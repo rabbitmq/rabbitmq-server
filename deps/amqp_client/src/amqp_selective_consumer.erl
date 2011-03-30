@@ -14,7 +14,27 @@
 %% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
 %%
 
-%% @doc TODO
+%% @doc This module is an implementation of the amqp_gen_consumer behaviour and
+%% can be used as part of the Consumer parameter when opening AMQP
+%% channels.<br/>
+%% The Consumer parameter for this implementation is {{@module}, []@}<br/>
+%% This consumer implementation keeps track of consumer tags and sends
+%% the subscription-relevant messages to the registered consumers, according
+%% to an internal tag dictionary.<br/>
+%% Use {@module}:subscribe/3 to subscribe a consumer to a queue and
+%% {@module}:cancel/2 to cancel a subscription.<br/>
+%% The channel will send to the relevant registered consumers the
+%% basic.consume_ok, basic.cancel_ok, basic.cancel and basic.deliver messages
+%% received from the server.<br/>
+%% If a consumer is not registered for a given consumer tag, the message
+%% is sent to the default consumer registered with
+%% {@module}:register_default_consumer. If there is no default consumer
+%% registered in this case, an exception occurs and the channel is abrubptly
+%% terminated.<br/>
+%% amqp_channel:call(ChannelPid, #'basic.consume'{}) can also be used to
+%% subscribe to a queue, but one must register a default consumer for messages
+%% to be delivered to, beforehand. Failing to do so generates the
+%% above-mentioned exception.
 -module(amqp_selective_consumer).
 
 -include("amqp_client.hrl").
@@ -33,7 +53,28 @@
 %% Interface
 %%---------------------------------------------------------------------------
 
-%% TODO doc
+%% @type consume() = #'basic.consume'{}.
+%% The AMQP method that is used to  subscribe a consumer to a queue.
+%% @type consume_ok() = #'basic.consume_ok'{}.
+%% The AMQP method returned in response to basic.consume.
+%% @spec (ChannelPid, consume(), ConsumerPid) -> Result
+%% where
+%%      ChannelPid = pid()
+%%      ConsumerPid = pid()
+%%      Result = consume_ok() | ok | {error, command_invalid}
+%% @doc Creates a subscription to a queue. This subscribes a consumer pid to
+%% the queue defined in the #'basic.consume'{} method record. Note that
+%% both the process invoking this method and the supplied consumer process
+%% receive an acknowledgement of the subscription. The calling process will
+%% receive the acknowledgement as the return value of this function, whereas
+%% the consumer process will receive the notification as a message,
+%% asynchronously.<br/>
+%% This function returns {error, command_invalid} if consumer_tag is not
+%% specified and nowait is true.<br/>
+%% Attempting to subscribe with a consumer_tag that is already in use will
+%% cause an exception and the channel will terminate. If nowait is set to true
+%% in this case, the function will return ok, but the channel will terminate
+%% with an error.
 subscribe(ChannelPid, #'basic.consume'{nowait = false} = BasicConsume,
           ConsumerPid) ->
     ConsumeOk = #'basic.consume_ok'{consumer_tag = RetTag} =
@@ -49,12 +90,44 @@ subscribe(ChannelPid, #'basic.consume'{nowait = true,
     ok = call_consumer(ChannelPid, {subscribe_nowait, Tag, ConsumerPid}),
     amqp_channel:call(ChannelPid, BasicConsume).
 
-%% TODO doc
-%% (provided for completeness)
+%% @type cancel() = #'basic.cancel'{}.
+%% The AMQP method used to cancel a subscription.
+
+%% @spec (ChannelPid, Cancel) -> amqp_method() | ok
+%% where
+%%      ChannelPid = pid()
+%%      Cancel = cancel()
+%% @doc This function is the same as calling
+%% amqp_channel:call(ChannelPid, Cancel) and is only provided for completeness.
 cancel(ChannelPid, #'basic.cancel'{} = Cancel) ->
     amqp_channel:call(ChannelPid, Cancel).
 
-%% TODO doc
+%% @spec (ChannelPid, ConsumerPid) -> ok
+%% where
+%%      ChannelPid = pid()
+%%      ConsumerPid = pid()
+%% @doc This function registers a default consumer with the channel. A default
+%% consumer is used in two situations:<br/>
+%% <br/>
+%% 1) A subscription was made via
+%% amqp_channel:call(ChannelPid, #'basic.consume'{}) (rather than
+%% {@module}:subscribe/3) and hence there is no consumer pid registered with the
+%% consumer tag.<br/>
+%% <br/>
+%% 2) The following sequence of events occurs:<br/>
+%% <br/>
+%% - subscribe is used with basic.consume with explicit acks<br/>
+%% - some deliveries take place but are not acked<br/>
+%% - a basic.cancel is issued<br/>
+%% - a basic.recover{requeue = false} is issued<br/>
+%% <br/>
+%% Since requeue is specified to be false in the basic.recover, the spec
+%% states that the message must be redelivered to "the original recipient"
+%% - i.e. the same channel / consumer-tag. But the consumer is no longer
+%% active. <br/>
+%% <br/>
+%% In these two cases, the relevant deliveries will be sent to the default
+%% consumer.
 register_default_consumer(ChannelPid, ConsumerPid) ->
     call_consumer(ChannelPid, {register_default_consumer, ConsumerPid}).
 
@@ -76,6 +149,7 @@ handle_consume_ok(#'basic.consume_ok'{consumer_tag = Tag} = ConsumeOk,
 handle_cancel_ok(#'basic.cancel_ok'{consumer_tag = Tag} = CancelOk, State) ->
     deliver_or_queue(Tag, CancelOk, State).
 
+%% @private
 handle_cancel(#'basic.cancel'{consumer_tag = Tag} = Cancel, State) ->
     deliver_or_queue(Tag, Cancel, State).
 

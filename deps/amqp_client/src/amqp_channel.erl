@@ -184,7 +184,13 @@ register_confirm_handler(Channel, ConfirmHandler) ->
 register_flow_handler(Channel, FlowHandler) ->
     gen_server:cast(Channel, {register_flow_handler, FlowHandler} ).
 
-%% TODO doc
+%% @spec (Channel, Message) -> ok
+%% where
+%%      Channel = pid()
+%%      Message = any()
+%% @doc This causes the channel to invoke Consumer:handle_message/2,
+%% where Consumer is the amqp_gen_consumer implementation registered with
+%% the channel.
 send_to_consumer(Channel, Message) ->
     gen_server:cast(Channel, {send_to_consumer, Message}).
 

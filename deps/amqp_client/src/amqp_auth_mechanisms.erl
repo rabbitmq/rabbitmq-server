@@ -14,6 +14,7 @@
 %% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
 %%
 
+%% @private
 -module(amqp_auth_mechanisms).
 
 -include("amqp_client.hrl").

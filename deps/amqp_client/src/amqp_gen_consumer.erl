@@ -14,7 +14,10 @@
 %% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
 %%
 
-%% @doc TODO
+%% @doc A behaviour module for implementing consumers for amqp_channel. To
+%% specify a consumer implementation for a channel, use
+%% amqp_connection:open_channel/{2,3}.<br/>
+%% All callbacks are called withing the channel process.
 -module(amqp_gen_consumer).
 
 -export([behaviour_info/1]).
@@ -23,40 +26,69 @@
 %% Behaviour
 %%---------------------------------------------------------------------------
 
-%% TODO: doc
-
 %% all callbacks run in the channel process
-
-%% init: called when channel is started.
-%% handle_consume_ok: called on each basic.consume_ok
-%% handle_cancel_ok: called on each basic.cancel_ok (sent by the server)
-%% handle_cancel: called on each basic.cancel (sent by the server)
-%% handle_deliver: called on each basic.deliver
-%% handle_message: called on amqp_channel:send_to_consumer/2
-%% terminate: called after channel has shut down
 
 %% @private
 behaviour_info(callbacks) ->
     [
-     %% init(Args) -> {ok, InitialState}
+     %% @spec Module:init(Args) -> {ok, InitialState}
+     %% where
+     %%      Args = [any()]
+     %%      InitialState = any()
+     %% @doc This function is called by the channel, when it starts up.
      {init, 1},
 
-     %% handle_consume(#'basic.consume_ok'{}, State) -> {ok, NewState}
+     %% @type consume_ok() = #'basic.consume_ok'{}.
+     %% The AMQP method returned in response to basic.consume.
+     %% @spec Module:handle_consume(consume_ok(), State) -> {ok, NewState}
+     %% where
+     %%      State = NewState = any()
+     %% @doc This function is called by the channel every time a
+     %% basic.consume_ok is received from the server.
      {handle_consume_ok, 2},
 
-     %% handle_cancel_ok(#'basic.cancel_ok'{}, State) -> {ok, NewState}
+     %% @type cancel_ok() = #'basic.cancel_ok'{}.
+     %% The AMQP method returned as reply to basicl.cancel.
+     %% @spec Module:handle_cancel_ok(cancel_ok(), State) -> {ok, NewState}
+     %% where
+     %%      State = NewState = any()
+     %% @doc This function is called by the channel every time a basic.cancel_ok
+     %% is received from the server.
      {handle_cancel_ok, 2},
 
-     %% handle_cancel(#'basic.cancel'{}, State) -> {ok, NewState}
+     %% @type cancel() = #'basic.cancel'{}.
+     %% The AMQP method used to cancel a subscription.
+     %% @spec Module:handle_cancel(cancel(), State) -> {ok, NewState}
+     %% where
+     %%      State = NewState = any()
+     %% @doc This function is called by the channel every time a basic.cancel
+     %% is received from the server.
      {handle_cancel, 2},
 
-     %% handle_deliver(#'basic.deliver', #amqp_msg{}, State} -> {ok, NewState}
+     %% @type deliver() = #'basic.deliver'{}.
+     %% The AMQP method sent when a message is delivered from a subscribed
+     %% queue.
+     %% @spec Module:handle_deliver(deliver(), #amqp_msg{}, State} ->
+     %%           {ok, NewState}
+     %% where
+     %%      State = NewState = any()
+     %% @doc This function is called by the channel every time a basic.deliver
+     %% is received from the server.
      {handle_deliver, 3},
 
-     %% handle_message(Message, State) -> {ok, NewState}
+     %% @spec Module:handle_message(Message, State) -> {ok, NewState}
+     %% where
+     %%      State = NewState = any()
+     %% @doc This function is called by the channel when calling
+     %% amqp_channel:send_to_consumer/2.
      {handle_message, 2},
 
-     %% terminate(Reason, State) -> _
+     %% @spec Module:terminate(Reason, State) -> _
+     %% where
+     %%      State = any()
+     %%      Reason = any()
+     %% @doc This function is called by the channel after it has shut down and
+     %% just before its process exits.
      {terminate, 2}
     ];
 behaviour_info(_Other) ->

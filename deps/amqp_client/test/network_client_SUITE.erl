@@ -103,7 +103,7 @@ pub_and_close_test_() ->
         end}.
 
 channel_tune_negotiation_test() ->
-    amqp_connection:close(new_connection(#amqp_params{ channel_max = 10 })).
+    amqp_connection:close(new_connection(#amqp_params{channel_max = 10})).
 
 confirm_test() ->
     test_util:confirm_test(new_connection()).
@@ -177,4 +177,3 @@ test_coverage() ->
     rabbit_misc:enable_cover(),
     test(),
     rabbit_misc:report_cover().
-

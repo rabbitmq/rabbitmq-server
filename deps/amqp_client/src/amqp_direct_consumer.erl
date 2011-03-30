@@ -14,7 +14,19 @@
 %% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
 %%
 
-%% @doc TODO
+%% @doc This module is an implementation of the amqp_gen_consumer behaviour and
+%% can be used as part of the Consumer parameter when opening AMQP
+%% channels.<br/>
+%% The Consumer parameter for this implementation is
+%% {{@module}, [ConsumerPid]@}, where ConsumerPid is a process that
+%% will receive queue subscription-related messages.<br/>
+%% This consumer implementation causes the channel to send to the ConsumerPid
+%% all basic.consume_ok, basic.cancel_ok, basic.cancel and basic.deliver
+%% messages received from the server.<br/>
+%% In addition, if the channel exits abnormally, an exit signal with the
+%% channel's exit reason is sent to ConsumerPid.<br/>
+%% <br/>
+%% This module has no public functions.
 -module(amqp_direct_consumer).
 
 -behaviour(amqp_gen_consumer).
