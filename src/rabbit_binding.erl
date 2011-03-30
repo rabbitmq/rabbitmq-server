@@ -410,11 +410,11 @@ process_deletions(Deletions) ->
     AugmentedDeletions =
         dict:map(fun (_XName, {X, deleted, Bindings}) ->
                          Bs = lists:flatten(Bindings),
-                         pd_callback(transaction, X, delete, Bs),
+                         x_callback(transaction, X, delete, Bs),
                          {X, deleted, Bs, none};
                      (_XName, {X, not_deleted, Bindings}) ->
                          Bs = lists:flatten(Bindings),
-                         pd_callback(transaction, X, remove_bindings, Bs),
+                         x_callback(transaction, X, remove_bindings, Bs),
                          {X, not_deleted, Bs, rabbit_exchange:serial(X)}
                  end, Deletions),
     fun() ->
@@ -422,13 +422,13 @@ process_deletions(Deletions) ->
                               ok = rabbit_event:notify(
                                      exchange_deleted, [{name, XName}]),
                               del_notify(Bs),
-                              pd_callback(Serial, X, delete, Bs);
+                              x_callback(Serial, X, delete, Bs);
                           (_XName, {X, not_deleted, Bs, Serial}, ok) ->
                               del_notify(Bs),
-                              pd_callback(Serial, X, remove_bindings, Bs)
+                              x_callback(Serial, X, remove_bindings, Bs)
                       end, ok, AugmentedDeletions)
     end.
 
 del_notify(Bs) -> [rabbit_event:notify(binding_deleted, info(B)) || B <- Bs].
 
-pd_callback(Arg, X, F, Bs) -> ok = rabbit_exchange:callback(X, F, [Arg, X, Bs]).
+x_callback(Arg, X, F, Bs) -> ok = rabbit_exchange:callback(X, F, [Arg, X, Bs]).
