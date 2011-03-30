@@ -96,10 +96,13 @@
 recover() ->
     rabbit_misc:table_fold(
       fun (Route = #route{binding = B}, Acc) ->
-              {_, ReverseRoute} = route_with_reverse(Route),
-              ok = mnesia:write(rabbit_route, Route, write),
-              ok = mnesia:write(rabbit_reverse_route, ReverseRoute, write),
-              [B | Acc]
+              case mnesia:read({rabbit_route, B}) of
+                  []  -> {_, Rev} = route_with_reverse(Route),
+                         ok = mnesia:write(rabbit_route, Route, write),
+                         ok = mnesia:write(rabbit_reverse_route, Rev, write),
+                         [B | Acc];
+                  [_] -> Acc
+              end
       end, [], rabbit_durable_route).
 
 exists(Binding) ->

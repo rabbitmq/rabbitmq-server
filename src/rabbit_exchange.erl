@@ -84,9 +84,12 @@
 
 recover() ->
     Xs = rabbit_misc:table_fold(
-           fun (X, Acc) ->
-                   ok = mnesia:write(rabbit_exchange, X, write),
-                   [X | Acc]
+           fun (X = #exchange{name = XName}, Acc) ->
+                   case mnesia:read({rabbit_exchange, XName}) of
+                       []  -> ok = mnesia:write(rabbit_exchange, X, write),
+                              [X | Acc];
+                       [_] -> Acc
+                   end
            end, [], rabbit_durable_exchange),
     Bs = rabbit_binding:recover(),
     recover_with_bindings(
