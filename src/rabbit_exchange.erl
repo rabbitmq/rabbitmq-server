@@ -84,15 +84,12 @@
 -define(INFO_KEYS, [name, type, durable, auto_delete, internal, arguments]).
 
 recover() ->
-    Xs = rabbit_misc:table_fold(
-           fun (X, Acc) ->
-                   write_exchange(X),
-                   [X | Acc]
-           end, [], rabbit_durable_exchange),
+    Xs = rabbit_misc:table_fold(fun (X, Acc) -> store(X), [X | Acc] end,
+                                [], rabbit_durable_exchange),
     Bs = rabbit_binding:recover(),
-    recover_with_bindings(
-      lists:keysort(#binding.source, Bs),
-      lists:keysort(#exchange.name, Xs), []).
+    recover_with_bindings(lists:keysort(#binding.source, Bs),
+                          lists:keysort(#exchange.name, Xs),
+                          []).
 
 recover_with_bindings([B = #binding{source = XName} | Rest],
                       Xs = [#exchange{name = XName} | _],
@@ -121,7 +118,7 @@ declare(XName, Type, Durable, AutoDelete, Internal, Args) ->
       fun () ->
               case mnesia:wread({rabbit_exchange, XName}) of
                   [] ->
-                      write_exchange(X),
+                      store(X),
                       ok = case Durable of
                                true  -> mnesia:write(rabbit_durable_exchange,
                                                      X, write);
@@ -145,7 +142,7 @@ declare(XName, Type, Durable, AutoDelete, Internal, Args) ->
               Err
       end).
 
-write_exchange(X = #exchange{name = Name, type = Type}) ->
+store(X = #exchange{name = Name, type = Type}) ->
     ok = mnesia:write(rabbit_exchange, X, write),
     case (type_to_module(Type)):serialise_events() of
         true  -> S = #exchange_serial{name = Name, serial = 0},
