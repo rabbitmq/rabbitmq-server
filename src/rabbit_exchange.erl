@@ -104,8 +104,8 @@ recover_with_bindings(Bs, [X = #exchange{type = Type} | Xs], Bindings) ->
 recover_with_bindings([], [], []) ->
     ok.
 
-callback(#exchange{type = XType}, Fun, Args) ->
-    apply(type_to_module(XType), Fun, Args).
+callback(#exchange{type = Type}, Fun, Args) ->
+    apply(type_to_module(Type), Fun, Args).
 
 declare(XName, Type, Durable, AutoDelete, Internal, Args) ->
     X = #exchange{name        = XName,
@@ -145,9 +145,9 @@ declare(XName, Type, Durable, AutoDelete, Internal, Args) ->
               Err
       end).
 
-write_exchange(X = #exchange{name = Name, type = XT}) ->
+write_exchange(X = #exchange{name = Name, type = Type}) ->
     ok = mnesia:write(rabbit_exchange, X, write),
-    case (type_to_module(XT)):serialise_events() of
+    case (type_to_module(Type)):serialise_events() of
         true  -> S = #exchange_serial{name = Name, serial = 0},
                  ok = mnesia:write(rabbit_exchange_serial, S, write);
         false -> ok
@@ -323,8 +323,8 @@ unconditional_delete(X = #exchange{name = XName}) ->
     Bindings = rabbit_binding:remove_for_source(XName),
     {deleted, X, Bindings, rabbit_binding:remove_for_destination(XName)}.
 
-serial(#exchange{name = XName, type = XType}) ->
-    case (type_to_module(XType)):serialise_events() of
+serial(#exchange{name = XName, type = Type}) ->
+    case (type_to_module(Type)):serialise_events() of
         true  -> next_serial(XName);
         false -> none
     end.
