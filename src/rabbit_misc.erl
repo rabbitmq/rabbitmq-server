@@ -62,11 +62,10 @@
 
 -ifdef(use_specs).
 
--export_type([resource_name/0, thunk/1, const/1]).
+-export_type([resource_name/0, thunk/1]).
 
 -type(ok_or_error() :: rabbit_types:ok_or_error(any())).
 -type(thunk(T) :: fun(() -> T)).
--type(const(T) :: fun(() -> T)).
 -type(resource_name() :: binary()).
 -type(optdef() :: {flag, string()} | {option, string(), any()}).
 -type(channel_or_connection_exit()
@@ -192,7 +191,7 @@
 -spec(now_ms/0 :: () -> non_neg_integer()).
 -spec(lock_file/1 :: (file:filename()) -> rabbit_types:ok_or_error('eexist')).
 -spec(const_ok/0 :: () -> 'ok').
--spec(const/1 :: (A) -> const(A)).
+-spec(const/1 :: (A) -> thunk(A)).
 -spec(ntoa/1 :: (inet:ip_address()) -> string()).
 -spec(ntoab/1 :: (inet:ip_address()) -> string()).
 -spec(is_process_alive/1 :: (pid()) -> boolean()).

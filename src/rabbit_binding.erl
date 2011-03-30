@@ -44,9 +44,9 @@
              rabbit_types:exchange() | rabbit_types:amqqueue()) ->
                    rabbit_types:ok_or_error(rabbit_types:amqp_error()))).
 -type(bindings() :: [rabbit_types:binding()]).
--type(add_res() :: bind_res() | rabbit_misc:const(bind_res())).
+-type(add_res() :: bind_res() | rabbit_misc:thunk(bind_res())).
 -type(bind_or_error() :: bind_res() | rabbit_types:error('binding_not_found')).
--type(remove_res() :: bind_or_error() | rabbit_misc:const(bind_or_error())).
+-type(remove_res() :: bind_or_error() | rabbit_misc:thunk(bind_or_error())).
 
 -opaque(deletions() :: dict()).
 
@@ -77,7 +77,7 @@
         (rabbit_types:binding_destination()) -> deletions()).
 -spec(remove_transient_for_destination/1 ::
         (rabbit_types:binding_destination()) -> deletions()).
--spec(process_deletions/1 :: (deletions()) -> rabbit_misc:const('ok')).
+-spec(process_deletions/1 :: (deletions()) -> rabbit_misc:thunk('ok')).
 -spec(combine_deletions/2 :: (deletions(), deletions()) -> deletions()).
 -spec(add_deletion/3 :: (rabbit_exchange:name(),
                          {'undefined' | rabbit_types:exchange(),
