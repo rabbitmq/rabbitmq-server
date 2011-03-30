@@ -37,7 +37,7 @@
 
 -define(CREATION_EVENT_KEYS, [pid, protocol, address, port, name,
                               peer_address, peer_port,
-                              user, vhost, client_properties]).
+                              user, vhost, client_properties, type]).
 
 %%---------------------------------------------------------------------------
 
