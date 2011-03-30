@@ -347,3 +347,11 @@ function fmt_sort(display, sort) {
     }
     return '<a class="sort" sort="' + sort + '">' + prefix + display + '</a>';
 }
+
+function properties_size(obj) {
+    var count = 0;
+    for (k in obj) {
+        if (obj.hasOwnProperty(k)) count++;
+    }
+    return count;
+}

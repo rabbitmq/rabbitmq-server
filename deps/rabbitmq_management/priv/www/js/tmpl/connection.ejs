@@ -131,12 +131,14 @@
 </div>
 <% } %>
 
+<% if (properties_size(connection.client_properties) > 0) { %>
 <div class="section-hidden">
 <h2>Client Library</h2>
 <div class="hider">
 <%= fmt_table_long(connection.client_properties) %>
 </div>
 </div>
+<% } %>
 
 <div class="section-hidden">
   <h2>Close This Connection</h2>
