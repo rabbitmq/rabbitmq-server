@@ -598,39 +598,37 @@ test_topic_matching() ->
     exchange_op_callback(X, create, []),
 
     %% add some bindings
-    Bindings = lists:map(
-                 fun ({Key, Q}) ->
-                         #binding{source = XName,
-                                  key = list_to_binary(Key),
-                                  destination = #resource{virtual_host = <<"/">>,
-                                                          kind = queue,
-                                                          name = list_to_binary(Q)}}
-                 end, [{"a.b.c",         "t1"},
-                       {"a.*.c",         "t2"},
-                       {"a.#.b",         "t3"},
-                       {"a.b.b.c",       "t4"},
-                       {"#",             "t5"},
-                       {"#.#",           "t6"},
-                       {"#.b",           "t7"},
-                       {"*.*",           "t8"},
-                       {"a.*",           "t9"},
-                       {"*.b.c",         "t10"},
-                       {"a.#",           "t11"},
-                       {"a.#.#",         "t12"},
-                       {"b.b.c",         "t13"},
-                       {"a.b.b",         "t14"},
-                       {"a.b",           "t15"},
-                       {"b.c",           "t16"},
-                       {"",              "t17"},
-                       {"*.*.*",         "t18"},
-                       {"vodka.martini", "t19"},
-                       {"a.b.c",         "t20"},
-                       {"*.#",           "t21"},
-                       {"#.*.#",         "t22"},
-                       {"*.#.#",         "t23"},
-                       {"#.#.#",         "t24"},
-                       {"*",             "t25"},
-                       {"#.b.#",         "t26"}]),
+    Bindings = [#binding{source = XName,
+                         key = list_to_binary(Key),
+                         destination = #resource{virtual_host = <<"/">>,
+                                                 kind = queue,
+                                                 name = list_to_binary(Q)}} ||
+                   {Key, Q} <- [{"a.b.c",         "t1"},
+                                {"a.*.c",         "t2"},
+                                {"a.#.b",         "t3"},
+                                {"a.b.b.c",       "t4"},
+                                {"#",             "t5"},
+                                {"#.#",           "t6"},
+                                {"#.b",           "t7"},
+                                {"*.*",           "t8"},
+                                {"a.*",           "t9"},
+                                {"*.b.c",         "t10"},
+                                {"a.#",           "t11"},
+                                {"a.#.#",         "t12"},
+                                {"b.b.c",         "t13"},
+                                {"a.b.b",         "t14"},
+                                {"a.b",           "t15"},
+                                {"b.c",           "t16"},
+                                {"",              "t17"},
+                                {"*.*.*",         "t18"},
+                                {"vodka.martini", "t19"},
+                                {"a.b.c",         "t20"},
+                                {"*.#",           "t21"},
+                                {"#.*.#",         "t22"},
+                                {"*.#.#",         "t23"},
+                                {"#.#.#",         "t24"},
+                                {"*",             "t25"},
+                                {"#.b.#",         "t26"}]],
     lists:foreach(fun (B) -> exchange_op_callback(X, add_binding, [B]) end,
                   Bindings),
 
@@ -669,22 +667,23 @@ test_topic_matching() ->
                                            ordsets:from_list(RemovedBindings))),
 
     %% test some matches
-    test_topic_expect_match(X,
-                            [{"a.b.c",               ["t2", "t6", "t10", "t12", "t18", "t20", "t22",
-                                                      "t23", "t24", "t26"]},
-                             {"a.b",                 ["t3", "t6", "t7", "t8", "t9", "t12", "t15",
-                                                      "t22", "t23", "t24", "t26"]},
-                             {"a.b.b",               ["t3", "t6", "t7", "t12", "t14", "t18", "t22",
-                                                      "t23", "t24", "t26"]},
-                             {"",                    ["t6", "t17", "t24"]},
-                             {"b.c.c",               ["t6", "t18", "t22", "t23", "t24", "t26"]},
-                             {"a.a.a.a.a",           ["t6", "t12", "t22", "t23", "t24"]},
-                             {"vodka.gin",           ["t6", "t8", "t22", "t23", "t24"]},
-                             {"vodka.martini",       ["t6", "t8", "t22", "t23", "t24"]},
-                             {"b.b.c",               ["t6", "t10", "t13", "t18", "t22", "t23",
-                                                      "t24", "t26"]},
-                             {"nothing.here.at.all", ["t6", "t22", "t23", "t24"]},
-                             {"oneword",             ["t6", "t22", "t23", "t24", "t25"]}]),
+    test_topic_expect_match(
+      X,
+      [{"a.b.c",               ["t2", "t6", "t10", "t12", "t18", "t20", "t22",
+                                "t23", "t24", "t26"]},
+       {"a.b",                 ["t3", "t6", "t7", "t8", "t9", "t12", "t15",
+                                "t22", "t23", "t24", "t26"]},
+       {"a.b.b",               ["t3", "t6", "t7", "t12", "t14", "t18", "t22",
+                                "t23", "t24", "t26"]},
+       {"",                    ["t6", "t17", "t24"]},
+       {"b.c.c",               ["t6", "t18", "t22", "t23", "t24", "t26"]},
+       {"a.a.a.a.a",           ["t6", "t12", "t22", "t23", "t24"]},
+       {"vodka.gin",           ["t6", "t8", "t22", "t23", "t24"]},
+       {"vodka.martini",       ["t6", "t8", "t22", "t23", "t24"]},
+       {"b.b.c",               ["t6", "t10", "t13", "t18", "t22", "t23",
+                                "t24", "t26"]},
+       {"nothing.here.at.all", ["t6", "t22", "t23", "t24"]},
+       {"oneword",             ["t6", "t22", "t23", "t24", "t25"]}]),
 
     %% remove the entire exchange
     exchange_op_callback(X, delete, [RemainingBindings]),
@@ -1206,9 +1205,7 @@ user(Username) ->
 
 test_statistics_event_receiver(Pid) ->
     receive
-        Foo ->
-            Pid ! Foo,
-            test_statistics_event_receiver(Pid)
+        Foo -> Pid ! Foo, test_statistics_event_receiver(Pid)
     end.
 
 test_statistics_receive_event(Ch, Matcher) ->
@@ -1252,10 +1249,9 @@ test_confirms() ->
     QPid1 = Q1#amqqueue.pid,
     %% Enable confirms
     rabbit_channel:do(Ch, #'confirm.select'{}),
-    receive #'confirm.select_ok'{} ->
-            ok
-    after 1000 ->
-            throw(failed_to_enable_confirms)
+    receive
+        #'confirm.select_ok'{} -> ok
+    after 1000 -> throw(failed_to_enable_confirms)
     end,
     %% Publish a message
     rabbit_channel:do(Ch, #'basic.publish'{exchange = <<"amq.direct">>,
@@ -1267,25 +1263,19 @@ test_confirms() ->
     QPid1 ! boom,
     %% Wait for a nack
     receive
-        #'basic.nack'{} ->
-            ok;
-        #'basic.ack'{} ->
-            throw(received_ack_instead_of_nack)
-    after 2000 ->
-            throw(did_not_receive_nack)
+        #'basic.nack'{} -> ok;
+        #'basic.ack'{}  -> throw(received_ack_instead_of_nack)
+    after 2000 -> throw(did_not_receive_nack)
     end,
     receive
-        #'basic.ack'{} ->
-            throw(received_ack_when_none_expected)
-    after 1000 ->
-            ok
+        #'basic.ack'{} -> throw(received_ack_when_none_expected)
+    after 1000 -> ok
     end,
     %% Cleanup
     rabbit_channel:do(Ch, #'queue.delete'{queue = QName2}),
-    receive #'queue.delete_ok'{} ->
-            ok
-    after 1000 ->
-            throw(failed_to_cleanup_queue)
+    receive
+        #'queue.delete_ok'{} -> ok
+    after 1000 -> throw(failed_to_cleanup_queue)
     end,
     unlink(Ch),
     ok = rabbit_channel:shutdown(Ch),
