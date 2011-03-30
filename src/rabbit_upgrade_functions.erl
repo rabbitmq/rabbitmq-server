@@ -105,7 +105,7 @@ topic_trie() ->
 
 exchange_event_serial() ->
     create(rabbit_exchange_serial, [{record_name, exchange_serial},
-                                    {attributes, [name, serial]}]).
+                                    {attributes, [name, next]}]).
 
 %%--------------------------------------------------------------------
 

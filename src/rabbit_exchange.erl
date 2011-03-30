@@ -145,7 +145,7 @@ declare(XName, Type, Durable, AutoDelete, Internal, Args) ->
 store(X = #exchange{name = Name, type = Type}) ->
     ok = mnesia:write(rabbit_exchange, X, write),
     case (type_to_module(Type)):serialise_events() of
-        true  -> S = #exchange_serial{name = Name, serial = 0},
+        true  -> S = #exchange_serial{name = Name, next = 1},
                  ok = mnesia:write(rabbit_exchange_serial, S, write);
         false -> ok
     end.
@@ -327,11 +327,10 @@ serial(#exchange{name = XName, type = Type}) ->
     end.
 
 next_serial(XName) ->
-    [#exchange_serial{serial = S}] =
+    [#exchange_serial{next = Serial}] =
         mnesia:read(rabbit_exchange_serial, XName, write),
-    Serial = S + 1,
     ok = mnesia:write(rabbit_exchange_serial,
-                      #exchange_serial{name = XName, serial = Serial}, write),
+                      #exchange_serial{name = XName, next = Serial + 1}, write),
     Serial.
 
 %% Used with atoms from records; e.g., the type is expected to exist.
