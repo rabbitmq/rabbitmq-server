@@ -41,9 +41,13 @@ to_json(ReqData, Context) ->
     rabbit_mgmt_util:reply({struct, conn(ReqData)}, ReqData, Context).
 
 delete_resource(ReqData, Context) ->
-    PidStr = proplists:get_value(pid, conn(ReqData)),
-    rabbit_networking:close_connection(
-      rabbit_misc:string_to_pid(PidStr), "Closed via management plugin"),
+    Conn = conn(ReqData),
+    Pid = rabbit_misc:string_to_pid(proplists:get_value(pid, Conn)),
+    Reason = "Closed via management plugin",
+    case proplists:get_value(type, Conn) of
+        direct  -> amqp_connection:close(Pid, 200, Reason);
+        network -> rabbit_networking:close_connection(Pid, Reason)
+    end,
     {true, ReqData, Context}.
 
 is_authorized(ReqData, Context) ->
