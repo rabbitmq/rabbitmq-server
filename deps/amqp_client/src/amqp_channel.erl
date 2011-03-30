@@ -494,7 +494,8 @@ do_rpc(State = #state{rpc_requests = Q,
                 true  -> State1;
                 false -> case {From, DoRet} of
                              {none, _} -> ok;
-                             {_, ok}   -> gen_server:reply(From, ok)
+                             {_, ok}   -> gen_server:reply(From, ok);
+                             _         -> ok
                              %% Do not reply if error in do. Expecting
                              %% {channel_exit, ...}
                          end,
