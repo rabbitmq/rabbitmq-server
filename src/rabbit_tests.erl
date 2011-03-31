@@ -2295,16 +2295,16 @@ test_variable_queue_all_the_bits_not_covered_elsewhere1(VQ0) ->
 
 test_variable_queue_all_the_bits_not_covered_elsewhere2(VQ) ->
     StateT = state_t:new(identity),
+    SM = StateT:modify(_),
     StateT:exec_state_t(
       do([StateT ||
-             StateT:modify(rabbit_variable_queue:set_ram_duration_target(0, _)),
-             StateT:modify(variable_queue_publish(false, 4, _)),
+             SM(rabbit_variable_queue:set_ram_duration_target(0, _)),
+             SM(variable_queue_publish(false, 4, _)),
              AckTags <- modify_and_return(
                           StateT, variable_queue_fetch(2, false, false, 4, _)),
-             StateT:modify(
-               rabbit_variable_queue:requeue(AckTags, fun(X) -> X end, _)),
-             StateT:modify(rabbit_variable_queue:idle_timeout(_)),
-             StateT:modify(rabbit_variable_queue:terminate(_)),
+             SM(rabbit_variable_queue:requeue(AckTags, fun(X) -> X end, _)),
+             SM(rabbit_variable_queue:idle_timeout(_)),
+             SM(rabbit_variable_queue:terminate(_)),
              StateT:put(variable_queue_init(test_queue(), true, true)),
              empty <- modify_and_return(
                         StateT, rabbit_variable_queue:fetch(false, _)),
