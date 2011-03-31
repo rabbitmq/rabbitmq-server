@@ -49,7 +49,7 @@
                     {mfa,         {rabbit_sup, start_child,
                                    [rabbit_mgmt_global_sup]}},
                     {requires,    rabbit_event},
-                    {enables,     queue_sup_queue_recovery}]}).
+                    {enables,     recovery}]}).
 
 start(_Type, _StartArgs) ->
     log_startup(),
