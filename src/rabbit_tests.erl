@@ -2306,8 +2306,7 @@ test_variable_queue_all_the_bits_not_covered_elsewhere2(VQ) ->
              StateT:modify(rabbit_variable_queue:idle_timeout(_)),
              StateT:modify(rabbit_variable_queue:terminate(_)),
              do([StateT ||
-                    S <- return(variable_queue_init(test_queue(), true, true)),
-                    StateT:put(S)]),
+                    StateT:put(variable_queue_init(test_queue(), true, true))]),
              empty <- modify_and_return(
                         StateT, rabbit_variable_queue:fetch(false, _)),
              return(passed)]), VQ).
