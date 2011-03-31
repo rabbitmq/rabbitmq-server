@@ -2007,7 +2007,10 @@ transform_msg_file(FileOld, FileNew, TransformFun) ->
         rabbit_msg_file:scan(
           RefOld, filelib:file_size(FileOld),
           fun({MsgId, _Size, _Offset, BinMsg}, ok) ->
-                  {ok, MsgNew} = TransformFun(binary_to_term(BinMsg)),
+                  {ok, MsgNew} = case binary_to_term(BinMsg) of
+                                     <<>> -> {ok, <<>>};  %% dying client marker
+                                     Msg  -> TransformFun(Msg)
+                                 end,
                   {ok, _} = rabbit_msg_file:append(RefNew, MsgId, MsgNew),
                   ok
           end, ok),
