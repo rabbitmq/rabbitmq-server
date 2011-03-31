@@ -297,7 +297,6 @@
 -define(PERSISTENT_MSG_STORE, msg_store_persistent).
 -define(TRANSIENT_MSG_STORE,  msg_store_transient).
 
-%% NB: for reasons I don't understand, this must occur before the qlc include
 -compile({parse_transform, cut}).
 
 -include("rabbit.hrl").
