@@ -1,26 +1,17 @@
-#   The contents of this file are subject to the Mozilla Public License
-#   Version 1.1 (the "License"); you may not use this file except in
-#   compliance with the License. You may obtain a copy of the License at
-#   http://www.mozilla.org/MPL/
+# The contents of this file are subject to the Mozilla Public License
+# Version 1.1 (the "License"); you may not use this file except in
+# compliance with the License. You may obtain a copy of the License at
+# http://www.mozilla.org/MPL/
 #
-#   Software distributed under the License is distributed on an "AS IS"
-#   basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
-#   License for the specific language governing rights and limitations
-#   under the License.
+# Software distributed under the License is distributed on an "AS IS"
+# basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
+# License for the specific language governing rights and limitations
+# under the License.
 #
-#   The Original Code is the RabbitMQ Erlang Client.
+# The Original Code is RabbitMQ.
 #
-#   The Initial Developers of the Original Code are LShift Ltd.,
-#   Cohesive Financial Technologies LLC., and Rabbit Technologies Ltd.
-#
-#   Portions created by LShift Ltd., Cohesive Financial
-#   Technologies LLC., and Rabbit Technologies Ltd. are Copyright (C) 
-#   2007 LShift Ltd., Cohesive Financial Technologies LLC., and Rabbit 
-#   Technologies Ltd.; 
-#
-#   All Rights Reserved.
-#
-#   Contributor(s): Ben Hood <0x6e6562@gmail.com>.
+# The Initial Developer of the Original Code is VMware, Inc.
+# Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
 #
 
 # The client library can either be built from source control or by downloading
@@ -54,6 +45,7 @@ SOURCE_DIR=src
 DIST_DIR=dist
 DEPS_DIR=deps
 DOC_DIR=doc
+DEPS_FILE=deps.mk
 
 ifeq ("$(ERL_LIBS)", "")
 	ERL_LIBS :=
@@ -71,7 +63,7 @@ export COMMON_PACKAGE_DIR=$(COMMON_PACKAGE)$(if $(APPEND_VERSION),-$(VERSION),)
 COMMON_PACKAGE_EZ=$(COMMON_PACKAGE_DIR).ez
 
 DEPS=$(shell erl -noshell -eval '{ok,[{_,_,[_,_,{modules, Mods},_,_,_]}]} = \
-                                 file:consult("$(COMMON_PACKAGE).app"), \
+                                 file:consult("$(COMMON_PACKAGE).app.in"), \
                                  [io:format("~p ",[M]) || M <- Mods], halt().')
 
 INCLUDES=$(wildcard $(INCLUDE_DIR)/*.hrl)
@@ -88,10 +80,9 @@ else
     LIBS_PATH=ERL_LIBS=$(LIBS_PATH_UNIX)
 endif
 
-LOAD_PATH=$(EBIN_DIR) $(BROKER_DIR)/ebin $(TEST_DIR) $(ERL_PATH)
+LOAD_PATH=$(EBIN_DIR) $(TEST_DIR) $(ERL_PATH)
 
-COVER_START := -s cover start -s rabbit_misc enable_cover ../rabbitmq-erlang-client
-COVER_STOP := -s rabbit_misc report_cover ../rabbitmq-erlang-client -s cover stop
+RUN:=$(LIBS_PATH) erl -pa $(LOAD_PATH) -sname amqp_client
 
 MKTEMP=$$(mktemp $(TMPDIR)/tmp.XXXXXXXXXX)
 
@@ -99,16 +90,15 @@ ifndef USE_SPECS
 # our type specs rely on features / bug fixes in dialyzer that are
 # only available in R13B01 upwards (R13B is eshell 5.7.2)
 #
-# NB: the test assumes that version number will only contain single digits
-# NB2: do not mark this variable for export, otherwise it will
+# NB: do not mark this variable for export, otherwise it will
 # override the test in rabbitmq-server's Makefile when it does the
 # make -C, which causes problems whenever the test here and the test
 # there compare system_info(version) against *different* eshell
 # version numbers.
-USE_SPECS=$(shell if [ $$(erl -noshell -eval 'io:format(erlang:system_info(version)), halt().') \> "5.7.1" ]; then echo "true"; else echo "false"; fi)
+USE_SPECS:=$(shell erl -noshell -eval 'io:format([list_to_integer(X) || X <- string:tokens(erlang:system_info(version), ".")] >= [5,7,2]), halt().')
 endif
 
-ERLC_OPTS=-I $(INCLUDE_DIR) -o $(EBIN_DIR) -Wall -v +debug_info $(shell [ $(USE_SPECS) = "true" ] && echo "-Duse_specs")
+ERLC_OPTS=-I $(INCLUDE_DIR) -pa $(EBIN_DIR) -o $(EBIN_DIR) -Wall -v +debug_info $(if $(filter true,$(USE_SPECS)),-Duse_specs)
 
 RABBITMQ_NODENAME=rabbit
 PA_LOAD_PATH=-pa $(realpath $(LOAD_PATH))
@@ -128,6 +118,18 @@ ALL_SSL_COVERAGE := true
 SSL_BROKER_ARGS :=
 endif
 
+# Versions prior to this are not supported
+NEED_MAKE := 3.80
+ifneq "$(NEED_MAKE)" "$(firstword $(sort $(NEED_MAKE) $(MAKE_VERSION)))"
+$(error Versions of make prior to $(NEED_MAKE) are not supported)
+endif
+
+# .DEFAULT_GOAL introduced in 3.81
+DEFAULT_GOAL_MAKE := 3.81
+ifneq "$(DEFAULT_GOAL_MAKE)" "$(firstword $(sort $(DEFAULT_GOAL_MAKE) $(MAKE_VERSION)))"
+.DEFAULT_GOAL=all
+endif
+
 all: package
 
 common_clean:
@@ -135,21 +137,20 @@ common_clean:
 	rm -f erl_crash.dump
 	rm -rf $(DEPS_DIR)
 	rm -rf $(DOC_DIR)
+	rm -f $(DEPS_FILE)
 	$(MAKE) -C $(TEST_DIR) clean
 
-compile: $(TARGETS)
+compile: $(TARGETS) $(EBIN_DIR)/$(PACKAGE).app
 
-run: compile $(EBIN_DIR)/$(PACKAGE).app
-	$(LIBS_PATH) erl -pa $(LOAD_PATH)
+run: compile
+	$(RUN)
 
 ###############################################################################
 ##  Packaging
 ###############################################################################
 
-$(DIST_DIR)/$(PACKAGE_NAME_EZ): $(DIST_DIR)/$(PACKAGE_DIR) | $(DIST_DIR)
-	(cd $(DIST_DIR); zip -r $(PACKAGE_NAME_EZ) $(PACKAGE_DIR))
-
-$(DIST_DIR)/$(PACKAGE_DIR): $(TARGETS) $(EBIN_DIR)/$(PACKAGE).app | $(DIST_DIR)
+$(DIST_DIR)/$(PACKAGE_NAME_EZ): $(TARGETS) $(EBIN_DIR)/$(PACKAGE).app | $(DIST_DIR)
+	rm -f $@
 	rm -rf $(DIST_DIR)/$(PACKAGE_DIR)
 	mkdir -p $(DIST_DIR)/$(PACKAGE_DIR)/$(EBIN_DIR)
 	mkdir -p $(DIST_DIR)/$(PACKAGE_DIR)/$(INCLUDE_DIR)
@@ -157,6 +158,7 @@ $(DIST_DIR)/$(PACKAGE_DIR): $(TARGETS) $(EBIN_DIR)/$(PACKAGE).app | $(DIST_DIR)
 	cp -r $(EBIN_DIR)/*.app $(DIST_DIR)/$(PACKAGE_DIR)/$(EBIN_DIR)
 	mkdir -p $(DIST_DIR)/$(PACKAGE_DIR)/$(INCLUDE_DIR)
 	cp -r $(INCLUDE_DIR)/* $(DIST_DIR)/$(PACKAGE_DIR)/$(INCLUDE_DIR)
+	(cd $(DIST_DIR); zip -r $(PACKAGE_NAME_EZ) $(PACKAGE_DIR))
 
 package: $(DIST_DIR)/$(PACKAGE_NAME_EZ)
 
@@ -169,8 +171,30 @@ $(DEPS_DIR)/$(COMMON_PACKAGE_DIR): $(DIST_DIR)/$(COMMON_PACKAGE_EZ) | $(DEPS_DIR
 	mkdir -p $(DEPS_DIR)/$(COMMON_PACKAGE_DIR)
 	unzip -o $< -d $(DEPS_DIR)
 
-$(EBIN_DIR)/%.beam: $(SOURCE_DIR)/%.erl $(INCLUDES) $(DEPS_DIR)/$(COMMON_PACKAGE_DIR)
+$(DEPS_FILE): $(SOURCES) $(INCLUDES)
+	rm -f $@
+	echo $(subst : ,:,$(foreach FILE,$^,$(FILE):)) | escript $(BROKER_DIR)/generate_deps $@ $(EBIN_DIR)
+
+$(EBIN_DIR)/%.beam: $(SOURCE_DIR)/%.erl $(INCLUDES) $(DEPS_DIR)/$(COMMON_PACKAGE_DIR) | $(DEPS_FILE)
 	$(LIBS_PATH) erlc $(ERLC_OPTS) $<
 
 $(DEPS_DIR):
 	mkdir -p $@
+
+# Note that all targets which depend on clean must have clean in their
+# name.  Also any target that doesn't depend on clean should not have
+# clean in its name, unless you know that you don't need any of the
+# automatic dependency generation for that target.
+
+# We want to load the dep file if *any* target *doesn't* contain
+# "clean" - i.e. if removing all clean-like targets leaves something
+
+ifeq "$(MAKECMDGOALS)" ""
+TESTABLEGOALS:=$(.DEFAULT_GOAL)
+else
+TESTABLEGOALS:=$(MAKECMDGOALS)
+endif
+
+ifneq "$(strip $(patsubst clean%,,$(patsubst %clean,,$(TESTABLEGOALS))))" ""
+-include $(DEPS_FILE)
+endif

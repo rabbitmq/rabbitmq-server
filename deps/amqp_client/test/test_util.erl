@@ -1,26 +1,17 @@
-%%   The contents of this file are subject to the Mozilla Public License
-%%   Version 1.1 (the "License"); you may not use this file except in
-%%   compliance with the License. You may obtain a copy of the License at
-%%   http://www.mozilla.org/MPL/
+%% The contents of this file are subject to the Mozilla Public License
+%% Version 1.1 (the "License"); you may not use this file except in
+%% compliance with the License. You may obtain a copy of the License at
+%% http://www.mozilla.org/MPL/
 %%
-%%   Software distributed under the License is distributed on an "AS IS"
-%%   basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
-%%   License for the specific language governing rights and limitations
-%%   under the License.
+%% Software distributed under the License is distributed on an "AS IS"
+%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
+%% License for the specific language governing rights and limitations
+%% under the License.
 %%
-%%   The Original Code is the RabbitMQ Erlang Client.
+%% The Original Code is RabbitMQ.
 %%
-%%   The Initial Developers of the Original Code are LShift Ltd.,
-%%   Cohesive Financial Technologies LLC., and Rabbit Technologies Ltd.
-%%
-%%   Portions created by LShift Ltd., Cohesive Financial
-%%   Technologies LLC., and Rabbit Technologies Ltd. are Copyright (C)
-%%   2007 LShift Ltd., Cohesive Financial Technologies LLC., and Rabbit
-%%   Technologies Ltd.;
-%%
-%%   All Rights Reserved.
-%%
-%%   Contributor(s): Ben Hood <0x6e6562@gmail.com>.
+%% The Initial Developer of the Original Code is VMware, Inc.
+%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
 %%
 
 -module(test_util).
@@ -31,7 +22,7 @@
 -compile([export_all]).
 
 -record(publish, {q, x, routing_key, bind_key, payload,
-                 mandatory = false, immediate = false}).
+                  mandatory = false, immediate = false}).
 
 %% The latch constant defines how many processes are spawned in order
 %% to run certain functionality in parallel. It follows the standard
@@ -64,7 +55,7 @@ lifecycle_test(Connection) ->
            fun() ->
                 queue_exchange_binding(Channel, X, Parent, Tag) end)
             || Tag <- lists:seq(1, ?Latch)],
-    latch_loop(?Latch),
+    latch_loop(),
     amqp_channel:call(Channel, #'exchange.delete'{exchange = X}),
     teardown(Connection, Channel),
     ok.
@@ -105,45 +96,102 @@ channel_lifecycle_test(Connection) ->
     teardown(Connection, Channel2),
     ok.
 
-%% This is designed to exercize the internal queuing mechanism
-%% to ensure that commands are properly serialized
-command_serialization_test(Connection) ->
+abstract_method_serialization_test(Connection, BeforeFun, MultiOpFun,
+                                   AfterFun) ->
     {ok, Channel} = amqp_connection:open_channel(Connection),
+    X = uuid(),
+    Payload = list_to_binary(["x" || _ <- lists:seq(1, 1000)]),
+    OpsPerProcess = 20,
+    #'exchange.declare_ok'{} =
+        amqp_channel:call(Channel, #'exchange.declare'{exchange = X,
+                                                       type = <<"topic">>}),
+    BeforeRet = BeforeFun(Channel, X),
     Parent = self(),
-    [spawn(fun() ->
-                Q = uuid(),
-                #'queue.declare_ok'{queue = Q1}
-                    = amqp_channel:call(Channel, #'queue.declare'{queue = Q}),
-                ?assertMatch(Q, Q1),
-                Parent ! finished
+    [spawn(fun () -> Ret = [MultiOpFun(Channel, X, Payload, BeforeRet)
+                            || _ <- lists:seq(1, OpsPerProcess)],
+                   Parent ! {finished, Ret}
            end) || _ <- lists:seq(1, ?Latch)],
-    latch_loop(?Latch),
+    MultiOpRet = latch_loop(),
+    AfterFun(Channel, X, Payload, BeforeRet, MultiOpRet),
     teardown(Connection, Channel).
 
-recover_after_cancel_test(Connection) ->
-    {ok, Channel} = amqp_connection:open_channel(Connection),
-    {ok, Q} = setup_publish(Channel),
-    amqp_channel:subscribe(Channel, #'basic.consume'{queue = Q}, self()),
-    amqp_channel:register_default_consumer(Channel, self()),
-    Tag = receive
-              #'basic.consume_ok'{consumer_tag = T} -> T
-          after 2000 ->
-                  exit(did_not_receive_subscription_message)
-          end,
-    Expect = fun() ->
-                     receive
-                         {#'basic.deliver'{}, _} ->
-                             %% don't send ack
-                             ok
-                     after 2000 ->
-                             exit(did_not_receive_first_message)
-                     end
-             end,
-    Expect(),
-    amqp_channel:call(Channel, #'basic.cancel'{consumer_tag = Tag}),
-    amqp_channel:call(Channel, #'basic.recover'{requeue = false}),
-    Expect(),
-    teardown(Connection, Channel).
+%% This is designed to exercize the internal queuing mechanism
+%% to ensure that sync methods are properly serialized
+sync_method_serialization_test(Connection) ->
+    abstract_method_serialization_test(
+        Connection,
+        fun (_, _) -> ok end,
+        fun (Channel, _, _, _) ->
+                Q = uuid(),
+                #'queue.declare_ok'{queue = Q1} =
+                    amqp_channel:call(Channel, #'queue.declare'{queue = Q}),
+                ?assertMatch(Q, Q1)
+        end,
+        fun (_, _, _, _, _) -> ok end).
+
+%% This is designed to exercize the internal queuing mechanism
+%% to ensure that sending async methods and then a sync method is serialized
+%% properly
+async_sync_method_serialization_test(Connection) ->
+    abstract_method_serialization_test(
+        Connection,
+        fun (Channel, _X) ->
+                #'queue.declare_ok'{queue = Q} =
+                    amqp_channel:call(Channel, #'queue.declare'{}),
+                Q
+        end,
+        fun (Channel, X, Payload, _) ->
+                %% The async methods
+                ok = amqp_channel:call(Channel,
+                                       #'basic.publish'{exchange = X,
+                                                        routing_key = <<"a">>},
+                                       #amqp_msg{payload = Payload})
+        end,
+        fun (Channel, X, _, Q, _) ->
+                %% The sync method
+                #'queue.bind_ok'{} =
+                    amqp_channel:call(Channel,
+                                      #'queue.bind'{exchange = X,
+                                                    queue = Q,
+                                                    routing_key = <<"a">>}),
+                %% No message should have been routed
+                #'queue.declare_ok'{message_count = 0} =
+                    amqp_channel:call(Channel,
+                                      #'queue.declare'{queue = Q,
+                                                       passive = true})
+        end).
+
+%% This is designed to exercize the internal queuing mechanism
+%% to ensure that sending sync methods and then an async method is serialized
+%% properly
+sync_async_method_serialization_test(Connection) ->
+    abstract_method_serialization_test(
+        Connection,
+        fun (_, _) -> ok end,
+        fun (Channel, X, _Payload, _) ->
+                Q = uuid(),
+                %% The sync methods (called with cast to resume immediately;
+                %% the order should still be preserved)
+                amqp_channel:cast(Channel, #'queue.declare'{queue = Q}),
+                amqp_channel:cast(Channel, #'queue.bind'{exchange = X,
+                                                         queue = Q,
+                                                         routing_key= <<"a">>}),
+                Q
+        end,
+        fun (Channel, X, Payload, _, MultiOpRet) ->
+                ok = amqp_channel:call(Channel,
+                                       #'basic.publish'{exchange = X,
+                                                        routing_key = <<"a">>},
+                                       #amqp_msg{payload = Payload}),
+                %% All queues must have gotten this message
+                lists:foreach(
+                    fun (Q) ->
+                            #'queue.declare_ok'{message_count = 1} =
+                                amqp_channel:call(
+                                    Channel,
+                                    #'queue.declare'{queue = Q, passive = true})
+                    end, lists:flatten(MultiOpRet))
+        end).
 
 queue_unbind_test(Connection) ->
     X = <<"eggs">>, Q = <<"foobar">>, Key = <<"quay">>,
@@ -171,10 +219,14 @@ get_and_assert_empty(Channel, Q) ->
         = amqp_channel:call(Channel, #'basic.get'{queue = Q, no_ack = true}).
 
 get_and_assert_equals(Channel, Q, Payload) ->
-    {#'basic.get_ok'{}, Content}
-        = amqp_channel:call(Channel, #'basic.get'{queue = Q, no_ack = true}),
+    get_and_assert_equals(Channel, Q, Payload, true).
+
+get_and_assert_equals(Channel, Q, Payload, NoAck) ->
+    {GetOk = #'basic.get_ok'{}, Content}
+        = amqp_channel:call(Channel, #'basic.get'{queue = Q, no_ack = NoAck}),
     #amqp_msg{payload = Payload2} = Content,
-    ?assertMatch(Payload, Payload2).
+    ?assertMatch(Payload, Payload2),
+    GetOk.
 
 basic_get_test(Connection) ->
     {ok, Channel} = amqp_connection:open_channel(Connection),
@@ -192,7 +244,7 @@ basic_return_test(Connection) ->
     amqp_channel:register_return_handler(Channel, self()),
     amqp_channel:call(Channel, #'exchange.declare'{exchange = X}),
     amqp_channel:call(Channel, #'queue.declare'{queue = Q}),
-    Publish = #'basic.publish'{exchange = X, routing_key = Key, 
+    Publish = #'basic.publish'{exchange = X, routing_key = Key,
                                mandatory = true},
     amqp_channel:call(Channel, Publish, #amqp_msg{payload = Payload}),
     receive
@@ -203,17 +255,46 @@ basic_return_test(Connection) ->
             #amqp_msg{payload = Payload2} = Content,
             ?assertMatch(Payload, Payload2);
         WhatsThis ->
-            %% TODO investigate where this comes from
-            ?LOG_INFO("Spurious message ~p~n", [WhatsThis])
+            exit({bad_message, WhatsThis})
     after 2000 ->
         exit(no_return_received)
     end,
     teardown(Connection, Channel).
 
+channel_repeat_open_close_test(Connection) ->
+    lists:foreach(
+        fun(_) ->
+            {ok, Ch} = amqp_connection:open_channel(Connection),
+            ok = amqp_channel:close(Ch)
+        end, lists:seq(1, 50)),
+    amqp_connection:close(Connection),
+    wait_for_death(Connection).
+
+channel_multi_open_close_test(Connection) ->
+    [spawn_link(
+        fun() ->
+            try amqp_connection:open_channel(Connection) of
+                {ok, Ch}           -> try amqp_channel:close(Ch) of
+                                          ok                 -> ok;
+                                          closing            -> ok
+                                      catch
+                                          exit:{noproc, _}             -> ok;
+                                          exit:{normal, _} -> ok
+                                      end;
+                closing            -> ok
+            catch
+                exit:{noproc, _}             -> ok;
+                exit:{normal, _} -> ok
+            end
+        end) || _ <- lists:seq(1, 50)],
+    erlang:yield(),
+    amqp_connection:close(Connection),
+    wait_for_death(Connection).
+
 basic_ack_test(Connection) ->
     {ok, Channel} = amqp_connection:open_channel(Connection),
     {ok, Q} = setup_publish(Channel),
-    {#'basic.get_ok'{delivery_tag = Tag}, _} 
+    {#'basic.get_ok'{delivery_tag = Tag}, _}
         = amqp_channel:call(Channel, #'basic.get'{queue = Q, no_ack = false}),
     amqp_channel:cast(Channel, #'basic.ack'{delivery_tag = Tag}),
     teardown(Connection, Channel).
@@ -232,37 +313,46 @@ basic_consume_test(Connection) ->
     amqp_channel:call(Channel, #'exchange.declare'{exchange = X}),
     RoutingKey = uuid(),
     Parent = self(),
-    [spawn(
-        fun() ->
-            consume_loop(Channel, X, RoutingKey, Parent, <<Tag:32>>) end)
-        || Tag <- lists:seq(1, ?Latch)],
+    [spawn_link(fun () ->
+                        consume_loop(Channel, X, RoutingKey, Parent, <<Tag:32>>)
+                end) || Tag <- lists:seq(1, ?Latch)],
     timer:sleep(?Latch * 20),
     Publish = #'basic.publish'{exchange = X, routing_key = RoutingKey},
     amqp_channel:call(Channel, Publish, #amqp_msg{payload = <<"foobar">>}),
-    latch_loop(?Latch),
+    latch_loop(),
     teardown(Connection, Channel).
 
 consume_loop(Channel, X, RoutingKey, Parent, Tag) ->
-    #'queue.declare_ok'{queue = Q}
-        = amqp_channel:call(Channel, #'queue.declare'{}),
-    Route = #'queue.bind'{queue = Q,
-                          exchange = X,
-                          routing_key = RoutingKey},
-    amqp_channel:call(Channel, Route),
-    amqp_channel:subscribe(Channel, #'basic.consume'{queue = Q,
-                                                     consumer_tag = Tag},
-                           self()),
-    receive
-        #'basic.consume_ok'{consumer_tag = Tag} -> ok
-    end,
-    receive
-        {#'basic.deliver'{}, _} -> ok
-    end,
-    amqp_channel:call(Channel, #'basic.cancel'{consumer_tag = Tag}),
-    receive
-        #'basic.cancel_ok'{consumer_tag = Tag} -> ok
-    end,
+    #'queue.declare_ok'{queue = Q} =
+        amqp_channel:call(Channel, #'queue.declare'{}),
+    #'queue.bind_ok'{} =
+        amqp_channel:call(Channel, #'queue.bind'{queue = Q,
+                                                 exchange = X,
+                                                 routing_key = RoutingKey}),
+    #'basic.consume_ok'{} =
+        amqp_channel:subscribe(Channel,
+                               #'basic.consume'{queue = Q, consumer_tag = Tag},
+                               self()),
+    receive #'basic.consume_ok'{consumer_tag = Tag} -> ok end,
+    receive {#'basic.deliver'{}, _} -> ok end,
+    #'basic.cancel_ok'{} =
+        amqp_channel:call(Channel, #'basic.cancel'{consumer_tag = Tag}),
+    receive #'basic.cancel_ok'{consumer_tag = Tag} -> ok end,
     Parent ! finished.
+
+consume_notification_test(Connection) ->
+    {ok, Channel} = amqp_connection:open_channel(Connection),
+    Q = uuid(),
+    #'queue.declare_ok'{} =
+        amqp_channel:call(Channel, #'queue.declare'{queue = Q}),
+    #'basic.consume_ok'{consumer_tag = CTag} = ConsumeOk =
+        amqp_channel:subscribe(Channel, #'basic.consume'{queue = Q}, self()),
+    receive ConsumeOk -> ok end,
+    #'queue.delete_ok'{} =
+        amqp_channel:call(Channel, #'queue.delete'{queue = Q}),
+    receive #'basic.cancel'{consumer_tag = CTag} -> ok end,
+    amqp_channel:close(Channel),
+    ok.
 
 basic_recover_test(Connection) ->
     {ok, Channel} = amqp_connection:open_channel(Connection),
@@ -309,23 +399,23 @@ basic_qos_test(Connection, Prefetch) ->
     Workers = [5, 50],
     Parent = self(),
     {ok, Chan} = amqp_connection:open_channel(Connection),
-    #'queue.declare_ok'{queue = Q}
-        = amqp_channel:call(Chan, #'queue.declare'{}),
+    #'queue.declare_ok'{queue = Q} =
+        amqp_channel:call(Chan, #'queue.declare'{}),
     Kids = [spawn(
             fun() ->
                 {ok, Channel} = amqp_connection:open_channel(Connection),
                 amqp_channel:call(Channel,
-                                 #'basic.qos'{prefetch_count = Prefetch}),
-                amqp_channel:subscribe(Channel,
-                                       #'basic.consume'{queue = Q},
+                                  #'basic.qos'{prefetch_count = Prefetch}),
+                amqp_channel:subscribe(Channel, #'basic.consume'{queue = Q},
                                        self()),
                 Parent ! finished,
                 sleeping_consumer(Channel, Sleep, Parent)
             end) || Sleep <- Workers],
     latch_loop(length(Kids)),
-    spawn(fun() -> {ok, Ch} = amqp_connection:open_channel(Connection),
-                   producer_loop(Ch, Q, Messages) end),
-    {Res, ok} = timer:tc(erlang, apply, [fun latch_loop/1, [Messages]]),
+    spawn(fun() -> {ok, Channel} = amqp_connection:open_channel(Connection),
+                   producer_loop(Channel, Q, Messages)
+          end),
+    {Res, _} = timer:tc(erlang, apply, [fun latch_loop/1, [Messages]]),
     [Kid ! stop || Kid <- Kids],
     latch_loop(length(Kids)),
     amqp_channel:close(Chan),
@@ -366,6 +456,56 @@ producer_loop(Channel, RoutingKey, N) ->
     amqp_channel:call(Channel, Publish, #amqp_msg{payload = <<>>}),
     producer_loop(Channel, RoutingKey, N - 1).
 
+confirm_test(Connection) ->
+    {ok, Channel} = amqp_connection:open_channel(Connection),
+    #'confirm.select_ok'{} = amqp_channel:call(Channel, #'confirm.select'{}),
+    amqp_channel:register_confirm_handler(Channel, self()),
+    io:format("Registered ~p~n", [self()]),
+    {ok, Q} = setup_publish(Channel),
+    {#'basic.get_ok'{}, _}
+        = amqp_channel:call(Channel, #'basic.get'{queue = Q, no_ack = false}),
+    ok = receive
+             #'basic.ack'{}  -> ok;
+             #'basic.nack'{} -> fail
+         after 2000 ->
+                 exit(did_not_receive_pub_ack)
+         end,
+    teardown(Connection, Channel).
+
+subscribe_nowait_test(Connection) ->
+    {ok, Channel} = amqp_connection:open_channel(Connection),
+    {ok, Q} = setup_publish(Channel),
+    ok = amqp_channel:subscribe(Channel, #'basic.consume'{queue = Q,
+                                                          consumer_tag = uuid(),
+                                                          nowait = true},
+                                self()),
+    receive
+        {#'basic.deliver'{delivery_tag = DTag}, _Content} ->
+            amqp_channel:cast(Channel, #'basic.ack'{delivery_tag = DTag})
+    end,
+    teardown(Connection, Channel).
+
+basic_nack_test(Connection) ->
+    {ok, Channel} = amqp_connection:open_channel(Connection),
+    #'queue.declare_ok'{queue = Q}
+        = amqp_channel:call(Channel, #'queue.declare'{}),
+
+    Payload = <<"m1">>,
+
+    amqp_channel:call(Channel,
+                      #'basic.publish'{exchange = <<>>, routing_key = Q},
+                      #amqp_msg{payload = Payload}),
+
+    #'basic.get_ok'{delivery_tag = Tag} =
+        get_and_assert_equals(Channel, Q, Payload, false),
+
+    amqp_channel:call(Channel, #'basic.nack'{delivery_tag = Tag,
+                                             multiple     = false,
+                                             requeue      = false}),
+
+    get_and_assert_empty(Channel, Q),
+    teardown(Connection, Channel).
+
 %% Reject is not yet implemented in RabbitMQ
 basic_reject_test(Connection) ->
     amqp_connection:close(Connection).
@@ -403,8 +543,8 @@ pub_and_close_test(Connection1, Connection2) ->
     amqp_connection:close(Connection1),
     %% Get sent messages back and count them
     {ok, Channel2} = amqp_connection:open_channel(Connection2),
-    amqp_channel:subscribe(Channel2, 
-                           #'basic.consume'{queue = Q, no_ack = true}, 
+    amqp_channel:subscribe(Channel2,
+                           #'basic.consume'{queue = Q, no_ack = true},
                            self()),
     ?assert(pc_consumer_loop(Channel2, Payload, 0) == NMessages),
     %% Make sure queue is empty
@@ -463,7 +603,7 @@ channel_flow_test(Connection) ->
                       end,
                       Publish = #'basic.publish'{exchange = X,
                                                  routing_key = K},
-                      blocked = 
+                      blocked =
                         amqp_channel:call(Channel, Publish,
                                           #amqp_msg{payload = Payload}),
                       memsup:set_sysmem_high_watermark(0.99),
@@ -480,93 +620,6 @@ channel_flow_test(Connection) ->
     after 10000 ->
         ?LOG_DEBUG("Are you sure that you have waited 1 minute?~n"),
         exit(did_not_receive_channel_flow)
-    end.
-
-%%----------------------------------------------------------------------------
-%% This is a test, albeit not a unit test, to see if the producer
-%% handles the effect of being throttled.
-
-channel_flow_sync(Connection) ->
-    start_channel_flow(Connection, fun amqp_channel:call/3).
-
-channel_flow_async(Connection) ->
-    start_channel_flow(Connection, fun amqp_channel:cast/3).
-
-start_channel_flow(Connection, PublishFun) ->
-    X = <<"amq.direct">>,
-    Key = uuid(),
-    Producer = spawn_link(
-        fun() ->
-            {ok, Channel} = amqp_connection:open_channel(Connection),
-            Parent = self(),
-            FlowHandler = spawn_link(fun() -> cf_handler_loop(Parent) end),
-            amqp_channel:register_flow_handler(Channel, FlowHandler),
-            Payload = << <<B:8>> || B <- lists:seq(1, 10000) >>,
-            cf_producer_loop(Channel, X, Key, PublishFun, Payload, 0)
-        end),
-    Consumer = spawn_link(
-        fun() ->
-            {ok, Channel} = amqp_connection:open_channel(Connection),
-            #'queue.declare_ok'{queue = Q}
-                = amqp_channel:call(Channel, #'queue.declare'{}),
-            Bind = #'queue.bind'{queue = Q,
-                                 exchange = X,
-                                 routing_key = Key},
-            amqp_channel:call(Channel, Bind),
-            #'basic.consume_ok'{consumer_tag = Tag} 
-                = amqp_channel:subscribe(Channel, #'basic.consume'{queue = Q},
-                                         self()),
-            
-            cf_consumer_loop(Channel, Tag)
-        end),
-    {Producer, Consumer}.
-
-cf_consumer_loop(Channel, Tag) ->
-    receive
-        #'basic.consume_ok'{} -> cf_consumer_loop(Channel, Tag);
-        #'basic.cancel_ok'{} -> ok;
-        {#'basic.deliver'{delivery_tag = DeliveryTag}, _Content} ->
-            amqp_channel:call(Channel,
-                #'basic.ack'{delivery_tag = DeliveryTag}),
-            cf_consumer_loop(Channel, Tag);
-        stop ->
-            amqp_channel:call(Channel, #'basic.cancel'{consumer_tag = Tag}),
-            ok
-    end.
-
-cf_producer_loop(Channel, X, Key, PublishFun, Payload, N)
-        when N rem 5000 =:= 0 ->
-    ?LOG_INFO("Producer (~p) has sent about ~p messages since it started~n",
-              [self(), N]),
-    cf_producer_loop(Channel, X, Key, PublishFun, Payload, N + 1);
-
-cf_producer_loop(Channel, X, Key, PublishFun, Payload, N) ->
-    Publish = #'basic.publish'{exchange = X, routing_key = Key},
-    case PublishFun(Channel, Publish, #amqp_msg{payload = Payload}) of
-        blocked ->
-            ?LOG_INFO("Producer (~p) is blocked, will go to sleep.....ZZZ~n",
-                      [self()]),
-            receive
-                resume ->
-                    ?LOG_INFO("Producer (~p) has woken up :-)~n", [self()]),
-                    cf_producer_loop(Channel, X, Key,
-                                     PublishFun, Payload, N + 1)
-            end;
-        _ ->
-            cf_producer_loop(Channel, X, Key, PublishFun, Payload, N + 1)
-    end.
-
-cf_handler_loop(Producer) ->
-    receive
-        #'channel.flow'{active = false} ->
-            ?LOG_DEBUG("Producer throttling ON~n"),
-            cf_handler_loop(Producer);
-        #'channel.flow'{active = true} ->
-            ?LOG_INFO("Producer throttling OFF, waking up producer (~p)~n",
-                      [Producer]),
-            Producer ! resume,
-            cf_handler_loop(Producer);
-        stop -> ok
     end.
 
 %%---------------------------------------------------------------------------
@@ -593,8 +646,8 @@ rpc_test(Connection) ->
 
 setup_publish(Channel) ->
     Publish = #publish{routing_key = <<"a.b.c.d">>,
-                       q = <<"a.b.c">>,
-                       x = <<"x">>,
+                       q = uuid(),
+                       x = uuid(),
                        bind_key = <<"a.b.c.*">>,
                        payload = <<"foobar">>},
     setup_publish(Channel, Publish).
@@ -638,18 +691,21 @@ wait_for_death(Pid) ->
     after 1000 -> exit({timed_out_waiting_for_process_death, Pid})
     end.
 
-latch_loop(0) ->
-    ok;
+latch_loop() ->
+    latch_loop(?Latch, []).
 
 latch_loop(Latch) ->
+    latch_loop(Latch, []).
+
+latch_loop(0, Acc) ->
+    Acc;
+latch_loop(Latch, Acc) ->
     receive
-        finished ->
-            latch_loop(Latch - 1)
-    after ?Latch * ?Wait ->
-        exit(waited_too_long)
+        finished        -> latch_loop(Latch - 1, Acc);
+        {finished, Ret} -> latch_loop(Latch - 1, [Ret | Acc])
+    after ?Latch * ?Wait -> exit(waited_too_long)
     end.
 
 uuid() ->
     {A, B, C} = now(),
     <<A:32, B:32, C:32>>.
-

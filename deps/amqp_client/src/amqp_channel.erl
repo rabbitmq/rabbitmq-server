@@ -1,48 +1,39 @@
-%%   The contents of this file are subject to the Mozilla Public License
-%%   Version 1.1 (the "License"); you may not use this file except in
-%%   compliance with the License. You may obtain a copy of the License at
-%%   http://www.mozilla.org/MPL/
+%% The contents of this file are subject to the Mozilla Public License
+%% Version 1.1 (the "License"); you may not use this file except in
+%% compliance with the License. You may obtain a copy of the License at
+%% http://www.mozilla.org/MPL/
 %%
-%%   Software distributed under the License is distributed on an "AS IS"
-%%   basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
-%%   License for the specific language governing rights and limitations
-%%   under the License.
+%% Software distributed under the License is distributed on an "AS IS"
+%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
+%% License for the specific language governing rights and limitations
+%% under the License.
 %%
-%%   The Original Code is the RabbitMQ Erlang Client.
+%% The Original Code is RabbitMQ.
 %%
-%%   The Initial Developers of the Original Code are LShift Ltd.,
-%%   Cohesive Financial Technologies LLC., and Rabbit Technologies Ltd.
-%%
-%%   Portions created by LShift Ltd., Cohesive Financial
-%%   Technologies LLC., and Rabbit Technologies Ltd. are Copyright (C)
-%%   2007 LShift Ltd., Cohesive Financial Technologies LLC., and Rabbit
-%%   Technologies Ltd.;
-%%
-%%   All Rights Reserved.
-%%
-%%   Contributor(s): Ben Hood <0x6e6562@gmail.com>.
+%% The Initial Developer of the Original Code is VMware, Inc.
+%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
 %%
 
-%% @doc This module encapsulates the client's view of an AMQP channel. Each
-%% server side channel is represented by an amqp_channel process on the client
-%% side. Channel processes are created using the {@link amqp_connection}
-%% module, but channels are respsonsible for closing themselves. Channel
-%% processes are linked to the connnection process from which they were
-%% created.
+%% @doc This module encapsulates the client's view of an AMQP
+%% channel. Each server side channel is represented by an amqp_channel
+%% process on the client side. Channel processes are created using the
+%% {@link amqp_connection} module. Channel processes are supervised
+%% under amqp_client's supervision tree.
 -module(amqp_channel).
 
 -include("amqp_client.hrl").
 
 -behaviour(gen_server).
 
--export([start_link/3]).
+-export([start_link/3, connection_closing/3, open/1]).
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2]).
 -export([call/2, call/3, cast/2, cast/3]).
 -export([subscribe/3]).
 -export([close/1, close/3]).
--export([register_return_handler/2]).
--export([register_flow_handler/2]).
+-export([register_return_handler/2, register_flow_handler/2,
+         register_confirm_handler/2]).
+-export([next_publish_seqno/1]).
 -export([register_default_consumer/2]).
 
 -define(TIMEOUT_FLUSH, 60000).
@@ -54,102 +45,96 @@
                 rpc_requests        = queue:new(),
                 anon_sub_requests   = queue:new(),
                 tagged_sub_requests = dict:new(),
-                closing             = false,
+                closing             = false, %% false | just_channel |
+                                             %%   {connection, Reason}
                 writer,
                 return_handler_pid  = none,
-                flow_control        = false,
+                confirm_handler_pid = none,
+                next_pub_seqno      = 0,
+                flow_active         = true,
                 flow_handler_pid    = none,
                 consumers           = dict:new(),
                 default_consumer    = none,
-                start_infrastructure_fun
+                start_writer_fun
                }).
-
-%% This diagram shows the interaction between the different component
-%% processes in an AMQP client scenario.
-%%
-%%                             message* / reply*        +-------+
-%%                            +----------------------   | queue |
-%%                            |                         +-------+
-%%                            |
-%%                            |                          +-----+
-%%                            v                          |     |
-%%           request                     reply*          |     v
-%% +------+  -------+  +--------------+  <------+  +----------------+
-%% | User |         |  | amqp_channel |         |  | direct_channel |
-%% +------+  <------+  +--------------+  -------+  +----------------+
-%%           response /        |          request
-%% cast/call         /         |
-%%                  /          | message
-%%                 /           v
-%% +-------------+/       +----------+
-%% | Pending RPC |        | Consumer |
-%% +-------------+        +----------+
-%%       |
-%% [consumer tag --> consumer pid]
-%%
-%% These notifications are processed asynchronously via
-%% handle_info/2 callbacks
 
 %%---------------------------------------------------------------------------
 %% Type Definitions
 %%---------------------------------------------------------------------------
 
-%% @type amqp_command().
-%% This abstract datatype represents the set of commands that comprise the
-%% AMQP execution model. As indicated in the overview, the attributes of each
-%% commands in the execution model are described in the protocol
-%% documentation. The Erlang record definitions are autogenerated from a
-%% parseable version of the specification.
+%% @type amqp_method().
+%% This abstract datatype represents the set of methods that comprise
+%% the AMQP execution model. As indicated in the overview, the
+%% attributes of each method in the execution model are described in
+%% the protocol documentation. The Erlang record definitions are
+%% autogenerated from a parseable version of the specification. Most
+%% fields in the generated records have sensible default values that
+%% you need not worry in the case of a simple usage of the client
+%% library.
 
-%% @type content() = #'basic.publish'{} |
-%%                   #'basic.deliver'{} |
-%%                   #'basic.return'{}.
-%% These are the content bearing AMQP commands.
+%% @type amqp_msg() = #amqp_msg{}.
+%% This is the content encapsulated in content-bearing AMQP methods. It
+%% contains the following fields:
+%% <ul>
+%% <li>props :: class_property() - A class property record, defaults to
+%%     #'P_basic'{}</li>
+%% <li>payload :: binary() - The arbitrary data payload</li>
+%% </ul>
 
 %%---------------------------------------------------------------------------
 %% AMQP Channel API methods
 %%---------------------------------------------------------------------------
 
-%% @spec (Channel, amqp_command()) -> amqp_command()
-%% where
-%%      Channel = pid()
-%% @doc This is a generic RPC mechanism that sends an AMQP command and
-%% receives an AMQP command as a response. This function blocks until the
-%% response is returned.
+%% @spec (Channel, Method) -> Result
+%% @doc This is equivalent to amqp_channel:call(Channel, Method, none).
 call(Channel, Method) ->
     gen_server:call(Channel, {call, Method, none}, infinity).
 
-%% @spec (Channel, amqp_command(), content()) -> ok | blocked | closing
+%% @spec (Channel, Method, Content) -> Result
 %% where
 %%      Channel = pid()
-%% @doc This sends an AMQP command with content and waits for a synchronous
-%% response. Generally this is used with the #basic.publish{} command.
-%% This will return a blocked atom if either the server has throttled the
-%% client for flow control reasons or if the channel is shutting down due to a
-%% broker initiated close.
-%% It will return a closing atom if the channel is in the process of shutting
-%% down.
-%% Note that the synchronicity only means that the client has transmitted the
-%% command to the broker. It does not imply that the broker has accepted
-%% responsibility for the message. To acheive guaranteed delivery, this
-%% function would have to be called within the context of a transaction.
+%%      Method = amqp_method()
+%%      Content = amqp_msg() | none
+%%      Result = amqp_method() | ok | blocked | closing
+%% @doc This sends an AMQP method on the channel.
+%% For content bearing methods, Content has to be an amqp_msg(), whereas
+%% for non-content bearing methods, it needs to be the atom 'none'.<br/>
+%% In the case of synchronous methods, this function blocks until the
+%% corresponding reply comes back from the server and returns it.
+%% In the case of asynchronous methods, the function blocks until the method
+%% gets sent on the wire and returns the atom 'ok' on success.<br/>
+%% This will return the atom 'blocked' if the server has
+%% throttled the  client for flow control reasons. This will return the
+%% atom 'closing' if the channel is in the process of shutting down.<br/>
+%% Note that for asynchronous methods, the synchronicity implied by
+%% 'call' only means that the client has transmitted the method to
+%% the broker. It does not necessarily imply that the broker has
+%% accepted responsibility for the message.
 call(Channel, Method, Content) ->
     gen_server:call(Channel, {call, Method, Content}, infinity).
 
-%% @spec (Channel, amqp_command()) -> ok
-%% @doc Asynchronous variant of {@link call/2}
+%% @spec (Channel, Method) -> ok
+%% @doc This is equivalent to amqp_channel:cast(Channel, Method, none).
 cast(Channel, Method) ->
     gen_server:cast(Channel, {cast, Method, none}).
 
-%% @spec (Channel, amqp_command(), content()) -> ok
-%% @doc Asynchronous variant of {@link call/3}
+%% @spec (Channel, Method, Content) -> ok
+%% where
+%%      Channel = pid()
+%%      Method = amqp_method()
+%%      Content = amqp_msg() | none
+%% @doc This function is the same as {@link call/3}, except that it returns
+%% immediately with the atom 'ok', without blocking the caller process.
+%% This function is not recommended with synchronous methods, since there is no
+%% way to verify that the server has received the method.
 cast(Channel, Method, Content) ->
     gen_server:cast(Channel, {cast, Method, Content}).
 
 %% @spec (Channel) -> ok
 %% where
 %%      Channel = pid()
-%% @doc Closes the channel, invokes close(Channel, 200, &lt;&lt;"Goodbye">>).
+%% @doc Closes the channel, invokes
+%% close(Channel, 200, &lt;&lt;"Goodbye"&gt;&gt;).
 close(Channel) ->
     close(Channel, 200, <<"Goodbye">>).
 
@@ -161,24 +146,28 @@ close(Channel) ->
 %% @doc Closes the channel, allowing the caller to supply a reply code and
 %% text.
 close(Channel, Code, Text) ->
-    Close = #'channel.close'{reply_text = Text,
-                             reply_code = Code,
-                             class_id   = 0,
-                             method_id  = 0},
-    #'channel.close_ok'{} = call(Channel, Close),
-    ok.
+    gen_server:call(Channel, {close, Code, Text}, infinity).
+
+%% @spec (Channel) -> integer()
+%% where
+%%      Channel = pid()
+%% @doc When in confirm mode, returns the sequence number of the next
+%% message to be published.
+next_publish_seqno(Channel) ->
+    gen_server:call(Channel, next_publish_seqno, infinity).
+
 %%---------------------------------------------------------------------------
 %% Consumer registration (API)
 %%---------------------------------------------------------------------------
 
 %% @type consume() = #'basic.consume'{}.
-%% The AMQP command that is used to  subscribe a consumer to a queue.
-%% @spec (Channel, consume(), Consumer) -> amqp_command()
+%% The AMQP method that is used to  subscribe a consumer to a queue.
+%% @spec (Channel, consume(), Consumer) -> amqp_method()
 %% where
 %%      Channel = pid()
 %%      Consumer = pid()
 %% @doc Creates a subscription to a queue. This subscribes a consumer pid to
-%% the queue defined in the #'basic.consume'{} command record. Note that both
+%% the queue defined in the #'basic.consume'{} method record. Note that
 %% both the process invoking this method and the supplied consumer process
 %% receive an acknowledgement of the subscription. The calling process will
 %% receive the acknowledgement as the return value of this function, whereas
@@ -191,16 +180,27 @@ subscribe(Channel, BasicConsume = #'basic.consume'{}, Consumer) ->
 %%      Channel = pid()
 %%      ReturnHandler = pid()
 %% @doc This registers a handler to deal with returned messages. The
-%% registered process will receive #basic.return{} commands.
+%% registered process will receive #basic.return{} records.
 register_return_handler(Channel, ReturnHandler) ->
     gen_server:cast(Channel, {register_return_handler, ReturnHandler} ).
+
+%% @spec (Channel, ConfirmHandler) -> ok
+%% where
+%%      Channel = pid()
+%%      ConfirmHandler = pid()
+
+%% @doc This registers a handler to deal with confirm-related
+%% messages. The registered process will receive #basic.ack{} and
+%% #basic.nack{} commands.
+register_confirm_handler(Channel, ConfirmHandler) ->
+    gen_server:cast(Channel, {register_confirm_handler, ConfirmHandler} ).
 
 %% @spec (Channel, FlowHandler) -> ok
 %% where
 %%      Channel = pid()
 %%      FlowHandler = pid()
 %% @doc This registers a handler to deal with channel flow notifications.
-%% The registered process will receive #channel.flow{} commands.
+%% The registered process will receive #channel.flow{} records.
 register_flow_handler(Channel, FlowHandler) ->
     gen_server:cast(Channel, {register_flow_handler, FlowHandler} ).
 
@@ -212,29 +212,259 @@ register_flow_handler(Channel, FlowHandler) ->
 %% Under certain circumstances it is possible for a channel to receive a
 %% message delivery which does not match any consumer which is currently
 %% set up via basic.consume. This will occur after the following sequence
-%% of events:
-%%
-%% basic.consume with explicit acks
-%% %% some deliveries take place but are not acked
-%% basic.cancel
-%% basic.recover{requeue = false}
-%%
+%% of events:<br/>
+%% <br/>
+%% basic.consume with explicit acks<br/>
+%% %% some deliveries take place but are not acked<br/>
+%% basic.cancel<br/>
+%% basic.recover{requeue = false}<br/>
+%% <br/>
 %% Since requeue is specified to be false in the basic.recover, the spec
 %% states that the message must be redelivered to "the original recipient"
 %% - i.e. the same channel / consumer-tag. But the consumer is no longer
-%% active.
-%%
+%% active.<br/>
 %% In these circumstances, you can register a default consumer to handle
 %% such deliveries. If no default consumer is registered then the channel
-%% will exit on receiving such a delivery.
-%%
+%% will exit on receiving such a delivery.<br/>
 %% Most people will not need to use this.
 register_default_consumer(Channel, Consumer) ->
     gen_server:cast(Channel, {register_default_consumer, Consumer}).
 
 %%---------------------------------------------------------------------------
+%% Internal interface
+%%---------------------------------------------------------------------------
+
+%% @private
+start_link(Driver, ChannelNumber, SWF) ->
+    gen_server:start_link(?MODULE, [self(), Driver, ChannelNumber, SWF], []).
+
+%% @private
+connection_closing(Pid, ChannelCloseType, Reason) ->
+    gen_server:cast(Pid, {connection_closing, ChannelCloseType, Reason}).
+
+%% @private
+open(Pid) ->
+    gen_server:call(Pid, open, infinity).
+
+%%---------------------------------------------------------------------------
+%% gen_server callbacks
+%%---------------------------------------------------------------------------
+
+%% @private
+init([Sup, Driver, ChannelNumber, SWF]) ->
+    {ok, #state{sup              = Sup,
+                driver           = Driver,
+                number           = ChannelNumber,
+                start_writer_fun = SWF}}.
+
+%% @private
+handle_call(open, From, State) ->
+    {noreply, rpc_top_half(#'channel.open'{}, none, From, State)};
+%% @private
+handle_call({close, Code, Text}, From, State) ->
+    handle_close(Code, Text, From, State);
+%% @private
+handle_call({call, Method, AmqpMsg}, From, State) ->
+    handle_method_to_server(Method, AmqpMsg, From, State);
+%% @private
+handle_call({subscribe, Method, Consumer}, From, State) ->
+    handle_subscribe(Method, Consumer, From, State);
+%% Handles the delivery of messages from a direct channel
+%% @private
+handle_call({send_command_sync, Method, Content}, From, State) ->
+    Ret = handle_method_from_server(Method, Content, State),
+    gen_server:reply(From, ok),
+    Ret;
+%% Handles the delivery of messages from a direct channel
+%% @private
+handle_call({send_command_sync, Method}, From, State) ->
+    Ret = handle_method_from_server(Method, none, State),
+    gen_server:reply(From, ok),
+    Ret;
+%% When in confirm mode, returns the sequence number of the next
+%% message to be published.
+%% @private
+handle_call(next_publish_seqno, _From,
+            State = #state{next_pub_seqno = SeqNo}) ->
+    {reply, SeqNo, State}.
+
+%% @private
+handle_cast({cast, Method, AmqpMsg}, State) ->
+    handle_method_to_server(Method, AmqpMsg, none, State);
+%% Registers a handler to process return messages
+%% @private
+handle_cast({register_return_handler, ReturnHandler}, State) ->
+    erlang:monitor(process, ReturnHandler),
+    {noreply, State#state{return_handler_pid = ReturnHandler}};
+%% Registers a handler to process ack and nack messages
+%% @private
+handle_cast({register_confirm_handler, ConfirmHandler}, State) ->
+    erlang:monitor(process, ConfirmHandler),
+    {noreply, State#state{confirm_handler_pid = ConfirmHandler}};
+%% Registers a handler to process flow control messages
+%% @private
+handle_cast({register_flow_handler, FlowHandler}, State) ->
+    erlang:monitor(process, FlowHandler),
+    {noreply, State#state{flow_handler_pid = FlowHandler}};
+%% Registers a handler to process unexpected deliveries
+%% @private
+handle_cast({register_default_consumer, Consumer}, State) ->
+    erlang:monitor(process, Consumer),
+    {noreply, State#state{default_consumer = Consumer}};
+%% Received from channels manager
+%% @private
+handle_cast({method, Method, Content}, State) ->
+    handle_method_from_server(Method, Content, State);
+%% Handles the situation when the connection closes without closing the channel
+%% beforehand. The channel must block all further RPCs,
+%% flush the RPC queue (optional), and terminate
+%% @private
+handle_cast({connection_closing, CloseType, Reason}, State) ->
+    handle_connection_closing(CloseType, Reason, State);
+%% @private
+handle_cast({shutdown, Shutdown}, State) ->
+    handle_shutdown(Shutdown, State).
+
+%% Received from rabbit_channel in the direct case
+%% @private
+handle_info({send_command, Method}, State) ->
+    handle_method_from_server(Method, none, State);
+%% Received from rabbit_channel in the direct case
+%% @private
+handle_info({send_command, Method, Content}, State) ->
+    handle_method_from_server(Method, Content, State);
+%% Received from rabbit_channel in the direct case
+%% @private
+handle_info({send_command_and_notify, Q, ChPid, Method, Content}, State) ->
+    handle_method_from_server(Method, Content, State),
+    rabbit_amqqueue:notify_sent(Q, ChPid),
+    {noreply, State};
+%% This comes from the writer or rabbit_channel
+%% @private
+handle_info({channel_exit, _ChNumber, Reason}, State) ->
+    handle_channel_exit(Reason, State);
+%% This comes from rabbit_channel in the direct case
+handle_info({channel_closing, ChPid}, State) ->
+    ok = rabbit_channel:ready_for_close(ChPid),
+    {noreply, State};
+%% @private
+handle_info(timed_out_flushing_channel, State) ->
+    ?LOG_WARN("Channel (~p) closing: timed out flushing while "
+              "connection closing~n", [self()]),
+    {stop, timed_out_flushing_channel, State};
+%% @private
+handle_info(timed_out_waiting_close_ok, State) ->
+    ?LOG_WARN("Channel (~p) closing: timed out waiting for "
+              "channel.close_ok while connection closing~n", [self()]),
+    {stop, timed_out_waiting_close_ok, State};
+%% @private
+handle_info({'DOWN', _, process, ReturnHandler, Reason},
+            State = #state{return_handler_pid = ReturnHandler}) ->
+    ?LOG_WARN("Channel (~p): Unregistering return handler ~p because it died. "
+              "Reason: ~p~n", [self(), ReturnHandler, Reason]),
+    {noreply, State#state{return_handler_pid = none}};
+%% @private
+handle_info({'DOWN', _, process, ConfirmHandler, Reason},
+            State = #state{confirm_handler_pid = ConfirmHandler}) ->
+    ?LOG_WARN("Channel (~p): Unregistering confirm handler ~p because it died. "
+              "Reason: ~p~n", [self(), ConfirmHandler, Reason]),
+    {noreply, State#state{confirm_handler_pid = none}};
+%% @private
+handle_info({'DOWN', _, process, FlowHandler, Reason},
+            State = #state{flow_handler_pid = FlowHandler}) ->
+    ?LOG_WARN("Channel (~p): Unregistering flow handler ~p because it died. "
+              "Reason: ~p~n", [self(), FlowHandler, Reason]),
+    {noreply, State#state{flow_handler_pid = none}};
+%% @private
+handle_info({'DOWN', _, process, DefaultConsumer, Reason},
+            State = #state{default_consumer = DefaultConsumer}) ->
+    ?LOG_WARN("Channel (~p): Unregistering default consumer ~p because it died."
+              "Reason: ~p~n", [self(), DefaultConsumer, Reason]),
+    {noreply, State#state{default_consumer = none}}.
+
+%% @private
+terminate(_Reason, _State) ->
+    ok.
+
+%% @private
+code_change(_OldVsn, State, _Extra) ->
+    State.
+
+%%---------------------------------------------------------------------------
 %% RPC mechanism
 %%---------------------------------------------------------------------------
+
+handle_method_to_server(Method, AmqpMsg, From, State) ->
+    case {check_invalid_method(Method), From,
+          check_block(Method, AmqpMsg, State)} of
+        {ok, _, ok} ->
+            State1 = case {Method, State#state.next_pub_seqno} of
+                         {#'confirm.select'{}, _} ->
+                             State#state{next_pub_seqno = 1};
+                         {#'basic.publish'{}, 0} ->
+                             State;
+                         {#'basic.publish'{}, SeqNo} ->
+                             State#state{next_pub_seqno = SeqNo + 1};
+                         _ ->
+                             State
+                     end,
+            {noreply,
+             rpc_top_half(Method, build_content(AmqpMsg), From, State1)};
+        {ok, none, BlockReply} ->
+            ?LOG_WARN("Channel (~p): discarding method ~p in cast.~n"
+                      "Reason: ~p~n", [self(), Method, BlockReply]),
+            {noreply, State};
+        {ok, _, BlockReply} ->
+            {reply, BlockReply, State};
+        {{_, InvalidMethodMessage}, none, _} ->
+            ?LOG_WARN("Channel (~p): ignoring cast of ~p method. " ++
+                      InvalidMethodMessage ++ "~n", [self(), Method]),
+            {noreply, State};
+        {{InvalidMethodReply, _}, _, _} ->
+            {reply, {error, InvalidMethodReply}, State}
+    end.
+
+handle_close(Code, Text, From, State) ->
+    Close = #'channel.close'{reply_code = Code,
+                             reply_text = Text,
+                             class_id   = 0,
+                             method_id  = 0},
+    case check_block(Close, none, State) of
+        ok         -> {noreply, rpc_top_half(Close, none, From, State)};
+        BlockReply -> {reply, BlockReply, State}
+    end.
+
+handle_subscribe(#'basic.consume'{consumer_tag = Tag, nowait = NoWait} = Method,
+                 Consumer,
+                 From, State = #state{tagged_sub_requests = Tagged,
+                                      anon_sub_requests   = Anon,
+                                      consumers           = Consumers}) ->
+    case check_block(Method, none, State) of
+        ok when Tag =:= undefined orelse size(Tag) == 0 ->
+            case NoWait of
+                true ->
+                    {reply, {error, command_invalid}, State};
+                false ->
+                    NewMethod = Method#'basic.consume'{consumer_tag = <<"">>},
+                    NewState = State#state{anon_sub_requests =
+                                               queue:in(Consumer, Anon)},
+                    {noreply, rpc_top_half(NewMethod, none, From, NewState)}
+            end;
+        ok when is_binary(Tag) andalso size(Tag) >= 0 ->
+            case dict:is_key(Tag, Tagged) orelse dict:is_key(Tag, Consumers) of
+                true ->
+                    {reply, {error, consumer_tag_already_in_use}, State};
+                false when NoWait ->
+                    NewState = register_consumer(Tag, Consumer, State),
+                    {reply, ok, rpc_top_half(Method, none, none, NewState)};
+                false ->
+                    NewState = State#state{tagged_sub_requests =
+                                             dict:store(Tag, Consumer, Tagged)},
+                    {noreply, rpc_top_half(Method, none, From, NewState)}
+            end;
+        BlockReply ->
+            {reply, BlockReply, State}
+    end.
 
 rpc_top_half(Method, Content, From,
              State0 = #state{rpc_requests = RequestQueue}) ->
@@ -248,43 +478,219 @@ rpc_top_half(Method, Content, From,
 rpc_bottom_half(Reply, State = #state{rpc_requests = RequestQueue}) ->
     {{value, {From, _Method, _Content}}, RequestQueue1} =
         queue:out(RequestQueue),
-    case From of
-        none -> ok;
-        _    -> gen_server:reply(From, Reply)
+    case From of none -> ok;
+                 _    -> gen_server:reply(From, Reply)
     end,
     do_rpc(State#state{rpc_requests = RequestQueue1}).
 
-do_rpc(State = #state{rpc_requests = RequestQueue,
+do_rpc(State = #state{rpc_requests = Q,
                       closing      = Closing}) ->
-    case queue:peek(RequestQueue) of
-        {value, {_From, Method, Content}} ->
+    case queue:out(Q) of
+        {{value, {From, Method, Content}}, NewQ} ->
             State1 = pre_do(Method, Content, State),
-            do(Method, Content, State1),
-            State1;
-        empty ->
+            DoRet = do(Method, Content, State1),
+            case ?PROTOCOL:is_method_synchronous(Method) of
+                true  -> State1;
+                false -> case {From, DoRet} of
+                             {none, _} -> ok;
+                             {_, ok}   -> gen_server:reply(From, ok)
+                             %% Do not reply if error in do. Expecting
+                             %% {channel_exit, ...}
+                         end,
+                         do_rpc(State1#state{rpc_requests = NewQ})
+            end;
+        {empty, NewQ} ->
             case Closing of
-                {connection, Reason} -> self() ! {shutdown, Reason};
-                _                    -> ok
+                {connection, Reason} ->
+                    gen_server:cast(self(),
+                                    {shutdown, {connection_closing, Reason}});
+                _ ->
+                    ok
             end,
-            State
+            State#state{rpc_requests = NewQ}
     end.
 
 pre_do(#'channel.open'{}, _Content, State) ->
-    start_infrastructure(State);
+    start_writer(State);
 pre_do(#'channel.close'{}, _Content, State) ->
     State#state{closing = just_channel};
 pre_do(_, _, State) ->
     State.
 
 %%---------------------------------------------------------------------------
+%% Handling of methods from the server
+%%---------------------------------------------------------------------------
+
+handle_method_from_server(Method, Content, State = #state{closing = Closing}) ->
+    case is_connection_method(Method) of
+        true -> server_misbehaved(
+                    #amqp_error{name        = command_invalid,
+                                explanation = "connection method on "
+                                              "non-zero channel",
+                                method      = element(1, Method)},
+                    State);
+        false -> Drop = case {Closing, Method} of
+                            {just_channel, #'channel.close'{}}    -> false;
+                            {just_channel, #'channel.close_ok'{}} -> false;
+                            {just_channel, _}                     -> true;
+                            _                                     -> false
+                        end,
+                 if Drop -> ?LOG_INFO("Channel (~p): dropping method ~p from "
+                                      "server because channel is closing~n",
+                                      [self(), {Method, Content}]),
+                            {noreply, State};
+                    true -> handle_method_from_server1(Method,
+                                                       amqp_msg(Content), State)
+                 end
+    end.
+
+handle_method_from_server1(#'channel.open_ok'{}, none, State) ->
+    {noreply, rpc_bottom_half(ok, State)};
+handle_method_from_server1(#'channel.close'{reply_code = Code,
+                                            reply_text = Text}, none, State) ->
+    do(#'channel.close_ok'{}, none, State),
+    {stop, {server_initiated_close, Code, Text}, State};
+handle_method_from_server1(#'channel.close_ok'{}, none, State) ->
+    {stop, normal, rpc_bottom_half(ok, State)};
+handle_method_from_server1(
+        #'basic.consume_ok'{consumer_tag = ConsumerTag} = ConsumeOk,
+        none, State = #state{tagged_sub_requests = Tagged,
+                             anon_sub_requests = Anon}) ->
+    {Consumer, State0} =
+        case dict:find(ConsumerTag, Tagged) of
+            {ok, C} ->
+                NewTagged = dict:erase(ConsumerTag, Tagged),
+                {C, State#state{tagged_sub_requests = NewTagged}};
+            error ->
+                {{value, C}, NewAnon} = queue:out(Anon),
+                {C, State#state{anon_sub_requests = NewAnon}}
+        end,
+    Consumer ! ConsumeOk,
+    State1 = register_consumer(ConsumerTag, Consumer, State0),
+    {noreply, rpc_bottom_half(ConsumeOk, State1)};
+handle_method_from_server1(
+        #'basic.cancel_ok'{consumer_tag = ConsumerTag} = CancelOk, none,
+        State) ->
+    Consumer = resolve_consumer(ConsumerTag, State),
+    Consumer ! CancelOk,
+    NewState = unregister_consumer(ConsumerTag, State),
+    {noreply, rpc_bottom_half(CancelOk, NewState)};
+handle_method_from_server1(#'channel.flow'{active = Active} = Flow, none,
+                           State = #state{flow_handler_pid = FlowHandler}) ->
+    case FlowHandler of none -> ok;
+                        _    -> FlowHandler ! Flow
+    end,
+    %% Putting the flow_ok in the queue so that the RPC queue can be
+    %% flushed beforehand. Methods that made it to the queue are not
+    %% blocked in any circumstance.
+    {noreply, rpc_top_half(#'channel.flow_ok'{active = Active}, none, none,
+                           State#state{flow_active = Active})};
+handle_method_from_server1(
+        #'basic.deliver'{consumer_tag = ConsumerTag} = Deliver, AmqpMsg,
+        State) ->
+    Consumer = resolve_consumer(ConsumerTag, State),
+    Consumer ! {Deliver, AmqpMsg},
+    {noreply, State};
+handle_method_from_server1(
+        #'basic.return'{} = BasicReturn, AmqpMsg,
+        State = #state{return_handler_pid = ReturnHandler}) ->
+    case ReturnHandler of
+        none -> ?LOG_WARN("Channel (~p): received {~p, ~p} but there is no "
+                          "return handler registered~n",
+                          [self(), BasicReturn, AmqpMsg]);
+        _    -> ReturnHandler ! {BasicReturn, AmqpMsg}
+    end,
+    {noreply, State};
+handle_method_from_server1(#'basic.cancel'{consumer_tag = ConsumerTag} = Death,
+                           none, State) ->
+    Consumer = resolve_consumer(ConsumerTag, State),
+    Consumer ! Death,
+    NewState = unregister_consumer(ConsumerTag, State),
+    {noreply, NewState};
+handle_method_from_server1(#'basic.ack'{} = BasicAck, none,
+                           #state{confirm_handler_pid = none} = State) ->
+    ?LOG_WARN("Channel (~p): received ~p but there is no "
+              "confirm handler registered~n", [self(), BasicAck]),
+    {noreply, State};
+handle_method_from_server1(#'basic.ack'{} = BasicAck, none,
+                           #state{confirm_handler_pid = ConfirmHandler} = State) ->
+    ConfirmHandler ! BasicAck,
+    {noreply, State};
+handle_method_from_server1(#'basic.nack'{} = BasicNack, none,
+                           #state{confirm_handler_pid = none} = State) ->
+    ?LOG_WARN("Channel (~p): received ~p but there is no "
+              "confirm handler registered~n", [self(), BasicNack]),
+    {noreply, State};
+handle_method_from_server1(#'basic.nack'{} = BasicNack, none,
+                           #state{confirm_handler_pid = ConfirmHandler} = State) ->
+    ConfirmHandler ! BasicNack,
+    {noreply, State};
+
+handle_method_from_server1(Method, none, State) ->
+    {noreply, rpc_bottom_half(Method, State)};
+handle_method_from_server1(Method, Content, State) ->
+    {noreply, rpc_bottom_half({Method, Content}, State)}.
+
+%%---------------------------------------------------------------------------
+%% Other handle_* functions
+%%---------------------------------------------------------------------------
+
+handle_connection_closing(CloseType, Reason,
+                          State = #state{rpc_requests = RpcQueue,
+                                         closing      = Closing}) ->
+    NewState = State#state{closing = {connection, Reason}},
+    case {CloseType, Closing, queue:is_empty(RpcQueue)} of
+        {flush, false, false} ->
+            erlang:send_after(?TIMEOUT_FLUSH, self(),
+                              timed_out_flushing_channel),
+            {noreply, NewState};
+        {flush, just_channel, false} ->
+            erlang:send_after(?TIMEOUT_CLOSE_OK, self(),
+                              timed_out_waiting_close_ok),
+            {noreply, NewState};
+        _ ->
+            handle_shutdown({connection_closing, Reason}, NewState)
+    end.
+
+handle_channel_exit(Reason, State) ->
+    case Reason of
+        %% Sent by rabbit_channel in the direct case
+        #amqp_error{name = ErrorName, explanation = Expl} ->
+            ?LOG_WARN("Channel (~p) closing: server sent error ~p~n",
+                      [self(), Reason]),
+            {IsHard, Code, _} = ?PROTOCOL:lookup_amqp_exception(ErrorName),
+            {stop, if IsHard -> {connection_closing,
+                                 {server_initiated_hard_close, Code, Expl}};
+                      true   -> {server_initiated_close, Code, Expl}
+                   end, State};
+        %% Unexpected death of a channel infrastructure process
+        _ ->
+            {stop, {infrastructure_died, Reason}, State}
+    end.
+
+handle_shutdown({_, 200, _}, State) ->
+    {stop, normal, State};
+handle_shutdown({connection_closing, normal}, State) ->
+    {stop, normal, State};
+handle_shutdown(Reason, State) ->
+    {stop, Reason, State}.
+
+%%---------------------------------------------------------------------------
 %% Internal plumbing
 %%---------------------------------------------------------------------------
 
-do(Method, Content, #state{driver = Driver, writer = Writer}) ->
-    ok = amqp_channel_util:do(Driver, Writer, Method, Content).
+do(Method, Content, #state{driver = Driver, writer = W}) ->
+    %% Catching because it expects the {channel_exit, _, _} message on error
+    catch case {Driver, Content} of
+              {network, none} -> rabbit_writer:send_command_sync(W, Method);
+              {network, _}    -> rabbit_writer:send_command_sync(W, Method,
+                                                                 Content);
+              {direct, none}  -> rabbit_channel:do(W, Method);
+              {direct, _}     -> rabbit_channel:do(W, Method, Content)
+          end.
 
-start_infrastructure(State = #state{start_infrastructure_fun = SIF}) ->
-    {ok, Writer} = SIF(),
+start_writer(State = #state{start_writer_fun = SWF}) ->
+    {ok, Writer} = SWF(),
     State#state{writer = Writer}.
 
 resolve_consumer(_ConsumerTag, #state{consumers = []}) ->
@@ -323,332 +729,42 @@ build_content(#amqp_msg{props = Props, payload = Payload}) ->
     rabbit_basic:build_content(Props, Payload).
 
 check_block(_Method, _AmqpMsg, #state{closing = just_channel}) ->
-    channel_closing;
+    closing;
 check_block(_Method, _AmqpMsg, #state{closing = {connection, _}}) ->
-    connection_closing;
+    closing;
 check_block(_Method, none, #state{}) ->
     ok;
-check_block(_Method, _AmqpMsg, #state{flow_control = true}) ->
+check_block(_Method, #amqp_msg{}, #state{flow_active = false}) ->
     blocked;
 check_block(_Method, _AmqpMsg, #state{}) ->
     ok.
 
-shutdown_with_reason({_, 200, _}, State) ->
-    {stop, normal, State};
-shutdown_with_reason(Reason, State) ->
-    {stop, Reason, State}.
-
-%%---------------------------------------------------------------------------
-%% Handling of methods from the server
-%%---------------------------------------------------------------------------
-
-handle_method(Method, Content, State = #state{closing = Closing}) ->
-    case {Method, Content} of
-        %% Handle 'channel.close': send 'channel.close_ok' and stop channel.
-        {#'channel.close'{reply_code = ReplyCode,
-                          reply_text = ReplyText}, none} ->
-            do(#'channel.close_ok'{}, none, State),
-            {stop, {server_initiated_close, ReplyCode, ReplyText}, State};
-        %% Handle 'channel.close_ok': stop channel
-        {CloseOk = #'channel.close_ok'{}, none} ->
-            {stop, normal, rpc_bottom_half(CloseOk, State)};
-        _ ->
-            case Closing of
-                %% Drop all incomming traffic except 'channel.close' and
-                %% 'channel.close_ok' when channel is closing (has sent
-                %% 'channel.close')
-                just_channel ->
-                    ?LOG_INFO("Channel (~p): dropping method ~p from server "
-                              "because channel is closing~n",
-                              [self(), {Method, Content}]),
-                    {noreply, State};
-                %% Standard handling of incoming method
-                _ ->
-                    handle_regular_method(Method, amqp_msg(Content), State)
-            end
+check_invalid_method(#'channel.open'{}) ->
+    {use_amqp_connection_module,
+     "Use amqp_connection:open_channel/{1,2} instead"};
+check_invalid_method(#'channel.close'{}) ->
+    {use_close_function, "Use close/{1,3} instead"};
+check_invalid_method(#'basic.consume'{}) ->
+    {use_subscribe_function, "Use subscribe/3 instead"};
+check_invalid_method(Method) ->
+    case is_connection_method(Method) of
+        true  -> {connection_methods_not_allowed,
+                  "Sending connection methods is not allowed"};
+        false -> ok
     end.
 
-handle_regular_method(
-        #'basic.consume_ok'{consumer_tag = ConsumerTag} = ConsumeOk, none,
-        #state{tagged_sub_requests = Tagged,
-               anon_sub_requests   = Anon} = State) ->
-    {Consumer, State0} =
-        case dict:find(ConsumerTag, Tagged) of
-            {ok, C} ->
-                NewTagged = dict:erase(ConsumerTag, Tagged),
-                {C, State#state{tagged_sub_requests = NewTagged}};
-            error ->
-                {{value, C}, NewAnon} = queue:out(Anon),
-                {C, State#state{anon_sub_requests = NewAnon}}
-        end,
-    Consumer ! ConsumeOk,
-    State1 = register_consumer(ConsumerTag, Consumer, State0),
-    {noreply, rpc_bottom_half(ConsumeOk, State1)};
+is_connection_method(Method) ->
+    {ClassId, _} = ?PROTOCOL:method_id(element(1, Method)),
+    ?PROTOCOL:lookup_class_name(ClassId) == connection.
 
-handle_regular_method(
-        #'basic.cancel_ok'{consumer_tag = ConsumerTag} = CancelOk, none,
-        #state{} = State) ->
-    Consumer = resolve_consumer(ConsumerTag, State),
-    Consumer ! CancelOk,
-    NewState = unregister_consumer(ConsumerTag, State),
-    {noreply, rpc_bottom_half(CancelOk, NewState)};
-
-%% Handle 'channel.flow'
-%% If flow_control flag is defined, it informs the flow control handler to
-%% suspend submitting any content bearing methods
-handle_regular_method(#'channel.flow'{active = Active} = Flow, none,
-                      #state{flow_handler_pid = FlowHandler} = State) ->
-    case FlowHandler of
-        none -> ok;
-        _    -> FlowHandler ! Flow
-    end,
-    do(#'channel.flow_ok'{active = Active}, none, State),
-    {noreply, State#state{flow_control = not(Active)}};
-
-handle_regular_method(#'basic.deliver'{consumer_tag = ConsumerTag} = Deliver,
-                      AmqpMsg, State) ->
-    Consumer = resolve_consumer(ConsumerTag, State),
-    Consumer ! {Deliver, AmqpMsg},
-    {noreply, State};
-
-handle_regular_method(#'basic.return'{} = BasicReturn, AmqpMsg,
-                      #state{return_handler_pid = ReturnHandler} = State) ->
-    case ReturnHandler of
-        none -> ?LOG_WARN("Channel (~p): received {~p, ~p} but there is no "
-                          "return handler registered~n",
-                          [self(), BasicReturn, AmqpMsg]);
-        _    -> ReturnHandler ! {BasicReturn, AmqpMsg}
-    end,
-    {noreply, State};
-
-handle_regular_method(Method, none, State) ->
-    {noreply, rpc_bottom_half(Method, State)};
-
-handle_regular_method(Method, Content, State) ->
-    {noreply, rpc_bottom_half({Method, Content}, State)}.
-
-%%---------------------------------------------------------------------------
-%% Internal interface
-%%---------------------------------------------------------------------------
-
-%% @private
-start_link(Driver, ChannelNumber, SIF) ->
-    gen_server:start_link(?MODULE, [self(), Driver, ChannelNumber, SIF], []).
-
-%%---------------------------------------------------------------------------
-%% gen_server callbacks
-%%---------------------------------------------------------------------------
-
-%% @private
-init([Sup, Driver, ChannelNumber, SIF]) ->
-    {ok, #state{sup                      = Sup,
-                driver                   = Driver,
-                number                   = ChannelNumber,
-                start_infrastructure_fun = SIF}}.
-
-%% Standard implementation of the call/{2,3} command
-%% @private
-handle_call({call, Method, AmqpMsg}, From, State) ->
-    case {Method, check_block(Method, AmqpMsg, State)} of
-        {#'basic.consume'{}, _} ->
-            {reply, {error, use_subscribe}, State};
-        {_, ok} ->
-            Content = build_content(AmqpMsg),
-            case ?PROTOCOL:is_method_synchronous(Method) of
-                true  -> {noreply, rpc_top_half(Method, Content, From, State)};
-                false -> do(Method, Content, State),
-                         {reply, ok, State}
-            end;
-        {_, BlockReply} ->
-            {reply, BlockReply, State}
-    end;
-
-%% Standard implementation of the subscribe/3 command
-%% @private
-handle_call({subscribe, #'basic.consume'{consumer_tag = Tag} = Method, Consumer},
-            From, #state{tagged_sub_requests = Tagged,
-                           anon_sub_requests = Anon} = State) ->
-    case check_block(Method, none, State) of
-        ok ->
-            {NewMethod, NewState} =
-                if Tag =:= undefined orelse size(Tag) == 0 ->
-                       NewAnon = queue:in(Consumer, Anon),
-                       {Method#'basic.consume'{consumer_tag = <<"">>},
-                        State#state{anon_sub_requests = NewAnon}};
-                   is_binary(Tag) ->
-                       %% TODO test whether this tag already exists, either in
-                       %% the pending tagged request map or in general as
-                       %% already subscribed consumer
-                       NewTagged = dict:store(Tag, Consumer, Tagged),
-                       {Method, State#state{tagged_sub_requests = NewTagged}}
-                end,
-            {noreply, rpc_top_half(NewMethod, none, From, NewState)};
-        BlockReply ->
-            {reply, BlockReply, State}
-    end;
-
-%% These handle the delivery of messages from a direct channel
-%% @private
-handle_call({send_command_sync, Method, Content}, From, State) ->
-    Ret = handle_method(Method, Content, State),
-    gen_server:reply(From, ok),
-    Ret;
-%% @private
-handle_call({send_command_sync, Method}, From, State) ->
-    Ret = handle_method(Method, none, State),
-    gen_server:reply(From, ok),
-    Ret.
-
-%% Standard implementation of the cast/{2,3} command
-%% @private
-handle_cast({cast, Method, AmqpMsg} = Cast, State) ->
-    case {Method, check_block(Method, AmqpMsg, State)} of
-        {#'basic.consume'{}, _} ->
-            ?LOG_WARN("Channel (~p): ignoring cast of ~p method. "
-                      "Use subscribe/3 instead!~n", [self(), Method]),
-            {noreply, State};
-        {_, ok} ->
-            Content = build_content(AmqpMsg),
-            case ?PROTOCOL:is_method_synchronous(Method) of
-                true  -> ?LOG_WARN("Channel (~p): casting synchronous method "
-                                   "~p.~n"
-                                   "The reply will be ignored!~n",
-                                   [self(), Method]),
-                         {noreply, rpc_top_half(Method, Content, none, State)};
-                false -> do(Method, Content, State),
-                         {noreply, State}
-            end;
-        {_, BlockReply} ->
-            ?LOG_WARN("Channel (~p): discarding method in cast ~p.~n"
-                      "Reason: ~p~n", [self(), Cast, BlockReply]),
+server_misbehaved(#amqp_error{} = AmqpError, State = #state{number = Number}) ->
+    case rabbit_binary_generator:map_exception(Number, AmqpError, ?PROTOCOL) of
+        {0, _} ->
+            {stop, {server_misbehaved, AmqpError}, State};
+        {_, Close} ->
+            ?LOG_WARN("Channel (~p) flushing and closing due to soft "
+                      "error caused by the server ~p~n", [self(), AmqpError]),
+            Self = self(),
+            spawn(fun () -> call(Self, Close) end),
             {noreply, State}
-    end;
-
-%% Registers a handler to process return messages
-%% @private
-handle_cast({register_return_handler, ReturnHandler}, State) ->
-    erlang:monitor(process, ReturnHandler),
-    {noreply, State#state{return_handler_pid = ReturnHandler}};
-
-%% Registers a handler to process flow control messages
-%% @private
-handle_cast({register_flow_handler, FlowHandler}, State) ->
-    erlang:monitor(process, FlowHandler),
-    {noreply, State#state{flow_handler_pid = FlowHandler}};
-
-%% Registers a handler to process unexpected deliveries
-%% @private
-handle_cast({register_default_consumer, Consumer}, State) ->
-    erlang:monitor(process, Consumer),
-    {noreply, State#state{default_consumer = Consumer}};
-
-%% @private
-handle_cast({notify_sent, _Peer}, State) ->
-    {noreply, State};
-
-%% This callback is invoked when a network channel sends messages
-%% to this gen_server instance
-%% @private
-handle_cast({method, Method, Content}, State) ->
-    handle_method(Method, Content, State).
-
-%% These callbacks are invoked when a direct channel sends messages
-%% to this gen_server instance
-%% @private
-handle_info({send_command, Method}, State) ->
-    handle_method(Method, none, State);
-%% @private
-handle_info({send_command, Method, Content}, State) ->
-    handle_method(Method, Content, State);
-
-%% This handles the delivery of a message from a direct channel
-%% @private
-handle_info({send_command_and_notify, Q, ChPid, Method, Content}, State) ->
-    handle_method(Method, Content, State),
-    rabbit_amqqueue:notify_sent(Q, ChPid),
-    {noreply, State};
-
-%% @private
-handle_info({shutdown, Reason}, State) ->
-    shutdown_with_reason(Reason, State);
-
-%% @private
-handle_info({shutdown, FailShutdownReason, InitialReason},
-            #state{number = Number} = State) ->
-    case FailShutdownReason of
-        {connection_closing, timed_out_flushing_channel} ->
-            ?LOG_WARN("Channel ~p closing: timed out flushing while connection "
-                      "closing~n", [Number]);
-        {connection_closing, timed_out_waiting_close_ok} ->
-            ?LOG_WARN("Channel ~p closing: timed out waiting for "
-                      "channel.close_ok while connection closing~n", [Number])
-    end,
-    {stop, {FailShutdownReason, InitialReason}, State};
-
-%% Handles the situation when the connection closes without closing the channel
-%% beforehand. The channel must block all further RPCs,
-%% flush the RPC queue (optional), and terminate
-%% @private
-handle_info({connection_closing, CloseType, Reason},
-            #state{rpc_requests = RpcQueue,
-                   closing = Closing} = State) ->
-    case {CloseType, Closing, queue:is_empty(RpcQueue)} of
-        {flush, false, false} ->
-            erlang:send_after(?TIMEOUT_FLUSH, self(),
-                              {shutdown,
-                               {connection_closing, timed_out_flushing_channel},
-                               Reason}),
-            {noreply, State#state{closing = {connection, Reason}}};
-        {flush, just_channel, false} ->
-            erlang:send_after(?TIMEOUT_CLOSE_OK, self(),
-                              {shutdown,
-                               {connection_closing, timed_out_waiting_close_ok},
-                               Reason}),
-            {noreply, State};
-        _ ->
-            shutdown_with_reason(Reason, State)
-    end;
-
-%% This is for a channel exception that is sent by the direct
-%% rabbit_channel process
-%% @private
-handle_info({channel_exit, _Channel, #amqp_error{name = ErrorName,
-                                                 explanation = Expl} = Error},
-            State = #state{number = Number}) ->
-    ?LOG_WARN("Channel ~p closing: server sent error ~p~n", [Number, Error]),
-    {_, Code, _} = ?PROTOCOL:lookup_amqp_exception(ErrorName),
-    {stop, {server_initiated_close, Code, Expl}, State};
-
-%% @private
-handle_info({'DOWN', _, process, Pid, Reason}, State) ->
-    handle_down(Pid, Reason, State).
-
-handle_down(ReturnHandler, Reason,
-            State = #state{return_handler_pid = ReturnHandler}) ->
-    ?LOG_WARN("Channel (~p): Unregistering return handler ~p because it died. "
-              "Reason: ~p~n", [self(), ReturnHandler, Reason]),
-    {noreply, State#state{return_handler_pid = none}};
-handle_down(FlowHandler, Reason,
-            State = #state{flow_handler_pid = FlowHandler}) ->
-    ?LOG_WARN("Channel (~p): Unregistering flow handler ~p because it died. "
-              "Reason: ~p~n", [self(), FlowHandler, Reason]),
-    {noreply, State#state{flow_handler_pid = none}};
-handle_down(DefaultConsumer, Reason,
-            State = #state{default_consumer = DefaultConsumer}) ->
-    ?LOG_WARN("Channel (~p): Unregistering default consumer ~p because it died."
-              "Reason: ~p~n", [self(), DefaultConsumer, Reason]),
-    {noreply, State#state{default_consumer = none}};
-handle_down(Other, Reason, State) ->
-    {stop, {unexpected_down, Other, Reason}, State}.
-
-%%---------------------------------------------------------------------------
-%% Rest of the gen_server callbacks
-%%---------------------------------------------------------------------------
-
-%% @private
-terminate(_Reason, _State) ->
-    ok.
-
-%% @private
-code_change(_OldVsn, State, _Extra) ->
-    State.
+    end.

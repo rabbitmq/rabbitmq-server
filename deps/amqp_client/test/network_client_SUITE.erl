@@ -1,26 +1,17 @@
-%%   The contents of this file are subject to the Mozilla Public License
-%%   Version 1.1 (the "License"); you may not use this file except in
-%%   compliance with the License. You may obtain a copy of the License at
-%%   http://www.mozilla.org/MPL/
+%% The contents of this file are subject to the Mozilla Public License
+%% Version 1.1 (the "License"); you may not use this file except in
+%% compliance with the License. You may obtain a copy of the License at
+%% http://www.mozilla.org/MPL/
 %%
-%%   Software distributed under the License is distributed on an "AS IS"
-%%   basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
-%%   License for the specific language governing rights and limitations
-%%   under the License.
+%% Software distributed under the License is distributed on an "AS IS"
+%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
+%% License for the specific language governing rights and limitations
+%% under the License.
 %%
-%%   The Original Code is the RabbitMQ Erlang Client.
+%% The Original Code is RabbitMQ.
 %%
-%%   The Initial Developers of the Original Code are LShift Ltd.,
-%%   Cohesive Financial Technologies LLC., and Rabbit Technologies Ltd.
-%%
-%%   Portions created by LShift Ltd., Cohesive Financial
-%%   Technologies LLC., and Rabbit Technologies Ltd. are Copyright (C)
-%%   2007 LShift Ltd., Cohesive Financial Technologies LLC., and Rabbit
-%%   Technologies Ltd.;
-%%
-%%   All Rights Reserved.
-%%
-%%   Contributor(s): Ben Hood <0x6e6562@gmail.com>.
+%% The Initial Developer of the Original Code is VMware, Inc.
+%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
 %%
 
 -module(network_client_SUITE).
@@ -47,6 +38,12 @@ basic_recover_test() ->
 basic_consume_test() ->
     test_util:basic_consume_test(new_connection()).
 
+consume_notification_test() ->
+    test_util:consume_notification_test(new_connection()).
+
+basic_nack_test() ->
+    test_util:basic_nack_test(new_connection()).
+
 large_content_test() ->
     test_util:large_content_test(new_connection()).
 
@@ -55,6 +52,12 @@ lifecycle_test() ->
 
 nowait_exchange_declare_test() ->
     test_util:nowait_exchange_declare_test(new_connection()).
+
+channel_repeat_open_close_test() ->
+    test_util:channel_repeat_open_close_test(new_connection()).
+
+channel_multi_open_close_test() ->
+    test_util:channel_multi_open_close_test(new_connection()).
 
 basic_ack_test() ->
     test_util:basic_ack_test(new_connection()).
@@ -68,26 +71,45 @@ channel_lifecycle_test() ->
 queue_unbind_test() ->
     test_util:queue_unbind_test(new_connection()).
 
-command_serialization_test() ->
-    test_util:command_serialization_test(new_connection()).
+sync_method_serialization_test_() ->
+    {timeout, 60,
+        fun () ->
+                test_util:sync_method_serialization_test(new_connection())
+        end}.
 
-recover_after_cancel_test() ->
-    test_util:recover_after_cancel_test(new_connection()).
+async_sync_method_serialization_test_() ->
+    {timeout, 60,
+        fun () ->
+                test_util:async_sync_method_serialization_test(new_connection())
+        end}.
+
+sync_async_method_serialization_test_() ->
+    {timeout, 60,
+        fun () ->
+                test_util:sync_async_method_serialization_test(new_connection())
+        end}.
 
 teardown_test() ->
-    repeat(fun test_util:teardown_test/1, ?ITERATIONS).
+    {timeout, 50,
+        fun () -> repeat(fun test_util:teardown_test/1, ?ITERATIONS) end}.
 
 rpc_test() ->
     test_util:rpc_test(new_connection()).
 
 pub_and_close_test_() ->
     {timeout, 50,
-        fun() ->
-            test_util:pub_and_close_test(new_connection(), new_connection())
+        fun () ->
+                test_util:pub_and_close_test(new_connection(), new_connection())
         end}.
 
 channel_tune_negotiation_test() ->
     amqp_connection:close(new_connection(#amqp_params{ channel_max = 10 })).
+
+confirm_test() ->
+    test_util:confirm_test(new_connection()).
+
+subscribe_nowait_test() ->
+    test_util:subscribe_nowait_test(new_connection()).
 
 %%---------------------------------------------------------------------------
 %% Negative Tests
@@ -95,23 +117,29 @@ channel_tune_negotiation_test() ->
 non_existent_exchange_test() ->
     negative_test_util:non_existent_exchange_test(new_connection()).
 
-bogus_rpc_test() ->
-    repeat(fun negative_test_util:bogus_rpc_test/1, ?ITERATIONS).
+bogus_rpc_test_() ->
+    {timeout, 50,
+        fun () ->
+                repeat(fun negative_test_util:bogus_rpc_test/1, ?ITERATIONS)
+        end}.
 
-hard_error_test() ->
-    repeat(fun negative_test_util:hard_error_test/1, ?ITERATIONS).
+hard_error_test_() ->
+    {timeout, 50,
+        fun () ->
+                repeat(fun negative_test_util:hard_error_test/1, ?ITERATIONS)
+        end}.
 
 non_existent_user_test() ->
-    negative_test_util:non_existent_user_test().
+    negative_test_util:non_existent_user_test(fun new_connection/1).
 
 invalid_password_test() ->
-    negative_test_util:invalid_password_test().
+    negative_test_util:invalid_password_test(fun new_connection/1).
 
 non_existent_vhost_test() ->
-    negative_test_util:non_existent_vhost_test().
+    negative_test_util:non_existent_vhost_test(fun new_connection/1).
 
 no_permission_test() ->
-    negative_test_util:no_permission_test().
+    negative_test_util:no_permission_test(fun new_connection/1).
 
 channel_writer_death_test() ->
     negative_test_util:channel_writer_death_test(new_connection()).
@@ -125,6 +153,12 @@ shortstr_overflow_property_test() ->
 shortstr_overflow_field_test() ->
     negative_test_util:shortstr_overflow_field_test(new_connection()).
 
+command_invalid_over_channel_test() ->
+    negative_test_util:command_invalid_over_channel_test(new_connection()).
+
+command_invalid_over_channel0_test() ->
+    negative_test_util:command_invalid_over_channel0_test(new_connection()).
+
 %%---------------------------------------------------------------------------
 %% Common Functions
 
@@ -135,12 +169,12 @@ new_connection() ->
     new_connection(#amqp_params{}).
 
 new_connection(AmqpParams) ->
-    case amqp_connection:start(network, AmqpParams) of
-        {ok, Conn}            -> Conn;
-        {error, _Err} = Error -> Error
+    case amqp_connection:start(network, AmqpParams) of {ok, Conn}     -> Conn;
+                                                       {error, _} = E -> E
     end.
 
 test_coverage() ->
     rabbit_misc:enable_cover(),
     test(),
     rabbit_misc:report_cover().
+

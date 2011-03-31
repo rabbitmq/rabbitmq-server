@@ -1,33 +1,28 @@
-%%   The contents of this file are subject to the Mozilla Public License
-%%   Version 1.1 (the "License"); you may not use this file except in
-%%   compliance with the License. You may obtain a copy of the License at
-%%   http://www.mozilla.org/MPL/
+%% The contents of this file are subject to the Mozilla Public License
+%% Version 1.1 (the "License"); you may not use this file except in
+%% compliance with the License. You may obtain a copy of the License at
+%% http://www.mozilla.org/MPL/
 %%
-%%   Software distributed under the License is distributed on an "AS IS"
-%%   basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
-%%   License for the specific language governing rights and limitations
-%%   under the License.
+%% Software distributed under the License is distributed on an "AS IS"
+%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
+%% License for the specific language governing rights and limitations
+%% under the License.
 %%
-%%   The Original Code is the RabbitMQ Erlang Client.
+%% The Original Code is RabbitMQ.
 %%
-%%   The Initial Developers of the Original Code are LShift Ltd.,
-%%   Cohesive Financial Technologies LLC., and Rabbit Technologies Ltd.
+%% The Initial Developer of the Original Code is VMware, Inc.
+%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
 %%
-%%   Portions created by LShift Ltd., Cohesive Financial
-%%   Technologies LLC., and Rabbit Technologies Ltd. are Copyright (C)
-%%   2007 LShift Ltd., Cohesive Financial Technologies LLC., and Rabbit
-%%   Technologies Ltd.;
-%%
-%%   All Rights Reserved.
-%%
-%%   Contributor(s): Ben Hood <0x6e6562@gmail.com>.
 
 %% @doc This module is responsible for maintaining a connection to an AMQP
 %% broker and manages channels within the connection. This module is used to
 %% open and close connections to the broker as well as creating new channels
-%% within a connection. Each amqp_connection process maintains a mapping of
-%% the channels that were created by that connection process. Each resulting
-%% amqp_channel process is linked to the parent connection process.
+%% within a connection.<br/>
+%% The connections and channels created by this module are supervised under
+%% amqp_client's supervision tree. Please note that connections and channels
+%% do not get restarted automatically by the supervision tree in the case of a
+%% failure. If you need robust connections and channels, we recommend you use
+%% Erlang monitors on the returned connection and channel PID.
 -module(amqp_connection).
 
 -include("amqp_client.hrl").
@@ -36,9 +31,6 @@
 -export([start/1, start/2]).
 -export([close/1, close/3]).
 -export([info/2, info_keys/1, info_keys/0]).
-
--define(COMMON_INFO_KEYS,
-        [server_properties, is_closing, amqp_params, num_channels]).
 
 %%---------------------------------------------------------------------------
 %% Type Definitions
@@ -54,13 +46,24 @@
 %% <li>virtual_host :: binary() - The name of a virtual host in the broker,
 %%     defaults to &lt;&lt;"/"&gt;&gt;</li>
 %% <li>host :: string() - The hostname of the broker,
-%%     defaults to "localhost"</li>
+%%     defaults to "localhost" (network only)</li>
 %% <li>port :: integer() - The port the broker is listening on,
-%%     defaults to 5672</li>
+%%     defaults to 5672 (network only)</li>
+%% <li>node :: atom() - The node the broker runs on (direct only)</li>
+%% <li>channel_max :: non_neg_integer() - The channel_max handshake parameter,
+%%     defaults to 0</li>
+%% <li>frame_max :: non_neg_integer() - The frame_max handshake parameter,
+%%     defaults to 0 (network only)</li>
+%% <li>heartbeat :: non_neg_integer() - The hearbeat interval in seconds,
+%%     defaults to 0 (turned off) (network only)</li>
+%% <li>ssl_options :: term() - The second parameter to be used with the
+%%     ssl:connect/2 function, defaults to 'none' (network only)</li>
+%% <li>client_properties :: [{binary(), atom(), binary()}] - A list of extra
+%%     client properties to be sent to the server, defaults to []</li>
 %% </ul>
 
 %%---------------------------------------------------------------------------
-%% AMQP Connection API Methods
+%% Starting a connection
 %%---------------------------------------------------------------------------
 
 %% @spec (Type) -> {ok, Connection} | {error, Error}
@@ -86,43 +89,47 @@ start(Type) ->
 %% a RabbitMQ server, assuming that the server is running in the same process
 %% space.
 start(Type, AmqpParams) ->
-    {ok, _Sup, Connection} = amqp_connection_sup:start_link(Type, AmqpParams),
-    Module = case Type of direct  -> amqp_direct_connection;
-                          network -> amqp_network_connection
-             end,
-    try Module:connect(Connection) of
-        ok -> {ok, Connection}
-    catch
-        exit:{Reason = {protocol_version_mismatch, _, _}, _} ->
-            {error, Reason};
-        exit:Reason ->
-            {error, {auth_failure_likely, Reason}}
-    end.
+    case amqp_client:start() of
+        ok                                      -> ok;
+        {error, {already_started, amqp_client}} -> ok;
+        {error, _} = E                          -> throw(E)
+    end,
+    {ok, _Sup, Connection} =
+        amqp_sup:start_connection_sup(
+            Type, case Type of direct  -> amqp_direct_connection;
+                               network -> amqp_network_connection
+                  end, AmqpParams),
+    amqp_gen_connection:connect(Connection).
 
 %%---------------------------------------------------------------------------
 %% Commands
 %%---------------------------------------------------------------------------
 
-%% @doc Invokes open_channel(ConnectionPid, none, &lt;&lt;&gt;&gt;).
+%% @doc Invokes open_channel(ConnectionPid, none). 
 %% Opens a channel without having to specify a channel number.
 open_channel(ConnectionPid) ->
     open_channel(ConnectionPid, none).
 
 %% @spec (ConnectionPid, ChannelNumber) -> {ok, ChannelPid} | {error, Error}
 %% where
-%%      ChannelNumber = integer()
+%%      ChannelNumber = pos_integer() | 'none'
 %%      ConnectionPid = pid()
 %%      ChannelPid = pid()
-%% @doc Opens an AMQP channel.
+%% @doc Opens an AMQP channel.<br/>
 %% This function assumes that an AMQP connection (networked or direct)
-%% has already been successfully established.
+%% has already been successfully established.<br/>
+%% ChannelNumber must be less than or equal to the negotiated max_channel value,
+%% or less than or equal to ?MAX_CHANNEL_NUMBER if the negotiated max_channel
+%% value is 0.<br/>
+%% In the direct connection, max_channel is always 0.
 open_channel(ConnectionPid, ChannelNumber) ->
-    command(ConnectionPid, {open_channel, ChannelNumber}).
+    amqp_gen_connection:open_channel(ConnectionPid, ChannelNumber).
 
 %% @spec (ConnectionPid) -> ok | Error
 %% where
 %%      ConnectionPid = pid()
-%% @doc Closes the channel, invokes close(Channel, 200, &lt;&lt;"Goodbye">>).
+%% @doc Closes the channel, invokes
+%% close(Channel, 200, &lt;&lt;"Goodbye"&gt;&gt;).
 close(ConnectionPid) ->
     close(ConnectionPid, 200, <<"Goodbye">>).
 
@@ -138,7 +145,7 @@ close(ConnectionPid, Code, Text) ->
                                 reply_code = Code,
                                 class_id   = 0,
                                 method_id  = 0},
-    command(ConnectionPid, {close, Close}).
+    amqp_gen_connection:close(ConnectionPid, Close).
 
 %%---------------------------------------------------------------------------
 %% Other functions
@@ -153,24 +160,28 @@ close(ConnectionPid, Code, Text) ->
 %%      Result = term()
 %% @doc Returns information about the connection, as specified by the Items
 %% list. Item may be any atom returned by info_keys/1:
-%%      server_properties - returns the server_properties fiels sent by the
-%%          server while establishing the connection
-%%      is_closing - returns true if the connection is in the process of closing
-%%          and false otherwise
-%%      amqp_params - returns the #amqp_params{} structure used to start the
-%%          connection
-%%      num_channels - returns the number of channels currently open under the
-%%          connection (excluding channel 0)
-%%      max_channel - returns the max_channel value negotiated with the server
-%%          (only for the network connection)
-%%      heartbeat - returns the heartbeat value negotiated with the server
-%%          (only for the network connection)
-%%      sock - returns the socket for the network connection (for use with
-%%             e.g. inet:sockname/1)
-%%          (only for the network connection)
-%%      any other value - throws an exception
+%%<ul>
+%%<li>type - returns the type of the connection (network or direct)</li>
+%%<li>server_properties - returns the server_properties fields sent by the
+%%    server while establishing the connection</li>
+%%<li>is_closing - returns true if the connection is in the process of closing
+%%    and false otherwise</li>
+%%<li>amqp_params - returns the #amqp_params{} structure used to start the
+%%    connection</li>
+%%<li>num_channels - returns the number of channels currently open under the
+%%    connection (excluding channel 0)</li>
+%%<li>channel_max - returns the channel_max value negotiated with the
+%%    server</li>
+%%<li>heartbeat - returns the heartbeat value negotiated with the server
+%%    (only for the network connection)</li>
+%%<li>frame_max - returns the frame_max value negotiated with the
+%%    server (only for the network connection)</li>
+%%<li>sock - returns the socket for the network connection (for use with
+%%    e.g. inet:sockname/1) (only for the network connection)</li>
+%%<li>any other value - throws an exception</li>
+%%</ul>
 info(ConnectionPid, Items) ->
-    gen_server:call(ConnectionPid, {info, Items}, infinity).
+    amqp_gen_connection:info(ConnectionPid, Items).
 
 %% @spec (ConnectionPid) -> Items
 %% where
@@ -182,7 +193,7 @@ info(ConnectionPid, Items) ->
 %% direct). Use info_keys/0 to get a list of info keys that can be used for
 %% any connection.
 info_keys(ConnectionPid) ->
-    gen_server:call(ConnectionPid, info_keys, infinity).
+    amqp_gen_connection:info_keys(ConnectionPid).
 
 %% @spec () -> Items
 %% where
@@ -193,11 +204,4 @@ info_keys(ConnectionPid) ->
 %% Other info keys may exist for a specific type. To get the full list of
 %% atoms that can be used for a certain connection, use info_keys/1.
 info_keys() ->
-    ?COMMON_INFO_KEYS.
-
-%%---------------------------------------------------------------------------
-%% Internal plumbing
-%%---------------------------------------------------------------------------
-
-command(ConnectionPid, Command) ->
-    gen_server:call(ConnectionPid, {command, Command}, infinity).
+    amqp_gen_connection:info_keys().

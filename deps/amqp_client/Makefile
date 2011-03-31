@@ -1,29 +1,21 @@
-#   The contents of this file are subject to the Mozilla Public License
-#   Version 1.1 (the "License"); you may not use this file except in
-#   compliance with the License. You may obtain a copy of the License at
-#   http://www.mozilla.org/MPL/
+# The contents of this file are subject to the Mozilla Public License
+# Version 1.1 (the "License"); you may not use this file except in
+# compliance with the License. You may obtain a copy of the License at
+# http://www.mozilla.org/MPL/
 #
-#   Software distributed under the License is distributed on an "AS IS"
-#   basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
-#   License for the specific language governing rights and limitations
-#   under the License.
+# Software distributed under the License is distributed on an "AS IS"
+# basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
+# License for the specific language governing rights and limitations
+# under the License.
 #
-#   The Original Code is the RabbitMQ Erlang Client.
+# The Original Code is RabbitMQ.
 #
-#   The Initial Developers of the Original Code are LShift Ltd.,
-#   Cohesive Financial Technologies LLC., and Rabbit Technologies Ltd.
-#
-#   Portions created by LShift Ltd., Cohesive Financial
-#   Technologies LLC., and Rabbit Technologies Ltd. are Copyright (C) 
-#   2007 LShift Ltd., Cohesive Financial Technologies LLC., and Rabbit 
-#   Technologies Ltd.; 
-#
-#   All Rights Reserved.
-#
-#   Contributor(s): Ben Hood <0x6e6562@gmail.com>.
+# The Initial Developer of the Original Code is VMware, Inc.
+# Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
 #
 
 VERSION=0.0.0
+
 SOURCE_PACKAGE_DIR=$(PACKAGE)-$(VERSION)-src
 SOURCE_PACKAGE_TAR_GZ=$(SOURCE_PACKAGE_DIR).tar.gz
 
@@ -56,9 +48,8 @@ distribution: documentation source_tarball package
 
 RABBIT_PLT=$(BROKER_DIR)/rabbit.plt
 
-dialyze: $(RABBIT_PLT) $(TARGETS) $(TEST_TARGETS)
-	$(LIBS_PATH) erl -noshell -pa $(LOAD_PATH) -eval \
-        "rabbit_dialyzer:halt_with_code(rabbit_dialyzer:dialyze_files(\"$(RABBIT_PLT)\", \"$(TARGETS) $(TEST_TARGETS)\"))."
+dialyze: $(RABBIT_PLT) $(TARGETS)
+	dialyzer --plt $(RABBIT_PLT) --no_native -Wrace_conditions $(TARGETS)
 
 .PHONY: $(RABBIT_PLT)
 $(RABBIT_PLT):
@@ -83,18 +74,6 @@ $(DOC_DIR)/index.html: $(DEPS_DIR)/$(COMMON_PACKAGE_DIR) $(DOC_DIR)/overview.edo
 
 include test.mk
 
-test_common_package: $(DIST_DIR)/$(COMMON_PACKAGE_EZ) package prepare_tests
-	$(MAKE) start_test_broker_node
-	OK=true && \
-	TMPFILE=$(MKTEMP) && \
-	    { $(LIBS_PATH) erl -noshell -pa $(TEST_DIR) \
-	    -eval 'error_logger:tty(false), network_client_SUITE:test(), halt().' 2>&1 | \
-		tee $$TMPFILE || OK=false; } && \
-	{ egrep "All .+ tests (successful|passed)." $$TMPFILE || OK=false; } && \
-	rm $$TMPFILE && \
-	$(MAKE) stop_test_broker_node && \
-	$$OK
-
 compile_tests: $(TEST_TARGETS) $(EBIN_DIR)/$(PACKAGE).app
 
 $(TEST_TARGETS): $(TEST_DIR)
@@ -109,10 +88,8 @@ $(TEST_DIR): $(DEPS_DIR)/$(COMMON_PACKAGE_DIR)
 
 COPY=cp -pR
 
-$(DIST_DIR)/$(COMMON_PACKAGE_EZ): $(DIST_DIR)/$(COMMON_PACKAGE_DIR) | $(DIST_DIR)
-	(cd $(DIST_DIR); zip -r $(COMMON_PACKAGE_EZ) $(COMMON_PACKAGE_DIR))
-
-$(DIST_DIR)/$(COMMON_PACKAGE_DIR): $(BROKER_DEPS) $(COMMON_PACKAGE).app | $(DIST_DIR)
+$(DIST_DIR)/$(COMMON_PACKAGE_EZ): $(BROKER_DEPS) $(COMMON_PACKAGE).app | $(DIST_DIR)
+	rm -f $@
 	$(MAKE) -C $(BROKER_DIR)
 	rm -rf $(DIST_DIR)/$(COMMON_PACKAGE_DIR)
 	mkdir -p $(DIST_DIR)/$(COMMON_PACKAGE_DIR)/$(INCLUDE_DIR)
@@ -122,6 +99,7 @@ $(DIST_DIR)/$(COMMON_PACKAGE_DIR): $(BROKER_DEPS) $(COMMON_PACKAGE).app | $(DIST
 	    ( cp $(BROKER_DIR)/ebin/$(DEP).beam $(DIST_DIR)/$(COMMON_PACKAGE_DIR)/$(EBIN_DIR)/ \
 	    );)
 	cp $(BROKER_DIR)/include/*.hrl $(DIST_DIR)/$(COMMON_PACKAGE_DIR)/$(INCLUDE_DIR)/
+	(cd $(DIST_DIR); zip -r $(COMMON_PACKAGE_EZ) $(COMMON_PACKAGE_DIR))
 
 source_tarball: $(DIST_DIR)/$(COMMON_PACKAGE_EZ) $(EBIN_DIR)/$(PACKAGE).app | $(DIST_DIR)
 	mkdir -p $(DIST_DIR)/$(SOURCE_PACKAGE_DIR)/$(DIST_DIR)
@@ -143,4 +121,3 @@ source_tarball: $(DIST_DIR)/$(COMMON_PACKAGE_EZ) $(EBIN_DIR)/$(PACKAGE).app | $(
 
 $(DIST_DIR):
 	mkdir -p $@
-
