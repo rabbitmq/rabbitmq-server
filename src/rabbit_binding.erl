@@ -17,7 +17,7 @@
 -module(rabbit_binding).
 -include("rabbit.hrl").
 
--export([recover/1, exists/1, add/1, remove/1, add/2, remove/2, list/1]).
+-export([recover/2, exists/1, add/1, remove/1, add/2, remove/2, list/1]).
 -export([list_for_source/1, list_for_destination/1,
          list_for_source_and_destination/2]).
 -export([new_deletions/0, combine_deletions/2, add_deletion/3,
@@ -50,7 +50,8 @@
 
 -opaque(deletions() :: dict()).
 
--spec(recover/1 :: ([rabbit_types:amqqueue()]) -> [rabbit_types:binding()]).
+-spec(recover/2 :: ([rabbit_types:exchange()], [rabbit_types:amqqueue()]) ->
+                        [rabbit_types:binding()]).
 -spec(exists/1 :: (rabbit_types:binding()) -> boolean() | bind_errors()).
 -spec(add/1 :: (rabbit_types:binding()) -> add_res()).
 -spec(remove/1 :: (rabbit_types:binding()) -> remove_res()).
@@ -93,11 +94,12 @@
                     destination_name, destination_kind,
                     routing_key, arguments]).
 
-recover(Qs) ->
+recover(Xs, Qs) ->
+    XNames = sets:from_list([Name || #exchange{name = Name} <- Xs]),
     QNames = sets:from_list([Name || #amqqueue{name = Name} <- Qs]),
     rabbit_misc:table_fold(
       fun (Route = #route{binding = B}, Acc) ->
-              case should_recover(B, QNames) of
+              case should_recover(B, XNames, QNames) of
                   true  -> {_, Rev} = route_with_reverse(Route),
                            ok = mnesia:write(rabbit_route, Route, write),
                            ok = mnesia:write(rabbit_reverse_route, Rev, write),
@@ -107,12 +109,12 @@ recover(Qs) ->
       end, [], rabbit_durable_route).
 
 should_recover(B = #binding{destination = Dest = #resource{ kind = Kind }},
-               QNames) ->
+               XNames, QNames) ->
     case mnesia:read({rabbit_route, B}) of
-        [] -> case Kind of
-                  exchange -> true;
-                  queue    -> sets:is_element(Dest, QNames)
-              end;
+        [] -> sets:is_element(Dest, case Kind of
+                                        exchange -> XNames;
+                                        queue    -> QNames
+                                    end);
         _  -> false
     end.
 

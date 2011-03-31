@@ -462,7 +462,7 @@ boot_delegate() ->
 recover() ->
     Xs = rabbit_exchange:recover(),
     Qs = rabbit_amqqueue:start(),
-    Bs = rabbit_binding:recover(Qs),
+    Bs = rabbit_binding:recover(Xs, Qs),
     {RecXBs, NoRecSrcBs} = filter_recovered_exchanges(Xs, Bs),
     ok = recovery_callbacks(RecXBs, NoRecSrcBs).
 
