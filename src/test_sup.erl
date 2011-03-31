@@ -46,7 +46,7 @@ with_sup(RestartStrategy, Fun) ->
     {ok, SupPid} = supervisor2:start_link(?MODULE, [RestartStrategy]),
     Res = Fun(SupPid),
     exit(SupPid, shutdown),
-    rabbit_misc:unlink_and_capture_exit(SupPid),
+    unlink(SupPid),
     Res.
 
 init([RestartStrategy]) ->
