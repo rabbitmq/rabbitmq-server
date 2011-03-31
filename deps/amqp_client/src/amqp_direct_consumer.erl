@@ -17,14 +17,20 @@
 %% @doc This module is an implementation of the amqp_gen_consumer behaviour and
 %% can be used as part of the Consumer parameter when opening AMQP
 %% channels.<br/>
+%% <br/>
 %% The Consumer parameter for this implementation is
 %% {{@module}, [ConsumerPid]@}, where ConsumerPid is a process that
 %% will receive queue subscription-related messages.<br/>
+%% <br/>
 %% This consumer implementation causes the channel to send to the ConsumerPid
 %% all basic.consume_ok, basic.cancel_ok, basic.cancel and basic.deliver
 %% messages received from the server.<br/>
-%% In addition, if the channel exits abnormally, an exit signal with the
-%% channel's exit reason is sent to ConsumerPid.<br/>
+%% <br/>
+%% In addition, this consumer implementation creates a link between the channel
+%% and the provided ConsumerPid.<br/>
+%% Warning! It is not recommended to rely on a consumer on killing off the
+%% channel (through the exit signal). That may cause messages to get lost.
+%% Always use amqp_channel:close/{1,3} for a clean shut down.<br/>
 %% <br/>
 %% This module has no public functions.
 -module(amqp_direct_consumer).
@@ -40,6 +46,7 @@
 
 %% @private
 init([ConsumerPid]) ->
+    link(ConsumerPid),
     {ok, ConsumerPid}.
 
 %% @private
@@ -58,15 +65,15 @@ handle_cancel(M, C) ->
     {ok, C}.
 
 %% @private
-handle_call(M, C) ->
-    C ! M,
-    {reply, ok, C}.
-
-%% @private
 handle_deliver(M, C) ->
     C ! M,
     {ok, C}.
 
 %% @private
-terminate(Reason, C) ->
-    exit(C, Reason).
+handle_call(M, C) ->
+    C ! M,
+    {reply, ok, C}.
+
+%% @private
+terminate(_Reason, _C) ->
+    ok.

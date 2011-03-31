@@ -17,24 +17,38 @@
 %% @doc This module is an implementation of the amqp_gen_consumer behaviour and
 %% can be used as part of the Consumer parameter when opening AMQP
 %% channels.<br/>
+%% <br/>
 %% The Consumer parameter for this implementation is {{@module}, []@}<br/>
 %% This consumer implementation keeps track of consumer tags and sends
 %% the subscription-relevant messages to the registered consumers, according
 %% to an internal tag dictionary.<br/>
+%% <br/>
 %% Use {@module}:subscribe/3 to subscribe a consumer to a queue and
 %% {@module}:cancel/2 to cancel a subscription.<br/>
+%% <br/>
 %% The channel will send to the relevant registered consumers the
 %% basic.consume_ok, basic.cancel_ok, basic.cancel and basic.deliver messages
 %% received from the server.<br/>
+%% <br/>
 %% If a consumer is not registered for a given consumer tag, the message
 %% is sent to the default consumer registered with
 %% {@module}:register_default_consumer. If there is no default consumer
 %% registered in this case, an exception occurs and the channel is abrubptly
 %% terminated.<br/>
+%% <br/>
 %% amqp_channel:call(ChannelPid, #'basic.consume'{}) can also be used to
 %% subscribe to a queue, but one must register a default consumer for messages
 %% to be delivered to, beforehand. Failing to do so generates the
-%% above-mentioned exception.
+%% above-mentioned exception.<br/>
+%% <br/>
+%% This consumer implementation creates a link between the channel and the
+%% registered consumers (either through register_default_consumer/2 or
+%% through subscribe/3). A cancel (either issued by the user application or the
+%% server) causes the link to be removed. In addition, registering another
+%% default consumer causes the old one to be unlinked.<br/>
+%% Warning! It is not recommended to rely on a consumer on killing off the
+%% channel (through the exit signal). That may cause messages to get lost.
+%% Always use amqp_channel:close/{1,3} for a clean shut down.
 -module(amqp_selective_consumer).
 
 -include("amqp_client.hrl").
@@ -69,10 +83,12 @@
 %% receive the acknowledgement as the return value of this function, whereas
 %% the consumer process will receive the notification as a message,
 %% asynchronously.<br/>
+%% <br/>
 %% Attempting to subscribe with a consumer_tag that is already in use or
 %% to subscribe with nowait true and not specifying a consumer_tag will
 %% cause an exception and the channel will terminate. If nowait is set to true
-%% the function will return ok, but the channel will terminate with an error.
+%% the function will return ok, but the channel will terminate with an
+%% error.
 subscribe(ChannelPid, BasicConsume, ConsumerPid) ->
     ok = amqp_channel:call_consumer(ChannelPid,
                                     {subscribe, BasicConsume, ConsumerPid}),
@@ -135,13 +151,19 @@ handle_consume_ok(BasicConsumeOk, BasicConsume, State) ->
 
 %% @private
 handle_cancel_ok(CancelOk, _Cancel, State) ->
+    %% Unlink first!
+    State1 = do_cancel(CancelOk, State),
+    %% Use old state
     deliver(CancelOk, State),
-    {ok, do_cancel(CancelOk, State)}.
+    {ok, State1}.
 
 %% @private
 handle_cancel(Cancel, State) ->
+    %% Unlink first!
+    State1 = do_cancel(Cancel, State),
+    %% Use old state
     deliver(Cancel, State),
-    {ok, do_cancel(Cancel, State)}.
+    {ok, State1}.
 
 %% @private
 handle_deliver(Deliver, State) ->
@@ -179,17 +201,17 @@ handle_call({subscribe, BasicConsume, Pid},
            {reply, ok, State}
     end;
 %% @private
-handle_call({register_default_consumer, DefaultConsumer}, State) ->
-    {reply, ok, State#state{default_consumer = DefaultConsumer}}.
+handle_call({register_default_consumer, Pid},
+            State = #state{default_consumer = PrevPid}) ->
+    case PrevPid of none -> ok;
+                    _    -> unlink(PrevPid)
+    end,
+    link(Pid),
+    {reply, ok, State#state{default_consumer = Pid}}.
 
 %% @private
-terminate(Reason, #state{consumers = Consumers,
-                         default_consumer = DefaultConsumer}) ->
-    dict:fold(fun (_, Consumer, _) -> exit(Consumer, Reason) end, ok,
-              Consumers),
-    case DefaultConsumer of none -> ok;
-                            _    -> exit(DefaultConsumer, Reason)
-    end.
+terminate(_Reason, _State) ->
+    ok.
 
 %%---------------------------------------------------------------------------
 %% Internal plumbing
@@ -214,7 +236,13 @@ deliver(Msg, State) ->
     end.
 
 do_cancel(Cancel, State = #state{consumers = Consumers}) ->
-    State#state{consumers = dict:erase(tag(Cancel), Consumers)}.
+    Tag = tag(Cancel),
+    case dict:find(Tag, Consumers) of
+        {ok, Pid} -> unlink(Pid),
+                     State#state{consumers = dict:erase(Tag, Consumers)};
+        error     -> %% Untracked consumer. Do nothing.
+                     State
+    end.
 
 resolve_consumer(Tag, #state{consumers = Consumers,
                              default_consumer = DefaultConsumer}) ->

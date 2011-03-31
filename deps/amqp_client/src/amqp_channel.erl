@@ -222,8 +222,7 @@ init([Sup, Driver, ChannelNumber, {ConsumerModule, ConsumerArgs}, SWF]) ->
                     number           = ChannelNumber,
                     consumer_module  = ConsumerModule,
                     start_writer_fun = SWF},
-    {noreply, State1} = consumer_callback(init, [ConsumerArgs], State0),
-    {ok, State1}.
+    {ok, consumer_callback(init, [ConsumerArgs], State0)}.
 
 %% @private
 handle_call(open, From, State) ->
@@ -252,7 +251,7 @@ handle_call(next_publish_seqno, _From,
     {reply, SeqNo, State};
 %% @private
 handle_call({call_consumer, Call}, _From, State) ->
-    consumer_callback(handle_call, [Call], State).
+    handle_consumer_callback(handle_call, [Call], State).
 
 %% @private
 handle_cast({cast, Method, AmqpMsg}, State) ->
@@ -478,13 +477,11 @@ handle_method_from_server1(#'channel.close_ok'{}, none, State) ->
     {stop, normal, rpc_bottom_half(ok, State)};
 handle_method_from_server1(#'basic.consume_ok'{} = ConsumeOk, none, State) ->
     Consume = #'basic.consume'{} = pending_rpc_method(State),
-    {noreply, State1} =
-        consumer_callback(handle_consume_ok, [ConsumeOk, Consume], State),
+    State1 = consumer_callback(handle_consume_ok, [ConsumeOk, Consume], State),
     {noreply, rpc_bottom_half(ConsumeOk, State1)};
 handle_method_from_server1(#'basic.cancel_ok'{} = CancelOk, none, State) ->
     Cancel = #'basic.cancel'{} = pending_rpc_method(State),
-    {noreply, State1} =
-        consumer_callback(handle_cancel_ok, [CancelOk, Cancel], State),
+    State1 = consumer_callback(handle_cancel_ok, [CancelOk, Cancel], State),
     {noreply, rpc_bottom_half(CancelOk, State1)};
 handle_method_from_server1(#'channel.flow'{active = Active} = Flow, none,
                            State = #state{flow_handler_pid = FlowHandler}) ->
@@ -497,7 +494,7 @@ handle_method_from_server1(#'channel.flow'{active = Active} = Flow, none,
     {noreply, rpc_top_half(#'channel.flow_ok'{active = Active}, none, none,
                            State#state{flow_active = Active})};
 handle_method_from_server1(#'basic.deliver'{} = Deliver, AmqpMsg, State) ->
-    consumer_callback(handle_deliver, [{Deliver, AmqpMsg}], State);
+    handle_consumer_callback(handle_deliver, [{Deliver, AmqpMsg}], State);
 handle_method_from_server1(
         #'basic.return'{} = BasicReturn, AmqpMsg,
         State = #state{return_handler_pid = ReturnHandler}) ->
@@ -509,7 +506,7 @@ handle_method_from_server1(
     end,
     {noreply, State};
 handle_method_from_server1(#'basic.cancel'{} = Cancel, none, State) ->
-    consumer_callback(handle_cancel, [Cancel], State);
+    handle_consumer_callback(handle_cancel, [Cancel], State);
 handle_method_from_server1(#'basic.ack'{} = BasicAck, none,
                            #state{confirm_handler_pid = none} = State) ->
     ?LOG_WARN("Channel (~p): received ~p but there is no "
@@ -648,21 +645,25 @@ server_misbehaved(#amqp_error{} = AmqpError, State = #state{number = Number}) ->
             {noreply, State}
     end.
 
+handle_consumer_callback(handle_call, Args,
+                         State = #state{consumer_state = CState,
+                                        consumer_module = CModule}) ->
+    {reply, Reply, NewCState} =
+        erlang:apply(CModule, handle_call, Args ++ [CState]),
+    {reply, Reply, State#state{consumer_state = NewCState}};
+handle_consumer_callback(Function, Args, State) ->
+    {noreply, consumer_callback(Function, Args, State)}.
+
 consumer_callback(init, Args, State = #state{}) ->
-    consumer_callback1(init, Args, State);
+    consumer_callback_basic(init, Args, State);
 consumer_callback(terminate, Args, State = #state{consumer_state = CState,
                                                   consumer_module = CModule}) ->
     erlang:apply(CModule, terminate, Args ++ [CState]),
-    {noreply, State};
-consumer_callback(handle_call, Args, State = #state{consumer_state = CState}) ->
-    consumer_callback1(handle_call, Args ++ [CState], State);
+    State;
 consumer_callback(Function, Args, State = #state{consumer_state = CState}) ->
-    consumer_callback1(Function, Args ++ [CState], State).
+    consumer_callback_basic(Function, Args ++ [CState], State).
 
-consumer_callback1(Function, Args, State = #state{consumer_module = CModule}) ->
-    case erlang:apply(CModule, Function, Args) of
-        {ok, NewCState} ->
-            {noreply, State#state{consumer_state = NewCState}};
-        {reply, Reply, NewCState} ->
-            {reply, Reply, State#state{consumer_state = NewCState}}
-    end.
+consumer_callback_basic(Function,
+                        Args, State = #state{consumer_module = CModule}) ->
+    {ok, NewCState} = erlang:apply(CModule, Function, Args),
+    State#state{consumer_state = NewCState}.
