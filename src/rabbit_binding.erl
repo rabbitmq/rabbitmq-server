@@ -129,7 +129,8 @@ add(Binding, InnerFun) ->
                                                    fun mnesia:write/3),
                                  fun (Tx) ->
                                          ok = rabbit_exchange:callback(
-                                                Src, add_binding, [Tx, Src, B]),
+                                                Src, add_bindings,
+                                                [Tx, Src, [B]]),
                                          rabbit_event:notify_if(
                                            not Tx, binding_created, info(B))
                                  end;

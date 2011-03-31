@@ -26,17 +26,14 @@ behaviour_info(callbacks) ->
      %% called BEFORE declaration, to check args etc; may exit with #amqp_error{}
      {validate, 1},
 
-     %% called after declaration when previously absent
-     {create, 2},
+     %% called after declaration and recovery
+     {start, 3},
 
-     %% called when recovering
-     {recover, 2},
-
-     %% called after exchange deletion.
+     %% called after exchange (auto)deletion.
      {delete, 3},
 
-     %% called after a binding has been added
-     {add_binding, 3},
+     %% called after a binding has been added or bindings have been recovered
+     {add_bindings, 3},
 
      %% called after bindings have been deleted.
      {remove_bindings, 3},

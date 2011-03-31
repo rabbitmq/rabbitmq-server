@@ -92,18 +92,34 @@ recover() ->
                    end
            end, [], rabbit_durable_exchange),
     Bs = rabbit_binding:recover(),
-    recover_with_bindings(
-      lists:keysort(#binding.source, Bs),
-      lists:keysort(#exchange.name, Xs), []).
+    {RecXBs, NoRecXBs} = filter_recovered_exchanges(Xs, Bs),
+    ok = recovery_callbacks(RecXBs, NoRecXBs).
 
-recover_with_bindings([B = #binding{source = XName} | Rest],
-                      Xs = [#exchange{name = XName} | _],
-                      Bindings) ->
-    recover_with_bindings(Rest, Xs, [B | Bindings]);
-recover_with_bindings(Bs, [X = #exchange{type = Type} | Xs], Bindings) ->
-    (type_to_module(Type)):recover(X, Bindings),
-    recover_with_bindings(Bs, Xs, []);
-recover_with_bindings([], [], []) ->
+%% TODO strip out bindings that are to queues not on this node
+filter_recovered_exchanges(Xs, Bs) ->
+    RecXs = dict:from_list([{XName, X} || X = #exchange{name = XName} <- Xs]),
+    lists:foldl(
+      fun (B = #binding{source = Src}, {RecXBs, NoRecXBs}) ->
+              case dict:find(Src, RecXs) of
+                  {ok, X} -> {dict:append(X, B, RecXBs), NoRecXBs};
+                  error   -> {ok, X} = lookup(Src),
+                             {RecXBs, dict:append(X, B, NoRecXBs)}
+              end
+      end, {dict:new(), dict:new()}, Bs).
+
+recovery_callbacks(RecXBs, NoRecXBs) ->
+    rabbit_misc:execute_mnesia_transaction(
+      fun () -> ok end,
+      fun (ok, Tx) ->
+              dict:map(fun (X = #exchange{type = Type}, Bs) ->
+                               io:format("Recover X ~p~n", [X]),
+                               (type_to_module(Type)):start(Tx, X, Bs)
+                       end, RecXBs),
+              dict:map(fun (X = #exchange{type = Type}, Bs) ->
+                               io:format("Recover Bs ~p~n", [Bs]),
+                               (type_to_module(Type)):add_bindings(Tx, X, Bs)
+                       end, NoRecXBs)
+      end),
     ok.
 
 callback(#exchange{type = XType}, Fun, Args) ->
@@ -134,7 +150,7 @@ declare(XName, Type, Durable, AutoDelete, Internal, Args) ->
               end
       end,
       fun ({new, Exchange}, Tx) ->
-              ok = (type_to_module(Type)):create(Tx, Exchange),
+              ok = (type_to_module(Type)):start(Tx, Exchange, []),
               rabbit_event:notify_if(not Tx, exchange_created, info(Exchange)),
               Exchange;
           ({existing, Exchange}, _Tx) ->

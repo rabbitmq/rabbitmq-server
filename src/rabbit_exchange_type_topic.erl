@@ -21,7 +21,7 @@
 -behaviour(rabbit_exchange_type).
 
 -export([description/0, route/2]).
--export([validate/1, create/2, recover/2, delete/3, add_binding/3,
+-export([validate/1, start/3, delete/3, add_bindings/3,
          remove_bindings/3, assert_args_equivalence/2]).
 -include("rabbit_exchange_type_spec.hrl").
 
@@ -47,13 +47,14 @@ route(#exchange{name = X},
                   end || RKey <- Routes]).
 
 validate(_X) -> ok.
-create(_Tx, _X) -> ok.
 
-recover(_Exchange, Bs) ->
+start(true, _X, Bs) ->
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
               lists:foreach(fun (B) -> internal_add_binding(B) end, Bs)
-      end).
+      end);
+start(false, _X, _Bs) ->
+    ok.
 
 delete(true, #exchange{name = X}, _Bs) ->
     trie_remove_all_edges(X),
@@ -62,9 +63,12 @@ delete(true, #exchange{name = X}, _Bs) ->
 delete(false, _Exchange, _Bs) ->
     ok.
 
-add_binding(true, _Exchange, Binding) ->
-    internal_add_binding(Binding);
-add_binding(false, _Exchange, _Binding) ->
+add_bindings(true, _X, Bs) ->
+    rabbit_misc:execute_mnesia_transaction(
+      fun () ->
+              lists:foreach(fun (B) -> internal_add_binding(B) end, Bs)
+      end);
+add_bindings(false, _X, _Bs) ->
     ok.
 
 remove_bindings(true, #exchange{name = X}, Bs) ->
