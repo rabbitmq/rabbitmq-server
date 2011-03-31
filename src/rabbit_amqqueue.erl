@@ -57,7 +57,7 @@
 
 -type(queue_or_not_found() :: rabbit_types:amqqueue() | 'not_found').
 
--spec(start/0 :: () -> 'ok').
+-spec(start/0 :: () -> [rabbit_types:amqqueue()]).
 -spec(stop/0 :: () -> 'ok').
 -spec(declare/5 ::
         (name(), boolean(), boolean(),
@@ -166,8 +166,7 @@ start() ->
                {rabbit_amqqueue_sup,
                 {rabbit_amqqueue_sup, start_link, []},
                 transient, infinity, supervisor, [rabbit_amqqueue_sup]}),
-    _RealDurableQueues = recover_durable_queues(DurableQueues),
-    ok.
+    recover_durable_queues(DurableQueues).
 
 stop() ->
     ok = supervisor:terminate_child(rabbit_sup, rabbit_amqqueue_sup),
@@ -188,7 +187,7 @@ find_durable_queues() ->
 recover_durable_queues(DurableQueues) ->
     Qs = [start_queue_process(Q) || Q <- DurableQueues],
     [Q || Q <- Qs,
-          gen_server2:call(Q#amqqueue.pid, {init, true}, infinity) == Q].
+          gen_server2:call(Q#amqqueue.pid, {init, true}, infinity) == {new, Q}].
 
 declare(QueueName, Durable, AutoDelete, Args, Owner) ->
     ok = check_declare_arguments(QueueName, Args),

@@ -17,7 +17,7 @@
 -module(rabbit_binding).
 -include("rabbit.hrl").
 
--export([recover/0, exists/1, add/1, remove/1, add/2, remove/2, list/1]).
+-export([recover/1, exists/1, add/1, remove/1, add/2, remove/2, list/1]).
 -export([list_for_source/1, list_for_destination/1,
          list_for_source_and_destination/2]).
 -export([new_deletions/0, combine_deletions/2, add_deletion/3,
@@ -50,7 +50,7 @@
 
 -opaque(deletions() :: dict()).
 
--spec(recover/0 :: () -> [rabbit_types:binding()]).
+-spec(recover/1 :: ([rabbit_types:amqqueue()]) -> [rabbit_types:binding()]).
 -spec(exists/1 :: (rabbit_types:binding()) -> boolean() | bind_errors()).
 -spec(add/1 :: (rabbit_types:binding()) -> add_res()).
 -spec(remove/1 :: (rabbit_types:binding()) -> remove_res()).
@@ -93,10 +93,11 @@
                     destination_name, destination_kind,
                     routing_key, arguments]).
 
-recover() ->
+recover(Qs) ->
+    QNames = sets:from_list([Name || #amqqueue{name = Name} <- Qs]),
     rabbit_misc:table_fold(
       fun (Route = #route{binding = B}, Acc) ->
-              case should_recover(B) of
+              case should_recover(B, QNames) of
                   true  -> {_, Rev} = route_with_reverse(Route),
                            ok = mnesia:write(rabbit_route, Route, write),
                            ok = mnesia:write(rabbit_reverse_route, Rev, write),
@@ -105,19 +106,12 @@ recover() ->
               end
       end, [], rabbit_durable_route).
 
-should_recover(B = #binding{destination = Dest = #resource{ kind = Kind }}) ->
+should_recover(B = #binding{destination = Dest = #resource{ kind = Kind }},
+               QNames) ->
     case mnesia:read({rabbit_route, B}) of
         [] -> case Kind of
                   exchange -> true;
-                  queue    -> case mnesia:read({rabbit_durable_queue, Dest}) of
-                                  [Q] -> #amqqueue{pid = Pid} = Q,
-                                         Node = node(),
-                                         case node(Pid) of
-                                             Node -> true;
-                                             _    -> false
-                                         end;
-                                  _   -> false
-                              end
+                  queue    -> sets:is_element(Dest, QNames)
               end;
         _  -> false
     end.

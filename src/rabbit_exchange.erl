@@ -83,41 +83,14 @@
 -define(INFO_KEYS, [name, type, durable, auto_delete, internal, arguments]).
 
 recover() ->
-    Xs = rabbit_misc:table_fold(
-           fun (X = #exchange{name = XName}, Acc) ->
-                   case mnesia:read({rabbit_exchange, XName}) of
-                       []  -> ok = mnesia:write(rabbit_exchange, X, write),
-                              [X | Acc];
-                       [_] -> Acc
-                   end
-           end, [], rabbit_durable_exchange),
-    Bs = rabbit_binding:recover(),
-    {RecXBs, NoRecXBs} = filter_recovered_exchanges(Xs, Bs),
-    ok = recovery_callbacks(RecXBs, NoRecXBs).
-
-filter_recovered_exchanges(Xs, Bs) ->
-    RecXs = dict:from_list([{XName, X} || X = #exchange{name = XName} <- Xs]),
-    lists:foldl(
-      fun (B = #binding{source = Src}, {RecXBs, NoRecXBs}) ->
-              case dict:find(Src, RecXs) of
-                  {ok, X} -> {dict:append(X, B, RecXBs), NoRecXBs};
-                  error   -> {ok, X} = lookup(Src),
-                             {RecXBs, dict:append(X, B, NoRecXBs)}
+    rabbit_misc:table_fold(
+      fun (X = #exchange{name = XName}, Acc) ->
+              case mnesia:read({rabbit_exchange, XName}) of
+                  []  -> ok = mnesia:write(rabbit_exchange, X, write),
+                         [X | Acc];
+                  [_] -> Acc
               end
-      end, {dict:new(), dict:new()}, Bs).
-
-recovery_callbacks(RecXBs, NoRecXBs) ->
-    rabbit_misc:execute_mnesia_transaction(
-      fun () -> ok end,
-      fun (ok, Tx) ->
-              dict:map(fun (X = #exchange{type = Type}, Bs) ->
-                               (type_to_module(Type)):start(Tx, X, Bs)
-                       end, RecXBs),
-              dict:map(fun (X = #exchange{type = Type}, Bs) ->
-                               (type_to_module(Type)):add_bindings(Tx, X, Bs)
-                       end, NoRecXBs)
-      end),
-    ok.
+      end, [], rabbit_durable_exchange).
 
 callback(#exchange{type = XType}, Fun, Args) ->
     apply(type_to_module(XType), Fun, Args).
