@@ -30,7 +30,7 @@
                     {mfa,         {rabbit_mgmt_db_handler, add_handler,
                                    []}},
                     {requires,    rabbit_event},
-                    {enables,     queue_sup_queue_recovery}]}).
+                    {enables,     recovery}]}).
 
 
 start(_Type, _StartArgs) ->
