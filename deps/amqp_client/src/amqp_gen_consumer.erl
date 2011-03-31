@@ -26,8 +26,6 @@
 %% Behaviour
 %%---------------------------------------------------------------------------
 
-%% all callbacks run in the channel process
-
 %% @private
 behaviour_info(callbacks) ->
     [
@@ -38,23 +36,33 @@ behaviour_info(callbacks) ->
      %% @doc This function is called by the channel, when it starts up.
      {init, 1},
 
+     %% @type consume() = #'basic.consume'{}.
+     %% The AMQP method that is used to  subscribe a consumer to a queue.
      %% @type consume_ok() = #'basic.consume_ok'{}.
      %% The AMQP method returned in response to basic.consume.
-     %% @spec Module:handle_consume(consume_ok(), State) -> {ok, NewState}
+     %% @spec Module:handle_consume(ConsumeOk, Consume, State) -> {ok, NewState}
      %% where
+     %%      ConsumeOk = consume_ok()
+     %%      Consume = consume()
      %%      State = NewState = any()
      %% @doc This function is called by the channel every time a
-     %% basic.consume_ok is received from the server.
-     {handle_consume_ok, 2},
+     %% basic.consume_ok is received from the server. Consume is the original
+     %% method sent out to the server - it can be used to associate the
+     %% call with the response.
+     {handle_consume_ok, 3},
 
+     %% @type cancel() = #'basic.cancel'{}.
+     %% The AMQP method used to cancel a subscription.
      %% @type cancel_ok() = #'basic.cancel_ok'{}.
      %% The AMQP method returned as reply to basicl.cancel.
-     %% @spec Module:handle_cancel_ok(cancel_ok(), State) -> {ok, NewState}
+     %% @spec Module:handle_cancel_ok(CancelOk, Cancel, State) -> {ok, NewState}
      %% where
+     %%      CancelOk = cancel_ok()
+     %%      Cancel = cancel()
      %%      State = NewState = any()
      %% @doc This function is called by the channel every time a basic.cancel_ok
      %% is received from the server.
-     {handle_cancel_ok, 2},
+     {handle_cancel_ok, 3},
 
      %% @type cancel() = #'basic.cancel'{}.
      %% The AMQP method used to cancel a subscription.
@@ -68,20 +76,22 @@ behaviour_info(callbacks) ->
      %% @type deliver() = #'basic.deliver'{}.
      %% The AMQP method sent when a message is delivered from a subscribed
      %% queue.
-     %% @spec Module:handle_deliver(deliver(), #amqp_msg{}, State} ->
+     %% @spec Module:handle_deliver({deliver(), #amqp_msg{}}, State} ->
      %%           {ok, NewState}
      %% where
      %%      State = NewState = any()
      %% @doc This function is called by the channel every time a basic.deliver
      %% is received from the server.
-     {handle_deliver, 3},
+     {handle_deliver, 2},
 
-     %% @spec Module:handle_message(Message, State) -> {ok, NewState}
+     %% @spec Module:handle_message(Message, State) -> {reply, Reply, NewState}
      %% where
+     %%      Reply = any()
      %%      State = NewState = any()
      %% @doc This function is called by the channel when calling
-     %% amqp_channel:send_to_consumer/2.
-     {handle_message, 2},
+     %% amqp_channel:call_consumer/2. Reply is the term that will be returned
+     %% when amqp_channel:call_consumer/2 returns.
+     {handle_call, 2},
 
      %% @spec Module:terminate(Reason, State) -> _
      %% where

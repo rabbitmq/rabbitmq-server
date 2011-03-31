@@ -42,11 +42,11 @@
 -behaviour(amqp_gen_consumer).
 
 -export([subscribe/3, cancel/2, register_default_consumer/2]).
--export([init/1, handle_consume_ok/2, handle_cancel_ok/2, handle_cancel/2,
-         handle_deliver/3, handle_message/2, terminate/2]).
+-export([init/1, handle_consume_ok/3, handle_cancel_ok/3, handle_cancel/2,
+         handle_deliver/2, handle_call/2, terminate/2]).
 
--record(state, {consumers           = dict:new(),   %% Tag -> ConsumerPid
-                unassigned_tags     = dict:new(),   %% Tag -> Messages
+-record(state, {consumers           = dict:new(), %% Tag -> ConsumerPid
+                unassigned          = dict:new(), %% BasicConsume -> ConsumerPid
                 default_consumer    = none}).
 
 %%---------------------------------------------------------------------------
@@ -69,30 +69,17 @@
 %% receive the acknowledgement as the return value of this function, whereas
 %% the consumer process will receive the notification as a message,
 %% asynchronously.<br/>
-%% This function returns {error, command_invalid} if consumer_tag is not
-%% specified and nowait is true.<br/>
-%% Attempting to subscribe with a consumer_tag that is already in use will
+%% Attempting to subscribe with a consumer_tag that is already in use or
+%% to subscribe with nowait true and not specifying a consumer_tag will
 %% cause an exception and the channel will terminate. If nowait is set to true
-%% in this case, the function will return ok, but the channel will terminate
-%% with an error.
-subscribe(ChannelPid, #'basic.consume'{nowait = false} = BasicConsume,
-          ConsumerPid) ->
-    ConsumeOk = #'basic.consume_ok'{consumer_tag = RetTag} =
-        amqp_channel:call(ChannelPid, BasicConsume),
-    amqp_channel:send_to_consumer(ChannelPid, {assign, ConsumerPid, RetTag}),
-    ConsumeOk;
-subscribe(_ChannelPid, #'basic.consume'{nowait = true, consumer_tag = Tag},
-          _ConsumerPid) when Tag =:= undefined orelse size(Tag) == 0 ->
-    {error, command_invalid};
-subscribe(ChannelPid, #'basic.consume'{nowait = true,
-                                       consumer_tag = Tag} = BasicConsume,
-          ConsumerPid) when is_binary(Tag) andalso size(Tag) >= 0 ->
-    ok = call_consumer(ChannelPid, {subscribe_nowait, Tag, ConsumerPid}),
+%% the function will return ok, but the channel will terminate with an error.
+subscribe(ChannelPid, BasicConsume, ConsumerPid) ->
+    ok = amqp_channel:call_consumer(ChannelPid,
+                                    {subscribe, BasicConsume, ConsumerPid}),
     amqp_channel:call(ChannelPid, BasicConsume).
 
 %% @type cancel() = #'basic.cancel'{}.
 %% The AMQP method used to cancel a subscription.
-
 %% @spec (ChannelPid, Cancel) -> amqp_method() | ok
 %% where
 %%      ChannelPid = pid()
@@ -129,7 +116,8 @@ cancel(ChannelPid, #'basic.cancel'{} = Cancel) ->
 %% In these two cases, the relevant deliveries will be sent to the default
 %% consumer.
 register_default_consumer(ChannelPid, ConsumerPid) ->
-    call_consumer(ChannelPid, {register_default_consumer, ConsumerPid}).
+    amqp_channel:call_consumer(ChannelPid,
+                               {register_default_consumer, ConsumerPid}).
 
 %%---------------------------------------------------------------------------
 %% amqp_gen_consumer callbacks
@@ -140,125 +128,106 @@ init([]) ->
     {ok, #state{}}.
 
 %% @private
-handle_consume_ok(#'basic.consume_ok'{consumer_tag = Tag} = ConsumeOk,
-                  State = #state{unassigned_tags = Unassigned}) ->
-    {ok,
-     State#state{unassigned_tags = dict:store(Tag, [ConsumeOk], Unassigned)}}.
+handle_consume_ok(BasicConsumeOk, BasicConsume, State) ->
+    State1 = assign_consumer(BasicConsume, tag(BasicConsumeOk), State),
+    deliver(BasicConsumeOk, State1),
+    {ok, State1}.
 
 %% @private
-handle_cancel_ok(#'basic.cancel_ok'{consumer_tag = Tag} = CancelOk, State) ->
-    deliver_or_queue(Tag, CancelOk, State).
+handle_cancel_ok(CancelOk, _Cancel, State) ->
+    deliver(CancelOk, State),
+    {ok, do_cancel(CancelOk, State)}.
 
 %% @private
-handle_cancel(#'basic.cancel'{consumer_tag = Tag} = Cancel, State) ->
-    deliver_or_queue(Tag, Cancel, State).
+handle_cancel(Cancel, State) ->
+    deliver(Cancel, State),
+    {ok, do_cancel(Cancel, State)}.
 
 %% @private
-handle_deliver(#'basic.deliver'{consumer_tag = Tag} = Deliver, AmqpMsg,
-               State) ->
-    deliver_or_queue(Tag, {Deliver, AmqpMsg}, State).
+handle_deliver(Deliver, State) ->
+    deliver(Deliver, State),
+    {ok, State}.
 
 %% @private
-handle_message({assign, ConsumerPid, ConsumerTag},
-               State = #state{unassigned_tags = Unassigned,
-                              consumers = Consumers}) ->
-    Messages = dict:fetch(ConsumerTag, Unassigned),
-    State1 = State#state{
-                 unassigned_tags = dict:erase(ConsumerTag, Unassigned),
-                 consumers = dict:store(ConsumerTag, ConsumerPid, Consumers)},
-    lists:foldr(fun (Message, {ok, CurState}) ->
-                        deliver(Message, ConsumerPid, ConsumerTag, CurState)
-                end, {ok, State1}, Messages);
-%% @private
-handle_message({call, Caller, {subscribe_nowait, Tag, ConsumerPid}},
-                State = #state{consumers = Consumers}) ->
-    ErrorOrDefault = case resolve_consumer(Tag, State) of
-                         error        -> true;
-                         {default, _} -> true;
-                         _            -> false
-                     end,
-    if ErrorOrDefault ->
-           reply(Caller, ok),
-           {ok, State#state{
-                    consumers = dict:store(Tag, ConsumerPid, Consumers)}};
-        true ->
-            %% Consumer already registered. Do not override, server will close
-            %% the channel.
-            reply(Caller, ok),
-            {ok, State}
+handle_call({subscribe, BasicConsume, Pid},
+            State = #state{consumers = Consumers, unassigned = Unassigned}) ->
+    Tag = tag(BasicConsume),
+    Ok =
+        case BasicConsume of
+            #'basic.consume'{nowait = true}
+                    when Tag =:= undefined orelse size(Tag) == 0 ->
+                false; %% Async and undefined tag
+            _ ->
+                case resolve_consumer(Tag, State) of
+                    {consumer, _} -> false; %% Tag already in use
+                    _             -> true
+                end
+        end,
+    if Ok ->
+           case BasicConsume of
+               #'basic.consume'{nowait = true} ->
+                   {reply, ok,
+                    State#state{consumers = dict:store(Tag, Pid, Consumers)}};
+               #'basic.consume'{nowait = false} ->
+                   {reply, ok,
+                    State#state{
+                        unassigned = dict:store(BasicConsume, Pid, Unassigned)}}
+           end;
+       true ->
+           %% There is an error. Don't do anything (don't override existing
+           %% consumers), the server will close the channel with an error.
+           {reply, ok, State}
     end;
 %% @private
-handle_message({call, Caller, {register_default_consumer, DefaultConsumer}},
-               State) ->
-    reply(Caller, ok),
-    {ok, State#state{default_consumer = DefaultConsumer}}.
+handle_call({register_default_consumer, DefaultConsumer}, State) ->
+    {reply, ok, State#state{default_consumer = DefaultConsumer}}.
 
 %% @private
 terminate(Reason, #state{consumers = Consumers,
                          default_consumer = DefaultConsumer}) ->
     dict:fold(fun (_, Consumer, _) -> exit(Consumer, Reason) end, ok,
               Consumers),
-    case DefaultConsumer of
-        none -> ok;
-        _    -> exit(DefaultConsumer, Reason)
+    case DefaultConsumer of none -> ok;
+                            _    -> exit(DefaultConsumer, Reason)
     end.
 
 %%---------------------------------------------------------------------------
 %% Internal plumbing
 %%---------------------------------------------------------------------------
 
-call_consumer(ChannelPid, Msg) ->
-    Monitor = erlang:monitor(process, ChannelPid),
-    amqp_channel:send_to_consumer(ChannelPid, {call, self(), Msg}),
-    receive
-        {'$call_consumer_reply', Reply} ->
-            erlang:demonitor(Monitor, [flush]),
-            Reply;
-        {'DOWN', Monitor, process, ChannelPid, Reason} ->
-            {channel_died, Reason}
-    end.
-
-reply(Caller, Reply) ->
-    Caller ! {'$call_consumer_reply', Reply}.
-
-deliver_or_queue(Tag, Message, State = #state{unassigned_tags = Unassigned}) ->
-    case resolve_consumer(Tag, State) of
-        {consumer, Consumer} ->
-            deliver(Message, Consumer, Tag, State);
-        {default, Consumer} ->
-            deliver(Message, Consumer, Tag, State);
-        {queue, Messages} ->
-            NewUnassigned = dict:store(Tag, [Message | Messages], Unassigned),
-            {ok, State#state{unassigned_tags = NewUnassigned}};
+assign_consumer(BasicConsume, Tag, State = #state{consumers = Consumers,
+                                                  unassigned = Unassigned}) ->
+    case dict:find(BasicConsume, Unassigned) of
+        {ok, Pid} ->
+            State#state{unassigned = dict:erase(BasicConsume, Unassigned),
+                        consumers = dict:store(Tag, Pid, Consumers)};
         error ->
-            exit(unexpected_delivery_and_no_default_consumer)
+            %% Untracked consumer (subscribed with amqp_channel:call/2)
+            State
     end.
+
+deliver(Msg, State) ->
+    case resolve_consumer(tag(Msg), State) of
+        {consumer, Pid} -> Pid ! Msg;
+        {default, Pid}  -> Pid ! Msg;
+        error           -> exit(unexpected_delivery_and_no_default_consumer)
+    end.
+
+do_cancel(Cancel, State = #state{consumers = Consumers}) ->
+    State#state{consumers = dict:erase(tag(Cancel), Consumers)}.
 
 resolve_consumer(Tag, #state{consumers = Consumers,
-                             unassigned_tags = Unassigned,
                              default_consumer = DefaultConsumer}) ->
     case dict:find(Tag, Consumers) of
-        {ok, ConsumerPid} ->
-            {consumer, ConsumerPid};
-        error ->
-            case {dict:find(Tag, Unassigned), DefaultConsumer} of
-                {{ok, Messages}, _} ->
-                    {queue, Messages};
-                {error, none} ->
-                    error;
-                {error, _} ->
-                    {default, DefaultConsumer}
-            end
+        {ok, ConsumerPid} -> {consumer, ConsumerPid};
+        error             -> case DefaultConsumer of
+                                 none -> error;
+                                 _    -> {default, DefaultConsumer}
+                             end
     end.
 
-deliver(Msg, Consumer, Tag, State = #state{consumers = Consumers}) ->
-    Consumer ! Msg,
-    CancelOrCancelOk = case Msg of #'basic.cancel'{}    -> true;
-                                   #'basic.cancel_ok'{} -> true;
-                                   _                    -> false
-                       end,
-    if CancelOrCancelOk ->
-            {ok, State#state{consumers = dict:erase(Tag, Consumers)}};
-        true ->
-            {ok, State}
-    end.
+tag(#'basic.consume'{consumer_tag = Tag})         -> Tag;
+tag(#'basic.consume_ok'{consumer_tag = Tag})      -> Tag;
+tag(#'basic.cancel'{consumer_tag = Tag})          -> Tag;
+tag(#'basic.cancel_ok'{consumer_tag = Tag})       -> Tag;
+tag({#'basic.deliver'{consumer_tag = Tag}, _})    -> Tag.

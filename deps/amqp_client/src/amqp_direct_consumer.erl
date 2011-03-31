@@ -31,8 +31,8 @@
 
 -behaviour(amqp_gen_consumer).
 
--export([init/1, handle_consume_ok/2, handle_cancel_ok/2, handle_cancel/2,
-         handle_deliver/3, handle_message/2, terminate/2]).
+-export([init/1, handle_consume_ok/3, handle_cancel_ok/3, handle_cancel/2,
+         handle_deliver/2, handle_call/2, terminate/2]).
 
 %%---------------------------------------------------------------------------
 %% amqp_gen_consumer callbacks
@@ -43,33 +43,30 @@ init([ConsumerPid]) ->
     {ok, ConsumerPid}.
 
 %% @private
-handle_consume_ok(P, C) ->
-    send(P, C).
+handle_consume_ok(M, _, C) ->
+    C ! M,
+    {ok, C}.
 
 %% @private
-handle_cancel_ok(P, C) ->
-    send(P, C).
+handle_cancel_ok(M, _, C) ->
+    C ! M,
+    {ok, C}.
 
 %% @private
-handle_cancel(P, C) ->
-    send(P, C).
+handle_cancel(M, C) ->
+    C ! M,
+    {ok, C}.
 
 %% @private
-handle_message(P, C) ->
-    send(P, C).
+handle_call(M, C) ->
+    C ! M,
+    {reply, ok, C}.
 
 %% @private
-handle_deliver(Deliver, AmqpMsg, C) ->
-    send({Deliver, AmqpMsg}, C).
+handle_deliver(M, C) ->
+    C ! M,
+    {ok, C}.
 
 %% @private
-terminate(Reason, ConsumerPid) ->
-    exit(ConsumerPid, Reason).
-
-%%---------------------------------------------------------------------------
-%% Internal plumbing
-%%---------------------------------------------------------------------------
-
-send(Param, ConsumerPid) ->
-    ConsumerPid ! Param,
-    {ok, ConsumerPid}.
+terminate(Reason, C) ->
+    exit(C, Reason).
