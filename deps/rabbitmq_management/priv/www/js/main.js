@@ -186,7 +186,7 @@ function dispatcher() {
             return false;
         });
 
-    path('#/vhosts', {'vhosts': '/vhosts'}, 'vhosts');
+    path('#/vhosts', {'vhosts': '/vhosts', 'permissions': '/permissions'}, 'vhosts');
     this.get('#/vhosts/:id', function() {
             render({'vhost': '/vhosts/' + esc(this.params['id']),
                     'permissions': '/vhosts/' + esc(this.params['id']) + '/permissions',
@@ -208,7 +208,7 @@ function dispatcher() {
             return false;
         });
 
-    path('#/users', {'users': '/users'}, 'users');
+    path('#/users', {'users': '/users', 'permissions': '/permissions'}, 'users');
     this.get('#/users/:id', function() {
             render({'user': '/users/' + esc(this.params['id']),
                     'permissions': '/users/' + esc(this.params['id']) + '/permissions',
