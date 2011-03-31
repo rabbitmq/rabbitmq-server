@@ -96,14 +96,31 @@
 recover() ->
     rabbit_misc:table_fold(
       fun (Route = #route{binding = B}, Acc) ->
-              case mnesia:read({rabbit_route, B}) of
-                  []  -> {_, Rev} = route_with_reverse(Route),
-                         ok = mnesia:write(rabbit_route, Route, write),
-                         ok = mnesia:write(rabbit_reverse_route, Rev, write),
-                         [B | Acc];
-                  [_] -> Acc
+              case should_recover(B) of
+                  true  -> {_, Rev} = route_with_reverse(Route),
+                           ok = mnesia:write(rabbit_route, Route, write),
+                           ok = mnesia:write(rabbit_reverse_route, Rev, write),
+                           [B | Acc];
+                  false -> Acc
               end
       end, [], rabbit_durable_route).
+
+should_recover(B = #binding{destination = Dest = #resource{ kind = Kind }}) ->
+    case mnesia:read({rabbit_route, B}) of
+        [] -> case Kind of
+                  exchange -> true;
+                  queue    -> case mnesia:read({rabbit_durable_queue, Dest}) of
+                                  [Q] -> #amqqueue{pid = Pid} = Q,
+                                         Node = node(),
+                                         case node(Pid) of
+                                             Node -> true;
+                                             _    -> false
+                                         end;
+                                  _   -> false
+                              end
+              end;
+        _  -> false
+    end.
 
 exists(Binding) ->
     binding_action(

@@ -95,7 +95,6 @@ recover() ->
     {RecXBs, NoRecXBs} = filter_recovered_exchanges(Xs, Bs),
     ok = recovery_callbacks(RecXBs, NoRecXBs).
 
-%% TODO strip out bindings that are to queues not on this node
 filter_recovered_exchanges(Xs, Bs) ->
     RecXs = dict:from_list([{XName, X} || X = #exchange{name = XName} <- Xs]),
     lists:foldl(
@@ -112,11 +111,9 @@ recovery_callbacks(RecXBs, NoRecXBs) ->
       fun () -> ok end,
       fun (ok, Tx) ->
               dict:map(fun (X = #exchange{type = Type}, Bs) ->
-                               io:format("Recover X ~p~n", [X]),
                                (type_to_module(Type)):start(Tx, X, Bs)
                        end, RecXBs),
               dict:map(fun (X = #exchange{type = Type}, Bs) ->
-                               io:format("Recover Bs ~p~n", [Bs]),
                                (type_to_module(Type)):add_bindings(Tx, X, Bs)
                        end, NoRecXBs)
       end),
