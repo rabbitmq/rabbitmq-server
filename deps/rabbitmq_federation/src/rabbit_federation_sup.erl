@@ -56,9 +56,8 @@ stop_child(Args) ->
 
 %%----------------------------------------------------------------------------
 
-%% Bindings will change
-id({Upstreams, X, _Bindings}) ->
-    {Upstreams, X}.
+id(Args) ->
+    Args.
 
 init([]) ->
     {ok, {{one_for_one, 3, 10},[]}}.

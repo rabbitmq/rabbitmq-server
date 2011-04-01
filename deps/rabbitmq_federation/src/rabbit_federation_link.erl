@@ -48,7 +48,7 @@ start_link(Args) ->
 
 %%----------------------------------------------------------------------------
 
-init(Args = {_, X, _}) ->
+init(Args = {_, X}) ->
     rabbit_federation_links:join(rabbit_federation_exchanges),
     rabbit_federation_links:join({rabbit_federation_exchange, X}),
     gen_server2:cast(self(), maybe_go),
@@ -231,7 +231,7 @@ key(#binding{source      = Source,
 %%----------------------------------------------------------------------------
 
 go(S0 = {not_started, {Upstream, #exchange{name    = DownstreamX,
-                                           durable = Durable}, Bindings}}) ->
+                                           durable = Durable}}}) ->
     case open(direct, rabbit_federation_util:local_params()) of
         {ok, DConn, DCh} ->
             #'confirm.select_ok'{} =
@@ -246,7 +246,7 @@ go(S0 = {not_started, {Upstream, #exchange{name    = DownstreamX,
                                    connection            = Conn,
                                    channel               = Ch},
                     State1 = consume_from_upstream_queue(State, Durable),
-                    State2 = ensure_upstream_bindings(State1, Bindings),
+                    State2 = ensure_upstream_bindings(State1),
                     {noreply, State2};
                 E ->
                     ensure_closed(DConn, DCh),
@@ -290,7 +290,7 @@ ensure_upstream_bindings(State = #state{upstream            = Upstream,
                                         connection          = Conn,
                                         channel             = Ch,
                                         downstream_exchange = DownstreamX,
-                                        queue               = Q}, Bindings) ->
+                                        queue               = Q}) ->
     #upstream{exchange = X,
               params   = #amqp_params{virtual_host = VHost}} = Upstream,
     OldSuffix = rabbit_federation_db:get_active_suffix(DownstreamX, Upstream),
@@ -314,7 +314,7 @@ ensure_upstream_bindings(State = #state{upstream            = Upstream,
     State2 = lists:foldl(fun (B, State0) ->
                                  add_binding(B, State0)
                          end,
-                         State1, Bindings),
+                         State1, rabbit_binding:list_for_source(DownstreamX)),
     rabbit_federation_db:set_active_suffix(DownstreamX, Upstream, Suffix),
     OldInternalX = upstream_exchange_name(X, VHost, DownstreamX, OldSuffix),
     delete_upstream_exchange(Conn, OldInternalX),

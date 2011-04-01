@@ -60,14 +60,14 @@ validate(X = #exchange{arguments = Args}) ->
 start(transaction, X, Bs) ->
     with_module(X, fun (M) -> M:start(transaction, X, Bs) end);
 start(none, X, Bs) ->
-    {ok, _} = rabbit_federation_sup:start_child(exchange_to_sup_args(X, Bs)),
+    {ok, _} = rabbit_federation_sup:start_child(exchange_to_sup_args(X)),
     with_module(X, fun (M) -> M:start(none, X, Bs) end).
 
 delete(transaction, X, Bs) ->
     with_module(X, fun (M) -> M:delete(transaction, X, Bs) end);
 delete(none, X, Bs) ->
     rabbit_federation_links:stop(X),
-    ok = rabbit_federation_sup:stop_child(exchange_to_sup_args(X, Bs)),
+    ok = rabbit_federation_sup:stop_child(exchange_to_sup_args(X)),
     with_module(X, fun (M) -> M:delete(none, X, Bs) end).
 
 add_bindings(transaction, X, Bs) ->
@@ -121,11 +121,11 @@ is_federation_exchange(_) ->
 
 %%----------------------------------------------------------------------------
 
-exchange_to_sup_args(X = #exchange{name = Name, arguments = Args}, Bindings) ->
+exchange_to_sup_args(X = #exchange{name = Name, arguments = Args}) ->
     {array, UpstreamTables} = rabbit_misc:table_lookup(Args, <<"upstreams">>),
     Upstreams = [rabbit_federation_util:upstream_from_table(U, Name) ||
                     {table, U} <- UpstreamTables],
-    {Upstreams, X, Bindings}.
+    {Upstreams, X}.
 
 validate_arg(Name, Type, Args) ->
     case rabbit_misc:table_lookup(Args, Name) of
