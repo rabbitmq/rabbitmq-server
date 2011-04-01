@@ -257,4 +257,4 @@ local_null_split(Content) ->
 firstnull(Content) -> fn(Content, 0).
 fn(<<>>, _N) -> -1;
 fn(<<0, _Rest/binary>>, N) -> N;
-fn(<<Ch, Rest/binary>>, N) -> fn(Rest, N+1).
+fn(<<_Ch, Rest/binary>>, N) -> fn(Rest, N+1).
