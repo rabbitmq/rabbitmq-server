@@ -30,7 +30,7 @@
 -behaviour(rabbit_exchange_type).
 
 -export([description/0, route/2, serialise_events/0]).
--export([validate/1, start/3, delete/3,
+-export([validate/1, create/2, delete/3,
          add_bindings/3, remove_bindings/3, assert_args_equivalence/2]).
 
 %%----------------------------------------------------------------------------
@@ -57,11 +57,11 @@ validate(X = #exchange{arguments = Args}) ->
     end,
     with_module(X, fun (M) -> M:validate(X) end).
 
-start(transaction, X, Bs) ->
-    with_module(X, fun (M) -> M:start(transaction, X, Bs) end);
-start(none, X, Bs) ->
+create(transaction, X) ->
+    with_module(X, fun (M) -> M:create(transaction, X) end);
+create(none, X) ->
     {ok, _} = rabbit_federation_sup:start_child(exchange_to_sup_args(X)),
-    with_module(X, fun (M) -> M:start(none, X, Bs) end).
+    with_module(X, fun (M) -> M:create(none, X) end).
 
 delete(transaction, X, Bs) ->
     with_module(X, fun (M) -> M:delete(transaction, X, Bs) end);
