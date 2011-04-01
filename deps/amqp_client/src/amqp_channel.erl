@@ -567,13 +567,14 @@ handle_method_from_server1(#'channel.close'{reply_code = Code,
     handle_shutdown({server_initiated_close, Code, Text}, State);
 handle_method_from_server1(#'channel.close_ok'{}, none,
                            State = #state{closing = Closing}) ->
-    case Closing of {just_channel, {app_initiated_close, _, _} = Reason} ->
-                        handle_shutdown(Reason, rpc_bottom_half(ok, State));
-                    {just_channel, {server_initiated_close, _, _} = Reason} ->
-                        handle_shutdown(Reason,
-                                        rpc_bottom_half(closing, State));
-                    {connection, Reason} ->
-                        handle_shutdown({connection_closing, Reason}, State)
+    case Closing of
+        {just_channel, {app_initiated_close, _, _} = Reason} ->
+            handle_shutdown(Reason, rpc_bottom_half(ok, State));
+        {just_channel, {server_initiated_close, _, _} = Reason} ->
+            handle_shutdown(Reason,
+                            rpc_bottom_half(closing, State));
+        {connection, Reason} ->
+            handle_shutdown({connection_closing, Reason}, State)
     end;
 handle_method_from_server1(
         #'basic.consume_ok'{consumer_tag = ConsumerTag} = ConsumeOk,
