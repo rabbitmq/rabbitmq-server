@@ -51,7 +51,11 @@
 
 user_pass_login(User, Pass) ->
     ?LOGDEBUG("Login with user ~p pass ~p~n", [User, Pass]),
-    case check_user_pass_login(User, Pass) of
+    AuthProps = case Pass of
+                    trust               -> [];
+                    P when is_binary(P) -> [{password, P}]
+                end,
+    case check_user_login(User, AuthProps) of
         {refused, Msg, Args} ->
             rabbit_misc:protocol_error(
               access_refused, "login refused: ~s", [io_lib:format(Msg, Args)]);
