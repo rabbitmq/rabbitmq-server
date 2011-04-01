@@ -14,11 +14,52 @@
 %% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
 %%
 
+%% @type close_reason(Type) = {shutdown, amqp_reason(Type)}.
+%% @type amqp_reason(Type) = {Type, Code, Text}
+%%      Code = non_neg_integer()
+%%      Text = binary().
 %% @doc This module encapsulates the client's view of an AMQP
 %% channel. Each server side channel is represented by an amqp_channel
 %% process on the client side. Channel processes are created using the
 %% {@link amqp_connection} module. Channel processes are supervised
-%% under amqp_client's supervision tree.
+%% under amqp_client's supervision tree.<br/>
+%% <br/>
+%% In case of a failure or an AMQP error, the channel process exits with a
+%% meaningful exit reason:<br/>
+%% <br/>
+%% <table>
+%%   <tr>
+%%     <td><strong>Cause</strong></td>
+%%     <td><strong>Exit reason</strong></td>
+%%   </tr>
+%%   <tr>
+%%     <td>Any reason, where Code would have been 200 otherwise</td>
+%%     <td>```normal'''</td>
+%%   </tr>
+%%   <tr>
+%%     <td>User application calls amqp_channel:close/3</td>
+%%     <td>```close_reason(app_initiated_close)'''</td>
+%%   </tr>
+%%   <tr>
+%%     <td>Server closes channel (soft error)</td>
+%%     <td>```close_reason(server_initiated_close)'''</td>
+%%   </tr>
+%%   <tr>
+%%     <td>Server misbehaved (did not follow protocol)</td>
+%%     <td>```close_reason(server_misbehaved)'''</td>
+%%   </tr>
+%%   <tr>
+%%     <td>Connection is closing (causing all channels to cleanup and
+%%         close)</td>
+%%     <td>```{shutdown, {connection_closing, amqp_reason(atom())}}'''</td>
+%%   </tr>
+%%   <tr>
+%%     <td>Other error</td>
+%%     <td>(various error reasons, causing more detailed logging)</td>
+%%   </tr>
+%% </table>
+%% <br/>
+%% See type definitions below.
 -module(amqp_channel).
 
 -include("amqp_client.hrl").
