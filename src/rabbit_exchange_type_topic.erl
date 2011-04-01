@@ -191,7 +191,7 @@ trie_child(X, Node, Word) ->
     case mnesia:read(rabbit_topic_trie_edge,
                      #trie_edge{exchange_name = X,
                                 node_id       = Node,
-                                word          = Word}) of
+                                word          = Word}, read) of
         [#topic_trie_edge{node_id = NextNode}] -> {ok, NextNode};
         []                                     -> error
     end.
