@@ -31,12 +31,12 @@ start_link(Args) ->
 
 %%----------------------------------------------------------------------------
 
-init({Upstreams, X}) ->
-    Specs = [spec(Upstream, X) || Upstream <- Upstreams],
+init({Upstreams, X, Bindings}) ->
+    Specs = [spec(Upstream, X, Bindings) || Upstream <- Upstreams],
     {ok, {{one_for_one, 2, 2}, Specs}}.
 
-spec(Upstream = #upstream{reconnect_delay = Delay}, X) ->
-    {Upstream, {rabbit_federation_link, start_link, [{Upstream, X}]},
+spec(Upstream = #upstream{reconnect_delay = Delay}, X, Bindings) ->
+    {Upstream, {rabbit_federation_link, start_link, [{Upstream, X, Bindings}]},
      {transient, Delay},
      ?MAX_WAIT, worker,
      [rabbit_federation_link]}.
