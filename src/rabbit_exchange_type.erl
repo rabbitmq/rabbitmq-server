@@ -27,7 +27,7 @@ behaviour_info(callbacks) ->
      {validate, 1},
 
      %% called after declaration and recovery
-     {start, 3},
+     {create, 2},
 
      %% called after exchange (auto)deletion.
      {delete, 3},

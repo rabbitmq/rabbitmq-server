@@ -16,7 +16,8 @@
 
 -module(rabbit_amqqueue).
 
--export([start/0, stop/0, declare/5, delete_immediately/1, delete/3, purge/1]).
+-export([recover/0, stop/0, declare/5, delete_immediately/1, delete/3,
+         purge/1]).
 -export([pseudo_queue/2]).
 -export([lookup/1, with/2, with_or_die/2, assert_equivalence/5,
          check_exclusive_access/2, with_exclusive_access_or_die/3,
@@ -57,7 +58,7 @@
 
 -type(queue_or_not_found() :: rabbit_types:amqqueue() | 'not_found').
 
--spec(start/0 :: () -> [rabbit_types:amqqueue()]).
+-spec(recover/0 :: () -> [rabbit_types:amqqueue()]).
 -spec(stop/0 :: () -> 'ok').
 -spec(declare/5 ::
         (name(), boolean(), boolean(),
@@ -157,7 +158,7 @@
 
 %%----------------------------------------------------------------------------
 
-start() ->
+recover() ->
     DurableQueues = find_durable_queues(),
     {ok, BQ} = application:get_env(rabbit, backing_queue_module),
     ok = BQ:start([QName || #amqqueue{name = QName} <- DurableQueues]),
@@ -186,8 +187,8 @@ find_durable_queues() ->
 
 recover_durable_queues(DurableQueues) ->
     Qs = [start_queue_process(Q) || Q <- DurableQueues],
-    [Q#amqqueue.name || Q <- Qs,
-          gen_server2:call(Q#amqqueue.pid, {init, true}, infinity) == {new, Q}].
+    [QName || Q = #amqqueue{name = QName, pid = Pid} <- Qs,
+              gen_server2:call(Pid, {init, true}, infinity) == {new, Q}].
 
 declare(QueueName, Durable, AutoDelete, Args, Owner) ->
     ok = check_declare_arguments(QueueName, Args),

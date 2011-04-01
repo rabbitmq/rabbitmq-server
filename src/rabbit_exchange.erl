@@ -36,7 +36,7 @@
 -type(type() :: atom()).
 -type(fun_name() :: atom()).
 
--spec(recover/0 :: () -> 'ok').
+-spec(recover/0 :: () -> [rabbit_types:resource()]).
 -spec(callback/3:: (rabbit_types:exchange(), fun_name(), [any()]) -> 'ok').
 -spec(declare/6 ::
         (name(), type(), boolean(), boolean(), boolean(),
@@ -83,14 +83,20 @@
 -define(INFO_KEYS, [name, type, durable, auto_delete, internal, arguments]).
 
 recover() ->
-    rabbit_misc:table_fold(
-      fun (X = #exchange{name = XName}, Acc) ->
-              case mnesia:read({rabbit_exchange, XName}) of
-                  []  -> ok = mnesia:write(rabbit_exchange, X, write),
-                         [XName | Acc];
-                  [_] -> Acc
-              end
-      end, [], rabbit_durable_exchange).
+    Xs = rabbit_misc:table_fold(
+           fun (X = #exchange{name = XName}, Acc) ->
+                   case mnesia:read({rabbit_exchange, XName}) of
+                       []  -> ok = mnesia:write(rabbit_exchange, X, write),
+                              [X | Acc];
+                       [_] -> Acc
+                   end
+           end, [], rabbit_durable_exchange),
+    rabbit_misc:execute_mnesia_transaction(
+      fun () -> ok end,
+      fun (ok, Tx) ->
+              [rabbit_exchange:callback(X, create, [Tx, X]) || X <- Xs]
+      end),
+    [XName || #exchange{name = XName} <- Xs].
 
 callback(#exchange{type = XType}, Fun, Args) ->
     apply(type_to_module(XType), Fun, Args).
@@ -120,7 +126,7 @@ declare(XName, Type, Durable, AutoDelete, Internal, Args) ->
               end
       end,
       fun ({new, Exchange}, Tx) ->
-              ok = (type_to_module(Type)):start(Tx, Exchange, []),
+              ok = (type_to_module(Type)):create(Tx, Exchange),
               rabbit_event:notify_if(not Tx, exchange_created, info(Exchange)),
               Exchange;
           ({existing, Exchange}, _Tx) ->

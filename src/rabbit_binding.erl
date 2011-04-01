@@ -50,8 +50,8 @@
 
 -opaque(deletions() :: dict()).
 
--spec(recover/2 :: ([rabbit_types:exchange()], [rabbit_types:amqqueue()]) ->
-                        [rabbit_types:binding()]).
+-spec(recover/2 :: ([rabbit_types:resource()], [rabbit_types:resource()]) ->
+                        'ok').
 -spec(exists/1 :: (rabbit_types:binding()) -> boolean() | bind_errors()).
 -spec(add/1 :: (rabbit_types:binding()) -> add_res()).
 -spec(remove/1 :: (rabbit_types:binding()) -> remove_res()).
@@ -94,27 +94,38 @@
                     destination_name, destination_kind,
                     routing_key, arguments]).
 
-recover(XsL, QsL) ->
-    Xs = sets:from_list(XsL),
-    Qs = sets:from_list(QsL),
-    rabbit_misc:table_fold(
-      fun (Route = #route{binding = B}, Acc) ->
-              case should_recover(B, Xs, Qs) of
-                  true  -> {_, Rev} = route_with_reverse(Route),
-                           ok = mnesia:write(rabbit_route, Route, write),
-                           ok = mnesia:write(rabbit_reverse_route, Rev, write),
-                           [B | Acc];
-                  false -> Acc
-              end
-      end, [], rabbit_durable_route).
+recover(XNames, QNames) ->
+    XNameSet = sets:from_list(XNames),
+    QNameSet = sets:from_list(QNames),
+    XBs = rabbit_misc:table_fold(
+            fun (Route = #route{binding = B = #binding{source = Src}}, Acc) ->
+                    case should_recover(B, XNameSet, QNameSet) of
+                        true  -> {_, Rev} = route_with_reverse(Route),
+                                 ok = mnesia:write(rabbit_route, Route, write),
+                                 ok = mnesia:write(rabbit_reverse_route, Rev,
+                                                   write),
+                                 rabbit_misc:dict_cons(Src, B, Acc);
+                        false -> Acc
+                    end
+            end, dict:new(), rabbit_durable_route),
+    rabbit_misc:execute_mnesia_transaction(
+      fun () -> ok end,
+      fun (ok, Tx) ->
+              dict:map(fun (XName, Bindings) ->
+                               {ok, X} = rabbit_exchange:lookup(XName),
+                               rabbit_exchange:callback(X, add_bindings,
+                                                        [Tx, X, Bindings])
+                       end, XBs)
+      end),
+    ok.
 
-should_recover(B = #binding{destination = Dest = #resource{ kind = Kind }},
-               XNames, QNames) ->
+should_recover(B = #binding{destination = Dst = #resource{ kind = Kind }},
+               XNameSet, QNameSet) ->
     case mnesia:read({rabbit_route, B}) of
-        [] -> sets:is_element(Dest, case Kind of
-                                        exchange -> XNames;
-                                        queue    -> QNames
-                                    end);
+        [] -> sets:is_element(Dst, case Kind of
+                                       exchange -> XNameSet;
+                                       queue    -> QNameSet
+                                   end);
         _  -> false
     end.
 

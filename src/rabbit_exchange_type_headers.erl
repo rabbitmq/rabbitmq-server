@@ -21,7 +21,7 @@
 -behaviour(rabbit_exchange_type).
 
 -export([description/0, route/2]).
--export([validate/1, start/3, delete/3, add_bindings/3,
+-export([validate/1, create/2, delete/3, add_bindings/3,
          remove_bindings/3, assert_args_equivalence/2]).
 -include("rabbit_exchange_type_spec.hrl").
 
@@ -113,7 +113,7 @@ headers_match([{PK, PT, PV} | PRest], [{DK, DT, DV} | DRest],
     headers_match(PRest, DRest, AllMatch1, AnyMatch1, MatchKind).
 
 validate(_X) -> ok.
-start(_Tx, _X, _Bs) -> ok.
+create(_Tx, _X) -> ok.
 delete(_Tx, _X, _Bs) -> ok.
 add_bindings(_Tx, _X, _Bs) -> ok.
 remove_bindings(_Tx, _X, _Bs) -> ok.
