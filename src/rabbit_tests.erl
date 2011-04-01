@@ -2322,7 +2322,7 @@ test_queue_recover() ->
     after 10000 -> exit(timeout_waiting_for_queue_death)
     end,
     rabbit_amqqueue:stop(),
-    rabbit_amqqueue:start(),
+    rabbit_amqqueue:recover(),
     rabbit_amqqueue:with_or_die(
       QName,
       fun (Q1 = #amqqueue { pid = QPid1 }) ->
