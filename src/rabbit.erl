@@ -460,34 +460,34 @@ boot_delegate() ->
     rabbit_sup:start_child(delegate_sup, [Count]).
 
 recover() ->
-    Xs = rabbit_exchange:recover(),
-    Qs = rabbit_amqqueue:start(),
-    Bs = rabbit_binding:recover(Xs, Qs),
-    {RecXBs, NoRecSrcBs} = filter_recovered_exchanges(Xs, Bs),
-    ok = recovery_callbacks(RecXBs, NoRecSrcBs).
+    XNames = rabbit_exchange:recover(),
+    QNames = rabbit_amqqueue:start(),
+    Bs = rabbit_binding:recover(XNames, QNames),
+    {RecXBs, NoRecXBs} = filter_recovered_exchanges(XNames, Bs),
+    ok = recovery_callbacks(RecXBs, NoRecXBs).
 
 filter_recovered_exchanges(Xs, Bs) ->
-    RecXs = dict:from_list([{XName, X} || X = #exchange{name = XName} <- Xs]),
+    RecXs = sets:from_list(Xs),
     lists:foldl(
       fun (B = #binding{source = Src}, {RecXBs, NoRecXBs}) ->
-              case dict:find(Src, RecXs) of
-                  {ok, X} -> {dict:append(X, B, RecXBs), NoRecXBs};
-                  error   -> {RecXBs, dict:append(Src, B, NoRecXBs)}
+              case sets:is_element(Src, RecXs) of
+                  true  -> {dict:append(Src, B, RecXBs), NoRecXBs};
+                  false -> {RecXBs, dict:append(Src, B, NoRecXBs)}
               end
       end, {dict:new(), dict:new()}, Bs).
 
 recovery_callbacks(RecXBs, NoRecXBs) ->
+    CB = fun (Tx, F, XBs) ->
+                 dict:map(fun (XName, Bs) ->
+                                  {ok, X} = rabbit_exchange:lookup(XName),
+                                  rabbit_exchange:callback(X, F, [Tx, X, Bs])
+                          end, XBs)
+         end,
     rabbit_misc:execute_mnesia_transaction(
       fun () -> ok end,
       fun (ok, Tx) ->
-              dict:map(fun (X, Bs) ->
-                               rabbit_exchange:callback(X, start, [Tx, X, Bs])
-                       end, RecXBs),
-              dict:map(fun (Src, Bs) ->
-                               {ok, X} = rabbit_exchange:lookup(Src),
-                               rabbit_exchange:callback(X, add_bindings,
-                                                        [Tx, X, Bs])
-                       end, NoRecXBs)
+              CB(Tx, start, RecXBs),
+              CB(Tx, add_bindings, NoRecXBs)
       end),
     ok.
 

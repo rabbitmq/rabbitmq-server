@@ -94,12 +94,12 @@
                     destination_name, destination_kind,
                     routing_key, arguments]).
 
-recover(Xs, Qs) ->
-    XNames = sets:from_list([Name || #exchange{name = Name} <- Xs]),
-    QNames = sets:from_list([Name || #amqqueue{name = Name} <- Qs]),
+recover(XsL, QsL) ->
+    Xs = sets:from_list(XsL),
+    Qs = sets:from_list(QsL),
     rabbit_misc:table_fold(
       fun (Route = #route{binding = B}, Acc) ->
-              case should_recover(B, XNames, QNames) of
+              case should_recover(B, Xs, Qs) of
                   true  -> {_, Rev} = route_with_reverse(Route),
                            ok = mnesia:write(rabbit_route, Route, write),
                            ok = mnesia:write(rabbit_reverse_route, Rev, write),
