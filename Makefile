@@ -99,7 +99,7 @@ $(DEPS_FILE): $(SOURCES) $(INCLUDES)
 	rm -f $@
 	echo $(subst : ,:,$(foreach FILE,$^,$(FILE):)) | escript generate_deps $@ $(EBIN_DIR)
 
-$(SOURCE_DIR)/%.erl: $(ERLANDO_SOURCE_DIR)/%.erl
+$(RABBIT_ERLANDO_SOURCES): $(SOURCE_DIR)/%.erl: $(ERLANDO_SOURCE_DIR)/%.erl
 	cp -a $< $@
 
 $(EBIN_DIR)/rabbit.app: $(EBIN_DIR)/rabbit_app.in $(BEAM_TARGETS) generate_app
@@ -144,6 +144,7 @@ clean:
 	rm -f $(DOCS_DIR)/*.[0-9].gz $(DOCS_DIR)/*.man.xml $(DOCS_DIR)/*.erl $(USAGES_ERL)
 	rm -f $(RABBIT_PLT)
 	rm -f $(DEPS_FILE)
+	rm -f $(RABBIT_ERLANDO_SOURCES)
 
 cleandb:
 	rm -rf $(RABBITMQ_MNESIA_DIR)/*
