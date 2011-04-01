@@ -59,9 +59,9 @@
 -export([init/1, handle_consume_ok/3, handle_cancel_ok/3, handle_cancel/2,
          handle_deliver/2, handle_call/2, terminate/2]).
 
--record(state, {consumers           = dict:new(), %% Tag -> ConsumerPid
-                unassigned          = dict:new(), %% BasicConsume -> ConsumerPid
-                default_consumer    = none}).
+-record(state, {consumers        = dict:new(), %% Tag -> ConsumerPid
+                unassigned       = dict:new(), %% BasicConsume -> [ConsumerPid]
+                default_consumer = none}).
 
 %%---------------------------------------------------------------------------
 %% Interface
@@ -75,7 +75,7 @@
 %% where
 %%      ChannelPid = pid()
 %%      ConsumerPid = pid()
-%%      Result = consume_ok() | ok | {error, command_invalid}
+%%      Result = consume_ok() | ok | error
 %% @doc Creates a subscription to a queue. This subscribes a consumer pid to
 %% the queue defined in the #'basic.consume'{} method record. Note that
 %% both the process invoking this method and the supplied consumer process
@@ -86,9 +86,9 @@
 %% <br/>
 %% Attempting to subscribe with a consumer_tag that is already in use or
 %% to subscribe with nowait true and not specifying a consumer_tag will
-%% cause an exception and the channel will terminate. If nowait is set to true
-%% the function will return ok, but the channel will terminate with an
-%% error.
+%% cause an exception and the channel will terminate, causing this function
+%% to throw. If nowait is set to true the function will return 'error'
+%% immediately, and the channel will be terminated by the server.
 subscribe(ChannelPid, BasicConsume, ConsumerPid) ->
     ok = amqp_channel:call_consumer(ChannelPid,
                                     {subscribe, BasicConsume, ConsumerPid}),
@@ -179,11 +179,13 @@ handle_call({subscribe, BasicConsume, Pid},
             #'basic.consume'{nowait = true}
                     when Tag =:= undefined orelse size(Tag) == 0 ->
                 false; %% Async and undefined tag
-            _ ->
+            _ when is_binary(Tag) andalso size(Tag) >= 0 ->
                 case resolve_consumer(Tag, State) of
                     {consumer, _} -> false; %% Tag already in use
                     _             -> true
-                end
+                end;
+           _ ->
+               true
         end,
     if Ok ->
            case BasicConsume of
@@ -191,14 +193,15 @@ handle_call({subscribe, BasicConsume, Pid},
                    {reply, ok,
                     State#state{consumers = dict:store(Tag, Pid, Consumers)}};
                #'basic.consume'{nowait = false} ->
-                   {reply, ok,
-                    State#state{
-                        unassigned = dict:store(BasicConsume, Pid, Unassigned)}}
+                   NewUnassigned =
+                       dict:update(BasicConsume, fun (Pids) -> [Pid | Pids] end,
+                                   [Pid], Unassigned),
+                   {reply, ok, State#state{unassigned = NewUnassigned}}
            end;
        true ->
            %% There is an error. Don't do anything (don't override existing
            %% consumers), the server will close the channel with an error.
-           {reply, ok, State}
+           {reply, error, State}
     end;
 %% @private
 handle_call({register_default_consumer, Pid},
@@ -220,8 +223,12 @@ terminate(_Reason, _State) ->
 assign_consumer(BasicConsume, Tag, State = #state{consumers = Consumers,
                                                   unassigned = Unassigned}) ->
     case dict:find(BasicConsume, Unassigned) of
-        {ok, Pid} ->
+        {ok, [Pid]} ->
             State#state{unassigned = dict:erase(BasicConsume, Unassigned),
+                        consumers = dict:store(Tag, Pid, Consumers)};
+        {ok, [Pid | RestPids]} ->
+            State#state{unassigned = dict:store(BasicConsume, RestPids,
+                                                Unassigned),
                         consumers = dict:store(Tag, Pid, Consumers)};
         error ->
             %% Untracked consumer (subscribed with amqp_channel:call/2)
