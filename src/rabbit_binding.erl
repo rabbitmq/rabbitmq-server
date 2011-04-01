@@ -266,10 +266,8 @@ remove_transient_for_destination(DstName) ->
 
 %%----------------------------------------------------------------------------
 
-all_durable(Resources) ->
-    lists:all(fun (#exchange{durable = D}) -> D;
-                  (#amqqueue{durable = D}) -> D
-              end, Resources).
+durable(#exchange{durable = D}) -> D;
+durable(#amqqueue{durable = D}) -> D.
 
 binding_action(Binding = #binding{source      = SrcName,
                                   destination = DstName,
@@ -283,14 +281,13 @@ binding_action(Binding = #binding{source      = SrcName,
 
 sync_binding(Binding, Src, Dst, Fun) ->
     {Route, ReverseRoute} = route_with_reverse(Binding),
-    ok = case all_durable([Src, Dst]) of
+    ok = case durable(Src) andalso durable(Dst) of
              true  -> Fun(rabbit_durable_route, Route, write);
              false -> ok
          end,
-    ok = case Dst of
-             #amqqueue{durable = true} -> Fun(rabbit_semi_durable_route, Route,
-                                              write);
-             _                         -> ok
+    ok = case durable(Dst) of
+             true  -> Fun(rabbit_semi_durable_route, Route, write);
+             false -> ok
          end,
     ok = Fun(rabbit_route, Route, write),
     ok = Fun(rabbit_reverse_route, ReverseRoute, write),
