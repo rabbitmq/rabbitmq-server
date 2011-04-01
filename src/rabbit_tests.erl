@@ -595,7 +595,7 @@ test_topic_matching() ->
                   auto_delete = false, arguments = []},
     %% create
     rabbit_exchange_type_topic:validate(X),
-    exchange_op_callback(X, start, [[]]),
+    exchange_op_callback(X, create, []),
 
     %% add some bindings
     Bindings = [#binding{source = XName,
