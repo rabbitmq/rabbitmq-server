@@ -118,18 +118,17 @@ parse_header_value_escape(<<Ch:8,  Rest/binary>>, Frame,
     end.
 
 parse_body(Content, Frame, Chunks, unknown) ->
-    case local_null_split(Content) of
-        [Content] ->
-            more(fun(Rest) ->
-                         parse_body(Rest,
-                                    Frame,
-                                    finalize_chunk(Content, Chunks),
-                                    unknown)
-                 end);
-        [Chunk, Rest] ->
-            {ok, Frame#stomp_frame{
-                   body_iolist = lists:reverse(
-                                   finalize_chunk(Chunk, Chunks))}, Rest}
+    case firstnull(Content) of
+        -1  -> more(fun(Rest) ->
+                            parse_body(Rest,
+                                       Frame,
+                                       finalize_chunk(Content, Chunks),
+                                       unknown)
+                    end);
+        Pos -> <<Chunk:Pos/binary, 0, Rest/binary>> = Content,
+               {ok, Frame#stomp_frame{
+                      body_iolist = lists:reverse(
+                                      finalize_chunk(Chunk, Chunks))}, Rest}
     end;
 parse_body(Content, Frame, Chunks, Remaining) ->
     Size = byte_size(Content),
@@ -244,17 +243,8 @@ escape($\n) ->
 escape(C) ->
     C.
 
-%% patch for line 121
-local_null_split(Content) ->
-    %% split binary at first null byte
-    case firstnull(Content) of
-        -1 -> [Content];
-        Pos ->
-            <<Chunk:Pos/binary, 0, Rest/binary>> = Content,
-            [Chunk, Rest]
-    end.
+firstnull(Content) -> firstnull(Content, 0).
 
-firstnull(Content) -> fn(Content, 0).
-fn(<<>>, _N) -> -1;
-fn(<<0, _Rest/binary>>, N) -> N;
-fn(<<_Ch, Rest/binary>>, N) -> fn(Rest, N+1).
+firstnull(<<>>,                _N) -> -1;
+firstnull(<<0,  _Rest/binary>>, N) -> N;
+firstnull(<<_Ch, Rest/binary>>, N) -> firstnull(Rest, N+1).
