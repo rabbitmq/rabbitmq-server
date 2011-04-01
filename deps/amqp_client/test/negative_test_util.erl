@@ -52,7 +52,7 @@ bogus_rpc_test(Connection) ->
     try amqp_channel:call(Channel, Bind) of
         _ -> exit(expected_to_exit)
     catch
-        exit:{{server_initiated_close, Code, _},_} ->
+        exit:{{shutdown, {server_initiated_close, Code, _}},_} ->
             ?assertMatch(?NOT_FOUND, Code)
     end,
     test_util:wait_for_death(Channel),
@@ -67,23 +67,15 @@ hard_error_test(Connection) ->
     try amqp_channel:call(Channel, Qos) of
         _ -> exit(expected_to_exit)
     catch
-        %% Network case
-        exit:{{connection_closing,
-               {server_initiated_close, ?NOT_IMPLEMENTED, _}}, _} ->
-            ok;
-        %% Direct case
-        exit:{{connection_closing,
-               {server_initiated_hard_close, ?NOT_IMPLEMENTED, _}}, _} ->
+        exit:{{shutdown, {connection_closing,
+                          {server_initiated_close, ?NOT_IMPLEMENTED, _}}}, _} ->
             ok
     end,
     receive
-        %% Direct case
-        %% TODO fix error code in the direct case
-        {'DOWN', OtherChannelMonitor, process, OtherChannel, killed} ->
-            ok;
         {'DOWN', OtherChannelMonitor, process, OtherChannel, OtherExit} ->
-            ?assertMatch({connection_closing,
-                          {server_initiated_close, ?NOT_IMPLEMENTED, _}},
+            ?assertMatch({shutdown,
+                          {connection_closing,
+                           {server_initiated_close, ?NOT_IMPLEMENTED, _}}},
                          OtherExit)
     end,
     test_util:wait_for_death(Channel),
@@ -169,7 +161,7 @@ command_invalid_over_channel0_test(Connection) ->
 assert_down_with_error(MonitorRef, CodeAtom) ->
     receive
         {'DOWN', MonitorRef, process, _, Reason} ->
-            {server_misbehaved, Code, _} = Reason,
+            {shutdown, {server_misbehaved, Code, _}} = Reason,
             ?assertMatch(CodeAtom, ?PROTOCOL:amqp_exception(Code))
     after 2000 ->
         exit(did_not_die)

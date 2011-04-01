@@ -21,18 +21,18 @@
 
 -behaviour(supervisor2).
 
--export([start_link/4]).
+-export([start_link/5]).
 -export([init/1]).
 
 %%---------------------------------------------------------------------------
 %% Interface
 %%---------------------------------------------------------------------------
 
-start_link(Type, InfraArgs, ChNumber, Consumer) ->
+start_link(Type, Connection, InfraArgs, ChNumber, Consumer) ->
     {ok, Sup} = supervisor2:start_link(?MODULE, []),
     {ok, ChPid} = supervisor2:start_child(
                     Sup, {channel, {amqp_channel, start_link,
-                                    [Type, ChNumber, Consumer,
+                                    [Type, Connection, ChNumber, Consumer,
                                      start_writer_fun(Sup, Type, InfraArgs,
                                                       ChNumber)]},
                           intrinsic, brutal_kill, worker, [amqp_channel]}),

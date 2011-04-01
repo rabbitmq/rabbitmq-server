@@ -149,7 +149,10 @@ handle_down(Pid, Reason, State) ->
     end.
 
 handle_channel_down(Pid, Number, Reason, State) ->
-    maybe_report_down(Pid, Reason, State),
+    maybe_report_down(Pid, case Reason of {shutdown, R} -> R;
+                                          _             -> Reason
+                           end,
+                      State),
     NewState = internal_unregister(Number, Pid, State),
     check_all_channels_terminated(NewState),
     {noreply, NewState}.
@@ -160,10 +163,6 @@ maybe_report_down(_Pid, {app_initiated_close, _, _}, _State) ->
     ok;
 maybe_report_down(_Pid, {server_initiated_close, _, _}, _State) ->
     ok;
-maybe_report_down(Pid, {connection_closing,
-                        {server_initiated_hard_close, _, _} = Reason},
-                  #state{connection = Connection}) ->
-    amqp_gen_connection:hard_error_in_channel(Connection, Pid, Reason);
 maybe_report_down(_Pid, {connection_closing, _}, _State) ->
     ok;
 maybe_report_down(_Pid, {server_misbehaved, AmqpError},
