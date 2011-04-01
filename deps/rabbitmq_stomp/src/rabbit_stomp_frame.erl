@@ -250,11 +250,11 @@ local_null_split(Content) ->
     case firstnull(Content) of
         -1 -> [Content];
         Pos ->
-            <<Chunk:Pos/bits, 0, Rest/bits>> = Content,
+            <<Chunk:Pos/binary, 0, Rest/binary>> = Content,
             [Chunk, Rest]
     end.
 
 firstnull(Content) -> fn(Content, 0).
 fn(<<>>, _N) -> -1;
-fn(<<0, Rest/bits>>, N) -> N;
-fn(<<Ch, Rest/bits>>, N) -> fn(Rest, N+1).
+fn(<<0, _Rest/binary>>, N) -> N;
+fn(<<Ch, Rest/binary>>, N) -> fn(Rest, N+1).
