@@ -124,7 +124,7 @@
                     {enables,     routing_ready}]}).
 
 -rabbit_boot_step({recovery,
-                   [{description, "exchange / queue recovery"},
+                   [{description, "exchange, queue and binding recovery"},
                     {mfa,         {rabbit, recover, []}},
                     {requires,    empty_db_check},
                     {enables,     routing_ready}]}).
@@ -461,39 +461,8 @@ boot_delegate() ->
 
 recover() ->
     XNames = rabbit_exchange:recover(),
-    QNames = rabbit_amqqueue:start(),
-    Bs = rabbit_binding:recover(XNames, QNames),
-    {RecXBs, NoRecXBs} = filter_recovered_exchanges(XNames, Bs),
-    ok = recovery_callbacks(RecXBs, NoRecXBs).
-
-filter_recovered_exchanges(Xs, Bs) ->
-    RecXs = sets:from_list(Xs),
-    lists:foldl(
-      fun (B = #binding{source = Src}, {RecXBs, NoRecXBs}) ->
-              case sets:is_element(Src, RecXs) of
-                  true  -> {dict:append(Src, B, RecXBs), NoRecXBs};
-                  false -> {RecXBs, dict:append(Src, B, NoRecXBs)}
-              end
-      end, {dict:new(), dict:new()}, Bs).
-
-recovery_callbacks(RecXBs, NoRecXBs) ->
-    CB = fun (Tx, F, XBs) ->
-                 dict:map(fun (XName, Bs) ->
-                                  {ok, X} = rabbit_exchange:lookup(XName),
-                                  rabbit_exchange:callback(X, F, [Tx, X, Bs])
-                          end, XBs)
-         end,
-    rabbit_misc:execute_mnesia_transaction(
-      fun () -> ok end,
-      fun (ok, Tx0) ->
-              Tx  = case Tx0 of
-                        true  -> transaction;
-                        false -> none
-                    end,
-              CB(Tx, start, RecXBs),
-              CB(Tx, add_bindings, NoRecXBs)
-      end),
-    ok.
+    QNames = rabbit_amqqueue:recover(),
+    rabbit_binding:recover(XNames, QNames).
 
 maybe_insert_default_data() ->
     case rabbit_mnesia:is_db_empty() of

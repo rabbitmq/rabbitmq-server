@@ -595,7 +595,7 @@ test_topic_matching() ->
                   auto_delete = false, arguments = []},
     %% create
     rabbit_exchange_type_topic:validate(X),
-    exchange_op_callback(X, start, [[]]),
+    exchange_op_callback(X, create, []),
 
     %% add some bindings
     Bindings = [#binding{source = XName,
@@ -2322,7 +2322,7 @@ test_queue_recover() ->
     after 10000 -> exit(timeout_waiting_for_queue_death)
     end,
     rabbit_amqqueue:stop(),
-    rabbit_amqqueue:start(),
+    rabbit_amqqueue:recover(),
     rabbit_amqqueue:with_or_die(
       QName,
       fun (Q1 = #amqqueue { pid = QPid1 }) ->

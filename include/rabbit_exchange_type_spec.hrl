@@ -24,8 +24,7 @@
 -spec(route/2 :: (rabbit_types:exchange(), rabbit_types:delivery())
                  -> rabbit_router:match_result()).
 -spec(validate/1 :: (rabbit_types:exchange()) -> 'ok').
--spec(start/3 :: (tx(), rabbit_types:exchange(),
-                  [rabbit_types:binding()]) -> 'ok').
+-spec(create/2 :: (tx(), rabbit_types:exchange()) -> 'ok').
 -spec(delete/3 :: (tx(), rabbit_types:exchange(),
                    [rabbit_types:binding()]) -> 'ok').
 -spec(add_bindings/3 :: (serial(), rabbit_types:exchange(),
