@@ -304,10 +304,9 @@ action(list_permissions, Node, [], Opts, Inform) ->
 
 wait_for_application(Node, Attempts) ->
     case rpc_call(Node, application, which_applications, [infinity]) of
-        {badrpc, _} = E -> NewAttempts = Attempts - 1,
-                           case NewAttempts of
+        {badrpc, _} = E -> case Attempts of
                                0 -> E;
-                               _ -> wait_for_application0(Node, NewAttempts)
+                               _ -> wait_for_application0(Node, Attempts - 1)
                            end;
         Apps            -> case proplists:is_defined(rabbit, Apps) of
                                %% We've seen the node up; if it goes down

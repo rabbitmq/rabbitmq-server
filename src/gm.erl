@@ -516,7 +516,8 @@ flush(Server) ->
 
 
 init([GroupName, Module, Args]) ->
-    random:seed(now()),
+    {MegaSecs, Secs, MicroSecs} = now(),
+    random:seed(MegaSecs, Secs, MicroSecs),
     gen_server2:cast(self(), join),
     Self = self(),
     {ok, #state { self             = Self,
@@ -1010,7 +1011,7 @@ prune_or_create_group(Self, GroupName) ->
           fun () -> GroupNew = #gm_group { name    = GroupName,
                                            members = [Self],
                                            version = 0 },
-                    case mnesia:read(?GROUP_TABLE, GroupName) of
+                    case mnesia:read({?GROUP_TABLE, GroupName}) of
                         [] ->
                             mnesia:write(GroupNew),
                             GroupNew;
@@ -1028,7 +1029,7 @@ record_dead_member_in_group(Member, GroupName) ->
     {atomic, Group} =
         mnesia:sync_transaction(
           fun () -> [Group1 = #gm_group { members = Members, version = Ver }] =
-                        mnesia:read(?GROUP_TABLE, GroupName),
+                        mnesia:read({?GROUP_TABLE, GroupName}),
                     case lists:splitwith(
                            fun (Member1) -> Member1 =/= Member end, Members) of
                         {_Members1, []} -> %% not found - already recorded dead
@@ -1048,7 +1049,7 @@ record_new_member_in_group(GroupName, Left, NewMember, Fun) ->
         mnesia:sync_transaction(
           fun () ->
                   [#gm_group { members = Members, version = Ver } = Group1] =
-                      mnesia:read(?GROUP_TABLE, GroupName),
+                      mnesia:read({?GROUP_TABLE, GroupName}),
                   {Prefix, [Left | Suffix]} =
                       lists:splitwith(fun (M) -> M =/= Left end, Members),
                   Members1 = Prefix ++ [Left, NewMember | Suffix],
@@ -1067,7 +1068,7 @@ erase_members_in_group(Members, GroupName) ->
           fun () ->
                   [Group1 = #gm_group { members = [_|_] = Members1,
                                         version = Ver }] =
-                      mnesia:read(?GROUP_TABLE, GroupName),
+                      mnesia:read({?GROUP_TABLE, GroupName}),
                   case Members1 -- DeadMembers of
                       Members1 -> Group1;
                       Members2 -> Group2 =
