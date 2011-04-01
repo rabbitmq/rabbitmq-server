@@ -531,17 +531,13 @@ write_file(Path, Append, Binary) when is_binary(Binary) ->
                             case file:sync(Hdl) of
                                 ok ->
                                     file:close(Hdl);
-                                {error, _} = E4 ->
-                                    E4
+                                {error, _} = E4 -> E4
                             end;
-                        {error, _} = E3 ->
-                            E3
+                        {error, _} = E3 -> E3
                     end;
-                {error, _} = E2 ->
-                    E2
+                {error, _} = E2 -> E2
             end;
-        {error, _} = E1 ->
-            E1
+        {error, _} = E1 -> E1
     end.
 
 append_file(File, Suffix) ->
