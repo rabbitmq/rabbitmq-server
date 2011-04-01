@@ -118,7 +118,7 @@ parse_header_value_escape(<<Ch:8,  Rest/binary>>, Frame,
     end.
 
 parse_body(Content, Frame, Chunks, unknown) ->
-    case binary:split(Content, <<0>>) of
+    case local_null_split(Content) of
         [Content] ->
             more(fun(Rest) ->
                          parse_body(Rest,
@@ -243,3 +243,18 @@ escape($\n) ->
     "\\n";
 escape(C) ->
     C.
+
+%% patch for line 121
+local_null_split(Content) ->
+    %% split binary at first null byte
+    case firstnull(Content) of
+        -1 -> [Content];
+        Pos ->
+            <<Chunk:Pos/bits, 0, Rest/bits>> = Content,
+            [Chunk, Rest]
+    end.
+
+firstnull(Content) -> fn(Content, 0).
+fn(<<>>, _N) -> -1;
+fn(<<0, Rest/bits>>, N) -> N;
+fn(<<Ch, Rest/bits>>, N) -> fn(Rest, N+1).
