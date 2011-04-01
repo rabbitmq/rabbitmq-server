@@ -533,13 +533,12 @@ handle_method_from_server(Method, Content, State = #state{closing = Closing}) ->
                                               "non-zero channel",
                                 method      = element(1, Method)},
                     State);
-        false -> Drop =
-                     case {Closing, Method} of
-                         {{just_channel, _}, #'channel.close'{}}    -> false;
-                         {{just_channel, _}, #'channel.close_ok'{}} -> false;
-                         {{just_channel, _}, _}                     -> true;
-                         _                                          -> false
-                     end,
+        false -> Drop = case {Closing, Method} of
+                            {{just_channel, _}, #'channel.close'{}}    -> false;
+                            {{just_channel, _}, #'channel.close_ok'{}} -> false;
+                            {{just_channel, _}, _}                     -> true;
+                            _                                          -> false
+                        end,
                  if Drop -> ?LOG_INFO("Channel (~p): dropping method ~p from "
                                       "server because channel is closing~n",
                                       [self(), {Method, Content}]),
