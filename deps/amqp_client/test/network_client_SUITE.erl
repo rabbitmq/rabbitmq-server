@@ -21,13 +21,15 @@
 -include("amqp_client.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
--define(ITERATIONS, 100).
-
 basic_get_test() ->
     test_util:basic_get_test(new_connection()).
 
 basic_return_test() ->
     test_util:basic_return_test(new_connection()).
+
+simultaneous_close_test_() ->
+    test_util:repeat_eunit(
+        fun () -> test_util:simultaneous_close_test(new_connection()) end).
 
 basic_qos_test() ->
     test_util:basic_qos_test(new_connection()).
@@ -89,9 +91,9 @@ sync_async_method_serialization_test_() ->
                 test_util:sync_async_method_serialization_test(new_connection())
         end}.
 
-teardown_test() ->
-    {timeout, 50,
-        fun () -> repeat(fun test_util:teardown_test/1, ?ITERATIONS) end}.
+teardown_test_() ->
+    test_util:repeat_eunit(
+        fun () -> test_util:teardown_test(new_connection()) end).
 
 rpc_test() ->
     test_util:rpc_test(new_connection()).
@@ -103,7 +105,7 @@ pub_and_close_test_() ->
         end}.
 
 channel_tune_negotiation_test() ->
-    amqp_connection:close(new_connection(#amqp_params{ channel_max = 10 })).
+    amqp_connection:close(new_connection(#amqp_params{channel_max = 10})).
 
 confirm_test() ->
     test_util:confirm_test(new_connection()).
@@ -118,16 +120,12 @@ non_existent_exchange_test() ->
     negative_test_util:non_existent_exchange_test(new_connection()).
 
 bogus_rpc_test_() ->
-    {timeout, 50,
-        fun () ->
-                repeat(fun negative_test_util:bogus_rpc_test/1, ?ITERATIONS)
-        end}.
+    test_util:repeat_eunit(
+        fun () -> negative_test_util:bogus_rpc_test(new_connection()) end).
 
 hard_error_test_() ->
-    {timeout, 50,
-        fun () ->
-                repeat(fun negative_test_util:hard_error_test/1, ?ITERATIONS)
-        end}.
+    test_util:repeat_eunit(
+        fun () -> negative_test_util:hard_error_test(new_connection()) end).
 
 non_existent_user_test() ->
     negative_test_util:non_existent_user_test(fun new_connection/1).
@@ -162,9 +160,6 @@ command_invalid_over_channel0_test() ->
 %%---------------------------------------------------------------------------
 %% Common Functions
 
-repeat(Fun, Times) ->
-    [ Fun(new_connection()) || _ <- lists:seq(1, Times)].
-
 new_connection() ->
     new_connection(#amqp_params{}).
 
@@ -177,4 +172,3 @@ test_coverage() ->
     rabbit_misc:enable_cover(),
     test(),
     rabbit_misc:report_cover().
-

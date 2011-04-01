@@ -30,6 +30,10 @@ basic_get_test() ->
 basic_return_test() ->
     test_util:basic_return_test(new_connection()).
 
+simultaneous_close_test_() ->
+    test_util:repeat_eunit(
+        fun () -> test_util:simultaneous_close_test(new_connection()) end).
+
 basic_qos_test() ->
     test_util:basic_qos_test(new_connection()).
 

@@ -21,6 +21,8 @@
 
 -compile([export_all]).
 
+-define(TEST_REPEATS, 100).
+
 -record(publish, {q, x, routing_key, bind_key, payload,
                   mandatory = false, immediate = false}).
 
@@ -386,6 +388,31 @@ basic_recover_test(Connection) ->
     end,
     teardown(Connection, Channel).
 
+simultaneous_close_test(Connection) ->
+    ChannelNumber = 5,
+    {ok, Channel1} = amqp_connection:open_channel(Connection, ChannelNumber),
+
+    %% Publish to non-existent exchange and immediately close channel
+    amqp_channel:cast(Channel1, #'basic.publish'{exchange = uuid(),
+                                                routing_key = <<"a">>},
+                               #amqp_msg{payload = <<"foobar">>}),
+    try amqp_channel:close(Channel1) of
+        closing -> wait_for_death(Channel1)
+    catch
+        exit:{noproc, _}                                              -> ok;
+        exit:{{shutdown, {server_initiated_close, ?NOT_FOUND, _}}, _} -> ok
+    end,
+
+    %% Channel2 (opened with the exact same number as Channel1)
+    %% should not receive a close_ok (which is intended for Channel1)
+    {ok, Channel2} = amqp_connection:open_channel(Connection, ChannelNumber),
+
+    %% Make sure Channel2 functions normally
+    #'exchange.declare_ok'{} =
+        amqp_channel:call(Channel2, #'exchange.declare'{exchange = uuid()}),
+
+    teardown(Connection, Channel2).    
+
 basic_qos_test(Con) ->
     [NoQos, Qos] = [basic_qos_test(Con, Prefetch) || Prefetch <- [0,1]],
     ExpectedRatio = (1+1) / (1+50/5),
@@ -709,3 +736,8 @@ latch_loop(Latch, Acc) ->
 uuid() ->
     {A, B, C} = now(),
     <<A:32, B:32, C:32>>.
+
+%% NB: make sure to name the function using this *_test_ (note trailing _)
+repeat_eunit(TestFun) ->
+    {timeout, 60,
+     fun () -> [TestFun() || _ <- lists:seq(1, ?TEST_REPEATS)] end}.
