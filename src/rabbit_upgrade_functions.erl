@@ -26,6 +26,7 @@
 -rabbit_upgrade({internal_exchanges,    mnesia, []}).
 -rabbit_upgrade({user_to_internal_user, mnesia, [hash_passwords]}).
 -rabbit_upgrade({topic_trie,            mnesia, []}).
+-rabbit_upgrade({semi_durable_route,    mnesia, []}).
 
 %% -------------------------------------------------------------------
 
@@ -37,6 +38,7 @@
 -spec(internal_exchanges/0 :: () -> 'ok').
 -spec(user_to_internal_user/0 :: () -> 'ok').
 -spec(topic_trie/0 :: () -> 'ok').
+-spec(semi_durable_route/0 :: () -> 'ok').
 
 -endif.
 
@@ -100,6 +102,10 @@ topic_trie() ->
     create(rabbit_topic_trie_binding, [{record_name, topic_trie_binding},
                                        {attributes, [trie_binding, value]},
                                        {type, ordered_set}]).
+
+semi_durable_route() ->
+    create(rabbit_semi_durable_route, [{record_name, route},
+                                       {attributes, [binding, value]}]).
 
 %%--------------------------------------------------------------------
 

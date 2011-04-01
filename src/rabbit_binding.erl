@@ -98,6 +98,10 @@ recover(XsL, QsL) ->
     Xs = sets:from_list(XsL),
     Qs = sets:from_list(QsL),
     rabbit_misc:table_fold(
+      fun (Route, ok) ->
+              ok = mnesia:write(rabbit_semi_durable_route, Route, write)
+      end, ok, rabbit_durable_route),
+    rabbit_misc:table_fold(
       fun (Route = #route{binding = B}, Acc) ->
               case should_recover(B, Xs, Qs) of
                   true  -> {_, Rev} = route_with_reverse(Route),
@@ -106,7 +110,7 @@ recover(XsL, QsL) ->
                            [B | Acc];
                   false -> Acc
               end
-      end, [], rabbit_durable_route).
+      end, [], rabbit_semi_durable_route).
 
 should_recover(B = #binding{destination = Dest = #resource{ kind = Kind }},
                XNames, QNames) ->
@@ -138,7 +142,7 @@ add(Binding, InnerFun) ->
               case InnerFun(Src, Dst) of
                   ok ->
                       case mnesia:read({rabbit_route, B}) of
-                          []  -> ok = sync_binding(B, all_durable([Src, Dst]),
+                          []  -> ok = sync_binding(B, Src, Dst,
                                                    fun mnesia:write/3),
                                  fun (Tx) ->
                                          ok = rabbit_exchange:callback(
@@ -166,7 +170,7 @@ remove(Binding, InnerFun) ->
                       [_] ->
                           case InnerFun(Src, Dst) of
                               ok ->
-                                  ok = sync_binding(B, all_durable([Src, Dst]),
+                                  ok = sync_binding(B, Src, Dst,
                                                     fun mnesia:delete_object/3),
                                   {ok, maybe_auto_delete(B#binding.source,
                                                          [B], new_deletions())};
@@ -239,7 +243,8 @@ has_for_source(SrcName) ->
     %% we need to check for durable routes here too in case a bunch of
     %% routes to durable queues have been removed temporarily as a
     %% result of a node failure
-    contains(rabbit_route, Match) orelse contains(rabbit_durable_route, Match).
+    contains(rabbit_route, Match) orelse contains(rabbit_semi_durable_route,
+                                                  Match).
 
 remove_for_source(SrcName) ->
     [begin
@@ -276,13 +281,17 @@ binding_action(Binding = #binding{source      = SrcName,
               Fun(Src, Dst, Binding#binding{args = SortedArgs})
       end).
 
-sync_binding(Binding, Durable, Fun) ->
-    ok = case Durable of
-             true  -> Fun(rabbit_durable_route,
-                          #route{binding = Binding}, write);
+sync_binding(Binding, Src, Dest, Fun) ->
+    {Route, ReverseRoute} = route_with_reverse(Binding),
+    ok = case all_durable([Src, Dest]) of
+             true  -> Fun(rabbit_durable_route, Route, write);
              false -> ok
          end,
-    {Route, ReverseRoute} = route_with_reverse(Binding),
+    ok = case Dest of
+             #amqqueue{durable = true} -> Fun(rabbit_semi_durable_route, Route,
+                                              write);
+             _                         -> ok
+         end,
     ok = Fun(rabbit_route, Route, write),
     ok = Fun(rabbit_reverse_route, ReverseRoute, write),
     ok.
@@ -363,6 +372,7 @@ maybe_auto_delete(XName, Bindings, Deletions) ->
 
 delete_forward_routes(Route) ->
     ok = mnesia:delete_object(rabbit_route, Route, write),
+    ok = mnesia:delete_object(rabbit_semi_durable_route, Route, write),
     ok = mnesia:delete_object(rabbit_durable_route, Route, write).
 
 delete_transient_forward_routes(Route) ->
