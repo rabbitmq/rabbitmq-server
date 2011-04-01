@@ -485,7 +485,11 @@ recovery_callbacks(RecXBs, NoRecXBs) ->
          end,
     rabbit_misc:execute_mnesia_transaction(
       fun () -> ok end,
-      fun (ok, Tx) ->
+      fun (ok, Tx0) ->
+              Tx  = case Tx0 of
+                        true  -> transaction;
+                        false -> none
+                    end,
               CB(Tx, start, RecXBs),
               CB(Tx, add_bindings, NoRecXBs)
       end),
