@@ -46,7 +46,7 @@
                 anon_sub_requests   = queue:new(),
                 tagged_sub_requests = dict:new(),
                 closing             = false, %% false |
-                                             %%   {just_channel, Code, Text} |
+                                             %%   {just_channel, Reason} |
                                              %%   {connection, Reason}
                 writer,
                 return_handler_pid  = none,
@@ -131,7 +131,7 @@ cast(Channel, Method) ->
 cast(Channel, Method, Content) ->
     gen_server:cast(Channel, {cast, Method, Content}).
 
-%% @spec (Channel) -> ok
+%% @spec (Channel) -> ok | closing
 %% where
 %%      Channel = pid()
 %% @doc Closes the channel, invokes
@@ -139,13 +139,13 @@ cast(Channel, Method, Content) ->
 close(Channel) ->
     close(Channel, 200, <<"Goodbye">>).
 
-%% @spec (Channel, Code, Text) -> ok
+%% @spec (Channel, Code, Text) -> ok | closing
 %% where
 %%      Channel = pid()
 %%      Code = integer()
 %%      Text = binary()
 %% @doc Closes the channel, allowing the caller to supply a reply code and
-%% text.
+%% text. If the channel is already closing, the atom 'closing' is returned.
 close(Channel, Code, Text) ->
     gen_server:call(Channel, {close, Code, Text}, infinity).
 
@@ -516,7 +516,7 @@ pre_do(#'channel.open'{}, none, State) ->
     start_writer(State);
 pre_do(#'channel.close'{reply_code = Code, reply_text = Text}, none,
        State) ->
-    State#state{closing = {just_channel, Code, Text}};
+    State#state{closing = {just_channel, {app_initiated_close, Code, Text}}};
 pre_do(_, _, State) ->
     State.
 
@@ -534,9 +534,9 @@ handle_method_from_server(Method, Content, State = #state{closing = Closing}) ->
                     State);
         false -> Drop =
                      case {Closing, Method} of
-                         {{just_channel, _, _}, #'channel.close'{}}    -> false;
-                         {{just_channel, _, _}, #'channel.close_ok'{}} -> false;
-                         {{just_channel, _, _}, _}                     -> true;
+                         {{just_channel, _}, #'channel.close'{}}    -> false;
+                         {{just_channel, _}, #'channel.close_ok'{}} -> false;
+                         {{just_channel, _}, _}                     -> true;
                          _                                             -> false
                      end,
                  if Drop -> ?LOG_INFO("Channel (~p): dropping method ~p from "
@@ -551,14 +551,27 @@ handle_method_from_server(Method, Content, State = #state{closing = Closing}) ->
 handle_method_from_server1(#'channel.open_ok'{}, none, State) ->
     {noreply, rpc_bottom_half(ok, State)};
 handle_method_from_server1(#'channel.close'{reply_code = Code,
+                                            reply_text = Text},
+                           none,
+                           State = #state{closing = {just_channel, _}}) ->
+    %% Both client and server sent close at the same time. Don't shutdown yet,
+    %% wait for close_ok.
+    do(#'channel.close_ok'{}, none, State),
+    erlang:send_after(?TIMEOUT_CLOSE_OK, self(), timed_out_waiting_close_ok),
+    {noreply,
+     State#state{
+         closing = {just_channel, {server_initiated_close, Code, Text}}}};
+handle_method_from_server1(#'channel.close'{reply_code = Code,
                                             reply_text = Text}, none, State) ->
     do(#'channel.close_ok'{}, none, State),
     handle_shutdown({server_initiated_close, Code, Text}, State);
 handle_method_from_server1(#'channel.close_ok'{}, none,
                            State = #state{closing = Closing}) ->
-    case Closing of {just_channel, Code, Text} ->
-                        handle_shutdown({app_initiated_close, Code, Text},
-                                        rpc_bottom_half(ok, State));
+    case Closing of {just_channel, {app_initiated_close, _, _} = Reason} ->
+                        handle_shutdown(Reason, rpc_bottom_half(ok, State));
+                    {just_channel, {server_initiated_close, _, _} = Reason} ->
+                        handle_shutdown(Reason,
+                                        rpc_bottom_half(closing, State));
                     {connection, Reason} ->
                         handle_shutdown({connection_closing, Reason}, State)
     end;
@@ -654,7 +667,7 @@ handle_connection_closing(CloseType, Reason,
             erlang:send_after(?TIMEOUT_FLUSH, self(),
                               timed_out_flushing_channel),
             {noreply, NewState};
-        {flush, {just_channel, _, _}, false} ->
+        {flush, {just_channel, _}, false} ->
             erlang:send_after(?TIMEOUT_CLOSE_OK, self(),
                               timed_out_waiting_close_ok),
             {noreply, NewState};
@@ -739,7 +752,7 @@ build_content(none) ->
 build_content(#amqp_msg{props = Props, payload = Payload}) ->
     rabbit_basic:build_content(Props, Payload).
 
-check_block(_Method, _AmqpMsg, #state{closing = {just_channel, _, _}}) ->
+check_block(_Method, _AmqpMsg, #state{closing = {just_channel, _}}) ->
     closing;
 check_block(_Method, _AmqpMsg, #state{closing = {connection, _}}) ->
     closing;
