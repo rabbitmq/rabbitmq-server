@@ -728,7 +728,7 @@ requeue(AckTags, MsgPropsFun, State) ->
                              needs_confirming = false }
                    end,
     a(reduce_memory_use(
-        ack(fun msg_store_release/3,
+        ack(fun (_, _, _) -> ok end,
             fun (#msg_status { msg = Msg, msg_props = MsgProps }, State1) ->
                     {_SeqId, State2} = publish(Msg, MsgPropsFun1(MsgProps),
                                                true, false, State1),
@@ -971,11 +971,6 @@ msg_store_remove(MSCState, IsPersistent, MsgIds) ->
     with_immutable_msg_store_state(
       MSCState, IsPersistent,
       fun (MCSState1) -> rabbit_msg_store:remove(MsgIds, MCSState1) end).
-
-msg_store_release(MSCState, IsPersistent, MsgIds) ->
-    with_immutable_msg_store_state(
-      MSCState, IsPersistent,
-      fun (MCSState1) -> rabbit_msg_store:release(MsgIds, MCSState1) end).
 
 msg_store_sync(MSCState, IsPersistent, MsgIds, Fun) ->
     with_immutable_msg_store_state(
