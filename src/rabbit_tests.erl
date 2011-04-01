@@ -2296,7 +2296,7 @@ test_variable_queue_all_the_bits_not_covered_elsewhere1(VQ0) ->
 test_variable_queue_all_the_bits_not_covered_elsewhere2(VQ) ->
     StateT = state_t:new(identity),
     SM = StateT:modify(_),
-    StateT:exec_state_t(
+    StateT:exec(
       do([StateT ||
              SM(rabbit_variable_queue:set_ram_duration_target(0, _)),
              SM(variable_queue_publish(false, 4, _)),
