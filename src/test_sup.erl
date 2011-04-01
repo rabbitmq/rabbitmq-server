@@ -45,8 +45,8 @@ test_supervisor_delayed_restart(SupPid) ->
 with_sup(RestartStrategy, Fun) ->
     {ok, SupPid} = supervisor2:start_link(?MODULE, [RestartStrategy]),
     Res = Fun(SupPid),
-    exit(SupPid, shutdown),
     unlink(SupPid),
+    exit(SupPid, shutdown),
     Res.
 
 init([RestartStrategy]) ->
