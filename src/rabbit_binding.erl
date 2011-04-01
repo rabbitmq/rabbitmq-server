@@ -112,13 +112,13 @@ recover(XsL, QsL) ->
               end
       end, [], rabbit_semi_durable_route).
 
-should_recover(B = #binding{destination = Dest = #resource{ kind = Kind }},
+should_recover(B = #binding{destination = Dst = #resource{ kind = Kind }},
                XNames, QNames) ->
     case mnesia:read({rabbit_route, B}) of
-        [] -> sets:is_element(Dest, case Kind of
-                                        exchange -> XNames;
-                                        queue    -> QNames
-                                    end);
+        [] -> sets:is_element(Dst, case Kind of
+                                       exchange -> XNames;
+                                       queue    -> QNames
+                                   end);
         _  -> false
     end.
 
@@ -281,13 +281,13 @@ binding_action(Binding = #binding{source      = SrcName,
               Fun(Src, Dst, Binding#binding{args = SortedArgs})
       end).
 
-sync_binding(Binding, Src, Dest, Fun) ->
+sync_binding(Binding, Src, Dst, Fun) ->
     {Route, ReverseRoute} = route_with_reverse(Binding),
-    ok = case all_durable([Src, Dest]) of
+    ok = case all_durable([Src, Dst]) of
              true  -> Fun(rabbit_durable_route, Route, write);
              false -> ok
          end,
-    ok = case Dest of
+    ok = case Dst of
              #amqqueue{durable = true} -> Fun(rabbit_semi_durable_route, Route,
                                               write);
              _                         -> ok
