@@ -162,10 +162,6 @@ maybe_report_down(_Pid, {app_initiated_close, _, _}, _State) ->
     ok;
 maybe_report_down(_Pid, {server_initiated_close, _, _}, _State) ->
     ok;
-maybe_report_down(Pid, {connection_closing,
-                        {server_initiated_hard_close, _, _} = Reason},
-                  #state{connection = Connection}) ->
-    amqp_gen_connection:hard_error_in_channel(Connection, Pid, Reason);
 maybe_report_down(_Pid, {connection_closing, _}, _State) ->
     ok;
 maybe_report_down(_Pid, {server_misbehaved, AmqpError},

@@ -25,7 +25,7 @@
 
 -behaviour(gen_server).
 
--export([start_link/3, connection_closing/3, open/1]).
+-export([start_link/4, connection_closing/3, open/1]).
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2]).
 -export([call/2, call/3, cast/2, cast/3]).
@@ -40,7 +40,7 @@
 -define(TIMEOUT_CLOSE_OK, 3000).
 
 -record(state, {number,
-                sup,
+                connection,
                 driver,
                 rpc_requests        = queue:new(),
                 anon_sub_requests   = queue:new(),
@@ -236,8 +236,9 @@ register_default_consumer(Channel, Consumer) ->
 %%---------------------------------------------------------------------------
 
 %% @private
-start_link(Driver, ChannelNumber, SWF) ->
-    gen_server:start_link(?MODULE, [self(), Driver, ChannelNumber, SWF], []).
+start_link(Driver, Connection, ChannelNumber, SWF) ->
+    gen_server:start_link(?MODULE,
+                          [Driver, Connection, ChannelNumber, SWF], []).
 
 %% @private
 connection_closing(Pid, ChannelCloseType, Reason) ->
@@ -252,8 +253,8 @@ open(Pid) ->
 %%---------------------------------------------------------------------------
 
 %% @private
-init([Sup, Driver, ChannelNumber, SWF]) ->
-    {ok, #state{sup              = Sup,
+init([Driver, Connection, ChannelNumber, SWF]) ->
+    {ok, #state{connection       = Connection,
                 driver           = Driver,
                 number           = ChannelNumber,
                 start_writer_fun = SWF}}.
@@ -675,17 +676,20 @@ handle_connection_closing(CloseType, Reason,
             handle_shutdown({connection_closing, Reason}, NewState)
     end.
 
-handle_channel_exit(Reason, State) ->
+handle_channel_exit(Reason, State = #state{connection = Connection}) ->
     case Reason of
         %% Sent by rabbit_channel in the direct case
         #amqp_error{name = ErrorName, explanation = Expl} ->
             ?LOG_WARN("Channel (~p) closing: server sent error ~p~n",
                       [self(), Reason]),
             {IsHard, Code, _} = ?PROTOCOL:lookup_amqp_exception(ErrorName),
+            ReportedReason = {server_initiated_close, Code, Expl},
             handle_shutdown(
-                if IsHard -> {connection_closing,
-                              {server_initiated_hard_close, Code, Expl}};
-                   true   -> {server_initiated_close, Code, Expl}
+                if IsHard ->
+                             amqp_gen_connection:hard_error_in_channel(
+                                 Connection, self(), ReportedReason),
+                             {connection_closing, ReportedReason};
+                   true   -> ReportedReason
                 end, State);
         %% Unexpected death of a channel infrastructure process
         _ ->
@@ -693,6 +697,8 @@ handle_channel_exit(Reason, State) ->
     end.
 
 handle_shutdown({_, 200, _}, State) ->
+    {stop, normal, State};
+handle_shutdown({connection_closing, {_, 200, _}}, State) ->
     {stop, normal, State};
 handle_shutdown({connection_closing, normal}, State) ->
     {stop, normal, State};

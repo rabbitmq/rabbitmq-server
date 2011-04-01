@@ -200,17 +200,13 @@ handle_cast({method, Method, none}, State) ->
     handle_method(Method, State);
 handle_cast(channels_terminated, State) ->
     handle_channels_terminated(State);
-handle_cast({hard_error_in_channel, Pid, Reason}, State) ->
-    ?LOG_WARN("Connection (~p) closing: channel (~p) received hard error ~p "
-              "from server~n", [self(), Pid, Reason]),
-    {stop, {shutdown, Reason}, State};
+handle_cast({hard_error_in_channel, _Pid, Reason}, State) ->
+    server_initiated_close(Reason, State);
 handle_cast({channel_internal_error, Pid, Reason}, State) ->
     ?LOG_WARN("Connection (~p) closing: internal error in channel (~p): ~p~n",
-             [self(), Pid, Reason]),
+              [self(), Pid, Reason]),
     internal_error(State);
 handle_cast({server_misbehaved, AmqpError}, State) ->
-    ?LOG_WARN("Connection (~p) closing: server misbehaved: ~p~n",
-              [self(), AmqpError]),
     server_misbehaved_close(AmqpError, State).
 
 handle_info(Info, State) ->
@@ -284,10 +280,14 @@ internal_error(State) ->
                       State).
 
 server_initiated_close(Close, State) ->
+    ?LOG_WARN("Connection (~p) closing: received hard error ~p "
+              "from server~n", [self(), Close]),
     set_closing_state(abrupt, #closing{reason = server_initiated_close,
                                        close = Close}, State).
 
 server_misbehaved_close(AmqpError, State) ->
+    ?LOG_WARN("Connection (~p) closing: server misbehaved: ~p~n",
+              [self(), AmqpError]),
     {0, Close} = rabbit_binary_generator:map_exception(0, AmqpError, ?PROTOCOL),
     set_closing_state(abrupt, #closing{reason = server_misbehaved,
                                        close = Close}, State).
@@ -317,7 +317,10 @@ closing_to_reason(#closing{close = #'connection.close'{reply_code = 200}}) ->
 closing_to_reason(#closing{reason = Reason,
                            close = #'connection.close'{reply_code = Code,
                                                        reply_text = Text}}) ->
-    {Reason, Code, Text}.
+    {Reason, Code, Text};
+closing_to_reason(#closing{reason = Reason,
+                           close = {Reason, _Code, _Text} = Close}) ->
+    Close.
 
 handle_channels_terminated(State = #state{closing = Closing,
                                           module = Mod,
