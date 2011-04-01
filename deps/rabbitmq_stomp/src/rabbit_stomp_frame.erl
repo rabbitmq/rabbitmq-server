@@ -226,20 +226,12 @@ serialize_header({K, V}) when is_integer(V) ->
 serialize_header({K, V}) when is_list(V) ->
     [K, $:, [escape(C) || C <- V], $\n].
 
-unescape($n) ->
-    {ok, $\n};
-unescape($\\) ->
-    {ok, $\\};
-unescape($c) ->
-    {ok, $:};
-unescape(_) ->
-    error.
+unescape($n)  -> {ok, $\n};
+unescape($\\) -> {ok, $\\};
+unescape($c)  -> {ok, $:};
+unescape(_)   -> error.
 
-escape($:) ->
-    "\\c";
-escape($\\) ->
-    "\\\\";
-escape($\n) ->
-    "\\n";
-escape(C) ->
-    C.
+escape($:)  -> "\\c";
+escape($\\) -> "\\\\";
+escape($\n) -> "\\n";
+escape(C)   -> C.
