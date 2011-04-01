@@ -40,8 +40,7 @@
 -export([upmap/2, map_in_order/2]).
 -export([table_fold/3]).
 -export([dirty_read_all/1, dirty_foreach_key/2, dirty_dump_log/1]).
--export([read_term_file/1, write_term_file/2]).
--export([write_file/3, run_ok_monad/2]).
+-export([read_term_file/1, write_term_file/2, write_file/3]).
 -export([append_file/2, ensure_parent_dirs_exist/1]).
 -export([format_stderr/2]).
 -export([start_applications/1, stop_applications/1]).
@@ -63,7 +62,7 @@
 
 -ifdef(use_specs).
 
--export_type([resource_name/0, thunk/1, const/1, ok_monad_fun/0]).
+-export_type([resource_name/0, thunk/1, const/1]).
 
 -type(ok_or_error() :: rabbit_types:ok_or_error(any())).
 -type(thunk(T) :: fun(() -> T)).
@@ -77,8 +76,6 @@
         fun ((atom(), [term()]) -> [{digraph:vertex(), digraph_label()}])).
 -type(graph_edge_fun() ::
         fun ((atom(), [term()]) -> [{digraph:vertex(), digraph:vertex()}])).
--type(ok_monad_fun() ::
-        fun((any()) -> 'ok' | rabbit_types:ok_or_error2(any(), any()))).
 
 -spec(method_record_type/1 :: (rabbit_framing:amqp_method_record())
                               -> rabbit_framing:amqp_method_name()).
@@ -158,8 +155,6 @@
         (file:filename()) -> {'ok', [any()]} | rabbit_types:error(any())).
 -spec(write_term_file/2 :: (file:filename(), [any()]) -> ok_or_error()).
 -spec(write_file/3 :: (file:filename(), boolean(), binary()) -> ok_or_error()).
--spec(run_ok_monad/2 :: ([ok_monad_fun()], any()) ->
-                             rabbit_types:ok_or_error(any())).
 -spec(append_file/2 :: (file:filename(), string()) -> ok_or_error()).
 -spec(ensure_parent_dirs_exist/1 :: (string()) -> 'ok').
 -spec(format_stderr/2 :: (string(), [any()]) -> 'ok').
@@ -527,22 +522,26 @@ write_file(Path, Append, Binary) when is_binary(Binary) ->
                                       true  -> [read];
                                       false -> []
                                   end],
-    run_ok_monad(
-      [fun (ok)  -> file:open(Path, Modes) end,
-       fun (Hdl) -> run_ok_monad(
-                      [fun (ok)   -> file:position(Hdl, eof) end,
-                       fun (_Pos) -> file:write(Hdl, Binary) end,
-                       fun (_Pos) -> file:sync(Hdl)          end,
-                       fun (_Pos) -> file:close(Hdl)         end], ok)
-       end], ok).
-
-run_ok_monad([], _State) ->
-    ok;
-run_ok_monad([Fun|Funs], State) ->
-    case Fun(State) of
-        ok                    -> run_ok_monad(Funs, State);
-        {ok, State1}          -> run_ok_monad(Funs, State1);
-        {error, _Err} = Error -> Error
+    case file:open(Path, Modes) of
+        {ok, Hdl} ->
+            case file:position(Hdl, eof) of
+                {ok, _Pos} ->
+                    case file:write(Hdl, Binary) of
+                        ok ->
+                            case file:sync(Hdl) of
+                                ok ->
+                                    file:close(Hdl);
+                                {error, _} = E4 ->
+                                    E4
+                            end;
+                        {error, _} = E3 ->
+                            E3
+                    end;
+                {error, _} = E2 ->
+                    E2
+            end;
+        {error, _} = E1 ->
+            E1
     end.
 
 append_file(File, Suffix) ->
