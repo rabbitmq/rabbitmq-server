@@ -38,7 +38,7 @@
 %%    child is a supervisor and it exits normally (i.e. with reason of
 %%    'shutdown') then the child's parent also exits normally.
 %%
-%% 5) normal, shutdown and {shutdown, _} exit reasons are all treated the same
+%% 5) normal, and {shutdown, _} exit reasons are all treated the same
 %%    (i.e. are regarded as normal exits)
 %%
 %% All modifications are (C) 2010-2011 VMware, Inc.
@@ -548,11 +548,11 @@ do_restart(permanent, Reason, Child, State) ->
     report_error(child_terminated, Reason, Child, State#state.name),
     restart(Child, State);
 do_restart(Type, normal, Child, State) ->
-    normal_or_shutdown_restart(Type, Child, State);
-do_restart(Type, shutdown, Child, State) ->
-    normal_or_shutdown_restart(Type, Child, State);
+    del_child_and_maybe_shutdown(Type, Child, State);
 do_restart(Type, {shutdown, _}, Child, State) ->
-    normal_or_shutdown_restart(Type, Child, State);
+    del_child_and_maybe_shutdown(Type, Child, State);
+do_restart(Type, shutdown, Child = #child{child_type = supervisor}, State) ->
+    del_child_and_maybe_shutdown(Type, Child, State);
 do_restart(Type, Reason, Child, State) when Type =:= transient orelse
                                             Type =:= intrinsic ->
     report_error(child_terminated, Reason, Child, State#state.name),
@@ -562,11 +562,10 @@ do_restart(temporary, Reason, Child, State) ->
     NState = state_del_child(Child, State),
     {ok, NState}.
 
-normal_or_shutdown_restart(intrinsic, Child, State) ->
+del_child_and_maybe_shutdown(intrinsic, Child, State) ->
     {shutdown, state_del_child(Child, State)};
-normal_or_shutdown_restart(_, Child, State) ->
-    NState = state_del_child(Child, State),
-    {ok, NState}.
+del_child_and_maybe_shutdown(_, Child, State) ->
+    {ok, state_del_child(Child, State)}.
 
 restart(Child, State) ->
     case add_restart(State) of
