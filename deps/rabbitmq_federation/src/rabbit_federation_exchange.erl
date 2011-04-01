@@ -22,7 +22,7 @@
                            [exchange, <<"x-federation">>,
                             rabbit_federation_exchange]}},
                     {requires, rabbit_registry},
-                    {enables, exchange_recovery}]}).
+                    {enables, recovery}]}).
 
 -include_lib("rabbit_common/include/rabbit_exchange_type_spec.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
@@ -30,8 +30,8 @@
 -behaviour(rabbit_exchange_type).
 
 -export([description/0, route/2, serialise_events/0]).
--export([validate/1, create/2, recover/2, delete/3,
-         add_binding/3, remove_bindings/3, assert_args_equivalence/2]).
+-export([validate/1, start/3, delete/3,
+         add_bindings/3, remove_bindings/3, assert_args_equivalence/2]).
 
 %%----------------------------------------------------------------------------
 
@@ -57,15 +57,11 @@ validate(X = #exchange{arguments = Args}) ->
     end,
     with_module(X, fun (M) -> M:validate(X) end).
 
-create(transaction, X) ->
-    with_module(X, fun (M) -> M:create(transaction, X) end);
-create(none, X) ->
+start(transaction, X, Bs) ->
+    with_module(X, fun (M) -> M:start(transaction, X, Bs) end);
+start(none, X, Bs) ->
     {ok, _} = rabbit_federation_sup:start_child(exchange_to_sup_args(X)),
-    with_module(X, fun (M) -> M:create(none, X) end).
-
-recover(X, Bs) ->
-    {ok, _} = rabbit_federation_sup:start_child(exchange_to_sup_args(X)),
-    with_module(X, fun (M) -> M:recover(X, Bs) end).
+    with_module(X, fun (M) -> M:start(none, X, Bs) end).
 
 delete(transaction, X, Bs) ->
     with_module(X, fun (M) -> M:delete(transaction, X, Bs) end);
@@ -74,15 +70,15 @@ delete(none, X, Bs) ->
     ok = rabbit_federation_sup:stop_child(exchange_to_sup_args(X)),
     with_module(X, fun (M) -> M:delete(none, X, Bs) end).
 
-add_binding(transaction, X, B) ->
-    with_module(X, fun (M) -> M:add_binding(transaction, X, B) end);
-add_binding(Serial, X, B = #binding{destination = Dest}) ->
+add_bindings(transaction, X, Bs) ->
+    with_module(X, fun (M) -> M:add_bindings(transaction, X, Bs) end);
+add_bindings(Serial, X, Bs) ->
     %% TODO add bindings only if needed.
-    case is_federation_exchange(Dest) of
-        true  -> ok;
-        false -> rabbit_federation_links:add_binding(Serial, X, B)
-    end,
-    with_module(X, fun (M) -> M:add_binding(serial(Serial, X), X, B) end).
+    [case is_federation_exchange(Dest) of
+         true  -> ok;
+         false -> rabbit_federation_links:add_binding(Serial, X, B)
+     end || B = #binding{destination = Dest} <- Bs],
+    with_module(X, fun (M) -> M:add_bindings(serial(Serial, X), X, Bs) end).
 
 remove_bindings(transaction, X, Bs) ->
     with_module(X, fun (M) -> M:remove_bindings(transaction, X, Bs) end);
