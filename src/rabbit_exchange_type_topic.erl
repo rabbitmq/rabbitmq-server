@@ -188,10 +188,10 @@ follow_down(X, CurNode, AccFun, Acc, Words = [W | RestW]) ->
     end.
 
 trie_child(X, Node, Word) ->
-    case mnesia:read(rabbit_topic_trie_edge,
-                     #trie_edge{exchange_name = X,
-                                node_id       = Node,
-                                word          = Word}, read) of
+    case mnesia:read({rabbit_topic_trie_edge,
+                      #trie_edge{exchange_name = X,
+                                 node_id       = Node,
+                                 word          = Word}}) of
         [#topic_trie_edge{node_id = NextNode}] -> {ok, NextNode};
         []                                     -> error
     end.
