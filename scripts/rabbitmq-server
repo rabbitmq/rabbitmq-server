@@ -68,11 +68,9 @@ RABBITMQ_START_RABBIT=
 [ "x" = "x$RABBITMQ_ALLOW_INPUT" ] && RABBITMQ_START_RABBIT='-noinput'
 
 RABBITMQ_EBIN_ROOT="${RABBITMQ_HOME}/ebin"
-RABBITMQ_ERLANDO_EBIN_ROOT="${RABBITMQ_HOME}/../erlando/ebin"
 if [ "x" = "x$RABBITMQ_NODE_ONLY" ]; then
     if erl \
 	-pa "$RABBITMQ_EBIN_ROOT" \
-	-pa "$RABBITMQ_ERLANDO_EBIN_ROOT" \
 	-noinput \
 	-hidden \
 	-s rabbit_prelaunch \
@@ -101,7 +99,6 @@ set -f
 
 exec erl \
     ${RABBITMQ_EBIN_PATH} \
-    -pa "$RABBITMQ_ERLANDO_EBIN_ROOT" \
     ${RABBITMQ_START_RABBIT} \
     -sname ${RABBITMQ_NODENAME} \
     -boot ${RABBITMQ_BOOT_FILE} \

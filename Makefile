@@ -6,13 +6,19 @@ RABBITMQ_MNESIA_DIR ?= $(TMPDIR)/rabbitmq-$(RABBITMQ_NODENAME)-mnesia
 RABBITMQ_PLUGINS_EXPAND_DIR ?= $(TMPDIR)/rabbitmq-$(RABBITMQ_NODENAME)-plugins-scratch
 RABBITMQ_LOG_BASE ?= $(TMPDIR)
 
-DEPS_FILE=deps.mk
-SOURCE_DIR=src
-EBIN_DIR=ebin
-INCLUDE_DIR=include
-DOCS_DIR=docs
+DEPS_FILE:=deps.mk
+SOURCE_DIR:=src
+EBIN_DIR:=ebin
+INCLUDE_DIR:=include
+DOCS_DIR:=docs
+
+SIBLING_ERLANDO_DIR:=../erlando
+ERLANDO_SOURCE_DIR:=$(SIBLING_ERLANDO_DIR)/src
+ERLANDO_SOURCES:=$(wildcard $(ERLANDO_SOURCE_DIR)/*.erl)
+RABBIT_ERLANDO_SOURCES:=$(patsubst $(ERLANDO_SOURCE_DIR)/%.erl, $(SOURCE_DIR)/%.erl, $(ERLANDO_SOURCES))
+
 INCLUDES=$(wildcard $(INCLUDE_DIR)/*.hrl) $(INCLUDE_DIR)/rabbit_framing.hrl
-SOURCES=$(wildcard $(SOURCE_DIR)/*.erl) $(SOURCE_DIR)/rabbit_framing_amqp_0_9_1.erl $(SOURCE_DIR)/rabbit_framing_amqp_0_8.erl $(USAGES_ERL)
+SOURCES=$(wildcard $(SOURCE_DIR)/*.erl) $(SOURCE_DIR)/rabbit_framing_amqp_0_9_1.erl $(SOURCE_DIR)/rabbit_framing_amqp_0_8.erl $(USAGES_ERL) $(RABBIT_ERLANDO_SOURCES)
 BEAM_TARGETS=$(patsubst $(SOURCE_DIR)/%.erl, $(EBIN_DIR)/%.beam, $(SOURCES))
 TARGETS=$(EBIN_DIR)/rabbit.app $(INCLUDE_DIR)/rabbit_framing.hrl $(BEAM_TARGETS)
 WEB_URL=http://www.rabbitmq.com/
@@ -45,11 +51,8 @@ ifndef USE_SPECS
 USE_SPECS:=$(shell erl -noshell -eval 'io:format([list_to_integer(X) || X <- string:tokens(erlang:system_info(version), ".")] >= [5,8]), halt().')
 endif
 
-SIBLING_ERLANDO_DIR:=../erlando/
-ERLANDO_EBIN_DIR:=$(SIBLING_ERLANDO_DIR)ebin/
-
 #other args: +native +"{hipe,[o3,verbose]}" -Ddebug=true +debug_info +no_strict_record_tests
-ERLC_OPTS=-I $(INCLUDE_DIR) -o $(EBIN_DIR) -Wall -v +debug_info $(if $(filter true,$(USE_SPECS)),-Duse_specs) -pa $(ERLANDO_EBIN_DIR)
+ERLC_OPTS=-I $(INCLUDE_DIR) -o $(EBIN_DIR) -Wall -v +debug_info $(if $(filter true,$(USE_SPECS)),-Duse_specs)
 
 VERSION=0.0.0
 TARBALL_NAME=rabbitmq-server-$(VERSION)
@@ -62,7 +65,7 @@ AMQP_SPEC_JSON_FILES_0_8=$(AMQP_CODEGEN_DIR)/amqp-rabbitmq-0.8.json
 
 ERL_CALL=erl_call -sname $(RABBITMQ_NODENAME) -e
 
-ERL_EBIN=erl -noinput -pa $(EBIN_DIR) -pa $(ERLANDO_EBIN_DIR)
+ERL_EBIN=erl -noinput -pa $(EBIN_DIR)
 
 define usage_xml_to_erl
   $(subst __,_,$(patsubst $(DOCS_DIR)/rabbitmq%.1.xml, $(SOURCE_DIR)/rabbit_%_usage.erl, $(subst -,_,$(1))))
@@ -95,6 +98,9 @@ all: $(TARGETS)
 $(DEPS_FILE): $(SOURCES) $(INCLUDES)
 	rm -f $@
 	echo $(subst : ,:,$(foreach FILE,$^,$(FILE):)) | escript generate_deps $@ $(EBIN_DIR)
+
+$(SOURCE_DIR)/%.erl: $(ERLANDO_SOURCE_DIR)/%.erl
+	cp -a $< $@
 
 $(EBIN_DIR)/rabbit.app: $(EBIN_DIR)/rabbit_app.in $(BEAM_TARGETS) generate_app
 	escript generate_app $(EBIN_DIR) $@ < $<
