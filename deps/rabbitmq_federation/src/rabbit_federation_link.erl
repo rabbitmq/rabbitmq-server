@@ -223,9 +223,9 @@ check_remove_binding(B = #binding{destination = Dest},
         _ -> {true,  State#state{bindings = dict:store(K, Dests, Bs)}}
     end.
 
-key(#binding{source      = Source,
-             key         = Key,
-             args        = Args}) ->
+key(#binding{source = Source,
+             key    = Key,
+             args   = Args}) ->
     {Source, Key, Args}.
 
 %%----------------------------------------------------------------------------
