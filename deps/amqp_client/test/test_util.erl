@@ -788,3 +788,4 @@ new_connection(AllowedConnectionTypes, AmqpParams) ->
         {ok, Conn}     -> Conn;
         {error, _} = E -> E
     end.
+

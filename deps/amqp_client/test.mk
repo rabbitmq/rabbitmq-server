@@ -114,3 +114,4 @@ test_remote_direct_coverage: prepare_tests
 
 test_direct_coverage: prepare_tests
 	$(MAKE) run_test_in_broker AMQP_CLIENT_TEST_CONNECTION_TYPE="direct" RUN_TEST_ARGS="-s amqp_client_SUITE test_coverage"
+
