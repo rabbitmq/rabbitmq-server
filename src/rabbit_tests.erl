@@ -2294,7 +2294,7 @@ test_variable_queue_all_the_bits_not_covered_elsewhere1(VQ0) ->
     VQ12.
 
 test_variable_queue_all_the_bits_not_covered_elsewhere2(VQ) ->
-    StateT = state_t:new(identity),
+    StateT = state_t:new(identity_m),
     SM = StateT:modify(_),
     StateT:exec(
       do([StateT ||
