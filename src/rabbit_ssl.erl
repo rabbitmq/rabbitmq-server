@@ -164,9 +164,7 @@ escape_rdn_value([C | S], middle) ->
 format_asn1_value({ST, S}) when ST =:= teletexString; ST =:= printableString;
                                 ST =:= universalString; ST =:= utf8String;
                                 ST =:= bmpString ->
-    if is_binary(S) -> format_directory_string(ST, binary_to_list(S));
-       true         -> format_directory_string(ST, S)
-    end;
+    format_directory_string(ST, S);
 format_asn1_value({utcTime, [Y1, Y2, M1, M2, D1, D2, H1, H2,
                              Min1, Min2, S1, S2, $Z]}) ->
     io_lib:format("20~c~c-~c~c-~c~cT~c~c:~c~c:~c~cZ",
@@ -198,11 +196,12 @@ format_asn1_value(V) ->
 %%
 %% (However according to that link X.680 actually defines
 %% TeletexString in some much more involved and crazy way. I suggest
-%% we treat it as Windows CP1252).
+%% we treat it as ISO-8859-1 since Erlang does not support Windows
+%% Latin 1).
 %%
 %% bmpString:
-%% UCS-2 according to RFC 3641. Hence cannot represent unicode characters
-%% above 65535.
+%% UCS-2 according to RFC 3641. Hence cannot represent Unicode
+%% characters above 65535 (outside the "Basic Multilingual Plane").
 %%
 %% universalString:
 %% UCS-4 according to RFC 3641.
@@ -212,19 +211,37 @@ format_asn1_value(V) ->
 %%
 %% Within Rabbit we assume UTF-8 encoding. Since printableString is a
 %% subset of ASCII it is also a subset of UTF-8. The others need
-%% converting.
+%% converting. Fortunately since the Erlang SSL library does the
+%% decoding for us (albeit into a weird format, see below), we just
+%% need to handle encoding into UTF-8.
 %%
 %% Note for testing: the default Ubuntu configuration for openssl will
 %% only create printableString or teletexString types no matter what
 %% you do. Edit string_mask in the [req] section of
 %% /etc/ssl/openssl.cnf to change this (see comments there). You
 %% probably also need to set utf8 = yes to get it to accept UTF-8 on
-%% the command line.
-%%
-%% TODO actually convert stuff here.
+%% the command line. Also note I could not get openssl to generate a
+%% universalString.
 
 format_directory_string(printableString, S) -> S;
-format_directory_string(teletexString,   S) -> S;
-format_directory_string(bmpString,       S) -> S;
-format_directory_string(universalString, S) -> S;
+format_directory_string(teletexString,   S) -> utf8_list_from(S);
+format_directory_string(bmpString,       S) -> utf8_list_from(S);
+format_directory_string(universalString, S) -> utf8_list_from(S);
 format_directory_string(utf8String,      S) -> S.
+
+utf8_list_from(S) ->
+    binary_to_list(
+          unicode:characters_to_binary(flatten_ssl_list(S), utf32, utf8)).
+
+%% The Erlang SSL implementation invents its own representation for
+%% non-ascii strings - looking like [97,{0,0,3,187}] (that's LATIN
+%% SMALL LETTER A followed by GREEK SMALL LETTER LAMDA). We convert
+%% this into a list of unicode characters, which we can tell
+%% unicode:characters_to_binary is utf32.
+
+flatten_ssl_list(L) -> [flatten_ssl_list_item(I) || I <- L].
+
+flatten_ssl_list_item({A, B, C, D}) ->
+    A * (1 bsl 24) + B * (1 bsl 16) + C * (1 bsl 8) + D;
+flatten_ssl_list_item(N) when is_number (N) ->
+    N.
