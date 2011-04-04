@@ -118,18 +118,17 @@ parse_header_value_escape(<<Ch:8,  Rest/binary>>, Frame,
     end.
 
 parse_body(Content, Frame, Chunks, unknown) ->
-    case binary:split(Content, <<0>>) of
-        [Content] ->
-            more(fun(Rest) ->
-                         parse_body(Rest,
-                                    Frame,
-                                    finalize_chunk(Content, Chunks),
-                                    unknown)
-                 end);
-        [Chunk, Rest] ->
-            {ok, Frame#stomp_frame{
-                   body_iolist = lists:reverse(
-                                   finalize_chunk(Chunk, Chunks))}, Rest}
+    case firstnull(Content) of
+        -1  -> more(fun(Rest) ->
+                            parse_body(Rest,
+                                       Frame,
+                                       finalize_chunk(Content, Chunks),
+                                       unknown)
+                    end);
+        Pos -> <<Chunk:Pos/binary, 0, Rest/binary>> = Content,
+               {ok, Frame#stomp_frame{
+                      body_iolist = lists:reverse(
+                                      finalize_chunk(Chunk, Chunks))}, Rest}
     end;
 parse_body(Content, Frame, Chunks, Remaining) ->
     Size = byte_size(Content),
@@ -235,3 +234,9 @@ escape($:)  -> "\\c";
 escape($\\) -> "\\\\";
 escape($\n) -> "\\n";
 escape(C)   -> C.
+
+firstnull(Content) -> firstnull(Content, 0).
+
+firstnull(<<>>,                _N) -> -1;
+firstnull(<<0,  _Rest/binary>>, N) -> N;
+firstnull(<<_Ch, Rest/binary>>, N) -> firstnull(Rest, N+1).
