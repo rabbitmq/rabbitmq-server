@@ -34,6 +34,7 @@
 -export([with_user/2, with_user_and_vhost/3]).
 -export([execute_mnesia_transaction/1]).
 -export([execute_mnesia_transaction/2]).
+-export([execute_pre_post_mnesia_tx/1]).
 -export([execute_mnesia_tx_with_tail/1]).
 -export([ensure_ok/2]).
 -export([makenode/1, nodeparts/1, cookie_hash/0, tcp_name/3]).
@@ -135,6 +136,7 @@
 -spec(execute_mnesia_transaction/1 :: (thunk(A)) -> A).
 -spec(execute_mnesia_transaction/2 ::
         (thunk(A), fun ((A, boolean()) -> B)) -> B).
+-spec(execute_pre_post_mnesia_tx/1 :: (fun ((boolean()) -> B)) -> B).
 -spec(execute_mnesia_tx_with_tail/1 ::
         (thunk(fun ((boolean()) -> B))) -> B | (fun ((boolean()) -> B))).
 -spec(ensure_ok/2 :: (ok_or_error(), atom()) -> 'ok').
@@ -403,6 +405,11 @@ execute_mnesia_transaction(TxFun, PrePostCommitFun) ->
                                PrePostCommitFun(Result, true),
                                Result
                        end), false).
+
+%% Like the above, but without the main body.
+execute_pre_post_mnesia_tx(PrePostCommitFun) ->
+    execute_mnesia_transaction(fun () -> ok end,
+                               fun (ok, Tx) -> PrePostCommitFun(Tx) end).
 
 %% Like execute_mnesia_transaction/2, but TxFun is expected to return a
 %% TailFun which gets called immediately before and after the tx commit

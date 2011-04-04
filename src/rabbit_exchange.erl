@@ -91,9 +91,8 @@ recover() ->
                        [_] -> Acc
                    end
            end, [], rabbit_durable_exchange),
-    rabbit_misc:execute_mnesia_transaction(
-      fun () -> ok end,
-      fun (ok, Tx) ->
+    rabbit_misc:execute_pre_post_mnesia_tx(
+      fun (Tx) ->
               [rabbit_exchange:callback(X, create, [Tx, X]) || X <- Xs]
       end),
     [XName || #exchange{name = XName} <- Xs].
