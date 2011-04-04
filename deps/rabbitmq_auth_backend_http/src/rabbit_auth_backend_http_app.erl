@@ -8,7 +8,7 @@
 %% the License for the specific language governing rights and
 %% limitations under the License.
 %%
-%% The Original Code is RabbitMQ Federation.
+%% The Original Code is RabbitMQ HTTP authentication.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
 %% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
