@@ -89,10 +89,8 @@ find_by_type(Type, {rdnSequence, RDNs}) ->
     case [V || #'AttributeTypeAndValue'{type = T, value = V}
                    <- lists:flatten(RDNs),
                T == Type] of
-        [{ST, S}] when ST =:= teletexString; ST =:= printableString;
-                       ST =:= universalString; ST =:= utf8String;
-                       ST =:= bmpString -> format_directory_string(ST, S);
-        []                              -> not_found
+        [Val] -> format_asn1_value(Val);
+        []    -> not_found
     end.
 
 %%--------------------------------------------------------------------------
