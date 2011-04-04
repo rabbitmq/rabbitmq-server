@@ -89,8 +89,10 @@ find_by_type(Type, {rdnSequence, RDNs}) ->
     case [V || #'AttributeTypeAndValue'{type = T, value = V}
                    <- lists:flatten(RDNs),
                T == Type] of
-        [{printableString, S}] -> S;
-        []                     -> not_found
+        [{ST, S}] when ST =:= teletexString; ST =:= printableString;
+                       ST =:= universalString; ST =:= utf8String;
+                       ST =:= bmpString -> format_directory_string(ST, S);
+        []                              -> not_found
     end.
 
 %%--------------------------------------------------------------------------
@@ -162,8 +164,8 @@ escape_rdn_value([C | S], middle) ->
 format_asn1_value({ST, S}) when ST =:= teletexString; ST =:= printableString;
                                 ST =:= universalString; ST =:= utf8String;
                                 ST =:= bmpString ->
-    if is_binary(S) -> binary_to_list(S);
-       true         -> S
+    if is_binary(S) -> format_directory_string(ST, binary_to_list(S));
+       true         -> format_directory_string(ST, S)
     end;
 format_asn1_value({utcTime, [Y1, Y2, M1, M2, D1, D2, H1, H2,
                              Min1, Min2, S1, S2, $Z]}) ->
@@ -171,3 +173,56 @@ format_asn1_value({utcTime, [Y1, Y2, M1, M2, D1, D2, H1, H2,
                   [Y1, Y2, M1, M2, D1, D2, H1, H2, Min1, Min2, S1, S2]);
 format_asn1_value(V) ->
     io_lib:format("~p", [V]).
+
+%% DirectoryString { INTEGER : maxSize } ::= CHOICE {
+%%     teletexString     TeletexString (SIZE (1..maxSize)),
+%%     printableString   PrintableString (SIZE (1..maxSize)),
+%%     bmpString         BMPString (SIZE (1..maxSize)),
+%%     universalString   UniversalString (SIZE (1..maxSize)),
+%%     uTF8String        UTF8String (SIZE (1..maxSize)) }
+%%
+%% Precise definitions of printable / teletexString are hard to come
+%% by. This is what I reconstructed:
+%%
+%% printableString:
+%% "intended to represent the limited character sets available to
+%% mainframe input terminals"
+%% http://msdn.microsoft.com/en-us/library/bb540814(v=vs.85).aspx
+%%
+%% teletexString:
+%% "a sizable volume of software in the world treats TeletexString
+%% (T61String) as a simple 8-bit string with mostly Windows Latin 1
+%% (superset of iso-8859-1) encoding"
+%% http://www.mail-archive.com/asn1@asn1.org/msg00460.html
+%% (however according to that link X.680 actually defines
+%% TeletexString in some much more invovled and crazy way. I suggest
+%% we treat it as Windows CP1252).
+%%
+%% bmpString:
+%% UCS-2 according to RFC 3641. Hence cannot represent unicode characters
+%% above 65535.
+%%
+%% universalString:
+%% UCS-4 according to RFC 3641.
+%%
+%% utf8String:
+%% UTF-8 according to RFC 3641.
+%%
+%% Within Rabbit we assume UTF-8 encoding. Since printableString is a
+%% subset of ASCII it is also a subset of UTF-8. The others need
+%% converting.
+%%
+%% Note for testing: the default Ubuntu configuration for openssl will
+%% only create printableString or teletexString types no matter what
+%% you do. Edit string_mask in the [req] section of
+%% /etc/ssl/openssl.cnf to change this (see comments there). You
+%% probably also need to set utf8 = yes to get it to accept UTF-8 on
+%% the command line.
+%%
+%% TODO actually convert stuff here.
+
+format_directory_string(printableString, S) -> S;
+format_directory_string(teletexString,   S) -> S;
+format_directory_string(bmpString,       S) -> S;
+format_directory_string(universalString, S) -> S;
+format_directory_string(utf8String,      S) -> S.
