@@ -187,6 +187,7 @@ format_asn1_value(V) ->
 %% printableString:
 %% "intended to represent the limited character sets available to
 %% mainframe input terminals"
+%% A-Z a-z 0-9 ' ( ) + , - . / : = ? [space]
 %% http://msdn.microsoft.com/en-us/library/bb540814(v=vs.85).aspx
 %%
 %% teletexString:
@@ -194,8 +195,9 @@ format_asn1_value(V) ->
 %% (T61String) as a simple 8-bit string with mostly Windows Latin 1
 %% (superset of iso-8859-1) encoding"
 %% http://www.mail-archive.com/asn1@asn1.org/msg00460.html
-%% (however according to that link X.680 actually defines
-%% TeletexString in some much more invovled and crazy way. I suggest
+%%
+%% (However according to that link X.680 actually defines
+%% TeletexString in some much more involved and crazy way. I suggest
 %% we treat it as Windows CP1252).
 %%
 %% bmpString:
