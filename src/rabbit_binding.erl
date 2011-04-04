@@ -108,6 +108,10 @@ recover(XNames, QNames) ->
             end, dict:new(), rabbit_durable_route),
     rabbit_misc:execute_pre_post_mnesia_tx(
       fun (Tx) ->
+              [begin
+                   {ok, X} = rabbit_exchange:lookup(XName),
+                   rabbit_exchange:callback(X, create, [Tx, X])
+               end|| XName <- XNames],
               dict:map(fun (XName, Bindings) ->
                                {ok, X} = rabbit_exchange:lookup(XName),
                                rabbit_exchange:callback(X, add_bindings,
