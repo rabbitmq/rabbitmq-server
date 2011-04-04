@@ -100,10 +100,8 @@ recover(XNames, QNames) ->
     XBs = rabbit_misc:table_fold(
             fun (Route = #route{binding = B = #binding{source = Src}}, Acc) ->
                     case should_recover(B, XNameSet, QNameSet) of
-                        true  -> {_, Rev} = route_with_reverse(Route),
-                                 ok = mnesia:write(rabbit_route, Route, write),
-                                 ok = mnesia:write(rabbit_reverse_route, Rev,
-                                                   write),
+                        true  -> ok = sync_transient_binding(
+                                        Route, fun mnesia:write/3),
                                  rabbit_misc:dict_cons(Src, B, Acc);
                         false -> Acc
                     end
@@ -287,16 +285,17 @@ binding_action(Binding = #binding{source      = SrcName,
               Fun(Src, Dst, Binding#binding{args = SortedArgs})
       end).
 
-sync_binding(Binding, Durable, Fun) ->
-    ok = case Durable of
-             true  -> Fun(rabbit_durable_route,
-                          #route{binding = Binding}, write);
-             false -> ok
-         end,
+sync_binding(Binding, true, Fun) ->
+    ok = Fun(rabbit_durable_route, #route{binding = Binding}, write),
+    ok = sync_transient_binding(Binding, Fun);
+
+sync_binding(Binding, false, Fun) ->
+    ok = sync_transient_binding(Binding, Fun).
+
+sync_transient_binding(Binding, Fun) ->
     {Route, ReverseRoute} = route_with_reverse(Binding),
     ok = Fun(rabbit_route, Route, write),
-    ok = Fun(rabbit_reverse_route, ReverseRoute, write),
-    ok.
+    ok = Fun(rabbit_reverse_route, ReverseRoute, write).
 
 call_with_source_and_destination(SrcName, DstName, Fun) ->
     SrcTable = table_for_resource(SrcName),
