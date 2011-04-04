@@ -72,6 +72,8 @@ as follows:
   * `read` (meaning learn it exists)
   * `write` (meaning log in and use it)
 
+Note that you cannot create arbitrary virtual hosts using this plugin; you can only determine whether your users can see / access the ones that exist.
+
 ### resource_path
 
 * `username`   - the name of the user
