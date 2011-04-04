@@ -297,6 +297,8 @@
 -define(PERSISTENT_MSG_STORE, msg_store_persistent).
 -define(TRANSIENT_MSG_STORE,  msg_store_transient).
 
+-compile({parse_transform, cut}).
+
 -include("rabbit.hrl").
 
 %%----------------------------------------------------------------------------
@@ -410,10 +412,8 @@ stop_msg_store() ->
 
 init(QueueName, IsDurable, Recover, AsyncCallback, SyncCallback) ->
     init(QueueName, IsDurable, Recover, AsyncCallback, SyncCallback,
-         fun (MsgIds, ActionTaken) ->
-                 msgs_written_to_disk(AsyncCallback, MsgIds, ActionTaken)
-         end,
-         fun (MsgIds) -> msg_indices_written_to_disk(AsyncCallback, MsgIds) end).
+         msgs_written_to_disk(AsyncCallback, _, _),
+         msg_indices_written_to_disk(AsyncCallback, _)).
 
 init(QueueName, IsDurable, false, AsyncCallback, SyncCallback,
      MsgOnDiskFun, MsgIdxOnDiskFun) ->
@@ -444,9 +444,7 @@ init(QueueName, true, true, AsyncCallback, SyncCallback,
         rabbit_queue_index:recover(
           QueueName, Terms1,
           rabbit_msg_store:successfully_recovered_state(?PERSISTENT_MSG_STORE),
-          fun (MsgId) ->
-                  rabbit_msg_store:contains(MsgId, PersistentClient)
-          end,
+          rabbit_msg_store:contains(_, PersistentClient),
           MsgIdxOnDiskFun),
     init(true, IndexState, DeltaCount, Terms1, AsyncCallback, SyncCallback,
          PersistentClient, TransientClient).
@@ -959,28 +957,23 @@ msg_store_client_init(MsgStore, Ref, MsgOnDiskFun, Callback) ->
 
 msg_store_write(MSCState, IsPersistent, MsgId, Msg) ->
     with_immutable_msg_store_state(
-      MSCState, IsPersistent,
-      fun (MSCState1) -> rabbit_msg_store:write(MsgId, Msg, MSCState1) end).
+      MSCState, IsPersistent, rabbit_msg_store:write(MsgId, Msg, _)).
 
 msg_store_read(MSCState, IsPersistent, MsgId) ->
     with_msg_store_state(
-      MSCState, IsPersistent,
-      fun (MSCState1) -> rabbit_msg_store:read(MsgId, MSCState1) end).
+      MSCState, IsPersistent, rabbit_msg_store:read(MsgId, _)).
 
 msg_store_remove(MSCState, IsPersistent, MsgIds) ->
     with_immutable_msg_store_state(
-      MSCState, IsPersistent,
-      fun (MCSState1) -> rabbit_msg_store:remove(MsgIds, MCSState1) end).
+      MSCState, IsPersistent, rabbit_msg_store:remove(MsgIds, _)).
 
 msg_store_sync(MSCState, IsPersistent, MsgIds, Fun) ->
     with_immutable_msg_store_state(
-      MSCState, IsPersistent,
-      fun (MSCState1) -> rabbit_msg_store:sync(MsgIds, Fun, MSCState1) end).
+      MSCState, IsPersistent, rabbit_msg_store:sync(MsgIds, Fun, _)).
 
 msg_store_close_fds(MSCState, IsPersistent) ->
     with_msg_store_state(
-      MSCState, IsPersistent,
-      fun (MSCState1) -> rabbit_msg_store:close_all_indicated(MSCState1) end).
+      MSCState, IsPersistent, rabbit_msg_store:close_all_indicated(_)).
 
 msg_store_close_fds_fun(IsPersistent) ->
     fun (State = #vqstate { msg_store_clients = MSCState }) ->
@@ -1129,10 +1122,8 @@ blank_rate(Timestamp, IngressLength) ->
 
 msg_store_callback(PersistentMsgIds, Pubs, AckTags, Fun, MsgPropsFun,
                    AsyncCallback, SyncCallback) ->
-    case SyncCallback(fun (StateN) ->
-                              tx_commit_post_msg_store(true, Pubs, AckTags,
-                                                       Fun, MsgPropsFun, StateN)
-                      end) of
+    case SyncCallback(tx_commit_post_msg_store(true, Pubs, AckTags,
+                                               Fun, MsgPropsFun, _)) of
         ok    -> ok;
         error -> remove_persistent_messages(PersistentMsgIds, AsyncCallback)
     end.
@@ -1451,7 +1442,7 @@ needs_index_sync(#vqstate { msg_indices_on_disk = MIOD,
     not (gb_sets:is_empty(UC) orelse gb_sets:is_subset(UC, MIOD)).
 
 blind_confirm(Callback, MsgIdSet) ->
-    Callback(fun (State) -> record_confirms(MsgIdSet, State) end).
+    Callback(record_confirms(MsgIdSet, _)).
 
 msgs_written_to_disk(Callback, MsgIdSet, removed) ->
     blind_confirm(Callback, MsgIdSet);

@@ -39,15 +39,12 @@ main([TargetFile, EbinDir]) ->
 detect_deps(IncludeDirs, EbinDir, Modules, Headers, Path) ->
     {ok, Forms} = epp:parse_file(Path, IncludeDirs, [{use_specs, true}]),
     lists:foldl(
-      fun ({attribute, _LineNumber, Attribute, Behaviour}, Deps)
+      fun ({attribute, _Line, Attribute, Behaviour}, Deps)
           when Attribute =:= behaviour orelse Attribute =:= behavior ->
-              case sets:is_element(Behaviour, Modules) of
-                  true  -> sets:add_element(
-                             [EbinDir, "/", atom_to_list(Behaviour), ".beam"],
-                             Deps);
-                  false -> Deps
-              end;
-          ({attribute, _LineNumber, file, {FileName, _LineNumber1}}, Deps) ->
+              maybe_add_to_deps(EbinDir, Modules, Behaviour, Deps);
+          ({attribute, _Line, compile, {parse_transform, Transform}}, Deps) ->
+              maybe_add_to_deps(EbinDir, Modules, Transform, Deps);
+          ({attribute, _Line, file, {FileName, _LineNumber1}}, Deps) ->
               case sets:is_element(FileName, Headers) of
                   true  -> sets:add_element(FileName, Deps);
                   false -> Deps
@@ -55,3 +52,10 @@ detect_deps(IncludeDirs, EbinDir, Modules, Headers, Path) ->
           (_Form, Deps) ->
               Deps
       end, sets:new(), Forms).
+
+maybe_add_to_deps(EbinDir, Modules, Module, Deps) ->
+    case sets:is_element(Module, Modules) of
+        true  -> sets:add_element(
+                   [EbinDir, "/", atom_to_list(Module), ".beam"], Deps);
+        false -> Deps
+    end.

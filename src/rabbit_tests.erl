@@ -20,6 +20,9 @@
 
 -export([all_tests/0, test_parsing/0]).
 
+-compile({parse_transform, cut}).
+-compile({parse_transform, erlando}).
+
 -include("rabbit.hrl").
 -include("rabbit_framing.hrl").
 -include_lib("kernel/include/file.hrl").
@@ -2090,13 +2093,13 @@ variable_queue_publish(IsPersistent, Count, VQ) ->
       end, VQ, lists:seq(1, Count)).
 
 variable_queue_fetch(Count, IsPersistent, IsDelivered, Len, VQ) ->
-    lists:foldl(fun (N, {VQN, AckTagsAcc}) ->
+    lists:foldl(fun (N, {AckTagsAcc, VQN}) ->
                         Rem = Len - N,
                         {{#basic_message { is_persistent = IsPersistent },
                           IsDelivered, AckTagN, Rem}, VQM} =
                             rabbit_variable_queue:fetch(true, VQN),
-                        {VQM, [AckTagN | AckTagsAcc]}
-                end, {VQ, []}, lists:seq(1, Count)).
+                        {[AckTagN | AckTagsAcc], VQM}
+                end, {[], VQ}, lists:seq(1, Count)).
 
 assert_prop(List, Prop, Value) ->
     Value = proplists:get_value(Prop, List).
@@ -2138,7 +2141,7 @@ test_variable_queue_ack_limiting(VQ0) ->
     {_Duration, VQ3} = rabbit_variable_queue:ram_duration(VQ2),
 
     %% fetch half the messages
-    {VQ4, _AckTags} = variable_queue_fetch(Len div 2, false, false, Len, VQ3),
+    {_AckTags, VQ4} = variable_queue_fetch(Len div 2, false, false, Len, VQ3),
 
     VQ5 = check_variable_queue_status(VQ4, [{len          , Len div 2},
                                             {ram_ack_count, Len div 2},
@@ -2207,7 +2210,7 @@ test_variable_queue_dynamic_duration_change(VQ0) ->
             end, VQ3, [Duration / 4, 0, Duration / 4, infinity]),
 
     %% drain
-    {VQ8, AckTags} = variable_queue_fetch(Len, false, false, Len, VQ7),
+    {AckTags, VQ8} = variable_queue_fetch(Len, false, false, Len, VQ7),
     VQ9 = rabbit_variable_queue:ack(AckTags, VQ8),
     {empty, VQ10} = rabbit_variable_queue:fetch(true, VQ9),
 
@@ -2241,7 +2244,7 @@ test_variable_queue_partial_segments_delta_thing(VQ0) ->
              {delta, {delta, SegmentSize, HalfSegment, OneAndAHalfSegment}},
              {q3, SegmentSize},
              {len, SegmentSize + HalfSegment + 1}]),
-    {VQ6, AckTags} = variable_queue_fetch(SegmentSize, true, false,
+    {AckTags, VQ6} = variable_queue_fetch(SegmentSize, true, false,
                                           SegmentSize + HalfSegment + 1, VQ5),
     VQ7 = check_variable_queue_status(
             VQ6,
@@ -2250,7 +2253,7 @@ test_variable_queue_partial_segments_delta_thing(VQ0) ->
              {delta, {delta, undefined, 0, undefined}},
              {q3, HalfSegment},
              {len, HalfSegment + 1}]),
-    {VQ8, AckTags1} = variable_queue_fetch(HalfSegment + 1, true, false,
+    {AckTags1, VQ8} = variable_queue_fetch(HalfSegment + 1, true, false,
                                            HalfSegment + 1, VQ7),
     VQ9 = rabbit_variable_queue:ack(AckTags ++ AckTags1, VQ8),
     %% should be empty now
@@ -2276,9 +2279,9 @@ test_variable_queue_all_the_bits_not_covered_elsewhere1(VQ0) ->
     VQ1 = variable_queue_publish(true, Count, VQ0),
     VQ2 = variable_queue_publish(false, Count, VQ1),
     VQ3 = rabbit_variable_queue:set_ram_duration_target(0, VQ2),
-    {VQ4, _AckTags}  = variable_queue_fetch(Count, true, false,
+    {_AckTags, VQ4}  = variable_queue_fetch(Count, true, false,
                                             Count + Count, VQ3),
-    {VQ5, _AckTags1} = variable_queue_fetch(Count, false, false,
+    {_AckTags1, VQ5} = variable_queue_fetch(Count, false, false,
                                             Count, VQ4),
     _VQ6 = rabbit_variable_queue:terminate(VQ5),
     VQ7 = variable_queue_init(test_queue(), true, true),
@@ -2286,20 +2289,32 @@ test_variable_queue_all_the_bits_not_covered_elsewhere1(VQ0) ->
         rabbit_variable_queue:fetch(true, VQ7),
     VQ9 = variable_queue_publish(false, 1, VQ8),
     VQ10 = rabbit_variable_queue:set_ram_duration_target(0, VQ9),
-    {VQ11, _AckTags2} = variable_queue_fetch(Count1, true, true, Count, VQ10),
-    {VQ12, _AckTags3} = variable_queue_fetch(1, false, false, 1, VQ11),
+    {_AckTags2, VQ11} = variable_queue_fetch(Count1, true, true, Count, VQ10),
+    {_AckTags3, VQ12} = variable_queue_fetch(1, false, false, 1, VQ11),
     VQ12.
 
-test_variable_queue_all_the_bits_not_covered_elsewhere2(VQ0) ->
-    VQ1 = rabbit_variable_queue:set_ram_duration_target(0, VQ0),
-    VQ2 = variable_queue_publish(false, 4, VQ1),
-    {VQ3, AckTags} = variable_queue_fetch(2, false, false, 4, VQ2),
-    VQ4 = rabbit_variable_queue:requeue(AckTags, fun(X) -> X end, VQ3),
-    VQ5 = rabbit_variable_queue:idle_timeout(VQ4),
-    _VQ6 = rabbit_variable_queue:terminate(VQ5),
-    VQ7 = variable_queue_init(test_queue(), true, true),
-    {empty, VQ8} = rabbit_variable_queue:fetch(false, VQ7),
-    VQ8.
+test_variable_queue_all_the_bits_not_covered_elsewhere2(VQ) ->
+    StateT = state_t:new(identity_m),
+    SM = StateT:modify(_),
+    StateT:exec(
+      do([StateT ||
+             SM(rabbit_variable_queue:set_ram_duration_target(0, _)),
+             SM(variable_queue_publish(false, 4, _)),
+             AckTags <- modify_and_return(
+                          StateT, variable_queue_fetch(2, false, false, 4, _)),
+             SM(rabbit_variable_queue:requeue(AckTags, fun(X) -> X end, _)),
+             SM(rabbit_variable_queue:idle_timeout(_)),
+             SM(rabbit_variable_queue:terminate(_)),
+             StateT:put(variable_queue_init(test_queue(), true, true)),
+             empty <- modify_and_return(
+                        StateT, rabbit_variable_queue:fetch(false, _)),
+             return(passed)]), VQ).
+
+modify_and_return(StateT, Fun) ->
+    do([StateT || S <- StateT:get(),
+                  {A, S1} <- return(Fun(S)),
+                  StateT:put(S1),
+                  return(A)]).
 
 test_queue_recover() ->
     Count = 2 * rabbit_queue_index:next_segment_boundary(0),

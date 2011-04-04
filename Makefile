@@ -6,13 +6,23 @@ RABBITMQ_MNESIA_DIR ?= $(TMPDIR)/rabbitmq-$(RABBITMQ_NODENAME)-mnesia
 RABBITMQ_PLUGINS_EXPAND_DIR ?= $(TMPDIR)/rabbitmq-$(RABBITMQ_NODENAME)-plugins-scratch
 RABBITMQ_LOG_BASE ?= $(TMPDIR)
 
-DEPS_FILE=deps.mk
-SOURCE_DIR=src
-EBIN_DIR=ebin
-INCLUDE_DIR=include
-DOCS_DIR=docs
-INCLUDES=$(wildcard $(INCLUDE_DIR)/*.hrl) $(INCLUDE_DIR)/rabbit_framing.hrl
-SOURCES=$(wildcard $(SOURCE_DIR)/*.erl) $(SOURCE_DIR)/rabbit_framing_amqp_0_9_1.erl $(SOURCE_DIR)/rabbit_framing_amqp_0_8.erl $(USAGES_ERL)
+DEPS_FILE:=deps.mk
+SOURCE_DIR:=src
+EBIN_DIR:=ebin
+INCLUDE_DIR:=include
+DOCS_DIR:=docs
+
+SIBLING_ERLANDO_DIR:=../erlando
+ERLANDO_SOURCE_DIR:=$(SIBLING_ERLANDO_DIR)/src
+ERLANDO_SOURCES:=$(wildcard $(ERLANDO_SOURCE_DIR)/*.erl)
+ERLANDO_INCLUDE_DIR:=$(SIBLING_ERLANDO_DIR)/include
+ERLANDO_INCLUDES:=$(wildcard $(ERLANDO_INCLUDE_DIR)/*.hrl)
+
+RABBIT_ERLANDO_SOURCES:=$(patsubst $(ERLANDO_SOURCE_DIR)/%.erl, $(SOURCE_DIR)/%.erl, $(ERLANDO_SOURCES))
+RABBIT_ERLANDO_INCLUDES:=$(patsubst $(ERLANDO_INCLUDE_DIR)/%.hrl, $(INCLUDE_DIR)/%.hrl, $(ERLANDO_INCLUDES))
+
+INCLUDES=$(wildcard $(INCLUDE_DIR)/*.hrl) $(INCLUDE_DIR)/rabbit_framing.hrl $(RABBIT_ERLANDO_INCLUDES)
+SOURCES=$(wildcard $(SOURCE_DIR)/*.erl) $(SOURCE_DIR)/rabbit_framing_amqp_0_9_1.erl $(SOURCE_DIR)/rabbit_framing_amqp_0_8.erl $(USAGES_ERL) $(RABBIT_ERLANDO_SOURCES)
 BEAM_TARGETS=$(patsubst $(SOURCE_DIR)/%.erl, $(EBIN_DIR)/%.beam, $(SOURCES))
 TARGETS=$(EBIN_DIR)/rabbit.app $(INCLUDE_DIR)/rabbit_framing.hrl $(BEAM_TARGETS)
 WEB_URL=http://www.rabbitmq.com/
@@ -93,6 +103,12 @@ $(DEPS_FILE): $(SOURCES) $(INCLUDES)
 	rm -f $@
 	echo $(subst : ,:,$(foreach FILE,$^,$(FILE):)) | escript generate_deps $@ $(EBIN_DIR)
 
+$(RABBIT_ERLANDO_SOURCES): $(SOURCE_DIR)/%.erl: $(ERLANDO_SOURCE_DIR)/%.erl
+	cp -a $< $@
+
+$(RABBIT_ERLANDO_INCLUDES): $(INCLUDE_DIR)/%.hrl: $(ERLANDO_INCLUDE_DIR)/%.hrl
+	cp -a $< $@
+
 $(EBIN_DIR)/rabbit.app: $(EBIN_DIR)/rabbit_app.in $(BEAM_TARGETS) generate_app
 	escript generate_app $(EBIN_DIR) $@ < $<
 
@@ -135,6 +151,7 @@ clean:
 	rm -f $(DOCS_DIR)/*.[0-9].gz $(DOCS_DIR)/*.man.xml $(DOCS_DIR)/*.erl $(USAGES_ERL)
 	rm -f $(RABBIT_PLT)
 	rm -f $(DEPS_FILE)
+	rm -f $(RABBIT_ERLANDO_SOURCES) $(RABBIT_ERLANDO_INCLUDES)
 
 cleandb:
 	rm -rf $(RABBITMQ_MNESIA_DIR)/*
@@ -216,6 +233,9 @@ srcdist: distclean
 
 	cp -r $(AMQP_CODEGEN_DIR)/* $(TARGET_SRC_DIR)/codegen/
 	cp codegen.py Makefile generate_app generate_deps calculate-relative $(TARGET_SRC_DIR)
+
+	cp $(ERLANDO_SOURCES) $(TARGET_SRC_DIR)/src/
+	cp $(ERLANDO_INCLUDES) $(TARGET_SRC_DIR)/include/
 
 	cp -r scripts $(TARGET_SRC_DIR)
 	cp -r $(DOCS_DIR) $(TARGET_SRC_DIR)
