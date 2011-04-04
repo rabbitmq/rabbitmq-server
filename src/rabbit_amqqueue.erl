@@ -16,7 +16,7 @@
 
 -module(rabbit_amqqueue).
 
--export([recover/0, stop/0, declare/5, delete_immediately/1, delete/3,
+-export([start/0, stop/0, declare/5, delete_immediately/1, delete/3,
          purge/1]).
 -export([pseudo_queue/2]).
 -export([lookup/1, with/2, with_or_die/2, assert_equivalence/5,
@@ -58,7 +58,7 @@
 
 -type(queue_or_not_found() :: rabbit_types:amqqueue() | 'not_found').
 
--spec(recover/0 :: () -> [rabbit_types:amqqueue()]).
+-spec(start/0 :: () -> [rabbit_amqqueue:name()]).
 -spec(stop/0 :: () -> 'ok').
 -spec(declare/5 ::
         (name(), boolean(), boolean(),
@@ -158,7 +158,7 @@
 
 %%----------------------------------------------------------------------------
 
-recover() ->
+start() ->
     DurableQueues = find_durable_queues(),
     {ok, BQ} = application:get_env(rabbit, backing_queue_module),
     ok = BQ:start([QName || #amqqueue{name = QName} <- DurableQueues]),

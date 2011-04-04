@@ -36,7 +36,7 @@
 -type(type() :: atom()).
 -type(fun_name() :: atom()).
 
--spec(recover/0 :: () -> [rabbit_types:resource()]).
+-spec(recover/0 :: () -> [rabbit_exchange:name()]).
 -spec(callback/3:: (rabbit_types:exchange(), fun_name(), [any()]) -> 'ok').
 -spec(declare/6 ::
         (name(), type(), boolean(), boolean(), boolean(),

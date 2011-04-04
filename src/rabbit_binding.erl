@@ -50,7 +50,7 @@
 
 -opaque(deletions() :: dict()).
 
--spec(recover/2 :: ([rabbit_types:resource()], [rabbit_types:resource()]) ->
+-spec(recover/2 :: ([rabbit_exchange:name()], [rabbit_amqqueue:name()]) ->
                         'ok').
 -spec(exists/1 :: (rabbit_types:binding()) -> boolean() | bind_errors()).
 -spec(add/1 :: (rabbit_types:binding()) -> add_res()).

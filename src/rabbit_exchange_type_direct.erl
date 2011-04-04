@@ -42,7 +42,7 @@ route(#exchange{name = Name},
 validate(_X) -> ok.
 create(_Tx, _X) -> ok.
 delete(_Tx, _X, _Bs) -> ok.
-add_bindings(_Tx, _X, _B) -> ok.
+add_bindings(_Tx, _X, _Bs) -> ok.
 remove_bindings(_Tx, _X, _Bs) -> ok.
 assert_args_equivalence(X, Args) ->
     rabbit_exchange:assert_args_equivalence(X, Args).

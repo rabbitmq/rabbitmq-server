@@ -460,9 +460,7 @@ boot_delegate() ->
     rabbit_sup:start_child(delegate_sup, [Count]).
 
 recover() ->
-    XNames = rabbit_exchange:recover(),
-    QNames = rabbit_amqqueue:recover(),
-    rabbit_binding:recover(XNames, QNames).
+    rabbit_binding:recover(rabbit_exchange:recover(), rabbit_amqqueue:start()).
 
 maybe_insert_default_data() ->
     case rabbit_mnesia:is_db_empty() of

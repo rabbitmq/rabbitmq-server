@@ -47,9 +47,7 @@ route(#exchange{name = X},
                   end || RKey <- Routes]).
 
 validate(_X) -> ok.
-
-create(_Tx, _X) ->
-    ok.
+create(_Tx, _X) -> ok.
 
 delete(true, #exchange{name = X}, _Bs) ->
     trie_remove_all_edges(X),
