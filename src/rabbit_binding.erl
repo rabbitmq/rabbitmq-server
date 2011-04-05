@@ -95,31 +95,28 @@
                     routing_key, arguments]).
 
 recover(XNames, QNames) ->
-    XNameSet = sets:from_list(XNames),
-    QNameSet = sets:from_list(QNames),
     XBs = rabbit_misc:execute_mnesia_transaction(
             fun () ->
-                    lists:foldl(
-                      fun (Route = #route{
-                             binding = B = #binding{source = Src}}, Acc) ->
-                              case should_recover(B, XNameSet, QNameSet) of
-                                  true  -> ok = sync_transient_binding(
-                                                  Route, fun mnesia:write/3),
-                                           rabbit_misc:dict_cons(Src, B, Acc);
-                                  false -> Acc
-                              end
-                      end, dict:new(),
-                      mnesia:select(rabbit_durable_route, [{'$1', [], ['$1']}]))
+                    XBs = recover_internal(XNames, QNames),
+                    callback_bindings(true, XBs),
+                    XBs
             end),
-    rabbit_misc:execute_pre_post_mnesia_tx(
-      fun (Tx) ->
-              dict:map(fun (XName, Bindings) ->
-                               {ok, X} = rabbit_exchange:lookup(XName),
-                               rabbit_exchange:callback(X, add_bindings,
-                                                        [Tx, X, Bindings])
-                       end, XBs)
-      end),
+    callback_bindings(false, XBs),
     ok.
+
+recover_internal(XNames, QNames) ->
+    XNameSet = sets:from_list(XNames),
+    QNameSet = sets:from_list(QNames),
+    lists:foldl(
+      fun (Route = #route{binding = B = #binding{source = Src}}, Acc) ->
+              case should_recover(B, XNameSet, QNameSet) of
+                  true  -> ok = sync_transient_binding(
+                                  Route, fun mnesia:write/3),
+                           rabbit_misc:dict_cons(Src, B, Acc);
+                  false -> Acc
+              end
+      end, dict:new(),
+      mnesia:select(rabbit_durable_route, [{'$1', [], ['$1']}])).
 
 should_recover(B = #binding{destination = Dst = #resource{ kind = Kind }},
                XNameSet, QNameSet) ->
@@ -130,6 +127,13 @@ should_recover(B = #binding{destination = Dst = #resource{ kind = Kind }},
                                    end);
         _  -> false
     end.
+
+callback_bindings(Tx, XBs) ->
+    dict:map(fun (XName, Bindings) ->
+                     {ok, X} = rabbit_exchange:lookup(XName),
+                     rabbit_exchange:callback(X, add_bindings,
+                                              [Tx, X, Bindings])
+             end, XBs).
 
 exists(Binding) ->
     binding_action(
