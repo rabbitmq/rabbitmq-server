@@ -97,15 +97,20 @@
 recover(XNames, QNames) ->
     XNameSet = sets:from_list(XNames),
     QNameSet = sets:from_list(QNames),
-    XBs = rabbit_misc:table_fold(
-            fun (Route = #route{binding = B = #binding{source = Src}}, Acc) ->
-                    case should_recover(B, XNameSet, QNameSet) of
-                        true  -> ok = sync_transient_binding(
-                                        Route, fun mnesia:write/3),
-                                 rabbit_misc:dict_cons(Src, B, Acc);
-                        false -> Acc
-                    end
-            end, dict:new(), rabbit_durable_route),
+    XBs = rabbit_misc:execute_mnesia_transaction(
+            fun () ->
+                    lists:foldl(
+                      fun (Route = #route{
+                             binding = B = #binding{source = Src}}, Acc) ->
+                              case should_recover(B, XNameSet, QNameSet) of
+                                  true  -> ok = sync_transient_binding(
+                                                  Route, fun mnesia:write/3),
+                                           rabbit_misc:dict_cons(Src, B, Acc);
+                                  false -> Acc
+                              end
+                      end, dict:new(),
+                      mnesia:select(rabbit_durable_route, [{'$1', [], ['$1']}]))
+            end),
     rabbit_misc:execute_pre_post_mnesia_tx(
       fun (Tx) ->
               dict:map(fun (XName, Bindings) ->
