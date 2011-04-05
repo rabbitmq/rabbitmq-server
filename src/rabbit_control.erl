@@ -282,6 +282,18 @@ action(list_consumers, Node, _Args, Opts, Inform) ->
         Other             -> Other
     end;
 
+action(set_env, Node, [VarStr, TermStr], _Opts, Inform) ->
+    Inform("Setting control variable ~s for node ~p to ~s", [VarStr, Node, TermStr]),
+    rpc_call(Node, application, set_env, [rabbit, parse_term(VarStr), parse_term(TermStr)]);
+
+action(get_env, Node, [VarStr], _Opts, Inform) ->
+    Inform("Getting control variable ~s for node ~p", [VarStr, Node]),
+    io:format("~p~n", [rpc_call(Node, application, get_env, [rabbit, parse_term(VarStr)])]);
+
+action(unset_env, Node, [VarStr], _Opts, Inform) ->
+    Inform("Clearing control variable ~s for node ~p", [VarStr, Node]),
+    rpc_call(Node, application, unset_env, [rabbit, parse_term(VarStr)]);
+
 action(set_permissions, Node, [Username, CPerm, WPerm, RPerm], Opts, Inform) ->
     VHost = proplists:get_value(?VHOST_OPT, Opts),
     Inform("Setting permissions for user ~p in vhost ~p", [Username, VHost]),
@@ -324,6 +336,11 @@ default_if_empty(List, Default) when is_list(List) ->
     if List == [] -> Default;
        true       -> [list_to_atom(X) || X <- List]
     end.
+
+parse_term(Str) ->
+    {ok, Tokens, _} = erl_scan:string(Str ++ "."),
+    {ok, Term} = erl_parse:parse_term(Tokens),
+    Term.
 
 display_info_list(Results, InfoItemKeys) when is_list(Results) ->
     lists:foreach(

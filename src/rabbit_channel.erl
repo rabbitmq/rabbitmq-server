@@ -280,6 +280,7 @@ handle_cast({deliver, ConsumerTag, AckRequired,
                          true  -> deliver;
                          false -> deliver_no_ack
                      end, State),
+    rabbit_log:tap_trace_out(Msg, DeliveryTag, ConsumerTag),
     noreply(State1#ch{next_tag = DeliveryTag + 1});
 
 handle_cast(emit_stats, State = #ch{stats_timer = StatsTimer}) ->
@@ -611,6 +612,8 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
             State2 = process_routing_result(RoutingRes, DeliveredQPids,
                                             ExchangeName, MsgSeqNo, Message,
                                             State1),
+            %% TODO is this in the right place?
+            rabbit_log:tap_trace_in(Message, DeliveredQPids),
             maybe_incr_stats([{ExchangeName, 1} |
                               [{{QPid, ExchangeName}, 1} ||
                                   QPid <- DeliveredQPids]], publish, State2),
@@ -671,6 +674,7 @@ handle_method(#'basic.get'{queue = QueueNameBin,
                                  true  -> get_no_ack;
                                  false -> get
                              end, State),
+            rabbit_log:tap_trace_out(Msg, DeliveryTag, none),
             ok = rabbit_writer:send_command(
                    WriterPid,
                    #'basic.get_ok'{delivery_tag = DeliveryTag,
