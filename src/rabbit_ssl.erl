@@ -211,7 +211,8 @@ format_asn1_value(V) ->
 %% subset of ASCII it is also a subset of UTF-8. The others need
 %% converting. Fortunately since the Erlang SSL library does the
 %% decoding for us (albeit into a weird format, see below), we just
-%% need to handle encoding into UTF-8.
+%% need to handle encoding into UTF-8. Note also that utf8Strings come
+%% back as binary.
 %%
 %% Note for testing: the default Ubuntu configuration for openssl will
 %% only create printableString or teletexString types no matter what
@@ -225,7 +226,7 @@ format_directory_string(printableString, S) -> S;
 format_directory_string(teletexString,   S) -> utf8_list_from(S);
 format_directory_string(bmpString,       S) -> utf8_list_from(S);
 format_directory_string(universalString, S) -> utf8_list_from(S);
-format_directory_string(utf8String,      S) -> S.
+format_directory_string(utf8String,      S) -> binary_to_list(S).
 
 utf8_list_from(S) ->
     binary_to_list(
