@@ -16,7 +16,7 @@
 
 -module(rabbit_prelaunch).
 
--export([start/0, stop/0, duplicate_node_check/1]).
+-export([start/0, stop/0]).
 
 -define(BaseApps, [rabbit]).
 -define(ERROR_CODE, 1).
