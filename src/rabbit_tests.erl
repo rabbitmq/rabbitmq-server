@@ -700,9 +700,14 @@ test_topic_expect_match(X, List) ->
     lists:foreach(
       fun ({Key, Expected}) ->
               BinKey = list_to_binary(Key),
+              Message = rabbit_basic:message(X#exchange.name, BinKey,
+                                             #'P_basic'{}, <<>>),
               Res = rabbit_exchange_type_topic:route(
-                      X, #delivery{message = #basic_message{routing_keys =
-                                                                [BinKey]}}),
+                      X, #delivery{mandatory = false,
+                                   immediate = false,
+                                   txn       = none,
+                                   sender    = self(),
+                                   message   = Message}),
               ExpectedRes = lists:map(
                               fun (Q) -> #resource{virtual_host = <<"/">>,
                                                    kind = queue,
@@ -1781,8 +1786,6 @@ test_msg_store() ->
     true = msg_store_contains(true, MsgIds2ndHalf, MSCState2),
     %% read the second half again
     MSCState3 = msg_store_read(MsgIds2ndHalf, MSCState2),
-    %% release the second half, just for fun (aka code coverage)
-    ok = rabbit_msg_store:release(MsgIds2ndHalf, MSCState3),
     %% read the second half again, just for fun (aka code coverage)
     MSCState4 = msg_store_read(MsgIds2ndHalf, MSCState3),
     ok = rabbit_msg_store:client_terminate(MSCState4),

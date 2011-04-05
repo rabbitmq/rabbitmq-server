@@ -127,6 +127,8 @@ usage() ->
     io:format("~s", [rabbit_ctl_usage:usage()]),
     quit(1).
 
+%%----------------------------------------------------------------------------
+
 action(stop, Node, [], _Opts, Inform) ->
     Inform("Stopping and halting node ~p", [Node]),
     call(Node, {rabbit, stop_and_halt, []});
@@ -158,6 +160,10 @@ action(force_cluster, Node, ClusterNodeSs, _Opts, Inform) ->
     Inform("Forcefully clustering node ~p with ~p (ignoring offline nodes)",
            [Node, ClusterNodes]),
     rpc_call(Node, rabbit_mnesia, force_cluster, [ClusterNodes]);
+
+action(wait, Node, [], _Opts, Inform) ->
+    Inform("Waiting for ~p", [Node]),
+    wait_for_application(Node, ?WAIT_FOR_VM_ATTEMPTS);
 
 action(status, Node, [], _Opts, Inform) ->
     Inform("Status of node ~p", [Node]),
@@ -292,18 +298,15 @@ action(list_permissions, Node, [], Opts, Inform) ->
     VHost = proplists:get_value(?VHOST_OPT, Opts),
     Inform("Listing permissions in vhost ~p", [VHost]),
     display_list(call(Node, {rabbit_auth_backend_internal,
-                             list_vhost_permissions, [VHost]}));
+                             list_vhost_permissions, [VHost]})).
 
-action(wait, Node, [], _Opts, Inform) ->
-    Inform("Waiting for ~p", [Node]),
-    wait_for_application(Node, ?WAIT_FOR_VM_ATTEMPTS).
+%%----------------------------------------------------------------------------
 
 wait_for_application(Node, Attempts) ->
     case rpc_call(Node, application, which_applications, [infinity]) of
-        {badrpc, _} = E -> NewAttempts = Attempts - 1,
-                           case NewAttempts of
+        {badrpc, _} = E -> case Attempts of
                                0 -> E;
-                               _ -> wait_for_application0(Node, NewAttempts)
+                               _ -> wait_for_application0(Node, Attempts - 1)
                            end;
         Apps            -> case proplists:is_defined(rabbit, Apps) of
                                %% We've seen the node up; if it goes down
