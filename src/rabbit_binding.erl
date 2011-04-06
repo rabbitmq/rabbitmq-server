@@ -103,7 +103,7 @@ recover(XNames, QNames) ->
                                            #resource{kind = Kind}}}, _Acc) ->
               %% The check against rabbit_durable_route is in case it
               %% disappeared between getting the list and here
-              case (not mnesia:read({rabbit_durable_route, B}) =:= [] andalso
+              case (not (mnesia:read({rabbit_durable_route, B}) =:= []) andalso
                     sets:is_element(Dst, case Kind of
                                              exchange -> XNameSet;
                                              queue    -> QNameSet
