@@ -1,32 +1,17 @@
-%%   The contents of this file are subject to the Mozilla Public License
-%%   Version 1.1 (the "License"); you may not use this file except in
-%%   compliance with the License. You may obtain a copy of the License at
-%%   http://www.mozilla.org/MPL/
+%% The contents of this file are subject to the Mozilla Public License
+%% Version 1.1 (the "License"); you may not use this file except in
+%% compliance with the License. You may obtain a copy of the License
+%% at http://www.mozilla.org/MPL/
 %%
-%%   Software distributed under the License is distributed on an "AS IS"
-%%   basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
-%%   License for the specific language governing rights and limitations
-%%   under the License.
+%% Software distributed under the License is distributed on an "AS IS"
+%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
+%% the License for the specific language governing rights and
+%% limitations under the License.
 %%
-%%   The Original Code is RabbitMQ.
+%% The Original Code is RabbitMQ.
 %%
-%%   The Initial Developers of the Original Code are LShift Ltd,
-%%   Cohesive Financial Technologies LLC, and Rabbit Technologies Ltd.
-%%
-%%   Portions created before 22-Nov-2008 00:00:00 GMT by LShift Ltd,
-%%   Cohesive Financial Technologies LLC, or Rabbit Technologies Ltd
-%%   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
-%%   Technologies LLC, and Rabbit Technologies Ltd.
-%%
-%%   Portions created by LShift Ltd are Copyright (C) 2007-2010 LShift
-%%   Ltd. Portions created by Cohesive Financial Technologies LLC are
-%%   Copyright (C) 2007-2010 Cohesive Financial Technologies
-%%   LLC. Portions created by Rabbit Technologies Ltd are Copyright
-%%   (C) 2007-2010 Rabbit Technologies Ltd.
-%%
-%%   All Rights Reserved.
-%%
-%%   Contributor(s): ______________________________________.
+%% The Initial Developer of the Original Code is VMware, Inc.
+%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_binding).
@@ -36,7 +21,7 @@
 -export([list_for_source/1, list_for_destination/1,
          list_for_source_and_destination/2]).
 -export([new_deletions/0, combine_deletions/2, add_deletion/3,
-         process_deletions/1]).
+         process_deletions/2]).
 -export([info_keys/0, info/1, info/2, info_all/1, info_all/2]).
 %% these must all be run inside a mnesia tx
 -export([has_for_source/1, remove_for_source/1,
@@ -59,17 +44,18 @@
              rabbit_types:exchange() | rabbit_types:amqqueue()) ->
                    rabbit_types:ok_or_error(rabbit_types:amqp_error()))).
 -type(bindings() :: [rabbit_types:binding()]).
+-type(add_res() :: bind_res() | rabbit_misc:const(bind_res())).
+-type(bind_or_error() :: bind_res() | rabbit_types:error('binding_not_found')).
+-type(remove_res() :: bind_or_error() | rabbit_misc:const(bind_or_error())).
 
 -opaque(deletions() :: dict()).
 
 -spec(recover/0 :: () -> [rabbit_types:binding()]).
 -spec(exists/1 :: (rabbit_types:binding()) -> boolean() | bind_errors()).
--spec(add/1 :: (rabbit_types:binding()) -> bind_res()).
--spec(remove/1 :: (rabbit_types:binding()) ->
-                       bind_res() | rabbit_types:error('binding_not_found')).
--spec(add/2 :: (rabbit_types:binding(), inner_fun()) -> bind_res()).
--spec(remove/2 :: (rabbit_types:binding(), inner_fun()) ->
-                       bind_res() | rabbit_types:error('binding_not_found')).
+-spec(add/1 :: (rabbit_types:binding()) -> add_res()).
+-spec(remove/1 :: (rabbit_types:binding()) -> remove_res()).
+-spec(add/2 :: (rabbit_types:binding(), inner_fun()) -> add_res()).
+-spec(remove/2 :: (rabbit_types:binding(), inner_fun()) -> remove_res()).
 -spec(list/1 :: (rabbit_types:vhost()) -> bindings()).
 -spec(list_for_source/1 ::
         (rabbit_types:binding_source()) -> bindings()).
@@ -84,14 +70,14 @@
                      rabbit_types:infos()).
 -spec(info_all/1 :: (rabbit_types:vhost()) -> [rabbit_types:infos()]).
 -spec(info_all/2 ::(rabbit_types:vhost(), rabbit_types:info_keys())
-                    -> [rabbit_types:infos()]).
+                   -> [rabbit_types:infos()]).
 -spec(has_for_source/1 :: (rabbit_types:binding_source()) -> boolean()).
 -spec(remove_for_source/1 :: (rabbit_types:binding_source()) -> bindings()).
 -spec(remove_for_destination/1 ::
         (rabbit_types:binding_destination()) -> deletions()).
 -spec(remove_transient_for_destination/1 ::
         (rabbit_types:binding_destination()) -> deletions()).
--spec(process_deletions/1 :: (deletions()) -> 'ok').
+-spec(process_deletions/2 :: (deletions(), boolean()) -> 'ok').
 -spec(combine_deletions/2 :: (deletions(), deletions()) -> deletions()).
 -spec(add_deletion/3 :: (rabbit_exchange:name(),
                          {'undefined' | rabbit_types:exchange(),
@@ -118,69 +104,66 @@ recover() ->
 
 exists(Binding) ->
     binding_action(
-      Binding,
-      fun (_Src, _Dst, B) -> mnesia:read({rabbit_route, B}) /= [] end).
+      Binding, fun (_Src, _Dst, B) ->
+                       rabbit_misc:const(mnesia:read({rabbit_route, B}) /= [])
+               end).
 
 add(Binding) -> add(Binding, fun (_Src, _Dst) -> ok end).
 
 remove(Binding) -> remove(Binding, fun (_Src, _Dst) -> ok end).
 
 add(Binding, InnerFun) ->
-    case binding_action(
-           Binding,
-           fun (Src, Dst, B) ->
-                   %% this argument is used to check queue exclusivity;
-                   %% in general, we want to fail on that in preference to
-                   %% anything else
-                   case InnerFun(Src, Dst) of
-                       ok ->
-                           case mnesia:read({rabbit_route, B}) of
-                               []  -> ok = sync_binding(
-                                             B, all_durable([Src, Dst]),
-                                             fun mnesia:write/3),
-                                      {new, Src, B};
-                               [_] -> {existing, Src, B}
-                           end;
-                       {error, _} = E ->
-                           E
-                   end
-           end) of
-        {new, Src = #exchange{ type = Type }, B} ->
-            ok = (type_to_module(Type)):add_binding(Src, B),
-            rabbit_event:notify(binding_created, info(B));
-        {existing, _, _} ->
-            ok;
-        {error, _} = Err ->
-            Err
-    end.
+    binding_action(
+      Binding,
+      fun (Src, Dst, B) ->
+              %% this argument is used to check queue exclusivity;
+              %% in general, we want to fail on that in preference to
+              %% anything else
+              case InnerFun(Src, Dst) of
+                  ok ->
+                      case mnesia:read({rabbit_route, B}) of
+                          []  -> ok = sync_binding(B, all_durable([Src, Dst]),
+                                                   fun mnesia:write/3),
+                                 fun (Tx) ->
+                                         ok = rabbit_exchange:callback(
+                                                Src, add_binding, [Tx, Src, B]),
+                                         rabbit_event:notify_if(
+                                           not Tx, binding_created, info(B))
+                                 end;
+                          [_] -> fun rabbit_misc:const_ok/1
+                      end;
+                  {error, _} = Err ->
+                      rabbit_misc:const(Err)
+              end
+      end).
 
 remove(Binding, InnerFun) ->
-    case binding_action(
-           Binding,
-           fun (Src, Dst, B) ->
-                   case mnesia:match_object(rabbit_route, #route{binding = B},
-                                            write) of
-                       [] ->
-                           {error, binding_not_found};
-                       [_] ->
-                           case InnerFun(Src, Dst) of
-                               ok ->
-                                   ok = sync_binding(
-                                          B, all_durable([Src, Dst]),
-                                          fun mnesia:delete_object/3),
-                                   {ok,
-                                    maybe_auto_delete(B#binding.source,
-                                                      [B], new_deletions())};
-                               {error, _} = E ->
-                                   E
-                           end
-                   end
-           end) of
-        {error, _} = Err ->
-            Err;
-        {ok, Deletions} ->
-            ok = process_deletions(Deletions)
-    end.
+    binding_action(
+      Binding,
+      fun (Src, Dst, B) ->
+              Result =
+                  case mnesia:match_object(rabbit_route, #route{binding = B},
+                                           write) of
+                      [] ->
+                          {error, binding_not_found};
+                      [_] ->
+                          case InnerFun(Src, Dst) of
+                              ok ->
+                                  ok = sync_binding(B, all_durable([Src, Dst]),
+                                                    fun mnesia:delete_object/3),
+                                  {ok, maybe_auto_delete(B#binding.source,
+                                                         [B], new_deletions())};
+                              {error, _} = E ->
+                                  E
+                          end
+                  end,
+              case Result of
+                  {error, _} = Err ->
+                      rabbit_misc:const(Err);
+                  {ok, Deletions} ->
+                      fun (Tx) -> ok = process_deletions(Deletions, Tx) end
+              end
+      end).
 
 list(VHostPath) ->
     VHostResource = rabbit_misc:r(VHostPath, '_'),
@@ -290,23 +273,21 @@ sync_binding(Binding, Durable, Fun) ->
 call_with_source_and_destination(SrcName, DstName, Fun) ->
     SrcTable = table_for_resource(SrcName),
     DstTable = table_for_resource(DstName),
-    rabbit_misc:execute_mnesia_transaction(
-      fun () -> case {mnesia:read({SrcTable, SrcName}),
-                      mnesia:read({DstTable, DstName})} of
-                    {[Src], [Dst]} -> Fun(Src, Dst);
-                    {[],    [_]  } -> {error, source_not_found};
-                    {[_],   []   } -> {error, destination_not_found};
-                    {[],    []   } -> {error, source_and_destination_not_found}
-                end
+    ErrFun = fun (Err) -> rabbit_misc:const(Err) end,
+    rabbit_misc:execute_mnesia_tx_with_tail(
+      fun () ->
+              case {mnesia:read({SrcTable, SrcName}),
+                    mnesia:read({DstTable, DstName})} of
+                  {[Src], [Dst]} -> Fun(Src, Dst);
+                  {[],    [_]  } -> ErrFun({error, source_not_found});
+                  {[_],   []   } -> ErrFun({error, destination_not_found});
+                  {[],    []   } -> ErrFun({error,
+                                            source_and_destination_not_found})
+              end
       end).
 
 table_for_resource(#resource{kind = exchange}) -> rabbit_exchange;
 table_for_resource(#resource{kind = queue})    -> rabbit_queue.
-
-%% Used with atoms from records; e.g., the type is expected to exist.
-type_to_module(T) ->
-    {ok, Module} = rabbit_exchange_type_registry:lookup_module(T),
-    Module.
 
 contains(Table, MatchHead) ->
     continue(mnesia:select(Table, [{MatchHead, [], ['$_']}], 1, read)).
@@ -350,17 +331,18 @@ group_bindings_fold(Fun, SrcName, Acc, Removed, Bindings) ->
     group_bindings_fold(Fun, Fun(SrcName, Bindings, Acc), Removed).
 
 maybe_auto_delete(XName, Bindings, Deletions) ->
-    case mnesia:read(rabbit_exchange, XName) of
-        [] ->
-            add_deletion(XName, {undefined, not_deleted, Bindings}, Deletions);
-        [X] ->
-            add_deletion(XName, {X, not_deleted, Bindings},
-                         case rabbit_exchange:maybe_auto_delete(X) of
-                             not_deleted           -> Deletions;
-                             {deleted, Deletions1} -> combine_deletions(
-                                                        Deletions, Deletions1)
-                         end)
-    end.
+    {Entry, Deletions1} =
+        case mnesia:read({rabbit_exchange, XName}) of
+            []  -> {{undefined, not_deleted, Bindings}, Deletions};
+            [X] -> case rabbit_exchange:maybe_auto_delete(X) of
+                       not_deleted ->
+                           {{X, not_deleted, Bindings}, Deletions};
+                       {deleted, Deletions2} ->
+                           {{X, deleted, Bindings},
+                            combine_deletions(Deletions, Deletions2)}
+                   end
+        end,
+    add_deletion(XName, Entry, Deletions1).
 
 delete_forward_routes(Route) ->
     ok = mnesia:delete_object(rabbit_route, Route, write),
@@ -423,17 +405,19 @@ merge_entry({X1, Deleted1, Bindings1}, {X2, Deleted2, Bindings2}) ->
      anything_but(not_deleted, Deleted1, Deleted2),
      [Bindings1 | Bindings2]}.
 
-process_deletions(Deletions) ->
+process_deletions(Deletions, Tx) ->
     dict:fold(
-      fun (_XName, {X = #exchange{ type = Type }, Deleted, Bindings}, ok) ->
+      fun (_XName, {X, Deleted, Bindings}, ok) ->
               FlatBindings = lists:flatten(Bindings),
-              [rabbit_event:notify(binding_deleted, info(B)) ||
+              [rabbit_event:notify_if(not Tx, binding_deleted, info(B)) ||
                   B <- FlatBindings],
-              TypeModule = type_to_module(Type),
               case Deleted of
-                  not_deleted -> TypeModule:remove_bindings(X, FlatBindings);
-                  deleted     -> rabbit_event:notify(exchange_deleted,
-                                                     [{name, X#exchange.name}]),
-                                 TypeModule:delete(X, FlatBindings)
+                  not_deleted ->
+                      rabbit_exchange:callback(X, remove_bindings,
+                                               [Tx, X, FlatBindings]);
+                  deleted ->
+                      rabbit_event:notify_if(not Tx, exchange_deleted,
+                                             [{name, X#exchange.name}]),
+                      rabbit_exchange:callback(X, delete, [Tx, X, FlatBindings])
               end
       end, ok, Deletions).

@@ -1,32 +1,17 @@
-%%   The contents of this file are subject to the Mozilla Public License
-%%   Version 1.1 (the "License"); you may not use this file except in
-%%   compliance with the License. You may obtain a copy of the License at
-%%   http://www.mozilla.org/MPL/
+%% The contents of this file are subject to the Mozilla Public License
+%% Version 1.1 (the "License"); you may not use this file except in
+%% compliance with the License. You may obtain a copy of the License
+%% at http://www.mozilla.org/MPL/
 %%
-%%   Software distributed under the License is distributed on an "AS IS"
-%%   basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
-%%   License for the specific language governing rights and limitations
-%%   under the License.
+%% Software distributed under the License is distributed on an "AS IS"
+%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
+%% the License for the specific language governing rights and
+%% limitations under the License.
 %%
-%%   The Original Code is RabbitMQ.
+%% The Original Code is RabbitMQ.
 %%
-%%   The Initial Developers of the Original Code are LShift Ltd,
-%%   Cohesive Financial Technologies LLC, and Rabbit Technologies Ltd.
-%%
-%%   Portions created before 22-Nov-2008 00:00:00 GMT by LShift Ltd,
-%%   Cohesive Financial Technologies LLC, or Rabbit Technologies Ltd
-%%   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
-%%   Technologies LLC, and Rabbit Technologies Ltd.
-%%
-%%   Portions created by LShift Ltd are Copyright (C) 2007-2010 LShift
-%%   Ltd. Portions created by Cohesive Financial Technologies LLC are
-%%   Copyright (C) 2007-2010 Cohesive Financial Technologies
-%%   LLC. Portions created by Rabbit Technologies Ltd are Copyright
-%%   (C) 2007-2010 Rabbit Technologies Ltd.
-%%
-%%   All Rights Reserved.
-%%
-%%   Contributor(s): ______________________________________.
+%% The Initial Developer of the Original Code is VMware, Inc.
+%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_error_logger).
@@ -49,7 +34,7 @@ boot() ->
 init([DefaultVHost]) ->
     #exchange{} = rabbit_exchange:declare(
                     rabbit_misc:r(DefaultVHost, exchange, ?LOG_EXCH_NAME),
-                    topic, true, false, []),
+                    topic, true, false, false, []),
     {ok, #resource{virtual_host = DefaultVHost,
                    kind = exchange,
                    name = ?LOG_EXCH_NAME}}.
@@ -82,8 +67,12 @@ publish(_Other, _Format, _Data, _State) ->
     ok.
 
 publish1(RoutingKey, Format, Data, LogExch) ->
+    %% 0-9-1 says the timestamp is a "64 bit POSIX timestamp". That's
+    %% second resolution, not millisecond.
+    Timestamp = rabbit_misc:now_ms() div 1000,
     {ok, _RoutingRes, _DeliveredQPids} =
         rabbit_basic:publish(LogExch, RoutingKey, false, false, none,
-                             #'P_basic'{content_type = <<"text/plain">>},
+                             #'P_basic'{content_type = <<"text/plain">>,
+                                        timestamp    = Timestamp},
                              list_to_binary(io_lib:format(Format, Data))),
     ok.

@@ -1,32 +1,17 @@
-%%   The contents of this file are subject to the Mozilla Public License
-%%   Version 1.1 (the "License"); you may not use this file except in
-%%   compliance with the License. You may obtain a copy of the License at
-%%   http://www.mozilla.org/MPL/
+%% The contents of this file are subject to the Mozilla Public License
+%% Version 1.1 (the "License"); you may not use this file except in
+%% compliance with the License. You may obtain a copy of the License
+%% at http://www.mozilla.org/MPL/
 %%
-%%   Software distributed under the License is distributed on an "AS IS"
-%%   basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
-%%   License for the specific language governing rights and limitations
-%%   under the License.
+%% Software distributed under the License is distributed on an "AS IS"
+%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
+%% the License for the specific language governing rights and
+%% limitations under the License.
 %%
-%%   The Original Code is RabbitMQ.
+%% The Original Code is RabbitMQ.
 %%
-%%   The Initial Developers of the Original Code are LShift Ltd,
-%%   Cohesive Financial Technologies LLC, and Rabbit Technologies Ltd.
-%%
-%%   Portions created before 22-Nov-2008 00:00:00 GMT by LShift Ltd,
-%%   Cohesive Financial Technologies LLC, or Rabbit Technologies Ltd
-%%   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
-%%   Technologies LLC, and Rabbit Technologies Ltd.
-%%
-%%   Portions created by LShift Ltd are Copyright (C) 2007-2010 LShift
-%%   Ltd. Portions created by Cohesive Financial Technologies LLC are
-%%   Copyright (C) 2007-2010 Cohesive Financial Technologies
-%%   LLC. Portions created by Rabbit Technologies Ltd are Copyright
-%%   (C) 2007-2010 Rabbit Technologies Ltd.
-%%
-%%   All Rights Reserved.
-%%
-%%   Contributor(s): ______________________________________.
+%% The Initial Developer of the Original Code is VMware, Inc.
+%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_writer).
@@ -39,13 +24,11 @@
          send_command_and_notify/4, send_command_and_notify/5]).
 -export([internal_send_command/4, internal_send_command/6]).
 
--import(gen_tcp).
-
 -record(wstate, {sock, channel, frame_max, protocol}).
 
 -define(HIBERNATE_AFTER, 5000).
 
-%%----------------------------------------------------------------------------
+%%---------------------------------------------------------------------------
 
 -ifdef(use_specs).
 
@@ -86,7 +69,7 @@
 
 -endif.
 
-%%----------------------------------------------------------------------------
+%%---------------------------------------------------------------------------
 
 start(Sock, Channel, FrameMax, Protocol, ReaderPid) ->
     {ok,
@@ -150,7 +133,7 @@ handle_message({inet_reply, _, Status}, _State) ->
 handle_message(Message, _State) ->
     exit({writer, message_not_understood, Message}).
 
-%---------------------------------------------------------------------------
+%%---------------------------------------------------------------------------
 
 send_command(W, MethodRecord) ->
     W ! {send_command, MethodRecord},
@@ -174,15 +157,15 @@ send_command_and_notify(W, Q, ChPid, MethodRecord, Content) ->
     W ! {send_command_and_notify, Q, ChPid, MethodRecord, Content},
     ok.
 
-%---------------------------------------------------------------------------
+%%---------------------------------------------------------------------------
 
 call(Pid, Msg) ->
     {ok, Res} = gen:call(Pid, '$gen_call', Msg, infinity),
     Res.
 
-%---------------------------------------------------------------------------
+%%---------------------------------------------------------------------------
 
-assemble_frames(Channel, MethodRecord, Protocol) ->
+assemble_frame(Channel, MethodRecord, Protocol) ->
     ?LOGMESSAGE(out, Channel, MethodRecord, none),
     rabbit_binary_generator:build_simple_method_frame(
       Channel, MethodRecord, Protocol).
@@ -197,17 +180,34 @@ assemble_frames(Channel, MethodRecord, Content, FrameMax, Protocol) ->
                       Channel, Content, FrameMax, Protocol),
     [MethodFrame | ContentFrames].
 
+%% We optimise delivery of small messages. Content-bearing methods
+%% require at least three frames. Small messages always fit into
+%% that. We hand their frames to the Erlang network functions in one
+%% go, which may lead to somewhat more efficient processing in the
+%% runtime and a greater chance of coalescing into fewer TCP packets.
+%%
+%% By contrast, for larger messages, split across many frames, we want
+%% to allow interleaving of frames on different channels. Hence we
+%% hand them to the Erlang network functions one frame at a time.
+send_frames(Fun, Sock, Frames) when length(Frames) =< 3 ->
+    Fun(Sock, Frames);
+send_frames(Fun, Sock, Frames) ->
+    lists:foldl(fun (Frame,     ok) -> Fun(Sock, Frame);
+                    (_Frame, Other) -> Other
+                end, ok, Frames).
+
 tcp_send(Sock, Data) ->
     rabbit_misc:throw_on_error(inet_error,
                                fun () -> rabbit_net:send(Sock, Data) end).
 
 internal_send_command(Sock, Channel, MethodRecord, Protocol) ->
-    ok = tcp_send(Sock, assemble_frames(Channel, MethodRecord, Protocol)).
+    ok = tcp_send(Sock, assemble_frame(Channel, MethodRecord, Protocol)).
 
 internal_send_command(Sock, Channel, MethodRecord, Content, FrameMax,
                       Protocol) ->
-    ok = tcp_send(Sock, assemble_frames(Channel, MethodRecord,
-                                        Content, FrameMax, Protocol)).
+    ok = send_frames(fun tcp_send/2, Sock,
+                     assemble_frames(Channel, MethodRecord,
+                                     Content, FrameMax, Protocol)).
 
 %% gen_tcp:send/2 does a selective receive of {inet_reply, Sock,
 %% Status} to obtain the result. That is bad when it is called from
@@ -231,19 +231,19 @@ internal_send_command_async(MethodRecord,
                             #wstate{sock      = Sock,
                                     channel   = Channel,
                                     protocol  = Protocol}) ->
-    true = port_cmd(Sock, assemble_frames(Channel, MethodRecord, Protocol)),
-    ok.
+    ok = port_cmd(Sock, assemble_frame(Channel, MethodRecord, Protocol)).
 
 internal_send_command_async(MethodRecord, Content,
                             #wstate{sock      = Sock,
                                     channel   = Channel,
                                     frame_max = FrameMax,
                                     protocol  = Protocol}) ->
-    true = port_cmd(Sock, assemble_frames(Channel, MethodRecord,
-                                          Content, FrameMax, Protocol)),
-    ok.
+    ok = send_frames(fun port_cmd/2, Sock,
+                     assemble_frames(Channel, MethodRecord,
+                                     Content, FrameMax, Protocol)).
 
 port_cmd(Sock, Data) ->
-    try rabbit_net:port_command(Sock, Data)
-    catch error:Error -> exit({writer, send_failed, Error})
-    end.
+    true = try rabbit_net:port_command(Sock, Data)
+           catch error:Error -> exit({writer, send_failed, Error})
+           end,
+    ok.

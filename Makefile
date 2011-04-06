@@ -18,7 +18,7 @@ TARGETS=$(EBIN_DIR)/rabbit.app $(INCLUDE_DIR)/rabbit_framing.hrl $(BEAM_TARGETS)
 WEB_URL=http://www.rabbitmq.com/
 MANPAGES=$(patsubst %.xml, %.gz, $(wildcard $(DOCS_DIR)/*.[0-9].xml))
 WEB_MANPAGES=$(patsubst %.xml, %.man.xml, $(wildcard $(DOCS_DIR)/*.[0-9].xml) $(DOCS_DIR)/rabbitmq-service.xml)
-USAGES_XML=$(DOCS_DIR)/rabbitmqctl.1.xml $(DOCS_DIR)/rabbitmq-multi.1.xml
+USAGES_XML=$(DOCS_DIR)/rabbitmqctl.1.xml
 USAGES_ERL=$(foreach XML, $(USAGES_XML), $(call usage_xml_to_erl, $(XML)))
 
 ifeq ($(shell python -c 'import simplejson' 2>/dev/null && echo yes),yes)
@@ -41,14 +41,12 @@ RABBIT_PLT=rabbit.plt
 
 ifndef USE_SPECS
 # our type specs rely on features and bug fixes in dialyzer that are
-# only available in R14A upwards (R13B04 is erts 5.7.5)
-#
-# NB: the test assumes that version number will only contain single digits
-USE_SPECS=$(shell if [ $$(erl -noshell -eval 'io:format(erlang:system_info(version)), halt().') \> "5.7.5" ]; then echo "true"; else echo "false"; fi)
+# only available in R14A upwards (R14A is erts 5.8)
+USE_SPECS:=$(shell erl -noshell -eval 'io:format([list_to_integer(X) || X <- string:tokens(erlang:system_info(version), ".")] >= [5,8]), halt().')
 endif
 
 #other args: +native +"{hipe,[o3,verbose]}" -Ddebug=true +debug_info +no_strict_record_tests
-ERLC_OPTS=-I $(INCLUDE_DIR) -o $(EBIN_DIR) -Wall -v +debug_info $(shell [ $(USE_SPECS) = "true" ] && echo "-Duse_specs")
+ERLC_OPTS=-I $(INCLUDE_DIR) -o $(EBIN_DIR) -Wall -v +debug_info $(if $(filter true,$(USE_SPECS)),-Duse_specs)
 
 VERSION=0.0.0
 TARBALL_NAME=rabbitmq-server-$(VERSION)
@@ -170,7 +168,7 @@ start-background-node:
 	$(BASIC_SCRIPT_ENVIRONMENT_SETTINGS) \
 		RABBITMQ_NODE_ONLY=true \
 		RABBITMQ_SERVER_START_ARGS="$(RABBITMQ_SERVER_START_ARGS) -detached" \
-		./scripts/rabbitmq-server ; sleep 1
+		./scripts/rabbitmq-server; sleep 1
 
 start-rabbit-on-node: all
 	echo "rabbit:start()." | $(ERL_CALL)
@@ -178,15 +176,12 @@ start-rabbit-on-node: all
 stop-rabbit-on-node: all
 	echo "rabbit:stop()." | $(ERL_CALL)
 
-force-snapshot: all
-	echo "rabbit_persister:force_snapshot()." | $(ERL_CALL)
-
 set-memory-alarm: all
-	echo "alarm_handler:set_alarm({vm_memory_high_watermark, []})." | \
+	echo "alarm_handler:set_alarm({{vm_memory_high_watermark, node()}, []})." | \
 	$(ERL_CALL)
 
 clear-memory-alarm: all
-	echo "alarm_handler:clear_alarm(vm_memory_high_watermark)." | \
+	echo "alarm_handler:clear_alarm({vm_memory_high_watermark, node()})." | \
 	$(ERL_CALL)
 
 stop-node:
@@ -273,7 +268,7 @@ install_bin: all install_dirs
 	cp -r ebin include LICENSE LICENSE-MPL-RabbitMQ INSTALL $(TARGET_DIR)
 
 	chmod 0755 scripts/*
-	for script in rabbitmq-env rabbitmq-server rabbitmqctl rabbitmq-multi; do \
+	for script in rabbitmq-env rabbitmq-server rabbitmqctl; do \
 		cp scripts/$$script $(TARGET_DIR)/sbin; \
 		[ -e $(SBIN_DIR)/$$script ] || ln -s $(SCRIPTS_REL_PATH)/$$script $(SBIN_DIR)/$$script; \
 	done
@@ -317,3 +312,4 @@ endif
 ifneq "$(strip $(patsubst clean%,,$(patsubst %clean,,$(TESTABLEGOALS))))" ""
 -include $(DEPS_FILE)
 endif
+

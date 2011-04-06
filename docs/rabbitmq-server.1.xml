@@ -21,7 +21,7 @@
 
     <refsynopsisdiv>
         <cmdsynopsis>
-          <command>rabbitmq-multi</command>
+          <command>rabbitmq-server</command>
           <arg choice="opt">-detached</arg>
         </cmdsynopsis>
     </refsynopsisdiv>
@@ -83,8 +83,9 @@ machine guide</ulink> for details.
           <term>RABBITMQ_NODE_IP_ADDRESS</term>
           <listitem>
             <para>
-Defaults to 0.0.0.0. This can be changed if you only want to bind to
-one network interface.
+By default RabbitMQ will bind to all interfaces, on IPv4 and IPv6 if
+available. Set this if you only want to bind to one network interface
+or address family.
             </para>
           </listitem>
         </varlistentry>
@@ -123,8 +124,7 @@ Defaults to 5672.
     <refsect1>
         <title>See also</title>
         <para>
-            <citerefentry><refentrytitle>rabbitmq.conf</refentrytitle><manvolnum>5</manvolnum></citerefentry>
-            <citerefentry><refentrytitle>rabbitmq-multi</refentrytitle><manvolnum>1</manvolnum></citerefentry>
+            <citerefentry><refentrytitle>rabbitmq-env.conf</refentrytitle><manvolnum>5</manvolnum></citerefentry>
             <citerefentry><refentrytitle>rabbitmqctl</refentrytitle><manvolnum>1</manvolnum></citerefentry>
         </para>
     </refsect1>

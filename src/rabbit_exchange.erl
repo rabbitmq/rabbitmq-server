@@ -1,43 +1,30 @@
-%%   The contents of this file are subject to the Mozilla Public License
-%%   Version 1.1 (the "License"); you may not use this file except in
-%%   compliance with the License. You may obtain a copy of the License at
-%%   http://www.mozilla.org/MPL/
+%% The contents of this file are subject to the Mozilla Public License
+%% Version 1.1 (the "License"); you may not use this file except in
+%% compliance with the License. You may obtain a copy of the License
+%% at http://www.mozilla.org/MPL/
 %%
-%%   Software distributed under the License is distributed on an "AS IS"
-%%   basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
-%%   License for the specific language governing rights and limitations
-%%   under the License.
+%% Software distributed under the License is distributed on an "AS IS"
+%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
+%% the License for the specific language governing rights and
+%% limitations under the License.
 %%
-%%   The Original Code is RabbitMQ.
+%% The Original Code is RabbitMQ.
 %%
-%%   The Initial Developers of the Original Code are LShift Ltd,
-%%   Cohesive Financial Technologies LLC, and Rabbit Technologies Ltd.
-%%
-%%   Portions created before 22-Nov-2008 00:00:00 GMT by LShift Ltd,
-%%   Cohesive Financial Technologies LLC, or Rabbit Technologies Ltd
-%%   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
-%%   Technologies LLC, and Rabbit Technologies Ltd.
-%%
-%%   Portions created by LShift Ltd are Copyright (C) 2007-2010 LShift
-%%   Ltd. Portions created by Cohesive Financial Technologies LLC are
-%%   Copyright (C) 2007-2010 Cohesive Financial Technologies
-%%   LLC. Portions created by Rabbit Technologies Ltd are Copyright
-%%   (C) 2007-2010 Rabbit Technologies Ltd.
-%%
-%%   All Rights Reserved.
-%%
-%%   Contributor(s): ______________________________________.
+%% The Initial Developer of the Original Code is VMware, Inc.
+%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_exchange).
 -include("rabbit.hrl").
 -include("rabbit_framing.hrl").
 
--export([recover/0, declare/5, lookup/1, lookup_or_die/1, list/1, info_keys/0,
-         info/1, info/2, info_all/1, info_all/2, publish/2, delete/2]).
+-export([recover/0, callback/3, declare/6,
+         assert_equivalence/6, assert_args_equivalence/2, check_type/1,
+         lookup/1, lookup_or_die/1, list/1,
+         info_keys/0, info/1, info/2, info_all/1, info_all/2,
+         publish/2, delete/2]).
 %% this must be run inside a mnesia tx
 -export([maybe_auto_delete/1]).
--export([assert_equivalence/5, assert_args_equivalence/2, check_type/1]).
 
 %%----------------------------------------------------------------------------
 
@@ -47,15 +34,18 @@
 
 -type(name() :: rabbit_types:r('exchange')).
 -type(type() :: atom()).
+-type(fun_name() :: atom()).
 
 -spec(recover/0 :: () -> 'ok').
--spec(declare/5 ::
-        (name(), type(), boolean(), boolean(), rabbit_framing:amqp_table())
+-spec(callback/3:: (rabbit_types:exchange(), fun_name(), [any()]) -> 'ok').
+-spec(declare/6 ::
+        (name(), type(), boolean(), boolean(), boolean(),
+         rabbit_framing:amqp_table())
         -> rabbit_types:exchange()).
 -spec(check_type/1 ::
         (binary()) -> atom() | rabbit_types:connection_exit()).
--spec(assert_equivalence/5 ::
-        (rabbit_types:exchange(), atom(), boolean(), boolean(),
+-spec(assert_equivalence/6 ::
+        (rabbit_types:exchange(), atom(), boolean(), boolean(), boolean(),
          rabbit_framing:amqp_table())
         -> 'ok' | rabbit_types:connection_exit()).
 -spec(assert_args_equivalence/2 ::
@@ -75,7 +65,7 @@
         -> rabbit_types:infos()).
 -spec(info_all/1 :: (rabbit_types:vhost()) -> [rabbit_types:infos()]).
 -spec(info_all/2 ::(rabbit_types:vhost(), rabbit_types:info_keys())
-                    -> [rabbit_types:infos()]).
+                   -> [rabbit_types:infos()]).
 -spec(publish/2 :: (rabbit_types:exchange(), rabbit_types:delivery())
                    -> {rabbit_router:routing_result(), [pid()]}).
 -spec(delete/2 ::
@@ -90,7 +80,7 @@
 
 %%----------------------------------------------------------------------------
 
--define(INFO_KEYS, [name, type, durable, auto_delete, arguments]).
+-define(INFO_KEYS, [name, type, durable, auto_delete, internal, arguments]).
 
 recover() ->
     Xs = rabbit_misc:table_fold(
@@ -113,54 +103,51 @@ recover_with_bindings(Bs, [X = #exchange{type = Type} | Xs], Bindings) ->
 recover_with_bindings([], [], []) ->
     ok.
 
-declare(XName, Type, Durable, AutoDelete, Args) ->
+callback(#exchange{type = XType}, Fun, Args) ->
+    apply(type_to_module(XType), Fun, Args).
+
+declare(XName, Type, Durable, AutoDelete, Internal, Args) ->
     X = #exchange{name        = XName,
                   type        = Type,
                   durable     = Durable,
                   auto_delete = AutoDelete,
+                  internal    = Internal,
                   arguments   = Args},
-    %% We want to upset things if it isn't ok; this is different from
-    %% the other hooks invocations, where we tend to ignore the return
-    %% value.
-    TypeModule = type_to_module(Type),
-    ok = TypeModule:validate(X),
-    case rabbit_misc:execute_mnesia_transaction(
-           fun () ->
-                   case mnesia:wread({rabbit_exchange, XName}) of
-                       [] ->
-                           ok = mnesia:write(rabbit_exchange, X, write),
-                           ok = case Durable of
-                                    true ->
-                                        mnesia:write(rabbit_durable_exchange,
+    %% We want to upset things if it isn't ok
+    ok = (type_to_module(Type)):validate(X),
+    rabbit_misc:execute_mnesia_transaction(
+      fun () ->
+              case mnesia:wread({rabbit_exchange, XName}) of
+                  [] ->
+                      ok = mnesia:write(rabbit_exchange, X, write),
+                      ok = case Durable of
+                               true  -> mnesia:write(rabbit_durable_exchange,
                                                      X, write);
-                                    false ->
-                                        ok
+                               false -> ok
                            end,
-                           {new, X};
-                       [ExistingX] ->
-                           {existing, ExistingX}
-                   end
-           end) of
-        {new, X}      -> TypeModule:create(X),
-                         rabbit_event:notify(exchange_created, info(X)),
-                         X;
-        {existing, X} -> X;
-        Err           -> Err
-    end.
-
-%% Used with atoms from records; e.g., the type is expected to exist.
-type_to_module(T) ->
-    {ok, Module} = rabbit_exchange_type_registry:lookup_module(T),
-    Module.
+                      {new, X};
+                  [ExistingX] ->
+                      {existing, ExistingX}
+              end
+      end,
+      fun ({new, Exchange}, Tx) ->
+              ok = (type_to_module(Type)):create(Tx, Exchange),
+              rabbit_event:notify_if(not Tx, exchange_created, info(Exchange)),
+              Exchange;
+          ({existing, Exchange}, _Tx) ->
+              Exchange;
+          (Err, _Tx) ->
+              Err
+      end).
 
 %% Used with binaries sent over the wire; the type may not exist.
 check_type(TypeBin) ->
-    case rabbit_exchange_type_registry:binary_to_type(TypeBin) of
+    case rabbit_registry:binary_to_type(TypeBin) of
         {error, not_found} ->
             rabbit_misc:protocol_error(
               command_invalid, "unknown exchange type '~s'", [TypeBin]);
         T ->
-            case rabbit_exchange_type_registry:lookup_module(T) of
+            case rabbit_registry:lookup_module(exchange, T) of
                 {error, not_found} -> rabbit_misc:protocol_error(
                                         command_invalid,
                                         "invalid exchange type '~s'", [T]);
@@ -170,14 +157,16 @@ check_type(TypeBin) ->
 
 assert_equivalence(X = #exchange{ durable     = Durable,
                                   auto_delete = AutoDelete,
+                                  internal    = Internal,
                                   type        = Type},
-                   Type, Durable, AutoDelete, RequiredArgs) ->
+                   Type, Durable, AutoDelete, Internal, RequiredArgs) ->
     (type_to_module(Type)):assert_args_equivalence(X, RequiredArgs);
-assert_equivalence(#exchange{ name = Name }, _Type, _Durable, _AutoDelete,
-                   _Args) ->
+assert_equivalence(#exchange{ name = Name },
+                   _Type, _Durable, _Internal, _AutoDelete, _Args) ->
     rabbit_misc:protocol_error(
       precondition_failed,
-      "cannot redeclare ~s with different type, durable or autodelete value",
+      "cannot redeclare ~s with different type, durable, "
+      "internal or autodelete value",
       [rabbit_misc:rs(Name)]).
 
 assert_args_equivalence(#exchange{ name = Name, arguments = Args },
@@ -215,6 +204,7 @@ i(name,        #exchange{name        = Name})       -> Name;
 i(type,        #exchange{type        = Type})       -> Type;
 i(durable,     #exchange{durable     = Durable})    -> Durable;
 i(auto_delete, #exchange{auto_delete = AutoDelete}) -> AutoDelete;
+i(internal,    #exchange{internal    = Internal})   -> Internal;
 i(arguments,   #exchange{arguments   = Arguments})  -> Arguments;
 i(Item, _) -> throw({bad_argument, Item}).
 
@@ -273,27 +263,28 @@ process_route(#resource{kind = queue} = QName,
               {WorkList, SeenXs, QNames}) ->
     {WorkList, SeenXs, [QName | QNames]}.
 
-call_with_exchange(XName, Fun) ->
+call_with_exchange(XName, Fun, PrePostCommitFun) ->
     rabbit_misc:execute_mnesia_transaction(
       fun () -> case mnesia:read({rabbit_exchange, XName}) of
-                   []  -> {error, not_found};
-                   [X] -> Fun(X)
-               end
-      end).
+                    []  -> {error, not_found};
+                    [X] -> Fun(X)
+                end
+      end, PrePostCommitFun).
 
 delete(XName, IfUnused) ->
-    Fun = case IfUnused of
-              true  -> fun conditional_delete/1;
-              false -> fun unconditional_delete/1
-          end,
-    case call_with_exchange(XName, Fun) of
-        {deleted, X, Bs, Deletions} ->
-            ok = rabbit_binding:process_deletions(
-                   rabbit_binding:add_deletion(
-                     XName, {X, deleted, Bs}, Deletions));
-        Error = {error, _InUseOrNotFound} ->
-            Error
-    end.
+    call_with_exchange(
+      XName,
+      case IfUnused of
+          true  -> fun conditional_delete/1;
+          false -> fun unconditional_delete/1
+      end,
+      fun ({deleted, X, Bs, Deletions}, Tx) ->
+              ok = rabbit_binding:process_deletions(
+                     rabbit_binding:add_deletion(
+                       XName, {X, deleted, Bs}, Deletions), Tx);
+          (Error = {error, _InUseOrNotFound}, _Tx) ->
+              Error
+      end).
 
 maybe_auto_delete(#exchange{auto_delete = false}) ->
     not_deleted;
@@ -314,3 +305,8 @@ unconditional_delete(X = #exchange{name = XName}) ->
     ok = mnesia:delete({rabbit_exchange, XName}),
     Bindings = rabbit_binding:remove_for_source(XName),
     {deleted, X, Bindings, rabbit_binding:remove_for_destination(XName)}.
+
+%% Used with atoms from records; e.g., the type is expected to exist.
+type_to_module(T) ->
+    {ok, Module} = rabbit_registry:lookup_module(exchange, T),
+    Module.

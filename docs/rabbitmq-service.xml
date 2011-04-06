@@ -165,8 +165,9 @@ machine guide</ulink> for details.
           <term>RABBITMQ_NODE_IP_ADDRESS</term>
           <listitem>
             <para>
-Defaults to 0.0.0.0. This can be changed if you only want to bind to
-one network interface.
+By default RabbitMQ will bind to all interfaces, on IPv4 and IPv6 if
+available. Set this if you only want to bind to one network interface
+or address family.
             </para>
           </listitem>
         </varlistentry>

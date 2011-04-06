@@ -1,39 +1,24 @@
-%%   The contents of this file are subject to the Mozilla Public License
-%%   Version 1.1 (the "License"); you may not use this file except in
-%%   compliance with the License. You may obtain a copy of the License at
-%%   http://www.mozilla.org/MPL/
+%% The contents of this file are subject to the Mozilla Public License
+%% Version 1.1 (the "License"); you may not use this file except in
+%% compliance with the License. You may obtain a copy of the License
+%% at http://www.mozilla.org/MPL/
 %%
-%%   Software distributed under the License is distributed on an "AS IS"
-%%   basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
-%%   License for the specific language governing rights and limitations
-%%   under the License.
+%% Software distributed under the License is distributed on an "AS IS"
+%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
+%% the License for the specific language governing rights and
+%% limitations under the License.
 %%
-%%   The Original Code is RabbitMQ.
+%% The Original Code is RabbitMQ.
 %%
-%%   The Initial Developers of the Original Code are LShift Ltd,
-%%   Cohesive Financial Technologies LLC, and Rabbit Technologies Ltd.
-%%
-%%   Portions created before 22-Nov-2008 00:00:00 GMT by LShift Ltd,
-%%   Cohesive Financial Technologies LLC, or Rabbit Technologies Ltd
-%%   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
-%%   Technologies LLC, and Rabbit Technologies Ltd.
-%%
-%%   Portions created by LShift Ltd are Copyright (C) 2007-2010 LShift
-%%   Ltd. Portions created by Cohesive Financial Technologies LLC are
-%%   Copyright (C) 2007-2010 Cohesive Financial Technologies
-%%   LLC. Portions created by Rabbit Technologies Ltd are Copyright
-%%   (C) 2007-2010 Rabbit Technologies Ltd.
-%%
-%%   All Rights Reserved.
-%%
-%%   Contributor(s): ______________________________________.
+%% The Initial Developer of the Original Code is VMware, Inc.
+%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_queue_index).
 
--export([init/1, shutdown_terms/1, recover/4,
+-export([init/2, shutdown_terms/1, recover/5,
          terminate/2, delete_and_terminate/1,
-         publish/5, deliver/2, ack/2, sync/2, flush/1, read/3,
+         publish/5, deliver/2, ack/2, sync/1, sync/2, flush/1, read/3,
          next_segment_boundary/1, bounds/1, recover/1]).
 
 -export([add_queue_ttl/0]).
@@ -101,7 +86,7 @@
 %% and seeding the message store on start up.
 %%
 %% Note that in general, the representation of a message's state as
-%% the tuple: {('no_pub'|{Guid, MsgProps, IsPersistent}),
+%% the tuple: {('no_pub'|{MsgId, MsgProps, IsPersistent}),
 %% ('del'|'no_del'), ('ack'|'no_ack')} is richer than strictly
 %% necessary for most operations. However, for startup, and to ensure
 %% the safe and correct combination of journal entries with entries
@@ -141,31 +126,33 @@
 %% (range: 0 - 16383)
 -define(REL_SEQ_ONLY_PREFIX, 00).
 -define(REL_SEQ_ONLY_PREFIX_BITS, 2).
--define(REL_SEQ_ONLY_ENTRY_LENGTH_BYTES, 2).
+-define(REL_SEQ_ONLY_RECORD_BYTES, 2).
 
 %% publish record is binary 1 followed by a bit for is_persistent,
 %% then 14 bits of rel seq id, 64 bits for message expiry and 128 bits
 %% of md5sum msg id
--define(PUBLISH_PREFIX, 1).
--define(PUBLISH_PREFIX_BITS, 1).
+-define(PUB_PREFIX, 1).
+-define(PUB_PREFIX_BITS, 1).
 
 -define(EXPIRY_BYTES, 8).
 -define(EXPIRY_BITS, (?EXPIRY_BYTES * 8)).
 -define(NO_EXPIRY, 0).
 
--define(GUID_BYTES, 16). %% md5sum is 128 bit or 16 bytes
--define(GUID_BITS, (?GUID_BYTES * 8)).
-%% 16 bytes for md5sum + 8 for expiry + 2 for seq, bits and prefix
--define(PUBLISH_RECORD_LENGTH_BYTES, ?GUID_BYTES + ?EXPIRY_BYTES + 2).
+-define(MSG_ID_BYTES, 16). %% md5sum is 128 bit or 16 bytes
+-define(MSG_ID_BITS, (?MSG_ID_BYTES * 8)).
+
+%% 16 bytes for md5sum + 8 for expiry
+-define(PUB_RECORD_BODY_BYTES, (?MSG_ID_BYTES + ?EXPIRY_BYTES)).
+%% + 2 for seq, bits and prefix
+-define(PUB_RECORD_BYTES, (?PUB_RECORD_BODY_BYTES + 2)).
 
 %% 1 publish, 1 deliver, 1 ack per msg
 -define(SEGMENT_TOTAL_SIZE, ?SEGMENT_ENTRY_COUNT *
-        (?PUBLISH_RECORD_LENGTH_BYTES +
-         (2 * ?REL_SEQ_ONLY_ENTRY_LENGTH_BYTES))).
+            (?PUB_RECORD_BYTES + (2 * ?REL_SEQ_ONLY_RECORD_BYTES))).
 
 %% ---- misc ----
 
--define(PUB, {_, _, _}). %% {Guid, MsgProps, IsPersistent}
+-define(PUB, {_, _, _}). %% {MsgId, MsgProps, IsPersistent}
 
 -define(READ_MODE, [binary, raw, read]).
 -define(READ_AHEAD_MODE, [{read_ahead, ?SEGMENT_TOTAL_SIZE} | ?READ_MODE]).
@@ -174,7 +161,7 @@
 %%----------------------------------------------------------------------------
 
 -record(qistate, { dir, segments, journal_handle, dirty_count,
-                   max_journal_entries }).
+                   max_journal_entries, on_sync, unsynced_msg_ids }).
 
 -record(segment, { num, path, journal_entries, unacked }).
 
@@ -182,7 +169,7 @@
 
 %%----------------------------------------------------------------------------
 
--rabbit_upgrade({add_queue_ttl, []}).
+-rabbit_upgrade({add_queue_ttl, local, []}).
 
 -ifdef(use_specs).
 
@@ -192,28 +179,31 @@
                                path            :: file:filename(),
                                journal_entries :: array(),
                                unacked         :: non_neg_integer()
-                              })).
+                             })).
 -type(seq_id() :: integer()).
 -type(seg_dict() :: {dict(), [segment()]}).
+-type(on_sync_fun() :: fun ((gb_set()) -> ok)).
 -type(qistate() :: #qistate { dir                 :: file:filename(),
                               segments            :: 'undefined' | seg_dict(),
                               journal_handle      :: hdl(),
                               dirty_count         :: integer(),
-                              max_journal_entries :: non_neg_integer()
-                             }).
--type(startup_fun_state() ::
-        {(fun ((A) -> 'finished' | {rabbit_guid:guid(), non_neg_integer(), A})),
-         A}).
+                              max_journal_entries :: non_neg_integer(),
+                              on_sync             :: on_sync_fun(),
+                              unsynced_msg_ids    :: [rabbit_types:msg_id()]
+                            }).
+-type(contains_predicate() :: fun ((rabbit_types:msg_id()) -> boolean())).
+-type(walker(A) :: fun ((A) -> 'finished' |
+                               {rabbit_types:msg_id(), non_neg_integer(), A})).
 -type(shutdown_terms() :: [any()]).
 
--spec(init/1 :: (rabbit_amqqueue:name()) -> qistate()).
+-spec(init/2 :: (rabbit_amqqueue:name(), on_sync_fun()) -> qistate()).
 -spec(shutdown_terms/1 :: (rabbit_amqqueue:name()) -> shutdown_terms()).
--spec(recover/4 :: (rabbit_amqqueue:name(), shutdown_terms(), boolean(),
-                    fun ((rabbit_guid:guid()) -> boolean())) ->
-             {'undefined' | non_neg_integer(), qistate()}).
+-spec(recover/5 :: (rabbit_amqqueue:name(), shutdown_terms(), boolean(),
+                    contains_predicate(), on_sync_fun()) ->
+                        {'undefined' | non_neg_integer(), qistate()}).
 -spec(terminate/2 :: ([any()], qistate()) -> qistate()).
 -spec(delete_and_terminate/1 :: (qistate()) -> qistate()).
--spec(publish/5 :: (rabbit_guid:guid(), seq_id(),
+-spec(publish/5 :: (rabbit_types:msg_id(), seq_id(),
                     rabbit_types:message_properties(), boolean(), qistate())
                    -> qistate()).
 -spec(deliver/2 :: ([seq_id()], qistate()) -> qistate()).
@@ -221,14 +211,13 @@
 -spec(sync/2 :: ([seq_id()], qistate()) -> qistate()).
 -spec(flush/1 :: (qistate()) -> qistate()).
 -spec(read/3 :: (seq_id(), seq_id(), qistate()) ->
-                     {[{rabbit_guid:guid(), seq_id(),
+                     {[{rabbit_types:msg_id(), seq_id(),
                         rabbit_types:message_properties(),
                         boolean(), boolean()}], qistate()}).
 -spec(next_segment_boundary/1 :: (seq_id()) -> seq_id()).
 -spec(bounds/1 :: (qistate()) ->
-             {non_neg_integer(), non_neg_integer(), qistate()}).
--spec(recover/1 ::
-        ([rabbit_amqqueue:name()]) -> {[[any()]], startup_fun_state()}).
+                       {non_neg_integer(), non_neg_integer(), qistate()}).
+-spec(recover/1 :: ([rabbit_amqqueue:name()]) -> {[[any()]], {walker(A), A}}).
 
 -spec(add_queue_ttl/0 :: () -> 'ok').
 
@@ -239,10 +228,10 @@
 %% public API
 %%----------------------------------------------------------------------------
 
-init(Name) ->
+init(Name, OnSyncFun) ->
     State = #qistate { dir = Dir } = blank_state(Name),
     false = filelib:is_file(Dir), %% is_file == is file or dir
-    State.
+    State #qistate { on_sync = OnSyncFun }.
 
 shutdown_terms(Name) ->
     #qistate { dir = Dir } = blank_state(Name),
@@ -251,13 +240,14 @@ shutdown_terms(Name) ->
         {ok, Terms1} -> Terms1
     end.
 
-recover(Name, Terms, MsgStoreRecovered, ContainsCheckFun) ->
+recover(Name, Terms, MsgStoreRecovered, ContainsCheckFun, OnSyncFun) ->
     State = #qistate { dir = Dir } = blank_state(Name),
+    State1 = State #qistate { on_sync = OnSyncFun },
     CleanShutdown = detect_clean_shutdown(Dir),
     case CleanShutdown andalso MsgStoreRecovered of
         true  -> RecoveredCounts = proplists:get_value(segments, Terms, []),
-                 init_clean(RecoveredCounts, State);
-        false -> init_dirty(CleanShutdown, ContainsCheckFun, State)
+                 init_clean(RecoveredCounts, State1);
+        false -> init_dirty(CleanShutdown, ContainsCheckFun, State1)
     end.
 
 terminate(Terms, State) ->
@@ -270,18 +260,22 @@ delete_and_terminate(State) ->
     ok = rabbit_misc:recursive_delete([Dir]),
     State1.
 
-publish(Guid, SeqId, MsgProps, IsPersistent, State) when is_binary(Guid) ->
-    ?GUID_BYTES = size(Guid),
-    {JournalHdl, State1} = get_journal_handle(State),
+publish(MsgId, SeqId, MsgProps, IsPersistent,
+        State = #qistate { unsynced_msg_ids = UnsyncedMsgIds })
+  when is_binary(MsgId) ->
+    ?MSG_ID_BYTES = size(MsgId),
+    {JournalHdl, State1} = get_journal_handle(
+                             State #qistate {
+                               unsynced_msg_ids = [MsgId | UnsyncedMsgIds] }),
     ok = file_handle_cache:append(
            JournalHdl, [<<(case IsPersistent of
                                true  -> ?PUB_PERSIST_JPREFIX;
                                false -> ?PUB_TRANS_JPREFIX
                            end):?JPREFIX_BITS,
                           SeqId:?SEQ_BITS>>,
-                          create_pub_record_body(Guid, MsgProps)]),
+                        create_pub_record_body(MsgId, MsgProps)]),
     maybe_flush_journal(
-      add_to_journal(SeqId, {Guid, MsgProps, IsPersistent}, State1)).
+      add_to_journal(SeqId, {MsgId, MsgProps, IsPersistent}, State1)).
 
 deliver(SeqIds, State) ->
     deliver_or_ack(del, SeqIds, State).
@@ -289,11 +283,12 @@ deliver(SeqIds, State) ->
 ack(SeqIds, State) ->
     deliver_or_ack(ack, SeqIds, State).
 
-sync([], State) ->
-    State;
-sync(_SeqIds, State = #qistate { journal_handle = undefined }) ->
-    State;
-sync(_SeqIds, State = #qistate { journal_handle = JournalHdl }) ->
+%% This is only called when there are outstanding confirms and the
+%% queue is idle.
+sync(State = #qistate { unsynced_msg_ids = MsgIds }) ->
+    sync_if([] =/= MsgIds, State).
+
+sync(SeqIds, State) ->
     %% The SeqIds here contains the SeqId of every publish and ack in
     %% the transaction. Ideally we should go through these seqids and
     %% only sync the journal if the pubs or acks appear in the
@@ -301,9 +296,8 @@ sync(_SeqIds, State = #qistate { journal_handle = JournalHdl }) ->
     %% the variable queue publishes and acks to the qi, and then
     %% syncs, all in one operation, there is no possibility of the
     %% seqids not being in the journal, provided the transaction isn't
-    %% emptied (handled above anyway).
-    ok = file_handle_cache:sync(JournalHdl),
-    State.
+    %% emptied (handled by sync_if anyway).
+    sync_if([] =/= SeqIds, State).
 
 flush(State = #qistate { dirty_count = 0 }) -> State;
 flush(State)                                -> flush_journal(State).
@@ -393,7 +387,9 @@ blank_state(QueueName) ->
                segments            = segments_new(),
                journal_handle      = undefined,
                dirty_count         = 0,
-               max_journal_entries = MaxJournal }.
+               max_journal_entries = MaxJournal,
+               on_sync             = fun (_) -> ok end,
+               unsynced_msg_ids    = [] }.
 
 clean_file_name(Dir) -> filename:join(Dir, ?CLEAN_FILENAME).
 
@@ -475,8 +471,9 @@ recover_segment(ContainsCheckFun, CleanShutdown,
     {SegEntries1, UnackedCountDelta} =
         segment_plus_journal(SegEntries, JEntries),
     array:sparse_foldl(
-      fun (RelSeq, {{Guid, _MsgProps, _IsPersistent}, Del, no_ack}, Segment1) ->
-              recover_message(ContainsCheckFun(Guid), CleanShutdown,
+      fun (RelSeq, {{MsgId, _MsgProps, _IsPersistent}, Del, no_ack},
+           Segment1) ->
+              recover_message(ContainsCheckFun(MsgId), CleanShutdown,
                               Del, RelSeq, Segment1)
       end,
       Segment #segment { unacked = UnackedCount + UnackedCountDelta },
@@ -517,20 +514,20 @@ queue_index_walker({start, DurableQueues}) when is_list(DurableQueues) ->
 queue_index_walker({next, Gatherer}) when is_pid(Gatherer) ->
     case gatherer:out(Gatherer) of
         empty ->
+            unlink(Gatherer),
             ok = gatherer:stop(Gatherer),
-            ok = rabbit_misc:unlink_and_capture_exit(Gatherer),
             finished;
-        {value, {Guid, Count}} ->
-            {Guid, Count, {next, Gatherer}}
+        {value, {MsgId, Count}} ->
+            {MsgId, Count, {next, Gatherer}}
     end.
 
 queue_index_walker_reader(QueueName, Gatherer) ->
     State = #qistate { segments = Segments, dir = Dir } =
         recover_journal(blank_state(QueueName)),
     [ok = segment_entries_foldr(
-            fun (_RelSeq, {{Guid, _MsgProps, true}, _IsDelivered, no_ack},
+            fun (_RelSeq, {{MsgId, _MsgProps, true}, _IsDelivered, no_ack},
                  ok) ->
-                    gatherer:in(Gatherer, {Guid, 1});
+                    gatherer:in(Gatherer, {MsgId, 1});
                 (_RelSeq, _Value, Acc) ->
                     Acc
             end, ok, segment_find_or_new(Seg, Dir, Segments)) ||
@@ -542,27 +539,21 @@ queue_index_walker_reader(QueueName, Gatherer) ->
 %% expiry/binary manipulation
 %%----------------------------------------------------------------------------
 
-create_pub_record_body(Guid, #message_properties{expiry = Expiry}) ->
-    [Guid, expiry_to_binary(Expiry)].
+create_pub_record_body(MsgId, #message_properties { expiry = Expiry }) ->
+    [MsgId, expiry_to_binary(Expiry)].
 
 expiry_to_binary(undefined) -> <<?NO_EXPIRY:?EXPIRY_BITS>>;
 expiry_to_binary(Expiry)    -> <<Expiry:?EXPIRY_BITS>>.
 
-read_pub_record_body(Hdl) ->
-    case file_handle_cache:read(Hdl, ?GUID_BYTES + ?EXPIRY_BYTES) of
-        {ok, Bin} ->
-            %% work around for binary data fragmentation. See
-            %% rabbit_msg_file:read_next/2
-            <<GuidNum:?GUID_BITS, Expiry:?EXPIRY_BITS>> = Bin,
-            <<Guid:?GUID_BYTES/binary>> = <<GuidNum:?GUID_BITS>>,
-            Exp = case Expiry of
-                      ?NO_EXPIRY -> undefined;
-                      X          -> X
-                  end,
-            {Guid, #message_properties{expiry = Exp}};
-        Error ->
-            Error
-    end.
+parse_pub_record_body(<<MsgIdNum:?MSG_ID_BITS, Expiry:?EXPIRY_BITS>>) ->
+    %% work around for binary data fragmentation. See
+    %% rabbit_msg_file:read_next/2
+    <<MsgId:?MSG_ID_BYTES/binary>> = <<MsgIdNum:?MSG_ID_BITS>>,
+    Exp = case Expiry of
+              ?NO_EXPIRY -> undefined;
+              X          -> X
+          end,
+    {MsgId, #message_properties { expiry = Exp }}.
 
 %%----------------------------------------------------------------------------
 %% journal manipulation
@@ -625,7 +616,7 @@ flush_journal(State = #qistate { segments = Segments }) ->
     {JournalHdl, State1} =
         get_journal_handle(State #qistate { segments = Segments1 }),
     ok = file_handle_cache:clear(JournalHdl),
-    State1 #qistate { dirty_count = 0 }.
+    notify_sync(State1 #qistate { dirty_count = 0 }).
 
 append_journal_to_segment(#segment { journal_entries = JEntries,
                                      path = Path } = Segment) ->
@@ -671,8 +662,8 @@ recover_journal(State) ->
                       journal_minus_segment(JEntries, SegEntries),
                   Segment #segment { journal_entries = JEntries1,
                                      unacked = (UnackedCountInJournal +
-                                                UnackedCountInSeg -
-                                                UnackedCountDuplicates) }
+                                                    UnackedCountInSeg -
+                                                    UnackedCountDuplicates) }
           end, Segments),
     State1 #qistate { segments = Segments1 }.
 
@@ -685,15 +676,16 @@ load_journal_entries(State = #qistate { journal_handle = Hdl }) ->
                 ?ACK_JPREFIX ->
                     load_journal_entries(add_to_journal(SeqId, ack, State));
                 _ ->
-                    case read_pub_record_body(Hdl) of
-                        {Guid, MsgProps} ->
-                            Publish = {Guid, MsgProps,
-                                       case Prefix of
-                                           ?PUB_PERSIST_JPREFIX -> true;
-                                           ?PUB_TRANS_JPREFIX   -> false
-                                       end},
+                    case file_handle_cache:read(Hdl, ?PUB_RECORD_BODY_BYTES) of
+                        {ok, Bin} ->
+                            {MsgId, MsgProps} = parse_pub_record_body(Bin),
+                            IsPersistent = case Prefix of
+                                               ?PUB_PERSIST_JPREFIX -> true;
+                                               ?PUB_TRANS_JPREFIX   -> false
+                                           end,
                             load_journal_entries(
-                              add_to_journal(SeqId, Publish, State));
+                              add_to_journal(
+                                SeqId, {MsgId, MsgProps, IsPersistent}, State));
                         _ErrOrEoF -> %% err, we've lost at least a publish
                             State
                     end
@@ -712,6 +704,18 @@ deliver_or_ack(Kind, SeqIds, State) ->
     maybe_flush_journal(lists:foldl(fun (SeqId, StateN) ->
                                             add_to_journal(SeqId, Kind, StateN)
                                     end, State1, SeqIds)).
+
+sync_if(false, State) ->
+    State;
+sync_if(_Bool, State = #qistate { journal_handle = undefined }) ->
+    State;
+sync_if(true, State = #qistate { journal_handle = JournalHdl }) ->
+    ok = file_handle_cache:sync(JournalHdl),
+    notify_sync(State).
+
+notify_sync(State = #qistate { unsynced_msg_ids = UG, on_sync = OnSyncFun }) ->
+    OnSyncFun(gb_sets:from_list(UG)),
+    State #qistate { unsynced_msg_ids = [] }.
 
 %%----------------------------------------------------------------------------
 %% segment manipulation
@@ -789,19 +793,19 @@ write_entry_to_segment(RelSeq, {Pub, Del, Ack}, Hdl) ->
     ok = case Pub of
              no_pub ->
                  ok;
-             {Guid, MsgProps, IsPersistent} ->
+             {MsgId, MsgProps, IsPersistent} ->
                  file_handle_cache:append(
-                   Hdl, [<<?PUBLISH_PREFIX:?PUBLISH_PREFIX_BITS,
-                          (bool_to_int(IsPersistent)):1,
-                          RelSeq:?REL_SEQ_BITS>>,
-                          create_pub_record_body(Guid, MsgProps)])
+                   Hdl, [<<?PUB_PREFIX:?PUB_PREFIX_BITS,
+                           (bool_to_int(IsPersistent)):1,
+                           RelSeq:?REL_SEQ_BITS>>,
+                         create_pub_record_body(MsgId, MsgProps)])
          end,
     ok = case {Del, Ack} of
              {no_del, no_ack} ->
                  ok;
              _ ->
                  Binary = <<?REL_SEQ_ONLY_PREFIX:?REL_SEQ_ONLY_PREFIX_BITS,
-                           RelSeq:?REL_SEQ_BITS>>,
+                            RelSeq:?REL_SEQ_BITS>>,
                  file_handle_cache:append(
                    Hdl, case {Del, Ack} of
                             {del, ack} -> [Binary, Binary];
@@ -814,10 +818,10 @@ read_bounded_segment(Seg, {StartSeg, StartRelSeq}, {EndSeg, EndRelSeq},
                      {Messages, Segments}, Dir) ->
     Segment = segment_find_or_new(Seg, Dir, Segments),
     {segment_entries_foldr(
-       fun (RelSeq, {{Guid, MsgProps, IsPersistent}, IsDelivered, no_ack}, Acc)
+       fun (RelSeq, {{MsgId, MsgProps, IsPersistent}, IsDelivered, no_ack}, Acc)
              when (Seg > StartSeg orelse StartRelSeq =< RelSeq) andalso
                   (Seg < EndSeg   orelse EndRelSeq   >= RelSeq) ->
-               [ {Guid, reconstruct_seq_id(StartSeg, RelSeq), MsgProps,
+               [ {MsgId, reconstruct_seq_id(StartSeg, RelSeq), MsgProps,
                   IsPersistent, IsDelivered == del} | Acc ];
            (_RelSeq, _Value, Acc) ->
                Acc
@@ -838,36 +842,40 @@ load_segment(KeepAcked, #segment { path = Path }) ->
         false -> {array_new(), 0};
         true  -> {ok, Hdl} = file_handle_cache:open(Path, ?READ_AHEAD_MODE, []),
                  {ok, 0} = file_handle_cache:position(Hdl, bof),
-                 Res = load_segment_entries(KeepAcked, Hdl, array_new(), 0),
+                 {ok, SegData} = file_handle_cache:read(
+                                   Hdl, ?SEGMENT_TOTAL_SIZE),
+                 Res = load_segment_entries(KeepAcked, SegData, array_new(), 0),
                  ok = file_handle_cache:close(Hdl),
                  Res
     end.
 
-load_segment_entries(KeepAcked, Hdl, SegEntries, UnackedCount) ->
-    case file_handle_cache:read(Hdl, ?REL_SEQ_ONLY_ENTRY_LENGTH_BYTES) of
-        {ok, <<?PUBLISH_PREFIX:?PUBLISH_PREFIX_BITS,
-              IsPersistentNum:1, RelSeq:?REL_SEQ_BITS>>} ->
-            {Guid, MsgProps} = read_pub_record_body(Hdl),
-            Obj = {{Guid, MsgProps, 1 == IsPersistentNum}, no_del, no_ack},
-            SegEntries1 = array:set(RelSeq, Obj, SegEntries),
-            load_segment_entries(KeepAcked, Hdl, SegEntries1,
-                                 UnackedCount + 1);
-        {ok, <<?REL_SEQ_ONLY_PREFIX:?REL_SEQ_ONLY_PREFIX_BITS,
-              RelSeq:?REL_SEQ_BITS>>} ->
-            {UnackedCountDelta, SegEntries1} =
-                case array:get(RelSeq, SegEntries) of
-                    {Pub, no_del, no_ack} ->
-                        { 0, array:set(RelSeq, {Pub, del, no_ack}, SegEntries)};
-                    {Pub, del, no_ack} when KeepAcked ->
-                        {-1, array:set(RelSeq, {Pub, del, ack}, SegEntries)};
-                    {_Pub, del, no_ack} ->
-                        {-1, array:reset(RelSeq, SegEntries)}
-                end,
-            load_segment_entries(KeepAcked, Hdl, SegEntries1,
-                                 UnackedCount + UnackedCountDelta);
-        _ErrOrEoF ->
-            {SegEntries, UnackedCount}
-    end.
+load_segment_entries(KeepAcked,
+                     <<?PUB_PREFIX:?PUB_PREFIX_BITS,
+                       IsPersistentNum:1, RelSeq:?REL_SEQ_BITS,
+                       PubRecordBody:?PUB_RECORD_BODY_BYTES/binary,
+                       SegData/binary>>,
+                     SegEntries, UnackedCount) ->
+    {MsgId, MsgProps} = parse_pub_record_body(PubRecordBody),
+    Obj = {{MsgId, MsgProps, 1 == IsPersistentNum}, no_del, no_ack},
+    SegEntries1 = array:set(RelSeq, Obj, SegEntries),
+    load_segment_entries(KeepAcked, SegData, SegEntries1, UnackedCount + 1);
+load_segment_entries(KeepAcked,
+                     <<?REL_SEQ_ONLY_PREFIX:?REL_SEQ_ONLY_PREFIX_BITS,
+                       RelSeq:?REL_SEQ_BITS, SegData/binary>>,
+                     SegEntries, UnackedCount) ->
+    {UnackedCountDelta, SegEntries1} =
+        case array:get(RelSeq, SegEntries) of
+            {Pub, no_del, no_ack} ->
+                { 0, array:set(RelSeq, {Pub, del, no_ack}, SegEntries)};
+            {Pub, del, no_ack} when KeepAcked ->
+                {-1, array:set(RelSeq, {Pub, del, ack}, SegEntries)};
+            {_Pub, del, no_ack} ->
+                {-1, array:reset(RelSeq, SegEntries)}
+        end,
+    load_segment_entries(KeepAcked, SegData, SegEntries1,
+                         UnackedCount + UnackedCountDelta);
+load_segment_entries(_KeepAcked, _SegData, SegEntries, UnackedCount) ->
+    {SegEntries, UnackedCount}.
 
 array_new() ->
     array:new([{default, undefined}, fixed, {size, ?SEGMENT_ENTRY_COUNT}]).
@@ -995,17 +1003,17 @@ add_queue_ttl_journal(<<?ACK_JPREFIX:?JPREFIX_BITS, SeqId:?SEQ_BITS,
                         Rest/binary>>) ->
     {<<?ACK_JPREFIX:?JPREFIX_BITS, SeqId:?SEQ_BITS>>, Rest};
 add_queue_ttl_journal(<<Prefix:?JPREFIX_BITS, SeqId:?SEQ_BITS,
-                        Guid:?GUID_BYTES/binary, Rest/binary>>) ->
-    {[<<Prefix:?JPREFIX_BITS, SeqId:?SEQ_BITS>>, Guid,
+                        MsgId:?MSG_ID_BYTES/binary, Rest/binary>>) ->
+    {[<<Prefix:?JPREFIX_BITS, SeqId:?SEQ_BITS>>, MsgId,
       expiry_to_binary(undefined)], Rest};
 add_queue_ttl_journal(_) ->
     stop.
 
-add_queue_ttl_segment(<<?PUBLISH_PREFIX:?PUBLISH_PREFIX_BITS, IsPersistentNum:1,
-                        RelSeq:?REL_SEQ_BITS, Guid:?GUID_BYTES/binary,
+add_queue_ttl_segment(<<?PUB_PREFIX:?PUB_PREFIX_BITS, IsPersistentNum:1,
+                        RelSeq:?REL_SEQ_BITS, MsgId:?MSG_ID_BYTES/binary,
                         Rest/binary>>) ->
-    {[<<?PUBLISH_PREFIX:?PUBLISH_PREFIX_BITS, IsPersistentNum:1,
-        RelSeq:?REL_SEQ_BITS>>, Guid, expiry_to_binary(undefined)], Rest};
+    {[<<?PUB_PREFIX:?PUB_PREFIX_BITS, IsPersistentNum:1, RelSeq:?REL_SEQ_BITS>>,
+      MsgId, expiry_to_binary(undefined)], Rest};
 add_queue_ttl_segment(<<?REL_SEQ_ONLY_PREFIX:?REL_SEQ_ONLY_PREFIX_BITS,
                         RelSeq:?REL_SEQ_BITS, Rest>>) ->
     {<<?REL_SEQ_ONLY_PREFIX:?REL_SEQ_ONLY_PREFIX_BITS, RelSeq:?REL_SEQ_BITS>>,
@@ -1028,8 +1036,8 @@ foreach_queue_index(Funs) ->
                 end)
      end || QueueDirName <- QueueDirNames],
     empty = gatherer:out(Gatherer),
-    ok = gatherer:stop(Gatherer),
-    ok = rabbit_misc:unlink_and_capture_exit(Gatherer).
+    unlink(Gatherer),
+    ok = gatherer:stop(Gatherer).
 
 transform_queue(Dir, Gatherer, {JournalFun, SegmentFun}) ->
     ok = transform_file(filename:join(Dir, ?JOURNAL_FILENAME), JournalFun),

@@ -1,32 +1,17 @@
-%%   The contents of this file are subject to the Mozilla Public License
-%%   Version 1.1 (the "License"); you may not use this file except in
-%%   compliance with the License. You may obtain a copy of the License at
-%%   http://www.mozilla.org/MPL/
+%% The contents of this file are subject to the Mozilla Public License
+%% Version 1.1 (the "License"); you may not use this file except in
+%% compliance with the License. You may obtain a copy of the License
+%% at http://www.mozilla.org/MPL/
 %%
-%%   Software distributed under the License is distributed on an "AS IS"
-%%   basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
-%%   License for the specific language governing rights and limitations
-%%   under the License.
+%% Software distributed under the License is distributed on an "AS IS"
+%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
+%% the License for the specific language governing rights and
+%% limitations under the License.
 %%
-%%   The Original Code is RabbitMQ.
+%% The Original Code is RabbitMQ.
 %%
-%%   The Initial Developers of the Original Code are LShift Ltd,
-%%   Cohesive Financial Technologies LLC, and Rabbit Technologies Ltd.
-%%
-%%   Portions created before 22-Nov-2008 00:00:00 GMT by LShift Ltd,
-%%   Cohesive Financial Technologies LLC, or Rabbit Technologies Ltd
-%%   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
-%%   Technologies LLC, and Rabbit Technologies Ltd.
-%%
-%%   Portions created by LShift Ltd are Copyright (C) 2007-2010 LShift
-%%   Ltd. Portions created by Cohesive Financial Technologies LLC are
-%%   Copyright (C) 2007-2010 Cohesive Financial Technologies
-%%   LLC. Portions created by Rabbit Technologies Ltd are Copyright
-%%   (C) 2007-2010 Rabbit Technologies Ltd.
-%%
-%%   All Rights Reserved.
-%%
-%%   Contributor(s): ______________________________________.
+%% The Initial Developer of the Original Code is VMware, Inc.
+%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_event).
@@ -37,7 +22,7 @@
 -export([init_stats_timer/0, ensure_stats_timer/2, stop_stats_timer/1]).
 -export([reset_stats_timer/1]).
 -export([stats_level/1, if_enabled/2]).
--export([notify/2]).
+-export([notify/2, notify_if/3]).
 
 %%----------------------------------------------------------------------------
 
@@ -77,6 +62,7 @@
 -spec(stats_level/1 :: (state()) -> level()).
 -spec(if_enabled/2 :: (state(), timer_fun()) -> 'ok').
 -spec(notify/2 :: (event_type(), event_props()) -> 'ok').
+-spec(notify_if/3 :: (boolean(), event_type(), event_props()) -> 'ok').
 
 -endif.
 
@@ -115,7 +101,7 @@ ensure_stats_timer(State = #state{level = none}, _Fun) ->
     State;
 ensure_stats_timer(State = #state{timer = undefined}, Fun) ->
     {ok, TRef} = timer:apply_after(?STATS_INTERVAL,
-                                      erlang, apply, [Fun, []]),
+                                   erlang, apply, [Fun, []]),
     State#state{timer = TRef};
 ensure_stats_timer(State, _Fun) ->
     State.
@@ -140,16 +126,12 @@ if_enabled(_State, Fun) ->
     Fun(),
     ok.
 
+notify_if(true,   Type,  Props) -> notify(Type, Props);
+notify_if(false, _Type, _Props) -> ok.
+
 notify(Type, Props) ->
-    try
-        %% TODO: switch to os:timestamp() when we drop support for
-        %% Erlang/OTP < R13B01
-        gen_event:notify(rabbit_event, #event{type = Type,
-                                              props = Props,
-                                              timestamp = now()})
-    catch error:badarg ->
-            %% badarg means rabbit_event is no longer registered. We never
-            %% unregister it so the great likelihood is that we're shutting
-            %% down the broker but some events were backed up. Ignore it.
-            ok
-    end.
+    %% TODO: switch to os:timestamp() when we drop support for
+    %% Erlang/OTP < R13B01
+    gen_event:notify(rabbit_event, #event{type = Type,
+                                          props = Props,
+                                          timestamp = now()}).

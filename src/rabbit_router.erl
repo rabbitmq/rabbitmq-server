@@ -1,32 +1,17 @@
-%%   The contents of this file are subject to the Mozilla Public License
-%%   Version 1.1 (the "License"); you may not use this file except in
-%%   compliance with the License. You may obtain a copy of the License at
-%%   http://www.mozilla.org/MPL/
+%% The contents of this file are subject to the Mozilla Public License
+%% Version 1.1 (the "License"); you may not use this file except in
+%% compliance with the License. You may obtain a copy of the License
+%% at http://www.mozilla.org/MPL/
 %%
-%%   Software distributed under the License is distributed on an "AS IS"
-%%   basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
-%%   License for the specific language governing rights and limitations
-%%   under the License.
+%% Software distributed under the License is distributed on an "AS IS"
+%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
+%% the License for the specific language governing rights and
+%% limitations under the License.
 %%
-%%   The Original Code is RabbitMQ.
+%% The Original Code is RabbitMQ.
 %%
-%%   The Initial Developers of the Original Code are LShift Ltd,
-%%   Cohesive Financial Technologies LLC, and Rabbit Technologies Ltd.
-%%
-%%   Portions created before 22-Nov-2008 00:00:00 GMT by LShift Ltd,
-%%   Cohesive Financial Technologies LLC, or Rabbit Technologies Ltd
-%%   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
-%%   Technologies LLC, and Rabbit Technologies Ltd.
-%%
-%%   Portions created by LShift Ltd are Copyright (C) 2007-2010 LShift
-%%   Ltd. Portions created by Cohesive Financial Technologies LLC are
-%%   Copyright (C) 2007-2010 Cohesive Financial Technologies
-%%   LLC. Portions created by Rabbit Technologies Ltd are Copyright
-%%   (C) 2007-2010 Rabbit Technologies Ltd.
-%%
-%%   All Rights Reserved.
-%%
-%%   Contributor(s): ______________________________________.
+%% The Initial Developer of the Original Code is VMware, Inc.
+%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_router).
@@ -52,7 +37,8 @@
                            fun ((rabbit_types:binding()) -> boolean())) ->
     match_result()).
 -spec(match_routing_key/2 :: (rabbit_types:binding_source(),
-                              routing_key() | '_') -> match_result()).
+                             [routing_key()] | ['_']) ->
+    match_result()).
 
 -endif.
 
@@ -72,7 +58,8 @@ deliver(QNames, Delivery = #delivery{mandatory = false,
       QPids, fun (Pid) -> rabbit_amqqueue:deliver(Pid, Delivery) end),
     {routed, QPids};
 
-deliver(QNames, Delivery) ->
+deliver(QNames, Delivery = #delivery{mandatory = Mandatory,
+                                     immediate = Immediate}) ->
     QPids = lookup_qpids(QNames),
     {Success, _} =
         delegate:invoke(QPids,
@@ -81,8 +68,8 @@ deliver(QNames, Delivery) ->
                         end),
     {Routed, Handled} =
         lists:foldl(fun fold_deliveries/2, {false, []}, Success),
-    check_delivery(Delivery#delivery.mandatory, Delivery#delivery.immediate,
-                   {Routed, Handled}).
+    check_delivery(Mandatory, Immediate, {Routed, Handled}).
+
 
 %% TODO: Maybe this should be handled by a cursor instead.
 %% TODO: This causes a full scan for each entry with the same source
@@ -96,12 +83,22 @@ match_bindings(SrcName, Match) ->
                       Match(Binding)]),
     mnesia:async_dirty(fun qlc:e/1, [Query]).
 
-match_routing_key(SrcName, RoutingKey) ->
+match_routing_key(SrcName, [RoutingKey]) ->
     MatchHead = #route{binding = #binding{source      = SrcName,
                                           destination = '$1',
                                           key         = RoutingKey,
                                           _           = '_'}},
-    mnesia:dirty_select(rabbit_route, [{MatchHead, [], ['$1']}]).
+    mnesia:dirty_select(rabbit_route, [{MatchHead, [], ['$1']}]);
+match_routing_key(SrcName, [_|_] = RoutingKeys) ->
+    Condition = list_to_tuple(['orelse' | [{'=:=', '$2', RKey} ||
+                                              RKey <- RoutingKeys]]),
+    MatchHead = #route{binding = #binding{source      = SrcName,
+                                          destination = '$1',
+                                          key         = '$2',
+                                          _           = '_'}},
+    mnesia:dirty_select(rabbit_route, [{MatchHead, [Condition], ['$1']}]).
+
+
 
 %%--------------------------------------------------------------------
 

@@ -1,39 +1,25 @@
-%%   The contents of this file are subject to the Mozilla Public License
-%%   Version 1.1 (the "License"); you may not use this file except in
-%%   compliance with the License. You may obtain a copy of the License at
-%%   http://www.mozilla.org/MPL/
+%% The contents of this file are subject to the Mozilla Public License
+%% Version 1.1 (the "License"); you may not use this file except in
+%% compliance with the License. You may obtain a copy of the License
+%% at http://www.mozilla.org/MPL/
 %%
-%%   Software distributed under the License is distributed on an "AS IS"
-%%   basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
-%%   License for the specific language governing rights and limitations
-%%   under the License.
+%% Software distributed under the License is distributed on an "AS IS"
+%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
+%% the License for the specific language governing rights and
+%% limitations under the License.
 %%
-%%   The Original Code is RabbitMQ.
+%% The Original Code is RabbitMQ.
 %%
-%%   The Initial Developers of the Original Code are LShift Ltd,
-%%   Cohesive Financial Technologies LLC, and Rabbit Technologies Ltd.
-%%
-%%   Portions created before 22-Nov-2008 00:00:00 GMT by LShift Ltd,
-%%   Cohesive Financial Technologies LLC, or Rabbit Technologies Ltd
-%%   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
-%%   Technologies LLC, and Rabbit Technologies Ltd.
-%%
-%%   Portions created by LShift Ltd are Copyright (C) 2007-2010 LShift
-%%   Ltd. Portions created by Cohesive Financial Technologies LLC are
-%%   Copyright (C) 2007-2010 Cohesive Financial Technologies
-%%   LLC. Portions created by Rabbit Technologies Ltd are Copyright
-%%   (C) 2007-2010 Rabbit Technologies Ltd.
-%%
-%%   All Rights Reserved.
-%%
-%%   Contributor(s): ______________________________________.
+%% The Initial Developer of the Original Code is VMware, Inc.
+%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
 %%
 
--module(rabbit_plugin_activator).
+-module(rabbit_prelaunch).
 
 -export([start/0, stop/0]).
 
 -define(BaseApps, [rabbit]).
+-define(ERROR_CODE, 1).
 
 %%----------------------------------------------------------------------------
 %% Specs
@@ -52,7 +38,7 @@ start() ->
     io:format("Activating RabbitMQ plugins ...~n"),
 
     %% Determine our various directories
-    [PluginDir, UnpackedPluginDir] = init:get_plain_arguments(),
+    [PluginDir, UnpackedPluginDir, NodeStr] = init:get_plain_arguments(),
     RootName = UnpackedPluginDir ++ "/rabbit",
 
     %% Unpack any .ez plugins
@@ -130,7 +116,10 @@ start() ->
     [io:format("* ~s-~s~n", [App, proplists:get_value(App, AppVersions)])
      || App <- PluginApps],
     io:nl(),
-    halt(),
+
+    ok = duplicate_node_check(NodeStr),
+
+    terminate(0),
     ok.
 
 stop() ->
@@ -246,11 +235,47 @@ post_process_script(ScriptFile) ->
             {error, {failed_to_load_script, Reason}}
     end.
 
-process_entry(Entry = {apply,{application,start_boot,[rabbit,permanent]}}) ->
+process_entry(Entry = {apply,{application,start_boot,[mnesia,permanent]}}) ->
     [{apply,{rabbit,prepare,[]}}, Entry];
 process_entry(Entry) ->
     [Entry].
 
+%% Check whether a node with the same name is already running
+duplicate_node_check([]) ->
+    %% Ignore running node while installing windows service
+    ok;
+duplicate_node_check(NodeStr) ->
+    Node = rabbit_misc:makenode(NodeStr),
+    {NodeName, NodeHost} = rabbit_misc:nodeparts(Node),
+    case net_adm:names(NodeHost) of
+        {ok, NamePorts}  ->
+            case proplists:is_defined(NodeName, NamePorts) of
+                true -> io:format("node with name ~p "
+                                  "already running on ~p~n",
+                                  [NodeName, NodeHost]),
+                        [io:format(Fmt ++ "~n", Args) ||
+                            {Fmt, Args} <- rabbit_control:diagnostics(Node)],
+                        terminate(?ERROR_CODE);
+                false -> ok
+            end;
+        {error, EpmdReason} ->
+            terminate("epmd error for host ~p: ~p (~s)~n",
+                      [NodeHost, EpmdReason,
+                       case EpmdReason of
+                           address -> "unable to establish tcp connection";
+                           _       -> inet:format_error(EpmdReason)
+                       end])
+    end.
+
 terminate(Fmt, Args) ->
     io:format("ERROR: " ++ Fmt ++ "~n", Args),
-    halt(1).
+    terminate(?ERROR_CODE).
+
+terminate(Status) ->
+    case os:type() of
+        {unix,  _} -> halt(Status);
+        {win32, _} -> init:stop(Status),
+                      receive
+                      after infinity -> ok
+                      end
+    end.

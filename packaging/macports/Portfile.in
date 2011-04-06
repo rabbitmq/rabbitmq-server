@@ -7,6 +7,8 @@ version		@VERSION@
 categories	net 
 maintainers	paperplanes.de:meyer rabbitmq.com:tonyg openmaintainer
 platforms	darwin
+supported_archs	noarch
+
 description	The RabbitMQ AMQP Server
 long_description	\
     RabbitMQ is an implementation of AMQP, the emerging standard for \
@@ -21,27 +23,25 @@ distfiles      ${name}-${version}${extract.suffix} \
                ${name}-generic-unix-${version}${extract.suffix}
 
 checksums \
-    ${name}-${version}${extract.suffix} md5 @md5-src@ \
-    ${name}-${version}${extract.suffix} sha1 @sha1-src@ \
-    ${name}-${version}${extract.suffix} rmd160 @rmd160-src@ \
-    ${name}-generic-unix-${version}${extract.suffix} md5 @md5-bin@ \
-    ${name}-generic-unix-${version}${extract.suffix} sha1 @sha1-bin@ \
-    ${name}-generic-unix-${version}${extract.suffix} rmd160 @rmd160-bin@
+    ${name}-${version}${extract.suffix} \
+        md5 @md5-src@ \
+        sha1 @sha1-src@ \
+        rmd160 @rmd160-src@ \
+    ${name}-generic-unix-${version}${extract.suffix} \
+        md5 @md5-bin@ \
+        sha1 @sha1-bin@ \
+        rmd160 @rmd160-bin@
 
 depends_lib	port:erlang
 depends_build	port:libxslt
 
-platform darwin 7 {
-    depends_build-append port:py25-simplejson
-    build.args      PYTHON=${prefix}/bin/python2.5
-}
 platform darwin 8 {
-    depends_build-append port:py25-simplejson
-    build.args      PYTHON=${prefix}/bin/python2.5
+    depends_build-append port:py26-simplejson
+    build.args      PYTHON=${prefix}/bin/python2.6
 }
 platform darwin 9 {
-    depends_build-append port:py25-simplejson
-    build.args      PYTHON=${prefix}/bin/python2.5
+    depends_build-append port:py26-simplejson
+    build.args      PYTHON=${prefix}/bin/python2.6
 }
 # no need for simplejson on Snow Leopard or higher
 
@@ -83,31 +83,28 @@ post-destroot {
     xinstall -d -g [existsgroup ${servergroup}] -m 775 ${destroot}${serverhome}
     xinstall -d -g [existsgroup ${servergroup}] -m 775 ${destroot}${mnesiadbdir}
 
-    reinplace -E "s:(/etc/rabbitmq/rabbitmq.conf):${prefix}\\1:g" \
+    reinplace -E "s:(/etc/rabbitmq/rabbitmq):${prefix}\\1:g" \
         ${realsbin}/rabbitmq-env
-    foreach var {CONFIG_FILE LOG_BASE MNESIA_BASE PIDS_FILE} {
+    foreach var {CONFIG_FILE LOG_BASE MNESIA_BASE} {
         reinplace -E "s:^($var)=/:\\1=${prefix}/:" \
-            ${realsbin}/rabbitmq-multi \
             ${realsbin}/rabbitmq-server \
             ${realsbin}/rabbitmqctl
     }
 
     xinstall -m 555 ${filespath}/rabbitmq-script-wrapper \
-                ${wrappersbin}/rabbitmq-multi
+                ${wrappersbin}/rabbitmq-server
 
     reinplace -E "s:MACPORTS_PREFIX/bin:${prefix}/bin:" \
-                ${wrappersbin}/rabbitmq-multi
+                ${wrappersbin}/rabbitmq-server
     reinplace -E "s:/usr/lib/rabbitmq/bin/:${prefix}/lib/rabbitmq/bin/:" \
-                ${wrappersbin}/rabbitmq-multi
+                ${wrappersbin}/rabbitmq-server
     reinplace -E "s:/var/lib/rabbitmq:${prefix}/var/lib/rabbitmq:" \
-                ${wrappersbin}/rabbitmq-multi
-    file copy ${wrappersbin}/rabbitmq-multi ${wrappersbin}/rabbitmq-server
-    file copy ${wrappersbin}/rabbitmq-multi ${wrappersbin}/rabbitmqctl
+                ${wrappersbin}/rabbitmq-server
+    file copy ${wrappersbin}/rabbitmq-server ${wrappersbin}/rabbitmqctl
 
-    file copy ${mansrc}/man1/rabbitmq-multi.1.gz  ${mandest}/man1/
-    file copy ${mansrc}/man1/rabbitmq-server.1.gz ${mandest}/man1/
-    file copy ${mansrc}/man1/rabbitmqctl.1.gz     ${mandest}/man1/
-    file copy ${mansrc}/man5/rabbitmq.conf.5.gz   ${mandest}/man5/
+    xinstall -m 644 -W ${mansrc}/man1 rabbitmq-server.1.gz rabbitmqctl.1.gz \
+        ${mandest}/man1/
+    xinstall -m 644 -W ${mansrc}/man5 rabbitmq-env.conf.5.gz ${mandest}/man5/
 }
 
 pre-install {

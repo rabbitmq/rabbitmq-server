@@ -1,32 +1,17 @@
-%%   The contents of this file are subject to the Mozilla Public License
-%%   Version 1.1 (the "License"); you may not use this file except in
-%%   compliance with the License. You may obtain a copy of the License at
-%%   http://www.mozilla.org/MPL/
+%% The contents of this file are subject to the Mozilla Public License
+%% Version 1.1 (the "License"); you may not use this file except in
+%% compliance with the License. You may obtain a copy of the License
+%% at http://www.mozilla.org/MPL/
 %%
-%%   Software distributed under the License is distributed on an "AS IS"
-%%   basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
-%%   License for the specific language governing rights and limitations
-%%   under the License.
+%% Software distributed under the License is distributed on an "AS IS"
+%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
+%% the License for the specific language governing rights and
+%% limitations under the License.
 %%
-%%   The Original Code is RabbitMQ.
+%% The Original Code is RabbitMQ.
 %%
-%%   The Initial Developers of the Original Code are LShift Ltd,
-%%   Cohesive Financial Technologies LLC, and Rabbit Technologies Ltd.
-%%
-%%   Portions created before 22-Nov-2008 00:00:00 GMT by LShift Ltd,
-%%   Cohesive Financial Technologies LLC, or Rabbit Technologies Ltd
-%%   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
-%%   Technologies LLC, and Rabbit Technologies Ltd.
-%%
-%%   Portions created by LShift Ltd are Copyright (C) 2007-2010 LShift
-%%   Ltd. Portions created by Cohesive Financial Technologies LLC are
-%%   Copyright (C) 2007-2010 Cohesive Financial Technologies
-%%   LLC. Portions created by Rabbit Technologies Ltd are Copyright
-%%   (C) 2007-2010 Rabbit Technologies Ltd.
-%%
-%%   All Rights Reserved.
-%%
-%%   Contributor(s): ______________________________________.
+%% The Initial Developer of the Original Code is VMware, Inc.
+%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_msg_store_gc).
@@ -42,6 +27,7 @@
 
 -record(state,
         { pending_no_readers,
+          on_action,
           msg_store_state
         }).
 
@@ -89,6 +75,7 @@ init([MsgStoreState]) ->
     ok = file_handle_cache:register_callback(?MODULE, set_maximum_since_use,
                                              [self()]),
     {ok, #state { pending_no_readers = dict:new(),
+                  on_action          = [],
                   msg_store_state    = MsgStoreState }, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
@@ -131,11 +118,15 @@ code_change(_OldVsn, State, _Extra) ->
 
 attempt_action(Action, Files,
                State = #state { pending_no_readers = Pending,
+                                on_action          = Thunks,
                                 msg_store_state    = MsgStoreState }) ->
     case [File || File <- Files,
                   rabbit_msg_store:has_readers(File, MsgStoreState)] of
-        []         -> do_action(Action, Files, MsgStoreState),
-                      State;
+        []         -> State #state {
+                        on_action = lists:filter(
+                                      fun (Thunk) -> not Thunk() end,
+                                      [do_action(Action, Files, MsgStoreState) |
+                                       Thunks]) };
         [File | _] -> Pending1 = dict:store(File, {Action, Files}, Pending),
                       State #state { pending_no_readers = Pending1 }
     end.

@@ -1,32 +1,17 @@
-%%   The contents of this file are subject to the Mozilla Public License
-%%   Version 1.1 (the "License"); you may not use this file except in
-%%   compliance with the License. You may obtain a copy of the License at
-%%   http://www.mozilla.org/MPL/
+%% The contents of this file are subject to the Mozilla Public License
+%% Version 1.1 (the "License"); you may not use this file except in
+%% compliance with the License. You may obtain a copy of the License
+%% at http://www.mozilla.org/MPL/
 %%
-%%   Software distributed under the License is distributed on an "AS IS"
-%%   basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
-%%   License for the specific language governing rights and limitations
-%%   under the License.
+%% Software distributed under the License is distributed on an "AS IS"
+%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
+%% the License for the specific language governing rights and
+%% limitations under the License.
 %%
-%%   The Original Code is RabbitMQ.
+%% The Original Code is RabbitMQ.
 %%
-%%   The Initial Developers of the Original Code are LShift Ltd,
-%%   Cohesive Financial Technologies LLC, and Rabbit Technologies Ltd.
-%%
-%%   Portions created before 22-Nov-2008 00:00:00 GMT by LShift Ltd,
-%%   Cohesive Financial Technologies LLC, or Rabbit Technologies Ltd
-%%   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
-%%   Technologies LLC, and Rabbit Technologies Ltd.
-%%
-%%   Portions created by LShift Ltd are Copyright (C) 2007-2010 LShift
-%%   Ltd. Portions created by Cohesive Financial Technologies LLC are
-%%   Copyright (C) 2007-2010 Cohesive Financial Technologies
-%%   LLC. Portions created by Rabbit Technologies Ltd are Copyright
-%%   (C) 2007-2010 Rabbit Technologies Ltd.
-%%
-%%   All Rights Reserved.
-%%
-%%   Contributor(s): ______________________________________.
+%% The Initial Developer of the Original Code is VMware, Inc.
+%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_channel_sup).
@@ -46,18 +31,22 @@
 -export_type([start_link_args/0]).
 
 -type(start_link_args() ::
-        {rabbit_types:protocol(), rabbit_net:socket(),
-         rabbit_channel:channel_number(), non_neg_integer(), pid(),
-         rabbit_access_control:username(), rabbit_types:vhost(), pid()}).
+        {'tcp', rabbit_net:socket(), rabbit_channel:channel_number(),
+         non_neg_integer(), pid(), rabbit_types:protocol(), rabbit_types:user(),
+         rabbit_types:vhost(), rabbit_framing:amqp_table(),
+         pid()} |
+        {'direct', rabbit_channel:channel_number(), pid(),
+         rabbit_types:protocol(), rabbit_types:user(), rabbit_types:vhost(),
+         rabbit_framing:amqp_table(), pid()}).
 
--spec(start_link/1 :: (start_link_args()) -> {'ok', pid(), pid()}).
+-spec(start_link/1 :: (start_link_args()) -> {'ok', pid(), {pid(), any()}}).
 
 -endif.
 
 %%----------------------------------------------------------------------------
 
-start_link({Protocol, Sock, Channel, FrameMax, ReaderPid, Username, VHost,
-            Collector}) ->
+start_link({tcp, Sock, Channel, FrameMax, ReaderPid, Protocol, User, VHost,
+            Capabilities, Collector}) ->
     {ok, SupPid} = supervisor2:start_link(?MODULE, []),
     {ok, WriterPid} =
         supervisor2:start_child(
@@ -69,16 +58,24 @@ start_link({Protocol, Sock, Channel, FrameMax, ReaderPid, Username, VHost,
         supervisor2:start_child(
           SupPid,
           {channel, {rabbit_channel, start_link,
-                     [Channel, ReaderPid, WriterPid, Username, VHost,
-                      Collector, start_limiter_fun(SupPid)]},
+                     [Channel, ReaderPid, WriterPid, ReaderPid, Protocol,
+                      User, VHost, Capabilities, Collector,
+                      start_limiter_fun(SupPid)]},
            intrinsic, ?MAX_WAIT, worker, [rabbit_channel]}),
-    {ok, FramingChannelPid} =
+    {ok, AState} = rabbit_command_assembler:init(Protocol),
+    {ok, SupPid, {ChannelPid, AState}};
+start_link({direct, Channel, ClientChannelPid, ConnPid, Protocol, User, VHost,
+            Capabilities, Collector}) ->
+    {ok, SupPid} = supervisor2:start_link(?MODULE, []),
+    {ok, ChannelPid} =
         supervisor2:start_child(
           SupPid,
-          {framing_channel, {rabbit_framing_channel, start_link,
-                             [ReaderPid, ChannelPid, Protocol]},
-           intrinsic, ?MAX_WAIT, worker, [rabbit_framing_channel]}),
-    {ok, SupPid, FramingChannelPid}.
+          {channel, {rabbit_channel, start_link,
+                     [Channel, ClientChannelPid, ClientChannelPid, ConnPid,
+                      Protocol, User, VHost, Capabilities, Collector,
+                      start_limiter_fun(SupPid)]},
+           intrinsic, ?MAX_WAIT, worker, [rabbit_channel]}),
+    {ok, SupPid, {ChannelPid, none}}.
 
 %%----------------------------------------------------------------------------
 

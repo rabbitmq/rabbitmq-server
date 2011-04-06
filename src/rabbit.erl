@@ -1,32 +1,17 @@
-%%   The contents of this file are subject to the Mozilla Public License
-%%   Version 1.1 (the "License"); you may not use this file except in
-%%   compliance with the License. You may obtain a copy of the License at
-%%   http://www.mozilla.org/MPL/
+%% The contents of this file are subject to the Mozilla Public License
+%% Version 1.1 (the "License"); you may not use this file except in
+%% compliance with the License. You may obtain a copy of the License
+%% at http://www.mozilla.org/MPL/
 %%
-%%   Software distributed under the License is distributed on an "AS IS"
-%%   basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
-%%   License for the specific language governing rights and limitations
-%%   under the License.
+%% Software distributed under the License is distributed on an "AS IS"
+%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
+%% the License for the specific language governing rights and
+%% limitations under the License.
 %%
-%%   The Original Code is RabbitMQ.
+%% The Original Code is RabbitMQ.
 %%
-%%   The Initial Developers of the Original Code are LShift Ltd,
-%%   Cohesive Financial Technologies LLC, and Rabbit Technologies Ltd.
-%%
-%%   Portions created before 22-Nov-2008 00:00:00 GMT by LShift Ltd,
-%%   Cohesive Financial Technologies LLC, or Rabbit Technologies Ltd
-%%   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
-%%   Technologies LLC, and Rabbit Technologies Ltd.
-%%
-%%   Portions created by LShift Ltd are Copyright (C) 2007-2010 LShift
-%%   Ltd. Portions created by Cohesive Financial Technologies LLC are
-%%   Copyright (C) 2007-2010 Cohesive Financial Technologies
-%%   LLC. Portions created by Rabbit Technologies Ltd are Copyright
-%%   (C) 2007-2010 Rabbit Technologies Ltd.
-%%
-%%   All Rights Reserved.
-%%
-%%   Contributor(s): ______________________________________.
+%% The Initial Developer of the Original Code is VMware, Inc.
+%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit).
@@ -42,7 +27,7 @@
 
 %%---------------------------------------------------------------------------
 %% Boot steps.
--export([maybe_insert_default_data/0]).
+-export([maybe_insert_default_data/0, boot_delegate/0]).
 
 -rabbit_boot_step({codec_correctness_check,
                    [{description, "codec correctness check"},
@@ -53,6 +38,7 @@
 
 -rabbit_boot_step({database,
                    [{mfa,         {rabbit_mnesia, init, []}},
+                    {requires,    file_handle_cache},
                     {enables,     external_infrastructure}]}).
 
 -rabbit_boot_step({file_handle_cache,
@@ -69,10 +55,10 @@
 -rabbit_boot_step({external_infrastructure,
                    [{description, "external infrastructure ready"}]}).
 
--rabbit_boot_step({rabbit_exchange_type_registry,
-                   [{description, "exchange type registry"},
+-rabbit_boot_step({rabbit_registry,
+                   [{description, "plugin registry"},
                     {mfa,         {rabbit_sup, start_child,
-                                   [rabbit_exchange_type_registry]}},
+                                   [rabbit_registry]}},
                     {requires,    external_infrastructure},
                     {enables,     kernel_ready}]}).
 
@@ -116,8 +102,7 @@
 
 -rabbit_boot_step({delegate_sup,
                    [{description, "cluster delegate"},
-                    {mfa,         {rabbit_sup, start_child,
-                                   [delegate_sup]}},
+                    {mfa,         {rabbit, boot_delegate, []}},
                     {requires,    kernel_ready},
                     {enables,     core_initialized}]}).
 
@@ -160,21 +145,20 @@
                     {requires,    routing_ready},
                     {enables,     networking}]}).
 
+-rabbit_boot_step({direct_client,
+                   [{mfa,        {rabbit_direct, boot, []}},
+                    {requires,   log_relay}]}).
+
 -rabbit_boot_step({networking,
                    [{mfa,         {rabbit_networking, boot, []}},
-                    {requires,    log_relay},
-                    {enables,     networking_listening}]}).
+                    {requires,    log_relay}]}).
 
--rabbit_boot_step({networking_listening,
-                   [{description, "network listeners available"}]}).
+-rabbit_boot_step({notify_cluster,
+                   [{description, "notify cluster nodes"},
+                    {mfa,         {rabbit_node_monitor, notify_cluster, []}},
+                    {requires,    networking}]}).
 
 %%---------------------------------------------------------------------------
-
--import(application).
--import(mnesia).
--import(lists).
--import(inet).
--import(gen_tcp).
 
 -include("rabbit_framing.hrl").
 -include("rabbit.hrl").
@@ -200,12 +184,16 @@
                {running_nodes, [node()]}]).
 -spec(log_location/1 :: ('sasl' | 'kernel') -> log_location()).
 
+-spec(maybe_insert_default_data/0 :: () -> 'ok').
+-spec(boot_delegate/0 :: () -> 'ok').
+
 -endif.
 
 %%----------------------------------------------------------------------------
 
 prepare() ->
-    ok = ensure_working_log_handlers().
+    ok = ensure_working_log_handlers(),
+    ok = rabbit_upgrade:maybe_upgrade_mnesia().
 
 start() ->
     try
@@ -228,7 +216,8 @@ stop_and_halt() ->
     ok.
 
 status() ->
-    [{running_applications, application:which_applications()}] ++
+    [{pid, list_to_integer(os:getpid())},
+     {running_applications, application:which_applications()}] ++
         rabbit_mnesia:status().
 
 rotate_logs(BinarySuffix) ->
@@ -245,18 +234,20 @@ rotate_logs(BinarySuffix) ->
 start(normal, []) ->
     case erts_version_check() of
         ok ->
+            ok = rabbit_mnesia:delete_previously_running_nodes(),
             {ok, SupPid} = rabbit_sup:start_link(),
+            true = register(rabbit, self()),
 
             print_banner(),
             [ok = run_boot_step(Step) || Step <- boot_steps()],
             io:format("~nbroker running~n"),
-
             {ok, SupPid};
         Error ->
             Error
     end.
 
 stop(_State) ->
+    ok = rabbit_mnesia:record_running_nodes(),
     terminated_ok = error_logger:delete_report_handler(rabbit_error_logger),
     ok = rabbit_alarm:stop(),
     ok = case rabbit_mnesia:is_clustered() of
@@ -379,7 +370,15 @@ home_dir() ->
         Other          -> Other
     end.
 
-%---------------------------------------------------------------------------
+config_files() ->
+    case init:get_argument(config) of
+        {ok, Files} -> [filename:absname(
+                          filename:rootname(File, ".config") ++ ".config") ||
+                           File <- Files];
+        error       -> []
+    end.
+
+%%---------------------------------------------------------------------------
 
 print_banner() ->
     {ok, Product} = application:get_key(id),
@@ -404,14 +403,24 @@ print_banner() ->
     Settings = [{"node",           node()},
                 {"app descriptor", app_location()},
                 {"home dir",       home_dir()},
+                {"config file(s)", config_files()},
                 {"cookie hash",    rabbit_misc:cookie_hash()},
                 {"log",            log_location(kernel)},
                 {"sasl log",       log_location(sasl)},
                 {"database dir",   rabbit_mnesia:dir()},
                 {"erlang version", erlang:system_info(version)}],
     DescrLen = 1 + lists:max([length(K) || {K, _V} <- Settings]),
-    Format = "~-" ++ integer_to_list(DescrLen) ++ "s: ~s~n",
-    lists:foreach(fun ({K, V}) -> io:format(Format, [K, V]) end, Settings),
+    Format = fun (K, V) ->
+                     io:format("~-" ++ integer_to_list(DescrLen) ++ "s: ~s~n",
+                               [K, V])
+             end,
+    lists:foreach(fun ({"config file(s)" = K, []}) ->
+                          Format(K, "(none)");
+                      ({"config file(s)" = K, [V0 | Vs]}) ->
+                          Format(K, V0), [Format("", V) || V <- Vs];
+                      ({K, V}) ->
+                          Format(K, V)
+                  end, Settings),
     io:nl().
 
 ensure_working_log_handlers() ->
@@ -451,6 +460,10 @@ ensure_working_log_handler(OldFHandler, NewFHandler, TTYHandler,
                      end
     end.
 
+boot_delegate() ->
+    {ok, Count} = application:get_env(rabbit, delegate_count),
+    rabbit_sup:start_child(delegate_sup, [Count]).
+
 maybe_insert_default_data() ->
     case rabbit_mnesia:is_db_empty() of
         true -> insert_default_data();
@@ -464,16 +477,16 @@ insert_default_data() ->
     {ok, DefaultVHost} = application:get_env(default_vhost),
     {ok, [DefaultConfigurePerm, DefaultWritePerm, DefaultReadPerm]} =
         application:get_env(default_permissions),
-    ok = rabbit_access_control:add_vhost(DefaultVHost),
-    ok = rabbit_access_control:add_user(DefaultUser, DefaultPass),
+    ok = rabbit_vhost:add(DefaultVHost),
+    ok = rabbit_auth_backend_internal:add_user(DefaultUser, DefaultPass),
     case DefaultAdmin of
-        true -> rabbit_access_control:set_admin(DefaultUser);
+        true -> rabbit_auth_backend_internal:set_admin(DefaultUser);
         _    -> ok
     end,
-    ok = rabbit_access_control:set_permissions(DefaultUser, DefaultVHost,
-                                               DefaultConfigurePerm,
-                                               DefaultWritePerm,
-                                               DefaultReadPerm),
+    ok = rabbit_auth_backend_internal:set_permissions(DefaultUser, DefaultVHost,
+                                                      DefaultConfigurePerm,
+                                                      DefaultWritePerm,
+                                                      DefaultReadPerm),
     ok.
 
 rotate_logs(File, Suffix, Handler) ->

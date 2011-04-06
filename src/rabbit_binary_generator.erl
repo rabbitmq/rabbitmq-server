@@ -1,44 +1,30 @@
-%%   The contents of this file are subject to the Mozilla Public License
-%%   Version 1.1 (the "License"); you may not use this file except in
-%%   compliance with the License. You may obtain a copy of the License at
-%%   http://www.mozilla.org/MPL/
+%% The contents of this file are subject to the Mozilla Public License
+%% Version 1.1 (the "License"); you may not use this file except in
+%% compliance with the License. You may obtain a copy of the License
+%% at http://www.mozilla.org/MPL/
 %%
-%%   Software distributed under the License is distributed on an "AS IS"
-%%   basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
-%%   License for the specific language governing rights and limitations
-%%   under the License.
+%% Software distributed under the License is distributed on an "AS IS"
+%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
+%% the License for the specific language governing rights and
+%% limitations under the License.
 %%
-%%   The Original Code is RabbitMQ.
+%% The Original Code is RabbitMQ.
 %%
-%%   The Initial Developers of the Original Code are LShift Ltd,
-%%   Cohesive Financial Technologies LLC, and Rabbit Technologies Ltd.
-%%
-%%   Portions created before 22-Nov-2008 00:00:00 GMT by LShift Ltd,
-%%   Cohesive Financial Technologies LLC, or Rabbit Technologies Ltd
-%%   are Copyright (C) 2007-2008 LShift Ltd, Cohesive Financial
-%%   Technologies LLC, and Rabbit Technologies Ltd.
-%%
-%%   Portions created by LShift Ltd are Copyright (C) 2007-2010 LShift
-%%   Ltd. Portions created by Cohesive Financial Technologies LLC are
-%%   Copyright (C) 2007-2010 Cohesive Financial Technologies
-%%   LLC. Portions created by Rabbit Technologies Ltd are Copyright
-%%   (C) 2007-2010 Rabbit Technologies Ltd.
-%%
-%%   All Rights Reserved.
-%%
-%%   Contributor(s): ______________________________________.
+%% The Initial Developer of the Original Code is VMware, Inc.
+%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_binary_generator).
 -include("rabbit_framing.hrl").
 -include("rabbit.hrl").
 
-% EMPTY_CONTENT_BODY_FRAME_SIZE, 8 = 1 + 2 + 4 + 1
-%  - 1 byte of frame type
-%  - 2 bytes of channel number
-%  - 4 bytes of frame payload length
-%  - 1 byte of payload trailer FRAME_END byte
-% See definition of check_empty_content_body_frame_size/0, an assertion called at startup.
+%% EMPTY_CONTENT_BODY_FRAME_SIZE, 8 = 1 + 2 + 4 + 1
+%%  - 1 byte of frame type
+%%  - 2 bytes of channel number
+%%  - 4 bytes of frame payload length
+%%  - 1 byte of payload trailer FRAME_END byte
+%% See definition of check_empty_content_body_frame_size/0,
+%% an assertion called at startup.
 -define(EMPTY_CONTENT_BODY_FRAME_SIZE, 8).
 
 -export([build_simple_method_frame/3,
@@ -48,8 +34,6 @@
 -export([check_empty_content_body_frame_size/0]).
 -export([ensure_content_encoded/2, clear_encoded_content/1]).
 -export([map_exception/3]).
-
--import(lists).
 
 %%----------------------------------------------------------------------------
 
@@ -78,8 +62,7 @@
 -spec(map_exception/3 :: (rabbit_channel:channel_number(),
                           rabbit_types:amqp_error() | any(),
                           rabbit_types:protocol()) ->
-                              {boolean(),
-                               rabbit_channel:channel_number(),
+                              {rabbit_channel:channel_number(),
                                rabbit_framing:amqp_method_record()}).
 
 -endif.
@@ -318,24 +301,21 @@ clear_encoded_content(Content = #content{}) ->
 map_exception(Channel, Reason, Protocol) ->
     {SuggestedClose, ReplyCode, ReplyText, FailedMethod} =
         lookup_amqp_exception(Reason, Protocol),
-    ShouldClose = SuggestedClose orelse (Channel == 0),
     {ClassId, MethodId} = case FailedMethod of
                               {_, _} -> FailedMethod;
                               none   -> {0, 0};
                               _      -> Protocol:method_id(FailedMethod)
                           end,
-    {CloseChannel, CloseMethod} =
-        case ShouldClose of
-            true  -> {0, #'connection.close'{reply_code = ReplyCode,
-                                             reply_text = ReplyText,
-                                             class_id = ClassId,
-                                             method_id = MethodId}};
-            false -> {Channel, #'channel.close'{reply_code = ReplyCode,
-                                                reply_text = ReplyText,
-                                                class_id = ClassId,
-                                                method_id = MethodId}}
-        end,
-    {ShouldClose, CloseChannel, CloseMethod}.
+    case SuggestedClose orelse (Channel == 0) of
+        true  -> {0, #'connection.close'{reply_code = ReplyCode,
+                                         reply_text = ReplyText,
+                                         class_id   = ClassId,
+                                         method_id  = MethodId}};
+        false -> {Channel, #'channel.close'{reply_code = ReplyCode,
+                                            reply_text = ReplyText,
+                                            class_id   = ClassId,
+                                            method_id  = MethodId}}
+    end.
 
 lookup_amqp_exception(#amqp_error{name        = Name,
                                   explanation = Expl,
@@ -346,8 +326,7 @@ lookup_amqp_exception(#amqp_error{name        = Name,
     {ShouldClose, Code, ExplBin, Method};
 lookup_amqp_exception(Other, Protocol) ->
     rabbit_log:warning("Non-AMQP exit reason '~p'~n", [Other]),
-    {ShouldClose, Code, Text} =
-        Protocol:lookup_amqp_exception(internal_error, Protocol),
+    {ShouldClose, Code, Text} = Protocol:lookup_amqp_exception(internal_error),
     {ShouldClose, Code, Text, none}.
 
 amqp_exception_explanation(Text, Expl) ->
