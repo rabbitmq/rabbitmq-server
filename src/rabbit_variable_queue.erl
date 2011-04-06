@@ -558,26 +558,33 @@ drain_confirmed(State = #vqstate { confirmed = C }) ->
     {gb_sets:to_list(C), State #vqstate { confirmed = gb_sets:new() }}.
 
 dropwhile(Pred, State) ->
-    {_OkOrEmpty, State1} = dropwhile1(Pred, State),
-    a(State1).
+    {DroppedMsgs, State1} = dropwhile1(Pred, [], State),
+    {DroppedMsgs, a(State1)}.
 
-dropwhile1(Pred, State) ->
-    internal_queue_out(
-      fun(MsgStatus = #msg_status { msg_props = MsgProps }, State1) ->
-              case Pred(MsgProps) of
-                  true ->
-                      {_, State2} = internal_fetch(false, MsgStatus, State1),
-                      dropwhile1(Pred, State2);
-                  false ->
-                      %% message needs to go back into Q4 (or maybe go
-                      %% in for the first time if it was loaded from
-                      %% Q3). Also the msg contents might not be in
-                      %% RAM, so read them in now
-                      {MsgStatus1, State2 = #vqstate { q4 = Q4 }} =
-                          read_msg(MsgStatus, State1),
-                      {ok, State2 #vqstate {q4 = queue:in_r(MsgStatus1, Q4) }}
-              end
-      end, State).
+dropwhile1(Pred, Acc, State) ->
+    case internal_queue_out(
+           fun(MsgStatus = #msg_status { msg_props = MsgProps }, State1) ->
+                   case Pred(MsgProps) of
+                       true ->
+                           {_, State2} = internal_fetch(false, MsgStatus,
+                                                        State1),
+                           dropwhile1(Pred, [MsgStatus | Acc], State2);
+                       false ->
+                           %% message needs to go back into Q4 (or maybe go
+                           %% in for the first time if it was loaded from
+                           %% Q3). Also the msg contents might not be in
+                           %% RAM, so read them in now
+                           {MsgStatus1, State2 = #vqstate { q4 = Q4 }} =
+                               read_msg(MsgStatus, State1),
+                           {ok, State2 #vqstate {
+                                  q4 = queue:in_r(MsgStatus1, Q4) }}
+                   end
+           end, State) of
+        {empty, StateR} -> {Acc, StateR};
+        {ok, StateR}    -> {Acc, StateR};
+        Result -> io:format("Got ~p~n", [Result])
+      end.
+
 
 fetch(AckRequired, State) ->
     internal_queue_out(
@@ -587,6 +594,7 @@ fetch(AckRequired, State) ->
               {MsgStatus1, State2} = read_msg(MsgStatus, State1),
               internal_fetch(AckRequired, MsgStatus1, State2)
       end, State).
+
 
 internal_queue_out(Fun, State = #vqstate { q4 = Q4 }) ->
     case queue:out(Q4) of

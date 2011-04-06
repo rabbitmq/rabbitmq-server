@@ -2168,10 +2168,10 @@ test_dropwhile(VQ0) ->
             end, VQ0, lists:seq(1, Count)),
 
     %% drop the first 5 messages
-    VQ2 = rabbit_variable_queue:dropwhile(
-            fun(#message_properties { expiry = Expiry }) ->
-                    Expiry =< 5
-            end, VQ1),
+    {DroppedMsgs, VQ2} = rabbit_variable_queue:dropwhile(
+                           fun(#message_properties { expiry = Expiry }) ->
+                                   Expiry =< 5
+                           end, VQ1),
 
     %% fetch five now
     VQ3 = lists:foldl(fun (_N, VQN) ->
