@@ -115,12 +115,15 @@ recover(XNames, QNames) ->
       none, rabbit_durable_route),
     ok.
 
-should_recover(#binding{destination = Dst = #resource{ kind = Kind }},
+should_recover(B = #binding{destination = Dst = #resource{ kind = Kind }},
                XNameSet, QNameSet) ->
-    sets:is_element(Dst, case Kind of
-                             exchange -> XNameSet;
-                             queue    -> QNameSet
-                         end).
+    case mnesia:read({rabbit_durable_route, B}) of
+        []  -> false; %% It disappeared between getting the list and here
+        [_] -> sets:is_element(Dst, case Kind of
+                                        exchange -> XNameSet;
+                                        queue    -> QNameSet
+                                    end)
+    end.
 
 exists(Binding) ->
     binding_action(
