@@ -227,7 +227,7 @@ set ERLANG_SERVICE_ARGUMENTS=!ERLANG_SERVICE_ARGUMENTS:"=\"!
 -stopaction "rabbit:stop_and_halt()." ^
 -sname !RABBITMQ_NODENAME! ^
 !CONSOLE_FLAG! ^
--comment "A performant, robust and scalable implementation of AMQP" ^
+-comment "A robust and scalable messaging broker" ^
 -args "!ERLANG_SERVICE_ARGUMENTS!" > NUL
 
 goto END
