@@ -293,27 +293,41 @@ assert_args_equivalence(#amqqueue{name = QueueName, arguments = Args},
     rabbit_misc:assert_args_equivalence(Args, RequiredArgs, QueueName,
                                         [<<"x-expires">>]).
 
-check_declare_arguments(QueueName, Args) ->
-    [case Fun(rabbit_misc:table_lookup(Args, Key)) of
+check_declare_arguments(QueueName = #resource{virtual_host = VHostPath},
+                        Args) ->
+    [case Fun(rabbit_misc:table_lookup(Args, Key), VHostPath) of
          ok             -> ok;
          {error, Error} -> rabbit_misc:protocol_error(
                              precondition_failed,
                              "invalid arg '~s' for ~s: ~w",
                              [Key, rabbit_misc:rs(QueueName), Error])
      end || {Key, Fun} <-
-                [{<<"x-expires">>,     fun check_integer_argument/1},
-                 {<<"x-message-ttl">>, fun check_integer_argument/1}]],
+                [{<<"x-expires">>,     fun check_integer_argument/2},
+                 {<<"x-message-ttl">>, fun check_integer_argument/2},
+                 {<<"x-dead-letter-exchange">>, fun check_exchange_argument/2}]],
     ok.
 
-check_integer_argument(undefined) ->
+check_integer_argument(undefined, _VHostPath) ->
     ok;
-check_integer_argument({Type, Val}) when Val > 0 ->
+check_integer_argument({Type, Val}, _VHostPath) when Val > 0 ->
     case lists:member(Type, ?INTEGER_ARG_TYPES) of
         true  -> ok;
         false -> {error, {unacceptable_type, Type}}
     end;
-check_integer_argument({_Type, Val}) ->
+check_integer_argument({_Type, Val}, _VHostPath) ->
     {error, {value_zero_or_less, Val}}.
+
+check_exchange_argument(undefined, _VHostPath) ->
+    ok;
+check_exchange_argument({longstr, Val}, VHostPath) ->
+    case rabbit_exchange:lookup(rabbit_misc:r(VHostPath, exchange, Val)) of
+        {ok, _Exchange}    -> ok;
+        {error, not_found} -> {error, {non_existent_exchange, Val}}
+    end;
+check_exchange_argument({Type, _Val}, _VHostPath) ->
+    {error, {unacceptable_type, Type}}.
+
+
 
 list(VHostPath) ->
     mnesia:dirty_match_object(
