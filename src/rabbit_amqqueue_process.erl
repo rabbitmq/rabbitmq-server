@@ -48,7 +48,8 @@
             stats_timer,
             msg_id_to_channel,
             ttl,
-            ttl_timer_ref
+            ttl_timer_ref,
+            dead_letter_exchange
            }).
 
 -record(consumer, {tag, ack_required}).
@@ -99,20 +100,21 @@ init(Q) ->
     process_flag(trap_exit, true),
     {ok, BQ} = application:get_env(backing_queue_module),
 
-    {ok, #q{q                   = Q#amqqueue{pid = self()},
-            exclusive_consumer  = none,
-            has_had_consumers   = false,
-            backing_queue       = BQ,
-            backing_queue_state = undefined,
-            active_consumers    = queue:new(),
-            blocked_consumers   = queue:new(),
-            expires             = undefined,
-            sync_timer_ref      = undefined,
-            rate_timer_ref      = undefined,
-            expiry_timer_ref    = undefined,
-            ttl                 = undefined,
-            stats_timer         = rabbit_event:init_stats_timer(),
-            msg_id_to_channel   = dict:new()}, hibernate,
+    {ok, #q{q                    = Q#amqqueue{pid = self()},
+            exclusive_consumer   = none,
+            has_had_consumers    = false,
+            backing_queue        = BQ,
+            backing_queue_state  = undefined,
+            active_consumers     = queue:new(),
+            blocked_consumers    = queue:new(),
+            expires              = undefined,
+            sync_timer_ref       = undefined,
+            rate_timer_ref       = undefined,
+            expiry_timer_ref     = undefined,
+            ttl                  = undefined,
+            dead_letter_exchange = undefined,
+            stats_timer          = rabbit_event:init_stats_timer(),
+            msg_id_to_channel    = dict:new()}, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
 terminate(shutdown,      State = #q{backing_queue = BQ}) ->
@@ -180,11 +182,18 @@ process_args(State = #q{q = #amqqueue{arguments = Arguments}}) ->
                             undefined    -> State1
                         end
                 end, State, [{<<"x-expires">>,     fun init_expires/2},
-                             {<<"x-message-ttl">>, fun init_ttl/2}]).
+                             {<<"x-message-ttl">>, fun init_ttl/2},
+                             {<<"x-dead-letter-exchange">>,
+                              fun init_dead_letter_exchange/2}]).
 
 init_expires(Expires, State) -> ensure_expiry_timer(State#q{expires = Expires}).
 
 init_ttl(TTL, State) -> drop_expired_messages(State#q{ttl = TTL}).
+
+init_dead_letter_exchange(DLE, State = #q{q = #amqqueue{
+                                            name = #resource{
+                                              virtual_host = VHostPath}}}) ->
+    State#q{dead_letter_exchange = rabbit_misc:r(VHostPath, exchange, DLE)}.
 
 terminate_shutdown(Fun, State) ->
     State1 = #q{backing_queue = BQ, backing_queue_state = BQS} =
