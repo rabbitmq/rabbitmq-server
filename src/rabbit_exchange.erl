@@ -83,21 +83,19 @@
 -define(INFO_KEYS, [name, type, durable, auto_delete, internal, arguments]).
 
 recover() ->
-    Xs = rabbit_misc:table_fold(
-           fun (X = #exchange{name = XName}, Acc) ->
+    Xs = rabbit_misc:table_map(
+           fun (X = #exchange{name = XName}) ->
                    case mnesia:read({rabbit_exchange, XName}) of
                        []  -> ok = mnesia:write(rabbit_exchange, X, write),
-                              [X | Acc];
-                       [_] -> Acc
+                              X;
+                       [_] -> none
                    end
            end,
-           fun ([], _Tx) ->
-                   [];
-               (Acc = [X | _], Tx) ->
-                   rabbit_exchange:callback(X, create, [Tx, X]),
-                   Acc
+           fun (none, _Tx) -> none;
+               (X,     Tx) -> rabbit_exchange:callback(X, create, [Tx, X]),
+                              X
            end,
-           [], rabbit_durable_exchange),
+           rabbit_durable_exchange),
     [XName || #exchange{name = XName} <- Xs].
 
 callback(#exchange{type = XType}, Fun, Args) ->
