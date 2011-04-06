@@ -39,7 +39,7 @@
 -export([ensure_ok/2]).
 -export([makenode/1, nodeparts/1, cookie_hash/0, tcp_name/3]).
 -export([upmap/2, map_in_order/2]).
--export([table_fold/3]).
+-export([table_fold/4]).
 -export([dirty_read_all/1, dirty_foreach_key/2, dirty_dump_log/1]).
 -export([read_term_file/1, write_term_file/2]).
 -export([append_file/2, ensure_parent_dirs_exist/1]).
@@ -148,7 +148,8 @@
         -> atom()).
 -spec(upmap/2 :: (fun ((A) -> B), [A]) -> [B]).
 -spec(map_in_order/2 :: (fun ((A) -> B), [A]) -> [B]).
--spec(table_fold/3 :: (fun ((any(), A) -> A), A, atom()) -> A).
+-spec(table_fold/4 :: (fun ((any(), A) -> A), fun ((A, boolean()) -> A), A,
+                                                  atom()) -> A).
 -spec(dirty_read_all/1 :: (atom()) -> [any()]).
 -spec(dirty_foreach_key/2 :: (fun ((any()) -> any()), atom())
                              -> 'ok' | 'aborted').
@@ -473,14 +474,15 @@ map_in_order(F, L) ->
 %% around the lot.
 %%
 %% We ignore entries that have been modified or removed.
-table_fold(F, Acc0, TableName) ->
+table_fold(Fun, PrePostCommitFun, Acc0, TableName) ->
     lists:foldl(
       fun (E, Acc) -> execute_mnesia_transaction(
                         fun () -> case mnesia:match_object(TableName, E, read) of
                                       [] -> Acc;
-                                      _  -> F(E, Acc)
+                                      _  -> Fun(E, Acc)
                                   end
-                        end)
+                        end,
+                        PrePostCommitFun)
       end, Acc0, dirty_read_all(TableName)).
 
 dirty_read_all(TableName) ->

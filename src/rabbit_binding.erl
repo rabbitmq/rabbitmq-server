@@ -95,45 +95,32 @@
                     routing_key, arguments]).
 
 recover(XNames, QNames) ->
-    XBs = rabbit_misc:execute_mnesia_transaction(
-            fun () ->
-                    XBs = recover_internal(XNames, QNames),
-                    callback_bindings(true, XBs),
-                    XBs
-            end),
-    callback_bindings(false, XBs),
-    ok.
-
-recover_internal(XNames, QNames) ->
     XNameSet = sets:from_list(XNames),
     QNameSet = sets:from_list(QNames),
-    lists:foldl(
-      fun (Route = #route{binding = B = #binding{source = Src}}, Acc) ->
+    rabbit_misc:table_fold(
+      fun (Route = #route{binding = B}, _Acc) ->
               case should_recover(B, XNameSet, QNameSet) of
                   true  -> ok = sync_transient_binding(
                                   Route, fun mnesia:write/3),
-                           rabbit_misc:dict_cons(Src, B, Acc);
-                  false -> Acc
+                           B;
+                  false -> none
               end
-      end, dict:new(),
-      mnesia:select(rabbit_durable_route, [{'$1', [], ['$1']}])).
+      end,
+      fun (none, _Tx) ->
+              ok;
+          (B = #binding{source = Src}, Tx) ->
+              {ok, X} = rabbit_exchange:lookup(Src),
+              rabbit_exchange:callback(X, add_bindings, [Tx, X, [B]])
+      end,
+      none, rabbit_durable_route),
+    ok.
 
-should_recover(B = #binding{destination = Dst = #resource{ kind = Kind }},
+should_recover(#binding{destination = Dst = #resource{ kind = Kind }},
                XNameSet, QNameSet) ->
-    case mnesia:read({rabbit_route, B}) of
-        [] -> sets:is_element(Dst, case Kind of
-                                       exchange -> XNameSet;
-                                       queue    -> QNameSet
-                                   end);
-        _  -> false
-    end.
-
-callback_bindings(Tx, XBs) ->
-    dict:map(fun (XName, Bindings) ->
-                     {ok, X} = rabbit_exchange:lookup(XName),
-                     rabbit_exchange:callback(X, add_bindings,
-                                              [Tx, X, Bindings])
-             end, XBs).
+    sets:is_element(Dst, case Kind of
+                             exchange -> XNameSet;
+                             queue    -> QNameSet
+                         end).
 
 exists(Binding) ->
     binding_action(
