@@ -142,14 +142,11 @@ add(Binding, InnerFun) ->
               case InnerFun(Src, Dst) of
                   ok ->
                       case mnesia:read({rabbit_route, B}) of
-                          []  -> ok = sync_binding(B, all_durable([Src, Dst]),
-                                                   fun mnesia:write/3),
-                                 fun (Tx) ->
-                                         ok = rabbit_exchange:callback(
-                                                Src, add_bindings,
-                                                [Tx, Src, [B]]),
-                                         rabbit_event:notify_if(
-                                           not Tx, binding_created, info(B))
+                          []  -> case mnesia:read({rabbit_durable_route, B}) of
+                                     []  -> add_internal(Src, Dst, B);
+                                     %% Binding exists, to queue on node which
+                                     %% is in the middle of starting
+                                     [_] -> rabbit_misc:const(not_found)
                                  end;
                           [_] -> fun rabbit_misc:const_ok/1
                       end;
@@ -157,6 +154,13 @@ add(Binding, InnerFun) ->
                       rabbit_misc:const(Err)
               end
       end).
+
+add_internal(Src, Dst, B) ->
+    ok = sync_binding(B, all_durable([Src, Dst]), fun mnesia:write/3),
+    fun (Tx) ->
+            ok = rabbit_exchange:callback(Src, add_bindings, [Tx, Src, [B]]),
+            rabbit_event:notify_if(not Tx, binding_created, info(B))
+    end.
 
 remove(Binding, InnerFun) ->
     binding_action(
