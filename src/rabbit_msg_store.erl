@@ -1891,7 +1891,10 @@ copy_messages(WorkList, InitOffset, FinalOffset, SourceHdl, DestinationHdl,
 
 force_recovery(BaseDir, Store) ->
     Dir = filename:join(BaseDir, atom_to_list(Store)),
-    ok = file:delete(filename:join(Dir, ?CLEAN_FILENAME)),
+    case file:delete(filename:join(Dir, ?CLEAN_FILENAME)) of
+        ok              -> ok;
+        {error, enoent} -> ok
+    end,
     recover_crashed_compactions(BaseDir),
     ok.
 
