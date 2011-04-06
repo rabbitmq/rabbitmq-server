@@ -91,7 +91,9 @@ recover() ->
                        [_] -> Acc
                    end
            end,
-           fun (Acc = [X | _], Tx) ->
+           fun ([], _Tx) ->
+                   [];
+               (Acc = [X | _], Tx) ->
                    rabbit_exchange:callback(X, create, [Tx, X]),
                    Acc
            end,
