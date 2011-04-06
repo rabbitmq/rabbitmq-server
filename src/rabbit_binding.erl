@@ -143,26 +143,30 @@ add(Binding, InnerFun) ->
               %% in general, we want to fail on that in preference to
               %% anything else
               case InnerFun(Src, Dst) of
-                  ok ->
-                      case mnesia:read({rabbit_route, B}) of
-                          []  -> case mnesia:read({rabbit_durable_route, B}) of
-                                     []  -> add_internal(Src, Dst, B);
-                                     %% Binding exists, to queue on node which
-                                     %% is in the middle of starting
-                                     [_] -> rabbit_misc:const(not_found)
-                                 end;
-                          [_] -> fun rabbit_misc:const_ok/1
-                      end;
-                  {error, _} = Err ->
-                      rabbit_misc:const(Err)
+                  ok               -> add(Src, Dst, B);
+                  {error, _} = Err -> rabbit_misc:const(Err)
               end
       end).
 
-add_internal(Src, Dst, B) ->
-    ok = sync_binding(B, all_durable([Src, Dst]), fun mnesia:write/3),
-    fun (Tx) ->
-            ok = rabbit_exchange:callback(Src, add_bindings, [Tx, Src, [B]]),
-            rabbit_event:notify_if(not Tx, binding_created, info(B))
+add(Src, Dst, B) ->
+    case mnesia:read({rabbit_route, B}) of
+        []  -> Durable = all_durable([Src, Dst]),
+               case (not Durable orelse
+                     mnesia:read({rabbit_durable_route, B}) =:= []) of
+                   true ->
+                       ok = sync_binding(B, Durable, fun mnesia:write/3),
+                       fun (Tx) ->
+                               ok = rabbit_exchange:callback(Src, add_bindings,
+                                                             [Tx, Src, [B]]),
+                               rabbit_event:notify_if(not Tx, binding_created,
+                                                      info(B))
+                       end;
+                   %% Binding exists, to queue on node which
+                   %% is in the middle of starting
+                   false ->
+                       rabbit_misc:const(not_found)
+               end;
+        [_] -> fun rabbit_misc:const_ok/1
     end.
 
 remove(Binding, InnerFun) ->
