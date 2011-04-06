@@ -301,10 +301,11 @@ check_declare_arguments(QueueName = #resource{virtual_host = VHostPath},
                              precondition_failed,
                              "invalid arg '~s' for ~s: ~w",
                              [Key, rabbit_misc:rs(QueueName), Error])
-     end || {Key, Fun} <-
-                [{<<"x-expires">>,     fun check_integer_argument/2},
-                 {<<"x-message-ttl">>, fun check_integer_argument/2},
-                 {<<"x-dead-letter-exchange">>, fun check_exchange_argument/2}]],
+     end ||
+        {Key, Fun} <-
+            [{<<"x-expires">>,     fun check_integer_argument/2},
+             {<<"x-message-ttl">>, fun check_integer_argument/2},
+             {<<"x-dead-letter-exchange">>, fun check_exchange_argument/2}]],
     ok.
 
 check_integer_argument(undefined, _VHostPath) ->
