@@ -521,8 +521,8 @@ handle_input({frame_payload, Type, Channel, PayloadSize},
              PayloadAndMarker, State) ->
     case PayloadAndMarker of
         <<Payload:PayloadSize/binary, ?FRAME_END>> ->
-            handle_frame(Type, Channel, Payload,
-                         switch_callback(State, frame_header, 7));
+            switch_callback(handle_frame(Type, Channel, Payload, State),
+                            frame_header, 7);
         _ ->
             throw({bad_payload, Type, Channel, PayloadSize, PayloadAndMarker})
     end;
