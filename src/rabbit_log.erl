@@ -82,22 +82,22 @@ error(Fmt) ->
 error(Fmt, Args) when is_list(Args) ->
     gen_server:cast(?SERVER, {error, Fmt, Args}).
 
-tap_trace_in(Message = #basic_message{exchange_name = #resource{
-                                        virtual_host = VHostBin,
-                                        name = XNameBin}}) ->
+tap_trace_in(Message = #basic_message{
+               exchange_name = #resource{virtual_host = VHostBin,
+                                         name         = XNameBin}}) ->
     check_trace(
       XNameBin,
       VHostBin,
       fun (TraceExchangeBin) ->
               {EncodedMetadata, Payload} = message_to_table(Message),
-              inject(TraceExchangeBin, VHostBin, <<"publish">>,
-                           XNameBin, EncodedMetadata, Payload)
+              publish(TraceExchangeBin, VHostBin, <<"publish">>, XNameBin,
+                      EncodedMetadata, Payload)
       end).
 
 tap_trace_out({#resource{name = QNameBin}, _QPid, _QMsgId, Redelivered,
-               Message = #basic_message{exchange_name = #resource{
-                                          virtual_host = VHostBin,
-                                          name = XNameBin}}},
+               Message = #basic_message{
+                 exchange_name = #resource{virtual_host = VHostBin,
+                                           name         = XNameBin}}},
               DeliveryTag,
               ConsumerTagOrNone) ->
     check_trace(
@@ -110,14 +110,12 @@ tap_trace_out({#resource{name = QNameBin}, _QPid, _QMsgId, Redelivered,
                          {<<"redelivered">>,  signedint, RedeliveredNum}]
                   ++ EncodedMetadata,
               Fields = case ConsumerTagOrNone of
-                           none ->
-                               Fields0;
-                           ConsumerTag ->
-                               [{<<"consumer_tag">>, longstr, ConsumerTag}
-                                | Fields0]
+                           none -> Fields0;
+                           CTag -> [{<<"consumer_tag">>, longstr, CTag} |
+                                    Fields0]
                        end,
-              inject(TraceExchangeBin, VHostBin, <<"deliver">>,
-                     QNameBin, Fields, Payload)
+              publish(TraceExchangeBin, VHostBin, <<"deliver">>, QNameBin,
+                      Fields, Payload)
       end).
 
 check_trace(XNameBin, VHostBin, F) ->
@@ -130,12 +128,10 @@ check_trace(XNameBin, VHostBin, F) ->
         ok               -> ok
     end.
 
-inject(TraceExchangeBin, VHostBin, RKPrefix, RKSuffix, Table, Payload) ->
-    rabbit_basic:publish(
-      rabbit_misc:r(VHostBin, exchange, TraceExchangeBin),
-      <<RKPrefix/binary, ".", RKSuffix/binary>>,
-      #'P_basic'{headers = Table},
-      Payload),
+publish(TraceExchangeBin, VHostBin, RKPrefix, RKSuffix, Table, Payload) ->
+    rabbit_basic:publish(rabbit_misc:r(VHostBin, exchange, TraceExchangeBin),
+                         <<RKPrefix/binary, ".", RKSuffix/binary>>,
+                         #'P_basic'{headers = Table}, Payload),
     ok.
 
 message_to_table(#basic_message{exchange_name = #resource{name = XName},
