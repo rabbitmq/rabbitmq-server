@@ -22,7 +22,7 @@
          requeue/3, len/1, is_empty/1, drain_confirmed/1, dropwhile/2,
          set_ram_duration_target/2, ram_duration/1,
          needs_idle_timeout/1, idle_timeout/1, handle_pre_hibernate/1,
-         status/1, invoke/3, is_duplicate/2, discard/3]).
+         status/1, invoke/3, is_duplicate/3, discard/3]).
 
 -export([start/1, stop/0]).
 
@@ -217,38 +217,59 @@ ack(AckTags, State = #state { gm                  = GM,
 tx_publish(Txn, Msg, MsgProps, ChPid,
            State = #state { gm                  = GM,
                             backing_queue       = BQ,
-                            backing_queue_state = BQS }) ->
-    ok = gm:broadcast(GM, {tx_publish, Txn, ChPid, MsgProps, Msg}),
-    BQS1 = BQ:tx_publish(Txn, Msg, MsgProps, ChPid, State),
-    State #state { backing_queue_state = BQS1 }.
+                            backing_queue_state = BQS,
+                            abandoned_txns      = AbandonedTxns }) ->
+    case sets:is_element(Txn, AbandonedTxns) of
+        true  -> State;
+        false -> ok = gm:broadcast(GM, {tx_publish, Txn, ChPid, MsgProps, Msg}),
+                 BQS1 = BQ:tx_publish(Txn, Msg, MsgProps, ChPid, State),
+                 State #state { backing_queue_state = BQS1 }
+    end.
 
 tx_ack(Txn, AckTags, State = #state { gm                  = GM,
                                       backing_queue       = BQ,
                                       backing_queue_state = BQS,
-                                      ack_msg_id          = AM }) ->
-    MsgIds = lists:foldl(
-               fun (AckTag, Acc) -> [dict:fetch(AckTag, AM) | Acc] end,
-               [], AckTags),
-    ok = gm:broadcast(GM, {tx_ack, Txn, MsgIds})
-    State.
+                                      ack_msg_id          = AM,
+                                      abandoned_txns      = AbandonedTxns }) ->
+    case sets:is_element(Txn, AbandonedTxns) of
+        true ->
+            State;
+        false ->
+            MsgIds = lists:foldl(
+                       fun (AckTag, Acc) -> [dict:fetch(AckTag, AM) | Acc] end,
+                       [], AckTags),
+            ok = gm:broadcast(GM, {tx_ack, Txn, MsgIds}),
+            State
+    end.
 
 tx_rollback(Txn, State = #state { gm                  = GM,
                                   backing_queue       = BQ,
-                                  backing_queue_state = BQS }) ->
-    ok = gm:confirmed_broadcast(GM, {tx_rollback, Txn}),
-    {AckTags, BQS1} = BQ:tx_rollback(Txn, BQS),
-    {AckTags, State #state { backing_queue_state = BQS1 }}.
+                                  backing_queue_state = BQS,
+                                  abandoned_txns      = AbandonedTxns }) ->
+    case sets:is_element(Txn, AbandonedTxns) of
+        true  -> {[], State};
+        false -> ok = gm:confirmed_broadcast(GM, {tx_rollback, Txn}),
+                 {AckTags, BQS1} = BQ:tx_rollback(Txn, BQS),
+                 {AckTags, State #state { backing_queue_state = BQS1 }}
+    end.
 
 tx_commit(Txn, PostCommitFun, MsgPropsFun,
           State = #state { gm                  = GM,
                            backing_queue       = BQ,
                            backing_queue_state = BQS,
                            ack_msg_id          = AM }) ->
-    ok = gm:confirmed_broadcast(GM, {tx_commit, Txn, MsgPropsFun}),
-    {AckTags, BQS1} = BQ:tx_commit(Txn, PostCommitFun, MsgPropsFun, BQS),
-    AM1 = lists:foldl(fun dict:erase/2, AM, AckTags),
-    {AckTags, State #state { backing_queue_state = BQS,
-                             ack_msg_id          = AM }}.
+    case sets:is_element(Txn, AbandonedTxns) of
+        true ->
+            %% Don't worry - the channel will explode as it'll still
+            %% try to commit on the old master.
+            {[], State};
+        false ->
+            ok = gm:confirmed_broadcast(GM, {tx_commit, Txn, MsgPropsFun}),
+            {AckTags, BQS1} = BQ:tx_commit(Txn, PostCommitFun, MsgPropsFun, BQS),
+            AM1 = lists:foldl(fun dict:erase/2, AM, AckTags),
+            {AckTags, State #state { backing_queue_state = BQS,
+                                     ack_msg_id          = AM }}
+    end.
 
 requeue(AckTags, MsgPropsFun, State = #state { gm                  = GM,
                                                backing_queue       = BQ,
@@ -291,7 +312,7 @@ invoke(Mod, Fun, State = #state { backing_queue       = BQ,
                                   backing_queue_state = BQS }) ->
     State #state { backing_queue_state = BQ:invoke(Mod, Fun, BQS) }.
 
-is_duplicate(Message = #basic_message { id = MsgId },
+is_duplicate(none, Message = #basic_message { id = MsgId },
              State = #state { seen_status         = SS,
                               backing_queue       = BQ,
                               backing_queue_state = BQS,
@@ -330,15 +351,34 @@ is_duplicate(Message = #basic_message { id = MsgId },
             {published, State #state { seen_status = dict:erase(MsgId, SS),
                                        confirmed = [MsgId | Confirmed] }};
         {ok, discarded} ->
-            {discarded, State #state { seen_status = dict:erase(MsgId, SS) }}
+            %% Don't erase from SS here because discard/2 is about to
+            %% be called and we need to be able to detect this case
+            {discarded, State}
+    end;
+is_duplicate(Txn, _Msg, State = #state { abandoned_txns = AbandonedTxns }) ->
+    %% There will be nothing in seen_status for any transactions that
+    %% are still in flight.
+    case sets:is_element(Txn, AbandonedTxns) of
+        true  -> {published, State};
+        false -> {false, State}
     end.
 
-discard(Msg = #basic_message {}, ChPid,
+discard(Msg = #basic_message { id = MsgId }, ChPid,
         State = #state { gm                  = GM,
                          backing_queue       = BQ,
-                         backing_queue_state = BQS }) ->
-    ok = gm:broadcast(GM, {discard, ChPid, Msg}),
-    State#state{backing_queue_state = BQ:discard(Msg, ChPid, BQS)}.
+                         backing_queue_state = BQS,
+                         seen_status         = SS }) ->
+    %% It's a massive error if we get told to discard something that's
+    %% already been published or published-and-confirmed. To do that
+    %% would require non FIFO access...
+    case dict:find(MsgId, SS) of
+        error ->
+            ok = gm:broadcast(GM, {discard, ChPid, Msg}),
+            State #state { backing_queue_state = BQ:discard(Msg, ChPid, BQS),
+                           seen_status         = dict:erase(MsgId, SS) };
+        discarded ->
+            State
+    end.
 
 maybe_store_acktag(undefined, _MsgId, AM) ->
     AM;

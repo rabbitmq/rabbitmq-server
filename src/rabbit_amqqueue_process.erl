@@ -523,7 +523,7 @@ attempt_delivery(Delivery = #delivery{txn        = none,
         immediately -> rabbit_channel:confirm(ChPid, [MsgSeqNo]);
         _           -> ok
     end,
-    case BQ:is_duplicate(Message, BQS) of
+    case BQ:is_duplicate(none, Message, BQS) of
         {false, BQS1} ->
             PredFun = fun (IsEmpty, _State) -> not IsEmpty end,
             DeliverFun =
@@ -561,7 +561,7 @@ attempt_delivery(Delivery = #delivery{txn     = Txn,
                                       message = Message},
                  State = #q{backing_queue = BQ, backing_queue_state = BQS}) ->
     Confirm = should_confirm_message(Delivery, State),
-    case BQ:is_duplicate(Message, BQS) of
+    case BQ:is_duplicate(Txn, Message, BQS) of
         {false, BQS1} ->
             store_ch_record((ch_record(ChPid))#cr{txn = Txn}),
             BQS2 = BQ:tx_publish(Txn, Message, ?BASE_MESSAGE_PROPERTIES, ChPid,

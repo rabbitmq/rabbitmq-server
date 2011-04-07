@@ -71,6 +71,7 @@
 -spec(handle_pre_hibernate/1 :: (state()) -> state()).
 -spec(status/1 :: (state()) -> [{atom(), any()}]).
 -spec(invoke/3 :: (atom(), fun ((atom(), A) -> A), state()) -> state()).
--spec(is_duplicate/2 :: (rabbit_types:basic_message(), state()) ->
+-spec(is_duplicate/3 ::
+        (rabbit_types:txn(), rabbit_types:basic_message(), state()) ->
                              {'false'|'published'|'discarded', state()}).
 -spec(discard/3 :: (rabbit_types:basic_message(), pid(), state()) -> state()).

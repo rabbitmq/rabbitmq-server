@@ -107,7 +107,7 @@ init([#amqqueue { name = QueueName } = Q]) ->
                   sender_queues       = dict:new(),
                   msg_id_ack          = dict:new(),
                   msg_id_status       = dict:new(),
-                  open_transactions   = sets:new()
+                  open_transactions   = dict:new()
                 }, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
@@ -157,8 +157,32 @@ handle_call({gm_deaths, Deaths}, From,
     end;
 
 handle_call({run_backing_queue, Mod, Fun}, _From, State) ->
-    reply(ok, run_backing_queue(Mod, Fun, State)).
+    reply(ok, run_backing_queue(Mod, Fun, State));
 
+handle_call({commit, Txn, ChPid}, From,
+            State = #state { open_transactions = OT }) ->
+    case dict:find(Txn, OT) of
+        error ->
+            %% curious. We've not received _anything_ about this txn
+            %% so far via gm!
+            OT1 = dict:store(Txn, {undefined, {committed, From}}, OT),
+            noreply(State #state { open_transactions = OT1 });
+        {ok, {committed, undefined}} ->
+            %% We've already finished via GM (our BQ has actually
+            %% replied back to us in the case of commit), so just
+            %% reply and tidy up. Note that because no one can every
+            %% consume from a slave, there are never going to be any
+            %% acks to return.
+            reply(ok, State #state { open_transactions = dict:erase(Txn, OT) });
+        {ok, {open, undefined}} ->
+            %% Save who we're from, but we're still waiting for the
+            %% commit to arrive via GM
+            OT1 = dict:store(Txn, {open, {committed, From}}, OT),
+            noreply(State #state { open_transactions = OT1 });
+        {ok, {abandoned, undefined}} ->
+            %% GM must have told us to roll back.
+            reply(ok, State #state { open_transactions = dict:erase(Txn, OT) })
+    end.
 
 handle_cast({run_backing_queue, Mod, Fun}, State) ->
     noreply(run_backing_queue(Mod, Fun, State));
@@ -192,7 +216,25 @@ handle_cast(update_ram_duration,
 
 handle_cast(sync_timeout, State) ->
     noreply(backing_queue_idle_timeout(
-              State #state { sync_timer_ref = undefined })).
+              State #state { sync_timer_ref = undefined }));
+
+handle_cast({rollback, Txn, ChPid},
+            State #state { open_transactions = OT }) ->
+    %% Will never see {'committed', _} or {_, 'abandoned'} or
+    %%  {_, {'committed', From}} here
+    case dict:find(Txn, OT) of
+        error ->
+            %% odd. We've not received anything from GM about this.
+            OT1 = dict:store(Txn, {undefined, abandoned}, OT),
+            noreply(State #state { open_transactions = OT1 });
+        {ok, {open, undefined}} ->
+            %% The rollback is yet to arrive via GM.
+            OT1 = dict:store(Txn, {open, abandoned}, OT),
+            noreply(State #state { open_transactions = OT1 });
+        {ok, {abandoned, undefined}} ->
+            %% GM has already rolled back. Tidy up.
+            noreply(State #state { open_transactions = dict:erase(Txn, OT) })
+    end.
 
 handle_info(timeout, State) ->
     noreply(backing_queue_idle_timeout(State));
@@ -370,9 +412,12 @@ promote_me(From, #state { q                   = Q,
     ok = gm:confirmed_broadcast(GM, heartbeat),
 
     %% Start by rolling back all open transactions
-
-    [ok = gm:confirmed_broadcast(GM, {tx_rollback, Txn})
-     || Txn <- sets:to_list(OT)],
+    BQS1 = lists:foldl(
+             fun (Txn, BQSN) ->
+                     ok = gm:confirmed_broadcast(GM, {tx_rollback, Txn}),
+                     {_AckTags, BQSN1} = BQ:tx_rollback(Txn, BQSN),
+                     BQSN1
+             end, BQS, dict:fetch_keys(OT)),
 
     %% We find all the messages that we've received from channels but
     %% not from gm, and if they're due to be enqueued on promotion
@@ -445,8 +490,7 @@ promote_me(From, #state { q                   = Q,
                    Status =:= published orelse Status =:= confirmed]),
 
     MasterState = rabbit_mirror_queue_master:promote_backing_queue_state(
-                    CPid, BQ, BQS, GM, SS),
-
+                    CPid, BQ, BQS1, GM, SS, OT),
 
     MTC = dict:from_list(
             [{MsgId, {ChPid, MsgSeqNo}} ||
@@ -516,7 +560,8 @@ stop_rate_timer(State = #state { rate_timer_ref = TRef }) ->
 maybe_enqueue_message(
   Delivery = #delivery { message    = #basic_message { id = MsgId },
                          msg_seq_no = MsgSeqNo,
-                         sender     = ChPid },
+                         sender     = ChPid,
+                         txn        = none },
   EnqueueOnPromotion,
   State = #state { sender_queues = SQ,
                    msg_id_status = MS }) ->
@@ -553,7 +598,11 @@ maybe_enqueue_message(
             %% We've already heard from GM that the msg is to be
             %% discarded. We won't see this again.
             State #state { msg_id_status = dict:erase(MsgId, MS) }
-    end.
+    end;
+maybe_enqueue_message(_Delivery, State) ->
+    %% In a txn. Txns are completely driven by gm for simplicity, so
+    %% we're not going to do anything here.
+    State.
 
 process_instruction(
   {publish, Deliver, ChPid, MsgProps, Msg = #basic_message { id = MsgId }},

@@ -175,12 +175,13 @@ behaviour_info(callbacks) ->
      %% the BQ to signal that it's already seen this message (and in
      %% what capacity - i.e. was it published previously or discarded
      %% previously) and thus the message should be dropped.
-     {is_duplicate, 2},
+     {is_duplicate, 3},
 
      %% Called to inform the BQ about messages which have reached the
      %% queue, but are not going to be further passed to BQ for some
-     %% reason. Note that this is not invoked for messages for which
-     %% BQ:is_duplicate/2 has already returned {true, BQS}.
+     %% reason. Note that this is may be invoked for messages for
+     %% which BQ:is_duplicate/2 has already returned {'published' |
+     %% 'discarded', BQS}.
      {discard, 3}
     ];
 behaviour_info(_Other) ->
