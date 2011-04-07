@@ -93,7 +93,7 @@ tap_trace_in(Message = #basic_message{exchange_name = #resource{
                            <<"publish">>, XNameBin, EncodedMetadata, Payload)
       end).
 
-tap_trace_out({#resource{name = QNameBin}, _QPid, QMsgId, Redelivered,
+tap_trace_out({#resource{name = QNameBin}, _QPid, _QMsgId, Redelivered,
                Message = #basic_message{exchange_name = #resource{
                                           virtual_host = VHostBin,
                                           name = XNameBin}}},
@@ -104,9 +104,8 @@ tap_trace_out({#resource{name = QNameBin}, _QPid, QMsgId, Redelivered,
       fun (TraceExchangeBin) ->
               RedeliveredNum = case Redelivered of true -> 1; false -> 0 end,
               {EncodedMetadata, Payload} = message_to_table(Message),
-              Fields0 = [{<<"delivery_tag">>,     signedint, DeliveryTag}, %% FIXME later
-                         {<<"queue_msg_number">>, signedint, QMsgId},
-                         {<<"redelivered">>,      signedint, RedeliveredNum}]
+              Fields0 = [{<<"delivery_tag">>, signedint, DeliveryTag}, %% FIXME later
+                         {<<"redelivered">>,  signedint, RedeliveredNum}]
                   ++ EncodedMetadata,
               Fields = case ConsumerTagOrNone of
                            none ->
