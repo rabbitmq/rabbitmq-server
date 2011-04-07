@@ -41,7 +41,9 @@ test_suites_coverage: prepare_tests
 	$$OK
 
 ## Starts a broker, configures users and runs the tests on the same node
-run_test_in_broker: start_test_broker_node unboot_broker
+run_test_in_broker:
+	$(MAKE) start_test_broker_node
+	$(MAKE) unboot_broker
 	OK=true && \
 	TMPFILE=$(MKTEMP) && \
 	{ $(MAKE) -C $(BROKER_DIR) run-node \
@@ -69,9 +71,11 @@ start_test_broker_node: boot_broker
 	sleep 1
 	- $(RABBITMQCTL) delete_user test_user_no_perm
 	$(RABBITMQCTL) add_user test_user_no_perm test_user_no_perm
+	sleep 1
 
 stop_test_broker_node:
-	- $(RABBITMQCTL) delete_user test_user_no_perm
+	sleep 1
+	$(RABBITMQCTL) delete_user test_user_no_perm
 	$(MAKE) unboot_broker
 
 boot_broker:
