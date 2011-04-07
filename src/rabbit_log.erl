@@ -175,7 +175,8 @@ message_to_table(#basic_message{exchange_name = #resource{name = XName},
                  {<<"app_id">>,           longstr,   AppId}]),
     {[{<<"exchange_name">>, longstr, XName},
       {<<"routing_key">>,   array,   [{longstr, K} || K <- RoutingKeys]},
-      {<<"headers">>,       table,   Headers1}],
+      {<<"headers">>,       table,   Headers1},
+      {<<"node">>,          longstr, list_to_binary(atom_to_list(node()))}],
      list_to_binary(lists:reverse(PFR))}.
 
 prune_undefined(Fields) ->
