@@ -88,10 +88,9 @@ tap_trace_in(Message = #basic_message{exchange_name = #resource{
     check_trace(
       VHostBin,
       fun (TraceExchangeBin) ->
-              EncodedMessage = message_to_table(Message),
+              {EncodedMetadata, Payload} = message_to_table(Message),
               maybe_inject(TraceExchangeBin, VHostBin, XNameBin,
-                           <<"publish">>, XNameBin,
-                           [{<<"message">>, table, EncodedMessage}])
+                           <<"publish">>, XNameBin, EncodedMetadata, Payload)
       end).
 
 tap_trace_out({#resource{name = QNameBin}, _QPid, QMsgId, Redelivered,
@@ -104,11 +103,11 @@ tap_trace_out({#resource{name = QNameBin}, _QPid, QMsgId, Redelivered,
       VHostBin,
       fun (TraceExchangeBin) ->
               RedeliveredNum = case Redelivered of true -> 1; false -> 0 end,
-              EncodedMessage = message_to_table(Message),
+              {EncodedMetadata, Payload} = message_to_table(Message),
               Fields0 = [{<<"delivery_tag">>,     signedint, DeliveryTag}, %% FIXME later
                          {<<"queue_msg_number">>, signedint, QMsgId},
-                         {<<"redelivered">>,      signedint, RedeliveredNum},
-                         {<<"message">>,          table,     EncodedMessage}],
+                         {<<"redelivered">>,      signedint, RedeliveredNum}]
+                  ++ EncodedMetadata,
               Fields = case ConsumerTagOrNone of
                            none ->
                                Fields0;
@@ -117,7 +116,7 @@ tap_trace_out({#resource{name = QNameBin}, _QPid, QMsgId, Redelivered,
                                 | Fields0]
                        end,
               maybe_inject(TraceExchangeBin, VHostBin, XNameBin,
-                           <<"deliver">>, QNameBin, Fields)
+                           <<"deliver">>, QNameBin, Fields, Payload)
       end).
 
 check_trace(VHostBin, F) ->
@@ -130,17 +129,16 @@ check_trace(VHostBin, F) ->
     end.
 
 maybe_inject(TraceExchangeBin, VHostBin, OriginalExchangeBin,
-             RKPrefix, RKSuffix, Table) ->
+             RKPrefix, RKSuffix, Table, Payload) ->
     if
         TraceExchangeBin =:= OriginalExchangeBin ->
             ok;
         true ->
-            ContentTypeBin = <<"application/x-amqp-table; version=0-9-1">>,
             rabbit_basic:publish(
               rabbit_misc:r(VHostBin, exchange, TraceExchangeBin),
               <<RKPrefix/binary, ".", RKSuffix/binary>>,
-              #'P_basic'{content_type = ContentTypeBin},
-              rabbit_binary_generator:generate_table(Table)),
+              #'P_basic'{headers = Table},
+              Payload),
             ok
     end.
 
@@ -176,10 +174,10 @@ message_to_table(#basic_message{exchange_name = #resource{name = XName},
                  {<<"type">>,             longstr,   Type},
                  {<<"user_id">>,          longstr,   UserId},
                  {<<"app_id">>,           longstr,   AppId}]),
-    [{<<"exchange_name">>, longstr, XName},
-     {<<"routing_key">>,   array,   [{longstr, K} || K <- RoutingKeys]},
-     {<<"headers">>,       table,   Headers1},
-     {<<"body">>,          longstr, list_to_binary(lists:reverse(PFR))}].
+    {[{<<"exchange_name">>, longstr, XName},
+      {<<"routing_key">>,   array,   [{longstr, K} || K <- RoutingKeys]},
+      {<<"headers">>,       table,   Headers1}],
+     list_to_binary(lists:reverse(PFR))}.
 
 prune_undefined(Fields) ->
     [F || F = {_, _, Value} <- Fields,
