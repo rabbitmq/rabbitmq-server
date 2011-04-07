@@ -106,7 +106,7 @@ tap_trace_out({#resource{name = QNameBin}, _QPid, _QMsgId, Redelivered,
       fun (TraceExchangeBin) ->
               RedeliveredNum = case Redelivered of true -> 1; false -> 0 end,
               {EncodedMetadata, Payload} = message_to_table(Message),
-              Fields0 = [{<<"delivery_tag">>, signedint, DeliveryTag}, %% FIXME later
+              Fields0 = [{<<"delivery_tag">>, signedint, DeliveryTag},
                          {<<"redelivered">>,  signedint, RedeliveredNum}]
                   ++ EncodedMetadata,
               Fields = case ConsumerTagOrNone of
