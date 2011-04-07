@@ -26,7 +26,7 @@
 -export([debug/1, debug/2, message/4, info/1, info/2,
          warning/1, warning/2, error/1, error/2]).
 
--export([tap_trace_in/2, tap_trace_out/3]).
+-export([tap_trace_in/1, tap_trace_out/3]).
 
 -include("rabbit.hrl").
 -include("rabbit_framing.hrl").
@@ -84,21 +84,14 @@ error(Fmt, Args) when is_list(Args) ->
 
 tap_trace_in(Message = #basic_message{exchange_name = #resource{
                                         virtual_host = VHostBin,
-                                        name = XNameBin}},
-             QPids) ->
+                                        name = XNameBin}}) ->
     check_trace(
       VHostBin,
       fun (TraceExchangeBin) ->
-              QInfos = [rabbit_amqqueue:info(#amqqueue{pid = P}, [name]) ||
-                           P <- QPids],
-              QNames = [binary_to_list(N) ||
-                           [{name, #resource{name = N}}] <- QInfos],
-              QNamesStr = list_to_binary(string:join(QNames, ",")),
               EncodedMessage = message_to_table(Message),
               maybe_inject(TraceExchangeBin, VHostBin, XNameBin,
                            <<"publish">>, XNameBin,
-                           [{<<"queue_names">>, longstr, QNamesStr},
-                            {<<"message">>, table, EncodedMessage}])
+                           [{<<"message">>, table, EncodedMessage}])
       end).
 
 tap_trace_out({#resource{name = QNameBin}, _QPid, QMsgId, Redelivered,

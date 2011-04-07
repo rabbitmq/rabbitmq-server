@@ -604,6 +604,7 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
         end,
     case rabbit_basic:message(ExchangeName, RoutingKey, DecodedContent) of
         {ok, Message} ->
+            rabbit_log:tap_trace_in(Message),
             {RoutingRes, DeliveredQPids} =
                 rabbit_exchange:publish(
                   Exchange,
@@ -612,8 +613,6 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
             State2 = process_routing_result(RoutingRes, DeliveredQPids,
                                             ExchangeName, MsgSeqNo, Message,
                                             State1),
-            %% TODO is this in the right place?
-            rabbit_log:tap_trace_in(Message, DeliveredQPids),
             maybe_incr_stats([{ExchangeName, 1} |
                               [{{QPid, ExchangeName}, 1} ||
                                   QPid <- DeliveredQPids]], publish, State2),
