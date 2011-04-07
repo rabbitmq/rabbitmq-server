@@ -91,8 +91,9 @@ tap_trace_in(Message = #basic_message{exchange_name = #resource{
       fun (TraceExchangeBin) ->
               QInfos = [rabbit_amqqueue:info(#amqqueue{pid = P}, [name]) ||
                            P <- QPids],
-              QNames = [N || [{name, #resource{name = N}}] <- QInfos],
-              QNamesStr = list_to_binary(rabbit_misc:intersperse(",", QNames)),
+              QNames = [binary_to_list(N) ||
+                           [{name, #resource{name = N}}] <- QInfos],
+              QNamesStr = list_to_binary(string:join(QNames, ",")),
               EncodedMessage = message_to_table(Message),
               maybe_inject(TraceExchangeBin, VHostBin, XNameBin,
                            <<"publish">>, XNameBin,
@@ -141,12 +142,11 @@ maybe_inject(TraceExchangeBin, VHostBin, OriginalExchangeBin,
         TraceExchangeBin =:= OriginalExchangeBin ->
             ok;
         true ->
-            rabbit_exchange:simple_publish(
-              false,
-              false,
+            ContentTypeBin = <<"application/x-amqp-table; version=0-9-1">>,
+            rabbit_basic:publish(
               rabbit_misc:r(VHostBin, exchange, TraceExchangeBin),
               <<RKPrefix/binary, ".", RKSuffix/binary>>,
-              <<"application/x-amqp-table; version=0-8">>,
+              #'P_basic'{content_type = ContentTypeBin},
               rabbit_binary_generator:generate_table(Table)),
             ok
     end.
@@ -169,7 +169,7 @@ message_to_table(#basic_message{exchange_name = #resource{name = XName},
                                      app_id           = AppId},
              payload_fragments_rev = PFR} =
         rabbit_binary_parser:ensure_content_decoded(Content),
-    Headers = prune_undefined(
+    Headers1 = prune_undefined(
                 [{<<"content_type">>,     longstr,   ContentType},
                  {<<"content_encoding">>, longstr,   ContentEncoding},
                  {<<"headers">>,          table,     Headers},
@@ -185,7 +185,7 @@ message_to_table(#basic_message{exchange_name = #resource{name = XName},
                  {<<"app_id">>,           longstr,   AppId}]),
     [{<<"exchange_name">>, longstr, XName},
      {<<"routing_key">>,   array,   [{longstr, K} || K <- RoutingKeys]},
-     {<<"headers">>,       table,   Headers},
+     {<<"headers">>,       table,   Headers1},
      {<<"body">>,          longstr, list_to_binary(lists:reverse(PFR))}].
 
 prune_undefined(Fields) ->
