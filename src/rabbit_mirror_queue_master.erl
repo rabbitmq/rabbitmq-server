@@ -239,7 +239,8 @@ tx_ack(Txn, AckTags, State = #state { gm                  = GM,
                        fun (AckTag, Acc) -> [dict:fetch(AckTag, AM) | Acc] end,
                        [], AckTags),
             ok = gm:broadcast(GM, {tx_ack, Txn, MsgIds}),
-            State
+            BQS1 = BQ:tx_ack(Txn, AckTags, BQS),
+            State #state { backing_queue_state = BQS1 }
     end.
 
 tx_rollback(Txn, State = #state { gm                  = GM,
@@ -248,8 +249,8 @@ tx_rollback(Txn, State = #state { gm                  = GM,
                                   abandoned_txns      = AbandonedTxns }) ->
     case sets:is_element(Txn, AbandonedTxns) of
         true  -> {[], State};
-        false -> ok = gm:confirmed_broadcast(GM, {tx_rollback, Txn}),
-                 {AckTags, BQS1} = BQ:tx_rollback(Txn, BQS),
+        false -> {AckTags, BQS1} = BQ:tx_rollback(Txn, BQS),
+                 ok = gm:confirmed_broadcast(GM, {tx_rollback, Txn}),
                  {AckTags, State #state { backing_queue_state = BQS1 }}
     end.
 
@@ -264,9 +265,14 @@ tx_commit(Txn, PostCommitFun, MsgPropsFun,
             %% try to commit on the old master.
             {[], State};
         false ->
-            ok = gm:confirmed_broadcast(GM, {tx_commit, Txn, MsgPropsFun}),
             {AckTags, BQS1} = BQ:tx_commit(Txn, PostCommitFun, MsgPropsFun, BQS),
-            AM1 = lists:foldl(fun dict:erase/2, AM, AckTags),
+            {MsgIds, AM1} = lists:foldl(
+                              fun (AckTag, {MsgIdsN, AMN}) ->
+                                      MsgId = dict:fetch(AckTag, AMN),
+                                      {[MsgId|MsgIdsN], dict:erase(AckTag, AMN)}
+                              end, {[], AM}, AckTags),
+            ok = gm:confirmed_broadcast(
+                   GM, {tx_commit, Txn, MsgPropsFun, MsgIds}),
             {AckTags, State #state { backing_queue_state = BQS,
                                      ack_msg_id          = AM }}
     end.
