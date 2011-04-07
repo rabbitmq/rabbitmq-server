@@ -86,11 +86,12 @@ tap_trace_in(Message = #basic_message{exchange_name = #resource{
                                         virtual_host = VHostBin,
                                         name = XNameBin}}) ->
     check_trace(
+      XNameBin,
       VHostBin,
       fun (TraceExchangeBin) ->
               {EncodedMetadata, Payload} = message_to_table(Message),
-              maybe_inject(TraceExchangeBin, VHostBin, XNameBin,
-                           <<"publish">>, XNameBin, EncodedMetadata, Payload)
+              inject(TraceExchangeBin, VHostBin, <<"publish">>,
+                           XNameBin, EncodedMetadata, Payload)
       end).
 
 tap_trace_out({#resource{name = QNameBin}, _QPid, _QMsgId, Redelivered,
@@ -100,6 +101,7 @@ tap_trace_out({#resource{name = QNameBin}, _QPid, _QMsgId, Redelivered,
               DeliveryTag,
               ConsumerTagOrNone) ->
     check_trace(
+      XNameBin,
       VHostBin,
       fun (TraceExchangeBin) ->
               RedeliveredNum = case Redelivered of true -> 1; false -> 0 end,
@@ -114,32 +116,27 @@ tap_trace_out({#resource{name = QNameBin}, _QPid, _QMsgId, Redelivered,
                                [{<<"consumer_tag">>, longstr, ConsumerTag}
                                 | Fields0]
                        end,
-              maybe_inject(TraceExchangeBin, VHostBin, XNameBin,
-                           <<"deliver">>, QNameBin, Fields, Payload)
+              inject(TraceExchangeBin, VHostBin, <<"deliver">>,
+                     QNameBin, Fields, Payload)
       end).
 
-check_trace(VHostBin, F) ->
+check_trace(XNameBin, VHostBin, F) ->
     case catch case application:get_env(rabbit, {trace_exchange, VHostBin}) of
                    undefined              -> ok;
+                   {ok, XNameBin}         -> ok;
                    {ok, TraceExchangeBin} -> F(TraceExchangeBin)
                end of
         {'EXIT', Reason} -> info("Trace tap died with reason ~p~n", [Reason]);
         ok               -> ok
     end.
 
-maybe_inject(TraceExchangeBin, VHostBin, OriginalExchangeBin,
-             RKPrefix, RKSuffix, Table, Payload) ->
-    if
-        TraceExchangeBin =:= OriginalExchangeBin ->
-            ok;
-        true ->
-            rabbit_basic:publish(
-              rabbit_misc:r(VHostBin, exchange, TraceExchangeBin),
-              <<RKPrefix/binary, ".", RKSuffix/binary>>,
-              #'P_basic'{headers = Table},
-              Payload),
-            ok
-    end.
+inject(TraceExchangeBin, VHostBin, RKPrefix, RKSuffix, Table, Payload) ->
+    rabbit_basic:publish(
+      rabbit_misc:r(VHostBin, exchange, TraceExchangeBin),
+      <<RKPrefix/binary, ".", RKSuffix/binary>>,
+      #'P_basic'{headers = Table},
+      Payload),
+    ok.
 
 message_to_table(#basic_message{exchange_name = #resource{name = XName},
                                 routing_keys = RoutingKeys,
