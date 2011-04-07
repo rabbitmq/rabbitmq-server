@@ -18,7 +18,7 @@
 -include("rabbit.hrl").
 
 -export([is_ssl/1, ssl_info/1, controlling_process/2, getstat/2,
-         async_recv/3, port_command/2, setopts/2, send/2, close/1,
+         recv/1, async_recv/3, port_command/2, setopts/2, send/2, close/1,
          sockname/1, peername/1, peercert/1]).
 
 %%---------------------------------------------------------------------------
@@ -42,6 +42,9 @@
 -spec(getstat/2 ::
         (socket(), [stat_option()])
         -> ok_val_or_error([{stat_option(), integer()}])).
+-spec(recv/1 :: (socket()) ->
+                     {'data', [char()] | binary()} | 'closed' |
+                     rabbit_types:error(any()) | {'other', any()}).
 -spec(async_recv/3 ::
         (socket(), integer(), timeout()) -> rabbit_types:ok(any())).
 -spec(port_command/2 :: (socket(), iolist()) -> 'true').
@@ -82,6 +85,23 @@ getstat(Sock, Stats) when ?IS_SSL(Sock) ->
     inet:getstat(Sock#ssl_socket.tcp, Stats);
 getstat(Sock, Stats) when is_port(Sock) ->
     inet:getstat(Sock, Stats).
+
+recv(Sock) when ?IS_SSL(Sock) ->
+    S = Sock#ssl_socket.ssl,
+    receive
+        {ssl, S, Data}         -> {data, Data};
+        {ssl_closed, S}        -> closed;
+        {ssl_error, S, Reason} -> {error, Reason};
+        Other                  -> {other, Other}
+    end;
+recv(Sock) ->
+    S = Sock,
+    receive
+        {tcp, S, Data}         -> {data, Data};
+        {tcp_closed, S}        -> closed;
+        {tcp_error, S, Reason} -> {error, Reason};
+        Other                  -> {other, Other}
+    end.
 
 async_recv(Sock, Length, Timeout) when ?IS_SSL(Sock) ->
     Pid = self(),
