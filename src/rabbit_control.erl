@@ -282,17 +282,18 @@ action(list_consumers, Node, _Args, Opts, Inform) ->
         Other             -> Other
     end;
 
-action(set_env, Node, [VarStr, TermStr], _Opts, Inform) ->
-    Inform("Setting control variable ~s for node ~p to ~s", [VarStr, Node, TermStr]),
-    rpc_call(Node, application, set_env, [rabbit, parse_term(VarStr), parse_term(TermStr)]);
+action(set_env, Node, [Var, Term], _Opts, Inform) ->
+    Inform("Setting control variable ~s for node ~p to ~s", [Var, Node, Term]),
+    rpc_call(Node, application, set_env, [rabbit, parse(Var), parse(Term)]);
 
-action(get_env, Node, [VarStr], _Opts, Inform) ->
-    Inform("Getting control variable ~s for node ~p", [VarStr, Node]),
-    io:format("~p~n", [rpc_call(Node, application, get_env, [rabbit, parse_term(VarStr)])]);
+action(get_env, Node, [Var], _Opts, Inform) ->
+    Inform("Getting control variable ~s for node ~p", [Var, Node]),
+    Val = rpc_call(Node, application, get_env, [rabbit, parse(Var)]),
+    io:format("~p~n", [Val]);
 
-action(unset_env, Node, [VarStr], _Opts, Inform) ->
-    Inform("Clearing control variable ~s for node ~p", [VarStr, Node]),
-    rpc_call(Node, application, unset_env, [rabbit, parse_term(VarStr)]);
+action(unset_env, Node, [Var], _Opts, Inform) ->
+    Inform("Clearing control variable ~s for node ~p", [Var, Node]),
+    rpc_call(Node, application, unset_env, [rabbit, parse(Var)]);
 
 action(set_permissions, Node, [Username, CPerm, WPerm, RPerm], Opts, Inform) ->
     VHost = proplists:get_value(?VHOST_OPT, Opts),
@@ -337,7 +338,7 @@ default_if_empty(List, Default) when is_list(List) ->
        true       -> [list_to_atom(X) || X <- List]
     end.
 
-parse_term(Str) ->
+parse(Str) ->
     {ok, Tokens, _} = erl_scan:string(Str ++ "."),
     {ok, Term} = erl_parse:parse_term(Tokens),
     Term.
