@@ -22,7 +22,7 @@
          requeue/3, len/1, is_empty/1, drain_confirmed/1, dropwhile/2,
          set_ram_duration_target/2, ram_duration/1,
          needs_idle_timeout/1, idle_timeout/1, handle_pre_hibernate/1,
-         status/1, invoke/3, validate_message/2]).
+         status/1, invoke/3, is_duplicate/2]).
 
 -export([start/1, stop/0]).
 
@@ -274,11 +274,11 @@ invoke(Mod, Fun, State = #state { backing_queue       = BQ,
                                   backing_queue_state = BQS }) ->
     State #state { backing_queue_state = BQ:invoke(Mod, Fun, BQS) }.
 
-validate_message(Message = #basic_message { id = MsgId },
-                 State = #state { seen_status         = SS,
-                                  backing_queue       = BQ,
-                                  backing_queue_state = BQS,
-                                  confirmed           = Confirmed }) ->
+is_duplicate(Message = #basic_message { id = MsgId },
+             State = #state { seen_status         = SS,
+                              backing_queue       = BQ,
+                              backing_queue_state = BQS,
+                              confirmed           = Confirmed }) ->
     %% Here, we need to deal with the possibility that we're about to
     %% receive a message that we've already seen when we were a slave
     %% (we received it via gm). Thus if we do receive such message now
@@ -297,10 +297,10 @@ validate_message(Message = #basic_message { id = MsgId },
             %% confirmation is waiting. amqqueue_process will have, in
             %% its msg_id_to_channel mapping, the entry for dealing
             %% with the confirm when that comes back in (it's added
-            %% immediately prior to calling validate_message). The msg
-            %% is invalid. We will not see this again, nor will we be
+            %% immediately after calling is_duplicate). The msg is
+            %% invalid. We will not see this again, nor will we be
             %% further involved in confirming this message, so erase.
-            {invalid, State #state { seen_status = dict:erase(MsgId, SS) }};
+            {true, State #state { seen_status = dict:erase(MsgId, SS) }};
         {ok, confirmed} ->
             %% It got published when we were a slave via gm, and
             %% confirmed some time after that (maybe even after
@@ -309,7 +309,7 @@ validate_message(Message = #basic_message { id = MsgId },
             %% msg_seq_no was (and thus confirm as a slave). So we
             %% need to confirm now. As above, amqqueue_process will
             %% have the entry for the msg_id_to_channel mapping added
-            %% immediately prior to calling validate_message/2.
-            {invalid, State #state { seen_status = dict:erase(MsgId, SS),
-                                     confirmed = [MsgId | Confirmed] }}
+            %% immediately after calling is_duplicate/2.
+            {true, State #state { seen_status = dict:erase(MsgId, SS),
+                                  confirmed = [MsgId | Confirmed] }}
     end.

@@ -171,8 +171,10 @@ behaviour_info(callbacks) ->
      %% components need to pass functions into the backing queue.
      {invoke, 3},
 
-     %% TODO: document me
-     {validate_message, 2}
+     %% Called prior to a publish or publish_delivered call. Allows
+     %% the BQ to signal that it's already seen this message and thus
+     %% the message should be dropped.
+     {is_duplicate, 2}
     ];
 behaviour_info(_Other) ->
     undefined.

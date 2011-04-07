@@ -523,12 +523,17 @@ attempt_delivery(Delivery = #delivery{txn        = none,
         immediately -> rabbit_channel:confirm(ChPid, [MsgSeqNo]);
         _           -> ok
     end,
-    case BQ:validate_message(Message, BQS) of
-        {invalid, BQS1} ->
-            %% if the message is invalid, we pretend it was delivered
-            %% fine
+    case BQ:is_duplicate(Message, BQS) of
+        {true, BQS1} ->
+            %% if the message has previously been seen by the BQ then
+            %% it must have been seen under the same circumstances as
+            %% now: i.e. if it is now a deliver_immediately then it
+            %% must have been before. Consequently, if the BQ has seen
+            %% it before then it's safe to assume it's been delivered
+            %% (i.e. the only thing that cares about that is
+            %% deliver_immediately).
             {true, Confirm, State#q{backing_queue_state = BQS1}};
-        {valid, BQS1} ->
+        {false, BQS1} ->
             PredFun = fun (IsEmpty, _State) -> not IsEmpty end,
             DeliverFun =
                 fun (AckRequired, false,
@@ -555,10 +560,10 @@ attempt_delivery(Delivery = #delivery{txn     = Txn,
                                       message = Message},
                  State = #q{backing_queue = BQ, backing_queue_state = BQS}) ->
     Confirm = should_confirm_message(Delivery, State),
-    case BQ:validate_message(Message, BQS) of
-        {invalid, BQS1} ->
+    case BQ:is_duplicate(Message, BQS) of
+        {true, BQS1} ->
             {true, Confirm, State#q{backing_queue_state = BQS1}};
-        {valid, BQS1} ->
+        {false, BQS1} ->
             store_ch_record((ch_record(ChPid))#cr{txn = Txn}),
             BQS2 = BQ:tx_publish(Txn, Message, ?BASE_MESSAGE_PROPERTIES, ChPid,
                                  BQS1),

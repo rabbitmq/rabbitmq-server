@@ -71,5 +71,5 @@
 -spec(handle_pre_hibernate/1 :: (state()) -> state()).
 -spec(status/1 :: (state()) -> [{atom(), any()}]).
 -spec(invoke/3 :: (atom(), fun ((atom(), A) -> A), state()) -> state()).
--spec(validate_message/2 :: (rabbit_types:basic_message(), state()) ->
-                                 {'invalid' | 'valid', state()}).
+-spec(is_duplicate/2 :: (rabbit_types:basic_message(), state()) ->
+                             {boolean(), state()}).
