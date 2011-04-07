@@ -55,7 +55,8 @@
                  sender_queues, %% :: Pid -> MsgQ
                  msg_id_ack,    %% :: MsgId -> AckTag
 
-                 msg_id_status
+                 msg_id_status,
+                 open_transactions
                }).
 
 -define(SYNC_INTERVAL,                 25). %% milliseconds
@@ -105,7 +106,8 @@ init([#amqqueue { name = QueueName } = Q]) ->
 
                   sender_queues       = dict:new(),
                   msg_id_ack          = dict:new(),
-                  msg_id_status       = dict:new()
+                  msg_id_status       = dict:new(),
+                  open_transactions   = sets:new()
                 }, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
@@ -358,13 +360,19 @@ promote_me(From, #state { q                   = Q,
                           rate_timer_ref      = RateTRef,
                           sender_queues       = SQ,
                           msg_id_ack          = MA,
-                          msg_id_status       = MS }) ->
+                          msg_id_status       = MS,
+                          open_transactions   = OT }) ->
     rabbit_log:info("Promoting slave ~p for ~s~n",
                     [self(), rabbit_misc:rs(Q #amqqueue.name)]),
     {ok, CPid} = rabbit_mirror_queue_coordinator:start_link(Q, GM),
     true = unlink(GM),
     gen_server2:reply(From, {promote, CPid}),
     ok = gm:confirmed_broadcast(GM, heartbeat),
+
+    %% Start by rolling back all open transactions
+
+    [ok = gm:confirmed_broadcast(GM, {tx_rollback, Txn})
+     || Txn <- sets:to_list(OT)],
 
     %% We find all the messages that we've received from channels but
     %% not from gm, and if they're due to be enqueued on promotion
@@ -380,7 +388,7 @@ promote_me(From, #state { q                   = Q,
     %% affect confirmations: if the message was previously pending a
     %% confirmation then it still will be, under the same msg_id. So
     %% as a master, we need to be prepared to filter out the
-    %% publication of said messages from the channel (validate_message
+    %% publication of said messages from the channel (is_duplicate
     %% (thus such requeued messages must remain in the msg_id_status
     %% (MS) which becomes seen_status (SS) in the master)).
     %%
@@ -424,6 +432,10 @@ promote_me(From, #state { q                   = Q,
     %% those messages are then requeued. However, as discussed above,
     %% this does not affect MS, nor which bits go through to SS in
     %% Master, or MTC in queue_process.
+    %%
+    %% Everything that's in MA gets requeued. Consequently the new
+    %% master should start with a fresh AM as there are no messages
+    %% pending acks (txns will have been rolled back).
 
     MSList = dict:to_list(MS),
     SS = dict:from_list(
