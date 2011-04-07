@@ -126,10 +126,10 @@ shortstr_overflow_field_test(Connection) ->
     SentString = << <<"k">> || _ <- lists:seq(1, 340)>>,
     Q = test_util:uuid(), X = test_util:uuid(), Key = test_util:uuid(),
     test_util:setup_exchange(Channel, Q, X, Key),
-    ?assertExit(_, amqp_channel:subscribe(
-                       Channel, #'basic.consume'{queue = Q, no_ack = true,
-                                                 consumer_tag = SentString},
-                       self())),
+    ?assertExit(_, amqp_channel:call(
+                       Channel, #'basic.consume'{queue = Q,
+                                                 no_ack = true,
+                                                 consumer_tag = SentString})),
     test_util:wait_for_death(Channel),
     test_util:wait_for_death(Connection),
     ok.

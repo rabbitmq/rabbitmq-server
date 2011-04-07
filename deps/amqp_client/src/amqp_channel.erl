@@ -66,16 +66,17 @@
 
 -behaviour(gen_server).
 
--export([start_link/4, connection_closing/3, open/1]).
--export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
-         handle_info/2]).
 -export([call/2, call/3, cast/2, cast/3]).
--export([subscribe/3]).
 -export([close/1, close/3]).
+-export([next_publish_seqno/1]).
 -export([register_return_handler/2, register_flow_handler/2,
          register_confirm_handler/2]).
--export([next_publish_seqno/1]).
--export([register_default_consumer/2]).
+-export([call_consumer/2]).
+
+-export([start_link/5, connection_closing/3, open/1]).
+
+-export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
+         handle_info/2]).
 
 -define(TIMEOUT_FLUSH, 60000).
 -define(TIMEOUT_CLOSE_OK, 3000).
@@ -84,8 +85,6 @@
                 connection,
                 driver,
                 rpc_requests        = queue:new(),
-                anon_sub_requests   = queue:new(),
-                tagged_sub_requests = dict:new(),
                 closing             = false, %% false |
                                              %%   {just_channel, Reason} |
                                              %%   {connection, Reason}
@@ -95,8 +94,8 @@
                 next_pub_seqno      = 0,
                 flow_active         = true,
                 flow_handler_pid    = none,
-                consumers           = dict:new(),
-                default_consumer    = none,
+                consumer_module,
+                consumer_state,
                 start_writer_fun
                }).
 
@@ -198,25 +197,6 @@ close(Channel, Code, Text) ->
 next_publish_seqno(Channel) ->
     gen_server:call(Channel, next_publish_seqno, infinity).
 
-%%---------------------------------------------------------------------------
-%% Consumer registration (API)
-%%---------------------------------------------------------------------------
-
-%% @type consume() = #'basic.consume'{}.
-%% The AMQP method that is used to  subscribe a consumer to a queue.
-%% @spec (Channel, consume(), Consumer) -> amqp_method()
-%% where
-%%      Channel = pid()
-%%      Consumer = pid()
-%% @doc Creates a subscription to a queue. This subscribes a consumer pid to
-%% the queue defined in the #'basic.consume'{} method record. Note that
-%% both the process invoking this method and the supplied consumer process
-%% receive an acknowledgement of the subscription. The calling process will
-%% receive the acknowledgement as the return value of this function, whereas
-%% the consumer process will receive the notification asynchronously.
-subscribe(Channel, BasicConsume = #'basic.consume'{}, Consumer) ->
-    gen_server:call(Channel, {subscribe, BasicConsume, Consumer}, infinity).
-
 %% @spec (Channel, ReturnHandler) -> ok
 %% where
 %%      Channel = pid()
@@ -246,40 +226,24 @@ register_confirm_handler(Channel, ConfirmHandler) ->
 register_flow_handler(Channel, FlowHandler) ->
     gen_server:cast(Channel, {register_flow_handler, FlowHandler} ).
 
-%% @spec (Channel, Consumer) -> ok
+%% @spec (Channel, Message) -> ok
 %% where
 %%      Channel = pid()
-%%      Consumer = pid()
-%% @doc Set the current default consumer.
-%% Under certain circumstances it is possible for a channel to receive a
-%% message delivery which does not match any consumer which is currently
-%% set up via basic.consume. This will occur after the following sequence
-%% of events:<br/>
-%% <br/>
-%% basic.consume with explicit acks<br/>
-%% %% some deliveries take place but are not acked<br/>
-%% basic.cancel<br/>
-%% basic.recover{requeue = false}<br/>
-%% <br/>
-%% Since requeue is specified to be false in the basic.recover, the spec
-%% states that the message must be redelivered to "the original recipient"
-%% - i.e. the same channel / consumer-tag. But the consumer is no longer
-%% active.<br/>
-%% In these circumstances, you can register a default consumer to handle
-%% such deliveries. If no default consumer is registered then the channel
-%% will exit on receiving such a delivery.<br/>
-%% Most people will not need to use this.
-register_default_consumer(Channel, Consumer) ->
-    gen_server:cast(Channel, {register_default_consumer, Consumer}).
+%%      Message = any()
+%% @doc This causes the channel to invoke Consumer:handle_call/2,
+%% where Consumer is the amqp_gen_consumer implementation registered with
+%% the channel.
+call_consumer(Channel, Call) ->
+    gen_server:call(Channel, {call_consumer, Call}, infinity).
 
 %%---------------------------------------------------------------------------
 %% Internal interface
 %%---------------------------------------------------------------------------
 
 %% @private
-start_link(Driver, Connection, ChannelNumber, SWF) ->
-    gen_server:start_link(?MODULE,
-                          [Driver, Connection, ChannelNumber, SWF], []).
+start_link(Driver, Connection, ChannelNumber, Consumer, SWF) ->
+    gen_server:start_link(
+        ?MODULE, [Driver, Connection, ChannelNumber, Consumer, SWF], []).
 
 %% @private
 connection_closing(Pid, ChannelCloseType, Reason) ->
@@ -294,11 +258,14 @@ open(Pid) ->
 %%---------------------------------------------------------------------------
 
 %% @private
-init([Driver, Connection, ChannelNumber, SWF]) ->
-    {ok, #state{connection       = Connection,
-                driver           = Driver,
-                number           = ChannelNumber,
-                start_writer_fun = SWF}}.
+init([Driver, Connection, ChannelNumber, {ConsumerModule, ConsumerArgs},
+      SWF]) ->
+    State0 = #state{connection       = Connection,
+                    driver           = Driver,
+                    number           = ChannelNumber,
+                    consumer_module  = ConsumerModule,
+                    start_writer_fun = SWF},
+    {ok, consumer_callback(init, [ConsumerArgs], State0)}.
 
 %% @private
 handle_call(open, From, State) ->
@@ -309,9 +276,6 @@ handle_call({close, Code, Text}, From, State) ->
 %% @private
 handle_call({call, Method, AmqpMsg}, From, State) ->
     handle_method_to_server(Method, AmqpMsg, From, State);
-%% @private
-handle_call({subscribe, Method, Consumer}, From, State) ->
-    handle_subscribe(Method, Consumer, From, State);
 %% Handles the delivery of messages from a direct channel
 %% @private
 handle_call({send_command_sync, Method, Content}, From, State) ->
@@ -324,36 +288,29 @@ handle_call({send_command_sync, Method}, From, State) ->
     Ret = handle_method_from_server(Method, none, State),
     gen_server:reply(From, ok),
     Ret;
-%% When in confirm mode, returns the sequence number of the next
-%% message to be published.
 %% @private
 handle_call(next_publish_seqno, _From,
             State = #state{next_pub_seqno = SeqNo}) ->
-    {reply, SeqNo, State}.
+    {reply, SeqNo, State};
+%% @private
+handle_call({call_consumer, Call}, _From, State) ->
+    handle_consumer_callback(handle_call, [Call], State).
 
 %% @private
 handle_cast({cast, Method, AmqpMsg}, State) ->
     handle_method_to_server(Method, AmqpMsg, none, State);
-%% Registers a handler to process return messages
 %% @private
 handle_cast({register_return_handler, ReturnHandler}, State) ->
     erlang:monitor(process, ReturnHandler),
     {noreply, State#state{return_handler_pid = ReturnHandler}};
-%% Registers a handler to process ack and nack messages
 %% @private
 handle_cast({register_confirm_handler, ConfirmHandler}, State) ->
     erlang:monitor(process, ConfirmHandler),
     {noreply, State#state{confirm_handler_pid = ConfirmHandler}};
-%% Registers a handler to process flow control messages
 %% @private
 handle_cast({register_flow_handler, FlowHandler}, State) ->
     erlang:monitor(process, FlowHandler),
     {noreply, State#state{flow_handler_pid = FlowHandler}};
-%% Registers a handler to process unexpected deliveries
-%% @private
-handle_cast({register_default_consumer, Consumer}, State) ->
-    erlang:monitor(process, Consumer),
-    {noreply, State#state{default_consumer = Consumer}};
 %% Received from channels manager
 %% @private
 handle_cast({method, Method, Content}, State) ->
@@ -417,17 +374,11 @@ handle_info({'DOWN', _, process, FlowHandler, Reason},
             State = #state{flow_handler_pid = FlowHandler}) ->
     ?LOG_WARN("Channel (~p): Unregistering flow handler ~p because it died. "
               "Reason: ~p~n", [self(), FlowHandler, Reason]),
-    {noreply, State#state{flow_handler_pid = none}};
-%% @private
-handle_info({'DOWN', _, process, DefaultConsumer, Reason},
-            State = #state{default_consumer = DefaultConsumer}) ->
-    ?LOG_WARN("Channel (~p): Unregistering default consumer ~p because it died."
-              "Reason: ~p~n", [self(), DefaultConsumer, Reason]),
-    {noreply, State#state{default_consumer = none}}.
+    {noreply, State#state{flow_handler_pid = none}}.
 
 %% @private
-terminate(_Reason, _State) ->
-    ok.
+terminate(Reason, State) ->
+    consumer_callback(terminate, [Reason], State).
 
 %% @private
 code_change(_OldVsn, State, _Extra) ->
@@ -477,38 +428,6 @@ handle_close(Code, Text, From, State) ->
         BlockReply -> {reply, BlockReply, State}
     end.
 
-handle_subscribe(#'basic.consume'{consumer_tag = Tag, nowait = NoWait} = Method,
-                 Consumer,
-                 From, State = #state{tagged_sub_requests = Tagged,
-                                      anon_sub_requests   = Anon,
-                                      consumers           = Consumers}) ->
-    case check_block(Method, none, State) of
-        ok when Tag =:= undefined orelse size(Tag) == 0 ->
-            case NoWait of
-                true ->
-                    {reply, {error, command_invalid}, State};
-                false ->
-                    NewMethod = Method#'basic.consume'{consumer_tag = <<"">>},
-                    NewState = State#state{anon_sub_requests =
-                                               queue:in(Consumer, Anon)},
-                    {noreply, rpc_top_half(NewMethod, none, From, NewState)}
-            end;
-        ok when is_binary(Tag) andalso size(Tag) >= 0 ->
-            case dict:is_key(Tag, Tagged) orelse dict:is_key(Tag, Consumers) of
-                true ->
-                    {reply, {error, consumer_tag_already_in_use}, State};
-                false when NoWait ->
-                    NewState = register_consumer(Tag, Consumer, State),
-                    {reply, ok, rpc_top_half(Method, none, none, NewState)};
-                false ->
-                    NewState = State#state{tagged_sub_requests =
-                                             dict:store(Tag, Consumer, Tagged)},
-                    {noreply, rpc_top_half(Method, none, From, NewState)}
-            end;
-        BlockReply ->
-            {reply, BlockReply, State}
-    end.
-
 rpc_top_half(Method, Content, From,
              State0 = #state{rpc_requests = RequestQueue}) ->
     State1 = State0#state{
@@ -554,6 +473,10 @@ do_rpc(State = #state{rpc_requests = Q,
             end,
             State#state{rpc_requests = NewQ}
     end.
+
+pending_rpc_method(#state{rpc_requests = Q}) ->
+    {value, {_From, Method, _Content}} = queue:peek(Q),
+    Method.
 
 pre_do(#'channel.open'{}, none, State) ->
     start_writer(State);
@@ -618,29 +541,14 @@ handle_method_from_server1(#'channel.close_ok'{}, none,
         {connection, Reason} ->
             handle_shutdown({connection_closing, Reason}, State)
     end;
-handle_method_from_server1(
-        #'basic.consume_ok'{consumer_tag = ConsumerTag} = ConsumeOk,
-        none, State = #state{tagged_sub_requests = Tagged,
-                             anon_sub_requests = Anon}) ->
-    {Consumer, State0} =
-        case dict:find(ConsumerTag, Tagged) of
-            {ok, C} ->
-                NewTagged = dict:erase(ConsumerTag, Tagged),
-                {C, State#state{tagged_sub_requests = NewTagged}};
-            error ->
-                {{value, C}, NewAnon} = queue:out(Anon),
-                {C, State#state{anon_sub_requests = NewAnon}}
-        end,
-    Consumer ! ConsumeOk,
-    State1 = register_consumer(ConsumerTag, Consumer, State0),
+handle_method_from_server1(#'basic.consume_ok'{} = ConsumeOk, none, State) ->
+    Consume = #'basic.consume'{} = pending_rpc_method(State),
+    State1 = consumer_callback(handle_consume_ok, [ConsumeOk, Consume], State),
     {noreply, rpc_bottom_half(ConsumeOk, State1)};
-handle_method_from_server1(
-        #'basic.cancel_ok'{consumer_tag = ConsumerTag} = CancelOk, none,
-        State) ->
-    Consumer = resolve_consumer(ConsumerTag, State),
-    Consumer ! CancelOk,
-    NewState = unregister_consumer(ConsumerTag, State),
-    {noreply, rpc_bottom_half(CancelOk, NewState)};
+handle_method_from_server1(#'basic.cancel_ok'{} = CancelOk, none, State) ->
+    Cancel = #'basic.cancel'{} = pending_rpc_method(State),
+    State1 = consumer_callback(handle_cancel_ok, [CancelOk, Cancel], State),
+    {noreply, rpc_bottom_half(CancelOk, State1)};
 handle_method_from_server1(#'channel.flow'{active = Active} = Flow, none,
                            State = #state{flow_handler_pid = FlowHandler}) ->
     case FlowHandler of none -> ok;
@@ -651,12 +559,8 @@ handle_method_from_server1(#'channel.flow'{active = Active} = Flow, none,
     %% blocked in any circumstance.
     {noreply, rpc_top_half(#'channel.flow_ok'{active = Active}, none, none,
                            State#state{flow_active = Active})};
-handle_method_from_server1(
-        #'basic.deliver'{consumer_tag = ConsumerTag} = Deliver, AmqpMsg,
-        State) ->
-    Consumer = resolve_consumer(ConsumerTag, State),
-    Consumer ! {Deliver, AmqpMsg},
-    {noreply, State};
+handle_method_from_server1(#'basic.deliver'{} = Deliver, AmqpMsg, State) ->
+    handle_consumer_callback(handle_deliver, [{Deliver, AmqpMsg}], State);
 handle_method_from_server1(
         #'basic.return'{} = BasicReturn, AmqpMsg,
         State = #state{return_handler_pid = ReturnHandler}) ->
@@ -667,19 +571,16 @@ handle_method_from_server1(
         _    -> ReturnHandler ! {BasicReturn, AmqpMsg}
     end,
     {noreply, State};
-handle_method_from_server1(#'basic.cancel'{consumer_tag = ConsumerTag} = Death,
-                           none, State) ->
-    Consumer = resolve_consumer(ConsumerTag, State),
-    Consumer ! Death,
-    NewState = unregister_consumer(ConsumerTag, State),
-    {noreply, NewState};
+handle_method_from_server1(#'basic.cancel'{} = Cancel, none, State) ->
+    handle_consumer_callback(handle_cancel, [Cancel], State);
 handle_method_from_server1(#'basic.ack'{} = BasicAck, none,
                            #state{confirm_handler_pid = none} = State) ->
     ?LOG_WARN("Channel (~p): received ~p but there is no "
               "confirm handler registered~n", [self(), BasicAck]),
     {noreply, State};
-handle_method_from_server1(#'basic.ack'{} = BasicAck, none,
-                           #state{confirm_handler_pid = ConfirmHandler} = State) ->
+handle_method_from_server1(
+        #'basic.ack'{} = BasicAck, none,
+        #state{confirm_handler_pid = ConfirmHandler} = State) ->
     ConfirmHandler ! BasicAck,
     {noreply, State};
 handle_method_from_server1(#'basic.nack'{} = BasicNack, none,
@@ -687,8 +588,9 @@ handle_method_from_server1(#'basic.nack'{} = BasicNack, none,
     ?LOG_WARN("Channel (~p): received ~p but there is no "
               "confirm handler registered~n", [self(), BasicNack]),
     {noreply, State};
-handle_method_from_server1(#'basic.nack'{} = BasicNack, none,
-                           #state{confirm_handler_pid = ConfirmHandler} = State) ->
+handle_method_from_server1(
+        #'basic.nack'{} = BasicNack, none,
+        #state{confirm_handler_pid = ConfirmHandler} = State) ->
     ConfirmHandler ! BasicNack,
     {noreply, State};
 
@@ -765,30 +667,6 @@ start_writer(State = #state{start_writer_fun = SWF}) ->
     {ok, Writer} = SWF(),
     State#state{writer = Writer}.
 
-resolve_consumer(_ConsumerTag, #state{consumers = []}) ->
-    exit(no_consumers_registered);
-resolve_consumer(ConsumerTag, #state{consumers = Consumers,
-                                     default_consumer = DefaultConsumer}) ->
-    case dict:find(ConsumerTag, Consumers) of
-        {ok, Value} ->
-            Value;
-        error ->
-            case is_pid(DefaultConsumer) of
-                true  -> DefaultConsumer;
-                false -> exit(unexpected_delivery_and_no_default_consumer)
-            end
-    end.
-
-register_consumer(ConsumerTag, Consumer,
-                  State = #state{consumers = Consumers0}) ->
-    Consumers1 = dict:store(ConsumerTag, Consumer, Consumers0),
-    State#state{consumers = Consumers1}.
-
-unregister_consumer(ConsumerTag,
-                    State = #state{consumers = Consumers0}) ->
-    Consumers1 = dict:erase(ConsumerTag, Consumers0),
-    State#state{consumers = Consumers1}.
-
 amqp_msg(none) ->
     none;
 amqp_msg(Content) ->
@@ -816,8 +694,6 @@ check_invalid_method(#'channel.open'{}) ->
      "Use amqp_connection:open_channel/{1,2} instead"};
 check_invalid_method(#'channel.close'{}) ->
     {use_close_function, "Use close/{1,3} instead"};
-check_invalid_method(#'basic.consume'{}) ->
-    {use_subscribe_function, "Use subscribe/3 instead"};
 check_invalid_method(Method) ->
     case is_connection_method(Method) of
         true  -> {connection_methods_not_allowed,
@@ -840,3 +716,26 @@ server_misbehaved(#amqp_error{} = AmqpError, State = #state{number = Number}) ->
             spawn(fun () -> call(Self, Close) end),
             {noreply, State}
     end.
+
+handle_consumer_callback(handle_call, Args,
+                         State = #state{consumer_state = CState,
+                                        consumer_module = CModule}) ->
+    {reply, Reply, NewCState} =
+        erlang:apply(CModule, handle_call, Args ++ [CState]),
+    {reply, Reply, State#state{consumer_state = NewCState}};
+handle_consumer_callback(Function, Args, State) ->
+    {noreply, consumer_callback(Function, Args, State)}.
+
+consumer_callback(init, Args, State = #state{}) ->
+    consumer_callback_basic(init, Args, State);
+consumer_callback(terminate, Args, State = #state{consumer_state = CState,
+                                                  consumer_module = CModule}) ->
+    erlang:apply(CModule, terminate, Args ++ [CState]),
+    State;
+consumer_callback(Function, Args, State = #state{consumer_state = CState}) ->
+    consumer_callback_basic(Function, Args ++ [CState], State).
+
+consumer_callback_basic(Function,
+                        Args, State = #state{consumer_module = CModule}) ->
+    {ok, NewCState} = erlang:apply(CModule, Function, Args),
+    State#state{consumer_state = NewCState}.
