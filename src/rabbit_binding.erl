@@ -152,18 +152,14 @@ add(Src, Dst, B) ->
         []  -> Durable = all_durable([Src, Dst]),
                case (not Durable orelse
                      mnesia:read({rabbit_durable_route, B}) =:= []) of
-                   true ->
-                       ok = sync_binding(B, Durable, fun mnesia:write/3),
-                       fun (Tx) ->
-                               ok = rabbit_exchange:callback(Src, add_bindings,
-                                                             [Tx, Src, [B]]),
-                               rabbit_event:notify_if(not Tx, binding_created,
-                                                      info(B))
-                       end;
-                   %% Binding exists, to queue on node which
-                   %% is in the middle of starting
-                   false ->
-                       rabbit_misc:const(not_found)
+                   true  -> ok = sync_binding(B, Durable, fun mnesia:write/3),
+                            fun (Tx) ->
+                                    ok = rabbit_exchange:callback(
+                                           Src, add_bindings, [Tx, Src, [B]]),
+                                    rabbit_event:notify_if(
+                                      not Tx, binding_created, info(B))
+                            end;
+                   false -> rabbit_misc:const(not_found)
                end;
         [_] -> fun rabbit_misc:const_ok/1
     end.

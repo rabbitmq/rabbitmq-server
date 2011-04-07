@@ -16,8 +16,7 @@
 
 -module(rabbit_amqqueue).
 
--export([start/0, stop/0, declare/5, delete_immediately/1, delete/3,
-         purge/1]).
+-export([start/0, stop/0, declare/5, delete_immediately/1, delete/3, purge/1]).
 -export([pseudo_queue/2]).
 -export([lookup/1, with/2, with_or_die/2, assert_equivalence/5,
          check_exclusive_access/2, with_exclusive_access_or_die/3,
@@ -58,7 +57,7 @@
 
 -type(queue_or_not_found() :: rabbit_types:amqqueue() | 'not_found').
 
--spec(start/0 :: () -> [rabbit_amqqueue:name()]).
+-spec(start/0 :: () -> [name()]).
 -spec(stop/0 :: () -> 'ok').
 -spec(declare/5 ::
         (name(), boolean(), boolean(),
