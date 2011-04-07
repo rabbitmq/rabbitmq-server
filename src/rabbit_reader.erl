@@ -213,7 +213,7 @@ start_connection(Parent, ChannelSupSupPid, Collector, StartHeartbeatFun, Deb,
                                 rabbit_event:init_stats_timer(),
                             channel_sup_sup_pid = ChannelSupSupPid,
                             start_heartbeat_fun = StartHeartbeatFun,
-                            buf                 = [<<>>],
+                            buf                 = [],
                             auth_mechanism      = none,
                             auth_state          = none
                            },
