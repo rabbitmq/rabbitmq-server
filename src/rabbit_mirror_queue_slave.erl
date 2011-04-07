@@ -313,6 +313,7 @@ confirm_messages(MsgIds, State = #state { msg_id_status = MS }) ->
     {MS1, CMs} =
         lists:foldl(
           fun (MsgId, {MSN, CMsN} = Acc) ->
+                  %% We will never see 'discarded' here
                   case dict:find(MsgId, MSN) of
                       error ->
                           %% If it needed confirming, it'll have
@@ -395,21 +396,25 @@ promote_me(From, #state { q                   = Q,
     %%
     %% MS contains the following three entry types:
     %%
-    %% {published, ChPid}:
+    %% a) {published, ChPid}:
     %%   published via gm only; pending arrival of publication from
     %%   channel, maybe pending confirm.
     %%
-    %% {published, ChPid, MsgSeqNo}:
+    %% b) {published, ChPid, MsgSeqNo}:
     %%   published via gm and channel; pending confirm.
     %%
-    %% {confirmed, ChPid}:
+    %% c) {confirmed, ChPid}:
     %%   published via gm only, and confirmed; pending publication
     %%   from channel.
     %%
-    %% The two outer forms only, need to go to the master state
+    %% d) discarded
+    %%   seen via gm only as discarded. Pending publication from
+    %%   channel
+    %%
+    %% The forms a, c and d only, need to go to the master state
     %% seen_status (SS).
     %%
-    %% The middle form only, needs to go through to the queue_process
+    %% The form b only, needs to go through to the queue_process
     %% state to form the msg_id_to_channel mapping (MTC).
     %%
     %% No messages that are enqueued from SQ at this point will have
@@ -420,9 +425,12 @@ promote_me(From, #state { q                   = Q,
     %% this does not affect MS, nor which bits go through to SS in
     %% Master, or MTC in queue_process.
 
-    SS = dict:from_list([{MsgId, Status}
-                         || {MsgId, {Status, _ChPid}} <- dict:to_list(MS),
-                            Status =:= published orelse Status =:= confirmed]),
+    MSList = dict:to_list(MS),
+    SS = dict:from_list(
+           [E || E = {_MsgId, discarded} <- MSList] ++
+               [{MsgId, Status}
+                || {MsgId, {Status, _ChPid}} <- MSList,
+                   Status =:= published orelse Status =:= confirmed]),
 
     MasterState = rabbit_mirror_queue_master:promote_backing_queue_state(
                     CPid, BQ, BQS, GM, SS),
@@ -528,7 +536,11 @@ maybe_enqueue_message(
                 immediately ->
                     ok = rabbit_channel:confirm(ChPid, [MsgSeqNo]),
                     State #state { msg_id_status = dict:erase(MsgId, MS) }
-            end
+            end;
+        {ok, discarded} ->
+            %% We've already heard from GM that the msg is to be
+            %% discarded. We won't see this again.
+            State #state { msg_id_status = dict:erase(MsgId, MS) }
     end.
 
 process_instruction(
@@ -559,8 +571,7 @@ process_instruction(
                     {{value, {Delivery = #delivery {
                                 msg_seq_no = MsgSeqNo,
                                 message    = #basic_message { id = MsgId } },
-                              _EnqueueOnPromotion}},
-                     MQ1} ->
+                              _EnqueueOnPromotion}}, MQ1} ->
                         %% We received the msg from the channel
                         %% first. Thus we need to deal with confirms
                         %% here.
@@ -604,6 +615,41 @@ process_instruction(
              State1 #state { backing_queue_state = BQS1,
                              msg_id_ack          = MA1 }
      end};
+process_instruction({discard, ChPid, Msg = #basic_message { id = MsgId }},
+                    State = #state { sender_queues       = SQ,
+                                     backing_queue       = BQ,
+                                     backing_queue_state = BQS,
+                                     msg_id_status       = MS }) ->
+    %% Many of the comments around the publish head above apply here
+    %% too.
+    MS1 = dict:store(MsgId, discarded, MS),
+    {SQ1, MS2} =
+        case dict:find(ChPid, SQ) of
+            error ->
+                {SQ, MS1};
+            {ok, MQ} ->
+                case queue:out(MQ) of
+                    {empty, _MQ} ->
+                        {SQ, MS1};
+                    {{value, {#delivery {
+                                  message = #basic_message { id = MsgId } },
+                              _EnqueueOnPromotion}}, MQ1} ->
+                        %% We've already seen it from the channel,
+                        %% we're not going to see this again, so don't
+                        %% add it to MS
+                        {dict:store(ChPid, MQ1, SQ), MS};
+                    {{value, {#delivery {}, _EnqueueOnPromotion}}, _MQ1} ->
+                        %% The instruction was sent to us before we
+                        %% were within the mirror_pids within the
+                        %% #amqqueue{} record. We'll never receive the
+                        %% message directly from the channel.
+                        {SQ, MS}
+                end
+        end,
+    BQS1 = BQ:discard(Msg, ChPid, BQS),
+    {ok, State #state { sender_queues       = SQ1,
+                        msg_id_status       = MS2,
+                        backing_queue_state = BQS1 }};
 process_instruction({set_length, Length},
                     State = #state { backing_queue       = BQ,
                                      backing_queue_state = BQS }) ->

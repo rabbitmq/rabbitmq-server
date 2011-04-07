@@ -22,7 +22,7 @@
          requeue/3, len/1, is_empty/1, drain_confirmed/1, dropwhile/2,
          set_ram_duration_target/2, ram_duration/1,
          needs_idle_timeout/1, idle_timeout/1, handle_pre_hibernate/1,
-         status/1, invoke/3, is_duplicate/2]).
+         status/1, invoke/3, is_duplicate/2, discard/3]).
 
 -export([start/1, stop/0]).
 
@@ -150,6 +150,7 @@ drain_confirmed(State = #state { backing_queue       = BQ,
     {MsgIds1, SS1} =
         lists:foldl(
           fun (MsgId, {MsgIdsN, SSN}) ->
+                  %% We will never see 'discarded' here
                   case dict:find(MsgId, SSN) of
                       error ->
                           {[MsgId | MsgIdsN], SSN};
@@ -300,7 +301,7 @@ is_duplicate(Message = #basic_message { id = MsgId },
             %% immediately after calling is_duplicate). The msg is
             %% invalid. We will not see this again, nor will we be
             %% further involved in confirming this message, so erase.
-            {true, State #state { seen_status = dict:erase(MsgId, SS) }};
+            {published, State #state { seen_status = dict:erase(MsgId, SS) }};
         {ok, confirmed} ->
             %% It got published when we were a slave via gm, and
             %% confirmed some time after that (maybe even after
@@ -310,6 +311,15 @@ is_duplicate(Message = #basic_message { id = MsgId },
             %% need to confirm now. As above, amqqueue_process will
             %% have the entry for the msg_id_to_channel mapping added
             %% immediately after calling is_duplicate/2.
-            {true, State #state { seen_status = dict:erase(MsgId, SS),
-                                  confirmed = [MsgId | Confirmed] }}
+            {published, State #state { seen_status = dict:erase(MsgId, SS),
+                                       confirmed = [MsgId | Confirmed] }};
+        {ok, discarded} ->
+            {discarded, State #state { seen_status = dict:erase(MsgId, SS) }}
     end.
+
+discard(Msg = #basic_message {}, ChPid,
+        State = #state { gm                  = GM,
+                         backing_queue       = BQ,
+                         backing_queue_state = BQS }) ->
+    ok = gm:broadcast(GM, {discard, ChPid, Msg}),
+    State#state{backing_queue_state = BQ:discard(Msg, ChPid, BQS)}.

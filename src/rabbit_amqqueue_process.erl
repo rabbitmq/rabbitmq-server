@@ -524,15 +524,6 @@ attempt_delivery(Delivery = #delivery{txn        = none,
         _           -> ok
     end,
     case BQ:is_duplicate(Message, BQS) of
-        {true, BQS1} ->
-            %% if the message has previously been seen by the BQ then
-            %% it must have been seen under the same circumstances as
-            %% now: i.e. if it is now a deliver_immediately then it
-            %% must have been before. Consequently, if the BQ has seen
-            %% it before then it's safe to assume it's been delivered
-            %% (i.e. the only thing that cares about that is
-            %% deliver_immediately).
-            {true, Confirm, State#q{backing_queue_state = BQS1}};
         {false, BQS1} ->
             PredFun = fun (IsEmpty, _State) -> not IsEmpty end,
             DeliverFun =
@@ -553,7 +544,17 @@ attempt_delivery(Delivery = #delivery{txn        = none,
             {Delivered, State2} =
                 deliver_msgs_to_consumers({ PredFun, DeliverFun }, false,
                                           State#q{backing_queue_state = BQS1}),
-            {Delivered, Confirm, State2}
+            {Delivered, Confirm, State2};
+        {Duplicate, BQS1} ->
+            %% if the message has previously been seen by the BQ then
+            %% it must have been seen under the same circumstances as
+            %% now: i.e. if it is now a deliver_immediately then it
+            %% must have been before.
+            Delivered = case Duplicate of
+                            published -> true;
+                            discarded -> false
+                        end,
+            {Delivered, Confirm, State#q{backing_queue_state = BQS1}}
     end;
 attempt_delivery(Delivery = #delivery{txn     = Txn,
                                       sender  = ChPid,
@@ -561,13 +562,17 @@ attempt_delivery(Delivery = #delivery{txn     = Txn,
                  State = #q{backing_queue = BQ, backing_queue_state = BQS}) ->
     Confirm = should_confirm_message(Delivery, State),
     case BQ:is_duplicate(Message, BQS) of
-        {true, BQS1} ->
-            {true, Confirm, State#q{backing_queue_state = BQS1}};
         {false, BQS1} ->
             store_ch_record((ch_record(ChPid))#cr{txn = Txn}),
             BQS2 = BQ:tx_publish(Txn, Message, ?BASE_MESSAGE_PROPERTIES, ChPid,
                                  BQS1),
-            {true, Confirm, State#q{backing_queue_state = BQS2}}
+            {true, Confirm, State#q{backing_queue_state = BQS2}};
+        {Duplicate, BQS1} ->
+            Delivered = case Duplicate of
+                            published -> true;
+                            discarded -> false
+                        end,
+            {Delivered, Confirm, State#q{backing_queue_state = BQS1}}
     end.
 
 deliver_or_enqueue(Delivery = #delivery{message = Message}, State) ->
@@ -720,6 +725,12 @@ rollback_transaction(Txn, C, State = #q{backing_queue = BQ,
 
 subtract_acks(A, B) when is_list(B) ->
     lists:foldl(fun sets:del_element/2, A, B).
+
+discard_delivery(#delivery{sender = ChPid,
+                           message = Message},
+                 State = #q{backing_queue = BQ,
+                            backing_queue_state = BQS}) ->
+    State#q{backing_queue_state = BQ:discard(Message, ChPid, BQS)}.
 
 reset_msg_expiry_fun(TTL) ->
     fun(MsgProps) ->
@@ -910,7 +921,7 @@ handle_call({deliver_immediately, Delivery}, _From, State) ->
     {Delivered, Confirm, State1} = attempt_delivery(Delivery, State),
     reply(Delivered, case Delivered of
                          true  -> maybe_record_confirm_message(Confirm, State1);
-                         false -> State1
+                         false -> discard_delivery(Delivery, State1)
                      end);
 
 handle_call({deliver, Delivery}, From, State) ->
