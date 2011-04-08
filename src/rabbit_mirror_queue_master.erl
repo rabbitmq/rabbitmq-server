@@ -42,6 +42,9 @@
                  ack_msg_id
                }).
 
+%% For general documentation of HA design, see
+%% rabbit_mirror_queue_coordinator
+%%
 %% Some notes on transactions
 %%
 %% We don't support transactions on mirror queues. To do so is

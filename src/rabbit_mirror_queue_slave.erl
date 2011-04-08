@@ -16,6 +16,9 @@
 
 -module(rabbit_mirror_queue_slave).
 
+%% For general documentation of HA design, see
+%% rabbit_mirror_queue_coordinator
+%%
 %% We join the GM group before we add ourselves to the amqqueue
 %% record. As a result:
 %% 1. We can receive msgs from GM that correspond to messages we will
