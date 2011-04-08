@@ -83,7 +83,8 @@ terminate(_Reason, State) ->
 handle_cast({"STOMP", Frame}, State) ->
     handle_cast({"CONNECT", Frame}, State);
 
-handle_cast({"CONNECT", Frame}, State = #state{channel = none}) ->
+handle_cast({"CONNECT", Frame}, State = #state{channel = none,
+                                               socket  = Sock}) ->
     process_request(
       fun(StateN) ->
               case negotiate_version(Frame) of
@@ -97,6 +98,7 @@ handle_cast({"CONNECT", Frame}, State = #state{channel = none}) ->
                                                            DefaultVHost)),
                                rabbit_stomp_frame:header(Frame, "heartbeat",
                                                          "0,0"),
+                               adapter_info(Sock, Version),
                                Version,
                                StateN);
                   {error, no_common_version} ->
@@ -313,12 +315,14 @@ with_destination(Command, Frame, State, Fun) ->
                   State)
     end.
 
-do_login({ok, Login}, {ok, Passcode}, VirtualHost, Heartbeat, Version, State) ->
+do_login({ok, Login}, {ok, Passcode}, VirtualHost, Heartbeat, AdapterInfo,
+         Version, State) ->
     {ok, Connection} = amqp_connection:start(
                          direct, #amqp_params{
                            username     = list_to_binary(Login),
                            password     = list_to_binary(Passcode),
-                           virtual_host = list_to_binary(VirtualHost)}),
+                           virtual_host = list_to_binary(VirtualHost),
+                           adapter_info = AdapterInfo}),
     {ok, Channel} = amqp_connection:open_channel(Connection),
     SessionId = rabbit_guid:string_guid("session"),
 
@@ -333,8 +337,17 @@ do_login({ok, Login}, {ok, Passcode}, VirtualHost, Heartbeat, Version, State) ->
                    channel    = Channel,
                    connection = Connection});
 
-do_login(_, _, _, _, _, State) ->
+do_login(_, _, _, _, _, _, State) ->
     error("Bad CONNECT", "Missing login or passcode header(s)\n", State).
+
+adapter_info(Sock, Version) ->
+    {ok, {Addr,     Port}}     = rabbit_net:sockname(Sock),
+    {ok, {PeerAddr, PeerPort}} = rabbit_net:peername(Sock),
+    #adapter_info{protocol     = {'STOMP', Version},
+                  address      = Addr,
+                  port         = Port,
+                  peer_address = PeerAddr,
+                  peer_port    = PeerPort}.
 
 do_subscribe(Destination, DestHdr, Frame,
              State = #state{subscriptions = Subs,
