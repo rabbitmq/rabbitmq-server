@@ -97,29 +97,24 @@
 recover(XNames, QNames) ->
     XNameSet = sets:from_list(XNames),
     QNameSet = sets:from_list(QNames),
-    rabbit_misc:table_map(
-      fun (Route = #route{binding = B =
-                              #binding{destination = Dst =
-                                           #resource{kind = Kind}}}) ->
+    rabbit_misc:table_filter(
+      fun (#route{binding = B = #binding{destination = Dst =
+                                             #resource{kind = Kind}}}) ->
               %% The check against rabbit_durable_route is in case it
               %% disappeared between getting the list and here
-              case mnesia:read({rabbit_durable_route, B}) =/= [] andalso
+              mnesia:read({rabbit_durable_route, B}) =/= [] andalso
                   sets:is_element(Dst, case Kind of
                                            exchange -> XNameSet;
                                            queue    -> QNameSet
-                                       end) of
-                  true  -> ok = sync_transient_binding(
-                                  Route, fun mnesia:write/3),
-                           B;
-                  false -> none
-              end
+                                       end)
       end,
-      fun (none, _Tx) ->
-              none;
-          (B = #binding{source = Src}, Tx) ->
+      fun (R = #route{binding = B = #binding{source = Src}}, Tx) ->
               {ok, X} = rabbit_exchange:lookup(Src),
               rabbit_exchange:callback(X, add_bindings, [Tx, X, [B]]),
-              B
+              case Tx of
+                  true  -> ok = sync_transient_binding(R, fun mnesia:write/3);
+                  false -> ok
+              end
       end,
       rabbit_durable_route),
     ok.
