@@ -124,8 +124,6 @@ exists(Binding) ->
 
 add(Binding) -> add(Binding, fun (_Src, _Dst) -> ok end).
 
-remove(Binding) -> remove(Binding, fun (_Src, _Dst) -> ok end).
-
 add(Binding, InnerFun) ->
     binding_action(
       Binding,
@@ -134,55 +132,45 @@ add(Binding, InnerFun) ->
               %% in general, we want to fail on that in preference to
               %% anything else
               case InnerFun(Src, Dst) of
-                  ok               -> add(Src, Dst, B);
+                  ok               -> case mnesia:read({rabbit_route, B}) of
+                                          []  -> add(Src, Dst, B);
+                                          [_] -> fun rabbit_misc:const_ok/1
+                                      end;
                   {error, _} = Err -> rabbit_misc:const(Err)
               end
       end).
 
 add(Src, Dst, B) ->
-    case mnesia:read({rabbit_route, B}) of
-        []  -> Durable = all_durable([Src, Dst]),
-               case (not Durable orelse
-                     mnesia:read({rabbit_durable_route, B}) =:= []) of
-                   true  -> ok = sync_binding(B, Durable, fun mnesia:write/3),
-                            fun (Tx) ->
-                                    ok = rabbit_exchange:callback(
-                                           Src, add_binding, [Tx, Src, B]),
-                                    rabbit_event:notify_if(
-                                      not Tx, binding_created, info(B))
-                            end;
-                   false -> rabbit_misc:const(not_found)
-               end;
-        [_] -> fun rabbit_misc:const_ok/1
+    Durable = all_durable([Src, Dst]),
+    case (not Durable orelse mnesia:read({rabbit_durable_route, B}) =:= []) of
+        true  -> ok = sync_binding(B, Durable, fun mnesia:write/3),
+                 fun (Tx) -> ok = rabbit_exchange:callback(Src, add_binding,
+                                                           [Tx, Src, B]),
+                             rabbit_event:notify_if(not Tx, binding_created,
+                                                    info(B))
+                 end;
+        false -> rabbit_misc:const(not_found)
     end.
+
+remove(Binding) -> remove(Binding, fun (_Src, _Dst) -> ok end).
 
 remove(Binding, InnerFun) ->
     binding_action(
       Binding,
       fun (Src, Dst, B) ->
-              Result =
-                  case mnesia:match_object(rabbit_route, #route{binding = B},
-                                           write) of
-                      [] ->
-                          {error, binding_not_found};
-                      [_] ->
-                          case InnerFun(Src, Dst) of
-                              ok ->
-                                  ok = sync_binding(B, all_durable([Src, Dst]),
-                                                    fun mnesia:delete_object/3),
-                                  {ok, maybe_auto_delete(B#binding.source,
-                                                         [B], new_deletions())};
-                              {error, _} = E ->
-                                  E
-                          end
-                  end,
-              case Result of
-                  {error, _} = Err ->
-                      rabbit_misc:const(Err);
-                  {ok, Deletions} ->
-                      fun (Tx) -> ok = process_deletions(Deletions, Tx) end
+              case mnesia:read(rabbit_route, B, write) of
+                  []  -> rabbit_misc:const({error, binding_not_found});
+                  [_] -> case InnerFun(Src, Dst) of
+                             ok               -> remove(Src, Dst, B);
+                             {error, _} = Err -> rabbit_misc:const(Err)
+                         end
               end
       end).
+
+remove(Src, Dst, B) ->
+    ok = sync_binding(B, all_durable([Src, Dst]), fun mnesia:delete_object/3),
+    Deletions = maybe_auto_delete(B#binding.source, [B], new_deletions()),
+    fun (Tx) -> ok = process_deletions(Deletions, Tx) end.
 
 list(VHostPath) ->
     VHostResource = rabbit_misc:r(VHostPath, '_'),
