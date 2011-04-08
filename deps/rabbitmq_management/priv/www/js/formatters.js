@@ -136,7 +136,7 @@ function is_col_empty(channels, name) {
 }
 
 function fmt_exchange(name) {
-    return name == '' ? '<i>(AMQP default)</i>' : name;
+    return name == '' ? '(AMQP default)' : name;
 }
 
 function fmt_exchange_url(name) {
