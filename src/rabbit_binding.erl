@@ -110,11 +110,11 @@ recover(XNames, QNames) ->
       end,
       fun (R = #route{binding = B = #binding{source = Src}}, Tx) ->
               {ok, X} = rabbit_exchange:lookup(Src),
-              rabbit_exchange:callback(X, add_bindings, [Tx, X, [B]]),
               case Tx of
                   true  -> ok = sync_transient_binding(R, fun mnesia:write/3);
                   false -> ok
-              end
+              end,
+              rabbit_exchange:callback(X, add_bindings, [Tx, X, [B]])
       end,
       rabbit_durable_route),
     ok.
