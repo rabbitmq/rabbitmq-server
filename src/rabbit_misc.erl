@@ -467,17 +467,16 @@ map_in_order(F, L) ->
 %% We ignore entries that have been modified or removed.
 table_filter(Pred, PrePostCommitFun, TableName) ->
     lists:foldl(
-      fun (E, Acc) -> execute_mnesia_transaction(
-                        fun () -> case mnesia:match_object(TableName, E,
-                                                           read) of
-                                      [] -> false;
-                                      _  -> Pred(E)
-                                  end
-                        end,
-                        fun (false, _Tx) -> Acc;
-                            (true,   Tx) -> PrePostCommitFun(E, Tx),
-                                            [E | Acc]
-                        end)
+      fun (E, Acc) ->
+              case execute_mnesia_transaction(
+                     fun () -> mnesia:match_object(TableName, E, read) =/= []
+                                   andalso Pred(E) end,
+                     fun (false, _Tx) -> false;
+                         (true,   Tx) -> PrePostCommitFun(E, Tx), true
+                     end) of
+                  false -> Acc;
+                  true  -> [E | Acc]
+              end
       end, [], dirty_read_all(TableName)).
 
 dirty_read_all(TableName) ->
