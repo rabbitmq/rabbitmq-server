@@ -38,7 +38,15 @@
                       ssl_options       = none,
                       auth_mechanisms   = [fun amqp_auth_mechanisms:plain/3,
                                            fun amqp_auth_mechanisms:amqplain/3],
+                      adapter_info      = none,
                       client_properties = []}).
+
+-record(adapter_info, {address      = unknown,
+                       port         = unknown,
+                       peer_address = unknown,
+                       peer_port    = unknown,
+                       name         = unknown,
+                       protocol     = unknown}).
 
 -define(LOG_DEBUG(Format), error_logger:info_msg(Format)).
 -define(LOG_INFO(Format, Args), error_logger:info_msg(Format, Args)).
