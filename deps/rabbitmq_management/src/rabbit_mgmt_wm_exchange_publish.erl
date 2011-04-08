@@ -81,7 +81,7 @@ good(MRef, Routed, ReqData, Context) ->
     erlang:demonitor(MRef),
     rabbit_mgmt_util:reply([{routed, Routed}], ReqData, Context).
 
-bad({server_initiated_close, Code, Reason}, ReqData, Context) ->
+bad({shutdown, {server_initiated_close, Code, Reason}}, ReqData, Context) ->
     rabbit_mgmt_util:bad_request_exception(Code, Reason, ReqData, Context).
 
 is_authorized(ReqData, Context) ->

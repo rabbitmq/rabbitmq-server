@@ -324,15 +324,18 @@ with_channel(VHost, ReqData,
             try
                 Fun(Ch)
             catch
-                exit:{{server_initiated_close, ?NOT_FOUND, Reason}, _} ->
+                exit:{{shutdown,
+                       {server_initiated_close, ?NOT_FOUND, Reason}}, _} ->
                     not_found(Reason, ReqData, Context);
-                exit:{{server_initiated_close, ?ACCESS_REFUSED, Reason}, _} ->
+                exit:{{shutdown,
+                      {server_initiated_close, ?ACCESS_REFUSED, Reason}}, _} ->
                     not_authorised(Reason, ReqData, Context);
-                exit:{{ServerClose, Code, Reason}, _}
+                exit:{{shutdown, {ServerClose, Code, Reason}}, _}
                   when ServerClose =:= server_initiated_close;
                        ServerClose =:= server_initiated_hard_close ->
                     bad_request_exception(Code, Reason, ReqData, Context);
-                exit:{{connection_closing, {ServerClose, Code, Reason}}, _}
+                exit:{{shutdown, {connection_closing,
+                                  {ServerClose, Code, Reason}}}, _}
                   when ServerClose =:= server_initiated_close;
                        ServerClose =:= server_initiated_hard_close ->
                     bad_request_exception(Code, Reason, ReqData, Context)

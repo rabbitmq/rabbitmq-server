@@ -299,13 +299,11 @@ handle_event(Event = #event{type = queue_deleted}, State) ->
     handle_deleted(queue_stats, Event, State);
 
 handle_event(#event{type = connection_created, props = Stats}, State) ->
-    Name = rabbit_mgmt_format:print(
-             "~s:~w",
-             [rabbit_mgmt_format:ipb(pget(peer_address, Stats)),
-              pget(peer_port, Stats)]),
+    Name = rabbit_mgmt_format:connection(Stats),
     handle_created(
-      connection_stats, [{name, Name} | Stats],
-      [{fun rabbit_mgmt_format:ip/1,           [address, peer_address]},
+      connection_stats, [{name, Name} | proplists:delete(name, Stats)],
+      [{fun rabbit_mgmt_format:addr/1,         [address, peer_address]},
+       {fun rabbit_mgmt_format:port/1,         [port, peer_port]},
        {fun rabbit_mgmt_format:node_and_pid/1, [pid]},
        {fun rabbit_mgmt_format:protocol/1,     [protocol]},
        {fun rabbit_mgmt_format:amqp_table/1,   [client_properties]}], State);
