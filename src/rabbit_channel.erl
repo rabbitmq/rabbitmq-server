@@ -156,6 +156,7 @@ ready_for_close(Pid) ->
 
 init([Channel, ReaderPid, WriterPid, ConnPid, Protocol, User, VHost,
       Capabilities, CollectorPid, StartLimiterFun]) ->
+    process_flag(trap_exit, true),
     ok = pg_local:join(rabbit_channels, self()),
     StatsTimer = rabbit_event:init_stats_timer(),
     State = #ch{state                   = starting,

@@ -681,7 +681,8 @@ handle_method0(#'connection.open'{virtual_host = VHostPath},
                State#v1{connection_state = running,
                         connection = NewConnection}),
     rabbit_event:notify(connection_created,
-                        infos(?CREATION_EVENT_KEYS, State1)),
+                        [{type, network} |
+                         infos(?CREATION_EVENT_KEYS, State1)]),
     rabbit_event:if_enabled(StatsTimer,
                             fun() -> internal_emit_stats(State1) end),
     State1;

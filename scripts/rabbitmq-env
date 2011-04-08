@@ -37,7 +37,8 @@ RABBITMQ_HOME="${SCRIPT_DIR}/.."
 NODENAME=rabbit@${HOSTNAME%%.*}
 
 # Load configuration from the rabbitmq.conf file
-if [ -f /etc/rabbitmq/rabbitmq.conf ]; then
+if [ -f /etc/rabbitmq/rabbitmq.conf ] && \
+   [ ! -f /etc/rabbitmq/rabbitmq-env.conf ] ; then
     echo -n "WARNING: ignoring /etc/rabbitmq/rabbitmq.conf -- "
     echo "location has moved to /etc/rabbitmq/rabbitmq-env.conf"
 fi

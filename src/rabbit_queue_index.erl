@@ -514,8 +514,8 @@ queue_index_walker({start, DurableQueues}) when is_list(DurableQueues) ->
 queue_index_walker({next, Gatherer}) when is_pid(Gatherer) ->
     case gatherer:out(Gatherer) of
         empty ->
+            unlink(Gatherer),
             ok = gatherer:stop(Gatherer),
-            ok = rabbit_misc:unlink_and_capture_exit(Gatherer),
             finished;
         {value, {MsgId, Count}} ->
             {MsgId, Count, {next, Gatherer}}
@@ -1036,8 +1036,8 @@ foreach_queue_index(Funs) ->
                 end)
      end || QueueDirName <- QueueDirNames],
     empty = gatherer:out(Gatherer),
-    ok = gatherer:stop(Gatherer),
-    ok = rabbit_misc:unlink_and_capture_exit(Gatherer).
+    unlink(Gatherer),
+    ok = gatherer:stop(Gatherer).
 
 transform_queue(Dir, Gatherer, {JournalFun, SegmentFun}) ->
     ok = transform_file(filename:join(Dir, ?JOURNAL_FILENAME), JournalFun),
