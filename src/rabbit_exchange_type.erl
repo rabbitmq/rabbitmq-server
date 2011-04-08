@@ -32,7 +32,7 @@ behaviour_info(callbacks) ->
      %% called after exchange (auto)deletion.
      {delete, 3},
 
-     %% called after a binding has been added or bindings have been recovered
+     %% called after a binding has been added or recovered
      {add_binding, 3},
 
      %% called after bindings have been deleted.

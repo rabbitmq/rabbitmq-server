@@ -56,10 +56,9 @@ delete(true, #exchange{name = X}, _Bs) ->
 delete(false, _Exchange, _Bs) ->
     ok.
 
-add_binding(true, _X, B) ->
-    rabbit_misc:execute_mnesia_transaction(
-      fun () -> internal_add_binding(B) end);
-add_binding(false, _X, _B) ->
+add_binding(true, _Exchange, Binding) ->
+    internal_add_binding(Binding);
+add_binding(false, _Exchange, _Binding) ->
     ok.
 
 remove_bindings(true, #exchange{name = X}, Bs) ->
