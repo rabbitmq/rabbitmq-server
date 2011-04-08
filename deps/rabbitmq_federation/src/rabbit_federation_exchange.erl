@@ -22,7 +22,7 @@
                            [exchange, <<"x-federation">>,
                             rabbit_federation_exchange]}},
                     {requires, rabbit_registry},
-                    {enables, exchange_recovery}]}).
+                    {enables, recovery}]}).
 
 -include_lib("rabbit_common/include/rabbit_exchange_type_spec.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
@@ -30,7 +30,7 @@
 -behaviour(rabbit_exchange_type).
 
 -export([description/0, route/2, serialise_events/0]).
--export([validate/1, create/2, recover/2, delete/3,
+-export([validate/1, create/2, delete/3,
          add_binding/3, remove_bindings/3, assert_args_equivalence/2]).
 
 %%----------------------------------------------------------------------------
@@ -62,10 +62,6 @@ create(transaction, X) ->
 create(none, X) ->
     {ok, _} = rabbit_federation_sup:start_child(exchange_to_sup_args(X)),
     with_module(X, fun (M) -> M:create(none, X) end).
-
-recover(X, Bs) ->
-    {ok, _} = rabbit_federation_sup:start_child(exchange_to_sup_args(X)),
-    with_module(X, fun (M) -> M:recover(X, Bs) end).
 
 delete(transaction, X, Bs) ->
     with_module(X, fun (M) -> M:delete(transaction, X, Bs) end);
