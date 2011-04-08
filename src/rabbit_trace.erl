@@ -25,7 +25,11 @@
 
 -ifdef(use_specs).
 
-%% TODO
+-type(delivery_tag() :: pos_integer()).
+
+-spec(tap_trace_in/1 :: (rabbit_types:basic_message()) -> 'ok').
+-spec(tap_trace_out/3 :: (rabbit_amqqueue:qmsg(), delivery_tag(),
+                          rabbit_types:maybe(rabbit_types:ctag())) -> 'ok').
 
 -endif.
 
