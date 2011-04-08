@@ -281,17 +281,16 @@ sync_transient_binding(Binding, Fun) ->
 call_with_source_and_destination(SrcName, DstName, Fun) ->
     SrcTable = table_for_resource(SrcName),
     DstTable = table_for_resource(DstName),
-    ErrFun = fun (Err) -> rabbit_misc:const(Err) end,
+    ErrFun = fun (Err) -> rabbit_misc:const({error, Err}) end,
     rabbit_misc:execute_mnesia_tx_with_tail(
       fun () ->
               case {mnesia:read({SrcTable, SrcName}),
                     mnesia:read({DstTable, DstName})} of
                   {[Src], [Dst]} -> Fun(Src, Dst);
-                  {[],    [_]  } -> ErrFun({error, source_not_found});
-                  {[_],   []   } -> ErrFun({error, destination_not_found});
-                  {[],    []   } -> ErrFun({error,
-                                            source_and_destination_not_found})
-              end
+                  {[],    [_]  } -> ErrFun(source_not_found);
+                  {[_],   []   } -> ErrFun(destination_not_found);
+                  {[],    []   } -> ErrFun(source_and_destination_not_found)
+               end
       end).
 
 table_for_resource(#resource{kind = exchange}) -> rabbit_exchange;
