@@ -20,7 +20,7 @@
 
 -behaviour(rabbit_exchange_type).
 
--export([description/0, route/2]).
+-export([description/0, serialise_events/0, route/2]).
 -export([validate/1, create/2, delete/3, add_binding/3,
          remove_bindings/3, assert_args_equivalence/2]).
 -include("rabbit_exchange_type_spec.hrl").
@@ -40,6 +40,8 @@
 description() ->
     [{name, <<"headers">>},
      {description, <<"AMQP headers exchange, as per the AMQP specification">>}].
+
+serialise_events() -> false.
 
 route(#exchange{name = Name},
       #delivery{message = #basic_message{content = Content}}) ->
