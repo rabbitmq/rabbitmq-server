@@ -102,11 +102,11 @@ recover(XNames, QNames) ->
                                              #resource{kind = Kind}}}) ->
               %% The check against rabbit_durable_route is in case it
               %% disappeared between getting the list and here
-              mnesia:read({rabbit_durable_route, B}) =/= [] andalso
-                  sets:is_element(Dst, case Kind of
-                                           exchange -> XNameSet;
-                                           queue    -> QNameSet
-                                       end)
+              sets:is_element(Dst, case Kind of
+                                       exchange -> XNameSet;
+                                       queue    -> QNameSet
+                                   end) andalso
+                  mnesia:read({rabbit_durable_route, B}) =/= []
       end,
       fun (R = #route{binding = B = #binding{source = Src}}, Tx) ->
               {ok, X} = rabbit_exchange:lookup(Src),
