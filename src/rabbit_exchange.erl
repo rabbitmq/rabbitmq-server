@@ -87,12 +87,12 @@ recover() ->
            fun (#exchange{name = XName}) ->
                    mnesia:read({rabbit_exchange, XName}) =:= []
            end,
-           fun (X, Tx) -> case Tx of
-                              true  -> ok = mnesia:write(rabbit_exchange,
-                                                         X, write);
-                              false -> ok
-                          end,
-                          rabbit_exchange:callback(X, create, [Tx, X])
+           fun (X, Tx) ->
+                   case Tx of
+                       true  -> ok = mnesia:write(rabbit_exchange, X, write);
+                       false -> ok
+                   end,
+                   rabbit_exchange:callback(X, create, [Tx, X])
            end,
            rabbit_durable_exchange),
     [XName || #exchange{name = XName} <- Xs].
