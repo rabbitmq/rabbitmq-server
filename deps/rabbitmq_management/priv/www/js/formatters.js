@@ -348,6 +348,17 @@ function fmt_sort(display, sort) {
     return '<a class="sort" sort="' + sort + '">' + prefix + display + '</a>';
 }
 
+function fmt_permissions(obj, permissions, lookup, show, warning) {
+    var res = [];
+    for (var i in permissions) {
+        var permission = permissions[i];
+        if (permission[lookup] == obj.name) {
+            res.push(permission[show]);
+        }
+    }
+    return res.length == 0 ? warning : res.join(', ');
+}
+
 function properties_size(obj) {
     var count = 0;
     for (k in obj) {

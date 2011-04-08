@@ -7,12 +7,18 @@
   <thead>
     <tr>
       <th><%= fmt_sort('Name', 'name') %></th>
+      <th>Users <span class="help" id="internal-users-only"></span></th>
     </tr>
   </thead>
   <tbody>
-    <% for (var i = 0; i < vhosts.length; i++) { %>
+    <%
+       for (var i = 0; i < vhosts.length; i++) {
+         var vhost = vhosts[i];
+    %>
        <tr<%= alt_rows(i)%>>
-         <td><%= link_vhost(vhosts[i].name) %></td>
+         <td><%= link_vhost(vhost.name) %></td>
+         <td class="c"><%= fmt_permissions(vhost, permissions, 'vhost', 'user',
+                           '<p class="warning">No users</p>') %></td>
        </tr>
     <% } %>
   </tbody>

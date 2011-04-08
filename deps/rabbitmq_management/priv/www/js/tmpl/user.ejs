@@ -1,5 +1,12 @@
 <h1>User: <b><%= user.name %></b></h1>
 
+<% if (permissions.length == 0) { %>
+<p class="warning">
+  This user does not have permission to access any virtual hosts.<br/>
+  Use "Set Permission" below to grant permission to access virtual hosts.
+</p>
+<% } %>
+
 <div class="section">
   <h2>Overview</h2>
   <div class="hider">

@@ -1,5 +1,12 @@
 <h1>Virtual Host: <b><%= vhost.name %></b></h1>
 
+<% if (permissions.length == 0) { %>
+<p class="warning">
+  No users have permission to access this virtual host.<br/>
+  Use "Set Permission" below to grant users permission to access this virtual host.
+</p>
+<% } %>
+
 <%= format('permissions', {'mode': 'vhost', 'permissions': permissions, 'users': users, 'parent': vhost}) %>
 
 <div class="section-hidden">

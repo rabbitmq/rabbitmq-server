@@ -1,3 +1,4 @@
+<% if (permissions.length > 0) { %>
 <div class="section">
   <h2>Permissions</h2>
   <div class="hider">
@@ -42,6 +43,7 @@ for (var i = 0; i < permissions.length; i++) {
     </table>
   </div>
 </div>
+<% } %>
 
 <div class="section-hidden">
   <h2>Set Permission</h2>

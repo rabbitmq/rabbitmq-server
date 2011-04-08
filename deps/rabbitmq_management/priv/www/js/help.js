@@ -23,7 +23,7 @@ HELP = {
       <dl>',
 
     'internal-users-only':
-      'Only users within the internal RabbitMQ database are managed here. Other users (e.g. those authenticated over LDAP) will not appear.',
+      'Only users within the internal RabbitMQ database are shown here. Other users (e.g. those authenticated over LDAP) will not appear.',
 
     'export-config':
     'The configuration consists of users, virtual hosts, permissions, exchanges, queues and bindings. It does not include the contents of queues. Exclusive queues will not be exported.',
