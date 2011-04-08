@@ -45,8 +45,8 @@ test_supervisor_delayed_restart(SupPid) ->
 with_sup(RestartStrategy, Fun) ->
     {ok, SupPid} = supervisor2:start_link(?MODULE, [RestartStrategy]),
     Res = Fun(SupPid),
+    unlink(SupPid),
     exit(SupPid, shutdown),
-    rabbit_misc:unlink_and_capture_exit(SupPid),
     Res.
 
 init([RestartStrategy]) ->
