@@ -17,7 +17,7 @@
 -module(rabbit_binding).
 -include("rabbit.hrl").
 
--export([recover/2, exists/1, add/1, remove/1, add/2, remove/2, list/1]).
+-export([recover/2, exists/1, add/1, add/2, remove/1, remove/2, list/1]).
 -export([list_for_source/1, list_for_destination/1,
          list_for_source_and_destination/2]).
 -export([new_deletions/0, combine_deletions/2, add_deletion/3,
@@ -38,25 +38,24 @@
 -type(bind_errors() :: rabbit_types:error('source_not_found' |
                                           'destination_not_found' |
                                           'source_and_destination_not_found')).
--type(bind_res() :: 'ok' | bind_errors()).
+-type(bind_ok_or_error() :: 'ok' | bind_errors() |
+                            rabbit_types:error('binding_not_found')).
+-type(bind_res() :: bind_ok_or_error() | rabbit_misc:const(bind_ok_or_error())).
 -type(inner_fun() ::
         fun((rabbit_types:exchange(),
              rabbit_types:exchange() | rabbit_types:amqqueue()) ->
                    rabbit_types:ok_or_error(rabbit_types:amqp_error()))).
 -type(bindings() :: [rabbit_types:binding()]).
--type(add_res() :: bind_res() | rabbit_misc:const(bind_res())).
--type(bind_or_error() :: bind_res() | rabbit_types:error('binding_not_found')).
--type(remove_res() :: bind_or_error() | rabbit_misc:const(bind_or_error())).
 
 -opaque(deletions() :: dict()).
 
 -spec(recover/2 :: ([rabbit_exchange:name()], [rabbit_amqqueue:name()]) ->
                         'ok').
 -spec(exists/1 :: (rabbit_types:binding()) -> boolean() | bind_errors()).
--spec(add/1 :: (rabbit_types:binding()) -> add_res()).
--spec(remove/1 :: (rabbit_types:binding()) -> remove_res()).
--spec(add/2 :: (rabbit_types:binding(), inner_fun()) -> add_res()).
--spec(remove/2 :: (rabbit_types:binding(), inner_fun()) -> remove_res()).
+-spec(add/1    :: (rabbit_types:binding())              -> bind_res()).
+-spec(add/2    :: (rabbit_types:binding(), inner_fun()) -> bind_res()).
+-spec(remove/1 :: (rabbit_types:binding())              -> bind_res()).
+-spec(remove/2 :: (rabbit_types:binding(), inner_fun()) -> bind_res()).
 -spec(list/1 :: (rabbit_types:vhost()) -> bindings()).
 -spec(list_for_source/1 ::
         (rabbit_types:binding_source()) -> bindings()).
@@ -149,7 +148,7 @@ add(Src, Dst, B) ->
                              rabbit_event:notify_if(not Tx, binding_created,
                                                     info(B))
                  end;
-        false -> rabbit_misc:const(not_found)
+        false -> rabbit_misc:const({error, binding_not_found})
     end.
 
 remove(Binding) -> remove(Binding, fun (_Src, _Dst) -> ok end).
