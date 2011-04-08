@@ -136,7 +136,7 @@ function is_col_empty(channels, name) {
 }
 
 function fmt_exchange(name) {
-    return name == '' ? '<i>(AMQP default)</i>' : name;
+    return name == '' ? '(AMQP default)' : name;
 }
 
 function fmt_exchange_url(name) {
@@ -250,6 +250,10 @@ function fmt_maybe_wrap(txt, encoding) {
     return fmt_escape_html(res);
 }
 
+function fmt_escape_html(txt) {
+    return txt.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
 function alt_rows(i) {
     return (i % 2 == 0) ? ' class="alt1"' : ' class="alt2"';
 }
@@ -288,7 +292,7 @@ function link_node(name) {
 }
 
 function link_to(name, url) {
-    return '<a href="' + url + '">' + name + '</a>';
+    return '<a href="' + url + '">' + fmt_escape_html(name) + '</a>';
 }
 
 function message_rates(stats) {
@@ -342,4 +346,12 @@ function fmt_sort(display, sort) {
             '</span>';
     }
     return '<a class="sort" sort="' + sort + '">' + prefix + display + '</a>';
+}
+
+function properties_size(obj) {
+    var count = 0;
+    for (k in obj) {
+        if (obj.hasOwnProperty(k)) count++;
+    }
+    return count;
 }
