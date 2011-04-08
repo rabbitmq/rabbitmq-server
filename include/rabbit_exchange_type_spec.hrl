@@ -23,8 +23,8 @@
 -spec(create/2 :: (boolean(), rabbit_types:exchange()) -> 'ok').
 -spec(delete/3 :: (boolean(), rabbit_types:exchange(),
                    [rabbit_types:binding()]) -> 'ok').
--spec(add_bindings/3 :: (boolean(), rabbit_types:exchange(),
-                         [rabbit_types:binding()]) -> 'ok').
+-spec(add_binding/3 :: (boolean(), rabbit_types:exchange(),
+                        rabbit_types:binding()) -> 'ok').
 -spec(remove_bindings/3 :: (boolean(), rabbit_types:exchange(),
                             [rabbit_types:binding()]) -> 'ok').
 -spec(assert_args_equivalence/2 ::

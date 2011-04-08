@@ -33,7 +33,7 @@ behaviour_info(callbacks) ->
      {delete, 3},
 
      %% called after a binding has been added or bindings have been recovered
-     {add_bindings, 3},
+     {add_binding, 3},
 
      %% called after bindings have been deleted.
      {remove_bindings, 3},

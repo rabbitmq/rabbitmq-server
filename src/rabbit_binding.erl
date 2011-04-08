@@ -114,7 +114,7 @@ recover(XNames, QNames) ->
                   true  -> ok = sync_transient_binding(R, fun mnesia:write/3);
                   false -> ok
               end,
-              rabbit_exchange:callback(X, add_bindings, [Tx, X, [B]])
+              rabbit_exchange:callback(X, add_binding, [Tx, X, B])
       end,
       rabbit_durable_route),
     ok.
@@ -150,7 +150,7 @@ add(Src, Dst, B) ->
                    true  -> ok = sync_binding(B, Durable, fun mnesia:write/3),
                             fun (Tx) ->
                                     ok = rabbit_exchange:callback(
-                                           Src, add_bindings, [Tx, Src, [B]]),
+                                           Src, add_binding, [Tx, Src, B]),
                                     rabbit_event:notify_if(
                                       not Tx, binding_created, info(B))
                             end;

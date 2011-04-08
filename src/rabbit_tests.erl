@@ -629,7 +629,7 @@ test_topic_matching() ->
                                 {"#.#.#",         "t24"},
                                 {"*",             "t25"},
                                 {"#.b.#",         "t26"}]],
-    lists:foreach(fun (B) -> exchange_op_callback(X, add_bindings, [[B]]) end,
+    lists:foreach(fun (B) -> exchange_op_callback(X, add_binding, [B]) end,
                   Bindings),
 
     %% test some matches
