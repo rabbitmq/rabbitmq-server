@@ -21,8 +21,6 @@
 -behaviour(gen_server2).
 
 -define(UNSENT_MESSAGE_LIMIT,          100).
--define(SYNC_INTERVAL,                 25). %% milliseconds
--define(RAM_DURATION_UPDATE_INTERVAL,  5000).
 
 -define(BASE_MESSAGE_PROPERTIES,
         #message_properties{expiry = undefined, needs_confirming = false}).
@@ -262,37 +260,27 @@ backing_queue_module(#amqqueue{arguments = Args}) ->
         _Nodes    -> rabbit_mirror_queue_master
     end.
 
-ensure_sync_timer(State = #q{sync_timer_ref = undefined}) ->
-    {ok, TRef} = timer:apply_after(
-                   ?SYNC_INTERVAL, rabbit_amqqueue, sync_timeout, [self()]),
-    State#q{sync_timer_ref = TRef};
 ensure_sync_timer(State) ->
-    State.
+    rabbit_amqqueue_process_utils:ensure_sync_timer(
+      fun sync_timer_getter/1, fun sync_timer_setter/2, State).
 
-stop_sync_timer(State = #q{sync_timer_ref = undefined}) ->
-    State;
-stop_sync_timer(State = #q{sync_timer_ref = TRef}) ->
-    {ok, cancel} = timer:cancel(TRef),
-    State#q{sync_timer_ref = undefined}.
+stop_sync_timer(State) ->
+    rabbit_amqqueue_process_utils:stop_sync_timer(
+      fun sync_timer_getter/1, fun sync_timer_setter/2, State).
 
-ensure_rate_timer(State = #q{rate_timer_ref = undefined}) ->
-    {ok, TRef} = timer:apply_after(
-                   ?RAM_DURATION_UPDATE_INTERVAL,
-                   rabbit_amqqueue, update_ram_duration,
-                   [self()]),
-    State#q{rate_timer_ref = TRef};
-ensure_rate_timer(State = #q{rate_timer_ref = just_measured}) ->
-    State#q{rate_timer_ref = undefined};
+sync_timer_getter(State) -> State#q.sync_timer_ref.
+sync_timer_setter(Timer, State) -> State#q{sync_timer_ref = Timer}.
+
 ensure_rate_timer(State) ->
-    State.
+    rabbit_amqqueue_process_utils:ensure_rate_timer(
+      fun rate_timer_getter/1, fun rate_timer_setter/2, State).
 
-stop_rate_timer(State = #q{rate_timer_ref = undefined}) ->
-    State;
-stop_rate_timer(State = #q{rate_timer_ref = just_measured}) ->
-    State#q{rate_timer_ref = undefined};
-stop_rate_timer(State = #q{rate_timer_ref = TRef}) ->
-    {ok, cancel} = timer:cancel(TRef),
-    State#q{rate_timer_ref = undefined}.
+stop_rate_timer(State) ->
+    rabbit_amqqueue_process_utils:stop_rate_timer(
+      fun rate_timer_getter/1, fun rate_timer_setter/2, State).
+
+rate_timer_getter(State) -> State#q.rate_timer_ref.
+rate_timer_setter(Timer, State) -> State#q{rate_timer_ref = Timer}.
 
 stop_expiry_timer(State = #q{expiry_timer_ref = undefined}) ->
     State;
@@ -1234,15 +1222,11 @@ handle_pre_hibernate(State = #q{backing_queue_state = undefined}) ->
 handle_pre_hibernate(State = #q{backing_queue = BQ,
                                 backing_queue_state = BQS,
                                 stats_timer = StatsTimer}) ->
-    {RamDuration, BQS1} = BQ:ram_duration(BQS),
-    DesiredDuration =
-        rabbit_memory_monitor:report_ram_duration(self(), RamDuration),
-    BQS2 = BQ:set_ram_duration_target(DesiredDuration, BQS1),
-    BQS3 = BQ:handle_pre_hibernate(BQS2),
+    BQS1 = rabbit_amqqueue_process_utils:backing_queue_pre_hibernate(BQ, BQS),
     rabbit_event:if_enabled(StatsTimer,
                             fun () ->
                                     emit_stats(State, [{idle_since, now()}])
                             end),
     State1 = State#q{stats_timer = rabbit_event:stop_stats_timer(StatsTimer),
-                     backing_queue_state = BQS3},
+                     backing_queue_state = BQS1},
     {hibernate, stop_rate_timer(State1)}.
