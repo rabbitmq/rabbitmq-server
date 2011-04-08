@@ -116,12 +116,14 @@ recover(XNames, QNames) ->
                   mnesia:read({rabbit_semi_durable_route, B}) =/= []
       end,
       fun (R = #route{binding = B = #binding{source = Src}}, Tx) ->
-              case Tx of
-                  true  -> ok = sync_transient_binding(R, fun mnesia:write/3);
-                  false -> ok
-              end,
               {ok, X} = rabbit_exchange:lookup(Src),
-              rabbit_exchange:callback(X, add_binding, [Tx, X, B])
+              Serial = case Tx of
+                           true  -> ok = sync_transient_binding(
+                                           R, fun mnesia:write/3),
+                                    transaction;
+                           false -> rabbit_exchange:serial(X)
+                       end,
+              rabbit_exchange:callback(X, add_binding, [Serial, X, B])
       end,
       rabbit_semi_durable_route),
     ok.
