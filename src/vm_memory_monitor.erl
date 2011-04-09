@@ -239,9 +239,12 @@ get_total_memory({unix,darwin}) ->
     PageSize * (Inactive + Active + Free + Wired);
 
 get_total_memory({unix,freebsd}) ->
-    PageSize  = freebsd_sysctl("vm.stats.vm.v_page_size"),
-    PageCount = freebsd_sysctl("vm.stats.vm.v_page_count"),
+    PageSize  = sysctl("vm.stats.vm.v_page_size"),
+    PageCount = sysctl("vm.stats.vm.v_page_count"),
     PageCount * PageSize;
+
+get_total_memory({unix,openbsd}) ->
+    sysctl("hw.usermem");
 
 get_total_memory({win32,_OSname}) ->
     %% Due to the Erlang print format bug, on Windows boxes the memory
@@ -342,7 +345,7 @@ parse_line_aix(Line) ->
          false -> list_to_integer(Value)
      end}.
 
-freebsd_sysctl(Def) ->
+sysctl(Def) ->
     list_to_integer(cmd("/sbin/sysctl -n " ++ Def) -- "\n").
 
 %% file:read_file does not work on files in /proc as it seems to get
