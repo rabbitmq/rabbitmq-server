@@ -210,6 +210,17 @@
 %% master). To do this bit properly would require 2PC and all the
 %% baggage that goes with that.
 %%
+%% Recovery of mirrored queues is straightforward: as nodes die, the
+%% remaining nodes record this, and eventually a situation is reached
+%% in which only one node is alive, which is the master. This is the
+%% only node which, upon recovery, will resurrect a mirrored queue:
+%% nodes which die and then rejoin as a slave will start off empty as
+%% if they have no mirrored content at all. This is not surprising: to
+%% achieve anything more sophisticated would require the master and
+%% recovering slave to be able to check to see whether they agree on
+%% the last seen state of the queue: checking length alone is not
+%% sufficient in this case.
+%%
 %%----------------------------------------------------------------------------
 
 start_link(Queue, GM) ->
