@@ -100,7 +100,7 @@ message_to_table(#basic_message{exchange_name = #resource{name = XName},
                   V = element(Ix, Props),
                   NewL = case V of
                              undefined -> L;
-                             _         -> [{a2b(K), type(K, V), V}|L]
+                             _         -> [{a2b(K), type(V), V} | L]
                          end,
                   {NewL, Ix + 1}
           end, {[], 2}, record_info(fields, 'P_basic')),
@@ -114,6 +114,6 @@ message_to_table(#basic_message{exchange_name = #resource{name = XName},
 a2b(A) ->
     list_to_binary(atom_to_list(A)).
 
-type(headers, _V)                    -> table;
-type(_K, V)       when is_integer(V) -> signedint;
-type(_K, _V)                         -> longstr.
+type(V) when is_list(V)    -> table;
+type(V) when is_integer(V) -> signedint;
+type(V)                    -> longstr.
