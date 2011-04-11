@@ -14,6 +14,10 @@
 %% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
 %%
 
+%% @type close_reason(Type) = {shutdown, amqp_reason(Type)}.
+%% @type amqp_reason(Type) = {Type, Code, Text}
+%%      Code = non_neg_integer()
+%%      Text = binary().
 %% @doc This module is responsible for maintaining a connection to an AMQP
 %% broker and manages channels within the connection. This module is used to
 %% open and close connections to the broker as well as creating new channels
@@ -22,7 +26,45 @@
 %% amqp_client's supervision tree. Please note that connections and channels
 %% do not get restarted automatically by the supervision tree in the case of a
 %% failure. If you need robust connections and channels, we recommend you use
-%% Erlang monitors on the returned connection and channel PID.
+%% Erlang monitors on the returned connection and channel PIDs.<br/>
+%% <br/>
+%% In case of a failure or an AMQP error, the connection process exits with a
+%% meaningful exit reason:<br/>
+%% <br/>
+%% <table>
+%%   <tr>
+%%     <td><strong>Cause</strong></td>
+%%     <td><strong>Exit reason</strong></td>
+%%   </tr>
+%%   <tr>
+%%     <td>Any reason, where Code would have been 200 otherwise</td>
+%%     <td>```normal'''</td>
+%%   </tr>
+%%   <tr>
+%%     <td>User application calls amqp_connection:close/3</td>
+%%     <td>```close_reason(app_initiated_close)'''</td>
+%%   </tr>
+%%   <tr>
+%%     <td>Server closes connection (hard error)</td>
+%%     <td>```close_reason(server_initiated_close)'''</td>
+%%   </tr>
+%%   <tr>
+%%     <td>Server misbehaved (did not follow protocol)</td>
+%%     <td>```close_reason(server_misbehaved)'''</td>
+%%   </tr>
+%%   <tr>
+%%     <td>AMQP client internal error - usually caused by a channel exiting
+%%         with an unusual reason. This is usually accompanied by a more
+%%         detailed error log from the channel</td>
+%%     <td>```close_reason(internal_error)'''</td>
+%%   </tr>
+%%   <tr>
+%%     <td>Other error</td>
+%%     <td>(various error reasons, causing more detailed logging)</td>
+%%   </tr>
+%% </table>
+%% <br/>
+%% See type definitions below.
 -module(amqp_connection).
 
 -include("amqp_client.hrl").

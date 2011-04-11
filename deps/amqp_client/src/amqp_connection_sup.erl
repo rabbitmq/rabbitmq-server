@@ -30,13 +30,7 @@
 
 start_link(Type, Module, AmqpParams) ->
     {ok, Sup} = supervisor2:start_link(?MODULE, []),
-    {ok, ChSupSup} = supervisor2:start_child(
-                       Sup,
-                       {channel_sup_sup, {amqp_channel_sup_sup, start_link,
-                                          [Type]},
-                        intrinsic, infinity, supervisor,
-                        [amqp_channel_sup_sup]}),
-    SChMF = start_channels_manager_fun(Sup, ChSupSup),
+    SChMF = start_channels_manager_fun(Sup, Type),
     SIF = start_infrastructure_fun(Sup, Type),
     {ok, Connection} = supervisor2:start_child(
                          Sup,
@@ -76,9 +70,15 @@ start_infrastructure_fun(Sup, direct) ->
             {ok, Collector}
     end.
 
-start_channels_manager_fun(Sup, ChSupSup) ->
+start_channels_manager_fun(Sup, Type) ->
     fun () ->
             Connection = self(),
+            {ok, ChSupSup} = supervisor2:start_child(
+                       Sup,
+                       {channel_sup_sup, {amqp_channel_sup_sup, start_link,
+                                          [Type, Connection]},
+                        intrinsic, infinity, supervisor,
+                        [amqp_channel_sup_sup]}),
             {ok, _} = supervisor2:start_child(
                         Sup,
                         {channels_manager, {amqp_channels_manager, start_link,

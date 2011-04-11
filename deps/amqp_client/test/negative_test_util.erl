@@ -52,7 +52,7 @@ bogus_rpc_test(Connection) ->
     try amqp_channel:call(Channel, Bind) of
         _ -> exit(expected_to_exit)
     catch
-        exit:{{server_initiated_close, Code, _},_} ->
+        exit:{{shutdown, {server_initiated_close, Code, _}},_} ->
             ?assertMatch(?NOT_FOUND, Code)
     end,
     test_util:wait_for_death(Channel),
@@ -67,23 +67,16 @@ hard_error_test(Connection) ->
     try amqp_channel:call(Channel, Qos) of
         _ -> exit(expected_to_exit)
     catch
-        exit:{connection_closing, _} ->
-            %% Network case
-            ok;
-        exit:Reason ->
-            %% Direct case
-            %% TODO: fix error code in the direct case
-            ?assertMatch({{server_initiated_hard_close, ?NOT_IMPLEMENTED, _}, _},
-                         Reason)
+        exit:{{shutdown, {connection_closing,
+                          {server_initiated_close, ?NOT_IMPLEMENTED, _}}}, _} ->
+            ok
     end,
-    receive {'DOWN', OtherChannelMonitor, process, OtherChannel, OtherExit} ->
-        case OtherExit of
-            %% Direct case
-            %% TODO fix error code in the direct case
-            killed -> ok;
-            %% Network case
-            _      -> ?assertMatch(connection_closing, OtherExit)
-        end
+    receive
+        {'DOWN', OtherChannelMonitor, process, OtherChannel, OtherExit} ->
+            ?assertMatch({shutdown,
+                          {connection_closing,
+                           {server_initiated_close, ?NOT_IMPLEMENTED, _}}},
+                         OtherExit)
     end,
     test_util:wait_for_death(Channel),
     test_util:wait_for_death(Connection).
@@ -168,7 +161,7 @@ command_invalid_over_channel0_test(Connection) ->
 assert_down_with_error(MonitorRef, CodeAtom) ->
     receive
         {'DOWN', MonitorRef, process, _, Reason} ->
-            {server_misbehaved, Code, _} = Reason,
+            {shutdown, {server_misbehaved, Code, _}} = Reason,
             ?assertMatch(CodeAtom, ?PROTOCOL:amqp_exception(Code))
     after 2000 ->
         exit(did_not_die)

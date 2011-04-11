@@ -21,6 +21,8 @@
 
 -compile([export_all]).
 
+-define(TEST_REPEATS, 100).
+
 -record(publish, {q, x, routing_key, bind_key, payload,
                   mandatory = false, immediate = false}).
 
@@ -278,13 +280,13 @@ channel_multi_open_close_test(Connection) ->
                                           ok                 -> ok;
                                           closing            -> ok
                                       catch
-                                          exit:{noproc, _}             -> ok;
-                                          exit:{connection_closing, _} -> ok
+                                          exit:{noproc, _} -> ok;
+                                          exit:{normal, _} -> ok
                                       end;
                 closing            -> ok
             catch
-                exit:{noproc, _}             -> ok;
-                exit:{connection_closing, _} -> ok
+                exit:{noproc, _} -> ok;
+                exit:{normal, _} -> ok
             end
         end) || _ <- lists:seq(1, 50)],
     erlang:yield(),
@@ -340,6 +342,20 @@ consume_loop(Channel, X, RoutingKey, Parent, Tag) ->
     receive #'basic.cancel_ok'{consumer_tag = Tag} -> ok end,
     Parent ! finished.
 
+consume_notification_test(Connection) ->
+    {ok, Channel} = amqp_connection:open_channel(Connection),
+    Q = uuid(),
+    #'queue.declare_ok'{} =
+        amqp_channel:call(Channel, #'queue.declare'{queue = Q}),
+    #'basic.consume_ok'{consumer_tag = CTag} = ConsumeOk =
+        amqp_channel:subscribe(Channel, #'basic.consume'{queue = Q}, self()),
+    receive ConsumeOk -> ok end,
+    #'queue.delete_ok'{} =
+        amqp_channel:call(Channel, #'queue.delete'{queue = Q}),
+    receive #'basic.cancel'{consumer_tag = CTag} -> ok end,
+    amqp_channel:close(Channel),
+    ok.
+
 basic_recover_test(Connection) ->
     {ok, Channel} = amqp_connection:open_channel(Connection),
     #'queue.declare_ok'{queue = Q} =
@@ -371,6 +387,31 @@ basic_recover_test(Connection) ->
         exit(did_not_receive_second_message)
     end,
     teardown(Connection, Channel).
+
+simultaneous_close_test(Connection) ->
+    ChannelNumber = 5,
+    {ok, Channel1} = amqp_connection:open_channel(Connection, ChannelNumber),
+
+    %% Publish to non-existent exchange and immediately close channel
+    amqp_channel:cast(Channel1, #'basic.publish'{exchange = uuid(),
+                                                routing_key = <<"a">>},
+                               #amqp_msg{payload = <<"foobar">>}),
+    try amqp_channel:close(Channel1) of
+        closing -> wait_for_death(Channel1)
+    catch
+        exit:{noproc, _}                                              -> ok;
+        exit:{{shutdown, {server_initiated_close, ?NOT_FOUND, _}}, _} -> ok
+    end,
+
+    %% Channel2 (opened with the exact same number as Channel1)
+    %% should not receive a close_ok (which is intended for Channel1)
+    {ok, Channel2} = amqp_connection:open_channel(Connection, ChannelNumber),
+
+    %% Make sure Channel2 functions normally
+    #'exchange.declare_ok'{} =
+        amqp_channel:call(Channel2, #'exchange.declare'{exchange = uuid()}),
+
+    teardown(Connection, Channel2).    
 
 basic_qos_test(Con) ->
     [NoQos, Qos] = [basic_qos_test(Con, Prefetch) || Prefetch <- [0,1]],
@@ -695,3 +736,8 @@ latch_loop(Latch, Acc) ->
 uuid() ->
     {A, B, C} = now(),
     <<A:32, B:32, C:32>>.
+
+%% NB: make sure to name the function using this *_test_ (note trailing _)
+repeat_eunit(TestFun) ->
+    {timeout, 60,
+     fun () -> [TestFun() || _ <- lists:seq(1, ?TEST_REPEATS)] end}.

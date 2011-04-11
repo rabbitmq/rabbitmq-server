@@ -63,7 +63,7 @@ handle_message(socket_closing_timeout,
     {stop, {socket_closing_timeout, Reason}, State};
 handle_message(socket_closed, State = #state{waiting_socket_close = true,
                                              closing_reason = Reason}) ->
-    {stop, Reason, State};
+    {stop, {shutdown, Reason}, State};
 handle_message(socket_closed, State = #state{waiting_socket_close = false}) ->
     {stop, socket_closed_unexpectedly, State};
 handle_message({socket_error, _} = SocketError, State) ->
@@ -127,7 +127,7 @@ connect(AmqpParams = #amqp_params{ssl_options = SslOpts,
 try_handshake(AmqpParams, SIF, ChMgr, State) ->
     try handshake(AmqpParams, SIF, ChMgr, State) of
         Return -> Return
-    catch _:Reason -> {error, Reason}
+    catch exit:Reason -> {error, Reason}
     end.
 
 handshake(AmqpParams, SIF, ChMgr, State0 = #state{sock = Sock}) ->
@@ -250,7 +250,7 @@ handshake_recv(Expecting) ->
                      {error, {unexpected_method, Method,
                               {expecting, Expecting}}}};
                 _ ->
-                    exit({unexpected_method, Method,
+                    throw({unexpected_method, Method,
                           {expecting, Expecting}})
             end;
         socket_closed ->
@@ -265,7 +265,7 @@ handshake_recv(Expecting) ->
         heartbeat_timeout ->
             exit(heartbeat_timeout);
         Other ->
-            exit({handshake_recv_unexpected_message, Other})
+            throw({handshake_recv_unexpected_message, Other})
     after ?HANDSHAKE_RECEIVE_TIMEOUT ->
         case Expecting of
             'connection.open_ok' ->

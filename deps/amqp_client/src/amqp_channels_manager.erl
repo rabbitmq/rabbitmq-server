@@ -22,7 +22,7 @@
 -behaviour(gen_server).
 
 -export([start_link/2, open_channel/3, set_channel_max/2, is_empty/1,
-         num_channels/1, pass_frame/3, signal_connection_closing/2]).
+         num_channels/1, pass_frame/3, signal_connection_closing/3]).
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2]).
 
@@ -55,8 +55,8 @@ num_channels(ChMgr) ->
 pass_frame(ChMgr, ChNumber, Frame) ->
     gen_server:cast(ChMgr, {pass_frame, ChNumber, Frame}).
 
-signal_connection_closing(ChMgr, ChannelCloseType) ->
-    gen_server:cast(ChMgr, {connection_closing, ChannelCloseType}).
+signal_connection_closing(ChMgr, ChannelCloseType, Reason) ->
+    gen_server:cast(ChMgr, {connection_closing, ChannelCloseType, Reason}).
 
 %%---------------------------------------------------------------------------
 %% gen_server callbacks
@@ -83,8 +83,8 @@ handle_cast({set_channel_max, ChannelMax}, State) ->
     {noreply, State#state{channel_max = ChannelMax}};
 handle_cast({pass_frame, ChNumber, Frame}, State) ->
     {noreply, internal_pass_frame(ChNumber, Frame, State)};
-handle_cast({connection_closing, ChannelCloseType}, State) ->
-    handle_connection_closing(ChannelCloseType, State).
+handle_cast({connection_closing, ChannelCloseType, Reason}, State) ->
+    handle_connection_closing(ChannelCloseType, Reason, State).
 
 handle_info({'DOWN', _, process, Pid, Reason}, State) ->
     handle_down(Pid, Reason, State).
@@ -148,7 +148,10 @@ handle_down(Pid, Reason, State) ->
     end.
 
 handle_channel_down(Pid, Number, Reason, State) ->
-    maybe_report_down(Pid, Reason, State),
+    maybe_report_down(Pid, case Reason of {shutdown, R} -> R;
+                                          _             -> Reason
+                           end,
+                      State),
     NewState = internal_unregister(Number, Pid, State),
     check_all_channels_terminated(NewState),
     {noreply, NewState}.
@@ -159,11 +162,8 @@ maybe_report_down(_Pid, {app_initiated_close, _, _}, _State) ->
     ok;
 maybe_report_down(_Pid, {server_initiated_close, _, _}, _State) ->
     ok;
-maybe_report_down(_Pid, connection_closing, _State) ->
+maybe_report_down(_Pid, {connection_closing, _}, _State) ->
     ok;
-maybe_report_down(Pid, {server_initiated_hard_close, _, _} = Reason,
-                  #state{connection = Connection}) ->
-    amqp_gen_connection:hard_error_in_channel(Connection, Pid, Reason);
 maybe_report_down(_Pid, {server_misbehaved, AmqpError},
                   #state{connection = Connection}) ->
     amqp_gen_connection:server_misbehaved(Connection, AmqpError);
@@ -179,11 +179,12 @@ check_all_channels_terminated(State = #state{closing = true,
         false -> ok
     end.
 
-handle_connection_closing(ChannelCloseType,
+handle_connection_closing(ChannelCloseType, Reason,
                           State = #state{connection = Connection}) ->
     case internal_is_empty(State) of
         true  -> amqp_gen_connection:channels_terminated(Connection);
-        false -> signal_channels_connection_closing(ChannelCloseType, State)
+        false -> signal_channels_connection_closing(ChannelCloseType, Reason,
+                                                    State)
     end,
     {noreply, State#state{closing = true}}.
 
@@ -233,7 +234,7 @@ internal_lookup_pn(Pid, #state{map_pid_num = MapPN}) ->
 internal_update_npa(Number, Pid, AState, State = #state{map_num_pa = MapNPA}) ->
     State#state{map_num_pa = gb_trees:update(Number, {Pid, AState}, MapNPA)}.
 
-signal_channels_connection_closing(ChannelCloseType,
+signal_channels_connection_closing(ChannelCloseType, Reason,
                                    #state{map_pid_num = MapPN}) ->
-    [amqp_channel:connection_closing(Pid, ChannelCloseType)
+    [amqp_channel:connection_closing(Pid, ChannelCloseType, Reason)
         || Pid <- dict:fetch_keys(MapPN)].
