@@ -97,7 +97,9 @@ recover(XNames, QNames) ->
     XNameSet = sets:from_list(XNames),
     QNameSet = sets:from_list(QNames),
     rabbit_misc:table_filter(
-      fun (_Route) -> true end,
+      fun (Route) ->
+              mnesia:read({rabbit_semi_durable_route, Route}) =:= []
+      end,
       fun (Route,  true) ->
               ok = mnesia:write(rabbit_semi_durable_route, Route, write);
           (_Route, false) ->
