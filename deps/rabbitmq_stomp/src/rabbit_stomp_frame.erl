@@ -43,8 +43,6 @@
          binary_header/2, binary_header/3]).
 -export([serialize/1]).
 
--define(CHUNK_SIZE_LIMIT, 32768).
-
 initial_state() ->
     none.
 
@@ -98,32 +96,39 @@ parse_header_value(<<$\n, Rest/binary>>, Frame, HeaderAcc, KeyAcc, ValAcc) ->
                                     HeaderAcc]
                  end,
     parse_headers(Rest, Frame, NewHeaders, []);
-parse_header_value(<<$\\, Ch:8,  Rest/binary>>, Frame,
+parse_header_value(<<$\\, Rest/binary>>, Frame,
                    HeaderAcc, KeyAcc, ValAcc) ->
+    parse_header_value_escape(Rest, Frame, HeaderAcc, KeyAcc, ValAcc);
+parse_header_value(<<Ch:8, Rest/binary>>, Frame, HeaderAcc, KeyAcc,
+                   ValAcc) ->
+    parse_header_value(Rest, Frame, HeaderAcc, KeyAcc, [Ch | ValAcc]).
+
+parse_header_value_escape(<<>>, Frame, HeaderAcc, KeyAcc, ValAcc) ->
+    more(fun(Rest) ->
+           parse_header_value_escape(Rest, Frame, HeaderAcc, KeyAcc, ValAcc)
+         end);
+parse_header_value_escape(<<Ch:8,  Rest/binary>>, Frame,
+                          HeaderAcc, KeyAcc, ValAcc) ->
     case unescape(Ch) of
         {ok, EscCh} ->
             parse_header_value(Rest, Frame, HeaderAcc, KeyAcc,
                                [EscCh | ValAcc]);
         error ->
             {error, {bad_escape, Ch}}
-    end;
-parse_header_value(<<Ch:8, Rest/binary>>, Frame, HeaderAcc, KeyAcc,
-                   ValAcc) ->
-    parse_header_value(Rest, Frame, HeaderAcc, KeyAcc, [Ch | ValAcc]).
+    end.
 
 parse_body(Content, Frame, Chunks, unknown) ->
-    case binary:split(Content, <<0>>) of
-        [Content] ->
-            more(fun(Rest) ->
-                         parse_body(Rest,
-                                    Frame,
-                                    finalize_chunk(Content, Chunks),
-                                    unknown)
-                 end);
-        [Chunk, Rest] ->
-            {ok, Frame#stomp_frame{
-                   body_iolist = lists:reverse(
-                                   finalize_chunk(Chunk, Chunks))}, Rest}
+    case firstnull(Content) of
+        -1  -> more(fun(Rest) ->
+                            parse_body(Rest,
+                                       Frame,
+                                       finalize_chunk(Content, Chunks),
+                                       unknown)
+                    end);
+        Pos -> <<Chunk:Pos/binary, 0, Rest/binary>> = Content,
+               {ok, Frame#stomp_frame{
+                      body_iolist = lists:reverse(
+                                      finalize_chunk(Chunk, Chunks))}, Rest}
     end;
 parse_body(Content, Frame, Chunks, Remaining) ->
     Size = byte_size(Content),
@@ -134,7 +139,7 @@ parse_body(Content, Frame, Chunks, Remaining) ->
                          parse_body(Rest, Frame,
                                     finalize_chunk(Content, Chunks),
                                     Left)
-                 end, Left);
+                 end, Left+1);  %% expect a trailing null, too
         false ->
             <<Chunk:Remaining/binary, 0, Remainder/binary>> = Content,
             {ok,
@@ -220,20 +225,18 @@ serialize_header({K, V}) when is_integer(V) ->
 serialize_header({K, V}) when is_list(V) ->
     [K, $:, [escape(C) || C <- V], $\n].
 
-unescape($n) ->
-    {ok, $\n};
-unescape($\\) ->
-    {ok, $\\};
-unescape($c) ->
-    {ok, $:};
-unescape(_) ->
-    error.
+unescape($n)  -> {ok, $\n};
+unescape($\\) -> {ok, $\\};
+unescape($c)  -> {ok, $:};
+unescape(_)   -> error.
 
-escape($:) ->
-    "\\c";
-escape($\\) ->
-    "\\\\";
-escape($\n) ->
-    "\\n";
-escape(C) ->
-    C.
+escape($:)  -> "\\c";
+escape($\\) -> "\\\\";
+escape($\n) -> "\\n";
+escape(C)   -> C.
+
+firstnull(Content) -> firstnull(Content, 0).
+
+firstnull(<<>>,                _N) -> -1;
+firstnull(<<0,  _Rest/binary>>, N) -> N;
+firstnull(<<_Ch, Rest/binary>>, N) -> firstnull(Rest, N+1).

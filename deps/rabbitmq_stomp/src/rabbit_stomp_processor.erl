@@ -40,7 +40,7 @@
 
 -record(state, {socket, session_id, channel,
                 connection, subscriptions, version,
-                start_heartbeat_fun}).
+                start_heartbeat_fun, pending_receipts}).
 
 -record(subscription, {dest_hdr, channel, multi_ack, description}).
 
@@ -71,7 +71,8 @@ init([Sock, StartHeartbeatFun]) ->
        connection          = none,
        subscriptions       = dict:new(),
        version             = none,
-       start_heartbeat_fun = StartHeartbeatFun},
+       start_heartbeat_fun = StartHeartbeatFun,
+       pending_receipts    = undefined},
      hibernate,
      {backoff, 1000, 1000, 10000}
     }.
@@ -82,7 +83,8 @@ terminate(_Reason, State) ->
 handle_cast({"STOMP", Frame}, State) ->
     handle_cast({"CONNECT", Frame}, State);
 
-handle_cast({"CONNECT", Frame}, State = #state{channel = none}) ->
+handle_cast({"CONNECT", Frame}, State = #state{channel = none,
+                                               socket  = Sock}) ->
     process_request(
       fun(StateN) ->
               case negotiate_version(Frame) of
@@ -96,6 +98,7 @@ handle_cast({"CONNECT", Frame}, State = #state{channel = none}) ->
                                                            DefaultVHost)),
                                rabbit_stomp_frame:header(Frame, "heartbeat",
                                                          "0,0"),
+                               adapter_info(Sock, Version),
                                Version,
                                StateN);
                   {error, no_common_version} ->
@@ -132,6 +135,8 @@ handle_info(#'basic.consume_ok'{}, State) ->
     {noreply, State, hibernate};
 handle_info(#'basic.cancel_ok'{}, State) ->
     {noreply, State, hibernate};
+handle_info(#'basic.ack'{delivery_tag = Tag, multiple = IsMulti}, State) ->
+    {noreply, flush_pending_receipts(Tag, IsMulti, State), hibernate};
 handle_info({Delivery = #'basic.deliver'{},
              #amqp_msg{props = Props, payload = Payload}}, State) ->
     {noreply, send_delivery(Delivery, Props, Payload, State), hibernate};
@@ -160,8 +165,10 @@ process_request(ProcessFun, SuccessFun, State) ->
             {noreply, SuccessFun(NewState), hibernate};
         {error, Message, Detail, NewState} ->
             {noreply, send_error(Message, Detail, NewState), hibernate};
-        {stop, R, State} ->
-            {stop, R, State}
+        {stop, normal, NewState} ->
+            {stop, normal, SuccessFun(NewState)};
+        {stop, R, NewState} ->
+            {stop, R, NewState}
     end.
 
 %%----------------------------------------------------------------------------
@@ -170,7 +177,7 @@ process_request(ProcessFun, SuccessFun, State) ->
 
 handle_frame("DISCONNECT", _Frame, State) ->
     %% We'll get to shutdown the channels in terminate
-    {stop, normal, State};
+    {stop, normal, shutdown_channel_and_connection(State)};
 
 handle_frame("SUBSCRIBE", Frame, State) ->
     with_destination("SUBSCRIBE", Frame, State, fun do_subscribe/4);
@@ -308,12 +315,14 @@ with_destination(Command, Frame, State, Fun) ->
                   State)
     end.
 
-do_login({ok, Login}, {ok, Passcode}, VirtualHost, Heartbeat, Version, State) ->
+do_login({ok, Login}, {ok, Passcode}, VirtualHost, Heartbeat, AdapterInfo,
+         Version, State) ->
     {ok, Connection} = amqp_connection:start(
                          direct, #amqp_params{
                            username     = list_to_binary(Login),
                            password     = list_to_binary(Passcode),
-                           virtual_host = list_to_binary(VirtualHost)}),
+                           virtual_host = list_to_binary(VirtualHost),
+                           adapter_info = AdapterInfo}),
     {ok, Channel} = amqp_connection:open_channel(Connection),
     SessionId = rabbit_guid:string_guid("session"),
 
@@ -328,8 +337,17 @@ do_login({ok, Login}, {ok, Passcode}, VirtualHost, Heartbeat, Version, State) ->
                    channel    = Channel,
                    connection = Connection});
 
-do_login(_, _, _, _, _, State) ->
+do_login(_, _, _, _, _, _, State) ->
     error("Bad CONNECT", "Missing login or passcode header(s)\n", State).
+
+adapter_info(Sock, Version) ->
+    {ok, {Addr,     Port}}     = rabbit_net:sockname(Sock),
+    {ok, {PeerAddr, PeerPort}} = rabbit_net:peername(Sock),
+    #adapter_info{protocol     = {'STOMP', Version},
+                  address      = Addr,
+                  port         = Port,
+                  peer_address = PeerAddr,
+                  peer_port    = PeerPort}.
 
 do_subscribe(Destination, DestHdr, Frame,
              State = #state{subscriptions = Subs,
@@ -394,10 +412,14 @@ do_send(Destination, _DestHdr,
     case transactional(Frame) of
         {yes, Transaction} ->
             extend_transaction(Transaction,
+                               fun(StateN) ->
+                                       maybe_record_receipt(Frame, StateN)
+                               end,
                                {Method, Props, BodyFragments},
                                State);
         no ->
-            ok(send_method(Method, Props, BodyFragments, State))
+            ok(send_method(Method, Props, BodyFragments,
+                           maybe_record_receipt(Frame, State)))
     end.
 
 create_ack_method(DeliveryTag, #subscription{multi_ack = IsMulti}) ->
@@ -415,11 +437,6 @@ negotiate_version(Frame) ->
                    [{return, list}]),
     rabbit_stomp_util:negotiate_version(ClientVers, ?SUPPORTED_VERSIONS).
 
-ensure_receipt(Frame, State) ->
-    case rabbit_stomp_frame:header(Frame, "receipt") of
-        {ok, Id}  -> send_frame("RECEIPT", [{"receipt-id", Id}], "", State);
-        not_found -> State
-    end.
 
 send_delivery(Delivery = #'basic.deliver'{consumer_tag = ConsumerTag},
               Properties, Body,
@@ -455,9 +472,11 @@ send_method(Method, Channel, Properties, BodyFragments, State) ->
     amqp_channel:call(
       Channel, Method,
       #amqp_msg{props   = Properties,
-                payload = list_to_binary(lists:reverse(BodyFragments))}),
+                payload = list_to_binary(BodyFragments)}),
     State.
 
+shutdown_channel_and_connection(State = #state{channel = none}) ->
+    State;
 shutdown_channel_and_connection(State = #state{channel       = Channel,
                                                connection    = Connection,
                                                subscriptions = Subs}) ->
@@ -473,12 +492,74 @@ shutdown_channel_and_connection(State = #state{channel       = Channel,
 
     amqp_channel:close(Channel),
     amqp_connection:close(Connection),
-    State#state{channel = none, connection = none}.
+    State#state{channel = none, connection = none, subscriptions = none}.
 
 default_prefetch({queue, _}) ->
     ?DEFAULT_QUEUE_PREFETCH;
 default_prefetch(_) ->
     undefined.
+
+%%----------------------------------------------------------------------------
+%% Receipt Handling
+%%----------------------------------------------------------------------------
+
+ensure_receipt(Frame = #stomp_frame{command = Command}, State) ->
+    case rabbit_stomp_frame:header(Frame, "receipt") of
+        {ok, Id}  -> do_receipt(Command, Id, State);
+        not_found -> State
+    end.
+
+do_receipt("SEND", _, State) ->
+    %% SEND frame receipts are handled when messages are confirmed
+    State;
+do_receipt(_Frame, ReceiptId, State) ->
+    send_frame("RECEIPT", [{"receipt-id", ReceiptId}], "", State).
+
+maybe_record_receipt(Frame, State = #state{channel          = Channel,
+                                           pending_receipts = PR}) ->
+    case rabbit_stomp_frame:header(Frame, "receipt") of
+        {ok, Id} ->
+            PR1 = case PR of
+                      undefined ->
+                          amqp_channel:register_confirm_handler(
+                            Channel, self()),
+                          #'confirm.select_ok'{} =
+                              amqp_channel:call(Channel, #'confirm.select'{}),
+                          gb_trees:empty();
+                      _ ->
+                          PR
+                  end,
+            SeqNo = amqp_channel:next_publish_seqno(Channel),
+            State#state{pending_receipts = gb_trees:insert(SeqNo, Id, PR1)};
+        not_found ->
+            State
+    end.
+
+flush_pending_receipts(DeliveryTag, IsMulti,
+                       State = #state{pending_receipts = PR}) ->
+    {Receipts, PR1} = accumulate_receipts(DeliveryTag, IsMulti, PR),
+    State1 = lists:foldl(fun(ReceiptId, StateN) ->
+                                 do_receipt(none, ReceiptId, StateN)
+                         end, State, Receipts),
+    State1#state{pending_receipts = PR1}.
+
+accumulate_receipts(DeliveryTag, false, PR) ->
+    case gb_trees:lookup(DeliveryTag, PR) of
+        {value, ReceiptId} -> {[ReceiptId], gb_trees:delete(DeliveryTag, PR)};
+        none               -> {[], PR}
+    end;
+accumulate_receipts(DeliveryTag, true, PR) ->
+    {Key, Value, PR1} = gb_trees:take_smallest(PR),
+    case DeliveryTag >= Key of
+        true  -> accumulate_receipts1(DeliveryTag, {Key, Value, PR1}, []);
+        false -> {[], PR}
+    end.
+
+accumulate_receipts1(DeliveryTag, {DeliveryTag, Value, PR}, Acc) ->
+    {lists:reverse([Value | Acc]), PR};
+accumulate_receipts1(DeliveryTag, {_Key, Value, PR}, Acc) ->
+    accumulate_receipts1(DeliveryTag,
+                         gb_trees:take_smallest(PR), [Value | Acc]).
 
 %%----------------------------------------------------------------------------
 %% Transaction Support
@@ -517,6 +598,9 @@ begin_transaction(Transaction, State) ->
     put({transaction, Transaction}, []),
     ok(State).
 
+extend_transaction(Transaction, Callback, Action, State) ->
+    extend_transaction(Transaction, {callback, Callback, Action}, State).
+
 extend_transaction(Transaction, Action, State0) ->
     with_transaction(
       Transaction, State0,
@@ -544,6 +628,8 @@ abort_transaction(Transaction, State0) ->
               ok(State)
       end).
 
+perform_transaction_action({callback, Callback, Action}, State) ->
+    perform_transaction_action(Action, Callback(State));
 perform_transaction_action({Method}, State) ->
     send_method(Method, State);
 perform_transaction_action({Channel, Method}, State) ->

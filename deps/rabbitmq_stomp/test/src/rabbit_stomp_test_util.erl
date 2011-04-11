@@ -97,6 +97,28 @@ message_headers_test() ->
 
     [] = lists:subtract(Headers, Expected).
 
+minimal_message_headers_with_no_custom_test() ->
+    Destination = "/queue/foo",
+    SessionId = "1234567",
+
+    Delivery = #'basic.deliver'{
+      consumer_tag = <<"Q_123">>,
+      delivery_tag = 123},
+
+    Properties = #'P_basic'{},
+
+    Headers = rabbit_stomp_util:message_headers(Destination, SessionId,
+                                                Delivery, Properties),
+    Expected = [
+                {"destination", Destination},
+                {"message-id", [<<"Q_123">>, "@@", SessionId, "@@", "123"]},
+                {"content-type", "text/plain"},
+                {"content-encoding", "UTF-8"},
+                {"amqp-message-id", "M123"}
+               ],
+
+    [] = lists:subtract(Headers, Expected).
+
 negotiate_version_both_empty_test() ->
     {error, no_common_version} = rabbit_stomp_util:negotiate_version([],[]).
 

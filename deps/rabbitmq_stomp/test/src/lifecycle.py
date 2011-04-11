@@ -91,13 +91,24 @@ class TestLifecycle(base.BaseTest):
         self.conn.disconnect()
         self.assertFalse(self.conn.is_connected())
 
+    def test_disconnect_with_receipt(self):
+        ''' Test the DISCONNECT command with receipts '''
+        time.sleep(3)
+        self.listener.reset(1)
+        self.conn.send_frame("DISCONNECT", {"receipt": "test"})
+        self.assertTrue(self.listener.await())
+        self.assertEquals(1, len(self.listener.receipts))
+        receiptReceived = self.listener.receipts[0]['headers']['receipt-id']
+        self.assertEquals("test", receiptReceived
+                         , "Wrong receipt received: '" + receiptReceived + "'")
+
     def unsub_test(self, dest, verbs, numRcts=0):
         def afterfun():
             self.conn.send("after-test", destination=dest)
         subverb, unsubverb = verbs
         self.assertListenerAfter(subverb, numMsgs=1,
                            errMsg="FAILED to subscribe and send")
-        self.assertListenerAfter(unsubverb, numRcts=numRcts, 
+        self.assertListenerAfter(unsubverb, numRcts=numRcts,
                            errMsg="Incorrect responses from UNSUBSCRIBE")
         self.assertListenerAfter(afterfun,
                            errMsg="Still receiving messages")

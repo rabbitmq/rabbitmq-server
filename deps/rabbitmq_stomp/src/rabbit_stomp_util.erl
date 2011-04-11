@@ -198,6 +198,8 @@ maybe_header(Key, Value, Acc) when is_integer(Value) ->
 maybe_header(_Key, _Value, Acc) ->
     Acc.
 
+adhoc_convert_headers(undefined, Existing) ->
+    Existing;
 adhoc_convert_headers(Headers, Existing) ->
     lists:foldr(fun ({K, longstr, V}, Acc) ->
                         [{binary_to_list(K), binary_to_list(V)} | Acc];
