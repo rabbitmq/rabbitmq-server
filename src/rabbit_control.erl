@@ -20,6 +20,7 @@
 -export([start/0, stop/0, action/5, diagnostics/1]).
 
 -define(RPC_TIMEOUT, infinity).
+-define(WAIT_FOR_VM_ATTEMPTS, 5).
 
 -define(QUIET_OPT, "-q").
 -define(NODE_OPT, "-n").
@@ -102,24 +103,22 @@ print_badrpc_diagnostics(Node) ->
 
 diagnostics(Node) ->
     {_NodeName, NodeHost} = rabbit_misc:nodeparts(Node),
-    [
-        {"diagnostics:", []},
-        case net_adm:names(NodeHost) of
-            {error, EpmdReason} ->
-                {"- unable to connect to epmd on ~s: ~w",
-                    [NodeHost, EpmdReason]};
-            {ok, NamePorts} ->
-                {"- nodes and their ports on ~s: ~p",
-                              [NodeHost, [{list_to_atom(Name), Port} ||
-                                          {Name, Port} <- NamePorts]]}
-        end,
-        {"- current node: ~w", [node()]},
-        case init:get_argument(home) of
-            {ok, [[Home]]} -> {"- current node home dir: ~s", [Home]};
-            Other          -> {"- no current node home dir: ~p", [Other]}
-        end,
-        {"- current node cookie hash: ~s", [rabbit_misc:cookie_hash()]}
-    ].
+    [{"diagnostics:", []},
+     case net_adm:names(NodeHost) of
+         {error, EpmdReason} ->
+             {"- unable to connect to epmd on ~s: ~w",
+              [NodeHost, EpmdReason]};
+         {ok, NamePorts} ->
+             {"- nodes and their ports on ~s: ~p",
+              [NodeHost, [{list_to_atom(Name), Port} ||
+                             {Name, Port} <- NamePorts]]}
+     end,
+     {"- current node: ~w", [node()]},
+     case init:get_argument(home) of
+         {ok, [[Home]]} -> {"- current node home dir: ~s", [Home]};
+         Other          -> {"- no current node home dir: ~p", [Other]}
+     end,
+     {"- current node cookie hash: ~s", [rabbit_misc:cookie_hash()]}].
 
 stop() ->
     ok.
@@ -127,6 +126,8 @@ stop() ->
 usage() ->
     io:format("~s", [rabbit_ctl_usage:usage()]),
     quit(1).
+
+%%----------------------------------------------------------------------------
 
 action(stop, Node, [], _Opts, Inform) ->
     Inform("Stopping and halting node ~p", [Node]),
@@ -151,14 +152,18 @@ action(force_reset, Node, [], _Opts, Inform) ->
 action(cluster, Node, ClusterNodeSs, _Opts, Inform) ->
     ClusterNodes = lists:map(fun list_to_atom/1, ClusterNodeSs),
     Inform("Clustering node ~p with ~p",
-              [Node, ClusterNodes]),
+           [Node, ClusterNodes]),
     rpc_call(Node, rabbit_mnesia, cluster, [ClusterNodes]);
 
 action(force_cluster, Node, ClusterNodeSs, _Opts, Inform) ->
     ClusterNodes = lists:map(fun list_to_atom/1, ClusterNodeSs),
     Inform("Forcefully clustering node ~p with ~p (ignoring offline nodes)",
-              [Node, ClusterNodes]),
+           [Node, ClusterNodes]),
     rpc_call(Node, rabbit_mnesia, force_cluster, [ClusterNodes]);
+
+action(wait, Node, [], _Opts, Inform) ->
+    Inform("Waiting for ~p", [Node]),
+    wait_for_application(Node, ?WAIT_FOR_VM_ATTEMPTS);
 
 action(status, Node, [], _Opts, Inform) ->
     Inform("Status of node ~p", [Node]),
@@ -295,11 +300,29 @@ action(list_permissions, Node, [], Opts, Inform) ->
     display_list(call(Node, {rabbit_auth_backend_internal,
                              list_vhost_permissions, [VHost]})).
 
+%%----------------------------------------------------------------------------
+
+wait_for_application(Node, Attempts) ->
+    case rpc_call(Node, application, which_applications, [infinity]) of
+        {badrpc, _} = E -> case Attempts of
+                               0 -> E;
+                               _ -> wait_for_application0(Node, Attempts - 1)
+                           end;
+        Apps            -> case proplists:is_defined(rabbit, Apps) of
+                               %% We've seen the node up; if it goes down
+                               %% die immediately.
+                               true  -> ok;
+                               false -> wait_for_application0(Node, 0)
+                           end
+    end.
+
+wait_for_application0(Node, Attempts) ->
+    timer:sleep(1000),
+    wait_for_application(Node, Attempts).
+
 default_if_empty(List, Default) when is_list(List) ->
-    if List == [] ->
-        Default;
-       true ->
-        [list_to_atom(X) || X <- List]
+    if List == [] -> Default;
+       true       -> [list_to_atom(X) || X <- List]
     end.
 
 display_info_list(Results, InfoItemKeys) when is_list(Results) ->
@@ -362,12 +385,9 @@ rpc_call(Node, Mod, Fun, Args) ->
 %% characters.  We don't escape characters above 127, since they may
 %% form part of UTF-8 strings.
 
-escape(Atom) when is_atom(Atom) ->
-    escape(atom_to_list(Atom));
-escape(Bin) when is_binary(Bin) ->
-    escape(binary_to_list(Bin));
-escape(L) when is_list(L) ->
-    escape_char(lists:reverse(L), []).
+escape(Atom) when is_atom(Atom)  -> escape(atom_to_list(Atom));
+escape(Bin)  when is_binary(Bin) -> escape(binary_to_list(Bin));
+escape(L)    when is_list(L)     -> escape_char(lists:reverse(L), []).
 
 escape_char([$\\ | T], Acc) ->
     escape_char(T, [$\\, $\\ | Acc]);
@@ -382,19 +402,15 @@ escape_char([], Acc) ->
 prettify_amqp_table(Table) ->
     [{escape(K), prettify_typed_amqp_value(T, V)} || {K, T, V} <- Table].
 
-prettify_typed_amqp_value(Type, Value) ->
-    case Type of
-        longstr -> escape(Value);
-        table   -> prettify_amqp_table(Value);
-        array   -> [prettify_typed_amqp_value(T, V) || {T, V} <- Value];
-        _       -> Value
-    end.
+prettify_typed_amqp_value(longstr, Value) -> escape(Value);
+prettify_typed_amqp_value(table,   Value) -> prettify_amqp_table(Value);
+prettify_typed_amqp_value(array,   Value) -> [prettify_typed_amqp_value(T, V) ||
+                                                 {T, V} <- Value];
+prettify_typed_amqp_value(_Type,   Value) -> Value.
 
-% the slower shutdown on windows required to flush stdout
+%% the slower shutdown on windows required to flush stdout
 quit(Status) ->
     case os:type() of
-        {unix, _} ->
-            halt(Status);
-        {win32, _} ->
-            init:stop(Status)
+        {unix,  _} -> halt(Status);
+        {win32, _} -> init:stop(Status)
     end.

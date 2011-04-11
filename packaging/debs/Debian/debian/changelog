@@ -1,3 +1,15 @@
+rabbitmq-server (2.4.1-1) lucid; urgency=low
+
+  * New Upstream Release
+
+ -- Alexandru Scvortov <alexandru@rabbitmq.com>  Thu, 07 Apr 2011 16:49:22 +0100
+
+rabbitmq-server (2.4.0-1) lucid; urgency=low
+
+  * New Upstream Release
+
+ -- Alexandru Scvortov <alexandru@rabbitmq.com>  Tue, 22 Mar 2011 17:34:31 +0000
+
 rabbitmq-server (2.3.1-1) lucid; urgency=low
 
   * New Upstream Release

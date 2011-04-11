@@ -19,7 +19,7 @@
 
 -behaviour(rabbit_auth_mechanism).
 
--export([description/0, init/1, handle_response/2]).
+-export([description/0, should_offer/1, init/1, handle_response/2]).
 
 -include("rabbit_auth_mechanism_spec.hrl").
 
@@ -43,6 +43,9 @@ description() ->
      {description, <<"RabbitMQ Demo challenge-response authentication "
                      "mechanism">>}].
 
+should_offer(_Sock) ->
+    true.
+
 init(_Sock) ->
     #state{}.
 
@@ -50,10 +53,8 @@ handle_response(Response, State = #state{username = undefined}) ->
     {challenge, <<"Please tell me your password">>,
      State#state{username = Response}};
 
-handle_response(Response, #state{username = Username}) ->
-    case Response of
-        <<"My password is ", Password/binary>> ->
-            rabbit_access_control:check_user_pass_login(Username, Password);
-        _ ->
-            {protocol_error, "Invalid response '~s'", [Response]}
-    end.
+handle_response(<<"My password is ", Password/binary>>,
+                #state{username = Username}) ->
+    rabbit_access_control:check_user_pass_login(Username, Password);
+handle_response(Response, _State) ->
+    {protocol_error, "Invalid response '~s'", [Response]}.

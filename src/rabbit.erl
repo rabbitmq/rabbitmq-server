@@ -27,7 +27,7 @@
 
 %%---------------------------------------------------------------------------
 %% Boot steps.
--export([maybe_insert_default_data/0, boot_delegate/0]).
+-export([maybe_insert_default_data/0, boot_delegate/0, recover/0]).
 
 -rabbit_boot_step({pre_boot, [{description, "rabbit boot start"}]}).
 
@@ -41,7 +41,7 @@
 
 -rabbit_boot_step({database,
                    [{mfa,         {rabbit_mnesia, init, []}},
-                    {requires,    pre_boot},
+                    {requires,    file_handle_cache},
                     {enables,     external_infrastructure}]}).
 
 -rabbit_boot_step({file_handle_cache,
@@ -128,15 +128,9 @@
                     {requires,    core_initialized},
                     {enables,     routing_ready}]}).
 
--rabbit_boot_step({exchange_recovery,
-                   [{description, "exchange recovery"},
-                    {mfa,         {rabbit_exchange, recover, []}},
-                    {requires,    empty_db_check},
-                    {enables,     routing_ready}]}).
-
--rabbit_boot_step({queue_sup_queue_recovery,
-                   [{description, "queue supervisor and queue recovery"},
-                    {mfa,         {rabbit_amqqueue, start, []}},
+-rabbit_boot_step({recovery,
+                   [{description, "exchange, queue and binding recovery"},
+                    {mfa,         {rabbit, recover, []}},
                     {requires,    empty_db_check},
                     {enables,     routing_ready}]}).
 
@@ -191,13 +185,15 @@
 
 -spec(maybe_insert_default_data/0 :: () -> 'ok').
 -spec(boot_delegate/0 :: () -> 'ok').
+-spec(recover/0 :: () -> 'ok').
 
 -endif.
 
 %%----------------------------------------------------------------------------
 
 prepare() ->
-    ok = ensure_working_log_handlers().
+    ok = ensure_working_log_handlers(),
+    ok = rabbit_upgrade:maybe_upgrade_mnesia().
 
 start() ->
     try
@@ -220,7 +216,8 @@ stop_and_halt() ->
     ok.
 
 status() ->
-    [{running_applications, application:which_applications()}] ++
+    [{pid, list_to_integer(os:getpid())},
+     {running_applications, application:which_applications()}] ++
         rabbit_mnesia:status().
 
 rotate_logs(BinarySuffix) ->
@@ -237,6 +234,7 @@ rotate_logs(BinarySuffix) ->
 start(normal, []) ->
     case erts_version_check() of
         ok ->
+            ok = rabbit_mnesia:delete_previously_running_nodes(),
             {ok, SupPid} = rabbit_sup:start_link(),
             true = register(rabbit, self()),
 
@@ -249,6 +247,7 @@ start(normal, []) ->
     end.
 
 stop(_State) ->
+    ok = rabbit_mnesia:record_running_nodes(),
     terminated_ok = error_logger:delete_report_handler(rabbit_error_logger),
     ok = rabbit_alarm:stop(),
     ok = case rabbit_mnesia:is_clustered() of
@@ -379,7 +378,7 @@ config_files() ->
         error       -> []
     end.
 
-%---------------------------------------------------------------------------
+%%---------------------------------------------------------------------------
 
 print_banner() ->
     {ok, Product} = application:get_key(id),
@@ -464,6 +463,9 @@ ensure_working_log_handler(OldFHandler, NewFHandler, TTYHandler,
 boot_delegate() ->
     {ok, Count} = application:get_env(rabbit, delegate_count),
     rabbit_sup:start_child(delegate_sup, [Count]).
+
+recover() ->
+    rabbit_binding:recover(rabbit_exchange:recover(), rabbit_amqqueue:start()).
 
 maybe_insert_default_data() ->
     case rabbit_mnesia:is_db_empty() of

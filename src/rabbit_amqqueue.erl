@@ -17,22 +17,23 @@
 -module(rabbit_amqqueue).
 
 -export([start/0, stop/0, declare/5, delete_immediately/1, delete/3, purge/1]).
--export([internal_declare/2, internal_delete/1,
-         maybe_run_queue_via_backing_queue/2,
-         maybe_run_queue_via_backing_queue_async/2,
-         sync_timeout/1, update_ram_duration/1, set_ram_duration_target/2,
-         set_maximum_since_use/2, maybe_expire/1, drop_expired/1]).
 -export([pseudo_queue/2]).
 -export([lookup/1, with/2, with_or_die/2, assert_equivalence/5,
          check_exclusive_access/2, with_exclusive_access_or_die/3,
          stat/1, deliver/2, requeue/3, ack/4, reject/4]).
 -export([list/1, info_keys/0, info/1, info/2, info_all/1, info_all/2]).
--export([emit_stats/1]).
 -export([consumers/1, consumers_all/1]).
 -export([basic_get/3, basic_consume/7, basic_cancel/4]).
 -export([notify_sent/2, unblock/2, flush_all/2]).
 -export([commit_all/3, rollback_all/3, notify_down_all/2, limit_all/3]).
 -export([on_node_down/1]).
+
+%% internal
+-export([internal_declare/2, internal_delete/1,
+         run_backing_queue/2, run_backing_queue_async/2,
+         sync_timeout/1, update_ram_duration/1, set_ram_duration_target/2,
+         set_maximum_since_use/2, maybe_expire/1, drop_expired/1,
+         emit_stats/1]).
 
 -include("rabbit.hrl").
 -include_lib("stdlib/include/qlc.hrl").
@@ -52,11 +53,11 @@
 -type(qmsg() :: {name(), pid(), msg_id(), boolean(), rabbit_types:message()}).
 -type(msg_id() :: non_neg_integer()).
 -type(ok_or_errors() ::
-      'ok' | {'error', [{'error' | 'exit' | 'throw', any()}]}).
+        'ok' | {'error', [{'error' | 'exit' | 'throw', any()}]}).
 
 -type(queue_or_not_found() :: rabbit_types:amqqueue() | 'not_found').
 
--spec(start/0 :: () -> 'ok').
+-spec(start/0 :: () -> [name()]).
 -spec(stop/0 :: () -> 'ok').
 -spec(declare/5 ::
         (name(), boolean(), boolean(),
@@ -100,13 +101,13 @@
 -spec(emit_stats/1 :: (rabbit_types:amqqueue()) -> 'ok').
 -spec(delete_immediately/1 :: (rabbit_types:amqqueue()) -> 'ok').
 -spec(delete/3 ::
-      (rabbit_types:amqqueue(), 'false', 'false')
+        (rabbit_types:amqqueue(), 'false', 'false')
         -> qlen();
-      (rabbit_types:amqqueue(), 'true' , 'false')
+        (rabbit_types:amqqueue(), 'true' , 'false')
         -> qlen() | rabbit_types:error('in_use');
-      (rabbit_types:amqqueue(), 'false', 'true' )
+        (rabbit_types:amqqueue(), 'false', 'true' )
         -> qlen() | rabbit_types:error('not_empty');
-      (rabbit_types:amqqueue(), 'true' , 'true' )
+        (rabbit_types:amqqueue(), 'true' , 'true' )
         -> qlen() |
            rabbit_types:error('in_use') |
            rabbit_types:error('not_empty')).
@@ -122,10 +123,10 @@
 -spec(notify_down_all/2 :: ([pid()], pid()) -> ok_or_errors()).
 -spec(limit_all/3 :: ([pid()], pid(), pid() | 'undefined') -> ok_or_errors()).
 -spec(basic_get/3 :: (rabbit_types:amqqueue(), pid(), boolean()) ->
-             {'ok', non_neg_integer(), qmsg()} | 'empty').
+                          {'ok', non_neg_integer(), qmsg()} | 'empty').
 -spec(basic_consume/7 ::
-      (rabbit_types:amqqueue(), boolean(), pid(), pid() | 'undefined',
-       rabbit_types:ctag(), boolean(), any())
+        (rabbit_types:amqqueue(), boolean(), pid(), pid() | 'undefined',
+         rabbit_types:ctag(), boolean(), any())
         -> rabbit_types:ok_or_error('exclusive_consume_unavailable')).
 -spec(basic_cancel/4 ::
         (rabbit_types:amqqueue(), pid(), rabbit_types:ctag(), any()) -> 'ok').
@@ -140,10 +141,10 @@
                     rabbit_types:connection_exit() |
                     fun ((boolean()) -> rabbit_types:ok_or_error('not_found') |
                                         rabbit_types:connection_exit())).
--spec(maybe_run_queue_via_backing_queue/2 ::
-        (pid(), (fun ((A) -> {[rabbit_guid:guid()], A}))) -> 'ok').
--spec(maybe_run_queue_via_backing_queue_async/2 ::
-        (pid(), (fun ((A) -> {[rabbit_guid:guid()], A}))) -> 'ok').
+-spec(run_backing_queue/2 ::
+        (pid(), (fun ((A) -> {[rabbit_types:msg_id()], A}))) -> 'ok').
+-spec(run_backing_queue_async/2 ::
+        (pid(), (fun ((A) -> {[rabbit_types:msg_id()], A}))) -> 'ok').
 -spec(sync_timeout/1 :: (pid()) -> 'ok').
 -spec(update_ram_duration/1 :: (pid()) -> 'ok').
 -spec(set_ram_duration_target/2 :: (pid(), number() | 'infinity') -> 'ok').
@@ -165,8 +166,7 @@ start() ->
                {rabbit_amqqueue_sup,
                 {rabbit_amqqueue_sup, start_link, []},
                 transient, infinity, supervisor, [rabbit_amqqueue_sup]}),
-    _RealDurableQueues = recover_durable_queues(DurableQueues),
-    ok.
+    recover_durable_queues(DurableQueues).
 
 stop() ->
     ok = supervisor:terminate_child(rabbit_sup, rabbit_amqqueue_sup),
@@ -186,8 +186,8 @@ find_durable_queues() ->
 
 recover_durable_queues(DurableQueues) ->
     Qs = [start_queue_process(Q) || Q <- DurableQueues],
-    [Q || Q <- Qs,
-          gen_server2:call(Q#amqqueue.pid, {init, true}, infinity) == Q].
+    [QName || Q = #amqqueue{name = QName, pid = Pid} <- Qs,
+              gen_server2:call(Pid, {init, true}, infinity) == {new, Q}].
 
 declare(QueueName, Durable, AutoDelete, Args, Owner) ->
     ok = check_declare_arguments(QueueName, Args),
@@ -214,8 +214,8 @@ internal_declare(Q = #amqqueue{name = QueueName}, false) ->
                           []  -> ok = store_queue(Q),
                                  B = add_default_binding(Q),
                                  fun (Tx) -> B(Tx), Q end;
-                          [_] -> %% Q exists on stopped node
-                                 rabbit_misc:const(not_found)
+                          %% Q exists on stopped node
+                          [_] -> rabbit_misc:const(not_found)
                       end;
                   [ExistingQ = #amqqueue{pid = QPid}] ->
                       case rabbit_misc:is_process_alive(QPid) of
@@ -288,7 +288,7 @@ with_exclusive_access_or_die(Name, ReaderPid, F) ->
                 fun (Q) -> check_exclusive_access(Q, ReaderPid), F(Q) end).
 
 assert_args_equivalence(#amqqueue{name = QueueName, arguments = Args},
-                       RequiredArgs) ->
+                        RequiredArgs) ->
     rabbit_misc:assert_args_equivalence(Args, RequiredArgs, QueueName,
                                         [<<"x-expires">>]).
 
@@ -438,11 +438,11 @@ internal_delete(QueueName) ->
               end
       end).
 
-maybe_run_queue_via_backing_queue(QPid, Fun) ->
-    gen_server2:call(QPid, {maybe_run_queue_via_backing_queue, Fun}, infinity).
+run_backing_queue(QPid, Fun) ->
+    gen_server2:call(QPid, {run_backing_queue, Fun}, infinity).
 
-maybe_run_queue_via_backing_queue_async(QPid, Fun) ->
-    gen_server2:cast(QPid, {maybe_run_queue_via_backing_queue, Fun}).
+run_backing_queue_async(QPid, Fun) ->
+    gen_server2:cast(QPid, {run_backing_queue, Fun}).
 
 sync_timeout(QPid) ->
     gen_server2:cast(QPid, sync_timeout).

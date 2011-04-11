@@ -52,8 +52,8 @@
 -spec(clear_admin/1 :: (rabbit_types:username()) -> 'ok').
 -spec(list_users/0 :: () -> [{rabbit_types:username(), boolean()}]).
 -spec(lookup_user/1 :: (rabbit_types:username())
-        -> rabbit_types:ok(rabbit_types:internal_user())
-               | rabbit_types:error('not_found')).
+                       -> rabbit_types:ok(rabbit_types:internal_user())
+                              | rabbit_types:error('not_found')).
 -spec(set_permissions/5 ::(rabbit_types:username(), rabbit_types:vhost(),
                            regexp(), regexp(), regexp()) -> 'ok').
 -spec(clear_permissions/2 :: (rabbit_types:username(), rabbit_types:vhost())
@@ -85,10 +85,9 @@ check_user_login(Username, []) ->
     internal_check_user_login(Username, fun(_) -> true end);
 check_user_login(Username, [{password, Password}]) ->
     internal_check_user_login(
-      Username,
-      fun(#internal_user{password_hash = Hash}) ->
-              check_password(Password, Hash)
-      end);
+      Username, fun(#internal_user{password_hash = Hash}) ->
+                        check_password(Password, Hash)
+                end);
 check_user_login(Username, AuthProps) ->
     exit({unknown_auth_props, Username, AuthProps}).
 
@@ -131,12 +130,11 @@ check_resource_access(#user{username = Username},
         [] ->
             false;
         [#user_permission{permission = P}] ->
-            PermRegexp =
-                case element(permission_index(Permission), P) of
-                    %% <<"^$">> breaks Emacs' erlang mode
-                    <<"">> -> <<$^, $$>>;
-                    RE     -> RE
-                end,
+            PermRegexp = case element(permission_index(Permission), P) of
+                             %% <<"^$">> breaks Emacs' erlang mode
+                             <<"">> -> <<$^, $$>>;
+                             RE     -> RE
+                         end,
             case re:run(Name, PermRegexp, [{capture, none}]) of
                 match    -> true;
                 nomatch  -> false
@@ -221,11 +219,9 @@ salted_md5(Salt, Cleartext) ->
     Salted = <<Salt/binary, Cleartext/binary>>,
     erlang:md5(Salted).
 
-set_admin(Username) ->
-    set_admin(Username, true).
+set_admin(Username)   -> set_admin(Username, true).
 
-clear_admin(Username) ->
-    set_admin(Username, false).
+clear_admin(Username) -> set_admin(Username, false).
 
 set_admin(Username, IsAdmin) ->
     R = update_user(Username, fun(User) ->

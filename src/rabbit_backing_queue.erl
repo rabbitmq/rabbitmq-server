@@ -33,7 +33,21 @@ behaviour_info(callbacks) ->
      {stop, 0},
 
      %% Initialise the backing queue and its state.
-     {init, 3},
+     %%
+     %% Takes
+     %% 1. the queue name
+     %% 2. a boolean indicating whether the queue is durable
+     %% 3. a boolean indicating whether the queue is an existing queue
+     %%    that should be recovered
+     %% 4. an asynchronous callback which accepts a function of type
+     %%    backing-queue-state to backing-queue-state. This callback
+     %%    function can be safely invoked from any process, which
+     %%    makes it useful for passing messages back into the backing
+     %%    queue, especially as the backing queue does not have
+     %%    control of its own mailbox.
+     %% 5. a synchronous callback. Same as the asynchronous callback
+     %%    but waits for completion and returns 'error' on error.
+     {init, 5},
 
      %% Called on queue shutdown when queue isn't being deleted.
      {terminate, 1},
@@ -54,6 +68,35 @@ behaviour_info(callbacks) ->
      %% (i.e. saves the round trip through the backing queue).
      {publish_delivered, 4},
 
+     %% Return ids of messages which have been confirmed since
+     %% the last invocation of this function (or initialisation).
+     %%
+     %% Message ids should only appear in the result of
+     %% drain_confirmed under the following circumstances:
+     %%
+     %% 1. The message appears in a call to publish_delivered/4 and
+     %%    the first argument (ack_required) is false; or
+     %% 2. The message is fetched from the queue with fetch/2 and the
+     %%    first argument (ack_required) is false; or
+     %% 3. The message is acked (ack/2 is called for the message); or
+     %% 4. The message is fully fsync'd to disk in such a way that the
+     %%    recovery of the message is guaranteed in the event of a
+     %%    crash of this rabbit node (excluding hardware failure).
+     %%
+     %% In addition to the above conditions, a message id may only
+     %% appear in the result of drain_confirmed if
+     %% #message_properties.needs_confirming = true when the msg was
+     %% published (through whichever means) to the backing queue.
+     %%
+     %% It is legal for the same message id to appear in the results
+     %% of multiple calls to drain_confirmed, which means that the
+     %% backing queue is not required to keep track of which messages
+     %% it has already confirmed. The confirm will be issued to the
+     %% publisher the first time the message id appears in the result
+     %% of drain_confirmed. All subsequent appearances of that message
+     %% id will be ignored.
+     {drain_confirmed, 1},
+
      %% Drop messages from the head of the queue while the supplied
      %% predicate returns true.
      {dropwhile, 2},
@@ -62,7 +105,7 @@ behaviour_info(callbacks) ->
      {fetch, 2},
 
      %% Acktags supplied are for messages which can now be forgotten
-     %% about. Must return 1 guid per Ack, in the same order as Acks.
+     %% about. Must return 1 msg_id per Ack, in the same order as Acks.
      {ack, 2},
 
      %% A publish, but in the context of a transaction.

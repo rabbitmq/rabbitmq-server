@@ -16,7 +16,7 @@
 
 -module(rabbit_direct).
 
--export([boot/0, connect/4, start_channel/7]).
+-export([boot/0, connect/4, start_channel/8]).
 
 -include("rabbit.hrl").
 
@@ -26,10 +26,10 @@
 
 -spec(boot/0 :: () -> 'ok').
 -spec(connect/4 :: (binary(), binary(), binary(), rabbit_types:protocol()) ->
-                       {'ok', {rabbit_types:user(),
-                               rabbit_framing:amqp_table()}}).
--spec(start_channel/7 ::
-        (rabbit_channel:channel_number(), pid(), rabbit_types:protocol(),
+                        {'ok', {rabbit_types:user(),
+                                rabbit_framing:amqp_table()}}).
+-spec(start_channel/8 ::
+        (rabbit_channel:channel_number(), pid(), pid(), rabbit_types:protocol(),
          rabbit_types:user(), rabbit_types:vhost(), rabbit_framing:amqp_table(),
          pid()) -> {'ok', pid()}).
 
@@ -40,12 +40,12 @@
 boot() ->
     {ok, _} =
         supervisor2:start_child(
-            rabbit_sup,
-            {rabbit_direct_client_sup,
-             {rabbit_client_sup, start_link,
-              [{local, rabbit_direct_client_sup},
-               {rabbit_channel_sup, start_link, []}]},
-             transient, infinity, supervisor, [rabbit_client_sup]}),
+          rabbit_sup,
+          {rabbit_direct_client_sup,
+           {rabbit_client_sup, start_link,
+            [{local, rabbit_direct_client_sup},
+             {rabbit_channel_sup, start_link, []}]},
+           transient, infinity, supervisor, [rabbit_client_sup]}),
     ok.
 
 %%----------------------------------------------------------------------------
@@ -69,11 +69,11 @@ connect(Username, Password, VHost, Protocol) ->
             {error, broker_not_found_on_node}
     end.
 
-start_channel(Number, ClientChannelPid, Protocol, User, VHost, Capabilities,
-              Collector) ->
+start_channel(Number, ClientChannelPid, ConnPid, Protocol, User, VHost,
+              Capabilities, Collector) ->
     {ok, _, {ChannelPid, _}} =
         supervisor2:start_child(
-            rabbit_direct_client_sup,
-            [{direct, Number, ClientChannelPid, Protocol, User, VHost,
-              Capabilities, Collector}]),
+          rabbit_direct_client_sup,
+          [{direct, Number, ClientChannelPid, ConnPid, Protocol, User, VHost,
+            Capabilities, Collector}]),
     {ok, ChannelPid}.

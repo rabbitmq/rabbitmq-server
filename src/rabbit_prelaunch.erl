@@ -235,7 +235,7 @@ post_process_script(ScriptFile) ->
             {error, {failed_to_load_script, Reason}}
     end.
 
-process_entry(Entry = {apply,{application,start_boot,[rabbit,permanent]}}) ->
+process_entry(Entry = {apply,{application,start_boot,[mnesia,permanent]}}) ->
     [{apply,{rabbit,prepare,[]}}, Entry];
 process_entry(Entry) ->
     [Entry].
@@ -250,16 +250,21 @@ duplicate_node_check(NodeStr) ->
     case net_adm:names(NodeHost) of
         {ok, NamePorts}  ->
             case proplists:is_defined(NodeName, NamePorts) of
-                     true -> io:format("node with name ~p "
-                                       "already running on ~p~n",
-                                       [NodeName, NodeHost]),
-                             [io:format(Fmt ++ "~n", Args) ||
-                              {Fmt, Args} <- rabbit_control:diagnostics(Node)],
-                             terminate(?ERROR_CODE);
-                     false -> ok
+                true -> io:format("node with name ~p "
+                                  "already running on ~p~n",
+                                  [NodeName, NodeHost]),
+                        [io:format(Fmt ++ "~n", Args) ||
+                            {Fmt, Args} <- rabbit_control:diagnostics(Node)],
+                        terminate(?ERROR_CODE);
+                false -> ok
             end;
-        {error, EpmdReason} -> terminate("unexpected epmd error: ~p~n",
-                                         [EpmdReason])
+        {error, EpmdReason} ->
+            terminate("epmd error for host ~p: ~p (~s)~n",
+                      [NodeHost, EpmdReason,
+                       case EpmdReason of
+                           address -> "unable to establish tcp connection";
+                           _       -> inet:format_error(EpmdReason)
+                       end])
     end.
 
 terminate(Fmt, Args) ->

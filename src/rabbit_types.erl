@@ -21,7 +21,7 @@
 -ifdef(use_specs).
 
 -export_type([txn/0, maybe/1, info/0, infos/0, info_key/0, info_keys/0,
-              message/0, basic_message/0,
+              message/0, msg_id/0, basic_message/0,
               delivery/0, content/0, decoded_content/0, undecoded_content/0,
               unencoded_content/0, encoded_content/0, message_properties/0,
               vhost/0, ctag/0, amqp_error/0, r/1, r2/2, r3/3, listener/0,
@@ -42,39 +42,40 @@
 %% TODO: make this more precise by tying specific class_ids to
 %% specific properties
 -type(undecoded_content() ::
-      #content{class_id              :: rabbit_framing:amqp_class_id(),
-               properties            :: 'none',
-               properties_bin        :: binary(),
-               payload_fragments_rev :: [binary()]} |
-      #content{class_id              :: rabbit_framing:amqp_class_id(),
-               properties            :: rabbit_framing:amqp_property_record(),
-               properties_bin        :: 'none',
-               payload_fragments_rev :: [binary()]}).
+        #content{class_id              :: rabbit_framing:amqp_class_id(),
+                 properties            :: 'none',
+                 properties_bin        :: binary(),
+                 payload_fragments_rev :: [binary()]} |
+        #content{class_id              :: rabbit_framing:amqp_class_id(),
+                 properties            :: rabbit_framing:amqp_property_record(),
+                 properties_bin        :: 'none',
+                 payload_fragments_rev :: [binary()]}).
 -type(unencoded_content() :: undecoded_content()).
 -type(decoded_content() ::
-      #content{class_id              :: rabbit_framing:amqp_class_id(),
-               properties            :: rabbit_framing:amqp_property_record(),
-               properties_bin        :: maybe(binary()),
-               payload_fragments_rev :: [binary()]}).
+        #content{class_id              :: rabbit_framing:amqp_class_id(),
+                 properties            :: rabbit_framing:amqp_property_record(),
+                 properties_bin        :: maybe(binary()),
+                 payload_fragments_rev :: [binary()]}).
 -type(encoded_content() ::
-      #content{class_id       :: rabbit_framing:amqp_class_id(),
-               properties     :: maybe(rabbit_framing:amqp_property_record()),
-               properties_bin        :: binary(),
-               payload_fragments_rev :: [binary()]}).
+        #content{class_id       :: rabbit_framing:amqp_class_id(),
+                 properties     :: maybe(rabbit_framing:amqp_property_record()),
+                 properties_bin        :: binary(),
+                 payload_fragments_rev :: [binary()]}).
 -type(content() :: undecoded_content() | decoded_content()).
+-type(msg_id() :: rabbit_guid:guid()).
 -type(basic_message() ::
-      #basic_message{exchange_name  :: rabbit_exchange:name(),
-                     routing_key    :: rabbit_router:routing_key(),
-                     content        :: content(),
-                     guid           :: rabbit_guid:guid(),
-                     is_persistent  :: boolean()}).
+        #basic_message{exchange_name  :: rabbit_exchange:name(),
+                       routing_keys   :: [rabbit_router:routing_key()],
+                       content        :: content(),
+                     id             :: msg_id(),
+                       is_persistent  :: boolean()}).
 -type(message() :: basic_message()).
 -type(delivery() ::
-      #delivery{mandatory :: boolean(),
-                immediate :: boolean(),
-                txn       :: maybe(txn()),
-                sender    :: pid(),
-                message   :: message()}).
+        #delivery{mandatory :: boolean(),
+                  immediate :: boolean(),
+                  txn       :: maybe(txn()),
+                  sender    :: pid(),
+                  message   :: message()}).
 -type(message_properties() ::
         #message_properties{expiry :: pos_integer() | 'undefined',
                             needs_confirming :: boolean()}).
@@ -89,9 +90,9 @@
 -type(infos() :: [info()]).
 
 -type(amqp_error() ::
-      #amqp_error{name        :: rabbit_framing:amqp_exception(),
-                  explanation :: string(),
-                  method      :: rabbit_framing:amqp_method_name()}).
+        #amqp_error{name        :: rabbit_framing:amqp_exception(),
+                    explanation :: string(),
+                    method      :: rabbit_framing:amqp_method_name()}).
 
 -type(r(Kind) ::
         r2(vhost(), Kind)).
@@ -103,34 +104,34 @@
                   name         :: Name}).
 
 -type(listener() ::
-      #listener{node     :: node(),
-                protocol :: atom(),
-                host     :: rabbit_networking:hostname(),
-                port     :: rabbit_networking:ip_port()}).
+        #listener{node     :: node(),
+                  protocol :: atom(),
+                  host     :: rabbit_networking:hostname(),
+                  port     :: rabbit_networking:ip_port()}).
 
 -type(binding_source() :: rabbit_exchange:name()).
 -type(binding_destination() :: rabbit_amqqueue:name() | rabbit_exchange:name()).
 
 -type(binding() ::
-      #binding{source      :: rabbit_exchange:name(),
-               destination :: binding_destination(),
-               key         :: rabbit_binding:key(),
-               args        :: rabbit_framing:amqp_table()}).
+        #binding{source      :: rabbit_exchange:name(),
+                 destination :: binding_destination(),
+                 key         :: rabbit_binding:key(),
+                 args        :: rabbit_framing:amqp_table()}).
 
 -type(amqqueue() ::
-      #amqqueue{name            :: rabbit_amqqueue:name(),
-                durable         :: boolean(),
-                auto_delete     :: boolean(),
-                exclusive_owner :: rabbit_types:maybe(pid()),
-                arguments       :: rabbit_framing:amqp_table(),
-                pid             :: rabbit_types:maybe(pid())}).
+        #amqqueue{name            :: rabbit_amqqueue:name(),
+                  durable         :: boolean(),
+                  auto_delete     :: boolean(),
+                  exclusive_owner :: rabbit_types:maybe(pid()),
+                  arguments       :: rabbit_framing:amqp_table(),
+                  pid             :: rabbit_types:maybe(pid())}).
 
 -type(exchange() ::
-      #exchange{name        :: rabbit_exchange:name(),
-                type        :: rabbit_exchange:type(),
-                durable     :: boolean(),
-                auto_delete :: boolean(),
-                arguments   :: rabbit_framing:amqp_table()}).
+        #exchange{name        :: rabbit_exchange:name(),
+                  type        :: rabbit_exchange:type(),
+                  durable     :: boolean(),
+                  auto_delete :: boolean(),
+                  arguments   :: rabbit_framing:amqp_table()}).
 
 -type(connection() :: pid()).
 

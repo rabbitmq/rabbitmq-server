@@ -62,7 +62,7 @@
 
 -record(listener, {node, protocol, host, ip_address, port}).
 
--record(basic_message, {exchange_name, routing_key, content, guid,
+-record(basic_message, {exchange_name, routing_keys = [], content, id,
                         is_persistent}).
 
 -record(ssl_socket, {tcp, ssl}).
@@ -86,6 +86,9 @@
 -define(HIBERNATE_AFTER_MIN,        1000).
 -define(DESIRED_HIBERNATE,         10000).
 -define(STATS_INTERVAL,             5000).
+
+-define(ROUTING_HEADERS, [<<"CC">>, <<"BCC">>]).
+-define(DELETED_HEADER, <<"BCC">>).
 
 -ifdef(debug).
 -define(LOGDEBUG0(F), rabbit_log:debug(F)).

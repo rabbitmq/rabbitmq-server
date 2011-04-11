@@ -20,12 +20,12 @@
 
 -compile([export_all]).
 
--rabbit_upgrade({remove_user_scope,  []}).
--rabbit_upgrade({hash_passwords,     []}).
--rabbit_upgrade({add_ip_to_listener, []}).
--rabbit_upgrade({internal_exchanges, []}).
--rabbit_upgrade({user_to_internal_user, [hash_passwords]}).
--rabbit_upgrade({topic_trie, []}).
+-rabbit_upgrade({remove_user_scope,     mnesia, []}).
+-rabbit_upgrade({hash_passwords,        mnesia, []}).
+-rabbit_upgrade({add_ip_to_listener,    mnesia, []}).
+-rabbit_upgrade({internal_exchanges,    mnesia, []}).
+-rabbit_upgrade({user_to_internal_user, mnesia, [hash_passwords]}).
+-rabbit_upgrade({topic_trie,            mnesia, []}).
 
 %% -------------------------------------------------------------------
 

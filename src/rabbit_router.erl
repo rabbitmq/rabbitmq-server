@@ -37,7 +37,8 @@
                            fun ((rabbit_types:binding()) -> boolean())) ->
     match_result()).
 -spec(match_routing_key/2 :: (rabbit_types:binding_source(),
-                              routing_key() | '_') -> match_result()).
+                             [routing_key()] | ['_']) ->
+    match_result()).
 
 -endif.
 
@@ -58,7 +59,7 @@ deliver(QNames, Delivery = #delivery{mandatory = false,
     {routed, QPids};
 
 deliver(QNames, Delivery = #delivery{mandatory = Mandatory,
-                                    immediate = Immediate}) ->
+                                     immediate = Immediate}) ->
     QPids = lookup_qpids(QNames),
     {Success, _} =
         delegate:invoke(QPids,
@@ -66,7 +67,7 @@ deliver(QNames, Delivery = #delivery{mandatory = Mandatory,
                                 rabbit_amqqueue:deliver(Pid, Delivery)
                         end),
     {Routed, Handled} =
-         lists:foldl(fun fold_deliveries/2, {false, []}, Success),
+        lists:foldl(fun fold_deliveries/2, {false, []}, Success),
     check_delivery(Mandatory, Immediate, {Routed, Handled}).
 
 
@@ -82,12 +83,22 @@ match_bindings(SrcName, Match) ->
                       Match(Binding)]),
     mnesia:async_dirty(fun qlc:e/1, [Query]).
 
-match_routing_key(SrcName, RoutingKey) ->
+match_routing_key(SrcName, [RoutingKey]) ->
     MatchHead = #route{binding = #binding{source      = SrcName,
                                           destination = '$1',
                                           key         = RoutingKey,
                                           _           = '_'}},
-    mnesia:dirty_select(rabbit_route, [{MatchHead, [], ['$1']}]).
+    mnesia:dirty_select(rabbit_route, [{MatchHead, [], ['$1']}]);
+match_routing_key(SrcName, [_|_] = RoutingKeys) ->
+    Condition = list_to_tuple(['orelse' | [{'=:=', '$2', RKey} ||
+                                              RKey <- RoutingKeys]]),
+    MatchHead = #route{binding = #binding{source      = SrcName,
+                                          destination = '$1',
+                                          key         = '$2',
+                                          _           = '_'}},
+    mnesia:dirty_select(rabbit_route, [{MatchHead, [Condition], ['$1']}]).
+
+
 
 %%--------------------------------------------------------------------
 
