@@ -1,9 +1,6 @@
-syntax: regexp
-
+~$
+\.beam$
 ^build/
 ^dist/
-.*\.beam
-^ebin/rabbit_auth_backend_ldap.app
 ^cover/
-^eldap/
-^tmp/
+^erl_crash.dump$
