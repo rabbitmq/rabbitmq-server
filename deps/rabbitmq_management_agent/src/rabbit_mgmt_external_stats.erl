@@ -33,7 +33,7 @@
 
 -define(REFRESH_RATIO, 5000).
 -define(KEYS, [os_pid, mem_ets, mem_binary, fd_used, fd_total,
-               sockets_used, sockets_total, mem_used, mem_limit,
+               sockets_used, sockets_total, mem_used, mem_limit, mem_alarm,
                proc_used, proc_total, statistics_level,
                erlang_version, uptime, run_queue, processors, exchange_types,
                auth_mechanisms, applications]).
@@ -164,7 +164,9 @@ i(auth_mechanisms, _State) ->
       fun (N) -> lists:member(list_to_atom(binary_to_list(N)), Mechanisms) end);
 i(applications, _State) ->
     [format_application(A) ||
-        A <- lists:keysort(1, application:which_applications())].
+        A <- lists:keysort(1, application:which_applications())];
+i(mem_alarm, _State) -> lists:member({{vm_memory_high_watermark, node()}, []},
+                                     alarm_handler:get_alarms()).
 
 list_registry_plugins(Type) ->
     list_registry_plugins(Type, fun(_) -> true end).
@@ -202,7 +204,6 @@ handle_call(_Req, _From, State) ->
 
 handle_cast(_C, State) ->
     {noreply, State}.
-
 
 handle_info(_I, State) ->
     {noreply, State}.
