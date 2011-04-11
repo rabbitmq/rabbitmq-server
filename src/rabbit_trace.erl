@@ -36,26 +36,26 @@
 %%----------------------------------------------------------------------------
 
 tap_trace_in(Message = #basic_message{
-               exchange_name = #resource{virtual_host = VHostBin,
-                                         name         = XNameBin}}, User) ->
+               exchange_name = #resource{virtual_host = VHost,
+                                         name         = XName}}, User) ->
     check_trace(
-      XNameBin,
-      VHostBin,
-      fun (TraceExchangeBin) ->
+      XName,
+      VHost,
+      fun (TraceExchange) ->
               {EncodedMetadata, Payload} = message_to_table(Message, User),
-              publish(TraceExchangeBin, VHostBin, <<"publish">>, XNameBin,
+              publish(TraceExchange, VHost, <<"publish">>, XName,
                       EncodedMetadata, Payload)
       end).
 
-tap_trace_out({#resource{name = QNameBin}, _QPid, _QMsgId, Redelivered,
+tap_trace_out({#resource{name = QName}, _QPid, _QMsgId, Redelivered,
                Message = #basic_message{
-                 exchange_name = #resource{virtual_host = VHostBin,
-                                           name         = XNameBin}}},
+                 exchange_name = #resource{virtual_host = VHost,
+                                           name         = XName}}},
               ConsumerTagOrNone, User) ->
     check_trace(
-      XNameBin,
-      VHostBin,
-      fun (TraceExchangeBin) ->
+      XName,
+      VHost,
+      fun (TraceExchange) ->
               RedeliveredNum = case Redelivered of true -> 1; false -> 0 end,
               {EncodedMetadata, Payload} = message_to_table(Message, User),
               Fields0 = [{<<"redelivered">>, signedint, RedeliveredNum}]
@@ -65,22 +65,22 @@ tap_trace_out({#resource{name = QNameBin}, _QPid, _QMsgId, Redelivered,
                            CTag -> [{<<"consumer_tag">>, longstr, CTag} |
                                     Fields0]
                        end,
-              publish(TraceExchangeBin, VHostBin, <<"deliver">>, QNameBin,
+              publish(TraceExchange, VHost, <<"deliver">>, QName,
                       Fields, Payload)
       end).
 
-check_trace(XNameBin, VHostBin, F) ->
-    case catch case application:get_env(rabbit, {trace_exchange, VHostBin}) of
-                   undefined              -> ok;
-                   {ok, XNameBin}         -> ok;
-                   {ok, TraceExchangeBin} -> F(TraceExchangeBin)
+check_trace(XName, VHost, F) ->
+    case catch case application:get_env(rabbit, {trace_exchange, VHost}) of
+                   undefined           -> ok;
+                   {ok, XName}         -> ok;
+                   {ok, TraceExchange} -> F(TraceExchange)
                end of
         {'EXIT', Reason} -> rabbit_log:info("Trace tap died: ~p~n", [Reason]);
         ok               -> ok
     end.
 
-publish(TraceExchangeBin, VHostBin, RKPrefix, RKSuffix, Table, Payload) ->
-    rabbit_basic:publish(rabbit_misc:r(VHostBin, exchange, TraceExchangeBin),
+publish(TraceExchange, VHost, RKPrefix, RKSuffix, Table, Payload) ->
+    rabbit_basic:publish(rabbit_misc:r(VHost, exchange, TraceExchange),
                          <<RKPrefix/binary, ".", RKSuffix/binary>>,
                          #'P_basic'{headers = Table}, Payload),
     ok.
