@@ -16,7 +16,7 @@
 
 -module(rabbit_trace).
 
--export([tap_trace_in/1, tap_trace_out/3]).
+-export([tap_trace_in/1, tap_trace_out/2]).
 
 -include("rabbit.hrl").
 -include("rabbit_framing.hrl").
@@ -25,10 +25,8 @@
 
 -ifdef(use_specs).
 
--type(delivery_tag() :: pos_integer()).
-
 -spec(tap_trace_in/1 :: (rabbit_types:basic_message()) -> 'ok').
--spec(tap_trace_out/3 :: (rabbit_amqqueue:qmsg(), delivery_tag(),
+-spec(tap_trace_out/2 :: (rabbit_amqqueue:qmsg(),
                           rabbit_types:maybe(rabbit_types:ctag())) -> 'ok').
 
 -endif.
@@ -51,7 +49,6 @@ tap_trace_out({#resource{name = QNameBin}, _QPid, _QMsgId, Redelivered,
                Message = #basic_message{
                  exchange_name = #resource{virtual_host = VHostBin,
                                            name         = XNameBin}}},
-              DeliveryTag,
               ConsumerTagOrNone) ->
     check_trace(
       XNameBin,
@@ -59,8 +56,7 @@ tap_trace_out({#resource{name = QNameBin}, _QPid, _QMsgId, Redelivered,
       fun (TraceExchangeBin) ->
               RedeliveredNum = case Redelivered of true -> 1; false -> 0 end,
               {EncodedMetadata, Payload} = message_to_table(Message),
-              Fields0 = [{<<"delivery_tag">>, signedint, DeliveryTag},
-                         {<<"redelivered">>,  signedint, RedeliveredNum}]
+              Fields0 = [{<<"redelivered">>, signedint, RedeliveredNum}]
                   ++ EncodedMetadata,
               Fields = case ConsumerTagOrNone of
                            none -> Fields0;
