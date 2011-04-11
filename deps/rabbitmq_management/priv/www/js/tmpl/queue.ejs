@@ -69,13 +69,6 @@
   </div>
 </div>
 
-<div class="section-hidden">
-  <h2>Consumers</h2>
-  <div class="hider updatable">
-<%= format('consumers', {'mode': 'queue', 'consumers': queue.consumer_details}) %>
-  </div>
-</div>
-
 <% if (statistics_level == 'fine') { %>
 <div class="section-hidden">
 <h2>Message Rates</h2>
@@ -104,10 +97,17 @@
 <% } %>
 
 <div class="section-hidden">
-  <h2>Bindings</h2>
+  <h2>Consumers</h2>
   <div class="hider updatable">
+<%= format('consumers', {'mode': 'queue', 'consumers': queue.consumer_details}) %>
+  </div>
+</div>
+
+<div class="section-hidden">
+  <h2>Bindings</h2>
+  <div class="hider">
     <h3>Incoming to <b><%= queue.name %></b></h3>
-    <table class="bindings">
+    <table class="bindings updatable">
       <tr>
         <td>
           <%= format('bindings', {'mode': 'queue', 'bindings': bindings}) %>
@@ -118,10 +118,54 @@
         </td>
       </tr>
     </table>
+
+<%= format('add-binding', {'mode': 'queue', 'parent': queue}) %>
+
   </div>
 </div>
 
-<%= format('add-binding', {'mode': 'queue', 'parent': queue}) %>
+<div class="section-hidden">
+  <h2>Get Messages</h2>
+  <div class="hider">
+    <p>
+      Warning: getting messages from a queue is a destructive action.
+      <span class="help" id="message-get-requeue"></span>
+    </p>
+    <form action="#/queues/get" method="post">
+      <input type="hidden" name="vhost" value="<%= queue.vhost %>"/>
+      <input type="hidden" name="name" value="<%= queue.name %>"/>
+      <input type="hidden" name="truncate" value="50000"/>
+      <table class="form">
+        <tr>
+          <th><label>Requeue:</label></th>
+          <td>
+            <select name="requeue">
+              <option value="true">Yes</option>
+              <option value="false">No</option>
+            </select>
+          </td>
+        </tr>
+        <tr>
+          <th><label>Encoding:</label></th>
+          <td>
+            <select name="encoding">
+              <option value="auto">Auto string / base64</option>
+              <option value="base64">base64</option>
+            </select>
+            <span class="help" id="string-base64"></span>
+          </td>
+        </tr>
+        <tr>
+          <th><label>Messages:</label></th>
+          <td><input type="text" name="count" value="1"/></td>
+        </tr>
+      </table>
+      <input type="submit" value="Get Message(s)" />
+    </form>
+    <div id="msg-wrapper"></div>
+    <span class="br"></span>
+  </div>
+</div>
 
 <div class="section-hidden">
   <h2>Delete / Purge</h2>

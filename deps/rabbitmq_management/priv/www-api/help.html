@@ -255,6 +255,28 @@ Content-Length: 0</pre>
         <td>A list of all bindings in which a given exchange is the destination.</td>
       </tr>
       <tr>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td>X</td>
+        <td class="path">/api/exchanges/<i>vhost</i>/<i>name</i>/publish</td>
+        <td>
+          Publish a message to a given exchange. You will need a body
+          looking something like:
+          <pre>{"properties":{},"routing_key":"my key","payload":"my body","payload_encoding":"string"}</pre>
+          All keys are mandatory. The <code>payload_encoding</code>
+          key should be either "string" (in which case the payload
+          will be taken to be the UTF-8 encoding of the payload field)
+          or "base64" (in which case the payload field is taken to be
+          base64 encoded).<br/>
+          If the message is published successfully, the response will
+          look like:
+          <pre>{"routed": true}</pre>
+          <code>routed</code> will be true if the message was sent to
+          at least one queue.
+        </td>
+      </tr>
+      <tr>
         <td>X</td>
         <td></td>
         <td></td>
@@ -295,6 +317,26 @@ Content-Length: 0</pre>
         <td></td>
         <td class="path">/api/queues/<i>vhost</i>/<i>name</i>/contents</td>
         <td>Contents of a queue. DELETE to purge. Note you can't GET this.</td>
+      </tr>
+      <tr>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td>X</td>
+        <td class="path">/api/queues/<i>vhost</i>/<i>name</i>/get</td>
+        <td>
+          Get messages from a queue. (This is not an HTTP GET as it
+          will alter the state of the queue.) You should post a body looking like:
+          <pre>{"count": 5, "requeue": true, "truncate": 50000}</pre>
+          to control the (maximum) number of messages you get and
+          whether those messages are requeued. If <code>requeue</code>
+          is false the messages will be removed from the queue. If
+          requeue is true they will be requeued - but their position
+          in the queue may change and their <code>redelivered</code>
+          flag will be set. <code>truncate</code> is optional - if
+          present it will truncate the message payload if it is larger
+          than the size given (in bytes).
+        </td>
       </tr>
       <tr>
         <td>X</td>
@@ -382,7 +424,13 @@ Content-Length: 0</pre>
         <td class="path">/api/users/<i>name</i></td>
         <td>An individual user. To PUT a user, you will need a body looking something like this:
 <pre>{"password":"secret", "administrator":true}</pre>
-        All keys are mandatory.</td>
+or:
+<pre>{"password_hash":"2lmoth8l4H0DViLaK9Fxi6l9ds8=", "administrator":true}</pre>
+        The <code>administrator</code> key is mandatory. Either
+        <code>password</code> or <code>password_hash</code>
+        must be set. Setting <code>password_hash</code> to "" will ensure the
+        user cannot use a password to log in.
+        </td>
       </tr>
       <tr>
         <td>X</td>

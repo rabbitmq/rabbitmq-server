@@ -53,7 +53,7 @@
 
 <div class="section-hidden">
   <h2>Bindings</h2>
-  <div class="hider updatable">
+  <div class="hider">
 <% if (exchange.name == "") { %>
   <h3>Default exchange</h3>
   <p>
@@ -65,7 +65,7 @@
 <% } else { %>
 <% if (bindings_destination.length > 0) { %>
       <h3>Incoming to <b><%= fmt_exchange(exchange.name) %></b></h3>
-      <table class="bindings">
+      <table class="bindings updatable">
         <tr>
           <td>
             <%= format('bindings', {'mode': 'exchange_destination', 'bindings': bindings_destination}) %>
@@ -76,9 +76,9 @@
           </td>
         </tr>
       </table>
-    <% } %>
+<% } %>
     <h3>Outgoing from <b><%= fmt_exchange(exchange.name) %></b></h3>
-    <table class="bindings">
+    <table class="bindings updatable">
       <tr>
         <td class="binding-endpoint">
           <span class="object"><%= fmt_exchange(exchange.name) %></span>
@@ -89,14 +89,64 @@
         </td>
       </tr>
     </table>
+<%= format('add-binding', {'mode': 'exchange_source', 'parent': exchange}) %>
 <% } %>
   </div>
 </div>
 
+<% if (!exchange.internal) { %>
+<div class="section-hidden">
+  <h2>Publish Message</h2>
+  <div class="hider">
+    <form action="#/exchanges/publish" method="post">
+      <input type="hidden" name="vhost" value="<%= exchange.vhost %>"/>
+      <input type="hidden" name="name" value="<%= fmt_exchange_url(exchange.name) %>"/>
+      <input type="hidden" name="properties" value=""/>
+      <table class="form">
+        <tr>
+          <th><label>Routing key:</label></th>
+          <td><input type="text" name="routing_key" value=""/></td>
+        </tr>
+        <tr>
+          <th><label>Delivery mode:</label></th>
+          <td>
+            <select name="delivery_mode">
+              <option value="1">1 - Non-persistent</option>
+              <option value="2">2 - Persistent</option>
+            </select>
+          </td>
+        </tr>
+        <tr>
+          <th>
+            <label>Headers:</label>
+            <span class="help" id="message-publish-headers"></span>
+          </th>
+          <td>
+            <span class="multifield" id="headers"></span>
+          </td>
+        </tr>
+        <tr>
+          <th>
+            <label>Properties:</label>
+            <span class="help" id="message-publish-properties"></span>
+          </th>
+          <td>
+            <span class="multifield" id="props"></span>
+          </td>
+        </tr>
+        <tr>
+          <th><label>Payload:</label></th>
+          <td><textarea name="payload"></textarea></td>
+        </tr>
+      </table>
+      <input type="submit" value="Publish Message" />
+    </form>
+    <span class="br"></span>
+  </div>
+</div>
+<% } %>
+
 <% if (exchange.name != "") { %>
-
-<%= format('add-binding', {'mode': 'exchange_source', 'parent': exchange}) %>
-
 <div class="section-hidden">
   <h2>Delete This Exchange</h2>
   <div class="hider">

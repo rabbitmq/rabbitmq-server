@@ -142,8 +142,12 @@ function dispatcher() {
                 go_to('#/exchanges');
             return false;
         });
+    this.post('#/exchanges/publish', function() {
+            publish_msg(this.params);
+            return false;
+        });
 
-    path('#/queues', {'queues': '/queues', 'vhosts': '/vhosts', 'nodes': '/nodes'}, 'queues');
+    path('#/queues', {'queues': '/queues', 'vhosts': '/vhosts'}, 'queues');
     this.get('#/queues/:vhost/:name', function() {
             var path = '/queues/' + esc(this.params['vhost']) + '/' + esc(this.params['name']);
             render({'queue': path,
@@ -167,7 +171,10 @@ function dispatcher() {
             }
             return false;
         });
-
+    this.post('#/queues/get', function() {
+            get_msgs(this.params);
+            return false;
+        });
     this.post('#/bindings', function() {
             if (sync_post(this, '/bindings/:vhost/e/:source/:destination_type/:destination'))
                 update();
@@ -179,7 +186,7 @@ function dispatcher() {
             return false;
         });
 
-    path('#/vhosts', {'vhosts': '/vhosts'}, 'vhosts');
+    path('#/vhosts', {'vhosts': '/vhosts', 'permissions': '/permissions'}, 'vhosts');
     this.get('#/vhosts/:id', function() {
             render({'vhost': '/vhosts/' + esc(this.params['id']),
                     'permissions': '/vhosts/' + esc(this.params['id']) + '/permissions',
@@ -201,7 +208,7 @@ function dispatcher() {
             return false;
         });
 
-    path('#/users', {'users': '/users'}, 'users');
+    path('#/users', {'users': '/users', 'permissions': '/permissions'}, 'users');
     this.get('#/users/:id', function() {
             render({'user': '/users/' + esc(this.params['id']),
                     'permissions': '/users/' + esc(this.params['id']) + '/permissions',
@@ -463,7 +470,7 @@ function update_multifields() {
             var largest_id = 0;
             var empty_found = false;
             var name = $(this).attr('id');
-            $('input[name$="_mfkey"]').each(function(index) {
+            $('#' + name + ' input[name$="_mfkey"]').each(function(index) {
                     var match = $(this).attr('name').
                         match(/[a-z]*_([0-9]*)_mfkey/);
                     var id = parseInt(match[1]);
@@ -533,10 +540,48 @@ function toggle_visibility(item) {
     }
 }
 
+function publish_msg(params0) {
+    var params = params_magic(params0);
+    var path = fill_path_template('/exchanges/:vhost/:name/publish', params);
+    params['payload_encoding'] = 'string';
+    params['properties'] = {};
+    params['properties']['delivery_mode'] = parseInt(params['delivery_mode']);
+    if (params['headers'] != '')
+        params['properties']['headers'] = params['headers'];
+    var props = ['content_type', 'content_encoding', 'priority', 'correlation_id', 'reply_to', 'expiration', 'message_id', 'timestamp', 'type', 'user_id', 'app_id', 'cluster_id'];
+    for (var i in props) {
+        var p = props[i];
+        if (params['props'][p] != '')
+            params['properties'][p] = params['props'][p];
+    }
+    with_req('POST', path, JSON.stringify(params), function(resp) {
+            var result = jQuery.parseJSON(resp.responseText);
+            if (result.routed) {
+                show_popup('info', 'Message published.');
+            } else {
+                show_popup('warn', 'Message published, but not routed.');
+            }
+        });
+}
+
+function get_msgs(params) {
+    var path = fill_path_template('/queues/:vhost/:name/get', params);
+    with_req('POST', path, JSON.stringify(params), function(resp) {
+            var msgs = jQuery.parseJSON(resp.responseText);
+            if (msgs.length == 0) {
+                show_popup('info', 'Queue is empty');
+            } else {
+                $('#msg-wrapper').slideUp(200);
+                replace_content('msg-wrapper', format('messages', {'msgs': msgs}));
+                $('#msg-wrapper').slideDown(200);
+            }
+        });
+}
+
 function with_reqs(reqs, acc, fun) {
     if (keys(reqs).length > 0) {
         var key = keys(reqs)[0];
-        with_req('../api' + reqs[key], function(resp) {
+        with_req('GET', reqs[key], null, function(resp) {
                 acc[key] = jQuery.parseJSON(resp.responseText);
                 var remainder = {};
                 for (var k in reqs) {
@@ -583,36 +628,19 @@ function update_status(status) {
     replace_content('status', html);
 }
 
-function with_req(path, fun) {
+function with_req(method, path, body, fun) {
     var json;
     var req = xmlHttpRequest();
-    req.open( "GET", path, true );
+    req.open(method, '../api' + path, true );
     req.onreadystatechange = function () {
         if (req.readyState == 4) {
-            if (req.status == 200) {
+            if (check_bad_response(req, true)) {
                 last_successful_connect = new Date();
                 fun(req);
             }
-            else if (req.status == 408) {
-                update_status('timeout');
-            }
-            else if (req.status == 0) { // Non-MSIE: could not connect
-                update_status('error');
-            }
-            else if (req.status > 12000) { // MSIE: could not connect
-                update_status('error');
-            }
-            else if (req.status == 404) {
-                var html = format('404', {});
-                replace_content('main', html);
-            }
-            else {
-                debug("Got response code " + req.status);
-                clearInterval(timer);
-            }
         }
     };
-    req.send(null);
+    req.send(body);
 }
 
 function sync_get(path) {
@@ -632,9 +660,10 @@ function sync_post(sammy, path_template) {
 }
 
 function sync_req(type, params0, path_template) {
-    var params = params_magic(params0);
+    var params;
     var path;
     try {
+        params = params_magic(params0);
         path = fill_path_template(path_template, params);
     } catch (e) {
         show_popup('warn', e);
@@ -657,24 +686,48 @@ function sync_req(type, params0, path_template) {
         }
     }
 
-    if (req.status >= 400 && req.status <= 404) {
+    if (check_bad_response(req, false)) {
+        if (type == 'GET')
+            return req.responseText;
+        else
+            return true;
+    }
+    else {
+        return false;
+    }
+}
+
+function check_bad_response(req, full_page_404) {
+    // 1223 == 204 - see http://www.enhanceie.com/ie/bugs.asp
+    // MSIE7 and 8 appear to do this in response to HTTP 204.
+    if ((req.status >= 200 && req.status < 300) || req.status == 1223) {
+        return true;
+    }
+    else if (req.status == 404 && full_page_404) {
+        var html = format('404', {});
+        replace_content('main', html);
+    }
+    else if (req.status >= 400 && req.status <= 404) {
         var reason = JSON.parse(req.responseText).reason;
         if (typeof(reason) != 'string') reason = JSON.stringify(reason);
         show_popup('warn', reason);
-        return false;
     }
-
-    // 1223 == 204 - see http://www.enhanceie.com/ie/bugs.asp
-    // MSIE7 and 8 appear to do this in response to HTTP 204.
-    if (req.status >= 400 && req.status != 1223) {
+    else if (req.status == 408) {
+        update_status('timeout');
+    }
+    else if (req.status == 0) { // Non-MSIE: could not connect
+        update_status('error');
+    }
+    else if (req.status > 12000) { // MSIE: could not connect
+        update_status('error');
+    }
+    else {
         debug("Got response code " + req.status + " with body " +
               req.responseText);
+        clearInterval(timer);
     }
 
-    if (type == 'GET')
-        return req.responseText;
-    else
-        return true;
+    return false;
 }
 
 function fill_path_template(template, params) {
@@ -693,8 +746,9 @@ var INTEGER_ARGUMENTS = map(['x-expires', 'x-message-ttl']);
 var ARRAY_ARGUMENTS = map(['upstreams']); // Used by the federation plugin
 
 function params_magic(params) {
-    return maybe_remove_password(
-        collapse_multifields(params));
+    return check_password(
+             maybe_remove_password(
+               collapse_multifields(params)));
 }
 
 function collapse_multifields(params0) {
@@ -726,6 +780,17 @@ function collapse_multifields(params0) {
             }
         }
     }
+    return params;
+}
+
+function check_password(params) {
+    if (params['password'] != undefined) {
+        if (params['password'] != params['password_confirm']) {
+            throw("Passwords do not match.");
+        }
+        delete params['password_confirm'];
+    }
+
     return params;
 }
 

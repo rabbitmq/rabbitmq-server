@@ -57,7 +57,7 @@ accept_content(ReqData, Context) ->
             VHost = rabbit_mgmt_util:id(vhost, ReqData),
             rabbit_mgmt_util:with_decode(
               [configure, write, read], ReqData, Context,
-              fun([Conf, Write, Read]) ->
+              fun([Conf, Write, Read], _) ->
                       rabbit_auth_backend_internal:set_permissions(
                         User, VHost, Conf, Write, Read),
                       {true, ReqData, Context}

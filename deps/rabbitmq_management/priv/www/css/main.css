@@ -21,8 +21,8 @@ b { color: black; font-weight: normal; }
 
 table { border-collapse: collapse; }
 table th { font-weight: normal; color: black; }
-table th, table td { font: 12px/17px Verdana,sans-serif; padding: 4px; min-width: 5em; width: auto; }
-table.list th, table.list td { vertical-align: top; }
+table th, table td { font: 12px/17px Verdana,sans-serif; padding: 4px; }
+table.list th, table.list td { vertical-align: top; min-width: 5em; width: auto; }
 
 table.list { border-width: 1px; border-bottom: 1px solid #bbb; margin-bottom: 1em; }
 table.list th, table.list td { border-left: 1px solid #bbb; border-right: 1px solid #bbb; }
@@ -31,6 +31,7 @@ table.list td a { display: block; width: 100%; }
 table.list th a.sort { display: block; width: 100%; cursor: pointer; }
 table.list th a.sort .arrow { color: #888; }
 table.list td p { margin: 0; padding: 1px 0 0 0; }
+table.list td p.warning { margin: 0; padding: 5px; }
 
 table.list-with-total { border-bottom: none; }
 table.list tr.total td { border: none; border-top: 1px solid #bbb; }
@@ -54,6 +55,7 @@ table.mini td { border: none; padding: 0 2px 2px 2px; }
 tr.alt1>td { background: #eee; }
 tr.alt2>td { background: #fff; }
 
+td.status { text-align: center; }
 td.status div { padding: 5px; text-align: center; border-radius: 5px; -moz-border-radius: 5px; }
 td.status div.red { background: #F62817; color:white; }
 td.status div.red * { color:white; }
@@ -93,13 +95,14 @@ form { margin: 0; }
 form.inline-form { float: left; }
 form.inline-form-right { float: right; }
 input, select { padding: 0.2em; }
-input[type=text] { font: 1.1em Lucidatypewriter, Courier, monospace; }
-input[type=text].wide { width: 300px; }
+input[type=text], input[type=password] { font: 1.1em Lucidatypewriter, Courier, monospace; }
+input[type=text].wide, input[type=password].wide { width: 300px; }
+textarea { width: 600px; height: 200px; }
 .mand { color: #f88; padding: 0 5px;}
 
 table.form { margin-bottom: 0.5em; }
 table.form th { text-align: right; vertical-align: top; }
-table.form input[type=text] { width: 200px; }
+table.form input[type=text], table.form input[type=password] { width: 200px; }
 table.form select { width: 200px; }
 table.form select.narrow { width: 110px; }
 table.form .multifield { margin: 0; padding: 0; }

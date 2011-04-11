@@ -1,4 +1,8 @@
 <h3><%= label %></h3>
+<%
+     var col_return_unroutable = !is_stat_empty(totals, 'return_unroutable');
+     var col_return_not_delivered = !is_stat_empty(totals, 'return_not_delivered');
+%>
 <% if (object && object.length > 0) { %>
 <table class="list list-with-total">
   <tr>
@@ -13,6 +17,12 @@
 <% } %>
     <th>publish</th>
     <th>confirm</th>
+<% if (col_return_unroutable) { %>
+    <th>return (mandatory)</th>
+<% } %>
+<% if (col_return_not_delivered) { %>
+    <th>return (immediate)</th>
+<% } %>
   </tr>
 <%
      for (var i = 0; i < object.length; i++) {
@@ -31,12 +41,24 @@
 <% } %>
       <td class="r"><%= fmt_rate(pub.stats, 'publish') %></td>
       <td class="r"><%= fmt_rate(pub.stats, 'confirm') %></td>
+<% if (col_return_unroutable) { %>
+      <td class="r"><%= fmt_rate(pub.stats, 'return_unroutable') %></td>
+<% } %>
+<% if (col_return_not_delivered) { %>
+      <td class="r"><%= fmt_rate(pub.stats, 'return_not_delivered') %></td>
+<% } %>
     </tr>
 <% } %>
   <tr class="total">
     <th>Total:</th>
-    <td><span class="mini-highlight"><%= fmt_rate(totals, 'publish') %></span></td>
-    <td><span class="mini-highlight"><%= fmt_rate(totals, 'confirm') %></span></td>
+    <td><%= fmt_rate(totals, 'publish', false, 'mini-highlight') %></td>
+    <td><%= fmt_rate(totals, 'confirm', false, 'mini-highlight') %></td>
+<% if (col_return_unroutable) { %>
+    <td><%= fmt_rate(totals, 'return_unroutable', false, 'mini-highlight') %></td>
+<% } %>
+<% if (col_return_not_delivered) { %>
+    <td><%= fmt_rate(totals, 'return_not_delivered', false, 'mini-highlight') %></td>
+<% } %>
   </tr>
 </table>
 <% } else { %>

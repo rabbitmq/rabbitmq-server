@@ -18,13 +18,15 @@
 
 -export([is_authorized/2, is_authorized_admin/2, vhost/1]).
 -export([is_authorized_vhost/2, is_authorized/3, is_authorized_user/3]).
--export([bad_request/3, id/2, parse_bool/1]).
--export([with_decode/4, with_decode_opts/4, not_found/3, amqp_request/4]).
+-export([bad_request/3, bad_request_exception/4, id/2, parse_bool/1,
+         parse_int/1]).
+-export([with_decode/4, not_found/3, amqp_request/4]).
+-export([with_channel/4, with_channel/5]).
 -export([props_to_method/2]).
 -export([all_or_one_vhost/2, http_to_amqp/5, reply/3, filter_vhost/3]).
 -export([filter_user/3, with_decode/5, redirect/2, args/1]).
 -export([reply_list/3, reply_list/4, sort_list/4, destination_type/1]).
--export([relativise/2]).
+-export([post_respond/1]).
 
 -include("rabbit_mgmt.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
@@ -196,44 +198,28 @@ id0(Key, ReqData) ->
         error    -> none
     end.
 
-%% TODO unify this with the function below after bug23384 is merged
-with_decode_opts(Keys, ReqData, Context, Fun) ->
-    Body = wrq:req_body(ReqData),
-    case decode(Keys, Body) of
-        {error, Reason} -> bad_request(Reason, ReqData, Context);
-        _Values         -> try
-                               {ok, Obj0} = decode(Body),
-                               Obj = [{list_to_atom(binary_to_list(K)), V} ||
-                                         {K, V} <- Obj0],
-                               Fun(Obj)
-                           catch {error, Error} ->
-                                   bad_request(Error, ReqData, Context)
-                           end
-    end.
-
 with_decode(Keys, ReqData, Context, Fun) ->
     with_decode(Keys, wrq:req_body(ReqData), ReqData, Context, Fun).
 
 with_decode(Keys, Body, ReqData, Context, Fun) ->
     case decode(Keys, Body) of
-        {error, Reason} -> bad_request(Reason, ReqData, Context);
-        Values          -> try
-                               Fun(Values)
-                           catch {error, Error} ->
-                                   bad_request(Error, ReqData, Context)
-                           end
+        {error, Reason}    -> bad_request(Reason, ReqData, Context);
+        {ok, Values, JSON} -> try
+                                  Fun(Values, JSON)
+                              catch {error, Error} ->
+                                      bad_request(Error, ReqData, Context)
+                              end
     end.
 
 decode(Keys, Body) ->
     case decode(Body) of
-        {ok, J} -> Results =
-                       [get_or_missing(list_to_binary(atom_to_list(K)), J) ||
-                           K <- Keys],
-                   case [E || E = {key_missing, _} <- Results] of
-                       []      -> Results;
-                       Errors  -> {error, Errors}
-                   end;
-        Else    -> Else
+        {ok, J0} -> J = [{list_to_atom(binary_to_list(K)), V} || {K, V} <- J0],
+                    Results = [get_or_missing(K, J) || K <- Keys],
+                    case [E || E = {key_missing, _} <- Results] of
+                        []      -> {ok, Results, J};
+                        Errors  -> {error, Errors}
+                    end;
+        Else     -> Else
     end.
 
 decode(Body) ->
@@ -301,43 +287,74 @@ parse_bool(true)        -> true;
 parse_bool(false)       -> false;
 parse_bool(V)           -> throw({error, {not_boolean, V}}).
 
+parse_int(I) when is_integer(I) ->
+    I;
+parse_int(F) when is_number(F) ->
+    trunc(F);
+parse_int(S) ->
+    try
+        list_to_integer(binary_to_list(S))
+    catch error:badarg ->
+        throw({error, {not_integer, S}})
+    end.
+
 amqp_request(VHost, ReqData, Context, Method) ->
     amqp_request(VHost, ReqData, Context, node(), Method).
 
-amqp_request(VHost, ReqData,
+amqp_request(VHost, ReqData, Context, Node, Method) ->
+    with_channel(VHost, ReqData, Context, Node,
+                      fun (Ch) ->
+                              amqp_channel:call(Ch, Method),
+                              {true, ReqData, Context}
+                      end).
+
+with_channel(VHost, ReqData, Context, Fun) ->
+    with_channel(VHost, ReqData, Context, node(), Fun).
+
+with_channel(VHost, ReqData,
              Context = #context{ user = #user { username = Username },
-                                 password = Password }, Node, Method) ->
-    try
-        Params = #amqp_params{username     = Username,
-                              password     = Password,
-                              node         = Node,
-                              virtual_host = VHost},
-        case amqp_connection:start(direct, Params) of
-            {ok, Conn} ->
-                {ok, Ch} = amqp_connection:open_channel(Conn),
-                amqp_channel:call(Ch, Method),
-                amqp_channel:close(Ch),
-                amqp_connection:close(Conn),
-                {true, ReqData, Context};
-            {error, auth_failure} ->
-                not_authorised(<<"">>, ReqData, Context);
-            {error, {nodedown, N}} ->
-                bad_request(
-                  list_to_binary(
-                    io_lib:format("Node ~s could not be contacted", [N])),
-                 ReqData, Context)
-        end
-    catch
-        exit:{{server_initiated_close, ?NOT_FOUND, Reason}, _} ->
-            not_found(Reason, ReqData, Context);
-        exit:{{server_initiated_close, ?ACCESS_REFUSED, Reason}, _} ->
-            not_authorised(Reason, ReqData, Context);
-        exit:{{ServerClose, Code, Reason}, _}
-          when ServerClose =:= server_initiated_close;
-               ServerClose =:= server_initiated_hard_close ->
-            bad_request(list_to_binary(io_lib:format("~p ~s", [Code, Reason])),
-                        ReqData, Context)
+                                 password = Password }, Node, Fun) ->
+    Params = #amqp_params{username     = Username,
+                          password     = Password,
+                          node         = Node,
+                          virtual_host = VHost},
+    case amqp_connection:start(direct, Params) of
+        {ok, Conn} ->
+            {ok, Ch} = amqp_connection:open_channel(Conn),
+            try
+                Fun(Ch)
+            catch
+                exit:{{shutdown,
+                       {server_initiated_close, ?NOT_FOUND, Reason}}, _} ->
+                    not_found(Reason, ReqData, Context);
+                exit:{{shutdown,
+                      {server_initiated_close, ?ACCESS_REFUSED, Reason}}, _} ->
+                    not_authorised(Reason, ReqData, Context);
+                exit:{{shutdown, {ServerClose, Code, Reason}}, _}
+                  when ServerClose =:= server_initiated_close;
+                       ServerClose =:= server_initiated_hard_close ->
+                    bad_request_exception(Code, Reason, ReqData, Context);
+                exit:{{shutdown, {connection_closing,
+                                  {ServerClose, Code, Reason}}}, _}
+                  when ServerClose =:= server_initiated_close;
+                       ServerClose =:= server_initiated_hard_close ->
+                    bad_request_exception(Code, Reason, ReqData, Context)
+            after
+            catch amqp_channel:close(Ch),
+            catch amqp_connection:close(Conn)
+            end;
+        {error, auth_failure} ->
+            not_authorised(<<"">>, ReqData, Context);
+        {error, {nodedown, N}} ->
+            bad_request(
+              list_to_binary(
+                io_lib:format("Node ~s could not be contacted", [N])),
+              ReqData, Context)
     end.
+
+bad_request_exception(Code, Reason, ReqData, Context) ->
+    bad_request(list_to_binary(io_lib:format("~p ~s", [Code, Reason])),
+                ReqData, Context).
 
 all_or_one_vhost(ReqData, Fun) ->
     case rabbit_mgmt_util:vhost(ReqData) of
@@ -365,21 +382,10 @@ args({struct, L}) ->
 args(L) ->
     rabbit_mgmt_format:to_amqp_table(L).
 
-relativise("/" ++ F, "/" ++ T) ->
-    From = string:tokens(F, "/"),
-    To = string:tokens(T, "/"),
-    relativise0(From, To).
-
-relativise0([H], [H|_] = To) ->
-    string:join(To, "/");
-relativise0([H|From], [H|To]) ->
-    relativise0(From, To);
-relativise0(From, []) ->
-    relativise(From, [], 0);
-relativise0(From, To) ->
-    relativise(From, To, 1).
-
-relativise(From, To, Diff) ->
-    string:join(lists:duplicate(length(From) - Diff, "..") ++ To, "/").
-
-
+%% Make replying to a post look like anything else...
+post_respond({{halt, Code}, ReqData, Context}) ->
+    {{halt, Code}, ReqData, Context};
+post_respond({JSON, ReqData, Context}) ->
+    {true, wrq:set_resp_header(
+             "content-type", "application/json",
+             wrq:append_to_response_body(JSON, ReqData)), Context}.

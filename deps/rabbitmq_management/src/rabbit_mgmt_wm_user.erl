@@ -48,9 +48,9 @@ to_json(ReqData, Context) ->
 
 accept_content(ReqData, Context) ->
     Username = rabbit_mgmt_util:id(user, ReqData),
-    rabbit_mgmt_util:with_decode_opts(
-      [administrator], ReqData, Context,
-      fun(User) ->
+    rabbit_mgmt_util:with_decode(
+      [], ReqData, Context,
+      fun(_, User) ->
               put_user([{name, Username} | User]),
               {true, ReqData, Context}
       end).

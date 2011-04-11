@@ -47,6 +47,9 @@
           declare and delete exchanges, queues, bindings, vhosts, users and permissions.
         </li>
         <li>
+          publish and get messages.
+        </li>
+        <li>
           close connections and purge queues.
         </li>
         <li>
@@ -127,6 +130,22 @@ exchange declared
         Declare a queue, with optional parameters:
 <pre>$ rabbitmqadmin declare queue name=my-new-queue durable=false
 queue declared
+</pre>
+      </li>
+      <li>
+        Publish a message:
+<pre>$ rabbitmqadmin publish exchange=amq.default routing_key=test payload="hello, world"
+Message published
+</pre>
+      </li>
+      <li>
+        And get it back:
+<pre>$ rabbitmqadmin get queue=test requeue=false
++-------------+----------+---------------+--------------+------------------+-------------+
+| routing_key | exchange | message_count |   payload    | payload_encoding | redelivered |
++-------------+----------+---------------+--------------+------------------+-------------+
+| test        |          | 0             | hello, world | string           | False       |
++-------------+----------+---------------+--------------+------------------+-------------+
 </pre>
       </li>
       <li>

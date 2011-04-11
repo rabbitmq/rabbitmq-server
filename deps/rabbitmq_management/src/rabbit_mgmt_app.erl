@@ -36,7 +36,11 @@
 -define(PREFIX, "api").
 -define(UI_PREFIX, "mgmt").
 -define(CLI_PREFIX, "cli").
+-ifdef(trace).
+-define(SETUP_WM_TRACE, true).
+-else.
 -define(SETUP_WM_TRACE, false).
+-endif.
 
 %% Make sure our database is hooked in *before* listening on the network or
 %% recovering queues (i.e. so there can't be any events fired before it starts).
@@ -45,7 +49,7 @@
                     {mfa,         {rabbit_sup, start_child,
                                    [rabbit_mgmt_global_sup]}},
                     {requires,    rabbit_event},
-                    {enables,     queue_sup_queue_recovery}]}).
+                    {enables,     recovery}]}).
 
 start(_Type, _StartArgs) ->
     log_startup(),
@@ -61,11 +65,9 @@ stop(_State) ->
     ok.
 
 register_contexts() ->
-    application:set_env(
-      webmachine, dispatch_list,
-      [{[?PREFIX | Path], F, A} ||
-          {Path, F, A} <- rabbit_mgmt_dispatcher:dispatcher()]),
-    application:set_env(webmachine, error_handler, webmachine_error_handler),
+    Dispatch =
+        [{[?PREFIX | Path], F, A} ||
+            {Path, F, A} <- rabbit_mgmt_dispatcher:dispatcher()],
     rabbit_mochiweb:register_authenticated_static_context(
       ?UI_PREFIX, ?MODULE, "priv/www", "Management: Web UI",
       fun (U, P) ->
@@ -75,7 +77,8 @@ register_contexts() ->
               end
       end),
     rabbit_mochiweb:register_context_handler(?PREFIX,
-                                             fun webmachine_mochiweb:loop/1,
+                                             rabbit_webmachine:makeloop(
+                                               Dispatch),
                                              "Management: HTTP API"),
     rabbit_mochiweb:register_static_context(?CLI_PREFIX, ?MODULE,
                                             "priv/www-cli",
@@ -84,22 +87,22 @@ setup_wm_logging() ->
     {ok, LogDir} = application:get_env(rabbit_management, http_log_dir),
     case LogDir of
         none ->
-            ok;
+            rabbit_webmachine:setup(none);
         _ ->
-            application:set_env(webmachine, webmachine_logger_module,
-                                webmachine_logger),
+            rabbit_webmachine:setup(webmachine_logger),
             webmachine_sup:start_logger(LogDir)
     end.
 
 %% This doesn't *entirely* seem to work. It fails to load a non-existent
 %% image which seems to partly break it, but some stuff is usable.
 setup_wm_trace_app() ->
-    webmachine_router:start_link(),
-    wmtrace_resource:add_dispatch_rule("wmtrace", "/tmp"),
+    Loop = rabbit_webmachine:makeloop([{["wmtrace", '*'],
+                                       wmtrace_resource,
+                                       [{trace_dir, "/tmp"}]}]),
     rabbit_mochiweb:register_static_context(
       "wmtrace/static", ?MODULE, "deps/webmachine/webmachine/priv/trace", none),
     rabbit_mochiweb:register_context_handler("wmtrace",
-                                             fun webmachine_mochiweb:loop/1,
+                                             Loop,
                                              "Webmachine tracer").
 log_startup() ->
     {ok, Hostname} = inet:gethostname(),

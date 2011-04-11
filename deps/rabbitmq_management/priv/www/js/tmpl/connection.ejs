@@ -1,9 +1,10 @@
-<h1>Connection <b><%= connection.name %></b></h1>
+<h1>Connection <b><%= fmt_escape_html(connection.name) %></b></h1>
 
 <div class="section">
 <h2>Overview</h2>
 <div class="hider updatable">
 
+<% if (connection.recv_oct) { %>
 <table class="facts">
 <tr>
   <th>From client</th>
@@ -22,6 +23,7 @@
 <% } %>
 </tr>
 </table>
+<% } %>
 
 <table class="facts">
 <% if (nodes_interesting) { %>
@@ -44,16 +46,23 @@
  <th>Protocol</th>
  <td><%= connection.protocol %></td>
 </tr>
+
+<% if (connection.ssl) { %>
 <tr>
  <th>SSL</th>
  <td><%= fmt_boolean(connection.ssl) %></td>
 </tr>
+<% } %>
+
+<% if (connection.auth_mechanism) { %>
 <tr>
  <th>Authentication</th>
  <td><%= connection.auth_mechanism %></td>
 </tr>
+<% } %>
 </table>
 
+<% if (connection.state) { %>
 <table class="facts">
 <tr>
  <th>State</th>
@@ -64,6 +73,8 @@
  <td><%= connection.timeout %></td>
 </tr>
 </table>
+<% } %>
+
 <span class="br"></span>
 </div>
 </div>
@@ -120,12 +131,14 @@
 </div>
 <% } %>
 
+<% if (properties_size(connection.client_properties) > 0) { %>
 <div class="section-hidden">
 <h2>Client Library</h2>
 <div class="hider">
 <%= fmt_table_long(connection.client_properties) %>
 </div>
 </div>
+<% } %>
 
 <div class="section-hidden">
   <h2>Close This Connection</h2>

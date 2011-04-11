@@ -99,7 +99,7 @@ accept(Body, ReqData, Context) ->
     rabbit_mgmt_util:with_decode(
       [users, vhosts, permissions, queues, exchanges, bindings],
       Body, ReqData, Context,
-      fun([Users, VHosts, Permissions, Queues, Exchanges, Bindings]) ->
+      fun([Users, VHosts, Permissions, Queues, Exchanges, Bindings], _) ->
               try
                   for_all(Users,       fun add_user/1),
                   for_all(VHosts,      fun add_vhost/1),

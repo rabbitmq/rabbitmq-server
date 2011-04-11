@@ -5,7 +5,6 @@ SOCKETS_THRESHOLDS=[[1.0, 'red'],
                     [0.8, 'yellow']];
 PROCESS_THRESHOLDS=[[0.75, 'red'],
                     [0.5, 'yellow']];
-MEMORY_THRESHOLDS=[[1.0, 'red']];
 
 function fmt_string(str) {
     if (str == undefined) return UNKNOWN_REPR;
@@ -92,8 +91,14 @@ function fmt_color(r, thresholds) {
     return 'green';
 }
 
-function fmt_rate(obj, name, show_total) {
-    return fmt_rate0(obj, name, fmt_num, show_total);
+function fmt_rate(obj, name, show_total, cssClass) {
+    var res = fmt_rate0(obj, name, fmt_num, show_total);
+    if (cssClass == undefined || res == '') {
+        return res;
+    }
+    else {
+        return '<span class="' + cssClass + '">' + res + '</span>';
+    }
 }
 
 function fmt_rate_bytes(obj, name) {
@@ -112,8 +117,26 @@ function fmt_rate0(obj, name, fmt, show_total) {
     return res;
 }
 
+function is_stat_empty(obj, name) {
+    if (obj == undefined
+        || obj[name] == undefined
+        || obj[name + '_details'] == undefined
+        || obj[name + '_details'].rate < 0.00001) return true;
+    return false;
+}
+
+function is_col_empty(channels, name) {
+    for (var i = 0; i < channels.length; i++) {
+        var channel = channels[i];
+        if (!is_stat_empty(channel.message_stats, name)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 function fmt_exchange(name) {
-    return name == '' ? '<i>(AMQP default)</i>' : name;
+    return name == '' ? '(AMQP default)' : name;
 }
 
 function fmt_exchange_url(name) {
@@ -146,9 +169,15 @@ function fmt_table_body(table, x) {
 
 function fmt_amqp_value(val) {
     if (val instanceof Array) {
-        return val.join("<br/>");
+        var val2 = new Array();
+        for (var i = 0; i < val.length; i++) {
+            val2[i] = fmt_amqp_value(val[i]);
+        }
+        return val2.join("<br/>");
     } else if (val instanceof Object) {
         return fmt_table_short(val);
+    } else if (typeof(val) == 'string') {
+        return fmt_escape_html(val);
     } else {
         return val;
     }
@@ -195,6 +224,36 @@ function fmt_idle_long(obj) {
     }
 }
 
+function fmt_escape_html(txt) {
+    return txt.replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/\n/g, '<br/>');
+}
+
+function fmt_maybe_wrap(txt, encoding) {
+    if (encoding == 'string') return fmt_escape_html(txt);
+
+    var WRAP = 120;
+    var res = '';
+    while (txt != '') {
+        var i = txt.indexOf('\n');
+        if (i == -1 || i > WRAP) {
+            i = Math.min(WRAP, txt.length);
+            res += txt.substring(0, i) + '\n';
+            txt = txt.substring(i);
+        }
+        else {
+            res += txt.substring(0, i + 1);
+            txt = txt.substring(i + 1);
+        }
+    }
+    return fmt_escape_html(res);
+}
+
+function fmt_escape_html(txt) {
+    return txt.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
 function alt_rows(i) {
     return (i % 2 == 0) ? ' class="alt1"' : ' class="alt2"';
 }
@@ -233,7 +292,7 @@ function link_node(name) {
 }
 
 function link_to(name, url) {
-    return '<a href="' + url + '">' + name + '</a>';
+    return '<a href="' + url + '">' + fmt_escape_html(name) + '</a>';
 }
 
 function message_rates(stats) {
@@ -242,7 +301,9 @@ function message_rates(stats) {
         var items = [['Publish', 'publish'], ['Confirm', 'confirm'],
                      ['Deliver', 'deliver'], ['Acknowledge', 'ack'],
                      ['Get', 'get'], ['Deliver (noack)', 'deliver_no_ack'],
-                     ['Get (noack)', 'get_no_ack']];
+                     ['Get (noack)', 'get_no_ack'],
+                     ['Return (mandatory)', 'return_unroutable'],
+                     ['Return (immediate)', 'return_not_delivered']];
         for (var i in items) {
             var name = items[i][0];
             var key = items[i][1] + '_details';
@@ -285,4 +346,23 @@ function fmt_sort(display, sort) {
             '</span>';
     }
     return '<a class="sort" sort="' + sort + '">' + prefix + display + '</a>';
+}
+
+function fmt_permissions(obj, permissions, lookup, show, warning) {
+    var res = [];
+    for (var i in permissions) {
+        var permission = permissions[i];
+        if (permission[lookup] == obj.name) {
+            res.push(permission[show]);
+        }
+    }
+    return res.length == 0 ? warning : res.join(', ');
+}
+
+function properties_size(obj) {
+    var count = 0;
+    for (k in obj) {
+        if (obj.hasOwnProperty(k)) count++;
+    }
+    return count;
 }

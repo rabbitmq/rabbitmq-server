@@ -20,9 +20,12 @@
 -export([node_and_pid/1, protocol/1, resource/1, permissions/1, queue/1]).
 -export([exchange/1, user/1, internal_user/1, binding/1, url/2]).
 -export([pack_binding_props/2, unpack_binding_props/1, tokenise/1]).
--export([to_amqp_table/1, listener/1, properties/1]).
+-export([to_amqp_table/1, listener/1, properties/1, basic_properties/1]).
+-export([to_basic_properties/1]).
+-export([connection/1, addr/1, port/1]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit_framing.hrl").
 
 %%--------------------------------------------------------------------
 
@@ -66,26 +69,52 @@ ip(IP)      -> list_to_binary(rabbit_misc:ntoa(IP)).
 ipb(unknown) -> unknown;
 ipb(IP)      -> list_to_binary(rabbit_misc:ntoab(IP)).
 
+addr(Addr) when is_list(Addr); is_atom(Addr) -> print("~s", Addr);
+addr(Addr) when is_tuple(Addr)               -> ip(Addr).
+
+port(Port) when is_number(Port) -> Port;
+port(Port)                      -> print("~w", Port).
+
 properties(unknown) -> unknown;
 properties(Table)   -> {struct, [{Name, tuple(Value)} ||
                                     {Name, Value} <- Table]}.
 
-amqp_table(unknown) -> unknown;
-amqp_table(Table)   -> {struct, [{Name, amqp_value(Type, Value)} ||
-                                    {Name, Type, Value} <- Table]}.
+amqp_table(unknown)   -> unknown;
+amqp_table(undefined) -> amqp_table([]);
+amqp_table(Table)     -> {struct, [{Name, amqp_value(Type, Value)} ||
+                                      {Name, Type, Value} <- Table]}.
 
-amqp_value(array, Val) -> [amqp_value(T, V) || {T, V} <- Val];
-amqp_value(table, Val) -> amqp_table(Val);
-amqp_value(_Type, Val) -> Val.
+amqp_value(array, Vs)                  -> [amqp_value(T, V) || {T, V} <- Vs];
+amqp_value(table, V)                   -> amqp_table(V);
+amqp_value(_Type, V) when is_binary(V) -> utf8_safe(V);
+amqp_value(_Type, V)                   -> V.
+
+utf8_safe(V) ->
+    try
+        xmerl_ucs:from_utf8(V),
+        V
+    catch exit:{ucs, _} ->
+            Enc = base64:encode(V),
+            <<"Invalid UTF-8, base64 is: ", Enc/binary>>
+    end.
 
 tuple(unknown)                    -> unknown;
 tuple(Tuple) when is_tuple(Tuple) -> [tuple(E) || E <- tuple_to_list(Tuple)];
 tuple(Term)                       -> Term.
 
-protocol(unknown)                  -> unknown;
-protocol({Major, Minor, 0})        -> print("~w-~w", [Major, Minor]);
-protocol({Major, Minor, Revision}) -> print("~w-~w-~w",
-                                            [Major, Minor, Revision]).
+protocol(unknown) ->
+    unknown;
+protocol(Version = {_Major, _Minor, _Revision}) ->
+    protocol({'AMQP', Version});
+protocol({Family, Version}) ->
+    print("~s ~s", [Family, protocol_version(Version)]).
+
+protocol_version(Arbitrary)
+  when is_list(Arbitrary)                  -> Arbitrary;
+protocol_version({Major, Minor})           -> io_lib:format("~B-~B", [Major, Minor]);
+protocol_version({Major, Minor, 0})        -> protocol_version({Major, Minor});
+protocol_version({Major, Minor, Revision}) -> io_lib:format("~B-~B-~B",
+                                                    [Major, Minor, Revision]).
 
 timestamp_ms(unknown) ->
     unknown;
@@ -188,23 +217,34 @@ tokenise(Str) ->
                   tokenise(string:sub_string(Str, Count + 2))]
     end.
 
+to_amqp_table({struct, T}) ->
+    to_amqp_table(T);
 to_amqp_table(T) ->
     [to_amqp_table_row(K, V) || {K, V} <- T].
 
-to_amqp_table_row(K, Vs) when is_list(Vs) ->
-    {K, array, [{args_type(V), V} || V <- Vs]};
 to_amqp_table_row(K, V) ->
-    {K, args_type(V), V}.
+    {T, V2} = type_val(V),
+    {K, T, V2}.
 
-args_type(X) when is_binary(X) ->
-    longstr;
-args_type(X) when is_number(X) ->
-    long;
-args_type(X) ->
-    throw({unhandled_type, X}).
+to_amqp_array(L) ->
+    [type_val(I) || I <- L].
+
+type_val({struct, M})         -> {table,   to_amqp_table(M)};
+type_val(L) when is_list(L)   -> {array,   to_amqp_array(L)};
+type_val(X) when is_binary(X) -> {longstr, X};
+type_val(X) when is_number(X) -> {long,    X};
+type_val(X)                   -> throw({unhandled_type, X}).
 
 url(Fmt, Vals) ->
     print(Fmt, [mochiweb_util:quote_plus(V) || V <- Vals]).
+
+connection(Props) ->
+    case proplists:get_value(name, Props, unknown) of
+        unknown -> print("~s:~w",
+                         [addr(proplists:get_value(peer_address, Props)),
+                          port(proplists:get_value(peer_port,    Props))]);
+        Name      -> Name
+    end.
 
 exchange(X) ->
     format(X, [{fun resource/1,   [name]},
@@ -247,3 +287,36 @@ binding(#binding{source      = S,
        {properties_key, pack_binding_props(Key, Args)}],
       [{fun (Res) -> resource(source, Res) end, [source]},
        {fun amqp_table/1,                       [arguments]}]).
+
+basic_properties(Props = #'P_basic'{}) ->
+    {Res, _Ix} = lists:foldl(fun (K, {L, Ix}) ->
+                                     V = element(Ix, Props),
+                                     NewL = case V of
+                                                undefined -> L;
+                                                _         -> [{K, V}|L]
+                                            end,
+                                     {NewL, Ix + 1}
+                             end, {[], 2},
+                             record_info(fields, 'P_basic')),
+    format(Res, [{fun amqp_table/1, [headers]}]).
+
+to_basic_properties({struct, P}) ->
+    to_basic_properties(P);
+
+to_basic_properties(Props) ->
+    Fmt = fun (headers, H) -> to_amqp_table(H);
+              (_K     , V) -> V
+          end,
+    {Res, _Ix} = lists:foldl(
+                   fun (K, {P, Ix}) ->
+                           NewP = case proplists:get_value(a2b(K), Props) of
+                                      undefined -> P;
+                                      V         -> setelement(Ix, P, Fmt(K, V))
+                                  end,
+                           {NewP, Ix + 1}
+                   end, {#'P_basic'{}, 2},
+                   record_info(fields, 'P_basic')),
+    Res.
+
+a2b(A) ->
+    list_to_binary(atom_to_list(A)).

@@ -81,6 +81,18 @@ PURGABLE = {
               'uri':       '/queues/{vhost}/{name}/contents'}
     }
 
+EXTRA_VERBS = {
+    'publish': {'mandatory': ['routing_key'],
+                'optional':  {'payload': None,
+                              'exchange': 'amq.default',
+                              'payload_encoding': 'string'},
+                'uri':       '/exchanges/{vhost}/{exchange}/publish'},
+    'get':     {'mandatory': ['queue'],
+                'optional':  {'count': '1', 'requeue': 'true',
+                              'payload_file': None},
+                'uri':       '/queues/{vhost}/{queue}/get'}
+}
+
 for k in DECLARABLE:
     DECLARABLE[k]['uri'] = URIS[k]
 
@@ -98,13 +110,21 @@ where cmd is one of:
         usage += "  list {0} [<column>...]\n".format(l)
     for s in SHOWABLE:
         usage += "  show {0} [<column>...]\n".format(s)
-    usage += fmt_usage_stanza(DECLARABLE, 'declare')
-    usage += fmt_usage_stanza(DELETABLE,  'delete')
-    usage += fmt_usage_stanza(CLOSABLE,   'close')
-    usage += fmt_usage_stanza(PURGABLE,   'purge')
+    usage += fmt_usage_stanza(DECLARABLE,  'declare')
+    usage += fmt_usage_stanza(DELETABLE,   'delete')
+    usage += fmt_usage_stanza(CLOSABLE,    'close')
+    usage += fmt_usage_stanza(PURGABLE,    'purge')
+    usage += fmt_usage_stanza(EXTRA_VERBS, '')
     usage += """
-  export FILE
-  import FILE"""
+  export <file>
+  import <file>
+
+  * If payload is not specified on publish, standard input is used
+
+  * If payload_file is not specified on get, the payload will be shown on
+    standard output along with the message metadata
+
+  * If payload_file is specified on get, count must not be set"""
     return usage
 
 def fmt_usage_stanza(root, verb):
@@ -116,8 +136,10 @@ def fmt_usage_stanza(root, verb):
         return res
 
     text = "\n"
+    if verb != "":
+        verb = " " + verb
     for k in root.keys():
-        text += "  {0} {1} {2}\n".format(verb, k, fmt_args(root[k]))
+        text += " {0} {1} {2}\n".format(verb, k, fmt_args(root[k]))
     return text
 
 parser = OptionParser(usage=make_usage())
@@ -150,8 +172,8 @@ def make_parser():
 
 def assert_usage(expr, error):
     if not expr:
-        print "\nERROR: {0}\n".format(error)
-        print "{0} --help for help\n".format(os.path.basename(sys.argv[0]))
+        output("\nERROR: {0}\n".format(error))
+        output("{0} --help for help\n".format(os.path.basename(sys.argv[0])))
         sys.exit(1)
 
 def column_sort_key(col):
@@ -174,9 +196,20 @@ def main():
     method = getattr(mgmt, "invoke_%s" % args[0])
     method()
 
-def die(str):
-    sys.stderr.write("*** {0}".format(str))
+def output(s):
+    print maybe_utf8(s, sys.stdout)
+
+def die(s):
+    sys.stderr.write(maybe_utf8("*** {0}".format(s), sys.stderr))
     exit(1)
+
+def maybe_utf8(s, stream):
+    if stream.isatty():
+        # It will have an encoding, which Python will respect
+        return s
+    else:
+        # It won't have an encoding, and Python will pick ASCII by default
+        return s.encode('utf-8')
 
 class Management:
     def __init__(self, options, args):
@@ -220,11 +253,38 @@ class Management:
 
     def verbose(self, string):
         if self.options.verbose:
-            print string
+            output(string)
 
     def get_arg(self):
         assert_usage(len(self.args) == 1, 'Exactly one argument required')
         return self.args[0]
+
+    def invoke_publish(self):
+        (uri, upload) = self.parse_args(self.args, EXTRA_VERBS['publish'])
+        upload['properties'] = {} # TODO do we care here?
+        if not upload['payload']:
+            data = sys.stdin.read()
+            upload['payload'] = base64.b64encode(data)
+            upload['payload_encoding'] = 'base64'
+        resp = json.loads(self.post(uri, json.dumps(upload)))
+        if resp['routed']:
+            self.verbose("Message published")
+        else:
+            self.verbose("Message published but NOT routed")
+
+    def invoke_get(self):
+        (uri, upload) = self.parse_args(self.args, EXTRA_VERBS['get'])
+        payload_file = upload['payload_file']
+        assert_usage(not payload_file or upload['count'] == '1',
+                     'Cannot get multiple messages using payload_file')
+        result = self.post(uri, json.dumps(upload))
+        if payload_file:
+            write_payload_file(payload_file, result)
+            columns = ['routing_key', 'exchange', 'message_count',
+                       'payload_bytes', 'redelivered']
+            format_list(result, columns, self.options)
+        else:
+            format_list(result, [], self.options)
 
     def invoke_export(self):
         path = self.get_arg()
@@ -260,25 +320,25 @@ class Management:
         return uri
 
     def invoke_declare(self):
-        (obj_type, uri, payload) = self.declare_delete_parse(DECLARABLE)
+        (obj_type, uri, upload) = self.declare_delete_parse(DECLARABLE)
         if obj_type == 'binding':
-            self.post(uri, json.dumps(payload))
+            self.post(uri, json.dumps(upload))
         else:
-            self.put(uri, json.dumps(payload))
+            self.put(uri, json.dumps(upload))
         self.verbose("{0} declared".format(obj_type))
 
     def invoke_delete(self):
-        (obj_type, uri, payload) = self.declare_delete_parse(DELETABLE)
+        (obj_type, uri, upload) = self.declare_delete_parse(DELETABLE)
         self.delete(uri)
         self.verbose("{0} deleted".format(obj_type))
 
     def invoke_close(self):
-        (obj_type, uri, payload) = self.declare_delete_parse(CLOSABLE)
+        (obj_type, uri, upload) = self.declare_delete_parse(CLOSABLE)
         self.delete(uri)
         self.verbose("{0} closed".format(obj_type))
 
     def invoke_purge(self):
-        (obj_type, uri, payload) = self.declare_delete_parse(PURGABLE)
+        (obj_type, uri, upload) = self.declare_delete_parse(PURGABLE)
         self.delete(uri)
         self.verbose("{0} purged".format(obj_type))
 
@@ -287,42 +347,48 @@ class Management:
         obj_type = self.args[0]
         assert_usage(obj_type in root,
                      'Type {0} not recognised'.format(obj_type))
-        args = self.args[1:]
-        mandatory = root[obj_type]['mandatory']
-        optional = root[obj_type]['optional']
-        args = self.args[1:]
-        payload = {}
+        obj = root[obj_type]
+        (uri, upload) = self.parse_args(self.args[1:], obj)
+        return (obj_type, uri, upload)
+
+    def parse_args(self, args, obj):
+        mandatory =  obj['mandatory']
+        optional = obj['optional']
+        uri_template = obj['uri']
+        upload = {}
         for k in optional.keys():
-            payload[k] = optional[k]
+            upload[k] = optional[k]
         for arg in args:
             assert_usage("=" in arg,
                          'Argument "{0}" not in format name=value'.format(arg))
-            (name, value) = arg.split("=")
+            (name, value) = arg.split("=", 1)
             assert_usage(name in mandatory or name in optional.keys(),
                          'Argument "{0}" not recognised'.format(name))
-            payload[name] = value
+            upload[name] = value
         for m in mandatory:
-            assert_usage(m in payload.keys(),
+            assert_usage(m in upload.keys(),
                          'mandatory argument "{0}" required'.format(m))
-        payload['arguments'] = {}
-        payload['vhost'] = self.options.vhost or '/'
+        upload['arguments'] = {}
+        upload['vhost'] = self.options.vhost or '/'
         uri_args = {}
-        for k in payload:
-            uri_args[k] = urllib.quote_plus(payload[k])
-            if k == 'destination_type':
-                uri_args['destination_char'] = payload[k][0]
-        uri = root[obj_type]['uri'].format(**uri_args)
-        return (obj_type, uri, payload)
+        for k in upload:
+            v = upload[k]
+            if v:
+                uri_args[k] = urllib.quote_plus(v)
+                if k == 'destination_type':
+                    uri_args['destination_char'] = v[0]
+        uri = uri_template.format(**uri_args)
+        return (uri, upload)
 
 def format_list(json_list, columns, options):
     format = options.format
     formatter = None
     if format == "raw_json":
-        print json_list
+        output(json_list)
         return
     elif format == "pretty_json":
         enc = json.JSONEncoder(False, False, True, True, True, 2)
-        print enc.encode(json.loads(json_list))
+        output(enc.encode(json.loads(json_list)))
         return
     else:
         formatter = FORMATS[format]
@@ -334,7 +400,7 @@ def format_list(json_list, columns, options):
 class Lister:
     def verbose(self, string):
         if self.options.verbose:
-            print string
+            output(string)
 
     def display(self, json_list):
         depth = sys.maxint
@@ -370,7 +436,7 @@ class Lister:
 
         def add_to_row(col, val):
             if col in column_ix:
-                row[column_ix[col]] = str(val)
+                row[column_ix[col]] = unicode(val)
 
         if len(self.columns) == 0:
             for item in items:
@@ -404,7 +470,7 @@ class TSVList(Lister):
             line = ""
             for cell in row:
                 line += cell + "\t"
-            print line
+            output(line)
 
 class LongList(Lister):
     def __init__(self, columns, options):
@@ -416,12 +482,12 @@ class LongList(Lister):
         max_width = 0
         for col in columns:
             max_width = max(max_width, len(col))
-        fmt = "{0:>" + str(max_width) + "}: {1}"
-        print sep
+        fmt = "{0:>" + unicode(max_width) + "}: {1}"
+        output(sep)
         for i in xrange(0, len(table)):
             for j in xrange(0, len(columns)):
-                print fmt.format(columns[j], table[i][j])
-            print sep
+                output(fmt.format(columns[j], table[i][j]))
+            output(sep)
 
 class TableList(Lister):
     def __init__(self, columns, options):
@@ -449,15 +515,15 @@ class TableList(Lister):
     def ascii_row(self, col_widths, row, align):
         txt = "|"
         for i in xrange(0, len(col_widths)):
-            fmt = " {0:" + align + str(col_widths[i]) + "} "
+            fmt = " {0:" + align + unicode(col_widths[i]) + "} "
             txt += fmt.format(row[i]) + "|"
-        print txt
+        output(txt)
 
     def ascii_bar(self, col_widths):
         txt = "+"
         for w in col_widths:
             txt += ("-" * (w + 2)) + "+"
-        print txt
+        output(txt)
 
 class KeyValueList(Lister):
     def __init__(self, columns, options):
@@ -469,7 +535,7 @@ class KeyValueList(Lister):
             row = []
             for j in xrange(0, len(columns)):
                 row.append("{0}=\"{1}\"".format(columns[j], table[i][j]))
-            print " ".join(row)
+            output(" ".join(row))
 
 # TODO handle spaces etc in completable names
 class BashList(Lister):
@@ -486,7 +552,7 @@ class BashList(Lister):
             res = []
             for row in table:
                 res.append(row[ix])
-            print " ".join(res)
+            output(" ".join(res))
 
 FORMATS = {
     'raw_json'    : None, # Special cased
@@ -497,6 +563,17 @@ FORMATS = {
     'kvp'         : KeyValueList,
     'bash'        : BashList
 }
+
+def write_payload_file(payload_file, json_list):
+    result = json.loads(json_list)[0]
+    payload = result['payload']
+    payload_encoding = result['payload_encoding']
+    with open(payload_file, 'w') as f:
+        if payload_encoding == 'base64':
+            data = base64.b64decode(payload)
+        else:
+            data = payload
+        f.write(data)
 
 def print_bash_completion():
     script = """# This is a bash completion script for rabbitmqadmin.
@@ -509,7 +586,7 @@ _rabbitmqadmin()
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
 
-    opts="list show declare delete close purge import export"
+    opts="list show declare delete close purge import export get publish"
     fargs="--help --host --port --vhost --username --password --format --depth"
 
     case "${prev}" in
@@ -582,7 +659,7 @@ _rabbitmqadmin()
 }
 complete -F _rabbitmqadmin rabbitmqadmin
 """
-    print script
+    output(script)
 
 if __name__ == "__main__":
     main()

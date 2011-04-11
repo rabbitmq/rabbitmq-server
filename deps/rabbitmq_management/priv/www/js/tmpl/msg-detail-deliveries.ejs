@@ -26,8 +26,8 @@
 <% } %>
   <tr class="total">
     <th>Total:</th>
-    <td><span class="mini-highlight"><%= fmt_rate(totals, 'deliver_get') %></span></td>
-    <td><span class="mini-highlight"><%= fmt_rate(totals, 'ack') %></span></td>
+    <td><%= fmt_rate(totals, 'deliver_get', false, 'mini-highlight') %></td>
+    <td><%= fmt_rate(totals, 'ack', false, 'mini-highlight') %></td>
   </tr>
 </table>
 <% } else { %>

@@ -7,13 +7,19 @@
     <tr>
       <th><%= fmt_sort('Name',          'name') %></th>
       <th><%= fmt_sort('Administrator', 'administrator') %></th>
+      <th>Can access virtual hosts</th>
     </tr>
   </thead>
   <tbody>
-    <% for (var i = 0; i < users.length; i++) { %>
+    <%
+       for (var i = 0; i < users.length; i++) {
+         var user = users[i];
+    %>
        <tr<%= alt_rows(i)%>>
-         <td><%= link_user(users[i].name) %></td>
-         <td class="c"><%= fmt_boolean(users[i].administrator) %></td>
+         <td><%= link_user(user.name) %></td>
+         <td class="c"><%= fmt_boolean(user.administrator) %></td>
+         <td class="c"><%= fmt_permissions(user, permissions, 'user', 'vhost',
+                           '<p class="warning">No access</p>') %></td>
        </tr>
     <% } %>
   </tbody>
@@ -45,8 +51,11 @@
           </th>
           <td>
             <div id="password">
-              <input type="text" name="password" />
+              <input type="password" name="password" />
+              <span class="mand">*</span><br/>
+              <input type="password" name="password_confirm" />
               <span class="mand">*</span>
+              (confirm)
             </div>
             <div id="no-password">
               User cannot log in using password.
