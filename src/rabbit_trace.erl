@@ -86,41 +86,28 @@ publish(TraceExchangeBin, VHostBin, RKPrefix, RKSuffix, Table, Payload) ->
 message_to_table(#basic_message{exchange_name = #resource{name = XName},
                                 routing_keys = RoutingKeys,
                                 content = Content}) ->
-    #content{properties = #'P_basic'{content_type     = ContentType,
-                                     content_encoding = ContentEncoding,
-                                     headers          = Headers,
-                                     delivery_mode    = DeliveryMode,
-                                     priority         = Priority,
-                                     correlation_id   = CorrelationId,
-                                     reply_to         = ReplyTo,
-                                     expiration       = Expiration,
-                                     message_id       = MessageId,
-                                     timestamp        = Timestamp,
-                                     type             = Type,
-                                     user_id          = UserId,
-                                     app_id           = AppId},
+    #content{properties            = Props,
              payload_fragments_rev = PFR} =
         rabbit_binary_parser:ensure_content_decoded(Content),
-    Headers1 = prune_undefined(
-                [{<<"content_type">>,     longstr,   ContentType},
-                 {<<"content_encoding">>, longstr,   ContentEncoding},
-                 {<<"headers">>,          table,     Headers},
-                 {<<"delivery_mode">>,    signedint, DeliveryMode},
-                 {<<"priority">>,         signedint, Priority},
-                 {<<"correlation_id">>,   longstr,   CorrelationId},
-                 {<<"reply_to">>,         longstr,   ReplyTo},
-                 {<<"expiration">>,       longstr,   Expiration},
-                 {<<"message_id">>,       longstr,   MessageId},
-                 {<<"timestamp">>,        longstr,   Timestamp},
-                 {<<"type">>,             longstr,   Type},
-                 {<<"user_id">>,          longstr,   UserId},
-                 {<<"app_id">>,           longstr,   AppId}]),
+    {PropsTable, _Ix} =
+        lists:foldl(
+          fun (K, {L, Ix}) ->
+                  V = element(Ix, Props),
+                  NewL = case V of
+                             undefined -> L;
+                             _         -> [{a2b(K), type(K, V), V}|L]
+                         end,
+                  {NewL, Ix + 1}
+          end, {[], 2}, record_info(fields, 'P_basic')),
     {[{<<"exchange_name">>, longstr, XName},
       {<<"routing_keys">>,  array,   [{longstr, K} || K <- RoutingKeys]},
-      {<<"headers">>,       table,   Headers1},
-      {<<"node">>,          longstr, list_to_binary(atom_to_list(node()))}],
+      {<<"properties">>,    table,   PropsTable},
+      {<<"node">>,          longstr, a2b(node())}],
      list_to_binary(lists:reverse(PFR))}.
 
-prune_undefined(Fields) ->
-    [F || F = {_, _, Value} <- Fields,
-          Value =/= undefined].
+a2b(A) ->
+    list_to_binary(atom_to_list(A)).
+
+type(headers, _V)                    -> table;
+type(_K, V)       when is_integer(V) -> signedint;
+type(_K, _V)                         -> longstr.
