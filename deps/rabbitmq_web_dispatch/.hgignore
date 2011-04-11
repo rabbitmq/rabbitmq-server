@@ -1,24 +1,6 @@
-syntax: glob
-*.beam
-*.ez
-*~
-erl_crash.dump
-
-syntax: regexp
-^mochiweb/
-^deps/
+~$
+\.beam$
 ^build/
 ^dist/
-^include/rabbit_framing.hrl$
-^src/rabbit_framing.erl$
-^rabbit.plt$
-^ebin/rabbit.app$
-^tmp/
-
-^packaging/RPMS/Fedora/(BUILD|RPMS|SOURCES|SPECS|SRPMS)$
-^packaging/debs/Debian/rabbitmq-server_.*\.(dsc|(diff|tar)\.gz|deb|changes)$
-^packaging/debs/apt-repository/debian$
-^packaging/generic-unix/rabbitmq-server-generic-unix-.*\.tar\.gz$
-^packaging/windows/rabbitmq-server-windows-.*\.zip$
-
-^docs/.*\.[15]\.gz$
+^cover/
+^erl_crash.dump$
