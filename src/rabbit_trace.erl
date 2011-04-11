@@ -37,8 +37,7 @@
 
 tap_trace_in(Message = #basic_message{
                exchange_name = #resource{virtual_host = VHostBin,
-                                         name         = XNameBin}},
-             User) ->
+                                         name         = XNameBin}}, User) ->
     check_trace(
       XNameBin,
       VHostBin,
@@ -52,8 +51,7 @@ tap_trace_out({#resource{name = QNameBin}, _QPid, _QMsgId, Redelivered,
                Message = #basic_message{
                  exchange_name = #resource{virtual_host = VHostBin,
                                            name         = XNameBin}}},
-              ConsumerTagOrNone,
-              User) ->
+              ConsumerTagOrNone, User) ->
     check_trace(
       XNameBin,
       VHostBin,
