@@ -107,7 +107,7 @@
             "methods": [{"id": 10,
                          "arguments": [{"type": "octet", "name": "version-major", "default-value": 0},
                                        {"type": "octet", "name": "version-minor", "default-value": 8},
-                                       {"domain": "peer-properties", "name": "server properties"},
+                                       {"domain": "peer-properties", "name": "server-properties"},
                                        {"type": "longstr", "name": "mechanisms", "default-value": "PLAIN"},
                                        {"type": "longstr", "name": "locales", "default-value": "en_US"}],
                          "name": "start",
