@@ -281,6 +281,7 @@ handle_cast({deliver, ConsumerTag, AckRequired,
                          true  -> deliver;
                          false -> deliver_no_ack
                      end, State),
+    rabbit_trace:tap_trace_out(Msg, ConsumerTag),
     noreply(State1#ch{next_tag = DeliveryTag + 1});
 
 handle_cast(emit_stats, State = #ch{stats_timer = StatsTimer}) ->
@@ -604,6 +605,7 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
         end,
     case rabbit_basic:message(ExchangeName, RoutingKey, DecodedContent) of
         {ok, Message} ->
+            rabbit_trace:tap_trace_in(Message),
             {RoutingRes, DeliveredQPids} =
                 rabbit_exchange:publish(
                   Exchange,
@@ -672,6 +674,7 @@ handle_method(#'basic.get'{queue = QueueNameBin,
                                  true  -> get_no_ack;
                                  false -> get
                              end, State),
+            rabbit_trace:tap_trace_out(Msg, none),
             ok = rabbit_writer:send_command(
                    WriterPid,
                    #'basic.get_ok'{delivery_tag = DeliveryTag,
