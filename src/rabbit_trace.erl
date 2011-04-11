@@ -39,8 +39,7 @@ tap_trace_in(Message = #basic_message{
                exchange_name = #resource{virtual_host = VHost,
                                          name         = XName}}, User) ->
     check_trace(
-      XName,
-      VHost,
+      XName, VHost,
       fun (TraceExchange) ->
               {EncodedMetadata, Payload} = message_to_table(Message, User),
               publish(TraceExchange, VHost, <<"publish">>, XName,
@@ -53,8 +52,7 @@ tap_trace_out({#resource{name = QName}, _QPid, _QMsgId, Redelivered,
                                            name         = XName}}},
               ConsumerTagOrNone, User) ->
     check_trace(
-      XName,
-      VHost,
+      XName, VHost,
       fun (TraceExchange) ->
               RedeliveredNum = case Redelivered of true -> 1; false -> 0 end,
               {EncodedMetadata, Payload} = message_to_table(Message, User),
@@ -114,4 +112,4 @@ a2b(A) ->
 
 type(V) when is_list(V)    -> table;
 type(V) when is_integer(V) -> signedint;
-type(V)                    -> longstr.
+type(_V)                   -> longstr.
