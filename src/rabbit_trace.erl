@@ -68,13 +68,15 @@ tap_trace_out({#resource{name = QName}, _QPid, _QMsgId, Redelivered,
       end).
 
 check_trace(XName, VHost, F) ->
-    case catch case application:get_env(rabbit, {trace_exchange, VHost}) of
-                   undefined           -> ok;
-                   {ok, XName}         -> ok;
-                   {ok, TraceExchange} -> F(TraceExchange)
-               end of
-        {'EXIT', Reason} -> rabbit_log:info("Trace tap died: ~p~n", [Reason]);
-        ok               -> ok
+    case application:get_env(rabbit, {trace_exchange, VHost}) of
+        undefined    -> ok;
+        {ok, XName}  -> ok;
+        {ok, TraceX} -> case catch F(TraceX) of
+                            {'EXIT', Reason} -> rabbit_log:info(
+                                                  "Trace tap died: ~p~n",
+                                                  [Reason]);
+                            ok               -> ok
+                        end
     end.
 
 publish(TraceExchange, VHost, RKPrefix, RKSuffix, Table, Payload) ->
