@@ -264,8 +264,7 @@ handle_cast({deliver, ConsumerTag, AckRequired,
                                    routing_keys = [RoutingKey | _CcRoutes],
                                    content = Content}}},
             State = #ch{writer_pid = WriterPid,
-                        next_tag   = DeliveryTag,
-                        user       = User}) ->
+                        next_tag = DeliveryTag}) ->
     State1 = lock_message(AckRequired,
                           ack_record(DeliveryTag, ConsumerTag, Msg),
                           State),
@@ -282,7 +281,7 @@ handle_cast({deliver, ConsumerTag, AckRequired,
                          true  -> deliver;
                          false -> deliver_no_ack
                      end, State),
-    rabbit_trace:tap_trace_out(Msg, ConsumerTag, User),
+    rabbit_trace:tap_trace_out(Msg),
     noreply(State1#ch{next_tag = DeliveryTag + 1});
 
 handle_cast(emit_stats, State = #ch{stats_timer = StatsTimer}) ->
@@ -589,8 +588,7 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
                                immediate   = Immediate},
               Content, State = #ch{virtual_host    = VHostPath,
                                    transaction_id  = TxnKey,
-                                   confirm_enabled = ConfirmEnabled,
-                                   user            = User}) ->
+                                   confirm_enabled = ConfirmEnabled}) ->
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
     check_write_permitted(ExchangeName, State),
     Exchange = rabbit_exchange:lookup_or_die(ExchangeName),
@@ -607,7 +605,7 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
         end,
     case rabbit_basic:message(ExchangeName, RoutingKey, DecodedContent) of
         {ok, Message} ->
-            rabbit_trace:tap_trace_in(Message, User),
+            rabbit_trace:tap_trace_in(Message),
             {RoutingRes, DeliveredQPids} =
                 rabbit_exchange:publish(
                   Exchange,
@@ -657,8 +655,7 @@ handle_method(#'basic.get'{queue = QueueNameBin,
                            no_ack = NoAck},
               _, State = #ch{writer_pid = WriterPid,
                              conn_pid   = ConnPid,
-                             next_tag   = DeliveryTag,
-                             user       = User}) ->
+                             next_tag   = DeliveryTag}) ->
     QueueName = expand_queue_name_shortcut(QueueNameBin, State),
     check_read_permitted(QueueName, State),
     case rabbit_amqqueue:with_exclusive_access_or_die(
@@ -677,7 +674,7 @@ handle_method(#'basic.get'{queue = QueueNameBin,
                                  true  -> get_no_ack;
                                  false -> get
                              end, State),
-            rabbit_trace:tap_trace_out(Msg, none, User),
+            rabbit_trace:tap_trace_out(Msg),
             ok = rabbit_writer:send_command(
                    WriterPid,
                    #'basic.get_ok'{delivery_tag = DeliveryTag,

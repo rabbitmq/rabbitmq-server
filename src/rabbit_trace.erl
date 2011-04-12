@@ -16,7 +16,7 @@
 
 -module(rabbit_trace).
 
--export([tap_trace_in/2, tap_trace_out/3]).
+-export([tap_trace_in/1, tap_trace_out/1]).
 
 -include("rabbit.hrl").
 -include("rabbit_framing.hrl").
@@ -25,11 +25,8 @@
 
 -ifdef(use_specs).
 
--spec(tap_trace_in/2 :: (rabbit_types:basic_message(), rabbit_types:user())
-                        -> 'ok').
--spec(tap_trace_out/3 :: (rabbit_amqqueue:qmsg(),
-                          rabbit_types:maybe(rabbit_types:ctag()),
-                          rabbit_types:user()) -> 'ok').
+-spec(tap_trace_in/1 :: (rabbit_types:basic_message()) -> 'ok').
+-spec(tap_trace_out/1 :: (rabbit_amqqueue:qmsg()) -> 'ok').
 
 -endif.
 
@@ -37,11 +34,11 @@
 
 tap_trace_in(Message = #basic_message{
                exchange_name = #resource{virtual_host = VHost,
-                                         name         = XName}}, User) ->
+                                         name         = XName}}) ->
     check_trace(
       XName, VHost,
       fun (TraceExchange) ->
-              {EncodedMetadata, Payload} = message_to_table(Message, User),
+              {EncodedMetadata, Payload} = message_to_table(Message),
               publish(TraceExchange, VHost, <<"publish">>, XName,
                       EncodedMetadata, Payload)
       end).
@@ -49,20 +46,14 @@ tap_trace_in(Message = #basic_message{
 tap_trace_out({#resource{name = QName}, _QPid, _QMsgId, Redelivered,
                Message = #basic_message{
                  exchange_name = #resource{virtual_host = VHost,
-                                           name         = XName}}},
-              ConsumerTagOrNone, User) ->
+                                           name         = XName}}}) ->
     check_trace(
       XName, VHost,
       fun (TraceExchange) ->
               RedeliveredNum = case Redelivered of true -> 1; false -> 0 end,
-              {EncodedMetadata, Payload} = message_to_table(Message, User),
-              Fields0 = [{<<"redelivered">>, signedint, RedeliveredNum}]
+              {EncodedMetadata, Payload} = message_to_table(Message),
+              Fields = [{<<"redelivered">>, signedint, RedeliveredNum}]
                   ++ EncodedMetadata,
-              Fields = case ConsumerTagOrNone of
-                           none -> Fields0;
-                           CTag -> [{<<"consumer_tag">>, longstr, CTag} |
-                                    Fields0]
-                       end,
               publish(TraceExchange, VHost, <<"deliver">>, QName,
                       Fields, Payload)
       end).
@@ -86,9 +77,8 @@ publish(TraceExchange, VHost, RKPrefix, RKSuffix, Table, Payload) ->
     ok.
 
 message_to_table(#basic_message{exchange_name = #resource{name = XName},
-                                routing_keys  = RoutingKeys,
-                                content       = Content},
-                 #user{username = Username}) ->
+                                routing_keys = RoutingKeys,
+                                content = Content}) ->
     #content{properties            = Props,
              payload_fragments_rev = PFR} =
         rabbit_binary_parser:ensure_content_decoded(Content),
@@ -102,8 +92,7 @@ message_to_table(#basic_message{exchange_name = #resource{name = XName},
                          end,
                   {NewL, Ix + 1}
           end, {[], 2}, record_info(fields, 'P_basic')),
-    {[{<<"username">>,      longstr, Username},
-      {<<"exchange_name">>, longstr, XName},
+    {[{<<"exchange_name">>, longstr, XName},
       {<<"routing_keys">>,  array,   [{longstr, K} || K <- RoutingKeys]},
       {<<"properties">>,    table,   PropsTable},
       {<<"node">>,          longstr, a2b(node())}],
