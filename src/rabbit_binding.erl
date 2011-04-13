@@ -239,8 +239,8 @@ has_for_source(SrcName) ->
     %% we need to check for durable routes here too in case a bunch of
     %% routes to durable queues have been removed temporarily as a
     %% result of a node failure
-    contains(rabbit_route, Match) orelse contains(rabbit_semi_durable_route,
-                                                  Match).
+    contains(rabbit_route, Match) orelse
+        contains(rabbit_semi_durable_route, Match).
 
 remove_for_source(SrcName) ->
     [begin
