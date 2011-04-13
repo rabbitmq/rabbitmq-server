@@ -1,5 +1,5 @@
 %% -*- erlang -*-
-{application, rabbit_auth_backend_ldap,
+{application, rabbitmq_auth_backend_ldap,
  [{description, "RabbitMQ LDAP Authentication Backend"},
   {vsn, "%%VSN%%"},
   {modules, [rabbit_auth_backend_ldap_app]}, %% TODO generate automatically.
