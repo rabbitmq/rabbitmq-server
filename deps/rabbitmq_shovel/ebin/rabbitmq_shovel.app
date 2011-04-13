@@ -1,4 +1,4 @@
-{application, rabbit_shovel,
+{application, rabbitmq_shovel,
  [{description, "Data Shovel for RabbitMQ"},
   {vsn, "%%VSN%%"},
   {modules, [
