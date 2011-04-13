@@ -36,7 +36,7 @@ add_handler() ->
 %%----------------------------------------------------------------------------
 
 ensure_statistics_enabled() ->
-    {ok, ForceStats} = application:get_env(rabbit_management_agent,
+    {ok, ForceStats} = application:get_env(rabbitmq_management_agent,
                                            force_fine_statistics),
     {ok, StatsLevel} = application:get_env(rabbit, collect_statistics),
     case {ForceStats, StatsLevel} of
