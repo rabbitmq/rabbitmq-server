@@ -19,7 +19,7 @@
 -rabbit_boot_step({mirror_queue_slave_sup,
                    [{description, "mirror queue slave sup"},
                     {mfa,         {rabbit_mirror_queue_slave_sup, start, []}},
-                    {requires,    queue_sup_queue_recovery},
+                    {requires,    recovery},
                     {enables,     routing_ready}]}).
 
 -rabbit_boot_step({mirrored_queues,

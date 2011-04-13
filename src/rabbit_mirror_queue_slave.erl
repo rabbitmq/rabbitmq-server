@@ -235,8 +235,12 @@ code_change(_OldVsn, State, _Extra) ->
 
 handle_pre_hibernate(State = #state { backing_queue       = BQ,
                                       backing_queue_state = BQS }) ->
-    BQS1 = rabbit_amqqueue_process_utils:backing_queue_pre_hibernate(BQ, BQS),
-    {hibernate, stop_rate_timer(State #state { backing_queue_state = BQS1 })}.
+    {RamDuration, BQS1} = BQ:ram_duration(BQS),
+    DesiredDuration =
+        rabbit_memory_monitor:report_ram_duration(self(), RamDuration),
+    BQS2 = BQ:set_ram_duration_target(DesiredDuration, BQS1),
+    BQS3 = BQ:handle_pre_hibernate(BQS2),
+    {hibernate, stop_rate_timer(State #state { backing_queue_state = BQS3 })}.
 
 prioritise_call(Msg, _From, _State) ->
     case Msg of
