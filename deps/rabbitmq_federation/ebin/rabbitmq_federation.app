@@ -1,4 +1,4 @@
-{application, rabbit_federation,
+{application, rabbitmq_federation,
  [{description, "RabbitMQ Federation"},
   {vsn, "%%VSN%%"},
   {modules, [rabbit_federation_exchange,

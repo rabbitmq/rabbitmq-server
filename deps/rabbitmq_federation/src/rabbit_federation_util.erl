@@ -37,14 +37,14 @@ federation_up() ->
                     application:which_applications(infinity)) =/= false.
 
 local_params() ->
-    {ok, U} = application:get_env(rabbit_federation, local_username),
-    {ok, P} = application:get_env(rabbit_federation, local_password),
+    {ok, U} = application:get_env(rabbitmq_federation, local_username),
+    {ok, P} = application:get_env(rabbitmq_federation, local_password),
     #amqp_params{username = list_to_binary(U),
                  password = list_to_binary(P)}.
 
 upstream_from_table(Table, #resource{name = DX, virtual_host = DVHost}) ->
     TableProps = [{list_to_atom(binary_to_list(K)), V} || {K, _T, V} <- Table],
-    {ok, Brokers} = application:get_env(rabbit_federation, brokers),
+    {ok, Brokers} = application:get_env(rabbitmq_federation, brokers),
     UsableProps = [Merged ||
                       BrokerProps <- binaryise_all(Brokers),
                       Merged <- [merge(BrokerProps, TableProps)],
