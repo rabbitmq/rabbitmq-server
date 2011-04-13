@@ -149,9 +149,9 @@ add(Binding, InnerFun) ->
       end).
 
 add(Src, Dst, B) ->
-    Durable = all_durable([Src, Dst]),
+    Durable = durable(Src) andalso durable(Dst),
     case (not Durable orelse mnesia:read({rabbit_durable_route, B}) =:= []) of
-        true  -> ok = sync_binding(B, Durable, durable(Dst),
+        true  -> ok = sync_binding(B, durable(Src), durable(Dst),
                                    fun mnesia:write/3),
                  fun (Tx) -> ok = rabbit_exchange:callback(Src, add_binding,
                                                            [Tx, Src, B]),
@@ -177,7 +177,7 @@ remove(Binding, InnerFun) ->
       end).
 
 remove(Src, Dst, B) ->
-    ok = sync_binding(B, all_durable([Src, Dst]), durable(Dst),
+    ok = sync_binding(B, durable(Src), durable(Dst),
                       fun mnesia:delete_object/3),
     Deletions = maybe_auto_delete(B#binding.source, [B], new_deletions()),
     fun (Tx) -> ok = process_deletions(Deletions, Tx) end.
@@ -267,8 +267,6 @@ remove_transient_for_destination(DstName) ->
 
 %%----------------------------------------------------------------------------
 
-all_durable(Resources) -> lists:all(fun durable/1, Resources).
-
 durable(#exchange{durable = D}) -> D;
 durable(#amqqueue{durable = D}) -> D.
 
@@ -282,15 +280,16 @@ binding_action(Binding = #binding{source      = SrcName,
               Fun(Src, Dst, Binding#binding{args = SortedArgs})
       end).
 
-sync_binding(Binding, true, SemiDurable, Fun) ->
+%% (Binding, SrcDurable, DstDurable, Fun)
+sync_binding(Binding, true, true, Fun) ->
     Fun(rabbit_durable_route, #route{binding = Binding}, write),
-    sync_binding(Binding, false, SemiDurable, Fun);
+    sync_binding(Binding, false, true, Fun);
 
 sync_binding(Binding, false, true, Fun) ->
     Fun(rabbit_semi_durable_route, #route{binding = Binding}, write),
     sync_binding(Binding, false, false, Fun);
 
-sync_binding(Binding, false, false, Fun) ->
+sync_binding(Binding, _SrcDurable, false, Fun) ->
     sync_transient_binding(Binding, Fun).
 
 sync_transient_binding(Binding, Fun) ->
