@@ -627,7 +627,7 @@ adjust_hibernated_memory_use(Qs) ->
                          Pids, fun (Pid) -> process_info(Pid, memory) end),
     MemDict = dict:from_list(
                 [{list_to_binary(rabbit_misc:pid_to_string(P)), M} ||
-                    {P, M} <- Mem]),
+                    {P, M = {memory, _}} <- Mem]),
     [case dict:find(pget(pid, Q), MemDict) of
          error        -> Q;
          {ok, Memory} -> [Memory|proplists:delete(memory, Q)]
