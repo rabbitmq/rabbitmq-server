@@ -115,7 +115,7 @@ recover(XNames, QNames) ->
       end,
       fun (R = #route{binding = B = #binding{source = Src}}, Tx) ->
               case Tx of
-                  true  -> ok = sync_transient_binding(R, fun mnesia:write/3);
+                  true  -> ok = sync_transient_route(R, fun mnesia:write/3);
                   false -> ok
               end,
               {ok, X} = rabbit_exchange:lookup(Src),
@@ -151,8 +151,8 @@ add(Binding, InnerFun) ->
 add(Src, Dst, B) ->
     Durable = durable(Src) andalso durable(Dst),
     case (not Durable orelse mnesia:read({rabbit_durable_route, B}) =:= []) of
-        true  -> ok = sync_binding(B, durable(Src), durable(Dst),
-                                   fun mnesia:write/3),
+        true  -> ok = sync_route(#route{binding = B}, durable(Src),
+                                 durable(Dst), fun mnesia:write/3),
                  fun (Tx) -> ok = rabbit_exchange:callback(Src, add_binding,
                                                            [Tx, Src, B]),
                              rabbit_event:notify_if(not Tx, binding_created,
@@ -177,8 +177,8 @@ remove(Binding, InnerFun) ->
       end).
 
 remove(Src, Dst, B) ->
-    ok = sync_binding(B, durable(Src), durable(Dst),
-                      fun mnesia:delete_object/3),
+    ok = sync_route(#route{binding = B}, durable(Src), durable(Dst),
+                    fun mnesia:delete_object/3),
     Deletions = maybe_auto_delete(B#binding.source, [B], new_deletions()),
     fun (Tx) -> ok = process_deletions(Deletions, Tx) end.
 
@@ -248,17 +248,17 @@ remove_for_source(SrcName) ->
                mnesia:match_object(rabbit_route, Match, write) ++
                    mnesia:match_object(rabbit_durable_route, Match, write)),
     [begin
-         ok = mnesia:delete_object(rabbit_reverse_route,
-                                   reverse_route(Route), write),
-         ok = delete_forward_routes(Route),
+         sync_route(Route, fun mnesia:delete_object/3),
          Route#route.binding
      end || Route <- Routes].
 
-remove_for_destination(DstName) ->
-    remove_for_destination(DstName, fun delete_forward_routes/1).
+remove_for_destination(Dst) ->
+    remove_for_destination(
+      Dst, fun (R) -> sync_route(R, fun mnesia:delete_object/3) end).
 
-remove_transient_for_destination(DstName) ->
-    remove_for_destination(DstName, fun delete_transient_forward_routes/1).
+remove_transient_for_destination(Dst) ->
+    remove_for_destination(
+      Dst, fun (R) -> sync_transient_route(R, fun mnesia:delete_object/3) end).
 
 %%----------------------------------------------------------------------------
 
@@ -275,20 +275,22 @@ binding_action(Binding = #binding{source      = SrcName,
               Fun(Src, Dst, Binding#binding{args = SortedArgs})
       end).
 
-%% (Binding, SrcDurable, DstDurable, Fun)
-sync_binding(Binding, true, true, Fun) ->
-    ok = Fun(rabbit_durable_route, #route{binding = Binding}, write),
-    sync_binding(Binding, false, true, Fun);
+sync_route(R, Fun) -> sync_route(R, true, true, Fun).
 
-sync_binding(Binding, false, true, Fun) ->
-    ok = Fun(rabbit_semi_durable_route, #route{binding = Binding}, write),
-    sync_binding(Binding, false, false, Fun);
+%% (Route, SrcDurable, DstDurable, Fun)
+sync_route(Route, true, true, Fun) ->
+    ok = Fun(rabbit_durable_route, Route, write),
+    sync_route(Route, false, true, Fun);
 
-sync_binding(Binding, _SrcDurable, false, Fun) ->
-    sync_transient_binding(Binding, Fun).
+sync_route(Route, false, true, Fun) ->
+    ok = Fun(rabbit_semi_durable_route, Route, write),
+    sync_route(Route, false, false, Fun);
 
-sync_transient_binding(Binding, Fun) ->
-    {Route, ReverseRoute} = route_with_reverse(Binding),
+sync_route(Route, _SrcDurable, false, Fun) ->
+    sync_transient_route(Route, Fun).
+
+sync_transient_route(Route, Fun) ->
+    ReverseRoute = reverse_route(Route),
     ok = Fun(rabbit_route, Route, write),
     ok = Fun(rabbit_reverse_route, ReverseRoute, write).
 
@@ -364,20 +366,6 @@ maybe_auto_delete(XName, Bindings, Deletions) ->
                    end
         end,
     add_deletion(XName, Entry, Deletions1).
-
-delete_forward_routes(Route) ->
-    ok = mnesia:delete_object(rabbit_route, Route, write),
-    ok = mnesia:delete_object(rabbit_semi_durable_route, Route, write),
-    ok = mnesia:delete_object(rabbit_durable_route, Route, write).
-
-delete_transient_forward_routes(Route) ->
-    ok = mnesia:delete_object(rabbit_route, Route, write).
-
-route_with_reverse(#route{binding = Binding}) ->
-    route_with_reverse(Binding);
-route_with_reverse(Binding = #binding{}) ->
-    Route = #route{binding = Binding},
-    {Route, reverse_route(Route)}.
 
 reverse_route(#route{binding = Binding}) ->
     #reverse_route{reverse_binding = reverse_binding(Binding)};
