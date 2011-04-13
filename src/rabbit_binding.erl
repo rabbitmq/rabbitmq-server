@@ -149,10 +149,11 @@ add(Binding, InnerFun) ->
       end).
 
 add(Src, Dst, B) ->
-    Durable = durable(Src) andalso durable(Dst),
-    case (not Durable orelse mnesia:read({rabbit_durable_route, B}) =:= []) of
-        true  -> ok = sync_route(#route{binding = B}, durable(Src),
-                                 durable(Dst), fun mnesia:write/3),
+    [SrcDurable, DstDurable] = [durable(E) || E <- [Src, Dst]],
+    case (not (SrcDurable andalso DstDurable) orelse
+          mnesia:read({rabbit_durable_route, B}) =:= []) of
+        true  -> ok = sync_route(#route{binding = B}, SrcDurable, DstDurable,
+                                 fun mnesia:write/3),
                  fun (Tx) -> ok = rabbit_exchange:callback(Src, add_binding,
                                                            [Tx, Src, B]),
                              rabbit_event:notify_if(not Tx, binding_created,
@@ -277,7 +278,6 @@ binding_action(Binding = #binding{source      = SrcName,
 
 sync_route(R, Fun) -> sync_route(R, true, true, Fun).
 
-%% (Route, SrcDurable, DstDurable, Fun)
 sync_route(Route, true, true, Fun) ->
     ok = Fun(rabbit_durable_route, Route, write),
     sync_route(Route, false, true, Fun);
@@ -320,19 +320,14 @@ continue({[_|_], _})         -> true;
 continue({[], Continuation}) -> continue(mnesia:select(Continuation)).
 
 remove_for_destination(DstName, DeleteFun) ->
-    Bindings =
-        [begin
-             Route = reverse_route(ReverseRoute),
-             ok = DeleteFun(Route),
-             Route#route.binding
-         end || ReverseRoute
-                    <- mnesia:match_object(
-                         rabbit_reverse_route,
-                         reverse_route(#route{
-                                          binding = #binding{
-                                            destination = DstName,
-                                            _           = '_'}}),
-                         write)],
+    Match = reverse_route(
+              #route{binding = #binding{destination = DstName, _ = '_'}}),
+    ReverseRoutes = mnesia:match_object(rabbit_reverse_route, Match, write),
+    Bindings = [begin
+                    Route = reverse_route(ReverseRoute),
+                    ok = DeleteFun(Route),
+                    Route#route.binding
+                end || ReverseRoute <- ReverseRoutes],
     group_bindings_fold(fun maybe_auto_delete/3, new_deletions(),
                         lists:keysort(#binding.source, Bindings)).
 
