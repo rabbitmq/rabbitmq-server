@@ -39,7 +39,7 @@ start_link(Listeners) ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, [Listeners]).
 
 init([Listeners]) ->
-    {ok, SocketOpts} = application:get_env(rabbit_stomp, tcp_listen_options),
+    {ok, SocketOpts} = application:get_env(rabbitmq_stomp, tcp_listen_options),
     {ok, {{one_for_all, 10, 10},
           [{rabbit_stomp_client_sup_sup,
             {rabbit_client_sup, start_link,

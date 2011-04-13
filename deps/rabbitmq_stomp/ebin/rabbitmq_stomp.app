@@ -1,4 +1,4 @@
-{application, rabbit_stomp,
+{application, rabbitmq_stomp,
  [{description, "Embedded Rabbit Stomp Adapter"},
   {vsn, "%%VSN%%"},
   {modules, [
