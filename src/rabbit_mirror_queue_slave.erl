@@ -47,6 +47,9 @@
 -include("rabbit.hrl").
 -include("gm_specs.hrl").
 
+-define(SYNC_INTERVAL,                 25). %% milliseconds
+-define(RAM_DURATION_UPDATE_INTERVAL,  5000).
+
 -record(state, { q,
                  gm,
                  master_node,
@@ -478,27 +481,37 @@ next_state(State = #state{backing_queue = BQ, backing_queue_state = BQS}) ->
 backing_queue_idle_timeout(State = #state { backing_queue = BQ }) ->
     run_backing_queue(BQ, fun (M, BQS) -> M:idle_timeout(BQS) end, State).
 
+ensure_sync_timer(State = #state { sync_timer_ref = undefined }) ->
+    {ok, TRef} = timer:apply_after(
+                   ?SYNC_INTERVAL, rabbit_amqqueue, sync_timeout, [self()]),
+    State #state { sync_timer_ref = TRef };
 ensure_sync_timer(State) ->
-    rabbit_amqqueue_process_utils:ensure_sync_timer(
-      fun sync_timer_getter/1, fun sync_timer_setter/2, State).
+    State.
 
-stop_sync_timer(State) ->
-    rabbit_amqqueue_process_utils:stop_sync_timer(
-      fun sync_timer_getter/1, fun sync_timer_setter/2, State).
+stop_sync_timer(State = #state { sync_timer_ref = undefined }) ->
+    State;
+stop_sync_timer(State = #state { sync_timer_ref = TRef }) ->
+    {ok, cancel} = timer:cancel(TRef),
+    State #state { sync_timer_ref = undefined }.
 
-sync_timer_getter(State) -> State#state.sync_timer_ref.
-sync_timer_setter(Timer, State) -> State#state{sync_timer_ref = Timer}.
-
+ensure_rate_timer(State = #state { rate_timer_ref = undefined }) ->
+    {ok, TRef} = timer:apply_after(
+                   ?RAM_DURATION_UPDATE_INTERVAL,
+                   rabbit_amqqueue, update_ram_duration,
+                   [self()]),
+    State #state { rate_timer_ref = TRef };
+ensure_rate_timer(State = #state { rate_timer_ref = just_measured }) ->
+    State #state { rate_timer_ref = undefined };
 ensure_rate_timer(State) ->
-    rabbit_amqqueue_process_utils:ensure_rate_timer(
-      fun rate_timer_getter/1, fun rate_timer_setter/2, State).
+    State.
 
-stop_rate_timer(State) ->
-    rabbit_amqqueue_process_utils:stop_rate_timer(
-      fun rate_timer_getter/1, fun rate_timer_setter/2, State).
-
-rate_timer_getter(State) -> State#state.rate_timer_ref.
-rate_timer_setter(Timer, State) -> State#state{rate_timer_ref = Timer}.
+stop_rate_timer(State = #state { rate_timer_ref = undefined }) ->
+    State;
+stop_rate_timer(State = #state { rate_timer_ref = just_measured }) ->
+    State #state { rate_timer_ref = undefined };
+stop_rate_timer(State = #state { rate_timer_ref = TRef }) ->
+    {ok, cancel} = timer:cancel(TRef),
+    State #state { rate_timer_ref = undefined }.
 
 maybe_enqueue_message(
   Delivery = #delivery { message    = #basic_message { id = MsgId },
