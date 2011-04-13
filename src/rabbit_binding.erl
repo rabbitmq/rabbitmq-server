@@ -277,11 +277,11 @@ binding_action(Binding = #binding{source      = SrcName,
 
 %% (Binding, SrcDurable, DstDurable, Fun)
 sync_binding(Binding, true, true, Fun) ->
-    Fun(rabbit_durable_route, #route{binding = Binding}, write),
+    ok = Fun(rabbit_durable_route, #route{binding = Binding}, write),
     sync_binding(Binding, false, true, Fun);
 
 sync_binding(Binding, false, true, Fun) ->
-    Fun(rabbit_semi_durable_route, #route{binding = Binding}, write),
+    ok = Fun(rabbit_semi_durable_route, #route{binding = Binding}, write),
     sync_binding(Binding, false, false, Fun);
 
 sync_binding(Binding, _SrcDurable, false, Fun) ->
