@@ -319,13 +319,11 @@ continue('$end_of_table')    -> false;
 continue({[_|_], _})         -> true;
 continue({[], Continuation}) -> continue(mnesia:select(Continuation)).
 
-remove_for_destination(DstName, FwdDeleteFun) ->
+remove_for_destination(DstName, DeleteFun) ->
     Bindings =
         [begin
              Route = reverse_route(ReverseRoute),
-             ok = FwdDeleteFun(Route),
-             ok = mnesia:delete_object(rabbit_reverse_route,
-                                       ReverseRoute, write),
+             ok = DeleteFun(Route),
              Route#route.binding
          end || ReverseRoute
                     <- mnesia:match_object(
