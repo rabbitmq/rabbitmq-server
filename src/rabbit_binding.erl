@@ -243,21 +243,16 @@ has_for_source(SrcName) ->
         contains(rabbit_semi_durable_route, Match).
 
 remove_for_source(SrcName) ->
+    Match = #route{binding = #binding{source = SrcName, _ = '_'}},
+    Routes = lists:usort(
+               mnesia:match_object(rabbit_route, Match, write) ++
+                   mnesia:match_object(rabbit_durable_route, Match, write)),
     [begin
          ok = mnesia:delete_object(rabbit_reverse_route,
                                    reverse_route(Route), write),
          ok = delete_forward_routes(Route),
          Route#route.binding
-     end || Route <- sets:to_list(
-                       sets:union(
-                         [sets:from_list(routes_for_source(SrcName, T)) ||
-                             T <- [rabbit_route, rabbit_semi_durable_route,
-                                   rabbit_durable_route]]))].
-
-routes_for_source(SrcName, Table) ->
-    mnesia:match_object(Table, #route{binding = #binding{source = SrcName,
-                                                         _      = '_'}},
-                        write).
+     end || Route <- Routes].
 
 remove_for_destination(DstName) ->
     remove_for_destination(DstName, fun delete_forward_routes/1).
