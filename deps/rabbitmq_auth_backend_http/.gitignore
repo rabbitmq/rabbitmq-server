@@ -1,6 +1,5 @@
 *~
 ebin/*.beam
-ebin/*.app
-build/deps
+build
 dist
 *.pyc
