@@ -64,8 +64,8 @@ channels_terminated(State = #state{closing_reason = Reason,
     rabbit_queue_collector:delete_all(Collector),
     {stop, {shutdown, Reason}, State}.
 
-terminate(_Reason, _State) ->
-    rabbit_event:notify(connection_closed, [{pid, self()}]),
+terminate(_Reason, #state{node = Node}) ->
+    rpc:call(Node, rabbit_event, notify, [connection_closed, [{pid, self()}]]),
     ok.
 
 i(type, _State) -> direct;
@@ -113,9 +113,9 @@ connect(Params = #amqp_params{username     = Username,
             {error, {nodedown, Node}}
     end.
 
-emit_created_event(State) ->
-    rabbit_event:notify(connection_created,
-                        infos(?CREATION_EVENT_KEYS, State)).
+emit_created_event(State = #state{node = Node}) ->
+    rpc:call(Node, rabbit_event, notify,
+             [connection_created, infos(?CREATION_EVENT_KEYS, State)]).
 
 ensure_adapter_info(none) ->
     ensure_adapter_info(#adapter_info{});
