@@ -29,11 +29,14 @@
 %% Boot steps.
 -export([maybe_insert_default_data/0, boot_delegate/0, recover/0]).
 
+-rabbit_boot_step({pre_boot, [{description, "rabbit boot start"}]}).
+
 -rabbit_boot_step({codec_correctness_check,
                    [{description, "codec correctness check"},
                     {mfa,         {rabbit_binary_generator,
                                    check_empty_content_body_frame_size,
                                    []}},
+                    {requires,    pre_boot},
                     {enables,     external_infrastructure}]}).
 
 -rabbit_boot_step({database,
@@ -45,11 +48,13 @@
                    [{description, "file handle cache server"},
                     {mfa,         {rabbit_sup, start_restartable_child,
                                    [file_handle_cache]}},
+                    {requires,    pre_boot},
                     {enables,     worker_pool}]}).
 
 -rabbit_boot_step({worker_pool,
                    [{description, "worker pool"},
                     {mfa,         {rabbit_sup, start_child, [worker_pool_sup]}},
+                    {requires,    pre_boot},
                     {enables,     external_infrastructure}]}).
 
 -rabbit_boot_step({external_infrastructure,
