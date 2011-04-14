@@ -148,7 +148,8 @@ handle_info({inet_reply, _, Status}, State) ->
 process_request(ProcessFun, SuccessFun, State) ->
     Res = case catch ProcessFun(State) of
               {'EXIT',
-               {{server_initiated_close, ReplyCode, Explanation}, _}} ->
+               {{shutdown,
+                 {server_initiated_close, ReplyCode, Explanation}}, _}} ->
                   amqp_death(ReplyCode, Explanation, State);
               {'EXIT', Reason} ->
                   priv_error("Processing error", "Processing error\n",
