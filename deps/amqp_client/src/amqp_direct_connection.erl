@@ -35,10 +35,6 @@
 
 -define(INFO_KEYS, [type]).
 
--define(CREATION_EVENT_KEYS, [pid, protocol, address, port, name,
-                              peer_address, peer_port,
-                              user, vhost, client_properties, type]).
-
 %%---------------------------------------------------------------------------
 
 init([]) ->
@@ -65,7 +61,6 @@ channels_terminated(State = #state{closing_reason = Reason,
     {stop, {shutdown, Reason}, State}.
 
 terminate(_Reason, _State) ->
-    rabbit_event:notify(connection_closed, [{pid, self()}]),
     ok.
 
 i(type, _State) -> direct;
@@ -87,9 +82,6 @@ i(Item, _State) -> throw({bad_argument, Item}).
 info_keys() ->
     ?INFO_KEYS.
 
-infos(Items, State) ->
-    [{Item, i(Item, State)} || Item <- Items].
-
 connect(Params = #amqp_params{username     = Username,
                               password     = Pass,
                               node         = Node,
@@ -105,17 +97,12 @@ connect(Params = #amqp_params{username     = Username,
                                  params       = Params,
                                  adapter_info = ensure_adapter_info(Info),
                                  collector    = Collector},
-            emit_created_event(State1),
             {ok, {ServerProperties, 0, State1}};
         {error, _} = E ->
             E;
         {badrpc, nodedown} ->
             {error, {nodedown, Node}}
     end.
-
-emit_created_event(State) ->
-    rabbit_event:notify(connection_created,
-                        infos(?CREATION_EVENT_KEYS, State)).
 
 ensure_adapter_info(none) ->
     ensure_adapter_info(#adapter_info{});
