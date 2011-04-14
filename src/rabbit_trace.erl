@@ -32,55 +32,41 @@
 
 %%----------------------------------------------------------------------------
 
-tap_trace_in(Message = #basic_message{
-               exchange_name = #resource{virtual_host = VHost,
-                                         name         = XName}}) ->
-    check_trace(
-      XName, VHost,
-      fun (TraceExchange) ->
-              {EncodedMetadata, Payload} = message_to_table(Message),
-              publish(TraceExchange, VHost, <<"publish">>, XName,
-                      EncodedMetadata, Payload)
-      end).
+tap_trace_in(Msg) ->
+    maybe_trace(Msg, <<"publish">>, xname(Msg), []).
 
-tap_trace_out({#resource{name = QName}, _QPid, _QMsgId, Redelivered,
-               Message = #basic_message{
-                 exchange_name = #resource{virtual_host = VHost,
-                                           name         = XName}}}) ->
-    check_trace(
-      XName, VHost,
-      fun (TraceExchange) ->
-              RedeliveredNum = case Redelivered of true -> 1; false -> 0 end,
-              {EncodedMetadata, Payload} = message_to_table(Message),
-              Fields = [{<<"redelivered">>, signedint, RedeliveredNum}]
-                  ++ EncodedMetadata,
-              publish(TraceExchange, VHost, <<"deliver">>, QName,
-                      Fields, Payload)
-      end).
+tap_trace_out({#resource{name = QName}, _QPid, _QMsgId, Redelivered, Msg}) ->
+    RedeliveredNum = case Redelivered of true -> 1; false -> 0 end,
+    maybe_trace(Msg, <<"deliver">>, QName,
+                [{<<"redelivered">>, signedint, RedeliveredNum}]).
 
-check_trace(XName, VHost, F) ->
-    case application:get_env(rabbit, {trace_exchange, VHost}) of
+xname(#basic_message{exchange_name = #resource{name         = XName}}) -> XName.
+vhost(#basic_message{exchange_name = #resource{virtual_host = VHost}}) -> VHost.
+
+maybe_trace(Msg, RKPrefix, RKSuffix, Extra) ->
+    XName = xname(Msg),
+    case application:get_env(rabbit, {trace_exchange, vhost(Msg)}) of
         undefined    -> ok;
         {ok, XName}  -> ok;
-        {ok, TraceX} -> case catch F(TraceX) of
+        {ok, TraceX} -> case catch trace(TraceX, Msg, RKPrefix, RKSuffix,
+                                         Extra) of
                             {'EXIT', R} -> rabbit_log:info(
                                              "Trace tap died: ~p~n", [R]);
                             ok          -> ok
                         end
     end.
 
-publish(TraceExchange, VHost, RKPrefix, RKSuffix, Table, Payload) ->
-    rabbit_basic:publish(rabbit_misc:r(VHost, exchange, TraceExchange),
+trace(TraceX, Msg0, RKPrefix, RKSuffix, Extra) ->
+    Msg = ensure_content_decoded(Msg0),
+    rabbit_basic:publish(rabbit_misc:r(vhost(Msg), exchange, TraceX),
                          <<RKPrefix/binary, ".", RKSuffix/binary>>,
-                         #'P_basic'{headers = Table}, Payload),
+                         #'P_basic'{headers = msg_to_table(Msg) ++ Extra},
+                         payload(Msg)),
     ok.
 
-message_to_table(#basic_message{exchange_name = #resource{name = XName},
-                                routing_keys = RoutingKeys,
-                                content = Content}) ->
-    #content{properties            = Props,
-             payload_fragments_rev = PFR} =
-        rabbit_binary_parser:ensure_content_decoded(Content),
+msg_to_table(#basic_message{exchange_name = #resource{name = XName},
+                            routing_keys  = RoutingKeys,
+                            content       = #content{properties = Props}}) ->
     {PropsTable, _Ix} =
         lists:foldl(
           fun (K, {L, Ix}) ->
@@ -91,11 +77,17 @@ message_to_table(#basic_message{exchange_name = #resource{name = XName},
                          end,
                   {NewL, Ix + 1}
           end, {[], 2}, record_info(fields, 'P_basic')),
-    {[{<<"exchange_name">>, longstr, XName},
+    [{<<"exchange_name">>, longstr, XName},
       {<<"routing_keys">>,  array,   [{longstr, K} || K <- RoutingKeys]},
       {<<"properties">>,    table,   PropsTable},
-      {<<"node">>,          longstr, a2b(node())}],
-     list_to_binary(lists:reverse(PFR))}.
+      {<<"node">>,          longstr, a2b(node())}].
+
+payload(#basic_message{content = #content{payload_fragments_rev = PFR}}) ->
+    list_to_binary(lists:reverse(PFR)).
+
+ensure_content_decoded(Msg = #basic_message{content = Content}) ->
+    Msg#basic_message{content = rabbit_binary_parser:ensure_content_decoded(
+                                  Content)}.
 
 a2b(A) ->
     list_to_binary(atom_to_list(A)).
