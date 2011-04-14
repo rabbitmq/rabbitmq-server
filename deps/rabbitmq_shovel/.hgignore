@@ -1,8 +1,6 @@
 ~$
 \.beam$
-^dist/
-^deps/
-^deps.mk$
-^toke$
-^priv$
 ^build/
+^dist/
+^cover/
+^erl_crash.dump$

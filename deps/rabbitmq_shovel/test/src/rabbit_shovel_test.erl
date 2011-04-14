@@ -26,9 +26,12 @@
 -define(TIMEOUT,     1000).
 
 test() ->
+    %% it may already be running. Stop if possible
+    application:stop(rabbitmq_shovel),
+
     %% shovel can be started with zero shovels configured
-    ok = application:start(rabbit_shovel),
-    ok = application:stop(rabbit_shovel),
+    ok = application:start(rabbitmq_shovel),
+    ok = application:stop(rabbitmq_shovel),
 
     %% various ways of breaking the config
     require_list_of_shovel_configurations =
@@ -133,7 +136,7 @@ test() ->
 
     %% a working config
     application:set_env(
-      rabbit_shovel,
+      rabbitmq_shovel,
       shovels,
       [{test_shovel,
         [{sources,
@@ -152,7 +155,7 @@ test() ->
          {publish_properties, [{content_type, ?SHOVELLED}]}
         ]}],
       infinity),
-    ok = application:start(rabbit_shovel),
+    ok = application:start(rabbitmq_shovel),
 
     {ok, Conn} = amqp_connection:start(network),
     {ok, Chan} = amqp_connection:open_channel(Conn),
@@ -213,12 +216,12 @@ test() ->
     amqp_channel:close(Chan),
     amqp_connection:close(Conn),
 
-    ok = application:stop(rabbit_shovel),
-    passed.
+    ok = application:stop(rabbitmq_shovel),
+    ok.
 
 test_broken_shovel_configs(Configs) ->
-    application:set_env(rabbit_shovel, shovels, Configs),
-    {error, {Error, _}} = application:start(rabbit_shovel),
+    application:set_env(rabbitmq_shovel, shovels, Configs),
+    {error, {Error, _}} = application:start(rabbitmq_shovel),
     Error.
 
 test_broken_shovel_config(Config) ->
