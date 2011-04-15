@@ -45,7 +45,7 @@
 -record(exchange, {name, type, durable, auto_delete, internal, arguments}).
 
 -record(amqqueue, {name, durable, auto_delete, exclusive_owner = none,
-                   arguments, pid}).
+                   arguments, pid, mirror_pids}).
 
 %% mnesia doesn't like unary records, so we add a dummy 'value' field
 -record(route, {binding, value = const}).
