@@ -26,7 +26,7 @@
 
 -spec(boot/0 :: () -> 'ok').
 -spec(connect/5 :: (binary(), binary(), binary(), rabbit_types:protocol(),
-                    term()) ->
+                    rabbit_event:event_props()) ->
                         {'ok', {rabbit_types:user(),
                                 rabbit_framing:amqp_table()}}).
 -spec(start_channel/8 ::
@@ -34,7 +34,7 @@
          rabbit_types:user(), rabbit_types:vhost(), rabbit_framing:amqp_table(),
          pid()) -> {'ok', pid()}).
 
--spec(disconnect/1 :: (pid()) -> 'ok').
+-spec(disconnect/1 :: (rabbit_event:event_props()) -> 'ok').
 
 -endif.
 
@@ -82,5 +82,5 @@ start_channel(Number, ClientChannelPid, ConnPid, Protocol, User, VHost,
             Capabilities, Collector}]),
     {ok, ChannelPid}.
 
-disconnect(Pid) ->
-    rabbit_event:notify(connection_closed, [{pid, Pid}]).
+disconnect(Infos) ->
+    rabbit_event:notify(connection_closed, Infos).
