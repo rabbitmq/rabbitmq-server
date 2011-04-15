@@ -46,7 +46,7 @@ A minimal configuration file might look like:
 
     [
       {rabbit, [{auth_backends, [rabbit_auth_backend_http]}]},
-      {rabbit_auth_backend_http,
+      {rabbitmq_auth_backend_http,
        [{user_path,     "http://some-server/auth/user"},
         {vhost_path,    "http://some-server/auth/vhost"},
         {resource_path, "http://some-server/auth/resource"}]}
