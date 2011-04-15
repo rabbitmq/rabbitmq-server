@@ -35,6 +35,10 @@
 
 -define(INFO_KEYS, [type]).
 
+-define(CREATION_EVENT_KEYS, [pid, protocol, address, port, name,
+                              peer_address, peer_port,
+                              user, vhost, client_properties, type]).
+
 %%---------------------------------------------------------------------------
 
 init([]) ->
@@ -60,7 +64,8 @@ channels_terminated(State = #state{closing_reason = Reason,
     rabbit_queue_collector:delete_all(Collector),
     {stop, {shutdown, Reason}, State}.
 
-terminate(_Reason, _State) ->
+terminate(_Reason, #state{node = Node}) ->
+    rpc:call(Node, rabbit_direct, disconnect, [[{pid, self()}]]),
     ok.
 
 i(type, _State) -> direct;
@@ -82,22 +87,26 @@ i(Item, _State) -> throw({bad_argument, Item}).
 info_keys() ->
     ?INFO_KEYS.
 
+infos(Items, State) ->
+    [{Item, i(Item, State)} || Item <- Items].
+
 connect(Params = #amqp_params{username     = Username,
                               password     = Pass,
                               node         = Node,
                               adapter_info = Info,
                               virtual_host = VHost}, SIF, _ChMgr, State) ->
+    State1 = State#state{node         = Node,
+                         vhost        = VHost,
+                         params       = Params,
+                         adapter_info = ensure_adapter_info(Info)},
     case rpc:call(Node, rabbit_direct, connect,
-                  [Username, Pass, VHost, ?PROTOCOL]) of
+                  [Username, Pass, VHost, ?PROTOCOL,
+                   infos(?CREATION_EVENT_KEYS, State1)]) of
         {ok, {User, ServerProperties}} ->
             {ok, Collector} = SIF(),
-            State1 = State#state{node         = Node,
-                                 user         = User,
-                                 vhost        = VHost,
-                                 params       = Params,
-                                 adapter_info = ensure_adapter_info(Info),
-                                 collector    = Collector},
-            {ok, {ServerProperties, 0, State1}};
+            State2 = State1#state{user      = User,
+                                  collector = Collector},
+            {ok, {ServerProperties, 0, State2}};
         {error, _} = E ->
             E;
         {badrpc, nodedown} ->
