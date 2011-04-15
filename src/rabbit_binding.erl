@@ -290,9 +290,8 @@ sync_route(Route, _SrcDurable, false, Fun) ->
     sync_transient_route(Route, Fun).
 
 sync_transient_route(Route, Fun) ->
-    ReverseRoute = reverse_route(Route),
     ok = Fun(rabbit_route, Route, write),
-    ok = Fun(rabbit_reverse_route, ReverseRoute, write).
+    ok = Fun(rabbit_reverse_route, reverse_route(Route), write).
 
 call_with_source_and_destination(SrcName, DstName, Fun) ->
     SrcTable = table_for_resource(SrcName),
