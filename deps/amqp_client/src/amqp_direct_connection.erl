@@ -65,7 +65,7 @@ channels_terminated(State = #state{closing_reason = Reason,
     {stop, {shutdown, Reason}, State}.
 
 terminate(_Reason, #state{node = Node}) ->
-    rpc:call(Node, rabbit_direct, disconnect, [{pid, self()}]),
+    rpc:call(Node, rabbit_direct, disconnect, [[{pid, self()}]]),
     ok.
 
 i(type, _State) -> direct;
