@@ -14,6 +14,9 @@
 %% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
 %%
 
+-ifndef(AMQP_CLIENT_HRL).
+-define(AMQP_CLIENT_HRL, true).
+
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 
@@ -57,3 +60,5 @@
                               {<<"exchange_exchange_bindings">>, bool, true},
                               {<<"basic.nack">>,                 bool, true},
                               {<<"consumer_cancel_notify">>,     bool, true}]).
+
+-endif.
