@@ -69,7 +69,7 @@
 
 -include("amqp_client.hrl").
 
--export([open_channel/1, open_channel/2]).
+-export([open_channel/1, open_channel/2, open_channel/3]).
 -export([start/1, start/2]).
 -export([close/1, close/3]).
 -export([info/2, info_keys/1, info_keys/0]).
@@ -147,25 +147,46 @@ start(Type, AmqpParams) ->
 %% Commands
 %%---------------------------------------------------------------------------
 
-%% @doc Invokes open_channel(ConnectionPid, none). 
-%% Opens a channel without having to specify a channel number.
+%% @doc Invokes open_channel(ConnectionPid, none, ?DEFAULT_CONSUMER).
+%% Opens a channel without having to specify a channel number. This uses the
+%% default consumer implementation.
 open_channel(ConnectionPid) ->
-    open_channel(ConnectionPid, none).
+    open_channel(ConnectionPid, none, ?DEFAULT_CONSUMER).
 
-%% @spec (ConnectionPid, ChannelNumber) -> {ok, ChannelPid} | {error, Error}
+%% @doc Invokes open_channel(ConnectionPid, none, Consumer).
+%% Opens a channel without having to specify a channel number.
+open_channel(ConnectionPid, {_, _} = Consumer) ->
+    open_channel(ConnectionPid, none, Consumer);
+
+%% @doc Invokes open_channel(ConnectionPid, ChannelNumber, ?DEFAULT_CONSUMER).
+%% Opens a channel, using the default consumer implementation.
+open_channel(ConnectionPid, ChannelNumber)
+        when is_number(ChannelNumber) orelse ChannelNumber =:= none ->
+    open_channel(ConnectionPid, ChannelNumber, ?DEFAULT_CONSUMER).
+
+%% @spec (ConnectionPid, ChannelNumber, Consumer) -> Result
 %% where
-%%      ChannelNumber = pos_integer() | 'none'
 %%      ConnectionPid = pid()
+%%      ChannelNumber = pos_integer() | 'none'
+%%      Consumer = {ConsumerModule, ConsumerArgs}
+%%      ConsumerModule = atom()
+%%      ConsumerArgs = [any()]
+%%      Result = {ok, ChannelPid} | {error, Error}
 %%      ChannelPid = pid()
 %% @doc Opens an AMQP channel.<br/>
+%% Opens a channel, using a proposed channel number and a specific consumer
+%% implementation.<br/>
+%% ConsumerModule must implement the amqp_gen_consumer behaviour. ConsumerArgs
+%% is passed as parameter to ConsumerModule:init/1.<br/>
 %% This function assumes that an AMQP connection (networked or direct)
 %% has already been successfully established.<br/>
 %% ChannelNumber must be less than or equal to the negotiated max_channel value,
 %% or less than or equal to ?MAX_CHANNEL_NUMBER if the negotiated max_channel
 %% value is 0.<br/>
 %% In the direct connection, max_channel is always 0.
-open_channel(ConnectionPid, ChannelNumber) ->
-    amqp_gen_connection:open_channel(ConnectionPid, ChannelNumber).
+open_channel(ConnectionPid, ChannelNumber,
+             {_ConsumerModule, _ConsumerArgs} = Consumer) ->
+    amqp_gen_connection:open_channel(ConnectionPid, ChannelNumber, Consumer).
 
 %% @spec (ConnectionPid) -> ok | Error
 %% where
