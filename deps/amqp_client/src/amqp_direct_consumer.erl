@@ -47,33 +47,33 @@
 %% @private
 init([ConsumerPid]) ->
     link(ConsumerPid),
-    {ok, ConsumerPid}.
+    ConsumerPid.
 
 %% @private
 handle_consume_ok(M, _, C) ->
     C ! M,
-    {ok, C}.
+    C.
 
 %% @private
 handle_cancel_ok(M, _, C) ->
     C ! M,
-    {ok, C}.
+    C.
 
 %% @private
 handle_cancel(M, C) ->
     C ! M,
-    {ok, C}.
+    C.
 
 %% @private
 handle_deliver(M, C) ->
     C ! M,
-    {ok, C}.
+    C.
 
 %% @private
 handle_call(M, C) ->
     C ! M,
-    {reply, ok, C}.
+    {ok, C}.
 
 %% @private
-terminate(_Reason, _C) ->
-    ok.
+terminate(_Reason, C) ->
+    C.

@@ -29,7 +29,7 @@
 %% @private
 behaviour_info(callbacks) ->
     [
-     %% @spec Module:init(Args) -> {ok, InitialState}
+     %% @spec Module:init(Args) -> InitialState
      %% where
      %%      Args = [any()]
      %%      InitialState = any()
@@ -40,7 +40,7 @@ behaviour_info(callbacks) ->
      %% The AMQP method that is used to  subscribe a consumer to a queue.
      %% @type consume_ok() = #'basic.consume_ok'{}.
      %% The AMQP method returned in response to basic.consume.
-     %% @spec Module:handle_consume(ConsumeOk, Consume, State) -> {ok, NewState}
+     %% @spec Module:handle_consume(ConsumeOk, Consume, State) -> NewState
      %% where
      %%      ConsumeOk = consume_ok()
      %%      Consume = consume()
@@ -55,7 +55,7 @@ behaviour_info(callbacks) ->
      %% The AMQP method used to cancel a subscription.
      %% @type cancel_ok() = #'basic.cancel_ok'{}.
      %% The AMQP method returned as reply to basicl.cancel.
-     %% @spec Module:handle_cancel_ok(CancelOk, Cancel, State) -> {ok, NewState}
+     %% @spec Module:handle_cancel_ok(CancelOk, Cancel, State) -> NewState
      %% where
      %%      CancelOk = cancel_ok()
      %%      Cancel = cancel()
@@ -66,7 +66,7 @@ behaviour_info(callbacks) ->
 
      %% @type cancel() = #'basic.cancel'{}.
      %% The AMQP method used to cancel a subscription.
-     %% @spec Module:handle_cancel(cancel(), State) -> {ok, NewState}
+     %% @spec Module:handle_cancel(cancel(), State) -> NewState
      %% where
      %%      State = NewState = any()
      %% @doc This function is called by the channel every time a basic.cancel
@@ -76,15 +76,14 @@ behaviour_info(callbacks) ->
      %% @type deliver() = #'basic.deliver'{}.
      %% The AMQP method sent when a message is delivered from a subscribed
      %% queue.
-     %% @spec Module:handle_deliver({deliver(), #amqp_msg{}}, State} ->
-     %%           {ok, NewState}
+     %% @spec Module:handle_deliver({deliver(), #amqp_msg{}}, State} -> NewState
      %% where
      %%      State = NewState = any()
      %% @doc This function is called by the channel every time a basic.deliver
      %% is received from the server.
      {handle_deliver, 2},
 
-     %% @spec Module:handle_message(Message, State) -> {reply, Reply, NewState}
+     %% @spec Module:handle_call(Call, State) -> {Reply, NewState}
      %% where
      %%      Reply = any()
      %%      State = NewState = any()
@@ -93,10 +92,10 @@ behaviour_info(callbacks) ->
      %% when amqp_channel:call_consumer/2 returns.
      {handle_call, 2},
 
-     %% @spec Module:terminate(Reason, State) -> _
+     %% @spec Module:terminate(Reason, State) -> NewState
      %% where
-     %%      State = any()
      %%      Reason = any()
+     %%      State = NewState = any()
      %% @doc This function is called by the channel after it has shut down and
      %% just before its process exits.
      {terminate, 2}

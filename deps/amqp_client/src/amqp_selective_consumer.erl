@@ -141,13 +141,13 @@ register_default_consumer(ChannelPid, ConsumerPid) ->
 
 %% @private
 init([]) ->
-    {ok, #state{}}.
+    #state{}.
 
 %% @private
 handle_consume_ok(BasicConsumeOk, BasicConsume, State) ->
     State1 = assign_consumer(BasicConsume, tag(BasicConsumeOk), State),
     deliver(BasicConsumeOk, State1),
-    {ok, State1}.
+    State1.
 
 %% @private
 handle_cancel_ok(CancelOk, _Cancel, State) ->
@@ -155,7 +155,7 @@ handle_cancel_ok(CancelOk, _Cancel, State) ->
     State1 = do_cancel(CancelOk, State),
     %% Use old state
     deliver(CancelOk, State),
-    {ok, State1}.
+    State1.
 
 %% @private
 handle_cancel(Cancel, State) ->
@@ -163,12 +163,12 @@ handle_cancel(Cancel, State) ->
     State1 = do_cancel(Cancel, State),
     %% Use old state
     deliver(Cancel, State),
-    {ok, State1}.
+    State1.
 
 %% @private
 handle_deliver(Deliver, State) ->
     deliver(Deliver, State),
-    {ok, State}.
+    State.
 
 %% @private
 handle_call({subscribe, BasicConsume, Pid},
@@ -190,18 +190,18 @@ handle_call({subscribe, BasicConsume, Pid},
     if Ok ->
            case BasicConsume of
                #'basic.consume'{nowait = true} ->
-                   {reply, ok,
+                   {ok,
                     State#state{consumers = dict:store(Tag, Pid, Consumers)}};
                #'basic.consume'{nowait = false} ->
                    NewUnassigned =
                        dict:update(BasicConsume, fun (Pids) -> [Pid | Pids] end,
                                    [Pid], Unassigned),
-                   {reply, ok, State#state{unassigned = NewUnassigned}}
+                   {ok, State#state{unassigned = NewUnassigned}}
            end;
        true ->
            %% There is an error. Don't do anything (don't override existing
            %% consumers), the server will close the channel with an error.
-           {reply, error, State}
+           {error, State}
     end;
 %% @private
 handle_call({register_default_consumer, Pid},
@@ -210,11 +210,11 @@ handle_call({register_default_consumer, Pid},
                     _    -> unlink(PrevPid)
     end,
     link(Pid),
-    {reply, ok, State#state{default_consumer = Pid}}.
+    {ok, State#state{default_consumer = Pid}}.
 
 %% @private
-terminate(_Reason, _State) ->
-    ok.
+terminate(_Reason, State) ->
+    State.
 
 %%---------------------------------------------------------------------------
 %% Internal plumbing

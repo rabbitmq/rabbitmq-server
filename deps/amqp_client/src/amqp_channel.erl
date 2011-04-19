@@ -241,7 +241,7 @@ call_consumer(Channel, Call) ->
 %%---------------------------------------------------------------------------
 
 %% @private
-start_link(Driver, Connection, ChannelNumber, Consumer, SWF) ->
+start_link(Driver, Connection, ChannelNumber, Consumer = {_, _}, SWF) ->
     gen_server:start_link(
         ?MODULE, [Driver, Connection, ChannelNumber, Consumer, SWF], []).
 
@@ -549,6 +549,10 @@ handle_method_from_server1(#'basic.cancel_ok'{} = CancelOk, none, State) ->
     Cancel = #'basic.cancel'{} = pending_rpc_method(State),
     State1 = consumer_callback(handle_cancel_ok, [CancelOk, Cancel], State),
     {noreply, rpc_bottom_half(CancelOk, State1)};
+handle_method_from_server1(#'basic.cancel'{} = Cancel, none, State) ->
+    handle_consumer_callback(handle_cancel, [Cancel], State);
+handle_method_from_server1(#'basic.deliver'{} = Deliver, AmqpMsg, State) ->
+    handle_consumer_callback(handle_deliver, [{Deliver, AmqpMsg}], State);
 handle_method_from_server1(#'channel.flow'{active = Active} = Flow, none,
                            State = #state{flow_handler_pid = FlowHandler}) ->
     case FlowHandler of none -> ok;
@@ -559,8 +563,6 @@ handle_method_from_server1(#'channel.flow'{active = Active} = Flow, none,
     %% blocked in any circumstance.
     {noreply, rpc_top_half(#'channel.flow_ok'{active = Active}, none, none,
                            State#state{flow_active = Active})};
-handle_method_from_server1(#'basic.deliver'{} = Deliver, AmqpMsg, State) ->
-    handle_consumer_callback(handle_deliver, [{Deliver, AmqpMsg}], State);
 handle_method_from_server1(
         #'basic.return'{} = BasicReturn, AmqpMsg,
         State = #state{return_handler_pid = ReturnHandler}) ->
@@ -571,8 +573,6 @@ handle_method_from_server1(
         _    -> ReturnHandler ! {BasicReturn, AmqpMsg}
     end,
     {noreply, State};
-handle_method_from_server1(#'basic.cancel'{} = Cancel, none, State) ->
-    handle_consumer_callback(handle_cancel, [Cancel], State);
 handle_method_from_server1(#'basic.ack'{} = BasicAck, none,
                            #state{confirm_handler_pid = none} = State) ->
     ?LOG_WARN("Channel (~p): received ~p but there is no "
@@ -720,22 +720,16 @@ server_misbehaved(#amqp_error{} = AmqpError, State = #state{number = Number}) ->
 handle_consumer_callback(handle_call, Args,
                          State = #state{consumer_state = CState,
                                         consumer_module = CModule}) ->
-    {reply, Reply, NewCState} =
-        erlang:apply(CModule, handle_call, Args ++ [CState]),
+    {Reply, NewCState} = erlang:apply(CModule, handle_call, Args ++ [CState]),
     {reply, Reply, State#state{consumer_state = NewCState}};
 handle_consumer_callback(Function, Args, State) ->
     {noreply, consumer_callback(Function, Args, State)}.
 
 consumer_callback(init, Args, State = #state{}) ->
     consumer_callback_basic(init, Args, State);
-consumer_callback(terminate, Args, State = #state{consumer_state = CState,
-                                                  consumer_module = CModule}) ->
-    erlang:apply(CModule, terminate, Args ++ [CState]),
-    State;
 consumer_callback(Function, Args, State = #state{consumer_state = CState}) ->
     consumer_callback_basic(Function, Args ++ [CState], State).
 
 consumer_callback_basic(Function,
                         Args, State = #state{consumer_module = CModule}) ->
-    {ok, NewCState} = erlang:apply(CModule, Function, Args),
-    State#state{consumer_state = NewCState}.
+    State#state{consumer_state = erlang:apply(CModule, Function, Args)}.
