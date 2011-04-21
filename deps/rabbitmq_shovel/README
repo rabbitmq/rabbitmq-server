@@ -76,7 +76,7 @@ structure like this:
 
 A full example of the shovel configuration is:
 
-{rabbit_shovel,
+{rabbitmq_shovel,
   [{shovels,
     [{my_first_shovel,
       [{sources,      [{brokers,
