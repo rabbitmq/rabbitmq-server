@@ -246,8 +246,11 @@ recvloop(Deb, State = #v1{sock = Sock, recv_length = Length, buf = Buf}) ->
     case iolist_size(Buf) < Length of
         true  -> ok = rabbit_net:setopts(Sock, [{active, once}]),
                  mainloop(Deb, State#v1{pending_recv = true});
-        false -> {Data, Rest} = split_binary(
-                                  list_to_binary(lists:reverse(Buf)), Length),
+        false -> {Data, Rest} = split_binary(case Buf of
+                                                 [B] -> B;
+                                                 _   -> list_to_binary(
+                                                          lists:reverse(Buf))
+                                             end, Length),
                  recvloop(Deb, handle_input(State#v1.callback, Data,
                                             State#v1{buf = [Rest]}))
     end.
