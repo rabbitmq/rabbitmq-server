@@ -22,7 +22,6 @@ DAEMON=/usr/sbin/${NAME}
 CONTROL=/usr/sbin/rabbitmqctl
 DESC=rabbitmq-server
 USER=rabbitmq
-ROTATE_SUFFIX=
 INIT_LOG_DIR=/var/log/rabbitmq
 
 LOCK_FILE= # This is filled in when building packages
@@ -93,9 +92,10 @@ status_rabbitmq() {
     set -e
 }
 
-rotate_logs_rabbitmq() {
+reopen_logs_rabbitmq() {
     set +e
-    $CONTROL rotate_logs ${ROTATE_SUFFIX}
+    # Do not supply a suffix as we do not want to rotate the logs.
+    $CONTROL rotate_logs
     if [ $? != 0 ] ; then
         RETVAL=1
     fi
@@ -131,9 +131,9 @@ case "$1" in
     status)
         status_rabbitmq
         ;;
-    rotate-logs)
+    reopen-logs)
         echo -n "Rotating log files for $DESC: "
-        rotate_logs_rabbitmq
+        reopen_logs_rabbitmq
         ;;
     force-reload|reload|restart)
         echo -n "Restarting $DESC: "
@@ -146,7 +146,7 @@ case "$1" in
         echo "$NAME."
         ;;
     *)
-        echo "Usage: $0 {start|stop|status|rotate-logs|restart|condrestart|try-restart|reload|force-reload}" >&2
+        echo "Usage: $0 {start|stop|status|reopen-logs|restart|condrestart|try-restart|reload|force-reload}" >&2
         RETVAL=1
         ;;
 esac

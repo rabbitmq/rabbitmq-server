@@ -7,6 +7,6 @@
         notifempty
         sharedscripts
         postrotate
-            /sbin/service rabbitmq-server rotate-logs > /dev/null
+            /sbin/service rabbitmq-server reopen-logs > /dev/null
         endscript
 }
