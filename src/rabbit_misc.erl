@@ -40,7 +40,7 @@
 -export([upmap/2, map_in_order/2]).
 -export([table_filter/3]).
 -export([dirty_read_all/1, dirty_foreach_key/2, dirty_dump_log/1]).
--export([read_term_file/1, write_term_file/2, write_file/3]).
+-export([read_term_file/1, write_term_file/2, write_file/2, write_file/3]).
 -export([append_file/2, ensure_parent_dirs_exist/1]).
 -export([format_stderr/2]).
 -export([start_applications/1, stop_applications/1]).
@@ -516,31 +516,45 @@ dirty_dump_log1(LH, {K, Terms, BadBytes}) ->
 read_term_file(File) -> file:consult(File).
 
 write_term_file(File, Terms) ->
-    write_file(File, false, list_to_binary([io_lib:format("~w.~n", [Term]) ||
-                                               Term <- Terms])).
+    write_file(File, list_to_binary([io_lib:format("~w.~n", [Term]) ||
+                                        Term <- Terms])).
 
-write_file(Path, Append, Binary) when is_binary(Binary) ->
-    Modes = [binary, write, raw | case Append of
-                                      true  -> [read];
-                                      false -> []
-                                  end],
-    case file:open(Path, Modes) of
-        {ok, Hdl} ->
-            case file:position(Hdl, eof) of
-                {ok, _Pos} ->
-                    case file:write(Hdl, Binary) of
+write_file(Path, Data) ->
+    write_file(Path, Data, []).
+
+write_file(Path, Data, Modes) ->
+    Modes1 = [binary, write | (Modes -- [binary, write])],
+    case make_binary(Data) of
+        Bin when is_binary(Bin) ->
+            case file:open(Path, Modes1) of
+                {ok, Hdl} ->
+                    case file:write(Hdl, Bin) of
                         ok ->
                             case file:sync(Hdl) of
                                 ok ->
                                     file:close(Hdl);
-                                {error, _} = E -> E
+                                {error, _} = E ->
+                                    file:close(Hdl),
+                                    E
                             end;
-                        {error, _} = E -> E
+                        {error, _} = E ->
+                            file:close(Hdl),
+                            E
                     end;
                 {error, _} = E -> E
             end;
         {error, _} = E -> E
     end.
+
+make_binary(Bin) when is_binary(Bin) ->
+    Bin;
+make_binary(List) ->
+    try
+        iolist_to_binary(List)
+    catch error:Reason ->
+            {error, Reason}
+    end.
+
 
 append_file(File, Suffix) ->
     case file:read_file_info(File) of
@@ -558,7 +572,7 @@ append_file(File, 0, Suffix) ->
     end;
 append_file(File, _, Suffix) ->
     case file:read_file(File) of
-        {ok, Data} -> write_file(File ++ Suffix, true, Data);
+        {ok, Data} -> write_file([File, Suffix], Data, [append]);
         Error      -> Error
     end.
 

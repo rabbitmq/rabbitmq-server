@@ -67,8 +67,7 @@ start() ->
              AppVersions},
 
     %% Write it out to $RABBITMQ_PLUGINS_EXPAND_DIR/rabbit.rel
-    rabbit_misc:write_file(RootName ++ ".rel", false,
-                           list_to_binary(io_lib:format("~p.~n", [RDesc]))),
+    rabbit_misc:write_file(RootName ++ ".rel", io_lib:format("~p.~n", [RDesc])),
 
     %% Compile the script
     ScriptFile = RootName ++ ".script",
