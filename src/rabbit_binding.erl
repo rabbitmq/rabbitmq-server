@@ -17,7 +17,7 @@
 -module(rabbit_binding).
 -include("rabbit.hrl").
 
--export([recover/0, exists/1, add/1, remove/1, add/2, remove/2, list/1]).
+-export([recover/2, exists/1, add/1, add/2, remove/1, remove/2, list/1]).
 -export([list_for_source/1, list_for_destination/1,
          list_for_source_and_destination/2]).
 -export([new_deletions/0, combine_deletions/2, add_deletion/3,
@@ -38,24 +38,24 @@
 -type(bind_errors() :: rabbit_types:error('source_not_found' |
                                           'destination_not_found' |
                                           'source_and_destination_not_found')).
--type(bind_res() :: 'ok' | bind_errors()).
+-type(bind_ok_or_error() :: 'ok' | bind_errors() |
+                            rabbit_types:error('binding_not_found')).
+-type(bind_res() :: bind_ok_or_error() | rabbit_misc:const(bind_ok_or_error())).
 -type(inner_fun() ::
         fun((rabbit_types:exchange(),
              rabbit_types:exchange() | rabbit_types:amqqueue()) ->
                    rabbit_types:ok_or_error(rabbit_types:amqp_error()))).
 -type(bindings() :: [rabbit_types:binding()]).
--type(add_res() :: bind_res() | rabbit_misc:const(bind_res())).
--type(bind_or_error() :: bind_res() | rabbit_types:error('binding_not_found')).
--type(remove_res() :: bind_or_error() | rabbit_misc:const(bind_or_error())).
 
 -opaque(deletions() :: dict()).
 
--spec(recover/0 :: () -> [rabbit_types:binding()]).
+-spec(recover/2 :: ([rabbit_exchange:name()], [rabbit_amqqueue:name()]) ->
+                        'ok').
 -spec(exists/1 :: (rabbit_types:binding()) -> boolean() | bind_errors()).
--spec(add/1 :: (rabbit_types:binding()) -> add_res()).
--spec(remove/1 :: (rabbit_types:binding()) -> remove_res()).
--spec(add/2 :: (rabbit_types:binding(), inner_fun()) -> add_res()).
--spec(remove/2 :: (rabbit_types:binding(), inner_fun()) -> remove_res()).
+-spec(add/1    :: (rabbit_types:binding())              -> bind_res()).
+-spec(add/2    :: (rabbit_types:binding(), inner_fun()) -> bind_res()).
+-spec(remove/1 :: (rabbit_types:binding())              -> bind_res()).
+-spec(remove/2 :: (rabbit_types:binding(), inner_fun()) -> bind_res()).
 -spec(list/1 :: (rabbit_types:vhost()) -> bindings()).
 -spec(list_for_source/1 ::
         (rabbit_types:binding_source()) -> bindings()).
@@ -93,14 +93,36 @@
                     destination_name, destination_kind,
                     routing_key, arguments]).
 
-recover() ->
-    rabbit_misc:table_fold(
-      fun (Route = #route{binding = B}, Acc) ->
-              {_, ReverseRoute} = route_with_reverse(Route),
-              ok = mnesia:write(rabbit_route, Route, write),
-              ok = mnesia:write(rabbit_reverse_route, ReverseRoute, write),
-              [B | Acc]
-      end, [], rabbit_durable_route).
+recover(XNames, QNames) ->
+    XNameSet = sets:from_list(XNames),
+    QNameSet = sets:from_list(QNames),
+    rabbit_misc:table_filter(
+      fun (Route) ->
+              mnesia:read({rabbit_semi_durable_route, Route}) =:= []
+      end,
+      fun (Route,  true) ->
+              ok = mnesia:write(rabbit_semi_durable_route, Route, write);
+          (_Route, false) ->
+              ok
+      end, rabbit_durable_route),
+    rabbit_misc:table_filter(
+      fun (#route{binding = #binding{destination = Dst =
+                                         #resource{kind = Kind}}}) ->
+              sets:is_element(Dst, case Kind of
+                                       exchange -> XNameSet;
+                                       queue    -> QNameSet
+                                   end)
+      end,
+      fun (R = #route{binding = B = #binding{source = Src}}, Tx) ->
+              case Tx of
+                  true  -> ok = sync_transient_route(R, fun mnesia:write/3);
+                  false -> ok
+              end,
+              {ok, X} = rabbit_exchange:lookup(Src),
+              rabbit_exchange:callback(X, add_binding, [Tx, X, B])
+      end,
+      rabbit_semi_durable_route),
+    ok.
 
 exists(Binding) ->
     binding_action(
@@ -110,8 +132,6 @@ exists(Binding) ->
 
 add(Binding) -> add(Binding, fun (_Src, _Dst) -> ok end).
 
-remove(Binding) -> remove(Binding, fun (_Src, _Dst) -> ok end).
-
 add(Binding, InnerFun) ->
     binding_action(
       Binding,
@@ -120,50 +140,48 @@ add(Binding, InnerFun) ->
               %% in general, we want to fail on that in preference to
               %% anything else
               case InnerFun(Src, Dst) of
-                  ok ->
-                      case mnesia:read({rabbit_route, B}) of
-                          []  -> ok = sync_binding(B, all_durable([Src, Dst]),
-                                                   fun mnesia:write/3),
-                                 fun (Tx) ->
-                                         ok = rabbit_exchange:callback(
-                                                Src, add_binding, [Tx, Src, B]),
-                                         rabbit_event:notify_if(
-                                           not Tx, binding_created, info(B))
-                                 end;
-                          [_] -> fun rabbit_misc:const_ok/1
-                      end;
-                  {error, _} = Err ->
-                      rabbit_misc:const(Err)
+                  ok               -> case mnesia:read({rabbit_route, B}) of
+                                          []  -> add(Src, Dst, B);
+                                          [_] -> fun rabbit_misc:const_ok/1
+                                      end;
+                  {error, _} = Err -> rabbit_misc:const(Err)
               end
       end).
+
+add(Src, Dst, B) ->
+    [SrcDurable, DstDurable] = [durable(E) || E <- [Src, Dst]],
+    case (not (SrcDurable andalso DstDurable) orelse
+          mnesia:read({rabbit_durable_route, B}) =:= []) of
+        true  -> ok = sync_route(#route{binding = B}, SrcDurable, DstDurable,
+                                 fun mnesia:write/3),
+                 fun (Tx) -> ok = rabbit_exchange:callback(Src, add_binding,
+                                                           [Tx, Src, B]),
+                             rabbit_event:notify_if(not Tx, binding_created,
+                                                    info(B))
+                 end;
+        false -> rabbit_misc:const({error, binding_not_found})
+    end.
+
+remove(Binding) -> remove(Binding, fun (_Src, _Dst) -> ok end).
 
 remove(Binding, InnerFun) ->
     binding_action(
       Binding,
       fun (Src, Dst, B) ->
-              Result =
-                  case mnesia:match_object(rabbit_route, #route{binding = B},
-                                           write) of
-                      [] ->
-                          {error, binding_not_found};
-                      [_] ->
-                          case InnerFun(Src, Dst) of
-                              ok ->
-                                  ok = sync_binding(B, all_durable([Src, Dst]),
-                                                    fun mnesia:delete_object/3),
-                                  {ok, maybe_auto_delete(B#binding.source,
-                                                         [B], new_deletions())};
-                              {error, _} = E ->
-                                  E
-                          end
-                  end,
-              case Result of
-                  {error, _} = Err ->
-                      rabbit_misc:const(Err);
-                  {ok, Deletions} ->
-                      fun (Tx) -> ok = process_deletions(Deletions, Tx) end
+              case mnesia:read(rabbit_route, B, write) of
+                  []  -> rabbit_misc:const({error, binding_not_found});
+                  [_] -> case InnerFun(Src, Dst) of
+                             ok               -> remove(Src, Dst, B);
+                             {error, _} = Err -> rabbit_misc:const(Err)
+                         end
               end
       end).
+
+remove(Src, Dst, B) ->
+    ok = sync_route(#route{binding = B}, durable(Src), durable(Dst),
+                    fun mnesia:delete_object/3),
+    Deletions = maybe_auto_delete(B#binding.source, [B], new_deletions()),
+    fun (Tx) -> ok = process_deletions(Deletions, Tx) end.
 
 list(VHostPath) ->
     VHostResource = rabbit_misc:r(VHostPath, '_'),
@@ -222,32 +240,31 @@ has_for_source(SrcName) ->
     %% we need to check for durable routes here too in case a bunch of
     %% routes to durable queues have been removed temporarily as a
     %% result of a node failure
-    contains(rabbit_route, Match) orelse contains(rabbit_durable_route, Match).
+    contains(rabbit_route, Match) orelse
+        contains(rabbit_semi_durable_route, Match).
 
 remove_for_source(SrcName) ->
+    Match = #route{binding = #binding{source = SrcName, _ = '_'}},
+    Routes = lists:usort(
+               mnesia:match_object(rabbit_route, Match, write) ++
+                   mnesia:match_object(rabbit_durable_route, Match, write)),
     [begin
-         ok = mnesia:delete_object(rabbit_reverse_route,
-                                   reverse_route(Route), write),
-         ok = delete_forward_routes(Route),
+         sync_route(Route, fun mnesia:delete_object/3),
          Route#route.binding
-     end || Route <- mnesia:match_object(
-                       rabbit_route,
-                       #route{binding = #binding{source = SrcName,
-                                                 _      = '_'}},
-                       write)].
+     end || Route <- Routes].
 
-remove_for_destination(DstName) ->
-    remove_for_destination(DstName, fun delete_forward_routes/1).
+remove_for_destination(Dst) ->
+    remove_for_destination(
+      Dst, fun (R) -> sync_route(R, fun mnesia:delete_object/3) end).
 
-remove_transient_for_destination(DstName) ->
-    remove_for_destination(DstName, fun delete_transient_forward_routes/1).
+remove_transient_for_destination(Dst) ->
+    remove_for_destination(
+      Dst, fun (R) -> sync_transient_route(R, fun mnesia:delete_object/3) end).
 
 %%----------------------------------------------------------------------------
 
-all_durable(Resources) ->
-    lists:all(fun (#exchange{durable = D}) -> D;
-                  (#amqqueue{durable = D}) -> D
-              end, Resources).
+durable(#exchange{durable = D}) -> D;
+durable(#amqqueue{durable = D}) -> D.
 
 binding_action(Binding = #binding{source      = SrcName,
                                   destination = DstName,
@@ -259,31 +276,36 @@ binding_action(Binding = #binding{source      = SrcName,
               Fun(Src, Dst, Binding#binding{args = SortedArgs})
       end).
 
-sync_binding(Binding, Durable, Fun) ->
-    ok = case Durable of
-             true  -> Fun(rabbit_durable_route,
-                          #route{binding = Binding}, write);
-             false -> ok
-         end,
-    {Route, ReverseRoute} = route_with_reverse(Binding),
+sync_route(R, Fun) -> sync_route(R, true, true, Fun).
+
+sync_route(Route, true, true, Fun) ->
+    ok = Fun(rabbit_durable_route, Route, write),
+    sync_route(Route, false, true, Fun);
+
+sync_route(Route, false, true, Fun) ->
+    ok = Fun(rabbit_semi_durable_route, Route, write),
+    sync_route(Route, false, false, Fun);
+
+sync_route(Route, _SrcDurable, false, Fun) ->
+    sync_transient_route(Route, Fun).
+
+sync_transient_route(Route, Fun) ->
     ok = Fun(rabbit_route, Route, write),
-    ok = Fun(rabbit_reverse_route, ReverseRoute, write),
-    ok.
+    ok = Fun(rabbit_reverse_route, reverse_route(Route), write).
 
 call_with_source_and_destination(SrcName, DstName, Fun) ->
     SrcTable = table_for_resource(SrcName),
     DstTable = table_for_resource(DstName),
-    ErrFun = fun (Err) -> rabbit_misc:const(Err) end,
+    ErrFun = fun (Err) -> rabbit_misc:const({error, Err}) end,
     rabbit_misc:execute_mnesia_tx_with_tail(
       fun () ->
               case {mnesia:read({SrcTable, SrcName}),
                     mnesia:read({DstTable, DstName})} of
                   {[Src], [Dst]} -> Fun(Src, Dst);
-                  {[],    [_]  } -> ErrFun({error, source_not_found});
-                  {[_],   []   } -> ErrFun({error, destination_not_found});
-                  {[],    []   } -> ErrFun({error,
-                                            source_and_destination_not_found})
-              end
+                  {[],    [_]  } -> ErrFun(source_not_found);
+                  {[_],   []   } -> ErrFun(destination_not_found);
+                  {[],    []   } -> ErrFun(source_and_destination_not_found)
+               end
       end).
 
 table_for_resource(#resource{kind = exchange}) -> rabbit_exchange;
@@ -296,22 +318,15 @@ continue('$end_of_table')    -> false;
 continue({[_|_], _})         -> true;
 continue({[], Continuation}) -> continue(mnesia:select(Continuation)).
 
-remove_for_destination(DstName, FwdDeleteFun) ->
-    Bindings =
-        [begin
-             Route = reverse_route(ReverseRoute),
-             ok = FwdDeleteFun(Route),
-             ok = mnesia:delete_object(rabbit_reverse_route,
-                                       ReverseRoute, write),
-             Route#route.binding
-         end || ReverseRoute
-                    <- mnesia:match_object(
-                         rabbit_reverse_route,
-                         reverse_route(#route{
-                                          binding = #binding{
-                                            destination = DstName,
-                                            _           = '_'}}),
-                         write)],
+remove_for_destination(DstName, DeleteFun) ->
+    Match = reverse_route(
+              #route{binding = #binding{destination = DstName, _ = '_'}}),
+    ReverseRoutes = mnesia:match_object(rabbit_reverse_route, Match, write),
+    Bindings = [begin
+                    Route = reverse_route(ReverseRoute),
+                    ok = DeleteFun(Route),
+                    Route#route.binding
+                end || ReverseRoute <- ReverseRoutes],
     group_bindings_fold(fun maybe_auto_delete/3, new_deletions(),
                         lists:keysort(#binding.source, Bindings)).
 
@@ -343,19 +358,6 @@ maybe_auto_delete(XName, Bindings, Deletions) ->
                    end
         end,
     add_deletion(XName, Entry, Deletions1).
-
-delete_forward_routes(Route) ->
-    ok = mnesia:delete_object(rabbit_route, Route, write),
-    ok = mnesia:delete_object(rabbit_durable_route, Route, write).
-
-delete_transient_forward_routes(Route) ->
-    ok = mnesia:delete_object(rabbit_route, Route, write).
-
-route_with_reverse(#route{binding = Binding}) ->
-    route_with_reverse(Binding);
-route_with_reverse(Binding = #binding{}) ->
-    Route = #route{binding = Binding},
-    {Route, reverse_route(Route)}.
 
 reverse_route(#route{binding = Binding}) ->
     #reverse_route{reverse_binding = reverse_binding(Binding)};

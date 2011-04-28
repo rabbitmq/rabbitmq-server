@@ -30,7 +30,7 @@
 
 %% internal
 -export([internal_declare/2, internal_delete/1,
-         run_backing_queue/2, run_backing_queue_async/2,
+         run_backing_queue/3, run_backing_queue_async/3,
          sync_timeout/1, update_ram_duration/1, set_ram_duration_target/2,
          set_maximum_since_use/2, maybe_expire/1, drop_expired/1,
          emit_stats/1]).
@@ -57,7 +57,7 @@
 
 -type(queue_or_not_found() :: rabbit_types:amqqueue() | 'not_found').
 
--spec(start/0 :: () -> 'ok').
+-spec(start/0 :: () -> [name()]).
 -spec(stop/0 :: () -> 'ok').
 -spec(declare/5 ::
         (name(), boolean(), boolean(),
@@ -141,10 +141,12 @@
                     rabbit_types:connection_exit() |
                     fun ((boolean()) -> rabbit_types:ok_or_error('not_found') |
                                         rabbit_types:connection_exit())).
--spec(run_backing_queue/2 ::
-        (pid(), (fun ((A) -> {[rabbit_types:msg_id()], A}))) -> 'ok').
--spec(run_backing_queue_async/2 ::
-        (pid(), (fun ((A) -> {[rabbit_types:msg_id()], A}))) -> 'ok').
+-spec(run_backing_queue/3 ::
+        (pid(), atom(),
+         (fun ((atom(), A) -> {[rabbit_types:msg_id()], A}))) -> 'ok').
+-spec(run_backing_queue_async/3 ::
+        (pid(), atom(),
+         (fun ((atom(), A) -> {[rabbit_types:msg_id()], A}))) -> 'ok').
 -spec(sync_timeout/1 :: (pid()) -> 'ok').
 -spec(update_ram_duration/1 :: (pid()) -> 'ok').
 -spec(set_ram_duration_target/2 :: (pid(), number() | 'infinity') -> 'ok').
@@ -166,8 +168,7 @@ start() ->
                {rabbit_amqqueue_sup,
                 {rabbit_amqqueue_sup, start_link, []},
                 transient, infinity, supervisor, [rabbit_amqqueue_sup]}),
-    _RealDurableQueues = recover_durable_queues(DurableQueues),
-    ok.
+    recover_durable_queues(DurableQueues).
 
 stop() ->
     ok = supervisor:terminate_child(rabbit_sup, rabbit_amqqueue_sup),
@@ -187,8 +188,8 @@ find_durable_queues() ->
 
 recover_durable_queues(DurableQueues) ->
     Qs = [start_queue_process(Q) || Q <- DurableQueues],
-    [Q || Q <- Qs,
-          gen_server2:call(Q#amqqueue.pid, {init, true}, infinity) == Q].
+    [QName || Q = #amqqueue{name = QName, pid = Pid} <- Qs,
+              gen_server2:call(Pid, {init, true}, infinity) == {new, Q}].
 
 declare(QueueName, Durable, AutoDelete, Args, Owner) ->
     ok = check_declare_arguments(QueueName, Args),
@@ -439,11 +440,11 @@ internal_delete(QueueName) ->
               end
       end).
 
-run_backing_queue(QPid, Fun) ->
-    gen_server2:call(QPid, {run_backing_queue, Fun}, infinity).
+run_backing_queue(QPid, Mod, Fun) ->
+    gen_server2:call(QPid, {run_backing_queue, Mod, Fun}, infinity).
 
-run_backing_queue_async(QPid, Fun) ->
-    gen_server2:cast(QPid, {run_backing_queue, Fun}).
+run_backing_queue_async(QPid, Mod, Fun) ->
+    gen_server2:cast(QPid, {run_backing_queue, Mod, Fun}).
 
 sync_timeout(QPid) ->
     gen_server2:cast(QPid, sync_timeout).

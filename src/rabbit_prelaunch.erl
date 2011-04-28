@@ -259,8 +259,13 @@ duplicate_node_check(NodeStr) ->
                         terminate(?ERROR_CODE);
                 false -> ok
             end;
-        {error, EpmdReason} -> terminate("unexpected epmd error: ~p~n",
-                                         [EpmdReason])
+        {error, EpmdReason} ->
+            terminate("epmd error for host ~p: ~p (~s)~n",
+                      [NodeHost, EpmdReason,
+                       case EpmdReason of
+                           address -> "unable to establish tcp connection";
+                           _       -> inet:format_error(EpmdReason)
+                       end])
     end.
 
 terminate(Fmt, Args) ->

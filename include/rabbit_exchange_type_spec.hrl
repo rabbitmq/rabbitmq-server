@@ -21,8 +21,6 @@
                  -> rabbit_router:match_result()).
 -spec(validate/1 :: (rabbit_types:exchange()) -> 'ok').
 -spec(create/2 :: (boolean(), rabbit_types:exchange()) -> 'ok').
--spec(recover/2 :: (rabbit_types:exchange(),
-                    [rabbit_types:binding()]) -> 'ok').
 -spec(delete/3 :: (boolean(), rabbit_types:exchange(),
                    [rabbit_types:binding()]) -> 'ok').
 -spec(add_binding/3 :: (boolean(), rabbit_types:exchange(),

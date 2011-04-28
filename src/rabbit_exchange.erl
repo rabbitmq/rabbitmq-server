@@ -36,7 +36,7 @@
 -type(type() :: atom()).
 -type(fun_name() :: atom()).
 
--spec(recover/0 :: () -> 'ok').
+-spec(recover/0 :: () -> [name()]).
 -spec(callback/3:: (rabbit_types:exchange(), fun_name(), [any()]) -> 'ok').
 -spec(declare/6 ::
         (name(), type(), boolean(), boolean(), boolean(),
@@ -83,25 +83,19 @@
 -define(INFO_KEYS, [name, type, durable, auto_delete, internal, arguments]).
 
 recover() ->
-    Xs = rabbit_misc:table_fold(
-           fun (X, Acc) ->
-                   ok = mnesia:write(rabbit_exchange, X, write),
-                   [X | Acc]
-           end, [], rabbit_durable_exchange),
-    Bs = rabbit_binding:recover(),
-    recover_with_bindings(
-      lists:keysort(#binding.source, Bs),
-      lists:keysort(#exchange.name, Xs), []).
-
-recover_with_bindings([B = #binding{source = XName} | Rest],
-                      Xs = [#exchange{name = XName} | _],
-                      Bindings) ->
-    recover_with_bindings(Rest, Xs, [B | Bindings]);
-recover_with_bindings(Bs, [X = #exchange{type = Type} | Xs], Bindings) ->
-    (type_to_module(Type)):recover(X, Bindings),
-    recover_with_bindings(Bs, Xs, []);
-recover_with_bindings([], [], []) ->
-    ok.
+    Xs = rabbit_misc:table_filter(
+           fun (#exchange{name = XName}) ->
+                   mnesia:read({rabbit_exchange, XName}) =:= []
+           end,
+           fun (X, Tx) ->
+                   case Tx of
+                       true  -> ok = mnesia:write(rabbit_exchange, X, write);
+                       false -> ok
+                   end,
+                   rabbit_exchange:callback(X, create, [Tx, X])
+           end,
+           rabbit_durable_exchange),
+    [XName || #exchange{name = XName} <- Xs].
 
 callback(#exchange{type = XType}, Fun, Args) ->
     apply(type_to_module(XType), Fun, Args).

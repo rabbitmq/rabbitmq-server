@@ -127,6 +127,8 @@ usage() ->
     io:format("~s", [rabbit_ctl_usage:usage()]),
     quit(1).
 
+%%----------------------------------------------------------------------------
+
 action(stop, Node, [], _Opts, Inform) ->
     Inform("Stopping and halting node ~p", [Node]),
     call(Node, {rabbit, stop_and_halt, []});
@@ -158,6 +160,10 @@ action(force_cluster, Node, ClusterNodeSs, _Opts, Inform) ->
     Inform("Forcefully clustering node ~p with ~p (ignoring offline nodes)",
            [Node, ClusterNodes]),
     rpc_call(Node, rabbit_mnesia, force_cluster, [ClusterNodes]);
+
+action(wait, Node, [], _Opts, Inform) ->
+    Inform("Waiting for ~p", [Node]),
+    wait_for_application(Node, ?WAIT_FOR_VM_ATTEMPTS);
 
 action(status, Node, [], _Opts, Inform) ->
     Inform("Status of node ~p", [Node]),
@@ -292,18 +298,15 @@ action(list_permissions, Node, [], Opts, Inform) ->
     VHost = proplists:get_value(?VHOST_OPT, Opts),
     Inform("Listing permissions in vhost ~p", [VHost]),
     display_list(call(Node, {rabbit_auth_backend_internal,
-                             list_vhost_permissions, [VHost]}));
+                             list_vhost_permissions, [VHost]})).
 
-action(wait, Node, [], _Opts, Inform) ->
-    Inform("Waiting for ~p", [Node]),
-    wait_for_application(Node, ?WAIT_FOR_VM_ATTEMPTS).
+%%----------------------------------------------------------------------------
 
 wait_for_application(Node, Attempts) ->
     case rpc_call(Node, application, which_applications, [infinity]) of
-        {badrpc, _} = E -> NewAttempts = Attempts - 1,
-                           case NewAttempts of
+        {badrpc, _} = E -> case Attempts of
                                0 -> E;
-                               _ -> wait_for_application0(Node, NewAttempts)
+                               _ -> wait_for_application0(Node, Attempts - 1)
                            end;
         Apps            -> case proplists:is_defined(rabbit, Apps) of
                                %% We've seen the node up; if it goes down
@@ -382,12 +385,9 @@ rpc_call(Node, Mod, Fun, Args) ->
 %% characters.  We don't escape characters above 127, since they may
 %% form part of UTF-8 strings.
 
-escape(Atom) when is_atom(Atom) ->
-    escape(atom_to_list(Atom));
-escape(Bin) when is_binary(Bin) ->
-    escape(binary_to_list(Bin));
-escape(L) when is_list(L) ->
-    escape_char(lists:reverse(L), []).
+escape(Atom) when is_atom(Atom)  -> escape(atom_to_list(Atom));
+escape(Bin)  when is_binary(Bin) -> escape(binary_to_list(Bin));
+escape(L)    when is_list(L)     -> escape_char(lists:reverse(L), []).
 
 escape_char([$\\ | T], Acc) ->
     escape_char(T, [$\\, $\\ | Acc]);
@@ -402,19 +402,15 @@ escape_char([], Acc) ->
 prettify_amqp_table(Table) ->
     [{escape(K), prettify_typed_amqp_value(T, V)} || {K, T, V} <- Table].
 
-prettify_typed_amqp_value(Type, Value) ->
-    case Type of
-        longstr -> escape(Value);
-        table   -> prettify_amqp_table(Value);
-        array   -> [prettify_typed_amqp_value(T, V) || {T, V} <- Value];
-        _       -> Value
-    end.
+prettify_typed_amqp_value(longstr, Value) -> escape(Value);
+prettify_typed_amqp_value(table,   Value) -> prettify_amqp_table(Value);
+prettify_typed_amqp_value(array,   Value) -> [prettify_typed_amqp_value(T, V) ||
+                                                 {T, V} <- Value];
+prettify_typed_amqp_value(_Type,   Value) -> Value.
 
 %% the slower shutdown on windows required to flush stdout
 quit(Status) ->
     case os:type() of
-        {unix, _} ->
-            halt(Status);
-        {win32, _} ->
-            init:stop(Status)
+        {unix,  _} -> halt(Status);
+        {win32, _} -> init:stop(Status)
     end.

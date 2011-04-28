@@ -21,7 +21,7 @@
 -behaviour(rabbit_exchange_type).
 
 -export([description/0, route/2]).
--export([validate/1, create/2, recover/2, delete/3, add_binding/3,
+-export([validate/1, create/2, delete/3, add_binding/3,
          remove_bindings/3, assert_args_equivalence/2]).
 -include("rabbit_exchange_type_spec.hrl").
 
@@ -48,12 +48,6 @@ route(#exchange{name = X},
 
 validate(_X) -> ok.
 create(_Tx, _X) -> ok.
-
-recover(_Exchange, Bs) ->
-    rabbit_misc:execute_mnesia_transaction(
-      fun () ->
-              lists:foreach(fun (B) -> internal_add_binding(B) end, Bs)
-      end).
 
 delete(true, #exchange{name = X}, _Bs) ->
     trie_remove_all_edges(X),
@@ -188,10 +182,10 @@ follow_down(X, CurNode, AccFun, Acc, Words = [W | RestW]) ->
     end.
 
 trie_child(X, Node, Word) ->
-    case mnesia:read(rabbit_topic_trie_edge,
-                     #trie_edge{exchange_name = X,
-                                node_id       = Node,
-                                word          = Word}) of
+    case mnesia:read({rabbit_topic_trie_edge,
+                      #trie_edge{exchange_name = X,
+                                 node_id       = Node,
+                                 word          = Word}}) of
         [#topic_trie_edge{node_id = NextNode}] -> {ok, NextNode};
         []                                     -> error
     end.

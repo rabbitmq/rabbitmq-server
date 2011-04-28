@@ -38,7 +38,7 @@
 -export([ensure_ok/2]).
 -export([makenode/1, nodeparts/1, cookie_hash/0, tcp_name/3]).
 -export([upmap/2, map_in_order/2]).
--export([table_fold/3]).
+-export([table_filter/3]).
 -export([dirty_read_all/1, dirty_foreach_key/2, dirty_dump_log/1]).
 -export([read_term_file/1, write_term_file/2, write_file/3]).
 -export([append_file/2, ensure_parent_dirs_exist/1]).
@@ -48,8 +48,7 @@
 -export([sort_field_table/1]).
 -export([pid_to_string/1, string_to_pid/1]).
 -export([version_compare/2, version_compare/3]).
--export([recursive_delete/1, recursive_copy/2, dict_cons/3, orddict_cons/3,
-         unlink_and_capture_exit/1]).
+-export([recursive_delete/1, recursive_copy/2, dict_cons/3, orddict_cons/3]).
 -export([get_options/2]).
 -export([all_module_attributes/1, build_acyclic_graph/3]).
 -export([now_ms/0]).
@@ -146,7 +145,8 @@
         -> atom()).
 -spec(upmap/2 :: (fun ((A) -> B), [A]) -> [B]).
 -spec(map_in_order/2 :: (fun ((A) -> B), [A]) -> [B]).
--spec(table_fold/3 :: (fun ((any(), A) -> A), A, atom()) -> A).
+-spec(table_filter/3:: (fun ((A) -> boolean()), fun ((A, boolean()) -> 'ok'),
+                                                    atom()) -> [A]).
 -spec(dirty_read_all/1 :: (atom()) -> [any()]).
 -spec(dirty_foreach_key/2 :: (fun ((any()) -> any()), atom())
                              -> 'ok' | 'aborted').
@@ -179,7 +179,6 @@
         -> rabbit_types:ok_or_error({file:filename(), file:filename(), any()})).
 -spec(dict_cons/3 :: (any(), any(), dict()) -> dict()).
 -spec(orddict_cons/3 :: (any(), any(), orddict:orddict()) -> orddict:orddict()).
--spec(unlink_and_capture_exit/1 :: (pid()) -> 'ok').
 -spec(get_options/2 :: ([optdef()], [string()])
                        -> {[string()], [{string(), any()}]}).
 -spec(all_module_attributes/1 :: (atom()) -> [{atom(), [term()]}]).
@@ -462,20 +461,23 @@ map_in_order(F, L) ->
     lists:reverse(
       lists:foldl(fun (E, Acc) -> [F(E) | Acc] end, [], L)).
 
-%% Fold over each entry in a table, executing the cons function in a
-%% transaction.  This is often far more efficient than wrapping a tx
-%% around the lot.
+%% Apply a pre-post-commit function to all entries in a table that
+%% satisfy a predicate, and return those entries.
 %%
 %% We ignore entries that have been modified or removed.
-table_fold(F, Acc0, TableName) ->
+table_filter(Pred, PrePostCommitFun, TableName) ->
     lists:foldl(
-      fun (E, Acc) -> execute_mnesia_transaction(
-                        fun () -> case mnesia:match_object(TableName, E, read) of
-                                      [] -> Acc;
-                                      _  -> F(E, Acc)
-                                  end
-                        end)
-      end, Acc0, dirty_read_all(TableName)).
+      fun (E, Acc) ->
+              case execute_mnesia_transaction(
+                     fun () -> mnesia:match_object(TableName, E, read) =/= []
+                                   andalso Pred(E) end,
+                     fun (false, _Tx) -> false;
+                         (true,   Tx) -> PrePostCommitFun(E, Tx), true
+                     end) of
+                  false -> Acc;
+                  true  -> [E | Acc]
+              end
+      end, [], dirty_read_all(TableName)).
 
 dirty_read_all(TableName) ->
     mnesia:dirty_select(TableName, [{'$1',[],['$1']}]).
@@ -772,12 +774,6 @@ dict_cons(Key, Value, Dict) ->
 
 orddict_cons(Key, Value, Dict) ->
     orddict:update(Key, fun (List) -> [Value | List] end, [Value], Dict).
-
-unlink_and_capture_exit(Pid) ->
-    unlink(Pid),
-    receive {'EXIT', Pid, _} -> ok
-    after 0 -> ok
-    end.
 
 %% Separate flags and options from arguments.
 %% get_options([{flag, "-q"}, {option, "-p", "/"}],

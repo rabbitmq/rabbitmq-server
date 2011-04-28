@@ -120,6 +120,9 @@ done
 rm -rf %{buildroot}
 
 %changelog
+* Thu Apr 7 2011 Alexandru Scvortov <alexandru@rabbitmq.com> 2.4.1-1
+- New Upstream Release
+
 * Tue Mar 22 2011 Alexandru Scvortov <alexandru@rabbitmq.com> 2.4.0-1
 - New Upstream Release
 

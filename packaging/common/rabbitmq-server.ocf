@@ -103,9 +103,9 @@ The IP Port for rabbitmq-server to listen on
 
 <parameter name="config_file" unique="0" required="0">
 <longdesc lang="en">
-Location of the config file
+Location of the config file (without the .config suffix)
 </longdesc>
-<shortdesc lang="en">Config file path</shortdesc>
+<shortdesc lang="en">Config file path (without the .config suffix)</shortdesc>
 <content type="string" default="" />
 </parameter>
 
@@ -189,8 +189,8 @@ rabbit_validate_partial() {
 }
 
 rabbit_validate_full() {
-    if [ ! -z $RABBITMQ_CONFIG_FILE ] && [ ! -e $RABBITMQ_CONFIG_FILE ]; then
-        ocf_log err "rabbitmq-server config_file $RABBITMQ_CONFIG_FILE does not exist or is not a file";
+    if [ ! -z $RABBITMQ_CONFIG_FILE ] && [ ! -e "${RABBITMQ_CONFIG_FILE}.config" ]; then
+        ocf_log err "rabbitmq-server config_file ${RABBITMQ_CONFIG_FILE}.config does not exist or is not a file";
         exit $OCF_ERR_INSTALLED;
     fi
 
