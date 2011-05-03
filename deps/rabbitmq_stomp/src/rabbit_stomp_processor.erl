@@ -318,25 +318,29 @@ with_destination(Command, Frame, State, Fun) ->
 
 do_login({ok, Login}, {ok, Passcode}, VirtualHost, Heartbeat, AdapterInfo,
          Version, State) ->
-    {ok, Connection} = amqp_connection:start(
-                         direct, #amqp_params{
-                           username     = list_to_binary(Login),
-                           password     = list_to_binary(Passcode),
-                           virtual_host = list_to_binary(VirtualHost),
-                           adapter_info = AdapterInfo}),
-    {ok, Channel} = amqp_connection:open_channel(Connection),
-    SessionId = rabbit_guid:string_guid("session"),
-
-    {{SendTimeout, ReceiveTimeout}, State1} =
-        ensure_heartbeats(Heartbeat, State),
-    ok("CONNECTED",
-       [{"session", SessionId},
-        {"heartbeat", io_lib:format("~B,~B", [SendTimeout, ReceiveTimeout])},
-        {"version", Version}],
-       "",
-       State1#state{session_id = SessionId,
-                   channel    = Channel,
-                   connection = Connection});
+    case amqp_connection:start(
+           direct, #amqp_params{
+             username     = list_to_binary(Login),
+             password     = list_to_binary(Passcode),
+             virtual_host = list_to_binary(VirtualHost),
+             adapter_info = AdapterInfo}) of
+        {ok, Connection} ->
+            {ok, Channel} = amqp_connection:open_channel(Connection),
+            SessionId = rabbit_guid:string_guid("session"),
+            {{SendTimeout, ReceiveTimeout}, State1} =
+                ensure_heartbeats(Heartbeat, State),
+            ok("CONNECTED",
+               [{"session", SessionId},
+                {"heartbeat", io_lib:format("~B,~B", [SendTimeout,
+                                                      ReceiveTimeout])},
+                {"version", Version}],
+               "",
+               State1#state{session_id = SessionId,
+                            channel    = Channel,
+                            connection = Connection});
+        {error, auth_failure} ->
+            error("Bad CONNECT", "Authentication failure\n", State)
+    end;
 
 do_login(_, _, _, _, _, _, State) ->
     error("Bad CONNECT", "Missing login or passcode header(s)\n", State).
