@@ -18,7 +18,7 @@
 
 -include("rabbit.hrl").
 
--export([user_pass_login/2, check_user_pass_login/2, check_user_login/2,
+-export([check_user_pass_login/2, check_user_login/2,
          check_vhost_access/2, check_resource_access/3, list_vhosts/2]).
 
 %%----------------------------------------------------------------------------
@@ -30,9 +30,6 @@
 -type(permission_atom() :: 'configure' | 'read' | 'write').
 -type(vhost_permission_atom() :: 'read' | 'write').
 
--spec(user_pass_login/2 ::
-        (rabbit_types:username(), rabbit_types:password())
-        -> rabbit_types:user() | rabbit_types:channel_exit()).
 -spec(check_user_pass_login/2 ::
         (rabbit_types:username(), rabbit_types:password())
         -> {'ok', rabbit_types:user()} | {'refused', string(), [any()]}).
@@ -48,16 +45,6 @@
 -endif.
 
 %%----------------------------------------------------------------------------
-
-user_pass_login(User, Pass) ->
-    ?LOGDEBUG("Login with user ~p pass ~p~n", [User, Pass]),
-    case check_user_pass_login(User, Pass) of
-        {refused, Msg, Args} ->
-            rabbit_misc:protocol_error(
-              access_refused, "login refused: ~s", [io_lib:format(Msg, Args)]);
-        {ok, U} ->
-            U
-    end.
 
 check_user_pass_login(Username, Password) ->
     check_user_login(Username, [{password, Password}]).
