@@ -6,7 +6,7 @@
 %% For testing
 -export([check_contexts/2]).
 
--define(APP, rabbit_mochiweb).
+-define(APP, rabbitmq_mochiweb).
 
 %% @spec start(_Type, _StartArgs) -> ServerRet
 %% @doc application start callback for rabbit_mochiweb.

@@ -1,12 +1,27 @@
--module(rabbit_mochiweb_test).
+%%   The contents of this file are subject to the Mozilla Public License
+%%   Version 1.1 (the "License"); you may not use this file except in
+%%   compliance with the License. You may obtain a copy of the License at
+%%   http://www.mozilla.org/MPL/
+%%
+%%   Software distributed under the License is distributed on an "AS IS"
+%%   basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
+%%   License for the specific language governing rights and limitations
+%%   under the License.
+%%
+%%   The Original Code is RabbitMQ Mochiweb Embedding.
+%%
+%%   The Initial Developers of the Original Code are Rabbit Technologies Ltd.
+%%
+%%   Copyright (C) 2011 Rabbit Technologies Ltd.
+%%
+%%   All Rights Reserved.
+%%
+%%   Contributor(s): ______________________________________.
+%%
+
+-module(rabbit_mochiweb_test_unit).
 
 -include_lib("eunit/include/eunit.hrl").
-
-query_static_resource_test() ->
-  %% TODO this is a fairly rubbish test
-  {ok, _Result} =
-        http:request("http://localhost:55670/rabbit_mochiweb_test/index.html"),
-  ok.
 
 relativise_test() ->
     ?assertEqual("baz",

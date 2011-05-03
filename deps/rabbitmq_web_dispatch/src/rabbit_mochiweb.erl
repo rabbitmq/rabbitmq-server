@@ -1,21 +1,10 @@
 -module(rabbit_mochiweb).
 
--export([start/0, stop/0]).
 -export([register_context_handler/4, register_static_context/5]).
 -export([register_authenticated_static_context/6]).
 -export([context_listener/1, context_path/2]).
 
--define(APP, ?MODULE).
-
-%% @spec start() -> ok
-%% @doc Start the rabbit_mochiweb server.
-start() ->
-    application:start(rabbit_mochiweb).
-
-%% @spec stop() -> ok
-%% @doc Stop the rabbit_mochiweb server.
-stop() ->
-    application:stop(rabbit_mochiweb).
+-define(APP, rabbitmq_mochiweb).
 
 %% @doc Get the path for a context; if not configured then use the
 %% default given.
@@ -33,7 +22,7 @@ context_path(Context, Default) ->
 
 %% @doc Get the listener and its options for a context.
 context_listener(Context) ->
-    L = case application:get_env(?MODULE, contexts) of
+    L = case application:get_env(?APP, contexts) of
             undefined ->
                 '*';
             {ok, Contexts} ->

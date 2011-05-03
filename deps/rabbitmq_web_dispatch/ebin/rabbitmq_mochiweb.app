@@ -1,4 +1,4 @@
-{application, rabbit_mochiweb,
+{application, rabbitmq_mochiweb,
  [{description, "RabbitMQ Mochiweb Embedding"},
   {vsn, "%%VSN%%"},
   {modules, [
