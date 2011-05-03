@@ -25,8 +25,8 @@
 -ifdef(use_specs).
 
 -spec(boot/0 :: () -> 'ok').
--spec(connect/4 :: (binary(), binary(), rabbit_types:protocol(),
-                    rabbit_event:event_props()) ->
+-spec(connect/4 :: (rabbit_types:username(), rabbit_types:vhost(),
+                    rabbit_types:protocol(), rabbit_event:event_props()) ->
                         {'ok', {rabbit_types:user(),
                                 rabbit_framing:amqp_table()}}).
 -spec(start_channel/8 ::
