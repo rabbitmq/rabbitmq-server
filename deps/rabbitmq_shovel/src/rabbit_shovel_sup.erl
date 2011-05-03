@@ -226,20 +226,28 @@ build_broker(ParsedUri) ->
                 "/"       -> <<"/">>;
                 [$/|Rest] -> list_to_binary(Rest)
             end,
-    Params = #amqp_params{host = Host, port = Port, virtual_host = VHost},
-    case proplists:get_value(userinfo, ParsedUri) of
-        [Username, Password | _ ] ->
-            Params#amqp_params{username = list_to_binary(Username),
-                               password = list_to_binary(Password)};
+    Params = case Host of
+                 undefined -> #amqp_params_direct{virtual_host = VHost};
+                 _         -> #amqp_params_network{host = Host, port = Port,
+                                                   virtual_host = VHost}
+             end,
+    case {Params, proplists:get_value(userinfo, ParsedUri)} of
+        {#amqp_params_network{}, [Username, Password | _ ]} ->
+            Params#amqp_params_network{username = list_to_binary(Username),
+                                       password = list_to_binary(Password)};
+        {#amqp_params_direct{}, [Username | _ ]} ->
+            Params#amqp_params_direct{username = list_to_binary(Username)};
         _ ->
             Params
     end.
 
 build_plain_broker(ParsedUri) ->
     Params = build_broker(ParsedUri),
-    case Params#amqp_params.port of
-        undefined -> Params#amqp_params{port = ?PROTOCOL_PORT};
-        _         -> Params
+    case Params of
+        #amqp_params_network{port = undefined} ->
+            Params#amqp_params_network{port = ?PROTOCOL_PORT};
+        _ ->
+            Params
     end.
 
 build_ssl_broker(ParsedUri) ->
@@ -265,15 +273,19 @@ build_ssl_broker(ParsedUri) ->
                        {fun find_atom_parameter/1,    verify},
                        {fun find_boolean_parameter/1, fail_if_no_peer_cert}]],
           []),
-    Params1 = Params#amqp_params{ssl_options = SSLOptions},
-    case Params1#amqp_params.port of
-        undefined -> Params1#amqp_params{port = ?PROTOCOL_PORT - 1};
+    Params1 = Params#amqp_params_network{ssl_options = SSLOptions},
+    case Params1#amqp_params_network.port of
+        undefined -> Params1#amqp_params_network{port = ?PROTOCOL_PORT - 1};
         _         -> Params1
     end.
 
-broker_add_query(Params, ParsedUri) ->
+broker_add_query(Params = #amqp_params_direct{}, Uri) ->
+    broker_add_query(Params, Uri, record_info(fields, amqp_params_direct));
+broker_add_query(Params = #amqp_params_network{}, Uri) ->
+    broker_add_query(Params, Uri, record_info(fields, amqp_params_network)).
+
+broker_add_query(Params, ParsedUri, Fields) ->
     Query = proplists:get_value('query', ParsedUri),
-    Fields = record_info(fields, amqp_params),
     {Params1, _Pos} =
         run_state_monad(
           [fun ({ParamsN, Pos}) ->

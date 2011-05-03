@@ -201,10 +201,7 @@ channel_flow(Chan, Active) ->
 
 make_conn_and_chan(AmqpParams) ->
     AmqpParam = lists:nth(random:uniform(length(AmqpParams)), AmqpParams),
-    {ok, Conn} = amqp_connection:start(
-                     case AmqpParam#amqp_params.host of undefined -> direct;
-                                                        _         -> network
-                     end, AmqpParam),
+    {ok, Conn} = amqp_connection:start(AmqpParam),
     link(Conn),
     {ok, Chan} = amqp_connection:open_channel(Conn),
     {Conn, Chan, AmqpParam}.

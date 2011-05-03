@@ -98,7 +98,8 @@ test() ->
 
     {invalid_amqp_params_parameter, heartbeat, "text",
      [{"heartbeat", "text"}], {not_an_integer, "text"}} =
-        test_broken_shovel_sources([{broker, "amqp://?heartbeat=text"}]),
+        test_broken_shovel_sources(
+          [{broker, "amqp://localhost/?heartbeat=text"}]),
 
     {invalid_amqp_params_parameter, username, "text",
      [{"username", "text"}],
@@ -157,7 +158,7 @@ test() ->
       infinity),
     ok = application:start(rabbitmq_shovel),
 
-    {ok, Conn} = amqp_connection:start(network),
+    {ok, Conn} = amqp_connection:start(#amqp_params_network{}),
     {ok, Chan} = amqp_connection:open_channel(Conn),
 
     #'queue.declare_ok'{ queue = Q } =
