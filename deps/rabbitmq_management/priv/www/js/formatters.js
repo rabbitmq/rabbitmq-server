@@ -42,9 +42,9 @@ function fmt_date(d) {
         return i < 10 ? "0" + i : i;
     }
 
-    return d.getFullYear() + "-" + f(d.getMonth() + 1) + "-" + f(d.getDay()) +
-        " " + f(d.getHours()) + ":" + f(d.getMinutes()) + ":" +
-        f(d.getSeconds());
+    return d.getFullYear() + "-" + f(d.getMonth() + 1) + "-" +
+        f(d.getDay() + 1) + " " + f(d.getHours()) + ":" + f(d.getMinutes()) +
+        ":" + f(d.getSeconds());
 }
 
 function fmt_parameters(obj) {
