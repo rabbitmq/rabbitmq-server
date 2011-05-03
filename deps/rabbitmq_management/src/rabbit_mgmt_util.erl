@@ -76,9 +76,7 @@ is_authorized(ReqData, Context, Fun) ->
                                                              Password) of
                 {ok, User} ->
                     case Fun(User) of
-                        true  -> {true, ReqData,
-                                  Context#context{user     = User,
-                                                  password = Password}};
+                        true  -> {true, ReqData, Context#context{user = User}};
                         false -> Unauthorized
                     end;
                 {refused, _, _} ->

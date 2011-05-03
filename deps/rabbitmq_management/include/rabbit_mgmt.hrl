@@ -18,4 +18,4 @@
 %%
 %%   Contributor(s): ______________________________________.
 %%
--record(context, {user, password}).
+-record(context, {user}).
