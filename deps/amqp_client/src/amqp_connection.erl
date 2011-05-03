@@ -70,7 +70,7 @@
 -include("amqp_client.hrl").
 
 -export([open_channel/1, open_channel/2]).
--export([start/1, start/2]).
+-export([start/1]).
 -export([close/1, close/3]).
 -export([info/2, info_keys/1, info_keys/0]).
 
@@ -78,7 +78,22 @@
 %% Type Definitions
 %%---------------------------------------------------------------------------
 
-%% @type amqp_params() = #amqp_params{}.
+%% @type adapter_info() = #adapter_info{}.
+%% @type amqp_params_direct() = #amqp_params_direct{}.
+%% As defined in amqp_client.hrl. It contains the following fields:
+%% <ul>
+%% <li>username :: binary() - The name of a user registered with the broker, 
+%%     defaults to &lt;&lt;guest"&gt;&gt;</li>
+%% <li>virtual_host :: binary() - The name of a virtual host in the broker,
+%%     defaults to &lt;&lt;"/"&gt;&gt;</li>
+%% <li>node :: atom() - The node the broker runs on (direct only)</li>
+%% <li>adapter_info :: adapter_info() - Extra management information for if
+%%     this connection represents a non-AMQP network connection.</li>
+%% <li>client_properties :: [{binary(), atom(), binary()}] - A list of extra
+%%     client properties to be sent to the server, defaults to []</li>
+%% </ul>
+%%
+%% @type amqp_params_network() = #amqp_params_network{}.
 %% As defined in amqp_client.hrl. It contains the following fields:
 %% <ul>
 %% <li>username :: binary() - The name of a user registered with the broker, 
@@ -91,7 +106,6 @@
 %%     defaults to "localhost" (network only)</li>
 %% <li>port :: integer() - The port the broker is listening on,
 %%     defaults to 5672 (network only)</li>
-%% <li>node :: atom() - The node the broker runs on (direct only)</li>
 %% <li>channel_max :: non_neg_integer() - The channel_max handshake parameter,
 %%     defaults to 0</li>
 %% <li>frame_max :: non_neg_integer() - The frame_max handshake parameter,
@@ -104,32 +118,22 @@
 %%     client properties to be sent to the server, defaults to []</li>
 %% </ul>
 
+
 %%---------------------------------------------------------------------------
 %% Starting a connection
 %%---------------------------------------------------------------------------
 
-%% @spec (Type) -> {ok, Connection} | {error, Error}
+%% @spec (Params) -> {ok, Connection} | {error, Error}
 %% where
-%%     Type = network | direct
-%%     Connection = pid()
-%% @doc Starts a connection to an AMQP server. Use network type to connect
-%% to a remote AMQP server - default connection settings are used, meaning that
-%% the server is expected to be at localhost:5672, with a vhost of "/"
-%% authorising a user guest/guest. Use direct type for a direct connection to
-%% a RabbitMQ server, assuming that the server is running in the same process
-%% space, and with a default set of amqp_params. If a different host, port,
-%% vhost or credential set is required, start/2 should be used.
-start(Type) ->
-    start(Type, #amqp_params{}).
-
-%% @spec (Type, amqp_params()) -> {ok, Connection} | {error, Error}
-%% where
-%%      Type = network | direct
+%%      Params = amqp_params_network() | amqp_params_direct()
 %%      Connection = pid()
-%% @doc Starts a connection to an AMQP server. Use network type to connect
-%% to a remote AMQP server or direct type for a direct connection to
+%% @doc Starts a connection to an AMQP server. Use network params to connect
+%% to a remote AMQP server or direct params for a direct connection to
 %% a RabbitMQ server, assuming that the server is running in the same process
 %% space.
+start(AmqpParams = #amqp_params_direct{})  -> start(direct,  AmqpParams);
+start(AmqpParams = #amqp_params_network{}) -> start(network, AmqpParams).
+
 start(Type, AmqpParams) ->
     case amqp_client:start() of
         ok                                      -> ok;

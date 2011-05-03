@@ -71,9 +71,10 @@ terminate(_Reason, #state{node = Node}) ->
 i(type, _State) -> direct;
 i(pid,  _State) -> self();
 %% AMQP Params
-i(user,              #state{params = P}) -> P#amqp_params.username;
-i(vhost,             #state{params = P}) -> P#amqp_params.virtual_host;
-i(client_properties, #state{params = P}) -> P#amqp_params.client_properties;
+i(user,              #state{params = P}) -> P#amqp_params_direct.username;
+i(vhost,             #state{params = P}) -> P#amqp_params_direct.virtual_host;
+i(client_properties, #state{params = P}) ->
+    P#amqp_params_direct.client_properties;
 %% Optional adapter info
 i(protocol,     #state{adapter_info = I}) -> I#adapter_info.protocol;
 i(address,      #state{adapter_info = I}) -> I#adapter_info.address;
@@ -90,17 +91,17 @@ info_keys() ->
 infos(Items, State) ->
     [{Item, i(Item, State)} || Item <- Items].
 
-connect(Params = #amqp_params{username     = Username,
-                              password     = Pass,
-                              node         = Node,
-                              adapter_info = Info,
-                              virtual_host = VHost}, SIF, _ChMgr, State) ->
+connect(Params = #amqp_params_direct{username     = Username,
+                                     node         = Node,
+                                     adapter_info = Info,
+                                     virtual_host = VHost},
+        SIF, _ChMgr, State) ->
     State1 = State#state{node         = Node,
                          vhost        = VHost,
                          params       = Params,
                          adapter_info = ensure_adapter_info(Info)},
     case rpc:call(Node, rabbit_direct, connect,
-                  [Username, Pass, VHost, ?PROTOCOL,
+                  [Username, VHost, ?PROTOCOL,
                    infos(?CREATION_EVENT_KEYS, State1)]) of
         {ok, {User, ServerProperties}} ->
             {ok, Collector} = SIF(),
