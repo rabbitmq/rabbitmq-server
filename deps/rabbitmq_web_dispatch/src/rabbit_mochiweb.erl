@@ -9,7 +9,7 @@
 %% @doc Get the path for a context; if not configured then use the
 %% default given.
 context_path(Context, Default) ->
-    case application:get_env(?MODULE, contexts) of
+    case application:get_env(?APP, contexts) of
         undefined ->
             Default;
         {ok, Contexts} ->
