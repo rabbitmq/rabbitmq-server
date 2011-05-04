@@ -20,7 +20,7 @@
 
 -behaviour(rabbit_exchange_type).
 
--export([description/0, route/2]).
+-export([description/0, serialise_events/0, route/2]).
 -export([validate/1, create/2, delete/3, add_binding/3,
          remove_bindings/3, assert_args_equivalence/2]).
 -include("rabbit_exchange_type_spec.hrl").
@@ -38,6 +38,8 @@ description() ->
     [{name, <<"topic">>},
      {description, <<"AMQP topic exchange, as per the AMQP specification">>}].
 
+serialise_events() -> false.
+
 %% NB: This may return duplicate results in some situations (that's ok)
 route(#exchange{name = X},
       #delivery{message = #basic_message{routing_keys = Routes}}) ->
@@ -49,19 +51,19 @@ route(#exchange{name = X},
 validate(_X) -> ok.
 create(_Tx, _X) -> ok.
 
-delete(true, #exchange{name = X}, _Bs) ->
+delete(transaction, #exchange{name = X}, _Bs) ->
     trie_remove_all_edges(X),
     trie_remove_all_bindings(X),
     ok;
-delete(false, _Exchange, _Bs) ->
+delete(none, _Exchange, _Bs) ->
     ok.
 
-add_binding(true, _Exchange, Binding) ->
+add_binding(transaction, _Exchange, Binding) ->
     internal_add_binding(Binding);
-add_binding(false, _Exchange, _Binding) ->
+add_binding(none, _Exchange, _Binding) ->
     ok.
 
-remove_bindings(true, #exchange{name = X}, Bs) ->
+remove_bindings(transaction, #exchange{name = X}, Bs) ->
     %% The remove process is split into two distinct phases. In the
     %% first phase we gather the lists of bindings and edges to
     %% delete, then in the second phase we process all the
@@ -80,7 +82,7 @@ remove_bindings(true, #exchange{name = X}, Bs) ->
     [trie_remove_edge(X, Parent, Node, W) ||
         {Node, {Parent, W, {0, 0}}} <- gb_trees:to_list(Paths)],
     ok;
-remove_bindings(false, _X, _Bs) ->
+remove_bindings(none, _X, _Bs) ->
     ok.
 
 maybe_add_path(_X, [{root, none}], PathAcc) ->

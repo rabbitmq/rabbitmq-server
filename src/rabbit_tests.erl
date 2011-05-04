@@ -691,10 +691,10 @@ test_topic_matching() ->
     test_topic_expect_match(X, [{"a.b.c", []}, {"b.b.c", []}, {"", []}]),
     passed.
 
-exchange_op_callback(X, Fun, ExtraArgs) ->
+exchange_op_callback(X, Fun, Args) ->
     rabbit_misc:execute_mnesia_transaction(
-      fun () -> rabbit_exchange:callback(X, Fun, [true, X] ++ ExtraArgs) end),
-    rabbit_exchange:callback(X, Fun, [false, X] ++ ExtraArgs).
+      fun () -> rabbit_exchange:callback(X, Fun, [transaction, X] ++ Args) end),
+    rabbit_exchange:callback(X, Fun, [none, X] ++ Args).
 
 test_topic_expect_match(X, List) ->
     lists:foreach(
