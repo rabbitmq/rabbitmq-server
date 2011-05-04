@@ -33,7 +33,7 @@ has_purpose_arg(X) ->
         {longstr, <<"federation">>}.
 
 federation_up() ->
-    lists:keysearch(rabbit_federation, 1,
+    lists:keysearch(rabbitmq_federation, 1,
                     application:which_applications(infinity)) =/= false.
 
 local_params() ->
