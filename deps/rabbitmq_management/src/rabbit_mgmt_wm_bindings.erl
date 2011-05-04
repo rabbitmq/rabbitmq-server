@@ -79,20 +79,19 @@ accept_content(ReqData, {_Mode, Context}) ->
         {{halt, _}, _, _} = Res ->
             Res;
         {true, ReqData, Context2} ->
-            rabbit_mgmt_util:with_decode(
-              [routing_key, arguments], ReqData, Context,
-              fun([Key, Args], _) ->
-                      Loc = rabbit_mochiweb_util:relativise(
-                              wrq:path(ReqData),
-                              binary_to_list(
-                                rabbit_mgmt_format:url(
-                                  "/api/bindings/~s/e/~s/~s/~s/~s",
-                                  [VHost, Source, DestType, Dest,
-                                   rabbit_mgmt_format:pack_binding_props(
-                                     Key, rabbit_mgmt_util:args(Args))]))),
-                      ReqData2 = wrq:set_resp_header("Location", Loc, ReqData),
-                      {true, ReqData2, Context2}
-              end)
+            {ok, Props} = rabbit_mgmt_util:decode(wrq:req_body(ReqData)),
+            Key = proplists:get_value(<<"routing_key">>, Props, <<"">>),
+            Args = proplists:get_value(<<"arguments">>, Props, []),
+            Loc = rabbit_mochiweb_util:relativise(
+                    wrq:path(ReqData),
+                    binary_to_list(
+                      rabbit_mgmt_format:url(
+                        "/api/bindings/~s/e/~s/~s/~s/~s",
+                        [VHost, Source, DestType, Dest,
+                         rabbit_mgmt_format:pack_binding_props(
+                           Key, rabbit_mgmt_util:args(Args))]))),
+            ReqData2 = wrq:set_resp_header("Location", Loc, ReqData),
+            {true, ReqData2, Context2}
     end.
 
 is_authorized(ReqData, {Mode, Context}) ->
