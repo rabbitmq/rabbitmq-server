@@ -19,4 +19,4 @@ start-other-node:
 	../rabbitmq-server/scripts/rabbitmqctl -n $(OTHER_NODE) wait
 
 stop-other-node:
-	../rabbitmq-server/scripts/rabbitmqctl -n $(OTHER_NODE) stop || true
+	../rabbitmq-server/scripts/rabbitmqctl -n $(OTHER_NODE) stop 2> /dev/null || true
