@@ -84,7 +84,7 @@ register_contexts() ->
                                             "priv/www-cli",
                                             "Management: Command Line Tool").
 setup_wm_logging() ->
-    {ok, LogDir} = application:get_env(rabbit_management, http_log_dir),
+    {ok, LogDir} = application:get_env(rabbitmq_management, http_log_dir),
     case LogDir of
         none ->
             rabbit_webmachine:setup(none);
@@ -114,7 +114,7 @@ log_startup() ->
       [URLPrefix, ?PREFIX, URLPrefix, ?UI_PREFIX]).
 
 get_port() ->
-    case application:get_env(rabbit_mochiweb, port) of
+    case application:get_env(rabbitmq_mochiweb, port) of
         undefined ->
             exit(mochiweb_port_not_configured);
         {ok, P} ->

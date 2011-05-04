@@ -1,12 +1,6 @@
-syntax: regexp
-
+~$
+\.beam$
 ^build/
 ^dist/
-.*\.beam
-^ebin/rabbit_management.app
-^deps/webmachine/webmachine
-^deps/webmachine/ebin
-^deps/webmachine/include
 ^cover/
-^priv/www-cli/rabbitmqadmin
-^tmp/
+^erl_crash.dump$

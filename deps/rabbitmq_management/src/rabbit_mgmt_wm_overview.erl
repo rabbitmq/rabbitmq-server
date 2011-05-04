@@ -63,6 +63,6 @@ stats_db_node() ->
 
 version() ->
     [Vsn] = [V || {A, _D, V} <- application:loaded_applications(),
-            A =:= rabbit_management],
+            A =:= rabbitmq_management],
     list_to_binary(Vsn).
 
