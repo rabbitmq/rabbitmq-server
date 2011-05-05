@@ -77,7 +77,7 @@ p.status-error, p.warning { margin: 20px; padding: 15px; border-radius: 10px; -m
 
 p#update-form { float: right; margin: 0; padding: 0; }
 
-.highlight, .highlight-right { width: 120px; font-size: 120%; text-align:center; padding:10px; background-color: #ddd; margin: 0 20px 0 0; color: #888; border-radius: 10px; -moz-border-radius: 10px; }
+.highlight, .highlight-right { min-width: 120px; font-size: 120%; text-align:center; padding:10px; background-color: #ddd; margin: 0 20px 0 0; color: #888; border-radius: 10px; -moz-border-radius: 10px; }
 .highlight strong, .highlight-right strong { font-size: 2em; display: block; color: #444; font-weight: normal; }
 .highlight { float: left; }
 .highlight-right { float: right; }
