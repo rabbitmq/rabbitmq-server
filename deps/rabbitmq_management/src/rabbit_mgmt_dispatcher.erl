@@ -15,24 +15,36 @@
 -module(rabbit_mgmt_dispatcher).
 
 -define(PREFIX, "api").
+-define(UI_PREFIX, "mgmt").
 
 -export([refresh/0, dispatcher/0]).
 
 refresh() ->
     Dispatch = [{[?PREFIX | Path], F, A} || {Path, F, A} <- build_dispatcher()],
-    rabbit_mochiweb:register_context_handler(?PREFIX,
-                                             rabbit_webmachine:makeloop(Dispatch),
-                                             "Management: HTTP API").
+    rabbit_mochiweb:register_context_handler(
+      ?PREFIX, rabbit_webmachine:makeloop(Dispatch), "Management: HTTP API"),
+    rabbit_mochiweb:register_authenticated_static_context(
+      ?UI_PREFIX, modules(), "priv/www", "Management: Web UI",
+      fun (U, P) ->
+              case rabbit_access_control:check_user_pass_login(U, P) of
+                  {ok, _} -> true;
+                  _       -> false
+              end
+      end).
 
 build_dispatcher() ->
+    lists:append([Module:dispatcher() || Module <- modules()]).
+
+modules() ->
     {ok, Modules} = application:get_env(rabbitmq_management, extensions),
-    lists:append([Module:dispatcher() || Module <- [?MODULE | Modules]]).
+    [?MODULE | Modules].
 
 dispatcher() ->
     [{[],                                                          rabbit_mgmt_wm_help, []},
      {["overview"],                                                rabbit_mgmt_wm_overview, []},
      {["nodes"],                                                   rabbit_mgmt_wm_nodes, []},
      {["nodes", node],                                             rabbit_mgmt_wm_node, []},
+     {["extensions"],                                              rabbit_mgmt_wm_extensions, []},
      {["all-configuration"],                                       rabbit_mgmt_wm_all_configuration, []},
      {["connections"],                                             rabbit_mgmt_wm_connections, []},
      {["connections", connection],                                 rabbit_mgmt_wm_connection, []},

@@ -65,14 +65,6 @@ stop(_State) ->
     ok.
 
 register_contexts() ->
-    rabbit_mochiweb:register_authenticated_static_context(
-      ?UI_PREFIX, ?MODULE, "priv/www", "Management: Web UI",
-      fun (U, P) ->
-              case rabbit_access_control:check_user_pass_login(U, P) of
-                  {ok, _} -> true;
-                  _       -> false
-              end
-      end),
     rabbit_mochiweb:register_static_context(?CLI_PREFIX, ?MODULE,
                                             "priv/www-cli",
                                             "Management: Command Line Tool"),
