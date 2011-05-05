@@ -45,15 +45,19 @@ vhost(#basic_message{exchange_name = #resource{virtual_host = VHost}}) -> VHost.
 
 maybe_trace(Msg, RKPrefix, RKSuffix, Extra) ->
     XName = xname(Msg),
-    case application:get_env(rabbit, {trace_exchange, vhost(Msg)}) of
-        undefined    -> ok;
-        {ok, XName}  -> ok;
-        {ok, TraceX} -> case catch trace(TraceX, Msg, RKPrefix, RKSuffix,
-                                         Extra) of
-                            {'EXIT', R} -> rabbit_log:info(
-                                             "Trace tap died: ~p~n", [R]);
-                            ok          -> ok
-                        end
+    case trace_exchange(vhost(Msg)) of
+        none   -> ok;
+        XName  -> ok;
+        TraceX -> case catch trace(TraceX, Msg, RKPrefix, RKSuffix, Extra) of
+                      {'EXIT', R} -> rabbit_log:info("Trace died: ~p~n", [R]);
+                      ok          -> ok
+                  end
+    end.
+
+trace_exchange(VHost) ->
+    case application:get_env(rabbit, trace_exchanges) of
+        undefined  -> none;
+        {ok, Xs}   -> proplists:get_value(VHost, Xs, none)
     end.
 
 trace(TraceX, Msg0, RKPrefix, RKSuffix, Extra) ->
