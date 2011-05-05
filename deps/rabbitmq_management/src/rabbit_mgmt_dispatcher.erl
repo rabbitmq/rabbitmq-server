@@ -25,7 +25,7 @@ refresh() ->
                                              "Management: HTTP API").
 
 build_dispatcher() ->
-    {ok, Modules} = application:get_env(rabbitmq_management, plugins),
+    {ok, Modules} = application:get_env(rabbitmq_management, extensions),
     lists:append([Module:dispatcher() || Module <- [?MODULE | Modules]]).
 
 dispatcher() ->
