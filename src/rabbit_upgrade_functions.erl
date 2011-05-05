@@ -108,7 +108,7 @@ topic_trie() ->
 semi_durable_route() ->
     create(rabbit_semi_durable_route, [{record_name, route},
                                        {attributes, [binding, value]}]).
-                                       
+
 exchange_event_serial() ->
     create(rabbit_exchange_serial, [{record_name, exchange_serial},
                                     {attributes, [name, next]}]).

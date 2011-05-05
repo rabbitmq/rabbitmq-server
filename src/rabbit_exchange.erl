@@ -36,7 +36,7 @@
 -type(type() :: atom()).
 -type(fun_name() :: atom()).
 
--spec(recover/0 :: () -> [rabbit_types:resource()]).
+-spec(recover/0 :: () -> [name()]).
 -spec(callback/3:: (rabbit_types:exchange(), fun_name(), [any()]) -> 'ok').
 -spec(declare/6 ::
         (name(), type(), boolean(), boolean(), boolean(),
@@ -98,8 +98,8 @@ recover() ->
            rabbit_durable_exchange),
     [XName || #exchange{name = XName} <- Xs].
 
-callback(#exchange{type = Type}, Fun, Args) ->
-    apply(type_to_module(Type), Fun, Args).
+callback(#exchange{type = XType}, Fun, Args) ->
+    apply(type_to_module(XType), Fun, Args).
 
 declare(XName, Type, Durable, AutoDelete, Internal, Args) ->
     X = #exchange{name        = XName,
