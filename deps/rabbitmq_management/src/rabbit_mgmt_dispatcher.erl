@@ -14,7 +14,19 @@
 %%   Copyright (c) 2007-2010 VMware, Inc.  All rights reserved.
 -module(rabbit_mgmt_dispatcher).
 
--export([dispatcher/0]).
+-define(PREFIX, "api").
+
+-export([refresh/0, dispatcher/0]).
+
+refresh() ->
+    Dispatch = [{[?PREFIX | Path], F, A} || {Path, F, A} <- build_dispatcher()],
+    rabbit_mochiweb:register_context_handler(?PREFIX,
+                                             rabbit_webmachine:makeloop(Dispatch),
+                                             "Management: HTTP API").
+
+build_dispatcher() ->
+    {ok, Modules} = application:get_env(rabbitmq_management, plugins),
+    lists:append([Module:dispatcher() || Module <- [?MODULE | Modules]]).
 
 dispatcher() ->
     [{[],                                                          rabbit_mgmt_wm_help, []},
