@@ -2,6 +2,8 @@ var statistics_level;
 var user_administrator;
 var nodes_interesting;
 var vhosts_interesting;
+var dispatcher_extensions = [];
+var app;
 
 $(document).ready(function() {
     statistics_level = JSON.parse(sync_get('/overview')).statistics_level;
@@ -14,13 +16,19 @@ $(document).ready(function() {
     setup_constant_events();
     current_vhost = get_pref('vhost');
     update_vhosts();
+    setup_extensions();
+    dynamic_load("dispatcher.js");
+});
+
+function start_app() {
+    app = $.sammy(dispatcher);
     app.run();
     update_interval();
     var url = this.location.toString();
     if (url.indexOf('#') == -1) {
         this.location = url + '#/';
     }
-});
+}
 
 function setup_constant_events() {
     $('#update-every').change(function() {
@@ -62,6 +70,21 @@ function update_vhosts() {
     store_pref('vhost', current_vhost);
 }
 
+function setup_extensions() {
+    var extensions = JSON.parse(sync_get('/extensions'));
+    for (var i in extensions) {
+        var extension = extensions[i];
+        dynamic_load(extension);
+    }
+}
+
+function dynamic_load(filename) {
+    var element = document.createElement('script');
+    element.setAttribute('type', 'text/javascript');
+    element.setAttribute('src', 'js/' + filename);
+    document.getElementsByTagName("head")[0].appendChild(element);
+}
+
 function update_interval() {
     var intervalStr = get_pref('interval');
     var interval;
@@ -82,163 +105,6 @@ function update_interval() {
             break;
         }
     }
-}
-
-var app = $.sammy(dispatcher);
-function dispatcher() {
-    var sammy = this;
-    function path(p, r, t) {
-        sammy.get(p, function() {
-                render(r, t, p);
-            });
-    }
-    this.get('#/', function() {
-            var reqs = {'overview': '/overview'};
-            if (user_administrator) {
-                reqs['nodes'] = '/nodes';
-            }
-            render(reqs, 'overview', '#/');
-        });
-    this.get('#/nodes/:name', function() {
-            var name = esc(this.params['name']);
-            render({'node': '/nodes/' + name},
-                   'node', '');
-        });
-
-    path('#/connections', {'connections': '/connections'}, 'connections');
-    this.get('#/connections/:name', function() {
-            var name = esc(this.params['name']);
-            render({'connection': '/connections/' + name,
-                    'channels': '/connections/' + name + '/channels'},
-                'connection', '#/connections');
-        });
-    this.del('#/connections', function() {
-            if (sync_delete(this, '/connections/:name'))
-                go_to('#/connections');
-            return false;
-        });
-
-    path('#/channels', {'channels': '/channels'}, 'channels');
-    this.get('#/channels/:name', function() {
-            render({'channel': '/channels/' + esc(this.params['name'])}, 'channel',
-                   '#/channels');
-        });
-
-    path('#/exchanges', {'exchanges': '/exchanges', 'vhosts': '/vhosts'}, 'exchanges');
-    this.get('#/exchanges/:vhost/:name', function() {
-            var path = '/exchanges/' + esc(this.params['vhost']) + '/' + esc(this.params['name']);
-            render({'exchange': path,
-                    'bindings_source': path + '/bindings/source',
-                    'bindings_destination': path + '/bindings/destination'},
-                'exchange', '#/exchanges');
-        });
-    this.put('#/exchanges', function() {
-            if (sync_put(this, '/exchanges/:vhost/:name'))
-                update();
-            return false;
-        });
-    this.del('#/exchanges', function() {
-            if (sync_delete(this, '/exchanges/:vhost/:name'))
-                go_to('#/exchanges');
-            return false;
-        });
-    this.post('#/exchanges/publish', function() {
-            publish_msg(this.params);
-            return false;
-        });
-
-    path('#/queues', {'queues': '/queues', 'vhosts': '/vhosts'}, 'queues');
-    this.get('#/queues/:vhost/:name', function() {
-            var path = '/queues/' + esc(this.params['vhost']) + '/' + esc(this.params['name']);
-            render({'queue': path,
-                    'bindings': path + '/bindings'}, 'queue', '#/queues');
-        });
-    this.put('#/queues', function() {
-            if (sync_put(this, '/queues/:vhost/:name'))
-                update();
-            return false;
-        });
-    this.del('#/queues', function() {
-            if (this.params['mode'] == 'delete') {
-                if (sync_delete(this, '/queues/:vhost/:name'))
-                    go_to('#/queues');
-            }
-            else if (this.params['mode'] == 'purge') {
-                if (sync_delete(this, '/queues/:vhost/:name/contents')) {
-                    show_popup('info', "Queue purged");
-                    update_partial();
-                }
-            }
-            return false;
-        });
-    this.post('#/queues/get', function() {
-            get_msgs(this.params);
-            return false;
-        });
-    this.post('#/bindings', function() {
-            if (sync_post(this, '/bindings/:vhost/e/:source/:destination_type/:destination'))
-                update();
-            return false;
-        });
-    this.del('#/bindings', function() {
-            if (sync_delete(this, '/bindings/:vhost/e/:source/:destination_type/:destination/:properties_key'))
-                update();
-            return false;
-        });
-
-    path('#/vhosts', {'vhosts': '/vhosts', 'permissions': '/permissions'}, 'vhosts');
-    this.get('#/vhosts/:id', function() {
-            render({'vhost': '/vhosts/' + esc(this.params['id']),
-                    'permissions': '/vhosts/' + esc(this.params['id']) + '/permissions',
-                    'users': '/users/'},
-                'vhost', '#/vhosts');
-        });
-    this.put('#/vhosts', function() {
-            if (sync_put(this, '/vhosts/:name')) {
-                update_vhosts();
-                update();
-            }
-            return false;
-        });
-    this.del('#/vhosts', function() {
-            if (sync_delete(this, '/vhosts/:name')) {
-                update_vhosts();
-                go_to('#/vhosts');
-            }
-            return false;
-        });
-
-    path('#/users', {'users': '/users', 'permissions': '/permissions'}, 'users');
-    this.get('#/users/:id', function() {
-            render({'user': '/users/' + esc(this.params['id']),
-                    'permissions': '/users/' + esc(this.params['id']) + '/permissions',
-                    'vhosts': '/vhosts/'}, 'user',
-                   '#/users');
-        });
-    this.put('#/users', function() {
-            if (sync_put(this, '/users/:username'))
-                update();
-            return false;
-        });
-    this.del('#/users', function() {
-            if (sync_delete(this, '/users/:username'))
-                go_to('#/users');
-            return false;
-        });
-
-    this.put('#/permissions', function() {
-            if (sync_put(this, '/permissions/:vhost/:username'))
-                update();
-            return false;
-        });
-    this.del('#/permissions', function() {
-            if (sync_delete(this, '/permissions/:vhost/:username'))
-                update();
-            return false;
-        });
-    this.get('#/import-succeeded', function() {
-            render({}, 'import-succeeded', '#/overview');
-        });
 }
 
 function go_to(url) {
