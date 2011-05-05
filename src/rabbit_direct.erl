@@ -16,7 +16,7 @@
 
 -module(rabbit_direct).
 
--export([boot/0, connect/4, start_channel/8]).
+-export([boot/0, connect/5, start_channel/8, disconnect/1]).
 
 -include("rabbit.hrl").
 
@@ -25,13 +25,16 @@
 -ifdef(use_specs).
 
 -spec(boot/0 :: () -> 'ok').
--spec(connect/4 :: (binary(), binary(), binary(), rabbit_types:protocol()) ->
+-spec(connect/5 :: (binary(), binary(), binary(), rabbit_types:protocol(),
+                    rabbit_event:event_props()) ->
                         {'ok', {rabbit_types:user(),
                                 rabbit_framing:amqp_table()}}).
 -spec(start_channel/8 ::
         (rabbit_channel:channel_number(), pid(), pid(), rabbit_types:protocol(),
          rabbit_types:user(), rabbit_types:vhost(), rabbit_framing:amqp_table(),
          pid()) -> {'ok', pid()}).
+
+-spec(disconnect/1 :: (rabbit_event:event_props()) -> 'ok').
 
 -endif.
 
@@ -50,13 +53,14 @@ boot() ->
 
 %%----------------------------------------------------------------------------
 
-connect(Username, Password, VHost, Protocol) ->
+connect(Username, Password, VHost, Protocol, Infos) ->
     case lists:keymember(rabbit, 1, application:which_applications()) of
         true  ->
             try rabbit_access_control:user_pass_login(Username, Password) of
                 #user{} = User ->
                     try rabbit_access_control:check_vhost_access(User, VHost) of
-                        ok -> {ok, {User,
+                        ok -> rabbit_event:notify(connection_created, Infos),
+                              {ok, {User,
                                     rabbit_reader:server_properties(Protocol)}}
                     catch
                         exit:#amqp_error{name = access_refused} ->
@@ -77,3 +81,6 @@ start_channel(Number, ClientChannelPid, ConnPid, Protocol, User, VHost,
           [{direct, Number, ClientChannelPid, ConnPid, Protocol, User, VHost,
             Capabilities, Collector}]),
     {ok, ChannelPid}.
+
+disconnect(Infos) ->
+    rabbit_event:notify(connection_closed, Infos).
