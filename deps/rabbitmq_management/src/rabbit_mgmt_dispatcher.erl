@@ -37,7 +37,7 @@ build_dispatcher() ->
 
 modules() ->
     {ok, Modules} = application:get_env(rabbitmq_management, extensions),
-    [?MODULE | Modules].
+    [?MODULE | ordsets:to_list(Modules)].
 
 dispatcher() ->
     [{[],                                                          rabbit_mgmt_wm_help, []},
