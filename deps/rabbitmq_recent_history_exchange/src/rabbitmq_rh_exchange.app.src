@@ -1,0 +1,10 @@
+{application, rabbitmq_rh_exchange,
+ [
+  {description, "RabbitMQ Recent History Exchange"},
+  {vsn, "0.1.0"},
+  {modules, []},
+  {registered, []},
+  {env, []},
+  {applications, [kernel, stdlib, rabbit, mnesia]}
+ ]
+}.
