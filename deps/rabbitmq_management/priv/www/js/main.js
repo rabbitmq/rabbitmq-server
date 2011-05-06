@@ -2,7 +2,8 @@ var statistics_level;
 var user_administrator;
 var nodes_interesting;
 var vhosts_interesting;
-var dispatcher_extensions = [];
+var dispatcher_modules = [];
+var extension_count;
 var app;
 
 $(document).ready(function() {
@@ -16,14 +17,27 @@ $(document).ready(function() {
     setup_constant_events();
     current_vhost = get_pref('vhost');
     update_vhosts();
+    update_interval();
     setup_extensions();
     dynamic_load("dispatcher.js");
 });
 
+function dispatcher_add(fun) {
+    dispatcher_modules.push(fun);
+    if (dispatcher_modules.length == extension_count + 1) {
+        start_app();
+    }
+}
+
+function dispatcher() {
+    for (var i in dispatcher_modules) {
+        dispatcher_modules[i](this);
+    }
+}
+
 function start_app() {
     app = $.sammy(dispatcher);
     app.run();
-    update_interval();
     var url = this.location.toString();
     if (url.indexOf('#') == -1) {
         this.location = url + '#/';
@@ -76,6 +90,7 @@ function setup_extensions() {
         var extension = extensions[i];
         dynamic_load(extension.javascript);
     }
+    extension_count = extensions.length;
 }
 
 function dynamic_load(filename) {
