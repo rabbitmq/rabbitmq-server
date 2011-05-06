@@ -131,20 +131,19 @@
 %% to a remote AMQP server or direct params for a direct connection to
 %% a RabbitMQ server, assuming that the server is running in the same process
 %% space.
-start(AmqpParams = #amqp_params_direct{})  -> start(direct,  AmqpParams);
-start(AmqpParams = #amqp_params_network{}) -> start(network, AmqpParams).
-
-start(Type, AmqpParams) ->
+start(AmqpParams) ->
+    {Type, Module} =
+        case AmqpParams of
+            #amqp_params_direct{}  -> {direct,  amqp_direct_connection};
+            #amqp_params_network{} -> {network, amqp_network_connection}
+        end,
     case amqp_client:start() of
         ok                                      -> ok;
         {error, {already_started, amqp_client}} -> ok;
         {error, _} = E                          -> throw(E)
     end,
     {ok, _Sup, Connection} =
-        amqp_sup:start_connection_sup(
-            Type, case Type of direct  -> amqp_direct_connection;
-                               network -> amqp_network_connection
-                  end, AmqpParams),
+        amqp_sup:start_connection_sup(Type, Module, AmqpParams),
     amqp_gen_connection:connect(Connection).
 
 %%---------------------------------------------------------------------------
