@@ -65,11 +65,25 @@ stop(_State) ->
     ok.
 
 register_contexts() ->
+    Dispatch =
+        [{[?PREFIX | Path], F, A} ||
+            {Path, F, A} <- rabbit_mgmt_dispatcher:build_dispatcher()],
+    rabbit_mochiweb:register_authenticated_static_context(
+      ?UI_PREFIX, rabbit_mgmt_dispatcher:modules(),
+      "priv/www", "Management: Web UI",
+      fun (U, P) ->
+              case rabbit_access_control:check_user_pass_login(U, P) of
+                  {ok, _} -> true;
+                  _       -> false
+              end
+      end),
+    rabbit_mochiweb:register_context_handler(?PREFIX,
+                                             rabbit_webmachine:makeloop(
+                                               Dispatch),
+                                             "Management: HTTP API"),
     rabbit_mochiweb:register_static_context(?CLI_PREFIX, ?MODULE,
                                             "priv/www-cli",
-                                            "Management: Command Line Tool"),
-    rabbit_mgmt_dispatcher:refresh().
-
+                                            "Management: Command Line Tool").
 setup_wm_logging() ->
     {ok, LogDir} = application:get_env(rabbitmq_management, http_log_dir),
     case LogDir of

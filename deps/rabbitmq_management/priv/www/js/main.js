@@ -19,12 +19,11 @@ $(document).ready(function() {
     update_vhosts();
     update_interval();
     setup_extensions();
-    dynamic_load("dispatcher.js");
 });
 
 function dispatcher_add(fun) {
     dispatcher_modules.push(fun);
-    if (dispatcher_modules.length == extension_count + 1) {
+    if (dispatcher_modules.length == extension_count) {
         start_app();
     }
 }

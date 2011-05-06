@@ -14,30 +14,22 @@
 %%   Copyright (c) 2007-2010 VMware, Inc.  All rights reserved.
 -module(rabbit_mgmt_dispatcher).
 
--define(PREFIX, "api").
--define(UI_PREFIX, "mgmt").
+-export([modules/0, build_dispatcher/0]).
 
--export([refresh/0, dispatcher/0]).
-
-refresh() ->
-    Dispatch = [{[?PREFIX | Path], F, A} || {Path, F, A} <- build_dispatcher()],
-    rabbit_mochiweb:register_context_handler(
-      ?PREFIX, rabbit_webmachine:makeloop(Dispatch), "Management: HTTP API"),
-    rabbit_mochiweb:register_authenticated_static_context(
-      ?UI_PREFIX, modules(), "priv/www", "Management: Web UI",
-      fun (U, P) ->
-              case rabbit_access_control:check_user_pass_login(U, P) of
-                  {ok, _} -> true;
-                  _       -> false
-              end
-      end).
+-behaviour(rabbit_mgmt_extension).
+-export([dispatcher/0, web_ui/0]).
 
 build_dispatcher() ->
     lists:append([Module:dispatcher() || Module <- modules()]).
 
 modules() ->
-    {ok, Modules} = application:get_env(rabbitmq_management, extensions),
-    [?MODULE | ordsets:to_list(Modules)].
+    [Module || {Module, Behaviours} <-
+                   rabbit_misc:all_module_attributes(behaviour),
+               lists:member(rabbit_mgmt_extension, Behaviours)].
+
+%%----------------------------------------------------------------------------
+
+web_ui()     -> [{javascript, <<"dispatcher.js">>}].
 
 dispatcher() ->
     [{[],                                                          rabbit_mgmt_wm_help, []},

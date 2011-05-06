@@ -27,7 +27,7 @@ content_types_provided(ReqData, Context) ->
    {[{"application/json", to_json}], ReqData, Context}.
 
 to_json(ReqData, Context) ->
-    {ok, Modules} = application:get_env(rabbitmq_management, extensions),
+    Modules = rabbit_mgmt_dispatcher:modules(),
     rabbit_mgmt_util:reply(
       [Module:web_ui() || Module <- Modules], ReqData, Context).
 
