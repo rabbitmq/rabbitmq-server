@@ -4,13 +4,13 @@ Keeps track of the last 20 messages that passed thorugh the exchange. Everytime 
 
 Exchange Type: `x-recent-history`
 
-## Installation ##    
+## Installation     
     
     git clone git://github.com/videlalvaro/rabbitmq-recent-history-exchange.git
     cd rabbitmq-recent-history-exchange
     make package
     cp dist/*.ez $RABBITMQ_HOME/plugins
 
-## License ##
+## License 
 
 See LICENSE.md
