@@ -74,7 +74,7 @@ function setup_extensions() {
     var extensions = JSON.parse(sync_get('/extensions'));
     for (var i in extensions) {
         var extension = extensions[i];
-        dynamic_load(extension);
+        dynamic_load(extension.javascript);
     }
 }
 
