@@ -264,6 +264,7 @@ init([Driver, Connection, ChannelNumber, {ConsumerModule, ConsumerArgs},
                     driver           = Driver,
                     number           = ChannelNumber,
                     consumer_module  = ConsumerModule,
+                    consumer_state   = [],
                     start_writer_fun = SWF},
     {ok, consumer_callback(init, [ConsumerArgs], State0)}.
 
@@ -720,16 +721,11 @@ server_misbehaved(#amqp_error{} = AmqpError, State = #state{number = Number}) ->
 handle_consumer_callback(handle_call, Args,
                          State = #state{consumer_state = CState,
                                         consumer_module = CModule}) ->
-    {Reply, NewCState} = erlang:apply(CModule, handle_call, Args ++ [CState]),
-    {reply, Reply, State#state{consumer_state = NewCState}};
+    {Reply, NewCState} = erlang:apply(CModule, handle_call, Args ++ CState),
+    {reply, Reply, State#state{consumer_state = [NewCState]}};
 handle_consumer_callback(Function, Args, State) ->
     {noreply, consumer_callback(Function, Args, State)}.
 
-consumer_callback(init, Args, State = #state{}) ->
-    consumer_callback_basic(init, Args, State);
-consumer_callback(Function, Args, State = #state{consumer_state = CState}) ->
-    consumer_callback_basic(Function, Args ++ [CState], State).
-
-consumer_callback_basic(Function,
-                        Args, State = #state{consumer_module = CModule}) ->
-    State#state{consumer_state = erlang:apply(CModule, Function, Args)}.
+consumer_callback(Function, Args, State = #state{consumer_state = CState,
+                                                 consumer_module = CModule}) ->
+    State#state{consumer_state = [erlang:apply(CModule, Function, Args ++ CState)]}.
