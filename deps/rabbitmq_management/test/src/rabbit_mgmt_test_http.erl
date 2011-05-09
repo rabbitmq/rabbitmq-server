@@ -703,7 +703,7 @@ sorting_test() ->
 
 columns_test() ->
     http_put("/queues/%2f/test", [], ?NO_CONTENT),
-    [{name, <<"test">>}] = http_get("/queues?columns=name", ?OK),
+    [[{name, <<"test">>}]] = http_get("/queues?columns=name", ?OK),
     http_delete("/queues/%2f/test", ?NO_CONTENT),
     ok.
 
