@@ -303,20 +303,24 @@ class Management:
                      % (self.options.hostname, path))
 
     def invoke_list(self):
-        uri = self.list_show_uri(LISTABLE, 'list')
-        format_list(self.get(uri), self.args[1:], self.options)
+        cols = self.args[1:]
+        uri = self.list_show_uri(LISTABLE, 'list', cols)
+        format_list(self.get(uri), cols, self.options)
 
     def invoke_show(self):
-        uri = self.list_show_uri(SHOWABLE, 'show')
-        format_list('[{0}]'.format(self.get(uri)), self.args[1:], self.options)
+        cols = self.args[1:]
+        uri = self.list_show_uri(SHOWABLE, 'show', cols)
+        format_list('[{0}]'.format(self.get(uri)), cols, self.options)
 
-    def list_show_uri(self, obj_types, verb):
+    def list_show_uri(self, obj_types, verb, cols):
         obj_type = self.args[0]
         assert_usage(obj_type in obj_types,
                      "Don't know how to {0} {1}".format(verb, obj_type))
         uri = "/%s" % obj_type
         if self.options.vhost:
             uri += "/%s" % urllib.quote_plus(self.options.vhost)
+        if cols != []:
+            uri += "?columns=" + ",".join(cols)
         return uri
 
     def invoke_declare(self):
