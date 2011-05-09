@@ -1553,7 +1553,7 @@ test_logs_working(MainLogFile, SaslLogFile) ->
     ok = rabbit_log:error("foo bar"),
     ok = error_logger:error_report(crash_report, [foo, bar]),
     %% give the error loggers some time to catch up
-    timer:sleep(50),
+    timer:sleep(100),
     [true, true] = non_empty_files([MainLogFile, SaslLogFile]),
     ok.
 
