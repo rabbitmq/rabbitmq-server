@@ -28,8 +28,8 @@
 -export_type([socket/0]).
 
 -type(stat_option() ::
-	'recv_cnt' | 'recv_max' | 'recv_avg' | 'recv_oct' | 'recv_dvi' |
-	'send_cnt' | 'send_max' | 'send_avg' | 'send_oct' | 'send_pend').
+        'recv_cnt' | 'recv_max' | 'recv_avg' | 'recv_oct' | 'recv_dvi' |
+        'send_cnt' | 'send_max' | 'send_avg' | 'send_oct' | 'send_pend').
 -type(ok_val_or_error(A) :: rabbit_types:ok_or_error2(A, any())).
 -type(ok_or_any_error() :: rabbit_types:ok_or_error(any())).
 -type(socket() :: port() | #ssl_socket{}).
