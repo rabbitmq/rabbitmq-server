@@ -81,7 +81,7 @@ test_queues(_Conn, Chan) ->
     [fun() ->
              Qs = rabbit_mgmt_db:get_queues(
                     [rabbit_mgmt_format:queue(Q) ||
-                        Q <- rabbit_amqqueue:list(<<"/">>)], all),
+                        Q <- rabbit_amqqueue:list(<<"/">>)]),
              Q1Info = find_by_name(Q1, Qs),
              Q2Info = find_by_name(Q2, Qs),
 
@@ -271,17 +271,16 @@ get_channel(C, Number) ->
     Port = local_port(C),
     rabbit_mgmt_db:get_channel(list_to_binary(
                                  "127.0.0.1:" ++ integer_to_list(Port) ++ ":" ++
-                                     integer_to_list(Number)), all).
+                                     integer_to_list(Number))).
 
 get_exchange(XName) ->
     X = rabbit_mgmt_wm_exchange:exchange(<<"/">>, XName),
-    [Res] = rabbit_mgmt_db:get_exchange(X, all),
+    [Res] = rabbit_mgmt_db:get_exchange(X),
     Res.
 
 get_queue(QName) ->
     Q = rabbit_mgmt_wm_queue:queue(<<"/">>, QName),
-    [Res] = rabbit_mgmt_db:get_queue(Q, all),
-    Res.
+    rabbit_mgmt_db:get_queue(Q).
 
 declare_queue(Chan) ->
     #'queue.declare_ok'{ queue = Q } =
