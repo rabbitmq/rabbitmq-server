@@ -20,9 +20,9 @@
 
 -export([start_link/0]).
 
--export([get_queues/1, get_queue/1, get_exchanges/1, get_exchange/1,
+-export([get_queues/2, get_queue/2, get_exchanges/2, get_exchange/2,
          get_connections/0, get_connection/1, get_overview/1,
-         get_overview/0, get_channels/0, get_channel/1]).
+         get_overview/0, get_channels/1, get_channel/2]).
 
 %% TODO can these not be exported any more?
 -export([pget/2, add/2, rates/5]).
@@ -92,16 +92,16 @@ start_link() ->
             Else
     end.
 
-get_queues(Qs)         -> safe_call({get_queues, Qs, list}, Qs).
-get_queue(Q)           -> safe_call({get_queues, [Q], detail}, [Q]).
-get_exchanges(Xs)      -> safe_call({get_exchanges, Xs, list}, Xs).
-get_exchange(X)        -> safe_call({get_exchanges, [X], detail}, [X]).
-get_connections()      -> safe_call(get_connections).
-get_connection(Name)   -> safe_call({get_connection, Name}).
-get_channels()         -> safe_call(get_channels).
-get_channel(Name)      -> safe_call({get_channel, Name}).
-get_overview(User)     -> safe_call({get_overview, User}).
-get_overview()         -> safe_call({get_overview, all}).
+get_queues(Qs, Cols)    -> safe_call({get_queues, Qs, Cols, list}, Qs).
+get_queue(Q, Cols)      -> safe_call({get_queues, [Q], Cols, detail}, [Q]).
+get_exchanges(Xs, Cols) -> safe_call({get_exchanges, Xs, Cols, list}, Xs).
+get_exchange(X, Cols)   -> safe_call({get_exchanges, [X], Cols, detail}, [X]).
+get_connections()       -> safe_call(get_connections).
+get_connection(Name)    -> safe_call({get_connection, Name}).
+get_channels(Cols)      -> safe_call({get_channels, Cols}).
+get_channel(Name, Cols) -> safe_call({get_channel, Name, Cols}).
+get_overview(User)      -> safe_call({get_overview, User}).
+get_overview()          -> safe_call({get_overview, all}).
 
 safe_call(Term) -> safe_call(Term, []).
 
@@ -204,23 +204,24 @@ init([]) ->
                            [{Key, ets:new(anon, [private])} ||
                                Key <- ?TABLES])}}.
 
-handle_call({get_queues, Qs0, Mode}, _From, State = #state{tables = Tables}) ->
+handle_call({get_queues, Qs0, Cols, Mode}, _From,
+            State = #state{tables = Tables}) ->
     FineSpecs = case Mode of
                     list   -> ?FINE_STATS_QUEUE_LIST;
                     detail -> ?FINE_STATS_QUEUE_DETAIL
                 end,
-    Qs1 = queue_stats(Qs0, FineSpecs, Tables),
+    Qs1 = queue_stats(Qs0, Cols, FineSpecs, Tables),
     Qs2 = [[{messages, add(pget(messages_ready, Q),
                            pget(messages_unacknowledged, Q))} | Q] || Q <- Qs1],
     {reply, adjust_hibernated_memory_use(Qs2), State};
 
-handle_call({get_exchanges, Xs, Mode}, _From,
+handle_call({get_exchanges, Xs, Cols, Mode}, _From,
             State = #state{tables = Tables}) ->
     FineSpecs = case Mode of
                     list   -> ?FINE_STATS_EXCHANGE_LIST;
                     detail -> ?FINE_STATS_EXCHANGE_DETAIL
                 end,
-    {reply, exchange_stats(Xs, FineSpecs, Tables), State};
+    {reply, exchange_stats(Xs, Cols, FineSpecs, Tables), State};
 
 handle_call(get_connections, _From, State = #state{tables = Tables}) ->
     Conns = created_events(connection_stats, Tables),
@@ -231,13 +232,14 @@ handle_call({get_connection, Name}, _From, State = #state{tables = Tables}) ->
     [Res] = connection_stats(Conns, Tables),
     {reply, result_or_error(Res), State};
 
-handle_call(get_channels, _From, State = #state{tables = Tables}) ->
+handle_call({get_channels, Cols}, _From, State = #state{tables = Tables}) ->
     Chs = created_events(channel_stats, Tables),
-    {reply, channel_stats(Chs, ?FINE_STATS_CHANNEL_LIST, Tables), State};
+    {reply, channel_stats(Chs, Cols, ?FINE_STATS_CHANNEL_LIST, Tables), State};
 
-handle_call({get_channel, Name}, _From, State = #state{tables = Tables}) ->
+handle_call({get_channel, Name, Cols}, _From,
+            State = #state{tables = Tables}) ->
     Chs = created_event(Name, channel_stats, Tables),
-    [Res] = channel_stats(Chs, ?FINE_STATS_CHANNEL_DETAIL, Tables),
+    [Res] = channel_stats(Chs, Cols, ?FINE_STATS_CHANNEL_DETAIL, Tables),
     {reply, result_or_error(Res), State};
 
 handle_call({get_overview, User}, _From, State = #state{tables = Tables}) ->
@@ -475,15 +477,21 @@ basic_stats_fun(Type, Tables) ->
             zero_old_rates(lookup_element(Table, {pget(pid, Props), stats}))
     end.
 
-fine_stats_fun(FineSpecs, Tables) ->
-    FineStats = [{AttachName, AttachBy,
-                  get_fine_stats(FineStatsType, GroupBy, Tables)}
-                 || {FineStatsType, GroupBy, AttachName, AttachBy}
-                        <- FineSpecs],
-    fun (Props) ->
-            lists:foldl(fun (FineStat, StatProps) ->
-                                fine_stat(Props, StatProps, FineStat, Tables)
-                        end, [], FineStats)
+fine_stats_fun(Cols, FineSpecs, Tables) ->
+    case rabbit_mgmt_util:want_column(message_stats, Cols) of
+        true ->
+            FineStats = [{AttachName, AttachBy,
+                          get_fine_stats(FineStatsType, GroupBy, Tables)}
+                         || {FineStatsType, GroupBy, AttachName, AttachBy}
+                                <- FineSpecs],
+            fun (Props) ->
+                    lists:foldl(fun (FineStat, StatProps) ->
+                                        fine_stat(Props, StatProps, FineStat,
+                                                  Tables)
+                                end, [], FineStats)
+            end;
+        false ->
+            fun identity/1
     end.
 
 fine_stat(Props, StatProps, {AttachName, AttachBy, Dict}, Tables) ->
@@ -507,14 +515,19 @@ augment_fine_stats(Dict, Tables) when element(1, Dict) == dict ->
 augment_fine_stats(Stats, _Tables) ->
     Stats.
 
-consumer_details_fun(PatternFun, Tables) ->
-    Table = orddict:fetch(consumers, Tables),
-    fun ([])    -> [];
-        (Props) -> Pattern = PatternFun(Props),
-                   [{consumer_details,
-                     [augment_msg_stats(Obj, Tables)
-                      || Obj <- lists:append(
-                                  ets:match(Table, {Pattern, '$1'}))]}]
+consumer_details_fun(Cols, PatternFun, Tables) ->
+    case rabbit_mgmt_util:want_column(consumer_details, Cols) of
+        true ->
+            Table = orddict:fetch(consumers, Tables),
+            fun ([])    -> [];
+                (Props) -> Pattern = PatternFun(Props),
+                           [{consumer_details,
+                             [augment_msg_stats(Obj, Tables)
+                              || Obj <- lists:append(
+                                          ets:match(Table, {Pattern, '$1'}))]}]
+            end;
+        false ->
+            fun identity/1
     end.
 
 zero_old_rates(Stats) -> [maybe_zero_rate(S) || S <- Stats].
@@ -533,6 +546,7 @@ is_details(Key) -> lists:suffix("_details", atom_to_list(Key)).
 
 details_key(Key) -> list_to_atom(atom_to_list(Key) ++ "_details").
 
+identity(X) -> X.
 %%----------------------------------------------------------------------------
 
 augment_msg_stats(Props, Tables) ->
@@ -592,26 +606,27 @@ basic_queue_stats(Objs, Tables) ->
     merge_stats(Objs, [basic_stats_fun(queue_stats, Tables),
                        augment_msg_stats_fun(Tables)]).
 
-queue_stats(Objs, FineSpecs, Tables) ->
+queue_stats(Objs, Cols, FineSpecs, Tables) ->
     merge_stats(Objs, [basic_stats_fun(queue_stats, Tables),
                        consumer_details_fun(
-                         fun (Props) -> {pget(pid, Props), '_'} end, Tables),
-                       fine_stats_fun(FineSpecs, Tables),
+                         Cols, fun (Props) -> {pget(pid, Props), '_'} end,
+                         Tables),
+                       fine_stats_fun(Cols, FineSpecs, Tables),
                        augment_msg_stats_fun(Tables)]).
 
-exchange_stats(Objs, FineSpecs, Tables) ->
-    merge_stats(Objs, [fine_stats_fun(FineSpecs, Tables),
+exchange_stats(Objs, Cols, FineSpecs, Tables) ->
+    merge_stats(Objs, [fine_stats_fun(Cols, FineSpecs, Tables),
                        augment_msg_stats_fun(Tables)]).
 
 connection_stats(Objs, Tables) ->
     merge_stats(Objs, [basic_stats_fun(connection_stats, Tables),
                        augment_msg_stats_fun(Tables)]).
 
-channel_stats(Objs, FineSpecs, Tables) ->
+channel_stats(Objs, Cols, FineSpecs, Tables) ->
     merge_stats(Objs, [basic_stats_fun(channel_stats, Tables),
-                       consumer_details_fun(
+                       consumer_details_fun(Cols,
                          fun (Props) -> {'_', pget(pid, Props)} end, Tables),
-                       fine_stats_fun(FineSpecs, Tables),
+                       fine_stats_fun(Cols, FineSpecs, Tables),
                        augment_msg_stats_fun(Tables)]).
 
 %%----------------------------------------------------------------------------

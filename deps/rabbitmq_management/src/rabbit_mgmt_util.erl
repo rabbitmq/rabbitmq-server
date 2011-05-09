@@ -26,7 +26,7 @@
 -export([all_or_one_vhost/2, http_to_amqp/5, reply/3, filter_vhost/3]).
 -export([filter_user/3, with_decode/5, redirect/2, args/1]).
 -export([reply_list/3, reply_list/4, sort_list/4, destination_type/1]).
--export([post_respond/1]).
+-export([post_respond/1, columns/1, want_column/2]).
 
 -include("rabbit_mgmt.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
@@ -120,9 +120,11 @@ reply_list(Facts, ReqData, Context) ->
     reply_list(Facts, ["vhost", "name"], ReqData, Context).
 
 reply_list(Facts, DefaultSorts, ReqData, Context) ->
-    reply(sort_list(Facts, DefaultSorts,
-                    wrq:get_qs_value("sort", ReqData),
-                    wrq:get_qs_value("sort_reverse", ReqData)),
+    reply(sort_list(
+            remove_columns(Facts, ReqData),
+            DefaultSorts,
+            wrq:get_qs_value("sort", ReqData),
+            wrq:get_qs_value("sort_reverse", ReqData)),
           ReqData, Context).
 
 sort_list(Facts, DefaultSorts, Sort, Reverse) ->
@@ -153,6 +155,13 @@ get_dotted_value0([Key], Item) ->
     proplists:get_value(list_to_atom(Key), Item, 0);
 get_dotted_value0([Key | Keys], Item) ->
     get_dotted_value0(Keys, proplists:get_value(list_to_atom(Key), Item, [])).
+
+remove_columns(Items, ReqData) ->
+    Cols = columns(ReqData),
+    [remove_columns0(Item, Cols) || Item <- Items].
+
+remove_columns0(Item, Cols) ->
+    [{K, V} || {K, V} <- Item, want_column(K, Cols)].
 
 bad_request(Reason, ReqData, Context) ->
     halt_response(400, bad_request, Reason, ReqData, Context).
@@ -380,3 +389,13 @@ post_respond({JSON, ReqData, Context}) ->
     {true, wrq:set_resp_header(
              "content-type", "application/json",
              wrq:append_to_response_body(JSON, ReqData)), Context}.
+
+columns(ReqData) ->
+    case wrq:get_qs_value("columns", ReqData) of
+        undefined -> all;
+        Str       -> ordsets:from_list(
+                       [list_to_atom(T) || T <- string:tokens(Str, ",")])
+    end.
+
+want_column(_Col, all) -> true;
+want_column(Col, Cols) -> ordsets:is_element(Col, Cols).

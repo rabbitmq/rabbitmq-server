@@ -37,7 +37,8 @@ resource_exists(ReqData, Context) ->
 to_json(ReqData, Context) ->
     rabbit_mgmt_util:reply_list(
       rabbit_mgmt_db:get_queues(
-        rabbit_mgmt_util:filter_vhost(queues(ReqData), ReqData, Context)),
+        rabbit_mgmt_util:filter_vhost(queues(ReqData), ReqData, Context),
+        rabbit_mgmt_util:columns(ReqData)),
       ReqData, Context).
 
 is_authorized(ReqData, Context) ->
