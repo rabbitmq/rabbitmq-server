@@ -424,7 +424,7 @@ class Lister:
 
         def add(prefix, depth, item, fun):
             for key in item:
-                column = prefix == '' and key or (prefix + '_' + key)
+                column = prefix == '' and key or (prefix + '.' + key)
                 if type(item[key]) == dict:
                     if depth < max_depth:
                         add(column, depth + 1, item[key], fun)
