@@ -303,7 +303,10 @@ handle_info({'DOWN', MRef, process, QPid, Reason},
               handle_publishing_queue_down(QPid, Reason, State);
           {ok, ConsumerTag} ->
               handle_consuming_queue_down(MRef, ConsumerTag, State)
-      end).
+      end);
+
+handle_info({'EXIT', _Pid, Reason}, State) ->
+    {stop, Reason, State}.
 
 handle_pre_hibernate(State = #ch{stats_timer = StatsTimer}) ->
     ok = clear_permission_cache(),

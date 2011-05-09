@@ -28,6 +28,7 @@ INIT_LOG_DIR=/var/log/rabbitmq
 LOCK_FILE= # This is filled in when building packages
 
 test -x $DAEMON || exit 0
+test -x $CONTROL || exit 0
 
 RETVAL=0
 set -e
@@ -94,7 +95,7 @@ status_rabbitmq() {
 
 rotate_logs_rabbitmq() {
     set +e
-    $DAEMON rotate_logs ${ROTATE_SUFFIX}
+    $CONTROL rotate_logs ${ROTATE_SUFFIX}
     if [ $? != 0 ] ; then
         RETVAL=1
     fi
