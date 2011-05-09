@@ -701,6 +701,12 @@ sorting_test() ->
     http_delete("/vhosts/vh1", ?NO_CONTENT),
     ok.
 
+columns_test() ->
+    http_put("/queues/%2f/test", [], ?NO_CONTENT),
+    [{name, <<"test">>}] = http_get("/queues?columns=name", ?OK),
+    http_delete("/queues/%2f/test", ?NO_CONTENT),
+    ok.
+
 get_test() ->
     %% Real world example...
     Headers = [{<<"x-forwarding">>, array,

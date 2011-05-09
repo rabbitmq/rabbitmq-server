@@ -491,7 +491,7 @@ fine_stats_fun(Cols, FineSpecs, Tables) ->
                                 end, [], FineStats)
             end;
         false ->
-            fun identity/1
+            fun nothing/1
     end.
 
 fine_stat(Props, StatProps, {AttachName, AttachBy, Dict}, Tables) ->
@@ -527,7 +527,7 @@ consumer_details_fun(Cols, PatternFun, Tables) ->
                                           ets:match(Table, {Pattern, '$1'}))]}]
             end;
         false ->
-            fun identity/1
+            fun nothing/1
     end.
 
 zero_old_rates(Stats) -> [maybe_zero_rate(S) || S <- Stats].
@@ -546,7 +546,7 @@ is_details(Key) -> lists:suffix("_details", atom_to_list(Key)).
 
 details_key(Key) -> list_to_atom(atom_to_list(Key) ++ "_details").
 
-identity(X) -> X.
+nothing(_) -> [].
 %%----------------------------------------------------------------------------
 
 augment_msg_stats(Props, Tables) ->
