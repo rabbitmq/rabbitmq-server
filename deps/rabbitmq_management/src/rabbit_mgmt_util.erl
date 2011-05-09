@@ -121,7 +121,7 @@ reply_list(Facts, ReqData, Context) ->
 
 reply_list(Facts, DefaultSorts, ReqData, Context) ->
     reply(sort_list(
-            remove_columns(Facts, ReqData),
+            extract_columns(Facts, ReqData),
             DefaultSorts,
             wrq:get_qs_value("sort", ReqData),
             wrq:get_qs_value("sort_reverse", ReqData)),
@@ -156,12 +156,26 @@ get_dotted_value0([Key], Item) ->
 get_dotted_value0([Key | Keys], Item) ->
     get_dotted_value0(Keys, proplists:get_value(list_to_atom(Key), Item, [])).
 
-remove_columns(Items, ReqData) ->
+extract_columns(Items, ReqData) ->
     Cols = columns(ReqData),
-    [remove_columns0(Item, Cols) || Item <- Items].
+    [extract_column_items(Item, Cols) || Item <- Items].
 
-remove_columns0(Item, Cols) ->
-    [{K, V} || {K, V} <- Item, want_column(K, Cols)].
+extract_column_items(Item, all) ->
+    Item;
+extract_column_items({struct, L}, Cols) ->
+    extract_column_items(L, Cols);
+extract_column_items(Item = [T | _], Cols) when is_tuple(T) ->
+    [{K, extract_column_items(V, descend_columns(K, Cols))} ||
+        {K, V} <- Item, want_column(K, Cols)];
+extract_column_items(L, Cols) when is_list(L) ->
+    [extract_column_items(I, Cols) || I <- L];
+extract_column_items(O, _Cols) ->
+    O.
+
+descend_columns(_K, [])               -> [];
+descend_columns(K, [[K] | Rest])      -> all;
+descend_columns(K, [[K | K2] | Rest]) -> [K2 | descend_columns(K, Rest)];
+descend_columns(K, [[K2 | _] | Rest]) -> descend_columns(K, Rest).
 
 bad_request(Reason, ReqData, Context) ->
     halt_response(400, bad_request, Reason, ReqData, Context).
@@ -393,9 +407,9 @@ post_respond({JSON, ReqData, Context}) ->
 columns(ReqData) ->
     case wrq:get_qs_value("columns", ReqData) of
         undefined -> all;
-        Str       -> ordsets:from_list(
-                       [list_to_atom(T) || T <- string:tokens(Str, ",")])
+        Str       -> [[list_to_atom(T) || T <- string:tokens(C, ".")]
+                      || C <- string:tokens(Str, ",")]
     end.
 
 want_column(_Col, all) -> true;
-want_column(Col, Cols) -> ordsets:is_element(Col, Cols).
+want_column(Col, Cols) -> lists:any(fun([C|_]) -> C == Col end, Cols).

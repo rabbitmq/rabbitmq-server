@@ -703,7 +703,10 @@ sorting_test() ->
 
 columns_test() ->
     http_put("/queues/%2f/test", [], ?NO_CONTENT),
-    [[{name, <<"test">>}]] = http_get("/queues?columns=name", ?OK),
+    %% Bit lame to test backing_queue_status but at least it's
+    %% something we can descend to that's always there
+    [[{backing_queue_status, [{len, 0}]}, {name, <<"test">>}]] =
+        http_get("/queues?columns=backing_queue_status.len,name", ?OK),
     http_delete("/queues/%2f/test", ?NO_CONTENT),
     ok.
 
