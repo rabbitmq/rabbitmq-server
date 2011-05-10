@@ -82,9 +82,9 @@ msg_to_table(#basic_message{exchange_name = #resource{name = XName},
                   {NewL, Ix + 1}
           end, {[], 2}, record_info(fields, 'P_basic')),
     [{<<"exchange_name">>, longstr, XName},
-      {<<"routing_keys">>,  array,   [{longstr, K} || K <- RoutingKeys]},
-      {<<"properties">>,    table,   PropsTable},
-      {<<"node">>,          longstr, a2b(node())}].
+     {<<"routing_keys">>,  array,   [{longstr, K} || K <- RoutingKeys]},
+     {<<"properties">>,    table,   PropsTable},
+     {<<"node">>,          longstr, a2b(node())}].
 
 payload(#basic_message{content = #content{payload_fragments_rev = PFR}}) ->
     list_to_binary(lists:reverse(PFR)).
