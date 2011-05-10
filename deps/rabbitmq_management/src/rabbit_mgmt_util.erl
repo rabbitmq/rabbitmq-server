@@ -172,10 +172,10 @@ extract_column_items(L, Cols) when is_list(L) ->
 extract_column_items(O, _Cols) ->
     O.
 
-descend_columns(_K, [])               -> [];
-descend_columns(K, [[K] | Rest])      -> all;
-descend_columns(K, [[K | K2] | Rest]) -> [K2 | descend_columns(K, Rest)];
-descend_columns(K, [[K2 | _] | Rest]) -> descend_columns(K, Rest).
+descend_columns(_K, [])                -> [];
+descend_columns(K, [[K] | _Rest])      -> all;
+descend_columns(K, [[K | K2] | Rest])  -> [K2 | descend_columns(K, Rest)];
+descend_columns(K, [[_K2 | _] | Rest]) -> descend_columns(K, Rest).
 
 bad_request(Reason, ReqData, Context) ->
     halt_response(400, bad_request, Reason, ReqData, Context).
