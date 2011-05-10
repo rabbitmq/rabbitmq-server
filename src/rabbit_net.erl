@@ -18,7 +18,7 @@
 -include("rabbit.hrl").
 
 -export([is_ssl/1, ssl_info/1, controlling_process/2, getstat/2,
-         async_recv/3, port_command/2, send/2, close/1,
+         recv/1, async_recv/3, port_command/2, setopts/2, send/2, close/1,
          sockname/1, peername/1, peercert/1]).
 
 %%---------------------------------------------------------------------------
@@ -42,9 +42,15 @@
 -spec(getstat/2 ::
         (socket(), [stat_option()])
         -> ok_val_or_error([{stat_option(), integer()}])).
+-spec(recv/1 :: (socket()) ->
+                     {'data', [char()] | binary()} | 'closed' |
+                     rabbit_types:error(any()) | {'other', any()}).
 -spec(async_recv/3 ::
         (socket(), integer(), timeout()) -> rabbit_types:ok(any())).
 -spec(port_command/2 :: (socket(), iolist()) -> 'true').
+-spec(setopts/2 :: (socket(), [{atom(), any()} |
+                               {raw, non_neg_integer(), non_neg_integer(),
+                                binary()}]) -> ok_or_any_error()).
 -spec(send/2 :: (socket(), binary() | iolist()) -> ok_or_any_error()).
 -spec(close/1 :: (socket()) -> ok_or_any_error()).
 -spec(sockname/1 ::
@@ -80,6 +86,19 @@ getstat(Sock, Stats) when ?IS_SSL(Sock) ->
 getstat(Sock, Stats) when is_port(Sock) ->
     inet:getstat(Sock, Stats).
 
+recv(Sock) when ?IS_SSL(Sock) ->
+    recv(Sock#ssl_socket.ssl, {ssl, ssl_closed, ssl_error});
+recv(Sock) when is_port(Sock) ->
+    recv(Sock, {tcp, tcp_closed, tcp_error}).
+
+recv(S, {DataTag, ClosedTag, ErrorTag}) ->
+    receive
+        {DataTag, S, Data}    -> {data, Data};
+        {ClosedTag, S}        -> closed;
+        {ErrorTag, S, Reason} -> {error, Reason};
+        Other                 -> {other, Other}
+    end.
+
 async_recv(Sock, Length, Timeout) when ?IS_SSL(Sock) ->
     Pid = self(),
     Ref = make_ref(),
@@ -102,6 +121,11 @@ port_command(Sock, Data) when ?IS_SSL(Sock) ->
     end;
 port_command(Sock, Data) when is_port(Sock) ->
     erlang:port_command(Sock, Data).
+
+setopts(Sock, Options) when ?IS_SSL(Sock) ->
+    ssl:setopts(Sock#ssl_socket.ssl, Options);
+setopts(Sock, Options) when is_port(Sock) ->
+    inet:setopts(Sock, Options).
 
 send(Sock, Data) when ?IS_SSL(Sock) -> ssl:send(Sock#ssl_socket.ssl, Data);
 send(Sock, Data) when is_port(Sock) -> gen_tcp:send(Sock, Data).
