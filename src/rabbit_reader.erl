@@ -38,9 +38,9 @@
 
 %%--------------------------------------------------------------------------
 
--record(v1, {parent, sock, connection, callback, recv_length, pending_recv,
+-record(v1, {parent, sock, connection, callback, recv_len, pending_recv,
              connection_state, queue_collector, heartbeater, stats_timer,
-             channel_sup_sup_pid, start_heartbeat_fun, buf,
+             channel_sup_sup_pid, start_heartbeat_fun, buf, buf_len,
              auth_mechanism, auth_state}).
 
 -define(STATISTICS_KEYS, [pid, recv_oct, recv_cnt, send_oct, send_cnt,
@@ -204,7 +204,7 @@ start_connection(Parent, ChannelSupSupPid, Collector, StartHeartbeatFun, Deb,
                               client_properties  = none,
                               capabilities       = []},
                             callback            = uninitialized_callback,
-                            recv_length         = 0,
+                            recv_len            = 0,
                             pending_recv        = false,
                             connection_state    = pre_init,
                             queue_collector     = Collector,
@@ -214,6 +214,7 @@ start_connection(Parent, ChannelSupSupPid, Collector, StartHeartbeatFun, Deb,
                             channel_sup_sup_pid = ChannelSupSupPid,
                             start_heartbeat_fun = StartHeartbeatFun,
                             buf                 = [],
+                            buf_len             = 0,
                             auth_mechanism      = none,
                             auth_state          = none
                            },
@@ -242,22 +243,23 @@ recvloop(Deb, State = #v1{pending_recv = true}) ->
     mainloop(Deb, State);
 recvloop(Deb, State = #v1{connection_state = blocked}) ->
     mainloop(Deb, State);
-recvloop(Deb, State = #v1{sock = Sock, recv_length = Length, buf = Buf}) ->
-    case iolist_size(Buf) < Length of
-        true  -> ok = rabbit_net:setopts(Sock, [{active, once}]),
-                 mainloop(Deb, State#v1{pending_recv = true});
-        false -> {Data, Rest} = split_binary(case Buf of
-                                                 [B] -> B;
-                                                 _   -> list_to_binary(
-                                                          lists:reverse(Buf))
-                                             end, Length),
-                 recvloop(Deb, handle_input(State#v1.callback, Data,
-                                            State#v1{buf = [Rest]}))
-    end.
+recvloop(Deb, State = #v1{sock = Sock, recv_len = RecvLen, buf_len = BufLen})
+  when BufLen < RecvLen ->
+    ok = rabbit_net:setopts(Sock, [{active, once}]),
+    mainloop(Deb, State#v1{pending_recv = true});
+recvloop(Deb, State = #v1{recv_len = RecvLen, buf = Buf, buf_len = BufLen}) ->
+    {Data, Rest} = split_binary(case Buf of
+                                    [B] -> B;
+                                    _   -> list_to_binary(lists:reverse(Buf))
+                                end, RecvLen),
+    recvloop(Deb, handle_input(State#v1.callback, Data,
+                               State#v1{buf = [Rest],
+                                        buf_len = BufLen - RecvLen})).
 
-mainloop(Deb, State = #v1{sock = Sock}) ->
+mainloop(Deb, State = #v1{sock = Sock, buf = Buf, buf_len = BufLen}) ->
     case rabbit_net:recv(Sock) of
-        {data, Data}    -> recvloop(Deb, State#v1{buf = [Data | State#v1.buf],
+        {data, Data}    -> recvloop(Deb, State#v1{buf = [Data | Buf],
+                                                  buf_len = BufLen + size(Data),
                                                   pending_recv = false});
         closed          -> if State#v1.connection_state =:= closed ->
                                    State;
@@ -332,9 +334,9 @@ handle_other(Other, _Deb, _State) ->
 switch_callback(State = #v1{connection_state = blocked,
                             heartbeater = Heartbeater}, Callback, Length) ->
     ok = rabbit_heartbeat:pause_monitor(Heartbeater),
-    State#v1{callback = Callback, recv_length = Length};
+    State#v1{callback = Callback, recv_len = Length};
 switch_callback(State, Callback, Length) ->
-    State#v1{callback = Callback, recv_length = Length}.
+    State#v1{callback = Callback, recv_len = Length}.
 
 terminate(Explanation, State) when ?IS_RUNNING(State) ->
     {normal, send_exception(State, 0,
