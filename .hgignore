@@ -5,6 +5,19 @@ syntax: glob
 *.patch
 erl_crash.dump
 deps.mk
+src/cut.erl
+src/do.erl
+src/error_m.erl
+src/identity_m.erl
+src/maybe_m.erl
+src/list_m.erl
+src/test_m.erl
+src/omega_m.erl
+src/state_t.erl
+src/monad.erl
+src/monad_plus.erl
+include/monad_specs.hrl
+include/monad_plus_specs.hrl
 
 syntax: regexp
 ^cover/

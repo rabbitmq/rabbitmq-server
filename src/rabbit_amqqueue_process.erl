@@ -86,6 +86,8 @@
 
 -define(INFO_KEYS, ?CREATION_EVENT_KEYS ++ ?STATISTICS_KEYS -- [pid]).
 
+-compile({parse_transform, cut}).
+
 %%----------------------------------------------------------------------------
 
 start_link(Q) -> gen_server2:start_link(?MODULE, Q, []).
@@ -116,9 +118,9 @@ init(Q) ->
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
 terminate(shutdown,      State = #q{backing_queue = BQ}) ->
-    terminate_shutdown(fun (BQS) -> BQ:terminate(BQS) end, State);
+    terminate_shutdown(BQ:terminate(_), State);
 terminate({shutdown, _}, State = #q{backing_queue = BQ}) ->
-    terminate_shutdown(fun (BQS) -> BQ:terminate(BQS) end, State);
+    terminate_shutdown(BQ:terminate(_), State);
 terminate(_Reason,       State = #q{backing_queue = BQ}) ->
     %% FIXME: How do we cancel active subscriptions?
     terminate_shutdown(fun (BQS) ->
@@ -161,9 +163,7 @@ declare(Recover, From,
 bq_init(BQ, Q, Recover) ->
     Self = self(),
     BQ:init(Q, Recover,
-            fun (Mod, Fun) ->
-                    rabbit_amqqueue:run_backing_queue_async(Self, Mod, Fun)
-            end,
+            rabbit_amqqueue:run_backing_queue_async(Self, _, _),
             fun (Mod, Fun) ->
                     rabbit_misc:with_exit_handler(
                       fun () -> error end,
@@ -427,9 +427,7 @@ confirm_messages(MsgIds, State = #q{msg_id_to_channel = MTC}) ->
                                     {CMs, MTC0}
                             end
                     end, {gb_trees:empty(), MTC}, MsgIds),
-    gb_trees_foreach(fun(ChPid, MsgSeqNos) ->
-                             rabbit_channel:confirm(ChPid, MsgSeqNos)
-                     end, CMs),
+    gb_trees_foreach(rabbit_channel:confirm(_, _), CMs),
     State#q{msg_id_to_channel = MTC1}.
 
 gb_trees_foreach(_, none) ->
@@ -662,7 +660,7 @@ maybe_send_reply(ChPid, Msg) -> ok = rabbit_channel:send_command(ChPid, Msg).
 qname(#q{q = #amqqueue{name = QName}}) -> QName.
 
 backing_queue_idle_timeout(State = #q{backing_queue = BQ}) ->
-    run_backing_queue(BQ, fun (M, BQS) -> M:idle_timeout(BQS) end, State).
+    run_backing_queue(BQ, _:idle_timeout(_), State).
 
 run_backing_queue(Mod, Fun, State = #q{backing_queue = BQ,
                                        backing_queue_state = BQS}) ->
@@ -697,9 +695,7 @@ discard_delivery(#delivery{sender = ChPid,
     State#q{backing_queue_state = BQ:discard(Message, ChPid, BQS)}.
 
 reset_msg_expiry_fun(TTL) ->
-    fun(MsgProps) ->
-            MsgProps#message_properties{expiry = calculate_msg_expiry(TTL)}
-    end.
+    _#message_properties{expiry = calculate_msg_expiry(TTL)}.
 
 message_properties(#q{ttl=TTL}) ->
     #message_properties{expiry = calculate_msg_expiry(TTL)}.
@@ -1099,8 +1095,7 @@ handle_cast(delete_immediately, State) ->
 
 handle_cast({unblock, ChPid}, State) ->
     noreply(
-      possibly_unblock(State, ChPid,
-                       fun (C) -> C#cr{is_limit_active = false} end));
+      possibly_unblock(State, ChPid, _#cr{is_limit_active = false}));
 
 handle_cast({notify_sent, ChPid}, State) ->
     noreply(

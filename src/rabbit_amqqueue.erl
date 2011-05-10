@@ -35,6 +35,9 @@
          set_maximum_since_use/2, maybe_expire/1, drop_expired/1,
          emit_stats/1]).
 
+%% NB: for reasons I don't understand, this must occur before the qlc include
+-compile({parse_transform, cut}).
+
 -include("rabbit.hrl").
 -include_lib("stdlib/include/qlc.hrl").
 
@@ -334,9 +337,9 @@ info(#amqqueue{ pid = QPid }, Items) ->
         {error, Error} -> throw(Error)
     end.
 
-info_all(VHostPath) -> map(VHostPath, fun (Q) -> info(Q) end).
+info_all(VHostPath) -> map(VHostPath, info(_)).
 
-info_all(VHostPath, Items) -> map(VHostPath, fun (Q) -> info(Q, Items) end).
+info_all(VHostPath, Items) -> map(VHostPath, info(_, Items)).
 
 consumers(#amqqueue{ pid = QPid }) ->
     delegate_call(QPid, consumers).
@@ -382,23 +385,19 @@ reject(QPid, MsgIds, Requeue, ChPid) ->
 
 commit_all(QPids, Txn, ChPid) ->
     safe_delegate_call_ok(
-      fun (QPid) -> gen_server2:call(QPid, {commit, Txn, ChPid}, infinity) end,
-      QPids).
+      gen_server2:call(_, {commit, Txn, ChPid}, infinity), QPids).
 
 rollback_all(QPids, Txn, ChPid) ->
     delegate:invoke_no_result(
-      QPids, fun (QPid) -> gen_server2:cast(QPid, {rollback, Txn, ChPid}) end).
+      QPids, gen_server2:cast(_, {rollback, Txn, ChPid})).
 
 notify_down_all(QPids, ChPid) ->
     safe_delegate_call_ok(
-      fun (QPid) -> gen_server2:call(QPid, {notify_down, ChPid}, infinity) end,
-      QPids).
+      gen_server2:call(_, {notify_down, ChPid}, infinity), QPids).
 
 limit_all(QPids, ChPid, LimiterPid) ->
     delegate:invoke_no_result(
-      QPids, fun (QPid) ->
-                     gen_server2:cast(QPid, {limit, ChPid, LimiterPid})
-             end).
+      QPids, gen_server2:cast(_, {limit, ChPid, LimiterPid})).
 
 basic_get(#amqqueue{pid = QPid}, ChPid, NoAck) ->
     delegate_call(QPid, {basic_get, ChPid, NoAck}).
@@ -418,8 +417,7 @@ unblock(QPid, ChPid) ->
     delegate_cast(QPid, {unblock, ChPid}).
 
 flush_all(QPids, ChPid) ->
-    delegate:invoke_no_result(
-      QPids, fun (QPid) -> gen_server2:cast(QPid, {flush, ChPid}) end).
+    delegate:invoke_no_result(QPids, gen_server2:cast(_, {flush, ChPid})).
 
 internal_delete1(QueueName) ->
     ok = mnesia:delete({rabbit_queue, QueueName}),
@@ -434,9 +432,7 @@ internal_delete(QueueName) ->
               case mnesia:wread({rabbit_queue, QueueName}) of
                   []  -> rabbit_misc:const({error, not_found});
                   [_] -> Deletions = internal_delete1(QueueName),
-                         fun (Tx) -> ok = rabbit_binding:process_deletions(
-                                            Deletions, Tx)
-                         end
+                         rabbit_binding:process_deletions(Deletions, _)
               end
       end).
 
@@ -501,7 +497,7 @@ safe_delegate_call_ok(F, Pids) ->
     end.
 
 delegate_call(Pid, Msg) ->
-    delegate:invoke(Pid, fun (P) -> gen_server2:call(P, Msg, infinity) end).
+    delegate:invoke(Pid, gen_server2:call(_, Msg, infinity)).
 
 delegate_cast(Pid, Msg) ->
-    delegate:invoke_no_result(Pid, fun (P) -> gen_server2:cast(P, Msg) end).
+    delegate:invoke_no_result(Pid, gen_server2:cast(_, Msg)).
