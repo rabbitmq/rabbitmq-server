@@ -622,21 +622,21 @@ _rabbitmqadmin()
 	    COMPREPLY=( $(compgen -f ${cur}) )
             return 0
             ;;
-	--host)
+	-@(H|-host))
 	    COMPREPLY=( $(compgen -A hostname ${cur}) )
             return 0
             ;;
-	--vhost)
+	-@(V|-vhost))
             opts="$(rabbitmqadmin -q -f bash list vhosts)"
 	    COMPREPLY=( $(compgen -W "${opts}"  -- ${cur}) )
             return 0
             ;;
-	--username)
+	-@(u|-username))
             opts="$(rabbitmqadmin -q -f bash list users)"
 	    COMPREPLY=( $(compgen -W "${opts}"  -- ${cur}) )
             return 0
             ;;
-	--format)
+	-@(f|-format))
 	    COMPREPLY=( $(compgen -W \"""" + " ".join(FORMATS.keys()) + """\"  -- ${cur}) )
             return 0
             ;;
