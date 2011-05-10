@@ -204,19 +204,12 @@ init([]) ->
                            [{Key, ets:new(anon, [private])} ||
                                Key <- ?TABLES])}}.
 
-%% TODO refactor
 handle_call({get_queue, Q0}, _From, State = #state{tables = Tables}) ->
-    Qs1 = detail_queue_stats([Q0], Tables),
-    Qs2 = [[{messages, add(pget(messages_ready, Q),
-                           pget(messages_unacknowledged, Q))} | Q] || Q <- Qs1],
-    [Q3] = adjust_hibernated_memory_use(Qs2),
-    {reply, Q3, State};
+    [Q1] = adjust_hibernated_memory_use(detail_queue_stats([Q0], Tables)),
+    {reply, Q1, State};
 
-handle_call({get_queues, Qs0}, _From, State = #state{tables = Tables}) ->
-    Qs1 = list_queue_stats(Qs0, Tables),
-    Qs2 = [[{messages, add(pget(messages_ready, Q),
-                           pget(messages_unacknowledged, Q))} | Q] || Q <- Qs1],
-    {reply, adjust_hibernated_memory_use(Qs2), State};
+handle_call({get_queues, Qs}, _From, State = #state{tables = Tables}) ->
+    {reply, adjust_hibernated_memory_use(list_queue_stats(Qs, Tables)), State};
 
 handle_call({get_exchanges, Xs, Mode}, _From,
             State = #state{tables = Tables}) ->
@@ -252,9 +245,7 @@ handle_call({get_overview, User}, _From, State = #state{tables = Tables}) ->
     Qs0 = [rabbit_mgmt_format:queue(Q) || V <- VHosts,
                                           Q <- rabbit_amqqueue:list(V)],
     Qs1 = basic_queue_stats(Qs0, Tables),
-    Totals0 = sum(Qs1, [messages_ready, messages_unacknowledged]),
-    Totals = [{messages, add(pget(messages_ready, Totals0),
-                             pget(messages_unacknowledged, Totals0))}|Totals0],
+    Totals = sum(Qs1, [messages, messages_ready, messages_unacknowledged]),
     Filter = fun(Id, Name) ->
                      lists:member(pget(vhost, pget(Name, Id)), VHosts)
              end,
@@ -521,6 +512,10 @@ consumer_details_fun(PatternFun, Tables) ->
                                   ets:match(Table, {Pattern, '$1'}))]}]
     end.
 
+total_messages(Q) ->
+    [{messages, add(pget(messages_ready, Q),
+                    pget(messages_unacknowledged, Q))}].
+
 zero_old_rates(Stats) -> [maybe_zero_rate(S) || S <- Stats].
 
 maybe_zero_rate({Key, Val}) ->
@@ -593,20 +588,21 @@ augment_queue_pid(Pid, _Tables) ->
 %%----------------------------------------------------------------------------
 
 basic_queue_stats(Objs, Tables) ->
-    merge_stats(Objs, [basic_stats_fun(queue_stats, Tables),
-                       augment_msg_stats_fun(Tables)]).
+    merge_stats(Objs, queue_funs(Tables)).
 
 list_queue_stats(Objs, Tables) ->
-    merge_stats(Objs, [basic_stats_fun(queue_stats, Tables),
-                       fine_stats_fun(?FINE_STATS_QUEUE_LIST, Tables),
-                       augment_msg_stats_fun(Tables)]).
+    merge_stats(Objs, [fine_stats_fun(?FINE_STATS_QUEUE_LIST, Tables)] ++
+                    queue_funs(Tables)).
 
 detail_queue_stats(Objs, Tables) ->
-    merge_stats(Objs, [basic_stats_fun(queue_stats, Tables),
-                       consumer_details_fun(
+    merge_stats(Objs, [consumer_details_fun(
                          fun (Props) -> {pget(pid, Props), '_'} end, Tables),
-                       fine_stats_fun(?FINE_STATS_QUEUE_DETAIL, Tables),
-                       augment_msg_stats_fun(Tables)]).
+                       fine_stats_fun(?FINE_STATS_QUEUE_DETAIL, Tables)] ++
+                    queue_funs(Tables)).
+
+queue_funs(Tables) ->
+    [basic_stats_fun(queue_stats, Tables), fun total_messages/1,
+     augment_msg_stats_fun(Tables)].
 
 exchange_stats(Objs, FineSpecs, Tables) ->
     merge_stats(Objs, [fine_stats_fun(FineSpecs, Tables),
