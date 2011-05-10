@@ -21,7 +21,7 @@
 -export([all_tests/0, test_parsing/0]).
 
 -compile({parse_transform, cut}).
--compile({parse_transform, erlando}).
+-compile({parse_transform, do}).
 
 -include("rabbit.hrl").
 -include("rabbit_framing.hrl").
@@ -2296,25 +2296,18 @@ test_variable_queue_all_the_bits_not_covered_elsewhere1(VQ0) ->
 test_variable_queue_all_the_bits_not_covered_elsewhere2(VQ) ->
     StateT = state_t:new(identity_m),
     SM = StateT:modify(_),
+    SMR = StateT:modify_and_return(_),
     StateT:exec(
       do([StateT ||
              SM(rabbit_variable_queue:set_ram_duration_target(0, _)),
              SM(variable_queue_publish(false, 4, _)),
-             AckTags <- modify_and_return(
-                          StateT, variable_queue_fetch(2, false, false, 4, _)),
+             AckTags <- SMR(variable_queue_fetch(2, false, false, 4, _)),
              SM(rabbit_variable_queue:requeue(AckTags, fun(X) -> X end, _)),
              SM(rabbit_variable_queue:idle_timeout(_)),
              SM(rabbit_variable_queue:terminate(_)),
              StateT:put(variable_queue_init(test_queue(), true, true)),
-             empty <- modify_and_return(
-                        StateT, rabbit_variable_queue:fetch(false, _)),
+             empty <- (rabbit_variable_queue:fetch(false, _)),
              return(passed)]), VQ).
-
-modify_and_return(StateT, Fun) ->
-    do([StateT || S <- StateT:get(),
-                  {A, S1} <- return(Fun(S)),
-                  StateT:put(S1),
-                  return(A)]).
 
 test_queue_recover() ->
     Count = 2 * rabbit_queue_index:next_segment_boundary(0),
