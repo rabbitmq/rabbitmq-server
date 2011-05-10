@@ -92,7 +92,7 @@ status_rabbitmq() {
     set -e
 }
 
-reopen_logs_rabbitmq() {
+truncate_and_reopen_logs_rabbitmq() {
     set +e
     # Do not supply a suffix as we do not want to rotate the logs.
     $CONTROL rotate_logs
@@ -131,9 +131,9 @@ case "$1" in
     status)
         status_rabbitmq
         ;;
-    reopen-logs)
+    truncate-and-reopen-logs)
         echo -n "Rotating log files for $DESC: "
-        reopen_logs_rabbitmq
+        truncate_and_reopen_logs_rabbitmq
         ;;
     force-reload|reload|restart)
         echo -n "Restarting $DESC: "
@@ -146,7 +146,7 @@ case "$1" in
         echo "$NAME."
         ;;
     *)
-        echo "Usage: $0 {start|stop|status|reopen-logs|restart|condrestart|try-restart|reload|force-reload}" >&2
+        echo "Usage: $0 {start|stop|status|truncate-and-reopen-logs|restart|condrestart|try-restart|reload|force-reload}" >&2
         RETVAL=1
         ;;
 esac
