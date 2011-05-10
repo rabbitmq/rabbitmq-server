@@ -2074,7 +2074,7 @@ test_queue_index() ->
 
 variable_queue_init(Q, Recover) ->
     rabbit_variable_queue:init(
-      Q, Recover, fun nop/1, fun nop/1, fun nop/2, fun nop/1).
+      Q, Recover, fun nop/2, fun nop/2, fun nop/2, fun nop/1).
 
 variable_queue_publish(IsPersistent, Count, VQ) ->
     lists:foldl(
