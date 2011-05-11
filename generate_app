@@ -1,9 +1,9 @@
 #!/usr/bin/env escript
 %% -*- erlang -*-
 
-main([BeamDir, TargetFile]) ->
-    Modules = [list_to_atom(filename:basename(F, ".beam")) ||
-                  F <- filelib:wildcard("*.beam", BeamDir)],
+main([SrcDir, TargetFile]) ->
+    Modules = [list_to_atom(filename:basename(F, ".erl")) ||
+                  F <- filelib:wildcard("*.erl", SrcDir)],
     {ok, {application, Application, Properties}} = io:read(''),
     NewProperties = lists:keyreplace(modules, 1, Properties,
                                      {modules, Modules}),
