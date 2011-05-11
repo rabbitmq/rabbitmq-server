@@ -87,6 +87,13 @@ class TestLifecycle(base.BaseTest):
                                           passcode="gust"),
                          "Authentication failure\n")
 
+    def test_bad_vhost(self):
+        ''' Test bad virtual host'''
+        self.bad_connect(stomp.Connection(user="guest",
+                                          passcode="guest",
+                                          virtual_host="//"),
+                         "Authentication failure\n")
+
     def bad_connect(self, new_conn, expected):
         self.conn.disconnect()
         listener = base.WaitableListener()

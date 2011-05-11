@@ -1,37 +1,48 @@
 diff -r 16a4000624a7 stomp/connect.py
 --- a/stomp/connect.py	Sun May 02 18:15:34 2010 +0100
-+++ b/stomp/connect.py	Wed Nov 10 20:44:32 2010 +0000
-@@ -88,7 +88,9 @@
++++ b/stomp/connect.py	Wed May 11 17:26:27 2011 +0100
+@@ -88,7 +88,10 @@
                   ssl_key_file = None,
                   ssl_cert_file = None,
                   ssl_ca_certs = None,
 -                 ssl_cert_validator = None):
 +                 ssl_cert_validator = None,
 +                 version = None,
-+                 heartbeat = None):
++                 heartbeat = None,
++                 virtual_host = None):
          """
          Initialize and start this connection.
-
-@@ -204,6 +206,12 @@
-         if user is not None and passcode is not None:
+ 
+@@ -205,6 +208,15 @@
              self.__connect_headers['login'] = user
              self.__connect_headers['passcode'] = passcode
-+
+ 
 +        if version is not None:
 +            self.__connect_headers['accept-version'] = version
 +
 +        if heartbeat is not None:
 +            self.__connect_headers['heartbeat'] = heartbeat
-
++
++        if virtual_host is not None:
++            self.__connect_headers['host'] = virtual_host
++
          self.__socket = None
          self.__socket_semaphore = threading.BoundedSemaphore(1)
-@@ -449,6 +457,9 @@
+         self.__current_host_and_port = None
+@@ -449,6 +461,9 @@
                  raise KeyError("Command %s requires header %r" % (command, required_header_key))
          self.__send_frame(command, headers, payload)
-
+ 
 +    def send_frame(self, command, headers={}, payload=''):
 +        self.__send_frame(command, headers, payload)
 +
      def __send_frame(self, command, headers={}, payload=''):
          """
          Send a STOMP frame.
+@@ -680,4 +695,4 @@
+                     sleep_exp += 1
+ 
+         if not self.__socket:
+-            raise exception.ReconnectFailedException
+\ No newline at end of file
++            raise exception.ReconnectFailedException

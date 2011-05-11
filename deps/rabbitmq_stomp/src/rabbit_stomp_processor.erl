@@ -342,6 +342,8 @@ do_login({ok, Username0}, {ok, Password0}, VirtualHost0, Heartbeat, AdapterInfo,
                                     channel    = Channel,
                                     connection = Connection});
                 {error, auth_failure} ->
+                    error("Bad CONNECT", "Authentication failure\n", State);
+                {error, access_refused} ->
                     error("Bad CONNECT", "Authentication failure\n", State)
             end;
         {refused, _Msg, _Args} ->
