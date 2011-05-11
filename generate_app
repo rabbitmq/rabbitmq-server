@@ -5,8 +5,11 @@ main([SrcDir, TargetFile]) ->
     Modules = [list_to_atom(filename:basename(F, ".erl")) ||
                   F <- filelib:wildcard("*.erl", SrcDir)],
     {ok, {application, Application, Properties}} = io:read(''),
-    NewProperties = lists:keyreplace(modules, 1, Properties,
-                                     {modules, Modules}),
+    NewProperties =
+        case proplists:get_value(modules, Properties) of
+            [] -> lists:keyreplace(modules, 1, Properties, {modules, Modules});
+            _  -> Properties
+        end,
     file:write_file(
       TargetFile,
       io_lib:format("~p.~n", [{application, Application, NewProperties}])).
