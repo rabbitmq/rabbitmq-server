@@ -132,18 +132,12 @@
 %% a RabbitMQ server, assuming that the server is running in the same process
 %% space.
 start(AmqpParams) ->
-    {Type, Module} =
-        case AmqpParams of
-            #amqp_params_direct{}  -> {direct,  amqp_direct_connection};
-            #amqp_params_network{} -> {network, amqp_network_connection}
-        end,
     case amqp_client:start() of
         ok                                      -> ok;
         {error, {already_started, amqp_client}} -> ok;
         {error, _} = E                          -> throw(E)
     end,
-    {ok, _Sup, Connection} =
-        amqp_sup:start_connection_sup(Type, Module, AmqpParams),
+    {ok, _Sup, Connection} = amqp_sup:start_connection_sup(AmqpParams),
     amqp_gen_connection:connect(Connection).
 
 %%---------------------------------------------------------------------------

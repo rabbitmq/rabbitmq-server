@@ -21,15 +21,20 @@
 
 -behaviour(supervisor2).
 
--export([start_link/3]).
+-export([start_link/1]).
 -export([init/1]).
 
 %%---------------------------------------------------------------------------
 %% Interface
 %%---------------------------------------------------------------------------
 
-start_link(Type, Module, AmqpParams) ->
+start_link(AmqpParams) ->
     {ok, Sup} = supervisor2:start_link(?MODULE, []),
+    {Type, Module} =
+        case AmqpParams of
+            #amqp_params_direct{}  -> {direct,  amqp_direct_connection};
+            #amqp_params_network{} -> {network, amqp_network_connection}
+        end,
     SChMF = start_channels_manager_fun(Sup, Type),
     SIF = start_infrastructure_fun(Sup, Type),
     {ok, Connection} = supervisor2:start_child(
