@@ -904,9 +904,9 @@ process_channel_frame(Frame, ErrPid, Channel, ChPid, AState) ->
         {ok, Method, Content, NewAState} -> rabbit_channel:do(ChPid,
                                                               Method, Content),
                                             NewAState;
-        {error, Reason}                  -> ErrPid ! {channel_exit, Channel,
+        {error, Reason, NewAState}       -> ErrPid ! {channel_exit, Channel,
                                                       Reason},
-                                            AState
+                                            NewAState
     end.
 
 handle_exception(State = #v1{connection_state = closed}, _Channel, _Reason) ->

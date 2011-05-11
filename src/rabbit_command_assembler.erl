@@ -84,7 +84,7 @@ process({method, MethodName, FieldsBin}, {method, Protocol}) ->
                      {ok, {content_header, Method, ClassId, Protocol}};
             false -> {ok, Method, {method, Protocol}}
         end
-    catch exit:#amqp_error{} = Reason -> {error, Reason}
+    catch exit:#amqp_error{} = Reason -> {error, Reason, error}
     end;
 process(_Frame, {method, _Protocol}) ->
     unexpected_frame("expected method frame, "
@@ -116,7 +116,10 @@ process({content_body, FragmentBin},
     end;
 process(_Frame, {content_body, Method, _RemainingSize, _Content, _Protocol}) ->
     unexpected_frame("expected content body, "
-                     "got non content body frame instead", [], Method).
+                     "got non content body frame instead", [], Method);
+process(_Frame, error) ->
+    {ok, error}.
+
 
 %%--------------------------------------------------------------------
 
@@ -128,6 +131,7 @@ empty_content(ClassId, PropertiesBin, Protocol) ->
              payload_fragments_rev = []}.
 
 unexpected_frame(Format, Params, Method) when is_atom(Method) ->
-    {error, rabbit_misc:amqp_error(unexpected_frame, Format, Params, Method)};
+    {error, rabbit_misc:amqp_error(unexpected_frame, Format, Params, Method),
+     error};
 unexpected_frame(Format, Params, Method) ->
     unexpected_frame(Format, Params, rabbit_misc:method_record_type(Method)).
