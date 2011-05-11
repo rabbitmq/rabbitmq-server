@@ -226,19 +226,22 @@ build_broker(ParsedUri) ->
                 "/"       -> <<"/">>;
                 [$/|Rest] -> list_to_binary(Rest)
             end,
-    Params = case Host of
-                 undefined -> #amqp_params_direct{virtual_host = VHost};
-                 _         -> #amqp_params_network{host = Host, port = Port,
-                                                   virtual_host = VHost}
-             end,
-    case {Params, proplists:get_value(userinfo, ParsedUri)} of
-        {#amqp_params_network{}, [Username, Password | _ ]} ->
-            Params#amqp_params_network{username = list_to_binary(Username),
-                                       password = list_to_binary(Password)};
-        {#amqp_params_direct{}, [Username | _ ]} ->
-            Params#amqp_params_direct{username = list_to_binary(Username)};
-        _ ->
-            Params
+    UserInfo = proplists:get_value(userinfo, ParsedUri),
+    case Host of
+        undefined -> Ps = #amqp_params_direct{virtual_host = VHost},
+                     case UserInfo of
+                         [U | _] -> Ps#amqp_params_direct{
+                                      username = list_to_binary(U)};
+                         _       -> Ps
+                     end;
+        _         -> Ps = #amqp_params_network{host = Host, port = Port,
+                                               virtual_host = VHost},
+                     case UserInfo of
+                         [U, P | _] -> Ps#amqp_params_network{
+                                         username = list_to_binary(U),
+                                         password = list_to_binary(P)};
+                         _          -> Ps
+                     end
     end.
 
 build_plain_broker(ParsedUri) ->
