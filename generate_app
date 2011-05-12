@@ -1,8 +1,9 @@
 #!/usr/bin/env escript
 %% -*- erlang -*-
 
-main([SrcDir, TargetFile]) ->
+main([TargetFile | SrcDirs]) ->
     Modules = [list_to_atom(filename:basename(F, ".erl")) ||
+                  SrcDir <- SrcDirs,
                   F <- filelib:wildcard("*.erl", SrcDir)],
     {ok, {application, Application, Properties}} = io:read(''),
     NewProperties =
