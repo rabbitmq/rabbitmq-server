@@ -274,6 +274,10 @@ Content-Length: 0</pre>
           <pre>{"routed": true}</pre>
           <code>routed</code> will be true if the message was sent to
           at least one queue.
+          <p>Please note that the publish / get paths in the HTTP API are
+          intended for injecting test messages, diagnostics etc - they do not
+          implement reliable delivery and so should be treated as a sysadmin's
+          tool rather than a general API for messaging.</p>
         </td>
       </tr>
       <tr>
@@ -327,15 +331,27 @@ Content-Length: 0</pre>
         <td>
           Get messages from a queue. (This is not an HTTP GET as it
           will alter the state of the queue.) You should post a body looking like:
-          <pre>{"count": 5, "requeue": true, "truncate": 50000}</pre>
-          to control the (maximum) number of messages you get and
-          whether those messages are requeued. If <code>requeue</code>
-          is false the messages will be removed from the queue. If
-          requeue is true they will be requeued - but their position
-          in the queue may change and their <code>redelivered</code>
-          flag will be set. <code>truncate</code> is optional - if
-          present it will truncate the message payload if it is larger
-          than the size given (in bytes).
+          <pre>{"count":5,"requeue":true,"encoding":"auto","truncate":50000}</pre>
+          <ul>
+            <li><code>count</code> controls the number of messages to get. You
+            may get fewer messages than this if the queue cannot immediately
+            provide them.</li>
+            <li><code>requeue</code> determines whether the messages will be
+            removed from the queue. If requeue is true they will be requeued -
+            but their position in the queue may change and
+            their <code>redelivered</code> flag will be set.</li>
+            <li><code>encoding</code> must be either "auto" (in which case the
+            payload will be returned as a string if it is valid UTF-8, and
+            base64 encoded otherwise), or "base64" (in which case the payload
+            will always be base64 encoded).</li>
+            <li>If <code>truncate</code> is present it will truncate the
+            message payload if it is larger than the size given (in bytes).</li>
+          </ul>
+          <p><code>truncate</code> is optional; all other keys are mandatory.</p>
+          <p>Please note that the publish / get paths in the HTTP API are
+          intended for injecting test messages, diagnostics etc - they do not
+          implement reliable delivery and so should be treated as a sysadmin's
+          tool rather than a general API for messaging.</p>
         </td>
       </tr>
       <tr>
