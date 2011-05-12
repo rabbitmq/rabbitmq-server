@@ -12,13 +12,13 @@
 
 %% @spec start_link() -> ServerRet
 %% @doc API for starting the supervisor.
-start_link(Instances) ->
-    supervisor:start_link({local, ?SUP}, ?MODULE, [Instances]).
+start_link(ListenerSpecs) ->
+    supervisor:start_link({local, ?SUP}, ?MODULE, [ListenerSpecs]).
 
 %% @spec upgrade([instance()]) -> ok
 %% @doc Add processes if necessary.
-upgrade(Instances) ->
-    {ok, {_, Specs}} = init([Instances]),
+upgrade(ListenerSpecs) ->
+    {ok, {_, Specs}} = init([ListenerSpecs]),
 
     Old = sets:from_list(
             [Name || {Name, _, _, _} <- supervisor:which_children(?MODULE)]),
@@ -34,9 +34,9 @@ upgrade(Instances) ->
     [supervisor:start_child(?SUP, Spec) || Spec <- Specs],
     ok.
 
-ensure_listener({Instance, Spec}) ->
-    Child = {{rabbit_mochiweb_web, Instance},
-             {rabbit_mochiweb_web, start, [{Instance, Spec}]},
+ensure_listener({Listener, Spec}) ->
+    Child = {{rabbit_mochiweb_web, Listener},
+             {rabbit_mochiweb_web, start, [{Listener, Spec}]},
              permanent, 5000, worker, dynamic},
     case supervisor:start_child(?SUP, Child) of
         {ok, Pid} ->
@@ -47,8 +47,8 @@ ensure_listener({Instance, Spec}) ->
 
 %% @spec init([[instance()]]) -> SupervisorTree
 %% @doc supervisor callback.
-init([Instances]) ->
+init([ListenerSpecs]) ->
     Registry = {rabbit_mochiweb_registry,
-                {rabbit_mochiweb_registry, start_link, [Instances]},
+                {rabbit_mochiweb_registry, start_link, [ListenerSpecs]},
                 permanent, 5000, worker, dynamic},
     {ok, {{one_for_one, 10, 10}, [Registry]}}.
