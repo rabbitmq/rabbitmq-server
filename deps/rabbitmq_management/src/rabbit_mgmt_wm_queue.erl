@@ -43,7 +43,7 @@ resource_exists(ReqData, Context) ->
 
 to_json(ReqData, Context) ->
     Q0 = queue(ReqData),
-    [Q] = rabbit_mgmt_db:get_queue(Q0),
+    Q = rabbit_mgmt_db:get_queue(Q0),
     rabbit_mgmt_util:reply(Q, ReqData, Context).
 
 accept_content(ReqData, Context) ->

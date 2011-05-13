@@ -92,8 +92,8 @@ start_link() ->
             Else
     end.
 
-get_queues(Qs)         -> safe_call({get_queues, Qs, list}, Qs).
-get_queue(Q)           -> safe_call({get_queues, [Q], detail}, [Q]).
+get_queues(Qs)         -> safe_call({get_queues, Qs}, Qs).
+get_queue(Q)           -> safe_call({get_queue, Q}, Q).
 get_exchanges(Xs)      -> safe_call({get_exchanges, Xs, list}, Xs).
 get_exchange(X)        -> safe_call({get_exchanges, [X], detail}, [X]).
 get_connections()      -> safe_call(get_connections).
@@ -204,15 +204,12 @@ init([]) ->
                            [{Key, ets:new(anon, [private, ordered_set])} ||
                                Key <- ?TABLES])}}.
 
-handle_call({get_queues, Qs0, Mode}, _From, State = #state{tables = Tables}) ->
-    FineSpecs = case Mode of
-                    list   -> ?FINE_STATS_QUEUE_LIST;
-                    detail -> ?FINE_STATS_QUEUE_DETAIL
-                end,
-    Qs1 = queue_stats(Qs0, FineSpecs, Tables),
-    Qs2 = [[{messages, add(pget(messages_ready, Q),
-                           pget(messages_unacknowledged, Q))} | Q] || Q <- Qs1],
-    {reply, adjust_hibernated_memory_use(Qs2), State};
+handle_call({get_queue, Q0}, _From, State = #state{tables = Tables}) ->
+    [Q1] = adjust_hibernated_memory_use(detail_queue_stats([Q0], Tables)),
+    {reply, Q1, State};
+
+handle_call({get_queues, Qs}, _From, State = #state{tables = Tables}) ->
+    {reply, adjust_hibernated_memory_use(list_queue_stats(Qs, Tables)), State};
 
 handle_call({get_exchanges, Xs, Mode}, _From,
             State = #state{tables = Tables}) ->
@@ -233,11 +230,11 @@ handle_call({get_connection, Name}, _From, State = #state{tables = Tables}) ->
 
 handle_call(get_channels, _From, State = #state{tables = Tables}) ->
     Chs = created_events(channel_stats, Tables),
-    {reply, channel_stats(Chs, ?FINE_STATS_CHANNEL_LIST, Tables), State};
+    {reply, list_channel_stats(Chs, Tables), State};
 
 handle_call({get_channel, Name}, _From, State = #state{tables = Tables}) ->
     Chs = created_event(Name, channel_stats, Tables),
-    [Res] = channel_stats(Chs, ?FINE_STATS_CHANNEL_DETAIL, Tables),
+    [Res] = detail_channel_stats(Chs, Tables),
     {reply, result_or_error(Res), State};
 
 handle_call({get_overview, User}, _From, State = #state{tables = Tables}) ->
@@ -248,9 +245,7 @@ handle_call({get_overview, User}, _From, State = #state{tables = Tables}) ->
     Qs0 = [rabbit_mgmt_format:queue(Q) || V <- VHosts,
                                           Q <- rabbit_amqqueue:list(V)],
     Qs1 = basic_queue_stats(Qs0, Tables),
-    Totals0 = sum(Qs1, [messages_ready, messages_unacknowledged]),
-    Totals = [{messages, add(pget(messages_ready, Totals0),
-                             pget(messages_unacknowledged, Totals0))}|Totals0],
+    Totals = sum(Qs1, [messages, messages_ready, messages_unacknowledged]),
     Filter = fun(Id, Name) ->
                      lists:member(pget(vhost, pget(Name, Id)), VHosts)
              end,
@@ -517,6 +512,10 @@ consumer_details_fun(PatternFun, Tables) ->
                                   ets:match(Table, {Pattern, '$1'}))]}]
     end.
 
+total_messages(Q) ->
+    [{messages, add(pget(messages_ready, Q),
+                    pget(messages_unacknowledged, Q))}].
+
 zero_old_rates(Stats) -> [maybe_zero_rate(S) || S <- Stats].
 
 maybe_zero_rate({Key, Val}) ->
@@ -589,15 +588,21 @@ augment_queue_pid(Pid, _Tables) ->
 %%----------------------------------------------------------------------------
 
 basic_queue_stats(Objs, Tables) ->
-    merge_stats(Objs, [basic_stats_fun(queue_stats, Tables),
-                       augment_msg_stats_fun(Tables)]).
+    merge_stats(Objs, queue_funs(Tables)).
 
-queue_stats(Objs, FineSpecs, Tables) ->
-    merge_stats(Objs, [basic_stats_fun(queue_stats, Tables),
-                       consumer_details_fun(
+list_queue_stats(Objs, Tables) ->
+    merge_stats(Objs, [fine_stats_fun(?FINE_STATS_QUEUE_LIST, Tables)] ++
+                    queue_funs(Tables)).
+
+detail_queue_stats(Objs, Tables) ->
+    merge_stats(Objs, [consumer_details_fun(
                          fun (Props) -> {pget(pid, Props), '_'} end, Tables),
-                       fine_stats_fun(FineSpecs, Tables),
-                       augment_msg_stats_fun(Tables)]).
+                       fine_stats_fun(?FINE_STATS_QUEUE_DETAIL, Tables)] ++
+                    queue_funs(Tables)).
+
+queue_funs(Tables) ->
+    [basic_stats_fun(queue_stats, Tables), fun total_messages/1,
+     augment_msg_stats_fun(Tables)].
 
 exchange_stats(Objs, FineSpecs, Tables) ->
     merge_stats(Objs, [fine_stats_fun(FineSpecs, Tables),
@@ -607,11 +612,16 @@ connection_stats(Objs, Tables) ->
     merge_stats(Objs, [basic_stats_fun(connection_stats, Tables),
                        augment_msg_stats_fun(Tables)]).
 
-channel_stats(Objs, FineSpecs, Tables) ->
+list_channel_stats(Objs, Tables) ->
+    merge_stats(Objs, [basic_stats_fun(channel_stats, Tables),
+                       fine_stats_fun(?FINE_STATS_CHANNEL_LIST, Tables),
+                       augment_msg_stats_fun(Tables)]).
+
+detail_channel_stats(Objs, Tables) ->
     merge_stats(Objs, [basic_stats_fun(channel_stats, Tables),
                        consumer_details_fun(
                          fun (Props) -> {'_', pget(pid, Props)} end, Tables),
-                       fine_stats_fun(FineSpecs, Tables),
+                       fine_stats_fun(?FINE_STATS_CHANNEL_DETAIL, Tables),
                        augment_msg_stats_fun(Tables)]).
 
 %%----------------------------------------------------------------------------
