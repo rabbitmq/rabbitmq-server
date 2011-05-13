@@ -33,10 +33,12 @@
 -behaviour(supervisor).
 -export([init/1]).
 
--define(PREFIX, "api").
+-define(API_PREFIX, "api").
 -define(UI_PREFIX, "mgmt").
 -define(CLI_PREFIX, "cli").
--define(CONTEXT, mgmt).
+-define(API_CONTEXT, rabbit_mgmt_api).
+-define(UI_CONTEXT, rabbit_mgmt).
+-define(CLI_CONTEXT, rabbit_mgmt_cli).
 -ifdef(trace).
 -define(SETUP_WM_TRACE, true).
 -else.
@@ -68,18 +70,18 @@ stop(_State) ->
 register_contexts() ->
     Dispatch = rabbit_mgmt_dispatcher:dispatcher(),
     rabbit_mochiweb:register_authenticated_static_context(
-      mgmt, ?UI_PREFIX, ?MODULE, "priv/www", "Management: Web UI",
+      ?UI_CONTEXT, ?UI_PREFIX, ?MODULE, "priv/www", "Management: Web UI",
       fun (U, P) ->
               case rabbit_access_control:check_user_pass_login(U, P) of
                   {ok, _} -> true;
                   _       -> false
               end
       end),
-    rabbit_mochiweb:register_context_handler(mgmt_api, ?PREFIX,
+    rabbit_mochiweb:register_context_handler(?API_CONTEXT, ?API_PREFIX,
                                              rabbit_webmachine:makeloop(
                                                Dispatch),
                                              "Management: HTTP API"),
-    rabbit_mochiweb:register_static_context(mgmt_cli, ?CLI_PREFIX, ?MODULE,
+    rabbit_mochiweb:register_static_context(?CLI_CONTEXT, ?CLI_PREFIX, ?MODULE,
                                             "priv/www-cli",
                                             "Management: Command Line Tool").
 setup_wm_logging() ->
@@ -99,22 +101,24 @@ setup_wm_trace_app() ->
                                        wmtrace_resource,
                                        [{trace_dir, "/tmp"}]}]),
     rabbit_mochiweb:register_static_context(
-      ?CONTEXT, "wmtrace/static", ?MODULE,
+      rabbit_mgmt_trace_static, "wmtrace/static", ?MODULE,
       "deps/webmachine/webmachine/priv/trace", none),
-    rabbit_mochiweb:register_context_handler(?CONTEXT,
+    rabbit_mochiweb:register_context_handler(rabbit_mgmt_trace,
                                              "wmtrace", Loop,
                                              "Webmachine tracer").
 log_startup() ->
     {ok, Hostname} = inet:gethostname(),
+    %% This assumes UI and API are assigned to the same listener;
+    %% which is fair since things will break if they are not.
     URLPrefix = "http://" ++ Hostname ++ ":" ++ integer_to_list(get_port()),
     rabbit_log:info(
       "Management plugin started.~n"
       ++ "HTTP API:       ~s/~s/~n"
       ++ "Management UI:  ~s/~s/~n",
-      [URLPrefix, ?PREFIX, URLPrefix, ?UI_PREFIX]).
+      [URLPrefix, ?API_PREFIX, URLPrefix, ?UI_PREFIX]).
 
 get_port() ->
-    case rabbit_mochiweb:context_listener(?CONTEXT) of
+    case rabbit_mochiweb:context_listener(?UI_CONTEXT) of
         undefined ->
             exit(rabbit_mochiweb_listener_not_configured);
         {_Instance, Options} ->
