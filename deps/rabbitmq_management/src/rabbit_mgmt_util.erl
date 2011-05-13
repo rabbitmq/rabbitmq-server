@@ -128,38 +128,29 @@ sort_list(Facts, DefaultSorts, Sort, Reverse) ->
                undefined -> DefaultSorts;
                Extra     -> [Extra | DefaultSorts]
            end,
-    Sorted = lists:sort(fun(A, B) -> compare(A, B, SortList) end, Facts),
+    %% lists:sort/2 is much more expensive than lists:sort/1
+    Sorted = [V || {_K, V} <- lists:sort(
+                                [{sort_key(F, SortList), F} || F <- Facts])],
     case Reverse of
         "true" -> lists:reverse(Sorted);
         _      -> Sorted
     end.
 
-compare(_A, _B, []) ->
-    true;
-compare(A, B, [Sort | Sorts]) ->
-    A0 = get_dotted_value(Sort, A),
-    B0 = get_dotted_value(Sort, B),
-    case {A0, B0, A0 == B0} of
-        %% Put "nothing" before everything else, in number terms it usually
-        %% means 0.
-        {_,         _,         true}  -> compare(A, B, Sorts);
-        {undefined, _,         _}     -> true;
-        {_,         undefined, _}     -> false;
-        {_,         _,         false} -> A0 < B0
-    end.
+sort_key(_Item, []) ->
+    [];
+sort_key(Item, [Sort | Sorts]) ->
+    [get_dotted_value(Sort, Item) | sort_key(Item, Sorts)].
 
 get_dotted_value(Key, Item) ->
     Keys = string:tokens(Key, "."),
     get_dotted_value0(Keys, Item).
 
 get_dotted_value0([Key], Item) ->
-    proplists:get_value(list_to_atom(Key), Item);
+    %% Put "nothing" before everything else, in number terms it usually
+    %% means 0.
+    proplists:get_value(list_to_atom(Key), Item, 0);
 get_dotted_value0([Key | Keys], Item) ->
-    SubItem = case proplists:get_value(list_to_atom(Key), Item) of
-                  undefined -> [];
-                  Other     -> Other
-              end,
-    get_dotted_value0(Keys, SubItem).
+    get_dotted_value0(Keys, proplists:get_value(list_to_atom(Key), Item, [])).
 
 bad_request(Reason, ReqData, Context) ->
     halt_response(400, bad_request, Reason, ReqData, Context).
