@@ -35,14 +35,19 @@ check_contexts(Listeners, Contexts) when
         undefined ->
             {error, no_default_listener};
         _ ->
+            HasListener = fun(Listener, Acc) ->
+                                  case proplists:get_value(Listener, Listeners) of
+                                      undefined ->
+                                          [Listener | Acc];
+                                      _ ->
+                                          Acc
+                                  end
+                          end,
             Checks = lists:foldl(
-                       fun ({_Name, Listener}, Acc) ->
-                               case proplists:get_value(Listener, Listeners) of
-                                   undefined ->
-                                       [Listener | Acc];
-                                   _ ->
-                                       Acc
-                               end
+                       fun ({_Name, {Listener, _Path}}, Acc) ->
+                               HasListener(Listener, Acc);
+                           ({_Name, Listener}, Acc) ->
+                               HasListener(Listener, Acc)
                        end, [], Contexts),
             case Checks of
                 [] ->
