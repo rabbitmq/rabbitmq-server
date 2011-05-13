@@ -76,9 +76,7 @@ is_authorized(ReqData, Context, Fun) ->
                                                              Password) of
                 {ok, User} ->
                     case Fun(User) of
-                        true  -> {true, ReqData,
-                                  Context#context{user     = User,
-                                                  password = Password}};
+                        true  -> {true, ReqData, Context#context{user = User}};
                         false -> Unauthorized
                     end;
                 {refused, _, _} ->
@@ -326,13 +324,14 @@ with_channel(VHost, ReqData, Context, Fun) ->
     with_channel(VHost, ReqData, Context, node(), Fun).
 
 with_channel(VHost, ReqData,
-             Context = #context{ user = #user { username = Username },
-                                 password = Password }, Node, Fun) ->
-    Params = #amqp_params{username     = Username,
-                          password     = Password,
-                          node         = Node,
-                          virtual_host = VHost},
-    case amqp_connection:start(direct, Params) of
+             Context = #context{user = #user {username = Username}},
+             Node, Fun) ->
+    Params = #amqp_params_direct{username     = Username,
+                                 node         = Node,
+                                 virtual_host = VHost},
+    %% We don't need to check the password here, we already did in
+    %% is_authorized/3.
+    case amqp_connection:start(Params) of
         {ok, Conn} ->
             {ok, Ch} = amqp_connection:open_channel(Conn),
             try

@@ -165,7 +165,7 @@ permissions_test() ->
     ok.
 
 connections_test() ->
-    {ok, Conn} = amqp_connection:start(network),
+    {ok, Conn} = amqp_connection:start(#amqp_params_network{}),
     LocalPort = rabbit_mgmt_test_db:local_port(Conn),
     Path = binary_to_list(
              rabbit_mgmt_format:print(
@@ -457,7 +457,7 @@ permissions_amqp_test() ->
     ok.
 
 get_conn(Username, Password) ->
-    {ok, Conn} = amqp_connection:start(network, #amqp_params{
+    {ok, Conn} = amqp_connection:start(#amqp_params_network{
                                         username = list_to_binary(Username),
                                         password = list_to_binary(Password)}),
     LocalPort = rabbit_mgmt_test_db:local_port(Conn),
@@ -556,7 +556,7 @@ all_configuration_test() ->
     ok.
 
 all_configuration_remove_things_test() ->
-    {ok, Conn} = amqp_connection:start(network, #amqp_params{}),
+    {ok, Conn} = amqp_connection:start(#amqp_params_network{}),
     {ok, Ch} = amqp_connection:open_channel(Conn),
     amqp_channel:call(Ch, #'queue.declare'{ queue = <<"my-exclusive">>,
                                             exclusive = true }),
@@ -570,7 +570,7 @@ all_configuration_remove_things_test() ->
     ok.
 
 all_configuration_server_named_queue_test() ->
-    {ok, Conn} = amqp_connection:start(network, #amqp_params{}),
+    {ok, Conn} = amqp_connection:start(#amqp_params_network{}),
     {ok, Ch} = amqp_connection:open_channel(Conn),
     #'queue.declare_ok'{ queue = QName } =
         amqp_channel:call(Ch, #'queue.declare'{}),
@@ -634,7 +634,7 @@ arguments_table_test() ->
 queue_purge_test() ->
     QArgs = [],
     http_put("/queues/%2f/myqueue", QArgs, ?NO_CONTENT),
-    {ok, Conn} = amqp_connection:start(network, #amqp_params{}),
+    {ok, Conn} = amqp_connection:start(#amqp_params_network{}),
     {ok, Ch} = amqp_connection:open_channel(Conn),
     Publish = fun() ->
                       amqp_channel:call(
@@ -717,7 +717,7 @@ get_test() ->
                   [{<<"uri">>, longstr,
                     <<"amqp://localhost/%2f/upstream">>}]}]}],
     http_put("/queues/%2f/myqueue", [], ?NO_CONTENT),
-    {ok, Conn} = amqp_connection:start(network),
+    {ok, Conn} = amqp_connection:start(#amqp_params_network{}),
     {ok, Ch} = amqp_connection:open_channel(Conn),
     Publish = fun (Payload) ->
                       amqp_channel:cast(

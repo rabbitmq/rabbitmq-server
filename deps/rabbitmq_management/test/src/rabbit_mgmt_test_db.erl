@@ -41,7 +41,7 @@ test() ->
 
 setup(Test) ->
     io:format("Set up ~p... ", [Test]),
-    {ok, Conn} = amqp_connection:start(network),
+    {ok, Conn} = amqp_connection:start(#amqp_params_network{}),
     {ok, Chan} = amqp_connection:open_channel(Conn),
     Continuations = apply(rabbit_mgmt_test_db, Test, [Conn, Chan]),
     io:format("done.~n", []),
