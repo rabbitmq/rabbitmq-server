@@ -379,6 +379,7 @@ handle_deleted(TName, #event{props = [{pid, Pid}]},
     Table = orddict:fetch(TName, Tables),
     ets:delete(Table, {id(Pid), create}),
     ets:delete(Table, {id(Pid), stats}),
+    rabbit_mgmt_format:remove_pid_from_cache(Pid),
     {ok, State}.
 
 handle_consumer(Fun, Props,
