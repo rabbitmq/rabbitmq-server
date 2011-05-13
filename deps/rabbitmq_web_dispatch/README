@@ -64,7 +64,7 @@ For example, for the configuration
 
     {rabbitmq_mochiweb, [{listeners, [{'*', [{port, 55672}]},
                                       {internal, [{port, 55670}]}]},
-                         {contexts,  [{myapp, internal, "myapp"}]}]}
+                         {contexts,  [{myapp, {internal, "myapp"}}]}]}
 
 an application registering the context name 'myapp' will be assigned
 to the listener 'internal', listening on port 55670, and be available
