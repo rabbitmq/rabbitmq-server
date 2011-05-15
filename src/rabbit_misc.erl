@@ -527,20 +527,12 @@ write_file(Path, Data, Modes) ->
     case make_binary(Data) of
         Bin when is_binary(Bin) ->
             case file:open(Path, Modes1) of
-                {ok, Hdl} ->
-                    case file:write(Hdl, Bin) of
-                        ok ->
-                            case file:sync(Hdl) of
-                                ok ->
-                                    file:close(Hdl);
-                                {error, _} = E ->
-                                    file:close(Hdl),
-                                    E
-                            end;
-                        {error, _} = E ->
-                            file:close(Hdl),
-                            E
-                    end;
+                {ok, Hdl}      -> try file:write(Hdl, Bin) of
+                                      ok             -> file:sync(Hdl);
+                                      {error, _} = E -> E
+                                  after
+                                      file:close(Hdl)
+                                  end;
                 {error, _} = E -> E
             end;
         {error, _} = E -> E
