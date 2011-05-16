@@ -26,7 +26,7 @@
 -export([all_or_one_vhost/2, http_to_amqp/5, reply/3, filter_vhost/3]).
 -export([filter_user/3, with_decode/5, decode/1, redirect/2, args/1]).
 -export([reply_list/3, reply_list/4, sort_list/4, destination_type/1]).
--export([post_respond/1]).
+-export([post_respond/1, columns/1, want_column/2]).
 
 -include("rabbit_mgmt.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
@@ -76,9 +76,7 @@ is_authorized(ReqData, Context, Fun) ->
                                                              Password) of
                 {ok, User} ->
                     case Fun(User) of
-                        true  -> {true, ReqData,
-                                  Context#context{user     = User,
-                                                  password = Password}};
+                        true  -> {true, ReqData, Context#context{user = User}};
                         false -> Unauthorized
                     end;
                 {refused, _, _} ->
@@ -120,9 +118,11 @@ reply_list(Facts, ReqData, Context) ->
     reply_list(Facts, ["vhost", "name"], ReqData, Context).
 
 reply_list(Facts, DefaultSorts, ReqData, Context) ->
-    reply(sort_list(Facts, DefaultSorts,
-                    wrq:get_qs_value("sort", ReqData),
-                    wrq:get_qs_value("sort_reverse", ReqData)),
+    reply(sort_list(
+            extract_columns(Facts, ReqData),
+            DefaultSorts,
+            wrq:get_qs_value("sort", ReqData),
+            wrq:get_qs_value("sort_reverse", ReqData)),
           ReqData, Context).
 
 sort_list(Facts, DefaultSorts, Sort, Reverse) ->
@@ -130,38 +130,50 @@ sort_list(Facts, DefaultSorts, Sort, Reverse) ->
                undefined -> DefaultSorts;
                Extra     -> [Extra | DefaultSorts]
            end,
-    Sorted = lists:sort(fun(A, B) -> compare(A, B, SortList) end, Facts),
+    %% lists:sort/2 is much more expensive than lists:sort/1
+    Sorted = [V || {_K, V} <- lists:sort(
+                                [{sort_key(F, SortList), F} || F <- Facts])],
     case Reverse of
         "true" -> lists:reverse(Sorted);
         _      -> Sorted
     end.
 
-compare(_A, _B, []) ->
-    true;
-compare(A, B, [Sort | Sorts]) ->
-    A0 = get_dotted_value(Sort, A),
-    B0 = get_dotted_value(Sort, B),
-    case {A0, B0, A0 == B0} of
-        %% Put "nothing" before everything else, in number terms it usually
-        %% means 0.
-        {_,         _,         true}  -> compare(A, B, Sorts);
-        {undefined, _,         _}     -> true;
-        {_,         undefined, _}     -> false;
-        {_,         _,         false} -> A0 < B0
-    end.
+sort_key(_Item, []) ->
+    [];
+sort_key(Item, [Sort | Sorts]) ->
+    [get_dotted_value(Sort, Item) | sort_key(Item, Sorts)].
 
 get_dotted_value(Key, Item) ->
     Keys = string:tokens(Key, "."),
     get_dotted_value0(Keys, Item).
 
 get_dotted_value0([Key], Item) ->
-    proplists:get_value(list_to_atom(Key), Item);
+    %% Put "nothing" before everything else, in number terms it usually
+    %% means 0.
+    proplists:get_value(list_to_atom(Key), Item, 0);
 get_dotted_value0([Key | Keys], Item) ->
-    SubItem = case proplists:get_value(list_to_atom(Key), Item) of
-                  undefined -> [];
-                  Other     -> Other
-              end,
-    get_dotted_value0(Keys, SubItem).
+    get_dotted_value0(Keys, proplists:get_value(list_to_atom(Key), Item, [])).
+
+extract_columns(Items, ReqData) ->
+    Cols = columns(ReqData),
+    [extract_column_items(Item, Cols) || Item <- Items].
+
+extract_column_items(Item, all) ->
+    Item;
+extract_column_items({struct, L}, Cols) ->
+    extract_column_items(L, Cols);
+extract_column_items(Item = [T | _], Cols) when is_tuple(T) ->
+    [{K, extract_column_items(V, descend_columns(K, Cols))} ||
+        {K, V} <- Item, want_column(K, Cols)];
+extract_column_items(L, Cols) when is_list(L) ->
+    [extract_column_items(I, Cols) || I <- L];
+extract_column_items(O, _Cols) ->
+    O.
+
+descend_columns(_K, [])                -> [];
+descend_columns(K, [[K] | _Rest])      -> all;
+descend_columns(K, [[K | K2] | Rest])  -> [K2 | descend_columns(K, Rest)];
+descend_columns(K, [[_K2 | _] | Rest]) -> descend_columns(K, Rest).
 
 bad_request(Reason, ReqData, Context) ->
     halt_response(400, bad_request, Reason, ReqData, Context).
@@ -312,13 +324,14 @@ with_channel(VHost, ReqData, Context, Fun) ->
     with_channel(VHost, ReqData, Context, node(), Fun).
 
 with_channel(VHost, ReqData,
-             Context = #context{ user = #user { username = Username },
-                                 password = Password }, Node, Fun) ->
-    Params = #amqp_params{username     = Username,
-                          password     = Password,
-                          node         = Node,
-                          virtual_host = VHost},
-    case amqp_connection:start(direct, Params) of
+             Context = #context{user = #user {username = Username}},
+             Node, Fun) ->
+    Params = #amqp_params_direct{username     = Username,
+                                 node         = Node,
+                                 virtual_host = VHost},
+    %% We don't need to check the password here, we already did in
+    %% is_authorized/3.
+    case amqp_connection:start(Params) of
         {ok, Conn} ->
             {ok, Ch} = amqp_connection:open_channel(Conn),
             try
@@ -389,3 +402,13 @@ post_respond({JSON, ReqData, Context}) ->
     {true, wrq:set_resp_header(
              "content-type", "application/json",
              wrq:append_to_response_body(JSON, ReqData)), Context}.
+
+columns(ReqData) ->
+    case wrq:get_qs_value("columns", ReqData) of
+        undefined -> all;
+        Str       -> [[list_to_atom(T) || T <- string:tokens(C, ".")]
+                      || C <- string:tokens(Str, ",")]
+    end.
+
+want_column(_Col, all) -> true;
+want_column(Col, Cols) -> lists:any(fun([C|_]) -> C == Col end, Cols).

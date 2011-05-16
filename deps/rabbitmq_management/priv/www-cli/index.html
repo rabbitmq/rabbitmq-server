@@ -88,9 +88,9 @@
 
       <li>
         Get a list of queues, with some columns specified:
-<pre>$ rabbitmqadmin list queues vhost name node messages message_stats_publish_details_rate
+<pre>$ rabbitmqadmin list queues vhost name node messages message_stats.publish_details.rate
 +-------+----------------------------------+-------------------+----------+------------------------------------+
-| vhost |               name               |       node        | messages | message_stats_publish_details_rate |
+| vhost |               name               |       node        | messages | message_stats.publish_details.rate |
 +-------+----------------------------------+-------------------+----------+------------------------------------+
 | /     | amq.gen-UELtxwb8OGJ9XHlHJq0Jug== | rabbit@smacmullen | 0        | 100.985821591                      |
 | /     | test                             | rabbit@misstiny   | 5052     | 100.985821591                      |
@@ -105,8 +105,8 @@
                                        vhost: /
                                         name: amq.gen-UELtxwb8OGJ9XHlHJq0Jug==
                                  auto_delete: False
-    backing_queue_status_avg_ack_egress_rate: 100.944672225
-   backing_queue_status_avg_ack_ingress_rate: 100.944672225
+    backing_queue_status.avg_ack_egress_rate: 100.944672225
+   backing_queue_status.avg_ack_ingress_rate: 100.944672225
 
 <i>and so on, and on...</i></pre>
       </li>
