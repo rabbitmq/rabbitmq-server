@@ -193,10 +193,7 @@ format_context({Path, Description, Rest}) ->
                    none -> [];
                    _    -> [{description, list_to_binary(Description)}]
                end,
-    {ok, Hostname} = inet:gethostname(),
-    FQDN = Hostname ++ "." ++ proplists:get_value(domain, inet:get_rc()),
-    DescPart ++ [{path, list_to_binary("/" ++ Path)},
-                 {host, list_to_binary(FQDN)}] ++ Rest.
+    DescPart ++ [{path, list_to_binary("/" ++ Path)}] ++ Rest.
 
 %%--------------------------------------------------------------------
 
