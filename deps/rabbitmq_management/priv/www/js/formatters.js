@@ -224,6 +224,25 @@ function fmt_idle_long(obj) {
     }
 }
 
+function fmt_context_opts(context) {
+    var boring = {'port': 0, 'node': 0, 'path': 0, 'ssl': 0, 'ssl_opts': 0,
+                  'description': 0};
+    var result;
+
+    if (context.ssl) {
+        result = '<sub>https</sub> ';
+    } else {
+        result = '<sub>http</sub> ';
+    }
+
+    for (var k in context) {
+        if (!(k in boring))
+            result += '<sub>' + k + ': ' + context[k] + '</sub> ';
+    }
+
+    return result;
+}
+
 function fmt_escape_html(txt) {
     return txt.replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')

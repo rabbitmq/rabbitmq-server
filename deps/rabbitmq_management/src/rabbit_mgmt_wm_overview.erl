@@ -73,4 +73,14 @@ rabbit_mochiweb_contexts() ->
 
 contexts(Node) ->
     [{contexts, Contexts}] = rabbit_mgmt_external_stats:info(Node, [contexts]),
-    [[{node, Node}|C] || C <- Contexts].
+    [[{node, Node} | format_mochiweb_option_list(C)] || C <- Contexts].
+
+format_mochiweb_option_list(C) ->
+    [{K, format_mochiweb_option(K, V)} || {K, V} <- C].
+
+format_mochiweb_option(ssl_opts, V) ->
+    format_mochiweb_option_list(V);
+format_mochiweb_option(_K, V) when is_list(V) ->
+    list_to_binary(V);
+format_mochiweb_option(_K, V) ->
+    V.

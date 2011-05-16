@@ -169,20 +169,18 @@
       <h3>Web Contexts</h3>
       <table class="list">
         <tr>
-          <th>URL</th>
+          <th>Context</th>
           <th>Port</th>
           <th>Path</th>
         </tr>
         <%
            for (var i = 0; i < overview.contexts.length; i++) {
              var context = overview.contexts[i];
-             var protocol = context.ssl ? "https" : "http";
-             var uri = protocol + "://" + context.host + ":" + context.port + context.path;
         %>
         <tr<%= alt_rows(i)%>>
           <td>
             <% if (context.description) { %>
-              <a href="<%= uri %>"><%= context.description %></a>
+              <%= context.description %>
             <% } else { %>
               <i>unnamed</i>
             <% } %>
@@ -190,7 +188,7 @@
           </td>
           <td>
             <%= context.port %>
-            <sub><%= protocol %></sub>
+            <%= fmt_context_opts(context) %>
           </td>
           <td>
             <%= context.path %>
