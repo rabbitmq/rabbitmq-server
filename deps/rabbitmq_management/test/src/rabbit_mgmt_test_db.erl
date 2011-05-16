@@ -280,8 +280,7 @@ get_exchange(XName) ->
 
 get_queue(QName) ->
     Q = rabbit_mgmt_wm_queue:queue(<<"/">>, QName),
-    [Res] = rabbit_mgmt_db:get_queue(Q),
-    Res.
+    rabbit_mgmt_db:get_queue(Q).
 
 declare_queue(Chan) ->
     #'queue.declare_ok'{ queue = Q } =
