@@ -162,6 +162,12 @@ def make_parser():
                       metavar="PASSWORD")
     parser.add_option("-q", "--quiet", action="store_false", dest="verbose",
                       default=True, help="suppress status messages")
+    parser.add_option("-s", "--ssl", action="store_true", dest="ssl",
+                      default=False, help="connect with ssl")
+    parser.add_option("--ssl-key-file", dest="ssl_key_file", default=None,
+                      help="PEM format key file for SSL [default: none]")
+    parser.add_option("--ssl-cert-file", dest="ssl_cert_file", default=None,
+                      help="PEM format certificate file for SSL [default: none]")
     parser.add_option("-f", "--format", dest="format", default="table",
                       help="format for listing commands - one of [" + ", ".join(FORMATS.keys())  + "]  [default: %default]")
     parser.add_option("-d", "--depth", dest="depth", default="1",
@@ -229,7 +235,14 @@ class Management:
         return self.http("DELETE", path, "")
 
     def http(self, method, path, body):
-        conn = httplib.HTTPConnection(self.options.hostname, self.options.port)
+        if self.options.ssl:
+            conn = httplib.HTTPSConnection(self.options.hostname,
+                                           self.options.port,
+                                           self.options.ssl_key_file,
+                                           self.options.ssl_cert_file)
+        else:
+            conn = httplib.HTTPConnection(self.options.hostname,
+                                          self.options.port)
         headers = {"Authorization":
                        "Basic " + base64.b64encode(self.options.username + ":" +
                                                    self.options.password)}
