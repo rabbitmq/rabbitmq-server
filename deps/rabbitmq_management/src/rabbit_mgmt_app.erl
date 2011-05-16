@@ -34,7 +34,7 @@
 -export([init/1]).
 
 -define(CONTEXT, rabbit_mgmt).
--define(STATIC_PATH, "www").
+-define(STATIC_PATH, "priv/www").
 
 -ifdef(trace).
 -define(SETUP_WM_TRACE, true).
@@ -71,7 +71,9 @@ register_context() ->
 make_loop() ->
     Dispatch = rabbit_mgmt_dispatcher:dispatcher(),
     WMLoop = rabbit_webmachine:makeloop(Dispatch),
-    LocalPath = filename:join(code:priv_dir(rabbitmq_management), ?STATIC_PATH),
+    {file, Here} = code:is_loaded(?MODULE),
+    ModuleRoot = filename:dirname(filename:dirname(Here)),
+    LocalPath = filename:join(ModuleRoot, ?STATIC_PATH),
     fun({Prefix, Listener}, Req) ->
             %% To get here we know Prefix matches the beginning
             %% of the path
