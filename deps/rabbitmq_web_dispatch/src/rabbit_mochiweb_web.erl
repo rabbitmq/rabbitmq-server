@@ -6,25 +6,24 @@
 %% HTTPish API
 %% ----------------------------------------------------------------------
 
-start({Instance, Env}) ->
+start({ListenerSpec, Env}) ->
     case proplists:get_value(port, Env, undefined) of
         undefined ->
-            {error, {no_port_given, Instance, Env}};
-        P ->
-            Loop = loopfun(Instance),
-            {_, OtherOptions} = proplists:split(Env, [port]),
-            Name = name(Instance),
+            {error, {no_port_given, ListenerSpec, Env}};
+        _ ->
+            Loop = loopfun(ListenerSpec),
+            OtherOptions = proplists:delete(name, Env),
+            Name = name(ListenerSpec),
             mochiweb_http:start(
-              [{name, Name}, {port, P}, {loop, Loop}] ++
-              OtherOptions)
+              [{name, Name}, {loop, Loop} | OtherOptions])
     end.
 
-stop(Instance) ->
-    mochiweb_http:stop(name(Instance)).
+stop(Listener) ->
+    mochiweb_http:stop(name(Listener)).
 
-loopfun(Instance) ->
+loopfun(Listener) ->
     fun (Req) ->
-            case rabbit_mochiweb_registry:lookup(Instance, Req) of
+            case rabbit_mochiweb_registry:lookup(Listener, Req) of
                 no_handler ->
                     Req:not_found();
                 {lookup_failure, Reason} ->
@@ -34,5 +33,5 @@ loopfun(Instance) ->
             end
     end.
 
-name(Instance) ->
-    list_to_atom(atom_to_list(?MODULE) ++ "_" ++ atom_to_list(Instance)).
+name(Listener) ->
+    list_to_atom(atom_to_list(?MODULE) ++ "_" ++ atom_to_list(Listener)).

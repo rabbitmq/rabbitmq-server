@@ -1,63 +1,37 @@
 -module(rabbit_mochiweb).
 
--export([start/0, stop/0]).
 -export([register_context_handler/4, register_static_context/5]).
 -export([register_authenticated_static_context/6]).
 -export([context_listener/1, context_path/2]).
 
--define(APP, ?MODULE).
-
-%% @spec start() -> ok
-%% @doc Start the rabbit_mochiweb server.
-start() ->
-    application:start(rabbit_mochiweb).
-
-%% @spec stop() -> ok
-%% @doc Stop the rabbit_mochiweb server.
-stop() ->
-    application:stop(rabbit_mochiweb).
+-define(APP, rabbitmq_mochiweb).
 
 %% @doc Get the path for a context; if not configured then use the
 %% default given.
 context_path(Context, Default) ->
-    case application:get_env(?MODULE, contexts) of
-        undefined ->
-            Default;
-        {ok, Contexts} ->
-            case proplists:get_value(Context, Contexts) of
-                undefined -> Default;
-                {_Listener, Path} -> Path;
-                _Listener -> Default
-            end
+    {ok, Contexts} = application:get_env(?APP, contexts),
+    case proplists:get_value(Context, Contexts) of
+        undefined         -> Default;
+        {_Listener, Path} -> Path;
+        _Listener         -> Default
     end.
 
-%% @doc Get the listener and its options for a context.
+%% @doc Get the listener and its options, for a given context.
 context_listener(Context) ->
-    L = case application:get_env(?MODULE, contexts) of
-            undefined ->
-                '*';
-            {ok, Contexts} ->
-                case proplists:get_value(Context, Contexts) of
-                    undefined -> '*';
-                    {Listener, _Path} -> Listener;
-                    Listener -> Listener
-                end
+    {ok, Contexts} = application:get_env(?APP, contexts),
+    L = case proplists:get_value(Context, Contexts) of
+            undefined         -> '*';
+            {Listener, _Path} -> Listener;
+            Listener          -> Listener
         end,
-    case application:get_env(?APP, listeners) of
-        {ok, Listeners} ->
-            case proplists:lookup(L, Listeners) of
-                none -> undefined;
-                Spec -> Spec
-            end;
-        undefined ->
-            undefined
-    end.
+    {ok, Listeners} = application:get_env(?APP, listeners),
+    proplists:lookup(L, Listeners).
 
 %% Handler Registration
 
-%% @doc Registers a dynamic selector and handler combination, with a
-%% link to display in lists. Assumes that context is configured; check
-%% with context_path first to make sure.
+%% Registers a dynamic selector and handler combination, with a link
+%% to display in lists. Assumes that context is configured; check with
+%% context_path first to make sure.
 register_handler(Context, Selector, Handler, Link) ->
     rabbit_mochiweb_registry:add(Context, Selector, Handler, Link).
 
@@ -67,7 +41,7 @@ register_handler(Context, Selector, Handler, Link) ->
 %% {ok, Path}
 %% @doc Registers a dynamic handler under a fixed context path, with
 %% link to display in the global context. The path may be overidden by
-%% rabbit_mochiweb's configuration.
+%% rabbitmq_mochiweb's configuration.
 register_context_handler(Context, Prefix0, Handler, LinkText) ->
     Prefix = context_path(Context, Prefix0),
     Listener = context_listener(Context),
@@ -75,8 +49,7 @@ register_context_handler(Context, Prefix0, Handler, LinkText) ->
       Context,
       fun(Req) ->
               "/" ++ Path = Req:get(raw_path),
-              (Path == Prefix) orelse
-              (string:str(Path, Prefix ++ "/") == 1)
+              (Path == Prefix) orelse (string:str(Path, Prefix ++ "/") == 1)
       end,
       fun (Req) -> Handler({Prefix, Listener}, Req) end,
       {Prefix, LinkText}),
@@ -93,7 +66,7 @@ register_static_context(Context, Prefix0, Module, FSPath, LinkText) ->
                      {Prefix, LinkText}),
     {ok, Prefix}.
 
-%% @doc Produces a selector for use with register_handler that
+%% Produces a selector for use with register_handler that
 %% responds to GET and HEAD HTTP methods for resources within the
 %% given fixed context path.
 static_context_selector(Prefix) ->
@@ -107,7 +80,7 @@ static_context_selector(Prefix) ->
             end
     end.
 
-%% @doc Produces a handler for use with register_handler that serves
+%% Produces a handler for use with register_handler that serves
 %% up static content from a directory specified relative to the
 %% directory containing the ebin directory containing the named
 %% module's beam file.
@@ -133,7 +106,7 @@ static_context_handler(Prefix, LocalPath) ->
             end
     end.
 
-%% @doc Register a fully static but HTTP-authenticated context to
+%% Register a fully static but HTTP-authenticated context to
 %% serve content from a module-relative directory, with link to
 %% display in the global context.
 register_authenticated_static_context(Context, Prefix0, Module, FSPath,
@@ -155,7 +128,6 @@ register_authenticated_static_context(Context, Prefix0, Module, FSPath,
                         Req:respond(Unauthorized)
                 end
         end,
-    register_handler(Context,
-                     static_context_selector(Prefix),
-                     Handler, {Prefix, LinkDesc}),
+    register_handler(Context, static_context_selector(Prefix), Handler,
+                     {Prefix, LinkDesc}),
     {ok, Prefix}.
