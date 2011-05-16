@@ -43,7 +43,8 @@ init([ListenerSpecs]) ->
 
 handle_call({add, Context, Selector, Handler, Link}, _From,
             undefined) ->
-    ListenerSpec = {Listener, Opts} = rabbit_mochiweb:context_listener(Context),
+    ListenerSpec = {Listener, _Opts} =
+        rabbit_mochiweb:context_listener(Context),
     rabbit_mochiweb_sup:ensure_listener(ListenerSpec),
     case lookup_dispatch(Listener) of
         {Selectors, Fallback} ->

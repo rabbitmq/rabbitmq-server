@@ -10,7 +10,7 @@ start({ListenerSpec, Env}) ->
     case proplists:get_value(port, Env, undefined) of
         undefined ->
             {error, {no_port_given, ListenerSpec, Env}};
-        P ->
+        _ ->
             Loop = loopfun(ListenerSpec),
             OtherOptions = proplists:delete(name, Env),
             Name = name(ListenerSpec),
