@@ -64,32 +64,20 @@ accept_content(ReqData, {_Mode, Context}) ->
     Dest = rabbit_mgmt_util:id(destination, ReqData),
     DestType = rabbit_mgmt_util:id(dtype, ReqData),
     VHost = rabbit_mgmt_util:vhost(ReqData),
-    Response =
-        case DestType of
-            <<"q">> ->
-                rabbit_mgmt_util:http_to_amqp(
-                  'queue.bind', ReqData, Context,
-                  [], [{exchange, Source}, {queue,       Dest}]);
-            <<"e">> ->
-                rabbit_mgmt_util:http_to_amqp(
-                  'exchange.bind', ReqData, Context,
-                  [], [{source,   Source}, {destination, Dest}])
-        end,
+    {ok, Props} = rabbit_mgmt_util:decode(wrq:req_body(ReqData)),
+    {Method, Key, Args} = method_key_args(DestType, Source, Dest, Props),
+    Response = rabbit_mgmt_util:amqp_request(VHost, ReqData, Context, Method),
     case Response of
         {{halt, _}, _, _} = Res ->
             Res;
         {true, ReqData, Context2} ->
-            {ok, Props} = rabbit_mgmt_util:decode(wrq:req_body(ReqData)),
-            Key = proplists:get_value(<<"routing_key">>, Props, <<"">>),
-            Args = proplists:get_value(<<"arguments">>, Props, []),
             Loc = rabbit_mochiweb_util:relativise(
                     wrq:path(ReqData),
                     binary_to_list(
                       rabbit_mgmt_format:url(
                         "/api/bindings/~s/e/~s/~s/~s/~s",
                         [VHost, Source, DestType, Dest,
-                         rabbit_mgmt_format:pack_binding_props(
-                           Key, rabbit_mgmt_util:args(Args))]))),
+                         rabbit_mgmt_format:pack_binding_props(Key, Args)]))),
             ReqData2 = wrq:set_resp_header("Location", Loc, ReqData),
             {true, ReqData2, Context2}
     end.
@@ -103,6 +91,20 @@ is_authorized(ReqData, {Mode, Context}) ->
 bindings(ReqData) ->
     [rabbit_mgmt_format:binding(B) ||
         B <- list_bindings(all, ReqData)].
+
+method_key_args(<<"q">>, Source, Dest, Props) ->
+    M = #'queue.bind'{routing_key = K, arguments = A} =
+        rabbit_mgmt_util:props_to_method(
+          'queue.bind', Props,
+          [], [{exchange, Source}, {queue,       Dest}]),
+    {M, K, A};
+
+method_key_args(<<"e">>, Source, Dest, Props) ->
+    M = #'exchange.bind'{routing_key = K, arguments = A} =
+        rabbit_mgmt_util:props_to_method(
+          'exchange.bind', Props,
+          [], [{source,   Source}, {destination, Dest}]),
+    {M, K, A}.
 
 %%--------------------------------------------------------------------
 
