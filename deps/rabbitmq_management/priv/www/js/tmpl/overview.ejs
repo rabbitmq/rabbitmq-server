@@ -134,31 +134,72 @@
 <% } %>
 <% } %>
 
-<h3>Listening Ports</h3>
-<table class="list">
+<table class="two-col-layout">
   <tr>
-    <th>Host</th>
-    <th>Bound to</th>
-    <th>Port</th>
+    <td>
+
+      <h3>Listening Ports</h3>
+      <table class="list">
+        <tr>
+          <th>Host</th>
+          <th>Bound to</th>
+          <th>Port</th>
+        </tr>
+        <%
+           for (var i = 0; i < overview.listeners.length; i++) {
+             var listener = overview.listeners[i];
+        %>
+        <tr<%= alt_rows(i)%>>
+          <td>
+            <%= listener.host %>
+            <sub><%= listener.node %></sub>
+          </td>
+          <td>
+            <%= listener.ip_address %>
+          </td>
+          <td>
+            <%= listener.port %>
+            <sub><%= listener.protocol %></sub>
+          </td>
+        </tr>
+        <% } %>
+      </table>
+    </td>
+    <td>
+      <h3>Web Contexts</h3>
+      <table class="list">
+        <tr>
+          <th>URL</th>
+          <th>Port</th>
+          <th>Path</th>
+        </tr>
+        <%
+           for (var i = 0; i < overview.contexts.length; i++) {
+             var context = overview.contexts[i];
+             var protocol = context.ssl ? "https" : "http";
+             var uri = protocol + "://" + context.host + ":" + context.port + context.path;
+        %>
+        <tr<%= alt_rows(i)%>>
+          <td>
+            <% if (context.description) { %>
+              <a href="<%= uri %>"><%= context.description %></a>
+            <% } else { %>
+              <i>unnamed</i>
+            <% } %>
+            <sub><%= context.node %></sub>
+          </td>
+          <td>
+            <%= context.port %>
+            <sub><%= protocol %></sub>
+          </td>
+          <td>
+            <%= context.path %>
+          </td>
+        </tr>
+        <% } %>
+      </table>
+    </td>
   </tr>
-<%
-for (var i = 0; i < overview.listeners.length; i++) {
-    var listener = overview.listeners[i];
-%>
-   <tr<%= alt_rows(i)%>>
-     <td>
-       <%= listener.host %>
-       <sub><%= listener.node %></sub>
-     </td>
-     <td>
-       <%= listener.ip_address %>
-     </td>
-     <td>
-       <%= listener.port %>
-       <sub><%= listener.protocol %></sub>
-     </td>
-   </tr>
-<% } %>
 </table>
 </div>
 </div>

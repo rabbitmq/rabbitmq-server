@@ -43,7 +43,8 @@ to_json(ReqData, Context = #context{user = User = #user{is_admin = IsAdmin}}) ->
                     rabbit_mgmt_db:get_overview() ++
                     [{node,               node()},
                      {statistics_db_node, stats_db_node()},
-                     {listeners,          Listeners}];
+                     {listeners,          Listeners},
+                     {contexts,           rabbit_mochiweb_contexts()}];
             _ ->
                 Overview0 ++
                     rabbit_mgmt_db:get_overview(User)
@@ -66,3 +67,10 @@ version() ->
             A =:= rabbitmq_management],
     list_to_binary(Vsn).
 
+rabbit_mochiweb_contexts() ->
+    Nodes = proplists:get_value(running_nodes, rabbit_mnesia:status()),
+    lists:append([contexts(Node) || Node <- Nodes]).
+
+contexts(Node) ->
+    [{contexts, Contexts}] = rabbit_mgmt_external_stats:info(Node, [contexts]),
+    [[{node, Node}|C] || C <- Contexts].
