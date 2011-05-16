@@ -45,9 +45,9 @@ relativise_test() ->
     ?assertEqual("foo", rabbit_mochiweb_util:relativise("/", "/foo")).
 
 check_contexts_ok_test_() ->
-    [?_test(?_assertEqual(ok,
-                          rabbit_mochiweb_app:check_contexts(
-                            Contexts, Listeners))) ||
+    [?_test(?assertMatch(ok,
+                         rabbit_mochiweb_app:check_contexts(
+                           Listeners, Contexts))) ||
         {Contexts, Listeners} <-
             [{[],             [{'*', []}]},
              {[{ctxt, lstr}], [{'*', []}, {lstr, []}]},
@@ -61,16 +61,12 @@ check_contexts_ok_test_() ->
 
 check_contexts_errors_test_() ->
     [fun() ->
-             {error, {_, Errs}} =
-                 rabbit_mochiweb_app:check_contexts(Contexts, Listeners),
-             ?_assertEqual(Expected, Errs)
+             {error, Err} =
+                 rabbit_mochiweb_app:check_contexts(Listeners, Contexts),
+             ?assertMatch({undefined_listeners, _}, Err)
      end ||
-        {Contexts, Listeners, Expected} <-
-            [{[{ctxt1, lstr}], [{'*', []}],
-              [lstr]},
-             {[{ctxt1, lstr}, {ctxt2, lstr}], [{'*', []}, {notlstr, []}],
-              [lstr]},
-             {[{ctxt1, lstr1}, {ctxt2, lstr2}], [{'*', []}, {lstr2, []}],
-              [lstr1]},
-             {[{ctxt1, lstr1}, {ctxt2, lstr2}], [{'*', []}],
-              [lstr1, lstr2]}]].
+        {Contexts, Listeners} <-
+            [{[{ctxt1, lstr}], [{'*', []}]},
+             {[{ctxt1, lstr}, {ctxt2, lstr}], [{'*', []}, {notlstr, []}]},
+             {[{ctxt1, lstr1}, {ctxt2, lstr2}], [{'*', []}, {lstr2, []}]},
+             {[{ctxt1, lstr1}, {ctxt2, lstr2}], [{'*', []}]}]].
