@@ -1,4 +1,4 @@
-{application, rabbit_management_agent,
+{application, rabbitmq_management_agent,
  [{description, "RabbitMQ Management Agent"},
   {vsn, "%%VSN%%"},
   {modules, [rabbit_mgmt_agent_app,

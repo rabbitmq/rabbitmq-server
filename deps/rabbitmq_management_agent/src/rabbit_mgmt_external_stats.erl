@@ -40,7 +40,7 @@
 
 %%--------------------------------------------------------------------
 
--record(state, {time_ms, fd_used, fd_total, memory_alarm = false}).
+-record(state, {time_ms, fd_used, fd_total}).
 
 %%--------------------------------------------------------------------
 
@@ -136,9 +136,8 @@ get_memory_limit() ->
 
 infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
 
-i(fd_used,        #state{fd_used      = FdUsed})  -> FdUsed;
-i(fd_total,       #state{fd_total     = FdTotal}) -> FdTotal;
-i(mem_alarm,      #state{memory_alarm = MemoryAlarm}) -> MemoryAlarm;
+i(fd_used,  #state{fd_used  = FdUsed})  -> FdUsed;
+i(fd_total, #state{fd_total = FdTotal}) -> FdTotal;
 i(sockets_used,   _State) ->
     proplists:get_value(obtain_count, file_handle_cache:info([obtain_count]));
 i(sockets_total,  _State) ->
@@ -169,6 +168,8 @@ i(auth_mechanisms, _State) ->
 i(applications, _State) ->
     [format_application(A) ||
         A <- lists:keysort(1, application:which_applications())];
+i(mem_alarm, _State) -> lists:member({{vm_memory_high_watermark, node()}, []},
+                                     alarm_handler:get_alarms());
 i(contexts, _State) ->
     [format_context(C) || C <- rabbit_mochiweb_registry:list_all()].
 
@@ -215,16 +216,6 @@ handle_call({info, Items}, _From, State0) ->
 handle_call(_Req, _From, State) ->
     {reply, unknown_request, State}.
 
-handle_cast({set_alarm, {{vm_memory_high_watermark, Node}, []}}, State) ->
-    case node() of
-        Node -> {noreply, State#state{memory_alarm = true}};
-        _    -> {noreply, State}
-    end;
-handle_cast({clear_alarm, {vm_memory_high_watermark, Node}}, State) ->
-    case node() of
-        Node -> {noreply, State#state{memory_alarm = false}};
-        _    -> {noreply, State}
-    end;
 handle_cast(_C, State) ->
     {noreply, State}.
 
