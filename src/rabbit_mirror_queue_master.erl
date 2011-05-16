@@ -287,7 +287,7 @@ is_duplicate(none, Message = #basic_message { id = MsgId },
         error ->
             %% We permit the underlying BQ to have a peek at it, but
             %% only if we ourselves are not filtering out the msg.
-            {Result, BQS1} = BQ:validate_message(Message, BQS),
+            {Result, BQS1} = BQ:is_duplicate(none, Message, BQS),
             {Result, State #state { backing_queue_state = BQS1 }};
         {ok, published} ->
             %% It already got published when we were a slave and no
