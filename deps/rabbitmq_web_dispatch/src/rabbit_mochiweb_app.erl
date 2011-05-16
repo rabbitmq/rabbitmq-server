@@ -14,10 +14,8 @@ start(_Type, _StartArgs) ->
     {ok, Listeners} = application:get_env(?APP, listeners),
     {ok, Contexts} = application:get_env(?APP, contexts),
     case check_contexts(Listeners, Contexts) of
-        ok ->
-            rabbit_mochiweb_sup:start_link(Listeners);
-        Err ->
-            Err
+        ok  -> rabbit_mochiweb_sup:start_link(Listeners);
+        Err -> Err
     end.
 
 %% @spec stop(_State) -> ServerRet
@@ -37,10 +35,8 @@ check_contexts(Listeners, Contexts) when
         _ ->
             HasListener = fun(Listener, Acc) ->
                                   case proplists:get_value(Listener, Listeners) of
-                                      undefined ->
-                                          [Listener | Acc];
-                                      _ ->
-                                          Acc
+                                      undefined -> [Listener | Acc];
+                                      _         -> Acc
                                   end
                           end,
             Checks = lists:foldl(

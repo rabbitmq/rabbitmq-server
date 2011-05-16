@@ -39,10 +39,8 @@ ensure_listener({Listener, Spec}) ->
              {rabbit_mochiweb_web, start, [{Listener, Spec}]},
              permanent, 5000, worker, dynamic},
     case supervisor:start_child(?SUP, Child) of
-        {ok, Pid} ->
-            {ok, Pid};
-        {error, {already_started, Pid}} ->
-            {ok, Pid}
+        {ok,                      Pid}  -> {ok, Pid};
+        {error, {already_started, Pid}} -> {ok, Pid}
     end.
 
 %% @spec init([[instance()]]) -> SupervisorTree

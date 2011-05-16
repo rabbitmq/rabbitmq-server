@@ -11,9 +11,9 @@
 context_path(Context, Default) ->
     {ok, Contexts} = application:get_env(?APP, contexts),
     case proplists:get_value(Context, Contexts) of
-        undefined -> Default;
+        undefined         -> Default;
         {_Listener, Path} -> Path;
-        _Listener -> Default
+        _Listener         -> Default
     end.
 
 %% @doc Get the listener and its options, for a given context.
@@ -49,8 +49,7 @@ register_context_handler(Context, Prefix0, Handler, LinkText) ->
       Context,
       fun(Req) ->
               "/" ++ Path = Req:get(raw_path),
-              (Path == Prefix) orelse
-              (string:str(Path, Prefix ++ "/") == 1)
+              (Path == Prefix) orelse (string:str(Path, Prefix ++ "/") == 1)
       end,
       fun (Req) -> Handler({Prefix, Listener}, Req) end,
       {Prefix, LinkText}),
@@ -129,7 +128,6 @@ register_authenticated_static_context(Context, Prefix0, Module, FSPath,
                         Req:respond(Unauthorized)
                 end
         end,
-    register_handler(Context,
-                     static_context_selector(Prefix),
-                     Handler, {Prefix, LinkDesc}),
+    register_handler(Context, static_context_selector(Prefix), Handler,
+                     {Prefix, LinkDesc}),
     {ok, Prefix}.

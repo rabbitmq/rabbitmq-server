@@ -25,12 +25,9 @@ lookup(Listener, Req) ->
     case lookup_dispatch(Listener) of
         {Selectors, Fallback} ->
             case catch match_request(Selectors, Req) of
-                {'EXIT', Reason} ->
-                    {lookup_failure, Reason};
-                no_handler ->
-                    {handler, Fallback};
-                Handler ->
-                    {handler, Handler}
+                {'EXIT', Reason} -> {lookup_failure, Reason};
+                no_handler       -> {handler, Fallback};
+                Handler          -> {handler, Handler}
             end;
         Err ->
             {lookup_failure, Err}
@@ -98,10 +95,8 @@ code_change(_, State, _) ->
 
 lookup_dispatch(Listener) ->
     case application:get_env(?APP, {dispatch, Listener}) of
-        {ok, Dispatch} ->
-            Dispatch;
-        undefined ->
-            {no_record_for_listener, Listener}
+        {ok, Dispatch} -> Dispatch;
+        undefined      -> {no_record_for_listener, Listener}
     end.
 
 set_dispatch(Listener, Dispatch) ->
