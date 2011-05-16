@@ -523,6 +523,10 @@ write_term_file(File, Terms) ->
 write_file(Path, Data) ->
     write_file(Path, Data, []).
 
+%% write_file/3 is based on the implementation the kernel/file.erl
+%% file of the Erlang R14B02 release, licensed under the EPL. That
+%% implementation does not do an fsync prior to closing the file,
+%% hence the existence of this version.
 write_file(Path, Data, Modes) ->
     Modes1 = [binary, write | (Modes -- [binary, write])],
     case make_binary(Data) of
