@@ -14,8 +14,6 @@
   {env, [
          {listeners, [{'*', [{port, 55670}]},
                       {mgmt, [{port, 55672}]}]},
-         {contexts, [{rabbit_mgmt, mgmt},
-                     {rabbit_mgmt_api, mgmt},
-                     {rabbit_mgmt_cli, mgmt}]}
+         {contexts, [{rabbit_mgmt, mgmt}]}
         ]},
   {applications, [kernel, stdlib]}]}.
