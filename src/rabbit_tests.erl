@@ -1553,7 +1553,7 @@ test_logs_working(MainLogFile, SaslLogFile) ->
     ok = rabbit_log:error("foo bar"),
     ok = error_logger:error_report(crash_report, [foo, bar]),
     %% give the error loggers some time to catch up
-    timer:sleep(50),
+    timer:sleep(100),
     [true, true] = non_empty_files([MainLogFile, SaslLogFile]),
     ok.
 
@@ -2074,7 +2074,7 @@ test_queue_index() ->
 
 variable_queue_init(Q, Recover) ->
     rabbit_variable_queue:init(
-      Q, Recover, fun nop/1, fun nop/1, fun nop/2, fun nop/1).
+      Q, Recover, fun nop/2, fun nop/2, fun nop/2, fun nop/1).
 
 variable_queue_publish(IsPersistent, Count, VQ) ->
     lists:foldl(
