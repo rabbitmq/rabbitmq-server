@@ -15,7 +15,7 @@ start({ListenerSpec, Env}) ->
             OtherOptions = proplists:delete(name, Env),
             Name = name(ListenerSpec),
             mochiweb_http:start(
-              [{name, Name}, {loop, Loop} | OtherOptions])
+              [{name, Name}, {loop, Loop} | easy_ssl(OtherOptions)])
     end.
 
 stop(Listener) ->
@@ -35,3 +35,16 @@ loopfun(Listener) ->
 
 name(Listener) ->
     list_to_atom(atom_to_list(?MODULE) ++ "_" ++ atom_to_list(Listener)).
+
+easy_ssl(Options) ->
+    case {proplists:get_value(ssl, Options),
+          proplists:get_value(ssl_opts, Options)} of
+        {true, undefined} ->
+            {ok, ServerOpts} = application:get_env(rabbit, ssl_options),
+            SSLOpts = [{K, V} ||
+                          {K, V} <- ServerOpts,
+                          not lists:member(K, [verify, fail_if_no_peer_cert])],
+            [{ssl_opts, SSLOpts}|Options];
+        _ ->
+            Options
+    end.
