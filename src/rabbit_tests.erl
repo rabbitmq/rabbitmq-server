@@ -691,10 +691,10 @@ test_topic_matching() ->
     test_topic_expect_match(X, [{"a.b.c", []}, {"b.b.c", []}, {"", []}]),
     passed.
 
-exchange_op_callback(X, Fun, ExtraArgs) ->
+exchange_op_callback(X, Fun, Args) ->
     rabbit_misc:execute_mnesia_transaction(
-      fun () -> rabbit_exchange:callback(X, Fun, [true, X] ++ ExtraArgs) end),
-    rabbit_exchange:callback(X, Fun, [false, X] ++ ExtraArgs).
+      fun () -> rabbit_exchange:callback(X, Fun, [transaction, X] ++ Args) end),
+    rabbit_exchange:callback(X, Fun, [none, X] ++ Args).
 
 test_topic_expect_match(X, List) ->
     lists:foreach(
@@ -1607,7 +1607,7 @@ test_file_handle_cache() ->
         [filename:join(TmpDir, Str) || Str <- ["file1", "file2", "file3", "file4"]],
     Content = <<"foo">>,
     CopyFun = fun (Src, Dst) ->
-                      ok = file:write_file(Src, Content),
+                      ok = rabbit_misc:write_file(Src, Content),
                       {ok, SrcHdl} = file_handle_cache:open(Src, [read], []),
                       {ok, DstHdl} = file_handle_cache:open(Dst, [write], []),
                       Size = size(Content),
