@@ -16,7 +16,7 @@
 -module(rabbit_mgmt_format).
 
 -export([format/2, print/2, pid/1, ip/1, ipb/1, amqp_table/1, tuple/1]).
--export([timestamp/1, timestamp_ms/1, remove_pid_from_cache/1]).
+-export([timestamp/1, timestamp_ms/1]).
 -export([node_and_pid/1, protocol/1, resource/1, permissions/1, queue/1]).
 -export([exchange/1, user/1, internal_user/1, binding/1, url/2]).
 -export([pack_binding_props/2, unpack_binding_props/1, tokenise/1]).
@@ -55,14 +55,8 @@ print(Fmt, Val) ->
 %% dictionary since rabbit_misc:pid_to_string/1 is expensive and we
 %% call it a lot. Therefore when using these functions, you should
 %% call remove_pid_from_cache/1 whenever a pid has gone away.
-pid(P) when is_pid(P) -> case get({pid_cache, P}) of
-                             undefined -> PS = list_to_binary(
-                                                 rabbit_misc:pid_to_string(P)),
-                                          put({pid_cache, P}, PS),
-                                          PS;
-                             PS      -> PS
-                             end;
-pid('')               ->  <<"">>;
+pid(P) when is_pid(P) -> list_to_binary(rabbit_misc:pid_to_string(P));
+pid('')               -> <<"">>;
 pid(unknown)          -> unknown;
 pid(none)             -> none.
 
@@ -72,10 +66,6 @@ node_and_pid(Pid) when is_pid(Pid) ->
 node_and_pid('')      -> [];
 node_and_pid(unknown) -> [];
 node_and_pid(none)    -> [].
-
-remove_pid_from_cache(Pid) ->
-    erase({pid_cache, Pid}),
-    ok.
 
 ip(unknown) -> unknown;
 ip(IP)      -> list_to_binary(rabbit_misc:ntoa(IP)).
@@ -280,9 +270,7 @@ queue(#amqqueue{name            = Name,
        {owner_pid,   ExclusiveOwner},
        {arguments,   Arguments},
        {pid,         Pid}],
-      [{fun pid/1,          [owner_pid]},
-       {fun node_and_pid/1, [pid]},
-       {fun resource/1,     [name]},
+      [{fun resource/1,     [name]},
        {fun amqp_table/1,   [arguments]}]).
 
 %% We get bindings using rabbit_binding:list_*/1 rather than :info_all/1 since

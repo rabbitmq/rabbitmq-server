@@ -119,8 +119,8 @@ pget(Key, List, Default) -> proplists:get_value(Key, List, Default).
 
 pset(Key, Value, List) -> [{Key, Value} | proplists:delete(Key, List)].
 
-id(Pid) when is_pid(Pid) -> rabbit_mgmt_format:pid(Pid);
-id(List) -> rabbit_mgmt_format:pid(pget(pid, List)).
+id(Pid) when is_pid(Pid) -> Pid;
+id(List) -> pget(pid, List).
 
 add(unknown, _) -> unknown;
 add(_, unknown) -> unknown;
@@ -205,11 +205,11 @@ init([]) ->
                                Key <- ?TABLES])}}.
 
 handle_call({get_queue, Q0}, _From, State = #state{tables = Tables}) ->
-    [Q1] = adjust_hibernated_memory_use(detail_queue_stats([Q0], Tables)),
+    [Q1] = detail_queue_stats([Q0], Tables),
     {reply, Q1, State};
 
 handle_call({get_queues, Qs}, _From, State = #state{tables = Tables}) ->
-    {reply, adjust_hibernated_memory_use(list_queue_stats(Qs, Tables)), State};
+    {reply, list_queue_stats(Qs, Tables), State};
 
 handle_call({get_exchanges, Xs, Mode}, _From,
             State = #state{tables = Tables}) ->
@@ -286,8 +286,7 @@ handle_event(#event{type = queue_stats, props = Stats, timestamp = Timestamp},
              State) ->
     handle_stats(queue_stats, Stats, Timestamp,
                  [{fun rabbit_mgmt_format:properties/1,[backing_queue_status]},
-                  {fun rabbit_mgmt_format:timestamp/1, [idle_since]},
-                  {fun rabbit_mgmt_format:pid/1, [exclusive_consumer_pid]}],
+                  {fun rabbit_mgmt_format:timestamp/1, [idle_since]}],
                  [], State);
 
 handle_event(Event = #event{type = queue_deleted}, State) ->
@@ -299,7 +298,6 @@ handle_event(#event{type = connection_created, props = Stats}, State) ->
       connection_stats, [{name, Name} | proplists:delete(name, Stats)],
       [{fun rabbit_mgmt_format:addr/1,         [address, peer_address]},
        {fun rabbit_mgmt_format:port/1,         [port, peer_port]},
-       {fun rabbit_mgmt_format:node_and_pid/1, [pid]},
        {fun rabbit_mgmt_format:protocol/1,     [protocol]},
        {fun rabbit_mgmt_format:amqp_table/1,   [client_properties]}], State);
 
@@ -319,10 +317,7 @@ handle_event(#event{type = channel_created, props = Stats},
     Name = rabbit_mgmt_format:print("~s:~w",
                                     [pget(name,   Conn),
                                      pget(number, Stats)]),
-    handle_created(channel_stats, [{name, Name}|Stats],
-                   [{fun rabbit_mgmt_format:node_and_pid/1, [pid]},
-                    {fun rabbit_mgmt_format:pid/1,          [connection]}],
-                   State);
+    handle_created(channel_stats, [{name, Name}|Stats], [], State);
 
 handle_event(#event{type = channel_stats, props = Stats, timestamp = Timestamp},
              State) ->
@@ -379,13 +374,11 @@ handle_deleted(TName, #event{props = [{pid, Pid}]},
     Table = orddict:fetch(TName, Tables),
     ets:delete(Table, {id(Pid), create}),
     ets:delete(Table, {id(Pid), stats}),
-    rabbit_mgmt_format:remove_pid_from_cache(Pid),
     {ok, State}.
 
 handle_consumer(Fun, Props,
                 State = #state{tables = Tables}) ->
-    P = rabbit_mgmt_format:format(
-          Props, [{fun rabbit_mgmt_format:pid/1, [queue, channel]}]),
+    P = rabbit_mgmt_format:format(Props, []),
     Table = orddict:fetch(consumers, Tables),
     Fun(Table, {pget(queue, P), pget(channel, P)}, P),
     {ok, State}.
@@ -580,8 +573,7 @@ augment_connection_pid(Pid, Tables) ->
 augment_queue_pid(Pid, _Tables) ->
     %% TODO This should be in rabbit_amqqueue?
     case mnesia:dirty_match_object(
-           rabbit_queue,
-           #amqqueue{pid = rabbit_misc:string_to_pid(Pid), _ = '_'}) of
+           rabbit_queue, #amqqueue{pid = Pid, _ = '_'}) of
         [Q] -> Name = Q#amqqueue.name,
                [{name,  Name#resource.name},
                 {vhost, Name#resource.virtual_host}];
@@ -591,17 +583,21 @@ augment_queue_pid(Pid, _Tables) ->
 %%----------------------------------------------------------------------------
 
 basic_queue_stats(Objs, Tables) ->
-    merge_stats(Objs, queue_funs(Tables)).
+    final_format_queues(merge_stats(Objs, queue_funs(Tables))).
 
 list_queue_stats(Objs, Tables) ->
-    merge_stats(Objs, [fine_stats_fun(?FINE_STATS_QUEUE_LIST, Tables)] ++
-                    queue_funs(Tables)).
+    final_format_queues(
+      adjust_hibernated_memory_use(
+        merge_stats(Objs, [fine_stats_fun(?FINE_STATS_QUEUE_LIST, Tables)] ++
+                        queue_funs(Tables)))).
 
 detail_queue_stats(Objs, Tables) ->
-    merge_stats(Objs, [consumer_details_fun(
-                         fun (Props) -> {pget(pid, Props), '_'} end, Tables),
-                       fine_stats_fun(?FINE_STATS_QUEUE_DETAIL, Tables)] ++
-                    queue_funs(Tables)).
+    final_format_queues(
+      adjust_hibernated_memory_use(
+        merge_stats(Objs, [consumer_details_fun(
+                             fun (Props) -> {pget(pid, Props), '_'} end, Tables),
+                           fine_stats_fun(?FINE_STATS_QUEUE_DETAIL, Tables)] ++
+                        queue_funs(Tables)))).
 
 queue_funs(Tables) ->
     [basic_stats_fun(queue_stats, Tables), fun total_messages/1,
@@ -612,20 +608,37 @@ exchange_stats(Objs, FineSpecs, Tables) ->
                        augment_msg_stats_fun(Tables)]).
 
 connection_stats(Objs, Tables) ->
-    merge_stats(Objs, [basic_stats_fun(connection_stats, Tables),
-                       augment_msg_stats_fun(Tables)]).
+    final_format_connections(
+      merge_stats(Objs, [basic_stats_fun(connection_stats, Tables),
+                       augment_msg_stats_fun(Tables)])).
 
 list_channel_stats(Objs, Tables) ->
-    merge_stats(Objs, [basic_stats_fun(channel_stats, Tables),
-                       fine_stats_fun(?FINE_STATS_CHANNEL_LIST, Tables),
-                       augment_msg_stats_fun(Tables)]).
+    final_format_channels(
+      merge_stats(Objs, [basic_stats_fun(channel_stats, Tables),
+                         fine_stats_fun(?FINE_STATS_CHANNEL_LIST, Tables),
+                         augment_msg_stats_fun(Tables)])).
 
 detail_channel_stats(Objs, Tables) ->
-    merge_stats(Objs, [basic_stats_fun(channel_stats, Tables),
-                       consumer_details_fun(
-                         fun (Props) -> {'_', pget(pid, Props)} end, Tables),
-                       fine_stats_fun(?FINE_STATS_CHANNEL_DETAIL, Tables),
-                       augment_msg_stats_fun(Tables)]).
+    final_format_channels(
+      merge_stats(Objs, [basic_stats_fun(channel_stats, Tables),
+                         consumer_details_fun(
+                           fun (Props) -> {'_', pget(pid, Props)} end, Tables),
+                         fine_stats_fun(?FINE_STATS_CHANNEL_DETAIL, Tables),
+                         augment_msg_stats_fun(Tables)])).
+
+final_format_connections(Conns) ->
+    [rabbit_mgmt_format:format(
+       Conn, [{fun rabbit_mgmt_format:node_and_pid/1, [pid]}]) || Conn <- Conns].
+
+final_format_channels(Chs) ->
+    [rabbit_mgmt_format:format(
+       Ch, [{fun rabbit_mgmt_format:node_and_pid/1, [pid]},
+            {fun rabbit_mgmt_format:pid/1, [connection]}]) || Ch <- Chs].
+
+final_format_queues(Qs) ->
+    [rabbit_mgmt_format:format(
+       Q, [{fun rabbit_mgmt_format:pid/1,          [owner_pid]},
+           {fun rabbit_mgmt_format:node_and_pid/1, [pid]}]) || Q <- Qs].
 
 %%----------------------------------------------------------------------------
 
@@ -634,13 +647,11 @@ detail_channel_stats(Objs, Tables) ->
 %% hibernation, so to do it when we receive a queue stats event would
 %% be fiddly and racy. This should be quite cheap though.
 adjust_hibernated_memory_use(Qs) ->
-    Pids = [rabbit_misc:string_to_pid(pget(pid, Q)) ||
+    Pids = [pget(pid, Q) ||
                Q <- Qs, pget(idle_since, Q, not_idle) =/= not_idle],
     {Mem, _BadNodes} = delegate:invoke(
                          Pids, fun (Pid) -> process_info(Pid, memory) end),
-    MemDict = dict:from_list(
-                [{list_to_binary(rabbit_misc:pid_to_string(P)), M} ||
-                    {P, M = {memory, _}} <- Mem]),
+    MemDict = dict:from_list([{P, M} || {P, M = {memory, _}} <- Mem]),
     [case dict:find(pget(pid, Q), MemDict) of
          error        -> Q;
          {ok, Memory} -> [Memory|proplists:delete(memory, Q)]
