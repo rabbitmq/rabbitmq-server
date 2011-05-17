@@ -16,16 +16,20 @@
 
 -ifdef(use_specs).
 
+-type(tx() :: 'transaction' | 'none').
+-type(serial() :: pos_integer() | tx()).
+
 -spec(description/0 :: () -> [{atom(), any()}]).
+-spec(serialise_events/0 :: () -> boolean()).
 -spec(route/2 :: (rabbit_types:exchange(), rabbit_types:delivery())
                  -> rabbit_router:match_result()).
 -spec(validate/1 :: (rabbit_types:exchange()) -> 'ok').
--spec(create/2 :: (boolean(), rabbit_types:exchange()) -> 'ok').
--spec(delete/3 :: (boolean(), rabbit_types:exchange(),
+-spec(create/2 :: (tx(), rabbit_types:exchange()) -> 'ok').
+-spec(delete/3 :: (tx(), rabbit_types:exchange(),
                    [rabbit_types:binding()]) -> 'ok').
--spec(add_binding/3 :: (boolean(), rabbit_types:exchange(),
+-spec(add_binding/3 :: (serial(), rabbit_types:exchange(),
                         rabbit_types:binding()) -> 'ok').
--spec(remove_bindings/3 :: (boolean(), rabbit_types:exchange(),
+-spec(remove_bindings/3 :: (serial(), rabbit_types:exchange(),
                             [rabbit_types:binding()]) -> 'ok').
 -spec(assert_args_equivalence/2 ::
         (rabbit_types:exchange(), rabbit_framing:amqp_table())

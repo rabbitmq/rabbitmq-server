@@ -691,10 +691,10 @@ test_topic_matching() ->
     test_topic_expect_match(X, [{"a.b.c", []}, {"b.b.c", []}, {"", []}]),
     passed.
 
-exchange_op_callback(X, Fun, ExtraArgs) ->
+exchange_op_callback(X, Fun, Args) ->
     rabbit_misc:execute_mnesia_transaction(
-      fun () -> rabbit_exchange:callback(X, Fun, [true, X] ++ ExtraArgs) end),
-    rabbit_exchange:callback(X, Fun, [false, X] ++ ExtraArgs).
+      fun () -> rabbit_exchange:callback(X, Fun, [transaction, X] ++ Args) end),
+    rabbit_exchange:callback(X, Fun, [none, X] ++ Args).
 
 test_topic_expect_match(X, List) ->
     lists:foreach(
@@ -1553,7 +1553,7 @@ test_logs_working(MainLogFile, SaslLogFile) ->
     ok = rabbit_log:error("foo bar"),
     ok = error_logger:error_report(crash_report, [foo, bar]),
     %% give the error loggers some time to catch up
-    timer:sleep(50),
+    timer:sleep(100),
     [true, true] = non_empty_files([MainLogFile, SaslLogFile]),
     ok.
 
@@ -2074,7 +2074,7 @@ test_queue_index() ->
 
 variable_queue_init(Q, Recover) ->
     rabbit_variable_queue:init(
-      Q, Recover, fun nop/1, fun nop/1, fun nop/2, fun nop/1).
+      Q, Recover, fun nop/2, fun nop/2, fun nop/2, fun nop/1).
 
 variable_queue_publish(IsPersistent, Count, VQ) ->
     lists:foldl(

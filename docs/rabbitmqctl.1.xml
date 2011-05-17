@@ -1264,6 +1264,67 @@
         </varlistentry>
       </variablelist>
     </refsect2>
+
+    <refsect2>
+      <title>Configuration variables</title>
+      <para>
+        Some configuration values can be changed at run time. Note
+        that this does not apply to all variables; many are only read
+        at startup - changing them will have no effect.
+      </para>
+      <variablelist>
+        <varlistentry>
+          <term><cmdsynopsis><command>set_env</command> <arg choice="req"><replaceable>variable</replaceable></arg> <arg choice="req"><replaceable>value</replaceable></arg></cmdsynopsis></term>
+          <listitem>
+            <variablelist>
+              <varlistentry>
+                <term>variable</term>
+                <listitem><para>The name of the variable to set, as the string form of an Erlang term.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>value</term>
+                <listitem><para>The value to set it to, as the string form of an Erlang term.</para></listitem>
+              </varlistentry>
+            </variablelist>
+            <para>
+              Set the value of a configuration variable.
+            </para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term><cmdsynopsis><command>get_env</command> <arg choice="req"><replaceable>variable</replaceable></arg></cmdsynopsis></term>
+          <listitem>
+            <variablelist>
+              <varlistentry>
+                <term>variable</term>
+                <listitem><para>The name of the variable to get, as the string form of an Erlang term.</para></listitem>
+              </varlistentry>
+            </variablelist>
+            <para>
+              Get the value of a configuration variable, printing either
+              {ok,<command>Value</command>} or undefined.
+            </para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term><cmdsynopsis><command>unset_env</command> <arg choice="req"><replaceable>variable</replaceable></arg></cmdsynopsis></term>
+          <listitem>
+            <variablelist>
+              <varlistentry>
+                <term>variable</term>
+                <listitem><para>The name of the variable to clear, as the string form of an Erlang term.</para></listitem>
+              </varlistentry>
+            </variablelist>
+            <para>
+              Clear the value of a configuration variable.
+            </para>
+          </listitem>
+        </varlistentry>
+
+      </variablelist>
+    </refsect2>
   </refsect1>
 
 </refentry>

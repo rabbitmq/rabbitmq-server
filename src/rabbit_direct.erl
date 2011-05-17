@@ -16,7 +16,7 @@
 
 -module(rabbit_direct).
 
--export([boot/0, connect/5, start_channel/8, disconnect/1]).
+-export([boot/0, connect/4, start_channel/8, disconnect/1]).
 
 -include("rabbit.hrl").
 
@@ -25,8 +25,8 @@
 -ifdef(use_specs).
 
 -spec(boot/0 :: () -> 'ok').
--spec(connect/5 :: (binary(), binary(), binary(), rabbit_types:protocol(),
-                    rabbit_event:event_props()) ->
+-spec(connect/4 :: (rabbit_types:username(), rabbit_types:vhost(),
+                    rabbit_types:protocol(), rabbit_event:event_props()) ->
                         {'ok', {rabbit_types:user(),
                                 rabbit_framing:amqp_table()}}).
 -spec(start_channel/8 ::
@@ -53,11 +53,11 @@ boot() ->
 
 %%----------------------------------------------------------------------------
 
-connect(Username, Password, VHost, Protocol, Infos) ->
+connect(Username, VHost, Protocol, Infos) ->
     case lists:keymember(rabbit, 1, application:which_applications()) of
         true  ->
-            try rabbit_access_control:user_pass_login(Username, Password) of
-                #user{} = User ->
+            case rabbit_access_control:check_user_login(Username, []) of
+                {ok, User} ->
                     try rabbit_access_control:check_vhost_access(User, VHost) of
                         ok -> rabbit_event:notify(connection_created, Infos),
                               {ok, {User,
@@ -65,9 +65,9 @@ connect(Username, Password, VHost, Protocol, Infos) ->
                     catch
                         exit:#amqp_error{name = access_refused} ->
                             {error, access_refused}
-                    end
-            catch
-                exit:#amqp_error{name = access_refused} -> {error, auth_failure}
+                    end;
+                {refused, _Msg, _Args} ->
+                    {error, auth_failure}
             end;
         false ->
             {error, broker_not_found_on_node}
