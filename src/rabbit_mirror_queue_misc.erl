@@ -20,6 +20,11 @@
 
 -include("rabbit.hrl").
 
+%% If the dead pids include the queue pid (i.e. the master has died)
+%% then only remove that if we are about to be promoted. Otherwise we
+%% can have the situation where a slave updates the mnesia record for
+%% a queue, promoting another slave before that slave realises it has
+%% become the new master.
 remove_from_queue(QueueName, DeadPids) ->
     DeadNodes = [node(DeadPid) || DeadPid <- DeadPids],
     rabbit_misc:execute_mnesia_transaction(
@@ -35,13 +40,22 @@ remove_from_queue(QueueName, DeadPids) ->
                                   not lists:member(node(Pid), DeadNodes)],
                       case {{QPid, MPids}, {QPid1, MPids1}} of
                           {Same, Same} ->
-                              {ok, QPid};
-                          _ ->
+                              ok;
+                          _ when QPid =:= QPid1 orelse node(QPid1) =:= node() ->
+                              %% Either master hasn't changed, so
+                              %% we're ok to update mnesia; or master
+                              %% has changed to become us!
                               Q1 = Q #amqqueue { pid         = QPid1,
                                                  mirror_pids = MPids1 },
-                              ok = rabbit_amqqueue:store_queue(Q1),
-                              {ok, QPid1}
-                      end
+                              ok = rabbit_amqqueue:store_queue(Q1);
+                          _ ->
+                              %% Master has changed, and we're not it,
+                              %% so leave alone to allow the promoted
+                              %% slave to find it and make its
+                              %% promotion atomic.
+                              ok
+                      end,
+                      {ok, QPid1}
               end
       end).
 
