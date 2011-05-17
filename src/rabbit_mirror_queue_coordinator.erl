@@ -257,7 +257,8 @@ handle_call(get_gm, _From, State = #state { gm = GM }) ->
 handle_cast({gm_deaths, Deaths},
             State = #state { q  = #amqqueue { name = QueueName } }) ->
     rabbit_log:info("Master ~p saw deaths ~p for ~s~n",
-                    [self(), Deaths, rabbit_misc:rs(QueueName)]),
+                    [self(), [{Pid, node(Pid)} || Pid <- Deaths],
+                     rabbit_misc:rs(QueueName)]),
     case rabbit_mirror_queue_misc:remove_from_queue(QueueName, Deaths) of
         {ok, Pid} when node(Pid) =:= node() ->
             noreply(State);

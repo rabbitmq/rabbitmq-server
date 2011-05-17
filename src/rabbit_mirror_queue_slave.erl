@@ -143,7 +143,8 @@ handle_call({gm_deaths, Deaths}, From,
                              gm          = GM,
                              master_node = MNode }) ->
     rabbit_log:info("Slave ~p saw deaths ~p for ~s~n",
-                    [self(), Deaths, rabbit_misc:rs(QueueName)]),
+                    [self(), [{Pid, node(Pid)} || Pid <- Deaths],
+                     rabbit_misc:rs(QueueName)]),
     %% The GM has told us about deaths, which means we're not going to
     %% receive any more messages from GM
     case rabbit_mirror_queue_misc:remove_from_queue(QueueName, Deaths) of
