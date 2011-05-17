@@ -28,6 +28,7 @@
 -rabbit_upgrade({topic_trie,            mnesia, []}).
 -rabbit_upgrade({semi_durable_route,    mnesia, []}).
 -rabbit_upgrade({exchange_event_serial, mnesia, []}).
+-rabbit_upgrade({mirror_pids,           mnesia, []}).
 
 %% -------------------------------------------------------------------
 
@@ -41,6 +42,7 @@
 -spec(topic_trie/0 :: () -> 'ok').
 -spec(exchange_event_serial/0 :: () -> 'ok').
 -spec(semi_durable_route/0 :: () -> 'ok').
+-spec(mirror_pids/0 :: () -> 'ok').
 
 -endif.
 
@@ -112,6 +114,19 @@ semi_durable_route() ->
 exchange_event_serial() ->
     create(rabbit_exchange_serial, [{record_name, exchange_serial},
                                     {attributes, [name, next]}]).
+
+mirror_pids() ->
+    Tables = [rabbit_queue, rabbit_durable_queue],
+    AddMirrorPidsFun =
+        fun ({amqqueue, Name, Durable, AutoDelete, Owner, Arguments, Pid}) ->
+                {amqqueue, Name, Durable, AutoDelete, Owner, Arguments, Pid, []}
+        end,
+    [ ok = transform(T,
+                     AddMirrorPidsFun,
+                     [name, durable, auto_delete, exclusive_owner, arguments,
+                      pid, mirror_pids])
+      || T <- Tables ],
+    ok.
 
 %%--------------------------------------------------------------------
 
