@@ -9,6 +9,5 @@
   {env, [{exchanges,      []},
          {brokers,        []},
          {ssl_options,    []},
-         {local_username, "guest"},
-         {local_password, "guest"}]},
+         {local_username, "guest"}]},
   {applications, [kernel, stdlib, rabbit, amqp_client]}]}.

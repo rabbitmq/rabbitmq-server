@@ -38,9 +38,7 @@ federation_up() ->
 
 local_params() ->
     {ok, U} = application:get_env(rabbitmq_federation, local_username),
-    {ok, P} = application:get_env(rabbitmq_federation, local_password),
-    #amqp_params{username = list_to_binary(U),
-                 password = list_to_binary(P)}.
+    #amqp_params_direct{username = list_to_binary(U)}.
 
 upstream_from_table(Table, #resource{name = DX, virtual_host = DVHost}) ->
     TableProps = [{list_to_atom(binary_to_list(K)), V} || {K, _T, V} <- Table],
@@ -86,7 +84,7 @@ upstream_from_properties(P, DX, DVHost) ->
               queue_expires   = proplists:get_value(queue_expires,   P, 1800)}.
 
 amqp_params_from_properties(P, DVHost) ->
-    Params = #amqp_params{
+    Params = #amqp_params_network{
       host         = binary_to_list(proplists:get_value(host, P)),
       port         = proplists:get_value(port,         P),
       virtual_host = proplists:get_value(virtual_host, P, DVHost),
@@ -104,23 +102,23 @@ set_ssl_options(Params, Props) ->
         <<"amqp">>  -> Params;
         <<"amqps">> -> {ok, Opts} = application:get_env(
                                       rabbit_federation, ssl_options),
-                       Params#amqp_params{ssl_options = Opts}
+                       Params#amqp_params_network{ssl_options = Opts}
     end.
 
 set_default_port(Params, _Props) ->
-    case Params#amqp_params.port of
-        undefined  -> Port = case Params#amqp_params.ssl_options of
+    case Params#amqp_params_network.port of
+        undefined  -> Port = case Params#amqp_params_network.ssl_options of
                                  none -> 5672;
                                  _    -> 5671
                              end,
-                      Params#amqp_params{port = Port};
+                      Params#amqp_params_network{port = Port};
         _          -> Params
     end.
 
 set_heartbeat(Params, Props) ->
     case proplists:get_value(heartbeat, Props, none) of
         none -> Params;
-        H    -> Params#amqp_params{heartbeat = H}
+        H    -> Params#amqp_params_network{heartbeat = H}
     end.
 
 %% TODO it would be nice to support arbitrary mechanisms here.
@@ -129,7 +127,7 @@ set_mechanisms(Params, Props) ->
         default ->
             Params;
         'EXTERNAL' ->
-            Params#amqp_params{
+            Params#amqp_params_network{
               auth_mechanisms = [fun amqp_auth_mechanisms:external/3]};
         M ->
             exit({unsupported_mechanism, M})

@@ -42,8 +42,8 @@ declare_exchange(Props) ->
     VHost = list_to_binary(
               pget(virtual_host, Props, binary_to_list(DefaultVHost))),
     Params = rabbit_federation_util:local_params(),
-    Params1 = Params#amqp_params{virtual_host = VHost},
-    {ok, Conn} = amqp_connection:start(direct, Params1),
+    Params1 = Params#amqp_params_direct{virtual_host = VHost},
+    {ok, Conn} = amqp_connection:start(Params1),
     {ok, Ch} = amqp_connection:open_channel(Conn),
     amqp_channel:call(
       Ch, #'exchange.declare'{

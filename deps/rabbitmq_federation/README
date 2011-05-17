@@ -3,8 +3,6 @@ WARNING
 
 This is all very experimental. You have been warned.
 
-You need branch bug23939 of the server!
-
 Generic build instructions are at:
         http://www.rabbitmq.com/plugin-development.html
 
@@ -120,8 +118,7 @@ A reasonably verbose static configuration might look like:
        {verify,               verify_peer},
        {fail_if_no_peer_cert, true}
      ]},
-     {local_username, "myusername"},
-     {local_password, "secret"}
+     {local_username, "myusername"}
    ]
   }
 
@@ -182,10 +179,9 @@ queue_expires
 The ssl_options parameter specifies how to make client SSL
 connections. See the Erlang client documentation for more details.
 
-The local_username and local_password parameters specify how to
-connect to the local broker. The default for both is "guest". This
-user will need the ability to publish messages to the downstream
-exchange.
+The local_username parameter specifies how to connect to the local
+broker. The default is "guest". This user will need the ability to
+publish messages to the downstream exchange.
 
 Declaring Federation Exchanges Over AMQP
 ========================================

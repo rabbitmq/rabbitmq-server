@@ -185,7 +185,7 @@ restart_upstream() ->
 %%----------------------------------------------------------------------------
 
 with_ch(Fun, Xs) ->
-    {ok, Conn} = amqp_connection:start(network),
+    {ok, Conn} = amqp_connection:start(#amqp_params_network{}),
     {ok, Ch} = amqp_connection:open_channel(Conn),
     [declare_exchange(Ch, X) || X <- Xs],
     Fun(Ch),
@@ -194,7 +194,7 @@ with_ch(Fun, Xs) ->
     ok.
 
 with_2ch(Fun) ->
-    {ok, Conn} = amqp_connection:start(network),
+    {ok, Conn} = amqp_connection:start(#amqp_params_network{}),
     {ok, Ch} = amqp_connection:open_channel(Conn),
     Ch2 = start_other_node(),
     Fun(Ch, Ch2),
@@ -204,7 +204,7 @@ with_2ch(Fun) ->
 
 start_other_node() ->
     ?assertCmd("make start-other-node"),
-    {ok, Conn2} = amqp_connection:start(network, #amqp_params {port = 5673}),
+    {ok, Conn2} = amqp_connection:start(#amqp_params_network{port = 5673}),
     {ok, Ch2} = amqp_connection:open_channel(Conn2),
     Ch2.
 

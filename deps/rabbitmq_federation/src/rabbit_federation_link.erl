@@ -168,8 +168,8 @@ play_back_commands(Serial, From, State = #state{waiting_cmds = Waiting}) ->
 
 %%----------------------------------------------------------------------------
 
-open(Type, Params) ->
-    case amqp_connection:start(Type, Params) of
+open(Params) ->
+    case amqp_connection:start(Params) of
         {ok, Conn} -> case amqp_connection:open_channel(Conn) of
                           {ok, Ch} -> erlang:monitor(process, Ch),
                                       {ok, Conn, Ch};
@@ -232,12 +232,12 @@ key(#binding{source = Source,
 
 go(S0 = {not_started, {Upstream, #exchange{name    = DownstreamX,
                                            durable = Durable}}}) ->
-    case open(direct, rabbit_federation_util:local_params()) of
+    case open(rabbit_federation_util:local_params()) of
         {ok, DConn, DCh} ->
             #'confirm.select_ok'{} =
                amqp_channel:call(DCh, #'confirm.select'{}),
             amqp_channel:register_confirm_handler(DCh, self()),
-            case open(network, Upstream#upstream.params) of
+            case open(Upstream#upstream.params) of
                 {ok, Conn, Ch} ->
                     State = #state{downstream_connection = DConn,
                                    downstream_channel    = DCh,
@@ -264,7 +264,8 @@ consume_from_upstream_queue(State = #state{upstream            = Upstream,
     #upstream{exchange       = X,
               prefetch_count = PrefetchCount,
               queue_expires  = Expiry,
-              params         = #amqp_params{virtual_host = VHost}} = Upstream,
+              params         = #amqp_params_network{virtual_host = VHost}}
+        = Upstream,
     Q = upstream_queue_name(X, VHost, DownstreamX),
     case Durable of
         false -> delete_upstream_queue(Conn, Q);
@@ -292,7 +293,7 @@ ensure_upstream_bindings(State = #state{upstream            = Upstream,
                                         downstream_exchange = DownstreamX,
                                         queue               = Q}) ->
     #upstream{exchange = X,
-              params   = #amqp_params{virtual_host = VHost}} = Upstream,
+              params   = #amqp_params_network{virtual_host = VHost}} = Upstream,
     OldSuffix = rabbit_federation_db:get_active_suffix(DownstreamX, Upstream),
     Suffix = case OldSuffix of
                  <<"A">> -> <<"B">>;
@@ -385,10 +386,10 @@ add_routing_to_headers(Headers, Info) ->
             end,
     set_table_value(Headers, ?ROUTING_HEADER, array, [{table, Info}|Prior]).
 
-upstream_info(#upstream{params   = #amqp_params{host         = H,
-                                                port         = P,
-                                                virtual_host = V,
-                                                ssl_options  = SSL},
+upstream_info(#upstream{params   = #amqp_params_network{host         = H,
+                                                        port         = P,
+                                                        virtual_host = V,
+                                                        ssl_options  = SSL},
                         exchange = X}) ->
     Protocol = case SSL of
                    none -> <<"amqp">>;
