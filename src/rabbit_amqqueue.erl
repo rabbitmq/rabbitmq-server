@@ -256,8 +256,13 @@ lookup(Name) ->
 
 with(Name, F, E) ->
     case lookup(Name) of
-        {ok, Q} -> rabbit_misc:with_exit_handler(E, fun () -> F(Q) end);
-        {error, not_found} -> E()
+        {ok, Q = #amqqueue{mirror_pids = []}} ->
+            rabbit_misc:with_exit_handler(E, fun () -> F(Q) end);
+        {ok, Q} ->
+            E1 = fun () -> with(Name, F, E) end,
+            rabbit_misc:with_exit_handler(E1, fun () -> F(Q) end);
+        {error, not_found} ->
+            E()
     end.
 
 with(Name, F) ->
