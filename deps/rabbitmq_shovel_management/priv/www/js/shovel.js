@@ -1,11 +1,11 @@
 dispatcher_add(function(sammy) {
-        sammy.get('#/shovel-status', function() {
-                render({'shovels': '/shovel-status'},
-                       'shovel-status', '#/shovel-status');
+        sammy.get('#/shovels', function() {
+                render({'shovels': '/shovels'},
+                       'shovels', '#/shovels');
             });
 });
 
-$("#tabs").append('<li class="administrator-only"><a href="#/shovel-status">Shovel Status</a></li>');
+$("#tabs").append('<li class="administrator-only"><a href="#/shovels">Shovels</a></li>');
 
 function fmt_shovel_endpoint(point) {
     if (point.node) {

@@ -25,7 +25,7 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("webmachine/include/webmachine.hrl").
 
-dispatcher() -> [{["shovel-status"], ?MODULE, []}].
+dispatcher() -> [{["shovels"], ?MODULE, []}].
 web_ui()     -> [{javascript, <<"shovel.js">>}].
 
 %%--------------------------------------------------------------------

@@ -9,4 +9,4 @@ management plugin.
 Strictly speaking the shovel does not need to be installed, but then
 it won't tell you much.
 
-The HTTP API is very simple: GET /api/shovel-status.
+The HTTP API is very simple: GET /api/shovels.
