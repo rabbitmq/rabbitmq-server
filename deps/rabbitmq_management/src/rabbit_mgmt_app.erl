@@ -68,9 +68,10 @@ stop(_State) ->
     ok.
 
 register_contexts() ->
-    Dispatch = rabbit_mgmt_dispatcher:dispatcher(),
+    Dispatch = rabbit_mgmt_dispatcher:build_dispatcher(),
     rabbit_mochiweb:register_authenticated_static_context(
-      ?UI_CONTEXT, ?UI_PREFIX, ?MODULE, "priv/www", "Management: Web UI",
+      ?UI_CONTEXT, ?UI_PREFIX, rabbit_mgmt_dispatcher:modules(),
+      "priv/www", "Management: Web UI",
       fun (U, P) ->
               case rabbit_access_control:check_user_pass_login(U, P) of
                   {ok, _} -> true;
