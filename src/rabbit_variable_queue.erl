@@ -831,20 +831,20 @@ ram_duration(State = #vqstate {
                  ram_ack_count_prev = RamAckCount }}.
 
 
-needs_timeout(State = #vqstate { on_sync = ?BLANK_SYNC }) ->
-    case needs_index_sync(State) of
-        true  -> timed;
-        false -> case reduce_memory_use(fun (_Quota, State1) -> {0, State1} end,
-                                        fun (_Quota, State1) -> State1 end,
-                                        fun (State1)         -> State1 end,
-                                        fun (_Quota, State1) -> {0, State1} end,
-                                        State) of
-                     {true,  _State} -> idle;
-                     {false, _State} -> false
-                 end
-    end;
-needs_timeout(_State) ->
-    timed.
+needs_timeout(State = #vqstate { on_sync = OnSync }) ->
+    case {OnSync, needs_index_sync(State)} of
+        {?BLANK_SYNC, false} ->
+            case reduce_memory_use(fun (_Quota, State1) -> {0, State1} end,
+                                   fun (_Quota, State1) -> State1 end,
+                                   fun (State1)         -> State1 end,
+                                   fun (_Quota, State1) -> {0, State1} end,
+                                   State) of
+                {true,  _State} -> idle;
+                {false, _State} -> false
+            end;
+        _ ->
+            timed
+    end.
 
 idle_timeout(State) ->
     a(reduce_memory_use(confirm_commit_index(tx_commit_index(State)))).
