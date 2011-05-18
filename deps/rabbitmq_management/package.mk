@@ -5,7 +5,7 @@ WITH_BROKER_TEST_COMMANDS:=rabbit_mgmt_test_all:all_tests()
 CONSTRUCT_APP_PREREQS:=$(shell find $(PACKAGE_DIR)/priv -type f) $(PACKAGE_DIR)/bin/rabbitmqadmin
 define construct_app_commands
 	cp -r $(PACKAGE_DIR)/priv $(APP_DIR)
-	cp $(PACKAGE_DIR)/bin/rabbitmqadmin $(APP_DIR)/priv/www-cli
+	cp $(PACKAGE_DIR)/bin/rabbitmqadmin $(APP_DIR)/priv/www/cli
 endef
 
 # The tests require erlang/OTP R14 (httpc issue)
