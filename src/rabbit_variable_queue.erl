@@ -830,7 +830,6 @@ ram_duration(State = #vqstate {
                  ram_msg_count_prev = RamMsgCount,
                  ram_ack_count_prev = RamAckCount }}.
 
-
 needs_timeout(State = #vqstate { on_sync = OnSync }) ->
     case {OnSync, needs_index_sync(State)} of
         {?BLANK_SYNC, false} ->
