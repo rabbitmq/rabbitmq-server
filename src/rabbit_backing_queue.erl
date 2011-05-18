@@ -152,11 +152,11 @@ behaviour_info(callbacks) ->
      %% Should 'idle_timeout' be called as soon as the queue process
      %% can manage (either on an empty mailbox, or when a timer
      %% fires)?
-     {needs_idle_timeout, 1},
+     {needs_timeout, 1},
 
-     %% Called (eventually) after needs_idle_timeout returns
-     %% 'true'. Note this may be called more than once for each 'true'
-     %% returned from needs_idle_timeout.
+     %% Called (eventually) after needs_timeout returns 'idle' or
+     %% 'timed'.  Note this may be called more than once for each
+     %% 'idle' or 'timed' returned from needs_timeout.
      {idle_timeout, 1},
 
      %% Called immediately before the queue hibernates.

@@ -220,9 +220,10 @@ next_state(State = #q{backing_queue = BQ, backing_queue_state = BQS}) ->
                ensure_rate_timer(
                  confirm_messages(MsgIds, State#q{
                                             backing_queue_state = BQS1}))),
-    case BQ:needs_idle_timeout(BQS1) of
-        true  -> {ensure_sync_timer(State1), 0};
-        false -> {stop_sync_timer(State1), hibernate}
+    case BQ:needs_timeout(BQS1) of
+        false -> {stop_sync_timer(State1),   hibernate};
+        idle  -> {stop_sync_timer(State1),   0        };
+        timed -> {ensure_sync_timer(State1), 0        }
     end.
 
 ensure_sync_timer(State = #q{sync_timer_ref = undefined}) ->

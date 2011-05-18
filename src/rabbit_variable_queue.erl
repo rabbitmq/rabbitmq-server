@@ -21,7 +21,7 @@
          fetch/2, ack/2, tx_publish/5, tx_ack/3, tx_rollback/2, tx_commit/4,
          requeue/3, len/1, is_empty/1, dropwhile/2,
          set_ram_duration_target/2, ram_duration/1,
-         needs_idle_timeout/1, idle_timeout/1, handle_pre_hibernate/1,
+         needs_timeout/1, idle_timeout/1, handle_pre_hibernate/1,
          status/1, invoke/3, is_duplicate/3, discard/3,
          multiple_routing_keys/0]).
 
@@ -830,19 +830,21 @@ ram_duration(State = #vqstate {
                  ram_msg_count_prev = RamMsgCount,
                  ram_ack_count_prev = RamAckCount }}.
 
-needs_idle_timeout(State = #vqstate { on_sync = OnSync }) ->
-    case {OnSync, needs_index_sync(State)} of
-        {?BLANK_SYNC, false} ->
-            {Res, _State} = reduce_memory_use(
-                              fun (_Quota, State1) -> {0, State1} end,
-                              fun (_Quota, State1) -> State1 end,
-                              fun (State1)         -> State1 end,
-                              fun (_Quota, State1) -> {0, State1} end,
-                              State),
-            Res;
-        _ ->
-            true
-    end.
+
+needs_timeout(State = #vqstate { on_sync = ?BLANK_SYNC }) ->
+    case needs_index_sync(State) of
+        true  -> timed;
+        false -> case reduce_memory_use(fun (_Quota, State1) -> {0, State1} end,
+                                        fun (_Quota, State1) -> State1 end,
+                                        fun (State1)         -> State1 end,
+                                        fun (_Quota, State1) -> {0, State1} end,
+                                        State) of
+                     {true,  _State} -> idle;
+                     {false, _State} -> false
+                 end
+    end;
+needs_timeout(_State) ->
+    timed.
 
 idle_timeout(State) ->
     a(reduce_memory_use(confirm_commit_index(tx_commit_index(State)))).

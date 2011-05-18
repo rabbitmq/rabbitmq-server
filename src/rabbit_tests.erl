@@ -2269,10 +2269,10 @@ check_variable_queue_status(VQ0, Props) ->
     VQ1.
 
 variable_queue_wait_for_shuffling_end(VQ) ->
-    case rabbit_variable_queue:needs_idle_timeout(VQ) of
-        true  -> variable_queue_wait_for_shuffling_end(
-                   rabbit_variable_queue:idle_timeout(VQ));
-        false -> VQ
+    case rabbit_variable_queue:needs_timeout(VQ) of
+        false -> VQ;
+        _     -> variable_queue_wait_for_shuffling_end(
+                   rabbit_variable_queue:idle_timeout(VQ))
     end.
 
 test_variable_queue_all_the_bits_not_covered_elsewhere1(VQ0) ->
