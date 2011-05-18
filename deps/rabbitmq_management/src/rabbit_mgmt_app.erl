@@ -58,7 +58,7 @@ start(_Type, _StartArgs) ->
         true -> setup_wm_trace_app();
         _    -> ok
     end,
-    rabbit_log:info("Management plugin started.~n"),
+    log_startup(),
     supervisor:start_link({local,?MODULE},?MODULE,[]).
 
 stop(_State) ->
@@ -111,6 +111,19 @@ setup_wm_trace_app() ->
     rabbit_mochiweb:register_context_handler(rabbit_mgmt_trace,
                                              "wmtrace", Loop,
                                              "Webmachine tracer").
+
+log_startup() ->
+    rabbit_log:info(
+      "Management plugin started. Port: ~w, path: ~s~n",
+      [get_port(), rabbit_mochiweb:context_path(?CONTEXT, "/")]).
+
+get_port() ->
+    case rabbit_mochiweb:context_listener(?CONTEXT) of
+        undefined ->
+            exit(rabbit_mochiweb_listener_not_configured);
+        {_Instance, Options} ->
+            proplists:get_value(port, Options)
+    end.
 
 %%----------------------------------------------------------------------------
 
