@@ -35,7 +35,7 @@
              user, virtual_host, most_recently_declared_queue,
              consumer_mapping, blocking, consumer_monitors, queue_collector_pid,
              stats_timer, confirm_enabled, publish_seqno, unconfirmed_mq,
-             unconfirmed_qm, confirmed, capabilities}).
+             unconfirmed_qm, confirmed, capabilities, trace_state}).
 
 -define(MAX_PERMISSION_CACHE_SIZE, 12).
 
@@ -185,7 +185,8 @@ init([Channel, ReaderPid, WriterPid, ConnPid, Protocol, User, VHost,
                 unconfirmed_mq          = gb_trees:empty(),
                 unconfirmed_qm          = gb_trees:empty(),
                 confirmed               = [],
-                capabilities            = Capabilities},
+                capabilities            = Capabilities,
+                trace_state             = rabbit_trace:init(VHost)},
     rabbit_event:notify(channel_created, infos(?CREATION_EVENT_KEYS, State)),
     rabbit_event:if_enabled(StatsTimer,
                             fun() -> internal_emit_stats(State) end),
@@ -263,8 +264,9 @@ handle_cast({deliver, ConsumerTag, AckRequired,
                     #basic_message{exchange_name = ExchangeName,
                                    routing_keys = [RoutingKey | _CcRoutes],
                                    content = Content}}},
-            State = #ch{writer_pid = WriterPid,
-                        next_tag = DeliveryTag}) ->
+            State = #ch{writer_pid  = WriterPid,
+                        next_tag    = DeliveryTag,
+                        trace_state = TraceState}) ->
     State1 = lock_message(AckRequired,
                           ack_record(DeliveryTag, ConsumerTag, Msg),
                           State),
@@ -281,7 +283,7 @@ handle_cast({deliver, ConsumerTag, AckRequired,
                          true  -> deliver;
                          false -> deliver_no_ack
                      end, State),
-    rabbit_trace:tap_trace_out(Msg),
+    rabbit_trace:tap_trace_out(Msg, TraceState),
     noreply(State1#ch{next_tag = DeliveryTag + 1});
 
 handle_cast(emit_stats, State = #ch{stats_timer = StatsTimer}) ->
@@ -591,7 +593,8 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
                                immediate   = Immediate},
               Content, State = #ch{virtual_host    = VHostPath,
                                    transaction_id  = TxnKey,
-                                   confirm_enabled = ConfirmEnabled}) ->
+                                   confirm_enabled = ConfirmEnabled,
+                                   trace_state     = TraceState}) ->
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
     check_write_permitted(ExchangeName, State),
     Exchange = rabbit_exchange:lookup_or_die(ExchangeName),
@@ -608,7 +611,7 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
         end,
     case rabbit_basic:message(ExchangeName, RoutingKey, DecodedContent) of
         {ok, Message} ->
-            rabbit_trace:tap_trace_in(Message),
+            rabbit_trace:tap_trace_in(Message, TraceState),
             {RoutingRes, DeliveredQPids} =
                 rabbit_exchange:publish(
                   Exchange,
@@ -656,9 +659,10 @@ handle_method(#'basic.ack'{delivery_tag = DeliveryTag,
 
 handle_method(#'basic.get'{queue = QueueNameBin,
                            no_ack = NoAck},
-              _, State = #ch{writer_pid = WriterPid,
-                             conn_pid   = ConnPid,
-                             next_tag   = DeliveryTag}) ->
+              _, State = #ch{writer_pid  = WriterPid,
+                             conn_pid    = ConnPid,
+                             next_tag    = DeliveryTag,
+                             trace_state = TraceState}) ->
     QueueName = expand_queue_name_shortcut(QueueNameBin, State),
     check_read_permitted(QueueName, State),
     case rabbit_amqqueue:with_exclusive_access_or_die(
@@ -677,7 +681,7 @@ handle_method(#'basic.get'{queue = QueueNameBin,
                                  true  -> get_no_ack;
                                  false -> get
                              end, State),
-            rabbit_trace:tap_trace_out(Msg),
+            rabbit_trace:tap_trace_out(Msg, TraceState),
             ok = rabbit_writer:send_command(
                    WriterPid,
                    #'basic.get_ok'{delivery_tag = DeliveryTag,

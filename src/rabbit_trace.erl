@@ -16,39 +16,48 @@
 
 -module(rabbit_trace).
 
--export([tap_trace_in/1, tap_trace_out/1]).
+-export([init/1, tap_trace_in/2, tap_trace_out/2]).
 
 -include("rabbit.hrl").
 -include("rabbit_framing.hrl").
+
+-record(trace_state, {trace_exchange}).
 
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
 
--spec(tap_trace_in/1 :: (rabbit_types:basic_message()) -> 'ok').
--spec(tap_trace_out/1 :: (rabbit_amqqueue:qmsg()) -> 'ok').
+-type(state() :: #trace_state{trace_exchange :: rabbit_exchange:name()}).
+
+-spec(init/1 :: (rabbit_types:vhost()) -> state()).
+-spec(tap_trace_in/2 :: (rabbit_types:basic_message(), state()) -> 'ok').
+-spec(tap_trace_out/2 :: (rabbit_amqqueue:qmsg(), state()) -> 'ok').
 
 -endif.
 
 %%----------------------------------------------------------------------------
 
-tap_trace_in(Msg) ->
-    maybe_trace(Msg, <<"publish">>, xname(Msg), []).
+init(VHost) ->
+    #trace_state{trace_exchange = trace_exchange(VHost)}.
 
-tap_trace_out({#resource{name = QName}, _QPid, _QMsgId, Redelivered, Msg}) ->
+tap_trace_in(Msg, #trace_state{trace_exchange = TraceX}) ->
+    maybe_trace(Msg, TraceX, <<"publish">>, xname(Msg), []).
+
+tap_trace_out({#resource{name = QName}, _QPid, _QMsgId, Redelivered, Msg},
+              #trace_state{trace_exchange = TraceX}) ->
     RedeliveredNum = case Redelivered of true -> 1; false -> 0 end,
-    maybe_trace(Msg, <<"deliver">>, QName,
+    maybe_trace(Msg, TraceX, <<"deliver">>, QName,
                 [{<<"redelivered">>, signedint, RedeliveredNum}]).
 
 xname(#basic_message{exchange_name = #resource{name         = XName}}) -> XName.
 vhost(#basic_message{exchange_name = #resource{virtual_host = VHost}}) -> VHost.
 
-maybe_trace(Msg, RKPrefix, RKSuffix, Extra) ->
+maybe_trace(Msg, TraceX, RKPrefix, RKSuffix, Extra) ->
     XName = xname(Msg),
-    case trace_exchange(vhost(Msg)) of
+    case TraceX of
         none   -> ok;
         XName  -> ok;
-        TraceX -> case catch trace(TraceX, Msg, RKPrefix, RKSuffix, Extra) of
+        _      -> case catch trace(TraceX, Msg, RKPrefix, RKSuffix, Extra) of
                       {'EXIT', R} -> rabbit_log:info("Trace died: ~p~n", [R]);
                       ok          -> ok
                   end
