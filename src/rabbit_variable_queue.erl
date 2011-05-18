@@ -567,21 +567,26 @@ dropwhile1(Pred, State) ->
     internal_queue_out(
       fun(MsgStatus = #msg_status { msg_props = MsgProps, msg = Msg,
                                     index_on_disk = IndexOnDisk },
-          State1 = #vqstate { q3 = Q3, q4 = Q4 }) ->
+          State1 = #vqstate { q3 = Q3, q4 = Q4,
+                              ram_index_count = RamIndexCount }) ->
               case Pred(MsgProps) of
                   true ->
                       {_, State2} = internal_fetch(false, MsgStatus, State1),
                       dropwhile1(Pred, State2);
                   false ->
-                      case Msg of
-                          undefined ->
-                              true = queue:is_empty(Q4), %% ASSERTION
-                              Q3a = bpqueue:in_r(IndexOnDisk, MsgStatus, Q3),
-                              {ok, State1 #vqstate { q3 = Q3a }};
-                          _ ->
-                              Q4a = queue:in_r(MsgStatus, Q4),
-                              {ok, State1 #vqstate { q4 = Q4a }}
-                      end
+                      {ok,
+                       case Msg of
+                           undefined ->
+                               true = queue:is_empty(Q4), %% ASSERTION
+                               Q3a = bpqueue:in_r(IndexOnDisk, MsgStatus, Q3),
+                               RamIndexCount1 =
+                                   RamIndexCount + one_if(not IndexOnDisk),
+                               State1 #vqstate {
+                                 q3 = Q3a, ram_index_count = RamIndexCount1 };
+                           _ ->
+                               Q4a = queue:in_r(MsgStatus, Q4),
+                               State1 #vqstate { q4 = Q4a }
+                       end}
               end
       end, State).
 
