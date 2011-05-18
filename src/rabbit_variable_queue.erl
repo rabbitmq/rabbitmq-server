@@ -565,19 +565,23 @@ dropwhile(Pred, State) ->
 
 dropwhile1(Pred, State) ->
     internal_queue_out(
-      fun(MsgStatus = #msg_status { msg_props = MsgProps }, State1) ->
+      fun(MsgStatus = #msg_status { msg_props = MsgProps, msg = Msg,
+                                    index_on_disk = IndexOnDisk },
+          State1 = #vqstate { q3 = Q3, q4 = Q4 }) ->
               case Pred(MsgProps) of
                   true ->
                       {_, State2} = internal_fetch(false, MsgStatus, State1),
                       dropwhile1(Pred, State2);
                   false ->
-                      %% message needs to go back into Q4 (or maybe go
-                      %% in for the first time if it was loaded from
-                      %% Q3). Also the msg contents might not be in
-                      %% RAM, so read them in now
-                      {MsgStatus1, State2 = #vqstate { q4 = Q4 }} =
-                          read_msg(MsgStatus, State1),
-                      {ok, State2 #vqstate {q4 = queue:in_r(MsgStatus1, Q4) }}
+                      case Msg of
+                          undefined ->
+                              true = queue:is_empty(Q4), %% ASSERTION
+                              Q3a = bpqueue:in_r(IndexOnDisk, MsgStatus, Q3),
+                              {ok, State1 #vqstate { q3 = Q3a }};
+                          _ ->
+                              Q4a = queue:in_r(MsgStatus, Q4),
+                              {ok, State1 #vqstate { q4 = Q4a }}
+                      end
               end
       end, State).
 
