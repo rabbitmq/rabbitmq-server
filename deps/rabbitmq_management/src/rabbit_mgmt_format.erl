@@ -15,9 +15,9 @@
 
 -module(rabbit_mgmt_format).
 
--export([format/2, print/2, pid/1, ip/1, ipb/1, amqp_table/1, tuple/1]).
--export([timestamp/1, timestamp_ms/1]).
--export([node_and_pid/1, protocol/1, resource/1, permissions/1, queue/1]).
+-export([format/2, print/2, remove/1, ip/1, ipb/1, amqp_table/1, tuple/1]).
+-export([timestamp/1, timestamp_ms/1, strip_pids/1]).
+-export([node_from_pid/1, protocol/1, resource/1, permissions/1, queue/1]).
 -export([exchange/1, user/1, internal_user/1, binding/1, url/2]).
 -export([pack_binding_props/2, unpack_binding_props/1, tokenise/1]).
 -export([to_amqp_table/1, listener/1, properties/1, basic_properties/1]).
@@ -51,21 +51,12 @@ print(Fmt, Val) ->
 
 %% TODO - can we remove all these "unknown" cases? Coverage never hits them.
 
-%% Note: pid/1 and node_and_pid/1 use a cache in the process
-%% dictionary since rabbit_misc:pid_to_string/1 is expensive and we
-%% call it a lot. Therefore when using these functions, you should
-%% call remove_pid_from_cache/1 whenever a pid has gone away.
-pid(P) when is_pid(P) -> list_to_binary(rabbit_misc:pid_to_string(P));
-pid('')               -> <<"">>;
-pid(unknown)          -> unknown;
-pid(none)             -> none.
+remove(_) -> [].
 
-node_and_pid(Pid) when is_pid(Pid) ->
-    [{pid,  pid(Pid)},
-     {node, node(Pid)}];
-node_and_pid('')      -> [];
-node_and_pid(unknown) -> [];
-node_and_pid(none)    -> [].
+node_from_pid(Pid) when is_pid(Pid) -> [{node, node(Pid)}];
+node_from_pid('')                   -> [];
+node_from_pid(unknown)              -> [];
+node_from_pid(none)                 -> [].
 
 ip(unknown) -> unknown;
 ip(IP)      -> list_to_binary(rabbit_misc:ntoa(IP)).
@@ -322,3 +313,12 @@ to_basic_properties(Props) ->
 
 a2b(A) ->
     list_to_binary(atom_to_list(A)).
+
+%% Items can be connections, channels, consumers or queues, hence remove takes
+%% various items.
+strip_pids(Item = [T | _]) when is_tuple(T) ->
+    format(Item,
+           [{fun node_from_pid/1, [pid]},
+            {fun remove/1,        [connection, owner_pid, queue, channel]}]);
+
+strip_pids(Items) -> [strip_pids(I) || I <- Items].

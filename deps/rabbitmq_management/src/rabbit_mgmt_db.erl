@@ -531,7 +531,8 @@ details_key(Key) -> list_to_atom(atom_to_list(Key) ++ "_details").
 %%----------------------------------------------------------------------------
 
 augment_msg_stats(Props, Tables) ->
-    (augment_msg_stats_fun(Tables))(Props) ++ Props.
+    rabbit_mgmt_format:strip_pids(
+      (augment_msg_stats_fun(Tables))(Props) ++ Props).
 
 augment_msg_stats_fun(Tables) ->
     Funs = [{connection, fun augment_connection_pid/2},
@@ -583,21 +584,19 @@ augment_queue_pid(Pid, _Tables) ->
 %%----------------------------------------------------------------------------
 
 basic_queue_stats(Objs, Tables) ->
-    final_format_queues(merge_stats(Objs, queue_funs(Tables))).
+    merge_stats(Objs, queue_funs(Tables)).
 
 list_queue_stats(Objs, Tables) ->
-    final_format_queues(
-      adjust_hibernated_memory_use(
-        merge_stats(Objs, [fine_stats_fun(?FINE_STATS_QUEUE_LIST, Tables)] ++
-                        queue_funs(Tables)))).
+    adjust_hibernated_memory_use(
+      merge_stats(Objs, [fine_stats_fun(?FINE_STATS_QUEUE_LIST, Tables)] ++
+                      queue_funs(Tables))).
 
 detail_queue_stats(Objs, Tables) ->
-    final_format_queues(
-      adjust_hibernated_memory_use(
-        merge_stats(Objs, [consumer_details_fun(
-                             fun (Props) -> {pget(pid, Props), '_'} end, Tables),
-                           fine_stats_fun(?FINE_STATS_QUEUE_DETAIL, Tables)] ++
-                        queue_funs(Tables)))).
+    adjust_hibernated_memory_use(
+      merge_stats(Objs, [consumer_details_fun(
+                           fun (Props) -> {pget(pid, Props), '_'} end, Tables),
+                         fine_stats_fun(?FINE_STATS_QUEUE_DETAIL, Tables)] ++
+                      queue_funs(Tables))).
 
 queue_funs(Tables) ->
     [basic_stats_fun(queue_stats, Tables), fun total_messages/1,
@@ -608,37 +607,20 @@ exchange_stats(Objs, FineSpecs, Tables) ->
                        augment_msg_stats_fun(Tables)]).
 
 connection_stats(Objs, Tables) ->
-    final_format_connections(
-      merge_stats(Objs, [basic_stats_fun(connection_stats, Tables),
-                       augment_msg_stats_fun(Tables)])).
+    merge_stats(Objs, [basic_stats_fun(connection_stats, Tables),
+                       augment_msg_stats_fun(Tables)]).
 
 list_channel_stats(Objs, Tables) ->
-    final_format_channels(
-      merge_stats(Objs, [basic_stats_fun(channel_stats, Tables),
-                         fine_stats_fun(?FINE_STATS_CHANNEL_LIST, Tables),
-                         augment_msg_stats_fun(Tables)])).
+    merge_stats(Objs, [basic_stats_fun(channel_stats, Tables),
+                       fine_stats_fun(?FINE_STATS_CHANNEL_LIST, Tables),
+                       augment_msg_stats_fun(Tables)]).
 
 detail_channel_stats(Objs, Tables) ->
-    final_format_channels(
-      merge_stats(Objs, [basic_stats_fun(channel_stats, Tables),
-                         consumer_details_fun(
-                           fun (Props) -> {'_', pget(pid, Props)} end, Tables),
-                         fine_stats_fun(?FINE_STATS_CHANNEL_DETAIL, Tables),
-                         augment_msg_stats_fun(Tables)])).
-
-final_format_connections(Conns) ->
-    [rabbit_mgmt_format:format(
-       Conn, [{fun rabbit_mgmt_format:node_and_pid/1, [pid]}]) || Conn <- Conns].
-
-final_format_channels(Chs) ->
-    [rabbit_mgmt_format:format(
-       Ch, [{fun rabbit_mgmt_format:node_and_pid/1, [pid]},
-            {fun rabbit_mgmt_format:pid/1, [connection]}]) || Ch <- Chs].
-
-final_format_queues(Qs) ->
-    [rabbit_mgmt_format:format(
-       Q, [{fun rabbit_mgmt_format:pid/1,          [owner_pid]},
-           {fun rabbit_mgmt_format:node_and_pid/1, [pid]}]) || Q <- Qs].
+    merge_stats(Objs, [basic_stats_fun(channel_stats, Tables),
+                       consumer_details_fun(
+                         fun (Props) -> {'_', pget(pid, Props)} end, Tables),
+                       fine_stats_fun(?FINE_STATS_CHANNEL_DETAIL, Tables),
+                       augment_msg_stats_fun(Tables)]).
 
 %%----------------------------------------------------------------------------
 

@@ -39,7 +39,8 @@ to_json(ReqData, Context) ->
     Chs = rabbit_mgmt_util:filter_user(
             [Ch || Ch <- rabbit_mgmt_db:get_channels(), conn_name(Ch) =:= Name],
             ReqData, Context),
-    rabbit_mgmt_util:reply_list(Chs, ReqData, Context).
+    rabbit_mgmt_util:reply_list(
+      rabbit_mgmt_format:strip_pids(Chs), ReqData, Context).
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized(ReqData, Context).

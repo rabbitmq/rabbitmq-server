@@ -38,11 +38,12 @@ resource_exists(ReqData, Context) ->
     end.
 
 to_json(ReqData, Context) ->
-    rabbit_mgmt_util:reply({struct, conn(ReqData)}, ReqData, Context).
+    rabbit_mgmt_util:reply(
+      {struct, rabbit_mgmt_format:strip_pids(conn(ReqData))}, ReqData, Context).
 
 delete_resource(ReqData, Context) ->
     Conn = conn(ReqData),
-    Pid = rabbit_misc:string_to_pid(proplists:get_value(pid, Conn)),
+    Pid = proplists:get_value(pid, Conn),
     Reason = "Closed via management plugin",
     case proplists:get_value(type, Conn) of
         direct  -> amqp_connection:close(Pid, 200, Reason);
