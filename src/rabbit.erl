@@ -188,8 +188,8 @@
 -spec(maybe_insert_default_data/0 :: () -> 'ok').
 -spec(boot_delegate/0 :: () -> 'ok').
 -spec(recover/0 :: () -> 'ok').
--spec(get_env/1 :: (atom()) -> any()).
--spec(set_env/2 :: (atom(), any()) -> 'ok').
+-spec(get_env/1 :: (atom()) -> term()).
+-spec(set_env/2 :: (atom(), term()) -> 'ok').
 -spec(unset_env/1 :: (atom()) -> 'ok').
 
 -endif.
