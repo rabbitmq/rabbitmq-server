@@ -67,7 +67,7 @@
       (('undefined' | 'infinity' | number()), state()) -> state()).
 -spec(ram_duration/1 :: (state()) -> {number(), state()}).
 -spec(needs_timeout/1 :: (state()) -> 'false' | 'timed' | 'idle').
--spec(idle_timeout/1 :: (state()) -> state()).
+-spec(timeout/1 :: (state()) -> state()).
 -spec(handle_pre_hibernate/1 :: (state()) -> state()).
 -spec(status/1 :: (state()) -> [{atom(), any()}]).
 -spec(invoke/3 :: (atom(), fun ((atom(), A) -> A), state()) -> state()).

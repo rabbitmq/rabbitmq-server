@@ -21,7 +21,7 @@
          fetch/2, ack/2, tx_publish/5, tx_ack/3, tx_rollback/2, tx_commit/4,
          requeue/3, len/1, is_empty/1, dropwhile/2,
          set_ram_duration_target/2, ram_duration/1,
-         needs_timeout/1, idle_timeout/1, handle_pre_hibernate/1,
+         needs_timeout/1, timeout/1, handle_pre_hibernate/1,
          status/1, invoke/3, is_duplicate/3, discard/3,
          multiple_routing_keys/0]).
 
@@ -146,7 +146,7 @@
 %% any one time. This further smooths the effects of changes to the
 %% target_ram_count and ensures the queue remains responsive
 %% even when there is a large amount of IO work to do. The
-%% idle_timeout callback is utilised to ensure that conversions are
+%% timeout callback is utilised to ensure that conversions are
 %% done as promptly as possible whilst ensuring the queue remains
 %% responsive.
 %%
@@ -845,7 +845,7 @@ needs_timeout(State = #vqstate { on_sync = OnSync }) ->
             timed
     end.
 
-idle_timeout(State) ->
+timeout(State) ->
     a(reduce_memory_use(confirm_commit_index(tx_commit_index(State)))).
 
 handle_pre_hibernate(State = #vqstate { index_state = IndexState }) ->
