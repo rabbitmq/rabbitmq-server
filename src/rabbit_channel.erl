@@ -23,7 +23,7 @@
 -export([start_link/10, do/2, do/3, flush/1, shutdown/1]).
 -export([send_command/2, deliver/4, flushed/2, confirm/2]).
 -export([list/0, info_keys/0, info/1, info/2, info_all/0, info_all/1]).
--export([emit_stats/1, ready_for_close/1]).
+-export([emit_stats/1, ready_for_close/1, refresh_config_all/0]).
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2, handle_pre_hibernate/1, prioritise_call/3,
@@ -89,6 +89,7 @@
 -spec(info/2 :: (pid(), rabbit_types:info_keys()) -> rabbit_types:infos()).
 -spec(info_all/0 :: () -> [rabbit_types:infos()]).
 -spec(info_all/1 :: (rabbit_types:info_keys()) -> [rabbit_types:infos()]).
+-spec(refresh_config_all/0 :: () -> 'ok').
 -spec(emit_stats/1 :: (pid()) -> 'ok').
 -spec(ready_for_close/1 :: (pid()) -> 'ok').
 
@@ -145,6 +146,11 @@ info_all() ->
 
 info_all(Items) ->
     rabbit_misc:filter_exit_map(fun (C) -> info(C, Items) end, list()).
+
+refresh_config_all() ->
+    rabbit_misc:upmap(
+      fun (C) -> gen_server2:call(C, refresh_config) end, list()),
+    ok.
 
 emit_stats(Pid) ->
     gen_server2:cast(Pid, emit_stats).
@@ -218,6 +224,9 @@ handle_call({info, Items}, _From, State) ->
         reply({ok, infos(Items, State)}, State)
     catch Error -> reply({error, Error}, State)
     end;
+
+handle_call(refresh_config, _From, State = #ch{virtual_host = VHost}) ->
+    reply(ok, State#ch{trace_state = rabbit_trace:init(VHost)});
 
 handle_call(_Request, _From, State) ->
     noreply(State).

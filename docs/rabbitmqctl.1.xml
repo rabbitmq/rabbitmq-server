@@ -1323,6 +1323,14 @@
           </listitem>
         </varlistentry>
 
+        <varlistentry>
+          <term><cmdsynopsis><command>refresh_channel_config</command></cmdsynopsis></term>
+          <listitem>
+            <para>
+              Tell all channels to refresh their configuration (currently only the value of <code>trace_exchanges</code>).
+            </para>
+          </listitem>
+        </varlistentry>
       </variablelist>
     </refsect2>
   </refsect1>
