@@ -39,32 +39,31 @@ init(VHost) ->
     trace_exchange(VHost).
 
 tap_trace_in(Msg, TraceX) ->
-    maybe_trace(Msg, TraceX,
-                fun () ->
-                        {<<"publish.", (xname(Msg))/binary>>, msg_to_table(Msg)}
-                end).
+    maybe_trace(Msg, TraceX, publish, []).
 
 tap_trace_out({#resource{name = QName}, _QPid, _QMsgId, Redelivered, Msg},
               TraceX) ->
-    maybe_trace(Msg, TraceX,
-                fun () ->
-                        H = {<<"redelivered">>, signedint,
-                             case Redelivered of true -> 1; false -> 0 end},
-                        {<<"deliver.", QName/binary>>, [H | msg_to_table(Msg)]}
-                end).
+    RedeliveredNum = case Redelivered of true -> 1; false -> 0 end,
+    maybe_trace(Msg, TraceX, {deliver, QName},
+                [{<<"redelivered">>, signedint, RedeliveredNum}]).
 
 xname(#basic_message{exchange_name = #resource{name         = XName}}) -> XName.
 vhost(#basic_message{exchange_name = #resource{virtual_host = VHost}}) -> VHost.
 
-maybe_trace(_Msg, none, _Fun) ->
+maybe_trace(_Msg, none, _Mode, _Extra) ->
     ok;
-maybe_trace(Msg0, TraceX, Fun) ->
+maybe_trace(Msg0, TraceX, Mode, Extra) ->
     case xname(Msg0) of
         TraceX -> ok;
         _      -> Msg = ensure_content_decoded(Msg0),
                   X = rabbit_misc:r(vhost(Msg), exchange, TraceX),
-                  {RKey, Headers} = Fun(),
-                  P = #'P_basic'{headers = Headers},
+                  {RKPrefix, RKSuffix} =
+                      case Mode of
+                          publish      -> {<<"publish">>, xname(Msg0)};
+                          {deliver, Q} -> {<<"deliver">>, Q}
+                      end,
+                  RKey = <<RKPrefix/binary, ".", RKSuffix/binary>>,
+                  P = #'P_basic'{headers = msg_to_table(Msg) ++ Extra},
                   case catch rabbit_basic:publish(X, RKey, P, payload(Msg)) of
                       {'EXIT', R} -> rabbit_log:info(
                                        "Trace publish died: ~p~n", [R]);
