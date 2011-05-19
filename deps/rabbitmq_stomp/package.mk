@@ -8,4 +8,7 @@ define package_rules
 $(PACKAGE_DIR)+pre-test::
 	make -C $(PACKAGE_DIR)/deps/stomppy
 
+$(PACKAGE_DIR)+clean-with-deps::
+	make -C $(PACKAGE_DIR)/deps/stomppy distclean
+
 endef
