@@ -14,8 +14,9 @@ clean:
 distclean: clean
 	rm -rf $(CHECKOUT_DIR)
 
-$(LIB_DIR) : $(CHECKOUT_DIR)
-	cp -r $< $@
+$(LIB_DIR) : $(CHECKOUT_DIR) rabbit.patch
+	rm -rf $@
+	cp -R $< $@
 	cd $@ && patch -p1 < ../rabbit.patch
 
 $(CHECKOUT_DIR):
