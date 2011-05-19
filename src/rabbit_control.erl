@@ -295,8 +295,8 @@ action(unset_env, Node, [Var], _Opts, Inform) ->
     Inform("Clearing control variable ~s for node ~p", [Var, Node]),
     rpc_call(Node, application, unset_env, [rabbit, parse(Var)]);
 
-action(refresh_channel_config, Node, [], _Opts, Inform) ->
-    Inform("Telling channels to refresh configuration", []),
+action(refresh_config, Node, [], _Opts, Inform) ->
+    Inform("Refreshing configuration", []),
     rpc_call(Node, rabbit_channel, refresh_config_all, []);
 
 action(set_permissions, Node, [Username, CPerm, WPerm, RPerm], Opts, Inform) ->

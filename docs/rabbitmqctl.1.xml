@@ -1324,10 +1324,10 @@
         </varlistentry>
 
         <varlistentry>
-          <term><cmdsynopsis><command>refresh_channel_config</command></cmdsynopsis></term>
+          <term><cmdsynopsis><command>refresh_config</command></cmdsynopsis></term>
           <listitem>
             <para>
-              Tell all channels to refresh their configuration (currently only the value of <code>trace_exchanges</code>).
+              Tell running RabbitMQ processes to refresh their configuration (currently only the value of <code>trace_exchanges</code>).
             </para>
           </listitem>
         </varlistentry>
