@@ -41,7 +41,7 @@ requiring clustering. This is useful for the following reasons:
    need to federate everything if you don't want to.
 
 4) Ultimately, greater scalability should be possible, since in future
-   more complex routing tompolgy will avoid the need for n^2 connections
+   more complex routing topology will avoid the need for n^2 connections
    between n brokers.
 
 For the time being, the plugin provides a federated exchange
