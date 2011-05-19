@@ -25,7 +25,7 @@
 
 -ifdef(use_specs).
 
--type(state() :: rabbit_exchange:name()).
+-type(state() :: rabbit_exchange:name() | 'none').
 
 -spec(init/1 :: (rabbit_types:vhost()) -> state()).
 -spec(tap_trace_in/2 :: (rabbit_types:basic_message(), state()) -> 'ok').
@@ -38,7 +38,10 @@
 init(VHost) ->
     case application:get_env(rabbit, trace_exchanges) of
         undefined  -> none;
-        {ok, Xs}   -> proplists:get_value(VHost, Xs, none)
+        {ok, Xs}   -> case proplists:get_value(VHost, Xs, none) of
+                          none -> none;
+                          XN   -> rabbit_misc:r(VHost, exchange, XN)
+                      end
     end.
 
 tap_trace_in(Msg, TraceX) ->
@@ -52,22 +55,21 @@ tap_trace_out({#resource{name = QName}, _QPid, _QMsgId, Redelivered, Msg},
 
 maybe_trace(_Msg, none, _RKPrefix, _RKSuffix, _Extra) ->
     ok;
-maybe_trace(Msg, TraceX, RKPrefix, RKSuffix, Extra) ->
+maybe_trace(Msg, X, RKPrefix, RKSuffix, Extra) ->
     case xname(Msg) of
-        TraceX -> ok;
-        _      -> case catch rabbit_basic:publish(
-                               rabbit_misc:r(vhost(Msg), exchange, TraceX),
-                               <<RKPrefix/binary, ".", RKSuffix/binary>>,
-                               #'P_basic'{headers = msg_to_table(Msg) ++ Extra},
-                               payload(Msg)) of
-                      {'EXIT', R} -> rabbit_log:info(
-                                       "Trace publish died: ~p~n", [R]);
-                      {ok, _, _}  -> ok
-                  end
+        X -> ok;
+        _ -> case rabbit_basic:publish(
+                    X,
+                    <<RKPrefix/binary, ".", RKSuffix/binary>>,
+                    #'P_basic'{headers = msg_to_table(Msg) ++ Extra},
+                    payload(Msg)) of
+                 {ok, _, _}         -> ok;
+                 {error, not_found} -> rabbit_log:info("trace ~s not found~n",
+                                                       [rabbit_misc:rs(X)])
+             end
     end.
 
 xname(#basic_message{exchange_name = #resource{name         = XName}}) -> XName.
-vhost(#basic_message{exchange_name = #resource{virtual_host = VHost}}) -> VHost.
 
 msg_to_table(#basic_message{exchange_name = #resource{name = XName},
                             routing_keys  = RoutingKeys,
