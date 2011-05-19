@@ -21,13 +21,11 @@
 -include("rabbit.hrl").
 -include("rabbit_framing.hrl").
 
--record(trace_state, {trace_exchange}).
-
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
 
--type(state() :: #trace_state{trace_exchange :: rabbit_exchange:name()}).
+-type(state() :: rabbit_exchange:name()).
 
 -spec(init/1 :: (rabbit_types:vhost()) -> state()).
 -spec(tap_trace_in/2 :: (rabbit_types:basic_message(), state()) -> 'ok').
@@ -38,29 +36,32 @@
 %%----------------------------------------------------------------------------
 
 init(VHost) ->
-    #trace_state{trace_exchange = trace_exchange(VHost)}.
+    trace_exchange(VHost).
 
-tap_trace_in(Msg, #trace_state{trace_exchange = TraceX}) ->
-    maybe_trace(Msg, TraceX, <<"publish">>, xname(Msg), []).
+tap_trace_in(Msg, TraceX) ->
+    maybe_trace(Msg, TraceX, publish, []).
 
 tap_trace_out({#resource{name = QName}, _QPid, _QMsgId, Redelivered, Msg},
-              #trace_state{trace_exchange = TraceX}) ->
+              TraceX) ->
     RedeliveredNum = case Redelivered of true -> 1; false -> 0 end,
-    maybe_trace(Msg, TraceX, <<"deliver">>, QName,
+    maybe_trace(Msg, TraceX, {deliver, QName},
                 [{<<"redelivered">>, signedint, RedeliveredNum}]).
 
 xname(#basic_message{exchange_name = #resource{name         = XName}}) -> XName.
 vhost(#basic_message{exchange_name = #resource{virtual_host = VHost}}) -> VHost.
 
-maybe_trace(Msg, TraceX, RKPrefix, RKSuffix, Extra) ->
-    XName = xname(Msg),
+maybe_trace(Msg, TraceX, Mode, Extra) ->
     case TraceX of
-        none   -> ok;
-        XName  -> ok;
-        _      -> case catch trace(TraceX, Msg, RKPrefix, RKSuffix, Extra) of
-                      {'EXIT', R} -> rabbit_log:info("Trace died: ~p~n", [R]);
-                      ok          -> ok
-                  end
+        none -> ok;
+        _    -> X = xname(Msg),
+                case TraceX of
+                    X -> ok;
+                    _ -> case catch trace(TraceX, Msg, Mode, Extra) of
+                             {'EXIT', R} -> rabbit_log:info(
+                                              "Trace died: ~p~n", [R]);
+                             ok          -> ok
+                         end
+                end
     end.
 
 trace_exchange(VHost) ->
@@ -69,8 +70,12 @@ trace_exchange(VHost) ->
         {ok, Xs}   -> proplists:get_value(VHost, Xs, none)
     end.
 
-trace(TraceX, Msg0, RKPrefix, RKSuffix, Extra) ->
+trace(TraceX, Msg0, Mode, Extra) ->
     Msg = ensure_content_decoded(Msg0),
+    {RKPrefix, RKSuffix} = case Mode of
+                               publish      -> {<<"publish">>, xname(Msg0)};
+                               {deliver, Q} -> {<<"deliver">>, Q}
+                           end,
     rabbit_basic:publish(rabbit_misc:r(vhost(Msg), exchange, TraceX),
                          <<RKPrefix/binary, ".", RKSuffix/binary>>,
                          #'P_basic'{headers = msg_to_table(Msg) ++ Extra},
