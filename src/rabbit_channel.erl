@@ -22,9 +22,8 @@
 
 -export([start_link/10, do/2, do/3, flush/1, shutdown/1]).
 -export([send_command/2, deliver/4, flushed/2, confirm/2]).
--export([list/0, info_keys/0, info/1, info/2, info_all/0, info_all/1,
-         refresh_config_all/0]).
--export([emit_stats/1, ready_for_close/1]).
+-export([list/0, info_keys/0, info/1, info/2, info_all/0, info_all/1]).
+-export([refresh_config_all/0, emit_stats/1, ready_for_close/1]).
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2, handle_pre_hibernate/1, prioritise_call/3,

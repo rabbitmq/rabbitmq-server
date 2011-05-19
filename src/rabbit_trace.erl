@@ -41,8 +41,7 @@ init(VHost) ->
 tap_trace_in(Msg, TraceX) ->
     maybe_trace(Msg, TraceX,
                 fun () ->
-                        XName = xname(Msg),
-                        {<<"publish.", XName/binary>>, msg_to_table(Msg)}
+                        {<<"publish.", (xname(Msg))/binary>>, msg_to_table(Msg)}
                 end).
 
 tap_trace_out({#resource{name = QName}, _QPid, _QMsgId, Redelivered, Msg},
@@ -57,15 +56,20 @@ tap_trace_out({#resource{name = QName}, _QPid, _QMsgId, Redelivered, Msg},
 xname(#basic_message{exchange_name = #resource{name         = XName}}) -> XName.
 vhost(#basic_message{exchange_name = #resource{virtual_host = VHost}}) -> VHost.
 
-maybe_trace(Msg, none, Fun) -> ok;
-maybe_trace(Msg, TraceX, Fun) ->
-    X = xname(Msg),
-    case TraceX of
-        X -> ok;
-        _ -> case catch trace(TraceX, Msg, Fun) of
-                 {'EXIT', R} -> rabbit_log:info("Trace died: ~p~n", [R]);
-                 ok          -> ok
-             end
+maybe_trace(_Msg, none, _Fun) ->
+    ok;
+maybe_trace(Msg0, TraceX, Fun) ->
+    case xname(Msg0) of
+        TraceX -> ok;
+        _      -> Msg = ensure_content_decoded(Msg0),
+                  X = rabbit_misc:r(vhost(Msg), exchange, TraceX),
+                  {RKey, Headers} = Fun(),
+                  P = #'P_basic'{headers = Headers},
+                  case catch rabbit_basic:publish(X, RKey, P, payload(Msg)) of
+                      {'EXIT', R} -> rabbit_log:info(
+                                       "Trace publish died: ~p~n", [R]);
+                      {ok, _, _}  -> ok
+                  end
     end.
 
 trace_exchange(VHost) ->
@@ -73,13 +77,6 @@ trace_exchange(VHost) ->
         undefined  -> none;
         {ok, Xs}   -> proplists:get_value(VHost, Xs, none)
     end.
-
-trace(TraceX, Msg0, Fun) ->
-    Msg = ensure_content_decoded(Msg0),
-    {RKey, Headers} = Fun(),
-    rabbit_basic:publish(rabbit_misc:r(vhost(Msg), exchange, TraceX),
-                         RKey, #'P_basic'{headers = Headers}, payload(Msg)),
-    ok.
 
 msg_to_table(#basic_message{exchange_name = #resource{name = XName},
                             routing_keys  = RoutingKeys,
