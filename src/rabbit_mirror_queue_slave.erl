@@ -707,8 +707,8 @@ process_instruction({fetch, AckRequired, MsgId, Remaining},
     QLen = BQ:len(BQS),
     {ok, case QLen - 1 of
              Remaining ->
-                 {{_Msg, _IsDelivered, AckTag, Remaining}, BQS1} =
-                     BQ:fetch(AckRequired, BQS),
+                 {{#basic_message{id = MsgId}, _IsDelivered,
+                   AckTag, Remaining}, BQS1} = BQ:fetch(AckRequired, BQS),
                  maybe_store_ack(AckRequired, MsgId, AckTag,
                                  State #state { backing_queue_state = BQS1 });
              Other when Other < Remaining ->
