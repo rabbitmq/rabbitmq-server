@@ -284,20 +284,16 @@ action(list_consumers, Node, _Args, Opts, Inform) ->
 
 action(set_env, Node, [Var, Term], _Opts, Inform) ->
     Inform("Setting control variable ~s for node ~p to ~s", [Var, Node, Term]),
-    rpc_call(Node, application, set_env, [rabbit, parse(Var), parse(Term)]);
+    rpc_call(Node, rabbit, set_env, [parse(Var), parse(Term)]);
 
 action(get_env, Node, [Var], _Opts, Inform) ->
     Inform("Getting control variable ~s for node ~p", [Var, Node]),
-    Val = rpc_call(Node, application, get_env, [rabbit, parse(Var)]),
+    Val = rpc_call(Node, rabbit, get_env, [parse(Var)]),
     io:format("~p~n", [Val]);
 
 action(unset_env, Node, [Var], _Opts, Inform) ->
     Inform("Clearing control variable ~s for node ~p", [Var, Node]),
-    rpc_call(Node, application, unset_env, [rabbit, parse(Var)]);
-
-action(refresh_config, Node, [], _Opts, Inform) ->
-    Inform("Refreshing configuration", []),
-    rpc_call(Node, rabbit_channel, refresh_config_all, []);
+    rpc_call(Node, rabbit, unset_env, [parse(Var)]);
 
 action(set_permissions, Node, [Username, CPerm, WPerm, RPerm], Opts, Inform) ->
     VHost = proplists:get_value(?VHOST_OPT, Opts),
