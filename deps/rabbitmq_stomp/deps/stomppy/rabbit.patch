@@ -21,7 +21,7 @@ diff -r 16a4000624a7 stomp/connect.py
 +            self.__connect_headers['accept-version'] = version
 +
 +        if heartbeat is not None:
-+            self.__connect_headers['heartbeat'] = heartbeat
++            self.__connect_headers['heart-beat'] = heartbeat
 +
 +        if virtual_host is not None:
 +            self.__connect_headers['host'] = virtual_host
