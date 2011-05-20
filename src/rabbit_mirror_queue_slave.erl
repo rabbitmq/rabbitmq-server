@@ -500,8 +500,9 @@ next_state(State = #state{backing_queue = BQ, backing_queue_state = BQS}) ->
                confirm_messages(MsgIds, State #state {
                                           backing_queue_state = BQS1 })),
     case BQ:needs_timeout(BQS1) of
-        true  -> {ensure_sync_timer(State1), 0};
-        false -> {stop_sync_timer(State1), hibernate}
+        false -> {stop_sync_timer(State1),   hibernate};
+        idle  -> {stop_sync_timer(State1),   0        };
+        timed -> {ensure_sync_timer(State1), 0        }
     end.
 
 backing_queue_timeout(State = #state { backing_queue = BQ }) ->
