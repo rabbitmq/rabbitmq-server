@@ -63,10 +63,10 @@ tap_trace_out({#resource{name = QName}, _QPid, _QMsgId, Redelivered, Msg},
 %%----------------------------------------------------------------------------
 
 start(VHost) ->
-    update_config(fun (VHosts) -> [VHost | lists:delete(VHost, VHosts)] end).
+    update_config(fun (VHosts) -> [VHost | VHosts -- [VHost]] end).
 
 stop(VHost) ->
-    update_config(fun (VHosts) -> lists:delete(VHost, VHosts) end).
+    update_config(fun (VHosts) -> [VHosts -- [VHost]] end).
 
 update_config(Fun) ->
     {ok, VHosts0} = application:get_env(rabbit, ?TRACE_VHOSTS),
