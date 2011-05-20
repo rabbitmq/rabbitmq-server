@@ -21,7 +21,7 @@
          tx_publish/5, tx_ack/3, tx_rollback/2, tx_commit/4,
          requeue/3, len/1, is_empty/1, drain_confirmed/1, dropwhile/2,
          set_ram_duration_target/2, ram_duration/1,
-         needs_idle_timeout/1, idle_timeout/1, handle_pre_hibernate/1,
+         needs_timeout/1, timeout/1, handle_pre_hibernate/1,
          status/1, invoke/3, is_duplicate/3, discard/3]).
 
 -export([start/1, stop/0]).
@@ -252,11 +252,11 @@ ram_duration(State = #state { backing_queue = BQ, backing_queue_state = BQS}) ->
     {Result, BQS1} = BQ:ram_duration(BQS),
     {Result, State #state { backing_queue_state = BQS1 }}.
 
-needs_idle_timeout(#state { backing_queue = BQ, backing_queue_state = BQS}) ->
-    BQ:needs_idle_timeout(BQS).
+needs_timeout(#state { backing_queue = BQ, backing_queue_state = BQS}) ->
+    BQ:needs_timeout(BQS).
 
-idle_timeout(State = #state { backing_queue = BQ, backing_queue_state = BQS}) ->
-    State #state { backing_queue_state = BQ:idle_timeout(BQS) }.
+timeout(State = #state { backing_queue = BQ, backing_queue_state = BQS}) ->
+    State #state { backing_queue_state = BQ:timeout(BQS) }.
 
 handle_pre_hibernate(State = #state { backing_queue       = BQ,
                                       backing_queue_state = BQS}) ->

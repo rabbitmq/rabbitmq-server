@@ -205,7 +205,7 @@ handle_cast(update_ram_duration,
                            backing_queue_state = BQS2 });
 
 handle_cast(sync_timeout, State) ->
-    noreply(backing_queue_idle_timeout(
+    noreply(backing_queue_timeout(
               State #state { sync_timer_ref = undefined }));
 
 handle_cast({rollback, _Txn, _ChPid}, State) ->
@@ -213,7 +213,7 @@ handle_cast({rollback, _Txn, _ChPid}, State) ->
     noreply(State).
 
 handle_info(timeout, State) ->
-    noreply(backing_queue_idle_timeout(State));
+    noreply(backing_queue_timeout(State));
 
 handle_info({'DOWN', _MonitorRef, process, Pid, _Reason},
            State = #state { gm = GM }) ->
@@ -499,13 +499,13 @@ next_state(State = #state{backing_queue = BQ, backing_queue_state = BQS}) ->
     State1 = ensure_rate_timer(
                confirm_messages(MsgIds, State #state {
                                           backing_queue_state = BQS1 })),
-    case BQ:needs_idle_timeout(BQS1) of
+    case BQ:needs_timeout(BQS1) of
         true  -> {ensure_sync_timer(State1), 0};
         false -> {stop_sync_timer(State1), hibernate}
     end.
 
-backing_queue_idle_timeout(State = #state { backing_queue = BQ }) ->
-    run_backing_queue(BQ, fun (M, BQS) -> M:idle_timeout(BQS) end, State).
+backing_queue_timeout(State = #state { backing_queue = BQ }) ->
+    run_backing_queue(BQ, fun (M, BQS) -> M:timeout(BQS) end, State).
 
 ensure_sync_timer(State = #state { sync_timer_ref = undefined }) ->
     {ok, TRef} = timer:apply_after(
