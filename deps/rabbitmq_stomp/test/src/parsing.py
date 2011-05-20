@@ -18,7 +18,7 @@ def connect(cnames):
         '\n\0')
     resp = ('CONNECTED\n'
             'session:(.*)\n'
-            'heartbeat:0,0\n'
+            'heart-beat:0,0\n'
             'version:1.0\n'
             '\n\x00')
     def w(m):
