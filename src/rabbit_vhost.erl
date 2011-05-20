@@ -51,12 +51,13 @@ add(VHostPath) ->
                      rabbit_misc:r(VHostPath, exchange, Name),
                      Type, true, false, false, []) ||
                       {Name,Type} <-
-                          [{<<"">>,            direct},
-                           {<<"amq.direct">>,  direct},
-                           {<<"amq.topic">>,   topic},
-                           {<<"amq.match">>,   headers}, %% per 0-9-1 pdf
-                           {<<"amq.headers">>, headers}, %% per 0-9-1 xml
-                           {<<"amq.fanout">>,  fanout}]],
+                          [{<<"">>,                   direct},
+                           {<<"amq.direct">>,         direct},
+                           {<<"amq.topic">>,          topic},
+                           {<<"amq.match">>,          headers}, %% per 0-9-1 pdf
+                           {<<"amq.headers">>,        headers}, %% per 0-9-1 xml
+                           {<<"amq.fanout">>,         fanout},
+                           {<<"amq.rabbitmq.trace">>, topic}]],
                   ok
           end),
     rabbit_log:info("Added vhost ~p~n", [VHostPath]),

@@ -16,12 +16,13 @@
 
 -module(rabbit_trace).
 
--export([init/1, tap_trace_in/2, tap_trace_out/2, start/2, stop/1]).
+-export([init/1, tap_trace_in/2, tap_trace_out/2, start/1, stop/1]).
 
 -include("rabbit.hrl").
 -include("rabbit_framing.hrl").
 
--define(TRACE_EXCHANGES, trace_exchanges).
+-define(TRACE_VHOSTS, trace_vhosts).
+-define(XNAME, <<"amq.rabbitmq.trace">>).
 
 %%----------------------------------------------------------------------------
 
@@ -33,7 +34,7 @@
 -spec(tap_trace_in/2 :: (rabbit_types:basic_message(), state()) -> 'ok').
 -spec(tap_trace_out/2 :: (rabbit_amqqueue:qmsg(), state()) -> 'ok').
 
--spec(start/2 :: (rabbit_types:vhost(), binary()) -> 'ok').
+-spec(start/1 :: (rabbit_types:vhost()) -> 'ok').
 -spec(stop/1 :: (rabbit_types:vhost()) -> 'ok').
 
 -endif.
@@ -41,14 +42,12 @@
 %%----------------------------------------------------------------------------
 
 init(VHost) ->
-    {ok, XNs} = application:get_env(rabbit, ?TRACE_EXCHANGES),
-    case proplists:get_value(VHost, XNs, none) of
-        none -> none;
-        Name -> case rabbit_exchange:lookup(
-                       rabbit_misc:r(VHost, exchange, Name)) of
-                    {ok, X} -> X;
-                    _       -> none
-                end
+    {ok, VHosts} = application:get_env(rabbit, ?TRACE_VHOSTS),
+    case lists:member(VHost, VHosts) of
+        false -> none;
+        true  -> {ok, X} = rabbit_exchange:lookup(
+                             rabbit_misc:r(VHost, exchange, ?XNAME)),
+                 X
     end.
 
 tap_trace_in(Msg = #basic_message{exchange_name = #resource{name = XName}},
@@ -63,16 +62,16 @@ tap_trace_out({#resource{name = QName}, _QPid, _QMsgId, Redelivered, Msg},
 
 %%----------------------------------------------------------------------------
 
-start(VHost, XN) ->
-    update_config(fun (Xs) -> orddict:store(VHost, list_to_binary(XN), Xs) end).
+start(VHost) ->
+    update_config(fun (VHosts) -> [VHost | lists:delete(VHost, VHosts)] end).
 
 stop(VHost) ->
-    update_config(fun (Xs) -> orddict:erase(VHost, Xs) end).
+    update_config(fun (VHosts) -> lists:delete(VHost, VHosts) end).
 
 update_config(Fun) ->
-    {ok, Xs0} = application:get_env(rabbit, ?TRACE_EXCHANGES),
-    Xs = Fun(orddict:from_list(Xs0)),
-    application:set_env(rabbit, ?TRACE_EXCHANGES, Xs),
+    {ok, VHosts0} = application:get_env(rabbit, ?TRACE_VHOSTS),
+    VHosts = Fun(VHosts0),
+    application:set_env(rabbit, ?TRACE_VHOSTS, VHosts),
     rabbit_channel:refresh_config_all(),
     ok.
 
