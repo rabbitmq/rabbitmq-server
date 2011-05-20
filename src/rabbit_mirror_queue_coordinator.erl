@@ -16,7 +16,7 @@
 
 -module(rabbit_mirror_queue_coordinator).
 
--export([start_link/2, get_gm/1]).
+-export([start_link/3, get_gm/1, ensure_monitoring/2]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3]).
@@ -30,7 +30,9 @@
 -include("gm_specs.hrl").
 
 -record(state, { q,
-                 gm
+                 gm,
+                 monitors,
+                 death_fun
                }).
 
 -define(ONE_SECOND, 1000).
@@ -223,17 +225,20 @@
 %%
 %%----------------------------------------------------------------------------
 
-start_link(Queue, GM) ->
-    gen_server2:start_link(?MODULE, [Queue, GM], []).
+start_link(Queue, GM, DeathFun) ->
+    gen_server2:start_link(?MODULE, [Queue, GM, DeathFun], []).
 
 get_gm(CPid) ->
     gen_server2:call(CPid, get_gm, infinity).
+
+ensure_monitoring(CPid, Pids) ->
+    gen_server2:cast(CPid, {ensure_monitoring, Pids}).
 
 %% ---------------------------------------------------------------------------
 %% gen_server
 %% ---------------------------------------------------------------------------
 
-init([#amqqueue { name = QueueName } = Q, GM]) ->
+init([#amqqueue { name = QueueName } = Q, GM, DeathFun]) ->
     GM1 = case GM of
               undefined ->
                   ok = gm:create_tables(),
@@ -248,7 +253,11 @@ init([#amqqueue { name = QueueName } = Q, GM]) ->
           end,
     {ok, _TRef} =
         timer:apply_interval(?ONE_SECOND, gm, broadcast, [GM1, heartbeat]),
-    {ok, #state { q = Q, gm = GM1 }, hibernate,
+    {ok, #state { q         = Q,
+                  gm        = GM1,
+                  monitors  = dict:new(),
+                  death_fun = DeathFun },
+     hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
 handle_call(get_gm, _From, State = #state { gm = GM }) ->
@@ -265,7 +274,29 @@ handle_cast({gm_deaths, Deaths},
             noreply(State);
         {error, not_found} ->
             {stop, normal, State}
-    end.
+    end;
+
+handle_cast({ensure_monitoring, Pids},
+            State = #state { monitors = Monitors }) ->
+    Monitors1 =
+        lists:foldl(fun (Pid, MonitorsN) ->
+                            case dict:is_key(Pid, MonitorsN) of
+                                true  -> MonitorsN;
+                                false -> MRef = erlang:monitor(process, Pid),
+                                         dict:store(Pid, MRef, MonitorsN)
+                            end
+                    end, Monitors, Pids),
+    noreply(State #state { monitors = Monitors1 }).
+
+handle_info({'DOWN', _MonitorRef, process, Pid, _Reason},
+            State = #state { monitors  = Monitors,
+                             death_fun = Fun }) ->
+    noreply(
+      case dict:is_key(Pid, Monitors) of
+          false -> State;
+          true  -> ok = Fun(Pid),
+                   State #state { monitors = dict:erase(Pid, Monitors) }
+      end);
 
 handle_info(Msg, State) ->
     {stop, {unexpected_info, Msg}, State}.
@@ -295,6 +326,8 @@ members_changed([CPid], _Births, Deaths) ->
 
 handle_msg([_CPid], _From, heartbeat) ->
     ok;
+handle_msg([CPid], _From, {ensure_monitoring, _Pids} = Msg) ->
+    ok = gen_server2:cast(CPid, Msg);
 handle_msg([_CPid], _From, _Msg) ->
     ok.
 

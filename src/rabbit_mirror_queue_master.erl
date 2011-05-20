@@ -26,7 +26,7 @@
 
 -export([start/1, stop/0]).
 
--export([promote_backing_queue_state/5]).
+-export([promote_backing_queue_state/6, sender_death_fun/0]).
 
 -behaviour(rabbit_backing_queue).
 
@@ -39,7 +39,8 @@
                  set_delivered,
                  seen_status,
                  confirmed,
-                 ack_msg_id
+                 ack_msg_id,
+                 known_senders
                }).
 
 %% For general documentation of HA design, see
@@ -58,9 +59,31 @@ stop() ->
     %% Same as start/1.
     exit({not_valid_for_generic_backing_queue, ?MODULE}).
 
+sender_death_fun() ->
+    Self = self(),
+    fun (DeadPid) ->
+            %% Purposefully set the priority to 0 here so that we
+            %% don't overtake any messages from DeadPid that are
+            %% already in the queue.
+            rabbit_amqqueue:run_backing_queue_async(
+              Self, ?MODULE,
+              fun (?MODULE, State = #state { gm = GM, known_senders = KS }) ->
+                      rabbit_log:info("Master saw death of sender ~p~n", [DeadPid]),
+                      case sets:is_element(DeadPid, KS) of
+                          false ->
+                              State;
+                          true ->
+                              ok = gm:broadcast(GM, {sender_death, DeadPid}),
+                              KS1 = sets:del_element(DeadPid, KS),
+                              State #state { known_senders = KS1 }
+                      end
+              end, 0)
+    end.
+
 init(#amqqueue { arguments = Args, name = QName } = Q, Recover,
      AsyncCallback, SyncCallback) ->
-    {ok, CPid} = rabbit_mirror_queue_coordinator:start_link(Q, undefined),
+    {ok, CPid} = rabbit_mirror_queue_coordinator:start_link(
+                   Q, undefined, sender_death_fun()),
     GM = rabbit_mirror_queue_coordinator:get_gm(CPid),
     {_Type, Nodes} = rabbit_misc:table_lookup(Args, <<"x-mirror">>),
     Nodes1 = case Nodes of
@@ -78,9 +101,10 @@ init(#amqqueue { arguments = Args, name = QName } = Q, Recover,
              set_delivered       = 0,
              seen_status         = dict:new(),
              confirmed           = [],
-             ack_msg_id          = dict:new() }.
+             ack_msg_id          = dict:new(),
+             known_senders       = sets:new() }.
 
-promote_backing_queue_state(CPid, BQ, BQS, GM, SeenStatus) ->
+promote_backing_queue_state(CPid, BQ, BQS, GM, SeenStatus, KS) ->
     #state { gm                  = GM,
              coordinator         = CPid,
              backing_queue       = BQ,
@@ -88,7 +112,8 @@ promote_backing_queue_state(CPid, BQ, BQS, GM, SeenStatus) ->
              set_delivered       = BQ:len(BQS),
              seen_status         = SeenStatus,
              confirmed           = [],
-             ack_msg_id          = dict:new() }.
+             ack_msg_id          = dict:new(),
+             known_senders       = sets:from_list(KS) }.
 
 terminate(State = #state { backing_queue = BQ, backing_queue_state = BQS }) ->
     %% Backing queue termination. The queue is going down but
@@ -119,7 +144,7 @@ publish(Msg = #basic_message { id = MsgId }, MsgProps, ChPid,
     false = dict:is_key(MsgId, SS), %% ASSERTION
     ok = gm:broadcast(GM, {publish, false, ChPid, MsgProps, Msg}),
     BQS1 = BQ:publish(Msg, MsgProps, ChPid, BQS),
-    State #state { backing_queue_state = BQS1 }.
+    ensure_monitoring(ChPid, State #state { backing_queue_state = BQS1 }).
 
 publish_delivered(AckRequired, Msg = #basic_message { id = MsgId }, MsgProps,
                   ChPid, State = #state { gm                  = GM,
@@ -136,8 +161,9 @@ publish_delivered(AckRequired, Msg = #basic_message { id = MsgId }, MsgProps,
     {AckTag, BQS1} =
         BQ:publish_delivered(AckRequired, Msg, MsgProps, ChPid, BQS),
     AM1 = maybe_store_acktag(AckTag, MsgId, AM),
-    {AckTag, State #state { backing_queue_state = BQS1,
-                            ack_msg_id          = AM1 }}.
+    {AckTag,
+     ensure_monitoring(ChPid, State #state { backing_queue_state = BQS1,
+                                             ack_msg_id          = AM1 })}.
 
 dropwhile(Fun, State = #state { gm                  = GM,
                                 backing_queue       = BQ,
@@ -341,3 +367,12 @@ maybe_store_acktag(undefined, _MsgId, AM) ->
     AM;
 maybe_store_acktag(AckTag, MsgId, AM) ->
     dict:store(AckTag, MsgId, AM).
+
+ensure_monitoring(ChPid, State = #state { coordinator = CPid,
+                                          known_senders = KS }) ->
+    case sets:is_element(ChPid, KS) of
+        true  -> State;
+        false -> ok = rabbit_mirror_queue_coordinator:ensure_monitoring(
+                        CPid, [ChPid]),
+                 State #state { known_senders = sets:add_element(ChPid, KS) }
+    end.

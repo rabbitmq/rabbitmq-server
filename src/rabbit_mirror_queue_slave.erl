@@ -49,10 +49,11 @@
 
 -define(SYNC_INTERVAL,                 25). %% milliseconds
 -define(RAM_DURATION_UPDATE_INTERVAL,  5000).
+-define(DEATH_TIMEOUT,                 20000). %% 20 seconds
 
 -record(state, { q,
                  gm,
-                 master_node,
+                 master_pid,
                  backing_queue,
                  backing_queue_state,
                  sync_timer_ref,
@@ -62,7 +63,8 @@
                  msg_id_ack,    %% :: MsgId -> AckTag
                  ack_num,
 
-                 msg_id_status
+                 msg_id_status,
+                 known_senders
                }).
 
 start_link(Q) ->
@@ -102,7 +104,7 @@ init([#amqqueue { name = QueueName } = Q]) ->
     BQS = bq_init(BQ, Q, false),
     {ok, #state { q                   = Q,
                   gm                  = GM,
-                  master_node         = node(MPid),
+                  master_pid          = MPid,
                   backing_queue       = BQ,
                   backing_queue_state = BQS,
                   rate_timer_ref      = undefined,
@@ -112,7 +114,8 @@ init([#amqqueue { name = QueueName } = Q]) ->
                   msg_id_ack          = dict:new(),
                   ack_num             = 0,
 
-                  msg_id_status       = dict:new()
+                  msg_id_status       = dict:new(),
+                  known_senders       = dict:new()
                 }, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
@@ -140,9 +143,9 @@ handle_call({deliver, Delivery = #delivery {}}, From, State) ->
     noreply(maybe_enqueue_message(Delivery, true, State));
 
 handle_call({gm_deaths, Deaths}, From,
-            State = #state { q           = #amqqueue { name = QueueName },
-                             gm          = GM,
-                             master_node = MNode }) ->
+            State = #state { q          = #amqqueue { name = QueueName },
+                             gm         = GM,
+                             master_pid = MPid }) ->
     rabbit_log:info("Mirrored-queue (~s): Slave ~s saw deaths of mirrors ~s~n",
                     [rabbit_misc:rs(QueueName),
                      rabbit_misc:pid_to_string(self()),
@@ -150,7 +153,7 @@ handle_call({gm_deaths, Deaths}, From,
     %% The GM has told us about deaths, which means we're not going to
     %% receive any more messages from GM
     case rabbit_mirror_queue_misc:remove_from_queue(QueueName, Deaths) of
-        {ok, Pid} when node(Pid) =:= MNode ->
+        {ok, Pid} when node(Pid) =:= node(MPid) ->
             %% master hasn't changed
             reply(ok, State);
         {ok, Pid} when node(Pid) =:= node() ->
@@ -161,20 +164,20 @@ handle_call({gm_deaths, Deaths}, From,
             gen_server2:reply(From, ok),
             erlang:monitor(process, Pid),
             ok = gm:broadcast(GM, heartbeat),
-            noreply(State #state { master_node = node(Pid) });
+            noreply(State #state { master_pid = Pid });
         {error, not_found} ->
             gen_server2:reply(From, ok),
             {stop, normal, State}
     end;
 
-handle_call({run_backing_queue, Mod, Fun}, _From, State) ->
+handle_call({run_backing_queue, Mod, Fun, _Priority}, _From, State) ->
     reply(ok, run_backing_queue(Mod, Fun, State));
 
 handle_call({commit, _Txn, _ChPid}, _From, State) ->
     %% We don't support transactions in mirror queues
     reply(ok, State).
 
-handle_cast({run_backing_queue, Mod, Fun}, State) ->
+handle_cast({run_backing_queue, Mod, Fun, _Priority}, State) ->
     noreply(run_backing_queue(Mod, Fun, State));
 
 handle_cast({gm, Instruction}, State) ->
@@ -215,10 +218,13 @@ handle_cast({rollback, _Txn, _ChPid}, State) ->
 handle_info(timeout, State) ->
     noreply(backing_queue_timeout(State));
 
-handle_info({'DOWN', _MonitorRef, process, Pid, _Reason},
-           State = #state { gm = GM }) ->
-    ok = gm:broadcast(GM, {process_death, Pid}),
+handle_info({'DOWN', _MonitorRef, process, MPid, _Reason},
+           State = #state { gm = GM, master_pid = MPid }) ->
+    ok = gm:broadcast(GM, {process_death, MPid}),
     noreply(State);
+
+handle_info({'DOWN', _MonitorRef, process, ChPid, _Reason}, State) ->
+    noreply(local_sender_death(ChPid, State));
 
 handle_info(Msg, State) ->
     {stop, {unexpected_info, Msg}, State}.
@@ -259,21 +265,23 @@ handle_pre_hibernate(State = #state { backing_queue       = BQ,
 
 prioritise_call(Msg, _From, _State) ->
     case Msg of
-        {run_backing_queue, _Mod, _Fun} -> 6;
-        {gm_deaths, _Deaths}            -> 5;
-        _                               -> 0
+        {run_backing_queue, _Mod, _Fun, default}  -> 6;
+        {run_backing_queue, _Mod, _Fun, Priority} -> Priority;
+        {gm_deaths, _Deaths}                      -> 5;
+        _                                         -> 0
     end.
 
 prioritise_cast(Msg, _State) ->
     case Msg of
-        update_ram_duration                  -> 8;
-        {set_ram_duration_target, _Duration} -> 8;
-        {set_maximum_since_use, _Age}        -> 8;
-        {run_backing_queue, _Mod, _Fun}      -> 6;
-        sync_timeout                         -> 6;
-        {gm, _Msg}                           -> 5;
-        {post_commit, _Txn, _AckTags}        -> 4;
-        _                                    -> 0
+        update_ram_duration                       -> 8;
+        {set_ram_duration_target, _Duration}      -> 8;
+        {set_maximum_since_use, _Age}             -> 8;
+        {run_backing_queue, _Mod, _Fun, default}  -> 6;
+        {run_backing_queue, _Mod, _Fun, Priority} -> Priority;
+        sync_timeout                              -> 6;
+        {gm, _Msg}                                -> 5;
+        {post_commit, _Txn, _AckTags}             -> 4;
+        _                                         -> 0
     end.
 
 %% ---------------------------------------------------------------------------
@@ -290,6 +298,9 @@ members_changed([SPid], _Births, Deaths) ->
     inform_deaths(SPid, Deaths).
 
 handle_msg([_SPid], _From, heartbeat) ->
+    ok;
+handle_msg([_SPid], _From, {ensure_monitoring, _Pid}) ->
+    %% This is only of value to the master
     ok;
 handle_msg([SPid], _From, {process_death, Pid}) ->
     inform_deaths(SPid, [Pid]);
@@ -327,9 +338,9 @@ bq_init(BQ, Q, Recover) ->
             end).
 
 run_backing_queue(rabbit_mirror_queue_master, Fun, State) ->
-    %% Yes, this might look a little crazy, but see comments around
-    %% process_instruction({tx_commit,...}, State).
-    Fun(rabbit_mirror_queue_master, State);
+    %% Yes, this might look a little crazy, but see comments in
+    %% local_sender_death/2
+    Fun(?MODULE, State);
 run_backing_queue(Mod, Fun, State = #state { backing_queue       = BQ,
                                              backing_queue_state = BQS }) ->
     State #state { backing_queue_state = BQ:invoke(Mod, Fun, BQS) }.
@@ -392,14 +403,26 @@ promote_me(From, #state { q                   = Q,
                           rate_timer_ref      = RateTRef,
                           sender_queues       = SQ,
                           msg_id_ack          = MA,
-                          msg_id_status       = MS }) ->
+                          msg_id_status       = MS,
+                          known_senders       = KS }) ->
     rabbit_log:info("Mirrored-queue (~s): Promoting slave ~s to master~n",
                     [rabbit_misc:rs(Q #amqqueue.name),
                      rabbit_misc:pid_to_string(self())]),
-    {ok, CPid} = rabbit_mirror_queue_coordinator:start_link(Q, GM),
+    Q1 = Q #amqqueue { pid = self() },
+    {ok, CPid} = rabbit_mirror_queue_coordinator:start_link(
+                   Q1, GM, rabbit_mirror_queue_master:sender_death_fun()),
     true = unlink(GM),
     gen_server2:reply(From, {promote, CPid}),
     ok = gm:confirmed_broadcast(GM, heartbeat),
+
+    %% Everything that we're monitoring, we need to ensure our new
+    %% coordinator is monitoring.
+
+    MonitoringPids = [begin true = erlang:demonitor(MRef),
+                            Pid
+                      end || {Pid, MRef} <- dict:to_list(KS)],
+    ok = rabbit_mirror_queue_coordinator:ensure_monitoring(
+           CPid, MonitoringPids),
 
     %% We find all the messages that we've received from channels but
     %% not from gm, and if they're due to be enqueued on promotion
@@ -472,7 +495,7 @@ promote_me(From, #state { q                   = Q,
                    Status =:= published orelse Status =:= confirmed]),
 
     MasterState = rabbit_mirror_queue_master:promote_backing_queue_state(
-                    CPid, BQ, BQS, GM, SS),
+                    CPid, BQ, BQS, GM, SS, MonitoringPids),
 
     MTC = dict:from_list(
             [{MsgId, {ChPid, MsgSeqNo}} ||
@@ -482,7 +505,7 @@ promote_me(From, #state { q                   = Q,
     Deliveries = [Delivery || {_ChPid, PubQ} <- dict:to_list(SQ),
                               {Delivery, true} <- queue:to_list(PubQ)],
     QueueState = rabbit_amqqueue_process:init_with_backing_queue_state(
-                   Q, rabbit_mirror_queue_master, MasterState, RateTRef,
+                   Q1, rabbit_mirror_queue_master, MasterState, RateTRef,
                    AckTags, Deliveries, MTC),
     {become, rabbit_amqqueue_process, QueueState, hibernate}.
 
@@ -540,6 +563,52 @@ stop_rate_timer(State = #state { rate_timer_ref = TRef }) ->
     {ok, cancel} = timer:cancel(TRef),
     State #state { rate_timer_ref = undefined }.
 
+ensure_monitoring(ChPid, State = #state { known_senders = KS }) ->
+    case dict:is_key(ChPid, KS) of
+        true  -> State;
+        false -> MRef = erlang:monitor(process, ChPid),
+                 State #state { known_senders = dict:store(ChPid, MRef, KS) }
+    end.
+
+local_sender_death(ChPid, State = #state { known_senders = KS }) ->
+    case dict:is_key(ChPid, KS) of
+        false ->
+            ok;
+        true ->
+            %% We have to deal with the possibility that we'll be
+            %% promoted to master before this thing gets
+            %% run. Consequently we set the module to
+            %% rabbit_mirror_queue_master so that if we do become a
+            %% rabbit_amqqueue_process before then, sane things will
+            %% happen.
+            Fun =
+                fun (?MODULE, State1 = #state { known_senders = KS1,
+                                                gm            = GM }) ->
+                        %% We're running still as a slave
+                        ok = case dict:is_key(ChPid, KS1) of
+                                 false ->
+                                     ok;
+                                 true ->
+                                     gm:broadcast(
+                                       GM, {ensure_monitoring, [ChPid]})
+                             end,
+                        State1;
+                    (rabbit_mirror_queue_master, State1) ->
+                        %% We've become a master. State1 is now opaque
+                        %% to us. When we became master, if ChPid was
+                        %% still known to us then we'd have set up
+                        %% monitoring of it then, so this is now a
+                        %% noop.
+                        State1
+                end,
+            %% Note that we do not remove our knowledge of this ChPid
+            %% until we get the sender_death from GM.
+            timer:apply_after(
+              ?DEATH_TIMEOUT, rabbit_amqqueue, run_backing_queue_async,
+              [self(), rabbit_mirror_queue_master, Fun])
+    end,
+    State.
+
 maybe_enqueue_message(
   Delivery = #delivery { message    = #basic_message { id = MsgId },
                          msg_seq_no = MsgSeqNo,
@@ -548,6 +617,7 @@ maybe_enqueue_message(
   EnqueueOnPromotion,
   State = #state { sender_queues = SQ,
                    msg_id_status = MS }) ->
+    State1 = ensure_monitoring(ChPid, State),
     %% We will never see {published, ChPid, MsgSeqNo} here.
     case dict:find(MsgId, MS) of
         error ->
@@ -557,30 +627,30 @@ maybe_enqueue_message(
                  end,
             SQ1 = dict:store(ChPid,
                              queue:in({Delivery, EnqueueOnPromotion}, MQ), SQ),
-            State #state { sender_queues = SQ1 };
+            State1 #state { sender_queues = SQ1 };
         {ok, {confirmed, ChPid}} ->
             %% BQ has confirmed it but we didn't know what the
             %% msg_seq_no was at the time. We do now!
             ok = rabbit_channel:confirm(ChPid, [MsgSeqNo]),
-            State #state { msg_id_status = dict:erase(MsgId, MS) };
+            State1 #state { msg_id_status = dict:erase(MsgId, MS) };
         {ok, {published, ChPid}} ->
             %% It was published to the BQ and we didn't know the
             %% msg_seq_no so couldn't confirm it at the time.
-            case needs_confirming(Delivery, State) of
+            case needs_confirming(Delivery, State1) of
                 never ->
-                    State #state { msg_id_status = dict:erase(MsgId, MS) };
+                    State1 #state { msg_id_status = dict:erase(MsgId, MS) };
                 eventually ->
-                    State #state {
+                    State1 #state {
                       msg_id_status =
                           dict:store(MsgId, {published, ChPid, MsgSeqNo}, MS) };
                 immediately ->
                     ok = rabbit_channel:confirm(ChPid, [MsgSeqNo]),
-                    State #state { msg_id_status = dict:erase(MsgId, MS) }
+                    State1 #state { msg_id_status = dict:erase(MsgId, MS) }
             end;
         {ok, discarded} ->
             %% We've already heard from GM that the msg is to be
             %% discarded. We won't see this again.
-            State #state { msg_id_status = dict:erase(MsgId, MS) }
+            State1 #state { msg_id_status = dict:erase(MsgId, MS) }
     end;
 maybe_enqueue_message(_Delivery, _EnqueueOnPromotion, State) ->
     %% We don't support txns in mirror queues.
@@ -601,6 +671,7 @@ process_instruction(
     %% which means that we're going to have to hang on to the fact
     %% that we've seen the msg_id confirmed until we can associate it
     %% with a msg_seq_no.
+    State1 = ensure_monitoring(ChPid, State),
     MS1 = dict:store(MsgId, {published, ChPid}, MS),
     {SQ1, MS2} =
         case dict:find(ChPid, SQ) of
@@ -618,7 +689,7 @@ process_instruction(
                         %% first. Thus we need to deal with confirms
                         %% here.
                         {dict:store(ChPid, MQ1, SQ),
-                         case needs_confirming(Delivery, State) of
+                         case needs_confirming(Delivery, State1) of
                              never ->
                                  MS;
                              eventually ->
@@ -639,19 +710,19 @@ process_instruction(
                 end
         end,
 
-    State1 = State #state { sender_queues = SQ1,
-                            msg_id_status = MS2 },
+    State2 = State1 #state { sender_queues = SQ1,
+                             msg_id_status = MS2 },
 
     {ok,
      case Deliver of
          false ->
              BQS1 = BQ:publish(Msg, MsgProps, ChPid, BQS),
-             State1 #state { backing_queue_state = BQS1 };
+             State2 #state { backing_queue_state = BQS1 };
          {true, AckRequired} ->
              {AckTag, BQS1} = BQ:publish_delivered(AckRequired, Msg, MsgProps,
                                                    ChPid, BQS),
              maybe_store_ack(AckRequired, MsgId, AckTag,
-                             State1 #state { backing_queue_state = BQS1 })
+                             State2 #state { backing_queue_state = BQS1 })
      end};
 process_instruction({discard, ChPid, Msg = #basic_message { id = MsgId }},
                     State = #state { sender_queues       = SQ,
@@ -660,6 +731,7 @@ process_instruction({discard, ChPid, Msg = #basic_message { id = MsgId }},
                                      msg_id_status       = MS }) ->
     %% Many of the comments around the publish head above apply here
     %% too.
+    State1 = ensure_monitoring(ChPid, State),
     MS1 = dict:store(MsgId, discarded, MS),
     {SQ1, MS2} =
         case dict:find(ChPid, SQ) of
@@ -685,9 +757,9 @@ process_instruction({discard, ChPid, Msg = #basic_message { id = MsgId }},
                 end
         end,
     BQS1 = BQ:discard(Msg, ChPid, BQS),
-    {ok, State #state { sender_queues       = SQ1,
-                        msg_id_status       = MS2,
-                        backing_queue_state = BQS1 }};
+    {ok, State1 #state { sender_queues       = SQ1,
+                         msg_id_status       = MS2,
+                         backing_queue_state = BQS1 }};
 process_instruction({set_length, Length},
                     State = #state { backing_queue       = BQ,
                                      backing_queue_state = BQS }) ->
@@ -745,6 +817,19 @@ process_instruction({requeue, MsgPropsFun, MsgIds},
                  {_MsgIds, BQS2} = ack_all(BQ, MA, BQS1),
                  State #state { msg_id_ack          = dict:new(),
                                 backing_queue_state = BQS2 }
+         end};
+process_instruction({sender_death, ChPid},
+                    State = #state { sender_queues = SQ,
+                                     known_senders = KS }) ->
+    rabbit_log:info("Slave received death of sender ~p~n", [ChPid]),
+    {ok, case dict:find(ChPid, KS) of
+             error ->
+                 State;
+             {ok, MRef} ->
+                 true = erlang:demonitor(MRef),
+                 KS1 = dict:erase(ChPid, KS),
+                 SQ1 = dict:erase(ChPid, SQ),
+                 State #state { sender_queues = SQ1, known_senders = KS1}
          end};
 process_instruction(delete_and_terminate,
                     State = #state { backing_queue       = BQ,

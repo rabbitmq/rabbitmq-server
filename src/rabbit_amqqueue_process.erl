@@ -127,7 +127,7 @@ init_with_backing_queue_state(Q = #amqqueue{exclusive_owner = Owner}, BQ, BQS,
     State = requeue_and_run(
               AckTags,
               process_args(
-                #q{q                   = Q#amqqueue{pid = self()},
+                #q{q                   = Q,
                    exclusive_consumer  = none,
                    has_had_consumers   = false,
                    backing_queue       = BQ,
@@ -843,29 +843,31 @@ emit_consumer_deleted(ChPid, ConsumerTag) ->
 
 prioritise_call(Msg, _From, _State) ->
     case Msg of
-        info                            -> 9;
-        {info, _Items}                  -> 9;
-        consumers                       -> 9;
-        {run_backing_queue, _Mod, _Fun} -> 6;
-        _                               -> 0
+        info                                      -> 9;
+        {info, _Items}                            -> 9;
+        consumers                                 -> 9;
+        {run_backing_queue, _Mod, _Fun, default}  -> 6;
+        {run_backing_queue, _Mod, _Fun, Priority} -> Priority;
+        _                                         -> 0
     end.
 
 prioritise_cast(Msg, _State) ->
     case Msg of
-        update_ram_duration                  -> 8;
-        delete_immediately                   -> 8;
-        {set_ram_duration_target, _Duration} -> 8;
-        {set_maximum_since_use, _Age}        -> 8;
-        maybe_expire                         -> 8;
-        drop_expired                         -> 8;
-        emit_stats                           -> 7;
-        {ack, _Txn, _AckTags, _ChPid}        -> 7;
-        {reject, _AckTags, _Requeue, _ChPid} -> 7;
-        {notify_sent, _ChPid}                -> 7;
-        {unblock, _ChPid}                    -> 7;
-        {run_backing_queue, _Mod, _Fun}      -> 6;
-        sync_timeout                         -> 6;
-        _                                    -> 0
+        update_ram_duration                       -> 8;
+        delete_immediately                        -> 8;
+        {set_ram_duration_target, _Duration}      -> 8;
+        {set_maximum_since_use, _Age}             -> 8;
+        maybe_expire                              -> 8;
+        drop_expired                              -> 8;
+        emit_stats                                -> 7;
+        {ack, _Txn, _AckTags, _ChPid}             -> 7;
+        {reject, _AckTags, _Requeue, _ChPid}      -> 7;
+        {notify_sent, _ChPid}                     -> 7;
+        {unblock, _ChPid}                         -> 7;
+        {run_backing_queue, _Mod, _Fun, default}  -> 6;
+        {run_backing_queue, _Mod, _Fun, Priority} -> Priority;
+        sync_timeout                              -> 6;
+        _                                         -> 0
     end.
 
 prioritise_info({'DOWN', _MonitorRef, process, DownPid, _Reason},
@@ -1079,11 +1081,11 @@ handle_call({requeue, AckTags, ChPid}, From, State) ->
             noreply(requeue_and_run(AckTags, State))
     end;
 
-handle_call({run_backing_queue, Mod, Fun}, _From, State) ->
+handle_call({run_backing_queue, Mod, Fun, _Priority}, _From, State) ->
     reply(ok, run_backing_queue(Mod, Fun, State)).
 
 
-handle_cast({run_backing_queue, Mod, Fun}, State) ->
+handle_cast({run_backing_queue, Mod, Fun, _Priority}, State) ->
     noreply(run_backing_queue(Mod, Fun, State));
 
 handle_cast(sync_timeout, State) ->
