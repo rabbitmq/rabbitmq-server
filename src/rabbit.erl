@@ -25,8 +25,6 @@
 
 -export([log_location/1]).
 
--export([get_env/1, set_env/2, unset_env/1]).
-
 %%---------------------------------------------------------------------------
 %% Boot steps.
 -export([maybe_insert_default_data/0, boot_delegate/0, recover/0]).
@@ -188,9 +186,6 @@
 -spec(maybe_insert_default_data/0 :: () -> 'ok').
 -spec(boot_delegate/0 :: () -> 'ok').
 -spec(recover/0 :: () -> 'ok').
--spec(get_env/1 :: (atom()) -> term()).
--spec(set_env/2 :: (atom(), term()) -> 'ok').
--spec(unset_env/1 :: (atom()) -> 'ok').
 
 -endif.
 
@@ -519,14 +514,3 @@ log_rotation_result(ok, {error, SaslLogError}) ->
     {error, {cannot_rotate_sasl_logs, SaslLogError}};
 log_rotation_result(ok, ok) ->
     ok.
-
-get_env(Key) ->
-    application:get_env(rabbit, Key).
-
-set_env(Key, Value) ->
-    application:set_env(rabbit, Key, Value),
-    rabbit_channel:refresh_config_all().
-
-unset_env(Key) ->
-    application:unset_env(rabbit, Key),
-    rabbit_channel:refresh_config_all().
