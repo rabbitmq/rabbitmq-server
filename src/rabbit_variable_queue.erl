@@ -21,7 +21,7 @@
          fetch/2, ack/2, tx_publish/5, tx_ack/3, tx_rollback/2, tx_commit/4,
          requeue/3, len/1, is_empty/1, dropwhile/2,
          set_ram_duration_target/2, ram_duration/1,
-         needs_idle_timeout/1, idle_timeout/1, handle_pre_hibernate/1,
+         needs_timeout/1, timeout/1, handle_pre_hibernate/1,
          status/1, invoke/3, is_duplicate/3, discard/3,
          multiple_routing_keys/0]).
 
@@ -146,7 +146,7 @@
 %% any one time. This further smooths the effects of changes to the
 %% target_ram_count and ensures the queue remains responsive
 %% even when there is a large amount of IO work to do. The
-%% idle_timeout callback is utilised to ensure that conversions are
+%% timeout callback is utilised to ensure that conversions are
 %% done as promptly as possible whilst ensuring the queue remains
 %% responsive.
 %%
@@ -567,19 +567,21 @@ dropwhile1(Pred, State) ->
     internal_queue_out(
       fun(MsgStatus = #msg_status { msg_props = MsgProps }, State1) ->
               case Pred(MsgProps) of
-                  true ->
-                      {_, State2} = internal_fetch(false, MsgStatus, State1),
-                      dropwhile1(Pred, State2);
-                  false ->
-                      %% message needs to go back into Q4 (or maybe go
-                      %% in for the first time if it was loaded from
-                      %% Q3). Also the msg contents might not be in
-                      %% RAM, so read them in now
-                      {MsgStatus1, State2 = #vqstate { q4 = Q4 }} =
-                          read_msg(MsgStatus, State1),
-                      {ok, State2 #vqstate {q4 = queue:in_r(MsgStatus1, Q4) }}
+                  true ->  {_, State2} = internal_fetch(false, MsgStatus,
+                                                        State1),
+                           dropwhile1(Pred, State2);
+                  false -> {ok, in_r(MsgStatus, State1)}
               end
       end, State).
+
+in_r(MsgStatus = #msg_status { msg = undefined, index_on_disk = IndexOnDisk },
+     State = #vqstate { q3 = Q3, q4 = Q4, ram_index_count = RamIndexCount }) ->
+    true = queue:is_empty(Q4), %% ASSERTION
+    State #vqstate {
+      q3              = bpqueue:in_r(IndexOnDisk, MsgStatus, Q3),
+      ram_index_count = RamIndexCount + one_if(not IndexOnDisk) };
+in_r(MsgStatus, State = #vqstate { q4 = Q4 }) ->
+    State #vqstate { q4 = queue:in_r(MsgStatus, Q4) }.
 
 fetch(AckRequired, State) ->
     internal_queue_out(
@@ -830,21 +832,22 @@ ram_duration(State = #vqstate {
                  ram_msg_count_prev = RamMsgCount,
                  ram_ack_count_prev = RamAckCount }}.
 
-needs_idle_timeout(State = #vqstate { on_sync = OnSync }) ->
+needs_timeout(State = #vqstate { on_sync = OnSync }) ->
     case {OnSync, needs_index_sync(State)} of
         {?BLANK_SYNC, false} ->
-            {Res, _State} = reduce_memory_use(
-                              fun (_Quota, State1) -> {0, State1} end,
-                              fun (_Quota, State1) -> State1 end,
-                              fun (State1)         -> State1 end,
-                              fun (_Quota, State1) -> {0, State1} end,
-                              State),
-            Res;
+            case reduce_memory_use(fun (_Quota, State1) -> {0, State1} end,
+                                   fun (_Quota, State1) -> State1 end,
+                                   fun (State1)         -> State1 end,
+                                   fun (_Quota, State1) -> {0, State1} end,
+                                   State) of
+                {true,  _State} -> idle;
+                {false, _State} -> false
+            end;
         _ ->
-            true
+            timed
     end.
 
-idle_timeout(State) ->
+timeout(State) ->
     a(reduce_memory_use(confirm_commit_index(tx_commit_index(State)))).
 
 handle_pre_hibernate(State = #vqstate { index_state = IndexState }) ->

@@ -220,9 +220,10 @@ next_state(State = #q{backing_queue = BQ, backing_queue_state = BQS}) ->
                ensure_rate_timer(
                  confirm_messages(MsgIds, State#q{
                                             backing_queue_state = BQS1}))),
-    case BQ:needs_idle_timeout(BQS1) of
-        true  -> {ensure_sync_timer(State1), 0};
-        false -> {stop_sync_timer(State1), hibernate}
+    case BQ:needs_timeout(BQS1) of
+        false -> {stop_sync_timer(State1),   hibernate};
+        idle  -> {stop_sync_timer(State1),   0        };
+        timed -> {ensure_sync_timer(State1), 0        }
     end.
 
 ensure_sync_timer(State = #q{sync_timer_ref = undefined}) ->
@@ -661,8 +662,8 @@ maybe_send_reply(ChPid, Msg) -> ok = rabbit_channel:send_command(ChPid, Msg).
 
 qname(#q{q = #amqqueue{name = QName}}) -> QName.
 
-backing_queue_idle_timeout(State = #q{backing_queue = BQ}) ->
-    run_backing_queue(BQ, fun (M, BQS) -> M:idle_timeout(BQS) end, State).
+backing_queue_timeout(State = #q{backing_queue = BQ}) ->
+    run_backing_queue(BQ, fun (M, BQS) -> M:timeout(BQS) end, State).
 
 run_backing_queue(Mod, Fun, State = #q{backing_queue = BQ,
                                        backing_queue_state = BQS}) ->
@@ -1046,7 +1047,7 @@ handle_cast({run_backing_queue, Mod, Fun}, State) ->
     noreply(run_backing_queue(Mod, Fun, State));
 
 handle_cast(sync_timeout, State) ->
-    noreply(backing_queue_idle_timeout(State#q{sync_timer_ref = undefined}));
+    noreply(backing_queue_timeout(State#q{sync_timer_ref = undefined}));
 
 handle_cast({deliver, Delivery}, State) ->
     %% Asynchronous, non-"mandatory", non-"immediate" deliver mode.
@@ -1180,7 +1181,7 @@ handle_info({'DOWN', _MonitorRef, process, DownPid, _Reason}, State) ->
     end;
 
 handle_info(timeout, State) ->
-    noreply(backing_queue_idle_timeout(State));
+    noreply(backing_queue_timeout(State));
 
 handle_info({'EXIT', _Pid, Reason}, State) ->
     {stop, Reason, State};
