@@ -19,7 +19,7 @@
 -include("rabbit_framing.hrl").
 
 -export([publish/1, message/3, message/4, properties/1, delivery/5]).
--export([publish/4, publish/7]).
+-export([publish/4, publish/7, republish/4, republish/7]).
 -export([build_content/2, from_content/1]).
 
 %%----------------------------------------------------------------------------
@@ -54,6 +54,13 @@
         (rabbit_exchange:name(), rabbit_router:routing_key(),
          boolean(), boolean(), rabbit_types:maybe(rabbit_types:txn()),
          properties_input(), binary()) -> publish_result()).
+-spec(republish/4 ::
+        (rabbit_types:exchange(), rabbit_router:routing_key(),
+         properties_input(), [binary()]) -> publish_result()).
+-spec(republish/7 ::
+        (rabbit_types:exchange(), rabbit_router:routing_key(),
+         boolean(), boolean(), rabbit_types:maybe(rabbit_types:txn()),
+         properties_input(), [binary()]) -> publish_result()).
 -spec(build_content/2 :: (rabbit_framing:amqp_property_record(), binary()) ->
                               rabbit_types:content()).
 -spec(from_content/1 :: (rabbit_types:content()) ->
@@ -77,7 +84,10 @@ delivery(Mandatory, Immediate, Txn, Message, MsgSeqNo) ->
     #delivery{mandatory = Mandatory, immediate = Immediate, txn = Txn,
               sender = self(), message = Message, msg_seq_no = MsgSeqNo}.
 
-build_content(Properties, BodyBin) ->
+build_content(Properties, BodyBin) when is_binary(BodyBin) ->
+    build_content(Properties, [BodyBin]);
+
+build_content(Properties, PFR) ->
     %% basic.publish hasn't changed so we can just hard-code amqp_0_9_1
     {ClassId, _MethodId} =
         rabbit_framing_amqp_0_9_1:method_id('basic.publish'),
@@ -85,7 +95,7 @@ build_content(Properties, BodyBin) ->
              properties = Properties,
              properties_bin = none,
              protocol = none,
-             payload_fragments_rev = [BodyBin]}.
+             payload_fragments_rev = PFR}.
 
 from_content(Content) ->
     #content{class_id = ClassId,
@@ -165,6 +175,20 @@ publish(ExchangeName, RoutingKeyBin, Mandatory, Immediate, Txn, Properties,
                      message(ExchangeName, RoutingKeyBin,
                              properties(Properties), BodyBin),
                      undefined)).
+
+%% It's faster if you already have an exchange and a message not to
+%% look up the exchange and disassemble and reassemble fragments
+republish(X, RoutingKey, Props, PFR) ->
+    republish(X, RoutingKey, false, false, none, Props, PFR).
+
+%% It's faster if you already have an exchange and a message not to
+%% look up the exchange and disassemble and reassemble fragments
+republish(X = #exchange{name = XName},
+          RoutingKey, Mandatory, Immediate, Txn, Props, PFR) ->
+    {ok, Msg} = message(XName, RoutingKey, build_content(Props, PFR)),
+    Delivery = delivery(Mandatory, Immediate, Txn, Msg, undefined),
+    {RoutingRes, DeliveredQPids} = rabbit_exchange:publish(X, Delivery),
+    {ok, RoutingRes, DeliveredQPids}.
 
 is_message_persistent(#content{properties = #'P_basic'{
                                  delivery_mode = Mode}}) ->

@@ -44,17 +44,21 @@ init(VHost) ->
     {ok, XNs} = application:get_env(rabbit, ?TRACE_EXCHANGES),
     case proplists:get_value(VHost, XNs, none) of
         none -> none;
-        Name -> rabbit_misc:r(VHost, exchange, Name)
+        Name -> case rabbit_exchange:lookup(
+                       rabbit_misc:r(VHost, exchange, Name)) of
+                    {ok, X} -> X;
+                    _       -> none
+                end
     end.
 
 tap_trace_in(Msg = #basic_message{exchange_name = #resource{name = XName}},
-             TraceXN) ->
-    maybe_trace(TraceXN, Msg, <<"publish">>, XName, []).
+             TraceX) ->
+    maybe_trace(TraceX, Msg, <<"publish">>, XName, []).
 
 tap_trace_out({#resource{name = QName}, _QPid, _QMsgId, Redelivered, Msg},
-              TraceXN) ->
+              TraceX) ->
     RedeliveredNum = case Redelivered of true -> 1; false -> 0 end,
-    maybe_trace(TraceXN, Msg, <<"deliver">>, QName,
+    maybe_trace(TraceX, Msg, <<"deliver">>, QName,
                 [{<<"redelivered">>, signedint, RedeliveredNum}]).
 
 %%----------------------------------------------------------------------------
@@ -76,20 +80,16 @@ update_config(Fun) ->
 
 maybe_trace(none, _Msg, _RKPrefix, _RKSuffix, _Extra) ->
     ok;
-maybe_trace(XName, #basic_message{exchange_name = #resource{name = XName}},
+maybe_trace(#exchange{name = Name}, #basic_message{exchange_name = Name},
             _RKPrefix, _RKSuffix, _Extra) ->
     ok;
-maybe_trace(XName, Msg = #basic_message{content = #content{
-                                          payload_fragments_rev = PFR}},
+maybe_trace(X, Msg = #basic_message{content = #content{
+                                      payload_fragments_rev = PFR}},
             RKPrefix, RKSuffix, Extra) ->
-    case rabbit_basic:publish(XName,
-                              <<RKPrefix/binary, ".", RKSuffix/binary>>,
-                              #'P_basic'{headers = msg_to_table(Msg) ++ Extra},
-                              list_to_binary(lists:reverse(PFR))) of
-        {ok, _, _}         -> ok;
-        {error, not_found} -> rabbit_log:info("trace ~s not found~n",
-                                              [rabbit_misc:rs(XName)])
-    end.
+    {ok, _, _} = rabbit_basic:republish(
+                   X, <<RKPrefix/binary, ".", RKSuffix/binary>>,
+                   #'P_basic'{headers = msg_to_table(Msg) ++ Extra}, PFR),
+    ok.
 
 msg_to_table(#basic_message{exchange_name = #resource{name = XName},
                             routing_keys  = RoutingKeys,
