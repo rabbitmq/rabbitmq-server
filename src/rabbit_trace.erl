@@ -27,7 +27,7 @@
 
 -ifdef(use_specs).
 
--type(state() :: rabbit_exchange:name() | 'none').
+-type(state() :: rabbit_types:exchange() | 'none').
 
 -spec(init/1 :: (rabbit_types:vhost()) -> state()).
 -spec(tap_trace_in/2 :: (rabbit_types:basic_message(), state()) -> 'ok').
@@ -86,7 +86,7 @@ maybe_trace(#exchange{name = Name}, #basic_message{exchange_name = Name},
 maybe_trace(X, Msg = #basic_message{content = #content{
                                       payload_fragments_rev = PFR}},
             RKPrefix, RKSuffix, Extra) ->
-    {ok, _, _} = rabbit_basic:republish(
+    {ok, _, _} = rabbit_basic:publish(
                    X, <<RKPrefix/binary, ".", RKSuffix/binary>>,
                    #'P_basic'{headers = msg_to_table(Msg) ++ Extra}, PFR),
     ok.
