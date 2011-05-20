@@ -829,7 +829,7 @@ process_instruction({sender_death, ChPid},
                  true = erlang:demonitor(MRef),
                  KS1 = dict:erase(ChPid, KS),
                  SQ1 = dict:erase(ChPid, SQ),
-                 State #state { sender_queues = SQ1, known_senders = KS1}
+                 State #state { sender_queues = SQ1, known_senders = KS1 }
          end};
 process_instruction(delete_and_terminate,
                     State = #state { backing_queue       = BQ,
