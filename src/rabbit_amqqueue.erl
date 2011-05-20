@@ -27,6 +27,8 @@
 -export([notify_sent/2, unblock/2, flush_all/2]).
 -export([commit_all/3, rollback_all/3, notify_down_all/2, limit_all/3]).
 -export([on_node_down/1]).
+-export([store_queue/1]).
+
 
 %% internal
 -export([internal_declare/2, internal_delete/1,
@@ -193,12 +195,13 @@ recover_durable_queues(DurableQueues) ->
 
 declare(QueueName, Durable, AutoDelete, Args, Owner) ->
     ok = check_declare_arguments(QueueName, Args),
-    Q = start_queue_process(#amqqueue{name = QueueName,
-                                      durable = Durable,
-                                      auto_delete = AutoDelete,
-                                      arguments = Args,
+    Q = start_queue_process(#amqqueue{name            = QueueName,
+                                      durable         = Durable,
+                                      auto_delete     = AutoDelete,
+                                      arguments       = Args,
                                       exclusive_owner = Owner,
-                                      pid = none}),
+                                      pid             = none,
+                                      mirror_pids     = []}),
     case gen_server2:call(Q#amqqueue.pid, {init, false}, infinity) of
         not_found -> rabbit_misc:not_found(QueueName);
         Q1        -> Q1
@@ -253,8 +256,14 @@ lookup(Name) ->
 
 with(Name, F, E) ->
     case lookup(Name) of
-        {ok, Q} -> rabbit_misc:with_exit_handler(E, fun () -> F(Q) end);
-        {error, not_found} -> E()
+        {ok, Q = #amqqueue{mirror_pids = []}} ->
+            rabbit_misc:with_exit_handler(E, fun () -> F(Q) end);
+        {ok, Q} ->
+            timer:sleep(25),
+            E1 = fun () -> with(Name, F, E) end,
+            rabbit_misc:with_exit_handler(E1, fun () -> F(Q) end);
+        {error, not_found} ->
+            E()
     end.
 
 with(Name, F) ->
@@ -465,7 +474,8 @@ drop_expired(QPid) ->
 on_node_down(Node) ->
     rabbit_misc:execute_mnesia_tx_with_tail(
       fun () -> Dels = qlc:e(qlc:q([delete_queue(QueueName) ||
-                                       #amqqueue{name = QueueName, pid = Pid}
+                                       #amqqueue{name = QueueName, pid = Pid,
+                                                 mirror_pids = []}
                                            <- mnesia:table(rabbit_queue),
                                        node(Pid) == Node])),
                 rabbit_binding:process_deletions(
@@ -478,11 +488,12 @@ delete_queue(QueueName) ->
     rabbit_binding:remove_transient_for_destination(QueueName).
 
 pseudo_queue(QueueName, Pid) ->
-    #amqqueue{name = QueueName,
-              durable = false,
+    #amqqueue{name        = QueueName,
+              durable     = false,
               auto_delete = false,
-              arguments = [],
-              pid = Pid}.
+              arguments   = [],
+              pid         = Pid,
+              mirror_pids = []}.
 
 safe_delegate_call_ok(F, Pids) ->
     case delegate:invoke(Pids, fun (Pid) ->
