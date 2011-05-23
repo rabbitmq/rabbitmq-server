@@ -283,14 +283,14 @@ action(list_consumers, Node, _Args, Opts, Inform) ->
     end;
 
 action(trace_on, Node, [], Opts, Inform) ->
-    VHost = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
+    VHost = proplists:get_value(?VHOST_OPT, Opts),
     Inform("Starting tracing for vhost ~p", [VHost]),
-    rpc_call(Node, rabbit_trace, start, [VHost]);
+    rpc_call(Node, rabbit_trace, start, [list_to_binary(VHost)]);
 
 action(trace_off, Node, [], Opts, Inform) ->
-    VHost = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
+    VHost = proplists:get_value(?VHOST_OPT, Opts),
     Inform("Stopping tracing for vhost ~p", [VHost]),
-    rpc_call(Node, rabbit_trace, stop, [VHost]);
+    rpc_call(Node, rabbit_trace, stop, [list_to_binary(VHost)]);
 
 action(set_permissions, Node, [Username, CPerm, WPerm, RPerm], Opts, Inform) ->
     VHost = proplists:get_value(?VHOST_OPT, Opts),
