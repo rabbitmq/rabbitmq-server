@@ -65,7 +65,6 @@ sender_death_fun() ->
             rabbit_amqqueue:run_backing_queue_async(
               Self, ?MODULE,
               fun (?MODULE, State = #state { gm = GM, known_senders = KS }) ->
-                      rabbit_log:info("Master saw death of sender ~p~n", [DeadPid]),
                       ok = gm:broadcast(GM, {sender_death, DeadPid}),
                       KS1 = sets:del_element(DeadPid, KS),
                       State #state { known_senders = KS1 }

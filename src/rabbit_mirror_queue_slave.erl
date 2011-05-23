@@ -819,7 +819,6 @@ process_instruction({requeue, MsgPropsFun, MsgIds},
 process_instruction({sender_death, ChPid},
                     State = #state { sender_queues = SQ,
                                      known_senders = KS }) ->
-    rabbit_log:info("Slave received death of sender ~p~n", [ChPid]),
     {ok, case dict:find(ChPid, KS) of
              error ->
                  State;
