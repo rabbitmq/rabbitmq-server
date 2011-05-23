@@ -73,10 +73,6 @@ publish(Delivery = #delivery{
         Other   -> Other
     end.
 
-publish(X, Delivery) ->
-    {RoutingRes, DeliveredQPids} = rabbit_exchange:publish(X, Delivery),
-    {ok, RoutingRes, DeliveredQPids}.
-
 delivery(Mandatory, Immediate, Txn, Message, MsgSeqNo) ->
     #delivery{mandatory = Mandatory, immediate = Immediate, txn = Txn,
               sender = self(), message = Message, msg_seq_no = MsgSeqNo}.
@@ -160,28 +156,31 @@ indexof([_ | Rest], Element, N)        -> indexof(Rest, Element, N + 1).
 
 %% Convenience function, for avoiding round-trips in calls across the
 %% erlang distributed network.
-publish(Exchange, RoutingKeyBin, Properties, BodyBin) ->
+publish(Exchange, RoutingKeyBin, Properties, Body) ->
     publish(Exchange, RoutingKeyBin, false, false, none, Properties,
-            BodyBin).
+            Body).
 
 %% Convenience function, for avoiding round-trips in calls across the
 %% erlang distributed network.
-publish(Exchange, RoutingKeyBin, Mandatory, Immediate, Txn, Properties,
-        BodyBin) ->
+publish(Exchange, RoutingKeyBin, Mandatory, Immediate, Txn, Properties, Body) ->
     case exchange(Exchange) of
-        X = #exchange{} ->
+        X = #exchange{name = XName} ->
             publish(X, delivery(Mandatory, Immediate, Txn,
-                                message(X#exchange.name, RoutingKeyBin,
-                                        properties(Properties), BodyBin),
+                                message(XName, RoutingKeyBin,
+                                        properties(Properties), Body),
                                 undefined));
-        _ ->
-            {ok, unroutable, []}
+        Err ->
+            Err
     end.
+
+publish(X, Delivery) ->
+    {RoutingRes, DeliveredQPids} = rabbit_exchange:publish(X, Delivery),
+    {ok, RoutingRes, DeliveredQPids}.
 
 exchange(X = #exchange{}) ->
     X;
-exchange(N = #resource{kind = exchange}) ->
-    case rabbit_exchange:lookup(N) of
+exchange(XName = #resource{kind = exchange}) ->
+    case rabbit_exchange:lookup(XName) of
         {ok, X} -> X;
         Err     -> Err
     end.
