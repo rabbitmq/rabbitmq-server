@@ -170,14 +170,14 @@ handle_call({gm_deaths, Deaths}, From,
             {stop, normal, State}
     end;
 
-handle_call({run_backing_queue, Mod, Fun, _Priority}, _From, State) ->
+handle_call({run_backing_queue, Mod, Fun}, _From, State) ->
     reply(ok, run_backing_queue(Mod, Fun, State));
 
 handle_call({commit, _Txn, _ChPid}, _From, State) ->
     %% We don't support transactions in mirror queues
     reply(ok, State).
 
-handle_cast({run_backing_queue, Mod, Fun, _Priority}, State) ->
+handle_cast({run_backing_queue, Mod, Fun}, State) ->
     noreply(run_backing_queue(Mod, Fun, State));
 
 handle_cast({gm, Instruction}, State) ->
@@ -265,23 +265,21 @@ handle_pre_hibernate(State = #state { backing_queue       = BQ,
 
 prioritise_call(Msg, _From, _State) ->
     case Msg of
-        {run_backing_queue, _Mod, _Fun, default}  -> 6;
-        {run_backing_queue, _Mod, _Fun, Priority} -> Priority;
-        {gm_deaths, _Deaths}                      -> 5;
-        _                                         -> 0
+        {run_backing_queue, _Mod, _Fun}      -> 6;
+        {gm_deaths, _Deaths}                 -> 5;
+        _                                    -> 0
     end.
 
 prioritise_cast(Msg, _State) ->
     case Msg of
-        update_ram_duration                       -> 8;
-        {set_ram_duration_target, _Duration}      -> 8;
-        {set_maximum_since_use, _Age}             -> 8;
-        {run_backing_queue, _Mod, _Fun, default}  -> 6;
-        {run_backing_queue, _Mod, _Fun, Priority} -> Priority;
-        sync_timeout                              -> 6;
-        {gm, _Msg}                                -> 5;
-        {post_commit, _Txn, _AckTags}             -> 4;
-        _                                         -> 0
+        update_ram_duration                  -> 8;
+        {set_ram_duration_target, _Duration} -> 8;
+        {set_maximum_since_use, _Age}        -> 8;
+        {run_backing_queue, _Mod, _Fun}      -> 6;
+        sync_timeout                         -> 6;
+        {gm, _Msg}                           -> 5;
+        {post_commit, _Txn, _AckTags}        -> 4;
+        _                                    -> 0
     end.
 
 %% ---------------------------------------------------------------------------

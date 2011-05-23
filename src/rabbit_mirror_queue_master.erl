@@ -62,22 +62,14 @@ stop() ->
 sender_death_fun() ->
     Self = self(),
     fun (DeadPid) ->
-            %% Purposefully set the priority to 0 here so that we
-            %% don't overtake any messages from DeadPid that are
-            %% already in the queue.
             rabbit_amqqueue:run_backing_queue_async(
               Self, ?MODULE,
               fun (?MODULE, State = #state { gm = GM, known_senders = KS }) ->
                       rabbit_log:info("Master saw death of sender ~p~n", [DeadPid]),
-                      case sets:is_element(DeadPid, KS) of
-                          false ->
-                              State;
-                          true ->
-                              ok = gm:broadcast(GM, {sender_death, DeadPid}),
-                              KS1 = sets:del_element(DeadPid, KS),
-                              State #state { known_senders = KS1 }
-                      end
-              end, 0)
+                      ok = gm:broadcast(GM, {sender_death, DeadPid}),
+                      KS1 = sets:del_element(DeadPid, KS),
+                      State #state { known_senders = KS1 }
+              end)
     end.
 
 init(#amqqueue { arguments = Args, name = QName } = Q, Recover,
