@@ -304,6 +304,8 @@
 %% the last seen state of the queue: checking length alone is not
 %% sufficient in this case.
 %%
+%% For more documentation see the comments in bug 23554.
+%%
 %%----------------------------------------------------------------------------
 
 start_link(Queue, GM, DeathFun) ->
