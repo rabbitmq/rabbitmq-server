@@ -162,28 +162,20 @@ publish(Exchange, RoutingKeyBin, Properties, Body) ->
 
 %% Convenience function, for avoiding round-trips in calls across the
 %% erlang distributed network.
-publish(Exchange, RoutingKeyBin, Mandatory, Immediate, Txn, Properties, Body) ->
-    case exchange(Exchange) of
-        X = #exchange{name = XName} ->
-            publish(X, delivery(Mandatory, Immediate, Txn,
-                                message(XName, RoutingKeyBin,
-                                        properties(Properties), Body),
-                                undefined));
-        Err ->
-            Err
+publish(X = #exchange{name = XName}, RKey, Mandatory, Immediate, Txn,
+        Props, Body) ->
+    publish(X, delivery(Mandatory, Immediate, Txn,
+                        message(XName, RKey, properties(Props), Body),
+                        undefined));
+publish(XName, RKey, Mandatory, Immediate, Txn, Props, Body) ->
+    case rabbit_exchange:lookup(XName) of
+        {ok, X} -> publish(X, RKey, Mandatory, Immediate, Txn, Props, Body);
+        Err     -> Err
     end.
 
 publish(X, Delivery) ->
     {RoutingRes, DeliveredQPids} = rabbit_exchange:publish(X, Delivery),
     {ok, RoutingRes, DeliveredQPids}.
-
-exchange(X = #exchange{}) ->
-    X;
-exchange(XName = #resource{kind = exchange}) ->
-    case rabbit_exchange:lookup(XName) of
-        {ok, X} -> X;
-        Err     -> Err
-    end.
 
 is_message_persistent(#content{properties = #'P_basic'{
                                  delivery_mode = Mode}}) ->
