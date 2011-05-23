@@ -624,14 +624,31 @@
           </listitem>
         </varlistentry>
 
-        <varlistentry>
-          <term><cmdsynopsis><command>list_vhosts</command></cmdsynopsis></term>
+        <varlistentry role="usage-has-option-list">
+          <term><cmdsynopsis><command>list_vhosts</command> <arg choice="opt" role="usage-option-list"><replaceable>vhostinfoitem</replaceable> ...</arg></cmdsynopsis></term>
           <listitem>
             <para>
               Lists virtual hosts.
             </para>
+            <para>
+              The <command>vhostinfoitem</command> parameter is used to indicate which
+              virtual host information items to include in the results. The column order in the
+              results will match the order of the parameters.
+              <command>vhostinfoitem</command> can take any value from
+              the list that follows:
+            </para>
+            <variablelist>
+              <varlistentry>
+                <term>name</term>
+                <listitem><para>The name of the virtual host with non-ASCII characters escaped as in C.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>tracing</term>
+                <listitem><para>Whether tracing is enabled for this virtual host.</para></listitem>
+              </varlistentry>
+            </variablelist>
             <para role="example-prefix">For example:</para>
-            <screen role="example">rabbitmqctl list_vhosts</screen>
+            <screen role="example">rabbitmqctl list_vhosts name tracing</screen>
             <para role="example">
               This command instructs the RabbitMQ broker to list all
               virtual hosts.

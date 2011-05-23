@@ -16,7 +16,7 @@
 
 -module(rabbit_trace).
 
--export([init/1, tap_trace_in/2, tap_trace_out/2, start/1, stop/1]).
+-export([init/1, tracing/1, tap_trace_in/2, tap_trace_out/2, start/1, stop/1]).
 
 -include("rabbit.hrl").
 -include("rabbit_framing.hrl").
@@ -31,6 +31,7 @@
 -type(state() :: rabbit_types:exchange() | 'none').
 
 -spec(init/1 :: (rabbit_types:vhost()) -> state()).
+-spec(tracing/1 :: (rabbit_types:vhost()) -> boolean()).
 -spec(tap_trace_in/2 :: (rabbit_types:basic_message(), state()) -> 'ok').
 -spec(tap_trace_out/2 :: (rabbit_amqqueue:qmsg(), state()) -> 'ok').
 
@@ -42,13 +43,16 @@
 %%----------------------------------------------------------------------------
 
 init(VHost) ->
-    {ok, VHosts} = application:get_env(rabbit, ?TRACE_VHOSTS),
-    case lists:member(VHost, VHosts) of
+    case tracing(VHost) of
         false -> none;
         true  -> {ok, X} = rabbit_exchange:lookup(
                              rabbit_misc:r(VHost, exchange, ?XNAME)),
                  X
     end.
+
+tracing(VHost) ->
+    {ok, VHosts} = application:get_env(rabbit, ?TRACE_VHOSTS),
+    lists:member(VHost, VHosts).
 
 tap_trace_in(Msg = #basic_message{exchange_name = #resource{name = XName}},
              TraceX) ->

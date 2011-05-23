@@ -221,9 +221,10 @@ action(delete_vhost, Node, Args = [_VHostPath], _Opts, Inform) ->
     Inform("Deleting vhost ~p", Args),
     call(Node, {rabbit_vhost, delete, Args});
 
-action(list_vhosts, Node, [], _Opts, Inform) ->
+action(list_vhosts, Node, Args, _Opts, Inform) ->
     Inform("Listing vhosts", []),
-    display_list(call(Node, {rabbit_vhost, list, []}));
+    ArgAtoms = default_if_empty(Args, [name]),
+    display_info_list(call(Node, {rabbit_vhost, info_all, []}), ArgAtoms);
 
 action(list_user_permissions, Node, Args = [_Username], _Opts, Inform) ->
     Inform("Listing permissions for user ~p", Args),
