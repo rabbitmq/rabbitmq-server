@@ -337,7 +337,7 @@ bq_init(BQ, Q, Recover) ->
 
 run_backing_queue(rabbit_mirror_queue_master, Fun, State) ->
     %% Yes, this might look a little crazy, but see comments in
-    %% local_sender_death/2
+    %% confirm_sender_death/1
     Fun(?MODULE, State);
 run_backing_queue(Mod, Fun, State = #state { backing_queue       = BQ,
                                              backing_queue_state = BQS }) ->
