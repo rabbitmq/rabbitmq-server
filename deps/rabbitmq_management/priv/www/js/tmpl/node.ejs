@@ -6,7 +6,7 @@
   <table class="facts">
     <tr>
       <th>
-        File Descriptors <span class="help" id="file-descriptors"></span>
+        File descriptors <span class="help" id="file-descriptors"></span>
         <sub>(used / available)</sub>
       </th>
       <td class="status">
@@ -18,7 +18,7 @@
     </tr>
     <tr>
       <th>
-        Socket Descriptors <span class="help" id="socket-descriptors"></span>
+        Socket descriptors <span class="help" id="socket-descriptors"></span>
         <sub>(used / available)</sub>
       </th>
       <td class="status">
@@ -30,7 +30,7 @@
     </tr>
     <tr>
       <th>
-        Erlang Processes
+        Erlang processes
         <sub>(used / available)</sub>
       </th>
      <td class="status">
@@ -70,22 +70,22 @@
       <td><%= fmt_uptime(node.uptime) %></td>
     </tr>
     <tr>
-      <th>RabbitMQ Version</th>
+      <th>RabbitMQ version</th>
       <td><%= fmt_rabbit_version(node.applications) %></td>
     </tr>
     <tr>
-      <th>Erlang Version</th>
+      <th>Erlang version</th>
       <td><%= node.erlang_version %></td>
     </tr>
     <tr>
-      <th>Mnesia Storage <span class="help" id="mnesia-storage"></span></th>
+      <th>Mnesia storage <span class="help" id="mnesia-storage"></span></th>
       <td><%= node.type %></td>
     </tr>
   </table>
 
   <table class="facts">
     <tr>
-      <th>OS Pid</th>
+      <th>OS pid</th>
       <td><%= node.os_pid %></td>
     </tr>
     <tr>
@@ -93,7 +93,7 @@
       <td><%= node.statistics_level %></td>
     </tr>
     <tr>
-      <th>Run Queue</th>
+      <th>Run queue</th>
       <td><%= node.run_queue %></td>
     </tr>
     <tr>
@@ -137,9 +137,9 @@
 <div class="section-hidden">
 <h2>Registry</h2>
 <div class="hider updatable">
-<h3>Exchange Types</h3>
+<h3>Exchange types</h3>
 <%= format('registry', {'list': node.exchange_types, 'node': node, 'show_enabled': false} ) %>
-<h3>Authentication Mechanisms</h3>
+<h3>Authentication mechanisms</h3>
 <%= format('registry', {'list': node.auth_mechanisms, 'node': node, 'show_enabled': true} ) %>
 </div>
 </div>

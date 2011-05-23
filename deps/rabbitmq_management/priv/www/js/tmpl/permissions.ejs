@@ -8,11 +8,11 @@
 <% if (mode == 'vhost') { %>
           <th>User</th>
 <% } else { %>
-          <th>Virtual Host</th>
+          <th>Virtual host</th>
 <% } %>
-          <th>Configure Regexp</th>
-          <th>Write Regexp</th>
-          <th>Read Regexp</th>
+          <th>Configure regexp</th>
+          <th>Write regexp</th>
+          <th>Read regexp</th>
           <th></th>
         </tr>
       </thead>
@@ -46,7 +46,7 @@ for (var i = 0; i < permissions.length; i++) {
 <% } %>
 
 <div class="section-hidden">
-  <h2>Set Permission</h2>
+  <h2>Set permission</h2>
   <div class="hider">
     <form action="#/permissions" method="put">
       <table class="form">
@@ -74,19 +74,19 @@ for (var i = 0; i < permissions.length; i++) {
 <% } %>
         </tr>
         <tr>
-          <th><label>Configure Regexp:</label></th>
+          <th><label>Configure regexp:</label></th>
           <td><input type="text" name="configure" value=".*"/></td>
         </tr>
         <tr>
-          <th><label>Write Regexp:</label></th>
+          <th><label>Write regexp:</label></th>
           <td><input type="text" name="write" value=".*"/></td>
         </tr>
         <tr>
-          <th><label>Read Regexp:</label></th>
+          <th><label>Read regexp:</label></th>
           <td><input type="text" name="read" value=".*"/></td>
         </tr>
       </table>
-      <input type="submit" value="Set Permission"/>
+      <input type="submit" value="Set permission"/>
     </form>
   </div>
 </div>

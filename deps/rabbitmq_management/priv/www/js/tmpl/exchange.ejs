@@ -25,7 +25,7 @@
 
 <% if (statistics_level == 'fine') { %>
 <div class="section-hidden">
-<h2>Message Rates</h2>
+<h2>Message rates</h2>
 <div class="hider updatable">
 <table class="two-col-layout">
   <tr>
@@ -96,7 +96,7 @@
 
 <% if (!exchange.internal) { %>
 <div class="section-hidden">
-  <h2>Publish Message</h2>
+  <h2>Publish message</h2>
   <div class="hider">
     <form action="#/exchanges/publish" method="post">
       <input type="hidden" name="vhost" value="<%= exchange.vhost %>"/>
@@ -139,7 +139,7 @@
           <td><textarea name="payload"></textarea></td>
         </tr>
       </table>
-      <input type="submit" value="Publish Message" />
+      <input type="submit" value="Publish message" />
     </form>
     <span class="br"></span>
   </div>
@@ -148,7 +148,7 @@
 
 <% if (exchange.name != "") { %>
 <div class="section-hidden">
-  <h2>Delete This Exchange</h2>
+  <h2>Delete this exchange</h2>
   <div class="hider">
     <form action="#/exchanges" method="delete" class="confirm">
       <input type="hidden" name="vhost" value="<%= exchange.vhost %>"/>
