@@ -70,12 +70,12 @@ start() ->
     rabbit_misc:write_file(RootName ++ ".rel", io_lib:format("~p.~n", [RDesc])),
 
     %% We exclude mochiweb due to its optional use of fdsrv.
-    Exclude = [mochiweb],
+    XRefExclude = [mochiweb],
 
     %% Compile the script
     ScriptFile = RootName ++ ".script",
     case systools:make_script(RootName, [local, silent,
-                                         {exref, AllApps -- Exclude}]) of
+                                         {exref, AllApps -- XRefExclude}]) of
         {ok, Module, Warnings} ->
             %% This gets lots of spurious no-source warnings when we
             %% have .ez files, so we want to supress them to prevent
