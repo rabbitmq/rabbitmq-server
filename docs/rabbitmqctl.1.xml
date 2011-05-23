@@ -1269,16 +1269,12 @@
       <title>Message Tracing</title>
       <variablelist>
         <varlistentry>
-          <term><cmdsynopsis><command>start_tracing</command> <arg choice="opt">-p <replaceable>vhost</replaceable></arg> <arg choice="req"><replaceable>exchange</replaceable></arg></cmdsynopsis></term>
+          <term><cmdsynopsis><command>trace_on</command> <arg choice="opt">-p <replaceable>vhost</replaceable></arg></cmdsynopsis></term>
           <listitem>
             <variablelist>
               <varlistentry>
                 <term>vhost</term>
                 <listitem><para>The name of the virtual host for which to start tracing.</para></listitem>
-              </varlistentry>
-              <varlistentry>
-                <term>value</term>
-                <listitem><para>The name of the exchange to which trace messages should be published.</para></listitem>
               </varlistentry>
             </variablelist>
             <para>
@@ -1288,7 +1284,7 @@
         </varlistentry>
 
         <varlistentry>
-          <term><cmdsynopsis><command>stop_tracing</command> <arg choice="opt">-p <replaceable>vhost</replaceable></arg></cmdsynopsis></term>
+          <term><cmdsynopsis><command>trace_off</command> <arg choice="opt">-p <replaceable>vhost</replaceable></arg></cmdsynopsis></term>
           <listitem>
             <variablelist>
               <varlistentry>
