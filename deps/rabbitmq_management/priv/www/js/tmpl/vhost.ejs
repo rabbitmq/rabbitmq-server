@@ -7,6 +7,19 @@
 </p>
 <% } %>
 
+<div class="section">
+  <h2>Overview</h2>
+  <div class="hider">
+    <table class="facts">
+      <tr>
+        <th>Tracing enabled:</th>
+        <td><%= fmt_boolean(vhost.tracing) %></td>
+      </tr>
+    </table>
+    <span class="br"></span>
+  </div>
+</div>
+
 <%= format('permissions', {'mode': 'vhost', 'permissions': permissions, 'users': users, 'parent': vhost}) %>
 
 <div class="section-hidden">
