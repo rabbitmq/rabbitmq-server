@@ -569,43 +569,40 @@ ensure_monitoring(ChPid, State = #state { known_senders = KS }) ->
     end.
 
 local_sender_death(ChPid, State = #state { known_senders = KS }) ->
-    case dict:is_key(ChPid, KS) of
-        false ->
-            ok;
-        true ->
-            %% We have to deal with the possibility that we'll be
-            %% promoted to master before this thing gets
-            %% run. Consequently we set the module to
-            %% rabbit_mirror_queue_master so that if we do become a
-            %% rabbit_amqqueue_process before then, sane things will
-            %% happen.
-            Fun =
-                fun (?MODULE, State1 = #state { known_senders = KS1,
-                                                gm            = GM }) ->
-                        %% We're running still as a slave
-                        ok = case dict:is_key(ChPid, KS1) of
-                                 false ->
-                                     ok;
-                                 true ->
-                                     gm:broadcast(
-                                       GM, {ensure_monitoring, [ChPid]})
-                             end,
-                        State1;
-                    (rabbit_mirror_queue_master, State1) ->
-                        %% We've become a master. State1 is now opaque
-                        %% to us. When we became master, if ChPid was
-                        %% still known to us then we'd have set up
-                        %% monitoring of it then, so this is now a
-                        %% noop.
-                        State1
-                end,
-            %% Note that we do not remove our knowledge of this ChPid
-            %% until we get the sender_death from GM.
-            timer:apply_after(
-              ?DEATH_TIMEOUT, rabbit_amqqueue, run_backing_queue_async,
-              [self(), rabbit_mirror_queue_master, Fun])
-    end,
+    ok = case dict:is_key(ChPid, KS) of
+             false -> ok;
+             true  -> confirm_sender_death(ChPid)
+         end,
     State.
+
+confirm_sender_death(Pid) ->
+    %% We have to deal with the possibility that we'll be promoted to
+    %% master before this thing gets run. Consequently we set the
+    %% module to rabbit_mirror_queue_master so that if we do become a
+    %% rabbit_amqqueue_process before then, sane things will happen.
+    Fun =
+        fun (?MODULE, State = #state { known_senders = KS,
+                                       gm            = GM }) ->
+                %% We're running still as a slave
+                ok = case dict:is_key(Pid, KS) of
+                         false -> ok;
+                         true  -> gm:broadcast(GM, {ensure_monitoring, [Pid]}),
+                                  confirm_sender_death(Pid)
+                     end,
+                State;
+            (rabbit_mirror_queue_master, State) ->
+                %% We've become a master. State is now opaque to
+                %% us. When we became master, if Pid was still known
+                %% to us then we'd have set up monitoring of it then,
+                %% so this is now a noop.
+                State
+        end,
+    %% Note that we do not remove our knowledge of this ChPid until we
+    %% get the sender_death from GM.
+    {ok, _TRef} = timer:apply_after(
+                    ?DEATH_TIMEOUT, rabbit_amqqueue, run_backing_queue_async,
+                    [self(), rabbit_mirror_queue_master, Fun]),
+    ok.
 
 maybe_enqueue_message(
   Delivery = #delivery { message    = #basic_message { id = MsgId },

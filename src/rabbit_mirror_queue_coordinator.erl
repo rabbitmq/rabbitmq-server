@@ -158,20 +158,101 @@
 %% as the bq, and the slave's bq as the master's bq. Thus the very
 %% same process that was the slave is now a full amqqueue_process.
 %%
-%% In the event of channel failure, there is the possibility that a
-%% msg that was being published only makes it to some of the
-%% mirrors. If it makes it to the master, then the master will push
-%% the entire message onto gm, and all the slaves will publish it to
-%% their bq, even though they may not receive it directly from the
-%% channel. This currently will create a small memory leak in the
-%% slave's msg_id_status mapping as the slaves will expect that
-%% eventually they'll receive the msg from the channel. If the message
-%% does not make it to the master then the slaves that receive it will
-%% hold onto the message, assuming it'll eventually appear via
-%% gm. Again, this will currently result in a memory leak, though this
-%% time, it's the entire message rather than tracking the status of
-%% the message, which is potentially much worse. This may eventually
-%% be solved by monitoring publishing channels in some way.
+%% It is important that we avoid memory leaks due to the death of
+%% senders (i.e. channels) and partial publications. A sender
+%% publishing a message may fail mid way through the publish and thus
+%% only some of the mirrors will receive the message. We need the
+%% mirrors to be able to detect this and tidy up as necessary to avoid
+%% leaks. If we just had the master monitoring all senders then we
+%% would have the possibility that a sender appears and only sends the
+%% message to a few of the slaves before dying. Those slaves would
+%% then hold on to the message, assuming they'll receive some
+%% instruction eventually from the master. Thus we have both slaves
+%% and the master monitor all senders they become aware of. But there
+%% is a race: if the slave receives a DOWN of a sender, how does it
+%% know whether or not the master is going to send it instructions
+%% regarding those messages?
+%%
+%% Whilst the master monitors senders, it can't access its mailbox
+%% directly, so it delegates monitoring to the coordinator. When the
+%% coordinator receives a DOWN message from a sender, it informs the
+%% master via a callback. This allows the master to do any tidying
+%% necessary, but more importantly allows the master to broadcast a
+%% sender_death message to all the slaves, saying the sender has
+%% died. Once the slaves receive the sender_death message, they know
+%% that they're not going to receive any more instructions from the gm
+%% regarding that sender, thus they throw away any publications from
+%% the sender pending publication instructions. However, it is
+%% possible that the coordinator receives the DOWN and communicates
+%% that to the master before the master has finished receiving and
+%% processing publishes from the sender. This turns out not to be a
+%% problem: the sender has actually died, and so will not need to
+%% receive confirms or other feedback, and should further messages be
+%% "received" from the sender, the master will ask the coordinator to
+%% set up a new monitor, and will continue to process the messages
+%% normally. Slaves may thus receive publishes via gm from previously
+%% declared "dead" senders, but again, this is fine: should the slave
+%% have just thrown out the message it had received directly from the
+%% sender (due to receiving a sender_death message via gm), it will be
+%% able to cope with the publication purely from the master via gm.
+%%
+%% When a slave receives a DOWN message for a sender, if it has not
+%% received the sender_death message from the master via gm already,
+%% then it will wait 20 seconds before broadcasting a request for
+%% confirmation from the master that the sender really has died.
+%% Should a sender have only sent a publish to slaves, this allows
+%% slaves to inform the master of the previous existence of the
+%% sender. The master will thus monitor the sender, receive the DOWN,
+%% and subsequently broadcast the sender_death message, allowing the
+%% slaves to tidy up. This process can repeat for the same sender:
+%% consider one slave receives the publication, then the DOWN, then
+%% asks for confirmation of death, then the master broadcasts the
+%% sender_death message. Only then does another slave receive the
+%% publication and thus set up its monitoring. Eventually that slave
+%% too will receive the DOWN, ask for confirmation and the master will
+%% monitor the sender again, receive another DOWN, and send out
+%% another sender_death message. Given the 20 second delay before
+%% requesting death confirmation, this is highly unlikely, but it is a
+%% possibility.
+%%
+%% When the 20 second timer expires, the slave first checks to see
+%% whether it still needs confirmation of the death before requesting
+%% it. This prevents unnecessary traffic on gm as it allows one
+%% broadcast of the sender_death message to satisfy many slaves.
+%%
+%% If we consider the promotion of a slave at this point, we have two
+%% possibilities: that of the slave that has received the DOWN and is
+%% thus waiting for confirmation from the master that the sender
+%% really is down; and that of the slave that has not received the
+%% DOWN. In the first case, in the act of promotion to master, the new
+%% master will monitor again the dead sender, and after it has
+%% finished promoting itself, it should find another DOWN waiting,
+%% which it will then broadcast. This will allow slaves to tidy up as
+%% normal. In the second case, we have the possibility that
+%% confirmation-of-sender-death request has been broadcast, but that
+%% it was broadcast before the master failed, and that the slave being
+%% promoted does not know anything about that sender, and so will not
+%% monitor it on promotion. Thus a slave that broadcasts such a
+%% request, at the point of broadcasting it, recurses, setting another
+%% 20 second timer. As before, on expiry of the timer, the slaves
+%% checks to see whether it still has not received a sender_death
+%% message for the dead sender, and if not, broadcasts a death
+%% confirmation request. Thus this ensures that even when a master
+%% dies and the new slave has no knowledge of the dead sender, it will
+%% eventually receive a death confirmation request, shall monitor the
+%% dead sender, receive the DOWN and broadcast the sender_death
+%% message.
+%%
+%% The preceding commentary deals with the possibility of slaves
+%% receiving publications from senders which the master does not, and
+%% the need to prevent memory leaks in such scenarios. The inverse is
+%% also possible: a partial publication may cause only the master to
+%% receive a publication. It will then publish the message via gm. The
+%% slaves will receive it via gm, will publish it to their BQ and will
+%% set up monitoring on the sender. They will then receive the DOWN
+%% message and the master will eventually publish the corresponding
+%% sender_death message. The slave will then be able to tidy up its
+%% state as normal.
 %%
 %% We don't support transactions on mirror queues. To do so is
 %% challenging. The underlying bq is free to add the contents of the
