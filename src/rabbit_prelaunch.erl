@@ -97,7 +97,8 @@ start() ->
                                  end]),
             case length(WarningStr) of
                 0 -> ok;
-                _ -> io:format("~s", [WarningStr])
+                _ -> S = string:copies("*", 80),
+                     io:format("~n~s~n~s~s~n~n", [S, WarningStr, S])
             end,
             ok;
         {error, Module, Error} ->
