@@ -169,10 +169,10 @@ publish(Exchange, RoutingKeyBin, Mandatory, Immediate, Txn, Properties,
         BodyBin) ->
     case exchange(Exchange) of
         X = #exchange{} ->
-            publish(delivery(Mandatory, Immediate, Txn,
-                             message(X#exchange.name, RoutingKeyBin,
-                                     properties(Properties), BodyBin),
-                             undefined));
+            publish(X, delivery(Mandatory, Immediate, Txn,
+                                message(X#exchange.name, RoutingKeyBin,
+                                        properties(Properties), BodyBin),
+                                undefined));
         _ ->
             {ok, unroutable, []}
     end.
