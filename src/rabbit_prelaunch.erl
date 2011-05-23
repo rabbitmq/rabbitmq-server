@@ -69,11 +69,13 @@ start() ->
     %% Write it out to $RABBITMQ_PLUGINS_EXPAND_DIR/rabbit.rel
     rabbit_misc:write_file(RootName ++ ".rel", io_lib:format("~p.~n", [RDesc])),
 
+    %% We exclude mochiweb due to its optional use of fdsrv.
+    Exclude = [mochiweb],
+
     %% Compile the script
     ScriptFile = RootName ++ ".script",
-    %% We exclude mochiweb due to its optional use of fdsrv.
     case systools:make_script(RootName, [local, silent,
-                                         {exref, AllApps -- [mochiweb]}]) of
+                                         {exref, AllApps -- Exclude}]) of
         {ok, Module, Warnings} ->
             %% This gets lots of spurious no-source warnings when we
             %% have .ez files, so we want to supress them to prevent
