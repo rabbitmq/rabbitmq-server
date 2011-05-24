@@ -226,6 +226,9 @@ handle_info({'DOWN', _MonitorRef, process, MPid, _Reason},
 handle_info({'DOWN', _MonitorRef, process, ChPid, _Reason}, State) ->
     noreply(local_sender_death(ChPid, State));
 
+handle_info({'EXIT', _Pid, Reason}, State) ->
+    {stop, Reason, State};
+
 handle_info(Msg, State) ->
     {stop, {unexpected_info, Msg}, State}.
 
@@ -238,6 +241,10 @@ terminate(_Reason, #state { backing_queue_state = undefined }) ->
     %% We've received a delete_and_terminate from gm, thus nothing to
     %% do here.
     ok;
+terminate({shutdown, dropped} = R, #state { backing_queue       = BQ,
+                                            backing_queue_state = BQS }) ->
+    %% See rabbit_mirror_queue_master:terminate/2
+    BQ:delete_and_terminate(R, BQS);
 terminate(Reason, #state { q                   = Q,
                            gm                  = GM,
                            backing_queue       = BQ,
@@ -839,10 +846,10 @@ process_instruction({sender_death, ChPid},
                                 msg_id_status = MS1,
                                 known_senders = dict:erase(ChPid, KS) }
          end};
-process_instruction(delete_and_terminate,
+process_instruction({delete_and_terminate, Reason},
                     State = #state { backing_queue       = BQ,
                                      backing_queue_state = BQS }) ->
-    BQ:delete_and_terminate(BQS),
+    BQ:delete_and_terminate(Reason, BQS),
     {stop, State #state { backing_queue_state = undefined }}.
 
 msg_ids_to_acktags(MsgIds, MA) ->

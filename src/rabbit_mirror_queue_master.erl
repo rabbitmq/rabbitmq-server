@@ -16,7 +16,7 @@
 
 -module(rabbit_mirror_queue_master).
 
--export([init/4, terminate/1, delete_and_terminate/1,
+-export([init/4, terminate/2, delete_and_terminate/2,
          purge/1, publish/4, publish_delivered/5, fetch/2, ack/2,
          tx_publish/5, tx_ack/3, tx_rollback/2, tx_commit/4,
          requeue/3, len/1, is_empty/1, drain_confirmed/1, dropwhile/2,
@@ -106,17 +106,28 @@ promote_backing_queue_state(CPid, BQ, BQS, GM, SeenStatus, KS) ->
              ack_msg_id          = dict:new(),
              known_senders       = sets:from_list(KS) }.
 
-terminate(State = #state { backing_queue = BQ, backing_queue_state = BQS }) ->
+terminate({shutdown, dropped} = Reason,
+          State = #state { backing_queue = BQ, backing_queue_state = BQS }) ->
+    %% Backing queue termination - this node has been explicitly
+    %% dropped. Normally, non-durable queues would be tidied up on
+    %% startup, but there's a possibility that we will be added back
+    %% in without this node being restarted. Thus we must do the full
+    %% blown delete_and_terminate now, but only locally: we do not
+    %% broadcast delete_and_terminate.
+    State #state { backing_queue_state = BQ:delete_and_terminate(Reason, BQS),
+                   set_delivered       = 0 };
+terminate(Reason,
+          State = #state { backing_queue = BQ, backing_queue_state = BQS }) ->
     %% Backing queue termination. The queue is going down but
     %% shouldn't be deleted. Most likely safe shutdown of this
     %% node. Thus just let some other slave take over.
-    State #state { backing_queue_state = BQ:terminate(BQS) }.
+    State #state { backing_queue_state = BQ:terminate(Reason, BQS) }.
 
-delete_and_terminate(State = #state { gm                  = GM,
-                                      backing_queue       = BQ,
-                                      backing_queue_state = BQS }) ->
-    ok = gm:broadcast(GM, delete_and_terminate),
-    State #state { backing_queue_state = BQ:delete_and_terminate(BQS),
+delete_and_terminate(Reason, State = #state { gm                  = GM,
+                                              backing_queue       = BQ,
+                                              backing_queue_state = BQS }) ->
+    ok = gm:broadcast(GM, {delete_and_terminate, Reason}),
+    State #state { backing_queue_state = BQ:delete_and_terminate(Reason, BQS),
                    set_delivered       = 0 }.
 
 purge(State = #state { gm                  = GM,

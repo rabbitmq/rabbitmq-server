@@ -16,7 +16,8 @@
 
 -module(rabbit_mirror_queue_misc).
 
--export([remove_from_queue/2, add_slave/2, add_slave/3, on_node_up/0]).
+-export([remove_from_queue/2, on_node_up/0,
+         drop_slave/2, drop_slave/3, add_slave/2, add_slave/3]).
 
 -include("rabbit.hrl").
 
@@ -59,36 +60,6 @@ remove_from_queue(QueueName, DeadPids) ->
               end
       end).
 
-add_slave(VHostPath, QueueName, MirrorNode) ->
-    add_slave(rabbit_misc:r(VHostPath, queue, QueueName), MirrorNode).
-
-add_slave(Queue, MirrorNode) ->
-    rabbit_amqqueue:with(
-      Queue,
-      fun (#amqqueue { arguments = Args, name = Name,
-                       pid = QPid, mirror_pids = MPids } = Q) ->
-              case rabbit_misc:table_lookup(Args, <<"x-mirror">>) of
-                  undefined ->
-                      ok;
-                  _ ->
-                      case [MirrorNode || Pid <- [QPid | MPids],
-                                          node(Pid) =:= MirrorNode] of
-                          [] ->
-                              Result =
-                                  rabbit_mirror_queue_slave_sup:start_child(
-                                    MirrorNode, [Q]),
-                              rabbit_log:info("Adding slave node for ~s: ~p~n",
-                                              [rabbit_misc:rs(Name), Result]),
-                              case Result of
-                                  {ok, _Pid} -> ok;
-                                  _          -> Result
-                              end;
-                          [_] ->
-                              {error, queue_already_mirrored_on_node}
-                      end
-              end
-      end).
-
 on_node_up() ->
     Qs =
         rabbit_misc:execute_mnesia_transaction(
@@ -113,3 +84,53 @@ on_node_up() ->
           end),
     [add_slave(Q, node()) || Q <- Qs],
     ok.
+
+drop_slave(VHostPath, QueueName, MirrorNode) ->
+    drop_slave(rabbit_misc:r(VHostPath, queue, QueueName), MirrorNode).
+
+drop_slave(Queue, MirrorNode) ->
+    if_mirrored_queue(
+      Queue,
+      fun (#amqqueue { name = Name, pid = QPid, mirror_pids = MPids }) ->
+              case [Pid || Pid <- [QPid | MPids], node(Pid) =:= MirrorNode] of
+                  [] ->
+                      {error, {queue_not_mirrored_on_node, MirrorNode}};
+                  [QPid | MPids] ->
+                      {error, cannot_drop_only_mirror};
+                  [Pid] ->
+                      rabbit_log:info("Dropping slave node on ~p for ~s~n",
+                                      [MirrorNode, rabbit_misc:rs(Name)]),
+                      exit(Pid, {shutdown, dropped}),
+                      ok
+              end
+      end).
+
+add_slave(VHostPath, QueueName, MirrorNode) ->
+    add_slave(rabbit_misc:r(VHostPath, queue, QueueName), MirrorNode).
+
+add_slave(Queue, MirrorNode) ->
+    if_mirrored_queue(
+      Queue,
+      fun (#amqqueue { name = Name, pid = QPid, mirror_pids = MPids } = Q) ->
+              case [Pid || Pid <- [QPid | MPids], node(Pid) =:= MirrorNode] of
+                  []  -> Result = rabbit_mirror_queue_slave_sup:start_child(
+                                    MirrorNode, [Q]),
+                         rabbit_log:info(
+                           "Adding slave node for ~s on node ~p: ~p~n",
+                           [rabbit_misc:rs(Name), MirrorNode, Result]),
+                         case Result of
+                             {ok, _Pid} -> ok;
+                             _          -> Result
+                         end;
+                  [_] -> {error, {queue_already_mirrored_on_node, MirrorNode}}
+              end
+      end).
+
+if_mirrored_queue(Queue, Fun) ->
+    rabbit_amqqueue:with(
+      Queue, fun (#amqqueue { arguments = Args } = Q) ->
+                     case rabbit_misc:table_lookup(Args, <<"x-mirror">>) of
+                         undefined -> ok;
+                         _         -> Fun(Q)
+                     end
+             end).

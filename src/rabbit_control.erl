@@ -244,6 +244,12 @@ action(add_queue_mirror, Node, [Queue, MirrorNode], Opts, Inform) ->
     rpc_call(Node, rabbit_mirror_queue_misc, add_slave,
              [VHostArg, list_to_binary(Queue), list_to_atom(MirrorNode)]);
 
+action(drop_queue_mirror, Node, [Queue, MirrorNode], Opts, Inform) ->
+    Inform("Dropping mirror of queue ~p on node ~p~n", [Queue, MirrorNode]),
+    VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
+    rpc_call(Node, rabbit_mirror_queue_misc, drop_slave,
+             [VHostArg, list_to_binary(Queue), list_to_atom(MirrorNode)]);
+
 action(list_exchanges, Node, Args, Opts, Inform) ->
     Inform("Listing exchanges", []),
     VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),

@@ -40,7 +40,7 @@
 
 start() ->
     {ok, _} =
-        supervisor:start_child(
+        supervisor2:start_child(
           rabbit_sup,
           {rabbit_mirror_queue_slave_sup,
            {rabbit_mirror_queue_slave_sup, start_link, []},

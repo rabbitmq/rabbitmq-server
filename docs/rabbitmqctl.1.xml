@@ -1325,6 +1325,49 @@
 
       </variablelist>
     </refsect2>
+
+    <refsect2>
+      <title>Mirrored Queue Management</title>
+      <para>
+        Mirrored queues can have slaves dynamically added, and slaves
+        or the master dynamically dropped. Refer to the <ulink
+        url="http://www.rabbitmq.com/ha.html">High Availability
+        guide</ulink> for further details about mirrored queues in
+        general.
+      </para>
+
+      <variablelist>
+        <varlistentry>
+          <term><cmdsynopsis><command>add_queue_mirror</command> <arg choice="req"><replaceable>queue_name</replaceable></arg> <arg choice="req"><replaceable>node</replaceable></arg></cmdsynopsis></term>
+          <listitem>
+            <para>
+              Attempts to add a mirror of the queue
+              <command>queue_name</command> on
+              <command>node</command>. This will only succeed if the
+              queue was declared a mirrored queue and if there is no
+              mirror of the queue already on the node. If it succeeds,
+              the new mirror will start off as an empty slave.
+            </para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term><cmdsynopsis><command>drop_queue_mirror</command> <arg choice="req"><replaceable>queue_name</replaceable></arg> <arg choice="req"><replaceable>node</replaceable></arg></cmdsynopsis></term>
+          <listitem>
+            <para>
+              Attempts to drop a mirror of the queue
+              <command>queue_name</command> on
+              <command>node</command>. This will only succeed if the
+              queue was declared a mirrored queue and if there is a
+              mirror of the queue already on the node. If the node
+              contains the master of the queue, a slave on some other
+              node will be promoted to become the new master. It is
+              not permitted to drop the only node of a mirrored-queue.
+            </para>
+          </listitem>
+        </varlistentry>
+      </variablelist>
+    </refsect2>
   </refsect1>
 
 </refentry>
