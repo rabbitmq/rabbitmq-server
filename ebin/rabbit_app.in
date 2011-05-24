@@ -36,6 +36,7 @@
          {auth_mechanisms, ['PLAIN', 'AMQPLAIN']},
          {auth_backends, [rabbit_auth_backend_internal]},
          {delegate_count, 16},
+         {trace_vhosts, []},
          {tcp_listen_options, [binary,
                                {packet,        raw},
                                {reuseaddr,     true},
