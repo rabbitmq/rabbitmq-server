@@ -27,7 +27,7 @@
 <%= format('permissions', {'mode': 'user', 'permissions': permissions, 'vhosts': vhosts, 'parent': user}) %>
 
 <div class="section-hidden">
-  <h2>Delete This User</h2>
+  <h2>Delete this user</h2>
   <div class="hider">
     <form action="#/users" method="delete" class="confirm">
       <input type="hidden" name="username" value="<%= user.name %>"/>

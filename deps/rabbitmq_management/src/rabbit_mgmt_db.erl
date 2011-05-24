@@ -513,8 +513,10 @@ consumer_details_fun(PatternFun, Tables) ->
     end.
 
 total_messages(Q) ->
-    [{messages, add(pget(messages_ready, Q),
-                    pget(messages_unacknowledged, Q))}].
+    case add(pget(messages_ready, Q), pget(messages_unacknowledged, Q)) of
+        unknown  -> [];
+        Messages -> [{messages, Messages}]
+    end.
 
 zero_old_rates(Stats) -> [maybe_zero_rate(S) || S <- Stats].
 
