@@ -16,60 +16,83 @@
 
 -module(rabbit_trace).
 
--export([init/1, tap_trace_in/2, tap_trace_out/2]).
+-export([init/1, tracing/1, tap_trace_in/2, tap_trace_out/2, start/1, stop/1]).
 
 -include("rabbit.hrl").
 -include("rabbit_framing.hrl").
+
+-define(TRACE_VHOSTS, trace_vhosts).
+-define(XNAME, <<"amq.rabbitmq.trace">>).
 
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
 
--type(state() :: rabbit_exchange:name() | 'none').
+-type(state() :: rabbit_types:exchange() | 'none').
 
 -spec(init/1 :: (rabbit_types:vhost()) -> state()).
+-spec(tracing/1 :: (rabbit_types:vhost()) -> boolean()).
 -spec(tap_trace_in/2 :: (rabbit_types:basic_message(), state()) -> 'ok').
 -spec(tap_trace_out/2 :: (rabbit_amqqueue:qmsg(), state()) -> 'ok').
+
+-spec(start/1 :: (rabbit_types:vhost()) -> 'ok').
+-spec(stop/1 :: (rabbit_types:vhost()) -> 'ok').
 
 -endif.
 
 %%----------------------------------------------------------------------------
 
 init(VHost) ->
-    case application:get_env(rabbit, trace_exchanges) of
-        undefined  -> none;
-        {ok, XNs}  -> case proplists:get_value(VHost, XNs, none) of
-                          none -> none;
-                          Name -> rabbit_misc:r(VHost, exchange, Name)
-                      end
+    case tracing(VHost) of
+        false -> none;
+        true  -> {ok, X} = rabbit_exchange:lookup(
+                             rabbit_misc:r(VHost, exchange, ?XNAME)),
+                 X
     end.
 
+tracing(VHost) ->
+    {ok, VHosts} = application:get_env(rabbit, ?TRACE_VHOSTS),
+    lists:member(VHost, VHosts).
+
 tap_trace_in(Msg = #basic_message{exchange_name = #resource{name = XName}},
-             TraceXN) ->
-    maybe_trace(TraceXN, Msg, <<"publish">>, XName, []).
+             TraceX) ->
+    maybe_trace(TraceX, Msg, <<"publish">>, XName, []).
 
 tap_trace_out({#resource{name = QName}, _QPid, _QMsgId, Redelivered, Msg},
-              TraceXN) ->
+              TraceX) ->
     RedeliveredNum = case Redelivered of true -> 1; false -> 0 end,
-    maybe_trace(TraceXN, Msg, <<"deliver">>, QName,
+    maybe_trace(TraceX, Msg, <<"deliver">>, QName,
                 [{<<"redelivered">>, signedint, RedeliveredNum}]).
+
+%%----------------------------------------------------------------------------
+
+start(VHost) ->
+    update_config(fun (VHosts) -> [VHost | VHosts -- [VHost]] end).
+
+stop(VHost) ->
+    update_config(fun (VHosts) -> VHosts -- [VHost] end).
+
+update_config(Fun) ->
+    {ok, VHosts0} = application:get_env(rabbit, ?TRACE_VHOSTS),
+    VHosts = Fun(VHosts0),
+    application:set_env(rabbit, ?TRACE_VHOSTS, VHosts),
+    rabbit_channel:refresh_config_all(),
+    ok.
+
+%%----------------------------------------------------------------------------
 
 maybe_trace(none, _Msg, _RKPrefix, _RKSuffix, _Extra) ->
     ok;
-maybe_trace(XName, #basic_message{exchange_name = #resource{name = XName}},
+maybe_trace(#exchange{name = Name}, #basic_message{exchange_name = Name},
             _RKPrefix, _RKSuffix, _Extra) ->
     ok;
-maybe_trace(XName, Msg = #basic_message{content = #content{
-                                          payload_fragments_rev = PFR}},
+maybe_trace(X, Msg = #basic_message{content = #content{
+                                      payload_fragments_rev = PFR}},
             RKPrefix, RKSuffix, Extra) ->
-    case rabbit_basic:publish(XName,
-                              <<RKPrefix/binary, ".", RKSuffix/binary>>,
-                              #'P_basic'{headers = msg_to_table(Msg) ++ Extra},
-                              list_to_binary(lists:reverse(PFR))) of
-        {ok, _, _}         -> ok;
-        {error, not_found} -> rabbit_log:info("trace ~s not found~n",
-                                              [rabbit_misc:rs(XName)])
-    end.
+    {ok, _, _} = rabbit_basic:publish(
+                   X, <<RKPrefix/binary, ".", RKSuffix/binary>>,
+                   #'P_basic'{headers = msg_to_table(Msg) ++ Extra}, PFR),
+    ok.
 
 msg_to_table(#basic_message{exchange_name = #resource{name = XName},
                             routing_keys  = RoutingKeys,
