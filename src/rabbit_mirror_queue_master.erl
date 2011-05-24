@@ -254,32 +254,32 @@ requeue(AckTags, MsgPropsFun, State = #state { gm                  = GM,
     ok = gm:broadcast(GM, {requeue, MsgPropsFun, MsgIds}),
     {MsgIds, State #state { backing_queue_state = BQS1 }}.
 
-len(#state { backing_queue = BQ, backing_queue_state = BQS}) ->
+len(#state { backing_queue = BQ, backing_queue_state = BQS }) ->
     BQ:len(BQS).
 
-is_empty(#state { backing_queue = BQ, backing_queue_state = BQS}) ->
+is_empty(#state { backing_queue = BQ, backing_queue_state = BQS }) ->
     BQ:is_empty(BQS).
 
 set_ram_duration_target(Target, State = #state { backing_queue       = BQ,
-                                                 backing_queue_state = BQS}) ->
+                                                 backing_queue_state = BQS }) ->
     State #state { backing_queue_state =
                        BQ:set_ram_duration_target(Target, BQS) }.
 
-ram_duration(State = #state { backing_queue = BQ, backing_queue_state = BQS}) ->
+ram_duration(State = #state { backing_queue = BQ, backing_queue_state = BQS }) ->
     {Result, BQS1} = BQ:ram_duration(BQS),
     {Result, State #state { backing_queue_state = BQS1 }}.
 
-needs_timeout(#state { backing_queue = BQ, backing_queue_state = BQS}) ->
+needs_timeout(#state { backing_queue = BQ, backing_queue_state = BQS }) ->
     BQ:needs_timeout(BQS).
 
-timeout(State = #state { backing_queue = BQ, backing_queue_state = BQS}) ->
+timeout(State = #state { backing_queue = BQ, backing_queue_state = BQS }) ->
     State #state { backing_queue_state = BQ:timeout(BQS) }.
 
 handle_pre_hibernate(State = #state { backing_queue       = BQ,
-                                      backing_queue_state = BQS}) ->
+                                      backing_queue_state = BQS }) ->
     State #state { backing_queue_state = BQ:handle_pre_hibernate(BQS) }.
 
-status(#state { backing_queue = BQ, backing_queue_state = BQS}) ->
+status(#state { backing_queue = BQ, backing_queue_state = BQS }) ->
     BQ:status(BQS).
 
 invoke(?MODULE, Fun, State) ->
