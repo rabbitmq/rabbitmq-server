@@ -61,6 +61,10 @@ ERL_CALL=erl_call -sname $(RABBITMQ_NODENAME) -e
 
 ERL_EBIN=erl -noinput -pa $(EBIN_DIR)
 
+CHECK_NAME=rabbitmq-check
+CHECK_DIR=/tmp/$(CHECK_NAME)
+CHECK_CALL=HOME=$(CHECK_DIR) erl_call -sname $(CHECK_NAME) -e
+
 define usage_xml_to_erl
   $(subst __,_,$(patsubst $(DOCS_DIR)/rabbitmq%.1.xml, $(SOURCE_DIR)/rabbit_%_usage.erl, $(subst -,_,$(1))))
 endef
@@ -163,6 +167,23 @@ run-node: all
 
 run-tests: all
 	echo "rabbit_tests:all_tests()." | $(ERL_CALL)
+
+check:
+	@[ "`id -u`" != "0" ] || (echo "Don't run tests as a superuser." && false)
+	rm -rf $(CHECK_DIR)
+	mkdir -m 777 -p $(CHECK_DIR)
+	HOME=$(CHECK_DIR) \
+		RABBITMQ_NODENAME="$(CHECK_NAME)" \
+		RABBITMQ_NODE_PORT="45672" \
+		RABBITMQ_LOG_BASE="$(CHECK_DIR)/logs" \
+		RABBITMQ_MNESIA_BASE="$(CHECK_DIR)/mnesia" \
+		RABBITMQ_SERVER_START_ARGS="$(RABBITMQ_SERVER_START_ARGS) -detached" \
+		./scripts/rabbitmq-server
+	@sleep 5
+	echo "rabbit_tests:all_tests()." | $(CHECK_CALL) | tee $(CHECK_DIR)/result
+	[ "`cat $(CHECK_DIR)/result | cut -b2-3`" = "ok" ] || \
+		($(CHECK_CALL) -q && rm -rf $(CHECK_DIR) && false)
+	$(CHECK_CALL) -q && rm -rf $(CHECK_DIR) && echo "Passed."
 
 start-background-node:
 	$(BASIC_SCRIPT_ENVIRONMENT_SETTINGS) \
