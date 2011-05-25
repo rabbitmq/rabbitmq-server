@@ -386,9 +386,8 @@ confirm_messages(MsgIds, State = #state { msg_id_status = MS }) ->
                           Acc
                   end
           end, {MS, gb_trees:empty()}, MsgIds),
-    gb_trees:map(fun (ChPid, MsgSeqNos) ->
-                         ok = rabbit_channel:confirm(ChPid, MsgSeqNos)
-                 end, CMs),
+    [ok = rabbit_channel:confirm(ChPid, MsgSeqNos)
+     || {ChPid, MsgSeqNos} <- gb_trees:to_list(CMs)],
     State #state { msg_id_status = MS1 }.
 
 gb_trees_cons(Key, Value, Tree) ->
