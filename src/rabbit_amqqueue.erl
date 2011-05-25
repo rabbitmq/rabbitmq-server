@@ -259,8 +259,7 @@ with(Name, F, E) ->
         {ok, Q = #amqqueue{mirror_pids = []}} ->
             rabbit_misc:with_exit_handler(E, fun () -> F(Q) end);
         {ok, Q} ->
-            timer:sleep(25),
-            E1 = fun () -> with(Name, F, E) end,
+            E1 = fun () -> timer:sleep(25), with(Name, F, E) end,
             rabbit_misc:with_exit_handler(E1, fun () -> F(Q) end);
         {error, not_found} ->
             E()
