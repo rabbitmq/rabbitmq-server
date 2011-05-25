@@ -312,7 +312,8 @@ check_declare_arguments(QueueName, Args) ->
                              [Key, rabbit_misc:rs(QueueName), Error])
      end || {Key, Fun} <-
                 [{<<"x-expires">>,     fun check_integer_argument/1},
-                 {<<"x-message-ttl">>, fun check_integer_argument/1}]],
+                 {<<"x-message-ttl">>, fun check_integer_argument/1},
+                 {<<"x-mirror">>,      fun check_array_of_longstr_argument/1}]],
     ok.
 
 check_integer_argument(undefined) ->
@@ -324,6 +325,18 @@ check_integer_argument({Type, Val}) when Val > 0 ->
     end;
 check_integer_argument({_Type, Val}) ->
     {error, {value_zero_or_less, Val}}.
+
+check_array_of_longstr_argument(undefined) ->
+    ok;
+check_array_of_longstr_argument({array, Array}) ->
+    case lists:all(fun ({longstr, _NodeName}) -> true;
+                       (_)                    -> false
+                   end, Array) of
+        true  -> ok;
+        false -> {error, {array_contains_non_longstrs, Array}}
+    end;
+check_array_of_longstr_argument({Type, _Val}) ->
+    {error, {unacceptable_type, Type}}.
 
 list(VHostPath) ->
     mnesia:dirty_match_object(
