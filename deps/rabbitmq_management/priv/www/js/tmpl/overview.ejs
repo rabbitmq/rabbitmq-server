@@ -3,7 +3,7 @@
 <div class="section">
 <h2>Totals</h2>
 <div class="hider updatable">
-  <h3>Queued Messages</h3>
+  <h3>Queued messages</h3>
   <div class="highlight">
     Ready
     <strong><%= overview.queue_totals.messages_ready %></strong>
@@ -18,7 +18,7 @@
   </div>
 <span class="br"></span>
 <% if (statistics_level == 'fine') { %>
-  <h3>Message Rates</h3>
+  <h3>Message rates</h3>
   <%= message_rates(overview.message_stats) %>
 <% } %>
 <span class="br"></span>
@@ -27,22 +27,22 @@
 
 <% if (user_administrator) { %>
 <div class="section">
-<h2>Nodes and Ports</h2>
+<h2>Nodes and ports</h2>
 <div class="hider updatable">
-<h3>RabbitMQ Nodes</h3>
+<h3>RabbitMQ nodes</h3>
 <table class="list">
   <tr>
     <th>Name</th>
     <th>
-      File Descriptors <span class="help" id="file-descriptors"></span>
+      File descriptors <span class="help" id="file-descriptors"></span>
       <sub>(used / available)</sub>
     </th>
     <th>
-      Socket Descriptors <span class="help" id="socket-descriptors"></span>
+      Socket descriptors <span class="help" id="socket-descriptors"></span>
       <sub>(used / available)</sub>
     </th>
     <th>
-      Erlang Processes
+      Erlang processes
       <sub>(used / available)</sub>
     </th>
     <th>
@@ -53,7 +53,7 @@
       Version
       <sub>(RabbitMQ / Erlang)</sub>
     </th>
-    <th>Mnesia Storage <span class="help" id="mnesia-storage"></span></th>
+    <th>Mnesia storage <span class="help" id="mnesia-storage"></span></th>
   </tr>
 <%
    for (var i = 0; i < nodes.length; i++) {
@@ -134,7 +134,7 @@
 <% } %>
 <% } %>
 
-<h3>Listening Ports</h3>
+<h3>Listening ports</h3>
 <table class="list">
   <tr>
     <th>Host</th>
@@ -164,7 +164,7 @@ for (var i = 0; i < overview.listeners.length; i++) {
 </div>
 
 <div class="section-hidden administrator-only">
-<h2>Import / Export Configuration</h2>
+<h2>Import / export configuration</h2>
 <div class="hider">
   <form action="../api/all-configuration" method="post" enctype="multipart/form-data">
     <table class="two-col-layout">
