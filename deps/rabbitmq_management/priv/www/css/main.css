@@ -108,6 +108,7 @@ table.form select.narrow { width: 110px; }
 table.form .multifield { margin: 0; padding: 0; }
 table.form .multifield p { margin: 0; padding: 0; }
 table.form label { margin-top: 5px; display: block; }
+table.form input[type=checkbox] + label { display: inline; }
 
 table.two-col-layout { width: 100%; }
 table.two-col-layout > tbody > tr > td { width: 50%; vertical-align: top; }
@@ -136,8 +137,6 @@ acronym { background: #add; color: #222; padding: 2px 4px; border-radius: 2px; -
 table.bindings { margin-bottom: 1em; }
 td.binding-endpoint span.object { border: 1px solid #bbb; padding: 10px; border-radius: 10px; -moz-border-radius: 10px; }
 td.binding-endpoint span.arrow { font-size: 200%; }
-
-#no-password { display: none; }
 
 #scratch { display: none; }
 

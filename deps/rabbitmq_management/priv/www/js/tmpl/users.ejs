@@ -43,21 +43,21 @@
         <tr>
           <th>
             <label>
-              <select name="has-password" id="has-password" class="narrow">
+              <select name="has-password" class="narrow controls-appearance" controls="password" param-name="password">
                 <option value="true">Password:</option>
                 <option value="false">No password</option>
               </select>
             </label>
           </th>
           <td>
-            <div id="password">
+            <div id="password-yes">
               <input type="password" name="password" />
               <span class="mand">*</span><br/>
               <input type="password" name="password_confirm" />
               <span class="mand">*</span>
               (confirm)
             </div>
-            <div id="no-password">
+            <div id="password-no">
               User cannot log in using password.
             </div>
           </td>

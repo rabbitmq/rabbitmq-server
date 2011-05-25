@@ -121,8 +121,27 @@
               <option value="<%= nodes[i].name %>"><%= nodes[i].name %></option>
               <% } %>
             </select>
-            +
-            <input type="text" name="x-mirror"/>
+          </td>
+        </tr>
+        <tr>
+          <th>
+            <label for="mirroring">Mirroring:</label>
+          </th>
+          <td>
+            <select id="mirroring" name="mirroring" class="controls-appearance" controls="mirroring" param-name="x-mirror">
+              <option value="false">No</option>
+              <option value="true">Yes</option>
+            </select>
+            <div id="mirroring-yes" style="display: none;">
+<%
+                 for (var i = 0; i < nodes.length; i++) {
+                     var name = nodes[i].name;
+%>
+                 <input type="checkbox" name="x-mirror" id="mirror-<%= name %>" value="<%= name %>"/><label for="mirror-<%= name %>"><%= name %></label><br/>
+              <% } %>
+              <span class="help" id="queue-mirrors">
+            </div>
+            <div id="mirroring-no"></div>
           </td>
         </tr>
 <% } %>

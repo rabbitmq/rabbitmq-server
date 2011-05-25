@@ -428,13 +428,14 @@ function postprocess() {
     $('.multifield input').live('blur', function() {
             update_multifields();
         });
-    $('#has-password').change(function() {
+    $('.controls-appearance').change(function() {
+        var controls = $(this).attr('controls');
         if ($(this).val() == 'true') {
-            $('#password').slideDown(100);
-            $('#no-password').slideUp(100);
+            $('#' + controls + '-yes').slideDown(100);
+            $('#' + controls + '-no').slideUp(100);
         } else {
-            $('#password').slideUp(100);
-            $('#no-password').slideDown(100);
+            $('#' + controls + '-yes').slideUp(100);
+            $('#' + controls + '-no').slideDown(100);
         }
     });
     setup_visibility();
@@ -743,8 +744,8 @@ function fill_path_template(template, params) {
 
 function params_magic(params) {
     return check_password(
-             maybe_remove_password(
-               add_known_arguments(
+             add_known_arguments(
+               maybe_remove_fields(
                  collapse_multifields(params))));
 }
 
@@ -796,12 +797,12 @@ function add_known_arguments(params) {
             if (type == 'int') {
                 v = parseInt(v);
             }
-            else if (type == 'array') {
+            else if (type == 'array' && typeof(v) == 'string') {
                 v = v.split(' ');
             }
-            delete params[k];
             params.arguments[k] = v;
         }
+        delete params[k];
     }
 
     return params;
@@ -818,11 +819,13 @@ function check_password(params) {
     return params;
 }
 
-function maybe_remove_password(params) {
-    if (params['has-password'] == 'false') {
-        delete params['password'];
-    }
-
+function maybe_remove_fields(params) {
+    $('.controls-appearance').each(function(index) {
+        if ($(this).val() == 'false') {
+            delete params[$(this).attr('param-name')];
+            delete params[$(this).attr('name')];
+        }
+    });
     return params;
 }
 
