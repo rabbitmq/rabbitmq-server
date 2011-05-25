@@ -1,17 +1,21 @@
 HELP = {
-    'exchange-arguments':
-      'Supported arguments:<br/> \
-      <dl><dt>alternate-exchange</dt> \
-      <dd>Alternate exchange to which to route messages which would otherwise not be routed.</dd><dl>',
+    'exchange-auto-delete':
+      'If yes, the exchange will delete itself after at least one queue or exchange has been bound to this one, and then all queues or exchanges have been unbound.',
 
-    'queue-arguments':
-      'Supported arguments:<br/> \
-      <dl> \
-        <dt>x-message-ttl</dt> \
-        <dd>How long a message published to a queue can live before it is discarded (milliseconds).</dd> \
-        <dt>x-expires</dt> \
-        <dd>How long a queue can be unused before it is automatically deleted (milliseconds).</dd> \
-      <dl>',
+    'exchange-internal':
+      'If yes, clients cannot publish to this exchange directly. It can only be used with exchange to exchange bindings.',
+
+    'exchange-alternate':
+      'If messages to this exchange cannot otherwise be routed, send them to the alternate exchange named here.<br/>(Sets the "alternate-exchange" argument.)',
+
+    'queue-message-ttl':
+    'How long a message published to a queue can live before it is discarded (milliseconds).<br/>(Sets the "x-message-ttl" argument.)',
+
+    'queue-expires':
+      'How long a queue can be unused for before it is automatically deleted (milliseconds).<br/>(Sets the "x-expires" argument.)',
+
+    'queue-auto-delete':
+      'If yes, the queue will delete itself after at least one consumer has connected, and then all consumers have disconnected.',
 
     'mnesia-storage':
       'Mnesia storage types:<br/> \

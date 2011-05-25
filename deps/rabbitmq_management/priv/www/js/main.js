@@ -741,14 +741,11 @@ function fill_path_template(template, params) {
         });
 }
 
-// Better suggestions appreciated
-var INTEGER_ARGUMENTS = map(['x-expires', 'x-message-ttl']);
-var ARRAY_ARGUMENTS = map(['x-mirror']);
-
 function params_magic(params) {
     return check_password(
              maybe_remove_password(
-               collapse_multifields(params)));
+               add_known_arguments(
+                 collapse_multifields(params))));
 }
 
 function collapse_multifields(params0) {
@@ -771,15 +768,42 @@ function collapse_multifields(params0) {
             if (params0[key] != "") {
                 var k = params0[key];
                 var v = params0[name + '_' + id + '_mfvalue'];
-                if (k in INTEGER_ARGUMENTS) {
-                    v = parseInt(v);
-                } else if (k in ARRAY_ARGUMENTS) {
-                    v = v.split(" ");
-                }
                 params[name][k] = v;
             }
         }
     }
+    return params;
+}
+
+KNOWN_ARGS = {'alternate-exchange': {'short': 'AE',  'type': 'string'},
+              'x-message-ttl':      {'short': 'TTL', 'type': 'int'},
+              'x-expires':          {'short': 'Exp', 'type': 'int'},
+              'x-mirror':           {'short': 'M',   'type': 'array'}};
+
+IMPLICIT_ARGS = {'durable':         {'short': 'D',   'type': 'boolean'},
+                 'auto-delete':     {'short': 'AD',  'type': 'boolean'},
+                 'internal':        {'short': 'I',   'type': 'boolean'}};
+
+ALL_ARGS = {};
+for (var k in KNOWN_ARGS)    ALL_ARGS[k] = KNOWN_ARGS[k];
+for (var k in IMPLICIT_ARGS) ALL_ARGS[k] = IMPLICIT_ARGS[k];
+
+function add_known_arguments(params) {
+    for (var k in KNOWN_ARGS) {
+        var v = params[k];
+        if (v != undefined && v != '') {
+            var type = KNOWN_ARGS[k].type;
+            if (type == 'int') {
+                v = parseInt(v);
+            }
+            else if (type == 'array') {
+                v = v.split(' ');
+            }
+            delete params[k];
+            params.arguments[k] = v;
+        }
+    }
+
     return params;
 }
 

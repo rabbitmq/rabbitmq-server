@@ -114,18 +114,20 @@
    var nodes = JSON.parse(sync_get('/nodes'));
 %>
         <tr>
-          <th><label>On node:</label></th>
+          <th><label>Node:</label></th>
           <td>
             <select name="node">
               <% for (var i = 0; i < nodes.length; i++) { %>
               <option value="<%= nodes[i].name %>"><%= nodes[i].name %></option>
               <% } %>
             </select>
+            +
+            <input type="text" name="x-mirror"/>
           </td>
         </tr>
 <% } %>
         <tr>
-          <th><label>Auto delete:</label></th>
+          <th><label>Auto delete: <span class="help" id="queue-auto-delete"></label></th>
           <td>
             <select name="auto_delete">
               <option value="false">No</option>
@@ -134,11 +136,16 @@
           </td>
         </tr>
         <tr>
+          <th><label>Message TTL: <span class="help" id="queue-message-ttl"></label></th>
+          <td><input type="text" name="x-message-ttl"/> ms</td>
+        </tr>
+        <tr>
+          <th><label>Auto expire: <span class="help" id="queue-expires"></label></th>
+          <td><input type="text" name="x-expires"/> ms</td>
+        </tr>
+        <tr>
           <th><label>Arguments:</label></th>
-          <td>
-            <span class="multifield" id="arguments"></span>
-            <span class="help" id="queue-arguments"></span>
-          </td>
+          <td><span class="multifield" id="arguments"></span></td>
         </tr>
       </table>
       <input type="submit" value="Add queue"/>

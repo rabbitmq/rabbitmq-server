@@ -47,18 +47,6 @@ function fmt_date(d) {
         ":" + f(d.getSeconds());
 }
 
-KNOWN_ARGS = {'alternate-exchange': 'AE',
-              'x-message-ttl':      'TTL',
-              'x-expires':          'Exp'};
-
-IMPLICIT_ARGS = {'durable':         'D',
-                 'auto-delete':     'AD',
-                 'internal':        'I'};
-
-ALL_ARGS = {};
-for (var k in KNOWN_ARGS)    ALL_ARGS[k] = KNOWN_ARGS[k];
-for (var k in IMPLICIT_ARGS) ALL_ARGS[k] = IMPLICIT_ARGS[k];
-
 function fmt_parameters(obj) {
     return fmt_table_short(args_to_params(obj));
 }
@@ -70,7 +58,7 @@ function fmt_parameters_short(obj) {
     for (var k in ALL_ARGS) {
         if (params[k] != undefined) {
             res += '<acronym title="' + k + ': ' + params[k] + '">' +
-                ALL_ARGS[k] + '</acronym> ';
+                ALL_ARGS[k].short + '</acronym> ';
         }
     }
 
