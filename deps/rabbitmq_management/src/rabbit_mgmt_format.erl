@@ -319,6 +319,9 @@ a2b(A) ->
 strip_pids(Item = [T | _]) when is_tuple(T) ->
     format(Item,
            [{fun node_from_pid/1, [pid]},
-            {fun remove/1,        [connection, owner_pid, queue, channel]}]);
+            {fun remove/1,        [connection, owner_pid, queue, channel]},
+            {fun (Pids) ->
+                     [{mirror_nodes, [node(Pid) || Pid <- Pids]}]
+             end,                 [mirror_pids]}]);
 
 strip_pids(Items) -> [strip_pids(I) || I <- Items].

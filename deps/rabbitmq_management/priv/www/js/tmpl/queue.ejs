@@ -63,6 +63,14 @@
         <th>Node</th>
         <td><%= queue.node %></td>
       </tr>
+      <tr>
+        <th>Mirrors</th>
+        <td>
+          <% for (var i in queue.mirror_nodes) { %>
+            <%= queue.mirror_nodes[i] %><br/>
+          <% } %>
+        </td>
+      </tr>
 <% } %>
     </table>
     <span class="br"></span>

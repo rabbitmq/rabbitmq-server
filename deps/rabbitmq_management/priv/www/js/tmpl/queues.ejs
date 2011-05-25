@@ -45,7 +45,10 @@
 <% } %>
    <td><%= link_queue(queue.vhost, queue.name) %></td>
 <% if (nodes_interesting) { %>
-   <td><%= queue.node %></td>
+   <td>
+     <%= queue.node %>
+     <%= fmt_mirrors(queue) %>
+   </td>
 <% } %>
    <td>
      <% if (queue.owner_pid_details != undefined) { %>

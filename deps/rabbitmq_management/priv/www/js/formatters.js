@@ -65,6 +65,14 @@ function fmt_parameters(obj) {
     return res;
 }
 
+function fmt_mirrors(queue) {
+    if (queue.mirror_nodes && queue.mirror_nodes.length > 0) {
+        return '<acronym title="Mirrors: ' + queue.mirror_nodes + '">' +
+            queue.mirror_nodes.length + '</acronym>';
+    }
+    return '';
+}
+
 function fmt_channel_mode(ch) {
     if (ch.transactional) {
         return '<acronym title="Transactional">T</acronym>';

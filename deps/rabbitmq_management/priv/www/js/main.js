@@ -743,7 +743,7 @@ function fill_path_template(template, params) {
 
 // Better suggestions appreciated
 var INTEGER_ARGUMENTS = map(['x-expires', 'x-message-ttl']);
-var ARRAY_ARGUMENTS = map(['upstreams']); // Used by the federation plugin
+var ARRAY_ARGUMENTS = map(['x-mirror']);
 
 function params_magic(params) {
     return check_password(
