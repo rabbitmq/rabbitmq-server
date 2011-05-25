@@ -28,7 +28,7 @@
 <% } %>
    <td><%= link_exchange(exchange.vhost, exchange.name) %></td>
    <td class="c"><%= exchange.type %></td>
-   <td class="c"><%= fmt_parameters(exchange) %></td>
+   <td class="c"><%= fmt_parameters_short(exchange) %></td>
    <td class="r"><%= fmt_rate(exchange.message_stats_in, 'publish', false) %></td>
   </tr>
   <% } %>

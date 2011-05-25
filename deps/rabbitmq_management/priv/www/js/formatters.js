@@ -47,20 +47,59 @@ function fmt_date(d) {
         ":" + f(d.getSeconds());
 }
 
+KNOWN_ARGS = {'alternate-exchange': 'AE',
+              'x-message-ttl':      'TTL',
+              'x-expires':          'Exp'};
+
+IMPLICIT_ARGS = {'durable':         'D',
+                 'auto-delete':     'AD',
+                 'internal':        'I'};
+
+ALL_ARGS = {};
+for (var k in KNOWN_ARGS)    ALL_ARGS[k] = KNOWN_ARGS[k];
+for (var k in IMPLICIT_ARGS) ALL_ARGS[k] = IMPLICIT_ARGS[k];
+
 function fmt_parameters(obj) {
+    return fmt_table_short(args_to_params(obj));
+}
+
+function fmt_parameters_short(obj) {
     var res = '';
+    var params = args_to_params(obj);
+
+    for (var k in ALL_ARGS) {
+        if (params[k] != undefined) {
+            res += '<acronym title="' + k + ': ' + params[k] + '">' +
+                ALL_ARGS[k] + '</acronym> ';
+        }
+    }
+
+    if (params.arguments) {
+        res += '<acronym title="' + fmt_table_flat(params.arguments) +
+        '">Args</acronym>';
+    }
+    return res;
+}
+
+function args_to_params(obj) {
+    var res = {};
+    for (var k in obj.arguments) {
+        if (k in KNOWN_ARGS) {
+            res[k] = obj.arguments[k];
+        }
+        else {
+            if (res.arguments == undefined) res.arguments = {};
+            res.arguments[k] = obj.arguments[k];
+        }
+    }
     if (obj.durable) {
-        res += '<acronym title="Durable">D</acronym> ';
+        res['durable'] = true;
     }
     if (obj.auto_delete) {
-        res += '<acronym title="Auto-delete">AD</acronym> ';
+        res['auto-delete'] = true;
     }
     if (obj.internal != undefined && obj.internal) {
-        res += '<acronym title="Internal">I</acronym> ';
-    }
-    var args = fmt_table_short(obj.arguments);
-    if (args != '') {
-        res += args;
+        res['internal'] = true;
     }
     return res;
 }
@@ -184,6 +223,30 @@ function fmt_amqp_value(val) {
         return val2.join("<br/>");
     } else if (val instanceof Object) {
         return fmt_table_short(val);
+    } else if (typeof(val) == 'string') {
+        return fmt_escape_html(val);
+    } else {
+        return val;
+    }
+}
+
+function fmt_table_flat(table) {
+    var res = [];
+    for (k in table) {
+        res.push(k + ': ' + fmt_amqp_value_flat(table[k]));
+    }
+    return res.join(', ');
+}
+
+function fmt_amqp_value_flat(val) {
+    if (val instanceof Array) {
+        var val2 = new Array();
+        for (var i = 0; i < val.length; i++) {
+            val2[i] = fmt_amqp_value_flat(val[i]);
+        }
+        return '[' + val2.join(",") + ']';
+    } else if (val instanceof Object) {
+        return '(' + fmt_table_flat(val) + ')';
     } else if (typeof(val) == 'string') {
         return fmt_escape_html(val);
     } else {
