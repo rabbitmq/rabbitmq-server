@@ -300,7 +300,7 @@ with_exclusive_access_or_die(Name, ReaderPid, F) ->
 assert_args_equivalence(#amqqueue{name = QueueName, arguments = Args},
                         RequiredArgs) ->
     rabbit_misc:assert_args_equivalence(Args, RequiredArgs, QueueName,
-                                        [<<"x-expires">>]).
+                                        [<<"x-expires">>, <<"x-mirror">>]).
 
 check_declare_arguments(QueueName, Args) ->
     [case Fun(rabbit_misc:table_lookup(Args, Key)) of
