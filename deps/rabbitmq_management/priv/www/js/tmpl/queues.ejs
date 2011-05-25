@@ -133,13 +133,13 @@
               <option value="true">Yes</option>
             </select>
             <div id="mirroring-yes" style="display: none;">
+              Initially mirror on <span class="help" id="queue-mirrors"></span><br/>
 <%
                  for (var i = 0; i < nodes.length; i++) {
                      var name = nodes[i].name;
 %>
                  <input type="checkbox" name="x-mirror" id="mirror-<%= name %>" value="<%= name %>"/><label for="mirror-<%= name %>"><%= name %></label><br/>
               <% } %>
-              <span class="help" id="queue-mirrors">
             </div>
             <div id="mirroring-no"></div>
           </td>
