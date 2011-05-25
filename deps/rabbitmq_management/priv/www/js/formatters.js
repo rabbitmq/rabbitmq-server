@@ -94,7 +94,7 @@ function args_to_params(obj) {
 
 function fmt_mirrors(queue) {
     if (queue.mirror_nodes && queue.mirror_nodes.length > 0) {
-        return '<acronym title="Mirrors: ' + queue.mirror_nodes + '">' +
+        return '<acronym title="Mirrors: ' + queue.mirror_nodes + '">+' +
             queue.mirror_nodes.length + '</acronym>';
     }
     return '';
