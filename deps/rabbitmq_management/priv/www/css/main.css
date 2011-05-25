@@ -88,8 +88,8 @@ div.section, div.section-hidden { margin: 0 0 1em 0; }
 div.section-invisible div.hider { display: none; }
 div.section div.hider, div.section-hidden div.hider { padding: 0.5em 0; }
 div.section h2, div.section-hidden h2 { font-size: 1em; padding: 5px 5px 5px 25px; cursor: pointer; margin: 0; }
-div.section-invisible h2 { background: white; border: 1px solid #ddd; background-image: url(../img/collapse.png); background-repeat:no-repeat; background-position:4px 4px; }
-div.section-visible h2 { background: #f8f8f8;  border: 1px solid #ddd; background-image: url(../img/expand.png); background-repeat:no-repeat; background-position:4px 4px; }
+div.section-invisible h2 { background: white; border-bottom: 1px solid #ddd; background-image: url(../img/collapse.png); background-repeat:no-repeat; background-position:4px 4px; }
+div.section-visible h2 { background: #f8f8f8;  border-bottom: 1px solid #ddd; background-image: url(../img/expand.png); background-repeat:no-repeat; background-position:4px 4px; }
 
 form { margin: 0; }
 form.inline-form { float: left; }
