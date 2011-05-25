@@ -75,7 +75,6 @@ set_maximum_since_use(QPid, Age) ->
 
 init([#amqqueue { name = QueueName } = Q]) ->
     process_flag(trap_exit, true), %% amqqueue_process traps exits too.
-    ok = gm:create_tables(),
     {ok, GM} = gm:start_link(QueueName, ?MODULE, [self()]),
     receive {joined, GM} ->
             ok

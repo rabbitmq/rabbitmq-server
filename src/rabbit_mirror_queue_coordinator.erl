@@ -324,7 +324,6 @@ ensure_monitoring(CPid, Pids) ->
 init([#amqqueue { name = QueueName } = Q, GM, DeathFun]) ->
     GM1 = case GM of
               undefined ->
-                  ok = gm:create_tables(),
                   {ok, GM2} = gm:start_link(QueueName, ?MODULE, [self()]),
                   receive {joined, GM2, _Members} ->
                           ok
