@@ -11,15 +11,16 @@ SOURCE_DIR=src
 EBIN_DIR=ebin
 INCLUDE_DIR=include
 DOCS_DIR=docs
-INCLUDES=$(wildcard $(INCLUDE_DIR)/*.hrl) $(INCLUDE_DIR)/rabbit_framing.hrl
+INCLUDES=$(wildcard $(INCLUDE_DIR)/*.hrl) $(INCLUDE_DIR)/rabbit_framing.hrl $(CTL_OPTS_HRL)
 SOURCES=$(wildcard $(SOURCE_DIR)/*.erl) $(SOURCE_DIR)/rabbit_framing_amqp_0_9_1.erl $(SOURCE_DIR)/rabbit_framing_amqp_0_8.erl $(USAGES_ERL)
 BEAM_TARGETS=$(patsubst $(SOURCE_DIR)/%.erl, $(EBIN_DIR)/%.beam, $(SOURCES))
 TARGETS=$(EBIN_DIR)/rabbit.app $(INCLUDE_DIR)/rabbit_framing.hrl $(BEAM_TARGETS)
 WEB_URL=http://www.rabbitmq.com/
 MANPAGES=$(patsubst %.xml, %.gz, $(wildcard $(DOCS_DIR)/*.[0-9].xml))
 WEB_MANPAGES=$(patsubst %.xml, %.man.xml, $(wildcard $(DOCS_DIR)/*.[0-9].xml) $(DOCS_DIR)/rabbitmq-service.xml)
-USAGES_XML=$(DOCS_DIR)/rabbitmqctl.1.xml
-USAGES_ERL=$(foreach XML, $(USAGES_XML), $(call usage_xml_to_erl, $(XML)))
+CTL_XML=$(DOCS_DIR)/rabbitmqctl.1.xml
+USAGES_ERL=$(foreach XML, $(CTL_XML), $(call usage_xml_to_erl, $(XML)))
+CTL_OPTS_HRL=$(INCLUDE_DIR)/rabbit_ctl_opts.hrl
 
 ifeq ($(shell python -c 'import simplejson' 2>/dev/null && echo yes),yes)
 PYTHON=python
@@ -132,7 +133,7 @@ clean:
 	rm -f $(EBIN_DIR)/*.beam
 	rm -f $(EBIN_DIR)/rabbit.app $(EBIN_DIR)/rabbit.boot $(EBIN_DIR)/rabbit.script $(EBIN_DIR)/rabbit.rel
 	rm -f $(INCLUDE_DIR)/rabbit_framing.hrl $(SOURCE_DIR)/rabbit_framing_amqp_*.erl codegen.pyc
-	rm -f $(DOCS_DIR)/*.[0-9].gz $(DOCS_DIR)/*.man.xml $(DOCS_DIR)/*.erl $(USAGES_ERL)
+	rm -f $(DOCS_DIR)/*.[0-9].gz $(DOCS_DIR)/*.man.xml $(DOCS_DIR)/*.erl $(USAGES_ERL) $(CTL_OPTS_HRL)
 	rm -f $(RABBIT_PLT)
 	rm -f $(DEPS_FILE)
 
@@ -249,6 +250,9 @@ $(SOURCE_DIR)/%_usage.erl:
 	mv $@.tmp3 $@
 	rm $@.tmp $@.tmp2
 
+$(CTL_OPTS_HRL): $(DOCS_DIR)/ctl-options.xsl $(CTL_XML)
+	xsltproc $^ > $@
+
 # We rename the file before xmlto sees it since xmlto will use the name of
 # the file to make internal links.
 %.man.xml: %.xml $(DOCS_DIR)/html-to-website-xml.xsl
@@ -293,7 +297,7 @@ install_dirs:
 	mkdir -p $(SBIN_DIR)
 	mkdir -p $(MAN_DIR)
 
-$(foreach XML,$(USAGES_XML),$(eval $(call usage_dep, $(XML))))
+$(foreach XML,$(CTL_XML),$(eval $(call usage_dep, $(XML))))
 
 # Note that all targets which depend on clean must have clean in their
 # name.  Also any target that doesn't depend on clean should not have
@@ -313,3 +317,5 @@ ifneq "$(strip $(patsubst clean%,,$(patsubst %clean,,$(TESTABLEGOALS))))" ""
 -include $(DEPS_FILE)
 endif
 
+.SUFFIXES:
+.SUFFIXES: .erl .beam .hrl

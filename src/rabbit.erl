@@ -18,7 +18,7 @@
 
 -behaviour(application).
 
--export([prepare/0, start/0, stop/0, stop_and_halt/0, status/0,
+-export([prepare/0, start/0, stop/0, stop_and_halt/0, status/0, node_info/0,
          rotate_logs/1]).
 
 -export([start/2, stop/1]).
@@ -181,6 +181,10 @@
         () -> [{running_applications, [{atom(), string(), string()}]} |
                {nodes, [{rabbit_mnesia:node_type(), [node()]}]} |
                {running_nodes, [node()]}]).
+-spec(node_info/0 ::
+        () -> [{node_name, node()} |
+               {os, {atom(), atom()}} |
+               {otp, string()}]).
 -spec(log_location/1 :: ('sasl' | 'kernel') -> log_location()).
 
 -spec(maybe_insert_default_data/0 :: () -> 'ok').
@@ -219,6 +223,11 @@ status() ->
     [{pid, list_to_integer(os:getpid())},
      {running_applications, application:which_applications()}] ++
         rabbit_mnesia:status().
+
+node_info() ->
+    [{node_name, erlang:node()},
+     {os, os:type()},
+     {otp, erlang:system_info(system_version)}].
 
 rotate_logs(BinarySuffix) ->
     Suffix = binary_to_list(BinarySuffix),

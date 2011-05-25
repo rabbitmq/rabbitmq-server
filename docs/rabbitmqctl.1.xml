@@ -1279,6 +1279,25 @@
             </para>
           </listitem>
         </varlistentry>
+
+        <varlistentry>
+          <term><cmdsynopsis><command>support_dump</command></cmdsynopsis></term>
+          <listitem>
+            <para>
+              Generate a diagnostic dump containing a concatenation of all server status
+              information for support purposes. The output should be redirected to a
+              file when accompanying a support request.
+            </para>
+            <para role="example-prefix">
+              For example:
+            </para>
+            <screen role="example">rabbitmqctl support_dump > support_request.txt</screen>
+            <para role="example">
+              This command creates a support dumpfile which may be attached to a
+              support request email.
+            </para>
+          </listitem>
+        </varlistentry>
       </variablelist>
     </refsect2>
 
