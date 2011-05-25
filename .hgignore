@@ -11,6 +11,7 @@ syntax: regexp
 ^dist/
 ^include/rabbit_framing\.hrl$
 ^include/rabbit_framing_spec\.hrl$
+^include/rabbit_ctl_opts.hrl$
 ^src/rabbit_framing_amqp.*\.erl$
 ^src/.*\_usage.erl$
 ^rabbit\.plt$
