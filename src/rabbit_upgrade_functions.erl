@@ -127,12 +127,13 @@ mirror_pids() ->
     Tables = [rabbit_queue, rabbit_durable_queue],
     AddMirrorPidsFun =
         fun ({amqqueue, Name, Durable, AutoDelete, Owner, Arguments, Pid}) ->
-                {amqqueue, Name, Durable, AutoDelete, Owner, Arguments, Pid, []}
+                {amqqueue, Name, Durable, AutoDelete, Owner, Arguments, Pid,
+                 [], []}
         end,
     [ ok = transform(T,
                      AddMirrorPidsFun,
                      [name, durable, auto_delete, exclusive_owner, arguments,
-                      pid, mirror_pids])
+                      pid, mirror_pids, mirror_pins])
       || T <- Tables ],
     ok.
 

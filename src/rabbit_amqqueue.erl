@@ -201,7 +201,8 @@ declare(QueueName, Durable, AutoDelete, Args, Owner) ->
                                       arguments       = Args,
                                       exclusive_owner = Owner,
                                       pid             = none,
-                                      mirror_pids     = []}),
+                                      mirror_pids     = [],
+                                      mirror_pins     = []}),
     case gen_server2:call(Q#amqqueue.pid, {init, false}, infinity) of
         not_found -> rabbit_misc:not_found(QueueName);
         Q1        -> Q1
@@ -505,7 +506,8 @@ pseudo_queue(QueueName, Pid) ->
               auto_delete = false,
               arguments   = [],
               pid         = Pid,
-              mirror_pids = []}.
+              mirror_pids = [],
+              mirror_pins = []}.
 
 safe_delegate_call_ok(F, Pids) ->
     case delegate:invoke(Pids, fun (Pid) ->
