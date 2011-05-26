@@ -221,10 +221,10 @@ action(delete_vhost, Node, Args = [_VHostPath], _Opts, Inform) ->
     Inform("Deleting vhost ~p", Args),
     call(Node, {rabbit_vhost, delete, Args});
 
-action(list_vhosts, Node, Args, _Opts, Inform) ->
+action(list_vhosts, Node, Args, Opts, Inform) ->
     Inform("Listing vhosts", []),
     ArgAtoms = default_if_empty(Args, [name]),
-    display_info_list(call(Node, {rabbit_vhost, info_all, []}), ArgAtoms);
+    display_info_list(call(Node, {rabbit_vhost, info_all, []}), ArgAtoms, Opts);
 
 action(list_user_permissions, Node, Args = [_Username], _Opts, Inform) ->
     Inform("Listing permissions for user ~p", Args),
@@ -237,7 +237,8 @@ action(list_queues, Node, Args, Opts, Inform) ->
     ArgAtoms = default_if_empty(Args, [name, messages]),
     display_info_list(rpc_call(Node, rabbit_amqqueue, info_all,
                                [VHostArg, ArgAtoms]),
-                      ArgAtoms);
+                      ArgAtoms,
+                      Opts);
 
 action(list_exchanges, Node, Args, Opts, Inform) ->
     Inform("Listing exchanges", []),
@@ -245,7 +246,8 @@ action(list_exchanges, Node, Args, Opts, Inform) ->
     ArgAtoms = default_if_empty(Args, [name, type]),
     display_info_list(rpc_call(Node, rabbit_exchange, info_all,
                                [VHostArg, ArgAtoms]),
-                      ArgAtoms);
+                      ArgAtoms,
+                      Opts);
 
 action(list_bindings, Node, Args, Opts, Inform) ->
     Inform("Listing bindings", []),
@@ -255,21 +257,24 @@ action(list_bindings, Node, Args, Opts, Inform) ->
                                        routing_key, arguments]),
     display_info_list(rpc_call(Node, rabbit_binding, info_all,
                                [VHostArg, ArgAtoms]),
-                      ArgAtoms);
+                      ArgAtoms,
+                      Opts);
 
-action(list_connections, Node, Args, _Opts, Inform) ->
+action(list_connections, Node, Args, Opts, Inform) ->
     Inform("Listing connections", []),
     ArgAtoms = default_if_empty(Args, [user, peer_address, peer_port, state]),
     display_info_list(rpc_call(Node, rabbit_networking, connection_info_all,
                                [ArgAtoms]),
-                      ArgAtoms);
+                      ArgAtoms,
+                      Opts);
 
-action(list_channels, Node, Args, _Opts, Inform) ->
+action(list_channels, Node, Args, Opts, Inform) ->
     Inform("Listing channels", []),
     ArgAtoms = default_if_empty(Args, [pid, user, transactional, consumer_count,
                                        messages_unacknowledged]),
     display_info_list(rpc_call(Node, rabbit_channel, info_all, [ArgAtoms]),
-                      ArgAtoms);
+                      ArgAtoms,
+                      Opts);
 
 action(list_consumers, Node, _Args, Opts, Inform) ->
     Inform("Listing consumers", []),
@@ -279,7 +284,8 @@ action(list_consumers, Node, _Args, Opts, Inform) ->
         L when is_list(L) -> display_info_list(
                                [lists:zip(InfoKeys, tuple_to_list(X)) ||
                                    X <- L],
-                               InfoKeys);
+                               InfoKeys,
+                               Opts);
         Other             -> Other
     end;
 
@@ -309,7 +315,35 @@ action(list_permissions, Node, [], Opts, Inform) ->
     VHost = proplists:get_value(?VHOST_OPT, Opts),
     Inform("Listing permissions in vhost ~p", [VHost]),
     display_list(call(Node, {rabbit_auth_backend_internal,
-                             list_vhost_permissions, [VHost]})).
+                             list_vhost_permissions, [VHost]}));
+
+action(report, Node, _Args, _Opts, _Inform) ->
+    Quiet = fun (_Format, _Args1) -> ok end,
+    io:format("Reporting server status on ~p~n", [erlang:universaltime()]),
+    action(status, Node, [], [], Quiet),
+    [io:format("node ~p:~n ~p~n ~p~n",
+         [N,
+          rpc_call(N, os, type, []),
+          rpc_call(N, erlang, system_info, [system_version])]) ||
+     N <- rpc_call(Node, mnesia, system_info, [running_db_nodes])],
+    Report = fun (Descr, M, F, A, Suppress) ->
+                 io:format("%% ~s~n", [Descr]),
+                 display_detected_info_list(rpc_call(Node, M, F, A), Suppress)
+             end,
+    Report("connections", rabbit_networking, connection_info_all, [],
+           [client_properties]),
+    Report("channels", rabbit_channel, info_all, [], []),
+    lists:foreach(
+        fun (VHost) ->
+            VHostStr = binary_to_list(VHost),
+            io:format("%% reporting on vhost ~p~n", [VHostStr]),
+            Report("queues", rabbit_amqqueue, info_all, [VHost],
+                   [backing_queue_status]),
+            Report("exchanges", rabbit_exchange, info_all, [VHost], []),
+            Report("bindings", rabbit_binding, info_all, [VHost], []),
+            io:format("%% consumers~n"),
+            action(list_consumers, Node, [], [{?VHOST_OPT, VHostStr}], Quiet)
+        end, rpc_call(Node, rabbit_vhost, list, [])).
 
 %%----------------------------------------------------------------------------
 
@@ -336,14 +370,27 @@ default_if_empty(List, Default) when is_list(List) ->
        true       -> [list_to_atom(X) || X <- List]
     end.
 
-display_info_list(Results, InfoItemKeys) when is_list(Results) ->
+display_detected_info_list([Row|_] = Results, Suppress) ->
+    {Keys, _Values} = lists:unzip(Row),
+    display_info_list(Results, Keys -- Suppress, []);
+display_detected_info_list([], _) ->
+    ok.
+
+atoms_to_lists(AtomList) ->
+    [atom_to_list(A) || A <- AtomList].
+
+display_info_list(Results, InfoItemKeys, Opts) when is_list(Results) ->
+    case {Results, proplists:get_bool(?QUIET_OPT, Opts)} of
+        {[_|_], false} -> display_row(atoms_to_lists(InfoItemKeys));
+        _              -> ok
+    end,
     lists:foreach(
       fun (Result) -> display_row(
                         [format_info_item(proplists:get_value(X, Result)) ||
                             X <- InfoItemKeys])
       end, Results),
     ok;
-display_info_list(Other, _) ->
+display_info_list(Other, _, _) ->
     Other.
 
 display_row(Row) ->
