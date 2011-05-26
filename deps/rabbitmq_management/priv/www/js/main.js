@@ -304,6 +304,7 @@ function partial_update() {
             for (var i = 0; i < befores.length; i++) {
                 $(befores[i]).replaceWith(afters[i]);
             }
+            replace_content('scratch', '');
             postprocess_partial();
         });
     }
