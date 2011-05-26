@@ -1,7 +1,8 @@
-%% This is a version of pg2 from R14B02 with the fix described at
-%% http://erlang.2086793.n4.nabble.com/pg2-still-busted-in-R13B04-td2230601.html
-%% applied and some search-and-replace to rename it.
-
+%% This is the version of pg2 from R14B02, which contains the fix
+%% described at
+%% http://erlang.2086793.n4.nabble.com/pg2-still-busted-in-R13B04-td2230601.html.
+%% The only changes are a search-and-replace to rename the module and
+%% avoid clashes with other versions of pg2.
 
 
 %%
