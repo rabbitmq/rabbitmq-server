@@ -40,25 +40,21 @@ local_params() ->
     #amqp_params_direct{username = list_to_binary(U)}.
 
 upstream_from_table(Table, #resource{name = DX, virtual_host = DVHost}) ->
-    TableProps = [{list_to_atom(binary_to_list(K)), V} || {K, _T, V} <- Table],
     {ok, Brokers} = application:get_env(rabbitmq_federation, brokers),
-    UsableProps = [Merged ||
-                      BrokerProps <- binaryise_all(Brokers),
-                      Merged <- [merge(BrokerProps, TableProps)],
-                      all_match(BrokerProps, Merged)],
-    Props = case UsableProps of
-                []    -> TableProps;
-                [P|_] -> P
-            end,
-    upstream_from_properties(Props, DX, DVHost).
+    TableProps = [{list_to_atom(binary_to_list(K)), V} || {K, _T, V} <- Table],
+    upstream_from_properties(
+      case [Merged || BrokerProps <- binaryise_all(Brokers),
+                      Merged      <- [merge(BrokerProps, TableProps)],
+                      all_match(BrokerProps, Merged)] of
+          []    -> TableProps;
+          [P|_] -> P
+      end, DX, DVHost).
 
 %%----------------------------------------------------------------------------
 
 %% For all the props in Props1, does Props2 match?
 all_match(Props1, Props2) ->
-    lists:all(fun ({K, V}) ->
-                      proplists:get_value(K, Props2) == V
-              end, [KV || KV <- Props1]).
+    lists:all(fun ({K, V}) -> proplists:get_value(K, Props2) == V end, Props1).
 
 %% Add elements of Props1 which are not in Props2 - i.e. Props2 wins in event
 %% of a clash
@@ -66,7 +62,7 @@ merge(Props1, Props2) ->
     lists:foldl(fun({K, V}, P) ->
                         case proplists:is_defined(K, Props2) of
                             true  -> P;
-                            false -> [{K, V}|P]
+                            false -> [{K, V} | P]
                         end
                 end, Props2, Props1).
 
@@ -89,8 +85,8 @@ amqp_params_from_properties(P, DVHost) ->
       host         = binary_to_list(proplists:get_value(host, P)),
       port         = proplists:get_value(port,         P),
       virtual_host = proplists:get_value(virtual_host, P, DVHost),
-      username     = proplists:get_value(username, P, <<"guest">>),
-      password     = proplists:get_value(password, P, <<"guest">>)
+      username     = proplists:get_value(username,     P, <<"guest">>),
+      password     = proplists:get_value(password,     P, <<"guest">>)
      },
     lists:foldl(fun (F, ParamsIn) -> F(ParamsIn, P) end, Params,
                 [fun set_ssl_options/2,

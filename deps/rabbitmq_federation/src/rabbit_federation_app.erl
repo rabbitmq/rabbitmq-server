@@ -57,7 +57,8 @@ declare_exchange(Props) ->
                                            U <- pget(upstreams, Props)]},
              {<<"type">>,      longstr, list_to_binary(pget(type, Props))}]}),
     amqp_channel:close(Ch),
-    amqp_connection:close(Conn).
+    amqp_connection:close(Conn),
+    ok.
 
 to_table(U) ->
     Args = [{host,         longstr},
@@ -86,4 +87,4 @@ pget(K, P) ->
 
 %%----------------------------------------------------------------------------
 
-init([]) -> {ok, {{one_for_one,3,10},[]}}.
+init([]) -> {ok, {{one_for_one, 3, 10}, []}}.

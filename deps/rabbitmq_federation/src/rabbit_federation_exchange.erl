@@ -49,8 +49,7 @@ validate(X = #exchange{arguments = Args}) ->
     {array, Upstreams} = rabbit_misc:table_lookup(Args, <<"upstreams">>),
     [validate_upstream(U) || U <- Upstreams],
     {longstr, TypeBin} = rabbit_misc:table_lookup(Args, <<"type">>),
-    Type = rabbit_exchange:check_type(TypeBin),
-    case Type of
+    case rabbit_exchange:check_type(TypeBin) of
         'x-federation' -> fail("Type argument must not be x-federation.", []);
         _              -> ok
     end,

@@ -35,11 +35,9 @@ join(Name) ->
 
 %%----------------------------------------------------------------------------
 
-call(X = #exchange{}, Msg) ->
-    [gen_server2:call(Pid, Msg, infinity) || Pid <- x(X)].
+call(X, Msg) -> [gen_server2:call(Pid, Msg, infinity) || Pid <- x(X)].
 
-cast_all(Msg) ->
-    [gen_server2:cast(Pid, Msg) || Pid <- all()].
+cast(Msg) -> [gen_server2:cast(Pid, Msg) || Pid <- all()].
 
 all() ->
     pg2_fixed:create(rabbit_federation_exchanges),
