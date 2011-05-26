@@ -376,12 +376,9 @@ display_detected_info_list([Row|_] = Results, Suppress) ->
 display_detected_info_list([], _) ->
     ok.
 
-atoms_to_lists(AtomList) ->
-    [atom_to_list(A) || A <- AtomList].
-
 display_info_list(Results, InfoItemKeys, Opts) when is_list(Results) ->
     case {Results, proplists:get_bool(?QUIET_OPT, Opts)} of
-        {[_|_], false} -> display_row(atoms_to_lists(InfoItemKeys));
+        {[_|_], false} -> display_row([atom_to_list(A) || A <- InfoItemKeys]);
         _              -> ok
     end,
     lists:foreach(
