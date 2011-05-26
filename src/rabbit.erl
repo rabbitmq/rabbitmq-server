@@ -217,6 +217,8 @@ stop_and_halt() ->
 
 status() ->
     [{pid, list_to_integer(os:getpid())},
+     {os, os:type()},
+     {erlang_version, erlang:system_info(system_version)},
      {running_applications, application:which_applications()}] ++
         rabbit_mnesia:status().
 

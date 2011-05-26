@@ -1259,7 +1259,7 @@
         </varlistentry>
 
         <varlistentry>
-          <term><cmdsynopsis><command>list_consumers</command></cmdsynopsis></term>
+          <term><cmdsynopsis><command>list_consumers</command><arg choice="opt">-p <replaceable>vhostpath</replaceable></arg></cmdsynopsis></term>
           <listitem>
             <para>
               List consumers, i.e. subscriptions to a queue's message
@@ -1276,6 +1276,24 @@
               in order, the queue name, channel process id, consumer tag, and a
               boolean indicating whether acknowledgements are expected from the
               consumer.
+            </para>
+          </listitem>
+        </varlistentry>
+        <varlistentry>
+          <term><cmdsynopsis><command>report</command></cmdsynopsis></term>
+          <listitem>
+            <para>
+              Generate a server status report containing a concatenation of all server status
+              information for support purposes. The output should be redirected to a
+              file when accompanying a support request.
+            </para>
+            <para role="example-prefix">
+              For example:
+            </para>
+            <screen role="example">rabbitmqctl report > server_report.txt</screen>
+            <para role="example">
+              This command creates a server report which may be attached to a
+              support request email.
             </para>
           </listitem>
         </varlistentry>

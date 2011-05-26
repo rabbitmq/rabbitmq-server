@@ -1162,7 +1162,7 @@ test_server_status() ->
     {ok, _C} = gen_tcp:connect(H, P, []),
     timer:sleep(100),
     ok = info_action(list_connections,
-                     rabbit_networking:connection_info_keys(), false),
+                     rabbit_networking:info_keys(), false),
     %% close_connection
     [ConnPid] = rabbit_networking:connections(),
     ok = control_action(close_connection, [rabbit_misc:pid_to_string(ConnPid),
