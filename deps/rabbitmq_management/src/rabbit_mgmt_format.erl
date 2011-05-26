@@ -317,11 +317,17 @@ a2b(A) ->
 %% Items can be connections, channels, consumers or queues, hence remove takes
 %% various items.
 strip_pids(Item = [T | _]) when is_tuple(T) ->
+    {struct, Args} = proplists:get_value(arguments, Item, {struct, []}),
+    MirrorFun = case proplists:get_value(<<"x-mirror">>, Args) of
+                    undefined -> fun remove/1;
+                    _         -> fun (Pids) ->
+                                         [{mirror_nodes,
+                                           [node(Pid) || Pid <- Pids]}]
+                                 end
+                end,
     format(Item,
            [{fun node_from_pid/1, [pid]},
             {fun remove/1,        [connection, owner_pid, queue, channel]},
-            {fun (Pids) ->
-                     [{mirror_nodes, [node(Pid) || Pid <- Pids]}]
-             end,                 [mirror_pids]}]);
+            {MirrorFun,           [mirror_pids]}]);
 
 strip_pids(Items) -> [strip_pids(I) || I <- Items].

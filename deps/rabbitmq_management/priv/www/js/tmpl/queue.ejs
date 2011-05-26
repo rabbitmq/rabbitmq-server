@@ -175,6 +175,54 @@
   </div>
 </div>
 
+<% if (queue.mirror_nodes != undefined && user_administrator) {
+   var nodes = JSON.parse(sync_get('/nodes'));
+ %>
+<div class="section-hidden">
+  <h2>Manage mirrors</h2>
+  <div class="hider">
+    <table class="two-col-layout">
+      <tr>
+        <td class="updateable">
+          <h3>Add</h3>
+          <form action="#/mirrors" method="put">
+            <input type="hidden" name="vhost" value="<%= queue.vhost %>"/>
+            <input type="hidden" name="queue" value="<%= queue.name %>"/>
+            <select name="node">
+              <% for (var i = 0; i < nodes.length; i++) {
+                   var node = nodes[i].name;
+               %>
+                 <option value="<%= node %>"><%= node %></option>
+              <% } %>
+            </select>
+            <br/>
+            <input type="submit" value="Add"/>
+          </form>
+        </td>
+        <td>
+          <% if (queue.mirror_nodes.length > 0) { %>
+          <h3>Remove</h3>
+          <form action="#/mirrors" method="delete">
+            <input type="hidden" name="vhost" value="<%= queue.vhost %>"/>
+            <input type="hidden" name="queue" value="<%= queue.name %>"/>
+            <select name="node">
+              <% for (var i = 0; i < queue.mirror_nodes.length; i++) {
+                   var node = queue.mirror_nodes[i];
+              %>
+                 <option value="<%= node %>"><%= node %></option>
+              <% } %>
+            </select>
+            <br/>
+            <input type="submit" value="Remove"/>
+          </form>
+          <% } %>
+        </td>
+      </tr>
+    </table>
+  </div>
+</div>
+<% } %>
+
 <div class="section-hidden">
   <h2>Delete / purge</h2>
   <div class="hider">
