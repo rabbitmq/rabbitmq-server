@@ -29,7 +29,7 @@
 
 -behaviour(rabbit_exchange_type).
 
--export([description/0, route/2, serialise_events/0]).
+-export([description/0, serialise_events/0, route/2]).
 -export([validate/1, create/2, delete/3,
          add_binding/3, remove_bindings/3, assert_args_equivalence/2]).
 
@@ -41,8 +41,7 @@ description() ->
 
 serialise_events() -> true.
 
-route(X, Delivery) ->
-    with_module(X, fun (M) -> M:route(X, Delivery) end).
+route(X, Delivery) -> with_module(X, fun (M) -> M:route(X, Delivery) end).
 
 validate(X = #exchange{arguments = Args}) ->
     validate_arg(<<"upstreams">>, array,   Args),
@@ -103,8 +102,6 @@ serial(Serial, X) ->
         false -> none
     end.
 
-%%----------------------------------------------------------------------------
-
 with_module(#exchange{ arguments = Args }, Fun) ->
     %% TODO should this be cached? It's on the publish path.
     {longstr, Type} = rabbit_misc:table_lookup(Args, <<"type">>),
@@ -112,14 +109,10 @@ with_module(#exchange{ arguments = Args }, Fun) ->
                      exchange, rabbit_exchange:check_type(Type)),
     Fun(Module).
 
-%%----------------------------------------------------------------------------
-
 is_federation_exchange(Name = #resource{kind = exchange}) ->
     rabbit_federation_util:has_purpose_arg(Name);
 is_federation_exchange(_) ->
     false.
-
-%%----------------------------------------------------------------------------
 
 exchange_to_sup_args(X = #exchange{name = Name, arguments = Args}) ->
     {array, UpstreamTables} = rabbit_misc:table_lookup(Args, <<"upstreams">>),
@@ -156,5 +149,4 @@ check_arg(Table, K, Ts, Mandatory) ->
         {_,       false} -> ok
     end.
 
-fail(Fmt, Args) ->
-    rabbit_misc:protocol_error(precondition_failed, Fmt, Args).
+fail(Fmt, Args) -> rabbit_misc:protocol_error(precondition_failed, Fmt, Args).

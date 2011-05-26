@@ -47,5 +47,4 @@ set_active_suffix(X, Upstream, Suffix) ->
 
 %%----------------------------------------------------------------------------
 
-file() ->
-    rabbit_mnesia:dir() ++ "/" ++ ?DETS_NAME.
+file() -> rabbit_mnesia:dir() ++ "/" ++ ?DETS_NAME.

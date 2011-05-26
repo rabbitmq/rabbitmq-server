@@ -54,6 +54,22 @@ init(Args = {_, X}) ->
     gen_server2:cast(self(), maybe_go),
     {ok, {not_started, Args}}.
 
+handle_call({enqueue, _, _}, _From, State = {not_started, _}) ->
+    {reply, ok, State};
+
+handle_call({enqueue, Serial, Cmd}, From,
+            State = #state{waiting_cmds = Waiting}) ->
+    Waiting1 = gb_trees:insert(Serial, Cmd, Waiting),
+    {reply, ok,
+     play_back_commands(Serial, From, State#state{waiting_cmds = Waiting1})};
+
+handle_call(stop, _From, State = #state{connection = Conn, queue = Q}) ->
+    disposable_channel_call(Conn, #'queue.delete'{queue = Q}),
+    {stop, normal, ok, State};
+
+handle_call(Msg, _From, State) ->
+    {stop, {unexpected_call, Msg}, State}.
+
 handle_cast(maybe_go, S0 = {not_started, _Args}) ->
     case rabbit_federation_util:federation_up() of
         true  -> go(S0);
@@ -70,22 +86,6 @@ handle_cast(go, State) ->
 
 handle_cast(Msg, State) ->
     {stop, {unexpected_cast, Msg}, State}.
-
-handle_call({enqueue, _, _}, _From, State = {not_started, _}) ->
-    {reply, ok, State};
-
-handle_call({enqueue, Serial, Cmd}, From,
-            State = #state{waiting_cmds = Waiting}) ->
-    Waiting1 = gb_trees:insert(Serial, Cmd, Waiting),
-    {reply, ok,
-     play_back_commands(Serial, From, State#state{waiting_cmds = Waiting1})};
-
-handle_call(stop, _From, State = #state{connection = Conn, queue = Q}) ->
-    disposable_channel_call(Conn, #'queue.delete'{queue = Q}),
-    {stop, normal, ok, State};
-
-handle_call(Msg, _From, State) ->
-    {stop, {unexpected_call, Msg}, State}.
 
 handle_info(#'basic.consume_ok'{}, State) ->
     {noreply, State};
@@ -131,9 +131,6 @@ handle_info({'DOWN', _Ref, process, Ch, Reason},
 handle_info(Msg, State) ->
     {stop, {unexpected_info, Msg}, State}.
 
-code_change(_OldVsn, State, _Extra) ->
-    {ok, State}.
-
 terminate(_Reason, {not_started, _}) ->
     ok;
 
@@ -144,6 +141,9 @@ terminate(_Reason, #state{downstream_channel    = DCh,
     ensure_closed(DConn, DCh),
     ensure_closed(Conn, Ch),
     ok.
+
+code_change(_OldVsn, State, _Extra) ->
+    {ok, State}.
 
 %%----------------------------------------------------------------------------
 
@@ -165,8 +165,6 @@ play_back_commands(Serial, From, State = #state{waiting_cmds = Waiting}) ->
                  end;
         true  -> State
     end.
-
-%%----------------------------------------------------------------------------
 
 open(Params) ->
     case amqp_connection:start(Params) of
@@ -223,12 +221,7 @@ check_remove_binding(B = #binding{destination = Dest},
         _ -> {true,  State#state{bindings = dict:store(K, Dests, Bs)}}
     end.
 
-key(#binding{source = Source,
-             key    = Key,
-             args   = Args}) ->
-    {Source, Key, Args}.
-
-%%----------------------------------------------------------------------------
+key(#binding{source = Source, key = Key, args = Args}) -> {Source, Key, Args}.
 
 go(S0 = {not_started, {Upstream, #exchange{name    = DownstreamX,
                                            durable = Durable}}}) ->
@@ -344,8 +337,6 @@ delete_upstream_queue(Conn, Q) ->
 delete_upstream_exchange(Conn, X) ->
     disposable_channel_call(Conn, #'exchange.delete'{exchange = X}).
 
-%%----------------------------------------------------------------------------
-
 disposable_channel_call(Conn, Method) ->
     {ok, Ch} = amqp_connection:open_channel(Conn),
     try
@@ -361,8 +352,6 @@ ensure_closed(Conn, Ch) ->
 
 ensure_closed(Ch) ->
     catch amqp_channel:close(Ch).
-
-%%----------------------------------------------------------------------------
 
 %% For the time being just don't forward anything that's already been
 %% forwarded.

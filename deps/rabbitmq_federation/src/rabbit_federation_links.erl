@@ -21,19 +21,13 @@
 
 -export([go_all/0, add_binding/3, remove_binding/3, stop/1, join/1]).
 
-go_all() ->
-    cast_all(go).
+go_all() -> cast_all(go).
 
-add_binding(Serial, X, B) ->
-    call(X, {enqueue, Serial, {add_binding, B}}).
+add_binding(Serial, X, B) -> call(X, {enqueue, Serial, {add_binding, B}}).
 
-remove_binding(Serial, X, B) ->
-    call(X, {enqueue, Serial, {remove_binding, B}}).
+remove_binding(Serial, X, B) -> call(X, {enqueue, Serial, {remove_binding, B}}).
 
-stop(X) ->
-    call(X, stop).
-
-%%----------------------------------------------------------------------------
+stop(X) -> call(X, stop).
 
 join(Name) ->
     pg2_fixed:create(Name),

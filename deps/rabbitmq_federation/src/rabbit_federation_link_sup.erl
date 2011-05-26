@@ -26,8 +26,7 @@
 -export([start_link/1]).
 -export([init/1]).
 
-start_link(Args) ->
-    supervisor2:start_link(?MODULE, Args).
+start_link(Args) -> supervisor2:start_link(?MODULE, Args).
 
 %%----------------------------------------------------------------------------
 

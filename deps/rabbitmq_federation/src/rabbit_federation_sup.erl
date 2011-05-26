@@ -37,6 +37,8 @@
                     {requires,    kernel_ready},
                     {enables,     rabbit_federation_exchange}]}).
 
+%%----------------------------------------------------------------------------
+
 start_link() ->
     rabbit_federation_db:init(),
     supervisor:start_link({local, ?SUPERVISOR}, ?MODULE, []).
@@ -56,8 +58,6 @@ stop_child(Args) ->
 
 %%----------------------------------------------------------------------------
 
-id(Args) ->
-    Args.
+id(Args) -> Args.
 
-init([]) ->
-    {ok, {{one_for_one, 3, 10},[]}}.
+init([]) -> {ok, {{one_for_one, 3, 10},[]}}.

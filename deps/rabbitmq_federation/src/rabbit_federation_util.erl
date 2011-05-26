@@ -19,13 +19,12 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_federation.hrl").
 
--export([purpose_arg/0, has_purpose_arg/1, upstream_from_table/2,
-         local_params/0, federation_up/0]).
+-export([purpose_arg/0, has_purpose_arg/1, federation_up/0, local_params/0,
+         upstream_from_table/2]).
 
 %%----------------------------------------------------------------------------
 
-purpose_arg() ->
-    {<<"x-purpose">>, longstr, <<"federation">>}.
+purpose_arg() -> {<<"x-purpose">>, longstr, <<"federation">>}.
 
 has_purpose_arg(X) ->
     #exchange{arguments = Args} = rabbit_exchange:lookup_or_die(X),
@@ -72,7 +71,9 @@ merge(Props1, Props2) ->
                 end, Props2, Props1).
 
 binaryise_all(Items) -> [binaryise(I) || I <- Items].
+
 binaryise(Props) -> [{K, binaryise0(V)} || {K, V} <- Props].
+
 binaryise0(L) when is_list(L) -> list_to_binary(L);
 binaryise0(X)                 -> X.
 
@@ -124,12 +125,9 @@ set_heartbeat(Params, Props) ->
 %% TODO it would be nice to support arbitrary mechanisms here.
 set_mechanisms(Params, Props) ->
     case proplists:get_value(mechanism, Props, default) of
-        default ->
-            Params;
-        'EXTERNAL' ->
-            Params#amqp_params_network{
-              auth_mechanisms = [fun amqp_auth_mechanisms:external/3]};
-        M ->
-            exit({unsupported_mechanism, M})
+        default    -> Params;
+        'EXTERNAL' -> Params#amqp_params_network{
+                        auth_mechanisms =
+                            [fun amqp_auth_mechanisms:external/3]};
+        M          -> exit({unsupported_mechanism, M})
     end.
-
