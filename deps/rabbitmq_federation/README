@@ -57,21 +57,21 @@ not provide any routing logic. The routing logic is implemented by a
 backing type, provided to the exchange as an argument.
 
 Messages can be published to a federated exchange like any
-other. However, a federated exchange will also receive messages from
+other. However, a federated exchange also receives messages from
 one or more "upstream" exchanges, located on remote brokers.
 
 (Well, you don't need to have upstream exchanges, and they don't need
 to be remote. But then you don't get anything very useful.)
 
 An upstream exchange can be a regular exchange or a federation
-exchange. It is expected that upstream and downstream exchanges will
-have the same type (or backing type). Mixing types will lead to
-strange routing behaviour.
+exchange. It is expected that upstream and downstream exchanges have
+the same type (or backing type). Mixing types will lead to strange
+routing behaviour.
 
 Inter-broker communication is implemented using AMQP (optionally
-secured with SSL). The federation plugin will ensure that only
-messages that will be received from the downstream exchange are sent
-over the wire.
+secured with SSL). The federation plugin ensures that only messages
+that will be received from the downstream exchange are sent over the
+wire.
 
 A typical use would be to have the same "logical" exchange distributed
 over many brokers. This would be achieved by having the exchange
@@ -79,7 +79,7 @@ declared as a federated exchange in each broker, with upstreams
 corresponding to all the other brokers.
 
 Other topologies are possible; however one notable current limitation
-is that the federation plugin will not forward the same message more
+is that the federation plugin does not forward the same message more
 than once. Therefore your inter-broker topology needs to be fully
 connected. We intend to remove this limitation in future.
 
@@ -196,7 +196,7 @@ This is a less common case, but in case you want to do this:
    and may also have "protocol", "port", "virtual_host" and "exchange"
    fields. TODO example.
 
- * Connection information and SSL parameters will still be taken from the
+ * Connection information and SSL parameters are still taken from the
    static configuration.
 
 Example using the Java API:
