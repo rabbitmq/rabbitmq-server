@@ -80,7 +80,7 @@ handle_cast(go, S0 = {not_started, _Args}) ->
     go(S0);
 
 %% There's a small race - I think we can realise federation is up
-%% before go_all gets invoked. Ignore.
+%% before 'go' gets invoked. Ignore.
 handle_cast(go, State) ->
     {noreply, State};
 

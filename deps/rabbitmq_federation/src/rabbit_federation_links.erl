@@ -19,9 +19,9 @@
 -include("rabbit_federation.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
--export([go_all/0, add_binding/3, remove_binding/3, stop/1, join/1]).
+-export([go/0, add_binding/3, remove_binding/3, stop/1, join/1]).
 
-go_all() -> cast_all(go).
+go() -> cast(go).
 
 add_binding(Serial, X, B) -> call(X, {enqueue, Serial, {add_binding, B}}).
 

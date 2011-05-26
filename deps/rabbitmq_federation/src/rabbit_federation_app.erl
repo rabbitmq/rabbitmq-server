@@ -29,8 +29,8 @@
 start(_Type, _StartArgs) ->
     {ok, Xs} = application:get_env(exchanges),
     [declare_exchange(X) || X <- Xs],
-    rabbit_federation_links:go_all(),
-    supervisor:start_link({local,?MODULE},?MODULE,[]).
+    rabbit_federation_links:go(),
+    supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
 stop(_State) ->
     ok.
