@@ -242,7 +242,7 @@ distclean: clean
 # Do not fold the cp into previous line, it's there to stop the file being
 # generated but empty if we fail
 $(SOURCE_DIR)/%_usage.erl:
-	xsltproc --stringparam modulename "`basename $@ .erl`" \
+	xsltproc --novalid --stringparam modulename "`basename $@ .erl`" \
 		$(DOCS_DIR)/usage.xsl $< > $@.tmp
 	sed -e 's/"/\\"/g' -e 's/%QUOTE%/"/g' $@.tmp > $@.tmp2
 	fold -s $@.tmp2 > $@.tmp3
