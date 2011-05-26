@@ -69,9 +69,8 @@ the same type (or backing type). Mixing types will lead to strange
 routing behaviour.
 
 Inter-broker communication is implemented using AMQP (optionally
-secured with SSL). The federation plugin ensures that only messages
-that will be received from the downstream exchange are sent over the
-wire.
+secured with SSL). The federation plugin will only send messages over
+the wire for which the downstream exchange has a subscription.
 
 A typical use would be to have the same "logical" exchange distributed
 over many brokers. This would be achieved by having the exchange
@@ -122,16 +121,21 @@ A reasonably verbose static configuration might look like:
    ]
   }
 
-Within the list of exchanges, the upstreams parameter is a list of
-remote exchanges whose messages should be federated to the local
-exchange. You can specify host, port, protocol, virtual_host and
-exchange here. Only host is mandatory; if protocol is omitted the
-protocol is taken as "amqp", and if virtual_host or exchange are
-omitted the default is the same as the downstream exchange.
+The list of exchanges looks like a set of exchange.declares for the
+most part, but with each declaration including a list of upstream
+exchanges. Note that the type parameter must match the type of the
+upstream exchanges for routing to work at all sensibly.
 
-Most of the rest of the list of exchanges looks like a set of
-exchange.declares, but note that the type parameter must match the
-type of the upstream exchanges for routing to work at all sensibly.
+The upstreams parameter is a list of remote exchanges whose messages
+should be federated to the local exchange. You can specify host, port,
+protocol, virtual_host and exchange here. Only host is mandatory; if
+protocol is omitted the protocol is taken as "amqp", and if
+virtual_host or exchange are omitted the default is the same as the
+downstream exchange.
+
+Note that the static configuration will declare the downstream
+exchanges (on the local broker). It does not ensure the upstream
+exchanges exist.
 
 The brokers list provides information on how to connect to brokers
 mentioned in the upstreams list. It can match on the following properties:
@@ -156,9 +160,10 @@ password
   - password to use. Default is "guest".
 
 mechanism
-  - SASL mechanism to use. Either default (to use by default PLAIN or
-    AMQPLAIN), or 'EXTERNAL' to use SASL EXTERNAL authentication
-    (e.g. rabbitmq-auth-mechanism-ssl)
+  - SASL mechanism to use. One of:
+      'default'  - to use PLAIN or AMQPLAIN by negotiation
+      'EXTERNAL' - to use SASL EXTERNAL authentication - e.g.
+                   rabbitmq-auth-mechanism-ssl
 
 prefetch_count
   - limit on the maximum number of unacknowledged messages in flight
@@ -214,3 +219,21 @@ args.put("upstreams", upstreams);
 
 Channel ch = ...;
 ch.exchangeDeclare("my-federated-exchange", "x-federation", true, false, args);
+
+
+Possible Future Enhancements
+============================
+
+* Compatibility with clustering
+
+* Simple status reporting, similar to the shovel
+
+* Add and remove upstream brokers dynamically
+
+* Mode to federate all exchanges
+
+* Status information and control in the management plugin
+
+* Smarter routing logic
+
+* Support for RPC-like patterns
