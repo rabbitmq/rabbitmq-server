@@ -18,10 +18,10 @@
 
 -export([init/0]).
 
--export([get_active_suffix/2, set_active_suffix/3]).
+-export([get_active_suffix/3, set_active_suffix/3]).
 
 %% TODO get rid of this dets table, use mnesia
--define(DETS_NAME, "rabbit_federation_exchange").
+-define(DETS_NAME, "rabbit_federation_exchange.dat").
 
 init() ->
     F = file(),
@@ -36,9 +36,9 @@ init() ->
 
 %%----------------------------------------------------------------------------
 
-get_active_suffix(X, Upstream) ->
+get_active_suffix(X, Upstream, Default) ->
     case dets:lookup(file(), {suffix, X, Upstream}) of
-        []       -> <<"A">>;
+        []       -> Default;
         [{_, S}] -> S
     end.
 

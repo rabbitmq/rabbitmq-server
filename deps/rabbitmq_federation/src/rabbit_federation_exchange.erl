@@ -19,8 +19,7 @@
 -rabbit_boot_step({?MODULE,
                    [{description, "federation exchange type"},
                     {mfa, {rabbit_registry, register,
-                           [exchange, <<"x-federation">>,
-                            rabbit_federation_exchange]}},
+                           [exchange, <<"x-federation">>, ?MODULE]}},
                     {requires, rabbit_registry},
                     {enables, recovery}]}).
 
@@ -58,23 +57,22 @@ validate(X = #exchange{arguments = Args}) ->
 create(transaction, X) ->
     with_module(X, fun (M) -> M:create(transaction, X) end);
 create(none, X) ->
-    {ok, _} = rabbit_federation_sup:start_child(exchange_to_sup_args(X)),
+    {ok, _} = rabbit_federation_sup:start_child(X, exchange_to_sup_args(X)),
     with_module(X, fun (M) -> M:create(none, X) end).
 
 delete(transaction, X, Bs) ->
     with_module(X, fun (M) -> M:delete(transaction, X, Bs) end);
 delete(none, X, Bs) ->
-    rabbit_federation_links:stop(X),
-    ok = rabbit_federation_sup:stop_child(exchange_to_sup_args(X)),
+    rabbit_federation_link:stop(X),
+    ok = rabbit_federation_sup:stop_child(X),
     with_module(X, fun (M) -> M:delete(none, X, Bs) end).
 
 add_binding(transaction, X, B) ->
     with_module(X, fun (M) -> M:add_binding(transaction, X, B) end);
 add_binding(Serial, X, B = #binding{destination = Dest}) ->
-    %% TODO add bindings only if needed.
     case is_federation_exchange(Dest) of
         true  -> ok;
-        false -> rabbit_federation_links:add_binding(Serial, X, B)
+        false -> rabbit_federation_link:add_binding(Serial, X, B)
     end,
     with_module(X, fun (M) -> M:add_binding(serial(Serial, X), X, B) end).
 
@@ -83,7 +81,7 @@ remove_bindings(transaction, X, Bs) ->
 remove_bindings(Serial, X, Bs) ->
     [case is_federation_exchange(Dest) of
          true  -> ok;
-         false -> rabbit_federation_links:remove_binding(Serial, X, B)
+         false -> rabbit_federation_link:remove_binding(Serial, X, B)
      end || B = #binding{destination = Dest} <- Bs],
     with_module(X, fun (M) -> M:remove_bindings(serial(Serial, X), X, Bs) end).
 
@@ -105,7 +103,7 @@ with_module(#exchange{ arguments = Args }, Fun) ->
     %% TODO should this be cached? It's on the publish path.
     {longstr, Type} = rabbit_misc:table_lookup(Args, <<"type">>),
     {ok, Module} = rabbit_registry:lookup_module(
-                     exchange, rabbit_exchange:check_type(Type)),
+                     exchange, list_to_existing_atom(binary_to_list(Type))),
     Fun(Module).
 
 is_federation_exchange(Name = #resource{kind = exchange}) ->

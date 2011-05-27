@@ -26,6 +26,8 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
+-export([go/0, add_binding/3, remove_binding/3, stop/1]).
+
 -export([add_routing_to_headers/2]).
 
 -define(ROUTING_HEADER, <<"x-forwarding">>).
@@ -43,14 +45,38 @@
 
 %%----------------------------------------------------------------------------
 
-start_link(Args) ->
-    gen_server2:start_link(?MODULE, Args, [{timeout, infinity}]).
+go() -> cast(go).
+
+add_binding(Serial, X, B) -> call(X, {enqueue, Serial, {add_binding, B}}).
+
+remove_binding(Serial, X, B) -> call(X, {enqueue, Serial, {remove_binding, B}}).
+
+stop(X) -> call(X, stop).
+
+join(Name) ->
+    pg2_fixed:create(Name),
+    ok = pg2_fixed:join(Name, self()).
+
+call(X, Msg) -> [gen_server2:call(Pid, Msg, infinity) || Pid <- x(X)].
+
+cast(Msg) -> [gen_server2:cast(Pid, Msg) || Pid <- all()].
+
+all() ->
+    pg2_fixed:create(rabbit_federation_exchanges),
+    pg2_fixed:get_members(rabbit_federation_exchanges).
+
+x(X) ->
+    pg2_fixed:create({rabbit_federation_exchange, X}),
+    pg2_fixed:get_members({rabbit_federation_exchange, X}).
 
 %%----------------------------------------------------------------------------
 
+start_link(Args) ->
+    gen_server2:start_link(?MODULE, Args, [{timeout, infinity}]).
+
 init(Args = {_, X}) ->
-    rabbit_federation_links:join(rabbit_federation_exchanges),
-    rabbit_federation_links:join({rabbit_federation_exchange, X}),
+    join(rabbit_federation_exchanges),
+    join({rabbit_federation_exchange, X}),
     gen_server2:cast(self(), maybe_go),
     {ok, {not_started, Args}}.
 
@@ -122,11 +148,12 @@ handle_info({#'basic.deliver'{%% TODO do we care?
     {noreply, State};
 
 handle_info({'DOWN', _Ref, process, Ch, Reason},
-            State = #state{ downstream_channel = DCh }) ->
-    case Ch of
-        DCh -> {stop, {downstream_channel_down, Reason}, State};
-        _   -> {stop, {upstream_channel_down, Reason}, State}
-    end;
+            State = #state{ channel = Ch }) ->
+    {stop, {upstream_channel_down, Reason}, State};
+
+handle_info({'DOWN', _Ref, process, Ch, Reason},
+            State = #state{ downstream_channel = Ch }) ->
+    {stop, {downstream_channel_down, Reason}, State};
 
 handle_info(Msg, State) ->
     {stop, {unexpected_info, Msg}, State}.
@@ -181,14 +208,14 @@ add_binding(B = #binding{key = Key, args = Args},
             State = #state{channel = Ch, internal_exchange = InternalX,
                            upstream = #upstream{exchange = X}}) ->
     case check_add_binding(B, State) of
-        {true,  State1} -> ok;
+        {true,  State1} -> State1;
         {false, State1} -> amqp_channel:call(
                              Ch, #'exchange.bind'{destination = InternalX,
                                                   source      = X,
                                                   routing_key = Key,
-                                                  arguments   = Args})
-    end,
-    State1.
+                                                  arguments   = Args}),
+                           State1
+    end.
 
 check_add_binding(B = #binding{destination = Dest},
                   State = #state{bindings = Bs}) ->
@@ -203,14 +230,14 @@ remove_binding(B = #binding{key = Key, args = Args},
                State = #state{channel = Ch, internal_exchange = InternalX,
                               upstream = #upstream{exchange = X}}) ->
     case check_remove_binding(B, State) of
-        {true,  State1} -> ok;
+        {true,  State1} -> State1;
         {false, State1} -> amqp_channel:call(
                              Ch, #'exchange.unbind'{destination = InternalX,
                                                     source      = X,
                                                     routing_key = Key,
-                                                    arguments   = Args})
-    end,
-    State1.
+                                                    arguments   = Args}),
+                           State1
+    end.
 
 check_remove_binding(B = #binding{destination = Dest},
                      State = #state{bindings = Bs}) ->
@@ -221,7 +248,7 @@ check_remove_binding(B = #binding{destination = Dest},
         _ -> {true,  State#state{bindings = dict:store(K, Dests, Bs)}}
     end.
 
-key(#binding{source = Source, key = Key, args = Args}) -> {Source, Key, Args}.
+key(#binding{key = Key, args = Args}) -> {Key, Args}.
 
 go(S0 = {not_started, {Upstream, #exchange{name    = DownstreamX,
                                            durable = Durable}}}) ->
@@ -287,7 +314,8 @@ ensure_upstream_bindings(State = #state{upstream            = Upstream,
                                         queue               = Q}) ->
     #upstream{exchange = X,
               params   = #amqp_params_network{virtual_host = VHost}} = Upstream,
-    OldSuffix = rabbit_federation_db:get_active_suffix(DownstreamX, Upstream),
+    OldSuffix = rabbit_federation_db:get_active_suffix(DownstreamX, Upstream,
+                                                       <<"A">>),
     Suffix = case OldSuffix of
                  <<"A">> -> <<"B">>;
                  <<"B">> -> <<"A">>
@@ -373,7 +401,7 @@ add_routing_to_headers(Headers, Info) ->
                 undefined          -> [];
                 {array, Existing}  -> Existing
             end,
-    set_table_value(Headers, ?ROUTING_HEADER, array, [{table, Info}|Prior]).
+    set_table_value(Headers, ?ROUTING_HEADER, array, [{table, Info} | Prior]).
 
 upstream_info(#upstream{params   = #amqp_params_network{host         = H,
                                                         port         = P,
@@ -392,13 +420,5 @@ upstream_info(#upstream{params   = #amqp_params_network{host         = H,
 
 %% TODO move this to rabbit_misc?
 set_table_value(Table, Key, Type, Value) ->
-    Stripped =
-      case rabbit_misc:table_lookup(Table, Key) of
-          {Type, _}  -> {_, Rest} = lists:partition(fun ({K, _, _}) ->
-                                                            K == Key
-                                                    end, Table),
-                        Rest;
-          {Type2, _} -> exit({type_mismatch_updating_table, Type, Type2});
-          undefined  -> Table
-      end,
-    rabbit_misc:sort_field_table([{Key, Type, Value}|Stripped]).
+    rabbit_misc:sort_field_table(
+      lists:keystore(Key, 1, Table, {Key, Type, Value})).

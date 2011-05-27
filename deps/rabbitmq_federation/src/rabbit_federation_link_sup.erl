@@ -32,7 +32,7 @@ start_link(Args) -> supervisor2:start_link(?MODULE, Args).
 
 init({Upstreams, X}) ->
     Specs = [spec(Upstream, X) || Upstream <- Upstreams],
-    {ok, {{one_for_one, 2, 2}, Specs}}.
+    {ok, {{one_for_one, 3, 10}, Specs}}.
 
 spec(Upstream = #upstream{reconnect_delay = Delay}, X) ->
     {Upstream, {rabbit_federation_link, start_link, [{Upstream, X}]},

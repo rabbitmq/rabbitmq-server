@@ -23,7 +23,7 @@
 -include("rabbit_federation.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
--export([start_link/0, start_child/1, stop_child/1]).
+-export([start_link/0, start_child/2, stop_child/1]).
 
 -export([init/1]).
 
@@ -43,21 +43,19 @@ start_link() ->
     rabbit_federation_db:init(),
     supervisor:start_link({local, ?SUPERVISOR}, ?MODULE, []).
 
-start_child(Args) ->
+start_child(Id, Args) ->
     {ok, Pid} = supervisor:start_child(
                   ?SUPERVISOR,
-                  {id(Args), {rabbit_federation_link_sup, start_link, [Args]},
+                  {Id, {rabbit_federation_link_sup, start_link, [Args]},
                    transient, ?MAX_WAIT, supervisor,
                    [rabbit_federation_link_sup]}),
     {ok, Pid}.
 
-stop_child(Args) ->
-    ok = supervisor:terminate_child(?SUPERVISOR, id(Args)),
-    ok = supervisor:delete_child(?SUPERVISOR, id(Args)),
+stop_child(Id) ->
+    ok = supervisor:terminate_child(?SUPERVISOR, Id),
+    ok = supervisor:delete_child(?SUPERVISOR, Id),
     ok.
 
 %%----------------------------------------------------------------------------
-
-id(Args) -> Args.
 
 init([]) -> {ok, {{one_for_one, 3, 10},[]}}.

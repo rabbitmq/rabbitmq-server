@@ -102,6 +102,7 @@ set_ssl_options(Params, Props) ->
                        Params#amqp_params_network{ssl_options = Opts}
     end.
 
+%% TODO this should be part of the Erlang client - see bug 24138
 set_default_port(Params, _Props) ->
     case Params#amqp_params_network.port of
         undefined  -> Port = case Params#amqp_params_network.ssl_options of
