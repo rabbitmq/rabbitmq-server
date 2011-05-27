@@ -274,14 +274,8 @@ action(list_channels, Node, Args, _Opts, Inform) ->
 action(list_consumers, Node, _Args, Opts, Inform) ->
     Inform("Listing consumers", []),
     VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
-    InfoKeys = [queue_name, channel_pid, consumer_tag, ack_required],
-    case rpc_call(Node, rabbit_amqqueue, consumers_all, [VHostArg]) of
-        L when is_list(L) -> display_info_list(
-                               [lists:zip(InfoKeys, tuple_to_list(X)) ||
-                                   X <- L],
-                               InfoKeys);
-        Other             -> Other
-    end;
+    display_info_list(rpc_call(Node, rabbit_amqqueue, consumers_all, [VHostArg]),
+                      rabbit_amqqueue:consumer_info_keys());
 
 action(trace_on, Node, [], Opts, Inform) ->
     VHost = proplists:get_value(?VHOST_OPT, Opts),
@@ -313,21 +307,34 @@ action(list_permissions, Node, [], Opts, Inform) ->
 
 action(report, Node, _Args, _Opts, Inform) ->
     io:format("Reporting server status on ~p~n", [erlang:universaltime()]),
-    [action(status, ClusteredNode, [], [], Inform) ||
-     ClusteredNode <- rpc_call(Node, rabbit_mnesia, running_clustered_nodes, [])],
-    Report = fun (Module, VHostArg) ->
-                 io:format("%% ~p~n", [[Module] ++ VHostArg]),
-                 case Results = rpc_call(Node, Module, info_all, VHostArg) of
-                     [Row|_] -> {InfoItems,_} = lists:unzip(Row),
-                                display_info_list(Results, InfoItems);
-                     _       -> ok
+    [action(status, ClusterNode, [], [], Inform) ||
+     ClusterNode <- rpc_call(Node, rabbit_mnesia, running_clustered_nodes, [])],
+    Report = fun ({Descr, Module, InfoFun, KeysFun}, VHostArg) ->
+                 io:format("%% ~p~n", [[Descr] ++ VHostArg]),
+                 case Results = rpc_call(Node, Module, InfoFun, VHostArg) of
+                     [_|_] -> InfoItems = rpc_call(Node, Module, KeysFun, []),
+                              display_info_list(Results, InfoItems);
+                     _     -> ok
                  end
              end,
-    GlobalQueries = [rabbit_channel],
-    VHostQueries  = [rabbit_amqqueue, rabbit_exchange, rabbit_binding],
-    [Report(M, [])  || M <- GlobalQueries],
-    [Report(M, [V]) || V <- rpc_call(Node, rabbit_vhost, list, []),
-                       M <- VHostQueries],
+    GlobalQueries = [{"connections", rabbit_networking, connection_info_all,
+                      connection_info_keys},
+                     {"channels", rabbit_channel, connection_info_all,
+                      info_keys}],
+    VHostQueries  = [{"queues", rabbit_amqqueue, info_all, info_keys},
+                     {"exchanges", rabbit_exchange, info_all, info_keys},
+                     {"bindings", rabbit_binding, info_all, info_keys},
+                     {"consumers", rabbit_amqqueue, consumers_all,
+                      consumer_info_keys}],
+    VHosts = rpc_call(Node, rabbit_vhost, list, []),
+    [Report(Q, [])  || Q <- GlobalQueries],
+    [Report(Q, [V]) || V <- VHosts, Q <- VHostQueries],
+    [begin
+       io:format("%% ~p~n", [["permissions" | [VHost]]]),
+       display_list(call(Node,
+                         {rabbit_auth_backend_internal, list_vhost_permissions,
+                         [binary_to_list(VHost)]}))
+     end || VHost <- VHosts],
     ok.
 
 %%----------------------------------------------------------------------------
