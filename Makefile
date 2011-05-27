@@ -94,7 +94,7 @@ $(DEPS_FILE): $(SOURCES) $(INCLUDES)
 	echo $(subst : ,:,$(foreach FILE,$^,$(FILE):)) | escript generate_deps $@ $(EBIN_DIR)
 
 $(EBIN_DIR)/rabbit.app: $(EBIN_DIR)/rabbit_app.in $(SOURCES) generate_app
-	escript generate_app $@ $(SOURCE_DIR) < $<
+	escript generate_app $(SOURCE_DIR) < $< > $@
 
 $(EBIN_DIR)/%.beam: $(SOURCE_DIR)/%.erl | $(DEPS_FILE)
 	erlc $(ERLC_OPTS) -pa $(EBIN_DIR) $<

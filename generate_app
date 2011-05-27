@@ -1,7 +1,7 @@
 #!/usr/bin/env escript
 %% -*- erlang -*-
 
-main([TargetFile | SrcDirs]) ->
+main(SrcDirs) ->
     Modules = [list_to_atom(filename:basename(F, ".erl")) ||
                   SrcDir <- SrcDirs,
                   F <- filelib:wildcard("*.erl", SrcDir)],
@@ -11,6 +11,4 @@ main([TargetFile | SrcDirs]) ->
             [] -> lists:keyreplace(modules, 1, Properties, {modules, Modules});
             _  -> Properties
         end,
-    file:write_file(
-      TargetFile,
-      io_lib:format("~p.~n", [{application, Application, NewProperties}])).
+    io:format("~p.~n", [{application, Application, NewProperties}]).
