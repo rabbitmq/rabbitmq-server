@@ -1,13 +1,7 @@
 {application, rabbitmq_shovel,
  [{description, "Data Shovel for RabbitMQ"},
   {vsn, "%%VSN%%"},
-  {modules, [
-    rabbit_shovel,
-    rabbit_shovel_status,
-    rabbit_shovel_sup,
-    rabbit_shovel_worker,
-    uri_parser
-  ]},
+  {modules, []},
   {registered, []},
   {env, [{defaults, [{prefetch_count,     0},
                      {auto_ack,           false},
