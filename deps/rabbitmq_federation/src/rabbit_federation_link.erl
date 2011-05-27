@@ -53,22 +53,6 @@ remove_binding(Serial, X, B) -> call(X, {enqueue, Serial, {remove_binding, B}}).
 
 stop(X) -> call(X, stop).
 
-join(Name) ->
-    pg2_fixed:create(Name),
-    ok = pg2_fixed:join(Name, self()).
-
-call(X, Msg) -> [gen_server2:call(Pid, Msg, infinity) || Pid <- x(X)].
-
-cast(Msg) -> [gen_server2:cast(Pid, Msg) || Pid <- all()].
-
-all() ->
-    pg2_fixed:create(rabbit_federation_exchanges),
-    pg2_fixed:get_members(rabbit_federation_exchanges).
-
-x(X) ->
-    pg2_fixed:create({rabbit_federation_exchange, X}),
-    pg2_fixed:get_members({rabbit_federation_exchange, X}).
-
 %%----------------------------------------------------------------------------
 
 start_link(Args) ->
@@ -171,6 +155,24 @@ terminate(_Reason, #state{downstream_channel    = DCh,
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
+
+%%----------------------------------------------------------------------------
+
+call(X, Msg) -> [gen_server2:call(Pid, Msg, infinity) || Pid <- x(X)].
+
+cast(Msg) -> [gen_server2:cast(Pid, Msg) || Pid <- all()].
+
+join(Name) ->
+    pg2_fixed:create(Name),
+    ok = pg2_fixed:join(Name, self()).
+
+all() ->
+    pg2_fixed:create(rabbit_federation_exchanges),
+    pg2_fixed:get_members(rabbit_federation_exchanges).
+
+x(X) ->
+    pg2_fixed:create({rabbit_federation_exchange, X}),
+    pg2_fixed:get_members({rabbit_federation_exchange, X}).
 
 %%----------------------------------------------------------------------------
 
