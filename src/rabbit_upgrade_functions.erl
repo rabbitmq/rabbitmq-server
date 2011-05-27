@@ -29,20 +29,24 @@
 -rabbit_upgrade({semi_durable_route,    mnesia, []}).
 -rabbit_upgrade({exchange_event_serial, mnesia, []}).
 -rabbit_upgrade({trace_exchanges,       mnesia, []}).
+-rabbit_upgrade({mirror_pids,           mnesia, []}).
+-rabbit_upgrade({gm,                    mnesia, []}).
 
 %% -------------------------------------------------------------------
 
 -ifdef(use_specs).
 
--spec(remove_user_scope/0  :: () -> 'ok').
--spec(hash_passwords/0     :: () -> 'ok').
--spec(add_ip_to_listener/0 :: () -> 'ok').
--spec(internal_exchanges/0 :: () -> 'ok').
+-spec(remove_user_scope/0     :: () -> 'ok').
+-spec(hash_passwords/0        :: () -> 'ok').
+-spec(add_ip_to_listener/0    :: () -> 'ok').
+-spec(internal_exchanges/0    :: () -> 'ok').
 -spec(user_to_internal_user/0 :: () -> 'ok').
--spec(topic_trie/0 :: () -> 'ok').
+-spec(topic_trie/0            :: () -> 'ok').
 -spec(exchange_event_serial/0 :: () -> 'ok').
--spec(semi_durable_route/0 :: () -> 'ok').
--spec(trace_exchanges/0 :: () -> 'ok').
+-spec(semi_durable_route/0    :: () -> 'ok').
+-spec(trace_exchanges/0       :: () -> 'ok').
+-spec(mirror_pids/0           :: () -> 'ok').
+-spec(gm/0                    :: () -> 'ok').
 
 -endif.
 
@@ -120,6 +124,23 @@ trace_exchanges() ->
        rabbit_misc:r(VHost, exchange, <<"amq.rabbitmq.trace">>), topic) ||
         VHost <- rabbit_vhost:list()],
     ok.
+
+mirror_pids() ->
+    Tables = [rabbit_queue, rabbit_durable_queue],
+    AddMirrorPidsFun =
+        fun ({amqqueue, Name, Durable, AutoDelete, Owner, Arguments, Pid}) ->
+                {amqqueue, Name, Durable, AutoDelete, Owner, Arguments, Pid, []}
+        end,
+    [ ok = transform(T,
+                     AddMirrorPidsFun,
+                     [name, durable, auto_delete, exclusive_owner, arguments,
+                      pid, mirror_pids])
+      || T <- Tables ],
+    ok.
+
+gm() ->
+    create(gm_group, [{record_name, gm_group},
+                      {attributes, [name, version, members]}]).
 
 %%--------------------------------------------------------------------
 

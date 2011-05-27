@@ -237,7 +237,8 @@ table_definitions() ->
      {rabbit_queue,
       [{record_name, amqqueue},
        {attributes, record_info(fields, amqqueue)},
-       {match, #amqqueue{name = queue_name_match(), _='_'}}]}].
+       {match, #amqqueue{name = queue_name_match(), _='_'}}]}]
+        ++ gm:table_definitions().
 
 binding_match() ->
     #binding{source = exchange_name_match(),
