@@ -111,10 +111,7 @@ handle_info(#'basic.ack'{ delivery_tag = Seq, multiple = Multiple },
                                        multiple     = Multiple}),
     {noreply, State};
 
-handle_info({#'basic.deliver'{%% TODO do we care?
-                              %%redelivered = Redelivered,
-                              %%exchange = Exchange,
-                              routing_key = Key}, Msg},
+handle_info({#'basic.deliver'{routing_key = Key}, Msg},
             State = #state{upstream            = Upstream,
                            downstream_exchange = #resource{name = X},
                            downstream_channel  = DCh}) ->
@@ -134,7 +131,6 @@ handle_info({#'basic.deliver'{%% TODO do we care?
 handle_info({'DOWN', _Ref, process, Ch, Reason},
             State = #state{ channel = Ch }) ->
     {stop, {upstream_channel_down, Reason}, State};
-
 handle_info({'DOWN', _Ref, process, Ch, Reason},
             State = #state{ downstream_channel = Ch }) ->
     {stop, {downstream_channel_down, Reason}, State};
@@ -335,10 +331,8 @@ ensure_upstream_bindings(State = #state{upstream            = Upstream,
     amqp_channel:call(Ch, #'queue.bind'{exchange = InternalX, queue = Q}),
     State1 = State#state{queue             = Q,
                          internal_exchange = InternalX},
-    State2 = lists:foldl(fun (B, State0) ->
-                                 add_binding(B, State0)
-                         end,
-                         State1, rabbit_binding:list_for_source(DownstreamX)),
+    State2 = lists:foldl(fun add_binding/2, State1,
+                         rabbit_binding:list_for_source(DownstreamX)),
     rabbit_federation_db:set_active_suffix(DownstreamX, Upstream, Suffix),
     OldInternalX = upstream_exchange_name(X, VHost, DownstreamX, OldSuffix),
     delete_upstream_exchange(Conn, OldInternalX),
