@@ -46,7 +46,7 @@ validate(X = #exchange{arguments = Args}) ->
     validate_arg(<<"upstreams">>, array,   Args),
     validate_arg(<<"type">>,      longstr, Args),
     {array, Upstreams} = rabbit_misc:table_lookup(Args, <<"upstreams">>),
-    [validate_upstream(U) || U <- Upstreams],
+    [rabbit_federation_upstream:validate_table(U) || U <- Upstreams],
     {longstr, TypeBin} = rabbit_misc:table_lookup(Args, <<"type">>),
     case rabbit_exchange:check_type(TypeBin) of
         'x-federation' -> fail("Type argument must not be x-federation.", []);
@@ -111,10 +111,11 @@ is_federation_exchange(Name = #resource{kind = exchange}) ->
 is_federation_exchange(_) ->
     false.
 
-exchange_to_sup_args(X = #exchange{name = Name, arguments = Args}) ->
+exchange_to_sup_args(X = #exchange{name = XRes, arguments = Args}) ->
+    #resource{name = XName, kind = exchange, virtual_host = VHost} = XRes,
     {array, UpstreamTables} = rabbit_misc:table_lookup(Args, <<"upstreams">>),
-    Upstreams = [rabbit_federation_util:upstream_from_table(U, Name) ||
-                    {table, U} <- UpstreamTables],
+    Upstreams = [rabbit_federation_upstream:from_table(U, XName, VHost) ||
+                    U <- UpstreamTables],
     {Upstreams, X}.
 
 validate_arg(Name, Type, Args) ->
@@ -122,28 +123,6 @@ validate_arg(Name, Type, Args) ->
         {Type, _} -> ok;
         undefined -> fail("Argument ~s missing", [Name]);
         _         -> fail("Argument ~s must be of type ~s", [Name, Type])
-    end.
-
-validate_upstream({table, Table}) ->
-    Args = [{<<"host">>,         [longstr],                      true},
-            {<<"protocol">>,     [longstr],                      false},
-            {<<"port">>,         [byte, short, signedint, long], false},
-            {<<"virtual_host">>, [longstr],                      false},
-            {<<"exchange">>,     [longstr],                      false}],
-    [check_arg(Table, K, Ts, M) || {K, Ts, M} <- Args];
-validate_upstream({Type, Obj}) ->
-    fail("Upstream ~w was of type ~s, not table", [Obj, Type]).
-
-check_arg(Table, K, Ts, Mandatory) ->
-    case {rabbit_misc:table_lookup(Table, K), Mandatory} of
-        {{T,  _}, _}     -> case lists:member(T, Ts) of
-                                true  -> ok;
-                                false -> fail("~s should have type in ~p, "
-                                              "but ~s was received",
-                                              [K, Ts, T])
-                            end;
-        {_,       true}  -> fail("~s is mandatory", [K]);
-        {_,       false} -> ok
     end.
 
 fail(Fmt, Args) -> rabbit_misc:protocol_error(precondition_failed, Fmt, Args).

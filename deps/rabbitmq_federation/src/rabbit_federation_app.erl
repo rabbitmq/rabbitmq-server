@@ -45,36 +45,25 @@ declare_exchange(Props) ->
     Params1 = Params#amqp_params_direct{virtual_host = VHost},
     {ok, Conn} = amqp_connection:start(Params1),
     {ok, Ch} = amqp_connection:open_channel(Conn),
+    XName = list_to_binary(pget(exchange, Props)),
     amqp_channel:call(
       Ch, #'exchange.declare'{
-        exchange    = list_to_binary(pget(exchange, Props)),
+        exchange    = XName,
         type        = <<"x-federation">>,
         durable     = pget(durable,     Props, true),
         auto_delete = pget(auto_delete, Props, false),
         internal    = pget(internal,    Props, false),
         arguments   =
-            [{<<"upstreams">>, array,  [{table, to_table(U)} ||
+            [{<<"upstreams">>, array,  [to_table(U, XName, VHost) ||
                                            U <- pget(upstreams, Props)]},
              {<<"type">>,      longstr, list_to_binary(pget(type, Props))}]}),
     amqp_channel:close(Ch),
     amqp_connection:close(Conn),
     ok.
 
-to_table(U) ->
-    Args = [{host,         longstr},
-            {protocol,     longstr},
-            {port,         long},
-            {virtual_host, longstr},
-            {exchange,     longstr}],
-    [Row || {K, T} <- Args, Row <- [to_table_row(U, K, T)], Row =/= none].
-
-to_table_row(U, Key, Type) ->
-    case {Type, proplists:get_value(Key, U)} of
-        {_,    undefined} -> none;
-        {long, Value}     -> {list_to_binary(atom_to_list(Key)), Type, Value};
-        {_,    Value}     -> {list_to_binary(atom_to_list(Key)), Type,
-                              list_to_binary(Value)}
-    end.
+to_table(Props, DefaultXName, DefaultVHost) ->
+    rabbit_federation_upstream:to_table(
+      rabbit_federation_upstream:from_props(Props, DefaultXName, DefaultVHost)).
 
 pget(K, P, D) ->
     proplists:get_value(K, P, D).

@@ -118,7 +118,7 @@ handle_info({#'basic.deliver'{routing_key = Key}, Msg},
     Headers0 = extract_headers(Msg),
     %% TODO add user information here?
     case forwarded_before(Headers0) of
-        false -> Info = upstream_info(Upstream),
+        false -> {table, Info} = rabbit_federation_upstream:to_table(Upstream),
                  Headers = add_routing_to_headers(Headers0, Info),
                  amqp_channel:cast(DCh, #'basic.publish'{exchange    = X,
                                                          routing_key = Key},
@@ -398,21 +398,6 @@ add_routing_to_headers(Headers, Info) ->
                 {array, Existing}  -> Existing
             end,
     set_table_value(Headers, ?ROUTING_HEADER, array, [{table, Info} | Prior]).
-
-upstream_info(#upstream{params   = #amqp_params_network{host         = H,
-                                                        port         = P,
-                                                        virtual_host = V,
-                                                        ssl_options  = SSL},
-                        exchange = X}) ->
-    Protocol = case SSL of
-                   none -> <<"amqp">>;
-                   _    -> <<"amqps">>
-               end,
-    [{<<"host">>,         longstr, list_to_binary(H)},
-     {<<"protocol">>,     longstr, Protocol},
-     {<<"port">>,         long,    P},
-     {<<"virtual_host">>, longstr, V},
-     {<<"exchange">>,     longstr, X}].
 
 %% TODO move this to rabbit_misc?
 set_table_value(Table, Key, Type, Value) ->
