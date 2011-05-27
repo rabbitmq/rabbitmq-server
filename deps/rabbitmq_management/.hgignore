@@ -4,4 +4,3 @@
 ^dist/
 ^cover/
 ^erl_crash.dump$
-^ebin/rabbitmq_management.app$
