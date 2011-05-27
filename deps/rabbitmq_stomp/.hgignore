@@ -5,4 +5,3 @@
 ^cover/
 ^erl_crash.dump$
 \.pyc$
-^ebin/rabbitmq_stomp.app$
