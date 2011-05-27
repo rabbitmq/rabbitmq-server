@@ -313,14 +313,14 @@ action(report, Node, _Args, _Opts, Inform) ->
                  io:format("%% ~p~n", [[Descr] ++ VHostArg]),
                  case Results = rpc_call(Node, Module, InfoFun, VHostArg) of
                      [_|_] -> InfoItems = rpc_call(Node, Module, KeysFun, []),
+                              display_row([atom_to_list(I) || I <- InfoItems]),
                               display_info_list(Results, InfoItems);
                      _     -> ok
                  end
              end,
     GlobalQueries = [{"connections", rabbit_networking, connection_info_all,
                       connection_info_keys},
-                     {"channels", rabbit_channel, connection_info_all,
-                      info_keys}],
+                     {"channels", rabbit_channel, info_all, info_keys}],
     VHostQueries  = [{"queues", rabbit_amqqueue, info_all, info_keys},
                      {"exchanges", rabbit_exchange, info_all, info_keys},
                      {"bindings", rabbit_binding, info_all, info_keys},
