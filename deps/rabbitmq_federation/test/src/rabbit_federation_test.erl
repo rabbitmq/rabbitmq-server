@@ -153,7 +153,7 @@ no_loop_test() ->
 %% %% Upstream:   port 5673, may not have federation
 
 restart_upstream_test_() ->
-    {timeout, 15, fun restart_upstream/0}.
+    {timeout, 25, fun restart_upstream/0}.
 
 restart_upstream() ->
     with_2ch(
@@ -172,7 +172,7 @@ restart_upstream() ->
               publish(Upstream1, <<"upstream">>, <<"stays">>, <<"STAYS">>),
               %% Give the link a chance to come up and for this binding
               %% to be transferred
-              timer:sleep(1000),
+              timer:sleep(10000),
               publish(Upstream1, <<"upstream">>, <<"comes">>, <<"COMES">>),
               expect(Downstream, Qstays, [<<"STAYS">>]),
               expect(Downstream, Qcomes, [<<"COMES">>]),
