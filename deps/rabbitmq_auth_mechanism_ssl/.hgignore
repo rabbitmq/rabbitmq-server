@@ -4,4 +4,3 @@
 ^dist/
 ^cover/
 ^erl_crash.dump$
-^ebin/rabbitmq_auth_mechanism_ssl.app$
