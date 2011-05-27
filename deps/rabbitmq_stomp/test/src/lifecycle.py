@@ -55,7 +55,7 @@ class TestLifecycle(base.BaseTest):
             new_conn.disconnect()
 
     def test_heartbeat_disconnects_client(self):
-        ''' Test heartbeat disconnection'''
+        ''' Test heart-beat disconnection'''
         self.conn.disconnect()
         new_conn = self.create_connection(heartbeat="1500,0")
         try:
@@ -70,18 +70,39 @@ class TestLifecycle(base.BaseTest):
 
     def test_unsupported_version(self):
         ''' Test unsupported version on CONNECT command'''
+        self.bad_connect(stomp.Connection(user="guest",
+                                          passcode="guest",
+                                          version="100.1"),
+                         "Supported versions are 1.0,1.1\n")
+
+    def test_bad_username(self):
+        ''' Test bad username'''
+        self.bad_connect(stomp.Connection(user="gust",
+                                          passcode="guest"),
+                         "Authentication failure\n")
+
+    def test_bad_password(self):
+        ''' Test bad password'''
+        self.bad_connect(stomp.Connection(user="guest",
+                                          passcode="gust"),
+                         "Authentication failure\n")
+
+    def test_bad_vhost(self):
+        ''' Test bad virtual host'''
+        self.bad_connect(stomp.Connection(user="guest",
+                                          passcode="guest",
+                                          virtual_host="//"),
+                         "Authentication failure\n")
+
+    def bad_connect(self, new_conn, expected):
         self.conn.disconnect()
-        new_conn = stomp.Connection(user="guest",
-                                    passcode="guest",
-                                    version="100.1")
         listener = base.WaitableListener()
         new_conn.set_listener('', listener)
         try:
             new_conn.start()
             new_conn.connect()
             self.assertTrue(listener.await())
-            self.assertEquals("Supported versions are 1.0,1.1\n",
-                              listener.errors[0]['message'])
+            self.assertEquals(expected, listener.errors[0]['message'])
         finally:
             if new_conn.is_connected():
                 new_conn.disconnect()

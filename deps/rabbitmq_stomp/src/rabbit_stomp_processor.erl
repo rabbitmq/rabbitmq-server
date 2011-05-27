@@ -96,7 +96,7 @@ handle_cast({"CONNECT", Frame}, State = #state{channel = none,
                                rabbit_stomp_frame:header(Frame, "host",
                                                          binary_to_list(
                                                            DefaultVHost)),
-                               rabbit_stomp_frame:header(Frame, "heartbeat",
+                               rabbit_stomp_frame:header(Frame, "heart-beat",
                                                          "0,0"),
                                adapter_info(Sock, Version),
                                Version,
@@ -316,27 +316,39 @@ with_destination(Command, Frame, State, Fun) ->
                   State)
     end.
 
-do_login({ok, Login}, {ok, Passcode}, VirtualHost, Heartbeat, AdapterInfo,
+do_login({ok, Username0}, {ok, Password0}, VirtualHost0, Heartbeat, AdapterInfo,
          Version, State) ->
-    {ok, Connection} = amqp_connection:start(
-                         direct, #amqp_params{
-                           username     = list_to_binary(Login),
-                           password     = list_to_binary(Passcode),
-                           virtual_host = list_to_binary(VirtualHost),
-                           adapter_info = AdapterInfo}),
-    {ok, Channel} = amqp_connection:open_channel(Connection),
-    SessionId = rabbit_guid:string_guid("session"),
-
-    {{SendTimeout, ReceiveTimeout}, State1} =
-        ensure_heartbeats(Heartbeat, State),
-    ok("CONNECTED",
-       [{"session", SessionId},
-        {"heartbeat", io_lib:format("~B,~B", [SendTimeout, ReceiveTimeout])},
-        {"version", Version}],
-       "",
-       State1#state{session_id = SessionId,
-                   channel    = Channel,
-                   connection = Connection});
+    Username = list_to_binary(Username0),
+    Password = list_to_binary(Password0),
+    VirtualHost = list_to_binary(VirtualHost0),
+    case rabbit_access_control:check_user_pass_login(Username, Password) of
+        {ok, _User} ->
+            case amqp_connection:start(
+                   #amqp_params_direct{username     = Username,
+                                       virtual_host = VirtualHost,
+                                       adapter_info = AdapterInfo}) of
+                {ok, Connection} ->
+                    {ok, Channel} = amqp_connection:open_channel(Connection),
+                    SessionId = rabbit_guid:string_guid("session"),
+                    {{SendTimeout, ReceiveTimeout}, State1} =
+                        ensure_heartbeats(Heartbeat, State),
+                    ok("CONNECTED",
+                       [{"session", SessionId},
+                        {"heart-beat", io_lib:format("~B,~B",
+                                            [SendTimeout, ReceiveTimeout])},
+                        {"version", Version}],
+                       "",
+                       State1#state{session_id = SessionId,
+                                    channel    = Channel,
+                                    connection = Connection});
+                {error, auth_failure} ->
+                    error("Bad CONNECT", "Authentication failure\n", State);
+                {error, access_refused} ->
+                    error("Bad CONNECT", "Authentication failure\n", State)
+            end;
+        {refused, _Msg, _Args} ->
+            error("Bad CONNECT", "Authentication failure\n", State)
+    end;
 
 do_login(_, _, _, _, _, _, State) ->
     error("Bad CONNECT", "Missing login or passcode header(s)\n", State).

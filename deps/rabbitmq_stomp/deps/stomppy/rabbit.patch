@@ -1,37 +1,65 @@
 diff -r 16a4000624a7 stomp/connect.py
 --- a/stomp/connect.py	Sun May 02 18:15:34 2010 +0100
-+++ b/stomp/connect.py	Wed Nov 10 20:44:32 2010 +0000
-@@ -88,7 +88,9 @@
++++ b/stomp/connect.py	Thu May 19 15:13:25 2011 +0100
+@@ -88,7 +88,10 @@
                   ssl_key_file = None,
                   ssl_cert_file = None,
                   ssl_ca_certs = None,
 -                 ssl_cert_validator = None):
 +                 ssl_cert_validator = None,
 +                 version = None,
-+                 heartbeat = None):
++                 heartbeat = None,
++                 virtual_host = None):
          """
          Initialize and start this connection.
-
-@@ -204,6 +206,12 @@
-         if user is not None and passcode is not None:
+ 
+@@ -159,6 +162,16 @@
+ 
+             where OK is a boolean, and cert is a certificate structure
+             as returned by ssl.SSLSocket.getpeercert()
++
++        \param version
++            (optional) stomp version header to send (comma separated)
++
++        \param heartbeat
++            (optional) heartbeat header to send (STOMP 1.1)
++
++        \param virtual_host
++            (optional) virtual_host header to send (STOMP 1.1)
++
+         """
+ 
+         sorted_host_and_ports = []
+@@ -205,6 +218,15 @@
              self.__connect_headers['login'] = user
              self.__connect_headers['passcode'] = passcode
-+
+ 
 +        if version is not None:
 +            self.__connect_headers['accept-version'] = version
 +
 +        if heartbeat is not None:
-+            self.__connect_headers['heartbeat'] = heartbeat
-
++            self.__connect_headers['heart-beat'] = heartbeat
++
++        if virtual_host is not None:
++            self.__connect_headers['host'] = virtual_host
++
          self.__socket = None
          self.__socket_semaphore = threading.BoundedSemaphore(1)
-@@ -449,6 +457,9 @@
+         self.__current_host_and_port = None
+@@ -449,6 +471,9 @@
                  raise KeyError("Command %s requires header %r" % (command, required_header_key))
          self.__send_frame(command, headers, payload)
-
+ 
 +    def send_frame(self, command, headers={}, payload=''):
 +        self.__send_frame(command, headers, payload)
 +
      def __send_frame(self, command, headers={}, payload=''):
          """
          Send a STOMP frame.
+@@ -680,4 +705,4 @@
+                     sleep_exp += 1
+ 
+         if not self.__socket:
+-            raise exception.ReconnectFailedException
+\ No newline at end of file
++            raise exception.ReconnectFailedException
