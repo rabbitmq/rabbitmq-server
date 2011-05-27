@@ -18,8 +18,10 @@
 
 -export([boot/0, start/0, start_tcp_listener/1, start_ssl_listener/2,
          stop_tcp_listener/1, on_node_down/1, active_listeners/0,
-         node_listeners/1, connections/0, info_keys/0, info/1, info/2,
-         info_all/0, info_all/1, close_connection/2]).
+         node_listeners/1, connections/0, connection_info_keys/0,
+         connection_info/1, connection_info/2,
+         connection_info_all/0, connection_info_all/1,
+         close_connection/2]).
 
 %%used by TCP-based transports, e.g. STOMP adapter
 -export([check_tcp_listener_address/2,
@@ -57,14 +59,14 @@
 -spec(active_listeners/0 :: () -> [rabbit_types:listener()]).
 -spec(node_listeners/1 :: (node()) -> [rabbit_types:listener()]).
 -spec(connections/0 :: () -> [rabbit_types:connection()]).
--spec(info_keys/0 :: () -> rabbit_types:info_keys()).
--spec(info/1 ::
+-spec(connection_info_keys/0 :: () -> rabbit_types:info_keys()).
+-spec(connection_info/1 ::
         (rabbit_types:connection()) -> rabbit_types:infos()).
--spec(info/2 ::
+-spec(connection_info/2 ::
         (rabbit_types:connection(), rabbit_types:info_keys())
         -> rabbit_types:infos()).
--spec(info_all/0 :: () -> [rabbit_types:infos()]).
--spec(info_all/1 ::
+-spec(connection_info_all/0 :: () -> [rabbit_types:infos()]).
+-spec(connection_info_all/1 ::
         (rabbit_types:info_keys()) -> [rabbit_types:infos()]).
 -spec(close_connection/2 :: (pid(), string()) -> 'ok').
 -spec(on_node_down/1 :: (node()) -> 'ok').
@@ -273,13 +275,13 @@ connections() ->
         {_, ConnSup, supervisor, _}
             <- supervisor:which_children({rabbit_tcp_client_sup, Node})].
 
-info_keys() -> rabbit_reader:info_keys().
+connection_info_keys() -> rabbit_reader:info_keys().
 
-info(Pid) -> rabbit_reader:info(Pid).
-info(Pid, Items) -> rabbit_reader:info(Pid, Items).
+connection_info(Pid) -> rabbit_reader:info(Pid).
+connection_info(Pid, Items) -> rabbit_reader:info(Pid, Items).
 
-info_all() -> cmap(fun (Q) -> info(Q) end).
-info_all(Items) -> cmap(fun (Q) -> info(Q, Items) end).
+connection_info_all() -> cmap(fun (Q) -> connection_info(Q) end).
+connection_info_all(Items) -> cmap(fun (Q) -> connection_info(Q, Items) end).
 
 close_connection(Pid, Explanation) ->
     case lists:member(Pid, connections()) of

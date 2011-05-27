@@ -260,7 +260,7 @@ action(list_bindings, Node, Args, Opts, Inform) ->
 action(list_connections, Node, Args, _Opts, Inform) ->
     Inform("Listing connections", []),
     ArgAtoms = default_if_empty(Args, [user, peer_address, peer_port, state]),
-    display_info_list(rpc_call(Node, rabbit_networking, info_all,
+    display_info_list(rpc_call(Node, rabbit_networking, connection_info_all,
                                [ArgAtoms]),
                       ArgAtoms);
 
@@ -275,8 +275,13 @@ action(list_consumers, Node, _Args, Opts, Inform) ->
     Inform("Listing consumers", []),
     VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
     InfoKeys = [queue_name, channel_pid, consumer_tag, ack_required],
-    display_info_list(rpc_call(Node, rabbit_consumer, info_all, [VHostArg]),
-                      InfoKeys);
+    case rpc_call(Node, rabbit_amqqueue, consumers_all, [VHostArg]) of
+        L when is_list(L) -> display_info_list(
+                               [lists:zip(InfoKeys, tuple_to_list(X)) ||
+                                   X <- L],
+                               InfoKeys);
+        Other             -> Other
+    end;
 
 action(trace_on, Node, [], Opts, Inform) ->
     VHost = proplists:get_value(?VHOST_OPT, Opts),
@@ -318,9 +323,8 @@ action(report, Node, _Args, _Opts, Inform) ->
                      _       -> ok
                  end
              end,
-    GlobalQueries = [rabbit_networking, rabbit_channel],
-    VHostQueries  = [rabbit_amqqueue, rabbit_exchange, rabbit_binding,
-                     rabbit_consumer],
+    GlobalQueries = [rabbit_channel],
+    VHostQueries  = [rabbit_amqqueue, rabbit_exchange, rabbit_binding],
     [Report(M, [])  || M <- GlobalQueries],
     [Report(M, [V]) || V <- rpc_call(Node, rabbit_vhost, list, []),
                        M <- VHostQueries],
