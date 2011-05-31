@@ -183,10 +183,14 @@
           <term><cmdsynopsis><command>status</command></cmdsynopsis></term>
           <listitem>
             <para>
-              Displays various information about the RabbitMQ broker,
-              such as whether the RabbitMQ application on the current
-              node, its version number, what nodes are part of the
-              broker, which of these are running.
+              Displays broker status information such as the running applications
+              on the current Erlang node, RabbitMQ and Erlang versions, OS, memory
+              and environment details and which nodes are clustered.
+            </para>
+            <para>
+              Diagnostic information is displayed if the broker is not running,
+              cannot be reached, or does not permit queries due to security
+              constraints.
             </para>
             <para role="example-prefix">For example:</para>
             <screen role="example">rabbitmqctl status</screen>
