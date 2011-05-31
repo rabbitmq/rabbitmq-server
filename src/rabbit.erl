@@ -178,7 +178,8 @@
 -spec(stop_and_halt/0 :: () -> 'ok').
 -spec(rotate_logs/1 :: (file_suffix()) -> rabbit_types:ok_or_error(any())).
 -spec(status/0 ::
-        () -> [{running_applications, [{atom(), string(), string()}]} |
+        () -> [{pid, integer()} |
+               {running_applications, [{atom(), string(), string()}]} |
                {nodes, [{rabbit_mnesia:node_type(), [node()]}]} |
                {running_nodes, [node()]}]).
 -spec(log_location/1 :: ('sasl' | 'kernel') -> log_location()).
@@ -217,8 +218,6 @@ stop_and_halt() ->
 
 status() ->
     [{pid, list_to_integer(os:getpid())},
-     {os, os:type()},
-     {erlang_version, erlang:system_info(system_version)},
      {running_applications, application:which_applications()}] ++
         rabbit_mnesia:status().
 
