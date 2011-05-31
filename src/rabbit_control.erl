@@ -17,7 +17,7 @@
 -module(rabbit_control).
 -include("rabbit.hrl").
 
--export([start/0, stop/0, action/5, diagnostics/1, node_status/0]).
+-export([start/0, stop/0, action/5, diagnostics/1]).
 
 -define(RPC_TIMEOUT, infinity).
 -define(WAIT_FOR_VM_ATTEMPTS, 5).
@@ -38,7 +38,6 @@
         -> 'ok').
 -spec(diagnostics/1 :: (node()) -> [{string(), [any()]}]).
 -spec(usage/0 :: () -> no_return()).
--spec(node_status/0 :: () -> [{atom(), any()}]).
 
 -endif.
 
@@ -139,15 +138,6 @@ stop() ->
 usage() ->
     io:format("~s", [rabbit_ctl_usage:usage()]),
     quit(1).
-
-node_status() ->
-    [{node_name, erlang:node()},
-     {os, os:type()},
-     {erlang_version, erlang:system_info(system_version)},
-     {memory, erlang:memory()},
-     {env, lists:filter(fun ({default_pass, _}) -> false;
-                            (_)                 -> true
-                        end, application:get_all_env(rabbit))}].
 
 %%----------------------------------------------------------------------------
 
@@ -330,8 +320,7 @@ action(list_permissions, Node, [], Opts, Inform) ->
 
 action(report, Node, _Args, _Opts, Inform) ->
     io:format("Reporting server status on ~p~n", [erlang:universaltime()]),
-    action(status, Node, [], [], Inform),
-    [io:format("~p~n", [rpc_call(N, rabbit_control, node_status, [])]) ||
+    [action(status, N, [], [], Inform) ||
      N <- rpc_call(Node, rabbit_mnesia, running_clustered_nodes, [])],
     GlobalQueries = [{"connections", rabbit_networking, connection_info_all,
                       connection_info_keys},

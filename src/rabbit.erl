@@ -180,6 +180,10 @@
 -spec(status/0 ::
         () -> [{pid, integer()} |
                {running_applications, [{atom(), string(), string()}]} |
+               {os , {atom(), atom()}} |
+               {erlang_version , string()} |
+               {memory , any()} |
+               {env , [{atom() | term()}]} |
                {nodes, [{rabbit_mnesia:node_type(), [node()]}]} |
                {running_nodes, [node()]}]).
 -spec(log_location/1 :: ('sasl' | 'kernel') -> log_location()).
@@ -218,7 +222,13 @@ stop_and_halt() ->
 
 status() ->
     [{pid, list_to_integer(os:getpid())},
-     {running_applications, application:which_applications()}] ++
+     {running_applications, application:which_applications()},
+     {os, os:type()},
+     {erlang_version, erlang:system_info(system_version)},
+     {memory, erlang:memory()},
+     {env, lists:filter(fun ({default_pass, _}) -> false;
+                            (_)                 -> true
+                        end, application:get_all_env(rabbit))}] ++
         rabbit_mnesia:status().
 
 rotate_logs(BinarySuffix) ->
