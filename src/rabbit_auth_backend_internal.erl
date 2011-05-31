@@ -28,7 +28,7 @@
          hash_password/1]).
 -export([set_permissions/5, clear_permissions/2,
          list_permissions/0, list_vhost_permissions/1, list_user_permissions/1,
-         list_user_vhost_permissions/2]).
+         list_user_vhost_permissions/2, vhost_perms_info_keys/0]).
 
 -include("rabbit_auth_backend_spec.hrl").
 
@@ -70,10 +70,13 @@
 -spec(list_user_vhost_permissions/2 ::
         (rabbit_types:username(), rabbit_types:vhost())
         -> [{regexp(), regexp(), regexp()}]).
+-spec(vhost_perms_info_keys/0 :: () -> rabbit_types:info_keys()).
 
 -endif.
 
 %%----------------------------------------------------------------------------
+
+-define(PERMS_INFO_KEYS, [configure_perms, write_perms, read_perms]).
 
 %% Implementation of rabbit_auth_backend
 
@@ -283,13 +286,16 @@ clear_permissions(Username, VHostPath) ->
                                                 virtual_host = VHostPath}})
         end)).
 
+vhost_perms_info_keys() -> [username] ++ ?PERMS_INFO_KEYS.
+
 list_permissions() ->
     [{Username, VHostPath, ConfigurePerm, WritePerm, ReadPerm} ||
         {Username, VHostPath, ConfigurePerm, WritePerm, ReadPerm} <-
             list_permissions(match_user_vhost('_', '_'))].
 
 list_vhost_permissions(VHostPath) ->
-    [{Username, ConfigurePerm, WritePerm, ReadPerm} ||
+    InfoKeys = vhost_perms_info_keys(),
+    [lists:zip(InfoKeys, [Username, ConfigurePerm, WritePerm, ReadPerm]) ||
         {Username, _, ConfigurePerm, WritePerm, ReadPerm} <-
             list_permissions(rabbit_vhost:with(
                                VHostPath, match_user_vhost('_', VHostPath)))].

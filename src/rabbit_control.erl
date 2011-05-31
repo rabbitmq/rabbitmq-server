@@ -96,6 +96,18 @@ start() ->
 
 fmt_stderr(Format, Args) -> rabbit_misc:format_stderr(Format ++ "~n", Args).
 
+print_report(Node, {Descr, Module, InfoFun, KeysFun}) ->
+    print_report(Node, {Descr, Module, InfoFun, KeysFun}, []).
+
+print_report(Node, {Descr, Module, InfoFun, KeysFun}, VHostArg) ->
+    io:format("%% ~p~n", [[Descr] ++ VHostArg]),
+    case Results = rpc_call(Node, Module, InfoFun, VHostArg) of
+        [_|_] -> InfoItems = rpc_call(Node, Module, KeysFun, []),
+                 display_row([atom_to_list(I) || I <- InfoItems]),
+                 display_info_list(Results, InfoItems);
+        _     -> ok
+    end.
+
 print_error(Format, Args) -> fmt_stderr("Error: " ++ Format, Args).
 
 print_badrpc_diagnostics(Node) ->
@@ -302,39 +314,27 @@ action(clear_permissions, Node, [Username], Opts, Inform) ->
 action(list_permissions, Node, [], Opts, Inform) ->
     VHost = proplists:get_value(?VHOST_OPT, Opts),
     Inform("Listing permissions in vhost ~p", [VHost]),
-    display_list(call(Node, {rabbit_auth_backend_internal,
-                             list_vhost_permissions, [VHost]}));
+    display_info_list(call(Node, {rabbit_auth_backend_internal,
+                             list_vhost_permissions, [VHost]}),
+                      rabbit_auth_backend_internal:vhost_perms_info_keys());
 
 action(report, Node, _Args, _Opts, Inform) ->
     io:format("Reporting server status on ~p~n", [erlang:universaltime()]),
     [action(status, ClusterNode, [], [], Inform) ||
      ClusterNode <- rpc_call(Node, rabbit_mnesia, running_clustered_nodes, [])],
-    Report = fun ({Descr, Module, InfoFun, KeysFun, VHostArg}) ->
-                 io:format("%% ~p~n", [[Descr] ++ VHostArg]),
-                 case Results = rpc_call(Node, Module, InfoFun, VHostArg) of
-                     [_|_] -> InfoItems = rpc_call(Node, Module, KeysFun, []),
-                              display_row([atom_to_list(I) || I <- InfoItems]),
-                              display_info_list(Results, InfoItems);
-                     _     -> ok
-                 end
-             end,
     GlobalQueries = [{"connections", rabbit_networking, connection_info_all,
-                      connection_info_keys, []},
-                     {"channels",  rabbit_channel,  info_all, info_keys, []}],
-    VHostQueries  = [{"queues",    rabbit_amqqueue, info_all, info_keys, []},
-                     {"exchanges", rabbit_exchange, info_all, info_keys, []},
-                     {"bindings",  rabbit_binding,  info_all, info_keys, []},
+                      connection_info_keys},
+                     {"channels",  rabbit_channel,  info_all, info_keys}],
+    VHostQueries  = [{"queues",    rabbit_amqqueue, info_all, info_keys},
+                     {"exchanges", rabbit_exchange, info_all, info_keys},
+                     {"bindings",  rabbit_binding,  info_all, info_keys},
                      {"consumers", rabbit_amqqueue, consumers_all,
-                      consumer_info_keys, []}],
+                      consumer_info_keys},
+                     {"permissions", rabbit_auth_backend_internal,
+                      list_vhost_permissions, vhost_perms_info_keys}],
     VHosts = rpc_call(Node, rabbit_vhost, list, []),
-    [Report(Q) || Q <- GlobalQueries],
-    [Report(setelement(5, Q, [V])) || Q <- VHostQueries, V <- VHosts],
-    [begin
-       io:format("%% ~p~n", [["permissions" | [VHost]]]),
-       display_list(call(Node,
-                         {rabbit_auth_backend_internal, list_vhost_permissions,
-                         [binary_to_list(VHost)]}))
-     end || VHost <- VHosts],
+    [print_report(Node, Q)      || Q <- GlobalQueries],
+    [print_report(Node, Q, [V]) || Q <- VHostQueries, V <- VHosts],
     io:format("End of server status report~n"),
     ok.
 
