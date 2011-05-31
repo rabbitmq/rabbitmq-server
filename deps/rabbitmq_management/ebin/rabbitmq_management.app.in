@@ -1,7 +1,7 @@
 {application, rabbitmq_management,
  [{description, "RabbitMQ Management Console"},
   {vsn, "%%VSN%%"},
-  {modules, [rabbit_mgmt_app]}, %% TODO generate automatically. NB: _app needed!
+  {modules, []},
   {registered, []},
   {mod, {rabbit_mgmt_app, []}},
   {env, [{http_log_dir, none}]},

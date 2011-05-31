@@ -201,7 +201,7 @@ if_unknown(Val,    _Def) -> Val.
 
 init([]) ->
     {ok, #state{tables = orddict:from_list(
-                           [{Key, ets:new(anon, [private])} ||
+                           [{Key, ets:new(anon, [private, ordered_set])} ||
                                Key <- ?TABLES])}}.
 
 handle_call({get_queue, Q0}, _From, State = #state{tables = Tables}) ->

@@ -133,7 +133,7 @@
 
 <% if (properties_size(connection.client_properties) > 0) { %>
 <div class="section-hidden">
-<h2>Client Library</h2>
+<h2>Client properties</h2>
 <div class="hider">
 <%= fmt_table_long(connection.client_properties) %>
 </div>
@@ -141,7 +141,7 @@
 <% } %>
 
 <div class="section-hidden">
-  <h2>Close This Connection</h2>
+  <h2>Close this connection</h2>
   <div class="hider">
     <form action="#/connections" method="delete" class="confirm">
       <input type="hidden" name="name" value="<%= connection.name %>"/>
