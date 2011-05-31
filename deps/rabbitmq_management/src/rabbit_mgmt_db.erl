@@ -146,9 +146,10 @@ rate(Stats, Timestamp, OldStats, OldTimestamp, Key) ->
         true  -> unknown;
         false -> Diff = pget(Key, Stats) - pget(Key, OldStats),
                  Name = details_key(Key),
-                 Rate = Diff / (timer:now_diff(Timestamp, OldTimestamp) /
-                                    1000000),
+                 Interval = timer:now_diff(Timestamp, OldTimestamp),
+                 Rate = Diff / (Interval / 1000000),
                  {Name, [{rate, Rate},
+                         {interval, Interval},
                          {last_event,
                           rabbit_mgmt_format:timestamp_ms(Timestamp)}]}
     end.
@@ -185,14 +186,19 @@ gs_update_add(Key, Item0, Item1) ->
         true  ->
             I0 = if_unknown(Item0, []),
             I1 = if_unknown(Item1, []),
+            %% TODO if I0 and I1 are from different channels then should we not
+            %% just throw away interval / last_event?
             [{rate,       pget(rate, I0, 0) + pget(rate, I1, 0)},
-             {last_event, erlang:max(pget(last_event, I0, 0),
-                                     pget(last_event, I1, 0))}];
+             {interval,   gs_max(interval, I0, I1)},
+             {last_event, gs_max(last_event, I0, I1)}];
         false ->
             I0 = if_unknown(Item0, 0),
             I1 = if_unknown(Item1, 0),
             I0 + I1
     end.
+
+gs_max(Key, I0, I1) ->
+    erlang:max(pget(Key, I0, 0), pget(Key, I1, 0)).
 
 if_unknown(unknown, Def) -> Def;
 if_unknown(Val,    _Def) -> Val.

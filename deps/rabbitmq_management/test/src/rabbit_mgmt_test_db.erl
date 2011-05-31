@@ -189,8 +189,7 @@ test_rate_zeroing(Conn, Chan) ->
 assert_ch_rate(Conn, ChNum, Rates) ->
     Ch = get_channel(Conn, ChNum),
     Stats = pget(message_stats, Ch),
-    [assert_close(Exp, pget(rate, pget(Type, Stats)))
-     || {Type, Exp} <- Rates].
+    [assert_rate(Exp, pget(Type, Stats)) || {Type, Exp} <- Rates].
 
 test_channel_aggregation(Conn, Chan) ->
     X1 = <<"channel-aggregation-exch1">>,
@@ -344,10 +343,13 @@ assert_equal(Item, PList1, PList2) ->
     Expected = pget(Item, PList1),
     Expected = pget(Item, PList2).
 
-assert_close(Exp, Act) ->
-    case abs(Exp - Act) < 0.5 of
+assert_rate(Exp, Stats) ->
+    Interval = pget(interval, Stats),
+    Rate = pget(rate, Stats),
+    CorrectedRate = Interval / 5000000 * Rate,
+    case abs(Exp - CorrectedRate) < 0.00001 of
         true -> ok;
-        _    -> throw({expected, Exp, got, Act})
+        _    -> throw({expected, Exp, got, Rate, corrected, CorrectedRate})
     end.
 
 assert_positive(Val) ->
