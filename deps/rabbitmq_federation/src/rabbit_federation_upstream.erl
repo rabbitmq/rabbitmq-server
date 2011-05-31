@@ -71,7 +71,7 @@ from_props(Props, DefaultXName, DefaultVHost) ->
                 []    -> Props;
                 [P|_] -> P
             end,
-    from_merged_props(binaryise(Props), DefaultXName, DefaultVHost).
+    from_merged_props(binaryise(Final), DefaultXName, DefaultVHost).
 
 from_merged_props(Props, DefaultXName, DefaultVHost) ->
     #upstream{params          = amqp_params_from_props(Props, DefaultVHost),
