@@ -22,6 +22,7 @@
 -behaviour(gen_server2).
 
 -export([go/0, add_binding/3, remove_binding/3, stop/1]).
+-export([list_routing_keys/1]). %% For testing
 
 -export([start_link/1]).
 
@@ -53,6 +54,8 @@ remove_binding(Serial, X, B) -> call(X, {enqueue, Serial, {remove_binding, B}}).
 
 stop(X) -> call(X, stop).
 
+list_routing_keys(X) -> call(X, list_routing_keys).
+
 %%----------------------------------------------------------------------------
 
 start_link(Args) ->
@@ -72,6 +75,9 @@ handle_call({enqueue, Serial, Cmd}, From,
     Waiting1 = gb_trees:insert(Serial, Cmd, Waiting),
     {reply, ok,
      play_back_commands(Serial, From, State#state{waiting_cmds = Waiting1})};
+
+handle_call(list_routing_keys, _From, State = #state{bindings = Bindings}) ->
+    {reply, lists:sort([K || {K, _} <- dict:fetch_keys(Bindings)]), State};
 
 handle_call(stop, _From, State = #state{connection = Conn, queue = Q}) ->
     disposable_channel_call(Conn, #'queue.delete'{queue = Q}),
