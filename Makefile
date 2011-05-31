@@ -233,7 +233,7 @@ distclean: clean
 # xmlto can not read from standard input, so we mess with a tmp file.
 %.gz: %.xml $(DOCS_DIR)/examples-to-end.xsl
 	xmlto --version | grep -E '^xmlto version 0\.0\.([0-9]|1[1-8])$$' >/dev/null || opt='--stringparam man.indent.verbatims=0' ; \
-	    xsltproc $(DOCS_DIR)/examples-to-end.xsl $< > $<.tmp && \
+	    xsltproc --novalid $(DOCS_DIR)/examples-to-end.xsl $< > $<.tmp && \
 	    xmlto -o $(DOCS_DIR) $$opt man $<.tmp && \
 	    gzip -f $(DOCS_DIR)/`basename $< .xml`
 	rm -f $<.tmp
@@ -256,7 +256,7 @@ $(SOURCE_DIR)/%_usage.erl:
 		xmlto xhtml-nochunks `basename $< .xml`.xml ; rm `basename $< .xml`.xml
 	cat `basename $< .xml`.html | \
 	    xsltproc --novalid $(DOCS_DIR)/remove-namespaces.xsl - | \
-		xsltproc --stringparam original `basename $<` $(DOCS_DIR)/html-to-website-xml.xsl - | \
+		xsltproc --novalid --stringparam original `basename $<` $(DOCS_DIR)/html-to-website-xml.xsl - | \
 		xmllint --format - > $@
 	rm `basename $< .xml`.html
 
