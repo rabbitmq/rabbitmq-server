@@ -348,10 +348,11 @@ consumers(#amqqueue{ pid = QPid }) ->
 consumer_info_keys() -> ?CONSUMER_INFO_KEYS.
 
 consumers_all(VHostPath) ->
+    ConsumerInfoKeys=consumer_info_keys(),
     lists:append(
       map(VHostPath,
           fun (Q) ->
-              [lists:zip(consumer_info_keys(),
+              [lists:zip(ConsumerInfoKeys,
                          [Q#amqqueue.name, ChPid, ConsumerTag, AckRequired]) ||
                          {ChPid, ConsumerTag, AckRequired} <- consumers(Q)]
           end)).
