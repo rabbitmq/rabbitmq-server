@@ -5,11 +5,10 @@ import amqplib.client_0_8 as amqp
 def main():
   conn = amqp.Connection()
   channel = conn.channel()
-  exch = channel.exchange_declare("randomtest", "random", auto_delete=False)
+  exch = channel.exchange_declare("test", "x-random", auto_delete=False)
   
-  for i in range(100):
-    msg = amqp.Message("hello world! %s" % i)
-    channel.basic_publish(msg, "randomtest", "random")
+  msg = amqp.Message("hello world!")
+  channel.basic_publish(msg, "test", "test")
     
   channel.close()
   conn.close()

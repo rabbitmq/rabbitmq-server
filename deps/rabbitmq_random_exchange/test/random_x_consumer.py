@@ -9,10 +9,10 @@ def callback(msg):
 def main():
   conn = amqp.Connection()
   channel = conn.channel()
-  exch = channel.exchange_declare("randomtest", "random", auto_delete=False)
+  exch = channel.exchange_declare("test", "x-random", auto_delete=False)
   
   q, _, _ = channel.queue_declare()
-  channel.queue_bind(q, "randomtest", "random")
+  channel.queue_bind(q, "test", "test")
   channel.basic_consume(q, callback=callback)
   
   while channel.callbacks:
