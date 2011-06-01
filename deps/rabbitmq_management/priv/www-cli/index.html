@@ -1,166 +1,31 @@
 <html>
   <head>
-    <title>RabbitMQ Management Command Line Tool</title>
+    <title>rabbitmqadmin</title>
     <style>
       body { font: 12px Verdana,sans-serif; color: #444; padding: 8px 35px; }
-      td, th { font: 12px Verdana,sans-serif; color: #444; }
       h1 { font-size: 2em; }
-      h2 { font-size: 1.5em; }
-      td.path { font-family: monospace; }
-      th { font-size 1em; font-weight: bold; }
-      table { border-collapse: collapse; }
-      table th, table td { vertical-align: top; border: 1px solid #bbb; padding: 5px; }
       code { background: #ffa; }
-      pre { background: black; color: #0f0; padding: 10px; }
-      table pre { background: #ffa; color: black; }
     </style>
   </head>
   <body>
-    <h1>RabbitMQ Management Command Line Tool</h1>
+    <h1>rabbitmqadmin</h1>
 
     <p>
       Download it from <a href="rabbitmqadmin">here</a> (Right click,
       Save as), make executable, and drop it in your path. Note that
       many browsers will rename the
       file <code>rabbitmqadmin.txt</code>. You will need Python
-      2.6+. Currently this has had little testing, but it's
-      pretty simple.
+      2.6+.
     </p>
 
     <p>
-      Windows users will need to ensure Python is on their path, and
-      invoke rabbitmqadmin as <code>python.exe
+      See <a href="http://www.rabbitmq.com/management-cli.html">the
+      rabbitmqadmin page on the website</a> for more information on
+      its use, or invoke <code>rabbitmqadmin --help</code> for usage
+      instructions. Windows users will need to ensure Python is on
+      their path, and invoke rabbitmqadmin as <code>python.exe
       rabbitmqadmin</code>.
     </p>
 
-    <p>
-      Invoke <code>rabbitmqadmin --help</code> for usage
-      instructions. You can:
-      <ul>
-        <li>
-          list exchanges, queues, bindings, vhosts, users, permissions, connections and channels.
-        </li>
-        <li>
-          show overview information.
-        </li>
-        <li>
-          declare and delete exchanges, queues, bindings, vhosts, users and permissions.
-        </li>
-        <li>
-          publish and get messages.
-        </li>
-        <li>
-          close connections and purge queues.
-        </li>
-        <li>
-          import and export configuration.
-        </li>
-      </ul>
-    </p>
-
-    <p>
-      <code>rabbitmqadmin --bash-completion</code> will print a bash
-      completion script for rabbitmqadmin. This should be redirected
-      to a file and <code>source</code>d. On Debian-derived systems,
-      copy the file to <code>/etc/bash_completion.d</code> to make it
-      available system-wide.
-    </p>
-
-    <h2>Examples</h2>
-
-    <p>A few quick examples:</p>
-
-    <ul>
-      <li>
-        Get a list of exchanges:
-<pre>$ rabbitmqadmin -V test list exchanges
-+-------------+---------+-------+---------+-------------+
-|    name     | durable | vhost |  type   | auto_delete |
-+-------------+---------+-------+---------+-------------+
-|             | True    | test  | direct  | False       |
-| amq.direct  | True    | test  | direct  | False       |
-| amq.fanout  | True    | test  | fanout  | False       |
-| amq.headers | True    | test  | headers | False       |
-| amq.match   | True    | test  | headers | False       |
-| amq.topic   | True    | test  | topic   | False       |
-+-------------+---------+-------+---------+-------------+</pre>
-      </li>
-
-      <li>
-        Get a list of queues, with some columns specified:
-<pre>$ rabbitmqadmin list queues vhost name node messages message_stats.publish_details.rate
-+-------+----------------------------------+-------------------+----------+------------------------------------+
-| vhost |               name               |       node        | messages | message_stats.publish_details.rate |
-+-------+----------------------------------+-------------------+----------+------------------------------------+
-| /     | amq.gen-UELtxwb8OGJ9XHlHJq0Jug== | rabbit@smacmullen | 0        | 100.985821591                      |
-| /     | test                             | rabbit@misstiny   | 5052     | 100.985821591                      |
-+-------+----------------------------------+-------------------+----------+------------------------------------+</pre>
-      </li>
-      <li>
-        Get a list of queues, with all the detail we can take:
-<pre>$ rabbitmqadmin -f long -d 3 list queues
-
---------------------------------------------------------------------------------
-
-                                       vhost: /
-                                        name: amq.gen-UELtxwb8OGJ9XHlHJq0Jug==
-                                 auto_delete: False
-    backing_queue_status.avg_ack_egress_rate: 100.944672225
-   backing_queue_status.avg_ack_ingress_rate: 100.944672225
-
-<i>and so on, and on...</i></pre>
-      </li>
-
-      <li>
-        Connect to another host as another user:
-<pre>$ rabbitmqadmin -H myserver -u simon -p simon list vhosts
-+------+
-| name |
-+------+
-| /    |
-+------+</pre>
-      </li>
-      <li>
-        Declare an exchange:
-<pre>$ rabbitmqadmin declare exchange name=my-new-exchange type=fanout
-exchange declared
-</pre>
-      </li>
-      <li>
-        Declare a queue, with optional parameters:
-<pre>$ rabbitmqadmin declare queue name=my-new-queue durable=false
-queue declared
-</pre>
-      </li>
-      <li>
-        Publish a message:
-<pre>$ rabbitmqadmin publish exchange=amq.default routing_key=test payload="hello, world"
-Message published
-</pre>
-      </li>
-      <li>
-        And get it back:
-<pre>$ rabbitmqadmin get queue=test requeue=false
-+-------------+----------+---------------+--------------+------------------+-------------+
-| routing_key | exchange | message_count |   payload    | payload_encoding | redelivered |
-+-------------+----------+---------------+--------------+------------------+-------------+
-| test        |          | 0             | hello, world | string           | False       |
-+-------------+----------+---------------+--------------+------------------+-------------+
-</pre>
-      </li>
-      <li>
-        Export configuration:
-<pre>$ rabbitmqadmin export rabbit.config
-Exported configuration for localhost to "rabbit.config"</pre>
-      </li>
-      <li>
-        Import configuration, quietly:
-<pre>$ rabbitmqadmin -q import rabbit.config</pre>
-      </li>
-      <li>
-        Close all connections:
-<pre>$ rabbitmqadmin -f tsv -q list connections name | while read conn ; do rabbitmqadmin close connection name=${conn} ; done</pre>
-      </li>
-    </ul>
   </body>
 </html>
