@@ -193,15 +193,15 @@ play_back_commands(State = #state{waiting_cmds = Waiting,
         false -> case gb_trees:take_smallest(Waiting) of
                      {Next, Cmd, Waiting1} ->
                          %% The next one. Just execute it.
-                         State1 = State#state{waiting_cmds = Waiting1,
-                                              next_serial  = Next + 1},
-                         State2 = handle_command(Cmd, State1),
-                         play_back_commands(State2);
-                     {S, _Cmd, Waiting1} when S < Next ->
+                         play_back_commands(
+                           handle_command(Cmd, State#state{
+                                                 waiting_cmds = Waiting1,
+                                                 next_serial  = Next + 1}));
+                     {Serial, _Cmd, Waiting1} when Serial < Next ->
                          %% This command came from before we executed
                          %% binding:list_for_source. Ignore it.
-                         State1 = State#state{waiting_cmds = Waiting1},
-                         play_back_commands(State1);
+                         play_back_commands(State#state{
+                                              waiting_cmds = Waiting1});
                      _ ->
                          %% Some future command. Don't do anything.
                          State
@@ -275,22 +275,21 @@ go(S0 = {not_started, {Upstream, #exchange{name    = DownstreamX,
             amqp_channel:register_confirm_handler(DCh, self()),
             case open(Upstream#upstream.params) of
                 {ok, Conn, Ch} ->
-                    State = #state{downstream_connection = DConn,
-                                   downstream_channel    = DCh,
-                                   downstream_exchange   = DownstreamX,
-                                   upstream              = Upstream,
-                                   connection            = Conn,
-                                   channel               = Ch},
-                    State1 = consume_from_upstream_queue(State, Durable),
                     {Serial, Bindings} =
                         rabbit_misc:execute_mnesia_transaction(
                           fun () ->
-                                  S = rabbit_exchange:peek_serial(DownstreamX),
-                                  Bs = rabbit_binding:list_for_source(
-                                         DownstreamX),
-                                  {S, Bs}
+                                  {rabbit_exchange:peek_serial(DownstreamX),
+                                   rabbit_binding:list_for_source(DownstreamX)}
                           end),
-                    State2 = ensure_upstream_bindings(Serial, Bindings, State1),
+                    State = #state{upstream              = Upstream,
+                                   connection            = Conn,
+                                   channel               = Ch,
+                                   next_serial           = Serial,
+                                   downstream_connection = DConn,
+                                   downstream_channel    = DCh,
+                                   downstream_exchange   = DownstreamX},
+                    State1 = consume_from_upstream_queue(State, Durable),
+                    State2 = ensure_upstream_bindings(Bindings, State1),
                     {noreply, State2};
                 E ->
                     ensure_closed(DConn, DCh),
@@ -331,7 +330,7 @@ consume_from_upstream_queue(State = #state{upstream            = Upstream,
                                                     no_ack = false}, self()),
     State#state{queue = Q}.
 
-ensure_upstream_bindings(Serial, Bindings,
+ensure_upstream_bindings(Bindings,
                          State = #state{upstream            = Upstream,
                                         connection          = Conn,
                                         channel             = Ch,
@@ -356,10 +355,8 @@ ensure_upstream_bindings(Serial, Bindings,
         auto_delete = true,
         arguments   = [rabbit_federation_util:purpose_arg()]}),
     amqp_channel:call(Ch, #'queue.bind'{exchange = InternalX, queue = Q}),
-    State1 = State#state{queue             = Q,
-                         internal_exchange = InternalX},
-    State2 = lists:foldl(fun add_binding/2,
-                         State1#state{next_serial = Serial}, Bindings),
+    State1 = State#state{internal_exchange = InternalX},
+    State2 = lists:foldl(fun add_binding/2, State1, Bindings),
     rabbit_federation_db:set_active_suffix(DownstreamX, Upstream, Suffix),
     OldInternalX = upstream_exchange_name(X, VHost, DownstreamX, OldSuffix),
     delete_upstream_exchange(Conn, OldInternalX),
