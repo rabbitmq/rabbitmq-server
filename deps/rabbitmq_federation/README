@@ -69,8 +69,12 @@ the same type (or backing type). Mixing types will lead to strange
 routing behaviour.
 
 Inter-broker communication is implemented using AMQP (optionally
-secured with SSL). The federation plugin will only send messages over
-the wire for which the downstream exchange has a subscription.
+secured with SSL). Bindings are grouped together and bind / unbind
+commands are sent to the upstream exchange. Therefore the federation
+plugin only receives messages over the wire for which the downstream
+exchange has a subscription. To promote scalability the bindings are
+sent upstream asynchronously - so the effect of adding or removing a
+binding is only guaranteed to be seen eventually.
 
 A typical use would be to have the same "logical" exchange distributed
 over many brokers. This would be achieved by having the exchange

@@ -19,7 +19,8 @@
 -define(INFO, [{<<"baz">>, longstr, <<"bam">>}]).
 -define(H, <<"x-forwarding">>).
 
--define(TEST_NAME, <<"TEST">>).
+-define(US_NAME, <<"upstream">>).
+-define(DS_NAME, <<"downstream">>).
 
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
@@ -47,36 +48,28 @@ add(Table) ->
 %% Test that we apply binding changes in the correct order even when
 %% they arrive out of order.
 serialisation_test() ->
-    rabbit_exchange:declare(r(<<"upstream">>), fanout,
+    rabbit_exchange:declare(r(?US_NAME), fanout,
                             false, false, false, []),
-    X = x(),
+    X = #exchange{arguments = Args} = x(),
+    rabbit_exchange:declare(r(?DS_NAME), 'x-federation',
+                            false, false, false, Args),
     B1 = b(<<"1">>),
     B2 = b(<<"2">>),
     B3 = b(<<"3">>),
 
-    create(X),
-    %% TODO this only passes as long as we don't permute the list!
+    remove_bindings(4, X, [B1, B3]),
+    add_binding(5, X, B1),
     add_binding(1, X, B1),
     add_binding(2, X, B2),
     add_binding(3, X, B3),
-    remove_bindings(4, X, [B1, B3]),
-    add_binding(5, X, B1),
 
     %% List of lists because one for each link
     ?assertEqual([[<<"1">>, <<"2">>]],
                  rabbit_federation_link:list_routing_keys(X)),
 
-    delete(X, [B1, B3]),
-    rabbit_exchange:delete(r(<<"upstream">>), false),
+    rabbit_exchange:delete(r(?US_NAME), false),
+    rabbit_exchange:delete(r(?DS_NAME), false),
     ok.
-
-create(X) ->
-    rabbit_federation_exchange:create(transaction, X),
-    rabbit_federation_exchange:create(none, X).
-
-delete(X, Bs) ->
-    rabbit_federation_exchange:delete(transaction, X, Bs),
-    rabbit_federation_exchange:delete(none, X, Bs).
 
 add_binding(Ser, X, B) ->
     rabbit_federation_exchange:add_binding(transaction, X, B),
@@ -91,12 +84,15 @@ x() ->
                           {<<"exchange">>,longstr,  <<"upstream">>}]}],
     Args = [{<<"upstreams">>, array,   Upstreams},
             {<<"type">>,      longstr, <<"fanout">>}],
-    #exchange{name      = r(?TEST_NAME),
-              type      = <<"x-federation">>,
-              arguments = Args}.
+    #exchange{name        = r(?DS_NAME),
+              type        = 'x-federation',
+              durable     = false,
+              auto_delete = false,
+              internal    = false,
+              arguments   = Args}.
 
 r(Name) -> rabbit_misc:r(<<"/">>, exchange, Name).
 
 b(Key) ->
-    #binding{source = ?TEST_NAME, destination = ?TEST_NAME,
+    #binding{source = ?DS_NAME, destination = <<"whatever">>,
              key = Key, args = []}.

@@ -71,7 +71,7 @@ add_binding(transaction, X, B) ->
     with_module(X, fun (M) -> M:add_binding(transaction, X, B) end);
 add_binding(Serial, X, B = #binding{destination = Dest}) ->
     case is_federation_exchange(Dest) of
-        true  -> ok;
+        true  -> rabbit_federation_link:noop(Serial, X);
         false -> rabbit_federation_link:add_binding(Serial, X, B)
     end,
     with_module(X, fun (M) -> M:add_binding(serial(Serial, X), X, B) end).
@@ -79,10 +79,10 @@ add_binding(Serial, X, B = #binding{destination = Dest}) ->
 remove_bindings(transaction, X, Bs) ->
     with_module(X, fun (M) -> M:remove_bindings(transaction, X, Bs) end);
 remove_bindings(Serial, X, Bs) ->
-    [case is_federation_exchange(Dest) of
-         true  -> ok;
-         false -> rabbit_federation_link:remove_binding(Serial, X, B)
-     end || B = #binding{destination = Dest} <- Bs],
+    rabbit_federation_link:remove_bindings(
+      Serial, X,
+      [B || B = #binding{destination = Dest} <- Bs,
+            not is_federation_exchange(Dest)]),
     with_module(X, fun (M) -> M:remove_bindings(serial(Serial, X), X, Bs) end).
 
 assert_args_equivalence(X = #exchange{name = Name, arguments = Args},

@@ -149,8 +149,8 @@ no_loop_test() ->
       end, [fed(<<"one">>, [<<"two">>]),
             fed(<<"two">>, [<<"one">>])]).
 
-%% %% Downstream: port 5672, has federation
-%% %% Upstream:   port 5673, may not have federation
+%% Downstream: port 5672, has federation
+%% Upstream:   port 5673, may not have federation
 
 restart_upstream_test_() ->
     {timeout, 25, fun restart_upstream/0}.
@@ -188,6 +188,7 @@ with_ch(Fun, Xs) ->
     {ok, Conn} = amqp_connection:start(#amqp_params_network{}),
     {ok, Ch} = amqp_connection:open_channel(Conn),
     [declare_exchange(Ch, X) || X <- Xs],
+    delay(),
     Fun(Ch),
     [delete_exchange(Ch, X) || #'exchange.declare'{exchange = X} <- Xs],
     amqp_connection:close(Conn),
@@ -251,17 +252,24 @@ declare_queue(Ch) ->
 bind_queue(Ch, Q, X, Key) ->
     amqp_channel:call(Ch, #'queue.bind'{ queue       = Q,
                                          exchange    = X,
-                                         routing_key = Key }).
+                                         routing_key = Key }),
+    delay().
 
 unbind_queue(Ch, Q, X, Key) ->
     amqp_channel:call(Ch, #'queue.unbind'{ queue       = Q,
                                            exchange    = X,
-                                           routing_key = Key }).
+                                           routing_key = Key }),
+    delay().
 
 bind_exchange(Ch, D, S, Key) ->
     amqp_channel:call(Ch, #'exchange.bind'{ destination = D,
                                             source      = S,
-                                            routing_key = Key }).
+                                            routing_key = Key }),
+    delay().
+
+delay() ->
+    %% The trouble is that we transmit bindings upstream asynchronously...
+    timer:sleep(100).
 
 bind_queue(Ch, X, Key) ->
     Q = declare_queue(Ch),
@@ -269,10 +277,12 @@ bind_queue(Ch, X, Key) ->
     Q.
 
 delete_exchange(Ch, X) ->
-    amqp_channel:call(Ch, #'exchange.delete'{ exchange = X }).
+    amqp_channel:call(Ch, #'exchange.delete'{ exchange = X }),
+    delay().
 
 delete_queue(Ch, Q) ->
-    amqp_channel:call(Ch, #'queue.delete'{ queue = Q }).
+    amqp_channel:call(Ch, #'queue.delete'{ queue = Q }),
+    delay().
 
 publish(Ch, X, Key, Payload) ->
     amqp_channel:call(Ch, #'basic.publish'{ exchange    = X,

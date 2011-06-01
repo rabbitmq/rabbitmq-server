@@ -21,7 +21,7 @@
 
 -behaviour(gen_server2).
 
--export([go/0, add_binding/3, remove_binding/3, stop/1]).
+-export([go/0, add_binding/3, remove_bindings/3, noop/2, stop/1]).
 -export([list_routing_keys/1]). %% For testing
 
 -export([start_link/1]).
@@ -39,6 +39,7 @@
                 queue,
                 internal_exchange,
                 waiting_cmds = gb_trees:empty(),
+                next_serial,
                 bindings = dict:new(),
                 downstream_connection,
                 downstream_channel,
@@ -48,9 +49,10 @@
 
 go() -> cast(go).
 
-add_binding(Serial, X, B) -> call(X, {enqueue, Serial, {add_binding, B}}).
-
-remove_binding(Serial, X, B) -> call(X, {enqueue, Serial, {remove_binding, B}}).
+add_binding(S, X, B)      -> cast(X, {enqueue, S, {add_binding, B}}).
+remove_bindings(S, X, Bs) -> cast(X, {enqueue, S, {remove_bindings, Bs}}).
+noop(S, X)                -> cast(X, {enqueue, S, noop}).
+%% ^^ Needed to eat unused serials when we decide not to add bindings
 
 stop(X) -> call(X, stop).
 
@@ -66,15 +68,6 @@ init(Args = {_, X}) ->
     join({rabbit_federation_exchange, X}),
     gen_server2:cast(self(), maybe_go),
     {ok, {not_started, Args}}.
-
-handle_call({enqueue, _, _}, _From, State = {not_started, _}) ->
-    {reply, ok, State};
-
-handle_call({enqueue, Serial, Cmd}, From,
-            State = #state{waiting_cmds = Waiting}) ->
-    Waiting1 = gb_trees:insert(Serial, Cmd, Waiting),
-    {reply, ok,
-     play_back_commands(Serial, From, State#state{waiting_cmds = Waiting1})};
 
 handle_call(list_routing_keys, _From, State = #state{bindings = Bindings}) ->
     {reply, lists:sort([K || {K, _} <- dict:fetch_keys(Bindings)]), State};
@@ -99,6 +92,13 @@ handle_cast(go, S0 = {not_started, _Args}) ->
 %% before 'go' gets invoked. Ignore.
 handle_cast(go, State) ->
     {noreply, State};
+
+handle_cast({enqueue, _, _}, State = {not_started, _}) ->
+    {noreply, State};
+
+handle_cast({enqueue, Serial, Cmd}, State = #state{waiting_cmds = Waiting}) ->
+    Waiting1 = gb_trees:insert(Serial, Cmd, Waiting),
+    {noreply, play_back_commands(State#state{waiting_cmds = Waiting1})};
 
 handle_cast(Msg, State) ->
     {stop, {unexpected_cast, Msg}, State}.
@@ -161,8 +161,8 @@ code_change(_OldVsn, State, _Extra) ->
 %%----------------------------------------------------------------------------
 
 call(X, Msg) -> [gen_server2:call(Pid, Msg, infinity) || Pid <- x(X)].
-
-cast(Msg) -> [gen_server2:cast(Pid, Msg) || Pid <- all()].
+cast(Msg) ->    [gen_server2:cast(Pid, Msg) || Pid <- all()].
+cast(X, Msg) -> [gen_server2:cast(Pid, Msg) || Pid <- x(X)].
 
 join(Name) ->
     pg2_fixed:create(Name),
@@ -178,20 +178,32 @@ x(X) ->
 
 %%----------------------------------------------------------------------------
 
-handle_command({add_binding, Binding}, _From, State) ->
+handle_command({add_binding, Binding}, State) ->
     add_binding(Binding, State);
 
-handle_command({remove_binding, Binding}, _From, State) ->
-    remove_binding(Binding, State).
+handle_command({remove_bindings, Bindings}, State) ->
+    lists:foldl(fun remove_binding/2, State, Bindings);
 
-play_back_commands(Serial, From, State = #state{waiting_cmds = Waiting}) ->
+handle_command(noop, State) ->
+    State.
+
+play_back_commands(State = #state{waiting_cmds = Waiting,
+                                  next_serial  = Next}) ->
     case gb_trees:is_empty(Waiting) of
         false -> case gb_trees:take_smallest(Waiting) of
-                     {Serial, Cmd, Waiting1} ->
+                     {Next, Cmd, Waiting1} ->
+                         %% The next one. Just execute it.
+                         State1 = State#state{waiting_cmds = Waiting1,
+                                              next_serial  = Next + 1},
+                         State2 = handle_command(Cmd, State1),
+                         play_back_commands(State2);
+                     {S, _Cmd, Waiting1} when S < Next ->
+                         %% This command came from before we executed
+                         %% binding:list_for_source. Ignore it.
                          State1 = State#state{waiting_cmds = Waiting1},
-                         State2 = handle_command(Cmd, From, State1),
-                         play_back_commands(Serial + 1, From, State2);
+                         play_back_commands(State1);
                      _ ->
+                         %% Some future command. Don't do anything.
                          State
                  end;
         true  -> State
@@ -270,7 +282,15 @@ go(S0 = {not_started, {Upstream, #exchange{name    = DownstreamX,
                                    connection            = Conn,
                                    channel               = Ch},
                     State1 = consume_from_upstream_queue(State, Durable),
-                    State2 = ensure_upstream_bindings(State1),
+                    {Serial, Bindings} =
+                        rabbit_misc:execute_mnesia_transaction(
+                          fun () ->
+                                  S = rabbit_exchange:peek_serial(DownstreamX),
+                                  Bs = rabbit_binding:list_for_source(
+                                         DownstreamX),
+                                  {S, Bs}
+                          end),
+                    State2 = ensure_upstream_bindings(Serial, Bindings, State1),
                     {noreply, State2};
                 E ->
                     ensure_closed(DConn, DCh),
@@ -311,7 +331,8 @@ consume_from_upstream_queue(State = #state{upstream            = Upstream,
                                                     no_ack = false}, self()),
     State#state{queue = Q}.
 
-ensure_upstream_bindings(State = #state{upstream            = Upstream,
+ensure_upstream_bindings(Serial, Bindings,
+                         State = #state{upstream            = Upstream,
                                         connection          = Conn,
                                         channel             = Ch,
                                         downstream_exchange = DownstreamX,
@@ -337,8 +358,8 @@ ensure_upstream_bindings(State = #state{upstream            = Upstream,
     amqp_channel:call(Ch, #'queue.bind'{exchange = InternalX, queue = Q}),
     State1 = State#state{queue             = Q,
                          internal_exchange = InternalX},
-    State2 = lists:foldl(fun add_binding/2, State1,
-                         rabbit_binding:list_for_source(DownstreamX)),
+    State2 = lists:foldl(fun add_binding/2,
+                         State1#state{next_serial = Serial}, Bindings),
     rabbit_federation_db:set_active_suffix(DownstreamX, Upstream, Suffix),
     OldInternalX = upstream_exchange_name(X, VHost, DownstreamX, OldSuffix),
     delete_upstream_exchange(Conn, OldInternalX),
