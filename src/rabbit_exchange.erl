@@ -76,7 +76,7 @@
         (rabbit_types:exchange())
         -> 'not_deleted' | {'deleted', rabbit_binding:deletions()}).
 -spec(serial/1 :: (rabbit_types:exchange()) -> 'none' | pos_integer()).
--spec(peek_serial/1 :: (name()) -> pos_integer()).
+-spec(peek_serial/1 :: (name()) -> pos_integer() | 'exchange_already_deleted').
 
 -endif.
 
