@@ -92,6 +92,9 @@ init() ->
     ensure_mnesia_dir(),
     ok = init_db(read_cluster_nodes_config(), true,
                  fun maybe_upgrade_local_or_record_desired/0),
+    %% We intuitively expect the global name server to be up when
+    %% Mnesia is. In fact that's not the case - let's make it so.
+    ok = global:sync(),
     ok.
 
 is_db_empty() ->
