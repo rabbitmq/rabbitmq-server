@@ -76,7 +76,7 @@
         (rabbit_types:exchange())
         -> 'not_deleted' | {'deleted', rabbit_binding:deletions()}).
 -spec(serial/1 :: (rabbit_types:exchange()) -> 'none' | pos_integer()).
--spec(peek_serial/1 :: (name()) -> pos_integer() | 'exchange_already_deleted').
+-spec(peek_serial/1 :: (name()) -> pos_integer() | 'undefined').
 
 -endif.
 
@@ -334,7 +334,7 @@ next_serial(XName) ->
 peek_serial(XName) ->
     case mnesia:read({rabbit_exchange_serial, XName}) of
         [#exchange_serial{next = Serial}]  -> Serial;
-        _                                  -> exchange_already_deleted
+        _                                  -> undefined
     end.
 
 %% Used with atoms from records; e.g., the type is expected to exist.
