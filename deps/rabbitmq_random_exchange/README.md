@@ -16,5 +16,9 @@ interested.
     make package
     cp dist/*.ez $RABBITMQ_HOME/plugins
 
-Apache 2.0 Licensed:
-http://www.apache.org/licenses/LICENSE-2.0.html
+### Usage
+
+To use it, declare an exchange of type "x-random".
+
+    Apache 2.0 Licensed:
+    http://www.apache.org/licenses/LICENSE-2.0.html

@@ -33,17 +33,20 @@
 
 -rabbit_boot_step({?MODULE,
                    [{description, "exchange type random"},
-                    {mfa,         {rabbit_registry, register, [exchange, <<"random">>, ?MODULE]}},
+                    {mfa,         {rabbit_registry, register, [exchange, <<"x-random">>, ?MODULE]}},
                     {requires,    rabbit_registry},
                     {enables,     kernel_ready}]}).
 
 description() ->
-    [{name, <<"random">>},
+    [{name, <<"x-random">>},
      {description, <<"AMQP random exchange. Like a direct exchange, but randomly chooses who to route to.">>}].
 
-route(#exchange{name = Name},
-      #delivery{message = #basic_message{routing_keys = Routes}}) ->
+route(_X=#exchange{name = Name},
+      _D=#delivery{message = #basic_message{routing_keys = Routes}}) ->
     Matches = rabbit_router:match_routing_key(Name, Routes),
+    %io:format("exchange: ~p~n", [X]),
+    %io:format("delivery: ~p~n", [D]),
+    %io:format("matches: ~p~n", [Matches]),
     case length(Matches) of
       Len when Len < 2 -> Matches;
       Len ->
