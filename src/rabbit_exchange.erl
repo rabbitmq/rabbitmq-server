@@ -24,7 +24,7 @@
          info_keys/0, info/1, info/2, info_all/1, info_all/2,
          publish/2, delete/2]).
 %% these must be run inside a mnesia tx
--export([maybe_auto_delete/1, serial/1]).
+-export([maybe_auto_delete/1, serial/1, peek_serial/1]).
 
 %%----------------------------------------------------------------------------
 
@@ -75,7 +75,8 @@
 -spec(maybe_auto_delete/1::
         (rabbit_types:exchange())
         -> 'not_deleted' | {'deleted', rabbit_binding:deletions()}).
--spec(serial/1:: (rabbit_types:exchange()) -> 'none' | pos_integer()).
+-spec(serial/1 :: (rabbit_types:exchange()) -> 'none' | pos_integer()).
+-spec(peek_serial/1 :: (name()) -> pos_integer()).
 
 -endif.
 
@@ -329,6 +330,12 @@ next_serial(XName) ->
     ok = mnesia:write(rabbit_exchange_serial,
                       #exchange_serial{name = XName, next = Serial + 1}, write),
     Serial.
+
+peek_serial(XName) ->
+    case mnesia:read({rabbit_exchange_serial, XName}) of
+        [#exchange_serial{next = Serial}]  -> Serial;
+        _                                  -> exchange_already_deleted
+    end.
 
 %% Used with atoms from records; e.g., the type is expected to exist.
 type_to_module(T) ->
