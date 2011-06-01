@@ -52,6 +52,7 @@
                     {mfa,         {rabbit_sup, start_child,
                                    [rabbit_mgmt_global_sup]}},
                     {requires,    rabbit_event},
+                    {requires,    database},
                     {enables,     recovery}]}).
 
 start(_Type, _StartArgs) ->
