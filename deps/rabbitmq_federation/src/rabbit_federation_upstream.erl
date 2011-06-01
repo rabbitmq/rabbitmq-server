@@ -19,7 +19,7 @@
 -include("rabbit_federation.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
--export([to_table/1, from_table/3, from_props/3, validate_table/1]).
+-export([to_table/1, validate_table/1, from_table/3, from_props/3]).
 
 %%----------------------------------------------------------------------------
 
@@ -28,19 +28,74 @@ to_table(#upstream{params   = #amqp_params_network{host         = H,
                                                    virtual_host = V,
                                                    ssl_options  = SSL},
                    exchange = X}) ->
-    Protocol = case SSL of
-                   none -> <<"amqp">>;
-                   _    -> <<"amqps">>
-               end,
     {table, [{<<"host">>,         longstr, list_to_binary(H)},
-             {<<"protocol">>,     longstr, Protocol},
+             {<<"protocol">>,     longstr, case SSL of
+                                               none -> <<"amqp">>;
+                                               _    -> <<"amqps">>
+                                           end},
              {<<"port">>,         long,    P},
              {<<"virtual_host">>, longstr, V},
              {<<"exchange">>,     longstr, X}]}.
 
+validate_table({table, Table}) ->
+    Args = [{<<"host">>,         [longstr],                      true},
+            {<<"protocol">>,     [longstr],                      false},
+            {<<"port">>,         [byte, short, signedint, long], false},
+            {<<"virtual_host">>, [longstr],                      false},
+            {<<"exchange">>,     [longstr],                      false}],
+    [case {rabbit_misc:table_lookup(Table, K), Mandatory} of
+         {{T,  _}, _}     -> case lists:member(T, Ts) of
+                                 true  -> ok;
+                                 false -> fail("~s should have type in ~p, "
+                                               "but ~s was received",
+                                               [K, Ts, T])
+                             end;
+         {_,       true}  -> fail("~s is mandatory", [K]);
+         {_,       false} -> ok
+     end || {K, Ts, Mandatory} <- Args];
+validate_table({Type, Obj}) ->
+    fail("Upstream ~w was of type ~s, not table", [Obj, Type]).
+
 from_table({table, Table}, DefaultXName, DefaultVHost) ->
-    TableProps = [{list_to_atom(binary_to_list(K)), V} || {K, _T, V} <- Table],
-    from_props(TableProps, DefaultXName, DefaultVHost).
+    from_props([{list_to_atom(binary_to_list(K)), V} || {K, _T, V} <- Table],
+               DefaultXName, DefaultVHost).
+
+from_props(GivenProps, DefaultXName, DefaultVHost) ->
+    {ok, Brokers} = application:get_env(rabbitmq_federation, brokers),
+    Props = binaryise(
+              case [Merged || BrokerProps <- binaryise_all(Brokers),
+                              Merged      <- [merge(BrokerProps, GivenProps)],
+                              all_match(BrokerProps, Merged)] of
+                  []    -> GivenProps;
+                  [P|_] -> P
+              end),
+    Params = #amqp_params_network{
+      host         = binary_to_list(pget(host, Props)),
+      port         = pget(port,         Props),
+      virtual_host = pget(virtual_host, Props, DefaultVHost),
+      username     = pget(username,     Props, <<"guest">>),
+      password     = pget(password,     Props, <<"guest">>)},
+    Params1 = lists:foldl(fun (F, ParamsIn) -> F(ParamsIn, Props) end, Params,
+                          [fun set_ssl_options/2,
+                           fun set_default_port/2,
+                           fun set_heartbeat/2,
+                           fun set_mechanisms/2]),
+    #upstream{params          = Params1,
+              exchange        = pget(exchange,        Props, DefaultXName),
+              prefetch_count  = pget(prefetch_count,  Props, none),
+              reconnect_delay = pget(reconnect_delay, Props, 1),
+              queue_expires   = pget(queue_expires,   Props, 1800)}.
+
+%%----------------------------------------------------------------------------
+
+fail(Fmt, Args) -> rabbit_misc:protocol_error(precondition_failed, Fmt, Args).
+
+binaryise_all(Items) -> [binaryise(I) || I <- Items].
+
+binaryise(Props) -> [{K, binaryise0(V)} || {K, V} <- Props].
+
+binaryise0(L) when is_list(L) -> list_to_binary(L);
+binaryise0(X)                 -> X.
 
 %% For all the props in Props1, does Props2 match?
 all_match(Props1, Props2) ->
@@ -56,43 +111,11 @@ merge(Props1, Props2) ->
                         end
                 end, Props2, Props1).
 
-binaryise_all(Items) -> [binaryise(I) || I <- Items].
+%% TODO remove
+pget(K, P, D) -> proplists:get_value(K, P, D).
+pget(K, P) -> proplists:get_value(K, P).
 
-binaryise(Props) -> [{K, binaryise0(V)} || {K, V} <- Props].
-
-binaryise0(L) when is_list(L) -> list_to_binary(L);
-binaryise0(X)                 -> X.
-
-from_props(Props, DefaultXName, DefaultVHost) ->
-    {ok, Brokers} = application:get_env(rabbitmq_federation, brokers),
-    Final = case [Merged || BrokerProps <- binaryise_all(Brokers),
-                            Merged      <- [merge(BrokerProps, Props)],
-                            all_match(BrokerProps, Merged)] of
-                []    -> Props;
-                [P|_] -> P
-            end,
-    from_merged_props(binaryise(Final), DefaultXName, DefaultVHost).
-
-from_merged_props(Props, DefaultXName, DefaultVHost) ->
-    #upstream{params          = amqp_params_from_props(Props, DefaultVHost),
-              exchange        = pget(exchange,        Props, DefaultXName),
-              prefetch_count  = pget(prefetch_count,  Props, none),
-              reconnect_delay = pget(reconnect_delay, Props, 1),
-              queue_expires   = pget(queue_expires,   Props, 1800)}.
-
-amqp_params_from_props(Props, DVHost) ->
-    Params = #amqp_params_network{
-      host         = binary_to_list(pget(host, Props)),
-      port         = pget(port,         Props),
-      virtual_host = pget(virtual_host, Props, DVHost),
-      username     = pget(username,     Props, <<"guest">>),
-      password     = pget(password,     Props, <<"guest">>)
-     },
-    lists:foldl(fun (F, ParamsIn) -> F(ParamsIn, Props) end, Params,
-                [fun set_ssl_options/2,
-                 fun set_default_port/2,
-                 fun set_heartbeat/2,
-                 fun set_mechanisms/2]).
+%%----------------------------------------------------------------------------
 
 set_ssl_options(Params, Props) ->
     case pget(protocol, Props, <<"amqp">>) of
@@ -103,15 +126,13 @@ set_ssl_options(Params, Props) ->
     end.
 
 %% TODO this should be part of the Erlang client - see bug 24138
-set_default_port(Params, _Props) ->
-    case Params#amqp_params_network.port of
-        undefined  -> Port = case Params#amqp_params_network.ssl_options of
-                                 none -> 5672;
-                                 _    -> 5671
-                             end,
-                      Params#amqp_params_network{port = Port};
-        _          -> Params
-    end.
+set_default_port(Params = #amqp_params_network{port        = undefined,
+                                               ssl_options = none}, _Props) ->
+    Params#amqp_params_network{port = 5672};
+set_default_port(Params = #amqp_params_network{port = undefined}, _Props) ->
+    Params#amqp_params_network{port = 5671};
+set_default_port(Params = #amqp_params_network{}, _Props) ->
+    Params.
 
 set_heartbeat(Params, Props) ->
     case pget(heartbeat, Props, none) of
@@ -128,33 +149,3 @@ set_mechanisms(Params, Props) ->
                             [fun amqp_auth_mechanisms:external/3]};
         M          -> exit({unsupported_mechanism, M})
     end.
-
-%%----------------------------------------------------------------------------
-
-validate_table({table, Table}) ->
-    Args = [{<<"host">>,         [longstr],                      true},
-            {<<"protocol">>,     [longstr],                      false},
-            {<<"port">>,         [byte, short, signedint, long], false},
-            {<<"virtual_host">>, [longstr],                      false},
-            {<<"exchange">>,     [longstr],                      false}],
-    [check_arg(Table, K, Ts, M) || {K, Ts, M} <- Args];
-validate_table({Type, Obj}) ->
-    fail("Upstream ~w was of type ~s, not table", [Obj, Type]).
-
-check_arg(Table, K, Ts, Mandatory) ->
-    case {rabbit_misc:table_lookup(Table, K), Mandatory} of
-        {{T,  _}, _}     -> case lists:member(T, Ts) of
-                                true  -> ok;
-                                false -> fail("~s should have type in ~p, "
-                                              "but ~s was received",
-                                              [K, Ts, T])
-                            end;
-        {_,       true}  -> fail("~s is mandatory", [K]);
-        {_,       false} -> ok
-    end.
-
-fail(Fmt, Args) -> rabbit_misc:protocol_error(precondition_failed, Fmt, Args).
-
-%% TODO remove
-pget(K, P, D) -> proplists:get_value(K, P, D).
-pget(K, P) -> proplists:get_value(K, P).
