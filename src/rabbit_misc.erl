@@ -56,6 +56,7 @@
 -export([const_ok/0, const/1]).
 -export([ntoa/1, ntoab/1]).
 -export([is_process_alive/1]).
+-export([pget/2, pget/3, pget_or_die/2]).
 
 %%----------------------------------------------------------------------------
 
@@ -201,6 +202,9 @@
 -spec(ntoa/1 :: (inet:ip_address()) -> string()).
 -spec(ntoab/1 :: (inet:ip_address()) -> string()).
 -spec(is_process_alive/1 :: (pid()) -> boolean()).
+-spec(pget/2 :: (term(), [term()]) -> term()).
+-spec(pget/3 :: (term(), [term()], term()) -> term()).
+-spec(pget_or_die/2 :: (term(), [term()]) -> term() | no_return()).
 
 -endif.
 
@@ -905,4 +909,13 @@ is_process_alive(Pid) ->
     case rpc:call(node(Pid), erlang, is_process_alive, [Pid]) of
         true -> true;
         _    -> false
+    end.
+
+pget(K, P) -> proplists:get_value(K, P).
+pget(K, P, D) -> proplists:get_value(K, P, D).
+
+pget_or_die(K, P) ->
+    case proplists:get_value(K, P) of
+        undefined -> exit({error, key_missing, K});
+        V         -> V
     end.
