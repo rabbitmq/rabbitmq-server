@@ -94,7 +94,7 @@ recover() ->
                        true  -> store(X);
                        false -> ok
                    end,
-                   rabbit_exchange:callback(X, create, [Tx, X])
+                   rabbit_exchange:callback(X, create, [map_create_tx(Tx), X])
            end,
            rabbit_durable_exchange),
     [XName || #exchange{name = XName} <- Xs].
@@ -128,10 +128,7 @@ declare(XName, Type, Durable, AutoDelete, Internal, Args) ->
               end
       end,
       fun ({new, Exchange}, Tx) ->
-              ok = XT:create(case Tx of
-                                 true  -> transaction;
-                                 false -> none
-                             end, Exchange),
+              ok = XT:create(map_create_tx(Tx), Exchange),
               rabbit_event:notify_if(not Tx, exchange_created, info(Exchange)),
               Exchange;
           ({existing, Exchange}, _Tx) ->
@@ -139,6 +136,9 @@ declare(XName, Type, Durable, AutoDelete, Internal, Args) ->
           (Err, _Tx) ->
               Err
       end).
+
+map_create_tx(true)  -> transaction;
+map_create_tx(false) -> none.
 
 store(X = #exchange{name = Name, type = Type}) ->
     ok = mnesia:write(rabbit_exchange, X, write),
