@@ -192,11 +192,15 @@ action(wait, Node, [], _Opts, Inform) ->
 
 action(status, Node, [], _Opts, Inform) ->
     Inform("Status of node ~p", [Node]),
-    case call(Node, {rabbit, status, []}) of
-        {badrpc, _} = Res -> Res;
-        Res               -> io:format("~p~n", [Res]),
-                             ok
-    end;
+    display_call_result(Node, {rabbit, status, []});
+
+action(cluster_status, Node, [], _Opts, Inform) ->
+    Inform("Cluster status of node ~p", [Node]),
+    display_call_result(Node, {rabbit_mnesia, status, []});
+
+action(environment, Node, _App, _Opts, Inform) ->
+    Inform("Application environment of node ~p", [Node]),
+    display_call_result(Node, {rabbit, environment, []});
 
 action(rotate_logs, Node, [], _Opts, Inform) ->
     Inform("Reopening logs for node ~p", [Node]),
@@ -333,8 +337,9 @@ action(list_permissions, Node, [], Opts, Inform) ->
 
 action(report, Node, _Args, _Opts, Inform) ->
     io:format("Reporting server status on ~p~n", [erlang:universaltime()]),
-    [action(status, N, [], [], Inform) ||
-     N <- rpc_call(Node, rabbit_mnesia, running_clustered_nodes, [])],
+    [ok = action(Action, N, [], [], Inform) ||
+       N      <- rpc_call(Node, rabbit_mnesia, running_clustered_nodes, []),
+       Action <- [status, cluster_status, environment]],
     VHosts = rpc_call(Node, rabbit_vhost, list, []),
     [print_report(Node, Q)      || Q <- ?GLOBAL_QUERIES],
     [print_report(Node, Q, [V]) || Q <- ?VHOST_QUERIES, V <- VHosts],
@@ -415,6 +420,13 @@ display_list(L) when is_list(L) ->
                   lists:sort(L)),
     ok;
 display_list(Other) -> Other.
+
+display_call_result(Node, MFA) ->
+    case call(Node, MFA) of
+        {badrpc, _} = Res -> Res;
+        Res               -> io:format("~p~n", [Res]),
+                             ok
+    end.
 
 call(Node, {Mod, Fun, Args}) ->
     rpc_call(Node, Mod, Fun, lists:map(fun list_to_binary/1, Args)).

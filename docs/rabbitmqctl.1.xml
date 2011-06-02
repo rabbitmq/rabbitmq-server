@@ -184,8 +184,9 @@
           <listitem>
             <para>
               Displays broker status information such as the running applications
-              on the current Erlang node, RabbitMQ and Erlang versions, OS, memory
-              and environment details and which nodes are clustered.
+              on the current Erlang node, RabbitMQ and Erlang versions and OS name.
+              (See the <command>cluster_status</command> command to find out which
+              nodes are clustered and running.)
             </para>
             <para>
               Diagnostic information is displayed if the broker is not running,
@@ -378,6 +379,20 @@
               ignores the current status of the specified nodes.
               Clustering may still fail for a variety of other
               reasons.
+            </para>
+          </listitem>
+        </varlistentry>
+        <varlistentry>
+          <term><cmdsynopsis><command>cluster_status</command></cmdsynopsis></term>
+          <listitem>
+            <para>
+              Displays all the nodes in the cluster grouped by node type,
+              together with the currently running nodes.
+            </para>
+            <para role="example-prefix">For example:</para>
+            <screen role="example">rabbitmqctl cluster_status</screen>
+            <para role="example">
+              This command displays the nodes in the cluster.
             </para>
           </listitem>
         </varlistentry>
@@ -1280,6 +1295,16 @@
               in order, the queue name, channel process id, consumer tag, and a
               boolean indicating whether acknowledgements are expected from the
               consumer.
+            </para>
+          </listitem>
+        </varlistentry>
+        <varlistentry>
+          <term><cmdsynopsis><command>environment</command></cmdsynopsis></term>
+          <listitem>
+            <para>
+              Display the name and value of each variable in the application environment.
+              This can be used to verify that options specified for the rabbit
+              application in the configuration file have been read.
             </para>
           </listitem>
         </varlistentry>
