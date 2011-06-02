@@ -76,6 +76,9 @@ handle_call(stop, _From, State = #state{connection = Conn, queue = Q}) ->
     disposable_channel_call(Conn, #'queue.delete'{queue = Q}),
     {stop, normal, ok, State};
 
+handle_call(Msg, _From, serial_undefined) ->
+    {stop, normal, ok, serial_undefined};
+
 handle_call(Msg, _From, State) ->
     {stop, {unexpected_call, Msg}, State}.
 
@@ -283,7 +286,7 @@ go(S0 = {not_started, {Upstream, #exchange{name    = DownstreamX,
                           end),
                     case Serial of
                         undefined ->
-                            {stop, serial_undefined, S0};
+                            {noreply, serial_undefined};
                         _ ->
                             {noreply,
                              ensure_upstream_bindings(
