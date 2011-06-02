@@ -282,8 +282,8 @@ go(S0 = {not_started, {Upstream, #exchange{name    = DownstreamX,
                                    rabbit_binding:list_for_source(DownstreamX)}
                           end),
                     case Serial of
-                        not_found ->
-                            {stop, serial_not_found, S0};
+                        undefined ->
+                            {stop, serial_undefined, S0};
                         _ ->
                             {noreply,
                              ensure_upstream_bindings(
