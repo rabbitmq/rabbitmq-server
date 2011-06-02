@@ -511,12 +511,6 @@ consumer_details_fun(PatternFun, Tables) ->
                                   ets:match(Table, {Pattern, '$1'}))]}]
     end.
 
-total_messages(Q) ->
-    case add(pget(messages_ready, Q), pget(messages_unacknowledged, Q)) of
-        unknown  -> [];
-        Messages -> [{messages, Messages}]
-    end.
-
 zero_old_rates(Stats) -> [maybe_zero_rate(S) || S <- Stats].
 
 maybe_zero_rate({Key, Val}) ->
@@ -604,8 +598,7 @@ detail_queue_stats(Objs, Tables) ->
                       queue_funs(Tables))).
 
 queue_funs(Tables) ->
-    [basic_stats_fun(queue_stats, Tables), fun total_messages/1,
-     augment_msg_stats_fun(Tables)].
+    [basic_stats_fun(queue_stats, Tables), augment_msg_stats_fun(Tables)].
 
 exchange_stats(Objs, FineSpecs, Tables) ->
     merge_stats(Objs, [fine_stats_fun(FineSpecs, Tables),
