@@ -269,8 +269,7 @@ check_remove_binding(B = #binding{destination = Dest},
 
 key(#binding{key = Key, args = Args}) -> {Key, Args}.
 
-go(S0 = {not_started, {Upstream, #exchange{name    = DownstreamX,
-                                           durable = Durable}}}) ->
+go(S0 = {not_started, {Upstream, #exchange{name = DownstreamX}}}) ->
     case open(rabbit_federation_util:local_params()) of
         {ok, DConn, DCh} ->
             #'confirm.select_ok'{} =
@@ -297,8 +296,8 @@ go(S0 = {not_started, {Upstream, #exchange{name    = DownstreamX,
                                         next_serial           = Serial,
                                         downstream_connection = DConn,
                                         downstream_channel    = DCh,
-                                        downstream_exchange   = DownstreamX},
-                                 Durable), Bindings)}
+                                        downstream_exchange   = DownstreamX}),
+                               Bindings)}
                     end;
                 E ->
                     ensure_closed(DConn, DCh),
@@ -308,21 +307,16 @@ go(S0 = {not_started, {Upstream, #exchange{name    = DownstreamX,
             {stop, E, S0}
     end.
 
-consume_from_upstream_queue(State = #state{upstream            = Upstream,
-                                           connection          = Conn,
-                                           channel             = Ch,
-                                           downstream_exchange = DownstreamX},
-                            Durable) ->
+consume_from_upstream_queue(
+  State = #state{upstream            = Upstream,
+                 channel             = Ch,
+                 downstream_exchange = DownstreamX}) ->
     #upstream{exchange       = X,
               prefetch_count = PrefetchCount,
               queue_expires  = Expiry,
               params         = #amqp_params_network{virtual_host = VHost}}
         = Upstream,
     Q = upstream_queue_name(X, VHost, DownstreamX),
-    case Durable of
-        false -> delete_upstream_queue(Conn, Q);
-        _     -> ok
-    end,
     amqp_channel:call(
       Ch, #'queue.declare'{
         queue     = Q,
@@ -386,9 +380,6 @@ upstream_queue_name(X, VHost, #resource{name         = DownstreamName,
 upstream_exchange_name(X, VHost, DownstreamX, Suffix) ->
     Name = upstream_queue_name(X, VHost, DownstreamX),
     <<Name/binary, " ", Suffix/binary>>.
-
-delete_upstream_queue(Conn, Q) ->
-    disposable_channel_call(Conn, #'queue.delete'{queue = Q}).
 
 delete_upstream_exchange(Conn, X) ->
     disposable_channel_call(Conn, #'exchange.delete'{exchange = X}).
