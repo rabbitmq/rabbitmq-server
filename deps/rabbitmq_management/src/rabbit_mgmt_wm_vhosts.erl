@@ -29,7 +29,8 @@ content_types_provided(ReqData, Context) ->
    {[{"application/json", to_json}], ReqData, Context}.
 
 to_json(ReqData, Context = #context{user = User}) ->
-    VHosts = format(rabbit_access_control:list_vhosts(User, read)),
+    VHosts = [rabbit_vhost:info(V) ||
+                 V <- rabbit_access_control:list_vhosts(User, read)],
     rabbit_mgmt_util:reply_list(VHosts, ReqData, Context).
 
 is_authorized(ReqData, Context) ->
@@ -38,7 +39,4 @@ is_authorized(ReqData, Context) ->
 %%--------------------------------------------------------------------
 
 vhosts() ->
-    format(rabbit_vhost:list()).
-
-format(Vs) ->
-    [[{name, N}] || N <- Vs].
+    rabbit_vhost:info_all([name]).

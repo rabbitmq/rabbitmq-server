@@ -1,3 +1,4 @@
+<%= maybe_truncate(bindings) %>
 <% if (bindings.length > 0) { %>
     <table class="list bindings">
       <thead>
@@ -7,7 +8,7 @@
 <% } else { %>
           <th>From</th>
 <% } %>
-          <th>Routing Key</th>
+          <th>Routing key</th>
           <th>Arguments</th>
           <th></th>
         </tr>

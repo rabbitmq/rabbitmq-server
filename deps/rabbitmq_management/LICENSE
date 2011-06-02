@@ -2,9 +2,9 @@ This package, the RabbitMQ Management Plugin is licensed under the MPL. For the
 MPL, please see LICENSE-MPL-RabbitMQ.
 
 This package makes use of the following third party libraries:
-jQuery     - http://jquery.com/                - MIT license
-EJS        - http://embeddedjs.com/            - MIT license
-Sammy      - http://code.quirkey.com/sammy/    - MIT license
+jQuery     - http://jquery.com/                - MIT license, see LICENSE-MIT-jQuery142
+EJS        - http://embeddedjs.com/            - MIT license, see LICENSE-MIT-EJS10
+Sammy      - http://code.quirkey.com/sammy/    - MIT license, see LICENSE-MIT-Sammy060
 webmachine - http://webmachine.basho.com/      - Apache license, 2.0
 mochiweb   - http://github.com/mochi/mochiweb/ - MIT license
 

@@ -44,7 +44,7 @@ resource_exists(ReqData, Context) ->
 to_json(ReqData, Context) ->
     Q0 = queue(ReqData),
     Q = rabbit_mgmt_db:get_queue(Q0),
-    rabbit_mgmt_util:reply(Q, ReqData, Context).
+    rabbit_mgmt_util:reply(rabbit_mgmt_format:strip_pids(Q), ReqData, Context).
 
 accept_content(ReqData, Context) ->
    rabbit_mgmt_util:http_to_amqp(

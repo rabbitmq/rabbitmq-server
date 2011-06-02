@@ -43,25 +43,14 @@ to_json(ReqData, Context = #context{ user = #user { username = Username } }) ->
     {ok, Conn} = amqp_connection:start(Ps),
     {ok, Ch} = amqp_connection:open_channel(Conn),
     amqp_channel:call(Ch, #'queue.declare'{ queue = ?QUEUE }),
-    amqp_channel:call(Ch,
-                      #'basic.publish'{ routing_key = ?QUEUE },
+    amqp_channel:call(Ch, #'basic.publish'{ routing_key = ?QUEUE },
                       #amqp_msg{payload = <<"test_message">>}),
-    amqp_channel:subscribe(Ch, #'basic.consume'{queue = ?QUEUE,
-                                                no_ack = true}, self()),
-    receive
-        #'basic.consume_ok'{consumer_tag = CTag} -> ok
-    end,
-    receive
-        {#'basic.deliver'{}, _} -> ok
-    end,
-    amqp_channel:call(Ch, #'basic.cancel'{consumer_tag = CTag}),
-    receive
-        #'basic.cancel_ok'{} -> ok
-    end,
+    {#'basic.get_ok'{}, _} =
+        amqp_channel:call(Ch, #'basic.get'{queue = ?QUEUE, no_ack = true}),
     %% Don't delete the queue. If this is pinged every few seconds we
     %% don't want to create a mnesia transaction each time.
-    amqp_channel:close(Ch),
-    amqp_connection:close(Conn),
+    catch amqp_channel:close(Ch),
+    catch amqp_connection:close(Conn),
     rabbit_mgmt_util:reply([{status, ok}], ReqData, Context).
 
 is_authorized(ReqData, Context) ->

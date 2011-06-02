@@ -25,10 +25,12 @@
          get_overview/0, get_channels/0, get_channel/1]).
 
 %% TODO can these not be exported any more?
--export([pget/2, add/2, rates/5]).
+-export([add/2, rates/5]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3]).
+
+-import(rabbit_misc, [pget/3]).
 
 -record(state, {tables}).
 -define(FINE_STATS_TYPES, [channel_queue_stats, channel_exchange_stats,
@@ -112,15 +114,12 @@ safe_call(Term, Item) ->
     end.
 
 %%----------------------------------------------------------------------------
-
 pget(Key, List) -> pget(Key, List, unknown).
-
-pget(Key, List, Default) -> proplists:get_value(Key, List, Default).
 
 pset(Key, Value, List) -> [{Key, Value} | proplists:delete(Key, List)].
 
-id(Pid) when is_pid(Pid) -> rabbit_mgmt_format:pid(Pid);
-id(List) -> rabbit_mgmt_format:pid(pget(pid, List)).
+id(Pid) when is_pid(Pid) -> Pid;
+id(List) -> pget(pid, List).
 
 add(unknown, _) -> unknown;
 add(_, unknown) -> unknown;
@@ -146,9 +145,10 @@ rate(Stats, Timestamp, OldStats, OldTimestamp, Key) ->
         true  -> unknown;
         false -> Diff = pget(Key, Stats) - pget(Key, OldStats),
                  Name = details_key(Key),
-                 Rate = Diff / (timer:now_diff(Timestamp, OldTimestamp) /
-                                    1000000),
+                 Interval = timer:now_diff(Timestamp, OldTimestamp),
+                 Rate = Diff / (Interval / 1000000),
                  {Name, [{rate, Rate},
+                         {interval, Interval},
                          {last_event,
                           rabbit_mgmt_format:timestamp_ms(Timestamp)}]}
     end.
@@ -185,14 +185,19 @@ gs_update_add(Key, Item0, Item1) ->
         true  ->
             I0 = if_unknown(Item0, []),
             I1 = if_unknown(Item1, []),
+            %% TODO if I0 and I1 are from different channels then should we not
+            %% just throw away interval / last_event?
             [{rate,       pget(rate, I0, 0) + pget(rate, I1, 0)},
-             {last_event, erlang:max(pget(last_event, I0, 0),
-                                     pget(last_event, I1, 0))}];
+             {interval,   gs_max(interval, I0, I1)},
+             {last_event, gs_max(last_event, I0, I1)}];
         false ->
             I0 = if_unknown(Item0, 0),
             I1 = if_unknown(Item1, 0),
             I0 + I1
     end.
+
+gs_max(Key, I0, I1) ->
+    erlang:max(pget(Key, I0, 0), pget(Key, I1, 0)).
 
 if_unknown(unknown, Def) -> Def;
 if_unknown(Val,    _Def) -> Val.
@@ -201,15 +206,15 @@ if_unknown(Val,    _Def) -> Val.
 
 init([]) ->
     {ok, #state{tables = orddict:from_list(
-                           [{Key, ets:new(anon, [private])} ||
+                           [{Key, ets:new(anon, [private, ordered_set])} ||
                                Key <- ?TABLES])}}.
 
 handle_call({get_queue, Q0}, _From, State = #state{tables = Tables}) ->
-    [Q1] = adjust_hibernated_memory_use(detail_queue_stats([Q0], Tables)),
+    [Q1] = detail_queue_stats([Q0], Tables),
     {reply, Q1, State};
 
 handle_call({get_queues, Qs}, _From, State = #state{tables = Tables}) ->
-    {reply, adjust_hibernated_memory_use(list_queue_stats(Qs, Tables)), State};
+    {reply, list_queue_stats(Qs, Tables), State};
 
 handle_call({get_exchanges, Xs, Mode}, _From,
             State = #state{tables = Tables}) ->
@@ -286,8 +291,7 @@ handle_event(#event{type = queue_stats, props = Stats, timestamp = Timestamp},
              State) ->
     handle_stats(queue_stats, Stats, Timestamp,
                  [{fun rabbit_mgmt_format:properties/1,[backing_queue_status]},
-                  {fun rabbit_mgmt_format:timestamp/1, [idle_since]},
-                  {fun rabbit_mgmt_format:pid/1, [exclusive_consumer_pid]}],
+                  {fun rabbit_mgmt_format:timestamp/1, [idle_since]}],
                  [], State);
 
 handle_event(Event = #event{type = queue_deleted}, State) ->
@@ -299,7 +303,6 @@ handle_event(#event{type = connection_created, props = Stats}, State) ->
       connection_stats, [{name, Name} | proplists:delete(name, Stats)],
       [{fun rabbit_mgmt_format:addr/1,         [address, peer_address]},
        {fun rabbit_mgmt_format:port/1,         [port, peer_port]},
-       {fun rabbit_mgmt_format:node_and_pid/1, [pid]},
        {fun rabbit_mgmt_format:protocol/1,     [protocol]},
        {fun rabbit_mgmt_format:amqp_table/1,   [client_properties]}], State);
 
@@ -319,10 +322,7 @@ handle_event(#event{type = channel_created, props = Stats},
     Name = rabbit_mgmt_format:print("~s:~w",
                                     [pget(name,   Conn),
                                      pget(number, Stats)]),
-    handle_created(channel_stats, [{name, Name}|Stats],
-                   [{fun rabbit_mgmt_format:node_and_pid/1, [pid]},
-                    {fun rabbit_mgmt_format:pid/1,          [connection]}],
-                   State);
+    handle_created(channel_stats, [{name, Name}|Stats], [], State);
 
 handle_event(#event{type = channel_stats, props = Stats, timestamp = Timestamp},
              State) ->
@@ -383,8 +383,7 @@ handle_deleted(TName, #event{props = [{pid, Pid}]},
 
 handle_consumer(Fun, Props,
                 State = #state{tables = Tables}) ->
-    P = rabbit_mgmt_format:format(
-          Props, [{fun rabbit_mgmt_format:pid/1, [queue, channel]}]),
+    P = rabbit_mgmt_format:format(Props, []),
     Table = orddict:fetch(consumers, Tables),
     Fun(Table, {pget(queue, P), pget(channel, P)}, P),
     {ok, State}.
@@ -512,12 +511,6 @@ consumer_details_fun(PatternFun, Tables) ->
                                   ets:match(Table, {Pattern, '$1'}))]}]
     end.
 
-total_messages(Q) ->
-    case add(pget(messages_ready, Q), pget(messages_unacknowledged, Q)) of
-        unknown  -> [];
-        Messages -> [{messages, Messages}]
-    end.
-
 zero_old_rates(Stats) -> [maybe_zero_rate(S) || S <- Stats].
 
 maybe_zero_rate({Key, Val}) ->
@@ -537,7 +530,8 @@ details_key(Key) -> list_to_atom(atom_to_list(Key) ++ "_details").
 %%----------------------------------------------------------------------------
 
 augment_msg_stats(Props, Tables) ->
-    (augment_msg_stats_fun(Tables))(Props) ++ Props.
+    rabbit_mgmt_format:strip_pids(
+      (augment_msg_stats_fun(Tables))(Props) ++ Props).
 
 augment_msg_stats_fun(Tables) ->
     Funs = [{connection, fun augment_connection_pid/2},
@@ -579,8 +573,7 @@ augment_connection_pid(Pid, Tables) ->
 augment_queue_pid(Pid, _Tables) ->
     %% TODO This should be in rabbit_amqqueue?
     case mnesia:dirty_match_object(
-           rabbit_queue,
-           #amqqueue{pid = rabbit_misc:string_to_pid(Pid), _ = '_'}) of
+           rabbit_queue, #amqqueue{pid = Pid, _ = '_'}) of
         [Q] -> Name = Q#amqqueue.name,
                [{name,  Name#resource.name},
                 {vhost, Name#resource.virtual_host}];
@@ -593,18 +586,19 @@ basic_queue_stats(Objs, Tables) ->
     merge_stats(Objs, queue_funs(Tables)).
 
 list_queue_stats(Objs, Tables) ->
-    merge_stats(Objs, [fine_stats_fun(?FINE_STATS_QUEUE_LIST, Tables)] ++
-                    queue_funs(Tables)).
+    adjust_hibernated_memory_use(
+      merge_stats(Objs, [fine_stats_fun(?FINE_STATS_QUEUE_LIST, Tables)] ++
+                      queue_funs(Tables))).
 
 detail_queue_stats(Objs, Tables) ->
-    merge_stats(Objs, [consumer_details_fun(
-                         fun (Props) -> {pget(pid, Props), '_'} end, Tables),
-                       fine_stats_fun(?FINE_STATS_QUEUE_DETAIL, Tables)] ++
-                    queue_funs(Tables)).
+    adjust_hibernated_memory_use(
+      merge_stats(Objs, [consumer_details_fun(
+                           fun (Props) -> {pget(pid, Props), '_'} end, Tables),
+                         fine_stats_fun(?FINE_STATS_QUEUE_DETAIL, Tables)] ++
+                      queue_funs(Tables))).
 
 queue_funs(Tables) ->
-    [basic_stats_fun(queue_stats, Tables), fun total_messages/1,
-     augment_msg_stats_fun(Tables)].
+    [basic_stats_fun(queue_stats, Tables), augment_msg_stats_fun(Tables)].
 
 exchange_stats(Objs, FineSpecs, Tables) ->
     merge_stats(Objs, [fine_stats_fun(FineSpecs, Tables),
@@ -633,13 +627,11 @@ detail_channel_stats(Objs, Tables) ->
 %% hibernation, so to do it when we receive a queue stats event would
 %% be fiddly and racy. This should be quite cheap though.
 adjust_hibernated_memory_use(Qs) ->
-    Pids = [rabbit_misc:string_to_pid(pget(pid, Q)) ||
+    Pids = [pget(pid, Q) ||
                Q <- Qs, pget(idle_since, Q, not_idle) =/= not_idle],
     {Mem, _BadNodes} = delegate:invoke(
                          Pids, fun (Pid) -> process_info(Pid, memory) end),
-    MemDict = dict:from_list(
-                [{list_to_binary(rabbit_misc:pid_to_string(P)), M} ||
-                    {P, M = {memory, _}} <- Mem]),
+    MemDict = dict:from_list([{P, M} || {P, M = {memory, _}} <- Mem]),
     [case dict:find(pget(pid, Q), MemDict) of
          error        -> Q;
          {ok, Memory} -> [Memory|proplists:delete(memory, Q)]

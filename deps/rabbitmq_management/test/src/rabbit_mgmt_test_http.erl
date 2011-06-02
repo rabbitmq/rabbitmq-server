@@ -56,16 +56,17 @@ auth_test() ->
 %% This test is rather over-verbose as we're trying to test understanding of
 %% Webmachine
 vhosts_test() ->
-    [[{name, <<"/">>}]] = http_get("/vhosts"),
+    assert_list([[{name, <<"/">>}]], http_get("/vhosts")),
     %% Create a new one
     http_put("/vhosts/myvhost", [], ?NO_CONTENT),
     %% PUT should be idempotent
     http_put("/vhosts/myvhost", [], ?NO_CONTENT),
     %% Check it's there
-    [[{name, <<"/">>}], [{name, <<"myvhost">>}]] = http_get("/vhosts"),
+    assert_list([[{name, <<"/">>}], [{name, <<"myvhost">>}]],
+                http_get("/vhosts")),
     %% Check individually
-    [{name, <<"/">>}] = http_get("/vhosts/%2f", ?OK),
-    [{name, <<"myvhost">>}] = http_get("/vhosts/myvhost"),
+    assert_item([{name, <<"/">>}], http_get("/vhosts/%2f", ?OK)),
+    assert_item([{name, <<"myvhost">>}],http_get("/vhosts/myvhost")),
     %% Delete it
     http_delete("/vhosts/myvhost", ?NO_CONTENT),
     %% It's not there
