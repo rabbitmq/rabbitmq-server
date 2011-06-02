@@ -281,16 +281,22 @@ go(S0 = {not_started, {Upstream, #exchange{name    = DownstreamX,
                                   {rabbit_exchange:peek_serial(DownstreamX),
                                    rabbit_binding:list_for_source(DownstreamX)}
                           end),
-                    State = #state{upstream              = Upstream,
-                                   connection            = Conn,
-                                   channel               = Ch,
-                                   next_serial           = Serial,
-                                   downstream_connection = DConn,
-                                   downstream_channel    = DCh,
-                                   downstream_exchange   = DownstreamX},
-                    State1 = consume_from_upstream_queue(State, Durable),
-                    State2 = ensure_upstream_bindings(Bindings, State1),
-                    {noreply, State2};
+                    case Serial of
+                        not_found ->
+                            {stop, serial_not_found, S0};
+                        _ ->
+                            {noreply,
+                             ensure_upstream_bindings(
+                               consume_from_upstream_queue(
+                                 #state{upstream              = Upstream,
+                                        connection            = Conn,
+                                        channel               = Ch,
+                                        next_serial           = Serial,
+                                        downstream_connection = DConn,
+                                        downstream_channel    = DCh,
+                                        downstream_exchange   = DownstreamX},
+                                 Durable), Bindings)}
+                    end;
                 E ->
                     ensure_closed(DConn, DCh),
                     {stop, E, S0}
@@ -330,12 +336,11 @@ consume_from_upstream_queue(State = #state{upstream            = Upstream,
                                                     no_ack = false}, self()),
     State#state{queue = Q}.
 
-ensure_upstream_bindings(Bindings,
-                         State = #state{upstream            = Upstream,
+ensure_upstream_bindings(State = #state{upstream            = Upstream,
                                         connection          = Conn,
                                         channel             = Ch,
                                         downstream_exchange = DownstreamX,
-                                        queue               = Q}) ->
+                                        queue               = Q}, Bindings) ->
     #upstream{exchange = X,
               params   = #amqp_params_network{virtual_host = VHost}} = Upstream,
     OldSuffix = rabbit_federation_db:get_active_suffix(DownstreamX, Upstream,
