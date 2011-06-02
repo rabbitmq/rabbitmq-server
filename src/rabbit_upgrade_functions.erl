@@ -27,18 +27,22 @@
 -rabbit_upgrade({user_to_internal_user, mnesia, [hash_passwords]}).
 -rabbit_upgrade({topic_trie,            mnesia, []}).
 -rabbit_upgrade({semi_durable_route,    mnesia, []}).
+-rabbit_upgrade({exchange_event_serial, mnesia, []}).
+-rabbit_upgrade({trace_exchanges,       mnesia, []}).
 
 %% -------------------------------------------------------------------
 
 -ifdef(use_specs).
 
--spec(remove_user_scope/0  :: () -> 'ok').
--spec(hash_passwords/0     :: () -> 'ok').
--spec(add_ip_to_listener/0 :: () -> 'ok').
--spec(internal_exchanges/0 :: () -> 'ok').
+-spec(remove_user_scope/0     :: () -> 'ok').
+-spec(hash_passwords/0        :: () -> 'ok').
+-spec(add_ip_to_listener/0    :: () -> 'ok').
+-spec(internal_exchanges/0    :: () -> 'ok').
 -spec(user_to_internal_user/0 :: () -> 'ok').
--spec(topic_trie/0 :: () -> 'ok').
--spec(semi_durable_route/0 :: () -> 'ok').
+-spec(topic_trie/0            :: () -> 'ok').
+-spec(semi_durable_route/0    :: () -> 'ok').
+-spec(exchange_event_serial/0 :: () -> 'ok').
+-spec(trace_exchanges/0       :: () -> 'ok').
 
 -endif.
 
@@ -107,6 +111,16 @@ semi_durable_route() ->
     create(rabbit_semi_durable_route, [{record_name, route},
                                        {attributes, [binding, value]}]).
 
+exchange_event_serial() ->
+    create(rabbit_exchange_serial, [{record_name, exchange_serial},
+                                    {attributes, [name, next]}]).
+
+trace_exchanges() ->
+    [declare_exchange(
+       rabbit_misc:r(VHost, exchange, <<"amq.rabbitmq.trace">>), topic) ||
+        VHost <- rabbit_vhost:list()],
+    ok.
+
 %%--------------------------------------------------------------------
 
 transform(TableName, Fun, FieldList) ->
@@ -123,3 +137,16 @@ transform(TableName, Fun, FieldList, NewRecordName) ->
 create(Tab, TabDef) ->
     {atomic, ok} = mnesia:create_table(Tab, TabDef),
     ok.
+
+%% Dumb replacement for rabbit_exchange:declare that does not require
+%% the exchange type registry or worker pool to be running by dint of
+%% not validating anything and assuming the exchange type does not
+%% require serialisation.
+declare_exchange(XName, Type) ->
+    X = #exchange{name        = XName,
+                  type        = Type,
+                  durable     = true,
+                  auto_delete = false,
+                  internal    = false,
+                  arguments   = []},
+    ok = mnesia:dirty_write(rabbit_durable_exchange, X).

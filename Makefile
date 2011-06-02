@@ -12,19 +12,18 @@ EBIN_DIR:=ebin
 INCLUDE_DIR:=include
 DOCS_DIR:=docs
 
-SIBLING_ERLANDO_DIR:=../erlando
-ERLANDO_SOURCE_DIR:=$(SIBLING_ERLANDO_DIR)/src
+ERLANDO_DIR:=../erlando
+ERLANDO:=.erlando.done
+ERLANDO_EBIN_DIR:=$(ERLANDO_DIR)/ebin
+ERLANDO_SOURCE_DIR:=$(ERLANDO_DIR)/src
 ERLANDO_SOURCES:=$(wildcard $(ERLANDO_SOURCE_DIR)/*.erl)
-ERLANDO_INCLUDE_DIR:=$(SIBLING_ERLANDO_DIR)/include
+ERLANDO_INCLUDE_DIR:=$(ERLANDO_DIR)/include
 ERLANDO_INCLUDES:=$(wildcard $(ERLANDO_INCLUDE_DIR)/*.hrl)
 
-RABBIT_ERLANDO_SOURCES:=$(patsubst $(ERLANDO_SOURCE_DIR)/%.erl, $(SOURCE_DIR)/%.erl, $(ERLANDO_SOURCES))
-RABBIT_ERLANDO_INCLUDES:=$(patsubst $(ERLANDO_INCLUDE_DIR)/%.hrl, $(INCLUDE_DIR)/%.hrl, $(ERLANDO_INCLUDES))
-
-INCLUDES=$(wildcard $(INCLUDE_DIR)/*.hrl) $(INCLUDE_DIR)/rabbit_framing.hrl $(RABBIT_ERLANDO_INCLUDES)
-SOURCES=$(wildcard $(SOURCE_DIR)/*.erl) $(SOURCE_DIR)/rabbit_framing_amqp_0_9_1.erl $(SOURCE_DIR)/rabbit_framing_amqp_0_8.erl $(USAGES_ERL) $(RABBIT_ERLANDO_SOURCES)
+INCLUDES=$(wildcard $(INCLUDE_DIR)/*.hrl) $(INCLUDE_DIR)/rabbit_framing.hrl
+SOURCES=$(wildcard $(SOURCE_DIR)/*.erl) $(SOURCE_DIR)/rabbit_framing_amqp_0_9_1.erl $(SOURCE_DIR)/rabbit_framing_amqp_0_8.erl $(USAGES_ERL)
 BEAM_TARGETS=$(patsubst $(SOURCE_DIR)/%.erl, $(EBIN_DIR)/%.beam, $(SOURCES))
-TARGETS=$(EBIN_DIR)/rabbit.app $(INCLUDE_DIR)/rabbit_framing.hrl $(BEAM_TARGETS)
+TARGETS:=$(EBIN_DIR)/rabbit.app $(INCLUDE_DIR)/rabbit_framing.hrl $(BEAM_TARGETS)
 WEB_URL=http://www.rabbitmq.com/
 MANPAGES=$(patsubst %.xml, %.gz, $(wildcard $(DOCS_DIR)/*.[0-9].xml))
 WEB_MANPAGES=$(patsubst %.xml, %.man.xml, $(wildcard $(DOCS_DIR)/*.[0-9].xml) $(DOCS_DIR)/rabbitmq-service.xml)
@@ -51,8 +50,8 @@ RABBIT_PLT=rabbit.plt
 
 ifndef USE_SPECS
 # our type specs rely on features and bug fixes in dialyzer that are
-# only available in R14A upwards (R14A is erts 5.8)
-USE_SPECS:=$(shell erl -noshell -eval 'io:format([list_to_integer(X) || X <- string:tokens(erlang:system_info(version), ".")] >= [5,8]), halt().')
+# only available in R14B03 upwards (R14B03 is erts 5.8.4)
+USE_SPECS:=$(shell erl -noshell -eval 'io:format([list_to_integer(X) || X <- string:tokens(erlang:system_info(version), ".")] >= [5,8,4]), halt().')
 endif
 
 #other args: +native +"{hipe,[o3,verbose]}" -Ddebug=true +debug_info +no_strict_record_tests
@@ -99,18 +98,22 @@ endif
 
 all: $(TARGETS)
 
+ifdef ERLANDO_SOURCES
+$(BEAM_TARGETS) : $(ERLANDO)
+ERLC_OPTS += -I $(ERLANDO_INCLUDE_DIR) -pa $(ERLANDO_EBIN_DIR)
+ERL_EBIN += -pa $(ERLANDO_EBIN_DIR)
+endif
+
+$(ERLANDO): $(ERLANDO_SOURCES) $(ERLANDO_INCLUDES)
+	$(MAKE) -C $(ERLANDO_DIR)
+	touch $@
+
 $(DEPS_FILE): $(SOURCES) $(INCLUDES)
 	rm -f $@
 	echo $(subst : ,:,$(foreach FILE,$^,$(FILE):)) | escript generate_deps $@ $(EBIN_DIR)
 
-$(RABBIT_ERLANDO_SOURCES): $(SOURCE_DIR)/%.erl: $(ERLANDO_SOURCE_DIR)/%.erl
-	cp -a $< $@
-
-$(RABBIT_ERLANDO_INCLUDES): $(INCLUDE_DIR)/%.hrl: $(ERLANDO_INCLUDE_DIR)/%.hrl
-	cp -a $< $@
-
-$(EBIN_DIR)/rabbit.app: $(EBIN_DIR)/rabbit_app.in $(BEAM_TARGETS) generate_app
-	escript generate_app $(EBIN_DIR) $@ < $<
+$(EBIN_DIR)/rabbit.app: $(EBIN_DIR)/rabbit_app.in $(SOURCES) generate_app
+	escript generate_app $< $@ $(SOURCE_DIR) $(ERLANDO_SOURCE_DIR)
 
 $(EBIN_DIR)/%.beam: $(SOURCE_DIR)/%.erl | $(DEPS_FILE)
 	erlc $(ERLC_OPTS) -pa $(EBIN_DIR) $<
@@ -151,7 +154,7 @@ clean:
 	rm -f $(DOCS_DIR)/*.[0-9].gz $(DOCS_DIR)/*.man.xml $(DOCS_DIR)/*.erl $(USAGES_ERL)
 	rm -f $(RABBIT_PLT)
 	rm -f $(DEPS_FILE)
-	rm -f $(RABBIT_ERLANDO_SOURCES) $(RABBIT_ERLANDO_INCLUDES)
+	rm -f $(ERLANDO)
 
 cleandb:
 	rm -rf $(RABBITMQ_MNESIA_DIR)/*
@@ -253,7 +256,7 @@ distclean: clean
 # xmlto can not read from standard input, so we mess with a tmp file.
 %.gz: %.xml $(DOCS_DIR)/examples-to-end.xsl
 	xmlto --version | grep -E '^xmlto version 0\.0\.([0-9]|1[1-8])$$' >/dev/null || opt='--stringparam man.indent.verbatims=0' ; \
-	    xsltproc $(DOCS_DIR)/examples-to-end.xsl $< > $<.tmp && \
+	    xsltproc --novalid $(DOCS_DIR)/examples-to-end.xsl $< > $<.tmp && \
 	    xmlto -o $(DOCS_DIR) $$opt man $<.tmp && \
 	    gzip -f $(DOCS_DIR)/`basename $< .xml`
 	rm -f $<.tmp
@@ -262,7 +265,7 @@ distclean: clean
 # Do not fold the cp into previous line, it's there to stop the file being
 # generated but empty if we fail
 $(SOURCE_DIR)/%_usage.erl:
-	xsltproc --stringparam modulename "`basename $@ .erl`" \
+	xsltproc --novalid --stringparam modulename "`basename $@ .erl`" \
 		$(DOCS_DIR)/usage.xsl $< > $@.tmp
 	sed -e 's/"/\\"/g' -e 's/%QUOTE%/"/g' $@.tmp > $@.tmp2
 	fold -s $@.tmp2 > $@.tmp3
@@ -276,7 +279,7 @@ $(SOURCE_DIR)/%_usage.erl:
 		xmlto xhtml-nochunks `basename $< .xml`.xml ; rm `basename $< .xml`.xml
 	cat `basename $< .xml`.html | \
 	    xsltproc --novalid $(DOCS_DIR)/remove-namespaces.xsl - | \
-		xsltproc --stringparam original `basename $<` $(DOCS_DIR)/html-to-website-xml.xsl - | \
+		xsltproc --novalid --stringparam original `basename $<` $(DOCS_DIR)/html-to-website-xml.xsl - | \
 		xmllint --format - > $@
 	rm `basename $< .xml`.html
 

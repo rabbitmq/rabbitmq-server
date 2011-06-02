@@ -92,6 +92,10 @@ init() ->
     ensure_mnesia_dir(),
     ok = init_db(read_cluster_nodes_config(), true,
                  fun maybe_upgrade_local_or_record_desired/0),
+    %% We intuitively expect the global name server to be synced when
+    %% Mnesia is up. In fact that's not guaranteed to be the case - let's
+    %% make it so.
+    ok = global:sync(),
     ok.
 
 is_db_empty() ->
@@ -225,6 +229,10 @@ table_definitions() ->
       [{record_name, exchange},
        {attributes, record_info(fields, exchange)},
        {match, #exchange{name = exchange_name_match(), _='_'}}]},
+     {rabbit_exchange_serial,
+      [{record_name, exchange_serial},
+       {attributes, record_info(fields, exchange_serial)},
+       {match, #exchange_serial{name = exchange_name_match(), _='_'}}]},
      {rabbit_durable_queue,
       [{record_name, amqqueue},
        {attributes, record_info(fields, amqqueue)},

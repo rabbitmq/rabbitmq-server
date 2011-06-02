@@ -99,12 +99,11 @@ info_keys() -> ?INFO_KEYS.
 init(Q) ->
     ?LOGDEBUG("Queue starting - ~p~n", [Q]),
     process_flag(trap_exit, true),
-    {ok, BQ} = application:get_env(backing_queue_module),
 
     {ok, #q{q                   = Q#amqqueue{pid = self()},
             exclusive_consumer  = none,
             has_had_consumers   = false,
-            backing_queue       = BQ,
+            backing_queue       = backing_queue_module(Q),
             backing_queue_state = undefined,
             active_consumers    = queue:new(),
             blocked_consumers   = queue:new(),
@@ -117,16 +116,16 @@ init(Q) ->
             msg_id_to_channel   = dict:new()}, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
-terminate(shutdown,      State = #q{backing_queue = BQ}) ->
-    terminate_shutdown(BQ:terminate(_), State);
-terminate({shutdown, _}, State = #q{backing_queue = BQ}) ->
-    terminate_shutdown(BQ:terminate(_), State);
-terminate(_Reason,       State = #q{backing_queue = BQ}) ->
+terminate(shutdown = R,      State = #q{backing_queue = BQ}) ->
+    terminate_shutdown(BQ:terminate(R, _), State);
+terminate({shutdown, _} = R, State = #q{backing_queue = BQ}) ->
+    terminate_shutdown(BQ:terminate(R, _), State);
+terminate(Reason,            State = #q{backing_queue = BQ}) ->
     %% FIXME: How do we cancel active subscriptions?
     terminate_shutdown(fun (BQS) ->
                                rabbit_event:notify(
                                  queue_deleted, [{pid, self()}]),
-                               BQS1 = BQ:delete_and_terminate(BQS),
+                               BQS1 = BQ:delete_and_terminate(Reason, BQS),
                                %% don't care if the internal delete
                                %% doesn't return 'ok'.
                                rabbit_amqqueue:internal_delete(qname(State)),
@@ -220,10 +219,15 @@ next_state(State = #q{backing_queue = BQ, backing_queue_state = BQS}) ->
                ensure_rate_timer(
                  confirm_messages(MsgIds, State#q{
                                             backing_queue_state = BQS1}))),
-    case BQ:needs_idle_timeout(BQS1) of
-        true  -> {ensure_sync_timer(State1), 0};
-        false -> {stop_sync_timer(State1), hibernate}
+    case BQ:needs_timeout(BQS1) of
+        false -> {stop_sync_timer(State1),   hibernate};
+        idle  -> {stop_sync_timer(State1),   0        };
+        timed -> {ensure_sync_timer(State1), 0        }
     end.
+
+backing_queue_module(#amqqueue{}) ->
+    {ok, BQM} = application:get_env(backing_queue_module),
+    BQM.
 
 ensure_sync_timer(State = #q{sync_timer_ref = undefined}) ->
     {ok, TRef} = timer:apply_after(
@@ -659,8 +663,8 @@ maybe_send_reply(ChPid, Msg) -> ok = rabbit_channel:send_command(ChPid, Msg).
 
 qname(#q{q = #amqqueue{name = QName}}) -> QName.
 
-backing_queue_idle_timeout(State = #q{backing_queue = BQ}) ->
-    run_backing_queue(BQ, _:idle_timeout(_), State).
+backing_queue_timeout(State = #q{backing_queue = BQ}) ->
+    run_backing_queue(BQ, _:timeout(_), State).
 
 run_backing_queue(Mod, Fun, State = #q{backing_queue = BQ,
                                        backing_queue_state = BQS}) ->
@@ -1042,7 +1046,7 @@ handle_cast({run_backing_queue, Mod, Fun}, State) ->
     noreply(run_backing_queue(Mod, Fun, State));
 
 handle_cast(sync_timeout, State) ->
-    noreply(backing_queue_idle_timeout(State#q{sync_timer_ref = undefined}));
+    noreply(backing_queue_timeout(State#q{sync_timer_ref = undefined}));
 
 handle_cast({deliver, Delivery}, State) ->
     %% Asynchronous, non-"mandatory", non-"immediate" deliver mode.
@@ -1175,7 +1179,7 @@ handle_info({'DOWN', _MonitorRef, process, DownPid, _Reason}, State) ->
     end;
 
 handle_info(timeout, State) ->
-    noreply(backing_queue_idle_timeout(State));
+    noreply(backing_queue_timeout(State));
 
 handle_info({'EXIT', _Pid, Reason}, State) ->
     {stop, Reason, State};

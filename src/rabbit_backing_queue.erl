@@ -49,11 +49,11 @@ behaviour_info(callbacks) ->
      {init, 4},
 
      %% Called on queue shutdown when queue isn't being deleted.
-     {terminate, 1},
+     {terminate, 2},
 
      %% Called when the queue is terminating and needs to delete all
      %% its content.
-     {delete_and_terminate, 1},
+     {delete_and_terminate, 2},
 
      %% Remove all messages in the queue, but not messages which have
      %% been fetched and are pending acks.
@@ -149,15 +149,15 @@ behaviour_info(callbacks) ->
      %% queue.
      {ram_duration, 1},
 
-     %% Should 'idle_timeout' be called as soon as the queue process
+     %% Should 'timeout' be called as soon as the queue process
      %% can manage (either on an empty mailbox, or when a timer
      %% fires)?
-     {needs_idle_timeout, 1},
+     {needs_timeout, 1},
 
-     %% Called (eventually) after needs_idle_timeout returns
-     %% 'true'. Note this may be called more than once for each 'true'
-     %% returned from needs_idle_timeout.
-     {idle_timeout, 1},
+     %% Called (eventually) after needs_timeout returns 'idle' or
+     %% 'timed'.  Note this may be called more than once for each
+     %% 'idle' or 'timed' returned from needs_timeout.
+     {timeout, 1},
 
      %% Called immediately before the queue hibernates.
      {handle_pre_hibernate, 1},

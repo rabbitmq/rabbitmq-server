@@ -624,14 +624,31 @@
           </listitem>
         </varlistentry>
 
-        <varlistentry>
-          <term><cmdsynopsis><command>list_vhosts</command></cmdsynopsis></term>
+        <varlistentry role="usage-has-option-list">
+          <term><cmdsynopsis><command>list_vhosts</command> <arg choice="opt" role="usage-option-list"><replaceable>vhostinfoitem</replaceable> ...</arg></cmdsynopsis></term>
           <listitem>
             <para>
               Lists virtual hosts.
             </para>
+            <para>
+              The <command>vhostinfoitem</command> parameter is used to indicate which
+              virtual host information items to include in the results. The column order in the
+              results will match the order of the parameters.
+              <command>vhostinfoitem</command> can take any value from
+              the list that follows:
+            </para>
+            <variablelist>
+              <varlistentry>
+                <term>name</term>
+                <listitem><para>The name of the virtual host with non-ASCII characters escaped as in C.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>tracing</term>
+                <listitem><para>Whether tracing is enabled for this virtual host.</para></listitem>
+              </varlistentry>
+            </variablelist>
             <para role="example-prefix">For example:</para>
-            <screen role="example">rabbitmqctl list_vhosts</screen>
+            <screen role="example">rabbitmqctl list_vhosts name tracing</screen>
             <para role="example">
               This command instructs the RabbitMQ broker to list all
               virtual hosts.
@@ -1266,59 +1283,34 @@
     </refsect2>
 
     <refsect2>
-      <title>Configuration variables</title>
-      <para>
-        Some configuration values can be changed at run time. Note
-        that this does not apply to all variables; many are only read
-        at startup - changing them will have no effect.
-      </para>
+      <title>Message Tracing</title>
       <variablelist>
         <varlistentry>
-          <term><cmdsynopsis><command>set_env</command> <arg choice="req"><replaceable>variable</replaceable></arg> <arg choice="req"><replaceable>value</replaceable></arg></cmdsynopsis></term>
+          <term><cmdsynopsis><command>trace_on</command> <arg choice="opt">-p <replaceable>vhost</replaceable></arg></cmdsynopsis></term>
           <listitem>
             <variablelist>
               <varlistentry>
-                <term>variable</term>
-                <listitem><para>The name of the variable to set, as the string form of an Erlang term.</para></listitem>
-              </varlistentry>
-              <varlistentry>
-                <term>value</term>
-                <listitem><para>The value to set it to, as the string form of an Erlang term.</para></listitem>
+                <term>vhost</term>
+                <listitem><para>The name of the virtual host for which to start tracing.</para></listitem>
               </varlistentry>
             </variablelist>
             <para>
-              Set the value of a configuration variable.
+              Starts tracing.
             </para>
           </listitem>
         </varlistentry>
 
         <varlistentry>
-          <term><cmdsynopsis><command>get_env</command> <arg choice="req"><replaceable>variable</replaceable></arg></cmdsynopsis></term>
+          <term><cmdsynopsis><command>trace_off</command> <arg choice="opt">-p <replaceable>vhost</replaceable></arg></cmdsynopsis></term>
           <listitem>
             <variablelist>
               <varlistentry>
-                <term>variable</term>
-                <listitem><para>The name of the variable to get, as the string form of an Erlang term.</para></listitem>
+                <term>vhost</term>
+                <listitem><para>The name of the virtual host for which to stop tracing.</para></listitem>
               </varlistentry>
             </variablelist>
             <para>
-              Get the value of a configuration variable, printing either
-              {ok,<command>Value</command>} or undefined.
-            </para>
-          </listitem>
-        </varlistentry>
-
-        <varlistentry>
-          <term><cmdsynopsis><command>unset_env</command> <arg choice="req"><replaceable>variable</replaceable></arg></cmdsynopsis></term>
-          <listitem>
-            <variablelist>
-              <varlistentry>
-                <term>variable</term>
-                <listitem><para>The name of the variable to clear, as the string form of an Erlang term.</para></listitem>
-              </varlistentry>
-            </variablelist>
-            <para>
-              Clear the value of a configuration variable.
+              Stops tracing.
             </para>
           </listitem>
         </varlistentry>

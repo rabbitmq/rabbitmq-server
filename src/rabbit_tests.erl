@@ -694,10 +694,10 @@ test_topic_matching() ->
     test_topic_expect_match(X, [{"a.b.c", []}, {"b.b.c", []}, {"", []}]),
     passed.
 
-exchange_op_callback(X, Fun, ExtraArgs) ->
+exchange_op_callback(X, Fun, Args) ->
     rabbit_misc:execute_mnesia_transaction(
-      fun () -> rabbit_exchange:callback(X, Fun, [true, X] ++ ExtraArgs) end),
-    rabbit_exchange:callback(X, Fun, [false, X] ++ ExtraArgs).
+      fun () -> rabbit_exchange:callback(X, Fun, [transaction, X] ++ Args) end),
+    rabbit_exchange:callback(X, Fun, [none, X] ++ Args).
 
 test_topic_expect_match(X, List) ->
     lists:foreach(
@@ -1610,7 +1610,7 @@ test_file_handle_cache() ->
         [filename:join(TmpDir, Str) || Str <- ["file1", "file2", "file3", "file4"]],
     Content = <<"foo">>,
     CopyFun = fun (Src, Dst) ->
-                      ok = file:write_file(Src, Content),
+                      ok = rabbit_misc:write_file(Src, Content),
                       {ok, SrcHdl} = file_handle_cache:open(Src, [read], []),
                       {ok, DstHdl} = file_handle_cache:open(Dst, [write], []),
                       Size = size(Content),
@@ -2077,7 +2077,7 @@ test_queue_index() ->
 
 variable_queue_init(Q, Recover) ->
     rabbit_variable_queue:init(
-      Q, Recover, fun nop/1, fun nop/1, fun nop/2, fun nop/1).
+      Q, Recover, fun nop/2, fun nop/2, fun nop/2, fun nop/1).
 
 variable_queue_publish(IsPersistent, Count, VQ) ->
     lists:foldl(
@@ -2119,7 +2119,7 @@ with_fresh_variable_queue(Fun) ->
                       {delta, {delta, undefined, 0, undefined}},
                       {q3, 0}, {q4, 0},
                       {len, 0}]),
-    _ = rabbit_variable_queue:delete_and_terminate(Fun(VQ)),
+    _ = rabbit_variable_queue:delete_and_terminate(shutdown, Fun(VQ)),
     passed.
 
 test_variable_queue() ->
@@ -2272,10 +2272,10 @@ check_variable_queue_status(VQ0, Props) ->
     VQ1.
 
 variable_queue_wait_for_shuffling_end(VQ) ->
-    case rabbit_variable_queue:needs_idle_timeout(VQ) of
-        true  -> variable_queue_wait_for_shuffling_end(
-                   rabbit_variable_queue:idle_timeout(VQ));
-        false -> VQ
+    case rabbit_variable_queue:needs_timeout(VQ) of
+        false -> VQ;
+        _     -> variable_queue_wait_for_shuffling_end(
+                   rabbit_variable_queue:timeout(VQ))
     end.
 
 test_variable_queue_all_the_bits_not_covered_elsewhere1(VQ0) ->
@@ -2287,7 +2287,7 @@ test_variable_queue_all_the_bits_not_covered_elsewhere1(VQ0) ->
                                             Count + Count, VQ3),
     {_AckTags1, VQ5} = variable_queue_fetch(Count, false, false,
                                             Count, VQ4),
-    _VQ6 = rabbit_variable_queue:terminate(VQ5),
+    _VQ6 = rabbit_variable_queue:terminate(shutdown, VQ5),
     VQ7 = variable_queue_init(test_amqqueue(true), true),
     {{_Msg1, true, _AckTag1, Count1}, VQ8} =
         rabbit_variable_queue:fetch(true, VQ7),
@@ -2308,8 +2308,8 @@ test_variable_queue_all_the_bits_not_covered_elsewhere2(VQ) ->
              AckTags <- SMR(variable_queue_fetch(2, false, false, 4, _)),
              _Guids <- SMR(rabbit_variable_queue:requeue(
                              AckTags, fun (X) -> X end, _)),
-             SM(rabbit_variable_queue:idle_timeout(_)),
-             SM(rabbit_variable_queue:terminate(_)),
+             SM(rabbit_variable_queue:timeout(_)),
+             SM(rabbit_variable_queue:terminate(shutdown, _)),
              StateT:put(variable_queue_init(test_amqqueue(true), true)),
              empty <- (rabbit_variable_queue:fetch(false, _)),
              return(passed)]), VQ).
@@ -2344,7 +2344,7 @@ test_queue_recover() ->
               VQ1 = variable_queue_init(Q, true),
               {{_Msg1, true, _AckTag1, CountMinusOne}, VQ2} =
                   rabbit_variable_queue:fetch(true, VQ1),
-              _VQ3 = rabbit_variable_queue:delete_and_terminate(VQ2),
+              _VQ3 = rabbit_variable_queue:delete_and_terminate(shutdown, VQ2),
               rabbit_amqqueue:internal_delete(QName)
       end),
     passed.

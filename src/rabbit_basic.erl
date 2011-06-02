@@ -32,6 +32,9 @@
         ({ok, rabbit_router:routing_result(), [pid()]}
          | rabbit_types:error('not_found'))).
 
+-type(exchange_input() :: (rabbit_types:exchange() | rabbit_exchange:name())).
+-type(body_input() :: (binary() | [binary()])).
+
 -spec(publish/1 ::
         (rabbit_types:delivery()) -> publish_result()).
 -spec(delivery/5 ::
@@ -48,14 +51,14 @@
 -spec(properties/1 ::
         (properties_input()) -> rabbit_framing:amqp_property_record()).
 -spec(publish/4 ::
-        (rabbit_exchange:name(), rabbit_router:routing_key(),
-         properties_input(), binary()) -> publish_result()).
+        (exchange_input(), rabbit_router:routing_key(), properties_input(),
+         body_input()) -> publish_result()).
 -spec(publish/7 ::
-        (rabbit_exchange:name(), rabbit_router:routing_key(),
-         boolean(), boolean(), rabbit_types:maybe(rabbit_types:txn()),
-         properties_input(), binary()) -> publish_result()).
--spec(build_content/2 :: (rabbit_framing:amqp_property_record(), binary()) ->
-                              rabbit_types:content()).
+        (exchange_input(), rabbit_router:routing_key(), boolean(), boolean(),
+         rabbit_types:maybe(rabbit_types:txn()), properties_input(),
+         body_input()) -> publish_result()).
+-spec(build_content/2 :: (rabbit_framing:amqp_property_record(),
+                          binary() | [binary()]) -> rabbit_types:content()).
 -spec(from_content/1 :: (rabbit_types:content()) ->
                              {rabbit_framing:amqp_property_record(), binary()}).
 
@@ -66,18 +69,18 @@
 publish(Delivery = #delivery{
           message = #basic_message{exchange_name = ExchangeName}}) ->
     case rabbit_exchange:lookup(ExchangeName) of
-        {ok, X} ->
-            {RoutingRes, DeliveredQPids} = rabbit_exchange:publish(X, Delivery),
-            {ok, RoutingRes, DeliveredQPids};
-        Other ->
-            Other
+        {ok, X} -> publish(X, Delivery);
+        Other   -> Other
     end.
 
 delivery(Mandatory, Immediate, Txn, Message, MsgSeqNo) ->
     #delivery{mandatory = Mandatory, immediate = Immediate, txn = Txn,
               sender = self(), message = Message, msg_seq_no = MsgSeqNo}.
 
-build_content(Properties, BodyBin) ->
+build_content(Properties, BodyBin) when is_binary(BodyBin) ->
+    build_content(Properties, [BodyBin]);
+
+build_content(Properties, PFR) ->
     %% basic.publish hasn't changed so we can just hard-code amqp_0_9_1
     {ClassId, _MethodId} =
         rabbit_framing_amqp_0_9_1:method_id('basic.publish'),
@@ -85,7 +88,7 @@ build_content(Properties, BodyBin) ->
              properties = Properties,
              properties_bin = none,
              protocol = none,
-             payload_fragments_rev = [BodyBin]}.
+             payload_fragments_rev = PFR}.
 
 from_content(Content) ->
     #content{class_id = ClassId,
@@ -126,9 +129,9 @@ message(ExchangeName, RoutingKey,
         {error, _Reason} = Error -> Error
     end.
 
-message(ExchangeName, RoutingKey, RawProperties, BodyBin) ->
+message(ExchangeName, RoutingKey, RawProperties, Body) ->
     Properties = properties(RawProperties),
-    Content = build_content(Properties, BodyBin),
+    Content = build_content(Properties, Body),
     {ok, Msg} = message(ExchangeName, RoutingKey, Content),
     Msg.
 
@@ -153,18 +156,26 @@ indexof([_ | Rest], Element, N)        -> indexof(Rest, Element, N + 1).
 
 %% Convenience function, for avoiding round-trips in calls across the
 %% erlang distributed network.
-publish(ExchangeName, RoutingKeyBin, Properties, BodyBin) ->
-    publish(ExchangeName, RoutingKeyBin, false, false, none, Properties,
-            BodyBin).
+publish(Exchange, RoutingKeyBin, Properties, Body) ->
+    publish(Exchange, RoutingKeyBin, false, false, none, Properties,
+            Body).
 
 %% Convenience function, for avoiding round-trips in calls across the
 %% erlang distributed network.
-publish(ExchangeName, RoutingKeyBin, Mandatory, Immediate, Txn, Properties,
-        BodyBin) ->
-    publish(delivery(Mandatory, Immediate, Txn,
-                     message(ExchangeName, RoutingKeyBin,
-                             properties(Properties), BodyBin),
-                     undefined)).
+publish(X = #exchange{name = XName}, RKey, Mandatory, Immediate, Txn,
+        Props, Body) ->
+    publish(X, delivery(Mandatory, Immediate, Txn,
+                        message(XName, RKey, properties(Props), Body),
+                        undefined));
+publish(XName, RKey, Mandatory, Immediate, Txn, Props, Body) ->
+    case rabbit_exchange:lookup(XName) of
+        {ok, X} -> publish(X, RKey, Mandatory, Immediate, Txn, Props, Body);
+        Err     -> Err
+    end.
+
+publish(X, Delivery) ->
+    {RoutingRes, DeliveredQPids} = rabbit_exchange:publish(X, Delivery),
+    {ok, RoutingRes, DeliveredQPids}.
 
 is_message_persistent(#content{properties = #'P_basic'{
                                  delivery_mode = Mode}}) ->

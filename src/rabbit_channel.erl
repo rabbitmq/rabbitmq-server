@@ -23,7 +23,7 @@
 -export([start_link/10, do/2, do/3, flush/1, shutdown/1]).
 -export([send_command/2, deliver/4, flushed/2, confirm/2]).
 -export([list/0, info_keys/0, info/1, info/2, info_all/0, info_all/1]).
--export([emit_stats/1, ready_for_close/1]).
+-export([refresh_config_all/0, emit_stats/1, ready_for_close/1]).
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2, handle_pre_hibernate/1, prioritise_call/3,
@@ -35,7 +35,7 @@
              user, virtual_host, most_recently_declared_queue,
              consumer_mapping, blocking, consumer_monitors, queue_collector_pid,
              stats_timer, confirm_enabled, publish_seqno, unconfirmed_mq,
-             unconfirmed_qm, confirmed, capabilities}).
+             unconfirmed_qm, confirmed, capabilities, trace_state}).
 
 -define(MAX_PERMISSION_CACHE_SIZE, 12).
 
@@ -89,6 +89,7 @@
 -spec(info/2 :: (pid(), rabbit_types:info_keys()) -> rabbit_types:infos()).
 -spec(info_all/0 :: () -> [rabbit_types:infos()]).
 -spec(info_all/1 :: (rabbit_types:info_keys()) -> [rabbit_types:infos()]).
+-spec(refresh_config_all/0 :: () -> 'ok').
 -spec(emit_stats/1 :: (pid()) -> 'ok').
 -spec(ready_for_close/1 :: (pid()) -> 'ok').
 
@@ -146,6 +147,11 @@ info_all() ->
 info_all(Items) ->
     rabbit_misc:filter_exit_map(fun (C) -> info(C, Items) end, list()).
 
+refresh_config_all() ->
+    rabbit_misc:upmap(
+      fun (C) -> gen_server2:call(C, refresh_config) end, list()),
+    ok.
+
 emit_stats(Pid) ->
     gen_server2:cast(Pid, emit_stats).
 
@@ -185,7 +191,8 @@ init([Channel, ReaderPid, WriterPid, ConnPid, Protocol, User, VHost,
                 unconfirmed_mq          = gb_trees:empty(),
                 unconfirmed_qm          = gb_trees:empty(),
                 confirmed               = [],
-                capabilities            = Capabilities},
+                capabilities            = Capabilities,
+                trace_state             = rabbit_trace:init(VHost)},
     rabbit_event:notify(channel_created, infos(?CREATION_EVENT_KEYS, State)),
     rabbit_event:if_enabled(StatsTimer,
                             fun() -> internal_emit_stats(State) end),
@@ -217,6 +224,9 @@ handle_call({info, Items}, _From, State) ->
         reply({ok, infos(Items, State)}, State)
     catch Error -> reply({error, Error}, State)
     end;
+
+handle_call(refresh_config, _From, State = #ch{virtual_host = VHost}) ->
+    reply(ok, State#ch{trace_state = rabbit_trace:init(VHost)});
 
 handle_call(_Request, _From, State) ->
     noreply(State).
@@ -263,8 +273,9 @@ handle_cast({deliver, ConsumerTag, AckRequired,
                     #basic_message{exchange_name = ExchangeName,
                                    routing_keys = [RoutingKey | _CcRoutes],
                                    content = Content}}},
-            State = #ch{writer_pid = WriterPid,
-                        next_tag = DeliveryTag}) ->
+            State = #ch{writer_pid  = WriterPid,
+                        next_tag    = DeliveryTag,
+                        trace_state = TraceState}) ->
     State1 = lock_message(AckRequired,
                           ack_record(DeliveryTag, ConsumerTag, Msg),
                           State),
@@ -281,7 +292,7 @@ handle_cast({deliver, ConsumerTag, AckRequired,
                          true  -> deliver;
                          false -> deliver_no_ack
                      end, State),
-    rabbit_trace:tap_trace_out(Msg),
+    rabbit_trace:tap_trace_out(Msg, TraceState),
     noreply(State1#ch{next_tag = DeliveryTag + 1});
 
 handle_cast(emit_stats, State = #ch{stats_timer = StatsTimer}) ->
@@ -591,7 +602,8 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
                                immediate   = Immediate},
               Content, State = #ch{virtual_host    = VHostPath,
                                    transaction_id  = TxnKey,
-                                   confirm_enabled = ConfirmEnabled}) ->
+                                   confirm_enabled = ConfirmEnabled,
+                                   trace_state     = TraceState}) ->
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
     check_write_permitted(ExchangeName, State),
     Exchange = rabbit_exchange:lookup_or_die(ExchangeName),
@@ -608,7 +620,7 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
         end,
     case rabbit_basic:message(ExchangeName, RoutingKey, DecodedContent) of
         {ok, Message} ->
-            rabbit_trace:tap_trace_in(Message),
+            rabbit_trace:tap_trace_in(Message, TraceState),
             {RoutingRes, DeliveredQPids} =
                 rabbit_exchange:publish(
                   Exchange,
@@ -656,9 +668,10 @@ handle_method(#'basic.ack'{delivery_tag = DeliveryTag,
 
 handle_method(#'basic.get'{queue = QueueNameBin,
                            no_ack = NoAck},
-              _, State = #ch{writer_pid = WriterPid,
-                             conn_pid   = ConnPid,
-                             next_tag   = DeliveryTag}) ->
+              _, State = #ch{writer_pid  = WriterPid,
+                             conn_pid    = ConnPid,
+                             next_tag    = DeliveryTag,
+                             trace_state = TraceState}) ->
     QueueName = expand_queue_name_shortcut(QueueNameBin, State),
     check_read_permitted(QueueName, State),
     case rabbit_amqqueue:with_exclusive_access_or_die(
@@ -677,7 +690,7 @@ handle_method(#'basic.get'{queue = QueueNameBin,
                                  true  -> get_no_ack;
                                  false -> get
                              end, State),
-            rabbit_trace:tap_trace_out(Msg),
+            rabbit_trace:tap_trace_out(Msg, TraceState),
             ok = rabbit_writer:send_command(
                    WriterPid,
                    #'basic.get_ok'{delivery_tag = DeliveryTag,

@@ -16,85 +16,104 @@
 
 -module(rabbit_trace).
 
--export([tap_trace_in/1, tap_trace_out/1]).
+-export([init/1, tracing/1, tap_trace_in/2, tap_trace_out/2, start/1, stop/1]).
 
 -include("rabbit.hrl").
 -include("rabbit_framing.hrl").
+
+-define(TRACE_VHOSTS, trace_vhosts).
+-define(XNAME, <<"amq.rabbitmq.trace">>).
 
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
 
--spec(tap_trace_in/1 :: (rabbit_types:basic_message()) -> 'ok').
--spec(tap_trace_out/1 :: (rabbit_amqqueue:qmsg()) -> 'ok').
+-type(state() :: rabbit_types:exchange() | 'none').
+
+-spec(init/1 :: (rabbit_types:vhost()) -> state()).
+-spec(tracing/1 :: (rabbit_types:vhost()) -> boolean()).
+-spec(tap_trace_in/2 :: (rabbit_types:basic_message(), state()) -> 'ok').
+-spec(tap_trace_out/2 :: (rabbit_amqqueue:qmsg(), state()) -> 'ok').
+
+-spec(start/1 :: (rabbit_types:vhost()) -> 'ok').
+-spec(stop/1 :: (rabbit_types:vhost()) -> 'ok').
 
 -endif.
 
 %%----------------------------------------------------------------------------
 
-tap_trace_in(Msg) ->
-    maybe_trace(Msg, <<"publish">>, xname(Msg), []).
+init(VHost) ->
+    case tracing(VHost) of
+        false -> none;
+        true  -> {ok, X} = rabbit_exchange:lookup(
+                             rabbit_misc:r(VHost, exchange, ?XNAME)),
+                 X
+    end.
 
-tap_trace_out({#resource{name = QName}, _QPid, _QMsgId, Redelivered, Msg}) ->
+tracing(VHost) ->
+    {ok, VHosts} = application:get_env(rabbit, ?TRACE_VHOSTS),
+    lists:member(VHost, VHosts).
+
+tap_trace_in(Msg = #basic_message{exchange_name = #resource{name = XName}},
+             TraceX) ->
+    maybe_trace(TraceX, Msg, <<"publish">>, XName, []).
+
+tap_trace_out({#resource{name = QName}, _QPid, _QMsgId, Redelivered, Msg},
+              TraceX) ->
     RedeliveredNum = case Redelivered of true -> 1; false -> 0 end,
-    maybe_trace(Msg, <<"deliver">>, QName,
+    maybe_trace(TraceX, Msg, <<"deliver">>, QName,
                 [{<<"redelivered">>, signedint, RedeliveredNum}]).
 
-xname(#basic_message{exchange_name = #resource{name         = XName}}) -> XName.
-vhost(#basic_message{exchange_name = #resource{virtual_host = VHost}}) -> VHost.
+%%----------------------------------------------------------------------------
 
-maybe_trace(Msg, RKPrefix, RKSuffix, Extra) ->
-    XName = xname(Msg),
-    case trace_exchange(vhost(Msg)) of
-        none   -> ok;
-        XName  -> ok;
-        TraceX -> case catch trace(TraceX, Msg, RKPrefix, RKSuffix, Extra) of
-                      {'EXIT', R} -> rabbit_log:info("Trace died: ~p~n", [R]);
-                      ok          -> ok
-                  end
-    end.
+start(VHost) ->
+    update_config(fun (VHosts) -> [VHost | VHosts -- [VHost]] end).
 
-trace_exchange(VHost) ->
-    case application:get_env(rabbit, trace_exchanges) of
-        undefined  -> none;
-        {ok, Xs}   -> proplists:get_value(VHost, Xs, none)
-    end.
+stop(VHost) ->
+    update_config(fun (VHosts) -> VHosts -- [VHost] end).
 
-trace(TraceX, Msg0, RKPrefix, RKSuffix, Extra) ->
-    Msg = ensure_content_decoded(Msg0),
-    rabbit_basic:publish(rabbit_misc:r(vhost(Msg), exchange, TraceX),
-                         <<RKPrefix/binary, ".", RKSuffix/binary>>,
-                         #'P_basic'{headers = msg_to_table(Msg) ++ Extra},
-                         payload(Msg)),
+update_config(Fun) ->
+    {ok, VHosts0} = application:get_env(rabbit, ?TRACE_VHOSTS),
+    VHosts = Fun(VHosts0),
+    application:set_env(rabbit, ?TRACE_VHOSTS, VHosts),
+    rabbit_channel:refresh_config_all(),
+    ok.
+
+%%----------------------------------------------------------------------------
+
+maybe_trace(none, _Msg, _RKPrefix, _RKSuffix, _Extra) ->
+    ok;
+maybe_trace(#exchange{name = Name}, #basic_message{exchange_name = Name},
+            _RKPrefix, _RKSuffix, _Extra) ->
+    ok;
+maybe_trace(X, Msg = #basic_message{content = #content{
+                                      payload_fragments_rev = PFR}},
+            RKPrefix, RKSuffix, Extra) ->
+    {ok, _, _} = rabbit_basic:publish(
+                   X, <<RKPrefix/binary, ".", RKSuffix/binary>>,
+                   #'P_basic'{headers = msg_to_table(Msg) ++ Extra}, PFR),
     ok.
 
 msg_to_table(#basic_message{exchange_name = #resource{name = XName},
                             routing_keys  = RoutingKeys,
-                            content       = #content{properties = Props}}) ->
+                            content       = Content}) ->
+    #content{properties = Props} =
+        rabbit_binary_parser:ensure_content_decoded(Content),
     {PropsTable, _Ix} =
-        lists:foldl(
-          fun (K, {L, Ix}) ->
-                  V = element(Ix, Props),
-                  NewL = case V of
-                             undefined -> L;
-                             _         -> [{a2b(K), type(V), V} | L]
-                         end,
-                  {NewL, Ix + 1}
-          end, {[], 2}, record_info(fields, 'P_basic')),
+        lists:foldl(fun (K, {L, Ix}) ->
+                            V = element(Ix, Props),
+                            NewL = case V of
+                                       undefined -> L;
+                                       _         -> [{a2b(K), type(V), V} | L]
+                                   end,
+                            {NewL, Ix + 1}
+                    end, {[], 2}, record_info(fields, 'P_basic')),
     [{<<"exchange_name">>, longstr, XName},
      {<<"routing_keys">>,  array,   [{longstr, K} || K <- RoutingKeys]},
      {<<"properties">>,    table,   PropsTable},
      {<<"node">>,          longstr, a2b(node())}].
 
-payload(#basic_message{content = #content{payload_fragments_rev = PFR}}) ->
-    list_to_binary(lists:reverse(PFR)).
-
-ensure_content_decoded(Msg = #basic_message{content = Content}) ->
-    Msg#basic_message{content = rabbit_binary_parser:ensure_content_decoded(
-                                  Content)}.
-
-a2b(A) ->
-    list_to_binary(atom_to_list(A)).
+a2b(A) -> list_to_binary(atom_to_list(A)).
 
 type(V) when is_list(V)    -> table;
 type(V) when is_integer(V) -> signedint;

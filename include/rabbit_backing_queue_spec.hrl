@@ -32,8 +32,8 @@
 -spec(stop/0 :: () -> 'ok').
 -spec(init/4 :: (rabbit_types:amqqueue(), attempt_recovery(),
                  async_callback(), sync_callback()) -> state()).
--spec(terminate/1 :: (state()) -> state()).
--spec(delete_and_terminate/1 :: (state()) -> state()).
+-spec(terminate/2 :: (any(), state()) -> state()).
+-spec(delete_and_terminate/2 :: (any(), state()) -> state()).
 -spec(purge/1 :: (state()) -> {purged_msg_count(), state()}).
 -spec(publish/4 :: (rabbit_types:basic_message(),
                     rabbit_types:message_properties(), pid(), state()) ->
@@ -66,8 +66,8 @@
 -spec(set_ram_duration_target/2 ::
       (('undefined' | 'infinity' | number()), state()) -> state()).
 -spec(ram_duration/1 :: (state()) -> {number(), state()}).
--spec(needs_idle_timeout/1 :: (state()) -> boolean()).
--spec(idle_timeout/1 :: (state()) -> state()).
+-spec(needs_timeout/1 :: (state()) -> 'false' | 'timed' | 'idle').
+-spec(timeout/1 :: (state()) -> state()).
 -spec(handle_pre_hibernate/1 :: (state()) -> state()).
 -spec(status/1 :: (state()) -> [{atom(), any()}]).
 -spec(invoke/3 :: (atom(), fun ((atom(), A) -> A), state()) -> state()).
