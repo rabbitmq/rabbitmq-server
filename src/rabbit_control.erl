@@ -26,6 +26,19 @@
 -define(NODE_OPT, "-n").
 -define(VHOST_OPT, "-p").
 
+-define(GLOBAL_QUERIES,
+        [{"connections", rabbit_networking, connection_info_all,
+          connection_info_keys},
+         {"channels",  rabbit_channel,  info_all, info_keys}]).
+
+-define(VHOST_QUERIES,
+        [{"queues",    rabbit_amqqueue, info_all, info_keys},
+         {"exchanges", rabbit_exchange, info_all, info_keys},
+         {"bindings",  rabbit_binding,  info_all, info_keys},
+         {"consumers", rabbit_amqqueue, consumers_all, consumer_info_keys},
+         {"permissions", rabbit_auth_backend_internal, list_vhost_permissions,
+          vhost_perms_info_keys}]).
+
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
@@ -322,19 +335,9 @@ action(report, Node, _Args, _Opts, Inform) ->
     io:format("Reporting server status on ~p~n", [erlang:universaltime()]),
     [action(status, N, [], [], Inform) ||
      N <- rpc_call(Node, rabbit_mnesia, running_clustered_nodes, [])],
-    GlobalQueries = [{"connections", rabbit_networking, connection_info_all,
-                      connection_info_keys},
-                     {"channels",  rabbit_channel,  info_all, info_keys}],
-    VHostQueries  = [{"queues",    rabbit_amqqueue, info_all, info_keys},
-                     {"exchanges", rabbit_exchange, info_all, info_keys},
-                     {"bindings",  rabbit_binding,  info_all, info_keys},
-                     {"consumers", rabbit_amqqueue, consumers_all,
-                      consumer_info_keys},
-                     {"permissions", rabbit_auth_backend_internal,
-                      list_vhost_permissions, vhost_perms_info_keys}],
     VHosts = rpc_call(Node, rabbit_vhost, list, []),
-    [print_report(Node, Q)      || Q <- GlobalQueries],
-    [print_report(Node, Q, [V]) || Q <- VHostQueries, V <- VHosts],
+    [print_report(Node, Q)      || Q <- ?GLOBAL_QUERIES],
+    [print_report(Node, Q, [V]) || Q <- ?VHOST_QUERIES, V <- VHosts],
     io:format("End of server status report~n"),
     ok.
 
