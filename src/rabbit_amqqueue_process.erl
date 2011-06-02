@@ -35,7 +35,7 @@
 
 -export([init_with_backing_queue_state/7]).
 
-% Queue's state
+%% Queue's state
 -record(q, {q,
             exclusive_consumer,
             has_had_consumers,
@@ -843,11 +843,11 @@ emit_consumer_deleted(ChPid, ConsumerTag) ->
 
 prioritise_call(Msg, _From, _State) ->
     case Msg of
-        info                                 -> 9;
-        {info, _Items}                       -> 9;
-        consumers                            -> 9;
-        {run_backing_queue, _Mod, _Fun}      -> 6;
-        _                                    -> 0
+        info                            -> 9;
+        {info, _Items}                  -> 9;
+        consumers                       -> 9;
+        {run_backing_queue, _Mod, _Fun} -> 6;
+        _                               -> 0
     end.
 
 prioritise_cast(Msg, _State) ->
