@@ -192,6 +192,12 @@ The local_username parameter specifies how to connect to the local
 broker. The default is "guest". This user will need the ability to
 publish messages to the downstream exchange.
 
+The local_nodename parameter specifies the name this node should use
+to identify itself in the federation. If not specified it will attempt
+to build a "long form" version of the usual Erlang node name (but
+using the machine's FQDN). You should only have to specify this if
+your DNS will not give each machine in the federation unique names.
+
 Declaring Federation Exchanges Over AMQP
 ========================================
 

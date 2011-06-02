@@ -16,6 +16,7 @@
 
 -module(rabbit_federation_link).
 
+-include_lib("kernel/include/inet.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_federation.hrl").
 
@@ -365,7 +366,7 @@ ensure_upstream_bindings(State = #state{upstream            = Upstream,
 
 upstream_queue_name(X, VHost, #resource{name         = DownstreamName,
                                         virtual_host = DownstreamVHost}) ->
-    Node = list_to_binary(atom_to_list(node())),
+    Node = local_nodename(),
     DownstreamPart = case DownstreamVHost of
                          VHost -> case DownstreamName of
                                       X -> <<"">>;
@@ -374,11 +375,21 @@ upstream_queue_name(X, VHost, #resource{name         = DownstreamName,
                          _     -> <<":", DownstreamVHost/binary,
                                     ":", DownstreamName/binary>>
                      end,
-    <<X/binary, " -> ", Node/binary, DownstreamPart/binary>>.
+    <<"federation: ", X/binary, " -> ", Node/binary, DownstreamPart/binary>>.
 
 upstream_exchange_name(X, VHost, DownstreamX, Suffix) ->
     Name = upstream_queue_name(X, VHost, DownstreamX),
     <<Name/binary, " ", Suffix/binary>>.
+
+local_nodename() ->
+    {ok, Explicit} = application:get_env(rabbitmq_federation, local_nodename),
+    case Explicit of
+        automatic -> [ID | _] = string:tokens(atom_to_list(node()), "@"),
+                     {ok, Host} = inet:gethostname(),
+                     {ok, #hostent{h_name = FQDN}} = inet:gethostbyname(Host),
+                     list_to_binary(ID ++ "@" ++ FQDN);
+        _         -> list_to_binary(Explicit)
+    end.
 
 delete_upstream_exchange(Conn, X) ->
     disposable_channel_call(Conn, #'exchange.delete'{exchange = X}).
