@@ -5,6 +5,7 @@
   {registered, []},
   {mod, {rabbit_stomp, []}},
   {env, [{tcp_listeners, [61613]},
+         {ssl_listeners, []},
          {tcp_listen_options, [binary,
                                {packet,    raw},
                                {reuseaddr, true},

@@ -660,7 +660,7 @@ ensure_heartbeats(Heartbeats,
                    X <- re:split(Heartbeats, ",", [{return, list}])],
 
     SendFun = fun() ->
-                      catch gen_tcp:send(Sock, <<0>>)
+                      catch rabbit_net:send(Sock, <<0>>)
               end,
 
     Pid = self(),
