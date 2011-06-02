@@ -42,8 +42,8 @@
 -spec(internal_exchanges/0    :: () -> 'ok').
 -spec(user_to_internal_user/0 :: () -> 'ok').
 -spec(topic_trie/0            :: () -> 'ok').
--spec(exchange_event_serial/0 :: () -> 'ok').
 -spec(semi_durable_route/0    :: () -> 'ok').
+-spec(exchange_event_serial/0 :: () -> 'ok').
 -spec(trace_exchanges/0       :: () -> 'ok').
 -spec(mirror_pids/0           :: () -> 'ok').
 -spec(gm/0                    :: () -> 'ok').
