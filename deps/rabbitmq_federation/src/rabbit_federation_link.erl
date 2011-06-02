@@ -76,9 +76,6 @@ handle_call(stop, _From, State = #state{connection = Conn, queue = Q}) ->
     disposable_channel_call(Conn, #'queue.delete'{queue = Q}),
     {stop, normal, ok, State};
 
-handle_call(Msg, _From, serial_undefined) ->
-    {stop, normal, ok, serial_undefined};
-
 handle_call(Msg, _From, State) ->
     {stop, {unexpected_call, Msg}, State}.
 
@@ -283,22 +280,24 @@ go(S0 = {not_started, {Upstream, #exchange{name = DownstreamX}}}) ->
                                   {rabbit_exchange:peek_serial(DownstreamX),
                                    rabbit_binding:list_for_source(DownstreamX)}
                           end),
-                    case Serial of
-                        undefined ->
-                            {noreply, serial_undefined};
-                        _ ->
-                            {noreply,
-                             ensure_upstream_bindings(
-                               consume_from_upstream_queue(
-                                 #state{upstream              = Upstream,
-                                        connection            = Conn,
-                                        channel               = Ch,
-                                        next_serial           = Serial,
-                                        downstream_connection = DConn,
-                                        downstream_channel    = DCh,
-                                        downstream_exchange   = DownstreamX}),
-                               Bindings)}
-                    end;
+                    %% If we are very short lived, Serial can be undefined at
+                    %% this point (since the deletion of the X could have
+                    %% overtaken the creation of this process). However, this
+                    %% is not a big deal - 'undefined' just becomes the next
+                    %% serial we will process. Since it compares larger than
+                    %% any number we never process any commands. And we will
+                    %% soon get told to stop anyway.
+                    {noreply,
+                     ensure_upstream_bindings(
+                       consume_from_upstream_queue(
+                         #state{upstream              = Upstream,
+                                connection            = Conn,
+                                channel               = Ch,
+                                next_serial           = Serial,
+                                downstream_connection = DConn,
+                                downstream_channel    = DCh,
+                                downstream_exchange   = DownstreamX}),
+                       Bindings)};
                 E ->
                     ensure_closed(DConn, DCh),
                     {stop, E, S0}
