@@ -101,7 +101,7 @@ binaryise0(X)                 -> X.
 
 %% For all the props in Props1, does Props2 match?
 all_match(Props1, Props2) ->
-    lists:all(fun ({K, V}) -> proplists:get_value(K, Props2) == V end, Props1).
+    lists:all(fun ({K, V}) -> pget(K, Props2) == V end, Props1).
 
 %% Add elements of Props1 which are not in Props2 - i.e. Props2 wins in event
 %% of a clash
