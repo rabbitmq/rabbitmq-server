@@ -18,6 +18,8 @@
 -export([content_types_accepted/2, allowed_methods/2, accept_json/2]).
 -export([post_is_create/2, create_path/2, accept_multipart/2]).
 
+-import(rabbit_misc, [pget/2]).
+
 -include("rabbit_mgmt.hrl").
 -include_lib("webmachine/include/webmachine.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
@@ -216,9 +218,6 @@ add_binding(Binding) ->
                destination  = r(DestType, destination,              Binding),
                key          = pget(routing_key,                     Binding),
                args         = rabbit_mgmt_util:args(pget(arguments, Binding))}).
-
-pget(Key, List) ->
-    proplists:get_value(Key, List).
 
 r(Type, Props) ->
     r(Type, name, Props).

@@ -25,10 +25,12 @@
          get_overview/0, get_channels/0, get_channel/1]).
 
 %% TODO can these not be exported any more?
--export([pget/2, add/2, rates/5]).
+-export([add/2, rates/5]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3]).
+
+-import(rabbit_misc, [pget/3]).
 
 -record(state, {tables}).
 -define(FINE_STATS_TYPES, [channel_queue_stats, channel_exchange_stats,
@@ -112,10 +114,7 @@ safe_call(Term, Item) ->
     end.
 
 %%----------------------------------------------------------------------------
-
 pget(Key, List) -> pget(Key, List, unknown).
-
-pget(Key, List, Default) -> proplists:get_value(Key, List, Default).
 
 pset(Key, Value, List) -> [{Key, Value} | proplists:delete(Key, List)].
 
