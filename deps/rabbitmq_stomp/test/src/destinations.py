@@ -168,7 +168,6 @@ class TestQueue(base.BaseTest):
 
         expected = set(['a', 'b'])
 
-        # make this a large transaction to trigger multi-confirm
         for i in range(1, prime_count + 1):
             expected.add(str(i))
             self.conn.send('prime', destination=d, receipt=str(i),
@@ -179,7 +178,7 @@ class TestQueue(base.BaseTest):
         self.conn.send('third', destination=d, receipt='b', transaction=tx)
         self.conn.commit(transaction=tx)
 
-        self.assertTrue(self.listener.await(10))
+        self.assertTrue("Missing messages/confirms", self.listener.await(20))
 
         missing = expected.difference(self.__gather_receipts())
 
