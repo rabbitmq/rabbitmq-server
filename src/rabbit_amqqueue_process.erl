@@ -114,16 +114,16 @@ init(Q) ->
             msg_id_to_channel   = dict:new()}, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
-terminate(shutdown,      State = #q{backing_queue = BQ}) ->
-    terminate_shutdown(fun (BQS) -> BQ:terminate(BQS) end, State);
-terminate({shutdown, _}, State = #q{backing_queue = BQ}) ->
-    terminate_shutdown(fun (BQS) -> BQ:terminate(BQS) end, State);
-terminate(_Reason,       State = #q{backing_queue = BQ}) ->
+terminate(shutdown = R,      State = #q{backing_queue = BQ}) ->
+    terminate_shutdown(fun (BQS) -> BQ:terminate(R, BQS) end, State);
+terminate({shutdown, _} = R, State = #q{backing_queue = BQ}) ->
+    terminate_shutdown(fun (BQS) -> BQ:terminate(R, BQS) end, State);
+terminate(Reason,            State = #q{backing_queue = BQ}) ->
     %% FIXME: How do we cancel active subscriptions?
     terminate_shutdown(fun (BQS) ->
                                rabbit_event:notify(
                                  queue_deleted, [{pid, self()}]),
-                               BQS1 = BQ:delete_and_terminate(BQS),
+                               BQS1 = BQ:delete_and_terminate(Reason, BQS),
                                %% don't care if the internal delete
                                %% doesn't return 'ok'.
                                rabbit_amqqueue:internal_delete(qname(State)),
