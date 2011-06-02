@@ -21,6 +21,8 @@
 
 -export([to_table/1, validate_table/1, from_table/3, from_props/3]).
 
+-import(rabbit_misc, [pget/2, pget/3]).
+
 %%----------------------------------------------------------------------------
 
 to_table(#upstream{params   = #amqp_params_network{host         = H,
@@ -110,10 +112,6 @@ merge(Props1, Props2) ->
                             false -> [{K, V} | P]
                         end
                 end, Props2, Props1).
-
-%% TODO remove
-pget(K, P, D) -> proplists:get_value(K, P, D).
-pget(K, P) -> proplists:get_value(K, P).
 
 %%----------------------------------------------------------------------------
 

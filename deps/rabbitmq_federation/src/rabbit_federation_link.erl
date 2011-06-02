@@ -426,9 +426,5 @@ add_routing_to_headers(Headers, Info) ->
                 undefined          -> [];
                 {array, Existing}  -> Existing
             end,
-    set_table_value(Headers, ?ROUTING_HEADER, array, [{table, Info} | Prior]).
-
-%% TODO move this to rabbit_misc?
-set_table_value(Table, Key, Type, Value) ->
-    rabbit_misc:sort_field_table(
-      lists:keystore(Key, 1, Table, {Key, Type, Value})).
+    rabbit_misc:set_table_value(
+      Headers, ?ROUTING_HEADER, array, [{table, Info} | Prior]).

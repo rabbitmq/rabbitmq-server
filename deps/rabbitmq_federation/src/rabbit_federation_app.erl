@@ -25,6 +25,7 @@
 -export([init/1]).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
+-import(rabbit_misc, [pget_or_die/2, pget/3]).
 
 start(_Type, _StartArgs) ->
     {ok, Xs} = application:get_env(exchanges),
@@ -45,7 +46,7 @@ declare_exchange(Props) ->
     Params1 = Params#amqp_params_direct{virtual_host = VHost},
     {ok, Conn} = amqp_connection:start(Params1),
     {ok, Ch} = amqp_connection:open_channel(Conn),
-    XName = list_to_binary(pget(exchange, Props)),
+    XName = list_to_binary(pget_or_die(exchange, Props)),
     amqp_channel:call(
       Ch, #'exchange.declare'{
         exchange    = XName,
@@ -55,8 +56,9 @@ declare_exchange(Props) ->
         internal    = pget(internal,    Props, false),
         arguments   =
             [{<<"upstreams">>, array,  [to_table(U, XName, VHost) ||
-                                           U <- pget(upstreams, Props)]},
-             {<<"type">>,      longstr, list_to_binary(pget(type, Props))}]}),
+                                           U <- pget_or_die(upstreams, Props)]},
+             {<<"type">>,      longstr, list_to_binary(
+                                          pget_or_die(type, Props))}]}),
     amqp_channel:close(Ch),
     amqp_connection:close(Conn),
     ok.
@@ -64,15 +66,6 @@ declare_exchange(Props) ->
 to_table(Props, DefaultXName, DefaultVHost) ->
     rabbit_federation_upstream:to_table(
       rabbit_federation_upstream:from_props(Props, DefaultXName, DefaultVHost)).
-
-pget(K, P, D) ->
-    proplists:get_value(K, P, D).
-
-pget(K, P) ->
-    case proplists:get_value(K, P) of
-        undefined -> exit({error, key_missing, K});
-        V         -> V
-    end.
 
 %%----------------------------------------------------------------------------
 
