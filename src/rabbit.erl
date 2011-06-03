@@ -226,9 +226,9 @@ status() ->
      {memory, erlang:memory()}].
 
 environment() ->
-    lists:filter(fun ({default_pass, _}) -> false;
-                     (_)                 -> true
-                 end, application:get_all_env(rabbit)).
+    lists:keysort(
+      1, [P || P = {K, _} <- application:get_all_env(rabbit),
+               K =/= default_pass]).
 
 rotate_logs(BinarySuffix) ->
     Suffix = binary_to_list(BinarySuffix),
