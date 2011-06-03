@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2011-2011 VMware, Inc.  All rights reserved.
 %%
 
 -include("amqp_client.hrl").
@@ -23,16 +23,10 @@
 -type(cancel_ok() :: #'basic.cancel_ok'{}).
 -type(deliver() :: {#'basic.deliver'{}, #amqp_msg{}}).
 
--spec(init/1 :: (Args :: [any()]) -> state()).
--spec(handle_consume_ok/3 :: (ConsumeOk :: consume_ok(), Consume :: consume(),
-                              State :: state()) -> NewState :: state()).
--spec(handle_cancel_ok/3 :: (CancelOk :: cancel_ok(), Cancel :: cancel(),
-                             State :: state()) -> NewState :: state()).
--spec(handle_cancel/2 :: (Cancel :: cancel(), State :: state()) ->
-                             NewState :: state()).
--spec(handle_deliver/2 :: (Deliver :: deliver(), State :: state()) ->
-                              NewState :: state()).
--spec(handle_call/2 :: (Call :: any(), State :: state()) ->
-                           {Reply :: any(), NewState :: state()}).
--spec(terminate/2 :: (Reason :: any(), State :: state()) ->
-                         NewState :: state()).
+-spec(init/1 :: ([any()]) -> state()).
+-spec(handle_consume_ok/3 :: (consume_ok(), consume(), state()) -> state()).
+-spec(handle_cancel_ok/3 :: (cancel_ok(), cancel(), state()) -> state()).
+-spec(handle_cancel/2 :: (cancel(), state()) -> state()).
+-spec(handle_deliver/2 :: (deliver(), state()) -> state()).
+-spec(handle_call/2 :: (any(), state()) -> {any(), state()}).
+-spec(terminate/2 :: (any(), state()) -> state()).
