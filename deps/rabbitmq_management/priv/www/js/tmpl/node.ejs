@@ -121,8 +121,8 @@
     %>
        <tr<%= alt_rows(j)%>>
          <td>
-           <abbr title="<%= application.description %>">
-             <%= application.name %></abbr>
+           <%= application.name %>
+           <sub><%= application.description %></sub>
          </td>
          <td><%= application.version %></td>
        </tr>
