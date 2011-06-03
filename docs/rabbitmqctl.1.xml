@@ -1301,8 +1301,8 @@
         <varlistentry>
           <term><cmdsynopsis><command>environment</command></cmdsynopsis></term>
           <listitem>
-            <para>
-              Display the name and value of each variable in the application environment.
+            <para role="usage">
+              The "environment" command displays variables in the application environment.
               This can be used to verify that options specified for the rabbit
               application in the configuration file have been read.
             </para>
@@ -1311,10 +1311,10 @@
         <varlistentry>
           <term><cmdsynopsis><command>report</command></cmdsynopsis></term>
           <listitem>
-            <para>
-              Generate a server status report containing a concatenation of all server status
-              information for support purposes. The output should be redirected to a
-              file when accompanying a support request.
+            <para role="usage">
+              The "report" command produces a server status report which is a concatenation
+              of all server status information. The output should be redirected to a file
+              when accompanying a support request.
             </para>
             <para role="example-prefix">
               For example:
