@@ -157,21 +157,11 @@ class TestQueue(base.BaseTest):
         d = '/queue/ir'
         tx = 'tx.ir'
 
-        prime_count = 100
-
-        # one receipt and message per prime send.
-        # then three messages and two receipts
-        self.listener.reset((prime_count * 2) + 5)
+        # three messages and two receipts
+        self.listener.reset(5)
 
         self.conn.subscribe(destination=d)
         self.conn.begin(transaction=tx)
-
-        expected = set(['a', 'b'])
-
-        for i in range(1, prime_count + 1):
-            expected.add(str(i))
-            self.conn.send('prime', destination=d, receipt=str(i),
-                           transaction=tx)
 
         self.conn.send('first', destination=d, receipt='a', transaction=tx)
         self.conn.send('second', destination=d, transaction=tx)
@@ -180,10 +170,11 @@ class TestQueue(base.BaseTest):
 
         self.assertTrue("Missing messages/confirms", self.listener.await(20))
 
+        expected = set(['a', 'b'])
         missing = expected.difference(self.__gather_receipts())
 
         self.assertEquals(set(), missing, "Missing receipts: " + str(missing))
-        self.assertEquals(prime_count + 3, len(self.listener.messages))
+        self.assertEquals(3, len(self.listener.messages))
 
     def test_interleaved_receipt_no_receipt_inverse(self):
         ''' Test interleaved receipt/no receipt where the receipt
