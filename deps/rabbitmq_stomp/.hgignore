@@ -5,3 +5,5 @@
 ^cover/
 ^erl_crash.dump$
 \.pyc$
+^test/certs/
+^test/ebin/test.config
