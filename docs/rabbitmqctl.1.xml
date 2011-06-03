@@ -184,53 +184,6 @@
           </listitem>
         </varlistentry>
 
-        <varlistentry>
-          <term><cmdsynopsis><command>status</command></cmdsynopsis></term>
-          <listitem>
-            <para>
-              Displays broker status information such as the running
-              applications on the current Erlang node, RabbitMQ and
-              Erlang versions and OS name.  (See
-              the <command>cluster_status</command> command to find
-              out which nodes are clustered and running.)
-            </para>
-            <para role="example-prefix">For example:</para>
-            <screen role="example">rabbitmqctl status</screen>
-            <para role="example">
-              This command displays information about the RabbitMQ
-              broker.
-            </para>
-          </listitem>
-        </varlistentry>
-
-        <varlistentry>
-          <term><cmdsynopsis><command>environment</command></cmdsynopsis></term>
-          <listitem>
-            <para>
-              Display the name and value of each variable in the application environment.
-            </para>
-          </listitem>
-        </varlistentry>
-
-        <varlistentry>
-          <term><cmdsynopsis><command>report</command></cmdsynopsis></term>
-          <listitem>
-            <para>
-              Generate a server status report containing a concatenation of all server status
-              information for support purposes. The output should be redirected to a
-              file when accompanying a support request.
-            </para>
-            <para role="example-prefix">
-              For example:
-            </para>
-            <screen role="example">rabbitmqctl report > server_report.txt</screen>
-            <para role="example">
-              This command creates a server report which may be attached to a
-              support request email.
-            </para>
-          </listitem>
-        </varlistentry>
-
         <varlistentry id="reset">
           <term><cmdsynopsis><command>reset</command></cmdsynopsis></term>
           <listitem>
@@ -1323,6 +1276,55 @@
               The output is a list of rows containing, in order, the queue name,
               channel process id, consumer tag, and a boolean indicating whether
               acknowledgements are expected from the consumer.
+            </para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term><cmdsynopsis><command>status</command></cmdsynopsis></term>
+          <listitem>
+            <para>
+              Displays broker status information such as the running
+              applications on the current Erlang node, RabbitMQ and
+              Erlang versions and OS name.  (See
+              the <command>cluster_status</command> command to find
+              out which nodes are clustered and running.)
+            </para>
+            <para role="example-prefix">For example:</para>
+            <screen role="example">rabbitmqctl status</screen>
+            <para role="example">
+              This command displays information about the RabbitMQ
+              broker.
+            </para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term><cmdsynopsis><command>environment</command></cmdsynopsis></term>
+          <listitem>
+            <para>
+              Display the name and value of each variable in the
+              application environment.
+            </para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term><cmdsynopsis><command>report</command></cmdsynopsis></term>
+          <listitem>
+            <para>
+              Generate a server status report containing a
+              concatenation of all server status information for
+              support purposes. The output should be redirected to a
+              file when accompanying a support request.
+            </para>
+            <para role="example-prefix">
+              For example:
+            </para>
+            <screen role="example">rabbitmqctl report > server_report.txt</screen>
+            <para role="example">
+              This command creates a server report which may be
+              attached to a support request email.
             </para>
           </listitem>
         </varlistentry>
