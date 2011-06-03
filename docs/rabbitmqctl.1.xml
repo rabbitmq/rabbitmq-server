@@ -1302,9 +1302,8 @@
           <term><cmdsynopsis><command>environment</command></cmdsynopsis></term>
           <listitem>
             <para role="usage">
-              The "environment" command displays variables in the application environment.
-              This can be used to verify that options specified for the rabbit
-              application in the configuration file have been read.
+              The "environment" command displays variables in the rabbit application
+              environment.
             </para>
           </listitem>
         </varlistentry>
