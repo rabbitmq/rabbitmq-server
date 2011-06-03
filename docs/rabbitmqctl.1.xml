@@ -1278,7 +1278,7 @@
         </varlistentry>
 
         <varlistentry>
-          <term><cmdsynopsis><command>list_consumers</command><arg choice="opt">-p <replaceable>vhostpath</replaceable></arg></cmdsynopsis></term>
+          <term><cmdsynopsis><command>list_consumers</command> <arg choice="opt">-p <replaceable>vhostpath</replaceable></arg></cmdsynopsis></term>
           <listitem>
             <para>
               List consumers, i.e. subscriptions to a queue's message
