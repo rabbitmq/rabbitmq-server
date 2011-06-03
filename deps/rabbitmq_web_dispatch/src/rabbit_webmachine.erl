@@ -45,7 +45,10 @@ makeloop(Dispatch) ->
     fun ({Prefix, _Listener}, MochiReq) ->
             Req = webmachine:new_request(mochiweb, MochiReq),
             {Path0, _} = Req:path(),
-            Path = string:substr(Path0, length(Prefix) + 2), % implicit "/"
+            Path = case string:substr(Path0, length(Prefix) + 2) of
+                       "" -> "/"; %% webmachine requires a leading "/"
+                       P  -> P    %% implicit "/"
+                   end,
             %% webmachine_mochiweb:loop/1 uses dispatch/3 here;
             %% however, we don't need to dispatch by the host name.
             case webmachine_dispatcher:dispatch(Path, Dispatch) of
