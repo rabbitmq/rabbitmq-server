@@ -27,16 +27,16 @@
 -define(VHOST_OPT, "-p").
 
 -define(GLOBAL_QUERIES,
-        [{"connections", rabbit_networking, connection_info_all,
+        [{"Connections", rabbit_networking, connection_info_all,
           connection_info_keys},
-         {"channels",  rabbit_channel,  info_all, info_keys}]).
+         {"Channels",  rabbit_channel,  info_all, info_keys}]).
 
 -define(VHOST_QUERIES,
-        [{"queues",    rabbit_amqqueue, info_all, info_keys},
-         {"exchanges", rabbit_exchange, info_all, info_keys},
-         {"bindings",  rabbit_binding,  info_all, info_keys},
-         {"consumers", rabbit_amqqueue, consumers_all, consumer_info_keys},
-         {"permissions", rabbit_auth_backend_internal, list_vhost_permissions,
+        [{"Queues",    rabbit_amqqueue, info_all, info_keys},
+         {"Exchanges", rabbit_exchange, info_all, info_keys},
+         {"Bindings",  rabbit_binding,  info_all, info_keys},
+         {"Consumers", rabbit_amqqueue, consumers_all, consumer_info_keys},
+         {"Permissions", rabbit_auth_backend_internal, list_vhost_permissions,
           vhost_perms_info_keys}]).
 
 %%----------------------------------------------------------------------------
@@ -110,16 +110,21 @@ start() ->
 fmt_stderr(Format, Args) -> rabbit_misc:format_stderr(Format ++ "~n", Args).
 
 print_report(Node, {Descr, Module, InfoFun, KeysFun}) ->
-    print_report(Node, {Descr, Module, InfoFun, KeysFun}, []).
+    io:format("~s:~n", [Descr]),
+    print_report0(Node, {Module, InfoFun, KeysFun}, []).
 
 print_report(Node, {Descr, Module, InfoFun, KeysFun}, VHostArg) ->
-    io:format("%% ~p~n", [[Descr] ++ VHostArg]),
+    io:format("~s on ~s:~n", [Descr, VHostArg]),
+    print_report0(Node, {Module, InfoFun, KeysFun}, VHostArg).
+
+print_report0(Node, {Module, InfoFun, KeysFun}, VHostArg) ->
     case Results = rpc_call(Node, Module, InfoFun, VHostArg) of
         [_|_] -> InfoItems = rpc_call(Node, Module, KeysFun, []),
                  display_row([atom_to_list(I) || I <- InfoItems]),
                  display_info_list(Results, InfoItems);
         _     -> ok
-    end.
+    end,
+    io:nl().
 
 print_error(Format, Args) -> fmt_stderr("Error: " ++ Format, Args).
 
@@ -336,10 +341,10 @@ action(list_permissions, Node, [], Opts, Inform) ->
                       rabbit_auth_backend_internal:vhost_perms_info_keys());
 
 action(report, Node, _Args, _Opts, Inform) ->
-    io:format("Reporting server status on ~p~n", [erlang:universaltime()]),
-    [ok = action(Action, N, [], [], Inform) ||
-       N      <- rpc_call(Node, rabbit_mnesia, running_clustered_nodes, []),
-       Action <- [status, cluster_status, environment]],
+    io:format("Reporting server status on ~p~n~n", [erlang:universaltime()]),
+    [begin ok = action(Action, N, [], [], Inform), io:nl() end ||
+        N      <- rpc_call(Node, rabbit_mnesia, running_clustered_nodes, []),
+        Action <- [status, cluster_status, environment]],
     VHosts = rpc_call(Node, rabbit_vhost, list, []),
     [print_report(Node, Q)      || Q <- ?GLOBAL_QUERIES],
     [print_report(Node, Q, [V]) || Q <- ?VHOST_QUERIES, V <- VHosts],
