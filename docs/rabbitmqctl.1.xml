@@ -59,6 +59,11 @@
       RabbitMQ broker. It performs all actions by connecting to one of the
       broker's nodes.
     </para>
+    <para>
+      Diagnostic information is displayed if the broker was not
+      running, could not be reached, or rejected the connection due to
+      mismatching Erlang cookies.
+    </para>
   </refsect1>
 
   <refsect1>
@@ -183,15 +188,11 @@
           <term><cmdsynopsis><command>status</command></cmdsynopsis></term>
           <listitem>
             <para>
-              Displays broker status information such as the running applications
-              on the current Erlang node, RabbitMQ and Erlang versions and OS name.
-              (See the <command>cluster_status</command> command to find out which
-              nodes are clustered and running.)
-            </para>
-            <para>
-              Diagnostic information is displayed if the broker is not running,
-              cannot be reached, or does not permit queries due to security
-              constraints.
+              Displays broker status information such as the running
+              applications on the current Erlang node, RabbitMQ and
+              Erlang versions and OS name.  (See
+              the <command>cluster_status</command> command to find
+              out which nodes are clustered and running.)
             </para>
             <para role="example-prefix">For example:</para>
             <screen role="example">rabbitmqctl status</screen>
