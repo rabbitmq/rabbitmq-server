@@ -202,6 +202,34 @@
           </listitem>
         </varlistentry>
 
+        <varlistentry>
+          <term><cmdsynopsis><command>environment</command></cmdsynopsis></term>
+          <listitem>
+            <para>
+              Display the name and value of each variable in the application environment.
+            </para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term><cmdsynopsis><command>report</command></cmdsynopsis></term>
+          <listitem>
+            <para>
+              Generate a server status report containing a concatenation of all server status
+              information for support purposes. The output should be redirected to a
+              file when accompanying a support request.
+            </para>
+            <para role="example-prefix">
+              For example:
+            </para>
+            <screen role="example">rabbitmqctl report > server_report.txt</screen>
+            <para role="example">
+              This command creates a server report which may be attached to a
+              support request email.
+            </para>
+          </listitem>
+        </varlistentry>
+
         <varlistentry id="reset">
           <term><cmdsynopsis><command>reset</command></cmdsynopsis></term>
           <listitem>
@@ -1290,38 +1318,10 @@
               indicating whether acknowledgements are expected for
               messages delivered to this consumer.
             </para>
-            <para role="usage">
-              The output format for "list_consumers" is a list of rows containing,
-              in order, the queue name, channel process id, consumer tag, and a
-              boolean indicating whether acknowledgements are expected from the
-              consumer.
-            </para>
-          </listitem>
-        </varlistentry>
-        <varlistentry>
-          <term><cmdsynopsis><command>environment</command></cmdsynopsis></term>
-          <listitem>
-            <para role="usage">
-              The "environment" command displays variables in the rabbit application
-              environment.
-            </para>
-          </listitem>
-        </varlistentry>
-        <varlistentry>
-          <term><cmdsynopsis><command>report</command></cmdsynopsis></term>
-          <listitem>
-            <para role="usage">
-              The "report" command produces a server status report which is a concatenation
-              of all server status information. The output should be redirected to a file
-              when accompanying a support request.
-            </para>
-            <para role="example-prefix">
-              For example:
-            </para>
-            <screen role="example">rabbitmqctl report > server_report.txt</screen>
-            <para role="example">
-              This command creates a server report which may be attached to a
-              support request email.
+            <para>
+              The output is a list of rows containing, in order, the queue name,
+              channel process id, consumer tag, and a boolean indicating whether
+              acknowledgements are expected from the consumer.
             </para>
           </listitem>
         </varlistentry>
