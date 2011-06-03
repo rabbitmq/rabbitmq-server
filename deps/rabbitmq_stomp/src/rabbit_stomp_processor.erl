@@ -356,11 +356,17 @@ do_login(_, _, _, _, _, _, State) ->
 adapter_info(Sock, Version) ->
     {ok, {Addr,     Port}}     = rabbit_net:sockname(Sock),
     {ok, {PeerAddr, PeerPort}} = rabbit_net:peername(Sock),
-    #adapter_info{protocol     = {'STOMP', Version},
+    #adapter_info{protocol     = {adapter_protocol(Sock), Version},
                   address      = Addr,
                   port         = Port,
                   peer_address = PeerAddr,
                   peer_port    = PeerPort}.
+
+adapter_protocol(Sock) ->
+    case rabbit_net:is_ssl(Sock) of
+        true  -> "STOMP/SSL";
+        false -> "STOMP"
+    end.
 
 do_subscribe(Destination, DestHdr, Frame,
              State = #state{subscriptions = Subs,
