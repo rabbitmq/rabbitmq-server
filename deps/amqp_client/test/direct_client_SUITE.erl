@@ -117,16 +117,13 @@ channel_death_test() ->
     negative_test_util:channel_death_test(new_connection()).
 
 non_existent_user_test() ->
-    negative_test_util:non_existent_user_test(fun new_connection/1).
-
-invalid_password_test() ->
-    negative_test_util:invalid_password_test(fun new_connection/1).
+    negative_test_util:non_existent_user_test(fun new_connection/3).
 
 non_existent_vhost_test() ->
-    negative_test_util:non_existent_vhost_test(fun new_connection/1).
+    negative_test_util:non_existent_vhost_test(fun new_connection/3).
 
 no_permission_test() ->
-    negative_test_util:no_permission_test(fun new_connection/1).
+    negative_test_util:no_permission_test(fun new_connection/3).
 
 command_invalid_over_channel_test() ->
     negative_test_util:command_invalid_over_channel_test(new_connection()).
@@ -136,12 +133,15 @@ command_invalid_over_channel_test() ->
 %%---------------------------------------------------------------------------
 
 new_connection() ->
-    new_connection(#amqp_params{}).
+    new_connection(#amqp_params_direct{}).
+
+new_connection(Username, _Password, VHost) ->
+    new_connection(#amqp_params_direct{username     = Username,
+                                       virtual_host = VHost}).
 
 new_connection(AmqpParams) ->
-    case amqp_connection:start(
-             direct,
-             AmqpParams#amqp_params{node = rabbit_misc:makenode(rabbit)}) of
+    Node = rabbit_misc:makenode(rabbit),
+    case amqp_connection:start(AmqpParams#amqp_params_direct{node = Node}) of
         {ok, Conn}     -> Conn;
         {error, _} = E -> E
     end.

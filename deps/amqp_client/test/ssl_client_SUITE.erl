@@ -71,14 +71,14 @@ hard_error_test() ->
 
 new_connection() ->
     {ok, [[CertsDir]]} = init:get_argument(erlang_client_ssl_dir),
-    Params = #amqp_params
+    Params = #amqp_params_network
       {port = 5671,
        ssl_options = [{cacertfile, CertsDir ++ "/testca/cacert.pem"},
                       {certfile, CertsDir ++ "/client/cert.pem"},
                       {keyfile, CertsDir ++ "/client/key.pem"},
                       {verify, verify_peer},
                       {fail_if_no_peer_cert, true}]},
-    case amqp_connection:start(network, Params) of
+    case amqp_connection:start(Params) of
         {ok, Conn}         -> Conn;
         {error, _} = Error -> Error
     end.

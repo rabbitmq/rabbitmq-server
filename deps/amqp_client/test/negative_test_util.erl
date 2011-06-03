@@ -168,20 +168,22 @@ assert_down_with_error(MonitorRef, CodeAtom) ->
     end.
 
 non_existent_user_test(StartConnectionFun) ->
-    Params = #amqp_params{username = test_util:uuid(),
-                          password = test_util:uuid()},
-    ?assertMatch({error, auth_failure}, StartConnectionFun(Params)).
+    ?assertMatch({error, auth_failure}, StartConnectionFun(test_util:uuid(),
+                                                           test_util:uuid(),
+                                                           test_util:uuid())).
 
 invalid_password_test(StartConnectionFun) ->
-    Params = #amqp_params{username = <<"guest">>,
-                          password = test_util:uuid()},
-    ?assertMatch({error, auth_failure}, StartConnectionFun(Params)).
+    ?assertMatch({error, auth_failure}, StartConnectionFun(<<"guest">>,
+                                                           test_util:uuid(),
+                                                           test_util:uuid())).
 
 non_existent_vhost_test(StartConnectionFun) ->
-    Params = #amqp_params{virtual_host = test_util:uuid()},
-    ?assertMatch({error, access_refused}, StartConnectionFun(Params)).
+    ?assertMatch({error, access_refused}, StartConnectionFun(<<"guest">>,
+                                                             <<"guest">>,
+                                                             test_util:uuid())).
 
 no_permission_test(StartConnectionFun) ->
-    Params = #amqp_params{username = <<"test_user_no_perm">>,
-                          password = <<"test_user_no_perm">>},
-    ?assertMatch({error, access_refused}, StartConnectionFun(Params)).
+    ?assertMatch({error, access_refused},
+                 StartConnectionFun(<<"test_user_no_perm">>,
+                                    <<"test_user_no_perm">>,
+                                    <<"/">>)).

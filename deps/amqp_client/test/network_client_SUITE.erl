@@ -105,7 +105,8 @@ pub_and_close_test_() ->
         end}.
 
 channel_tune_negotiation_test() ->
-    amqp_connection:close(new_connection(#amqp_params{channel_max = 10})).
+    amqp_connection:close(
+      new_connection(#amqp_params_network{channel_max = 10})).
 
 confirm_test() ->
     test_util:confirm_test(new_connection()).
@@ -128,16 +129,16 @@ hard_error_test_() ->
         fun () -> negative_test_util:hard_error_test(new_connection()) end).
 
 non_existent_user_test() ->
-    negative_test_util:non_existent_user_test(fun new_connection/1).
+    negative_test_util:non_existent_user_test(fun new_connection/3).
 
 invalid_password_test() ->
-    negative_test_util:invalid_password_test(fun new_connection/1).
+    negative_test_util:invalid_password_test(fun new_connection/3).
 
 non_existent_vhost_test() ->
-    negative_test_util:non_existent_vhost_test(fun new_connection/1).
+    negative_test_util:non_existent_vhost_test(fun new_connection/3).
 
 no_permission_test() ->
-    negative_test_util:no_permission_test(fun new_connection/1).
+    negative_test_util:no_permission_test(fun new_connection/3).
 
 channel_writer_death_test() ->
     negative_test_util:channel_writer_death_test(new_connection()).
@@ -161,11 +162,17 @@ command_invalid_over_channel0_test() ->
 %% Common Functions
 
 new_connection() ->
-    new_connection(#amqp_params{}).
+    new_connection(#amqp_params_network{}).
+
+new_connection(Username, Password, VHost) ->
+    new_connection(#amqp_params_network{username     = Username,
+                                        password     = Password,
+                                        virtual_host = VHost}).
 
 new_connection(AmqpParams) ->
-    case amqp_connection:start(network, AmqpParams) of {ok, Conn}     -> Conn;
-                                                       {error, _} = E -> E
+    case amqp_connection:start(AmqpParams) of
+        {ok, Conn}     -> Conn;
+        {error, _} = E -> E
     end.
 
 test_coverage() ->

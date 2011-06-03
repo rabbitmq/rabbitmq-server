@@ -37,8 +37,9 @@ clean: common_clean
 
 distribution: documentation source_tarball package
 
-%.app: %.app.in
-	sed -e 's:%%VSN%%:$(VERSION):g' < $< > $@
+%.app: %.app.in $(SOURCES) $(BROKER_DIR)/generate_app
+	escript  $(BROKER_DIR)/generate_app $< $@ $(SOURCE_DIR)
+	sed -i.save 's/%%VSN%%/$(VERSION)/' $@ && rm $@.save
 
 ###############################################################################
 ##  Dialyzer
