@@ -32,8 +32,8 @@
 -spec(stop/0 :: () -> 'ok').
 -spec(init/4 :: (rabbit_types:amqqueue(), attempt_recovery(),
                  async_callback(), sync_callback()) -> state()).
--spec(terminate/1 :: (state()) -> state()).
--spec(delete_and_terminate/1 :: (state()) -> state()).
+-spec(terminate/2 :: (any(), state()) -> state()).
+-spec(delete_and_terminate/2 :: (any(), state()) -> state()).
 -spec(purge/1 :: (state()) -> {purged_msg_count(), state()}).
 -spec(publish/4 :: (rabbit_types:basic_message(),
                     rabbit_types:message_properties(), pid(), state()) ->

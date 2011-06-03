@@ -49,11 +49,11 @@ behaviour_info(callbacks) ->
      {init, 4},
 
      %% Called on queue shutdown when queue isn't being deleted.
-     {terminate, 1},
+     {terminate, 2},
 
      %% Called when the queue is terminating and needs to delete all
      %% its content.
-     {delete_and_terminate, 1},
+     {delete_and_terminate, 2},
 
      %% Remove all messages in the queue, but not messages which have
      %% been fetched and are pending acks.
