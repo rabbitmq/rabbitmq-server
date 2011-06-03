@@ -80,10 +80,8 @@ remove_bindings(Ser, X, Bs) ->
     rabbit_federation_exchange:remove_bindings(Ser, X, Bs).
 
 x() ->
-    Upstreams = [{table, [{<<"host">>,    longstr,  <<"localhost">>},
-                          {<<"exchange">>,longstr,  <<"upstream">>}]}],
-    Args = [{<<"upstreams">>, array,   Upstreams},
-            {<<"type">>,      longstr, <<"fanout">>}],
+    Args = [{<<"upstream_set">>, longstr, <<"upstream">>},
+            {<<"type">>,         longstr, <<"fanout">>}],
     #exchange{name        = r(?DS_NAME),
               type        = 'x-federation',
               durable     = false,

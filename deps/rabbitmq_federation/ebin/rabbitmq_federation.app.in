@@ -5,8 +5,8 @@
   {registered, []},
   {mod, {rabbit_federation_app, []}},
   {env, [{exchanges,      []},
-         {brokers,        []},
-         {ssl_options,    []},
+         {upstream_sets,  []},
+         {connections,    []},
          {local_username, "guest"},
          {local_nodename, automatic}]},
   {applications, [kernel, stdlib, rabbit, amqp_client]}]}.

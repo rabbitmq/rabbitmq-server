@@ -55,17 +55,13 @@ declare_exchange(Props) ->
         auto_delete = pget(auto_delete, Props, false),
         internal    = pget(internal,    Props, false),
         arguments   =
-            [{<<"upstreams">>, array,  [to_table(U, XName, VHost) ||
-                                           U <- pget_or_die(upstreams, Props)]},
-             {<<"type">>,      longstr, list_to_binary(
-                                          pget_or_die(type, Props))}]}),
+            [{<<"upstream_set">>, longstr, pget_bin(upstream_set, Props)},
+             {<<"type">>,         longstr, pget_bin(type, Props)}]}),
     amqp_channel:close(Ch),
     amqp_connection:close(Conn),
     ok.
 
-to_table(Props, DefaultXName, DefaultVHost) ->
-    rabbit_federation_upstream:to_table(
-      rabbit_federation_upstream:from_props(Props, DefaultXName, DefaultVHost)).
+pget_bin(K, T) -> list_to_binary(pget_or_die(K, T)).
 
 %%----------------------------------------------------------------------------
 

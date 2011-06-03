@@ -32,6 +32,8 @@
 -export([validate/1, create/2, delete/3,
          add_binding/3, remove_bindings/3, assert_args_equivalence/2]).
 
+-export([fail/2]).
+
 %%----------------------------------------------------------------------------
 
 description() ->
@@ -43,10 +45,13 @@ serialise_events() -> true.
 route(X, Delivery) -> with_module(X, fun (M) -> M:route(X, Delivery) end).
 
 validate(X = #exchange{arguments = Args}) ->
-    validate_arg(<<"upstreams">>, array,   Args),
-    validate_arg(<<"type">>,      longstr, Args),
-    {array, Upstreams} = rabbit_misc:table_lookup(Args, <<"upstreams">>),
-    [rabbit_federation_upstream:validate_table(U) || U <- Upstreams],
+    validate_arg(<<"upstream_set">>, longstr, Args),
+    validate_arg(<<"type">>,         longstr, Args),
+    {longstr, SetName} = rabbit_misc:table_lookup(Args, <<"upstream_set">>),
+    case rabbit_federation_upstream:from_set_name(SetName, <<"">>, <<"">>) of
+        {error, {F, A}} -> fail("upstream_set ~s: " ++ F, [SetName | A]);
+        _               -> ok
+    end,
     {longstr, TypeBin} = rabbit_misc:table_lookup(Args, <<"type">>),
     case rabbit_exchange:check_type(TypeBin) of
         'x-federation' -> fail("Type argument must not be x-federation.", []);
@@ -113,9 +118,8 @@ is_federation_exchange(_) ->
 
 exchange_to_sup_args(X = #exchange{name = XRes, arguments = Args}) ->
     #resource{name = XName, kind = exchange, virtual_host = VHost} = XRes,
-    {array, UpstreamTables} = rabbit_misc:table_lookup(Args, <<"upstreams">>),
-    Upstreams = [rabbit_federation_upstream:from_table(U, XName, VHost) ||
-                    U <- UpstreamTables],
+    {longstr, Set} = rabbit_misc:table_lookup(Args, <<"upstream_set">>),
+    Upstreams = rabbit_federation_upstream:from_set_name(Set, XName, VHost),
     {Upstreams, X}.
 
 validate_arg(Name, Type, Args) ->

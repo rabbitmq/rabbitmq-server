@@ -312,21 +312,21 @@ consume_from_upstream_queue(
                  channel             = Ch,
                  downstream_exchange = DownstreamX}) ->
     #upstream{exchange       = X,
-              prefetch_count = PrefetchCount,
+              prefetch_count = Prefetch,
               queue_expires  = Expiry,
               params         = #amqp_params_network{virtual_host = VHost}}
         = Upstream,
     Q = upstream_queue_name(X, VHost, DownstreamX),
-    amqp_channel:call(
-      Ch, #'queue.declare'{
-        queue     = Q,
-        durable   = true,
-        arguments = [{<<"x-expires">>, long, Expiry * 1000},
-                     rabbit_federation_util:purpose_arg()]}),
-    case PrefetchCount of
+    Args = case Expiry of
+               none -> [];
+               _    -> [{<<"x-expires">>, long, Expiry * 1000}]
+           end ++ [rabbit_federation_util:purpose_arg()],
+    amqp_channel:call(Ch, #'queue.declare'{queue     = Q,
+                                           durable   = true,
+                                           arguments = Args}),
+    case Prefetch of
         none -> ok;
-        _    -> amqp_channel:call(Ch,
-                                  #'basic.qos'{prefetch_count = PrefetchCount})
+        _    -> amqp_channel:call(Ch, #'basic.qos'{prefetch_count = Prefetch})
     end,
     #'basic.consume_ok'{} =
         amqp_channel:subscribe(Ch, #'basic.consume'{queue  = Q,

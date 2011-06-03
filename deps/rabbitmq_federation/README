@@ -102,59 +102,62 @@ A reasonably verbose static configuration might look like:
                    {durable,      true},
                    {auto_delete,  false},
                    {internal,     false},
-                   {upstreams,    [[{host,     "upstream-server"},
-                                    {protocol, "amqps"}]]}]
+                   {upstream_set, "my-upstreams"}]
                  ]},
-     {brokers, [[{host,            "upstream-server"},
-                 {protocol,        "amqps"},
-                 {username,        "myusername"},
-                 {password,        "secret"},
-                 {prefetch_count,  1000},
-                 {reconnect_delay, 5},
-                 {heartbeat,       10},
-                 {queue_expires,   30}]
-               ]},
-     {ssl_options,
-      [{cacertfile,           "/path/to/cacert.pem"},
-       {certfile,             "/path/to/cert.pem"},
-       {keyfile,              "/path/to/key.pem"},
-       {verify,               verify_peer},
-       {fail_if_no_peer_cert, true}
-     ]},
+     {upstream_sets, [{"my-upstreams", [[{connection, "upstream-server"},
+                                         {exchange,   "my-upstream-x"}],
+                                        [{connection, "another-server"}]
+                                       ]}
+                     ]},
+     {connections, [{"upstream-server", [{host,            "upstream-server"},
+                                         {protocol,        "amqps"},
+                                         {username,        "myusername"},
+                                         {password,        "secret"},
+                                         {prefetch_count,  1000},
+                                         {reconnect_delay, 5},
+                                         {heartbeat,       10},
+                                         {queue_expires,   30},
+                                         {ssl_options,
+                                          [{cacertfile, "/path/to/cacert.pem"},
+                                           {certfile,   "/path/to/cert.pem"},
+                                           {keyfile,    "/path/to/key.pem"},
+                                           {verify,     verify_peer},
+                                           {fail_if_no_peer_cert, true}
+                                          ]}
+                                        ]},
+                    {"another-server", [...elided...]}
+                   ]},
      {local_username, "myusername"}
    ]
   }
 
 The list of exchanges looks like a set of exchange.declares for the
-most part, but with each declaration including a list of upstream
-exchanges. Note that the type parameter must match the type of the
-upstream exchanges for routing to work at all sensibly.
+most part, but with each declaration including the name of an
+"upstream_set", representing a list of remote exchanges whose messages
+should be federated to the local exchange. Note that the type
+parameter must match the type of the upstream exchanges for routing to
+work at all sensibly.
 
-The upstreams parameter is a list of remote exchanges whose messages
-should be federated to the local exchange. You can specify host, port,
-protocol, virtual_host and exchange here. Only host is mandatory; if
-protocol is omitted the protocol is taken as "amqp", and if
-virtual_host or exchange are omitted the default is the same as the
-downstream exchange.
+Each element in the upstream_set contains a mapping from a name to a
+list of upstreams. Each element in this list must specify a connection
+to use. It can also specify an exchange name and / or virtual host to
+map to - if these are not specified they are taken to be the same as
+for the local exchange. Therefore one upstream_set can be refered to
+by many local exchanges as long as exchange names are the same across
+all the nodes in your federation.
 
 Note that the static configuration will declare the downstream
 exchanges (on the local broker). It does not ensure the upstream
 exchanges exist.
 
-The brokers list provides information on how to connect to brokers
-mentioned in the upstreams list. It can match on the following properties:
+The connections list provides information on how to connect to brokers
+mentioned in the upstream sets. It can contain the following properties:
 
 host
   - hostname to connect to
 
 protocol
   - "amqp" or "amqps"
-
-virtual_host
-  - if present, distinguish between different sets of broker
-    properties for different virtual hosts on the same broker
-
-And can contain the following options:
 
 username
   - user to connect as. Default is "guest". The user will need the
@@ -185,8 +188,9 @@ queue_expires
   - How long to keep the upstream queue around (and collecting
     messages) when disconnected, in seconds. Default is 1800 (half an hour).
 
-The ssl_options parameter specifies how to make client SSL
-connections. See the Erlang client documentation for more details.
+ssl_options
+  - Specifies how to make client SSL connections. See the Erlang
+    client documentation for more details.
 
 The local_username parameter specifies how to connect to the local
 broker. The default is "guest". This user will need the ability to
@@ -205,27 +209,16 @@ This is a less common case, but in case you want to do this:
 
  * Declare the downstream exchange with type "x-federation".
 
- * Give it arguments "type" and "upstreams". "type" should refer to
-   its backing type; the type of the upstream exchanges. "upstreams"
-   should be an array of tables. Each table must have a "host" fields,
-   and may also have "protocol", "port", "virtual_host" and "exchange"
-   fields. TODO example.
-
- * Connection information and SSL parameters are still taken from the
-   static configuration.
+ * Give it arguments "type" and "upstream_set", both of type "long
+   string". "type" should refer to its backing type; the type of the
+   upstream exchanges. "upstream_set" should be the name of an
+   upstream_set from the static configuration.
 
 Example using the Java API:
 
-Map<String, Object> upstream = new HashMap<String, Object>();
-upstream.put("host", "remote-server");
-upstream.put("exchange", "upstream-exchange");
-
-ArrayList<Map<String, Object>> upstreams = new ArrayList<Map<String, Object>>();
-upstreams.add(upstream);
-
 Map<String, Object> args = new HashMap<String, Object>();
 args.put("type", "topic");
-args.put("upstreams", upstreams);
+args.put("upstream_set", "my-upstream-set");
 
 Channel ch = ...;
 ch.exchangeDeclare("my-federated-exchange", "x-federation", true, false, args);
@@ -238,7 +231,7 @@ Possible Future Enhancements
 
 * Simple status reporting, similar to the shovel
 
-* Add and remove upstream brokers dynamically
+* Modify upstream sets dynamically
 
 * Mode to federate all exchanges
 
