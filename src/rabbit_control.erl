@@ -343,9 +343,9 @@ action(list_permissions, Node, [], Opts, Inform) ->
 action(report, Node, _Args, _Opts, Inform) ->
     io:format("Reporting server status on ~p~n~n", [erlang:universaltime()]),
     [begin ok = action(Action, N, [], [], Inform), io:nl() end ||
-        N      <- rpc_call(Node, rabbit_mnesia, running_clustered_nodes, []),
+        N      <- unsafe_rpc(Node, rabbit_mnesia, running_clustered_nodes, []),
         Action <- [status, cluster_status, environment]],
-    VHosts = rpc_call(Node, rabbit_vhost, list, []),
+    VHosts = unsafe_rpc(Node, rabbit_vhost, list, []),
     [print_report(Node, Q)      || Q <- ?GLOBAL_QUERIES],
     [print_report(Node, Q, [V]) || Q <- ?VHOST_QUERIES, V <- VHosts],
     io:format("End of server status report~n"),
@@ -428,9 +428,15 @@ display_list(Other) -> Other.
 
 display_call_result(Node, MFA) ->
     case call(Node, MFA) of
-        {badrpc, _} = Res -> Res;
+        {badrpc, _} = Res -> throw(Res);
         Res               -> io:format("~p~n", [Res]),
                              ok
+    end.
+
+unsafe_rpc(Node, Mod, Fun, Args) ->
+    case rpc_call(Node, Mod, Fun, Args) of
+        {badrpc, _} = Res -> throw(Res);
+        Normal            -> Normal
     end.
 
 call(Node, {Mod, Fun, Args}) ->
