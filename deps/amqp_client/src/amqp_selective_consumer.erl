@@ -58,7 +58,7 @@
 
 -export([subscribe/3, cancel/2, register_default_consumer/2]).
 -export([init/1, handle_consume_ok/3, handle_cancel_ok/3, handle_cancel/2,
-         handle_deliver/2, handle_call/2, terminate/2]).
+         handle_deliver/2, handle_call/3, terminate/2]).
 
 -record(state, {consumers        = dict:new(), %% Tag -> ConsumerPid
                 unassigned       = dict:new(), %% BasicConsume -> [ConsumerPid]
@@ -111,27 +111,11 @@ cancel(ChannelPid, #'basic.cancel'{} = Cancel) ->
 %%      ChannelPid = pid()
 %%      ConsumerPid = pid()
 %% @doc This function registers a default consumer with the channel. A default
-%% consumer is used in two situations:<br/>
-%% <br/>
-%% 1) A subscription was made via
+%% consumer is used when a subscription is made via
 %% amqp_channel:call(ChannelPid, #'basic.consume'{}) (rather than
 %% {@module}:subscribe/3) and hence there is no consumer pid registered with the
-%% consumer tag.<br/>
-%% <br/>
-%% 2) The following sequence of events occurs:<br/>
-%% <br/>
-%% - subscribe is used with basic.consume with explicit acks<br/>
-%% - some deliveries take place but are not acked<br/>
-%% - a basic.cancel is issued<br/>
-%% - a basic.recover{requeue = false} is issued<br/>
-%% <br/>
-%% Since requeue is specified to be false in the basic.recover, the spec
-%% states that the message must be redelivered to "the original recipient"
-%% - i.e. the same channel / consumer-tag. But the consumer is no longer
-%% active. <br/>
-%% <br/>
-%% In these two cases, the relevant deliveries will be sent to the default
-%% consumer.
+%% consumer tag. In this case, the relevant deliveries will be sent to the
+%% default consumer.
 register_default_consumer(ChannelPid, ConsumerPid) ->
     amqp_channel:call_consumer(ChannelPid,
                                {register_default_consumer, ConsumerPid}).
@@ -172,7 +156,7 @@ handle_deliver(Deliver, State) ->
     State.
 
 %% @private
-handle_call({subscribe, BasicConsume, Pid},
+handle_call({subscribe, BasicConsume, Pid}, _From,
             State = #state{consumers = Consumers, unassigned = Unassigned}) ->
     Tag = tag(BasicConsume),
     Ok =
@@ -188,30 +172,30 @@ handle_call({subscribe, BasicConsume, Pid},
            _ ->
                true
         end,
-    if Ok ->
-           case BasicConsume of
-               #'basic.consume'{nowait = true} ->
-                   {ok,
-                    State#state{consumers = dict:store(Tag, Pid, Consumers)}};
-               #'basic.consume'{nowait = false} ->
-                   NewUnassigned =
-                       dict:update(BasicConsume, fun (Pids) -> [Pid | Pids] end,
-                                   [Pid], Unassigned),
-                   {ok, State#state{unassigned = NewUnassigned}}
-           end;
-       true ->
-           %% There is an error. Don't do anything (don't override existing
-           %% consumers), the server will close the channel with an error.
-           {error, State}
+    case {Ok, BasicConsume} of
+        {true, #'basic.consume'{nowait = true}} ->
+            {reply, ok,
+             State#state{consumers = dict:store(Tag, Pid, Consumers)}};
+        {true, #'basic.consume'{nowait = false}} ->
+            NewUnassigned =
+                dict:update(BasicConsume, fun (Pids) -> [Pid | Pids] end,
+                            [Pid], Unassigned),
+            {reply, ok, State#state{unassigned = NewUnassigned}};
+        {false, #'basic.consume'{nowait = true}} ->
+            {reply, error, State};
+        {false, #'basic.consume'{nowait = false}} ->
+            %% Don't do anything (don't override existing
+            %% consumers), the server will close the channel with an error.
+            {noreply, State}
     end;
 %% @private
-handle_call({register_default_consumer, Pid},
+handle_call({register_default_consumer, Pid}, _From,
             State = #state{default_consumer = PrevPid}) ->
     case PrevPid of none -> ok;
                     _    -> unlink(PrevPid)
     end,
     link(Pid),
-    {ok, State#state{default_consumer = Pid}}.
+    {reply, ok, State#state{default_consumer = Pid}}.
 
 %% @private
 terminate(_Reason, State) ->

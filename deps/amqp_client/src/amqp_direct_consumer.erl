@@ -40,7 +40,7 @@
 -behaviour(amqp_gen_consumer).
 
 -export([init/1, handle_consume_ok/3, handle_cancel_ok/3, handle_cancel/2,
-         handle_deliver/2, handle_call/2, terminate/2]).
+         handle_deliver/2, handle_call/3, terminate/2]).
 
 %%---------------------------------------------------------------------------
 %% amqp_gen_consumer callbacks
@@ -72,9 +72,9 @@ handle_deliver(M, C) ->
     C.
 
 %% @private
-handle_call(M, C) ->
+handle_call(M, _, C) ->
     C ! M,
-    {ok, C}.
+    {reply, ok, C}.
 
 %% @private
 terminate(_Reason, C) ->

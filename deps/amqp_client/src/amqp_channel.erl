@@ -294,8 +294,8 @@ handle_call(next_publish_seqno, _From,
             State = #state{next_pub_seqno = SeqNo}) ->
     {reply, SeqNo, State};
 %% @private
-handle_call({call_consumer, Call}, _From, State) ->
-    handle_consumer_callback(handle_call, [Call], State).
+handle_call({call_consumer, Call}, From, State) ->
+    handle_consumer_callback(handle_call, [Call, From], State).
 
 %% @private
 handle_cast({cast, Method, AmqpMsg}, State) ->
@@ -721,8 +721,12 @@ server_misbehaved(#amqp_error{} = AmqpError, State = #state{number = Number}) ->
 handle_consumer_callback(handle_call, Args,
                          State = #state{consumer_state = CState,
                                         consumer_module = CModule}) ->
-    {Reply, NewCState} = erlang:apply(CModule, handle_call, Args ++ CState),
-    {reply, Reply, State#state{consumer_state = [NewCState]}};
+    case erlang:apply(CModule, handle_call, Args ++ CState) of
+        {reply, Reply, NewCState} ->
+            {reply, Reply, State#state{consumer_state = [NewCState]}};
+        {noreply, NewCState} ->
+            {noreply, State#state{consumer_state = [NewCState]}}
+    end;
 handle_consumer_callback(Function, Args, State) ->
     {noreply, consumer_callback(Function, Args, State)}.
 

@@ -23,7 +23,20 @@
 %% callback functions.
 -module(amqp_gen_consumer).
 
+-export([reply/2]).
 -export([behaviour_info/1]).
+
+%%---------------------------------------------------------------------------
+%% Interface
+%%---------------------------------------------------------------------------
+
+%% @spec reply(From, Reply) -> _
+%% @doc This function is used from within the callback to reply to a previous
+%% call triggered by an amqp_channel:call_consumer/2. The From parameter must
+%% be the one passed through handle_call/3. The value returned by this function
+%% is not defined and must always be ignored.
+reply(From, Reply) ->
+    gen_server:reply(From, Reply).
 
 %%---------------------------------------------------------------------------
 %% Behaviour
@@ -85,7 +98,8 @@ behaviour_info(callbacks) ->
      %% is received from the server.
      {handle_deliver, 2},
 
-     %% handle_call(Call, State) -> {Reply, NewState}
+     %% handle_call(Call, From, State) -> {reply, Reply, NewState} |
+     %%                                   {noreply, NewState}
      %% where
      %%      Call = any()
      %%      Reply = any()
@@ -94,8 +108,11 @@ behaviour_info(callbacks) ->
      %%
      %% This callback is invoked by the channel when calling
      %% amqp_channel:call_consumer/2. Reply is the term that
-     %% amqp_channel:call_consumer/2 will return.
-     {handle_call, 2},
+     %% amqp_channel:call_consumer/2 will return. If the callback returns
+     %% {noreply, _}, then the caller to amqp_channel:call_consumer/2 remains
+     %% blocked until reply/2 is used with the provided From as the first
+     %% argument.
+     {handle_call, 3},
 
      %% terminate(Reason, State) -> NewState
      %% where
