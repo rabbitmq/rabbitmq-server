@@ -82,9 +82,9 @@ declared as a federated exchange in each broker, with upstreams
 corresponding to all the other brokers.
 
 Other topologies are possible; however one notable current limitation
-is that the federation plugin does not forward the same message more
-than once. Therefore your inter-broker topology needs to be fully
-connected. We intend to remove this limitation in future.
+is that every broker must be connected directly to every other broker
+from which it should receive messages. We intend to remove this
+limitation in future.
 
 Federated exchanges can be set up statically via broker configuration,
 or declared dynamically over AMQP.
@@ -161,7 +161,9 @@ protocol
 
 username
   - user to connect as. Default is "guest". The user will need the
-    ability to create and bind exchanges and queues.
+    ability to create exchanges and queues with names beginning with
+    "federation:". It will also need to be able to bind to the upstream
+    exchange.
 
 password
   - password to use. Default is "guest".
