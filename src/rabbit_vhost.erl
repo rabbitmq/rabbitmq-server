@@ -91,9 +91,9 @@ delete(VHostPath) ->
 
 internal_delete(VHostPath) ->
     lists:foreach(
-      fun ({Username, _, _, _}) ->
-              ok = rabbit_auth_backend_internal:clear_permissions(Username,
-                                                                  VHostPath)
+      fun (Info) ->
+              ok = rabbit_auth_backend_internal:clear_permissions(
+                     proplists:get_value(user, Info), VHostPath)
       end,
       rabbit_auth_backend_internal:list_vhost_permissions(VHostPath)),
     ok = mnesia:delete({rabbit_vhost, VHostPath}),
