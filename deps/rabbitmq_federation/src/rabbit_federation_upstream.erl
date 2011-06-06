@@ -81,7 +81,8 @@ from_props_connection(UpstreamProps, ConnName, Conn,
                           exchange        = list_to_binary(XName),
                           prefetch_count  = pget(prefetch_count,  Conn, none),
                           reconnect_delay = pget(reconnect_delay, Conn, 1),
-                          queue_expires   = pget(queue_expires,   Conn, none)}
+                          expires         = pget(expires,         Conn, none),
+                          message_ttl     = pget(message_ttl,     Conn, none)}
     end.
 
 set_extra_params(Params, Conn) ->

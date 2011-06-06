@@ -18,6 +18,7 @@
                    exchange,
                    prefetch_count,
                    reconnect_delay,
-                   queue_expires}).
+                   expires,
+                   message_ttl}).
 
 -define(SUPERVISOR, rabbit_federation_sup).

@@ -313,14 +313,20 @@ consume_from_upstream_queue(
                  downstream_exchange = DownstreamX}) ->
     #upstream{exchange       = X,
               prefetch_count = Prefetch,
-              queue_expires  = Expiry,
+              expires        = Expiry,
+              message_ttl    = TTL,
               params         = #amqp_params_network{virtual_host = VHost}}
         = Upstream,
     Q = upstream_queue_name(X, VHost, DownstreamX),
-    Args = case Expiry of
-               none -> [];
-               _    -> [{<<"x-expires">>, long, Expiry * 1000}]
-           end ++ [rabbit_federation_util:purpose_arg()],
+    ExpiryArg = case Expiry of
+                    none -> [];
+                    _    -> [{<<"x-expires">>, long, Expiry * 1000}]
+                end,
+    TTLArg = case TTL of
+                 none -> [];
+                 _    -> [{<<"x-message-ttl">>, long, TTL * 1000}]
+             end,
+    Args = ExpiryArg ++ TTLArg ++ [rabbit_federation_util:purpose_arg()],
     amqp_channel:call(Ch, #'queue.declare'{queue     = Q,
                                            durable   = true,
                                            arguments = Args}),
