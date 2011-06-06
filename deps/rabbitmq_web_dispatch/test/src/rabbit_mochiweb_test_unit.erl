@@ -57,7 +57,13 @@ check_contexts_ok_test_() ->
               [{'*', []}, {lstr, []}]},
 
              {[{ctxt1, '*'}, {ctxt2, '*'}],
-              [{'*', []}]}]].
+              [{'*', []}]},
+
+             %% {listener, path}-style contexts
+             {[{ctxt1, {'*', "foo"}}], [{'*', []}]},
+             {[{ctxt1, {lstr, "bar"}}],
+              [{'*', []}, {lstr, []}]}
+            ]].
 
 check_contexts_errors_test_() ->
     [fun() ->
