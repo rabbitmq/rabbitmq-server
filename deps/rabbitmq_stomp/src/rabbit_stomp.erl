@@ -77,6 +77,8 @@ parse_default_user([{passcode, Passcode} | Rest], Configuration) ->
                                default_passcode = Passcode});
 parse_default_user([implicit_connect | Rest], Configuration) ->
     parse_default_user(Rest, Configuration#stomp_configuration{
-                               implicit_connect = true}).
+                               implicit_connect = true});
+parse_default_user([_Unkown | Rest], Configuration) ->
+    parse_default_user(Rest, Configuration).
 
 
