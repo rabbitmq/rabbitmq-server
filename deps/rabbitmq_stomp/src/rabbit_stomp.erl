@@ -60,12 +60,15 @@ parse_listener_configuration() ->
     end.
 
 parse_configuration() ->
-    case application:get_env(default_user) of
-        undefined ->
-            ?DEFAULT_CONFIGURATION;
-        {ok, UserConfig} ->
-            parse_default_user(UserConfig, ?DEFAULT_CONFIGURATION)
-    end.
+    Configuration =
+        case application:get_env(default_user) of
+            undefined ->
+                ?DEFAULT_CONFIGURATION;
+            {ok, UserConfig} ->
+                parse_default_user(UserConfig, ?DEFAULT_CONFIGURATION)
+        end,
+    report_configuration(Configuration),
+    Configuration.
 
 parse_default_user([], Configuration) ->
     Configuration;
@@ -78,7 +81,26 @@ parse_default_user([{passcode, Passcode} | Rest], Configuration) ->
 parse_default_user([implicit_connect | Rest], Configuration) ->
     parse_default_user(Rest, Configuration#stomp_configuration{
                                implicit_connect = true});
-parse_default_user([_Unkown | Rest], Configuration) ->
+parse_default_user([Unknown | Rest], Configuration) ->
+    error_logger:error_msg("Invalid default_user configuration option: ~p~n",
+                           [Unknown]),
     parse_default_user(Rest, Configuration).
+
+report_configuration(#stomp_configuration{
+                        default_login    = Login,
+                        implicit_connect = ImplicitConnect}) ->
+    case Login of
+        undefined ->
+            ok;
+        _ ->
+            error_logger:info_msg("Default user '~s' enabled~n", [Login])
+    end,
+
+    case ImplicitConnect of
+        true  -> error_logger:info_msg("Implicit connect enabled~n");
+        false -> ok
+    end,
+
+    ok.
 
 
