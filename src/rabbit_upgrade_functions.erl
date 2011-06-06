@@ -34,15 +34,15 @@
 
 -ifdef(use_specs).
 
--spec(remove_user_scope/0  :: () -> 'ok').
--spec(hash_passwords/0     :: () -> 'ok').
--spec(add_ip_to_listener/0 :: () -> 'ok').
--spec(internal_exchanges/0 :: () -> 'ok').
+-spec(remove_user_scope/0     :: () -> 'ok').
+-spec(hash_passwords/0        :: () -> 'ok').
+-spec(add_ip_to_listener/0    :: () -> 'ok').
+-spec(internal_exchanges/0    :: () -> 'ok').
 -spec(user_to_internal_user/0 :: () -> 'ok').
--spec(topic_trie/0 :: () -> 'ok').
+-spec(topic_trie/0            :: () -> 'ok').
+-spec(semi_durable_route/0    :: () -> 'ok').
 -spec(exchange_event_serial/0 :: () -> 'ok').
--spec(semi_durable_route/0 :: () -> 'ok').
--spec(trace_exchanges/0 :: () -> 'ok').
+-spec(trace_exchanges/0       :: () -> 'ok').
 
 -endif.
 

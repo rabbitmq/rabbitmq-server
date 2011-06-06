@@ -2116,7 +2116,7 @@ with_fresh_variable_queue(Fun) ->
                       {delta, {delta, undefined, 0, undefined}},
                       {q3, 0}, {q4, 0},
                       {len, 0}]),
-    _ = rabbit_variable_queue:delete_and_terminate(Fun(VQ)),
+    _ = rabbit_variable_queue:delete_and_terminate(shutdown, Fun(VQ)),
     passed.
 
 test_variable_queue() ->
@@ -2284,7 +2284,7 @@ test_variable_queue_all_the_bits_not_covered_elsewhere1(VQ0) ->
                                             Count + Count, VQ3),
     {VQ5, _AckTags1} = variable_queue_fetch(Count, false, false,
                                             Count, VQ4),
-    _VQ6 = rabbit_variable_queue:terminate(VQ5),
+    _VQ6 = rabbit_variable_queue:terminate(shutdown, VQ5),
     VQ7 = variable_queue_init(test_amqqueue(true), true),
     {{_Msg1, true, _AckTag1, Count1}, VQ8} =
         rabbit_variable_queue:fetch(true, VQ7),
@@ -2301,7 +2301,7 @@ test_variable_queue_all_the_bits_not_covered_elsewhere2(VQ0) ->
     {_Guids, VQ4} =
         rabbit_variable_queue:requeue(AckTags, fun(X) -> X end, VQ3),
     VQ5 = rabbit_variable_queue:timeout(VQ4),
-    _VQ6 = rabbit_variable_queue:terminate(VQ5),
+    _VQ6 = rabbit_variable_queue:terminate(shutdown, VQ5),
     VQ7 = variable_queue_init(test_amqqueue(true), true),
     {empty, VQ8} = rabbit_variable_queue:fetch(false, VQ7),
     VQ8.
@@ -2336,7 +2336,7 @@ test_queue_recover() ->
               VQ1 = variable_queue_init(Q, true),
               {{_Msg1, true, _AckTag1, CountMinusOne}, VQ2} =
                   rabbit_variable_queue:fetch(true, VQ1),
-              _VQ3 = rabbit_variable_queue:delete_and_terminate(VQ2),
+              _VQ3 = rabbit_variable_queue:delete_and_terminate(shutdown, VQ2),
               rabbit_amqqueue:internal_delete(QName)
       end),
     passed.

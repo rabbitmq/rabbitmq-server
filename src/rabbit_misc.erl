@@ -25,7 +25,7 @@
          protocol_error/3, protocol_error/4, protocol_error/1]).
 -export([not_found/1, assert_args_equivalence/4]).
 -export([dirty_read/1]).
--export([table_lookup/2]).
+-export([table_lookup/2, set_table_value/4]).
 -export([r/3, r/2, r_arg/4, rs/1]).
 -export([enable_cover/0, report_cover/0]).
 -export([enable_cover/1, report_cover/1]).
@@ -56,6 +56,7 @@
 -export([const_ok/0, const/1]).
 -export([ntoa/1, ntoab/1]).
 -export([is_process_alive/1]).
+-export([pget/2, pget/3, pget_or_die/2]).
 
 %%----------------------------------------------------------------------------
 
@@ -104,6 +105,11 @@
 -spec(table_lookup/2 ::
         (rabbit_framing:amqp_table(), binary())
         -> 'undefined' | {rabbit_framing:amqp_field_type(), any()}).
+-spec(set_table_value/4 ::
+        (rabbit_framing:amqp_table(), binary(),
+         rabbit_framing:amqp_field_type(), rabbit_framing:amqp_value())
+        -> rabbit_framing:amqp_table()).
+
 -spec(r/2 :: (rabbit_types:vhost(), K)
              -> rabbit_types:r3(rabbit_types:vhost(), K, '_')
                     when is_subtype(K, atom())).
@@ -196,6 +202,9 @@
 -spec(ntoa/1 :: (inet:ip_address()) -> string()).
 -spec(ntoab/1 :: (inet:ip_address()) -> string()).
 -spec(is_process_alive/1 :: (pid()) -> boolean()).
+-spec(pget/2 :: (term(), [term()]) -> term()).
+-spec(pget/3 :: (term(), [term()], term()) -> term()).
+-spec(pget_or_die/2 :: (term(), [term()]) -> term() | no_return()).
 
 -endif.
 
@@ -267,6 +276,10 @@ table_lookup(Table, Key) ->
         {value, {_, TypeBin, ValueBin}} -> {TypeBin, ValueBin};
         false                           -> undefined
     end.
+
+set_table_value(Table, Key, Type, Value) ->
+    sort_field_table(
+      lists:keystore(Key, 1, Table, {Key, Type, Value})).
 
 r(#resource{virtual_host = VHostPath}, Kind, Name)
   when is_binary(Name) ->
@@ -896,4 +909,13 @@ is_process_alive(Pid) ->
     case rpc:call(node(Pid), erlang, is_process_alive, [Pid]) of
         true -> true;
         _    -> false
+    end.
+
+pget(K, P) -> proplists:get_value(K, P).
+pget(K, P, D) -> proplists:get_value(K, P, D).
+
+pget_or_die(K, P) ->
+    case proplists:get_value(K, P) of
+        undefined -> exit({error, key_missing, K});
+        V         -> V
     end.

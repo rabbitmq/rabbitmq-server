@@ -198,22 +198,33 @@ list(VHostPath) ->
                                                            Route)].
 
 list_for_source(SrcName) ->
-    Route = #route{binding = #binding{source = SrcName, _ = '_'}},
-    [B || #route{binding = B} <- mnesia:dirty_match_object(rabbit_route,
-                                                           Route)].
+    mnesia:async_dirty(
+      fun() ->
+              Route = #route{binding = #binding{source = SrcName, _ = '_'}},
+              [B || #route{binding = B}
+                        <- mnesia:match_object(rabbit_route, Route, read)]
+      end).
 
 list_for_destination(DstName) ->
-    Route = #route{binding = #binding{destination = DstName, _ = '_'}},
-    [reverse_binding(B) || #reverse_route{reverse_binding = B} <-
-                               mnesia:dirty_match_object(rabbit_reverse_route,
-                                                         reverse_route(Route))].
+    mnesia:async_dirty(
+      fun() ->
+              Route = #route{binding = #binding{destination = DstName,
+                                                _ = '_'}},
+              [reverse_binding(B) ||
+                  #reverse_route{reverse_binding = B} <-
+                      mnesia:match_object(rabbit_reverse_route,
+                                          reverse_route(Route), read)]
+      end).
 
 list_for_source_and_destination(SrcName, DstName) ->
-    Route = #route{binding = #binding{source      = SrcName,
-                                      destination = DstName,
-                                      _           = '_'}},
-    [B || #route{binding = B} <- mnesia:dirty_match_object(rabbit_route,
-                                                           Route)].
+    mnesia:async_dirty(
+      fun() ->
+              Route = #route{binding = #binding{source      = SrcName,
+                                                destination = DstName,
+                                                _           = '_'}},
+              [B || #route{binding = B} <- mnesia:match_object(rabbit_route,
+                                                               Route, read)]
+      end).
 
 info_keys() -> ?INFO_KEYS.
 

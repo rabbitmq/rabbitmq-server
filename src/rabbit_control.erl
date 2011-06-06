@@ -412,6 +412,12 @@ format_info_item([{TableEntryKey, TableEntryType, _TableEntryValue} | _] =
                      Value) when is_binary(TableEntryKey) andalso
                                  is_atom(TableEntryType) ->
     io_lib:format("~1000000000000p", [prettify_amqp_table(Value)]);
+format_info_item([T | _] = Value)
+  when is_tuple(T) orelse is_pid(T) orelse is_binary(T) orelse is_atom(T) orelse
+       is_list(T) ->
+    "[" ++
+        lists:nthtail(2, lists:append(
+                           [", " ++ format_info_item(E) || E <- Value])) ++ "]";
 format_info_item(Value) ->
     io_lib:format("~w", [Value]).
 
