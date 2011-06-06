@@ -122,7 +122,15 @@ handle_cast({"CONNECT", Frame},
       fun(StateM) -> StateM end,
       State);
 
-handle_cast(_Request, State = #state{channel = none}) ->
+handle_cast(Request, State = #state{channel = none,
+                                     config = #stomp_configuration{
+                                      implicit_connect = true}}) ->
+    {noreply, State1, _} =
+        handle_cast({"CONNECT", #stomp_frame{headers = []}}, State),
+    handle_cast(Request, State1);
+handle_cast(_Request, State = #state{channel = none,
+                                     config = #stomp_configuration{
+                                      implicit_connect = false}}) ->
     {noreply,
      send_error("Illegal command",
                 "You must log in using CONNECT first\n",
