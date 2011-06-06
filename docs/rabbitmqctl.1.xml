@@ -648,6 +648,10 @@
                 <listitem><para>Whether tracing is enabled for this virtual host.</para></listitem>
               </varlistentry>
             </variablelist>
+            <para>
+              If no <command>vhostinfoitem</command>s are specified
+              then the vhost name is displayed.
+            </para>
             <para role="example-prefix">For example:</para>
             <screen role="example">rabbitmqctl list_vhosts name tracing</screen>
             <para role="example">
