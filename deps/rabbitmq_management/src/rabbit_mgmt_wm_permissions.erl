@@ -38,5 +38,4 @@ is_authorized(ReqData, Context) ->
 %%--------------------------------------------------------------------
 
 permissions() ->
-    [rabbit_mgmt_format:permissions(P) ||
-        P <- rabbit_auth_backend_internal:list_permissions()].
+    rabbit_auth_backend_internal:list_permissions().

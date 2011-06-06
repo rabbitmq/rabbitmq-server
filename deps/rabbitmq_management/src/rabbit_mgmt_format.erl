@@ -17,7 +17,7 @@
 
 -export([format/2, print/2, remove/1, ip/1, ipb/1, amqp_table/1, tuple/1]).
 -export([timestamp/1, timestamp_ms/1, strip_pids/1]).
--export([node_from_pid/1, protocol/1, resource/1, permissions/1, queue/1]).
+-export([node_from_pid/1, protocol/1, resource/1, queue/1]).
 -export([exchange/1, user/1, internal_user/1, binding/1, url/2]).
 -export([pack_binding_props/2, unpack_binding_props/1, tokenise/1]).
 -export([to_amqp_table/1, listener/1, properties/1, basic_properties/1]).
@@ -129,13 +129,6 @@ resource(_, unknown) ->
     unknown;
 resource(NameAs, #resource{name = Name, virtual_host = VHost}) ->
     [{NameAs, Name}, {vhost, VHost}].
-
-permissions({User, VHost, Conf, Write, Read}) ->
-    [{user,      User},
-     {vhost,     VHost},
-     {configure, Conf},
-     {write,     Write},
-     {read,      Read}].
 
 internal_user(User) ->
     [{name,          User#internal_user.username},

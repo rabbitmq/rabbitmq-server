@@ -43,9 +43,7 @@ resource_exists(ReqData, Context) ->
      end, ReqData, Context}.
 
 to_json(ReqData, Context) ->
-    rabbit_mgmt_util:reply(
-      rabbit_mgmt_format:permissions(perms(ReqData)),
-      ReqData, Context).
+    rabbit_mgmt_util:reply(perms(ReqData), ReqData, Context).
 
 accept_content(ReqData, Context) ->
     case perms(ReqData) of
@@ -87,10 +85,9 @@ perms(ReqData) ->
                         rabbit_auth_backend_internal:list_user_vhost_permissions(
                           User, VHost),
                     case Perms of
-                        [{Configure, Write, Read}] ->
-                            {User, VHost, Configure, Write, Read};
-                        [] ->
-                            none
+                        [Rest] -> [{user,  User},
+                                   {vhost, VHost} | Rest];
+                        []     -> none
                     end
             end;
         {error, _} ->
