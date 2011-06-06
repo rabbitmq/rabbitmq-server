@@ -30,14 +30,23 @@
 %%
 -module(rabbit_stomp).
 
+-include("rabbit_stomp.hrl").
+
 -behaviour(application).
 -export([start/2, stop/1]).
 
+-define(DEFAULT_CONFIGURATION,
+        #stomp_configuration{
+          default_login    = undefined,
+          default_passcode = undefined,
+          implicit_connect = false}).
+
 start(normal, []) ->
+    Config = parse_configuration(),
     Listeners = parse_listener_configuration(),
     io:format("starting ~s (binding to ~p)  ...",
               ["STOMP Adapter", Listeners]),
-    {ok, SupPid} = rabbit_stomp_sup:start_link(Listeners),
+    {ok, SupPid} = rabbit_stomp_sup:start_link(Listeners, Config),
     io:format("done~n"),
     {ok, SupPid}.
 
@@ -49,3 +58,25 @@ parse_listener_configuration() ->
         undefined -> throw({error, {stomp_configuration_not_found}});
         {ok, Listeners} -> Listeners
     end.
+
+parse_configuration() ->
+    case application:get_env(default_user) of
+        undefined ->
+            ?DEFAULT_CONFIGURATION;
+        {ok, UserConfig} ->
+            parse_default_user(UserConfig, ?DEFAULT_CONFIGURATION)
+    end.
+
+parse_default_user([], Configuration) ->
+    Configuration;
+parse_default_user([{login, Login} | Rest], Configuration) ->
+    parse_default_user(Rest, Configuration#stomp_configuration{
+                               default_login = Login});
+parse_default_user([{passcode, Passcode} | Rest], Configuration) ->
+    parse_default_user(Rest, Configuration#stomp_configuration{
+                               default_passcode = Passcode});
+parse_default_user([implicit_connect | Rest], Configuration) ->
+    parse_default_user(Rest, Configuration#stomp_configuration{
+                               implicit_connect = true}).
+
+

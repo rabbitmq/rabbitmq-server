@@ -31,14 +31,15 @@
 -module(rabbit_stomp_sup).
 -behaviour(supervisor).
 
--export([start_link/1, init/1]).
+-export([start_link/2, init/1]).
 
 -export([listener_started/2, listener_stopped/2, start_client/1]).
 
-start_link(Listeners) ->
-    supervisor:start_link({local, ?MODULE}, ?MODULE, [Listeners]).
+start_link(Listeners, Configuration) ->
+    supervisor:start_link({local, ?MODULE}, ?MODULE,
+                          [Listeners, Configuration]).
 
-init([Listeners]) ->
+init([Listeners, Configuration]) ->
     {ok, SocketOpts} = application:get_env(rabbitmq_stomp, tcp_listen_options),
     {ok, {{one_for_all, 10, 10},
           [{rabbit_stomp_client_sup_sup,
