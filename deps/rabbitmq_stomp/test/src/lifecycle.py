@@ -94,6 +94,17 @@ class TestLifecycle(base.BaseTest):
                                           virtual_host="//"),
                          "Authentication failure\n")
 
+    def test_default_user(self):
+        ''' Test default user connection '''
+        self.conn.disconnect()
+        new_conn = stomp.Connection(user="", passcode="")
+        new_conn.start()
+        new_conn.connect()
+        try:
+            self.assertTrue(new_conn.is_connected())
+        finally:
+            new_conn.disconnect()
+
     def bad_connect(self, new_conn, expected):
         self.conn.disconnect()
         listener = base.WaitableListener()

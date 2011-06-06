@@ -33,7 +33,7 @@
 
 -export([start_link/2, init/1]).
 
--export([listener_started/2, listener_stopped/2, start_client/1]).
+-export([listener_started/2, listener_stopped/2, start_client/2]).
 
 start_link(Listeners, Configuration) ->
     supervisor:start_link({local, ?MODULE}, ?MODULE,
@@ -53,7 +53,7 @@ init([Listeners, Configuration]) ->
                [Family | SocketOpts],
                {?MODULE, listener_started, []},
                {?MODULE, listener_stopped, []},
-               {?MODULE, start_client, []}, "STOMP Listener"]},
+               {?MODULE, start_client, [Configuration]}, "STOMP Listener"]},
              transient, infinity, supervisor, [tcp_listener_sup]} ||
                Listener <- Listeners,
                {IPAddress, Port, Family, Name} <-
@@ -66,9 +66,10 @@ listener_started(IPAddress, Port) ->
 listener_stopped(IPAddress, Port) ->
     rabbit_networking:tcp_listener_stopped(stomp, IPAddress, Port).
 
-start_client(Sock) ->
+start_client(Configuration, Sock) ->
     {ok, SupPid, ReaderPid} =
-        supervisor:start_child(rabbit_stomp_client_sup_sup, [Sock]),
+        supervisor:start_child(rabbit_stomp_client_sup_sup,
+                               [Sock, Configuration]),
     ok = gen_tcp:controlling_process(Sock, ReaderPid),
     ReaderPid ! {go, Sock},
     SupPid.
