@@ -11,7 +11,7 @@ def add_deps_to_path():
 def run_unittests():
     add_deps_to_path()
     modules = ['parsing', 'destinations', 'lifecycle', 'transactions',
-               'ack', 'errors']
+               'ack', 'errors', 'reliability']
 
     suite = unittest.TestSuite()
     for m in modules:
