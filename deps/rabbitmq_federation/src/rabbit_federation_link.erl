@@ -320,11 +320,11 @@ consume_from_upstream_queue(
     Q = upstream_queue_name(X, VHost, DownstreamX),
     ExpiryArg = case Expiry of
                     none -> [];
-                    _    -> [{<<"x-expires">>, long, Expiry * 1000}]
+                    _    -> [{<<"x-expires">>, long, Expiry}]
                 end,
     TTLArg = case TTL of
                  none -> [];
-                 _    -> [{<<"x-message-ttl">>, long, TTL * 1000}]
+                 _    -> [{<<"x-message-ttl">>, long, TTL}]
              end,
     Args = ExpiryArg ++ TTLArg ++ [rabbit_federation_util:purpose_arg()],
     amqp_channel:call(Ch, #'queue.declare'{queue     = Q,

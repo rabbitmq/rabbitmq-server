@@ -187,11 +187,15 @@ heartbeat
     is none.
 
 expires
-  - How long to keep buffered upstream messages around when disconnected,
-    in seconds. Default is forever.
+  - Messages are buffered in the upstream broker in a queue before being
+    sent downstream. This setting controls how long the upstream queue
+    lasts before being deleted if the downstream is disconnected (i.e.
+    it controls the "x-expires" argument for the upstream queue). The
+    value is in milliseconds. Default is forever.
 
 message_ttl
-  - How long to keep upstream messages buffered, in seconds. Default is
+  - Controls how long to keep upstream messages buffered, in milliseconds
+    (i.e. the "x-message-ttl" argument for the upstream queue). Default is
     forever.
 
 ssl_options
