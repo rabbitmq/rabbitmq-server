@@ -262,8 +262,9 @@ action(list_vhosts, Node, Args, _Opts, Inform) ->
 
 action(list_user_permissions, Node, Args = [_Username], _Opts, Inform) ->
     Inform("Listing permissions for user ~p", Args),
-    display_list(call(Node, {rabbit_auth_backend_internal,
-                             list_user_permissions, Args}));
+    display_info_list(call(Node, {rabbit_auth_backend_internal,
+                                  list_user_permissions, Args}),
+                      rabbit_auth_backend_internal:user_perms_info_keys());
 
 action(list_queues, Node, Args, Opts, Inform) ->
     Inform("Listing queues", []),
