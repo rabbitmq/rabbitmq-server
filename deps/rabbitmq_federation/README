@@ -184,9 +184,13 @@ heartbeat
   - AMQP heartbeat interval (in seconds) on the connection, or none. Default
     is none.
 
-queue_expires
-  - How long to keep the upstream queue around (and collecting
-    messages) when disconnected, in seconds. Default is 1800 (half an hour).
+expires
+  - How long to keep buffered upstream messages around when disconnected,
+    in seconds. Default is forever.
+
+message_ttl
+  - How long to keep upstream messages buffered, in seconds. Default is
+    forever.
 
 ssl_options
   - Specifies how to make client SSL connections. See the Erlang
