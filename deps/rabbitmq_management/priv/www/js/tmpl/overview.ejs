@@ -166,7 +166,7 @@ for (var i = 0; i < overview.listeners.length; i++) {
 <div class="section-hidden administrator-only">
 <h2>Import / export configuration</h2>
 <div class="hider">
-  <form action="../api/all-configuration" method="post" enctype="multipart/form-data">
+  <form action="api/all-configuration" method="post" enctype="multipart/form-data">
     <table class="two-col-layout">
       <tr>
         <td>
@@ -192,7 +192,7 @@ for (var i = 0; i < overview.listeners.length; i++) {
         </td>
         <td>
           <p>
-            <input type="hidden" name="redirect" value="/mgmt/#/import-succeeded"/>
+            <input type="hidden" name="redirect" value="../#/import-succeeded"/>
             <input type="submit" value="Upload broker configuration"/>
           </p>
         </td>

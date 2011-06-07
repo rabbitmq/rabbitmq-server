@@ -94,7 +94,11 @@ make_loop() ->
 
 respond(Req, LocalPath, PL = {Prefix, _}, WMLoop) ->
     %% To get here we know Prefix matches the beginning of the path
-    Path = string:substr(Req:get(raw_path), string:len(Prefix) + 1),
+    RawPath = Req:get(raw_path),
+    Path = case Prefix of
+               "" -> RawPath;
+               _  -> string:substr(RawPath, string:len(Prefix) + 2)
+           end,
     case Path of
         "/api/" ++ Rest when length(Rest) > 0 ->
             WMLoop(PL, Req);
