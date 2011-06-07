@@ -30,7 +30,12 @@
     var connection = connections[i];
 %>
   <tr<%= alt_rows(i)%>>
-    <td><%= connection.protocol %></td>
+    <td>
+      <%= connection.protocol %>
+      <% if (connection.ssl) { %>
+        <sub>SSL</sub>
+      <% } %>
+    </td>
     <td><%= link_conn(connection.name) %></td>
 <% if (nodes_interesting) { %>
     <td><%= connection.node %></td>
