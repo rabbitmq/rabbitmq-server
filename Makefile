@@ -161,8 +161,11 @@ run-node: all
 		RABBITMQ_SERVER_START_ARGS="$(RABBITMQ_SERVER_START_ARGS)" \
 		./scripts/rabbitmq-server
 
+# erl_call treats all communication with the node as success, so we
+# have to emulate it.
 run-tests: all
-	echo "rabbit_tests:all_tests()." | $(ERL_CALL)
+	erl -sname foo -noinput -eval \
+	  "case rpc:call(rabbit@$(shell hostname -s), rabbit_tests, all_tests, []) of passed -> halt(0); E -> io:format(\"~n~p~n~n\", [E]), halt(1) end."
 
 start-background-node:
 	$(BASIC_SCRIPT_ENVIRONMENT_SETTINGS) \
