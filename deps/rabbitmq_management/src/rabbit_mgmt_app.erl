@@ -76,33 +76,32 @@ make_loop() ->
     {file, Here} = code:is_loaded(?MODULE),
     ModuleRoot = filename:dirname(filename:dirname(Here)),
     LocalPath = filename:join(ModuleRoot, ?STATIC_PATH),
-    fun({Prefix, Listener}, Req) ->
+    fun(PL, Req) ->
             Unauthorized = {401, [{"WWW-Authenticate", ?AUTH_REALM}], ""},
-            case rabbit_mochiweb_util:parse_auth_header(
-                   Req:get_header_value("authorization")) of
+            Auth = Req:get_header_value("authorization"),
+            case rabbit_mochiweb_util:parse_auth_header(Auth) of
                 [Username, Password] ->
                     case rabbit_access_control:check_user_pass_login(
                            Username, Password) of
-                        {ok, _User} ->
-                            %% To get here we know Prefix matches the beginning
-                            %% of the path
-                            Path = string:substr(Req:get(raw_path),
-                                                 string:len(Prefix) + 1),
-                            case string:len(Path) > 5 andalso
-                                string:left(Path, 5) == "/api/" of
-                                true ->
-                                    WMLoop({Prefix, Listener}, Req);
-                                false ->
-                                    "/" ++ Stripped = Path,
-                                    Req:serve_file(Stripped, LocalPath)
-                            end;
-                        _ ->
-                            Req:respond(Unauthorized)
+                        {ok, _} -> respond(Req, LocalPath, PL, WMLoop);
+                        _       -> Req:respond(Unauthorized)
                     end;
                 _ ->
                     Req:respond(Unauthorized)
             end
 
+    end.
+
+respond(Req, LocalPath, PL = {Prefix, _}, WMLoop) ->
+    %% To get here we know Prefix matches the beginning of the path
+    Path = string:substr(Req:get(raw_path), string:len(Prefix) + 1),
+    case Path of
+        "/api/" ++ Rest when length(Rest) > 0 ->
+            WMLoop(PL, Req);
+        "/mgmt/" ->
+            Req:respond({301, [{"Location", Prefix ++ "/"}], ""});
+        "/" ++ Stripped ->
+            Req:serve_file(Stripped, LocalPath)
     end.
 
 setup_wm_logging() ->
