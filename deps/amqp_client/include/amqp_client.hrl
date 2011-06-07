@@ -46,12 +46,13 @@
                              adapter_info      = none,
                              client_properties = []}).
 
--record(adapter_info, {address      = unknown,
-                       port         = unknown,
-                       peer_address = unknown,
-                       peer_port    = unknown,
-                       name         = unknown,
-                       protocol     = unknown}).
+-record(adapter_info, {address         = unknown,
+                       port            = unknown,
+                       peer_address    = unknown,
+                       peer_port       = unknown,
+                       name            = unknown,
+                       protocol        = unknown,
+                       additional_info = []}).
 
 -define(LOG_DEBUG(Format), error_logger:info_msg(Format)).
 -define(LOG_INFO(Format, Args), error_logger:info_msg(Format, Args)).
