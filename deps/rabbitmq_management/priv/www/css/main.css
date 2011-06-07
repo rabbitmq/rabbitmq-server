@@ -139,6 +139,14 @@ td.binding-endpoint span.arrow { font-size: 200%; }
 
 #no-password { display: none; }
 
+#footer-nav { padding-top: 5px; }
+#footer-nav ul { float: left; list-style-type: none; padding: 0; margin: 0;}
+#footer-nav ul li { float: left; border-right: 1px solid #ccc; padding: 2px 5px 2px 0;}
+#footer-nav ul li + li { border-right: none; padding: 2px 5px;}
+#footer-nav ul li a { color: #888; text-decoration: none; }
+
+#debug { clear: both; }
+
 #scratch { display: none; }
 
 tr.alt1>td {
