@@ -48,7 +48,8 @@
             stats_timer,
             msg_id_to_channel,
             ttl,
-            ttl_timer_ref
+            ttl_timer_ref,
+            dead_letter_exchange
            }).
 
 -record(consumer, {tag, ack_required}).
@@ -98,20 +99,21 @@ init(Q) ->
     ?LOGDEBUG("Queue starting - ~p~n", [Q]),
     process_flag(trap_exit, true),
 
-    {ok, #q{q                   = Q#amqqueue{pid = self()},
-            exclusive_consumer  = none,
-            has_had_consumers   = false,
-            backing_queue       = backing_queue_module(Q),
-            backing_queue_state = undefined,
-            active_consumers    = queue:new(),
-            blocked_consumers   = queue:new(),
-            expires             = undefined,
-            sync_timer_ref      = undefined,
-            rate_timer_ref      = undefined,
-            expiry_timer_ref    = undefined,
-            ttl                 = undefined,
-            stats_timer         = rabbit_event:init_stats_timer(),
-            msg_id_to_channel   = dict:new()}, hibernate,
+    {ok, #q{q                    = Q#amqqueue{pid = self()},
+            exclusive_consumer   = none,
+            has_had_consumers    = false,
+            backing_queue        = backing_queue_module(Q),
+            backing_queue_state  = undefined,
+            active_consumers     = queue:new(),
+            blocked_consumers    = queue:new(),
+            expires              = undefined,
+            sync_timer_ref       = undefined,
+            rate_timer_ref       = undefined,
+            expiry_timer_ref     = undefined,
+            ttl                  = undefined,
+            dead_letter_exchange = undefined,
+            stats_timer          = rabbit_event:init_stats_timer(),
+            msg_id_to_channel    = dict:new()}, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
 terminate(shutdown = R,      State = #q{backing_queue = BQ}) ->
@@ -178,11 +180,18 @@ process_args(State = #q{q = #amqqueue{arguments = Arguments}}) ->
                             undefined    -> State1
                         end
                 end, State, [{<<"x-expires">>,     fun init_expires/2},
-                             {<<"x-message-ttl">>, fun init_ttl/2}]).
+                             {<<"x-message-ttl">>, fun init_ttl/2},
+                             {<<"x-dead-letter-exchange">>,
+                              fun init_dead_letter_exchange/2}]).
 
 init_expires(Expires, State) -> ensure_expiry_timer(State#q{expires = Expires}).
 
 init_ttl(TTL, State) -> drop_expired_messages(State#q{ttl = TTL}).
+
+init_dead_letter_exchange(DLE, State = #q{q = #amqqueue{
+                                            name = #resource{
+                                              virtual_host = VHostPath}}}) ->
+    State#q{dead_letter_exchange = rabbit_misc:r(VHostPath, exchange, DLE)}.
 
 terminate_shutdown(Fun, State) ->
     State1 = #q{backing_queue = BQ, backing_queue_state = BQS} =
@@ -718,6 +727,7 @@ drop_expired_messages(State = #q{backing_queue_state = BQS,
     Now = now_micros(),
     BQS1 = BQ:dropwhile(
              fun (#message_properties{expiry = Expiry}) -> Now > Expiry end,
+             fun (Msg) -> maybe_dead_letter(Msg, expired_queue_ttl, State) end,
              BQS),
     ensure_ttl_timer(State#q{backing_queue_state = BQS1}).
 
@@ -734,6 +744,41 @@ ensure_ttl_timer(State = #q{backing_queue       = BQ,
     end;
 ensure_ttl_timer(State) ->
     State.
+
+maybe_dead_letter(Msg, _Reason, #q{dead_letter_exchange = undefined}) ->
+    ok;
+maybe_dead_letter(Msg = #basic_message{content = Content},
+                  Reason, #q{dead_letter_exchange = DLE}) ->
+    %% Should this be lookup_or_die? Do we really want to stop the
+    %% message from being discarded if the exchange is not there?
+    Exchange = rabbit_exchange:lookup_or_die(DLE),
+
+    %% Should do something with the routing result here, but what?
+    %% Are we going to stop the message from being discarded if
+    %% unroutable? At the least we should write to the error log if
+    %% the routing fails.
+    rabbit_exchange:publish(
+      Exchange,
+      rabbit_basic:delivery(false, false, none,
+                            record_death_reason(Reason, Msg), undefined)),
+    ok.
+
+record_death_reason(Reason,
+                    Msg = #basic_message{
+                      content = Content = #content{
+                                  properties = Props = #'P_basic'{
+                                                 headers = Headers}}}) ->
+    ReasonTuple = {<<"x-death-reason">>, longstr,
+                   list_to_binary(atom_to_list(Reason))},
+    Headers1 = case Headers of
+                   undefined -> [ReasonTuple];
+                   _         -> [ReasonTuple | Headers]
+               end,
+    Msg#basic_message{
+      content = Content#content{
+                  properties = Props#'P_basic'{
+                                 headers = Headers1}}}.
+
 
 now_micros() -> timer:now_diff(now(), {0,0,0}).
 

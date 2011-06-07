@@ -19,7 +19,7 @@
 -export([init/4, terminate/2, delete_and_terminate/2,
          purge/1, publish/4, publish_delivered/5, drain_confirmed/1,
          fetch/2, ack/2, tx_publish/5, tx_ack/3, tx_rollback/2, tx_commit/4,
-         requeue/3, len/1, is_empty/1, dropwhile/2,
+         requeue/3, len/1, is_empty/1, dropwhile/3,
          set_ram_duration_target/2, ram_duration/1,
          needs_timeout/1, timeout/1, handle_pre_hibernate/1,
          status/1, invoke/3, is_duplicate/3, discard/3,
@@ -559,17 +559,19 @@ publish_delivered(true, Msg = #basic_message { is_persistent = IsPersistent,
 drain_confirmed(State = #vqstate { confirmed = C }) ->
     {gb_sets:to_list(C), State #vqstate { confirmed = gb_sets:new() }}.
 
-dropwhile(Pred, State) ->
-    {_OkOrEmpty, State1} = dropwhile1(Pred, State),
+dropwhile(Pred, DropFun, State) ->
+    {_OkOrEmpty, State1} = dropwhile1(Pred, DropFun, State),
     a(State1).
 
-dropwhile1(Pred, State) ->
+dropwhile1(Pred, DropFun, State) ->
     internal_queue_out(
-      fun(MsgStatus = #msg_status { msg_props = MsgProps }, State1) ->
+      fun(MsgStatus = #msg_status { msg_props = MsgProps,
+                                    msg = Msg }, State1) ->
               case Pred(MsgProps) of
-                  true ->  {_, State2} = internal_fetch(false, MsgStatus,
+                  true ->  DropFun(Msg),
+                           {_, State2} = internal_fetch(false, MsgStatus,
                                                         State1),
-                           dropwhile1(Pred, State2);
+                           dropwhile1(Pred, DropFun, State2);
                   false -> {ok, in_r(MsgStatus, State1)}
               end
       end, State).
@@ -591,6 +593,7 @@ fetch(AckRequired, State) ->
               {MsgStatus1, State2} = read_msg(MsgStatus, State1),
               internal_fetch(AckRequired, MsgStatus1, State2)
       end, State).
+
 
 internal_queue_out(Fun, State = #vqstate { q4 = Q4 }) ->
     case queue:out(Q4) of

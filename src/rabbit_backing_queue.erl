@@ -98,7 +98,7 @@ behaviour_info(callbacks) ->
 
      %% Drop messages from the head of the queue while the supplied
      %% predicate returns true.
-     {dropwhile, 2},
+     {dropwhile, 3},
 
      %% Produce the next message.
      {fetch, 2},
