@@ -19,8 +19,7 @@ class TestExchange(base.BaseTest):
         self.__test_exchange_send_rec("amq.fanout", "route")
 
     def test_amq_fanout_no_route(self):
-        ''' Test basic send/receive for /exchange/amq.direct with no
-        routing key'''
+        ''' Test basic send/receive, /exchange/amq.direct, no routing key'''
         self.__test_exchange_send_rec("amq.fanout")
 
     def test_invalid_exchange(self):
@@ -133,8 +132,7 @@ class TestQueue(base.BaseTest):
         self.__test_send_receipt(d, before, after, {'transaction': tx})
 
     def test_interleaved_receipt_no_receipt(self):
-        ''' Test interleaved receipt/no receipt where the no receipt
-            is bracketed by receipts '''
+        ''' Test i-leaved receipt/no receipt, no-r bracketed by rs '''
 
         d = '/queue/ir'
 
@@ -151,8 +149,7 @@ class TestQueue(base.BaseTest):
         self.assertEquals(3, len(self.listener.messages))
 
     def test_interleaved_receipt_no_receipt_tx(self):
-        ''' Test interleaved receipt/no receipt where the no receipt
-            is bracketed by receipts with transactions'''
+        ''' Test i-leaved receipt/no receipt, no-r bracketed by r+xactions '''
 
         d = '/queue/ir'
         tx = 'tx.ir'
@@ -177,8 +174,7 @@ class TestQueue(base.BaseTest):
         self.assertEquals(3, len(self.listener.messages))
 
     def test_interleaved_receipt_no_receipt_inverse(self):
-        ''' Test interleaved receipt/no receipt where the receipt
-            is bracketed by no receipts '''
+        ''' Test i-leaved receipt/no receipt, r bracketed by no-rs '''
 
         d = '/queue/ir'
 
