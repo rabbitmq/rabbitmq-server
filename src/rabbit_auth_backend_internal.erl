@@ -28,7 +28,9 @@
          hash_password/1]).
 -export([set_permissions/5, clear_permissions/2,
          list_permissions/0, list_vhost_permissions/1, list_user_permissions/1,
-         list_user_vhost_permissions/2]).
+         list_user_vhost_permissions/2, perms_info_keys/0,
+         vhost_perms_info_keys/0, user_perms_info_keys/0,
+         user_vhost_perms_info_keys/0]).
 
 -include("rabbit_auth_backend_spec.hrl").
 
@@ -58,22 +60,23 @@
                            regexp(), regexp(), regexp()) -> 'ok').
 -spec(clear_permissions/2 :: (rabbit_types:username(), rabbit_types:vhost())
                              -> 'ok').
--spec(list_permissions/0 ::
-        () -> [{rabbit_types:username(), rabbit_types:vhost(),
-                regexp(), regexp(), regexp()}]).
+-spec(list_permissions/0 :: () -> rabbit_types:infos()).
 -spec(list_vhost_permissions/1 ::
-        (rabbit_types:vhost()) -> [{rabbit_types:username(),
-                                    regexp(), regexp(), regexp()}]).
+        (rabbit_types:vhost()) -> rabbit_types:infos()).
 -spec(list_user_permissions/1 ::
-        (rabbit_types:username()) -> [{rabbit_types:vhost(),
-                                       regexp(), regexp(), regexp()}]).
+        (rabbit_types:username()) -> rabbit_types:infos()).
 -spec(list_user_vhost_permissions/2 ::
         (rabbit_types:username(), rabbit_types:vhost())
-        -> [{regexp(), regexp(), regexp()}]).
-
+        -> rabbit_types:infos()).
+-spec(perms_info_keys/0 :: () -> rabbit_types:info_keys()).
+-spec(vhost_perms_info_keys/0 :: () -> rabbit_types:info_keys()).
+-spec(user_perms_info_keys/0 :: () -> rabbit_types:info_keys()).
+-spec(user_vhost_perms_info_keys/0 :: () -> rabbit_types:info_keys()).
 -endif.
 
 %%----------------------------------------------------------------------------
+
+-define(PERMS_INFO_KEYS, [configure, write, read]).
 
 %% Implementation of rabbit_auth_backend
 
@@ -283,32 +286,38 @@ clear_permissions(Username, VHostPath) ->
                                                 virtual_host = VHostPath}})
         end)).
 
+perms_info_keys()            -> [user, vhost | ?PERMS_INFO_KEYS].
+vhost_perms_info_keys()      -> [user | ?PERMS_INFO_KEYS].
+user_perms_info_keys()       -> [vhost | ?PERMS_INFO_KEYS].
+user_vhost_perms_info_keys() -> ?PERMS_INFO_KEYS.
+
 list_permissions() ->
-    [{Username, VHostPath, ConfigurePerm, WritePerm, ReadPerm} ||
-        {Username, VHostPath, ConfigurePerm, WritePerm, ReadPerm} <-
-            list_permissions(match_user_vhost('_', '_'))].
+    list_permissions(perms_info_keys(), match_user_vhost('_', '_')).
 
 list_vhost_permissions(VHostPath) ->
-    [{Username, ConfigurePerm, WritePerm, ReadPerm} ||
-        {Username, _, ConfigurePerm, WritePerm, ReadPerm} <-
-            list_permissions(rabbit_vhost:with(
-                               VHostPath, match_user_vhost('_', VHostPath)))].
+    list_permissions(
+      vhost_perms_info_keys(),
+      rabbit_vhost:with(VHostPath, match_user_vhost('_', VHostPath))).
 
 list_user_permissions(Username) ->
-    [{VHostPath, ConfigurePerm, WritePerm, ReadPerm} ||
-        {_, VHostPath, ConfigurePerm, WritePerm, ReadPerm} <-
-            list_permissions(rabbit_misc:with_user(
-                               Username, match_user_vhost(Username, '_')))].
+    list_permissions(
+      user_perms_info_keys(),
+      rabbit_misc:with_user(Username, match_user_vhost(Username, '_'))).
 
 list_user_vhost_permissions(Username, VHostPath) ->
-    [{ConfigurePerm, WritePerm, ReadPerm} ||
-        {_, _, ConfigurePerm, WritePerm, ReadPerm} <-
-            list_permissions(rabbit_misc:with_user_and_vhost(
-                               Username, VHostPath,
-                               match_user_vhost(Username, VHostPath)))].
+    list_permissions(
+      user_vhost_perms_info_keys(),
+      rabbit_misc:with_user_and_vhost(
+        Username, VHostPath, match_user_vhost(Username, VHostPath))).
 
-list_permissions(QueryThunk) ->
-    [{Username, VHostPath, ConfigurePerm, WritePerm, ReadPerm} ||
+filter_props(Keys, Props) -> [T || T = {K, _} <- Props, lists:member(K, Keys)].
+
+list_permissions(Keys, QueryThunk) ->
+    [filter_props(Keys, [{user,      Username},
+                         {vhost,     VHostPath},
+                         {configure, ConfigurePerm},
+                         {write,     WritePerm},
+                         {read,      ReadPerm}]) ||
         #user_permission{user_vhost = #user_vhost{username     = Username,
                                                   virtual_host = VHostPath},
                          permission = #permission{ configure = ConfigurePerm,

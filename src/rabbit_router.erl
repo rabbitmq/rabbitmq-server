@@ -84,21 +84,18 @@ match_bindings(SrcName, Match) ->
     mnesia:async_dirty(fun qlc:e/1, [Query]).
 
 match_routing_key(SrcName, [RoutingKey]) ->
-    MatchHead = #route{binding = #binding{source      = SrcName,
+    find_routes(#route{binding = #binding{source      = SrcName,
                                           destination = '$1',
                                           key         = RoutingKey,
                                           _           = '_'}},
-    mnesia:dirty_select(rabbit_route, [{MatchHead, [], ['$1']}]);
+                []);
 match_routing_key(SrcName, [_|_] = RoutingKeys) ->
-    Condition = list_to_tuple(['orelse' | [{'=:=', '$2', RKey} ||
-                                              RKey <- RoutingKeys]]),
-    MatchHead = #route{binding = #binding{source      = SrcName,
+    find_routes(#route{binding = #binding{source      = SrcName,
                                           destination = '$1',
                                           key         = '$2',
                                           _           = '_'}},
-    mnesia:dirty_select(rabbit_route, [{MatchHead, [Condition], ['$1']}]).
-
-
+                [list_to_tuple(['orelse' | [{'=:=', '$2', RKey} ||
+                                               RKey <- RoutingKeys]])]).
 
 %%--------------------------------------------------------------------
 
@@ -117,3 +114,25 @@ lookup_qpids(QNames) ->
                             []                      -> QPids
                         end
                 end, [], QNames).
+
+%% Normally we'd call mnesia:dirty_select/2 here, but that is quite
+%% expensive due to
+%%
+%% 1) general mnesia overheads (figuring out table types and
+%% locations, etc). We get away with bypassing these because we know
+%% that the table
+%% - is not the schema table
+%% - has a local ram copy
+%% - does not have any indices
+%%
+%% 2) 'fixing' of the table with ets:safe_fixtable/2, which is wholly
+%% unnecessary. According to the ets docs (and the code in erl_db.c),
+%% 'select' is safe anyway ("Functions that internally traverse over a
+%% table, like select and match, will give the same guarantee as
+%% safe_fixtable.") and, furthermore, even the lower level iterators
+%% ('first' and 'next') are safe on ordered_set tables ("Note that for
+%% tables of the ordered_set type, safe_fixtable/2 is not necessary as
+%% calls to first/1 and next/2 will always succeed."), which
+%% rabbit_route is.
+find_routes(MatchHead, Conditions) ->
+    ets:select(rabbit_route, [{MatchHead, Conditions, ['$1']}]).

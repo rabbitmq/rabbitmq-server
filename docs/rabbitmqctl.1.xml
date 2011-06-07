@@ -59,6 +59,11 @@
       RabbitMQ broker. It performs all actions by connecting to one of the
       broker's nodes.
     </para>
+    <para>
+      Diagnostic information is displayed if the broker was not
+      running, could not be reached, or rejected the connection due to
+      mismatching Erlang cookies.
+    </para>
   </refsect1>
 
   <refsect1>
@@ -175,24 +180,6 @@
             <para role="example">
               This command will return when the RabbitMQ node has
               started up.
-            </para>
-          </listitem>
-        </varlistentry>
-
-        <varlistentry>
-          <term><cmdsynopsis><command>status</command></cmdsynopsis></term>
-          <listitem>
-            <para>
-              Displays various information about the RabbitMQ broker,
-              such as whether the RabbitMQ application on the current
-              node, its version number, what nodes are part of the
-              broker, which of these are running.
-            </para>
-            <para role="example-prefix">For example:</para>
-            <screen role="example">rabbitmqctl status</screen>
-            <para role="example">
-              This command displays information about the RabbitMQ
-              broker.
             </para>
           </listitem>
         </varlistentry>
@@ -374,6 +361,20 @@
               ignores the current status of the specified nodes.
               Clustering may still fail for a variety of other
               reasons.
+            </para>
+          </listitem>
+        </varlistentry>
+        <varlistentry>
+          <term><cmdsynopsis><command>cluster_status</command></cmdsynopsis></term>
+          <listitem>
+            <para>
+              Displays all the nodes in the cluster grouped by node type,
+              together with the currently running nodes.
+            </para>
+            <para role="example-prefix">For example:</para>
+            <screen role="example">rabbitmqctl cluster_status</screen>
+            <para role="example">
+              This command displays the nodes in the cluster.
             </para>
           </listitem>
         </varlistentry>
@@ -647,6 +648,10 @@
                 <listitem><para>Whether tracing is enabled for this virtual host.</para></listitem>
               </varlistentry>
             </variablelist>
+            <para>
+              If no <command>vhostinfoitem</command>s are specified
+              then the vhost name is displayed.
+            </para>
             <para role="example-prefix">For example:</para>
             <screen role="example">rabbitmqctl list_vhosts name tracing</screen>
             <para role="example">
@@ -1259,7 +1264,7 @@
         </varlistentry>
 
         <varlistentry>
-          <term><cmdsynopsis><command>list_consumers</command></cmdsynopsis></term>
+          <term><cmdsynopsis><command>list_consumers</command> <arg choice="opt">-p <replaceable>vhostpath</replaceable></arg></cmdsynopsis></term>
           <listitem>
             <para>
               List consumers, i.e. subscriptions to a queue's message
@@ -1271,11 +1276,59 @@
               indicating whether acknowledgements are expected for
               messages delivered to this consumer.
             </para>
-            <para role="usage">
-              The output format for "list_consumers" is a list of rows containing,
-              in order, the queue name, channel process id, consumer tag, and a
-              boolean indicating whether acknowledgements are expected from the
-              consumer.
+            <para>
+              The output is a list of rows containing, in order, the queue name,
+              channel process id, consumer tag, and a boolean indicating whether
+              acknowledgements are expected from the consumer.
+            </para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term><cmdsynopsis><command>status</command></cmdsynopsis></term>
+          <listitem>
+            <para>
+              Displays broker status information such as the running
+              applications on the current Erlang node, RabbitMQ and
+              Erlang versions and OS name.  (See
+              the <command>cluster_status</command> command to find
+              out which nodes are clustered and running.)
+            </para>
+            <para role="example-prefix">For example:</para>
+            <screen role="example">rabbitmqctl status</screen>
+            <para role="example">
+              This command displays information about the RabbitMQ
+              broker.
+            </para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term><cmdsynopsis><command>environment</command></cmdsynopsis></term>
+          <listitem>
+            <para>
+              Display the name and value of each variable in the
+              application environment.
+            </para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term><cmdsynopsis><command>report</command></cmdsynopsis></term>
+          <listitem>
+            <para>
+              Generate a server status report containing a
+              concatenation of all server status information for
+              support purposes. The output should be redirected to a
+              file when accompanying a support request.
+            </para>
+            <para role="example-prefix">
+              For example:
+            </para>
+            <screen role="example">rabbitmqctl report > server_report.txt</screen>
+            <para role="example">
+              This command creates a server report which may be
+              attached to a support request email.
             </para>
           </listitem>
         </varlistentry>

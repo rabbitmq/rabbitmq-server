@@ -18,7 +18,7 @@
 
 -behaviour(application).
 
--export([prepare/0, start/0, stop/0, stop_and_halt/0, status/0,
+-export([prepare/0, start/0, stop/0, stop_and_halt/0, status/0, environment/0,
          rotate_logs/1]).
 
 -export([start/2, stop/1]).
@@ -178,9 +178,12 @@
 -spec(stop_and_halt/0 :: () -> 'ok').
 -spec(rotate_logs/1 :: (file_suffix()) -> rabbit_types:ok_or_error(any())).
 -spec(status/0 ::
-        () -> [{running_applications, [{atom(), string(), string()}]} |
-               {nodes, [{rabbit_mnesia:node_type(), [node()]}]} |
-               {running_nodes, [node()]}]).
+        () -> [{pid, integer()} |
+               {running_applications, [{atom(), string(), string()}]} |
+               {os, {atom(), atom()}} |
+               {erlang_version, string()} |
+               {memory, any()}]).
+-spec(environment/0 :: () -> [{atom() | term()}]).
 -spec(log_location/1 :: ('sasl' | 'kernel') -> log_location()).
 
 -spec(maybe_insert_default_data/0 :: () -> 'ok').
@@ -217,8 +220,15 @@ stop_and_halt() ->
 
 status() ->
     [{pid, list_to_integer(os:getpid())},
-     {running_applications, application:which_applications()}] ++
-        rabbit_mnesia:status().
+     {running_applications, application:which_applications()},
+     {os, os:type()},
+     {erlang_version, erlang:system_info(system_version)},
+     {memory, erlang:memory()}].
+
+environment() ->
+    lists:keysort(
+      1, [P || P = {K, _} <- application:get_all_env(rabbit),
+               K =/= default_pass]).
 
 rotate_logs(BinarySuffix) ->
     Suffix = binary_to_list(BinarySuffix),

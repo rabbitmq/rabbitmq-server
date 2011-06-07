@@ -182,7 +182,8 @@ run-node: all
 		./scripts/rabbitmq-server
 
 run-tests: all
-	echo "rabbit_tests:all_tests()." | $(ERL_CALL)
+	OUT=$$(echo "rabbit_tests:all_tests()." | $(ERL_CALL)) ; \
+	  echo $$OUT ; echo $$OUT | grep '^{ok, passed}$$' > /dev/null
 
 start-background-node:
 	$(BASIC_SCRIPT_ENVIRONMENT_SETTINGS) \

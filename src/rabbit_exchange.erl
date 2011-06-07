@@ -24,7 +24,7 @@
          info_keys/0, info/1, info/2, info_all/1, info_all/2,
          publish/2, delete/2]).
 %% these must be run inside a mnesia tx
--export([maybe_auto_delete/1, serial/1]).
+-export([maybe_auto_delete/1, serial/1, peek_serial/1]).
 
 %%----------------------------------------------------------------------------
 
@@ -75,7 +75,8 @@
 -spec(maybe_auto_delete/1::
         (rabbit_types:exchange())
         -> 'not_deleted' | {'deleted', rabbit_binding:deletions()}).
--spec(serial/1:: (rabbit_types:exchange()) -> 'none' | pos_integer()).
+-spec(serial/1 :: (rabbit_types:exchange()) -> 'none' | pos_integer()).
+-spec(peek_serial/1 :: (name()) -> pos_integer() | 'undefined').
 
 -endif.
 
@@ -93,7 +94,7 @@ recover() ->
                        true  -> store(X);
                        false -> ok
                    end,
-                   rabbit_exchange:callback(X, create, [Tx, X])
+                   rabbit_exchange:callback(X, create, [map_create_tx(Tx), X])
            end,
            rabbit_durable_exchange),
     [XName || #exchange{name = XName} <- Xs].
@@ -127,10 +128,7 @@ declare(XName, Type, Durable, AutoDelete, Internal, Args) ->
               end
       end,
       fun ({new, Exchange}, Tx) ->
-              ok = XT:create(case Tx of
-                                 true  -> transaction;
-                                 false -> none
-                             end, Exchange),
+              ok = XT:create(map_create_tx(Tx), Exchange),
               rabbit_event:notify_if(not Tx, exchange_created, info(Exchange)),
               Exchange;
           ({existing, Exchange}, _Tx) ->
@@ -138,6 +136,9 @@ declare(XName, Type, Durable, AutoDelete, Internal, Args) ->
           (Err, _Tx) ->
               Err
       end).
+
+map_create_tx(true)  -> transaction;
+map_create_tx(false) -> none.
 
 store(X = #exchange{name = Name, type = Type}) ->
     ok = mnesia:write(rabbit_exchange, X, write),
@@ -329,6 +330,12 @@ next_serial(XName) ->
     ok = mnesia:write(rabbit_exchange_serial,
                       #exchange_serial{name = XName, next = Serial + 1}, write),
     Serial.
+
+peek_serial(XName) ->
+    case mnesia:read({rabbit_exchange_serial, XName}) of
+        [#exchange_serial{next = Serial}]  -> Serial;
+        _                                  -> undefined
+    end.
 
 %% Used with atoms from records; e.g., the type is expected to exist.
 type_to_module(T) ->
