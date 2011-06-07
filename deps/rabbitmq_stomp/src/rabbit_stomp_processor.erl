@@ -356,16 +356,42 @@ do_login(_, _, _, _, _, _, State) ->
 adapter_info(Sock, Version) ->
     {ok, {Addr,     Port}}     = rabbit_net:sockname(Sock),
     {ok, {PeerAddr, PeerPort}} = rabbit_net:peername(Sock),
-    #adapter_info{protocol     = {adapter_protocol(Sock), Version},
-                  address      = Addr,
-                  port         = Port,
-                  peer_address = PeerAddr,
-                  peer_port    = PeerPort}.
+    #adapter_info{protocol        = {'STOMP', Version},
+                  address         = Addr,
+                  port            = Port,
+                  peer_address    = PeerAddr,
+                  peer_port       = PeerPort,
+                  additional_info = maybe_ssl_info(Sock)}.
 
-adapter_protocol(Sock) ->
+maybe_ssl_info(Sock) ->
     case rabbit_net:is_ssl(Sock) of
-        true  -> "STOMP/SSL";
-        false -> "STOMP"
+        true  -> [{ssl, true}] ++ ssl_info(Sock) ++ ssl_cert_info(Sock);
+        false -> [{ssl, false}]
+    end.
+
+ssl_info(Sock) ->
+    {Protocol, KeyExchange, Cipher, Hash} =
+        case rabbit_net:ssl_info(Sock) of
+            {ok, {P, {K, C, H}}}    -> {P, K, C, H};
+            {ok, {P, {K, C, H, _}}} -> {P, K, C, H};
+            _                       -> {unknown, unknown, unknown, unknown}
+        end,
+    [{ssl_protocol,       Protocol},
+     {ssl_key_exchange,   KeyExchange},
+     {ssl_cipher,         Cipher},
+     {ssl_hash,           Hash}].
+
+ssl_cert_info(Sock) ->
+    case rabbit_net:peercert(Sock) of
+        {ok, Cert} ->
+            [{peer_cert_issuer,   list_to_binary(
+                                    rabbit_ssl:peer_cert_issuer(Cert))},
+             {peer_cert_subject,  list_to_binary(
+                                    rabbit_ssl:peer_cert_subject(Cert))},
+             {peer_cert_validity, list_to_binary(
+                                    rabbit_ssl:peer_cert_validity(Cert))}];
+        _ ->
+            []
     end.
 
 do_subscribe(Destination, DestHdr, Frame,
