@@ -18,11 +18,10 @@ $(TEST_CONFIG_PATH): $(CERTS_DIR)
 	sed -e "s|%%CERTS_DIR%%|$(CERTS_DIR)|g" < test/src/ssl.config > $@
 	echo $(WITH_BROKER_TEST_CONFIG)
 
-$(CERTS_DIR): $(SSL_CONFIG_PATH)
+$(CERTS_DIR):
 	mkdir -p $(CERTS_DIR)
 	make -C $(RABBITMQ_TEST_PATH)/certs all PASSWORD=test DIR=$(CERTS_DIR)
 
-$(SSL_CONFIG_PATH)
 else
 $(TEST_CONFIG_PATH):
 	echo "[]." >> $@
