@@ -20,7 +20,7 @@ mechanism. A configuration has this structure:
     Listener = {Name, [{port, Port} | Option...]}
 
     Context = {Name, ListenerName}
-            | {Name, ListenerName, Path}
+            | {Name, {ListenerName, Path}}
 
 Installation
 ------------
