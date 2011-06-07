@@ -20,6 +20,7 @@ MANPAGES=$(patsubst %.xml, %.gz, $(wildcard $(DOCS_DIR)/*.[0-9].xml))
 WEB_MANPAGES=$(patsubst %.xml, %.man.xml, $(wildcard $(DOCS_DIR)/*.[0-9].xml) $(DOCS_DIR)/rabbitmq-service.xml)
 USAGES_XML=$(DOCS_DIR)/rabbitmqctl.1.xml
 USAGES_ERL=$(foreach XML, $(USAGES_XML), $(call usage_xml_to_erl, $(XML)))
+TMP_TEST_OUT=/tmp/rabbitmq-server-test-output
 
 ifeq ($(shell python -c 'import simplejson' 2>/dev/null && echo yes),yes)
 PYTHON=python
@@ -161,11 +162,11 @@ run-node: all
 		RABBITMQ_SERVER_START_ARGS="$(RABBITMQ_SERVER_START_ARGS)" \
 		./scripts/rabbitmq-server
 
-# erl_call treats all communication with the node as success, so we
-# have to emulate it.
 run-tests: all
-	erl -sname foo -noinput -eval \
-	  "case rpc:call(rabbit@$(shell hostname -s), rabbit_tests, all_tests, []) of passed -> halt(0); E -> io:format(\"~n~p~n~n\", [E]), halt(1) end."
+	echo "rabbit_tests:all_tests()." | $(ERL_CALL) | \
+	  tee $(TMP_TEST_OUT) | tail -n 1 | \
+	  grep '^{ok, passed}$$' > /dev/null && rm $(TMP_TEST_OUT) || \
+	  (cat $(TMP_TEST_OUT) && echo && rm $(TMP_TEST_OUT) && false)
 
 start-background-node:
 	$(BASIC_SCRIPT_ENVIRONMENT_SETTINGS) \
