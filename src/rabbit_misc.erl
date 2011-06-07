@@ -15,6 +15,10 @@
 %%
 
 -module(rabbit_misc).
+
+-compile({parse_transform, import_as}).
+-import_as({proplists, [{get_value/2, pget}, {get_value/3, pget}]}).
+
 -include("rabbit.hrl").
 -include("rabbit_framing.hrl").
 
@@ -910,9 +914,6 @@ is_process_alive(Pid) ->
         true -> true;
         _    -> false
     end.
-
-pget(K, P) -> proplists:get_value(K, P).
-pget(K, P, D) -> proplists:get_value(K, P, D).
 
 pget_or_die(K, P) ->
     case proplists:get_value(K, P) of
