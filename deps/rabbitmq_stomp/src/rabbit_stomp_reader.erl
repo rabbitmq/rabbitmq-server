@@ -44,12 +44,11 @@ start_link(ProcessorPid) ->
 init(ProcessorPid) ->
     receive
         {go, Sock} ->
-            ok = inet:setopts(Sock, [{active, false}]),
-
-            {ok, {PeerAddress, PeerPort}} = inet:peername(Sock),
+            {ok, {PeerAddress, PeerPort}} = rabbit_net:peername(Sock),
             PeerAddressS = inet_parse:ntoa(PeerAddress),
             error_logger:info_msg("starting STOMP connection ~p from ~s:~p~n",
                                   [self(), PeerAddressS, PeerPort]),
+
             ParseState = rabbit_stomp_frame:initial_state(),
             try
                 ?MODULE:mainloop(
