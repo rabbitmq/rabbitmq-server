@@ -63,27 +63,18 @@ is_authorized_user(ReqData, Context, Item) ->
       end).
 
 is_authorized(ReqData, Context, Fun) ->
-    %% The realm name is wrong, but it needs to match the context name
-    %% of /mgmt/ to prevent some web ui users from being asked for
-    %% creds twice.
-    %% This will get fixed if / when we stop using rabbitmq-mochiweb.
-    Unauthorized = {"Basic realm=\"Management: Web UI\"",
-                    ReqData, Context},
-    case rabbit_mochiweb_util:parse_auth_header(
-           wrq:get_req_header("authorization", ReqData)) of
-        [Username, Password] ->
-            case rabbit_access_control:check_user_pass_login(Username,
-                                                             Password) of
-                {ok, User} ->
-                    case Fun(User) of
-                        true  -> {true, ReqData, Context#context{user = User}};
-                        false -> Unauthorized
-                    end;
-                {refused, _, _} ->
-                    Unauthorized
-            end;
-        _ ->
-            Unauthorized
+    %% Note that we've already done authentication in the Mochiweb
+    %% world, so we know we're authorised. Unfortunately we can't
+    %% influence ReqData or Context from Mochiweb, so we have to
+    %% invoke check_user_pass_login again to see what kind of user we
+    %% have.
+    [Username, Password] = rabbit_mochiweb_util:parse_auth_header(
+                             wrq:get_req_header("authorization", ReqData)),
+    {ok, User} = rabbit_access_control:check_user_pass_login(
+                   Username, Password),
+    case Fun(User) of
+        true  -> {true, ReqData, Context#context{user = User}};
+        false -> {?AUTH_REALM, ReqData, Context}
     end.
 
 vhost(ReqData) ->
