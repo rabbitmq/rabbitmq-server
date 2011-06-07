@@ -48,6 +48,10 @@
 
 %%----------------------------------------------------------------------------
 
+%% We start off in a state where we do not connect, since we can first
+%% start during exchange recovery, when rabbit is not fully started
+%% and the Erlang client is not running. This then gets invoked when
+%% the federation app is started.
 go() -> cast(go).
 
 add_binding(S, X, B)      -> cast(X, {enqueue, S, {add_binding, B}}).
@@ -55,6 +59,9 @@ remove_bindings(S, X, Bs) -> cast(X, {enqueue, S, {remove_bindings, Bs}}).
 noop(S, X)                -> cast(X, {enqueue, S, noop}).
 %% ^^ Needed to eat unused serials when we decide not to add bindings
 
+%% This doesn't just correspond to the link being killed by its
+%% supervisor since this means "the exchange is going away, please
+%% remove upstream resources associated with it".
 stop(X) -> call(X, stop).
 
 list_routing_keys(X) -> call(X, list_routing_keys).
