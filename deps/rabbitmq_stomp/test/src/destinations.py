@@ -19,8 +19,7 @@ class TestExchange(base.BaseTest):
         self.__test_exchange_send_rec("amq.fanout", "route")
 
     def test_amq_fanout_no_route(self):
-        ''' Test basic send/receive for /exchange/amq.direct with no
-        routing key'''
+        ''' Test basic send/receive, /exchange/amq.direct, no routing key'''
         self.__test_exchange_send_rec("amq.fanout")
 
     def test_invalid_exchange(self):
@@ -133,8 +132,7 @@ class TestQueue(base.BaseTest):
         self.__test_send_receipt(d, before, after, {'transaction': tx})
 
     def test_interleaved_receipt_no_receipt(self):
-        ''' Test interleaved receipt/no receipt where the no receipt
-            is bracketed by receipts '''
+        ''' Test i-leaved receipt/no receipt, no-r bracketed by rs '''
 
         d = '/queue/ir'
 
@@ -151,44 +149,32 @@ class TestQueue(base.BaseTest):
         self.assertEquals(3, len(self.listener.messages))
 
     def test_interleaved_receipt_no_receipt_tx(self):
-        ''' Test interleaved receipt/no receipt where the no receipt
-            is bracketed by receipts with transactions'''
+        ''' Test i-leaved receipt/no receipt, no-r bracketed by r+xactions '''
 
         d = '/queue/ir'
         tx = 'tx.ir'
 
-        prime_count = 100
-
-        # one receipt and message per prime send.
-        # then three messages and two receipts
-        self.listener.reset((prime_count * 2) + 5)
+        # three messages and two receipts
+        self.listener.reset(5)
 
         self.conn.subscribe(destination=d)
         self.conn.begin(transaction=tx)
-
-        expected = set(['a', 'b'])
-
-        # make this a large transaction to trigger multi-confirm
-        for i in range(1, prime_count + 1):
-            expected.add(str(i))
-            self.conn.send('prime', destination=d, receipt=str(i),
-                           transaction=tx)
 
         self.conn.send('first', destination=d, receipt='a', transaction=tx)
         self.conn.send('second', destination=d, transaction=tx)
         self.conn.send('third', destination=d, receipt='b', transaction=tx)
         self.conn.commit(transaction=tx)
 
-        self.assertTrue(self.listener.await(10))
+        self.assertTrue("Missing messages/confirms", self.listener.await(20))
 
+        expected = set(['a', 'b'])
         missing = expected.difference(self.__gather_receipts())
 
         self.assertEquals(set(), missing, "Missing receipts: " + str(missing))
-        self.assertEquals(prime_count + 3, len(self.listener.messages))
+        self.assertEquals(3, len(self.listener.messages))
 
     def test_interleaved_receipt_no_receipt_inverse(self):
-        ''' Test interleaved receipt/no receipt where the receipt
-            is bracketed by no receipts '''
+        ''' Test i-leaved receipt/no receipt, r bracketed by no-rs '''
 
         d = '/queue/ir'
 
