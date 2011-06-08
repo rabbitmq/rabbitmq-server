@@ -5,6 +5,7 @@ import unittest
 class TestReliability(base.BaseTest):
 
     def test_send_and_disconnect(self):
+        ''' Test close socket after send does not lose messages '''
         d = "/queue/reliability"
         pub_conn = self.create_connection()
         try:
