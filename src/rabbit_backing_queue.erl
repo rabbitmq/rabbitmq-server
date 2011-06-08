@@ -105,7 +105,7 @@ behaviour_info(callbacks) ->
 
      %% Acktags supplied are for messages which can now be forgotten
      %% about. Must return 1 msg_id per Ack, in the same order as Acks.
-     {ack, 2},
+     {ack, 3},
 
      %% A publish, but in the context of a transaction.
      {tx_publish, 5},

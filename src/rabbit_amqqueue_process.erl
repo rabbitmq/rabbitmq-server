@@ -729,7 +729,7 @@ drop_expired_messages(State = #q{backing_queue_state = BQS,
     Now = now_micros(),
     BQS1 = BQ:dropwhile(
              fun (#message_properties{expiry = Expiry}) -> Now > Expiry end,
-             dead_letter_drop_fun(expired, State),
+             dead_letter_callback_fun(expired, State),
              BQS),
     ensure_ttl_timer(State#q{backing_queue_state = BQS1}).
 
@@ -747,9 +747,9 @@ ensure_ttl_timer(State = #q{backing_queue       = BQ,
 ensure_ttl_timer(State) ->
     State.
 
-dead_letter_drop_fun(_Reason, #q{dead_letter_exchange = undefined}) ->
+dead_letter_callback_fun(_Reason, #q{dead_letter_exchange = undefined}) ->
     fun(_MsgFun, LookupState) -> LookupState end;
-dead_letter_drop_fun(Reason, State) ->
+dead_letter_callback_fun(Reason, State) ->
     fun(MsgFun, LookupState) ->
             {Msg, LookupState1} = MsgFun(LookupState),
             dead_letter_msg(Msg, Reason, State),
@@ -761,8 +761,7 @@ maybe_dead_letter_queue(_Reason, State = #q{
     State;
 maybe_dead_letter_queue(Reason, State = #q{
                                   backing_queue_state  = BQS,
-                                  backing_queue        = BQ,
-                                  dead_letter_exchange = DLE}) ->
+                                  backing_queue        = BQ}) ->
     case BQ:fetch(false, BQS) of
         {empty, BQS1} ->
             State#q{backing_queue_state = BQS1};
@@ -770,7 +769,6 @@ maybe_dead_letter_queue(Reason, State = #q{
             dead_letter_msg(Msg, Reason, State),
             maybe_dead_letter_queue(Reason, State#q{backing_queue_state = BQS1})
     end.
-
 
 dead_letter_msg(Msg, Reason, State = #q{dead_letter_exchange = DLE}) ->
     %% Should this be lookup_or_die? Do we really want to stop the
@@ -1103,10 +1101,11 @@ handle_call({delete, IfUnused, IfEmpty}, _From,
             {stop, normal, {ok, BQ:len(BQS)}, State}
     end;
 
-handle_call(purge, _From, State = #q{backing_queue = BQ,
-                                     backing_queue_state = BQS}) ->
+handle_call(purge, _From, State = #q{backing_queue = BQ}) ->
+    State1 = #q{backing_queue_state = BQS} =
+        maybe_dead_letter_queue(queue_purged, State),
     {Count, BQS1} = BQ:purge(BQS),
-    reply({ok, Count}, State#q{backing_queue_state = BQS1});
+    reply({ok, Count}, State1#q{backing_queue_state = BQS1});
 
 handle_call({requeue, AckTags, ChPid}, From, State) ->
     gen_server2:reply(From, ok),
@@ -1143,7 +1142,9 @@ handle_cast({ack, Txn, AckTags, ChPid},
                 case Txn of
                     none -> ChAckTags1 = subtract_acks(ChAckTags, AckTags),
                             NewC = C#cr{acktags = ChAckTags1},
-                            {_Guids, BQS1} = BQ:ack(AckTags, BQS),
+                            {_Guids, BQS1} = BQ:ack(AckTags,
+                                                    fun(_, BQS0) -> BQS0 end,
+                                                    BQS),
                             {NewC, State#q{backing_queue_state = BQS1}};
                     _    -> BQS1 = BQ:tx_ack(Txn, AckTags, BQS),
                             {C#cr{txn = Txn},
@@ -1164,7 +1165,9 @@ handle_cast({reject, AckTags, Requeue, ChPid},
             maybe_store_ch_record(C#cr{acktags = ChAckTags1}),
             noreply(case Requeue of
                         true  -> requeue_and_run(AckTags, State);
-                        false -> {_Guids, BQS1} = BQ:ack(AckTags, BQS),
+                        false -> Fun = dead_letter_callback_fun(
+                                         rejected, State),
+                                 {_Guids, BQS1} = BQ:ack(AckTags, Fun, BQS),
                                  State#q{backing_queue_state = BQS1}
                     end)
     end;

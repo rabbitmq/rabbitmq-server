@@ -18,7 +18,7 @@
 
 -export([init/4, terminate/2, delete_and_terminate/2,
          purge/1, publish/4, publish_delivered/5, drain_confirmed/1,
-         fetch/2, ack/2, tx_publish/5, tx_ack/3, tx_rollback/2, tx_commit/4,
+         fetch/2, ack/3, tx_publish/5, tx_ack/3, tx_rollback/2, tx_commit/4,
          requeue/3, len/1, is_empty/1, dropwhile/3,
          set_ram_duration_target/2, ram_duration/1,
          needs_timeout/1, timeout/1, handle_pre_hibernate/1,
@@ -565,8 +565,7 @@ dropwhile(Pred, DropFun, State) ->
 
 dropwhile1(Pred, DropFun, State) ->
     internal_queue_out(
-      fun(MsgStatus = #msg_status { msg_props = MsgProps,
-                                    msg = Msg }, State1) ->
+      fun(MsgStatus = #msg_status { msg_props = MsgProps }, State1) ->
               case Pred(MsgProps) of
                   true ->
                       {MsgStatus1, State2} =
@@ -610,10 +609,16 @@ internal_queue_out(Fun, State = #vqstate { q4 = Q4 }) ->
     end.
 
 read_msg_callback() ->
-    fun({MsgStatus, State}) ->
+    fun({MsgStatus = #msg_status {}, State}) ->
             {MsgStatus1 = #msg_status { msg = Msg }, State1} =
                 read_msg(MsgStatus, State),
-            {Msg, {MsgStatus1, State1}}
+            {Msg, {MsgStatus1, State1}};
+       ({{IsPersistent, MsgId, _MsgProps}, State}) ->
+            #vqstate { msg_store_clients = MSCState } = State,
+            {{ok, Msg = #basic_message{}}, MSCState1} =
+                msg_store_read(MSCState, IsPersistent, MsgId),
+            {Msg, {undefined, State #vqstate {
+                                msg_store_clients = MSCState1 }}}
     end.
 
 read_msg(MsgStatus = #msg_status { msg           = undefined,
@@ -681,9 +686,13 @@ internal_fetch(AckRequired, MsgStatus = #msg_status {
                          len              = Len1,
                          persistent_count = PCount1 })}.
 
-ack(AckTags, State) ->
+ack(AckTags, Fun, State) ->
     {MsgIds, State1} = ack(fun msg_store_remove/3,
-                           fun (_, State0) -> State0 end,
+                           fun (MsgStatus = #msg_status {}, State0) ->
+                                   {_, State2} = Fun(read_msg_callback(),
+                                                     {MsgStatus, State0}),
+                                   State2
+                           end,
                            AckTags, State),
     {MsgIds, a(State1)}.
 
@@ -1220,7 +1229,7 @@ tx_commit_index(State = #vqstate { on_sync = #sync {
     Acks  = lists:append(SAcks),
     Pubs  = [{Msg, Fun(MsgProps)} || {Fun, PubsN}    <- lists:reverse(SPubs),
                                      {Msg, MsgProps} <- lists:reverse(PubsN)],
-    {_MsgIds, State1} = ack(Acks, State),
+    {_MsgIds, State1} = ack(Acks, fun(_, State0) -> State0 end, State),
     {SeqIds, State2 = #vqstate { index_state = IndexState }} =
         lists:foldl(
           fun ({Msg = #basic_message { is_persistent = IsPersistent },
