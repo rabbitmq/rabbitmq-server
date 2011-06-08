@@ -568,11 +568,14 @@ dropwhile1(Pred, DropFun, State) ->
       fun(MsgStatus = #msg_status { msg_props = MsgProps,
                                     msg = Msg }, State1) ->
               case Pred(MsgProps) of
-                  true ->  DropFun(Msg),
-                           {_, State2} = internal_fetch(false, MsgStatus,
-                                                        State1),
-                           dropwhile1(Pred, DropFun, State2);
-                  false -> {ok, in_r(MsgStatus, State1)}
+                  true ->
+                      {MsgStatus1, State2} =
+                          DropFun(read_msg_callback(), {MsgStatus, State1}),
+
+                      {_, State3} = internal_fetch(false, MsgStatus1, State2),
+                      dropwhile1(Pred, DropFun, State3);
+                  false ->
+                      {ok, in_r(MsgStatus, State1)}
               end
       end, State).
 
@@ -604,6 +607,13 @@ internal_queue_out(Fun, State = #vqstate { q4 = Q4 }) ->
             end;
         {{value, MsgStatus}, Q4a} ->
             Fun(MsgStatus, State #vqstate { q4 = Q4a })
+    end.
+
+read_msg_callback() ->
+    fun({MsgStatus, State}) ->
+            {MsgStatus1 = #msg_status { msg = Msg }, State1} =
+                read_msg(MsgStatus, State),
+            {Msg, {MsgStatus1, State1}}
     end.
 
 read_msg(MsgStatus = #msg_status { msg           = undefined,
