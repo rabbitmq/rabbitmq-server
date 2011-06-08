@@ -31,16 +31,18 @@
 -module(rabbit_stomp_processor).
 -behaviour(gen_server2).
 
--export([start_link/2, process_frame/2]).
+-export([start_link/3, process_frame/2]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          code_change/3, terminate/2]).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_stomp_frame.hrl").
+-include("rabbit_stomp.hrl").
 
 -record(state, {socket, session_id, channel,
                 connection, subscriptions, version,
-                start_heartbeat_fun, pending_receipts}).
+                start_heartbeat_fun, pending_receipts,
+                config}).
 
 -record(subscription, {dest_hdr, channel, multi_ack, description}).
 
@@ -51,8 +53,9 @@
 %%----------------------------------------------------------------------------
 %% Public API
 %%----------------------------------------------------------------------------
-start_link(Sock, StartHeartbeatFun) ->
-    gen_server2:start_link(?MODULE, [Sock, StartHeartbeatFun], []).
+start_link(Sock, StartHeartbeatFun, Configuration) ->
+    gen_server2:start_link(?MODULE, [Sock, StartHeartbeatFun, Configuration],
+                           []).
 
 process_frame(Pid, Frame = #stomp_frame{command = Command}) ->
     gen_server2:cast(Pid, {Command, Frame}).
@@ -61,7 +64,7 @@ process_frame(Pid, Frame = #stomp_frame{command = Command}) ->
 %% Basic gen_server2 callbacks
 %%----------------------------------------------------------------------------
 
-init([Sock, StartHeartbeatFun]) ->
+init([Sock, StartHeartbeatFun, Configuration]) ->
     process_flag(trap_exit, true),
     {ok,
      #state {
@@ -72,7 +75,8 @@ init([Sock, StartHeartbeatFun]) ->
        subscriptions       = dict:new(),
        version             = none,
        start_heartbeat_fun = StartHeartbeatFun,
-       pending_receipts    = undefined},
+       pending_receipts    = undefined,
+       config              = Configuration},
      hibernate,
      {backoff, 1000, 1000, 10000}
     }.
@@ -83,16 +87,23 @@ terminate(_Reason, State) ->
 handle_cast({"STOMP", Frame}, State) ->
     handle_cast({"CONNECT", Frame}, State);
 
-handle_cast({"CONNECT", Frame}, State = #state{channel = none,
-                                               socket  = Sock}) ->
+handle_cast({"CONNECT", Frame},
+            State = #state{
+              channel = none,
+              socket  = Sock,
+              config  = #stomp_configuration{
+                default_login    = DefaultLogin,
+                default_passcode = DefaultPasscode}}) ->
     process_request(
       fun(StateN) ->
               case negotiate_version(Frame) of
                   {ok, Version} ->
                       {ok, DefaultVHost} =
                           application:get_env(rabbit, default_vhost),
-                      do_login(rabbit_stomp_frame:header(Frame, "login"),
-                               rabbit_stomp_frame:header(Frame, "passcode"),
+                      do_login(rabbit_stomp_frame:header(Frame, "login",
+                                                         DefaultLogin),
+                               rabbit_stomp_frame:header(Frame, "passcode",
+                                                         DefaultPasscode),
                                rabbit_stomp_frame:header(Frame, "host",
                                                          binary_to_list(
                                                            DefaultVHost)),
@@ -111,7 +122,15 @@ handle_cast({"CONNECT", Frame}, State = #state{channel = none,
       fun(StateM) -> StateM end,
       State);
 
-handle_cast(_Request, State = #state{channel = none}) ->
+handle_cast(Request, State = #state{channel = none,
+                                     config = #stomp_configuration{
+                                      implicit_connect = true}}) ->
+    {noreply, State1, _} =
+        handle_cast({"CONNECT", #stomp_frame{headers = []}}, State),
+    handle_cast(Request, State1);
+handle_cast(_Request, State = #state{channel = none,
+                                     config = #stomp_configuration{
+                                      implicit_connect = false}}) ->
     {noreply,
      send_error("Illegal command",
                 "You must log in using CONNECT first\n",
@@ -316,7 +335,10 @@ with_destination(Command, Frame, State, Fun) ->
                   State)
     end.
 
-do_login({ok, Username0}, {ok, Password0}, VirtualHost0, Heartbeat, AdapterInfo,
+do_login(undefined, _, _, _, _, _, State) ->
+    error("Bad CONNECT", "Missing login or passcode header(s)\n", State);
+
+do_login(Username0, Password0, VirtualHost0, Heartbeat, AdapterInfo,
          Version, State) ->
     Username = list_to_binary(Username0),
     Password = list_to_binary(Password0),
@@ -348,10 +370,7 @@ do_login({ok, Username0}, {ok, Password0}, VirtualHost0, Heartbeat, AdapterInfo,
             end;
         {refused, _Msg, _Args} ->
             error("Bad CONNECT", "Authentication failure\n", State)
-    end;
-
-do_login(_, _, _, _, _, _, State) ->
-    error("Bad CONNECT", "Missing login or passcode header(s)\n", State).
+    end.
 
 adapter_info(Sock, Version) ->
     {ok, {Addr,     Port}}     = rabbit_net:sockname(Sock),
