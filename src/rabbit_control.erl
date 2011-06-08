@@ -19,7 +19,6 @@
 
 -export([start/0, stop/0, action/5, diagnostics/1]).
 
--define(RPC_TIMEOUT, infinity).
 -define(WAIT_FOR_VM_ATTEMPTS, 5).
 
 -define(QUIET_OPT, "-q").
@@ -450,7 +449,7 @@ call(Node, {Mod, Fun, Args}) ->
     rpc_call(Node, Mod, Fun, lists:map(fun list_to_binary/1, Args)).
 
 rpc_call(Node, Mod, Fun, Args) ->
-    rpc:call(Node, Mod, Fun, Args, ?RPC_TIMEOUT).
+    rpc:call(Node, Mod, Fun, Args, ?MAX_WAIT).
 
 %% escape does C-style backslash escaping of non-printable ASCII
 %% characters.  We don't escape characters above 127, since they may

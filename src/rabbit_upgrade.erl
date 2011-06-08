@@ -171,7 +171,7 @@ upgrade_mode(AllNodes) ->
                                  [ClusterVersion, MyVersion])
                      end,
             case rpc:call(Another, rabbit_version, desired_for_scope,
-                          [mnesia]) of
+                          [mnesia], ?MAX_WAIT) of
                 {badrpc, {'EXIT', {undef, _}}} -> ErrFun(unknown_old_version);
                 {badrpc, Reason}               -> ErrFun({unknown, Reason});
                 CV                             -> case rabbit_version:matches(
@@ -237,7 +237,7 @@ nodes_running(Nodes) ->
     [N || N <- Nodes, node_running(N)].
 
 node_running(Node) ->
-    case rpc:call(Node, application, which_applications, []) of
+    case rpc:call(Node, application, which_applications, [], ?MAX_WAIT) of
         {badrpc, _} -> false;
         Apps        -> lists:keysearch(rabbit, 1, Apps) =/= false
     end.

@@ -906,7 +906,7 @@ ntoab(IP) ->
 is_process_alive(Pid) when node(Pid) =:= node() ->
     erlang:is_process_alive(Pid);
 is_process_alive(Pid) ->
-    case rpc:call(node(Pid), erlang, is_process_alive, [Pid]) of
+    case rpc:call(node(Pid), erlang, is_process_alive, [Pid], ?MAX_WAIT) of
         true -> true;
         _    -> false
     end.

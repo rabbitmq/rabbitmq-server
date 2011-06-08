@@ -455,7 +455,8 @@ init_db(ClusterNodes, Force, SecondaryPostMnesiaFun) ->
                 {[AnotherNode|_], _} ->
                     %% Subsequent node in cluster, catch up
                     ensure_version_ok(
-                      rpc:call(AnotherNode, rabbit_version, recorded, [])),
+                      rpc:call(AnotherNode, rabbit_version, recorded, [],
+                               ?MAX_WAIT)),
                     IsDiskNode = ClusterNodes == [] orelse
                         lists:member(node(), ClusterNodes),
                     ok = wait_for_replicated_tables(),
@@ -648,7 +649,7 @@ leave_cluster(Nodes, RunningNodes) ->
     case lists:any(
            fun (Node) ->
                    case rpc:call(Node, mnesia, del_table_copy,
-                                 [schema, node()]) of
+                                 [schema, node()], ?MAX_WAIT) of
                        {atomic, ok} -> true;
                        {badrpc, nodedown} -> false;
                        {aborted, Reason} ->
