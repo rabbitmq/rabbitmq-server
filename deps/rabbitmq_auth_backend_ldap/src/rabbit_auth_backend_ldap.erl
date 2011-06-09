@@ -55,7 +55,7 @@
                  other_bind,
                  vhost_access_query,
                  resource_access_query,
-                 tags_query,
+                 tag_queries,
                  use_ssl,
                  log,
                  port }).
@@ -100,8 +100,8 @@ check_resource_access(User = #user{username = Username, impl = UserDN},
 
 %%--------------------------------------------------------------------
 
-evaluate({constant, Result}, _Args, _User, _LDAP) ->
-    Result;
+evaluate({constant, Bool}, _Args, _User, _LDAP) ->
+    Bool;
 
 evaluate({for, [{Type, Value, SubQuery}|Rest]}, Args, User, LDAP) ->
     case proplists:get_value(Type, Args) of
@@ -193,15 +193,17 @@ get_env(F) ->
     {ok, V} = application:get_env(F),
     V.
 
-do_login(Username, LDAP, State = #state{ tags_query  = TagsQuery }) ->
+do_login(Username, LDAP, State = #state{ tag_queries = TagQueries }) ->
     UserDN = username_to_dn(Username, State),
     User = #user{username     = Username,
                  auth_backend = ?MODULE,
                  impl         = UserDN},
-    case evaluate(TagsQuery, [{username, Username},
-                              {user_dn,  UserDN}], User, LDAP) of
-        {error, _} = E -> E;
-        Tags           -> {ok, User#user{tags = Tags}}
+    TagRes = [{Tag, evaluate(Q, [{username, Username},
+                                 {user_dn,  UserDN}], User, LDAP)} ||
+                 {Tag, Q} <- TagQueries],
+    case [E || {_, E = {error, _}} <- TagRes] of
+        []      -> {ok, User#user{tags = [Tag || {Tag, true} <- TagRes]}};
+        [E | _] -> E
     end.
 
 username_to_dn(Username, #state{ user_dn_pattern = UserDNPattern }) ->
