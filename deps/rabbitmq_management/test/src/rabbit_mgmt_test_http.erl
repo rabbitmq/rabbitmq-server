@@ -38,7 +38,7 @@ overview_test() ->
     %% didn't blow up.
     true = 0 < length(pget(listeners, http_get("/overview"))),
     http_put("/users/myuser", [{password,      <<"myuser">>},
-                               {tags, []}], ?NO_CONTENT),
+                               {tags, <<"">>}], ?NO_CONTENT),
     http_get("/overview", "myuser", "myuser", ?OK),
     http_delete("/users/myuser", ?NO_CONTENT),
     %% TODO uncomment when priv works in test
@@ -74,21 +74,21 @@ vhosts_test() ->
     http_delete("/vhosts/myvhost", ?NOT_FOUND).
 
 users_test() ->
-    assert_item([{name, <<"guest">>}, {tags, [<<"administrator">>]}],
+    assert_item([{name, <<"guest">>}, {tags, <<"administrator">>}],
                 http_get("/whoami")),
     http_get("/users/myuser", ?NOT_FOUND),
     http_put_raw("/users/myuser", "Something not JSON", ?BAD_REQUEST),
     http_put("/users/myuser", [{flim, <<"flam">>}], ?BAD_REQUEST),
-    http_put("/users/myuser", [{tags, []}], ?NO_CONTENT),
+    http_put("/users/myuser", [{tags, <<"">>}], ?NO_CONTENT),
     http_put("/users/myuser", [{password_hash,
                                 <<"IECV6PZI/Invh0DL187KFpkO5Jc=">>},
-                               {tags, []}], ?NO_CONTENT),
+                               {tags, <<"">>}], ?NO_CONTENT),
     http_put("/users/myuser", [{password, <<"password">>},
-                               {tags, [administrator]}], ?NO_CONTENT),
-    assert_item([{name, <<"myuser">>}, {tags, [<<"administrator">>]}],
+                               {tags, <<"administrator">>}], ?NO_CONTENT),
+    assert_item([{name, <<"myuser">>}, {tags, <<"administrator">>}],
                 http_get("/users/myuser")),
-    assert_list([[{name, <<"myuser">>}, {tags, [<<"administrator">>]}],
-                 [{name, <<"guest">>}, {tags, [<<"administrator">>]}]],
+    assert_list([[{name, <<"myuser">>}, {tags, <<"administrator">>}],
+                 [{name, <<"guest">>}, {tags, <<"administrator">>}]],
                 http_get("/users")),
     test_auth(?OK, [auth_header("myuser", "password")]),
     http_delete("/users/myuser", ?NO_CONTENT),
@@ -114,9 +114,9 @@ permissions_list_test() ->
       {read,<<".*">>}]] =
         http_get("/permissions"),
 
-    http_put("/users/myuser1", [{password, <<"">>}, {tags, [administrator]}],
+    http_put("/users/myuser1", [{password, <<"">>}, {tags, <<"administrator">>}],
              ?NO_CONTENT),
-    http_put("/users/myuser2", [{password, <<"">>}, {tags, [administrator]}],
+    http_put("/users/myuser2", [{password, <<"">>}, {tags, <<"administrator">>}],
              ?NO_CONTENT),
     http_put("/vhosts/myvhost1", [], ?NO_CONTENT),
     http_put("/vhosts/myvhost2", [], ?NO_CONTENT),
@@ -137,7 +137,7 @@ permissions_list_test() ->
     ok.
 
 permissions_test() ->
-    http_put("/users/myuser", [{password, <<"myuser">>}, {tags, [administrator]}],
+    http_put("/users/myuser", [{password, <<"myuser">>}, {tags, <<"administrator">>}],
              ?NO_CONTENT),
     http_put("/vhosts/myvhost", [], ?NO_CONTENT),
 
@@ -367,11 +367,11 @@ bindings_e2e_test() ->
 
 permissions_administrator_test() ->
     http_put("/users/isadmin", [{password, <<"isadmin">>},
-                                {tags, [administrator]}], ?NO_CONTENT),
+                                {tags, <<"administrator">>}], ?NO_CONTENT),
     http_put("/users/notadmin", [{password, <<"notadmin">>},
-                                 {tags, [administrator]}], ?NO_CONTENT),
+                                 {tags, <<"administrator">>}], ?NO_CONTENT),
     http_put("/users/notadmin", [{password, <<"notadmin">>},
-                                 {tags, []}], ?NO_CONTENT),
+                                 {tags, <<"">>}], ?NO_CONTENT),
     Test =
         fun(Path) ->
                 http_get(Path, "notadmin", "notadmin", ?NOT_AUTHORISED),
@@ -395,7 +395,7 @@ permissions_vhost_test() ->
     QArgs = [],
     PermArgs = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
     http_put("/users/myuser", [{password, <<"myuser">>},
-                               {tags, []}], ?NO_CONTENT),
+                               {tags, <<"">>}], ?NO_CONTENT),
     http_put("/vhosts/myvhost1", [], ?NO_CONTENT),
     http_put("/vhosts/myvhost2", [], ?NO_CONTENT),
     http_put("/permissions/myvhost1/myuser", PermArgs, ?NO_CONTENT),
@@ -449,7 +449,7 @@ permissions_amqp_test() ->
     PermArgs = [{configure, <<"foo.*">>}, {write, <<"foo.*">>},
                 {read,      <<"foo.*">>}],
     http_put("/users/myuser", [{password, <<"myuser">>},
-                               {tags, []}], ?NO_CONTENT),
+                               {tags, <<"">>}], ?NO_CONTENT),
     http_put("/permissions/%2f/myuser", PermArgs, ?NO_CONTENT),
     http_put("/queues/%2f/bar-queue", QArgs, "myuser", "myuser",
              ?NOT_AUTHORISED),
@@ -474,7 +474,7 @@ get_conn(Username, Password) ->
 permissions_connection_channel_test() ->
     PermArgs = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
     http_put("/users/user", [{password, <<"user">>},
-                             {tags, []}], ?NO_CONTENT),
+                             {tags, <<"">>}], ?NO_CONTENT),
     http_put("/permissions/%2f/user", PermArgs, ?NO_CONTENT),
     {Conn1, ConnPath1, ChPath1} = get_conn("user", "user"),
     {Conn2, ConnPath2, ChPath2} = get_conn("guest", "guest"),
@@ -760,7 +760,7 @@ get_test() ->
 
 get_fail_test() ->
     http_put("/users/myuser", [{password, <<"password">>},
-                               {tags, []}], ?NO_CONTENT),
+                               {tags, <<"">>}], ?NO_CONTENT),
     http_put("/queues/%2f/myqueue", [], ?NO_CONTENT),
     http_post("/queues/%2f/myqueue/get",
               [{requeue,  false},
@@ -792,7 +792,7 @@ publish_fail_test() ->
     Msg = msg(<<"myqueue">>, [], <<"Hello world">>),
     http_put("/queues/%2f/myqueue", [], ?NO_CONTENT),
     http_put("/users/myuser", [{password, <<"password">>},
-                               {tags, []}], ?NO_CONTENT),
+                               {tags, <<"">>}], ?NO_CONTENT),
     http_post("/exchanges/%2f/amq.default/publish", Msg, "myuser", "password",
               ?NOT_AUTHORISED),
     Msg2 = [{exchange,         <<"">>},

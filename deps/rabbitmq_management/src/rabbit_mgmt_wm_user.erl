@@ -93,7 +93,8 @@ put_user(User, PWArg, PWFun) ->
                                 true  -> [administrator];
                                 false -> []
                             end;
-               TagsBin   -> [list_to_atom(binary_to_list(T)) || T <- TagsBin]
+               TagsS     -> [list_to_atom(T) ||
+                                T <- string:tokens(binary_to_list(TagsS), ",")]
            end,
     case rabbit_auth_backend_internal:lookup_user(Username) of
         {error, not_found} ->
