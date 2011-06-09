@@ -40,7 +40,7 @@
 -include_lib("rabbit_common/include/rabbit_auth_backend_spec.hrl").
 
 -export([description/0]).
--export([check_user_login/2, check_vhost_access/3, check_resource_access/3]).
+-export([check_user_login/2, check_vhost_access/2, check_resource_access/3]).
 
 -behaviour(gen_server).
 
@@ -55,7 +55,7 @@
                  other_bind,
                  vhost_access_query,
                  resource_access_query,
-                 is_admin_query,
+                 tags_query,
                  use_ssl,
                  log,
                  port }).
@@ -81,11 +81,10 @@ check_user_login(Username, AuthProps) ->
     exit({unknown_auth_props, Username, AuthProps}).
 
 check_vhost_access(User = #user{username = Username,
-                                impl = UserDN}, VHost, Permission) ->
-    gen_server:call(?SERVER, {check_vhost, [{username,   Username},
-                                            {user_dn,    UserDN},
-                                            {vhost,      VHost},
-                                            {permission, Permission}], User},
+                                impl = UserDN}, VHost) ->
+    gen_server:call(?SERVER, {check_vhost, [{username, Username},
+                                            {user_dn,  UserDN},
+                                            {vhost,    VHost}], User},
                     infinity).
 
 check_resource_access(User = #user{username = Username, impl = UserDN},
@@ -101,8 +100,8 @@ check_resource_access(User = #user{username = Username, impl = UserDN},
 
 %%--------------------------------------------------------------------
 
-evaluate({constant, Bool}, _Args, _User, _LDAP) ->
-    Bool;
+evaluate({constant, Result}, _Args, _User, _LDAP) ->
+    Result;
 
 evaluate({for, [{Type, Value, SubQuery}|Rest]}, Args, User, LDAP) ->
     case proplists:get_value(Type, Args) of
@@ -157,6 +156,7 @@ with_ldap(BindOpts, Fun,
     Opts0 = [{ssl, SSL}, {port, Port}],
     Opts = case Log of
                true ->
+                   rabbit_log:info("Connecting to ~p", [Servers]),
                    [{log, fun(1, S, A) -> rabbit_log:warning(S, A);
                              (2, S, A) -> rabbit_log:info   (S, A)
                           end} | Opts0];
@@ -192,17 +192,15 @@ get_env(F) ->
     {ok, V} = application:get_env(F),
     V.
 
-do_login(Username, LDAP, State = #state{ is_admin_query  = IsAdminQuery }) ->
+do_login(Username, LDAP, State = #state{ tags_query  = TagsQuery }) ->
     UserDN = username_to_dn(Username, State),
     User = #user{username     = Username,
                  auth_backend = ?MODULE,
                  impl         = UserDN},
-    case evaluate(IsAdminQuery, [{username, Username},
-                                 {user_dn,  UserDN}], User, LDAP) of
-        {error, _} = E ->
-            E;
-        IsAdmin ->
-            {ok, User#user{is_admin = IsAdmin}}
+    case evaluate(TagsQuery, [{username, Username},
+                              {user_dn,  UserDN}], User, LDAP) of
+        {error, _} = E -> E;
+        Tags           -> {ok, User#user{tags = Tags}}
     end.
 
 username_to_dn(Username, #state{ user_dn_pattern = UserDNPattern }) ->

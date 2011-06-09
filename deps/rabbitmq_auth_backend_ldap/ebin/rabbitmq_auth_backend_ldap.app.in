@@ -10,7 +10,7 @@
           {other_bind,            anon},
           {vhost_access_query,    {constant, true}},
           {resource_access_query, {constant, true}},
-          {is_admin_query,        {constant, false}},
+          {tags_query,            {constant, []}},
           {use_ssl,               false},
           {port,                  389},
           {log,                   false} ] },
