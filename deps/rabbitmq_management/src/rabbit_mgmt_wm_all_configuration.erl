@@ -146,7 +146,7 @@ export_name(_Name)                -> true.
 %%--------------------------------------------------------------------
 
 rw_state() ->
-    [{users,       [name, password_hash, administrator]},
+    [{users,       [name, password_hash, tags]},
      {vhosts,      [name]},
      {permissions, [user, vhost, configure, write, read]},
      {queues,      [name, vhost, durable, auto_delete, arguments]},
