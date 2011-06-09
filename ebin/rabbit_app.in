@@ -33,6 +33,7 @@
          {cluster_nodes, []},
          {server_properties, []},
          {collect_statistics, none},
+         {collect_statistics_interval, 5000},
          {auth_mechanisms, ['PLAIN', 'AMQPLAIN']},
          {auth_backends, [rabbit_auth_backend_internal]},
          {delegate_count, 16},
