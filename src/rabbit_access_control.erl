@@ -67,7 +67,7 @@ check_vhost_access(User = #user{ username     = Username,
     check_access(
       fun() ->
               rabbit_vhost:exists(VHostPath) andalso
-                  Module:check_vhost_access(User, VHostPath, write)
+                  Module:check_vhost_access(User, VHostPath)
       end,
       "~s failed checking vhost access to ~s for ~s: ~p~n",
       [Module, VHostPath, Username],
