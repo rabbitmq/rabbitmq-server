@@ -53,7 +53,7 @@ DECLARABLE = {
                    'optional':  {}},
     'vhost':      {'mandatory': ['name'],
                    'optional':  {}},
-    'user':       {'mandatory': ['name', 'password', 'administrator'],
+    'user':       {'mandatory': ['name', 'password', 'tags'],
                    'optional':  {}},
     'permission': {'mandatory': ['vhost', 'user', 'configure', 'write', 'read'],
                    'optional':  {}}
