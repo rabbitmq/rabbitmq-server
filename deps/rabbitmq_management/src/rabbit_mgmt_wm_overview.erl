@@ -27,7 +27,7 @@ init(_Config) -> {ok, #context{}}.
 content_types_provided(ReqData, Context) ->
    {[{"application/json", to_json}], ReqData, Context}.
 
-to_json(ReqData, Context = #context{user = User = #user{is_admin = IsAdmin}}) ->
+to_json(ReqData, Context = #context{user = User = #user{tags = Tags}}) ->
     {ok, StatsLevel} = application:get_env(rabbit, collect_statistics),
     %% NB: node and stats level duplicate what's in /nodes but we want
     %% to (a) know which node we're talking to and (b) use the stats
@@ -35,7 +35,7 @@ to_json(ReqData, Context = #context{user = User = #user{is_admin = IsAdmin}}) ->
     Overview0 = [{management_version, version()},
                  {statistics_level,   StatsLevel}],
     Overview =
-        case IsAdmin of
+        case rabbit_mgmt_util:is_admin(Tags) of
             true ->
                 Listeners = [rabbit_mgmt_format:listener(L)
                              || L <- rabbit_networking:active_listeners()],

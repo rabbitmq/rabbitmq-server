@@ -26,7 +26,7 @@
 -export([all_or_one_vhost/2, http_to_amqp/5, reply/3, filter_vhost/3]).
 -export([filter_user/3, with_decode/5, decode/1, redirect/2, args/1]).
 -export([reply_list/3, reply_list/4, sort_list/4, destination_type/1]).
--export([post_respond/1, columns/1, want_column/2]).
+-export([post_respond/1, columns/1, want_column/2, is_admin/1]).
 
 -include("rabbit_mgmt.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
@@ -40,7 +40,7 @@ is_authorized(ReqData, Context) ->
 
 is_authorized_admin(ReqData, Context) ->
     is_authorized(ReqData, Context,
-                  fun(#user{is_admin = IsAdmin}) -> IsAdmin end).
+                  fun(#user{tags = Tags}) -> is_admin(Tags) end).
 
 is_authorized_vhost(ReqData, Context) ->
     is_authorized(
@@ -58,8 +58,8 @@ is_authorized_vhost(ReqData, Context) ->
 is_authorized_user(ReqData, Context, Item) ->
     is_authorized(
       ReqData, Context,
-      fun(#user{username = Username, is_admin = IsAdmin}) ->
-              IsAdmin orelse Username == proplists:get_value(user, Item)
+      fun(#user{username = Username, tags = Tags}) ->
+              is_admin(Tags) orelse Username == proplists:get_value(user, Item)
       end).
 
 is_authorized(ReqData, Context, Fun) ->
@@ -380,11 +380,12 @@ filter_vhost(List, _ReqData, Context) ->
     VHosts = rabbit_access_control:list_vhosts(Context#context.user, write),
     [I || I <- List, lists:member(proplists:get_value(vhost, I), VHosts)].
 
-filter_user(List, _ReqData, #context{user = #user{is_admin = true}}) ->
-    List;
 filter_user(List, _ReqData,
-            #context{user = #user{username = Username, is_admin = false}}) ->
-    [I || I <- List, proplists:get_value(user, I) == Username].
+            #context{user = #user{username = Username, tags = Tags}}) ->
+    case is_admin(Tags) of
+        true  -> List;
+        false -> [I || I <- List, proplists:get_value(user, I) == Username]
+    end.
 
 redirect(Location, ReqData) ->
     wrq:do_redirect(true,
@@ -412,3 +413,5 @@ columns(ReqData) ->
 
 want_column(_Col, all) -> true;
 want_column(Col, Cols) -> lists:any(fun([C|_]) -> C == Col end, Cols).
+
+is_admin(Tags) -> lists:member(administrator, Tags).
