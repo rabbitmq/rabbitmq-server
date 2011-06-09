@@ -93,7 +93,7 @@ put_user(User, PWArg, PWFun) ->
                                 true  -> [administrator];
                                 false -> []
                             end;
-               TagsS     -> [list_to_atom(T) ||
+               TagsS     -> [list_to_atom(string:strip(T)) ||
                                 T <- string:tokens(binary_to_list(TagsS), ",")]
            end,
     case rabbit_auth_backend_internal:lookup_user(Username) of

@@ -439,13 +439,15 @@ Content-Length: 0</pre>
         <td></td>
         <td class="path">/api/users/<i>name</i></td>
         <td>An individual user. To PUT a user, you will need a body looking something like this:
-<pre>{"password":"secret", "administrator":true}</pre>
+<pre>{"password":"secret","tags":"administrator"}</pre>
 or:
-<pre>{"password_hash":"2lmoth8l4H0DViLaK9Fxi6l9ds8=", "administrator":true}</pre>
+<pre>{"password_hash":"2lmoth8l4H0DViLaK9Fxi6l9ds8=", "tags":"administrator"}</pre>
         The <code>administrator</code> key is mandatory. Either
         <code>password</code> or <code>password_hash</code>
         must be set. Setting <code>password_hash</code> to "" will ensure the
-        user cannot use a password to log in.
+        user cannot use a password to log in. <code>tags</code> is a
+        comma-separated list of tags for the user. Currently only the
+        administrator tag means anything.
         </td>
       </tr>
       <tr>
