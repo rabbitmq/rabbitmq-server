@@ -20,7 +20,7 @@
 -behaviour(rabbit_auth_backend).
 
 -export([description/0]).
--export([check_user_login/2, check_vhost_access/3, check_resource_access/3]).
+-export([check_user_login/2, check_vhost_access/2, check_resource_access/3]).
 
 -export([add_user/2, delete_user/1, change_password/2, set_tags/2,
          list_users/0, user_info_keys/0, lookup_user/1, clear_password/1]).
@@ -110,23 +110,17 @@ internal_check_user_login(Username, Fun) ->
             Refused
     end.
 
-check_vhost_access(#user{username = Username, tags = Tags}, VHost, Mode) ->
-    Admin = lists:any(fun(T) -> lists:member(T, [administrator]) end, Tags),
-    case {Admin, Mode} of
-        {true, read} ->
-            true;
-        _ ->
-            %% TODO: use dirty ops instead
-            rabbit_misc:execute_mnesia_transaction(
-              fun () ->
-                      case mnesia:read({rabbit_user_permission,
-                                        #user_vhost{username     = Username,
-                                                    virtual_host = VHost}}) of
-                          []   -> false;
-                          [_R] -> true
-                      end
-              end)
-    end.
+check_vhost_access(#user{username = Username}, VHost) ->
+    %% TODO: use dirty ops instead
+    rabbit_misc:execute_mnesia_transaction(
+      fun () ->
+              case mnesia:read({rabbit_user_permission,
+                                #user_vhost{username     = Username,
+                                            virtual_host = VHost}}) of
+                  []   -> false;
+                  [_R] -> true
+              end
+      end).
 
 check_resource_access(#user{username = Username},
                       #resource{virtual_host = VHostPath, name = Name},

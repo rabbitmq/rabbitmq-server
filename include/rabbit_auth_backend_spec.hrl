@@ -22,8 +22,7 @@
                                  {'ok', rabbit_types:user()} |
                                  {'refused', string(), [any()]} |
                                  {'error', any()}).
--spec(check_vhost_access/3 :: (rabbit_types:user(), rabbit_types:vhost(),
-                               rabbit_access_control:vhost_permission_atom()) ->
+-spec(check_vhost_access/2 :: (rabbit_types:user(), rabbit_types:vhost()) ->
                                    boolean() | {'error', any()}).
 -spec(check_resource_access/3 :: (rabbit_types:user(),
                                   rabbit_types:r(atom()),
