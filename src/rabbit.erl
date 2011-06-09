@@ -486,16 +486,13 @@ maybe_insert_default_data() ->
 insert_default_data() ->
     {ok, DefaultUser} = application:get_env(default_user),
     {ok, DefaultPass} = application:get_env(default_pass),
-    {ok, DefaultAdmin} = application:get_env(default_user_is_admin),
+    {ok, DefaultTags} = application:get_env(default_user_tags),
     {ok, DefaultVHost} = application:get_env(default_vhost),
     {ok, [DefaultConfigurePerm, DefaultWritePerm, DefaultReadPerm]} =
         application:get_env(default_permissions),
     ok = rabbit_vhost:add(DefaultVHost),
     ok = rabbit_auth_backend_internal:add_user(DefaultUser, DefaultPass),
-    case DefaultAdmin of
-        true -> rabbit_auth_backend_internal:set_admin(DefaultUser);
-        _    -> ok
-    end,
+    ok = rabbit_auth_backend_internal:set_tags(DefaultUser, DefaultTags),
     ok = rabbit_auth_backend_internal:set_permissions(DefaultUser, DefaultVHost,
                                                       DefaultConfigurePerm,
                                                       DefaultWritePerm,

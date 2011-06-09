@@ -1078,8 +1078,8 @@ test_user_management() ->
     {error, {user_already_exists, _}} =
         control_action(add_user, ["foo", "bar"]),
     ok = control_action(change_password, ["foo", "baz"]),
-    ok = control_action(set_admin, ["foo"]),
-    ok = control_action(clear_admin, ["foo"]),
+    ok = control_action(set_tags, ["foo", "administrator"]),
+    ok = control_action(set_tags, ["foo"]),
     ok = control_action(list_users, []),
 
     %% vhost creation
@@ -1203,10 +1203,10 @@ test_spawn() ->
 
 user(Username) ->
     #user{username     = Username,
-          is_admin     = true,
+          tags         = [administrator],
           auth_backend = rabbit_auth_backend_internal,
           impl         = #internal_user{username = Username,
-                                        is_admin = true}}.
+                                        tags     = [administrator]}}.
 
 test_statistics_event_receiver(Pid) ->
     receive

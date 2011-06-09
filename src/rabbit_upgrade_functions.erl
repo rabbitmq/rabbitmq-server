@@ -29,6 +29,7 @@
 -rabbit_upgrade({semi_durable_route,    mnesia, []}).
 -rabbit_upgrade({exchange_event_serial, mnesia, []}).
 -rabbit_upgrade({trace_exchanges,       mnesia, []}).
+-rabbit_upgrade({user_admin_to_tags,    mnesia, [user_to_internal_user]}).
 
 %% -------------------------------------------------------------------
 
@@ -43,6 +44,7 @@
 -spec(semi_durable_route/0    :: () -> 'ok').
 -spec(exchange_event_serial/0 :: () -> 'ok').
 -spec(trace_exchanges/0       :: () -> 'ok').
+-spec(user_admin_to_tags/0    :: () -> 'ok').
 
 -endif.
 
@@ -120,6 +122,16 @@ trace_exchanges() ->
        rabbit_misc:r(VHost, exchange, <<"amq.rabbitmq.trace">>), topic) ||
         VHost <- rabbit_vhost:list()],
     ok.
+
+user_admin_to_tags() ->
+    transform(
+      rabbit_user,
+      fun({internal_user, Username, PasswordHash, true}) ->
+              {internal_user, Username, PasswordHash, [administrator]};
+         ({internal_user, Username, PasswordHash, false}) ->
+              {internal_user, Username, PasswordHash, []}
+      end,
+      [username, password_hash, tags], internal_user).
 
 %%--------------------------------------------------------------------
 

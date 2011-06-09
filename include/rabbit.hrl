@@ -15,12 +15,12 @@
 %%
 
 -record(user, {username,
-               is_admin,
+               tags,
                auth_backend, %% Module this user came from
                impl          %% Scratch space for that module
               }).
 
--record(internal_user, {username, password_hash, is_admin}).
+-record(internal_user, {username, password_hash, tags}).
 -record(permission, {configure, write, read}).
 -record(user_vhost, {username, virtual_host}).
 -record(user_permission, {user_vhost, permission}).
