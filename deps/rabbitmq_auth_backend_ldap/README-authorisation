@@ -124,7 +124,7 @@ TODO improve and explain this
                      {permission, read,  {constant, true}}
                     ]}},
              {resource, queue, {constant, true}} ]}},
-     {tag_queries,           [{default, {constant, false}}]},
+     {tag_queries,           [{administrator, {constant, false}}]},
      {use_ssl,               false},
      {port,                  389},
      {log,                   false} ] }
