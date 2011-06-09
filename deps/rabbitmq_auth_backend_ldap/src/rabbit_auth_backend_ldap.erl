@@ -156,9 +156,10 @@ with_ldap(BindOpts, Fun,
     Opts0 = [{ssl, SSL}, {port, Port}],
     Opts = case Log of
                true ->
-                   rabbit_log:info("Connecting to ~p~n", [Servers]),
-                   [{log, fun(1, S, A) -> rabbit_log:warning(S, A);
-                             (2, S, A) -> rabbit_log:info   (S, A)
+                   Pre = "LDAP backend: ",
+                   rabbit_log:info(Pre ++ "connecting to ~p~n", [Servers]),
+                   [{log, fun(1, S, A) -> rabbit_log:warning(Pre ++ S, A);
+                             (2, S, A) -> rabbit_log:info   (Pre ++ S, A)
                           end} | Opts0];
                _ ->
                    Opts0
