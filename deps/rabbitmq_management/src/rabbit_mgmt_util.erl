@@ -27,6 +27,7 @@
 -export([filter_user/3, with_decode/5, decode/1, redirect/2, args/1]).
 -export([reply_list/3, reply_list/4, sort_list/4, destination_type/1]).
 -export([post_respond/1, columns/1, want_column/2, is_admin/1]).
+-export([list_visible_vhosts/1]).
 
 -include("rabbit_mgmt.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
@@ -49,9 +50,7 @@ is_authorized_vhost(ReqData, Context) ->
               case vhost(ReqData) of
                   not_found -> true;
                   none      -> true;
-                  V         -> lists:member(
-                                 V,
-                                 rabbit_access_control:list_vhosts(User, write))
+                  V         -> lists:member(V, list_login_vhosts(User))
               end
       end).
 
@@ -377,7 +376,7 @@ all_or_one_vhost(ReqData, Fun) ->
     end.
 
 filter_vhost(List, _ReqData, Context) ->
-    VHosts = rabbit_access_control:list_vhosts(Context#context.user, write),
+    VHosts = list_login_vhosts(Context#context.user),
     [I || I <- List, lists:member(proplists:get_value(vhost, I), VHosts)].
 
 filter_user(List, _ReqData,
@@ -415,3 +414,18 @@ want_column(_Col, all) -> true;
 want_column(Col, Cols) -> lists:any(fun([C|_]) -> C == Col end, Cols).
 
 is_admin(Tags) -> lists:member(administrator, Tags).
+
+%% TODO does the distinction between list_visible_vhosts and list_login_vhosts
+%% actually make sense?
+list_visible_vhosts(User = #user{tags = Tags}) ->
+    case is_admin(Tags) of
+        true  -> rabbit_vhost:list();
+        false -> list_login_vhosts(User)
+    end.
+
+list_login_vhosts(User) ->
+    [V || V <- rabbit_vhost:list(),
+          case catch rabbit_access_control:check_vhost_access(User, V) of
+              ok -> true;
+              _  -> false
+          end].

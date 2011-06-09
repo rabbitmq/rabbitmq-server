@@ -245,7 +245,7 @@ handle_call({get_channel, Name}, _From, State = #state{tables = Tables}) ->
 handle_call({get_overview, User}, _From, State = #state{tables = Tables}) ->
     VHosts = case User of
                  all -> rabbit_vhost:list();
-                 _   -> rabbit_access_control:list_vhosts(User, read)
+                 _   -> rabbit_mgmt_util:list_visible_vhosts(User)
              end,
     Qs0 = [rabbit_mgmt_format:queue(Q) || V <- VHosts,
                                           Q <- rabbit_amqqueue:list(V)],
