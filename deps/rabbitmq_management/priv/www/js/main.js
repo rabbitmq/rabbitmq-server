@@ -1,5 +1,6 @@
 var statistics_level;
 var user_administrator;
+var user_monitor;
 var nodes_interesting;
 var vhosts_interesting;
 
@@ -8,10 +9,15 @@ $(document).ready(function() {
     var user = JSON.parse(sync_get('/whoami'));
     replace_content('login', '<p>User: <b>' + user.name + '</b></p>');
     user_administrator = false;
+    user_monitor = false;
     var tags = user.tags.split(",");
     for (var i = 0; i < tags.length; i++) {
         if (tags[i] == "administrator") {
             user_administrator = true;
+            user_monitor = true;
+        }
+        if (tags[i] == "monitor") {
+            user_monitor = true;
         }
     }
     nodes_interesting = user_administrator &&
@@ -100,7 +106,7 @@ function dispatcher() {
     }
     this.get('#/', function() {
             var reqs = {'overview': '/overview'};
-            if (user_administrator) {
+            if (user_monitor) {
                 reqs['nodes'] = '/nodes';
             }
             render(reqs, 'overview', '#/');

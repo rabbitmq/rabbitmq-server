@@ -17,7 +17,8 @@
 %% TODO sort all this out; maybe there's scope for rabbit_mgmt_request?
 
 -export([is_authorized/2, is_authorized_admin/2, vhost/1]).
--export([is_authorized_vhost/2, is_authorized/3, is_authorized_user/3]).
+-export([is_authorized_vhost/2, is_authorized/3, is_authorized_user/3,
+         is_authorized_monitor/2]).
 -export([bad_request/3, bad_request_exception/4, id/2, parse_bool/1,
          parse_int/1]).
 -export([with_decode/4, not_found/3, amqp_request/4]).
@@ -26,7 +27,7 @@
 -export([all_or_one_vhost/2, http_to_amqp/5, reply/3, filter_vhost/3]).
 -export([filter_user/3, with_decode/5, decode/1, redirect/2, args/1]).
 -export([reply_list/3, reply_list/4, sort_list/4, destination_type/1]).
--export([post_respond/1, columns/1, want_column/2, is_admin/1]).
+-export([post_respond/1, columns/1, want_column/2, is_monitor/1]).
 -export([list_visible_vhosts/1]).
 
 -include("rabbit_mgmt.hrl").
@@ -43,6 +44,10 @@ is_authorized_admin(ReqData, Context) ->
     is_authorized(ReqData, Context,
                   fun(#user{tags = Tags}) -> is_admin(Tags) end).
 
+is_authorized_monitor(ReqData, Context) ->
+    is_authorized(ReqData, Context,
+                  fun(#user{tags = Tags}) -> is_monitor(Tags) end).
+
 is_authorized_vhost(ReqData, Context) ->
     is_authorized(
       ReqData, Context,
@@ -54,11 +59,17 @@ is_authorized_vhost(ReqData, Context) ->
               end
       end).
 
+%% Used for connections / channels. A normal user can only see / delete
+%% their own stuff. Monitors can see other users' and delete their
+%% own. Admins can do it all.
 is_authorized_user(ReqData, Context, Item) ->
     is_authorized(
       ReqData, Context,
       fun(#user{username = Username, tags = Tags}) ->
-              is_admin(Tags) orelse Username == proplists:get_value(user, Item)
+              case wrq:method(ReqData) of
+                  'DELETE' -> is_admin(Tags);
+                  _        -> is_monitor(Tags)
+              end orelse Username == proplists:get_value(user, Item)
       end).
 
 is_authorized(ReqData, Context, Fun) ->
@@ -413,18 +424,20 @@ columns(ReqData) ->
 want_column(_Col, all) -> true;
 want_column(Col, Cols) -> lists:any(fun([C|_]) -> C == Col end, Cols).
 
-is_admin(Tags) -> lists:member(administrator, Tags).
+is_admin(Tags)   -> lists:member(administrator, Tags).
+is_monitor(Tags) -> lists:member(administrator, Tags) orelse
+                        lists:member(monitor, Tags).
 
 %% The distinction between list_visible_vhosts and list_login_vhosts
-%% is there to ensure that administrators can always learn of the
+%% is there to ensure that adminis / monitors can always learn of the
 %% existence of all vhosts, and can always see their contribution to
-%% global stats. However, if an administrator does not have any
+%% global stats. However, if an admin / monitor does not have any
 %% permissions for a vhost, it's probably less confusing to make that
 %% prevent them from seeing "into" it, than letting them see stuff
 %% that they then can't touch.
 
 list_visible_vhosts(User = #user{tags = Tags}) ->
-    case is_admin(Tags) of
+    case is_monitor(Tags) of
         true  -> rabbit_vhost:list();
         false -> list_login_vhosts(User)
     end.
