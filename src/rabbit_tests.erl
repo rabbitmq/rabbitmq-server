@@ -1072,22 +1072,25 @@ test_user_management() ->
         control_action(list_permissions, [], [{"-p", "/testhost"}]),
     {error, {invalid_regexp, _, _}} =
         control_action(set_permissions, ["guest", "+foo", ".*", ".*"]),
+    {error, {no_such_user, _}} =
+        control_action(set_user_tags, ["foo", "bar"]),
 
     %% user creation
     ok = control_action(add_user, ["foo", "bar"]),
     {error, {user_already_exists, _}} =
         control_action(add_user, ["foo", "bar"]),
     ok = control_action(change_password, ["foo", "baz"]),
-    ok = control_action(set_user_tags, ["foo", "foo", "bar", "bash"]),
-    {ok, #internal_user{tags = [foo, bar, bash]}} =
-         rabbit_auth_backend_internal:lookup_user(<<"foo">>),
-    ok = control_action(set_user_tags, ["foo", "administrator"]),
-    {ok, #internal_user{tags = [administrator]}} =
-         rabbit_auth_backend_internal:lookup_user(<<"foo">>),
-    ok = control_action(set_user_tags, ["foo"]),
-    {ok, #internal_user{tags = []}} =
-         rabbit_auth_backend_internal:lookup_user(<<"foo">>),
-    ok = control_action(list_users, []),
+
+    TestTags = fun (Tags) ->
+                       Args = ["foo" | [atom_to_list(T) || T <- Tags]],
+                       ok = control_action(set_user_tags, Args),
+                       {ok, #internal_user{tags = Tags}} =
+                           rabbit_auth_backend_internal:lookup_user(<<"foo">>),
+                       ok = control_action(list_users, [])
+               end,
+    TestTags([foo, bar, bash]),
+    TestTags([administrator]),
+    TestTags([]),
 
     %% vhost creation
     ok = control_action(add_vhost, ["/testhost"]),
