@@ -1088,7 +1088,7 @@ test_user_management() ->
                            rabbit_auth_backend_internal:lookup_user(<<"foo">>),
                        ok = control_action(list_users, [])
                end,
-    TestTags([foo, bar, bash]),
+    TestTags([foo, bar, baz]),
     TestTags([administrator]),
     TestTags([]),
 
