@@ -1078,8 +1078,15 @@ test_user_management() ->
     {error, {user_already_exists, _}} =
         control_action(add_user, ["foo", "bar"]),
     ok = control_action(change_password, ["foo", "baz"]),
-    ok = control_action(set_tags, ["foo", "administrator"]),
-    ok = control_action(set_tags, ["foo"]),
+    ok = control_action(set_user_tags, ["foo", "foo", "bar", "bash"]),
+    {ok, #internal_user{tags = [foo, bar, bash]}} =
+         rabbit_auth_backend_internal:lookup_user(<<"foo">>),
+    ok = control_action(set_user_tags, ["foo", "administrator"]),
+    {ok, #internal_user{tags = [administrator]}} =
+         rabbit_auth_backend_internal:lookup_user(<<"foo">>),
+    ok = control_action(set_user_tags, ["foo"]),
+    {ok, #internal_user{tags = []}} =
+         rabbit_auth_backend_internal:lookup_user(<<"foo">>),
     ok = control_action(list_users, []),
 
     %% vhost creation
