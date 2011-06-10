@@ -415,8 +415,14 @@ want_column(Col, Cols) -> lists:any(fun([C|_]) -> C == Col end, Cols).
 
 is_admin(Tags) -> lists:member(administrator, Tags).
 
-%% TODO does the distinction between list_visible_vhosts and list_login_vhosts
-%% actually make sense?
+%% The distinction between list_visible_vhosts and list_login_vhosts
+%% is there to ensure that administrators can always learn of the
+%% existence of all vhosts, and can always see their contribution to
+%% global stats. However, if an administrator does not have any
+%% permissions for a vhost, it's probably less confusing to make that
+%% prevent them from seeing "into" it, than letting them see stuff
+%% that they then can't touch.
+
 list_visible_vhosts(User = #user{tags = Tags}) ->
     case is_admin(Tags) of
         true  -> rabbit_vhost:list();
