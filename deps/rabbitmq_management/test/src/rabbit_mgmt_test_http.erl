@@ -46,7 +46,22 @@ overview_test() ->
     ok.
 
 nodes_test() ->
-    assert_list([[{type, <<"disc">>}, {running, true}]], http_get("/nodes")).
+    http_put("/users/user", [{password, <<"user">>},
+                             {tags, <<"">>}], ?NO_CONTENT),
+    http_put("/users/monitor", [{password, <<"monitor">>},
+                                {tags, <<"monitor">>}], ?NO_CONTENT),
+    DiscNode = [{type, <<"disc">>}, {running, true}],
+    assert_list([DiscNode], http_get("/nodes")),
+    assert_list([DiscNode], http_get("/nodes", "monitor", "monitor", ?OK)),
+    http_get("/nodes", "user", "user", ?NOT_AUTHORISED),
+    [Node] = http_get("/nodes"),
+    Path = "/nodes/" ++ binary_to_list(pget(name, Node)),
+    assert_item(DiscNode, http_get(Path, ?OK)),
+    assert_item(DiscNode, http_get(Path, "monitor", "monitor", ?OK)),
+    http_get(Path, "user", "user", ?NOT_AUTHORISED),
+    http_delete("/users/user", ?NO_CONTENT),
+    http_delete("/users/monitor", ?NO_CONTENT),
+    ok.
 
 auth_test() ->
     test_auth(?NOT_AUTHORISED, []),
@@ -476,26 +491,49 @@ permissions_connection_channel_test() ->
     http_put("/users/user", [{password, <<"user">>},
                              {tags, <<"">>}], ?NO_CONTENT),
     http_put("/permissions/%2f/user", PermArgs, ?NO_CONTENT),
-    {Conn1, ConnPath1, ChPath1} = get_conn("user", "user"),
-    {Conn2, ConnPath2, ChPath2} = get_conn("guest", "guest"),
+    http_put("/users/monitor", [{password, <<"monitor">>},
+                            {tags, <<"monitor">>}], ?NO_CONTENT),
+    http_put("/permissions/%2f/monitor", PermArgs, ?NO_CONTENT),
+    {Conn1, UserConn, UserCh} = get_conn("user", "user"),
+    {Conn2, MonConn, MonCh} = get_conn("monitor", "monitor"),
+    {Conn3, AdmConn, AdmCh} = get_conn("guest", "guest"),
     {ok, _Ch1} = amqp_connection:open_channel(Conn1),
     {ok, _Ch2} = amqp_connection:open_channel(Conn2),
+    {ok, _Ch3} = amqp_connection:open_channel(Conn3),
 
-    2 = length(http_get("/connections", ?OK)),
-    1 = length(http_get("/connections", "user", "user", ?OK)),
-    http_get(ConnPath1, ?OK),
-    http_get(ConnPath2, ?OK),
-    http_get(ConnPath1, "user", "user", ?OK),
-    http_get(ConnPath2, "user", "user", ?NOT_AUTHORISED),
-    2 = length(http_get("/channels", ?OK)),
-    1 = length(http_get("/channels", "user", "user", ?OK)),
-    http_get(ChPath1, ?OK),
-    http_get(ChPath2, ?OK),
-    http_get(ChPath1, "user", "user", ?OK),
-    http_get(ChPath2, "user", "user", ?NOT_AUTHORISED),
-    amqp_connection:close(Conn1),
-    amqp_connection:close(Conn2),
+    AssertLength = fun (Path, User, Len) ->
+                           ?assertEqual(Len,
+                                        length(http_get(Path, User, User, ?OK)))
+                   end,
+    [begin
+         AssertLength(P, "user", 1),
+         AssertLength(P, "monitor", 3),
+         AssertLength(P, "guest", 3)
+     end || P <- ["/connections", "/channels"]],
+
+    AssertRead = fun(Path, UserStatus) ->
+                         http_get(Path, "user", "user", UserStatus),
+                         http_get(Path, "monitor", "monitor", ?OK),
+                         http_get(Path, ?OK)
+                 end,
+    AssertRead(UserConn, ?OK),
+    AssertRead(MonConn, ?NOT_AUTHORISED),
+    AssertRead(AdmConn, ?NOT_AUTHORISED),
+    AssertRead(UserCh, ?OK),
+    AssertRead(MonCh, ?NOT_AUTHORISED),
+    AssertRead(AdmCh, ?NOT_AUTHORISED),
+
+    AssertClose = fun(Path, User, Status) ->
+                          http_delete(Path, User, User, Status)
+                  end,
+    AssertClose(UserConn, "monitor", ?NOT_AUTHORISED),
+    AssertClose(MonConn, "user", ?NOT_AUTHORISED),
+    AssertClose(AdmConn, "guest", ?NO_CONTENT),
+    AssertClose(MonConn, "guest", ?NO_CONTENT),
+    AssertClose(UserConn, "user", ?NO_CONTENT),
+
     http_delete("/users/user", ?NO_CONTENT),
+    http_delete("/users/monitor", ?NO_CONTENT),
     http_get("/connections/foo", ?NOT_FOUND),
     http_get("/channels/foo", ?NOT_FOUND),
     ok.
@@ -880,8 +918,11 @@ http_upload_raw(Type, Path, Body, User, Pass, CodeExp) ->
     decode(CodeExp, Headers, ResBody).
 
 http_delete(Path, CodeExp) ->
+    http_delete(Path, "guest", "guest", CodeExp).
+
+http_delete(Path, User, Pass, CodeExp) ->
     {ok, {{_HTTP, CodeAct, _}, Headers, ResBody}} =
-        req(delete, Path, [auth_header()]),
+        req(delete, Path, [auth_header(User, Pass)]),
     assert_code(CodeExp, CodeAct, "DELETE", Path, ResBody),
     decode(CodeExp, Headers, ResBody).
 
@@ -910,9 +951,6 @@ cleanup({K, V}) when is_binary(K) ->
     {list_to_atom(binary_to_list(K)), cleanup(V)};
 cleanup(I) ->
     I.
-
-auth_header() ->
-    auth_header("guest", "guest").
 
 auth_header(Username, Password) ->
     {"Authorization",

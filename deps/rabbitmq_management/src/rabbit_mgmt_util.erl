@@ -392,7 +392,7 @@ filter_vhost(List, _ReqData, Context) ->
 
 filter_user(List, _ReqData,
             #context{user = #user{username = Username, tags = Tags}}) ->
-    case is_admin(Tags) of
+    case is_monitor(Tags) of
         true  -> List;
         false -> [I || I <- List, proplists:get_value(user, I) == Username]
     end.
