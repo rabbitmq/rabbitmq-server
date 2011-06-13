@@ -1,4 +1,4 @@
-REBAR=`which rebar || ./rebar`
+REBAR=`which rebar || echo ./rebar`
 PACKAGE=rh-exchange
 DIST_DIR=dist
 EBIN_DIR=ebin
