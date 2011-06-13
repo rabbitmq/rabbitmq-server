@@ -3,7 +3,7 @@
 -behaviour(gen_server).
 
 -export([start_link/1]).
--export([add/4, set_fallback/2, lookup/2]).
+-export([add/4, set_fallback/2, lookup/2, list_all/0]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3]).
 
@@ -32,6 +32,9 @@ lookup(Listener, Req) ->
         Err ->
             {lookup_failure, Err}
     end.
+
+list_all() ->
+    gen_server:call(?MODULE, list_all).
 
 %% Callback Methods
 
@@ -73,6 +76,13 @@ handle_call({list, Listener}, _From, undefined) ->
         Err ->
             {stop, Err, undefined}
     end;
+
+handle_call(list_all, _From, undefined) ->
+    {ok, Listeners} = application:get_env(listeners),
+    Res = [{Path, Desc, proplists:get_value(Name, Listeners)} ||
+                {{dispatch, Name}, {V, _}} <- application:get_all_env(),
+                {_, _, _, {Path, Desc}} <- V],
+    {reply, Res, undefined};
 
 handle_call(Req, _From, State) ->
     error_logger:format("Unexpected call to ~p: ~p~n", [?MODULE, Req]),
@@ -134,10 +144,6 @@ listing_fallback_handler(Listener) ->
     end.
 
 handler_listing(Path, ReqPath, Desc) ->
-    io_lib:format("<li><a href=\"~s\">~s</a></li>", [
-        rabbit_mochiweb_util:relativise(ReqPath, "/" ++ Path),
-        case Desc of
-            none -> Path;
-            _    -> Desc
-        end
-    ]).
+    io_lib:format(
+      "<li><a href=\"~s\">~s</a></li>",
+      [rabbit_mochiweb_util:relativise(ReqPath, "/" ++ Path), Desc]).
