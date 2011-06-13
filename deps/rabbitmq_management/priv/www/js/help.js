@@ -112,14 +112,24 @@ HELP = {
      </dl>',
 
     'user-tags':
-      'Comma-separated list of tags to apply to the user. Currently supported: \
+      'Comma-separated list of tags to apply to the user. Currently supported \
+       by the management plugin: \
       <dl> \
+        <dt>management-user</dt> \
+        <dd> \
+          User can access the management plugin \
+        </dd> \
+        <dt>monitor</dt> \
+        <dd> \
+          If set, user can see all connections and channels as well as \
+          node-related information. \
+        </dd> \
         <dt>administrator</dt> \
         <dd> \
           If set, user can manage users and vhosts, see all connections \
           and channels (not just their own), and see node-related \
           information. \
-       </dd> \
+        </dd> \
       </dl>',
 
     'foo': 'foo' // No comma.

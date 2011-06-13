@@ -84,8 +84,8 @@ is_authorized(ReqData, Context, Fun) ->
         [Username, Password] ->
             case rabbit_access_control:check_user_pass_login(Username,
                                                              Password) of
-                {ok, User} ->
-                    case Fun(User) of
+                {ok, User = #user{tags = Tags}} ->
+                    case is_mgmt_user(Tags) andalso Fun(User) of
                         true  -> {true, ReqData, Context#context{user = User}};
                         false -> Unauthorized
                     end;
@@ -424,9 +424,11 @@ columns(ReqData) ->
 want_column(_Col, all) -> true;
 want_column(Col, Cols) -> lists:any(fun([C|_]) -> C == Col end, Cols).
 
-is_admin(Tags)   -> lists:member(administrator, Tags).
-is_monitor(Tags) -> lists:member(administrator, Tags) orelse
-                        lists:member(monitor, Tags).
+is_admin(T)     -> intersects(T, [administrator]).
+is_monitor(T)   -> intersects(T, [administrator, monitor]).
+is_mgmt_user(T) -> intersects(T, [administrator, monitor, 'management-user']).
+
+intersects(A, B) -> lists:any(fun(I) -> lists:member(I, B) end, A).
 
 %% The distinction between list_visible_vhosts and list_login_vhosts
 %% is there to ensure that adminis / monitors can always learn of the
