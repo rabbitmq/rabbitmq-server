@@ -769,14 +769,8 @@ maybe_dead_letter_queue(Reason, State = #q{
     end.
 
 dead_letter_msg(Msg, Reason, State = #q{dead_letter_exchange = DLE}) ->
-    %% Should this be lookup_or_die? Do we really want to stop the
-    %% message from being discarded if the exchange is not there?
     Exchange = rabbit_exchange:lookup_or_die(DLE),
 
-    %% Should do something with the routing result here, but what?
-    %% Are we going to stop the message from being discarded if
-    %% unroutable? At the least we should write to the error log if
-    %% the routing fails.
     rabbit_exchange:publish(
       Exchange,
       rabbit_basic:delivery(false, false, none,
