@@ -21,7 +21,7 @@
 -export([exchange/1, user/1, internal_user/1, binding/1, url/2]).
 -export([pack_binding_props/2, unpack_binding_props/1, tokenise/1]).
 -export([to_amqp_table/1, listener/1, properties/1, basic_properties/1]).
--export([to_basic_properties/1]).
+-export([record/2, to_basic_properties/1]).
 -export([connection/1, addr/1, port/1]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
@@ -275,16 +275,19 @@ binding(#binding{source      = S,
        {fun amqp_table/1,                       [arguments]}]).
 
 basic_properties(Props = #'P_basic'{}) ->
+    Res = record(Props, record_info(fields, 'P_basic')),
+    format(Res, [{fun amqp_table/1, [headers]}]).
+
+record(Record, Fields) ->
     {Res, _Ix} = lists:foldl(fun (K, {L, Ix}) ->
-                                     V = element(Ix, Props),
+                                     V = element(Ix, Record),
                                      NewL = case V of
                                                 undefined -> L;
                                                 _         -> [{K, V}|L]
                                             end,
                                      {NewL, Ix + 1}
-                             end, {[], 2},
-                             record_info(fields, 'P_basic')),
-    format(Res, [{fun amqp_table/1, [headers]}]).
+                             end, {[], 2}, Fields),
+    Res.
 
 to_basic_properties({struct, P}) ->
     to_basic_properties(P);
