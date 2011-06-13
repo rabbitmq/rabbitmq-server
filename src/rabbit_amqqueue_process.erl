@@ -778,12 +778,11 @@ dead_letter_msg(Msg, Reason, State = #q{dead_letter_exchange = DLE}) ->
                             undefined)),
     ok.
 
-make_dead_letter_msg(Reason,
-                     Msg = #basic_message{
-                       content = Content = #content{
-                                   properties = Props = #'P_basic'{
-                                                  headers = Headers}}},
-                    State) ->
+make_dead_letter_msg(Reason, Msg = #basic_message{content = Content}, State) ->
+
+    Content1 = #content{
+      properties = Props = #'P_basic'{headers = Headers}} =
+        rabbit_binary_parser:ensure_content_decoded(Content),
 
     #resource{name = QName} = qname(State),
 
@@ -795,11 +794,11 @@ make_dead_letter_msg(Reason,
                    undefined -> DeathHeaders;
                    _         -> Headers ++ DeathHeaders
                end,
-    Content1 =
+    Content2 =
         rabbit_binary_generator:clear_encoded_content(
-          Content#content{properties = Props#'P_basic'{headers = Headers1}}),
+          Content1#content{properties = Props#'P_basic'{headers = Headers1}}),
 
-      Msg#basic_message{id = rabbit_guid:guid(), content = Content1}.
+    Msg#basic_message{id = rabbit_guid:guid(), content = Content2}.
 
 
 now_micros() -> timer:now_diff(now(), {0,0,0}).
