@@ -171,13 +171,7 @@
         var context = overview.contexts[i];
   %>
     <tr<%= alt_rows(i)%>>
-      <td>
-        <% if (context.description) { %>
-        <%= context.description %>
-        <% } else { %>
-        <i>unnamed</i>
-        <% } %>
-      </td>
+      <td><%= context.description %></td>
       <td><%= context.port %></td>
       <td><%= context.path %></td>
       <td class="c"><%= fmt_boolean(context.ssl || false) %></td>
