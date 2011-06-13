@@ -75,7 +75,7 @@ rabbit_mochiweb_contexts() ->
     Nodes = proplists:get_value(running_nodes, rabbit_mnesia:status()),
     rabbit_mgmt_util:sort_list(
       lists:append([contexts(Node) || Node <- Nodes]),
-      ["context", "port", "node"]).
+      ["description", "port", "node"]).
 
 contexts(Node) ->
     [{contexts, Contexts}] = rabbit_mgmt_external_stats:info(Node, [contexts]),
