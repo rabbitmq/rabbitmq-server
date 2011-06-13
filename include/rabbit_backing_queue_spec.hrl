@@ -28,6 +28,13 @@
 -type(async_callback() :: fun ((atom(), fun ((atom(), state()) -> state())) -> 'ok')).
 -type(sync_callback() :: fun ((atom(), fun ((atom(), state()) -> state())) -> 'ok' | 'error')).
 
+-type(msg_lookup_result() :: {rabbit_types:basic_message(), {any(), state()}}).
+
+-type(msg_lookup_fun() :: fun((any(), state()) -> msg_lookup_result())).
+
+-type(msg_lookup_callback() ::
+        fun((msg_lookup_fun(), {any(), state()}) -> {any(), state()})).
+
 -spec(start/1 :: ([rabbit_amqqueue:name()]) -> 'ok').
 -spec(stop/0 :: () -> 'ok').
 -spec(init/4 :: (rabbit_types:amqqueue(), attempt_recovery(),
@@ -45,12 +52,14 @@
                               rabbit_types:message_properties(), pid(), state())
                              -> {undefined, state()}).
 -spec(drain_confirmed/1 :: (state()) -> {[rabbit_guid:guid()], state()}).
--spec(dropwhile/2 ::
-        (fun ((rabbit_types:message_properties()) -> boolean()), state())
+-spec(dropwhile/3 ::
+        (fun ((rabbit_types:message_properties()) -> boolean()),
+             msg_lookup_callback(), state())
         -> state()).
 -spec(fetch/2 :: (true,  state()) -> {fetch_result(ack()), state()};
                  (false, state()) -> {fetch_result(undefined), state()}).
--spec(ack/2 :: ([ack()], state()) -> {[rabbit_guid:guid()], state()}).
+-spec(ack/3 :: ([ack()], msg_lookup_callback(), state()) ->
+                    {[rabbit_guid:guid()], state()}).
 -spec(tx_publish/5 :: (rabbit_types:txn(), rabbit_types:basic_message(),
                        rabbit_types:message_properties(), pid(), state()) ->
                            state()).

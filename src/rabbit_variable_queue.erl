@@ -688,9 +688,9 @@ internal_fetch(AckRequired, MsgStatus = #msg_status {
 
 ack(AckTags, Fun, State) ->
     {MsgIds, State1} = ack(fun msg_store_remove/3,
-                           fun (MsgStatus = #msg_status {}, State0) ->
+                           fun (MsgState, State0) ->
                                    {_, State2} = Fun(read_msg_callback(),
-                                                     {MsgStatus, State0}),
+                                                     {MsgState, State0}),
                                    State2
                            end,
                            AckTags, State),
