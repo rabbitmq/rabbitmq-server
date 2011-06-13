@@ -1,3 +1,4 @@
+REBAR=`which rebar || ./rebar`
 PACKAGE=rh-exchange
 DIST_DIR=dist
 EBIN_DIR=ebin
@@ -28,10 +29,10 @@ install: package
 	cp $(DIST_DIR)/$(PACKAGE).ez $(RABBITMQ_HOME)/plugins
 
 $(DEPS_DIR):
-	./rebar get-deps
+	@$(REBAR) get-deps
 
 $(DEPS_EZ):
 	cd $(DEPS_DIR); $(foreach DEP, $(DEPS), zip -r $(DEP).ez $(DEP);)
 
 compile: $(DEPS_DIR)
-	./rebar compile
+	@$(REBAR) compile
