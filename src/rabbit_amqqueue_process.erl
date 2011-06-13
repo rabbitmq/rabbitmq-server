@@ -48,7 +48,8 @@
             stats_timer,
             msg_id_to_channel,
             ttl,
-            ttl_timer_ref
+            ttl_timer_ref,
+            dead_letter_exchange
            }).
 
 -record(consumer, {tag, ack_required}).
@@ -98,20 +99,21 @@ init(Q) ->
     ?LOGDEBUG("Queue starting - ~p~n", [Q]),
     process_flag(trap_exit, true),
 
-    {ok, #q{q                   = Q#amqqueue{pid = self()},
-            exclusive_consumer  = none,
-            has_had_consumers   = false,
-            backing_queue       = backing_queue_module(Q),
-            backing_queue_state = undefined,
-            active_consumers    = queue:new(),
-            blocked_consumers   = queue:new(),
-            expires             = undefined,
-            sync_timer_ref      = undefined,
-            rate_timer_ref      = undefined,
-            expiry_timer_ref    = undefined,
-            ttl                 = undefined,
-            stats_timer         = rabbit_event:init_stats_timer(),
-            msg_id_to_channel   = dict:new()}, hibernate,
+    {ok, #q{q                    = Q#amqqueue{pid = self()},
+            exclusive_consumer   = none,
+            has_had_consumers    = false,
+            backing_queue        = backing_queue_module(Q),
+            backing_queue_state  = undefined,
+            active_consumers     = queue:new(),
+            blocked_consumers    = queue:new(),
+            expires              = undefined,
+            sync_timer_ref       = undefined,
+            rate_timer_ref       = undefined,
+            expiry_timer_ref     = undefined,
+            ttl                  = undefined,
+            dead_letter_exchange = undefined,
+            stats_timer          = rabbit_event:init_stats_timer(),
+            msg_id_to_channel    = dict:new()}, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
 terminate(shutdown = R,      State = #q{backing_queue = BQ}) ->
@@ -119,16 +121,18 @@ terminate(shutdown = R,      State = #q{backing_queue = BQ}) ->
 terminate({shutdown, _} = R, State = #q{backing_queue = BQ}) ->
     terminate_shutdown(fun (BQS) -> BQ:terminate(R, BQS) end, State);
 terminate(Reason,            State = #q{backing_queue = BQ}) ->
+    State1 = maybe_dead_letter_queue(queue_deleted, State),
     %% FIXME: How do we cancel active subscriptions?
     terminate_shutdown(fun (BQS) ->
+
                                rabbit_event:notify(
                                  queue_deleted, [{pid, self()}]),
                                BQS1 = BQ:delete_and_terminate(Reason, BQS),
                                %% don't care if the internal delete
                                %% doesn't return 'ok'.
-                               rabbit_amqqueue:internal_delete(qname(State)),
+                               rabbit_amqqueue:internal_delete(qname(State1)),
                                BQS1
-                       end, State).
+                       end, State1).
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
@@ -178,11 +182,18 @@ process_args(State = #q{q = #amqqueue{arguments = Arguments}}) ->
                             undefined    -> State1
                         end
                 end, State, [{<<"x-expires">>,     fun init_expires/2},
-                             {<<"x-message-ttl">>, fun init_ttl/2}]).
+                             {<<"x-message-ttl">>, fun init_ttl/2},
+                             {<<"x-dead-letter-exchange">>,
+                              fun init_dead_letter_exchange/2}]).
 
 init_expires(Expires, State) -> ensure_expiry_timer(State#q{expires = Expires}).
 
 init_ttl(TTL, State) -> drop_expired_messages(State#q{ttl = TTL}).
+
+init_dead_letter_exchange(DLE, State = #q{q = #amqqueue{
+                                            name = #resource{
+                                              virtual_host = VHostPath}}}) ->
+    State#q{dead_letter_exchange = rabbit_misc:r(VHostPath, exchange, DLE)}.
 
 terminate_shutdown(Fun, State) ->
     State1 = #q{backing_queue = BQ, backing_queue_state = BQS} =
@@ -716,6 +727,7 @@ drop_expired_messages(State = #q{backing_queue_state = BQS,
     Now = now_micros(),
     BQS1 = BQ:dropwhile(
              fun (#message_properties{expiry = Expiry}) -> Now > Expiry end,
+             dead_letter_callback_fun(expired, State),
              BQS),
     ensure_ttl_timer(State#q{backing_queue_state = BQS1}).
 
@@ -732,6 +744,69 @@ ensure_ttl_timer(State = #q{backing_queue       = BQ,
     end;
 ensure_ttl_timer(State) ->
     State.
+
+dead_letter_callback_fun(_Reason, #q{dead_letter_exchange = undefined}) ->
+    fun(_MsgFun, LookupState) -> LookupState end;
+dead_letter_callback_fun(Reason, State) ->
+    fun(MsgFun, LookupState) ->
+            {Msg, LookupState1} = MsgFun(LookupState),
+            dead_letter_msg(Msg, Reason, State),
+            LookupState1
+    end.
+
+maybe_dead_letter_queue(_Reason, State = #q{
+                                   dead_letter_exchange = undefined}) ->
+    State;
+maybe_dead_letter_queue(Reason, State = #q{
+                                  backing_queue_state  = BQS,
+                                  backing_queue        = BQ}) ->
+    case BQ:fetch(false, BQS) of
+        {empty, BQS1} ->
+            State#q{backing_queue_state = BQS1};
+        {{Msg, _IsDelivered, _AckTag, _Remaining}, BQS1} ->
+            dead_letter_msg(Msg, Reason, State),
+            maybe_dead_letter_queue(Reason, State#q{backing_queue_state = BQS1})
+    end.
+
+dead_letter_msg(Msg, Reason, State = #q{dead_letter_exchange = DLE}) ->
+    %% Should this be lookup_or_die? Do we really want to stop the
+    %% message from being discarded if the exchange is not there?
+    Exchange = rabbit_exchange:lookup_or_die(DLE),
+
+    %% Should do something with the routing result here, but what?
+    %% Are we going to stop the message from being discarded if
+    %% unroutable? At the least we should write to the error log if
+    %% the routing fails.
+    rabbit_exchange:publish(
+      Exchange,
+      rabbit_basic:delivery(false, false, none,
+                            make_dead_letter_msg(Reason, Msg, State),
+                            undefined)),
+    ok.
+
+make_dead_letter_msg(Reason,
+                     Msg = #basic_message{
+                       content = Content = #content{
+                                   properties = Props = #'P_basic'{
+                                                  headers = Headers}}},
+                    State) ->
+
+    #resource{name = QName} = qname(State),
+
+    DeathHeaders = [{<<"x-death-reason">>, longstr,
+                     list_to_binary(atom_to_list(Reason))},
+                    {<<"x-death-queue">>, longstr, QName}],
+
+    Headers1 = case Headers of
+                   undefined -> DeathHeaders;
+                   _         -> Headers ++ DeathHeaders
+               end,
+    Content1 =
+        rabbit_binary_generator:clear_encoded_content(
+          Content#content{properties = Props#'P_basic'{headers = Headers1}}),
+
+      Msg#basic_message{id = rabbit_guid:guid(), content = Content1}.
+
 
 now_micros() -> timer:now_diff(now(), {0,0,0}).
 
@@ -1024,10 +1099,11 @@ handle_call({delete, IfUnused, IfEmpty}, _From,
             {stop, normal, {ok, BQ:len(BQS)}, State}
     end;
 
-handle_call(purge, _From, State = #q{backing_queue = BQ,
-                                     backing_queue_state = BQS}) ->
+handle_call(purge, _From, State = #q{backing_queue = BQ}) ->
+    State1 = #q{backing_queue_state = BQS} =
+        maybe_dead_letter_queue(queue_purged, State),
     {Count, BQS1} = BQ:purge(BQS),
-    reply({ok, Count}, State#q{backing_queue_state = BQS1});
+    reply({ok, Count}, State1#q{backing_queue_state = BQS1});
 
 handle_call({requeue, AckTags, ChPid}, From, State) ->
     gen_server2:reply(From, ok),
@@ -1064,7 +1140,9 @@ handle_cast({ack, Txn, AckTags, ChPid},
                 case Txn of
                     none -> ChAckTags1 = subtract_acks(ChAckTags, AckTags),
                             NewC = C#cr{acktags = ChAckTags1},
-                            {_Guids, BQS1} = BQ:ack(AckTags, BQS),
+                            {_Guids, BQS1} = BQ:ack(AckTags,
+                                                    fun(_, BQS0) -> BQS0 end,
+                                                    BQS),
                             {NewC, State#q{backing_queue_state = BQS1}};
                     _    -> BQS1 = BQ:tx_ack(Txn, AckTags, BQS),
                             {C#cr{txn = Txn},
@@ -1085,7 +1163,9 @@ handle_cast({reject, AckTags, Requeue, ChPid},
             maybe_store_ch_record(C#cr{acktags = ChAckTags1}),
             noreply(case Requeue of
                         true  -> requeue_and_run(AckTags, State);
-                        false -> {_Guids, BQS1} = BQ:ack(AckTags, BQS),
+                        false -> Fun = dead_letter_callback_fun(
+                                         rejected, State),
+                                 {_Guids, BQS1} = BQ:ack(AckTags, Fun, BQS),
                                  State#q{backing_queue_state = BQS1}
                     end)
     end;

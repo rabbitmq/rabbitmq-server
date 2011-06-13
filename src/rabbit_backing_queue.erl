@@ -98,14 +98,14 @@ behaviour_info(callbacks) ->
 
      %% Drop messages from the head of the queue while the supplied
      %% predicate returns true.
-     {dropwhile, 2},
+     {dropwhile, 3},
 
      %% Produce the next message.
      {fetch, 2},
 
      %% Acktags supplied are for messages which can now be forgotten
      %% about. Must return 1 msg_id per Ack, in the same order as Acks.
-     {ack, 2},
+     {ack, 3},
 
      %% A publish, but in the context of a transaction.
      {tx_publish, 5},
