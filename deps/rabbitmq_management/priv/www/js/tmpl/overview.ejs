@@ -139,7 +139,9 @@
   <tr>
     <th>Protocol</th>
     <th>Port</th>
+<% if (nodes_interesting) { %>
     <th>Node</th>
+<% } %>
     <th>Host</th>
     <th>Bound to</th>
   </tr>
@@ -150,7 +152,9 @@
   <tr<%= alt_rows(i)%>>
     <td><%= listener.protocol %></td>
     <td><%= listener.port %></td>
+<% if (nodes_interesting) { %>
     <td><%= listener.node %></td>
+<% } %>
     <td><%= listener.host %></td>
     <td><%= listener.ip_address %></td>
   </tr>
@@ -163,7 +167,9 @@
     <th>Port</th>
     <th>Path</th>
     <th>SSL</th>
+<% if (nodes_interesting) { %>
     <th>Node</th>
+<% } %>
     <th>Bound to</th>
   </tr>
   <%
@@ -175,7 +181,9 @@
       <td><%= context.port %></td>
       <td><%= context.path %></td>
       <td class="c"><%= fmt_boolean(context.ssl || false) %></td>
+<% if (nodes_interesting) { %>
       <td><%= context.node %></td>
+<% } %>
       <td><%= (context.ip != undefined) ? context.ip : "0.0.0.0" %></td>
     </tr>
   <% } %>
