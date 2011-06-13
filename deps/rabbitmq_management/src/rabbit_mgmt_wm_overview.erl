@@ -37,13 +37,11 @@ to_json(ReqData, Context = #context{user = User = #user{is_admin = IsAdmin}}) ->
     Overview =
         case IsAdmin of
             true ->
-                Listeners = [rabbit_mgmt_format:listener(L)
-                             || L <- rabbit_networking:active_listeners()],
                 Overview0 ++
                     rabbit_mgmt_db:get_overview() ++
                     [{node,               node()},
                      {statistics_db_node, stats_db_node()},
-                     {listeners,          Listeners},
+                     {listeners,          listeners()},
                      {contexts,           rabbit_mochiweb_contexts()}];
             _ ->
                 Overview0 ++
@@ -67,9 +65,17 @@ version() ->
             A =:= rabbitmq_management],
     list_to_binary(Vsn).
 
+listeners() ->
+    rabbit_mgmt_util:sort_list(
+      [rabbit_mgmt_format:listener(L)
+       || L <- rabbit_networking:active_listeners()],
+      ["protocol", "port", "node"] ).
+
 rabbit_mochiweb_contexts() ->
     Nodes = proplists:get_value(running_nodes, rabbit_mnesia:status()),
-    lists:append([contexts(Node) || Node <- Nodes]).
+    rabbit_mgmt_util:sort_list(
+      lists:append([contexts(Node) || Node <- Nodes]),
+      ["context", "port", "node"]).
 
 contexts(Node) ->
     [{contexts, Contexts}] = rabbit_mgmt_external_stats:info(Node, [contexts]),

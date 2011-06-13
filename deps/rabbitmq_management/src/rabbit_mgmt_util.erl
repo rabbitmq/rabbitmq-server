@@ -25,7 +25,7 @@
 -export([props_to_method/2, props_to_method/4]).
 -export([all_or_one_vhost/2, http_to_amqp/5, reply/3, filter_vhost/3]).
 -export([filter_user/3, with_decode/5, decode/1, redirect/2, args/1]).
--export([reply_list/3, reply_list/4, sort_list/4, destination_type/1]).
+-export([reply_list/3, reply_list/4, sort_list/2, destination_type/1]).
 -export([post_respond/1, columns/1, want_column/2]).
 
 -include("rabbit_mgmt.hrl").
@@ -124,6 +124,9 @@ reply_list(Facts, DefaultSorts, ReqData, Context) ->
             wrq:get_qs_value("sort", ReqData),
             wrq:get_qs_value("sort_reverse", ReqData)),
           ReqData, Context).
+
+sort_list(Facts, Sorts) ->
+    sort_list(Facts, Sorts, undefined, false).
 
 sort_list(Facts, DefaultSorts, Sort, Reverse) ->
     SortList = case Sort of
