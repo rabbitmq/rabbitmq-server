@@ -27,7 +27,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3]).
 
--export([info/1]).
+-export([info/1, info/2]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
@@ -36,7 +36,7 @@
                sockets_used, sockets_total, mem_used, mem_limit, mem_alarm,
                proc_used, proc_total, statistics_level,
                erlang_version, uptime, run_queue, processors, exchange_types,
-               auth_mechanisms, applications]).
+               auth_mechanisms, applications, contexts]).
 
 %%--------------------------------------------------------------------
 
@@ -48,8 +48,11 @@ start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
 info(Node) ->
+    info(Node, ?KEYS).
+
+info(Node, Keys) ->
     try
-        gen_server2:call({?MODULE, Node}, {info, ?KEYS}, infinity)
+        gen_server2:call({?MODULE, Node}, {info, Keys}, infinity)
     catch
         exit:{noproc, _} -> [{external_stats_not_running, true}]
     end.
@@ -166,7 +169,9 @@ i(applications, _State) ->
     [format_application(A) ||
         A <- lists:keysort(1, application:which_applications())];
 i(mem_alarm, _State) -> lists:member({{vm_memory_high_watermark, node()}, []},
-                                     alarm_handler:get_alarms()).
+                                     alarm_handler:get_alarms());
+i(contexts, _State) ->
+    [format_context(C) || C <- rabbit_mochiweb_registry:list_all()].
 
 list_registry_plugins(Type) ->
     list_registry_plugins(Type, fun(_) -> true end).
@@ -183,6 +188,12 @@ format_application({Application, Description, Version}) ->
      {description, list_to_binary(Description)},
      {version, list_to_binary(Version)}].
 
+format_context({Path, Description, Rest}) ->
+    DescPart = case Description of
+                   none -> [];
+                   _    -> [{description, list_to_binary(Description)}]
+               end,
+    DescPart ++ [{path, list_to_binary("/" ++ Path)}] ++ Rest.
 
 %%--------------------------------------------------------------------
 
