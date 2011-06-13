@@ -1,6 +1,6 @@
 diff -r 16a4000624a7 stomp/connect.py
 --- a/stomp/connect.py	Sun May 02 18:15:34 2010 +0100
-+++ b/stomp/connect.py	Thu May 19 15:13:25 2011 +0100
++++ b/stomp/connect.py	Wed Jun 08 13:20:12 2011 +0100
 @@ -88,7 +88,10 @@
                   ssl_key_file = None,
                   ssl_cert_file = None,
@@ -46,7 +46,26 @@ diff -r 16a4000624a7 stomp/connect.py
          self.__socket = None
          self.__socket_semaphore = threading.BoundedSemaphore(1)
          self.__current_host_and_port = None
-@@ -449,6 +471,9 @@
+@@ -383,6 +405,10 @@
+         """
+         self.__send_frame_helper('DISCONNECT', '', utils.merge_headers([self.__connect_headers, headers, keyword_headers]), [ ])
+         self.__running = False
++        self.close_socket()
++        self.__current_host_and_port = None
++        
++    def close_socket(self):
+         if self.__socket is not None:
+             if self.__ssl:
+                 #
+@@ -403,7 +429,6 @@
+         #
+         if self.__socket is not None:
+             self.__socket.close()
+-        self.__current_host_and_port = None
+ 
+     def __convert_dict(self, payload):
+         """
+@@ -449,6 +474,9 @@
                  raise KeyError("Command %s requires header %r" % (command, required_header_key))
          self.__send_frame(command, headers, payload)
  
@@ -56,7 +75,7 @@ diff -r 16a4000624a7 stomp/connect.py
      def __send_frame(self, command, headers={}, payload=''):
          """
          Send a STOMP frame.
-@@ -680,4 +705,4 @@
+@@ -680,4 +708,4 @@
                      sleep_exp += 1
  
          if not self.__socket:
