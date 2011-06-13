@@ -5,47 +5,47 @@ import time
 
 class TestLifecycle(base.BaseTest):
 
-    def xtest_unsubscribe_exchange_destination(self):
+    def test_unsubscribe_exchange_destination(self):
         ''' Test UNSUBSCRIBE command with exchange'''
         d = "/exchange/amq.fanout"
         self.unsub_test(d, self.sub_and_send(d))
 
-    def xtest_unsubscribe_exchange_destination_with_receipt(self):
+    def test_unsubscribe_exchange_destination_with_receipt(self):
         ''' Test receipted UNSUBSCRIBE command with exchange'''
         d = "/exchange/amq.fanout"
         self.unsub_test(d, self.sub_and_send(d, receipt="unsub.rct"), numRcts=1)
 
-    def xtest_unsubscribe_queue_destination(self):
+    def test_unsubscribe_queue_destination(self):
         ''' Test UNSUBSCRIBE command with queue'''
         d = "/queue/unsub01"
         self.unsub_test(d, self.sub_and_send(d))
 
-    def xtest_unsubscribe_queue_destination_with_receipt(self):
+    def test_unsubscribe_queue_destination_with_receipt(self):
         ''' Test receipted UNSUBSCRIBE command with queue'''
         d = "/queue/unsub02"
         self.unsub_test(d, self.sub_and_send(d, receipt="unsub.rct"), numRcts=1)
 
-    def xtest_unsubscribe_exchange_id(self):
+    def test_unsubscribe_exchange_id(self):
         ''' Test UNSUBSCRIBE command with exchange by id'''
         d = "/exchange/amq.fanout"
         self.unsub_test(d, self.sub_and_send(d, subid="exchid"))
 
-    def xtest_unsubscribe_exchange_id_with_receipt(self):
+    def test_unsubscribe_exchange_id_with_receipt(self):
         ''' Test receipted UNSUBSCRIBE command with exchange by id'''
         d = "/exchange/amq.fanout"
         self.unsub_test(d, self.sub_and_send(d, subid="exchid", receipt="unsub.rct"), numRcts=1)
 
-    def xtest_unsubscribe_queue_id(self):
+    def test_unsubscribe_queue_id(self):
         ''' Test UNSUBSCRIBE command with queue by id'''
         d = "/queue/unsub03"
         self.unsub_test(d, self.sub_and_send(d, subid="queid"))
 
-    def xtest_unsubscribe_queue_id_with_receipt(self):
+    def test_unsubscribe_queue_id_with_receipt(self):
         ''' Test receipted UNSUBSCRIBE command with queue by id'''
         d = "/queue/unsub04"
         self.unsub_test(d, self.sub_and_send(d, subid="queid", receipt="unsub.rct"), numRcts=1)
 
-    def xtest_connect_version_1_1(self):
+    def test_connect_version_1_1(self):
         ''' Test CONNECT with version 1.1'''
         self.conn.disconnect()
         new_conn = self.create_connection(version="1.1,1.0")
@@ -54,7 +54,7 @@ class TestLifecycle(base.BaseTest):
         finally:
             new_conn.disconnect()
 
-    def xtest_heartbeat_disconnects_client(self):
+    def test_heartbeat_disconnects_client(self):
         ''' Test heart-beat disconnection'''
         self.conn.disconnect()
         new_conn = self.create_connection(heartbeat="1500,0")
@@ -68,33 +68,33 @@ class TestLifecycle(base.BaseTest):
             if new_conn.is_connected():
                 new_conn.disconnect()
 
-    def xtest_unsupported_version(self):
+    def test_unsupported_version(self):
         ''' Test unsupported version on CONNECT command'''
         self.bad_connect(stomp.Connection(user="guest",
                                           passcode="guest",
                                           version="100.1"),
                          "Supported versions are 1.0,1.1\n")
 
-    def xtest_bad_username(self):
+    def test_bad_username(self):
         ''' Test bad username'''
         self.bad_connect(stomp.Connection(user="gust",
                                           passcode="guest"),
                          "Authentication failure\n")
 
-    def xtest_bad_password(self):
+    def test_bad_password(self):
         ''' Test bad password'''
         self.bad_connect(stomp.Connection(user="guest",
                                           passcode="gust"),
                          "Authentication failure\n")
 
-    def xtest_bad_vhost(self):
+    def test_bad_vhost(self):
         ''' Test bad virtual host'''
         self.bad_connect(stomp.Connection(user="guest",
                                           passcode="guest",
                                           virtual_host="//"),
                          "Authentication failure\n")
 
-    def xtest_default_user(self):
+    def test_default_user(self):
         ''' Test default user connection '''
         self.conn.disconnect()
         new_conn = stomp.Connection(user="", passcode="")
@@ -135,12 +135,12 @@ class TestLifecycle(base.BaseTest):
             if new_conn.is_connected():
                 new_conn.disconnect()
 
-    def xtest_disconnect(self):
+    def test_disconnect(self):
         ''' Test DISCONNECT command'''
         self.conn.disconnect()
         self.assertFalse(self.conn.is_connected())
 
-    def xtest_disconnect_with_receipt(self):
+    def test_disconnect_with_receipt(self):
         ''' Test the DISCONNECT command with receipts '''
         time.sleep(3)
         self.listener.reset(1)
