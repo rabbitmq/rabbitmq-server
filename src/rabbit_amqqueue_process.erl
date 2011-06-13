@@ -121,7 +121,11 @@ terminate(shutdown = R,      State = #q{backing_queue = BQ}) ->
 terminate({shutdown, _} = R, State = #q{backing_queue = BQ}) ->
     terminate_shutdown(fun (BQS) -> BQ:terminate(R, BQS) end, State);
 terminate(Reason,            State = #q{backing_queue = BQ}) ->
-    State1 = maybe_dead_letter_queue(queue_deleted, State),
+    DeathReason = case get(death_reason) of
+                      undefined -> queue_deleted;
+                      DR        -> DR
+                  end,
+    State1 = maybe_dead_letter_queue(DeathReason, State),
     %% FIXME: How do we cancel active subscriptions?
     terminate_shutdown(fun (BQS) ->
 
@@ -1232,6 +1236,7 @@ handle_cast({set_maximum_since_use, Age}, State) ->
 handle_cast(maybe_expire, State) ->
     case is_unused(State) of
         true  -> ?LOGDEBUG("Queue lease expired for ~p~n", [State#q.q]),
+                 put(death_reason, queue_expired),
                  {stop, normal, State};
         false -> noreply(ensure_expiry_timer(State))
     end;
