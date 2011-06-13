@@ -39,7 +39,8 @@ table.list tr.total th { border: none; border-top: 1px solid #bbb; text-align: r
 
 div.section table.list, div.section-hidden table.list { margin-bottom: 0; }
 
-sub { display: block; color: #888; }
+sub { display: block; font-size: 0.8em; color: #888; }
+small { font-size: 0.8em; color: #888; }
 .unknown { color: #888; }
 
 table.facts { float: left; margin-right: 50px; }

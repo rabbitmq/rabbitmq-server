@@ -321,7 +321,7 @@ function fmt_node_host(node_host) {
     var both = node_host.split('@');
     var node = both.slice(0, 1);
     var host = both.slice(1);
-    return host + '<sub>' + node_host + '</sub>';
+    return host + ' <small>(' + node_host + ')</small>';
 }
 
 function alt_rows(i) {
