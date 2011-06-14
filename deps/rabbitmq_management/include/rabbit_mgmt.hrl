@@ -19,3 +19,5 @@
 %%   Contributor(s): ______________________________________.
 %%
 -record(context, {user}).
+
+-define(AUTH_REALM, "Basic realm=\"RabbitMQ Management\"").

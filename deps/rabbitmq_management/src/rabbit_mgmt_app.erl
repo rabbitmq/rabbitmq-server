@@ -17,6 +17,7 @@
 -behaviour(application).
 -export([start/2, stop/1]).
 
+-include("rabbit_mgmt.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
 %% Dummy supervisor - see Ulf Wiger's comment at
@@ -33,12 +34,9 @@
 -behaviour(supervisor).
 -export([init/1]).
 
--define(API_PREFIX, "api").
--define(UI_PREFIX, "mgmt").
--define(CLI_PREFIX, "cli").
--define(API_CONTEXT, rabbit_mgmt_api).
--define(UI_CONTEXT, rabbit_mgmt).
--define(CLI_CONTEXT, rabbit_mgmt_cli).
+-define(CONTEXT, rabbit_mgmt).
+-define(STATIC_PATH, "priv/www").
+
 -ifdef(trace).
 -define(SETUP_WM_TRACE, true).
 -else.
@@ -56,35 +54,60 @@
                     {enables,     recovery}]}).
 
 start(_Type, _StartArgs) ->
-    log_startup(),
     setup_wm_logging(),
-    register_contexts(),
+    register_context(),
     case ?SETUP_WM_TRACE of
         true -> setup_wm_trace_app();
         _    -> ok
     end,
+    log_startup(),
     supervisor:start_link({local,?MODULE},?MODULE,[]).
 
 stop(_State) ->
     ok.
 
-register_contexts() ->
+register_context() ->
+    rabbit_mochiweb:register_context_handler(
+      ?CONTEXT, "", make_loop(), "RabbitMQ Management").
+
+make_loop() ->
     Dispatch = rabbit_mgmt_dispatcher:dispatcher(),
-    rabbit_mochiweb:register_authenticated_static_context(
-      ?UI_CONTEXT, ?UI_PREFIX, ?MODULE, "priv/www", "Management: Web UI",
-      fun (U, P) ->
-              case rabbit_access_control:check_user_pass_login(U, P) of
-                  {ok, _} -> true;
-                  _       -> false
-              end
-      end),
-    rabbit_mochiweb:register_context_handler(?API_CONTEXT, ?API_PREFIX,
-                                             rabbit_webmachine:makeloop(
-                                               Dispatch),
-                                             "Management: HTTP API"),
-    rabbit_mochiweb:register_static_context(?CLI_CONTEXT, ?CLI_PREFIX, ?MODULE,
-                                            "priv/www-cli",
-                                            "Management: Command Line Tool").
+    WMLoop = rabbit_webmachine:makeloop(Dispatch),
+    {file, Here} = code:is_loaded(?MODULE),
+    ModuleRoot = filename:dirname(filename:dirname(Here)),
+    LocalPath = filename:join(ModuleRoot, ?STATIC_PATH),
+    fun(PL, Req) ->
+            Unauthorized = {401, [{"WWW-Authenticate", ?AUTH_REALM}], ""},
+            Auth = Req:get_header_value("authorization"),
+            case rabbit_mochiweb_util:parse_auth_header(Auth) of
+                [Username, Password] ->
+                    case rabbit_access_control:check_user_pass_login(
+                           Username, Password) of
+                        {ok, _} -> respond(Req, LocalPath, PL, WMLoop);
+                        _       -> Req:respond(Unauthorized)
+                    end;
+                _ ->
+                    Req:respond(Unauthorized)
+            end
+
+    end.
+
+respond(Req, LocalPath, PL = {Prefix, _}, WMLoop) ->
+    %% To get here we know Prefix matches the beginning of the path
+    RawPath = Req:get(raw_path),
+    Path = case Prefix of
+               "" -> RawPath;
+               _  -> string:substr(RawPath, string:len(Prefix) + 2)
+           end,
+    case Path of
+        "/api/" ++ Rest when length(Rest) > 0 ->
+            WMLoop(PL, Req);
+        "/mgmt/" ->
+            Req:respond({301, [{"Location", Prefix ++ "/"}], ""});
+        "/" ++ Stripped ->
+            Req:serve_file(Stripped, LocalPath)
+    end.
+
 setup_wm_logging() ->
     {ok, LogDir} = application:get_env(rabbitmq_management, http_log_dir),
     case LogDir of
@@ -107,19 +130,14 @@ setup_wm_trace_app() ->
     rabbit_mochiweb:register_context_handler(rabbit_mgmt_trace,
                                              "wmtrace", Loop,
                                              "Webmachine tracer").
+
 log_startup() ->
-    {ok, Hostname} = inet:gethostname(),
-    %% This assumes UI and API are assigned to the same listener;
-    %% which is fair since things will break if they are not.
-    URLPrefix = "http://" ++ Hostname ++ ":" ++ integer_to_list(get_port()),
     rabbit_log:info(
-      "Management plugin started.~n"
-      ++ "HTTP API:       ~s/~s/~n"
-      ++ "Management UI:  ~s/~s/~n",
-      [URLPrefix, ?API_PREFIX, URLPrefix, ?UI_PREFIX]).
+      "Management plugin started. Port: ~w, path: ~s~n",
+      [get_port(), rabbit_mochiweb:context_path(?CONTEXT, "/")]).
 
 get_port() ->
-    case rabbit_mochiweb:context_listener(?UI_CONTEXT) of
+    case rabbit_mochiweb:context_listener(?CONTEXT) of
         undefined ->
             exit(rabbit_mochiweb_listener_not_configured);
         {_Instance, Options} ->
