@@ -99,11 +99,14 @@ respond(Req, LocalPath, PL = {Prefix, _}, WMLoop) ->
                "" -> RawPath;
                _  -> string:substr(RawPath, string:len(Prefix) + 2)
            end,
+    Redirect = {301, [{"Location", Prefix ++ "/"}], ""},
     case Path of
         "/api/" ++ Rest when length(Rest) > 0 ->
             WMLoop(PL, Req);
+        "" ->
+            Req:respond(Redirect);
         "/mgmt/" ->
-            Req:respond({301, [{"Location", Prefix ++ "/"}], ""});
+            Req:respond(Redirect);
         "/" ++ Stripped ->
             Req:serve_file(Stripped, LocalPath)
     end.
