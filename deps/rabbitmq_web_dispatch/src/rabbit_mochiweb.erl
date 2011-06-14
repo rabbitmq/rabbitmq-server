@@ -1,7 +1,6 @@
 -module(rabbit_mochiweb).
 
 -export([register_context_handler/4, register_static_context/5]).
--export([register_authenticated_static_context/6]).
 -export([context_listener/1, context_path/2]).
 
 -define(APP, rabbitmq_mochiweb).
@@ -49,7 +48,8 @@ register_context_handler(Context, Prefix0, Handler, LinkText) ->
       Context,
       fun(Req) ->
               "/" ++ Path = Req:get(raw_path),
-              (Path == Prefix) orelse (string:str(Path, Prefix ++ "/") == 1)
+              (Prefix == "") orelse (Path == Prefix)
+                  orelse (string:str(Path, Prefix ++ "/") == 1)
       end,
       fun (Req) -> Handler({Prefix, Listener}, Req) end,
       {Prefix, LinkText}),
@@ -105,29 +105,3 @@ static_context_handler(Prefix, LocalPath) ->
                 "/" ++ P  -> Req:serve_file(P, LocalPath)
             end
     end.
-
-%% Register a fully static but HTTP-authenticated context to
-%% serve content from a module-relative directory, with link to
-%% display in the global context.
-register_authenticated_static_context(Context, Prefix0, Module, FSPath,
-                                      LinkDesc, AuthFun) ->
-    Prefix = context_path(Context, Prefix0),
-    RawHandler = static_context_handler(Prefix, Module, FSPath),
-    Unauthorized = {401, [{"WWW-Authenticate",
-                           "Basic realm=\"" ++ LinkDesc ++ "\""}], ""},
-    Handler =
-        fun (Req) ->
-                case rabbit_mochiweb_util:parse_auth_header(
-                       Req:get_header_value("authorization")) of
-                    [Username, Password] ->
-                        case AuthFun(Username, Password) of
-                            true -> RawHandler(Req);
-                            _    -> Req:respond(Unauthorized)
-                        end;
-                    _ ->
-                        Req:respond(Unauthorized)
-                end
-        end,
-    register_handler(Context, static_context_selector(Prefix), Handler,
-                     {Prefix, LinkDesc}),
-    {ok, Prefix}.
