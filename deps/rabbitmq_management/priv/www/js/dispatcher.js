@@ -12,71 +12,71 @@ dispatcher_add(function(sammy) {
             render(reqs, 'overview', '#/');
         });
     sammy.get('#/nodes/:name', function() {
-            var name = esc(sammy.params['name']);
+            var name = esc(this.params['name']);
             render({'node': '/nodes/' + name},
                    'node', '');
         });
 
     path('#/connections', {'connections': '/connections'}, 'connections');
     sammy.get('#/connections/:name', function() {
-            var name = esc(sammy.params['name']);
+            var name = esc(this.params['name']);
             render({'connection': '/connections/' + name,
                     'channels': '/connections/' + name + '/channels'},
                 'connection', '#/connections');
         });
     sammy.del('#/connections', function() {
-            if (sync_delete(sammy, '/connections/:name'))
+            if (sync_delete(this, '/connections/:name'))
                 go_to('#/connections');
             return false;
         });
 
     path('#/channels', {'channels': '/channels'}, 'channels');
     sammy.get('#/channels/:name', function() {
-            render({'channel': '/channels/' + esc(sammy.params['name'])}, 'channel',
+            render({'channel': '/channels/' + esc(this.params['name'])}, 'channel',
                    '#/channels');
         });
 
     path('#/exchanges', {'exchanges': '/exchanges', 'vhosts': '/vhosts'}, 'exchanges');
     sammy.get('#/exchanges/:vhost/:name', function() {
-            var path = '/exchanges/' + esc(sammy.params['vhost']) + '/' + esc(sammy.params['name']);
+            var path = '/exchanges/' + esc(this.params['vhost']) + '/' + esc(this.params['name']);
             render({'exchange': path,
                     'bindings_source': path + '/bindings/source',
                     'bindings_destination': path + '/bindings/destination'},
                 'exchange', '#/exchanges');
         });
     sammy.put('#/exchanges', function() {
-            if (sync_put(sammy, '/exchanges/:vhost/:name'))
+            if (sync_put(this, '/exchanges/:vhost/:name'))
                 update();
             return false;
         });
     sammy.del('#/exchanges', function() {
-            if (sync_delete(sammy, '/exchanges/:vhost/:name'))
+            if (sync_delete(this, '/exchanges/:vhost/:name'))
                 go_to('#/exchanges');
             return false;
         });
     sammy.post('#/exchanges/publish', function() {
-            publish_msg(sammy.params);
+            publish_msg(this.params);
             return false;
         });
 
     path('#/queues', {'queues': '/queues', 'vhosts': '/vhosts'}, 'queues');
     sammy.get('#/queues/:vhost/:name', function() {
-            var path = '/queues/' + esc(sammy.params['vhost']) + '/' + esc(sammy.params['name']);
+            var path = '/queues/' + esc(this.params['vhost']) + '/' + esc(this.params['name']);
             render({'queue': path,
                     'bindings': path + '/bindings'}, 'queue', '#/queues');
         });
     sammy.put('#/queues', function() {
-            if (sync_put(sammy, '/queues/:vhost/:name'))
+            if (sync_put(this, '/queues/:vhost/:name'))
                 update();
             return false;
         });
     sammy.del('#/queues', function() {
-            if (sammy.params['mode'] == 'delete') {
-                if (sync_delete(sammy, '/queues/:vhost/:name'))
+            if (this.params['mode'] == 'delete') {
+                if (sync_delete(this, '/queues/:vhost/:name'))
                     go_to('#/queues');
             }
-            else if (sammy.params['mode'] == 'purge') {
-                if (sync_delete(sammy, '/queues/:vhost/:name/contents')) {
+            else if (this.params['mode'] == 'purge') {
+                if (sync_delete(this, '/queues/:vhost/:name/contents')) {
                     show_popup('info', "Queue purged");
                     update_partial();
                 }
@@ -84,36 +84,36 @@ dispatcher_add(function(sammy) {
             return false;
         });
     sammy.post('#/queues/get', function() {
-            get_msgs(sammy.params);
+            get_msgs(this.params);
             return false;
         });
     sammy.post('#/bindings', function() {
-            if (sync_post(sammy, '/bindings/:vhost/e/:source/:destination_type/:destination'))
+            if (sync_post(this, '/bindings/:vhost/e/:source/:destination_type/:destination'))
                 update();
             return false;
         });
     sammy.del('#/bindings', function() {
-            if (sync_delete(sammy, '/bindings/:vhost/e/:source/:destination_type/:destination/:properties_key'))
+            if (sync_delete(this, '/bindings/:vhost/e/:source/:destination_type/:destination/:properties_key'))
                 update();
             return false;
         });
 
     path('#/vhosts', {'vhosts': '/vhosts', 'permissions': '/permissions'}, 'vhosts');
     sammy.get('#/vhosts/:id', function() {
-            render({'vhost': '/vhosts/' + esc(sammy.params['id']),
-                    'permissions': '/vhosts/' + esc(sammy.params['id']) + '/permissions',
+            render({'vhost': '/vhosts/' + esc(this.params['id']),
+                    'permissions': '/vhosts/' + esc(this.params['id']) + '/permissions',
                     'users': '/users/'},
                 'vhost', '#/vhosts');
         });
     sammy.put('#/vhosts', function() {
-            if (sync_put(sammy, '/vhosts/:name')) {
+            if (sync_put(this, '/vhosts/:name')) {
                 update_vhosts();
                 update();
             }
             return false;
         });
     sammy.del('#/vhosts', function() {
-            if (sync_delete(sammy, '/vhosts/:name')) {
+            if (sync_delete(this, '/vhosts/:name')) {
                 update_vhosts();
                 go_to('#/vhosts');
             }
@@ -122,29 +122,29 @@ dispatcher_add(function(sammy) {
 
     path('#/users', {'users': '/users', 'permissions': '/permissions'}, 'users');
     sammy.get('#/users/:id', function() {
-            render({'user': '/users/' + esc(sammy.params['id']),
-                    'permissions': '/users/' + esc(sammy.params['id']) + '/permissions',
+            render({'user': '/users/' + esc(this.params['id']),
+                    'permissions': '/users/' + esc(this.params['id']) + '/permissions',
                     'vhosts': '/vhosts/'}, 'user',
                    '#/users');
         });
     sammy.put('#/users', function() {
-            if (sync_put(sammy, '/users/:username'))
+            if (sync_put(this, '/users/:username'))
                 update();
             return false;
         });
     sammy.del('#/users', function() {
-            if (sync_delete(sammy, '/users/:username'))
+            if (sync_delete(this, '/users/:username'))
                 go_to('#/users');
             return false;
         });
 
     sammy.put('#/permissions', function() {
-            if (sync_put(sammy, '/permissions/:vhost/:username'))
+            if (sync_put(this, '/permissions/:vhost/:username'))
                 update();
             return false;
         });
     sammy.del('#/permissions', function() {
-            if (sync_delete(sammy, '/permissions/:vhost/:username'))
+            if (sync_delete(this, '/permissions/:vhost/:username'))
                 update();
             return false;
         });
