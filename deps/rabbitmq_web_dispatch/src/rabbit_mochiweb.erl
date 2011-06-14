@@ -101,6 +101,6 @@ serve_file(Req, Path, LocalPath) ->
         Method when Method =:= 'GET'; Method =:= 'HEAD' ->
             Req:serve_file(Path, LocalPath);
         _ ->
-            Req:respond({400, [],
+            Req:respond({405, [{"Allow", "GET, HEAD"}],
                          "Only GET or HEAD supported for static content"})
     end.
