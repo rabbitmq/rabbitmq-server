@@ -61,12 +61,21 @@ handle_call({lookup, VHost, Name}, _From, State = #state{table = Table}) ->
 
 handle_call({create, VHost, Name, Trace}, _From,
             State = #state{table = Table}) ->
+    Already = vhost_tracing(VHost, Table),
     true = ets:insert(Table, {{VHost, Name}, pset(vhost, VHost,
                                                   pset(name, Name, Trace))}),
+    case Already of
+        true  -> ok;
+        false -> rabbit_trace:start(VHost)
+    end,
     {reply, ok, State};
 
 handle_call({stop, VHost, Name}, _From, State = #state{table = Table}) ->
     true = ets:delete(Table, {VHost, Name}),
+    case vhost_tracing(VHost, Table) of
+        true  -> ok;
+        false -> rabbit_trace:stop(VHost)
+    end,
     {reply, ok, State};
 
 handle_call(_Req, _From, State) ->
@@ -85,3 +94,9 @@ code_change(_, State, _) -> {ok, State}.
 %%--------------------------------------------------------------------
 
 pset(Key, Value, List) -> [{Key, Value} | proplists:delete(Key, List)].
+
+vhost_tracing(VHost, Table) ->
+    case [true || {{V, _}, _} <- ets:tab2list(Table), V =:= VHost] of
+        [] -> false;
+        _  -> true
+    end.
