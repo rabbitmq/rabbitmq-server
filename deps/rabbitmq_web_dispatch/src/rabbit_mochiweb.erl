@@ -45,12 +45,7 @@ register_context_handler(Context, Prefix0, Handler, LinkText) ->
     Prefix = context_path(Context, Prefix0),
     Listener = context_listener(Context),
     register_handler(
-      Context,
-      fun(Req) ->
-              "/" ++ Path = Req:get(raw_path),
-              (Prefix == "") orelse (Path == Prefix)
-                  orelse (string:str(Path, Prefix ++ "/") == 1)
-      end,
+      Context, context_selector(Prefix),
       fun (Req) -> Handler({Prefix, Listener}, Req) end,
       {Prefix, LinkText}),
     {ok, Prefix}.
@@ -61,23 +56,20 @@ register_context_handler(Context, Prefix0, Handler, LinkText) ->
 register_static_context(Context, Prefix0, Module, FSPath, LinkText) ->
     Prefix = context_path(Context, Prefix0),
     register_handler(Context,
-                     static_context_selector(Prefix),
+                     context_selector(Prefix),
                      static_context_handler(Prefix, Module, FSPath),
                      {Prefix, LinkText}),
     {ok, Prefix}.
 
-%% Produces a selector for use with register_handler that
-%% responds to GET and HEAD HTTP methods for resources within the
-%% given fixed context path.
-static_context_selector(Prefix) ->
-    fun(Req) ->
-            case Req:get(method) of
-                Method when Method =:= 'GET'; Method =:= 'HEAD' ->
-                    "/" ++ Path = Req:get(raw_path),
-                    (Prefix == Path) or (string:str(Path, Prefix ++ "/") == 1);
-                _ ->
-                    false
-            end
+context_selector(Prefix) ->
+    Prefix1 = "/" ++ Prefix,
+    case Prefix == "" of
+        true  -> fun(_Req) -> true end;
+        false -> fun(Req) ->
+                         Path = Req:get(raw_path),
+                         (Path == Prefix1)
+                             orelse (string:str(Path, Prefix1 ++ "/") == 1)
+                 end
     end.
 
 %% Produces a handler for use with register_handler that serves
@@ -95,13 +87,22 @@ static_context_handler(Prefix, Module, FSPath) ->
 static_context_handler("", LocalPath) ->
     fun(Req) ->
             "/" ++ Path = Req:get(raw_path),
-            Req:serve_file(Path, LocalPath)
+            serve_file(Req, Path, LocalPath)
     end;
 static_context_handler(Prefix, LocalPath) ->
     fun(Req) ->
             "/" ++ Path = Req:get(raw_path),
             case string:substr(Path, length(Prefix) + 1) of
                 ""        -> Req:respond({301, [{"Location", "/" ++ Prefix ++ "/"}], ""});
-                "/" ++ P  -> Req:serve_file(P, LocalPath)
+                "/" ++ P  -> serve_file(Req, P, LocalPath)
             end
+    end.
+
+serve_file(Req, Path, LocalPath) ->
+    case Req:get(method) of
+        Method when Method =:= 'GET'; Method =:= 'HEAD' ->
+            Req:serve_file(Path, LocalPath);
+        _ ->
+            Req:respond({400, [],
+                         "Only GET or HEAD supported for static content"})
     end.
