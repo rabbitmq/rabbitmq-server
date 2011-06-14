@@ -1,0 +1,27 @@
+<h1>Trace: <b><%= fmt_exchange(trace.name) %></b></h1>
+
+<div class="section">
+  <h2>Overview</h2>
+  <div class="hider updatable">
+    <table class="facts">
+<% if (vhosts_interesting) { %>
+      <tr>
+        <th>Virtual host</th>
+        <td><%= trace.vhost %></td>
+      </tr>
+<% } %>
+    </table>
+    <span class="br"></span>
+  </div>
+</div>
+
+<div class="section-hidden">
+  <h2>Stop this trace</h2>
+  <div class="hider">
+    <form action="#/traces" method="delete">
+      <input type="hidden" name="vhost" value="<%= trace.vhost %>"/>
+      <input type="hidden" name="name" value="<%= trace.name %>"/>
+      <input type="submit" value="Stop"/>
+    </form>
+  </div>
+</div>

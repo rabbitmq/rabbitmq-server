@@ -1,0 +1,87 @@
+%%  The contents of this file are subject to the Mozilla Public License
+%%  Version 1.1 (the "License"); you may not use this file except in
+%%  compliance with the License. You may obtain a copy of the License
+%%  at http://www.mozilla.org/MPL/
+%%
+%%  Software distributed under the License is distributed on an "AS IS"
+%%  basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
+%%  the License for the specific language governing rights and
+%%  limitations under the License.
+%%
+%%  The Original Code is RabbitMQ.
+%%
+%%  The Initial Developer of the Original Code is VMware, Inc.
+%%  Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
+%%
+
+-module(rabbit_tracing_traces).
+
+-behaviour(gen_server).
+
+-export([list/0, lookup/2, create/3, stop/2]).
+
+-export([start_link/0]).
+-export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
+         code_change/3]).
+
+-define(SERVER, ?MODULE).
+
+-record(state, { table }).
+
+%%--------------------------------------------------------------------
+
+start_link() ->
+    gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
+
+list() ->
+    gen_server:call(?MODULE, list, infinity).
+
+lookup(VHost, Name) ->
+    gen_server:call(?MODULE, {lookup, VHost, Name}, infinity).
+
+create(VHost, Name, Trace) ->
+    gen_server:call(?MODULE, {create, VHost, Name, Trace}, infinity).
+
+stop(VHost, Name) ->
+    gen_server:call(?MODULE, {stop, VHost, Name}, infinity).
+
+%%--------------------------------------------------------------------
+
+init([]) ->
+    {ok, #state{table = ets:new(anon, [private])}}.
+
+handle_call(list, _From, State = #state{table = Table}) ->
+    {reply, [Trace || {_K, Trace} <- ets:tab2list(Table)], State};
+
+handle_call({lookup, VHost, Name}, _From, State = #state{table = Table}) ->
+    {reply, case ets:lookup(Table, {VHost, Name}) of
+                []        -> not_found;
+                [{_K, V}] -> V
+            end, State};
+
+handle_call({create, VHost, Name, Trace}, _From,
+            State = #state{table = Table}) ->
+    true = ets:insert(Table, {{VHost, Name}, pset(vhost, VHost,
+                                                  pset(name, Name, Trace))}),
+    {reply, ok, State};
+
+handle_call({stop, VHost, Name}, _From, State = #state{table = Table}) ->
+    true = ets:delete(Table, {VHost, Name}),
+    {reply, ok, State};
+
+handle_call(_Req, _From, State) ->
+    {reply, unknown_request, State}.
+
+handle_cast(_C, State) ->
+    {noreply, State}.
+
+handle_info(_I, State) ->
+    {noreply, State}.
+
+terminate(_, _) -> ok.
+
+code_change(_, State, _) -> {ok, State}.
+
+%%--------------------------------------------------------------------
+
+pset(Key, Value, List) -> [{Key, Value} | proplists:delete(Key, List)].
