@@ -61,15 +61,13 @@ register_static_context(Context, Prefix0, Module, FSPath, LinkText) ->
                      {Prefix, LinkText}),
     {ok, Prefix}.
 
+context_selector("") ->
+    fun(_Req) -> true end;
 context_selector(Prefix) ->
     Prefix1 = "/" ++ Prefix,
-    case Prefix == "" of
-        true  -> fun(_Req) -> true end;
-        false -> fun(Req) ->
-                         Path = Req:get(raw_path),
-                         (Path == Prefix1)
-                             orelse (string:str(Path, Prefix1 ++ "/") == 1)
-                 end
+    fun(Req) ->
+            Path = Req:get(raw_path),
+            (Path == Prefix1) orelse (string:str(Path, Prefix1 ++ "/") == 1)
     end.
 
 %% Produces a handler for use with register_handler that serves
