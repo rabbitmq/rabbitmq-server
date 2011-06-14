@@ -68,6 +68,7 @@ handle_call({create, VHost, Name, Trace}, _From,
         true  -> ok;
         false -> rabbit_trace:start(VHost)
     end,
+    rabbit_tracing_sup:start_child({VHost, Name}, Trace),
     {reply, ok, State};
 
 handle_call({stop, VHost, Name}, _From, State = #state{table = Table}) ->
@@ -76,6 +77,7 @@ handle_call({stop, VHost, Name}, _From, State = #state{table = Table}) ->
         true  -> ok;
         false -> rabbit_trace:stop(VHost)
     end,
+    rabbit_tracing_sup:stop_child({VHost, Name}),
     {reply, ok, State};
 
 handle_call(_Req, _From, State) ->
