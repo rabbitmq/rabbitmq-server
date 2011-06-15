@@ -7,3 +7,4 @@
 \.pyc$
 ^test/certs/
 ^test/ebin/test.config
+^ebin/rabbitmq_stomp\.app$
