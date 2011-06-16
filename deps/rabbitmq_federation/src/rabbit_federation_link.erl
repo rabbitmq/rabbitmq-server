@@ -313,11 +313,17 @@ go(S0 = {not_started, {Upstream, #exchange{name = DownstreamX}}}) ->
                        Bindings)};
                 E ->
                     ensure_closed(DConn, DCh),
-                    {stop, E, S0}
+                    connection_error(E, S0)
             end;
         E ->
-            {stop, E, S0}
+            connection_error(E, S0)
     end.
+
+connection_error(E, State = {not_started, {U, #exchange{name = X}}}) ->
+    rabbit_log:info("Federation ~s failed to establish connection to ~s: ~w~n",
+                    [rabbit_misc:rs(X),
+                     rabbit_federation_upstream:to_string(U), E]),
+    {stop, {shutdown, E}, State}.
 
 consume_from_upstream_queue(
   State = #state{upstream            = Upstream,

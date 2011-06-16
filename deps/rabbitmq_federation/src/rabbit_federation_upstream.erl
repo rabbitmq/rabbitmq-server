@@ -19,7 +19,7 @@
 -include("rabbit_federation.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
--export([to_table/1, from_set_name/3]).
+-export([to_table/1, to_string/1, from_set_name/3]).
 
 -import(rabbit_misc, [pget/2, pget/3]).
 
@@ -33,6 +33,12 @@ to_table(#upstream{params   = #amqp_params_network{host         = H,
              {<<"port">>,         long,    P},
              {<<"virtual_host">>, longstr, V},
              {<<"exchange">>,     longstr, X}]}.
+
+to_string(#upstream{params   = #amqp_params_network{host         = H,
+                                                    port         = P,
+                                                    virtual_host = V},
+                    exchange = X}) ->
+    iolist_to_binary(io_lib:format("~s:~w:~s:~s", [H, P, V, X])).
 
 from_set_name(SetName, DefaultXName, DefaultVHost) ->
     {ok, Sets} = application:get_env(rabbitmq_federation, upstream_sets),
