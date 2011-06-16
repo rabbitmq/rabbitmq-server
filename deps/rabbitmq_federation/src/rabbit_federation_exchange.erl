@@ -75,19 +75,13 @@ delete(none, X, Bs) ->
 add_binding(transaction, X, B) ->
     with_module(X, fun (M) -> M:add_binding(transaction, X, B) end);
 add_binding(Serial, X, B = #binding{destination = Dest}) ->
-    case is_federation_exchange(Dest) of
-        true  -> rabbit_federation_link:noop(Serial, X);
-        false -> rabbit_federation_link:add_binding(Serial, X, B)
-    end,
+    rabbit_federation_link:add_binding(Serial, X, B),
     with_module(X, fun (M) -> M:add_binding(serial(Serial, X), X, B) end).
 
 remove_bindings(transaction, X, Bs) ->
     with_module(X, fun (M) -> M:remove_bindings(transaction, X, Bs) end);
 remove_bindings(Serial, X, Bs) ->
-    rabbit_federation_link:remove_bindings(
-      Serial, X,
-      [B || B = #binding{destination = Dest} <- Bs,
-            not is_federation_exchange(Dest)]),
+    rabbit_federation_link:remove_bindings(Serial, X, Bs),
     with_module(X, fun (M) -> M:remove_bindings(serial(Serial, X), X, Bs) end).
 
 assert_args_equivalence(X = #exchange{name = Name, arguments = Args},
@@ -110,11 +104,6 @@ with_module(#exchange{ arguments = Args }, Fun) ->
     {ok, Module} = rabbit_registry:lookup_module(
                      exchange, list_to_existing_atom(binary_to_list(Type))),
     Fun(Module).
-
-is_federation_exchange(Name = #resource{kind = exchange}) ->
-    rabbit_federation_util:has_purpose_arg(Name);
-is_federation_exchange(_) ->
-    false.
 
 exchange_to_sup_args(X = #exchange{name = XRes, arguments = Args}) ->
     #resource{name = XName, kind = exchange, virtual_host = VHost} = XRes,

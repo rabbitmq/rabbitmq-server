@@ -19,16 +19,9 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_federation.hrl").
 
--export([purpose_arg/0, has_purpose_arg/1, federation_up/0, local_params/0]).
+-export([federation_up/0, local_params/0]).
 
 %%----------------------------------------------------------------------------
-
-purpose_arg() -> {<<"x-purpose">>, longstr, <<"federation">>}.
-
-has_purpose_arg(X) ->
-    #exchange{arguments = Args} = rabbit_exchange:lookup_or_die(X),
-    rabbit_misc:table_lookup(Args, <<"x-purpose">>) ==
-        {longstr, <<"federation">>}.
 
 federation_up() ->
     lists:keysearch(rabbitmq_federation, 1,

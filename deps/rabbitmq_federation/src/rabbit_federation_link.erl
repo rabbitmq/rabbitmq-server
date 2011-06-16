@@ -22,7 +22,7 @@
 
 -behaviour(gen_server2).
 
--export([go/0, add_binding/3, remove_bindings/3, noop/2, stop/1]).
+-export([go/0, add_binding/3, remove_bindings/3, stop/1]).
 -export([list_routing_keys/1]). %% For testing
 
 -export([start_link/1]).
@@ -56,8 +56,6 @@ go() -> cast(go).
 
 add_binding(S, X, B)      -> cast(X, {enqueue, S, {add_binding, B}}).
 remove_bindings(S, X, Bs) -> cast(X, {enqueue, S, {remove_bindings, Bs}}).
-noop(S, X)                -> cast(X, {enqueue, S, noop}).
-%% ^^ Needed to eat unused serials when we decide not to add bindings
 
 %% This doesn't just correspond to the link being killed by its
 %% supervisor since this means "the exchange is going away, please
@@ -190,10 +188,7 @@ handle_command({add_binding, Binding}, State) ->
     add_binding(Binding, State);
 
 handle_command({remove_bindings, Bindings}, State) ->
-    lists:foldl(fun remove_binding/2, State, Bindings);
-
-handle_command(noop, State) ->
-    State.
+    lists:foldl(fun remove_binding/2, State, Bindings).
 
 play_back_commands(State = #state{waiting_cmds = Waiting,
                                   next_serial  = Next}) ->
@@ -333,7 +328,7 @@ consume_from_upstream_queue(
                  none -> [];
                  _    -> [{<<"x-message-ttl">>, long, TTL}]
              end,
-    Args = ExpiryArg ++ TTLArg ++ [rabbit_federation_util:purpose_arg()],
+    Args = ExpiryArg ++ TTLArg,
     amqp_channel:call(Ch, #'queue.declare'{queue     = Q,
                                            durable   = true,
                                            arguments = Args}),
@@ -368,7 +363,7 @@ ensure_upstream_bindings(State = #state{upstream            = Upstream,
         durable     = true,
         internal    = true,
         auto_delete = true,
-        arguments   = [rabbit_federation_util:purpose_arg()]}),
+        arguments   = []}),
     amqp_channel:call(Ch, #'queue.bind'{exchange = InternalX, queue = Q}),
     State1 = State#state{internal_exchange = InternalX},
     State2 = lists:foldl(fun add_binding/2, State1, Bindings),
