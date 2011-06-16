@@ -22,6 +22,14 @@
 -define(UPSTREAM_DOWNSTREAM, [x(<<"upstream">>),
                               fed(<<"downstream">>, <<"upstream">>)]).
 
+%% Used in restart_upstream_test
+-define(HARE,       {"hare",       5673}).
+
+%% Used in max_hops_test
+-define(FLOPSY,     {"flopsy",     5674}).
+-define(MOPSY,      {"mopsy",      5675}).
+-define(COTTONTAIL, {"cottontail", 5676}).
+
 simple_test() ->
     with_ch(
       fun (Ch) ->
@@ -149,25 +157,27 @@ no_loop_test() ->
       end, [fed(<<"one">>, <<"two">>),
             fed(<<"two">>, <<"one">>)]).
 
-%% Downstream: port 5672, has federation
-%% Upstream:   port 5673, may not have federation
+%% Downstream: rabbit-test, port 5672, has federation
+%% Upstream:   hare,        port 5673, does not have federation
 
 restart_upstream_test_() ->
     {timeout, 25, fun restart_upstream/0}.
 
 restart_upstream() ->
-    with_2ch(
-      fun (Downstream, Upstream) ->
+    with_ch(
+      fun (Downstream) ->
+              Upstream = start_other_node(?HARE),
+
               declare_exchange(Upstream, x(<<"upstream">>)),
               declare_exchange(Downstream,
                                fed(<<"downstream">>, <<"upstream5673">>)),
 
               Qstays = bind_queue(Downstream, <<"downstream">>, <<"stays">>),
               Qgoes = bind_queue(Downstream, <<"downstream">>, <<"goes">>),
-              stop_other_node(),
+              stop_other_node(?HARE),
               Qcomes = bind_queue(Downstream, <<"downstream">>, <<"comes">>),
               unbind_queue(Downstream, Qgoes, <<"downstream">>, <<"goes">>),
-              Upstream1 = start_other_node(),
+              Upstream1 = start_other_node(?HARE),
               publish(Upstream1, <<"upstream">>, <<"goes">>, <<"GOES">>),
               publish(Upstream1, <<"upstream">>, <<"stays">>, <<"STAYS">>),
               %% Give the link a chance to come up and for this binding
@@ -179,8 +189,45 @@ restart_upstream() ->
               expect_empty(Downstream, Qgoes),
 
               delete_exchange(Downstream, <<"downstream">>),
-              delete_exchange(Upstream1, <<"upstream">>)
-      end).
+              delete_exchange(Upstream1, <<"upstream">>),
+
+              stop_other_node(?HARE)
+      end, []).
+
+%% flopsy, mopsy and cottontail, connected in a ring with max_hops = 2
+%% for each connection. We should not see any duplicates.
+
+max_hops_test_() ->
+    {timeout, 600000000, fun max_hops/0}.
+
+max_hops() ->
+    Flopsy     = start_other_node(?FLOPSY),
+    Mopsy      = start_other_node(?MOPSY),
+    Cottontail = start_other_node(?COTTONTAIL),
+
+    Q1 = bind_queue(Flopsy,     <<"ring">>, <<"key">>),
+    Q2 = bind_queue(Mopsy,      <<"ring">>, <<"key">>),
+    Q3 = bind_queue(Cottontail, <<"ring">>, <<"key">>),
+
+    %% Wait for federation to come up on all nodes
+    timer:sleep(10000),
+
+    publish(Flopsy,     <<"ring">>, <<"key">>, <<"HELLO flopsy">>),
+    publish(Mopsy,      <<"ring">>, <<"key">>, <<"HELLO mopsy">>),
+    publish(Cottontail, <<"ring">>, <<"key">>, <<"HELLO cottontail">>),
+
+    Msgs = [<<"HELLO flopsy">>, <<"HELLO mopsy">>, <<"HELLO cottontail">>],
+    expect(Flopsy,     Q1, Msgs),
+    expect(Mopsy,      Q2, Msgs),
+    expect(Cottontail, Q3, Msgs),
+    expect_empty(Flopsy,     Q1),
+    expect_empty(Mopsy,      Q2),
+    expect_empty(Cottontail, Q3),
+
+    stop_other_node(?FLOPSY),
+    stop_other_node(?MOPSY),
+    stop_other_node(?COTTONTAIL),
+    ok.
 
 %%----------------------------------------------------------------------------
 
@@ -194,29 +241,16 @@ with_ch(Fun, Xs) ->
     amqp_connection:close(Conn),
     ok.
 
-with_2ch(Fun) ->
-    {ok, Conn} = amqp_connection:start(#amqp_params_network{}),
+start_other_node({Name, Port}) ->
+    ?assertCmd("make OTHER_NODE=" ++ Name ++ " OTHER_PORT=" ++
+                   integer_to_list(Port) ++ " start-other-node"),
+    {ok, Conn} = amqp_connection:start(#amqp_params_network{port = Port}),
     {ok, Ch} = amqp_connection:open_channel(Conn),
-    Ch2 = start_other_node(),
-    Fun(Ch, Ch2),
-    amqp_connection:close(Conn),
-    stop_other_node(),
-    ok.
+    Ch.
 
-start_other_node() ->
-    ?assertCmd("make start-other-node"),
-    {ok, Conn2} = amqp_connection:start(#amqp_params_network{port = 5673}),
-    {ok, Ch2} = amqp_connection:open_channel(Conn2),
-    Ch2.
-
-stop_other_node() ->
-    ?assertCmd("make stop-other-node"),
+stop_other_node({Name, _Port}) ->
+    ?assertCmd("make OTHER_NODE=" ++ Name ++ " stop-other-node"),
     timer:sleep(1000).
-
-to_table(U, Port) ->
-    [{<<"host">>,         longstr, <<"localhost">>},
-     {<<"port">>,         long,    Port},
-     {<<"exchange">>,     longstr, U}].
 
 declare_exchange(Ch, X) ->
     amqp_channel:call(Ch, X).

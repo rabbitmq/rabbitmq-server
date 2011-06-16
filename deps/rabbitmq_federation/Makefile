@@ -1,20 +1,24 @@
 include ../umbrella.mk
 
-OTHER_NODE=bunny
-OTHER_PORT=5673
+OTHER_NODE=undefined
+OTHER_PORT=undefined
 
-test: cleantest stop-other-node
+test: cleantest
 
 cleantest:
-	rm -rf tmp /tmp/rabbitmq-$(OTHER_NODE)-mnesia
+	rm -rf tmp /tmp/rabbitmq-*-mnesia
+	for R in hare bunny lapin flopsy mopsy cottontail ; do \
+	  erl_call -sname $$R -q ; \
+	done
 
 start-other-node:
 	RABBITMQ_MNESIA_BASE=/tmp/rabbitmq-$(OTHER_NODE)-mnesia \
 	RABBITMQ_LOG_BASE=/tmp \
 	RABBITMQ_NODENAME=$(OTHER_NODE) \
 	RABBITMQ_NODE_PORT=$(OTHER_PORT) \
-	RABBITMQ_CONFIG_FILE=etc/test-other \
-	RABBITMQ_SERVER_ERL_ARGS="-rabbit_mochiweb port 5$(OTHER_PORT)" \
+	RABBITMQ_CONFIG_FILE=etc/$(OTHER_NODE) \
+	RABBITMQ_PLUGINS_DIR=/tmp/rabbitmq-test/plugins \
+	RABBITMQ_PLUGINS_EXPAND_DIR=/tmp/rabbitmq-$(OTHER_NODE)-plugins-expand \
 	../rabbitmq-server/scripts/rabbitmq-server -detached
 	../rabbitmq-server/scripts/rabbitmqctl -n $(OTHER_NODE) wait
 
