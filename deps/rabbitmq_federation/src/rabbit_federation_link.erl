@@ -427,8 +427,10 @@ ensure_closed(Ch) ->
 should_forward(undefined, _MaxHops) ->
     true;
 should_forward(Headers, MaxHops) ->
-    R = rabbit_misc:table_lookup(Headers, ?ROUTING_HEADER),
-    R =:= undefined orelse length(R) < MaxHops.
+    case rabbit_misc:table_lookup(Headers, ?ROUTING_HEADER) of
+        undefined  -> true;
+        {array, A} -> length(A) < MaxHops
+    end.
 
 extract_headers(#amqp_msg{props = #'P_basic'{headers = Headers}}) ->
     Headers.
