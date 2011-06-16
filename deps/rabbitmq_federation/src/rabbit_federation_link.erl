@@ -146,6 +146,10 @@ handle_info({#'basic.deliver'{routing_key  = Key,
     end,
     {noreply, State};
 
+handle_info({'DOWN', _Ref, process, Ch, shutdown},
+            State = #state{ downstream_channel = Ch }) ->
+    {noreply, State};
+
 handle_info({'DOWN', _Ref, process, Ch, Reason},
             State = #state{ channel = Ch }) ->
     {stop, {upstream_channel_down, Reason}, State};
