@@ -17,7 +17,7 @@
 -module(rabbit_federation_unit_test).
 
 -define(INFO, [{<<"baz">>, longstr, <<"bam">>}]).
--define(H, <<"x-forwarding">>).
+-define(H, <<"x-received-from">>).
 
 -define(US_NAME, <<"upstream">>).
 -define(DS_NAME, <<"downstream">>).
@@ -27,19 +27,19 @@
 
 %% Test that we add routing information to message headers sensibly.
 routing_test() ->
-    ?assertEqual([{<<"x-forwarding">>, array, [{table, ?INFO}]}],
+    ?assertEqual([{?H, array, [{table, ?INFO}]}],
                  add(undefined)),
 
-    ?assertEqual([{<<"x-forwarding">>, array, [{table, ?INFO}]}],
+    ?assertEqual([{?H, array, [{table, ?INFO}]}],
                  add([])),
 
     ?assertEqual([{<<"foo">>, longstr, <<"bar">>},
-                  {<<"x-forwarding">>, array, [{table, ?INFO}]}],
+                  {?H, array, [{table, ?INFO}]}],
                  add([{<<"foo">>, longstr, <<"bar">>}])),
 
-    ?assertEqual([{<<"x-forwarding">>, array, [{table, ?INFO},
-                                               {table, ?INFO}]}],
-                 add([{<<"x-forwarding">>, array, [{table, ?INFO}]}])),
+    ?assertEqual([{?H, array, [{table, ?INFO},
+                               {table, ?INFO}]}],
+                 add([{?H, array, [{table, ?INFO}]}])),
     ok.
 
 add(Table) ->

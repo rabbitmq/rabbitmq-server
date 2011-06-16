@@ -27,14 +27,9 @@
 
 to_table(#upstream{params   = #amqp_params_network{host         = H,
                                                    port         = P,
-                                                   virtual_host = V,
-                                                   ssl_options  = SSL},
+                                                   virtual_host = V},
                    exchange = X}) ->
     {table, [{<<"host">>,         longstr, list_to_binary(H)},
-             {<<"protocol">>,     longstr, case SSL of
-                                               none -> <<"amqp">>;
-                                               _    -> <<"amqps">>
-                                           end},
              {<<"port">>,         long,    P},
              {<<"virtual_host">>, longstr, V},
              {<<"exchange">>,     longstr, X}]}.

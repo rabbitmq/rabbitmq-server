@@ -32,7 +32,7 @@
 
 -export([add_routing_to_headers/2]).
 
--define(ROUTING_HEADER, <<"x-forwarding">>).
+-define(ROUTING_HEADER, <<"x-received-from">>).
 
 -record(state, {upstream,
                 connection,
