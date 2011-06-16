@@ -124,19 +124,20 @@ handle_info(#'basic.ack'{ delivery_tag = Seq, multiple = Multiple },
     {noreply, State};
 
 handle_info({#'basic.deliver'{routing_key = Key}, Msg},
-            State = #state{upstream            = Upstream,
-                           downstream_exchange = #resource{name = X},
-                           downstream_channel  = DCh}) ->
+            State = #state{
+              upstream            = #upstream{max_hops = MaxHops} = Upstream,
+              downstream_exchange = #resource{name = X},
+              downstream_channel  = DCh}) ->
     Headers0 = extract_headers(Msg),
     %% TODO add user information here?
-    case forwarded_before(Headers0) of
-        false -> {table, Info} = rabbit_federation_upstream:to_table(Upstream),
+    case should_forward(Headers0, MaxHops) of
+        true  -> {table, Info} = rabbit_federation_upstream:to_table(Upstream),
                  Headers = add_routing_to_headers(Headers0, Info),
                  amqp_channel:cast(DCh, #'basic.publish'{exchange    = X,
                                                          routing_key = Key},
                                    update_headers(Headers, Msg)),
                  ok;
-        true  -> ok
+        false -> ok
     end,
     {noreply, State};
 
@@ -418,12 +419,11 @@ ensure_closed(Conn, Ch) ->
 ensure_closed(Ch) ->
     catch amqp_channel:close(Ch).
 
-%% For the time being just don't forward anything that's already been
-%% forwarded.
-forwarded_before(undefined) ->
-    false;
-forwarded_before(Headers) ->
-    rabbit_misc:table_lookup(Headers, ?ROUTING_HEADER) =/= undefined.
+should_forward(undefined, _MaxHops) ->
+    true;
+should_forward(Headers, MaxHops) ->
+    R = rabbit_misc:table_lookup(Headers, ?ROUTING_HEADER),
+    R =:= undefined orelse length(R) < MaxHops.
 
 extract_headers(#amqp_msg{props = #'P_basic'{headers = Headers}}) ->
     Headers.

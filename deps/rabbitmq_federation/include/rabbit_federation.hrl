@@ -17,6 +17,7 @@
 -record(upstream, {params,
                    exchange,
                    prefetch_count,
+                   max_hops,
                    reconnect_delay,
                    expires,
                    message_ttl}).

@@ -81,10 +81,12 @@ over many brokers. This would be achieved by having the exchange
 declared as a federated exchange in each broker, with upstreams
 corresponding to all the other brokers.
 
-Other topologies are possible; however one notable current limitation
-is that every broker must be connected directly to every other broker
-from which it should receive messages. We intend to remove this
-limitation in future.
+Another would be massive fanout - a single "root" exchange in one
+broker can be treated as an upstream by many other brokers. In turn
+each of these can be the upstream for many more downstreams, and so
+on.
+
+Other topologies are of course possible.
 
 Federated exchanges can be set up statically via broker configuration,
 or declared dynamically over AMQP.
@@ -115,8 +117,9 @@ A reasonably verbose static configuration might look like:
                                          {password,        "secret"},
                                          {prefetch_count,  1000},
                                          {reconnect_delay, 5},
-                                         {heartbeat,       10},
-                                         {queue_expires,   30},
+                                         {heartbeat,       10000},
+                                         {queue_expires,   30000},
+                                         {max_hops,        2},
                                          {ssl_options,
                                           [{cacertfile, "/path/to/cacert.pem"},
                                            {certfile,   "/path/to/cert.pem"},
@@ -181,6 +184,10 @@ prefetch_count
 reconnect_delay
   - time in seconds to wait to reconnect to the broker after being
     disconnected. Default is 1.
+
+max_hops
+  - maximum number of times a message received over this link may have
+    been forwarded (including traversing this link). Default is 1.
 
 heartbeat
   - AMQP heartbeat interval (in seconds) on the connection, or none. Default
