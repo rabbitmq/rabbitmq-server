@@ -123,9 +123,11 @@ handle_info(#'basic.ack'{ delivery_tag = Seq, multiple = Multiple },
                                        multiple     = Multiple}),
     {noreply, State};
 
-handle_info({#'basic.deliver'{routing_key = Key}, Msg},
+handle_info({#'basic.deliver'{routing_key  = Key,
+                              delivery_tag = Seq}, Msg},
             State = #state{
               upstream            = #upstream{max_hops = MaxHops} = Upstream,
+              channel             = Ch,
               downstream_exchange = #resource{name = X},
               downstream_channel  = DCh}) ->
     Headers0 = extract_headers(Msg),
@@ -137,7 +139,10 @@ handle_info({#'basic.deliver'{routing_key = Key}, Msg},
                                                          routing_key = Key},
                                    update_headers(Headers, Msg)),
                  ok;
-        false -> ok
+        false -> %% Drop it, but acknowledge it!
+                 amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = Seq,
+                                                    multiple     = false}),
+                 ok
     end,
     {noreply, State};
 
