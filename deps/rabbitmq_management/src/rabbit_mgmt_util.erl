@@ -419,8 +419,8 @@ want_column(_Col, all) -> true;
 want_column(Col, Cols) -> lists:any(fun([C|_]) -> C == Col end, Cols).
 
 is_admin(T)     -> intersects(T, [administrator]).
-is_monitor(T)   -> intersects(T, [administrator, monitor]).
-is_mgmt_user(T) -> intersects(T, [administrator, monitor, 'management-user']).
+is_monitor(T)   -> intersects(T, [administrator, monitoring]).
+is_mgmt_user(T) -> intersects(T, [administrator, monitoring, management]).
 
 intersects(A, B) -> lists:any(fun(I) -> lists:member(I, B) end, A).
 

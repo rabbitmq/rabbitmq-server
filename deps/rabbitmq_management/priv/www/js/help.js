@@ -115,11 +115,11 @@ HELP = {
       'Comma-separated list of tags to apply to the user. Currently supported \
        by the management plugin: \
       <dl> \
-        <dt>management-user</dt> \
+        <dt>management</dt> \
         <dd> \
           User can access the management plugin \
         </dd> \
-        <dt>monitor</dt> \
+        <dt>monitoring</dt> \
         <dd> \
           If set, user can see all connections and channels as well as \
           node-related information. \

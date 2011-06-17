@@ -38,7 +38,7 @@ overview_test() ->
     %% didn't blow up.
     true = 0 < length(pget(listeners, http_get("/overview"))),
     http_put("/users/myuser", [{password, <<"myuser">>},
-                               {tags,     <<"management-user">>}], ?NO_CONTENT),
+                               {tags,     <<"management">>}], ?NO_CONTENT),
     http_get("/overview", "myuser", "myuser", ?OK),
     http_delete("/users/myuser", ?NO_CONTENT),
     %% TODO uncomment when priv works in test
@@ -47,9 +47,9 @@ overview_test() ->
 
 nodes_test() ->
     http_put("/users/user", [{password, <<"user">>},
-                             {tags, <<"management-user">>}], ?NO_CONTENT),
+                             {tags, <<"management">>}], ?NO_CONTENT),
     http_put("/users/monitor", [{password, <<"monitor">>},
-                                {tags, <<"monitor">>}], ?NO_CONTENT),
+                                {tags, <<"monitoring">>}], ?NO_CONTENT),
     DiscNode = [{type, <<"disc">>}, {running, true}],
     assert_list([DiscNode], http_get("/nodes")),
     assert_list([DiscNode], http_get("/nodes", "monitor", "monitor", ?OK)),
@@ -99,10 +99,10 @@ users_test() ->
     http_get("/users/myuser", ?NOT_FOUND),
     http_put_raw("/users/myuser", "Something not JSON", ?BAD_REQUEST),
     http_put("/users/myuser", [{flim, <<"flam">>}], ?BAD_REQUEST),
-    http_put("/users/myuser", [{tags, <<"management-user">>}], ?NO_CONTENT),
+    http_put("/users/myuser", [{tags, <<"management">>}], ?NO_CONTENT),
     http_put("/users/myuser", [{password_hash,
                                 <<"IECV6PZI/Invh0DL187KFpkO5Jc=">>},
-                               {tags, <<"management-user">>}], ?NO_CONTENT),
+                               {tags, <<"management">>}], ?NO_CONTENT),
     http_put("/users/myuser", [{password, <<"password">>},
                                {tags, <<"administrator, foo">>}], ?NO_CONTENT),
     assert_item([{name, <<"myuser">>}, {tags, <<"administrator,foo">>}],
@@ -391,7 +391,7 @@ permissions_administrator_test() ->
     http_put("/users/notadmin", [{password, <<"notadmin">>},
                                  {tags, <<"administrator">>}], ?NO_CONTENT),
     http_put("/users/notadmin", [{password, <<"notadmin">>},
-                                 {tags, <<"management-user">>}], ?NO_CONTENT),
+                                 {tags, <<"management">>}], ?NO_CONTENT),
     Test =
         fun(Path) ->
                 http_get(Path, "notadmin", "notadmin", ?NOT_AUTHORISED),
@@ -415,7 +415,7 @@ permissions_vhost_test() ->
     QArgs = [],
     PermArgs = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
     http_put("/users/myuser", [{password, <<"myuser">>},
-                               {tags, <<"management-user">>}], ?NO_CONTENT),
+                               {tags, <<"management">>}], ?NO_CONTENT),
     http_put("/vhosts/myvhost1", [], ?NO_CONTENT),
     http_put("/vhosts/myvhost2", [], ?NO_CONTENT),
     http_put("/permissions/myvhost1/myuser", PermArgs, ?NO_CONTENT),
@@ -469,7 +469,7 @@ permissions_amqp_test() ->
     PermArgs = [{configure, <<"foo.*">>}, {write, <<"foo.*">>},
                 {read,      <<"foo.*">>}],
     http_put("/users/myuser", [{password, <<"myuser">>},
-                               {tags, <<"management-user">>}], ?NO_CONTENT),
+                               {tags, <<"management">>}], ?NO_CONTENT),
     http_put("/permissions/%2f/myuser", PermArgs, ?NO_CONTENT),
     http_put("/queues/%2f/bar-queue", QArgs, "myuser", "myuser",
              ?NOT_AUTHORISED),
@@ -494,10 +494,10 @@ get_conn(Username, Password) ->
 permissions_connection_channel_test() ->
     PermArgs = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
     http_put("/users/user", [{password, <<"user">>},
-                             {tags, <<"management-user">>}], ?NO_CONTENT),
+                             {tags, <<"management">>}], ?NO_CONTENT),
     http_put("/permissions/%2f/user", PermArgs, ?NO_CONTENT),
     http_put("/users/monitor", [{password, <<"monitor">>},
-                            {tags, <<"monitor">>}], ?NO_CONTENT),
+                            {tags, <<"monitoring">>}], ?NO_CONTENT),
     http_put("/permissions/%2f/monitor", PermArgs, ?NO_CONTENT),
     {Conn1, UserConn, UserCh} = get_conn("user", "user"),
     {Conn2, MonConn, MonCh} = get_conn("monitor", "monitor"),
@@ -803,7 +803,7 @@ get_test() ->
 
 get_fail_test() ->
     http_put("/users/myuser", [{password, <<"password">>},
-                               {tags, <<"management-user">>}], ?NO_CONTENT),
+                               {tags, <<"management">>}], ?NO_CONTENT),
     http_put("/queues/%2f/myqueue", [], ?NO_CONTENT),
     http_post("/queues/%2f/myqueue/get",
               [{requeue,  false},
@@ -835,7 +835,7 @@ publish_fail_test() ->
     Msg = msg(<<"myqueue">>, [], <<"Hello world">>),
     http_put("/queues/%2f/myqueue", [], ?NO_CONTENT),
     http_put("/users/myuser", [{password, <<"password">>},
-                               {tags, <<"management-user">>}], ?NO_CONTENT),
+                               {tags, <<"management">>}], ?NO_CONTENT),
     http_post("/exchanges/%2f/amq.default/publish", Msg, "myuser", "password",
               ?NOT_AUTHORISED),
     Msg2 = [{exchange,         <<"">>},
