@@ -146,13 +146,22 @@ handle_info({#'basic.deliver'{routing_key  = Key,
     end,
     {noreply, State};
 
+%% If the downstream channel shuts down cleanly, we can just ignore it
+%% - we're the same node, we're presumably about to go down too.
 handle_info({'DOWN', _Ref, process, Ch, shutdown},
             State = #state{ downstream_channel = Ch }) ->
     {noreply, State};
 
+%% If the upstream channel goes down for an intelligible reason, just
+%% log it and die quietly.
+handle_info({'DOWN', _Ref, process, Ch, {shutdown, Reason}},
+            State = #state{ channel = Ch }) ->
+    connection_error({upstream_channel_down, Reason}, State);
+
 handle_info({'DOWN', _Ref, process, Ch, Reason},
             State = #state{ channel = Ch }) ->
     {stop, {upstream_channel_down, Reason}, State};
+
 handle_info({'DOWN', _Ref, process, Ch, Reason},
             State = #state{ downstream_channel = Ch }) ->
     {stop, {downstream_channel_down, Reason}, State};
@@ -320,10 +329,17 @@ go(S0 = {not_started, {Upstream, #exchange{name = DownstreamX}}}) ->
     end.
 
 connection_error(E, State = {not_started, {U, #exchange{name = X}}}) ->
-    rabbit_log:info("Federation ~s failed to establish connection to ~s: ~w~n",
+    rabbit_log:info("Federation ~s failed to establish connection to ~s~n~p~n",
+                    [rabbit_misc:rs(X),
+                     rabbit_federation_upstream:to_string(U), E]),
+    {stop, {shutdown, E}, State};
+
+connection_error(E, State = #state{upstream = U, downstream_exchange = X}) ->
+    rabbit_log:info("Federation ~s disconnected from ~s:~n~p~n",
                     [rabbit_misc:rs(X),
                      rabbit_federation_upstream:to_string(U), E]),
     {stop, {shutdown, E}, State}.
+
 
 consume_from_upstream_queue(
   State = #state{upstream            = Upstream,
