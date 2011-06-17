@@ -317,6 +317,13 @@ function fmt_escape_html(txt) {
     return txt.replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
+function fmt_node_host(node_host) {
+    var both = node_host.split('@');
+    var node = both.slice(0, 1);
+    var host = both.slice(1);
+    return host + ' <small>(' + node_host + ')</small>';
+}
+
 function alt_rows(i) {
     return (i % 2 == 0) ? ' class="alt1"' : ' class="alt2"';
 }

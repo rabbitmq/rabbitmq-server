@@ -56,7 +56,8 @@ apply_continuations(_, []) ->
 
 apply_continuations(Count, Lists) ->
     io:format("~nRound ~p, ~p tests remain...~n", [Count, length(Lists)]),
-    timer:sleep(?STATS_INTERVAL + 10),
+    {ok, Interval} = application:get_env(rabbit, collect_statistics_interval),
+    timer:sleep(Interval + 10),
     NewLists = [New ||
                    List <- Lists,
                    New = {_, Rest, _, _} <- [apply_continuation(List)],

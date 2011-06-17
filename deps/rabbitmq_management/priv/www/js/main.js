@@ -424,7 +424,7 @@ function postprocess() {
             }
         });
     $('#download-configuration').click(function() {
-            var path = '../api/all-configuration?download=' +
+            var path = 'api/all-configuration?download=' +
                 esc($('#download-filename').val());
             window.location = path;
             setTimeout('app.run()');
@@ -637,7 +637,7 @@ function update_status(status) {
 function with_req(method, path, body, fun) {
     var json;
     var req = xmlHttpRequest();
-    req.open(method, '../api' + path, true );
+    req.open(method, 'api' + path, true );
     req.onreadystatechange = function () {
         if (req.readyState == 4) {
             if (check_bad_response(req, true)) {
@@ -676,7 +676,7 @@ function sync_req(type, params0, path_template) {
         return false;
     }
     var req = xmlHttpRequest();
-    req.open(type, '../api' + path, false);
+    req.open(type, 'api' + path, false);
     req.setRequestHeader('content-type', 'application/json');
     try {
         if (type == 'GET')
