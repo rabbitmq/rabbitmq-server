@@ -5,13 +5,14 @@
     <table class="two-col-layout">
       <tr>
         <td>
-          <h3>All traces</h3>
+          <h3>All active traces</h3>
           <% if (traces.length > 0) { %>
           <table class="list">
             <thead>
               <tr>
                 <th>Name</th>
                 <th>Pattern</th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
@@ -20,8 +21,15 @@
                      var trace = traces[i];
               %>
               <tr<%= alt_rows(i)%>>
-                <td><%= link_to(trace.name, '#/traces/' + esc(trace.vhost) + '/' + esc(trace.name)) %></td>
+                <td><%= trace.name %></td>
                 <td><%= trace.pattern %></td>
+                <td>
+                  <form action="#/traces" method="delete">
+                    <input type="hidden" name="vhost" value="<%= trace.vhost %>"/>
+                    <input type="hidden" name="name" value="<%= trace.name %>"/>
+                    <input type="submit" value="Stop"/>
+                  </form>
+                </td>
               </tr>
               <% } %>
             </tbody>
@@ -45,7 +53,7 @@
                      var vhost = vhosts[i];
               %>
               <tr<%= alt_rows(i)%>>
-                <td><%= link_vhost(vhost.name) %></td>
+                <td><%= vhost.name %></td>
                 <td class="c"><%= fmt_boolean(vhost.tracing) %></td>
               </tr>
               <% } %>
@@ -54,6 +62,42 @@
         </td>
       </tr>
     </table>
+  </div>
+</div>
+
+<div class="section">
+  <h2>Trace files</h2>
+  <div class="hider updatable">
+    <% if (files.length > 0) { %>
+      <table class="list">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Size</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+        <%
+            for (var i = 0; i < files.length; i++) {
+                var file = files[i];
+        %>
+          <tr<%= alt_rows(i)%>>
+            <td><%= link_to(file.name, "api/trace-files/" + file.name) %></td>
+            <td class="r"><%= fmt_bytes(file.size) %></td>
+            <td>
+              <form action="#/trace-files" method="delete" class="inline-form">
+                <input type="hidden" name="name" value="<%= file.name %>"/>
+                <input type="submit" value="Delete" />
+              </form>
+            </td>
+          </tr>
+        <% } %>
+        </tbody>
+      </table>
+    <% } else { %>
+      <p>... no files ...</p>
+    <% } %>
   </div>
 </div>
 

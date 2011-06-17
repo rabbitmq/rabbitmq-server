@@ -22,6 +22,8 @@
 
 dispatcher() -> [{["traces"],              rabbit_tracing_wm_traces, []},
                  {["traces", vhost],       rabbit_tracing_wm_traces, []},
-                 {["traces", vhost, name], rabbit_tracing_wm_trace, []}].
+                 {["traces", vhost, name], rabbit_tracing_wm_trace,  []},
+                 {["trace-files"],         rabbit_tracing_wm_files,  []},
+                 {["trace-files", name],   rabbit_tracing_wm_file,   []}].
 
 web_ui()     -> [{javascript, <<"tracing.js">>}].
