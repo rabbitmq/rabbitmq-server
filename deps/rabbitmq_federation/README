@@ -109,7 +109,8 @@ A reasonably verbose static configuration might look like:
                    {upstream_set, "my-upstreams"}]
                  ]},
      {upstream_sets, [{"my-upstreams", [[{connection, "upstream-server"},
-                                         {exchange,   "my-upstream-x"}],
+                                         {exchange,   "my-upstream-x"},
+                                         {max_hops,   2}],
                                         [{connection, "another-server"}]
                                        ]}
                      ]},
@@ -121,7 +122,6 @@ A reasonably verbose static configuration might look like:
                                          {reconnect_delay, 5},
                                          {heartbeat,       10000},
                                          {queue_expires,   30000},
-                                         {max_hops,        2},
                                          {ssl_options,
                                           [{cacertfile, "/path/to/cacert.pem"},
                                            {certfile,   "/path/to/cert.pem"},
@@ -149,7 +149,10 @@ to use. It can also specify an exchange name and / or virtual host to
 map to - if these are not specified they are taken to be the same as
 for the local exchange. Therefore one upstream_set can be refered to
 by many local exchanges as long as exchange names are the same across
-all the nodes in your federation.
+all the nodes in your federation. Furthermore, it can specify a value
+for max_hops - the maximum number of times a message received over
+this link may have been forwarded (including traversing this
+link). The default for max_hops is 1.
 
 Note that the static configuration will declare the downstream
 exchanges (on the local broker). It does not ensure the upstream
@@ -186,10 +189,6 @@ prefetch_count
 reconnect_delay
   - time in seconds to wait to reconnect to the broker after being
     disconnected. Default is 1.
-
-max_hops
-  - maximum number of times a message received over this link may have
-    been forwarded (including traversing this link). Default is 1.
 
 heartbeat
   - AMQP heartbeat interval (in seconds) on the connection, or none. Default

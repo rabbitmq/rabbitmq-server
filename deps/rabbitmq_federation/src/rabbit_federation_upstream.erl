@@ -79,11 +79,12 @@ from_props_connection(UpstreamProps, ConnName, Conn,
                   username     = pget(username,     Conn, <<"guest">>),
                   password     = pget(password,     Conn, <<"guest">>)},
                 XName = pget(exchange, UpstreamProps, DefaultXName),
+                MaxHops = pget(max_hops, UpstreamProps, 1),
                 #upstream{params          = set_extra_params(Params, Conn),
                           exchange        = list_to_binary(XName),
                           prefetch_count  = pget(prefetch_count,  Conn, none),
                           reconnect_delay = pget(reconnect_delay, Conn, 1),
-                          max_hops        = pget(max_hops,        Conn, 1),
+                          max_hops        = MaxHops,
                           expires         = pget(expires,         Conn, none),
                           message_ttl     = pget(message_ttl,     Conn, none)}
     end.
