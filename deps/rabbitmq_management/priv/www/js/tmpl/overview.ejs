@@ -27,9 +27,8 @@
 
 <% if (user_monitor) { %>
 <div class="section">
-<h2>Nodes and ports</h2>
+<h2>Nodes</h2>
 <div class="hider updatable">
-<h3>RabbitMQ nodes</h3>
 <table class="list">
   <tr>
     <th>Name</th>
@@ -126,39 +125,69 @@
 </table>
 
 <% if (nodes_interesting) { %>
-<p>You are connected to: <b><%= overview.node %></b>.</p>
 <% if (overview.statistics_db_node == 'not_running') { %>
   <p class="status-error">Statistics database node could not be contacted. Message rates and queue lengths will not be shown.</p>
 <% } else { %>
-  <p>Statistics database on: <b><%= overview.statistics_db_node %></b>.</b>
+  <p>Connected to: <b><%= overview.node %></b>. Statistics database: <b><%= overview.statistics_db_node %></b>.</b>
 <% } %>
 <% } %>
+</div>
+</div>
 
+<div class="section">
+<h2>Ports and contexts</h2>
+<div class="hider updatable">
 <h3>Listening ports</h3>
 <table class="list">
   <tr>
-    <th>Host</th>
+    <th>Protocol</th>
+<% if (nodes_interesting) { %>
+    <th>Host <small>(node)</small></th>
+<% } %>
     <th>Bound to</th>
     <th>Port</th>
   </tr>
-<%
-for (var i = 0; i < overview.listeners.length; i++) {
-    var listener = overview.listeners[i];
-%>
-   <tr<%= alt_rows(i)%>>
-     <td>
-       <%= listener.host %>
-       <sub><%= listener.node %></sub>
-     </td>
-     <td>
-       <%= listener.ip_address %>
-     </td>
-     <td>
-       <%= listener.port %>
-       <sub><%= listener.protocol %></sub>
-     </td>
-   </tr>
+  <%
+      for (var i = 0; i < overview.listeners.length; i++) {
+          var listener = overview.listeners[i];
+  %>
+  <tr<%= alt_rows(i)%>>
+    <td><%= listener.protocol %></td>
+<% if (nodes_interesting) { %>
+    <td><%= fmt_node_host(listener.node) %></td>
 <% } %>
+    <td><%= listener.ip_address %></td>
+    <td><%= listener.port %></td>
+  </tr>
+  <% } %>
+</table>
+<h3>Web contexts</h3>
+<table class="list">
+  <tr>
+    <th>Context</th>
+<% if (nodes_interesting) { %>
+    <th>Host <small>(node)</small></th>
+<% } %>
+    <th>Bound to</th>
+    <th>Port</th>
+    <th>SSL</th>
+    <th>Path</th>
+  </tr>
+  <%
+    for (var i = 0; i < overview.contexts.length; i++) {
+        var context = overview.contexts[i];
+  %>
+    <tr<%= alt_rows(i)%>>
+      <td><%= context.description %></td>
+<% if (nodes_interesting) { %>
+      <td><%= fmt_node_host(context.node) %></td>
+<% } %>
+      <td><%= (context.ip != undefined) ? context.ip : "0.0.0.0" %></td>
+      <td><%= context.port %></td>
+      <td class="c"><%= fmt_boolean(context.ssl || false) %></td>
+      <td><%= context.path %></td>
+    </tr>
+  <% } %>
 </table>
 </div>
 </div>
@@ -166,7 +195,7 @@ for (var i = 0; i < overview.listeners.length; i++) {
 <div class="section-hidden administrator-only">
 <h2>Import / export configuration</h2>
 <div class="hider">
-  <form action="../api/all-configuration" method="post" enctype="multipart/form-data">
+  <form action="api/all-configuration" method="post" enctype="multipart/form-data">
     <table class="two-col-layout">
       <tr>
         <td>
@@ -192,7 +221,7 @@ for (var i = 0; i < overview.listeners.length; i++) {
         </td>
         <td>
           <p>
-            <input type="hidden" name="redirect" value="/mgmt/#/import-succeeded"/>
+            <input type="hidden" name="redirect" value="../#/import-succeeded"/>
             <input type="submit" value="Upload broker configuration"/>
           </p>
         </td>

@@ -26,7 +26,7 @@
 -export([props_to_method/2, props_to_method/4]).
 -export([all_or_one_vhost/2, http_to_amqp/5, reply/3, filter_vhost/3]).
 -export([filter_user/3, with_decode/5, decode/1, redirect/2, args/1]).
--export([reply_list/3, reply_list/4, sort_list/4, destination_type/1]).
+-export([reply_list/3, reply_list/4, sort_list/2, destination_type/1]).
 -export([post_respond/1, columns/1, want_column/2, is_monitor/1]).
 -export([list_visible_vhosts/1]).
 
@@ -73,27 +73,18 @@ is_authorized_user(ReqData, Context, Item) ->
       end).
 
 is_authorized(ReqData, Context, Fun) ->
-    %% The realm name is wrong, but it needs to match the context name
-    %% of /mgmt/ to prevent some web ui users from being asked for
-    %% creds twice.
-    %% This will get fixed if / when we stop using rabbitmq-mochiweb.
-    Unauthorized = {"Basic realm=\"Management: Web UI\"",
-                    ReqData, Context},
-    case rabbit_mochiweb_util:parse_auth_header(
-           wrq:get_req_header("authorization", ReqData)) of
-        [Username, Password] ->
-            case rabbit_access_control:check_user_pass_login(Username,
-                                                             Password) of
-                {ok, User = #user{tags = Tags}} ->
-                    case is_mgmt_user(Tags) andalso Fun(User) of
-                        true  -> {true, ReqData, Context#context{user = User}};
-                        false -> Unauthorized
-                    end;
-                {refused, _, _} ->
-                    Unauthorized
-            end;
-        _ ->
-            Unauthorized
+    %% Note that we've already done authentication in the Mochiweb
+    %% world, so we know we're authorised. Unfortunately we can't
+    %% influence ReqData or Context from Mochiweb, so we have to
+    %% invoke check_user_pass_login again to see what kind of user we
+    %% have.
+    [Username, Password] = rabbit_mochiweb_util:parse_auth_header(
+                             wrq:get_req_header("authorization", ReqData)),
+    {ok, User = #user{tags = Tags}} =
+        rabbit_access_control:check_user_pass_login(Username, Password),
+    case is_mgmt_user(Tags) andalso Fun(User) of
+        true  -> {true, ReqData, Context#context{user = User}};
+        false -> {?AUTH_REALM, ReqData, Context}
     end.
 
 vhost(ReqData) ->
@@ -134,6 +125,9 @@ reply_list(Facts, DefaultSorts, ReqData, Context) ->
             wrq:get_qs_value("sort", ReqData),
             wrq:get_qs_value("sort_reverse", ReqData)),
           ReqData, Context).
+
+sort_list(Facts, Sorts) ->
+    sort_list(Facts, Sorts, undefined, false).
 
 sort_list(Facts, DefaultSorts, Sort, Reverse) ->
     SortList = case Sort of
