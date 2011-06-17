@@ -129,7 +129,7 @@ user_admin_to_tags() ->
       fun({internal_user, Username, PasswordHash, true}) ->
               {internal_user, Username, PasswordHash, [administrator]};
          ({internal_user, Username, PasswordHash, false}) ->
-              {internal_user, Username, PasswordHash, ['management-user']}
+              {internal_user, Username, PasswordHash, [management]}
       end,
       [username, password_hash, tags], internal_user).
 
