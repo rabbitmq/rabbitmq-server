@@ -15,9 +15,9 @@ Significant limitation: rabbitmq-federation is not compatible with
 clustering. *Do not deploy it in a cluster*. We intend to fix this
 at some point.
 
-Other limitations: you can't federate headers exchanges, you can't
-federate with new brokers without restarting old ones and there's no
-status reporting. Again these will get fixed.
+Other limitations: You can't federate headers exchanges. You can't
+make a broker federate with a new upstream without restarting
+it. There's no status reporting. Again these will get fixed.
 
 
 Purpose
