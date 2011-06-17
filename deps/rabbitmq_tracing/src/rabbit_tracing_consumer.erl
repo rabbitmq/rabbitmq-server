@@ -48,9 +48,11 @@ init(Args) ->
     amqp_channel:call(
       Ch, #'queue.bind'{exchange = ?X, queue = Q,
                         routing_key = pget(pattern, Args)}),
+    #'basic.qos_ok'{} =
+        amqp_channel:call(Ch, #'basic.qos'{prefetch_count = 10}),
     #'basic.consume_ok'{} =
         amqp_channel:subscribe(Ch, #'basic.consume'{queue  = Q,
-                                                    no_ack = true}, self()),
+                                                    no_ack = false}, self()),
     {ok, Dir} = application:get_env(directory),
     Filename = Dir ++ "/" ++ binary_to_list(pget(name, Args)) ++ ".log",
     ok = filelib:ensure_dir(Filename),
@@ -64,9 +66,9 @@ handle_call(_Req, _From, State) ->
 handle_cast(_C, State) ->
     {noreply, State}.
 
-handle_info({#'basic.deliver'{routing_key = Key},
+handle_info({#'basic.deliver'{routing_key = Key, delivery_tag = Seq},
              #amqp_msg{props = #'P_basic'{headers = H}, payload = Payload}},
-            State = #state{file = F}) ->
+            State = #state{ch = Ch, file = F}) ->
     P = fun(Fmt, Args) -> io:format(F, Fmt, Args) end,
     P("~n~s~n", [string:copies("=", 80)]),
     P("~s: ", [rabbit_mgmt_format:timestamp(os:timestamp())]),
@@ -91,6 +93,7 @@ handle_info({#'basic.deliver'{routing_key = Key},
     {table, Props} = table_lookup(H, <<"properties">>),
     P("Properties:   ~p~n", [Props]),
     P("Payload: ~n~s~n", [Payload]),
+    amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = Seq}),
     {noreply, State};
 
 handle_info(_I, State) ->
