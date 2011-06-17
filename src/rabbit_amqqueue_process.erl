@@ -431,9 +431,7 @@ confirm_messages(MsgIds, State = #q{msg_id_to_channel = MTC}) ->
                                     {CMs, MTC0}
                             end
                     end, {gb_trees:empty(), MTC}, MsgIds),
-    gb_trees_foreach(fun(ChPid, MsgSeqNos) ->
-                             rabbit_channel:confirm(ChPid, MsgSeqNos)
-                     end, CMs),
+    gb_trees_foreach(fun rabbit_channel:confirm/2, CMs),
     State#q{msg_id_to_channel = MTC1}.
 
 gb_trees_foreach(_, none) ->
