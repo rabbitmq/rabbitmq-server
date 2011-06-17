@@ -1,54 +1,58 @@
 <h1>Traces</h1>
 <div class="section">
-  <h2>All traces</h2>
+  <h2>Status</h2>
   <div class="hider updatable">
-    <% if (traces.length > 0) { %>
-    <table class="list">
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Pattern</th>
-        </tr>
-      </thead>
-      <tbody>
-        <%
-           for (var i = 0; i < traces.length; i++) {
-             var trace = traces[i];
-        %>
-          <tr<%= alt_rows(i)%>>
-            <td><%= link_to(trace.name, '#/traces/' + esc(trace.vhost) + '/' + esc(trace.name)) %></td>
-            <td><%= trace.pattern %></td>
-          </tr>
-        <% } %>
-      </tbody>
-    </table>
-    <% } else { %>
-    <p>... no traces ...</p>
-    <% } %>
-  </div>
-</div>
-
-<div class="section-hidden">
-  <h2>Virtual hosts and tracing</h2>
-  <div class="hider updatable">
-    <table class="list">
-      <thead>
-        <tr>
-          <th><%= fmt_sort('Name', 'name') %></th>
-          <th>Tracing</th>
-        </tr>
-      </thead>
-      <tbody>
-        <%
-           for (var i = 0; i < vhosts.length; i++) {
-             var vhost = vhosts[i];
-        %>
-          <tr<%= alt_rows(i)%>>
-            <td><%= link_vhost(vhost.name) %></td>
-            <td class="c"><%= fmt_boolean(vhost.tracing) %></td>
-          </tr>
-        <% } %>
-      </tbody>
+    <table class="two-col-layout">
+      <tr>
+        <td>
+          <h3>All traces</h3>
+          <% if (traces.length > 0) { %>
+          <table class="list">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Pattern</th>
+              </tr>
+            </thead>
+            <tbody>
+              <%
+                 for (var i = 0; i < traces.length; i++) {
+                     var trace = traces[i];
+              %>
+              <tr<%= alt_rows(i)%>>
+                <td><%= link_to(trace.name, '#/traces/' + esc(trace.vhost) + '/' + esc(trace.name)) %></td>
+                <td><%= trace.pattern %></td>
+              </tr>
+              <% } %>
+            </tbody>
+          </table>
+          <% } else { %>
+          <p>... no traces ...</p>
+          <% } %>
+        </td>
+        <td>
+          <h3>Virtual hosts and tracing</h3>
+          <table class="list">
+            <thead>
+              <tr>
+                <th><%= fmt_sort('Name', 'name') %></th>
+                <th>Tracing</th>
+              </tr>
+            </thead>
+            <tbody>
+              <%
+                 for (var i = 0; i < vhosts.length; i++) {
+                     var vhost = vhosts[i];
+              %>
+              <tr<%= alt_rows(i)%>>
+                <td><%= link_vhost(vhost.name) %></td>
+                <td class="c"><%= fmt_boolean(vhost.tracing) %></td>
+              </tr>
+              <% } %>
+            </tbody>
+          </table>
+        </td>
+      </tr>
     </table>
   </div>
 </div>
