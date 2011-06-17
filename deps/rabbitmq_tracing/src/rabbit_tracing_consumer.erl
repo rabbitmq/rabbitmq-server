@@ -52,8 +52,8 @@ init(Args) ->
         amqp_channel:subscribe(Ch, #'basic.consume'{queue  = Q,
                                                     no_ack = true}, self()),
     {ok, Dir} = application:get_env(directory),
-    ok = filelib:ensure_dir(Dir),
     Filename = Dir ++ "/" ++ binary_to_list(pget(name, Args)) ++ ".log",
+    ok = filelib:ensure_dir(Filename),
     {ok, F} = file:open(Filename, [append]),
     rabbit_log:info("Tracer opened log file ~p~n", [Filename]),
     {ok, #state{conn = Conn, ch = Ch, queue = Q, file = F}}.
