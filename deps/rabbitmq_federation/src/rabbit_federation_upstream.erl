@@ -74,7 +74,8 @@ from_props_connection(UpstreamProps, ConnName, Conn,
         Host -> Params = #amqp_params_network{
                   host         = Host,
                   port         = pget(port,         Conn),
-                  virtual_host = pget(virtual_host, Conn, DefaultVHost),
+                  virtual_host = list_to_binary(
+                                   pget(virtual_host, Conn, DefaultVHost)),
                   username     = pget(username,     Conn, <<"guest">>),
                   password     = pget(password,     Conn, <<"guest">>)},
                 XName = pget(exchange, UpstreamProps, DefaultXName),

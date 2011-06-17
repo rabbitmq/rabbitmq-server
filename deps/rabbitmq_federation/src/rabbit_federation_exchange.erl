@@ -48,7 +48,7 @@ validate(X = #exchange{arguments = Args}) ->
     validate_arg(<<"upstream_set">>, longstr, Args),
     validate_arg(<<"type">>,         longstr, Args),
     {longstr, SetName} = rabbit_misc:table_lookup(Args, <<"upstream_set">>),
-    case rabbit_federation_upstream:from_set_name(SetName, <<"">>, <<"">>) of
+    case rabbit_federation_upstream:from_set_name(SetName, "", "") of
         {error, {F, A}} -> fail("upstream_set ~s: " ++ F, [SetName | A]);
         _               -> ok
     end,
@@ -108,7 +108,8 @@ with_module(#exchange{ arguments = Args }, Fun) ->
 exchange_to_sup_args(X = #exchange{name = XRes, arguments = Args}) ->
     #resource{name = XName, kind = exchange, virtual_host = VHost} = XRes,
     {longstr, Set} = rabbit_misc:table_lookup(Args, <<"upstream_set">>),
-    Upstreams = rabbit_federation_upstream:from_set_name(Set, XName, VHost),
+    Upstreams = rabbit_federation_upstream:from_set_name(
+                  Set, binary_to_list(XName), binary_to_list(VHost)),
     {Upstreams, X}.
 
 validate_arg(Name, Type, Args) ->
