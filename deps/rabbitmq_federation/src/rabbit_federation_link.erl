@@ -309,17 +309,23 @@ go(S0 = {not_started, {Upstream, #exchange{name = DownstreamX}}}) ->
                     %% serial we will process. Since it compares larger than
                     %% any number we never process any commands. And we will
                     %% soon get told to stop anyway.
-                    {noreply,
-                     ensure_upstream_bindings(
-                       consume_from_upstream_queue(
-                         #state{upstream              = Upstream,
-                                connection            = Conn,
-                                channel               = Ch,
-                                next_serial           = Serial,
-                                downstream_connection = DConn,
-                                downstream_channel    = DCh,
-                                downstream_exchange   = DownstreamX}),
-                       Bindings)};
+                    State =
+                        ensure_upstream_bindings(
+                          consume_from_upstream_queue(
+                            #state{upstream              = Upstream,
+                                   connection            = Conn,
+                                   channel               = Ch,
+                                   next_serial           = Serial,
+                                   downstream_connection = DConn,
+                                   downstream_channel    = DCh,
+                                   downstream_exchange   = DownstreamX}),
+                          Bindings),
+                    rabbit_log:info("Federation ~s connected to ~s~n",
+                                    [rabbit_misc:rs(DownstreamX),
+                                     rabbit_federation_upstream:to_string(
+                                       Upstream)]),
+                    {noreply, State};
+
                 E ->
                     ensure_closed(DConn, DCh),
                     connection_error(E, S0)
