@@ -1,3 +1,3 @@
 An opinionated tracing plugin for RabbitMQ management. Build it
-like any other plugin. You need branch bug23890 of rabbitmq-mochiweb
-and rabbitmq-management.
+like any other plugin. You need branch bug23890 of rabbitmq-management.
+
