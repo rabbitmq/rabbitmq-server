@@ -286,12 +286,11 @@ handle_cast({deliver, ConsumerTag, AckRequired,
                          exchange = ExchangeName#resource.name,
                          routing_key = RoutingKey},
     rabbit_writer:send_command_and_notify(WriterPid, QPid, self(), M, Content),
-
-    maybe_incr_stats([{QPid, 1}],
-                     case AckRequired of
-                         true  -> deliver;
-                         false -> deliver_no_ack
-                     end, State),
+    maybe_incr_stats([{QPid, 1}], case AckRequired of
+                                      true  -> deliver;
+                                      false -> deliver_no_ack
+                                  end, State),
+    maybe_incr_redeliver(Redelivered, QPid, State),
     rabbit_trace:tap_trace_out(Msg, TraceState),
     noreply(State1#ch{next_tag = DeliveryTag + 1});
 
@@ -690,6 +689,7 @@ handle_method(#'basic.get'{queue = QueueNameBin,
                                  true  -> get_no_ack;
                                  false -> get
                              end, State),
+            maybe_incr_redeliver(Redelivered, QPid, State),
             rabbit_trace:tap_trace_out(Msg, TraceState),
             ok = rabbit_writer:send_command(
                    WriterPid,
@@ -1453,6 +1453,11 @@ i(client_flow_blocked, #ch{limiter_pid = LimiterPid}) ->
     rabbit_limiter:is_blocked(LimiterPid);
 i(Item, _) ->
     throw({bad_argument, Item}).
+
+maybe_incr_redeliver(true, QPid, State) ->
+    maybe_incr_stats([{QPid, 1}], redeliver, State);
+maybe_incr_redeliver(_, _, _) ->
+    ok.
 
 maybe_incr_stats(QXIncs, Measure, #ch{stats_timer = StatsTimer}) ->
     case rabbit_event:stats_level(StatsTimer) of
