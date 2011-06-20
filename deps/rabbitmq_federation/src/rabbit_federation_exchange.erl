@@ -74,7 +74,7 @@ delete(none, X, Bs) ->
 
 add_binding(transaction, X, B) ->
     with_module(X, fun (M) -> M:add_binding(transaction, X, B) end);
-add_binding(Serial, X, B = #binding{destination = Dest}) ->
+add_binding(Serial, X, B) ->
     rabbit_federation_link:add_binding(Serial, X, B),
     with_module(X, fun (M) -> M:add_binding(serial(Serial, X), X, B) end).
 
