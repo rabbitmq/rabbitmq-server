@@ -33,7 +33,7 @@
 -type(msg_lookup_fun() :: fun((any(), state()) -> msg_lookup_result())).
 
 -type(msg_lookup_callback() ::
-        fun((msg_lookup_fun(), {any(), state()}) -> {any(), state()})).
+        fun((msg_lookup_fun(), {A, state()}) -> {A, state()})).
 
 -spec(start/1 :: ([rabbit_amqqueue:name()]) -> 'ok').
 -spec(stop/0 :: () -> 'ok').
