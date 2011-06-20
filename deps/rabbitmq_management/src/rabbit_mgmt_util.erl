@@ -29,6 +29,8 @@
 -export([post_respond/1, columns/1, want_column/2, is_admin/1]).
 -export([list_visible_vhosts/1]).
 
+-import(rabbit_misc, [pget/2, pget/3]).
+
 -include("rabbit_mgmt.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
@@ -58,7 +60,7 @@ is_authorized_user(ReqData, Context, Item) ->
     is_authorized(
       ReqData, Context,
       fun(#user{username = Username, tags = Tags}) ->
-              is_admin(Tags) orelse Username == proplists:get_value(user, Item)
+              is_admin(Tags) orelse Username == pget(user, Item)
       end).
 
 is_authorized(ReqData, Context, Fun) ->
@@ -143,9 +145,9 @@ get_dotted_value(Key, Item) ->
 get_dotted_value0([Key], Item) ->
     %% Put "nothing" before everything else, in number terms it usually
     %% means 0.
-    proplists:get_value(list_to_atom(Key), Item, 0);
+    pget(list_to_atom(Key), Item, 0);
 get_dotted_value0([Key | Keys], Item) ->
-    get_dotted_value0(Keys, proplists:get_value(list_to_atom(Key), Item, [])).
+    get_dotted_value0(Keys, pget(list_to_atom(Key), Item, [])).
 
 extract_columns(Items, ReqData) ->
     Cols = columns(ReqData),
@@ -235,7 +237,7 @@ decode(Body) ->
     end.
 
 get_or_missing(K, L) ->
-    case proplists:get_value(K, L) of
+    case pget(K, L) of
         undefined -> {key_missing, K};
         V         -> V
     end.
@@ -248,12 +250,11 @@ http_to_amqp(MethodName, ReqData, Context, Transformers, Extra) ->
             case decode(wrq:req_body(ReqData)) of
                 {ok, Props} ->
                     try
-                        Node =
-                            case proplists:get_value(<<"node">>, Props) of
-                                undefined -> node();
-                                N         -> rabbit_misc:makenode(
-                                               binary_to_list(N))
-                            end,
+                        Node = case pget(<<"node">>, Props) of
+                                   undefined -> node();
+                                   N         -> rabbit_misc:makenode(
+                                                  binary_to_list(N))
+                               end,
                         amqp_request(VHost, ReqData, Context, Node,
                                      props_to_method(
                                        MethodName, Props, Transformers, Extra))
@@ -277,7 +278,7 @@ props_to_method(MethodName, Props) ->
     FieldNames = ?FRAMING:method_fieldnames(MethodName),
     {Res, _Idx} = lists:foldl(
                     fun (K, {R, Idx}) ->
-                            NewR = case proplists:get_value(K, Props1) of
+                            NewR = case pget(K, Props1) of
                                        undefined -> R;
                                        V         -> setelement(Idx, R, V)
                                    end,
@@ -371,13 +372,13 @@ all_or_one_vhost(ReqData, Fun) ->
 
 filter_vhost(List, _ReqData, Context) ->
     VHosts = list_login_vhosts(Context#context.user),
-    [I || I <- List, lists:member(proplists:get_value(vhost, I), VHosts)].
+    [I || I <- List, lists:member(pget(vhost, I), VHosts)].
 
 filter_user(List, _ReqData,
             #context{user = #user{username = Username, tags = Tags}}) ->
     case is_admin(Tags) of
         true  -> List;
-        false -> [I || I <- List, proplists:get_value(user, I) == Username]
+        false -> [I || I <- List, pget(user, I) == Username]
     end.
 
 redirect(Location, ReqData) ->
