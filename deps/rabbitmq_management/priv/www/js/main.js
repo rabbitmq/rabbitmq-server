@@ -7,13 +7,8 @@ $(document).ready(function() {
     statistics_level = JSON.parse(sync_get('/overview')).statistics_level;
     var user = JSON.parse(sync_get('/whoami'));
     replace_content('login', '<p>User: <b>' + user.name + '</b></p>');
-    user_administrator = false;
     var tags = user.tags.split(",");
-    for (var i = 0; i < tags.length; i++) {
-        if (tags[i] == "administrator") {
-            user_administrator = true;
-        }
-    }
+    user_administrator = jQuery.inArray("administrator", tags) != -1;
     nodes_interesting = user_administrator &&
         JSON.parse(sync_get('/nodes')).length > 1;
     vhosts_interesting = JSON.parse(sync_get('/vhosts')).length > 1;
