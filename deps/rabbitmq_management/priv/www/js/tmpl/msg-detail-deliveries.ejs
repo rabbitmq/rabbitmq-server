@@ -9,6 +9,7 @@
 <% } %>
     <th>deliver / get</th>
     <th>ack</th>
+    <th>redeliver</th>
   </tr>
 <%
    for (var i = 0; i < object.length; i++) {
@@ -22,12 +23,14 @@
 <% } %>
        <td class="r"><%= fmt_rate(del.stats, 'deliver_get') %></td>
        <td class="r"><%= fmt_rate(del.stats, 'ack') %></td>
+       <td class="r"><%= fmt_rate(del.stats, 'redeliver') %></td>
      </tr>
 <% } %>
   <tr class="total">
     <th>Total:</th>
     <td><%= fmt_rate(totals, 'deliver_get', false, 'mini-highlight') %></td>
     <td><%= fmt_rate(totals, 'ack', false, 'mini-highlight') %></td>
+    <td><%= fmt_rate(totals, 'redeliver', false, 'mini-highlight') %></td>
   </tr>
 </table>
 <% } else { %>

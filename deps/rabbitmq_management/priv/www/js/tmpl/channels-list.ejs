@@ -2,7 +2,8 @@
 <%
      var col_return_unroutable = !is_col_empty(channels, 'return_unroutable');
      var col_return_not_delivered = !is_col_empty(channels, 'return_not_delivered');
-     var ratesWidth = 4 + (col_return_unroutable ? 1 : 0) + (col_return_not_delivered ? 1 : 0);
+     var col_redeliver = !is_col_empty(channels, 'redeliver');
+     var ratesWidth = 4 + (col_return_unroutable ? 1 : 0) + (col_return_not_delivered ? 1 : 0) + (col_redeliver ? 1 : 0);
 %>
 <table class="list">
  <thead>
@@ -44,6 +45,9 @@
     <% if (col_return_not_delivered) { %>
         <th><%= fmt_sort('return (immediate)', 'message_stats.return_not_delivered_details.rate') %></th>
     <% } %>
+    <% if (col_redeliver) { %>
+        <th><%= fmt_sort('redeliver', 'message_stats.redeliver_details.rate') %></th>
+    <% } %>
 <% } %>
 <% } else { %>
 <!-- TODO make sortable after bug 23401 -->
@@ -63,6 +67,9 @@
     <% } %>
     <% if (col_return_not_delivered) { %>
         <th>return (immediate)</th>
+    <% } %>
+    <% if (col_redeliver) { %>
+        <th>redeliver</th>
     <% } %>
 <% } %>
 <% } %>
@@ -106,6 +113,9 @@
     <% } %>
     <% if (col_return_not_delivered) { %>
     <td class="r"><%= fmt_rate(channel.message_stats, 'return_not_delivered') %></td>
+    <% } %>
+    <% if (col_redeliver) { %>
+        <td class="r"><%= fmt_rate(channel.message_stats, 'redeliver') %></td>
     <% } %>
 <% } %>
   </tr>
