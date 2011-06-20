@@ -42,21 +42,20 @@ requiring clustering. This is useful for the following reasons:
 3) Brokers can contain federated and local-only components - you don't
    need to federate everything if you don't want to.
 
-4) Ultimately, greater scalability should be possible, since in future
-   more complex routing topology will avoid the need for n^2 connections
-   between n brokers.
+4) Ultimately, greater scalability should be possible, since more complex
+   routing topologies avoid the need for n^2 connections between n
+   brokers.
 
-For the time being, the plugin provides a federated exchange
-type. Other features might appear in the future. In particular this
-means that federation is primarily useful in pub/sub scenarios.
+For the time being, federation is primarily useful in pub/sub scenarios.
 
 
 HOWTO
 =====
 
-A federated exchange has type 'x-federation'. However, this type does
-not provide any routing logic. The routing logic is implemented by a
-backing type, provided to the exchange as an argument.
+The plugin provides a federated exchange type. A federated exchange
+has type 'x-federation'. However, this type does not provide any
+routing logic. The routing logic is implemented by a backing type,
+provided to the exchange as an argument.
 
 Messages can be published to a federated exchange like any
 other. However, a federated exchange also receives messages from
@@ -97,7 +96,7 @@ or declared dynamically over AMQP.
 Static Configuration
 ====================
 
-A reasonably verbose static configuration might look like:
+A verbose static configuration might look like:
 
   {rabbit_federation,
    [ {exchanges, [[{exchange,     "my-exchange"},
@@ -116,12 +115,16 @@ A reasonably verbose static configuration might look like:
                      ]},
      {connections, [{"upstream-server", [{host,            "upstream-server"},
                                          {protocol,        "amqps"},
+                                         {port,            5671},
+                                         {virtual_host,    "/"},
                                          {username,        "myusername"},
                                          {password,        "secret"},
+                                         {mechanism,       default},
                                          {prefetch_count,  1000},
                                          {reconnect_delay, 5},
-                                         {heartbeat,       10000},
+                                         {heartbeat,       1},
                                          {queue_expires,   30000},
+                                         {message_ttl,     10000},
                                          {ssl_options,
                                           [{cacertfile, "/path/to/cacert.pem"},
                                            {certfile,   "/path/to/cert.pem"},
@@ -132,7 +135,8 @@ A reasonably verbose static configuration might look like:
                                         ]},
                     {"another-server", [...elided...]}
                    ]},
-     {local_username, "myusername"}
+     {local_username, "myusername"},
+     {local_nodename, "my-server"}
    ]
   }
 
@@ -144,15 +148,24 @@ parameter must match the type of the upstream exchanges for routing to
 work at all sensibly.
 
 Each element in the upstream_set contains a mapping from a name to a
-list of upstreams. Each element in this list must specify a connection
-to use. It can also specify an exchange name and / or virtual host to
-map to - if these are not specified they are taken to be the same as
-for the local exchange. Therefore one upstream_set can be refered to
-by many local exchanges as long as exchange names are the same across
-all the nodes in your federation. Furthermore, it can specify a value
-for max_hops - the maximum number of times a message received over
-this link may have been forwarded (including traversing this
-link). The default for max_hops is 1.
+list of upstreams. Each element in this list can contain the following
+properties:
+
+connection
+  - name of a connection from the connection list. Mandatory.
+
+exchange
+  - name for exchange to connect to. Default is to use the same name
+    as the downstream exchange. (Therefore one upstream_set can be
+    refered to by many local exchanges as long as exchange names are
+    the same across all the nodes in your federation.)
+
+max_hops
+  - the maximum number of times a message received over this link may
+    have been forwarded (including traversing this link). The default
+    for max_hops is 1. This prevents messages from looping forever
+    when there are circular topologies, and can reduce or prevent
+    message duplication.
 
 Note that the static configuration will declare the downstream
 exchanges (on the local broker). It does not ensure the upstream
@@ -165,7 +178,14 @@ host
   - hostname to connect to
 
 protocol
-  - "amqp" or "amqps"
+  - "amqp" or "amqps". Default is "amqp".
+
+port
+  - port to connect to. Default is 5672, or 5671 when using SSL.
+
+virtual_host
+  - virtual host to connect to. Default is to use the virtual host for
+    the downstream exchange.
 
 username
   - user to connect as. Default is "guest". The user will need the
@@ -178,13 +198,13 @@ password
 
 mechanism
   - SASL mechanism to use. One of:
-      'default'  - to use PLAIN or AMQPLAIN by negotiation
+      'default'  - to use PLAIN or AMQPLAIN by negotiation (this is the default)
       'EXTERNAL' - to use SASL EXTERNAL authentication - e.g.
                    rabbitmq-auth-mechanism-ssl
 
 prefetch_count
   - limit on the maximum number of unacknowledged messages in flight
-    per link. Default is none.
+    per link. Default is 'none'.
 
 reconnect_delay
   - time in seconds to wait to reconnect to the broker after being
@@ -192,19 +212,20 @@ reconnect_delay
 
 heartbeat
   - AMQP heartbeat interval (in seconds) on the connection, or none. Default
-    is none.
+    is 'none'.
 
 expires
   - Messages are buffered in the upstream broker in a queue before being
     sent downstream. This setting controls how long the upstream queue
     lasts before being deleted if the downstream is disconnected (i.e.
     it controls the "x-expires" argument for the upstream queue). The
-    value is in milliseconds. Default is forever.
+    value is in milliseconds. Default is 'none', meaning the queue should
+    never expire.
 
 message_ttl
   - Controls how long to keep upstream messages buffered, in milliseconds
     (i.e. the "x-message-ttl" argument for the upstream queue). Default is
-    forever.
+    'none', meaning messages should never expire.
 
 ssl_options
   - Specifies how to make client SSL connections. See the Erlang

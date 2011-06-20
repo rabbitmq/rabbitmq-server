@@ -79,8 +79,9 @@ This means that messages matching R1 are always routed during the
 switchover. Messages for R3 will start being routed as soon as we bind
 the second exchange, and messages for R2 will be stopped in a timely
 way. Of course this could lag the downstream situation somewhat, in
-which case some R2 messages will get thrown away downstream. However
-this lag is inevitable when the link goes down.
+which case some R2 messages will get thrown away downstream since they
+are unroutable. However this lag is inevitable when the link goes
+down.
 
 This means that the downstream only needs to keep track of whether the
 upstream is currently going via internal exchange A or B. This is
@@ -98,6 +99,9 @@ destination) that cannot be duplicated upstream (since the destination
 is the same). The link therefore maintains a mapping of (Key, Args) to
 set(Dest). Duplicated bindings do not get repeated upstream, and are
 only unbound upstream when the last one goes away downstream.
+
+Furthermore, this works as an optimisation since this will tend to
+reduce upstream binding churn.
 
 
 Wrinkle: We may receive binding events out of order
@@ -118,3 +122,24 @@ add_binding and remove_binding callbacks. The link process then queues
 up these events, and replays them in order. The link process's state
 thus always follows Mnesia (it may be delayed, but the effects happen
 in the same order).
+
+
+Other issues
+============
+
+Since links are implemented in terms of AMQP, link failure may cause
+messages to be redelivered. If you're unlucky this could lead to
+duplication.
+
+Message duplication can also happen with some topologies. In some
+cases it may not be possible to set max_hops such that messages arrive
+once at every node.
+
+While we correctly order bind / unbind events, we don't do the same
+thing for exchange creation / deletion. (This is harder - if you
+delete and recreate an exchange with the same name, is it the same
+exchange? What about if its type changes?) This would only be an issue
+if exchanges churn rapidly; however we could get into a state where
+Mnesia sees CDCD but we see CDDC and leave a process running when we
+shouldn't.
+
