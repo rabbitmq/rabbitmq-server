@@ -120,6 +120,9 @@ done
 rm -rf %{buildroot}
 
 %changelog
+* Thu Jun 9 2011 jerryk@vmware.com 2.5.0-1
+- New Upstream Release
+
 * Thu Apr 7 2011 Alexandru Scvortov <alexandru@rabbitmq.com> 2.4.1-1
 - New Upstream Release
 
