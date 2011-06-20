@@ -62,7 +62,7 @@ validate(X = #exchange{arguments = Args}) ->
 create(transaction, X) ->
     with_module(X, fun (M) -> M:create(transaction, X) end);
 create(none, X) ->
-    {ok, _} = rabbit_federation_sup:start_child(X, exchange_to_sup_args(X)),
+    {ok, _} = rabbit_federation_sup:start_child(X, {upstreams(X), X}),
     with_module(X, fun (M) -> M:create(none, X) end).
 
 delete(transaction, X, Bs) ->
@@ -105,12 +105,11 @@ with_module(#exchange{ arguments = Args }, Fun) ->
                      exchange, list_to_existing_atom(binary_to_list(Type))),
     Fun(Module).
 
-exchange_to_sup_args(X = #exchange{name = XRes, arguments = Args}) ->
-    #resource{name = XName, kind = exchange, virtual_host = VHost} = XRes,
+upstreams(#exchange{name      = #resource{name = XName, virtual_host = VHost},
+                    arguments = Args}) ->
     {longstr, Set} = rabbit_misc:table_lookup(Args, <<"upstream_set">>),
-    Upstreams = rabbit_federation_upstream:from_set_name(
-                  Set, binary_to_list(XName), binary_to_list(VHost)),
-    {Upstreams, X}.
+    rabbit_federation_upstream:from_set_name(
+      Set, binary_to_list(XName), binary_to_list(VHost)).
 
 validate_arg(Name, Type, Args) ->
     case rabbit_misc:table_lookup(Args, Name) of
