@@ -42,7 +42,7 @@ to_string(#upstream{params   = #amqp_params_network{host         = H,
 
 from_set(SetName, DefaultXName, DefaultVHost) ->
     {ok, Sets} = application:get_env(rabbitmq_federation, upstream_sets),
-    case pget(binary_to_list(SetName), Sets) of
+    case pget(SetName, Sets) of
         undefined -> {error, {"set not found", []}};
         Set       -> Results = [from_props(P, DefaultXName, DefaultVHost) ||
                                    P <- Set],
