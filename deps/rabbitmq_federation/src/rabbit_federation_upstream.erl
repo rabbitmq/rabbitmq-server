@@ -56,7 +56,7 @@ from_props(UpstreamProps, DefaultXName, DefaultVHost) ->
     {ok, Connections} = application:get_env(rabbitmq_federation, connections),
     case pget(connection, UpstreamProps) of
         undefined -> {error, {"no connection name", []}};
-        ConnName  -> case pget(pget(connection, UpstreamProps), Connections) of
+        ConnName  -> case pget(ConnName, Connections) of
                          undefined  -> {error, {"connection ~s not found",
                                                 [ConnName]}};
                          Conn       -> from_props_connection(
