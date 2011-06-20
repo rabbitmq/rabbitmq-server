@@ -28,12 +28,12 @@
 -type(async_callback() :: fun ((atom(), fun ((atom(), state()) -> state())) -> 'ok')).
 -type(sync_callback() :: fun ((atom(), fun ((atom(), state()) -> state())) -> 'ok' | 'error')).
 
--type(msg_lookup_result() :: {rabbit_types:basic_message(), {any(), state()}}).
+-type(msg_lookup_result() :: {rabbit_types:basic_message(), state()}).
 
--type(msg_lookup_fun() :: fun((any(), state()) -> msg_lookup_result())).
+-type(msg_lookup_fun() :: fun((state()) -> msg_lookup_result())).
 
 -type(msg_lookup_callback() ::
-        fun((msg_lookup_fun(), {A, state()}) -> {A, state()})).
+        fun((msg_lookup_fun(), state()) -> state())).
 
 -spec(start/1 :: ([rabbit_amqqueue:name()]) -> 'ok').
 -spec(stop/0 :: () -> 'ok').
