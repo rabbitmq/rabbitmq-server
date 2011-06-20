@@ -190,9 +190,9 @@ init_expires(Expires, State) -> ensure_expiry_timer(State#q{expires = Expires}).
 
 init_ttl(TTL, State) -> drop_expired_messages(State#q{ttl = TTL}).
 
-init_dlx(DLE, State = #q{q = #amqqueue{name = #resource{
+init_dlx(DLX, State = #q{q = #amqqueue{name = #resource{
                                               virtual_host = VHostPath}}}) ->
-    State#q{dlx = rabbit_misc:r(VHostPath, exchange, DLE)}.
+    State#q{dlx = rabbit_misc:r(VHostPath, exchange, DLX)}.
 
 terminate_shutdown(Fun, State) ->
     State1 = #q{backing_queue = BQ, backing_queue_state = BQS} =
@@ -766,8 +766,8 @@ maybe_dead_letter_queue(Reason, State = #q{
             maybe_dead_letter_queue(Reason, State#q{backing_queue_state = BQS1})
     end.
 
-dead_letter_msg(Msg, Reason, State = #q{dlx = DLE}) ->
-    Exchange = rabbit_exchange:lookup_or_die(DLE),
+dead_letter_msg(Msg, Reason, State = #q{dlx = DLX}) ->
+    Exchange = rabbit_exchange:lookup_or_die(DLX),
 
     rabbit_exchange:publish(
       Exchange,
