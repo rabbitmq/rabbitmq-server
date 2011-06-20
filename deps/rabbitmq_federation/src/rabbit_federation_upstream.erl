@@ -69,6 +69,8 @@ from_props(UpstreamProps, DefaultXName, DefaultVHost) ->
 
 from_props_connection(UpstreamProps, ConnName, Conn,
                       DefaultXName, DefaultVHost) ->
+    {ok, DefaultUser} = application:get_env(rabbit, default_user),
+    {ok, DefaultPass} = application:get_env(rabbit, default_pass),
     case pget(host, Conn, none) of
         none -> {error, {"no host in connection ~s", [ConnName]}};
         Host -> Params = #amqp_params_network{
@@ -76,8 +78,8 @@ from_props_connection(UpstreamProps, ConnName, Conn,
                   port         = pget(port,         Conn),
                   virtual_host = list_to_binary(
                                    pget(virtual_host, Conn, DefaultVHost)),
-                  username     = pget(username,     Conn, <<"guest">>),
-                  password     = pget(password,     Conn, <<"guest">>)},
+                  username     = pget(username,     Conn, DefaultUser),
+                  password     = pget(password,     Conn, DefaultPass)},
                 XName = pget(exchange, UpstreamProps, DefaultXName),
                 MaxHops = pget(max_hops, UpstreamProps, 1),
                 #upstream{params          = set_extra_params(Params, Conn),
