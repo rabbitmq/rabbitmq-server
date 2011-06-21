@@ -30,7 +30,7 @@
 -rabbit_upgrade({exchange_event_serial, mnesia, []}).
 -rabbit_upgrade({trace_exchanges,       mnesia, []}).
 -rabbit_upgrade({user_admin_to_tags,    mnesia, [user_to_internal_user]}).
--rabbit_upgrade({mirror_pids,           mnesia, []}).
+-rabbit_upgrade({ha_mirrors,            mnesia, []}).
 -rabbit_upgrade({gm,                    mnesia, []}).
 
 %% -------------------------------------------------------------------
@@ -47,7 +47,7 @@
 -spec(exchange_event_serial/0 :: () -> 'ok').
 -spec(trace_exchanges/0       :: () -> 'ok').
 -spec(user_admin_to_tags/0    :: () -> 'ok').
--spec(mirror_pids/0           :: () -> 'ok').
+-spec(ha_mirrors/0            :: () -> 'ok').
 -spec(gm/0                    :: () -> 'ok').
 
 -endif.
@@ -137,16 +137,17 @@ user_admin_to_tags() ->
       end,
       [username, password_hash, tags], internal_user).
 
-mirror_pids() ->
+ha_mirrors() ->
     Tables = [rabbit_queue, rabbit_durable_queue],
     AddMirrorPidsFun =
         fun ({amqqueue, Name, Durable, AutoDelete, Owner, Arguments, Pid}) ->
-                {amqqueue, Name, Durable, AutoDelete, Owner, Arguments, Pid, []}
+                {amqqueue, Name, Durable, AutoDelete, Owner, Arguments, Pid,
+                 [], undefined}
         end,
     [ ok = transform(T,
                      AddMirrorPidsFun,
                      [name, durable, auto_delete, exclusive_owner, arguments,
-                      pid, mirror_pids])
+                      pid, slave_pids, mirror_nodes])
       || T <- Tables ],
     ok.
 

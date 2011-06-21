@@ -34,20 +34,20 @@ remove_from_queue(QueueName, DeadPids) ->
               %% get here.
               case mnesia:read({rabbit_queue, QueueName}) of
                   [] -> {error, not_found};
-                  [Q = #amqqueue { pid         = QPid,
-                                   mirror_pids = MPids }] ->
-                      [QPid1 | MPids1] =
-                          [Pid || Pid <- [QPid | MPids],
+                  [Q = #amqqueue { pid        = QPid,
+                                   slave_pids = SPids }] ->
+                      [QPid1 | SPids1] =
+                          [Pid || Pid <- [QPid | SPids],
                                   not lists:member(node(Pid), DeadNodes)],
-                      case {{QPid, MPids}, {QPid1, MPids1}} of
+                      case {{QPid, SPids}, {QPid1, SPids1}} of
                           {Same, Same} ->
                               ok;
                           _ when QPid =:= QPid1 orelse node(QPid1) =:= node() ->
                               %% Either master hasn't changed, so
                               %% we're ok to update mnesia; or master
                               %% has changed to become us!
-                              Q1 = Q #amqqueue { pid         = QPid1,
-                                                 mirror_pids = MPids1 },
+                              Q1 = Q #amqqueue { pid        = QPid1,
+                                                 slave_pids = SPids1 },
                               ok = rabbit_amqqueue:store_queue(Q1);
                           _ ->
                               %% Master has changed, and we're not it,
@@ -91,11 +91,11 @@ drop_slave(VHostPath, QueueName, MirrorNode) ->
 drop_slave(Queue, MirrorNode) ->
     if_mirrored_queue(
       Queue,
-      fun (#amqqueue { name = Name, pid = QPid, mirror_pids = MPids }) ->
-              case [Pid || Pid <- [QPid | MPids], node(Pid) =:= MirrorNode] of
+      fun (#amqqueue { name = Name, pid = QPid, slave_pids = SPids }) ->
+              case [Pid || Pid <- [QPid | SPids], node(Pid) =:= MirrorNode] of
                   [] ->
                       {error, {queue_not_mirrored_on_node, MirrorNode}};
-                  [QPid | MPids] ->
+                  [QPid | SPids] ->
                       {error, cannot_drop_only_mirror};
                   [Pid] ->
                       rabbit_log:info("Dropping slave node on ~p for ~s~n",
@@ -111,8 +111,8 @@ add_slave(VHostPath, QueueName, MirrorNode) ->
 add_slave(Queue, MirrorNode) ->
     if_mirrored_queue(
       Queue,
-      fun (#amqqueue { name = Name, pid = QPid, mirror_pids = MPids } = Q) ->
-              case [Pid || Pid <- [QPid | MPids], node(Pid) =:= MirrorNode] of
+      fun (#amqqueue { name = Name, pid = QPid, slave_pids = SPids } = Q) ->
+              case [Pid || Pid <- [QPid | SPids], node(Pid) =:= MirrorNode] of
                   []  -> Result = rabbit_mirror_queue_slave_sup:start_child(
                                     MirrorNode, [Q]),
                          rabbit_log:info(

@@ -193,19 +193,21 @@ find_durable_queues() ->
       end).
 
 recover_durable_queues(DurableQueues) ->
-    Qs = [start_queue_process(Q) || Q <- DurableQueues],
+    Qs = [start_queue_process(node(), Q) || Q <- DurableQueues],
     [QName || Q = #amqqueue{name = QName, pid = Pid} <- Qs,
               gen_server2:call(Pid, {init, true}, infinity) == {new, Q}].
 
 declare(QueueName, Durable, AutoDelete, Args, Owner) ->
     ok = check_declare_arguments(QueueName, Args),
-    Q = start_queue_process(#amqqueue{name            = QueueName,
-                                      durable         = Durable,
-                                      auto_delete     = AutoDelete,
-                                      arguments       = Args,
-                                      exclusive_owner = Owner,
-                                      pid             = none,
-                                      mirror_pids     = []}),
+    {Node, MNodes} = determine_queue_nodes(Args),
+    Q = start_queue_process(Node, #amqqueue{name            = QueueName,
+                                            durable         = Durable,
+                                            auto_delete     = AutoDelete,
+                                            arguments       = Args,
+                                            exclusive_owner = Owner,
+                                            pid             = none,
+                                            slave_pids      = [],
+                                            mirror_nodes    = MNodes}),
     case gen_server2:call(Q#amqqueue.pid, {init, false}, infinity) of
         not_found -> rabbit_misc:not_found(QueueName);
         Q1        -> Q1
@@ -243,8 +245,25 @@ store_queue(Q = #amqqueue{durable = false}) ->
     ok = mnesia:write(rabbit_queue, Q, write),
     ok.
 
-start_queue_process(Q) ->
-    {ok, Pid} = rabbit_amqqueue_sup:start_child([Q]),
+determine_queue_nodes(Args) ->
+    Policy = rabbit_misc:table_lookup(Args, <<"x-ha-policy">>),
+    PolicyParams = rabbit_misc:table_lookup(Args, <<"x-ha-policy-params">>),
+    case {Policy, PolicyParams} of
+        {{_Type, <<"nodes">>}, {array, Nodes}} ->
+            case [list_to_atom(binary_to_list(Node)) ||
+                     {longstr, Node} <- Nodes] of
+                []             -> {node(), undefined};
+                [Node]         -> {Node, undefined};
+                [First | Rest] -> {First, Rest}
+            end;
+        {{_Type, <<"all">>}, _} ->
+            {node(), all};
+        _ ->
+            {node(), undefined}
+    end.
+
+start_queue_process(Node, Q) ->
+    {ok, Pid} = rabbit_amqqueue_sup:start_child(Node, [Q]),
     Q#amqqueue{pid = Pid}.
 
 add_default_binding(#amqqueue{name = QueueName}) ->
@@ -260,7 +279,7 @@ lookup(Name) ->
 
 with(Name, F, E) ->
     case lookup(Name) of
-        {ok, Q = #amqqueue{mirror_pids = []}} ->
+        {ok, Q = #amqqueue{slave_pids = []}} ->
             rabbit_misc:with_exit_handler(E, fun () -> F(Q) end);
         {ok, Q} ->
             E1 = fun () -> timer:sleep(25), with(Name, F, E) end,
@@ -305,7 +324,7 @@ assert_args_equivalence(#amqqueue{name = QueueName, arguments = Args},
                         RequiredArgs) ->
     rabbit_misc:assert_args_equivalence(
       Args, RequiredArgs, QueueName,
-      [<<"x-expires">>, <<"x-message-ttl">>, <<"x-mirror">>]).
+      [<<"x-expires">>, <<"x-message-ttl">>, <<"x-ha-policy">>]).
 
 check_declare_arguments(QueueName, Args) ->
     [case Fun(rabbit_misc:table_lookup(Args, Key)) of
@@ -317,7 +336,7 @@ check_declare_arguments(QueueName, Args) ->
      end || {Key, Fun} <-
                 [{<<"x-expires">>,     fun check_integer_argument/1},
                  {<<"x-message-ttl">>, fun check_integer_argument/1},
-                 {<<"x-mirror">>,      fun check_array_of_longstr_argument/1}]],
+                 {<<"x-ha-policy">>,   fun check_ha_policy_argument/1}]],
     ok.
 
 check_integer_argument(undefined) ->
@@ -330,16 +349,14 @@ check_integer_argument({Type, Val}) when Val > 0 ->
 check_integer_argument({_Type, Val}) ->
     {error, {value_zero_or_less, Val}}.
 
-check_array_of_longstr_argument(undefined) ->
+check_ha_policy_argument(undefined) ->
     ok;
-check_array_of_longstr_argument({array, Array}) ->
-    case lists:all(fun ({longstr, _NodeName}) -> true;
-                       (_)                    -> false
-                   end, Array) of
-        true  -> ok;
-        false -> {error, {array_contains_non_longstrs, Array}}
-    end;
-check_array_of_longstr_argument({Type, _Val}) ->
+check_ha_policy_argument({longstr, Policy})
+  when Policy =:= <<"nodes">> orelse Policy =:= <<"all">> ->
+    ok;
+check_ha_policy_argument({longstr, Policy}) ->
+    {error, {invalid_ha_policy, Policy}};
+check_ha_policy_argument({Type, _}) ->
     {error, {unacceptable_type, Type}}.
 
 list(VHostPath) ->
@@ -497,7 +514,7 @@ on_node_down(Node) ->
     rabbit_misc:execute_mnesia_tx_with_tail(
       fun () -> Dels = qlc:e(qlc:q([delete_queue(QueueName) ||
                                        #amqqueue{name = QueueName, pid = Pid,
-                                                 mirror_pids = []}
+                                                 slave_pids = []}
                                            <- mnesia:table(rabbit_queue),
                                        node(Pid) == Node])),
                 rabbit_binding:process_deletions(
@@ -510,12 +527,13 @@ delete_queue(QueueName) ->
     rabbit_binding:remove_transient_for_destination(QueueName).
 
 pseudo_queue(QueueName, Pid) ->
-    #amqqueue{name        = QueueName,
-              durable     = false,
-              auto_delete = false,
-              arguments   = [],
-              pid         = Pid,
-              mirror_pids = []}.
+    #amqqueue{name         = QueueName,
+              durable      = false,
+              auto_delete  = false,
+              arguments    = [],
+              pid          = Pid,
+              slave_pids   = [],
+              mirror_nodes = undefined}.
 
 safe_delegate_call_ok(F, Pids) ->
     case delegate:invoke(Pids, fun (Pid) ->

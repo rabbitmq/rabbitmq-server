@@ -75,7 +75,7 @@
          consumers,
          memory,
          backing_queue_status,
-         mirror_pids
+         slave_pids
         ]).
 
 -define(CREATION_EVENT_KEYS,
@@ -84,7 +84,8 @@
          durable,
          auto_delete,
          arguments,
-         owner_pid
+         owner_pid,
+         mirror_nodes
         ]).
 
 -define(INFO_KEYS, ?CREATION_EVENT_KEYS ++ ?STATISTICS_KEYS -- [pid]).
@@ -101,7 +102,8 @@ init(Q) ->
     ?LOGDEBUG("Queue starting - ~p~n", [Q]),
     process_flag(trap_exit, true),
 
-    {ok, #q{q                   = Q#amqqueue{pid = self()},
+    {ok, #q{q                   = Q#amqqueue{pid = self(),
+                                             mirror_nodes = MirrorNodes},
             exclusive_consumer  = none,
             has_had_consumers   = false,
             backing_queue       = backing_queue_module(Q),
@@ -257,10 +259,10 @@ next_state(State = #q{backing_queue = BQ, backing_queue_state = BQS}) ->
     end.
 
 backing_queue_module(#amqqueue{arguments = Args}) ->
-    case rabbit_misc:table_lookup(Args, <<"x-mirror">>) of
+    case rabbit_misc:table_lookup(Args, <<"x-ha-policy">>) of
         undefined -> {ok, BQM} = application:get_env(backing_queue_module),
                      BQM;
-        _Nodes    -> rabbit_mirror_queue_master
+        _Policy   -> rabbit_mirror_queue_master
     end.
 
 ensure_sync_timer(State = #q{sync_timer_ref = undefined}) ->
@@ -803,9 +805,12 @@ i(memory, _) ->
     M;
 i(backing_queue_status, #q{backing_queue_state = BQS, backing_queue = BQ}) ->
     BQ:status(BQS);
-i(mirror_pids, #q{q = #amqqueue{name = Name}}) ->
-    {ok, #amqqueue{mirror_pids = MPids}} = rabbit_amqqueue:lookup(Name),
-    MPids;
+i(slave_pids, #q{q = #amqqueue{name = Name}}) ->
+    {ok, #amqqueue{slave_pids = SPids}} = rabbit_amqqueue:lookup(Name),
+    SPids;
+i(mirror_nodes, #q{q = #amqqueue{name = Name}}) ->
+    {ok, #amqqueue{mirror_nodes = MNodes}} = rabbit_amqqueue:lookup(Name),
+    MNodes;
 i(Item, _) ->
     throw({bad_argument, Item}).
 
