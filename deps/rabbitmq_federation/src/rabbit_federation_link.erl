@@ -112,7 +112,7 @@ handle_cast(Msg, State) ->
 handle_info(#'basic.consume_ok'{}, State) ->
     {noreply, State};
 
-handle_info(#'basic.ack'{ delivery_tag = Seq, multiple = Multiple },
+handle_info(#'basic.ack'{delivery_tag = Seq, multiple = Multiple},
             State = #state{channel = Ch}) ->
     %% We rely on the fact that the delivery tags allocated by the
     %% consuming side will always be increasing from 1, the same as
@@ -149,21 +149,21 @@ handle_info({#'basic.deliver'{routing_key  = Key,
 %% If the downstream channel shuts down cleanly, we can just ignore it
 %% - we're the same node, we're presumably about to go down too.
 handle_info({'DOWN', _Ref, process, Ch, shutdown},
-            State = #state{ downstream_channel = Ch }) ->
+            State = #state{downstream_channel = Ch}) ->
     {noreply, State};
 
 %% If the upstream channel goes down for an intelligible reason, just
 %% log it and die quietly.
 handle_info({'DOWN', _Ref, process, Ch, {shutdown, Reason}},
-            State = #state{ channel = Ch }) ->
+            State = #state{channel = Ch}) ->
     connection_error({upstream_channel_down, Reason}, State);
 
 handle_info({'DOWN', _Ref, process, Ch, Reason},
-            State = #state{ channel = Ch }) ->
+            State = #state{channel = Ch}) ->
     {stop, {upstream_channel_down, Reason}, State};
 
 handle_info({'DOWN', _Ref, process, Ch, Reason},
-            State = #state{ downstream_channel = Ch }) ->
+            State = #state{downstream_channel = Ch}) ->
     {stop, {downstream_channel_down, Reason}, State};
 
 handle_info(Msg, State) ->
@@ -315,17 +315,16 @@ go(S0 = {not_started, {Upstream, #exchange{name = #resource{
                     %% serial we will process. Since it compares larger than
                     %% any number we never process any commands. And we will
                     %% soon get told to stop anyway.
-                    State =
-                        ensure_upstream_bindings(
-                          consume_from_upstream_queue(
-                            #state{upstream              = Upstream,
-                                   connection            = Conn,
-                                   channel               = Ch,
-                                   next_serial           = Serial,
-                                   downstream_connection = DConn,
-                                   downstream_channel    = DCh,
-                                   downstream_exchange   = DownstreamX}),
-                          Bindings),
+                    State = ensure_upstream_bindings(
+                              consume_from_upstream_queue(
+                                #state{upstream              = Upstream,
+                                       connection            = Conn,
+                                       channel               = Ch,
+                                       next_serial           = Serial,
+                                       downstream_connection = DConn,
+                                       downstream_channel    = DCh,
+                                       downstream_exchange   = DownstreamX}),
+                              Bindings),
                     rabbit_log:info("Federation ~s connected to ~s~n",
                                     [rabbit_misc:rs(DownstreamX),
                                      rabbit_federation_upstream:to_string(

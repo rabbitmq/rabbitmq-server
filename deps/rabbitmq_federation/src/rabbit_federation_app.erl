@@ -55,7 +55,7 @@ declare_exchange(Props) ->
         internal    = pget(internal,    Props, false),
         arguments   =
             [{<<"upstream-set">>, longstr, pget_bin(upstream_set, Props)},
-             {<<"type">>,         longstr, pget_bin(type, Props)}]}),
+             {<<"type">>,         longstr, pget_bin(type,         Props)}]}),
     amqp_channel:close(Ch),
     amqp_connection:close(Conn),
     ok.

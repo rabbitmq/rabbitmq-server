@@ -99,7 +99,7 @@ serial(Serial, X) ->
         false -> none
     end.
 
-with_module(#exchange{ arguments = Args }, Fun) ->
+with_module(#exchange{arguments = Args}, Fun) ->
     %% TODO should this be cached? It's on the publish path.
     {longstr, Type} = rabbit_misc:table_lookup(Args, <<"type">>),
     {ok, Module} = rabbit_registry:lookup_module(
