@@ -86,7 +86,7 @@ handle_call(Msg, _From, State) ->
     {stop, {unexpected_call, Msg}, State}.
 
 handle_cast(maybe_go, S0 = {not_started, _Args}) ->
-    case rabbit_federation_util:federation_up() of
+    case federation_up() of
         true  -> go(S0);
         false -> {noreply, S0}
     end;
@@ -203,6 +203,10 @@ x(X) ->
 
 %%----------------------------------------------------------------------------
 
+federation_up() ->
+    lists:keysearch(rabbitmq_federation, 1,
+                    application:which_applications(infinity)) =/= false.
+
 handle_command({add_binding, Binding}, State) ->
     add_binding(Binding, State);
 
@@ -288,8 +292,10 @@ check_remove_binding(B = #binding{destination = Dest},
 
 key(#binding{key = Key, args = Args}) -> {Key, Args}.
 
-go(S0 = {not_started, {Upstream, #exchange{name = DownstreamX}}}) ->
-    case open(rabbit_federation_util:local_params()) of
+go(S0 = {not_started, {Upstream, #exchange{name = #resource{
+                                             virtual_host = DownstreamVHost}
+                                           = DownstreamX}}}) ->
+    case open(rabbit_federation_util:local_params(DownstreamVHost)) of
         {ok, DConn, DCh} ->
             #'confirm.select_ok'{} =
                amqp_channel:call(DCh, #'confirm.select'{}),

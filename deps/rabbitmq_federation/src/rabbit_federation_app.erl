@@ -42,9 +42,8 @@ stop(_State) ->
 declare_exchange(Props) ->
     {ok, DefaultVHost} = application:get_env(rabbit, default_vhost),
     VHost = pget_bin(virtual_host, Props, DefaultVHost),
-    Params = rabbit_federation_util:local_params(),
-    Params1 = Params#amqp_params_direct{virtual_host = VHost},
-    {ok, Conn} = amqp_connection:start(Params1),
+    Params = rabbit_federation_util:local_params(VHost),
+    {ok, Conn} = amqp_connection:start(Params),
     {ok, Ch} = amqp_connection:open_channel(Conn),
     XName = pget_bin(exchange, Props),
     amqp_channel:call(
