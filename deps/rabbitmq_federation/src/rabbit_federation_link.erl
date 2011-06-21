@@ -112,22 +112,19 @@ handle_cast(Msg, State) ->
 handle_info(#'basic.consume_ok'{}, State) ->
     {noreply, State};
 
-handle_info(#'basic.ack'{delivery_tag = Seq, multiple = Multiple},
-            State = #state{channel = Ch}) ->
+handle_info(#'basic.ack'{delivery_tag = Seq, multiple = Multiple}, State) ->
     %% We rely on the fact that the delivery tags allocated by the
     %% consuming side will always be increasing from 1, the same as
     %% the publish sequence numbers are. This behaviour is not
     %% guaranteed by the spec, but it's what Rabbit does. Assuming
     %% this allows us to cut out a bunch of bookkeeping.
-    amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = Seq,
-                                       multiple     = Multiple}),
+    ack(Seq, Multiple, State),
     {noreply, State};
 
 handle_info({#'basic.deliver'{routing_key  = Key,
                               delivery_tag = Seq}, Msg},
             State = #state{
               upstream            = #upstream{max_hops = MaxHops} = Upstream,
-              channel             = Ch,
               downstream_exchange = #resource{name = X},
               downstream_channel  = DCh}) ->
     Headers0 = extract_headers(Msg),
@@ -139,9 +136,7 @@ handle_info({#'basic.deliver'{routing_key  = Key,
                                                          routing_key = Key},
                                    update_headers(Headers, Msg)),
                  ok;
-        false -> %% Drop it, but acknowledge it!
-                 amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = Seq,
-                                                    multiple     = false}),
+        false -> ack(Seq, false, State), %% Drop it, but acknowledge it!
                  ok
     end,
     {noreply, State};
@@ -461,6 +456,10 @@ ensure_closed(Conn, Ch) ->
 
 ensure_closed(Ch) ->
     catch amqp_channel:close(Ch).
+
+ack(Tag, Multiple, #state{channel = Ch}) ->
+    amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = Tag,
+                                       multiple     = Multiple}).
 
 should_forward(undefined, _MaxHops) ->
     true;
