@@ -53,10 +53,7 @@ serialisation_test() ->
     X = #exchange{arguments = Args} = x(),
     rabbit_exchange:declare(r(?DS_NAME), 'x-federation',
                             false, false, false, Args),
-    B1 = b(<<"1">>),
-    B2 = b(<<"2">>),
-    B3 = b(<<"3">>),
-
+    [B1, B2, B3] = [b(K) || K <- [<<"1">>, <<"2">>, <<"3">>]],
     remove_bindings(4, X, [B1, B3]),
     add_binding(5, X, B1),
     add_binding(1, X, B1),
