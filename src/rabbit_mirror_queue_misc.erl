@@ -67,9 +67,7 @@ on_node_up() ->
         rabbit_misc:execute_mnesia_transaction(
           fun () ->
                   mnesia:foldl(
-                    fun (#amqqueue { mirror_nodes = [] }, QsN) ->
-                            QsN;
-                        (#amqqueue { mirror_nodes = undefined }, QsN) ->
+                    fun (#amqqueue { mirror_nodes = undefined }, QsN) ->
                             QsN;
                         (#amqqueue { name         = QName,
                                      mirror_nodes = all }, QsN) ->
