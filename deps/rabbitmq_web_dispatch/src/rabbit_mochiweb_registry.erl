@@ -78,7 +78,7 @@ handle_call({list, Listener}, _From, undefined) ->
     end;
 
 handle_call(list_all, _From, undefined) ->
-    {ok, Listeners} = application:get_env(listeners),
+    Listeners = rabbit_mochiweb:all_listeners(),
     Res = [{Path, Desc, proplists:get_value(Name, Listeners)} ||
                 {{dispatch, Name}, {V, _}} <- application:get_all_env(),
                 {_, _, _, {Path, Desc}} <- V],

@@ -5,8 +5,8 @@
   {registered, []},
   {mod, {rabbit_mochiweb_app, []}},
   {env, [
-         {listeners, [{'*', [{port, 55670}]},
-                      {mgmt, [{port, 55672}]}]},
-         {contexts, [{rabbit_mgmt, mgmt}]}
+         {listeners,        [{mgmt, [{port, 55672}]}]},
+         {contexts,         [{rabbit_mgmt, mgmt}]},
+         {default_listener, [{port, 55670}]}
         ]},
   {applications, [kernel, stdlib]}]}.
