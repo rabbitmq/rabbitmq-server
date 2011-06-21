@@ -19,7 +19,9 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_federation.hrl").
 
--export([federation_up/0, local_params/0]).
+-export([federation_up/0, local_params/0, pget_bin/2, pget_bin/3]).
+
+-import(rabbit_misc, [pget_or_die/2, pget/3]).
 
 %%----------------------------------------------------------------------------
 
@@ -31,3 +33,7 @@ local_params() ->
     {ok, U} = application:get_env(rabbitmq_federation, local_username),
     #amqp_params_direct{username = list_to_binary(U)}.
 
+pget_bin(K, T) -> list_to_binary(pget_or_die(K, T)).
+
+pget_bin(K, T, D) when is_binary(D) -> pget_bin(K, T, binary_to_list(D));
+pget_bin(K, T, D) when is_list(D)   -> list_to_binary(pget(K, T, D)).

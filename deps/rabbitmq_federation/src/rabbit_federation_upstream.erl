@@ -22,6 +22,7 @@
 -export([to_table/1, to_string/1, from_set/3]).
 
 -import(rabbit_misc, [pget/2, pget/3]).
+-import(rabbit_federation_util, [pget_bin/3]).
 
 %%----------------------------------------------------------------------------
 
@@ -42,7 +43,7 @@ to_string(#upstream{params   = #amqp_params_network{host         = H,
 
 from_set(SetName, DefaultXName, DefaultVHost) ->
     {ok, Sets} = application:get_env(rabbitmq_federation, upstream_sets),
-    case pget(SetName, Sets) of
+    case pget(binary_to_list(SetName), Sets) of
         undefined -> {error, {"set not found", []}};
         Set       -> Results = [from_props(P, DefaultXName, DefaultVHost) ||
                                    P <- Set],
@@ -52,39 +53,36 @@ from_set(SetName, DefaultXName, DefaultVHost) ->
                      end
     end.
 
-from_props(UpstreamProps, DefaultXName, DefaultVHost) ->
+from_props(Upst, DefaultXName, DefaultVHost) ->
     {ok, Connections} = application:get_env(rabbitmq_federation, connections),
-    case pget(connection, UpstreamProps) of
+    case pget(connection, Upst) of
         undefined -> {error, {"no connection name", []}};
         ConnName  -> case pget(ConnName, Connections) of
                          undefined  -> {error, {"connection ~s not found",
                                                 [ConnName]}};
                          Conn       -> from_props_connection(
-                                         UpstreamProps, ConnName, Conn,
-                                         DefaultXName, DefaultVHost)
+                                         Upst, ConnName, Conn, DefaultXName,
+                                         DefaultVHost)
                      end
     end.
 
-from_props_connection(UpstreamProps, ConnName, Conn,
-                      DefaultXName, DefaultVHost) ->
+from_props_connection(Upst, ConnName, Conn, DefaultXName, DefaultVHost) ->
     {ok, DefaultUser} = application:get_env(rabbit, default_user),
     {ok, DefaultPass} = application:get_env(rabbit, default_pass),
     case pget(host, Conn, none) of
         none -> {error, {"no host in connection ~s", [ConnName]}};
         Host -> Params = #amqp_params_network{
                   host         = Host,
-                  port         = pget(port,         Conn),
-                  virtual_host = list_to_binary(
-                                   pget(virtual_host, Conn, DefaultVHost)),
-                  username     = pget(username,     Conn, DefaultUser),
-                  password     = pget(password,     Conn, DefaultPass)},
-                XName = pget(exchange, UpstreamProps, DefaultXName),
-                MaxHops = pget(max_hops, UpstreamProps, 1),
+                  port         = pget    (port,         Conn),
+                  virtual_host = pget_bin(virtual_host, Conn, DefaultVHost),
+                  username     = pget_bin(username,     Conn, DefaultUser),
+                  password     = pget_bin(password,     Conn, DefaultPass)},
+                XName = pget_bin(exchange, Upst, DefaultXName),
                 #upstream{params          = set_extra_params(Params, Conn),
-                          exchange        = list_to_binary(XName),
+                          exchange        = XName,
                           prefetch_count  = pget(prefetch_count,  Conn, none),
                           reconnect_delay = pget(reconnect_delay, Conn, 1),
-                          max_hops        = MaxHops,
+                          max_hops        = pget(max_hops,        Upst, 1),
                           expires         = pget(expires,         Conn, none),
                           message_ttl     = pget(message_ttl,     Conn, none)}
     end.

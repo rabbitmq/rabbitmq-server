@@ -25,7 +25,8 @@
 -export([init/1]).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
--import(rabbit_misc, [pget_or_die/2, pget/3]).
+-import(rabbit_misc, [pget/3]).
+-import(rabbit_federation_util, [pget_bin/2, pget_bin/3]).
 
 start(_Type, _StartArgs) ->
     {ok, Xs} = application:get_env(exchanges),
@@ -40,13 +41,12 @@ stop(_State) ->
 
 declare_exchange(Props) ->
     {ok, DefaultVHost} = application:get_env(rabbit, default_vhost),
-    VHost = list_to_binary(
-              pget(virtual_host, Props, binary_to_list(DefaultVHost))),
+    VHost = pget_bin(virtual_host, Props, DefaultVHost),
     Params = rabbit_federation_util:local_params(),
     Params1 = Params#amqp_params_direct{virtual_host = VHost},
     {ok, Conn} = amqp_connection:start(Params1),
     {ok, Ch} = amqp_connection:open_channel(Conn),
-    XName = list_to_binary(pget_or_die(exchange, Props)),
+    XName = pget_bin(exchange, Props),
     amqp_channel:call(
       Ch, #'exchange.declare'{
         exchange    = XName,
@@ -60,8 +60,6 @@ declare_exchange(Props) ->
     amqp_channel:close(Ch),
     amqp_connection:close(Conn),
     ok.
-
-pget_bin(K, T) -> list_to_binary(pget_or_die(K, T)).
 
 %%----------------------------------------------------------------------------
 
