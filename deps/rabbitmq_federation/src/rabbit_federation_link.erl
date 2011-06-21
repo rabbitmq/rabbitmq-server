@@ -436,10 +436,11 @@ upstream_exchange_name(X, VHost, DownstreamX, Suffix) ->
 local_nodename() ->
     {ok, Explicit} = application:get_env(rabbitmq_federation, local_nodename),
     case Explicit of
-        automatic -> [ID | _] = string:tokens(atom_to_list(node()), "@"),
+        automatic -> {ID, _} = rabbit_misc:nodeparts(node()),
                      {ok, Host} = inet:gethostname(),
                      {ok, #hostent{h_name = FQDN}} = inet:gethostbyname(Host),
-                     list_to_binary(ID ++ "@" ++ FQDN);
+                     list_to_binary(atom_to_list(
+                                      rabbit_misc:makenode({ID, FQDN})));
         _         -> list_to_binary(Explicit)
     end.
 
