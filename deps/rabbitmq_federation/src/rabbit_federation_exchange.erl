@@ -49,8 +49,8 @@ validate(X = #exchange{arguments = Args}) ->
     validate_arg(<<"type">>,         longstr, Args),
     {longstr, SetName} = rabbit_misc:table_lookup(Args, <<"upstream-set">>),
     case rabbit_federation_upstream:from_set(SetName, <<"">>, <<"">>) of
-        {error, {F, A}} -> fail("upstream-set ~s: " ++ F, [SetName | A]);
-        _               -> ok
+        {error, E} -> fail_error(SetName, E);
+        {ok, _}    -> ok
     end,
     {longstr, TypeBin} = rabbit_misc:table_lookup(Args, <<"type">>),
     case rabbit_exchange:check_type(TypeBin) of
@@ -108,7 +108,8 @@ with_module(#exchange{ arguments = Args }, Fun) ->
 upstreams(#exchange{name      = #resource{name = XName, virtual_host = VHost},
                     arguments = Args}) ->
     {longstr, Set} = rabbit_misc:table_lookup(Args, <<"upstream-set">>),
-    rabbit_federation_upstream:from_set(Set, XName, VHost).
+    {ok, Upstreams} = rabbit_federation_upstream:from_set(Set, XName, VHost),
+    Upstreams.
 
 validate_arg(Name, Type, Args) ->
     case rabbit_misc:table_lookup(Args, Name) of
@@ -118,3 +119,12 @@ validate_arg(Name, Type, Args) ->
     end.
 
 fail(Fmt, Args) -> rabbit_misc:protocol_error(precondition_failed, Fmt, Args).
+
+fail_error(SetName, Reason) ->
+    {Fmt, Args} = error_text(Reason),
+    fail("upstream-set ~s: " ++ Fmt, [SetName | Args]).
+
+error_text(set_not_found)         -> {"set not found", []};
+error_text(no_connection_name)    -> {"no connection name", []};
+error_text({no_connection, Name}) -> {"connection ~s not found", [Name]};
+error_text({no_host,       Name}) -> {"no host in connection ~s", [Name]}.

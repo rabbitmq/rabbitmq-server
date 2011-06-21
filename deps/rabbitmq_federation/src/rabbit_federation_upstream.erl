@@ -44,11 +44,11 @@ to_string(#upstream{params   = #amqp_params_network{host         = H,
 from_set(SetName, DefaultXName, DefaultVHost) ->
     {ok, Sets} = application:get_env(rabbitmq_federation, upstream_sets),
     case pget(binary_to_list(SetName), Sets) of
-        undefined -> {error, {"set not found", []}};
+        undefined -> {error, set_not_found};
         Set       -> Results = [from_props(P, DefaultXName, DefaultVHost) ||
                                    P <- Set],
                      case [E || E = {error, _} <- Results] of
-                         []      -> Results;
+                         []      -> {ok, Results};
                          [E | _] -> E
                      end
     end.
@@ -56,10 +56,9 @@ from_set(SetName, DefaultXName, DefaultVHost) ->
 from_props(Upst, DefaultXName, DefaultVHost) ->
     {ok, Connections} = application:get_env(rabbitmq_federation, connections),
     case pget(connection, Upst) of
-        undefined -> {error, {"no connection name", []}};
+        undefined -> {error, no_connection_name};
         ConnName  -> case pget(ConnName, Connections) of
-                         undefined  -> {error, {"connection ~s not found",
-                                                [ConnName]}};
+                         undefined  -> {error, {no_connection, ConnName}};
                          Conn       -> from_props_connection(
                                          Upst, ConnName, Conn, DefaultXName,
                                          DefaultVHost)
@@ -70,7 +69,7 @@ from_props_connection(Upst, ConnName, Conn, DefaultXName, DefaultVHost) ->
     {ok, DefaultUser} = application:get_env(rabbit, default_user),
     {ok, DefaultPass} = application:get_env(rabbit, default_pass),
     case pget(host, Conn, none) of
-        none -> {error, {"no host in connection ~s", [ConnName]}};
+        none -> {error, {no_host, ConnName}};
         Host -> Params = #amqp_params_network{
                   host         = Host,
                   port         = pget    (port,         Conn),
