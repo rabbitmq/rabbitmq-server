@@ -101,7 +101,7 @@ set(Dest). Duplicated bindings do not get repeated upstream, and are
 only unbound upstream when the last one goes away downstream.
 
 Furthermore, this works as an optimisation since this will tend to
-reduce upstream binding churn.
+reduce upstream binding count and churn.
 
 
 Wrinkle: We may receive binding events out of order
