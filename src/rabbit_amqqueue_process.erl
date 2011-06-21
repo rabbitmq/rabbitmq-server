@@ -33,6 +33,8 @@
          handle_info/2, handle_pre_hibernate/1, prioritise_call/3,
          prioritise_cast/2, prioritise_info/2]).
 
+-export([init_with_backing_queue_state/7]).
+
 %% Queue's state
 -record(q, {q,
             exclusive_consumer,
@@ -72,7 +74,8 @@
          messages,
          consumers,
          memory,
-         backing_queue_status
+         backing_queue_status,
+         mirror_pids
         ]).
 
 -define(CREATION_EVENT_KEYS,
@@ -113,6 +116,34 @@ init(Q) ->
             stats_timer         = rabbit_event:init_stats_timer(),
             msg_id_to_channel   = dict:new()}, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
+
+init_with_backing_queue_state(Q = #amqqueue{exclusive_owner = Owner}, BQ, BQS,
+                              RateTRef, AckTags, Deliveries, MTC) ->
+    ?LOGDEBUG("Queue starting - ~p~n", [Q]),
+    case Owner of
+        none -> ok;
+        _    -> erlang:monitor(process, Owner)
+    end,
+    State = requeue_and_run(
+              AckTags,
+              process_args(
+                #q{q                   = Q,
+                   exclusive_consumer  = none,
+                   has_had_consumers   = false,
+                   backing_queue       = BQ,
+                   backing_queue_state = BQS,
+                   active_consumers    = queue:new(),
+                   blocked_consumers   = queue:new(),
+                   expires             = undefined,
+                   sync_timer_ref      = undefined,
+                   rate_timer_ref      = RateTRef,
+                   expiry_timer_ref    = undefined,
+                   ttl                 = undefined,
+                   stats_timer         = rabbit_event:init_stats_timer(),
+                   msg_id_to_channel   = MTC})),
+    lists:foldl(
+      fun (Delivery, StateN) -> deliver_or_enqueue(Delivery, StateN) end,
+      State, Deliveries).
 
 terminate(shutdown = R,      State = #q{backing_queue = BQ}) ->
     terminate_shutdown(fun (BQS) -> BQ:terminate(R, BQS) end, State);
@@ -225,9 +256,12 @@ next_state(State = #q{backing_queue = BQ, backing_queue_state = BQS}) ->
         timed -> {ensure_sync_timer(State1), 0        }
     end.
 
-backing_queue_module(#amqqueue{}) ->
-    {ok, BQM} = application:get_env(backing_queue_module),
-    BQM.
+backing_queue_module(#amqqueue{arguments = Args}) ->
+    case rabbit_misc:table_lookup(Args, <<"x-mirror">>) of
+        undefined -> {ok, BQM} = application:get_env(backing_queue_module),
+                     BQM;
+        _Nodes    -> rabbit_mirror_queue_master
+    end.
 
 ensure_sync_timer(State = #q{sync_timer_ref = undefined}) ->
     {ok, TRef} = timer:apply_after(
@@ -769,6 +803,9 @@ i(memory, _) ->
     M;
 i(backing_queue_status, #q{backing_queue_state = BQS, backing_queue = BQ}) ->
     BQ:status(BQS);
+i(mirror_pids, #q{q = #amqqueue{name = Name}}) ->
+    {ok, #amqqueue{mirror_pids = MPids}} = rabbit_amqqueue:lookup(Name),
+    MPids;
 i(Item, _) ->
     throw({bad_argument, Item}).
 
