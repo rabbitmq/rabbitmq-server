@@ -84,13 +84,13 @@ init([#amqqueue { name = QueueName } = Q]) ->
     {ok, MPid} =
         rabbit_misc:execute_mnesia_transaction(
           fun () ->
-                  [Q1 = #amqqueue { pid = QPid, mirror_pids = MPids }] =
+                  [Q1 = #amqqueue { pid = QPid, slave_pids = MPids }] =
                       mnesia:read({rabbit_queue, QueueName}),
                   %% ASSERTION
                   [] = [Pid || Pid <- [QPid | MPids], node(Pid) =:= Node],
                   MPids1 = MPids ++ [Self],
                   mnesia:write(rabbit_queue,
-                               Q1 #amqqueue { mirror_pids = MPids1 },
+                               Q1 #amqqueue { slave_pids = MPids1 },
                                write),
                   {ok, QPid}
           end),
@@ -714,7 +714,7 @@ process_instruction(
                 end;
             {{value, {#delivery {}, _EnqueueOnPromotion}}, _MQ2} ->
                 %% The instruction was sent to us before we were
-                %% within the mirror_pids within the #amqqueue{}
+                %% within the slave_pids within the #amqqueue{}
                 %% record. We'll never receive the message directly
                 %% from the channel. And the channel will not be
                 %% expecting any confirms from us.
@@ -756,7 +756,7 @@ process_instruction({discard, ChPid, Msg = #basic_message { id = MsgId }},
                 {MQ2, PendingCh, MS};
             {{value, {#delivery {}, _EnqueueOnPromotion}}, _MQ2} ->
                 %% The instruction was sent to us before we were
-                %% within the mirror_pids within the #amqqueue{}
+                %% within the slave_pids within the #amqqueue{}
                 %% record. We'll never receive the message directly
                 %% from the channel.
                 {MQ, PendingCh, MS}

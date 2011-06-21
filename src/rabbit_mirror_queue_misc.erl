@@ -69,6 +69,11 @@ on_node_up() ->
                   mnesia:foldl(
                     fun (#amqqueue { mirror_nodes = [] }, QsN) ->
                             QsN;
+                        (#amqqueue { mirror_nodes = undefined }, QsN) ->
+                            QsN;
+                        (#amqqueue { name         = QName,
+                                     mirror_nodes = all }, QsN) ->
+                            [QName | QsN];
                         (#amqqueue { name         = QName,
                                      mirror_nodes = MNodes }, QsN) ->
                             case lists:member(node(), MNodes) of
