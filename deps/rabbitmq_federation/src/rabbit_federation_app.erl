@@ -55,7 +55,7 @@ declare_exchange(Props) ->
         auto_delete = pget(auto_delete, Props, false),
         internal    = pget(internal,    Props, false),
         arguments   =
-            [{<<"upstream_set">>, longstr, pget_bin(upstream_set, Props)},
+            [{<<"upstream-set">>, longstr, pget_bin(upstream_set, Props)},
              {<<"type">>,         longstr, pget_bin(type, Props)}]}),
     amqp_channel:close(Ch),
     amqp_connection:close(Conn),

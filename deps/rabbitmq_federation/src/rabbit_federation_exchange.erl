@@ -45,11 +45,11 @@ serialise_events() -> true.
 route(X, Delivery) -> with_module(X, fun (M) -> M:route(X, Delivery) end).
 
 validate(X = #exchange{arguments = Args}) ->
-    validate_arg(<<"upstream_set">>, longstr, Args),
+    validate_arg(<<"upstream-set">>, longstr, Args),
     validate_arg(<<"type">>,         longstr, Args),
-    {longstr, SetName} = rabbit_misc:table_lookup(Args, <<"upstream_set">>),
+    {longstr, SetName} = rabbit_misc:table_lookup(Args, <<"upstream-set">>),
     case rabbit_federation_upstream:from_set(SetName, <<"">>, <<"">>) of
-        {error, {F, A}} -> fail("upstream_set ~s: " ++ F, [SetName | A]);
+        {error, {F, A}} -> fail("upstream-set ~s: " ++ F, [SetName | A]);
         _               -> ok
     end,
     {longstr, TypeBin} = rabbit_misc:table_lookup(Args, <<"type">>),
@@ -107,7 +107,7 @@ with_module(#exchange{ arguments = Args }, Fun) ->
 
 upstreams(#exchange{name      = #resource{name = XName, virtual_host = VHost},
                     arguments = Args}) ->
-    {longstr, Set} = rabbit_misc:table_lookup(Args, <<"upstream_set">>),
+    {longstr, Set} = rabbit_misc:table_lookup(Args, <<"upstream-set">>),
     rabbit_federation_upstream:from_set(Set, XName, VHost).
 
 validate_arg(Name, Type, Args) ->

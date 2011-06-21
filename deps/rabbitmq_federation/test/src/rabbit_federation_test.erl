@@ -78,7 +78,7 @@ e2e_test() ->
 
 validation_test() ->
     T = fun (U) ->
-                {<<"upstream_set">>, longstr, U}
+                {<<"upstream-set">>, longstr, U}
         end,
     Type = {<<"type">>, longstr, <<"topic">>},
 
@@ -268,7 +268,7 @@ fed(Name, UpstreamSet, Type) when is_binary(Type) ->
         exchange  = Name,
         durable   = true,
         type      = <<"x-federation">>,
-        arguments = [{<<"upstream_set">>, longstr, UpstreamSet},
+        arguments = [{<<"upstream-set">>, longstr, UpstreamSet},
                      {<<"type">>,         longstr, Type}]
     }.
 

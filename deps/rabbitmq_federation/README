@@ -248,16 +248,17 @@ This is a less common case, but in case you want to do this:
 
  * Declare the downstream exchange with type "x-federation".
 
- * Give it arguments "type" and "upstream_set", both of type "long
+ * Give it arguments "type" and "upstream-set", both of type "long
    string". "type" should refer to its backing type; the type of the
-   upstream exchanges. "upstream_set" should be the name of an
-   upstream_set from the static configuration.
+   upstream exchanges. "upstream-set" should be the name of an
+   upstream_set from the static configuration (note that it's a hyphen
+   over AMQP but an underscore in the configuration).
 
 Example using the Java API:
 
 Map<String, Object> args = new HashMap<String, Object>();
 args.put("type", "topic");
-args.put("upstream_set", "my-upstream-set");
+args.put("upstream-set", "my-upstream-set");
 
 Channel ch = ...;
 ch.exchangeDeclare("my-federated-exchange", "x-federation", true, false, args);
