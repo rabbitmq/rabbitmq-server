@@ -44,11 +44,12 @@ serialise_events() -> true.
 
 route(X, Delivery) -> with_module(X, fun (M) -> M:route(X, Delivery) end).
 
-validate(X = #exchange{arguments = Args}) ->
+validate(#exchange{name      = #resource{name = XName, virtual_host = VHost},
+                   arguments = Args} = X) ->
     validate_arg(<<"upstream-set">>, longstr, Args),
     validate_arg(<<"type">>,         longstr, Args),
     {longstr, SetName} = rabbit_misc:table_lookup(Args, <<"upstream-set">>),
-    case rabbit_federation_upstream:from_set(SetName, <<"">>, <<"">>) of
+    case rabbit_federation_upstream:from_set(SetName, XName, VHost) of
         {error, E} -> fail_error(SetName, E);
         {ok, _}    -> ok
     end,
