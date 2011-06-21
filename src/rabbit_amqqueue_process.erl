@@ -102,8 +102,7 @@ init(Q) ->
     ?LOGDEBUG("Queue starting - ~p~n", [Q]),
     process_flag(trap_exit, true),
 
-    {ok, #q{q                   = Q#amqqueue{pid = self(),
-                                             mirror_nodes = MirrorNodes},
+    {ok, #q{q                   = Q#amqqueue{pid = self()},
             exclusive_consumer  = none,
             has_had_consumers   = false,
             backing_queue       = backing_queue_module(Q),
