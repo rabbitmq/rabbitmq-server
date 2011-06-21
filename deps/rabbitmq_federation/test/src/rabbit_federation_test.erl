@@ -273,26 +273,26 @@ fed(Name, UpstreamSet, Type) when is_binary(Type) ->
     }.
 
 declare_queue(Ch) ->
-    #'queue.declare_ok'{ queue = Q } =
-        amqp_channel:call(Ch, #'queue.declare'{ exclusive = true }),
+    #'queue.declare_ok'{queue = Q} =
+        amqp_channel:call(Ch, #'queue.declare'{exclusive = true}),
     Q.
 
 bind_queue(Ch, Q, X, Key) ->
-    amqp_channel:call(Ch, #'queue.bind'{ queue       = Q,
-                                         exchange    = X,
-                                         routing_key = Key }),
+    amqp_channel:call(Ch, #'queue.bind'{queue       = Q,
+                                        exchange    = X,
+                                        routing_key = Key}),
     delay().
 
 unbind_queue(Ch, Q, X, Key) ->
-    amqp_channel:call(Ch, #'queue.unbind'{ queue       = Q,
-                                           exchange    = X,
-                                           routing_key = Key }),
+    amqp_channel:call(Ch, #'queue.unbind'{queue       = Q,
+                                          exchange    = X,
+                                          routing_key = Key}),
     delay().
 
 bind_exchange(Ch, D, S, Key) ->
-    amqp_channel:call(Ch, #'exchange.bind'{ destination = D,
-                                            source      = S,
-                                            routing_key = Key }),
+    amqp_channel:call(Ch, #'exchange.bind'{destination = D,
+                                           source      = S,
+                                           routing_key = Key}),
     delay().
 
 delay() ->
@@ -305,35 +305,35 @@ bind_queue(Ch, X, Key) ->
     Q.
 
 delete_exchange(Ch, X) ->
-    amqp_channel:call(Ch, #'exchange.delete'{ exchange = X }),
+    amqp_channel:call(Ch, #'exchange.delete'{exchange = X}),
     delay().
 
 delete_queue(Ch, Q) ->
-    amqp_channel:call(Ch, #'queue.delete'{ queue = Q }),
+    amqp_channel:call(Ch, #'queue.delete'{queue = Q}),
     delay().
 
 publish(Ch, X, Key, Payload) ->
-    amqp_channel:call(Ch, #'basic.publish'{ exchange    = X,
-                                            routing_key = Key },
-                      #amqp_msg { payload = Payload }).
+    amqp_channel:call(Ch, #'basic.publish'{exchange    = X,
+                                           routing_key = Key},
+                      #amqp_msg{payload = Payload}).
 
 expect(Ch, Q, Payloads) ->
-    amqp_channel:subscribe(Ch, #'basic.consume'{ queue  = Q,
-                                                 no_ack = true}, self()),
+    amqp_channel:subscribe(Ch, #'basic.consume'{queue  = Q,
+                                                no_ack = true}, self()),
     receive
-        #'basic.consume_ok'{ consumer_tag = CTag } -> ok
+        #'basic.consume_ok'{consumer_tag = CTag} -> ok
     end,
     expect(Payloads),
-    amqp_channel:call(Ch, #'basic.cancel'{ consumer_tag = CTag }).
+    amqp_channel:call(Ch, #'basic.cancel'{consumer_tag = CTag}).
 
 expect([]) ->
     ok;
 expect(Payloads) ->
     receive
-        {#'basic.deliver'{}, #amqp_msg { payload = Recved }} ->
-            case lists:member(Recved, Payloads) of
-                true  -> expect(Payloads -- [Recved]);
-                false -> throw({expected, Payloads, actual, Recved})
+        {#'basic.deliver'{}, #amqp_msg{payload = Payload}} ->
+            case lists:member(Payload, Payloads) of
+                true  -> expect(Payloads -- [Payload]);
+                false -> throw({expected, Payloads, actual, Payload})
             end
     after 500 ->
             throw({timeout_waiting_for, Payloads})
