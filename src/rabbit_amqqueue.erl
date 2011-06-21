@@ -253,8 +253,8 @@ determine_queue_nodes(Args) ->
             case [list_to_atom(binary_to_list(Node)) ||
                      {longstr, Node} <- Nodes] of
                 []             -> {node(), undefined};
-                [Node]         -> {Node, undefined};
-                [First | Rest] -> {First, Rest}
+                [Node]         -> {Node,   undefined};
+                [First | Rest] -> {First,  Rest}
             end;
         {{_Type, <<"all">>}, _} ->
             {node(), all};

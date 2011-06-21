@@ -82,7 +82,7 @@ init(#amqqueue { arguments = Args, name = QName } = Q, Recover,
                   _  -> [list_to_atom(binary_to_list(Node)) ||
                             {longstr, Node} <- Nodes]
               end) -- [node()],
-    [rabbit_mirror_queue_misc:add_slave(QName, Node) || Node <- Nodes1],
+    [rabbit_mirror_queue_misc:add_mirror(QName, Node) || Node <- Nodes1],
     {ok, BQ} = application:get_env(backing_queue_module),
     BQS = BQ:init(Q, Recover, AsyncCallback, SyncCallback),
     #state { gm                  = GM,
