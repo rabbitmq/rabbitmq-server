@@ -12,8 +12,9 @@ a vhost, a resource (e.g. exchange, queue, binding) or is considered
 an administrator.
 
 The default values are {constant, true}, {constant, true} and
-[{administrator, {constant, false}}], granting all users access to all
-objects in all vhosts, but not making them administrators.
+[{administrator, {constant, false}}] respectively, granting all users
+access to all objects in all vhosts, but not making them
+administrators.
 
 A query can be of one of several types:
 
