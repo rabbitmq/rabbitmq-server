@@ -44,7 +44,9 @@
                 bindings = dict:new(),
                 downstream_connection,
                 downstream_channel,
-                downstream_exchange}).
+                downstream_exchange,
+                unacked = gb_trees:empty(),
+                next_publish_id = 1}).
 
 %%----------------------------------------------------------------------------
 
@@ -113,16 +115,15 @@ handle_info(#'basic.consume_ok'{}, State) ->
     {noreply, State};
 
 handle_info(#'basic.ack'{delivery_tag = Seq, multiple = Multiple}, State) ->
-    %% We rely on the fact that the delivery tags allocated by the
-    %% consuming side will always be increasing from 1, the same as
-    %% the publish sequence numbers are. This behaviour is not
-    %% guaranteed by the spec, but it's what Rabbit does. Assuming
-    %% this allows us to cut out a bunch of bookkeeping.
-    ack(Seq, Multiple, State),
-    {noreply, State};
+    {DTag, State1} = retrieve_delivery_tag(Seq, Multiple, State),
+    case DTag of
+        none -> ok;
+        _    -> ack(DTag, Multiple, State1)
+    end,
+    {noreply, State1};
 
 handle_info({#'basic.deliver'{routing_key  = Key,
-                              delivery_tag = Seq}, Msg},
+                              delivery_tag = DTag}, Msg},
             State = #state{
               upstream            = #upstream{max_hops = MaxHops} = Upstream,
               downstream_exchange = #resource{name = X},
@@ -135,11 +136,10 @@ handle_info({#'basic.deliver'{routing_key  = Key,
                  amqp_channel:cast(DCh, #'basic.publish'{exchange    = X,
                                                          routing_key = Key},
                                    update_headers(Headers, Msg)),
-                 ok;
-        false -> ack(Seq, false, State), %% Drop it, but acknowledge it!
-                 ok
-    end,
-    {noreply, State};
+                 {noreply, record_delivery_tag(DTag, State)};
+        false -> ack(DTag, false, State), %% Drop it, but acknowledge it!
+                 {noreply, State}
+    end;
 
 %% If the downstream channel shuts down cleanly, we can just ignore it
 %% - we're the same node, we're presumably about to go down too.
@@ -460,6 +460,32 @@ ensure_closed(Ch) ->
 ack(Tag, Multiple, #state{channel = Ch}) ->
     amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = Tag,
                                        multiple     = Multiple}).
+
+record_delivery_tag(DTag, State = #state{unacked         = Unacked,
+                                         next_publish_id = Seq}) ->
+    State#state{unacked         = gb_trees:insert(Seq, DTag, Unacked),
+                next_publish_id = Seq + 1}.
+
+retrieve_delivery_tag(Seq, Multiple, State = #state{unacked = Unacked0}) ->
+    Unacked = remove_delivery_tags(Seq, Multiple, Unacked0),
+    DTag = case gb_trees:lookup(Seq, Unacked0) of
+               {value, V} -> V;
+               none       -> none
+           end,
+    {DTag, State#state{unacked = Unacked}}.
+
+remove_delivery_tags(Seq, false, Unacked) ->
+    gb_trees:delete_any(Seq, Unacked);
+remove_delivery_tags(Seq, true, Unacked) ->
+    case gb_trees:size(Unacked) of
+        0 -> Unacked;
+        _ -> Smallest = gb_trees:smallest(Unacked),
+             case Smallest > Seq of
+                 true  -> Unacked;
+                 false -> remove_delivery_tags(
+                            Seq, true, gb_trees:delete(Smallest, Unacked))
+             end
+    end.
 
 should_forward(undefined, _MaxHops) ->
     true;
