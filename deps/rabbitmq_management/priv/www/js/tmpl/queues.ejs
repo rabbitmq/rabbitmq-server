@@ -45,7 +45,10 @@
 <% } %>
    <td><%= link_queue(queue.vhost, queue.name) %></td>
 <% if (nodes_interesting) { %>
-   <td><%= queue.node %></td>
+   <td>
+     <%= queue.node %>
+     <%= fmt_mirrors(queue) %>
+   </td>
 <% } %>
    <td>
      <% if (queue.owner_pid_details != undefined) { %>
@@ -111,7 +114,7 @@
    var nodes = JSON.parse(sync_get('/nodes'));
 %>
         <tr>
-          <th><label>On node:</label></th>
+          <th><label>Node:</label></th>
           <td>
             <select name="node">
               <% for (var i = 0; i < nodes.length; i++) { %>
@@ -120,9 +123,30 @@
             </select>
           </td>
         </tr>
+        <tr>
+          <th>
+            <label for="mirroring">Mirroring:</label>
+          </th>
+          <td>
+            <select id="mirroring" name="mirroring" class="controls-appearance" controls="mirroring" param-name="x-mirror">
+              <option value="false">No</option>
+              <option value="true">Yes</option>
+            </select>
+            <div id="mirroring-yes" style="display: none;">
+              Initially mirror on <span class="help" id="queue-mirrors"></span><br/>
+<%
+                 for (var i = 0; i < nodes.length; i++) {
+                     var name = nodes[i].name;
+%>
+                 <input type="checkbox" name="x-mirror" id="mirror-<%= name %>" value="<%= name %>"/><label for="mirror-<%= name %>"><%= name %></label><br/>
+              <% } %>
+            </div>
+            <div id="mirroring-no"></div>
+          </td>
+        </tr>
 <% } %>
         <tr>
-          <th><label>Auto delete:</label></th>
+          <th><label>Auto delete: <span class="help" id="queue-auto-delete"></label></th>
           <td>
             <select name="auto_delete">
               <option value="false">No</option>
@@ -131,11 +155,16 @@
           </td>
         </tr>
         <tr>
+          <th><label>Message TTL: <span class="help" id="queue-message-ttl"></label></th>
+          <td><input type="text" name="x-message-ttl"/> ms</td>
+        </tr>
+        <tr>
+          <th><label>Auto expire: <span class="help" id="queue-expires"></label></th>
+          <td><input type="text" name="x-expires"/> ms</td>
+        </tr>
+        <tr>
           <th><label>Arguments:</label></th>
-          <td>
-            <span class="multifield" id="arguments"></span>
-            <span class="help" id="queue-arguments"></span>
-          </td>
+          <td><span class="multifield" id="arguments"></span></td>
         </tr>
       </table>
       <input type="submit" value="Add queue"/>

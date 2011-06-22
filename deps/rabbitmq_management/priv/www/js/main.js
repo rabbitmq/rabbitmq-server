@@ -176,6 +176,20 @@ function dispatcher() {
             get_msgs(this.params);
             return false;
         });
+    this.put('#/mirrors', function() {
+            if (sync_put(this, '/queues/:vhost/:queue/mirrors/:node')) {
+                show_popup('info', "Mirror added");
+                //update();
+            }
+            return false;
+        });
+    this.del('#/mirrors', function() {
+            if (sync_delete(this, '/queues/:vhost/:queue/mirrors/:node')) {
+                show_popup('info', "Mirror removed");
+                //update();
+            }
+            return false;
+        });
     this.post('#/bindings', function() {
             if (sync_post(this, '/bindings/:vhost/e/:source/:destination_type/:destination'))
                 update();
@@ -305,6 +319,7 @@ function partial_update() {
             for (var i = 0; i < befores.length; i++) {
                 $(befores[i]).replaceWith(afters[i]);
             }
+            replace_content('scratch', '');
             postprocess_partial();
         });
     }
@@ -429,13 +444,14 @@ function postprocess() {
     $('.multifield input').live('blur', function() {
             update_multifields();
         });
-    $('#has-password').change(function() {
+    $('.controls-appearance').change(function() {
+        var controls = $(this).attr('controls');
         if ($(this).val() == 'true') {
-            $('#password').slideDown(100);
-            $('#no-password').slideUp(100);
+            $('#' + controls + '-yes').slideDown(100);
+            $('#' + controls + '-no').slideUp(100);
         } else {
-            $('#password').slideUp(100);
-            $('#no-password').slideDown(100);
+            $('#' + controls + '-yes').slideUp(100);
+            $('#' + controls + '-no').slideDown(100);
         }
     });
     setup_visibility();
@@ -742,14 +758,11 @@ function fill_path_template(template, params) {
         });
 }
 
-// Better suggestions appreciated
-var INTEGER_ARGUMENTS = map(['x-expires', 'x-message-ttl']);
-var ARRAY_ARGUMENTS = map(['upstreams']); // Used by the federation plugin
-
 function params_magic(params) {
     return check_password(
-             maybe_remove_password(
-               collapse_multifields(params)));
+             add_known_arguments(
+               maybe_remove_fields(
+                 collapse_multifields(params))));
 }
 
 function collapse_multifields(params0) {
@@ -772,15 +785,42 @@ function collapse_multifields(params0) {
             if (params0[key] != "") {
                 var k = params0[key];
                 var v = params0[name + '_' + id + '_mfvalue'];
-                if (k in INTEGER_ARGUMENTS) {
-                    v = parseInt(v);
-                } else if (k in ARRAY_ARGUMENTS) {
-                    v = v.split(" ");
-                }
                 params[name][k] = v;
             }
         }
     }
+    return params;
+}
+
+KNOWN_ARGS = {'alternate-exchange': {'short': 'AE',  'type': 'string'},
+              'x-message-ttl':      {'short': 'TTL', 'type': 'int'},
+              'x-expires':          {'short': 'Exp', 'type': 'int'},
+              'x-mirror':           {'short': 'M',   'type': 'array'}};
+
+IMPLICIT_ARGS = {'durable':         {'short': 'D',   'type': 'boolean'},
+                 'auto-delete':     {'short': 'AD',  'type': 'boolean'},
+                 'internal':        {'short': 'I',   'type': 'boolean'}};
+
+ALL_ARGS = {};
+for (var k in KNOWN_ARGS)    ALL_ARGS[k] = KNOWN_ARGS[k];
+for (var k in IMPLICIT_ARGS) ALL_ARGS[k] = IMPLICIT_ARGS[k];
+
+function add_known_arguments(params) {
+    for (var k in KNOWN_ARGS) {
+        var v = params[k];
+        if (v != undefined && v != '') {
+            var type = KNOWN_ARGS[k].type;
+            if (type == 'int') {
+                v = parseInt(v);
+            }
+            else if (type == 'array' && typeof(v) == 'string') {
+                v = v.split(' ');
+            }
+            params.arguments[k] = v;
+        }
+        delete params[k];
+    }
+
     return params;
 }
 
@@ -795,11 +835,13 @@ function check_password(params) {
     return params;
 }
 
-function maybe_remove_password(params) {
-    if (params['has-password'] == 'false') {
-        delete params['password'];
-    }
-
+function maybe_remove_fields(params) {
+    $('.controls-appearance').each(function(index) {
+        if ($(this).val() == 'false') {
+            delete params[$(this).attr('param-name')];
+            delete params[$(this).attr('name')];
+        }
+    });
     return params;
 }
 

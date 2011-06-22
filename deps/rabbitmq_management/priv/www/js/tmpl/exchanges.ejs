@@ -74,7 +74,7 @@
           </td>
         </tr>
         <tr>
-          <th><label>Auto delete:</label></th>
+          <th><label>Auto delete: <span class="help" id="exchange-auto-delete"></span></label></th>
           <td>
             <select name="auto_delete">
               <option value="false">No</option>
@@ -83,7 +83,7 @@
           </td>
         </tr>
         <tr>
-          <th><label>Internal:</label></th>
+          <th><label>Internal: <span class="help" id="exchange-internal"></span></label></th>
           <td>
             <select name="internal">
               <option value="false">No</option>
@@ -92,10 +92,13 @@
           </td>
         </tr>
         <tr>
+          <th><label>Alternate exchange: <span class="help" id="exchange-alternate"></span></label></th>
+          <td><input type="text" name="alternate-exchange"/></td>
+        </tr>
+        <tr>
           <th><label>Arguments:</label></th>
           <td>
             <span class="multifield" id="arguments"></span>
-            <span class="help" id="exchange-arguments"></span>
           </td>
         </tr>
       </table>
