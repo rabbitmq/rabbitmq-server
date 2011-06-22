@@ -17,9 +17,6 @@ HELP = {
     'queue-auto-delete':
       'If yes, the queue will delete itself after at least one consumer has connected, and then all consumers have disconnected.',
 
-    'queue-mirrors':
-      'Select all additional nodes on which this queue should be mirrored. You can select none of the nodes and add mirrors later. If you select the node the primary queue is located on it will be ignored.',
-
     'mnesia-storage':
       'Mnesia storage types:<br/> \
       <dl> \
