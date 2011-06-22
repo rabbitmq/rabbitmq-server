@@ -45,8 +45,7 @@
                 downstream_connection,
                 downstream_channel,
                 downstream_exchange,
-                unacked = gb_trees:empty(),
-                next_publish_id = 1}).
+                unacked = gb_trees:empty()}).
 
 %%----------------------------------------------------------------------------
 
@@ -463,25 +462,25 @@ ack(Tag, Multiple, #state{channel = Ch}) ->
     amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = Tag,
                                        multiple     = Multiple}).
 
-record_delivery_tag(DTag, State = #state{unacked         = Unacked,
-                                         next_publish_id = Seq}) ->
-    State#state{unacked         = gb_trees:insert(Seq, DTag, Unacked),
-                next_publish_id = Seq + 1}.
+record_delivery_tag(DTag, State = #state{downstream_channel = DCh,
+                                         unacked            = Unacked}) ->
+    Seq = amqp_channel:next_publish_seqno(DCh) - 1, %% We just published
+    State#state{unacked = gb_trees:insert(Seq, DTag, Unacked)}.
 
 retrieve_delivery_tag(Seq, Multiple, State = #state{unacked = Unacked}) ->
     {gb_trees:get(Seq, Unacked),
      State#state{unacked = remove_delivery_tags(Seq, Multiple, Unacked)}}.
 
 remove_delivery_tags(Seq, false, Unacked) ->
-    gb_trees:delete_any(Seq, Unacked);
+    gb_trees:delete(Seq, Unacked);
 remove_delivery_tags(Seq, true, Unacked) ->
-    case gb_trees:size(Unacked) of
-        0 -> Unacked;
-        _ -> {Smallest, _Val, Unacked1} = gb_trees:take_smallest(Unacked),
-             case Smallest > Seq of
-                 true  -> Unacked;
-                 false -> remove_delivery_tags(Seq, true, Unacked1)
-             end
+    case gb_trees:is_empty(Unacked) of
+        true  -> Unacked;
+        false -> {Smallest, _Val, Unacked1} = gb_trees:take_smallest(Unacked),
+                 case Smallest > Seq of
+                     true  -> Unacked;
+                     false -> remove_delivery_tags(Seq, true, Unacked1)
+                 end
     end.
 
 should_forward(undefined, _MaxHops) ->
