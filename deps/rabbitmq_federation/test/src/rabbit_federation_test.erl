@@ -198,7 +198,7 @@ restart_upstream() ->
 %% for each connection. We should not see any duplicates.
 
 max_hops_test_() ->
-    {timeout, 600000000, fun max_hops/0}.
+    {timeout, 60, fun max_hops/0}.
 
 max_hops() ->
     Flopsy     = start_other_node(?FLOPSY),
@@ -235,7 +235,6 @@ with_ch(Fun, Xs) ->
     {ok, Conn} = amqp_connection:start(#amqp_params_network{}),
     {ok, Ch} = amqp_connection:open_channel(Conn),
     [declare_exchange(Ch, X) || X <- Xs],
-    delay(),
     Fun(Ch),
     [delete_exchange(Ch, X) || #'exchange.declare'{exchange = X} <- Xs],
     amqp_connection:close(Conn),
@@ -280,24 +279,17 @@ declare_queue(Ch) ->
 bind_queue(Ch, Q, X, Key) ->
     amqp_channel:call(Ch, #'queue.bind'{queue       = Q,
                                         exchange    = X,
-                                        routing_key = Key}),
-    delay().
+                                        routing_key = Key}).
 
 unbind_queue(Ch, Q, X, Key) ->
     amqp_channel:call(Ch, #'queue.unbind'{queue       = Q,
                                           exchange    = X,
-                                          routing_key = Key}),
-    delay().
+                                          routing_key = Key}).
 
 bind_exchange(Ch, D, S, Key) ->
     amqp_channel:call(Ch, #'exchange.bind'{destination = D,
                                            source      = S,
-                                           routing_key = Key}),
-    delay().
-
-delay() ->
-    %% The trouble is that we transmit bindings upstream asynchronously...
-    timer:sleep(100).
+                                           routing_key = Key}).
 
 bind_queue(Ch, X, Key) ->
     Q = declare_queue(Ch),
@@ -305,14 +297,14 @@ bind_queue(Ch, X, Key) ->
     Q.
 
 delete_exchange(Ch, X) ->
-    amqp_channel:call(Ch, #'exchange.delete'{exchange = X}),
-    delay().
+    amqp_channel:call(Ch, #'exchange.delete'{exchange = X}).
 
 delete_queue(Ch, Q) ->
-    amqp_channel:call(Ch, #'queue.delete'{queue = Q}),
-    delay().
+    amqp_channel:call(Ch, #'queue.delete'{queue = Q}).
 
 publish(Ch, X, Key, Payload) ->
+    %% The trouble is that we transmit bindings upstream asynchronously...
+    timer:sleep(100),
     amqp_channel:call(Ch, #'basic.publish'{exchange    = X,
                                            routing_key = Key},
                       #amqp_msg{payload = Payload}).
