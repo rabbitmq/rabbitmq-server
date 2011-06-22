@@ -241,15 +241,21 @@ with_ch(Fun, Xs) ->
     ok.
 
 start_other_node({Name, Port}) ->
-    ?assertCmd("make OTHER_NODE=" ++ Name ++ " OTHER_PORT=" ++
-                   integer_to_list(Port) ++ " start-other-node"),
+    ?assertCmd("make -C " ++ plugin_dir() ++ " OTHER_NODE=" ++ Name ++
+                   " OTHER_PORT=" ++ integer_to_list(Port) ++
+                   " start-other-node"),
     {ok, Conn} = amqp_connection:start(#amqp_params_network{port = Port}),
     {ok, Ch} = amqp_connection:open_channel(Conn),
     Ch.
 
 stop_other_node({Name, _Port}) ->
-    ?assertCmd("make OTHER_NODE=" ++ Name ++ " stop-other-node"),
+    ?assertCmd("make -C " ++ plugin_dir() ++ " OTHER_NODE=" ++ Name ++
+                   " stop-other-node"),
     timer:sleep(1000).
+
+plugin_dir() ->
+    {ok, [[File]]} = init:get_argument(config),
+    filename:dirname(filename:dirname(File)).
 
 declare_exchange(Ch, X) ->
     amqp_channel:call(Ch, X).
