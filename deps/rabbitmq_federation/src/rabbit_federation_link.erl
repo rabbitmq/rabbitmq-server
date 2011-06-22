@@ -123,7 +123,8 @@ handle_info(#'basic.ack'{delivery_tag = Seq, multiple = Multiple}, State) ->
     {noreply, State1};
 
 handle_info({#'basic.deliver'{routing_key  = Key,
-                              delivery_tag = DTag}, Msg},
+                              delivery_tag = DTag,
+                              redelivered  = Redelivered}, Msg},
             State = #state{
               upstream            = #upstream{max_hops = MaxHops} = Upstream,
               downstream_exchange = #resource{name = X},
@@ -131,7 +132,8 @@ handle_info({#'basic.deliver'{routing_key  = Key,
     Headers0 = extract_headers(Msg),
     %% TODO add user information here?
     case should_forward(Headers0, MaxHops) of
-        true  -> {table, Info} = rabbit_federation_upstream:to_table(Upstream),
+        true  -> {table, Info0} = rabbit_federation_upstream:to_table(Upstream),
+                 Info = Info0 ++ [{<<"redelivered">>, bool, Redelivered}],
                  Headers = add_routing_to_headers(Headers0, Info),
                  amqp_channel:cast(DCh, #'basic.publish'{exchange    = X,
                                                          routing_key = Key},
