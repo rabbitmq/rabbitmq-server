@@ -134,10 +134,11 @@ handle_info({#'basic.deliver'{routing_key  = Key,
         true  -> {table, Info0} = rabbit_federation_upstream:to_table(Upstream),
                  Info = Info0 ++ [{<<"redelivered">>, bool, Redelivered}],
                  Headers = add_routing_to_headers(Headers0, Info),
+                 Seq = amqp_channel:next_publish_seqno(DCh),
                  amqp_channel:cast(DCh, #'basic.publish'{exchange    = X,
                                                          routing_key = Key},
                                    update_headers(Headers, Msg)),
-                 {noreply, record_delivery_tag(DTag, State)};
+                 {noreply, record_delivery_tag(Seq, DTag, State)};
         false -> ack(DTag, false, State), %% Drop it, but acknowledge it!
                  {noreply, State}
     end;
@@ -462,9 +463,7 @@ ack(Tag, Multiple, #state{channel = Ch}) ->
     amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = Tag,
                                        multiple     = Multiple}).
 
-record_delivery_tag(DTag, State = #state{downstream_channel = DCh,
-                                         unacked            = Unacked}) ->
-    Seq = amqp_channel:next_publish_seqno(DCh) - 1, %% We just published
+record_delivery_tag(Seq, DTag, State = #state{unacked = Unacked}) ->
     State#state{unacked = gb_trees:insert(Seq, DTag, Unacked)}.
 
 retrieve_delivery_tag(Seq, Multiple, State = #state{unacked = Unacked}) ->
