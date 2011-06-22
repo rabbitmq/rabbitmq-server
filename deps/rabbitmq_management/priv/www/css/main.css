@@ -110,7 +110,6 @@ table.form select.narrow { width: 110px; }
 table.form .multifield { margin: 0; padding: 0; }
 table.form .multifield p { margin: 0; padding: 0; }
 table.form label { margin-top: 5px; display: block; }
-table.form input[type=checkbox] + label { display: inline; }
 
 table.two-col-layout { width: 100%; }
 table.two-col-layout > tbody > tr > td { width: 50%; vertical-align: top; }

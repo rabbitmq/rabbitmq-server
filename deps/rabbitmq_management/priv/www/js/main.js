@@ -176,20 +176,6 @@ function dispatcher() {
             get_msgs(this.params);
             return false;
         });
-    this.put('#/mirrors', function() {
-            if (sync_put(this, '/queues/:vhost/:queue/mirrors/:node')) {
-                show_popup('info', "Mirror added");
-                //update();
-            }
-            return false;
-        });
-    this.del('#/mirrors', function() {
-            if (sync_delete(this, '/queues/:vhost/:queue/mirrors/:node')) {
-                show_popup('info', "Mirror removed");
-                //update();
-            }
-            return false;
-        });
     this.post('#/bindings', function() {
             if (sync_post(this, '/bindings/:vhost/e/:source/:destination_type/:destination'))
                 update();
@@ -795,7 +781,7 @@ function collapse_multifields(params0) {
 KNOWN_ARGS = {'alternate-exchange': {'short': 'AE',  'type': 'string'},
               'x-message-ttl':      {'short': 'TTL', 'type': 'int'},
               'x-expires':          {'short': 'Exp', 'type': 'int'},
-              'x-mirror':           {'short': 'M',   'type': 'array'}};
+              'x-ha-policy':        {'short': 'M',   'type': 'string'}};
 
 IMPLICIT_ARGS = {'durable':         {'short': 'D',   'type': 'boolean'},
                  'auto-delete':     {'short': 'AD',  'type': 'boolean'},
