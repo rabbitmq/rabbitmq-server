@@ -3,14 +3,6 @@ include ../umbrella.mk
 OTHER_NODE=undefined
 OTHER_PORT=undefined
 
-test: cleantest
-
-cleantest:
-	rm -rf tmp /tmp/rabbitmq-*-mnesia
-	for R in hare bunny lapin flopsy mopsy cottontail ; do \
-	  erl_call -sname $$R -q ; \
-	done
-
 start-other-node:
 	RABBITMQ_MNESIA_BASE=/tmp/rabbitmq-$(OTHER_NODE)-mnesia \
 	RABBITMQ_LOG_BASE=/tmp \
