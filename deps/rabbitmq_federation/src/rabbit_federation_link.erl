@@ -113,10 +113,11 @@ handle_cast(Msg, State) ->
 handle_info(#'basic.consume_ok'{}, State) ->
     {noreply, State};
 
-handle_info(#'basic.ack'{delivery_tag = Seq, multiple = Multiple}, State) ->
-    {DTag, State1} = retrieve_delivery_tag(Seq, Multiple, State),
-    ack(DTag, Multiple, State1),
-    {noreply, State1};
+handle_info(#'basic.ack'{delivery_tag = Seq, multiple = Multiple},
+            State = #state{unacked = Unacked}) ->
+    ack(gb_trees:get(Seq, Unacked), Multiple, State),
+    {noreply, State#state{unacked = remove_delivery_tags(Seq, Multiple,
+                                                         Unacked)}};
 
 handle_info({#'basic.deliver'{routing_key  = Key,
                               delivery_tag = DTag,
@@ -124,7 +125,8 @@ handle_info({#'basic.deliver'{routing_key  = Key,
             State = #state{
               upstream            = #upstream{max_hops = MaxHops} = Upstream,
               downstream_exchange = #resource{name = X},
-              downstream_channel  = DCh}) ->
+              downstream_channel  = DCh,
+              unacked             = Unacked}) ->
     Headers0 = extract_headers(Msg),
     %% TODO add user information here?
     case should_forward(Headers0, MaxHops) of
@@ -135,7 +137,8 @@ handle_info({#'basic.deliver'{routing_key  = Key,
                  amqp_channel:cast(DCh, #'basic.publish'{exchange    = X,
                                                          routing_key = Key},
                                    update_headers(Headers, Msg)),
-                 {noreply, record_delivery_tag(Seq, DTag, State)};
+                 {noreply, State#state{unacked = gb_trees:insert(Seq, DTag,
+                                                                 Unacked)}};
         false -> ack(DTag, false, State), %% Drop it, but acknowledge it!
                  {noreply, State}
     end;
@@ -459,13 +462,6 @@ ensure_closed(Ch) ->
 ack(Tag, Multiple, #state{channel = Ch}) ->
     amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = Tag,
                                        multiple     = Multiple}).
-
-record_delivery_tag(Seq, DTag, State = #state{unacked = Unacked}) ->
-    State#state{unacked = gb_trees:insert(Seq, DTag, Unacked)}.
-
-retrieve_delivery_tag(Seq, Multiple, State = #state{unacked = Unacked}) ->
-    {gb_trees:get(Seq, Unacked),
-     State#state{unacked = remove_delivery_tags(Seq, Multiple, Unacked)}}.
 
 remove_delivery_tags(Seq, false, Unacked) ->
     gb_trees:delete(Seq, Unacked);
