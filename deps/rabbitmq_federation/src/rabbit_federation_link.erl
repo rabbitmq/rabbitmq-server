@@ -468,24 +468,19 @@ record_delivery_tag(DTag, State = #state{unacked         = Unacked,
     State#state{unacked         = gb_trees:insert(Seq, DTag, Unacked),
                 next_publish_id = Seq + 1}.
 
-retrieve_delivery_tag(Seq, Multiple, State = #state{unacked = Unacked0}) ->
-    Unacked = remove_delivery_tags(Seq, Multiple, Unacked0),
-    DTag = case gb_trees:lookup(Seq, Unacked0) of
-               {value, V} -> V;
-               none       -> none
-           end,
-    {DTag, State#state{unacked = Unacked}}.
+retrieve_delivery_tag(Seq, Multiple, State = #state{unacked = Unacked}) ->
+    {gb_trees:get(Seq, Unacked),
+     State#state{unacked = remove_delivery_tags(Seq, Multiple, Unacked)}}.
 
 remove_delivery_tags(Seq, false, Unacked) ->
     gb_trees:delete_any(Seq, Unacked);
 remove_delivery_tags(Seq, true, Unacked) ->
     case gb_trees:size(Unacked) of
         0 -> Unacked;
-        _ -> Smallest = gb_trees:smallest(Unacked),
+        _ -> {Smallest, _Val, Unacked1} = gb_trees:take_smallest(Unacked),
              case Smallest > Seq of
                  true  -> Unacked;
-                 false -> remove_delivery_tags(
-                            Seq, true, gb_trees:delete(Smallest, Unacked))
+                 false -> remove_delivery_tags(Seq, true, Unacked1)
              end
     end.
 
