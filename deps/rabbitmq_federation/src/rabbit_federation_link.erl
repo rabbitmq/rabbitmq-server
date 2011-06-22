@@ -115,10 +115,7 @@ handle_info(#'basic.consume_ok'{}, State) ->
 
 handle_info(#'basic.ack'{delivery_tag = Seq, multiple = Multiple}, State) ->
     {DTag, State1} = retrieve_delivery_tag(Seq, Multiple, State),
-    case DTag of
-        none -> ok;
-        _    -> ack(DTag, Multiple, State1)
-    end,
+    ack(DTag, Multiple, State1),
     {noreply, State1};
 
 handle_info({#'basic.deliver'{routing_key  = Key,
