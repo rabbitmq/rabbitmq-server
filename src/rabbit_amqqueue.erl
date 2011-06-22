@@ -356,7 +356,7 @@ check_ha_policy_argument({longstr, <<"all">>}, _Args) ->
 check_ha_policy_argument({longstr, <<"nodes">>}, Args) ->
     case rabbit_misc:table_lookup(Args, <<"x-ha-policy-params">>) of
         undefined ->
-            {error, {require, <<"x-ha-policy-params">>}};
+            {error, {require, 'x-ha-policy-params'}};
         {array, Ary} ->
             case lists:all(fun ({longstr, _Node}) -> true;
                                (_               ) -> false
