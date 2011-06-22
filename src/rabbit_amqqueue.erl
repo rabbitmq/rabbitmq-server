@@ -327,36 +327,49 @@ assert_args_equivalence(#amqqueue{name = QueueName, arguments = Args},
       [<<"x-expires">>, <<"x-message-ttl">>, <<"x-ha-policy">>]).
 
 check_declare_arguments(QueueName, Args) ->
-    [case Fun(rabbit_misc:table_lookup(Args, Key)) of
+    [case Fun(rabbit_misc:table_lookup(Args, Key), Args) of
          ok             -> ok;
          {error, Error} -> rabbit_misc:protocol_error(
                              precondition_failed,
                              "invalid arg '~s' for ~s: ~w",
                              [Key, rabbit_misc:rs(QueueName), Error])
      end || {Key, Fun} <-
-                [{<<"x-expires">>,     fun check_integer_argument/1},
-                 {<<"x-message-ttl">>, fun check_integer_argument/1},
-                 {<<"x-ha-policy">>,   fun check_ha_policy_argument/1}]],
+                [{<<"x-expires">>,     fun check_integer_argument/2},
+                 {<<"x-message-ttl">>, fun check_integer_argument/2},
+                 {<<"x-ha-policy">>,   fun check_ha_policy_argument/2}]],
     ok.
 
-check_integer_argument(undefined) ->
+check_integer_argument(undefined, _Args) ->
     ok;
-check_integer_argument({Type, Val}) when Val > 0 ->
+check_integer_argument({Type, Val}, _Args) when Val > 0 ->
     case lists:member(Type, ?INTEGER_ARG_TYPES) of
         true  -> ok;
         false -> {error, {unacceptable_type, Type}}
     end;
-check_integer_argument({_Type, Val}) ->
+check_integer_argument({_Type, Val}, _Args) ->
     {error, {value_zero_or_less, Val}}.
 
-check_ha_policy_argument(undefined) ->
+check_ha_policy_argument(undefined, _Args) ->
     ok;
-check_ha_policy_argument({longstr, Policy})
-  when Policy =:= <<"nodes">> orelse Policy =:= <<"all">> ->
+check_ha_policy_argument({longstr, <<"all">>}, _Args) ->
     ok;
-check_ha_policy_argument({longstr, Policy}) ->
+check_ha_policy_argument({longstr, <<"nodes">>}, _Args) ->
+    case rabbit_misc:table_lookup(Args, <<"x-ha-policy-params">>) of
+        undefined ->
+            {error, {require, <<"x-ha-policy-params">>}};
+        {array, Ary} ->
+            case lists:all(fun ({longstr, _Node}) -> true;
+                               _                  -> false
+                           end, Ary) of
+                true -> ok;
+                false -> {error, {require_list_of_nodes_as_longstrs, Ary}}
+            end;
+        {Type, _} ->
+            {error, {ha_nodes_policy_params_not_array_of_longstr, Type}}
+    end;
+check_ha_policy_argument({longstr, Policy}, _Args) ->
     {error, {invalid_ha_policy, Policy}};
-check_ha_policy_argument({Type, _}) ->
+check_ha_policy_argument({Type, _}, _Args) ->
     {error, {unacceptable_type, Type}}.
 
 list(VHostPath) ->
