@@ -182,7 +182,7 @@ restart_upstream() ->
               publish(Upstream1, <<"upstream">>, <<"stays">>, <<"STAYS">>),
               %% Give the link a chance to come up and for this binding
               %% to be transferred
-              timer:sleep(10000),
+              timer:sleep(1000),
               publish(Upstream1, <<"upstream">>, <<"comes">>, <<"COMES">>),
               expect(Downstream, Qstays, [<<"STAYS">>]),
               expect(Downstream, Qcomes, [<<"COMES">>]),
@@ -198,7 +198,7 @@ restart_upstream() ->
 %% for each connection. We should not see any duplicates.
 
 max_hops_test_() ->
-    {timeout, 60, fun max_hops/0}.
+    {timeout, 25, fun max_hops/0}.
 
 max_hops() ->
     Flopsy     = start_other_node(?FLOPSY),
@@ -210,7 +210,7 @@ max_hops() ->
     Q3 = bind_queue(Cottontail, <<"ring">>, <<"key">>),
 
     %% Wait for federation to come up on all nodes
-    timer:sleep(10000),
+    timer:sleep(1000),
 
     publish(Flopsy,     <<"ring">>, <<"key">>, <<"HELLO flopsy">>),
     publish(Mopsy,      <<"ring">>, <<"key">>, <<"HELLO mopsy">>),
