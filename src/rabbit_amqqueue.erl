@@ -252,7 +252,6 @@ determine_queue_nodes(Args) ->
         {{_Type, <<"nodes">>}, {array, Nodes}} ->
             case [list_to_atom(binary_to_list(Node)) ||
                      {longstr, Node} <- Nodes] of
-                []             -> {node(), undefined};
                 [Node]         -> {Node,   undefined};
                 [First | Rest] -> {First,  Rest}
             end;
@@ -357,12 +356,14 @@ check_ha_policy_argument({longstr, <<"nodes">>}, Args) ->
     case rabbit_misc:table_lookup(Args, <<"x-ha-policy-params">>) of
         undefined ->
             {error, {require, 'x-ha-policy-params'}};
+        {array, []} ->
+            {error, {require_non_empty_list_of_nodes_for_ha}};
         {array, Ary} ->
             case lists:all(fun ({longstr, _Node}) -> true;
                                (_               ) -> false
                            end, Ary) of
-                true -> ok;
-                false -> {error, {require_list_of_nodes_as_longstrs, Ary}}
+                true  -> ok;
+                false -> {error, {require_node_list_as_longstrs_for_ha, Ary}}
             end;
         {Type, _} ->
             {error, {ha_nodes_policy_params_not_array_of_longstr, Type}}
