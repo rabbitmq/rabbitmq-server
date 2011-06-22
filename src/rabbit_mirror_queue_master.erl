@@ -71,18 +71,18 @@ sender_death_fun() ->
               end)
     end.
 
-init(#amqqueue { arguments = Args, name = QName } = Q, Recover,
+init(#amqqueue { name = QName, mirror_nodes = MNodes } = Q, Recover,
      AsyncCallback, SyncCallback) ->
     {ok, CPid} = rabbit_mirror_queue_coordinator:start_link(
                    Q, undefined, sender_death_fun()),
     GM = rabbit_mirror_queue_coordinator:get_gm(CPid),
-    {_Type, Nodes} = rabbit_misc:table_lookup(Args, <<"x-mirror">>),
-    Nodes1 = (case Nodes of
-                  [] -> rabbit_mnesia:all_clustered_nodes();
-                  _  -> [list_to_atom(binary_to_list(Node)) ||
-                            {longstr, Node} <- Nodes]
-              end) -- [node()],
-    [rabbit_mirror_queue_misc:add_mirror(QName, Node) || Node <- Nodes1],
+    MNodes1 =
+        (case MNodes of
+             all       -> rabbit_mnesia:all_clustered_nodes();
+             undefined -> [];
+             _         -> [list_to_atom(binary_to_list(Node)) || Node <- MNodes]
+         end) -- [node()],
+    [rabbit_mirror_queue_misc:add_mirror(QName, Node) || Node <- MNodes1],
     {ok, BQ} = application:get_env(backing_queue_module),
     BQS = BQ:init(Q, Recover, AsyncCallback, SyncCallback),
     #state { gm                  = GM,
