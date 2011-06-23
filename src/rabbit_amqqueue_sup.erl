@@ -18,7 +18,7 @@
 
 -behaviour(supervisor2).
 
--export([start_link/0, start_child/1]).
+-export([start_link/0, start_child/2]).
 
 -export([init/1]).
 
@@ -29,8 +29,8 @@
 start_link() ->
     supervisor2:start_link({local, ?SERVER}, ?MODULE, []).
 
-start_child(Args) ->
-    supervisor2:start_child(?SERVER, Args).
+start_child(Node, Args) ->
+    supervisor2:start_child({?SERVER, Node}, Args).
 
 init([]) ->
     {ok, {{simple_one_for_one_terminate, 10, 10},
