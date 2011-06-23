@@ -1,5 +1,6 @@
 <h1>Overview</h1>
 
+<% if (overview.statistics_db_node != 'not_running') { %>
 <div class="section">
 <h2>Totals</h2>
 <div class="hider updatable">
@@ -24,6 +25,7 @@
 <span class="br"></span>
 </div>
 </div>
+<% } %>
 
 <% if (user_administrator) { %>
 <div class="section">
