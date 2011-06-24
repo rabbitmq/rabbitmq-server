@@ -20,7 +20,7 @@
 
 -behaviour(gen_server2).
 
--export([start_link/10, do/2, do/3, flush/1, shutdown/1]).
+-export([start_link/7, do/2, do/3, flush/1, shutdown/1]).
 -export([send_command/2, deliver/4, flushed/2, confirm/2]).
 -export([list/0, info_keys/0, info/1, info/2, info_all/0, info_all/1]).
 -export([refresh_config_all/0, emit_stats/1, ready_for_close/1]).
@@ -67,9 +67,8 @@
 
 -type(channel_number() :: non_neg_integer()).
 
--spec(start_link/10 ::
-        (channel_number(), pid(), pid(), pid(), rabbit_types:protocol(),
-         rabbit_types:user(), rabbit_types:vhost(), rabbit_framing:amqp_table(),
+-spec(start_link/7 ::
+        (channel_number(), pid(), pid(), pid(), rabbit_types:connection(),
          pid(), fun ((non_neg_integer()) -> rabbit_types:ok(pid()))) ->
                            rabbit_types:ok_pid_or_error()).
 -spec(do/2 :: (pid(), rabbit_framing:amqp_method_record()) -> 'ok').
@@ -97,11 +96,11 @@
 
 %%----------------------------------------------------------------------------
 
-start_link(Channel, ReaderPid, WriterPid, ConnPid, Protocol, User, VHost,
-           Capabilities, CollectorPid, StartLimiterFun) ->
+start_link(Channel, ReaderPid, WriterPid, ConnPid, Connection, CollectorPid,
+           StartLimiterFun) ->
     gen_server2:start_link(
-      ?MODULE, [Channel, ReaderPid, WriterPid, ConnPid, Protocol, User,
-                VHost, Capabilities, CollectorPid, StartLimiterFun], []).
+      ?MODULE, [Channel, ReaderPid, WriterPid, ConnPid, Connection,
+                CollectorPid, StartLimiterFun], []).
 
 do(Pid, Method) ->
     do(Pid, Method, none).
@@ -160,8 +159,10 @@ ready_for_close(Pid) ->
 
 %%---------------------------------------------------------------------------
 
-init([Channel, ReaderPid, WriterPid, ConnPid, Protocol, User, VHost,
-      Capabilities, CollectorPid, StartLimiterFun]) ->
+init([Channel, ReaderPid, WriterPid, ConnPid, Connection, CollectorPid,
+      StartLimiterFun]) ->
+    #connection{protocol = Protocol, user = User, vhost = VHost,
+                capabilities = Capabilities} = Connection,
     process_flag(trap_exit, true),
     ok = pg_local:join(rabbit_channels, self()),
     StatsTimer = rabbit_event:init_stats_timer(),

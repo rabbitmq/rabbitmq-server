@@ -58,12 +58,12 @@
 -spec(stop_tcp_listener/1 :: (listener_config()) -> 'ok').
 -spec(active_listeners/0 :: () -> [rabbit_types:listener()]).
 -spec(node_listeners/1 :: (node()) -> [rabbit_types:listener()]).
--spec(connections/0 :: () -> [rabbit_types:connection()]).
+-spec(connections/0 :: () -> [rabbit_types:connection_id()]).
 -spec(connection_info_keys/0 :: () -> rabbit_types:info_keys()).
 -spec(connection_info/1 ::
-        (rabbit_types:connection()) -> rabbit_types:infos()).
+        (rabbit_types:connection_id()) -> rabbit_types:infos()).
 -spec(connection_info/2 ::
-        (rabbit_types:connection(), rabbit_types:info_keys())
+        (rabbit_types:connection_id(), rabbit_types:info_keys())
         -> rabbit_types:infos()).
 -spec(connection_info_all/0 :: () -> [rabbit_types:infos()]).
 -spec(connection_info_all/1 ::
