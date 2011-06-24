@@ -75,11 +75,17 @@ connect(Username, VHost, Protocol, Infos) ->
 
 start_channel(Number, ClientChannelPid, ConnPid, Protocol, User, VHost,
               Capabilities, Collector) ->
+    Connection = #connection{protocol          = Protocol,
+                             user              = User,
+                             timeout_sec       = 0,
+                             frame_max         = 0,
+                             vhost             = VHost,
+                             client_properties = [],
+                             capabilities      = Capabilities},
     {ok, _, {ChannelPid, _}} =
         supervisor2:start_child(
           rabbit_direct_client_sup,
-          [{direct, Number, ClientChannelPid, ConnPid, Protocol, User, VHost,
-            Capabilities, Collector}]),
+          [{direct, Number, ClientChannelPid, ConnPid, Connection, Collector}]),
     {ok, ChannelPid}.
 
 disconnect(Infos) ->
