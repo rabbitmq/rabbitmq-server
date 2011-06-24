@@ -495,8 +495,7 @@ run_message_queue(State) ->
     {_IsEmpty1, State2} = deliver_msgs_to_consumers(Funs, IsEmpty, State1),
     State2.
 
-attempt_delivery(Delivery = #delivery{txn        = none,
-                                      sender     = ChPid,
+attempt_delivery(Delivery = #delivery{sender     = ChPid,
                                       message    = Message,
                                       msg_seq_no = MsgSeqNo},
                  State = #q{backing_queue = BQ, backing_queue_state = BQS}) ->
@@ -801,7 +800,7 @@ prioritise_cast(Msg, _State) ->
         maybe_expire                         -> 8;
         drop_expired                         -> 8;
         emit_stats                           -> 7;
-        {ack, _Txn, _AckTags, _ChPid}        -> 7;
+        {ack, _AckTags, _ChPid}              -> 7;
         {reject, _AckTags, _Requeue, _ChPid} -> 7;
         {notify_sent, _ChPid}                -> 7;
         {unblock, _ChPid}                    -> 7;
@@ -1028,7 +1027,7 @@ handle_cast({deliver, Delivery}, State) ->
     %% Asynchronous, non-"mandatory", non-"immediate" deliver mode.
     noreply(deliver_or_enqueue(Delivery, State));
 
-handle_cast({ack, none, AckTags, ChPid},
+handle_cast({ack, AckTags, ChPid},
             State = #q{backing_queue = BQ, backing_queue_state = BQS}) ->
     case lookup_ch(ChPid) of
         not_found ->

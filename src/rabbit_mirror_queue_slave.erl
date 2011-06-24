@@ -488,7 +488,7 @@ promote_me(From, #state { q                   = Q,
     %%
     %% Everything that's in MA gets requeued. Consequently the new
     %% master should start with a fresh AM as there are no messages
-    %% pending acks (txns will have been rolled back).
+    %% pending acks.
 
     MSList = dict:to_list(MS),
     SS = dict:from_list(
@@ -612,8 +612,7 @@ confirm_sender_death(Pid) ->
 maybe_enqueue_message(
   Delivery = #delivery { message    = #basic_message { id = MsgId },
                          msg_seq_no = MsgSeqNo,
-                         sender     = ChPid,
-                         txn        = none },
+                         sender     = ChPid },
   EnqueueOnPromotion,
   State = #state { sender_queues = SQ, msg_id_status = MS }) ->
     State1 = ensure_monitoring(ChPid, State),
@@ -655,10 +654,7 @@ maybe_enqueue_message(
             SQ1 = remove_from_pending_ch(MsgId, ChPid, SQ),
             State1 #state { msg_id_status = dict:erase(MsgId, MS),
                             sender_queues = SQ1 }
-    end;
-maybe_enqueue_message(_Delivery, _EnqueueOnPromotion, State) ->
-    %% We don't support txns in mirror queues.
-    State.
+    end.
 
 get_sender_queue(ChPid, SQ) ->
     case dict:find(ChPid, SQ) of

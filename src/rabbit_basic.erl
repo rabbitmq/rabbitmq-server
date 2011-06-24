@@ -18,8 +18,8 @@
 -include("rabbit.hrl").
 -include("rabbit_framing.hrl").
 
--export([publish/1, message/3, message/4, properties/1, delivery/5]).
--export([publish/4, publish/7]).
+-export([publish/1, message/3, message/4, properties/1, delivery/4]).
+-export([publish/4, publish/6]).
 -export([build_content/2, from_content/1]).
 
 %%----------------------------------------------------------------------------
@@ -37,9 +37,8 @@
 
 -spec(publish/1 ::
         (rabbit_types:delivery()) -> publish_result()).
--spec(delivery/5 ::
-        (boolean(), boolean(), rabbit_types:maybe(rabbit_types:txn()),
-         rabbit_types:message(), undefined | integer()) ->
+-spec(delivery/4 ::
+        (boolean(), boolean(), rabbit_types:message(), undefined | integer()) ->
                          rabbit_types:delivery()).
 -spec(message/4 ::
         (rabbit_exchange:name(), rabbit_router:routing_key(),
@@ -53,10 +52,9 @@
 -spec(publish/4 ::
         (exchange_input(), rabbit_router:routing_key(), properties_input(),
          body_input()) -> publish_result()).
--spec(publish/7 ::
+-spec(publish/6 ::
         (exchange_input(), rabbit_router:routing_key(), boolean(), boolean(),
-         rabbit_types:maybe(rabbit_types:txn()), properties_input(),
-         body_input()) -> publish_result()).
+         properties_input(), body_input()) -> publish_result()).
 -spec(build_content/2 :: (rabbit_framing:amqp_property_record(),
                           binary() | [binary()]) -> rabbit_types:content()).
 -spec(from_content/1 :: (rabbit_types:content()) ->
@@ -73,9 +71,9 @@ publish(Delivery = #delivery{
         Other   -> Other
     end.
 
-delivery(Mandatory, Immediate, Txn, Message, MsgSeqNo) ->
-    #delivery{mandatory = Mandatory, immediate = Immediate, txn = Txn,
-              sender = self(), message = Message, msg_seq_no = MsgSeqNo}.
+delivery(Mandatory, Immediate, Message, MsgSeqNo) ->
+    #delivery{mandatory = Mandatory, immediate = Immediate, sender = self(),
+              message = Message, msg_seq_no = MsgSeqNo}.
 
 build_content(Properties, BodyBin) when is_binary(BodyBin) ->
     build_content(Properties, [BodyBin]);
@@ -157,19 +155,17 @@ indexof([_ | Rest], Element, N)        -> indexof(Rest, Element, N + 1).
 %% Convenience function, for avoiding round-trips in calls across the
 %% erlang distributed network.
 publish(Exchange, RoutingKeyBin, Properties, Body) ->
-    publish(Exchange, RoutingKeyBin, false, false, none, Properties,
-            Body).
+    publish(Exchange, RoutingKeyBin, false, false, Properties, Body).
 
 %% Convenience function, for avoiding round-trips in calls across the
 %% erlang distributed network.
-publish(X = #exchange{name = XName}, RKey, Mandatory, Immediate, Txn,
-        Props, Body) ->
-    publish(X, delivery(Mandatory, Immediate, Txn,
+publish(X = #exchange{name = XName}, RKey, Mandatory, Immediate, Props, Body) ->
+    publish(X, delivery(Mandatory, Immediate,
                         message(XName, RKey, properties(Props), Body),
                         undefined));
-publish(XName, RKey, Mandatory, Immediate, Txn, Props, Body) ->
+publish(XName, RKey, Mandatory, Immediate, Props, Body) ->
     case rabbit_exchange:lookup(XName) of
-        {ok, X} -> publish(X, RKey, Mandatory, Immediate, Txn, Props, Body);
+        {ok, X} -> publish(X, RKey, Mandatory, Immediate, Props, Body);
         Err     -> Err
     end.
 

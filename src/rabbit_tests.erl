@@ -705,7 +705,6 @@ test_topic_expect_match(X, List) ->
               Res = rabbit_exchange_type_topic:route(
                       X, #delivery{mandatory = false,
                                    immediate = false,
-                                   txn       = none,
                                    sender    = self(),
                                    message   = Message}),
               ExpectedRes = lists:map(
@@ -1669,8 +1668,8 @@ test_backing_queue() ->
             passed = test_queue_index(),
             passed = test_queue_index_props(),
             passed = test_variable_queue(),
-            %% FIXME: replace the use of tx in these with confirms
-            %% passed = test_variable_queue_delete_msg_store_files_callback(),
+            passed = test_variable_queue_delete_msg_store_files_callback(),
+            %% FIXME: re-enable once fixed
             %% passed = test_queue_recover(),
             application:set_env(rabbit, queue_index_max_journal_entries,
                                 MaxJournal, infinity),
@@ -2319,17 +2318,16 @@ test_variable_queue_all_the_bits_not_covered_elsewhere2(VQ0) ->
 
 test_queue_recover() ->
     Count = 2 * rabbit_queue_index:next_segment_boundary(0),
-    TxID = rabbit_guid:guid(),
     {new, #amqqueue { pid = QPid, name = QName } = Q} =
         rabbit_amqqueue:declare(test_queue(), true, false, [], none),
     [begin
          Msg = rabbit_basic:message(rabbit_misc:r(<<>>, exchange, <<>>),
                                     <<>>, #'P_basic'{delivery_mode = 2}, <<>>),
-         Delivery = #delivery{mandatory = false, immediate = false, txn = TxID,
+         Delivery = #delivery{mandatory = false, immediate = false,
                               sender = self(), message = Msg},
          true = rabbit_amqqueue:deliver(QPid, Delivery)
      end || _ <- lists:seq(1, Count)],
-    rabbit_amqqueue:commit_all([QPid], TxID, self()),
+    %% FIXME: wait for confirms of all publishes
     exit(QPid, kill),
     MRef = erlang:monitor(process, QPid),
     receive {'DOWN', MRef, process, QPid, _Info} -> ok
@@ -2356,18 +2354,17 @@ test_variable_queue_delete_msg_store_files_callback() ->
     ok = restart_msg_store_empty(),
     {new, #amqqueue { pid = QPid, name = QName } = Q} =
         rabbit_amqqueue:declare(test_queue(), true, false, [], none),
-    TxID = rabbit_guid:guid(),
     Payload = <<0:8388608>>, %% 1MB
     Count = 30,
     [begin
          Msg = rabbit_basic:message(
                  rabbit_misc:r(<<>>, exchange, <<>>),
                  <<>>, #'P_basic'{delivery_mode = 2}, Payload),
-         Delivery = #delivery{mandatory = false, immediate = false, txn = TxID,
+         Delivery = #delivery{mandatory = false, immediate = false,
                               sender = self(), message = Msg},
          true = rabbit_amqqueue:deliver(QPid, Delivery)
      end || _ <- lists:seq(1, Count)],
-    rabbit_amqqueue:commit_all([QPid], TxID, self()),
+    %% FIXME: wait for confirms of all publishes
     rabbit_amqqueue:set_ram_duration_target(QPid, 0),
 
     CountMinusOne = Count - 1,
