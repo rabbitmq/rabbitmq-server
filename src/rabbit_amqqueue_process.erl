@@ -192,7 +192,7 @@ bq_init(BQ, Q, Recover) ->
     Self = self(),
     BQ:init(Q, Recover,
             fun (Mod, Fun) ->
-                    rabbit_amqqueue:run_backing_queue_async(Self, Mod, Fun)
+                    rabbit_amqqueue:run_backing_queue(Self, Mod, Fun)
             end).
 
 process_args(State = #q{q = #amqqueue{arguments = Arguments}}) ->

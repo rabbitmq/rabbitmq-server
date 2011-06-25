@@ -31,7 +31,7 @@
 
 
 %% internal
--export([internal_declare/2, internal_delete/1, run_backing_queue_async/3,
+-export([internal_declare/2, internal_delete/1, run_backing_queue/3,
          sync_timeout/1, update_ram_duration/1, set_ram_duration_target/2,
          set_maximum_since_use/2, maybe_expire/1, drop_expired/1,
          emit_stats/1]).
@@ -139,7 +139,7 @@
                     rabbit_types:connection_exit() |
                     fun (() -> rabbit_types:ok_or_error('not_found') |
                                rabbit_types:connection_exit())).
--spec(run_backing_queue_async/3 ::
+-spec(run_backing_queue/3 ::
         (pid(), atom(),
          (fun ((atom(), A) -> {[rabbit_types:msg_id()], A}))) -> 'ok').
 -spec(sync_timeout/1 :: (pid()) -> 'ok').
@@ -483,7 +483,7 @@ internal_delete(QueueName) ->
               end
       end).
 
-run_backing_queue_async(QPid, Mod, Fun) ->
+run_backing_queue(QPid, Mod, Fun) ->
     gen_server2:cast(QPid, {run_backing_queue, Mod, Fun}).
 
 sync_timeout(QPid) ->

@@ -70,7 +70,7 @@
 %% group. Because the master is the bq of amqqueue_process, it doesn't
 %% have sole control over its mailbox, and as a result, the master
 %% itself cannot be passed messages directly (well, it could by via
-%% the amqqueue:run_backing_queue_async callback but that would induce
+%% the amqqueue:run_backing_queue callback but that would induce
 %% additional unnecessary loading on the master queue process), yet it
 %% needs to react to gm events, such as the death of slaves. Thus the
 %% master creates the coordinator, and it is the coordinator that is

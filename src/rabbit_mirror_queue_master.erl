@@ -61,7 +61,7 @@ stop() ->
 sender_death_fun() ->
     Self = self(),
     fun (DeadPid) ->
-            rabbit_amqqueue:run_backing_queue_async(
+            rabbit_amqqueue:run_backing_queue(
               Self, ?MODULE,
               fun (?MODULE, State = #state { gm = GM, known_senders = KS }) ->
                       ok = gm:broadcast(GM, {sender_death, DeadPid}),
