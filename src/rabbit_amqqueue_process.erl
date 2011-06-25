@@ -787,7 +787,6 @@ prioritise_call(Msg, _From, _State) ->
         info                            -> 9;
         {info, _Items}                  -> 9;
         consumers                       -> 9;
-        {run_backing_queue, _Mod, _Fun} -> 6;
         _                               -> 0
     end.
 
@@ -1011,11 +1010,7 @@ handle_call({requeue, AckTags, ChPid}, From, State) ->
             ChAckTags1 = subtract_acks(ChAckTags, AckTags),
             maybe_store_ch_record(C#cr{acktags = ChAckTags1}),
             noreply(requeue_and_run(AckTags, State))
-    end;
-
-handle_call({run_backing_queue, Mod, Fun}, _From, State) ->
-    reply(ok, run_backing_queue(Mod, Fun, State)).
-
+    end.
 
 handle_cast({run_backing_queue, Mod, Fun}, State) ->
     noreply(run_backing_queue(Mod, Fun, State));

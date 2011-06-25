@@ -167,14 +167,7 @@ handle_call({gm_deaths, Deaths}, From,
         {error, not_found} ->
             gen_server2:reply(From, ok),
             {stop, normal, State}
-    end;
-
-handle_call({run_backing_queue, Mod, Fun}, _From, State) ->
-    reply(ok, run_backing_queue(Mod, Fun, State));
-
-handle_call({commit, _Txn, _ChPid}, _From, State) ->
-    %% We don't support transactions in mirror queues
-    reply(ok, State).
+    end.
 
 handle_cast({run_backing_queue, Mod, Fun}, State) ->
     noreply(run_backing_queue(Mod, Fun, State));
@@ -208,11 +201,7 @@ handle_cast(update_ram_duration,
 
 handle_cast(sync_timeout, State) ->
     noreply(backing_queue_timeout(
-              State #state { sync_timer_ref = undefined }));
-
-handle_cast({rollback, _Txn, _ChPid}, State) ->
-    %% We don't support transactions in mirror queues
-    noreply(State).
+              State #state { sync_timer_ref = undefined })).
 
 handle_info(timeout, State) ->
     noreply(backing_queue_timeout(State));
