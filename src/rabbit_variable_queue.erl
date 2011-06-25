@@ -18,8 +18,9 @@
 
 -export([init/4, terminate/2, delete_and_terminate/2,
          purge/1, publish/4, publish_delivered/5, drain_confirmed/1,
-         fetch/2, ack/2, tx_publish/5, tx_ack/3, tx_rollback/2, tx_commit/4,
-         requeue/3, len/1, is_empty/1, dropwhile/2,
+         dropwhile/2, fetch/2, ack/2,
+         tx_publish/5, tx_ack/3, tx_rollback/2, tx_commit/4,
+         requeue/3, len/1, is_empty/1,
          set_ram_duration_target/2, ram_duration/1,
          needs_timeout/1, timeout/1, handle_pre_hibernate/1,
          status/1, invoke/3, is_duplicate/3, discard/3,
