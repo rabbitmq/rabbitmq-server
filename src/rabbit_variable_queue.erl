@@ -577,14 +577,11 @@ dropwhile1(Pred, State) ->
 in_r(MsgStatus = #msg_status { msg = undefined, index_on_disk = IndexOnDisk },
      State = #vqstate { q3 = Q3, q4 = Q4, ram_index_count = RamIndexCount }) ->
     case queue:is_empty(Q4) of
-        true ->
-            State #vqstate {
-              q3              = bpqueue:in_r(IndexOnDisk, MsgStatus, Q3),
-              ram_index_count = RamIndexCount + one_if(not IndexOnDisk) };
-        false ->
-            {MsgStatus1, State1 = #vqstate { q4 = Q4a }} =
-                read_msg(MsgStatus, State),
-            State1 #vqstate { q4 = queue:in_r(MsgStatus1, Q4a) }
+        true  -> State #vqstate {
+                   q3              = bpqueue:in_r(IndexOnDisk, MsgStatus, Q3),
+                   ram_index_count = RamIndexCount + one_if(not IndexOnDisk) };
+        false -> {MsgStatus1, State1} = read_msg(MsgStatus, State),
+                 State1 #vqstate { q4 = queue:in_r(MsgStatus1, Q4) }
     end;
 in_r(MsgStatus, State = #vqstate { q4 = Q4 }) ->
     State #vqstate { q4 = queue:in_r(MsgStatus, Q4) }.
