@@ -2136,6 +2136,7 @@ test_variable_queue() ->
               fun test_variable_queue_all_the_bits_not_covered_elsewhere1/1,
               fun test_variable_queue_all_the_bits_not_covered_elsewhere2/1,
               fun test_dropwhile/1,
+              fun test_dropwhile_varying_ram_duration/1,
               fun test_variable_queue_ack_limiting/1]],
     passed.
 
@@ -2198,6 +2199,21 @@ test_dropwhile(VQ0) ->
     {empty, VQ4} = rabbit_variable_queue:fetch(false, VQ3),
 
     VQ4.
+
+test_dropwhile_varying_ram_duration(VQ0) ->
+    VQ1 = rabbit_variable_queue:publish(
+                      rabbit_basic:message(
+                        rabbit_misc:r(<<>>, exchange, <<>>),
+                        <<>>, #'P_basic'{}, <<>>),
+                      #message_properties{}, self(), VQ0),
+    VQ2 = rabbit_variable_queue:set_ram_duration_target(0, VQ1),
+    VQ3 = rabbit_variable_queue:set_ram_duration_target(infinity, VQ2),
+    VQ4 = rabbit_variable_queue:publish(
+                      rabbit_basic:message(
+                        rabbit_misc:r(<<>>, exchange, <<>>),
+                        <<>>, #'P_basic'{}, <<>>),
+                      #message_properties{}, self(), VQ3),
+    rabbit_variable_queue:dropwhile(fun(_) -> false end, VQ4).
 
 test_variable_queue_dynamic_duration_change(VQ0) ->
     SegmentSize = rabbit_queue_index:next_segment_boundary(0),
