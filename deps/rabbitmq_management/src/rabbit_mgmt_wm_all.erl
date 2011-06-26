@@ -11,30 +11,31 @@
 %%   The Original Code is RabbitMQ Management Plugin.
 %%
 %%   The Initial Developer of the Original Code is VMware, Inc.
-%%   Copyright (c) 2007-2010 VMware, Inc.  All rights reserved.
--module(rabbit_mgmt_wm_channels).
+%%   Copyright (c) 2011-2011 VMware, Inc.  All rights reserved.
+-module(rabbit_mgmt_wm_all).
 
--export([init/1, to_json/2, content_types_provided/2, is_authorized/2,
-         annotated/2]).
+-export([init/1, to_json/2, content_types_provided/2, is_authorized/2]).
+
+-import(rabbit_misc, [pget/2]).
 
 -include("rabbit_mgmt.hrl").
 -include_lib("webmachine/include/webmachine.hrl").
--include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("amqp_client/include/amqp_client.hrl").
 
 %%--------------------------------------------------------------------
-
 init(_Config) -> {ok, #context{}}.
 
 content_types_provided(ReqData, Context) ->
    {[{"application/json", to_json}], ReqData, Context}.
 
 to_json(ReqData, Context) ->
-    rabbit_mgmt_util:reply_list(annotated(ReqData, Context), ReqData, Context).
+    rabbit_mgmt_util:reply(
+      [{Key, Mod:annotated(ReqData, Context)}
+       || {Key, Mod} <- [{queues,    rabbit_mgmt_wm_queues},
+                         {exchanges, rabbit_mgmt_wm_exchanges},
+                         {bindings,  rabbit_mgmt_wm_bindings},
+                         {channels,  rabbit_mgmt_wm_channels}]
+      ], ReqData, Context).
 
 is_authorized(ReqData, Context) ->
-    rabbit_mgmt_util:is_authorized(ReqData, Context).
-
-annotated(ReqData, Context) ->
-    Chs = rabbit_mgmt_util:filter_user(rabbit_mgmt_db:get_channels(),
-                                       ReqData, Context),
-    rabbit_mgmt_format:strip_pids(Chs).
+    rabbit_mgmt_util:is_authorized_admin(ReqData, Context).
