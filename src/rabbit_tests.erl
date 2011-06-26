@@ -2199,11 +2199,13 @@ test_dropwhile(VQ0) ->
     VQ4.
 
 test_dropwhile_varying_ram_duration(VQ0) ->
-    VQ1 = variable_queue_publish(false, 1, VQ0),
+    VQ1 = variable_queue_publish(false, 2, VQ0),
     VQ2 = rabbit_variable_queue:set_ram_duration_target(0, VQ1),
     VQ3 = rabbit_variable_queue:set_ram_duration_target(infinity, VQ2),
     VQ4 = variable_queue_publish(false, 1, VQ3),
-    rabbit_variable_queue:dropwhile(fun(_) -> false end, VQ4).
+    VQ5 = rabbit_variable_queue:dropwhile(fun(_) -> false end, VQ4),
+    {VQ6, [_AckTag]} = variable_queue_fetch(1, false, false, 3, VQ5),
+    rabbit_variable_queue:dropwhile(fun(_) -> false end, VQ6).
 
 test_variable_queue_dynamic_duration_change(VQ0) ->
     SegmentSize = rabbit_queue_index:next_segment_boundary(0),
