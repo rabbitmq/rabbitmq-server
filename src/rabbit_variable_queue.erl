@@ -1073,7 +1073,7 @@ queue_out(State = #vqstate { q4 = Q4 }) ->
     case queue:out(Q4) of
         {empty, _Q4} ->
             case fetch_from_q3(State) of
-                {empty, _State1} = Result      -> Result;
+                {empty, _State1} = Result     -> Result;
                 {loaded, {MsgStatus, State1}} -> {{value, MsgStatus}, State1}
             end;
         {{value, MsgStatus}, Q4a} ->
