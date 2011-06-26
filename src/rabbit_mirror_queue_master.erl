@@ -43,6 +43,28 @@
                  known_senders
                }).
 
+-ifdef(use_specs).
+
+-export_type([death_fun/0]).
+
+-type(death_fun() :: fun ((pid()) -> 'ok')).
+-type(master_state() :: #state { gm                  :: pid(),
+                                 coordinator         :: pid(),
+                                 backing_queue       :: atom(),
+                                 backing_queue_state :: any(),
+                                 set_delivered       :: non_neg_integer(),
+                                 seen_status         :: dict(),
+                                 confirmed           :: [rabbit_guid:guid()],
+                                 ack_msg_id          :: dict(),
+                                 known_senders       :: set()
+                               }).
+
+-spec(promote_backing_queue_state/6 ::
+        (pid(), atom(), any(), pid(), dict(), [pid()]) -> master_state()).
+-spec(sender_death_fun/0 :: () -> death_fun()).
+
+-endif.
+
 %% For general documentation of HA design, see
 %% rabbit_mirror_queue_coordinator
 
@@ -58,18 +80,6 @@ start(_DurableQueues) ->
 stop() ->
     %% Same as start/1.
     exit({not_valid_for_generic_backing_queue, ?MODULE}).
-
-sender_death_fun() ->
-    Self = self(),
-    fun (DeadPid) ->
-            rabbit_amqqueue:run_backing_queue_async(
-              Self, ?MODULE,
-              fun (?MODULE, State = #state { gm = GM, known_senders = KS }) ->
-                      ok = gm:broadcast(GM, {sender_death, DeadPid}),
-                      KS1 = sets:del_element(DeadPid, KS),
-                      State #state { known_senders = KS1 }
-              end)
-    end.
 
 init(#amqqueue { name = QName, mirror_nodes = MNodes } = Q, Recover,
      AsyncCallback, SyncCallback) ->
@@ -94,17 +104,6 @@ init(#amqqueue { name = QName, mirror_nodes = MNodes } = Q, Recover,
              confirmed           = [],
              ack_msg_id          = dict:new(),
              known_senders       = sets:new() }.
-
-promote_backing_queue_state(CPid, BQ, BQS, GM, SeenStatus, KS) ->
-    #state { gm                  = GM,
-             coordinator         = CPid,
-             backing_queue       = BQ,
-             backing_queue_state = BQS,
-             set_delivered       = BQ:len(BQS),
-             seen_status         = SeenStatus,
-             confirmed           = [],
-             ack_msg_id          = dict:new(),
-             known_senders       = sets:from_list(KS) }.
 
 terminate({shutdown, dropped} = Reason,
           State = #state { backing_queue = BQ, backing_queue_state = BQS }) ->
@@ -364,6 +363,37 @@ discard(Msg = #basic_message { id = MsgId }, ChPid,
         {ok, discarded} ->
             State
     end.
+
+%% ---------------------------------------------------------------------------
+%% Other exported functions
+%% ---------------------------------------------------------------------------
+
+promote_backing_queue_state(CPid, BQ, BQS, GM, SeenStatus, KS) ->
+    #state { gm                  = GM,
+             coordinator         = CPid,
+             backing_queue       = BQ,
+             backing_queue_state = BQS,
+             set_delivered       = BQ:len(BQS),
+             seen_status         = SeenStatus,
+             confirmed           = [],
+             ack_msg_id          = dict:new(),
+             known_senders       = sets:from_list(KS) }.
+
+sender_death_fun() ->
+    Self = self(),
+    fun (DeadPid) ->
+            rabbit_amqqueue:run_backing_queue_async(
+              Self, ?MODULE,
+              fun (?MODULE, State = #state { gm = GM, known_senders = KS }) ->
+                      ok = gm:broadcast(GM, {sender_death, DeadPid}),
+                      KS1 = sets:del_element(DeadPid, KS),
+                      State #state { known_senders = KS1 }
+              end)
+    end.
+
+%% ---------------------------------------------------------------------------
+%% Helpers
+%% ---------------------------------------------------------------------------
 
 maybe_store_acktag(undefined, _MsgId, AM) ->
     AM;
