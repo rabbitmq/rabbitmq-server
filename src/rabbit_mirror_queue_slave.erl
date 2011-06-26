@@ -101,6 +101,8 @@ init([#amqqueue { name = QueueName } = Q]) ->
            self(), {rabbit_amqqueue, set_ram_duration_target, [self()]}),
     {ok, BQ} = application:get_env(backing_queue_module),
     BQS = bq_init(BQ, Q, false),
+    rabbit_event:notify(queue_slave_created,
+                        [{name, QueueName}, {pid, self()}, {master_pid, MPid}]),
     {ok, #state { q                   = Q,
                   gm                  = GM,
                   master_pid          = MPid,
