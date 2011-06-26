@@ -401,7 +401,7 @@ gb_trees_cons(Key, Value, Tree) ->
 handle_process_result({ok,   State}) -> noreply(State);
 handle_process_result({stop, State}) -> {stop, normal, State}.
 
-promote_me(From, #state { q                   = Q,
+promote_me(From, #state { q                   = Q = #amqqueue { name = QName },
                           gm                  = GM,
                           backing_queue       = BQ,
                           backing_queue_state = BQS,
@@ -410,9 +410,9 @@ promote_me(From, #state { q                   = Q,
                           msg_id_ack          = MA,
                           msg_id_status       = MS,
                           known_senders       = KS }) ->
+    rabbit_event:notify(queue_slave_promoted, [{name, QName}, {pid, self()}]),
     rabbit_log:info("Mirrored-queue (~s): Promoting slave ~s to master~n",
-                    [rabbit_misc:rs(Q #amqqueue.name),
-                     rabbit_misc:pid_to_string(self())]),
+                    [rabbit_misc:rs(QName), rabbit_misc:pid_to_string(self())]),
     Q1 = Q #amqqueue { pid = self() },
     {ok, CPid} = rabbit_mirror_queue_coordinator:start_link(
                    Q1, GM, rabbit_mirror_queue_master:sender_death_fun()),
