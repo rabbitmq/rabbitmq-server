@@ -43,6 +43,30 @@
                  known_senders
                }).
 
+-ifdef(use_specs).
+
+-export_type([death_fun/0, length_fun/0]).
+
+-type(death_fun() :: fun ((pid()) -> 'ok')).
+-type(length_fun() :: fun (() -> 'ok')).
+-type(master_state() :: #state { gm                  :: pid(),
+                                 coordinator         :: pid(),
+                                 backing_queue       :: atom(),
+                                 backing_queue_state :: any(),
+                                 set_delivered       :: non_neg_integer(),
+                                 seen_status         :: dict(),
+                                 confirmed           :: [rabbit_guid:guid()],
+                                 ack_msg_id          :: dict(),
+                                 known_senders       :: set()
+                               }).
+
+-spec(promote_backing_queue_state/6 ::
+        (pid(), atom(), any(), pid(), dict(), [pid()]) -> master_state()).
+-spec(sender_death_fun/0 :: () -> death_fun()).
+-spec(length_fun/0 :: () -> length_fun()).
+
+-endif.
+
 %% For general documentation of HA design, see
 %% rabbit_mirror_queue_coordinator
 
@@ -73,7 +97,7 @@ init(#amqqueue { name = QName, mirror_nodes = MNodes } = Q, Recover,
     [rabbit_mirror_queue_misc:add_mirror(QName, Node) || Node <- MNodes1],
     {ok, BQ} = application:get_env(backing_queue_module),
     BQS = BQ:init(Q, Recover, AsyncCallback, SyncCallback),
-    ok = gm:broadcast(GM, {length, BQ:length(BQS)}),
+    ok = gm:broadcast(GM, {length, BQ:len(BQS)}),
     #state { gm                  = GM,
              coordinator         = CPid,
              backing_queue       = BQ,
@@ -343,13 +367,18 @@ discard(Msg = #basic_message { id = MsgId }, ChPid,
             State
     end.
 
+%% ---------------------------------------------------------------------------
+%% Other exported functions
+%% ---------------------------------------------------------------------------
+
 promote_backing_queue_state(CPid, BQ, BQS, GM, SeenStatus, KS) ->
-    ok = gm:broadcast(GM, {length, BQ:length(BQS)}),
+    Len = BQ:len(BQS),
+    ok = gm:broadcast(GM, {length, Len}),
     #state { gm                  = GM,
              coordinator         = CPid,
              backing_queue       = BQ,
              backing_queue_state = BQS,
-             set_delivered       = BQ:len(BQS),
+             set_delivered       = Len,
              seen_status         = SeenStatus,
              confirmed           = [],
              ack_msg_id          = dict:new(),
@@ -375,7 +404,7 @@ length_fun() ->
               fun (?MODULE, State = #state { gm                  = GM,
                                              backing_queue       = BQ,
                                              backing_queue_state = BQS }) ->
-                      ok = gm:broadcast(GM, {length, BQ:length(BQS)}),
+                      ok = gm:broadcast(GM, {length, BQ:len(BQS)}),
                       State
               end)
     end.

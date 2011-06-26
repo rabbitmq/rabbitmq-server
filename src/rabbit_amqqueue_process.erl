@@ -220,7 +220,7 @@ terminate_shutdown(Fun, State) ->
     State1 = #q{backing_queue = BQ, backing_queue_state = BQS} =
         stop_sync_timer(stop_rate_timer(State)),
     case BQS of
-        undefined -> State;
+        undefined -> State1;
         _         -> ok = rabbit_memory_monitor:deregister(self()),
                      BQS1 = lists:foldl(
                               fun (#cr{txn = none}, BQSN) ->
