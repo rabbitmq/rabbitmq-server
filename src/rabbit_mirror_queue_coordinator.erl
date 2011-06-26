@@ -16,7 +16,7 @@
 
 -module(rabbit_mirror_queue_coordinator).
 
--export([start_link/3, get_gm/1, ensure_monitoring/2]).
+-export([start_link/4, get_gm/1, ensure_monitoring/2]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3]).
@@ -32,7 +32,8 @@
 -record(state, { q,
                  gm,
                  monitors,
-                 death_fun
+                 death_fun,
+                 length_fun
                }).
 
 -define(ONE_SECOND, 1000).
@@ -308,8 +309,8 @@
 %%
 %%----------------------------------------------------------------------------
 
-start_link(Queue, GM, DeathFun) ->
-    gen_server2:start_link(?MODULE, [Queue, GM, DeathFun], []).
+start_link(Queue, GM, DeathFun, LengthFun) ->
+    gen_server2:start_link(?MODULE, [Queue, GM, DeathFun, LengthFun], []).
 
 get_gm(CPid) ->
     gen_server2:call(CPid, get_gm, infinity).
@@ -321,7 +322,7 @@ ensure_monitoring(CPid, Pids) ->
 %% gen_server
 %% ---------------------------------------------------------------------------
 
-init([#amqqueue { name = QueueName } = Q, GM, DeathFun]) ->
+init([#amqqueue { name = QueueName } = Q, GM, DeathFun, LengthFun]) ->
     GM1 = case GM of
               undefined ->
                   {ok, GM2} = gm:start_link(QueueName, ?MODULE, [self()]),
@@ -335,10 +336,11 @@ init([#amqqueue { name = QueueName } = Q, GM, DeathFun]) ->
           end,
     {ok, _TRef} =
         timer:apply_interval(?ONE_SECOND, gm, broadcast, [GM1, heartbeat]),
-    {ok, #state { q         = Q,
-                  gm        = GM1,
-                  monitors  = dict:new(),
-                  death_fun = DeathFun },
+    {ok, #state { q          = Q,
+                  gm         = GM1,
+                  monitors   = dict:new(),
+                  death_fun  = DeathFun,
+                  length_fun = LengthFun },
      hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
@@ -358,8 +360,8 @@ handle_cast({gm_deaths, Deaths},
             {stop, normal, State}
     end;
 
-handle_cast(request_length, State) ->
-    %% TODO: something
+handle_cast(request_length, State = #state { length_fun = LengthFun }) ->
+    ok = LengthFun(),
     noreply(State);
 
 handle_cast({ensure_monitoring, Pids},
@@ -376,13 +378,12 @@ handle_cast({ensure_monitoring, Pids},
 
 handle_info({'DOWN', _MonitorRef, process, Pid, _Reason},
             State = #state { monitors  = Monitors,
-                             death_fun = Fun }) ->
-    noreply(
-      case dict:is_key(Pid, Monitors) of
-          false -> State;
-          true  -> ok = Fun(Pid),
-                   State #state { monitors = dict:erase(Pid, Monitors) }
-      end);
+                             death_fun = DeathFun }) ->
+    noreply(case dict:is_key(Pid, Monitors) of
+                false -> State;
+                true  -> ok = DeathFun(Pid),
+                         State #state { monitors = dict:erase(Pid, Monitors) }
+            end);
 
 handle_info(Msg, State) ->
     {stop, {unexpected_info, Msg}, State}.

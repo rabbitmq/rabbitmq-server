@@ -26,7 +26,7 @@
 
 -export([start/1, stop/0]).
 
--export([promote_backing_queue_state/6, sender_death_fun/0]).
+-export([promote_backing_queue_state/6, sender_death_fun/0, length_fun/0]).
 
 -behaviour(rabbit_backing_queue).
 
@@ -59,22 +59,10 @@ stop() ->
     %% Same as start/1.
     exit({not_valid_for_generic_backing_queue, ?MODULE}).
 
-sender_death_fun() ->
-    Self = self(),
-    fun (DeadPid) ->
-            rabbit_amqqueue:run_backing_queue_async(
-              Self, ?MODULE,
-              fun (?MODULE, State = #state { gm = GM, known_senders = KS }) ->
-                      ok = gm:broadcast(GM, {sender_death, DeadPid}),
-                      KS1 = sets:del_element(DeadPid, KS),
-                      State #state { known_senders = KS1 }
-              end)
-    end.
-
 init(#amqqueue { name = QName, mirror_nodes = MNodes } = Q, Recover,
      AsyncCallback, SyncCallback) ->
     {ok, CPid} = rabbit_mirror_queue_coordinator:start_link(
-                   Q, undefined, sender_death_fun()),
+                   Q, undefined, sender_death_fun(), length_fun()),
     GM = rabbit_mirror_queue_coordinator:get_gm(CPid),
     MNodes1 =
         (case MNodes of
@@ -85,6 +73,7 @@ init(#amqqueue { name = QName, mirror_nodes = MNodes } = Q, Recover,
     [rabbit_mirror_queue_misc:add_mirror(QName, Node) || Node <- MNodes1],
     {ok, BQ} = application:get_env(backing_queue_module),
     BQS = BQ:init(Q, Recover, AsyncCallback, SyncCallback),
+    ok = gm:broadcast(GM, {length, BQ:length(BQS)}),
     #state { gm                  = GM,
              coordinator         = CPid,
              backing_queue       = BQ,
@@ -94,17 +83,6 @@ init(#amqqueue { name = QName, mirror_nodes = MNodes } = Q, Recover,
              confirmed           = [],
              ack_msg_id          = dict:new(),
              known_senders       = sets:new() }.
-
-promote_backing_queue_state(CPid, BQ, BQS, GM, SeenStatus, KS) ->
-    #state { gm                  = GM,
-             coordinator         = CPid,
-             backing_queue       = BQ,
-             backing_queue_state = BQS,
-             set_delivered       = BQ:len(BQS),
-             seen_status         = SeenStatus,
-             confirmed           = [],
-             ack_msg_id          = dict:new(),
-             known_senders       = sets:from_list(KS) }.
 
 terminate({shutdown, dropped} = Reason,
           State = #state { backing_queue = BQ, backing_queue_state = BQS }) ->
@@ -363,6 +341,43 @@ discard(Msg = #basic_message { id = MsgId }, ChPid,
                            seen_status         = dict:erase(MsgId, SS) };
         {ok, discarded} ->
             State
+    end.
+
+promote_backing_queue_state(CPid, BQ, BQS, GM, SeenStatus, KS) ->
+    ok = gm:broadcast(GM, {length, BQ:length(BQS)}),
+    #state { gm                  = GM,
+             coordinator         = CPid,
+             backing_queue       = BQ,
+             backing_queue_state = BQS,
+             set_delivered       = BQ:len(BQS),
+             seen_status         = SeenStatus,
+             confirmed           = [],
+             ack_msg_id          = dict:new(),
+             known_senders       = sets:from_list(KS) }.
+
+sender_death_fun() ->
+    Self = self(),
+    fun (DeadPid) ->
+            rabbit_amqqueue:run_backing_queue_async(
+              Self, ?MODULE,
+              fun (?MODULE, State = #state { gm = GM, known_senders = KS }) ->
+                      ok = gm:broadcast(GM, {sender_death, DeadPid}),
+                      KS1 = sets:del_element(DeadPid, KS),
+                      State #state { known_senders = KS1 }
+              end)
+    end.
+
+length_fun() ->
+    Self = self(),
+    fun () ->
+            rabbit_amqqueue:run_backing_queue_async(
+              Self, ?MODULE,
+              fun (?MODULE, State = #state { gm                  = GM,
+                                             backing_queue       = BQ,
+                                             backing_queue_state = BQS }) ->
+                      ok = gm:broadcast(GM, {length, BQ:length(BQS)}),
+                      State
+              end)
     end.
 
 maybe_store_acktag(undefined, _MsgId, AM) ->
