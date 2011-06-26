@@ -893,6 +893,7 @@ maybe_store_ack(true, MsgId, AckTag, State = #state { msg_id_ack = MA,
 %% We intentionally leave out the head where a slave becomes
 %% unsynchronised: we assert that can never happen.
 set_synchronised(true, State = #state { synchronised = false }) ->
+    rabbit_event:notify(queue_slave_synchronised, [{pid, self()}]),
     State #state { synchronised = true };
 set_synchronised(true, State) ->
     State;
