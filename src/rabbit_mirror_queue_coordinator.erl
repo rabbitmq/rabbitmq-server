@@ -140,9 +140,28 @@
 %% state of the master. The detection of the sync-status of a slave is
 %% done entirely based on length: if the slave and the master both
 %% agree on the length of the queue after the fetch of the head of the
-%% queue, then the queues must be in sync. The only other possibility
-%% is that the slave's queue is shorter, and thus the fetch should be
-%% ignored.
+%% queue (or a 'set_length' results in a slave having to drop some
+%% messages from the head of its queue), then the queues must be in
+%% sync. The only other possibility is that the slave's queue is
+%% shorter, and thus the fetch should be ignored. In case slaves are
+%% joined to an empty queue which only goes on to receive publishes,
+%% they start by asking the master to broadcast its length. This is
+%% enough for slaves to always be able to work out when their head
+%% does not differ from the master (and is much simpler and cheaper
+%% than getting the master to hang on to the guid of the msg at the
+%% head of its queue). When a slave is promoted to a master, it
+%% unilaterally broadcasts its length, in order to solve the problem
+%% of length requests from new slaves being unanswered by a dead
+%% master.
+%%
+%% Obviously, due to the async nature of communication across gm, the
+%% slaves can fall behind. This does not matter from a sync pov: if
+%% they fall behind and the master dies then a) no publishes are lost
+%% because all publishes go to all mirrors anyway; b) the worst that
+%% happens is that acks get lost and so messages come back to
+%% life. This is no worse than normal given you never get confirmation
+%% that an ack has been received (not quite true with QoS-prefetch,
+%% but close enough for jazz).
 %%
 %% Because acktags are issued by the bq independently, and because
 %% there is no requirement for the master and all slaves to use the
