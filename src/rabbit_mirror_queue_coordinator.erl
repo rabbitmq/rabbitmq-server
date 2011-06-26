@@ -358,6 +358,10 @@ handle_cast({gm_deaths, Deaths},
             {stop, normal, State}
     end;
 
+handle_cast(request_length, State) ->
+    %% TODO: something
+    noreply(State);
+
 handle_cast({ensure_monitoring, Pids},
             State = #state { monitors = Monitors }) ->
     Monitors1 =
@@ -408,6 +412,8 @@ members_changed([CPid], _Births, Deaths) ->
 
 handle_msg([_CPid], _From, heartbeat) ->
     ok;
+handle_msg([CPid], _From, request_length = Msg) ->
+    ok = gen_server2:cast(CPid, Msg);
 handle_msg([CPid], _From, {ensure_monitoring, _Pids} = Msg) ->
     ok = gen_server2:cast(CPid, Msg);
 handle_msg([_CPid], _From, _Msg) ->

@@ -103,6 +103,7 @@ init([#amqqueue { name = QueueName } = Q]) ->
     BQS = bq_init(BQ, Q, false),
     rabbit_event:notify(queue_slave_created,
                         [{name, QueueName}, {pid, self()}, {master_pid, MPid}]),
+    ok = gm:broadcast(GM, request_length),
     {ok, #state { q                   = Q,
                   gm                  = GM,
                   master_pid          = MPid,
@@ -304,6 +305,9 @@ members_changed([SPid], _Births, Deaths) ->
     inform_deaths(SPid, Deaths).
 
 handle_msg([_SPid], _From, heartbeat) ->
+    ok;
+handle_msg([_SPid], _From, request_length) ->
+    %% This is only of value to the master
     ok;
 handle_msg([_SPid], _From, {ensure_monitoring, _Pid}) ->
     %% This is only of value to the master
