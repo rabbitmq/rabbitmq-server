@@ -1063,8 +1063,9 @@ in_r(MsgStatus = #msg_status { msg = undefined, index_on_disk = IndexOnDisk },
         true  -> State #vqstate {
                    q3              = bpqueue:in_r(IndexOnDisk, MsgStatus, Q3),
                    ram_index_count = RamIndexCount + one_if(not IndexOnDisk) };
-        false -> {MsgStatus1, State1} = read_msg(MsgStatus, State),
-                 State1 #vqstate { q4 = queue:in_r(MsgStatus1, Q4) }
+        false -> {MsgStatus1, State1 = #vqstate { q4 = Q4a }} =
+                     read_msg(MsgStatus, State),
+                 State1 #vqstate { q4 = queue:in_r(MsgStatus1, Q4a) }
     end;
 in_r(MsgStatus, State = #vqstate { q4 = Q4 }) ->
     State #vqstate { q4 = queue:in_r(MsgStatus, Q4) }.
