@@ -71,7 +71,7 @@ publish1(RoutingKey, Format, Data, LogExch) ->
     %% second resolution, not millisecond.
     Timestamp = rabbit_misc:now_ms() div 1000,
     {ok, _RoutingRes, _DeliveredQPids} =
-        rabbit_basic:publish(LogExch, RoutingKey, false, false, none,
+        rabbit_basic:publish(LogExch, RoutingKey, false, false,
                              #'P_basic'{content_type = <<"text/plain">>,
                                         timestamp    = Timestamp},
                              list_to_binary(io_lib:format(Format, Data))),
