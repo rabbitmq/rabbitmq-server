@@ -290,7 +290,7 @@ handle_cast({deliver, ConsumerTag, AckRequired,
                                       true  -> deliver;
                                       false -> deliver_no_ack
                                   end, State),
-    maybe_incr_redeliver(Redelivered, QPid, State),
+    maybe_incr_redeliver_stats(Redelivered, QPid, State),
     rabbit_trace:tap_trace_out(Msg, TraceState),
     noreply(State1#ch{next_tag = DeliveryTag + 1});
 
@@ -684,12 +684,11 @@ handle_method(#'basic.get'{queue = QueueNameBin,
             State1 = lock_message(not(NoAck),
                                   ack_record(DeliveryTag, none, Msg),
                                   State),
-            maybe_incr_stats([{QPid, 1}],
-                             case NoAck of
-                                 true  -> get_no_ack;
-                                 false -> get
-                             end, State),
-            maybe_incr_redeliver(Redelivered, QPid, State),
+            maybe_incr_stats([{QPid, 1}], case NoAck of
+                                              true  -> get_no_ack;
+                                              false -> get
+                                          end, State),
+            maybe_incr_redeliver_stats(Redelivered, QPid, State),
             rabbit_trace:tap_trace_out(Msg, TraceState),
             ok = rabbit_writer:send_command(
                    WriterPid,
@@ -1454,9 +1453,9 @@ i(client_flow_blocked, #ch{limiter_pid = LimiterPid}) ->
 i(Item, _) ->
     throw({bad_argument, Item}).
 
-maybe_incr_redeliver(true, QPid, State) ->
+maybe_incr_redeliver_stats(true, QPid, State) ->
     maybe_incr_stats([{QPid, 1}], redeliver, State);
-maybe_incr_redeliver(_, _, _) ->
+maybe_incr_redeliver_stats(_, _, _) ->
     ok.
 
 maybe_incr_stats(QXIncs, Measure, #ch{stats_timer = StatsTimer}) ->
