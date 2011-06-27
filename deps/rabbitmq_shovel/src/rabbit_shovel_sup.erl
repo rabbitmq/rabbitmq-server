@@ -82,8 +82,7 @@ parse_shovel_config(ShovelName, Config, Defaults) ->
         {ok, run_state_monad(
                [fun enrich_shovel_config/1,
                 fun parse_shovel_config_proplist/1,
-                fun parse_shovel_config_dict/1,
-                fun enforce_shovel_interdependencies/1],
+                fun parse_shovel_config_dict/1],
                {Config, Defaults})}
     catch throw:{error, Reason} ->
             {error, {invalid_shovel_configuration, ShovelName, Reason}}
@@ -129,18 +128,12 @@ parse_shovel_config_dict(Dict) ->
                   [{fun parse_endpoint/1,             sources},
                    {fun parse_endpoint/1,             destinations},
                    {fun parse_non_negative_integer/1, prefetch_count},
-                   {fun parse_boolean/1,              auto_ack},
-                   {fun parse_boolean/1,              confirm},
+                   {fun parse_ack_on/1,               ack_on},
                    {fun parse_binary/1,               queue},
                    make_parse_publish(publish_fields),
                    make_parse_publish(publish_properties),
                    {fun parse_non_negative_number/1,  reconnect_delay}]],
       #shovel{}).
-
-enforce_shovel_interdependencies(#shovel{auto_ack = true, confirm = true}) ->
-    fail(auto_ack_and_confirm_cannot_both_be_true);
-enforce_shovel_interdependencies(Shovel) ->
-    Shovel.
 
 %% --=: Plain state monad implementation start :=--
 run_state_monad(FunList, State) ->
@@ -358,6 +351,13 @@ parse_binary({Binary, Pos}) when is_binary(Binary) ->
     return({Binary, Pos});
 parse_binary({NotABinary, _Pos}) ->
     fail({require_binary, NotABinary}).
+
+parse_ack_on({Val, Pos}) when Val =:= auto orelse
+                              Val =:= publish orelse
+                              Val =:= confirm ->
+    return({Val, Pos});
+parse_ack_on({WrongVal, _Pos}) ->
+    fail({ack_on_value_requires_one_of, {auto, publish, confirm}, WrongVal}).
 
 make_parse_publish(publish_fields) ->
     {make_parse_publish1(record_info(fields, 'basic.publish')), publish_fields};

@@ -105,16 +105,13 @@ test() ->
      {parameter_unconfigurable_in_query, username, "text"}} =
         test_broken_shovel_sources([{broker, "amqp://?username=text"}]),
 
-    auto_ack_and_confirm_cannot_both_be_true =
-        test_broken_shovel_config([{auto_ack, true}, {confirm, true} | Config]),
-
     {invalid_parameter_value, prefetch_count,
      {require_non_negative_integer, invalid}} =
         test_broken_shovel_config([{prefetch_count, invalid} | Config]),
 
-    {invalid_parameter_value, auto_ack,
-     {require_boolean, invalid}} =
-        test_broken_shovel_config([{auto_ack, invalid} | Config]),
+    {invalid_parameter_value, ack_on,
+     {ack_on_value_requires_one_of, {auto,publish,confirm}, invalid}} =
+        test_broken_shovel_config([{ack_on, invalid} | Config]),
 
     {invalid_parameter_value, queue,
      {require_binary, invalid}} =
@@ -153,7 +150,7 @@ test() ->
          {destinations,
           [{broker, "amqp://"}]},
          {queue, <<>>},
-         {confirm, true},
+         {ack_on, confirm},
          {publish_fields, [{exchange, ?EXCHANGE}, {routing_key, ?FROM_SHOVEL}]},
          {publish_properties, [{content_type, ?SHOVELLED}]}
         ]}],

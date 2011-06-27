@@ -70,12 +70,12 @@ handle_cast(init, State = #state{config = Config}) ->
 
     ok = amqp_channel:register_flow_handler(OutboundChan, self()),
 
-    case Config#shovel.confirm of
-        true ->
+    case Config#shovel.ack_on of
+        confirm ->
             #'confirm.select_ok'{} =
                 amqp_channel:call(OutboundChan, #'confirm.select'{}),
             ok = amqp_channel:register_confirm_handler(OutboundChan, self());
-        false ->
+        _ ->
             ok
     end,
 
@@ -83,7 +83,7 @@ handle_cast(init, State = #state{config = Config}) ->
         amqp_channel:subscribe(
           InboundChan,
           #'basic.consume'{queue  = Config#shovel.queue,
-                           no_ack = Config#shovel.auto_ack},
+                           no_ack = Config#shovel.ack_on =:= auto},
           self()),
 
     State1 =
@@ -125,12 +125,12 @@ handle_info(#'channel.flow'{active = false},
     {noreply, State#state{blocked = true}};
 
 handle_info(#'basic.ack'{delivery_tag = Seq, multiple = Multiple},
-            State = #state{config = Config}) when Config#shovel.confirm ->
+            State = #state{config = #shovel{ack_on = confirm}}) ->
     {noreply, confirm_to_inbound(#'basic.ack'{delivery_tag = _, multiple = _},
                                  Seq, Multiple, State)};
 
 handle_info(#'basic.nack'{delivery_tag = Seq, multiple = Multiple},
-            State = #state{config = Config}) when Config#shovel.confirm ->
+            State = #state{config = #shovel{ack_on = confirm}}) ->
     {noreply, confirm_to_inbound(#'basic.nack'{delivery_tag = _, multiple = _},
                                  Seq, Multiple, State)};
 
@@ -190,18 +190,18 @@ publish(Tag, Method, Msg,
         State = #state{inbound_ch = InboundChan, outbound_ch = OutboundChan,
                        config = Config, blocked = false, msg_buf = MsgBuf,
                        unacked = Unacked}) ->
-    Seq = case Config#shovel.confirm of
-              true  -> amqp_channel:next_publish_seqno(OutboundChan);
-              false -> undefined
+    Seq = case Config#shovel.ack_on of
+              confirm  -> amqp_channel:next_publish_seqno(OutboundChan);
+              _        -> undefined
           end,
     case amqp_channel:call(OutboundChan, Method, Msg) of
         ok ->
-            case {Config#shovel.auto_ack, Config#shovel.confirm} of
-                {true, false} ->
+            case Config#shovel.ack_on of
+                auto ->
                     State;
-                {false, true} ->
+                confirm ->
                     State#state{unacked = gb_trees:insert(Seq, Tag, Unacked)};
-                {false, false} ->
+                publish ->
                     ok = amqp_channel:cast(
                            InboundChan, #'basic.ack'{delivery_tag = Tag}),
                     State
