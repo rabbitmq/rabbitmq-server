@@ -129,7 +129,6 @@ parse_shovel_config_dict(Dict) ->
                    {fun parse_endpoint/1,             destinations},
                    {fun parse_non_negative_integer/1, prefetch_count},
                    {fun parse_boolean/1,              auto_ack},
-                   {fun parse_non_negative_integer/1, tx_size},
                    {fun parse_binary/1,               queue},
                    make_parse_publish(publish_fields),
                    make_parse_publish(publish_properties),
