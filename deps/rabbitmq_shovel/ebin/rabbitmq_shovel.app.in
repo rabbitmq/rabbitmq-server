@@ -5,6 +5,7 @@
   {registered, []},
   {env, [{defaults, [{prefetch_count,     0},
                      {auto_ack,           false},
+                     {confirm,            true},
                      {publish_fields,     []},
                      {publish_properties, []},
                      {reconnect_delay,    5}]

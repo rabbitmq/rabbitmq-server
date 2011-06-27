@@ -24,6 +24,7 @@
          destinations,
          prefetch_count,
          auto_ack,
+         confirm,
          publish_fields,
          publish_properties,
          queue,
