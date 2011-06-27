@@ -32,6 +32,7 @@
 -rabbit_upgrade({user_admin_to_tags,    mnesia, [user_to_internal_user]}).
 -rabbit_upgrade({ha_mirrors,            mnesia, []}).
 -rabbit_upgrade({gm,                    mnesia, []}).
+-rabbit_upgrade({exchange_scratch,      mnesia, [trace_exchanges]}).
 
 %% -------------------------------------------------------------------
 
@@ -49,6 +50,7 @@
 -spec(user_admin_to_tags/0    :: () -> 'ok').
 -spec(ha_mirrors/0            :: () -> 'ok').
 -spec(gm/0                    :: () -> 'ok').
+-spec(exchange_scratch/0      :: () -> 'ok').
 
 -endif.
 
@@ -154,6 +156,18 @@ ha_mirrors() ->
 gm() ->
     create(gm_group, [{record_name, gm_group},
                       {attributes, [name, version, members]}]).
+
+exchange_scratch() ->
+    ok = exchange_scratch(rabbit_exchange),
+    ok = exchange_scratch(rabbit_durable_exchange).
+
+exchange_scratch(Table) ->
+    transform(
+      Table,
+      fun ({exchange, Name, Type, Dur, AutoDel, Int, Args}) ->
+              {exchange, Name, Type, Dur, AutoDel, Int, Args, undefined}
+      end,
+      [name, type, durable, auto_delete, internal, arguments, scratch]).
 
 %%--------------------------------------------------------------------
 

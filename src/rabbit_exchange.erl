@@ -20,7 +20,7 @@
 
 -export([recover/0, callback/3, declare/6,
          assert_equivalence/6, assert_args_equivalence/2, check_type/1,
-         lookup/1, lookup_or_die/1, list/1,
+         lookup/1, lookup_or_die/1, list/1, update/2,
          info_keys/0, info/1, info/2, info_all/1, info_all/2,
          publish/2, delete/2]).
 %% these must be run inside a mnesia tx
@@ -198,6 +198,27 @@ list(VHostPath) ->
     mnesia:dirty_match_object(
       rabbit_exchange,
       #exchange{name = rabbit_misc:r(VHostPath, exchange), _ = '_'}).
+
+update(Name, Fun) ->
+    case mnesia:transaction(
+           fun() ->
+                   case mnesia:read(rabbit_exchange, Name, write) of
+                       [X = #exchange{durable = Durable}] ->
+                           ok = mnesia:write(rabbit_exchange, Fun(X), write),
+                           case Durable of
+                               true ->
+                                   ok = mnesia:write(rabbit_durable_exchange,
+                                                     Fun(X), write);
+                               _ ->
+                                   ok
+                           end;
+                       [] ->
+                           ok
+                   end
+           end) of
+        {atomic, ok}      -> ok;
+        {aborted, Reason} -> {error, Reason}
+    end.
 
 info_keys() -> ?INFO_KEYS.
 
