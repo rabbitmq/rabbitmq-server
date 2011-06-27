@@ -16,35 +16,39 @@
 
 -module(rabbit_federation_db).
 
--export([init/0]).
+-include("rabbit_federation.hrl").
+-include_lib("amqp_client/include/amqp_client.hrl").
 
 -export([get_active_suffix/3, set_active_suffix/3]).
-
-%% TODO get rid of this dets table, use mnesia
--define(DETS_NAME, "rabbit_federation_exchange.dat").
-
-init() ->
-    F = file(),
-    Args = [{type, set}],
-    case dets:open_file(F, Args) of
-        {ok, F} -> ok;
-        Error   -> rabbit_log:error("Federation state file ~s could "
-                                    "not be opened - ~p.", [F, Error]),
-                   ok = file:delete(F),
-                   {ok, F} = dets:open_file(F, Args)
-    end.
 
 %%----------------------------------------------------------------------------
 
 get_active_suffix(X, Upstream, Default) ->
-    case dets:lookup(file(), {suffix, X, Upstream}) of
-        []       -> Default;
-        [{_, S}] -> S
+    case rabbit_exchange:lookup(X) of
+        {ok, #exchange{scratch = undefined}} ->
+            Default;
+        {ok, #exchange{scratch = Dict}} ->
+            case dict:find(key(Upstream), Dict) of
+                {ok, Suffix} -> Suffix;
+                error        -> Default
+            end;
+        {error, not_found} ->
+            Default
     end.
 
 set_active_suffix(X, Upstream, Suffix) ->
-    ok = dets:insert(file(), {{suffix, X, Upstream}, Suffix}).
+    ok = rabbit_exchange:update(
+           X, fun(Exchange = #exchange{scratch = S}) ->
+                      Dict = case S of
+                                 undefined -> dict:new();
+                                 _         -> S
+                             end,
+                      Dict1 = dict:store(key(Upstream), Suffix, Dict),
+                      Exchange#exchange{scratch = Dict1}
+              end).
 
-%%----------------------------------------------------------------------------
-
-file() -> rabbit_mnesia:dir() ++ "/" ++ ?DETS_NAME.
+key(#upstream{params   = #amqp_params_network{host         = Host,
+                                              port         = Port,
+                                              virtual_host = VHost},
+              exchange = X}) ->
+    {Host, Port, VHost, X}.
