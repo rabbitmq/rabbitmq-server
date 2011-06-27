@@ -151,7 +151,6 @@ test() ->
          {destinations,
           [{broker, "amqp://"}]},
          {queue, <<>>},
-         {tx_size, 1},
          {publish_fields, [{exchange, ?EXCHANGE}, {routing_key, ?FROM_SHOVEL}]},
          {publish_properties, [{content_type, ?SHOVELLED}]}
         ]}],

@@ -24,7 +24,6 @@
          destinations,
          prefetch_count,
          auto_ack,
-         tx_size,
          publish_fields,
          publish_properties,
          queue,

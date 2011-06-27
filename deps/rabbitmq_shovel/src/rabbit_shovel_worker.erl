@@ -25,7 +25,7 @@
 -include("rabbit_shovel.hrl").
 
 -record(state, {inbound_conn, inbound_ch, outbound_conn, outbound_ch,
-                tx_counter, name, config, blocked, msg_buf, inbound_params,
+                name, config, blocked, msg_buf, inbound_params,
                 outbound_params}).
 
 start_link(Name, Config) ->
@@ -66,13 +66,6 @@ handle_cast(init, State = #state{config = Config}) ->
                           #'basic.qos'{
                             prefetch_count = Config#shovel.prefetch_count}),
 
-    ok = case Config#shovel.tx_size of
-                 0 -> ok;
-                 _ -> #'tx.select_ok'{} =
-                          amqp_channel:call(OutboundChan, #'tx.select'{}),
-                      ok
-         end,
-
     ok = amqp_channel:register_flow_handler(OutboundChan, self()),
 
     #'basic.consume_ok'{} =
@@ -85,7 +78,7 @@ handle_cast(init, State = #state{config = Config}) ->
     State1 =
         State#state{inbound_conn = InboundConn, inbound_ch = InboundChan,
                     outbound_conn = OutboundConn, outbound_ch = OutboundChan,
-                    tx_counter = 0, blocked = false, msg_buf = queue:new(),
+                    blocked = false, msg_buf = queue:new(),
                     inbound_params = InboundParams,
                     outbound_params = OutboundParams},
     ok = report_status(running, State1),
@@ -153,27 +146,15 @@ report_status(Verb, State) ->
                          {destination, State#state.outbound_params}}).
 
 publish(Tag, Method, Msg,
-        State = #state{tx_counter = TxCounter, inbound_ch = InboundChan,
-                       outbound_ch = OutboundChan, config = Config,
-                       blocked = false, msg_buf = MsgBuf}) ->
+        State = #state{inbound_ch = InboundChan, outbound_ch = OutboundChan,
+                       config = Config, blocked = false, msg_buf = MsgBuf}) ->
     case amqp_channel:call(OutboundChan, Method, Msg) of
         ok ->
-            {Ack, AckMulti, TxCounter1} =
-                case {Config#shovel.tx_size, TxCounter + 1} of
-                    {0, _}            -> {true,  false, TxCounter};
-                    {N, N}            -> #'tx.commit_ok'{} =
-                                             amqp_channel:call(OutboundChan,
-                                                               #'tx.commit'{}),
-                                         {true,  true,  0};
-                    {N, M} when N > M -> {false, false, M}
-                end,
-            case Ack andalso not (Config#shovel.auto_ack) of
-                true -> amqp_channel:cast(InboundChan,
-                                          #'basic.ack'{delivery_tag = Tag,
-                                                       multiple = AckMulti});
-                _    -> ok
-            end,
-            State#state{tx_counter = TxCounter1};
+            case Config#shovel.auto_ack of
+                true  -> ok;
+                false -> amqp_channel:cast(InboundChan,
+                                           #'basic.ack'{delivery_tag = Tag})
+            end;
         blocked ->
             ok = report_status(blocked, State),
             ok = channel_flow(InboundChan, false),
