@@ -110,7 +110,7 @@ test() ->
         test_broken_shovel_config([{prefetch_count, invalid} | Config]),
 
     {invalid_parameter_value, ack_on,
-     {ack_on_value_requires_one_of, {auto,publish,confirm}, invalid}} =
+     {ack_on_value_requires_one_of, {auto, publish, confirm}, invalid}} =
         test_broken_shovel_config([{ack_on, invalid} | Config]),
 
     {invalid_parameter_value, queue,
