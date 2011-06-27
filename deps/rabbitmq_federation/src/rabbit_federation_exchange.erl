@@ -62,15 +62,15 @@ validate(#exchange{name      = #resource{name = XName, virtual_host = VHost},
 
 create(transaction, X) ->
     with_module(X, fun (M) -> M:create(transaction, X) end);
-create(none, X) ->
-    {ok, _} = rabbit_federation_sup:start_child(X, {upstreams(X), X}),
+create(none, X = #exchange{name = XName}) ->
+    {ok, _} = rabbit_federation_sup:start_child(XName, {upstreams(X), X}),
     with_module(X, fun (M) -> M:create(none, X) end).
 
 delete(transaction, X, Bs) ->
     with_module(X, fun (M) -> M:delete(transaction, X, Bs) end);
-delete(none, X, Bs) ->
+delete(none, X = #exchange{name = XName}, Bs) ->
     rabbit_federation_link:stop(X),
-    ok = rabbit_federation_sup:stop_child(X),
+    ok = rabbit_federation_sup:stop_child(XName),
     with_module(X, fun (M) -> M:delete(none, X, Bs) end).
 
 add_binding(transaction, X, B) ->

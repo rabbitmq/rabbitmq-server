@@ -70,9 +70,9 @@ list_routing_keys(X) -> call(X, list_routing_keys).
 start_link(Args) ->
     gen_server2:start_link(?MODULE, Args, [{timeout, infinity}]).
 
-init(Args = {_, X}) ->
+init(Args = {_, #exchange{name = Name}}) ->
     join(rabbit_federation_exchanges),
-    join({rabbit_federation_exchange, X}),
+    join({rabbit_federation_exchange, Name}),
     gen_server2:cast(self(), maybe_go),
     {ok, {not_started, Args}}.
 
@@ -194,9 +194,9 @@ all() ->
     pg2_fixed:create(rabbit_federation_exchanges),
     pg2_fixed:get_members(rabbit_federation_exchanges).
 
-x(X) ->
-    pg2_fixed:create({rabbit_federation_exchange, X}),
-    pg2_fixed:get_members({rabbit_federation_exchange, X}).
+x(#exchange{name = Name}) ->
+    pg2_fixed:create({rabbit_federation_exchange, Name}),
+    pg2_fixed:get_members({rabbit_federation_exchange, Name}).
 
 %%----------------------------------------------------------------------------
 
