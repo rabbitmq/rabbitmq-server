@@ -99,7 +99,6 @@ A full example of the shovel configuration is:
        {queue, <<>>},
        {prefetch_count, 10},
        {auto_ack, false},
-       {tx_size, 0},
        {publish_properties, [{delivery_mode, 2}]},
        {publish_fields, [{exchange, <<"my_exchange">>},
                          {routing_key, <<"from_shovel">>}]},
@@ -113,12 +112,11 @@ Firstly, all shovels are named. Here we have one shovel, called
 'my_first_shovel'. We can have multiple shovels if you wish. Secondly,
 every shovel must have the subfields sources, destinations and queue
 specified, whereas the other fields (prefetch_count, auto_ack,
-tx_size, publish_properties, publish_fields, reconnect_delay) are
-optional and have defaults as follows:
+publish_properties, publish_fields, reconnect_delay) are optional and
+have defaults as follows:
 
 {prefetch_count,      0}
 {auto_ack,            false}
-{tx_size,             0}
 {publish_properties,  []}
 {publish_fields,      []}
 {reconnect_delay,     5}
@@ -218,20 +216,6 @@ auto_ack :: boolean
 
 Setting this to 'true' turns on the no_ack flag when subscribing to
 the source queue.
-
-
-tx_size :: non-negative-integer
--------------------------------
-
-When set to 0, transactions are not used. Other values make publishes
-transactional, with a commit every N messages. In lieu of the auto-ack
-option, when transactions are not used, messages are acknowledged to
-the source immediately after every publish. When transactions are
-used, acks are only issued to the source on receipt of the commit-ok
-message from the destination. This can thus be used to guarantee that
-messages are only acknowledged (and thus forgotten about by the source
-broker) when they are guaranteed to have been received by the
-destination broker.
 
 
 publish_properties
