@@ -82,7 +82,8 @@ parse_shovel_config(ShovelName, Config, Defaults) ->
         {ok, run_state_monad(
                [fun enrich_shovel_config/1,
                 fun parse_shovel_config_proplist/1,
-                fun parse_shovel_config_dict/1],
+                fun parse_shovel_config_dict/1,
+                fun enforce_shovel_interdependencies/1],
                {Config, Defaults})}
     catch throw:{error, Reason} ->
             {error, {invalid_shovel_configuration, ShovelName, Reason}}
@@ -135,6 +136,11 @@ parse_shovel_config_dict(Dict) ->
                    make_parse_publish(publish_properties),
                    {fun parse_non_negative_number/1,  reconnect_delay}]],
       #shovel{}).
+
+enforce_shovel_interdependencies(#shovel{auto_ack = true, confirm = true}) ->
+    fail(auto_ack_and_confirm_cannot_both_be_true);
+enforce_shovel_interdependencies(Shovel) ->
+    Shovel.
 
 %% --=: Plain state monad implementation start :=--
 run_state_monad(FunList, State) ->

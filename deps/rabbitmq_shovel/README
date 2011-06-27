@@ -112,11 +112,12 @@ Firstly, all shovels are named. Here we have one shovel, called
 'my_first_shovel'. We can have multiple shovels if you wish. Secondly,
 every shovel must have the subfields sources, destinations and queue
 specified, whereas the other fields (prefetch_count, auto_ack,
-publish_properties, publish_fields, reconnect_delay) are optional and
-have defaults as follows:
+confirm, publish_properties, publish_fields, reconnect_delay) are
+optional and have defaults as follows:
 
 {prefetch_count,      0}
 {auto_ack,            false}
+{confirm,             true}
 {publish_properties,  []}
 {publish_fields,      []}
 {reconnect_delay,     5}
@@ -215,7 +216,21 @@ auto_ack :: boolean
 -------------------
 
 Setting this to 'true' turns on the no_ack flag when subscribing to
-the source queue.
+the source queue. Note that it is illegal to have auto_ack set to
+'true' and confirm set to 'true'.
+
+
+confirm :: boolean
+------------------
+
+Setting this to 'true' makes the shovel request confirmations from the
+destination broker that it has received published messages. The shovel
+delays acknowledging messages from the source broker until it has
+received such confirmation from the destination broker. This feature
+gives a guarantee that messages will not be discarded from the source
+broker until after the destination broker has confirmed receipt of the
+message. Note that it is illegal to have confirm set to 'true' and
+auto_ack set to 'true'.
 
 
 publish_properties
