@@ -28,7 +28,7 @@
 -rabbit_upgrade({topic_trie,            mnesia, []}).
 -rabbit_upgrade({semi_durable_route,    mnesia, []}).
 -rabbit_upgrade({exchange_event_serial, mnesia, []}).
--rabbit_upgrade({trace_exchanges,       mnesia, []}).
+-rabbit_upgrade({trace_exchanges,       mnesia, [internal_exchanges]}).
 
 %% -------------------------------------------------------------------
 
