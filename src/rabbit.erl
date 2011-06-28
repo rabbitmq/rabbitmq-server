@@ -201,14 +201,14 @@ prepare() ->
 start() ->
     try
         ok = prepare(),
-        ok = rabbit_misc:start_applications(?APPS)
+        ok = rabbit_misc:start_applications(application_load_order())
     after
         %%give the error loggers some time to catch up
         timer:sleep(100)
     end.
 
 stop() ->
-    ok = rabbit_misc:stop_applications(?APPS).
+    ok = rabbit_misc:stop_applications(application_load_order()).
 
 stop_and_halt() ->
     init:stop(),
@@ -383,6 +383,24 @@ config_files() ->
                            File <- Files];
         error       -> []
     end.
+
+%%---------------------------------------------------------------------------
+
+application_load_order() ->
+    {ok, G} = rabbit_misc:build_acyclic_graph(
+                fun application_graph_vertex/2, fun application_graph_edge/2,
+                [{App, Deps} ||
+                    {App, _Desc, _Vsn} <- application:loaded_applications(),
+                    {ok, Deps} <- [application:get_key(App, applications)]]),
+    true = digraph:del_vertices(
+             G, digraph:vertices(G) -- digraph_utils:reachable(?APPS, G)),
+    digraph_utils:topsort(G).
+
+application_graph_vertex(App, _Deps) ->
+    [{App, App}].
+
+application_graph_edge(App, Deps) ->
+    [{Dep, App} || Dep <- Deps].
 
 %%---------------------------------------------------------------------------
 
