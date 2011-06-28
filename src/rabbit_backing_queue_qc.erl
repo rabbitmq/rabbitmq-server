@@ -15,6 +15,7 @@
 %%
 
 -module(rabbit_backing_queue_qc).
+-ifdef(use_proper_qc).
 -include("rabbit.hrl").
 -include("rabbit_framing.hrl").
 -include_lib("proper/include/proper.hrl").
@@ -280,3 +281,5 @@ drop_messages(Messages) ->
                 false -> Messages
             end
     end.
+
+-endif.
