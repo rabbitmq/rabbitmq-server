@@ -390,7 +390,32 @@ config_files() ->
 
 %%---------------------------------------------------------------------------
 
+load_applications() ->
+    load_applications(queue:from_list(?APPS), sets:new()).
+
+load_applications(Worklist, Loaded) ->
+    case queue:out(Worklist) of
+        {empty, _WorkList} ->
+            ok;
+        {{value, App}, Worklist1} ->
+            case sets:is_element(App, Loaded) of
+                true  -> load_applications(Worklist1, Loaded);
+                false -> case application:load(App) of
+                             ok                             -> ok;
+                             {error, {already_loaded, App}} -> ok;
+                             Error                          -> throw(Error)
+                         end,
+                         load_applications(
+                           case application:get_key(App, applications) of
+                               undefined -> Worklist1;
+                               {ok, Lst} -> queue:join(Worklist1,
+                                                       queue:from_list(Lst))
+                           end, sets:add_element(App, Loaded))
+            end
+    end.
+
 application_load_order() ->
+    ok = load_applications(),
     {ok, G} = rabbit_misc:build_acyclic_graph(
                 fun application_graph_vertex/2, fun application_graph_edge/2,
                 [{App, case application:get_key(App, applications) of
