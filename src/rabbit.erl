@@ -393,15 +393,11 @@ config_files() ->
 application_load_order() ->
     {ok, G} = rabbit_misc:build_acyclic_graph(
                 fun application_graph_vertex/2, fun application_graph_edge/2,
-                [{App, Deps} ||
-                    {App, _Desc, _Vsn} <- application:loaded_applications(),
-                    begin
-                        Deps = case application:get_key(App, applications) of
-                                   undefined -> [];
-                                   {ok, Lst} -> Lst
-                               end,
-                        true
-                    end]),
+                [{App, case application:get_key(App, applications) of
+                           undefined -> [];
+                           {ok, Lst} -> Lst
+                       end} ||
+                    {App, _Desc, _Vsn} <- application:loaded_applications()]),
     true = digraph:del_vertices(
              G, digraph:vertices(G) -- digraph_utils:reachable(?APPS, G)),
     Result = digraph_utils:topsort(G),
