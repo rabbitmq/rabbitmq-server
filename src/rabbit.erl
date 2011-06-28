@@ -394,7 +394,9 @@ application_load_order() ->
                     {ok, Deps} <- [application:get_key(App, applications)]]),
     true = digraph:del_vertices(
              G, digraph:vertices(G) -- digraph_utils:reachable(?APPS, G)),
-    digraph_utils:topsort(G).
+    Result = digraph_utils:topsort(G),
+    true = digraph:delete(G),
+    Result.
 
 application_graph_vertex(App, _Deps) ->
     [{App, App}].
