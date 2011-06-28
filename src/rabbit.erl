@@ -395,7 +395,13 @@ application_load_order() ->
                 fun application_graph_vertex/2, fun application_graph_edge/2,
                 [{App, Deps} ||
                     {App, _Desc, _Vsn} <- application:loaded_applications(),
-                    {ok, Deps} <- [application:get_key(App, applications)]]),
+                    begin
+                        Deps = case application:get_key(App, applications) of
+                                   undefined -> [];
+                                   {ok, Lst} -> Lst
+                               end,
+                        true
+                    end]),
     true = digraph:del_vertices(
              G, digraph:vertices(G) -- digraph_utils:reachable(?APPS, G)),
     Result = digraph_utils:topsort(G),
