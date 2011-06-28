@@ -211,7 +211,11 @@ stop() ->
     ok = rabbit_misc:stop_applications(application_load_order()).
 
 stop_and_halt() ->
-    init:stop(),
+    try
+        stop()
+    after
+        init:stop()
+    end,
     ok.
 
 status() ->
