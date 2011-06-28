@@ -25,7 +25,7 @@
          {queue_index_max_journal_entries, 262144},
          {default_user, <<"guest">>},
          {default_pass, <<"guest">>},
-         {default_user_is_admin, true},
+         {default_user_tags, [administrator]},
          {default_vhost, <<"/">>},
          {default_permissions, [<<".*">>, <<".*">>, <<".*">>]},
          {cluster_nodes, []},

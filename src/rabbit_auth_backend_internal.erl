@@ -20,10 +20,10 @@
 -behaviour(rabbit_auth_backend).
 
 -export([description/0]).
--export([check_user_login/2, check_vhost_access/3, check_resource_access/3]).
+-export([check_user_login/2, check_vhost_access/2, check_resource_access/3]).
 
--export([add_user/2, delete_user/1, change_password/2, set_admin/1,
-         clear_admin/1, list_users/0, lookup_user/1, clear_password/1]).
+-export([add_user/2, delete_user/1, change_password/2, set_tags/2,
+         list_users/0, user_info_keys/0, lookup_user/1, clear_password/1]).
 -export([make_salt/0, check_password/2, change_password_hash/2,
          hash_password/1]).
 -export([set_permissions/5, clear_permissions/2,
@@ -50,9 +50,9 @@
                                  rabbit_types:password_hash()) -> 'ok').
 -spec(hash_password/1 :: (rabbit_types:password())
                          -> rabbit_types:password_hash()).
--spec(set_admin/1 :: (rabbit_types:username()) -> 'ok').
--spec(clear_admin/1 :: (rabbit_types:username()) -> 'ok').
--spec(list_users/0 :: () -> [{rabbit_types:username(), boolean()}]).
+-spec(set_tags/2 :: (rabbit_types:username(), [atom()]) -> 'ok').
+-spec(list_users/0 :: () -> rabbit_types:infos()).
+-spec(user_info_keys/0 :: () -> rabbit_types:info_keys()).
 -spec(lookup_user/1 :: (rabbit_types:username())
                        -> rabbit_types:ok(rabbit_types:internal_user())
                               | rabbit_types:error('not_found')).
@@ -77,6 +77,7 @@
 %%----------------------------------------------------------------------------
 
 -define(PERMS_INFO_KEYS, [configure, write, read]).
+-define(USER_INFO_KEYS, [user, tags]).
 
 %% Implementation of rabbit_auth_backend
 
@@ -97,10 +98,10 @@ check_user_login(Username, AuthProps) ->
 internal_check_user_login(Username, Fun) ->
     Refused = {refused, "user '~s' - invalid credentials", [Username]},
     case lookup_user(Username) of
-        {ok, User = #internal_user{is_admin = IsAdmin}} ->
+        {ok, User = #internal_user{tags = Tags}} ->
             case Fun(User) of
                 true -> {ok, #user{username     = Username,
-                                   is_admin     = IsAdmin,
+                                   tags         = Tags,
                                    auth_backend = ?MODULE,
                                    impl         = User}};
                 _    -> Refused
@@ -109,16 +110,13 @@ internal_check_user_login(Username, Fun) ->
             Refused
     end.
 
-check_vhost_access(#user{is_admin = true},    _VHostPath, read) ->
-    true;
-
-check_vhost_access(#user{username = Username}, VHostPath, _) ->
+check_vhost_access(#user{username = Username}, VHost) ->
     %% TODO: use dirty ops instead
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
               case mnesia:read({rabbit_user_permission,
                                 #user_vhost{username     = Username,
-                                            virtual_host = VHostPath}}) of
+                                            virtual_host = VHost}}) of
                   []   -> false;
                   [_R] -> true
               end
@@ -161,7 +159,7 @@ add_user(Username, Password) ->
                                  #internal_user{username = Username,
                                                 password_hash =
                                                     hash_password(Password),
-                                                is_admin = false},
+                                                tags = []},
                                  write);
                       _ ->
                           mnesia:abort({user_already_exists, Username})
@@ -222,16 +220,12 @@ salted_md5(Salt, Cleartext) ->
     Salted = <<Salt/binary, Cleartext/binary>>,
     erlang:md5(Salted).
 
-set_admin(Username)   -> set_admin(Username, true).
-
-clear_admin(Username) -> set_admin(Username, false).
-
-set_admin(Username, IsAdmin) ->
+set_tags(Username, Tags) ->
     R = update_user(Username, fun(User) ->
-                                      User#internal_user{is_admin = IsAdmin}
+                                      User#internal_user{tags = Tags}
                               end),
-    rabbit_log:info("Set user admin flag for user ~p to ~p~n",
-                    [Username, IsAdmin]),
+    rabbit_log:info("Set user tags for user ~p to ~p~n",
+                    [Username, Tags]),
     R.
 
 update_user(Username, Fun) ->
@@ -244,9 +238,11 @@ update_user(Username, Fun) ->
         end)).
 
 list_users() ->
-    [{Username, IsAdmin} ||
-        #internal_user{username = Username, is_admin = IsAdmin} <-
+    [[{user, Username}, {tags, Tags}] ||
+        #internal_user{username = Username, tags = Tags} <-
             mnesia:dirty_match_object(rabbit_user, #internal_user{_ = '_'})].
+
+user_info_keys() -> ?USER_INFO_KEYS.
 
 lookup_user(Username) ->
     rabbit_misc:dirty_read({rabbit_user, Username}).

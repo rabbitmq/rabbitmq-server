@@ -18,8 +18,9 @@
 
 -export([init/4, terminate/2, delete_and_terminate/2,
          purge/1, publish/4, publish_delivered/5, drain_confirmed/1,
-         fetch/2, ack/2, tx_publish/5, tx_ack/3, tx_rollback/2, tx_commit/4,
-         requeue/3, len/1, is_empty/1, dropwhile/2,
+         dropwhile/2, fetch/2, ack/2,
+         tx_publish/5, tx_ack/3, tx_rollback/2, tx_commit/4,
+         requeue/3, len/1, is_empty/1,
          set_ram_duration_target/2, ram_duration/1,
          needs_timeout/1, timeout/1, handle_pre_hibernate/1,
          status/1, invoke/3, is_duplicate/3, discard/3,
@@ -560,113 +561,28 @@ drain_confirmed(State = #vqstate { confirmed = C }) ->
     {gb_sets:to_list(C), State #vqstate { confirmed = gb_sets:new() }}.
 
 dropwhile(Pred, State) ->
-    {_OkOrEmpty, State1} = dropwhile1(Pred, State),
-    a(State1).
-
-dropwhile1(Pred, State) ->
-    internal_queue_out(
-      fun(MsgStatus = #msg_status { msg_props = MsgProps }, State1) ->
-              case Pred(MsgProps) of
-                  true ->  {_, State2} = internal_fetch(false, MsgStatus,
-                                                        State1),
-                           dropwhile1(Pred, State2);
-                  false -> {ok, in_r(MsgStatus, State1)}
-              end
-      end, State).
-
-in_r(MsgStatus = #msg_status { msg = undefined, index_on_disk = IndexOnDisk },
-     State = #vqstate { q3 = Q3, q4 = Q4, ram_index_count = RamIndexCount }) ->
-    true = queue:is_empty(Q4), %% ASSERTION
-    State #vqstate {
-      q3              = bpqueue:in_r(IndexOnDisk, MsgStatus, Q3),
-      ram_index_count = RamIndexCount + one_if(not IndexOnDisk) };
-in_r(MsgStatus, State = #vqstate { q4 = Q4 }) ->
-    State #vqstate { q4 = queue:in_r(MsgStatus, Q4) }.
-
-fetch(AckRequired, State) ->
-    internal_queue_out(
-      fun(MsgStatus, State1) ->
-              %% it's possible that the message wasn't read from disk
-              %% at this point, so read it in.
-              {MsgStatus1, State2} = read_msg(MsgStatus, State1),
-              internal_fetch(AckRequired, MsgStatus1, State2)
-      end, State).
-
-internal_queue_out(Fun, State = #vqstate { q4 = Q4 }) ->
-    case queue:out(Q4) of
-        {empty, _Q4} ->
-            case fetch_from_q3(State) of
-                {empty, State1} = Result      -> a(State1), Result;
-                {loaded, {MsgStatus, State1}} -> Fun(MsgStatus, State1)
-            end;
-        {{value, MsgStatus}, Q4a} ->
-            Fun(MsgStatus, State #vqstate { q4 = Q4a })
+    case queue_out(State) of
+        {empty, State1} ->
+            a(State1);
+        {{value, MsgStatus = #msg_status { msg_props = MsgProps }}, State1} ->
+            case Pred(MsgProps) of
+                true ->  {_, State2} = internal_fetch(false, MsgStatus, State1),
+                         dropwhile(Pred, State2);
+                false -> a(in_r(MsgStatus, State1))
+            end
     end.
 
-read_msg(MsgStatus = #msg_status { msg           = undefined,
-                                   msg_id        = MsgId,
-                                   is_persistent = IsPersistent },
-         State = #vqstate { ram_msg_count     = RamMsgCount,
-                            msg_store_clients = MSCState}) ->
-    {{ok, Msg = #basic_message {}}, MSCState1} =
-        msg_store_read(MSCState, IsPersistent, MsgId),
-    {MsgStatus #msg_status { msg = Msg },
-     State #vqstate { ram_msg_count     = RamMsgCount + 1,
-                      msg_store_clients = MSCState1 }};
-read_msg(MsgStatus, State) ->
-    {MsgStatus, State}.
-
-internal_fetch(AckRequired, MsgStatus = #msg_status {
-                              seq_id        = SeqId,
-                              msg_id        = MsgId,
-                              msg           = Msg,
-                              is_persistent = IsPersistent,
-                              is_delivered  = IsDelivered,
-                              msg_on_disk   = MsgOnDisk,
-                              index_on_disk = IndexOnDisk },
-               State = #vqstate {ram_msg_count     = RamMsgCount,
-                                 out_counter       = OutCount,
-                                 index_state       = IndexState,
-                                 msg_store_clients = MSCState,
-                                 len               = Len,
-                                 persistent_count  = PCount }) ->
-    %% 1. Mark it delivered if necessary
-    IndexState1 = maybe_write_delivered(
-                    IndexOnDisk andalso not IsDelivered,
-                    SeqId, IndexState),
-
-    %% 2. Remove from msg_store and queue index, if necessary
-    Rem = fun () ->
-                  ok = msg_store_remove(MSCState, IsPersistent, [MsgId])
-          end,
-    Ack = fun () -> rabbit_queue_index:ack([SeqId], IndexState1) end,
-    IndexState2 =
-        case {AckRequired, MsgOnDisk, IndexOnDisk, IsPersistent} of
-            {false, true, false,     _} -> Rem(), IndexState1;
-            {false, true,  true,     _} -> Rem(), Ack();
-            { true, true,  true, false} -> Ack();
-            _                           -> IndexState1
-        end,
-
-    %% 3. If an ack is required, add something sensible to PA
-    {AckTag, State1} = case AckRequired of
-                           true  -> StateN = record_pending_ack(
-                                               MsgStatus #msg_status {
-                                                 is_delivered = true }, State),
-                                    {SeqId, StateN};
-                           false -> {undefined, State}
-                       end,
-
-    PCount1 = PCount - one_if(IsPersistent andalso not AckRequired),
-    Len1 = Len - 1,
-    RamMsgCount1 = RamMsgCount - one_if(Msg =/= undefined),
-
-    {{Msg, IsDelivered, AckTag, Len1},
-     a(State1 #vqstate { ram_msg_count    = RamMsgCount1,
-                         out_counter      = OutCount + 1,
-                         index_state      = IndexState2,
-                         len              = Len1,
-                         persistent_count = PCount1 })}.
+fetch(AckRequired, State) ->
+    case queue_out(State) of
+        {empty, State1} ->
+            {empty, a(State1)};
+        {{value, MsgStatus}, State1} ->
+            %% it is possible that the message wasn't read from disk
+            %% at this point, so read it in.
+            {MsgStatus1, State2} = read_msg(MsgStatus, State1),
+            {Res, State3} = internal_fetch(AckRequired, MsgStatus1, State2),
+            {Res, a(State3)}
+    end.
 
 ack(AckTags, State) ->
     {MsgIds, State1} = ack(fun msg_store_remove/3,
@@ -1140,6 +1056,95 @@ blank_rate(Timestamp, IngressLength) ->
              avg_egress  = 0.0,
              avg_ingress = 0.0,
              timestamp   = Timestamp }.
+
+in_r(MsgStatus = #msg_status { msg = undefined, index_on_disk = IndexOnDisk },
+     State = #vqstate { q3 = Q3, q4 = Q4, ram_index_count = RamIndexCount }) ->
+    case queue:is_empty(Q4) of
+        true  -> State #vqstate {
+                   q3              = bpqueue:in_r(IndexOnDisk, MsgStatus, Q3),
+                   ram_index_count = RamIndexCount + one_if(not IndexOnDisk) };
+        false -> {MsgStatus1, State1 = #vqstate { q4 = Q4a }} =
+                     read_msg(MsgStatus, State),
+                 State1 #vqstate { q4 = queue:in_r(MsgStatus1, Q4a) }
+    end;
+in_r(MsgStatus, State = #vqstate { q4 = Q4 }) ->
+    State #vqstate { q4 = queue:in_r(MsgStatus, Q4) }.
+
+queue_out(State = #vqstate { q4 = Q4 }) ->
+    case queue:out(Q4) of
+        {empty, _Q4} ->
+            case fetch_from_q3(State) of
+                {empty, _State1} = Result     -> Result;
+                {loaded, {MsgStatus, State1}} -> {{value, MsgStatus}, State1}
+            end;
+        {{value, MsgStatus}, Q4a} ->
+            {{value, MsgStatus}, State #vqstate { q4 = Q4a }}
+    end.
+
+read_msg(MsgStatus = #msg_status { msg           = undefined,
+                                   msg_id        = MsgId,
+                                   is_persistent = IsPersistent },
+         State = #vqstate { ram_msg_count     = RamMsgCount,
+                            msg_store_clients = MSCState}) ->
+    {{ok, Msg = #basic_message {}}, MSCState1} =
+        msg_store_read(MSCState, IsPersistent, MsgId),
+    {MsgStatus #msg_status { msg = Msg },
+     State #vqstate { ram_msg_count     = RamMsgCount + 1,
+                      msg_store_clients = MSCState1 }};
+read_msg(MsgStatus, State) ->
+    {MsgStatus, State}.
+
+internal_fetch(AckRequired, MsgStatus = #msg_status {
+                              seq_id        = SeqId,
+                              msg_id        = MsgId,
+                              msg           = Msg,
+                              is_persistent = IsPersistent,
+                              is_delivered  = IsDelivered,
+                              msg_on_disk   = MsgOnDisk,
+                              index_on_disk = IndexOnDisk },
+               State = #vqstate {ram_msg_count     = RamMsgCount,
+                                 out_counter       = OutCount,
+                                 index_state       = IndexState,
+                                 msg_store_clients = MSCState,
+                                 len               = Len,
+                                 persistent_count  = PCount }) ->
+    %% 1. Mark it delivered if necessary
+    IndexState1 = maybe_write_delivered(
+                    IndexOnDisk andalso not IsDelivered,
+                    SeqId, IndexState),
+
+    %% 2. Remove from msg_store and queue index, if necessary
+    Rem = fun () ->
+                  ok = msg_store_remove(MSCState, IsPersistent, [MsgId])
+          end,
+    Ack = fun () -> rabbit_queue_index:ack([SeqId], IndexState1) end,
+    IndexState2 =
+        case {AckRequired, MsgOnDisk, IndexOnDisk, IsPersistent} of
+            {false, true, false,     _} -> Rem(), IndexState1;
+            {false, true,  true,     _} -> Rem(), Ack();
+            { true, true,  true, false} -> Ack();
+            _                           -> IndexState1
+        end,
+
+    %% 3. If an ack is required, add something sensible to PA
+    {AckTag, State1} = case AckRequired of
+                           true  -> StateN = record_pending_ack(
+                                               MsgStatus #msg_status {
+                                                 is_delivered = true }, State),
+                                    {SeqId, StateN};
+                           false -> {undefined, State}
+                       end,
+
+    PCount1 = PCount - one_if(IsPersistent andalso not AckRequired),
+    Len1 = Len - 1,
+    RamMsgCount1 = RamMsgCount - one_if(Msg =/= undefined),
+
+    {{Msg, IsDelivered, AckTag, Len1},
+     State1 #vqstate { ram_msg_count    = RamMsgCount1,
+                       out_counter      = OutCount + 1,
+                       index_state      = IndexState2,
+                       len              = Len1,
+                       persistent_count = PCount1 }}.
 
 msg_store_callback(PersistentMsgIds, Pubs, AckTags, Fun, MsgPropsFun,
                    AsyncCallback, SyncCallback) ->
