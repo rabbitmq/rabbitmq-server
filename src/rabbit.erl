@@ -402,11 +402,9 @@ application_load_order() ->
     true = digraph:delete(G),
     Result.
 
-application_graph_vertex(App, _Deps) ->
-    [{App, App}].
+application_graph_vertex(App, _Deps) -> [{App, App}].
 
-application_graph_edge(App, Deps) ->
-    [{Dep, App} || Dep <- Deps].
+application_graph_edge(App, Deps) -> [{Dep, App} || Dep <- Deps].
 
 %%---------------------------------------------------------------------------
 
