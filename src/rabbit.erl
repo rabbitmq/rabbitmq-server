@@ -406,11 +406,9 @@ load_applications(Worklist, Loaded) ->
                              Error                          -> throw(Error)
                          end,
                          load_applications(
-                           case application:get_key(App, applications) of
-                               undefined -> Worklist1;
-                               {ok, Lst} -> queue:join(Worklist1,
-                                                       queue:from_list(Lst))
-                           end, sets:add_element(App, Loaded))
+                           queue:join(Worklist1,
+                                      queue:from_list(app_dependencies(App))),
+                           sets:add_element(App, Loaded))
             end
     end.
 
@@ -418,16 +416,19 @@ application_load_order() ->
     ok = load_applications(),
     {ok, G} = rabbit_misc:build_acyclic_graph(
                 fun application_graph_vertex/2, fun application_graph_edge/2,
-                [{App, case application:get_key(App, applications) of
-                           undefined -> [];
-                           {ok, Lst} -> Lst
-                       end} ||
+                [{App, app_dependencies(App)} ||
                     {App, _Desc, _Vsn} <- application:loaded_applications()]),
     true = digraph:del_vertices(
              G, digraph:vertices(G) -- digraph_utils:reachable(?APPS, G)),
     Result = digraph_utils:topsort(G),
     true = digraph:delete(G),
     Result.
+
+app_dependencies(App) ->
+    case application:get_key(App, applications) of
+        undefined -> [];
+        {ok, Lst} -> Lst
+    end.
 
 application_graph_vertex(App, _Deps) -> [{App, App}].
 
