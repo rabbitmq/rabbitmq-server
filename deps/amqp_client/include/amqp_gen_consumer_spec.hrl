@@ -21,14 +21,14 @@
 -type(consume_ok() :: #'basic.consume_ok'{}).
 -type(cancel() :: #'basic.cancel'{}).
 -type(cancel_ok() :: #'basic.cancel_ok'{}).
--type(deliver() :: {#'basic.deliver'{}, #amqp_msg{}}).
+-type(deliver() :: #'basic.deliver'{}).
 -type(from() :: any()).
 
--spec(init/1 :: ([any()]) -> state()).
+-spec(init/1 :: ([any()]) -> {ok, state()}).
 -spec(handle_consume_ok/3 :: (consume_ok(), consume(), state()) -> state()).
 -spec(handle_cancel_ok/3 :: (cancel_ok(), cancel(), state()) -> state()).
 -spec(handle_cancel/2 :: (cancel(), state()) -> state()).
--spec(handle_deliver/2 :: (deliver(), state()) -> state()).
+-spec(handle_deliver/3 :: (deliver(), #amqp_msg{}, state()) -> state()).
 -spec(handle_call/3 :: (any(), from(), state()) ->
                            {reply, any(), state()} | {noreply, state()}).
 -spec(terminate/2 :: (any(), state()) -> state()).

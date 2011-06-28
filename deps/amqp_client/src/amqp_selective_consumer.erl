@@ -58,7 +58,7 @@
 
 -export([subscribe/3, cancel/2, register_default_consumer/2]).
 -export([init/1, handle_consume_ok/3, handle_cancel_ok/3, handle_cancel/2,
-         handle_deliver/2, handle_call/3, terminate/2]).
+         handle_deliver/3, handle_call/3, terminate/2]).
 
 -record(state, {consumers        = dict:new(), %% Tag -> ConsumerPid
                 unassigned       = dict:new(), %% BasicConsume -> [ConsumerPid]
@@ -126,7 +126,7 @@ register_default_consumer(ChannelPid, ConsumerPid) ->
 
 %% @private
 init([]) ->
-    #state{}.
+    {ok, #state{}}.
 
 %% @private
 handle_consume_ok(BasicConsumeOk, BasicConsume, State) ->
@@ -151,8 +151,8 @@ handle_cancel(Cancel, State) ->
     State1.
 
 %% @private
-handle_deliver(Deliver, State) ->
-    deliver(Deliver, State),
+handle_deliver(Deliver, Message, State) ->
+    deliver(Deliver, Message, State),
     State.
 
 %% @private
@@ -221,9 +221,14 @@ assign_consumer(BasicConsume, Tag, State = #state{consumers = Consumers,
     end.
 
 deliver(Msg, State) ->
+    deliver(Msg, undefined, State).
+deliver(Msg, Message, State) ->
+    Combined = if Message =:= undefined -> Msg;
+                  true                  -> {Msg, Message}
+               end,
     case resolve_consumer(tag(Msg), State) of
-        {consumer, Pid} -> Pid ! Msg;
-        {default, Pid}  -> Pid ! Msg;
+        {consumer, Pid} -> Pid ! Combined;
+        {default, Pid}  -> Pid ! Combined;
         error           -> exit(unexpected_delivery_and_no_default_consumer)
     end.
 
@@ -250,4 +255,4 @@ tag(#'basic.consume'{consumer_tag = Tag})         -> Tag;
 tag(#'basic.consume_ok'{consumer_tag = Tag})      -> Tag;
 tag(#'basic.cancel'{consumer_tag = Tag})          -> Tag;
 tag(#'basic.cancel_ok'{consumer_tag = Tag})       -> Tag;
-tag({#'basic.deliver'{consumer_tag = Tag}, _})    -> Tag.
+tag(#'basic.deliver'{consumer_tag = Tag})         -> Tag.

@@ -83,6 +83,7 @@
 
 -record(state, {number,
                 connection,
+                consumer,
                 driver,
                 rpc_requests        = queue:new(),
                 closing             = false, %% false |
@@ -94,8 +95,6 @@
                 next_pub_seqno      = 0,
                 flow_active         = true,
                 flow_handler_pid    = none,
-                consumer_module,
-                consumer_state,
                 start_writer_fun
                }).
 
@@ -226,10 +225,10 @@ register_confirm_handler(Channel, ConfirmHandler) ->
 register_flow_handler(Channel, FlowHandler) ->
     gen_server:cast(Channel, {register_flow_handler, FlowHandler} ).
 
-%% @spec (Channel, Message) -> ok
+%% @spec (Channel, Message, Args) -> ok
 %% where
 %%      Channel = pid()
-%%      Message = any()
+%%      Call    = any()
 %% @doc This causes the channel to invoke Consumer:handle_call/2,
 %% where Consumer is the amqp_gen_consumer implementation registered with
 %% the channel.
@@ -260,13 +259,13 @@ open(Pid) ->
 %% @private
 init([Driver, Connection, ChannelNumber, {ConsumerModule, ConsumerArgs},
       SWF]) ->
-    State0 = #state{connection       = Connection,
-                    driver           = Driver,
-                    number           = ChannelNumber,
-                    consumer_module  = ConsumerModule,
-                    consumer_state   = [],
-                    start_writer_fun = SWF},
-    {ok, consumer_callback(init, [ConsumerArgs], State0)}.
+    {ok, Consumer} =
+        amqp_gen_consumer:start_link(ConsumerModule, ConsumerArgs),
+    {ok, #state{connection       = Connection,
+                driver           = Driver,
+                number           = ChannelNumber,
+                consumer         = Consumer,
+                start_writer_fun = SWF}}.
 
 %% @private
 handle_call(open, From, State) ->
@@ -294,8 +293,10 @@ handle_call(next_publish_seqno, _From,
             State = #state{next_pub_seqno = SeqNo}) ->
     {reply, SeqNo, State};
 %% @private
-handle_call({call_consumer, Call}, From, State) ->
-    handle_consumer_callback(handle_call, [Call, From], State).
+handle_call({call_consumer, Call}, _From,
+            State = #state{consumer = Consumer}) ->
+    {ok, Reply} = amqp_gen_consumer:call_consumer(Consumer, Call),
+    {reply, Reply, State}.
 
 %% @private
 handle_cast({cast, Method, AmqpMsg}, State) ->
@@ -378,8 +379,8 @@ handle_info({'DOWN', _, process, FlowHandler, Reason},
     {noreply, State#state{flow_handler_pid = none}}.
 
 %% @private
-terminate(Reason, State) ->
-    consumer_callback(terminate, [Reason], State).
+terminate(Reason, #state{consumer = Consumer}) ->
+    exit(Consumer, Reason).
 
 %% @private
 code_change(_OldVsn, State, _Extra) ->
@@ -544,16 +545,18 @@ handle_method_from_server1(#'channel.close_ok'{}, none,
     end;
 handle_method_from_server1(#'basic.consume_ok'{} = ConsumeOk, none, State) ->
     Consume = #'basic.consume'{} = pending_rpc_method(State),
-    State1 = consumer_callback(handle_consume_ok, [ConsumeOk, Consume], State),
-    {noreply, rpc_bottom_half(ConsumeOk, State1)};
+    call_to_consumer(ConsumeOk, Consume, State),
+    {noreply, rpc_bottom_half(ConsumeOk, State)};
 handle_method_from_server1(#'basic.cancel_ok'{} = CancelOk, none, State) ->
     Cancel = #'basic.cancel'{} = pending_rpc_method(State),
-    State1 = consumer_callback(handle_cancel_ok, [CancelOk, Cancel], State),
-    {noreply, rpc_bottom_half(CancelOk, State1)};
+    call_to_consumer(CancelOk, Cancel, State),
+    {noreply, rpc_bottom_half(CancelOk, State)};
 handle_method_from_server1(#'basic.cancel'{} = Cancel, none, State) ->
-    handle_consumer_callback(handle_cancel, [Cancel], State);
+    call_to_consumer(Cancel, none, State),
+    {noreply, State};
 handle_method_from_server1(#'basic.deliver'{} = Deliver, AmqpMsg, State) ->
-    handle_consumer_callback(handle_deliver, [{Deliver, AmqpMsg}], State);
+    call_to_consumer(Deliver, [AmqpMsg], State),
+    {noreply, State};
 handle_method_from_server1(#'channel.flow'{active = Active} = Flow, none,
                            State = #state{flow_handler_pid = FlowHandler}) ->
     case FlowHandler of none -> ok;
@@ -718,18 +721,5 @@ server_misbehaved(#amqp_error{} = AmqpError, State = #state{number = Number}) ->
             {noreply, State}
     end.
 
-handle_consumer_callback(handle_call, Args,
-                         State = #state{consumer_state = CState,
-                                        consumer_module = CModule}) ->
-    case erlang:apply(CModule, handle_call, Args ++ CState) of
-        {reply, Reply, NewCState} ->
-            {reply, Reply, State#state{consumer_state = [NewCState]}};
-        {noreply, NewCState} ->
-            {noreply, State#state{consumer_state = [NewCState]}}
-    end;
-handle_consumer_callback(Function, Args, State) ->
-    {noreply, consumer_callback(Function, Args, State)}.
-
-consumer_callback(Function, Args, State = #state{consumer_state = CState,
-                                                 consumer_module = CModule}) ->
-    State#state{consumer_state = [erlang:apply(CModule, Function, Args ++ CState)]}.
+call_to_consumer(Method, Args, #state{consumer = Consumer}) ->
+    amqp_gen_consumer:call_consumer(Consumer, Method, Args).

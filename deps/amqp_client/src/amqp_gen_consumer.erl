@@ -23,20 +23,29 @@
 %% callback functions.
 -module(amqp_gen_consumer).
 
--export([reply/2]).
+-include("amqp_client.hrl").
+
+-behaviour(gen_server).
+
+-export([start_link/2, call_consumer/2, call_consumer/3]).
 -export([behaviour_info/1]).
+-export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
+         handle_info/2]).
+
+-record(state, {module,
+                module_state}).
 
 %%---------------------------------------------------------------------------
 %% Interface
 %%---------------------------------------------------------------------------
 
-%% @spec reply(From, Reply) -> _
-%% @doc This function is used from within the callback to reply to a previous
-%% call triggered by an amqp_channel:call_consumer/2. The From parameter must
-%% be the one passed through handle_call/3. The value returned by this function
-%% is not defined and must always be ignored.
-reply(From, Reply) ->
-    gen_server:reply(From, Reply).
+start_link(ConsumerModule, ExtraParams) ->
+    gen_server:start_link(?MODULE, [ConsumerModule, ExtraParams], []).
+
+call_consumer(Pid, Call) ->
+    gen_server:call(Pid, {consumer_call, Call}).
+call_consumer(Pid, Method, Args) ->
+    gen_server:call(Pid, {consumer_call, Method, Args}).
 
 %%---------------------------------------------------------------------------
 %% Behaviour
@@ -45,7 +54,7 @@ reply(From, Reply) ->
 %% @private
 behaviour_info(callbacks) ->
     [
-     %% init(Args) -> InitialState
+     %% init(Args) -> {ok, InitialState}
      %% where
      %%      Args = [any()]
      %%      InitialState = state()
@@ -88,15 +97,16 @@ behaviour_info(callbacks) ->
      %% is received from the server.
      {handle_cancel, 2},
 
-     %% handle_deliver(Deliver, State) -> NewState
+     %% handle_deliver(Deliver, Message, State) -> NewState
      %% where
-     %%      Deliver = {#'basic.deliver'{}, #amqp_msg{}}
+     %%      Deliver = #'basic.deliver'{}
+     %%      Message = #amqp_msg{}
      %%      State = state()
      %%      NewState = state()
      %%
      %% This callback is invoked by the channel every time a basic.deliver
      %% is received from the server.
-     {handle_deliver, 2},
+     {handle_deliver, 3},
 
      %% handle_call(Call, From, State) -> {reply, Reply, NewState} |
      %%                                   {noreply, NewState}
@@ -126,3 +136,48 @@ behaviour_info(callbacks) ->
     ];
 behaviour_info(_Other) ->
     undefined.
+
+%%---------------------------------------------------------------------------
+%% gen_server callbacks
+%%---------------------------------------------------------------------------
+
+init([ConsumerModule, ExtraParams]) ->
+    {ok, MState} = ConsumerModule:init(ExtraParams),
+    {ok, #state{module = ConsumerModule, module_state = MState}}.
+
+handle_call({consumer_call, Call}, _From,
+            State = #state{module       = ConsumerModule,
+                           module_state = MState}) ->
+    case ConsumerModule:handle_call(Call, MState) of
+        {noreply, NewMState} ->
+            {reply, ok, State#state{module_state = NewMState}};
+        {reply, Reply, NewMState} ->
+            {reply, Reply, State#state{module_state = NewMState}}
+    end;
+handle_call({consumer_call, Method, Args}, _From,
+            State = #state{module       = ConsumerModule,
+                           module_state = MState}) ->
+    NewMState =
+        case Method of
+            #'basic.consume_ok'{} ->
+                ConsumerModule:handle_consume_ok(Method, Args, MState);
+            #'basic.cancel_ok'{} ->
+                ConsumerModule:handle_cancel_ok(Method, Args, MState);
+            #'basic.cancel'{} ->
+                ConsumerModule:handle_cancel(Method, MState);
+            #'basic.deliver'{} ->
+                ConsumerModule:handle_deliver(Method, Args, MState)
+        end,
+    {reply, ok, State#state{module_state = NewMState}}.
+
+handle_cast(_What, State) ->
+    {noreply, State}.
+
+handle_info(_Info, State) ->
+    {noreply, State}.
+
+terminate(Reason, #state{module = ConsumerModule, module_state = MState}) ->
+    ConsumerModule:terminate(Reason, MState).
+
+code_change(_OldVsn, State, _Extra) ->
+    State.
