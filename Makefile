@@ -178,7 +178,7 @@ run-tests: all
 	  echo $$OUT ; echo $$OUT | grep '^{ok, passed}$$' > /dev/null
 
 run-qc: all
-	$(foreach MOD,$(QC_MODULES),./quickcheck $(RABBITMQ_NODENAME) $(MOD) $(QC_TRIALS)) 
+	$(foreach MOD,$(QC_MODULES),./quickcheck $(RABBITMQ_NODENAME) $(MOD) $(QC_TRIALS))
 
 start-background-node:
 	$(BASIC_SCRIPT_ENVIRONMENT_SETTINGS) \
@@ -329,5 +329,3 @@ ifneq "$(strip $(patsubst clean%,,$(patsubst %clean,,$(TESTABLEGOALS))))" ""
 -include $(DEPS_FILE)
 endif
 
-.SUFFIXES:
-.SUFFIXES: .erl .hrl .beam
