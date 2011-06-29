@@ -37,14 +37,13 @@ get_active_suffix(X, Upstream, Default) ->
     end.
 
 set_active_suffix(X, Upstream, Suffix) ->
-    ok = rabbit_exchange:update(
-           X, fun(Exchange = #exchange{scratch = S}) ->
-                      Dict = case S of
+    ok = rabbit_exchange:update_scratch(
+           X, fun(Scratch) ->
+                      Dict = case Scratch of
                                  undefined -> dict:new();
-                                 _         -> S
+                                 _         -> Scratch
                              end,
-                      Dict1 = dict:store(key(Upstream), Suffix, Dict),
-                      Exchange#exchange{scratch = Dict1}
+                      dict:store(key(Upstream), Suffix, Dict)
               end).
 
 key(#upstream{params   = #amqp_params_network{host         = Host,
