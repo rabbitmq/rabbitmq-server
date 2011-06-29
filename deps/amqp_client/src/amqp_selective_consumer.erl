@@ -45,7 +45,7 @@
 %% registered consumers (either through register_default_consumer/2 or
 %% through subscribe/3). A cancel (either issued by the user application or the
 %% server) causes the link to be removed. In addition, registering another
-%% default consumer causes the old one to be unlinked.<br/>
+%% default consumer causes the old one to be unjlinked.<br/>
 %% Warning! It is not recommended to rely on a consumer on killing off the
 %% channel (through the exit signal). That may cause messages to get lost.
 %% Always use amqp_channel:close/{1,3} for a clean shut down.
@@ -58,11 +58,13 @@
 
 -export([cancel/2, register_default_consumer/2]).
 -export([init/1, handle_consume_ok/3, handle_consume/3, handle_cancel_ok/3,
-         handle_cancel/2, handle_deliver/3, handle_call/3, terminate/2]).
+         handle_cancel/2, handle_deliver/3, handle_down/4, handle_call/3,
+         terminate/2]).
 
--record(state, {consumers        = dict:new(), %% Tag -> ConsumerPid
-                unassigned       = dict:new(), %% BasicConsume -> [ConsumerPid]
-                default_consumer = none}).
+-record(state, {consumers             = dict:new(), %% Tag -> ConsumerPid
+                unassigned            = dict:new(), %% BasicConsume -> [ConsumerPid]
+                monitors              = dict:new(), %% Pid -> MRef
+                default_consumer      = none}).
 
 %%---------------------------------------------------------------------------
 %% Interface
@@ -132,7 +134,6 @@ handle_consume_ok(BasicConsumeOk, BasicConsume, State) ->
 
 %% @private
 handle_cancel_ok(CancelOk, _Cancel, State) ->
-    %% Unlink first!
     State1 = do_cancel(CancelOk, State),
     %% Use old state
     deliver(CancelOk, State),
@@ -140,7 +141,6 @@ handle_cancel_ok(CancelOk, _Cancel, State) ->
 
 %% @private
 handle_cancel(Cancel, State) ->
-    %% Unlink first!
     State1 = do_cancel(Cancel, State),
     %% Use old state
     deliver(Cancel, State),
@@ -153,7 +153,8 @@ handle_deliver(Deliver, Message, State) ->
 
 %% @private
 handle_consume(BasicConsume, Pid, State = #state{consumers = Consumers,
-                                                 unassigned = Unassigned}) ->
+                                                 unassigned = Unassigned,
+                                                 monitors = Monitors}) ->
     Tag = tag(BasicConsume),
     Ok =
         case BasicConsume of
@@ -170,18 +171,33 @@ handle_consume(BasicConsume, Pid, State = #state{consumers = Consumers,
         end,
     case {Ok, BasicConsume} of
         {true, #'basic.consume'{nowait = true}} ->
-            {ok, State#state{consumers = dict:store(Tag, Pid, Consumers)}};
+            io:format("monitoring ~p~n\n", [Pid]),
+            {ok, State#state
+             {consumers = dict:store(Tag, Pid, Consumers),
+              monitors  = dict:store(Pid, monitor(process, Pid), Monitors)}};
         {true, #'basic.consume'{nowait = false}} ->
             NewUnassigned =
                 dict:update(BasicConsume, fun (Pids) -> [Pid | Pids] end,
                             [Pid], Unassigned),
-            {ok, State#state{unassigned = NewUnassigned}};
+            {ok, State#state{unassigned = NewUnassigned,
+                             monitors = dict:store(Pid, monitor(process, Pid),
+                                                   Monitors)}};
         {false, #'basic.consume'{nowait = true}} ->
             {error, State};
         {false, #'basic.consume'{nowait = false}} ->
             %% Don't do anything (don't override existing
             %% consumers), the server will close the channel with an error.
             {ok, State}
+    end.
+
+%% @private
+handle_down(_MRef, Pid, _Info, State = #state{monitors = Monitors}) ->
+    case dict:find(Pid, Monitors) of
+        {ok, Tag} ->
+            State#state{monitors = dict:erase(Pid, Monitors)};
+        error ->
+            %% unnamed consumer went down before receiving consume_ok
+            State
     end.
 
 %% @private
@@ -212,7 +228,7 @@ assign_consumer(BasicConsume, Tag, State = #state{consumers = Consumers,
                                                 Unassigned),
                         consumers = dict:store(Tag, Pid, Consumers)};
         error ->
-            %% Untracked consumer (subscribed with amqp_channel:call/2)
+            %% ignore
             State
     end.
 
@@ -228,11 +244,14 @@ deliver(Msg, Message, State) ->
         error           -> exit(unexpected_delivery_and_no_default_consumer)
     end.
 
-do_cancel(Cancel, State = #state{consumers = Consumers}) ->
+do_cancel(Cancel, State = #state{consumers = Consumers,
+                                 monitors  = Monitors}) ->
     Tag = tag(Cancel),
     case dict:find(Tag, Consumers) of
-        {ok, Pid} -> unlink(Pid),
-                     State#state{consumers = dict:erase(Tag, Consumers)};
+        {ok, Pid} -> MRef = dict:fetch(Pid, Monitors),
+                     demonitor(MRef),
+                     State#state{consumers = dict:erase(Tag, Consumers),
+                                 monitors  = dict:erase(Pid, Monitors)};
         error     -> %% Untracked consumer. Do nothing.
                      State
     end.

@@ -120,6 +120,18 @@ behaviour_info(callbacks) ->
      %% is received from the server.
      {handle_deliver, 3},
 
+     %% handle_down(MRef, Pid, Info, State) -> NewState
+     %% where
+     %%      MRef = ref()
+     %%      Pid = pid()
+     %%      Info = any()
+     %%      State = state()
+     %%      NewState = state()
+     %%
+     %% This callback is invoked when a process the consumer was
+     %% monitoring via monitor/2 goes down.
+     {handle_down, 4},
+
      %% handle_call(Call, From, State) -> {reply, Reply, NewState} |
      %%                                   {noreply, NewState}
      %% where
@@ -188,8 +200,11 @@ handle_call({consumer_call, Method, Args}, _From,
 handle_cast(_What, State) ->
     {noreply, State}.
 
-handle_info(_Info, State) ->
-    {noreply, State}.
+handle_info({'DOWN', MRef, process, Pid, Info},
+            State = #state{module_state = MState,
+                           module       = ConsumerModule}) ->
+    NewMState = ConsumerModule:handle_down(MRef, Pid, Info, MState),
+    {noreply, State#state{module_state = NewMState}}.
 
 terminate(Reason, #state{module = ConsumerModule, module_state = MState}) ->
     ConsumerModule:terminate(Reason, MState).
