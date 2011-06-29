@@ -23,7 +23,7 @@
         {sources,
          destinations,
          prefetch_count,
-         ack_on,
+         ack_mode,
          publish_fields,
          publish_properties,
          queue,

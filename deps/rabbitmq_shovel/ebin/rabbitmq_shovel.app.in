@@ -4,7 +4,7 @@
   {modules, []},
   {registered, []},
   {env, [{defaults, [{prefetch_count,     0},
-                     {ack_on,             confirm},
+                     {ack_mode,           on_confirm},
                      {publish_fields,     []},
                      {publish_properties, []},
                      {reconnect_delay,    5}]

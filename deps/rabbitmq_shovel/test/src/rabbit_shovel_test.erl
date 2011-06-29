@@ -109,9 +109,10 @@ test() ->
      {require_non_negative_integer, invalid}} =
         test_broken_shovel_config([{prefetch_count, invalid} | Config]),
 
-    {invalid_parameter_value, ack_on,
-     {ack_on_value_requires_one_of, {auto, publish, confirm}, invalid}} =
-        test_broken_shovel_config([{ack_on, invalid} | Config]),
+    {invalid_parameter_value, ack_mode,
+     {ack_mode_value_requires_one_of,
+      {no_ack, on_publish, on_confirm}, invalid}} =
+        test_broken_shovel_config([{ack_mode, invalid} | Config]),
 
     {invalid_parameter_value, queue,
      {require_binary, invalid}} =
@@ -150,7 +151,7 @@ test() ->
          {destinations,
           [{broker, "amqp://"}]},
          {queue, <<>>},
-         {ack_on, confirm},
+         {ack_mode, on_confirm},
          {publish_fields, [{exchange, ?EXCHANGE}, {routing_key, ?FROM_SHOVEL}]},
          {publish_properties, [{content_type, ?SHOVELLED}]}
         ]}],

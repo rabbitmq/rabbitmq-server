@@ -128,7 +128,7 @@ parse_shovel_config_dict(Dict) ->
                   [{fun parse_endpoint/1,             sources},
                    {fun parse_endpoint/1,             destinations},
                    {fun parse_non_negative_integer/1, prefetch_count},
-                   {fun parse_ack_on/1,               ack_on},
+                   {fun parse_ack_mode/1,             ack_mode},
                    {fun parse_binary/1,               queue},
                    make_parse_publish(publish_fields),
                    make_parse_publish(publish_properties),
@@ -352,12 +352,13 @@ parse_binary({Binary, Pos}) when is_binary(Binary) ->
 parse_binary({NotABinary, _Pos}) ->
     fail({require_binary, NotABinary}).
 
-parse_ack_on({Val, Pos}) when Val =:= auto orelse
-                              Val =:= publish orelse
-                              Val =:= confirm ->
+parse_ack_mode({Val, Pos}) when Val =:= no_ack orelse
+                                Val =:= on_publish orelse
+                                Val =:= on_confirm ->
     return({Val, Pos});
-parse_ack_on({WrongVal, _Pos}) ->
-    fail({ack_on_value_requires_one_of, {auto, publish, confirm}, WrongVal}).
+parse_ack_mode({WrongVal, _Pos}) ->
+    fail({ack_mode_value_requires_one_of, {no_ack, on_publish, on_confirm},
+          WrongVal}).
 
 make_parse_publish(publish_fields) ->
     {make_parse_publish1(record_info(fields, 'basic.publish')), publish_fields};

@@ -103,7 +103,7 @@ A full example of the shovel configuration is:
                           ]}]},
        {queue, <<>>},
        {prefetch_count, 10},
-       {ack_on, confirm},
+       {ack_mode, on_confirm},
        {publish_properties, [{delivery_mode, 2}]},
        {publish_fields, [{exchange, <<"my_exchange">>},
                          {routing_key, <<"from_shovel">>}]},
@@ -116,12 +116,12 @@ A full example of the shovel configuration is:
 Firstly, all shovels are named. Here we have one shovel, called
 'my_first_shovel'. We can have multiple shovels if you wish. Secondly,
 every shovel must have the subfields sources, destinations and queue
-specified, whereas the other fields (prefetch_count, ack_on,
+specified, whereas the other fields (prefetch_count, ack_mode,
 publish_properties, publish_fields, reconnect_delay) are optional and
 have defaults as follows:
 
 {prefetch_count,      0}
-{ack_on,              confirm}
+{ack_mode,            on_confirm}
 {publish_properties,  []}
 {publish_fields,      []}
 {reconnect_delay,     5}
@@ -216,23 +216,23 @@ the number of messages which are sent to the shovel in advance of the
 message the shovel is currently processing.
 
 
-ack_on :: 'auto' | 'publish' | 'confirm'
-----------------------------------------
+ack_mode :: 'no_ack' | 'on_publish' | 'on_confirm'
+--------------------------------------------------
 
 This setting controls if or when acknowledgements to the source broker
-are issued by the shovel.
+are issued by the shovel. The default is 'on_confirm'.
 
-'auto' - The shovel consumes from its queue with no_ack = 'true':
+'no_ack' - The shovel consumes from its queue with no_ack = 'true':
 i.e. the shovel does not issue explicit acks for messages it receives,
 and the source broker considers messages acknowledged as soon as it
 has sent them to the shovel.
 
-'publish' - the shovel consumes from its queue with no_ack = 'false',
-and a message is acknowledged to the source broker as soon as it has
-been published to the destination broker.
+'on_publish' - the shovel consumes from its queue with no_ack =
+'false', and a message is acknowledged to the source broker as soon as
+it has been published to the destination broker.
 
-'confirm' - the shovel consumes from its queue with no_ack = 'false'
-and it requests publisher confirmations from the destination
+'on_confirm' - the shovel consumes from its queue with no_ack =
+'false' and it requests publisher confirmations from the destination
 broker. It only issues acknowledgements to the source broker when it
 has received confirmation from the destination broker that each
 message has been successfully received. This setting gives a guarantee
