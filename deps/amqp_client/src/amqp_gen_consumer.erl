@@ -76,6 +76,18 @@ behaviour_info(callbacks) ->
      %% call with the response.
      {handle_consume_ok, 3},
 
+     %% handle_consume(Consume, Sender, State) ->
+     %%                     {ok, NewState} | {error, NewState}
+     %% where
+     %%      Consume = #'basic.consume'{}
+     %%      Sender = pid()
+     %%      State = state()
+     %%      NewState = state()
+     %%
+     %% This callback is invoked by the channel before a basic.consume
+     %% is sent to the server.
+     {handle_consume, 3},
+
      %% handle_cancel_ok(CancelOk, Cancel, State) -> NewState
      %% where
      %%      CancelOk = #'basic.cancel_ok'{}
@@ -157,18 +169,21 @@ handle_call({consumer_call, Call}, _From,
 handle_call({consumer_call, Method, Args}, _From,
             State = #state{module       = ConsumerModule,
                            module_state = MState}) ->
-    NewMState =
+    {Ok, NewMState} =
         case Method of
+            #'basic.consume'{} ->
+                {Pid, _} = Args,
+                ConsumerModule:handle_consume(Method, Pid, MState);
             #'basic.consume_ok'{} ->
-                ConsumerModule:handle_consume_ok(Method, Args, MState);
+                {ok, ConsumerModule:handle_consume_ok(Method, Args, MState)};
             #'basic.cancel_ok'{} ->
-                ConsumerModule:handle_cancel_ok(Method, Args, MState);
+                {ok, ConsumerModule:handle_cancel_ok(Method, Args, MState)};
             #'basic.cancel'{} ->
-                ConsumerModule:handle_cancel(Method, MState);
+                {ok, ConsumerModule:handle_cancel(Method, MState)};
             #'basic.deliver'{} ->
-                ConsumerModule:handle_deliver(Method, Args, MState)
+                {ok, ConsumerModule:handle_deliver(Method, Args, MState)}
         end,
-    {reply, ok, State#state{module_state = NewMState}}.
+    {reply, Ok, State#state{module_state = NewMState}}.
 
 handle_cast(_What, State) ->
     {noreply, State}.

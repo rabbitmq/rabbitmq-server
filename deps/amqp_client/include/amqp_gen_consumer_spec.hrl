@@ -26,6 +26,8 @@
 
 -spec(init/1 :: ([any()]) -> {ok, state()}).
 -spec(handle_consume_ok/3 :: (consume_ok(), consume(), state()) -> state()).
+-spec(handle_consume/3 :: (consume(), pid(), state()) ->
+                               {ok, state()} | {error, state()}).
 -spec(handle_cancel_ok/3 :: (cancel_ok(), cancel(), state()) -> state()).
 -spec(handle_cancel/2 :: (cancel(), state()) -> state()).
 -spec(handle_deliver/3 :: (deliver(), #amqp_msg{}, state()) -> state()).

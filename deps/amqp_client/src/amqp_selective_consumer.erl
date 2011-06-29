@@ -1,4 +1,4 @@
-%% The contents of this file are subject to the Mozilla Public License
+%% The contents of this file are subject to the Mozilla Public Licensbe
 %% Version 1.1 (the "License"); you may not use this file except in
 %% compliance with the License. You may obtain a copy of the License at
 %% http://www.mozilla.org/MPL/
@@ -56,9 +56,9 @@
 
 -behaviour(amqp_gen_consumer).
 
--export([subscribe/3, cancel/2, register_default_consumer/2]).
--export([init/1, handle_consume_ok/3, handle_cancel_ok/3, handle_cancel/2,
-         handle_deliver/3, handle_call/3, terminate/2]).
+-export([cancel/2, register_default_consumer/2]).
+-export([init/1, handle_consume_ok/3, handle_consume/3, handle_cancel_ok/3,
+         handle_cancel/2, handle_deliver/3, handle_call/3, terminate/2]).
 
 -record(state, {consumers        = dict:new(), %% Tag -> ConsumerPid
                 unassigned       = dict:new(), %% BasicConsume -> [ConsumerPid]
@@ -90,10 +90,6 @@
 %% cause an exception and the channel will terminate, causing this function
 %% to throw. If nowait is set to true the function will return 'error'
 %% immediately, and the channel will be terminated by the server.
-subscribe(ChannelPid, BasicConsume, ConsumerPid) ->
-    ok = amqp_channel:call_consumer(ChannelPid,
-                                    {subscribe, BasicConsume, ConsumerPid}),
-    amqp_channel:call(ChannelPid, BasicConsume).
 
 %% @type cancel() = #'basic.cancel'{}.
 %% The AMQP method used to cancel a subscription.
@@ -156,8 +152,8 @@ handle_deliver(Deliver, Message, State) ->
     State.
 
 %% @private
-handle_call({subscribe, BasicConsume, Pid}, _From,
-            State = #state{consumers = Consumers, unassigned = Unassigned}) ->
+handle_consume(BasicConsume, Pid, State = #state{consumers = Consumers,
+                                                 unassigned = Unassigned}) ->
     Tag = tag(BasicConsume),
     Ok =
         case BasicConsume of
@@ -174,20 +170,20 @@ handle_call({subscribe, BasicConsume, Pid}, _From,
         end,
     case {Ok, BasicConsume} of
         {true, #'basic.consume'{nowait = true}} ->
-            {reply, ok,
-             State#state{consumers = dict:store(Tag, Pid, Consumers)}};
+            {ok, State#state{consumers = dict:store(Tag, Pid, Consumers)}};
         {true, #'basic.consume'{nowait = false}} ->
             NewUnassigned =
                 dict:update(BasicConsume, fun (Pids) -> [Pid | Pids] end,
                             [Pid], Unassigned),
-            {reply, ok, State#state{unassigned = NewUnassigned}};
+            {ok, State#state{unassigned = NewUnassigned}};
         {false, #'basic.consume'{nowait = true}} ->
-            {reply, error, State};
+            {error, State};
         {false, #'basic.consume'{nowait = false}} ->
             %% Don't do anything (don't override existing
             %% consumers), the server will close the channel with an error.
-            {noreply, State}
-    end;
+            {ok, State}
+    end.
+
 %% @private
 handle_call({register_default_consumer, Pid}, _From,
             State = #state{default_consumer = PrevPid}) ->
