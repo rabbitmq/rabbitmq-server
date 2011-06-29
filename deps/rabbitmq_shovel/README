@@ -239,6 +239,9 @@ message has been successfully received. This setting gives a guarantee
 that messages will not be discarded from the source broker until after
 the destination broker has confirmed receipt of the message.
 
+'on_confirm' is strongly recommended. However the destination broker
+must support publish confirms, meaning it can only be used with
+RabbitMQ 2.3.1 and up.
 
 publish_properties
 ------------------
