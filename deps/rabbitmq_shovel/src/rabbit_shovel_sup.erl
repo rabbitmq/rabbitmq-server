@@ -342,11 +342,6 @@ parse_non_negative_number({N, Pos}) when is_number(N) andalso N >= 0 ->
 parse_non_negative_number({N, _Pos}) ->
     fail({require_non_negative_number, N}).
 
-parse_boolean({Bool, Pos}) when is_boolean(Bool) ->
-    return({Bool, Pos});
-parse_boolean({NotABool, _Pos}) ->
-    fail({require_boolean, NotABool}).
-
 parse_binary({Binary, Pos}) when is_binary(Binary) ->
     return({Binary, Pos});
 parse_binary({NotABinary, _Pos}) ->
