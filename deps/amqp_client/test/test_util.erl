@@ -337,8 +337,7 @@ consume_loop(Channel, X, RoutingKey, Parent, Tag) ->
     receive #'basic.consume_ok'{consumer_tag = Tag} -> ok end,
     receive {#'basic.deliver'{}, _} -> ok end,
     #'basic.cancel_ok'{} =
-        amqp_selective_consumer:cancel(
-            Channel, #'basic.cancel'{consumer_tag = Tag}),
+        amqp_channel:call(Channel, #'basic.cancel'{consumer_tag = Tag}),
     receive #'basic.cancel_ok'{consumer_tag = Tag} -> ok end,
     Parent ! finished.
 

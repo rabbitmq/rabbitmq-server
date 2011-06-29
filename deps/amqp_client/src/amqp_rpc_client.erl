@@ -141,7 +141,15 @@ handle_cast(_Msg, State) ->
     {noreply, State}.
 
 %% @private
+handle_info({#'basic.consume'{}, _Pid}, State) ->
+    {noreply, State};
+
+%% @private
 handle_info(#'basic.consume_ok'{}, State) ->
+    {noreply, State};
+
+%% @private
+handle_info(#'basic.cancel'{}, State) ->
     {noreply, State};
 
 %% @private

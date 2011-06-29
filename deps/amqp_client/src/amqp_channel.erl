@@ -564,7 +564,7 @@ handle_method_from_server1(#'basic.cancel'{} = Cancel, none, State) ->
     call_to_consumer(Cancel, none, State),
     {noreply, State};
 handle_method_from_server1(#'basic.deliver'{} = Deliver, AmqpMsg, State) ->
-    call_to_consumer(Deliver, [AmqpMsg], State),
+    call_to_consumer(Deliver, AmqpMsg, State),
     {noreply, State};
 handle_method_from_server1(#'channel.flow'{active = Active} = Flow, none,
                            State = #state{flow_handler_pid = FlowHandler}) ->

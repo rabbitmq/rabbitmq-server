@@ -75,7 +75,15 @@ handle_info(shutdown, State) ->
     {stop, normal, State};
 
 %% @private
+handle_info({#'basic.consume'{}, _}, State) ->
+    {noreply, State};
+
+%% @private
 handle_info(#'basic.consume_ok'{}, State) ->
+    {noreply, State};
+
+%% @private
+handle_info(#'basic.cancel'{}, State) ->
     {noreply, State};
 
 %% @private
@@ -96,6 +104,10 @@ handle_info({#'basic.deliver'{delivery_tag = DeliveryTag},
     amqp_channel:call(Channel, Publish, #amqp_msg{props = Properties,
                                                   payload = Response}),
     amqp_channel:call(Channel, #'basic.ack'{delivery_tag = DeliveryTag}),
+    {noreply, State};
+
+%% @private
+handle_info({'DOWN', _MRef, process, _Pid, _Info}, State) ->
     {noreply, State}.
 
 %% @private

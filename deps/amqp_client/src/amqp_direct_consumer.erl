@@ -53,18 +53,18 @@ init([ConsumerPid]) ->
     {ok, ConsumerPid}.
 
 %% @private
-handle_consume_ok(M, A, C) ->
-    C ! {M, A},
+handle_consume_ok(M, _, C) ->
+    C ! M,
     C.
 
 %% @private
 handle_consume(M, A, C) ->
     C ! {M, A},
-    C.
+    {ok, C}.
 
 %% @private
-handle_cancel_ok(M, A, C) ->
-    C ! {M, A},
+handle_cancel_ok(M, _, C) ->
+    C ! M,
     C.
 
 %% @private
@@ -78,8 +78,9 @@ handle_deliver(M, A, C) ->
     C.
 
 %% @private
-handle_down(_M, _P, _I, _C) ->
-    exit(consumer_died).
+handle_down(M, P, I, C) ->
+    C ! {'DOWN', M, process, P, I},
+    C.
 
 %% @private
 handle_call(M, A, C) ->
