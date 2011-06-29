@@ -42,6 +42,7 @@
 start_link(ConsumerModule, ExtraParams) ->
     gen_server:start_link(?MODULE, [ConsumerModule, ExtraParams], []).
 
+%% You may reply to the first one with gen_server:reply/2.
 call_consumer(Pid, Call) ->
     gen_server:call(Pid, {consumer_call, Call}).
 call_consumer(Pid, Method, Args) ->
@@ -169,12 +170,12 @@ init([ConsumerModule, ExtraParams]) ->
     {ok, MState} = ConsumerModule:init(ExtraParams),
     {ok, #state{module = ConsumerModule, module_state = MState}}.
 
-handle_call({consumer_call, Call}, _From,
+handle_call({consumer_call, Call}, From,
             State = #state{module       = ConsumerModule,
                            module_state = MState}) ->
     case ConsumerModule:handle_call(Call, MState) of
         {noreply, NewMState} ->
-            {reply, ok, State#state{module_state = NewMState}};
+            {noreply, State#state{module_state = NewMState}};
         {reply, Reply, NewMState} ->
             {reply, Reply, State#state{module_state = NewMState}}
     end;

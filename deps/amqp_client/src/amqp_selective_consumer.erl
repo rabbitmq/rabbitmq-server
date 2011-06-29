@@ -201,13 +201,8 @@ handle_down(_MRef, Pid, _Info, State = #state{monitors = Monitors}) ->
     end.
 
 %% @private
-handle_call({register_default_consumer, Pid}, _From,
-            State = #state{default_consumer = PrevPid}) ->
-    case PrevPid of none -> ok;
-                    _    -> unlink(PrevPid)
-    end,
-    link(Pid),
-    {reply, ok, State#state{default_consumer = Pid}}.
+handle_call(_Call, _From, State) ->
+    {reply, ok, State}.
 
 %% @private
 terminate(_Reason, State) ->
