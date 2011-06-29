@@ -170,7 +170,7 @@ init([ConsumerModule, ExtraParams]) ->
     {ok, MState} = ConsumerModule:init(ExtraParams),
     {ok, #state{module = ConsumerModule, module_state = MState}}.
 
-handle_call({consumer_call, Call}, From,
+handle_call({consumer_call, Call}, _From,
             State = #state{module       = ConsumerModule,
                            module_state = MState}) ->
     case ConsumerModule:handle_call(Call, MState) of

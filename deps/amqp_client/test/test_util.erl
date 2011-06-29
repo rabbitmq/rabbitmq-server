@@ -332,8 +332,8 @@ consume_loop(Channel, X, RoutingKey, Parent, Tag) ->
                                                  exchange = X,
                                                  routing_key = RoutingKey}),
     #'basic.consume_ok'{} =
-        amqp_selective_consumer:subscribe(
-            Channel, #'basic.consume'{queue = Q, consumer_tag = Tag}, self()),
+        amqp_channel:call(Channel,
+                          #'basic.consume'{queue = Q, consumer_tag = Tag}),
     receive #'basic.consume_ok'{consumer_tag = Tag} -> ok end,
     receive {#'basic.deliver'{}, _} -> ok end,
     #'basic.cancel_ok'{} =
@@ -348,8 +348,7 @@ consume_notification_test(Connection) ->
     #'queue.declare_ok'{} =
         amqp_channel:call(Channel, #'queue.declare'{queue = Q}),
     #'basic.consume_ok'{consumer_tag = CTag} = ConsumeOk =
-        amqp_selective_consumer:subscribe(
-            Channel, #'basic.consume'{queue = Q}, self()),
+        amqp_channel:call(Channel, #'basic.consume'{queue = Q}),
     receive ConsumeOk -> ok end,
     #'queue.delete_ok'{} =
         amqp_channel:call(Channel, #'queue.delete'{queue = Q}),
@@ -427,8 +426,8 @@ basic_qos_test(Connection, Prefetch) ->
                 {ok, Channel} = amqp_connection:open_channel(Connection),
                 amqp_channel:call(Channel,
                                   #'basic.qos'{prefetch_count = Prefetch}),
-                amqp_selective_consumer:subscribe(
-                    Channel, #'basic.consume'{queue = Q}, self()),
+                amqp_channel:call(Channel,
+                                  #'basic.consume'{queue = Q}),
                 Parent ! finished,
                 sleeping_consumer(Channel, Sleep, Parent)
             end) || Sleep <- Workers],
@@ -496,11 +495,10 @@ confirm_test(Connection) ->
 subscribe_nowait_test(Connection) ->
     {ok, Channel} = amqp_connection:open_channel(Connection),
     {ok, Q} = setup_publish(Channel),
-    ok = amqp_selective_consumer:subscribe(
-             Channel, #'basic.consume'{queue = Q,
-                                       consumer_tag = uuid(),
-                                       nowait = true},
-             self()),
+    ok = amqp_channel:call(Channel,
+                           #'basic.consume'{queue = Q,
+                                            consumer_tag = uuid(),
+                                            nowait = true}),
     receive #'basic.consume_ok'{} -> exit(unexpected_consume_ok)
     after 0 -> ok
     end,
