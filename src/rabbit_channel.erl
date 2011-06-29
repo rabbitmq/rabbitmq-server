@@ -30,8 +30,7 @@
          prioritise_cast/2]).
 
 -record(ch, {state, protocol, channel, reader_pid, writer_pid, conn_pid,
-             limiter_pid, start_limiter_fun, transaction_id, tx_participants,
-             next_tag, uncommitted_ack_q, unacked_message_q,
+             limiter_pid, start_limiter_fun, next_tag, unacked_message_q,
              user, virtual_host, most_recently_declared_queue,
              consumer_mapping, blocking, consumer_monitors, queue_collector_pid,
              stats_timer, confirm_enabled, publish_seqno, unconfirmed_mq,
@@ -41,12 +40,10 @@
 
 -define(STATISTICS_KEYS,
         [pid,
-         transactional,
          confirm,
          consumer_count,
          messages_unacknowledged,
          messages_unconfirmed,
-         acks_uncommitted,
          prefetch_count,
          client_flow_blocked]).
 
@@ -173,10 +170,7 @@ init([Channel, ReaderPid, WriterPid, ConnPid, Protocol, User, VHost,
                 conn_pid                = ConnPid,
                 limiter_pid             = undefined,
                 start_limiter_fun       = StartLimiterFun,
-                transaction_id          = none,
-                tx_participants         = sets:new(),
                 next_tag                = 1,
-                uncommitted_ack_q       = queue:new(),
                 unacked_message_q       = queue:new(),
                 user                    = User,
                 virtual_host            = VHost,
@@ -331,7 +325,7 @@ handle_pre_hibernate(State = #ch{stats_timer = StatsTimer}) ->
     {hibernate, State#ch{stats_timer = StatsTimer1}}.
 
 terminate(Reason, State) ->
-    {Res, _State1} = rollback_and_notify(State),
+    {Res, _State1} = notify_queues(State),
     case Reason of
         normal            -> ok = Res;
         shutdown          -> ok = Res;
@@ -386,8 +380,8 @@ send_exception(Reason, State = #ch{protocol   = Protocol,
         rabbit_binary_generator:map_exception(Channel, Reason, Protocol),
     rabbit_log:error("connection ~p, channel ~p - error:~n~p~n",
                      [ConnPid, Channel, Reason]),
-    %% something bad's happened: rollback_and_notify may not be 'ok'
-    {_Result, State1} = rollback_and_notify(State),
+    %% something bad's happened: notify_queues may not be 'ok'
+    {_Result, State1} = notify_queues(State),
     case CloseChannel of
         Channel -> ok = rabbit_writer:send_command(WriterPid, CloseMethod),
                    {noreply, State1};
@@ -589,7 +583,7 @@ handle_method(_Method, _, State = #ch{state = closing}) ->
     {noreply, State};
 
 handle_method(#'channel.close'{}, _, State = #ch{reader_pid = ReaderPid}) ->
-    {ok, State1} = rollback_and_notify(State),
+    {ok, State1} = notify_queues(State),
     ReaderPid ! {channel_closing, self()},
     {noreply, State1};
 
@@ -601,7 +595,6 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
                                mandatory   = Mandatory,
                                immediate   = Immediate},
               Content, State = #ch{virtual_host    = VHostPath,
-                                   transaction_id  = TxnKey,
                                    confirm_enabled = ConfirmEnabled,
                                    trace_state     = TraceState}) ->
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
@@ -623,19 +616,15 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
             rabbit_trace:tap_trace_in(Message, TraceState),
             {RoutingRes, DeliveredQPids} =
                 rabbit_exchange:publish(
-                  Exchange,
-                  rabbit_basic:delivery(Mandatory, Immediate, TxnKey, Message,
-                                        MsgSeqNo)),
+                  Exchange, rabbit_basic:delivery(Mandatory, Immediate, Message,
+                                                  MsgSeqNo)),
             State2 = process_routing_result(RoutingRes, DeliveredQPids,
                                             ExchangeName, MsgSeqNo, Message,
                                             State1),
             maybe_incr_stats([{ExchangeName, 1} |
                               [{{QPid, ExchangeName}, 1} ||
                                   QPid <- DeliveredQPids]], publish, State2),
-            {noreply, case TxnKey of
-                          none -> State2;
-                          _    -> add_tx_participants(DeliveredQPids, State2)
-                      end};
+            {noreply, State2};
         {error, Reason} ->
             rabbit_misc:protocol_error(precondition_failed,
                                        "invalid message: ~p", [Reason])
@@ -649,22 +638,12 @@ handle_method(#'basic.nack'{delivery_tag = DeliveryTag,
 
 handle_method(#'basic.ack'{delivery_tag = DeliveryTag,
                            multiple = Multiple},
-              _, State = #ch{transaction_id = TxnKey,
-                             unacked_message_q = UAMQ}) ->
+              _, State = #ch{unacked_message_q = UAMQ}) ->
     {Acked, Remaining} = collect_acks(UAMQ, DeliveryTag, Multiple),
-    QIncs = ack(TxnKey, Acked),
-    Participants = [QPid || {QPid, _} <- QIncs],
+    QIncs = ack(Acked),
     maybe_incr_stats(QIncs, ack, State),
-    {noreply, case TxnKey of
-                  none -> ok = notify_limiter(State#ch.limiter_pid, Acked),
-                          State#ch{unacked_message_q = Remaining};
-                  _    -> NewUAQ = queue:join(State#ch.uncommitted_ack_q,
-                                              Acked),
-                          add_tx_participants(
-                            Participants,
-                            State#ch{unacked_message_q = Remaining,
-                                     uncommitted_ack_q = NewUAQ})
-              end};
+    ok = notify_limiter(State#ch.limiter_pid, Acked),
+    {noreply, State#ch{unacked_message_q = Remaining}};
 
 handle_method(#'basic.get'{queue = QueueNameBin,
                            no_ack = NoAck},
@@ -1046,35 +1025,6 @@ handle_method(#'queue.purge'{queue = QueueNameBin,
               #'queue.purge_ok'{message_count = PurgedMessageCount});
 
 
-handle_method(#'tx.select'{}, _, #ch{confirm_enabled = true}) ->
-    rabbit_misc:protocol_error(
-      precondition_failed, "cannot switch from confirm to tx mode", []);
-
-handle_method(#'tx.select'{}, _, State = #ch{transaction_id = none}) ->
-    {reply, #'tx.select_ok'{}, new_tx(State)};
-
-handle_method(#'tx.select'{}, _, State) ->
-    {reply, #'tx.select_ok'{}, State};
-
-handle_method(#'tx.commit'{}, _, #ch{transaction_id = none}) ->
-    rabbit_misc:protocol_error(
-      precondition_failed, "channel is not transactional", []);
-
-handle_method(#'tx.commit'{}, _, State) ->
-    {reply, #'tx.commit_ok'{}, internal_commit(State)};
-
-handle_method(#'tx.rollback'{}, _, #ch{transaction_id = none}) ->
-    rabbit_misc:protocol_error(
-      precondition_failed, "channel is not transactional", []);
-
-handle_method(#'tx.rollback'{}, _, State) ->
-    {reply, #'tx.rollback_ok'{}, internal_rollback(State)};
-
-handle_method(#'confirm.select'{}, _, #ch{transaction_id = TxId})
-  when TxId =/= none ->
-    rabbit_misc:protocol_error(
-      precondition_failed, "cannot switch from tx to confirm mode", []);
-
 handle_method(#'confirm.select'{nowait = NoWait}, _, State) ->
     return_ok(State#ch{confirm_enabled = true},
               NoWait, #'confirm.select_ok'{});
@@ -1250,55 +1200,17 @@ collect_acks(ToAcc, PrefixAcc, Q, DeliveryTag, Multiple) ->
               precondition_failed, "unknown delivery tag ~w", [DeliveryTag])
     end.
 
-add_tx_participants(MoreP, State = #ch{tx_participants = Participants}) ->
-    State#ch{tx_participants = sets:union(Participants,
-                                          sets:from_list(MoreP))}.
+ack(UAQ) ->
+    fold_per_queue(fun (QPid, MsgIds, L) ->
+                           ok = rabbit_amqqueue:ack(QPid, MsgIds, self()),
+                           [{QPid, length(MsgIds)} | L]
+                   end, [], UAQ).
 
-ack(TxnKey, UAQ) ->
-    fold_per_queue(
-      fun (QPid, MsgIds, L) ->
-              ok = rabbit_amqqueue:ack(QPid, TxnKey, MsgIds, self()),
-              [{QPid, length(MsgIds)} | L]
-      end, [], UAQ).
-
-make_tx_id() -> rabbit_guid:guid().
-
-new_tx(State) ->
-    State#ch{transaction_id    = make_tx_id(),
-             tx_participants   = sets:new(),
-             uncommitted_ack_q = queue:new()}.
-
-internal_commit(State = #ch{transaction_id = TxnKey,
-                            tx_participants = Participants}) ->
-    case rabbit_amqqueue:commit_all(sets:to_list(Participants),
-                                    TxnKey, self()) of
-        ok              -> ok = notify_limiter(State#ch.limiter_pid,
-                                               State#ch.uncommitted_ack_q),
-                           new_tx(State);
-        {error, Errors} -> rabbit_misc:protocol_error(
-                             internal_error, "commit failed: ~w", [Errors])
-    end.
-
-internal_rollback(State = #ch{transaction_id = TxnKey,
-                              tx_participants = Participants,
-                              uncommitted_ack_q = UAQ,
-                              unacked_message_q = UAMQ}) ->
-    ?LOGDEBUG("rollback ~p~n  - ~p acks uncommitted, ~p messages unacked~n",
-              [self(),
-               queue:len(UAQ),
-               queue:len(UAMQ)]),
-    ok = rabbit_amqqueue:rollback_all(sets:to_list(Participants),
-                                      TxnKey, self()),
-    NewUAMQ = queue:join(UAQ, UAMQ),
-    new_tx(State#ch{unacked_message_q = NewUAMQ}).
-
-rollback_and_notify(State = #ch{state = closing}) ->
+notify_queues(State = #ch{state = closing}) ->
     {ok, State};
-rollback_and_notify(State = #ch{transaction_id = none}) ->
-    {notify_queues(State), State#ch{state = closing}};
-rollback_and_notify(State) ->
-    State1 = internal_rollback(State),
-    {notify_queues(State1), State1#ch{state = closing}}.
+notify_queues(State = #ch{consumer_mapping = Consumers}) ->
+    {rabbit_amqqueue:notify_down_all(consumer_queues(Consumers), self()),
+     State#ch{state = closing}}.
 
 fold_per_queue(F, Acc0, UAQ) ->
     D = rabbit_misc:queue_fold(
@@ -1316,9 +1228,6 @@ start_limiter(State = #ch{unacked_message_q = UAMQ, start_limiter_fun = SLF}) ->
     {ok, LPid} = SLF(queue:len(UAMQ)),
     ok = limit_queues(LPid, State),
     LPid.
-
-notify_queues(#ch{consumer_mapping = Consumers}) ->
-    rabbit_amqqueue:notify_down_all(consumer_queues(Consumers), self()).
 
 unlimit_queues(State) ->
     ok = limit_queues(undefined, State),
@@ -1434,17 +1343,13 @@ i(connection,     #ch{conn_pid         = ConnPid}) -> ConnPid;
 i(number,         #ch{channel          = Channel}) -> Channel;
 i(user,           #ch{user             = User})    -> User#user.username;
 i(vhost,          #ch{virtual_host     = VHost})   -> VHost;
-i(transactional,  #ch{transaction_id   = TxnKey})  -> TxnKey =/= none;
 i(confirm,        #ch{confirm_enabled  = CE})      -> CE;
 i(consumer_count, #ch{consumer_mapping = ConsumerMapping}) ->
     dict:size(ConsumerMapping);
 i(messages_unconfirmed, #ch{unconfirmed_mq = UMQ}) ->
     gb_trees:size(UMQ);
-i(messages_unacknowledged, #ch{unacked_message_q = UAMQ,
-                               uncommitted_ack_q = UAQ}) ->
-    queue:len(UAMQ) + queue:len(UAQ);
-i(acks_uncommitted, #ch{uncommitted_ack_q = UAQ}) ->
-    queue:len(UAQ);
+i(messages_unacknowledged, #ch{unacked_message_q = UAMQ}) ->
+    queue:len(UAMQ);
 i(prefetch_count, #ch{limiter_pid = LimiterPid}) ->
     rabbit_limiter:get_limit(LimiterPid);
 i(client_flow_blocked, #ch{limiter_pid = LimiterPid}) ->

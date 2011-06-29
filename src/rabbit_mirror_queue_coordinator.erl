@@ -80,7 +80,7 @@
 %% group. Because the master is the bq of amqqueue_process, it doesn't
 %% have sole control over its mailbox, and as a result, the master
 %% itself cannot be passed messages directly (well, it could by via
-%% the amqqueue:run_backing_queue_async callback but that would induce
+%% the amqqueue:run_backing_queue callback but that would induce
 %% additional unnecessary loading on the master queue process), yet it
 %% needs to react to gm events, such as the death of slaves. Thus the
 %% master creates the coordinator, and it is the coordinator that is
@@ -263,45 +263,6 @@
 %% message and the master will eventually publish the corresponding
 %% sender_death message. The slave will then be able to tidy up its
 %% state as normal.
-%%
-%% We don't support transactions on mirror queues. To do so is
-%% challenging. The underlying bq is free to add the contents of the
-%% txn to the queue proper at any point after the tx.commit comes in
-%% but before the tx.commit-ok goes out. This means that it is not
-%% safe for all mirrors to simply issue the bq:tx_commit at the same
-%% time, as the addition of the txn's contents to the queue may
-%% subsequently be inconsistently interwoven with other actions on the
-%% bq. The solution to this is, in the master, wrap the PostCommitFun
-%% and do the gm:broadcast in there: at that point, you're in the bq
-%% (well, there's actually nothing to stop that function being invoked
-%% by some other process, but let's pretend for now: you could always
-%% use run_backing_queue to ensure you really are in the queue process
-%% (the _async variant would be unsafe from an ordering pov)), the
-%% gm:broadcast is safe because you don't have to worry about races
-%% with other gm:broadcast calls (same process). Thus this signal
-%% would indicate sufficiently to all the slaves that they must insert
-%% the complete contents of the txn at precisely this point in the
-%% stream of events.
-%%
-%% However, it's quite difficult for the slaves to make that happen:
-%% they would be forced to issue the bq:tx_commit at that point, but
-%% then stall processing any further instructions from gm until they
-%% receive the notification from their bq that the tx_commit has fully
-%% completed (i.e. they need to treat what is an async system as being
-%% fully synchronous). This is not too bad (apart from the
-%% vomit-inducing notion of it all): just need a queue of instructions
-%% from the GM; but then it gets rather worse when you consider what
-%% needs to happen if the master dies at this point and the slave in
-%% the middle of this tx_commit needs to be promoted.
-%%
-%% Finally, we can't possibly hope to make transactions atomic across
-%% mirror queues, and it's not even clear that that's desirable: if a
-%% slave fails whilst there's an open transaction in progress then
-%% when the channel comes to commit the txn, it will detect the
-%% failure and destroy the channel. However, the txn will have
-%% actually committed successfully in all the other mirrors (including
-%% master). To do this bit properly would require 2PC and all the
-%% baggage that goes with that.
 %%
 %% Recovery of mirrored queues is straightforward: as nodes die, the
 %% remaining nodes record this, and eventually a situation is reached

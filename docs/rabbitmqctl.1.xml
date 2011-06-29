@@ -1196,10 +1196,6 @@
                 <listitem><para>Virtual host in which the channel operates.</para></listitem>
               </varlistentry>
               <varlistentry>
-                <term>transactional</term>
-                <listitem><para>True if the channel is in transactional mode, false otherwise.</para></listitem>
-              </varlistentry>
-              <varlistentry>
                 <term>consumer_count</term>
                 <listitem><para>Number of logical AMQP consumers retrieving messages via
                   the channel.</para></listitem>
@@ -1208,11 +1204,6 @@
                 <term>messages_unacknowledged</term>
                 <listitem><para>Number of messages delivered via this channel but not
                   yet acknowledged.</para></listitem>
-              </varlistentry>
-              <varlistentry>
-                <term>acks_uncommitted</term>
-                <listitem><para>Number of acknowledgements received in an as yet
-                  uncommitted transaction.</para></listitem>
               </varlistentry>
               <varlistentry>
                 <term>prefetch_count</term>
@@ -1239,8 +1230,7 @@
             </variablelist>
             <para>
               If no <command>channelinfoitem</command>s are specified then pid,
-              user, transactional, consumer_count, and
-              messages_unacknowledged are assumed.
+              user, consumer_count, and messages_unacknowledged are assumed.
             </para>
 
             <para role="example-prefix">
