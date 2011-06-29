@@ -20,7 +20,7 @@
 
 -export([recover/0, callback/3, declare/6,
          assert_equivalence/6, assert_args_equivalence/2, check_type/1,
-         lookup/1, lookup_or_die/1, list/1, update/2,
+         lookup/1, lookup_or_die/1, list/1, update_scratch/2,
          info_keys/0, info/1, info/2, info_all/1, info_all/2,
          publish/2, delete/2]).
 %% these must be run inside a mnesia tx
@@ -58,9 +58,7 @@
         (name()) -> rabbit_types:exchange() |
                     rabbit_types:channel_exit()).
 -spec(list/1 :: (rabbit_types:vhost()) -> [rabbit_types:exchange()]).
--spec(update/2 ::
-        (name(), fun((rabbit_types:exchange()) -> rabbit_types:exchange()))
-        -> rabbit_types:ok_or_error(term())).
+-spec(update_scratch/2 :: (name(), fun((term()) -> term())) -> 'ok').
 -spec(info_keys/0 :: () -> rabbit_types:info_keys()).
 -spec(info/1 :: (rabbit_types:exchange()) -> rabbit_types:infos()).
 -spec(info/2 ::
@@ -202,26 +200,22 @@ list(VHostPath) ->
       rabbit_exchange,
       #exchange{name = rabbit_misc:r(VHostPath, exchange), _ = '_'}).
 
-update(Name, Fun) ->
-    case mnesia:transaction(
-           fun() ->
-                   case mnesia:read(rabbit_exchange, Name, write) of
-                       [X = #exchange{durable = Durable}] ->
-                           ok = mnesia:write(rabbit_exchange, Fun(X), write),
-                           case Durable of
-                               true ->
-                                   ok = mnesia:write(rabbit_durable_exchange,
-                                                     Fun(X), write);
-                               _ ->
-                                   ok
-                           end;
-                       [] ->
-                           ok
-                   end
-           end) of
-        {atomic, ok}      -> ok;
-        {aborted, Reason} -> {error, Reason}
-    end.
+update_scratch(Name, Fun) ->
+    rabbit_misc:execute_mnesia_transaction(
+      fun() ->
+              case mnesia:wread({rabbit_exchange, Name}) of
+                  [X = #exchange{durable = Durable, scratch = Scratch}] ->
+                      X1 = X#exchange{scratch = Fun(Scratch)},
+                      ok = mnesia:write(rabbit_exchange, X1, write),
+                      case Durable of
+                          true -> ok = mnesia:write(rabbit_durable_exchange,
+                                                    X1, write);
+                          _    -> ok
+                      end;
+                  [] ->
+                      ok
+              end
+      end).
 
 info_keys() -> ?INFO_KEYS.
 
