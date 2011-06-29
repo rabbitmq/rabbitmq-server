@@ -21,10 +21,15 @@ reception and publishing of messages.
 Requirements
 ------------
 
-Currently, you must build the server from source. You must also have
-checked out the rabbitmq-public-umbrella hg repository, and have the
-rabbitmq-erlang-client built. From scratch, the following commands
-should build RabbitMQ with the shovel plug-in:
+If you are using a released version of RabbitMQ then the simplest
+means of installing the shovel is to use the ez files available from
+http://www.rabbitmq.com/plugins.html#rabbitmq-shovel (or, if you're
+not using the current release of RabbitMQ, grab the necessary ez files
+from http://www.rabbitmq.com/releases/plugins/).
+
+If you are running an unreleased version of RabbitMQ, compiled from
+source, you will need to compile the shovel from source. From scratch,
+the following commands should build RabbitMQ with the shovel plug-in:
 
 hg clone http://hg.rabbitmq.com/rabbitmq-public-umbrella
 cd rabbitmq-public-umbrella
