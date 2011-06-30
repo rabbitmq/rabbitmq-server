@@ -25,12 +25,12 @@
 
 -include("amqp_client.hrl").
 
--behaviour(gen_server).
+-behaviour(gen_server2).
 
 -export([start_link/2, call_consumer/2, call_consumer/3]).
 -export([behaviour_info/1]).
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
-         handle_info/2]).
+         handle_info/2, prioritise_info/2]).
 
 -record(state, {module,
                 module_state}).
@@ -40,12 +40,12 @@
 %%---------------------------------------------------------------------------
 
 start_link(ConsumerModule, ExtraParams) ->
-    gen_server:start_link(?MODULE, [ConsumerModule, ExtraParams], []).
+    gen_server2:start_link(?MODULE, [ConsumerModule, ExtraParams], []).
 
 call_consumer(Pid, Call) ->
-    gen_server:call(Pid, {consumer_call, Call}).
+    gen_server2:call(Pid, {consumer_call, Call}).
 call_consumer(Pid, Method, Args) ->
-    gen_server:call(Pid, {consumer_call, Method, Args}).
+    gen_server2:call(Pid, {consumer_call, Method, Args}).
 
 %%---------------------------------------------------------------------------
 %% Behaviour
@@ -163,7 +163,7 @@ behaviour_info(_Other) ->
     undefined.
 
 %%---------------------------------------------------------------------------
-%% gen_server callbacks
+%% gen_server2 callbacks
 %%---------------------------------------------------------------------------
 
 init([ConsumerModule, ExtraParams]) ->
