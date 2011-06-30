@@ -32,6 +32,7 @@
 -rabbit_upgrade({user_admin_to_tags,    mnesia, [user_to_internal_user]}).
 -rabbit_upgrade({ha_mirrors,            mnesia, []}).
 -rabbit_upgrade({gm,                    mnesia, []}).
+-rabbit_upgrade({mirrored_supervisor,   mnesia, []}).
 
 %% -------------------------------------------------------------------
 
@@ -154,6 +155,10 @@ ha_mirrors() ->
 gm() ->
     create(gm_group, [{record_name, gm_group},
                       {attributes, [name, version, members]}]).
+
+mirrored_supervisor() ->
+    create(mirrored_sup_childspec, [{record_name, mirrored_sup_childspec},
+                                    {attributes, [id, sup_pid, childspec]}]).
 
 %%--------------------------------------------------------------------
 
