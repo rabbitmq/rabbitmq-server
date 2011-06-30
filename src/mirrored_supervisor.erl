@@ -177,6 +177,8 @@ check_start(ChildSpec) ->
         [S] -> #mirrored_sup_childspec{sup_pid = Pid} = S,
                case alive(Pid) of
                    true  -> already; %% TODO return real pid?
+                   %% TODO this is broken. How can we test it? Can it
+                   %% ever happen?
                    false -> delete(ChildSpec),
                             write(ChildSpec),
                             start
