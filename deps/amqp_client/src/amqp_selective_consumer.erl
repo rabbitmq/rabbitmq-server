@@ -57,29 +57,6 @@
 %% Interface
 %%---------------------------------------------------------------------------
 
-%% @type consume() = #'basic.consume'{}.
-%% The AMQP method that is used to  subscribe a consumer to a queue.
-%% @type consume_ok() = #'basic.consume_ok'{}.
-%% The AMQP method returned in response to basic.consume.
-%% @spec (ChannelPid, consume(), ConsumerPid) -> Result
-%% where
-%%      ChannelPid = pid()
-%%      ConsumerPid = pid()
-%%      Result = consume_ok() | ok | error
-%% @doc Creates a subscription to a queue. This subscribes a consumer pid to
-%% the queue defined in the #'basic.consume'{} method record. Note that
-%% both the process invoking this method and the supplied consumer process
-%% receive an acknowledgement of the subscription. The calling process will
-%% receive the acknowledgement as the return value of this function, whereas
-%% the consumer process will receive the notification as a message,
-%% asynchronously.<br/>
-%% <br/>
-%% Attempting to subscribe with a consumer_tag that is already in use or
-%% to subscribe with nowait true and not specifying a consumer_tag will
-%% cause an exception and the channel will terminate, causing this function
-%% to throw. If nowait is set to true the function will return 'error'
-%% immediately, and the channel will be terminated by the server.
-
 %% @spec (ChannelPid, ConsumerPid) -> ok
 %% where
 %%      ChannelPid = pid()
@@ -173,9 +150,11 @@ handle_down(_MRef, Pid, _Info,
     case dict:find(Pid, Monitors) of
         {ok, _Tag} ->
             State#state{monitors = dict:erase(Pid, Monitors),
-                        consumers = dict:filter(fun (_, Pid) -> false;
-                                                    (_, _)   -> true
-                                                end, Consumers)};
+                        consumers =
+                            dict:filter(
+                              fun (_, Pid1) when Pid1 =:= Pid -> false;
+                                  (_, _)                      -> true
+                              end, Consumers)};
         error ->
             case Pid of
                 DConsumer -> State#state{monitors = dict:erase(Pid, Monitors),

@@ -493,7 +493,7 @@ confirm_test(Connection) ->
 
 default_consumer_test(Connection) ->
     {ok, Channel} = amqp_connection:open_channel(Connection),
-    amqp_channel:call_consumer(Channel, {register_default_consumer, self()}),
+    amqp_selective_consumer:register_default_consumer(Channel, self()),
 
     #'queue.declare_ok'{queue = Q}
         = amqp_channel:call(Channel, #'queue.declare'{}),
