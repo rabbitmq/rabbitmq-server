@@ -137,6 +137,7 @@ behaviour_info(callbacks) ->
      %%                                   {noreply, NewState}
      %% where
      %%      Call = any()
+     %%      From = any()
      %%      Reply = any()
      %%      State = state()
      %%      NewState = state()
@@ -170,10 +171,10 @@ init([ConsumerModule, ExtraParams]) ->
     {ok, MState} = ConsumerModule:init(ExtraParams),
     {ok, #state{module = ConsumerModule, module_state = MState}}.
 
-handle_call({consumer_call, Call}, _From,
+handle_call({consumer_call, Call}, From,
             State = #state{module       = ConsumerModule,
                            module_state = MState}) ->
-    case ConsumerModule:handle_call(Call, MState) of
+    case ConsumerModule:handle_call(Call, From, MState) of
         {noreply, NewMState} ->
             {noreply, State#state{module_state = NewMState}};
         {reply, Reply, NewMState} ->

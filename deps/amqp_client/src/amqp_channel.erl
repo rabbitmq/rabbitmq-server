@@ -295,8 +295,7 @@ handle_call(next_publish_seqno, _From,
 %% @private
 handle_call({call_consumer, Call}, _From,
             State = #state{consumer = Consumer}) ->
-    {ok, Reply} = amqp_gen_consumer:call_consumer(Consumer, Call),
-    {reply, Reply, State}.
+    {reply, amqp_gen_consumer:call_consumer(Consumer, Call), State}.
 
 %% @private
 handle_cast({cast, Method, AmqpMsg}, State) ->

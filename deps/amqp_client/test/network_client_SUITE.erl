@@ -111,6 +111,9 @@ channel_tune_negotiation_test() ->
 confirm_test() ->
     test_util:confirm_test(new_connection()).
 
+default_consumer_test() ->
+    test_util:default_consumer_test(new_connection()).
+
 subscribe_nowait_test() ->
     test_util:subscribe_nowait_test(new_connection()).
 

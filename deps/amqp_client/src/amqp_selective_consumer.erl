@@ -166,18 +166,38 @@ handle_consume(BasicConsume, Pid, State = #state{consumers = Consumers,
     end.
 
 %% @private
-handle_down(_MRef, Pid, _Info, State = #state{monitors = Monitors}) ->
+handle_down(_MRef, Pid, _Info,
+            State = #state{monitors         = Monitors,
+                           consumers        = Consumers,
+                           default_consumer = DConsumer }) ->
     case dict:find(Pid, Monitors) of
         {ok, _Tag} ->
-            State#state{monitors = dict:erase(Pid, Monitors)};
+            State#state{monitors = dict:erase(Pid, Monitors),
+                        consumers = dict:filter(fun (_, Pid) -> false;
+                                                    (_, _)   -> true
+                                                end, Consumers)};
         error ->
-            %% unnamed consumer went down before receiving consume_ok
-            State
+            case Pid of
+                DConsumer -> State#state{monitors = dict:erase(Pid, Monitors),
+                                         default_consumer = none};
+                _         -> State %% unnamed consumer went down
+                                   %% before receiving consume_ok
+            end
     end.
 
 %% @private
-handle_call(_Call, _From, State) ->
-    {reply, ok, State}.
+handle_call({register_default_consumer, Pid}, _From,
+            State = #state{default_consumer = PrevPid,
+                           monitors         = Monitors}) ->
+    case PrevPid of
+        none -> ok;
+        _    -> demonitor(dict:fetch(PrevPid, Monitors)),
+                dict:erase(PrevPid, Monitors)
+    end,
+    {reply, ok,
+     State#state{default_consumer = Pid,
+                 monitors = dict:store(Pid, monitor(process, Pid),
+                                       Monitors)}}.
 
 %% @private
 terminate(_Reason, State) ->

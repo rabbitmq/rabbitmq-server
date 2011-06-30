@@ -491,6 +491,35 @@ confirm_test(Connection) ->
          end,
     teardown(Connection, Channel).
 
+default_consumer_test(Connection) ->
+    {ok, Channel} = amqp_connection:open_channel(Connection),
+    amqp_channel:call_consumer(Channel, {register_default_consumer, self()}),
+
+    #'queue.declare_ok'{queue = Q}
+        = amqp_channel:call(Channel, #'queue.declare'{}),
+    spawn(fun () ->
+                  #'basic.consume_ok'{} =
+                      amqp_channel:call(Channel,
+                                        #'basic.consume'{queue = Q}),
+                  io:format("little consumer died out~n"),
+                  exit('consumer_out')
+          end),
+    receive
+    after 500 -> ok
+    end,
+    Payload = <<"for the default consumer">>,
+    amqp_channel:call(Channel,
+                      #'basic.publish'{exchange = <<>>, routing_key = Q},
+                      #amqp_msg{payload = Payload}),
+
+    receive
+        {#'basic.deliver'{}, #'amqp_msg'{payload = Payload}} ->
+            ok
+    after 1000 ->
+            exit('default_consumer_didnt_work')
+    end,
+    teardown(Connection, Channel).
+
 subscribe_nowait_test(Connection) ->
     {ok, Channel} = amqp_connection:open_channel(Connection),
     {ok, Q} = setup_publish(Channel),
