@@ -60,8 +60,13 @@ info(Node, Keys) ->
 %%--------------------------------------------------------------------
 
 get_used_fd_lsof() ->
-    Lsof = os:cmd("lsof -d \"0-9999999\" -lna -p " ++ os:getpid()),
-    string:words(Lsof, $\n).
+    case os:find_executable("lsof") of
+        false ->
+            unknown;
+        Path ->
+            Lsof = os:cmd(Path ++ " -d \"0-9999999\" -lna -p " ++ os:getpid()),
+            string:words(Lsof, $\n) - 1
+    end.
 
 get_used_fd() ->
     get_used_fd(os:type()).
@@ -70,8 +75,7 @@ get_used_fd({unix, linux}) ->
     {ok, Files} = file:list_dir("/proc/" ++ os:getpid() ++ "/fd"),
     length(Files);
 
-get_used_fd({unix, Os}) when Os =:= darwin
-                      orelse Os =:= freebsd ->
+get_used_fd({unix, _}) ->
     get_used_fd_lsof();
 
 %% handle.exe can be obtained from
