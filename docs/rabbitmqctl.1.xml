@@ -1200,6 +1200,10 @@
                 <listitem><para>True if the channel is in transactional mode, false otherwise.</para></listitem>
               </varlistentry>
               <varlistentry>
+                <term>confirm</term>
+                <listitem><para>True if the channel is in confirm mode, false otherwise.</para></listitem>
+              </varlistentry>
+              <varlistentry>
                 <term>consumer_count</term>
                 <listitem><para>Number of logical AMQP consumers retrieving messages via
                   the channel.</para></listitem>
@@ -1215,6 +1219,12 @@
                   uncommitted transaction.</para></listitem>
               </varlistentry>
               <varlistentry>
+                <term>messages_unconfirmed</term>
+                <listitem><para>Number of published messages not yet
+                confirmed.  On channels not in confirm mode, this
+                remains 0.</para></listitem>
+              </varlistentry>
+              <varlistentry>
                 <term>prefetch_count</term>
                 <listitem><para>QoS prefetch count limit in force, 0 if unlimited.</para></listitem>
               </varlistentry>
@@ -1225,16 +1235,6 @@
                     command, blocking the server from delivering
                     messages to the channel's consumers.
                     </para></listitem>
-              </varlistentry>
-              <varlistentry>
-                <term>confirm</term>
-                <listitem><para>True if the channel is in confirm mode, false otherwise.</para></listitem>
-              </varlistentry>
-              <varlistentry>
-                <term>messages_unconfirmed</term>
-                <listitem><para>Number of published messages not yet
-                confirmed.  On channels not in confirm mode, this
-                remains 0.</para></listitem>
               </varlistentry>
             </variablelist>
             <para>
