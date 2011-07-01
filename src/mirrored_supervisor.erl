@@ -80,8 +80,11 @@ behaviour_info(callbacks) -> [{init,1}];
 behaviour_info(_Other)    -> undefined.
 
 call(Sup, Msg) ->
-    [Pid] = [Pid || {Name, Pid, _, _} <- which_children(Sup), Name =:= ?ID],
-    ?GEN_SERVER:call(Pid, Msg, infinity).
+    ?GEN_SERVER:call(child(Sup, ?ID), Msg, infinity).
+
+child(Sup, Name) ->
+    [Pid] = [Pid || {Name1, Pid, _, _} <- which_children(Sup), Name1 =:= Name],
+    Pid.
 
 %%----------------------------------------------------------------------------
 
@@ -103,10 +106,10 @@ init({Sup, Group, _Args}) ->
 
 handle_call({start_child, ChildSpec}, _From, State = #state{sup = Sup}) ->
     {reply, case mnesia:transaction(fun() -> check_start(ChildSpec) end) of
-                {atomic, start}   -> io:format("Start ~p~n", [id(ChildSpec)]),
-                                     start(Sup, ChildSpec);
-                {atomic, already} -> io:format("Already ~p~n", [id(ChildSpec)]),
-                                           {ok, already}
+                {atomic, start} -> io:format("Start ~p~n", [id(ChildSpec)]),
+                                   start(Sup, ChildSpec);
+                {atomic, Pid}   -> io:format("Already ~p~n", [id(ChildSpec)]),
+                                   {ok, Pid}
             end, State};
 
 handle_call({delete_child, Id}, _From, State = #state{sup = Sup}) ->
@@ -121,8 +124,8 @@ handle_call({hello, Pid}, _From, State) ->
     erlang:monitor(process, Pid),
     {reply, ok, State};
 
-handle_call(alive, _From, State) ->
-    {reply, true, State};
+handle_call(supervisor, _From, State = #state{sup = Sup}) ->
+    {reply, Sup, State};
 
 handle_call(Msg, _From, State) ->
     {stop, {unexpected_call, Msg}, State}.
@@ -161,20 +164,21 @@ check_start(ChildSpec) ->
     case mnesia:wread({?TABLE, id(ChildSpec)}) of
         []  -> write(ChildSpec),
                start;
-        [S] -> #mirrored_sup_childspec{sup_pid = Pid} = S,
-               case alive(Pid) of
-                   true  -> already; %% TODO return real pid?
-                   false -> delete(ChildSpec),
-                            write(ChildSpec),
-                            start
+        [S] -> #mirrored_sup_childspec{id      = Id,
+                                       sup_pid = Pid} = S,
+               case supervisor(Pid) of
+                   dead -> delete(ChildSpec),
+                           write(ChildSpec),
+                           start;
+                   Sup  -> child(Sup, Id)
                end
     end.
 
-alive(Pid) ->
+supervisor(Pid) ->
     try
-        gen_server:call(Pid, alive, infinity)
+        gen_server:call(Pid, supervisor, infinity)
     catch
-        exit:{noproc, _} -> false
+        exit:{noproc, _} -> dead
     end.
 
 write(ChildSpec) ->

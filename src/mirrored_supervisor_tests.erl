@@ -31,6 +31,7 @@
 all_tests() ->
     passed = test_migrate(),
     passed = test_migrate_twice(),
+    passed = test_already_there(),
     passed.
 
 test_migrate() ->
@@ -53,6 +54,14 @@ test_migrate_twice() ->
                                         false = (Pid1 =:= Pid2)
                                 end, [c])
               end, [a, b]).
+
+test_already_there() ->
+    with_sups(fun([_, _]) ->
+                      S = childspec(worker),
+                      {ok, Pid} = mirrored_supervisor:start_child(a, S),
+                      {ok, Pid} = mirrored_supervisor:start_child(b, S)
+              end, [a, b]).
+
 
 %% ---------------------------------------------------------------------------
 
