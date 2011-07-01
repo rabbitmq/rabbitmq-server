@@ -132,8 +132,11 @@ handle_cast(Msg, State) ->
 handle_info({'DOWN', _Ref, process, Pid, _Reason},
             State = #state{sup = Sup, group = Group}) ->
     %% TODO load balance this
+    %% We remove the dead pid here because pg2_fixed is slightly racy,
+    %% most of the time it will be gone before we get here but not
+    %% always.
     Self = self(),
-    case lists:sort(pg2_fixed:get_members(Group)) of
+    case lists:sort(pg2_fixed:get_members(Group)) -- [Pid] of
         [Self | _] -> {atomic, ChildSpecs} =
                           mnesia:transaction(fun() -> update_all(Pid) end),
                       [start(Sup, ChildSpec) || ChildSpec <- ChildSpecs];
