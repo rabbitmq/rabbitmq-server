@@ -114,8 +114,7 @@ init({SupName, _Args}) ->
 handle_call({start_child, ChildSpec}, _From, State = #state{name = SupName}) ->
     {reply, case mnesia:transaction(fun() -> check_start(ChildSpec) end) of
                 {atomic, start}   -> io:format("Start ~p~n", [id(ChildSpec)]),
-                                     apply(?SUPERVISOR,
-                                           start_child, [SupName, ChildSpec]);
+                                     start(SupName, ChildSpec);
                 {atomic, already} -> io:format("Already ~p~n", [id(ChildSpec)]),
                                            {ok, already}
             end, State};
@@ -123,7 +122,7 @@ handle_call({start_child, ChildSpec}, _From, State = #state{name = SupName}) ->
 handle_call({delete_child, ChildSpec}, _From,
             State = #state{name = SupName}) ->
     {atomic, ok} = mnesia:transaction(fun() -> delete(ChildSpec) end),
-    {reply, apply(?SUPERVISOR, delete_child, [SupName, id(ChildSpec)]), State};
+    {reply, stop(SupName, id(ChildSpec)), State};
 
 handle_call({msg, F, A}, _From, State) ->
     {reply, apply(?SUPERVISOR, F, A), State};
@@ -151,8 +150,7 @@ handle_info({'DOWN', _Ref, process, Pid, _Reason},
         [Self | _] -> {atomic, ChildSpecs} =
                           mnesia:transaction(fun() -> restart_all(Pid) end),
                       [begin
-                           apply(?SUPERVISOR, start_child,
-                                 [SupName, ChildSpec]),
+                           start(SupName, ChildSpec),
                            io:format("Restarted ~p~n", [id(ChildSpec)])
                        end || ChildSpec <- ChildSpecs];
         _          -> ok
@@ -195,6 +193,12 @@ write(ChildSpec) ->
 
 delete(ChildSpec) ->
     ok = mnesia:delete({?MNESIA_TABLE, id(ChildSpec)}).
+
+start(SupName, ChildSpec) ->
+    apply(?SUPERVISOR, start_child, [SupName, ChildSpec]).
+
+stop(SupName, ChildSpec) ->
+    apply(?SUPERVISOR, delete_child, [SupName, id(ChildSpec)]).
 
 id({Id, _, _, _, _, _}) -> Id.
 
