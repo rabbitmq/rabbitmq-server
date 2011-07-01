@@ -7,7 +7,8 @@ $(document).ready(function() {
     statistics_level = JSON.parse(sync_get('/overview')).statistics_level;
     var user = JSON.parse(sync_get('/whoami'));
     replace_content('login', '<p>User: <b>' + user.name + '</b></p>');
-    user_administrator = user.administrator;
+    var tags = user.tags.split(",");
+    user_administrator = jQuery.inArray("administrator", tags) != -1;
     nodes_interesting = user_administrator &&
         JSON.parse(sync_get('/nodes')).length > 1;
     vhosts_interesting = JSON.parse(sync_get('/vhosts')).length > 1;
@@ -418,7 +419,7 @@ function postprocess() {
             }
         });
     $('#download-configuration').click(function() {
-            var path = '../api/all-configuration?download=' +
+            var path = 'api/all-configuration?download=' +
                 esc($('#download-filename').val());
             window.location = path;
             setTimeout('app.run()');
@@ -631,7 +632,7 @@ function update_status(status) {
 function with_req(method, path, body, fun) {
     var json;
     var req = xmlHttpRequest();
-    req.open(method, '../api' + path, true );
+    req.open(method, 'api' + path, true );
     req.onreadystatechange = function () {
         if (req.readyState == 4) {
             if (check_bad_response(req, true)) {
@@ -670,7 +671,7 @@ function sync_req(type, params0, path_template) {
         return false;
     }
     var req = xmlHttpRequest();
-    req.open(type, '../api' + path, false);
+    req.open(type, 'api' + path, false);
     req.setRequestHeader('content-type', 'application/json');
     try {
         if (type == 'GET')

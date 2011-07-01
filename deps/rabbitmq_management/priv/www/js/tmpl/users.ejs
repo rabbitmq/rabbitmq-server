@@ -5,8 +5,8 @@
 <table class="list">
   <thead>
     <tr>
-      <th><%= fmt_sort('Name',          'name') %></th>
-      <th><%= fmt_sort('Administrator', 'administrator') %></th>
+      <th><%= fmt_sort('Name', 'name') %></th>
+      <th><%= fmt_sort('Tags', 'tags') %></th>
       <th>Can access virtual hosts</th>
     </tr>
   </thead>
@@ -17,7 +17,7 @@
     %>
        <tr<%= alt_rows(i)%>>
          <td><%= link_user(user.name) %></td>
-         <td class="c"><%= fmt_boolean(user.administrator) %></td>
+         <td class="c"><%= user.tags %></td>
          <td class="c"><%= fmt_permissions(user, permissions, 'user', 'vhost',
                            '<p class="warning">No access</p>') %></td>
        </tr>
@@ -63,12 +63,14 @@
           </td>
         </tr>
         <tr>
-          <th><label>Administrator:</label></th>
+          <th><label>Tags:</label></th>
           <td>
-            <select name="administrator">
-              <option value="false">No</option>
-              <option value="true">Yes</option>
-            </select>
+            <input type="text" name="tags" id="tags" />
+            <span class="help" id="user-tags"/>
+            <sub>
+              [<a href="javascript:$('#tags').val('administrator');">Administrator</a>]
+              [<a href="javascript:$('#tags').val('');">None</a>]
+            </sub>
           </td>
         </tr>
       </table>

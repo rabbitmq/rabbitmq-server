@@ -17,11 +17,15 @@
 -export([dispatcher/0]).
 
 dispatcher() ->
-    [{[],                                                          rabbit_mgmt_wm_help, []},
-     {["overview"],                                                rabbit_mgmt_wm_overview, []},
+    [{["api" | Path], Mod, Args} || {Path, Mod, Args} <- dispatcher_api()].
+
+dispatcher_api() ->
+    [{["overview"],                                                rabbit_mgmt_wm_overview, []},
      {["nodes"],                                                   rabbit_mgmt_wm_nodes, []},
      {["nodes", node],                                             rabbit_mgmt_wm_node, []},
      {["all-configuration"],                                       rabbit_mgmt_wm_all_configuration, []},
+     {["all"],                                                     rabbit_mgmt_wm_all, []},
+     {["all", vhost],                                              rabbit_mgmt_wm_all, []},
      {["connections"],                                             rabbit_mgmt_wm_connections, []},
      {["connections", connection],                                 rabbit_mgmt_wm_connection, []},
      {["connections", connection, "channels"],                     rabbit_mgmt_wm_connection_channels, []},

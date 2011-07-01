@@ -17,6 +17,8 @@
 -export([init/1, to_json/2, content_types_provided/2, is_authorized/2]).
 -export([users/0]).
 
+-import(rabbit_misc, [pget/2]).
+
 -include("rabbit_mgmt.hrl").
 -include_lib("webmachine/include/webmachine.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
@@ -38,6 +40,6 @@ is_authorized(ReqData, Context) ->
 
 users() ->
     [begin
-         {ok, User} = rabbit_auth_backend_internal:lookup_user(U),
+         {ok, User} = rabbit_auth_backend_internal:lookup_user(pget(user, U)),
          rabbit_mgmt_format:internal_user(User)
-     end || {U, _} <- rabbit_auth_backend_internal:list_users()].
+     end || U <- rabbit_auth_backend_internal:list_users()].

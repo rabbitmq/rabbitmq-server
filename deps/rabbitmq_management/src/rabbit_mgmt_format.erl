@@ -133,19 +133,20 @@ resource(NameAs, #resource{name = Name, virtual_host = VHost}) ->
 internal_user(User) ->
     [{name,          User#internal_user.username},
      {password_hash, base64:encode(User#internal_user.password_hash)},
-     {administrator, User#internal_user.is_admin}].
+     {tags,          tags(User#internal_user.tags)}].
 
 user(User) ->
-    [{name,          User#user.username},
-     {administrator, User#user.is_admin},
-     {auth_backend,  User#user.auth_backend}].
+    [{name,         User#user.username},
+     {tags,         tags(User#user.tags)},
+     {auth_backend, User#user.auth_backend}].
 
+tags(Tags) ->
+    list_to_binary(string:join([atom_to_list(T) || T <- Tags], ",")).
 
 listener(#listener{node = Node, protocol = Protocol,
-                   host = Host, ip_address = IPAddress, port = Port}) ->
+                   ip_address = IPAddress, port = Port}) ->
     [{node, Node},
      {protocol, Protocol},
-     {host, list_to_binary(Host)},
      {ip_address, ip(IPAddress)},
      {port, Port}].
 

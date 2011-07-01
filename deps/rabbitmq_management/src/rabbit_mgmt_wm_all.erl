@@ -11,32 +11,32 @@
 %%   The Original Code is RabbitMQ Management Plugin.
 %%
 %%   The Initial Developer of the Original Code is VMware, Inc.
-%%   Copyright (c) 2007-2010 VMware, Inc.  All rights reserved.
--module(rabbit_mgmt_wm_vhosts).
+%%   Copyright (c) 2011-2011 VMware, Inc.  All rights reserved.
+-module(rabbit_mgmt_wm_all).
 
 -export([init/1, to_json/2, content_types_provided/2, is_authorized/2]).
--export([vhosts/0]).
+
+-import(rabbit_misc, [pget/2]).
 
 -include("rabbit_mgmt.hrl").
 -include_lib("webmachine/include/webmachine.hrl").
--include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("amqp_client/include/amqp_client.hrl").
 
 %%--------------------------------------------------------------------
-
 init(_Config) -> {ok, #context{}}.
 
 content_types_provided(ReqData, Context) ->
    {[{"application/json", to_json}], ReqData, Context}.
 
-to_json(ReqData, Context = #context{user = User}) ->
-    VHosts = [rabbit_vhost:info(V) ||
-                 V <- rabbit_mgmt_util:list_visible_vhosts(User)],
-    rabbit_mgmt_util:reply_list(VHosts, ReqData, Context).
+to_json(ReqData, Context) ->
+    rabbit_mgmt_util:reply(
+      [{Key, Mod:annotated(ReqData, Context)}
+       || {Key, Mod} <- [{queues,      rabbit_mgmt_wm_queues},
+                         {exchanges,   rabbit_mgmt_wm_exchanges},
+                         {bindings,    rabbit_mgmt_wm_bindings},
+                         {channels,    rabbit_mgmt_wm_channels},
+                         {connections, rabbit_mgmt_wm_connections}]
+      ], ReqData, Context).
 
 is_authorized(ReqData, Context) ->
-    rabbit_mgmt_util:is_authorized(ReqData, Context).
-
-%%--------------------------------------------------------------------
-
-vhosts() ->
-    rabbit_vhost:info_all([name]).
+    rabbit_mgmt_util:is_authorized_admin(ReqData, Context).

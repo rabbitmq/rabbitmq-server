@@ -15,7 +15,7 @@ body { font: 12px Verdana,sans-serif; color: #484848; padding: 8px 35px; }
 #vhost-form { float: right; padding: 0; margin: 0; }
 
 h1 { font-size: 2em; font-weight: normal; padding: 0; }
-b { color: black; font-weight: normal; }
+b, dt { color: black; font-weight: normal; }
 
 .help { color: #888; cursor: pointer; }
 
@@ -39,7 +39,9 @@ table.list tr.total th { border: none; border-top: 1px solid #bbb; text-align: r
 
 div.section table.list, div.section-hidden table.list { margin-bottom: 0; }
 
-sub { display: block; color: #888; }
+sub { display: block; font-size: 0.8em; color: #888; }
+small { font-size: 0.8em; color: #888; }
+#main sub a { color: #888; }
 .unknown { color: #888; }
 
 table.facts { float: left; margin-right: 50px; }
@@ -138,6 +140,14 @@ td.binding-endpoint span.object { border: 1px solid #bbb; padding: 10px; border-
 td.binding-endpoint span.arrow { font-size: 200%; }
 
 #no-password { display: none; }
+
+#footer-nav { padding-top: 5px; }
+#footer-nav ul { float: left; list-style-type: none; padding: 0; margin: 0;}
+#footer-nav ul li { float: left; border-right: 1px solid #ccc; padding: 2px 5px 2px 0;}
+#footer-nav ul li + li { border-right: none; padding: 2px 5px;}
+#footer-nav ul li a { color: #888; text-decoration: none; }
+
+#debug { clear: both; }
 
 #scratch { display: none; }
 
