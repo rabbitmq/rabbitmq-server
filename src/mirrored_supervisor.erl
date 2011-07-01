@@ -24,7 +24,6 @@
 
 -define(SUPERVISOR, supervisor2).
 -define(GEN_SERVER, gen_server2).
--define(ETS_TABLE, ?MODULE).
 -define(ID, ?MODULE).
 
 -define(MNESIA_TABLE, mirrored_sup_childspec).
@@ -37,8 +36,7 @@
 -export([start_link/3, start_link/4,
 	 start_child/2, restart_child/2,
 	 delete_child/2, terminate_child/2,
-	 which_children/1, find_child/2,
-	 check_childspecs/1]).
+	 which_children/1, check_childspecs/1]).
 
 -export([behaviour_info/1]).
 
@@ -48,7 +46,7 @@
          handle_cast/2]).
 
 -export([start_internal/3]).
--export([init/0, create_tables/0, table_definitions/0]).
+-export([create_tables/0, table_definitions/0]).
 
 -record(mirrored_sup_childspec, {id, sup_pid, childspec}).
 
@@ -75,27 +73,20 @@ start_child(Sup, ChildSpec)  -> call(Sup, {start_child,  ChildSpec}).
 delete_child(Sup, Name)      -> call(Sup, {delete_child, Name}).
 restart_child(Sup, Name)     -> call(Sup, {msg, restart_child,   [Sup, Name]}).
 terminate_child(Sup, Name)   -> call(Sup, {msg, terminate_child, [Sup, Name]}).
-which_children(Sup)          -> call(Sup, {msg, which_children,  [Sup]}).
-find_child(Sup, Name)        -> call(Sup, {msg, find_child,      [Sup, Name]}).
+which_children(Sup)          -> ?SUPERVISOR:which_children(Sup).
 check_childspecs(ChildSpecs) -> ?SUPERVISOR:check_childspecs(ChildSpecs).
 
 behaviour_info(callbacks) -> [{init,1}];
 behaviour_info(_Other)    -> undefined.
 
 call(Sup, Msg) ->
-    [{Sup, Pid}] = ets:lookup(?ETS_TABLE, Sup),
+    [Pid] = [Pid || {Name, Pid, _, _} <- which_children(Sup), Name =:= ?ID],
     ?GEN_SERVER:call(Pid, Msg, infinity).
 
 %%----------------------------------------------------------------------------
 
-init() ->
-    ets:new(?ETS_TABLE, [named_table, public]).
-
 start_internal(Sup, Group, Args) ->
-    {ok, Pid} = ?GEN_SERVER:start_link(?MODULE, {Sup, Group, Args},
-                                       [{timeout, infinity}]),
-    ets:insert(?ETS_TABLE, {Sup, Pid}),
-    {ok, Pid}.
+    ?GEN_SERVER:start_link(?MODULE, {Sup, Group, Args}, [{timeout, infinity}]).
 
 %%----------------------------------------------------------------------------
 
@@ -173,8 +164,6 @@ check_start(ChildSpec) ->
         [S] -> #mirrored_sup_childspec{sup_pid = Pid} = S,
                case alive(Pid) of
                    true  -> already; %% TODO return real pid?
-                   %% TODO this is broken. How can we test it? Can it
-                   %% ever happen?
                    false -> delete(ChildSpec),
                             write(ChildSpec),
                             start
@@ -182,7 +171,11 @@ check_start(ChildSpec) ->
     end.
 
 alive(Pid) ->
-    gen_server:call(Pid, alive, infinity).
+    try
+        gen_server:call(Pid, alive, infinity)
+    catch
+        exit:{noproc, _} -> false
+    end.
 
 write(ChildSpec) ->
     ok = mnesia:write(#mirrored_sup_childspec{id        = id(ChildSpec),

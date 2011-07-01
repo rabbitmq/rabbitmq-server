@@ -30,6 +30,7 @@
 
 all_tests() ->
     passed = test_migrate(),
+    passed = test_migrate_twice(),
     passed.
 
 test_migrate() ->
@@ -39,6 +40,18 @@ test_migrate() ->
                       kill(A),
                       Pid2 = pid_of(worker),
                       false = (Pid1 =:= Pid2)
+              end, [a, b]).
+
+test_migrate_twice() ->
+    with_sups(fun([A, B]) ->
+                      mirrored_supervisor:start_child(a, childspec(worker)),
+                      Pid1 = pid_of(worker),
+                      kill(A),
+                      with_sups(fun([_]) ->
+                                        kill(B),
+                                        Pid2 = pid_of(worker),
+                                        false = (Pid1 =:= Pid2)
+                                end, [c])
               end, [a, b]).
 
 %% ---------------------------------------------------------------------------
