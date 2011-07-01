@@ -301,7 +301,7 @@ action(list_connections, Node, Args, _Opts, Inform) ->
 
 action(list_channels, Node, Args, _Opts, Inform) ->
     Inform("Listing channels", []),
-    ArgAtoms = default_if_empty(Args, [pid, user, transactional, consumer_count,
+    ArgAtoms = default_if_empty(Args, [pid, user, consumer_count,
                                        messages_unacknowledged]),
     display_info_list(rpc_call(Node, rabbit_channel, info_all, [ArgAtoms]),
                       ArgAtoms);

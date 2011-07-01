@@ -1238,8 +1238,8 @@
               </varlistentry>
             </variablelist>
             <para>
-              If no <command>channelinfoitem</command>s are specified then pid,
-              user, transactional, consumer_count, and
+              If no <command>channelinfoitem</command>s are specified
+              then pid, user, consumer_count, and
               messages_unacknowledged are assumed.
             </para>
 
