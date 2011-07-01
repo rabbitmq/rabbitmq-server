@@ -96,7 +96,6 @@ start_internal(Sup, Group, Args) ->
 init({Sup, Group, _Args}) ->
     pg2_fixed:create(Group),
     [begin
-         io:format("Announce to ~p~n", [Pid]),
          gen_server2:call(Pid, {hello, self()}, infinity),
          erlang:monitor(process, Pid)
      end
@@ -106,10 +105,8 @@ init({Sup, Group, _Args}) ->
 
 handle_call({start_child, ChildSpec}, _From, State = #state{sup = Sup}) ->
     {reply, case mnesia:transaction(fun() -> check_start(ChildSpec) end) of
-                {atomic, start} -> io:format("Start ~p~n", [id(ChildSpec)]),
-                                   start(Sup, ChildSpec);
-                {atomic, Pid}   -> io:format("Already ~p~n", [id(ChildSpec)]),
-                                   {ok, Pid}
+                {atomic, start} -> start(Sup, ChildSpec);
+                {atomic, Pid}   -> {ok, Pid}
             end, State};
 
 handle_call({delete_child, Id}, _From, State = #state{sup = Sup}) ->
@@ -120,7 +117,6 @@ handle_call({msg, F, A}, _From, State) ->
     {reply, apply(?SUPERVISOR, F, A), State};
 
 handle_call({hello, Pid}, _From, State) ->
-    io:format("Hello from ~p~n", [Pid]),
     erlang:monitor(process, Pid),
     {reply, ok, State};
 
@@ -135,16 +131,12 @@ handle_cast(Msg, State) ->
 
 handle_info({'DOWN', _Ref, process, Pid, _Reason},
             State = #state{sup = Sup, group = Group}) ->
-    io:format("Pid ~p down!~n", [Pid]),
     %% TODO load balance this
     Self = self(),
     case lists:sort(pg2_fixed:get_members(Group)) of
         [Self | _] -> {atomic, ChildSpecs} =
                           mnesia:transaction(fun() -> update_all(Pid) end),
-                      [begin
-                           start(Sup, ChildSpec),
-                           io:format("Restarted ~p~n", [id(ChildSpec)])
-                       end || ChildSpec <- ChildSpecs];
+                      [start(Sup, ChildSpec) || ChildSpec <- ChildSpecs];
         _          -> ok
     end,
     {noreply, State};
