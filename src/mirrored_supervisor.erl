@@ -26,12 +26,12 @@
 -define(GEN_SERVER, gen_server2).
 -define(ID, ?MODULE).
 
--define(MNESIA_TABLE, mirrored_sup_childspec).
--define(MNESIA_TABLE_DEF,
-        {?MNESIA_TABLE,
+-define(TABLE, mirrored_sup_childspec).
+-define(TABLE_DEF,
+        {?TABLE,
          [{record_name, mirrored_sup_childspec},
           {attributes, record_info(fields, mirrored_sup_childspec)}]}).
--define(MNESIA_TABLE_MATCH, {match, #mirrored_sup_childspec{ _ = '_' }}).
+-define(TABLE_MATCH, {match, #mirrored_sup_childspec{ _ = '_' }}).
 
 -export([start_link/3, start_link/4,
 	 start_child/2, restart_child/2,
@@ -158,7 +158,7 @@ code_change(_OldVsn, State, _Extra) ->
 %%----------------------------------------------------------------------------
 
 check_start(ChildSpec) ->
-    case mnesia:wread({?MNESIA_TABLE, id(ChildSpec)}) of
+    case mnesia:wread({?TABLE, id(ChildSpec)}) of
         []  -> write(ChildSpec),
                start;
         [S] -> #mirrored_sup_childspec{sup_pid = Pid} = S,
@@ -183,7 +183,7 @@ write(ChildSpec) ->
                                               childspec = ChildSpec}).
 
 delete(Id) ->
-    ok = mnesia:delete({?MNESIA_TABLE, Id}).
+    ok = mnesia:delete({?TABLE, Id}).
 
 start(Sup, ChildSpec) ->
     apply(?SUPERVISOR, start_child, [Sup, ChildSpec]).
@@ -202,24 +202,24 @@ update_all(OldPid) ->
     MatchHead = #mirrored_sup_childspec{sup_pid   = OldPid,
                                         childspec = '$1',
                                         _         = '_'},
-    [update(C) || C <- mnesia:select(?MNESIA_TABLE, [{MatchHead, [], ['$1']}])].
+    [update(C) || C <- mnesia:select(?TABLE, [{MatchHead, [], ['$1']}])].
 
 %%----------------------------------------------------------------------------
 
 create_tables() ->
-    create_tables([?MNESIA_TABLE_DEF]).
+    create_tables([?TABLE_DEF]).
 
 create_tables([]) ->
     ok;
 create_tables([{Table, Attributes} | Ts]) ->
     case mnesia:create_table(Table, Attributes) of
-        {atomic, ok}                               -> create_tables(Ts);
-        {aborted, {already_exists, ?MNESIA_TABLE}} -> create_tables(Ts);
-        Err                                        -> Err
+        {atomic, ok}                        -> create_tables(Ts);
+        {aborted, {already_exists, ?TABLE}} -> create_tables(Ts);
+        Err                                 -> Err
     end.
 
 table_definitions() ->
-    {Name, Attributes} = ?MNESIA_TABLE_DEF,
-    [{Name, [?MNESIA_TABLE_MATCH | Attributes]}].
+    {Name, Attributes} = ?TABLE_DEF,
+    [{Name, [?TABLE_MATCH | Attributes]}].
 
 %%----------------------------------------------------------------------------
