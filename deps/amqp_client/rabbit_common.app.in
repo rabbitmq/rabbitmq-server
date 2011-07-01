@@ -3,6 +3,7 @@
   {vsn, "%%VSN%%"},
   {modules, [
              gen_server2,
+             mirrored_supervisor,
              rabbit_backing_queue,
              rabbit_basic,
              rabbit_binary_generator,
