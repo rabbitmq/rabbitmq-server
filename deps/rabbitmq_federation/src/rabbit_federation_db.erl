@@ -19,6 +19,8 @@
 -include("rabbit_federation.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
+-define(DICT, orddict).
+
 -export([get_active_suffix/3, set_active_suffix/3]).
 
 %%----------------------------------------------------------------------------
@@ -28,7 +30,7 @@ get_active_suffix(X, Upstream, Default) ->
         {ok, #exchange{scratch = undefined}} ->
             Default;
         {ok, #exchange{scratch = Dict}} ->
-            case dict:find(key(Upstream), Dict) of
+            case ?DICT:find(key(Upstream), Dict) of
                 {ok, Suffix} -> Suffix;
                 error        -> Default
             end;
@@ -40,10 +42,10 @@ set_active_suffix(X, Upstream, Suffix) ->
     ok = rabbit_exchange:update_scratch(
            X, fun(Scratch) ->
                       Dict = case Scratch of
-                                 undefined -> dict:new();
+                                 undefined -> ?DICT:new();
                                  _         -> Scratch
                              end,
-                      dict:store(key(Upstream), Suffix, Dict)
+                      ?DICT:store(key(Upstream), Suffix, Dict)
               end).
 
 key(#upstream{params   = #amqp_params_network{host         = Host,
