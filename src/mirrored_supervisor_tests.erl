@@ -29,27 +29,36 @@
 %% ---------------------------------------------------------------------------
 
 all_tests() ->
-    passed = test_simple(),
+    passed = test_migrate(),
     passed.
 
-test_simple() ->
-    {ok, A} = start_sup(a),
-    {ok, B} = start_sup(b),
-    mirrored_supervisor:start_child(a, childspec(worker)),
-    Pid1 = pid_of(worker),
-    kill(A),
-    Pid2 = pid_of(worker),
-    false = (Pid1 =:= Pid2),
-    kill(B),
-    passed.
+test_migrate() ->
+    with_sups(fun([A, _]) ->
+                      mirrored_supervisor:start_child(a, childspec(worker)),
+                      Pid1 = pid_of(worker),
+                      kill(A),
+                      Pid2 = pid_of(worker),
+                      false = (Pid1 =:= Pid2)
+              end, [a, b]).
 
 %% ---------------------------------------------------------------------------
+
+with_sups(Fun, Sups) ->
+    Pids = [begin {ok, Pid} = start_sup(Sup), Pid end || Sup <- Sups],
+    Fun(Pids),
+    [kill(Pid) || Pid <- Pids, is_process_alive(Pid)],
+    passed.
 
 start_sup(Name) ->
     start_sup(Name, group).
 
 start_sup(Name, Group) ->
-    mirrored_supervisor:start_link({local, Name}, Group, ?MODULE, []).
+    {ok, Pid} = mirrored_supervisor:start_link({local, Name}, Group,
+                                               ?MODULE, []),
+    %% We are not a supervisor, when we kill the supervisor we do not
+    %% want to die!
+    unlink(Pid),
+    {ok, Pid}.
 
 childspec(Id) ->
     {Id, {?MODULE, start_gs, [Id]}, transient, 16#ffffffff, worker, [?MODULE]}.
@@ -63,17 +72,17 @@ pid_of(Id) ->
 
 call(Id, Msg) -> call(Id, Msg, 100, 10).
 
-call(Id, Msg, 0, Decr) ->
+call(Id, Msg, 0, _Decr) ->
     exit({timeout_waiting_for_server, Id, Msg});
 
 call(Id, Msg, MaxDelay, Decr) ->
     try
         gen_server:call(Id, Msg, infinity)
-    catch exit:{shutdown, _} -> timer:sleep(Decr),
-                                call(Id, Msg, MaxDelay - Decr, Decr)
+    catch exit:_ -> timer:sleep(Decr),
+                    call(Id, Msg, MaxDelay - Decr, Decr)
     end.
 
-kill(Pid) -> exit(Pid, bang).
+kill(Pid) -> exit(Pid, kill).
 
 %% ---------------------------------------------------------------------------
 %% Dumb gen_server we can supervise
