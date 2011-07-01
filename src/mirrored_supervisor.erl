@@ -48,7 +48,7 @@
          handle_cast/2]).
 
 -export([start_internal/3]).
--export([create_tables/0, table_definitions/0]).
+-export([init/0, create_tables/0, table_definitions/0]).
 
 -record(mirrored_sup_childspec, {id, sup_pid, childspec}).
 
@@ -88,15 +88,13 @@ call(Sup, Msg) ->
 
 %%----------------------------------------------------------------------------
 
+init() ->
+    ets:new(?ETS_TABLE, [named_table, public]).
+
 start_internal(Sup, Group, Args) ->
     {ok, Pid} = ?GEN_SERVER:start_link(?MODULE, {Sup, Group, Args},
                                        [{timeout, infinity}]),
-    Ins = fun() -> true = ets:insert(?ETS_TABLE, {Sup, Pid}) end,
-    try
-        Ins()
-    catch error:badarg -> ets:new(?ETS_TABLE, [named_table]),
-                          Ins()
-    end,
+    ets:insert(?ETS_TABLE, {Sup, Pid}),
     {ok, Pid}.
 
 %%----------------------------------------------------------------------------

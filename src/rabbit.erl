@@ -57,6 +57,12 @@
                     {requires,    pre_boot},
                     {enables,     external_infrastructure}]}).
 
+-rabbit_boot_step({mirrored_supervisor,
+                   [{description, "mirrored supervisor"},
+                    {mfa,         {mirrored_supervisor, init, []}},
+                    {requires,    pre_boot},
+                    {enables,     external_infrastructure}]}).
+
 -rabbit_boot_step({external_infrastructure,
                    [{description, "external infrastructure ready"}]}).
 
