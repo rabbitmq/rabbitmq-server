@@ -148,7 +148,7 @@ handle_info({'DOWN', _Ref, process, Pid, _Reason},
     Self = self(),
     case lists:sort(pg2_fixed:get_members(Group)) of
         [Self | _] -> {atomic, ChildSpecs} =
-                          mnesia:transaction(fun() -> restart_all(Pid) end),
+                          mnesia:transaction(fun() -> update_all(Pid) end),
                       [begin
                            start(Sup, ChildSpec),
                            io:format("Restarted ~p~n", [id(ChildSpec)])
@@ -207,7 +207,7 @@ update(ChildSpec) ->
     write(ChildSpec),
     ChildSpec.
 
-restart_all(OldPid) ->
+update_all(OldPid) ->
     MatchHead = #mirrored_sup_childspec{sup_pid   = OldPid,
                                         childspec = '$1',
                                         _         = '_'},
