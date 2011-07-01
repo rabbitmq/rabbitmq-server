@@ -42,7 +42,8 @@
 
 -record(resource, {virtual_host, kind, name}).
 
--record(exchange, {name, type, durable, auto_delete, internal, arguments}).
+-record(exchange, {name, type, durable, auto_delete, internal, arguments,
+                   scratch}).
 -record(exchange_serial, {name, next}).
 
 -record(amqqueue, {name, durable, auto_delete, exclusive_owner = none,
