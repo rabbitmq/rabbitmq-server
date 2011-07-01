@@ -32,6 +32,7 @@ all_tests() ->
     passed = test_migrate(),
     passed = test_migrate_twice(),
     passed = test_already_there(),
+    passed = test_delete_restart(),
     passed.
 
 test_migrate() ->
@@ -60,6 +61,19 @@ test_already_there() ->
                       S = childspec(worker),
                       {ok, Pid} = mirrored_supervisor:start_child(a, S),
                       {ok, Pid} = mirrored_supervisor:start_child(b, S)
+              end, [a, b]).
+
+test_delete_restart() ->
+    with_sups(fun([_, _]) ->
+                      S = childspec(worker),
+                      {ok, Pid1} = mirrored_supervisor:start_child(a, S),
+                      mirrored_supervisor:terminate_child(a, worker),
+                      mirrored_supervisor:delete_child(a, worker),
+                      {ok, Pid2} = mirrored_supervisor:start_child(b, S),
+                      false = (Pid1 =:= Pid2),
+                      mirrored_supervisor:restart_child(a, worker),
+                      Pid3 = pid_of(worker),
+                      false = (Pid2 =:= Pid3)
               end, [a, b]).
 
 
@@ -104,7 +118,9 @@ call(Id, Msg, MaxDelay, Decr) ->
                     call(Id, Msg, MaxDelay - Decr, Decr)
     end.
 
-kill(Pid) -> exit(Pid, kill).
+kill(Pid) ->
+    exit(Pid, kill),
+    timer:sleep(100).
 
 %% ---------------------------------------------------------------------------
 %% Dumb gen_server we can supervise
