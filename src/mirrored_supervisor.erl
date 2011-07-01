@@ -16,11 +16,11 @@
 
 -module(mirrored_supervisor).
 
-
 %% TODO documentation
 %% We need a thing like a supervisor, except that it joins something
 %% like a process group, and if a child process dies it can be
 %% restarted under another supervisor (probably on another node).
+%% For docs: start_link/2 and /3 become /3 and /4.
 
 -define(SUPERVISOR, supervisor2).
 -define(GEN_SERVER, gen_server2).
@@ -34,7 +34,7 @@
           {attributes, record_info(fields, mirrored_sup_childspec)}]}).
 -define(MNESIA_TABLE_MATCH, {match, #mirrored_sup_childspec{ _ = '_' }}).
 
--export([start_link/2,start_link/3,
+-export([start_link/3, start_link/4,
 	 start_child/2, restart_child/2,
 	 delete_child/2, terminate_child/2,
 	 which_children/1, find_child/2,
@@ -47,27 +47,28 @@
 -export([init/1, handle_call/3, handle_info/2, terminate/2, code_change/3,
          handle_cast/2]).
 
--export([start_internal/2]).
+-export([start_internal/3]).
 -export([create_tables/0, table_definitions/0]).
 
 -record(mirrored_sup_childspec, {id, sup_pid, childspec}).
 
--record(state, {name}).
+-record(state, {sup, group}).
 
 %%----------------------------------------------------------------------------
 
-%% TODO this is going to make testing awkward. Maybe we need a local name and a group name?
-start_link(_Mod, _Args) ->
+start_link(_Group, _Mod, _Args) ->
+    %% TODO this one is probably fixable.
     exit(mirrored_supervisors_must_be_locally_named).
 
-start_link({local, SupName}, Mod, Args) ->
+start_link({local, SupName}, Group, Mod, Args) ->
     {ok, SupPid} = ?SUPERVISOR:start_link({local, SupName}, Mod, Args),
     {ok, _Me} = ?SUPERVISOR:start_child(
-                   SupPid, {?ID, {?MODULE, start_internal, [SupName, Args]},
+                   SupPid, {?ID, {?MODULE, start_internal,
+                                  [SupName, Group, Args]},
                             transient, 16#ffffffff, supervisor, [?MODULE]}),
     {ok, SupPid};
 
-start_link({_, _SupName}, _Mod, _Args) ->
+start_link({global, _SupName}, _Group, _Mod, _Args) ->
     exit(mirrored_supervisors_must_be_locally_named).
 
 start_child(Sup, ChildSpec)  -> call(Sup, {start_child,  ChildSpec}).
@@ -81,16 +82,16 @@ check_childspecs(ChildSpecs) -> ?SUPERVISOR:check_childspecs(ChildSpecs).
 behaviour_info(callbacks) -> [{init,1}];
 behaviour_info(_Other)    -> undefined.
 
-call(SupName, Msg) ->
-    [{SupName, Pid}] = ets:lookup(?ETS_TABLE, SupName),
+call(Sup, Msg) ->
+    [{Sup, Pid}] = ets:lookup(?ETS_TABLE, Sup),
     ?GEN_SERVER:call(Pid, Msg, infinity).
 
 %%----------------------------------------------------------------------------
 
-start_internal(SupName, Args) ->
-    {ok, Pid} = ?GEN_SERVER:start_link(?MODULE, {SupName, Args},
+start_internal(Sup, Group, Args) ->
+    {ok, Pid} = ?GEN_SERVER:start_link(?MODULE, {Sup, Group, Args},
                                        [{timeout, infinity}]),
-    Ins = fun() -> true = ets:insert(?ETS_TABLE, {SupName, Pid}) end,
+    Ins = fun() -> true = ets:insert(?ETS_TABLE, {Sup, Pid}) end,
     try
         Ins()
     catch error:badarg -> ets:new(?ETS_TABLE, [named_table]),
@@ -100,29 +101,28 @@ start_internal(SupName, Args) ->
 
 %%----------------------------------------------------------------------------
 
-init({SupName, _Args}) ->
-    pg2_fixed:create(SupName),
+init({Sup, Group, _Args}) ->
+    pg2_fixed:create(Group),
     [begin
          io:format("Announce to ~p~n", [Pid]),
          gen_server2:call(Pid, {hello, self()}, infinity),
          erlang:monitor(process, Pid)
      end
-     || Pid <- pg2_fixed:get_members(SupName)],
-    ok = pg2_fixed:join(SupName, self()),
-    {ok, #state{name = SupName}}.
+     || Pid <- pg2_fixed:get_members(Group)],
+    ok = pg2_fixed:join(Group, self()),
+    {ok, #state{sup = Sup, group = Group}}.
 
-handle_call({start_child, ChildSpec}, _From, State = #state{name = SupName}) ->
+handle_call({start_child, ChildSpec}, _From, State = #state{sup = Sup}) ->
     {reply, case mnesia:transaction(fun() -> check_start(ChildSpec) end) of
                 {atomic, start}   -> io:format("Start ~p~n", [id(ChildSpec)]),
-                                     start(SupName, ChildSpec);
+                                     start(Sup, ChildSpec);
                 {atomic, already} -> io:format("Already ~p~n", [id(ChildSpec)]),
                                            {ok, already}
             end, State};
 
-handle_call({delete_child, ChildSpec}, _From,
-            State = #state{name = SupName}) ->
-    {atomic, ok} = mnesia:transaction(fun() -> delete(ChildSpec) end),
-    {reply, stop(SupName, id(ChildSpec)), State};
+handle_call({delete_child, Id}, _From, State = #state{sup = Sup}) ->
+    {atomic, ok} = mnesia:transaction(fun() -> delete(Id) end),
+    {reply, stop(Sup, Id), State};
 
 handle_call({msg, F, A}, _From, State) ->
     {reply, apply(?SUPERVISOR, F, A), State};
@@ -142,15 +142,15 @@ handle_cast(Msg, State) ->
     {stop, {unexpected_cast, Msg}, State}.
 
 handle_info({'DOWN', _Ref, process, Pid, _Reason},
-            State = #state{name = SupName}) ->
+            State = #state{sup = Sup, group = Group}) ->
     io:format("Pid ~p down!~n", [Pid]),
     %% TODO load balance this
     Self = self(),
-    case lists:sort(pg2_fixed:get_members(SupName)) of
+    case lists:sort(pg2_fixed:get_members(Group)) of
         [Self | _] -> {atomic, ChildSpecs} =
                           mnesia:transaction(fun() -> restart_all(Pid) end),
                       [begin
-                           start(SupName, ChildSpec),
+                           start(Sup, ChildSpec),
                            io:format("Restarted ~p~n", [id(ChildSpec)])
                        end || ChildSpec <- ChildSpecs];
         _          -> ok
@@ -191,14 +191,14 @@ write(ChildSpec) ->
                                               sup_pid   = self(),
                                               childspec = ChildSpec}).
 
-delete(ChildSpec) ->
-    ok = mnesia:delete({?MNESIA_TABLE, id(ChildSpec)}).
+delete(Id) ->
+    ok = mnesia:delete({?MNESIA_TABLE, Id}).
 
-start(SupName, ChildSpec) ->
-    apply(?SUPERVISOR, start_child, [SupName, ChildSpec]).
+start(Sup, ChildSpec) ->
+    apply(?SUPERVISOR, start_child, [Sup, ChildSpec]).
 
-stop(SupName, ChildSpec) ->
-    apply(?SUPERVISOR, delete_child, [SupName, id(ChildSpec)]).
+stop(Sup, Id) ->
+    apply(?SUPERVISOR, delete_child, [Sup, Id]).
 
 id({Id, _, _, _, _, _}) -> Id.
 
