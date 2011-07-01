@@ -58,7 +58,7 @@
         (name()) -> rabbit_types:exchange() |
                     rabbit_types:channel_exit()).
 -spec(list/1 :: (rabbit_types:vhost()) -> [rabbit_types:exchange()]).
--spec(update_scratch/2 :: (name(), fun((term()) -> term())) -> 'ok').
+-spec(update_scratch/2 :: (name(), fun((any()) -> any())) -> 'ok').
 -spec(info_keys/0 :: () -> rabbit_types:info_keys()).
 -spec(info/1 :: (rabbit_types:exchange()) -> rabbit_types:infos()).
 -spec(info/2 ::
