@@ -111,7 +111,7 @@ lookup_qpids(QNames) ->
     lists:foldl(fun (QName, QPids) ->
                         case mnesia:dirty_read({rabbit_queue, QName}) of
                             [#amqqueue{pid = QPid, slave_pids = SPids}] ->
-                                SPids ++ [QPid | QPids];
+                                [QPid | SPids ++ QPids];
                             [] ->
                                 QPids
                         end
