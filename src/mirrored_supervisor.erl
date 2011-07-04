@@ -100,6 +100,7 @@
 
 -define(SUPERVISOR, supervisor2).
 -define(GEN_SERVER, gen_server2).
+-define(PG2,        pg2_fixed).
 
 -define(TABLE, mirrored_sup_childspec).
 -define(TABLE_DEF,
@@ -183,13 +184,13 @@ init({delegate, Restart}) ->
     {ok, {Restart, []}};
 
 init({mirroring, Group, ChildSpecs}) ->
-    pg2_fixed:create(Group),
+    ?PG2:create(Group),
     [begin
          gen_server2:call(Pid, {hello, self()}, infinity),
          erlang:monitor(process, Pid)
      end
-     || Pid <- pg2_fixed:get_members(Group)],
-    ok = pg2_fixed:join(Group, self()),
+     || Pid <- ?PG2:get_members(Group)],
+    ok = ?PG2:join(Group, self()),
     {ok, #state{group = Group, initial_childspecs = ChildSpecs}}.
 
 handle_call({finish_startup, Overall}, _From,
@@ -226,11 +227,11 @@ handle_cast(Msg, State) ->
 handle_info({'DOWN', _Ref, process, Pid, _Reason},
             State = #state{overall = Overall, group = Group}) ->
     %% TODO load balance this
-    %% We remove the dead pid here because pg2_fixed is slightly racy,
+    %% We remove the dead pid here because pg2 is slightly racy,
     %% most of the time it will be gone before we get here but not
     %% always.
     Self = self(),
-    case lists:sort(pg2_fixed:get_members(Group)) -- [Pid] of
+    case lists:sort(?PG2:get_members(Group)) -- [Pid] of
         [Self | _] -> {atomic, ChildSpecs} =
                           mnesia:transaction(fun() -> update_all(Pid) end),
                       [start(Overall, ChildSpec) || ChildSpec <- ChildSpecs];
