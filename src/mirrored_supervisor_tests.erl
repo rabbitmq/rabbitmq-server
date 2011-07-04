@@ -33,8 +33,10 @@ all_tests() ->
     passed = test_migrate_twice(),
     passed = test_already_there(),
     passed = test_delete_restart(),
+    passed = test_large_group(),
     passed.
 
+%% Simplest test
 test_migrate() ->
     with_sups(fun([A, _]) ->
                       mirrored_supervisor:start_child(a, childspec(worker)),
@@ -44,6 +46,7 @@ test_migrate() ->
                       false = (Pid1 =:= Pid2)
               end, [a, b]).
 
+%% Is migration transitive?
 test_migrate_twice() ->
     with_sups(fun([A, B]) ->
                       mirrored_supervisor:start_child(a, childspec(worker)),
@@ -56,6 +59,7 @@ test_migrate_twice() ->
                                 end, [c])
               end, [a, b]).
 
+%% Can't start the same child twice
 test_already_there() ->
     with_sups(fun([_, _]) ->
                       S = childspec(worker),
@@ -63,6 +67,7 @@ test_already_there() ->
                       {ok, Pid} = mirrored_supervisor:start_child(b, S)
               end, [a, b]).
 
+%% Deleting and restarting should work as per a normal supervisor
 test_delete_restart() ->
     with_sups(fun([_, _]) ->
                       S = childspec(worker),
@@ -76,6 +81,15 @@ test_delete_restart() ->
                       false = (Pid2 =:= Pid3)
               end, [a, b]).
 
+%% Not all the members of the group should actually do the failover
+test_large_group() ->
+    with_sups(fun([A, _, _, _]) ->
+                      mirrored_supervisor:start_child(a, childspec(worker)),
+                      Pid1 = pid_of(worker),
+                      kill(A),
+                      Pid2 = pid_of(worker),
+                      false = (Pid1 =:= Pid2)
+              end, [a, b, c, d]).
 
 %% ---------------------------------------------------------------------------
 
