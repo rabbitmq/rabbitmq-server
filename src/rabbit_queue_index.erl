@@ -76,11 +76,10 @@
 %% the segment file combined with the journal, no writing needs to be
 %% done to the segment file either (in fact it is deleted if it exists
 %% at all). This is safe given that the set of acks is a subset of the
-%% set of publishes. When it's necessary to sync messages because of
-%% transactions, it's only necessary to fsync on the journal: when
-%% entries are distributed from the journal to segment files, those
-%% segments appended to are fsync'd prior to the journal being
-%% truncated.
+%% set of publishes. When it is necessary to sync messages, it is
+%% sufficient to fsync on the journal: when entries are distributed
+%% from the journal to segment files, those segments appended to are
+%% fsync'd prior to the journal being truncated.
 %%
 %% This module is also responsible for scanning the queue index files
 %% and seeding the message store on start up.
@@ -289,14 +288,13 @@ sync(State = #qistate { unsynced_msg_ids = MsgIds }) ->
     sync_if([] =/= MsgIds, State).
 
 sync(SeqIds, State) ->
-    %% The SeqIds here contains the SeqId of every publish and ack in
-    %% the transaction. Ideally we should go through these seqids and
-    %% only sync the journal if the pubs or acks appear in the
+    %% The SeqIds here contains the SeqId of every publish and ack to
+    %% be sync'ed. Ideally we should go through these seqids and only
+    %% sync the journal if the pubs or acks appear in the
     %% journal. However, this would be complex to do, and given that
     %% the variable queue publishes and acks to the qi, and then
     %% syncs, all in one operation, there is no possibility of the
-    %% seqids not being in the journal, provided the transaction isn't
-    %% emptied (handled by sync_if anyway).
+    %% seqids not being in the journal.
     sync_if([] =/= SeqIds, State).
 
 flush(State = #qistate { dirty_count = 0 }) -> State;

@@ -44,9 +44,7 @@ behaviour_info(callbacks) ->
      %%    makes it useful for passing messages back into the backing
      %%    queue, especially as the backing queue does not have
      %%    control of its own mailbox.
-     %% 4. a synchronous callback. Same as the asynchronous callback
-     %%    but waits for completion and returns 'error' on error.
-     {init, 4},
+     {init, 3},
 
      %% Called on queue shutdown when queue isn't being deleted.
      {terminate, 2},
@@ -107,21 +105,6 @@ behaviour_info(callbacks) ->
      %% about. Must return 1 msg_id per Ack, in the same order as Acks.
      {ack, 2},
 
-     %% A publish, but in the context of a transaction.
-     {tx_publish, 5},
-
-     %% Acks, but in the context of a transaction.
-     {tx_ack, 3},
-
-     %% Undo anything which has been done in the context of the
-     %% specified transaction.
-     {tx_rollback, 2},
-
-     %% Commit a transaction. The Fun passed in must be called once
-     %% the messages have really been commited. This CPS permits the
-     %% possibility of commit coalescing.
-     {tx_commit, 4},
-
      %% Reinsert messages into the queue which have already been
      %% delivered and were pending acknowledgement.
      {requeue, 3},
@@ -175,7 +158,7 @@ behaviour_info(callbacks) ->
      %% the BQ to signal that it's already seen this message (and in
      %% what capacity - i.e. was it published previously or discarded
      %% previously) and thus the message should be dropped.
-     {is_duplicate, 3},
+     {is_duplicate, 2},
 
      %% Called to inform the BQ about messages which have reached the
      %% queue, but are not going to be further passed to BQ for some

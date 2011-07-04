@@ -20,19 +20,18 @@
 -export([pseudo_queue/2]).
 -export([lookup/1, with/2, with_or_die/2, assert_equivalence/5,
          check_exclusive_access/2, with_exclusive_access_or_die/3,
-         stat/1, deliver/2, requeue/3, ack/4, reject/4]).
+         stat/1, deliver/2, requeue/3, ack/3, reject/4]).
 -export([list/1, info_keys/0, info/1, info/2, info_all/1, info_all/2]).
 -export([consumers/1, consumers_all/1, consumer_info_keys/0]).
 -export([basic_get/3, basic_consume/7, basic_cancel/4]).
 -export([notify_sent/2, unblock/2, flush_all/2]).
--export([commit_all/3, rollback_all/3, notify_down_all/2, limit_all/3]).
+-export([notify_down_all/2, limit_all/3]).
 -export([on_node_down/1]).
 -export([store_queue/1]).
 
 
 %% internal
--export([internal_declare/2, internal_delete/1,
-         run_backing_queue/3, run_backing_queue_async/3,
+-export([internal_declare/2, internal_delete/1, run_backing_queue/3,
          sync_timeout/1, update_ram_duration/1, set_ram_duration_target/2,
          set_maximum_since_use/2, maybe_expire/1, drop_expired/1,
          emit_stats/1]).
@@ -117,12 +116,8 @@
 -spec(purge/1 :: (rabbit_types:amqqueue()) -> qlen()).
 -spec(deliver/2 :: (pid(), rabbit_types:delivery()) -> boolean()).
 -spec(requeue/3 :: (pid(), [msg_id()],  pid()) -> 'ok').
--spec(ack/4 ::
-        (pid(), rabbit_types:maybe(rabbit_types:txn()), [msg_id()], pid())
-        -> 'ok').
+-spec(ack/3 :: (pid(), [msg_id()], pid()) -> 'ok').
 -spec(reject/4 :: (pid(), [msg_id()], boolean(), pid()) -> 'ok').
--spec(commit_all/3 :: ([pid()], rabbit_types:txn(), pid()) -> ok_or_errors()).
--spec(rollback_all/3 :: ([pid()], rabbit_types:txn(), pid()) -> 'ok').
 -spec(notify_down_all/2 :: ([pid()], pid()) -> ok_or_errors()).
 -spec(limit_all/3 :: ([pid()], pid(), pid() | 'undefined') -> ok_or_errors()).
 -spec(basic_get/3 :: (rabbit_types:amqqueue(), pid(), boolean()) ->
@@ -145,9 +140,6 @@
                     fun (() -> rabbit_types:ok_or_error('not_found') |
                                rabbit_types:connection_exit())).
 -spec(run_backing_queue/3 ::
-        (pid(), atom(),
-         (fun ((atom(), A) -> {[rabbit_types:msg_id()], A}))) -> 'ok').
--spec(run_backing_queue_async/3 ::
         (pid(), atom(),
          (fun ((atom(), A) -> {[rabbit_types:msg_id()], A}))) -> 'ok').
 -spec(sync_timeout/1 :: (pid()) -> 'ok').
@@ -436,20 +428,11 @@ deliver(QPid, Delivery) ->
 requeue(QPid, MsgIds, ChPid) ->
     delegate_call(QPid, {requeue, MsgIds, ChPid}).
 
-ack(QPid, Txn, MsgIds, ChPid) ->
-    delegate_cast(QPid, {ack, Txn, MsgIds, ChPid}).
+ack(QPid, MsgIds, ChPid) ->
+    delegate_cast(QPid, {ack, MsgIds, ChPid}).
 
 reject(QPid, MsgIds, Requeue, ChPid) ->
     delegate_cast(QPid, {reject, MsgIds, Requeue, ChPid}).
-
-commit_all(QPids, Txn, ChPid) ->
-    safe_delegate_call_ok(
-      fun (QPid) -> gen_server2:call(QPid, {commit, Txn, ChPid}, infinity) end,
-      QPids).
-
-rollback_all(QPids, Txn, ChPid) ->
-    delegate:invoke_no_result(
-      QPids, fun (QPid) -> gen_server2:cast(QPid, {rollback, Txn, ChPid}) end).
 
 notify_down_all(QPids, ChPid) ->
     safe_delegate_call_ok(
@@ -501,9 +484,6 @@ internal_delete(QueueName) ->
       end).
 
 run_backing_queue(QPid, Mod, Fun) ->
-    gen_server2:call(QPid, {run_backing_queue, Mod, Fun}, infinity).
-
-run_backing_queue_async(QPid, Mod, Fun) ->
     gen_server2:cast(QPid, {run_backing_queue, Mod, Fun}).
 
 sync_timeout(QPid) ->

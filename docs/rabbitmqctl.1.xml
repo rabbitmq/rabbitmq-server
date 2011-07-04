@@ -1214,6 +1214,11 @@
                   yet acknowledged.</para></listitem>
               </varlistentry>
               <varlistentry>
+                <term>messages_uncommitted</term>
+                <listitem><para>Number of messages received in an as yet
+                  uncommitted transaction.</para></listitem>
+              </varlistentry>
+              <varlistentry>
                 <term>acks_uncommitted</term>
                 <listitem><para>Number of acknowledgements received in an as yet
                   uncommitted transaction.</para></listitem>
@@ -1238,9 +1243,8 @@
               </varlistentry>
             </variablelist>
             <para>
-              If no <command>channelinfoitem</command>s are specified
-              then pid, user, consumer_count, and
-              messages_unacknowledged are assumed.
+              If no <command>channelinfoitem</command>s are specified then pid,
+              user, consumer_count, and messages_unacknowledged are assumed.
             </para>
 
             <para role="example-prefix">
