@@ -34,6 +34,7 @@ all_tests() ->
     passed = test_already_there(),
     passed = test_delete_restart(),
     passed = test_large_group(),
+    passed = test_childspecs_at_init(),
     passed.
 
 %% Simplest test
@@ -91,6 +92,16 @@ test_large_group() ->
                       false = (Pid1 =:= Pid2)
               end, [a, b, c, d]).
 
+%% Do childspecs work when returned from init?
+test_childspecs_at_init() ->
+    S = childspec(worker),
+    with_sups(fun([A, _]) ->
+                      Pid1 = pid_of(worker),
+                      kill(A),
+                      Pid2 = pid_of(worker),
+                      false = (Pid1 =:= Pid2)
+              end, [{a, [S]}, {b, [S]}]).
+
 %% ---------------------------------------------------------------------------
 
 with_sups(Fun, Sups) ->
@@ -99,16 +110,19 @@ with_sups(Fun, Sups) ->
     [kill(Pid) || Pid <- Pids, is_process_alive(Pid)],
     passed.
 
-start_sup(Name) ->
-    start_sup(Name, group).
+start_sup(Spec) ->
+    start_sup(Spec, group).
 
-start_sup(Name, Group) ->
+start_sup({Name, ChildSpecs}, Group) ->
     {ok, Pid} = mirrored_supervisor:start_link({local, Name}, Group,
-                                               ?MODULE, []),
+                                               ?MODULE, ChildSpecs),
     %% We are not a supervisor, when we kill the supervisor we do not
     %% want to die!
     unlink(Pid),
-    {ok, Pid}.
+    {ok, Pid};
+
+start_sup(Name, Group) ->
+    start_sup({Name, []}, Group).
 
 childspec(Id) ->
     {Id, {?MODULE, start_gs, [Id]}, transient, 16#ffffffff, worker, [?MODULE]}.
