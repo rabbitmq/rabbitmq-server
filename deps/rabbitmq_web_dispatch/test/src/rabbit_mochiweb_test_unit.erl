@@ -77,10 +77,3 @@ check_contexts_errors_test_() ->
              {[{ctxt1, lstr1}, {ctxt2, lstr2}], [{'*', []}, {lstr2, []}]},
              {[{ctxt1, lstr1}, {ctxt2, lstr2}], [{'*', []}]}]].
 
-check_no_default_listener_test() ->
-    ?assertMatch({error, no_default_listener},
-                 rabbit_mochiweb_app:check_contexts(
-                  [], [])),
-    ?assertMatch({error, no_default_listener},
-                 rabbit_mochiweb_app:check_contexts(
-                   [{listener, []}], [])).
