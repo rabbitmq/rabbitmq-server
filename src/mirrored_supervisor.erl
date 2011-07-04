@@ -16,11 +16,87 @@
 
 -module(mirrored_supervisor).
 
-%% TODO documentation
-%% We need a thing like a supervisor, except that it joins something
-%% like a process group, and if a child process dies it can be
-%% restarted under another supervisor (probably on another node).
-%% For docs: start_link/2 and /3 become /3 and /4.
+%% Mirrored Supervisor
+%% ===================
+%%
+%% This module implements a new type of supervisor. It acts like a
+%% normal supervisor, but at creation time you also provide the name
+%% of a process group to join. All the supervisors within the
+%% process group act like a single large distributed supervisor:
+%%
+%% * A process with a given child_id will only exist on one
+%%   supervisor within the group.
+%%
+%% * If one supervisor fails, children may migrate to surviving
+%%   supervisors within the group.
+%%
+%%
+%% Motivation
+%% ----------
+%%
+%% Sometimes you have processes which:
+%%
+%% * Only need to exist once per cluster.
+%%
+%% * Does not contain much state (or can reconstruct its state easily).
+%%
+%% * Needs to be restarted elsewhere should it be running on a node
+%%   which fails.
+%%
+%% By creating a mirrored supervisor group with one supervisor on
+%% each node, that's what you get.
+%%
+%%
+%% API use
+%% -------
+%%
+%% This is basically the same as for supervisor, except that:
+%%
+%% 1) start_link(Module, Args) becomes
+%%    start_link(Group, Module, Args).
+%%
+%% 2) start_link({local, Name}, Module, Args) becomes
+%%    start_link({local, Name}, Group, Module, Args).
+%%
+%% 3) start_link({global, Name}, Module, Args) is not available.
+%%
+%% 4) Mnesia is used to hold global state. At some point your
+%%    application should invoke create_tables() (or table_definitions()
+%%    if it wants to manage table creation itself).
+%%
+%%
+%% Internals
+%% ---------
+%%
+%% Each mirrored_supervisor consists of three processes - the overall
+%% supervisor, the delegate supervisor and the mirroring server. The
+%% overall supervisor supervises the other two processes. Its pid is
+%% the one returned from start_link; the pids of the other two
+%% processes are effectively hidden in the API.
+%%
+%% The delegate supervisor is in charge of supervising all the child
+%% processes that are added to the supervisor as usual.
+%%
+%% The mirroring server intercepts calls to the supervisor API
+%% (directed at the overall supervisor), does any special handling,
+%% and forwards everything to the delegate supervisor.
+%%
+%% This module implements all three, hence init/1 is somewhat overloaded.
+%%
+%% The mirroring server creates and joins a process group on
+%% startup. It monitors all the existing members of this group, and
+%% broadcasts a "hello" message to them so that they can monitor it in
+%% turn. When it receives a 'DOWN' message, it checks to see if it's
+%% the "first" server in the group and restarts all the child
+%% processes from the dead supervisor if so.
+%%
+%% In the future we might load balance this.
+%%
+%% Startup is slightly fiddly. The mirroring server needs to know the
+%% Pid of the overall supervisor, but we don't have that until it has
+%% started. Therefore we set this after the fact. We also start any
+%% children we found in Module:init() at this point, since starting
+%% children requires knowing the overall supervisor pid.
 
 -define(SUPERVISOR, supervisor2).
 -define(GEN_SERVER, gen_server2).
