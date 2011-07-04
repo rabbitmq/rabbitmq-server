@@ -157,8 +157,9 @@ gm() ->
                       {attributes, [name, version, members]}]).
 
 mirrored_supervisor() ->
-    create(mirrored_sup_childspec, [{record_name, mirrored_sup_childspec},
-                                    {attributes, [id, sup_pid, childspec]}]).
+    create(mirrored_sup_childspec,
+           [{record_name, mirrored_sup_childspec},
+            {attributes, [id, mirroring_pid, childspec]}]).
 
 %%--------------------------------------------------------------------
 
