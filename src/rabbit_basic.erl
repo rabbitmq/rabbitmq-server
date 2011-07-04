@@ -170,7 +170,8 @@ publish(XName, RKey, Mandatory, Immediate, Props, Body) ->
     end.
 
 publish(X, Delivery) ->
-    {RoutingRes, DeliveredQPids} = rabbit_exchange:publish(X, Delivery),
+    {RoutingRes, DeliveredQPids} =
+        rabbit_router:deliver(rabbit_exchange:route(X, Delivery), Delivery),
     {ok, RoutingRes, DeliveredQPids}.
 
 is_message_persistent(#content{properties = #'P_basic'{

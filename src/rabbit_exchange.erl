@@ -22,7 +22,7 @@
          assert_equivalence/6, assert_args_equivalence/2, check_type/1,
          lookup/1, lookup_or_die/1, list/1,
          info_keys/0, info/1, info/2, info_all/1, info_all/2,
-         publish/2, delete/2]).
+         route/2, delete/2]).
 %% these must be run inside a mnesia tx
 -export([maybe_auto_delete/1, serial/1, peek_serial/1]).
 
@@ -66,8 +66,8 @@
 -spec(info_all/1 :: (rabbit_types:vhost()) -> [rabbit_types:infos()]).
 -spec(info_all/2 ::(rabbit_types:vhost(), rabbit_types:info_keys())
                    -> [rabbit_types:infos()]).
--spec(publish/2 :: (rabbit_types:exchange(), rabbit_types:delivery())
-                   -> {rabbit_router:routing_result(), [pid()]}).
+-spec(route/2 :: (rabbit_types:exchange(), rabbit_types:delivery())
+                 -> [rabbit_amqqueue:name()]).
 -spec(delete/2 ::
         (name(), boolean())-> 'ok' |
                               rabbit_types:error('not_found') |
@@ -224,21 +224,19 @@ info_all(VHostPath) -> map(VHostPath, fun (X) -> info(X) end).
 
 info_all(VHostPath, Items) -> map(VHostPath, fun (X) -> info(X, Items) end).
 
-publish(X = #exchange{name = XName}, Delivery) ->
-    rabbit_router:deliver(
-      route(Delivery, {queue:from_list([X]), XName, []}),
-      Delivery).
+route(X = #exchange{name = XName}, Delivery) ->
+    route1(Delivery, {queue:from_list([X]), XName, []}).
 
-route(Delivery, {WorkList, SeenXs, QNames}) ->
+route1(Delivery, {WorkList, SeenXs, QNames}) ->
     case queue:out(WorkList) of
         {empty, _WorkList} ->
             lists:usort(QNames);
         {{value, X = #exchange{type = Type}}, WorkList1} ->
             DstNames = process_alternate(
                          X, ((type_to_module(Type)):route(X, Delivery))),
-            route(Delivery,
-                  lists:foldl(fun process_route/2, {WorkList1, SeenXs, QNames},
-                              DstNames))
+            route1(Delivery,
+                   lists:foldl(fun process_route/2, {WorkList1, SeenXs, QNames},
+                               DstNames))
     end.
 
 process_alternate(#exchange{name = XName, arguments = Args}, []) ->

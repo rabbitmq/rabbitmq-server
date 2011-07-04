@@ -1217,7 +1217,21 @@
                     messages to the channel's consumers.
                     </para></listitem>
               </varlistentry>
-              <varlistentry>
+                <varlistentry>
+                <term>transactional</term>
+                <listitem><para>True if the channel is in transactional mode, false otherwise.</para></listitem>
+              </varlistentry>
+               <varlistentry>
+                <term>messages_uncommitted</term>
+                <listitem><para>Number of messages received in an as yet
+                  uncommitted transaction.</para></listitem>
+              </varlistentry>
+               <varlistentry>
+                <term>acks_uncommitted</term>
+                <listitem><para>Number of acknowledgements received in an as yet
+                  uncommitted transaction.</para></listitem>
+              </varlistentry>
+            <varlistentry>
                 <term>confirm</term>
                 <listitem><para>True if the channel is in confirm mode, false otherwise.</para></listitem>
               </varlistentry>
