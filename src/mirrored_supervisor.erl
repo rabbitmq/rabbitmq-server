@@ -45,7 +45,7 @@
 -export([init/1, handle_call/3, handle_info/2, terminate/2, code_change/3,
          handle_cast/2]).
 
--export([start_internal/3]).
+-export([start_internal/2]).
 -export([create_tables/0, table_definitions/0]).
 
 -record(mirrored_sup_childspec, {id, mirroring_pid, childspec}).
@@ -64,13 +64,9 @@ start_link({global, _SupName}, _Group, _Mod, _Args) ->
     exit(mirrored_supervisors_must_not_be_globally_named).
 
 start_link0(Prefix, Group, Mod, Args) ->
-    {ok, Pid} =
-        apply(?SUPERVISOR, start_link,
-              Prefix ++
-                  [?MODULE, {overall, Group, Mod, Args, self()}]),
-    receive
-        started -> call(Pid, {finish_startup, Pid})
-    end,
+    {ok, Pid} = apply(?SUPERVISOR, start_link,
+                      Prefix ++ [?MODULE, {overall, Group, Mod, Args}]),
+    call(Pid, {finish_startup, Pid}),
     {ok, Pid}.
 
 start_child(Sup, ChildSpec)  -> call(Sup, {start_child,  ChildSpec}).
@@ -92,27 +88,25 @@ child(Sup, Name) ->
 
 %%----------------------------------------------------------------------------
 
-start_internal(Group, ChildSpecs, Notify) ->
-    ?GEN_SERVER:start_link(
-       ?MODULE, {mirroring, Group, ChildSpecs, Notify},
-       [{timeout, infinity}]).
+start_internal(Group, ChildSpecs) ->
+    ?GEN_SERVER:start_link(?MODULE, {mirroring, Group, ChildSpecs},
+                           [{timeout, infinity}]).
 
 %%----------------------------------------------------------------------------
 
-init({overall, Group, Mod, Args, Notify}) ->
+init({overall, Group, Mod, Args}) ->
     {ok, {Restart, ChildSpecs}} = Mod:init(Args),
     Delegate = {delegate, {?SUPERVISOR, start_link,
                            [?MODULE, {delegate, Restart}]},
                 transient, 16#ffffffff, supervisor, [?SUPERVISOR]},
-    Mirroring = {mirroring, {?MODULE, start_internal,
-                             [Group, ChildSpecs, Notify]},
+    Mirroring = {mirroring, {?MODULE, start_internal, [Group, ChildSpecs]},
                  transient, 16#ffffffff, worker, [?MODULE]},
     {ok, {{one_for_all, 0, 1}, [Delegate, Mirroring]}};
 
 init({delegate, Restart}) ->
     {ok, {Restart, []}};
 
-init({mirroring, Group, ChildSpecs, Notify}) ->
+init({mirroring, Group, ChildSpecs}) ->
     pg2_fixed:create(Group),
     [begin
          gen_server2:call(Pid, {hello, self()}, infinity),
@@ -120,7 +114,6 @@ init({mirroring, Group, ChildSpecs, Notify}) ->
      end
      || Pid <- pg2_fixed:get_members(Group)],
     ok = pg2_fixed:join(Group, self()),
-    ?GEN_SERVER:cast(self(), {notify_running, Notify}),
     {ok, #state{group = Group, initial_childspecs = ChildSpecs}}.
 
 handle_call({finish_startup, Overall}, _From,
@@ -150,10 +143,6 @@ handle_call(overall_supervisor, _From, State = #state{overall = Overall}) ->
 
 handle_call(Msg, _From, State) ->
     {stop, {unexpected_call, Msg}, State}.
-
-handle_cast({notify_running, Notify}, State) ->
-    Notify ! started,
-    {noreply, State};
 
 handle_cast(Msg, State) ->
     {stop, {unexpected_cast, Msg}, State}.
