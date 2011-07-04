@@ -35,6 +35,7 @@ all_tests() ->
     passed = test_delete_restart(),
     passed = test_large_group(),
     passed = test_childspecs_at_init(),
+    passed = test_anonymous_supervisors(),
     passed.
 
 %% Simplest test
@@ -102,6 +103,15 @@ test_childspecs_at_init() ->
                       false = (Pid1 =:= Pid2)
               end, [{a, [S]}, {b, [S]}]).
 
+test_anonymous_supervisors() ->
+    with_sups(fun([A, _B]) ->
+                      mirrored_supervisor:start_child(A, childspec(worker)),
+                      Pid1 = pid_of(worker),
+                      kill(A),
+                      Pid2 = pid_of(worker),
+                      false = (Pid1 =:= Pid2)
+              end, [anon, anon]).
+
 %% ---------------------------------------------------------------------------
 
 with_sups(Fun, Sups) ->
@@ -114,8 +124,7 @@ start_sup(Spec) ->
     start_sup(Spec, group).
 
 start_sup({Name, ChildSpecs}, Group) ->
-    {ok, Pid} = mirrored_supervisor:start_link({local, Name}, Group,
-                                               ?MODULE, ChildSpecs),
+    {ok, Pid} = start_sup0(Name, Group, ChildSpecs),
     %% We are not a supervisor, when we kill the supervisor we do not
     %% want to die!
     unlink(Pid),
@@ -123,6 +132,12 @@ start_sup({Name, ChildSpecs}, Group) ->
 
 start_sup(Name, Group) ->
     start_sup({Name, []}, Group).
+
+start_sup0(anon, Group, ChildSpecs) ->
+    mirrored_supervisor:start_link(Group, ?MODULE, ChildSpecs);
+
+start_sup0(Name, Group, ChildSpecs) ->
+    mirrored_supervisor:start_link({local, Name}, Group, ?MODULE, ChildSpecs).
 
 childspec(Id) ->
     {Id, {?MODULE, start_gs, [Id]}, transient, 16#ffffffff, worker, [?MODULE]}.
