@@ -55,7 +55,7 @@ init([ConsumerPid]) ->
 %% @private
 handle_consume_ok(M, _, C) ->
     C ! M,
-    C.
+    {ok, C}.
 
 %% @private
 handle_consume(M, A, C) ->
@@ -65,22 +65,22 @@ handle_consume(M, A, C) ->
 %% @private
 handle_cancel_ok(M, _, C) ->
     C ! M,
-    C.
+    {ok, C}.
 
 %% @private
 handle_cancel(M, C) ->
     C ! M,
-    C.
+    {ok, C}.
 
 %% @private
 handle_deliver(M, A, C) ->
     C ! {M, A},
-    C.
+    {ok, C}.
 
 %% @private
 handle_info({'DOWN', MRef, process, Pid, Info}, C) ->
     C ! {'DOWN', MRef, process, Pid, Info},
-    C.
+    {ok, C}.
 
 %% @private
 handle_call(M, A, C) ->

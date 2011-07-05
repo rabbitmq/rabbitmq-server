@@ -65,11 +65,13 @@ behaviour_info(callbacks) ->
      %% an error, return {stop, Reason} or ignore.
      {init, 1},
 
-     %% handle_consume_ok(ConsumeOk, Consume, State) -> NewState
+     %% handle_consume_ok(ConsumeOk, Consume, State) ->
+     %%                     {ok, NewState} | {error, Reason, NewState}
      %% where
      %%      ConsumeOk = #'basic.consume_ok'{}
      %%      Consume = #'basic.consume'{}
      %%      State = state()
+     %%      Reason = term()
      %%      NewState = state()
      %%
      %% This callback is invoked by the channel every time a
@@ -79,53 +81,62 @@ behaviour_info(callbacks) ->
      {handle_consume_ok, 3},
 
      %% handle_consume(Consume, Sender, State) ->
-     %%                     {ok, NewState} | {error, NewState}
+     %%                     {ok, NewState} | {error, Reason, NewState}
      %% where
      %%      Consume = #'basic.consume'{}
      %%      Sender = pid()
      %%      State = state()
+     %%      Reason = term()
      %%      NewState = state()
      %%
      %% This callback is invoked by the channel before a basic.consume
      %% is sent to the server.
      {handle_consume, 3},
 
-     %% handle_cancel_ok(CancelOk, Cancel, State) -> NewState
+     %% handle_cancel_ok(CancelOk, Cancel, State) ->
+     %%                     {ok, NewState} | {error, Reason, NewState}
      %% where
      %%      CancelOk = #'basic.cancel_ok'{}
      %%      Cancel = #'basic.cancel'{}
      %%      State = state()
+     %%      Reason = term()
      %%      NewState = state()
      %%
      %% This callback is invoked by the channel every time a basic.cancel_ok
      %% is received from the server.
      {handle_cancel_ok, 3},
 
-     %% handle_cancel(Cancel, State) -> NewState
+     %% handle_cancel(Cancel, State) ->
+     %%                     {ok, NewState} | {error, Reason, NewState}
      %% where
      %%      Cancel = #'basic.cancel'{}
      %%      State = state()
+     %%      Reason = term()
      %%      NewState = state()
      %%
      %% This callback is invoked by the channel every time a basic.cancel
      %% is received from the server.
      {handle_cancel, 2},
 
-     %% handle_deliver(Deliver, Message, State) -> NewState
+     %% handle_deliver(Deliver, Message, State) ->
+     %%                     {ok, NewState} | {error, Reason, NewState}
      %% where
      %%      Deliver = #'basic.deliver'{}
      %%      Message = #amqp_msg{}
      %%      State = state()
+     %%      Reason = term()
      %%      NewState = state()
      %%
      %% This callback is invoked by the channel every time a basic.deliver
      %% is received from the server.
      {handle_deliver, 3},
 
-     %% handle_info(Info, State) -> NewState
+     %% handle_info(Info, State) ->
+     %%                     {ok, NewState} | {error, Reason, NewState}
      %% where
      %%      Info = any()
      %%      State = state()
+     %%      Reason = term()
      %%      NewState = state()
      %%
      %% This callback is invoked the consumer process receives a
@@ -133,7 +144,8 @@ behaviour_info(callbacks) ->
      {handle_info, 2},
 
      %% handle_call(Call, From, State) -> {reply, Reply, NewState} |
-     %%                                   {noreply, NewState}
+     %%                                   {noreply, NewState} |
+     %%                                   {error, Reason, NewState}
      %% where
      %%      Call = any()
      %%      From = any()
@@ -149,11 +161,10 @@ behaviour_info(callbacks) ->
      %% argument.
      {handle_call, 3},
 
-     %% terminate(Reason, State) -> NewState
+     %% terminate(Reason, State) -> any()
      %% where
      %%      Reason = any()
      %%      State = state()
-     %%      NewState = state()
      %%
      %% This callback is invoked by the channel after it has shut down and
      %% just before its process exits.
@@ -191,29 +202,38 @@ handle_call({consumer_call, Call}, From,
 handle_call({consumer_call, Method, Args}, _From,
             State = #state{module       = ConsumerModule,
                            module_state = MState}) ->
-    {Ok, NewMState} =
+    Return =
         case Method of
             #'basic.consume'{} ->
                 {Pid, _} = Args,
                 ConsumerModule:handle_consume(Method, Pid, MState);
             #'basic.consume_ok'{} ->
-                {ok, ConsumerModule:handle_consume_ok(Method, Args, MState)};
+                ConsumerModule:handle_consume_ok(Method, Args, MState);
             #'basic.cancel_ok'{} ->
-                {ok, ConsumerModule:handle_cancel_ok(Method, Args, MState)};
+                ConsumerModule:handle_cancel_ok(Method, Args, MState);
             #'basic.cancel'{} ->
-                {ok, ConsumerModule:handle_cancel(Method, MState)};
+                ConsumerModule:handle_cancel(Method, MState);
             #'basic.deliver'{} ->
-                {ok, ConsumerModule:handle_deliver(Method, Args, MState)}
+                ConsumerModule:handle_deliver(Method, Args, MState)
         end,
-    {reply, Ok, State#state{module_state = NewMState}}.
+    case Return of
+        {ok, NewMState} ->
+            {reply, ok, State#state{module_state = NewMState}};
+        {error, Reason, NewMState} ->
+            {stop, Reason, State#state{module_state = NewMState}}
+    end.
 
 handle_cast(_What, State) ->
     {noreply, State}.
 
 handle_info(Info, State = #state{module_state = MState,
                                  module       = ConsumerModule}) ->
-    NewMState = ConsumerModule:handle_info(Info, MState),
-    {noreply, State#state{module_state = NewMState}}.
+    case ConsumerModule:handle_info(Info, MState) of
+        {ok, NewMState} ->
+            {noreply, State#state{module_state = NewMState}};
+        {error, Reason, NewMState} ->
+            {stop, Reason, State#state{module_state = NewMState}}
+    end.
 
 terminate(Reason, #state{module = ConsumerModule, module_state = MState}) ->
     ConsumerModule:terminate(Reason, MState).

@@ -493,19 +493,21 @@ confirm_test(Connection) ->
 
 default_consumer_test(Connection) ->
     {ok, Channel} = amqp_connection:open_channel(Connection),
+    io:format("default consumer is ~p~n", [self()]),
     amqp_selective_consumer:register_default_consumer(Channel, self()),
 
     #'queue.declare_ok'{queue = Q}
         = amqp_channel:call(Channel, #'queue.declare'{}),
-    spawn(fun () ->
-                  #'basic.consume_ok'{} =
-                      amqp_channel:call(Channel,
-                                        #'basic.consume'{queue = Q}),
-                  io:format("little consumer died out~n"),
-                  exit('consumer_out')
-          end),
+    Pid = spawn(fun () ->
+                        #'basic.consume_ok'{} =
+                            amqp_channel:call(Channel,
+                                              #'basic.consume'{queue = Q}),
+                        exit('consumer_out')
+                end),
+    monitor(process, Pid),
     receive
-    after 500 -> ok
+        {'DOWN', _, process, _, _} ->
+            io:format("little consumer died out~n")
     end,
     Payload = <<"for the default consumer">>,
     amqp_channel:call(Channel,

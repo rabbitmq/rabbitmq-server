@@ -83,26 +83,26 @@ init([]) ->
 handle_consume_ok(BasicConsumeOk, BasicConsume, State) ->
     State1 = assign_consumer(BasicConsume, tag(BasicConsumeOk), State),
     deliver(BasicConsumeOk, State1),
-    State1.
+    {ok, State1}.
 
 %% @private
 handle_cancel_ok(CancelOk, _Cancel, State) ->
     State1 = do_cancel(CancelOk, State),
     %% Use old state
     deliver(CancelOk, State),
-    State1.
+    {ok, State1}.
 
 %% @private
 handle_cancel(Cancel, State) ->
     State1 = do_cancel(Cancel, State),
     %% Use old state
     deliver(Cancel, State),
-    State1.
+    {ok, State1}.
 
 %% @private
 handle_deliver(Deliver, Message, State) ->
     deliver(Deliver, Message, State),
-    State.
+    {ok, State}.
 
 %% @private
 handle_consume(BasicConsume, Pid, State = #state{consumers = Consumers,
@@ -135,7 +135,7 @@ handle_consume(BasicConsume, Pid, State = #state{consumers = Consumers,
                              monitors = dict:store(Pid, monitor(process, Pid),
                                                    Monitors)}};
         {false, #'basic.consume'{nowait = true}} ->
-            {error, State};
+            {error, 'no_consumer_tag_specified', State};
         {false, #'basic.consume'{nowait = false}} ->
             %% Don't do anything (don't override existing
             %% consumers), the server will close the channel with an error.
@@ -149,18 +149,19 @@ handle_info({'DOWN', _MRef, process, Pid, _Info},
                            default_consumer = DConsumer }) ->
     case dict:find(Pid, Monitors) of
         {ok, _Tag} ->
-            State#state{monitors = dict:erase(Pid, Monitors),
-                        consumers =
-                            dict:filter(
-                              fun (_, Pid1) when Pid1 =:= Pid -> false;
-                                  (_, _)                      -> true
-                              end, Consumers)};
+            {ok, State#state{monitors = dict:erase(Pid, Monitors),
+                             consumers =
+                                 dict:filter(
+                                   fun (_, Pid1) when Pid1 =:= Pid -> false;
+                                       (_, _)                      -> true
+                                   end, Consumers)}};
         error ->
             case Pid of
-                DConsumer -> State#state{monitors = dict:erase(Pid, Monitors),
-                                         default_consumer = none};
-                _         -> State %% unnamed consumer went down
-                                   %% before receiving consume_ok
+                DConsumer -> {ok, State#state{
+                                    monitors = dict:erase(Pid, Monitors),
+                                    default_consumer = none}};
+                _         -> {ok, State} %% unnamed consumer went down
+                                         %% before receiving consume_ok
             end
     end.
 
