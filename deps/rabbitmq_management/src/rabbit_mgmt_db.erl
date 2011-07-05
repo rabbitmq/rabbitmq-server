@@ -245,13 +245,12 @@ handle_call({get_annotated_channels, Mode}, _From,
                  coarse   -> list_channel_stats(Chans, State);
                  detailed -> detail_channel_stats(Chans, State)
              end,
-    {reply, lists:map(fun result_or_error/1, Result), State};
+    {reply, Result, State};
 
 handle_call(get_annotated_connections, _From,
             State = #state{tables = Tables}) ->
     Conns = created_events(connection_stats, Tables),
-    Result = connection_stats(Conns, State),
-    {reply, lists:map(fun result_or_error/1, Result), State};
+    {reply, connection_stats(Conns, State), State};
 
 handle_call({get_overview, User}, _From, State = #state{tables = Tables}) ->
     VHosts = case User of
