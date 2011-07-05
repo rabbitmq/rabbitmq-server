@@ -38,14 +38,30 @@ get_active_suffix(X, Upstream, Default) ->
             Default
     end.
 
-set_active_suffix(X, Upstream, Suffix) ->
+set_active_suffix(X = #resource{name = XName, virtual_host = VHost},
+                  Upstream = #upstream{upstream_set = SetName}, Suffix) ->
     ok = rabbit_exchange:update_scratch(
            X, fun(Scratch) ->
-                      Dict = case Scratch of
-                                 undefined -> ?DICT:new();
-                                 _         -> Scratch
-                             end,
-                      ?DICT:store(key(Upstream), Suffix, Dict)
+                      OldDict = case Scratch of
+                                    undefined -> ?DICT:new();
+                                    _         -> Scratch
+                                end,
+                      %% We want to make sure old keys don't stay around, so
+                      %% reconstruct the dict from scratch.
+                      {ok, Upstreams} = rabbit_federation_upstream:from_set(
+                                          SetName, XName, VHost),
+                      Key = key(Upstream),
+                      lists:foldl(
+                        fun(U, D) ->
+                                K = key(U),
+                                case K of
+                                    Key -> ?DICT:store(K, Suffix, D);
+                                    _   -> case ?DICT:find(K, OldDict) of
+                                               {ok, V} -> ?DICT:store(K, V, D);
+                                               _       -> D
+                                           end
+                                end
+                        end, ?DICT:new(), Upstreams)
               end).
 
 key(#upstream{connection_name = ConnName, exchange = X}) -> {ConnName, X}.
