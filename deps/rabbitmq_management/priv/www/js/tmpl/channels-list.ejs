@@ -3,7 +3,7 @@
      var col_return_unroutable = !is_col_empty(channels, 'return_unroutable');
      var col_return_not_delivered = !is_col_empty(channels, 'return_not_delivered');
      var col_redeliver = !is_col_empty(channels, 'redeliver');
-     var ratesWidth = 4 + (col_return_unroutable ? 1 : 0) + (col_return_not_delivered ? 1 : 0) + (col_redeliver ? 1 : 0);
+     var ratesWidth = 4 + (col_return_unroutable ? 1 : 0) + (col_return_not_delivered ? 1 : 0);
 %>
 <table class="list">
  <thead>
@@ -35,18 +35,20 @@
     <th><%= fmt_sort('Unconfirmed',     'messages_unconfirmed') %></th>
     <th><%= fmt_sort('Status',          'idle_since') %></th>
 <% if (statistics_level == 'fine') { %>
-    <th><%= fmt_sort('publish',         'message_stats.publish_details.rate') %></th>
-    <th><%= fmt_sort('confirm',         'message_stats.confirm_details.rate') %></th>
-    <th><%= fmt_sort('deliver / get',   'message_stats.deliver_get_details.rate') %></th>
-    <th><%= fmt_sort('ack',             'message_stats.ack_details.rate') %></th>
+    <th><%= fmt_sort('publish', 'message_stats.publish_details.rate') %></th>
+    <th><%= fmt_sort('confirm', 'message_stats.confirm_details.rate') %></th>
+    <th>
+      <%= fmt_sort('deliver / get', 'message_stats.deliver_get_details.rate') %>
+      <% if (col_redeliver) { %>
+        <sub><%= fmt_sort('of which redelivered', 'message_stats.redeliver_details.rate') %></sub>
+      <% } %>
+    </th>
+    <th><%= fmt_sort('ack', 'message_stats.ack_details.rate') %></th>
     <% if (col_return_unroutable) { %>
         <th><%= fmt_sort('return (mandatory)', 'message_stats.return_unroutable_details.rate') %></th>
     <% } %>
     <% if (col_return_not_delivered) { %>
         <th><%= fmt_sort('return (immediate)', 'message_stats.return_not_delivered_details.rate') %></th>
-    <% } %>
-    <% if (col_redeliver) { %>
-        <th><%= fmt_sort('redeliver', 'message_stats.redeliver_details.rate') %></th>
     <% } %>
 <% } %>
 <% } else { %>
@@ -60,16 +62,18 @@
 <% if (statistics_level == 'fine') { %>
     <th>publish</th>
     <th>confirm</th>
-    <th>deliver / get</th>
+    <th>
+      deliver / get
+      <% if (col_redeliver) { %>
+        <sub>of which redelivered</sub>
+        <% } %>
+    </th>
     <th>ack</th>
     <% if (col_return_unroutable) { %>
         <th>return (mandatory)</th>
     <% } %>
     <% if (col_return_not_delivered) { %>
         <th>return (immediate)</th>
-    <% } %>
-    <% if (col_redeliver) { %>
-        <th>redeliver</th>
     <% } %>
 <% } %>
 <% } %>
@@ -106,16 +110,18 @@
 <% if (statistics_level == 'fine') { %>
     <td class="r"><%= fmt_rate(channel.message_stats, 'publish') %></td>
     <td class="r"><%= fmt_rate(channel.message_stats, 'confirm') %></td>
-    <td class="r"><%= fmt_rate(channel.message_stats, 'deliver_get') %></td>
+    <td class="r">
+      <%= fmt_rate(channel.message_stats, 'deliver_get') %>
+      <% if (col_redeliver) { %>
+        <sub><%= fmt_rate(channel.message_stats, 'redeliver') %></sub>
+      <% } %>
+    </td>
     <td class="r"><%= fmt_rate(channel.message_stats, 'ack') %></td>
     <% if (col_return_unroutable) { %>
     <td class="r"><%= fmt_rate(channel.message_stats, 'return_unroutable') %></td>
     <% } %>
     <% if (col_return_not_delivered) { %>
     <td class="r"><%= fmt_rate(channel.message_stats, 'return_not_delivered') %></td>
-    <% } %>
-    <% if (col_redeliver) { %>
-        <td class="r"><%= fmt_rate(channel.message_stats, 'redeliver') %></td>
     <% } %>
 <% } %>
   </tr>

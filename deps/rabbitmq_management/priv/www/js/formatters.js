@@ -164,10 +164,11 @@ function is_stat_empty(obj, name) {
     return false;
 }
 
-function is_col_empty(channels, name) {
-    for (var i = 0; i < channels.length; i++) {
-        var channel = channels[i];
-        if (!is_stat_empty(channel.message_stats, name)) {
+function is_col_empty(objects, name, accessor) {
+    if (accessor == undefined) accessor = function(o) {return o.message_stats;};
+    for (var i = 0; i < objects.length; i++) {
+        var object = objects[i];
+        if (!is_stat_empty(accessor(object), name)) {
             return false;
         }
     }
