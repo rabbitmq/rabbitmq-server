@@ -516,6 +516,10 @@ queue_blocked(QPid, State = #ch{blocking = Blocking}) ->
                       State#ch{blocking = Blocking1}
     end.
 
+blind_confirm({#delivery{message    = #basic_message{exchange_name = XName},
+                         msg_seq_no = MsgSeqNo}, _QNames}, State) ->
+    record_confirm(MsgSeqNo, XName, State).
+
 record_confirm(undefined, _, State) ->
     State;
 record_confirm(MsgSeqNo, XName, State) ->
@@ -1051,10 +1055,12 @@ handle_method(#'tx.rollback'{}, _, #ch{tx_enabled = false}) ->
     rabbit_misc:protocol_error(
       precondition_failed, "channel is not transactional", []);
 
-handle_method(#'tx.rollback'{}, _, State = #ch{unacked_message_q = UAMQ,
-                                               uncommitted_ack_q = TAQ}) ->
-    {reply, #'tx.rollback_ok'{}, new_tx(State#ch{unacked_message_q =
-                                                     queue:join(TAQ, UAMQ)})};
+handle_method(#'tx.rollback'{}, _, State = #ch{unacked_message_q     = UAMQ,
+                                               uncommitted_message_q = TMQ,
+                                               uncommitted_ack_q     = TAQ}) ->
+    State1 = rabbit_misc:queue_fold(fun blind_confirm/2, State, TMQ),
+    {reply, #'tx.rollback_ok'{}, new_tx(State1#ch{unacked_message_q =
+                                                      queue:join(TAQ, UAMQ)})};
 
 handle_method(#'confirm.select'{nowait = NoWait}, _, State) ->
     return_ok(State#ch{confirm_enabled = true},
