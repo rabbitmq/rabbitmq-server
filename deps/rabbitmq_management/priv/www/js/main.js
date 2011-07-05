@@ -1,5 +1,6 @@
 var statistics_level;
 var user_administrator;
+var user_monitor;
 var nodes_interesting;
 var vhosts_interesting;
 
@@ -9,6 +10,7 @@ $(document).ready(function() {
     replace_content('login', '<p>User: <b>' + user.name + '</b></p>');
     var tags = user.tags.split(",");
     user_administrator = jQuery.inArray("administrator", tags) != -1;
+    user_monitor = jQuery.inArray("monitor", tags) != -1;
     nodes_interesting = user_administrator &&
         JSON.parse(sync_get('/nodes')).length > 1;
     vhosts_interesting = JSON.parse(sync_get('/vhosts')).length > 1;
@@ -95,7 +97,7 @@ function dispatcher() {
     }
     this.get('#/', function() {
             var reqs = {'overview': '/overview'};
-            if (user_administrator) {
+            if (user_monitor) {
                 reqs['nodes'] = '/nodes';
             }
             render(reqs, 'overview', '#/');

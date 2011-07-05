@@ -25,9 +25,6 @@
          get_all_channels/1, get_all_connections/0,
          get_overview/1, get_overview/0]).
 
-%% TODO can these not be exported any more?
--export([add/2, rates/5]).
-
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3]).
 
@@ -122,10 +119,6 @@ pset(Key, Value, List) -> [{Key, Value} | proplists:delete(Key, List)].
 
 id(Pid) when is_pid(Pid) -> Pid;
 id(List) -> pget(pid, List).
-
-add(unknown, _) -> unknown;
-add(_, unknown) -> unknown;
-add(A, B)       -> A + B.
 
 lookup_element(Table, Key) -> lookup_element(Table, Key, 2).
 
