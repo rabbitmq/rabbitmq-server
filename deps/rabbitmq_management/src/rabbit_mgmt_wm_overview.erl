@@ -35,7 +35,7 @@ to_json(ReqData, Context = #context{user = User = #user{tags = Tags}}) ->
     Overview0 = [{management_version, version()},
                  {statistics_level,   StatsLevel}],
     Overview =
-        case rabbit_mgmt_util:is_admin(Tags) of
+        case rabbit_mgmt_util:is_monitor(Tags) of
             true ->
                 Overview0 ++
                     rabbit_mgmt_db:get_overview() ++
