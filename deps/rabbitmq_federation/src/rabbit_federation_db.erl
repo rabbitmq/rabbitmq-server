@@ -48,8 +48,4 @@ set_active_suffix(X, Upstream, Suffix) ->
                       ?DICT:store(key(Upstream), Suffix, Dict)
               end).
 
-key(#upstream{params   = #amqp_params_network{host         = Host,
-                                              port         = Port,
-                                              virtual_host = VHost},
-              exchange = X}) ->
-    {Host, Port, VHost, X}.
+key(#upstream{connection_name = ConnName, exchange = X}) -> {ConnName, X}.

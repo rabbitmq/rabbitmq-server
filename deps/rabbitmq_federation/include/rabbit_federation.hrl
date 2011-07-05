@@ -20,6 +20,7 @@
                    max_hops,
                    reconnect_delay,
                    expires,
-                   message_ttl}).
+                   message_ttl,
+                   connection_name}).
 
 -define(SUPERVISOR, rabbit_federation_sup).
