@@ -37,8 +37,8 @@ overview_test() ->
     %% Rather crude, but this req doesn't say much and at least this means it
     %% didn't blow up.
     true = 0 < length(pget(listeners, http_get("/overview"))),
-    http_put("/users/myuser", [{password,      <<"myuser">>},
-                               {tags, <<"">>}], ?NO_CONTENT),
+    http_put("/users/myuser", [{password, <<"myuser">>},
+                               {tags,     <<"management">>}], ?NO_CONTENT),
     http_get("/overview", "myuser", "myuser", ?OK),
     http_delete("/users/myuser", ?NO_CONTENT),
     %% TODO uncomment when priv works in test
@@ -46,12 +46,32 @@ overview_test() ->
     ok.
 
 nodes_test() ->
-    assert_list([[{type, <<"disc">>}, {running, true}]], http_get("/nodes")).
+    http_put("/users/user", [{password, <<"user">>},
+                             {tags, <<"management">>}], ?NO_CONTENT),
+    http_put("/users/monitor", [{password, <<"monitor">>},
+                                {tags, <<"monitoring">>}], ?NO_CONTENT),
+    DiscNode = [{type, <<"disc">>}, {running, true}],
+    assert_list([DiscNode], http_get("/nodes")),
+    assert_list([DiscNode], http_get("/nodes", "monitor", "monitor", ?OK)),
+    http_get("/nodes", "user", "user", ?NOT_AUTHORISED),
+    [Node] = http_get("/nodes"),
+    Path = "/nodes/" ++ binary_to_list(pget(name, Node)),
+    assert_item(DiscNode, http_get(Path, ?OK)),
+    assert_item(DiscNode, http_get(Path, "monitor", "monitor", ?OK)),
+    http_get(Path, "user", "user", ?NOT_AUTHORISED),
+    http_delete("/users/user", ?NO_CONTENT),
+    http_delete("/users/monitor", ?NO_CONTENT),
+    ok.
 
 auth_test() ->
+    http_put("/users/user", [{password, <<"user">>},
+                             {tags, <<"">>}], ?NO_CONTENT),
     test_auth(?NOT_AUTHORISED, []),
+    test_auth(?NOT_AUTHORISED, [auth_header("user", "user")]),
     test_auth(?NOT_AUTHORISED, [auth_header("guest", "gust")]),
-    test_auth(?OK, [auth_header("guest", "guest")]).
+    test_auth(?OK, [auth_header("guest", "guest")]),
+    http_delete("/users/user", ?NO_CONTENT),
+    ok.
 
 %% This test is rather over-verbose as we're trying to test understanding of
 %% Webmachine
@@ -79,10 +99,10 @@ users_test() ->
     http_get("/users/myuser", ?NOT_FOUND),
     http_put_raw("/users/myuser", "Something not JSON", ?BAD_REQUEST),
     http_put("/users/myuser", [{flim, <<"flam">>}], ?BAD_REQUEST),
-    http_put("/users/myuser", [{tags, <<"">>}], ?NO_CONTENT),
+    http_put("/users/myuser", [{tags, <<"management">>}], ?NO_CONTENT),
     http_put("/users/myuser", [{password_hash,
                                 <<"IECV6PZI/Invh0DL187KFpkO5Jc=">>},
-                               {tags, <<"">>}], ?NO_CONTENT),
+                               {tags, <<"management">>}], ?NO_CONTENT),
     http_put("/users/myuser", [{password, <<"password">>},
                                {tags, <<"administrator, foo">>}], ?NO_CONTENT),
     assert_item([{name, <<"myuser">>}, {tags, <<"administrator,foo">>}],
@@ -371,7 +391,7 @@ permissions_administrator_test() ->
     http_put("/users/notadmin", [{password, <<"notadmin">>},
                                  {tags, <<"administrator">>}], ?NO_CONTENT),
     http_put("/users/notadmin", [{password, <<"notadmin">>},
-                                 {tags, <<"">>}], ?NO_CONTENT),
+                                 {tags, <<"management">>}], ?NO_CONTENT),
     Test =
         fun(Path) ->
                 http_get(Path, "notadmin", "notadmin", ?NOT_AUTHORISED),
@@ -395,7 +415,7 @@ permissions_vhost_test() ->
     QArgs = [],
     PermArgs = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
     http_put("/users/myuser", [{password, <<"myuser">>},
-                               {tags, <<"">>}], ?NO_CONTENT),
+                               {tags, <<"management">>}], ?NO_CONTENT),
     http_put("/vhosts/myvhost1", [], ?NO_CONTENT),
     http_put("/vhosts/myvhost2", [], ?NO_CONTENT),
     http_put("/permissions/myvhost1/myuser", PermArgs, ?NO_CONTENT),
@@ -449,7 +469,7 @@ permissions_amqp_test() ->
     PermArgs = [{configure, <<"foo.*">>}, {write, <<"foo.*">>},
                 {read,      <<"foo.*">>}],
     http_put("/users/myuser", [{password, <<"myuser">>},
-                               {tags, <<"">>}], ?NO_CONTENT),
+                               {tags, <<"management">>}], ?NO_CONTENT),
     http_put("/permissions/%2f/myuser", PermArgs, ?NO_CONTENT),
     http_put("/queues/%2f/bar-queue", QArgs, "myuser", "myuser",
              ?NOT_AUTHORISED),
@@ -474,28 +494,51 @@ get_conn(Username, Password) ->
 permissions_connection_channel_test() ->
     PermArgs = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
     http_put("/users/user", [{password, <<"user">>},
-                             {tags, <<"">>}], ?NO_CONTENT),
+                             {tags, <<"management">>}], ?NO_CONTENT),
     http_put("/permissions/%2f/user", PermArgs, ?NO_CONTENT),
-    {Conn1, ConnPath1, ChPath1} = get_conn("user", "user"),
-    {Conn2, ConnPath2, ChPath2} = get_conn("guest", "guest"),
+    http_put("/users/monitor", [{password, <<"monitor">>},
+                            {tags, <<"monitoring">>}], ?NO_CONTENT),
+    http_put("/permissions/%2f/monitor", PermArgs, ?NO_CONTENT),
+    {Conn1, UserConn, UserCh} = get_conn("user", "user"),
+    {Conn2, MonConn, MonCh} = get_conn("monitor", "monitor"),
+    {Conn3, AdmConn, AdmCh} = get_conn("guest", "guest"),
     {ok, _Ch1} = amqp_connection:open_channel(Conn1),
     {ok, _Ch2} = amqp_connection:open_channel(Conn2),
+    {ok, _Ch3} = amqp_connection:open_channel(Conn3),
 
-    2 = length(http_get("/connections", ?OK)),
-    1 = length(http_get("/connections", "user", "user", ?OK)),
-    http_get(ConnPath1, ?OK),
-    http_get(ConnPath2, ?OK),
-    http_get(ConnPath1, "user", "user", ?OK),
-    http_get(ConnPath2, "user", "user", ?NOT_AUTHORISED),
-    2 = length(http_get("/channels", ?OK)),
-    1 = length(http_get("/channels", "user", "user", ?OK)),
-    http_get(ChPath1, ?OK),
-    http_get(ChPath2, ?OK),
-    http_get(ChPath1, "user", "user", ?OK),
-    http_get(ChPath2, "user", "user", ?NOT_AUTHORISED),
-    amqp_connection:close(Conn1),
-    amqp_connection:close(Conn2),
+    AssertLength = fun (Path, User, Len) ->
+                           ?assertEqual(Len,
+                                        length(http_get(Path, User, User, ?OK)))
+                   end,
+    [begin
+         AssertLength(P, "user", 1),
+         AssertLength(P, "monitor", 3),
+         AssertLength(P, "guest", 3)
+     end || P <- ["/connections", "/channels"]],
+
+    AssertRead = fun(Path, UserStatus) ->
+                         http_get(Path, "user", "user", UserStatus),
+                         http_get(Path, "monitor", "monitor", ?OK),
+                         http_get(Path, ?OK)
+                 end,
+    AssertRead(UserConn, ?OK),
+    AssertRead(MonConn, ?NOT_AUTHORISED),
+    AssertRead(AdmConn, ?NOT_AUTHORISED),
+    AssertRead(UserCh, ?OK),
+    AssertRead(MonCh, ?NOT_AUTHORISED),
+    AssertRead(AdmCh, ?NOT_AUTHORISED),
+
+    AssertClose = fun(Path, User, Status) ->
+                          http_delete(Path, User, User, Status)
+                  end,
+    AssertClose(UserConn, "monitor", ?NOT_AUTHORISED),
+    AssertClose(MonConn, "user", ?NOT_AUTHORISED),
+    AssertClose(AdmConn, "guest", ?NO_CONTENT),
+    AssertClose(MonConn, "guest", ?NO_CONTENT),
+    AssertClose(UserConn, "user", ?NO_CONTENT),
+
     http_delete("/users/user", ?NO_CONTENT),
+    http_delete("/users/monitor", ?NO_CONTENT),
     http_get("/connections/foo", ?NOT_FOUND),
     http_get("/channels/foo", ?NOT_FOUND),
     ok.
@@ -760,7 +803,7 @@ get_test() ->
 
 get_fail_test() ->
     http_put("/users/myuser", [{password, <<"password">>},
-                               {tags, <<"">>}], ?NO_CONTENT),
+                               {tags, <<"management">>}], ?NO_CONTENT),
     http_put("/queues/%2f/myqueue", [], ?NO_CONTENT),
     http_post("/queues/%2f/myqueue/get",
               [{requeue,  false},
@@ -792,7 +835,7 @@ publish_fail_test() ->
     Msg = msg(<<"myqueue">>, [], <<"Hello world">>),
     http_put("/queues/%2f/myqueue", [], ?NO_CONTENT),
     http_put("/users/myuser", [{password, <<"password">>},
-                               {tags, <<"">>}], ?NO_CONTENT),
+                               {tags, <<"management">>}], ?NO_CONTENT),
     http_post("/exchanges/%2f/amq.default/publish", Msg, "myuser", "password",
               ?NOT_AUTHORISED),
     Msg2 = [{exchange,         <<"">>},
@@ -880,8 +923,11 @@ http_upload_raw(Type, Path, Body, User, Pass, CodeExp) ->
     decode(CodeExp, Headers, ResBody).
 
 http_delete(Path, CodeExp) ->
+    http_delete(Path, "guest", "guest", CodeExp).
+
+http_delete(Path, User, Pass, CodeExp) ->
     {ok, {{_HTTP, CodeAct, _}, Headers, ResBody}} =
-        req(delete, Path, [auth_header()]),
+        req(delete, Path, [auth_header(User, Pass)]),
     assert_code(CodeExp, CodeAct, "DELETE", Path, ResBody),
     decode(CodeExp, Headers, ResBody).
 
@@ -910,9 +956,6 @@ cleanup({K, V}) when is_binary(K) ->
     {list_to_atom(binary_to_list(K)), cleanup(V)};
 cleanup(I) ->
     I.
-
-auth_header() ->
-    auth_header("guest", "guest").
 
 auth_header(Username, Password) ->
     {"Authorization",
