@@ -40,7 +40,7 @@
 -behaviour(amqp_gen_consumer).
 
 -export([init/1, handle_consume_ok/3, handle_consume/3, handle_cancel_ok/3,
-         handle_cancel/2, handle_deliver/3, handle_down/4, handle_call/3,
+         handle_cancel/2, handle_deliver/3, handle_info/2, handle_call/3,
          terminate/2]).
 
 %%---------------------------------------------------------------------------
@@ -78,8 +78,8 @@ handle_deliver(M, A, C) ->
     C.
 
 %% @private
-handle_down(M, P, I, C) ->
-    C ! {'DOWN', M, process, P, I},
+handle_info({'DOWN', MRef, process, Pid, Info}, C) ->
+    C ! {'DOWN', MRef, process, Pid, Info},
     C.
 
 %% @private

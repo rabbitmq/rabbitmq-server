@@ -31,7 +31,7 @@
 -spec(handle_cancel_ok/3 :: (cancel_ok(), cancel(), state()) -> state()).
 -spec(handle_cancel/2 :: (cancel(), state()) -> state()).
 -spec(handle_deliver/3 :: (deliver(), #amqp_msg{}, state()) -> state()).
--spec(handle_down/4 :: (reference(), pid(), any(), state()) -> state()).
+-spec(handle_info/2 :: (any(), state()) -> state()).
 -spec(handle_call/3 :: (any(), from(), state()) ->
                            {reply, any(), state()} | {noreply, state()}).
 -spec(terminate/2 :: (any(), state()) -> state()).

@@ -45,7 +45,7 @@
 
 -export([register_default_consumer/2]).
 -export([init/1, handle_consume_ok/3, handle_consume/3, handle_cancel_ok/3,
-         handle_cancel/2, handle_deliver/3, handle_down/4, handle_call/3,
+         handle_cancel/2, handle_deliver/3, handle_info/2, handle_call/3,
          terminate/2]).
 
 -record(state, {consumers             = dict:new(), %% Tag -> ConsumerPid
@@ -143,7 +143,7 @@ handle_consume(BasicConsume, Pid, State = #state{consumers = Consumers,
     end.
 
 %% @private
-handle_down(_MRef, Pid, _Info,
+handle_info({'DOWN', _MRef, process, Pid, _Info},
             State = #state{monitors         = Monitors,
                            consumers        = Consumers,
                            default_consumer = DConsumer }) ->
