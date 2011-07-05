@@ -42,8 +42,24 @@
 start_link(ConsumerModule, ExtraParams) ->
     gen_server2:start_link(?MODULE, [ConsumerModule, ExtraParams], []).
 
+%% @spec (Consumer, Call) -> ok
+%% where
+%%      Consumer = pid()
+%%      Call = any()
+%%
+%% @doc This function is used to perform arbitrary calls into the
+%% consumer module.
 call_consumer(Pid, Call) ->
     gen_server2:call(Pid, {consumer_call, Call}).
+
+%% @spec (Consumer, Method, Args) -> ok
+%% where
+%%      Consumer = pid()
+%%      Method = amqp_method()
+%%      Args = any()
+%%
+%% @doc This function is used by amqp_channel to forward received
+%% methods and deliveries to the consumer module.
 call_consumer(Pid, Method, Args) ->
     gen_server2:call(Pid, {consumer_call, Method, Args}).
 
