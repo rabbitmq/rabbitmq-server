@@ -69,7 +69,7 @@
 
 -include("amqp_client.hrl").
 
--export([open_channel/1, open_channel/2]).
+-export([open_channel/1, open_channel/2, maybe_set_default_port/1]).
 -export([start/1]).
 -export([close/1, close/3]).
 -export([info/2, info_keys/1, info_keys/0]).
@@ -139,17 +139,26 @@ start(AmqpParams) ->
         {error, {already_started, amqp_client}} -> ok;
         {error, _} = E                          -> throw(E)
     end,
-    AmqpParams1 =
-        case AmqpParams of
-            #amqp_params_network{port = undefined, ssl_options = none} ->
-                AmqpParams#amqp_params_network{port = ?PROTOCOL_PORT};
-            #amqp_params_network{port = undefined, ssl_options = _} ->
-                AmqpParams#amqp_params_network{port = ?PROTOCOL_SSL_PORT};
-            _ ->
-                AmqpParams
-        end,
+    AmqpParams1 = maybe_set_default_port(AmqpParams),
     {ok, _Sup, Connection} = amqp_sup:start_connection_sup(AmqpParams1),
     amqp_gen_connection:connect(Connection).
+
+%% @spec (Params) -> NewParams
+%% where
+%%      Params = amqp_params_network() | amqp_params_direct()
+%%      NewParams = amqp_params_network() | amqp_params_direct()
+%% @doc In the case of a network connection, if the port is
+%% 'undefined', set it to the default normal or SSL port, depending on
+%% whether ssl_options is 'none' or not.
+maybe_set_default_port(AmqpParams = #amqp_params_network{
+                         port = undefined, ssl_options = none}) ->
+    AmqpParams#amqp_params_network{port = ?PROTOCOL_PORT};
+maybe_set_default_port(AmqpParams = #amqp_params_network{
+                         port = undefined, ssl_options = _}) ->
+    AmqpParams#amqp_params_network{port = ?PROTOCOL_SSL_PORT};
+maybe_set_default_port(AmqpParams) ->
+    AmqpParams.
+
 
 %%---------------------------------------------------------------------------
 %% Commands
