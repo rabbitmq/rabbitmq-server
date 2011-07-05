@@ -42,7 +42,7 @@ resource_exists(ReqData, Context) ->
      end, ReqData, Context}.
 
 to_json(ReqData, Context) ->
-    [Q] = rabbit_mgmt_db:annotate_queues([queue(ReqData)], detailed),
+    [Q] = rabbit_mgmt_db:augment_queues([queue(ReqData)], detailed),
     rabbit_mgmt_util:reply(rabbit_mgmt_format:strip_pids(Q), ReqData, Context).
 
 accept_content(ReqData, Context) ->

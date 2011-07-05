@@ -30,7 +30,7 @@ content_types_provided(ReqData, Context) ->
 to_json(ReqData, Context) ->
     Conns =
         rabbit_mgmt_util:filter_user(
-          rabbit_mgmt_db:get_annotated_connections(), ReqData, Context),
+          rabbit_mgmt_db:get_augmented_connections(), ReqData, Context),
     rabbit_mgmt_util:reply_list(
       rabbit_mgmt_format:strip_pids(Conns), ReqData, Context).
 
