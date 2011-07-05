@@ -24,6 +24,7 @@
 
 -define(BQMOD, rabbit_variable_queue).
 -define(QUEUE_MAXLEN, 10000).
+-define(TIMEOUT_LIMIT, 100).
 
 -define(RECORD_INDEX(Key, Record),
     erlang:element(2, proplists:lookup(Key, lists:zip(
@@ -32,7 +33,7 @@
 -export([initial_state/0, command/1, precondition/2, postcondition/3,
          next_state/3]).
 
--export([prop_backing_queue_test/0, publish_multiple/4]).
+-export([prop_backing_queue_test/0, publish_multiple/4, timeout/2]).
 
 -record(state, {bqstate,
                 len,        %% int
@@ -90,8 +91,8 @@ command(S) ->
                {1,  qc_drain_confirmed(S)},
                {1,  qc_dropwhile(S)},
                {1,  qc_is_empty(S)},
-               {1,  qc_needs_timeout(S)},
-               {5,  qc_purge(S)}]).
+               {1,  qc_timeout(S)},
+               {1,  qc_purge(S)}]).
 
 qc_publish(#state{bqstate = BQ}) ->
     {call, ?BQMOD, publish,
@@ -122,7 +123,7 @@ qc_requeue(#state{bqstate = BQ, acks = Acks}) ->
 
 qc_set_ram_duration_target(#state{bqstate = BQ}) ->
     {call, ?BQMOD, set_ram_duration_target,
-      [oneof([0, 1, 100, resize(1000, pos_integer()), infinity]), BQ]}.
+      [oneof([0, 1, 2, resize(1000, pos_integer()), infinity]), BQ]}.
 
 qc_ram_duration(#state{bqstate = BQ}) ->
     {call, ?BQMOD, ram_duration, [BQ]}.
@@ -136,8 +137,8 @@ qc_dropwhile(#state{bqstate = BQ}) ->
 qc_is_empty(#state{bqstate = BQ}) ->
     {call, ?BQMOD, is_empty, [BQ]}.
 
-qc_needs_timeout(#state{bqstate = BQ}) ->
-    {call, ?BQMOD, needs_timeout, [BQ]}.
+qc_timeout(#state{bqstate = BQ}) ->
+    {call, ?MODULE, timeout, [BQ, ?TIMEOUT_LIMIT]}.
 
 qc_purge(#state{bqstate = BQ}) ->
     {call, ?BQMOD, purge, [BQ]}.
@@ -151,6 +152,8 @@ precondition(#state{messages = Messages},
              {call, ?BQMOD, publish_delivered, _Arg}) ->
     queue:is_empty(Messages);
 precondition(_S, {call, ?BQMOD, _Fun, _Arg}) ->
+    true;
+precondition(_S, {call, ?MODULE, timeout, _Arg}) ->
     true;
 precondition(#state{len = Len}, {call, ?MODULE, publish_multiple, _Arg}) ->
     Len < ?QUEUE_MAXLEN.
@@ -252,8 +255,8 @@ next_state(S, BQ1, {call, ?BQMOD, dropwhile, _Args}) ->
 next_state(S, _Res, {call, ?BQMOD, is_empty, _Args}) ->
     S;
 
-next_state(S, _Res, {call, ?BQMOD, needs_timeout, _Args}) ->
-    S;
+next_state(S, BQ, {call, ?MODULE, timeout, _Args}) ->
+    S#state{bqstate = BQ};
 
 next_state(S, Res, {call, ?BQMOD, purge, _Args}) ->
     BQ1 = {call, erlang, element, [2, Res]},
@@ -300,6 +303,14 @@ publish_multiple(Msg, MsgProps, BQ, Count) ->
     publish_multiple(Msg, MsgProps,
                      ?BQMOD:publish(Msg, MsgProps, self(), BQ),
                      Count - 1).
+
+timeout(BQ, 0) ->
+    BQ;
+timeout(BQ, AtMost) ->
+    case rabbit_variable_queue:needs_timeout(BQ) of
+        false -> BQ;
+        _     -> timeout(rabbit_variable_queue:timeout(BQ), AtMost - 1)
+    end.
 
 qc_message_payload() ->
     ?SIZED(Size, resize(Size * Size, binary())).
