@@ -29,7 +29,7 @@ content_types_provided(ReqData, Context) ->
 
 to_json(ReqData, Context) ->
     Chs = rabbit_mgmt_util:filter_user(
-            rabbit_mgmt_db:get_augmented_channels(basic), ReqData, Context),
+            rabbit_mgmt_db:get_all_channels(basic), ReqData, Context),
     rabbit_mgmt_util:reply_list(
       rabbit_mgmt_format:strip_pids(Chs), ReqData, Context).
 

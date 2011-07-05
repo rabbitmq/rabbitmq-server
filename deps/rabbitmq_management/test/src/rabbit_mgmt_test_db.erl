@@ -101,12 +101,12 @@ test_connections(Conn, Chan) ->
 
     [fun() ->
              Port = local_port(Conn),
-             Conns = rabbit_mgmt_db:get_augmented_connections(),
+             Conns = rabbit_mgmt_db:get_all_connections(),
              ConnInfo = find_conn_by_local_port(Port, Conns),
              %% There's little we can actually test - just retrieve and check
              %% equality.
              Name = pget(name, ConnInfo),
-             [ConnInfo2] = rabbit_mgmt_db:augment_connections([Name]),
+             [ConnInfo2] = rabbit_mgmt_db:get_connections([Name]),
              [assert_equal(Item, ConnInfo, ConnInfo2) ||
                  Item <- rabbit_reader:info_keys()]
      end].
@@ -269,7 +269,7 @@ find_conn_by_local_port(Port, Items) ->
 
 get_channel(C, Number) ->
     Port = local_port(C),
-    hd(rabbit_mgmt_db:augment_channels(
+    hd(rabbit_mgmt_db:get_channels(
          [list_to_binary("127.0.0.1:" ++ integer_to_list(Port) ++ ":" ++
                              integer_to_list(Number))], full)).
 

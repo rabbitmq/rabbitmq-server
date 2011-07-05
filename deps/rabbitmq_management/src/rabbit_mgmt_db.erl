@@ -20,9 +20,10 @@
 
 -export([start_link/0]).
 
--export([augment_channels/2, augment_connections/1, augment_exchanges/2,
-         augment_queues/2, get_augmented_connections/0,
-         get_augmented_channels/1, get_overview/1, get_overview/0]).
+-export([augment_exchanges/2, augment_queues/2,
+         get_channels/2, get_connections/1,
+         get_all_channels/1, get_all_connections/0,
+         get_overview/1, get_overview/0]).
 
 %% TODO can these not be exported any more?
 -export([add/2, rates/5]).
@@ -94,16 +95,17 @@ start_link() ->
             Else
     end.
 
-augment_channels(Cs, Mode)   -> safe_call({augment_channels, Cs, Mode}, Cs).
-augment_connections(Cs)      -> safe_call({augment_connections, Cs}, Cs).
-augment_exchanges(Xs, Mode)  -> safe_call({augment_exchanges, Xs, Mode}, Xs).
-augment_queues(Qs, Mode)     -> safe_call({augment_queues, Qs, Mode}, Qs).
+augment_exchanges(Xs, Mode) -> safe_call({augment_exchanges, Xs, Mode}, Xs).
+augment_queues(Qs, Mode)    -> safe_call({augment_queues, Qs, Mode}, Qs).
 
-get_augmented_channels(Mode) -> safe_call({get_augmented_channels, Mode}).
-get_augmented_connections()  -> safe_call(get_augmented_connections).
+get_channels(Cs, Mode)      -> safe_call({get_channels, Cs, Mode}, Cs).
+get_connections(Cs)         -> safe_call({get_connections, Cs}, Cs).
 
-get_overview(User)           -> safe_call({get_overview, User}).
-get_overview()               -> safe_call({get_overview, all}).
+get_all_channels(Mode)      -> safe_call({get_all_channels, Mode}).
+get_all_connections()       -> safe_call(get_all_connections).
+
+get_overview(User)          -> safe_call({get_overview, User}).
+get_overview()              -> safe_call({get_overview, all}).
 
 safe_call(Term) -> safe_call(Term, []).
 
@@ -211,21 +213,6 @@ init([]) ->
                            [{Key, ets:new(anon, [private, ordered_set])} ||
                                Key <- ?TABLES])}}.
 
-handle_call({augment_channels, Names, Mode}, _From,
-            State = #state{tables = Tables}) ->
-    Chans = created_event(Names, channel_stats, Tables),
-    Result = case Mode of
-                 basic -> list_channel_stats(Chans, State);
-                 full  -> detail_channel_stats(Chans, State)
-             end,
-    {reply, lists:map(fun result_or_error/1, Result), State};
-
-handle_call({augment_connections, Names}, _From,
-            State = #state{tables = Tables}) ->
-    Conns = created_event(Names, connection_stats, Tables),
-    Result = connection_stats(Conns, State),
-    {reply, lists:map(fun result_or_error/1, Result), State};
-
 handle_call({augment_exchanges, Xs, basic}, _From, State) ->
     {reply, exchange_stats(Xs, ?FINE_STATS_EXCHANGE_LIST, State), State};
 
@@ -238,8 +225,22 @@ handle_call({augment_queues, Qs, basic}, _From, State) ->
 handle_call({augment_queues, Qs, full}, _From, State) ->
     {reply, detail_queue_stats(Qs, State), State};
 
-handle_call({get_augmented_channels, Mode}, _From,
+handle_call({get_channels, Names, Mode}, _From,
             State = #state{tables = Tables}) ->
+    Chans = created_event(Names, channel_stats, Tables),
+    Result = case Mode of
+                 basic -> list_channel_stats(Chans, State);
+                 full  -> detail_channel_stats(Chans, State)
+             end,
+    {reply, lists:map(fun result_or_error/1, Result), State};
+
+handle_call({get_connections, Names}, _From,
+            State = #state{tables = Tables}) ->
+    Conns = created_event(Names, connection_stats, Tables),
+    Result = connection_stats(Conns, State),
+    {reply, lists:map(fun result_or_error/1, Result), State};
+
+handle_call({get_all_channels, Mode}, _From, State = #state{tables = Tables}) ->
     Chans = created_events(channel_stats, Tables),
     Result = case Mode of
                  basic -> list_channel_stats(Chans, State);
@@ -247,8 +248,7 @@ handle_call({get_augmented_channels, Mode}, _From,
              end,
     {reply, Result, State};
 
-handle_call(get_augmented_connections, _From,
-            State = #state{tables = Tables}) ->
+handle_call(get_all_connections, _From, State = #state{tables = Tables}) ->
     Conns = created_events(connection_stats, Tables),
     {reply, connection_stats(Conns, State), State};
 
