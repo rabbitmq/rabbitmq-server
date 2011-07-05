@@ -15,7 +15,7 @@ body { font: 12px Verdana,sans-serif; color: #484848; padding: 8px 35px; }
 #vhost-form { float: right; padding: 0; margin: 0; }
 
 h1 { font-size: 2em; font-weight: normal; padding: 0; }
-b { color: black; font-weight: normal; }
+b, dt { color: black; font-weight: normal; }
 
 .help { color: #888; cursor: pointer; }
 
@@ -41,6 +41,7 @@ div.section table.list, div.section-hidden table.list { margin-bottom: 0; }
 
 sub { display: block; font-size: 0.8em; color: #888; }
 small { font-size: 0.8em; color: #888; }
+#main sub a { color: #888; }
 .unknown { color: #888; }
 
 table.facts { float: left; margin-right: 50px; }

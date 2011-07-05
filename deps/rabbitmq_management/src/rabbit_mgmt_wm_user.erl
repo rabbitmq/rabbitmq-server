@@ -19,6 +19,8 @@
          is_authorized/2, allowed_methods/2, accept_content/2,
          delete_resource/2, put_user/1]).
 
+-import(rabbit_misc, [pget/2]).
+
 -include("rabbit_mgmt.hrl").
 -include_lib("webmachine/include/webmachine.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
@@ -72,10 +74,10 @@ put_user(User) ->
     case {proplists:is_defined(password, User),
           proplists:is_defined(password_hash, User)} of
         {true, _} ->
-            Pass = proplists:get_value(password, User),
+            Pass = pget(password, User),
             put_user(User, Pass, fun rabbit_auth_backend_internal:change_password/2);
         {_, true} ->
-            Hash = base64:decode(proplists:get_value(password_hash, User)),
+            Hash = base64:decode(pget(password_hash, User)),
             put_user(User, Hash,
                      fun rabbit_auth_backend_internal:change_password_hash/2);
         _ ->
@@ -84,8 +86,16 @@ put_user(User) ->
     end.
 
 put_user(User, PWArg, PWFun) ->
-    Username = proplists:get_value(name, User),
-    IsAdmin = proplists:get_value(administrator, User),
+    Username = pget(name, User),
+    Tags = case pget(tags, User) of
+               undefined -> case rabbit_mgmt_util:parse_bool(
+                                   pget(administrator, User)) of
+                                true  -> [administrator];
+                                false -> []
+                            end;
+               TagsS     -> [list_to_atom(string:strip(T)) ||
+                                T <- string:tokens(binary_to_list(TagsS), ",")]
+           end,
     case rabbit_auth_backend_internal:lookup_user(Username) of
         {error, not_found} ->
             rabbit_auth_backend_internal:add_user(
@@ -94,7 +104,4 @@ put_user(User, PWArg, PWFun) ->
             ok
     end,
     PWFun(Username, PWArg),
-    case rabbit_mgmt_util:parse_bool(IsAdmin) of
-        true  -> rabbit_auth_backend_internal:set_admin(Username);
-        false -> rabbit_auth_backend_internal:clear_admin(Username)
-    end.
+    ok = rabbit_auth_backend_internal:set_tags(Username, Tags).

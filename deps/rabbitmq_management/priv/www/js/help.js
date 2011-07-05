@@ -111,6 +111,17 @@ HELP = {
        <dd>Return the payload encoded as base64 unconditionally.</dd> \
      </dl>',
 
+    'user-tags':
+      'Comma-separated list of tags to apply to the user. Currently supported: \
+      <dl> \
+        <dt>administrator</dt> \
+        <dd> \
+          If set, user can manage users and vhosts, see all connections \
+          and channels (not just their own), and see node-related \
+          information. \
+       </dd> \
+      </dl>',
+
     'foo': 'foo' // No comma.
 };
 

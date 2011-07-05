@@ -26,7 +26,10 @@
 -export([all_or_one_vhost/2, http_to_amqp/5, reply/3, filter_vhost/3]).
 -export([filter_user/3, with_decode/5, decode/1, redirect/2, args/1]).
 -export([reply_list/3, reply_list/4, sort_list/2, destination_type/1]).
--export([post_respond/1, columns/1, want_column/2]).
+-export([post_respond/1, columns/1, want_column/2, is_admin/1]).
+-export([list_visible_vhosts/1]).
+
+-import(rabbit_misc, [pget/2, pget/3]).
 
 -include("rabbit_mgmt.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
@@ -40,7 +43,7 @@ is_authorized(ReqData, Context) ->
 
 is_authorized_admin(ReqData, Context) ->
     is_authorized(ReqData, Context,
-                  fun(#user{is_admin = IsAdmin}) -> IsAdmin end).
+                  fun(#user{tags = Tags}) -> is_admin(Tags) end).
 
 is_authorized_vhost(ReqData, Context) ->
     is_authorized(
@@ -49,17 +52,15 @@ is_authorized_vhost(ReqData, Context) ->
               case vhost(ReqData) of
                   not_found -> true;
                   none      -> true;
-                  V         -> lists:member(
-                                 V,
-                                 rabbit_access_control:list_vhosts(User, write))
+                  V         -> lists:member(V, list_login_vhosts(User))
               end
       end).
 
 is_authorized_user(ReqData, Context, Item) ->
     is_authorized(
       ReqData, Context,
-      fun(#user{username = Username, is_admin = IsAdmin}) ->
-              IsAdmin orelse Username == proplists:get_value(user, Item)
+      fun(#user{username = Username, tags = Tags}) ->
+              is_admin(Tags) orelse Username == pget(user, Item)
       end).
 
 is_authorized(ReqData, Context, Fun) ->
@@ -144,9 +145,9 @@ get_dotted_value(Key, Item) ->
 get_dotted_value0([Key], Item) ->
     %% Put "nothing" before everything else, in number terms it usually
     %% means 0.
-    proplists:get_value(list_to_atom(Key), Item, 0);
+    pget(list_to_atom(Key), Item, 0);
 get_dotted_value0([Key | Keys], Item) ->
-    get_dotted_value0(Keys, proplists:get_value(list_to_atom(Key), Item, [])).
+    get_dotted_value0(Keys, pget(list_to_atom(Key), Item, [])).
 
 extract_columns(Items, ReqData) ->
     Cols = columns(ReqData),
@@ -236,7 +237,7 @@ decode(Body) ->
     end.
 
 get_or_missing(K, L) ->
-    case proplists:get_value(K, L) of
+    case pget(K, L) of
         undefined -> {key_missing, K};
         V         -> V
     end.
@@ -249,12 +250,11 @@ http_to_amqp(MethodName, ReqData, Context, Transformers, Extra) ->
             case decode(wrq:req_body(ReqData)) of
                 {ok, Props} ->
                     try
-                        Node =
-                            case proplists:get_value(<<"node">>, Props) of
-                                undefined -> node();
-                                N         -> rabbit_misc:makenode(
-                                               binary_to_list(N))
-                            end,
+                        Node = case pget(<<"node">>, Props) of
+                                   undefined -> node();
+                                   N         -> rabbit_misc:makenode(
+                                                  binary_to_list(N))
+                               end,
                         amqp_request(VHost, ReqData, Context, Node,
                                      props_to_method(
                                        MethodName, Props, Transformers, Extra))
@@ -278,7 +278,7 @@ props_to_method(MethodName, Props) ->
     FieldNames = ?FRAMING:method_fieldnames(MethodName),
     {Res, _Idx} = lists:foldl(
                     fun (K, {R, Idx}) ->
-                            NewR = case proplists:get_value(K, Props1) of
+                            NewR = case pget(K, Props1) of
                                        undefined -> R;
                                        V         -> setelement(Idx, R, V)
                                    end,
@@ -371,14 +371,15 @@ all_or_one_vhost(ReqData, Fun) ->
     end.
 
 filter_vhost(List, _ReqData, Context) ->
-    VHosts = rabbit_access_control:list_vhosts(Context#context.user, write),
-    [I || I <- List, lists:member(proplists:get_value(vhost, I), VHosts)].
+    VHosts = list_login_vhosts(Context#context.user),
+    [I || I <- List, lists:member(pget(vhost, I), VHosts)].
 
-filter_user(List, _ReqData, #context{user = #user{is_admin = true}}) ->
-    List;
 filter_user(List, _ReqData,
-            #context{user = #user{username = Username, is_admin = false}}) ->
-    [I || I <- List, proplists:get_value(user, I) == Username].
+            #context{user = #user{username = Username, tags = Tags}}) ->
+    case is_admin(Tags) of
+        true  -> List;
+        false -> [I || I <- List, pget(user, I) == Username]
+    end.
 
 redirect(Location, ReqData) ->
     wrq:do_redirect(true,
@@ -406,3 +407,26 @@ columns(ReqData) ->
 
 want_column(_Col, all) -> true;
 want_column(Col, Cols) -> lists:any(fun([C|_]) -> C == Col end, Cols).
+
+is_admin(Tags) -> lists:member(administrator, Tags).
+
+%% The distinction between list_visible_vhosts and list_login_vhosts
+%% is there to ensure that administrators can always learn of the
+%% existence of all vhosts, and can always see their contribution to
+%% global stats. However, if an administrator does not have any
+%% permissions for a vhost, it's probably less confusing to make that
+%% prevent them from seeing "into" it, than letting them see stuff
+%% that they then can't touch.
+
+list_visible_vhosts(User = #user{tags = Tags}) ->
+    case is_admin(Tags) of
+        true  -> rabbit_vhost:list();
+        false -> list_login_vhosts(User)
+    end.
+
+list_login_vhosts(User) ->
+    [V || V <- rabbit_vhost:list(),
+          case catch rabbit_access_control:check_vhost_access(User, V) of
+              ok -> true;
+              _  -> false
+          end].
