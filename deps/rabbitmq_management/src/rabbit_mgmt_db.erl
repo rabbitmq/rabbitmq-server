@@ -20,9 +20,9 @@
 
 -export([start_link/0]).
 
--export([get_queues/1, get_queue/1, get_exchanges/1, get_exchange/1,
-         get_connections/0, get_connection/1, get_overview/1,
-         get_overview/0, get_channels/0, get_channel/1]).
+-export([annotate_channels/2, annotate_connections/1, annotate_exchanges/2,
+         annotate_queues/2, get_annotated_connections/0,
+         get_annotated_channels/1, get_overview/1, get_overview/0]).
 
 %% TODO can these not be exported any more?
 -export([add/2, rates/5]).
@@ -94,16 +94,16 @@ start_link() ->
             Else
     end.
 
-get_queues(Qs)         -> safe_call({get_queues, Qs}, Qs).
-get_queue(Q)           -> safe_call({get_queue, Q}, Q).
-get_exchanges(Xs)      -> safe_call({get_exchanges, Xs, list}, Xs).
-get_exchange(X)        -> safe_call({get_exchanges, [X], detail}, [X]).
-get_connections()      -> safe_call(get_connections).
-get_connection(Name)   -> safe_call({get_connection, Name}).
-get_channels()         -> safe_call(get_channels).
-get_channel(Name)      -> safe_call({get_channel, Name}).
-get_overview(User)     -> safe_call({get_overview, User}).
-get_overview()         -> safe_call({get_overview, all}).
+annotate_channels(Cs, Mode)  -> safe_call({annotate_channels, Cs, Mode}, Cs).
+annotate_connections(Cs)     -> safe_call({annotate_connections, Cs}, Cs).
+annotate_exchanges(Xs, Mode) -> safe_call({annotate_exchanges, Xs, Mode}, Xs).
+annotate_queues(Qs, Mode)    -> safe_call({annotate_queues, Qs, Mode}, Qs).
+
+get_annotated_channels(Mode) -> safe_call({get_annotated_channels, Mode}).
+get_annotated_connections()  -> safe_call(get_annotated_connections).
+
+get_overview(User)           -> safe_call({get_overview, User}).
+get_overview()               -> safe_call({get_overview, all}).
 
 safe_call(Term) -> safe_call(Term, []).
 
@@ -211,37 +211,47 @@ init([]) ->
                            [{Key, ets:new(anon, [private, ordered_set])} ||
                                Key <- ?TABLES])}}.
 
-handle_call({get_queue, Q0}, _From, State) ->
-    [Q1] = detail_queue_stats([Q0], State),
-    {reply, Q1, State};
+handle_call({annotate_channels, Names, Mode}, _From,
+            State = #state{tables = Tables}) ->
+    Chans = created_event(Names, channel_stats, Tables),
+    Result = case Mode of
+                 coarse   -> list_channel_stats(Chans, State);
+                 detailed -> detail_channel_stats(Chans, State)
+             end,
+    {reply, lists:map(fun result_or_error/1, Result), State};
 
-handle_call({get_queues, Qs}, _From, State) ->
+handle_call({annotate_connections, Names}, _From,
+            State = #state{tables = Tables}) ->
+    Conns = created_event(Names, connection_stats, Tables),
+    Result = connection_stats(Conns, State),
+    {reply, lists:map(fun result_or_error/1, Result), State};
+
+handle_call({annotate_exchanges, Xs, coarse}, _From, State) ->
+    {reply, exchange_stats(Xs, ?FINE_STATS_EXCHANGE_LIST, State), State};
+
+handle_call({annotate_exchanges, Xs, detailed}, _From, State) ->
+    {reply, exchange_stats(Xs, ?FINE_STATS_EXCHANGE_DETAIL, State), State};
+
+handle_call({annotate_queues, Qs, coarse}, _From, State) ->
     {reply, list_queue_stats(Qs, State), State};
 
-handle_call({get_exchanges, Xs, Mode}, _From, State) ->
-    FineSpecs = case Mode of
-                    list   -> ?FINE_STATS_EXCHANGE_LIST;
-                    detail -> ?FINE_STATS_EXCHANGE_DETAIL
-                end,
-    {reply, exchange_stats(Xs, FineSpecs, State), State};
+handle_call({annotate_queues, Qs, detailed}, _From, State) ->
+    {reply, detail_queue_stats(Qs, State), State};
 
-handle_call(get_connections, _From, State = #state{tables = Tables}) ->
+handle_call({get_annotated_channels, Mode}, _From,
+            State = #state{tables = Tables}) ->
+    Chans = created_events(channel_stats, Tables),
+    Result = case Mode of
+                 coarse   -> list_channel_stats(Chans, State);
+                 detailed -> detail_channel_stats(Chans, State)
+             end,
+    {reply, lists:map(fun result_or_error/1, Result), State};
+
+handle_call(get_annotated_connections, _From,
+            State = #state{tables = Tables}) ->
     Conns = created_events(connection_stats, Tables),
-    {reply, connection_stats(Conns, State), State};
-
-handle_call({get_connection, Name}, _From, State = #state{tables = Tables}) ->
-    Conns = created_event(Name, connection_stats, Tables),
-    [Res] = connection_stats(Conns, State),
-    {reply, result_or_error(Res), State};
-
-handle_call(get_channels, _From, State = #state{tables = Tables}) ->
-    Chs = created_events(channel_stats, Tables),
-    {reply, list_channel_stats(Chs, State), State};
-
-handle_call({get_channel, Name}, _From, State = #state{tables = Tables}) ->
-    Chs = created_event(Name, channel_stats, Tables),
-    [Res] = detail_channel_stats(Chs, State),
-    {reply, result_or_error(Res), State};
+    Result = connection_stats(Conns, State),
+    {reply, lists:map(fun result_or_error/1, Result), State};
 
 handle_call({get_overview, User}, _From, State = #state{tables = Tables}) ->
     VHosts = case User of
@@ -430,13 +440,13 @@ fine_stats_key(ChPid, {QPid, X})              -> {ChPid, id(QPid), X};
 fine_stats_key(ChPid, QPid) when is_pid(QPid) -> {ChPid, id(QPid)};
 fine_stats_key(ChPid, X)                      -> {ChPid, X}.
 
-created_event(Name, Type, Tables) ->
+created_event(Names, Type, Tables) ->
     Table = orddict:fetch(Type, Tables),
-    Id = case ets:match(Table, {{'$1', create}, '_', Name}) of
-             []    -> none;
-             [[I]] -> I
-         end,
-    [lookup_element(Table, {Id, create})].
+    [lookup_element(
+       Table, {case ets:match(Table, {{'$1', create}, '_', Name}) of
+                   []    -> none;
+                   [[I]] -> I
+               end, create}) || Name <- Names].
 
 created_events(Type, Tables) ->
     [Facts || {{_, create}, Facts, _Name}

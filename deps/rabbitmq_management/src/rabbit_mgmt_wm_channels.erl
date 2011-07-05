@@ -28,8 +28,8 @@ content_types_provided(ReqData, Context) ->
    {[{"application/json", to_json}], ReqData, Context}.
 
 to_json(ReqData, Context) ->
-    Chs = rabbit_mgmt_util:filter_user(rabbit_mgmt_db:get_channels(),
-                                       ReqData, Context),
+    Chs = rabbit_mgmt_util:filter_user(
+            rabbit_mgmt_db:get_annotated_channels(coarse), ReqData, Context),
     rabbit_mgmt_util:reply_list(
       rabbit_mgmt_format:strip_pids(Chs), ReqData, Context).
 
