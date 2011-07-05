@@ -105,25 +105,41 @@ recover(XNames, QNames) ->
           (_Route, false) ->
               ok
       end, rabbit_durable_route),
-    rabbit_misc:table_filter(
-      fun (#route{binding = #binding{destination = Dst =
-                                         #resource{kind = Kind}}}) ->
-              sets:is_element(Dst, case Kind of
-                                       exchange -> XNameSet;
-                                       queue    -> QNameSet
-                                   end)
-      end,
-      fun (R = #route{binding = B = #binding{source = Src}}, Tx) ->
-              {ok, X} = rabbit_exchange:lookup(Src),
-              Serial = case Tx of
-                           true  -> ok = sync_transient_route(
-                                           R, fun mnesia:write/3),
-                                    transaction;
-                           false -> rabbit_exchange:serial(X)
-                       end,
-              rabbit_exchange:callback(X, add_binding, [Serial, X, B])
-      end,
-      rabbit_semi_durable_route),
+    lists:foldl(
+      fun (R = #route{binding = B = #binding{source = Src,
+                                             destination = Dst =
+                                             #resource{kind = Kind}}}, Acc) ->
+              case rabbit_misc:execute_mnesia_transaction(
+                     fun () ->
+                             case mnesia:match_object(
+                                    rabbit_semi_durable_route, R, read) =/= []
+                                 andalso sets:is_element(
+                                           Dst, case Kind of
+                                                    exchange -> XNameSet;
+                                                    queue    -> QNameSet
+                                                end) of
+                                 false -> false;
+                                 true  -> {ok, X} = rabbit_exchange:lookup(Src),
+                                          {true, rabbit_exchange:serial(X)}
+                             end
+                     end,
+                     fun (false, _Tx) ->
+                             false;
+                         ({true, Serial0}, Tx) ->
+                             Serial = case Tx of
+                                          true  -> ok = sync_transient_route(
+                                                          R, fun mnesia:write/3),
+                                                   transaction;
+                                          false -> Serial0
+                                      end,
+                             {ok, X} = rabbit_exchange:lookup(Src),
+                             rabbit_exchange:callback(X, add_binding, [Serial, X, B]),
+                             true
+                     end) of
+                  false -> Acc;
+                  true  -> [R | Acc]
+              end
+      end, [], rabbit_misc:dirty_read_all(rabbit_semi_durable_route)),
     ok.
 
 exists(Binding) ->
