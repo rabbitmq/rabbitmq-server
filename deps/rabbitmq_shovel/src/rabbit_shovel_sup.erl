@@ -209,7 +209,7 @@ parse_uri({[Uri | Uris], Acc}) when is_list(Uri) ->
             fail({unable_to_parse_uri, Uri, Reason});
         Parsed ->
             Endpoint = case proplists:get_value(scheme, Parsed) of
-                           "amqp"  -> build_plain_broker(Parsed);
+                           "amqp"  -> build_broker(Parsed);
                            "amqps" -> build_ssl_broker(Parsed);
                            Scheme  -> fail({unexpected_uri_scheme, Scheme, Uri})
                        end,
@@ -243,15 +243,6 @@ build_broker(ParsedUri) ->
                      end
     end.
 
-build_plain_broker(ParsedUri) ->
-    Params = build_broker(ParsedUri),
-    case Params of
-        #amqp_params_network{port = undefined} ->
-            Params#amqp_params_network{port = ?PROTOCOL_PORT};
-        _ ->
-            Params
-    end.
-
 build_ssl_broker(ParsedUri) ->
     Params = build_broker(ParsedUri),
     Query = proplists:get_value('query', ParsedUri),
@@ -275,11 +266,7 @@ build_ssl_broker(ParsedUri) ->
                        {fun find_atom_parameter/1,    verify},
                        {fun find_boolean_parameter/1, fail_if_no_peer_cert}]],
           []),
-    Params1 = Params#amqp_params_network{ssl_options = SSLOptions},
-    case Params1#amqp_params_network.port of
-        undefined -> Params1#amqp_params_network{port = ?PROTOCOL_PORT - 1};
-        _         -> Params1
-    end.
+    Params#amqp_params_network{ssl_options = SSLOptions}.
 
 broker_add_query(Params = #amqp_params_direct{}, Uri) ->
     broker_add_query(Params, Uri, record_info(fields, amqp_params_direct));
