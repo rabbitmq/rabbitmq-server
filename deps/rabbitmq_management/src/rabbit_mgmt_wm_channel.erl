@@ -46,4 +46,4 @@ is_authorized(ReqData, Context) ->
 
 channel(ReqData) ->
     hd(rabbit_mgmt_db:augment_channels(
-         [rabbit_mgmt_util:id(channel, ReqData)], detailed)).
+         [rabbit_mgmt_util:id(channel, ReqData)], full)).

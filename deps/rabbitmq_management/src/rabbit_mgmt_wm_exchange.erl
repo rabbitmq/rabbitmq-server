@@ -42,7 +42,7 @@ resource_exists(ReqData, Context) ->
      end, ReqData, Context}.
 
 to_json(ReqData, Context) ->
-    [X] = rabbit_mgmt_db:augment_exchanges([exchange(ReqData)], detailed),
+    [X] = rabbit_mgmt_db:augment_exchanges([exchange(ReqData)], full),
     rabbit_mgmt_util:reply(X, ReqData, Context).
 
 accept_content(ReqData, Context) ->

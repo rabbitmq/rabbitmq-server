@@ -215,8 +215,8 @@ handle_call({augment_channels, Names, Mode}, _From,
             State = #state{tables = Tables}) ->
     Chans = created_event(Names, channel_stats, Tables),
     Result = case Mode of
-                 coarse   -> list_channel_stats(Chans, State);
-                 detailed -> detail_channel_stats(Chans, State)
+                 basic -> list_channel_stats(Chans, State);
+                 full  -> detail_channel_stats(Chans, State)
              end,
     {reply, lists:map(fun result_or_error/1, Result), State};
 
@@ -226,24 +226,24 @@ handle_call({augment_connections, Names}, _From,
     Result = connection_stats(Conns, State),
     {reply, lists:map(fun result_or_error/1, Result), State};
 
-handle_call({augment_exchanges, Xs, coarse}, _From, State) ->
+handle_call({augment_exchanges, Xs, basic}, _From, State) ->
     {reply, exchange_stats(Xs, ?FINE_STATS_EXCHANGE_LIST, State), State};
 
-handle_call({augment_exchanges, Xs, detailed}, _From, State) ->
+handle_call({augment_exchanges, Xs, full}, _From, State) ->
     {reply, exchange_stats(Xs, ?FINE_STATS_EXCHANGE_DETAIL, State), State};
 
-handle_call({augment_queues, Qs, coarse}, _From, State) ->
+handle_call({augment_queues, Qs, basic}, _From, State) ->
     {reply, list_queue_stats(Qs, State), State};
 
-handle_call({augment_queues, Qs, detailed}, _From, State) ->
+handle_call({augment_queues, Qs, full}, _From, State) ->
     {reply, detail_queue_stats(Qs, State), State};
 
 handle_call({get_augmented_channels, Mode}, _From,
             State = #state{tables = Tables}) ->
     Chans = created_events(channel_stats, Tables),
     Result = case Mode of
-                 coarse   -> list_channel_stats(Chans, State);
-                 detailed -> detail_channel_stats(Chans, State)
+                 basic -> list_channel_stats(Chans, State);
+                 full  -> detail_channel_stats(Chans, State)
              end,
     {reply, Result, State};
 
