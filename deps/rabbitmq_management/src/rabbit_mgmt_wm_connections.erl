@@ -14,7 +14,8 @@
 %%   Copyright (c) 2007-2010 VMware, Inc.  All rights reserved.
 -module(rabbit_mgmt_wm_connections).
 
--export([init/1, to_json/2, content_types_provided/2, is_authorized/2]).
+-export([init/1, to_json/2, content_types_provided/2, is_authorized/2,
+         annotated/2]).
 
 -include("rabbit_mgmt.hrl").
 -include_lib("webmachine/include/webmachine.hrl").
@@ -28,11 +29,12 @@ content_types_provided(ReqData, Context) ->
    {[{"application/json", to_json}], ReqData, Context}.
 
 to_json(ReqData, Context) ->
-    Conns =
-        rabbit_mgmt_util:filter_user(
-          rabbit_mgmt_db:get_annotated_connections(), ReqData, Context),
-    rabbit_mgmt_util:reply_list(
-      rabbit_mgmt_format:strip_pids(Conns), ReqData, Context).
+    rabbit_mgmt_util:reply_list(annotated(ReqData, Context), ReqData, Context).
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized(ReqData, Context).
+
+annotated(ReqData, Context) ->
+    rabbit_mgmt_format:strip_pids(
+      rabbit_mgmt_util:filter_user(
+        rabbit_mgmt_db:get_annotated_connections(), ReqData, Context)).
