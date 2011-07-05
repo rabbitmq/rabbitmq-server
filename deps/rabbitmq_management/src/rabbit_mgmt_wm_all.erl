@@ -35,7 +35,8 @@ to_json(ReqData, Context) ->
                          {exchanges,   rabbit_mgmt_wm_exchanges},
                          {bindings,    rabbit_mgmt_wm_bindings},
                          {channels,    rabbit_mgmt_wm_channels},
-                         {connections, rabbit_mgmt_wm_connections}]
+                         {connections, rabbit_mgmt_wm_connections},
+                         {vhosts,      rabbit_mgmt_wm_vhosts}]
       ], ReqData, Context).
 
 is_authorized(ReqData, Context) ->
