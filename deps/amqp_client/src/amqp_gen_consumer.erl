@@ -203,7 +203,7 @@ init([ConsumerModule, ExtraParams]) ->
             ignore
     end.
 
-prioritise_info({'DOWN', _MRef, process, _Pid, _Info}, _State) -> 9;
+prioritise_info({'DOWN', _MRef, process, _Pid, _Info}, _State) -> 1;
 prioritise_info(_, _State)                                     -> 0.
 
 handle_call({consumer_call, Call}, From,
