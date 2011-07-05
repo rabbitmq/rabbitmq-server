@@ -118,10 +118,6 @@ pset(Key, Value, List) -> [{Key, Value} | proplists:delete(Key, List)].
 id(Pid) when is_pid(Pid) -> Pid;
 id(List) -> pget(pid, List).
 
-add(unknown, _) -> unknown;
-add(_, unknown) -> unknown;
-add(A, B)       -> A + B.
-
 lookup_element(Table, Key) -> lookup_element(Table, Key, 2).
 
 lookup_element(Table, Key, Pos) ->
