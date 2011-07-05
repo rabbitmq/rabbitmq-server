@@ -54,13 +54,15 @@ call_consumer(Pid, Method, Args) ->
 %% @private
 behaviour_info(callbacks) ->
     [
-     %% init(Args) -> {ok, InitialState}
+     %% init(Args) -> {ok, InitialState} | {stop, Reason} | ignore
      %% where
      %%      Args = [any()]
      %%      InitialState = state()
+     %%      Reason = term()
      %%
-     %% This callback is invoked by the channel, when it starts up. Use it to
-     %% initialize the state of the consumer.
+     %% This callback is invoked by the channel, when it starts
+     %% up. Use it to initialize the state of the consumer. In case of
+     %% an error, return {stop, Reason} or ignore.
      {init, 1},
 
      %% handle_consume_ok(ConsumeOk, Consume, State) -> NewState
@@ -165,8 +167,14 @@ behaviour_info(_Other) ->
 %%---------------------------------------------------------------------------
 
 init([ConsumerModule, ExtraParams]) ->
-    {ok, MState} = ConsumerModule:init(ExtraParams),
-    {ok, #state{module = ConsumerModule, module_state = MState}}.
+    case ConsumerModule:init(ExtraParams) of
+        {ok, MState} ->
+            {ok, #state{module = ConsumerModule, module_state = MState}};
+        {stop, Reason} ->
+            {stop, Reason};
+        ignore ->
+            ignore
+    end.
 
 prioritise_info({'DOWN', _MRef, process, _Pid, _Info}, _State) -> 9;
 prioritise_info(_, _State)                                     -> 0.
