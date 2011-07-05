@@ -80,31 +80,6 @@ init([]) ->
     {ok, #state{}}.
 
 %% @private
-handle_consume_ok(BasicConsumeOk, BasicConsume, State) ->
-    State1 = assign_consumer(BasicConsume, tag(BasicConsumeOk), State),
-    deliver(BasicConsumeOk, State1),
-    {ok, State1}.
-
-%% @private
-handle_cancel_ok(CancelOk, _Cancel, State) ->
-    State1 = do_cancel(CancelOk, State),
-    %% Use old state
-    deliver(CancelOk, State),
-    {ok, State1}.
-
-%% @private
-handle_cancel(Cancel, State) ->
-    State1 = do_cancel(Cancel, State),
-    %% Use old state
-    deliver(Cancel, State),
-    {ok, State1}.
-
-%% @private
-handle_deliver(Deliver, Message, State) ->
-    deliver(Deliver, Message, State),
-    {ok, State}.
-
-%% @private
 handle_consume(BasicConsume, Pid, State = #state{consumers = Consumers,
                                                  unassigned = Unassigned,
                                                  monitors = Monitors}) ->
@@ -141,6 +116,31 @@ handle_consume(BasicConsume, Pid, State = #state{consumers = Consumers,
             %% consumers), the server will close the channel with an error.
             {ok, State}
     end.
+
+%% @private
+handle_consume_ok(BasicConsumeOk, BasicConsume, State) ->
+    State1 = assign_consumer(BasicConsume, tag(BasicConsumeOk), State),
+    deliver(BasicConsumeOk, State1),
+    {ok, State1}.
+
+%% @private
+handle_cancel(Cancel, State) ->
+    State1 = do_cancel(Cancel, State),
+    %% Use old state
+    deliver(Cancel, State),
+    {ok, State1}.
+
+%% @private
+handle_cancel_ok(CancelOk, _Cancel, State) ->
+    State1 = do_cancel(CancelOk, State),
+    %% Use old state
+    deliver(CancelOk, State),
+    {ok, State1}.
+
+%% @private
+handle_deliver(Deliver, Message, State) ->
+    deliver(Deliver, Message, State),
+    {ok, State}.
 
 %% @private
 handle_info({'DOWN', _MRef, process, Pid, _Info},

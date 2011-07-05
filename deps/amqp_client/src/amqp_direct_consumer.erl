@@ -53,22 +53,22 @@ init([ConsumerPid]) ->
     {ok, ConsumerPid}.
 
 %% @private
-handle_consume_ok(M, _, C) ->
-    C ! M,
-    {ok, C}.
-
-%% @private
 handle_consume(M, A, C) ->
     C ! {M, A},
     {ok, C}.
 
 %% @private
-handle_cancel_ok(M, _, C) ->
+handle_consume_ok(M, _, C) ->
     C ! M,
     {ok, C}.
 
 %% @private
 handle_cancel(M, C) ->
+    C ! M,
+    {ok, C}.
+
+%% @private
+handle_cancel_ok(M, _, C) ->
     C ! M,
     {ok, C}.
 

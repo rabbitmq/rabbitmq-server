@@ -81,6 +81,19 @@ behaviour_info(callbacks) ->
      %% an error, return {stop, Reason} or ignore.
      {init, 1},
 
+     %% handle_consume(Consume, Sender, State) ->
+     %%                     {ok, NewState} | {error, Reason, NewState}
+     %% where
+     %%      Consume = #'basic.consume'{}
+     %%      Sender = pid()
+     %%      State = state()
+     %%      Reason = term()
+     %%      NewState = state()
+     %%
+     %% This callback is invoked by the channel before a basic.consume
+     %% is sent to the server.
+     {handle_consume, 3},
+
      %% handle_consume_ok(ConsumeOk, Consume, State) ->
      %%                     {ok, NewState} | {error, Reason, NewState}
      %% where
@@ -96,18 +109,17 @@ behaviour_info(callbacks) ->
      %% call with the response.
      {handle_consume_ok, 3},
 
-     %% handle_consume(Consume, Sender, State) ->
+     %% handle_cancel(Cancel, State) ->
      %%                     {ok, NewState} | {error, Reason, NewState}
      %% where
-     %%      Consume = #'basic.consume'{}
-     %%      Sender = pid()
+     %%      Cancel = #'basic.cancel'{}
      %%      State = state()
      %%      Reason = term()
      %%      NewState = state()
      %%
-     %% This callback is invoked by the channel before a basic.consume
-     %% is sent to the server.
-     {handle_consume, 3},
+     %% This callback is invoked by the channel every time a basic.cancel
+     %% is received from the server.
+     {handle_cancel, 2},
 
      %% handle_cancel_ok(CancelOk, Cancel, State) ->
      %%                     {ok, NewState} | {error, Reason, NewState}
@@ -121,18 +133,6 @@ behaviour_info(callbacks) ->
      %% This callback is invoked by the channel every time a basic.cancel_ok
      %% is received from the server.
      {handle_cancel_ok, 3},
-
-     %% handle_cancel(Cancel, State) ->
-     %%                     {ok, NewState} | {error, Reason, NewState}
-     %% where
-     %%      Cancel = #'basic.cancel'{}
-     %%      State = state()
-     %%      Reason = term()
-     %%      NewState = state()
-     %%
-     %% This callback is invoked by the channel every time a basic.cancel
-     %% is received from the server.
-     {handle_cancel, 2},
 
      %% handle_deliver(Deliver, Message, State) ->
      %%                     {ok, NewState} | {error, Reason, NewState}
