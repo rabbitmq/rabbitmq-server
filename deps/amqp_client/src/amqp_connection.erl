@@ -130,7 +130,7 @@
 %% @doc Starts a connection to an AMQP server. Use network params to
 %% connect to a remote AMQP server or direct params for a direct
 %% connection to a RabbitMQ server, assuming that the server is
-%% running in the same process space.  If the port is set to 'auto',
+%% running in the same process space.  If the port is set to 'undefined',
 %% the default ports will be selected depending on whether this is a
 %% normal or an SSL connection.
 start(AmqpParams) ->
@@ -141,9 +141,9 @@ start(AmqpParams) ->
     end,
     AmqpParams1 =
         case AmqpParams of
-            #amqp_params_network{port = auto, ssl_options = none} ->
+            #amqp_params_network{port = undefined, ssl_options = none} ->
                 AmqpParams#amqp_params_network{port = ?PROTOCOL_PORT};
-            #amqp_params_network{port = auto, ssl_options = _} ->
+            #amqp_params_network{port = undefined, ssl_options = _} ->
                 AmqpParams#amqp_params_network{port = ?PROTOCOL_SSL_PORT};
             _ ->
                 AmqpParams

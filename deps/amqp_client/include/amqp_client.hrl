@@ -32,7 +32,7 @@
                               password          = <<"guest">>,
                               virtual_host      = <<"/">>,
                               host              = "localhost",
-                              port              = auto,
+                              port              = undefined,
                               channel_max       = 0,
                               frame_max         = 0,
                               heartbeat         = 0,
