@@ -24,9 +24,6 @@
          get_connections/0, get_connection/1, get_overview/1,
          get_overview/0, get_channels/0, get_channel/1]).
 
-%% TODO can these not be exported any more?
--export([add/2, rates/5]).
-
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3]).
 
