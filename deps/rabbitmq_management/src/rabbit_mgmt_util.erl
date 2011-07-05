@@ -426,7 +426,7 @@ is_mgmt_user(T) -> intersects(T, [administrator, monitoring, management]).
 intersects(A, B) -> lists:any(fun(I) -> lists:member(I, B) end, A).
 
 %% The distinction between list_visible_vhosts and list_login_vhosts
-%% is there to ensure that adminis / monitors can always learn of the
+%% is there to ensure that admins / monitors can always learn of the
 %% existence of all vhosts, and can always see their contribution to
 %% global stats. However, if an admin / monitor does not have any
 %% permissions for a vhost, it's probably less confusing to make that
