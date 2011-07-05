@@ -28,12 +28,22 @@
 
 to_table(#upstream{params   = #amqp_params_network{host         = H,
                                                    port         = P,
+                                                   ssl_options  = S,
                                                    virtual_host = V},
                    exchange = X}) ->
+    PortPart = case P of
+                   undefined -> [];
+                   _         -> [{<<"port">>, long, P}]
+               end,
+    Protocol = case S of
+                   none -> <<"amqp">>;
+                   _    -> <<"amqps">>
+               end,
     {table, [{<<"host">>,         longstr, list_to_binary(H)},
-             {<<"port">>,         long,    P},
              {<<"virtual_host">>, longstr, V},
-             {<<"exchange">>,     longstr, X}]}.
+             {<<"exchange">>,     longstr, X},
+             {<<"protocol">>,     longstr, Protocol}] ++
+         PortPart}.
 
 to_string(#upstream{params   = #amqp_params_network{host         = H,
                                                     port         = P,
@@ -89,9 +99,6 @@ from_props_connection(Upst, ConnName, Conn, DefaultXName, DefaultVHost) ->
 set_extra_params(Params, Conn) ->
     lists:foldl(fun (F, ParamsIn) -> F(ParamsIn, Conn) end, Params,
                 [fun set_ssl_options/2,
-                 fun(Params, _Conn) ->
-                         amqp_connection:maybe_set_default_port(Params)
-                 end,
                  fun set_heartbeat/2,
                  fun set_mechanisms/2]).
 
