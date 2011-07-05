@@ -57,5 +57,5 @@ is_authorized(ReqData, Context) ->
 %%--------------------------------------------------------------------
 
 conn(ReqData) ->
-    hd(rabbit_mgmt_db:annotate_connections(
+    hd(rabbit_mgmt_db:augment_connections(
          [rabbit_mgmt_util:id(connection, ReqData)])).

@@ -37,4 +37,4 @@ is_authorized(ReqData, Context) ->
 annotated(ReqData, Context) ->
     rabbit_mgmt_format:strip_pids(
       rabbit_mgmt_util:filter_user(
-        rabbit_mgmt_db:get_annotated_connections(), ReqData, Context)).
+        rabbit_mgmt_db:get_augmented_connections(), ReqData, Context)).

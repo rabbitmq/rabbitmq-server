@@ -44,9 +44,9 @@ is_authorized(ReqData, Context) ->
 
 annotated(ReqData, Context) ->
     rabbit_mgmt_format:strip_pids(
-      rabbit_mgmt_db:annotate_queues(
+      rabbit_mgmt_db:augment_queues(
         rabbit_mgmt_util:filter_vhost(queues(ReqData), ReqData, Context),
-        coarse)).
+        basic)).
 
 queues(ReqData) ->
     [rabbit_mgmt_format:queue(Q) || Q <- queues0(ReqData)].

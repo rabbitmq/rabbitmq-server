@@ -80,9 +80,9 @@ test_queues(_Conn, Chan) ->
     basic_get(Chan, Q1, false, false),
 
     [fun() ->
-             Qs = rabbit_mgmt_db:annotate_queues(
+             Qs = rabbit_mgmt_db:augment_queues(
                     [rabbit_mgmt_format:queue(Q) ||
-                        Q <- rabbit_amqqueue:list(<<"/">>)], coarse),
+                        Q <- rabbit_amqqueue:list(<<"/">>)], basic),
              Q1Info = find_by_name(Q1, Qs),
              Q2Info = find_by_name(Q2, Qs),
 
@@ -101,12 +101,12 @@ test_connections(Conn, Chan) ->
 
     [fun() ->
              Port = local_port(Conn),
-             Conns = rabbit_mgmt_db:get_annotated_connections(),
+             Conns = rabbit_mgmt_db:get_augmented_connections(),
              ConnInfo = find_conn_by_local_port(Port, Conns),
              %% There's little we can actually test - just retrieve and check
              %% equality.
              Name = pget(name, ConnInfo),
-             [ConnInfo2] = rabbit_mgmt_db:annotate_connections([Name]),
+             [ConnInfo2] = rabbit_mgmt_db:augment_connections([Name]),
              [assert_equal(Item, ConnInfo, ConnInfo2) ||
                  Item <- rabbit_reader:info_keys()]
      end].
@@ -269,17 +269,17 @@ find_conn_by_local_port(Port, Items) ->
 
 get_channel(C, Number) ->
     Port = local_port(C),
-    hd(rabbit_mgmt_db:annotate_channels(
+    hd(rabbit_mgmt_db:augment_channels(
          [list_to_binary("127.0.0.1:" ++ integer_to_list(Port) ++ ":" ++
-                             integer_to_list(Number))], detailed)).
+                             integer_to_list(Number))], full)).
 
 get_exchange(XName) ->
     X = rabbit_mgmt_wm_exchange:exchange(<<"/">>, XName),
-    hd(rabbit_mgmt_db:annotate_exchanges([X], detailed)).
+    hd(rabbit_mgmt_db:augment_exchanges([X], full)).
 
 get_queue(QName) ->
     Q = rabbit_mgmt_wm_queue:queue(<<"/">>, QName),
-    hd(rabbit_mgmt_db:annotate_queues([Q], detailed)).
+    hd(rabbit_mgmt_db:augment_queues([Q], full)).
 
 declare_queue(Chan) ->
     #'queue.declare_ok'{ queue = Q } =

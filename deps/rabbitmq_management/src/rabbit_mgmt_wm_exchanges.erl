@@ -43,9 +43,9 @@ is_authorized(ReqData, Context) ->
 %%--------------------------------------------------------------------
 
 annotated(ReqData, Context) ->
-    rabbit_mgmt_db:annotate_exchanges(
+    rabbit_mgmt_db:augment_exchanges(
       rabbit_mgmt_util:filter_vhost(exchanges(ReqData), ReqData, Context),
-      coarse).
+      basic).
 
 exchanges(ReqData) ->
     [rabbit_mgmt_format:exchange(X) || X <- exchanges0(ReqData)].
