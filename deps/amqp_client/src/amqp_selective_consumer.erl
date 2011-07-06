@@ -103,10 +103,8 @@ handle_consume(BasicConsume, Pid, State = #state{consumers = Consumers,
              {consumers = dict:store(Tag, Pid, Consumers),
               monitors  = dict:store(Pid, monitor(process, Pid), Monitors)}};
         {true, #'basic.consume'{nowait = false}} ->
-            NewUnassigned =
-                dict:update(BasicConsume, fun (Pids) -> [Pids] ++ [Pid] end,
-                            [Pid], Unassigned),
-            {ok, State#state{unassigned = NewUnassigned,
+            {ok, State#state{unassigned = dict:append(BasicConsume, Pid,
+                                                      Unassigned),
                              monitors = dict:store(Pid, monitor(process, Pid),
                                                    Monitors)}};
         {false, #'basic.consume'{nowait = true}} ->
