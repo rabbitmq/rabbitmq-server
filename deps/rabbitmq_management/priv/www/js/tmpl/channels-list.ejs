@@ -89,6 +89,7 @@
     <td class="c">
       <%= fmt_channel_mode(channel) %>
       <% if (channel.transactional) { %>
+      <sub><%= channel.messages_uncommitted %> uncommitted messages</sub>
       <sub><%= channel.acks_uncommitted %> uncommitted acks</sub>
       <% } %>
     </td>
