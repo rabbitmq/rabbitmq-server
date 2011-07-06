@@ -17,9 +17,11 @@ mechanism. A configuration has this structure:
 
     Env = [{listeners, [Listener...]},
            {contexts, [Context...]},
-           {default_listener, [{port, Port} | Option ...]}]
+           {default_listener, ListenerOptions}]
 
-    Listener = {Name, [{port, Port} | Option...]}
+    Listener = {Name, ListenerOptions}
+
+    ListenerOptions = [{port, Port} | Option...]
 
     Context = {Name, ListenerName}
             | {Name, {ListenerName, Path}}
@@ -54,8 +56,8 @@ context when it is registered. This configuration
     {rabbitmq_mochiweb, [{listeners, [{internal, [{port, 5568}]}]},
                          {contexts, [{bar, {internal, "bar"}}]}]}
 
-assigns the context `'bar'` to the listener on port 5568 and forces
-its path prefix to `"/bar"`.
+assigns the context `bar` to the listener on port 5568 and forces
+its path prefix to `"bar"`.
 
 To give a path for a context, but let it use the default listener, use
 `'*'` as the listener name. For example:
@@ -63,8 +65,8 @@ To give a path for a context, but let it use the default listener, use
     {rabbitmq_mochiweb, [{default_listener, [{port, 5567}]},
                          {contexts, [{foo, {'*', "foo"}}]}]}
 
-will let the context `'foo'` default to the listener on port 5567, but
-force its path prefix to `"/foo"`.
+will let the context `foo` default to the listener on port 5567, but
+force its path prefix to `"foo"`.
 
 The procedures `register_*` exported from the module `rabbit_mochiweb`
 all take a context and a path as the first two arguments.
@@ -83,12 +85,12 @@ For example, for the configuration
                          {listeners, [{internal, [{port, 55671}]}]},
                          {contexts,  [{myapp, {internal, "myapp"}}]}]}
 
-an application registering the context name 'myapp' will be assigned
-to the listener 'internal', listening on port 55671, and be available
-under the path `/myapp/` in URLs. An application registering with the
-context 'myotherapp' and the path "other" will be assigned to the
-default listener, listening on port 55670, and be available
-under "/other/".
+an application registering the context name `myapp` will be assigned
+to the listener `internal`, listening on port 55671, and be available
+under the path "/myapp/" in URLs. An application registering with the
+context `myotherapp` and the path `"other"` will be assigned to the
+default listener, listening on port 55670, and be available under
+"/other/".
 
 There is no attempt made to avoid clashes of paths, either those given
 in configuration or those given when registering.  Also note that an
