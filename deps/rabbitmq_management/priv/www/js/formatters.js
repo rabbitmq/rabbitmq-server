@@ -378,7 +378,9 @@ function message_rates(stats) {
     var res = "";
     if (keys(stats).length > 0) {
         var items = [['Publish', 'publish'], ['Confirm', 'confirm'],
-                     ['Deliver', 'deliver'], ['Acknowledge', 'ack'],
+                     ['Deliver', 'deliver'],
+                     ['Of which redelivered', 'redeliver'],
+                     ['Acknowledge', 'ack'],
                      ['Get', 'get'], ['Deliver (noack)', 'deliver_no_ack'],
                      ['Get (noack)', 'get_no_ack'],
                      ['Return (mandatory)', 'return_unroutable'],
