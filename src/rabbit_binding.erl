@@ -114,9 +114,8 @@ recover_semi_durable_route(R = #route{binding = B}, ToRecover) ->
     {ok, X} = rabbit_exchange:lookup(Src),
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
-              case mnesia:match_object(
-                     rabbit_semi_durable_route, R, read) =/= [] andalso
-                  sets:is_element(Dst, ToRecover) of
+              Rs = mnesia:match_object(rabbit_semi_durable_route, R, read),
+              case Rs =/= [] andalso sets:is_element(Dst, ToRecover) of
                   false -> no_recover;
                   true  -> ok = sync_transient_route(R, fun mnesia:write/3),
                            rabbit_exchange:serial(X)
