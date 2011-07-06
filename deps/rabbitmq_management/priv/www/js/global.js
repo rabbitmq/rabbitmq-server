@@ -68,7 +68,7 @@ function setup_global_vars() {
     user_administrator = jQuery.inArray("administrator", tags) != -1;
     user_monitor = user_administrator ||
         jQuery.inArray("monitoring", tags) != -1;
-    nodes_interesting = user_administrator &&
+    nodes_interesting = user_monitor &&
         JSON.parse(sync_get('/nodes')).length > 1;
     vhosts_interesting = JSON.parse(sync_get('/vhosts')).length > 1;
     current_vhost = get_pref('vhost');
