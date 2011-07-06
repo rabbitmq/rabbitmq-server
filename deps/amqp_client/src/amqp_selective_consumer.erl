@@ -104,7 +104,7 @@ handle_consume(BasicConsume, Pid, State = #state{consumers = Consumers,
               monitors  = dict:store(Pid, monitor(process, Pid), Monitors)}};
         {true, #'basic.consume'{nowait = false}} ->
             NewUnassigned =
-                dict:update(BasicConsume, fun (Pids) -> [Pid | Pids] end,
+                dict:update(BasicConsume, fun (Pids) -> [Pids] ++ [Pid] end,
                             [Pid], Unassigned),
             {ok, State#state{unassigned = NewUnassigned,
                              monitors = dict:store(Pid, monitor(process, Pid),
