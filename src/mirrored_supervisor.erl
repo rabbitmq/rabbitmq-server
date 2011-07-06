@@ -131,6 +131,99 @@
 
 %%----------------------------------------------------------------------------
 
+-ifdef(use_specs).
+
+-type child()    :: pid() | 'undefined'.
+-type child_id() :: term().
+-type mfargs()   :: {M :: module(), F :: atom(), A :: [term()] | undefined}.
+-type modules()  :: [module()] | 'dynamic'.
+-type restart()  :: 'permanent' | 'transient' | 'temporary'.
+-type shutdown() :: 'brutal_kill' | timeout().
+-type worker()   :: 'worker' | 'supervisor'.
+-type sup_name() :: {'local', Name :: atom()} | {'global', Name :: atom()}.
+-type sup_ref()  :: (Name :: atom())
+                  | {Name :: atom(), Node :: node()}
+                  | {'global', Name :: atom()}
+                  | pid().
+-type child_spec() :: {Id :: child_id(),
+                       StartFunc :: mfargs(),
+                       Restart :: restart(),
+                       Shutdown :: shutdown(),
+                       Type :: worker(),
+                       Modules :: modules()}.
+
+-type strategy() :: 'one_for_all' | 'one_for_one'
+                  | 'rest_for_one' | 'simple_one_for_one'.
+
+-type startlink_err() :: {'already_started', pid()} | 'shutdown' | term().
+-type startlink_ret() :: {'ok', pid()} | 'ignore' | {'error', startlink_err()}.
+
+-type startchild_err() :: 'already_present'
+			| {'already_started', Child :: child()} | term().
+-type startchild_ret() :: {'ok', Child :: child()}
+                        | {'ok', Child :: child(), Info :: term()}
+			| {'error', startchild_err()}.
+
+-type group_name() :: any().
+
+-spec start_link(GroupName, Module, Args) -> startlink_ret() when
+      GroupName :: group_name(),
+      Module :: module(),
+      Args :: term().
+
+-spec start_link(SupName, GroupName, Module, Args) -> startlink_ret() when
+      SupName :: sup_name(),
+      GroupName :: group_name(),
+      Module :: module(),
+      Args :: term().
+
+-spec start_child(SupRef, ChildSpec) -> startchild_ret() when
+      SupRef :: sup_ref(),
+      ChildSpec :: child_spec() | (List :: [term()]).
+
+-spec restart_child(SupRef, Id) -> Result when
+      SupRef :: sup_ref(),
+      Id :: child_id(),
+      Result :: {'ok', Child :: child()}
+              | {'ok', Child :: child(), Info :: term()}
+              | {'error', Error},
+      Error :: 'running' | 'not_found' | 'simple_one_for_one' | term().
+
+-spec delete_child(SupRef, Id) -> Result when
+      SupRef :: sup_ref(),
+      Id :: child_id(),
+      Result :: 'ok' | {'error', Error},
+      Error :: 'running' | 'not_found' | 'simple_one_for_one'.
+
+-spec terminate_child(SupRef, Id) -> Result when
+      SupRef :: sup_ref(),
+      Id :: pid() | child_id(),
+      Result :: 'ok' | {'error', Error},
+      Error :: 'not_found' | 'simple_one_for_one'.
+
+-spec which_children(SupRef) -> [{Id,Child,Type,Modules}] when
+      SupRef :: sup_ref(),
+      Id :: child_id() | undefined,
+      Child :: child(),
+      Type :: worker(),
+      Modules :: modules().
+
+-spec check_childspecs(ChildSpecs) -> Result when
+      ChildSpecs :: [child_spec()],
+      Result :: 'ok' | {'error', Error :: term()}.
+
+-spec start_internal(Group, ChildSpecs) -> Result when
+      Group :: group_name(),
+      ChildSpecs :: [child_spec()],
+      Result :: startlink_ret().
+
+-spec create_tables() -> Result when
+      Result :: 'ok'.
+
+-endif.
+
+%%----------------------------------------------------------------------------
+
 start_link(Group, Mod, Args) ->
     start_link0([], Group, Mod, Args).
 
