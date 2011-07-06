@@ -62,7 +62,7 @@ serialisation_test() ->
 
     %% List of lists because one for each link
     ?assertEqual([[<<"1">>, <<"2">>]],
-                 rabbit_federation_link:list_routing_keys(X)),
+                 rabbit_federation_link:list_routing_keys(X#exchange.name)),
 
     rabbit_exchange:delete(r(?US_NAME), false),
     rabbit_exchange:delete(r(?DS_NAME), false),

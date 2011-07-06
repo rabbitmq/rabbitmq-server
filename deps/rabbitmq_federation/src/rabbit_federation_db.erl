@@ -25,8 +25,8 @@
 
 %%----------------------------------------------------------------------------
 
-get_active_suffix(X, Upstream, Default) ->
-    case rabbit_exchange:lookup(X) of
+get_active_suffix(XName, Upstream, Default) ->
+    case rabbit_exchange:lookup(XName) of
         {ok, #exchange{scratch = Dict}} ->
             case ?DICT:find(key(Upstream), Dict) of
                 {ok, Suffix} -> Suffix;
@@ -36,15 +36,16 @@ get_active_suffix(X, Upstream, Default) ->
             Default
     end.
 
-set_active_suffix(X, Upstream, Suffix) ->
+set_active_suffix(XName, Upstream, Suffix) ->
     ok = rabbit_exchange:update_scratch(
-           X, fun(D) -> ?DICT:store(key(Upstream), Suffix, D) end).
+           XName, fun(D) -> ?DICT:store(key(Upstream), Suffix, D) end).
 
-key(#upstream{connection_name = ConnName, exchange = X}) -> {ConnName, X}.
+key(#upstream{connection_name = ConnName, exchange = XName}) ->
+    {ConnName, XName}.
 
-prune_scratch(X, Upstreams) ->
+prune_scratch(XName, Upstreams) ->
     ok = rabbit_exchange:update_scratch(
-           X,
+           XName,
            fun(undefined) -> ?DICT:new();
               (D)         -> Keys = [key(U) || U <- Upstreams],
                              ?DICT:filter(

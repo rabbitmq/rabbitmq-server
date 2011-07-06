@@ -65,26 +65,26 @@ create(transaction, X) ->
 create(none, X = #exchange{name = XName}) ->
     Upstreams = upstreams(X),
     ok = rabbit_federation_db:prune_scratch(XName, Upstreams),
-    {ok, _} = rabbit_federation_sup:start_child(XName, {Upstreams, X}),
+    {ok, _} = rabbit_federation_sup:start_child(XName, {Upstreams, XName}),
     with_module(X, fun (M) -> M:create(none, X) end).
 
 delete(transaction, X, Bs) ->
     with_module(X, fun (M) -> M:delete(transaction, X, Bs) end);
 delete(none, X = #exchange{name = XName}, Bs) ->
-    rabbit_federation_link:stop(X),
+    rabbit_federation_link:stop(XName),
     ok = rabbit_federation_sup:stop_child(XName),
     with_module(X, fun (M) -> M:delete(none, X, Bs) end).
 
 add_binding(transaction, X, B) ->
     with_module(X, fun (M) -> M:add_binding(transaction, X, B) end);
-add_binding(Serial, X, B) ->
-    rabbit_federation_link:add_binding(Serial, X, B),
+add_binding(Serial, X = #exchange{name = XName}, B) ->
+    rabbit_federation_link:add_binding(Serial, XName, B),
     with_module(X, fun (M) -> M:add_binding(serial(Serial, X), X, B) end).
 
 remove_bindings(transaction, X, Bs) ->
     with_module(X, fun (M) -> M:remove_bindings(transaction, X, Bs) end);
-remove_bindings(Serial, X, Bs) ->
-    rabbit_federation_link:remove_bindings(Serial, X, Bs),
+remove_bindings(Serial, X = #exchange{name = XName}, Bs) ->
+    rabbit_federation_link:remove_bindings(Serial, XName, Bs),
     with_module(X, fun (M) -> M:remove_bindings(serial(Serial, X), X, Bs) end).
 
 assert_args_equivalence(X = #exchange{name = Name, arguments = Args},
