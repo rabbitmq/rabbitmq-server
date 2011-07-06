@@ -1,3 +1,10 @@
+///////////////////////
+//                   //
+// Genuine constants //
+//                   //
+///////////////////////
+
+// Just used below
 function map(list) {
     var res = {};
     for (i in list) {
@@ -6,32 +13,53 @@ function map(list) {
     return res;
 }
 
+// Which queries need to have the current vhost appended (if there is one)?
 var VHOST_QUERIES = map(['/queues', '/exchanges']);
+
+// Which queries need to have the current sort appended (if there is one)?
 var SORT_QUERIES  = map(['/connections', '/channels', '/vhosts', '/users',
                          '/queues', '/exchanges']);
 
+// Extension arguments that we know about and present specially in the UI.
 var KNOWN_ARGS = {'alternate-exchange': {'short': 'AE',  'type': 'string'},
                   'x-message-ttl':      {'short': 'TTL', 'type': 'int'},
                   'x-expires':          {'short': 'Exp', 'type': 'int'},
                   'x-ha-policy':        {'short': 'M',   'type': 'string'}};
 
+// Things that are like arguments that we format the same way in listings.
 var IMPLICIT_ARGS = {'durable':         {'short': 'D',   'type': 'boolean'},
                      'auto-delete':     {'short': 'AD',  'type': 'boolean'},
                      'internal':        {'short': 'I',   'type': 'boolean'}};
 
+// Both the above
 var ALL_ARGS = {};
 for (var k in KNOWN_ARGS)    ALL_ARGS[k] = KNOWN_ARGS[k];
 for (var k in IMPLICIT_ARGS) ALL_ARGS[k] = IMPLICIT_ARGS[k];
 
-var statistics_level;
-var user_administrator;
-var user_monitor;
-var nodes_interesting;
-var vhosts_interesting;
+
+///////////////////////////////////////////////////////////////////////////
+//                                                                       //
+// Mostly constant, typically get set once at startup (or rarely anyway) //
+//                                                                       //
+///////////////////////////////////////////////////////////////////////////
+
+// All these are to do with hiding UI elements if
+var statistics_level;   // ...there are no fine stats
+var user_administrator; // ...user is not an admin
+var user_monitor;       // ...user cannot monitor
+var nodes_interesting;  // ...we are not in a cluster
+var vhosts_interesting; // ...there is only one vhost
+
+// Extensions write to this, the dispatcher maker reads it
 var dispatcher_modules = [];
+
+// We need to know when all extension script files have loaded
 var extension_count;
+
+// The dispatcher needs access to the Sammy app
 var app;
 
+// Set up the above vars
 function setup_global_vars() {
     statistics_level = JSON.parse(sync_get('/overview')).statistics_level;
     var user = JSON.parse(sync_get('/whoami'));
@@ -46,14 +74,37 @@ function setup_global_vars() {
     current_vhost = get_pref('vhost');
 }
 
+////////////////////////////////////////////////////
+//                                                //
+// Change frequently (typically every "new page") //
+//                                                //
+////////////////////////////////////////////////////
+
+// Which top level template we're showing
 var current_template;
+
+// Which JSON requests do we need to populate it
 var current_reqs;
+
+// Which tab is highlighted
 var current_highlight;
+
+// Which vhost are we looking at
 var current_vhost = '';
+
+// What is our current sort order
 var current_sort;
 var current_sort_reverse = false;
+
+// The timer object for auto-updates, and how often it goes off
 var timer;
 var timer_interval;
+
+// When did we last connect successfully (for the "could not connect" error)
 var last_successful_connect;
+
+// Every 200 updates without user interaction we do a full refresh, to
+// work around memory leaks in browser DOM implementations.
+// TODO: maybe we don't need this any more?
 var update_counter = 0;
 
