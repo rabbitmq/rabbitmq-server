@@ -6,7 +6,7 @@ dispatcher_add(function(sammy) {
     }
     sammy.get('#/', function() {
             var reqs = {'overview': '/overview'};
-            if (user_administrator) {
+            if (user_monitor) {
                 reqs['nodes'] = '/nodes';
             }
             render(reqs, 'overview', '#/');

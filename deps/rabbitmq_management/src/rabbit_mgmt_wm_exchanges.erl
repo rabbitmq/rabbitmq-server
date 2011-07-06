@@ -36,8 +36,9 @@ resource_exists(ReqData, Context) ->
 
 to_json(ReqData, Context) ->
     rabbit_mgmt_util:reply_list(
-      rabbit_mgmt_db:get_exchanges(
-        rabbit_mgmt_util:filter_vhost(exchanges(ReqData), ReqData, Context)),
+      rabbit_mgmt_db:augment_exchanges(
+        rabbit_mgmt_util:filter_vhost(exchanges(ReqData), ReqData, Context),
+        basic),
       ReqData, Context).
 
 is_authorized(ReqData, Context) ->
