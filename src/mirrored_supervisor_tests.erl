@@ -74,11 +74,12 @@ test_delete_restart() ->
     with_sups(fun([_, _]) ->
                       S = childspec(worker),
                       {ok, Pid1} = mirrored_supervisor:start_child(a, S),
-                      mirrored_supervisor:terminate_child(a, worker),
-                      mirrored_supervisor:delete_child(a, worker),
+                      ok = mirrored_supervisor:terminate_child(a, worker),
+                      ok = mirrored_supervisor:delete_child(a, worker),
                       {ok, Pid2} = mirrored_supervisor:start_child(b, S),
                       false = (Pid1 =:= Pid2),
-                      mirrored_supervisor:restart_child(a, worker),
+                      ok = mirrored_supervisor:terminate_child(b, worker),
+                      {ok, Pid3} = mirrored_supervisor:restart_child(b, worker),
                       Pid3 = pid_of(worker),
                       false = (Pid2 =:= Pid3)
               end, [a, b]).
@@ -147,7 +148,7 @@ start_gs(Id) ->
 
 pid_of(Id) ->
     {received, Pid, ping} = call(Id, ping),
-    {ok, Pid}.
+    Pid.
 
 call(Id, Msg) -> call(Id, Msg, 100, 10).
 
