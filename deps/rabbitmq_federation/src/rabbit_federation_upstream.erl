@@ -45,8 +45,7 @@ from_set(SetName, DefaultXName, DefaultVHost) ->
     {ok, Sets} = application:get_env(rabbitmq_federation, upstream_sets),
     case pget(binary_to_list(SetName), Sets) of
         undefined -> {error, set_not_found};
-        Set       -> Results = [from_props(P, SetName,
-                                           DefaultXName, DefaultVHost) ||
+        Set       -> Results = [from_props(P, DefaultXName, DefaultVHost) ||
                                    P <- Set],
                      case [E || E = {error, _} <- Results] of
                          []      -> {ok, Results};
@@ -54,20 +53,19 @@ from_set(SetName, DefaultXName, DefaultVHost) ->
                      end
     end.
 
-from_props(Upst, SetName, DefaultXName, DefaultVHost) ->
+from_props(Upst, DefaultXName, DefaultVHost) ->
     {ok, Connections} = application:get_env(rabbitmq_federation, connections),
     case pget(connection, Upst) of
         undefined -> {error, no_connection_name};
         ConnName  -> case pget(ConnName, Connections) of
                          undefined  -> {error, {no_connection, ConnName}};
                          Conn       -> from_props_connection(
-                                         Upst, SetName, ConnName, Conn,
-                                         DefaultXName, DefaultVHost)
+                                         Upst, ConnName, Conn, DefaultXName,
+                                         DefaultVHost)
                      end
     end.
 
-from_props_connection(Upst, SetName, ConnName, Conn,
-                      DefaultXName, DefaultVHost) ->
+from_props_connection(Upst, ConnName, Conn, DefaultXName, DefaultVHost) ->
     {ok, DefaultUser} = application:get_env(rabbit, default_user),
     {ok, DefaultPass} = application:get_env(rabbit, default_pass),
     case pget(host, Conn, none) of
@@ -86,8 +84,7 @@ from_props_connection(Upst, SetName, ConnName, Conn,
                           max_hops        = pget(max_hops,        Upst, 1),
                           expires         = pget(expires,         Conn, none),
                           message_ttl     = pget(message_ttl,     Conn, none),
-                          connection_name = ConnName,
-                          upstream_set    = SetName}
+                          connection_name = ConnName}
     end.
 
 set_extra_params(Params, Conn) ->

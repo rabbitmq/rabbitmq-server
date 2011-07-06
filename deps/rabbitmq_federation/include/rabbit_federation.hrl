@@ -21,7 +21,6 @@
                    reconnect_delay,
                    expires,
                    message_ttl,
-                   connection_name,
-                   upstream_set}).
+                   connection_name}).
 
 -define(SUPERVISOR, rabbit_federation_sup).
