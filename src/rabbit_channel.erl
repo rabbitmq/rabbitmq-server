@@ -539,17 +539,13 @@ process_confirms(MsgSeqNos, QPid, Nack, State = #ch{unconfirmed_mq = UMQ,
           fun(MsgSeqNo, {_MXs, UMQ0, _UQM} = Acc) ->
                   case gb_trees:lookup(MsgSeqNo, UMQ0) of
                       {value, XQ} -> remove_unconfirmed(MsgSeqNo, QPid, XQ,
-                                                        Acc, Nack, State);
+                                                        Acc, Nack);
                       none        -> Acc
                   end
           end, {[], UMQ, UQM}, MsgSeqNos),
     {MXs, State#ch{unconfirmed_mq = UMQ1, unconfirmed_qm = UQM1}}.
 
-remove_unconfirmed(MsgSeqNo, QPid, {XName, Qs}, {MXs, UMQ, UQM}, Nack,
-                   State) ->
-    %% these confirms will be emitted even when a queue dies, but that
-    %% should be fine, since the queue stats get erased immediately
-    maybe_incr_stats([{{QPid, XName}, 1}], confirm, State),
+remove_unconfirmed(MsgSeqNo, QPid, {XName, Qs}, {MXs, UMQ, UQM}, Nack) ->
     UQM1 = case gb_trees:lookup(QPid, UQM) of
                {value, MsgSeqNos} ->
                    MsgSeqNos1 = gb_sets:delete(MsgSeqNo, MsgSeqNos),
