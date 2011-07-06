@@ -71,7 +71,7 @@
 -export([next_publish_seqno/1]).
 -export([register_return_handler/2, register_flow_handler/2,
          register_confirm_handler/2]).
--export([call_consumer/2]).
+-export([call_consumer/2, subscribe/3]).
 
 -export([start_link/5, connection_closing/3, open/1]).
 
@@ -128,7 +128,7 @@
 %% @spec (Channel, Method) -> Result
 %% @doc This is equivalent to amqp_channel:call(Channel, Method, none).
 call(Channel, Method) ->
-    gen_server:call(Channel, {call, Method, none}, infinity).
+    gen_server:call(Channel, {call, Method, none, self()}, infinity).
 
 %% @spec (Channel, Method, Content) -> Result
 %% where
@@ -151,12 +151,12 @@ call(Channel, Method) ->
 %% the broker. It does not necessarily imply that the broker has
 %% accepted responsibility for the message.
 call(Channel, Method, Content) ->
-    gen_server:call(Channel, {call, Method, Content}, infinity).
+    gen_server:call(Channel, {call, Method, Content, self()}, infinity).
 
 %% @spec (Channel, Method) -> ok
 %% @doc This is equivalent to amqp_channel:cast(Channel, Method, none).
 cast(Channel, Method) ->
-    gen_server:cast(Channel, {cast, Method, none}).
+    gen_server:cast(Channel, {cast, Method, none, self()}).
 
 %% @spec (Channel, Method, Content) -> ok
 %% where
@@ -168,7 +168,7 @@ cast(Channel, Method) ->
 %% This function is not recommended with synchronous methods, since there is no
 %% way to verify that the server has received the method.
 cast(Channel, Method, Content) ->
-    gen_server:cast(Channel, {cast, Method, Content}).
+    gen_server:cast(Channel, {cast, Method, Content, self()}).
 
 %% @spec (Channel) -> ok | closing
 %% where
@@ -235,6 +235,16 @@ register_flow_handler(Channel, FlowHandler) ->
 call_consumer(Channel, Call) ->
     gen_server:call(Channel, {call_consumer, Call}, infinity).
 
+%% @spec (Channel, BasicConsume, Subscriber) -> ok
+%% where
+%%      Channel = pid()
+%%      BasicConsume = amqp_method()
+%%      Subscriber = pid()
+%% @doc Subscribe the given pid to a queue using the specified
+%% basic.consume method.
+subscribe(Channel, BasicConsume = #'basic.consume'{}, Subscriber) ->
+    gen_server:call(Channel, {subscribe, BasicConsume, Subscriber}, infinity).
+
 %%---------------------------------------------------------------------------
 %% Internal interface
 %%---------------------------------------------------------------------------
@@ -274,8 +284,8 @@ handle_call(open, From, State) ->
 handle_call({close, Code, Text}, From, State) ->
     handle_close(Code, Text, From, State);
 %% @private
-handle_call({call, Method, AmqpMsg}, From, State) ->
-    handle_method_to_server(Method, AmqpMsg, From, State);
+handle_call({call, Method, AmqpMsg, Sender}, From, State) ->
+    handle_method_to_server(Method, AmqpMsg, From, Sender, State);
 %% Handles the delivery of messages from a direct channel
 %% @private
 handle_call({send_command_sync, Method, Content}, From, State) ->
@@ -295,11 +305,14 @@ handle_call(next_publish_seqno, _From,
 %% @private
 handle_call({call_consumer, Call}, _From,
             State = #state{consumer = Consumer}) ->
-    {reply, amqp_gen_consumer:call_consumer(Consumer, Call), State}.
+    {reply, amqp_gen_consumer:call_consumer(Consumer, Call), State};
+%% @private
+handle_call({subscribe, BasicConsume, Subscriber}, From, State) ->
+    handle_method_to_server(BasicConsume, none, From, Subscriber, State).
 
 %% @private
-handle_cast({cast, Method, AmqpMsg}, State) ->
-    handle_method_to_server(Method, AmqpMsg, none, State);
+handle_cast({cast, Method, AmqpMsg, Sender}, State) ->
+    handle_method_to_server(Method, AmqpMsg, none, Sender, State);
 %% @private
 handle_cast({register_return_handler, ReturnHandler}, State) ->
     erlang:monitor(process, ReturnHandler),
@@ -389,7 +402,7 @@ code_change(_OldVsn, State, _Extra) ->
 %% RPC mechanism
 %%---------------------------------------------------------------------------
 
-handle_method_to_server(Method, AmqpMsg, From, State) ->
+handle_method_to_server(Method, AmqpMsg, From, Sender, State) ->
     case {check_invalid_method(Method), From,
           check_block(Method, AmqpMsg, State)} of
         {ok, _, ok} ->
@@ -405,14 +418,14 @@ handle_method_to_server(Method, AmqpMsg, From, State) ->
                      end,
             ConsumerReply = case Method of
                                 #'basic.consume'{} ->
-                                    call_to_consumer(Method, From, State);
+                                    call_to_consumer(Method, Sender, State);
                                 _ -> ok
                             end,
             case ConsumerReply of
                 ok -> {noreply,
                        rpc_top_half(Method, build_content(AmqpMsg),
                                     From, State1)};
-                error -> {reply, {error, consumer_error, State}}
+                error -> {reply, {error, consumer_error}, State}
             end;
         {ok, none, BlockReply} ->
             ?LOG_WARN("Channel (~p): discarding method ~p in cast.~n"

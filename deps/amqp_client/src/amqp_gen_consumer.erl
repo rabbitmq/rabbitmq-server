@@ -221,8 +221,7 @@ handle_call({consumer_call, Method, Args}, _From,
     Return =
         case Method of
             #'basic.consume'{} ->
-                {Pid, _} = Args,
-                ConsumerModule:handle_consume(Method, Pid, MState);
+                ConsumerModule:handle_consume(Method, Args, MState);
             #'basic.consume_ok'{} ->
                 ConsumerModule:handle_consume_ok(Method, Args, MState);
             #'basic.cancel_ok'{} ->
