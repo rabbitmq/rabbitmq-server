@@ -1,25 +1,6 @@
-var statistics_level;
-var user_administrator;
-var user_monitor;
-var nodes_interesting;
-var vhosts_interesting;
-var dispatcher_modules = [];
-var extension_count;
-var app;
-
 $(document).ready(function() {
-    statistics_level = JSON.parse(sync_get('/overview')).statistics_level;
-    var user = JSON.parse(sync_get('/whoami'));
-    replace_content('login', '<p>User: <b>' + user.name + '</b></p>');
-    var tags = user.tags.split(",");
-    user_administrator = jQuery.inArray("administrator", tags) != -1;
-    user_monitor = user_administrator ||
-        jQuery.inArray("monitoring", tags) != -1;
-    nodes_interesting = user_administrator &&
-        JSON.parse(sync_get('/nodes')).length > 1;
-    vhosts_interesting = JSON.parse(sync_get('/vhosts')).length > 1;
+    setup_global_vars();
     setup_constant_events();
-    current_vhost = get_pref('vhost');
     update_vhosts();
     update_interval();
     setup_extensions();
@@ -129,15 +110,6 @@ function go_to(url) {
     this.location = url;
 }
 
-var current_template;
-var current_reqs;
-var current_highlight;
-var current_vhost = '';
-var current_sort;
-var current_sort_reverse = false;
-var timer;
-var timer_interval;
-
 function set_timer_interval(interval) {
     timer_interval = interval;
     reset_timer();
@@ -167,8 +139,6 @@ function update() {
             reset_timer();
         });
 }
-
-var update_counter = 0;
 
 function partial_update() {
     if ($('.updatable').length > 0) {
@@ -231,18 +201,6 @@ function with_update(fun) {
             fun(html);
             update_status('ok');
         });
-}
-
-var VHOST_QUERIES = map(['/queues', '/exchanges']);
-var SORT_QUERIES  = map(['/connections', '/channels', '/vhosts', '/users',
-                         '/queues', '/exchanges']);
-
-function map(list) {
-    var res = {};
-    for (i in list) {
-        res[list[i]] = '';
-    }
-    return res;
 }
 
 function apply_state(reqs) {
@@ -495,8 +453,6 @@ function format(template, json) {
     }
 }
 
-var last_successful_connect;
-
 function update_status(status) {
     var text;
     if (status == 'ok')
@@ -660,19 +616,6 @@ function collapse_multifields(params0) {
     }
     return params;
 }
-
-KNOWN_ARGS = {'alternate-exchange': {'short': 'AE',  'type': 'string'},
-              'x-message-ttl':      {'short': 'TTL', 'type': 'int'},
-              'x-expires':          {'short': 'Exp', 'type': 'int'},
-              'x-ha-policy':        {'short': 'M',   'type': 'string'}};
-
-IMPLICIT_ARGS = {'durable':         {'short': 'D',   'type': 'boolean'},
-                 'auto-delete':     {'short': 'AD',  'type': 'boolean'},
-                 'internal':        {'short': 'I',   'type': 'boolean'}};
-
-ALL_ARGS = {};
-for (var k in KNOWN_ARGS)    ALL_ARGS[k] = KNOWN_ARGS[k];
-for (var k in IMPLICIT_ARGS) ALL_ARGS[k] = IMPLICIT_ARGS[k];
 
 function add_known_arguments(params) {
     for (var k in KNOWN_ARGS) {
