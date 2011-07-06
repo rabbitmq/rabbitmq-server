@@ -71,11 +71,10 @@ register_context() ->
       ?CONTEXT, "", make_loop(), "RabbitMQ Management").
 
 make_loop() ->
-    Dispatch = rabbit_mgmt_dispatcher:dispatcher(),
+    Dispatch = rabbit_mgmt_dispatcher:build_dispatcher(),
     WMLoop = rabbit_webmachine:makeloop(Dispatch),
-    {file, Here} = code:is_loaded(?MODULE),
-    ModuleRoot = filename:dirname(filename:dirname(Here)),
-    LocalPath = filename:join(ModuleRoot, ?STATIC_PATH),
+    LocalPaths = [filename:join(module_path(M), ?STATIC_PATH) ||
+                     M <- rabbit_mgmt_dispatcher:modules()],
     fun(PL, Req) ->
             Unauthorized = {401, [{"WWW-Authenticate", ?AUTH_REALM}], ""},
             Auth = Req:get_header_value("authorization"),
@@ -83,7 +82,7 @@ make_loop() ->
                 [Username, Password] ->
                     case rabbit_access_control:check_user_pass_login(
                            Username, Password) of
-                        {ok, _} -> respond(Req, LocalPath, PL, WMLoop);
+                        {ok, _} -> respond(Req, LocalPaths, PL, WMLoop);
                         _       -> Req:respond(Unauthorized)
                     end;
                 _ ->
@@ -92,7 +91,11 @@ make_loop() ->
 
     end.
 
-respond(Req, LocalPath, PL = {Prefix, _}, WMLoop) ->
+module_path(Module) ->
+    {file, Here} = code:is_loaded(Module),
+    filename:dirname(filename:dirname(Here)).
+
+respond(Req, LocalPaths, PL = {Prefix, _}, WMLoop) ->
     %% To get here we know Prefix matches the beginning of the path
     RawPath = Req:get(raw_path),
     Path = case Prefix of
@@ -108,7 +111,19 @@ respond(Req, LocalPath, PL = {Prefix, _}, WMLoop) ->
         "/mgmt/" ->
             Req:respond(Redirect);
         "/" ++ Stripped ->
-            Req:serve_file(Stripped, LocalPath)
+            serve_file(Req, Stripped, LocalPaths)
+    end.
+
+serve_file(Req, Path, [LocalPath]) ->
+    Req:serve_file(Path, LocalPath);
+serve_file(Req, Path, [LocalPath | Others]) ->
+    Path1 = case Path of
+                "" -> "index.html";
+                _  -> Path
+            end,
+    case filelib:is_regular(filename:join([LocalPath, Path1])) of
+        true  -> Req:serve_file(Path, LocalPath);
+        false -> serve_file(Req, Path, Others)
     end.
 
 setup_wm_logging() ->

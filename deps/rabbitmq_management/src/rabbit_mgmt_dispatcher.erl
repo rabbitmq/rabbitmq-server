@@ -14,15 +14,30 @@
 %%   Copyright (c) 2007-2010 VMware, Inc.  All rights reserved.
 -module(rabbit_mgmt_dispatcher).
 
--export([dispatcher/0]).
+-export([modules/0, build_dispatcher/0]).
+
+-behaviour(rabbit_mgmt_extension).
+-export([dispatcher/0, web_ui/0]).
+
+build_dispatcher() ->
+    [{["api" | Path], Mod, Args} ||
+        {Path, Mod, Args} <-
+            lists:append([Module:dispatcher() || Module <- modules()])].
+
+modules() ->
+    [Module || {Module, Behaviours} <-
+                   rabbit_misc:all_module_attributes(behaviour),
+               lists:member(rabbit_mgmt_extension, Behaviours)].
+
+%%----------------------------------------------------------------------------
+
+web_ui()     -> [{javascript, <<"dispatcher.js">>}].
 
 dispatcher() ->
-    [{["api" | Path], Mod, Args} || {Path, Mod, Args} <- dispatcher_api()].
-
-dispatcher_api() ->
     [{["overview"],                                                rabbit_mgmt_wm_overview, []},
      {["nodes"],                                                   rabbit_mgmt_wm_nodes, []},
      {["nodes", node],                                             rabbit_mgmt_wm_node, []},
+     {["extensions"],                                              rabbit_mgmt_wm_extensions, []},
      {["all-configuration"],                                       rabbit_mgmt_wm_all_configuration, []},
      {["connections"],                                             rabbit_mgmt_wm_connections, []},
      {["connections", connection],                                 rabbit_mgmt_wm_connection, []},
