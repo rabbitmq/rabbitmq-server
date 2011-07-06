@@ -63,7 +63,9 @@ validate(#exchange{name      = #resource{name = XName, virtual_host = VHost},
 create(transaction, X) ->
     with_module(X, fun (M) -> M:create(transaction, X) end);
 create(none, X = #exchange{name = XName}) ->
-    {ok, _} = rabbit_federation_sup:start_child(XName, {upstreams(X), X}),
+    Upstreams = upstreams(X),
+    ok = rabbit_federation_db:prune_scratch(XName, Upstreams),
+    {ok, _} = rabbit_federation_sup:start_child(XName, {Upstreams, X}),
     with_module(X, fun (M) -> M:create(none, X) end).
 
 delete(transaction, X, Bs) ->

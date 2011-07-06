@@ -21,14 +21,12 @@
 
 -define(DICT, orddict).
 
--export([get_active_suffix/3, set_active_suffix/3]).
+-export([get_active_suffix/3, set_active_suffix/3, prune_scratch/2]).
 
 %%----------------------------------------------------------------------------
 
 get_active_suffix(X, Upstream, Default) ->
     case rabbit_exchange:lookup(X) of
-        {ok, #exchange{scratch = undefined}} ->
-            Default;
         {ok, #exchange{scratch = Dict}} ->
             case ?DICT:find(key(Upstream), Dict) of
                 {ok, Suffix} -> Suffix;
@@ -40,12 +38,15 @@ get_active_suffix(X, Upstream, Default) ->
 
 set_active_suffix(X, Upstream, Suffix) ->
     ok = rabbit_exchange:update_scratch(
-           X, fun(Scratch) ->
-                      Dict = case Scratch of
-                                 undefined -> ?DICT:new();
-                                 _         -> Scratch
-                             end,
-                      ?DICT:store(key(Upstream), Suffix, Dict)
-              end).
+           X, fun(D) -> ?DICT:store(key(Upstream), Suffix, D) end).
 
 key(#upstream{connection_name = ConnName, exchange = X}) -> {ConnName, X}.
+
+prune_scratch(X, Upstreams) ->
+    ok = rabbit_exchange:update_scratch(
+           X,
+           fun(undefined) -> ?DICT:new();
+              (D)         -> Keys = [key(U) || U <- Upstreams],
+                             ?DICT:filter(
+                                fun(K, _V) -> lists:member(K, Keys) end, D)
+           end).
