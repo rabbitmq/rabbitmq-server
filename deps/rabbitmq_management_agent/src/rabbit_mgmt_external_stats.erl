@@ -61,11 +61,9 @@ info(Node, Keys) ->
 
 get_used_fd_lsof() ->
     case os:find_executable("lsof") of
-        false ->
-            unknown;
-        Path ->
-            Lsof = os:cmd(Path ++ " -d \"0-9999999\" -lna -p " ++ os:getpid()),
-            string:words(Lsof, $\n) - 1
+        false -> unknown;
+        Path  -> Cmd = Path ++ " -d \"0-9999999\" -lna -p " ++ os:getpid(),
+                 string:words(os:cmd(Cmd), $\n) - 1
     end.
 
 get_used_fd() ->
