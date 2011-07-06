@@ -38,7 +38,7 @@
 -record(state, {bqstate,
                 len,        %% int
                 messages,   %% queue of {msg_props, basic_msg}
-                acks,       %% list of {acktag, {message_props, basic_msg}}
+                acks,       %% list of {acktag, {msg_props, basic_msg}}
                 confirms}). %% set of msgid
 
 %% Initialise model
@@ -297,12 +297,10 @@ repeat(Result, _Fun, 0) ->
 repeat(Result, Fun, Times) ->
     repeat(Fun(Result), Fun, Times - 1).
 
-publish_multiple(_Msg, _MsgProps, BQ, 0) ->
-    BQ;
 publish_multiple(Msg, MsgProps, BQ, Count) ->
-    publish_multiple(Msg, MsgProps,
-                     ?BQMOD:publish(Msg, MsgProps, self(), BQ),
-                     Count - 1).
+    repeat(BQ, fun(BQ1) ->
+                   ?BQMOD:publish(Msg, MsgProps, self(), BQ1)
+               end, Count).
 
 timeout(BQ, 0) ->
     BQ;
