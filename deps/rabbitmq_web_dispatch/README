@@ -15,7 +15,9 @@ Environment Variables
 rabbitmq-mochiweb uses the standard OTP environment variables
 mechanism. A configuration has this structure:
 
-    Env = [{listeners, [Listener...]}, {contexts, [Context...]}]
+    Env = [{listeners, [Listener...]},
+           {contexts, [Context...]},
+           {default_listener, [{port, Port} | Option ...]}]
 
     Listener = {Name, [{port, Port} | Option...]}
 
@@ -37,18 +39,32 @@ rabbitmq-mochiweb plugin supports OTP application configuration
 values. These values can be set as either Erlang startup parameters or
 via the rabbitmq.config file, with a block such as:
 
-    {rabbitmq_mochiweb, [{listeners, [{'*', [{port, 55672}]}]},
-                         {contexts,  []}]}
+    {rabbitmq_mochiweb, [{default_listener, [{port, 5567}]}]}
 
-There must be at least a default listener, named `'*'`. Each listener
-must have a port number, and may have other options, which are
-supplied to mochiweb as-is, aside from `name` and `loop`. `name`
-because that is generated from the listener name, and `loop` because
-that is supplied for each context.
+When listeners are supplied, each listener must have a port number.  A
+listener may have other options, which are supplied to mochiweb as-is,
+aside from `name` and `loop`. `name` because that is generated from
+the listener name, and `loop` because that is supplied for each
+context.
 
 Each context must give the name of a listener that appears in the list
 of listeners. It may give a path, which overrides any path given for a
-context when it is registered.
+context when it is registered. This configuration
+
+    {rabbitmq_mochiweb, [{listeners, [{internal, [{port, 5568}]}]},
+                         {contexts, [{bar, {internal, "bar"}}]}]}
+
+assigns the context `'bar'` to the listener on port 5568 and forces
+its path prefix to `"/bar"`.
+
+To give a path for a context, but let it use the default listener, use
+`'*'` as the listener name. For example:
+
+    {rabbitmq_mochiweb, [{default_listener, [{port, 5567}]},
+                         {contexts, [{foo, {'*', "foo"}}]}]}
+
+will let the context `'foo'` default to the listener on port 5567, but
+force its path prefix to `"/foo"`.
 
 The procedures `register_*` exported from the module `rabbit_mochiweb`
 all take a context and a path as the first two arguments.
@@ -58,19 +74,20 @@ supplies a context name, which is expected to be unique to that
 application, and a path prefix. If this context is mentioned in the
 environment, it is assigned to the listener given there. Its path
 prefix may also be overidden if it is given in the configuration. If
-it is not mentioned, it is assigned to the default listener.
+it is not mentioned or gives the listener `'*'`, it is assigned to the
+default listener.
 
 For example, for the configuration
 
-    {rabbitmq_mochiweb, [{listeners, [{'*', [{port, 55672}]},
-                                      {internal, [{port, 55670}]}]},
+    {rabbitmq_mochiweb, [{default_listener, [{port, 55670}]},
+                         {listeners, [{internal, [{port, 55671}]}]},
                          {contexts,  [{myapp, {internal, "myapp"}}]}]}
 
 an application registering the context name 'myapp' will be assigned
-to the listener 'internal', listening on port 55670, and be available
+to the listener 'internal', listening on port 55671, and be available
 under the path `/myapp/` in URLs. An application registering with the
 context 'myotherapp' and the path "other" will be assigned to the
-default listener ('*'), listening on port 55672, and be available
+default listener, listening on port 55670, and be available
 under "/other/".
 
 There is no attempt made to avoid clashes of paths, either those given
