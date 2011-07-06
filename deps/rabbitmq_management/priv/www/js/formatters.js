@@ -156,6 +156,14 @@ function fmt_rate0(obj, name, fmt, show_total) {
     return res;
 }
 
+function fmt_deliver_rate(obj, show_redeliver, cssClass) {
+    var res = fmt_rate(obj, 'deliver_get', false, cssClass);
+    if (show_redeliver) {
+        res += '<sub>' + fmt_rate(obj, 'redeliver') + '</sub>';
+    }
+    return res;
+}
+
 function is_stat_empty(obj, name) {
     if (obj == undefined
         || obj[name] == undefined

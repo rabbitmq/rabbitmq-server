@@ -69,10 +69,7 @@
 <% if (statistics_level == 'fine') { %>
     <td class="r"><%= fmt_rate(queue.message_stats, 'publish', false) %></td>
     <td class="r">
-      <%= fmt_rate(queue.message_stats, 'deliver_get', false) %>
-      <% if (col_redeliver) { %>
-        <sub><%= fmt_rate(queue.message_stats, 'redeliver', false) %></sub>
-      <% } %>
+      <%= fmt_deliver_rate(queue.message_stats, col_redeliver) %>
     </td>
     <td class="r"><%= fmt_rate(queue.message_stats, 'ack', false) %></td>
 <% } %>
