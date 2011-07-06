@@ -78,8 +78,12 @@ rabbit_mochiweb_contexts() ->
       ["description", "port", "node"]).
 
 contexts(Node) ->
-    [{contexts, Contexts}] = rabbit_mgmt_external_stats:info(Node, [contexts]),
-    [[{node, Node} | format_mochiweb_option_list(C)] || C <- Contexts].
+    case rabbit_mgmt_external_stats:info(Node, [contexts]) of
+        [{contexts, Contexts}] ->
+            [[{node, Node} | format_mochiweb_option_list(C)] || C <- Contexts];
+        [{external_stats_not_running, true}] ->
+            []
+    end.
 
 format_mochiweb_option_list(C) ->
     [{K, format_mochiweb_option(K, V)} || {K, V} <- C].
