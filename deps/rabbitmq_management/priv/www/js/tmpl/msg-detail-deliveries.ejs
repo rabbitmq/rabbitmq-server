@@ -34,9 +34,7 @@
 <% } %>
   <tr class="total">
     <th>Total:</th>
-    <td class="r">
-      <%= fmt_deliver_rate(totals, col_redeliver, 'mini-highlight') %>
-    </td>
+    <td class="r"><%= fmt_deliver_rate(totals, col_redeliver, 'mini-highlight') %></td>
     <td class="r"><%= fmt_rate(totals, 'ack', false, 'mini-highlight') %></td>
   </tr>
 </table>

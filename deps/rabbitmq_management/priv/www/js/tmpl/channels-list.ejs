@@ -110,9 +110,7 @@
 <% if (statistics_level == 'fine') { %>
     <td class="r"><%= fmt_rate(channel.message_stats, 'publish') %></td>
     <td class="r"><%= fmt_rate(channel.message_stats, 'confirm') %></td>
-    <td class="r">
-      <%= fmt_deliver_rate(channel.message_stats, col_redeliver) %>
-    </td>
+    <td class="r"><%= fmt_deliver_rate(channel.message_stats, col_redeliver) %></td>
     <td class="r"><%= fmt_rate(channel.message_stats, 'ack') %></td>
     <% if (col_return_unroutable) { %>
     <td class="r"><%= fmt_rate(channel.message_stats, 'return_unroutable') %></td>
