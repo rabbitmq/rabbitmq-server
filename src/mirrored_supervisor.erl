@@ -234,10 +234,12 @@ start_link({global, _SupName}, _Group, _Mod, _Args) ->
     exit(mirrored_supervisors_must_not_be_globally_named).
 
 start_link0(Prefix, Group, Mod, Args) ->
-    {ok, Pid} = apply(?SUPERVISOR, start_link,
-                      Prefix ++ [?MODULE, {overall, Group, Mod, Args}]),
-    call(Pid, {finish_startup, Pid}),
-    {ok, Pid}.
+    case apply(?SUPERVISOR, start_link,
+               Prefix ++ [?MODULE, {overall, Group, Mod, Args}]) of
+        {ok, Pid} -> call(Pid, {finish_startup, Pid}),
+                     {ok, Pid};
+        Other     -> Other
+    end.
 
 start_child(Sup, ChildSpec)  -> call(Sup, {start_child,  ChildSpec}).
 delete_child(Sup, Name)      -> call(Sup, {delete_child, Name}).
