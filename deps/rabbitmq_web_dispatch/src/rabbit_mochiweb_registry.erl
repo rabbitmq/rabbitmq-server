@@ -50,7 +50,9 @@ handle_call({add, Context, Selector, Handler, Link}, _From,
         rabbit_mochiweb:context_listener(Context),
     rabbit_mochiweb_sup:ensure_listener(ListenerSpec),
     case lookup_dispatch(Listener) of
-        {Selectors, Fallback} ->
+        {OldSelectors, Fallback} ->
+            Selectors = lists:filter(fun ({C, _, _, _}) -> C =/= Context end,
+                                     OldSelectors),
             set_dispatch(Listener,
                          {Selectors ++ [{Context, Selector, Handler, Link}],
                           Fallback}),
