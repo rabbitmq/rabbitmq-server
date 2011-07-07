@@ -55,24 +55,24 @@
 %% the federation app is started.
 go() -> cast(go).
 
-add_binding(S, X, B)      -> cast(X, {enqueue, S, {add_binding, B}}).
-remove_bindings(S, X, Bs) -> cast(X, {enqueue, S, {remove_bindings, Bs}}).
+add_binding(S, XN, B)      -> cast(XN, {enqueue, S, {add_binding, B}}).
+remove_bindings(S, XN, Bs) -> cast(XN, {enqueue, S, {remove_bindings, Bs}}).
 
 %% This doesn't just correspond to the link being killed by its
 %% supervisor since this means "the exchange is going away, please
 %% remove upstream resources associated with it".
-stop(X) -> call(X, stop).
+stop(XN) -> call(XN, stop).
 
-list_routing_keys(X) -> call(X, list_routing_keys).
+list_routing_keys(XN) -> call(XN, list_routing_keys).
 
 %%----------------------------------------------------------------------------
 
 start_link(Args) ->
     gen_server2:start_link(?MODULE, Args, [{timeout, infinity}]).
 
-init(Args = {_, #exchange{name = Name}}) ->
+init(Args = {_, XName}) ->
     join(rabbit_federation_exchanges),
-    join({rabbit_federation_exchange, Name}),
+    join({rabbit_federation_exchange, XName}),
     gen_server2:cast(self(), maybe_go),
     {ok, {not_started, Args}}.
 
@@ -182,9 +182,9 @@ code_change(_OldVsn, State, _Extra) ->
 
 %%----------------------------------------------------------------------------
 
-call(X, Msg) -> [gen_server2:call(Pid, Msg, infinity) || Pid <- x(X)].
-cast(Msg) ->    [gen_server2:cast(Pid, Msg) || Pid <- all()].
-cast(X, Msg) -> [gen_server2:cast(Pid, Msg) || Pid <- x(X)].
+call(XName, Msg) -> [gen_server2:call(Pid, Msg, infinity) || Pid <- x(XName)].
+cast(Msg)        -> [gen_server2:cast(Pid, Msg) || Pid <- all()].
+cast(XName, Msg) -> [gen_server2:cast(Pid, Msg) || Pid <- x(XName)].
 
 join(Name) ->
     pg2_fixed:create(Name),
@@ -194,9 +194,9 @@ all() ->
     pg2_fixed:create(rabbit_federation_exchanges),
     pg2_fixed:get_members(rabbit_federation_exchanges).
 
-x(#exchange{name = Name}) ->
-    pg2_fixed:create({rabbit_federation_exchange, Name}),
-    pg2_fixed:get_members({rabbit_federation_exchange, Name}).
+x(XName) ->
+    pg2_fixed:create({rabbit_federation_exchange, XName}),
+    pg2_fixed:get_members({rabbit_federation_exchange, XName}).
 
 %%----------------------------------------------------------------------------
 
@@ -289,9 +289,8 @@ check_remove_binding(B = #binding{destination = Dest},
 
 key(#binding{key = Key, args = Args}) -> {Key, Args}.
 
-go(S0 = {not_started, {Upstream, #exchange{name = #resource{
-                                             virtual_host = DownstreamVHost}
-                                           = DownstreamX}}}) ->
+go(S0 = {not_started, {Upstream, DownstreamX =
+                           #resource{virtual_host = DownstreamVHost}}}) ->
     case open(rabbit_federation_util:local_params(DownstreamVHost)) of
         {ok, DConn, DCh} ->
             #'confirm.select_ok'{} =
@@ -336,9 +335,9 @@ go(S0 = {not_started, {Upstream, #exchange{name = #resource{
             connection_error(E, S0)
     end.
 
-connection_error(E, State = {not_started, {U, #exchange{name = X}}}) ->
+connection_error(E, State = {not_started, {U, XName}}) ->
     rabbit_log:info("Federation ~s failed to establish connection to ~s~n~p~n",
-                    [rabbit_misc:rs(X),
+                    [rabbit_misc:rs(XName),
                      rabbit_federation_upstream:to_string(U), E]),
     {stop, {shutdown, E}, State};
 
