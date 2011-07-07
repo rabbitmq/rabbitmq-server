@@ -28,7 +28,11 @@
 -rabbit_upgrade({topic_trie,            mnesia, []}).
 -rabbit_upgrade({semi_durable_route,    mnesia, []}).
 -rabbit_upgrade({exchange_event_serial, mnesia, []}).
--rabbit_upgrade({trace_exchanges,       mnesia, []}).
+-rabbit_upgrade({trace_exchanges,       mnesia, [internal_exchanges]}).
+-rabbit_upgrade({user_admin_to_tags,    mnesia, [user_to_internal_user]}).
+-rabbit_upgrade({ha_mirrors,            mnesia, []}).
+-rabbit_upgrade({gm,                    mnesia, []}).
+-rabbit_upgrade({exchange_scratch,      mnesia, [trace_exchanges]}).
 
 %% -------------------------------------------------------------------
 
@@ -43,6 +47,10 @@
 -spec(semi_durable_route/0    :: () -> 'ok').
 -spec(exchange_event_serial/0 :: () -> 'ok').
 -spec(trace_exchanges/0       :: () -> 'ok').
+-spec(user_admin_to_tags/0    :: () -> 'ok').
+-spec(ha_mirrors/0            :: () -> 'ok').
+-spec(gm/0                    :: () -> 'ok').
+-spec(exchange_scratch/0      :: () -> 'ok').
 
 -endif.
 
@@ -120,6 +128,46 @@ trace_exchanges() ->
        rabbit_misc:r(VHost, exchange, <<"amq.rabbitmq.trace">>), topic) ||
         VHost <- rabbit_vhost:list()],
     ok.
+
+user_admin_to_tags() ->
+    transform(
+      rabbit_user,
+      fun({internal_user, Username, PasswordHash, true}) ->
+              {internal_user, Username, PasswordHash, [administrator]};
+         ({internal_user, Username, PasswordHash, false}) ->
+              {internal_user, Username, PasswordHash, [management]}
+      end,
+      [username, password_hash, tags], internal_user).
+
+ha_mirrors() ->
+    Tables = [rabbit_queue, rabbit_durable_queue],
+    AddMirrorPidsFun =
+        fun ({amqqueue, Name, Durable, AutoDelete, Owner, Arguments, Pid}) ->
+                {amqqueue, Name, Durable, AutoDelete, Owner, Arguments, Pid,
+                 [], undefined}
+        end,
+    [ ok = transform(T,
+                     AddMirrorPidsFun,
+                     [name, durable, auto_delete, exclusive_owner, arguments,
+                      pid, slave_pids, mirror_nodes])
+      || T <- Tables ],
+    ok.
+
+gm() ->
+    create(gm_group, [{record_name, gm_group},
+                      {attributes, [name, version, members]}]).
+
+exchange_scratch() ->
+    ok = exchange_scratch(rabbit_exchange),
+    ok = exchange_scratch(rabbit_durable_exchange).
+
+exchange_scratch(Table) ->
+    transform(
+      Table,
+      fun ({exchange, Name, Type, Dur, AutoDel, Int, Args}) ->
+              {exchange, Name, Type, Dur, AutoDel, Int, Args, undefined}
+      end,
+      [name, type, durable, auto_delete, internal, arguments, scratch]).
 
 %%--------------------------------------------------------------------
 

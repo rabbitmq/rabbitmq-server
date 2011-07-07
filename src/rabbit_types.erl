@@ -124,7 +124,9 @@
                   auto_delete     :: boolean(),
                   exclusive_owner :: rabbit_types:maybe(pid()),
                   arguments       :: rabbit_framing:amqp_table(),
-                  pid             :: rabbit_types:maybe(pid())}).
+                  pid             :: rabbit_types:maybe(pid()),
+                  slave_pids      :: [pid()],
+                  mirror_nodes    :: [node()] | 'undefined' | 'all'}).
 
 -type(exchange() ::
         #exchange{name        :: rabbit_exchange:name(),
@@ -139,14 +141,14 @@
 
 -type(user() ::
         #user{username     :: username(),
-              is_admin     :: boolean(),
+              tags         :: [atom()],
               auth_backend :: atom(),
               impl         :: any()}).
 
 -type(internal_user() ::
         #internal_user{username      :: username(),
                        password_hash :: password_hash(),
-                       is_admin      :: boolean()}).
+                       tags          :: [atom()]}).
 
 -type(username() :: binary()).
 -type(password() :: binary()).

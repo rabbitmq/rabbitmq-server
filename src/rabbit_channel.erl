@@ -893,7 +893,6 @@ handle_method(#'exchange.declare'{exchange = ExchangeNameBin,
                                   nowait = NoWait},
               _, State = #ch{virtual_host = VHostPath}) ->
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
-    check_configure_permitted(ExchangeName, State),
     check_not_default_exchange(ExchangeName),
     _ = rabbit_exchange:lookup_or_die(ExchangeName),
     return_ok(State, NoWait, #'exchange.declare_ok'{});
@@ -989,7 +988,6 @@ handle_method(#'queue.declare'{queue   = QueueNameBin,
               _, State = #ch{virtual_host = VHostPath,
                              conn_pid     = ConnPid}) ->
     QueueName = rabbit_misc:r(VHostPath, queue, QueueNameBin),
-    check_configure_permitted(QueueName, State),
     {{ok, MessageCount, ConsumerCount}, #amqqueue{} = Q} =
         rabbit_amqqueue:with_or_die(
           QueueName, fun (Q) -> {rabbit_amqqueue:stat(Q), Q} end),

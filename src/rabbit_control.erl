@@ -235,17 +235,17 @@ action(clear_password, Node, Args = [Username], _Opts, Inform) ->
     Inform("Clearing password for user ~p", [Username]),
     call(Node, {rabbit_auth_backend_internal, clear_password, Args});
 
-action(set_admin, Node, [Username], _Opts, Inform) ->
-    Inform("Setting administrative status for user ~p", [Username]),
-    call(Node, {rabbit_auth_backend_internal, set_admin, [Username]});
-
-action(clear_admin, Node, [Username], _Opts, Inform) ->
-    Inform("Clearing administrative status for user ~p", [Username]),
-    call(Node, {rabbit_auth_backend_internal, clear_admin, [Username]});
+action(set_user_tags, Node, [Username | TagsStr], _Opts, Inform) ->
+    Tags = [list_to_atom(T) || T <- TagsStr],
+    Inform("Setting tags for user ~p to ~p", [Username, Tags]),
+    rpc_call(Node, rabbit_auth_backend_internal, set_tags,
+             [list_to_binary(Username), Tags]);
 
 action(list_users, Node, [], _Opts, Inform) ->
     Inform("Listing users", []),
-    display_list(call(Node, {rabbit_auth_backend_internal, list_users, []}));
+    display_info_list(
+      call(Node, {rabbit_auth_backend_internal, list_users, []}),
+      rabbit_auth_backend_internal:user_info_keys());
 
 action(add_vhost, Node, Args = [_VHostPath], _Opts, Inform) ->
     Inform("Creating vhost ~p", Args),
@@ -301,7 +301,7 @@ action(list_connections, Node, Args, _Opts, Inform) ->
 
 action(list_channels, Node, Args, _Opts, Inform) ->
     Inform("Listing channels", []),
-    ArgAtoms = default_if_empty(Args, [pid, user, transactional, consumer_count,
+    ArgAtoms = default_if_empty(Args, [pid, user, consumer_count,
                                        messages_unacknowledged]),
     display_info_list(rpc_call(Node, rabbit_channel, info_all, [ArgAtoms]),
                       ArgAtoms);
@@ -421,17 +421,6 @@ format_info_item([T | _] = Value)
                            [", " ++ format_info_item(E) || E <- Value])) ++ "]";
 format_info_item(Value) ->
     io_lib:format("~w", [Value]).
-
-display_list(L) when is_list(L) ->
-    lists:foreach(fun (I) when is_binary(I) ->
-                          io:format("~s~n", [escape(I)]);
-                      (I) when is_tuple(I) ->
-                          display_row([escape(V)
-                                       || V <- tuple_to_list(I)])
-                  end,
-                  lists:sort(L)),
-    ok;
-display_list(Other) -> Other.
 
 display_call_result(Node, MFA) ->
     case call(Node, MFA) of

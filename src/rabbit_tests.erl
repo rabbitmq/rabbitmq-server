@@ -1072,15 +1072,25 @@ test_user_management() ->
         control_action(list_permissions, [], [{"-p", "/testhost"}]),
     {error, {invalid_regexp, _, _}} =
         control_action(set_permissions, ["guest", "+foo", ".*", ".*"]),
+    {error, {no_such_user, _}} =
+        control_action(set_user_tags, ["foo", "bar"]),
 
     %% user creation
     ok = control_action(add_user, ["foo", "bar"]),
     {error, {user_already_exists, _}} =
         control_action(add_user, ["foo", "bar"]),
     ok = control_action(change_password, ["foo", "baz"]),
-    ok = control_action(set_admin, ["foo"]),
-    ok = control_action(clear_admin, ["foo"]),
-    ok = control_action(list_users, []),
+
+    TestTags = fun (Tags) ->
+                       Args = ["foo" | [atom_to_list(T) || T <- Tags]],
+                       ok = control_action(set_user_tags, Args),
+                       {ok, #internal_user{tags = Tags}} =
+                           rabbit_auth_backend_internal:lookup_user(<<"foo">>),
+                       ok = control_action(list_users, [])
+               end,
+    TestTags([foo, bar, baz]),
+    TestTags([administrator]),
+    TestTags([]),
 
     %% vhost creation
     ok = control_action(add_vhost, ["/testhost"]),
@@ -1203,10 +1213,10 @@ test_spawn() ->
 
 user(Username) ->
     #user{username     = Username,
-          is_admin     = true,
+          tags         = [administrator],
           auth_backend = rabbit_auth_backend_internal,
           impl         = #internal_user{username = Username,
-                                        is_admin = true}}.
+                                        tags     = [administrator]}}.
 
 test_statistics_event_receiver(Pid) ->
     receive
@@ -2077,8 +2087,11 @@ variable_queue_init(Q, Recover) ->
       Q, Recover, fun nop/2, fun nop/2, fun nop/2, fun nop/1).
 
 variable_queue_publish(IsPersistent, Count, VQ) ->
+    variable_queue_publish(IsPersistent, Count, fun (_N, P) -> P end, VQ).
+
+variable_queue_publish(IsPersistent, Count, PropFun, VQ) ->
     lists:foldl(
-      fun (_N, VQN) ->
+      fun (N, VQN) ->
               rabbit_variable_queue:publish(
                 rabbit_basic:message(
                   rabbit_misc:r(<<>>, exchange, <<>>),
@@ -2086,7 +2099,7 @@ variable_queue_publish(IsPersistent, Count, VQ) ->
                                                        true  -> 2;
                                                        false -> 1
                                                    end}, <<>>),
-                #message_properties{}, self(), VQN)
+                PropFun(N, #message_properties{}), self(), VQN)
       end, VQ, lists:seq(1, Count)).
 
 variable_queue_fetch(Count, IsPersistent, IsDelivered, Len, VQ) ->
@@ -2126,6 +2139,7 @@ test_variable_queue() ->
               fun test_variable_queue_all_the_bits_not_covered_elsewhere1/1,
               fun test_variable_queue_all_the_bits_not_covered_elsewhere2/1,
               fun test_dropwhile/1,
+              fun test_dropwhile_varying_ram_duration/1,
               fun test_variable_queue_ack_limiting/1]],
     passed.
 
@@ -2162,14 +2176,9 @@ test_dropwhile(VQ0) ->
     Count = 10,
 
     %% add messages with sequential expiry
-    VQ1 = lists:foldl(
-            fun (N, VQN) ->
-                    rabbit_variable_queue:publish(
-                      rabbit_basic:message(
-                        rabbit_misc:r(<<>>, exchange, <<>>),
-                        <<>>, #'P_basic'{}, <<>>),
-                      #message_properties{expiry = N}, self(), VQN)
-            end, VQ0, lists:seq(1, Count)),
+    VQ1 = variable_queue_publish(
+            false, Count,
+            fun (N, Props) -> Props#message_properties{expiry = N} end, VQ0),
 
     %% drop the first 5 messages
     VQ2 = rabbit_variable_queue:dropwhile(
@@ -2188,6 +2197,14 @@ test_dropwhile(VQ0) ->
     {empty, VQ4} = rabbit_variable_queue:fetch(false, VQ3),
 
     VQ4.
+
+test_dropwhile_varying_ram_duration(VQ0) ->
+    VQ1 = variable_queue_publish(false, 1, VQ0),
+    VQ2 = rabbit_variable_queue:set_ram_duration_target(0, VQ1),
+    VQ3 = rabbit_variable_queue:dropwhile(fun(_) -> false end, VQ2),
+    VQ4 = rabbit_variable_queue:set_ram_duration_target(infinity, VQ3),
+    VQ5 = variable_queue_publish(false, 1, VQ4),
+    rabbit_variable_queue:dropwhile(fun(_) -> false end, VQ5).
 
 test_variable_queue_dynamic_duration_change(VQ0) ->
     SegmentSize = rabbit_queue_index:next_segment_boundary(0),

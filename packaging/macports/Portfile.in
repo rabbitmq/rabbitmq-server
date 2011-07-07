@@ -5,7 +5,7 @@ PortSystem 1.0
 name		rabbitmq-server
 version		@VERSION@
 categories	net 
-maintainers	paperplanes.de:meyer rabbitmq.com:tonyg openmaintainer
+maintainers	paperplanes.de:meyer openmaintainer
 platforms	darwin
 supported_archs	noarch
 
@@ -24,11 +24,9 @@ distfiles      ${name}-${version}${extract.suffix} \
 
 checksums \
     ${name}-${version}${extract.suffix} \
-        md5 @md5-src@ \
         sha1 @sha1-src@ \
         rmd160 @rmd160-src@ \
     ${name}-generic-unix-${version}${extract.suffix} \
-        md5 @md5-bin@ \
         sha1 @sha1-bin@ \
         rmd160 @rmd160-bin@
 
