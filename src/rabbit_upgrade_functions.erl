@@ -16,6 +16,9 @@
 
 -module(rabbit_upgrade_functions).
 
+%% If you are tempted to add include("rabbit.hrl"). here, don't. Using record
+%% defs here leads to pain later.
+
 -compile([export_all]).
 
 -rabbit_upgrade({remove_user_scope,     mnesia, []}).
