@@ -1,3 +1,21 @@
-An opinionated tracing plugin for RabbitMQ management. Build it
-like any other plugin. You need branch bug23890 of rabbitmq-management.
+An opinionated tracing plugin for RabbitMQ management. Build it like
+any other plugin. After installation you should see a "Tracing" tab in
+the management UI. Hopefully use is obvious.
 
+Configuration
+=============
+
+There is one configuration option, "directory". This controls where
+the log files go. It defaults to "/tmp/rabbitmq-tracing".
+
+Performance
+===========
+
+On my workstation, rabbitmq-tracing can write about 2000 msg/s to a
+log file. You should be careful using rabbitmq-tracing if you think
+you're going to capture more messages than this. Of course, any
+messages that can't be logged are queued.
+
+The code to serve up the log files over HTTP is pretty dumb, it loads
+the whole log into memeory. If you have large log files you may wish
+to transfer them off the server in some other way.
