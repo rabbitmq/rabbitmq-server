@@ -22,7 +22,7 @@
 
 -import(rabbit_misc, [pget/2, pget/3, table_lookup/2]).
 
--record(state, {conn, ch, vhost, queue, file}).
+-record(state, {conn, ch, vhost, queue, file, filename}).
 -define(X, <<"amq.rabbitmq.trace">>).
 
 -export([start_link/1, info_all/1]).
@@ -64,7 +64,8 @@ init(Args) ->
     {ok, F} = file:open(Filename, [append]),
     rabbit_tracing_traces:announce(VHost, Name, self()),
     rabbit_log:info("Tracer opened log file ~p~n", [Filename]),
-    {ok, #state{conn = Conn, ch = Ch, vhost = VHost, queue = Q, file = F}}.
+    {ok, #state{conn = Conn, ch = Ch, vhost = VHost, queue = Q,
+                file = F, filename = Filename}}.
 
 handle_call(info_all, _From, State = #state{vhost = V, queue = Q}) ->
     [QInfo] = rabbit_mgmt_db:augment_queues(
@@ -110,10 +111,12 @@ handle_info({#'basic.deliver'{routing_key = Key, delivery_tag = Seq},
 handle_info(_I, State) ->
     {noreply, State}.
 
-terminate(shutdown, #state{conn = Conn, ch = Ch, file = F}) ->
+terminate(shutdown, #state{conn = Conn, ch = Ch,
+                           file = F, filename = Filename}) ->
     catch amqp_channel:close(Ch),
     catch amqp_connection:close(Conn),
     catch file:close(F),
+    rabbit_log:info("Tracer closed log file ~p~n", [Filename]),
     ok;
 
 terminate(_Reason, _State) ->
