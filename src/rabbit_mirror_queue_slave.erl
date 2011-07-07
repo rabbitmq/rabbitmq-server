@@ -33,7 +33,7 @@
 %% All instructions from the GM group must be processed in the order
 %% in which they're received.
 
--export([start_link/1, set_maximum_since_use/2]).
+-export([start_link/1, set_maximum_since_use/2, info/1]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3, handle_pre_hibernate/1, prioritise_call/3,
@@ -46,6 +46,13 @@
 
 -include("rabbit.hrl").
 -include("gm_specs.hrl").
+
+-define(STATISTICS_KEYS,
+        [pid,
+         is_synchronised
+        ]).
+
+-define(INFO_KEYS, ?STATISTICS_KEYS).
 
 -define(SYNC_INTERVAL,                 25). %% milliseconds
 -define(RAM_DURATION_UPDATE_INTERVAL,  5000).
@@ -74,6 +81,9 @@ start_link(Q) ->
 
 set_maximum_since_use(QPid, Age) ->
     gen_server2:cast(QPid, {set_maximum_since_use, Age}).
+
+info(QPid) ->
+    gen_server2:call(QPid, info, infinity).
 
 init([#amqqueue { name = QueueName } = Q]) ->
     process_flag(trap_exit, true), %% amqqueue_process traps exits too.
@@ -181,7 +191,10 @@ handle_call({run_backing_queue, Mod, Fun}, _From, State) ->
 
 handle_call({commit, _Txn, _ChPid}, _From, State) ->
     %% We don't support transactions in mirror queues
-    reply(ok, State).
+    reply(ok, State);
+
+handle_call(info, _From, State) ->
+    reply(infos(?INFO_KEYS, State), State).
 
 handle_cast({run_backing_queue, Mod, Fun}, State) ->
     noreply(run_backing_queue(Mod, Fun, State));
@@ -336,6 +349,12 @@ inform_deaths(SPid, Deaths) ->
 %% ---------------------------------------------------------------------------
 %% Others
 %% ---------------------------------------------------------------------------
+
+infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
+
+i(pid,             _State) -> self();
+i(is_synchronised,  State) -> State #state.synchronised;
+i(Item,            _State) -> throw({bad_argument, Item}).
 
 bq_init(BQ, Q, Recover) ->
     Self = self(),

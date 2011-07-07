@@ -860,6 +860,14 @@
                 <listitem><para>Bytes of memory consumed by the Erlang process associated with the
                   queue, including stack, heap and internal structures.</para></listitem>
               </varlistentry>
+              <varlistentry>
+                <term>mirror_nodes</term>
+                <listitem><para>If the queue is mirrored, the nodes upon which mirrors will be present if the nodes are part of the current cluster.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>slaves</term>
+                <listitem><para>If the queue is mirrored, this gives the status of slaves.</para></listitem>
+              </varlistentry>
             </variablelist>
             <para>
               If no <command>queueinfoitem</command>s are specified then queue name and depth are

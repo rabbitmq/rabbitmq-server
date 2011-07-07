@@ -74,8 +74,8 @@
          messages,
          consumers,
          memory,
-         backing_queue_status,
-         slave_pids
+         slaves,
+         backing_queue_status
         ]).
 
 -define(CREATION_EVENT_KEYS,
@@ -802,14 +802,26 @@ i(consumers, State) ->
 i(memory, _) ->
     {memory, M} = process_info(self(), memory),
     M;
-i(backing_queue_status, #q{backing_queue_state = BQS, backing_queue = BQ}) ->
-    BQ:status(BQS);
-i(slave_pids, #q{q = #amqqueue{name = Name}}) ->
-    {ok, #amqqueue{slave_pids = SPids}} = rabbit_amqqueue:lookup(Name),
-    SPids;
 i(mirror_nodes, #q{q = #amqqueue{name = Name}}) ->
     {ok, #amqqueue{mirror_nodes = MNodes}} = rabbit_amqqueue:lookup(Name),
-    MNodes;
+    case MNodes of
+        undefined -> '';
+        _         -> MNodes
+    end;
+i(slaves, #q{q = #amqqueue{name = Name}}) ->
+    {ok, #amqqueue{mirror_nodes = MNodes,
+                   slave_pids = SPids}} = rabbit_amqqueue:lookup(Name),
+    case MNodes of
+        undefined ->
+            '';
+        _ ->
+            {Results, _Bad} =
+                delegate:invoke(
+                  SPids, fun (Pid) -> rabbit_mirror_queue_slave:info(Pid) end),
+            [Result || {_Pid, Result} <- Results]
+    end;
+i(backing_queue_status, #q{backing_queue_state = BQS, backing_queue = BQ}) ->
+    BQ:status(BQS);
 i(Item, _) ->
     throw({bad_argument, Item}).
 
