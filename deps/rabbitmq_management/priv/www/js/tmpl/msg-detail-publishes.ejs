@@ -51,13 +51,13 @@
 <% } %>
   <tr class="total">
     <th>Total:</th>
-    <td><%= fmt_rate(totals, 'publish', false, 'mini-highlight') %></td>
-    <td><%= fmt_rate(totals, 'confirm', false, 'mini-highlight') %></td>
+    <td class="r"><%= fmt_rate(totals, 'publish', false, 'mini-highlight') %></td>
+    <td class="r"><%= fmt_rate(totals, 'confirm', false, 'mini-highlight') %></td>
 <% if (col_return_unroutable) { %>
-    <td><%= fmt_rate(totals, 'return_unroutable', false, 'mini-highlight') %></td>
+    <td class="r"><%= fmt_rate(totals, 'return_unroutable', false, 'mini-highlight') %></td>
 <% } %>
 <% if (col_return_not_delivered) { %>
-    <td><%= fmt_rate(totals, 'return_not_delivered', false, 'mini-highlight') %></td>
+    <td class="r"><%= fmt_rate(totals, 'return_not_delivered', false, 'mini-highlight') %></td>
 <% } %>
   </tr>
 </table>

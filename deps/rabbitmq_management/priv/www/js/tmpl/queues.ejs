@@ -4,6 +4,9 @@
   <div class="hider updatable">
 <%= maybe_truncate(queues) %>
 <% if (queues.length > 0) { %>
+<%
+   var col_redeliver = !is_col_empty(queues, 'redeliver');
+%>
 <table class="list">
  <thead>
   <tr>
@@ -28,9 +31,13 @@
     <th><%= fmt_sort('Unacked',      'messages_unacknowledged') %></th>
     <th><%= fmt_sort('Total',        'messages') %></th>
 <% if (statistics_level == 'fine') { %>
-    <th><%= fmt_sort('incoming',        'message_stats.publish_details.rate') %></th>
-    <th><%= fmt_sort('deliver / get',   'message_stats.deliver_get_details.rate') %></th>
-    <th><%= fmt_sort('ack',             'message_stats.ack_details.rate') %></th>
+    <th><%= fmt_sort('incoming', 'message_stats.publish_details.rate') %></th>
+    <th><%= fmt_sort('deliver / get', 'message_stats.deliver_get_details.rate') %>
+  <% if (col_redeliver) { %>
+    <sub><%= fmt_sort('of which redelivered', 'message_stats.redeliver_details.rate') %></sub>
+  <% } %>
+</th>
+    <th><%= fmt_sort('ack', 'message_stats.ack_details.rate') %></th>
 <% } %>
   </tr>
  </thead>
@@ -64,7 +71,7 @@
    <td class="r"><%= fmt_string(queue.messages) %></td>
 <% if (statistics_level == 'fine') { %>
     <td class="r"><%= fmt_rate(queue.message_stats, 'publish', false) %></td>
-    <td class="r"><%= fmt_rate(queue.message_stats, 'deliver_get', false) %></td>
+    <td class="r"><%= fmt_deliver_rate(queue.message_stats, col_redeliver) %></td>
     <td class="r"><%= fmt_rate(queue.message_stats, 'ack', false) %></td>
 <% } %>
   </tr>
