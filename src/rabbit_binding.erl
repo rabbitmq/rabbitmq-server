@@ -105,8 +105,12 @@ recover(XNames, QNames) ->
       end, rabbit_durable_route),
     XNameSet = sets:from_list(XNames),
     QNameSet = sets:from_list(QNames),
-    [recover_semi_durable_route(R, set(destination(R), XNameSet, QNameSet)) ||
-        R <- rabbit_misc:dirty_read_all(rabbit_semi_durable_route)],
+    SelectSet = fun (#resource{kind = exchange}) -> XNameSet;
+                    (#resource{kind = queue})    -> QNameSet
+                end,
+    [recover_semi_durable_route(R, SelectSet(Dst)) ||
+        R = #route{binding = #binding{destination = Dst}} <-
+            rabbit_misc:dirty_read_all(rabbit_semi_durable_route)],
     ok.
 
 recover_semi_durable_route(R = #route{binding = B}, ToRecover) ->
@@ -125,10 +129,6 @@ recover_semi_durable_route(R = #route{binding = B}, ToRecover) ->
           (_Serial,    true)  -> x_callback(transaction, X, add_binding, B);
           (Serial,     false) -> x_callback(Serial,      X, add_binding, B)
       end).
-
-destination(#route{binding = #binding{destination = D}}) -> D.
-set(#resource{kind = exchange}, XNameSet, _) -> XNameSet;
-set(#resource{kind = queue},    _, QNameSet) -> QNameSet.
 
 exists(Binding) ->
     binding_action(
