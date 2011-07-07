@@ -40,7 +40,6 @@
 %%----------------------------------------------------------------------------
 
 start_link() ->
-    rabbit_federation_db:init(),
     supervisor:start_link({local, ?SUPERVISOR}, ?MODULE, []).
 
 start_child(Id, Args) ->
