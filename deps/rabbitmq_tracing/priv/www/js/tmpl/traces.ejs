@@ -10,8 +10,13 @@
           <table class="list">
             <thead>
               <tr>
+                <% if (vhosts_interesting) { %>
+                  <th>Virtual host</th>
+                <% } %>
                 <th>Name</th>
                 <th>Pattern</th>
+                <th>Rate</th>
+                <th>Queued</th>
                 <th></th>
               </tr>
             </thead>
@@ -21,8 +26,16 @@
                      var trace = traces[i];
               %>
               <tr<%= alt_rows(i)%>>
+                <% if (vhosts_interesting) { %>
+                  <td><%= trace.vhost %></td>
+                <% } %>
                 <td><%= trace.name %></td>
                 <td><%= trace.pattern %></td>
+                <td class="r"><%= fmt_rate(trace.queue.message_stats, 'ack', false) %></td>
+                <td class="r">
+                  <%= trace.queue.messages %>
+                  <sub><%= link_to("(queue)", '#/queues/' + esc(trace.vhost) + '/' + esc(trace.queue.name)) %></sub>
+                </td>
                 <td>
                   <form action="#/traces" method="delete">
                     <input type="hidden" name="vhost" value="<%= trace.vhost %>"/>

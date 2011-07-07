@@ -18,7 +18,9 @@
 
 -behaviour(gen_server).
 
--export([list/0, lookup/2, create/3, stop/2]).
+-import(rabbit_misc, [pget/2]).
+
+-export([list/0, lookup/2, create/3, stop/2, announce/3]).
 
 -export([start_link/0]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
@@ -45,25 +47,28 @@ create(VHost, Name, Trace) ->
 stop(VHost, Name) ->
     gen_server:call(?MODULE, {stop, VHost, Name}, infinity).
 
+announce(VHost, Name, Pid) ->
+    gen_server:cast(?MODULE, {announce, {VHost, Name}, Pid}).
+
 %%--------------------------------------------------------------------
 
 init([]) ->
     {ok, #state{table = ets:new(anon, [private])}}.
 
 handle_call(list, _From, State = #state{table = Table}) ->
-    {reply, [Trace || {_K, Trace} <- ets:tab2list(Table)], State};
+    {reply, [augment(Trace) || {_K, Trace} <- ets:tab2list(Table)], State};
 
 handle_call({lookup, VHost, Name}, _From, State = #state{table = Table}) ->
     {reply, case ets:lookup(Table, {VHost, Name}) of
-                []        -> not_found;
-                [{_K, V}] -> V
+                []            -> not_found;
+                [{_K, Trace}] -> augment(Trace)
             end, State};
 
-handle_call({create, VHost, Name, Trace}, _From,
+handle_call({create, VHost, Name, Trace0}, _From,
             State = #state{table = Table}) ->
     Already = vhost_tracing(VHost, Table),
-    true = ets:insert(Table, {{VHost, Name}, pset(vhost, VHost,
-                                                  pset(name, Name, Trace))}),
+    Trace = pset(vhost, VHost, pset(name, Name, Trace0)),
+    true = ets:insert(Table, {{VHost, Name}, Trace}),
     case Already of
         true  -> ok;
         false -> rabbit_trace:start(VHost)
@@ -83,6 +88,13 @@ handle_call({stop, VHost, Name}, _From, State = #state{table = Table}) ->
 handle_call(_Req, _From, State) ->
     {reply, unknown_request, State}.
 
+handle_cast({announce, Key, Pid}, State = #state{table = Table}) ->
+    case ets:lookup(Table, Key) of
+        []           -> ok;
+        [{_, Trace}] -> ets:insert(Table, {Key, pset(pid, Pid, Trace)})
+    end,
+    {noreply, State};
+
 handle_cast(_C, State) ->
     {noreply, State}.
 
@@ -101,4 +113,12 @@ vhost_tracing(VHost, Table) ->
     case [true || {{V, _}, _} <- ets:tab2list(Table), V =:= VHost] of
         [] -> false;
         _  -> true
+    end.
+
+augment(Trace) ->
+    Pid = pget(pid, Trace),
+    Trace1 = lists:keydelete(pid, 1, Trace),
+    case Pid of
+        undefined -> Trace1;
+        _         -> rabbit_tracing_consumer:info_all(Pid) ++ Trace1
     end.

@@ -22,22 +22,27 @@
 
 -import(rabbit_misc, [pget/2, pget/3, table_lookup/2]).
 
--record(state, { conn, ch, queue, file }).
+-record(state, {conn, ch, vhost, queue, file}).
 -define(X, <<"amq.rabbitmq.trace">>).
 
--export([start_link/1]).
+-export([start_link/1, info_all/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3]).
 
 start_link(Args) ->
     gen_server:start_link(?MODULE, Args, []).
 
+info_all(Pid) ->
+    gen_server:call(Pid, info_all, infinity).
+
 %%----------------------------------------------------------------------------
 
 init(Args) ->
     process_flag(trap_exit, true),
+    Name = pget(name, Args),
+    VHost = pget(vhost, Args),
     {ok, Conn} = amqp_connection:start(
-                   #amqp_params_direct{virtual_host = pget(vhost, Args)}),
+                   #amqp_params_direct{virtual_host = VHost}),
     link(Conn),
     {ok, Ch} = amqp_connection:open_channel(Conn),
     link(Ch),
@@ -54,11 +59,17 @@ init(Args) ->
         amqp_channel:subscribe(Ch, #'basic.consume'{queue  = Q,
                                                     no_ack = false}, self()),
     {ok, Dir} = application:get_env(directory),
-    Filename = Dir ++ "/" ++ binary_to_list(pget(name, Args)) ++ ".log",
+    Filename = Dir ++ "/" ++ binary_to_list(Name) ++ ".log",
     ok = filelib:ensure_dir(Filename),
     {ok, F} = file:open(Filename, [append]),
+    rabbit_tracing_traces:announce(VHost, Name, self()),
     rabbit_log:info("Tracer opened log file ~p~n", [Filename]),
-    {ok, #state{conn = Conn, ch = Ch, queue = Q, file = F}}.
+    {ok, #state{conn = Conn, ch = Ch, vhost = VHost, queue = Q, file = F}}.
+
+handle_call(info_all, _From, State = #state{vhost = V, queue = Q}) ->
+    [QInfo] = rabbit_mgmt_db:augment_queues(
+                [rabbit_mgmt_wm_queue:queue(V, Q)], basic),
+    {reply, [{queue, rabbit_mgmt_format:strip_pids(QInfo)}], State};
 
 handle_call(_Req, _From, State) ->
     {reply, unknown_request, State}.
