@@ -321,5 +321,4 @@ strip_pids(Item = [T | _]) when is_tuple(T) ->
 
 strip_pids(Items) -> [strip_pids(I) || I <- Items].
 
-mirror_nodes(Pids) ->
-    [{mirror_nodes, [node(Pid) || Pid <- Pids]}].
+mirror_nodes(Pids) -> [{mirror_nodes, [node(Pid) || Pid <- Pids]}].
