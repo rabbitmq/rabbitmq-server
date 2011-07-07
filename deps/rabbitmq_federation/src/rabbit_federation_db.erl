@@ -40,9 +40,6 @@ set_active_suffix(XName, Upstream, Suffix) ->
     ok = rabbit_exchange:update_scratch(
            XName, fun(D) -> ?DICT:store(key(Upstream), Suffix, D) end).
 
-key(#upstream{connection_name = ConnName, exchange = XName}) ->
-    {ConnName, XName}.
-
 prune_scratch(XName, Upstreams) ->
     ok = rabbit_exchange:update_scratch(
            XName,
@@ -51,3 +48,6 @@ prune_scratch(XName, Upstreams) ->
                              ?DICT:filter(
                                 fun(K, _V) -> lists:member(K, Keys) end, D)
            end).
+
+key(#upstream{connection_name = ConnName, exchange = XName}) ->
+    {ConnName, XName}.
