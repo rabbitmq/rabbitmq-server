@@ -22,7 +22,7 @@
 -define(UPSTREAM_DOWNSTREAM, [x(<<"upstream">>),
                               fed(<<"downstream">>, <<"upstream">>)]).
 
-%% Used in restart_upstream_test
+%% Used in restart_upstream_test and binding_recovery_test
 -define(HARE,       {"hare",       5673}).
 
 %% Used in max_hops_test
@@ -157,8 +157,8 @@ no_loop_test() ->
       end, [fed(<<"one">>, <<"two">>),
             fed(<<"two">>, <<"one">>)]).
 
-%% Downstream: rabbit-test, port 5672, has federation
-%% Upstream:   hare,        port 5673, does not have federation
+%% Downstream: rabbit-test, port 5672
+%% Upstream:   hare,        port 5673
 
 restart_upstream_test_() ->
     {timeout, 25, fun restart_upstream/0}.
@@ -227,6 +227,26 @@ max_hops() ->
     stop_other_node(?FLOPSY),
     stop_other_node(?MOPSY),
     stop_other_node(?COTTONTAIL),
+    ok.
+
+binding_recovery_test_() ->
+    {timeout, 25, fun binding_recovery/0}.
+
+binding_recovery() ->
+    Hare = start_other_node(?HARE),
+
+    declare_exchange(Hare, x(<<"up">>)),
+    declare_exchange(Hare, fed(<<"down">>, <<"up">>)),
+    #'queue.declare_ok'{queue = Q} =
+        amqp_channel:call(Hare, #'queue.declare'{durable = true}),
+    bind_queue(Hare, Q, <<"down">>, <<"key">>),
+
+    stop_other_node(?HARE),
+    Hare2 = start_other_node(?HARE),
+
+    publish_expect(Hare2, <<"up">>, <<"key">>, Q, <<"HELLO">>),
+
+    stop_other_node(?HARE),
     ok.
 
 %%----------------------------------------------------------------------------
