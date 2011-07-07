@@ -16,6 +16,7 @@
 
 -module(rabbit_federation_test).
 
+-include("rabbit_federation.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
@@ -159,22 +160,41 @@ no_loop_test() ->
 
 binding_recovery_test() ->
     Q = <<"durable-Q">>,
+    {ok, Env} = application:get_env(rabbitmq_federation, upstream_sets),
+    EnvMod = lists:keystore("upstream", 1, Env,
+                            {"upstream",[[{connection, "localhost"},
+                                          {exchange,   "upstream"}],
+                                         [{connection, "localhost"},
+                                          {exchange,   "upstream2"}]]}),
+    ok = application:set_env(rabbitmq_federation, upstream_sets, EnvMod),
     with_ch(
       fun (Ch) ->
-              declare_all(Ch, ?UPSTREAM_DOWNSTREAM),
+              declare_all(Ch, [x(<<"upstream2">>) | ?UPSTREAM_DOWNSTREAM]),
               #'queue.declare_ok'{} =
                   amqp_channel:call(Ch, #'queue.declare'{queue   = Q,
                                                          durable = true}),
-              bind_queue(Ch, Q, <<"downstream">>, <<"key">>)
+              bind_queue(Ch, Q, <<"downstream">>, <<"key">>),
+              timer:sleep(100), %% To get the suffix written
+              ?assert(none =/= suffix("upstream")),
+              ?assert(none =/= suffix("upstream2"))
       end, []),
     rabbit:stop(),
+    ok = application:set_env(rabbitmq_federation, upstream_sets, Env),
     rabbit:start(),
     with_ch(
       fun(Ch) ->
               publish_expect(Ch, <<"upstream">>, <<"key">>, Q, <<"HELLO">>),
-              delete_all(Ch, ?UPSTREAM_DOWNSTREAM),
+              ?assert(none =/= suffix("upstream")),
+              ?assertEqual(none, suffix("upstream2")),
+              delete_all(Ch, [x(<<"upstream2">>) | ?UPSTREAM_DOWNSTREAM]),
               delete_queue(Ch, Q)
       end, []).
+
+suffix(X) ->
+    rabbit_federation_db:get_active_suffix(
+      rabbit_misc:r(<<"/">>, exchange, <<"downstream">>),
+      #upstream{connection_name = "localhost",
+                exchange        = list_to_binary(X)}, none).
 
 %% Downstream: rabbit-test, port 5672
 %% Upstream:   hare,        port 5673
