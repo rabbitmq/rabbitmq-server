@@ -64,7 +64,9 @@
                  ack_num,
 
                  msg_id_status,
-                 known_senders
+                 known_senders,
+
+                 synchronised
                }).
 
 start_link(Q) ->
@@ -101,6 +103,9 @@ init([#amqqueue { name = QueueName } = Q]) ->
            self(), {rabbit_amqqueue, set_ram_duration_target, [self()]}),
     {ok, BQ} = application:get_env(backing_queue_module),
     BQS = bq_init(BQ, Q, false),
+    rabbit_event:notify(queue_slave_created,
+                        [{name, QueueName}, {pid, self()}, {master_pid, MPid}]),
+    ok = gm:broadcast(GM, request_length),
     {ok, #state { q                   = Q,
                   gm                  = GM,
                   master_pid          = MPid,
@@ -114,7 +119,9 @@ init([#amqqueue { name = QueueName } = Q]) ->
                   ack_num             = 0,
 
                   msg_id_status       = dict:new(),
-                  known_senders       = dict:new()
+                  known_senders       = dict:new(),
+
+                  synchronised        = false
                 }, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
@@ -303,6 +310,9 @@ members_changed([SPid], _Births, Deaths) ->
 
 handle_msg([_SPid], _From, heartbeat) ->
     ok;
+handle_msg([_SPid], _From, request_length) ->
+    %% This is only of value to the master
+    ok;
 handle_msg([_SPid], _From, {ensure_monitoring, _Pid}) ->
     %% This is only of value to the master
     ok;
@@ -399,7 +409,7 @@ gb_trees_cons(Key, Value, Tree) ->
 handle_process_result({ok,   State}) -> noreply(State);
 handle_process_result({stop, State}) -> {stop, normal, State}.
 
-promote_me(From, #state { q                   = Q,
+promote_me(From, #state { q                   = Q = #amqqueue { name = QName },
                           gm                  = GM,
                           backing_queue       = BQ,
                           backing_queue_state = BQS,
@@ -408,12 +418,13 @@ promote_me(From, #state { q                   = Q,
                           msg_id_ack          = MA,
                           msg_id_status       = MS,
                           known_senders       = KS }) ->
+    rabbit_event:notify(queue_slave_promoted, [{name, QName}, {pid, self()}]),
     rabbit_log:info("Mirrored-queue (~s): Promoting slave ~s to master~n",
-                    [rabbit_misc:rs(Q #amqqueue.name),
-                     rabbit_misc:pid_to_string(self())]),
+                    [rabbit_misc:rs(QName), rabbit_misc:pid_to_string(self())]),
     Q1 = Q #amqqueue { pid = self() },
     {ok, CPid} = rabbit_mirror_queue_coordinator:start_link(
-                   Q1, GM, rabbit_mirror_queue_master:sender_death_fun()),
+                   Q1, GM, rabbit_mirror_queue_master:sender_death_fun(),
+                   rabbit_mirror_queue_master:length_fun()),
     true = unlink(GM),
     gen_server2:reply(From, {promote, CPid}),
     ok = gm:confirmed_broadcast(GM, heartbeat),
@@ -771,7 +782,7 @@ process_instruction({set_length, Length},
                                      backing_queue_state = BQS }) ->
     QLen = BQ:len(BQS),
     ToDrop = QLen - Length,
-    {ok, case ToDrop > 0 of
+    {ok, case ToDrop >= 0 of
              true  -> BQS1 =
                           lists:foldl(
                             fun (const, BQSN) ->
@@ -779,7 +790,8 @@ process_instruction({set_length, Length},
                                      BQSN1} = BQ:fetch(false, BQSN),
                                     BQSN1
                             end, BQS, lists:duplicate(ToDrop, const)),
-                      State #state { backing_queue_state = BQS1 };
+                      set_synchronised(
+                        true, State #state { backing_queue_state = BQS1 });
              false -> State
          end};
 process_instruction({fetch, AckRequired, MsgId, Remaining},
@@ -792,6 +804,8 @@ process_instruction({fetch, AckRequired, MsgId, Remaining},
                    AckTag, Remaining}, BQS1} = BQ:fetch(AckRequired, BQS),
                  maybe_store_ack(AckRequired, MsgId, AckTag,
                                  State #state { backing_queue_state = BQS1 });
+             Other when Other + 1 =:= Remaining ->
+                 set_synchronised(true, State);
              Other when Other < Remaining ->
                  %% we must be shorter than the master
                  State
@@ -844,6 +858,10 @@ process_instruction({sender_death, ChPid},
                                 msg_id_status = MS1,
                                 known_senders = dict:erase(ChPid, KS) }
          end};
+process_instruction({length, Length},
+                    State = #state { backing_queue = BQ,
+                                     backing_queue_state = BQS }) ->
+    {ok, set_synchronised(Length =:= BQ:len(BQS), State)};
 process_instruction({delete_and_terminate, Reason},
                     State = #state { backing_queue       = BQ,
                                      backing_queue_state = BQS }) ->
@@ -871,3 +889,13 @@ maybe_store_ack(true, MsgId, AckTag, State = #state { msg_id_ack = MA,
                                                       ack_num    = Num }) ->
     State #state { msg_id_ack = dict:store(MsgId, {Num, AckTag}, MA),
                    ack_num    = Num + 1 }.
+
+%% We intentionally leave out the head where a slave becomes
+%% unsynchronised: we assert that can never happen.
+set_synchronised(true, State = #state { synchronised = false }) ->
+    rabbit_event:notify(queue_slave_synchronised, [{pid, self()}]),
+    State #state { synchronised = true };
+set_synchronised(true, State) ->
+    State;
+set_synchronised(false, State = #state { synchronised = false }) ->
+    State.
