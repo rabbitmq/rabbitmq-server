@@ -24,6 +24,7 @@
 
 list() ->
     {ok, Dir} = application:get_env(rabbitmq_tracing, directory),
+    ok = filelib:ensure_dir(Dir ++ "/a"),
     {ok, Names} = file:list_dir(Dir),
     [file_info(Name) || Name <- Names].
 
