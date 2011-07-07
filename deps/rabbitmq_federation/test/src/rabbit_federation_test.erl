@@ -22,7 +22,7 @@
 -define(UPSTREAM_DOWNSTREAM, [x(<<"upstream">>),
                               fed(<<"downstream">>, <<"upstream">>)]).
 
-%% Used in restart_upstream_test and binding_recovery_test
+%% Used in restart_upstream_test
 -define(HARE,       {"hare",       5673}).
 
 %% Used in max_hops_test
@@ -157,6 +157,25 @@ no_loop_test() ->
       end, [fed(<<"one">>, <<"two">>),
             fed(<<"two">>, <<"one">>)]).
 
+binding_recovery_test() ->
+    Q = <<"durable-Q">>,
+    with_ch(
+      fun (Ch) ->
+              declare_all(Ch, ?UPSTREAM_DOWNSTREAM),
+              #'queue.declare_ok'{} =
+                  amqp_channel:call(Ch, #'queue.declare'{queue   = Q,
+                                                         durable = true}),
+              bind_queue(Ch, Q, <<"downstream">>, <<"key">>)
+      end, []),
+    rabbit:stop(),
+    rabbit:start(),
+    with_ch(
+      fun(Ch) ->
+              publish_expect(Ch, <<"upstream">>, <<"key">>, Q, <<"HELLO">>),
+              delete_all(Ch, ?UPSTREAM_DOWNSTREAM),
+              delete_queue(Ch, Q)
+      end, []).
+
 %% Downstream: rabbit-test, port 5672
 %% Upstream:   hare,        port 5673
 
@@ -229,36 +248,20 @@ max_hops() ->
     stop_other_node(?COTTONTAIL),
     ok.
 
-binding_recovery_test_() ->
-    {timeout, 25, fun binding_recovery/0}.
-
-binding_recovery() ->
-    Hare = start_other_node(?HARE),
-
-    declare_exchange(Hare, x(<<"up">>)),
-    declare_exchange(Hare, fed(<<"down">>, <<"up">>)),
-    #'queue.declare_ok'{queue = Q} =
-        amqp_channel:call(Hare, #'queue.declare'{durable = true}),
-    bind_queue(Hare, Q, <<"down">>, <<"key">>),
-
-    stop_other_node(?HARE),
-    Hare2 = start_other_node(?HARE),
-
-    publish_expect(Hare2, <<"up">>, <<"key">>, Q, <<"HELLO">>),
-
-    stop_other_node(?HARE),
-    ok.
-
 %%----------------------------------------------------------------------------
 
 with_ch(Fun, Xs) ->
     {ok, Conn} = amqp_connection:start(#amqp_params_network{}),
     {ok, Ch} = amqp_connection:open_channel(Conn),
-    [declare_exchange(Ch, X) || X <- Xs],
+    declare_all(Ch, Xs),
     Fun(Ch),
-    [delete_exchange(Ch, X) || #'exchange.declare'{exchange = X} <- Xs],
+    delete_all(Ch, Xs),
     amqp_connection:close(Conn),
     ok.
+
+declare_all(Ch, Xs) -> [declare_exchange(Ch, X) || X <- Xs].
+delete_all(Ch, Xs) ->
+    [delete_exchange(Ch, X) || #'exchange.declare'{exchange = X} <- Xs].
 
 start_other_node({Name, Port}) ->
     ?assertCmd("make -C " ++ plugin_dir() ++ " OTHER_NODE=" ++ Name ++
