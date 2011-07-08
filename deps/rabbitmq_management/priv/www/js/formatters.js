@@ -152,6 +152,14 @@ function fmt_rate0(obj, name, fmt, show_total) {
     return res;
 }
 
+function fmt_deliver_rate(obj, show_redeliver, cssClass) {
+    var res = fmt_rate(obj, 'deliver_get', false, cssClass);
+    if (show_redeliver) {
+        res += '<sub>' + fmt_rate(obj, 'redeliver') + '</sub>';
+    }
+    return res;
+}
+
 function is_stat_empty(obj, name) {
     if (obj == undefined
         || obj[name] == undefined
@@ -160,10 +168,11 @@ function is_stat_empty(obj, name) {
     return false;
 }
 
-function is_col_empty(channels, name) {
-    for (var i = 0; i < channels.length; i++) {
-        var channel = channels[i];
-        if (!is_stat_empty(channel.message_stats, name)) {
+function is_col_empty(objects, name, accessor) {
+    if (accessor == undefined) accessor = function(o) {return o.message_stats;};
+    for (var i = 0; i < objects.length; i++) {
+        var object = objects[i];
+        if (!is_stat_empty(accessor(object), name)) {
             return false;
         }
     }
@@ -365,7 +374,9 @@ function message_rates(stats) {
     var res = "";
     if (keys(stats).length > 0) {
         var items = [['Publish', 'publish'], ['Confirm', 'confirm'],
-                     ['Deliver', 'deliver'], ['Acknowledge', 'ack'],
+                     ['Deliver', 'deliver'],
+                     ['Of which redelivered', 'redeliver'],
+                     ['Acknowledge', 'ack'],
                      ['Get', 'get'], ['Deliver (noack)', 'deliver_no_ack'],
                      ['Get (noack)', 'get_no_ack'],
                      ['Return (mandatory)', 'return_unroutable'],
