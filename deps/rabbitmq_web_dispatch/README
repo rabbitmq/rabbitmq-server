@@ -54,19 +54,19 @@ of listeners. It may give a path, which overrides any path given for a
 context when it is registered. This configuration
 
     {rabbitmq_mochiweb, [{listeners, [{internal, [{port, 5568}]}]},
-                         {contexts, [{bar, {internal, "bar"}}]}]}
+                         {contexts, [{foo, {internal, "bar"}}]}]}
 
-assigns the context `bar` to the listener on port 5568 and forces
-its path prefix to `"bar"`.
+assigns the context named `foo` to the listener on port 5568 and
+forces its path prefix to `"bar"`.
 
 To give a path for a context, but let it use the default listener, use
 `'*'` as the listener name. For example:
 
     {rabbitmq_mochiweb, [{default_listener, [{port, 5567}]},
-                         {contexts, [{foo, {'*', "foo"}}]}]}
+                         {contexts, [{foo, {'*', "bar"}}]}]}
 
 will let the context `foo` default to the listener on port 5567, but
-force its path prefix to `"foo"`.
+force its path prefix to `"bar"`.
 
 The procedures `register_*` exported from the module `rabbit_mochiweb`
 all take a context and a path as the first two arguments.
