@@ -97,7 +97,10 @@
                 flow_handler_pid    = none,
                 consumers           = dict:new(),
                 default_consumer    = none,
-                start_writer_fun
+                start_writer_fun,
+                unconfirmed_set     = gb_sets:new(),
+                waiting_set         = gb_sets:new(),
+                only_acks_received  = true
                }).
 
 %%---------------------------------------------------------------------------
@@ -197,6 +200,16 @@ close(Channel, Code, Text) ->
 %% message to be published.
 next_publish_seqno(Channel) ->
     gen_server:call(Channel, next_publish_seqno, infinity).
+
+%% @spec (Channel) -> boolean()
+%% where
+%%      Channel = pid()
+%% @doc Wait until all messages published since the last call have
+%% been either ack'd or nack'd by the broker.  Note, when called on a
+%% non-Confirm channel, waitForConfirms returns true immediately.
+
+wait_for_confirms(Channel) ->
+    gen_server:call(Channel, wait_for_confirms, infinity).
 
 %%---------------------------------------------------------------------------
 %% Consumer registration (API)
@@ -316,7 +329,7 @@ handle_call({subscribe, Method, Consumer}, From, State) ->
 %% @private
 handle_call({send_command_sync, Method, Content}, From, State) ->
     Ret = handle_method_from_server(Method, Content, State),
-    gen_server:reply(From, ok),
+    gen_server:reply    (From, ok),
     Ret;
 %% Handles the delivery of messages from a direct channel
 %% @private
@@ -329,7 +342,14 @@ handle_call({send_command_sync, Method}, From, State) ->
 %% @private
 handle_call(next_publish_seqno, _From,
             State = #state{next_pub_seqno = SeqNo}) ->
-    {reply, SeqNo, State}.
+    {reply, SeqNo, State};
+handle_call(wait_for_confirms, From,
+            State = #state{unconfirmed_set = USet,
+                           waiting_set     = WSet}) ->
+    case gb_sets:is_empty(USet) of
+        true -> {reply, true, State};
+        false -> {noreply, State#state{waiting_set = gb_sets:add(From, WSet)}}
+    end.
 
 %% @private
 handle_cast({cast, Method, AmqpMsg}, State) ->
@@ -437,7 +457,8 @@ code_change(_OldVsn, State, _Extra) ->
 %% RPC mechanism
 %%---------------------------------------------------------------------------
 
-handle_method_to_server(Method, AmqpMsg, From, State) ->
+handle_method_to_server(Method, AmqpMsg, From,
+                        State = #state{unconfirmed_set = USet}) ->
     case {check_invalid_method(Method), From,
           check_block(Method, AmqpMsg, State)} of
         {ok, _, ok} ->
@@ -447,7 +468,9 @@ handle_method_to_server(Method, AmqpMsg, From, State) ->
                          {#'basic.publish'{}, 0} ->
                              State;
                          {#'basic.publish'{}, SeqNo} ->
-                             State#state{next_pub_seqno = SeqNo + 1};
+                             State#state{unconfirmed_set =
+                                             gb_sets:add(SeqNo, USet),
+                                         next_pub_seqno = SeqNo + 1};
                          _ ->
                              State
                      end,
@@ -677,20 +700,20 @@ handle_method_from_server1(#'basic.ack'{} = BasicAck, none,
                            #state{confirm_handler_pid = none} = State) ->
     ?LOG_WARN("Channel (~p): received ~p but there is no "
               "confirm handler registered~n", [self(), BasicAck]),
-    {noreply, State};
+    {noreply, update_confirm_set(BasicAck, State)};
 handle_method_from_server1(#'basic.ack'{} = BasicAck, none,
                            #state{confirm_handler_pid = ConfirmHandler} = State) ->
     ConfirmHandler ! BasicAck,
-    {noreply, State};
+    {noreply, update_confirm_set(BasicAck, State)};
 handle_method_from_server1(#'basic.nack'{} = BasicNack, none,
                            #state{confirm_handler_pid = none} = State) ->
     ?LOG_WARN("Channel (~p): received ~p but there is no "
               "confirm handler registered~n", [self(), BasicNack]),
-    {noreply, State};
+    {noreply, update_confirm_set(BasicNack, State)};
 handle_method_from_server1(#'basic.nack'{} = BasicNack, none,
                            #state{confirm_handler_pid = ConfirmHandler} = State) ->
     ConfirmHandler ! BasicNack,
-    {noreply, State};
+    {noreply, update_confirm_set(BasicNack, State)};
 
 handle_method_from_server1(Method, none, State) ->
     {noreply, rpc_bottom_half(Method, State)};
@@ -840,3 +863,25 @@ server_misbehaved(#amqp_error{} = AmqpError, State = #state{number = Number}) ->
             spawn(fun () -> call(Self, Close) end),
             {noreply, State}
     end.
+
+update_confirm_set(#'basic.ack'{delivery_tag = SeqNo},
+                   State = #state{unconfirmed_set = USet}) ->
+    maybe_notify_waiters(
+      State#state{unconfirmed_set = gb_sets:del_element(SeqNo, USet)});
+update_confirm_set(#'basic.nack'{delivery_tag = SeqNo},
+                   State = #state{unconfirmed_set = USet}) ->
+    maybe_notify_waiters(
+      State#state{unconfirmed_set = gb_sets:del_element(SeqNo, USet),
+                  only_acks_received = false}).
+
+maybe_notify_waiters(State = #state{unconfirmed_set = USet}) ->
+    case gb_sets:is_empty(USet) of
+        false -> State;
+        true  -> notify_confirm_waiters(State)
+    end.
+
+notify_confirm_waiters(State = #state{waiting_set = WSet,
+                                      only_acks_received = OAR}) ->
+    [gen_server:reply(From, OAR) || From <- gb_sets:to_list(WSet)],
+    State#state{waiting_set = gb_sets:new(), unconfirmed_set = gb_sets:new(),
+                only_acks_received = true}.
