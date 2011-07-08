@@ -180,7 +180,7 @@ binding_recovery_test() ->
 %% Upstream:   hare,        port 5673
 
 restart_upstream_test_() ->
-    {timeout, 25, fun restart_upstream/0}.
+    {timeout, 60, fun restart_upstream/0}.
 
 restart_upstream() ->
     with_ch(
@@ -217,7 +217,7 @@ restart_upstream() ->
 %% for each connection. We should not see any duplicates.
 
 max_hops_test_() ->
-    {timeout, 25, fun max_hops/0}.
+    {timeout, 60, fun max_hops/0}.
 
 max_hops() ->
     Flopsy     = start_other_node(?FLOPSY),
