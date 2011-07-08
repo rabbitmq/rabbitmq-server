@@ -74,7 +74,7 @@
 -export([close/1, close/3]).
 -export([register_return_handler/2, register_flow_handler/2,
          register_confirm_handler/2]).
--export([next_publish_seqno/1]).
+-export([next_publish_seqno/1, wait_for_confirms/1]).
 -export([register_default_consumer/2]).
 
 -define(TIMEOUT_FLUSH, 60000).
@@ -329,7 +329,7 @@ handle_call({subscribe, Method, Consumer}, From, State) ->
 %% @private
 handle_call({send_command_sync, Method, Content}, From, State) ->
     Ret = handle_method_from_server(Method, Content, State),
-    gen_server:reply    (From, ok),
+    gen_server:reply(From, ok),
     Ret;
 %% Handles the delivery of messages from a direct channel
 %% @private

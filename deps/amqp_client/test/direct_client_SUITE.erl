@@ -97,6 +97,12 @@ rpc_test() ->
 confirm_test() ->
     test_util:confirm_test(new_connection()).
 
+confirm_barrier_test() ->
+    test_util:confirm_barrier_test(new_connection()).
+
+confirm_barrier_nop_test() ->
+    test_util:confirm_barrier_nop_test(new_connection()).
+
 subscribe_nowait_test() ->
     test_util:subscribe_nowait_test(new_connection()).
 

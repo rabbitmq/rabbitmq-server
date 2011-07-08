@@ -487,7 +487,6 @@ confirm_test(Connection) ->
     {ok, Channel} = amqp_connection:open_channel(Connection),
     #'confirm.select_ok'{} = amqp_channel:call(Channel, #'confirm.select'{}),
     amqp_channel:register_confirm_handler(Channel, self()),
-    io:format("Registered ~p~n", [self()]),
     {ok, Q} = setup_publish(Channel),
     {#'basic.get_ok'{}, _}
         = amqp_channel:call(Channel, #'basic.get'{queue = Q, no_ack = false}),
@@ -497,6 +496,37 @@ confirm_test(Connection) ->
          after 2000 ->
                  exit(did_not_receive_pub_ack)
          end,
+    teardown(Connection, Channel).
+
+confirm_barrier_test(Connection) ->
+    {ok, Channel} = amqp_connection:open_channel(Connection),
+    amqp_channel:register_confirm_handler(Channel, self()),
+    #'confirm.select_ok'{} = amqp_channel:call(Channel, #'confirm.select'{}),
+    USet = gb_sets:from_list(lists:seq(1, 10)),
+    [amqp_channel:call(Channel, #'basic.publish'{routing_key = <<"whoosh">>},
+                       #amqp_msg{payload = <<"foo">>})
+     || _ <- lists:seq(1, 10)],
+    true = amqp_channel:wait_for_confirms(Channel),
+    ok = wait_acks(USet),
+    teardown(Connection, Channel).
+
+wait_acks(USet) ->
+    case gb_sets:is_empty(USet) of
+        true  -> ok;
+        false -> receive
+                     #'basic.ack'{delivery_tag = SeqNo} ->
+                         wait_acks(gb_sets:delete(SeqNo, USet));
+                     #'basic.nack'{} ->
+                         fail
+                 end
+    end.
+
+confirm_barrier_nop_test(Connection) ->
+    {ok, Channel} = amqp_connection:open_channel(Connection),
+    true = amqp_channel:wait_for_confirms(Channel),
+    amqp_channel:call(Channel, #'basic.publish'{routing_key = <<"whoosh">>},
+                      #amqp_msg{payload = <<"foo">>}),
+    true = amqp_channel:wait_for_confirms(Channel),
     teardown(Connection, Channel).
 
 subscribe_nowait_test(Connection) ->
