@@ -1238,9 +1238,8 @@
               </varlistentry>
             </variablelist>
             <para>
-              If no <command>channelinfoitem</command>s are specified
-              then pid, user, consumer_count, and
-              messages_unacknowledged are assumed.
+              If no <command>channelinfoitem</command>s are specified then pid,
+              user, consumer_count, and messages_unacknowledged are assumed.
             </para>
 
             <para role="example-prefix">
