@@ -1,10 +1,16 @@
 -module(rabbit_mochiweb).
 
+-export([all_listeners/0]).
 -export([register_context_handler/4, register_static_context/5]).
 -export([register_authenticated_static_context/6]).
 -export([context_listener/1, context_path/2]).
 
 -define(APP, rabbitmq_mochiweb).
+
+all_listeners() ->
+    {ok, Listeners} = application:get_env(?APP, listeners),
+    {ok, Default} = application:get_env(?APP, default_listener),
+    [{'*', Default} | Listeners].
 
 %% @doc Get the path for a context; if not configured then use the
 %% default given.
@@ -24,8 +30,7 @@ context_listener(Context) ->
             {Listener, _Path} -> Listener;
             Listener          -> Listener
         end,
-    {ok, Listeners} = application:get_env(?APP, listeners),
-    proplists:lookup(L, Listeners).
+    proplists:lookup(L, all_listeners()).
 
 %% Handler Registration
 

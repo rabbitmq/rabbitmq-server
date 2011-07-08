@@ -11,7 +11,7 @@
 %% @spec start(_Type, _StartArgs) -> ServerRet
 %% @doc application start callback for rabbit_mochiweb.
 start(_Type, _StartArgs) ->
-    {ok, Listeners} = application:get_env(?APP, listeners),
+    Listeners = rabbit_mochiweb:all_listeners(),
     {ok, Contexts} = application:get_env(?APP, contexts),
     case check_contexts(Listeners, Contexts) of
         ok  -> rabbit_mochiweb_sup:start_link(Listeners);
@@ -25,32 +25,26 @@ stop(_State) ->
 
 %% Internal
 
-%% Check that there is a default listener '*', and no context mentions
-%% a listener that doesn't exist.
+%% Check that no context mentions a listener that doesn't exist.
 check_contexts(Listeners, Contexts) when
       is_list(Contexts), is_list(Listeners) ->
-    case proplists:get_value('*', Listeners) of
-        undefined ->
-            {error, no_default_listener};
-        _ ->
-            HasListener = fun(Listener, Acc) ->
-                                  case proplists:get_value(Listener, Listeners) of
-                                      undefined -> [Listener | Acc];
-                                      _         -> Acc
-                                  end
-                          end,
-            Checks = lists:foldl(
-                       fun ({_Name, {Listener, _Path}}, Acc) ->
-                               HasListener(Listener, Acc);
-                           ({_Name, Listener}, Acc) ->
-                               HasListener(Listener, Acc)
-                       end, [], Contexts),
-            case Checks of
-                [] ->
-                    ok;
-                Errors ->
-                    {error, {undefined_listeners, Errors}}
-            end
+    HasListener = fun(Listener, Acc) ->
+                          case proplists:get_value(Listener, Listeners) of
+                              undefined -> [Listener | Acc];
+                              _         -> Acc
+                          end
+                  end,
+    Checks = lists:foldl(
+               fun ({_Name, {Listener, _Path}}, Acc) ->
+                       HasListener(Listener, Acc);
+                   ({_Name, Listener}, Acc) ->
+                       HasListener(Listener, Acc)
+               end, [], Contexts),
+    case Checks of
+        [] ->
+            ok;
+        Errors ->
+            {error, {undefined_listeners, Errors}}
     end;
 check_contexts(_Cs, _Ls) ->
     {error, invalid_configuration}.
