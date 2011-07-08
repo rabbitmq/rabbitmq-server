@@ -83,14 +83,14 @@ For example, for the configuration
 
     {rabbitmq_mochiweb, [{default_listener, [{port, 55670}]},
                          {listeners, [{internal, [{port, 55671}]}]},
-                         {contexts,  [{myapp, {internal, "myapp"}}]}]}
+                         {contexts,  [{myapp, {internal, "mine"}}]}]}
 
 an application registering the context name `myapp` will be assigned
 to the listener `internal`, listening on port 55671, and be available
-under the path "/myapp/" in URLs. An application registering with the
-context `myotherapp` and the path `"other"` will be assigned to the
+under the path "/mine/" in URLs. An application registering with the
+context `yourapp` and the path `"yours"` will be assigned to the
 default listener, listening on port 55670, and be available under
-"/other/".
+"/yours/".
 
 There is no attempt made to avoid clashes of paths, either those given
 in configuration or those given when registering.  Also note that an
