@@ -17,5 +17,5 @@ you're going to capture more messages than this. Of course, any
 messages that can't be logged are queued.
 
 The code to serve up the log files over HTTP is pretty dumb, it loads
-the whole log into memeory. If you have large log files you may wish
+the whole log into memory. If you have large log files you may wish
 to transfer them off the server in some other way.
