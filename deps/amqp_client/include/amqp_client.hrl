@@ -24,7 +24,7 @@
 
 -define(MAX_CHANNEL_NUMBER, 65535).
 
--define(PROTOCOL_SSL_PORT, 5671).
+-define(PROTOCOL_SSL_PORT, (?PROTOCOL_PORT - 1)).
 
 -record(amqp_msg, {props = #'P_basic'{}, payload = <<>>}).
 
