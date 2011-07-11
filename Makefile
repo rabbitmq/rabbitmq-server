@@ -168,7 +168,7 @@ run-tests: all
 start-background-node:
 	$(BASIC_SCRIPT_ENVIRONMENT_SETTINGS) \
 		RABBITMQ_NODE_ONLY=true \
-		RABBITMQ_SERVER_START_ARGS="$(RABBITMQ_SERVER_START_ARGS) -detached" \
+		RABBITMQ_SERVER_START_ARGS="$(RABBITMQ_SERVER_START_ARGS) -detached $(SSL_BROKER_ARGS)" \
 		./scripts/rabbitmq-server; sleep 1
 
 start-rabbit-on-node: all
