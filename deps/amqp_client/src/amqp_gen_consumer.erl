@@ -213,7 +213,10 @@ handle_call({consumer_call, Call}, From,
         {noreply, NewMState} ->
             {noreply, State#state{module_state = NewMState}};
         {reply, Reply, NewMState} ->
-            {reply, Reply, State#state{module_state = NewMState}}
+            {reply, Reply, State#state{module_state = NewMState}};
+        {error, Reason, NewMState} ->
+            {stop, Reason, {error, Reason},
+             State#state{module_state = NewMState}}
     end;
 handle_call({consumer_call, Method, Args}, From,
             State = #state{module       = ConsumerModule,
@@ -224,10 +227,10 @@ handle_call({consumer_call, Method, Args}, From,
                 ConsumerModule:handle_consume(Method, Args, MState);
             #'basic.consume_ok'{} ->
                 ConsumerModule:handle_consume_ok(Method, Args, MState);
-            #'basic.cancel_ok'{} ->
-                ConsumerModule:handle_cancel_ok(Method, Args, MState);
             #'basic.cancel'{} ->
                 ConsumerModule:handle_cancel(Method, MState);
+            #'basic.cancel_ok'{} ->
+                ConsumerModule:handle_cancel_ok(Method, Args, MState);
             #'basic.deliver'{} ->
                 ConsumerModule:handle_deliver(Method, Args, MState)
         end,
@@ -235,8 +238,8 @@ handle_call({consumer_call, Method, Args}, From,
         {ok, NewMState} ->
             {reply, ok, State#state{module_state = NewMState}};
         {error, Reason, NewMState} ->
-            gen_server2:reply(From, {error, Reason}),
-            {stop, Reason, State#state{module_state = NewMState}}
+            {stop, Reason, {error, Reason},
+             State#state{module_state = NewMState}}
     end.
 
 handle_cast(_What, State) ->
@@ -248,7 +251,8 @@ handle_info(Info, State = #state{module_state = MState,
         {ok, NewMState} ->
             {noreply, State#state{module_state = NewMState}};
         {error, Reason, NewMState} ->
-            {stop, Reason, State#state{module_state = NewMState}}
+            {stop, Reason, {error, Reason},
+             State#state{module_state = NewMState}}
     end.
 
 terminate(Reason, #state{module = ConsumerModule, module_state = MState}) ->
