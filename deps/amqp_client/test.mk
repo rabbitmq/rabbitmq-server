@@ -80,7 +80,7 @@ stop_test_broker_node:
 	$(MAKE) unboot_broker
 
 boot_broker:
-	$(MAKE) -C $(BROKER_DIR) start-background-node SSL_BROKER_ARGS="$(SSL_BROKER_ARGS)"
+	$(MAKE) -C $(BROKER_DIR) start-background-node RABBITMQ_SERVER_START_ARGS="$(RABBITMQ_SERVER_START_ARGS) $(SSL_BROKER_ARGS)"
 	$(MAKE) -C $(BROKER_DIR) start-rabbit-on-node
 
 unboot_broker:
