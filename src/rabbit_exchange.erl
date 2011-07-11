@@ -20,9 +20,9 @@
 
 -export([recover/0, callback/3, declare/6,
          assert_equivalence/6, assert_args_equivalence/2, check_type/1,
-         lookup/1, lookup_or_die/1, list/1,
+         lookup/1, lookup_or_die/1, list/1, update_scratch/2,
          info_keys/0, info/1, info/2, info_all/1, info_all/2,
-         publish/2, delete/2]).
+         route/2, delete/2]).
 %% these must be run inside a mnesia tx
 -export([maybe_auto_delete/1, serial/1, peek_serial/1]).
 
@@ -58,6 +58,7 @@
         (name()) -> rabbit_types:exchange() |
                     rabbit_types:channel_exit()).
 -spec(list/1 :: (rabbit_types:vhost()) -> [rabbit_types:exchange()]).
+-spec(update_scratch/2 :: (name(), fun((any()) -> any())) -> 'ok').
 -spec(info_keys/0 :: () -> rabbit_types:info_keys()).
 -spec(info/1 :: (rabbit_types:exchange()) -> rabbit_types:infos()).
 -spec(info/2 ::
@@ -66,8 +67,8 @@
 -spec(info_all/1 :: (rabbit_types:vhost()) -> [rabbit_types:infos()]).
 -spec(info_all/2 ::(rabbit_types:vhost(), rabbit_types:info_keys())
                    -> [rabbit_types:infos()]).
--spec(publish/2 :: (rabbit_types:exchange(), rabbit_types:delivery())
-                   -> {rabbit_router:routing_result(), [pid()]}).
+-spec(route/2 :: (rabbit_types:exchange(), rabbit_types:delivery())
+                 -> [rabbit_amqqueue:name()]).
 -spec(delete/2 ::
         (name(), boolean())-> 'ok' |
                               rabbit_types:error('not_found') |
@@ -199,6 +200,23 @@ list(VHostPath) ->
       rabbit_exchange,
       #exchange{name = rabbit_misc:r(VHostPath, exchange), _ = '_'}).
 
+update_scratch(Name, Fun) ->
+    rabbit_misc:execute_mnesia_transaction(
+      fun() ->
+              case mnesia:wread({rabbit_exchange, Name}) of
+                  [X = #exchange{durable = Durable, scratch = Scratch}] ->
+                      X1 = X#exchange{scratch = Fun(Scratch)},
+                      ok = mnesia:write(rabbit_exchange, X1, write),
+                      case Durable of
+                          true -> ok = mnesia:write(rabbit_durable_exchange,
+                                                    X1, write);
+                          _    -> ok
+                      end;
+                  [] ->
+                      ok
+              end
+      end).
+
 info_keys() -> ?INFO_KEYS.
 
 map(VHostPath, F) ->
@@ -224,21 +242,19 @@ info_all(VHostPath) -> map(VHostPath, fun (X) -> info(X) end).
 
 info_all(VHostPath, Items) -> map(VHostPath, fun (X) -> info(X, Items) end).
 
-publish(X = #exchange{name = XName}, Delivery) ->
-    rabbit_router:deliver(
-      route(Delivery, {queue:from_list([X]), XName, []}),
-      Delivery).
+route(X = #exchange{name = XName}, Delivery) ->
+    route1(Delivery, {queue:from_list([X]), XName, []}).
 
-route(Delivery, {WorkList, SeenXs, QNames}) ->
+route1(Delivery, {WorkList, SeenXs, QNames}) ->
     case queue:out(WorkList) of
         {empty, _WorkList} ->
             lists:usort(QNames);
         {{value, X = #exchange{type = Type}}, WorkList1} ->
             DstNames = process_alternate(
                          X, ((type_to_module(Type)):route(X, Delivery))),
-            route(Delivery,
-                  lists:foldl(fun process_route/2, {WorkList1, SeenXs, QNames},
-                              DstNames))
+            route1(Delivery,
+                   lists:foldl(fun process_route/2, {WorkList1, SeenXs, QNames},
+                               DstNames))
     end.
 
 process_alternate(#exchange{name = XName, arguments = Args}, []) ->

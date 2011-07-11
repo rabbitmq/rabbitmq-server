@@ -705,7 +705,6 @@ test_topic_expect_match(X, List) ->
               Res = rabbit_exchange_type_topic:route(
                       X, #delivery{mandatory = false,
                                    immediate = false,
-                                   txn       = none,
                                    sender    = self(),
                                    message   = Message}),
               ExpectedRes = lists:map(
@@ -1072,15 +1071,25 @@ test_user_management() ->
         control_action(list_permissions, [], [{"-p", "/testhost"}]),
     {error, {invalid_regexp, _, _}} =
         control_action(set_permissions, ["guest", "+foo", ".*", ".*"]),
+    {error, {no_such_user, _}} =
+        control_action(set_user_tags, ["foo", "bar"]),
 
     %% user creation
     ok = control_action(add_user, ["foo", "bar"]),
     {error, {user_already_exists, _}} =
         control_action(add_user, ["foo", "bar"]),
     ok = control_action(change_password, ["foo", "baz"]),
-    ok = control_action(set_admin, ["foo"]),
-    ok = control_action(clear_admin, ["foo"]),
-    ok = control_action(list_users, []),
+
+    TestTags = fun (Tags) ->
+                       Args = ["foo" | [atom_to_list(T) || T <- Tags]],
+                       ok = control_action(set_user_tags, Args),
+                       {ok, #internal_user{tags = Tags}} =
+                           rabbit_auth_backend_internal:lookup_user(<<"foo">>),
+                       ok = control_action(list_users, [])
+               end,
+    TestTags([foo, bar, baz]),
+    TestTags([administrator]),
+    TestTags([]),
 
     %% vhost creation
     ok = control_action(add_vhost, ["/testhost"]),
@@ -1203,10 +1212,10 @@ test_spawn() ->
 
 user(Username) ->
     #user{username     = Username,
-          is_admin     = true,
+          tags         = [administrator],
           auth_backend = rabbit_auth_backend_internal,
           impl         = #internal_user{username = Username,
-                                        is_admin = true}}.
+                                        tags     = [administrator]}}.
 
 test_statistics_event_receiver(Pid) ->
     receive
@@ -2074,11 +2083,14 @@ test_queue_index() ->
 
 variable_queue_init(Q, Recover) ->
     rabbit_variable_queue:init(
-      Q, Recover, fun nop/2, fun nop/2, fun nop/2, fun nop/1).
+      Q, Recover, fun nop/2, fun nop/2, fun nop/1).
 
 variable_queue_publish(IsPersistent, Count, VQ) ->
+    variable_queue_publish(IsPersistent, Count, fun (_N, P) -> P end, VQ).
+
+variable_queue_publish(IsPersistent, Count, PropFun, VQ) ->
     lists:foldl(
-      fun (_N, VQN) ->
+      fun (N, VQN) ->
               rabbit_variable_queue:publish(
                 rabbit_basic:message(
                   rabbit_misc:r(<<>>, exchange, <<>>),
@@ -2086,7 +2098,7 @@ variable_queue_publish(IsPersistent, Count, VQ) ->
                                                        true  -> 2;
                                                        false -> 1
                                                    end}, <<>>),
-                #message_properties{}, self(), VQN)
+                PropFun(N, #message_properties{}), self(), VQN)
       end, VQ, lists:seq(1, Count)).
 
 variable_queue_fetch(Count, IsPersistent, IsDelivered, Len, VQ) ->
@@ -2119,6 +2131,29 @@ with_fresh_variable_queue(Fun) ->
     _ = rabbit_variable_queue:delete_and_terminate(shutdown, Fun(VQ)),
     passed.
 
+publish_and_confirm(QPid, Payload, Count) ->
+    Seqs = lists:seq(1, Count),
+    [begin
+         Msg = rabbit_basic:message(rabbit_misc:r(<<>>, exchange, <<>>),
+                                    <<>>, #'P_basic'{delivery_mode = 2},
+                                    Payload),
+         Delivery = #delivery{mandatory = false, immediate = false,
+                              sender = self(), message = Msg, msg_seq_no = Seq},
+         true = rabbit_amqqueue:deliver(QPid, Delivery)
+     end || Seq <- Seqs],
+    wait_for_confirms(gb_sets:from_list(Seqs)).
+
+wait_for_confirms(Unconfirmed) ->
+    case gb_sets:is_empty(Unconfirmed) of
+        true  -> ok;
+        false -> receive {'$gen_cast', {confirm, Confirmed, _}} ->
+                         wait_for_confirms(
+                           gb_sets:difference(Unconfirmed,
+                                              gb_sets:from_list(Confirmed)))
+                 after 1000 -> exit(timeout_waiting_for_confirm)
+                 end
+    end.
+
 test_variable_queue() ->
     [passed = with_fresh_variable_queue(F) ||
         F <- [fun test_variable_queue_dynamic_duration_change/1,
@@ -2126,6 +2161,7 @@ test_variable_queue() ->
               fun test_variable_queue_all_the_bits_not_covered_elsewhere1/1,
               fun test_variable_queue_all_the_bits_not_covered_elsewhere2/1,
               fun test_dropwhile/1,
+              fun test_dropwhile_varying_ram_duration/1,
               fun test_variable_queue_ack_limiting/1]],
     passed.
 
@@ -2162,14 +2198,9 @@ test_dropwhile(VQ0) ->
     Count = 10,
 
     %% add messages with sequential expiry
-    VQ1 = lists:foldl(
-            fun (N, VQN) ->
-                    rabbit_variable_queue:publish(
-                      rabbit_basic:message(
-                        rabbit_misc:r(<<>>, exchange, <<>>),
-                        <<>>, #'P_basic'{}, <<>>),
-                      #message_properties{expiry = N}, self(), VQN)
-            end, VQ0, lists:seq(1, Count)),
+    VQ1 = variable_queue_publish(
+            false, Count,
+            fun (N, Props) -> Props#message_properties{expiry = N} end, VQ0),
 
     %% drop the first 5 messages
     VQ2 = rabbit_variable_queue:dropwhile(
@@ -2188,6 +2219,14 @@ test_dropwhile(VQ0) ->
     {empty, VQ4} = rabbit_variable_queue:fetch(false, VQ3),
 
     VQ4.
+
+test_dropwhile_varying_ram_duration(VQ0) ->
+    VQ1 = variable_queue_publish(false, 1, VQ0),
+    VQ2 = rabbit_variable_queue:set_ram_duration_target(0, VQ1),
+    VQ3 = rabbit_variable_queue:dropwhile(fun(_) -> false end, VQ2),
+    VQ4 = rabbit_variable_queue:set_ram_duration_target(infinity, VQ3),
+    VQ5 = variable_queue_publish(false, 1, VQ4),
+    rabbit_variable_queue:dropwhile(fun(_) -> false end, VQ5).
 
 test_variable_queue_dynamic_duration_change(VQ0) ->
     SegmentSize = rabbit_queue_index:next_segment_boundary(0),
@@ -2308,17 +2347,10 @@ test_variable_queue_all_the_bits_not_covered_elsewhere2(VQ0) ->
 
 test_queue_recover() ->
     Count = 2 * rabbit_queue_index:next_segment_boundary(0),
-    TxID = rabbit_guid:guid(),
     {new, #amqqueue { pid = QPid, name = QName } = Q} =
         rabbit_amqqueue:declare(test_queue(), true, false, [], none),
-    [begin
-         Msg = rabbit_basic:message(rabbit_misc:r(<<>>, exchange, <<>>),
-                                    <<>>, #'P_basic'{delivery_mode = 2}, <<>>),
-         Delivery = #delivery{mandatory = false, immediate = false, txn = TxID,
-                              sender = self(), message = Msg},
-         true = rabbit_amqqueue:deliver(QPid, Delivery)
-     end || _ <- lists:seq(1, Count)],
-    rabbit_amqqueue:commit_all([QPid], TxID, self()),
+    publish_and_confirm(QPid, <<>>, Count),
+
     exit(QPid, kill),
     MRef = erlang:monitor(process, QPid),
     receive {'DOWN', MRef, process, QPid, _Info} -> ok
@@ -2345,18 +2377,10 @@ test_variable_queue_delete_msg_store_files_callback() ->
     ok = restart_msg_store_empty(),
     {new, #amqqueue { pid = QPid, name = QName } = Q} =
         rabbit_amqqueue:declare(test_queue(), true, false, [], none),
-    TxID = rabbit_guid:guid(),
     Payload = <<0:8388608>>, %% 1MB
     Count = 30,
-    [begin
-         Msg = rabbit_basic:message(
-                 rabbit_misc:r(<<>>, exchange, <<>>),
-                 <<>>, #'P_basic'{delivery_mode = 2}, Payload),
-         Delivery = #delivery{mandatory = false, immediate = false, txn = TxID,
-                              sender = self(), message = Msg},
-         true = rabbit_amqqueue:deliver(QPid, Delivery)
-     end || _ <- lists:seq(1, Count)],
-    rabbit_amqqueue:commit_all([QPid], TxID, self()),
+    publish_and_confirm(QPid, Payload, Count),
+
     rabbit_amqqueue:set_ram_duration_target(QPid, 0),
 
     CountMinusOne = Count - 1,

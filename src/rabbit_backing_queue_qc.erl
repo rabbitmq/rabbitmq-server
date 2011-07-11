@@ -334,7 +334,7 @@ qc_default_exchange() ->
 
 qc_variable_queue_init(Q) ->
     {call, ?BQMOD, init,
-        [Q, false, nop(2), nop(2), nop(2), nop(1)]}.
+        [Q, false, function(2, ok)]}.
 
 qc_test_q() ->
     {call, rabbit_misc, r, [<<"/">>, queue, noshrink(binary(16))]}.
@@ -349,18 +349,13 @@ qc_test_queue(Durable) ->
               arguments   = [],
               pid         = self()}.
 
-nop(N) -> function(N, ok).
-
 propvals_by_keys(Props, Keys) ->
     lists:filter(fun ({Key, _Msg}) ->
                      not lists:member(Key, Keys)
                  end, Props).
 
-rand_choice(List) ->
-    case List of
-        []  -> [];
-        _   -> [lists:nth(random:uniform(length(List)), List)]
-    end.
+rand_choice([])   -> [];
+rand_choice(List) -> [lists:nth(random:uniform(length(List)), List)].
 
 dropfun(Props) ->
     Expiry = eval({call, erlang, element,

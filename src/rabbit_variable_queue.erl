@@ -16,19 +16,18 @@
 
 -module(rabbit_variable_queue).
 
--export([init/4, terminate/2, delete_and_terminate/2,
+-export([init/3, terminate/2, delete_and_terminate/2,
          purge/1, publish/4, publish_delivered/5, drain_confirmed/1,
-         fetch/2, ack/2, tx_publish/5, tx_ack/3, tx_rollback/2, tx_commit/4,
-         requeue/3, len/1, is_empty/1, dropwhile/2,
+         dropwhile/2, fetch/2, ack/2, requeue/3, len/1, is_empty/1,
          set_ram_duration_target/2, ram_duration/1,
          needs_timeout/1, timeout/1, handle_pre_hibernate/1,
-         status/1, invoke/3, is_duplicate/3, discard/3,
+         status/1, invoke/3, is_duplicate/2, discard/3,
          multiple_routing_keys/0]).
 
 -export([start/1, stop/0]).
 
 %% exported for testing only
--export([start_msg_store/2, stop_msg_store/0, init/6]).
+-export([start_msg_store/2, stop_msg_store/0, init/5]).
 
 %%----------------------------------------------------------------------------
 %% Definitions:
@@ -238,12 +237,10 @@
           ram_ack_index,
           index_state,
           msg_store_clients,
-          on_sync,
           durable,
           transient_threshold,
 
           async_callback,
-          sync_callback,
 
           len,
           persistent_count,
@@ -284,10 +281,6 @@
           end_seq_id    %% end_seq_id is exclusive
         }).
 
--record(tx, { pending_messages, pending_acks }).
-
--record(sync, { acks_persistent, acks_all, pubs, funs }).
-
 %% When we discover, on publish, that we should write some indices to
 %% disk for some betas, the IO_BATCH_SIZE sets the number of betas
 %% that we must be due to write indices for before we do any work at
@@ -320,12 +313,6 @@
                           count        :: non_neg_integer(),
                           end_seq_id   :: non_neg_integer() }).
 
--type(sync() :: #sync { acks_persistent :: [[seq_id()]],
-                        acks_all        :: [[seq_id()]],
-                        pubs            :: [{message_properties_transformer(),
-                                             [rabbit_types:basic_message()]}],
-                        funs            :: [fun (() -> any())] }).
-
 -type(state() :: #vqstate {
              q1                    :: queue(),
              q2                    :: bpqueue:bpqueue(),
@@ -338,12 +325,10 @@
              index_state           :: any(),
              msg_store_clients     :: 'undefined' | {{any(), binary()},
                                                     {any(), binary()}},
-             on_sync               :: sync(),
              durable               :: boolean(),
              transient_threshold   :: non_neg_integer(),
 
              async_callback        :: async_callback(),
-             sync_callback         :: sync_callback(),
 
              len                   :: non_neg_integer(),
              persistent_count      :: non_neg_integer(),
@@ -376,11 +361,6 @@
                                          count        = 0,
                                          end_seq_id   = Z }).
 
--define(BLANK_SYNC, #sync { acks_persistent = [],
-                            acks_all        = [],
-                            pubs            = [],
-                            funs            = [] }).
-
 %%----------------------------------------------------------------------------
 %% Public API
 %%----------------------------------------------------------------------------
@@ -409,17 +389,17 @@ stop_msg_store() ->
     ok = rabbit_sup:stop_child(?PERSISTENT_MSG_STORE),
     ok = rabbit_sup:stop_child(?TRANSIENT_MSG_STORE).
 
-init(Queue, Recover, AsyncCallback, SyncCallback) ->
-    init(Queue, Recover, AsyncCallback, SyncCallback,
+init(Queue, Recover, AsyncCallback) ->
+    init(Queue, Recover, AsyncCallback,
          fun (MsgIds, ActionTaken) ->
                  msgs_written_to_disk(AsyncCallback, MsgIds, ActionTaken)
          end,
          fun (MsgIds) -> msg_indices_written_to_disk(AsyncCallback, MsgIds) end).
 
 init(#amqqueue { name = QueueName, durable = IsDurable }, false,
-     AsyncCallback, SyncCallback, MsgOnDiskFun, MsgIdxOnDiskFun) ->
+     AsyncCallback, MsgOnDiskFun, MsgIdxOnDiskFun) ->
     IndexState = rabbit_queue_index:init(QueueName, MsgIdxOnDiskFun),
-    init(IsDurable, IndexState, 0, [], AsyncCallback, SyncCallback,
+    init(IsDurable, IndexState, 0, [], AsyncCallback,
          case IsDurable of
              true  -> msg_store_client_init(?PERSISTENT_MSG_STORE,
                                             MsgOnDiskFun, AsyncCallback);
@@ -428,7 +408,7 @@ init(#amqqueue { name = QueueName, durable = IsDurable }, false,
          msg_store_client_init(?TRANSIENT_MSG_STORE, undefined, AsyncCallback));
 
 init(#amqqueue { name = QueueName, durable = true }, true,
-     AsyncCallback, SyncCallback, MsgOnDiskFun, MsgIdxOnDiskFun) ->
+     AsyncCallback, MsgOnDiskFun, MsgIdxOnDiskFun) ->
     Terms = rabbit_queue_index:shutdown_terms(QueueName),
     {PRef, TRef, Terms1} =
         case [persistent_ref, transient_ref] -- proplists:get_keys(Terms) of
@@ -449,14 +429,14 @@ init(#amqqueue { name = QueueName, durable = true }, true,
                   rabbit_msg_store:contains(MsgId, PersistentClient)
           end,
           MsgIdxOnDiskFun),
-    init(true, IndexState, DeltaCount, Terms1, AsyncCallback, SyncCallback,
+    init(true, IndexState, DeltaCount, Terms1, AsyncCallback,
          PersistentClient, TransientClient).
 
 terminate(_Reason, State) ->
     State1 = #vqstate { persistent_count  = PCount,
                         index_state       = IndexState,
                         msg_store_clients = {MSCStateP, MSCStateT} } =
-        remove_pending_ack(true, tx_commit_index(State)),
+        remove_pending_ack(true, State),
     PRef = case MSCStateP of
                undefined -> undefined;
                _         -> ok = rabbit_msg_store:client_terminate(MSCStateP),
@@ -560,172 +540,34 @@ drain_confirmed(State = #vqstate { confirmed = C }) ->
     {gb_sets:to_list(C), State #vqstate { confirmed = gb_sets:new() }}.
 
 dropwhile(Pred, State) ->
-    {_OkOrEmpty, State1} = dropwhile1(Pred, State),
-    a(State1).
-
-dropwhile1(Pred, State) ->
-    internal_queue_out(
-      fun(MsgStatus = #msg_status { msg_props = MsgProps }, State1) ->
-              case Pred(MsgProps) of
-                  true ->  {_, State2} = internal_fetch(false, MsgStatus,
-                                                        State1),
-                           dropwhile1(Pred, State2);
-                  false -> {ok, in_r(MsgStatus, State1)}
-              end
-      end, State).
-
-in_r(MsgStatus = #msg_status { msg = undefined, index_on_disk = IndexOnDisk },
-     State = #vqstate { q3 = Q3, q4 = Q4, ram_index_count = RamIndexCount }) ->
-    true = queue:is_empty(Q4), %% ASSERTION
-    State #vqstate {
-      q3              = bpqueue:in_r(IndexOnDisk, MsgStatus, Q3),
-      ram_index_count = RamIndexCount + one_if(not IndexOnDisk) };
-in_r(MsgStatus, State = #vqstate { q4 = Q4 }) ->
-    State #vqstate { q4 = queue:in_r(MsgStatus, Q4) }.
-
-fetch(AckRequired, State) ->
-    internal_queue_out(
-      fun(MsgStatus, State1) ->
-              %% it's possible that the message wasn't read from disk
-              %% at this point, so read it in.
-              {MsgStatus1, State2} = read_msg(MsgStatus, State1),
-              internal_fetch(AckRequired, MsgStatus1, State2)
-      end, State).
-
-internal_queue_out(Fun, State = #vqstate { q4 = Q4 }) ->
-    case queue:out(Q4) of
-        {empty, _Q4} ->
-            case fetch_from_q3(State) of
-                {empty, State1} = Result      -> a(State1), Result;
-                {loaded, {MsgStatus, State1}} -> Fun(MsgStatus, State1)
-            end;
-        {{value, MsgStatus}, Q4a} ->
-            Fun(MsgStatus, State #vqstate { q4 = Q4a })
+    case queue_out(State) of
+        {empty, State1} ->
+            a(State1);
+        {{value, MsgStatus = #msg_status { msg_props = MsgProps }}, State1} ->
+            case Pred(MsgProps) of
+                true ->  {_, State2} = internal_fetch(false, MsgStatus, State1),
+                         dropwhile(Pred, State2);
+                false -> a(in_r(MsgStatus, State1))
+            end
     end.
 
-read_msg(MsgStatus = #msg_status { msg           = undefined,
-                                   msg_id        = MsgId,
-                                   is_persistent = IsPersistent },
-         State = #vqstate { ram_msg_count     = RamMsgCount,
-                            msg_store_clients = MSCState}) ->
-    {{ok, Msg = #basic_message {}}, MSCState1} =
-        msg_store_read(MSCState, IsPersistent, MsgId),
-    {MsgStatus #msg_status { msg = Msg },
-     State #vqstate { ram_msg_count     = RamMsgCount + 1,
-                      msg_store_clients = MSCState1 }};
-read_msg(MsgStatus, State) ->
-    {MsgStatus, State}.
-
-internal_fetch(AckRequired, MsgStatus = #msg_status {
-                              seq_id        = SeqId,
-                              msg_id        = MsgId,
-                              msg           = Msg,
-                              is_persistent = IsPersistent,
-                              is_delivered  = IsDelivered,
-                              msg_on_disk   = MsgOnDisk,
-                              index_on_disk = IndexOnDisk },
-               State = #vqstate {ram_msg_count     = RamMsgCount,
-                                 out_counter       = OutCount,
-                                 index_state       = IndexState,
-                                 msg_store_clients = MSCState,
-                                 len               = Len,
-                                 persistent_count  = PCount }) ->
-    %% 1. Mark it delivered if necessary
-    IndexState1 = maybe_write_delivered(
-                    IndexOnDisk andalso not IsDelivered,
-                    SeqId, IndexState),
-
-    %% 2. Remove from msg_store and queue index, if necessary
-    Rem = fun () ->
-                  ok = msg_store_remove(MSCState, IsPersistent, [MsgId])
-          end,
-    Ack = fun () -> rabbit_queue_index:ack([SeqId], IndexState1) end,
-    IndexState2 =
-        case {AckRequired, MsgOnDisk, IndexOnDisk, IsPersistent} of
-            {false, true, false,     _} -> Rem(), IndexState1;
-            {false, true,  true,     _} -> Rem(), Ack();
-            { true, true,  true, false} -> Ack();
-            _                           -> IndexState1
-        end,
-
-    %% 3. If an ack is required, add something sensible to PA
-    {AckTag, State1} = case AckRequired of
-                           true  -> StateN = record_pending_ack(
-                                               MsgStatus #msg_status {
-                                                 is_delivered = true }, State),
-                                    {SeqId, StateN};
-                           false -> {undefined, State}
-                       end,
-
-    PCount1 = PCount - one_if(IsPersistent andalso not AckRequired),
-    Len1 = Len - 1,
-    RamMsgCount1 = RamMsgCount - one_if(Msg =/= undefined),
-
-    {{Msg, IsDelivered, AckTag, Len1},
-     a(State1 #vqstate { ram_msg_count    = RamMsgCount1,
-                         out_counter      = OutCount + 1,
-                         index_state      = IndexState2,
-                         len              = Len1,
-                         persistent_count = PCount1 })}.
+fetch(AckRequired, State) ->
+    case queue_out(State) of
+        {empty, State1} ->
+            {empty, a(State1)};
+        {{value, MsgStatus}, State1} ->
+            %% it is possible that the message wasn't read from disk
+            %% at this point, so read it in.
+            {MsgStatus1, State2} = read_msg(MsgStatus, State1),
+            {Res, State3} = internal_fetch(AckRequired, MsgStatus1, State2),
+            {Res, a(State3)}
+    end.
 
 ack(AckTags, State) ->
     {MsgIds, State1} = ack(fun msg_store_remove/3,
                            fun (_, State0) -> State0 end,
                            AckTags, State),
     {MsgIds, a(State1)}.
-
-tx_publish(Txn, Msg = #basic_message { is_persistent = IsPersistent }, MsgProps,
-           _ChPid, State = #vqstate { durable           = IsDurable,
-                                      msg_store_clients = MSCState }) ->
-    Tx = #tx { pending_messages = Pubs } = lookup_tx(Txn),
-    store_tx(Txn, Tx #tx { pending_messages = [{Msg, MsgProps} | Pubs] }),
-    case IsPersistent andalso IsDurable of
-        true  -> MsgStatus = msg_status(true, undefined, Msg, MsgProps),
-                 #msg_status { msg_on_disk = true } =
-                     maybe_write_msg_to_disk(false, MsgStatus, MSCState);
-        false -> ok
-    end,
-    a(State).
-
-tx_ack(Txn, AckTags, State) ->
-    Tx = #tx { pending_acks = Acks } = lookup_tx(Txn),
-    store_tx(Txn, Tx #tx { pending_acks = [AckTags | Acks] }),
-    State.
-
-tx_rollback(Txn, State = #vqstate { durable           = IsDurable,
-                                    msg_store_clients = MSCState }) ->
-    #tx { pending_acks = AckTags, pending_messages = Pubs } = lookup_tx(Txn),
-    erase_tx(Txn),
-    ok = case IsDurable of
-             true  -> msg_store_remove(MSCState, true,
-                                       persistent_msg_ids(Pubs));
-             false -> ok
-         end,
-    {lists:append(AckTags), a(State)}.
-
-tx_commit(Txn, Fun, MsgPropsFun,
-          State = #vqstate { durable           = IsDurable,
-                             async_callback    = AsyncCallback,
-                             sync_callback     = SyncCallback,
-                             msg_store_clients = MSCState }) ->
-    #tx { pending_acks = AckTags, pending_messages = Pubs } = lookup_tx(Txn),
-    erase_tx(Txn),
-    AckTags1 = lists:append(AckTags),
-    PersistentMsgIds = persistent_msg_ids(Pubs),
-    HasPersistentPubs = PersistentMsgIds =/= [],
-    {AckTags1,
-     a(case IsDurable andalso HasPersistentPubs of
-           true  -> MsgStoreCallback =
-                        fun () -> msg_store_callback(
-                                    PersistentMsgIds, Pubs, AckTags1, Fun,
-                                    MsgPropsFun, AsyncCallback, SyncCallback)
-                        end,
-                    ok = msg_store_sync(MSCState, true, PersistentMsgIds,
-                                        fun () -> spawn(MsgStoreCallback) end),
-                    State;
-           false -> tx_commit_post_msg_store(HasPersistentPubs, Pubs, AckTags1,
-                                             Fun, MsgPropsFun, State)
-       end)}.
 
 requeue(AckTags, MsgPropsFun, State) ->
     MsgPropsFun1 = fun (MsgProps) ->
@@ -832,23 +674,22 @@ ram_duration(State = #vqstate {
                  ram_msg_count_prev = RamMsgCount,
                  ram_ack_count_prev = RamAckCount }}.
 
-needs_timeout(State = #vqstate { on_sync = OnSync }) ->
-    case {OnSync, needs_index_sync(State)} of
-        {?BLANK_SYNC, false} ->
-            case reduce_memory_use(fun (_Quota, State1) -> {0, State1} end,
-                                   fun (_Quota, State1) -> State1 end,
-                                   fun (State1)         -> State1 end,
-                                   fun (_Quota, State1) -> {0, State1} end,
-                                   State) of
-                {true,  _State} -> idle;
-                {false, _State} -> false
-            end;
-        _ ->
-            timed
+needs_timeout(State) ->
+    case needs_index_sync(State) of
+        false -> case reduce_memory_use(
+                        fun (_Quota, State1) -> {0, State1} end,
+                        fun (_Quota, State1) -> State1 end,
+                        fun (State1)         -> State1 end,
+                        fun (_Quota, State1) -> {0, State1} end,
+                        State) of
+                     {true,  _State} -> idle;
+                     {false, _State} -> false
+                 end;
+        true  -> timed
     end.
 
 timeout(State) ->
-    a(reduce_memory_use(confirm_commit_index(tx_commit_index(State)))).
+    a(reduce_memory_use(confirm_commit_index(State))).
 
 handle_pre_hibernate(State = #vqstate { index_state = IndexState }) ->
     State #vqstate { index_state = rabbit_queue_index:flush(IndexState) }.
@@ -858,7 +699,6 @@ status(#vqstate {
           len              = Len,
           pending_ack      = PA,
           ram_ack_index    = RAI,
-          on_sync          = #sync { funs = From },
           target_ram_count = TargetRamCount,
           ram_msg_count    = RamMsgCount,
           ram_index_count  = RamIndexCount,
@@ -875,7 +715,6 @@ status(#vqstate {
       {q4                  , queue:len(Q4)},
       {len                 , Len},
       {pending_acks        , dict:size(PA)},
-      {outstanding_txns    , length(From)},
       {target_ram_count    , TargetRamCount},
       {ram_msg_count       , RamMsgCount},
       {ram_ack_count       , gb_trees:size(RAI)},
@@ -887,10 +726,9 @@ status(#vqstate {
       {avg_ack_ingress_rate, AvgAckIngressRate},
       {avg_ack_egress_rate , AvgAckEgressRate} ].
 
-invoke(?MODULE, Fun, State) ->
-    Fun(?MODULE, State).
+invoke(?MODULE, Fun, State) -> Fun(?MODULE, State).
 
-is_duplicate(_Txn, _Msg, State) -> {false, State}.
+is_duplicate(_Msg, State) -> {false, State}.
 
 discard(_Msg, _ChPid, State) -> State.
 
@@ -986,11 +824,6 @@ msg_store_remove(MSCState, IsPersistent, MsgIds) ->
       MSCState, IsPersistent,
       fun (MCSState1) -> rabbit_msg_store:remove(MsgIds, MCSState1) end).
 
-msg_store_sync(MSCState, IsPersistent, MsgIds, Fun) ->
-    with_immutable_msg_store_state(
-      MSCState, IsPersistent,
-      fun (MSCState1) -> rabbit_msg_store:sync(MsgIds, Fun, MSCState1) end).
-
 msg_store_close_fds(MSCState, IsPersistent) ->
     with_msg_store_state(
       MSCState, IsPersistent,
@@ -1006,20 +839,6 @@ maybe_write_delivered(false, _SeqId, IndexState) ->
     IndexState;
 maybe_write_delivered(true, SeqId, IndexState) ->
     rabbit_queue_index:deliver([SeqId], IndexState).
-
-lookup_tx(Txn) -> case get({txn, Txn}) of
-                      undefined -> #tx { pending_messages = [],
-                                         pending_acks     = [] };
-                      V         -> V
-                  end.
-
-store_tx(Txn, Tx) -> put({txn, Txn}, Tx).
-
-erase_tx(Txn) -> erase({txn, Txn}).
-
-persistent_msg_ids(Pubs) ->
-    [MsgId || {#basic_message { id            = MsgId,
-                                is_persistent = true }, _MsgProps} <- Pubs].
 
 betas_from_index_entries(List, TransientThreshold, IndexState) ->
     {Filtered, Delivers, Acks} =
@@ -1084,8 +903,8 @@ update_rate(Now, Then, Count, {OThen, OCount}) ->
 %% Internal major helpers for Public API
 %%----------------------------------------------------------------------------
 
-init(IsDurable, IndexState, DeltaCount, Terms,
-     AsyncCallback, SyncCallback, PersistentClient, TransientClient) ->
+init(IsDurable, IndexState, DeltaCount, Terms, AsyncCallback,
+     PersistentClient, TransientClient) ->
     {LowSeqId, NextSeqId, IndexState1} = rabbit_queue_index:bounds(IndexState),
 
     DeltaCount1 = proplists:get_value(persistent_count, Terms, DeltaCount),
@@ -1107,12 +926,10 @@ init(IsDurable, IndexState, DeltaCount, Terms,
       ram_ack_index       = gb_trees:empty(),
       index_state         = IndexState1,
       msg_store_clients   = {PersistentClient, TransientClient},
-      on_sync             = ?BLANK_SYNC,
       durable             = IsDurable,
       transient_threshold = NextSeqId,
 
       async_callback      = AsyncCallback,
-      sync_callback       = SyncCallback,
 
       len                 = DeltaCount1,
       persistent_count    = DeltaCount1,
@@ -1141,87 +958,94 @@ blank_rate(Timestamp, IngressLength) ->
              avg_ingress = 0.0,
              timestamp   = Timestamp }.
 
-msg_store_callback(PersistentMsgIds, Pubs, AckTags, Fun, MsgPropsFun,
-                   AsyncCallback, SyncCallback) ->
-    case SyncCallback(?MODULE,
-                      fun (?MODULE, StateN) ->
-                              tx_commit_post_msg_store(true, Pubs, AckTags,
-                                                       Fun, MsgPropsFun, StateN)
-                      end) of
-        ok    -> ok;
-        error -> remove_persistent_messages(PersistentMsgIds, AsyncCallback)
-    end.
-
-remove_persistent_messages(MsgIds, AsyncCallback) ->
-    PersistentClient = msg_store_client_init(?PERSISTENT_MSG_STORE,
-                                             undefined, AsyncCallback),
-    ok = rabbit_msg_store:remove(MsgIds, PersistentClient),
-    rabbit_msg_store:client_delete_and_terminate(PersistentClient).
-
-tx_commit_post_msg_store(HasPersistentPubs, Pubs, AckTags, Fun, MsgPropsFun,
-                         State = #vqstate {
-                           on_sync     = OnSync = #sync {
-                                           acks_persistent = SPAcks,
-                                           acks_all        = SAcks,
-                                           pubs            = SPubs,
-                                           funs            = SFuns },
-                           pending_ack = PA,
-                           durable     = IsDurable }) ->
-    PersistentAcks =
-        case IsDurable of
-            true  -> [AckTag || AckTag <- AckTags,
-                                case dict:fetch(AckTag, PA) of
-                                    #msg_status {} ->
-                                        false;
-                                    {IsPersistent, _MsgId, _MsgProps} ->
-                                        IsPersistent
-                                end];
-            false -> []
-        end,
-    case IsDurable andalso (HasPersistentPubs orelse PersistentAcks =/= []) of
+in_r(MsgStatus = #msg_status { msg = undefined, index_on_disk = IndexOnDisk },
+     State = #vqstate { q3 = Q3, q4 = Q4, ram_index_count = RamIndexCount }) ->
+    case queue:is_empty(Q4) of
         true  -> State #vqstate {
-                   on_sync = #sync {
-                     acks_persistent = [PersistentAcks | SPAcks],
-                     acks_all        = [AckTags | SAcks],
-                     pubs            = [{MsgPropsFun, Pubs} | SPubs],
-                     funs            = [Fun | SFuns] }};
-        false -> State1 = tx_commit_index(
-                            State #vqstate {
-                              on_sync = #sync {
-                                acks_persistent = [],
-                                acks_all        = [AckTags],
-                                pubs            = [{MsgPropsFun, Pubs}],
-                                funs            = [Fun] } }),
-                 State1 #vqstate { on_sync = OnSync }
+                   q3              = bpqueue:in_r(IndexOnDisk, MsgStatus, Q3),
+                   ram_index_count = RamIndexCount + one_if(not IndexOnDisk) };
+        false -> {MsgStatus1, State1 = #vqstate { q4 = Q4a }} =
+                     read_msg(MsgStatus, State),
+                 State1 #vqstate { q4 = queue:in_r(MsgStatus1, Q4a) }
+    end;
+in_r(MsgStatus, State = #vqstate { q4 = Q4 }) ->
+    State #vqstate { q4 = queue:in_r(MsgStatus, Q4) }.
+
+queue_out(State = #vqstate { q4 = Q4 }) ->
+    case queue:out(Q4) of
+        {empty, _Q4} ->
+            case fetch_from_q3(State) of
+                {empty, _State1} = Result     -> Result;
+                {loaded, {MsgStatus, State1}} -> {{value, MsgStatus}, State1}
+            end;
+        {{value, MsgStatus}, Q4a} ->
+            {{value, MsgStatus}, State #vqstate { q4 = Q4a }}
     end.
 
-tx_commit_index(State = #vqstate { on_sync = ?BLANK_SYNC }) ->
-    State;
-tx_commit_index(State = #vqstate { on_sync = #sync {
-                                     acks_persistent = SPAcks,
-                                     acks_all        = SAcks,
-                                     pubs            = SPubs,
-                                     funs            = SFuns },
-                                   durable = IsDurable }) ->
-    PAcks = lists:append(SPAcks),
-    Acks  = lists:append(SAcks),
-    Pubs  = [{Msg, Fun(MsgProps)} || {Fun, PubsN}    <- lists:reverse(SPubs),
-                                     {Msg, MsgProps} <- lists:reverse(PubsN)],
-    {_MsgIds, State1} = ack(Acks, State),
-    {SeqIds, State2 = #vqstate { index_state = IndexState }} =
-        lists:foldl(
-          fun ({Msg = #basic_message { is_persistent = IsPersistent },
-                MsgProps},
-               {SeqIdsAcc, State3}) ->
-                  IsPersistent1 = IsDurable andalso IsPersistent,
-                  {SeqId, State4} =
-                      publish(Msg, MsgProps, false, IsPersistent1, State3),
-                  {cons_if(IsPersistent1, SeqId, SeqIdsAcc), State4}
-          end, {PAcks, State1}, Pubs),
-    IndexState1 = rabbit_queue_index:sync(SeqIds, IndexState),
-    [ Fun() || Fun <- lists:reverse(SFuns) ],
-    reduce_memory_use(
-      State2 #vqstate { index_state = IndexState1, on_sync = ?BLANK_SYNC }).
+read_msg(MsgStatus = #msg_status { msg           = undefined,
+                                   msg_id        = MsgId,
+                                   is_persistent = IsPersistent },
+         State = #vqstate { ram_msg_count     = RamMsgCount,
+                            msg_store_clients = MSCState}) ->
+    {{ok, Msg = #basic_message {}}, MSCState1} =
+        msg_store_read(MSCState, IsPersistent, MsgId),
+    {MsgStatus #msg_status { msg = Msg },
+     State #vqstate { ram_msg_count     = RamMsgCount + 1,
+                      msg_store_clients = MSCState1 }};
+read_msg(MsgStatus, State) ->
+    {MsgStatus, State}.
+
+internal_fetch(AckRequired, MsgStatus = #msg_status {
+                              seq_id        = SeqId,
+                              msg_id        = MsgId,
+                              msg           = Msg,
+                              is_persistent = IsPersistent,
+                              is_delivered  = IsDelivered,
+                              msg_on_disk   = MsgOnDisk,
+                              index_on_disk = IndexOnDisk },
+               State = #vqstate {ram_msg_count     = RamMsgCount,
+                                 out_counter       = OutCount,
+                                 index_state       = IndexState,
+                                 msg_store_clients = MSCState,
+                                 len               = Len,
+                                 persistent_count  = PCount }) ->
+    %% 1. Mark it delivered if necessary
+    IndexState1 = maybe_write_delivered(
+                    IndexOnDisk andalso not IsDelivered,
+                    SeqId, IndexState),
+
+    %% 2. Remove from msg_store and queue index, if necessary
+    Rem = fun () ->
+                  ok = msg_store_remove(MSCState, IsPersistent, [MsgId])
+          end,
+    Ack = fun () -> rabbit_queue_index:ack([SeqId], IndexState1) end,
+    IndexState2 =
+        case {AckRequired, MsgOnDisk, IndexOnDisk, IsPersistent} of
+            {false, true, false,     _} -> Rem(), IndexState1;
+            {false, true,  true,     _} -> Rem(), Ack();
+            { true, true,  true, false} -> Ack();
+            _                           -> IndexState1
+        end,
+
+    %% 3. If an ack is required, add something sensible to PA
+    {AckTag, State1} = case AckRequired of
+                           true  -> StateN = record_pending_ack(
+                                               MsgStatus #msg_status {
+                                                 is_delivered = true }, State),
+                                    {SeqId, StateN};
+                           false -> {undefined, State}
+                       end,
+
+    PCount1 = PCount - one_if(IsPersistent andalso not AckRequired),
+    Len1 = Len - 1,
+    RamMsgCount1 = RamMsgCount - one_if(Msg =/= undefined),
+
+    {{Msg, IsDelivered, AckTag, Len1},
+     State1 #vqstate { ram_msg_count    = RamMsgCount1,
+                       out_counter      = OutCount + 1,
+                       index_state      = IndexState2,
+                       len              = Len1,
+                       persistent_count = PCount1 }}.
 
 purge_betas_and_deltas(LensByStore,
                        State = #vqstate { q3                = Q3,

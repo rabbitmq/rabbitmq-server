@@ -513,17 +513,22 @@
         </varlistentry>
 
         <varlistentry>
-          <term><cmdsynopsis><command>set_admin</command> <arg choice="req"><replaceable>username</replaceable></arg></cmdsynopsis></term>
+          <term><cmdsynopsis><command>set_user_tags</command> <arg choice="req"><replaceable>username</replaceable></arg> <arg choice="req"><replaceable>tag</replaceable> ...</arg></cmdsynopsis></term>
           <listitem>
             <variablelist>
               <varlistentry>
                 <term>username</term>
-                <listitem><para>The name of the user whose administrative
-                status is to be set.</para></listitem>
+                <listitem><para>The name of the user whose tags are to
+                be set.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>tag</term>
+                <listitem><para>Zero, one or more tags to set. Any
+                existing tags will be removed.</para></listitem>
               </varlistentry>
             </variablelist>
             <para role="example-prefix">For example:</para>
-            <screen role="example">rabbitmqctl set_admin tonyg</screen>
+            <screen role="example">rabbitmqctl set_user_tags tonyg administrator</screen>
             <para role="example">
               This command instructs the RabbitMQ broker to ensure the user
                named <command>tonyg</command> is an administrator. This has no
@@ -532,24 +537,10 @@
                user logs in via some other means (for example with the
                management plugin).
             </para>
-          </listitem>
-        </varlistentry>
-
-        <varlistentry>
-          <term><cmdsynopsis><command>clear_admin</command> <arg choice="req"><replaceable>username</replaceable></arg></cmdsynopsis></term>
-          <listitem>
-            <variablelist>
-              <varlistentry>
-                <term>username</term>
-                <listitem><para>The name of the user whose administrative
-                status is to be cleared.</para></listitem>
-              </varlistentry>
-            </variablelist>
-            <para role="example-prefix">For example:</para>
-            <screen role="example">rabbitmqctl clear_admin tonyg</screen>
+            <screen role="example">rabbitmqctl set_user_tags tonyg</screen>
             <para role="example">
-              This command instructs the RabbitMQ broker to ensure the user
-               named <command>tonyg</command> is not an administrator.
+              This command instructs the RabbitMQ broker to remove any
+              tags from the user named <command>tonyg</command>.
             </para>
           </listitem>
         </varlistentry>
@@ -1209,6 +1200,10 @@
                 <listitem><para>True if the channel is in transactional mode, false otherwise.</para></listitem>
               </varlistentry>
               <varlistentry>
+                <term>confirm</term>
+                <listitem><para>True if the channel is in confirm mode, false otherwise.</para></listitem>
+              </varlistentry>
+              <varlistentry>
                 <term>consumer_count</term>
                 <listitem><para>Number of logical AMQP consumers retrieving messages via
                   the channel.</para></listitem>
@@ -1219,9 +1214,20 @@
                   yet acknowledged.</para></listitem>
               </varlistentry>
               <varlistentry>
+                <term>messages_uncommitted</term>
+                <listitem><para>Number of messages received in an as yet
+                  uncommitted transaction.</para></listitem>
+              </varlistentry>
+              <varlistentry>
                 <term>acks_uncommitted</term>
                 <listitem><para>Number of acknowledgements received in an as yet
                   uncommitted transaction.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>messages_unconfirmed</term>
+                <listitem><para>Number of published messages not yet
+                confirmed.  On channels not in confirm mode, this
+                remains 0.</para></listitem>
               </varlistentry>
               <varlistentry>
                 <term>prefetch_count</term>
@@ -1235,21 +1241,10 @@
                     messages to the channel's consumers.
                     </para></listitem>
               </varlistentry>
-              <varlistentry>
-                <term>confirm</term>
-                <listitem><para>True if the channel is in confirm mode, false otherwise.</para></listitem>
-              </varlistentry>
-              <varlistentry>
-                <term>messages_unconfirmed</term>
-                <listitem><para>Number of published messages not yet
-                confirmed.  On channels not in confirm mode, this
-                remains 0.</para></listitem>
-              </varlistentry>
             </variablelist>
             <para>
               If no <command>channelinfoitem</command>s are specified then pid,
-              user, transactional, consumer_count, and
-              messages_unacknowledged are assumed.
+              user, consumer_count, and messages_unacknowledged are assumed.
             </para>
 
             <para role="example-prefix">
