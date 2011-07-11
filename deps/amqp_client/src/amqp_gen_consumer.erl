@@ -215,7 +215,7 @@ handle_call({consumer_call, Call}, From,
         {reply, Reply, NewMState} ->
             {reply, Reply, State#state{module_state = NewMState}}
     end;
-handle_call({consumer_call, Method, Args}, _From,
+handle_call({consumer_call, Method, Args}, From,
             State = #state{module       = ConsumerModule,
                            module_state = MState}) ->
     Return =
@@ -235,6 +235,7 @@ handle_call({consumer_call, Method, Args}, _From,
         {ok, NewMState} ->
             {reply, ok, State#state{module_state = NewMState}};
         {error, Reason, NewMState} ->
+            gen_server2:reply(From, {error, Reason}),
             {stop, Reason, State#state{module_state = NewMState}}
     end.
 

@@ -413,19 +413,14 @@ handle_method_to_server(Method, AmqpMsg, From, Sender, State) ->
                          _ ->
                              State
                      end,
-            ConsumerReply =
-                case Method of
-                    #'basic.consume'{} ->
-                        ok = call_to_consumer(Method, Sender, State);
-                    _ ->
-                        ok
-                end,
-            case ConsumerReply of
-                ok -> {noreply,
-                       rpc_top_half(Method, build_content(AmqpMsg),
-                                    From, State1)};
-                error -> {reply, {error, consumer_error}, State}
-            end;
+            case Method of
+                #'basic.consume'{} ->
+                    ok = call_to_consumer(Method, Sender, State);
+                _ ->
+                    ok
+            end,
+            {noreply, rpc_top_half(Method, build_content(AmqpMsg),
+                                   From, State1)};
         {ok, none, BlockReply} ->
             ?LOG_WARN("Channel (~p): discarding method ~p in cast.~n"
                       "Reason: ~p~n", [self(), Method, BlockReply]),
