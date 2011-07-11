@@ -280,12 +280,12 @@ init({delegate, Restart}) ->
 
 init({mirroring, Group, ChildSpecs}) ->
     ?PG2:create(Group),
+    ok = ?PG2:join(Group, self()),
     [begin
-         gen_server2:call(Pid, {hello, self()}, infinity),
+         gen_server2:cast(Pid, {ensure_monitoring, self()}),
          erlang:monitor(process, Pid)
      end
-     || Pid <- ?PG2:get_members(Group)],
-    ok = ?PG2:join(Group, self()),
+     || Pid <- ?PG2:get_members(Group) -- [self()]],
     {ok, #state{group = Group, initial_childspecs = ChildSpecs}}.
 
 handle_call({finish_startup, Overall}, _From,
@@ -306,15 +306,15 @@ handle_call({delete_child, Id}, _From,
 handle_call({msg, F, A}, _From, State = #state{overall = Overall}) ->
     {reply, apply(?SUPERVISOR, F, [child(Overall, delegate) | A]), State};
 
-handle_call({hello, Pid}, _From, State) ->
-    erlang:monitor(process, Pid),
-    {reply, ok, State};
-
 handle_call(overall_supervisor, _From, State = #state{overall = Overall}) ->
     {reply, Overall, State};
 
 handle_call(Msg, _From, State) ->
     {stop, {unexpected_call, Msg}, State}.
+
+handle_cast({ensure_monitoring, Pid}, State) ->
+    erlang:monitor(process, Pid),
+    {noreply, State};
 
 handle_cast(Msg, State) ->
     {stop, {unexpected_cast, Msg}, State}.
