@@ -28,12 +28,22 @@
 
 to_table(#upstream{params   = #amqp_params_network{host         = H,
                                                    port         = P,
+                                                   ssl_options  = S,
                                                    virtual_host = V},
                    exchange = X}) ->
+    PortPart = case P of
+                   undefined -> [];
+                   _         -> [{<<"port">>, long, P}]
+               end,
+    Protocol = case S of
+                   none -> <<"amqp">>;
+                   _    -> <<"amqps">>
+               end,
     {table, [{<<"host">>,         longstr, list_to_binary(H)},
-             {<<"port">>,         long,    P},
              {<<"virtual_host">>, longstr, V},
-             {<<"exchange">>,     longstr, X}]}.
+             {<<"exchange">>,     longstr, X},
+             {<<"protocol">>,     longstr, Protocol}] ++
+         PortPart}.
 
 to_string(#upstream{params   = #amqp_params_network{host         = H,
                                                     port         = P,
@@ -90,7 +100,6 @@ from_props_connection(Upst, ConnName, Conn, DefaultXName, DefaultVHost) ->
 set_extra_params(Params, Conn) ->
     lists:foldl(fun (F, ParamsIn) -> F(ParamsIn, Conn) end, Params,
                 [fun set_ssl_options/2,
-                 fun set_default_port/2,
                  fun set_heartbeat/2,
                  fun set_mechanisms/2]).
 
@@ -102,15 +111,6 @@ set_ssl_options(Params, Conn) ->
         "amqps" -> Params#amqp_params_network{
                      ssl_options = pget(ssl_options, Conn)}
     end.
-
-%% TODO this should be part of the Erlang client - see bug 24138
-set_default_port(Params = #amqp_params_network{port        = undefined,
-                                               ssl_options = none}, _Conn) ->
-    Params#amqp_params_network{port = 5672};
-set_default_port(Params = #amqp_params_network{port = undefined}, _Conn) ->
-    Params#amqp_params_network{port = 5671};
-set_default_port(Params = #amqp_params_network{}, _Conn) ->
-    Params.
 
 set_heartbeat(Params, Conn) ->
     case pget(heartbeat, Conn, none) of
