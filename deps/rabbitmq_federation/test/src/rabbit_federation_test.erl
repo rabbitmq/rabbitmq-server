@@ -176,28 +176,28 @@ binding_recovery() ->
     stop_other_node(?HARE),
     start_other_node(?HARE, "hare-two-upstreams"),
 
-    ?assert(none =/= suffix("upstream")),
-    ?assert(none =/= suffix("upstream2")),
+    ?assert(none =/= suffix(?HARE, "upstream")),
+    ?assert(none =/= suffix(?HARE, "upstream2")),
 
     stop_other_node(?HARE),
 
     Ch2 = start_other_node(?HARE),
 
     publish_expect(Ch2, <<"upstream">>, <<"key">>, Q, <<"HELLO">>),
-    ?assert(none =/= suffix("upstream")),
-    ?assertEqual(none, suffix("upstream2")),
+    ?assert(none =/= suffix(?HARE, "upstream")),
+    ?assertEqual(none, suffix(?HARE, "upstream2")),
     delete_all(Ch2, [x(<<"upstream2">>) | ?UPSTREAM_DOWNSTREAM]),
     delete_queue(Ch2, Q),
 
     stop_other_node(?HARE),
     ok.
 
-suffix(X) ->
+suffix({Nodename, _}, X) ->
     {_, NodeHost} = rabbit_misc:nodeparts(node()),
-    Hare = rabbit_misc:makenode({"hare", NodeHost}),
-    rpc:call(Hare, rabbit_federation_db, get_active_suffix,
+    Node = rabbit_misc:makenode({Nodename, NodeHost}),
+    rpc:call(Node, rabbit_federation_db, get_active_suffix,
              [rabbit_misc:r(<<"/">>, exchange, <<"downstream">>),
-              #upstream{connection_name = "hare",
+              #upstream{connection_name = Nodename,
                         exchange        = list_to_binary(X)}, none]).
 
 %% Downstream: rabbit-test, port 5672
