@@ -48,9 +48,6 @@ channel_lifecycle_test() ->
 queue_unbind_test() ->
     test_util:queue_unbind_test(new_connection()).
 
-command_serialization_test() ->
-    test_util:command_serialization_test(new_connection()).
-
 teardown_test() ->
     test_util:teardown_test(new_connection()).
 
@@ -72,8 +69,7 @@ hard_error_test() ->
 new_connection() ->
     {ok, [[CertsDir]]} = init:get_argument(erlang_client_ssl_dir),
     Params = #amqp_params_network
-      {port = 5671,
-       ssl_options = [{cacertfile, CertsDir ++ "/testca/cacert.pem"},
+      {ssl_options = [{cacertfile, CertsDir ++ "/testca/cacert.pem"},
                       {certfile, CertsDir ++ "/client/cert.pem"},
                       {keyfile, CertsDir ++ "/client/key.pem"},
                       {verify, verify_peer},
