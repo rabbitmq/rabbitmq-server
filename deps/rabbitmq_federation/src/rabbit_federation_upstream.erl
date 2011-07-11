@@ -83,7 +83,8 @@ from_props_connection(Upst, ConnName, Conn, DefaultXName, DefaultVHost) ->
                           reconnect_delay = pget(reconnect_delay, Conn, 1),
                           max_hops        = pget(max_hops,        Upst, 1),
                           expires         = pget(expires,         Conn, none),
-                          message_ttl     = pget(message_ttl,     Conn, none)}
+                          message_ttl     = pget(message_ttl,     Conn, none),
+                          connection_name = ConnName}
     end.
 
 set_extra_params(Params, Conn) ->

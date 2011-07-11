@@ -22,6 +22,7 @@
 -define(US_NAME, <<"upstream">>).
 -define(DS_NAME, <<"downstream">>).
 
+-include("rabbit_federation.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
@@ -48,22 +49,28 @@ add(Table) ->
 %% Test that we apply binding changes in the correct order even when
 %% they arrive out of order.
 serialisation_test() ->
+    with_exchanges(
+      fun(X) ->
+              [B1, B2, B3] = [b(K) || K <- [<<"1">>, <<"2">>, <<"3">>]],
+              remove_bindings(4, X, [B1, B3]),
+              add_binding(5, X, B1),
+              add_binding(1, X, B1),
+              add_binding(2, X, B2),
+              add_binding(3, X, B3),
+
+              %% List of lists because one for each link
+              Keys = rabbit_federation_link:list_routing_keys(X#exchange.name),
+              ?assertEqual([[<<"1">>, <<"2">>]], Keys)
+      end).
+
+with_exchanges(Fun) ->
     rabbit_exchange:declare(r(?US_NAME), fanout,
                             false, false, false, []),
     X = #exchange{arguments = Args} = x(),
     rabbit_exchange:declare(r(?DS_NAME), 'x-federation',
                             false, false, false, Args),
-    [B1, B2, B3] = [b(K) || K <- [<<"1">>, <<"2">>, <<"3">>]],
-    remove_bindings(4, X, [B1, B3]),
-    add_binding(5, X, B1),
-    add_binding(1, X, B1),
-    add_binding(2, X, B2),
-    add_binding(3, X, B3),
 
-    %% List of lists because one for each link
-    ?assertEqual([[<<"1">>, <<"2">>]],
-                 rabbit_federation_link:list_routing_keys(X)),
-
+    Fun(X),
     rabbit_exchange:delete(r(?US_NAME), false),
     rabbit_exchange:delete(r(?DS_NAME), false),
     ok.
@@ -91,3 +98,23 @@ r(Name) -> rabbit_misc:r(<<"/">>, exchange, Name).
 b(Key) ->
     #binding{source = ?DS_NAME, destination = <<"whatever">>,
              key = Key, args = []}.
+
+scratch_space_test() ->
+    A = <<"A">>,
+    B = <<"B">>,
+    DB = rabbit_federation_db,
+    with_exchanges(
+      fun(#exchange{name = N}) ->
+              DB:set_active_suffix(N, upstream(x), A),
+              DB:set_active_suffix(N, upstream(y), A),
+              DB:prune_scratch(N, [upstream(y), upstream(z)]),
+              DB:set_active_suffix(N, upstream(y), B),
+              DB:set_active_suffix(N, upstream(z), A),
+              ?assertEqual(none, DB:get_active_suffix(N, upstream(x), none)),
+              ?assertEqual(B,    DB:get_active_suffix(N, upstream(y), none)),
+              ?assertEqual(A,    DB:get_active_suffix(N, upstream(z), none))
+      end).
+
+upstream(ConnName) ->
+    #upstream{connection_name = atom_to_list(ConnName),
+              exchange        = <<"upstream">>}.

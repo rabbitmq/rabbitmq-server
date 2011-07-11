@@ -30,12 +30,13 @@ start_link(Args) -> supervisor2:start_link(?MODULE, Args).
 
 %%----------------------------------------------------------------------------
 
-init({Upstreams, X}) ->
+init({Upstreams, XName}) ->
     %% 1, 1 so that the supervisor can give up and get into waiting
     %% for the reconnect_delay quickly.
-    {ok, {{one_for_one, 1, 1}, [spec(Upstream, X) || Upstream <- Upstreams]}}.
+    {ok, {{one_for_one, 1, 1},
+          [spec(Upstream, XName) || Upstream <- Upstreams]}}.
 
-spec(Upstream = #upstream{reconnect_delay = Delay}, X) ->
-    {Upstream, {rabbit_federation_link, start_link, [{Upstream, X}]},
+spec(Upstream = #upstream{reconnect_delay = Delay}, XName) ->
+    {Upstream, {rabbit_federation_link, start_link, [{Upstream, XName}]},
      {transient, Delay}, ?MAX_WAIT, worker,
      [rabbit_federation_link]}.

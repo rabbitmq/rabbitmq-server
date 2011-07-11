@@ -16,35 +16,38 @@
 
 -module(rabbit_federation_db).
 
--export([init/0]).
+-include("rabbit_federation.hrl").
+-include_lib("amqp_client/include/amqp_client.hrl").
 
--export([get_active_suffix/3, set_active_suffix/3]).
+-define(DICT, orddict).
 
-%% TODO get rid of this dets table, use mnesia
--define(DETS_NAME, "rabbit_federation_exchange.dat").
-
-init() ->
-    F = file(),
-    Args = [{type, set}],
-    case dets:open_file(F, Args) of
-        {ok, F} -> ok;
-        Error   -> rabbit_log:error("Federation state file ~s could "
-                                    "not be opened - ~p.", [F, Error]),
-                   ok = file:delete(F),
-                   {ok, F} = dets:open_file(F, Args)
-    end.
+-export([get_active_suffix/3, set_active_suffix/3, prune_scratch/2]).
 
 %%----------------------------------------------------------------------------
 
-get_active_suffix(X, Upstream, Default) ->
-    case dets:lookup(file(), {suffix, X, Upstream}) of
-        []       -> Default;
-        [{_, S}] -> S
+get_active_suffix(XName, Upstream, Default) ->
+    case rabbit_exchange:lookup(XName) of
+        {ok, #exchange{scratch = Dict}} ->
+            case ?DICT:find(key(Upstream), Dict) of
+                {ok, Suffix} -> Suffix;
+                error        -> Default
+            end;
+        {error, not_found} ->
+            Default
     end.
 
-set_active_suffix(X, Upstream, Suffix) ->
-    ok = dets:insert(file(), {{suffix, X, Upstream}, Suffix}).
+set_active_suffix(XName, Upstream, Suffix) ->
+    ok = rabbit_exchange:update_scratch(
+           XName, fun(D) -> ?DICT:store(key(Upstream), Suffix, D) end).
 
-%%----------------------------------------------------------------------------
+prune_scratch(XName, Upstreams) ->
+    ok = rabbit_exchange:update_scratch(
+           XName,
+           fun(undefined) -> ?DICT:new();
+              (D)         -> Keys = [key(U) || U <- Upstreams],
+                             ?DICT:filter(
+                                fun(K, _V) -> lists:member(K, Keys) end, D)
+           end).
 
-file() -> rabbit_mnesia:dir() ++ "/" ++ ?DETS_NAME.
+key(#upstream{connection_name = ConnName, exchange = XName}) ->
+    {ConnName, XName}.
