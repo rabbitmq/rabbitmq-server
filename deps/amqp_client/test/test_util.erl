@@ -500,7 +500,6 @@ confirm_test(Connection) ->
 
 confirm_barrier_test(Connection) ->
     {ok, Channel} = amqp_connection:open_channel(Connection),
-    amqp_channel:register_confirm_handler(Channel, self()),
     #'confirm.select_ok'{} = amqp_channel:call(Channel, #'confirm.select'{}),
     [amqp_channel:call(Channel, #'basic.publish'{routing_key = <<"whoosh">>},
                        #amqp_msg{payload = <<"foo">>})
