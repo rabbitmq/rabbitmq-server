@@ -413,11 +413,13 @@ handle_method_to_server(Method, AmqpMsg, From, Sender, State) ->
                          _ ->
                              State
                      end,
-            ConsumerReply = case Method of
-                                #'basic.consume'{} ->
-                                    call_to_consumer(Method, Sender, State);
-                                _ -> ok
-                            end,
+            ConsumerReply =
+                case Method of
+                    #'basic.consume'{} ->
+                        ok = call_to_consumer(Method, Sender, State);
+                    _ ->
+                        ok
+                end,
             case ConsumerReply of
                 ok -> {noreply,
                        rpc_top_half(Method, build_content(AmqpMsg),
@@ -563,17 +565,17 @@ handle_method_from_server1(#'channel.close_ok'{}, none,
     end;
 handle_method_from_server1(#'basic.consume_ok'{} = ConsumeOk, none, State) ->
     Consume = #'basic.consume'{} = pending_rpc_method(State),
-    call_to_consumer(ConsumeOk, Consume, State),
+    ok = call_to_consumer(ConsumeOk, Consume, State),
     {noreply, rpc_bottom_half(ConsumeOk, State)};
 handle_method_from_server1(#'basic.cancel_ok'{} = CancelOk, none, State) ->
     Cancel = #'basic.cancel'{} = pending_rpc_method(State),
-    call_to_consumer(CancelOk, Cancel, State),
+    ok = call_to_consumer(CancelOk, Cancel, State),
     {noreply, rpc_bottom_half(CancelOk, State)};
 handle_method_from_server1(#'basic.cancel'{} = Cancel, none, State) ->
-    call_to_consumer(Cancel, none, State),
+    ok = call_to_consumer(Cancel, none, State),
     {noreply, State};
 handle_method_from_server1(#'basic.deliver'{} = Deliver, AmqpMsg, State) ->
-    call_to_consumer(Deliver, AmqpMsg, State),
+    ok = call_to_consumer(Deliver, AmqpMsg, State),
     {noreply, State};
 handle_method_from_server1(#'channel.flow'{active = Active} = Flow, none,
                            State = #state{flow_handler_pid = FlowHandler}) ->
