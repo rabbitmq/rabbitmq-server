@@ -28,11 +28,12 @@
 %% Interface
 %%---------------------------------------------------------------------------
 
-start_link(Type, Connection, InfraArgs, ChNumber, Consumer) ->
-    {ok, Sup} = supervisor2:start_link(?MODULE, []),
+start_link(Type, Connection, InfraArgs, ChNumber, Consumer = {_, _}) ->
+    {ok, Sup} = supervisor2:start_link(?MODULE, [Consumer]),
+    [{gen_consumer, ConsumerPid, _, _}] = supervisor2:which_children(Sup),
     {ok, ChPid} = supervisor2:start_child(
                     Sup, {channel, {amqp_channel, start_link,
-                                    [Type, Connection, ChNumber, Consumer,
+                                    [Type, Connection, ChNumber, ConsumerPid,
                                      start_writer_fun(Sup, Type, InfraArgs,
                                                       ChNumber)]},
                           intrinsic, brutal_kill, worker, [amqp_channel]}),
@@ -70,5 +71,8 @@ init_command_assembler(network) -> rabbit_command_assembler:init(?PROTOCOL).
 %% supervisor2 callbacks
 %%---------------------------------------------------------------------------
 
-init([]) ->
-    {ok, {{one_for_all, 0, 1}, []}}.
+init([{ConsumerModule, ConsumerArgs}]) ->
+    {ok, {{one_for_all, 0, 1},
+          [{gen_consumer, {amqp_gen_consumer, start_link,
+                           [ConsumerModule, ConsumerArgs]},
+           transient, brutal_kill, worker, [amqp_gen_consumer]}]}}.

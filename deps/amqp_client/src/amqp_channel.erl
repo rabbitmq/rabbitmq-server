@@ -250,7 +250,7 @@ subscribe(Channel, BasicConsume = #'basic.consume'{}, Subscriber) ->
 %%---------------------------------------------------------------------------
 
 %% @private
-start_link(Driver, Connection, ChannelNumber, Consumer = {_, _}, SWF) ->
+start_link(Driver, Connection, ChannelNumber, Consumer, SWF) ->
     gen_server:start_link(
         ?MODULE, [Driver, Connection, ChannelNumber, Consumer, SWF], []).
 
@@ -267,10 +267,7 @@ open(Pid) ->
 %%---------------------------------------------------------------------------
 
 %% @private
-init([Driver, Connection, ChannelNumber, {ConsumerModule, ConsumerArgs},
-      SWF]) ->
-    {ok, Consumer} =
-        amqp_gen_consumer:start_link(ConsumerModule, ConsumerArgs),
+init([Driver, Connection, ChannelNumber, Consumer, SWF]) ->
     {ok, #state{connection       = Connection,
                 driver           = Driver,
                 number           = ChannelNumber,
@@ -391,8 +388,8 @@ handle_info({'DOWN', _, process, FlowHandler, Reason},
     {noreply, State#state{flow_handler_pid = none}}.
 
 %% @private
-terminate(Reason, #state{consumer = Consumer}) ->
-    exit(Consumer, Reason).
+terminate(Reason, State) ->
+    State.
 
 %% @private
 code_change(_OldVsn, State, _Extra) ->
