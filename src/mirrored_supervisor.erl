@@ -110,9 +110,9 @@
 -define(TABLE_MATCH, {match, #mirrored_sup_childspec{ _ = '_' }}).
 
 -export([start_link/3, start_link/4,
-	 start_child/2, restart_child/2,
-	 delete_child/2, terminate_child/2,
-	 which_children/1, check_childspecs/1]).
+         start_child/2, restart_child/2,
+         delete_child/2, terminate_child/2,
+         which_children/1, check_childspecs/1]).
 
 -export([behaviour_info/1]).
 
@@ -159,10 +159,10 @@
 -type startlink_ret() :: {'ok', pid()} | 'ignore' | {'error', startlink_err()}.
 
 -type startchild_err() :: 'already_present'
-			| {'already_started', Child :: child()} | term().
+                        | {'already_started', Child :: child()} | term().
 -type startchild_ret() :: {'ok', Child :: child()}
                         | {'ok', Child :: child(), Info :: term()}
-			| {'error', startchild_err()}.
+                        | {'error', startchild_err()}.
 
 -type group_name() :: any().
 
