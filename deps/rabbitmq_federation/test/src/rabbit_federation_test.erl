@@ -158,43 +158,47 @@ no_loop_test() ->
       end, [fed(<<"one">>, <<"two">>),
             fed(<<"two">>, <<"one">>)]).
 
-binding_recovery_test() ->
+binding_recovery_test_() ->
+    {timeout, 60, fun binding_recovery/0}.
+
+binding_recovery() ->
     Q = <<"durable-Q">>,
-    {ok, Env} = application:get_env(rabbitmq_federation, upstream_sets),
-    EnvMod = lists:keystore("upstream", 1, Env,
-                            {"upstream",[[{connection, "localhost"},
-                                          {exchange,   "upstream"}],
-                                         [{connection, "localhost"},
-                                          {exchange,   "upstream2"}]]}),
-    ok = application:set_env(rabbitmq_federation, upstream_sets, EnvMod),
-    with_ch(
-      fun (Ch) ->
-              declare_all(Ch, [x(<<"upstream2">>) | ?UPSTREAM_DOWNSTREAM]),
-              #'queue.declare_ok'{} =
-                  amqp_channel:call(Ch, #'queue.declare'{queue   = Q,
-                                                         durable = true}),
-              bind_queue(Ch, Q, <<"downstream">>, <<"key">>),
-              timer:sleep(100), %% To get the suffix written
-              ?assert(none =/= suffix("upstream")),
-              ?assert(none =/= suffix("upstream2"))
-      end, []),
-    rabbit:stop(),
-    ok = application:set_env(rabbitmq_federation, upstream_sets, Env),
-    rabbit:start(),
-    with_ch(
-      fun(Ch) ->
-              publish_expect(Ch, <<"upstream">>, <<"key">>, Q, <<"HELLO">>),
-              ?assert(none =/= suffix("upstream")),
-              ?assertEqual(none, suffix("upstream2")),
-              delete_all(Ch, [x(<<"upstream2">>) | ?UPSTREAM_DOWNSTREAM]),
-              delete_queue(Ch, Q)
-      end, []).
+
+    Ch = start_other_node(?HARE, "hare-two-upstreams"),
+
+    declare_all(Ch, [x(<<"upstream2">>) | ?UPSTREAM_DOWNSTREAM]),
+    #'queue.declare_ok'{} =
+        amqp_channel:call(Ch, #'queue.declare'{queue   = Q,
+                                               durable = true}),
+    bind_queue(Ch, Q, <<"downstream">>, <<"key">>),
+    timer:sleep(100), %% To get the suffix written
+
+    stop_other_node(?HARE),
+    start_other_node(?HARE, "hare-two-upstreams"),
+
+    ?assert(none =/= suffix("upstream")),
+    ?assert(none =/= suffix("upstream2")),
+
+    stop_other_node(?HARE),
+
+    Ch2 = start_other_node(?HARE),
+
+    publish_expect(Ch2, <<"upstream">>, <<"key">>, Q, <<"HELLO">>),
+    ?assert(none =/= suffix("upstream")),
+    ?assertEqual(none, suffix("upstream2")),
+    delete_all(Ch2, [x(<<"upstream2">>) | ?UPSTREAM_DOWNSTREAM]),
+    delete_queue(Ch2, Q),
+
+    stop_other_node(?HARE),
+    ok.
 
 suffix(X) ->
-    rabbit_federation_db:get_active_suffix(
-      rabbit_misc:r(<<"/">>, exchange, <<"downstream">>),
-      #upstream{connection_name = "localhost",
-                exchange        = list_to_binary(X)}, none).
+    {_, NodeHost} = rabbit_misc:nodeparts(node()),
+    Hare = rabbit_misc:makenode({"hare", NodeHost}),
+    rpc:call(Hare, rabbit_federation_db, get_active_suffix,
+             [rabbit_misc:r(<<"/">>, exchange, <<"downstream">>),
+              #upstream{connection_name = "hare",
+                        exchange        = list_to_binary(X)}, none]).
 
 %% Downstream: rabbit-test, port 5672
 %% Upstream:   hare,        port 5673
@@ -284,8 +288,12 @@ delete_all(Ch, Xs) ->
     [delete_exchange(Ch, X) || #'exchange.declare'{exchange = X} <- Xs].
 
 start_other_node({Name, Port}) ->
+    start_other_node({Name, Port}, Name).
+
+start_other_node({Name, Port}, Config) ->
     ?assertCmd("make -C " ++ plugin_dir() ++ " OTHER_NODE=" ++ Name ++
                    " OTHER_PORT=" ++ integer_to_list(Port) ++
+                   " OTHER_CONFIG=" ++ Config ++
                    " start-other-node"),
     {ok, Conn} = amqp_connection:start(#amqp_params_network{port = Port}),
     {ok, Ch} = amqp_connection:open_channel(Conn),
