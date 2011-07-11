@@ -48,7 +48,6 @@ make
 cd ../rabbitmq-shovel
 make
 cd ../rabbitmq-server
-./scripts/rabbitmq-activate-plugins
 make cleandb run
 
 
