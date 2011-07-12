@@ -1,0 +1,61 @@
+<h1>Federation links</h1>
+<div class="updatable">
+<% if (links.length > 0) { %>
+<table class="list">
+ <thead>
+  <tr>
+<% if (vhosts_interesting) { %>
+    <th>Virtual Host</th>
+<% } %>
+    <th>Exchange</th>
+    <th>Connection name</th>
+<% if (nodes_interesting) { %>
+    <th>Node</th>
+<% } %>
+    <th>State</th>
+    <th>Inbound message rate</th>
+    <th>Last changed</th>
+  </tr>
+ </thead>
+ <tbody>
+<%
+ for (var i = 0; i < links.length; i++) {
+    var link = links[i];
+%>
+   <tr<%= alt_rows(i)%>>
+<% if (vhosts_interesting) { %>
+    <td><%= link.vhost %></td>
+<% } %>
+    <td><%= link_exchange(link.vhost, link.exchange) %></td>
+    <td><%= link.connection %></td>
+<% if (nodes_interesting) { %>
+    <td><%= link.node %></td>
+<% } %>
+<% if (link.status != 'connected') { %>
+    <td class="status">
+       <div class="red"><%= link.status %></div>
+    </td>
+    <td><%= link.timestamp %></td>
+  </tr>
+  <tr>
+    <td colspan="5">
+      <pre><%= fmt_escape_html(link.error) %></pre>
+    </td>
+  </tr>
+<% } else { %>
+    <td class="status">
+       <div class="green"><%= link.status %></div>
+    </td>
+    <td class="r">
+      <%= fmt_rate(link.local_channel.message_stats, 'confirm') %>
+    </td>
+    <td><%= link.timestamp %></td>
+  </tr>
+<% } %>
+  <% } %>
+ </tbody>
+</table>
+<% } else { %>
+  <p>... no links ...</p>
+<% } %>
+</div>

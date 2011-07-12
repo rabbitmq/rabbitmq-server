@@ -1,0 +1,8 @@
+~$
+\.beam$
+^build/
+^dist/
+^cover/
+^erl_crash.dump$
+^ebin/rabbitmq_federation_management.app
+
