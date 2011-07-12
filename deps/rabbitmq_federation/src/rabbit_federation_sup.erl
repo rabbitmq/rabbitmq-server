@@ -57,4 +57,8 @@ stop_child(Id) ->
 
 %%----------------------------------------------------------------------------
 
-init([]) -> {ok, {{one_for_one, 3, 10},[]}}.
+init([]) ->
+    Status = {status, {rabbit_federation_status, start_link, []},
+              transient, ?MAX_WAIT, worker,
+              [rabbit_federation_status]},
+    {ok, {{one_for_one, 3, 10}, [Status]}}.
