@@ -39,6 +39,9 @@
 %% Interface
 %%---------------------------------------------------------------------------
 
+%% @type ok_error() = {ok, state()} | {error, reason(), state()}
+%% Denotes a successful or an error return from a consumer module call.
+
 start_link(ConsumerModule, ExtraParams) ->
     gen_server2:start_link(?MODULE, [ConsumerModule, ExtraParams], []).
 
@@ -81,27 +84,21 @@ behaviour_info(callbacks) ->
      %% an error, return {stop, Reason} or ignore.
      {init, 1},
 
-     %% handle_consume(Consume, Sender, State) ->
-     %%                     {ok, NewState} | {error, Reason, NewState}
+     %% handle_consume(Consume, Sender, State) -> ok_error()
      %% where
      %%      Consume = #'basic.consume'{}
      %%      Sender = pid()
      %%      State = state()
-     %%      Reason = term()
-     %%      NewState = state()
      %%
      %% This callback is invoked by the channel before a basic.consume
      %% is sent to the server.
      {handle_consume, 3},
 
-     %% handle_consume_ok(ConsumeOk, Consume, State) ->
-     %%                     {ok, NewState} | {error, Reason, NewState}
+     %% handle_consume_ok(ConsumeOk, Consume, State) -> ok_error()
      %% where
      %%      ConsumeOk = #'basic.consume_ok'{}
      %%      Consume = #'basic.consume'{}
      %%      State = state()
-     %%      Reason = term()
-     %%      NewState = state()
      %%
      %% This callback is invoked by the channel every time a
      %% basic.consume_ok is received from the server. Consume is the original
@@ -109,51 +106,39 @@ behaviour_info(callbacks) ->
      %% call with the response.
      {handle_consume_ok, 3},
 
-     %% handle_cancel(Cancel, State) ->
-     %%                     {ok, NewState} | {error, Reason, NewState}
+     %% handle_cancel(Cancel, State) -> ok_error()
      %% where
      %%      Cancel = #'basic.cancel'{}
      %%      State = state()
-     %%      Reason = term()
-     %%      NewState = state()
      %%
      %% This callback is invoked by the channel every time a basic.cancel
      %% is received from the server.
      {handle_cancel, 2},
 
-     %% handle_cancel_ok(CancelOk, Cancel, State) ->
-     %%                     {ok, NewState} | {error, Reason, NewState}
+     %% handle_cancel_ok(CancelOk, Cancel, State) -> ok_error()
      %% where
      %%      CancelOk = #'basic.cancel_ok'{}
      %%      Cancel = #'basic.cancel'{}
      %%      State = state()
-     %%      Reason = term()
-     %%      NewState = state()
      %%
      %% This callback is invoked by the channel every time a basic.cancel_ok
      %% is received from the server.
      {handle_cancel_ok, 3},
 
-     %% handle_deliver(Deliver, Message, State) ->
-     %%                     {ok, NewState} | {error, Reason, NewState}
+     %% handle_deliver(Deliver, Message, State) -> ok_error()
      %% where
      %%      Deliver = #'basic.deliver'{}
      %%      Message = #amqp_msg{}
      %%      State = state()
-     %%      Reason = term()
-     %%      NewState = state()
      %%
      %% This callback is invoked by the channel every time a basic.deliver
      %% is received from the server.
      {handle_deliver, 3},
 
-     %% handle_info(Info, State) ->
-     %%                     {ok, NewState} | {error, Reason, NewState}
+     %% handle_info(Info, State) -> ok_error()
      %% where
      %%      Info = any()
      %%      State = state()
-     %%      Reason = term()
-     %%      NewState = state()
      %%
      %% This callback is invoked the consumer process receives a
      %% message.
@@ -215,7 +200,7 @@ handle_call({consumer_call, Call}, From,
         {reply, Reply, NewMState} ->
             {reply, Reply, State#state{module_state = NewMState}};
         {error, Reason, NewMState} ->
-            {stop, Reason, {error, Reason},
+            {stop, {error, Reason}, {error, Reason},
              State#state{module_state = NewMState}}
     end;
 handle_call({consumer_call, Method, Args}, From,
@@ -238,7 +223,7 @@ handle_call({consumer_call, Method, Args}, From,
         {ok, NewMState} ->
             {reply, ok, State#state{module_state = NewMState}};
         {error, Reason, NewMState} ->
-            {stop, Reason, {error, Reason},
+            {stop, {error, Reason}, {error, Reason},
              State#state{module_state = NewMState}}
     end.
 
@@ -251,7 +236,7 @@ handle_info(Info, State = #state{module_state = MState,
         {ok, NewMState} ->
             {noreply, State#state{module_state = NewMState}};
         {error, Reason, NewMState} ->
-            {stop, Reason, {error, Reason},
+            {stop, {error, Reason}, {error, Reason},
              State#state{module_state = NewMState}}
     end.
 

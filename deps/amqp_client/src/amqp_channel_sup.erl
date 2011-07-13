@@ -36,7 +36,7 @@ start_link(Type, Connection, InfraArgs, ChNumber, Consumer = {_, _}) ->
                                     [Type, Connection, ChNumber, ConsumerPid,
                                      start_writer_fun(Sup, Type, InfraArgs,
                                                       ChNumber)]},
-                          intrinsic, brutal_kill, worker, [amqp_channel]}),
+                          intrinsic, ?MAX_WAIT, worker, [amqp_channel]}),
     {ok, AState} = init_command_assembler(Type),
     {ok, Sup, {ChPid, AState}}.
 
@@ -75,4 +75,4 @@ init([{ConsumerModule, ConsumerArgs}]) ->
     {ok, {{one_for_all, 0, 1},
           [{gen_consumer, {amqp_gen_consumer, start_link,
                            [ConsumerModule, ConsumerArgs]},
-           transient, brutal_kill, worker, [amqp_gen_consumer]}]}}.
+           intrinsic, ?MAX_WAIT, worker, [amqp_gen_consumer]}]}}.
