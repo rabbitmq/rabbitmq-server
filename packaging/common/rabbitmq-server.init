@@ -43,7 +43,7 @@ start_rabbitmq () {
         set +e
         setsid sh -c "PID_FILE=$PID_FILE $DAEMON > \
             ${INIT_LOG_DIR}/startup_log 2> ${INIT_LOG_DIR}/startup_err" &
-        $CONTROL wait >/dev/null 2>&1
+        $CONTROL wait $PID_FILE >/dev/null 2>&1
         RETVAL=$?
         set -e
         case "$RETVAL" in

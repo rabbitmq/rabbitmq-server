@@ -20,7 +20,6 @@
 -export([start/0, stop/0, action/5, diagnostics/1]).
 
 -define(RPC_TIMEOUT, infinity).
--define(WAIT_FOR_VM_ATTEMPTS, 5).
 
 -define(QUIET_OPT, "-q").
 -define(NODE_OPT, "-n").
@@ -191,9 +190,9 @@ action(force_cluster, Node, ClusterNodeSs, _Opts, Inform) ->
            [Node, ClusterNodes]),
     rpc_call(Node, rabbit_mnesia, force_cluster, [ClusterNodes]);
 
-action(wait, Node, [], _Opts, Inform) ->
+action(wait, Node, [PidFile], _Opts, Inform) ->
     Inform("Waiting for ~p", [Node]),
-    wait_for_application(Node, ?WAIT_FOR_VM_ATTEMPTS);
+    wait_for_application(Node, PidFile);
 
 action(status, Node, [], _Opts, Inform) ->
     Inform("Status of node ~p", [Node]),
@@ -354,23 +353,67 @@ action(report, Node, _Args, _Opts, Inform) ->
 
 %%----------------------------------------------------------------------------
 
-wait_for_application(Node, Attempts) ->
-    case rpc_call(Node, application, which_applications, [infinity]) of
-        {badrpc, _} = E -> case Attempts of
-                               0 -> E;
-                               _ -> wait_for_application0(Node, Attempts - 1)
-                           end;
-        Apps            -> case proplists:is_defined(rabbit, Apps) of
-                               %% We've seen the node up; if it goes down
-                               %% die immediately.
-                               true  -> ok;
-                               false -> wait_for_application0(Node, 0)
-                           end
+wait_for_application(Node, PidFile) ->
+    wait_for_application0(Node, wait_and_read_pid_file(PidFile)).
+
+wait_for_application0(Node, Pid) ->
+    case node_up(Node) of
+        true  -> ok;
+        false -> case pid_up(Pid) of
+                     true  -> timer:sleep(1000),
+                              wait_for_application0(Node, Pid);
+                     false -> {error, {pid_went_away, Pid}}
+                 end
     end.
 
-wait_for_application0(Node, Attempts) ->
-    timer:sleep(1000),
-    wait_for_application(Node, Attempts).
+wait_and_read_pid_file(PidFile) ->
+    case file:read_file(PidFile) of
+        {ok,    Bin}    -> string:strip(binary_to_list(Bin), right, $\n);
+        {error, enoent} -> timer:sleep(500),
+                           wait_and_read_pid_file(PidFile);
+        {error, _} = E  -> exit(E)
+    end.
+
+node_up(Node) ->
+    case rpc_call(Node, application, which_applications, [infinity]) of
+        {badrpc, _} -> false;
+        Apps        -> proplists:is_defined(rabbit, Apps)
+    end.
+
+% Test using some OS clunkiness since we shouldn't trust
+% rpc:call(os, getpid, []) at this point
+pid_up(Pid) ->
+    with_os([{unix, fun () ->
+                            system("kill -0 " ++ Pid
+                                   ++ " >/dev/null 2>&1") =:= 0
+                    end},
+             {win32, fun () ->
+                             Res = os:cmd("tasklist /nh /fi \"pid eq " ++
+                                          Pid ++ "\" 2>&1"),
+                             case re:run(Res, "erl\\.exe", [{capture, none}]) of
+                                 match -> true;
+                                 _     -> false
+                             end
+                     end}]).
+
+with_os(Handlers) ->
+    {OsFamily, _} = os:type(),
+    case proplists:get_value(OsFamily, Handlers) of
+        undefined -> throw({unsupported_os, OsFamily});
+        Handler   -> Handler()
+    end.
+
+% Like system(3)
+system(Cmd) ->
+    ShCmd = "sh -c '" ++ escape_quotes(Cmd) ++ "'",
+    Port = erlang:open_port({spawn, ShCmd}, [exit_status,nouse_stdio]),
+    receive {Port, {exit_status, Status}} -> Status end.
+
+% Escape the quotes in a shell command so that it can be used in "sh -c 'cmd'"
+escape_quotes(Cmd) ->
+    lists:flatten(lists:map(fun ($') -> "'\\''"; (Ch) -> Ch end, Cmd)).
+
+%%----------------------------------------------------------------------------
 
 default_if_empty(List, Default) when is_list(List) ->
     if List == [] -> Default;
