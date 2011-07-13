@@ -218,7 +218,7 @@ wait_for_confirms(Channel) ->
 %% received, the calling process is immediately sent an
 %% exit(nack_received).
 wait_for_confirms_or_die(Channel) ->
-    gen_server:call(Channel, {wait_for_confirms_or_die, Channel}, infinity).
+    gen_server:call(Channel, {wait_for_confirms_or_die, self()}, infinity).
 
 %%---------------------------------------------------------------------------
 %% Consumer registration (API)
@@ -911,5 +911,4 @@ notify_confirm_waiters(State = #state{waiting_set = WSet,
                                       only_acks_received = OAR}) ->
     [gen_server:reply(From, OAR) || {From, _} <- gb_trees:to_list(WSet)],
     State#state{waiting_set = gb_trees:empty(),
-                unconfirmed_set = gb_sets:new(),
                 only_acks_received = true}.
