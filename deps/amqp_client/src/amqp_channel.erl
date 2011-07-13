@@ -889,7 +889,7 @@ handle_nack(State = #state{waiting_set = WSet}) ->
     case DyingPids of
         [] -> State;
         _  -> [exit(Pid, nack_received) || {From, Pid} <- DyingPids],
-              close(self())
+              close(self(), 200, <<"Nacks Received">>)
     end.
 
 update_confirm_set(#'basic.ack'{delivery_tag = SeqNo},
