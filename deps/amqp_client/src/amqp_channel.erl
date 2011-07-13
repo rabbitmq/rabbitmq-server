@@ -886,10 +886,11 @@ server_misbehaved(#amqp_error{} = AmqpError, State = #state{number = Number}) ->
 handle_nack(State = #state{waiting_set = WSet}) ->
     DyingPids = [{From, Pid} || {From, Pid} <- gb_trees:to_list(WSet),
                                 Pid =/= none],
-    [exit(Pid, nack_received) || {From, Pid} <- DyingPids],
-    State#state{waiting_set = lists:foldl(fun({From, _}, WSet0) ->
-                                                  gb_trees:delete(From, WSet0)
-                                          end, WSet, DyingPids)}.
+    case DyingPids of
+        [] -> State;
+        _  -> [exit(Pid, nack_received) || {From, Pid} <- DyingPids],
+              close(self())
+    end.
 
 update_confirm_set(#'basic.ack'{delivery_tag = SeqNo},
                    State = #state{unconfirmed_set = USet}) ->
