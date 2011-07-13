@@ -85,48 +85,16 @@ terminate(_Reason, State) ->
     shutdown_channel_and_connection(State).
 
 handle_cast({"STOMP", Frame}, State) ->
-    handle_cast({"CONNECT", Frame}, State);
+    process_connect(no_implicit, Frame, State);
 
-handle_cast({"CONNECT", Frame},
-            State = #state{
-              channel = none,
-              socket  = Sock,
-              config  = #stomp_configuration{
-                default_login    = DefaultLogin,
-                default_passcode = DefaultPasscode}}) ->
-    process_request(
-      fun(StateN) ->
-              case negotiate_version(Frame) of
-                  {ok, Version} ->
-                      {ok, DefaultVHost} =
-                          application:get_env(rabbit, default_vhost),
-                      do_login(rabbit_stomp_frame:header(Frame, "login",
-                                                         DefaultLogin),
-                               rabbit_stomp_frame:header(Frame, "passcode",
-                                                         DefaultPasscode),
-                               rabbit_stomp_frame:header(Frame, "host",
-                                                         binary_to_list(
-                                                           DefaultVHost)),
-                               rabbit_stomp_frame:header(Frame, "heart-beat",
-                                                         "0,0"),
-                               adapter_info(Sock, Version),
-                               Version,
-                               StateN);
-                  {error, no_common_version} ->
-                      error("Version mismatch",
-                            "Supported versions are ~s\n",
-                            [string:join(?SUPPORTED_VERSIONS, ",")],
-                            StateN)
-              end
-      end,
-      fun(StateM) -> StateM end,
-      State);
+handle_cast({"CONNECT", Frame}, State) ->
+    process_connect(no_implicit, Frame, State);
 
 handle_cast(Request, State = #state{channel = none,
                                      config = #stomp_configuration{
                                       implicit_connect = true}}) ->
     {noreply, State1, _} =
-        handle_cast({"CONNECT", #stomp_frame{headers = []}}, State),
+        process_connect(implicit, #stomp_frame{headers = []}, State),
     handle_cast(Request, State1);
 handle_cast(_Request, State = #state{channel = none,
                                      config = #stomp_configuration{
@@ -190,6 +158,47 @@ process_request(ProcessFun, SuccessFun, State) ->
         {stop, R, NewState} ->
             {stop, R, NewState}
     end.
+
+process_connect(Implicit,
+                Frame,
+                State = #state{
+                  channel = none,
+                  socket  = Sock,
+                  config  = #stomp_configuration{
+                    default_login    = DefaultLogin,
+                    default_passcode = DefaultPasscode}}) ->
+    process_request(
+      fun(StateN) ->
+              case negotiate_version(Frame) of
+                  {ok, Version} ->
+                      {ok, DefaultVHost} =
+                          application:get_env(rabbit, default_vhost),
+                      Res = do_login(
+                                rabbit_stomp_frame:header(Frame, "login",
+                                                          DefaultLogin),
+                                rabbit_stomp_frame:header(Frame, "passcode",
+                                                          DefaultPasscode),
+                                rabbit_stomp_frame:header(Frame, "host",
+                                                          binary_to_list(
+                                                            DefaultVHost)),
+                                rabbit_stomp_frame:header(Frame, "heart-beat",
+                                                          "0,0"),
+                                adapter_info(Sock, Version),
+                                Version,
+                                StateN),
+                      case {Res, Implicit} of
+                          {{ok, _, StateN1}, implicit} -> ok(StateN1);
+                          _                            -> Res
+                      end;
+                  {error, no_common_version} ->
+                      error("Version mismatch",
+                            "Supported versions are ~s\n",
+                            [string:join(?SUPPORTED_VERSIONS, ",")],
+                            StateN)
+              end
+      end,
+      fun(StateM) -> StateM end,
+      State).
 
 %%----------------------------------------------------------------------------
 %% Frame handlers
