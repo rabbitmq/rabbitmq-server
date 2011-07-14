@@ -16,13 +16,12 @@
 
 -module(rabbit_mirror_queue_master).
 
--export([init/4, terminate/2, delete_and_terminate/2,
+-export([init/3, terminate/2, delete_and_terminate/2,
          purge/1, publish/4, publish_delivered/5, fetch/2, ack/2,
-         tx_publish/5, tx_ack/3, tx_rollback/2, tx_commit/4,
          requeue/3, len/1, is_empty/1, drain_confirmed/1, dropwhile/2,
          set_ram_duration_target/2, ram_duration/1,
          needs_timeout/1, timeout/1, handle_pre_hibernate/1,
-         status/1, invoke/3, is_duplicate/3, discard/3]).
+         status/1, invoke/3, is_duplicate/2, discard/3]).
 
 -export([start/1, stop/0]).
 
@@ -82,7 +81,7 @@ stop() ->
     exit({not_valid_for_generic_backing_queue, ?MODULE}).
 
 init(#amqqueue { name = QName, mirror_nodes = MNodes } = Q, Recover,
-     AsyncCallback, SyncCallback) ->
+     AsyncCallback) ->
     {ok, CPid} = rabbit_mirror_queue_coordinator:start_link(
                    Q, undefined, sender_death_fun()),
     GM = rabbit_mirror_queue_coordinator:get_gm(CPid),
@@ -94,7 +93,7 @@ init(#amqqueue { name = QName, mirror_nodes = MNodes } = Q, Recover,
          end) -- [node()],
     [rabbit_mirror_queue_misc:add_mirror(QName, Node) || Node <- MNodes1],
     {ok, BQ} = application:get_env(backing_queue_module),
-    BQS = BQ:init(Q, Recover, AsyncCallback, SyncCallback),
+    BQS = BQ:init(Q, Recover, AsyncCallback),
     #state { gm                  = GM,
              coordinator         = CPid,
              backing_queue       = BQ,
@@ -242,21 +241,6 @@ ack(AckTags, State = #state { gm                  = GM,
     {MsgIds, State #state { backing_queue_state = BQS1,
                             ack_msg_id          = AM1 }}.
 
-tx_publish(_Txn, _Msg, _MsgProps, _ChPid, State) ->
-    %% We don't support txns in mirror queues
-    State.
-
-tx_ack(_Txn, _AckTags, State) ->
-    %% We don't support txns in mirror queues
-    State.
-
-tx_rollback(_Txn, State) ->
-    {[], State}.
-
-tx_commit(_Txn, PostCommitFun, _MsgPropsFun, State) ->
-    PostCommitFun(), %% Probably must run it to avoid deadlocks
-    {[], State}.
-
 requeue(AckTags, MsgPropsFun, State = #state { gm                  = GM,
                                                backing_queue       = BQ,
                                                backing_queue_state = BQS }) ->
@@ -298,7 +282,7 @@ invoke(Mod, Fun, State = #state { backing_queue       = BQ,
                                   backing_queue_state = BQS }) ->
     State #state { backing_queue_state = BQ:invoke(Mod, Fun, BQS) }.
 
-is_duplicate(none, Message = #basic_message { id = MsgId },
+is_duplicate(Message = #basic_message { id = MsgId },
              State = #state { seen_status         = SS,
                               backing_queue       = BQ,
                               backing_queue_state = BQS,
@@ -314,7 +298,7 @@ is_duplicate(none, Message = #basic_message { id = MsgId },
         error ->
             %% We permit the underlying BQ to have a peek at it, but
             %% only if we ourselves are not filtering out the msg.
-            {Result, BQS1} = BQ:is_duplicate(none, Message, BQS),
+            {Result, BQS1} = BQ:is_duplicate(Message, BQS),
             {Result, State #state { backing_queue_state = BQS1 }};
         {ok, published} ->
             %% It already got published when we were a slave and no
@@ -340,11 +324,7 @@ is_duplicate(none, Message = #basic_message { id = MsgId },
             %% Don't erase from SS here because discard/2 is about to
             %% be called and we need to be able to detect this case
             {discarded, State}
-    end;
-is_duplicate(_Txn, _Msg, State) ->
-    %% In a transaction. We don't support txns in mirror queues. But
-    %% it's probably not a duplicate...
-    {false, State}.
+    end.
 
 discard(Msg = #basic_message { id = MsgId }, ChPid,
         State = #state { gm                  = GM,
@@ -382,7 +362,7 @@ promote_backing_queue_state(CPid, BQ, BQS, GM, SeenStatus, KS) ->
 sender_death_fun() ->
     Self = self(),
     fun (DeadPid) ->
-            rabbit_amqqueue:run_backing_queue_async(
+            rabbit_amqqueue:run_backing_queue(
               Self, ?MODULE,
               fun (?MODULE, State = #state { gm = GM, known_senders = KS }) ->
                       ok = gm:broadcast(GM, {sender_death, DeadPid}),

@@ -16,7 +16,8 @@
 
 -module(rabbit_upgrade_functions).
 
--include("rabbit.hrl").
+%% If you are tempted to add include("rabbit.hrl"). here, don't. Using record
+%% defs here leads to pain later.
 
 -compile([export_all]).
 
@@ -32,6 +33,7 @@
 -rabbit_upgrade({user_admin_to_tags,    mnesia, [user_to_internal_user]}).
 -rabbit_upgrade({ha_mirrors,            mnesia, []}).
 -rabbit_upgrade({gm,                    mnesia, []}).
+-rabbit_upgrade({exchange_scratch,      mnesia, [trace_exchanges]}).
 -rabbit_upgrade({mirrored_supervisor,   mnesia, []}).
 
 %% -------------------------------------------------------------------
@@ -50,6 +52,7 @@
 -spec(user_admin_to_tags/0    :: () -> 'ok').
 -spec(ha_mirrors/0            :: () -> 'ok').
 -spec(gm/0                    :: () -> 'ok').
+-spec(exchange_scratch/0      :: () -> 'ok').
 
 -endif.
 
@@ -156,6 +159,18 @@ gm() ->
     create(gm_group, [{record_name, gm_group},
                       {attributes, [name, version, members]}]).
 
+exchange_scratch() ->
+    ok = exchange_scratch(rabbit_exchange),
+    ok = exchange_scratch(rabbit_durable_exchange).
+
+exchange_scratch(Table) ->
+    transform(
+      Table,
+      fun ({exchange, Name, Type, Dur, AutoDel, Int, Args}) ->
+              {exchange, Name, Type, Dur, AutoDel, Int, Args, undefined}
+      end,
+      [name, type, durable, auto_delete, internal, arguments, scratch]).
+
 mirrored_supervisor() ->
     create(mirrored_sup_childspec,
            [{record_name, mirrored_sup_childspec},
@@ -182,11 +197,7 @@ create(Tab, TabDef) ->
 %% the exchange type registry or worker pool to be running by dint of
 %% not validating anything and assuming the exchange type does not
 %% require serialisation.
+%% NB: this assumes the pre-exchange-scratch-space format
 declare_exchange(XName, Type) ->
-    X = #exchange{name        = XName,
-                  type        = Type,
-                  durable     = true,
-                  auto_delete = false,
-                  internal    = false,
-                  arguments   = []},
+    X = {exchange, XName, Type, true, false, false, []},
     ok = mnesia:dirty_write(rabbit_durable_exchange, X).
