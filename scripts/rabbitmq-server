@@ -97,8 +97,8 @@ RABBITMQ_LISTEN_ARG=
 # there is no other way of preventing their expansion.
 set -f
 
-if [ -n "$PID_FILE" ] ; then
-    echo $$ > $PID_FILE
+if [ -n "$RABBITMQ_PID_FILE" ] ; then
+    echo $$ > $RABBITMQ_PID_FILE
 fi
 
 exec erl \
