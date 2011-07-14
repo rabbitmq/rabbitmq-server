@@ -862,11 +862,15 @@
               </varlistentry>
               <varlistentry>
                 <term>mirror_nodes</term>
-                <listitem><para>If the queue is mirrored, the nodes upon which mirrors will be present if the nodes are part of the current cluster.</para></listitem>
+                <listitem><para>If the queue is mirrored, this provides the names of the nodes upon which mirrors will be present should those nodes be part of the current cluster (i.e. it may contain node names that are not currently part of the cluster).</para></listitem>
               </varlistentry>
               <varlistentry>
-                <term>slaves</term>
-                <listitem><para>If the queue is mirrored, this gives the status of slaves.</para></listitem>
+                <term>slave_pids</term>
+                <listitem><para>If the queue is mirrored, this gives the IDs of the current slaves.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>synchronised_slave_pids</term>
+                <listitem><para>If the queue is mirrored, this gives the IDs of the current slaves which are synchronised with the master.</para></listitem>
               </varlistentry>
             </variablelist>
             <para>

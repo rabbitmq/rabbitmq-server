@@ -419,11 +419,6 @@ format_info_item([T | _] = Value)
     "[" ++
         lists:nthtail(2, lists:append(
                            [", " ++ format_info_item(E) || E <- Value])) ++ "]";
-format_info_item(Value) when is_tuple(Value) ->
-    List = tuple_to_list(Value),
-    "{" ++
-        lists:nthtail(2, lists:append(
-                           [", " ++ format_info_item(E) || E <- List])) ++ "}";
 format_info_item(Value) ->
     io_lib:format("~w", [Value]).
 

@@ -47,12 +47,12 @@
 -include("rabbit.hrl").
 -include("gm_specs.hrl").
 
--define(STATISTICS_KEYS,
+-define(CREATION_EVENT_KEYS,
         [pid,
          is_synchronised
         ]).
 
--define(INFO_KEYS, ?STATISTICS_KEYS).
+-define(INFO_KEYS, ?CREATION_EVENT_KEYS).
 
 -define(SYNC_INTERVAL,                 25). %% milliseconds
 -define(RAM_DURATION_UPDATE_INTERVAL,  5000).
