@@ -61,7 +61,7 @@ start_writer_fun(Sup, network, [Sock], ChNumber) ->
                         {writer, {rabbit_writer, start_link,
                                   [Sock, ChNumber, ?FRAME_MIN_SIZE, ?PROTOCOL,
                                    self()]},
-                         transient, ?MAX_WAIT, worker, [rabbit_writer]})
+                         intrinsic, ?MAX_WAIT, worker, [rabbit_writer]})
     end.
 
 init_command_assembler(direct)  -> {ok, none};
