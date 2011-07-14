@@ -352,24 +352,15 @@ handle_call({send_command_sync, Method}, From, State) ->
 handle_call(next_publish_seqno, _From,
             State = #state{next_pub_seqno = SeqNo}) ->
     {reply, SeqNo, State};
-handle_call(wait_for_confirms, From,
-            State = #state{unconfirmed_set = USet,
-                           waiting_set     = WSet}) ->
-    case gb_sets:is_empty(USet) of
-        true  -> {reply, true, State};
-        false -> {noreply, State#state{waiting_set =
-                                           gb_trees:insert(From, none, WSet)}}
-    end;
+
+handle_call(wait_for_confirms, From, State) ->
+    handle_wait_for_confirms(From, none, true, State);
+
 %% Lets the channel know that the process should be sent an exit
 %% signal if a nack is received.
-handle_call({wait_for_confirms_or_die, Pid}, From,
-            State = #state{unconfirmed_set = USet,
-                           waiting_set     = WSet}) ->
-    case gb_sets:is_empty(USet) of
-        true  -> {reply, ok, State};
-        false -> {noreply, State#state{waiting_set =
-                                           gb_trees:insert(From, Pid, WSet)}}
-    end.
+handle_call({wait_for_confirms_or_die, Pid}, From, State) ->
+    handle_wait_for_confirms(From, Pid, ok, State).
+
 %% @private
 handle_cast({cast, Method, AmqpMsg}, State) ->
     handle_method_to_server(Method, AmqpMsg, none, State);
@@ -913,3 +904,12 @@ notify_confirm_waiters(State = #state{waiting_set = WSet,
     [gen_server:reply(From, OAR) || {From, _} <- gb_trees:to_list(WSet)],
     State#state{waiting_set = gb_trees:empty(),
                 only_acks_received = true}.
+
+handle_wait_for_confirms(From, Notify, EmptyReply,
+                         State = #state{unconfirmed_set = USet,
+                                        waiting_set     = WSet}) ->
+    case gb_sets:is_empty(USet) of
+        true  -> {reply, EmptyReply, State};
+        false -> {noreply, State#state{waiting_set =
+                                           gb_trees:insert(From, Notify, WSet)}}
+    end.
