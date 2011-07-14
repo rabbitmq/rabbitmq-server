@@ -186,13 +186,6 @@ handle_call({gm_deaths, Deaths}, From,
             {stop, normal, State}
     end;
 
-handle_call({run_backing_queue, Mod, Fun}, _From, State) ->
-    reply(ok, run_backing_queue(Mod, Fun, State));
-
-handle_call({commit, _Txn, _ChPid}, _From, State) ->
-    %% We don't support transactions in mirror queues
-    reply(ok, State);
-
 handle_call(info, _From, State) ->
     reply(infos(?INFO_KEYS, State), State).
 
@@ -228,11 +221,7 @@ handle_cast(update_ram_duration,
 
 handle_cast(sync_timeout, State) ->
     noreply(backing_queue_timeout(
-              State #state { sync_timer_ref = undefined }));
-
-handle_cast({rollback, _Txn, _ChPid}, State) ->
-    %% We don't support transactions in mirror queues
-    noreply(State).
+              State #state { sync_timer_ref = undefined })).
 
 handle_info(timeout, State) ->
     noreply(backing_queue_timeout(State));
@@ -291,7 +280,6 @@ handle_pre_hibernate(State = #state { backing_queue       = BQ,
 
 prioritise_call(Msg, _From, _State) ->
     case Msg of
-        {run_backing_queue, _Mod, _Fun}      -> 6;
         {gm_deaths, _Deaths}                 -> 5;
         _                                    -> 0
     end.
@@ -360,14 +348,7 @@ bq_init(BQ, Q, Recover) ->
     Self = self(),
     BQ:init(Q, Recover,
             fun (Mod, Fun) ->
-                    rabbit_amqqueue:run_backing_queue_async(Self, Mod, Fun)
-            end,
-            fun (Mod, Fun) ->
-                    rabbit_misc:with_exit_handler(
-                      fun () -> error end,
-                      fun () ->
-                              rabbit_amqqueue:run_backing_queue(Self, Mod, Fun)
-                      end)
+                    rabbit_amqqueue:run_backing_queue(Self, Mod, Fun)
             end).
 
 run_backing_queue(rabbit_mirror_queue_master, Fun, State) ->
@@ -518,7 +499,7 @@ promote_me(From, #state { q                   = Q = #amqqueue { name = QName },
     %%
     %% Everything that's in MA gets requeued. Consequently the new
     %% master should start with a fresh AM as there are no messages
-    %% pending acks (txns will have been rolled back).
+    %% pending acks.
 
     MSList = dict:to_list(MS),
     SS = dict:from_list(
@@ -635,15 +616,14 @@ confirm_sender_death(Pid) ->
     %% Note that we do not remove our knowledge of this ChPid until we
     %% get the sender_death from GM.
     {ok, _TRef} = timer:apply_after(
-                    ?DEATH_TIMEOUT, rabbit_amqqueue, run_backing_queue_async,
+                    ?DEATH_TIMEOUT, rabbit_amqqueue, run_backing_queue,
                     [self(), rabbit_mirror_queue_master, Fun]),
     ok.
 
 maybe_enqueue_message(
   Delivery = #delivery { message    = #basic_message { id = MsgId },
                          msg_seq_no = MsgSeqNo,
-                         sender     = ChPid,
-                         txn        = none },
+                         sender     = ChPid },
   EnqueueOnPromotion,
   State = #state { sender_queues = SQ, msg_id_status = MS }) ->
     State1 = ensure_monitoring(ChPid, State),
@@ -685,10 +665,7 @@ maybe_enqueue_message(
             SQ1 = remove_from_pending_ch(MsgId, ChPid, SQ),
             State1 #state { msg_id_status = dict:erase(MsgId, MS),
                             sender_queues = SQ1 }
-    end;
-maybe_enqueue_message(_Delivery, _EnqueueOnPromotion, State) ->
-    %% We don't support txns in mirror queues.
-    State.
+    end.
 
 get_sender_queue(ChPid, SQ) ->
     case dict:find(ChPid, SQ) of

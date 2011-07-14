@@ -16,7 +16,8 @@
 
 -module(rabbit_upgrade_functions).
 
--include("rabbit.hrl").
+%% If you are tempted to add include("rabbit.hrl"). here, don't. Using record
+%% defs here leads to pain later.
 
 -compile([export_all]).
 
@@ -190,11 +191,7 @@ create(Tab, TabDef) ->
 %% the exchange type registry or worker pool to be running by dint of
 %% not validating anything and assuming the exchange type does not
 %% require serialisation.
+%% NB: this assumes the pre-exchange-scratch-space format
 declare_exchange(XName, Type) ->
-    X = #exchange{name        = XName,
-                  type        = Type,
-                  durable     = true,
-                  auto_delete = false,
-                  internal    = false,
-                  arguments   = []},
+    X = {exchange, XName, Type, true, false, false, []},
     ok = mnesia:dirty_write(rabbit_durable_exchange, X).
