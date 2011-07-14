@@ -127,7 +127,11 @@
 
 -record(mirrored_sup_childspec, {id, mirroring_pid, childspec}).
 
--record(state, {overall, group, initial_childspecs}).
+-record(state, {overall,
+                delegate,
+                group,
+                initial_childspecs,
+                peer_monitors = sets:new()}).
 
 %%----------------------------------------------------------------------------
 
@@ -241,12 +245,12 @@ start_link0(Prefix, Group, Mod, Args) ->
         Other     -> Other
     end.
 
-start_child(Sup, ChildSpec)  -> call(Sup, {start_child,  ChildSpec}).
-delete_child(Sup, Name)      -> call(Sup, {delete_child, Name}).
-restart_child(Sup, Name)     -> call(Sup, {msg, restart_child,   [Name]}).
-terminate_child(Sup, Name)   -> call(Sup, {msg, terminate_child, [Name]}).
-which_children(Sup)          -> ?SUPERVISOR:which_children(Sup).
-check_childspecs(ChildSpecs) -> ?SUPERVISOR:check_childspecs(ChildSpecs).
+start_child(Sup, ChildSpec) -> call(Sup, {start_child,  ChildSpec}).
+delete_child(Sup, Name)     -> call(Sup, {delete_child, Name}).
+restart_child(Sup, Name)    -> call(Sup, {msg, restart_child,   [Name]}).
+terminate_child(Sup, Name)  -> call(Sup, {msg, terminate_child, [Name]}).
+which_children(Sup)         -> ?SUPERVISOR:which_children(child(Sup, delegate)).
+check_childspecs(Specs)     -> ?SUPERVISOR:check_childspecs(Specs).
 
 behaviour_info(callbacks) -> [{init,1}];
 behaviour_info(_Other)    -> undefined.
@@ -255,7 +259,8 @@ call(Sup, Msg) ->
     ?GEN_SERVER:call(child(Sup, mirroring), Msg, infinity).
 
 child(Sup, Name) ->
-    [Pid] = [Pid || {Name1, Pid, _, _} <- which_children(Sup), Name1 =:= Name],
+    [Pid] = [Pid || {Name1, Pid, _, _} <- ?SUPERVISOR:which_children(Sup),
+                    Name1 =:= Name],
     Pid.
 
 %%----------------------------------------------------------------------------
@@ -270,57 +275,80 @@ init({overall, Group, Mod, Args}) ->
     {ok, {Restart, ChildSpecs}} = Mod:init(Args),
     Delegate = {delegate, {?SUPERVISOR, start_link,
                            [?MODULE, {delegate, Restart}]},
-                transient, 16#ffffffff, supervisor, [?SUPERVISOR]},
+                temporary, 16#ffffffff, supervisor, [?SUPERVISOR]},
     Mirroring = {mirroring, {?MODULE, start_internal, [Group, ChildSpecs]},
-                 transient, 16#ffffffff, worker, [?MODULE]},
-    {ok, {{one_for_all, 0, 1}, [Delegate, Mirroring]}};
+                 permanent, 16#ffffffff, worker, [?MODULE]},
+    %% Important: Delegate MUST start after Mirroring, see comment in
+    %% handle_info('DOWN', ...) below
+    {ok, {{one_for_all, 0, 1}, [Mirroring, Delegate]}};
 
 init({delegate, Restart}) ->
     {ok, {Restart, []}};
 
 init({mirroring, Group, ChildSpecs}) ->
+    process_flag(trap_exit, true),
     ?PG2:create(Group),
     ok = ?PG2:join(Group, self()),
-    [begin
-         gen_server2:cast(Pid, {ensure_monitoring, self()}),
-         erlang:monitor(process, Pid)
-     end
-     || Pid <- ?PG2:get_members(Group) -- [self()]],
-    {ok, #state{group = Group, initial_childspecs = ChildSpecs}}.
+    {ok, lists:foldl(
+           fun(Pid, State0) ->
+                   gen_server2:cast(Pid, {ensure_monitoring, self()}),
+                   monitor(Pid, State0)
+           end, #state{group = Group, initial_childspecs = ChildSpecs},
+           ?PG2:get_members(Group) -- [self()])}.
 
 handle_call({finish_startup, Overall}, _From,
             State = #state{overall            = undefined,
                            initial_childspecs = ChildSpecs}) ->
-    [maybe_start(Overall, S) || S <- ChildSpecs],
-    {reply, ok, State#state{overall = Overall}};
+    Delegate = child(Overall, delegate),
+    erlang:monitor(process, Delegate),
+    [maybe_start(Delegate, S) || S <- ChildSpecs],
+    {reply, ok, State#state{overall = Overall, delegate = Delegate}};
 
 handle_call({start_child, ChildSpec}, _From,
-            State = #state{overall = Overall}) ->
-    {reply, maybe_start(Overall, ChildSpec), State};
+            State = #state{delegate = Delegate}) ->
+    {reply, maybe_start(Delegate, ChildSpec), State};
 
 handle_call({delete_child, Id}, _From,
-            State = #state{overall = Overall}) ->
+            State = #state{delegate = Delegate}) ->
     {atomic, ok} = mnesia:transaction(fun() -> delete(Id) end),
-    {reply, stop(Overall, Id), State};
+    {reply, stop(Delegate, Id), State};
 
-handle_call({msg, F, A}, _From, State = #state{overall = Overall}) ->
-    {reply, apply(?SUPERVISOR, F, [child(Overall, delegate) | A]), State};
+handle_call({msg, F, A}, _From, State = #state{delegate = Delegate}) ->
+    {reply, apply(?SUPERVISOR, F, [Delegate | A]), State};
 
-handle_call(overall_supervisor, _From, State = #state{overall = Overall}) ->
-    {reply, Overall, State};
+handle_call(delegate_supervisor, _From, State = #state{delegate = Delegate}) ->
+    {reply, Delegate, State};
 
 handle_call(Msg, _From, State) ->
     {stop, {unexpected_call, Msg}, State}.
 
 handle_cast({ensure_monitoring, Pid}, State) ->
-    erlang:monitor(process, Pid),
-    {noreply, State};
+    {noreply, monitor(Pid, State)};
+
+handle_cast({die, Reason}, State = #state{peer_monitors = Peers}) ->
+    [erlang:demonitor(Ref) || Ref <- sets:to_list(Peers)],
+    {stop, Reason, State};
 
 handle_cast(Msg, State) ->
     {stop, {unexpected_cast, Msg}, State}.
 
+handle_info({'DOWN', _Ref, process, Pid, Reason},
+            State = #state{delegate = Pid, group = Group}) ->
+    %% Since the delegate is temporary, its death won't cause us to
+    %% die. Since the overall supervisor kills processes in reverse
+    %% order when shutting down "from above" and we started after the
+    %% delegate, if we see the delegate die then that means it died
+    %% because one of its children exceeded its restart limits, not
+    %% because the whole app was being torn down.
+    %%
+    %% Therefore if we get here we know we need to cause the entire
+    %% mirrored sup to shut down, not just fail over.
+    %% TODO is this itself racy?
+    [gen_server2:cast(P, {die, Reason}) || P <- ?PG2:get_members(Group)],
+    {noreply, State};
+
 handle_info({'DOWN', _Ref, process, Pid, _Reason},
-            State = #state{overall = Overall, group = Group}) ->
+            State = #state{delegate = Delegate, group = Group}) ->
     %% TODO load balance this
     %% We remove the dead pid here because pg2 is slightly racy,
     %% most of the time it will be gone before we get here but not
@@ -329,7 +357,7 @@ handle_info({'DOWN', _Ref, process, Pid, _Reason},
     case lists:sort(?PG2:get_members(Group)) -- [Pid] of
         [Self | _] -> {atomic, ChildSpecs} =
                           mnesia:transaction(fun() -> update_all(Pid) end),
-                      [start(Overall, ChildSpec) || ChildSpec <- ChildSpecs];
+                      [start(Delegate, ChildSpec) || ChildSpec <- ChildSpecs];
         _          -> ok
     end,
     {noreply, State};
@@ -345,9 +373,13 @@ code_change(_OldVsn, State, _Extra) ->
 
 %%----------------------------------------------------------------------------
 
-maybe_start(Overall, ChildSpec) ->
+monitor(Pid, State = #state{peer_monitors = Peers}) ->
+    State#state{peer_monitors = sets:add_element(
+                                  erlang:monitor(process, Pid), Peers)}.
+
+maybe_start(Delegate, ChildSpec) ->
     case mnesia:transaction(fun() -> check_start(ChildSpec) end) of
-        {atomic, start} -> start(Overall, ChildSpec);
+        {atomic, start} -> start(Delegate, ChildSpec);
         {atomic, Pid}   -> {ok, Pid}
     end.
 
@@ -358,16 +390,16 @@ check_start(ChildSpec) ->
         [S] -> #mirrored_sup_childspec{id            = Id,
                                        mirroring_pid = Pid} = S,
                case supervisor(Pid) of
-                   dead -> delete(ChildSpec),
-                           write(ChildSpec),
-                           start;
-                   Sup  -> child(child(Sup, delegate), Id)
+                   dead     -> delete(ChildSpec),
+                               write(ChildSpec),
+                               start;
+                   Delegate -> child(Delegate, Id)
                end
     end.
 
 supervisor(Pid) ->
     try
-        gen_server:call(Pid, overall_supervisor, infinity)
+        gen_server:call(Pid, delegate_supervisor, infinity)
     catch
         exit:{noproc, _} -> dead
     end.
@@ -380,11 +412,11 @@ write(ChildSpec) ->
 delete(Id) ->
     ok = mnesia:delete({?TABLE, Id}).
 
-start(Overall, ChildSpec) ->
-    apply(?SUPERVISOR, start_child, [child(Overall, delegate), ChildSpec]).
+start(Delegate, ChildSpec) ->
+    apply(?SUPERVISOR, start_child, [Delegate, ChildSpec]).
 
-stop(Overall, Id) ->
-    apply(?SUPERVISOR, delete_child, [child(Overall, delegate), Id]).
+stop(Delegate, Id) ->
+    apply(?SUPERVISOR, delete_child, [Delegate, Id]).
 
 id({Id, _, _, _, _, _}) -> Id.
 

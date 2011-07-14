@@ -36,6 +36,7 @@ all_tests() ->
     passed = test_large_group(),
     passed = test_childspecs_at_init(),
     passed = test_anonymous_supervisors(),
+    passed = test_no_migration_on_shutdown(),
     passed.
 
 %% Simplest test
@@ -113,6 +114,24 @@ test_anonymous_supervisors() ->
                       false = (Pid1 =:= Pid2)
               end, [anon, anon]).
 
+%% When a mirrored_supervisor terminates, we should not migrate, but
+%% the whole supervisor group should shut down. To test this we set up
+%% a situation where the gen_server will only fail if it's running
+%% under the supervisor called 'evil'. It should not migrate to
+%% 'good' and survive, rather the whole group should go away.
+test_no_migration_on_shutdown() ->
+    with_sups(fun([Evil, _]) ->
+                      mirrored_supervisor:start_child(Evil, childspec(worker)),
+                      try
+                          call(worker, ping),
+                          exit(worker_should_not_have_migrated)
+                      catch exit:{timeout_waiting_for_server, _} ->
+                              ok
+                      end,
+                      timer:sleep(1000)
+              end, [evil, good]).
+
+
 %% ---------------------------------------------------------------------------
 
 with_sups(Fun, Sups) ->
@@ -135,16 +154,18 @@ start_sup(Name, Group) ->
     start_sup({Name, []}, Group).
 
 start_sup0(anon, Group, ChildSpecs) ->
-    mirrored_supervisor:start_link(Group, ?MODULE, ChildSpecs);
+    mirrored_supervisor:start_link(Group, ?MODULE, {sup, ChildSpecs});
 
 start_sup0(Name, Group, ChildSpecs) ->
-    mirrored_supervisor:start_link({local, Name}, Group, ?MODULE, ChildSpecs).
+    mirrored_supervisor:start_link({local, Name},
+                                   Group, ?MODULE, {sup, ChildSpecs}).
 
 childspec(Id) ->
-    {Id, {?MODULE, start_gs, [Id]}, transient, 16#ffffffff, worker, [?MODULE]}.
+    {Id, {?MODULE, start_gs, [Id]},
+     transient, 16#ffffffff, worker, [?MODULE]}.
 
 start_gs(Id) ->
-    gen_server:start_link({local, Id}, ?MODULE, [], []).
+    gen_server:start_link({local, Id}, ?MODULE, server, []).
 
 pid_of(Id) ->
     {received, Pid, ping} = call(Id, ping),
@@ -153,7 +174,7 @@ pid_of(Id) ->
 call(Id, Msg) -> call(Id, Msg, 100, 10).
 
 call(Id, Msg, 0, _Decr) ->
-    exit({timeout_waiting_for_server, Id, Msg});
+    exit({timeout_waiting_for_server, {Id, Msg}});
 
 call(Id, Msg, MaxDelay, Decr) ->
     try
@@ -170,13 +191,14 @@ kill(Pid) ->
 %% Dumb gen_server we can supervise
 %% ---------------------------------------------------------------------------
 
-%% Cheeky: this is used for both the gen_server and supervisor
-%% behaviours. So our gen server has a weird-looking state. But we
-%% don't care.
-init(ChildSpecs) ->
-    {ok, {{one_for_one, 3, 10}, ChildSpecs}}.
+init({sup, ChildSpecs}) ->
+    {ok, {{one_for_one, 0, 1}, ChildSpecs}};
+
+init(server) ->
+    {ok, state}.
 
 handle_call(Msg, _From, State) ->
+    die_if_my_supervisor_is_evil(),
     {reply, {received, self(), Msg}, State}.
 
 handle_cast(_Msg, State) ->
@@ -190,3 +212,11 @@ terminate(_Reason, _State) ->
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
+
+die_if_my_supervisor_is_evil() ->
+    try lists:keyfind(self(), 2, mirrored_supervisor:which_children(evil)) of
+        false -> ok;
+        _     -> exit(doooom)
+    catch
+        exit:{noproc, _} -> ok
+    end.
