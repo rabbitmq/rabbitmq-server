@@ -349,6 +349,7 @@ handle_info({'DOWN', _Ref, process, Pid, Reason},
     Members = ?PG2:get_members(Group),
     demonitor_all(State),
     [gen_server2:call(P, demonitor_all) || P <- Members -- [self()]],
+    %% NB, no infinity here ----------^ because this could deadlock otherwise
     [gen_server2:cast(P, {die, Reason}) || P <- Members],
     {noreply, State};
 
