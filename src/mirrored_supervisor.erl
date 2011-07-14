@@ -319,14 +319,17 @@ handle_call({msg, F, A}, _From, State = #state{delegate = Delegate}) ->
 handle_call(delegate_supervisor, _From, State = #state{delegate = Delegate}) ->
     {reply, Delegate, State};
 
+handle_call(demonitor_all, _From, State) ->
+    demonitor_all(State),
+    {reply, ok, State};
+
 handle_call(Msg, _From, State) ->
     {stop, {unexpected_call, Msg}, State}.
 
 handle_cast({ensure_monitoring, Pid}, State) ->
     {noreply, monitor(Pid, State)};
 
-handle_cast({die, Reason}, State = #state{peer_monitors = Peers}) ->
-    [erlang:demonitor(Ref) || Ref <- sets:to_list(Peers)],
+handle_cast({die, Reason}, State) ->
     {stop, Reason, State};
 
 handle_cast(Msg, State) ->
@@ -343,11 +346,13 @@ handle_info({'DOWN', _Ref, process, Pid, Reason},
     %%
     %% Therefore if we get here we know we need to cause the entire
     %% mirrored sup to shut down, not just fail over.
-    %% TODO is this itself racy?
-    [gen_server2:cast(P, {die, Reason}) || P <- ?PG2:get_members(Group)],
+    Members = ?PG2:get_members(Group),
+    demonitor_all(State),
+    [gen_server2:call(P, demonitor_all) || P <- Members -- [self()]],
+    [gen_server2:cast(P, {die, Reason}) || P <- Members],
     {noreply, State};
 
-handle_info({'DOWN', _Ref, process, Pid, _Reason},
+handle_info({'DOWN', Ref, process, Pid, _Reason},
             State = #state{delegate = Delegate, group = Group}) ->
     %% TODO load balance this
     %% We remove the dead pid here because pg2 is slightly racy,
@@ -360,7 +365,7 @@ handle_info({'DOWN', _Ref, process, Pid, _Reason},
                       [start(Delegate, ChildSpec) || ChildSpec <- ChildSpecs];
         _          -> ok
     end,
-    {noreply, State};
+    {noreply, remove_monitor(Ref, State)};
 
 handle_info(Info, State) ->
     {stop, {unexpected_info, Info}, State}.
@@ -376,6 +381,12 @@ code_change(_OldVsn, State, _Extra) ->
 monitor(Pid, State = #state{peer_monitors = Peers}) ->
     State#state{peer_monitors = sets:add_element(
                                   erlang:monitor(process, Pid), Peers)}.
+
+remove_monitor(Ref, State = #state{peer_monitors = Peers}) ->
+    State#state{peer_monitors = sets:del_element(Ref, Peers)}.
+
+demonitor_all(#state{peer_monitors = Peers}) ->
+    [erlang:demonitor(Ref) || Ref <- sets:to_list(Peers)].
 
 maybe_start(Delegate, ChildSpec) ->
     case mnesia:transaction(fun() -> check_start(ChildSpec) end) of
