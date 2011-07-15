@@ -291,6 +291,12 @@ code_change(_OldVsn, State, _Extra) ->
 
 %%----------------------------------------------------------------------------
 
+handle_event(#event{type = queue_created, props = Props}, State) ->
+    Pid = pget(pid, Props),
+    [handle_slave_synchronised(Pid, SSPid, State) ||
+        SSPid <- pget(synchronised_slave_pids, Props)],
+    {ok, State};
+
 handle_event(#event{type = queue_stats, props = Stats, timestamp = Timestamp},
              State) ->
     handle_stats(queue_stats, Stats, Timestamp,
@@ -352,6 +358,9 @@ handle_event(#event{type = consumer_deleted, props = Props}, State) ->
     handle_consumer(fun(Table, Id, _P) -> ets:delete(Table, Id) end,
                     Props, State);
 
+handle_event(#event{type = queue_slave_synchronised, props = Props}, State) ->
+    handle_slave_synchronised(pget(master_pid, Props), pget(pid, Props), State);
+
 handle_event(_Event, State) ->
     {ok, State}.
 
@@ -390,6 +399,15 @@ handle_consumer(Fun, Props,
     P = rabbit_mgmt_format:format(Props, []),
     Table = orddict:fetch(consumers, Tables),
     Fun(Table, {pget(queue, P), pget(channel, P)}, P),
+    {ok, State}.
+
+handle_slave_synchronised(Pid, SSPid, State = #state{tables = Tables}) ->
+    Table = orddict:fetch(queue_stats, Tables),
+    Synced = case ets:lookup(Table, {Pid, synchronised_slaves}) of
+                 []            -> [SSPid];
+                 [{_, SSPids}] -> [SSPid | SSPids]
+             end,
+    ets:insert(Table, {{Pid, synchronised_slaves}, Synced}),
     {ok, State}.
 
 handle_fine_stats(Type, Props, Timestamp, State = #state{tables = Tables}) ->
@@ -517,6 +535,15 @@ consumer_details_fun(PatternFun, State = #state{tables = Tables}) ->
                                   ets:match(Table, {Pattern, '$1'}))]}]
     end.
 
+synchronised_slaves_fun(State = #state{tables = Tables}) ->
+    Table = orddict:fetch(queue_stats, Tables),
+    fun (Props) -> Key = {pget(pid, Props), synchronised_slaves},
+                   case ets:lookup(Table, Key) of
+                       []       -> [];
+                       [{_, S}] -> [{synchronised_slave_pids, S}]
+                   end
+    end.
+
 zero_old_rates(Stats, State) -> [maybe_zero_rate(S, State) || S <- Stats].
 
 maybe_zero_rate({Key, Val}, #state{interval = Interval}) ->
@@ -604,7 +631,8 @@ detail_queue_stats(Objs, State) ->
                       queue_funs(State))).
 
 queue_funs(State) ->
-    [basic_stats_fun(queue_stats, State), augment_msg_stats_fun(State)].
+    [basic_stats_fun(queue_stats, State), augment_msg_stats_fun(State),
+     synchronised_slaves_fun(State)].
 
 exchange_stats(Objs, FineSpecs, State) ->
     merge_stats(Objs, [fine_stats_fun(FineSpecs, State),
