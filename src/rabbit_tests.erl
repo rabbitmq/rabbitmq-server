@@ -60,6 +60,9 @@ all_tests() ->
     passed = test_confirms(),
     passed = maybe_run_cluster_dependent_tests(),
     passed = test_configurable_server_properties(),
+    ok = cleanup_test_queue(),
+    ok = restart_app(),
+    io:format("rabbit app restarted"),
     passed.
 
 maybe_run_cluster_dependent_tests() ->
@@ -1910,6 +1913,16 @@ with_empty_test_queue(Fun) ->
     ok = empty_test_queue(),
     {0, Qi} = init_test_queue(),
     rabbit_queue_index:delete_and_terminate(Fun(Qi)).
+
+cleanup_test_queue() ->
+    %% the test queue's already there; let's remove it
+    {_, Q} = rabbit_amqqueue:declare(test_queue(), true, false, [], none),
+    {ok, _} = rabbit_amqqueue:delete(Q, false, false),
+    ok.
+
+restart_app() ->
+    rabbit:stop(),
+    rabbit:start().
 
 queue_index_publish(SeqIds, Persistent, Qi) ->
     Ref = rabbit_guid:guid(),
