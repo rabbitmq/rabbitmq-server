@@ -292,7 +292,7 @@ init({mirroring, Group, ChildSpecs}) ->
     {ok, lists:foldl(
            fun(Pid, State0) ->
                    gen_server2:cast(Pid, {ensure_monitoring, self()}),
-                   monitor(Pid, State0)
+                   add_peer_monitor(Pid, State0)
            end, #state{group = Group, initial_childspecs = ChildSpecs},
            ?PG2:get_members(Group) -- [self()])}.
 
@@ -319,15 +319,15 @@ handle_call({msg, F, A}, _From, State = #state{delegate = Delegate}) ->
 handle_call(delegate_supervisor, _From, State = #state{delegate = Delegate}) ->
     {reply, Delegate, State};
 
-handle_call(demonitor_all, _From, State) ->
-    demonitor_all(State),
+handle_call(demonitor_all_peers, _From, State) ->
+    demonitor_all_peers(State),
     {reply, ok, State};
 
 handle_call(Msg, _From, State) ->
     {stop, {unexpected_call, Msg}, State}.
 
 handle_cast({ensure_monitoring, Pid}, State) ->
-    {noreply, monitor(Pid, State)};
+    {noreply, add_peer_monitor(Pid, State)};
 
 handle_cast({die, Reason}, State) ->
     {stop, Reason, State};
@@ -347,9 +347,10 @@ handle_info({'DOWN', _Ref, process, Pid, Reason},
     %% Therefore if we get here we know we need to cause the entire
     %% mirrored sup to shut down, not just fail over.
     Members = ?PG2:get_members(Group),
-    demonitor_all(State),
-    [gen_server2:call(P, demonitor_all) || P <- Members -- [self()]],
-    %% NB, no infinity here ----------^ because this could deadlock otherwise
+    demonitor_all_peers(State),
+    [gen_server2:call(P, demonitor_all_peers) || P <- Members -- [self()]],
+    %% NB, no infinity here ----------------^ because this could deadlock
+    %% otherwise.
     [gen_server2:cast(P, {die, Reason}) || P <- Members],
     {noreply, State};
 
@@ -366,7 +367,7 @@ handle_info({'DOWN', Ref, process, Pid, _Reason},
                       [start(Delegate, ChildSpec) || ChildSpec <- ChildSpecs];
         _          -> ok
     end,
-    {noreply, remove_monitor(Ref, State)};
+    {noreply, remove_peer_monitor(Ref, State)};
 
 handle_info(Info, State) ->
     {stop, {unexpected_info, Info}, State}.
@@ -379,14 +380,14 @@ code_change(_OldVsn, State, _Extra) ->
 
 %%----------------------------------------------------------------------------
 
-monitor(Pid, State = #state{peer_monitors = Peers}) ->
+add_peer_monitor(Pid, State = #state{peer_monitors = Peers}) ->
     State#state{peer_monitors = sets:add_element(
                                   erlang:monitor(process, Pid), Peers)}.
 
-remove_monitor(Ref, State = #state{peer_monitors = Peers}) ->
+remove_peer_monitor(Ref, State = #state{peer_monitors = Peers}) ->
     State#state{peer_monitors = sets:del_element(Ref, Peers)}.
 
-demonitor_all(#state{peer_monitors = Peers}) ->
+demonitor_all_peers(#state{peer_monitors = Peers}) ->
     [erlang:demonitor(Ref) || Ref <- sets:to_list(Peers)].
 
 maybe_start(Delegate, ChildSpec) ->
