@@ -44,12 +44,12 @@ serialise_events() -> true.
 
 route(X, Delivery) -> with_module(X, fun (M) -> M:route(X, Delivery) end).
 
-validate(#exchange{name      = #resource{name = XName, virtual_host = VHost},
+validate(#exchange{name      = #resource{name = XNameBin, virtual_host = VHost},
                    arguments = Args} = X) ->
     validate_arg(<<"upstream-set">>, longstr, Args),
     validate_arg(<<"type">>,         longstr, Args),
     {longstr, SetName} = rabbit_misc:table_lookup(Args, <<"upstream-set">>),
-    case rabbit_federation_upstream:from_set(SetName, XName, VHost) of
+    case rabbit_federation_upstream:from_set(SetName, XNameBin, VHost) of
         {error, E} -> fail_error(SetName, E);
         {ok, _}    -> ok
     end,
@@ -87,9 +87,9 @@ remove_bindings(Serial, X = #exchange{name = XName}, Bs) ->
     rabbit_federation_link:remove_bindings(Serial, XName, Bs),
     with_module(X, fun (M) -> M:remove_bindings(serial(Serial, X), X, Bs) end).
 
-assert_args_equivalence(X = #exchange{name = Name, arguments = Args},
+assert_args_equivalence(X = #exchange{name = XName, arguments = Args},
                         NewArgs) ->
-    rabbit_misc:assert_args_equivalence(Args, NewArgs, Name,
+    rabbit_misc:assert_args_equivalence(Args, NewArgs, XName,
                                         [<<"upstream">>, <<"type">>]),
     with_module(X, fun (M) -> M:assert_args_equivalence(X, Args) end).
 
@@ -108,10 +108,11 @@ with_module(#exchange{arguments = Args}, Fun) ->
                      exchange, list_to_existing_atom(binary_to_list(Type))),
     Fun(Module).
 
-upstreams(#exchange{name      = #resource{name = XName, virtual_host = VHost},
+upstreams(#exchange{name      = #resource{name         = XNameBin,
+                                          virtual_host = VHost},
                     arguments = Args}) ->
     {longstr, Set} = rabbit_misc:table_lookup(Args, <<"upstream-set">>),
-    {ok, Upstreams} = rabbit_federation_upstream:from_set(Set, XName, VHost),
+    {ok, Upstreams} = rabbit_federation_upstream:from_set(Set, XNameBin, VHost),
     Upstreams.
 
 validate_arg(Name, Type, Args) ->

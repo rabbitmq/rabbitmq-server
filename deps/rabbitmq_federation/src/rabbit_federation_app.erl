@@ -45,10 +45,10 @@ declare_exchange(Props) ->
     Params = rabbit_federation_util:local_params(VHost),
     {ok, Conn} = amqp_connection:start(Params),
     {ok, Ch} = amqp_connection:open_channel(Conn),
-    XName = pget_bin(exchange, Props),
+    XNameBin = pget_bin(exchange, Props),
     amqp_channel:call(
       Ch, #'exchange.declare'{
-        exchange    = XName,
+        exchange    = XNameBin,
         type        = <<"x-federation">>,
         durable     = pget(durable,     Props, true),
         auto_delete = pget(auto_delete, Props, false),

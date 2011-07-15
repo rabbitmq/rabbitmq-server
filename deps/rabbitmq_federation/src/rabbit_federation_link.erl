@@ -124,7 +124,7 @@ handle_info({#'basic.deliver'{routing_key  = Key,
                               redelivered  = Redelivered}, Msg},
             State = #state{
               upstream            = #upstream{max_hops = MaxHops} = Upstream,
-              downstream_exchange = #resource{name = X},
+              downstream_exchange = #resource{name = XNameBin},
               downstream_channel  = DCh,
               unacked             = Unacked}) ->
     Headers0 = extract_headers(Msg),
@@ -134,7 +134,7 @@ handle_info({#'basic.deliver'{routing_key  = Key,
                  Info = Info0 ++ [{<<"redelivered">>, bool, Redelivered}],
                  Headers = add_routing_to_headers(Headers0, Info),
                  Seq = amqp_channel:next_publish_seqno(DCh),
-                 amqp_channel:cast(DCh, #'basic.publish'{exchange    = X,
+                 amqp_channel:cast(DCh, #'basic.publish'{exchange    = XNameBin,
                                                          routing_key = Key},
                                    update_headers(Headers, Msg)),
                  {noreply, State#state{unacked = gb_trees:insert(Seq, DTag,
@@ -244,15 +244,16 @@ open(Params) ->
     end.
 
 add_binding(B = #binding{key = Key, args = Args},
-            State = #state{channel = Ch, internal_exchange = InternalX,
-                           upstream = #upstream{exchange = X}}) ->
+            State = #state{channel = Ch, internal_exchange = IntXNameBin,
+                           upstream = #upstream{exchange = XNameBin}}) ->
     case check_add_binding(B, State) of
         {true,  State1} -> State1;
         {false, State1} -> amqp_channel:call(
-                             Ch, #'exchange.bind'{destination = InternalX,
-                                                  source      = X,
-                                                  routing_key = Key,
-                                                  arguments   = Args}),
+                             Ch, #'exchange.bind'{
+                               destination = IntXNameBin,
+                               source      = XNameBin,
+                               routing_key = Key,
+                               arguments   = Args}),
                            State1
     end.
 
@@ -266,15 +267,17 @@ check_add_binding(B = #binding{destination = Dest},
     {Res, State#state{bindings = dict:store(K, Set, Bs)}}.
 
 remove_binding(B = #binding{key = Key, args = Args},
-               State = #state{channel = Ch, internal_exchange = InternalX,
-                              upstream = #upstream{exchange = X}}) ->
+               State = #state{channel = Ch,
+                              internal_exchange = IntXNameBin,
+                              upstream = #upstream{exchange = XNameBin}}) ->
     case check_remove_binding(B, State) of
         {true,  State1} -> State1;
         {false, State1} -> amqp_channel:call(
-                             Ch, #'exchange.unbind'{destination = InternalX,
-                                                    source      = X,
-                                                    routing_key = Key,
-                                                    arguments   = Args}),
+                             Ch, #'exchange.unbind'{
+                               destination = IntXNameBin,
+                               source      = XNameBin,
+                               routing_key = Key,
+                               arguments   = Args}),
                            State1
     end.
 
@@ -289,9 +292,9 @@ check_remove_binding(B = #binding{destination = Dest},
 
 key(#binding{key = Key, args = Args}) -> {Key, Args}.
 
-go(S0 = {not_started, {Upstream, DownstreamX =
-                           #resource{virtual_host = DownstreamVHost}}}) ->
-    case open(rabbit_federation_util:local_params(DownstreamVHost)) of
+go(S0 = {not_started, {Upstream, DownXName =
+                           #resource{virtual_host = DownVHost}}}) ->
+    case open(rabbit_federation_util:local_params(DownVHost)) of
         {ok, DConn, DCh} ->
             #'confirm.select_ok'{} =
                amqp_channel:call(DCh, #'confirm.select'{}),
@@ -301,8 +304,8 @@ go(S0 = {not_started, {Upstream, DownstreamX =
                     {Serial, Bindings} =
                         rabbit_misc:execute_mnesia_transaction(
                           fun () ->
-                                  {rabbit_exchange:peek_serial(DownstreamX),
-                                   rabbit_binding:list_for_source(DownstreamX)}
+                                  {rabbit_exchange:peek_serial(DownXName),
+                                   rabbit_binding:list_for_source(DownXName)}
                           end),
                     %% If we are very short lived, Serial can be undefined at
                     %% this point (since the deletion of the X could have
@@ -319,10 +322,10 @@ go(S0 = {not_started, {Upstream, DownstreamX =
                                        next_serial           = Serial,
                                        downstream_connection = DConn,
                                        downstream_channel    = DCh,
-                                       downstream_exchange   = DownstreamX}),
+                                       downstream_exchange   = DownXName}),
                               Bindings),
                     rabbit_log:info("Federation ~s connected to ~s~n",
-                                    [rabbit_misc:rs(DownstreamX),
+                                    [rabbit_misc:rs(DownXName),
                                      rabbit_federation_upstream:to_string(
                                        Upstream)]),
                     {noreply, State};
@@ -341,9 +344,10 @@ connection_error(E, State = {not_started, {U, XName}}) ->
                      rabbit_federation_upstream:to_string(U), E]),
     {stop, {shutdown, E}, State};
 
-connection_error(E, State = #state{upstream = U, downstream_exchange = X}) ->
+connection_error(E, State = #state{upstream            = U,
+                                   downstream_exchange = XName}) ->
     rabbit_log:info("Federation ~s disconnected from ~s:~n~p~n",
-                    [rabbit_misc:rs(X),
+                    [rabbit_misc:rs(XName),
                      rabbit_federation_upstream:to_string(U), E]),
     {stop, {shutdown, E}, State}.
 
@@ -351,14 +355,14 @@ connection_error(E, State = #state{upstream = U, downstream_exchange = X}) ->
 consume_from_upstream_queue(
   State = #state{upstream            = Upstream,
                  channel             = Ch,
-                 downstream_exchange = DownstreamX}) ->
-    #upstream{exchange       = X,
+                 downstream_exchange = DownXName}) ->
+    #upstream{exchange       = XNameBin,
               prefetch_count = Prefetch,
               expires        = Expiry,
               message_ttl    = TTL,
               params         = #amqp_params_network{virtual_host = VHost}}
         = Upstream,
-    Q = upstream_queue_name(X, VHost, DownstreamX),
+    Q = upstream_queue_name(XNameBin, VHost, DownXName),
     ExpiryArg = case Expiry of
                     none -> [];
                     _    -> [{<<"x-expires">>, long, Expiry}]
@@ -383,49 +387,50 @@ consume_from_upstream_queue(
 ensure_upstream_bindings(State = #state{upstream            = Upstream,
                                         connection          = Conn,
                                         channel             = Ch,
-                                        downstream_exchange = DownstreamX,
+                                        downstream_exchange = DownXName,
                                         queue               = Q}, Bindings) ->
-    #upstream{exchange = X,
+    #upstream{exchange = XNameBin,
               params   = #amqp_params_network{virtual_host = VHost}} = Upstream,
-    OldSuffix = rabbit_federation_db:get_active_suffix(DownstreamX, Upstream,
-                                                       <<"A">>),
+    OldSuffix = rabbit_federation_db:get_active_suffix(
+                  DownXName, Upstream, <<"A">>),
     Suffix = case OldSuffix of
                  <<"A">> -> <<"B">>;
                  <<"B">> -> <<"A">>
              end,
-    InternalX = upstream_exchange_name(X, VHost, DownstreamX, Suffix),
-    delete_upstream_exchange(Conn, InternalX),
+    IntXNameBin = upstream_exchange_name(XNameBin, VHost, DownXName, Suffix),
+    delete_upstream_exchange(Conn, IntXNameBin),
     amqp_channel:call(
       Ch, #'exchange.declare'{
-        exchange    = InternalX,
+        exchange    = IntXNameBin,
         type        = <<"fanout">>,
         durable     = true,
         internal    = true,
         auto_delete = true,
         arguments   = []}),
-    amqp_channel:call(Ch, #'queue.bind'{exchange = InternalX, queue = Q}),
-    State1 = State#state{internal_exchange = InternalX},
+    amqp_channel:call(Ch, #'queue.bind'{exchange = IntXNameBin, queue = Q}),
+    State1 = State#state{internal_exchange = IntXNameBin},
     State2 = lists:foldl(fun add_binding/2, State1, Bindings),
-    rabbit_federation_db:set_active_suffix(DownstreamX, Upstream, Suffix),
-    OldInternalX = upstream_exchange_name(X, VHost, DownstreamX, OldSuffix),
-    delete_upstream_exchange(Conn, OldInternalX),
+    rabbit_federation_db:set_active_suffix(DownXName, Upstream, Suffix),
+    OldIntXNameBin = upstream_exchange_name(
+                       XNameBin, VHost, DownXName, OldSuffix),
+    delete_upstream_exchange(Conn, OldIntXNameBin),
     State2.
 
-upstream_queue_name(X, VHost, #resource{name         = DownstreamName,
-                                        virtual_host = DownstreamVHost}) ->
+upstream_queue_name(XNameBin, VHost, #resource{name         = DownXNameBin,
+                                               virtual_host = DownVHost}) ->
     Node = local_nodename(),
-    DownstreamPart = case DownstreamVHost of
-                         VHost -> case DownstreamName of
-                                      X -> <<"">>;
-                                      _ -> <<":", DownstreamName/binary>>
-                                  end;
-                         _     -> <<":", DownstreamVHost/binary,
-                                    ":", DownstreamName/binary>>
-                     end,
-    <<"federation: ", X/binary, " -> ", Node/binary, DownstreamPart/binary>>.
+    DownPart = case DownVHost of
+                   VHost -> case DownXNameBin of
+                                XNameBin -> <<"">>;
+                                _        -> <<":", DownXNameBin/binary>>
+                            end;
+                   _     -> <<":", DownVHost/binary,
+                              ":", DownXNameBin/binary>>
+               end,
+    <<"federation: ", XNameBin/binary, " -> ", Node/binary, DownPart/binary>>.
 
-upstream_exchange_name(X, VHost, DownstreamX, Suffix) ->
-    Name = upstream_queue_name(X, VHost, DownstreamX),
+upstream_exchange_name(XNameBin, VHost, DownXName, Suffix) ->
+    Name = upstream_queue_name(XNameBin, VHost, DownXName),
     <<Name/binary, " ", Suffix/binary>>.
 
 local_nodename() ->
@@ -439,8 +444,8 @@ local_nodename() ->
         _         -> list_to_binary(Explicit)
     end.
 
-delete_upstream_exchange(Conn, X) ->
-    disposable_channel_call(Conn, #'exchange.delete'{exchange = X}).
+delete_upstream_exchange(Conn, XNameBin) ->
+    disposable_channel_call(Conn, #'exchange.delete'{exchange = XNameBin}).
 
 disposable_channel_call(Conn, Method) ->
     {ok, Ch} = amqp_connection:open_channel(Conn),

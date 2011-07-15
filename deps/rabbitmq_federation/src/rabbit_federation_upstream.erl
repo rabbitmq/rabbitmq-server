@@ -30,7 +30,7 @@ to_table(#upstream{params   = #amqp_params_network{host         = H,
                                                    port         = P,
                                                    ssl_options  = S,
                                                    virtual_host = V},
-                   exchange = X}) ->
+                   exchange = XNameBin}) ->
     PortPart = case P of
                    undefined -> [];
                    _         -> [{<<"port">>, long, P}]
@@ -41,21 +41,21 @@ to_table(#upstream{params   = #amqp_params_network{host         = H,
                end,
     {table, [{<<"host">>,         longstr, list_to_binary(H)},
              {<<"virtual_host">>, longstr, V},
-             {<<"exchange">>,     longstr, X},
+             {<<"exchange">>,     longstr, XNameBin},
              {<<"protocol">>,     longstr, Protocol}] ++
          PortPart}.
 
 to_string(#upstream{params   = #amqp_params_network{host         = H,
                                                     port         = P,
                                                     virtual_host = V},
-                    exchange = X}) ->
-    iolist_to_binary(io_lib:format("~s:~w:~s:~s", [H, P, V, X])).
+                    exchange = XNameBin}) ->
+    iolist_to_binary(io_lib:format("~s:~w:~s:~s", [H, P, V, XNameBin])).
 
-from_set(SetName, DefaultXName, DefaultVHost) ->
+from_set(SetName, DefaultXNameBin, DefaultVHost) ->
     {ok, Sets} = application:get_env(rabbitmq_federation, upstream_sets),
     case pget(binary_to_list(SetName), Sets) of
         undefined -> {error, set_not_found};
-        Set       -> Results = [from_props(P, DefaultXName, DefaultVHost) ||
+        Set       -> Results = [from_props(P, DefaultXNameBin, DefaultVHost) ||
                                    P <- Set],
                      case [E || E = {error, _} <- Results] of
                          []      -> {ok, Results};
@@ -63,19 +63,19 @@ from_set(SetName, DefaultXName, DefaultVHost) ->
                      end
     end.
 
-from_props(Upst, DefaultXName, DefaultVHost) ->
+from_props(Upst, DefaultXNameBin, DefaultVHost) ->
     {ok, Connections} = application:get_env(rabbitmq_federation, connections),
     case pget(connection, Upst) of
         undefined -> {error, no_connection_name};
         ConnName  -> case pget(ConnName, Connections) of
                          undefined  -> {error, {no_connection, ConnName}};
                          Conn       -> from_props_connection(
-                                         Upst, ConnName, Conn, DefaultXName,
+                                         Upst, ConnName, Conn, DefaultXNameBin,
                                          DefaultVHost)
                      end
     end.
 
-from_props_connection(Upst, ConnName, Conn, DefaultXName, DefaultVHost) ->
+from_props_connection(Upst, ConnName, Conn, DefaultXNameBin, DefaultVHost) ->
     {ok, DefaultUser} = application:get_env(rabbit, default_user),
     {ok, DefaultPass} = application:get_env(rabbit, default_pass),
     case pget(host, Conn, none) of
@@ -86,9 +86,9 @@ from_props_connection(Upst, ConnName, Conn, DefaultXName, DefaultVHost) ->
                   virtual_host = pget_bin(virtual_host, Conn, DefaultVHost),
                   username     = pget_bin(username,     Conn, DefaultUser),
                   password     = pget_bin(password,     Conn, DefaultPass)},
-                XName = pget_bin(exchange, Upst, DefaultXName),
+                XNameBin = pget_bin(exchange, Upst, DefaultXNameBin),
                 #upstream{params          = set_extra_params(Params, Conn),
-                          exchange        = XName,
+                          exchange        = XNameBin,
                           prefetch_count  = pget(prefetch_count,  Conn, none),
                           reconnect_delay = pget(reconnect_delay, Conn, 1),
                           max_hops        = pget(max_hops,        Upst, 1),
