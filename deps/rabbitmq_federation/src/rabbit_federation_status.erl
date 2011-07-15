@@ -67,10 +67,10 @@ code_change(_OldVsn, State, _Extra) ->
 
 format(#entry{name      = {#resource{virtual_host = VHost,
                                      kind         = exchange,
-                                     name         = XName}, Connection},
+                                     name         = XNameBin}, Connection},
               info      = Info,
               timestamp = Timestamp}) ->
-    [{exchange,   XName},
+    [{exchange,   XNameBin},
      {vhost,      VHost},
      {connection, Connection},
      {timestamp,  Timestamp} | Info].
