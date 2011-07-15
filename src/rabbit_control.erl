@@ -359,13 +359,13 @@ wait_for_application(Node, PidFile, Inform) ->
     wait_for_application(Node, Pid).
 
 wait_for_application(Node, Pid) ->
-    case node_up(Node) of
-        true  -> ok;
-        false -> case pid_up(Pid) of
-                     true  -> timer:sleep(1000),
-                              wait_for_application(Node, Pid);
-                     false -> {error, {pid_went_away, Pid}}
-                 end
+    case pid_up(Pid) of
+        true  -> case node_up(Node) of
+                     true  -> ok;
+                     false -> timer:sleep(1000),
+                              wait_for_application(Node, Pid)
+                 end;
+        false -> {error, pid_not_running}
     end.
 
 wait_and_read_pid_file(PidFile) ->
