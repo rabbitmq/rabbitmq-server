@@ -450,12 +450,12 @@ Content-Length: 0</pre>
 <pre>{"password":"secret","tags":"administrator"}</pre>
 or:
 <pre>{"password_hash":"2lmoth8l4H0DViLaK9Fxi6l9ds8=", "tags":"administrator"}</pre>
-        The <code>administrator</code> key is mandatory. Either
+        The <code>tags</code> key is mandatory. Either
         <code>password</code> or <code>password_hash</code>
         must be set. Setting <code>password_hash</code> to "" will ensure the
         user cannot use a password to log in. <code>tags</code> is a
-        comma-separated list of tags for the user. Currently only the
-        administrator tag means anything.
+        comma-separated list of tags for the user. Currently recognised tags
+        are "administrator", "monitoring" and "management".
         </td>
       </tr>
       <tr>
