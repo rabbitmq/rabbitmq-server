@@ -4,7 +4,7 @@ WITH_BROKER_TEST_CONFIG:=$(PACKAGE_DIR)/etc/rabbit-test
 
 $(PACKAGE_DIR)+pre-test::
 	rm -rf tmp /tmp/rabbitmq-*-mnesia
-	for R in hare bunny lapin flopsy mopsy cottontail ; do \
+	for R in hare flopsy mopsy cottontail ; do \
 	  erl_call -sname $$R -q ; \
 	done
 
