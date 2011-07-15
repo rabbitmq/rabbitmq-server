@@ -386,7 +386,7 @@ node_up(Node) ->
 % rpc:call(os, getpid, []) at this point
 pid_up(Pid) ->
     with_os([{unix, fun () ->
-                            system("kill -0 " ++ Pid
+                            system("ps -p " ++ Pid
                                    ++ " >/dev/null 2>&1") =:= 0
                     end},
              {win32, fun () ->
