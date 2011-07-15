@@ -62,7 +62,6 @@ all_tests() ->
     passed = test_configurable_server_properties(),
     ok = cleanup_test_queue(),
     ok = restart_app(),
-    io:format("rabbit app restarted"),
     passed.
 
 maybe_run_cluster_dependent_tests() ->
