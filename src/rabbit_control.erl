@@ -192,7 +192,7 @@ action(force_cluster, Node, ClusterNodeSs, _Opts, Inform) ->
 
 action(wait, Node, [PidFile], _Opts, Inform) ->
     Inform("Waiting for ~p", [Node]),
-    wait_for_application(Node, PidFile);
+    wait_for_application(Node, PidFile, Inform);
 
 action(status, Node, [], _Opts, Inform) ->
     Inform("Status of node ~p", [Node]),
@@ -353,15 +353,17 @@ action(report, Node, _Args, _Opts, Inform) ->
 
 %%----------------------------------------------------------------------------
 
-wait_for_application(Node, PidFile) ->
-    wait_for_application0(Node, wait_and_read_pid_file(PidFile)).
+wait_for_application(Node, PidFile, Inform) ->
+    Pid = wait_and_read_pid_file(PidFile),
+    Inform("pid is ~s", [Pid]),
+    wait_for_application(Node, Pid).
 
-wait_for_application0(Node, Pid) ->
+wait_for_application(Node, Pid) ->
     case node_up(Node) of
         true  -> ok;
         false -> case pid_up(Pid) of
                      true  -> timer:sleep(1000),
-                              wait_for_application0(Node, Pid);
+                              wait_for_application(Node, Pid);
                      false -> {error, {pid_went_away, Pid}}
                  end
     end.
