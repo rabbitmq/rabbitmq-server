@@ -59,7 +59,7 @@ node_from_pid(unknown)              -> [];
 node_from_pid(none)                 -> [].
 
 nodes_from_pids(Name) ->
-    fun('')   -> '';
+    fun('')   -> [];
        (Pids) -> [{Name, [node(Pid) || Pid <- Pids]}]
     end.
 
