@@ -373,7 +373,7 @@ wait_and_read_pid_file(PidFile) ->
         {ok,    Bin}    -> string:strip(binary_to_list(Bin), right, $\n);
         {error, enoent} -> timer:sleep(500),
                            wait_and_read_pid_file(PidFile);
-        {error, _} = E  -> exit(E)
+        {error, _} = E  -> exit({error, {could_not_read_pid, E}})
     end.
 
 node_up(Node) ->
