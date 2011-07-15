@@ -76,9 +76,9 @@ terminate(_Reason, _State) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
-format(#entry{key      = {#resource{virtual_host = VHost,
-                                    kind         = exchange,
-                                    name         = XNameBin},
+format(#entry{key       = {#resource{virtual_host = VHost,
+                                     kind         = exchange,
+                                     name         = XNameBin},
                           Connection, UXNameBin},
               info      = Info,
               timestamp = Timestamp}) ->
