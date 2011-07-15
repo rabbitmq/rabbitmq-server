@@ -60,7 +60,6 @@ all_tests() ->
     passed = test_confirms(),
     passed = maybe_run_cluster_dependent_tests(),
     passed = test_configurable_server_properties(),
-    ok = cleanup_test_queue(),
     ok = restart_app(),
     passed.
 
@@ -1913,12 +1912,6 @@ with_empty_test_queue(Fun) ->
     {0, Qi} = init_test_queue(),
     rabbit_queue_index:delete_and_terminate(Fun(Qi)).
 
-cleanup_test_queue() ->
-    %% the test queue's already there; let's remove it
-    {_, Q} = rabbit_amqqueue:declare(test_queue(), true, false, [], none),
-    {ok, _} = rabbit_amqqueue:delete(Q, false, false),
-    ok.
-
 restart_app() ->
     rabbit:stop(),
     rabbit:start().
@@ -2162,7 +2155,7 @@ wait_for_confirms(Unconfirmed) ->
                          wait_for_confirms(
                            gb_sets:difference(Unconfirmed,
                                               gb_sets:from_list(Confirmed)))
-                 after 1000 -> exit(timeout_waiting_for_confirm)
+                 after 5000 -> exit(timeout_waiting_for_confirm)
                  end
     end.
 
