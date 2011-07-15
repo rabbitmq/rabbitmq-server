@@ -1,0 +1,76 @@
+%%  The contents of this file are subject to the Mozilla Public License
+%%  Version 1.1 (the "License"); you may not use this file except in
+%%  compliance with the License. You may obtain a copy of the License
+%%  at http://www.mozilla.org/MPL/
+%%
+%%  Software distributed under the License is distributed on an "AS IS"
+%%  basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
+%%  the License for the specific language governing rights and
+%%  limitations under the License.
+%%
+%%  The Original Code is RabbitMQ Federation.
+%%
+%%  The Initial Developer of the Original Code is VMware, Inc.
+%%  Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
+%%
+
+-module(rabbit_federation_status).
+-behaviour(gen_server).
+
+-include_lib("rabbit_common/include/rabbit.hrl").
+
+-export([start_link/0]).
+
+-export([report/3, status/0]).
+
+-export([init/1, handle_call/3, handle_cast/2, handle_info/2,
+         terminate/2, code_change/3]).
+
+-define(SERVER, ?MODULE).
+-define(ETS_NAME, ?MODULE).
+
+-record(state, {}).
+-record(entry, {name, info, timestamp}).
+
+start_link() ->
+    gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
+
+report(XName, Connection, Info) ->
+    gen_server:cast(?SERVER, {report, XName, Connection, Info,
+                              calendar:local_time()}).
+
+status() ->
+    gen_server:call(?SERVER, status, infinity).
+
+init([]) ->
+    ?ETS_NAME = ets:new(?ETS_NAME, [named_table, private]),
+    {ok, #state{}}.
+
+handle_call(status, _From, State) ->
+    Entries = ets:tab2list(?ETS_NAME),
+    {reply, [format(Entry) || Entry <- Entries], State}.
+
+handle_cast({report, XName, Connection, Info, Timestamp}, State) ->
+    true = ets:insert(?ETS_NAME, #entry{name       = {XName, Connection},
+                                        info       = Info,
+                                        timestamp  = Timestamp}),
+    {noreply, State}.
+
+handle_info(_Info, State) ->
+    {noreply, State}.
+
+terminate(_Reason, _State) ->
+    ok.
+
+code_change(_OldVsn, State, _Extra) ->
+    {ok, State}.
+
+format(#entry{name      = {#resource{virtual_host = VHost,
+                                     kind         = exchange,
+                                     name         = XName}, Connection},
+              info      = Info,
+              timestamp = Timestamp}) ->
+    [{exchange,   XName},
+     {vhost,      VHost},
+     {connection, Connection},
+     {timestamp,  Timestamp} | Info].
