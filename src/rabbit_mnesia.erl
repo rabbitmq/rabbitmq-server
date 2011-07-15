@@ -429,6 +429,8 @@ delete_previously_running_nodes() ->
 init_db(ClusterNodes, Force, SecondaryPostMnesiaFun) ->
     UClusterNodes = lists:usort(ClusterNodes),
     ProperClusterNodes = UClusterNodes -- [node()],
+    IsDiskNode = ClusterNodes == [] orelse lists:member(node(), ClusterNodes),
+    WasDiskNode = mnesia:system_info(use_dir),
     case mnesia:change_config(extra_db_nodes, ProperClusterNodes) of
         {ok, Nodes} ->
             case Force of
@@ -442,29 +444,38 @@ init_db(ClusterNodes, Force, SecondaryPostMnesiaFun) ->
                          end;
                 true  -> ok
             end,
-            case {Nodes, mnesia:system_info(use_dir)} of
-                {[], false} ->
+            case {Nodes, WasDiskNode, IsDiskNode} of
+                {[], false, false} ->
+                    ok = create_tables(false),
+                    ok = rabbit_version:record_desired();
+                {[], true, false} ->
+                    rabbit_log:warning("converting from disc to ram node; backing up database"),
+                    move_db(),
+                    ok = create_tables(false),
+                    ok = rabbit_version:record_desired();
+                {[], false, _} ->
                     %% Nothing there at all, start from scratch
                     ok = create_schema();
-                {[], true} ->
+                {[], _, true} ->
                     %% We're the first node up
                     case rabbit_upgrade:maybe_upgrade_local() of
-                        ok                    -> ensure_schema_integrity();
-                        version_not_available -> ok = schema_ok_or_move()
+                        ok                    ->
+                            ensure_schema_integrity();
+                        version_not_available ->
+                            ok = schema_ok_or_move()
                     end,
                     ok;
-                {[AnotherNode|_], _} ->
+                {[AnotherNode|_], _, _} ->
                     %% Subsequent node in cluster, catch up
                     ensure_version_ok(
                       rpc:call(AnotherNode, rabbit_version, recorded, [])),
-                    IsDiskNode = ClusterNodes == [] orelse
-                        lists:member(node(), ClusterNodes),
                     ok = wait_for_replicated_tables(),
-                    ok = create_local_table_copy(schema, disc_copies),
-                    ok = create_local_table_copies(case IsDiskNode of
-                                                       true  -> disc;
-                                                       false -> ram
-                                                   end),
+                    CopyType = case IsDiskNode of
+                                   true  -> disc;
+                                   false -> ram
+                               end,
+                    ok = create_local_table_copy(schema, CopyType),
+                    ok = create_local_table_copies(CopyType),
                     ok = SecondaryPostMnesiaFun(),
                     ensure_schema_integrity(),
                     ok
@@ -486,7 +497,7 @@ maybe_upgrade_local_or_record_desired() ->
 
 schema_ok_or_move() ->
     case check_schema_integrity() of
-        ok ->
+        {true, ok} ->
             ok;
         {error, Reason} ->
             %% NB: we cannot use rabbit_log here since it may not have been
@@ -545,13 +556,24 @@ copy_db(Destination) ->
     rabbit_misc:recursive_copy(dir(), Destination).
 
 create_tables() ->
+    create_tables(true).
+
+create_tables(IsDiskNode) ->
     lists:foreach(fun ({Tab, TabDef}) ->
                           TabDef1 = proplists:delete(match, TabDef),
-                          case mnesia:create_table(Tab, TabDef1) of
+                          TabDef2 = case IsDiskNode of
+                                        true ->
+                                            TabDef1;
+                                        false ->
+                                            [{disc_copies, []} |
+                                             proplists:delete(disc_copies,
+                                                              TabDef1)]
+                                    end,
+                          case mnesia:create_table(Tab, TabDef2) of
                               {atomic, ok} -> ok;
                               {aborted, Reason} ->
                                   throw({error, {table_creation_failed,
-                                                 Tab, TabDef1, Reason}})
+                                                 Tab, TabDef2, Reason}})
                           end
                   end,
                   table_definitions()),
