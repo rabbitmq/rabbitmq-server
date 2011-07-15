@@ -392,6 +392,7 @@ handle_deleted(TName, #event{props = [{pid, Pid}]},
     Table = orddict:fetch(TName, Tables),
     ets:delete(Table, {id(Pid), create}),
     ets:delete(Table, {id(Pid), stats}),
+    ets:delete(Table, {id(Pid), synchronised_slaves}),
     {ok, State}.
 
 handle_consumer(Fun, Props,
