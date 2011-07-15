@@ -27,8 +27,8 @@
 -define(TIMEOUT_LIMIT, 100).
 
 -define(RECORD_INDEX(Key, Record),
-    erlang:element(2, proplists:lookup(Key, lists:zip(
-       record_info(fields, Record), lists:seq(2, record_info(size, Record)))))).
+    proplists:get_value(Key, lists:zip(
+       record_info(fields, Record), lists:seq(2, record_info(size, Record))))).
 
 -export([initial_state/0, command/1, precondition/2, postcondition/3,
          next_state/3]).
@@ -79,11 +79,17 @@ prop_backing_queue_test() ->
 
 %% Commands
 
+%% Command frequencies are tuned so that queues are normally reasonably
+%% short, but they may sometimes exceed ?QUEUE_MAXLEN. Publish-multiple
+%% and purging cause extreme queue lengths, so these have lower probabilities.
+%% Fetches are sufficiently frequent so that commands that need acktags
+%% get decent coverage.
+
 command(S) ->
     frequency([{10, qc_publish(S)},
                {1,  qc_publish_delivered(S)},
-               {1,  qc_publish_multiple(S)},
-               {15, qc_fetch(S)},
+               {1,  qc_publish_multiple(S)},  %% very slow
+               {15, qc_fetch(S)},             %% needed for ack and requeue
                {15, qc_ack(S)},
                {15, qc_requeue(S)},
                {3,  qc_set_ram_duration_target(S)},
@@ -264,15 +270,23 @@ next_state(S, Res, {call, ?BQMOD, purge, _Args}) ->
 
 %% Postconditions
 
-postcondition(#state{messages = Messages, len = Len},
-              {call, ?BQMOD, fetch, _Args}, Res) ->
+postcondition(S, {call, ?BQMOD, fetch, _Args}, Res) ->
+    #state{messages = Messages, len = Len, acks = Acks, confirms = Confrms} = S,
     case Res of
-        {{MsgFetched, _IsDelivered, _AckTag, _Remaining_Len}, _BQ} ->
+        {{MsgFetched, _IsDelivered, AckTag, RemainingLen}, _BQ} ->
             {_MsgProps, Msg} = queue:head(Messages),
-            MsgFetched =:= Msg;
+            MsgFetched =:= Msg andalso
+            not lists:member(AckTag, Acks) andalso
+            not gb_sets:is_element(AckTag, Confrms) andalso
+            RemainingLen =:= Len - 1;
         {empty, _BQ} ->
             Len =:= 0
     end;
+
+postcondition(S, {call, ?BQMOD, publish_delivered, _Args}, {AckTag, _BQ}) ->
+    #state{acks = Acks, confirms = Confrms} = S,
+    not lists:member(AckTag, Acks) andalso
+    not gb_sets:is_element(AckTag, Confrms);
 
 postcondition(#state{len = Len}, {call, ?BQMOD, purge, _Args}, Res) ->
     {PurgeCount, _BQ} = Res,
