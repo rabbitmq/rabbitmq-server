@@ -156,9 +156,6 @@
                        Type :: worker(),
                        Modules :: modules()}.
 
--type strategy() :: 'one_for_all' | 'one_for_one'
-                  | 'rest_for_one' | 'simple_one_for_one'.
-
 -type startlink_err() :: {'already_started', pid()} | 'shutdown' | term().
 -type startlink_ret() :: {'ok', pid()} | 'ignore' | {'error', startlink_err()}.
 
