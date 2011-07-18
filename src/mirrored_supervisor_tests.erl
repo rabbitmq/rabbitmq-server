@@ -58,12 +58,12 @@ test_migrate_twice() ->
                       ?MS:start_child(a, childspec(worker)),
                       Pid1 = pid_of(worker),
                       kill(A, Pid1),
-                      with_sups(fun([_]) ->
-                                        Pid2 = pid_of(worker),
-                                        kill(B, Pid2),
-                                        Pid3 = pid_of(worker),
-                                        false = (Pid1 =:= Pid3)
-                                end, [c])
+                      {ok, C} = start_sup(c),
+                      Pid2 = pid_of(worker),
+                      kill(B, Pid2),
+                      Pid3 = pid_of(worker),
+                      false = (Pid1 =:= Pid3),
+                      kill(C)
               end, [a, b]).
 
 %% Can't start the same child twice
@@ -144,6 +144,7 @@ test_start_idempotence() ->
 %% ---------------------------------------------------------------------------
 
 with_sups(Fun, Sups) ->
+    inc_group(),
     Pids = [begin {ok, Pid} = start_sup(Sup), Pid end || Sup <- Sups],
     Fun(Pids),
     [kill(Pid) || Pid <- Pids, is_process_alive(Pid)],
@@ -153,7 +154,7 @@ start_sup(Spec) ->
     start_sup(Spec, group).
 
 start_sup({Name, ChildSpecs}, Group) ->
-    {ok, Pid} = start_sup0(Name, Group, ChildSpecs),
+    {ok, Pid} = start_sup0(Name, get_group(Group), ChildSpecs),
     %% We are not a supervisor, when we kill the supervisor we do not
     %% want to die!
     unlink(Pid),
@@ -177,6 +178,16 @@ start_gs(Id) ->
 pid_of(Id) ->
     {received, Pid, ping} = call(Id, ping),
     Pid.
+
+inc_group() ->
+    Count = case get(counter) of
+                undefined -> 0;
+                C         -> C
+            end + 1,
+    put(counter, Count).
+
+get_group(Group) ->
+    {Group, get(counter)}.
 
 call(Id, Msg) -> call(Id, Msg, 100, 10).
 
