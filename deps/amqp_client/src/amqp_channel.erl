@@ -875,11 +875,10 @@ server_misbehaved(#amqp_error{} = AmqpError, State = #state{number = Number}) ->
     end.
 
 handle_nack(State = #state{waiting_set = WSet}) ->
-    DyingPids = [{From, Pid} || {From, Pid} <- gb_trees:to_list(WSet),
-                                Pid =/= none],
+    DyingPids = [Pid || {_, Pid} <- gb_trees:to_list(WSet), Pid =/= none],
     case DyingPids of
         [] -> State;
-        _  -> [exit(Pid, nack_received) || {From, Pid} <- DyingPids],
+        _  -> [exit(Pid, nack_received) || Pid <- DyingPids],
               close(self(), 200, <<"Nacks Received">>)
     end.
 
