@@ -295,7 +295,7 @@ handle_call({init, Overall}, _From,
     ok = ?PG2:join(Group, self()),
     State1 = lists:foldl(
                fun(Pid, State0) ->
-                       gen_server2:cast(Pid, {ensure_monitoring, self()}),
+                       ?GEN_SERVER:cast(Pid, {ensure_monitoring, self()}),
                        add_peer_monitor(Pid, State0)
                end, State, ?PG2:get_members(Group) -- [self()]),
 
@@ -319,17 +319,15 @@ handle_call({msg, F, A}, _From, State = #state{delegate = Delegate}) ->
 handle_call(delegate_supervisor, _From, State = #state{delegate = Delegate}) ->
     {reply, Delegate, State};
 
-handle_call(demonitor_all_peers, _From, State) ->
-    demonitor_all_peers(State),
-    {reply, ok, State};
-
 handle_call(Msg, _From, State) ->
     {stop, {unexpected_call, Msg}, State}.
 
 handle_cast({ensure_monitoring, Pid}, State) ->
     {noreply, add_peer_monitor(Pid, State)};
 
-handle_cast({die, Reason}, State) ->
+handle_cast({die, Reason}, State = #state{group = Group}) ->
+    demonitor_all_peers(State),
+    tell_all_peers_to_die(Group, Reason),
     {stop, Reason, State};
 
 handle_cast(Msg, State) ->
@@ -341,18 +339,14 @@ handle_info({'DOWN', _Ref, process, Pid, Reason},
     %% die. Since the overall supervisor kills processes in reverse
     %% order when shutting down "from above" and we started after the
     %% delegate, if we see the delegate die then that means it died
-    %% because one of its children exceeded its restart limits, not
+    %% "from below" i.e. due to the behaviour of its children, not
     %% because the whole app was being torn down.
     %%
     %% Therefore if we get here we know we need to cause the entire
     %% mirrored sup to shut down, not just fail over.
-    Members = ?PG2:get_members(Group),
     demonitor_all_peers(State),
-    [gen_server2:call(P, demonitor_all_peers) || P <- Members -- [self()]],
-    %% NB, no infinity here ----------------^ because this could deadlock
-    %% otherwise.
-    [gen_server2:cast(P, {die, Reason}) || P <- Members],
-    {noreply, State};
+    tell_all_peers_to_die(Group, Reason),
+    {stop, Reason, State};
 
 handle_info({'DOWN', Ref, process, Pid, _Reason},
             State = #state{delegate = Delegate, group = Group}) ->
@@ -389,6 +383,10 @@ remove_peer_monitor(Ref, State = #state{peer_monitors = Peers}) ->
 
 demonitor_all_peers(#state{peer_monitors = Peers}) ->
     [erlang:demonitor(Ref) || Ref <- sets:to_list(Peers)].
+
+tell_all_peers_to_die(Group, Reason) ->
+    [?GEN_SERVER:cast(P, {die, Reason}) ||
+        P <- ?PG2:get_members(Group) -- [self()]].
 
 maybe_start(Delegate, ChildSpec) ->
     case mnesia:transaction(fun() -> check_start(Delegate, ChildSpec) end) of
