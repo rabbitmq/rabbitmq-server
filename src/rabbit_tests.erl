@@ -1672,7 +1672,10 @@ test_backing_queue() ->
             passed = test_queue_recover(),
             application:set_env(rabbit, queue_index_max_journal_entries,
                                 MaxJournal, infinity),
-            ok = restart_app(), %% reset rabbit_sup's restart order
+            %% We will have restarted the message store, and thus changed
+            %% the order of the children of rabbit_sup. This will cause
+            %% problems if there are subsequent failures - see bug 24262.
+            ok = restart_app(),
             passed;
         _ ->
             passed
