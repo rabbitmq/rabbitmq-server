@@ -91,6 +91,8 @@ info_keys() ->
 infos(Items, State) ->
     [{Item, i(Item, State)} || Item <- Items].
 
+additional_info(#state{adapter_info = I}) -> I#adapter_info.additional_info.
+
 connect(Params = #amqp_params_direct{username     = Username,
                                      node         = Node,
                                      adapter_info = Info,
@@ -102,7 +104,8 @@ connect(Params = #amqp_params_direct{username     = Username,
                          adapter_info = ensure_adapter_info(Info)},
     case rpc:call(Node, rabbit_direct, connect,
                   [Username, VHost, ?PROTOCOL,
-                   infos(?CREATION_EVENT_KEYS, State1)]) of
+                   infos(?CREATION_EVENT_KEYS, State1) ++
+                       additional_info(State1)]) of
         {ok, {User, ServerProperties}} ->
             {ok, Collector} = SIF(),
             State2 = State1#state{user      = User,

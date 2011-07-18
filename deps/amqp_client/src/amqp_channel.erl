@@ -68,11 +68,11 @@
 
 -export([call/2, call/3, cast/2, cast/3]).
 -export([close/1, close/3]).
--export([next_publish_seqno/1]).
 -export([register_return_handler/2, register_flow_handler/2,
          register_confirm_handler/2]).
 -export([call_consumer/2, subscribe/3]).
-
+-export([next_publish_seqno/1, wait_for_confirms/1,
+         wait_for_confirms_or_die/1]).
 -export([start_link/5, connection_closing/3, open/1]).
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
@@ -95,7 +95,10 @@
                 next_pub_seqno      = 0,
                 flow_active         = true,
                 flow_handler_pid    = none,
-                start_writer_fun
+                start_writer_fun,
+                unconfirmed_set     = gb_sets:new(),
+                waiting_set         = gb_trees:empty(),
+                only_acks_received  = true
                }).
 
 %%---------------------------------------------------------------------------
@@ -195,6 +198,24 @@ close(Channel, Code, Text) ->
 %% message to be published.
 next_publish_seqno(Channel) ->
     gen_server:call(Channel, next_publish_seqno, infinity).
+
+%% @spec (Channel) -> boolean()
+%% where
+%%      Channel = pid()
+%% @doc Wait until all messages published since the last call have
+%% been either ack'd or nack'd by the broker.  Note, when called on a
+%% non-Confirm channel, waitForConfirms returns true immediately.
+wait_for_confirms(Channel) ->
+    gen_server:call(Channel, wait_for_confirms, infinity).
+
+%% @spec (Channel) -> true
+%% where
+%%      Channel = pid()
+%% @doc Behaves the same as wait_for_confirms/1, but if a nack is
+%% received, the calling process is immediately sent an
+%% exit(nack_received).
+wait_for_confirms_or_die(Channel) ->
+    gen_server:call(Channel, {wait_for_confirms_or_die, self()}, infinity).
 
 %% @spec (Channel, ReturnHandler) -> ok
 %% where
@@ -299,6 +320,14 @@ handle_call({send_command_sync, Method}, From, State) ->
 handle_call(next_publish_seqno, _From,
             State = #state{next_pub_seqno = SeqNo}) ->
     {reply, SeqNo, State};
+
+handle_call(wait_for_confirms, From, State) ->
+    handle_wait_for_confirms(From, none, true, State);
+
+%% Lets the channel know that the process should be sent an exit
+%% signal if a nack is received.
+handle_call({wait_for_confirms_or_die, Pid}, From, State) ->
+    handle_wait_for_confirms(From, Pid, ok, State);
 %% @private
 handle_call({call_consumer, Call}, _From,
             State = #state{consumer = Consumer}) ->
@@ -388,7 +417,7 @@ handle_info({'DOWN', _, process, FlowHandler, Reason},
     {noreply, State#state{flow_handler_pid = none}}.
 
 %% @private
-terminate(Reason, State) ->
+terminate(_Reason, State) ->
     State.
 
 %% @private
@@ -399,7 +428,8 @@ code_change(_OldVsn, State, _Extra) ->
 %% RPC mechanism
 %%---------------------------------------------------------------------------
 
-handle_method_to_server(Method, AmqpMsg, From, Sender, State) ->
+handle_method_to_server(Method, AmqpMsg, From, Sender,
+                        State = #state{unconfirmed_set = USet}) ->
     case {check_invalid_method(Method), From,
           check_block(Method, AmqpMsg, State)} of
         {ok, _, ok} ->
@@ -409,7 +439,9 @@ handle_method_to_server(Method, AmqpMsg, From, Sender, State) ->
                          {#'basic.publish'{}, 0} ->
                              State;
                          {#'basic.publish'{}, SeqNo} ->
-                             State#state{next_pub_seqno = SeqNo + 1};
+                             State#state{unconfirmed_set =
+                                             gb_sets:add(SeqNo, USet),
+                                         next_pub_seqno = SeqNo + 1};
                          _ ->
                              State
                      end,
@@ -596,22 +628,22 @@ handle_method_from_server1(#'basic.ack'{} = BasicAck, none,
                            #state{confirm_handler_pid = none} = State) ->
     ?LOG_WARN("Channel (~p): received ~p but there is no "
               "confirm handler registered~n", [self(), BasicAck]),
-    {noreply, State};
+    {noreply, update_confirm_set(BasicAck, State)};
 handle_method_from_server1(
         #'basic.ack'{} = BasicAck, none,
         #state{confirm_handler_pid = ConfirmHandler} = State) ->
     ConfirmHandler ! BasicAck,
-    {noreply, State};
+    {noreply, update_confirm_set(BasicAck, State)};
 handle_method_from_server1(#'basic.nack'{} = BasicNack, none,
                            #state{confirm_handler_pid = none} = State) ->
     ?LOG_WARN("Channel (~p): received ~p but there is no "
               "confirm handler registered~n", [self(), BasicNack]),
-    {noreply, State};
+    {noreply, update_confirm_set(BasicNack, handle_nack(State))};
 handle_method_from_server1(
         #'basic.nack'{} = BasicNack, none,
         #state{confirm_handler_pid = ConfirmHandler} = State) ->
     ConfirmHandler ! BasicNack,
-    {noreply, State};
+    {noreply, update_confirm_set(BasicNack, handle_nack(State))};
 
 handle_method_from_server1(Method, none, State) ->
     {noreply, rpc_bottom_half(Method, State)};
@@ -734,6 +766,46 @@ server_misbehaved(#amqp_error{} = AmqpError, State = #state{number = Number}) ->
             Self = self(),
             spawn(fun () -> call(Self, Close) end),
             {noreply, State}
+    end.
+
+handle_nack(State = #state{waiting_set = WSet}) ->
+    DyingPids = [{From, Pid} || {From, Pid} <- gb_trees:to_list(WSet),
+                                Pid =/= none],
+    case DyingPids of
+        [] -> State;
+        _  -> [exit(Pid, nack_received) || {From, Pid} <- DyingPids],
+              close(self(), 200, <<"Nacks Received">>)
+    end.
+
+update_confirm_set(#'basic.ack'{delivery_tag = SeqNo},
+                   State = #state{unconfirmed_set = USet}) ->
+    maybe_notify_waiters(
+      State#state{unconfirmed_set = gb_sets:del_element(SeqNo, USet)});
+update_confirm_set(#'basic.nack'{delivery_tag = SeqNo},
+                   State = #state{unconfirmed_set = USet}) ->
+    maybe_notify_waiters(
+      State#state{unconfirmed_set = gb_sets:del_element(SeqNo, USet),
+                  only_acks_received = false}).
+
+maybe_notify_waiters(State = #state{unconfirmed_set = USet}) ->
+    case gb_sets:is_empty(USet) of
+        false -> State;
+        true  -> notify_confirm_waiters(State)
+    end.
+
+notify_confirm_waiters(State = #state{waiting_set = WSet,
+                                      only_acks_received = OAR}) ->
+    [gen_server:reply(From, OAR) || {From, _} <- gb_trees:to_list(WSet)],
+    State#state{waiting_set = gb_trees:empty(),
+                only_acks_received = true}.
+
+handle_wait_for_confirms(From, Notify, EmptyReply,
+                         State = #state{unconfirmed_set = USet,
+                                        waiting_set     = WSet}) ->
+    case gb_sets:is_empty(USet) of
+        true  -> {reply, EmptyReply, State};
+        false -> {noreply, State#state{waiting_set =
+                                           gb_trees:insert(From, Notify, WSet)}}
     end.
 
 call_to_consumer(Method, Args, #state{consumer = Consumer}) ->

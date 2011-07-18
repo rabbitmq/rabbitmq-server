@@ -479,7 +479,6 @@ confirm_test(Connection) ->
     {ok, Channel} = amqp_connection:open_channel(Connection),
     #'confirm.select_ok'{} = amqp_channel:call(Channel, #'confirm.select'{}),
     amqp_channel:register_confirm_handler(Channel, self()),
-    io:format("Registered ~p~n", [self()]),
     {ok, Q} = setup_publish(Channel),
     {#'basic.get_ok'{}, _}
         = amqp_channel:call(Channel, #'basic.get'{queue = Q, no_ack = false}),
@@ -489,6 +488,23 @@ confirm_test(Connection) ->
          after 2000 ->
                  exit(did_not_receive_pub_ack)
          end,
+    teardown(Connection, Channel).
+
+confirm_barrier_test(Connection) ->
+    {ok, Channel} = amqp_connection:open_channel(Connection),
+    #'confirm.select_ok'{} = amqp_channel:call(Channel, #'confirm.select'{}),
+    [amqp_channel:call(Channel, #'basic.publish'{routing_key = <<"whoosh">>},
+                       #amqp_msg{payload = <<"foo">>})
+     || _ <- lists:seq(1, 10)],
+    true = amqp_channel:wait_for_confirms(Channel),
+    teardown(Connection, Channel).
+
+confirm_barrier_nop_test(Connection) ->
+    {ok, Channel} = amqp_connection:open_channel(Connection),
+    true = amqp_channel:wait_for_confirms(Channel),
+    amqp_channel:call(Channel, #'basic.publish'{routing_key = <<"whoosh">>},
+                      #amqp_msg{payload = <<"foo">>}),
+    true = amqp_channel:wait_for_confirms(Channel),
     teardown(Connection, Channel).
 
 default_consumer_test(Connection) ->

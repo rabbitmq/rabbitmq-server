@@ -111,6 +111,12 @@ channel_tune_negotiation_test() ->
 confirm_test() ->
     test_util:confirm_test(new_connection()).
 
+confirm_barrier_test() ->
+    test_util:confirm_barrier_test(new_connection()).
+
+confirm_barrier_nop_test() ->
+    test_util:confirm_barrier_nop_test(new_connection()).
+
 default_consumer_test() ->
     test_util:default_consumer_test(new_connection()).
 

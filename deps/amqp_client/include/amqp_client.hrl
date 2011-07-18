@@ -28,13 +28,15 @@
 -define(MAX_CHANNEL_NUMBER, 65535).
 -define(DEFAULT_CONSUMER, {amqp_selective_consumer, []}).
 
+-define(PROTOCOL_SSL_PORT, (?PROTOCOL_PORT - 1)).
+
 -record(amqp_msg, {props = #'P_basic'{}, payload = <<>>}).
 
 -record(amqp_params_network, {username          = <<"guest">>,
                               password          = <<"guest">>,
                               virtual_host      = <<"/">>,
                               host              = "localhost",
-                              port              = ?PROTOCOL_PORT,
+                              port              = undefined,
                               channel_max       = 0,
                               frame_max         = 0,
                               heartbeat         = 0,
@@ -50,12 +52,13 @@
                              adapter_info      = none,
                              client_properties = []}).
 
--record(adapter_info, {address      = unknown,
-                       port         = unknown,
-                       peer_address = unknown,
-                       peer_port    = unknown,
-                       name         = unknown,
-                       protocol     = unknown}).
+-record(adapter_info, {address         = unknown,
+                       port            = unknown,
+                       peer_address    = unknown,
+                       peer_port       = unknown,
+                       name            = unknown,
+                       protocol        = unknown,
+                       additional_info = []}).
 
 -define(LOG_DEBUG(Format), error_logger:info_msg(Format)).
 -define(LOG_INFO(Format, Args), error_logger:info_msg(Format, Args)).

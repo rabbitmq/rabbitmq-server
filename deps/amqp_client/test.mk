@@ -60,7 +60,8 @@ run_test_in_broker:
 run_test_detached: start_test_broker_node
 	OK=true && \
 	TMPFILE=$(MKTEMP) && \
-	{ $(RUN) -noinput $(TESTING_MESSAGE) $(RUN_TEST_ARGS) \
+	{ $(RUN) -noinput $(TESTING_MESSAGE) \
+	   $(SSL_CLIENT_ARGS) $(RUN_TEST_ARGS) \
 	    -s init stop 2>&1 | tee $$TMPFILE || OK=false; } && \
 	{ $(IS_SUCCESS) $$TMPFILE || OK=false; } && \
 	rm $$TMPFILE && \
@@ -79,7 +80,7 @@ stop_test_broker_node:
 	$(MAKE) unboot_broker
 
 boot_broker:
-	$(MAKE) -C $(BROKER_DIR) start-background-node
+	$(MAKE) -C $(BROKER_DIR) start-background-node RABBITMQ_SERVER_START_ARGS="$(RABBITMQ_SERVER_START_ARGS) $(SSL_BROKER_ARGS)"
 	$(MAKE) -C $(BROKER_DIR) start-rabbit-on-node
 
 unboot_broker:
