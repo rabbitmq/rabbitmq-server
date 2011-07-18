@@ -237,7 +237,7 @@ start_link({global, _SupName}, _Group, _Mod, _Args) ->
 start_link0(Prefix, Group, Mod, Args) ->
     case apply(?SUPERVISOR, start_link,
                Prefix ++ [?MODULE, {overall, Group, Mod, Args}]) of
-        {ok, Pid} -> call(Pid, {finish_startup, Pid}),
+        {ok, Pid} -> call(Pid, {init, Pid}),
                      {ok, Pid};
         Other     -> Other
     end.
@@ -283,23 +283,26 @@ init({delegate, Restart}) ->
     {ok, {Restart, []}};
 
 init({mirroring, Group, ChildSpecs}) ->
+    {ok, #state{group = Group, initial_childspecs = ChildSpecs}}.
+
+handle_call({init, Overall}, _From,
+            State = #state{overall            = undefined,
+                           delegate           = undefined,
+                           group              = Group,
+                           initial_childspecs = ChildSpecs}) ->
     process_flag(trap_exit, true),
     ?PG2:create(Group),
     ok = ?PG2:join(Group, self()),
-    {ok, lists:foldl(
-           fun(Pid, State0) ->
-                   gen_server2:cast(Pid, {ensure_monitoring, self()}),
-                   add_peer_monitor(Pid, State0)
-           end, #state{group = Group, initial_childspecs = ChildSpecs},
-           ?PG2:get_members(Group) -- [self()])}.
+    State1 = lists:foldl(
+               fun(Pid, State0) ->
+                       gen_server2:cast(Pid, {ensure_monitoring, self()}),
+                       add_peer_monitor(Pid, State0)
+               end, State, ?PG2:get_members(Group) -- [self()]),
 
-handle_call({finish_startup, Overall}, _From,
-            State = #state{overall            = undefined,
-                           initial_childspecs = ChildSpecs}) ->
     Delegate = child(Overall, delegate),
     erlang:monitor(process, Delegate),
     [maybe_start(Delegate, S) || S <- ChildSpecs],
-    {reply, ok, State#state{overall = Overall, delegate = Delegate}};
+    {reply, ok, State1#state{overall = Overall, delegate = Delegate}};
 
 handle_call({start_child, ChildSpec}, _From,
             State = #state{delegate = Delegate}) ->
