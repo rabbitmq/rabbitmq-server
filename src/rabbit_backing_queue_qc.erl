@@ -204,11 +204,11 @@ next_state(S, Res,
                            true -> gb_sets:add(MsgId, Confirms);
                            _    -> Confirms
                        end,
-            acks = Acks ++ case AckReq of
-                               true  -> [{AckTag, {MsgProps, Msg}}];
-                               false -> []
-                           end
-          };
+            acks = case AckReq of
+                       true  -> [{AckTag, {MsgProps, Msg}} | Acks];
+                       false -> Acks
+                   end
+           };
 
 next_state(S, Res, {call, ?BQMOD, fetch, [AckReq, _BQ]}) ->
     #state{len = Len, messages = Messages, acks = Acks} = S,
@@ -222,7 +222,7 @@ next_state(S, Res, {call, ?BQMOD, fetch, [AckReq, _BQ]}) ->
         {{value, MsgProp_Msg}, M2} ->
             S2 = S1#state{len = Len - 1, messages = M2},
             case AckReq of
-                true  -> S2#state{acks = Acks ++ [{AckTag, MsgProp_Msg}]};
+                true  -> S2#state{acks = [{AckTag, MsgProp_Msg} | Acks]};
                 false -> S2
            end
     end;
