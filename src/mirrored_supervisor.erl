@@ -414,11 +414,11 @@ check_start(Delegate, ChildSpec) ->
     end.
 
 supervisor(Pid) ->
-    try
-        gen_server:call(Pid, delegate_supervisor, infinity)
-    catch
-        exit:{noproc, _} -> dead
-    end.
+    with_exit_handler(
+      fun() -> dead end,
+      fun() ->
+              gen_server:call(Pid, delegate_supervisor, infinity)
+      end).
 
 write(ChildSpec) ->
     ok = mnesia:write(#mirrored_sup_childspec{id              = id(ChildSpec),
@@ -466,3 +466,14 @@ table_definitions() ->
     [{Name, [?TABLE_MATCH | Attributes]}].
 
 %%----------------------------------------------------------------------------
+
+with_exit_handler(Handler, Thunk) ->
+    try
+        Thunk()
+    catch
+        exit:{R, _} when R =:= noproc; R =:= nodedown;
+                         R =:= normal; R =:= shutdown ->
+            Handler();
+        exit:{{R, _}, _} when R =:= nodedown; R =:= shutdown ->
+            Handler()
+    end.
