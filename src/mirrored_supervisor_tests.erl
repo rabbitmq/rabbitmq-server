@@ -45,7 +45,7 @@ test_migrate() ->
     with_sups(fun([A, _]) ->
                       mirrored_supervisor:start_child(a, childspec(worker)),
                       Pid1 = pid_of(worker),
-                      kill(A),
+                      kill(A, Pid1),
                       Pid2 = pid_of(worker),
                       false = (Pid1 =:= Pid2)
               end, [a, b]).
@@ -55,11 +55,12 @@ test_migrate_twice() ->
     with_sups(fun([A, B]) ->
                       mirrored_supervisor:start_child(a, childspec(worker)),
                       Pid1 = pid_of(worker),
-                      kill(A),
+                      kill(A, Pid1),
                       with_sups(fun([_]) ->
-                                        kill(B),
                                         Pid2 = pid_of(worker),
-                                        false = (Pid1 =:= Pid2)
+                                        kill(B, Pid2),
+                                        Pid3 = pid_of(worker),
+                                        false = (Pid1 =:= Pid3)
                                 end, [c])
               end, [a, b]).
 
@@ -91,7 +92,7 @@ test_large_group() ->
     with_sups(fun([A, _, _, _]) ->
                       mirrored_supervisor:start_child(a, childspec(worker)),
                       Pid1 = pid_of(worker),
-                      kill(A),
+                      kill(A, Pid1),
                       Pid2 = pid_of(worker),
                       false = (Pid1 =:= Pid2)
               end, [a, b, c, d]).
@@ -101,7 +102,7 @@ test_childspecs_at_init() ->
     S = childspec(worker),
     with_sups(fun([A, _]) ->
                       Pid1 = pid_of(worker),
-                      kill(A),
+                      kill(A, Pid1),
                       Pid2 = pid_of(worker),
                       false = (Pid1 =:= Pid2)
               end, [{a, [S]}, {b, [S]}]).
@@ -110,7 +111,7 @@ test_anonymous_supervisors() ->
     with_sups(fun([A, _B]) ->
                       mirrored_supervisor:start_child(A, childspec(worker)),
                       Pid1 = pid_of(worker),
-                      kill(A),
+                      kill(A, Pid1),
                       Pid2 = pid_of(worker),
                       false = (Pid1 =:= Pid2)
               end, [anon, anon]).
@@ -189,9 +190,20 @@ call(Id, Msg, MaxDelay, Decr) ->
                     call(Id, Msg, MaxDelay - Decr, Decr)
     end.
 
-kill(Pid) ->
+kill(Pid) -> kill(Pid, []).
+kill(Pid, Wait) when is_pid(Wait) -> kill(Pid, [Wait]);
+kill(Pid, Waits) ->
+    erlang:monitor(process, Pid),
+    [erlang:monitor(process, P) || P <- Waits],
     exit(Pid, kill),
-    timer:sleep(100).
+    kill_wait(Pid),
+    [kill_wait(P) || P <- Waits].
+
+kill_wait(Pid) ->
+    receive
+        {'DOWN', _Ref, process, Pid, _Reason} ->
+            ok
+    end.
 
 %% ---------------------------------------------------------------------------
 %% Dumb gen_server we can supervise
