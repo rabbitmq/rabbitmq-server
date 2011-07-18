@@ -444,6 +444,8 @@ init_db(ClusterNodes, Force, SecondaryPostMnesiaFun) ->
                          end;
                 true  -> ok
             end,
+            %% We create a new db (on disk, or in ram) in the first
+            %% three cases and attempt to upgrade the in the other two
             case {Nodes, WasDiskNode, IsDiskNode} of
                 {[], false, false} ->
                     ok = create_tables(false),
@@ -453,28 +455,28 @@ init_db(ClusterNodes, Force, SecondaryPostMnesiaFun) ->
                     move_db(),
                     ok = create_tables(false),
                     ok = rabbit_version:record_desired();
-                {[], false, _} ->
+                {[], false, true} ->
                     %% Nothing there at all, start from scratch
                     ok = create_schema();
-                {[], _, true} ->
+                {[], true, true} ->
                     %% We're the first node up
-                    case rabbit_upgrade:maybe_upgrade_local() of
-                        ok                    ->
-                            ensure_schema_integrity();
-                        version_not_available ->
-                            ok = schema_ok_or_move()
-                    end,
-                    ok;
+                    ok = case rabbit_upgrade:maybe_upgrade_local() of
+                             ok ->
+                                 ensure_schema_integrity();
+                             version_not_available ->
+                                 schema_ok_or_move()
+                         end;
                 {[AnotherNode|_], _, _} ->
                     %% Subsequent node in cluster, catch up
                     ensure_version_ok(
                       rpc:call(AnotherNode, rabbit_version, recorded, [])),
                     ok = wait_for_replicated_tables(),
-                    CopyType = case IsDiskNode of
-                                   true  -> disc;
-                                   false -> ram
-                               end,
-                    ok = create_local_table_copy(schema, CopyType),
+                    {CopyType, CopyTypeAlt} =
+                        case IsDiskNode of
+                            true  -> {disc, disc_copies};
+                            false -> {ram, ram_copies}
+                        end,
+                    ok = create_local_table_copy(schema, CopyTypeAlt),
                     ok = create_local_table_copies(CopyType),
                     ok = SecondaryPostMnesiaFun(),
                     ensure_schema_integrity(),
