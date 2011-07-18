@@ -24,6 +24,8 @@
 -behaviour(gen_server).
 -behaviour(mirrored_supervisor).
 
+-define(MS,  mirrored_supervisor).
+
 %% ---------------------------------------------------------------------------
 %% Functional tests
 %% ---------------------------------------------------------------------------
@@ -43,7 +45,7 @@ all_tests() ->
 %% Simplest test
 test_migrate() ->
     with_sups(fun([A, _]) ->
-                      mirrored_supervisor:start_child(a, childspec(worker)),
+                      ?MS:start_child(a, childspec(worker)),
                       Pid1 = pid_of(worker),
                       kill(A, Pid1),
                       Pid2 = pid_of(worker),
@@ -53,7 +55,7 @@ test_migrate() ->
 %% Is migration transitive?
 test_migrate_twice() ->
     with_sups(fun([A, B]) ->
-                      mirrored_supervisor:start_child(a, childspec(worker)),
+                      ?MS:start_child(a, childspec(worker)),
                       Pid1 = pid_of(worker),
                       kill(A, Pid1),
                       with_sups(fun([_]) ->
@@ -68,21 +70,21 @@ test_migrate_twice() ->
 test_already_there() ->
     with_sups(fun([_, _]) ->
                       S = childspec(worker),
-                      {ok, Pid} = mirrored_supervisor:start_child(a, S),
-                      {ok, Pid} = mirrored_supervisor:start_child(b, S)
+                      {ok, Pid}              = ?MS:start_child(a, S),
+                      {already_started, Pid} = ?MS:start_child(b, S)
               end, [a, b]).
 
 %% Deleting and restarting should work as per a normal supervisor
 test_delete_restart() ->
     with_sups(fun([_, _]) ->
                       S = childspec(worker),
-                      {ok, Pid1} = mirrored_supervisor:start_child(a, S),
-                      ok = mirrored_supervisor:terminate_child(a, worker),
-                      ok = mirrored_supervisor:delete_child(a, worker),
-                      {ok, Pid2} = mirrored_supervisor:start_child(b, S),
+                      {ok, Pid1} = ?MS:start_child(a, S),
+                      ok = ?MS:terminate_child(a, worker),
+                      ok = ?MS:delete_child(a, worker),
+                      {ok, Pid2} = ?MS:start_child(b, S),
                       false = (Pid1 =:= Pid2),
-                      ok = mirrored_supervisor:terminate_child(b, worker),
-                      {ok, Pid3} = mirrored_supervisor:restart_child(b, worker),
+                      ok = ?MS:terminate_child(b, worker),
+                      {ok, Pid3} = ?MS:restart_child(b, worker),
                       Pid3 = pid_of(worker),
                       false = (Pid2 =:= Pid3)
               end, [a, b]).
@@ -90,7 +92,7 @@ test_delete_restart() ->
 %% Not all the members of the group should actually do the failover
 test_large_group() ->
     with_sups(fun([A, _, _, _]) ->
-                      mirrored_supervisor:start_child(a, childspec(worker)),
+                      ?MS:start_child(a, childspec(worker)),
                       Pid1 = pid_of(worker),
                       kill(A, Pid1),
                       Pid2 = pid_of(worker),
@@ -109,7 +111,7 @@ test_childspecs_at_init() ->
 
 test_anonymous_supervisors() ->
     with_sups(fun([A, _B]) ->
-                      mirrored_supervisor:start_child(A, childspec(worker)),
+                      ?MS:start_child(A, childspec(worker)),
                       Pid1 = pid_of(worker),
                       kill(A, Pid1),
                       Pid2 = pid_of(worker),
@@ -123,7 +125,7 @@ test_anonymous_supervisors() ->
 %% 'good' and survive, rather the whole group should go away.
 test_no_migration_on_shutdown() ->
     with_sups(fun([Evil, _]) ->
-                      mirrored_supervisor:start_child(Evil, childspec(worker)),
+                      ?MS:start_child(Evil, childspec(worker)),
                       try
                           call(worker, ping),
                           exit(worker_should_not_have_migrated)
@@ -133,9 +135,10 @@ test_no_migration_on_shutdown() ->
               end, [evil, good]).
 
 test_start_idempotence() ->
-    with_sups(fun([A]) ->
-                      mirrored_supervisor:start_child(a, childspec(worker)),
-                      mirrored_supervisor:start_child(a, childspec(worker))
+    with_sups(fun([_]) ->
+                      CS = childspec(worker),
+                      {ok, Pid}              = ?MS:start_child(a, CS),
+                      {already_started, Pid} = ?MS:start_child(a, CS)
               end, [a]).
 
 %% ---------------------------------------------------------------------------
@@ -160,15 +163,13 @@ start_sup(Name, Group) ->
     start_sup({Name, []}, Group).
 
 start_sup0(anon, Group, ChildSpecs) ->
-    mirrored_supervisor:start_link(Group, ?MODULE, {sup, ChildSpecs});
+    ?MS:start_link(Group, ?MODULE, {sup, ChildSpecs});
 
 start_sup0(Name, Group, ChildSpecs) ->
-    mirrored_supervisor:start_link({local, Name},
-                                   Group, ?MODULE, {sup, ChildSpecs}).
+    ?MS:start_link({local, Name}, Group, ?MODULE, {sup, ChildSpecs}).
 
 childspec(Id) ->
-    {Id, {?MODULE, start_gs, [Id]},
-     transient, 16#ffffffff, worker, [?MODULE]}.
+    {Id, {?MODULE, start_gs, [Id]}, transient, 16#ffffffff, worker, [?MODULE]}.
 
 start_gs(Id) ->
     gen_server:start_link({local, Id}, ?MODULE, server, []).
@@ -231,7 +232,7 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 die_if_my_supervisor_is_evil() ->
-    try lists:keyfind(self(), 2, mirrored_supervisor:which_children(evil)) of
+    try lists:keyfind(self(), 2, ?MS:which_children(evil)) of
         false -> ok;
         _     -> exit(doooom)
     catch
