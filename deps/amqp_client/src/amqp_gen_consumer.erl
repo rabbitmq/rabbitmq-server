@@ -203,7 +203,7 @@ handle_call({consumer_call, Call}, From,
             {stop, {error, Reason}, {error, Reason},
              State#state{module_state = NewMState}}
     end;
-handle_call({consumer_call, Method, Args}, From,
+handle_call({consumer_call, Method, Args}, _From,
             State = #state{module       = ConsumerModule,
                            module_state = MState}) ->
     Return =
