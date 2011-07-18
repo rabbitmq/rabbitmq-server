@@ -392,8 +392,10 @@ demonitor_all_peers(#state{peer_monitors = Peers}) ->
 
 maybe_start(Delegate, ChildSpec) ->
     case mnesia:transaction(fun() -> check_start(Delegate, ChildSpec) end) of
-        {atomic, start} -> start(Delegate, ChildSpec);
-        {atomic, Pid}   -> {ok, Pid}
+        {atomic, start}        -> start(Delegate, ChildSpec);
+        {atomic, Pid}          -> {ok, Pid};
+        %% If we are torn down while in the transaction...
+        {aborted, {killed, _}} -> ignore
     end.
 
 check_start(Delegate, ChildSpec) ->
