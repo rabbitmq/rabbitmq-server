@@ -60,7 +60,6 @@ all_tests() ->
     passed = test_confirms(),
     passed = maybe_run_cluster_dependent_tests(),
     passed = test_configurable_server_properties(),
-    ok = restart_app(),
     passed.
 
 maybe_run_cluster_dependent_tests() ->
@@ -1673,6 +1672,7 @@ test_backing_queue() ->
             passed = test_queue_recover(),
             application:set_env(rabbit, queue_index_max_journal_entries,
                                 MaxJournal, infinity),
+            ok = restart_app(), %% reset rabbit_sup's restart order
             passed;
         _ ->
             passed
