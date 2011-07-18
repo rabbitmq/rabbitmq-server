@@ -37,6 +37,7 @@ all_tests() ->
     passed = test_childspecs_at_init(),
     passed = test_anonymous_supervisors(),
     passed = test_no_migration_on_shutdown(),
+    passed = test_start_idempotence(),
     passed.
 
 %% Simplest test
@@ -131,6 +132,11 @@ test_no_migration_on_shutdown() ->
                       timer:sleep(1000)
               end, [evil, good]).
 
+test_start_idempotence() ->
+    with_sups(fun([A]) ->
+                      mirrored_supervisor:start_child(a, childspec(worker)),
+                      mirrored_supervisor:start_child(a, childspec(worker))
+              end, [a]).
 
 %% ---------------------------------------------------------------------------
 

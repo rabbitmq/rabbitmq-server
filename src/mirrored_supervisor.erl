@@ -391,22 +391,25 @@ demonitor_all_peers(#state{peer_monitors = Peers}) ->
     [erlang:demonitor(Ref) || Ref <- sets:to_list(Peers)].
 
 maybe_start(Delegate, ChildSpec) ->
-    case mnesia:transaction(fun() -> check_start(ChildSpec) end) of
+    case mnesia:transaction(fun() -> check_start(Delegate, ChildSpec) end) of
         {atomic, start} -> start(Delegate, ChildSpec);
         {atomic, Pid}   -> {ok, Pid}
     end.
 
-check_start(ChildSpec) ->
+check_start(Delegate, ChildSpec) ->
     case mnesia:wread({?TABLE, id(ChildSpec)}) of
         []  -> write(ChildSpec),
                start;
         [S] -> #mirrored_sup_childspec{id            = Id,
                                        mirroring_pid = Pid} = S,
-               case supervisor(Pid) of
-                   dead     -> delete(ChildSpec),
-                               write(ChildSpec),
-                               start;
-                   Delegate -> child(Delegate, Id)
+               case self() of
+                   Pid -> child(Delegate, Id);
+                   _   -> case supervisor(Pid) of
+                              dead      -> delete(ChildSpec),
+                                           write(ChildSpec),
+                                           start;
+                              Delegate0 -> child(Delegate0, Id)
+                          end
                end
     end.
 
