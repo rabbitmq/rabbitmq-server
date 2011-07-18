@@ -1131,10 +1131,13 @@ handle_publishing_queue_down(QPid, Reason, State = #ch{unconfirmed_qm = UQM}) ->
     %% process_confirms to prevent each MsgSeqNo being removed from
     %% the set one by one which which would be inefficient
     State1 = State#ch{unconfirmed_qm = gb_trees:delete_any(QPid, UQM)},
-    {Nack, SendFun} = case Reason of
-                          normal -> {false, fun record_confirms/2};
-                          _      -> {true,  fun send_nacks/2}
-                      end,
+    {Nack, SendFun} =
+        if (Reason =:= noproc orelse Reason =:= nodedown orelse
+            Reason =:= normal orelse Reason =:= shutdown) ->
+                {false, fun record_confirms/2};
+           true ->
+                {true,  fun send_nacks/2}
+        end,
     {MXs, State2} = process_confirms(MsgSeqNos, QPid, Nack, State1),
     erase_queue_stats(QPid),
     State3 = SendFun(MXs, State2),
