@@ -129,8 +129,7 @@ test_no_migration_on_shutdown() ->
                           exit(worker_should_not_have_migrated)
                       catch exit:{timeout_waiting_for_server, _} ->
                               ok
-                      end,
-                      timer:sleep(1000)
+                      end
               end, [evil, good]).
 
 test_start_idempotence() ->
