@@ -24,13 +24,15 @@
 
 -define(MAX_CHANNEL_NUMBER, 65535).
 
+-define(PROTOCOL_SSL_PORT, (?PROTOCOL_PORT - 1)).
+
 -record(amqp_msg, {props = #'P_basic'{}, payload = <<>>}).
 
 -record(amqp_params_network, {username          = <<"guest">>,
                               password          = <<"guest">>,
                               virtual_host      = <<"/">>,
                               host              = "localhost",
-                              port              = ?PROTOCOL_PORT,
+                              port              = undefined,
                               channel_max       = 0,
                               frame_max         = 0,
                               heartbeat         = 0,

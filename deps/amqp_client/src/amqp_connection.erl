@@ -127,24 +127,35 @@
 %% where
 %%      Params = amqp_params_network() | amqp_params_direct()
 %%      Connection = pid()
-%% @doc Starts a connection to an AMQP server. Use network params to connect
-%% to a remote AMQP server or direct params for a direct connection to
-%% a RabbitMQ server, assuming that the server is running in the same process
-%% space.
+%% @doc Starts a connection to an AMQP server. Use network params to
+%% connect to a remote AMQP server or direct params for a direct
+%% connection to a RabbitMQ server, assuming that the server is
+%% running in the same process space.  If the port is set to 'undefined',
+%% the default ports will be selected depending on whether this is a
+%% normal or an SSL connection.
 start(AmqpParams) ->
     case amqp_client:start() of
         ok                                      -> ok;
         {error, {already_started, amqp_client}} -> ok;
         {error, _} = E                          -> throw(E)
     end,
-    {ok, _Sup, Connection} = amqp_sup:start_connection_sup(AmqpParams),
+    AmqpParams1 =
+        case AmqpParams of
+            #amqp_params_network{port = undefined, ssl_options = none} ->
+                AmqpParams#amqp_params_network{port = ?PROTOCOL_PORT};
+            #amqp_params_network{port = undefined, ssl_options = _} ->
+                AmqpParams#amqp_params_network{port = ?PROTOCOL_SSL_PORT};
+            _ ->
+                AmqpParams
+        end,
+    {ok, _Sup, Connection} = amqp_sup:start_connection_sup(AmqpParams1),
     amqp_gen_connection:connect(Connection).
 
 %%---------------------------------------------------------------------------
 %% Commands
 %%---------------------------------------------------------------------------
 
-%% @doc Invokes open_channel(ConnectionPid, none). 
+%% @doc Invokes open_channel(ConnectionPid, none).
 %% Opens a channel without having to specify a channel number.
 open_channel(ConnectionPid) ->
     open_channel(ConnectionPid, none).
