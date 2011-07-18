@@ -444,15 +444,15 @@ init_db(ClusterNodes, Force, SecondaryPostMnesiaFun) ->
                          end;
                 true  -> ok
             end,
+            if (WasDiskNode andalso (not IsDiskNode)) ->
+                    rabbit_log:warning("converting from disc to ram node; backing up database"),
+                    move_db();
+               true -> ok
+            end,
             %% We create a new db (on disk, or in ram) in the first
             %% three cases and attempt to upgrade the in the other two
             case {Nodes, WasDiskNode, IsDiskNode} of
-                {[], false, false} ->
-                    ok = create_tables(false),
-                    ok = rabbit_version:record_desired();
-                {[], true, false} ->
-                    rabbit_log:warning("converting from disc to ram node; backing up database"),
-                    move_db(),
+                {_, _, false} ->
                     ok = create_tables(false),
                     ok = rabbit_version:record_desired();
                 {[], false, true} ->
@@ -573,6 +573,7 @@ create_tables(IsDiskNode) ->
                                     end,
                           case mnesia:create_table(Tab, TabDef2) of
                               {atomic, ok} -> ok;
+                              {aborted, {already_exists, Tab}} -> ok;
                               {aborted, Reason} ->
                                   throw({error, {table_creation_failed,
                                                  Tab, TabDef2, Reason}})

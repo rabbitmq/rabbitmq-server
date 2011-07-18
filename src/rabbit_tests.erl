@@ -904,7 +904,6 @@ test_option_parser() ->
     passed.
 
 test_cluster_management() ->
-
     %% 'cluster' and 'reset' should only work if the app is stopped
     {error, _} = control_action(cluster, []),
     {error, _} = control_action(reset, []),
@@ -1014,6 +1013,9 @@ test_cluster_management2(SecondaryNode) ->
                                         "invalid2@invalid"]),
 
     %% turn a disk node into a ram node
+    receive
+    after 1000 -> ok
+    end,
     ok = control_action(reset, []),
     ok = control_action(cluster, [SecondaryNodeS]),
     ok = control_action(start_app, []),
