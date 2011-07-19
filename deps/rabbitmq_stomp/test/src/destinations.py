@@ -253,3 +253,34 @@ class TestTopic(base.BaseTest):
               conn1.stop()
               conn2.stop()
 
+class TestReplyQueue(base.BaseTest):
+
+    def test_reply_queue(self):
+        ''' Test with two separate clients. Client 1 sends
+        message to a known destination with a defined reply
+        queue. Client 2 receives on known destination and replies
+        on the reply destination. Client 1 gets the reply message'''
+
+        known = '/queue/known'
+        reply = '/temp-queue/0'
+
+        ## Client 1 uses pre-supplied connection and listener
+        ## Set up client 2
+        conn2, listener2 = self.create_subscriber_connection(known)
+
+        try:
+            self.conn.send("test", destination=known,
+                           headers = {"reply-to": reply})
+
+            self.assertTrue(listener2.await(5))
+            self.assertEquals(1, len(listener2.messages))
+
+            reply_to = listener2.messages[0]['headers']['reply-to']
+            self.assertTrue(reply_to.startswith('/reply-queue/'))
+
+            conn2.send("reply", destination=reply_to)
+            self.assertTrue(self.listener.await(5))
+            self.assertEquals("reply", self.listener.messages[0]['message'])
+        finally:
+            conn2.stop()
+

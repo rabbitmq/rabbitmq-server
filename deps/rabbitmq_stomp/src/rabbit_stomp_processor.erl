@@ -42,7 +42,7 @@
 -record(state, {socket, session_id, channel,
                 connection, subscriptions, version,
                 start_heartbeat_fun, pending_receipts,
-                config}).
+                config, reply_queues}).
 
 -record(subscription, {dest_hdr, channel, multi_ack, description}).
 
@@ -76,7 +76,8 @@ init([Sock, StartHeartbeatFun, Configuration]) ->
        version             = none,
        start_heartbeat_fun = StartHeartbeatFun,
        pending_receipts    = undefined,
-       config              = Configuration},
+       config              = Configuration,
+       reply_queues        = dict:new()},
      hibernate,
      {backoff, 1000, 1000, 10000}
     }.
@@ -471,7 +472,9 @@ do_send(Destination, _DestHdr,
         State = #state{channel = Channel}) ->
     {ok, _Q} = ensure_queue(send, Destination, Channel),
 
-    Props = rabbit_stomp_util:message_properties(Frame),
+    {Frame1, State1} = ensure_reply_to(Frame, State),
+
+    Props = rabbit_stomp_util:message_properties(Frame1),
 
     {Exchange, RoutingKey} =
         rabbit_stomp_util:parse_routing_information(Destination),
@@ -482,17 +485,17 @@ do_send(Destination, _DestHdr,
       mandatory = false,
       immediate = false},
 
-    case transactional(Frame) of
+    case transactional(Frame1) of
         {yes, Transaction} ->
             extend_transaction(Transaction,
                                fun(StateN) ->
-                                       maybe_record_receipt(Frame, StateN)
+                                       maybe_record_receipt(Frame1, StateN)
                                end,
                                {Method, Props, BodyFragments},
-                               State);
+                               State1);
         no ->
             ok(send_method(Method, Props, BodyFragments,
-                           maybe_record_receipt(Frame, State)))
+                           maybe_record_receipt(Frame1, State1)))
     end.
 
 create_ack_method(DeliveryTag, #subscription{multi_ack = IsMulti}) ->
@@ -571,6 +574,63 @@ default_prefetch({queue, _}) ->
     ?DEFAULT_QUEUE_PREFETCH;
 default_prefetch(_) ->
     undefined.
+
+%%----------------------------------------------------------------------------
+%% Reply-To
+%%----------------------------------------------------------------------------
+ensure_reply_to(Frame = #stomp_frame{headers = Headers}, State) ->
+    case rabbit_stomp_frame:header(Frame, "reply-to") of
+        not_found ->
+            {Frame, State};
+        {ok, ReplyTo} ->
+            {ok, Destination} = rabbit_stomp_util:parse_destination(ReplyTo),
+            case Destination of
+                {temp_queue, TempQueueId} ->
+                    {ReplyQueue, State1} =
+                        ensure_reply_queue(TempQueueId, State),
+                    {Frame#stomp_frame{
+                       headers = lists:keyreplace("reply-to", 1, Headers,
+                                                  {"reply-to", ReplyQueue})},
+                     State1};
+                _ ->
+                    {Frame, State}
+            end
+    end.
+
+ensure_reply_queue(TempQueueId, State = #state{channel       = Channel,
+                                               reply_queues  = RQS,
+                                               subscriptions = Subs}) ->
+    case dict:find(TempQueueId, RQS) of
+        {ok, RQ} ->
+            {RQ, RQS};
+        error ->
+            #'queue.declare_ok'{queue = Queue} =
+                amqp_channel:call(Channel,
+                                  #'queue.declare'{auto_delete = true,
+                                                   exclusive   = true}),
+
+            #'basic.consume_ok'{consumer_tag = ConsumerTag} =
+                amqp_channel:subscribe(Channel,
+                                       #'basic.consume'{
+                                         queue  = Queue,
+                                         no_ack = true,
+                                         nowait = false},
+                                       self()),
+
+            Destination = "/reply-queue/" ++ binary_to_list(Queue),
+
+            %% synthesise a subscription to the reply queue destination
+            Subs1 = dict:store(ConsumerTag,
+                               #subscription{dest_hdr    = Destination,
+                                             channel     = Channel,
+                                             multi_ack   = false},
+                               Subs),
+
+            {Destination, State#state{
+                            reply_queues  = dict:store(TempQueueId, Queue, RQS),
+                            subscriptions = Subs1}}
+    end.
+
 
 %%----------------------------------------------------------------------------
 %% Receipt Handling
@@ -772,7 +832,10 @@ ensure_queue(subscribe, {topic, _}, Channel) ->
     {ok, Queue};
 ensure_queue(send, {topic, _}, _Channel) ->
     %% Don't create queues on SEND for /topic destinations
-    {ok, undefined}.
+    {ok, undefined};
+ensure_queue(_, {reply_queue, Name}, _Channel) ->
+    {ok, list_to_binary(Name)}.
+
 
 ensure_queue_binding(QueueBin, {"", Queue}, _Channel) ->
     %% i.e., we should only be asked to bind to the default exchange a
