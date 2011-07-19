@@ -23,6 +23,8 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
+-export([http_get/1]).
+
 -define(OK, 200).
 -define(CREATED, 201).
 -define(NO_CONTENT, 204).

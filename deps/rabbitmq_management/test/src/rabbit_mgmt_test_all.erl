@@ -25,4 +25,12 @@
 all_tests() ->
     ok = eunit:test(rabbit_mgmt_test_unit,[verbose]),
     ok = eunit:test(rabbit_mgmt_test_http,[verbose]),
+    io:format("Starting second node...~n"),
+    ok = rabbit_mgmt_test_clustering:start_second_node(),
+    io:format("...done.~n"),
+    try
+        ok = eunit:test(rabbit_mgmt_test_clustering,[verbose])
+    after
+        ok = rabbit_mgmt_test_clustering:stop_second_node()
+    end,
     ok = rabbit_mgmt_test_db:test().
