@@ -273,7 +273,7 @@ federated exchange and an upstream. It can contain the following keys:
 
 * exchange         - the name of the federated exchange
 * vhost            - the virtual host containing the federated exchange
-* connection       - the name of the connection for this link
+* connection       - the name of the connection for this link (from config)
 * status           - status of the link: starting
                                          shutting_down
                                          connected
@@ -282,7 +282,8 @@ federated exchange and an upstream. It can contain the following keys:
                                          upstream_channel_down (*)
                                          downstream_channel_down (*)
 * timestamp        - time the status was last updated
-* local_connection - local connection name if status is 'connected'
+* local_connection - identifier for the local amqp connection used to
+                     publish messages (set if status is 'connected')
 * error            - error message if the status represents an error (those
   (optional)         marked with (*) above.
 
