@@ -294,8 +294,12 @@ code_change(_OldVsn, State, _Extra) ->
 handle_event(#event{type = queue_created, props = Props}, State) ->
     QName = pget(name, Props),
     io:format("create ~p~n", [Props]),
-    [handle_slave_synchronised(QName, SSPid, State) ||
-        SSPid <- pget(synchronised_slave_pids, Props)],
+    case pget(synchronised_slave_pids, Props) of
+        SSPids when is_list(SSPids) ->
+            [handle_slave_synchronised(QName, SSPid, State) || SSPid <- SSPids];
+        _ ->
+            ok
+    end,
     {ok, State};
 
 handle_event(#event{type = queue_stats, props = Stats, timestamp = Timestamp},
