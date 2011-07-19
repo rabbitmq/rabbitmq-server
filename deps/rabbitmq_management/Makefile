@@ -6,7 +6,7 @@ TEST_TMPDIR=/tmp/rabbitmq-test
 
 start-second-node:
 	RABBITMQ_MNESIA_BASE=$(TEST_TMPDIR)/rabbitmq-hare-mnesia \
-	RABBITMQ_LOG_BASE=/tmp \
+	RABBITMQ_LOG_BASE=$(TEST_TMPDIR)/log \
 	RABBITMQ_NODENAME=hare \
 	RABBITMQ_NODE_PORT=5673 \
 	RABBITMQ_CONFIG_FILE=etc/hare \
