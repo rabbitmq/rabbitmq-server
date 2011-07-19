@@ -20,22 +20,13 @@
 %%
 -module(rabbit_mgmt_test_clustering).
 
--include_lib("eunit/include/eunit.hrl").
--include_lib("amqp_client/include/amqp_client.hrl").
+-include("rabbit_mgmt_test.hrl").
 
 -export([start_second_node/0, stop_second_node/0]).
 
 -import(rabbit_mgmt_test_http, [http_get/1]).
 
--define(OK, 200).
--define(CREATED, 201).
--define(NO_CONTENT, 204).
--define(BAD_REQUEST, 400).
--define(NOT_AUTHORISED, 401).
-%%-define(NOT_FOUND, 404). Defined for AMQP by amqp_client.hrl (as 404)
--define(PREFIX, "http://localhost:55672/api").
-%% httpc seems to get racy when using HTTP 1.1
--define(HTTPC_OPTS, [{version, "HTTP/1.0"}]).
+%%----------------------------------------------------------------------------
 
 start_second_node() ->
     ?assertCmd("make -C " ++ plugin_dir() ++ " start-second-node").
