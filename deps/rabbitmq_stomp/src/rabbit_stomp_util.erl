@@ -43,6 +43,7 @@
 -define(QUEUE_PREFIX, "/queue").
 -define(TOPIC_PREFIX, "/topic").
 -define(EXCHANGE_PREFIX, "/exchange").
+-define(AMQQUEUE_PREFIX, "/amq/queue").
 
 -define(MESSAGE_ID_SEPARATOR, "@@").
 -define(HEADER_CONTENT_TYPE, "content-type").
@@ -224,6 +225,8 @@ parse_destination(?QUEUE_PREFIX ++ Rest) ->
     parse_simple_destination(queue, Rest);
 parse_destination(?TOPIC_PREFIX ++ Rest) ->
     parse_simple_destination(topic, Rest);
+parse_destination(?AMQQUEUE_PREFIX ++ Rest) ->
+    parse_simple_destination(amqqueue, Rest);
 parse_destination(?EXCHANGE_PREFIX ++ Rest) ->
     case parse_content(Rest) of
         %% One cannot refer to the default exchange this way; it has

@@ -199,6 +199,9 @@ valid_exchange_with_pattern_test() ->
     {ok, {exchange, {"test", "pattern"}}} =
         parse_destination("/exchange/test/pattern").
 
+valid_amqqueue_test() ->
+    {ok, {amqqueue, "test"}} = parse_destination("/amq/queue/test").
+
 queue_with_no_name_test() ->
     {error, {invalid_destination, queue, ""}} = parse_destination("/queue").
 
@@ -212,6 +215,10 @@ exchange_with_no_name_test() ->
 exchange_default_name_test() ->
     {error, {invalid_destination, exchange, "//foo"}} =
         parse_destination("/exchange//foo").
+
+amqqueue_with_no_name_test() ->
+    {error, {invalid_destination, amqqueue, ""}} =
+        parse_destination("/amq/queue").
 
 queue_with_no_name_slash_test() ->
     {error, {invalid_destination, queue, "/"}} = parse_destination("/queue/").
