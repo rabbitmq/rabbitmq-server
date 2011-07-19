@@ -451,7 +451,8 @@ init_db(ClusterNodes, Force, SecondaryPostMnesiaFun) ->
                     throw({error, {cannot_convert_disc_to_ram,
                                    "Cannot convert a disc node to a ram node."
                                    " Reset first."}});
-                {[], _, false} ->
+                {[], false, false} ->
+                    %% New ram node; start from scratch
                     ok = create_schema(false);
                 {[], false, true} ->
                     %% Nothing there at all, start from scratch
