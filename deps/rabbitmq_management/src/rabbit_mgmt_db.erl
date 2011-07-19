@@ -420,7 +420,7 @@ handle_slave_synchronised(QName, SSPid, State) ->
 
 handle_slave_promoted(QName, SPid, State) ->
     handle_slave_sync_change(QName, fun ([])            -> [SPid];
-                                        ([{_, SSPids}]) -> [SSPids] -- [SPid]
+                                        ([{_, SSPids}]) -> SSPids -- [SPid]
                                     end, State).
 
 handle_slave_sync_change(QName, Fun, State = #state{tables = Tables}) ->

@@ -22,7 +22,7 @@
 
 -include("rabbit_mgmt_test.hrl").
 
--export([http_get/1]).
+-export([http_get/1, http_put/3, http_delete/2]).
 
 overview_test() ->
     %% Rather crude, but this req doesn't say much and at least this means it
