@@ -772,7 +772,10 @@ ensure_queue(subscribe, {topic, _}, Channel) ->
     {ok, Queue};
 ensure_queue(send, {topic, _}, _Channel) ->
     %% Don't create queues on SEND for /topic destinations
-    {ok, undefined}.
+    {ok, undefined};
+ensure_queue(_, {amqqueue, Name}, _Channel) ->
+    %% no queues are created for /amq/queue destinations
+    {ok, list_to_binary(Name)}.
 
 ensure_queue_binding(QueueBin, {"", Queue}, _Channel) ->
     %% i.e., we should only be asked to bind to the default exchange a

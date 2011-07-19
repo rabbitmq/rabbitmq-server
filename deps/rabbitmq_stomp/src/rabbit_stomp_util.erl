@@ -243,10 +243,11 @@ parse_routing_information({exchange, {Name, undefined}}) ->
     {Name, ""};
 parse_routing_information({exchange, {Name, Pattern}}) ->
     {Name, Pattern};
-parse_routing_information({queue, Name}) ->
-    {"", Name};
 parse_routing_information({topic, Name}) ->
-    {"amq.topic", Name}.
+    {"amq.topic", Name};
+parse_routing_information({Type, Name})
+  when Type =:= queue orelse Type =:= amqqueue->
+    {"", Name}.
 
 %% ---- Destination parsing helpers ----
 
