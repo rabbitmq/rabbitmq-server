@@ -16,10 +16,11 @@ start_link(ListenerSpecs) ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [ListenerSpecs], []).
 
 add(Context, Selector, Handler, Link) ->
-    gen_server:call(?MODULE, {add, Context, Selector, Handler, Link}).
+    gen_server:call(?MODULE, {add, Context, Selector, Handler, Link}, infinity).
 
 set_fallback(Listener, FallbackHandler) ->
-    gen_server:call(?MODULE, {set_fallback, Listener, FallbackHandler}).
+    gen_server:call(?MODULE, {set_fallback, Listener, FallbackHandler},
+                    infinity).
 
 lookup(Listener, Req) ->
     case lookup_dispatch(Listener) of
@@ -34,7 +35,7 @@ lookup(Listener, Req) ->
     end.
 
 list_all() ->
-    gen_server:call(?MODULE, list_all).
+    gen_server:call(?MODULE, list_all, infinity).
 
 %% Callback Methods
 
@@ -131,7 +132,7 @@ listing_fallback_handler(Listener) ->
                 "<body><h1>RabbitMQ Web Server</h1><p>Contexts available:</p><ul>",
             HTMLSuffix = "</ul></body></html>",
             {ReqPath, _, _} = mochiweb_util:urlsplit_path(Req:get(raw_path)),
-            Contexts = gen_server:call(?MODULE, {list, Listener}),
+            Contexts = gen_server:call(?MODULE, {list, Listener}, infinity),
             List =
                 case Contexts of
                     [] ->
