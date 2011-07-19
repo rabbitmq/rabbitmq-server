@@ -223,8 +223,10 @@ next_state(S, Res, {call, ?BQMOD, fetch, [AckReq, _BQ]}) ->
         {{value, MsgProp_Msg}, M2} ->
             S2 = S1#state{len = Len - 1, messages = M2},
             case AckReq of
-                true  -> S2#state{acks = orddict:append(AckTag, MsgProp_Msg, Acks)};
-                false -> S2
+                true  ->
+                    S2#state{acks = orddict:append(AckTag, MsgProp_Msg, Acks)};
+                false ->
+                    S2
            end
     end;
 
@@ -239,7 +241,8 @@ next_state(S, Res, {call, ?BQMOD, ack, [AcksArg, _BQ]}) ->
 next_state(S, Res, {call, ?BQMOD, requeue, [AcksArg, _F, _V]}) ->
     #state{len = Len, messages = Messages, acks = AcksState} = S,
     BQ1 = {call, erlang, element, [2, Res]},
-    RequeueMsgs = lists:append([orddict:fetch(Key, AcksState) || Key <- AcksArg]),
+    RequeueMsgs = lists:append([orddict:fetch(Key, AcksState) ||
+                                Key <- AcksArg]),
     S#state{bqstate  = BQ1,
             len      = Len + length(RequeueMsgs),
             messages = queue:join(Messages, queue:from_list(RequeueMsgs)),
