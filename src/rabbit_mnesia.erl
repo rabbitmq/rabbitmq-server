@@ -430,7 +430,7 @@ init_db(ClusterNodes, Force, SecondaryPostMnesiaFun) ->
     UClusterNodes = lists:usort(ClusterNodes),
     ProperClusterNodes = UClusterNodes -- [node()],
     IsDiskNode = ClusterNodes == [] orelse lists:member(node(), ClusterNodes),
-    WasDiskNode = mnesia:system_info(use_dir),
+    WasDiskNode = filelib:is_regular(filename:join(dir(), "rabbit_durable_exchange.DCD")),
     case mnesia:change_config(extra_db_nodes, ProperClusterNodes) of
         {ok, Nodes} ->
             case Force of
@@ -444,20 +444,18 @@ init_db(ClusterNodes, Force, SecondaryPostMnesiaFun) ->
                          end;
                 true  -> ok
             end,
-            if (WasDiskNode andalso (not IsDiskNode)) ->
-                    rabbit_log:warning("converting from disc to ram node; backing up database"),
-                    move_db();
-               true -> ok
-            end,
             %% We create a new db (on disk, or in ram) in the first
             %% three cases and attempt to upgrade the in the other two
             case {Nodes, WasDiskNode, IsDiskNode} of
-                {_, _, false} ->
-                    ok = create_tables(false),
-                    ok = rabbit_version:record_desired();
+                {_, true, false} ->
+                    throw({error, {cannot_convert_disc_to_ram,
+                                   "Cannot convert a disc node to a ram node."
+                                   " Reset first."}});
+                {[], _, false} ->
+                    ok = create_schema(false);
                 {[], false, true} ->
                     %% Nothing there at all, start from scratch
-                    ok = create_schema();
+                    ok = create_schema(true);
                 {[], true, true} ->
                     %% We're the first node up
                     ok = case rabbit_upgrade:maybe_upgrade_local() of
@@ -522,23 +520,29 @@ ensure_version_ok({error, _}) ->
     ok = rabbit_version:record_desired().
 
 create_schema() ->
+    create_schema(true).
+
+create_schema(OnDisk) ->
+    Nodes = if OnDisk -> [node()];
+               true   -> []
+            end,
     mnesia:stop(),
-    rabbit_misc:ensure_ok(mnesia:create_schema([node()]),
+    rabbit_misc:ensure_ok(mnesia:create_schema(Nodes),
                           cannot_create_schema),
     rabbit_misc:ensure_ok(mnesia:start(),
                           cannot_start_mnesia),
-    ok = create_tables(),
+    if not OnDisk ->
+            mnesia:change_table_copy_type(schema, node(), ram_copies);
+       true -> ok
+    end,
+    ok = create_tables(OnDisk),
     ensure_schema_integrity(),
     ok = rabbit_version:record_desired().
 
 move_db() ->
     mnesia:stop(),
     MnesiaDir = filename:dirname(dir() ++ "/"),
-    {{Year, Month, Day}, {Hour, Minute, Second}} = erlang:universaltime(),
-    BackupDir = lists:flatten(
-                  io_lib:format("~s_~w~2..0w~2..0w~2..0w~2..0w~2..0w",
-                                [MnesiaDir,
-                                 Year, Month, Day, Hour, Minute, Second])),
+    BackupDir = new_backup_dir_name(MnesiaDir),
     case file:rename(MnesiaDir, BackupDir) of
         ok ->
             %% NB: we cannot use rabbit_log here since it may not have
@@ -553,6 +557,19 @@ move_db() ->
     rabbit_misc:ensure_ok(mnesia:start(), cannot_start_mnesia),
     ok.
 
+new_backup_dir_name(MnesiaDir) ->
+    {{Year, Month, Day}, {Hour, Minute, Second}} = erlang:universaltime(),
+    BackupDir = lists:flatten(
+                  io_lib:format("~s_~w~2..0w~2..0w~2..0w~2..0w~2..0w",
+                                [MnesiaDir,
+                                 Year, Month, Day, Hour, Minute, Second])),
+    case filelib:is_file(BackupDir) of
+        false -> BackupDir;
+        true -> receive
+                after 1000 -> new_backup_dir_name(MnesiaDir)
+                end
+    end.
+
 copy_db(Destination) ->
     ok = ensure_mnesia_not_running(),
     rabbit_misc:recursive_copy(dir(), Destination).
@@ -560,16 +577,19 @@ copy_db(Destination) ->
 create_tables() ->
     create_tables(true).
 
-create_tables(IsDiskNode) ->
+create_tables(OnDisk) ->
     lists:foreach(fun ({Tab, TabDef}) ->
                           TabDef1 = proplists:delete(match, TabDef),
-                          TabDef2 = case IsDiskNode of
+                          TabDef2 = case OnDisk of
                                         true ->
                                             TabDef1;
                                         false ->
-                                            [{disc_copies, []} |
-                                             proplists:delete(disc_copies,
-                                                              TabDef1)]
+                                            [{disc_copies, []},
+                                             {ram_copies, [node()]} |
+                                             proplists:delete(
+                                               ram_copies,
+                                               proplists:delete(disc_copies,
+                                                                TabDef1))]
                                     end,
                           case mnesia:create_table(Tab, TabDef2) of
                               {atomic, ok} -> ok;

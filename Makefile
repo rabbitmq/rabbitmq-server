@@ -163,7 +163,7 @@ run-node: all
 
 run-tests: all
 	OUT=$$(echo "rabbit_tests:all_tests()." | $(ERL_CALL)) ; \
-	  echo $$OUT ; echo $$OUT | grep '^{ok, passed}$$' > /dev/null
+	  echo -e $$OUT ; echo $$OUT | grep '^{ok, passed}$$' > /dev/null
 
 start-background-node:
 	$(BASIC_SCRIPT_ENVIRONMENT_SETTINGS) \
