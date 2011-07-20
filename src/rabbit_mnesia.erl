@@ -118,18 +118,27 @@ cluster(ClusterNodes, Force) ->
     ensure_mnesia_not_running(),
     ensure_mnesia_dir(),
 
-    %% Reset the node if we're in a cluster and have just changed node type
-    rabbit_misc:ensure_ok(mnesia:start(), cannot_start_mnesia),
-    AllClusteredNodes =
-        lists:usort(all_clustered_nodes() ++
-                        read_cluster_nodes_config()) -- [node()],
-    mnesia:stop(),
-    case {AllClusteredNodes =/= [],
-          is_disc_node() =/= should_be_disc_node(ClusterNodes)} of
-        {true, true} -> error_logger:warning_msg("changing node type; "
-                                                 "resetting...~n"),
-                        reset();
-        {_, _}       -> ok
+    %% Reset the node if we've just changed node type
+    case {is_disc_node(), should_be_disc_node(ClusterNodes)} of
+        {true, false} -> error_logger:warning_msg(
+                           "changing node type; backing up db and "
+                           "resetting...~n"),
+                         ok = move_db(),
+                         mnesia:stop(),
+                         reset();
+        _    -> ok
+    end,
+
+    %% Pre-emtively leave the cluster (in case we had been part of it
+    %% and force_reseted)
+    ProperClusterNodes = ClusterNodes -- [node()],
+    try leave_cluster(ProperClusterNodes, ProperClusterNodes) of
+        ok -> ok
+    catch
+        throw:({error, {no_running_cluster_nodes, _, _}} = E) ->
+            if Force -> ok;
+               true  -> throw(E)
+            end
     end,
 
     %% Join the cluster
@@ -496,6 +505,7 @@ init_db(ClusterNodes, Force, SecondaryPostMnesiaFun) ->
                             false -> {ram, ram_copies}
                         end,
                     ok = wait_for_replicated_tables(),
+
                     ok = create_local_table_copy(schema, CopyTypeAlt),
                     ok = create_local_table_copies(CopyType),
                     ok = SecondaryPostMnesiaFun(),
@@ -722,6 +732,7 @@ leave_cluster(Nodes, RunningNodes) ->
                                  [schema, node()]) of
                        {atomic, ok} -> true;
                        {badrpc, nodedown} -> false;
+                       {aborted, {node_not_running, _}} -> false;
                        {aborted, Reason} ->
                            throw({error, {failed_to_leave_cluster,
                                           Nodes, RunningNodes, Reason}})
