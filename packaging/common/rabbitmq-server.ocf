@@ -29,6 +29,7 @@
 ##   OCF_RESKEY_log_base
 ##   OCF_RESKEY_mnesia_base
 ##   OCF_RESKEY_server_start_args
+##   OCF_RESKEY_pid_file
 
 #######################################################################
 # Initialization:
@@ -42,10 +43,12 @@ OCF_RESKEY_server_default="/usr/sbin/rabbitmq-server"
 OCF_RESKEY_ctl_default="/usr/sbin/rabbitmqctl"
 OCF_RESKEY_nodename_default="rabbit@localhost"
 OCF_RESKEY_log_base_default="/var/log/rabbitmq"
+OCF_RESKEY_pid_file_default="/var/lib/rabbitmq/pid"
 : ${OCF_RESKEY_server=${OCF_RESKEY_server_default}}
 : ${OCF_RESKEY_ctl=${OCF_RESKEY_ctl_default}}
 : ${OCF_RESKEY_nodename=${OCF_RESKEY_nodename_default}}
 : ${OCF_RESKEY_log_base=${OCF_RESKEY_log_base_default}}
+: ${OCF_RESKEY_pid_file=${OCF_RESKEY_pid_file_default}}
 
 meta_data() {
     cat <<END
@@ -133,6 +136,14 @@ Additional arguments provided to the server on startup
 <content type="string" default="" />
 </parameter>
 
+<parameter name="pid_file" unique="0" required="0">
+<longdesc lang="en">
+Location of the file in which the pid will be stored
+</longdesc>
+<shortdesc lang="en">Pid file path</shortdesc>
+<content type="string" default="${OCF_RESKEY_pid_file_default}" />
+</parameter>
+
 </parameters>
 
 <actions>
@@ -164,6 +175,7 @@ RABBITMQ_CONFIG_FILE=$OCF_RESKEY_config_file
 RABBITMQ_LOG_BASE=$OCF_RESKEY_log_base
 RABBITMQ_MNESIA_BASE=$OCF_RESKEY_mnesia_base
 RABBITMQ_SERVER_START_ARGS=$OCF_RESKEY_server_start_args
+RABBITMQ_PID_FILE=$OCF_RESKEY_pid_file
 [ ! -z $RABBITMQ_NODENAME ] && NODENAME_ARG="-n $RABBITMQ_NODENAME"
 [ ! -z $RABBITMQ_NODENAME ]            && export RABBITMQ_NODENAME
 
@@ -174,6 +186,7 @@ export_vars() {
     [ ! -z $RABBITMQ_LOG_BASE ]            && export RABBITMQ_LOG_BASE
     [ ! -z $RABBITMQ_MNESIA_BASE ]         && export RABBITMQ_MNESIA_BASE
     [ ! -z $RABBITMQ_SERVER_START_ARGS ]   && export RABBITMQ_SERVER_START_ARGS
+    [ ! -z $RABBITMQ_PID_FILE ]            && export RABBITMQ_PID_FILE
 }
 
 rabbit_validate_partial() {
@@ -214,13 +227,13 @@ rabbit_status() {
 }
 
 rabbit_wait() {
-    rabbitmqctl_action "wait"
+    rabbitmqctl_action "wait" $1
 }
 
 rabbitmqctl_action() {
     local rc
     local action
-    action=$1
+    action=$@
     $RABBITMQ_CTL $NODENAME_ARG $action > /dev/null 2> /dev/null
     rc=$?
     case "$rc" in
@@ -252,9 +265,10 @@ rabbit_start() {
 
     # Wait for the server to come up.
     # Let the CRM/LRM time us out if required
-    rabbit_wait
+    rabbit_wait $RABBITMQ_PID_FILE
     rc=$?
     if [ "$rc" != $OCF_SUCCESS ]; then
+        rm -f $RABBITMQ_PID_FILE
         ocf_log info "rabbitmq-server start failed: $rc"
         exit $OCF_ERR_GENERIC
     fi
@@ -285,6 +299,7 @@ rabbit_stop() {
         rabbit_status
         rc=$?
         if [ "$rc" = $OCF_NOT_RUNNING ]; then
+            rm -f $RABBITMQ_PID_FILE
             stop_wait=0
             break
         elif [ "$rc" != $OCF_SUCCESS ]; then
