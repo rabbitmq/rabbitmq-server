@@ -85,7 +85,9 @@ status() ->
                  no -> case all_clustered_nodes() of
                            [] -> [];
                            Nodes -> [{unknown, Nodes}]
-                       end
+                       end;
+                 Reason when Reason =:= starting; Reason =:= stopping ->
+                     exit({rabbit_busy, try_again_later})
              end},
      {running_nodes, running_clustered_nodes()}].
 
@@ -316,13 +318,23 @@ ensure_mnesia_dir() ->
 ensure_mnesia_running() ->
     case mnesia:system_info(is_running) of
         yes -> ok;
-        no  -> throw({error, mnesia_not_running})
+        no  -> throw({error, mnesia_not_running});
+        Reason when Reason =:= starting; Reason =:= stopping ->
+            wait_and_try_again(ensure_mnesia_running, [])
     end.
 
 ensure_mnesia_not_running() ->
     case mnesia:system_info(is_running) of
         no  -> ok;
-        yes -> throw({error, mnesia_unexpectedly_running})
+        yes -> throw({error, mnesia_unexpectedly_running});
+        Reason when Reason =:= starting; Reason =:= stopping ->
+            wait_and_try_again(ensure_mnesia_not_running, [])
+    end.
+
+wait_and_try_again(Fun, Args) ->
+    receive
+    after 1000 -> error_logger:info_msg("trying to ~p again~n", [Fun, Args]),
+                  apply(Fun, Args)
     end.
 
 ensure_schema_integrity() ->
@@ -603,9 +615,7 @@ new_backup_dir_name(MnesiaDir) ->
                                  Year, Month, Day, Hour, Minute, Second])),
     case filelib:is_file(BackupDir) of
         false -> BackupDir;
-        true -> receive
-                after 1000 -> new_backup_dir_name(MnesiaDir)
-                end
+        true -> wait_and_try_again(new_backup_dir_name, [MnesiaDir])
     end.
 
 copy_db(Destination) ->
@@ -743,3 +753,4 @@ leave_cluster(Nodes, RunningNodes) ->
         false -> throw({error, {no_running_cluster_nodes,
                                 Nodes, RunningNodes}})
     end.
+
