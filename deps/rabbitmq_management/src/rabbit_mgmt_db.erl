@@ -292,11 +292,11 @@ code_change(_OldVsn, State, _Extra) ->
 %%----------------------------------------------------------------------------
 
 handle_event(#event{type = queue_created, props = Props}, State) ->
-    QName = pget(name, Props),
+    Pid = pget(pid, Props),
     io:format("create ~p~n", [Props]),
     case pget(synchronised_slave_pids, Props) of
         SSPids when is_list(SSPids) ->
-            [handle_slave_synchronised(QName, SSPid, State) || SSPid <- SSPids];
+            [handle_slave_synchronised(Pid, SSPid, State) || SSPid <- SSPids];
         _ ->
             ok
     end,
@@ -366,11 +366,11 @@ handle_event(#event{type = consumer_deleted, props = Props}, State) ->
 
 handle_event(#event{type = queue_slave_synchronised, props = Props}, State) ->
     io:format("sync ~p~n", [Props]),
-    handle_slave_synchronised(pget(name, Props), pget(pid, Props), State);
+    handle_slave_synchronised(pget(master_pid, Props), pget(pid, Props), State);
 
 handle_event(#event{type = queue_slave_promoted, props = Props}, State) ->
     io:format("promoted ~p~n", [Props]),
-    handle_slave_promoted(pget(name, Props), pget(pid, Props), State);
+    handle_slave_promoted(pget(old_pid, Props), pget(pid, Props), State);
 
 handle_event(_Event, State) ->
     {ok, State}.
@@ -413,20 +413,23 @@ handle_consumer(Fun, Props,
     Fun(Table, {pget(queue, P), pget(channel, P)}, P),
     {ok, State}.
 
-handle_slave_synchronised(QName, SSPid, State) ->
-    handle_slave_sync_change(QName, fun ([])            -> [SSPid];
-                                        ([{_, SSPids}]) -> [SSPid | SSPids]
-                                    end, State).
-
-handle_slave_promoted(QName, SPid, State) ->
-    handle_slave_sync_change(QName, fun ([])            -> [SPid];
-                                        ([{_, SSPids}]) -> SSPids -- [SPid]
-                                    end, State).
-
-handle_slave_sync_change(QName, Fun, State = #state{tables = Tables}) ->
+handle_slave_synchronised(MPid, SSPid, State = #state{tables = Tables}) ->
     Table = orddict:fetch(queue_stats, Tables),
-    Synced = Fun(ets:lookup(Table, {QName, synchronised_slaves})),
-    ets:insert(Table, {{QName, synchronised_slaves}, Synced}),
+    Synced = case ets:lookup(Table, {MPid, synchronised_slaves}) of
+                 ([])            -> [SSPid];
+                 ([{_, SSPids}]) -> [SSPid | SSPids]
+             end,
+    ets:insert(Table, {{MPid, synchronised_slaves}, Synced}),
+    {ok, State}.
+
+handle_slave_promoted(OldMPid, NewMPid, State = #state{tables = Tables}) ->
+    Table = orddict:fetch(queue_stats, Tables),
+    Synced = case ets:lookup(Table, {OldMPid, synchronised_slaves}) of
+                 ([])            -> [];
+                 ([{_, SSPids}]) -> SSPids -- [NewMPid]
+             end,
+    ets:delete(Table, {OldMPid, synchronised_slaves}),
+    ets:insert(Table, {{NewMPid, synchronised_slaves}, Synced}),
     {ok, State}.
 
 handle_fine_stats(Type, Props, Timestamp, State = #state{tables = Tables}) ->
@@ -556,9 +559,7 @@ consumer_details_fun(PatternFun, State = #state{tables = Tables}) ->
 
 synchronised_slaves_fun(#state{tables = Tables}) ->
     Table = orddict:fetch(queue_stats, Tables),
-    fun (Props) -> QName = rabbit_misc:r(pget(vhost, Props), queue,
-                                         pget(name, Props)),
-                   Key = {QName, synchronised_slaves},
+    fun (Props) -> Key = {pget(pid, Props), synchronised_slaves},
                    case ets:lookup(Table, Key) of
                        []       -> [];
                        [{_, S}] -> [{synchronised_slave_pids, S}]
