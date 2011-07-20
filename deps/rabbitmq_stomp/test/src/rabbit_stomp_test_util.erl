@@ -195,6 +195,12 @@ valid_topic_test() ->
 valid_exchange_test() ->
     {ok, {exchange, {"test", undefined}}} = parse_destination("/exchange/test").
 
+valid_temp_queue_test() ->
+    {ok, {temp_queue, "test"}} = parse_destination("/temp-queue/test").
+
+valid_reply_queue_test() ->
+    {ok, {reply_queue, "test"}} = parse_destination("/reply-queue/test").
+
 valid_exchange_with_pattern_test() ->
     {ok, {exchange, {"test", "pattern"}}} =
         parse_destination("/exchange/test/pattern").

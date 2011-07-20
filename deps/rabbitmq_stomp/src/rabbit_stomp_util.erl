@@ -44,6 +44,11 @@
 -define(TOPIC_PREFIX, "/topic").
 -define(EXCHANGE_PREFIX, "/exchange").
 -define(AMQQUEUE_PREFIX, "/amq/queue").
+-define(TEMP_QUEUE_PREFIX, "/temp-queue").
+
+%% reply queues names can have slashes in the content so no further
+%% parsing happens.
+-define(REPLY_QUEUE_PREFIX, "/reply-queue/").
 
 -define(MESSAGE_ID_SEPARATOR, "@@").
 -define(HEADER_CONTENT_TYPE, "content-type").
@@ -113,10 +118,10 @@ message_headers(Destination, SessionId,
                   maybe_header(Header, element(Index, Props), Acc)
           end,
           case ConsumerTag of
-              <<"Q_",  _/binary>> ->
-                  Basic;
               <<"T_", Id/binary>> ->
-                  [{"subscription", binary_to_list(Id)} | Basic]
+                  [{"subscription", binary_to_list(Id)} | Basic];
+              _ ->
+                  Basic
           end,
           [{?HEADER_CONTENT_TYPE,     #'P_basic'.content_type},
            {?HEADER_CONTENT_ENCODING, #'P_basic'.content_encoding},
@@ -227,6 +232,11 @@ parse_destination(?TOPIC_PREFIX ++ Rest) ->
     parse_simple_destination(topic, Rest);
 parse_destination(?AMQQUEUE_PREFIX ++ Rest) ->
     parse_simple_destination(amqqueue, Rest);
+parse_destination(?TEMP_QUEUE_PREFIX ++ Rest) ->
+    parse_simple_destination(temp_queue, Rest);
+parse_destination(?REPLY_QUEUE_PREFIX ++ Rest) ->
+    %% reply queue names might have slashes
+    {ok, {reply_queue, Rest}};
 parse_destination(?EXCHANGE_PREFIX ++ Rest) ->
     case parse_content(Rest) of
         %% One cannot refer to the default exchange this way; it has
@@ -246,7 +256,7 @@ parse_routing_information({exchange, {Name, Pattern}}) ->
 parse_routing_information({topic, Name}) ->
     {"amq.topic", Name};
 parse_routing_information({Type, Name})
-  when Type =:= queue orelse Type =:= amqqueue->
+  when Type =:= queue orelse Type =:= reply_queue orelse Type =:= amqqueue ->
     {"", Name}.
 
 %% ---- Destination parsing helpers ----
