@@ -318,24 +318,24 @@ ensure_mnesia_dir() ->
 ensure_mnesia_running() ->
     case mnesia:system_info(is_running) of
         yes -> ok;
-        no  -> throw({error, mnesia_not_running});
-        Reason when Reason =:= starting; Reason =:= stopping ->
-            wait_and_try_again(ensure_mnesia_running, [])
+        starting -> waiting_for(mnesia_running),
+                    ensure_mnesia_running();
+        Reason when Reason =:= no; Reason =:= stopping ->
+                    throw({error, mnesia_not_running})
     end.
 
 ensure_mnesia_not_running() ->
     case mnesia:system_info(is_running) of
         no  -> ok;
-        yes -> throw({error, mnesia_unexpectedly_running});
-        Reason when Reason =:= starting; Reason =:= stopping ->
-            wait_and_try_again(ensure_mnesia_not_running, [])
+        stopping -> waiting_for(mnesia_not_running),
+                    ensure_mnesia_not_running();
+        Reason when Reason =:= yes; Reason =:= starting ->
+            throw({error, mnesia_unexpectedly_running})
     end.
 
-wait_and_try_again(Fun, Args) ->
-    receive
-    after 1000 -> error_logger:info_msg("trying to ~p again~n", [Fun, Args]),
-                  apply(Fun, Args)
-    end.
+waiting_for(Condition) ->
+    error_logger:info_msg("Waiting for ~p...~n", [Condition]),
+    timer:sleep(1000).
 
 ensure_schema_integrity() ->
     case check_schema_integrity() of
@@ -615,7 +615,8 @@ new_backup_dir_name(MnesiaDir) ->
                                  Year, Month, Day, Hour, Minute, Second])),
     case filelib:is_file(BackupDir) of
         false -> BackupDir;
-        true -> wait_and_try_again(new_backup_dir_name, [MnesiaDir])
+        true -> waiting_for(new_backup_dir_name),
+                new_backup_dir_name(MnesiaDir)
     end.
 
 copy_db(Destination) ->
