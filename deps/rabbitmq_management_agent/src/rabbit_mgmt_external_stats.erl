@@ -51,11 +51,9 @@ info(Node) ->
     info(Node, ?KEYS).
 
 info(Node, Keys) ->
-    try
-        gen_server2:call({?MODULE, Node}, {info, Keys}, infinity)
-    catch
-        exit:{noproc, _} -> [{external_stats_not_running, true}]
-    end.
+    rabbit_misc:with_exit_handler(
+      fun() -> [{external_stats_not_running, true}] end,
+      fun() -> gen_server2:call({?MODULE, Node}, {info, Keys}, infinity) end).
 
 %%--------------------------------------------------------------------
 
