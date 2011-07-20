@@ -16,6 +16,6 @@ add_idempotence_test() ->
     rabbit_mochiweb_registry:add(foo, F, F, L),
     rabbit_mochiweb_registry:add(foo, F, F, L),
     ?assertEqual(
-       1, length([P || {P, _, _} <- rabbit_mochiweb_registry:list_all(),
-                       P =:= "/foo"])),
+       1, length([ok || {"/foo", _, _} <-
+                            rabbit_mochiweb_registry:list_all()])),
     passed.
