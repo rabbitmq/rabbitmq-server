@@ -951,6 +951,7 @@ test_cluster_management() ->
     ok = control_action(reset, []),
     ok = control_action(start_app, []),
     ok = control_action(stop_app, []),
+    ok = assert_disc_node(),
     ok = control_action(force_cluster, ["invalid1@invalid",
                                         "invalid2@invalid"]),
     ok = assert_ram_node(),
@@ -978,6 +979,7 @@ test_cluster_management2(SecondaryNode) ->
     %% make a disk node
     ok = control_action(reset, []),
     ok = control_action(cluster, [NodeS]),
+    ok = assert_disc_node(),
     %% make a ram node
     ok = control_action(reset, []),
     ok = control_action(cluster, [SecondaryNodeS]),
@@ -1003,23 +1005,37 @@ test_cluster_management2(SecondaryNode) ->
     ok = control_action(stop_app, []),
     ok = assert_ram_node(),
 
-    %% join empty cluster as a ram node
+    %% join empty cluster as a ram node (converts to disc)
     ok = control_action(reset, []),
     ok = control_action(cluster, []),
+    ok = control_action(start_app, []),
+    ok = control_action(stop_app, []),
+    ok = assert_disc_node(),
+
+    %% make a new ram node
+    ok = control_action(reset, []),
+    ok = control_action(force_cluster, [SecondaryNodeS]),
     ok = control_action(start_app, []),
     ok = control_action(stop_app, []),
     ok = assert_ram_node(),
 
     %% turn ram node into disk node
-    ok = control_action(reset, []),
     ok = control_action(cluster, [SecondaryNodeS, NodeS]),
     ok = control_action(start_app, []),
     ok = control_action(stop_app, []),
+    ok = assert_disc_node(),
 
     %% convert a disk node into a ram node
+    ok = assert_disc_node(),
     ok = control_action(force_cluster, ["invalid1@invalid",
                                         "invalid2@invalid"]),
     ok = assert_ram_node(),
+
+    %% make a new disk node
+    ok = control_action(force_reset, []),
+    ok = control_action(start_app, []),
+    ok = control_action(stop_app, []),
+    ok = assert_disc_node(),
 
     %% turn a disk node into a ram node
     ok = control_action(reset, []),
@@ -1594,6 +1610,12 @@ assert_ram_node() ->
     case rabbit_mnesia:is_disc_node() of
         true -> exit('not_ram_node');
         false -> ok
+    end.
+
+assert_disc_node() ->
+    case rabbit_mnesia:is_disc_node() of
+        true -> ok;
+        false -> exit('not_disc_node')
     end.
 
 delete_file(File) ->

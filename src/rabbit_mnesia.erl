@@ -431,7 +431,7 @@ delete_previously_running_nodes() ->
 init_db(ClusterNodes, Force, SecondaryPostMnesiaFun) ->
     UClusterNodes = lists:usort(ClusterNodes),
     ProperClusterNodes = UClusterNodes -- [node()],
-    IsDiskNode = lists:member(node(), ClusterNodes),
+    IsDiskNode = ClusterNodes == [] orelse lists:member(node(), ClusterNodes),
     WasDiskNode = is_disc_node(),
     case mnesia:change_config(extra_db_nodes, ProperClusterNodes) of
         {ok, Nodes} ->
@@ -613,6 +613,14 @@ table_has_copy_type(TabDef, DiscType) ->
     lists:member(node(), proplists:get_value(DiscType, TabDef, [])).
 
 assert_tables_copy_type(CopyTypeAlt) ->
+    case mnesia:table_info(schema, storage_type) of
+        CopyTypeAlt -> ok;
+        _ -> case mnesia:change_table_copy_type(schema, node(), CopyTypeAlt) of
+                 {aborted, {"Disc resident tables", _, _}} -> ok;
+                 {atomic, ok} -> ok;
+                 E -> exit({'node_conversion_failed', E})
+             end
+    end,
     lists:foreach(
       fun({Tab, TabDef}) ->
               HasDiscCopies     = table_has_copy_type(TabDef, disc_copies),
@@ -627,12 +635,16 @@ assert_tables_copy_type(CopyTypeAlt) ->
               case mnesia:table_info(Tab, storage_type) of
                   StorageType1 -> ok;
                   unknown      -> ok;
-                  _            -> io:format("~p to ~p: ~p~n", [Tab, StorageType1, mnesia:change_table_copy_type(Tab, node(), StorageType1)])
+                  _            ->
+                      {atomic, ok} = mnesia:change_table_copy_type(
+                                       Tab, node(), StorageType1)
               end
       end, table_definitions()),
     case mnesia:table_info(schema, storage_type) of
         CopyTypeAlt -> ok;
-        _           -> io:format("~p to ~p: ~p~n", [schema, CopyTypeAlt, mnesia:change_table_copy_type(schema, node(), CopyTypeAlt)])
+        _           ->
+            {atomic, ok} = mnesia:change_table_copy_type(
+                             schema, node(), CopyTypeAlt)
     end.
 
 create_local_table_copies(Type) ->
