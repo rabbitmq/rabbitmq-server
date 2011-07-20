@@ -359,13 +359,13 @@ wait_for_application(Node, PidFile, Inform) ->
     wait_for_application(Node, Pid).
 
 wait_for_application(Node, Pid) ->
-    case pid_up(Pid) of
+    case process_up(Pid) of
         true  -> case node_up(Node) of
                      true  -> ok;
                      false -> timer:sleep(1000),
                               wait_for_application(Node, Pid)
                  end;
-        false -> {error, pid_not_running}
+        false -> {error, process_not_running}
     end.
 
 wait_and_read_pid_file(PidFile) ->
@@ -384,7 +384,7 @@ node_up(Node) ->
 
 % Test using some OS clunkiness since we shouldn't trust
 % rpc:call(os, getpid, []) at this point
-pid_up(Pid) ->
+process_up(Pid) ->
     with_os([{unix, fun () ->
                             system("ps -p " ++ Pid
                                    ++ " >/dev/null 2>&1") =:= 0
