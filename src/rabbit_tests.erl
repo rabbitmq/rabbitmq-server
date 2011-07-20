@@ -998,7 +998,6 @@ test_cluster_management2(SecondaryNode) ->
     ok = control_action(stop_app, []),
 
     %% join non-existing cluster as a ram node
-    ok = control_action(reset, []),
     ok = control_action(force_cluster, ["invalid1@invalid",
                                         "invalid2@invalid"]),
     ok = control_action(start_app, []),
@@ -1006,7 +1005,6 @@ test_cluster_management2(SecondaryNode) ->
     ok = assert_ram_node(),
 
     %% join empty cluster as a ram node (converts to disc)
-    ok = control_action(reset, []),
     ok = control_action(cluster, []),
     ok = control_action(start_app, []),
     ok = control_action(stop_app, []),
