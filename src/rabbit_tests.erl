@@ -951,9 +951,8 @@ test_cluster_management() ->
     ok = control_action(reset, []),
     ok = control_action(start_app, []),
     ok = control_action(stop_app, []),
-    {error, {cannot_convert_disc_to_ram, _}} =
-        control_action(force_cluster, ["invalid1@invalid",
-                                       "invalid2@invalid"]),
+    ok = control_action(force_cluster, ["invalid1@invalid",
+                                        "invalid2@invalid"]),
 
     %% join a non-existing cluster as a ram node
     ok = control_action(reset, []),
@@ -1012,9 +1011,8 @@ test_cluster_management2(SecondaryNode) ->
     ok = control_action(stop_app, []),
 
     %% convert a disk node into a ram node
-    {error, {cannot_convert_disc_to_ram, _}} =
-        control_action(force_cluster, ["invalid1@invalid",
-                                       "invalid2@invalid"]),
+    ok = control_action(force_cluster, ["invalid1@invalid",
+                                        "invalid2@invalid"]),
 
     %% turn a disk node into a ram node
     ok = control_action(reset, []),

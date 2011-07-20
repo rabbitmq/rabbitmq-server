@@ -23,7 +23,8 @@
          empty_ram_only_tables/0, copy_db/1, wait_for_tables/1,
          create_cluster_nodes_config/1, read_cluster_nodes_config/0,
          record_running_nodes/0, read_previously_running_nodes/0,
-         delete_previously_running_nodes/0, running_nodes_filename/0]).
+         delete_previously_running_nodes/0, running_nodes_filename/0,
+         is_disc_node/0]).
 
 -export([table_names/0]).
 
@@ -65,6 +66,7 @@
 -spec(read_previously_running_nodes/0 :: () ->  [node()]).
 -spec(delete_previously_running_nodes/0 :: () ->  'ok').
 -spec(running_nodes_filename/0 :: () -> file:filename()).
+-spec(is_disc_node/0 :: () -> boolean()).
 
 -endif.
 
@@ -429,8 +431,8 @@ delete_previously_running_nodes() ->
 init_db(ClusterNodes, Force, SecondaryPostMnesiaFun) ->
     UClusterNodes = lists:usort(ClusterNodes),
     ProperClusterNodes = UClusterNodes -- [node()],
-    IsDiskNode = ClusterNodes == [] orelse lists:member(node(), ClusterNodes),
-    WasDiskNode = filelib:is_regular(filename:join(dir(), "rabbit_durable_exchange.DCD")),
+    IsDiskNode = lists:member(node(), ClusterNodes),
+    WasDiskNode = is_disc_node(),
     case mnesia:change_config(extra_db_nodes, ProperClusterNodes) of
         {ok, Nodes} ->
             case Force of
@@ -448,9 +450,12 @@ init_db(ClusterNodes, Force, SecondaryPostMnesiaFun) ->
             %% three cases and attempt to upgrade the in the other two
             case {Nodes, WasDiskNode, IsDiskNode} of
                 {_, true, false} ->
-                    throw({error, {cannot_convert_disc_to_ram,
-                                   "Cannot convert a disc node to a ram node."
-                                   " Reset first."}});
+                    %% Converting disc node to ram
+                    mnesia:stop(),
+                    move_db(),
+                    rabbit_misc:ensure_ok(mnesia:start(),
+                                          cannot_start_mnesia),
+                    ok = create_schema(false);
                 {[], false, false} ->
                     %% New ram node; start from scratch
                     ok = create_schema(false);
@@ -469,12 +474,13 @@ init_db(ClusterNodes, Force, SecondaryPostMnesiaFun) ->
                     %% Subsequent node in cluster, catch up
                     ensure_version_ok(
                       rpc:call(AnotherNode, rabbit_version, recorded, [])),
-                    ok = wait_for_replicated_tables(),
                     {CopyType, CopyTypeAlt} =
                         case IsDiskNode of
                             true  -> {disc, disc_copies};
                             false -> {ram, ram_copies}
                         end,
+                    ok = wait_for_replicated_tables(),
+                    assert_tables_copy_type(CopyTypeAlt),
                     ok = create_local_table_copy(schema, CopyTypeAlt),
                     ok = create_local_table_copies(CopyType),
                     ok = SecondaryPostMnesiaFun(),
@@ -524,21 +530,24 @@ create_schema() ->
     create_schema(true).
 
 create_schema(OnDisk) ->
-    Nodes = if OnDisk -> [node()];
-               true   -> []
-            end,
-    mnesia:stop(),
-    rabbit_misc:ensure_ok(mnesia:create_schema(Nodes),
-                          cannot_create_schema),
-    rabbit_misc:ensure_ok(mnesia:start(),
-                          cannot_start_mnesia),
-    if not OnDisk ->
-            mnesia:change_table_copy_type(schema, node(), ram_copies);
-       true -> ok
+    if OnDisk ->
+            mnesia:stop(),
+            rabbit_misc:ensure_ok(mnesia:create_schema([node()]),
+                                  cannot_create_schema),
+            rabbit_misc:ensure_ok(mnesia:start(),
+                                  cannot_start_mnesia);
+       true ->
+            ok
     end,
     ok = create_tables(OnDisk),
     ensure_schema_integrity(),
     ok = rabbit_version:record_desired().
+
+is_disc_node() ->
+    %% This is pretty ugly but we can't start Mnesia and ask it (will hang),
+    %% we can't look at the config file (may not include us even if we're a
+    %% disc node).
+    filelib:is_regular(filename:join(dir(), "rabbit_durable_exchange.DCD")).
 
 move_db() ->
     mnesia:stop(),
@@ -582,15 +591,8 @@ create_tables(OnDisk) ->
     lists:foreach(fun ({Tab, TabDef}) ->
                           TabDef1 = proplists:delete(match, TabDef),
                           TabDef2 = case OnDisk of
-                                        true ->
-                                            TabDef1;
-                                        false ->
-                                            [{disc_copies, []},
-                                             {ram_copies, [node()]} |
-                                             proplists:delete(
-                                               ram_copies,
-                                               proplists:delete(disc_copies,
-                                                                TabDef1))]
+                                        true ->  TabDef1;
+                                        false -> copy_type_to_ram(TabDef1)
                                     end,
                           case mnesia:create_table(Tab, TabDef2) of
                               {atomic, ok} -> ok;
@@ -603,8 +605,35 @@ create_tables(OnDisk) ->
                   table_definitions()),
     ok.
 
+copy_type_to_ram(TabDef) ->
+    [{disc_copies, []}, {ram_copies, [node()]}
+     | proplists:delete(ram_copies, proplists:delete(disc_copies, TabDef))].
+
 table_has_copy_type(TabDef, DiscType) ->
     lists:member(node(), proplists:get_value(DiscType, TabDef, [])).
+
+assert_tables_copy_type(CopyTypeAlt) ->
+    lists:foreach(
+      fun({Tab, TabDef}) ->
+              HasDiscCopies     = table_has_copy_type(TabDef, disc_copies),
+              HasDiscOnlyCopies = table_has_copy_type(TabDef, disc_only_copies),
+              StorageType = if HasDiscCopies     -> disc_copies;
+                               HasDiscOnlyCopies -> disc_only_copies;
+                               true              -> ram_copies
+                            end,
+              StorageType1 = if CopyTypeAlt =:= disc_copies -> StorageType;
+                                true                        -> ram_copies
+                             end,
+              case mnesia:table_info(Tab, storage_type) of
+                  StorageType1 -> ok;
+                  unknown      -> ok;
+                  _            -> io:format("~p to ~p: ~p~n", [Tab, StorageType1, mnesia:change_table_copy_type(Tab, node(), StorageType1)])
+              end
+      end, table_definitions()),
+    case mnesia:table_info(schema, storage_type) of
+        CopyTypeAlt -> ok;
+        _           -> io:format("~p to ~p: ~p~n", [schema, CopyTypeAlt, mnesia:change_table_copy_type(schema, node(), CopyTypeAlt)])
+    end.
 
 create_local_table_copies(Type) ->
     lists:foreach(
