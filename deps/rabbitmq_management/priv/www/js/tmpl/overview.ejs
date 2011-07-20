@@ -1,9 +1,9 @@
 <h1>Overview</h1>
 
-<% if (overview.statistics_db_node != 'not_running') { %>
 <div class="section">
 <h2>Totals</h2>
 <div class="hider updatable">
+<% if (overview.statistics_db_node != 'not_running') { %>
   <h3>Queued messages</h3>
   <div class="highlight">
     Ready
@@ -22,10 +22,12 @@
   <h3>Message rates</h3>
   <%= message_rates(overview.message_stats) %>
 <% } %>
+<% } else { %>
+    Totals not available
+<% } %>
 <span class="br"></span>
 </div>
 </div>
-<% } %>
 
 <% if (user_monitor) { %>
 <div class="section">
