@@ -117,6 +117,22 @@ force_cluster(ClusterNodes) ->
 cluster(ClusterNodes, Force) ->
     ensure_mnesia_not_running(),
     ensure_mnesia_dir(),
+
+    %% Reset the node if we're in a cluster and have just changed node type
+    rabbit_misc:ensure_ok(mnesia:start(), cannot_start_mnesia),
+    AllClusteredNodes =
+        lists:usort(all_clustered_nodes() ++
+                        read_cluster_nodes_config()) -- [node()],
+    mnesia:stop(),
+    case {AllClusteredNodes =/= [],
+          is_disc_node() =/= should_be_disc_node(ClusterNodes)} of
+        {true, true} -> error_logger:warning_msg("changing node type; "
+                                                 "resetting...~n"),
+                        reset();
+        {_, _}       -> ok
+    end,
+
+    %% Join the cluster
     rabbit_misc:ensure_ok(mnesia:start(), cannot_start_mnesia),
     try
         ok = init_db(ClusterNodes, Force,
@@ -431,7 +447,7 @@ delete_previously_running_nodes() ->
 init_db(ClusterNodes, Force, SecondaryPostMnesiaFun) ->
     UClusterNodes = lists:usort(ClusterNodes),
     ProperClusterNodes = UClusterNodes -- [node()],
-    IsDiskNode = ClusterNodes == [] orelse lists:member(node(), ClusterNodes),
+    IsDiskNode = should_be_disc_node(ClusterNodes),
     WasDiskNode = is_disc_node(),
     case mnesia:change_config(extra_db_nodes, ProperClusterNodes) of
         {ok, Nodes} ->
@@ -480,7 +496,6 @@ init_db(ClusterNodes, Force, SecondaryPostMnesiaFun) ->
                             false -> {ram, ram_copies}
                         end,
                     ok = wait_for_replicated_tables(),
-                    assert_tables_copy_type(CopyTypeAlt),
                     ok = create_local_table_copy(schema, CopyTypeAlt),
                     ok = create_local_table_copies(CopyType),
                     ok = SecondaryPostMnesiaFun(),
@@ -549,6 +564,9 @@ is_disc_node() ->
     %% disc node).
     filelib:is_regular(filename:join(dir(), "rabbit_durable_exchange.DCD")).
 
+should_be_disc_node(ClusterNodes) ->
+    ClusterNodes == [] orelse lists:member(node(), ClusterNodes).
+
 move_db() ->
     mnesia:stop(),
     MnesiaDir = filename:dirname(dir() ++ "/"),
@@ -611,41 +629,6 @@ copy_type_to_ram(TabDef) ->
 
 table_has_copy_type(TabDef, DiscType) ->
     lists:member(node(), proplists:get_value(DiscType, TabDef, [])).
-
-assert_tables_copy_type(CopyTypeAlt) ->
-    case mnesia:table_info(schema, storage_type) of
-        CopyTypeAlt -> ok;
-        _ -> case mnesia:change_table_copy_type(schema, node(), CopyTypeAlt) of
-                 {aborted, {"Disc resident tables", _, _}} -> ok;
-                 {atomic, ok} -> ok;
-                 E -> exit({'node_conversion_failed', E})
-             end
-    end,
-    lists:foreach(
-      fun({Tab, TabDef}) ->
-              HasDiscCopies     = table_has_copy_type(TabDef, disc_copies),
-              HasDiscOnlyCopies = table_has_copy_type(TabDef, disc_only_copies),
-              StorageType = if HasDiscCopies     -> disc_copies;
-                               HasDiscOnlyCopies -> disc_only_copies;
-                               true              -> ram_copies
-                            end,
-              StorageType1 = if CopyTypeAlt =:= disc_copies -> StorageType;
-                                true                        -> ram_copies
-                             end,
-              case mnesia:table_info(Tab, storage_type) of
-                  StorageType1 -> ok;
-                  unknown      -> ok;
-                  _            ->
-                      {atomic, ok} = mnesia:change_table_copy_type(
-                                       Tab, node(), StorageType1)
-              end
-      end, table_definitions()),
-    case mnesia:table_info(schema, storage_type) of
-        CopyTypeAlt -> ok;
-        _           ->
-            {atomic, ok} = mnesia:change_table_copy_type(
-                             schema, node(), CopyTypeAlt)
-    end.
 
 create_local_table_copies(Type) ->
     lists:foreach(

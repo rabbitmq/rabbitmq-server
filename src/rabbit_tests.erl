@@ -1066,6 +1066,10 @@ test_cluster_management2(SecondaryNode) ->
     {error, {no_running_cluster_nodes, _, _}} =
         control_action(reset, []),
 
+    %% attempt to change type when no other node is alive
+    {error, {no_running_cluster_nodes, _, _}} =
+        control_action(cluster, [SecondaryNodeS]),
+
     %% leave system clustered, with the secondary node as a ram node
     ok = control_action(force_reset, []),
     ok = control_action(start_app, []),
