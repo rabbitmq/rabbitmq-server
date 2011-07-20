@@ -52,8 +52,9 @@ handle_call({add, Context, Selector, Handler, Link}, _From,
     case lookup_dispatch(Listener) of
         {Selectors, Fallback} ->
             set_dispatch(Listener,
-                         {Selectors ++ [{Context, Selector, Handler, Link}],
-                          Fallback}),
+                         {lists:keystore(Context, 1, Selectors,
+                                         {Context, Selector, Handler, Link}),
+                         Fallback}),
             {reply, ok, undefined};
         Err ->
             {stop, Err, undefined}
