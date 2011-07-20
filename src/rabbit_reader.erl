@@ -677,7 +677,6 @@ handle_method0(#'connection.tune_ok'{frame_max = FrameMax,
     end;
 
 handle_method0(#'connection.open'{virtual_host = VHostPath},
-
                State = #v1{connection_state = opening,
                            connection = Connection = #connection{
                                           user = User,
