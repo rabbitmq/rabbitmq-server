@@ -70,8 +70,8 @@ test_migrate_twice() ->
 test_already_there() ->
     with_sups(fun([_, _]) ->
                       S = childspec(worker),
-                      {ok, Pid}              = ?MS:start_child(a, S),
-                      {already_started, Pid} = ?MS:start_child(b, S)
+                      {ok, Pid}                       = ?MS:start_child(a, S),
+                      {error, {already_started, Pid}} = ?MS:start_child(b, S)
               end, [a, b]).
 
 %% Deleting and restarting should work as per a normal supervisor
@@ -137,8 +137,8 @@ test_no_migration_on_shutdown() ->
 test_start_idempotence() ->
     with_sups(fun([_]) ->
                       CS = childspec(worker),
-                      {ok, Pid}              = ?MS:start_child(a, CS),
-                      {already_started, Pid} = ?MS:start_child(a, CS)
+                      {ok, Pid}                       = ?MS:start_child(a, CS),
+                      {error, {already_started, Pid}} = ?MS:start_child(a, CS)
               end, [a]).
 
 %% ---------------------------------------------------------------------------

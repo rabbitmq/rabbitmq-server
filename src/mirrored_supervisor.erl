@@ -377,7 +377,7 @@ tell_all_peers_to_die(Group, Reason) ->
 maybe_start(Delegate, ChildSpec) ->
     case mnesia:transaction(fun() -> check_start(Delegate, ChildSpec) end) of
         {atomic, start} -> start(Delegate, ChildSpec);
-        {atomic, Pid}   -> {already_started, Pid};
+        {atomic, Pid}   -> {error, {already_started, Pid}};
         %% If we are torn down while in the transaction...
         {aborted, E}    -> {error, E}
     end.
