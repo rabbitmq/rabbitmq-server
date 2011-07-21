@@ -33,7 +33,6 @@ function parse_cookie() {
         var kv = items[i].split(':');
         dict[kv[0]] = unescape(kv[1]);
     }
-
     return dict;
 }
 
@@ -48,25 +47,12 @@ function store_cookie(dict) {
 }
 
 function get_cookie() {
-    var c = '';
-    if (document.cookie.length > 2) {
-        if (document.cookie.substr(0, 2) == 'm=') {
-            c = document.cookie.slice(2);
-        } else {
-            // Old cookie format
-            clear_all_cookies();
-        }
-    }
-    return c;
-}
-
-var epoch = 'Thu, 01-Jan-1970 00:00:01 GMT';
-
-function clear_all_cookies() {
     var cookies = document.cookie.split(';');
     for (var i in cookies) {
-        document.cookie = cookies[i].split('=')[0] + '=; expires=' + epoch;
+        var kv = cookies[i].split('=');
+        if (kv[0] == 'm') return kv[1];
     }
+    return '';
 }
 
 // Try to economise on space since cookies have limited length.
