@@ -1610,13 +1610,13 @@ clean_logs(Files, Suffix) ->
 
 assert_ram_node() ->
     case rabbit_mnesia:is_disc_node() of
-        true -> exit('not_ram_node');
+        true  -> exit('not_ram_node');
         false -> ok
     end.
 
 assert_disc_node() ->
     case rabbit_mnesia:is_disc_node() of
-        true -> ok;
+        true  -> ok;
         false -> exit('not_disc_node')
     end.
 

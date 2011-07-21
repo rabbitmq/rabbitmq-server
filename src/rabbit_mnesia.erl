@@ -124,7 +124,7 @@ cluster(ClusterNodes, Force) ->
                            "changing node type; wiping mnesia...~n"),
                          rabbit_misc:ensure_ok(mnesia:delete_schema([node()]),
                                                cannot_delete_schema);
-        _    -> ok
+        _             -> ok
     end,
 
     %% Pre-emtively leave the cluster
@@ -633,8 +633,8 @@ new_backup_dir_name(MnesiaDir) ->
                                  Year, Month, Day, Hour, Minute, Second])),
     case filelib:is_file(BackupDir) of
         false -> BackupDir;
-        true -> waiting_for(new_backup_dir_name),
-                new_backup_dir_name(MnesiaDir)
+        true  -> waiting_for(new_backup_dir_name),
+                 new_backup_dir_name(MnesiaDir)
     end.
 
 copy_db(Destination) ->
