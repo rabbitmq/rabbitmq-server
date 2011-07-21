@@ -203,7 +203,7 @@
 
 -spec which_children(SupRef) -> [{Id,Child,Type,Modules}] when
       SupRef :: sup_ref(),
-      Id :: child_id() | undefined,
+      Id :: child_id() | 'undefined',
       Child :: child(),
       Type :: worker(),
       Modules :: modules().
