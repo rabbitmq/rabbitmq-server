@@ -494,16 +494,9 @@ init_db(ClusterNodes, Force, SecondaryPostMnesiaFun) ->
                 true  -> ok
             end,
             %% We create a new db (on disk, or in ram) in the first
-            %% three cases and attempt to upgrade the in the other two
+            %% two cases and attempt to upgrade the in the other two
             case {Nodes, WasDiskNode, IsDiskNode} of
-                {_, true, false} ->
-                    %% Converting disc node to ram
-                    mnesia:stop(),
-                    move_db(),
-                    rabbit_misc:ensure_ok(mnesia:start(),
-                                          cannot_start_mnesia),
-                    ok = create_schema(false);
-                {[], false, false} ->
+                {[], _, false} ->
                     %% New ram node; start from scratch
                     ok = create_schema(false);
                 {[], false, true} ->
