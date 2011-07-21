@@ -591,15 +591,17 @@ create_schema() ->
     create_schema(true).
 
 create_schema(OnDisk) ->
+    mnesia:stop(),
     if OnDisk ->
-            mnesia:stop(),
             rabbit_misc:ensure_ok(mnesia:create_schema([node()]),
-                                  cannot_create_schema),
-            rabbit_misc:ensure_ok(mnesia:start(),
-                                  cannot_start_mnesia);
+                                  cannot_create_schema);
        true ->
-            ok
+            %% remove the disc schema since this is a ram node
+            rabbit_misc:ensure_ok(mnesia:delete_schema([node()]),
+                                  cannot_delete_schema)
     end,
+    rabbit_misc:ensure_ok(mnesia:start(),
+                          cannot_start_mnesia),
     ok = create_tables(OnDisk),
     ensure_schema_integrity(),
     ok = rabbit_version:record_desired().
