@@ -35,6 +35,8 @@
 
 -export([init_with_backing_queue_state/7]).
 
+-export([format_priority_mailbox/2]).
+
 %% Queue's state
 -record(q, {q,
             exclusive_consumer,
@@ -1162,3 +1164,14 @@ handle_pre_hibernate(State = #q{backing_queue = BQ,
     State1 = State#q{stats_timer = rabbit_event:stop_stats_timer(StatsTimer),
                      backing_queue_state = BQS3},
     {hibernate, stop_rate_timer(State1)}.
+
+format_priority_mailbox(_Opt, Mailbox) ->
+    Len = priority_queue:len(Mailbox),
+    case Len > 100 of
+        false -> {Len, priority_queue:to_list(Mailbox)};
+        true  -> {Len, {dict:to_list(
+                          lists:foldl(
+                            fun ({P, _V}, Counts) ->
+                                    dict:update_counter(P, 1, Counts)
+                            end, dict:new(), priority_queue:to_list(Mailbox)))}}
+    end.

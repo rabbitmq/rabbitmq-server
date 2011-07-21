@@ -1161,17 +1161,22 @@ format_status(Opt, StatusData) ->
               end,
     Header = lists:concat(["Status for generic server ", NameTag]),
     Log = sys:get_debug(log, Debug, []),
-    Specfic =
-        case erlang:function_exported(Mod, format_status, 2) of
-            true -> case catch Mod:format_status(Opt, [PDict, State]) of
-                        {'EXIT', _} -> [{data, [{"State", State}]}];
-                        Else        -> Else
-                    end;
-            _    -> [{data, [{"State", State}]}]
-        end,
+    Specfic = callback_format_status(Opt, Mod, format_status, [PDict, State],
+                                     [{data, [{"State", State}]}]),
+    Messages = callback_format_status(Opt, Mod, format_priority_mailbox, Queue,
+                                      priority_queue:to_list(Queue)),
     [{header, Header},
      {data, [{"Status", SysState},
              {"Parent", Parent},
              {"Logged events", Log},
-             {"Queued messages", priority_queue:to_list(Queue)}]} |
+             {"Queued messages", Messages}]} |
      Specfic].
+
+callback_format_status(Opt, Mod, FunName, Args, Default) ->
+    case erlang:function_exported(Mod, FunName, 2) of
+        true -> case catch Mod:FunName(Opt, Args) of
+                    {'EXIT', _} -> Default;
+                    Else        -> Else
+                end;
+        _    -> Default
+    end.
