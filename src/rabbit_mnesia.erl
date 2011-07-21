@@ -193,6 +193,16 @@ nodes_of_type(Type) ->
     mnesia:table_info(rabbit_durable_exchange, Type).
 
 table_definitions() ->
+    table_definitions(is_disc_node()).
+
+%% The tables aren't supposed to be on disk on a ram node
+table_definitions(true) ->
+    real_table_definitions();
+table_definitions(false) ->
+    [{Tab, copy_type_to_ram(TabDef)}
+     || {Tab, TabDef} <- real_table_definitions()].
+
+real_table_definitions() ->
     [{rabbit_user,
       [{record_name, internal_user},
        {attributes, record_info(fields, internal_user)},
@@ -297,10 +307,10 @@ resource_match(Kind) ->
     #resource{kind = Kind, _='_'}.
 
 table_names() ->
-    [Tab || {Tab, _} <- table_definitions()].
+    [Tab || {Tab, _} <- real_table_definitions()].
 
 replicated_table_names() ->
-    [Tab || {Tab, TabDef} <- table_definitions(),
+    [Tab || {Tab, TabDef} <- real_table_definitions(),
             not lists:member({local_content, true}, TabDef)
     ].
 
@@ -517,10 +527,21 @@ init_db(ClusterNodes, Force, SecondaryPostMnesiaFun) ->
                             false -> {ram, ram_copies}
                         end,
                     ok = wait_for_replicated_tables(),
-
                     ok = create_local_table_copy(schema, CopyTypeAlt),
                     ok = create_local_table_copies(CopyType),
+
                     ok = SecondaryPostMnesiaFun(),
+                    %% We've taken down mnesia, so ram nodes will need
+                    %% to re-sync
+                    case is_disc_node() of
+                        false -> mnesia:start(),
+                                ensure_mnesia_running(),
+                                mnesia:change_config(extra_db_nodes,
+                                                     ProperClusterNodes),
+                                wait_for_replicated_tables();
+                        true  -> ok
+                    end,
+
                     ensure_schema_integrity(),
                     ok
             end;
@@ -629,19 +650,15 @@ create_tables() ->
 create_tables(OnDisk) ->
     lists:foreach(fun ({Tab, TabDef}) ->
                           TabDef1 = proplists:delete(match, TabDef),
-                          TabDef2 = case OnDisk of
-                                        true ->  TabDef1;
-                                        false -> copy_type_to_ram(TabDef1)
-                                    end,
-                          case mnesia:create_table(Tab, TabDef2) of
+                          case mnesia:create_table(Tab, TabDef1) of
                               {atomic, ok} -> ok;
                               {aborted, {already_exists, Tab}} -> ok;
                               {aborted, Reason} ->
                                   throw({error, {table_creation_failed,
-                                                 Tab, TabDef2, Reason}})
+                                                 Tab, TabDef1, Reason}})
                           end
                   end,
-                  table_definitions()),
+                  table_definitions(OnDisk)),
     ok.
 
 copy_type_to_ram(TabDef) ->
@@ -677,7 +694,7 @@ create_local_table_copies(Type) ->
                   end,
               ok = create_local_table_copy(Tab, StorageType)
       end,
-      table_definitions()),
+      table_definitions(Type =:= disc)),
     ok.
 
 create_local_table_copy(Tab, Type) ->
