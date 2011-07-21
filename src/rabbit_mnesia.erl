@@ -120,19 +120,30 @@ cluster(ClusterNodes, Force) ->
     ensure_mnesia_not_running(),
     ensure_mnesia_dir(),
 
-    %% Reset the node if we've just changed node type
+    %% Wipe mnesia if we're changing type from disc to ram
     case {is_disc_node(), should_be_disc_node(ClusterNodes)} of
         {true, false} -> error_logger:warning_msg(
-                           "changing node type; backing up db and "
-                           "resetting...~n"),
-                         ok = move_db(),
-                         mnesia:stop(),
-                         reset();
+                           "changing node type; wiping mnesia...~n"),
+                         rabbit_misc:ensure_ok(mnesia:delete_schema([node()]),
+                                               cannot_delete_schema);
         _    -> ok
     end,
 
-    %% Pre-emtively leave the cluster (in case we had been part of it
-    %% and force_reseted)
+    %% Pre-emtively leave the cluster
+    %%
+    %% We're trying to handle the following two cases:
+    %% 1. We have a two-node cluster, where both nodes are disc nodes.
+    %% One node is re-clustered as a ram node.  When it tries to
+    %% re-join the cluster, but before it has time to update its
+    %% tables definitions, the other node will order it to re-create
+    %% its disc tables.  So, we need to leave the cluster before we
+    %% can join it again.
+    %% 2. We have a two-node cluster, where both nodes are disc nodes.
+    %% One node is forcefully reset (so, the other node thinks its
+    %% still a part of the cluster).  The reset node is re-clustered
+    %% as a ram node.  Same as above, we need to leave the cluster
+    %% before we can join it.  But, since we don't know if we're in a
+    %% cluster or not, we just pre-emptively leave it before joining.
     ProperClusterNodes = ClusterNodes -- [node()],
     try leave_cluster(ProperClusterNodes, ProperClusterNodes) of
         ok -> ok
