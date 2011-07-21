@@ -515,12 +515,10 @@ init_db(ClusterNodes, Force, SecondaryPostMnesiaFun) ->
                     ok = create_schema(true);
                 {[], true, true} ->
                     %% We're the first node up
-                    ok = case rabbit_upgrade:maybe_upgrade_local() of
-                             ok ->
-                                 ensure_schema_integrity();
-                             version_not_available ->
-                                 schema_ok_or_move()
-                         end;
+                    case rabbit_upgrade:maybe_upgrade_local() of
+                        ok                    -> ensure_schema_integrity();
+                        version_not_available -> ok = schema_ok_or_move()
+                    end;
                 {[AnotherNode|_], _, _} ->
                     %% Subsequent node in cluster, catch up
                     ensure_version_ok(
@@ -538,7 +536,8 @@ init_db(ClusterNodes, Force, SecondaryPostMnesiaFun) ->
                     %% We've taken down mnesia, so ram nodes will need
                     %% to re-sync
                     case is_disc_node() of
-                        false -> mnesia:start(),
+                        false -> rabbit_misc:ensure_ok(mnesia:start(),
+                                                       cannot_start_mnesia),
                                  ensure_mnesia_running(),
                                  mnesia:change_config(extra_db_nodes,
                                                       ProperClusterNodes),
