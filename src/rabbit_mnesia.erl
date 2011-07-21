@@ -535,10 +535,10 @@ init_db(ClusterNodes, Force, SecondaryPostMnesiaFun) ->
                     %% to re-sync
                     case is_disc_node() of
                         false -> mnesia:start(),
-                                ensure_mnesia_running(),
-                                mnesia:change_config(extra_db_nodes,
-                                                     ProperClusterNodes),
-                                wait_for_replicated_tables();
+                                 ensure_mnesia_running(),
+                                 mnesia:change_config(extra_db_nodes,
+                                                      ProperClusterNodes),
+                                 wait_for_replicated_tables();
                         true  -> ok
                     end,
 
@@ -562,7 +562,7 @@ maybe_upgrade_local_or_record_desired() ->
 
 schema_ok_or_move() ->
     case check_schema_integrity() of
-        {true, ok} ->
+        ok ->
             ok;
         {error, Reason} ->
             %% NB: we cannot use rabbit_log here since it may not have been
