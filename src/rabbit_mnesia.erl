@@ -645,7 +645,6 @@ create_tables(OnDisk) ->
                           TabDef1 = proplists:delete(match, TabDef),
                           case mnesia:create_table(Tab, TabDef1) of
                               {atomic, ok} -> ok;
-                              {aborted, {already_exists, Tab}} -> ok;
                               {aborted, Reason} ->
                                   throw({error, {table_creation_failed,
                                                  Tab, TabDef1, Reason}})
