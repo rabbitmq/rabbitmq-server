@@ -130,8 +130,7 @@
 -record(state, {overall,
                 delegate,
                 group,
-                initial_childspecs,
-                peer_monitors = sets:new()}).
+                initial_childspecs}).
 
 %%----------------------------------------------------------------------------
 
@@ -293,16 +292,14 @@ handle_call({init, Overall}, _From,
     process_flag(trap_exit, true),
     ?PG2:create(Group),
     ok = ?PG2:join(Group, self()),
-    State1 = lists:foldl(
-               fun(Pid, State0) ->
-                       ?GEN_SERVER:cast(Pid, {ensure_monitoring, self()}),
-                       add_peer_monitor(Pid, State0)
-               end, State, ?PG2:get_members(Group) -- [self()]),
-
+    [begin
+         ?GEN_SERVER:cast(Pid, {ensure_monitoring, self()}),
+         erlang:monitor(process, Pid)
+     end || Pid <- ?PG2:get_members(Group) -- [self()]],
     Delegate = child(Overall, delegate),
     erlang:monitor(process, Delegate),
     [maybe_start(Delegate, S) || S <- ChildSpecs],
-    {reply, ok, State1#state{overall = Overall, delegate = Delegate}};
+    {reply, ok, State#state{overall = Overall, delegate = Delegate}};
 
 handle_call({start_child, ChildSpec}, _From,
             State = #state{delegate = Delegate}) ->
@@ -323,10 +320,10 @@ handle_call(Msg, _From, State) ->
     {stop, {unexpected_call, Msg}, State}.
 
 handle_cast({ensure_monitoring, Pid}, State) ->
-    {noreply, add_peer_monitor(Pid, State)};
+    erlang:monitor(process, Pid),
+    {noreply, State};
 
 handle_cast({die, Reason}, State = #state{group = Group}) ->
-    demonitor_all_peers(State),
     tell_all_peers_to_die(Group, Reason),
     {stop, Reason, State};
 
@@ -344,11 +341,10 @@ handle_info({'DOWN', _Ref, process, Pid, Reason},
     %%
     %% Therefore if we get here we know we need to cause the entire
     %% mirrored sup to shut down, not just fail over.
-    demonitor_all_peers(State),
     tell_all_peers_to_die(Group, Reason),
     {stop, Reason, State};
 
-handle_info({'DOWN', Ref, process, Pid, _Reason},
+handle_info({'DOWN', _Ref, process, Pid, _Reason},
             State = #state{delegate = Delegate, group = Group}) ->
     %% TODO load balance this
     %% We remove the dead pid here because pg2 is slightly racy,
@@ -361,7 +357,7 @@ handle_info({'DOWN', Ref, process, Pid, _Reason},
                       [start(Delegate, ChildSpec) || ChildSpec <- ChildSpecs];
         _          -> ok
     end,
-    {noreply, remove_peer_monitor(Ref, State)};
+    {noreply, State};
 
 handle_info(Info, State) ->
     {stop, {unexpected_info, Info}, State}.
@@ -373,16 +369,6 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 %%----------------------------------------------------------------------------
-
-add_peer_monitor(Pid, State = #state{peer_monitors = Peers}) ->
-    State#state{peer_monitors = sets:add_element(
-                                  erlang:monitor(process, Pid), Peers)}.
-
-remove_peer_monitor(Ref, State = #state{peer_monitors = Peers}) ->
-    State#state{peer_monitors = sets:del_element(Ref, Peers)}.
-
-demonitor_all_peers(#state{peer_monitors = Peers}) ->
-    [erlang:demonitor(Ref) || Ref <- sets:to_list(Peers)].
 
 tell_all_peers_to_die(Group, Reason) ->
     [?GEN_SERVER:cast(P, {die, Reason}) ||
