@@ -602,7 +602,7 @@ is_disc_node() ->
     %% This is pretty ugly but we can't start Mnesia and ask it (will hang),
     %% we can't look at the config file (may not include us even if we're a
     %% disc node).
-    filelib:is_regular(filename:join(dir(), "rabbit_durable_exchange.DCD")).
+    mnesia:system_info(use_dir).
 
 should_be_disc_node(ClusterNodes) ->
     ClusterNodes == [] orelse lists:member(node(), ClusterNodes).
