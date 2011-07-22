@@ -121,7 +121,7 @@ cluster(ClusterNodes, Force) ->
     %% Wipe mnesia if we're changing type from disc to ram
     case {is_disc_node(), should_be_disc_node(ClusterNodes)} of
         {true, false} -> error_logger:warning_msg(
-                           "changing node type; wiping mnesia...~n"),
+                           "changing node type; wiping mnesia...~n~n"),
                          rabbit_misc:ensure_ok(mnesia:delete_schema([node()]),
                                                cannot_delete_schema);
         _             -> ok
