@@ -127,7 +127,7 @@ cluster(ClusterNodes, Force) ->
         _             -> ok
     end,
 
-    %% Pre-emtively leave the cluster
+    %% Pre-emptively leave the cluster
     %%
     %% We're trying to handle the following two cases:
     %% 1. We have a two-node cluster, where both nodes are disc nodes.
