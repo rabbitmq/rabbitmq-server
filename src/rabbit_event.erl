@@ -26,7 +26,7 @@
 
 %%----------------------------------------------------------------------------
 
--record(state, {level, timer}).
+-record(state, {level, interval, timer}).
 
 %%----------------------------------------------------------------------------
 
@@ -49,6 +49,7 @@
 
 -opaque(state() :: #state {
                level :: level(),
+               interval :: integer(),
                timer :: atom()
               }).
 
@@ -95,13 +96,14 @@ start_link() ->
 
 init_stats_timer() ->
     {ok, StatsLevel} = application:get_env(rabbit, collect_statistics),
-    #state{level = StatsLevel, timer = undefined}.
+    {ok, Interval} = application:get_env(rabbit, collect_statistics_interval),
+    #state{level = StatsLevel, interval = Interval, timer = undefined}.
 
 ensure_stats_timer(State = #state{level = none}, _Fun) ->
     State;
-ensure_stats_timer(State = #state{timer = undefined}, Fun) ->
-    {ok, TRef} = timer:apply_after(?STATS_INTERVAL,
-                                      erlang, apply, [Fun, []]),
+ensure_stats_timer(State = #state{interval = Interval,
+                                  timer    = undefined}, Fun) ->
+    {ok, TRef} = timer:apply_after(Interval, erlang, apply, [Fun, []]),
     State#state{timer = TRef};
 ensure_stats_timer(State, _Fun) ->
     State.
@@ -130,15 +132,8 @@ notify_if(true,   Type,  Props) -> notify(Type, Props);
 notify_if(false, _Type, _Props) -> ok.
 
 notify(Type, Props) ->
-    try
-        %% TODO: switch to os:timestamp() when we drop support for
-        %% Erlang/OTP < R13B01
-        gen_event:notify(rabbit_event, #event{type = Type,
-                                              props = Props,
-                                              timestamp = now()})
-    catch error:badarg ->
-            %% badarg means rabbit_event is no longer registered. We never
-            %% unregister it so the great likelihood is that we're shutting
-            %% down the broker but some events were backed up. Ignore it.
-            ok
-    end.
+    %% TODO: switch to os:timestamp() when we drop support for
+    %% Erlang/OTP < R13B01
+    gen_event:notify(rabbit_event, #event{type = Type,
+                                          props = Props,
+                                          timestamp = now()}).

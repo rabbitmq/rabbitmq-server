@@ -15,12 +15,12 @@
 %%
 
 -record(user, {username,
-               is_admin,
+               tags,
                auth_backend, %% Module this user came from
                impl          %% Scratch space for that module
               }).
 
--record(internal_user, {username, password_hash, is_admin}).
+-record(internal_user, {username, password_hash, tags}).
 -record(permission, {configure, write, read}).
 -record(user_vhost, {username, virtual_host}).
 -record(user_permission, {user_vhost, permission}).
@@ -42,10 +42,12 @@
 
 -record(resource, {virtual_host, kind, name}).
 
--record(exchange, {name, type, durable, auto_delete, internal, arguments}).
+-record(exchange, {name, type, durable, auto_delete, internal, arguments,
+                   scratch}).
+-record(exchange_serial, {name, next}).
 
 -record(amqqueue, {name, durable, auto_delete, exclusive_owner = none,
-                   arguments, pid}).
+                   arguments, pid, slave_pids, mirror_nodes}).
 
 %% mnesia doesn't like unary records, so we add a dummy 'value' field
 -record(route, {binding, value = const}).
@@ -54,14 +56,19 @@
 -record(binding, {source, key, destination, args = []}).
 -record(reverse_binding, {destination, key, source, args = []}).
 
+-record(topic_trie_edge, {trie_edge, node_id}).
+-record(topic_trie_binding, {trie_binding, value = const}).
+
+-record(trie_edge, {exchange_name, node_id, word}).
+-record(trie_binding, {exchange_name, node_id, destination}).
+
 -record(listener, {node, protocol, host, ip_address, port}).
 
--record(basic_message, {exchange_name, routing_key, content, guid,
+-record(basic_message, {exchange_name, routing_keys = [], content, id,
                         is_persistent}).
 
 -record(ssl_socket, {tcp, ssl}).
--record(delivery, {mandatory, immediate, txn, sender, message,
-                   msg_seq_no}).
+-record(delivery, {mandatory, immediate, sender, message, msg_seq_no}).
 -record(amqp_error, {name, explanation = "", method = none}).
 
 -record(event, {type, props, timestamp}).
@@ -79,7 +86,9 @@
 
 -define(HIBERNATE_AFTER_MIN,        1000).
 -define(DESIRED_HIBERNATE,         10000).
--define(STATS_INTERVAL,             5000).
+
+-define(ROUTING_HEADERS, [<<"CC">>, <<"BCC">>]).
+-define(DELETED_HEADER, <<"BCC">>).
 
 -ifdef(debug).
 -define(LOGDEBUG0(F), rabbit_log:debug(F)).

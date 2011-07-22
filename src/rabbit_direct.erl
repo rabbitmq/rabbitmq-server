@@ -16,7 +16,7 @@
 
 -module(rabbit_direct).
 
--export([boot/0, connect/4, start_channel/6]).
+-export([boot/0, connect/4, start_channel/8, disconnect/1]).
 
 -include("rabbit.hrl").
 
@@ -25,13 +25,16 @@
 -ifdef(use_specs).
 
 -spec(boot/0 :: () -> 'ok').
--spec(connect/4 :: (binary(), binary(), binary(), rabbit_types:protocol()) ->
-                       {'ok', {rabbit_types:user(),
-                               rabbit_framing:amqp_table()}}).
--spec(start_channel/6 ::
-        (rabbit_channel:channel_number(), pid(), rabbit_types:user(),
-         rabbit_types:vhost(), rabbit_framing:amqp_table(), pid()) ->
-                              {'ok', pid()}).
+-spec(connect/4 :: (rabbit_types:username(), rabbit_types:vhost(),
+                    rabbit_types:protocol(), rabbit_event:event_props()) ->
+                        {'ok', {rabbit_types:user(),
+                                rabbit_framing:amqp_table()}}).
+-spec(start_channel/8 ::
+        (rabbit_channel:channel_number(), pid(), pid(), rabbit_types:protocol(),
+         rabbit_types:user(), rabbit_types:vhost(), rabbit_framing:amqp_table(),
+         pid()) -> {'ok', pid()}).
+
+-spec(disconnect/1 :: (rabbit_event:event_props()) -> 'ok').
 
 -endif.
 
@@ -40,39 +43,44 @@
 boot() ->
     {ok, _} =
         supervisor2:start_child(
-            rabbit_sup,
-            {rabbit_direct_client_sup,
-             {rabbit_client_sup, start_link,
-              [{local, rabbit_direct_client_sup},
-               {rabbit_channel_sup, start_link, []}]},
-             transient, infinity, supervisor, [rabbit_client_sup]}),
+          rabbit_sup,
+          {rabbit_direct_client_sup,
+           {rabbit_client_sup, start_link,
+            [{local, rabbit_direct_client_sup},
+             {rabbit_channel_sup, start_link, []}]},
+           transient, infinity, supervisor, [rabbit_client_sup]}),
     ok.
 
 %%----------------------------------------------------------------------------
 
-connect(Username, Password, VHost, Protocol) ->
+connect(Username, VHost, Protocol, Infos) ->
     case lists:keymember(rabbit, 1, application:which_applications()) of
         true  ->
-            try rabbit_access_control:user_pass_login(Username, Password) of
-                #user{} = User ->
+            case rabbit_access_control:check_user_login(Username, []) of
+                {ok, User} ->
                     try rabbit_access_control:check_vhost_access(User, VHost) of
-                        ok -> {ok, {User,
+                        ok -> rabbit_event:notify(connection_created, Infos),
+                              {ok, {User,
                                     rabbit_reader:server_properties(Protocol)}}
                     catch
                         exit:#amqp_error{name = access_refused} ->
                             {error, access_refused}
-                    end
-            catch
-                exit:#amqp_error{name = access_refused} -> {error, auth_failure}
+                    end;
+                {refused, _Msg, _Args} ->
+                    {error, auth_failure}
             end;
         false ->
             {error, broker_not_found_on_node}
     end.
 
-start_channel(Number, ClientChannelPid, User, VHost, Capabilities, Collector) ->
+start_channel(Number, ClientChannelPid, ConnPid, Protocol, User, VHost,
+              Capabilities, Collector) ->
     {ok, _, {ChannelPid, _}} =
         supervisor2:start_child(
-            rabbit_direct_client_sup,
-            [{direct, Number, ClientChannelPid, User, VHost, Capabilities,
-              Collector}]),
+          rabbit_direct_client_sup,
+          [{direct, Number, ClientChannelPid, ConnPid, Protocol, User, VHost,
+            Capabilities, Collector}]),
     {ok, ChannelPid}.
+
+disconnect(Infos) ->
+    rabbit_event:notify(connection_closed, Infos).

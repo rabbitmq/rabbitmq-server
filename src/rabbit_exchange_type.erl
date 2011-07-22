@@ -21,21 +21,25 @@
 behaviour_info(callbacks) ->
     [
      {description, 0},
+
+     %% Should Rabbit ensure that all binding events that are
+     %% delivered to an individual exchange can be serialised? (they
+     %% might still be delivered out of order, but there'll be a
+     %% serial number).
+     {serialise_events, 0},
+
      {route, 2},
 
      %% called BEFORE declaration, to check args etc; may exit with #amqp_error{}
      {validate, 1},
 
-     %% called after declaration when previously absent
+     %% called after declaration and recovery
      {create, 2},
 
-     %% called when recovering
-     {recover, 2},
-
-     %% called after exchange deletion.
+     %% called after exchange (auto)deletion.
      {delete, 3},
 
-     %% called after a binding has been added
+     %% called after a binding has been added or recovered
      {add_binding, 3},
 
      %% called after bindings have been deleted.

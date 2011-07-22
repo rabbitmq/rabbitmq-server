@@ -133,9 +133,9 @@ init([ChPid, UnackedMsgCount]) ->
 prioritise_call(get_limit, _From, _State) -> 9;
 prioritise_call(_Msg,      _From, _State) -> 0.
 
-handle_call({can_send, _QPid, _AckRequired, _CTag, _Len}, _From,
+handle_call({can_send, QPid, _AckRequired, _CTag, _Len}, _From,
             State = #lim{blocked = true}) ->
-    {reply, false, State};
+    {reply, false, limit_queue(QPid, State)};
 handle_call({can_send, QPid, AckRequired, CTag, Len}, _From,
             State = #lim{volume = Volume}) ->
     case limit_reached(CTag, State) of

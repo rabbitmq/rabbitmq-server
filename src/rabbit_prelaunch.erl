@@ -67,11 +67,15 @@ start() ->
              AppVersions},
 
     %% Write it out to $RABBITMQ_PLUGINS_EXPAND_DIR/rabbit.rel
-    file:write_file(RootName ++ ".rel", io_lib:format("~p.~n", [RDesc])),
+    rabbit_misc:write_file(RootName ++ ".rel", io_lib:format("~p.~n", [RDesc])),
+
+    %% We exclude mochiweb due to its optional use of fdsrv.
+    XRefExclude = [mochiweb],
 
     %% Compile the script
     ScriptFile = RootName ++ ".script",
-    case systools:make_script(RootName, [local, silent, exref]) of
+    case systools:make_script(RootName, [local, silent,
+                                         {exref, AllApps -- XRefExclude}]) of
         {ok, Module, Warnings} ->
             %% This gets lots of spurious no-source warnings when we
             %% have .ez files, so we want to supress them to prevent
@@ -93,7 +97,8 @@ start() ->
                                  end]),
             case length(WarningStr) of
                 0 -> ok;
-                _ -> io:format("~s", [WarningStr])
+                _ -> S = string:copies("*", 80),
+                     io:format("~n~s~n~s~s~n~n", [S, WarningStr, S])
             end,
             ok;
         {error, Module, Error} ->
@@ -235,7 +240,7 @@ post_process_script(ScriptFile) ->
             {error, {failed_to_load_script, Reason}}
     end.
 
-process_entry(Entry = {apply,{application,start_boot,[rabbit,permanent]}}) ->
+process_entry(Entry = {apply,{application,start_boot,[mnesia,permanent]}}) ->
     [{apply,{rabbit,prepare,[]}}, Entry];
 process_entry(Entry) ->
     [Entry].
@@ -250,16 +255,21 @@ duplicate_node_check(NodeStr) ->
     case net_adm:names(NodeHost) of
         {ok, NamePorts}  ->
             case proplists:is_defined(NodeName, NamePorts) of
-                     true -> io:format("node with name ~p "
-                                       "already running on ~p~n",
-                                       [NodeName, NodeHost]),
-                             [io:format(Fmt ++ "~n", Args) ||
-                              {Fmt, Args} <- rabbit_control:diagnostics(Node)],
-                             terminate(?ERROR_CODE);
-                     false -> ok
+                true -> io:format("node with name ~p "
+                                  "already running on ~p~n",
+                                  [NodeName, NodeHost]),
+                        [io:format(Fmt ++ "~n", Args) ||
+                            {Fmt, Args} <- rabbit_control:diagnostics(Node)],
+                        terminate(?ERROR_CODE);
+                false -> ok
             end;
-        {error, EpmdReason} -> terminate("unexpected epmd error: ~p~n",
-                                         [EpmdReason])
+        {error, EpmdReason} ->
+            terminate("epmd error for host ~p: ~p (~s)~n",
+                      [NodeHost, EpmdReason,
+                       case EpmdReason of
+                           address -> "unable to establish tcp connection";
+                           _       -> inet:format_error(EpmdReason)
+                       end])
     end.
 
 terminate(Fmt, Args) ->

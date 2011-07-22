@@ -20,15 +20,17 @@
 -behaviour(rabbit_auth_backend).
 
 -export([description/0]).
--export([check_user_login/2, check_vhost_access/3, check_resource_access/3]).
+-export([check_user_login/2, check_vhost_access/2, check_resource_access/3]).
 
--export([add_user/2, delete_user/1, change_password/2, set_admin/1,
-         clear_admin/1, list_users/0, lookup_user/1, clear_password/1]).
+-export([add_user/2, delete_user/1, change_password/2, set_tags/2,
+         list_users/0, user_info_keys/0, lookup_user/1, clear_password/1]).
 -export([make_salt/0, check_password/2, change_password_hash/2,
          hash_password/1]).
 -export([set_permissions/5, clear_permissions/2,
          list_permissions/0, list_vhost_permissions/1, list_user_permissions/1,
-         list_user_vhost_permissions/2]).
+         list_user_vhost_permissions/2, perms_info_keys/0,
+         vhost_perms_info_keys/0, user_perms_info_keys/0,
+         user_vhost_perms_info_keys/0]).
 
 -include("rabbit_auth_backend_spec.hrl").
 
@@ -48,32 +50,34 @@
                                  rabbit_types:password_hash()) -> 'ok').
 -spec(hash_password/1 :: (rabbit_types:password())
                          -> rabbit_types:password_hash()).
--spec(set_admin/1 :: (rabbit_types:username()) -> 'ok').
--spec(clear_admin/1 :: (rabbit_types:username()) -> 'ok').
--spec(list_users/0 :: () -> [{rabbit_types:username(), boolean()}]).
+-spec(set_tags/2 :: (rabbit_types:username(), [atom()]) -> 'ok').
+-spec(list_users/0 :: () -> rabbit_types:infos()).
+-spec(user_info_keys/0 :: () -> rabbit_types:info_keys()).
 -spec(lookup_user/1 :: (rabbit_types:username())
-        -> rabbit_types:ok(rabbit_types:internal_user())
-               | rabbit_types:error('not_found')).
+                       -> rabbit_types:ok(rabbit_types:internal_user())
+                              | rabbit_types:error('not_found')).
 -spec(set_permissions/5 ::(rabbit_types:username(), rabbit_types:vhost(),
                            regexp(), regexp(), regexp()) -> 'ok').
 -spec(clear_permissions/2 :: (rabbit_types:username(), rabbit_types:vhost())
                              -> 'ok').
--spec(list_permissions/0 ::
-        () -> [{rabbit_types:username(), rabbit_types:vhost(),
-                regexp(), regexp(), regexp()}]).
+-spec(list_permissions/0 :: () -> rabbit_types:infos()).
 -spec(list_vhost_permissions/1 ::
-        (rabbit_types:vhost()) -> [{rabbit_types:username(),
-                                    regexp(), regexp(), regexp()}]).
+        (rabbit_types:vhost()) -> rabbit_types:infos()).
 -spec(list_user_permissions/1 ::
-        (rabbit_types:username()) -> [{rabbit_types:vhost(),
-                                       regexp(), regexp(), regexp()}]).
+        (rabbit_types:username()) -> rabbit_types:infos()).
 -spec(list_user_vhost_permissions/2 ::
         (rabbit_types:username(), rabbit_types:vhost())
-        -> [{regexp(), regexp(), regexp()}]).
-
+        -> rabbit_types:infos()).
+-spec(perms_info_keys/0 :: () -> rabbit_types:info_keys()).
+-spec(vhost_perms_info_keys/0 :: () -> rabbit_types:info_keys()).
+-spec(user_perms_info_keys/0 :: () -> rabbit_types:info_keys()).
+-spec(user_vhost_perms_info_keys/0 :: () -> rabbit_types:info_keys()).
 -endif.
 
 %%----------------------------------------------------------------------------
+
+-define(PERMS_INFO_KEYS, [configure, write, read]).
+-define(USER_INFO_KEYS, [user, tags]).
 
 %% Implementation of rabbit_auth_backend
 
@@ -85,20 +89,19 @@ check_user_login(Username, []) ->
     internal_check_user_login(Username, fun(_) -> true end);
 check_user_login(Username, [{password, Password}]) ->
     internal_check_user_login(
-      Username,
-      fun(#internal_user{password_hash = Hash}) ->
-              check_password(Password, Hash)
-      end);
+      Username, fun(#internal_user{password_hash = Hash}) ->
+                        check_password(Password, Hash)
+                end);
 check_user_login(Username, AuthProps) ->
     exit({unknown_auth_props, Username, AuthProps}).
 
 internal_check_user_login(Username, Fun) ->
     Refused = {refused, "user '~s' - invalid credentials", [Username]},
     case lookup_user(Username) of
-        {ok, User = #internal_user{is_admin = IsAdmin}} ->
+        {ok, User = #internal_user{tags = Tags}} ->
             case Fun(User) of
                 true -> {ok, #user{username     = Username,
-                                   is_admin     = IsAdmin,
+                                   tags         = Tags,
                                    auth_backend = ?MODULE,
                                    impl         = User}};
                 _    -> Refused
@@ -107,16 +110,13 @@ internal_check_user_login(Username, Fun) ->
             Refused
     end.
 
-check_vhost_access(#user{is_admin = true},    _VHostPath, read) ->
-    true;
-
-check_vhost_access(#user{username = Username}, VHostPath, _) ->
+check_vhost_access(#user{username = Username}, VHost) ->
     %% TODO: use dirty ops instead
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
               case mnesia:read({rabbit_user_permission,
                                 #user_vhost{username     = Username,
-                                            virtual_host = VHostPath}}) of
+                                            virtual_host = VHost}}) of
                   []   -> false;
                   [_R] -> true
               end
@@ -131,12 +131,11 @@ check_resource_access(#user{username = Username},
         [] ->
             false;
         [#user_permission{permission = P}] ->
-            PermRegexp =
-                case element(permission_index(Permission), P) of
-                    %% <<"^$">> breaks Emacs' erlang mode
-                    <<"">> -> <<$^, $$>>;
-                    RE     -> RE
-                end,
+            PermRegexp = case element(permission_index(Permission), P) of
+                             %% <<"^$">> breaks Emacs' erlang mode
+                             <<"">> -> <<$^, $$>>;
+                             RE     -> RE
+                         end,
             case re:run(Name, PermRegexp, [{capture, none}]) of
                 match    -> true;
                 nomatch  -> false
@@ -160,7 +159,7 @@ add_user(Username, Password) ->
                                  #internal_user{username = Username,
                                                 password_hash =
                                                     hash_password(Password),
-                                                is_admin = false},
+                                                tags = []},
                                  write);
                       _ ->
                           mnesia:abort({user_already_exists, Username})
@@ -221,18 +220,12 @@ salted_md5(Salt, Cleartext) ->
     Salted = <<Salt/binary, Cleartext/binary>>,
     erlang:md5(Salted).
 
-set_admin(Username) ->
-    set_admin(Username, true).
-
-clear_admin(Username) ->
-    set_admin(Username, false).
-
-set_admin(Username, IsAdmin) ->
+set_tags(Username, Tags) ->
     R = update_user(Username, fun(User) ->
-                                      User#internal_user{is_admin = IsAdmin}
+                                      User#internal_user{tags = Tags}
                               end),
-    rabbit_log:info("Set user admin flag for user ~p to ~p~n",
-                    [Username, IsAdmin]),
+    rabbit_log:info("Set user tags for user ~p to ~p~n",
+                    [Username, Tags]),
     R.
 
 update_user(Username, Fun) ->
@@ -245,9 +238,11 @@ update_user(Username, Fun) ->
         end)).
 
 list_users() ->
-    [{Username, IsAdmin} ||
-        #internal_user{username = Username, is_admin = IsAdmin} <-
+    [[{user, Username}, {tags, Tags}] ||
+        #internal_user{username = Username, tags = Tags} <-
             mnesia:dirty_match_object(rabbit_user, #internal_user{_ = '_'})].
+
+user_info_keys() -> ?USER_INFO_KEYS.
 
 lookup_user(Username) ->
     rabbit_misc:dirty_read({rabbit_user, Username}).
@@ -287,32 +282,38 @@ clear_permissions(Username, VHostPath) ->
                                                 virtual_host = VHostPath}})
         end)).
 
+perms_info_keys()            -> [user, vhost | ?PERMS_INFO_KEYS].
+vhost_perms_info_keys()      -> [user | ?PERMS_INFO_KEYS].
+user_perms_info_keys()       -> [vhost | ?PERMS_INFO_KEYS].
+user_vhost_perms_info_keys() -> ?PERMS_INFO_KEYS.
+
 list_permissions() ->
-    [{Username, VHostPath, ConfigurePerm, WritePerm, ReadPerm} ||
-        {Username, VHostPath, ConfigurePerm, WritePerm, ReadPerm} <-
-            list_permissions(match_user_vhost('_', '_'))].
+    list_permissions(perms_info_keys(), match_user_vhost('_', '_')).
 
 list_vhost_permissions(VHostPath) ->
-    [{Username, ConfigurePerm, WritePerm, ReadPerm} ||
-        {Username, _, ConfigurePerm, WritePerm, ReadPerm} <-
-            list_permissions(rabbit_vhost:with(
-                               VHostPath, match_user_vhost('_', VHostPath)))].
+    list_permissions(
+      vhost_perms_info_keys(),
+      rabbit_vhost:with(VHostPath, match_user_vhost('_', VHostPath))).
 
 list_user_permissions(Username) ->
-    [{VHostPath, ConfigurePerm, WritePerm, ReadPerm} ||
-        {_, VHostPath, ConfigurePerm, WritePerm, ReadPerm} <-
-            list_permissions(rabbit_misc:with_user(
-                               Username, match_user_vhost(Username, '_')))].
+    list_permissions(
+      user_perms_info_keys(),
+      rabbit_misc:with_user(Username, match_user_vhost(Username, '_'))).
 
 list_user_vhost_permissions(Username, VHostPath) ->
-    [{ConfigurePerm, WritePerm, ReadPerm} ||
-        {_, _, ConfigurePerm, WritePerm, ReadPerm} <-
-            list_permissions(rabbit_misc:with_user_and_vhost(
-                               Username, VHostPath,
-                               match_user_vhost(Username, VHostPath)))].
+    list_permissions(
+      user_vhost_perms_info_keys(),
+      rabbit_misc:with_user_and_vhost(
+        Username, VHostPath, match_user_vhost(Username, VHostPath))).
 
-list_permissions(QueryThunk) ->
-    [{Username, VHostPath, ConfigurePerm, WritePerm, ReadPerm} ||
+filter_props(Keys, Props) -> [T || T = {K, _} <- Props, lists:member(K, Keys)].
+
+list_permissions(Keys, QueryThunk) ->
+    [filter_props(Keys, [{user,      Username},
+                         {vhost,     VHostPath},
+                         {configure, ConfigurePerm},
+                         {write,     WritePerm},
+                         {read,      ReadPerm}]) ||
         #user_permission{user_vhost = #user_vhost{username     = Username,
                                                   virtual_host = VHostPath},
                          permission = #permission{ configure = ConfigurePerm,

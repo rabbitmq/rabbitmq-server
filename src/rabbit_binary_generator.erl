@@ -18,12 +18,13 @@
 -include("rabbit_framing.hrl").
 -include("rabbit.hrl").
 
-% EMPTY_CONTENT_BODY_FRAME_SIZE, 8 = 1 + 2 + 4 + 1
-%  - 1 byte of frame type
-%  - 2 bytes of channel number
-%  - 4 bytes of frame payload length
-%  - 1 byte of payload trailer FRAME_END byte
-% See definition of check_empty_content_body_frame_size/0, an assertion called at startup.
+%% EMPTY_CONTENT_BODY_FRAME_SIZE, 8 = 1 + 2 + 4 + 1
+%%  - 1 byte of frame type
+%%  - 2 bytes of channel number
+%%  - 4 bytes of frame payload length
+%%  - 1 byte of payload trailer FRAME_END byte
+%% See definition of check_empty_content_body_frame_size/0,
+%% an assertion called at startup.
 -define(EMPTY_CONTENT_BODY_FRAME_SIZE, 8).
 
 -export([build_simple_method_frame/3,
@@ -61,8 +62,7 @@
 -spec(map_exception/3 :: (rabbit_channel:channel_number(),
                           rabbit_types:amqp_error() | any(),
                           rabbit_types:protocol()) ->
-                              {boolean(),
-                               rabbit_channel:channel_number(),
+                              {rabbit_channel:channel_number(),
                                rabbit_framing:amqp_method_record()}).
 
 -endif.
@@ -301,24 +301,21 @@ clear_encoded_content(Content = #content{}) ->
 map_exception(Channel, Reason, Protocol) ->
     {SuggestedClose, ReplyCode, ReplyText, FailedMethod} =
         lookup_amqp_exception(Reason, Protocol),
-    ShouldClose = SuggestedClose orelse (Channel == 0),
     {ClassId, MethodId} = case FailedMethod of
                               {_, _} -> FailedMethod;
                               none   -> {0, 0};
                               _      -> Protocol:method_id(FailedMethod)
                           end,
-    {CloseChannel, CloseMethod} =
-        case ShouldClose of
-            true  -> {0, #'connection.close'{reply_code = ReplyCode,
-                                             reply_text = ReplyText,
-                                             class_id = ClassId,
-                                             method_id = MethodId}};
-            false -> {Channel, #'channel.close'{reply_code = ReplyCode,
-                                                reply_text = ReplyText,
-                                                class_id = ClassId,
-                                                method_id = MethodId}}
-        end,
-    {ShouldClose, CloseChannel, CloseMethod}.
+    case SuggestedClose orelse (Channel == 0) of
+        true  -> {0, #'connection.close'{reply_code = ReplyCode,
+                                         reply_text = ReplyText,
+                                         class_id   = ClassId,
+                                         method_id  = MethodId}};
+        false -> {Channel, #'channel.close'{reply_code = ReplyCode,
+                                            reply_text = ReplyText,
+                                            class_id   = ClassId,
+                                            method_id  = MethodId}}
+    end.
 
 lookup_amqp_exception(#amqp_error{name        = Name,
                                   explanation = Expl,

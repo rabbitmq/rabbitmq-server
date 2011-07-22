@@ -21,6 +21,7 @@
 %%----------------------------------------------------------------------------
 
 -export([add/1, delete/1, exists/1, list/0, with/2]).
+-export([info/1, info/2, info_all/0, info_all/1]).
 
 -ifdef(use_specs).
 
@@ -30,9 +31,17 @@
 -spec(list/0 :: () -> [rabbit_types:vhost()]).
 -spec(with/2 :: (rabbit_types:vhost(), rabbit_misc:thunk(A)) -> A).
 
+-spec(info/1 :: (rabbit_types:vhost()) -> rabbit_types:infos()).
+-spec(info/2 :: (rabbit_types:vhost(), rabbit_types:info_keys())
+                -> rabbit_types:infos()).
+-spec(info_all/0 :: () -> [rabbit_types:infos()]).
+-spec(info_all/1 :: (rabbit_types:info_keys()) -> [rabbit_types:infos()]).
+
 -endif.
 
 %%----------------------------------------------------------------------------
+
+-define(INFO_KEYS, [name, tracing]).
 
 add(VHostPath) ->
     R = rabbit_misc:execute_mnesia_transaction(
@@ -48,15 +57,16 @@ add(VHostPath) ->
                   ok;
               (ok, false) ->
                   [rabbit_exchange:declare(
-                      rabbit_misc:r(VHostPath, exchange, Name),
-                      Type, true, false, false, []) ||
-                         {Name,Type} <-
-                             [{<<"">>,            direct},
-                              {<<"amq.direct">>,  direct},
-                              {<<"amq.topic">>,   topic},
-                              {<<"amq.match">>,   headers}, %% per 0-9-1 pdf
-                              {<<"amq.headers">>, headers}, %% per 0-9-1 xml
-                              {<<"amq.fanout">>,  fanout}]],
+                     rabbit_misc:r(VHostPath, exchange, Name),
+                     Type, true, false, false, []) ||
+                      {Name,Type} <-
+                          [{<<"">>,                   direct},
+                           {<<"amq.direct">>,         direct},
+                           {<<"amq.topic">>,          topic},
+                           {<<"amq.match">>,          headers}, %% per 0-9-1 pdf
+                           {<<"amq.headers">>,        headers}, %% per 0-9-1 xml
+                           {<<"amq.fanout">>,         fanout},
+                           {<<"amq.rabbitmq.trace">>, topic}]],
                   ok
           end),
     rabbit_log:info("Added vhost ~p~n", [VHostPath]),
@@ -81,9 +91,9 @@ delete(VHostPath) ->
 
 internal_delete(VHostPath) ->
     lists:foreach(
-      fun ({Username, _, _, _}) ->
-              ok = rabbit_auth_backend_internal:clear_permissions(Username,
-                                                                  VHostPath)
+      fun (Info) ->
+              ok = rabbit_auth_backend_internal:clear_permissions(
+                     proplists:get_value(user, Info), VHostPath)
       end,
       rabbit_auth_backend_internal:list_vhost_permissions(VHostPath)),
     ok = mnesia:delete({rabbit_vhost, VHostPath}),
@@ -104,3 +114,17 @@ with(VHostPath, Thunk) ->
                     Thunk()
             end
     end.
+
+%%----------------------------------------------------------------------------
+
+infos(Items, X) -> [{Item, i(Item, X)} || Item <- Items].
+
+i(name,    VHost) -> VHost;
+i(tracing, VHost) -> rabbit_trace:tracing(VHost);
+i(Item, _)        -> throw({bad_argument, Item}).
+
+info(VHost)        -> infos(?INFO_KEYS, VHost).
+info(VHost, Items) -> infos(Items, VHost).
+
+info_all()      -> info_all(?INFO_KEYS).
+info_all(Items) -> [info(VHost, Items) || VHost <- list()].
