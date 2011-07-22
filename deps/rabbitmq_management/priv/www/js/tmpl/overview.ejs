@@ -56,7 +56,10 @@
       Version
       <sub>(RabbitMQ / Erlang)</sub>
     </th>
-    <th>Mnesia storage <span class="help" id="mnesia-storage"></span></th>
+    <th>Mnesia <span class="help" id="mnesia-storage"></span></th>
+    <% if (nodes_interesting) { %>
+    <th>Management</th>
+    <% } %>
   </tr>
 <%
    for (var i = 0; i < nodes.length; i++) {
@@ -124,16 +127,23 @@
      <td class="c">
        <%= node.type %>
      </td>
+     <% if (nodes_interesting) { %>
+       <td class="c">
+       <% if (overview.node == node.name) { %>
+         <acronym title="You are accessing the management UI from this node.">A</acronym>
+       <% } %>
+       <% if (overview.statistics_db_node == node.name) { %>
+         <acronym title="This node contains the management statistics database">S</acronym>
+       <% } %>
+       </td>
+     <% } %>
+     </td>
    </tr>
 <% } %>
 </table>
 
-<% if (nodes_interesting) { %>
 <% if (overview.statistics_db_node == 'not_running') { %>
-  <p class="status-error">Statistics database node could not be contacted. Message rates and queue lengths will not be shown.</p>
-<% } else { %>
-  <p>Connected to: <b><%= overview.node %></b>. Statistics database: <b><%= overview.statistics_db_node %></b>.</b>
-<% } %>
+  <p class="status-error">Statistics database could not be contacted. Message rates and queue lengths will not be shown.</p>
 <% } %>
 </div>
 </div>
