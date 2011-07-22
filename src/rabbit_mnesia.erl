@@ -481,8 +481,6 @@ delete_previously_running_nodes() ->
 init_db(ClusterNodes, Force, SecondaryPostMnesiaFun) ->
     UClusterNodes = lists:usort(ClusterNodes),
     ProperClusterNodes = UClusterNodes -- [node()],
-    IsDiskNode = should_be_disc_node(ClusterNodes),
-    WasDiskNode = is_disc_node(),
     case mnesia:change_config(extra_db_nodes, ProperClusterNodes) of
         {ok, Nodes} ->
             case Force of
@@ -496,9 +494,11 @@ init_db(ClusterNodes, Force, SecondaryPostMnesiaFun) ->
                          end;
                 true  -> ok
             end,
+            WantDiscNode = should_be_disc_node(ClusterNodes),
+            WasDiscNode = is_disc_node(),
             %% We create a new db (on disk, or in ram) in the first
             %% two cases and attempt to upgrade the in the other two
-            case {Nodes, WasDiskNode, IsDiskNode} of
+            case {Nodes, WasDiscNode, WantDiscNode} of
                 {[], _, false} ->
                     %% New ram node; start from scratch
                     ok = create_schema(false);
@@ -516,7 +516,7 @@ init_db(ClusterNodes, Force, SecondaryPostMnesiaFun) ->
                     ensure_version_ok(
                       rpc:call(AnotherNode, rabbit_version, recorded, [])),
                     {CopyType, CopyTypeAlt} =
-                        case IsDiskNode of
+                        case WantDiscNode of
                             true  -> {disc, disc_copies};
                             false -> {ram, ram_copies}
                         end,
