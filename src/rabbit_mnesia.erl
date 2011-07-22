@@ -346,7 +346,7 @@ ensure_mnesia_not_running() ->
         yes -> throw({error, mnesia_unexpectedly_running})
     end.
 
-waiting_for(Condition) ->
+wait_for(Condition) ->
     error_logger:info_msg("Waiting for ~p...~n", [Condition]),
     timer:sleep(1000).
 
@@ -633,7 +633,7 @@ new_backup_dir_name(MnesiaDir) ->
                                  Year, Month, Day, Hour, Minute, Second])),
     case filelib:is_file(BackupDir) of
         false -> BackupDir;
-        true  -> waiting_for(new_backup_dir_name),
+        true  -> wait_for(new_backup_dir_name),
                  new_backup_dir_name(MnesiaDir)
     end.
 
