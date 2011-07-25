@@ -144,7 +144,7 @@ upgrade_mode(AllNodes) ->
     case nodes_running(AllNodes) of
         [] ->
             AfterUs = rabbit_mnesia:read_previously_running_nodes(),
-            case {is_disc_node(), AfterUs} of
+            case {is_disc_node_legacy(), AfterUs} of
                 {true, []}  ->
                     primary;
                 {true, _}  ->
@@ -212,7 +212,7 @@ force_tables() ->
 
 secondary_upgrade(AllNodes) ->
     %% must do this before we wipe out schema
-    IsDiscNode = is_disc_node(),
+    IsDiscNode = is_disc_node_legacy(),
     rabbit_misc:ensure_ok(mnesia:delete_schema([node()]),
                           cannot_delete_schema),
     %% Note that we cluster with all nodes, rather than all disc nodes
@@ -276,7 +276,7 @@ lock_filename() -> lock_filename(dir()).
 lock_filename(Dir) -> filename:join(Dir, ?LOCK_FILENAME).
 backup_dir() -> dir() ++ "-upgrade-backup".
 
-is_disc_node() ->
+is_disc_node_legacy() ->
     %% This is pretty ugly but we can't start Mnesia and ask it (will
     %% hang), we can't look at the config file (may not include us
     %% even if we're a disc node).  We also can't use

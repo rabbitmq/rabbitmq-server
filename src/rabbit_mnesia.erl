@@ -599,9 +599,6 @@ create_schema(OnDisk) ->
     ok = rabbit_version:record_desired().
 
 is_disc_node() ->
-    %% This is pretty ugly but we can't start Mnesia and ask it (will hang),
-    %% we can't look at the config file (may not include us even if we're a
-    %% disc node).
     mnesia:system_info(use_dir).
 
 should_be_disc_node(ClusterNodes) ->
