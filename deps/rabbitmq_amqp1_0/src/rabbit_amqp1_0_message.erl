@@ -47,7 +47,7 @@ assemble(?V_1_0_FOOTER, {PropsIn, ContentIn},
     {PropsIn, ContentIn};
 assemble(?V_1_0_FOOTER, State, []) ->
     State;
-assemble(?V_1_0_FOOTER, State, [Left | _]) ->
+assemble(?V_1_0_FOOTER, _State, [Left | _]) ->
     exit({unexpected_trailing_fragments, Left});
 
 assemble(Expected, {_, _}, Actual) ->

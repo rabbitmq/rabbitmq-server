@@ -87,9 +87,9 @@ init([Channel, ReaderPid, WriterPid]) ->
                    incoming_unsettled_map = gb_trees:empty(),
                    outgoing_unsettled_map = gb_trees:empty()}}.
 
-terminate(_Reason, State = #session{ backing_connection = Conn,
-                                     declaring_channel = DeclCh,
-                                     backing_channel    = Ch}) ->
+terminate(_Reason, #session{ backing_connection = Conn,
+                             declaring_channel = DeclCh,
+                             backing_channel    = Ch}) ->
     ?DEBUG("Shutting down session ~p", [State]),
     case DeclCh of
         undefined -> ok;
@@ -614,22 +614,22 @@ attach_outgoing(DefaultOutcome, Outcomes,
                 Fail ->
                     protocol_error(?V_1_0_INTERNAL_ERROR, "Consume failed: ~p", Fail)
             end;
-        {error, Reason, State1} ->
+        {error, _Reason, State1} ->
             {reply, #'v1_0.attach'{local = undefined}, State1}
     end.
 
-flow_session_fields(State = #session{ next_transfer_number = NextOut,
-                                      next_incoming_id = NextIn,
-                                      window_size = Window,
-                                      outgoing_unsettled_map = UnsettledOut,
-                                      incoming_unsettled_map = UnsettledIn }) ->
+flow_session_fields(#session{ next_transfer_number = NextOut,
+                              next_incoming_id = NextIn,
+                              window_size = Window,
+                              outgoing_unsettled_map = UnsettledOut,
+                              incoming_unsettled_map = UnsettledIn }) ->
     #'v1_0.flow'{ next_outgoing_id = {uint, NextOut},
                   outgoing_window = {uint, Window - gb_trees:size(UnsettledOut)},
                   next_incoming_id = {uint, NextIn},
                   incoming_window = {uint, Window - gb_trees:size(UnsettledIn)}}.
 
 outgoing_flow(#outgoing_link{ transfer_count = LocalCount },
-              Flow = #'v1_0.flow'{
+              #'v1_0.flow'{
                 handle = Handle,
                 transfer_count = Count0,
                 link_credit = {uint, RemoteCredit},
@@ -900,7 +900,7 @@ ensure_target(Target = #'v1_0.target'{address=Address,
                     case parse_destination(Destination, Enc) of
                         ["queue", Name] ->
                             case check_queue(Name, State) of
-                                {ok, QueueName, _Available, State1} ->
+                                {ok, QueueName, State1} ->
                                     {ok, Target,
                                      Link#incoming_link{exchange = <<"">>,
                                                         routing_key = QueueName},
@@ -953,7 +953,7 @@ ensure_source(Source = #'v1_0.source'{ address = Address,
                     case parse_destination(Destination, Enc) of
                         ["queue", Name] ->
                             case check_queue(Name, State) of
-                                {ok, QueueName, Available, State1} ->
+                                {ok, QueueName, State1} ->
                                     {ok, Source,
                                      Link#outgoing_link{
                                        queue = QueueName},
@@ -1016,8 +1016,8 @@ check_queue(QueueName, State) ->
     case catch amqp_channel:call(Channel, QDecl) of
         {'EXIT', _Reason} ->
             {error, not_found, State1#session{ declaring_channel = undefined }};
-        #'queue.declare_ok'{ message_count = Available } ->
-            {ok, QueueName, Available, State1}
+        #'queue.declare_ok'{} ->
+            {ok, QueueName, State1}
     end.
 
 check_exchange(ExchangeName, State) when is_list(ExchangeName) ->
