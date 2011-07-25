@@ -501,7 +501,6 @@ check_name(Kind, NameBin = <<"amq.", _/binary>>) ->
 check_name(_Kind, NameBin) ->
     NameBin.
 
-%% TODO port this(?)
 queue_blocked(QPid, State = #ch{blocking = Blocking}) ->
     case dict:find(QPid, Blocking) of
         error      -> State;
@@ -1130,15 +1129,6 @@ handle_method(#'basic.credit'{consumer_tag = CTag,
         end,
     State1 = State#ch{limiter_pid = LimiterPid2},
     return_ok(State1, false, #'basic.credit_ok'{available = Available});
-
-    %% TODO port this bit ?
-    %% case consumer_queues(Consumers) of
-    %%     []    -> {reply, #'channel.flow_ok'{active = false}, State1};
-    %%     QPids -> Queues = [{QPid, erlang:monitor(process, QPid)} ||
-    %%                           QPid <- QPids],
-    %%              ok = rabbit_amqqueue:flush_all(QPids, self()),
-    %%              {noreply, State1#ch{blocking = dict:from_list(Queues)}}
-    %% end;
 
 handle_method(_MethodRecord, _Content, _State) ->
     rabbit_misc:protocol_error(
