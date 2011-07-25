@@ -1136,7 +1136,7 @@ test_server_status() ->
     {ok, Ch} = rabbit_channel:start_link(
                  1, self(), Writer, self(), rabbit_framing_amqp_0_9_1,
                  user(<<"user">>), <<"/">>, [], self(),
-                 fun (_) -> {ok, self()} end),
+                 rabbit_limiter:make_new_token(self())),
     [Q, Q2] = [Queue || Name <- [<<"foo">>, <<"bar">>],
                         {new, Queue = #amqqueue{}} <-
                             [rabbit_amqqueue:declare(
@@ -1203,7 +1203,7 @@ test_spawn() ->
     {ok, Ch} = rabbit_channel:start_link(
                  1, Me, Writer, Me, rabbit_framing_amqp_0_9_1,
                  user(<<"guest">>), <<"/">>, [], self(),
-                 fun (_) -> {ok, self()} end),
+                  rabbit_limiter:make_new_token(self())),
     ok = rabbit_channel:do(Ch, #'channel.open'{}),
     receive #'channel.open_ok'{} -> ok
     after 1000 -> throw(failed_to_receive_channel_open_ok)
