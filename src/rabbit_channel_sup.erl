@@ -54,26 +54,27 @@ start_link({tcp, Sock, Channel, FrameMax, ReaderPid, Protocol, User, VHost,
           {writer, {rabbit_writer, start_link,
                     [Sock, Channel, FrameMax, Protocol, ReaderPid]},
            intrinsic, ?MAX_WAIT, worker, [rabbit_writer]}),
+    LimiterToken = start_limiter(SupPid),
     {ok, ChannelPid} =
         supervisor2:start_child(
           SupPid,
           {channel, {rabbit_channel, start_link,
                      [Channel, ReaderPid, WriterPid, ReaderPid, Protocol,
-                      User, VHost, Capabilities, Collector,
-                      start_limiter_fun(SupPid)]},
+                      User, VHost, Capabilities, Collector, LimiterToken]},
            intrinsic, ?MAX_WAIT, worker, [rabbit_channel]}),
     {ok, AState} = rabbit_command_assembler:init(Protocol),
     {ok, SupPid, {ChannelPid, AState}};
 start_link({direct, Channel, ClientChannelPid, ConnPid, Protocol, User, VHost,
             Capabilities, Collector}) ->
     {ok, SupPid} = supervisor2:start_link(?MODULE, []),
+    LimiterToken = start_limiter(SupPid),
     {ok, ChannelPid} =
         supervisor2:start_child(
           SupPid,
           {channel, {rabbit_channel, start_link,
                      [Channel, ClientChannelPid, ClientChannelPid, ConnPid,
                       Protocol, User, VHost, Capabilities, Collector,
-                      start_limiter_fun(SupPid)]},
+                      LimiterToken]},
            intrinsic, ?MAX_WAIT, worker, [rabbit_channel]}),
     {ok, SupPid, {ChannelPid, none}}.
 
@@ -82,12 +83,10 @@ start_link({direct, Channel, ClientChannelPid, ConnPid, Protocol, User, VHost,
 init([]) ->
     {ok, {{one_for_all, 0, 1}, []}}.
 
-start_limiter_fun(SupPid) ->
-    fun (UnackedCount) ->
-            Me = self(),
-            {ok, _Pid} =
-                supervisor2:start_child(
-                  SupPid,
-                  {limiter, {rabbit_limiter, start_link, [Me, UnackedCount]},
-                   transient, ?MAX_WAIT, worker, [rabbit_limiter]})
-    end.
+start_limiter(SupPid) ->
+    {ok, Pid} =
+        supervisor2:start_child(
+          SupPid,
+          {limiter, {rabbit_limiter, start_link, []},
+           transient, ?MAX_WAIT, worker, [rabbit_limiter]}),
+    rabbit_limiter:make_new_token(Pid).

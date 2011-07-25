@@ -20,27 +20,34 @@
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2, prioritise_call/3]).
--export([start_link/2]).
+-export([start_link/0, make_new_token/1, is_enabled/1, enable/2, disable/1]).
+-export_type([limiter_token/0]).
 -export([limit/2, can_send/3, ack/2, register/2, unregister/2]).
 -export([get_limit/1, block/1, unblock/1, is_blocked/1]).
 
 %%----------------------------------------------------------------------------
 
+-record(limiter_token, {pid, enabled = false}).
+
 -ifdef(use_specs).
 
--type(maybe_pid() :: pid() | 'undefined').
+-type(maybe_token() :: limiter_token() | 'undefined').
+-opaque(limiter_token() :: #'limiter_token'{}).
 
--spec(start_link/2 :: (pid(), non_neg_integer()) ->
-                           rabbit_types:ok_pid_or_error()).
--spec(limit/2 :: (maybe_pid(), non_neg_integer()) -> 'ok' | 'stopped').
--spec(can_send/3 :: (maybe_pid(), pid(), boolean()) -> boolean()).
--spec(ack/2 :: (maybe_pid(), non_neg_integer()) -> 'ok').
--spec(register/2 :: (maybe_pid(), pid()) -> 'ok').
--spec(unregister/2 :: (maybe_pid(), pid()) -> 'ok').
--spec(get_limit/1 :: (maybe_pid()) -> non_neg_integer()).
--spec(block/1 :: (maybe_pid()) -> 'ok').
--spec(unblock/1 :: (maybe_pid()) -> 'ok' | 'stopped').
--spec(is_blocked/1 :: (maybe_pid()) -> boolean()).
+-spec(start_link/0 :: () -> rabbit_types:ok_pid_or_error()).
+-spec(make_new_token/1 :: (pid()) -> limiter_token()).
+-spec(is_enabled/1 :: (limiter_token()) -> boolean()).
+-spec(enable/2 :: (limiter_token(), non_neg_integer()) -> limiter_token()).
+-spec(disable/1 :: (limiter_token()) -> limiter_token()).
+-spec(limit/2 :: (maybe_token(), non_neg_integer()) -> 'ok' | 'stopped').
+-spec(can_send/3 :: (maybe_token(), pid(), boolean()) -> boolean()).
+-spec(ack/2 :: (maybe_token(), non_neg_integer()) -> 'ok').
+-spec(register/2 :: (maybe_token(), pid()) -> 'ok').
+-spec(unregister/2 :: (maybe_token(), pid()) -> 'ok').
+-spec(get_limit/1 :: (maybe_token()) -> non_neg_integer()).
+-spec(block/1 :: (maybe_token()) -> 'ok').
+-spec(unblock/1 :: (maybe_token()) -> 'ok' | 'stopped').
+-spec(is_blocked/1 :: (maybe_token()) -> boolean()).
 
 -endif.
 
@@ -59,63 +66,68 @@
 %% API
 %%----------------------------------------------------------------------------
 
-start_link(ChPid, UnackedMsgCount) ->
-    gen_server2:start_link(?MODULE, [ChPid, UnackedMsgCount], []).
+start_link() ->
+    gen_server2:start_link(?MODULE, [], []).
 
-limit(undefined, 0) ->
-    ok;
-limit(LimiterPid, PrefetchCount) ->
-    gen_server2:call(LimiterPid, {limit, PrefetchCount}, infinity).
+make_new_token(Pid) ->
+    #limiter_token{pid = Pid}.
+
+is_enabled(#limiter_token{enabled = Enabled}) ->
+    Enabled.
+
+enable(#limiter_token{pid = Pid} = Token, Volume) ->
+    gen_server2:call(Pid, {enable, Token, self(), Volume}).
+
+disable(#limiter_token{pid = Pid} = Token) ->
+    gen_server2:call(Pid, {disable, Token}).
+
+limit(LimiterToken, PrefetchCount) ->
+    maybe_call(LimiterToken, {limit, PrefetchCount, LimiterToken}).
 
 %% Ask the limiter whether the queue can deliver a message without
 %% breaching a limit
 can_send(undefined, _QPid, _AckRequired) ->
     true;
-can_send(LimiterPid, QPid, AckRequired) ->
+can_send(#limiter_token{enabled = false}, _QPid, _AckRequired) ->
+    true;
+can_send(LimiterToken, QPid, AckRequired) ->
     rabbit_misc:with_exit_handler(
       fun () -> true end,
-      fun () -> gen_server2:call(LimiterPid, {can_send, QPid, AckRequired},
-                                 infinity) end).
+      fun () -> maybe_call(LimiterToken, {can_send, QPid, AckRequired}) end).
 
 %% Let the limiter know that the channel has received some acks from a
 %% consumer
-ack(undefined, _Count) -> ok;
-ack(LimiterPid, Count) -> gen_server2:cast(LimiterPid, {ack, Count}).
+ack(LimiterToken, Count) -> maybe_cast(LimiterToken, {ack, Count}).
 
-register(undefined, _QPid) -> ok;
-register(LimiterPid, QPid) -> gen_server2:cast(LimiterPid, {register, QPid}).
+register(LimiterToken, QPid) -> maybe_cast(LimiterToken, {register, QPid}).
 
-unregister(undefined, _QPid) -> ok;
-unregister(LimiterPid, QPid) -> gen_server2:cast(LimiterPid, {unregister, QPid}).
+unregister(LimiterToken, QPid) -> maybe_cast(LimiterToken,
+                                             {unregister, QPid}).
 
-get_limit(undefined) ->
-    0;
-get_limit(Pid) ->
+get_limit(LimiterToken) ->
     rabbit_misc:with_exit_handler(
       fun () -> 0 end,
-      fun () -> gen_server2:call(Pid, get_limit, infinity) end).
+      fun () -> maybe_call(LimiterToken, get_limit) end).
 
-block(undefined) ->
-    ok;
-block(LimiterPid) ->
-    gen_server2:call(LimiterPid, block, infinity).
+block(LimiterToken) ->
+    maybe_call(LimiterToken, block).
 
-unblock(undefined) ->
-    ok;
-unblock(LimiterPid) ->
-    gen_server2:call(LimiterPid, unblock, infinity).
+unblock(LimiterToken) ->
+    maybe_call(LimiterToken, {unblock, LimiterToken}).
 
 is_blocked(undefined) ->
     false;
-is_blocked(LimiterPid) ->
-    gen_server2:call(LimiterPid, is_blocked, infinity).
+is_blocked(#limiter_token{enabled = false}) ->
+    false;
+is_blocked(LimiterToken) ->
+    maybe_call(LimiterToken, is_blocked).
 
 %%----------------------------------------------------------------------------
 %% gen_server callbacks
 %%----------------------------------------------------------------------------
 
-init([ChPid, UnackedMsgCount]) ->
-    {ok, #lim{ch_pid = ChPid, volume = UnackedMsgCount}}.
+init([]) ->
+    {ok, #lim{}}.
 
 prioritise_call(get_limit, _From, _State) -> 9;
 prioritise_call(_Msg,      _From, _State) -> 0.
@@ -135,23 +147,33 @@ handle_call({can_send, QPid, AckRequired}, _From,
 handle_call(get_limit, _From, State = #lim{prefetch_count = PrefetchCount}) ->
     {reply, PrefetchCount, State};
 
-handle_call({limit, PrefetchCount}, _From, State) ->
+handle_call({limit, PrefetchCount, Token}, _From, State) ->
     case maybe_notify(State, State#lim{prefetch_count = PrefetchCount}) of
-        {cont, State1} -> {reply, ok, State1};
-        {stop, State1} -> {stop, normal, stopped, State1}
+        {cont, State1} ->
+            {reply, ok, State1};
+        {stop, State1} ->
+            {reply, {disabled, Token#limiter_token{enabled = false}}, State1}
     end;
 
 handle_call(block, _From, State) ->
     {reply, ok, State#lim{blocked = true}};
 
-handle_call(unblock, _From, State) ->
+handle_call({unblock, Token}, _From, State) ->
     case maybe_notify(State, State#lim{blocked = false}) of
-        {cont, State1} -> {reply, ok, State1};
-        {stop, State1} -> {stop, normal, stopped, State1}
+        {cont, State1} ->
+            {reply, ok, State1};
+        {stop, State1} ->
+            {reply, {disabled, Token#limiter_token{enabled = false}}, State1}
     end;
 
 handle_call(is_blocked, _From, State) ->
-    {reply, blocked(State), State}.
+    {reply, blocked(State), State};
+
+handle_call({enable, Token, Channel, Volume}, _From, State) ->
+    {reply, Token#limiter_token{enabled = true},
+     State#lim{ch_pid = Channel, volume = Volume}};
+handle_call({disable, Token}, _From, State) ->
+    {reply, Token#limiter_token{enabled = false}, State}.
 
 handle_cast({ack, Count}, State = #lim{volume = Volume}) ->
     NewVolume = if Volume == 0 -> 0;
@@ -189,6 +211,20 @@ maybe_notify(OldState, NewState) ->
                   end, NewState1};
         false -> {cont, NewState}
     end.
+
+maybe_call(undefined, _Call) ->
+    ok;
+maybe_call(#limiter_token{enabled = false}, _Call) ->
+    ok;
+maybe_call(#limiter_token{pid = Pid}, Call) ->
+    gen_server2:call(Pid, Call, infinity).
+
+maybe_cast(undefined, _Call) ->
+    ok;
+maybe_cast(#limiter_token{enabled = false}, _Cast) ->
+    ok;
+maybe_cast(#limiter_token{pid = Pid}, Cast) ->
+    gen_server2:cast(Pid, Cast).
 
 limit_reached(#lim{prefetch_count = Limit, volume = Volume}) ->
     Limit =/= 0 andalso Volume >= Limit.
