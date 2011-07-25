@@ -246,15 +246,15 @@ register_confirm_handler(Channel, ConfirmHandler) ->
 register_flow_handler(Channel, FlowHandler) ->
     gen_server:cast(Channel, {register_flow_handler, FlowHandler} ).
 
-%% @spec (Channel, Call) -> ok
+%% @spec (Channel, Msg) -> ok
 %% where
 %%      Channel = pid()
-%%      Call    = any()
+%%      Msg    = any()
 %% @doc This causes the channel to invoke Consumer:handle_call/2,
 %% where Consumer is the amqp_gen_consumer implementation registered with
 %% the channel.
-call_consumer(Channel, Call) ->
-    gen_server:call(Channel, {call_consumer, Call}, infinity).
+call_consumer(Channel, Msg) ->
+    gen_server:call(Channel, {call_consumer, Msg}, infinity).
 
 %% @spec (Channel, BasicConsume, Subscriber) -> ok
 %% where
@@ -329,9 +329,9 @@ handle_call(wait_for_confirms, From, State) ->
 handle_call({wait_for_confirms_or_die, Pid}, From, State) ->
     handle_wait_for_confirms(From, Pid, ok, State);
 %% @private
-handle_call({call_consumer, Call}, _From,
+handle_call({call_consumer, Msg}, _From,
             State = #state{consumer = Consumer}) ->
-    {reply, amqp_gen_consumer:call_consumer(Consumer, Call), State};
+    {reply, amqp_gen_consumer:call_consumer(Consumer, Msg), State};
 %% @private
 handle_call({subscribe, BasicConsume, Subscriber}, From, State) ->
     handle_method_to_server(BasicConsume, none, From, Subscriber, State).

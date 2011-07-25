@@ -14,13 +14,17 @@
 %% Copyright (c) 2011-2011 VMware, Inc.  All rights reserved.
 %%
 
-%% @doc A behaviour module for implementing consumers for amqp_channel. To
-%% specify a consumer implementation for a channel, use
-%% amqp_connection:open_channel/{2,3}.<br/>
-%% All callbacks are called withing the channel process.<br/>
+%% @doc A behaviour module for implementing consumers for
+%% amqp_channel. To specify a consumer implementation for a channel,
+%% use amqp_connection:open_channel/{2,3}.
 %% <br/>
-%% See comments in amqp_gen_consumer.erl source file for documentation on the
-%% callback functions.
+%% All callbacks are called within the gen_consumer process. <br/>
+%% <br/>
+%% See comments in amqp_gen_consumer.erl source file for documentation
+%% on the callback functions.
+%% <br/>
+%% Note that making calls to the channel from the callback module will
+%% result in deadlock.
 -module(amqp_gen_consumer).
 
 -include("amqp_client.hrl").
@@ -45,15 +49,15 @@
 start_link(ConsumerModule, ExtraParams) ->
     gen_server2:start_link(?MODULE, [ConsumerModule, ExtraParams], []).
 
-%% @spec (Consumer, Call) -> ok
+%% @spec (Consumer, Msg) -> ok
 %% where
 %%      Consumer = pid()
-%%      Call = any()
+%%      Msg = any()
 %%
 %% @doc This function is used to perform arbitrary calls into the
 %% consumer module.
-call_consumer(Pid, Call) ->
-    gen_server2:call(Pid, {consumer_call, Call}, infinity).
+call_consumer(Pid, Msg) ->
+    gen_server2:call(Pid, {consumer_call, Msg}, infinity).
 
 %% @spec (Consumer, Method, Args) -> ok
 %% where
@@ -144,11 +148,11 @@ behaviour_info(callbacks) ->
      %% message.
      {handle_info, 2},
 
-     %% handle_call(Call, From, State) -> {reply, Reply, NewState} |
-     %%                                   {noreply, NewState} |
-     %%                                   {error, Reason, NewState}
+     %% handle_call(Msg, From, State) -> {reply, Reply, NewState} |
+     %%                                  {noreply, NewState} |
+     %%                                  {error, Reason, NewState}
      %% where
-     %%      Call = any()
+     %%      Msg = any()
      %%      From = any()
      %%      Reply = any()
      %%      State = state()
@@ -156,10 +160,11 @@ behaviour_info(callbacks) ->
      %%
      %% This callback is invoked by the channel when calling
      %% amqp_channel:call_consumer/2. Reply is the term that
-     %% amqp_channel:call_consumer/2 will return. If the callback returns
-     %% {noreply, _}, then the caller to amqp_channel:call_consumer/2 remains
-     %% blocked until reply/2 is used with the provided From as the first
-     %% argument.
+     %% amqp_channel:call_consumer/2 will return. If the callback
+     %% returns {noreply, _}, then the caller to
+     %% amqp_channel:call_consumer/2 and the channel remain blocked
+     %% until gen_server2:reply/2 is used with the provided From as
+     %% the first argument.
      {handle_call, 3},
 
      %% terminate(Reason, State) -> any()
@@ -191,10 +196,10 @@ init([ConsumerModule, ExtraParams]) ->
 prioritise_info({'DOWN', _MRef, process, _Pid, _Info}, _State) -> 1;
 prioritise_info(_, _State)                                     -> 0.
 
-handle_call({consumer_call, Call}, From,
+handle_call({consumer_call, Msg}, From,
             State = #state{module       = ConsumerModule,
                            module_state = MState}) ->
-    case ConsumerModule:handle_call(Call, From, MState) of
+    case ConsumerModule:handle_call(Msg, From, MState) of
         {noreply, NewMState} ->
             {noreply, State#state{module_state = NewMState}};
         {reply, Reply, NewMState} ->

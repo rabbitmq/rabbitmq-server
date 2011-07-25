@@ -14,9 +14,10 @@
 %% Copyright (c) 2011-2011 VMware, Inc.  All rights reserved.
 %%
 
-%% @doc This module is an implementation of the amqp_gen_consumer behaviour and
-%% can be used as part of the Consumer parameter when opening AMQP
-%% channels.<br/>
+%% @doc This module is an implementation of the amqp_gen_consumer
+%% behaviour and can be used as part of the Consumer parameter when
+%% opening AMQP channels. This is the default implementation selected
+%% by channel. <br/>
 %% <br/>
 %% The Consumer parameter for this implementation is {{@module}, []@}<br/>
 %% This consumer implementation keeps track of consumer tags and sends
@@ -61,12 +62,12 @@
 %% where
 %%      ChannelPid = pid()
 %%      ConsumerPid = pid()
-%% @doc This function registers a default consumer with the channel. A default
-%% consumer is used when a subscription is made via
+%% @doc This function registers a default consumer with the channel. A
+%% default consumer is used when a subscription is made via
 %% amqp_channel:call(ChannelPid, #'basic.consume'{}) (rather than
-%% {@module}:subscribe/3) and hence there is no consumer pid registered with the
-%% consumer tag. In this case, the relevant deliveries will be sent to the
-%% default consumer.
+%% {@module}:subscribe/3) and hence there is no consumer pid
+%% registered with the consumer tag. In this case, the relevant
+%% deliveries will be sent to the default consumer.
 register_default_consumer(ChannelPid, ConsumerPid) ->
     amqp_channel:call_consumer(ChannelPid,
                                {register_default_consumer, ConsumerPid}).
