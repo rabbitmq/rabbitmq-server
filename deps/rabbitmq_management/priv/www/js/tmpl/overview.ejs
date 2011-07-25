@@ -56,7 +56,10 @@
       Version
       <sub>(RabbitMQ / Erlang)</sub>
     </th>
-    <th>Mnesia storage <span class="help" id="mnesia-storage"></span></th>
+    <th>Mnesia <span class="help" id="mnesia-storage"></span></th>
+    <% if (nodes_interesting) { %>
+    <th>Management</th>
+    <% } %>
   </tr>
 <%
    for (var i = 0; i < nodes.length; i++) {
@@ -124,16 +127,23 @@
      <td class="c">
        <%= node.type %>
      </td>
+     <% if (nodes_interesting) { %>
+       <td class="c">
+       <% if (overview.node == node.name) { %>
+         <acronym title="You are accessing the management UI from this node.">A</acronym>
+       <% } %>
+       <% if (overview.statistics_db_node == node.name) { %>
+         <acronym title="This node contains the management statistics database">S</acronym>
+       <% } %>
+       </td>
+     <% } %>
+     </td>
    </tr>
 <% } %>
 </table>
 
-<% if (nodes_interesting) { %>
 <% if (overview.statistics_db_node == 'not_running') { %>
-  <p class="status-error">Statistics database node could not be contacted. Message rates and queue lengths will not be shown.</p>
-<% } else { %>
-  <p>Connected to: <b><%= overview.node %></b>. Statistics database: <b><%= overview.statistics_db_node %></b>.</b>
-<% } %>
+  <p class="status-error">Statistics database could not be contacted. Message rates and queue lengths will not be shown.</p>
 <% } %>
 </div>
 </div>
@@ -203,14 +213,14 @@
     <table class="two-col-layout">
       <tr>
         <td>
-          <h3>Export <span class="help" id="export-config"></span></h3>
+          <h3>Export</h3>
           <p>
             <label for="download-filename">Filename for download:</label><br/>
             <input type="text" id="download-filename" value="<%= fmt_download_filename(overview.node) %>" class="wide" />
           </p>
         </td>
         <td>
-          <h3>Import <span class="help" id="import-config"></span></h3>
+          <h3>Import</h3>
           <p>
             <label>Configuration file:</label><br/>
             <input type="file" name="file"/>
@@ -221,12 +231,14 @@
         <td>
           <p>
             <button id="download-configuration">Download broker configuration</button>
+            <span class="help" id="export-config"></span>
           </p>
         </td>
         <td>
           <p>
             <input type="hidden" name="redirect" value="../#/import-succeeded"/>
             <input type="submit" value="Upload broker configuration"/>
+            <span class="help" id="import-config"></span>
           </p>
         </td>
       </tr>

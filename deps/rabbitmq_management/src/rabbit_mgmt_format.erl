@@ -27,6 +27,9 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 
+-define(PIDS_TO_STRIP, [connection, owner_pid, queue, channel,
+                        exclusive_consumer_pid]).
+
 %%--------------------------------------------------------------------
 
 format(Stats, Fs) ->
@@ -316,7 +319,7 @@ a2b(A) ->
 strip_pids(Item = [T | _]) when is_tuple(T) ->
     format(Item,
            [{fun node_from_pid/1, [pid]},
-            {fun remove/1,        [connection, owner_pid, queue, channel]},
+            {fun remove/1,        ?PIDS_TO_STRIP},
             {fun mirror_nodes/1,  [slave_pids]}]);
 
 strip_pids(Items) -> [strip_pids(I) || I <- Items].

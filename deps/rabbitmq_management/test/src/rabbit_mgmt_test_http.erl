@@ -704,6 +704,20 @@ queue_purge_test() ->
     http_delete("/queues/%2f/myqueue", ?NO_CONTENT),
     ok.
 
+
+exclusive_consumer_test() ->
+    {ok, Conn} = amqp_connection:start(#amqp_params_network{}),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    #'queue.declare_ok'{ queue = QName } =
+        amqp_channel:call(Ch, #'queue.declare'{exclusive = true}),
+    amqp_channel:subscribe(Ch, #'basic.consume'{queue     = QName,
+                                                exclusive = true}, self()),
+    timer:sleep(1000), %% Sadly we need to sleep to let the stats update
+    http_get("/queues/%2f/"), %% Just check we don't blow up
+    amqp_channel:close(Ch),
+    amqp_connection:close(Conn),
+    ok.
+
 sorting_test() ->
     QArgs = [],
     PermArgs = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
