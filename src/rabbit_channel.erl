@@ -30,7 +30,7 @@
          prioritise_cast/2]).
 
 -record(ch, {state, protocol, channel, reader_pid, writer_pid, conn_pid,
-             limiter_pid, start_limiter_fun, tx_status, next_tag,
+             limiter_pid, limiter_sup_pid, tx_status, next_tag,
              unacked_message_q, uncommitted_message_q, uncommitted_ack_q,
              user, virtual_host, most_recently_declared_queue,
              consumer_mapping, blocking, consumer_monitors, queue_collector_pid,
@@ -162,7 +162,7 @@ ready_for_close(Pid) ->
 %%---------------------------------------------------------------------------
 
 init([Channel, ReaderPid, WriterPid, ConnPid, Protocol, User, VHost,
-      Capabilities, CollectorPid, StartLimiterFun]) ->
+      Capabilities, CollectorPid, LimiterSupPid]) ->
     process_flag(trap_exit, true),
     ok = pg_local:join(rabbit_channels, self()),
     StatsTimer = rabbit_event:init_stats_timer(),
@@ -173,7 +173,7 @@ init([Channel, ReaderPid, WriterPid, ConnPid, Protocol, User, VHost,
                 writer_pid              = WriterPid,
                 conn_pid                = ConnPid,
                 limiter_pid             = undefined,
-                start_limiter_fun       = StartLimiterFun,
+                limiter_sup_pid         = LimiterSupPid,
                 tx_status               = none,
                 next_tag                = 1,
                 unacked_message_q       = queue:new(),
@@ -1281,8 +1281,9 @@ fold_per_queue(F, Acc0, UAQ) ->
     dict:fold(fun (QPid, MsgIds, Acc) -> F(QPid, MsgIds, Acc) end,
               Acc0, D).
 
-start_limiter(State = #ch{unacked_message_q = UAMQ, start_limiter_fun = SLF}) ->
-    {ok, LPid} = SLF(queue:len(UAMQ)),
+start_limiter(State = #ch{unacked_message_q = UAMQ, limiter_sup_pid = LSP}) ->
+    {ok, LPid} =
+        rabbit_limiter_sup:start_limiter(LSP, self(), queue:len(UAMQ)),
     ok = limit_queues(LPid, State),
     LPid.
 
