@@ -33,21 +33,15 @@ the following commands should build RabbitMQ with the shovel plug-in:
 
 hg clone http://hg.rabbitmq.com/rabbitmq-public-umbrella
 cd rabbitmq-public-umbrella
-hg clone http://hg.rabbitmq.com/rabbitmq-codegen
-hg clone http://hg.rabbitmq.com/rabbitmq-erlang-client
-hg clone http://hg.rabbitmq.com/rabbitmq-server
-hg clone http://hg.rabbitmq.com/rabbitmq-shovel
+make -j4 checkout
 cd rabbitmq-server
 make -j
 mkdir -p plugins
-cd plugins
-ln -s ../../rabbitmq-erlang-client
-ln -s ../../rabbitmq-shovel
-cd ../../rabbitmq-erlang-client
-make
 cd ../rabbitmq-shovel
-make
+make -j
+cp dist/*.ez ../rabbitmq-server/plugins
 cd ../rabbitmq-server
+rm plugins/rabbit_common*.ez
 make cleandb run
 
 
