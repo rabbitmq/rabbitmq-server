@@ -14,20 +14,25 @@
 %% Copyright (c) 2011-2011 VMware, Inc.  All rights reserved.
 %%
 
-%% @doc This module is an implementation of the amqp_gen_consumer behaviour and
-%% can be used as part of the Consumer parameter when opening AMQP
-%% channels.<br/>
+%% @doc This module is an implementation of the amqp_gen_consumer
+%% behaviour and can be used as part of the Consumer parameter when
+%% opening AMQP channels.
 %% <br/>
-%% The Consumer parameter for this implementation is
-%% {{@module}, [ConsumerPid]@}, where ConsumerPid is a process that
-%% will receive queue subscription-related messages.<br/>
 %% <br/>
-%% This consumer implementation causes the channel to send to the ConsumerPid
-%% all basic.consume_ok, basic.cancel_ok, basic.cancel and basic.deliver
-%% messages received from the server.<br/>
+%% The Consumer parameter for this implementation is {{@module},
+%% [ConsumerPid]@}, where ConsumerPid is a process that will receive
+%% queue subscription-related messages.<br/>
 %% <br/>
-%% In addition, this consumer implementation creates a link between the channel
-%% and the provided ConsumerPid.<br/>
+%% This consumer implementation causes the channel to send to the
+%% ConsumerPid all basic.consume, basic.consume_ok, basic.cancel,
+%% basic.cancel_ok and basic.deliver messages received from the
+%% server.
+%% <br/>
+%% <br/>
+%% In addition, this consumer implementation monitors the ConsumerPid
+%% and exits with the same shutdown reason when it dies.  'DOWN'
+%% messages from other sources are passed to ConsumerPid.
+%% <br/>
 %% Warning! It is not recommended to rely on a consumer on killing off the
 %% channel (through the exit signal). That may cause messages to get lost.
 %% Always use amqp_channel:close/{1,3} for a clean shut down.<br/>
@@ -78,6 +83,8 @@ handle_deliver(M, A, C) ->
     {ok, C}.
 
 %% @private
+handle_info({'DOWN', _MRef, process, C, Info}, C) ->
+    {stop, Info, C};
 handle_info({'DOWN', MRef, process, Pid, Info}, C) ->
     C ! {'DOWN', MRef, process, Pid, Info},
     {ok, C}.

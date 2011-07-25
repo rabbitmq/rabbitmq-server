@@ -246,7 +246,7 @@ register_confirm_handler(Channel, ConfirmHandler) ->
 register_flow_handler(Channel, FlowHandler) ->
     gen_server:cast(Channel, {register_flow_handler, FlowHandler} ).
 
-%% @spec (Channel, Message, Args) -> ok
+%% @spec (Channel, Call) -> ok
 %% where
 %%      Channel = pid()
 %%      Call    = any()
