@@ -82,7 +82,7 @@ disable(#limiter_token{pid = Pid} = Token) ->
     gen_server2:call(Pid, {disable, Token}).
 
 limit(LimiterToken, PrefetchCount) ->
-    maybe_call(LimiterToken, {limit, PrefetchCount, LimiterToken}).
+    maybe_call(LimiterToken, {limit, PrefetchCount, LimiterToken}, ok).
 
 %% Ask the limiter whether the queue can deliver a message without
 %% breaching a limit
@@ -93,7 +93,9 @@ can_send(#limiter_token{enabled = false}, _QPid, _AckRequired) ->
 can_send(LimiterToken, QPid, AckRequired) ->
     rabbit_misc:with_exit_handler(
       fun () -> true end,
-      fun () -> maybe_call(LimiterToken, {can_send, QPid, AckRequired}) end).
+      fun () ->
+              maybe_call(LimiterToken, {can_send, QPid, AckRequired}, ok)
+      end).
 
 %% Let the limiter know that the channel has received some acks from a
 %% consumer
@@ -107,20 +109,16 @@ unregister(LimiterToken, QPid) -> maybe_cast(LimiterToken,
 get_limit(LimiterToken) ->
     rabbit_misc:with_exit_handler(
       fun () -> 0 end,
-      fun () -> maybe_call(LimiterToken, get_limit) end).
+      fun () -> maybe_call(LimiterToken, get_limit, ok) end).
 
 block(LimiterToken) ->
-    maybe_call(LimiterToken, block).
+    maybe_call(LimiterToken, block, ok).
 
 unblock(LimiterToken) ->
-    maybe_call(LimiterToken, {unblock, LimiterToken}).
+    maybe_call(LimiterToken, {unblock, LimiterToken}, ok).
 
-is_blocked(undefined) ->
-    false;
-is_blocked(#limiter_token{enabled = false}) ->
-    false;
 is_blocked(LimiterToken) ->
-    maybe_call(LimiterToken, is_blocked).
+    maybe_call(LimiterToken, is_blocked, false).
 
 %%----------------------------------------------------------------------------
 %% gen_server callbacks
@@ -212,11 +210,11 @@ maybe_notify(OldState, NewState) ->
         false -> {cont, NewState}
     end.
 
-maybe_call(undefined, _Call) ->
-    ok;
-maybe_call(#limiter_token{enabled = false}, _Call) ->
-    ok;
-maybe_call(#limiter_token{pid = Pid}, Call) ->
+maybe_call(undefined, _Call, Default) ->
+    Default;
+maybe_call(#limiter_token{enabled = false}, _Call, Default) ->
+    Default;
+maybe_call(#limiter_token{pid = Pid}, Call, _Default) ->
     gen_server2:call(Pid, Call, infinity).
 
 maybe_cast(undefined, _Call) ->
