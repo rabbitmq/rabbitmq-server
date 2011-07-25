@@ -156,6 +156,7 @@ test() ->
          {publish_properties, [{content_type, ?SHOVELLED}]}
         ]}],
       infinity),
+
     ok = application:start(rabbitmq_shovel),
 
     {ok, Conn} = amqp_connection:start(#amqp_params_network{}),

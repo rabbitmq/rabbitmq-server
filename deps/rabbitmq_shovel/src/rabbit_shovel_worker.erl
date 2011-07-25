@@ -190,13 +190,16 @@ publish(Tag, Method, Msg,
         State = #state{inbound_ch = InboundChan, outbound_ch = OutboundChan,
                        config = Config, blocked = false, msg_buf = MsgBuf,
                        unacked = Unacked}) ->
+    Seq = case Config#shovel.ack_mode of
+              on_confirm  -> amqp_channel:next_publish_seqno(OutboundChan);
+              _           -> undefined
+          end,
     case amqp_channel:call(OutboundChan, Method, Msg) of
         ok ->
             case Config#shovel.ack_mode of
                 no_ack ->
                     State;
                 on_confirm ->
-                    Seq = amqp_channel:next_publish_seqno(OutboundChan),
                     State#state{unacked = gb_trees:insert(Seq, Tag, Unacked)};
                 on_publish ->
                     ok = amqp_channel:cast(
