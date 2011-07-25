@@ -54,5 +54,5 @@ start_client(Sock) ->
     SupPid.
 
 tcp_opts() ->
-    {ok, Opts} = application:get_env(rabbit_amqp1_0, tcp_listen_options),
+    {ok, Opts} = application:get_env(rabbitmq_amqp1_0, tcp_listen_options),
     Opts.
