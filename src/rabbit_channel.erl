@@ -1111,13 +1111,11 @@ handle_method(#'basic.credit'{consumer_tag = CTag,
     %% want that? Because at least then it's consistent with the credit value
     %% we return. And Available is always going to be racy.
     Available = case dict:find(CTag, Consumers) of
-                    {ok, QName} ->
-                        case rabbit_amqqueue:with(
-                               QName, fun (Q) -> rabbit_amqqueue:stat(Q) end) of
-                                   {ok, Len, _} -> Len;
-                                   _            -> -1
-                               end;
-                    error   -> -1
+                    {ok, {Q, _}} -> case rabbit_amqqueue:stat(Q) of
+                                        {ok, Len, _} -> Len;
+                                        _            -> -1
+                                    end;
+                    error        -> -1 %% TODO these -1s smell very iffy!
                 end,
     LimiterPid1 = case LimiterPid of
                       undefined -> start_limiter(State);
