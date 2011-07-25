@@ -806,9 +806,11 @@ handle_method(#'basic.qos'{prefetch_count = PrefetchCount}, _,
             {_, _}     -> LimiterToken
         end,
     LimiterToken3 = case rabbit_limiter:limit(LimiterToken1, PrefetchCount) of
-                        ok                        -> LimiterToken1;
-                        {disabled, LimiterToken2} -> unlimit_queues(State),
-                                                     LimiterToken2
+                        ok                        ->
+                            LimiterToken1;
+                        {disabled, LimiterToken2} ->
+                            ok = limit_queues(LimiterToken2, State),
+                            LimiterToken2
                     end,
     {reply, #'basic.qos_ok'{}, State#ch{limiter_token = LimiterToken3}};
 
@@ -1077,9 +1079,11 @@ handle_method(#'confirm.select'{nowait = NoWait}, _, State) ->
 handle_method(#'channel.flow'{active = true}, _,
               State = #ch{limiter_token = LimiterToken}) ->
     LimiterToken2 = case rabbit_limiter:unblock(LimiterToken) of
-                        ok                        -> LimiterToken;
-                        {disabled, LimiterToken1} -> unlimit_queues(State),
-                                                     LimiterToken1
+                        ok                        ->
+                            LimiterToken;
+                        {disabled, LimiterToken1} ->
+                            ok = limit_queues(LimiterToken1, State),
+                            LimiterToken1
                     end,
     {reply, #'channel.flow_ok'{active = true},
      State#ch{limiter_token = LimiterToken2}};
@@ -1282,11 +1286,6 @@ fold_per_queue(F, Acc0, UAQ) ->
 enable_limiter(State = #ch{unacked_message_q = UAMQ,
                            limiter_token = LimiterToken}) ->
     LimiterToken1 = rabbit_limiter:enable(LimiterToken, queue:len(UAMQ)),
-    ok = limit_queues(LimiterToken1, State),
-    LimiterToken1.
-
-unlimit_queues(State = #ch{limiter_token = LimiterToken}) ->
-    LimiterToken1 = rabbit_limiter:disable(LimiterToken),
     ok = limit_queues(LimiterToken1, State),
     LimiterToken1.
 
