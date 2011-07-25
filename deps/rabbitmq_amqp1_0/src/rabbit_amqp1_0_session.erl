@@ -998,7 +998,7 @@ parse_destination(Destination, Enc) when is_binary(Destination) ->
     parse_destination(unicode:characters_to_list(Destination, Enc)).
 
 parse_destination(Destination) when is_list(Destination) ->
-    case regexp:split(Destination, "/") of
+    case re:split(Destination, "/", [{return, list}]) of
         {ok, ["", Type | Tail]} when
               Type =:= "queue" orelse Type =:= "exchange" ->
             [Type | Tail];

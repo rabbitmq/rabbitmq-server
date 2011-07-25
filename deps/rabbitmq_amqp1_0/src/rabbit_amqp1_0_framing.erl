@@ -40,7 +40,8 @@ keys(Record) ->
     [{symbol, symbolify(K)} || K <- rabbit_amqp1_0_framing0:fields(Record)].
 
 symbolify(FieldName) when is_atom(FieldName) ->
-    {ok, Symbol, _} = regexp:gsub(atom_to_list(FieldName), "_", "-"),
+    {ok, Symbol, _} = re:replace(atom_to_list(FieldName), "_", "-",
+                                 [{return,list}, global]),
     Symbol.
 
 %% Some fields are allowed to be 'multiple', in which case they are
