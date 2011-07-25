@@ -1122,7 +1122,8 @@ handle_method(#'basic.credit'{consumer_tag = CTag,
                       Other     -> Other
                   end,
     LimiterPid2 =
-        case rabbit_limiter:set_credit(LimiterPid1, CTag, Credit, Count, Drain) of
+        case rabbit_limiter:set_credit(
+               LimiterPid1, CTag, Credit, Count, Drain) of
             ok      -> limit_queues(LimiterPid1, State),
                        LimiterPid1;
             stopped -> unlimit_queues(State)

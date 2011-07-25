@@ -36,7 +36,9 @@
 -spec(start_link/2 :: (pid(), non_neg_integer()) ->
                            rabbit_types:ok_pid_or_error()).
 -spec(limit/2 :: (maybe_pid(), non_neg_integer()) -> 'ok' | 'stopped').
--spec(can_send/5 :: (maybe_pid(), pid(), boolean(), binary(), non_neg_integer()) -> boolean()).
+-spec(can_send/5 ::
+        (maybe_pid(), pid(), boolean(), binary(), non_neg_integer())
+        -> boolean()).
 -spec(ack/2 :: (maybe_pid(), binary()) -> 'ok').
 -spec(register/2 :: (maybe_pid(), pid()) -> 'ok').
 -spec(unregister/2 :: (maybe_pid(), pid()) -> 'ok').
@@ -116,7 +118,8 @@ unblock(LimiterPid) ->
 set_credit(undefined, _, _, _, _) ->
     ok;
 set_credit(LimiterPid, CTag, Credit, Count, Drain) ->
-    gen_server2:call(LimiterPid, {set_credit, CTag, Credit, Count, Drain}, infinity).
+    gen_server2:call(
+      LimiterPid, {set_credit, CTag, Credit, Count, Drain}, infinity).
 
 is_blocked(undefined) ->
     false;
@@ -164,7 +167,8 @@ handle_call(unblock, _From, State) ->
     maybe_notify_reply(irrelevant, State, State#lim{blocked = false});
 
 handle_call({set_credit, CTag, Credit, Count, Drain}, _From, State) ->
-    maybe_notify_reply(CTag, State, reset_credit(CTag, Credit, Count, Drain, State));
+    maybe_notify_reply(CTag, State,
+                       reset_credit(CTag, Credit, Count, Drain, State));
 
 handle_call(is_blocked, _From, State) ->
     {reply, blocked(State), State}.
