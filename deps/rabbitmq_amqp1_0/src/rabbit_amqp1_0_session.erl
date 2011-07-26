@@ -913,37 +913,29 @@ ensure_source(Source = #'v1_0.source'{ address = Address,
               Link = #outgoing_link{}, State) ->
     case Dynamic of
         undefined ->
-            case Address of
-                {Enc, Destination}
-                when Enc =:= utf8 orelse Enc =:= utf16 ->
-                    case parse_destination(Destination, Enc) of
-                        ["queue", Name] ->
-                            case check_queue(Name, State) of
-                                {ok, QueueName, State1} ->
-                                    {ok, Source,
-                                     Link#outgoing_link{
-                                       queue = QueueName},
-                                     State1};
-                                {error, Reason, State1} ->
-                                    {error, Reason, State1}
-                            end;
-                        ["exchange", Name, RK] ->
-                            case check_exchange(Name, State) of
-                                {ok, ExchangeName, State1} ->
-                                    RoutingKey = list_to_binary(RK),
-                                    {ok, QueueName, State2} =
-                                        create_bound_queue(ExchangeName, RoutingKey,
-                                                           State1),
-                                    {ok, Source, Link#outgoing_link{queue = QueueName},
-                                     State2};
-                                {error, Reason, State1} ->
-                                    {error, Reason, State1}
-                            end;
-                        _Otherwise ->
-                            {error, {unknown_address, Address}, State}
+            case parse_destination(Address) of
+                ["queue", Name] ->
+                    case check_queue(Name, State) of
+                        {ok, QueueName, State1} ->
+                            {ok, Source,
+                             Link#outgoing_link{queue = QueueName}, State1};
+                        {error, Reason, State1} ->
+                            {error, Reason, State1}
                     end;
-                _Else ->
-                    {error, {malformed_address, Address}, State}
+                ["exchange", Name, RK] ->
+                    case check_exchange(Name, State) of
+                        {ok, ExchangeName, State1} ->
+                            RoutingKey = list_to_binary(RK),
+                            {ok, QueueName, State2} =
+                                create_bound_queue(ExchangeName, RoutingKey,
+                                                   State1),
+                            {ok, Source, Link#outgoing_link{queue = QueueName},
+                             State2};
+                        {error, Reason, State1} ->
+                            {error, Reason, State1}
+                    end;
+                _Otherwise ->
+                    {error, {unknown_address, Address}, State}
             end;
         {symbol, Lifetime} ->
             case Address of
@@ -965,7 +957,7 @@ parse_destination(Destination, Enc) when is_binary(Destination) ->
 
 parse_destination(Destination) when is_list(Destination) ->
     case re:split(Destination, "/", [{return, list}]) of
-        {ok, ["", Type | Tail]} when
+        ["", Type | Tail] when
               Type =:= "queue" orelse Type =:= "exchange" ->
             [Type | Tail];
         _Else ->
