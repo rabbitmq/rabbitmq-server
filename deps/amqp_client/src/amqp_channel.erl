@@ -297,7 +297,7 @@ init([Driver, Connection, ChannelNumber, Consumer, SWF]) ->
 
 %% @private
 handle_call(open, From, State) ->
-    {noreply, rpc_top_half(#'channel.open'{}, none, From, State)};
+    {noreply, rpc_top_half(#'channel.open'{}, none, From, none, State)};
 %% @private
 handle_call({close, Code, Text}, From, State) ->
     handle_close(Code, Text, From, State);
@@ -445,14 +445,8 @@ handle_method_to_server(Method, AmqpMsg, From, Sender,
                          _ ->
                              State
                      end,
-            case Method of
-                #'basic.consume'{} ->
-                    ok = call_to_consumer(Method, Sender, State);
-                _ ->
-                    ok
-            end,
             {noreply, rpc_top_half(Method, build_content(AmqpMsg),
-                                   From, State1)};
+                                   From, Sender, State1)};
         {ok, none, BlockReply} ->
             ?LOG_WARN("Channel (~p): discarding method ~p in cast.~n"
                       "Reason: ~p~n", [self(), Method, BlockReply]),
@@ -473,21 +467,22 @@ handle_close(Code, Text, From, State) ->
                              class_id   = 0,
                              method_id  = 0},
     case check_block(Close, none, State) of
-        ok         -> {noreply, rpc_top_half(Close, none, From, State)};
+        ok         -> {noreply, rpc_top_half(Close, none, From, none, State)};
         BlockReply -> {reply, BlockReply, State}
     end.
 
-rpc_top_half(Method, Content, From,
+rpc_top_half(Method, Content, From, Sender,
              State0 = #state{rpc_requests = RequestQueue}) ->
     State1 = State0#state{
-        rpc_requests = queue:in({From, Method, Content}, RequestQueue)},
+        rpc_requests =
+                   queue:in({From, Sender, Method, Content}, RequestQueue)},
     IsFirstElement = queue:is_empty(RequestQueue),
     if IsFirstElement -> do_rpc(State1);
        true           -> State1
     end.
 
 rpc_bottom_half(Reply, State = #state{rpc_requests = RequestQueue}) ->
-    {{value, {From, _Method, _Content}}, RequestQueue1} =
+    {{value, {From, _Sender, _Method, _Content}}, RequestQueue1} =
         queue:out(RequestQueue),
     case From of
         none -> ok;
@@ -498,8 +493,8 @@ rpc_bottom_half(Reply, State = #state{rpc_requests = RequestQueue}) ->
 do_rpc(State = #state{rpc_requests = Q,
                       closing      = Closing}) ->
     case queue:out(Q) of
-        {{value, {From, Method, Content}}, NewQ} ->
-            State1 = pre_do(Method, Content, State),
+        {{value, {From, Sender, Method, Content}}, NewQ} ->
+            State1 = pre_do(Method, Content, Sender, State),
             DoRet = do(Method, Content, State1),
             case ?PROTOCOL:is_method_synchronous(Method) of
                 true  -> State1;
@@ -524,15 +519,18 @@ do_rpc(State = #state{rpc_requests = Q,
     end.
 
 pending_rpc_method(#state{rpc_requests = Q}) ->
-    {value, {_From, Method, _Content}} = queue:peek(Q),
+    {value, {_From, _Sender, Method, _Content}} = queue:peek(Q),
     Method.
 
-pre_do(#'channel.open'{}, none, State) ->
+pre_do(#'channel.open'{}, none, _Sender, State) ->
     start_writer(State);
 pre_do(#'channel.close'{reply_code = Code, reply_text = Text}, none,
-       State) ->
+       _Sender, State) ->
     State#state{closing = {just_channel, {app_initiated_close, Code, Text}}};
-pre_do(_, _, State) ->
+pre_do(#'basic.consume'{} = Method, none, Sender, State) ->
+    ok = call_to_consumer(Method, Sender, State),
+    State;
+pre_do(_, _, _, State) ->
     State.
 
 %%---------------------------------------------------------------------------
@@ -613,7 +611,7 @@ handle_method_from_server1(#'channel.flow'{active = Active} = Flow, none,
     %% flushed beforehand. Methods that made it to the queue are not
     %% blocked in any circumstance.
     {noreply, rpc_top_half(#'channel.flow_ok'{active = Active}, none, none,
-                           State#state{flow_active = Active})};
+                           none, State#state{flow_active = Active})};
 handle_method_from_server1(
         #'basic.return'{} = BasicReturn, AmqpMsg,
         State = #state{return_handler_pid = ReturnHandler}) ->
