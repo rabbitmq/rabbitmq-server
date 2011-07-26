@@ -114,21 +114,15 @@ handle_consume(BasicConsume, Pid, State = #state{consumers = Consumers,
 
 %% @private
 handle_consume_ok(BasicConsumeOk, _BasicConsume,
-                  State = #state{unassigned = Unassigned,
+                  State = #state{unassigned = Pid,
                                  consumers  = Consumers,
-                                 monitors   = Monitors}) ->
-    State1 = case Unassigned of
-                 undefined ->
-                     State;
-                 Pid       ->
-                     State#state{consumers  =
-                                     dict:store(tag(BasicConsumeOk),
-                                                Pid, Consumers),
-                                 monitors   =
-                                     dict:store(Pid, monitor(process, Pid),
-                                                Monitors),
-                                 unassigned = undefined}
-             end,
+                                 monitors   = Monitors})
+  when is_pid(Pid) ->
+    State1 = State#state{consumers  =
+                             dict:store(tag(BasicConsumeOk), Pid, Consumers),
+                         monitors   =
+                             dict:store(Pid, monitor(process, Pid), Monitors),
+                         unassigned = undefined},
     deliver(BasicConsumeOk, State1),
     {ok, State1}.
 
