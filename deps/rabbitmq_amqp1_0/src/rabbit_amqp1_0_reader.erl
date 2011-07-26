@@ -940,8 +940,10 @@ server_frame_max() ->
     {ok, FrameMax} = application:get_env(rabbit, frame_max),
     FrameMax.
 
+%% Begin 1-0
 send_on_channel0(Sock, Method, Protocol) ->
-    ok = rabbit_writer:internal_send_command(Sock, 0, Method, Protocol).
+    ok = rabbit_amqp1_0_writer:internal_send_command(Sock, 0, Method, Protocol).
+%% End 1-0
 
 auth_mechanism_to_module(TypeBin, Sock) ->
     case rabbit_registry:binary_to_type(TypeBin) of

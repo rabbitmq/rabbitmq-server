@@ -75,7 +75,7 @@ process_frame(Pid, Frame) ->
 
 init([Channel, ReaderPid, WriterPid]) ->
     %% TODO pass through authentication information
-    {ok, Conn} = amqp_connection:start(direct),
+    {ok, Conn} = amqp_connection:start(#amqp_params_direct{}),
     {ok, Ch} = amqp_connection:open_channel(Conn),
     {ok, #session{ channel_num            = Channel,
                    backing_connection     = Conn,
