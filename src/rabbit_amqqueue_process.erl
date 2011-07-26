@@ -379,7 +379,7 @@ deliver_msgs_to_consumers(Funs = {PredFun, DeliverFun}, FunAcc,
                     acktags = ChAckTags} = ch_record(ChPid),
             IsMsgReady = PredFun(FunAcc, State),
             case (IsMsgReady andalso
-                  rabbit_limiter:can_send( Limiter, self(), AckRequired )) of
+                  rabbit_limiter:can_send(Limiter, self(), AckRequired)) of
                 true ->
                     {{Message, IsDelivered, AckTag}, FunAcc1, State1} =
                         DeliverFun(AckRequired, FunAcc, State),
