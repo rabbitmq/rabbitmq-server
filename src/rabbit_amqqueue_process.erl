@@ -1073,11 +1073,11 @@ handle_cast({limit, ChPid, Limiter}, State) ->
         fun (C = #cr{consumer_count  = ConsumerCount,
                      limiter         = OldLimiter,
                      is_limit_active = OldLimited}) ->
-                case {ConsumerCount =/= 0,
-                      not rabbit_limiter:is_enabled(OldLimiter)} of
-                    {true, true} ->
+                case (ConsumerCount =/= 0 andalso
+                      not rabbit_limiter:is_enabled(OldLimiter)) of
+                    true ->
                         ok = rabbit_limiter:register(Limiter, self());
-                    {_, _} ->
+                    false ->
                         ok
                 end,
                 Limited =
