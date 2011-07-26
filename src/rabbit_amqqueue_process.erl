@@ -1167,12 +1167,13 @@ handle_pre_hibernate(State = #q{backing_queue = BQ,
 
 format_message_queue(_Opt, Mailbox) ->
     Len = priority_queue:len(Mailbox),
-    {Len, case Len > 100 of
-              false -> priority_queue:to_list(Mailbox);
-              true  -> {summary,
-                        dict:to_list(
-                          lists:foldl(
-                            fun ({P, _V}, Counts) ->
-                                    dict:update_counter(P, 1, Counts)
-                            end, dict:new(), priority_queue:to_list(Mailbox)))}
-          end}.
+    {Len,
+     case Len > 100 of
+         false -> priority_queue:to_list(Mailbox);
+         true  -> {summary,
+                   orddict:to_list(
+                     lists:foldl(
+                       fun ({P, _V}, Counts) ->
+                               orddict:update_counter(P, 1, Counts)
+                       end, orddict:new(), priority_queue:to_list(Mailbox)))}
+     end}.
