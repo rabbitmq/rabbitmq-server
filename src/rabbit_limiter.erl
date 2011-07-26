@@ -204,11 +204,10 @@ remember_queue(QPid, State = #lim{queues = Queues}) ->
 
 forget_queue(QPid, State = #lim{ch_pid = ChPid, queues = Queues}) ->
     case orddict:find(QPid, Queues) of
-        {ok, {MRef, _}} ->
-            true = erlang:demonitor(MRef),
-            ok = rabbit_amqqueue:unblock(QPid, ChPid),
-            State#lim{queues = orddict:erase(QPid, Queues)};
-        error -> State
+        {ok, {MRef, _}} -> true = erlang:demonitor(MRef),
+                           ok = rabbit_amqqueue:unblock(QPid, ChPid),
+                           State#lim{queues = orddict:erase(QPid, Queues)};
+        error           -> State
     end.
 
 limit_queue(QPid, State = #lim{queues = Queues}) ->
@@ -218,9 +217,9 @@ limit_queue(QPid, State = #lim{queues = Queues}) ->
 notify_queues(State = #lim{ch_pid = ChPid, queues = Queues}) ->
     {QList, NewQueues} =
         orddict:fold(fun (_QPid, {_, false}, Acc) -> Acc;
-                      (QPid, {MRef, true}, {L, D}) ->
-                          {[QPid | L], orddict:store(QPid, {MRef, false}, D)}
-                  end, {[], Queues}, Queues),
+                         (QPid, {MRef, true}, {L, D}) ->
+                             {[QPid | L], orddict:store(QPid, {MRef, false}, D)}
+                     end, {[], Queues}, Queues),
     case length(QList) of
         0 -> ok;
         L ->
