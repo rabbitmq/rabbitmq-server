@@ -1,82 +1,62 @@
 -module(rabbit_amqp1_0_message).
 
-%%-export([assemble/1, fragments/1]).
+-export([assemble/1]).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_amqp1_0.hrl").
 
-%% %% TODO: we don't care about fragment_offset while reading. Should we?
-%% assemble(Fragments) ->
-%%     {Props, Content} = assemble(?V_1_0_HEADER, {#'P_basic'{}, undefined},
-%%                                 Fragments),
-%%     #amqp_msg{props = Props, payload = Content}.
+assemble(Msg) ->
+    {Props, Content} = assemble(header, {#'P_basic'{}, undefined}, Msg),
+    #amqp_msg{props = Props, payload = Content}.
 
-%% assemble(?V_1_0_HEADER, {PropsIn, ContentIn},
-%%          [#'v1_0.fragment'{first = true, last = true,
-%%                            payload = {binary, Payload},
-%%                            format_code = ?V_1_0_HEADER} | Fragments]) ->
-%%     assemble(?V_1_0_PROPERTIES, {parse_header(Payload, PropsIn), ContentIn},
-%%              Fragments);
-%% assemble(?V_1_0_HEADER, State, Fragments) ->
-%%     assemble(?V_1_0_PROPERTIES, State, Fragments);
+%% TODO handle delivery-annotations, message-annotations and
+%% application-properties
 
-%% assemble(?V_1_0_PROPERTIES, {PropsIn, ContentIn},
-%%          [#'v1_0.fragment'{first = true, last = true,
-%%                            payload = {binary, Payload},
-%%                            format_code = ?V_1_0_PROPERTIES} | Fragments]) ->
-%%     %% TODO allow for AMQP_DATA, _MAP, _LIST
-%%     assemble(?V_1_0_DATA, {parse_properties(Payload, PropsIn), ContentIn},
-%%              Fragments);
-%% assemble(?V_1_0_PROPERTIES, State, Fragments) ->
-%%     assemble(?V_1_0_DATA, State, Fragments);
+assemble(header, {P, C}, [H = #'v1_0.header'{} | Rest]) ->
+    assemble(properties, {parse_header(H, P), C}, Rest);
+assemble(header, {P, C}, Rest) ->
+    assemble(properties, {P, C}, Rest);
 
-%% assemble(?V_1_0_DATA, {PropsIn, _ContentIn},
-%%          [#'v1_0.fragment'{first = true, last = true,
-%%                            payload = {binary, Payload},
-%%                            format_code = ?V_1_0_DATA} | Fragments]) ->
-%%     %% TODO allow for multiple fragments
-%%     assemble(?V_1_0_FOOTER, {PropsIn, Payload}, Fragments);
-%% assemble(?V_1_0_DATA, State, Fragments) ->
-%%     assemble(?V_1_0_FOOTER, State, Fragments);
+assemble(properties, {P, C}, [X = #'v1_0.properties'{} | Rest]) ->
+    assemble(properties, {parse_properties(X, P), C}, Rest);
+assemble(properties, {P, C}, Rest) ->
+    assemble(data, {P, C}, Rest);
 
-%% assemble(?V_1_0_FOOTER, {PropsIn, ContentIn},
-%%          [#'v1_0.fragment'{first = true, last = true,
-%%                            payload = {binary, _Payload},
-%%                            format_code = ?V_1_0_FOOTER}]) ->
-%%     %% TODO parse FOOTER
-%%     {PropsIn, ContentIn};
-%% assemble(?V_1_0_FOOTER, State, []) ->
-%%     State;
-%% assemble(?V_1_0_FOOTER, _State, [Left | _]) ->
-%%     exit({unexpected_trailing_fragments, Left});
+assemble(data, {P, _C}, [Content | Rest]) when is_binary(Content) ->
+    assemble(footer, {P, Content}, Rest);
+assemble(data, {P, C}, Rest) ->
+    assemble(footer, {P, C}, Rest);
 
-%% assemble(Expected, {_, _}, Actual) ->
-%%     exit({expected_fragment, Expected, Actual}).
+assemble(footer, {P, C}, [#'v1_0.footer'{}]) ->
+    %% TODO parse FOOTER
+    {P, C};
+assemble(footer, {P, C}, []) ->
+    {P, C};
+assemble(footer, _, [Left | _]) ->
+    exit({unexpected_trailing_sections, Left});
 
-parse_header(HeaderBin, Props) ->
-    Parsed = parse(HeaderBin),
+assemble(Expected, {_, _}, Actual) ->
+    exit({expected_section, Expected, Actual}).
+
+parse_header(Header, Props) ->
     Props#'P_basic'{headers          = undefined, %% TODO
-                    delivery_mode    = case Parsed#'v1_0.header'.durable of
+                    delivery_mode    = case Header#'v1_0.header'.durable of
                                            true -> 2;
                                            _    -> 1
                                        end,
-                    priority         = Parsed#'v1_0.header'.priority,
-                    expiration       = Parsed#'v1_0.header'.ttl,
+                    priority         = Header#'v1_0.header'.priority,
+                    expiration       = Header#'v1_0.header'.ttl,
                     type             = undefined, %% TODO
                     app_id           = undefined, %% TODO
                     cluster_id       = undefined}. %% TODO
 
-parse_properties(PropsBin, Props) ->
-    Parsed = parse(PropsBin),
-    Props#'P_basic'{content_type     = Parsed#'v1_0.properties'.content_type,
+parse_properties(Props10, Props) ->
+    Props#'P_basic'{content_type     = Props10#'v1_0.properties'.content_type,
                     content_encoding = undefined, %% TODO parse from 1.0 version
-                    correlation_id   = Parsed#'v1_0.properties'.correlation_id,
-                    reply_to         = Parsed#'v1_0.properties'.reply_to,
-                    message_id       = Parsed#'v1_0.properties'.message_id,
-                    user_id          = Parsed#'v1_0.properties'.user_id}.
-
-parse(Bin) ->
-    rabbit_amqp1_0_framing:decode(rabbit_amqp1_0_binary_parser:parse(Bin)).
+                    correlation_id   = Props10#'v1_0.properties'.correlation_id,
+                    reply_to         = Props10#'v1_0.properties'.reply_to,
+                    message_id       = Props10#'v1_0.properties'.message_id,
+                    user_id          = Props10#'v1_0.properties'.user_id}.
 
 %%--------------------------------------------------------------------
 

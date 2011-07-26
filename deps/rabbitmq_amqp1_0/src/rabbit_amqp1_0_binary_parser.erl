@@ -1,6 +1,6 @@
 -module(rabbit_amqp1_0_binary_parser).
 
--export([parse/1, parse1/1]).
+-export([parse/1]).
 
 -include("rabbit_amqp1_0.hrl").
 
@@ -9,8 +9,10 @@
 -endif.
 
 parse(ValueBin) when is_binary(ValueBin) ->
-    {Value, <<>>} = parse1(ValueBin),
-    Value.
+    lists:reverse(parse_all([], parse1(ValueBin))).
+
+parse_all(Acc, {Value, <<>>}) -> [Value | Acc];
+parse_all(Acc, {Value, Rest}) -> parse_all([Value | Acc], parse1(Rest)).
 
 parse1(<<?DESCRIBED,Rest/binary>>) ->
     parse_described(Rest);

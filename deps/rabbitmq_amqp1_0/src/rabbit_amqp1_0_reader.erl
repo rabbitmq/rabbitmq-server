@@ -545,21 +545,26 @@ is_connection_frame(_)               -> false.
 handle_1_0_frame(_Channel, Payload,
                  State = #v1{ connection_state = CS}) when
       CS =:= closing; CS =:= closed ->
-    Frame = rabbit_amqp1_0_framing:decode(
-              rabbit_amqp1_0_binary_parser:parse(Payload)),
-    ?DEBUG("1.0 frame decoded: ~p~n", [Frame]),
-    case is_connection_frame(Frame) of
-        true  -> handle_1_0_connection_frame(Frame, State);
+    Sections = parse_1_0_frame(Payload),
+    case is_connection_frame(Sections) of
+        true  -> handle_1_0_connection_frame(Sections, State);
         false -> State
     end;
 handle_1_0_frame(Channel, Payload, State) ->
-    Frame = rabbit_amqp1_0_framing:decode(
-              rabbit_amqp1_0_binary_parser:parse(Payload)),
-    ?DEBUG("1.0 frame decoded: ~p~n", [Frame]),
-    case is_connection_frame(Frame) of
-        true  -> handle_1_0_connection_frame(Frame, State);
-        false -> handle_1_0_session_frame(Channel, Frame, State)
+    Sections = parse_1_0_frame(Payload),
+    case is_connection_frame(Sections) of
+        true  -> handle_1_0_connection_frame(Sections, State);
+        false -> handle_1_0_session_frame(Channel, Sections, State)
     end.
+
+parse_1_0_frame(Payload) ->
+    Sections = case [rabbit_amqp1_0_framing:decode(Parsed) ||
+                        Parsed <- rabbit_amqp1_0_binary_parser:parse(Payload)] of
+                   [Value] -> Value;
+                   List    -> List
+               end,
+    ?DEBUG("1.0 frame(s) decoded: ~p~n", [Sections]),
+    Sections.
 
 handle_1_0_connection_frame(#'v1_0.open'{ max_frame_size = ClientFrameMax,
                                           hostname = _Hostname,

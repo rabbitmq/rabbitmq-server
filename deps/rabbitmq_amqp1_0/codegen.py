@@ -51,7 +51,7 @@ def print_erl(types):
 """
     for t in types:
         print """encode(Frame = #'v1_0.%s'{}) ->
-    rabbit_amqp1_0_framing:encode_described(%s, %s, Frame);""" % (t.name, t.source, t.number)
+    rabbit_amqp1_0_framing:encode_described('%s', %s, Frame);""" % (t.name, t.source, t.number)
     print """encode(L) when is_list(L) ->
     {described, true, {list, [encode(I) || I <- L]}};
 encode(undefined) -> null;
@@ -88,8 +88,8 @@ def print_define(opt, source):
     print """-define(V_1_0_%s, {%s, %s}).""" % (name, source, quoted)
 
 def want_type(el):
-    klass = el.getAttribute('class')
-    return klass == 'composite'
+    descriptors = el.getElementsByTagName('descriptor')
+    return len(descriptors) > 0
 
 def want_define(el):
     klass = el.getAttribute('class')

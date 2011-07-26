@@ -365,9 +365,10 @@ handle_control(#'v1_0.attach'{source = Source,
     {DefaultOutcome, Outcomes} = outcomes(Source),
     attach_outgoing(DefaultOutcome, Outcomes, Attach, State);
 
-handle_control(Txfr = #'v1_0.transfer'{handle = Handle,
-                                       settled = Settled,
-                                       delivery_id = {uint, TxfrId}},
+handle_control([Txfr = #'v1_0.transfer'{handle = Handle,
+                                        settled = Settled,
+                                        delivery_id = {uint, TxfrId}} |
+                AnnotatedMessage],
                State = #session{backing_channel = Ch,
                                 next_publish_id = NextPublishId,
                                 incoming_unsettled_map = Unsettled}) ->
@@ -376,7 +377,7 @@ handle_control(Txfr = #'v1_0.transfer'{handle = Handle,
                         delivery_count = Count,
                         credit_used = CreditUsed } = Link ->
             NewCount = rabbit_misc:serial_add(Count, 1),
-            Msg = <<"">>,%%rabbit_amqp1_0_message:assemble(Fragments),
+            Msg = rabbit_amqp1_0_message:assemble(AnnotatedMessage),
             NextPublishId1 = case NextPublishId of
                                  0 -> 0;
                                  _ -> NextPublishId + 1 % serial?
