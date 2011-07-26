@@ -203,8 +203,7 @@ nodes_of_type(Type) ->
 table_definitions(disc) ->
     table_definitions();
 table_definitions(ram) ->
-    [{Tab, copy_type_to_ram(TabDef)}
-     || {Tab, TabDef} <- table_definitions()].
+    [{Tab, copy_type_to_ram(TabDef)} || {Tab, TabDef} <- table_definitions()].
 
 table_definitions() ->
     [{rabbit_user,
