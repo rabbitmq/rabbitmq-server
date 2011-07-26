@@ -117,6 +117,9 @@ confirm_barrier_test() ->
 confirm_barrier_nop_test() ->
     test_util:confirm_barrier_nop_test(new_connection()).
 
+default_consumer_test() ->
+    test_util:default_consumer_test(new_connection()).
+
 subscribe_nowait_test() ->
     test_util:subscribe_nowait_test(new_connection()).
 
