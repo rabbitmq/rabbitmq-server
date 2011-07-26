@@ -54,27 +54,27 @@ start_link({tcp, Sock, Channel, FrameMax, ReaderPid, Protocol, User, VHost,
           {writer, {rabbit_writer, start_link,
                     [Sock, Channel, FrameMax, Protocol, ReaderPid]},
            intrinsic, ?MAX_WAIT, worker, [rabbit_writer]}),
-    LimiterToken = start_limiter(SupPid),
+    Limiter = start_limiter(SupPid),
     {ok, ChannelPid} =
         supervisor2:start_child(
           SupPid,
           {channel, {rabbit_channel, start_link,
                      [Channel, ReaderPid, WriterPid, ReaderPid, Protocol,
-                      User, VHost, Capabilities, Collector, LimiterToken]},
+                      User, VHost, Capabilities, Collector, Limiter]},
            intrinsic, ?MAX_WAIT, worker, [rabbit_channel]}),
     {ok, AState} = rabbit_command_assembler:init(Protocol),
     {ok, SupPid, {ChannelPid, AState}};
 start_link({direct, Channel, ClientChannelPid, ConnPid, Protocol, User, VHost,
             Capabilities, Collector}) ->
     {ok, SupPid} = supervisor2:start_link(?MODULE, []),
-    LimiterToken = start_limiter(SupPid),
+    Limiter = start_limiter(SupPid),
     {ok, ChannelPid} =
         supervisor2:start_child(
           SupPid,
           {channel, {rabbit_channel, start_link,
                      [Channel, ClientChannelPid, ClientChannelPid, ConnPid,
                       Protocol, User, VHost, Capabilities, Collector,
-                      LimiterToken]},
+                      Limiter]},
            intrinsic, ?MAX_WAIT, worker, [rabbit_channel]}),
     {ok, SupPid, {ChannelPid, none}}.
 

@@ -78,8 +78,8 @@ enable(#token{pid = Pid} = Token, Volume) ->
 disable(#token{pid = Pid} = Token) ->
     gen_server2:call(Pid, {disable, Token}).
 
-limit(LimiterToken, PrefetchCount) ->
-    maybe_call(LimiterToken, {limit, PrefetchCount, LimiterToken}, ok).
+limit(Limiter, PrefetchCount) ->
+    maybe_call(Limiter, {limit, PrefetchCount, Limiter}, ok).
 
 %% Ask the limiter whether the queue can deliver a message without
 %% breaching a limit
@@ -87,35 +87,34 @@ can_send(undefined, _QPid, _AckRequired) ->
     true;
 can_send(#token{enabled = false}, _QPid, _AckRequired) ->
     true;
-can_send(LimiterToken, QPid, AckRequired) ->
+can_send(Limiter, QPid, AckRequired) ->
     rabbit_misc:with_exit_handler(
       fun () -> true end,
       fun () ->
-              maybe_call(LimiterToken, {can_send, QPid, AckRequired}, ok)
+              maybe_call(Limiter, {can_send, QPid, AckRequired}, ok)
       end).
 
 %% Let the limiter know that the channel has received some acks from a
 %% consumer
-ack(LimiterToken, Count) -> maybe_cast(LimiterToken, {ack, Count}).
+ack(Limiter, Count) -> maybe_cast(Limiter, {ack, Count}).
 
-register(LimiterToken, QPid) -> maybe_cast(LimiterToken, {register, QPid}).
+register(Limiter, QPid) -> maybe_cast(Limiter, {register, QPid}).
 
-unregister(LimiterToken, QPid) -> maybe_cast(LimiterToken,
-                                             {unregister, QPid}).
+unregister(Limiter, QPid) -> maybe_cast(Limiter, {unregister, QPid}).
 
-get_limit(LimiterToken) ->
+get_limit(Limiter) ->
     rabbit_misc:with_exit_handler(
       fun () -> 0 end,
-      fun () -> maybe_call(LimiterToken, get_limit, ok) end).
+      fun () -> maybe_call(Limiter, get_limit, ok) end).
 
-block(LimiterToken) ->
-    maybe_call(LimiterToken, block, ok).
+block(Limiter) ->
+    maybe_call(Limiter, block, ok).
 
-unblock(LimiterToken) ->
-    maybe_call(LimiterToken, {unblock, LimiterToken}, ok).
+unblock(Limiter) ->
+    maybe_call(Limiter, {unblock, Limiter}, ok).
 
-is_blocked(LimiterToken) ->
-    maybe_call(LimiterToken, is_blocked, false).
+is_blocked(Limiter) ->
+    maybe_call(Limiter, is_blocked, false).
 
 %%----------------------------------------------------------------------------
 %% gen_server callbacks

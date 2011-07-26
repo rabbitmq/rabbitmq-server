@@ -440,10 +440,10 @@ notify_down_all(QPids, ChPid) ->
       fun (QPid) -> gen_server2:call(QPid, {notify_down, ChPid}, infinity) end,
       QPids).
 
-limit_all(QPids, ChPid, LimiterToken) ->
+limit_all(QPids, ChPid, Limiter) ->
     delegate:invoke_no_result(
       QPids, fun (QPid) ->
-                     gen_server2:cast(QPid, {limit, ChPid, LimiterToken})
+                     gen_server2:cast(QPid, {limit, ChPid, Limiter})
              end).
 
 basic_get(#amqqueue{pid = QPid}, ChPid, NoAck) ->
