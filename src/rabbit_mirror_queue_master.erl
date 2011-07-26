@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2010 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2010-2011 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_mirror_queue_master).
@@ -298,7 +298,7 @@ is_duplicate(Message = #basic_message { id = MsgId },
         error ->
             %% We permit the underlying BQ to have a peek at it, but
             %% only if we ourselves are not filtering out the msg.
-            {Result, BQS1} = BQ:is_duplicate(none, Message, BQS),
+            {Result, BQS1} = BQ:is_duplicate(Message, BQS),
             {Result, State #state { backing_queue_state = BQS1 }};
         {ok, published} ->
             %% It already got published when we were a slave and no
