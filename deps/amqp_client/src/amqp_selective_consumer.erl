@@ -50,7 +50,7 @@
          terminate/2]).
 
 -record(state, {consumers             = dict:new(), %% Tag -> ConsumerPid
-                unassigned            = dict:new(), %% BasicConsume -> [ConsumerPid]
+                unassigned            = undefined,  %% Pid
                 monitors              = dict:new(), %% Pid -> MRef
                 default_consumer      = none}).
 
@@ -82,7 +82,6 @@ init([]) ->
 
 %% @private
 handle_consume(BasicConsume, Pid, State = #state{consumers = Consumers,
-                                                 unassigned = Unassigned,
                                                  monitors = Monitors}) ->
     Tag = tag(BasicConsume),
     Ok =
@@ -104,8 +103,7 @@ handle_consume(BasicConsume, Pid, State = #state{consumers = Consumers,
              {consumers = dict:store(Tag, Pid, Consumers),
               monitors  = dict:store(Pid, monitor(process, Pid), Monitors)}};
         {true, #'basic.consume'{nowait = false}} ->
-            {ok, State#state{unassigned = dict:append(BasicConsume, Pid,
-                                                      Unassigned)}};
+            {ok, State#state{unassigned = Pid}};
         {false, #'basic.consume'{nowait = true}} ->
             {error, 'no_consumer_tag_specified', State};
         {false, #'basic.consume'{nowait = false}} ->
@@ -115,8 +113,22 @@ handle_consume(BasicConsume, Pid, State = #state{consumers = Consumers,
     end.
 
 %% @private
-handle_consume_ok(BasicConsumeOk, BasicConsume, State) ->
-    State1 = assign_consumer(BasicConsume, tag(BasicConsumeOk), State),
+handle_consume_ok(BasicConsumeOk, _BasicConsume,
+                  State = #state{unassigned = Unassigned,
+                                 consumers  = Consumers,
+                                 monitors   = Monitors}) ->
+    State1 = case Unassigned of
+                 undefined ->
+                     State;
+                 Pid       ->
+                     State#state{consumers  =
+                                     dict:store(tag(BasicConsumeOk),
+                                                Pid, Consumers),
+                                 monitors   =
+                                     dict:store(Pid, monitor(process, Pid),
+                                                Monitors),
+                                 unassigned = undefined}
+             end,
     deliver(BasicConsumeOk, State1),
     {ok, State1}.
 
@@ -185,27 +197,6 @@ terminate(_Reason, State) ->
 %%---------------------------------------------------------------------------
 %% Internal plumbing
 %%---------------------------------------------------------------------------
-
-assign_consumer(BasicConsume, Tag, State = #state{unassigned = Unassigned}) ->
-    case dict:find(BasicConsume, Unassigned) of
-        {ok, [Pid]} ->
-            assign_update_state(
-              Tag, Pid, dict:erase(BasicConsume, Unassigned), State);
-        {ok, [Pid | RestPids]} ->
-            assign_update_state(
-              Tag, Pid, dict:store(BasicConsume, RestPids, Unassigned),
-              State);
-        error ->
-            %% ignore
-            State
-    end.
-
-assign_update_state(Tag, Pid, NewUnassigned,
-                    State = #state{consumers = Consumers,
-                                   monitors = Monitors}) ->
-    State#state{consumers  = dict:store(Tag, Pid, Consumers),
-                monitors   = dict:store(Pid, monitor(process, Pid), Monitors),
-                unassigned = NewUnassigned}.
 
 deliver(Msg, State) ->
     deliver(Msg, undefined, State).
