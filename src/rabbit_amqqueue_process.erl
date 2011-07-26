@@ -35,7 +35,7 @@
 
 -export([init_with_backing_queue_state/7]).
 
--export([format_priority_mailbox/2]).
+-export([format_message_queue/2]).
 
 %% Queue's state
 -record(q, {q,
@@ -1165,11 +1165,12 @@ handle_pre_hibernate(State = #q{backing_queue = BQ,
                      backing_queue_state = BQS3},
     {hibernate, stop_rate_timer(State1)}.
 
-format_priority_mailbox(_Opt, Mailbox) ->
+format_message_queue(_Opt, Mailbox) ->
     Len = priority_queue:len(Mailbox),
     {Len, case Len > 100 of
               false -> priority_queue:to_list(Mailbox);
-              true  -> {dict:to_list(
+              true  -> {summary,
+                        dict:to_list(
                           lists:foldl(
                             fun ({P, _V}, Counts) ->
                                     dict:update_counter(P, 1, Counts)

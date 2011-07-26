@@ -67,6 +67,11 @@
 %% module. Note there is no form also encompassing a reply, thus if
 %% you wish to reply in handle_call/3 and change the callback module,
 %% you need to use gen_server2:reply/2 to issue the reply manually.
+%%
+%% 8) The callback module can optionally implement
+%% format_message_queue/2 which is the equivalent of format_status/2
+%% but where the second argument is specifically the priority_queue
+%% which contains the prioritised message_queue.
 
 %% All modifications are (C) 2009-2011 VMware, Inc.
 
@@ -1163,7 +1168,7 @@ format_status(Opt, StatusData) ->
     Log = sys:get_debug(log, Debug, []),
     Specfic = callback_format_status(Opt, Mod, format_status, [PDict, State],
                                      [{data, [{"State", State}]}]),
-    Messages = callback_format_status(Opt, Mod, format_priority_mailbox, Queue,
+    Messages = callback_format_status(Opt, Mod, format_message_queue, Queue,
                                       priority_queue:to_list(Queue)),
     [{header, Header},
      {data, [{"Status", SysState},
