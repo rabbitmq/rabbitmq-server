@@ -1088,8 +1088,12 @@ handle_method(#'channel.flow'{active = true}, _,
      State#ch{limiter = Limiter2}};
 
 handle_method(#'channel.flow'{active = false}, _,
-              State = #ch{consumer_mapping = Consumers}) ->
-    Limiter1 = enable_limiter(State),
+              State = #ch{consumer_mapping = Consumers,
+                          limiter          = Limiter}) ->
+    Limiter1 = case rabbit_limiter:is_enabled(Limiter) of
+                   true  -> Limiter;
+                   false -> enable_limiter(State)
+               end,
     State1 = State#ch{limiter = Limiter1},
     ok = rabbit_limiter:block(Limiter1),
     case consumer_queues(Consumers) of
