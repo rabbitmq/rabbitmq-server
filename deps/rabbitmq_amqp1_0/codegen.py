@@ -24,7 +24,8 @@ class AMQPDefines:
     def __init__(self, dom):
         self.name = safe(dom.getAttribute('name'))
         self.source = dom.getAttribute('source')
-        self.options = [(safe(el.getAttribute('name')).upper(),
+        self.options = [(self.name.upper() + '_' +
+                         (safe(el.getAttribute('name')).upper()),
                          el.getAttribute('value')) for el in
                         dom.getElementsByTagName('choice')]
 

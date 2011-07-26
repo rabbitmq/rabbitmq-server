@@ -561,8 +561,7 @@ handle_1_0_frame(Channel, Payload, State) ->
         false -> handle_1_0_session_frame(Channel, Frame, State)
     end.
 
-handle_1_0_connection_frame(#'v1_0.open'{ heartbeat_interval = Interval,
-                                          max_frame_size = ClientFrameMax,
+handle_1_0_connection_frame(#'v1_0.open'{ max_frame_size = ClientFrameMax,
                                           hostname = _Hostname,
                                           properties = Props },
                             State = #v1{
@@ -571,6 +570,7 @@ handle_1_0_connection_frame(#'v1_0.open'{ heartbeat_interval = Interval,
                               connection_state = starting,
                               connection = Connection,
                               sock = Sock}) ->
+    Interval = undefined, %% TODO does 1-0 really no longer have heartbeating?
     %% TODO channel_max?
     ClientProps = case Props of
                       undefined -> [];
@@ -621,8 +621,7 @@ handle_1_0_connection_frame(#'v1_0.open'{ heartbeat_interval = Interval,
            Sock,
            #'v1_0.open'{channel_max = {ushort, 0},
                         max_frame_size = {uint, FrameMax},
-                        container_id = {utf8, list_to_binary(atom_to_list(node()))},
-                        heartbeat_interval = {uint, ClientHeartbeat}},
+                        container_id = {utf8, list_to_binary(atom_to_list(node()))}},
            rabbit_amqp1_0_framing),
     State2 = internal_conserve_memory(
                rabbit_alarm:register(self(), {?MODULE, conserve_memory, []}),

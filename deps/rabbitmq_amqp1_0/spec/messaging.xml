@@ -3,11 +3,11 @@
 <!--
 
 Copyright Bank of America, N.A., Barclays Bank PLC, Cisco Systems, Credit
-Suisse, Deutsche Boerse Systems, Envoy Technologies Inc., Goldman Sachs, INETCO
-Systems Limited, JPMorgan Chase Bank Inc. N.A, Microsoft Corporation, Novell,
-Progress Software, Rabbit Technologies Ltd., Red Hat Inc., Solace Systems Inc.,
-Tervela Inc., TWIST Process Innovations Ltd, WS02 Inc. and 29West Inc 2006-2010.
-All rights reserved.
+Suisse, Deutsche Boerse Systems, Goldman Sachs, HCL Technologies Ltd, INETCO
+Systems Limited, Informatica Corporation, JPMorgan Chase Bank Inc. N.A,
+Microsoft Corporation, my-Channels, Novell, Progress Software, Red Hat Inc.,
+Software AG, Solace Systems Inc., StormMQ Ltd., Tervela Inc., TWIST Process
+Innovations Ltd, VMware Inc. and WS02 Inc. 2006-2011. All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
 modification, are permitted provided that the following conditions
@@ -34,127 +34,135 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 <amqp name="messaging" xmlns="http://www.amqp.org/schema/amqp.xsd">
   <section name="message-format">
-    <type name="section-codes" class="restricted" source="uint">
-      <choice name="header" value="0"/>
-      <choice name="properties" value="1"/>
-      <choice name="footer" value="2"/>
-      <choice name="data" value="3"/>
-      <choice name="amqp-data" value="4"/>
-      <choice name="amqp-map" value="5"/>
-      <choice name="amqp-list" value="6"/>
-    </type>
-    <type name="header" class="composite" source="list">
-      <descriptor name="amqp:header:list" code="0x00000000:0x00000020"/>
+    <type name="header" class="composite" source="list" provides="section">
+      <descriptor name="amqp:header:list" code="0x00000000:0x00000070"/>
       <field name="durable" type="boolean"/>
       <field name="priority" type="ubyte"/>
-      <field name="transmit-time" type="timestamp"/>
-      <field name="ttl" type="ulong"/>
-      <field name="former-acquirers" type="uint"/>
-      <field name="delivery-failures" type="uint"/>
-      <field name="format-code" type="uint"/>
-      <field name="message-attrs" type="message-attributes"/>
-      <field name="delivery-attrs" type="message-attributes"/>
+      <field name="ttl" type="milliseconds"/>
+      <field name="first-acquirer" type="boolean"/>
+      <field name="delivery-count" type="uint"/>
     </type>
-    <type name="properties" class="composite" source="list">
-      <descriptor name="amqp:properties:list" code="0x00000000:0x00000021"/>
-      <field name="message-id" type="binary"/>
+    <type name="delivery-annotations" class="restricted" source="annotations" provides="section">
+      <descriptor name="amqp:delivery-annotations:map" code="0x00000000:0x00000071"/>
+    </type>
+    <type name="message-annotations" class="restricted" source="annotations" provides="section">
+      <descriptor name="amqp:message-annotations:map" code="0x00000000:0x00000072"/>
+    </type>
+    <type name="properties" class="composite" source="list" provides="section">
+      <descriptor name="amqp:properties:list" code="0x00000000:0x00000073"/>
+      <field name="message-id" type="*" requires="message-id"/>
       <field name="user-id" type="binary"/>
       <field name="to" type="*" requires="address"/>
       <field name="subject" type="string"/>
       <field name="reply-to" type="*" requires="address"/>
-      <field name="correlation-id" type="binary"/>
-      <field name="content-length" type="ulong"/>
+      <field name="correlation-id" type="*" requires="message-id"/>
       <field name="content-type" type="symbol"/>
+      <field name="content-encoding" type="symbol"/>
+      <field name="absolute-expiry-time" type="timestamp"/>
+      <field name="creation-time" type="timestamp"/>
+      <field name="group-id" type="string"/>
+      <field name="group-sequence" type="sequence-no"/>
+      <field name="reply-to-group-id" type="string"/>
     </type>
-    <type name="footer" class="composite" source="list">
-      <descriptor name="amqp:footer:list" code="0x00000000:0x00000022"/>
-      <field name="message-attrs" type="message-attributes"/>
-      <field name="delivery-attrs" type="message-attributes"/>
+    <type name="application-properties" class="restricted" source="map" provides="section">
+      <descriptor name="amqp:application-properties:map" code="0x00000000:0x00000074"/>
     </type>
-    <type name="message-attributes" class="restricted" source="map"/>
+    <type name="data" class="restricted" source="binary" provides="section">
+      <descriptor name="amqp:data:binary" code="0x00000000:0x00000075"/>
+    </type>
+    <type name="amqp-sequence" class="restricted" source="list" provides="section">
+      <descriptor name="amqp:amqp-sequence:list" code="0x00000000:0x00000076"/>
+    </type>
+    <type name="amqp-value" class="restricted" source="*" provides="section">
+      <descriptor name="amqp:amqp-value:*" code="0x00000000:0x00000077"/>
+    </type>
+    <type name="footer" class="restricted" source="annotations" provides="section">
+      <descriptor name="amqp:footer:map" code="0x00000000:0x00000078"/>
+    </type>
+    <type name="annotations" class="restricted" source="map"/>
+    <type name="message-id-ulong" class="restricted" source="ulong" provides="message-id"/>
+    <type name="message-id-uuid" class="restricted" source="uuid" provides="message-id"/>
+    <type name="message-id-binary" class="restricted" source="binary" provides="message-id"/>
+    <type name="message-id-string" class="restricted" source="string" provides="message-id"/>
+    <type name="address-string" class="restricted" source="string" provides="address"/>
+    <definition name="MESSAGE-FORMAT" value="0"/>
   </section>
-  <section name="transfer-state">
-    <type name="transfer-state" class="composite" source="map" provides="transfer-state">
-      <descriptor name="amqp:transfer-state:map" code="0x00000000:0x00000023"/>
-      <field name="bytes-transferred" type="ulong"/>
-      <field name="outcome" type="*" requires="outcome"/>
-      <field name="txn-id" type="*"/>
+  <section name="delivery-state">
+    <type name="received" class="composite" source="list" provides="delivery-state">
+      <descriptor name="amqp:received:list" code="0x00000000:0x00000023"/>
+      <field name="section-number" type="uint"/>
+      <field name="section-offset" type="ulong"/>
     </type>
-    <type name="accepted" class="composite" source="map" provides="outcome">
-      <descriptor name="amqp:accepted:map" code="0x00000000:0x00000024"/>
+    <type name="accepted" class="composite" source="list" provides="delivery-state, outcome">
+      <descriptor name="amqp:accepted:list" code="0x00000000:0x00000024"/>
     </type>
-    <type name="rejected" class="composite" source="map" provides="outcome">
-      <descriptor name="amqp:rejected:map" code="0x00000000:0x00000025"/>
+    <type name="rejected" class="composite" source="list" provides="delivery-state, outcome">
+      <descriptor name="amqp:rejected:list" code="0x00000000:0x00000025"/>
       <field name="error" type="error"/>
     </type>
-    <type name="released" class="composite" source="map" provides="outcome">
-      <descriptor name="amqp:released:map" code="0x00000000:0x00000026"/>
+    <type name="released" class="composite" source="list" provides="delivery-state, outcome">
+      <descriptor name="amqp:released:list" code="0x00000000:0x00000026"/>
     </type>
-    <type name="modified" class="composite" source="map" provides="outcome">
-      <descriptor name="amqp:modified:map" code="0x00000000:0x00000027"/>
+    <type name="modified" class="composite" source="list" provides="delivery-state, outcome">
+      <descriptor name="amqp:modified:list" code="0x00000000:0x00000027"/>
       <field name="delivery-failed" type="boolean"/>
-      <field name="deliver-elsewhere" type="boolean"/>
-      <field name="message-attrs" type="message-attributes"/>
-      <field name="delivery-attrs" type="message-attributes"/>
+      <field name="undeliverable-here" type="boolean"/>
+      <field name="message-annotations" type="fields"/>
     </type>
   </section>
   <section name="addressing">
-    <type name="source" class="composite" source="map" provides="source">
-      <descriptor name="amqp:source:map" code="0x00000000:0x00000028"/>
-      <field name="address" type="*" requires="address">
-        <error name="address-not-found" type="amqp-error" value="not-found"/>
-      </field>
-      <field name="durable" type="boolean"/>
-      <field name="expiry-policy" type="link-expiry-policy" default="session"/>
+    <type name="source" class="composite" source="list" provides="source">
+      <descriptor name="amqp:source:list" code="0x00000000:0x00000028"/>
+      <field name="address" type="*" requires="address"/>
+      <field name="durable" type="terminus-durability" default="none"/>
+      <field name="expiry-policy" type="terminus-expiry-policy" default="session-end"/>
       <field name="timeout" type="seconds" default="0"/>
-      <field name="dynamic" type="*" requires="lifetime-policy"/>
+      <field name="dynamic" type="boolean" default="false"/>
+      <field name="dynamic-node-properties" type="node-properties"/>
       <field name="distribution-mode" type="symbol" requires="distribution-mode"/>
       <field name="filter" type="filter-set"/>
-      <field name="default-outcome" type="*"/>
+      <field name="default-outcome" type="*" requires="outcome"/>
       <field name="outcomes" type="symbol" multiple="true"/>
       <field name="capabilities" type="symbol" multiple="true"/>
     </type>
-    <type name="target" class="composite" source="map" provides="target">
-      <descriptor name="amqp:target:map" code="0x00000000:0x00000029"/>
-      <field name="address" type="*" requires="address">
-        <error name="address-not-found" type="amqp-error" value="not-found"/>
-      </field>
-      <field name="durable" type="boolean"/>
-      <field name="expiry-policy" type="link-expiry-policy" default="session"/>
+    <type name="target" class="composite" source="list" provides="target">
+      <descriptor name="amqp:target:list" code="0x00000000:0x00000029"/>
+      <field name="address" type="*" requires="address"/>
+      <field name="durable" type="terminus-durability" default="none"/>
+      <field name="expiry-policy" type="terminus-expiry-policy" default="session-end"/>
       <field name="timeout" type="seconds" default="0"/>
-      <field name="dynamic" type="*" requires="lifetime-policy"/>
+      <field name="dynamic" type="boolean" default="false"/>
+      <field name="dynamic-node-properties" type="node-properties"/>
       <field name="capabilities" type="symbol" multiple="true"/>
     </type>
-    <type name="link-expiry-policy" class="restricted" source="symbol">
-      <choice name="session" value="session"/>
-      <choice name="connection" value="connection"/>
+    <type name="terminus-durability" class="restricted" source="uint">
+      <choice name="none" value="0"/>
+      <choice name="configuration" value="1"/>
+      <choice name="unsettled-state" value="2"/>
+    </type>
+    <type name="terminus-expiry-policy" class="restricted" source="symbol">
+      <choice name="link-detach" value="link-detach"/>
+      <choice name="session-end" value="session-end"/>
+      <choice name="connection-close" value="connection-close"/>
       <choice name="never" value="never"/>
     </type>
     <type name="std-dist-mode" class="restricted" source="symbol" provides="distribution-mode">
       <choice name="move" value="move"/>
       <choice name="copy" value="copy"/>
     </type>
-    <type name="filter" class="composite" source="list">
-      <descriptor name="amqp:filter:list" code="0x00000000:0x0000002a"/>
-      <field name="filter-type" type="symbol" mandatory="true"/>
-      <field name="filter" type="*" mandatory="true"/>
-    </type>
     <type name="filter-set" class="restricted" source="map"/>
-    <type name="delete-on-close" class="composite" source="map" provides="lifetime-policy">
-      <descriptor name="amqp:delete-on-close:map" code="0x00000000:0x0000002b"/>
-      <field name="options" type="options"/>
+    <type name="node-properties" class="restricted" source="fields"/>
+    <type name="delete-on-close" class="composite" source="list" provides="lifetime-policy">
+      <descriptor name="amqp:delete-on-close:list" code="0x00000000:0x0000002b"/>
     </type>
-    <type name="delete-on-no-links" class="composite" source="map" provides="lifetime-policy">
-      <descriptor name="amqp:delete-on-no-links:map" code="0x00000000:0x0000002c"/>
-      <field name="options" type="options"/>
+    <type name="delete-on-no-links" class="composite" source="list" provides="lifetime-policy">
+      <descriptor name="amqp:delete-on-no-links:list" code="0x00000000:0x0000002c"/>
     </type>
-    <type name="delete-on-no-messages" class="composite" source="map" provides="lifetime-policy">
-      <descriptor name="amqp:delete-on-no-messages:map" code="0x00000000:0x0000002d"/>
-      <field name="options" type="options"/>
+    <type name="delete-on-no-messages" class="composite" source="list" provides="lifetime-policy">
+      <descriptor name="amqp:delete-on-no-messages:list" code="0x00000000:0x0000002d"/>
     </type>
-    <type name="delete-on-no-links-or-messages" class="composite" source="map" provides="lifetime-policy">
-      <descriptor name="amqp:delete-on-no-links-or-messages:map" code="0x00000000:0x0000002e"/>
-      <field name="options" type="options"/>
+    <type name="delete-on-no-links-or-messages" class="composite" source="list" provides="lifetime-policy">
+      <descriptor name="amqp:delete-on-no-links-or-messages:list" code="0x00000000:0x0000002e"/>
     </type>
   </section>
 </amqp>

@@ -26,19 +26,16 @@
                   incoming_unsettled_map,
                   outgoing_unsettled_map }).
 -record(outgoing_link, {queue,
-                        transfer_count = 0,
-                        transfer_unit = 0,
+                        delivery_count = 0,
                         no_ack,
                         default_outcome}).
 
 %% Just make these constant for the time being.
 -define(INCOMING_CREDIT, 65536).
 -define(INIT_TXFR_COUNT, 0).
--define(TRANSFER_UNIT, 0).
 
 -record(incoming_link, {name, exchange, routing_key,
-                        transfer_unit = 0,
-                        transfer_count = 0,
+                        delivery_count = 0,
                         credit_used = ?INCOMING_CREDIT div 2
                        }).
 
@@ -153,11 +150,11 @@ handle_info(#'basic.credit_state'{consumer_tag = CTag,
     Out = get({out, Handle}),
     
     F = #'v1_0.flow'{ handle      = Handle,
-                      transfer_count = {uint, Count},
+                      delivery_count = {uint, Count},
                       link_credit = {uint, LinkCredit},
                       available   = Available,
                       drain       = Drain },
-    put({out, Handle}, Out#outgoing_link{ transfer_count = Count }),
+    put({out, Handle}, Out#outgoing_link{ delivery_count = Count }),
     rabbit_amqp1_0_writer:send_command(WriterPid, F),
     {noreply, State};
 
@@ -316,20 +313,18 @@ handle_control(#'v1_0.begin'{next_outgoing_id = {uint, RemoteNextIn},
 
 handle_control(#'v1_0.attach'{name = Name,
                               handle = Handle,
-                              local = ClientLinkage,
-                              initial_transfer_count = {uint, InitTransfer},
-                              transfer_unit = _Unit,
+                              source = Source,
+                              target = Target,
+                              initial_delivery_count = {uint, InitTransfer},
                               role = ?SEND_ROLE}, %% client is sender
                State = #session{ backing_channel = Ch,
                                  next_publish_id = NextPublishId }) ->
     %% TODO associate link name with target
-    #'v1_0.linkage'{ source = Source, target = Target } = ClientLinkage,
     case ensure_target(Target, #incoming_link{ name = Name }, State) of
         {ok, ServerTarget,
-         IncomingLink = #incoming_link{ transfer_unit = Unit,
-                                        transfer_count = InitTransfer },
+         IncomingLink = #incoming_link{ delivery_count = InitTransfer },
          State1} ->
-            {_, Outcomes} = outcomes(ClientLinkage),
+            {_, Outcomes} = outcomes(Source),
             State2 =
                 case Outcomes of
                     [?V_1_0_SYMBOL_ACCEPTED] ->
@@ -349,58 +344,52 @@ handle_control(#'v1_0.attach'{name = Name,
             Attach = #'v1_0.attach'{
               name = Name,
               handle = Handle,
-              remote = ClientLinkage,
-              local = #'v1_0.linkage'{
-                source = Source,
-                target = ServerTarget },
-              transfer_unit = {ulong, Unit}, % We count messages, not bytes
-              initial_transfer_count = undefined, % must be, I am the recvr
+              source = Source,
+              target = ServerTarget,
+              initial_delivery_count = undefined, % must be, I am the recvr
               role = ?RECV_ROLE}, %% server is receiver
             {reply, [Attach, Flow1], State2};
         {error, Reason, State1} ->
             rabbit_log:warning("AMQP 1.0 attach rejected ~p~n", [Reason]),
             %% TODO proper link estalishment protocol here?
-            protocol_error(?V_1_0_INVALID_FIELD,
+            protocol_error(?V_1_0_AMQP_ERROR_INVALID_FIELD,
                                "Attach rejected: ~p", [Reason]),
             {noreply, State1}
     end;
 
-handle_control(#'v1_0.attach'{local = Linkage,
-                              initial_transfer_count = undefined,
+handle_control(#'v1_0.attach'{source = Source,
+                              initial_delivery_count = undefined,
                               role = ?RECV_ROLE} = Attach, %% client is receiver
                State) ->
     %% TODO ensure_destination
-    {DefaultOutcome, Outcomes} = outcomes(Linkage),
+    {DefaultOutcome, Outcomes} = outcomes(Source),
     attach_outgoing(DefaultOutcome, Outcomes, Attach, State);
 
 handle_control(Txfr = #'v1_0.transfer'{handle = Handle,
                                        settled = Settled,
-                                       fragments = Fragments,
-                                       transfer_id = {uint, TxfrId}},
+                                       delivery_id = {uint, TxfrId}},
                State = #session{backing_channel = Ch,
                                 next_publish_id = NextPublishId,
                                 incoming_unsettled_map = Unsettled}) ->
     case get({in, Handle}) of
         #incoming_link{ exchange = X, routing_key = RK,
-                        transfer_count = Count,
-                        credit_used = CreditUsed,
-                        transfer_unit = Unit } = Link ->
-            TransferSize = transfer_size(Txfr, Unit),
-            NewCount = rabbit_misc:serial_add(Count, TransferSize),
-            Msg = rabbit_amqp1_0_message:assemble(Fragments),
+                        delivery_count = Count,
+                        credit_used = CreditUsed } = Link ->
+            NewCount = rabbit_misc:serial_add(Count, 1),
+            Msg = <<"">>,%%rabbit_amqp1_0_message:assemble(Fragments),
             NextPublishId1 = case NextPublishId of
                                  0 -> 0;
                                  _ -> NextPublishId + 1 % serial?
                              end,
             amqp_channel:call(Ch, #'basic.publish' { exchange    = X,
                                                      routing_key = RK }, Msg),
-            {SendFlow, CreditUsed1} = case CreditUsed - TransferSize of
+            {SendFlow, CreditUsed1} = case CreditUsed - 1 of
                                           C when C =< 0 ->
                                               {true,  ?INCOMING_CREDIT div 2};
                                           D ->
                                               {false, D}
                                       end,
-            NewLink = Link#incoming_link{ transfer_count = NewCount,
+            NewLink = Link#incoming_link{ delivery_count = NewCount,
                                           credit_used = CreditUsed1 },
             put({in, Handle}, NewLink),
             State1 = State#session{
@@ -429,7 +418,7 @@ handle_control(Txfr = #'v1_0.transfer'{handle = Handle,
                     {noreply, State2}
             end;
         undefined ->
-            protocol_error(?V_1_0_ILLEGAL_STATE,
+            protocol_error(?V_1_0_AMQP_ERROR_ILLEGAL_STATE,
                            "Unknown link handle ~p", [Handle])
     end;
 
@@ -505,7 +494,7 @@ handle_control(Flow = #'v1_0.flow'{},
                     case get({out, Handle}) of
                         undefined ->
                             rabbit_log:warning("Flow for unknown link handle ~p", [Flow]),
-                            protocol_error(?V_1_0_INVALID_FIELD,
+                            protocol_error(?V_1_0_AMQP_ERROR_INVALID_FIELD,
                                            "Unattached handle: ~p", [Handle]);
                         Out = #outgoing_link{} ->
                             outgoing_flow(Out, Flow, State1)
@@ -533,8 +522,7 @@ protocol_error(Condition, Msg, Args) ->
        }).
 
 
-outcomes(Linkage) ->
-    #'v1_0.linkage'{ source = Source } = Linkage,
+outcomes(Source) ->
     {DefaultOutcome, Outcomes} =
         case Source of
             #'v1_0.source' {
@@ -555,28 +543,25 @@ outcomes(Linkage) ->
         end,
     case [O || O <- Outcomes, not lists:member(O, ?OUTCOMES)] of
         []   -> {DefaultOutcome, Outcomes};
-        Bad  -> protocol_error(?V_1_0_NOT_IMPLEMENTED,
+        Bad  -> protocol_error(?V_1_0_AMQP_ERROR_NOT_IMPLEMENTED,
                                "Outcomes not supported: ~p", [Bad])
     end.
 
 attach_outgoing(DefaultOutcome, Outcomes,
                 #'v1_0.attach'{name = Name,
                                handle = Handle,
-                               local = ClientLinkage,
-                               transfer_unit = _Unit},
+                               source = Source},
                State = #session{backing_channel = Ch}) ->
-    #'v1_0.linkage'{ source = Source } = ClientLinkage,
     NoAck = DefaultOutcome == #'v1_0.accepted'{} andalso
         Outcomes == [?V_1_0_SYMBOL_ACCEPTED],
     DOSym = rabbit_amqp1_0_framing:symbol_for(DefaultOutcome),
     case ensure_source(Source,
-                       #outgoing_link{ transfer_unit = ?TRANSFER_UNIT,
-                                       transfer_count = ?INIT_TXFR_COUNT,
+                       #outgoing_link{ delivery_count = ?INIT_TXFR_COUNT,
                                        no_ack = NoAck,
                                        default_outcome = DOSym}, State) of
         {ok, Source1,
          OutgoingLink = #outgoing_link{ queue = QueueName,
-                                        transfer_count = Count }, State1} ->
+                                        delivery_count = Count }, State1} ->
             CTag = handle_to_ctag(Handle),
             %% Zero the credit before we start consuming, so that we only
             %% use explicitly given credit.
@@ -597,25 +582,21 @@ attach_outgoing(DefaultOutcome, Outcomes,
                     {reply, #'v1_0.attach'{
                        name = Name,
                        handle = Handle,
-                       transfer_unit = {ulong, ?TRANSFER_UNIT},
-                       initial_transfer_count = {uint, ?INIT_TXFR_COUNT},
-                       remote = ClientLinkage,
-                       local =
-                       ClientLinkage#'v1_0.linkage'{
-                         source = Source1#'v1_0.source'{
-                                    default_outcome = DefaultOutcome
-                                    %% TODO this breaks the Python client, when it
-                                    %% tries to send us back a matching detach message
-                                    %% it gets confused between described(true, [...])
-                                    %% and [...]. We think we're correct here
-                                    %% outcomes = Outcomes
-                                   }},
+                       initial_delivery_count = {uint, ?INIT_TXFR_COUNT},
+                       source = Source1#'v1_0.source'{
+                                  default_outcome = DefaultOutcome
+                                  %% TODO this breaks the Python client, when it
+                                  %% tries to send us back a matching detach message
+                                  %% it gets confused between described(true, [...])
+                                  %% and [...]. We think we're correct here
+                                  %% outcomes = Outcomes
+                                 },
                        role = ?SEND_ROLE}, State1};
                 Fail ->
-                    protocol_error(?V_1_0_INTERNAL_ERROR, "Consume failed: ~p", Fail)
+                    protocol_error(?V_1_0_AMQP_ERROR_INTERNAL_ERROR, "Consume failed: ~p", Fail)
             end;
         {error, _Reason, State1} ->
-            {reply, #'v1_0.attach'{local = undefined}, State1}
+            {reply, #'v1_0.attach'{source = undefined}, State1}
     end.
 
 flow_session_fields(#session{ next_transfer_number = NextOut,
@@ -628,10 +609,10 @@ flow_session_fields(#session{ next_transfer_number = NextOut,
                   next_incoming_id = {uint, NextIn},
                   incoming_window = {uint, Window - gb_trees:size(UnsettledIn)}}.
 
-outgoing_flow(#outgoing_link{ transfer_count = LocalCount },
+outgoing_flow(#outgoing_link{ delivery_count = LocalCount },
               #'v1_0.flow'{
                 handle = Handle,
-                transfer_count = Count0,
+                delivery_count = Count0,
                 link_credit = {uint, RemoteCredit},
                 drain = Drain},
               State = #session{backing_channel = Ch}) ->
@@ -659,23 +640,22 @@ outgoing_flow(#outgoing_link{ transfer_count = LocalCount },
             Flow1 = flow_session_fields(State),
             {reply, Flow1#'v1_0.flow'{
                       handle = Handle,
-                      transfer_count = {uint, LocalCount},
+                      delivery_count = {uint, LocalCount},
                       link_credit = {uint, Credit},
                       available = {uint, Available},
                       drain = Drain}, State}
     end.
 
-incoming_flow(#incoming_link{ transfer_count = Count }, Handle, State) ->
+incoming_flow(#incoming_link{ delivery_count = Count }, Handle, State) ->
     Flow = flow_session_fields(State),
     {reply, Flow#'v1_0.flow'{
               handle = Handle,
-              transfer_count = {uint, Count},
+              delivery_count = {uint, Count},
               link_credit = {uint, ?INCOMING_CREDIT}},
      State}.
 
 transfer(WriterPid, LinkHandle,
-         Link = #outgoing_link{ transfer_unit = Unit,
-                                transfer_count = Count,
+         Link = #outgoing_link{ delivery_count = Count,
                                 no_ack = NoAck,
                                 default_outcome = DefaultOutcome },
          Session = #session{ next_transfer_number = TransferNumber,
@@ -685,8 +665,6 @@ transfer(WriterPid, LinkHandle,
                              outgoing_unsettled_map = Unsettled },
          Msg = #amqp_msg{payload = Content},
          DeliveryTag) ->
-    TransferSize = transfer_size(Content, Unit),
-
     %% FIXME
     %% If either the outgoing session window, or the remote incoming
     %% session window, is closed, we can't send this. This probably
@@ -698,33 +676,22 @@ transfer(WriterPid, LinkHandle,
     if (LocalMaxOut > TransferNumber) andalso
        (WindowSize >= NumUnsettled) ->
             NewLink = Link#outgoing_link{
-                        transfer_count = Count + TransferSize
+                        delivery_count = Count + 1
                        },
             T = #'v1_0.transfer'{handle = LinkHandle,
                                  delivery_tag = {binary, <<DeliveryTag:64>>},
-                                 transfer_id = {uint, TransferNumber},
+                                 delivery_id = {uint, TransferNumber},
                                  settled = NoAck,
-                                 state = #'v1_0.transfer_state'{
-                                   %% TODO DUBIOUS this replicates
-                                   %% information we and the client
-                                   %% already have. Also TODO: should
-                                   %% it be inclusive of this
-                                   %% transfer?
-                                   bytes_transferred = {ulong, 0},
-                                   %% DUBIOUS it seems to mean the
-                                   %% same thing if we include the
-                                   %% outcome or send null here
-                                   outcome = ?DEFAULT_OUTCOME
-                                  },
+                                 state = ?DEFAULT_OUTCOME,
                                  resume = false,
                                  more = false,
                                  aborted = false,
                                  %% TODO: actually batchable would be
                                  %% fine, but in any case it's only a
                                  %% hint
-                                 batchable = false,
-                                 fragments =
-                                 rabbit_amqp1_0_message:fragments(Msg)},
+                                 batchable = false},
+                                 %% fragments =
+                                 %% rabbit_amqp1_0_message:fragments(Msg)},
             Unsettled1 = case NoAck of
                              true -> Unsettled;
                              false -> gb_trees:insert(TransferNumber,
@@ -754,7 +721,7 @@ transfer(WriterPid, LinkHandle,
 settle(Disp = #'v1_0.disposition'{ first = First0,
                                    last = Last0,
                                    settled = Settled,
-                                   state = #'v1_0.transfer_state'{outcome = Outcome}},
+                                   state = Outcome },
        State = #session{backing_channel = Ch,
                         outgoing_unsettled_map = Unsettled}) ->
     {uint, First} = First0,
@@ -837,8 +804,7 @@ acknowledgement(TransferIds, Disposition) ->
     Disposition#'v1_0.disposition'{ first = {uint, hd(TransferIds)},
                                     last = {uint, lists:last(TransferIds)},
                                     settled = true,
-                                    state = #'v1_0.transfer_state'{
-                                      outcome = #'v1_0.accepted'{}}}.
+                                    state = #'v1_0.accepted'{} }.
 
 ensure_declaring_channel(State = #session{
                            backing_connection = Conn,
@@ -1058,10 +1024,6 @@ queue_address(QueueName) when is_binary(QueueName) ->
 next_transfer_number(TransferNumber) ->
     %% TODO this should be a serial number
     rabbit_misc:serial_add(TransferNumber, 1).
-
-%% FIXME
-transfer_size(_Content, _Unit) ->
-    1.
 
 handle_to_ctag({uint, H}) ->
     <<"ctag-", H:32/integer>>.
