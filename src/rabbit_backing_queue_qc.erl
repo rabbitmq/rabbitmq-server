@@ -234,9 +234,7 @@ next_state(S, Res, {call, ?BQMOD, ack, [AcksArg, _BQ]}) ->
     #state{acks = AcksState} = S,
     BQ1 = {call, erlang, element, [2, Res]},
     S#state{bqstate = BQ1,
-            acks    = orddict:filter(fun (AckTag, _) ->
-                                         not lists:member(AckTag, AcksArg)
-                                     end, AcksState)};
+            acks    = lists:foldl(fun orddict:erase/2, AcksState, AcksArg)};
 
 next_state(S, Res, {call, ?BQMOD, requeue, [AcksArg, _F, _V]}) ->
     #state{len = Len, messages = Messages, acks = AcksState} = S,
@@ -246,9 +244,7 @@ next_state(S, Res, {call, ?BQMOD, requeue, [AcksArg, _F, _V]}) ->
     S#state{bqstate  = BQ1,
             len      = Len + length(RequeueMsgs),
             messages = queue:join(Messages, queue:from_list(RequeueMsgs)),
-            acks     = orddict:filter(fun (AckTag, _) ->
-                                         not lists:member(AckTag, AcksArg)
-                                     end, AcksState)};
+            acks     = lists:foldl(fun orddict:erase/2, AcksState, AcksArg)};
 
 next_state(S, BQ, {call, ?BQMOD, set_ram_duration_target, _Args}) ->
     S#state{bqstate = BQ};
