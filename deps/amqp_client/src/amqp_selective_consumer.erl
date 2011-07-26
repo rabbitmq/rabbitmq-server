@@ -105,9 +105,7 @@ handle_consume(BasicConsume, Pid, State = #state{consumers = Consumers,
               monitors  = dict:store(Pid, monitor(process, Pid), Monitors)}};
         {true, #'basic.consume'{nowait = false}} ->
             {ok, State#state{unassigned = dict:append(BasicConsume, Pid,
-                                                      Unassigned),
-                             monitors = dict:store(Pid, monitor(process, Pid),
-                                                   Monitors)}};
+                                                      Unassigned)}};
         {false, #'basic.consume'{nowait = true}} ->
             {error, 'no_consumer_tag_specified', State};
         {false, #'basic.consume'{nowait = false}} ->
@@ -123,6 +121,7 @@ handle_consume_ok(BasicConsumeOk, BasicConsume, State) ->
     {ok, State1}.
 
 %% @private
+%% The server sent a basic.cancel.
 handle_cancel(Cancel, State) ->
     State1 = do_cancel(Cancel, State),
     %% Use old state
@@ -130,6 +129,7 @@ handle_cancel(Cancel, State) ->
     {ok, State1}.
 
 %% @private
+%% We sent a basic.cancel and now receive the ok.
 handle_cancel_ok(CancelOk, _Cancel, State) ->
     State1 = do_cancel(CancelOk, State),
     %% Use old state
@@ -186,20 +186,26 @@ terminate(_Reason, State) ->
 %% Internal plumbing
 %%---------------------------------------------------------------------------
 
-assign_consumer(BasicConsume, Tag, State = #state{consumers = Consumers,
-                                                  unassigned = Unassigned}) ->
+assign_consumer(BasicConsume, Tag, State = #state{unassigned = Unassigned}) ->
     case dict:find(BasicConsume, Unassigned) of
         {ok, [Pid]} ->
-            State#state{unassigned = dict:erase(BasicConsume, Unassigned),
-                        consumers = dict:store(Tag, Pid, Consumers)};
+            assign_update_state(
+              Tag, Pid, dict:erase(BasicConsume, Unassigned), State);
         {ok, [Pid | RestPids]} ->
-            State#state{unassigned = dict:store(BasicConsume, RestPids,
-                                                Unassigned),
-                        consumers = dict:store(Tag, Pid, Consumers)};
+            assign_update_state(
+              Tag, Pid, dict:store(BasicConsume, RestPids, Unassigned),
+              State);
         error ->
             %% ignore
             State
     end.
+
+assign_update_state(Tag, Pid, NewUnassigned,
+                    State = #state{consumers = Consumers,
+                                   monitors = Monitors}) ->
+    State#state{consumers  = dict:store(Tag, Pid, Consumers),
+                monitors   = dict:store(Pid, monitor(process, Pid), Monitors),
+                unassigned = NewUnassigned}.
 
 deliver(Msg, State) ->
     deliver(Msg, undefined, State).
