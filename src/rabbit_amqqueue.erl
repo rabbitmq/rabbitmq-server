@@ -254,7 +254,8 @@ determine_queue_nodes(Args) ->
     end.
 
 start_queue_process(Node, Q) ->
-    {ok, Pid} = rabbit_amqqueue_sup:start_child(Node, [Q]),
+    {ok, Pid} = rabbit_amqqueue_sup:start_child(Node,
+                                                [Q#amqqueue{slave_pids = []}]),
     Q#amqqueue{pid = Pid}.
 
 add_default_binding(#amqqueue{name = QueueName}) ->
