@@ -1072,15 +1072,17 @@ handle_cast({limit, ChPid, Limiter}, State) ->
         State, ChPid,
         fun (C = #cr{consumer_count  = ConsumerCount,
                      limiter         = OldLimiter,
-                     is_limit_active = Limited}) ->
-                if ConsumerCount =/= 0 ->
+                     is_limit_active = OldLimited}) ->
+                case {ConsumerCount =/= 0,
+                      not rabbit_limiter:is_enabled(OldLimiter)} of
+                    {true, true} ->
                         ok = rabbit_limiter:register(Limiter, self());
-                    true ->
+                    {_, _} ->
                         ok
                 end,
-                NewLimited = Limited,
-                C#cr{limiter         = Limiter,
-                     is_limit_active = NewLimited}
+                Limited =
+                    OldLimited andalso rabbit_limiter:is_enabled(Limiter),
+                C#cr{limiter = Limiter, is_limit_active = Limited}
         end));
 
 handle_cast({flush, ChPid}, State) ->
