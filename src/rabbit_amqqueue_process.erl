@@ -58,7 +58,7 @@
 %% These are held in our process dictionary
 -record(cr, {consumer_count,
              ch_pid,
-             limiter_token,
+             limiter,
              monitor_ref,
              acktags,
              is_limit_active,
@@ -346,10 +346,10 @@ maybe_store_ch_record(C = #cr{consumer_count       = ConsumerCount,
                      true
     end.
 
-erase_ch_record(#cr{ch_pid        = ChPid,
-                    limiter_token = LimiterToken,
-                    monitor_ref   = MonitorRef}) ->
-    ok = rabbit_limiter:unregister(LimiterToken, self()),
+erase_ch_record(#cr{ch_pid      = ChPid,
+                    limiter     = Limiter,
+                    monitor_ref = MonitorRef}) ->
+    ok = rabbit_limiter:unregister(Limiter, self()),
     erlang:demonitor(MonitorRef),
     erase({ch, ChPid}),
     ok.
@@ -374,12 +374,12 @@ deliver_msgs_to_consumers(Funs = {PredFun, DeliverFun}, FunAcc,
         {{value, QEntry = {ChPid, #consumer{tag = ConsumerTag,
                                             ack_required = AckRequired}}},
          ActiveConsumersTail} ->
-            C = #cr{limiter_token = LimiterToken,
+            C = #cr{limiter              = Limiter,
                     unsent_message_count = Count,
                     acktags = ChAckTags} = ch_record(ChPid),
             IsMsgReady = PredFun(FunAcc, State),
             case (IsMsgReady andalso
-                  rabbit_limiter:can_send( LimiterToken, self(), AckRequired )) of
+                  rabbit_limiter:can_send( Limiter, self(), AckRequired )) of
                 true ->
                     {{Message, IsDelivered, AckTag}, FunAcc1, State1} =
                         DeliverFun(AckRequired, FunAcc, State),
@@ -904,7 +904,7 @@ handle_call({basic_get, ChPid, NoAck}, _From,
             reply({ok, Remaining, Msg}, State3)
     end;
 
-handle_call({basic_consume, NoAck, ChPid, LimiterToken,
+handle_call({basic_consume, NoAck, ChPid, Limiter,
              ConsumerTag, ExclusiveConsume, OkMsg},
             _From, State = #q{exclusive_consumer = ExistingHolder}) ->
     case check_exclusive_access(ExistingHolder, ExclusiveConsume,
@@ -917,9 +917,9 @@ handle_call({basic_consume, NoAck, ChPid, LimiterToken,
                                  ack_required = not NoAck},
             true = maybe_store_ch_record(
                      C#cr{consumer_count = ConsumerCount +1,
-                          limiter_token  = LimiterToken}),
+                          limiter        = Limiter}),
             ok = case ConsumerCount of
-                     0 -> rabbit_limiter:register(LimiterToken, self());
+                     0 -> rabbit_limiter:register(Limiter, self());
                      _ -> ok
                  end,
             ExclusiveConsumer = if ExclusiveConsume -> {ChPid, ConsumerTag};
@@ -952,12 +952,12 @@ handle_call({basic_cancel, ChPid, ConsumerTag, OkMsg}, _From,
             ok = maybe_send_reply(ChPid, OkMsg),
             reply(ok, State);
         C = #cr{consumer_count = ConsumerCount,
-                limiter_token    = LimiterToken} ->
+                limiter        = Limiter} ->
             C1 = C#cr{consumer_count = ConsumerCount -1},
             maybe_store_ch_record(
               case ConsumerCount of
-                  1 -> ok = rabbit_limiter:unregister(LimiterToken, self()),
-                       C1#cr{limiter_token = undefined};
+                  1 -> ok = rabbit_limiter:unregister(Limiter, self()),
+                       C1#cr{limiter = undefined};
                   _ -> C1
               end),
             emit_consumer_deleted(ChPid, ConsumerTag),
@@ -1066,20 +1066,20 @@ handle_cast({notify_sent, ChPid}, State) ->
                                C#cr{unsent_message_count = Count - 1}
                        end));
 
-handle_cast({limit, ChPid, LimiterToken}, State) ->
+handle_cast({limit, ChPid, Limiter}, State) ->
     noreply(
       possibly_unblock(
         State, ChPid,
-        fun (C = #cr{consumer_count = ConsumerCount,
-                     limiter_token = OldLimiterToken,
+        fun (C = #cr{consumer_count  = ConsumerCount,
+                     limiter         = OldLimiter,
                      is_limit_active = Limited}) ->
                 if ConsumerCount =/= 0 ->
-                        ok = rabbit_limiter:register(LimiterToken, self());
+                        ok = rabbit_limiter:register(Limiter, self());
                     true ->
                         ok
                 end,
                 NewLimited = Limited,
-                C#cr{limiter_token = LimiterToken,
+                C#cr{limiter         = Limiter,
                      is_limit_active = NewLimited}
         end));
 

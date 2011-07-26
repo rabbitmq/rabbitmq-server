@@ -21,24 +21,24 @@
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2, prioritise_call/3]).
 -export([start_link/0, make_new_token/1, is_enabled/1, enable/2, disable/1]).
--export_type([limiter_token/0]).
+-export_type([token/0]).
 -export([limit/2, can_send/3, ack/2, register/2, unregister/2]).
 -export([get_limit/1, block/1, unblock/1, is_blocked/1]).
 
 %%----------------------------------------------------------------------------
 
--record(limiter_token, {pid, enabled = false}).
+-record(token, {pid, enabled = false}).
 
 -ifdef(use_specs).
 
--type(maybe_token() :: limiter_token() | 'undefined').
--opaque(limiter_token() :: #'limiter_token'{}).
+-type(maybe_token() :: token() | 'undefined').
+-opaque(token() :: #token{}).
 
 -spec(start_link/0 :: () -> rabbit_types:ok_pid_or_error()).
--spec(make_new_token/1 :: (pid()) -> limiter_token()).
--spec(is_enabled/1 :: (limiter_token()) -> boolean()).
--spec(enable/2 :: (limiter_token(), non_neg_integer()) -> limiter_token()).
--spec(disable/1 :: (limiter_token()) -> limiter_token()).
+-spec(make_new_token/1 :: (pid()) -> token()).
+-spec(is_enabled/1 :: (token()) -> boolean()).
+-spec(enable/2 :: (token(), non_neg_integer()) -> token()).
+-spec(disable/1 :: (token()) -> token()).
 -spec(limit/2 :: (maybe_token(), non_neg_integer()) -> 'ok' | 'stopped').
 -spec(can_send/3 :: (maybe_token(), pid(), boolean()) -> boolean()).
 -spec(ack/2 :: (maybe_token(), non_neg_integer()) -> 'ok').
@@ -66,19 +66,16 @@
 %% API
 %%----------------------------------------------------------------------------
 
-start_link() ->
-    gen_server2:start_link(?MODULE, [], []).
+start_link() -> gen_server2:start_link(?MODULE, [], []).
 
-make_new_token(Pid) ->
-    #limiter_token{pid = Pid}.
+make_new_token(Pid) -> #token{pid = Pid}.
 
-is_enabled(#limiter_token{enabled = Enabled}) ->
-    Enabled.
+is_enabled(#token{enabled = Enabled}) -> Enabled.
 
-enable(#limiter_token{pid = Pid} = Token, Volume) ->
+enable(#token{pid = Pid} = Token, Volume) ->
     gen_server2:call(Pid, {enable, Token, self(), Volume}).
 
-disable(#limiter_token{pid = Pid} = Token) ->
+disable(#token{pid = Pid} = Token) ->
     gen_server2:call(Pid, {disable, Token}).
 
 limit(LimiterToken, PrefetchCount) ->
@@ -88,7 +85,7 @@ limit(LimiterToken, PrefetchCount) ->
 %% breaching a limit
 can_send(undefined, _QPid, _AckRequired) ->
     true;
-can_send(#limiter_token{enabled = false}, _QPid, _AckRequired) ->
+can_send(#token{enabled = false}, _QPid, _AckRequired) ->
     true;
 can_send(LimiterToken, QPid, AckRequired) ->
     rabbit_misc:with_exit_handler(
@@ -150,7 +147,7 @@ handle_call({limit, PrefetchCount, Token}, _From, State) ->
         {cont, State1} ->
             {reply, ok, State1};
         {stop, State1} ->
-            {reply, {disabled, Token#limiter_token{enabled = false}}, State1}
+            {reply, {disabled, Token#token{enabled = false}}, State1}
     end;
 
 handle_call(block, _From, State) ->
@@ -161,17 +158,17 @@ handle_call({unblock, Token}, _From, State) ->
         {cont, State1} ->
             {reply, ok, State1};
         {stop, State1} ->
-            {reply, {disabled, Token#limiter_token{enabled = false}}, State1}
+            {reply, {disabled, Token#token{enabled = false}}, State1}
     end;
 
 handle_call(is_blocked, _From, State) ->
     {reply, blocked(State), State};
 
 handle_call({enable, Token, Channel, Volume}, _From, State) ->
-    {reply, Token#limiter_token{enabled = true},
+    {reply, Token#token{enabled = true},
      State#lim{ch_pid = Channel, volume = Volume}};
 handle_call({disable, Token}, _From, State) ->
-    {reply, Token#limiter_token{enabled = false}, State}.
+    {reply, Token#token{enabled = false}, State}.
 
 handle_cast({ack, Count}, State = #lim{volume = Volume}) ->
     NewVolume = if Volume == 0 -> 0;
@@ -212,16 +209,16 @@ maybe_notify(OldState, NewState) ->
 
 maybe_call(undefined, _Call, Default) ->
     Default;
-maybe_call(#limiter_token{enabled = false}, _Call, Default) ->
+maybe_call(#token{enabled = false}, _Call, Default) ->
     Default;
-maybe_call(#limiter_token{pid = Pid}, Call, _Default) ->
+maybe_call(#token{pid = Pid}, Call, _Default) ->
     gen_server2:call(Pid, Call, infinity).
 
 maybe_cast(undefined, _Call) ->
     ok;
-maybe_cast(#limiter_token{enabled = false}, _Cast) ->
+maybe_cast(#token{enabled = false}, _Cast) ->
     ok;
-maybe_cast(#limiter_token{pid = Pid}, Cast) ->
+maybe_cast(#token{pid = Pid}, Cast) ->
     gen_server2:cast(Pid, Cast).
 
 limit_reached(#lim{prefetch_count = Limit, volume = Volume}) ->
