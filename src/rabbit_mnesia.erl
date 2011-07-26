@@ -583,12 +583,11 @@ create_schema(Type) ->
     case Type of
         disc -> rabbit_misc:ensure_ok(mnesia:create_schema([node()]),
                                       cannot_create_schema);
-        ram -> %% remove the disc schema since this is a ram node
-               rabbit_misc:ensure_ok(mnesia:delete_schema([node()]),
-                                     cannot_delete_schema)
+        ram  -> %% remove the disc schema since this is a ram node
+                rabbit_misc:ensure_ok(mnesia:delete_schema([node()]),
+                                      cannot_delete_schema)
     end,
-    rabbit_misc:ensure_ok(mnesia:start(),
-                          cannot_start_mnesia),
+    rabbit_misc:ensure_ok(mnesia:start(), cannot_start_mnesia),
     ok = create_tables(Type),
     ensure_schema_integrity(),
     ok = rabbit_version:record_desired().
