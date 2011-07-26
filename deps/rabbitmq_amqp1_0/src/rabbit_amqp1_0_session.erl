@@ -84,10 +84,10 @@ init([Channel, ReaderPid, WriterPid]) ->
                    incoming_unsettled_map = gb_trees:empty(),
                    outgoing_unsettled_map = gb_trees:empty()}}.
 
-terminate(_Reason, #session{ backing_connection = Conn,
-                             declaring_channel = DeclCh,
-                             backing_channel    = Ch}) ->
-    ?DEBUG("Shutting down session ~p", [State]),
+terminate(_Reason, _State = #session{ backing_connection = Conn,
+                                     declaring_channel  = DeclCh,
+                                     backing_channel    = Ch}) ->
+    ?DEBUG("Shutting down session ~p", [_State]),
     case DeclCh of
         undefined -> ok;
         Channel   -> amqp_channel:close(Channel)
