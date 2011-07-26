@@ -805,7 +805,7 @@ handle_method(#'basic.qos'{prefetch_count = PrefetchCount}, _,
             {_, _}     -> Limiter
         end,
     Limiter3 = case rabbit_limiter:limit(Limiter1, PrefetchCount) of
-                   ok                        ->
+                   ok ->
                        Limiter1;
                    {disabled, Limiter2} ->
                        ok = limit_queues(Limiter2, State),
@@ -1078,7 +1078,7 @@ handle_method(#'confirm.select'{nowait = NoWait}, _, State) ->
 handle_method(#'channel.flow'{active = true}, _,
               State = #ch{limiter = Limiter}) ->
     Limiter2 = case rabbit_limiter:unblock(Limiter) of
-                   ok                        ->
+                   ok ->
                        Limiter;
                    {disabled, Limiter1} ->
                        ok = limit_queues(Limiter1, State),
@@ -1307,13 +1307,13 @@ consumer_queues(Consumers) ->
 notify_limiter(Limiter, Acked) ->
     case rabbit_limiter:is_enabled(Limiter) of
         false -> ok;
-        true  ->
-            case rabbit_misc:queue_fold(fun ({_, none, _}, Acc) -> Acc;
-                                            ({_, _, _}, Acc)    -> Acc + 1
-                                        end, 0, Acked) of
-                0     -> ok;
-                Count -> rabbit_limiter:ack(Limiter, Count)
-            end
+        true  -> case rabbit_misc:queue_fold(
+                        fun ({_, none, _}, Acc) -> Acc;
+                            ({_, _, _}, Acc)    -> Acc + 1
+                        end, 0, Acked) of
+                     0     -> ok;
+                     Count -> rabbit_limiter:ack(Limiter, Count)
+                 end
     end.
 
 deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{
