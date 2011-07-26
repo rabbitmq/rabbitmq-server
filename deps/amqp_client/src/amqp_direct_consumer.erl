@@ -84,7 +84,7 @@ handle_deliver(M, A, C) ->
 
 %% @private
 handle_info({'DOWN', _MRef, process, C, Info}, C) ->
-    {stop, Info, C};
+    {error, {consumer_died, Info}, C};
 handle_info({'DOWN', MRef, process, Pid, Info}, C) ->
     C ! {'DOWN', MRef, process, Pid, Info},
     {ok, C}.
