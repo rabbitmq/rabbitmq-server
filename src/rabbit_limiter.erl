@@ -202,19 +202,15 @@ maybe_notify(OldState, NewState) ->
         false -> {cont, NewState}
     end.
 
-maybe_call(undefined, _Call, Default) ->
-    Default;
-maybe_call(#token{enabled = false}, _Call, Default) ->
-    Default;
-maybe_call(#token{pid = Pid}, Call, _Default) ->
-    gen_server2:call(Pid, Call, infinity).
+maybe_call(#token{pid = Pid, enabled = true}, Call, _Default) ->
+    gen_server2:call(Pid, Call, infinity);
+maybe_call(_, _Call, Default) ->
+    Default.
 
+maybe_cast(#token{pid = Pid, enabled = true}, Cast) ->
+    gen_server2:cast(Pid, Cast);
 maybe_cast(undefined, _Call) ->
-    ok;
-maybe_cast(#token{enabled = false}, _Cast) ->
-    ok;
-maybe_cast(#token{pid = Pid}, Cast) ->
-    gen_server2:cast(Pid, Cast).
+    ok.
 
 limit_reached(#lim{prefetch_count = Limit, volume = Volume}) ->
     Limit =/= 0 andalso Volume >= Limit.
