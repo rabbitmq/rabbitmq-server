@@ -35,7 +35,7 @@ parse_primitive(?FIXED_0, 2, Rest) ->
 parse_primitive(?FIXED_1, 6, <<0:8/unsigned,Rest/binary>>) ->
     {false, Rest};
 parse_primitive(?FIXED_1, 6, <<1:8/unsigned,Rest/binary>>) ->
-    {false, Rest};
+    {true, Rest};
 
 
 %% Most integral types have a compact encoding as a byte.
