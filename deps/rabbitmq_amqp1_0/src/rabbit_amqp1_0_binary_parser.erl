@@ -32,6 +32,11 @@ parse_primitive(?FIXED_0, 1, Rest) ->
     {true, Rest};
 parse_primitive(?FIXED_0, 2, Rest) ->
     {false, Rest};
+parse_primitive(?FIXED_1, 6, <<0:8/unsigned,Rest/binary>>) ->
+    {false, Rest};
+parse_primitive(?FIXED_1, 6, <<1:8/unsigned,Rest/binary>>) ->
+    {false, Rest};
+
 
 %% Most integral types have a compact encoding as a byte.
 %% TODO types other than ulong (ulong is used for descriptors).
