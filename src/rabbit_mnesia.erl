@@ -143,13 +143,11 @@ cluster(ClusterNodes, Force) ->
     %% before we can join it.  But, since we don't know if we're in a
     %% cluster or not, we just pre-emptively leave it before joining.
     ProperClusterNodes = ClusterNodes -- [node()],
-    try leave_cluster(ProperClusterNodes, ProperClusterNodes) of
-        ok -> ok
+    try
+        ok = leave_cluster(ProperClusterNodes, ProperClusterNodes)
     catch
-        throw:({error, {no_running_cluster_nodes, _, _}} = E) ->
-            if Force -> ok;
-               true  -> throw(E)
-            end
+        {error, {no_running_cluster_nodes, _, _}} when Force ->
+            ok
     end,
 
     %% Join the cluster
@@ -201,17 +199,14 @@ nodes_of_type(Type) ->
     %% RAM.
     mnesia:table_info(rabbit_durable_exchange, Type).
 
-table_definitions() ->
-    table_definitions(is_disc_node()).
-
 %% The tables aren't supposed to be on disk on a ram node
-table_definitions(true) ->
-    real_table_definitions();
-table_definitions(false) ->
+table_definitions(disc) ->
+    table_definitions();
+table_definitions(ram) ->
     [{Tab, copy_type_to_ram(TabDef)}
-     || {Tab, TabDef} <- real_table_definitions()].
+     || {Tab, TabDef} <- table_definitions()].
 
-real_table_definitions() ->
+table_definitions() ->
     [{rabbit_user,
       [{record_name, internal_user},
        {attributes, record_info(fields, internal_user)},
@@ -316,10 +311,10 @@ resource_match(Kind) ->
     #resource{kind = Kind, _='_'}.
 
 table_names() ->
-    [Tab || {Tab, _} <- real_table_definitions()].
+    [Tab || {Tab, _} <- table_definitions()].
 
 replicated_table_names() ->
-    [Tab || {Tab, TabDef} <- real_table_definitions(),
+    [Tab || {Tab, TabDef} <- table_definitions(),
             not lists:member({local_content, true}, TabDef)
     ].
 
@@ -393,7 +388,11 @@ check_table_content(Tab, TabDef) ->
     end.
 
 check_tables(Fun) ->
-    case [Error || {Tab, TabDef} <- table_definitions(),
+    case [Error || {Tab, TabDef} <- table_definitions(
+                                      case is_disc_node() of
+                                          true  -> disc;
+                                          false -> ram
+                                      end),
                    case Fun(Tab, TabDef) of
                        ok             -> Error = none, false;
                        {error, Error} -> true
@@ -501,10 +500,10 @@ init_db(ClusterNodes, Force, SecondaryPostMnesiaFun) ->
             case {Nodes, WasDiscNode, WantDiscNode} of
                 {[], _, false} ->
                     %% New ram node; start from scratch
-                    ok = create_schema(false);
+                    ok = create_schema(ram);
                 {[], false, true} ->
                     %% Nothing there at all, start from scratch
-                    ok = create_schema(true);
+                    ok = create_schema(disc);
                 {[], true, true} ->
                     %% We're the first node up
                     case rabbit_upgrade:maybe_upgrade_local() of
@@ -567,7 +566,7 @@ schema_ok_or_move() ->
                                      "and recreating schema from scratch~n",
                                      [Reason]),
             ok = move_db(),
-            ok = create_schema()
+            ok = create_schema(disc)
     end.
 
 ensure_version_ok({ok, DiscVersion}) ->
@@ -579,27 +578,22 @@ ensure_version_ok({ok, DiscVersion}) ->
 ensure_version_ok({error, _}) ->
     ok = rabbit_version:record_desired().
 
-create_schema() ->
-    create_schema(true).
-
-create_schema(OnDisk) ->
+create_schema(Type) ->
     mnesia:stop(),
-    if OnDisk ->
-            rabbit_misc:ensure_ok(mnesia:create_schema([node()]),
-                                  cannot_create_schema);
-       true ->
-            %% remove the disc schema since this is a ram node
-            rabbit_misc:ensure_ok(mnesia:delete_schema([node()]),
-                                  cannot_delete_schema)
+    case Type of
+        disc -> rabbit_misc:ensure_ok(mnesia:create_schema([node()]),
+                                      cannot_create_schema);
+        ram -> %% remove the disc schema since this is a ram node
+               rabbit_misc:ensure_ok(mnesia:delete_schema([node()]),
+                                     cannot_delete_schema)
     end,
     rabbit_misc:ensure_ok(mnesia:start(),
                           cannot_start_mnesia),
-    ok = create_tables(OnDisk),
+    ok = create_tables(Type),
     ensure_schema_integrity(),
     ok = rabbit_version:record_desired().
 
-is_disc_node() ->
-    mnesia:system_info(use_dir).
+is_disc_node() -> mnesia:system_info(use_dir).
 
 should_be_disc_node(ClusterNodes) ->
     ClusterNodes == [] orelse lists:member(node(), ClusterNodes).
@@ -638,10 +632,9 @@ copy_db(Destination) ->
     ok = ensure_mnesia_not_running(),
     rabbit_misc:recursive_copy(dir(), Destination).
 
-create_tables() ->
-    create_tables(true).
+create_tables() -> create_tables(disc).
 
-create_tables(OnDisk) ->
+create_tables(Type) ->
     lists:foreach(fun ({Tab, TabDef}) ->
                           TabDef1 = proplists:delete(match, TabDef),
                           case mnesia:create_table(Tab, TabDef1) of
@@ -651,7 +644,7 @@ create_tables(OnDisk) ->
                                                  Tab, TabDef1, Reason}})
                           end
                   end,
-                  table_definitions(OnDisk)),
+                  table_definitions(Type)),
     ok.
 
 copy_type_to_ram(TabDef) ->
@@ -687,7 +680,7 @@ create_local_table_copies(Type) ->
                   end,
               ok = create_local_table_copy(Tab, StorageType)
       end,
-      table_definitions(Type =:= disc)),
+      table_definitions(disc)),
     ok.
 
 create_local_table_copy(Tab, Type) ->
