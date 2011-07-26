@@ -1288,8 +1288,8 @@ enable_limiter(State = #ch{unacked_message_q = UAMQ,
     ok = limit_queues(Limiter1, State),
     Limiter1.
 
-limit_queues(Token, #ch{consumer_mapping = Consumers}) ->
-    rabbit_amqqueue:limit_all(consumer_queues(Consumers), self(), Token).
+limit_queues(Limiter, #ch{consumer_mapping = Consumers}) ->
+    rabbit_amqqueue:limit_all(consumer_queues(Consumers), self(), Limiter).
 
 consumer_queues(Consumers) ->
     lists:usort([QPid ||

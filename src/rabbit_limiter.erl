@@ -83,15 +83,11 @@ limit(Limiter, PrefetchCount) ->
 
 %% Ask the limiter whether the queue can deliver a message without
 %% breaching a limit
-can_send(undefined, _QPid, _AckRequired) ->
-    true;
-can_send(#token{enabled = false}, _QPid, _AckRequired) ->
-    true;
 can_send(Limiter, QPid, AckRequired) ->
     rabbit_misc:with_exit_handler(
       fun () -> true end,
       fun () ->
-              maybe_call(Limiter, {can_send, QPid, AckRequired}, ok)
+              maybe_call(Limiter, {can_send, QPid, AckRequired}, true)
       end).
 
 %% Let the limiter know that the channel has received some acks from a
