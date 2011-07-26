@@ -680,7 +680,7 @@ create_local_table_copies(Type) ->
                   end,
               ok = create_local_table_copy(Tab, StorageType)
       end,
-      table_definitions(disc)),
+      table_definitions(Type)),
     ok.
 
 create_local_table_copy(Tab, Type) ->
