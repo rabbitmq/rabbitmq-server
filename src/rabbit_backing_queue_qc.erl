@@ -73,7 +73,7 @@ backing_queue_test(Cmds) ->
     application:set_env(rabbit, queue_index_max_journal_entries,
                         MaxJournal, infinity),
 
-    rabbit_variable_queue:delete_and_terminate(shutdown, BQ),
+    ?BQMOD:delete_and_terminate(shutdown, BQ),
     ?WHENFAIL(
         io:format("Result: ~p~n", [Res]),
         aggregate(command_names(Cmds), Res =:= ok)).
@@ -329,9 +329,9 @@ publish_multiple(Msg, MsgProps, BQ, Count) ->
 timeout(BQ, 0) ->
     BQ;
 timeout(BQ, AtMost) ->
-    case rabbit_variable_queue:needs_timeout(BQ) of
+    case ?BQMOD:needs_timeout(BQ) of
         false -> BQ;
-        _     -> timeout(rabbit_variable_queue:timeout(BQ), AtMost - 1)
+        _     -> timeout(?BQMOD:timeout(BQ), AtMost - 1)
     end.
 
 qc_message_payload() ->
