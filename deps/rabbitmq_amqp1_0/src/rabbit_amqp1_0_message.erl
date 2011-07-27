@@ -1,6 +1,6 @@
 -module(rabbit_amqp1_0_message).
 
--export([assemble/1]).
+-export([assemble/1, annotated_message/1]).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_amqp1_0.hrl").
@@ -22,7 +22,7 @@ assemble(properties, {P, C}, [X = #'v1_0.properties'{} | Rest]) ->
 assemble(properties, {P, C}, Rest) ->
     assemble(data, {P, C}, Rest);
 
-assemble(data, {P, _C}, [Content | Rest]) when is_binary(Content) ->
+assemble(data, {P, _C}, [#'v1_0.data'{content = Content} | Rest]) ->
     assemble(footer, {P, Content}, Rest);
 assemble(data, {P, C}, Rest) ->
     assemble(footer, {P, C}, Rest);
@@ -60,25 +60,10 @@ parse_properties(Props10, Props) ->
 
 %%--------------------------------------------------------------------
 
-%% fragments(#amqp_msg{props = Properties, payload = Content}) ->
-%%     {HeaderBin, PropertiesBin} = enc_properties(Properties),
-%%     FooterBin = enc(#'v1_0.footer'{}), %% TODO
-%%     [fragment(?V_1_0_HEADER,     HeaderBin),
-%%      fragment(?V_1_0_PROPERTIES, PropertiesBin),
-%%      fragment(?V_1_0_DATA,       Content),
-%%      fragment(?V_1_0_FOOTER,     FooterBin)].
+%% TODO create delivery-annotations, message-annotations and
+%% application-properties if we feel like it.
 
-%% fragment(Code, Content) ->
-%%     #'v1_0.fragment'{first = true,
-%%                      last = true,
-%%                      format_code = Code,
-%%                      %% TODO DUBIOUS this is definitely wrong but I don't see
-%%                      %% the point
-%%                      section_offset = {ulong, 0},
-%%                      section_number = {uint, 0},
-%%                      payload = {binary, Content}}.
-
-enc_properties(Props) ->
+annotated_message(#amqp_msg{props = Props, payload = Content}) ->
     Header = #'v1_0.header'
       {durable           = case Props#'P_basic'.delivery_mode of
                                2 -> true;
@@ -88,7 +73,7 @@ enc_properties(Props) ->
        ttl               = Props#'P_basic'.expiration,
        first_acquirer    = undefined, %% TODO
        delivery_count    = undefined}, %% TODO
-    Properties = #'v1_0.properties'{
+    Props10 = #'v1_0.properties'{
       message_id     = Props#'P_basic'.message_id,
       user_id        = Props#'P_basic'.user_id,
       to             = undefined, %% TODO
@@ -96,8 +81,4 @@ enc_properties(Props) ->
       reply_to       = Props#'P_basic'.reply_to,
       correlation_id = Props#'P_basic'.correlation_id,
       content_type   = Props#'P_basic'.content_type}, %% TODO encode to 1.0 ver
-    {enc(Header), enc(Properties)}.
-
-enc(Rec) ->
-    iolist_to_binary(rabbit_amqp1_0_binary_generator:generate(
-                       rabbit_amqp1_0_framing:encode(Rec))).
+    [Header, Props10, #'v1_0.data'{content = Content}, #'v1_0.footer'{}].

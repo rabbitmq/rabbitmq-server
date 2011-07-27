@@ -684,6 +684,8 @@ transfer(WriterPid, LinkHandle,
             T = #'v1_0.transfer'{handle = LinkHandle,
                                  delivery_tag = {binary, <<DeliveryTag:64>>},
                                  delivery_id = {uint, TransferNumber},
+                                 %% The only one in AMQP 1-0
+                                 message_format = {uint, 0},
                                  settled = NoAck,
                                  state = ?DEFAULT_OUTCOME,
                                  resume = false,
@@ -693,8 +695,6 @@ transfer(WriterPid, LinkHandle,
                                  %% fine, but in any case it's only a
                                  %% hint
                                  batchable = false},
-                                 %% fragments =
-                                 %% rabbit_amqp1_0_message:fragments(Msg)},
             Unsettled1 = case NoAck of
                              true -> Unsettled;
                              false -> gb_trees:insert(TransferNumber,
@@ -703,7 +703,9 @@ transfer(WriterPid, LinkHandle,
                                                         expected_outcome = DefaultOutcome },
                                                       Unsettled)
                          end,
-            rabbit_amqp1_0_writer:send_command(WriterPid, T),
+            rabbit_amqp1_0_writer:send_command(
+              WriterPid,
+              [T | rabbit_amqp1_0_message:annotated_message(Msg)]),
             {NewLink, Session#session { outgoing_unsettled_map = Unsettled1 }};
        %% FIXME We can't knowingly exceed our credit.  On the other
        %% hand, we've been handed a message to deliver. This has

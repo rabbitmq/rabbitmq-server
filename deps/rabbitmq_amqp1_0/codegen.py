@@ -16,6 +16,8 @@ class AMQPType:
         self.number = parse_code(self.code)
         self.fields = [safe(el.getAttribute('name')) for el in
                        dom.getElementsByTagName('field')]
+        if self.desc == 'amqp:data:binary':
+            self.fields = ['content']
 
     def define(self):
         return ('SYMBOL_%s' % self.name.upper(), self.desc)

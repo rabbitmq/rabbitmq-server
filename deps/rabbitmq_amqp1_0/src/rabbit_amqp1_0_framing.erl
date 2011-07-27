@@ -37,7 +37,8 @@ fill_from_map(Record, Fields) ->
     Res.
 
 %% TODO this should be part of a more general handler for AMQP values etc.
-fill_from_binary(#'v1_0.data'{}, Field) -> Field.
+fill_from_binary(F = #'v1_0.data'{}, Field) ->
+    F#'v1_0.data'{content = Field}.
 
 keys(Record) ->
     [{symbol, symbolify(K)} || K <- rabbit_amqp1_0_framing0:fields(Record)].
@@ -68,7 +69,12 @@ encode_described(map, ListOrNumber, Frame) ->
     Desc = descriptor(ListOrNumber),
     {described, Desc,
      {map, lists:zip(keys(Frame),
-                     lists:map(fun encode/1, tl(tuple_to_list(Frame))))}}.
+                     lists:map(fun encode/1, tl(tuple_to_list(Frame))))}};
+encode_described(binary, ListOrNumber, #'v1_0.data'{content = Content}) ->
+    Desc = descriptor(ListOrNumber),
+    {described, Desc, {binary, Content}};
+encode_described(annotations, ListOrNumber, Frame) ->
+    encode_described(map, ListOrNumber, Frame).
 
 encode(X) ->
     rabbit_amqp1_0_framing0:encode(X).

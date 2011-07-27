@@ -170,18 +170,23 @@ call(Pid, Msg) ->
 
 %---------------------------------------------------------------------------
 
+assemble_frames(Channel, FrameRecords, rabbit_amqp1_0_framing)
+  when is_list(FrameRecords) ->
+    ?LOGMESSAGE(out, Channel, FrameRecords, none),
+    FrameBin = [rabbit_amqp1_0_binary_generator:generate(
+                  rabbit_amqp1_0_framing:encode(F)) || F <- FrameRecords],
+    rabbit_amqp1_0_binary_generator:build_frame(Channel, FrameBin);
 assemble_frames(Channel, FrameRecord, rabbit_amqp1_0_framing) ->
-    ?LOGMESSAGE(out, Channel, FrameRecord, none),
-    Frame = rabbit_amqp1_0_framing:encode(FrameRecord),
-    rabbit_amqp1_0_binary_generator:build_frame(
-      Channel, rabbit_amqp1_0_binary_generator:generate(Frame));
+    assemble_frames(Channel, [FrameRecord], rabbit_amqp1_0_framing);
 assemble_frames(Channel, MethodRecord, Protocol) ->
     ?LOGMESSAGE(out, Channel, MethodRecord, none),
     rabbit_binary_generator:build_simple_method_frame(
       Channel, MethodRecord, Protocol).
 
-%% Note: no AMQP 1.0 equivalent of content frames, everything is a
-%% transfer frame.
+%% Note: no (direct) AMQP 1.0 equivalent of content frames, a transfer
+%% record can be followed by a number of other records to make a
+%% complete frame but it's less predictable so we just model that as a
+%% sequence of records going into assemble_frames/3 above.
 assemble_frames(Channel, MethodRecord, Content, FrameMax, Protocol) ->
     ?LOGMESSAGE(out, Channel, MethodRecord, Content),
     MethodName = rabbit_misc:method_record_type(MethodRecord),
