@@ -209,7 +209,7 @@ maybe_call(_, _Call, Default) ->
 
 maybe_cast(#token{pid = Pid, enabled = true}, Cast) ->
     gen_server2:cast(Pid, Cast);
-maybe_cast(undefined, _Call) ->
+maybe_cast(_, _Call) ->
     ok.
 
 limit_reached(#lim{prefetch_count = Limit, volume = Volume}) ->
