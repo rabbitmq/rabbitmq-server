@@ -21,7 +21,7 @@
 
 -behaviour(supervisor2).
 
--export([start_link/2, start_channel_sup/3]).
+-export([start_link/2, start_channel_sup/4]).
 -export([init/1]).
 
 %%---------------------------------------------------------------------------
@@ -31,8 +31,8 @@
 start_link(Type, Connection) ->
     supervisor2:start_link(?MODULE, [Type, Connection]).
 
-start_channel_sup(Sup, InfraArgs, ChannelNumber) ->
-    supervisor2:start_child(Sup, [InfraArgs, ChannelNumber]).
+start_channel_sup(Sup, InfraArgs, ChannelNumber, Consumer) ->
+    supervisor2:start_child(Sup, [InfraArgs, ChannelNumber, Consumer]).
 
 %%---------------------------------------------------------------------------
 %% supervisor2 callbacks

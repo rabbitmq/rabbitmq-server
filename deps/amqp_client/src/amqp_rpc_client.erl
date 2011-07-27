@@ -81,7 +81,7 @@ setup_reply_queue(State = #state{channel = Channel}) ->
 
 %% Registers this RPC client instance as a consumer to handle rpc responses
 setup_consumer(#state{channel = Channel, reply_queue = Q}) ->
-    amqp_channel:subscribe(Channel, #'basic.consume'{queue = Q}, self()).
+    amqp_channel:call(Channel, #'basic.consume'{queue = Q}).
 
 %% Publishes to the broker, stores the From address against
 %% the correlation id and increments the correlationid for
@@ -111,7 +111,8 @@ publish(Payload, From,
 %% Sets up a reply queue and consumer within an existing channel
 %% @private
 init([Connection, RoutingKey]) ->
-    {ok, Channel} = amqp_connection:open_channel(Connection),
+    {ok, Channel} = amqp_connection:open_channel(
+                        Connection, {amqp_direct_consumer, [self()]}),
     InitialState = #state{channel     = Channel,
                           exchange    = <<>>,
                           routing_key = RoutingKey},
@@ -140,7 +141,15 @@ handle_cast(_Msg, State) ->
     {noreply, State}.
 
 %% @private
+handle_info({#'basic.consume'{}, _Pid}, State) ->
+    {noreply, State};
+
+%% @private
 handle_info(#'basic.consume_ok'{}, State) ->
+    {noreply, State};
+
+%% @private
+handle_info(#'basic.cancel'{}, State) ->
     {noreply, State};
 
 %% @private
