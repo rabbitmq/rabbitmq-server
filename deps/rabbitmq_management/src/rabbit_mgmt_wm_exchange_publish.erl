@@ -53,10 +53,7 @@ do_it(ReqData, Context) ->
                         amqp_channel:register_return_handler(Ch, self()),
                         amqp_channel:call(Ch, #'confirm.select'{}),
                         Props = rabbit_mgmt_format:to_basic_properties(Props0),
-                        Payload = case Enc of
-                                      <<"string">> -> Payload0;
-                                      <<"base64">> -> base64:decode(Payload0)
-                                  end,
+                        Payload = decode(Payload0, Enc),
                         amqp_channel:cast(Ch, #'basic.publish'{
                                             exchange    = X,
                                             routing_key = RoutingKey,
@@ -88,3 +85,7 @@ is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized_vhost(ReqData, Context).
 
 %%--------------------------------------------------------------------
+
+decode(Payload, <<"string">>) -> Payload;
+decode(Payload, <<"base64">>) -> rabbit_mgmt_util:b64decode_or_throw(Payload);
+decode(_Payload, Enc)         -> throw({error, {unsupported_encoding, Enc}}).
