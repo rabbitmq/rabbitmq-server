@@ -112,6 +112,7 @@ done
 %defattr(-,root,root,-)
 %attr(0750, rabbitmq, rabbitmq) %dir %{_localstatedir}/lib/rabbitmq
 %attr(0750, rabbitmq, rabbitmq) %dir %{_localstatedir}/log/rabbitmq
+%attr(0750, rabbitmq, rabbitmq) %dir %{_localstatedir}/run/rabbitmq
 %dir %{_sysconfdir}/rabbitmq
 %{_initrddir}/rabbitmq-server
 %config(noreplace) %{_sysconfdir}/logrotate.d/rabbitmq-server
