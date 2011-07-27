@@ -32,7 +32,7 @@
 -module(rabbit_stomp_util).
 
 -export([parse_destination/1, parse_routing_information/1,
-         parse_message_id/1]).
+         parse_message_id/1, durable_subscription_queue/2]).
 -export([longstr_field/2]).
 -export([ack_mode/1, consumer_tag/1, message_headers/4, message_properties/1]).
 -export([negotiate_version/2]).
@@ -263,6 +263,10 @@ parse_routing_information({Type, Name})
     {"", Name}.
 
 valid_dest_prefixes() -> ?VALID_DEST_PREFIXES.
+
+durable_subscription_queue(Destination, SubscriptionId) ->
+    <<(list_to_binary("stomp.dsub." ++ Destination ++ "."))/binary,
+      (erlang:md5(SubscriptionId))/binary>>.
 
 %% ---- Destination parsing helpers ----
 
