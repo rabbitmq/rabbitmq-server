@@ -165,7 +165,7 @@ class TestQueue(base.BaseTest):
         self.conn.send('third', destination=d, receipt='b', transaction=tx)
         self.conn.commit(transaction=tx)
 
-        self.assertTrue("Missing messages/confirms", self.listener.await(20))
+        self.assertTrue(self.listener.await(3), "Missing messages/confirms")
 
         expected = set(['a', 'b'])
         missing = expected.difference(self.__gather_receipts())
