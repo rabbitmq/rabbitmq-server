@@ -36,6 +36,7 @@
 -export([longstr_field/2]).
 -export([ack_mode/1, consumer_tag/1, message_headers/4, message_properties/1]).
 -export([negotiate_version/2]).
+-export([valid_dest_prefixes/0]).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_stomp_frame.hrl").
@@ -44,6 +45,8 @@
 -define(TOPIC_PREFIX, "/topic").
 -define(EXCHANGE_PREFIX, "/exchange").
 -define(AMQQUEUE_PREFIX, "/amq/queue").
+-define(VALID_DEST_PREFIXES, [?EXCHANGE_PREFIX, ?TOPIC_PREFIX, ?QUEUE_PREFIX,
+                              ?AMQQUEUE_PREFIX]).
 
 -define(MESSAGE_ID_SEPARATOR, "@@").
 -define(HEADER_CONTENT_TYPE, "content-type").
@@ -248,6 +251,8 @@ parse_routing_information({topic, Name}) ->
 parse_routing_information({Type, Name})
   when Type =:= queue orelse Type =:= amqqueue->
     {"", Name}.
+
+valid_dest_prefixes() -> ?VALID_DEST_PREFIXES.
 
 %% ---- Destination parsing helpers ----
 

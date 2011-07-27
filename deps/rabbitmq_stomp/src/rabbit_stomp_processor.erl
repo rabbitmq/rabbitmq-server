@@ -333,7 +333,8 @@ with_destination(Command, Frame, State, Fun) ->
                     error("Unknown destination",
                           "'~s' is not a valid destination.\n" ++
                               "Valid destination types are: " ++
-                              "/exchange, /topic or /queue.\n",
+                   string:join(rabbit_stomp_util:valid_dest_prefixes(),", ") ++
+                              ".\n",
                           [Content],
                           State)
             end;
