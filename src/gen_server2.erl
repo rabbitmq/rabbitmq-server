@@ -1166,10 +1166,10 @@ format_status(Opt, StatusData) ->
               end,
     Header = lists:concat(["Status for generic server ", NameTag]),
     Log = sys:get_debug(log, Debug, []),
-    Specfic = callback_format_status(Opt, Mod, format_status, [PDict, State],
-                                     [{data, [{"State", State}]}]),
-    Messages = callback_format_status(Opt, Mod, format_message_queue, Queue,
-                                      priority_queue:to_list(Queue)),
+    Specfic = callback(Mod, format_status, [Opt, [PDict, State]],
+                       fun () -> [{data, [{"State", State}]}] end),
+    Messages = callback(Mod, format_message_queue, [Opt, Queue],
+                        fun () -> priority_queue:to_list(Queue) end),
     [{header, Header},
      {data, [{"Status", SysState},
              {"Parent", Parent},
@@ -1177,11 +1177,11 @@ format_status(Opt, StatusData) ->
              {"Queued messages", Messages}]} |
      Specfic].
 
-callback_format_status(Opt, Mod, FunName, Args, Default) ->
-    case erlang:function_exported(Mod, FunName, 2) of
-        true -> case catch Mod:FunName(Opt, Args) of
-                    {'EXIT', _} -> Default;
-                    Else        -> Else
-                end;
-        _    -> Default
+callback(Mod, FunName, Args, DefaultThunk) ->
+    case erlang:function_exported(Mod, FunName, length(Args)) of
+        true  -> case catch apply(Mod, FunName, Args) of
+                     {'EXIT', _} -> DefaultThunk();
+                     Success     -> Success
+                 end;
+        false -> DefaultThunk()
     end.
