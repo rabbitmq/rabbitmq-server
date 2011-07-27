@@ -50,6 +50,7 @@ make install TARGET_DIR=%{_maindir} \
 
 mkdir -p %{buildroot}%{_localstatedir}/lib/rabbitmq/mnesia
 mkdir -p %{buildroot}%{_localstatedir}/log/rabbitmq
+mkdir -p %{buildroot}%{_localstatedir}/run/rabbitmq
 
 #Copy all necessary lib files etc.
 install -p -D -m 0755 %{S:1} %{buildroot}%{_initrddir}/rabbitmq-server
