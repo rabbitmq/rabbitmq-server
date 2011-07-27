@@ -475,7 +475,9 @@ handle_control(Flow = #'v1_0.flow'{},
     %% Check the things that we know for sure
     %% TODO sequence number comparisons
     ?DEBUG("~p == ~p~n", [RemoteNextOut, LocalNextIn]),
-    RemoteNextOut = LocalNextIn,
+    %% TODO the Python client sets next_outgoing_id=2 on begin, then sends a
+    %% flow with next_outgoing_id=1. Not sure what that's meant to mean.
+    %% RemoteNextOut = LocalNextIn,
     %% The far side may not have our begin{} with our next-transfer-id
     RemoteNextIn = case RemoteNextIn0 of
                        {uint, Id} -> Id;
@@ -914,7 +916,12 @@ ensure_source(Source = #'v1_0.source'{ address = Address,
               Link = #outgoing_link{}, State) ->
     case Dynamic of
         undefined ->
-            case parse_destination(Address) of
+            %% TODO ugh. This will go awya after the planned codec rewrite.
+            Destination = case Address of
+                              {_Enc, D} -> binary_to_list(D);
+                              D         -> D
+                          end,
+            case parse_destination(Destination) of
                 ["queue", Name] ->
                     case check_queue(Name, State) of
                         {ok, QueueName, State1} ->
@@ -936,7 +943,7 @@ ensure_source(Source = #'v1_0.source'{ address = Address,
                             {error, Reason, State1}
                     end;
                 _Otherwise ->
-                    {error, {unknown_address, Address}, State}
+                    {error, {unknown_address, Destination}, State}
             end;
         {symbol, Lifetime} ->
             case Address of
