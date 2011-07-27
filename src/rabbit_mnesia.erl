@@ -194,10 +194,9 @@ nodes_of_type(Type) ->
     %% This function should return the nodes of a certain type (ram,
     %% disc or disc_only) in the current cluster.  The type of nodes
     %% is determined when the cluster is initially configured.
-    %% Specifically, we check whether a certain table, which we know
-    %% will be written to disk on a disc node, is stored on disk or in
-    %% RAM.
-    mnesia:table_info(rabbit_durable_exchange, Type).
+    %% Specifically, we check whether the schema, which we know will
+    %% be written to disk on a disc node, is stored on disk or in RAM.
+    mnesia:table_info(schema, Type).
 
 %% The tables aren't supposed to be on disk on a ram node
 table_definitions(disc) ->
@@ -260,8 +259,6 @@ table_definitions() ->
        {type, ordered_set},
        {match, #topic_trie_binding{trie_binding = trie_binding_match(),
                                    _='_'}}]},
-     %% Consider the implications to nodes_of_type/1 before altering
-     %% the next entry.
      {rabbit_durable_exchange,
       [{record_name, exchange},
        {attributes, record_info(fields, exchange)},
