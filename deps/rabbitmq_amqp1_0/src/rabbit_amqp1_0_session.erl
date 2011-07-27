@@ -916,7 +916,7 @@ ensure_source(Source = #'v1_0.source'{ address = Address,
               Link = #outgoing_link{}, State) ->
     case Dynamic of
         undefined ->
-            %% TODO ugh. This will go awya after the planned codec rewrite.
+            %% TODO ugh. This will go away after the planned codec rewrite.
             Destination = case Address of
                               {_Enc, D} -> binary_to_list(D);
                               D         -> D
