@@ -67,6 +67,11 @@
 %% module. Note there is no form also encompassing a reply, thus if
 %% you wish to reply in handle_call/3 and change the callback module,
 %% you need to use gen_server2:reply/2 to issue the reply manually.
+%%
+%% 8) The callback module can optionally implement
+%% format_message_queue/2 which is the equivalent of format_status/2
+%% but where the second argument is specifically the priority_queue
+%% which contains the prioritised message_queue.
 
 %% All modifications are (C) 2009-2011 VMware, Inc.
 
@@ -1161,17 +1166,22 @@ format_status(Opt, StatusData) ->
               end,
     Header = lists:concat(["Status for generic server ", NameTag]),
     Log = sys:get_debug(log, Debug, []),
-    Specfic =
-        case erlang:function_exported(Mod, format_status, 2) of
-            true -> case catch Mod:format_status(Opt, [PDict, State]) of
-                        {'EXIT', _} -> [{data, [{"State", State}]}];
-                        Else        -> Else
-                    end;
-            _    -> [{data, [{"State", State}]}]
-        end,
+    Specfic = callback(Mod, format_status, [Opt, [PDict, State]],
+                       fun () -> [{data, [{"State", State}]}] end),
+    Messages = callback(Mod, format_message_queue, [Opt, Queue],
+                        fun () -> priority_queue:to_list(Queue) end),
     [{header, Header},
      {data, [{"Status", SysState},
              {"Parent", Parent},
              {"Logged events", Log},
-             {"Queued messages", priority_queue:to_list(Queue)}]} |
+             {"Queued messages", Messages}]} |
      Specfic].
+
+callback(Mod, FunName, Args, DefaultThunk) ->
+    case erlang:function_exported(Mod, FunName, length(Args)) of
+        true  -> case catch apply(Mod, FunName, Args) of
+                     {'EXIT', _} -> DefaultThunk();
+                     Success     -> Success
+                 end;
+        false -> DefaultThunk()
+    end.
