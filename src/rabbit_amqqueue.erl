@@ -230,7 +230,7 @@ internal_declare(Q = #amqqueue{name = QueueName}, false) ->
       end).
 
 store_queue(Q = #amqqueue{durable = true}) ->
-    ok = mnesia:write(rabbit_durable_queue, Q, write),
+    ok = mnesia:write(rabbit_durable_queue, Q#amqqueue{slave_pids = []}, write),
     ok = mnesia:write(rabbit_queue, Q, write),
     ok;
 store_queue(Q = #amqqueue{durable = false}) ->
@@ -254,8 +254,7 @@ determine_queue_nodes(Args) ->
     end.
 
 start_queue_process(Node, Q) ->
-    {ok, Pid} = rabbit_amqqueue_sup:start_child(Node,
-                                                [Q#amqqueue{slave_pids = []}]),
+    {ok, Pid} = rabbit_amqqueue_sup:start_child(Node, [Q]),
     Q#amqqueue{pid = Pid}.
 
 add_default_binding(#amqqueue{name = QueueName}) ->
