@@ -170,7 +170,7 @@ package: $(DIST_DIR)/$(PACKAGE_NAME_EZ)
 $(DEPS_DIR)/$(COMMON_PACKAGE_DIR): $(DIST_DIR)/$(COMMON_PACKAGE_EZ) | $(DEPS_DIR)
 	rm -rf $(DEPS_DIR)/$(COMMON_PACKAGE_DIR)
 	mkdir -p $(DEPS_DIR)/$(COMMON_PACKAGE_DIR)
-	unzip -o $< -d $(DEPS_DIR)
+	unzip -q -o $< -d $(DEPS_DIR)
 
 $(DEPS_FILE): $(SOURCES) $(INCLUDES)
 	rm -f $@
