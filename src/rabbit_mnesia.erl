@@ -340,10 +340,6 @@ ensure_mnesia_not_running() ->
         yes -> throw({error, mnesia_unexpectedly_running})
     end.
 
-wait_for(Condition) ->
-    error_logger:info_msg("Waiting for ~p...~n", [Condition]),
-    timer:sleep(1000).
-
 ensure_schema_integrity() ->
     case check_schema_integrity() of
         ok ->
@@ -599,7 +595,11 @@ should_be_disc_node(ClusterNodes) ->
 move_db() ->
     mnesia:stop(),
     MnesiaDir = filename:dirname(dir() ++ "/"),
-    BackupDir = new_backup_dir_name(MnesiaDir),
+    {{Year, Month, Day}, {Hour, Minute, Second}} = erlang:universaltime(),
+    BackupDir = lists:flatten(
+                  io_lib:format("~s_~w~2..0w~2..0w~2..0w~2..0w~2..0w",
+                                [MnesiaDir,
+                                 Year, Month, Day, Hour, Minute, Second])),
     case file:rename(MnesiaDir, BackupDir) of
         ok ->
             %% NB: we cannot use rabbit_log here since it may not have
@@ -613,18 +613,6 @@ move_db() ->
     ensure_mnesia_dir(),
     rabbit_misc:ensure_ok(mnesia:start(), cannot_start_mnesia),
     ok.
-
-new_backup_dir_name(MnesiaDir) ->
-    {{Year, Month, Day}, {Hour, Minute, Second}} = erlang:universaltime(),
-    BackupDir = lists:flatten(
-                  io_lib:format("~s_~w~2..0w~2..0w~2..0w~2..0w~2..0w",
-                                [MnesiaDir,
-                                 Year, Month, Day, Hour, Minute, Second])),
-    case filelib:is_file(BackupDir) of
-        false -> BackupDir;
-        true  -> wait_for(new_backup_dir_name),
-                 new_backup_dir_name(MnesiaDir)
-    end.
 
 copy_db(Destination) ->
     ok = ensure_mnesia_not_running(),
