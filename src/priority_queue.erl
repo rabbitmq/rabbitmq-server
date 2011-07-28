@@ -47,6 +47,9 @@
 
 -ifdef(use_specs).
 
+-export_type([q/0]).
+
+-type(q() :: pqueue()).
 -type(priority() :: integer() | 'infinity').
 -type(squeue() :: {queue, [any()], [any()]}).
 -type(pqueue() ::  squeue() | {pqueue, [{priority(), squeue()}]}).

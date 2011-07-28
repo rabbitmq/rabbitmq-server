@@ -57,6 +57,7 @@
 -export([ntoa/1, ntoab/1]).
 -export([is_process_alive/1]).
 -export([pget/2, pget/3, pget_or_die/2]).
+-export([format_message_queue/2]).
 
 %%----------------------------------------------------------------------------
 
@@ -205,6 +206,7 @@
 -spec(pget/2 :: (term(), [term()]) -> term()).
 -spec(pget/3 :: (term(), [term()], term()) -> term()).
 -spec(pget_or_die/2 :: (term(), [term()]) -> term() | no_return()).
+-spec(format_message_queue/2 :: (any(), priority_queue:q()) -> term()).
 
 -endif.
 
@@ -919,3 +921,24 @@ pget_or_die(K, P) ->
         undefined -> exit({error, key_missing, K});
         V         -> V
     end.
+
+format_message_queue(_Opt, MQ) ->
+    Len = priority_queue:len(MQ),
+    {Len,
+     case Len > 100 of
+         false -> priority_queue:to_list(MQ);
+         true  -> {summary,
+                   orddict:to_list(
+                     lists:foldl(
+                       fun ({P, V}, Counts) ->
+                               orddict:update_counter(
+                                 {P, format_message_queue_entry(V)}, 1, Counts)
+                       end, orddict:new(), priority_queue:to_list(MQ)))}
+     end}.
+
+format_message_queue_entry(V) when is_atom(V) ->
+    V;
+format_message_queue_entry(V) when is_tuple(V) ->
+    list_to_tuple([format_message_queue_entry(E) || E <- tuple_to_list(V)]);
+format_message_queue_entry(_V) ->
+    '_'.
