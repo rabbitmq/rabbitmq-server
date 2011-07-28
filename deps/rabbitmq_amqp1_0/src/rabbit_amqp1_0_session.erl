@@ -71,6 +71,7 @@ process_frame(Pid, Frame) ->
 %% ---------
 
 init([Channel, ReaderPid, WriterPid]) ->
+    process_flag(trap_exit, true),
     %% TODO pass through authentication information
     {ok, Conn} = amqp_connection:start(#amqp_params_direct{}),
     {ok, Ch} = amqp_connection:open_channel(Conn),
@@ -85,8 +86,8 @@ init([Channel, ReaderPid, WriterPid]) ->
                    outgoing_unsettled_map = gb_trees:empty()}}.
 
 terminate(_Reason, _State = #session{ backing_connection = Conn,
-                                     declaring_channel  = DeclCh,
-                                     backing_channel    = Ch}) ->
+                                      declaring_channel  = DeclCh,
+                                      backing_channel    = Ch}) ->
     ?DEBUG("Shutting down session ~p", [_State]),
     case DeclCh of
         undefined -> ok;
