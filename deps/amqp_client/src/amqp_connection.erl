@@ -134,6 +134,7 @@
 %% the default ports will be selected depending on whether this is a
 %% normal or an SSL connection.
 start(AmqpParams) ->
+    io:format("starting connection: ~p~n", [AmqpParams]),
     case amqp_client:start() of
         ok                                      -> ok;
         {error, {already_started, amqp_client}} -> ok;
