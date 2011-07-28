@@ -10,7 +10,7 @@ rabbitmq-$(VERSION).nsi: rabbitmq_nsi.in
 	    $< > $@
 
 rabbitmq_server-$(VERSION):
-	unzip $(ZIP)
+	unzip -q $(ZIP)
 
 clean:
 	rm -rf rabbitmq-*.nsi rabbitmq_server-* rabbitmq-server-*.exe
