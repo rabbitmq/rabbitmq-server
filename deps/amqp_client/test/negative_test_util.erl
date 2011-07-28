@@ -182,7 +182,8 @@ non_existent_user_test() ->
 
 invalid_password_test() ->
     Params = [{username, <<"guest">>}, {password, test_util:uuid()}],
-    ?assertMatch({error, auth_failure}, test_util:new_connection(Params)).
+    ?assertMatch({error, auth_failure},
+                 test_util:new_connection(just_network, Params)).
 
 non_existent_vhost_test() ->
     Params = [{virtual_host, test_util:uuid()}],

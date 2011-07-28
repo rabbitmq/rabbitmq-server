@@ -826,7 +826,7 @@ new_connection(AllowedConnectionTypes, Params) ->
                                   {verify, verify_peer},
                                   {fail_if_no_peer_cert, true}]}] ++ Params);
             {_, "direct"} ->
-                make_direct_params([node, rabbit_misc:makenode(rabbit)] ++
+                make_direct_params([{node, rabbit_misc:makenode(rabbit)}] ++
                                        Params)
         end,
     case amqp_connection:start(Params1) of
