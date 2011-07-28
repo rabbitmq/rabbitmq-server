@@ -238,7 +238,7 @@ srcdist: distclean
 	chmod 0755 $(TARGET_SRC_DIR)/scripts/*
 
 	(cd dist; tar -zcf $(TARBALL_NAME).tar.gz $(TARBALL_NAME))
-	(cd dist; zip -r $(TARBALL_NAME).zip $(TARBALL_NAME))
+	(cd dist; zip -q -r $(TARBALL_NAME).zip $(TARBALL_NAME))
 	rm -rf $(TARGET_SRC_DIR)
 
 distclean: clean
