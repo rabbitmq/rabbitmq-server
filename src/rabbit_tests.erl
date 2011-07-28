@@ -203,6 +203,42 @@ test_priority_queue() ->
     {true, false, 3, [{1, baz}, {0, foo}, {0, bar}], [baz, foo, bar]} =
         test_priority_queue(Q15),
 
+    %% 1-element infinity priority Q
+    Q16 = priority_queue:in(foo, infinity, Q),
+    {true, false, 1, [{infinity, foo}], [foo]} = test_priority_queue(Q16),
+
+    %% add infinity to 0-priority Q
+    Q17 = priority_queue:in(foo, infinity, priority_queue:in(bar, Q)),
+    {true, false, 2, [{infinity, foo}, {0, bar}], [foo, bar]} =
+        test_priority_queue(Q17),
+
+    %% and the other way around
+    Q18 = priority_queue:in(bar, priority_queue:in(foo, infinity, Q)),
+    {true, false, 2, [{infinity, foo}, {0, bar}], [foo, bar]} =
+        test_priority_queue(Q18),
+
+    %% add infinity to mixed-priority Q
+    Q19 = priority_queue:in(qux, infinity, Q3),
+    {true, false, 3, [{infinity, qux}, {2, bar}, {1, foo}], [qux, bar, foo]} =
+        test_priority_queue(Q19),
+
+    %% merge the above with a negative priority Q
+    Q20 = priority_queue:join(Q19, Q4),
+    {true, false, 4, [{infinity, qux}, {2, bar}, {1, foo}, {-1, foo}],
+     [qux, bar, foo, foo]} = test_priority_queue(Q20),
+
+    %% merge two infinity priority queues
+    Q21 = priority_queue:join(priority_queue:in(foo, infinity, Q),
+                              priority_queue:in(bar, infinity, Q)),
+    {true, false, 2, [{infinity, foo}, {infinity, bar}], [foo, bar]} =
+        test_priority_queue(Q21),
+
+    %% merge two mixed priority with infinity queues
+    Q22 = priority_queue:join(Q18, Q20),
+    {true, false, 6, [{infinity, foo}, {infinity, qux}, {2, bar}, {1, foo},
+                      {0, bar}, {-1, foo}], [foo, qux, bar, foo, bar, foo]} =
+        test_priority_queue(Q22),
+
     passed.
 
 priority_queue_in_all(Q, L) ->
