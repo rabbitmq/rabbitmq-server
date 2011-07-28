@@ -85,7 +85,9 @@ status() ->
                  no -> case all_clustered_nodes() of
                            [] -> [];
                            Nodes -> [{unknown, Nodes}]
-                       end
+                       end;
+                 Reason when Reason =:= starting; Reason =:= stopping ->
+                     exit({rabbit_busy, try_again_later})
              end},
      {running_nodes, running_clustered_nodes()}].
 
@@ -331,13 +333,19 @@ ensure_mnesia_dir() ->
 ensure_mnesia_running() ->
     case mnesia:system_info(is_running) of
         yes -> ok;
-        no  -> throw({error, mnesia_not_running})
+        starting -> wait_for(mnesia_running),
+                    ensure_mnesia_running();
+        Reason when Reason =:= no; Reason =:= stopping ->
+                    throw({error, mnesia_not_running})
     end.
 
 ensure_mnesia_not_running() ->
     case mnesia:system_info(is_running) of
         no  -> ok;
-        yes -> throw({error, mnesia_unexpectedly_running})
+        stopping -> wait_for(mnesia_not_running),
+                    ensure_mnesia_not_running();
+        Reason when Reason =:= yes; Reason =:= starting ->
+            throw({error, mnesia_unexpectedly_running})
     end.
 
 ensure_schema_integrity() ->
@@ -741,6 +749,10 @@ leave_cluster(Nodes, RunningNodes) ->
         false -> throw({error, {no_running_cluster_nodes,
                                 Nodes, RunningNodes}})
     end.
+
+wait_for(Condition) ->
+    error_logger:info_msg("Waiting for ~p...~n", [Condition]),
+    timer:sleep(1000).
 
 start_mnesia() ->
     rabbit_misc:ensure_ok(mnesia:start(), cannot_start_mnesia),
