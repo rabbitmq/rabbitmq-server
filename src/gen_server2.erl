@@ -599,21 +599,20 @@ adjust_timeout_state(SleptAt, AwokeAt, {backoff, CurrentTO, MinimumTO,
     {backoff, CurrentTO1, MinimumTO, DesiredHibPeriod, RandomState1}.
 
 in({'$gen_cast', Msg} = Input,
-   GS2State = #gs2_state { prioritise_cast = PC, queue = Queue }) ->
-    GS2State #gs2_state { queue = priority_queue:in(
-                                    Input, PC(Msg, GS2State), Queue) };
+   GS2State = #gs2_state { prioritise_cast = PC }) ->
+    in(Input, PC(Msg, GS2State), GS2State);
 in({'$gen_call', From, Msg} = Input,
-   GS2State = #gs2_state { prioritise_call = PC, queue = Queue }) ->
-    GS2State #gs2_state { queue = priority_queue:in(
-                                    Input, PC(Msg, From, GS2State), Queue) };
-in({'EXIT', Parent, _Reason} = Input,
-   GS2State = #gs2_state { parent = Parent, queue = Queue }) ->
-    GS2State #gs2_state { queue = priority_queue:in(Input, infinity, Queue) };
-in({system, _From, _Req} = Input, GS2State = #gs2_state { queue = Queue }) ->
-    GS2State #gs2_state { queue = priority_queue:in(Input, infinity, Queue) };
-in(Input, GS2State = #gs2_state { prioritise_info = PI, queue = Queue }) ->
-    GS2State #gs2_state { queue = priority_queue:in(
-                                    Input, PI(Input, GS2State), Queue) }.
+   GS2State = #gs2_state { prioritise_call = PC }) ->
+    in(Input, PC(Msg, From, GS2State), GS2State);
+in({'EXIT', Parent, _R} = Input, GS2State = #gs2_state { parent = Parent }) ->
+    in(Input, infinity, GS2State);
+in({system, _From, _Req} = Input, GS2State) ->
+    in(Input, infinity, GS2State);
+in(Input, GS2State = #gs2_state { prioritise_info = PI }) ->
+    in(Input, PI(Input, GS2State), GS2State).
+
+in(Input, Priority, GS2State = #gs2_state { queue = Queue }) ->
+    GS2State # gs2_state { queue = priority_queue:in(Input, Priority, Queue) }.
 
 process_msg({system, From, Req},
             GS2State = #gs2_state { parent = Parent, debug  = Debug }) ->
