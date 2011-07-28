@@ -612,27 +612,19 @@ in(Input, GS2State = #gs2_state { prioritise_info = PI, queue = Queue }) ->
     GS2State #gs2_state { queue = priority_queue:in(
                                     Input, PI(Input, GS2State), Queue) }.
 
-process_msg(Msg,
-            GS2State = #gs2_state { parent = Parent,
-                                    name   = Name,
-                                    debug  = Debug }) ->
-    case Msg of
-        {system, From, Req} ->
-            sys:handle_system_msg(
-              Req, From, Parent, ?MODULE, Debug,
-              GS2State);
-        %% gen_server puts Hib on the end as the 7th arg, but that
-        %% version of the function seems not to be documented so
-        %% leaving out for now.
-        {'EXIT', Parent, Reason} ->
-            terminate(Reason, Msg, GS2State);
-        _Msg when Debug =:= [] ->
-            handle_msg(Msg, GS2State);
-        _Msg ->
-            Debug1 = sys:handle_debug(Debug, fun print_event/3,
-                                      Name, {in, Msg}),
-            handle_msg(Msg, GS2State #gs2_state { debug = Debug1 })
-    end.
+process_msg({system, From, Req},
+            GS2State = #gs2_state { parent = Parent, debug  = Debug }) ->
+    sys:handle_system_msg(Req, From, Parent, ?MODULE, Debug, GS2State);
+process_msg({'EXIT', Parent, Reason} = Msg,
+            GS2State = #gs2_state { parent = Parent }) ->
+    %% gen_server puts Hib on the end as the 7th arg, but that version
+    %% of the fun seems not to be documented so leaving out for now.
+    terminate(Reason, Msg, GS2State);
+process_msg(Msg, GS2State = #gs2_state { debug  = [] }) ->
+    handle_msg(Msg, GS2State);
+process_msg(Msg, GS2State = #gs2_state { name = Name, debug  = Debug }) ->
+    Debug1 = sys:handle_debug(Debug, fun print_event/3, Name, {in, Msg}),
+    handle_msg(Msg, GS2State #gs2_state { debug = Debug1 }).
 
 %%% ---------------------------------------------------
 %%% Send/recive functions
