@@ -90,12 +90,8 @@ len({pqueue, Queues}) ->
 to_list({queue, In, Out}) when is_list(In), is_list(Out) ->
     [{0, V} || V <- Out ++ lists:reverse(In, [])];
 to_list({pqueue, Queues}) ->
-    [{P1, V} || {P, Q} <- Queues,
-                case P of
-                    infinity -> P1 = P, true;
-                    _        -> P1 = -P, true
-                end,
-                {0, V} <- to_list(Q)].
+    [{maybe_negate_priority(P), V} || {P, Q} <- Queues,
+                                      {0, V} <- to_list(Q)].
 
 in(Item, Q) ->
     in(Item, 0, Q).
@@ -109,10 +105,7 @@ in(X, Priority, _Q = {queue, [], []}) ->
 in(X, Priority, Q = {queue, _, _}) ->
     in(X, Priority, {pqueue, [{0, Q}]});
 in(X, Priority, {pqueue, Queues}) ->
-    P = case Priority of
-            infinity -> Priority;
-            _        -> -Priority
-        end,
+    P = maybe_negate_priority(Priority),
     {pqueue, case lists:keysearch(P, 1, Queues) of
                  {value, {_, Q}} ->
                      lists:keyreplace(P, 1, Queues, {P, in(X, Q)});
@@ -193,3 +186,6 @@ r2f([])      -> {queue, [], []};
 r2f([_] = R) -> {queue, [], R};
 r2f([X,Y])   -> {queue, [X], [Y]};
 r2f([X,Y|R]) -> {queue, [X,Y], lists:reverse(R, [])}.
+
+maybe_negate_priority(infinity) -> infinity;
+maybe_negate_priority(P)        -> -P.
