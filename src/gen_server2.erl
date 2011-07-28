@@ -608,6 +608,13 @@ in({'$gen_call', From, Msg}, GS2State = #gs2_state { prioritise_call = PC,
     GS2State #gs2_state { queue = priority_queue:in(
                                     {'$gen_call', From, Msg},
                                     PC(Msg, From, GS2State), Queue) };
+in({'EXIT', Parent, Reason},
+   GS2State = #gs2_state { parent = Parent, queue = Queue }) ->
+    GS2State #gs2_state { queue = priority_queue:in(
+                                    {'EXIT', Parent, Reason}, infinity, Queue) };
+in({system, From, Req}, GS2State = #gs2_state { queue = Queue }) ->
+    GS2State #gs2_state { queue = priority_queue:in(
+                                    {system, From, Req}, infinity, Queue) };
 in(Input, GS2State = #gs2_state { prioritise_info = PI, queue = Queue }) ->
     GS2State #gs2_state { queue = priority_queue:in(
                                     Input, PI(Input, GS2State), Queue) }.
