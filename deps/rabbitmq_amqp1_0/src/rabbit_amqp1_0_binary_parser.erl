@@ -46,10 +46,14 @@ parse_primitive(?FIXED_1, 0, <<Value:8/unsigned,Rest/binary>>) ->
     {{ubyte, Value}, Rest};
 parse_primitive(?FIXED_2, 0, <<Value:16/unsigned,Rest/binary>>) ->
     {{ushort, Value}, Rest};
+parse_primitive(?FIXED_0, 3, Rest) ->
+    {{uint, 0}, Rest};
 parse_primitive(?FIXED_1, 2, <<Value:8/unsigned,Rest/binary>>) ->
     {{uint, Value}, Rest};
 parse_primitive(?FIXED_4, 0, <<Value:32/unsigned,Rest/binary>>) ->
     {{uint, Value}, Rest};
+parse_primitive(?FIXED_0, 4, Rest) ->
+    {{ulong, 0}, Rest};
 parse_primitive(?FIXED_1, 3, <<Value:8/unsigned,Rest/binary>>) ->
     {{ulong, Value}, Rest};
 parse_primitive(?FIXED_8, 0, <<Value:64/unsigned,Rest/binary>>) ->
@@ -107,6 +111,8 @@ parse_primitive(?VAR_4, 3,
                 <<Size:32/unsigned,Value:Size/binary,Rest/binary>>) ->
     {{symbol, binary_to_list(Value)}, Rest};
 
+parse_primitive(?FIXED_0, 5, Rest) ->
+    {{list, []}, Rest};
 parse_primitive(?COMPOUND_1, 0,
                 <<Size:8/unsigned,
                  CountAndValue:Size/binary,Rest/binary>>) ->

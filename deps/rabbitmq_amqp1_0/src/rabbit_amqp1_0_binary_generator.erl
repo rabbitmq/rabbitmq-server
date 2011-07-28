@@ -29,7 +29,7 @@ generate(null) -> <<?FIXED_0:4,0:4>>;
 generate(true) -> <<?FIXED_0:4,1:4>>;
 generate(false) -> <<?FIXED_0:4,2:4>>;
 
-%% most integral types have a compact encoding as a byte; this is in
+%% some integral types have a compact encoding as a byte; this is in
 %% particular for the descriptors of AMQP types, which have the domain
 %% bits set to zero and values < 256.
 generate({ubyte, Value}) -> <<?FIXED_1:4,0:4,Value:8/unsigned>>;
@@ -77,6 +77,8 @@ generate({utf16, Value}) -> [ <<?VAR_1:4,2:4,(size(Value)):8>>, Value ];
 generate({symbol, Value}) -> [ <<?VAR_1:4,3:4,(length(Value)):8>>,
                                list_to_binary(Value) ];
 
+generate({list, []}) ->
+    <<?FIXED_0:4, 5:4>>;
 generate({list, List}) ->
     Count = length(List),
     Compound = lists:map(fun generate/1, List),
