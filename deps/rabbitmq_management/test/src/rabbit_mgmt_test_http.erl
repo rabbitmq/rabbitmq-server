@@ -100,6 +100,7 @@ users_test() ->
     http_put_raw("/users/myuser", "Something not JSON", ?BAD_REQUEST),
     http_put("/users/myuser", [{flim, <<"flam">>}], ?BAD_REQUEST),
     http_put("/users/myuser", [{tags, <<"management">>}], ?NO_CONTENT),
+    http_put("/users/myuser", [{password_hash, <<"not_hash">>}], ?BAD_REQUEST),
     http_put("/users/myuser", [{password_hash,
                                 <<"IECV6PZI/Invh0DL187KFpkO5Jc=">>},
                                {tags, <<"management">>}], ?NO_CONTENT),
@@ -862,9 +863,13 @@ publish_fail_test() ->
     ok.
 
 publish_base64_test() ->
-    Msg = msg(<<"myqueue">>, [], <<"YWJjZA==">>, <<"base64">>),
+    Msg     = msg(<<"myqueue">>, [], <<"YWJjZA==">>, <<"base64">>),
+    BadMsg1 = msg(<<"myqueue">>, [], <<"flibble">>,  <<"base64">>),
+    BadMsg2 = msg(<<"myqueue">>, [], <<"YWJjZA==">>, <<"base99">>),
     http_put("/queues/%2f/myqueue", [], ?NO_CONTENT),
     http_post("/exchanges/%2f/amq.default/publish", Msg, ?OK),
+    http_post("/exchanges/%2f/amq.default/publish", BadMsg1, ?BAD_REQUEST),
+    http_post("/exchanges/%2f/amq.default/publish", BadMsg2, ?BAD_REQUEST),
     [Msg2] = http_post("/queues/%2f/myqueue/get", [{requeue,  false},
                                                    {count,    1},
                                                    {encoding, auto}], ?OK),
