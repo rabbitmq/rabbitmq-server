@@ -151,13 +151,13 @@ cluster(ClusterNodes, Force) ->
     end,
 
     %% Join the cluster
-    rabbit_misc:ensure_ok(mnesia:start(), cannot_start_mnesia),
+    start_mnesia(),
     try
         ok = init_db(ClusterNodes, Force,
                      fun maybe_upgrade_local_or_record_desired/0),
         ok = create_cluster_nodes_config(ClusterNodes)
     after
-        mnesia:stop()
+        stop_mnesia()
     end,
     ok.
 
@@ -522,9 +522,7 @@ init_db(ClusterNodes, Force, SecondaryPostMnesiaFun) ->
                     %% We've taken down mnesia, so ram nodes will need
                     %% to re-sync
                     case is_disc_node() of
-                        false -> rabbit_misc:ensure_ok(mnesia:start(),
-                                                       cannot_start_mnesia),
-                                 ensure_mnesia_running(),
+                        false -> start_mnesia(),
                                  mnesia:change_config(extra_db_nodes,
                                                       ProperClusterNodes),
                                  wait_for_replicated_tables();
@@ -574,7 +572,7 @@ ensure_version_ok({error, _}) ->
     ok = rabbit_version:record_desired().
 
 create_schema(Type) ->
-    mnesia:stop(),
+    stop_mnesia(),
     case Type of
         disc -> rabbit_misc:ensure_ok(mnesia:create_schema([node()]),
                                       cannot_create_schema);
@@ -582,7 +580,7 @@ create_schema(Type) ->
                 rabbit_misc:ensure_ok(mnesia:delete_schema([node()]),
                                       cannot_delete_schema)
     end,
-    rabbit_misc:ensure_ok(mnesia:start(), cannot_start_mnesia),
+    start_mnesia(),
     ok = create_tables(Type),
     ensure_schema_integrity(),
     ok = rabbit_version:record_desired().
@@ -593,7 +591,7 @@ should_be_disc_node(ClusterNodes) ->
     ClusterNodes == [] orelse lists:member(node(), ClusterNodes).
 
 move_db() ->
-    mnesia:stop(),
+    stop_mnesia(),
     MnesiaDir = filename:dirname(dir() ++ "/"),
     {{Year, Month, Day}, {Hour, Minute, Second}} = erlang:universaltime(),
     BackupDir = lists:flatten(
@@ -611,7 +609,7 @@ move_db() ->
                                           MnesiaDir, BackupDir, Reason}})
     end,
     ensure_mnesia_dir(),
-    rabbit_misc:ensure_ok(mnesia:start(), cannot_start_mnesia),
+    start_mnesia(),
     ok.
 
 copy_db(Destination) ->
@@ -702,14 +700,14 @@ reset(Force) ->
         true  -> ok;
         false ->
             ensure_mnesia_dir(),
-            rabbit_misc:ensure_ok(mnesia:start(), cannot_start_mnesia),
+            start_mnesia(),
             {Nodes, RunningNodes} =
                 try
                     ok = init(),
                     {all_clustered_nodes() -- [Node],
                      running_clustered_nodes() -- [Node]}
                 after
-                    mnesia:stop()
+                    stop_mnesia()
                 end,
             leave_cluster(Nodes, RunningNodes),
             rabbit_misc:ensure_ok(mnesia:delete_schema([Node]),
@@ -744,3 +742,10 @@ leave_cluster(Nodes, RunningNodes) ->
                                 Nodes, RunningNodes}})
     end.
 
+start_mnesia() ->
+    rabbit_misc:ensure_ok(mnesia:start(), cannot_start_mnesia),
+    ensure_mnesia_running().
+
+stop_mnesia() ->
+    stopped = mnesia:stop(),
+    ensure_mnesia_not_running().
