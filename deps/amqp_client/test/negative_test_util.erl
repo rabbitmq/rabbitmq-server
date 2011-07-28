@@ -21,14 +21,15 @@
 
 -compile(export_all).
 
-non_existent_exchange_test(Connection) ->
+non_existent_exchange_test() ->
+    Connection = test_util:new_connection(),
     X = test_util:uuid(),
-    RoutingKey = <<"a">>, 
+    RoutingKey = <<"a">>,
     Payload = <<"foobar">>,
     {ok, Channel} = amqp_connection:open_channel(Connection),
     {ok, OtherChannel} = amqp_connection:open_channel(Connection),
     amqp_channel:call(Channel, #'exchange.declare'{exchange = X}),
-    
+
     %% Deliberately mix up the routingkey and exchange arguments
     Publish = #'basic.publish'{exchange = RoutingKey, routing_key = X},
     amqp_channel:call(Channel, Publish, #amqp_msg{payload = Payload}),
@@ -41,7 +42,8 @@ non_existent_exchange_test(Connection) ->
                           #'exchange.declare'{exchange = test_util:uuid()}),
     amqp_connection:close(Connection).
 
-bogus_rpc_test(Connection) ->
+bogus_rpc_test() ->
+    Connection = test_util:new_connection(),
     X = test_util:uuid(),
     Q = test_util:uuid(),
     R = test_util:uuid(),
@@ -59,7 +61,8 @@ bogus_rpc_test(Connection) ->
     ?assertMatch(true, is_process_alive(Connection)),
     amqp_connection:close(Connection).
 
-hard_error_test(Connection) ->
+hard_error_test() ->
+    Connection = test_util:new_connection(),
     {ok, Channel} = amqp_connection:open_channel(Connection),
     {ok, OtherChannel} = amqp_connection:open_channel(Connection),
     OtherChannelMonitor = erlang:monitor(process, OtherChannel),
@@ -84,7 +87,8 @@ hard_error_test(Connection) ->
 %% An error in a channel should result in the death of the entire connection.
 %% The death of the channel is caused by an error in generating the frames
 %% (writer dies) - only in the network case
-channel_writer_death_test(Connection) ->
+channel_writer_death_test() ->
+    Connection = test_util:new_connection(just_network),
     {ok, Channel} = amqp_connection:open_channel(Connection),
     Publish = #'basic.publish'{routing_key = <<>>, exchange = <<>>},
     Message = #amqp_msg{props = <<>>, payload = <<>>},
@@ -96,7 +100,8 @@ channel_writer_death_test(Connection) ->
 %% An error in the channel process should result in the death of the entire
 %% connection. The death of the channel is caused by making a call with an
 %% invalid message to the channel process
-channel_death_test(Connection) ->
+channel_death_test() ->
+    Connection = test_util:new_connection(),
     {ok, Channel} = amqp_connection:open_channel(Connection),
     ?assertExit(_, amqp_channel:call(Channel, bogus_message)),
     test_util:wait_for_death(Channel),
@@ -105,7 +110,8 @@ channel_death_test(Connection) ->
 
 %% Attempting to send a shortstr longer than 255 bytes in a property field
 %% should fail - this only applies to the network case
-shortstr_overflow_property_test(Connection) ->
+shortstr_overflow_property_test() ->
+    Connection = test_util:new_connection(just_network),
     {ok, Channel} = amqp_connection:open_channel(Connection),
     SentString = << <<"k">> || _ <- lists:seq(1, 340)>>,
     Q = test_util:uuid(), X = test_util:uuid(), Key = test_util:uuid(),
@@ -121,7 +127,8 @@ shortstr_overflow_property_test(Connection) ->
 
 %% Attempting to send a shortstr longer than 255 bytes in a method's field
 %% should fail - this only applies to the network case
-shortstr_overflow_field_test(Connection) ->
+shortstr_overflow_field_test() ->
+    Connection = test_util:new_connection(just_network),
     {ok, Channel} = amqp_connection:open_channel(Connection),
     SentString = << <<"k">> || _ <- lists:seq(1, 340)>>,
     Q = test_util:uuid(), X = test_util:uuid(), Key = test_util:uuid(),
@@ -137,7 +144,8 @@ shortstr_overflow_field_test(Connection) ->
 %% Simulates a #'connection.open'{} method received on non-zero channel. The
 %% connection is expected to send a '#connection.close{}' to the server with
 %% reply code command_invalid
-command_invalid_over_channel_test(Connection) ->
+command_invalid_over_channel_test() ->
+    Connection = test_util:new_connection(),
     {ok, Channel} = amqp_connection:open_channel(Connection),
     MonitorRef = erlang:monitor(process, Connection),
     case amqp_connection:info(Connection, [type]) of
@@ -152,7 +160,8 @@ command_invalid_over_channel_test(Connection) ->
 %% Simulates a #'basic.ack'{} method received on channel zero. The connection
 %% is expected to send a '#connection.close{}' to the server with reply code
 %% command_invalid - this only applies to the network case
-command_invalid_over_channel0_test(Connection) ->
+command_invalid_over_channel0_test() ->
+    Connection = test_util:new_connection(just_network),
     gen_server:cast(Connection, {method, #'basic.ack'{}, none}),
     MonitorRef = erlang:monitor(process, Connection),
     assert_down_with_error(MonitorRef, command_invalid),
@@ -167,23 +176,20 @@ assert_down_with_error(MonitorRef, CodeAtom) ->
         exit(did_not_die)
     end.
 
-non_existent_user_test(StartConnectionFun) ->
-    ?assertMatch({error, auth_failure}, StartConnectionFun(test_util:uuid(),
-                                                           test_util:uuid(),
-                                                           test_util:uuid())).
+non_existent_user_test() ->
+    Params = [{username, test_util:uuid()}, {password, test_util:uuid()}],
+    ?assertMatch({error, auth_failure}, test_util:new_connection(Params)).
 
-invalid_password_test(StartConnectionFun) ->
-    ?assertMatch({error, auth_failure}, StartConnectionFun(<<"guest">>,
-                                                           test_util:uuid(),
-                                                           test_util:uuid())).
+invalid_password_test() ->
+    Params = [{username, <<"guest">>}, {password, test_util:uuid()}],
+    ?assertMatch({error, auth_failure},
+                 test_util:new_connection(just_network, Params)).
 
-non_existent_vhost_test(StartConnectionFun) ->
-    ?assertMatch({error, access_refused}, StartConnectionFun(<<"guest">>,
-                                                             <<"guest">>,
-                                                             test_util:uuid())).
+non_existent_vhost_test() ->
+    Params = [{virtual_host, test_util:uuid()}],
+    ?assertMatch({error, access_refused}, test_util:new_connection(Params)).
 
-no_permission_test(StartConnectionFun) ->
-    ?assertMatch({error, access_refused},
-                 StartConnectionFun(<<"test_user_no_perm">>,
-                                    <<"test_user_no_perm">>,
-                                    <<"/">>)).
+no_permission_test() ->
+    Params = [{username, <<"test_user_no_perm">>},
+              {password, <<"test_user_no_perm">>}],
+    ?assertMatch({error, access_refused}, test_util:new_connection(Params)).
