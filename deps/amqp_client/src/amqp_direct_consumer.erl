@@ -54,7 +54,7 @@
 
 %% @private
 init([ConsumerPid]) ->
-    monitor(process, ConsumerPid),
+    erlang:monitor(process, ConsumerPid),
     {ok, ConsumerPid}.
 
 %% @private

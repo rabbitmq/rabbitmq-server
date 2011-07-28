@@ -101,7 +101,8 @@ handle_consume(BasicConsume, Pid, State = #state{consumers = Consumers,
         {true, #'basic.consume'{nowait = true}} ->
             {ok, State#state
              {consumers = dict:store(Tag, Pid, Consumers),
-              monitors  = dict:store(Pid, monitor(process, Pid), Monitors)}};
+              monitors  = dict:store(
+                            Pid, erlang:monitor(process, Pid), Monitors)}};
         {true, #'basic.consume'{nowait = false}} ->
             {ok, State#state{unassigned = Pid}};
         {false, #'basic.consume'{nowait = true}} ->
@@ -118,11 +119,11 @@ handle_consume_ok(BasicConsumeOk, _BasicConsume,
                                  consumers  = Consumers,
                                  monitors   = Monitors})
   when is_pid(Pid) ->
-    State1 = State#state{consumers  =
-                             dict:store(tag(BasicConsumeOk), Pid, Consumers),
-                         monitors   =
-                             dict:store(Pid, monitor(process, Pid), Monitors),
-                         unassigned = undefined},
+    State1 =
+        State#state{
+          consumers  = dict:store(tag(BasicConsumeOk), Pid, Consumers),
+          monitors   = dict:store(Pid, erlang:monitor(process, Pid), Monitors),
+          unassigned = undefined},
     deliver(BasicConsumeOk, State1),
     {ok, State1}.
 
@@ -176,13 +177,13 @@ handle_call({register_default_consumer, Pid}, _From,
                            monitors         = Monitors}) ->
     case PrevPid of
         none -> ok;
-        _    -> demonitor(dict:fetch(PrevPid, Monitors)),
+        _    -> erlang:demonitor(dict:fetch(PrevPid, Monitors)),
                 dict:erase(PrevPid, Monitors)
     end,
     {reply, ok,
      State#state{default_consumer = Pid,
-                 monitors = dict:store(Pid, monitor(process, Pid),
-                                       Monitors)}}.
+                 monitors = dict:store(
+                              Pid, erlang:monitor(process, Pid), Monitors)}}.
 
 %% @private
 terminate(_Reason, State) ->
@@ -209,7 +210,7 @@ do_cancel(Cancel, State = #state{consumers = Consumers,
     Tag = tag(Cancel),
     case dict:find(Tag, Consumers) of
         {ok, Pid} -> MRef = dict:fetch(Pid, Monitors),
-                     demonitor(MRef),
+                     erlang:demonitor(MRef),
                      State#state{consumers = dict:erase(Tag, Consumers),
                                  monitors  = dict:erase(Pid, Monitors)};
         error     -> %% Untracked consumer. Do nothing.
