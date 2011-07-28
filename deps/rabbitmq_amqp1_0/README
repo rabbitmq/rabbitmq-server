@@ -1,9 +1,0 @@
-Currently you need bug23749 of rabbitmq-server and rabbitmq-codegen.
-
-You will then need to add config like:
-
-  {rabbit_amqp1_0, [ {tcp_listeners, [5673] }]}
-
-to your rabbitmq.config.
-
-Note that AMQP 1.0 has not yet been finalised and is subject to change.
