@@ -98,7 +98,7 @@ $(DIST_DIR)/$(COMMON_PACKAGE_EZ): $(BROKER_DEPS) $(COMMON_PACKAGE).app | $(DIST_
 	    ( cp $(BROKER_DIR)/ebin/$(DEP).beam $(DIST_DIR)/$(COMMON_PACKAGE_DIR)/$(EBIN_DIR)/ \
 	    );)
 	cp $(BROKER_DIR)/include/*.hrl $(DIST_DIR)/$(COMMON_PACKAGE_DIR)/$(INCLUDE_DIR)/
-	(cd $(DIST_DIR); zip -r $(COMMON_PACKAGE_EZ) $(COMMON_PACKAGE_DIR))
+	(cd $(DIST_DIR); zip -q -r $(COMMON_PACKAGE_EZ) $(COMMON_PACKAGE_DIR))
 
 source_tarball: $(DIST_DIR)/$(COMMON_PACKAGE_EZ) $(EBIN_DIR)/$(PACKAGE).app | $(DIST_DIR)
 	mkdir -p $(DIST_DIR)/$(SOURCE_PACKAGE_DIR)/$(DIST_DIR)

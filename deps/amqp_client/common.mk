@@ -159,7 +159,7 @@ $(DIST_DIR)/$(PACKAGE_NAME_EZ): $(TARGETS) $(EBIN_DIR)/$(PACKAGE).app | $(DIST_D
 	cp -r $(EBIN_DIR)/*.app $(DIST_DIR)/$(PACKAGE_DIR)/$(EBIN_DIR)
 	mkdir -p $(DIST_DIR)/$(PACKAGE_DIR)/$(INCLUDE_DIR)
 	cp -r $(INCLUDE_DIR)/* $(DIST_DIR)/$(PACKAGE_DIR)/$(INCLUDE_DIR)
-	(cd $(DIST_DIR); zip -r $(PACKAGE_NAME_EZ) $(PACKAGE_DIR))
+	(cd $(DIST_DIR); zip -q -r $(PACKAGE_NAME_EZ) $(PACKAGE_DIR))
 
 package: $(DIST_DIR)/$(PACKAGE_NAME_EZ)
 
@@ -170,7 +170,7 @@ package: $(DIST_DIR)/$(PACKAGE_NAME_EZ)
 $(DEPS_DIR)/$(COMMON_PACKAGE_DIR): $(DIST_DIR)/$(COMMON_PACKAGE_EZ) | $(DEPS_DIR)
 	rm -rf $(DEPS_DIR)/$(COMMON_PACKAGE_DIR)
 	mkdir -p $(DEPS_DIR)/$(COMMON_PACKAGE_DIR)
-	unzip -o $< -d $(DEPS_DIR)
+	unzip -q -o $< -d $(DEPS_DIR)
 
 $(DEPS_FILE): $(SOURCES) $(INCLUDES)
 	rm -f $@
