@@ -1341,7 +1341,7 @@ list_sorted_file_names(Dir, Ext) ->
 %% message cache helper functions
 %%----------------------------------------------------------------------------
 
-update_msg_cache(CacheEts, MsgId, Msg, N) ->
+update_msg_cache(CacheEts, MsgId, Msg, N) when N =:= -1 orelse N =:= 1 ->
     case ets:insert_new(CacheEts, {MsgId, Msg, N}) of
         true  -> ok;
         false -> safe_ets_update_counter(
