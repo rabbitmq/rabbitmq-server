@@ -194,8 +194,6 @@ nodes_of_type(Type) ->
     %% This function should return the nodes of a certain type (ram,
     %% disc or disc_only) in the current cluster.  The type of nodes
     %% is determined when the cluster is initially configured.
-    %% Specifically, we check whether the schema, which we know will
-    %% be written to disk on a disc node, is stored on disk or in RAM.
     mnesia:table_info(schema, Type).
 
 %% The tables aren't supposed to be on disk on a ram node
