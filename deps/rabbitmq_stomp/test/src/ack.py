@@ -86,7 +86,7 @@ class TestAck(base.BaseTest):
             listener3 = base.WaitableListener()
             conn3.set_listener('', listener3)
             conn3.subscribe(destination=d)
-            self.assertTrue(listener3.await(3),
+            self.assertTrue(listener3.await(20),
                              "Expected to see a message. ACK not working?")
             self.assertEquals("test1", listener3.messages[0]['message'])
         finally:

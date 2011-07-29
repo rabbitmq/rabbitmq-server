@@ -22,7 +22,7 @@ class TestReliability(base.BaseTest):
                 pub_conn.send(msg + str(x), destination=d)
 
             pub_conn.close_socket()
-            self.assertTrue(listener.await(10))
+            self.assertTrue(listener.await(30))
             self.assertEquals(count, len(listener.messages))
         finally:
             if pub_conn.is_connected():
