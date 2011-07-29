@@ -98,21 +98,27 @@ info_keys() ->
 %% Handshake
 %%---------------------------------------------------------------------------
 
-connect(AmqpParams = #amqp_params_network{ssl_options = none,
-                                          host        = Host,
-                                          port        = Port},
-        SIF, ChMgr, State) ->
-    case gen_tcp:connect(Host, Port, ?RABBIT_TCP_OPTS) of
+connect(AmqpParams = #amqp_params_network{host = Host}, SIF, ChMgr, State) ->
+    case gethostaddr(Host) of
+        []     -> {error, unknown_host};
+        [AF|_] -> do_connect(AF, AmqpParams, SIF, ChMgr, State)
+    end.
+
+do_connect({Addr, Family},
+           AmqpParams = #amqp_params_network{ssl_options = none,
+                                             port        = Port},
+           SIF, ChMgr, State) ->
+    case gen_tcp:connect(Addr, Port, [Family | ?RABBIT_TCP_OPTS]) of
         {ok, Sock}     -> try_handshake(AmqpParams, SIF, ChMgr,
                                         State#state{sock = Sock});
         {error, _} = E -> E
     end;
-connect(AmqpParams = #amqp_params_network{ssl_options = SslOpts,
-                                          host        = Host,
-                                          port        = Port},
-        SIF, ChMgr, State) ->
+do_connect({Addr, Family},
+           AmqpParams = #amqp_params_network{ssl_options = SslOpts,
+                                             port        = Port},
+           SIF, ChMgr, State) ->
     rabbit_misc:start_applications([crypto, public_key, ssl]),
-    case gen_tcp:connect(Host, Port, ?RABBIT_TCP_OPTS) of
+    case gen_tcp:connect(Addr, Port, [Family | ?RABBIT_TCP_OPTS]) of
         {ok, Sock} ->
             case ssl:connect(Sock, SslOpts) of
                 {ok, SslSock} ->
@@ -125,6 +131,11 @@ connect(AmqpParams = #amqp_params_network{ssl_options = SslOpts,
         {error, _} = E ->
             E
     end.
+
+gethostaddr(Host) ->
+    Lookups = [{Family, inet:getaddr(Host, Family)}
+               || Family <- [inet, inet6]],
+    [{IP, Family} || {Family, {ok, IP}} <- Lookups].
 
 try_handshake(AmqpParams, SIF, ChMgr, State) ->
     try handshake(AmqpParams, SIF, ChMgr, State) of
