@@ -1080,6 +1080,7 @@ remove_message(MsgId, CRef,
                                   cur_file_cache_ets = CurFileCacheEts }) ->
     case should_mask_action(CRef, MsgId, State) of
         {true, _Location} ->
+            ok = update_msg_cache(CurFileCacheEts, MsgId, undefined, -1),
             State;
         {false_if_increment, #msg_location { ref_count = 0 }} ->
             %% CRef has tried to both write and remove this msg
