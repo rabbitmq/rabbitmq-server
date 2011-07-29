@@ -743,8 +743,10 @@ handle_cast({write, CRef, MsgId},
                           write_message(CRef, MsgId, Msg, State1);
                       {ignore, CurFile,
                        State1 = #msstate { current_file = CurFile }} ->
+                          ets:update_counter(CurFileCacheEts, MsgId, {3, +1}),
                           State1;
                       {ignore, _File, State1} ->
+                          ets:update_counter(CurFileCacheEts, MsgId, {3, +1}),
                           true = ets:delete_object(CurFileCacheEts,
                                                    {MsgId, Msg, 0}),
                           State1;
@@ -769,7 +771,6 @@ handle_cast({write, CRef, MsgId},
                 %% and now we're back to -1. So we need to do nothing
                 %% here, other than to undo the -1 we just attempted.
                 ets:update_counter(CurFileCacheEts, MsgId, {3, +1}),
-                true = ets:match_delete(CurFileCacheEts, {MsgId, '_', 0}),
                 noreply(State)
         end
     catch error:badarg ->
@@ -1122,7 +1123,6 @@ remove_message(MsgId, CRef,
             %% try to cope with negative refcounts, instead, again we
             %% just cancel out a pending write.
             ok = update_msg_cache(CurFileCacheEts, MsgId, undefined, -1),
-            true = ets:match_delete(CurFileCacheEts, {MsgId, '_', 0}),
             State
     end.
 
