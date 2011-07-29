@@ -20,6 +20,8 @@ MANPAGES=$(patsubst %.xml, %.gz, $(wildcard $(DOCS_DIR)/*.[0-9].xml))
 WEB_MANPAGES=$(patsubst %.xml, %.man.xml, $(wildcard $(DOCS_DIR)/*.[0-9].xml) $(DOCS_DIR)/rabbitmq-service.xml)
 USAGES_XML=$(DOCS_DIR)/rabbitmqctl.1.xml
 USAGES_ERL=$(foreach XML, $(USAGES_XML), $(call usage_xml_to_erl, $(XML)))
+QC_MODULES := rabbit_backing_queue_qc
+QC_TRIALS ?= 100
 
 ifeq ($(shell python -c 'import simplejson' 2>/dev/null && echo yes),yes)
 PYTHON=python
@@ -45,8 +47,14 @@ ifndef USE_SPECS
 USE_SPECS:=$(shell erl -noshell -eval 'io:format([list_to_integer(X) || X <- string:tokens(erlang:system_info(version), ".")] >= [5,8,4]), halt().')
 endif
 
+ifndef USE_PROPER_QC
+# PropEr needs to be installed for property checking
+# http://proper.softlab.ntua.gr/
+USE_PROPER_QC:=$(shell erl -noshell -eval 'io:format({module, proper} =:= code:ensure_loaded(proper)), halt().')
+endif
+
 #other args: +native +"{hipe,[o3,verbose]}" -Ddebug=true +debug_info +no_strict_record_tests
-ERLC_OPTS=-I $(INCLUDE_DIR) -o $(EBIN_DIR) -Wall -v +debug_info $(if $(filter true,$(USE_SPECS)),-Duse_specs)
+ERLC_OPTS=-I $(INCLUDE_DIR) -o $(EBIN_DIR) -Wall -v +debug_info $(call boolean_macro,$(USE_SPECS),use_specs) $(call boolean_macro,$(USE_PROPER_QC),use_proper_qc)
 
 VERSION=0.0.0
 TARBALL_NAME=rabbitmq-server-$(VERSION)
@@ -67,6 +75,10 @@ endef
 
 define usage_dep
   $(call usage_xml_to_erl, $(1)): $(1) $(DOCS_DIR)/usage.xsl
+endef
+
+define boolean_macro
+$(if $(filter true,$(1)),-D$(2))
 endef
 
 ifneq "$(SBIN_DIR)" ""
@@ -164,6 +176,9 @@ run-node: all
 run-tests: all
 	OUT=$$(echo "rabbit_tests:all_tests()." | $(ERL_CALL)) ; \
 	  echo $$OUT ; echo $$OUT | grep '^{ok, passed}$$' > /dev/null
+
+run-qc: all
+	$(foreach MOD,$(QC_MODULES),./quickcheck $(RABBITMQ_NODENAME) $(MOD) $(QC_TRIALS))
 
 start-background-node:
 	$(BASIC_SCRIPT_ENVIRONMENT_SETTINGS) \
@@ -314,3 +329,4 @@ ifneq "$(strip $(patsubst clean%,,$(patsubst %clean,,$(TESTABLEGOALS))))" ""
 -include $(DEPS_FILE)
 endif
 
+.PHONY: run-qc

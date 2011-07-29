@@ -49,7 +49,7 @@
 -record(lim, {prefetch_count = 0,
               ch_pid,
               blocked = false,
-              queues = dict:new(), % QPid -> {MonitorRef, Notify}
+              queues = orddict:new(), % QPid -> {MonitorRef, Notify}
               volume = 0}).
 %% 'Notify' is a boolean that indicates whether a queue should be
 %% notified of a change in the limit or volume that may allow it to
@@ -196,31 +196,30 @@ limit_reached(#lim{prefetch_count = Limit, volume = Volume}) ->
 blocked(#lim{blocked = Blocked}) -> Blocked.
 
 remember_queue(QPid, State = #lim{queues = Queues}) ->
-    case dict:is_key(QPid, Queues) of
+    case orddict:is_key(QPid, Queues) of
         false -> MRef = erlang:monitor(process, QPid),
-                 State#lim{queues = dict:store(QPid, {MRef, false}, Queues)};
+                 State#lim{queues = orddict:store(QPid, {MRef, false}, Queues)};
         true  -> State
     end.
 
 forget_queue(QPid, State = #lim{ch_pid = ChPid, queues = Queues}) ->
-    case dict:find(QPid, Queues) of
-        {ok, {MRef, _}} ->
-            true = erlang:demonitor(MRef),
-            ok = rabbit_amqqueue:unblock(QPid, ChPid),
-            State#lim{queues = dict:erase(QPid, Queues)};
-        error -> State
+    case orddict:find(QPid, Queues) of
+        {ok, {MRef, _}} -> true = erlang:demonitor(MRef),
+                           ok = rabbit_amqqueue:unblock(QPid, ChPid),
+                           State#lim{queues = orddict:erase(QPid, Queues)};
+        error           -> State
     end.
 
 limit_queue(QPid, State = #lim{queues = Queues}) ->
     UpdateFun = fun ({MRef, _}) -> {MRef, true} end,
-    State#lim{queues = dict:update(QPid, UpdateFun, Queues)}.
+    State#lim{queues = orddict:update(QPid, UpdateFun, Queues)}.
 
 notify_queues(State = #lim{ch_pid = ChPid, queues = Queues}) ->
     {QList, NewQueues} =
-        dict:fold(fun (_QPid, {_, false}, Acc) -> Acc;
-                      (QPid, {MRef, true}, {L, D}) ->
-                          {[QPid | L], dict:store(QPid, {MRef, false}, D)}
-                  end, {[], Queues}, Queues),
+        orddict:fold(fun (_QPid, {_, false}, Acc) -> Acc;
+                         (QPid, {MRef, true}, {L, D}) ->
+                             {[QPid | L], orddict:store(QPid, {MRef, false}, D)}
+                     end, {[], Queues}, Queues),
     case length(QList) of
         0 -> ok;
         L ->
