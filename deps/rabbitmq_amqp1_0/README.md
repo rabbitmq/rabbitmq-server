@@ -15,6 +15,8 @@ are), with broadly the same semantics as you would get with 0-9-1.
 
 The plugin uses the standard RabbitMQ plugin build environment; see <http://www.rabbitmq.com/plugin-development.html>.
 
+Currently you need bug23749 of rabbitmq-server and rabbitmq-codegen.
+
 By default, it will listen on port 5673.  However, you may wish to
 listen on the standard AMQP port, 5672.  To do this, give RabbitMQ a
 configuration that looks like this:
