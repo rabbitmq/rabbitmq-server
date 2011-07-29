@@ -2,7 +2,7 @@ VERSION=0.0.0
 ZIP=../windows/rabbitmq-server-windows-$(VERSION)
 
 dist: rabbitmq-$(VERSION).nsi rabbitmq_server-$(VERSION)
-	makensis rabbitmq-$(VERSION).nsi
+	makensis -V2 rabbitmq-$(VERSION).nsi
 
 rabbitmq-$(VERSION).nsi: rabbitmq_nsi.in
 	sed \
