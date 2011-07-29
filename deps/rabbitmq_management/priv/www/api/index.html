@@ -498,12 +498,14 @@ or:
         <td></td>
         <td></td>
         <td class="path">/api/aliveness-test/<i>vhost</i></td>
-        <td>Declares a test queue, then publishes and consumes a
-        message. Does not delete the queue to avoid creating many
-        mnesia transactions when this is repeatedly pinged. Intended
-        for use by monitoring tools. If everything is working
-        correctly, will return HTTP status 200 with
-        body: <pre>{"status":"ok"}</pre></td>
+        <td>
+          Declares a test queue, then publishes and consumes a
+          message. Intended for use by monitoring tools. If everything
+          is working correctly, will return HTTP status 200 with
+          body: <pre>{"status":"ok"}</pre> Note: the test queue will
+          not be deleted (to to prevent queue churn if this is
+          repeatedly pinged).
+        </td>
       </tr>
     </table>
   </body>
