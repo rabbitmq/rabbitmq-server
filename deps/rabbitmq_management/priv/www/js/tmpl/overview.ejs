@@ -5,27 +5,29 @@
 <div class="hider updatable">
 <% if (overview.statistics_db_node != 'not_running') { %>
   <h3>Queued messages</h3>
-  <div class="highlight">
-    Ready
-    <strong><%= overview.queue_totals.messages_ready %></strong>
+  <div class="box">
+    <div class="highlight">
+      Ready
+      <strong><%= overview.queue_totals.messages_ready %></strong>
+    </div>
+    <div class="highlight">
+      Unacknowledged
+      <strong><%= overview.queue_totals.messages_unacknowledged %></strong>
+    </div>
+    <div class="highlight">
+      Total
+      <strong><%= overview.queue_totals.messages %></strong>
+    </div>
   </div>
-  <div class="highlight">
-    Unacknowledged
-    <strong><%= overview.queue_totals.messages_unacknowledged %></strong>
-  </div>
-  <div class="highlight">
-    Total
-    <strong><%= overview.queue_totals.messages %></strong>
-  </div>
-<span class="br"></span>
 <% if (statistics_level == 'fine') { %>
   <h3>Message rates</h3>
-  <%= message_rates(overview.message_stats) %>
+  <div class="box">
+    <%= message_rates(overview.message_stats) %>
+  </div>
 <% } %>
 <% } else { %>
     Totals not available
 <% } %>
-<span class="br"></span>
 </div>
 </div>
 
@@ -263,7 +265,6 @@
   set <code>force_fine_statistics</code> to <code>true</code> in
   the <code>rabbitmq_management_agent</code> application
 </p>
-<span class="br"></span>
 </div>
 </div>
 <% } %>

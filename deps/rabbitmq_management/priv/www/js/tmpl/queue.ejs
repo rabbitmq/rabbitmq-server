@@ -4,19 +4,20 @@
   <h2>Overview</h2>
   <div class="hider updatable">
     <h3>Messages</h3>
-    <div class="highlight">
-      Ready
-      <strong><%= fmt_string(queue.messages_ready) %></strong>
-    </div>
-    <div class="highlight">
-      Unacknowledged
-      <strong><%= fmt_string(queue.messages_unacknowledged) %></strong>
-    </div>
-    <div class="highlight">
+    <div class="box">
+      <div class="highlight">
+        Ready
+        <strong><%= fmt_string(queue.messages_ready) %></strong>
+      </div>
+      <div class="highlight">
+        Unacknowledged
+        <strong><%= fmt_string(queue.messages_unacknowledged) %></strong>
+      </div>
+      <div class="highlight">
       Total
       <strong><%= fmt_string(queue.messages) %></strong>
+      </div>
     </div>
-    <span class="br"></span>
 
     <h3>Details</h3>
     <table class="facts">
@@ -73,7 +74,6 @@
       </tr>
 <% } %>
     </table>
-    <span class="br"></span>
   </div>
 </div>
 
@@ -99,7 +99,6 @@
     </td>
   </tr>
 </table>
-<span class="br"></span>
 </div>
 </div>
 <% } %>
@@ -171,7 +170,6 @@
       <input type="submit" value="Get Message(s)" />
     </form>
     <div id="msg-wrapper"></div>
-    <span class="br"></span>
   </div>
 </div>
 
@@ -191,7 +189,5 @@
       <input type="hidden" name="mode" value="purge"/>
       <input type="submit" value="Purge" />
     </form>
-
-    <span class="br"></span>
   </div>
 </div>

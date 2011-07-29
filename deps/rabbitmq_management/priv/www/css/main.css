@@ -1,5 +1,4 @@
 body { font: 12px Verdana,sans-serif; color: #484848; padding: 8px 35px; }
-.br { clear: both; display: block; }
 #logo { width: 204px; height: 37px; margin-bottom: 20px; background: url(../img/rabbitmqlogo.png); }
 #login { float: right; color: #444; }
 #login p { padding: 0; margin: 0; }
@@ -7,7 +6,7 @@ body { font: 12px Verdana,sans-serif; color: #484848; padding: 8px 35px; }
 #menu ul { float: left; padding: 0; margin: 0; }
 #menu li { float: left; list-style-type: none; padding: 0 2em 0 0; }
 #menu li a { display: block; padding: 0.5em; }
-#menu { border-bottom: 1px solid #FF8C00; }
+#menu { border-bottom: 1px solid #FF8C00; overflow: auto; width: 100%; }
 #main { clear: both; }
 #menu a { color: #444; font-weight: bold; text-decoration: none; }
 #main a { color: #444; font-weight: bold; text-decoration: none; color: black; }
@@ -16,6 +15,7 @@ body { font: 12px Verdana,sans-serif; color: #484848; padding: 8px 35px; }
 
 h1 { font-size: 2em; font-weight: normal; padding: 0; }
 b, dt { color: black; font-weight: normal; }
+div.box, div.section, div.section-hidden { overflow: auto; width: 100%; }
 
 .help { color: #888; cursor: pointer; }
 
