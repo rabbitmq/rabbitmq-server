@@ -24,6 +24,9 @@
 basic_get_test() ->
     test_util:basic_get_test(new_connection()).
 
+basic_get_ipv6_test() ->
+    test_util:basic_get_test(new_connection(
+                               #amqp_params_network{host = "::1"})).
 basic_return_test() ->
     test_util:basic_return_test(new_connection()).
 
@@ -67,8 +70,11 @@ hard_error_test() ->
 %% Common Functions
 
 new_connection() ->
+    new_connection(#amqp_params_network{}).
+
+new_connection(AmqpParams) ->
     {ok, [[CertsDir]]} = init:get_argument(erlang_client_ssl_dir),
-    Params = #amqp_params_network
+    Params = AmqpParams#amqp_params_network
       {ssl_options = [{cacertfile, CertsDir ++ "/testca/cacert.pem"},
                       {certfile, CertsDir ++ "/client/cert.pem"},
                       {keyfile, CertsDir ++ "/client/key.pem"},
