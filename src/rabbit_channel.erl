@@ -27,7 +27,7 @@
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2, handle_pre_hibernate/1, prioritise_call/3,
-         prioritise_cast/2]).
+         prioritise_cast/2, format_message_queue/2]).
 
 -record(ch, {state, protocol, channel, reader_pid, writer_pid, conn_pid,
              limiter_pid, start_limiter_fun, tx_status, next_tag,
@@ -343,6 +343,8 @@ terminate(Reason, State) ->
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
+
+format_message_queue(Opt, MQ) -> rabbit_misc:format_message_queue(Opt, MQ).
 
 %%---------------------------------------------------------------------------
 

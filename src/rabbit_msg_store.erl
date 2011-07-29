@@ -29,7 +29,8 @@
 -export([transform_dir/3, force_recovery/2]). %% upgrade
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
-         terminate/2, code_change/3, prioritise_call/3, prioritise_cast/2]).
+         terminate/2, code_change/3, prioritise_call/3, prioritise_cast/2,
+         format_message_queue/2]).
 
 %%----------------------------------------------------------------------------
 
@@ -835,6 +836,8 @@ terminate(_Reason, State = #msstate { index_state         = IndexState,
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
+
+format_message_queue(Opt, MQ) -> rabbit_misc:format_message_queue(Opt, MQ).
 
 %%----------------------------------------------------------------------------
 %% general helper functions
