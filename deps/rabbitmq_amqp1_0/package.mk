@@ -5,8 +5,8 @@ WITH_BROKER_TEST_COMMANDS:=eunit:test(rabbit_amqp1_0_test,[verbose])
 
 FRAMING_HRL=$(PACKAGE_DIR)/include/rabbit_amqp1_0_framing.hrl
 FRAMING_ERL=$(PACKAGE_DIR)/src/rabbit_amqp1_0_framing0.erl
-CODEGEN=./codegen.py
-CODEGEN_SPECS=spec/messaging.xml spec/transport.xml
+CODEGEN=$(PACKAGE_DIR)/codegen.py
+CODEGEN_SPECS=$(PACKAGE_DIR)/spec/messaging.xml $(PACKAGE_DIR)/spec/transport.xml
 
 INCLUDE_HRLS+=$(FRAMING_HRL)
 SOURCE_ERLS+=$(FRAMING_ERL)
