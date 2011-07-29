@@ -940,7 +940,6 @@ test_option_parser() ->
     passed.
 
 test_cluster_management() ->
-
     %% 'cluster' and 'reset' should only work if the app is stopped
     {error, _} = control_action(cluster, []),
     {error, _} = control_action(reset, []),
@@ -988,13 +987,16 @@ test_cluster_management() ->
     ok = control_action(reset, []),
     ok = control_action(start_app, []),
     ok = control_action(stop_app, []),
+    ok = assert_disc_node(),
     ok = control_action(force_cluster, ["invalid1@invalid",
                                         "invalid2@invalid"]),
+    ok = assert_ram_node(),
 
     %% join a non-existing cluster as a ram node
     ok = control_action(reset, []),
     ok = control_action(force_cluster, ["invalid1@invalid",
                                         "invalid2@invalid"]),
+    ok = assert_ram_node(),
 
     SecondaryNode = rabbit_misc:makenode("hare"),
     case net_adm:ping(SecondaryNode) of
@@ -1013,15 +1015,18 @@ test_cluster_management2(SecondaryNode) ->
     %% make a disk node
     ok = control_action(reset, []),
     ok = control_action(cluster, [NodeS]),
+    ok = assert_disc_node(),
     %% make a ram node
     ok = control_action(reset, []),
     ok = control_action(cluster, [SecondaryNodeS]),
+    ok = assert_ram_node(),
 
     %% join cluster as a ram node
     ok = control_action(reset, []),
     ok = control_action(force_cluster, [SecondaryNodeS, "invalid1@invalid"]),
     ok = control_action(start_app, []),
     ok = control_action(stop_app, []),
+    ok = assert_ram_node(),
 
     %% change cluster config while remaining in same cluster
     ok = control_action(force_cluster, ["invalid2@invalid", SecondaryNodeS]),
@@ -1033,27 +1038,45 @@ test_cluster_management2(SecondaryNode) ->
                                         "invalid2@invalid"]),
     ok = control_action(start_app, []),
     ok = control_action(stop_app, []),
+    ok = assert_ram_node(),
 
-    %% join empty cluster as a ram node
+    %% join empty cluster as a ram node (converts to disc)
     ok = control_action(cluster, []),
     ok = control_action(start_app, []),
     ok = control_action(stop_app, []),
+    ok = assert_disc_node(),
+
+    %% make a new ram node
+    ok = control_action(reset, []),
+    ok = control_action(force_cluster, [SecondaryNodeS]),
+    ok = control_action(start_app, []),
+    ok = control_action(stop_app, []),
+    ok = assert_ram_node(),
 
     %% turn ram node into disk node
-    ok = control_action(reset, []),
     ok = control_action(cluster, [SecondaryNodeS, NodeS]),
     ok = control_action(start_app, []),
     ok = control_action(stop_app, []),
+    ok = assert_disc_node(),
 
     %% convert a disk node into a ram node
+    ok = assert_disc_node(),
     ok = control_action(force_cluster, ["invalid1@invalid",
                                         "invalid2@invalid"]),
+    ok = assert_ram_node(),
+
+    %% make a new disk node
+    ok = control_action(force_reset, []),
+    ok = control_action(start_app, []),
+    ok = control_action(stop_app, []),
+    ok = assert_disc_node(),
 
     %% turn a disk node into a ram node
     ok = control_action(reset, []),
     ok = control_action(cluster, [SecondaryNodeS]),
     ok = control_action(start_app, []),
     ok = control_action(stop_app, []),
+    ok = assert_ram_node(),
 
     %% NB: this will log an inconsistent_database error, which is harmless
     %% Turning cover on / off is OK even if we're not in general using cover,
@@ -1078,6 +1101,10 @@ test_cluster_management2(SecondaryNode) ->
     ok = control_action(stop_app, []),
     {error, {no_running_cluster_nodes, _, _}} =
         control_action(reset, []),
+
+    %% attempt to change type when no other node is alive
+    {error, {no_running_cluster_nodes, _, _}} =
+        control_action(cluster, [SecondaryNodeS]),
 
     %% leave system clustered, with the secondary node as a ram node
     ok = control_action(force_reset, []),
@@ -1616,6 +1643,18 @@ clean_logs(Files, Suffix) ->
          ok = delete_file([File, Suffix])
      end || File <- Files],
     ok.
+
+assert_ram_node() ->
+    case rabbit_mnesia:is_disc_node() of
+        true  -> exit('not_ram_node');
+        false -> ok
+    end.
+
+assert_disc_node() ->
+    case rabbit_mnesia:is_disc_node() of
+        true  -> ok;
+        false -> exit('not_disc_node')
+    end.
 
 delete_file(File) ->
     case file:delete(File) of

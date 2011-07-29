@@ -31,11 +31,9 @@
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2, handle_pre_hibernate/1, prioritise_call/3,
-         prioritise_cast/2, prioritise_info/2]).
+         prioritise_cast/2, prioritise_info/2, format_message_queue/2]).
 
 -export([init_with_backing_queue_state/7]).
-
--export([format_message_queue/2]).
 
 %% Queue's state
 -record(q, {q,
@@ -1165,15 +1163,4 @@ handle_pre_hibernate(State = #q{backing_queue = BQ,
                      backing_queue_state = BQS3},
     {hibernate, stop_rate_timer(State1)}.
 
-format_message_queue(_Opt, Mailbox) ->
-    Len = priority_queue:len(Mailbox),
-    {Len,
-     case Len > 100 of
-         false -> priority_queue:to_list(Mailbox);
-         true  -> {summary,
-                   orddict:to_list(
-                     lists:foldl(
-                       fun ({P, _V}, Counts) ->
-                               orddict:update_counter(P, 1, Counts)
-                       end, orddict:new(), priority_queue:to_list(Mailbox)))}
-     end}.
+format_message_queue(Opt, MQ) -> rabbit_misc:format_message_queue(Opt, MQ).
