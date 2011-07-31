@@ -730,50 +730,8 @@ handle_cast({client_delete, CRef}, State = #msstate { clients = Clients }) ->
 
 handle_cast({write, CRef, MsgId},
             State = #msstate { cur_file_cache_ets = CurFileCacheEts }) ->
-    try
-        case 0 =< ets:update_counter(CurFileCacheEts, MsgId, {3, -1}) of
-            true ->
-                [{MsgId, Msg, _CacheRefCount}] =
-                    ets:lookup(CurFileCacheEts, MsgId),
-                true = Msg =/= undefined, %% ASSERTION
-                noreply(
-                  case write_action(should_mask_action(CRef, MsgId, State),
-                                    MsgId, State) of
-                      {write, State1} ->
-                          write_message(CRef, MsgId, Msg, State1);
-                      {ignore, CurFile,
-                       State1 = #msstate { current_file = CurFile }} ->
-                          ets:update_counter(CurFileCacheEts, MsgId, {3, +1}),
-                          State1;
-                      {ignore, _File, State1} ->
-                          ets:update_counter(CurFileCacheEts, MsgId, {3, +1}),
-                          true = ets:delete_object(CurFileCacheEts,
-                                                   {MsgId, Msg, 0}),
-                          State1;
-                      {confirm, CurFile,
-                       State1 = #msstate { current_file = CurFile }} ->
-                          record_pending_confirm(CRef, MsgId, State1);
-                      {confirm, _File, State1} ->
-                          true = ets:delete_object(CurFileCacheEts,
-                                                   {MsgId, Msg, 0}),
-                          update_pending_confirms(
-                            fun (MsgOnDiskFun, CTM) ->
-                                    MsgOnDiskFun(gb_sets:singleton(MsgId),
-                                                 written),
-                                    CTM
-                            end, CRef, State1)
-                  end);
-            false ->
-                %% The remove overtook the write, thus when we do the
-                %% -1 above, we ended up with a negative number
-                %% because the remove would have put in -1, then the
-                %% write on the client would have pushed that up to 0,
-                %% and now we're back to -1. So we need to do nothing
-                %% here, other than to undo the -1 we just attempted.
-                ets:update_counter(CurFileCacheEts, MsgId, {3, +1}),
-                noreply(State)
-        end
-    catch error:badarg ->
+    case ets:lookup(CurFileCacheEts, MsgId) of
+        [] ->
             %% A remove overtook a write, but other writes were going
             %% on which meant that one of the ets:delete_object calls
             %% above removed the entry from the CurFileCacheEts. Hence
@@ -795,11 +753,41 @@ handle_cast({write, CRef, MsgId},
             %%     msg we fall into the lower 'confirm' branch and do
             %%     the ets:delete_object)
             %%
-            %% msg store processes q3's write. But it can't do the
-            %%     ets:update_counter and so we get badarg and end up
+            %% msg store processes q3's write. But there is now no
+            %%     entry in cur_file_cache_ets and so we end up
             %%     here. Note though that at this point, the msg_store
             %%     knows of the msg, and the msg has a refcount of 2,
             %%     which is exactly what is required.
+            noreply(State);
+        [{MsgId, Msg, CacheRefCount}] when 0 < CacheRefCount ->
+            true = Msg =/= undefined, %% ASSERTION
+            noreply(
+              case write_action(should_mask_action(CRef, MsgId, State), MsgId,
+                                State) of
+                  {write, State1} ->
+                      ets:update_counter(CurFileCacheEts, MsgId, {3, -1}),
+                      write_message(CRef, MsgId, Msg, State1);
+                  {ignore, CurFile,
+                   State1 = #msstate { current_file = CurFile }} ->
+                      State1;
+                  {ignore, _File, State1} ->
+                      State1;
+                  {confirm, CurFile,
+                   State1 = #msstate { current_file = CurFile }} ->
+                      ets:update_counter(CurFileCacheEts, MsgId, {3, -1}),
+                      record_pending_confirm(CRef, MsgId, State1);
+                  {confirm, _File, State1} ->
+                      ets:update_counter(CurFileCacheEts, MsgId, {3, -1}),
+                      true = ets:delete_object(CurFileCacheEts,
+                                               {MsgId, Msg, 0}),
+                      update_pending_confirms(
+                        fun (MsgOnDiskFun, CTM) ->
+                                MsgOnDiskFun(gb_sets:singleton(MsgId), written),
+                                CTM
+                        end, CRef, State1)
+              end);
+        [{MsgId, _Msg, _CacheRefCount}] ->
+            %% The remove overtook the write, so we do nothing here.
             noreply(State)
     end;
 
@@ -1077,16 +1065,29 @@ contains_message(MsgId, From,
 
 remove_message(MsgId, CRef,
                State = #msstate { file_summary_ets   = FileSummaryEts,
-                                  cur_file_cache_ets = CurFileCacheEts }) ->
+                                  cur_file_cache_ets = CurFileCacheEts,
+                                  current_file       = CurFile }) ->
     case should_mask_action(CRef, MsgId, State) of
-        {true, _Location} ->
+        {true, Location} ->
             ok = update_msg_cache(CurFileCacheEts, MsgId, undefined, -1),
+            case Location of
+                #msg_location { file = File } when File =/= CurFile ->
+                    true = ets:match_delete(CurFileCacheEts, {MsgId, '_', 0});
+                _ -> ok
+            end,
             State;
         {false_if_increment, #msg_location { ref_count = 0 }} ->
-            %% CRef has tried to both write and remove this msg
-            %% whilst it's being GC'd. ASSERTION:
-            %% [#file_summary { locked = true }] =
-            %%    ets:lookup(FileSummaryEts, File),
+            %% CRef is dying. If this remove had a corresponding write
+            %% that arrived before the remove and the ref_count is 0
+            %% then it can only be because the file is currently being
+            %% GC'd, and thus the write was masked. However, it's
+            %% possible the remove has arrived first. If the write got
+            %% to the msg_store first and was ignored due to death+GC
+            %% then the write wouldn't have touched the
+            %% CacheRefCount. In either case, it's safe here to
+            %% decrement the CacheRefCount as a write either before or
+            %% after will not touch the CacheRefCount.
+            ok = update_msg_cache(CurFileCacheEts, MsgId, undefined, -1),
             State;
         {_Mask, #msg_location { ref_count = RefCount, file = File,
                                 total_size = TotalSize }} when RefCount > 0 ->
