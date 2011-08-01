@@ -10,13 +10,8 @@
 %%
 %%   The Original Code is RabbitMQ Management Console.
 %%
-%%   The Initial Developers of the Original Code are Rabbit Technologies Ltd.
-%%
-%%   Copyright (C) 2010 Rabbit Technologies Ltd.
-%%
-%%   All Rights Reserved.
-%%
-%%   Contributor(s): ______________________________________.
+%%   The Initial Developer of the Original Code is VMware, Inc.
+%%   Copyright (c) 2010-2011 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_mgmt_external_stats).
