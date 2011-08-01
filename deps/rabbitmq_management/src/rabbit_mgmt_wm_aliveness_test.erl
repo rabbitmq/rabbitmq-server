@@ -36,22 +36,21 @@ resource_exists(ReqData, Context) ->
          _         -> true
      end, ReqData, Context}.
 
-to_json(ReqData, Context = #context{ user = #user { username = Username } }) ->
-    Ps = #amqp_params_direct{username     = Username,
-                             virtual_host = rabbit_mgmt_util:vhost(ReqData)},
-    %% TODO use network connection (need to check what we're bound to)
-    {ok, Conn} = amqp_connection:start(Ps),
-    {ok, Ch} = amqp_connection:open_channel(Conn),
-    amqp_channel:call(Ch, #'queue.declare'{ queue = ?QUEUE }),
-    amqp_channel:call(Ch, #'basic.publish'{ routing_key = ?QUEUE },
-                      #amqp_msg{payload = <<"test_message">>}),
-    {#'basic.get_ok'{}, _} =
-        amqp_channel:call(Ch, #'basic.get'{queue = ?QUEUE, no_ack = true}),
-    %% Don't delete the queue. If this is pinged every few seconds we
-    %% don't want to create a mnesia transaction each time.
-    catch amqp_channel:close(Ch),
-    catch amqp_connection:close(Conn),
-    rabbit_mgmt_util:reply([{status, ok}], ReqData, Context).
+to_json(ReqData, Context) ->
+    rabbit_mgmt_util:with_channel(
+      rabbit_mgmt_util:vhost(ReqData), ReqData, Context,
+      fun(Ch) ->
+              amqp_channel:call(Ch, #'queue.declare'{queue = ?QUEUE}),
+              amqp_channel:call(Ch, #'basic.publish'{routing_key = ?QUEUE},
+                                #amqp_msg{payload = <<"test_message">>}),
+              {#'basic.get_ok'{}, _} =
+                  amqp_channel:call(Ch, #'basic.get'{queue  = ?QUEUE,
+                                                     no_ack = true}),
+              %% Don't delete the queue. If this is pinged every few
+              %% seconds we don't want to create a mnesia transaction
+              %% each time.
+              rabbit_mgmt_util:reply([{status, ok}], ReqData, Context)
+      end).
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized_vhost(ReqData, Context).
