@@ -10,14 +10,10 @@
 %%
 %%   The Original Code is RabbitMQ Management Console.
 %%
-%%   The Initial Developers of the Original Code are Rabbit Technologies Ltd.
+%%   The Initial Developer of the Original Code is VMware, Inc.
+%%   Copyright (c) 2010-2011 VMware, Inc.  All rights reserved.
 %%
-%%   Copyright (C) 2010 Rabbit Technologies Ltd.
-%%
-%%   All Rights Reserved.
-%%
-%%   Contributor(s): ______________________________________.
-%%
+
 -module(rabbit_mgmt_wm_node).
 
 -export([init/1, to_json/2, content_types_provided/2, is_authorized/2]).
