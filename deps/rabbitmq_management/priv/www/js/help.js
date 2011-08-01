@@ -17,15 +17,6 @@ HELP = {
     'queue-auto-delete':
       'If yes, the queue will delete itself after at least one consumer has connected, and then all consumers have disconnected.',
 
-    'mnesia-storage':
-      'Mnesia storage types:<br/> \
-      <dl> \
-        <dt>disc</dt> \
-        <dd>Node configuration is held on disc.</dd> \
-        <dt>ram</dt> \
-        <dd>Node configuration is held in ram. Messages will still be written to disc if necessary.</dd> \
-      <dl>',
-
     'internal-users-only':
       'Only users within the internal RabbitMQ database are shown here. Other users (e.g. those authenticated over LDAP) will not appear.',
 

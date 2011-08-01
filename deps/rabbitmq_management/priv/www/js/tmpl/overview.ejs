@@ -58,10 +58,7 @@
       Version
       <sub>(RabbitMQ / Erlang)</sub>
     </th>
-    <th>Mnesia <span class="help" id="mnesia-storage"></span></th>
-    <% if (nodes_interesting) { %>
-    <th>Management</th>
-    <% } %>
+    <th>Type</th>
   </tr>
 <%
    for (var i = 0; i < nodes.length; i++) {
@@ -127,18 +124,19 @@
      </td>
 <% } %>
      <td class="c">
-       <%= node.type %>
-     </td>
-     <% if (nodes_interesting) { %>
-       <td class="c">
-       <% if (overview.node == node.name) { %>
-         <acronym title="You are accessing the management UI from this node.">A</acronym>
+       <% if (node.type == 'disc') { %>
+         <acronym title="Broker configuration is held on disc.">Disc</acronym>
+       <% } else { %>
+         <acronym title="Broker configuration is held in RAM. Messages will still be written to disc if necessary.">RAM</acronym>
        <% } %>
-       <% if (overview.statistics_db_node == node.name) { %>
-         <acronym title="This node contains the management statistics database">S</acronym>
+       <% if (nodes_interesting) { %>
+         <% if (overview.statistics_db_node == node.name) { %>
+           <acronym title="This node contains the management statistics database">Stats</acronym>
+         <% } %>
+         <% if (overview.node == node.name) { %>
+           <acronym title="You are accessing the management UI from this node.">*</acronym>
+         <% } %>
        <% } %>
-       </td>
-     <% } %>
      </td>
    </tr>
 <% } %>
