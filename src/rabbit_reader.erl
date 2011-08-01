@@ -28,7 +28,7 @@
 
 -export([process_channel_frame/5]). %% used by erlang-client
 
--export([emit_stats/1]).
+-export([emit_stats/1, force_event_refresh/1]).
 
 -define(HANDSHAKE_TIMEOUT, 10).
 -define(NORMAL_TIMEOUT, 3).
@@ -71,6 +71,7 @@
 -spec(info/1 :: (pid()) -> rabbit_types:infos()).
 -spec(info/2 :: (pid(), rabbit_types:info_keys()) -> rabbit_types:infos()).
 -spec(emit_stats/1 :: (pid()) -> 'ok').
+-spec(force_event_refresh/1 :: (pid()) -> 'ok').
 -spec(shutdown/2 :: (pid(), string()) -> 'ok').
 -spec(conserve_memory/2 :: (pid(), boolean()) -> 'ok').
 -spec(server_properties/1 :: (rabbit_types:protocol()) ->
@@ -128,6 +129,9 @@ info(Pid, Items) ->
 
 emit_stats(Pid) ->
     gen_server:cast(Pid, emit_stats).
+
+force_event_refresh(Pid) ->
+    gen_server:cast(Pid, force_event_refresh).
 
 conserve_memory(Pid, Conserve) ->
     Pid ! {conserve_memory, Conserve},
@@ -325,6 +329,11 @@ handle_other({'$gen_call', From, {info, Items}}, Deb, State) ->
     mainloop(Deb, State);
 handle_other({'$gen_cast', emit_stats}, Deb, State) ->
     mainloop(Deb, internal_emit_stats(State));
+handle_other({'$gen_cast', force_event_refresh}, Deb, State) ->
+    rabbit_event:notify(connection_exists,
+                        [{type, network} |
+                         infos(?CREATION_EVENT_KEYS, State)]),
+    mainloop(Deb, State);
 handle_other({system, From, Request}, Deb, State = #v1{parent = Parent}) ->
     sys:handle_system_msg(Request, From, Parent, ?MODULE, Deb, State);
 handle_other(Other, _Deb, _State) ->

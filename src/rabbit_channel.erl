@@ -24,6 +24,7 @@
 -export([send_command/2, deliver/4, flushed/2, confirm/2]).
 -export([list/0, info_keys/0, info/1, info/2, info_all/0, info_all/1]).
 -export([refresh_config_all/0, emit_stats/1, ready_for_close/1]).
+-export([force_event_refresh/0]).
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2, handle_pre_hibernate/1, prioritise_call/3,
@@ -93,6 +94,7 @@
 -spec(refresh_config_all/0 :: () -> 'ok').
 -spec(emit_stats/1 :: (pid()) -> 'ok').
 -spec(ready_for_close/1 :: (pid()) -> 'ok').
+-spec(force_event_refresh/0 :: () -> 'ok').
 
 -endif.
 
@@ -158,6 +160,16 @@ emit_stats(Pid) ->
 
 ready_for_close(Pid) ->
     gen_server2:cast(Pid, ready_for_close).
+
+force_event_refresh() ->
+    %% TODO roll in bug 23897?
+    All = [Pid ||
+              Node <- rabbit_mnesia:running_clustered_nodes(),
+              Pid  <- rpc:call(Node, rabbit_channel, list, [])],
+    rabbit_misc:filter_exit_map(fun (C) -> force_event_refresh(C) end, All).
+
+force_event_refresh(Pid) ->
+    gen_server2:cast(Pid, force_event_refresh).
 
 %%---------------------------------------------------------------------------
 
@@ -299,6 +311,10 @@ handle_cast(emit_stats, State = #ch{stats_timer = StatsTimer}) ->
     internal_emit_stats(State),
     noreply([ensure_stats_timer],
             State#ch{stats_timer = rabbit_event:reset_stats_timer(StatsTimer)});
+
+handle_cast(force_event_refresh, State) ->
+    rabbit_event:notify(channel_exists, infos(?CREATION_EVENT_KEYS, State)),
+    noreply(State);
 
 handle_cast({confirm, MsgSeqNos, From}, State) ->
     State1 = #ch{confirmed = C} = confirm(MsgSeqNos, From, State),

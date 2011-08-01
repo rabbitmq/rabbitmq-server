@@ -21,7 +21,7 @@
          node_listeners/1, connections/0, connection_info_keys/0,
          connection_info/1, connection_info/2,
          connection_info_all/0, connection_info_all/1,
-         close_connection/2]).
+         close_connection/2, force_connection_event_refresh/0]).
 
 %%used by TCP-based transports, e.g. STOMP adapter
 -export([check_tcp_listener_address/2,
@@ -69,6 +69,8 @@
 -spec(connection_info_all/1 ::
         (rabbit_types:info_keys()) -> [rabbit_types:infos()]).
 -spec(close_connection/2 :: (pid(), string()) -> 'ok').
+-spec(force_connection_event_refresh/0 :: () -> 'ok').
+
 -spec(on_node_down/1 :: (node()) -> 'ok').
 -spec(check_tcp_listener_address/2 :: (atom(), listener_config())
         -> [{inet:ip_address(), ip_port(), family(), atom()}]).
@@ -288,6 +290,9 @@ close_connection(Pid, Explanation) ->
         true  -> rabbit_reader:shutdown(Pid, Explanation);
         false -> throw({error, {not_a_connection_pid, Pid}})
     end.
+
+force_connection_event_refresh() ->
+    cmap(fun (C) -> rabbit_reader:force_event_refresh(C) end).
 
 %%--------------------------------------------------------------------
 

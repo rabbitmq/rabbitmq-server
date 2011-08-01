@@ -767,7 +767,15 @@ emit_stats(State, Extra) ->
     rabbit_event:notify(queue_stats, Extra ++ infos(?STATISTICS_KEYS, State)).
 
 emit_consumer_created(ChPid, ConsumerTag, Exclusive, AckRequired) ->
-    rabbit_event:notify(consumer_created,
+    emit_consumer_event(ChPid, ConsumerTag, Exclusive, AckRequired,
+                        consumer_created).
+
+emit_consumer_exists(ChPid, ConsumerTag, Exclusive, AckRequired) ->
+    emit_consumer_event(ChPid, ConsumerTag, Exclusive, AckRequired,
+                        consumer_exists).
+
+emit_consumer_event(ChPid, ConsumerTag, Exclusive, AckRequired, Type) ->
+    rabbit_event:notify(Type,
                         [{consumer_tag, ConsumerTag},
                          {exclusive,    Exclusive},
                          {ack_required, AckRequired},
@@ -1118,7 +1126,18 @@ handle_cast(emit_stats, State = #q{stats_timer = StatsTimer}) ->
     emit_stats(State),
     State1 = State#q{stats_timer = rabbit_event:reset_stats_timer(StatsTimer)},
     assert_invariant(State1),
-    {noreply, State1, hibernate}.
+    {noreply, State1, hibernate};
+
+handle_cast(force_event_refresh, State = #q{exclusive_consumer = Exclusive}) ->
+    rabbit_event:notify(queue_exists, infos(?CREATION_EVENT_KEYS, State)),
+    case Exclusive of
+        none -> [emit_consumer_exists(Ch, CTag, false, AckRequired) ||
+                    {Ch, CTag, AckRequired} <- consumers(State)];
+        _    -> [emit_consumer_exists(Ch, CTag, true, AckRequired) ||
+                    {Ch, CTag, AckRequired} <- consumers(State),
+                    Exclusive = {Ch, CTag}]
+    end,
+    noreply(State).
 
 handle_info({'DOWN', _MonitorRef, process, DownPid, _Reason},
             State = #q{q = #amqqueue{exclusive_owner = DownPid}}) ->
