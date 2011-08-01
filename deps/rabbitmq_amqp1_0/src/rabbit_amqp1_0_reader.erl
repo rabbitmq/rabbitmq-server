@@ -454,8 +454,6 @@ maybe_close(State = #v1{connection_state = closing,
 %% Begin 1-0
             ok = case Protocol of
                      rabbit_amqp1_0_framing ->
-                         %% TODO this is highly dubious. Looks like a mix
-                         %% of 1-0 and 0-9-1.
                          send_on_channel0(Sock, #'v1_0.close'{}, rabbit_amqp1_0_framing);
                      _ ->
                          send_on_channel0(Sock, #'connection.close_ok'{}, Protocol)
