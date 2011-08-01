@@ -1,6 +1,6 @@
 diff -r 16a4000624a7 stomp/connect.py
 --- a/stomp/connect.py	Sun May 02 18:15:34 2010 +0100
-+++ b/stomp/connect.py	Wed Jun 08 13:20:12 2011 +0100
++++ b/stomp/connect.py	Mon Aug 01 17:25:05 2011 +0100
 @@ -88,7 +88,10 @@
                   ssl_key_file = None,
                   ssl_cert_file = None,
@@ -57,15 +57,34 @@ diff -r 16a4000624a7 stomp/connect.py
          if self.__socket is not None:
              if self.__ssl:
                  #
-@@ -403,7 +429,6 @@
+@@ -390,20 +416,20 @@
+                 #
+                 try:
+                     self.__socket = self.__socket.unwrap()
+-                except Exception:
++                except Exception as e:
+                     #
+                     # unwrap seems flaky on Win with the backported ssl mod, so catch any exception and log it
+                     #
+-                    _, e, _ = sys.exc_info()
+-                    log.warn(e)
++                    log.warning("socket unwrap() threw exception: %s" % e)
+             elif hasattr(socket, 'SHUT_RDWR'):
+                 self.__socket.shutdown(socket.SHUT_RDWR)
          #
-         if self.__socket is not None:
+-        # split this into a separate check, because sometimes the socket is nulled between shutdown and this call
++        # caution, because sometimes the socket is nulled between shutdown and this call
+         #
+-        if self.__socket is not None:
++        try:
              self.__socket.close()
 -        self.__current_host_and_port = None
++        except Exception as e:
++            log.warning("socket close() threw exception: %s" % e)
  
      def __convert_dict(self, payload):
          """
-@@ -449,6 +474,9 @@
+@@ -449,6 +475,9 @@
                  raise KeyError("Command %s requires header %r" % (command, required_header_key))
          self.__send_frame(command, headers, payload)
  
@@ -75,7 +94,7 @@ diff -r 16a4000624a7 stomp/connect.py
      def __send_frame(self, command, headers={}, payload=''):
          """
          Send a STOMP frame.
-@@ -680,4 +708,4 @@
+@@ -680,4 +709,4 @@
                      sleep_exp += 1
  
          if not self.__socket:
