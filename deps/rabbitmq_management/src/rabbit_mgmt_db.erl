@@ -201,6 +201,7 @@ if_unknown(Val,    _Def) -> Val.
 %%----------------------------------------------------------------------------
 
 init([]) ->
+    amqp_direct_connection:force_event_refresh(),
     rabbit:force_event_refresh(),
     {ok, Interval} = application:get_env(rabbit, collect_statistics_interval),
     {ok, #state{interval = Interval,
