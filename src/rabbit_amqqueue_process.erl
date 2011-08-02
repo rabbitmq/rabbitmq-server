@@ -275,13 +275,13 @@ stop_rate_timer(State = #q{rate_timer_ref = undefined}) ->
 stop_rate_timer(State = #q{rate_timer_ref = just_measured}) ->
     State#q{rate_timer_ref = undefined};
 stop_rate_timer(State = #q{rate_timer_ref = TRef}) ->
-    _ = erlang:cancel_timer(TRef),
+    erlang:cancel_timer(TRef),
     State#q{rate_timer_ref = undefined}.
 
 stop_expiry_timer(State = #q{expiry_timer_ref = undefined}) ->
     State;
 stop_expiry_timer(State = #q{expiry_timer_ref = TRef}) ->
-    _ = erlang:cancel_timer(TRef),
+    erlang:cancel_timer(TRef),
     State#q{expiry_timer_ref = undefined}.
 
 %% We wish to expire only when there are no consumers *and* the expiry
@@ -787,12 +787,9 @@ prioritise_call(Msg, _From, _State) ->
 
 prioritise_cast(Msg, _State) ->
     case Msg of
-        update_ram_duration                  -> 8;
         delete_immediately                   -> 8;
         {set_ram_duration_target, _Duration} -> 8;
         {set_maximum_since_use, _Age}        -> 8;
-        maybe_expire                         -> 8;
-        drop_expired                         -> 8;
         emit_stats                           -> 7;
         {ack, _AckTags, _ChPid}              -> 7;
         {reject, _AckTags, _Requeue, _ChPid} -> 7;
@@ -1096,15 +1093,6 @@ handle_cast({set_maximum_since_use, Age}, State) ->
     ok = file_handle_cache:set_maximum_since_use(Age),
     noreply(State).
 
-handle_info(update_ram_duration, State = #q{backing_queue = BQ,
-                                            backing_queue_state = BQS}) ->
-    {RamDuration, BQS1} = BQ:ram_duration(BQS),
-    DesiredDuration =
-        rabbit_memory_monitor:report_ram_duration(self(), RamDuration),
-    BQS2 = BQ:set_ram_duration_target(DesiredDuration, BQS1),
-    noreply(State#q{rate_timer_ref = just_measured,
-                    backing_queue_state = BQS2});
-
 handle_info(maybe_expire, State) ->
     case is_unused(State) of
         true  -> ?LOGDEBUG("Queue lease expired for ~p~n", [State#q.q]),
@@ -1136,6 +1124,15 @@ handle_info({'DOWN', _MonitorRef, process, DownPid, _Reason}, State) ->
         {ok, NewState}   -> noreply(NewState);
         {stop, NewState} -> {stop, normal, NewState}
     end;
+
+handle_info(update_ram_duration, State = #q{backing_queue = BQ,
+                                            backing_queue_state = BQS}) ->
+    {RamDuration, BQS1} = BQ:ram_duration(BQS),
+    DesiredDuration =
+        rabbit_memory_monitor:report_ram_duration(self(), RamDuration),
+    BQS2 = BQ:set_ram_duration_target(DesiredDuration, BQS1),
+    noreply(State#q{rate_timer_ref = just_measured,
+                    backing_queue_state = BQS2});
 
 handle_info(timeout, State) ->
     noreply(backing_queue_timeout(State));

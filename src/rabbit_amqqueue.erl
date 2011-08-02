@@ -32,8 +32,8 @@
 
 %% internal
 -export([internal_declare/2, internal_delete/1, run_backing_queue/3,
-         sync_timeout/1, update_ram_duration/1, set_ram_duration_target/2,
-         set_maximum_since_use/2, maybe_expire/1, drop_expired/1]).
+         sync_timeout/1, set_ram_duration_target/2,
+         set_maximum_since_use/2]).
 
 -include("rabbit.hrl").
 -include_lib("stdlib/include/qlc.hrl").
@@ -141,10 +141,8 @@
         (pid(), atom(),
          (fun ((atom(), A) -> {[rabbit_types:msg_id()], A}))) -> 'ok').
 -spec(sync_timeout/1 :: (pid()) -> 'ok').
--spec(update_ram_duration/1 :: (pid()) -> 'ok').
 -spec(set_ram_duration_target/2 :: (pid(), number() | 'infinity') -> 'ok').
 -spec(set_maximum_since_use/2 :: (pid(), non_neg_integer()) -> 'ok').
--spec(maybe_expire/1 :: (pid()) -> 'ok').
 -spec(on_node_down/1 :: (node()) -> 'ok').
 -spec(pseudo_queue/2 :: (name(), pid()) -> rabbit_types:amqqueue()).
 
@@ -484,20 +482,11 @@ run_backing_queue(QPid, Mod, Fun) ->
 sync_timeout(QPid) ->
     gen_server2:cast(QPid, sync_timeout).
 
-update_ram_duration(QPid) ->
-    gen_server2:cast(QPid, update_ram_duration).
-
 set_ram_duration_target(QPid, Duration) ->
     gen_server2:cast(QPid, {set_ram_duration_target, Duration}).
 
 set_maximum_since_use(QPid, Age) ->
     gen_server2:cast(QPid, {set_maximum_since_use, Age}).
-
-maybe_expire(QPid) ->
-    gen_server2:cast(QPid, maybe_expire).
-
-drop_expired(QPid) ->
-    gen_server2:cast(QPid, drop_expired).
 
 on_node_down(Node) ->
     rabbit_misc:execute_mnesia_tx_with_tail(
