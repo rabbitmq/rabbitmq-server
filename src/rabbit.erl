@@ -58,7 +58,7 @@
                     {enables,     external_infrastructure}]}).
 
 -rabbit_boot_step({ensure_process_groups,
-                   [{description, "ensuring process groups exist"},
+                   [{description, "process groups"},
                     {mfa,         {rabbit, ensure_process_groups, []}},
                     {requires,    pre_boot},
                     {enables,     external_infrastructure}]}).
