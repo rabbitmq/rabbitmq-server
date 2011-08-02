@@ -182,8 +182,9 @@ declare(Recover, From,
                      State1 = process_args(State#q{backing_queue_state = BQS}),
                      rabbit_event:notify(queue_created,
                                          infos(?CREATION_EVENT_KEYS, State1)),
-                     rabbit_event:if_enabled(StatsTimer,
-                                             fun() -> emit_stats(State1) end),
+                     rabbit_event:if_enabled(
+                       StatsTimer,
+                       fun() -> internal_emit_stats(State1) end),
                      noreply(State1);
         Q1        -> {stop, normal, {existing, Q1}, State}
     end.
@@ -754,10 +755,10 @@ consumers(#q{active_consumers = ActiveConsumers,
               [{ChPid, ConsumerTag, AckRequired} | Acc]
       end, [], queue:join(ActiveConsumers, BlockedConsumers)).
 
-emit_stats(State) ->
-    emit_stats(State, []).
+internal_emit_stats(State) ->
+    internal_emit_stats(State, []).
 
-emit_stats(State, Extra) ->
+internal_emit_stats(State, Extra) ->
     rabbit_event:notify(queue_stats, Extra ++ infos(?STATISTICS_KEYS, State)).
 
 emit_consumer_created(ChPid, ConsumerTag, Exclusive, AckRequired) ->
@@ -1100,7 +1101,7 @@ handle_info(drop_expired, State) ->
 
 handle_info(emit_stats, State = #q{stats_timer = StatsTimer}) ->
     %% Do not invoke noreply as it would see no timer and create a new one.
-    emit_stats(State),
+    internal_emit_stats(State),
     State1 = State#q{stats_timer = rabbit_event:reset_stats_timer(StatsTimer)},
     assert_invariant(State1),
     {noreply, State1, hibernate};
@@ -1152,10 +1153,9 @@ handle_pre_hibernate(State = #q{backing_queue = BQ,
         rabbit_memory_monitor:report_ram_duration(self(), RamDuration),
     BQS2 = BQ:set_ram_duration_target(DesiredDuration, BQS1),
     BQS3 = BQ:handle_pre_hibernate(BQS2),
-    rabbit_event:if_enabled(StatsTimer,
-                            fun () ->
-                                    emit_stats(State, [{idle_since, now()}])
-                            end),
+    rabbit_event:if_enabled(
+      StatsTimer,
+      fun () -> internal_emit_stats(State, [{idle_since, now()}]) end),
     State1 = State#q{stats_timer = rabbit_event:stop_stats_timer(StatsTimer),
                      backing_queue_state = BQS3},
     {hibernate, stop_rate_timer(State1)}.
