@@ -16,7 +16,8 @@
 
 -module(rabbit_direct).
 
--export([boot/0, connect/4, start_channel/8, disconnect/1]).
+-export([boot/0, connect/5, start_channel/8, disconnect/1,
+         force_event_refresh/0]).
 
 -include("rabbit.hrl").
 
@@ -25,8 +26,9 @@
 -ifdef(use_specs).
 
 -spec(boot/0 :: () -> 'ok').
--spec(connect/4 :: (rabbit_types:username(), rabbit_types:vhost(),
-                    rabbit_types:protocol(), rabbit_event:event_props()) ->
+-spec(connect/5 :: (rabbit_types:username(), rabbit_types:vhost(),
+                    rabbit_types:protocol(), rabbit_event:event_props(),
+                    pid()) ->
                         {'ok', {rabbit_types:user(),
                                 rabbit_framing:amqp_table()}}).
 -spec(start_channel/8 ::
@@ -35,6 +37,7 @@
          pid()) -> {'ok', pid()}).
 
 -spec(disconnect/1 :: (rabbit_event:event_props()) -> 'ok').
+-spec(force_event_refresh/0 :: () -> 'ok').
 
 -endif.
 
@@ -53,13 +56,14 @@ boot() ->
 
 %%----------------------------------------------------------------------------
 
-connect(Username, VHost, Protocol, Infos) ->
+connect(Username, VHost, Protocol, Infos, Pid) ->
     case lists:keymember(rabbit, 1, application:which_applications()) of
         true  ->
             case rabbit_access_control:check_user_login(Username, []) of
                 {ok, User} ->
                     try rabbit_access_control:check_vhost_access(User, VHost) of
-                        ok -> rabbit_event:notify(connection_created, Infos),
+                        ok -> pg2_fixed:join(rabbit_direct_connections, Pid),
+                              rabbit_event:notify(connection_created, Infos),
                               {ok, {User,
                                     rabbit_reader:server_properties(Protocol)}}
                     catch
@@ -84,3 +88,13 @@ start_channel(Number, ClientChannelPid, ConnPid, Protocol, User, VHost,
 
 disconnect(Infos) ->
     rabbit_event:notify(connection_closed, Infos).
+
+force_event_refresh() ->
+    rabbit_misc:filter_exit_map(fun (C) -> force_event_refresh(C) end, list()).
+
+list() -> pg2_fixed:get_members(rabbit_direct_connections).
+
+force_event_refresh(Pid) ->
+    [{created_event, Ev}] =
+        gen_server:call(Pid, {info, [created_event]}, infinity),
+    rabbit_event:notify(connection_exists, Ev).

@@ -445,7 +445,8 @@ insert_default_data() ->
 
 ensure_process_groups() ->
     [ok = pg2_fixed:create(G) || G <- [rabbit_channels,
-                                       rabbit_network_connections]].
+                                       rabbit_network_connections,
+                                       rabbit_direct_connections]].
 
 %%---------------------------------------------------------------------------
 %% logging
@@ -525,6 +526,7 @@ log_rotation_result(ok, ok) ->
 
 force_event_refresh() ->
     rabbit_networking:force_connection_event_refresh(),
+    rabbit_direct:force_event_refresh(),
     rabbit_channel:force_event_refresh(),
     rabbit_amqqueue:force_event_refresh().
 
