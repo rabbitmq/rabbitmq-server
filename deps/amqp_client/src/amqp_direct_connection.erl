@@ -67,8 +67,9 @@ open_channel_args(#state{node = Node,
 do(_Method, _State) ->
     ok.
 
-handle_message(force_event_refresh, State) ->
-    rabbit_event:notify(connection_exists, connection_info(State)),
+handle_message(force_event_refresh, State = #state{node = Node}) ->
+    rpc:call(Node, rabbit_event, notify,
+             [connection_exists, connection_info(State)]),
     {ok, State};
 
 handle_message(Msg, State) ->
