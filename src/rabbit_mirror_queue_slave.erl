@@ -187,9 +187,9 @@ handle_cast({set_ram_duration_target, Duration},
             State = #state { backing_queue       = BQ,
                              backing_queue_state = BQS }) ->
     BQS1 = BQ:set_ram_duration_target(Duration, BQS),
-    noreply(State #state { backing_queue_state = BQS1 });
+    noreply(State #state { backing_queue_state = BQS1 }).
 
-handle_cast(update_ram_duration,
+handle_info(update_ram_duration,
             State = #state { backing_queue = BQ,
                              backing_queue_state = BQS }) ->
     {RamDuration, BQS1} = BQ:ram_duration(BQS),
@@ -197,7 +197,7 @@ handle_cast(update_ram_duration,
         rabbit_memory_monitor:report_ram_duration(self(), RamDuration),
     BQS2 = BQ:set_ram_duration_target(DesiredDuration, BQS1),
     noreply(State #state { rate_timer_ref = just_measured,
-                           backing_queue_state = BQS2 }).
+                           backing_queue_state = BQS2 });
 
 handle_info(sync_timeout, State) ->
     noreply(backing_queue_timeout(
@@ -266,7 +266,6 @@ prioritise_call(Msg, _From, _State) ->
 
 prioritise_cast(Msg, _State) ->
     case Msg of
-        update_ram_duration                  -> 8;
         {set_ram_duration_target, _Duration} -> 8;
         {set_maximum_since_use, _Age}        -> 8;
         {run_backing_queue, _Mod, _Fun}      -> 6;
@@ -277,6 +276,7 @@ prioritise_cast(Msg, _State) ->
 
 prioritise_info(Msg, _State) ->
     case Msg of
+        update_ram_duration                  -> 8;
         sync_timeout                         -> 6;
         _                                    -> 0
     end.
@@ -533,10 +533,8 @@ stop_sync_timer(State = #state { sync_timer_ref = TRef }) ->
     State #state { sync_timer_ref = undefined }.
 
 ensure_rate_timer(State = #state { rate_timer_ref = undefined }) ->
-    {ok, TRef} = timer:apply_after(
-                   ?RAM_DURATION_UPDATE_INTERVAL,
-                   rabbit_amqqueue, update_ram_duration,
-                   [self()]),
+    TRef = erlang:send_after(?RAM_DURATION_UPDATE_INTERVAL,
+                             self(), update_ram_duration),
     State #state { rate_timer_ref = TRef };
 ensure_rate_timer(State = #state { rate_timer_ref = just_measured }) ->
     State #state { rate_timer_ref = undefined };
