@@ -24,7 +24,7 @@
 
 -export([init/4, mainloop/2]).
 
--export([conserve_memory/2, server_properties/0]).
+-export([conserve_memory/2, server_properties/1]).
 
 -export([process_channel_frame/5]). %% used by erlang-client
 
@@ -33,14 +33,13 @@
 -define(CLOSING_TIMEOUT, 1).
 -define(CHANNEL_TERMINATION_TIMEOUT, 3).
 -define(SILENT_CLOSE_DELAY, 3).
--define(FRAME_MAX, 131072). %% set to zero once QPid fix their negotiation
 
-%---------------------------------------------------------------------------
+%%--------------------------------------------------------------------------
 
--record(v1, {parent, sock, connection, callback, recv_length, recv_ref,
+-record(v1, {parent, sock, connection, callback, recv_len, pending_recv,
              connection_state, queue_collector, heartbeater, stats_timer,
-             channel_sup_sup_pid, start_heartbeat_fun, auth_mechanism,
-             auth_state}).
+             channel_sup_sup_pid, start_heartbeat_fun, buf, buf_len,
+             auth_mechanism, auth_state}).
 
 -define(STATISTICS_KEYS, [pid, recv_oct, recv_cnt, send_oct, send_cnt,
                           send_pend, state, channels]).
@@ -55,98 +54,12 @@
 
 -define(INFO_KEYS, ?CREATION_EVENT_KEYS ++ ?STATISTICS_KEYS -- [pid]).
 
-%% connection lifecycle
-%%
-%% all state transitions and terminations are marked with *...*
-%%
-%% The lifecycle begins with: start handshake_timeout timer, *pre-init*
-%%
-%% all states, unless specified otherwise:
-%%   socket error -> *exit*
-%%   socket close -> *throw*
-%%   writer send failure -> *throw*
-%%   forced termination -> *exit*
-%%   handshake_timeout -> *throw*
-%% pre-init:
-%%   receive protocol header -> send connection.start, *starting*
-%% starting:
-%%   receive connection.start_ok -> *securing*
-%% securing:
-%%   check authentication credentials
-%%     if authentication success -> send connection.tune, *tuning*
-%%     if more challenge needed -> send connection.secure,
-%%                                 receive connection.secure_ok *securing*
-%%     otherwise send close, *exit*
-%% tuning:
-%%   receive connection.tune_ok -> start heartbeats, *opening*
-%% opening:
-%%   receive connection.open -> send connection.open_ok, *running*
-%% running:
-%%   receive connection.close ->
-%%     tell channels to terminate gracefully
-%%     if no channels then send connection.close_ok, start
-%%        terminate_connection timer, *closed*
-%%     else *closing*
-%%   forced termination
-%%   -> wait for channels to terminate forcefully, start
-%%      terminate_connection timer, send close, *exit*
-%%   channel exit with hard error
-%%   -> log error, wait for channels to terminate forcefully, start
-%%      terminate_connection timer, send close, *closed*
-%%   channel exit with soft error
-%%   -> log error, mark channel as closing, *running*
-%%   handshake_timeout -> ignore, *running*
-%%   heartbeat timeout -> *throw*
-%%   conserve_memory=true -> *blocking*
-%% blocking:
-%%   conserve_memory=true -> *blocking*
-%%   conserve_memory=false -> *running*
-%%   receive a method frame for a content-bearing method
-%%   -> process, stop receiving, *blocked*
-%%   ...rest same as 'running'
-%% blocked:
-%%   conserve_memory=true -> *blocked*
-%%   conserve_memory=false -> resume receiving, *running*
-%%   ...rest same as 'running'
-%% closing:
-%%   socket close -> *terminate*
-%%   receive connection.close -> send connection.close_ok,
-%%     *closing*
-%%   receive frame -> ignore, *closing*
-%%   handshake_timeout -> ignore, *closing*
-%%   heartbeat timeout -> *throw*
-%%   channel exit with hard error
-%%   -> log error, wait for channels to terminate forcefully, start
-%%      terminate_connection timer, send close, *closed*
-%%   channel exit with soft error
-%%   -> log error, mark channel as closing
-%%      if last channel to exit then send connection.close_ok,
-%%         start terminate_connection timer, *closed*
-%%      else *closing*
-%%   channel exits normally
-%%   -> if last channel to exit then send connection.close_ok,
-%%      start terminate_connection timer, *closed*
-%% closed:
-%%   socket close -> *terminate*
-%%   receive connection.close -> send connection.close_ok,
-%%     *closed*
-%%   receive connection.close_ok -> self() ! terminate_connection,
-%%     *closed*
-%%   receive frame -> ignore, *closed*
-%%   terminate_connection timeout -> *terminate*
-%%   handshake_timeout -> ignore, *closed*
-%%   heartbeat timeout -> *throw*
-%%   channel exit -> log error, *closed*
-%%
-%%
-%% TODO: refactor the code so that the above is obvious
-
 -define(IS_RUNNING(State),
         (State#v1.connection_state =:= running orelse
          State#v1.connection_state =:= blocking orelse
          State#v1.connection_state =:= blocked)).
 
-%%----------------------------------------------------------------------------
+%%--------------------------------------------------------------------------
 
 -ifdef(use_specs).
 
@@ -157,7 +70,8 @@
 -spec(info/2 :: (pid(), rabbit_types:info_keys()) -> rabbit_types:infos()).
 -spec(shutdown/2 :: (pid(), string()) -> 'ok').
 -spec(conserve_memory/2 :: (pid(), boolean()) -> 'ok').
--spec(server_properties/0 :: () -> rabbit_framing:amqp_table()).
+-spec(server_properties/1 :: (rabbit_types:protocol()) ->
+                                  rabbit_framing:amqp_table()).
 
 %% These specs only exists to add no_return() to keep dialyzer happy
 -spec(init/4 :: (pid(), pid(), pid(), rabbit_heartbeat:start_heartbeat_fun())
@@ -213,7 +127,7 @@ conserve_memory(Pid, Conserve) ->
     Pid ! {conserve_memory, Conserve},
     ok.
 
-server_properties() ->
+server_properties(Protocol) ->
     {ok, Product} = application:get_key(rabbit, id),
     {ok, Version} = application:get_key(rabbit, vsn),
 
@@ -224,21 +138,30 @@ server_properties() ->
     %% Normalize the simplifed (2-tuple) and unsimplified (3-tuple) forms
     %% from the config and merge them with the generated built-in properties
     NormalizedConfigServerProps =
-        [case X of
-             {KeyAtom, Value} -> {list_to_binary(atom_to_list(KeyAtom)),
-                                  longstr,
-                                  list_to_binary(Value)};
-             {BinKey, Type, Value} -> {BinKey, Type, Value}
-         end || X <- RawConfigServerProps ++
-                    [{product,     Product},
-                     {version,     Version},
-                     {platform,    "Erlang/OTP"},
-                     {copyright,   ?COPYRIGHT_MESSAGE},
-                     {information, ?INFORMATION_MESSAGE}]],
+        [{<<"capabilities">>, table, server_capabilities(Protocol)} |
+         [case X of
+              {KeyAtom, Value} -> {list_to_binary(atom_to_list(KeyAtom)),
+                                   longstr,
+                                   list_to_binary(Value)};
+              {BinKey, Type, Value} -> {BinKey, Type, Value}
+          end || X <- RawConfigServerProps ++
+                     [{product,     Product},
+                      {version,     Version},
+                      {platform,    "Erlang/OTP"},
+                      {copyright,   ?COPYRIGHT_MESSAGE},
+                      {information, ?INFORMATION_MESSAGE}]]],
 
-    %% Filter duplicated properties in favor of config file provided values
+    %% Filter duplicated properties in favour of config file provided values
     lists:usort(fun ({K1,_,_}, {K2,_,_}) -> K1 =< K2 end,
                 NormalizedConfigServerProps).
+
+server_capabilities(rabbit_framing_amqp_0_9_1) ->
+    [{<<"publisher_confirms">>,         bool, true},
+     {<<"exchange_exchange_bindings">>, bool, true},
+     {<<"basic.nack">>,                 bool, true},
+     {<<"consumer_cancel_notify">>,     bool, true}];
+server_capabilities(_) ->
+    [].
 
 inet_op(F) -> rabbit_misc:throw_on_error(inet_error, F).
 
@@ -263,7 +186,7 @@ start_connection(Parent, ChannelSupSupPid, Collector, StartHeartbeatFun, Deb,
     erlang:send_after(?HANDSHAKE_TIMEOUT * 1000, self(),
                       handshake_timeout),
     try
-        mainloop(Deb, switch_callback(
+        recvloop(Deb, switch_callback(
                         #v1{parent              = Parent,
                             sock                = ClientSock,
                             connection          = #connection{
@@ -272,10 +195,11 @@ start_connection(Parent, ChannelSupSupPid, Collector, StartHeartbeatFun, Deb,
                               timeout_sec        = ?HANDSHAKE_TIMEOUT,
                               frame_max          = ?FRAME_MIN_SIZE,
                               vhost              = none,
-                              client_properties  = none},
+                              client_properties  = none,
+                              capabilities       = []},
                             callback            = uninitialized_callback,
-                            recv_length         = 0,
-                            recv_ref            = none,
+                            recv_len            = 0,
+                            pending_recv        = false,
                             connection_state    = pre_init,
                             queue_collector     = Collector,
                             heartbeater         = none,
@@ -283,6 +207,8 @@ start_connection(Parent, ChannelSupSupPid, Collector, StartHeartbeatFun, Deb,
                                 rabbit_event:init_stats_timer(),
                             channel_sup_sup_pid = ChannelSupSupPid,
                             start_heartbeat_fun = StartHeartbeatFun,
+                            buf                 = [],
+                            buf_len             = 0,
                             auth_mechanism      = none,
                             auth_state          = none
                            },
@@ -307,88 +233,104 @@ start_connection(Parent, ChannelSupSupPid, Collector, StartHeartbeatFun, Deb,
     end,
     done.
 
-mainloop(Deb, State = #v1{parent = Parent, sock= Sock, recv_ref = Ref}) ->
-    receive
-        {inet_async, Sock, Ref, {ok, Data}} ->
-            mainloop(Deb, handle_input(State#v1.callback, Data,
-                                       State#v1{recv_ref = none}));
-        {inet_async, Sock, Ref, {error, closed}} ->
-            if State#v1.connection_state =:= closed ->
-                    State;
-               true ->
-                    throw(connection_closed_abruptly)
-            end;
-        {inet_async, Sock, Ref, {error, Reason}} ->
-            throw({inet_error, Reason});
-        {conserve_memory, Conserve} ->
-            mainloop(Deb, internal_conserve_memory(Conserve, State));
-        {'EXIT', Parent, Reason} ->
-            terminate(io_lib:format("broker forced connection closure "
-                                    "with reason '~w'", [Reason]), State),
-            %% this is what we are expected to do according to
-            %% http://www.erlang.org/doc/man/sys.html
-            %%
-            %% If we wanted to be *really* nice we should wait for a
-            %% while for clients to close the socket at their end,
-            %% just as we do in the ordinary error case. However,
-            %% since this termination is initiated by our parent it is
-            %% probably more important to exit quickly.
-            exit(Reason);
-        {channel_exit, _Channel, E = {writer, send_failed, _Error}} ->
-            throw(E);
-        {channel_exit, Channel, Reason} ->
-            mainloop(Deb, handle_exception(State, Channel, Reason));
-        {'DOWN', _MRef, process, ChPid, Reason} ->
-            mainloop(Deb, handle_dependent_exit(ChPid, Reason, State));
-        terminate_connection ->
-            State;
-        handshake_timeout ->
-            if ?IS_RUNNING(State) orelse
-               State#v1.connection_state =:= closing orelse
-               State#v1.connection_state =:= closed ->
-                    mainloop(Deb, State);
-               true ->
-                    throw({handshake_timeout, State#v1.callback})
-            end;
-        timeout ->
-            case State#v1.connection_state of
-                closed -> mainloop(Deb, State);
-                S      -> throw({timeout, S})
-            end;
-        {'$gen_call', From, {shutdown, Explanation}} ->
-            {ForceTermination, NewState} = terminate(Explanation, State),
-            gen_server:reply(From, ok),
-            case ForceTermination of
-                force  -> ok;
-                normal -> mainloop(Deb, NewState)
-            end;
-        {'$gen_call', From, info} ->
-            gen_server:reply(From, infos(?INFO_KEYS, State)),
-            mainloop(Deb, State);
-        {'$gen_call', From, {info, Items}} ->
-            gen_server:reply(From, try {ok, infos(Items, State)}
-                                   catch Error -> {error, Error}
-                                   end),
-            mainloop(Deb, State);
-        emit_stats ->
-            State1 = internal_emit_stats(State),
-            mainloop(Deb, State1);
-        {system, From, Request} ->
-            sys:handle_system_msg(Request, From,
-                                  Parent, ?MODULE, Deb, State);
-        Other ->
-            %% internal error -> something worth dying for
-            exit({unexpected_message, Other})
+recvloop(Deb, State = #v1{pending_recv = true}) ->
+    mainloop(Deb, State);
+recvloop(Deb, State = #v1{connection_state = blocked}) ->
+    mainloop(Deb, State);
+recvloop(Deb, State = #v1{sock = Sock, recv_len = RecvLen, buf_len = BufLen})
+  when BufLen < RecvLen ->
+    ok = rabbit_net:setopts(Sock, [{active, once}]),
+    mainloop(Deb, State#v1{pending_recv = true});
+recvloop(Deb, State = #v1{recv_len = RecvLen, buf = Buf, buf_len = BufLen}) ->
+    {Data, Rest} = split_binary(case Buf of
+                                    [B] -> B;
+                                    _   -> list_to_binary(lists:reverse(Buf))
+                                end, RecvLen),
+    recvloop(Deb, handle_input(State#v1.callback, Data,
+                               State#v1{buf = [Rest],
+                                        buf_len = BufLen - RecvLen})).
+
+mainloop(Deb, State = #v1{sock = Sock, buf = Buf, buf_len = BufLen}) ->
+    case rabbit_net:recv(Sock) of
+        {data, Data}    -> recvloop(Deb, State#v1{buf = [Data | Buf],
+                                                  buf_len = BufLen + size(Data),
+                                                  pending_recv = false});
+        closed          -> if State#v1.connection_state =:= closed ->
+                                   State;
+                              true ->
+                                   throw(connection_closed_abruptly)
+                           end;
+        {error, Reason} -> throw({inet_error, Reason});
+        {other, Other}  -> handle_other(Other, Deb, State)
     end.
+
+handle_other({conserve_memory, Conserve}, Deb, State) ->
+    recvloop(Deb, internal_conserve_memory(Conserve, State));
+handle_other({channel_closing, ChPid}, Deb, State) ->
+    ok = rabbit_channel:ready_for_close(ChPid),
+    channel_cleanup(ChPid),
+    mainloop(Deb, State);
+handle_other({'EXIT', Parent, Reason}, _Deb, State = #v1{parent = Parent}) ->
+    terminate(io_lib:format("broker forced connection closure "
+                            "with reason '~w'", [Reason]), State),
+    %% this is what we are expected to do according to
+    %% http://www.erlang.org/doc/man/sys.html
+    %%
+    %% If we wanted to be *really* nice we should wait for a while for
+    %% clients to close the socket at their end, just as we do in the
+    %% ordinary error case. However, since this termination is
+    %% initiated by our parent it is probably more important to exit
+    %% quickly.
+    exit(Reason);
+handle_other({channel_exit, _Channel, E = {writer, send_failed, _Error}},
+             _Deb, _State) ->
+    throw(E);
+handle_other({channel_exit, Channel, Reason}, Deb, State) ->
+    mainloop(Deb, handle_exception(State, Channel, Reason));
+handle_other({'DOWN', _MRef, process, ChPid, Reason}, Deb, State) ->
+    mainloop(Deb, handle_dependent_exit(ChPid, Reason, State));
+handle_other(terminate_connection, _Deb, State) ->
+    State;
+handle_other(handshake_timeout, Deb, State)
+  when ?IS_RUNNING(State) orelse
+       State#v1.connection_state =:= closing orelse
+       State#v1.connection_state =:= closed ->
+    mainloop(Deb, State);
+handle_other(handshake_timeout, _Deb, State) ->
+    throw({handshake_timeout, State#v1.callback});
+handle_other(timeout, Deb, State = #v1{connection_state = closed}) ->
+    mainloop(Deb, State);
+handle_other(timeout, _Deb, #v1{connection_state = S}) ->
+    throw({timeout, S});
+handle_other({'$gen_call', From, {shutdown, Explanation}}, Deb, State) ->
+    {ForceTermination, NewState} = terminate(Explanation, State),
+    gen_server:reply(From, ok),
+    case ForceTermination of
+        force  -> ok;
+        normal -> mainloop(Deb, NewState)
+    end;
+handle_other({'$gen_call', From, info}, Deb, State) ->
+    gen_server:reply(From, infos(?INFO_KEYS, State)),
+    mainloop(Deb, State);
+handle_other({'$gen_call', From, {info, Items}}, Deb, State) ->
+    gen_server:reply(From, try {ok, infos(Items, State)}
+                           catch Error -> {error, Error}
+                           end),
+    mainloop(Deb, State);
+handle_other(emit_stats, Deb, State) ->
+    mainloop(Deb, internal_emit_stats(State));
+handle_other({system, From, Request}, Deb, State = #v1{parent = Parent}) ->
+    sys:handle_system_msg(Request, From, Parent, ?MODULE, Deb, State);
+handle_other(Other, _Deb, _State) ->
+    %% internal error -> something worth dying for
+    exit({unexpected_message, Other}).
 
 switch_callback(State = #v1{connection_state = blocked,
                             heartbeater = Heartbeater}, Callback, Length) ->
     ok = rabbit_heartbeat:pause_monitor(Heartbeater),
-    State#v1{callback = Callback, recv_length = Length, recv_ref = none};
+    State#v1{callback = Callback, recv_len = Length};
 switch_callback(State, Callback, Length) ->
-    Ref = inet_op(fun () -> rabbit_net:async_recv(
-                              State#v1.sock, Length, infinity) end),
-    State#v1{callback = Callback, recv_length = Length, recv_ref = Ref}.
+    State#v1{callback = Callback, recv_len = Length}.
 
 terminate(Explanation, State) when ?IS_RUNNING(State) ->
     {normal, send_exception(State, 0,
@@ -402,12 +344,9 @@ internal_conserve_memory(true,  State = #v1{connection_state = running}) ->
 internal_conserve_memory(false, State = #v1{connection_state = blocking}) ->
     State#v1{connection_state = running};
 internal_conserve_memory(false, State = #v1{connection_state = blocked,
-                                            heartbeater      = Heartbeater,
-                                            callback         = Callback,
-                                            recv_length      = Length,
-                                            recv_ref         = none}) ->
+                                            heartbeater      = Heartbeater}) ->
     ok = rabbit_heartbeat:resume_monitor(Heartbeater),
-    switch_callback(State#v1{connection_state = running}, Callback, Length);
+    State#v1{connection_state = running};
 internal_conserve_memory(_Conserve, State) ->
     State.
 
@@ -429,32 +368,32 @@ close_connection(State = #v1{queue_collector = Collector,
     erlang:send_after(TimeoutMillisec, self(), terminate_connection),
     State#v1{connection_state = closed}.
 
-close_channel(Channel, State) ->
-    put({channel, Channel}, closing),
-    State.
-
 handle_dependent_exit(ChPid, Reason, State) ->
     case termination_kind(Reason) of
         controlled ->
-            erase({ch_pid, ChPid}),
+            channel_cleanup(ChPid),
             maybe_close(State);
         uncontrolled ->
             case channel_cleanup(ChPid) of
                 undefined -> exit({abnormal_dependent_exit, ChPid, Reason});
-                Channel   -> maybe_close(
+                Channel   -> rabbit_log:error(
+                               "connection ~p, channel ~p - error:~n~p~n",
+                               [self(), Channel, Reason]),
+                             maybe_close(
                                handle_exception(State, Channel, Reason))
             end
     end.
 
 channel_cleanup(ChPid) ->
     case get({ch_pid, ChPid}) of
-        undefined -> undefined;
-        Channel   -> erase({channel, Channel}),
-                     erase({ch_pid, ChPid}),
-                     Channel
+        undefined       -> undefined;
+        {Channel, MRef} -> erase({channel, Channel}),
+                           erase({ch_pid, ChPid}),
+                           erlang:demonitor(MRef, [flush]),
+                           Channel
     end.
 
-all_channels() -> [ChPid || {{ch_pid, ChPid}, _Channel} <- get()].
+all_channels() -> [ChPid || {{ch_pid, ChPid}, _ChannelMRef} <- get()].
 
 terminate_channels() ->
     NChannels =
@@ -509,8 +448,8 @@ maybe_close(State = #v1{connection_state = closing,
 maybe_close(State) ->
     State.
 
-termination_kind(normal)            -> controlled;
-termination_kind(_)                 -> uncontrolled.
+termination_kind(normal) -> controlled;
+termination_kind(_)      -> uncontrolled.
 
 handle_frame(Type, 0, Payload,
              State = #v1{connection_state = CS,
@@ -546,8 +485,8 @@ handle_frame(Type, Channel, Payload,
                                   Channel, ChPid, FramingState),
                     put({channel, Channel}, {ChPid, NewAState}),
                     case AnalyzedFrame of
-                        {method, 'channel.close', _} ->
-                            erase({channel, Channel}),
+                        {method, 'channel.close_ok', _} ->
+                            channel_cleanup(ChPid),
                             State;
                         {method, MethodName, _} ->
                             case (State#v1.connection_state =:= blocking
@@ -559,25 +498,6 @@ handle_frame(Type, Channel, Payload,
                         _ ->
                             State
                     end;
-                closing ->
-                    %% According to the spec, after sending a
-                    %% channel.close we must ignore all frames except
-                    %% channel.close and channel.close_ok.  In the
-                    %% event of a channel.close, we should send back a
-                    %% channel.close_ok.
-                    case AnalyzedFrame of
-                        {method, 'channel.close_ok', _} ->
-                            erase({channel, Channel});
-                        {method, 'channel.close', _} ->
-                            %% We're already closing this channel, so
-                            %% there's no cleanup to do (notify
-                            %% queues, etc.)
-                            ok = rabbit_writer:internal_send_command(
-                                   State#v1.sock, Channel,
-                                   #'channel.close_ok'{}, Protocol);
-                        _ -> ok
-                    end,
-                    State;
                 undefined ->
                     case ?IS_RUNNING(State) of
                         true  -> send_to_new_channel(
@@ -598,8 +518,8 @@ handle_input({frame_payload, Type, Channel, PayloadSize},
              PayloadAndMarker, State) ->
     case PayloadAndMarker of
         <<Payload:PayloadSize/binary, ?FRAME_END>> ->
-            handle_frame(Type, Channel, Payload,
-                         switch_callback(State, frame_header, 7));
+            switch_callback(handle_frame(Type, Channel, Payload, State),
+                            frame_header, 7);
         _ ->
             throw({bad_payload, Type, Channel, PayloadSize, PayloadAndMarker})
     end;
@@ -649,8 +569,8 @@ start_connection({ProtocolMajor, ProtocolMinor, _ProtocolRevision},
     Start = #'connection.start'{
       version_major = ProtocolMajor,
       version_minor = ProtocolMinor,
-      server_properties = server_properties(),
-      mechanisms = auth_mechanisms_binary(),
+      server_properties = server_properties(Protocol),
+      mechanisms = auth_mechanisms_binary(Sock),
       locales = <<"en_US">> },
     ok = send_on_channel0(Sock, Start, Protocol),
     switch_callback(State#v1{connection = Connection#connection{
@@ -676,14 +596,14 @@ handle_method0(MethodName, FieldsBin,
                State = #v1{connection = #connection{protocol = Protocol}}) ->
     HandleException =
         fun(R) ->
-            case ?IS_RUNNING(State) of
-                true  -> send_exception(State, 0, R);
-                %% We don't trust the client at this point - force
-                %% them to wait for a bit so they can't DOS us with
-                %% repeated failed logins etc.
-                false -> timer:sleep(?SILENT_CLOSE_DELAY * 1000),
-                         throw({channel0_error, State#v1.connection_state, R})
-            end
+                case ?IS_RUNNING(State) of
+                    true  -> send_exception(State, 0, R);
+                    %% We don't trust the client at this point - force
+                    %% them to wait for a bit so they can't DOS us with
+                    %% repeated failed logins etc.
+                    false -> timer:sleep(?SILENT_CLOSE_DELAY * 1000),
+                             throw({channel0_error, State#v1.connection_state, R})
+                end
         end,
     try
         handle_method0(Protocol:decode_method_fields(MethodName, FieldsBin),
@@ -700,13 +620,19 @@ handle_method0(#'connection.start_ok'{mechanism = Mechanism,
                State0 = #v1{connection_state = starting,
                             connection       = Connection,
                             sock             = Sock}) ->
-    AuthMechanism = auth_mechanism_to_module(Mechanism),
+    AuthMechanism = auth_mechanism_to_module(Mechanism, Sock),
+    Capabilities =
+        case rabbit_misc:table_lookup(ClientProperties, <<"capabilities">>) of
+            {table, Capabilities1} -> Capabilities1;
+            _                      -> []
+        end,
     State = State0#v1{auth_mechanism   = AuthMechanism,
                       auth_state       = AuthMechanism:init(Sock),
                       connection_state = securing,
                       connection       =
                           Connection#connection{
-                            client_properties = ClientProperties}},
+                            client_properties = ClientProperties,
+                            capabilities      = Capabilities}},
     auth_phase(Response, State);
 
 handle_method0(#'connection.secure_ok'{response = Response},
@@ -719,14 +645,15 @@ handle_method0(#'connection.tune_ok'{frame_max = FrameMax,
                            connection = Connection,
                            sock = Sock,
                            start_heartbeat_fun = SHF}) ->
-    if (FrameMax /= 0) and (FrameMax < ?FRAME_MIN_SIZE) ->
+    ServerFrameMax = server_frame_max(),
+    if FrameMax /= 0 andalso FrameMax < ?FRAME_MIN_SIZE ->
             rabbit_misc:protocol_error(
               not_allowed, "frame_max=~w < ~w min size",
               [FrameMax, ?FRAME_MIN_SIZE]);
-       (?FRAME_MAX /= 0) and (FrameMax > ?FRAME_MAX) ->
+       ServerFrameMax /= 0 andalso FrameMax > ServerFrameMax ->
             rabbit_misc:protocol_error(
               not_allowed, "frame_max=~w > ~w max size",
-              [FrameMax, ?FRAME_MAX]);
+              [FrameMax, ServerFrameMax]);
        true ->
             Frame = rabbit_binary_generator:build_heartbeat_frame(),
             SendFun = fun() -> catch rabbit_net:send(Sock, Frame) end,
@@ -742,7 +669,6 @@ handle_method0(#'connection.tune_ok'{frame_max = FrameMax,
     end;
 
 handle_method0(#'connection.open'{virtual_host = VHostPath},
-
                State = #v1{connection_state = opening,
                            connection = Connection = #connection{
                                           user = User,
@@ -757,7 +683,8 @@ handle_method0(#'connection.open'{virtual_host = VHostPath},
                State#v1{connection_state = running,
                         connection = NewConnection}),
     rabbit_event:notify(connection_created,
-                        infos(?CREATION_EVENT_KEYS, State1)),
+                        [{type, network} |
+                         infos(?CREATION_EVENT_KEYS, State1)]),
     rabbit_event:if_enabled(StatsTimer,
                             fun() -> internal_emit_stats(State1) end),
     State1;
@@ -784,17 +711,23 @@ handle_method0(_Method, #v1{connection_state = S}) ->
     rabbit_misc:protocol_error(
       channel_error, "unexpected method in connection state ~w", [S]).
 
+%% Compute frame_max for this instance. Could simply use 0, but breaks
+%% QPid Java client.
+server_frame_max() ->
+    {ok, FrameMax} = application:get_env(rabbit, frame_max),
+    FrameMax.
+
 send_on_channel0(Sock, Method, Protocol) ->
     ok = rabbit_writer:internal_send_command(Sock, 0, Method, Protocol).
 
-auth_mechanism_to_module(TypeBin) ->
+auth_mechanism_to_module(TypeBin, Sock) ->
     case rabbit_registry:binary_to_type(TypeBin) of
         {error, not_found} ->
             rabbit_misc:protocol_error(
               command_invalid, "unknown authentication mechanism '~s'",
               [TypeBin]);
         T ->
-            case {lists:member(T, auth_mechanisms()),
+            case {lists:member(T, auth_mechanisms(Sock)),
                   rabbit_registry:lookup_module(auth_mechanism, T)} of
                 {true, {ok, Module}} ->
                     Module;
@@ -805,15 +738,14 @@ auth_mechanism_to_module(TypeBin) ->
             end
     end.
 
-auth_mechanisms() ->
+auth_mechanisms(Sock) ->
     {ok, Configured} = application:get_env(auth_mechanisms),
-    [Name || {Name, _Module} <- rabbit_registry:lookup_all(auth_mechanism),
-             lists:member(Name, Configured)].
+    [Name || {Name, Module} <- rabbit_registry:lookup_all(auth_mechanism),
+             Module:should_offer(Sock), lists:member(Name, Configured)].
 
-auth_mechanisms_binary() ->
+auth_mechanisms_binary(Sock) ->
     list_to_binary(
-            string:join(
-              [atom_to_list(A) || A <- auth_mechanisms()], " ")).
+      string:join([atom_to_list(A) || A <- auth_mechanisms(Sock)], " ")).
 
 auth_phase(Response,
            State = #v1{auth_mechanism = AuthMechanism,
@@ -835,7 +767,7 @@ auth_phase(Response,
             State#v1{auth_state = AuthState1};
         {ok, User} ->
             Tune = #'connection.tune'{channel_max = 0,
-                                      frame_max = ?FRAME_MAX,
+                                      frame_max = server_frame_max(),
                                       heartbeat = 0},
             ok = send_on_channel0(Sock, Tune, Protocol),
             State#v1{connection_state = tuning,
@@ -939,19 +871,20 @@ cert_info(F, Sock) ->
 send_to_new_channel(Channel, AnalyzedFrame, State) ->
     #v1{sock = Sock, queue_collector = Collector,
         channel_sup_sup_pid = ChanSupSup,
-        connection = #connection{protocol  = Protocol,
-                                 frame_max = FrameMax,
-                                 user      = User,
-                                 vhost     = VHost}} = State,
+        connection = #connection{protocol     = Protocol,
+                                 frame_max    = FrameMax,
+                                 user         = User,
+                                 vhost        = VHost,
+                                 capabilities = Capabilities}} = State,
     {ok, _ChSupPid, {ChPid, AState}} =
         rabbit_channel_sup_sup:start_channel(
-          ChanSupSup, {tcp, Protocol, Sock, Channel, FrameMax, self(), User,
-                       VHost, Collector}),
-    erlang:monitor(process, ChPid),
+          ChanSupSup, {tcp, Sock, Channel, FrameMax, self(), Protocol, User,
+                       VHost, Capabilities, Collector}),
+    MRef = erlang:monitor(process, ChPid),
     NewAState = process_channel_frame(AnalyzedFrame, self(),
                                       Channel, ChPid, AState),
     put({channel, Channel}, {ChPid, NewAState}),
-    put({ch_pid, ChPid}, Channel),
+    put({ch_pid, ChPid}, {Channel, MRef}),
     State.
 
 process_channel_frame(Frame, ErrPid, Channel, ChPid, AState) ->
@@ -967,29 +900,20 @@ process_channel_frame(Frame, ErrPid, Channel, ChPid, AState) ->
                                             AState
     end.
 
-log_channel_error(ConnectionState, Channel, Reason) ->
-    rabbit_log:error("connection ~p (~p), channel ~p - error:~n~p~n",
-                     [self(), ConnectionState, Channel, Reason]).
-
-handle_exception(State = #v1{connection_state = closed}, Channel, Reason) ->
-    log_channel_error(closed, Channel, Reason),
+handle_exception(State = #v1{connection_state = closed}, _Channel, _Reason) ->
     State;
-handle_exception(State = #v1{connection_state = CS}, Channel, Reason) ->
-    log_channel_error(CS, Channel, Reason),
+handle_exception(State, Channel, Reason) ->
     send_exception(State, Channel, Reason).
 
 send_exception(State = #v1{connection = #connection{protocol = Protocol}},
                Channel, Reason) ->
-    {ShouldClose, CloseChannel, CloseMethod} =
+    {0, CloseMethod} =
         rabbit_binary_generator:map_exception(Channel, Reason, Protocol),
-    NewState = case ShouldClose of
-                   true  -> terminate_channels(),
-                            close_connection(State);
-                   false -> close_channel(Channel, State)
-               end,
+    terminate_channels(),
+    State1 = close_connection(State),
     ok = rabbit_writer:internal_send_command(
-           NewState#v1.sock, CloseChannel, CloseMethod, Protocol),
-    NewState.
+           State1#v1.sock, 0, CloseMethod, Protocol),
+    State1.
 
 internal_emit_stats(State = #v1{stats_timer = StatsTimer}) ->
     rabbit_event:notify(connection_stats, infos(?STATISTICS_KEYS, State)),

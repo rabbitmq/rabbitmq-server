@@ -36,17 +36,13 @@ behaviour_info(callbacks) ->
      %%     Client failed authentication. Log and die.
      {check_user_login, 2},
 
-     %% Given #user, vhost path and permission, can a user access a vhost?
-     %% Permission is read  - learn of the existence of (only relevant for
-     %%                       management plugin)
-     %%            or write - log in
-     %%
+     %% Given #user and vhost, can a user log in to a vhost?
      %% Possible responses:
      %% true
      %% false
      %% {error, Error}
      %%     Something went wrong. Log and die.
-     {check_vhost_access, 3},
+     {check_vhost_access, 2},
 
      %% Given #user, resource and permission, can a user access a resource?
      %%

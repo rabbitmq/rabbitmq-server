@@ -111,11 +111,11 @@ stop() ->
 
 init([]) ->
     MemoryLimit = trunc(?MEMORY_LIMIT_SCALING *
-                        (try
-                             vm_memory_monitor:get_memory_limit()
-                         catch
-                             exit:{noproc, _} -> ?MEMORY_SIZE_FOR_DISABLED_VMM
-                         end)),
+                            (try
+                                 vm_memory_monitor:get_memory_limit()
+                             catch
+                                 exit:{noproc, _} -> ?MEMORY_SIZE_FOR_DISABLED_VMM
+                             end)),
 
     {ok, TRef} = timer:apply_interval(?DEFAULT_UPDATE_INTERVAL,
                                       ?SERVER, update, []),

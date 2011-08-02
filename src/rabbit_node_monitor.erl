@@ -22,13 +22,40 @@
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
+-export([notify_cluster/0, rabbit_running_on/1]).
 
 -define(SERVER, ?MODULE).
+-define(RABBIT_UP_RPC_TIMEOUT, 2000).
+
+%%----------------------------------------------------------------------------
+
+-ifdef(use_specs).
+
+-spec(rabbit_running_on/1 :: (node()) -> 'ok').
+-spec(notify_cluster/0 :: () -> 'ok').
+
+-endif.
 
 %%--------------------------------------------------------------------
 
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
+
+rabbit_running_on(Node) ->
+    gen_server:cast(rabbit_node_monitor, {rabbit_running_on, Node}).
+
+notify_cluster() ->
+    Node = node(),
+    Nodes = rabbit_mnesia:running_clustered_nodes() -- [Node],
+    %% notify other rabbits of this rabbit
+    case rpc:multicall(Nodes, rabbit_node_monitor, rabbit_running_on,
+                       [Node], ?RABBIT_UP_RPC_TIMEOUT) of
+        {_, [] } -> ok;
+        {_, Bad} -> rabbit_log:info("failed to contact nodes ~p~n", [Bad])
+    end,
+    %% register other active rabbits with this rabbit
+    [ rabbit_node_monitor:rabbit_running_on(N) || N <- Nodes ],
+    ok.
 
 %%--------------------------------------------------------------------
 
@@ -39,19 +66,21 @@ init([]) ->
 handle_call(_Request, _From, State) ->
     {noreply, State}.
 
+handle_cast({rabbit_running_on, Node}, State) ->
+    rabbit_log:info("node ~p up~n", [Node]),
+    erlang:monitor(process, {rabbit, Node}),
+    ok = rabbit_alarm:on_node_up(Node),
+    {noreply, State};
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
-handle_info({nodeup, Node}, State) ->
-    rabbit_log:info("node ~p up", [Node]),
-    {noreply, State};
 handle_info({nodedown, Node}, State) ->
-    rabbit_log:info("node ~p down", [Node]),
-    %% TODO: This may turn out to be a performance hog when there are
-    %% lots of nodes.  We really only need to execute this code on
-    %% *one* node, rather than all of them.
-    ok = rabbit_networking:on_node_down(Node),
-    ok = rabbit_amqqueue:on_node_down(Node),
+    rabbit_log:info("node ~p down~n", [Node]),
+    ok = handle_dead_rabbit(Node),
+    {noreply, State};
+handle_info({'DOWN', _MRef, process, {rabbit, Node}, _Reason}, State) ->
+    rabbit_log:info("node ~p lost 'rabbit'~n", [Node]),
+    ok = handle_dead_rabbit(Node),
     {noreply, State};
 handle_info(_Info, State) ->
     {noreply, State}.
@@ -64,3 +93,10 @@ code_change(_OldVsn, State, _Extra) ->
 
 %%--------------------------------------------------------------------
 
+%% TODO: This may turn out to be a performance hog when there are lots
+%% of nodes.  We really only need to execute some of these statements
+%% on *one* node, rather than all of them.
+handle_dead_rabbit(Node) ->
+    ok = rabbit_networking:on_node_down(Node),
+    ok = rabbit_amqqueue:on_node_down(Node),
+    ok = rabbit_alarm:on_node_down(Node).

@@ -9,20 +9,20 @@
     </refentryinfo>
 
     <refmeta>
-        <refentrytitle>rabbitmq.conf</refentrytitle>
+        <refentrytitle>rabbitmq-env.conf</refentrytitle>
         <manvolnum>5</manvolnum>
         <refmiscinfo class="manual">RabbitMQ Server</refmiscinfo>
     </refmeta>
 
     <refnamediv>
-        <refname>rabbitmq.conf</refname>
+        <refname>rabbitmq-env.conf</refname>
         <refpurpose>default settings for RabbitMQ AMQP server</refpurpose>
     </refnamediv>
 
     <refsect1>
         <title>Description</title>
         <para>
-<filename>/etc/rabbitmq/rabbitmq.conf</filename> contains variable settings that override the
+<filename>/etc/rabbitmq/rabbitmq-env.conf</filename> contains variable settings that override the
 defaults built in to the RabbitMQ startup scripts.
         </para>
         <para>
@@ -33,7 +33,7 @@ operator), including line comments starting with "#".
         </para>
         <para>
 In order of preference, the startup scripts get their values from the
-environment, from <filename>/etc/rabbitmq/rabbitmq.conf</filename> and finally from the
+environment, from <filename>/etc/rabbitmq/rabbitmq-env.conf</filename> and finally from the
 built-in default values. For example, for the <envar>RABBITMQ_NODENAME</envar>
 setting,
         </para>
@@ -48,26 +48,26 @@ empty string, then
           <envar>NODENAME</envar>
         </para>
         <para>
-from <filename>/etc/rabbitmq/rabbitmq.conf</filename> is checked. If it is also absent
+from <filename>/etc/rabbitmq/rabbitmq-env.conf</filename> is checked. If it is also absent
 or set equal to the empty string then the default value from the
 startup script is used.
         </para>
         <para>
-The variable names in /etc/rabbitmq/rabbitmq.conf are always equal to the
+The variable names in /etc/rabbitmq/rabbitmq-env.conf are always equal to the
 environment variable names, with the <envar>RABBITMQ_</envar> prefix removed:
 <envar>RABBITMQ_NODE_PORT</envar> from the environment becomes <envar>NODE_PORT</envar> in the
-<filename>/etc/rabbitmq/rabbitmq.conf</filename> file, etc.
+<filename>/etc/rabbitmq/rabbitmq-env.conf</filename> file, etc.
         </para>
         <para role="example-prefix">For example:</para>
         <screen role="example-multiline">
-# I am a complete /etc/rabbitmq/rabbitmq.conf file.
+# I am a complete /etc/rabbitmq/rabbitmq-env.conf file.
 # Comment lines start with a hash character.
 # This is a /bin/sh script file - use ordinary envt var syntax
 NODENAME=hare
         </screen>
         <para role="example">
             This is an example of a complete
-            <filename>/etc/rabbitmq/rabbitmq.conf</filename> file that overrides the default Erlang
+            <filename>/etc/rabbitmq/rabbitmq-env.conf</filename> file that overrides the default Erlang
             node name from "rabbit" to "hare".
         </para>
 
@@ -76,7 +76,6 @@ NODENAME=hare
     <refsect1>
         <title>See also</title>
         <para>
-            <citerefentry><refentrytitle>rabbitmq-multi</refentrytitle><manvolnum>1</manvolnum></citerefentry>
             <citerefentry><refentrytitle>rabbitmq-server</refentrytitle><manvolnum>1</manvolnum></citerefentry>
             <citerefentry><refentrytitle>rabbitmqctl</refentrytitle><manvolnum>1</manvolnum></citerefentry>
         </para>

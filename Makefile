@@ -18,8 +18,10 @@ TARGETS=$(EBIN_DIR)/rabbit.app $(INCLUDE_DIR)/rabbit_framing.hrl $(BEAM_TARGETS)
 WEB_URL=http://www.rabbitmq.com/
 MANPAGES=$(patsubst %.xml, %.gz, $(wildcard $(DOCS_DIR)/*.[0-9].xml))
 WEB_MANPAGES=$(patsubst %.xml, %.man.xml, $(wildcard $(DOCS_DIR)/*.[0-9].xml) $(DOCS_DIR)/rabbitmq-service.xml)
-USAGES_XML=$(DOCS_DIR)/rabbitmqctl.1.xml $(DOCS_DIR)/rabbitmq-multi.1.xml
+USAGES_XML=$(DOCS_DIR)/rabbitmqctl.1.xml
 USAGES_ERL=$(foreach XML, $(USAGES_XML), $(call usage_xml_to_erl, $(XML)))
+QC_MODULES := rabbit_backing_queue_qc
+QC_TRIALS ?= 100
 
 ifeq ($(shell python -c 'import simplejson' 2>/dev/null && echo yes),yes)
 PYTHON=python
@@ -41,12 +43,18 @@ RABBIT_PLT=rabbit.plt
 
 ifndef USE_SPECS
 # our type specs rely on features and bug fixes in dialyzer that are
-# only available in R14A upwards (R14A is erts 5.8)
-USE_SPECS:=$(shell erl -noshell -eval 'io:format([list_to_integer(X) || X <- string:tokens(erlang:system_info(version), ".")] >= [5,8]), halt().')
+# only available in R14B03 upwards (R14B03 is erts 5.8.4)
+USE_SPECS:=$(shell erl -noshell -eval 'io:format([list_to_integer(X) || X <- string:tokens(erlang:system_info(version), ".")] >= [5,8,4]), halt().')
+endif
+
+ifndef USE_PROPER_QC
+# PropEr needs to be installed for property checking
+# http://proper.softlab.ntua.gr/
+USE_PROPER_QC:=$(shell erl -noshell -eval 'io:format({module, proper} =:= code:ensure_loaded(proper)), halt().')
 endif
 
 #other args: +native +"{hipe,[o3,verbose]}" -Ddebug=true +debug_info +no_strict_record_tests
-ERLC_OPTS=-I $(INCLUDE_DIR) -o $(EBIN_DIR) -Wall -v +debug_info $(if $(filter true,$(USE_SPECS)),-Duse_specs)
+ERLC_OPTS=-I $(INCLUDE_DIR) -o $(EBIN_DIR) -Wall -v +debug_info $(call boolean_macro,$(USE_SPECS),use_specs) $(call boolean_macro,$(USE_PROPER_QC),use_proper_qc)
 
 VERSION=0.0.0
 TARBALL_NAME=rabbitmq-server-$(VERSION)
@@ -67,6 +75,10 @@ endef
 
 define usage_dep
   $(call usage_xml_to_erl, $(1)): $(1) $(DOCS_DIR)/usage.xsl
+endef
+
+define boolean_macro
+$(if $(filter true,$(1)),-D$(2))
 endef
 
 ifneq "$(SBIN_DIR)" ""
@@ -93,8 +105,8 @@ $(DEPS_FILE): $(SOURCES) $(INCLUDES)
 	rm -f $@
 	echo $(subst : ,:,$(foreach FILE,$^,$(FILE):)) | escript generate_deps $@ $(EBIN_DIR)
 
-$(EBIN_DIR)/rabbit.app: $(EBIN_DIR)/rabbit_app.in $(BEAM_TARGETS) generate_app
-	escript generate_app $(EBIN_DIR) $@ < $<
+$(EBIN_DIR)/rabbit.app: $(EBIN_DIR)/rabbit_app.in $(SOURCES) generate_app
+	escript generate_app $< $@ $(SOURCE_DIR)
 
 $(EBIN_DIR)/%.beam: $(SOURCE_DIR)/%.erl | $(DEPS_FILE)
 	erlc $(ERLC_OPTS) -pa $(EBIN_DIR) $<
@@ -162,7 +174,11 @@ run-node: all
 		./scripts/rabbitmq-server
 
 run-tests: all
-	echo "rabbit_tests:all_tests()." | $(ERL_CALL)
+	OUT=$$(echo "rabbit_tests:all_tests()." | $(ERL_CALL)) ; \
+	  echo $$OUT ; echo $$OUT | grep '^{ok, passed}$$' > /dev/null
+
+run-qc: all
+	$(foreach MOD,$(QC_MODULES),./quickcheck $(RABBITMQ_NODENAME) $(MOD) $(QC_TRIALS))
 
 start-background-node:
 	$(BASIC_SCRIPT_ENVIRONMENT_SETTINGS) \
@@ -177,11 +193,11 @@ stop-rabbit-on-node: all
 	echo "rabbit:stop()." | $(ERL_CALL)
 
 set-memory-alarm: all
-	echo "alarm_handler:set_alarm({vm_memory_high_watermark, []})." | \
+	echo "alarm_handler:set_alarm({{vm_memory_high_watermark, node()}, []})." | \
 	$(ERL_CALL)
 
 clear-memory-alarm: all
-	echo "alarm_handler:clear_alarm(vm_memory_high_watermark)." | \
+	echo "alarm_handler:clear_alarm({vm_memory_high_watermark, node()})." | \
 	$(ERL_CALL)
 
 stop-node:
@@ -222,7 +238,7 @@ srcdist: distclean
 	chmod 0755 $(TARGET_SRC_DIR)/scripts/*
 
 	(cd dist; tar -zcf $(TARBALL_NAME).tar.gz $(TARBALL_NAME))
-	(cd dist; zip -r $(TARBALL_NAME).zip $(TARBALL_NAME))
+	(cd dist; zip -q -r $(TARBALL_NAME).zip $(TARBALL_NAME))
 	rm -rf $(TARGET_SRC_DIR)
 
 distclean: clean
@@ -233,7 +249,7 @@ distclean: clean
 # xmlto can not read from standard input, so we mess with a tmp file.
 %.gz: %.xml $(DOCS_DIR)/examples-to-end.xsl
 	xmlto --version | grep -E '^xmlto version 0\.0\.([0-9]|1[1-8])$$' >/dev/null || opt='--stringparam man.indent.verbatims=0' ; \
-	    xsltproc $(DOCS_DIR)/examples-to-end.xsl $< > $<.tmp && \
+	    xsltproc --novalid $(DOCS_DIR)/examples-to-end.xsl $< > $<.tmp && \
 	    xmlto -o $(DOCS_DIR) $$opt man $<.tmp && \
 	    gzip -f $(DOCS_DIR)/`basename $< .xml`
 	rm -f $<.tmp
@@ -242,7 +258,7 @@ distclean: clean
 # Do not fold the cp into previous line, it's there to stop the file being
 # generated but empty if we fail
 $(SOURCE_DIR)/%_usage.erl:
-	xsltproc --stringparam modulename "`basename $@ .erl`" \
+	xsltproc --novalid --stringparam modulename "`basename $@ .erl`" \
 		$(DOCS_DIR)/usage.xsl $< > $@.tmp
 	sed -e 's/"/\\"/g' -e 's/%QUOTE%/"/g' $@.tmp > $@.tmp2
 	fold -s $@.tmp2 > $@.tmp3
@@ -256,7 +272,7 @@ $(SOURCE_DIR)/%_usage.erl:
 		xmlto xhtml-nochunks `basename $< .xml`.xml ; rm `basename $< .xml`.xml
 	cat `basename $< .xml`.html | \
 	    xsltproc --novalid $(DOCS_DIR)/remove-namespaces.xsl - | \
-		xsltproc --stringparam original `basename $<` $(DOCS_DIR)/html-to-website-xml.xsl - | \
+		xsltproc --novalid --stringparam original `basename $<` $(DOCS_DIR)/html-to-website-xml.xsl - | \
 		xmllint --format - > $@
 	rm `basename $< .xml`.html
 
@@ -268,7 +284,7 @@ install_bin: all install_dirs
 	cp -r ebin include LICENSE LICENSE-MPL-RabbitMQ INSTALL $(TARGET_DIR)
 
 	chmod 0755 scripts/*
-	for script in rabbitmq-env rabbitmq-server rabbitmqctl rabbitmq-multi; do \
+	for script in rabbitmq-env rabbitmq-server rabbitmqctl; do \
 		cp scripts/$$script $(TARGET_DIR)/sbin; \
 		[ -e $(SBIN_DIR)/$$script ] || ln -s $(SCRIPTS_REL_PATH)/$$script $(SBIN_DIR)/$$script; \
 	done
@@ -313,3 +329,4 @@ ifneq "$(strip $(patsubst clean%,,$(patsubst %clean,,$(TESTABLEGOALS))))" ""
 -include $(DEPS_FILE)
 endif
 
+.PHONY: run-qc

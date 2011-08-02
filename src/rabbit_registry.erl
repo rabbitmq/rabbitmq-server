@@ -48,7 +48,7 @@ start_link() ->
 %%---------------------------------------------------------------------------
 
 register(Class, TypeName, ModuleName) ->
-    gen_server:call(?SERVER, {register, Class, TypeName, ModuleName}).
+    gen_server:call(?SERVER, {register, Class, TypeName, ModuleName}, infinity).
 
 %% This is used with user-supplied arguments (e.g., on exchange
 %% declare), so we restrict it to existing atoms only.  This means it
