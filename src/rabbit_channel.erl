@@ -133,6 +133,11 @@ confirm(Pid, MsgSeqNos) ->
 list() ->
     pg_local:get_members(rabbit_channels).
 
+list_all_nodes() ->
+    [Pid ||
+        Node <- rabbit_mnesia:running_clustered_nodes(),
+        Pid  <- rpc:call(Node, rabbit_channel, list, [])].
+
 info_keys() -> ?INFO_KEYS.
 
 info(Pid) ->
@@ -145,10 +150,11 @@ info(Pid, Items) ->
     end.
 
 info_all() ->
-    rabbit_misc:filter_exit_map(fun (C) -> info(C) end, list()).
+    rabbit_misc:filter_exit_map(fun (C) -> info(C) end, list_all_nodes()).
 
 info_all(Items) ->
-    rabbit_misc:filter_exit_map(fun (C) -> info(C, Items) end, list()).
+    rabbit_misc:filter_exit_map(fun (C) -> info(C, Items) end,
+                                list_all_nodes()).
 
 refresh_config_all() ->
     rabbit_misc:upmap(
@@ -162,11 +168,8 @@ ready_for_close(Pid) ->
     gen_server2:cast(Pid, ready_for_close).
 
 force_event_refresh() ->
-    %% TODO roll in bug 23897?
-    All = [Pid ||
-              Node <- rabbit_mnesia:running_clustered_nodes(),
-              Pid  <- rpc:call(Node, rabbit_channel, list, [])],
-    rabbit_misc:filter_exit_map(fun (C) -> force_event_refresh(C) end, All).
+    rabbit_misc:filter_exit_map(fun (C) -> force_event_refresh(C) end,
+                                list_all_nodes()).
 
 force_event_refresh(Pid) ->
     gen_server2:cast(Pid, force_event_refresh).
