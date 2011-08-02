@@ -21,6 +21,8 @@
 
 -behaviour(amqp_gen_connection).
 
+-export([force_event_refresh/0, list_local/0]).
+
 -export([init/1, terminate/2, connect/4, do/2, open_channel_args/1, i/2,
          info_keys/0, handle_message/2, closing/3, channels_terminated/1]).
 
@@ -41,7 +43,20 @@
 
 %%---------------------------------------------------------------------------
 
+force_event_refresh() ->
+    [Pid ! force_event_refresh || Pid<- list()].
+
+list_local() ->
+    pg_local:get_members(amqp_direct_connections).
+
+list() ->
+    [Pid || Node <- rabbit_mnesia:running_clustered_nodes(),
+            Pid  <- rpc:call(Node, amqp_direct_connection, list_local, [])].
+
+%%---------------------------------------------------------------------------
+
 init([]) ->
+    ok = pg_local:join(amqp_direct_connections, self()),
     {ok, #state{}}.
 
 open_channel_args(#state{node = Node,
@@ -52,6 +67,10 @@ open_channel_args(#state{node = Node,
 
 do(_Method, _State) ->
     ok.
+
+handle_message(force_event_refresh, State) ->
+    rabbit_event:notify(connection_exists, connection_info(State)),
+    {ok, State};
 
 handle_message(Msg, State) ->
     {stop, {unexpected_msg, Msg}, State}.
@@ -65,6 +84,7 @@ channels_terminated(State = #state{closing_reason = Reason,
     {stop, {shutdown, Reason}, State}.
 
 terminate(_Reason, #state{node = Node}) ->
+    pg_local:leave(amqp_direct_connections, self()),
     rpc:call(Node, rabbit_direct, disconnect, [[{pid, self()}]]),
     ok.
 
@@ -91,7 +111,8 @@ info_keys() ->
 infos(Items, State) ->
     [{Item, i(Item, State)} || Item <- Items].
 
-additional_info(#state{adapter_info = I}) -> I#adapter_info.additional_info.
+connection_info(State = #state{adapter_info = I}) ->
+    infos(?CREATION_EVENT_KEYS, State) ++ I#adapter_info.additional_info.
 
 connect(Params = #amqp_params_direct{username     = Username,
                                      node         = Node,
@@ -103,9 +124,7 @@ connect(Params = #amqp_params_direct{username     = Username,
                          params       = Params,
                          adapter_info = ensure_adapter_info(Info)},
     case rpc:call(Node, rabbit_direct, connect,
-                  [Username, VHost, ?PROTOCOL,
-                   infos(?CREATION_EVENT_KEYS, State1) ++
-                       additional_info(State1)]) of
+                  [Username, VHost, ?PROTOCOL, connection_info(State1)]) of
         {ok, {User, ServerProperties}} ->
             {ok, Collector} = SIF(),
             State2 = State1#state{user      = User,
