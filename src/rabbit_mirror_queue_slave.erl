@@ -37,7 +37,7 @@
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3, handle_pre_hibernate/1, prioritise_call/3,
-         prioritise_cast/2]).
+         prioritise_cast/2, prioritise_info/2]).
 
 -export([joined/2, members_changed/3, handle_msg/3]).
 
@@ -197,11 +197,11 @@ handle_cast(update_ram_duration,
         rabbit_memory_monitor:report_ram_duration(self(), RamDuration),
     BQS2 = BQ:set_ram_duration_target(DesiredDuration, BQS1),
     noreply(State #state { rate_timer_ref = just_measured,
-                           backing_queue_state = BQS2 });
+                           backing_queue_state = BQS2 }).
 
-handle_cast(sync_timeout, State) ->
+handle_info(sync_timeout, State) ->
     noreply(backing_queue_timeout(
-              State #state { sync_timer_ref = undefined })).
+              State #state { sync_timer_ref = undefined }));
 
 handle_info(timeout, State) ->
     noreply(backing_queue_timeout(State));
@@ -270,9 +270,14 @@ prioritise_cast(Msg, _State) ->
         {set_ram_duration_target, _Duration} -> 8;
         {set_maximum_since_use, _Age}        -> 8;
         {run_backing_queue, _Mod, _Fun}      -> 6;
-        sync_timeout                         -> 6;
         {gm, _Msg}                           -> 5;
         {post_commit, _Txn, _AckTags}        -> 4;
+        _                                    -> 0
+    end.
+
+prioritise_info(Msg, _State) ->
+    case Msg of
+        sync_timeout                         -> 6;
         _                                    -> 0
     end.
 
@@ -516,8 +521,7 @@ backing_queue_timeout(State = #state { backing_queue = BQ }) ->
     run_backing_queue(BQ, fun (M, BQS) -> M:timeout(BQS) end, State).
 
 ensure_sync_timer(State = #state { sync_timer_ref = undefined }) ->
-    {ok, TRef} = timer:apply_after(
-                   ?SYNC_INTERVAL, rabbit_amqqueue, sync_timeout, [self()]),
+    TRef = erlang:send_after(?SYNC_INTERVAL, self(), sync_timeout),
     State #state { sync_timer_ref = TRef };
 ensure_sync_timer(State) ->
     State.
@@ -525,7 +529,7 @@ ensure_sync_timer(State) ->
 stop_sync_timer(State = #state { sync_timer_ref = undefined }) ->
     State;
 stop_sync_timer(State = #state { sync_timer_ref = TRef }) ->
-    {ok, cancel} = timer:cancel(TRef),
+    rabbit_misc:cancel_timer(TRef),
     State #state { sync_timer_ref = undefined }.
 
 ensure_rate_timer(State = #state { rate_timer_ref = undefined }) ->
