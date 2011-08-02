@@ -19,7 +19,7 @@
 -behaviour(application).
 
 -export([prepare/0, start/0, stop/0, stop_and_halt/0, status/0, environment/0,
-         rotate_logs/1, force_event_refresh/0]).
+         rotate_logs/1, force_event_refresh/0, ensure_process_groups/0]).
 
 -export([start/2, stop/1]).
 
@@ -54,6 +54,12 @@
 -rabbit_boot_step({worker_pool,
                    [{description, "worker pool"},
                     {mfa,         {rabbit_sup, start_child, [worker_pool_sup]}},
+                    {requires,    pre_boot},
+                    {enables,     external_infrastructure}]}).
+
+-rabbit_boot_step({ensure_process_groups,
+                   [{description, "ensuring process groups exist"},
+                    {mfa,         {rabbit, ensure_process_groups, []}},
                     {requires,    pre_boot},
                     {enables,     external_infrastructure}]}).
 
@@ -436,6 +442,10 @@ insert_default_data() ->
                                                       DefaultWritePerm,
                                                       DefaultReadPerm),
     ok.
+
+ensure_process_groups() ->
+    [ok = pg2_fixed:create(G) || G <- [rabbit_channels,
+                                       rabbit_network_connections]].
 
 %%---------------------------------------------------------------------------
 %% logging

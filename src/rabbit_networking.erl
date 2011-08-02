@@ -271,11 +271,7 @@ start_client(Sock) ->
 start_ssl_client(SslOpts, Sock) ->
     start_client(Sock, ssl_transform_fun(SslOpts)).
 
-connections() ->
-    [rabbit_connection_sup:reader(ConnSup) ||
-        Node <- rabbit_mnesia:running_clustered_nodes(),
-        {_, ConnSup, supervisor, _}
-            <- supervisor:which_children({rabbit_tcp_client_sup, Node})].
+connections() -> pg2_fixed:get_members(rabbit_network_connections).
 
 connection_info_keys() -> rabbit_reader:info_keys().
 

@@ -18,7 +18,7 @@
 
 -behaviour(supervisor2).
 
--export([start_link/0, reader/1]).
+-export([start_link/0]).
 
 -export([init/1]).
 
@@ -29,7 +29,6 @@
 -ifdef(use_specs).
 
 -spec(start_link/0 :: () -> {'ok', pid(), pid()}).
--spec(reader/1 :: (pid()) -> pid()).
 
 -endif.
 
@@ -55,9 +54,6 @@ start_link() ->
                      rabbit_heartbeat:start_heartbeat_fun(SupPid)]},
            intrinsic, ?MAX_WAIT, worker, [rabbit_reader]}),
     {ok, SupPid, ReaderPid}.
-
-reader(Pid) ->
-    hd(supervisor2:find_child(Pid, reader)).
 
 %%--------------------------------------------------------------------------
 

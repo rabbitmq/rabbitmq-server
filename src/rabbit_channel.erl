@@ -131,7 +131,7 @@ confirm(Pid, MsgSeqNos) ->
     gen_server2:cast(Pid, {confirm, MsgSeqNos, self()}).
 
 list() ->
-    pg_local:get_members(rabbit_channels).
+    pg2_fixed:get_members(rabbit_channels).
 
 info_keys() -> ?INFO_KEYS.
 
@@ -162,11 +162,7 @@ ready_for_close(Pid) ->
     gen_server2:cast(Pid, ready_for_close).
 
 force_event_refresh() ->
-    %% TODO roll in bug 23897?
-    All = [Pid ||
-              Node <- rabbit_mnesia:running_clustered_nodes(),
-              Pid  <- rpc:call(Node, rabbit_channel, list, [])],
-    rabbit_misc:filter_exit_map(fun (C) -> force_event_refresh(C) end, All).
+    rabbit_misc:filter_exit_map(fun (C) -> force_event_refresh(C) end, list()).
 
 force_event_refresh(Pid) ->
     gen_server2:cast(Pid, force_event_refresh).
@@ -176,7 +172,7 @@ force_event_refresh(Pid) ->
 init([Channel, ReaderPid, WriterPid, ConnPid, Protocol, User, VHost,
       Capabilities, CollectorPid, StartLimiterFun]) ->
     process_flag(trap_exit, true),
-    ok = pg_local:join(rabbit_channels, self()),
+    ok = pg2_fixed:join(rabbit_channels, self()),
     StatsTimer = rabbit_event:init_stats_timer(),
     State = #ch{state                   = starting,
                 protocol                = Protocol,
@@ -354,7 +350,6 @@ terminate(Reason, State) ->
         {shutdown, _Term} -> ok = Res;
         _                 -> ok
     end,
-    pg_local:leave(rabbit_channels, self()),
     rabbit_event:notify(channel_closed, [{pid, self()}]).
 
 code_change(_OldVsn, State, _Extra) ->

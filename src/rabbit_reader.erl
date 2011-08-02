@@ -99,6 +99,7 @@ shutdown(Pid, Explanation) ->
     gen_server:call(Pid, {shutdown, Explanation}, infinity).
 
 init(Parent, ChannelSupSupPid, Collector, StartHeartbeatFun) ->
+    ok = pg2_fixed:join(rabbit_network_connections, self()),
     Deb = sys:debug_options([]),
     receive
         {go, Sock, SockTransform} ->
