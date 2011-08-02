@@ -32,8 +32,7 @@
 
 %% internal
 -export([internal_declare/2, internal_delete/1, run_backing_queue/3,
-         sync_timeout/1, set_ram_duration_target/2,
-         set_maximum_since_use/2]).
+         set_ram_duration_target/2, set_maximum_since_use/2]).
 
 -include("rabbit.hrl").
 -include_lib("stdlib/include/qlc.hrl").
@@ -140,7 +139,6 @@
 -spec(run_backing_queue/3 ::
         (pid(), atom(),
          (fun ((atom(), A) -> {[rabbit_types:msg_id()], A}))) -> 'ok').
--spec(sync_timeout/1 :: (pid()) -> 'ok').
 -spec(set_ram_duration_target/2 :: (pid(), number() | 'infinity') -> 'ok').
 -spec(set_maximum_since_use/2 :: (pid(), non_neg_integer()) -> 'ok').
 -spec(on_node_down/1 :: (node()) -> 'ok').
@@ -478,9 +476,6 @@ internal_delete(QueueName) ->
 
 run_backing_queue(QPid, Mod, Fun) ->
     gen_server2:cast(QPid, {run_backing_queue, Mod, Fun}).
-
-sync_timeout(QPid) ->
-    gen_server2:cast(QPid, sync_timeout).
 
 set_ram_duration_target(QPid, Duration) ->
     gen_server2:cast(QPid, {set_ram_duration_target, Duration}).

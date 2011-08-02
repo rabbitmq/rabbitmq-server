@@ -249,8 +249,7 @@ backing_queue_module(#amqqueue{arguments = Args}) ->
     end.
 
 ensure_sync_timer(State = #q{sync_timer_ref = undefined}) ->
-    {ok, TRef} = timer:apply_after(
-                   ?SYNC_INTERVAL, rabbit_amqqueue, sync_timeout, [self()]),
+    TRef = erlang:send_after(?SYNC_INTERVAL, self(), sync_timeout),
     State#q{sync_timer_ref = TRef};
 ensure_sync_timer(State) ->
     State.
@@ -258,7 +257,7 @@ ensure_sync_timer(State) ->
 stop_sync_timer(State = #q{sync_timer_ref = undefined}) ->
     State;
 stop_sync_timer(State = #q{sync_timer_ref = TRef}) ->
-    {ok, cancel} = timer:cancel(TRef),
+    rabbit_misc:cancel_timer(TRef),
     State#q{sync_timer_ref = undefined}.
 
 ensure_rate_timer(State = #q{rate_timer_ref = undefined}) ->
@@ -795,7 +794,6 @@ prioritise_cast(Msg, _State) ->
         {notify_sent, _ChPid}                -> 7;
         {unblock, _ChPid}                    -> 7;
         {run_backing_queue, _Mod, _Fun}      -> 6;
-        sync_timeout                         -> 6;
         _                                    -> 0
     end.
 
@@ -803,11 +801,12 @@ prioritise_info({'DOWN', _MonitorRef, process, DownPid, _Reason},
                 #q{q = #amqqueue{exclusive_owner = DownPid}}) -> 8;
 prioritise_info(Msg, _State) ->
     case Msg of
-        update_ram_duration                                   -> 8;
-        maybe_expire                                          -> 8;
-        drop_expired                                          -> 8;
-        emit_stats                                            -> 7;
-        _                                                     -> 0
+        update_ram_duration                  -> 8;
+        maybe_expire                         -> 8;
+        drop_expired                         -> 8;
+        emit_stats                           -> 7;
+        sync_timeout                         -> 6;
+        _                                    -> 0
     end.
 
 handle_call({init, Recover}, From,
@@ -1013,9 +1012,6 @@ handle_call({requeue, AckTags, ChPid}, From, State) ->
 handle_cast({run_backing_queue, Mod, Fun}, State) ->
     noreply(run_backing_queue(Mod, Fun, State));
 
-handle_cast(sync_timeout, State) ->
-    noreply(backing_queue_timeout(State#q{sync_timer_ref = undefined}));
-
 handle_cast({deliver, Delivery}, State) ->
     %% Asynchronous, non-"mandatory", non-"immediate" deliver mode.
     noreply(deliver_or_enqueue(Delivery, State));
@@ -1132,6 +1128,9 @@ handle_info(update_ram_duration, State = #q{backing_queue = BQ,
     BQS2 = BQ:set_ram_duration_target(DesiredDuration, BQS1),
     noreply(State#q{rate_timer_ref = just_measured,
                     backing_queue_state = BQS2});
+
+handle_info(sync_timeout, State) ->
+    noreply(backing_queue_timeout(State#q{sync_timer_ref = undefined}));
 
 handle_info(timeout, State) ->
     noreply(backing_queue_timeout(State));
