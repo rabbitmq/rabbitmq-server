@@ -27,7 +27,7 @@
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2, handle_pre_hibernate/1, prioritise_call/3,
-         prioritise_cast/2, format_message_queue/2]).
+         prioritise_cast/2, prioritise_info/2, format_message_queue/2]).
 
 -record(ch, {state, protocol, channel, reader_pid, writer_pid, conn_pid,
              limiter_pid, start_limiter_fun, tx_status, next_tag,
@@ -192,7 +192,7 @@ init([Channel, ReaderPid, WriterPid, ConnPid, Protocol, User, VHost,
                 trace_state             = rabbit_trace:init(VHost)},
     rabbit_event:notify(channel_created, infos(?CREATION_EVENT_KEYS, State)),
     rabbit_event:if_enabled(StatsTimer,
-                            fun() -> internal_emit_stats(State) end),
+                            fun() -> emit_stats(State) end),
     {ok, State, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
@@ -211,7 +211,8 @@ prioritise_cast(Msg, _State) ->
 
 prioritise_info(Msg, _State) ->
     case Msg of
-        emit_stats                   -> 7
+        emit_stats                   -> 7;
+        _                            -> 0
     end.
 
 handle_call(flush, _From, State) ->
@@ -303,7 +304,7 @@ handle_info(timeout, State) ->
     noreply(State);
 
 handle_info(emit_stats, State = #ch{stats_timer = StatsTimer}) ->
-    internal_emit_stats(State),
+    emit_stats(State),
     noreply([ensure_stats_timer],
             State#ch{
               stats_timer = rabbit_event:reset_stats_timer(StatsTimer)});
@@ -323,11 +324,8 @@ handle_info({'EXIT', _Pid, Reason}, State) ->
 
 handle_pre_hibernate(State = #ch{stats_timer = StatsTimer}) ->
     ok = clear_permission_cache(),
-    rabbit_event:if_enabled(StatsTimer,
-                            fun () ->
-                                    internal_emit_stats(
-                                      State, [{idle_since, now()}])
-                            end),
+    rabbit_event:if_enabled(
+      StatsTimer, fun () -> emit_stats(State, [{idle_since, now()}]) end),
     StatsTimer1 = rabbit_event:stop_stats_timer(StatsTimer),
     {hibernate, State#ch{stats_timer = StatsTimer1}}.
 
@@ -1495,10 +1493,10 @@ update_measures(Type, QX, Inc, Measure) ->
     put({Type, QX},
         orddict:store(Measure, Cur + Inc, Measures)).
 
-internal_emit_stats(State) ->
-    internal_emit_stats(State, []).
+emit_stats(State) ->
+    emit_stats(State, []).
 
-internal_emit_stats(State = #ch{stats_timer = StatsTimer}, Extra) ->
+emit_stats(State = #ch{stats_timer = StatsTimer}, Extra) ->
     CoarseStats = infos(?STATISTICS_KEYS, State),
     case rabbit_event:stats_level(StatsTimer) of
         coarse ->

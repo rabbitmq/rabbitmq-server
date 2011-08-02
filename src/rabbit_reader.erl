@@ -318,7 +318,7 @@ handle_other({'$gen_call', From, {info, Items}}, Deb, State) ->
                            end),
     mainloop(Deb, State);
 handle_other(emit_stats, Deb, State) ->
-    mainloop(Deb, internal_emit_stats(State));
+    mainloop(Deb, emit_stats(State));
 handle_other({system, From, Request}, Deb, State = #v1{parent = Parent}) ->
     sys:handle_system_msg(Request, From, Parent, ?MODULE, Deb, State);
 handle_other(Other, _Deb, _State) ->
@@ -686,7 +686,7 @@ handle_method0(#'connection.open'{virtual_host = VHostPath},
                         [{type, network} |
                          infos(?CREATION_EVENT_KEYS, State1)]),
     rabbit_event:if_enabled(StatsTimer,
-                            fun() -> internal_emit_stats(State1) end),
+                            fun() -> emit_stats(State1) end),
     State1;
 handle_method0(#'connection.close'{}, State) when ?IS_RUNNING(State) ->
     lists:foreach(fun rabbit_channel:shutdown/1, all_channels()),
@@ -915,6 +915,6 @@ send_exception(State = #v1{connection = #connection{protocol = Protocol}},
            State1#v1.sock, 0, CloseMethod, Protocol),
     State1.
 
-internal_emit_stats(State = #v1{stats_timer = StatsTimer}) ->
+emit_stats(State = #v1{stats_timer = StatsTimer}) ->
     rabbit_event:notify(connection_stats, infos(?STATISTICS_KEYS, State)),
     State#v1{stats_timer = rabbit_event:reset_stats_timer(StatsTimer)}.
