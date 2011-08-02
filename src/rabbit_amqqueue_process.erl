@@ -257,7 +257,7 @@ ensure_sync_timer(State) ->
 stop_sync_timer(State = #q{sync_timer_ref = undefined}) ->
     State;
 stop_sync_timer(State = #q{sync_timer_ref = TRef}) ->
-    rabbit_misc:cancel_timer(TRef),
+    erlang:cancel_timer(TRef),
     State#q{sync_timer_ref = undefined}.
 
 ensure_rate_timer(State = #q{rate_timer_ref = undefined}) ->
@@ -274,13 +274,13 @@ stop_rate_timer(State = #q{rate_timer_ref = undefined}) ->
 stop_rate_timer(State = #q{rate_timer_ref = just_measured}) ->
     State#q{rate_timer_ref = undefined};
 stop_rate_timer(State = #q{rate_timer_ref = TRef}) ->
-    rabbit_misc:cancel_timer(TRef),
+    erlang:cancel_timer(TRef),
     State#q{rate_timer_ref = undefined}.
 
 stop_expiry_timer(State = #q{expiry_timer_ref = undefined}) ->
     State;
 stop_expiry_timer(State = #q{expiry_timer_ref = TRef}) ->
-    rabbit_misc:cancel_timer(TRef),
+    erlang:cancel_timer(TRef),
     State#q{expiry_timer_ref = undefined}.
 
 %% We wish to expire only when there are no consumers *and* the expiry

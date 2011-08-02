@@ -529,7 +529,7 @@ ensure_sync_timer(State) ->
 stop_sync_timer(State = #state { sync_timer_ref = undefined }) ->
     State;
 stop_sync_timer(State = #state { sync_timer_ref = TRef }) ->
-    rabbit_misc:cancel_timer(TRef),
+    erlang:cancel_timer(TRef),
     State #state { sync_timer_ref = undefined }.
 
 ensure_rate_timer(State = #state { rate_timer_ref = undefined }) ->
@@ -546,7 +546,7 @@ stop_rate_timer(State = #state { rate_timer_ref = undefined }) ->
 stop_rate_timer(State = #state { rate_timer_ref = just_measured }) ->
     State #state { rate_timer_ref = undefined };
 stop_rate_timer(State = #state { rate_timer_ref = TRef }) ->
-    {ok, cancel} = timer:cancel(TRef),
+    erlang:cancel_timer(TRef),
     State #state { rate_timer_ref = undefined }.
 
 ensure_monitoring(ChPid, State = #state { known_senders = KS }) ->

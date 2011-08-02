@@ -803,7 +803,7 @@ ensure_broadcast_timer(State = #state { broadcast_buffer = [],
     State;
 ensure_broadcast_timer(State = #state { broadcast_buffer = [],
                                         broadcast_timer  = TRef }) ->
-    rabbit_misc:cancel_timer(TRef),
+    erlang:cancel_timer(TRef),
     State #state { broadcast_timer = undefined };
 ensure_broadcast_timer(State = #state { broadcast_timer = undefined }) ->
     TRef = erlang:send_after(?BROADCAST_TIMER, self(), flush),
