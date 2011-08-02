@@ -67,7 +67,7 @@ class TestAck(base.BaseTest):
         conn2 = self.create_connection()
         try:
             listener2 = base.WaitableListener()
-            listener2.reset(2)
+            listener2.reset(2) ## expecting 2 messages
             conn2.set_listener('', listener2)
             conn2.subscribe(destination=d, ack='client-individual',
                             headers={'prefetch-count': '10'})
@@ -84,10 +84,12 @@ class TestAck(base.BaseTest):
         conn3 = self.create_connection()
         try:
             listener3 = base.WaitableListener()
+            listener3.reset(1) ## expecting a single message
             conn3.set_listener('', listener3)
             conn3.subscribe(destination=d)
             self.assertTrue(listener3.await(20),
                              "Expected to see a message. ACK not working?")
+            self.assertEquals(1, len(listener3.messages))
             self.assertEquals("test1", listener3.messages[0]['message'])
         finally:
             conn3.stop()

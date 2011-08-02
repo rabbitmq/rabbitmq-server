@@ -22,7 +22,7 @@ class TestReliability(base.BaseTest):
                 pub_conn.send(msg + str(x), destination=d)
             pub_conn.close_socket()
 
-            if listener.await(30):
+            if listener.await(60):
                 self.assertEquals(count, len(listener.messages))
             else:
                 listener.print_state("Final state of listener:")
