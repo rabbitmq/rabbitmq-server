@@ -75,8 +75,8 @@ start() ->
     Quiet = proplists:get_bool(?QUIET_OPT, Opts1),
     Node = proplists:get_value(?NODE_OPT, Opts1),
     rpc_call(Node, rabbit_control, log_anytime,
-             ["~p executing 'rabbitmqctl ~p'~n",
-              [node(), init:get_plain_arguments()]]),
+             ["~p executing~nrabbitmqctl ~p~n",
+              [node(), mask_args([Command0 | Args])]]),
     Inform = case Quiet of
                  true  -> fun (_Format, _Args1) -> ok end;
                  false -> fun (Format, Args1) ->
@@ -486,3 +486,13 @@ quit(Status) ->
         {unix,  _} -> halt(Status);
         {win32, _} -> init:stop(Status)
     end.
+
+%% Mask passwords and other sensitive info before logging.
+mask_args([]) ->
+    [];
+mask_args(["add_user", Name, Password | Args]) ->
+    ["add_user", Name, "****" | mask_args(Args)];
+mask_args(["change_password", Name, Password | Args]) ->
+    ["change_password", Name, "****" | mask_args(Args)];
+mask_args([Arg | Args]) ->
+    [Arg | mask_args(Args)].
