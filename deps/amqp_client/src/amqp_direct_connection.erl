@@ -50,8 +50,7 @@ list_local() ->
     pg_local:get_members(amqp_direct_connections).
 
 list() ->
-    [Pid || Node <- rabbit_mnesia:running_clustered_nodes(),
-            Pid  <- rpc:call(Node, amqp_direct_connection, list_local, [])].
+    rabbit_misc:rpc_list_all_nodes(amqp_direct_connection, list_local, []).
 
 %%---------------------------------------------------------------------------
 
