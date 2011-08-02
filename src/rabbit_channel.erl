@@ -23,7 +23,7 @@
 -export([start_link/10, do/2, do/3, flush/1, shutdown/1]).
 -export([send_command/2, deliver/4, flushed/2, confirm/2]).
 -export([list/0, info_keys/0, info/1, info/2, info_all/0, info_all/1]).
--export([refresh_config_all/0, emit_stats/1, ready_for_close/1]).
+-export([refresh_config_all/0, ready_for_close/1]).
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2, handle_pre_hibernate/1, prioritise_call/3,
@@ -91,7 +91,6 @@
 -spec(info_all/0 :: () -> [rabbit_types:infos()]).
 -spec(info_all/1 :: (rabbit_types:info_keys()) -> [rabbit_types:infos()]).
 -spec(refresh_config_all/0 :: () -> 'ok').
--spec(emit_stats/1 :: (pid()) -> 'ok').
 -spec(ready_for_close/1 :: (pid()) -> 'ok').
 
 -endif.
@@ -153,9 +152,6 @@ refresh_config_all() ->
       fun (C) -> gen_server2:call(C, refresh_config) end, list()),
     ok.
 
-emit_stats(Pid) ->
-    gen_server2:cast(Pid, emit_stats).
-
 ready_for_close(Pid) ->
     gen_server2:cast(Pid, ready_for_close).
 
@@ -209,9 +205,13 @@ prioritise_call(Msg, _From, _State) ->
 
 prioritise_cast(Msg, _State) ->
     case Msg of
-        emit_stats                   -> 7;
         {confirm, _MsgSeqNos, _QPid} -> 5;
         _                            -> 0
+    end.
+
+prioritise_info(Msg, _State) ->
+    case Msg of
+        emit_stats                   -> 7
     end.
 
 handle_call(flush, _From, State) ->

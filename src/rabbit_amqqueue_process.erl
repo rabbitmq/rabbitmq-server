@@ -275,13 +275,13 @@ stop_rate_timer(State = #q{rate_timer_ref = undefined}) ->
 stop_rate_timer(State = #q{rate_timer_ref = just_measured}) ->
     State#q{rate_timer_ref = undefined};
 stop_rate_timer(State = #q{rate_timer_ref = TRef}) ->
-    erlang:cancel_timer(TRef),
+    rabbit_misc:cancel_timer(TRef),
     State#q{rate_timer_ref = undefined}.
 
 stop_expiry_timer(State = #q{expiry_timer_ref = undefined}) ->
     State;
 stop_expiry_timer(State = #q{expiry_timer_ref = TRef}) ->
-    erlang:cancel_timer(TRef),
+    rabbit_misc:cancel_timer(TRef),
     State#q{expiry_timer_ref = undefined}.
 
 %% We wish to expire only when there are no consumers *and* the expiry
@@ -790,7 +790,6 @@ prioritise_cast(Msg, _State) ->
         delete_immediately                   -> 8;
         {set_ram_duration_target, _Duration} -> 8;
         {set_maximum_since_use, _Age}        -> 8;
-        emit_stats                           -> 7;
         {ack, _AckTags, _ChPid}              -> 7;
         {reject, _AckTags, _Requeue, _ChPid} -> 7;
         {notify_sent, _ChPid}                -> 7;

@@ -873,7 +873,7 @@ start_sync_timer(State = #msstate { sync_timer_ref = undefined }) ->
 stop_sync_timer(State = #msstate { sync_timer_ref = undefined }) ->
     State;
 stop_sync_timer(State = #msstate { sync_timer_ref = TRef }) ->
-    _ = erlang:cancel_timer(TRef),
+    rabbit_misc:cancel_timer(TRef),
     State #msstate { sync_timer_ref = undefined }.
 
 internal_sync(State = #msstate { current_file_handle = CurHdl,

@@ -51,7 +51,7 @@
 -export([recursive_delete/1, recursive_copy/2, dict_cons/3, orddict_cons/3]).
 -export([get_options/2]).
 -export([all_module_attributes/1, build_acyclic_graph/3]).
--export([now_ms/0]).
+-export([now_ms/0, cancel_timer/1]).
 -export([lock_file/1]).
 -export([const_ok/0, const/1]).
 -export([ntoa/1, ntoab/1]).
@@ -831,6 +831,12 @@ get_flag(_, []) ->
 
 now_ms() ->
     timer:now_diff(now(), {0,0,0}) div 1000.
+
+cancel_timer(TRef) ->
+    case erlang:cancel_timer(TRef) of
+        false -> throw({not_a_valid_timer, TRef});
+        _     -> ok
+    end.
 
 module_attributes(Module) ->
     case catch Module:module_info(attributes) of
