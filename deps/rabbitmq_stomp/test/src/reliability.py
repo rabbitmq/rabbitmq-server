@@ -1,6 +1,7 @@
 import base
 import stomp
 import unittest
+import time
 
 class TestReliability(base.BaseTest):
 
