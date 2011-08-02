@@ -22,20 +22,6 @@
 -include("rabbit_mgmt.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
-%% Dummy supervisor - see Ulf Wiger's comment at
-%% http://erlang.2086793.n4.nabble.com/initializing-library-applications-without-processes-td2094473.html
-
-%% All of our actual server processes are supervised by rabbit_mgmt_sup, which
-%% is started by a rabbit_boot_step (since it needs to start up before queue
-%% recovery or the network being up, so it can't be part of our application).
-%%
-%% However, we still need an application behaviour since we need to depend on
-%% the rabbit_mochiweb application and call into it once it's running. Since
-%% the application behaviour needs a tree of processes to supervise, this is
-%% it...
--behaviour(supervisor).
--export([init/1]).
-
 -define(CONTEXT, rabbit_mgmt).
 -define(STATIC_PATH, "priv/www").
 
@@ -45,16 +31,6 @@
 -define(SETUP_WM_TRACE, false).
 -endif.
 
-%% Make sure our database is hooked in *before* listening on the network or
-%% recovering queues (i.e. so there can't be any events fired before it starts).
--rabbit_boot_step({rabbit_mgmt_database,
-                   [{description, "management statistics database"},
-                    {mfa,         {rabbit_sup, start_child,
-                                   [rabbit_mgmt_global_sup]}},
-                    {requires,    rabbit_event},
-                    {requires,    database},
-                    {enables,     recovery}]}).
-
 start(_Type, _StartArgs) ->
     setup_wm_logging(),
     register_context(),
@@ -63,7 +39,7 @@ start(_Type, _StartArgs) ->
         _    -> ok
     end,
     log_startup(),
-    supervisor:start_link({local,?MODULE},?MODULE,[]).
+    rabbit_mgmt_sup:start_link().
 
 stop(_State) ->
     ok.
@@ -172,8 +148,3 @@ get_port() ->
         {_Instance, Options} ->
             proplists:get_value(port, Options)
     end.
-
-%%----------------------------------------------------------------------------
-
-init([]) ->
-    {ok, {{one_for_one,3,10},[]}}.
