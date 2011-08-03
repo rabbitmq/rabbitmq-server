@@ -78,8 +78,14 @@
       <td><%= node.erlang_version %></td>
     </tr>
     <tr>
-      <th>Mnesia storage <span class="help" id="mnesia-storage"></span></th>
-      <td><%= node.type %></td>
+      <th>Type</th>
+      <td>
+       <% if (node.type == 'disc') { %>
+         <acronym title="Broker configuration is held on disc.">Disc</acronym>
+       <% } else { %>
+         <acronym title="Broker configuration is held in RAM. Messages will still be written to disc if necessary.">RAM</acronym>
+       <% } %>
+      </td>
     </tr>
   </table>
 
