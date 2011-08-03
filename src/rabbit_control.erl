@@ -17,7 +17,7 @@
 -module(rabbit_control).
 -include("rabbit.hrl").
 
--export([start/0, stop/0, action/5, diagnostics/1, log_anytime/2]).
+-export([start/0, stop/0, action/5, diagnostics/1, log_action/3]).
 
 -define(RPC_TIMEOUT, infinity).
 -define(WAIT_FOR_VM_ATTEMPTS, 5).
@@ -51,7 +51,7 @@
         -> 'ok').
 -spec(diagnostics/1 :: (node()) -> [{string(), [any()]}]).
 -spec(usage/0 :: () -> no_return()).
--spec(log_anytime/2 :: (string(), [term()]) -> ok).
+-spec(log_action/3 :: (node(), string(), [term()]) -> ok).
 
 -endif.
 
@@ -74,9 +74,7 @@ start() ->
     Command = list_to_atom(Command0),
     Quiet = proplists:get_bool(?QUIET_OPT, Opts1),
     Node = proplists:get_value(?NODE_OPT, Opts1),
-    rpc_call(Node, rabbit_control, log_anytime,
-             ["~p executing~nrabbitmqctl ~p ~p~n",
-              [node(), Command0, mask_args(Command0, Args)]]),
+    rpc_call(Node, rabbit_control, log_action, [node(), Command0, Args]),
     Inform = case Quiet of
                  true  -> fun (_Format, _Args1) -> ok end;
                  false -> fun (Format, Args1) ->
@@ -112,14 +110,6 @@ start() ->
     end.
 
 fmt_stderr(Format, Args) -> rabbit_misc:format_stderr(Format ++ "~n", Args).
-
-%% Log an info item on a remote node regardless of whether rabbit is
-%% running there or not: first change the group leader to that of the
-%% remote node, then use the standard error logger, because rabbit's
-%% might not be running.
-log_anytime(Format, Args) ->
-    group_leader(whereis(user), self()),
-    error_logger:info_msg(Format, Args).
 
 print_report(Node, {Descr, Module, InfoFun, KeysFun}) ->
     io:format("~s:~n", [Descr]),
@@ -487,10 +477,17 @@ quit(Status) ->
         {win32, _} -> init:stop(Status)
     end.
 
+log_action(Node, Command, Args) ->
+    rabbit_misc:with_local_io(
+      fun () ->
+            error_logger:info_msg("~p executing~nrabbitmqctl ~p ~p~n",
+                                  [Node, Command, mask_args(Command, Args)])
+      end).
+
 %% Mask passwords and other sensitive info before logging.
-mask_args("add_user", [Name, Password | Args]) ->
+mask_args("add_user", [Name, _Password | Args]) ->
     [Name, "****" | Args];
-mask_args("change_password", [Name, Password | Args]) ->
+mask_args("change_password", [Name, _Password | Args]) ->
     [Name, "****" | Args];
 mask_args(_, Args) ->
     Args.
