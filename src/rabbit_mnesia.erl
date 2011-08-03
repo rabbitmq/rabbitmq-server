@@ -28,6 +28,8 @@
 
 -export([table_names/0]).
 
+-compile([export_all]).
+
 %% create_tables/0 exported for helping embed RabbitMQ in or alongside
 %% other mnesia-using Erlang applications, such as ejabberd
 -export([create_tables/0]).
@@ -118,6 +120,21 @@ cluster(ClusterNodes, Force) ->
     ensure_mnesia_not_running(),
     ensure_mnesia_dir(),
 
+    DiscNodes = case is_disc_node() of
+                    true -> start_mnesia(),
+                            Nodes = nodes_of_type(disc_copies),
+                            stop_mnesia(),
+                            Nodes;
+                    _    -> []
+                end,
+    Node = node(),
+    case {should_be_disc_node(ClusterNodes), DiscNodes} of
+        {false, [Node]} -> Warning = "Warning: no disc nodes in cluster~n",
+                           io:format(Warning),
+                           error_logger:warning_msg(Warning);
+        _ -> ok
+    end,
+
     %% Wipe mnesia if we're changing type from disc to ram
     case {is_disc_node(), should_be_disc_node(ClusterNodes)} of
         {true, false} -> error_logger:warning_msg(
@@ -159,6 +176,7 @@ cluster(ClusterNodes, Force) ->
     after
         stop_mnesia()
     end,
+
     ok.
 
 %% return node to its virgin state, where it is not member of any
