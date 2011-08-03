@@ -750,7 +750,7 @@ leave_cluster(Nodes, RunningNodes) ->
 
 on_node_down(Node) ->
     case is_only_disc_node(Node, true) of
-        true  -> log_both("last disc node went down");
+        true  -> log_both("only disc node went down");
         false -> ok
     end.
 
