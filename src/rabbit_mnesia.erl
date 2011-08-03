@@ -120,19 +120,11 @@ cluster(ClusterNodes, Force) ->
     ensure_mnesia_not_running(),
     ensure_mnesia_dir(),
 
-    DiscNodes = case is_disc_node() of
-                    true -> start_mnesia(),
-                            Nodes = nodes_of_type(disc_copies),
-                            stop_mnesia(),
-                            Nodes;
-                    _    -> []
-                end,
-    Node = node(),
-    case {should_be_disc_node(ClusterNodes), DiscNodes} of
-        {false, [Node]} -> Warning = "Warning: no disc nodes in cluster~n",
-                           io:format(Warning),
-                           error_logger:warning_msg(Warning);
-        _ -> ok
+    case is_only_disc_node() andalso not should_be_disc_node(ClusterNodes) of
+        true  -> Warning = "Warning: last disc node leaving cluster~n",
+                 io:format(Warning),
+                 error_logger:warning_msg(Warning);
+        false -> ok
     end,
 
     %% Wipe mnesia if we're changing type from disc to ram
@@ -708,6 +700,12 @@ wait_for_tables(TableNames) ->
 
 reset(Force) ->
     ensure_mnesia_not_running(),
+    case is_only_disc_node() of
+        true  -> Warning = "Warning: resetting only disc node~n",
+                 io:format(Warning),
+                 error_logger:warning_msg(Warning);
+        false -> ok
+    end,
     Node = node(),
     case Force of
         true  -> ok;
@@ -754,6 +752,15 @@ leave_cluster(Nodes, RunningNodes) ->
         false -> throw({error, {no_running_cluster_nodes,
                                 Nodes, RunningNodes}})
     end.
+
+is_only_disc_node() ->
+    [node()] =:= case is_disc_node() of
+                     true -> start_mnesia(),
+                             Nodes = nodes_of_type(disc_copies),
+                             stop_mnesia(),
+                             Nodes;
+                      _   -> []
+                  end.
 
 start_mnesia() ->
     rabbit_misc:ensure_ok(mnesia:start(), cannot_start_mnesia),
