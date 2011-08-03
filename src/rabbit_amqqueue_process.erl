@@ -364,7 +364,9 @@ ch_record_state_transition(OldCR, NewCR) ->
 deliver_msgs_to_consumers(Funs = {PredFun, DeliverFun}, FunAcc,
                           State = #q{q = #amqqueue{name = QName},
                                      active_consumers = ActiveConsumers,
-                                     blocked_consumers = BlockedConsumers}) ->
+                                     blocked_consumers = BlockedConsumers,
+                                     backing_queue = BQ,
+                                     backing_queue_state = BQS}) ->
     case queue:out(ActiveConsumers) of
         {{value, QEntry = {ChPid, #consumer{tag = ConsumerTag,
                                             ack_required = AckRequired}}},
@@ -374,7 +376,8 @@ deliver_msgs_to_consumers(Funs = {PredFun, DeliverFun}, FunAcc,
                     acktags = ChAckTags} = ch_record(ChPid),
             IsMsgReady = PredFun(FunAcc, State),
             case (IsMsgReady andalso
-                  rabbit_limiter:can_send( LimiterPid, self(), AckRequired )) of
+                  rabbit_limiter:can_send( LimiterPid, self(), AckRequired,
+                                           ConsumerTag, BQ:len(BQS) )) of
                 true ->
                     {{Message, IsDelivered, AckTag}, FunAcc1, State1} =
                         DeliverFun(AckRequired, FunAcc, State),
@@ -1070,7 +1073,8 @@ handle_cast({limit, ChPid, LimiterPid}, State) ->
                    true ->
                         ok
                 end,
-                NewLimited = Limited andalso LimiterPid =/= undefined,
+                NewLimited = Limited andalso LimiterPid =/= undefined
+                    andalso rabbit_limiter:is_blocked(LimiterPid),
                 C#cr{limiter_pid = LimiterPid, is_limit_active = NewLimited}
         end));
 

@@ -18,7 +18,7 @@
 
 -compile([export_all]).
 
--export([all_tests/0, test_parsing/0]).
+-export([all_tests/0, test_parsing/0, test_serial_arithmetic/0]).
 
 -include("rabbit.hrl").
 -include("rabbit_framing.hrl").
@@ -48,6 +48,7 @@ all_tests() ->
     passed = test_parsing(),
     passed = test_content_framing(),
     passed = test_content_transcoding(),
+    passed = test_serial_arithmetic(),
     passed = test_topic_matching(),
     passed = test_log_management(),
     passed = test_app_management(),
@@ -622,6 +623,29 @@ sequence_with_content(Sequence) ->
                   rabbit_basic:build_content(#'P_basic'{}, <<>>),
                   rabbit_framing_amqp_0_9_1),
                 Sequence).
+
+test_serial_arithmetic() ->
+    1 = rabbit_misc:serial_add(0, 1),
+    16#7fffffff = rabbit_misc:serial_add(0, 16#7fffffff),
+    0 = rabbit_misc:serial_add(16#ffffffff, 1),
+    %% Cannot add more than 2 ^ 31 - 1
+    case catch rabbit_misc:serial_add(200, 16#80000000) of
+        {'EXIT', {out_of_bound_serial_addition, _, _}} -> ok;
+        _ -> exit(fail_out_of_bound_serial_addition)
+    end,
+
+    1 = rabbit_misc:serial_diff(1, 0),
+    2 = rabbit_misc:serial_diff(1, 16#ffffffff),
+    -2 = rabbit_misc:serial_diff(16#ffffffff, 1),
+    case catch rabbit_misc:serial_diff(0, 16#80000000) of
+        {'EXIT', {indeterminate_serial_diff, _, _}} -> ok;
+        _ -> exit(fail_indeterminate_serial_difference)
+    end,
+    case catch rabbit_misc:serial_diff(16#ffffffff, 16#7fffffff) of
+        {'EXIT', {indeterminate_serial_diff, _, _}} -> ok;
+        _ -> exit(fail_indeterminate_serial_difference)
+    end,
+    passed.
 
 test_topic_matching() ->
     XName = #resource{virtual_host = <<"/">>,

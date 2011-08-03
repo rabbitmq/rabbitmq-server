@@ -55,6 +55,7 @@
 -export([lock_file/1]).
 -export([const_ok/0, const/1]).
 -export([ntoa/1, ntoab/1]).
+-export([serial_add/2, serial_compare/2, serial_diff/2]).
 -export([is_process_alive/1]).
 -export([pget/2, pget/3, pget_or_die/2]).
 -export([format_message_queue/2]).
@@ -64,6 +65,7 @@
 -ifdef(use_specs).
 
 -export_type([resource_name/0, thunk/1]).
+-export_type([serial_number/0]).
 
 -type(ok_or_error() :: rabbit_types:ok_or_error(any())).
 -type(thunk(T) :: fun(() -> T)).
@@ -76,6 +78,8 @@
         fun ((atom(), [term()]) -> [{digraph:vertex(), digraph_label()}])).
 -type(graph_edge_fun() ::
         fun ((atom(), [term()]) -> [{digraph:vertex(), digraph:vertex()}])).
+-type(serial_number() :: non_neg_integer()).
+-type(serial_compare_result() :: 'equal' | 'less' | 'greater').
 
 -spec(method_record_type/1 :: (rabbit_framing:amqp_method_record())
                               -> rabbit_framing:amqp_method_name()).
@@ -207,6 +211,12 @@
 -spec(pget/3 :: (term(), [term()], term()) -> term()).
 -spec(pget_or_die/2 :: (term(), [term()]) -> term() | no_return()).
 -spec(format_message_queue/2 :: (any(), priority_queue:q()) -> term()).
+-spec(serial_add/2 :: (serial_number(), non_neg_integer()) ->
+             serial_number()).
+-spec(serial_compare/2 :: (serial_number(), serial_number()) ->
+             serial_compare_result()).
+-spec(serial_diff/2 :: (serial_number(), serial_number()) ->
+             integer()).
 
 -endif.
 
@@ -903,6 +913,47 @@ ntoab(IP) ->
     case string:str(Str, ":") of
         0 -> Str;
         _ -> "[" ++ Str ++ "]"
+    end.
+
+%% Serial arithmetic for unsigned ints.
+%% http://www.faqs.org/rfcs/rfc1982.html
+%% SERIAL_BITS = 32
+
+%% 2 ^ SERIAL_BITS
+-define(SERIAL_MAX, 16#100000000).
+%% 2 ^ (SERIAL_BITS - 1) - 1
+-define(SERIAL_MAX_ADDEND, 16#7fffffff).
+
+serial_add(S, N) when N =< ?SERIAL_MAX_ADDEND ->
+    (S + N) rem ?SERIAL_MAX;
+serial_add(S, N) ->
+    exit({out_of_bound_serial_addition, S, N}).
+
+serial_compare(A, B) ->
+    if A =:= B ->
+            equal;
+       (A < B andalso B - A < ?SERIAL_MAX_ADDEND) orelse
+       (A > B andalso A - B > ?SERIAL_MAX_ADDEND) ->
+            less;
+       (A < B andalso B - A > ?SERIAL_MAX_ADDEND) orelse
+       (A > B andalso B - A < ?SERIAL_MAX_ADDEND) ->
+            greater;
+       true -> exit({indeterminate_serial_comparison, A, B})
+    end.
+
+-define(SERIAL_DIFF_BOUND, 16#80000000).
+
+serial_diff(A, B) ->
+    Diff = A - B,
+    if Diff > (?SERIAL_DIFF_BOUND) ->
+            %% B is actually greater than A
+            - (?SERIAL_MAX - Diff);
+       Diff < - (?SERIAL_DIFF_BOUND) ->
+            ?SERIAL_MAX + Diff;
+       Diff < ?SERIAL_DIFF_BOUND andalso Diff > -?SERIAL_DIFF_BOUND ->
+            Diff;
+       true ->
+            exit({indeterminate_serial_diff, A, B})
     end.
 
 is_process_alive(Pid) when node(Pid) =:= node() ->

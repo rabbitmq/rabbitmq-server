@@ -1098,6 +1098,37 @@ handle_method(#'channel.flow'{active = false}, _,
                  {noreply, State1#ch{blocking = dict:from_list(Queues)}}
     end;
 
+handle_method(#'basic.credit'{consumer_tag = CTag,
+                              credit = Credit,
+                              count = Count,
+                              drain = Drain}, _,
+              State = #ch{limiter_pid      = LimiterPid,
+                          consumer_mapping = Consumers}) ->
+    %% We get Available first because it's likely that as soon as we set
+    %% the credit msgs will get consumed and it'll be out of date. Why do we
+    %% want that? Because at least then it's consistent with the credit value
+    %% we return. And Available is always going to be racy.
+    Available = case dict:find(CTag, Consumers) of
+                    {ok, {Q, _}} -> case rabbit_amqqueue:stat(Q) of
+                                        {ok, Len, _} -> Len;
+                                        _            -> -1
+                                    end;
+                    error        -> -1 %% TODO these -1s smell very iffy!
+                end,
+    LimiterPid1 = case LimiterPid of
+                      undefined -> start_limiter(State);
+                      Other     -> Other
+                  end,
+    LimiterPid2 =
+        case rabbit_limiter:set_credit(
+               LimiterPid1, CTag, Credit, Count, Drain) of
+            ok      -> limit_queues(LimiterPid1, State),
+                       LimiterPid1;
+            stopped -> unlimit_queues(State)
+        end,
+    State1 = State#ch{limiter_pid = LimiterPid2},
+    return_ok(State1, false, #'basic.credit_ok'{available = Available});
+
 handle_method(_MethodRecord, _Content, _State) ->
     rabbit_misc:protocol_error(
       command_invalid, "unimplemented method", []).
@@ -1304,12 +1335,12 @@ consumer_queues(Consumers) ->
 notify_limiter(undefined, _Acked) ->
     ok;
 notify_limiter(LimiterPid, Acked) ->
-    case rabbit_misc:queue_fold(fun ({_, none, _}, Acc) -> Acc;
-                                    ({_, _, _}, Acc)    -> Acc + 1
-                                end, 0, Acked) of
-        0     -> ok;
-        Count -> rabbit_limiter:ack(LimiterPid, Count)
-    end.
+    %% TODO this could be faster, group the acks
+    rabbit_misc:queue_fold(
+      fun ({_, none, _}, Acc) -> Acc;
+          ({_, CTag, _}, Acc) -> rabbit_limiter:ack(LimiterPid, CTag),
+                                 Acc
+      end, ok, Acked).
 
 deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{
                                                        exchange_name = XName},
