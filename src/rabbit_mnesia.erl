@@ -28,8 +28,6 @@
 
 -export([table_names/0]).
 
--compile([export_all]).
-
 %% create_tables/0 exported for helping embed RabbitMQ in or alongside
 %% other mnesia-using Erlang applications, such as ejabberd
 -export([create_tables/0]).
@@ -120,7 +118,8 @@ cluster(ClusterNodes, Force) ->
     ensure_mnesia_not_running(),
     ensure_mnesia_dir(),
 
-    case {is_only_disc_node(node()), should_be_disc_node(ClusterNodes)} of
+    case {is_only_disc_node(node(), false),
+          should_be_disc_node(ClusterNodes)} of
         {true, false} -> log_both("last disc node leaving cluster");
         _             -> ok
     end,
@@ -698,7 +697,7 @@ wait_for_tables(TableNames) ->
 
 reset(Force) ->
     ensure_mnesia_not_running(),
-    case is_only_disc_node(node()) of
+    case is_only_disc_node(node(), false) of
         true  -> log_both("resetting only disc node");
         false -> ok
     end,
@@ -750,22 +749,22 @@ leave_cluster(Nodes, RunningNodes) ->
     end.
 
 on_node_down(Node) ->
-    io:format("node down!!! ~p~n", [Node]),
-    case is_only_disc_node(Node) of
+    case is_only_disc_node(Node, true) of
         true  -> log_both("last disc node went down");
         false -> ok
     end.
 
-is_only_disc_node(Node) ->
+is_only_disc_node(Node, _MnesiaRunning = true) ->
+    [Node] =:= nodes_of_type(disc_copies);
+is_only_disc_node(Node, false) ->
     start_mnesia(),
-    Nodes = nodes_of_type(disc_copies),
+    Res = is_only_disc_node(Node, true),
     stop_mnesia(),
-    [Node] =:= Nodes.
+    Res.
 
 log_both(Warning) ->
     io:format("Warning: ~s~n", [Warning]),
-    %%error_logger:warning_msg("~s~n", [Warning]).
-    ok.
+    error_logger:warning_msg("~s~n", [Warning]).
 
 start_mnesia() ->
     rabbit_misc:ensure_ok(mnesia:start(), cannot_start_mnesia),
