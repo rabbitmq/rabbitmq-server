@@ -96,7 +96,8 @@ sanity_check_module(ClassModule, Module) ->
     end.
 
 class_module(exchange)       -> rabbit_exchange_type;
-class_module(auth_mechanism) -> rabbit_auth_mechanism.
+class_module(auth_mechanism) -> rabbit_auth_mechanism;
+class_module(amqp)           -> rabbit_amqp.
 
 %%---------------------------------------------------------------------------
 
