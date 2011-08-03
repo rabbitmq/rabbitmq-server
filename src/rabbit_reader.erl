@@ -28,7 +28,7 @@
 
 -export([all_channels/0, channel_cleanup/1, emit_stats/1, infos/2,
          internal_conserve_memory/2, maybe_close/1, send_exception/3,
-         send_on_channel0/3, switch_callback/3]).
+         send_on_channel0/4, switch_callback/3]).
 
 -define(HANDSHAKE_TIMEOUT, 10).
 -define(NORMAL_TIMEOUT, 3).
@@ -400,12 +400,13 @@ wait_for_channel_termination(N, TimerRef) ->
     end.
 
 maybe_close(State = #v1{connection_state = closing,
+                        module = Module,
                         connection = #connection{protocol = Protocol},
                         sock = Sock}) ->
     case all_channels() of
         [] ->
             NewState = close_connection(State),
-            ok = send_on_channel0(Sock, #'connection.close_ok'{}, Protocol),
+            ok = send_on_channel0(Sock, #'connection.close_ok'{}, Module, Protocol),
             NewState;
         _  -> State
     end;
@@ -454,8 +455,8 @@ server_frame_max() ->
     {ok, FrameMax} = application:get_env(rabbit, frame_max),
     FrameMax.
 
-send_on_channel0(Sock, Method, Protocol) ->
-    ok = rabbit_writer:internal_send_command(Sock, 0, Method, Protocol).
+send_on_channel0(Sock, Method, Module, Protocol) ->
+    ok = rabbit_writer:internal_send_command(Sock, 0, Method, Module, Protocol).
 
 %%--------------------------------------------------------------------------
 
@@ -556,14 +557,15 @@ handle_exception(State = #v1{connection_state = closed}, _Channel, _Reason) ->
 handle_exception(State, Channel, Reason) ->
     send_exception(State, Channel, Reason).
 
-send_exception(State = #v1{connection = #connection{protocol = Protocol}},
+send_exception(State = #v1{connection = #connection{protocol = Protocol},
+                           module = Module},
                Channel, Reason) ->
     {0, CloseMethod} =
         rabbit_binary_generator:map_exception(Channel, Reason, Protocol),
     terminate_channels(),
     State1 = close_connection(State),
     ok = rabbit_writer:internal_send_command(
-           State1#v1.sock, 0, CloseMethod, Protocol),
+           State1#v1.sock, 0, CloseMethod, Module, Protocol),
     State1.
 
 emit_stats(State = #v1{stats_timer = StatsTimer}) ->

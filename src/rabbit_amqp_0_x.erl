@@ -18,8 +18,8 @@
 -include("rabbit.hrl").
 -include("rabbit_framing.hrl").
 
--export([accept_handshake_bytes/1, start_connection/2, send_close_frame/1,
-         handle_input/3, assemble_frame/3, assemble_frames/5]).
+-export([accept_handshake_bytes/1, start_connection/2, handle_input/3,
+         assemble_frame/3, assemble_frames/5]).
 
 -export([process_channel_frame/5]). %% used by erlang-client TODO
 
@@ -93,9 +93,6 @@ accept_handshake_bytes(<<"AMQP", 1, 1, 9, 1>>) ->
 
 accept_handshake_bytes(_) ->
     false.
-
-send_close_frame(Sock) ->
-    exit(bang).
 
 handle_input(frame_header, <<Type:8,Channel:16,PayloadSize:32>>, State) ->
     rabbit_reader:ensure_stats_timer(
@@ -275,7 +272,7 @@ handle_method0(#'connection.open'{virtual_host = VHostPath},
                            stats_timer = StatsTimer}) ->
     ok = rabbit_access_control:check_vhost_access(User, VHostPath),
     NewConnection = Connection#connection{vhost = VHostPath},
-    ok = rabbit_reader:send_on_channel0(Sock, #'connection.open_ok'{}, Protocol),
+    ok = rabbit_reader:send_on_channel0(Sock, #'connection.open_ok'{}, ?MODULE, Protocol),
     State1 = rabbit_reader:internal_conserve_memory(
                rabbit_alarm:register(self(), {?MODULE, conserve_memory, []}),
                State#v1{connection_state = running,
@@ -296,7 +293,7 @@ handle_method0(#'connection.close'{},
   when CS =:= closing; CS =:= closed ->
     %% We're already closed or closing, so we don't need to cleanup
     %% anything.
-    ok = rabbit_reader:send_on_channel0(Sock, #'connection.close_ok'{}, Protocol),
+    ok = rabbit_reader:send_on_channel0(Sock, #'connection.close_ok'{}, ?MODULE, Protocol),
     State;
 handle_method0(#'connection.close_ok'{},
                State = #v1{connection_state = closed}) ->
@@ -319,8 +316,8 @@ send_to_new_channel(Channel, AnalyzedFrame, State) ->
                                  capabilities = Capabilities}} = State,
     {ok, _ChSupPid, {ChPid, AState}} =
         rabbit_channel_sup_sup:start_channel(
-          ChanSupSup, {tcp, Sock, Channel, FrameMax, self(), Protocol, User,
-                       VHost, Capabilities, Collector}),
+          ChanSupSup, {tcp, Sock, Channel, FrameMax, self(), ?MODULE, Protocol,
+                       User, VHost, Capabilities, Collector}),
     MRef = erlang:monitor(process, ChPid),
     NewAState = process_channel_frame(AnalyzedFrame, self(),
                                       Channel, ChPid, AState),
@@ -384,13 +381,13 @@ auth_phase(Response,
             rabbit_misc:protocol_error(syntax_error, Msg, Args);
         {challenge, Challenge, AuthState1} ->
             Secure = #'connection.secure'{challenge = Challenge},
-            ok = rabbit_reader:send_on_channel0(Sock, Secure, Protocol),
+            ok = rabbit_reader:send_on_channel0(Sock, Secure, ?MODULE, Protocol),
             State#v1{auth_state = AuthState1};
         {ok, User} ->
             Tune = #'connection.tune'{channel_max = 0,
                                       frame_max = rabbit_reader:server_frame_max(),
                                       heartbeat = 0},
-            ok = rabbit_reader:send_on_channel0(Sock, Tune, Protocol),
+            ok = rabbit_reader:send_on_channel0(Sock, Tune, ?MODULE, Protocol),
             State#v1{connection_state = tuning,
                      connection = Connection#connection{user = User}}
     end.
@@ -408,7 +405,7 @@ start_connection(<<"AMQP", 0, 0, 9, 1>>,
       server_properties = server_properties(Protocol),
       mechanisms = auth_mechanisms_binary(Sock),
       locales = <<"en_US">> },
-    ok = rabbit_reader:send_on_channel0(Sock, Start, Protocol),
+    ok = rabbit_reader:send_on_channel0(Sock, Start, ?MODULE, Protocol),
     rabbit_reader:switch_callback(State#v1{connection = Connection#connection{
                                                           timeout_sec = ?NORMAL_TIMEOUT,
                                                           protocol = Protocol},

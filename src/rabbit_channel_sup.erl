@@ -45,14 +45,14 @@
 
 %%----------------------------------------------------------------------------
 
-start_link({tcp, Sock, Channel, FrameMax, ReaderPid, Protocol, User, VHost,
-            Capabilities, Collector}) ->
+start_link({tcp, Sock, Channel, FrameMax, ReaderPid, Module, Protocol,
+            User, VHost, Capabilities, Collector}) ->
     {ok, SupPid} = supervisor2:start_link(?MODULE, []),
     {ok, WriterPid} =
         supervisor2:start_child(
           SupPid,
           {writer, {rabbit_writer, start_link,
-                    [Sock, Channel, FrameMax, Protocol, ReaderPid]},
+                    [Sock, Channel, FrameMax, Module, Protocol, ReaderPid]},
            intrinsic, ?MAX_WAIT, worker, [rabbit_writer]}),
     {ok, ChannelPid} =
         supervisor2:start_child(

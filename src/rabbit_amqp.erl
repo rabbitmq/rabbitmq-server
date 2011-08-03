@@ -22,7 +22,6 @@ behaviour_info(callbacks) ->
     [
      {accept_handshake_bytes, 1},
      {start_connection, 2},
-     {send_close_frame, 1},
      {handle_input, 3},
      {assemble_frame, 3},
      {assemble_frames, 5}
