@@ -480,7 +480,7 @@ quit(Status) ->
 log_action(Node, Command, Args) ->
     rabbit_misc:with_local_io(
       fun () ->
-            error_logger:info_msg("~p executing~nrabbitmqctl ~p ~p~n",
+            error_logger:info_msg("~p executing~n  rabbitmqctl ~p ~p~n",
                                   [Node, Command, mask_args(Command, Args)])
       end).
 
