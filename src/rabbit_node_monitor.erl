@@ -99,4 +99,7 @@ code_change(_OldVsn, State, _Extra) ->
 handle_dead_rabbit(Node) ->
     ok = rabbit_networking:on_node_down(Node),
     ok = rabbit_amqqueue:on_node_down(Node),
-    ok = rabbit_alarm:on_node_down(Node).
+    ok = rabbit_alarm:on_node_down(Node),
+    rabbit_log:info("handling dead rabbit!~p~n", [Node]),
+    %%ok = rabbit_mnesia:on_node_down(Node).
+    ok.

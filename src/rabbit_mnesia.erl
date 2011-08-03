@@ -24,7 +24,7 @@
          create_cluster_nodes_config/1, read_cluster_nodes_config/0,
          record_running_nodes/0, read_previously_running_nodes/0,
          delete_previously_running_nodes/0, running_nodes_filename/0,
-         is_disc_node/0]).
+         is_disc_node/0, on_node_down/1]).
 
 -export([table_names/0]).
 
@@ -120,11 +120,9 @@ cluster(ClusterNodes, Force) ->
     ensure_mnesia_not_running(),
     ensure_mnesia_dir(),
 
-    case is_only_disc_node() andalso not should_be_disc_node(ClusterNodes) of
-        true  -> Warning = "Warning: last disc node leaving cluster~n",
-                 io:format(Warning),
-                 error_logger:warning_msg(Warning);
-        false -> ok
+    case {is_only_disc_node(node()), should_be_disc_node(ClusterNodes)} of
+        {true, false} -> log_both("last disc node leaving cluster");
+        _             -> ok
     end,
 
     %% Wipe mnesia if we're changing type from disc to ram
@@ -700,10 +698,8 @@ wait_for_tables(TableNames) ->
 
 reset(Force) ->
     ensure_mnesia_not_running(),
-    case is_only_disc_node() of
-        true  -> Warning = "Warning: resetting only disc node~n",
-                 io:format(Warning),
-                 error_logger:warning_msg(Warning);
+    case is_only_disc_node(node()) of
+        true  -> log_both("resetting only disc node");
         false -> ok
     end,
     Node = node(),
@@ -753,14 +749,23 @@ leave_cluster(Nodes, RunningNodes) ->
                                 Nodes, RunningNodes}})
     end.
 
-is_only_disc_node() ->
-    [node()] =:= case is_disc_node() of
-                     true -> start_mnesia(),
-                             Nodes = nodes_of_type(disc_copies),
-                             stop_mnesia(),
-                             Nodes;
-                      _   -> []
-                  end.
+on_node_down(Node) ->
+    io:format("node down!!! ~p~n", [Node]),
+    case is_only_disc_node(Node) of
+        true  -> log_both("last disc node went down");
+        false -> ok
+    end.
+
+is_only_disc_node(Node) ->
+    start_mnesia(),
+    Nodes = nodes_of_type(disc_copies),
+    stop_mnesia(),
+    [Node] =:= Nodes.
+
+log_both(Warning) ->
+    io:format("Warning: ~s~n", [Warning]),
+    %%error_logger:warning_msg("~s~n", [Warning]).
+    ok.
 
 start_mnesia() ->
     rabbit_misc:ensure_ok(mnesia:start(), cannot_start_mnesia),
