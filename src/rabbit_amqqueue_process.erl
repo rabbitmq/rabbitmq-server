@@ -182,9 +182,8 @@ declare(Recover, From,
                      State1 = process_args(State#q{backing_queue_state = BQS}),
                      rabbit_event:notify(queue_created,
                                          infos(?CREATION_EVENT_KEYS, State1)),
-                     rabbit_event:if_enabled(
-                       StatsTimer,
-                       fun() -> emit_stats(State1) end),
+                     rabbit_event:if_enabled(StatsTimer,
+                                             fun() -> emit_stats(State1) end),
                      noreply(State1);
         Q1        -> {stop, normal, {existing, Q1}, State}
     end.
@@ -299,10 +298,10 @@ ensure_expiry_timer(State = #q{expires = Expires}) ->
             State
     end.
 
-ensure_stats_timer(State = #q { stats_timer = StatsTimer,
-                                q = #amqqueue { pid = QPid }}) ->
-    State #q { stats_timer = rabbit_event:ensure_stats_timer(
-                               StatsTimer, QPid, emit_stats) }.
+ensure_stats_timer(State = #q{stats_timer = StatsTimer,
+                              q = #amqqueue{pid = QPid}}) ->
+    State#q{stats_timer = rabbit_event:ensure_stats_timer(
+                            StatsTimer, QPid, emit_stats)}.
 
 assert_invariant(#q{active_consumers = AC,
                     backing_queue = BQ, backing_queue_state = BQS}) ->

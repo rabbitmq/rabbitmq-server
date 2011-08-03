@@ -306,8 +306,7 @@ handle_info(timeout, State) ->
 handle_info(emit_stats, State = #ch{stats_timer = StatsTimer}) ->
     emit_stats(State),
     noreply([ensure_stats_timer],
-            State#ch{
-              stats_timer = rabbit_event:reset_stats_timer(StatsTimer)});
+            State#ch{stats_timer = rabbit_event:reset_stats_timer(StatsTimer)});
 
 handle_info({'DOWN', MRef, process, QPid, Reason},
             State = #ch{consumer_monitors = ConsumerMonitors}) ->
