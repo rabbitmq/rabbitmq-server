@@ -28,7 +28,8 @@
 
 -export([all_channels/0, channel_cleanup/1, emit_stats/1, infos/2,
          internal_conserve_memory/2, maybe_close/1, send_exception/3,
-         send_on_channel0/4, switch_callback/3, server_properties/1]).
+         send_on_channel0/4, switch_callback/3, server_properties/1,
+         inet_op/1]).
 
 -define(HANDSHAKE_TIMEOUT, 10).
 -define(NORMAL_TIMEOUT, 3).

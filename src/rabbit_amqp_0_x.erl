@@ -19,7 +19,7 @@
 -include("rabbit_framing.hrl").
 
 -export([accept_handshake_bytes/1, start_connection/2, handle_input/3,
-         assemble_frame/3, assemble_frames/5]).
+         assemble_frame/3, assemble_frames/5, channel_spec/1]).
 
 -export([process_channel_frame/5]). %% used by erlang-client TODO
 
@@ -126,6 +126,10 @@ assemble_frames(Channel, MethodRecord, Content, FrameMax, Protocol) ->
     ContentFrames = rabbit_binary_generator:build_simple_content_frames(
                       Channel, Content, FrameMax, Protocol),
     [MethodFrame | ContentFrames].
+
+channel_spec(Args) ->
+    {channel, {rabbit_channel, start_link, Args},
+     intrinsic, ?MAX_WAIT, worker, [rabbit_channel]}.
 
 %%--------------------------------------------------------------------------
 

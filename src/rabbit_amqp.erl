@@ -24,7 +24,8 @@ behaviour_info(callbacks) ->
      {start_connection, 2},
      {handle_input, 3},
      {assemble_frame, 3},
-     {assemble_frames, 5}
+     {assemble_frames, 5},
+     {channel_spec, 1}
     ];
 behaviour_info(_Other) ->
     undefined.
