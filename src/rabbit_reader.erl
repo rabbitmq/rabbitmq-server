@@ -28,7 +28,7 @@
 
 -export([all_channels/0, channel_cleanup/1, emit_stats/1, infos/2,
          internal_conserve_memory/2, maybe_close/1, send_exception/3,
-         send_on_channel0/4, switch_callback/3]).
+         send_on_channel0/4, switch_callback/3, server_properties/1]).
 
 -define(HANDSHAKE_TIMEOUT, 10).
 -define(NORMAL_TIMEOUT, 3).
@@ -126,6 +126,42 @@ info(Pid, Items) ->
 conserve_memory(Pid, Conserve) ->
     Pid ! {conserve_memory, Conserve},
     ok.
+
+server_properties(Protocol) ->
+    {ok, Product} = application:get_key(rabbit, id),
+    {ok, Version} = application:get_key(rabbit, vsn),
+
+    %% Get any configuration-specified server properties
+    {ok, RawConfigServerProps} = application:get_env(rabbit,
+                                                     server_properties),
+
+    %% Normalize the simplifed (2-tuple) and unsimplified (3-tuple) forms
+    %% from the config and merge them with the generated built-in properties
+    NormalizedConfigServerProps =
+        [{<<"capabilities">>, table, server_capabilities(Protocol)} |
+         [case X of
+              {KeyAtom, Value} -> {list_to_binary(atom_to_list(KeyAtom)),
+                                   longstr,
+                                   list_to_binary(Value)};
+              {BinKey, Type, Value} -> {BinKey, Type, Value}
+          end || X <- RawConfigServerProps ++
+                     [{product,     Product},
+                      {version,     Version},
+                      {platform,    "Erlang/OTP"},
+                      {copyright,   ?COPYRIGHT_MESSAGE},
+                      {information, ?INFORMATION_MESSAGE}]]],
+
+    %% Filter duplicated properties in favour of config file provided values
+    lists:usort(fun ({K1,_,_}, {K2,_,_}) -> K1 =< K2 end,
+                NormalizedConfigServerProps).
+
+server_capabilities(rabbit_framing_amqp_0_9_1) ->
+    [{<<"publisher_confirms">>,         bool, true},
+     {<<"exchange_exchange_bindings">>, bool, true},
+     {<<"basic.nack">>,                 bool, true},
+     {<<"consumer_cancel_notify">>,     bool, true}];
+server_capabilities(_) ->
+    [].
 
 inet_op(F) -> rabbit_misc:throw_on_error(inet_error, F).
 
