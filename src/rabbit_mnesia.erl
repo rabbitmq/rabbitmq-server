@@ -24,7 +24,7 @@
          create_cluster_nodes_config/1, read_cluster_nodes_config/0,
          record_running_nodes/0, read_previously_running_nodes/0,
          delete_previously_running_nodes/0, running_nodes_filename/0,
-         is_disc_node/0]).
+         is_disc_node/0, on_node_down/1]).
 
 -export([table_names/0]).
 
@@ -118,6 +118,12 @@ cluster(ClusterNodes, Force) ->
     ensure_mnesia_not_running(),
     ensure_mnesia_dir(),
 
+    case {is_only_disc_node(node(), false),
+          should_be_disc_node(ClusterNodes)} of
+        {true, false} -> log_both("last disc node leaving cluster");
+        _             -> ok
+    end,
+
     %% Wipe mnesia if we're changing type from disc to ram
     case {is_disc_node(), should_be_disc_node(ClusterNodes)} of
         {true, false} -> error_logger:warning_msg(
@@ -159,6 +165,7 @@ cluster(ClusterNodes, Force) ->
     after
         stop_mnesia()
     end,
+
     ok.
 
 %% return node to its virgin state, where it is not member of any
@@ -690,6 +697,10 @@ wait_for_tables(TableNames) ->
 
 reset(Force) ->
     ensure_mnesia_not_running(),
+    case is_only_disc_node(node(), false) of
+        true  -> log_both("resetting only disc node");
+        false -> ok
+    end,
     Node = node(),
     case Force of
         true  -> ok;
@@ -736,6 +747,24 @@ leave_cluster(Nodes, RunningNodes) ->
         false -> throw({error, {no_running_cluster_nodes,
                                 Nodes, RunningNodes}})
     end.
+
+on_node_down(Node) ->
+    case is_only_disc_node(Node, true) of
+        true  -> log_both("only disc node went down");
+        false -> ok
+    end.
+
+is_only_disc_node(Node, _MnesiaRunning = true) ->
+    [Node] =:= nodes_of_type(disc_copies);
+is_only_disc_node(Node, false) ->
+    start_mnesia(),
+    Res = is_only_disc_node(Node, true),
+    stop_mnesia(),
+    Res.
+
+log_both(Warning) ->
+    io:format("Warning: ~s~n", [Warning]),
+    error_logger:warning_msg("~s~n", [Warning]).
 
 start_mnesia() ->
     rabbit_misc:ensure_ok(mnesia:start(), cannot_start_mnesia),

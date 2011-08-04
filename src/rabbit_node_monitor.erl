@@ -95,8 +95,11 @@ code_change(_OldVsn, State, _Extra) ->
 
 %% TODO: This may turn out to be a performance hog when there are lots
 %% of nodes.  We really only need to execute some of these statements
-%% on *one* node, rather than all of them.
+%% on *one* node, rather than all of them. NOTE: This function will be
+%% executed *twice* if the other rabbit node is shut down cleanly
+%% (once for the rabbit_app going down and once for the node).
 handle_dead_rabbit(Node) ->
     ok = rabbit_networking:on_node_down(Node),
     ok = rabbit_amqqueue:on_node_down(Node),
-    ok = rabbit_alarm:on_node_down(Node).
+    ok = rabbit_alarm:on_node_down(Node),
+    ok = rabbit_mnesia:on_node_down(Node).
