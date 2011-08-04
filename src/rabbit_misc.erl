@@ -611,8 +611,11 @@ format_stderr(Fmt, Args) ->
 with_local_io(Fun) ->
     GL = group_leader(),
     group_leader(whereis(user), self()),
-    Fun(),
-    group_leader(GL, self()).
+    try
+        Fun()
+    after
+        group_leader(GL, self())
+    end.
 
 manage_applications(Iterate, Do, Undo, SkipError, ErrorTag, Apps) ->
     Iterate(fun (App, Acc) ->
