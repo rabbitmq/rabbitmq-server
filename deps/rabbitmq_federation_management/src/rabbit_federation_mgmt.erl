@@ -67,18 +67,28 @@ status(Node) ->
         Status                         -> [format(Node, I) || I <- Status]
     end.
 
-format(Node, Info) ->
-    [Ch] = rabbit_mgmt_format:strip_pids(
-             [Ch || Ch <- rabbit_mgmt_db:get_all_channels(basic),
-                    pget(name, pget(connection_details, Ch))
-                        =:= pget(local_connection, Info)]),
-    [{node, Node}, {local_channel, Ch} | format_info(Info)].
+format(Node, Info0) ->
+    Info1 = proplists:delete(status, Info0),
+    Info = case pget(status, Info0) of
+               {connected, Name} -> [{status,           connected},
+                                     {local_connection, Name} | Info1];
+               {Status, E}       -> Fmted = rabbit_mgmt_format:print("~p", [E]),
+                                    [{status, Status},
+                                     {error,  Fmted} | Info1];
+               S when is_atom(S) -> [{status, S} | Info1]
+           end,
+    LocalCh = case rabbit_mgmt_format:strip_pids(
+                     [Ch || Ch <- rabbit_mgmt_db:get_all_channels(basic),
+                            pget(name, pget(connection_details, Ch))
+                                =:= pget(local_connection, Info)]) of
+                  [Ch] -> [{local_channel, Ch}];
+                  []   -> []
+              end,
+    [{node, Node} | format_info(Info)] ++ LocalCh.
 
 format_info(Items) ->
     [format_item(I) || I <- Items].
 
-format_item({error, Reason}) ->
-    {error, print("~p", [Reason])};
 format_item({timestamp, {{Y, M, D}, {H, Min, S}}}) ->
     {timestamp, print("~w-~2.2.0w-~2.2.0w ~w:~2.2.0w:~2.2.0w",
                       [Y, M, D, H, Min, S])};

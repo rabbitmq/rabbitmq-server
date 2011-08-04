@@ -31,10 +31,11 @@
 <% if (nodes_interesting) { %>
     <td><%= link.node %></td>
 <% } %>
-<% if (link.status != 'connected') { %>
+<% if (link.error) { %>
     <td class="status">
        <div class="red"><%= link.status %></div>
     </td>
+    <td></td>
     <td><%= link.timestamp %></td>
   </tr>
   <tr>
@@ -47,7 +48,9 @@
        <div class="green"><%= link.status %></div>
     </td>
     <td class="r">
-      <%= fmt_rate(link.local_channel.message_stats, 'confirm') %>
+      <% if (link.local_channel) { %>
+        <%= fmt_rate(link.local_channel.message_stats, 'confirm') %>
+      <% } %>
     </td>
     <td><%= link.timestamp %></td>
   </tr>
