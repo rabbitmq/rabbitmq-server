@@ -101,8 +101,7 @@ code_change(_OldVsn, State, _Extra) ->
 %% on *one* node, rather than all of them.
 handle_dead_rabbit(Node, State = #state{rabbits = Rabbits}) ->
     case sets:is_element(Node, Rabbits) of
-        true  -> rabbit_log:info("handling dead rabbit ~p~n", [Node]),
-                 ok = rabbit_networking:on_node_down(Node),
+        true  -> ok = rabbit_networking:on_node_down(Node),
                  ok = rabbit_amqqueue:on_node_down(Node),
                  ok = rabbit_alarm:on_node_down(Node),
                  State#state{rabbits = sets:del_element(Node, Rabbits)};
