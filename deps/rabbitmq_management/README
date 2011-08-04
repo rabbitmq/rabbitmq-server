@@ -4,7 +4,7 @@ http://www.rabbitmq.com/plugins.html.
 
 When installed, point your broswer at:
 
-http://<server>:55672/mgmt/
+http://<server>:55672/
 
 and log in with AMQP credentials (guest/guest by default).
 
