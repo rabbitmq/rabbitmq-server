@@ -480,8 +480,9 @@ quit(Status) ->
 log_action(Node, Command, Args) ->
     rabbit_misc:with_local_io(
       fun () ->
-            error_logger:info_msg("~p executing~n  rabbitmqctl ~p ~p~n",
-                                  [Node, Command, mask_args(Command, Args)])
+              error_logger:info_msg("~p executing~n  rabbitmqctl ~s ~s~n",
+                                    [Node, Command,
+                                     format_args(mask_args(Command, Args))])
       end).
 
 %% Mask passwords and other sensitive info before logging.
@@ -491,3 +492,6 @@ mask_args("change_password", [Name, _Password | Args]) ->
     [Name, "****" | Args];
 mask_args(_, Args) ->
     Args.
+
+format_args(Args) ->
+    string:join([io_lib:format("~p", [A]) || A <- Args], " ").
