@@ -513,18 +513,12 @@ add_routing_to_headers(Headers, Info) ->
       Headers, ?ROUTING_HEADER, array, [{table, Info} | Prior]).
 
 report_status({#upstream{connection_name = Connection,
-                         exchange        = UXNameBin}, XName}, Info) ->
-    rabbit_federation_status:report(
-      XName, Connection, UXNameBin, fmt_status(Info));
+                         exchange        = UXNameBin}, XName}, Status) ->
+    rabbit_federation_status:report(XName, Connection, UXNameBin, Status);
 
-report_status({not_started, Args}, Info) ->
-    report_status(Args, Info);
+report_status({not_started, Args}, Status) ->
+    report_status(Args, Status);
 
 report_status(#state{upstream            = Upstream,
-                     downstream_exchange = XName}, Info) ->
-    report_status({Upstream, XName}, Info).
-
-fmt_status({connected, Name})           -> [{status,           connected},
-                                            {local_connection, Name}];
-fmt_status({Status, Error})             -> [{status, Status}, {error, Error}];
-fmt_status(Status) when is_atom(Status) -> [{status, Status}].
+                     downstream_exchange = XName}, Status) ->
+    report_status({Upstream, XName}, Status).

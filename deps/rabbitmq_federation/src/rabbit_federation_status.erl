@@ -30,13 +30,13 @@
 -define(ETS_NAME, ?MODULE).
 
 -record(state, {}).
--record(entry, {key, info, timestamp}).
+-record(entry, {key, status, timestamp}).
 
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
-report(XName, Connection, UXNameBin, Info) ->
-    gen_server:cast(?SERVER, {report, XName, Connection, UXNameBin, Info,
+report(XName, Connection, UXNameBin, Status) ->
+    gen_server:cast(?SERVER, {report, XName, Connection, UXNameBin, Status,
                               calendar:local_time()}).
 
 remove(XName) ->
@@ -52,7 +52,7 @@ init([]) ->
 
 handle_call({remove, XName}, _From, State) ->
     true = ets:match_delete(?ETS_NAME, #entry{key       = {XName, '_', '_'},
-                                              info      = '_',
+                                              status    = '_',
                                               timestamp = '_'}),
     {reply, ok, State};
 
@@ -60,10 +60,10 @@ handle_call(status, _From, State) ->
     Entries = ets:tab2list(?ETS_NAME),
     {reply, [format(Entry) || Entry <- Entries], State}.
 
-handle_cast({report, XName, Connection, UXNameBin, Info, Timestamp}, State) ->
+handle_cast({report, XName, Connection, UXNameBin, Status, Timestamp}, State) ->
     true = ets:insert(?ETS_NAME, #entry{key        = {XName, Connection,
                                                       UXNameBin},
-                                        info       = Info,
+                                        status     = Status,
                                         timestamp  = Timestamp}),
     {noreply, State}.
 
@@ -80,10 +80,11 @@ format(#entry{key       = {#resource{virtual_host = VHost,
                                      kind         = exchange,
                                      name         = XNameBin},
                           Connection, UXNameBin},
-              info      = Info,
+              status    = Status,
               timestamp = Timestamp}) ->
     [{exchange,          XNameBin},
      {vhost,             VHost},
      {connection,        Connection},
      {upstream_exchange, UXNameBin},
-     {timestamp,         Timestamp} | Info].
+     {status,            Status},
+     {timestamp,         Timestamp}].

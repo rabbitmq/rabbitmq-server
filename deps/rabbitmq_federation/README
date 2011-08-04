@@ -276,16 +276,12 @@ federated exchange and an upstream. It can contain the following keys:
 * connection       - the name of the connection for this link (from config)
 * status           - status of the link: starting
                                          shutting_down
-                                         connected
-                                         connect_failed (*)
-                                         disconnected (*)
-                                         upstream_channel_down (*)
-                                         downstream_channel_down (*)
+                                         {connected, LocalConnectionName}
+                                         {connect_failed, Error}
+                                         {disconnected, Error}
+                                         {upstream_channel_down, Error}
+                                         {downstream_channel_down, Error}
 * timestamp        - time the status was last updated
-* local_connection - identifier for the local amqp connection used to
-                     publish messages (set if status is 'connected')
-* error            - error message if the status represents an error (those
-  (optional)         marked with (*) above.
 
 Possible Future Enhancements
 ============================
