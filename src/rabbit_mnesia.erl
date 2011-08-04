@@ -118,7 +118,7 @@ cluster(ClusterNodes, Force) ->
     ensure_mnesia_not_running(),
     ensure_mnesia_dir(),
 
-    case {is_only_disc_node(node(), false),
+    case {not Force andalso is_only_disc_node(node(), false),
           should_be_disc_node(ClusterNodes)} of
         {true, false} -> log_both("last disc node leaving cluster");
         _             -> ok
@@ -697,7 +697,7 @@ wait_for_tables(TableNames) ->
 
 reset(Force) ->
     ensure_mnesia_not_running(),
-    case is_only_disc_node(node(), false) of
+    case not Force andalso is_only_disc_node(node(), false) of
         true  -> log_both("resetting only disc node");
         false -> ok
     end,
