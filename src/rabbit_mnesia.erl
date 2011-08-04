@@ -764,7 +764,8 @@ is_only_disc_node(Node, false) ->
 
 log_both(Warning) ->
     io:format("Warning: ~s~n", [Warning]),
-    error_logger:warning_msg("~s~n", [Warning]).
+    rabbit_misc:with_local_io(
+      fun () -> error_logger:warning_msg("~s~n", [Warning]) end).
 
 start_mnesia() ->
     rabbit_misc:ensure_ok(mnesia:start(), cannot_start_mnesia),
