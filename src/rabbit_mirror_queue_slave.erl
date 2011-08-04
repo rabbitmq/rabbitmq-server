@@ -89,9 +89,8 @@ init([#amqqueue { name = QueueName } = Q]) ->
                   %% ASSERTION
                   [] = [Pid || Pid <- [QPid | MPids], node(Pid) =:= Node],
                   MPids1 = MPids ++ [Self],
-                  mnesia:write(rabbit_queue,
-                               Q1 #amqqueue { slave_pids = MPids1 },
-                               write),
+                  ok = rabbit_amqqueue:store_queue(
+                         Q1 #amqqueue { slave_pids = MPids1 }),
                   {ok, QPid}
           end),
     erlang:monitor(process, MPid),
