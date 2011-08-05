@@ -63,6 +63,9 @@
          rabbit_framing:amqp_table(), rabbit_types:maybe(pid()))
         -> {'new' | 'existing', rabbit_types:amqqueue()} |
            rabbit_types:channel_exit()).
+-spec(internal_declare/2 ::
+        (rabbit_types:amqqueue(), boolean())
+        -> queue_or_not_found() | rabbit_misc:thunk(queue_or_not_found())).
 -spec(lookup/1 ::
         (name()) -> rabbit_types:ok(rabbit_types:amqqueue()) |
                     rabbit_types:error('not_found')).
@@ -128,9 +131,6 @@
 -spec(notify_sent/2 :: (pid(), pid()) -> 'ok').
 -spec(unblock/2 :: (pid(), pid()) -> 'ok').
 -spec(flush_all/2 :: ([pid()], pid()) -> 'ok').
--spec(internal_declare/2 ::
-        (rabbit_types:amqqueue(), boolean())
-        -> queue_or_not_found() | rabbit_misc:thunk(queue_or_not_found())).
 -spec(internal_delete/1 ::
         (name()) -> rabbit_types:ok_or_error('not_found') |
                     rabbit_types:connection_exit() |
@@ -143,6 +143,7 @@
 -spec(set_maximum_since_use/2 :: (pid(), non_neg_integer()) -> 'ok').
 -spec(on_node_down/1 :: (node()) -> 'ok').
 -spec(pseudo_queue/2 :: (name(), pid()) -> rabbit_types:amqqueue()).
+-spec(store_queue/1 :: (rabbit_types:amqqueue()) -> 'ok').
 
 -endif.
 
