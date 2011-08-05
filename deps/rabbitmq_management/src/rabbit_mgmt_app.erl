@@ -124,7 +124,7 @@ serve_file(Req, Path, [LocalPath | Others], Redirect) ->
     Path1 = filename:join([LocalPath, Path]),
     case filelib:is_regular(Path1) of
         true  -> Req:serve_file(Path, LocalPath);
-        false -> case filelib:is_dir(Path1) of
+        false -> case filelib:is_regular(Path1 ++ "/index.html") of
                      true  -> index(Req, Path, LocalPath, Redirect);
                      false -> serve_file(Req, Path, Others, Redirect)
                  end
