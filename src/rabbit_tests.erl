@@ -28,8 +28,6 @@
 -define(TRANSIENT_MSG_STORE,  msg_store_transient).
 -define(CLEANUP_QUEUE_NAME, <<"cleanup-queue">>).
 
-%%----------------------------------------------------------------------------
-
 test_content_prop_roundtrip(Datum, Binary) ->
     Types =  [element(1, E) || E <- Datum],
     Values = [element(2, E) || E <- Datum],
