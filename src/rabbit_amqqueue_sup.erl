@@ -26,6 +26,8 @@
 
 -define(SERVER, ?MODULE).
 
+%%----------------------------------------------------------------------------
+
 -ifdef(use_specs).
 
 -spec(start_link/0 ::
@@ -36,6 +38,8 @@
                              rabbit_types:error(any())).
 
 -endif.
+
+%%----------------------------------------------------------------------------
 
 start_link() ->
     supervisor2:start_link({local, ?SERVER}, ?MODULE, []).
