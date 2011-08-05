@@ -201,7 +201,7 @@
                     prioritise_cast, prioritise_info}).
 
 %%%=========================================================================
-%%%  Specs.
+%%%  Specs. These exist only to shut up dialyzer's warnings
 %%%=========================================================================
 
 -ifdef(use_specs).
@@ -213,61 +213,6 @@
 -spec(hibernate/1 :: (gs2_state()) -> no_return()).
 -spec(pre_hibernate/1 :: (gs2_state()) -> no_return()).
 -spec(system_terminate/4 :: (_, _, _, gs2_state()) -> no_return()).
-
--spec(abcast/2 :: (atom(),_) -> 'abcast').
--spec(abcast/3 :: ([atom()],atom(),_) -> 'abcast').
--spec(call/2 :: (_,_) -> any()).
--spec(call/3 :: (_,_,_) -> any()).
--spec(cast/2 :: (atom() | pid() | {atom(),_},_) -> 'ok').
--spec(enter_loop/3 :: (atom(),maybe_improper_list(),_) -> any()).
--spec(enter_loop/4 :: (atom(),maybe_improper_list(),_,_) -> any()).
--spec(enter_loop/5 :: (atom(),
-		       maybe_improper_list(),
-		       _,
-		       pid() | {'global',_} | {'local',atom()},
-		       _) ->
-			   any()).
--spec(enter_loop/6 :: (atom(),
-		       maybe_improper_list(),
-		       _,
-		       pid() | {'global',_} | {'local',atom()},
-		       _,
-		       'undefined' | {'backoff',_,_,_}) ->
-			   any()).
--spec(format_status/2 :: (_,[any(),...]) -> nonempty_maybe_improper_list()).
--spec(init_it/6 :: (pid(),_,_,atom(),_,maybe_improper_list()) -> any()).
--spec(multi_call/2 :: (atom(),_) -> any()).
--spec(multi_call/3 :: (maybe_improper_list(),atom(),_) -> any()).
--spec(multi_call/4 :: (_,_,_,'infinity' | non_neg_integer()) -> any()).
--spec(print_event/3 :: (atom() | pid(),_,_) -> 'ok').
--spec(reply/2 :: ({_,_},_) -> any()).
--spec(start/3 :: (atom() | tuple(),
-		  _,
-		  [{'debug',
-		    ['debug' | 'log' | 'statistics' | 'trace' | {_,_}]} |
-		   {'spawn_opt',['link' | {_,_}]} |
-		   {'timeout','infinity' | non_neg_integer()}]) ->
-		      'ignore' | {'error',_} | {'ok',pid()}).
--spec(start/4 :: ({'global',_} | {'local',atom()},
-		  atom() | tuple(),
-		  _,
-		  [{'debug',
-		    ['debug' | 'log' | 'statistics' | 'trace' | {_,_}]} |
-		   {'spawn_opt', ['link' | {_,_}]} |
-		   {'timeout','infinity' | non_neg_integer()}]) ->
-		      'ignore' | {'error',_} | {'ok',pid()}).
--spec(system_code_change/4 :: (#gs2_state{},_,_,_) -> any()).
--spec(system_continue/3 :: (_,_,#gs2_state{}) -> any()).
--spec(wake_hib/1 :: (#gs2_state{timeout_state::'undefined' |
-					       {{non_neg_integer(),
-						 non_neg_integer(),
-						 non_neg_integer()},
-						{'backoff',
-						 integer(),
-						 number(),
-						 number(),
-						 {_,_,_}}}}) ->
-			 any()).
 
 -endif.
 
