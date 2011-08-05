@@ -64,12 +64,8 @@ mkdir -p %{buildroot}%{_sysconfdir}/rabbitmq
 rm %{_maindir}/LICENSE %{_maindir}/LICENSE-MPL-RabbitMQ %{_maindir}/INSTALL
 
 #Build the list of files
-rm -f %{_builddir}/%{name}.files
-echo '%defattr(-,root,root, -)' >> %{_builddir}/%{name}.files 
-(cd %{buildroot}; \
-    find . -type f ! -regex '\.%{_sysconfdir}.*' \
-        ! -regex '\.\(%{_rabbit_erllibdir}\|%{_rabbit_libdir}\).*' \
-        | sed -e 's/^\.//' >> %{_builddir}/%{name}.files)
+echo '%defattr(-,root,root, -)' >%{_builddir}/%{name}.files
+find %{buildroot} -path %{buildroot}%{_sysconfdir} -prune -o '!' -type d -printf "/%%P\n" >>%{_builddir}/%{name}.files
 
 %pre
 
@@ -116,8 +112,6 @@ done
 %attr(0750, rabbitmq, rabbitmq) %dir %{_localstatedir}/lib/rabbitmq
 %attr(0750, rabbitmq, rabbitmq) %dir %{_localstatedir}/log/rabbitmq
 %dir %{_sysconfdir}/rabbitmq
-%{_rabbit_erllibdir}
-%{_rabbit_libdir}
 %{_initrddir}/rabbitmq-server
 %config(noreplace) %{_sysconfdir}/logrotate.d/rabbitmq-server
 %doc LICENSE LICENSE-MPL-RabbitMQ
@@ -126,6 +120,15 @@ done
 rm -rf %{buildroot}
 
 %changelog
+* Thu Jun 9 2011 jerryk@vmware.com 2.5.0-1
+- New Upstream Release
+
+* Thu Apr 7 2011 Alexandru Scvortov <alexandru@rabbitmq.com> 2.4.1-1
+- New Upstream Release
+
+* Tue Mar 22 2011 Alexandru Scvortov <alexandru@rabbitmq.com> 2.4.0-1
+- New Upstream Release
+
 * Thu Feb 3 2011 simon@rabbitmq.com 2.3.1-1
 - New Upstream Release
 

@@ -24,7 +24,8 @@
          close_connection/2]).
 
 %%used by TCP-based transports, e.g. STOMP adapter
--export([check_tcp_listener_address/2]).
+-export([check_tcp_listener_address/2,
+         ensure_ssl/0, ssl_transform_fun/1]).
 
 -export([tcp_listener_started/3, tcp_listener_stopped/3,
          start_client/1, start_ssl_client/2]).
@@ -41,6 +42,9 @@
 -ifdef(use_specs).
 
 -export_type([ip_port/0, hostname/0]).
+
+-type(hostname() :: inet:hostname()).
+-type(ip_port() :: inet:ip_port()).
 
 -type(family() :: atom()).
 -type(listener_config() :: ip_port() |
@@ -110,19 +114,8 @@ boot_ssl() ->
         {ok, []} ->
             ok;
         {ok, SslListeners} ->
-            ok = rabbit_misc:start_applications([crypto, public_key, ssl]),
-            {ok, SslOptsConfig} = application:get_env(ssl_options),
-            % unknown_ca errors are silently ignored  prior to R14B unless we
-            % supply this verify_fun - remove when at least R14B is required
-            SslOpts =
-                case proplists:get_value(verify, SslOptsConfig, verify_none) of
-                    verify_none -> SslOptsConfig;
-                    verify_peer -> [{verify_fun, fun([])    -> true;
-                                                    ([_|_]) -> false
-                                                 end}
-                                   | SslOptsConfig]
-                end,
-            [start_ssl_listener(Listener, SslOpts) || Listener <- SslListeners],
+            [start_ssl_listener(Listener, ensure_ssl())
+             || Listener <- SslListeners],
             ok
     end.
 
@@ -168,6 +161,34 @@ resolve_family({_,_,_,_},         auto) -> inet;
 resolve_family({_,_,_,_,_,_,_,_}, auto) -> inet6;
 resolve_family(IP,                auto) -> throw({error, {strange_family, IP}});
 resolve_family(_,                 F)    -> F.
+
+ensure_ssl() ->
+    ok = rabbit_misc:start_applications([crypto, public_key, ssl]),
+    {ok, SslOptsConfig} = application:get_env(rabbit, ssl_options),
+
+    % unknown_ca errors are silently ignored prior to R14B unless we
+    % supply this verify_fun - remove when at least R14B is required
+    case proplists:get_value(verify, SslOptsConfig, verify_none) of
+        verify_none -> SslOptsConfig;
+        verify_peer -> [{verify_fun, fun([])    -> true;
+                                        ([_|_]) -> false
+                                     end}
+                        | SslOptsConfig]
+    end.
+
+ssl_transform_fun(SslOpts) ->
+    fun (Sock) ->
+            case catch ssl:ssl_accept(Sock, SslOpts, ?SSL_TIMEOUT * 1000) of
+                {ok, SslSock} ->
+                    rabbit_log:info("upgraded TCP connection ~p to SSL~n",
+                                    [self()]),
+                    {ok, #ssl_socket{tcp = Sock, ssl = SslSock}};
+                {error, Reason} ->
+                    {error, {ssl_upgrade_error, Reason}};
+                {'EXIT', Reason} ->
+                    {error, {ssl_upgrade_failure, Reason}}
+            end
+    end.
 
 check_tcp_listener_address(NamePrefix, Port) when is_integer(Port) ->
     check_tcp_listener_address_auto(NamePrefix, Port);
@@ -268,21 +289,7 @@ start_client(Sock) ->
     start_client(Sock, fun (S) -> {ok, S} end).
 
 start_ssl_client(SslOpts, Sock) ->
-    start_client(
-      Sock,
-      fun (Sock1) ->
-              case catch ssl:ssl_accept(Sock1, SslOpts, ?SSL_TIMEOUT * 1000) of
-                  {ok, SslSock} ->
-                      rabbit_log:info("upgraded TCP connection ~p to SSL~n",
-                                      [self()]),
-                      {ok, #ssl_socket{tcp = Sock1, ssl = SslSock}};
-                  {error, Reason} ->
-                      {error, {ssl_upgrade_error, Reason}};
-                  {'EXIT', Reason} ->
-                      {error, {ssl_upgrade_failure, Reason}}
-
-              end
-      end).
+    start_client(Sock, ssl_transform_fun(SslOpts)).
 
 connections() ->
     [rabbit_connection_sup:reader(ConnSup) ||

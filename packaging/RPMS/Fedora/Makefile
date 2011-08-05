@@ -12,7 +12,7 @@ ifndef RPM_OS
 RPM_OS=fedora
 endif
 
-ifeq "x$(RPM_OS)" "xsuse"
+ifeq "$(RPM_OS)" "suse"
 REQUIRES=/sbin/chkconfig /sbin/service
 OS_DEFINES=--define '_initrddir /etc/init.d' --define 'dist .suse'
 else
@@ -33,6 +33,11 @@ prepare:
 	sed -i \
 	    -e 's|^LOCK_FILE=.*$$|LOCK_FILE=/var/lock/subsys/$$NAME|' \
 	    SOURCES/rabbitmq-server.init
+ifeq "$(RPM_OS)" "fedora"
+# Fedora says that only vital services should have Default-Start
+	sed -i -e '/^# Default-Start:/d;/^# Default-Stop:/d' \
+	    SOURCES/rabbitmq-server.init
+endif
 	sed -i -e 's|@SU_RABBITMQ_SH_C@|su rabbitmq -s /bin/sh -c|' \
 	    SOURCES/rabbitmq-script-wrapper
 	cp rabbitmq-server.logrotate SOURCES/rabbitmq-server.logrotate
@@ -40,5 +45,5 @@ prepare:
 server: prepare
 	rpmbuild -ba --nodeps SPECS/rabbitmq-server.spec $(DEFINES) $(OS_DEFINES)
 
-clean:	
+clean:
 	rm -rf SOURCES SPECS RPMS SRPMS BUILD tmp

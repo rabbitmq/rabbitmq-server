@@ -38,6 +38,9 @@
 %%    child is a supervisor and it exits normally (i.e. with reason of
 %%    'shutdown') then the child's parent also exits normally.
 %%
+%% 5) normal, and {shutdown, _} exit reasons are all treated the same
+%%    (i.e. are regarded as normal exits)
+%%
 %% All modifications are (C) 2010-2011 VMware, Inc.
 %%
 %% %CopyrightBegin%
@@ -73,7 +76,6 @@
 %% Internal exports
 -export([init/1, handle_call/3, handle_info/2, terminate/2, code_change/3]).
 -export([handle_cast/2]).
--export([delayed_restart/2]).
 
 -define(DICT, dict).
 
@@ -104,7 +106,6 @@
 
 -ifdef(use_specs).
 
--spec(delayed_restart/2 :: (atom() | pid() | {atom(),_},_) -> 'ok').
 -spec(find_child/2 :: (_,_) -> [any()]).
 
 -endif.
@@ -164,9 +165,6 @@ check_childspecs(ChildSpecs) when is_list(ChildSpecs) ->
 	Error -> {error, Error}
     end;
 check_childspecs(X) -> {error, {badarg, X}}.
-
-delayed_restart(Supervisor, RestartDetails) ->
-    gen_server:cast(Supervisor, {delayed_restart, RestartDetails}).
 
 %%% ---------------------------------------------------
 %%% 
@@ -363,20 +361,6 @@ handle_call(which_children, _From, State) ->
 		  State#state.children),
     {reply, Resp, State}.
 
-
-handle_cast({delayed_restart, {RestartType, Reason, Child}}, State)
-  when ?is_simple(State) ->
-    {ok, NState} = do_restart(RestartType, Reason, Child, State),
-    {noreply, NState};
-handle_cast({delayed_restart, {RestartType, Reason, Child}}, State) ->
-    case get_child(Child#child.name, State) of
-        {value, Child1} ->
-            {ok, NState} = do_restart(RestartType, Reason, Child1, State),
-            {noreply, NState};
-        _ ->
-            {noreply, State}
-    end;
-
 %%% Hopefully cause a function-clause as there is no API function
 %%% that utilizes cast.
 handle_cast(null, State) ->
@@ -384,6 +368,19 @@ handle_cast(null, State) ->
 			   []),
 
     {noreply, State}.
+
+handle_info({delayed_restart, {RestartType, Reason, Child}}, State)
+  when ?is_simple(State) ->
+    {ok, NState} = do_restart(RestartType, Reason, Child, State),
+    {noreply, NState};
+handle_info({delayed_restart, {RestartType, Reason, Child}}, State) ->
+    case get_child(Child#child.name, State) of
+        {value, Child1} ->
+            {ok, NState} = do_restart(RestartType, Reason, Child1, State),
+            {noreply, NState};
+        _ ->
+            {noreply, State}
+    end;
 
 %%
 %% Take care of terminated children.
@@ -547,25 +544,20 @@ do_restart({RestartType, Delay}, Reason, Child, State) ->
         {ok, NState} ->
             {ok, NState};
         {terminate, NState} ->
-            {ok, _TRef} = timer:apply_after(
-                            trunc(Delay*1000), ?MODULE, delayed_restart,
-                            [self(), {{RestartType, Delay}, Reason, Child}]),
+            _TRef = erlang:send_after(trunc(Delay*1000), self(),
+				      {delayed_restart,
+				       {{RestartType, Delay}, Reason, Child}}),
             {ok, state_del_child(Child, NState)}
     end;
 do_restart(permanent, Reason, Child, State) ->
     report_error(child_terminated, Reason, Child, State#state.name),
     restart(Child, State);
-do_restart(intrinsic, normal, Child, State) ->
-    {shutdown, state_del_child(Child, State)};
-do_restart(intrinsic, shutdown, Child = #child{child_type = supervisor},
-           State) ->
-    {shutdown, state_del_child(Child, State)};
-do_restart(_, normal, Child, State) ->
-    NState = state_del_child(Child, State),
-    {ok, NState};
-do_restart(_, shutdown, Child, State) ->
-    NState = state_del_child(Child, State),
-    {ok, NState};
+do_restart(Type, normal, Child, State) ->
+    del_child_and_maybe_shutdown(Type, Child, State);
+do_restart(Type, {shutdown, _}, Child, State) ->
+    del_child_and_maybe_shutdown(Type, Child, State);
+do_restart(Type, shutdown, Child = #child{child_type = supervisor}, State) ->
+    del_child_and_maybe_shutdown(Type, Child, State);
 do_restart(Type, Reason, Child, State) when Type =:= transient orelse
                                             Type =:= intrinsic ->
     report_error(child_terminated, Reason, Child, State#state.name),
@@ -574,6 +566,11 @@ do_restart(temporary, Reason, Child, State) ->
     report_error(child_terminated, Reason, Child, State#state.name),
     NState = state_del_child(Child, State),
     {ok, NState}.
+
+del_child_and_maybe_shutdown(intrinsic, Child, State) ->
+    {shutdown, state_del_child(Child, State)};
+del_child_and_maybe_shutdown(_, Child, State) ->
+    {ok, state_del_child(Child, State)}.
 
 restart(Child, State) ->
     case add_restart(State) of

@@ -23,6 +23,10 @@ behaviour_info(callbacks) ->
      %% A description.
      {description, 0},
 
+     %% If this mechanism is enabled, should it be offered for a given socket?
+     %% (primarily so EXTERNAL can be SSL-only)
+     {should_offer, 1},
+
      %% Called before authentication starts. Should create a state
      %% object to be passed through all the stages of authentication.
      {init, 1},

@@ -10,8 +10,8 @@
 # Provides:          rabbitmq-server
 # Required-Start:    $remote_fs $network
 # Required-Stop:     $remote_fs $network
-# Default-Start:
-# Default-Stop:
+# Default-Start:     3 4 5
+# Default-Stop:      0 1 2 6
 # Description:       RabbitMQ broker
 # Short-Description: Enable AMQP service provided by RabbitMQ broker
 ### END INIT INFO
@@ -28,6 +28,7 @@ INIT_LOG_DIR=/var/log/rabbitmq
 LOCK_FILE= # This is filled in when building packages
 
 test -x $DAEMON || exit 0
+test -x $CONTROL || exit 0
 
 RETVAL=0
 set -e
@@ -94,11 +95,21 @@ status_rabbitmq() {
 
 rotate_logs_rabbitmq() {
     set +e
-    $DAEMON rotate_logs ${ROTATE_SUFFIX}
+    $CONTROL rotate_logs ${ROTATE_SUFFIX}
     if [ $? != 0 ] ; then
         RETVAL=1
     fi
     set -e
+}
+
+restart_running_rabbitmq () {
+    status_rabbitmq quiet
+    if [ $RETVAL = 0 ] ; then
+        restart_rabbitmq
+    else
+        echo RabbitMQ is not runnning
+        RETVAL=0
+    fi
 }
 
 restart_rabbitmq() {
@@ -124,9 +135,14 @@ case "$1" in
         echo -n "Rotating log files for $DESC: "
         rotate_logs_rabbitmq
         ;;
-    force-reload|reload|restart|condrestart|try-restart)
+    force-reload|reload|restart)
         echo -n "Restarting $DESC: "
         restart_rabbitmq
+        echo "$NAME."
+        ;;
+    try-restart)
+        echo -n "Restarting $DESC: "
+        restart_running_rabbitmq
         echo "$NAME."
         ;;
     *)

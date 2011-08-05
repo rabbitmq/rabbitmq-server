@@ -37,7 +37,8 @@
                            fun ((rabbit_types:binding()) -> boolean())) ->
     match_result()).
 -spec(match_routing_key/2 :: (rabbit_types:binding_source(),
-                              routing_key() | '_') -> match_result()).
+                             [routing_key()] | ['_']) ->
+    match_result()).
 
 -endif.
 
@@ -58,7 +59,7 @@ deliver(QNames, Delivery = #delivery{mandatory = false,
     {routed, QPids};
 
 deliver(QNames, Delivery = #delivery{mandatory = Mandatory,
-                                    immediate = Immediate}) ->
+                                     immediate = Immediate}) ->
     QPids = lookup_qpids(QNames),
     {Success, _} =
         delegate:invoke(QPids,
@@ -66,7 +67,7 @@ deliver(QNames, Delivery = #delivery{mandatory = Mandatory,
                                 rabbit_amqqueue:deliver(Pid, Delivery)
                         end),
     {Routed, Handled} =
-         lists:foldl(fun fold_deliveries/2, {false, []}, Success),
+        lists:foldl(fun fold_deliveries/2, {false, []}, Success),
     check_delivery(Mandatory, Immediate, {Routed, Handled}).
 
 
@@ -82,12 +83,19 @@ match_bindings(SrcName, Match) ->
                       Match(Binding)]),
     mnesia:async_dirty(fun qlc:e/1, [Query]).
 
-match_routing_key(SrcName, RoutingKey) ->
-    MatchHead = #route{binding = #binding{source      = SrcName,
+match_routing_key(SrcName, [RoutingKey]) ->
+    find_routes(#route{binding = #binding{source      = SrcName,
                                           destination = '$1',
                                           key         = RoutingKey,
                                           _           = '_'}},
-    mnesia:dirty_select(rabbit_route, [{MatchHead, [], ['$1']}]).
+                []);
+match_routing_key(SrcName, [_|_] = RoutingKeys) ->
+    find_routes(#route{binding = #binding{source      = SrcName,
+                                          destination = '$1',
+                                          key         = '$2',
+                                          _           = '_'}},
+                [list_to_tuple(['orelse' | [{'=:=', '$2', RKey} ||
+                                               RKey <- RoutingKeys]])]).
 
 %%--------------------------------------------------------------------
 
@@ -102,7 +110,31 @@ check_delivery(_   , _   , {_    , Qs}) -> {routed, Qs}.
 lookup_qpids(QNames) ->
     lists:foldl(fun (QName, QPids) ->
                         case mnesia:dirty_read({rabbit_queue, QName}) of
-                            [#amqqueue{pid = QPid}] -> [QPid | QPids];
-                            []                      -> QPids
+                            [#amqqueue{pid = QPid, slave_pids = SPids}] ->
+                                [QPid | SPids ++ QPids];
+                            [] ->
+                                QPids
                         end
                 end, [], QNames).
+
+%% Normally we'd call mnesia:dirty_select/2 here, but that is quite
+%% expensive due to
+%%
+%% 1) general mnesia overheads (figuring out table types and
+%% locations, etc). We get away with bypassing these because we know
+%% that the table
+%% - is not the schema table
+%% - has a local ram copy
+%% - does not have any indices
+%%
+%% 2) 'fixing' of the table with ets:safe_fixtable/2, which is wholly
+%% unnecessary. According to the ets docs (and the code in erl_db.c),
+%% 'select' is safe anyway ("Functions that internally traverse over a
+%% table, like select and match, will give the same guarantee as
+%% safe_fixtable.") and, furthermore, even the lower level iterators
+%% ('first' and 'next') are safe on ordered_set tables ("Note that for
+%% tables of the ordered_set type, safe_fixtable/2 is not necessary as
+%% calls to first/1 and next/2 will always succeed."), which
+%% rabbit_route is.
+find_routes(MatchHead, Conditions) ->
+    ets:select(rabbit_route, [{MatchHead, Conditions, ['$1']}]).

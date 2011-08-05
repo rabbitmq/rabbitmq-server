@@ -29,13 +29,13 @@
 -spec(new/1 :: (dir()) -> index_state()).
 -spec(recover/1 :: (dir()) -> rabbit_types:ok_or_error2(index_state(), any())).
 -spec(lookup/2 ::
-        (rabbit_guid:guid(), index_state()) -> ('not_found' | keyvalue())).
+        (rabbit_types:msg_id(), index_state()) -> ('not_found' | keyvalue())).
 -spec(insert/2 :: (keyvalue(), index_state()) -> 'ok').
 -spec(update/2 :: (keyvalue(), index_state()) -> 'ok').
--spec(update_fields/3 :: (rabbit_guid:guid(), ({fieldpos(), fieldvalue()} |
-                                               [{fieldpos(), fieldvalue()}]),
+-spec(update_fields/3 :: (rabbit_types:msg_id(), ({fieldpos(), fieldvalue()} |
+                                                  [{fieldpos(), fieldvalue()}]),
                           index_state()) -> 'ok').
--spec(delete/2 :: (rabbit_guid:guid(), index_state()) -> 'ok').
+-spec(delete/2 :: (rabbit_types:msg_id(), index_state()) -> 'ok').
 -spec(delete_object/2 :: (keyvalue(), index_state()) -> 'ok').
 -spec(delete_by_file/2 :: (fieldvalue(), index_state()) -> 'ok').
 -spec(terminate/1 :: (index_state()) -> any()).

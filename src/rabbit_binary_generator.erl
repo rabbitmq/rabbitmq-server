@@ -18,12 +18,13 @@
 -include("rabbit_framing.hrl").
 -include("rabbit.hrl").
 
-% EMPTY_CONTENT_BODY_FRAME_SIZE, 8 = 1 + 2 + 4 + 1
-%  - 1 byte of frame type
-%  - 2 bytes of channel number
-%  - 4 bytes of frame payload length
-%  - 1 byte of payload trailer FRAME_END byte
-% See definition of check_empty_content_body_frame_size/0, an assertion called at startup.
+%% EMPTY_CONTENT_BODY_FRAME_SIZE, 8 = 1 + 2 + 4 + 1
+%%  - 1 byte of frame type
+%%  - 2 bytes of channel number
+%%  - 4 bytes of frame payload length
+%%  - 1 byte of payload trailer FRAME_END byte
+%% See definition of check_empty_content_body_frame_size/0,
+%% an assertion called at startup.
 -define(EMPTY_CONTENT_BODY_FRAME_SIZE, 8).
 
 -export([build_simple_method_frame/3,

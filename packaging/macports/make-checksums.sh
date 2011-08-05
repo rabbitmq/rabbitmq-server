@@ -6,7 +6,7 @@ for type in src bin
 do
     tarball_var=tarball_${type}
     tarball=${!tarball_var}
-    for algo in md5 sha1 rmd160
+    for algo in sha1 rmd160
     do
         checksum=$(openssl $algo ${tarball} | awk '{print $NF}')
         echo "s|@$algo-$type@|$checksum|g"

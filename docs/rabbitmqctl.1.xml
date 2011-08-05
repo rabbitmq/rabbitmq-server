@@ -59,6 +59,11 @@
       RabbitMQ broker. It performs all actions by connecting to one of the
       broker's nodes.
     </para>
+    <para>
+      Diagnostic information is displayed if the broker was not
+      running, could not be reached, or rejected the connection due to
+      mismatching Erlang cookies.
+    </para>
   </refsect1>
 
   <refsect1>
@@ -175,24 +180,6 @@
             <para role="example">
               This command will return when the RabbitMQ node has
               started up.
-            </para>
-          </listitem>
-        </varlistentry>
-
-        <varlistentry>
-          <term><cmdsynopsis><command>status</command></cmdsynopsis></term>
-          <listitem>
-            <para>
-              Displays various information about the RabbitMQ broker,
-              such as whether the RabbitMQ application on the current
-              node, its version number, what nodes are part of the
-              broker, which of these are running.
-            </para>
-            <para role="example-prefix">For example:</para>
-            <screen role="example">rabbitmqctl status</screen>
-            <para role="example">
-              This command displays information about the RabbitMQ
-              broker.
             </para>
           </listitem>
         </varlistentry>
@@ -377,6 +364,20 @@
             </para>
           </listitem>
         </varlistentry>
+        <varlistentry>
+          <term><cmdsynopsis><command>cluster_status</command></cmdsynopsis></term>
+          <listitem>
+            <para>
+              Displays all the nodes in the cluster grouped by node type,
+              together with the currently running nodes.
+            </para>
+            <para role="example-prefix">For example:</para>
+            <screen role="example">rabbitmqctl cluster_status</screen>
+            <para role="example">
+              This command displays the nodes in the cluster.
+            </para>
+          </listitem>
+        </varlistentry>
       </variablelist>
     </refsect2>
 
@@ -512,17 +513,22 @@
         </varlistentry>
 
         <varlistentry>
-          <term><cmdsynopsis><command>set_admin</command> <arg choice="req"><replaceable>username</replaceable></arg></cmdsynopsis></term>
+          <term><cmdsynopsis><command>set_user_tags</command> <arg choice="req"><replaceable>username</replaceable></arg> <arg choice="req"><replaceable>tag</replaceable> ...</arg></cmdsynopsis></term>
           <listitem>
             <variablelist>
               <varlistentry>
                 <term>username</term>
-                <listitem><para>The name of the user whose administrative
-                status is to be set.</para></listitem>
+                <listitem><para>The name of the user whose tags are to
+                be set.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>tag</term>
+                <listitem><para>Zero, one or more tags to set. Any
+                existing tags will be removed.</para></listitem>
               </varlistentry>
             </variablelist>
             <para role="example-prefix">For example:</para>
-            <screen role="example">rabbitmqctl set_admin tonyg</screen>
+            <screen role="example">rabbitmqctl set_user_tags tonyg administrator</screen>
             <para role="example">
               This command instructs the RabbitMQ broker to ensure the user
                named <command>tonyg</command> is an administrator. This has no
@@ -531,24 +537,10 @@
                user logs in via some other means (for example with the
                management plugin).
             </para>
-          </listitem>
-        </varlistentry>
-
-        <varlistentry>
-          <term><cmdsynopsis><command>clear_admin</command> <arg choice="req"><replaceable>username</replaceable></arg></cmdsynopsis></term>
-          <listitem>
-            <variablelist>
-              <varlistentry>
-                <term>username</term>
-                <listitem><para>The name of the user whose administrative
-                status is to be cleared.</para></listitem>
-              </varlistentry>
-            </variablelist>
-            <para role="example-prefix">For example:</para>
-            <screen role="example">rabbitmqctl clear_admin tonyg</screen>
+            <screen role="example">rabbitmqctl set_user_tags tonyg</screen>
             <para role="example">
-              This command instructs the RabbitMQ broker to ensure the user
-               named <command>tonyg</command> is not an administrator.
+              This command instructs the RabbitMQ broker to remove any
+              tags from the user named <command>tonyg</command>.
             </para>
           </listitem>
         </varlistentry>
@@ -624,14 +616,35 @@
           </listitem>
         </varlistentry>
 
-        <varlistentry>
-          <term><cmdsynopsis><command>list_vhosts</command></cmdsynopsis></term>
+        <varlistentry role="usage-has-option-list">
+          <term><cmdsynopsis><command>list_vhosts</command> <arg choice="opt" role="usage-option-list"><replaceable>vhostinfoitem</replaceable> ...</arg></cmdsynopsis></term>
           <listitem>
             <para>
               Lists virtual hosts.
             </para>
+            <para>
+              The <command>vhostinfoitem</command> parameter is used to indicate which
+              virtual host information items to include in the results. The column order in the
+              results will match the order of the parameters.
+              <command>vhostinfoitem</command> can take any value from
+              the list that follows:
+            </para>
+            <variablelist>
+              <varlistentry>
+                <term>name</term>
+                <listitem><para>The name of the virtual host with non-ASCII characters escaped as in C.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>tracing</term>
+                <listitem><para>Whether tracing is enabled for this virtual host.</para></listitem>
+              </varlistentry>
+            </variablelist>
+            <para>
+              If no <command>vhostinfoitem</command>s are specified
+              then the vhost name is displayed.
+            </para>
             <para role="example-prefix">For example:</para>
-            <screen role="example">rabbitmqctl list_vhosts</screen>
+            <screen role="example">rabbitmqctl list_vhosts name tracing</screen>
             <para role="example">
               This command instructs the RabbitMQ broker to list all
               virtual hosts.
@@ -1187,6 +1200,10 @@
                 <listitem><para>True if the channel is in transactional mode, false otherwise.</para></listitem>
               </varlistentry>
               <varlistentry>
+                <term>confirm</term>
+                <listitem><para>True if the channel is in confirm mode, false otherwise.</para></listitem>
+              </varlistentry>
+              <varlistentry>
                 <term>consumer_count</term>
                 <listitem><para>Number of logical AMQP consumers retrieving messages via
                   the channel.</para></listitem>
@@ -1197,9 +1214,20 @@
                   yet acknowledged.</para></listitem>
               </varlistentry>
               <varlistentry>
+                <term>messages_uncommitted</term>
+                <listitem><para>Number of messages received in an as yet
+                  uncommitted transaction.</para></listitem>
+              </varlistentry>
+              <varlistentry>
                 <term>acks_uncommitted</term>
                 <listitem><para>Number of acknowledgements received in an as yet
                   uncommitted transaction.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>messages_unconfirmed</term>
+                <listitem><para>Number of published messages not yet
+                confirmed.  On channels not in confirm mode, this
+                remains 0.</para></listitem>
               </varlistentry>
               <varlistentry>
                 <term>prefetch_count</term>
@@ -1213,21 +1241,10 @@
                     messages to the channel's consumers.
                     </para></listitem>
               </varlistentry>
-              <varlistentry>
-                <term>confirm</term>
-                <listitem><para>True if the channel is in confirm mode, false otherwise.</para></listitem>
-              </varlistentry>
-              <varlistentry>
-                <term>messages_unconfirmed</term>
-                <listitem><para>Number of published messages not yet
-                confirmed.  On channels not in confirm mode, this
-                remains 0.</para></listitem>
-              </varlistentry>
             </variablelist>
             <para>
               If no <command>channelinfoitem</command>s are specified then pid,
-              user, transactional, consumer_count, and
-              messages_unacknowledged are assumed.
+              user, consumer_count, and messages_unacknowledged are assumed.
             </para>
 
             <para role="example-prefix">
@@ -1242,7 +1259,7 @@
         </varlistentry>
 
         <varlistentry>
-          <term><cmdsynopsis><command>list_consumers</command></cmdsynopsis></term>
+          <term><cmdsynopsis><command>list_consumers</command> <arg choice="opt">-p <replaceable>vhostpath</replaceable></arg></cmdsynopsis></term>
           <listitem>
             <para>
               List consumers, i.e. subscriptions to a queue's message
@@ -1254,14 +1271,98 @@
               indicating whether acknowledgements are expected for
               messages delivered to this consumer.
             </para>
-            <para role="usage">
-              The output format for "list_consumers" is a list of rows containing,
-              in order, the queue name, channel process id, consumer tag, and a
-              boolean indicating whether acknowledgements are expected from the
-              consumer.
+            <para>
+              The output is a list of rows containing, in order, the queue name,
+              channel process id, consumer tag, and a boolean indicating whether
+              acknowledgements are expected from the consumer.
             </para>
           </listitem>
         </varlistentry>
+
+        <varlistentry>
+          <term><cmdsynopsis><command>status</command></cmdsynopsis></term>
+          <listitem>
+            <para>
+              Displays broker status information such as the running
+              applications on the current Erlang node, RabbitMQ and
+              Erlang versions and OS name.  (See
+              the <command>cluster_status</command> command to find
+              out which nodes are clustered and running.)
+            </para>
+            <para role="example-prefix">For example:</para>
+            <screen role="example">rabbitmqctl status</screen>
+            <para role="example">
+              This command displays information about the RabbitMQ
+              broker.
+            </para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term><cmdsynopsis><command>environment</command></cmdsynopsis></term>
+          <listitem>
+            <para>
+              Display the name and value of each variable in the
+              application environment.
+            </para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term><cmdsynopsis><command>report</command></cmdsynopsis></term>
+          <listitem>
+            <para>
+              Generate a server status report containing a
+              concatenation of all server status information for
+              support purposes. The output should be redirected to a
+              file when accompanying a support request.
+            </para>
+            <para role="example-prefix">
+              For example:
+            </para>
+            <screen role="example">rabbitmqctl report > server_report.txt</screen>
+            <para role="example">
+              This command creates a server report which may be
+              attached to a support request email.
+            </para>
+          </listitem>
+        </varlistentry>
+      </variablelist>
+    </refsect2>
+
+    <refsect2>
+      <title>Message Tracing</title>
+      <variablelist>
+        <varlistentry>
+          <term><cmdsynopsis><command>trace_on</command> <arg choice="opt">-p <replaceable>vhost</replaceable></arg></cmdsynopsis></term>
+          <listitem>
+            <variablelist>
+              <varlistentry>
+                <term>vhost</term>
+                <listitem><para>The name of the virtual host for which to start tracing.</para></listitem>
+              </varlistentry>
+            </variablelist>
+            <para>
+              Starts tracing.
+            </para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term><cmdsynopsis><command>trace_off</command> <arg choice="opt">-p <replaceable>vhost</replaceable></arg></cmdsynopsis></term>
+          <listitem>
+            <variablelist>
+              <varlistentry>
+                <term>vhost</term>
+                <listitem><para>The name of the virtual host for which to stop tracing.</para></listitem>
+              </varlistentry>
+            </variablelist>
+            <para>
+              Stops tracing.
+            </para>
+          </listitem>
+        </varlistentry>
+
       </variablelist>
     </refsect2>
   </refsect1>

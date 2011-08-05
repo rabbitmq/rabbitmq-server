@@ -67,6 +67,11 @@
 %% module. Note there is no form also encompassing a reply, thus if
 %% you wish to reply in handle_call/3 and change the callback module,
 %% you need to use gen_server2:reply/2 to issue the reply manually.
+%%
+%% 8) The callback module can optionally implement
+%% format_message_queue/2 which is the equivalent of format_status/2
+%% but where the second argument is specifically the priority_queue
+%% which contains the prioritised message_queue.
 
 %% All modifications are (C) 2009-2011 VMware, Inc.
 
@@ -508,8 +513,8 @@ unregister_name({global,Name}) ->
     _ = global:unregister_name(Name);
 unregister_name(Pid) when is_pid(Pid) ->
     Pid;
-% Under R12 let's just ignore it, as we have a single term as Name.
-% On R13 it will never get here, as we get tuple with 'local/global' atom.
+%% Under R12 let's just ignore it, as we have a single term as Name.
+%% On R13 it will never get here, as we get tuple with 'local/global' atom.
 unregister_name(_Name) -> ok.
 
 extend_backoff(undefined) ->
@@ -648,41 +653,35 @@ adjust_timeout_state(SleptAt, AwokeAt, {backoff, CurrentTO, MinimumTO,
     CurrentTO1 = Base + Extra,
     {backoff, CurrentTO1, MinimumTO, DesiredHibPeriod, RandomState1}.
 
-in({'$gen_cast', Msg}, GS2State = #gs2_state { prioritise_cast = PC,
-                                               queue           = Queue }) ->
-    GS2State #gs2_state { queue = priority_queue:in(
-                                    {'$gen_cast', Msg},
-                                    PC(Msg, GS2State), Queue) };
-in({'$gen_call', From, Msg}, GS2State = #gs2_state { prioritise_call = PC,
-                                                     queue           = Queue }) ->
-    GS2State #gs2_state { queue = priority_queue:in(
-                                    {'$gen_call', From, Msg},
-                                    PC(Msg, From, GS2State), Queue) };
-in(Input, GS2State = #gs2_state { prioritise_info = PI, queue = Queue }) ->
-    GS2State #gs2_state { queue = priority_queue:in(
-                                    Input, PI(Input, GS2State), Queue) }.
+in({'$gen_cast', Msg} = Input,
+   GS2State = #gs2_state { prioritise_cast = PC }) ->
+    in(Input, PC(Msg, GS2State), GS2State);
+in({'$gen_call', From, Msg} = Input,
+   GS2State = #gs2_state { prioritise_call = PC }) ->
+    in(Input, PC(Msg, From, GS2State), GS2State);
+in({'EXIT', Parent, _R} = Input, GS2State = #gs2_state { parent = Parent }) ->
+    in(Input, infinity, GS2State);
+in({system, _From, _Req} = Input, GS2State) ->
+    in(Input, infinity, GS2State);
+in(Input, GS2State = #gs2_state { prioritise_info = PI }) ->
+    in(Input, PI(Input, GS2State), GS2State).
 
-process_msg(Msg,
-            GS2State = #gs2_state { parent = Parent,
-                                    name   = Name,
-                                    debug  = Debug }) ->
-    case Msg of
-        {system, From, Req} ->
-            sys:handle_system_msg(
-              Req, From, Parent, ?MODULE, Debug,
-              GS2State);
-        %% gen_server puts Hib on the end as the 7th arg, but that
-        %% version of the function seems not to be documented so
-        %% leaving out for now.
-        {'EXIT', Parent, Reason} ->
-            terminate(Reason, Msg, GS2State);
-        _Msg when Debug =:= [] ->
-            handle_msg(Msg, GS2State);
-        _Msg ->
-            Debug1 = sys:handle_debug(Debug, fun print_event/3,
-                                      Name, {in, Msg}),
-            handle_msg(Msg, GS2State #gs2_state { debug = Debug1 })
-    end.
+in(Input, Priority, GS2State = #gs2_state { queue = Queue }) ->
+    GS2State # gs2_state { queue = priority_queue:in(Input, Priority, Queue) }.
+
+process_msg({system, From, Req},
+            GS2State = #gs2_state { parent = Parent, debug  = Debug }) ->
+    sys:handle_system_msg(Req, From, Parent, ?MODULE, Debug, GS2State);
+process_msg({'EXIT', Parent, Reason} = Msg,
+            GS2State = #gs2_state { parent = Parent }) ->
+    %% gen_server puts Hib on the end as the 7th arg, but that version
+    %% of the fun seems not to be documented so leaving out for now.
+    terminate(Reason, Msg, GS2State);
+process_msg(Msg, GS2State = #gs2_state { debug  = [] }) ->
+    handle_msg(Msg, GS2State);
+process_msg(Msg, GS2State = #gs2_state { name = Name, debug  = Debug }) ->
+    Debug1 = sys:handle_debug(Debug, fun print_event/3, Name, {in, Msg}),
+    handle_msg(Msg, GS2State #gs2_state { debug = Debug1 }).
 
 %%% ---------------------------------------------------
 %%% Send/recive functions
@@ -1216,17 +1215,22 @@ format_status(Opt, StatusData) ->
               end,
     Header = lists:concat(["Status for generic server ", NameTag]),
     Log = sys:get_debug(log, Debug, []),
-    Specfic =
-        case erlang:function_exported(Mod, format_status, 2) of
-            true -> case catch Mod:format_status(Opt, [PDict, State]) of
-                        {'EXIT', _} -> [{data, [{"State", State}]}];
-                        Else        -> Else
-                    end;
-            _    -> [{data, [{"State", State}]}]
-        end,
+    Specfic = callback(Mod, format_status, [Opt, [PDict, State]],
+                       fun () -> [{data, [{"State", State}]}] end),
+    Messages = callback(Mod, format_message_queue, [Opt, Queue],
+                        fun () -> priority_queue:to_list(Queue) end),
     [{header, Header},
      {data, [{"Status", SysState},
              {"Parent", Parent},
              {"Logged events", Log},
-             {"Queued messages", priority_queue:to_list(Queue)}]} |
+             {"Queued messages", Messages}]} |
      Specfic].
+
+callback(Mod, FunName, Args, DefaultThunk) ->
+    case erlang:function_exported(Mod, FunName, length(Args)) of
+        true  -> case catch apply(Mod, FunName, Args) of
+                     {'EXIT', _} -> DefaultThunk();
+                     Success     -> Success
+                 end;
+        false -> DefaultThunk()
+    end.

@@ -45,10 +45,10 @@ test_supervisor_delayed_restart() ->
 test_supervisor_delayed_restart(SupPid) ->
     ok = ping_child(SupPid),
     ok = exit_child(SupPid),
-    timer:sleep(10),
+    timer:sleep(100),
     ok = ping_child(SupPid),
     ok = exit_child(SupPid),
-    timer:sleep(10),
+    timer:sleep(100),
     timeout = ping_child(SupPid),
     timer:sleep(1010),
     ok = ping_child(SupPid),
@@ -57,8 +57,8 @@ test_supervisor_delayed_restart(SupPid) ->
 with_sup(RestartStrategy, Fun) ->
     {ok, SupPid} = supervisor2:start_link(?MODULE, [RestartStrategy]),
     Res = Fun(SupPid),
+    unlink(SupPid),
     exit(SupPid, shutdown),
-    rabbit_misc:unlink_and_capture_exit(SupPid),
     Res.
 
 init([RestartStrategy]) ->
