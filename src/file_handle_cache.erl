@@ -230,7 +230,7 @@
 
 -spec(register_callback/3 :: (atom(), atom(), [any()]) -> 'ok').
 -spec(open/3 ::
-        (string(), [any()],
+        (file:filename(), [any()],
          [{'write_buffer', (non_neg_integer() | 'infinity' | 'unbuffered')}])
         -> val_or_error(ref())).
 -spec(close/1 :: (ref()) -> ok_or_error()).
