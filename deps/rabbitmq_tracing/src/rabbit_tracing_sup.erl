@@ -31,11 +31,11 @@ start_link() ->
     supervisor:start_link({local, ?SUPERVISOR}, ?MODULE, []).
 
 start_child(Id, Args) ->
-    {ok, Pid} = supervisor:start_child(
-                  ?SUPERVISOR,
-                  {Id, {rabbit_tracing_consumer_sup, start_link, [Args]},
-                   transient, ?MAX_WAIT, supervisor,
-                   [rabbit_tracing_consumer_sup]}),
+    {ok, _Pid} = supervisor:start_child(
+                   ?SUPERVISOR,
+                   {Id, {rabbit_tracing_consumer_sup, start_link, [Args]},
+                    transient, ?MAX_WAIT, supervisor,
+                    [rabbit_tracing_consumer_sup]}),
     ok.
 
 stop_child(Id) ->
