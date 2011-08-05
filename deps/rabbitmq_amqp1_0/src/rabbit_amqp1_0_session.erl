@@ -859,12 +859,28 @@ ensure_declaring_channel(State) ->
 %%
 %% TODO default-outcome and outcomes, dynamic lifetimes
 
-ensure_target(Target = #'v1_0.target'{address=Address,
-                                      dynamic=Dynamic},
+ensure_target(Target = #'v1_0.target'{address       = Address,
+                                      dynamic       = Dynamic,
+                                      expiry_policy = ExpiryPolicy,
+                                      timeout       = Timeout},
               Link = #incoming_link{},
               State) ->
     case Dynamic of
-        undefined ->
+        true ->
+            case Address of
+                undefined ->
+                    {ok, QueueName, State1} = create_queue(Timeout, State),
+                    {ok,
+                     Target#'v1_0.target'{address = {utf8, queue_address(QueueName)}},
+                     Link#incoming_link{exchange = <<"">>,
+                                        routing_key = QueueName},
+                     State1};
+                _Else ->
+                    {error, {both_dynamic_and_address_supplied,
+                             Dynamic, Address},
+                     State}
+            end;
+        _ ->
             case Address of
                 {Enc, Destination}
                 when Enc =:= utf8 orelse Enc =:= utf16 ->
@@ -896,28 +912,29 @@ ensure_target(Target = #'v1_0.target'{address=Address,
                     end;
                 _Else ->
                     {error, {unknown_address, Address}, State}
-            end;
-        {symbol, Lifetime} ->
+            end
+    end.
+
+ensure_source(Source = #'v1_0.source'{address       = Address,
+                                      dynamic       = Dynamic,
+                                      expiry_policy = ExpiryPolicy,
+                                      timeout       = Timeout},
+              Link = #outgoing_link{}, State) ->
+    case Dynamic of
+        true ->
             case Address of
                 undefined ->
-                    {ok, QueueName, State1} = create_queue(Lifetime, State),
+                    {ok, QueueName, State1} = create_queue(Timeout, State),
                     {ok,
-                     Target#'v1_0.target'{address = {utf8, queue_address(QueueName)}},
-                     Link#incoming_link{exchange = <<"">>,
-                                        routing_key = QueueName},
+                     Source#'v1_0.source'{address = {utf8, queue_address(QueueName)}},
+                     #outgoing_link{queue = QueueName},
                      State1};
                 _Else ->
                     {error, {both_dynamic_and_address_supplied,
                              Dynamic, Address},
                      State}
-            end
-    end.
-
-ensure_source(Source = #'v1_0.source'{ address = Address,
-                                       dynamic = Dynamic },
-              Link = #outgoing_link{}, State) ->
-    case Dynamic of
-        undefined ->
+            end;
+        _ ->
             %% TODO ugh. This will go away after the planned codec rewrite.
             Destination = case Address of
                               {_Enc, D} -> binary_to_list(D);
@@ -946,19 +963,6 @@ ensure_source(Source = #'v1_0.source'{ address = Address,
                     end;
                 _Otherwise ->
                     {error, {unknown_address, Destination}, State}
-            end;
-        {symbol, Lifetime} ->
-            case Address of
-                undefined ->
-                    {ok, QueueName, State1} = create_queue(Lifetime, State),
-                    {ok,
-                     Source#'v1_0.source'{address = {utf8, queue_address(QueueName)}},
-                     #outgoing_link{queue = QueueName},
-                     State1};
-                _Else ->
-                    {error, {both_dynamic_and_address_supplied,
-                             Dynamic, Address},
-                     State}
             end
     end.
 
@@ -1001,13 +1005,11 @@ check_exchange(ExchangeName, State) when is_binary(ExchangeName) ->
             {ok, ExchangeName, State1}
     end.
 
-%% TODO Lifetimes: we approximate these with auto_delete, but not
-%% exclusive, since exclusive queues and the direct client are broken
-%% at the minute.
+%% TODO Lifetimes: we approximate these with exclusive.
 create_queue(_Lifetime, State) ->
     State1 = #session{ declaring_channel = Ch } = ensure_declaring_channel(State),
     #'queue.declare_ok'{queue = QueueName} =
-        amqp_channel:call(Ch, #'queue.declare'{auto_delete = true}),
+        amqp_channel:call(Ch, #'queue.declare'{exclusive = true}),
     {ok, QueueName, State1}.
 
 create_bound_queue(ExchangeName, RoutingKey, State) ->
