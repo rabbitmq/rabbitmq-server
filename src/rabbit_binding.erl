@@ -68,9 +68,9 @@
 -spec(info/1 :: (rabbit_types:binding()) -> rabbit_types:infos()).
 -spec(info/2 :: (rabbit_types:binding(), rabbit_types:info_keys()) ->
                      rabbit_types:infos()).
--spec(info_all/1 :: (rabbit_types:vhost()) -> [rabbit_types:infos()]).
+-spec(info_all/1 :: (rabbit_types:vhost()) -> rabbit_types:infos()).
 -spec(info_all/2 ::(rabbit_types:vhost(), rabbit_types:info_keys())
-                   -> [rabbit_types:infos()]).
+                   -> rabbit_types:infos()).
 -spec(has_for_source/1 :: (rabbit_types:binding_source()) -> boolean()).
 -spec(remove_for_source/1 :: (rabbit_types:binding_source()) -> bindings()).
 -spec(remove_for_destination/1 ::
