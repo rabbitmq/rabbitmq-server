@@ -1098,11 +1098,10 @@ handle_cast({set_maximum_since_use, Age}, State) ->
 handle_cast(force_event_refresh, State = #q{exclusive_consumer = Exclusive}) ->
     rabbit_event:notify(queue_exists, infos(?CREATION_EVENT_KEYS, State)),
     case Exclusive of
-        none -> [emit_consumer_exists(Ch, CTag, false, AckRequired) ||
-                    {Ch, CTag, AckRequired} <- consumers(State)];
-        _    -> [emit_consumer_exists(Ch, CTag, true, AckRequired) ||
-                    {Ch, CTag, AckRequired} <- consumers(State),
-                    Exclusive = {Ch, CTag}]
+        none       -> [emit_consumer_exists(Ch, CTag, false, AckRequired) ||
+                          {Ch, CTag, AckRequired} <- consumers(State)];
+        {Ch, CTag} -> [{Ch, CTag, AckRequired}] = consumers(State),
+                      emit_consumer_exists(Ch, CTag, true, AckRequired)
     end,
     noreply(State).
 
