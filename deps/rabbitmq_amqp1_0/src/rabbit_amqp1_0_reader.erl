@@ -534,7 +534,7 @@ is_connection_frame(_)               -> false.
 
 %% Nothing specifies that connection methods have to be on a
 %% particular channel.
-handle_1_0_frame(_Channel, Payload,
+handle_1_0_frame(_Mode, _Channel, Payload,
                  State = #v1{ connection_state = CS}) when
       CS =:= closing; CS =:= closed ->
     Sections = parse_1_0_frame(Payload),
@@ -542,11 +542,12 @@ handle_1_0_frame(_Channel, Payload,
         true  -> handle_1_0_connection_frame(Sections, State);
         false -> State
     end;
-handle_1_0_frame(Channel, Payload, State) ->
+handle_1_0_frame(Mode, Channel, Payload, State) ->
     Sections = parse_1_0_frame(Payload),
-    case is_connection_frame(Sections) of
-        true  -> handle_1_0_connection_frame(Sections, State);
-        false -> handle_1_0_session_frame(Channel, Sections, State)
+    case {Mode, is_connection_frame(Sections)} of
+        {amqp, true}  -> handle_1_0_connection_frame(Sections, State);
+        {amqp, false} -> handle_1_0_session_frame(Channel, Sections, State);
+        {sasl, _}     -> handle_1_0_sasl_frame(Sections, State)
     end.
 
 parse_1_0_frame(Payload) ->
@@ -669,6 +670,10 @@ handle_1_0_session_frame(Channel, Frame, State) ->
             end
     end.
 
+handle_1_0_sasl_frame(Frame, State) ->
+    io:format("SASL frame ~p~n", [Frame]),
+    State.
+
 %% End 1-0
 
 handle_input(frame_header, <<Type:8,Channel:16,PayloadSize:32>>, State) ->
@@ -688,26 +693,26 @@ handle_input({frame_payload, Type, Channel, PayloadSize},
 
 %% Begin 1-0
 
-handle_input(frame_header_1_0, <<Size:32, DOff:8, Type:8, Channel:16>>,
+handle_input({frame_header_1_0, Mode}, <<Size:32, DOff:8, Type:8, Channel:16>>,
              State) when DOff >= 2 andalso Type == 0 ->
     ?DEBUG("1.0 frame header: doff: ~p size: ~p~n", [DOff, Size]),
     case Size of
         8 -> % length inclusive
-            {State, frame_header_1_0, 8}; %% heartbeat
+            {State, {frame_header_1_0, Mode}, 8}; %% heartbeat
         _ ->
             ensure_stats_timer(
-              switch_callback(State, {frame_payload_1_0, DOff, Channel}, Size - 8))
+              switch_callback(State, {frame_payload_1_0, Mode, DOff, Channel}, Size - 8))
     end;
-handle_input(frame_header_1_0, Malformed, _State) ->
+handle_input({frame_header_1_0, _Mode}, Malformed, _State) ->
     throw({bad_1_0_header, Malformed});
-handle_input({frame_payload_1_0, DOff, Channel},
+handle_input({frame_payload_1_0, Mode, DOff, Channel},
             FrameBin, State) ->
     SkipBits = (DOff * 32 - 64), % DOff = 4-byte words, we've read 8 already
     <<Skip:SkipBits, FramePayload/binary>> = FrameBin,
     Skip = Skip, %% hide warning when debug is off
     ?DEBUG("1.0 frame: ~p (skipped ~p)~n", [FramePayload, Skip]),
-    handle_1_0_frame(Channel, FramePayload,
-                     switch_callback(State, frame_header_1_0, 8));
+    handle_1_0_frame(Mode, Channel, FramePayload,
+                     switch_callback(State, {frame_header_1_0, Mode}, 8));
 
 %% End 1-0
 
@@ -743,10 +748,14 @@ handle_input(handshake, <<"AMQP", 1, 1, 9, 1>>, State) ->
 %% ... and finally, the 1.0 spec is crystal clear!  Note that the
 %% Protocol supplied is vestigal; we use it as a marker, but not in
 %% general where the 0-x code would use it as a module.
-%% FIXME TLS and SASL use a different protocol number, and would go
-%% here.
-handle_input(handshake, <<"AMQP", 0, 1, 0, 0>>, State) ->
-    start_1_0_connection({1, 0, 0}, rabbit_amqp1_0_framing, State);
+%% FIXME TLS uses a different protocol number, and would go here.
+handle_input(handshake, H = <<"AMQP", 0, 1, 0, 0>>, State) ->
+    start_1_0_connection(amqp, H, {1, 0, 0}, rabbit_amqp1_0_framing, State);
+
+%% 3 stands for "SASL"
+handle_input(handshake, H = <<"AMQP", 3, 1, 0, 0>>, State) ->
+    io:format("SASL handshake~n"),
+    start_1_0_connection(sasl, H, {1, 0, 0}, rabbit_amqp1_0_framing, State);
 
 %% End 1-0
 
@@ -780,16 +789,17 @@ start_connection({ProtocolMajor, ProtocolMinor, _ProtocolRevision},
 
 %% Begin 1-0
 
-start_1_0_connection({1, 0, 0},
+start_1_0_connection(Mode,
+                     AMQPABCD,
+                     {1, 0, 0},
                      Protocol,
                      State = #v1{sock = Sock, connection = Connection}) ->
-    ok = inet_op(fun () -> rabbit_net:send(
-                             Sock, <<"AMQP", 0, 1, 0, 0>>) end),
+    ok = inet_op(fun () -> rabbit_net:send(Sock, AMQPABCD) end),
     switch_callback(State#v1{connection = Connection#connection{
                                             timeout_sec = ?NORMAL_TIMEOUT,
                                             protocol = Protocol},
                              connection_state = starting},
-                    frame_header_1_0, 8).
+                    {frame_header_1_0, Mode}, 8).
 
 %% End 1-0
 
