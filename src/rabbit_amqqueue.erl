@@ -22,6 +22,7 @@
          check_exclusive_access/2, with_exclusive_access_or_die/3,
          stat/1, deliver/2, requeue/3, ack/3, reject/4]).
 -export([list/1, info_keys/0, info/1, info/2, info_all/1, info_all/2]).
+-export([force_event_refresh/0]).
 -export([consumers/1, consumers_all/1, consumer_info_keys/0]).
 -export([basic_get/3, basic_consume/7, basic_cancel/4]).
 -export([notify_sent/2, unblock/2, flush_all/2]).
@@ -88,6 +89,7 @@
 -spec(info_all/1 :: (rabbit_types:vhost()) -> [rabbit_types:infos()]).
 -spec(info_all/2 :: (rabbit_types:vhost(), rabbit_types:info_keys())
                     -> [rabbit_types:infos()]).
+-spec(force_event_refresh/0 :: () -> 'ok').
 -spec(consumers/1 ::
         (rabbit_types:amqqueue())
         -> [{pid(), rabbit_types:ctag(), boolean()}]).
@@ -380,6 +382,11 @@ info(#amqqueue{ pid = QPid }, Items) ->
 info_all(VHostPath) -> map(VHostPath, fun (Q) -> info(Q) end).
 
 info_all(VHostPath, Items) -> map(VHostPath, fun (Q) -> info(Q, Items) end).
+
+force_event_refresh() ->
+    [map(VHost, fun(Q) -> delegate_cast(Q#amqqueue.pid,
+                                        force_event_refresh) end) ||
+        VHost <- rabbit_vhost:list()].
 
 consumers(#amqqueue{ pid = QPid }) ->
     delegate_call(QPid, consumers).

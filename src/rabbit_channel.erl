@@ -22,8 +22,9 @@
 
 -export([start_link/10, do/2, do/3, flush/1, shutdown/1]).
 -export([send_command/2, deliver/4, flushed/2, confirm/2]).
--export([list/0, info_keys/0, info/1, info/2, info_all/0, info_all/1]).
+-export([list_local/0, info_keys/0, info/1, info/2, info_all/0, info_all/1]).
 -export([refresh_config_all/0, ready_for_close/1]).
+-export([force_event_refresh/0]).
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2, handle_pre_hibernate/1, prioritise_call/3,
@@ -84,7 +85,7 @@
         -> 'ok').
 -spec(flushed/2 :: (pid(), pid()) -> 'ok').
 -spec(confirm/2 ::(pid(), [non_neg_integer()]) -> 'ok').
--spec(list/0 :: () -> [pid()]).
+-spec(list_local/0 :: () -> [pid()]).
 -spec(info_keys/0 :: () -> rabbit_types:info_keys()).
 -spec(info/1 :: (pid()) -> rabbit_types:infos()).
 -spec(info/2 :: (pid(), rabbit_types:info_keys()) -> rabbit_types:infos()).
@@ -92,6 +93,7 @@
 -spec(info_all/1 :: (rabbit_types:info_keys()) -> [rabbit_types:infos()]).
 -spec(refresh_config_all/0 :: () -> 'ok').
 -spec(ready_for_close/1 :: (pid()) -> 'ok').
+-spec(force_event_refresh/0 :: () -> 'ok').
 
 -endif.
 
@@ -127,8 +129,11 @@ flushed(Pid, QPid) ->
 confirm(Pid, MsgSeqNos) ->
     gen_server2:cast(Pid, {confirm, MsgSeqNos, self()}).
 
-list() ->
+list_local() ->
     pg_local:get_members(rabbit_channels).
+
+list() ->
+    rabbit_misc:rpc_list_all_nodes(rabbit_channel, list_local, []).
 
 info_keys() -> ?INFO_KEYS.
 
@@ -149,11 +154,17 @@ info_all(Items) ->
 
 refresh_config_all() ->
     rabbit_misc:upmap(
-      fun (C) -> gen_server2:call(C, refresh_config) end, list()),
+      fun (C) -> gen_server2:call(C, refresh_config) end, list_local()),
     ok.
 
 ready_for_close(Pid) ->
     gen_server2:cast(Pid, ready_for_close).
+
+force_event_refresh() ->
+    rabbit_misc:filter_exit_map(fun (C) -> force_event_refresh(C) end, list()).
+
+force_event_refresh(Pid) ->
+    gen_server2:cast(Pid, force_event_refresh).
 
 %%---------------------------------------------------------------------------
 
@@ -296,6 +307,10 @@ handle_cast({deliver, ConsumerTag, AckRequired,
     rabbit_trace:tap_trace_out(Msg, TraceState),
     noreply(State1#ch{next_tag = DeliveryTag + 1});
 
+
+handle_cast(force_event_refresh, State) ->
+    rabbit_event:notify(channel_exists, infos(?CREATION_EVENT_KEYS, State)),
+    noreply(State);
 handle_cast({confirm, MsgSeqNos, From}, State) ->
     State1 = #ch{confirmed = C} = confirm(MsgSeqNos, From, State),
     noreply([send_confirms], State1, case C of [] -> hibernate; _ -> 0 end).

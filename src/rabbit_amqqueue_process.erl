@@ -761,7 +761,15 @@ emit_stats(State, Extra) ->
     rabbit_event:notify(queue_stats, Extra ++ infos(?STATISTICS_KEYS, State)).
 
 emit_consumer_created(ChPid, ConsumerTag, Exclusive, AckRequired) ->
-    rabbit_event:notify(consumer_created,
+    emit_consumer_event(ChPid, ConsumerTag, Exclusive, AckRequired,
+                        consumer_created).
+
+emit_consumer_exists(ChPid, ConsumerTag, Exclusive, AckRequired) ->
+    emit_consumer_event(ChPid, ConsumerTag, Exclusive, AckRequired,
+                        consumer_exists).
+
+emit_consumer_event(ChPid, ConsumerTag, Exclusive, AckRequired, Type) ->
+    rabbit_event:notify(Type,
                         [{consumer_tag, ConsumerTag},
                          {exclusive,    Exclusive},
                          {ack_required, AckRequired},
@@ -1085,6 +1093,17 @@ handle_cast({set_ram_duration_target, Duration},
 
 handle_cast({set_maximum_since_use, Age}, State) ->
     ok = file_handle_cache:set_maximum_since_use(Age),
+    noreply(State);
+
+handle_cast(force_event_refresh, State = #q{exclusive_consumer = Exclusive}) ->
+    rabbit_event:notify(queue_exists, infos(?CREATION_EVENT_KEYS, State)),
+    case Exclusive of
+        none -> [emit_consumer_exists(Ch, CTag, false, AckRequired) ||
+                    {Ch, CTag, AckRequired} <- consumers(State)];
+        _    -> [emit_consumer_exists(Ch, CTag, true, AckRequired) ||
+                    {Ch, CTag, AckRequired} <- consumers(State),
+                    Exclusive = {Ch, CTag}]
+    end,
     noreply(State).
 
 handle_info(maybe_expire, State) ->
