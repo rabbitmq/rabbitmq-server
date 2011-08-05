@@ -30,8 +30,7 @@
 
 -ifdef(use_specs).
 
--spec(start_link/0 ::
-        () -> rabbit_types:ok_or_error2(pid(), {already_started, pid()})).
+-spec(start_link/0 :: () -> rabbit_types:ok_pid_or_error()).
 -spec(start_child/2 ::
         (node(), [any()]) -> rabbit_types:ok(pid() | undefined) |
                              rabbit_types:ok({pid(), any()}) |
