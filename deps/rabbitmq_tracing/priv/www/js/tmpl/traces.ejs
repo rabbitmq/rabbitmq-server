@@ -15,6 +15,7 @@
                 <% } %>
                 <th>Name</th>
                 <th>Pattern</th>
+                <th>Format</th>
                 <th>Rate</th>
                 <th>Queued</th>
                 <th></th>
@@ -31,6 +32,7 @@
                 <% } %>
                 <td><%= trace.name %></td>
                 <td><%= trace.pattern %></td>
+                <td><%= trace.format %></td>
                 <td class="r"><%= fmt_rate(trace.queue.message_stats, 'ack', false) %></td>
                 <td class="r">
                   <%= trace.queue.messages %>
@@ -89,7 +91,7 @@
   </div>
 </div>
 
-<div class="section-hidden">
+<div class="section">
   <h2>Add a new trace</h2>
   <div class="hider">
     <form action="#/traces" method="put">
@@ -111,6 +113,15 @@
         <tr>
           <th><label>Name:</label></th>
           <td><input type="text" name="name"/><span class="mand">*</span></td>
+        </tr>
+        <tr>
+          <th><label>Format:</label></th>
+          <td>
+            <select name="format">
+              <option value="text">Text</option>
+              <option value="json">JSON</option>
+            </select>
+          </td>
         </tr>
         <tr>
           <th><label>Pattern:</label></th>
