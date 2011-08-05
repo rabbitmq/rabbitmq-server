@@ -29,11 +29,11 @@
 
 -export([start_link/1, info_keys/0]).
 
+-export([init_with_backing_queue_state/7]).
+
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2, handle_pre_hibernate/1, prioritise_call/3,
          prioritise_cast/2, prioritise_info/2, format_message_queue/2]).
-
--export([init_with_backing_queue_state/7]).
 
 %% Queue's state
 -record(q, {q,
@@ -68,7 +68,12 @@
 
 -ifdef(use_specs).
 
--spec(info_keys/0 :: () -> [atom(),...]).
+-spec(start_link/1 ::
+        (rabbit_types:amqqueue()) -> rabbit_types:ok_pid_or_error()).
+-spec(info_keys/0 :: () -> rabbit_types:info_keys()).
+-spec(init_with_backing_queue_state/7 ::
+        (rabbit_types:amqqueue(), atom(), tuple(), any(), set(),
+         [rabbit_types:delivery()], dict()) -> #q{}).
 
 -endif.
 
