@@ -42,7 +42,7 @@
 -export([dirty_read_all/1, dirty_foreach_key/2, dirty_dump_log/1]).
 -export([read_term_file/1, write_term_file/2, write_file/2, write_file/3]).
 -export([append_file/2, ensure_parent_dirs_exist/1]).
--export([format_stderr/2]).
+-export([format_stderr/2, with_local_io/1]).
 -export([start_applications/1, stop_applications/1]).
 -export([unfold/2, ceil/1, queue_fold/3]).
 -export([sort_field_table/1]).
@@ -57,6 +57,7 @@
 -export([ntoa/1, ntoab/1]).
 -export([is_process_alive/1]).
 -export([pget/2, pget/3, pget_or_die/2]).
+-export([format_message_queue/2]).
 
 %%----------------------------------------------------------------------------
 
@@ -164,6 +165,7 @@
 -spec(append_file/2 :: (file:filename(), string()) -> ok_or_error()).
 -spec(ensure_parent_dirs_exist/1 :: (string()) -> 'ok').
 -spec(format_stderr/2 :: (string(), [any()]) -> 'ok').
+-spec(with_local_io/1 :: (fun (() -> A)) -> A).
 -spec(start_applications/1 :: ([atom()]) -> 'ok').
 -spec(stop_applications/1 :: ([atom()]) -> 'ok').
 -spec(unfold/2  :: (fun ((A) -> ({'true', B, A} | 'false')), A) -> {[B], A}).
@@ -205,6 +207,7 @@
 -spec(pget/2 :: (term(), [term()]) -> term()).
 -spec(pget/3 :: (term(), [term()], term()) -> term()).
 -spec(pget_or_die/2 :: (term(), [term()]) -> term() | no_return()).
+-spec(format_message_queue/2 :: (any(), priority_queue:q()) -> term()).
 
 -endif.
 
@@ -603,6 +606,17 @@ format_stderr(Fmt, Args) ->
     end,
     ok.
 
+%% Execute Fun using the IO system of the local node (i.e. the node on
+%% which the code is executing).
+with_local_io(Fun) ->
+    GL = group_leader(),
+    group_leader(whereis(user), self()),
+    try
+        Fun()
+    after
+        group_leader(GL, self())
+    end.
+
 manage_applications(Iterate, Do, Undo, SkipError, ErrorTag, Apps) ->
     Iterate(fun (App, Acc) ->
                     case Do(App) of
@@ -919,3 +933,24 @@ pget_or_die(K, P) ->
         undefined -> exit({error, key_missing, K});
         V         -> V
     end.
+
+format_message_queue(_Opt, MQ) ->
+    Len = priority_queue:len(MQ),
+    {Len,
+     case Len > 100 of
+         false -> priority_queue:to_list(MQ);
+         true  -> {summary,
+                   orddict:to_list(
+                     lists:foldl(
+                       fun ({P, V}, Counts) ->
+                               orddict:update_counter(
+                                 {P, format_message_queue_entry(V)}, 1, Counts)
+                       end, orddict:new(), priority_queue:to_list(MQ)))}
+     end}.
+
+format_message_queue_entry(V) when is_atom(V) ->
+    V;
+format_message_queue_entry(V) when is_tuple(V) ->
+    list_to_tuple([format_message_queue_entry(E) || E <- tuple_to_list(V)]);
+format_message_queue_entry(_V) ->
+    '_'.

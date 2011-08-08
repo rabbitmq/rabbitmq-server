@@ -20,7 +20,7 @@
 
 -ifdef(use_specs).
 
--export_type([txn/0, maybe/1, info/0, infos/0, info_key/0, info_keys/0,
+-export_type([maybe/1, info/0, infos/0, info_key/0, info_keys/0,
               message/0, msg_id/0, basic_message/0,
               delivery/0, content/0, decoded_content/0, undecoded_content/0,
               unencoded_content/0, encoded_content/0, message_properties/0,
@@ -73,15 +73,11 @@
 -type(delivery() ::
         #delivery{mandatory :: boolean(),
                   immediate :: boolean(),
-                  txn       :: maybe(txn()),
                   sender    :: pid(),
                   message   :: message()}).
 -type(message_properties() ::
         #message_properties{expiry :: pos_integer() | 'undefined',
                             needs_confirming :: boolean()}).
-
-%% this is really an abstract type, but dialyzer does not support them
--type(txn() :: rabbit_guid:guid()).
 
 -type(info_key() :: atom()).
 -type(info_keys() :: [info_key()]).
@@ -124,7 +120,9 @@
                   auto_delete     :: boolean(),
                   exclusive_owner :: rabbit_types:maybe(pid()),
                   arguments       :: rabbit_framing:amqp_table(),
-                  pid             :: rabbit_types:maybe(pid())}).
+                  pid             :: rabbit_types:maybe(pid()),
+                  slave_pids      :: [pid()],
+                  mirror_nodes    :: [node()] | 'undefined' | 'all'}).
 
 -type(exchange() ::
         #exchange{name        :: rabbit_exchange:name(),
@@ -139,14 +137,14 @@
 
 -type(user() ::
         #user{username     :: username(),
-              is_admin     :: boolean(),
+              tags         :: [atom()],
               auth_backend :: atom(),
               impl         :: any()}).
 
 -type(internal_user() ::
         #internal_user{username      :: username(),
                        password_hash :: password_hash(),
-                       is_admin      :: boolean()}).
+                       tags          :: [atom()]}).
 
 -type(username() :: binary()).
 -type(password() :: binary()).

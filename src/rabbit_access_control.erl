@@ -19,16 +19,15 @@
 -include("rabbit.hrl").
 
 -export([check_user_pass_login/2, check_user_login/2,
-         check_vhost_access/2, check_resource_access/3, list_vhosts/2]).
+         check_vhost_access/2, check_resource_access/3]).
 
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
 
--export_type([permission_atom/0, vhost_permission_atom/0]).
+-export_type([permission_atom/0]).
 
 -type(permission_atom() :: 'configure' | 'read' | 'write').
--type(vhost_permission_atom() :: 'read' | 'write').
 
 -spec(check_user_pass_login/2 ::
         (rabbit_types:username(), rabbit_types:password())
@@ -39,8 +38,6 @@
 -spec(check_resource_access/3 ::
         (rabbit_types:user(), rabbit_types:r(atom()), permission_atom())
         -> 'ok' | rabbit_types:channel_exit()).
--spec(list_vhosts/2 :: (rabbit_types:user(), vhost_permission_atom())
-                       -> [rabbit_types:vhost()]).
 
 -endif.
 
@@ -70,7 +67,7 @@ check_vhost_access(User = #user{ username     = Username,
     check_access(
       fun() ->
               rabbit_vhost:exists(VHostPath) andalso
-                  Module:check_vhost_access(User, VHostPath, write)
+                  Module:check_vhost_access(User, VHostPath)
       end,
       "~s failed checking vhost access to ~s for ~s: ~p~n",
       [Module, VHostPath, Username],
@@ -104,21 +101,3 @@ check_access(Fun, ErrStr, ErrArgs, RefStr, RefArgs) ->
         false ->
             rabbit_misc:protocol_error(access_refused, RefStr, RefArgs)
     end.
-
-%% Permission = write -> log in
-%% Permission = read  -> learn of the existence of (only relevant for
-%%                       management plugin)
-list_vhosts(User = #user{username = Username, auth_backend = Module},
-            Permission) ->
-    lists:filter(
-      fun(VHost) ->
-              case Module:check_vhost_access(User, VHost, Permission) of
-                  {error, _} = E ->
-                      rabbit_log:warning("~w failed checking vhost access "
-                                         "to ~s for ~s: ~p~n",
-                                         [Module, VHost, Username, E]),
-                      false;
-                  Else ->
-                      Else
-              end
-      end, rabbit_vhost:list()).

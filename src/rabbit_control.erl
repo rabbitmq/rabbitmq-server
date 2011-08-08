@@ -17,7 +17,7 @@
 -module(rabbit_control).
 -include("rabbit.hrl").
 
--export([start/0, stop/0, action/5, diagnostics/1]).
+-export([start/0, stop/0, action/5, diagnostics/1, log_action/3]).
 
 -define(RPC_TIMEOUT, infinity).
 -define(WAIT_FOR_VM_ATTEMPTS, 5).
@@ -51,6 +51,7 @@
         -> 'ok').
 -spec(diagnostics/1 :: (node()) -> [{string(), [any()]}]).
 -spec(usage/0 :: () -> no_return()).
+-spec(log_action/3 :: (node(), string(), [term()]) -> ok).
 
 -endif.
 
@@ -73,6 +74,7 @@ start() ->
     Command = list_to_atom(Command0),
     Quiet = proplists:get_bool(?QUIET_OPT, Opts1),
     Node = proplists:get_value(?NODE_OPT, Opts1),
+    rpc_call(Node, rabbit_control, log_action, [node(), Command0, Args]),
     Inform = case Quiet of
                  true  -> fun (_Format, _Args1) -> ok end;
                  false -> fun (Format, Args1) ->
@@ -235,17 +237,17 @@ action(clear_password, Node, Args = [Username], _Opts, Inform) ->
     Inform("Clearing password for user ~p", [Username]),
     call(Node, {rabbit_auth_backend_internal, clear_password, Args});
 
-action(set_admin, Node, [Username], _Opts, Inform) ->
-    Inform("Setting administrative status for user ~p", [Username]),
-    call(Node, {rabbit_auth_backend_internal, set_admin, [Username]});
-
-action(clear_admin, Node, [Username], _Opts, Inform) ->
-    Inform("Clearing administrative status for user ~p", [Username]),
-    call(Node, {rabbit_auth_backend_internal, clear_admin, [Username]});
+action(set_user_tags, Node, [Username | TagsStr], _Opts, Inform) ->
+    Tags = [list_to_atom(T) || T <- TagsStr],
+    Inform("Setting tags for user ~p to ~p", [Username, Tags]),
+    rpc_call(Node, rabbit_auth_backend_internal, set_tags,
+             [list_to_binary(Username), Tags]);
 
 action(list_users, Node, [], _Opts, Inform) ->
     Inform("Listing users", []),
-    display_list(call(Node, {rabbit_auth_backend_internal, list_users, []}));
+    display_info_list(
+      call(Node, {rabbit_auth_backend_internal, list_users, []}),
+      rabbit_auth_backend_internal:user_info_keys());
 
 action(add_vhost, Node, Args = [_VHostPath], _Opts, Inform) ->
     Inform("Creating vhost ~p", Args),
@@ -301,7 +303,7 @@ action(list_connections, Node, Args, _Opts, Inform) ->
 
 action(list_channels, Node, Args, _Opts, Inform) ->
     Inform("Listing channels", []),
-    ArgAtoms = default_if_empty(Args, [pid, user, transactional, consumer_count,
+    ArgAtoms = default_if_empty(Args, [pid, user, consumer_count,
                                        messages_unacknowledged]),
     display_info_list(rpc_call(Node, rabbit_channel, info_all, [ArgAtoms]),
                       ArgAtoms);
@@ -422,17 +424,6 @@ format_info_item([T | _] = Value)
 format_info_item(Value) ->
     io_lib:format("~w", [Value]).
 
-display_list(L) when is_list(L) ->
-    lists:foreach(fun (I) when is_binary(I) ->
-                          io:format("~s~n", [escape(I)]);
-                      (I) when is_tuple(I) ->
-                          display_row([escape(V)
-                                       || V <- tuple_to_list(I)])
-                  end,
-                  lists:sort(L)),
-    ok;
-display_list(Other) -> Other.
-
 display_call_result(Node, MFA) ->
     case call(Node, MFA) of
         {badrpc, _} = Res -> throw(Res);
@@ -485,3 +476,22 @@ quit(Status) ->
         {unix,  _} -> halt(Status);
         {win32, _} -> init:stop(Status)
     end.
+
+log_action(Node, Command, Args) ->
+    rabbit_misc:with_local_io(
+      fun () ->
+              error_logger:info_msg("~p executing~n  rabbitmqctl ~s ~s~n",
+                                    [Node, Command,
+                                     format_args(mask_args(Command, Args))])
+      end).
+
+%% Mask passwords and other sensitive info before logging.
+mask_args("add_user", [Name, _Password | Args]) ->
+    [Name, "****" | Args];
+mask_args("change_password", [Name, _Password | Args]) ->
+    [Name, "****" | Args];
+mask_args(_, Args) ->
+    Args.
+
+format_args(Args) ->
+    string:join([io_lib:format("~p", [A]) || A <- Args], " ").

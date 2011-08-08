@@ -4,7 +4,7 @@ TARGET_DIR=rabbitmq_server-$(VERSION)
 TARGET_ZIP=rabbitmq-server-windows-$(VERSION)
 
 dist:
-	tar -zxvf ../../dist/$(SOURCE_DIR).tar.gz
+	tar -zxf ../../dist/$(SOURCE_DIR).tar.gz
 	$(MAKE) -C $(SOURCE_DIR)
 
 	mkdir $(SOURCE_DIR)/sbin
@@ -24,7 +24,7 @@ dist:
 	elinks -dump -no-references -no-numbering rabbitmq-service.html \
 		> $(TARGET_DIR)/readme-service.txt
 	todos $(TARGET_DIR)/readme-service.txt
-	zip -r $(TARGET_ZIP).zip $(TARGET_DIR)
+	zip -q -r $(TARGET_ZIP).zip $(TARGET_DIR)
 	rm -rf $(TARGET_DIR) rabbitmq-service.html
 
 clean: clean_partial

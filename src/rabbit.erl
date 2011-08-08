@@ -23,7 +23,7 @@
 
 -export([start/2, stop/1]).
 
--export([log_location/1]).
+-export([log_location/1]). %% for testing
 
 %%---------------------------------------------------------------------------
 %% Boot steps.
@@ -134,6 +134,18 @@
                     {requires,    empty_db_check},
                     {enables,     routing_ready}]}).
 
+-rabbit_boot_step({mirror_queue_slave_sup,
+                   [{description, "mirror queue slave sup"},
+                    {mfa,         {rabbit_mirror_queue_slave_sup, start, []}},
+                    {requires,    recovery},
+                    {enables,     routing_ready}]}).
+
+-rabbit_boot_step({mirrored_queues,
+                   [{description, "adding mirrors to queues"},
+                    {mfa,         {rabbit_mirror_queue_misc, on_node_up, []}},
+                    {requires,    mirror_queue_slave_sup},
+                    {enables,     routing_ready}]}).
+
 -rabbit_boot_step({routing_ready,
                    [{description, "message delivery logic ready"},
                     {requires,    core_initialized}]}).
@@ -201,14 +213,14 @@ prepare() ->
 start() ->
     try
         ok = prepare(),
-        ok = rabbit_misc:start_applications(?APPS)
+        ok = rabbit_misc:start_applications(application_load_order())
     after
         %%give the error loggers some time to catch up
         timer:sleep(100)
     end.
 
 stop() ->
-    ok = rabbit_misc:stop_applications(?APPS).
+    ok = rabbit_misc:stop_applications(application_load_order()).
 
 stop_and_halt() ->
     try
@@ -267,20 +279,51 @@ stop(_State) ->
     ok.
 
 %%---------------------------------------------------------------------------
+%% application life cycle
 
-erts_version_check() ->
-    FoundVer = erlang:system_info(version),
-    case rabbit_misc:version_compare(?ERTS_MINIMUM, FoundVer, lte) of
-        true  -> ok;
-        false -> {error, {erlang_version_too_old,
-                          {found, FoundVer}, {required, ?ERTS_MINIMUM}}}
+application_load_order() ->
+    ok = load_applications(),
+    {ok, G} = rabbit_misc:build_acyclic_graph(
+                fun (App, _Deps) -> [{App, App}] end,
+                fun (App,  Deps) -> [{Dep, App} || Dep <- Deps] end,
+                [{App, app_dependencies(App)} ||
+                    {App, _Desc, _Vsn} <- application:loaded_applications()]),
+    true = digraph:del_vertices(
+             G, digraph:vertices(G) -- digraph_utils:reachable(?APPS, G)),
+    Result = digraph_utils:topsort(G),
+    true = digraph:delete(G),
+    Result.
+
+load_applications() ->
+    load_applications(queue:from_list(?APPS), sets:new()).
+
+load_applications(Worklist, Loaded) ->
+    case queue:out(Worklist) of
+        {empty, _WorkList} ->
+            ok;
+        {{value, App}, Worklist1} ->
+            case sets:is_element(App, Loaded) of
+                true  -> load_applications(Worklist1, Loaded);
+                false -> case application:load(App) of
+                             ok                             -> ok;
+                             {error, {already_loaded, App}} -> ok;
+                             Error                          -> throw(Error)
+                         end,
+                         load_applications(
+                           queue:join(Worklist1,
+                                      queue:from_list(app_dependencies(App))),
+                           sets:add_element(App, Loaded))
+            end
     end.
 
-boot_error(Format, Args) ->
-    io:format("BOOT ERROR: " ++ Format, Args),
-    error_logger:error_msg(Format, Args),
-    timer:sleep(1000),
-    exit({?MODULE, failure_during_boot}).
+app_dependencies(App) ->
+    case application:get_key(App, applications) of
+        undefined -> [];
+        {ok, Lst} -> Lst
+    end.
+
+%%---------------------------------------------------------------------------
+%% boot step logic
 
 run_boot_step({StepName, Attributes}) ->
     Description = case lists:keysearch(description, 1, Attributes) of
@@ -355,7 +398,83 @@ sort_boot_steps(UnsortedSteps) ->
                end])
     end.
 
+boot_error(Format, Args) ->
+    io:format("BOOT ERROR: " ++ Format, Args),
+    error_logger:error_msg(Format, Args),
+    timer:sleep(1000),
+    exit({?MODULE, failure_during_boot}).
+
 %%---------------------------------------------------------------------------
+%% boot step functions
+
+boot_delegate() ->
+    {ok, Count} = application:get_env(rabbit, delegate_count),
+    rabbit_sup:start_child(delegate_sup, [Count]).
+
+recover() ->
+    rabbit_binding:recover(rabbit_exchange:recover(), rabbit_amqqueue:start()).
+
+maybe_insert_default_data() ->
+    case rabbit_mnesia:is_db_empty() of
+        true -> insert_default_data();
+        false -> ok
+    end.
+
+insert_default_data() ->
+    {ok, DefaultUser} = application:get_env(default_user),
+    {ok, DefaultPass} = application:get_env(default_pass),
+    {ok, DefaultTags} = application:get_env(default_user_tags),
+    {ok, DefaultVHost} = application:get_env(default_vhost),
+    {ok, [DefaultConfigurePerm, DefaultWritePerm, DefaultReadPerm]} =
+        application:get_env(default_permissions),
+    ok = rabbit_vhost:add(DefaultVHost),
+    ok = rabbit_auth_backend_internal:add_user(DefaultUser, DefaultPass),
+    ok = rabbit_auth_backend_internal:set_tags(DefaultUser, DefaultTags),
+    ok = rabbit_auth_backend_internal:set_permissions(DefaultUser, DefaultVHost,
+                                                      DefaultConfigurePerm,
+                                                      DefaultWritePerm,
+                                                      DefaultReadPerm),
+    ok.
+
+%%---------------------------------------------------------------------------
+%% logging
+
+ensure_working_log_handlers() ->
+    Handlers = gen_event:which_handlers(error_logger),
+    ok = ensure_working_log_handler(error_logger_file_h,
+                                    rabbit_error_logger_file_h,
+                                    error_logger_tty_h,
+                                    log_location(kernel),
+                                    Handlers),
+
+    ok = ensure_working_log_handler(sasl_report_file_h,
+                                    rabbit_sasl_report_file_h,
+                                    sasl_report_tty_h,
+                                    log_location(sasl),
+                                    Handlers),
+    ok.
+
+ensure_working_log_handler(OldFHandler, NewFHandler, TTYHandler,
+                           LogLocation, Handlers) ->
+    case LogLocation of
+        undefined -> ok;
+        tty       -> case lists:member(TTYHandler, Handlers) of
+                         true  -> ok;
+                         false ->
+                             throw({error, {cannot_log_to_tty,
+                                            TTYHandler, not_installed}})
+                     end;
+        _         -> case lists:member(NewFHandler, Handlers) of
+                         true  -> ok;
+                         false -> case rotate_logs(LogLocation, "",
+                                                   OldFHandler, NewFHandler) of
+                                      ok -> ok;
+                                      {error, Reason} ->
+                                          throw({error, {cannot_log_to_file,
+                                                         LogLocation, Reason}})
+                                  end
+                     end
+    end.
 
 log_location(Type) ->
     case application:get_env(Type, case Type of
@@ -370,25 +489,39 @@ log_location(Type) ->
         _                  -> undefined
     end.
 
-app_location() ->
-    {ok, Application} = application:get_application(),
-    filename:absname(code:where_is_file(atom_to_list(Application) ++ ".app")).
+rotate_logs(File, Suffix, Handler) ->
+    rotate_logs(File, Suffix, Handler, Handler).
 
-home_dir() ->
-    case init:get_argument(home) of
-        {ok, [[Home]]} -> Home;
-        Other          -> Other
+rotate_logs(File, Suffix, OldHandler, NewHandler) ->
+    case File of
+        undefined -> ok;
+        tty       -> ok;
+        _         -> gen_event:swap_handler(
+                       error_logger,
+                       {OldHandler, swap},
+                       {NewHandler, {File, Suffix}})
     end.
 
-config_files() ->
-    case init:get_argument(config) of
-        {ok, Files} -> [filename:absname(
-                          filename:rootname(File, ".config") ++ ".config") ||
-                           File <- Files];
-        error       -> []
-    end.
+log_rotation_result({error, MainLogError}, {error, SaslLogError}) ->
+    {error, {{cannot_rotate_main_logs, MainLogError},
+             {cannot_rotate_sasl_logs, SaslLogError}}};
+log_rotation_result({error, MainLogError}, ok) ->
+    {error, {cannot_rotate_main_logs, MainLogError}};
+log_rotation_result(ok, {error, SaslLogError}) ->
+    {error, {cannot_rotate_sasl_logs, SaslLogError}};
+log_rotation_result(ok, ok) ->
+    ok.
 
 %%---------------------------------------------------------------------------
+%% misc
+
+erts_version_check() ->
+    FoundVer = erlang:system_info(version),
+    case rabbit_misc:version_compare(?ERTS_MINIMUM, FoundVer, lte) of
+        true  -> ok;
+        false -> {error, {erlang_version_too_old,
+                          {found, FoundVer}, {required, ?ERTS_MINIMUM}}}
+    end.
 
 print_banner() ->
     {ok, Product} = application:get_key(id),
@@ -433,94 +566,20 @@ print_banner() ->
                   end, Settings),
     io:nl().
 
-ensure_working_log_handlers() ->
-    Handlers = gen_event:which_handlers(error_logger),
-    ok = ensure_working_log_handler(error_logger_file_h,
-                                    rabbit_error_logger_file_h,
-                                    error_logger_tty_h,
-                                    log_location(kernel),
-                                    Handlers),
+app_location() ->
+    {ok, Application} = application:get_application(),
+    filename:absname(code:where_is_file(atom_to_list(Application) ++ ".app")).
 
-    ok = ensure_working_log_handler(sasl_report_file_h,
-                                    rabbit_sasl_report_file_h,
-                                    sasl_report_tty_h,
-                                    log_location(sasl),
-                                    Handlers),
-    ok.
-
-ensure_working_log_handler(OldFHandler, NewFHandler, TTYHandler,
-                           LogLocation, Handlers) ->
-    case LogLocation of
-        undefined -> ok;
-        tty       -> case lists:member(TTYHandler, Handlers) of
-                         true  -> ok;
-                         false ->
-                             throw({error, {cannot_log_to_tty,
-                                            TTYHandler, not_installed}})
-                     end;
-        _         -> case lists:member(NewFHandler, Handlers) of
-                         true  -> ok;
-                         false -> case rotate_logs(LogLocation, "",
-                                                   OldFHandler, NewFHandler) of
-                                      ok -> ok;
-                                      {error, Reason} ->
-                                          throw({error, {cannot_log_to_file,
-                                                         LogLocation, Reason}})
-                                  end
-                     end
+home_dir() ->
+    case init:get_argument(home) of
+        {ok, [[Home]]} -> Home;
+        Other          -> Other
     end.
 
-boot_delegate() ->
-    {ok, Count} = application:get_env(rabbit, delegate_count),
-    rabbit_sup:start_child(delegate_sup, [Count]).
-
-recover() ->
-    rabbit_binding:recover(rabbit_exchange:recover(), rabbit_amqqueue:start()).
-
-maybe_insert_default_data() ->
-    case rabbit_mnesia:is_db_empty() of
-        true -> insert_default_data();
-        false -> ok
+config_files() ->
+    case init:get_argument(config) of
+        {ok, Files} -> [filename:absname(
+                          filename:rootname(File, ".config") ++ ".config") ||
+                           File <- Files];
+        error       -> []
     end.
-
-insert_default_data() ->
-    {ok, DefaultUser} = application:get_env(default_user),
-    {ok, DefaultPass} = application:get_env(default_pass),
-    {ok, DefaultAdmin} = application:get_env(default_user_is_admin),
-    {ok, DefaultVHost} = application:get_env(default_vhost),
-    {ok, [DefaultConfigurePerm, DefaultWritePerm, DefaultReadPerm]} =
-        application:get_env(default_permissions),
-    ok = rabbit_vhost:add(DefaultVHost),
-    ok = rabbit_auth_backend_internal:add_user(DefaultUser, DefaultPass),
-    case DefaultAdmin of
-        true -> rabbit_auth_backend_internal:set_admin(DefaultUser);
-        _    -> ok
-    end,
-    ok = rabbit_auth_backend_internal:set_permissions(DefaultUser, DefaultVHost,
-                                                      DefaultConfigurePerm,
-                                                      DefaultWritePerm,
-                                                      DefaultReadPerm),
-    ok.
-
-rotate_logs(File, Suffix, Handler) ->
-    rotate_logs(File, Suffix, Handler, Handler).
-
-rotate_logs(File, Suffix, OldHandler, NewHandler) ->
-    case File of
-        undefined -> ok;
-        tty       -> ok;
-        _         -> gen_event:swap_handler(
-                       error_logger,
-                       {OldHandler, swap},
-                       {NewHandler, {File, Suffix}})
-    end.
-
-log_rotation_result({error, MainLogError}, {error, SaslLogError}) ->
-    {error, {{cannot_rotate_main_logs, MainLogError},
-             {cannot_rotate_sasl_logs, SaslLogError}}};
-log_rotation_result({error, MainLogError}, ok) ->
-    {error, {cannot_rotate_main_logs, MainLogError}};
-log_rotation_result(ok, {error, SaslLogError}) ->
-    {error, {cannot_rotate_sasl_logs, SaslLogError}};
-log_rotation_result(ok, ok) ->
-    ok.
