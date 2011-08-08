@@ -748,7 +748,8 @@ handle_cast({write, CRef, MsgId},
             %%     the msg yet: now pending write count is 2,
             %%
             %% msg store processes q1's write (pending write count: 1
-            %%     and msg store now knows about msg)
+            %%     and msg store now knows about msg, and the cur file
+            %%     is rolled over)
             %%
             %% msg store processes q2's write (pending write count
             %%     falls to 0 and, because we already know about the
@@ -788,8 +789,11 @@ handle_cast({write, CRef, MsgId},
                                 CTM
                         end, CRef, State1)
               end);
-        [{MsgId, _Msg, _CacheRefCount}] ->
-            %% The remove overtook the write, so we do nothing here.
+        [{MsgId, Msg, _CacheRefCount}] ->
+            %% The remove overtook the write, and because of that, we
+            %% know a read can't be following, so it's ok to remove
+            %% from the cache.
+            true = ets:delete_object(CurFileCacheEts, {MsgId, Msg, 0}),
             noreply(State)
     end;
 
@@ -1074,13 +1078,10 @@ remove_message(MsgId, CRef,
     case should_mask_action(CRef, MsgId, State) of
         {true, Location} ->
             ok = update_msg_cache(CurFileCacheEts, MsgId, undefined, -1),
-            case Location of
-                #msg_location { file = File } when File =/= CurFile ->
-                    true = ets:match_delete(CurFileCacheEts, {MsgId, '_', 0});
-                _ -> ok
-            end,
+            true = maybe_delete_from_cache(CurFileCacheEts, MsgId, Location,
+                                           CurFile),
             State;
-        {false_if_increment, #msg_location { ref_count = 0 }} ->
+        {false_if_increment, #msg_location { ref_count = 0 } = Location} ->
             %% CRef is dying. If this remove had a corresponding write
             %% that arrived before the remove and the ref_count is 0
             %% then it can only be because the file is currently being
@@ -1092,6 +1093,8 @@ remove_message(MsgId, CRef,
             %% decrement the CacheRefCount as a write either before or
             %% after will not touch the CacheRefCount.
             ok = update_msg_cache(CurFileCacheEts, MsgId, undefined, -1),
+            true = maybe_delete_from_cache(CurFileCacheEts, MsgId, Location,
+                                           CurFile),
             State;
         {_Mask, #msg_location { ref_count = RefCount, file = File,
                                 total_size = TotalSize }} when RefCount > 0 ->
@@ -1128,9 +1131,20 @@ remove_message(MsgId, CRef,
             %% removes have left it with a refcount of 0. Rather than
             %% try to cope with negative refcounts, instead, again we
             %% just cancel out a pending write.
+            %%
+            %% Because the remove has arrived first, we know that a
+            %% read can't be following so it's ok to remove from the
+            %% cache.
             ok = update_msg_cache(CurFileCacheEts, MsgId, undefined, -1),
+            true = ets:match_delete(CurFileCacheEts, {MsgId, '_', 0}),
             State
     end.
+
+maybe_delete_from_cache(_CurFileCacheEts, _MsgId,
+                        #msg_location { file = CurFile }, CurFile) ->
+    true;
+maybe_delete_from_cache(CurFileCacheEts, MsgId, _, _CurFile) ->
+    true = ets:match_delete(CurFileCacheEts, {MsgId, '_', 0}).
 
 add_to_pending_gc_completion(
   Op, File, State = #msstate { pending_gc_completion = Pending }) ->
