@@ -27,6 +27,7 @@ basic_get_test() ->
 basic_get_ipv6_test() ->
     test_util:basic_get_test(new_connection(
                                #amqp_params_network{host = "::1"})).
+
 basic_return_test() ->
     test_util:basic_return_test(new_connection()).
 
