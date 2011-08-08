@@ -16,13 +16,15 @@
 
 -module(rabbit_tests_event_receiver).
 
--export([start/1, stop/0]).
+-export([start/2, stop/0]).
 
 -export([init/1, handle_call/2, handle_event/2, handle_info/2,
          terminate/2, code_change/3]).
 
-start(Pid) ->
-    gen_event:add_handler(rabbit_event, ?MODULE, [Pid]).
+start(Pid, Nodes) ->
+    Oks = [ok || _ <- Nodes],
+    {Oks, _} = rpc:multicall(Nodes, gen_event, add_handler,
+                             [rabbit_event, ?MODULE, [Pid]]).
 
 stop() ->
     gen_event:delete_handler(rabbit_event, ?MODULE, []).

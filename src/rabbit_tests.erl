@@ -20,6 +20,8 @@
 
 -export([all_tests/0, test_parsing/0]).
 
+-import(rabbit_misc, [pget/2]).
+
 -include("rabbit.hrl").
 -include("rabbit_framing.hrl").
 -include_lib("kernel/include/file.hrl").
@@ -85,6 +87,7 @@ run_cluster_dependent_tests(SecondaryNode) ->
     passed = test_delegates_sync(SecondaryNode),
     passed = test_queue_cleanup(SecondaryNode),
     passed = test_declare_on_dead_queue(SecondaryNode),
+    passed = test_refresh_events(SecondaryNode),
 
     %% we now run the tests remotely, so that code coverage on the
     %% local node picks up more of the delegate
@@ -94,7 +97,8 @@ run_cluster_dependent_tests(SecondaryNode) ->
                    fun () -> Rs = [ test_delegates_async(Node),
                                     test_delegates_sync(Node),
                                     test_queue_cleanup(Node),
-                                    test_declare_on_dead_queue(Node) ],
+                                    test_declare_on_dead_queue(Node),
+                                    test_refresh_events(Node) ],
                              Self ! {self(), Rs}
                    end),
     receive
@@ -1265,13 +1269,29 @@ test_spawn() ->
     Writer = spawn(fun () -> test_writer(Me) end),
     {ok, Ch} = rabbit_channel:start_link(
                  1, Me, Writer, Me, rabbit_framing_amqp_0_9_1,
-                 user(<<"guest">>), <<"/">>, [], self(),
-                 fun (_) -> {ok, self()} end),
+                 user(<<"guest">>), <<"/">>, [], Me,
+                 fun (_) -> {ok, Me} end),
     ok = rabbit_channel:do(Ch, #'channel.open'{}),
     receive #'channel.open_ok'{} -> ok
     after 1000 -> throw(failed_to_receive_channel_open_ok)
     end,
     {Writer, Ch}.
+
+test_spawn(Node) ->
+    rpc:call(Node, ?MODULE, test_spawn_remote, []).
+
+%% Spawn an arbitrary long lived process, so we don't end up linking
+%% the channel to the short-lived process (RPC, here) spun up by the
+%% RPC server.
+test_spawn_remote() ->
+    RPC = self(),
+    spawn(fun () ->
+                  RPC ! test_spawn(),
+                  timer:sleep(60000)
+          end),
+    receive Res -> Res
+    after 1000  -> throw(failed_to_receive_result)
+    end.
 
 user(Username) ->
     #user{username     = Username,
@@ -1376,7 +1396,7 @@ test_statistics() ->
     QPid = Q#amqqueue.pid,
     X = rabbit_misc:r(<<"/">>, exchange, <<"">>),
 
-    rabbit_tests_event_receiver:start(self()),
+    rabbit_tests_event_receiver:start(self(), [node()]),
 
     %% Check stats empty
     Event = test_statistics_receive_event(Ch, fun (_) -> true end),
@@ -1418,6 +1438,37 @@ test_statistics() ->
     rabbit_channel:shutdown(Ch),
     rabbit_tests_event_receiver:stop(),
     passed.
+
+test_refresh_events(SecondaryNode) ->
+    %% Just make sure we don't have some other events ready to consume...
+    drain_mbx(),
+    Expect = fun (Ch, Type) ->
+                     receive #event{type = Type, props = Props} ->
+                             Ch = pget(pid, Props)
+                     after 1000 -> throw({failed_to_receive_event, Type})
+                     end
+             end,
+    rabbit_tests_event_receiver:start(self(), [node(), SecondaryNode]),
+
+    {_Writer, Ch} = test_spawn(),
+    Expect(Ch, channel_created),
+    rabbit:force_event_refresh(),
+    Expect(Ch, channel_exists),
+    rabbit_channel:shutdown(Ch),
+
+    {_Writer2, Ch2} = test_spawn(SecondaryNode),
+    Expect(Ch2, channel_created),
+    rabbit:force_event_refresh(),
+    Expect(Ch2, channel_exists),
+    rabbit_channel:shutdown(Ch2),
+
+    rabbit_tests_event_receiver:stop(),
+    passed.
+
+drain_mbx() ->
+    receive _ -> drain_mbx()
+    after 0   -> ok
+    end.
 
 test_delegates_async(SecondaryNode) ->
     Self = self(),
@@ -1534,6 +1585,7 @@ test_queue_cleanup(_SecondaryNode) ->
     after 2000 ->
             throw(failed_to_receive_channel_exit)
     end,
+    rabbit_channel:shutdown(Ch),
     passed.
 
 test_declare_on_dead_queue(SecondaryNode) ->
