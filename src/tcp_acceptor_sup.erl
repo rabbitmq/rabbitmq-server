@@ -22,6 +22,14 @@
 
 -export([init/1]).
 
+%%----------------------------------------------------------------------------
+
+-ifdef(use_specs).
+-spec(start_link/2 :: (atom(), mfa()) -> rabbit_types:ok_pid_or_error()).
+-endif.
+
+%%----------------------------------------------------------------------------
+
 start_link(Name, Callback) ->
     supervisor:start_link({local,Name}, ?MODULE, Callback).
 

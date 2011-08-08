@@ -72,6 +72,9 @@
 -spec(on_node_down/1 :: (node()) -> 'ok').
 -spec(check_tcp_listener_address/2 :: (atom(), listener_config())
         -> [{inet:ip_address(), ip_port(), family(), atom()}]).
+-spec(ensure_ssl/0 :: () -> rabbit_types:infos()).
+-spec(ssl_transform_fun/1 ::
+        (rabbit_types:infos()) -> rabbit_types:ok_or_error(#ssl_socket{})).
 
 -spec(boot/0 :: () -> 'ok').
 -spec(start_client/1 ::
