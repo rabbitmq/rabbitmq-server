@@ -30,6 +30,10 @@
 %% * If one supervisor fails, children may migrate to surviving
 %%   supervisors within the group.
 %%
+%% In almost all cases you will want to use the module name for the
+%% process group. Using multiple process groups with the same module
+%% name is supported. Having multiple module names for the same
+%% process group will lead to undefined behaviour.
 %%
 %% Motivation
 %% ----------
