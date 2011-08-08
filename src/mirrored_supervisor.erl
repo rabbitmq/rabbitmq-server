@@ -68,6 +68,9 @@
 %%    application should invoke create_tables() (or table_definitions()
 %%    if it wants to manage table creation itself).
 %%
+%% Note that in contrast to gen_server2, when using
+%% mirrored_supervisor you *must* always call all APIs from the
+%% mirrored_supervisor module, and not from the supervisor module.
 %%
 %% Internals
 %% ---------
