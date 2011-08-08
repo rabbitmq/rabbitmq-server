@@ -27,8 +27,6 @@
 -define(SERVER, ?MODULE).
 -define(RABBIT_UP_RPC_TIMEOUT, 2000).
 
--record(state, {rabbits}).
-
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
@@ -62,29 +60,22 @@ notify_cluster() ->
 %%--------------------------------------------------------------------
 
 init([]) ->
-    ok = net_kernel:monitor_nodes(true),
-    {ok, #state{rabbits = sets:new()}}.
+    {ok, no_state}.
 
 handle_call(_Request, _From, State) ->
     {noreply, State}.
 
-handle_cast({rabbit_running_on, Node}, State = #state{rabbits = Rabbits}) ->
+handle_cast({rabbit_running_on, Node}, State) ->
     rabbit_log:info("rabbit on ~p up~n", [Node]),
     erlang:monitor(process, {rabbit, Node}),
     ok = rabbit_alarm:on_node_up(Node),
-    {noreply, State#state{rabbits = sets:add_element(Node, Rabbits)}};
+    {noreply, State};
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
-handle_info({nodedown, Node}, State) ->
-    rabbit_log:info("node ~p down~n", [Node]),
-    {noreply, handle_dead_rabbit(Node, State)};
-handle_info({nodeup, Node}, State = #state{rabbits = Nodes}) ->
-    rabbit_log:info("node ~p up~n", [Node]),
-    {noreply, State#state{rabbits = sets:add_element(Node, Nodes)}};
 handle_info({'DOWN', _MRef, process, {rabbit, Node}, _Reason}, State) ->
     rabbit_log:info("node ~p lost 'rabbit'~n", [Node]),
-    {noreply, handle_dead_rabbit(Node, State)};
+    {noreply, handle_dead_rabbit(Node)};
 handle_info(_Info, State) ->
     {noreply, State}.
 
@@ -99,11 +90,7 @@ code_change(_OldVsn, State, _Extra) ->
 %% TODO: This may turn out to be a performance hog when there are lots
 %% of nodes.  We really only need to execute some of these statements
 %% on *one* node, rather than all of them.
-handle_dead_rabbit(Node, State = #state{rabbits = Rabbits}) ->
-    case sets:is_element(Node, Rabbits) of
-        true  -> ok = rabbit_networking:on_node_down(Node),
-                 ok = rabbit_amqqueue:on_node_down(Node),
-                 ok = rabbit_alarm:on_node_down(Node),
-                 State#state{rabbits = sets:del_element(Node, Rabbits)};
-        false -> State
-    end.
+handle_dead_rabbit(Node) ->
+    ok = rabbit_networking:on_node_down(Node),
+    ok = rabbit_amqqueue:on_node_down(Node),
+    ok = rabbit_alarm:on_node_down(Node).
