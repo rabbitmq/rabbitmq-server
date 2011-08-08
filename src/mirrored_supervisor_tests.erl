@@ -79,6 +79,7 @@ test_delete_restart() ->
     with_sups(fun([_, _]) ->
                       S = childspec(worker),
                       {ok, Pid1} = ?MS:start_child(a, S),
+                      {error, running} = ?MS:delete_child(a, worker),
                       ok = ?MS:terminate_child(a, worker),
                       ok = ?MS:delete_child(a, worker),
                       {ok, Pid2} = ?MS:start_child(b, S),

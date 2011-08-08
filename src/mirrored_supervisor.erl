@@ -311,7 +311,6 @@ handle_call({start_child, ChildSpec}, _From,
 
 handle_call({delete_child, Id}, _From,
             State = #state{delegate = Delegate}) ->
-    {atomic, ok} = mnesia:transaction(fun() -> delete(Id) end),
     {reply, stop(Delegate, Id), State};
 
 handle_call({msg, F, A}, _From, State = #state{delegate = Delegate}) ->
@@ -422,7 +421,11 @@ start(Delegate, ChildSpec) ->
     apply(?SUPERVISOR, start_child, [Delegate, ChildSpec]).
 
 stop(Delegate, Id) ->
-    apply(?SUPERVISOR, delete_child, [Delegate, Id]).
+    case child(Delegate, Id) of
+        undefined -> {atomic, ok} = mnesia:transaction(fun() -> delete(Id) end),
+                     apply(?SUPERVISOR, delete_child, [Delegate, Id]);
+        _         -> {error, running}
+    end.
 
 id({Id, _, _, _, _, _}) -> Id.
 
