@@ -292,7 +292,8 @@ close_connection(Pid, Explanation) ->
     end.
 
 force_connection_event_refresh() ->
-    cmap(fun (C) -> rabbit_reader:force_event_refresh(C) end).
+    [rabbit_reader:force_event_refresh(C) || C <- connections()],
+    ok.
 
 %%--------------------------------------------------------------------
 

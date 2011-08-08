@@ -361,6 +361,9 @@ check_ha_policy_argument({longstr, Policy}, _Args) ->
 check_ha_policy_argument({Type, _}, _Args) ->
     {error, {unacceptable_type, Type}}.
 
+list() ->
+    mnesia:dirty_match_object(rabbit_queue, #amqqueue{_ = '_'}).
+
 list(VHostPath) ->
     mnesia:dirty_match_object(
       rabbit_queue,
@@ -384,9 +387,8 @@ info_all(VHostPath) -> map(VHostPath, fun (Q) -> info(Q) end).
 info_all(VHostPath, Items) -> map(VHostPath, fun (Q) -> info(Q, Items) end).
 
 force_event_refresh() ->
-    [map(VHost, fun(Q) -> delegate_cast(Q#amqqueue.pid,
-                                        force_event_refresh) end) ||
-        VHost <- rabbit_vhost:list()].
+    [gen_server2:cast(Q#amqqueue.pid, force_event_refresh) || Q <- list()],
+    ok.
 
 consumers(#amqqueue{ pid = QPid }) ->
     delegate_call(QPid, consumers).

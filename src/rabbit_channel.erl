@@ -22,13 +22,15 @@
 
 -export([start_link/10, do/2, do/3, flush/1, shutdown/1]).
 -export([send_command/2, deliver/4, flushed/2, confirm/2]).
--export([list_local/0, info_keys/0, info/1, info/2, info_all/0, info_all/1]).
--export([refresh_config_all/0, ready_for_close/1]).
+-export([list/0, info_keys/0, info/1, info/2, info_all/0, info_all/1]).
+-export([refresh_config_local/0, ready_for_close/1]).
 -export([force_event_refresh/0]).
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2, handle_pre_hibernate/1, prioritise_call/3,
          prioritise_cast/2, prioritise_info/2, format_message_queue/2]).
+%% Internal
+-export([list_local/0]).
 
 -record(ch, {state, protocol, channel, reader_pid, writer_pid, conn_pid,
              limiter_pid, start_limiter_fun, tx_status, next_tag,
@@ -85,13 +87,14 @@
         -> 'ok').
 -spec(flushed/2 :: (pid(), pid()) -> 'ok').
 -spec(confirm/2 ::(pid(), [non_neg_integer()]) -> 'ok').
+-spec(list/0 :: () -> [pid()]).
 -spec(list_local/0 :: () -> [pid()]).
 -spec(info_keys/0 :: () -> rabbit_types:info_keys()).
 -spec(info/1 :: (pid()) -> rabbit_types:infos()).
 -spec(info/2 :: (pid(), rabbit_types:info_keys()) -> rabbit_types:infos()).
 -spec(info_all/0 :: () -> [rabbit_types:infos()]).
 -spec(info_all/1 :: (rabbit_types:info_keys()) -> [rabbit_types:infos()]).
--spec(refresh_config_all/0 :: () -> 'ok').
+-spec(refresh_config_local/0 :: () -> 'ok').
 -spec(ready_for_close/1 :: (pid()) -> 'ok').
 -spec(force_event_refresh/0 :: () -> 'ok').
 
@@ -129,11 +132,11 @@ flushed(Pid, QPid) ->
 confirm(Pid, MsgSeqNos) ->
     gen_server2:cast(Pid, {confirm, MsgSeqNos, self()}).
 
-list_local() ->
-    pg_local:get_members(rabbit_channels).
-
 list() ->
     rabbit_misc:rpc_list_all_nodes(rabbit_channel, list_local, []).
+
+list_local() ->
+    pg_local:get_members(rabbit_channels).
 
 info_keys() -> ?INFO_KEYS.
 
@@ -152,7 +155,7 @@ info_all() ->
 info_all(Items) ->
     rabbit_misc:filter_exit_map(fun (C) -> info(C, Items) end, list()).
 
-refresh_config_all() ->
+refresh_config_local() ->
     rabbit_misc:upmap(
       fun (C) -> gen_server2:call(C, refresh_config) end, list_local()),
     ok.
@@ -161,10 +164,9 @@ ready_for_close(Pid) ->
     gen_server2:cast(Pid, ready_for_close).
 
 force_event_refresh() ->
-    rabbit_misc:filter_exit_map(fun (C) -> force_event_refresh(C) end, list()).
-
-force_event_refresh(Pid) ->
-    gen_server2:cast(Pid, force_event_refresh).
+    rabbit_misc:filter_exit_map(
+      fun (C) -> gen_server2:cast(C, force_event_refresh) end, list()),
+    ok.
 
 %%---------------------------------------------------------------------------
 

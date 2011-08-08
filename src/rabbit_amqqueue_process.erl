@@ -760,14 +760,6 @@ emit_stats(State) ->
 emit_stats(State, Extra) ->
     rabbit_event:notify(queue_stats, Extra ++ infos(?STATISTICS_KEYS, State)).
 
-emit_consumer_created(ChPid, ConsumerTag, Exclusive, AckRequired) ->
-    emit_consumer_event(ChPid, ConsumerTag, Exclusive, AckRequired,
-                        consumer_created).
-
-emit_consumer_exists(ChPid, ConsumerTag, Exclusive, AckRequired) ->
-    emit_consumer_event(ChPid, ConsumerTag, Exclusive, AckRequired,
-                        consumer_exists).
-
 emit_consumer_event(ChPid, ConsumerTag, Exclusive, AckRequired, Type) ->
     rabbit_event:notify(Type,
                         [{consumer_tag, ConsumerTag},
@@ -943,8 +935,8 @@ handle_call({basic_consume, NoAck, ChPid, LimiterPid,
                                      add_consumer(ChPid, Consumer,
                                                   State1#q.active_consumers)})
                 end,
-            emit_consumer_created(ChPid, ConsumerTag, ExclusiveConsume,
-                                  not NoAck),
+            emit_consumer_event(ChPid, ConsumerTag, ExclusiveConsume,
+                                not NoAck, consumer_created),
             reply(ok, State2)
     end;
 
@@ -1098,10 +1090,12 @@ handle_cast({set_maximum_since_use, Age}, State) ->
 handle_cast(force_event_refresh, State = #q{exclusive_consumer = Exclusive}) ->
     rabbit_event:notify(queue_exists, infos(?CREATION_EVENT_KEYS, State)),
     case Exclusive of
-        none       -> [emit_consumer_exists(Ch, CTag, false, AckRequired) ||
+        none       -> [emit_consumer_event(Ch, CTag, false, AckRequired,
+                                           consumer_exists) ||
                           {Ch, CTag, AckRequired} <- consumers(State)];
         {Ch, CTag} -> [{Ch, CTag, AckRequired}] = consumers(State),
-                      emit_consumer_exists(Ch, CTag, true, AckRequired)
+                      emit_consumer_event(Ch, CTag, true, AckRequired,
+                                          consumer_exists)
     end,
     noreply(State).
 

@@ -18,7 +18,8 @@
 -include("rabbit_framing.hrl").
 -include("rabbit.hrl").
 
--export([start_link/3, info_keys/0, info/1, info/2, shutdown/2]).
+-export([start_link/3, info_keys/0, info/1, info/2, force_event_refresh/1,
+         shutdown/2]).
 
 -export([system_continue/3, system_terminate/4, system_code_change/4]).
 
@@ -27,7 +28,6 @@
 -export([conserve_memory/2, server_properties/1]).
 
 -export([process_channel_frame/5]). %% used by erlang-client
--export([force_event_refresh/1]).
 
 -define(HANDSHAKE_TIMEOUT, 10).
 -define(NORMAL_TIMEOUT, 3).
@@ -322,13 +322,12 @@ handle_other({'$gen_call', From, {info, Items}}, Deb, State) ->
                            catch Error -> {error, Error}
                            end),
     mainloop(Deb, State);
-handle_other(emit_stats, Deb, State) ->
-    mainloop(Deb, emit_stats(State));
 handle_other({'$gen_cast', force_event_refresh}, Deb, State) ->
     rabbit_event:notify(connection_exists,
-                        [{type, network} |
-                         infos(?CREATION_EVENT_KEYS, State)]),
+                        [{type, network} | infos(?CREATION_EVENT_KEYS, State)]),
     mainloop(Deb, State);
+handle_other(emit_stats, Deb, State) ->
+    mainloop(Deb, emit_stats(State));
 handle_other({system, From, Request}, Deb, State = #v1{parent = Parent}) ->
     sys:handle_system_msg(Request, From, Parent, ?MODULE, Deb, State);
 handle_other(Other, _Deb, _State) ->
