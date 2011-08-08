@@ -235,7 +235,7 @@ start_link({local, SupName}, Group, Mod, Args) ->
     start_link0([{local, SupName}], Group, Mod, Args);
 
 start_link({global, _SupName}, _Group, _Mod, _Args) ->
-    exit(mirrored_supervisors_must_not_be_globally_named).
+    error(badarg).
 
 start_link0(Prefix, Group, Mod, Args) ->
     case apply(?SUPERVISOR, start_link,
