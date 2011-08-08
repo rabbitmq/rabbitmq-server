@@ -132,7 +132,7 @@
 -export([start_internal/2]).
 -export([create_tables/0, table_definitions/0]).
 
--record(mirrored_sup_childspec, {id, mirroring_pid, childspec}).
+-record(mirrored_sup_childspec, {id, mirroring_pid, group, childspec}).
 
 -record(state, {overall,
                 delegate,
@@ -299,18 +299,24 @@ handle_call({init, Overall}, _From,
     process_flag(trap_exit, true),
     ?PG2:create(Group),
     ok = ?PG2:join(Group, self()),
+    Rest = ?PG2:get_members(Group) -- [self()],
+    case Rest of
+        [] -> {atomic, _} = mnesia:transaction(fun() -> delete_all(Group) end);
+        _  -> ok
+    end,
     [begin
          ?GEN_SERVER:cast(Pid, {ensure_monitoring, self()}),
          erlang:monitor(process, Pid)
-     end || Pid <- ?PG2:get_members(Group) -- [self()]],
+     end || Pid <- Rest],
     Delegate = child(Overall, delegate),
     erlang:monitor(process, Delegate),
-    [maybe_start(Delegate, S) || S <- ChildSpecs],
+    [maybe_start(Group, Delegate, S) || S <- ChildSpecs],
     {reply, ok, State#state{overall = Overall, delegate = Delegate}};
 
 handle_call({start_child, ChildSpec}, _From,
-            State = #state{delegate = Delegate}) ->
-    {reply, maybe_start(Delegate, ChildSpec), State};
+            State = #state{delegate = Delegate,
+                           group    = Group}) ->
+    {reply, maybe_start(Group, Delegate, ChildSpec), State};
 
 handle_call({delete_child, Id}, _From,
             State = #state{delegate = Delegate}) ->
@@ -380,17 +386,19 @@ tell_all_peers_to_die(Group, Reason) ->
     [?GEN_SERVER:cast(P, {die, Reason}) ||
         P <- ?PG2:get_members(Group) -- [self()]].
 
-maybe_start(Delegate, ChildSpec) ->
-    case mnesia:transaction(fun() -> check_start(Delegate, ChildSpec) end) of
+maybe_start(Group, Delegate, ChildSpec) ->
+    case mnesia:transaction(fun() ->
+                                    check_start(Group, Delegate, ChildSpec)
+                            end) of
         {atomic, start} -> start(Delegate, ChildSpec);
         {atomic, Pid}   -> {error, {already_started, Pid}};
         %% If we are torn down while in the transaction...
         {aborted, E}    -> {error, E}
     end.
 
-check_start(Delegate, ChildSpec) ->
+check_start(Group, Delegate, ChildSpec) ->
     case mnesia:wread({?TABLE, id(ChildSpec)}) of
-        []  -> write(ChildSpec),
+        []  -> write(Group, ChildSpec),
                start;
         [S] -> #mirrored_sup_childspec{id            = Id,
                                        mirroring_pid = Pid} = S,
@@ -398,7 +406,7 @@ check_start(Delegate, ChildSpec) ->
                    Pid -> child(Delegate, Id);
                    _   -> case supervisor(Pid) of
                               dead      -> delete(ChildSpec),
-                                           write(ChildSpec),
+                                           write(Group, ChildSpec),
                                            start;
                               Delegate0 -> child(Delegate0, Id)
                           end
@@ -412,9 +420,10 @@ supervisor(Pid) ->
               gen_server:call(Pid, delegate_supervisor, infinity)
       end).
 
-write(ChildSpec) ->
+write(Group, ChildSpec) ->
     ok = mnesia:write(#mirrored_sup_childspec{id              = id(ChildSpec),
                                               mirroring_pid   = self(),
+                                              group           = Group,
                                               childspec       = ChildSpec}).
 
 delete(Id) ->
@@ -432,16 +441,24 @@ stop(Delegate, Id) ->
 
 id({Id, _, _, _, _, _}) -> Id.
 
-update(ChildSpec) ->
+update(Group, ChildSpec) ->
     delete(ChildSpec),
-    write(ChildSpec),
+    write(Group, ChildSpec),
     ChildSpec.
 
 update_all(OldPid) ->
     MatchHead = #mirrored_sup_childspec{mirroring_pid   = OldPid,
-                                        childspec       = '$1',
+                                        group           = '$1',
+                                        childspec       = '$2',
                                         _               = '_'},
-    [update(C) || C <- mnesia:select(?TABLE, [{MatchHead, [], ['$1']}])].
+    [update(Group, C) ||
+        [Group, C] <- mnesia:select(?TABLE, [{MatchHead, [], ['$$']}])].
+
+delete_all(Group) ->
+    MatchHead = #mirrored_sup_childspec{group     = Group,
+                                        childspec = '$1',
+                                        _         = '_'},
+    [delete(C) || C <- mnesia:select(?TABLE, [{MatchHead, [], ['$1']}])].
 
 %%----------------------------------------------------------------------------
 
