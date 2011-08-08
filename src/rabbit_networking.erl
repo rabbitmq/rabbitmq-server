@@ -74,7 +74,9 @@
         -> [{inet:ip_address(), ip_port(), family(), atom()}]).
 -spec(ensure_ssl/0 :: () -> rabbit_types:infos()).
 -spec(ssl_transform_fun/1 ::
-        (rabbit_types:infos()) -> rabbit_types:ok_or_error(#ssl_socket{})).
+        (rabbit_types:infos())
+        -> fun ((rabbit_net:socket())
+                -> rabbit_types:ok_or_error(#ssl_socket{}))).
 
 -spec(boot/0 :: () -> 'ok').
 -spec(start_client/1 ::

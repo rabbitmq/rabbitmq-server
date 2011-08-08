@@ -256,7 +256,7 @@
 -spec(info_keys/0 :: () -> rabbit_types:info_keys()).
 -spec(info/0 :: () -> rabbit_types:infos()).
 -spec(info/1 :: ([atom()]) -> rabbit_types:infos()).
--spec(ulimit/0 :: () -> 'infinity' | 'unknown' | non_neg_integer()).
+-spec(ulimit/0 :: () -> 'unknown' | non_neg_integer()).
 
 -endif.
 
@@ -811,7 +811,6 @@ init([]) ->
                     Watermark;
                 _ ->
                     case ulimit() of
-                        infinity -> infinity;
                         unknown  -> ?FILE_HANDLES_LIMIT_OTHER;
                         Lim      -> lists:max([2, Lim - ?RESERVED_FOR_OTHERS])
                     end

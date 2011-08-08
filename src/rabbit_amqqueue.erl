@@ -48,7 +48,7 @@
 -type(name() :: rabbit_types:r('queue')).
 
 -type(qlen() :: rabbit_types:ok(non_neg_integer())).
--type(qfun(A) :: fun ((rabbit_types:amqqueue()) -> A)).
+-type(qfun(A) :: fun ((rabbit_types:amqqueue()) -> A | no_return())).
 -type(qmsg() :: {name(), pid(), msg_id(), boolean(), rabbit_types:message()}).
 -type(msg_id() :: non_neg_integer()).
 -type(ok_or_errors() ::

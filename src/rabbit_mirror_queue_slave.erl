@@ -45,7 +45,18 @@
 -behaviour(gm).
 
 -include("rabbit.hrl").
+
+%%----------------------------------------------------------------------------
+
 -include("gm_specs.hrl").
+
+-ifdef(use_specs).
+%% Shut dialyzer up
+-spec(promote_me/2 :: (_, _) -> no_return()).
+-endif.
+
+%%----------------------------------------------------------------------------
+
 
 -define(SYNC_INTERVAL,                 25). %% milliseconds
 -define(RAM_DURATION_UPDATE_INTERVAL,  5000).

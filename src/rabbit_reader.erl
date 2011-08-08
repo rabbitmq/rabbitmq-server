@@ -63,8 +63,6 @@
 
 -ifdef(use_specs).
 
--type(frame() :: [binary()]).
-
 -spec(start_link/3 :: (pid(), pid(), rabbit_heartbeat:start_heartbeat_fun()) ->
                            rabbit_types:ok(pid())).
 -spec(info_keys/0 :: () -> rabbit_types:info_keys()).
@@ -90,7 +88,9 @@
 -spec(system_continue/3 :: (_,_,#v1{}) -> any()).
 -spec(system_terminate/4 :: (_,_,_,_) -> none()).
 
--spec(process_channel_frame/5 :: (frame(), pid(), non_neg_integer(), pid(), tuple()) -> tuple()).
+-spec(process_channel_frame/5 ::
+        (rabbit_command_assembler:frame(), pid(), non_neg_integer(), pid(),
+         tuple()) -> tuple()).
 
 -endif.
 
