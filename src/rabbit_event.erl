@@ -19,7 +19,7 @@
 -include("rabbit.hrl").
 
 -export([start_link/0]).
--export([init_stats_timer/0, ensure_stats_timer/2, stop_stats_timer/1]).
+-export([init_stats_timer/0, ensure_stats_timer/3, stop_stats_timer/1]).
 -export([reset_stats_timer/1]).
 -export([stats_level/1, if_enabled/2]).
 -export([notify/2, notify_if/3]).
@@ -57,7 +57,7 @@
 
 -spec(start_link/0 :: () -> rabbit_types:ok_pid_or_error()).
 -spec(init_stats_timer/0 :: () -> state()).
--spec(ensure_stats_timer/2 :: (state(), timer_fun()) -> state()).
+-spec(ensure_stats_timer/3 :: (state(), pid(), term()) -> state()).
 -spec(stop_stats_timer/1 :: (state()) -> state()).
 -spec(reset_stats_timer/1 :: (state()) -> state()).
 -spec(stats_level/1 :: (state()) -> level()).
@@ -80,7 +80,7 @@ start_link() ->
 %%   if_enabled(internal_emit_stats) - so we immediately send something
 %%
 %% On wakeup:
-%%   ensure_stats_timer(Timer, emit_stats)
+%%   ensure_stats_timer(Timer, Pid, emit_stats)
 %%   (Note we can't emit stats immediately, the timer may have fired 1ms ago.)
 %%
 %% emit_stats:
@@ -99,13 +99,13 @@ init_stats_timer() ->
     {ok, Interval} = application:get_env(rabbit, collect_statistics_interval),
     #state{level = StatsLevel, interval = Interval, timer = undefined}.
 
-ensure_stats_timer(State = #state{level = none}, _Fun) ->
+ensure_stats_timer(State = #state{level = none}, _Pid, _Msg) ->
     State;
 ensure_stats_timer(State = #state{interval = Interval,
-                                  timer    = undefined}, Fun) ->
-    {ok, TRef} = timer:apply_after(Interval, erlang, apply, [Fun, []]),
+                                  timer    = undefined}, Pid, Msg) ->
+    TRef = erlang:send_after(Interval, Pid, Msg),
     State#state{timer = TRef};
-ensure_stats_timer(State, _Fun) ->
+ensure_stats_timer(State, _Pid, _Msg) ->
     State.
 
 stop_stats_timer(State = #state{level = none}) ->
@@ -113,7 +113,7 @@ stop_stats_timer(State = #state{level = none}) ->
 stop_stats_timer(State = #state{timer = undefined}) ->
     State;
 stop_stats_timer(State = #state{timer = TRef}) ->
-    {ok, cancel} = timer:cancel(TRef),
+    erlang:cancel_timer(TRef),
     State#state{timer = undefined}.
 
 reset_stats_timer(State) ->

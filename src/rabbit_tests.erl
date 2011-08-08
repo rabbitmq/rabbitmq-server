@@ -1287,7 +1287,7 @@ test_statistics_event_receiver(Pid) ->
 
 test_statistics_receive_event(Ch, Matcher) ->
     rabbit_channel:flush(Ch),
-    rabbit_channel:emit_stats(Ch),
+    Ch ! emit_stats,
     test_statistics_receive_event1(Ch, Matcher).
 
 test_statistics_receive_event1(Ch, Matcher) ->

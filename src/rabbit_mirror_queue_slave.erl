@@ -37,7 +37,7 @@
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3, handle_pre_hibernate/1, prioritise_call/3,
-         prioritise_cast/2]).
+         prioritise_cast/2, prioritise_info/2]).
 
 -export([joined/2, members_changed/3, handle_msg/3]).
 
@@ -89,9 +89,8 @@ init([#amqqueue { name = QueueName } = Q]) ->
                   %% ASSERTION
                   [] = [Pid || Pid <- [QPid | MPids], node(Pid) =:= Node],
                   MPids1 = MPids ++ [Self],
-                  mnesia:write(rabbit_queue,
-                               Q1 #amqqueue { slave_pids = MPids1 },
-                               write),
+                  ok = rabbit_amqqueue:store_queue(
+                         Q1 #amqqueue { slave_pids = MPids1 }),
                   {ok, QPid}
           end),
     erlang:monitor(process, MPid),
@@ -187,9 +186,9 @@ handle_cast({set_ram_duration_target, Duration},
             State = #state { backing_queue       = BQ,
                              backing_queue_state = BQS }) ->
     BQS1 = BQ:set_ram_duration_target(Duration, BQS),
-    noreply(State #state { backing_queue_state = BQS1 });
+    noreply(State #state { backing_queue_state = BQS1 }).
 
-handle_cast(update_ram_duration,
+handle_info(update_ram_duration,
             State = #state { backing_queue = BQ,
                              backing_queue_state = BQS }) ->
     {RamDuration, BQS1} = BQ:ram_duration(BQS),
@@ -199,9 +198,9 @@ handle_cast(update_ram_duration,
     noreply(State #state { rate_timer_ref = just_measured,
                            backing_queue_state = BQS2 });
 
-handle_cast(sync_timeout, State) ->
+handle_info(sync_timeout, State) ->
     noreply(backing_queue_timeout(
-              State #state { sync_timer_ref = undefined })).
+              State #state { sync_timer_ref = undefined }));
 
 handle_info(timeout, State) ->
     noreply(backing_queue_timeout(State));
@@ -266,13 +265,18 @@ prioritise_call(Msg, _From, _State) ->
 
 prioritise_cast(Msg, _State) ->
     case Msg of
-        update_ram_duration                  -> 8;
         {set_ram_duration_target, _Duration} -> 8;
         {set_maximum_since_use, _Age}        -> 8;
         {run_backing_queue, _Mod, _Fun}      -> 6;
-        sync_timeout                         -> 6;
         {gm, _Msg}                           -> 5;
         {post_commit, _Txn, _AckTags}        -> 4;
+        _                                    -> 0
+    end.
+
+prioritise_info(Msg, _State) ->
+    case Msg of
+        update_ram_duration                  -> 8;
+        sync_timeout                         -> 6;
         _                                    -> 0
     end.
 
@@ -516,8 +520,7 @@ backing_queue_timeout(State = #state { backing_queue = BQ }) ->
     run_backing_queue(BQ, fun (M, BQS) -> M:timeout(BQS) end, State).
 
 ensure_sync_timer(State = #state { sync_timer_ref = undefined }) ->
-    {ok, TRef} = timer:apply_after(
-                   ?SYNC_INTERVAL, rabbit_amqqueue, sync_timeout, [self()]),
+    TRef = erlang:send_after(?SYNC_INTERVAL, self(), sync_timeout),
     State #state { sync_timer_ref = TRef };
 ensure_sync_timer(State) ->
     State.
@@ -525,14 +528,12 @@ ensure_sync_timer(State) ->
 stop_sync_timer(State = #state { sync_timer_ref = undefined }) ->
     State;
 stop_sync_timer(State = #state { sync_timer_ref = TRef }) ->
-    {ok, cancel} = timer:cancel(TRef),
+    erlang:cancel_timer(TRef),
     State #state { sync_timer_ref = undefined }.
 
 ensure_rate_timer(State = #state { rate_timer_ref = undefined }) ->
-    {ok, TRef} = timer:apply_after(
-                   ?RAM_DURATION_UPDATE_INTERVAL,
-                   rabbit_amqqueue, update_ram_duration,
-                   [self()]),
+    TRef = erlang:send_after(?RAM_DURATION_UPDATE_INTERVAL,
+                             self(), update_ram_duration),
     State #state { rate_timer_ref = TRef };
 ensure_rate_timer(State = #state { rate_timer_ref = just_measured }) ->
     State #state { rate_timer_ref = undefined };
@@ -544,7 +545,7 @@ stop_rate_timer(State = #state { rate_timer_ref = undefined }) ->
 stop_rate_timer(State = #state { rate_timer_ref = just_measured }) ->
     State #state { rate_timer_ref = undefined };
 stop_rate_timer(State = #state { rate_timer_ref = TRef }) ->
-    {ok, cancel} = timer:cancel(TRef),
+    erlang:cancel_timer(TRef),
     State #state { rate_timer_ref = undefined }.
 
 ensure_monitoring(ChPid, State = #state { known_senders = KS }) ->

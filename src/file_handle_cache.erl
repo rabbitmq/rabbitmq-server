@@ -925,10 +925,10 @@ handle_cast({transfer, FromPid, ToPid}, State) ->
     ok = track_client(ToPid, State#fhc_state.clients),
     {noreply, process_pending(
                 update_counts(obtain, ToPid, +1,
-                              update_counts(obtain, FromPid, -1, State)))};
+                              update_counts(obtain, FromPid, -1, State)))}.
 
-handle_cast(check_counts, State) ->
-    {noreply, maybe_reduce(State #fhc_state { timer_ref = undefined })}.
+handle_info(check_counts, State) ->
+    {noreply, maybe_reduce(State #fhc_state { timer_ref = undefined })};
 
 handle_info({'DOWN', _MRef, process, Pid, _Reason},
             State = #fhc_state { elders         = Elders,
@@ -1133,9 +1133,9 @@ reduce(State = #fhc_state { open_pending   = OpenPending,
               end
     end,
     case TRef of
-        undefined -> {ok, TRef1} = timer:apply_after(
-                                     ?FILE_HANDLES_CHECK_INTERVAL,
-                                     gen_server, cast, [?SERVER, check_counts]),
+        undefined -> TRef1 = erlang:send_after(
+                               ?FILE_HANDLES_CHECK_INTERVAL, ?SERVER,
+                               check_counts),
                      State #fhc_state { timer_ref = TRef1 };
         _         -> State
     end.
