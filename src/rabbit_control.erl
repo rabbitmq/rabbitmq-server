@@ -17,7 +17,7 @@
 -module(rabbit_control).
 -include("rabbit.hrl").
 
--export([start/0, stop/0, action/5, diagnostics/1]).
+-export([start/0, stop/0, action/5, diagnostics/1, log_action/3]).
 
 -define(RPC_TIMEOUT, infinity).
 -define(WAIT_FOR_VM_ATTEMPTS, 5).
@@ -51,6 +51,7 @@
         -> 'ok').
 -spec(diagnostics/1 :: (node()) -> [{string(), [any()]}]).
 -spec(usage/0 :: () -> no_return()).
+-spec(log_action/3 :: (node(), string(), [term()]) -> ok).
 
 -endif.
 
@@ -73,6 +74,7 @@ start() ->
     Command = list_to_atom(Command0),
     Quiet = proplists:get_bool(?QUIET_OPT, Opts1),
     Node = proplists:get_value(?NODE_OPT, Opts1),
+    rpc_call(Node, rabbit_control, log_action, [node(), Command0, Args]),
     Inform = case Quiet of
                  true  -> fun (_Format, _Args1) -> ok end;
                  false -> fun (Format, Args1) ->
@@ -474,3 +476,22 @@ quit(Status) ->
         {unix,  _} -> halt(Status);
         {win32, _} -> init:stop(Status)
     end.
+
+log_action(Node, Command, Args) ->
+    rabbit_misc:with_local_io(
+      fun () ->
+              error_logger:info_msg("~p executing~n  rabbitmqctl ~s ~s~n",
+                                    [Node, Command,
+                                     format_args(mask_args(Command, Args))])
+      end).
+
+%% Mask passwords and other sensitive info before logging.
+mask_args("add_user", [Name, _Password | Args]) ->
+    [Name, "****" | Args];
+mask_args("change_password", [Name, _Password | Args]) ->
+    [Name, "****" | Args];
+mask_args(_, Args) ->
+    Args.
+
+format_args(Args) ->
+    string:join([io_lib:format("~p", [A]) || A <- Args], " ").

@@ -569,13 +569,13 @@ add_to_journal(SeqId, Action, State = #qistate { dirty_count = DCount,
 add_to_journal(RelSeq, Action,
                Segment = #segment { journal_entries = JEntries,
                                     unacked = UnackedCount }) ->
-    Segment1 = Segment #segment {
-                 journal_entries = add_to_journal(RelSeq, Action, JEntries) },
-    case Action of
-        del  -> Segment1;
-        ack  -> Segment1 #segment { unacked = UnackedCount - 1 };
-        ?PUB -> Segment1 #segment { unacked = UnackedCount + 1 }
-    end;
+    Segment #segment {
+      journal_entries = add_to_journal(RelSeq, Action, JEntries),
+      unacked = UnackedCount + case Action of
+                                   ?PUB -> +1;
+                                   del  ->  0;
+                                   ack  -> -1
+                               end};
 
 add_to_journal(RelSeq, Action, JEntries) ->
     Val = case array:get(RelSeq, JEntries) of
