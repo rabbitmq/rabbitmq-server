@@ -133,7 +133,7 @@ confirm(Pid, MsgSeqNos) ->
     gen_server2:cast(Pid, {confirm, MsgSeqNos, self()}).
 
 list() ->
-    rabbit_misc:rpc_list_all_nodes(rabbit_channel, list_local, []).
+    rabbit_misc:append_rpc_all_nodes(rabbit_channel, list_local, []).
 
 list_local() ->
     pg_local:get_members(rabbit_channels).

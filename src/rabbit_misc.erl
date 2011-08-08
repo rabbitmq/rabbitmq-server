@@ -58,7 +58,7 @@
 -export([is_process_alive/1]).
 -export([pget/2, pget/3, pget_or_die/2]).
 -export([format_message_queue/2]).
--export([rpc_list_all_nodes/3]).
+-export([append_rpc_all_nodes/3]).
 
 %%----------------------------------------------------------------------------
 
@@ -209,7 +209,7 @@
 -spec(pget/3 :: (term(), [term()], term()) -> term()).
 -spec(pget_or_die/2 :: (term(), [term()]) -> term() | no_return()).
 -spec(format_message_queue/2 :: (any(), priority_queue:q()) -> term()).
--spec(rpc_list_all_nodes/3 :: (atom(), atom(), [any()]) -> [any()]).
+-spec(append_rpc_all_nodes/3 :: (atom(), atom(), [any()]) -> [any()]).
 
 -endif.
 
@@ -957,8 +957,9 @@ format_message_queue_entry(V) when is_tuple(V) ->
 format_message_queue_entry(_V) ->
     '_'.
 
-rpc_list_all_nodes(M, F, A) ->
-    [Res || Node <- [node() | nodes()], Res <- case rpc:call(Node, M, F, A) of
-                                                   {badrpc, _} -> [];
-                                                   R           -> R
-                                               end].
+append_rpc_all_nodes(M, F, A) ->
+    {ResL, _} = rpc:multicall(M, F, A),
+    lists:append([case Res of
+                      {badrpc, _} -> [];
+                      _           -> Res
+                  end || Res <- ResL]).

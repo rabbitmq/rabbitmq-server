@@ -30,6 +30,9 @@
 -export([tcp_listener_started/3, tcp_listener_stopped/3,
          start_client/1, start_ssl_client/2]).
 
+%% Internal
+-export([connections_local/0]).
+
 -include("rabbit.hrl").
 -include_lib("kernel/include/inet.hrl").
 
@@ -59,6 +62,7 @@
 -spec(active_listeners/0 :: () -> [rabbit_types:listener()]).
 -spec(node_listeners/1 :: (node()) -> [rabbit_types:listener()]).
 -spec(connections/0 :: () -> [rabbit_types:connection()]).
+-spec(connections_local/0 :: () -> [rabbit_types:connection()]).
 -spec(connection_info_keys/0 :: () -> rabbit_types:info_keys()).
 -spec(connection_info/1 ::
         (rabbit_types:connection()) -> rabbit_types:infos()).
@@ -272,10 +276,12 @@ start_ssl_client(SslOpts, Sock) ->
     start_client(Sock, ssl_transform_fun(SslOpts)).
 
 connections() ->
+    rabbit_misc:append_rpc_all_nodes(rabbit_networking, connections_local, []).
+
+connections_local() ->
     [rabbit_connection_sup:reader(ConnSup) ||
-        Node <- rabbit_mnesia:running_clustered_nodes(),
         {_, ConnSup, supervisor, _}
-            <- supervisor:which_children({rabbit_tcp_client_sup, Node})].
+            <- supervisor:which_children(rabbit_tcp_client_sup)].
 
 connection_info_keys() -> rabbit_reader:info_keys().
 
