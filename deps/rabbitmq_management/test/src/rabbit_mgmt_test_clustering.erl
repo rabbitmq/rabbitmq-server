@@ -52,34 +52,42 @@ ha() ->
     QArgs = [{node,      <<"hare">>},
              {arguments, [{'x-ha-policy', all}]}],
     http_put("/queues/%2f/ha-queue", QArgs, ?NO_CONTENT),
-    Q = wait_for("/queues/%2f/ha-queue", synchronised_slave_nodes),
+    Q = wait_for("/queues/%2f/ha-queue"),
     assert_node(hare, pget(node, Q)),
     assert_single_node('rabbit-test', pget(slave_nodes, Q)),
     assert_single_node('rabbit-test', pget(synchronised_slave_nodes, Q)),
     restart_node(),
-    Q2 = wait_for("/queues/%2f/ha-queue", synchronised_slave_nodes),
-    %% TODO this does not yet pass, I think due to bug24130.
-    %% assert_node('rabbit-test', pget(node, Q2)),
-    %% assert_single_node(hare, pget(slave_nodes, Q2)),
-    %% assert_single_node(hare, pget(synchronised_slave_nodes, Q2)),
+    Q2 = wait_for("/queues/%2f/ha-queue"),
+    assert_node('rabbit-test', pget(node, Q2)),
+    assert_single_node(hare, pget(slave_nodes, Q2)),
+    assert_single_node(hare, pget(synchronised_slave_nodes, Q2)),
     http_delete("/queues/%2f/ha-queue", ?NO_CONTENT),
     ok.
 
 %%----------------------------------------------------------------------------
 
-wait_for(Path, Key) ->
-    wait_for(Path, Key, 100).
+wait_for(Path) ->
+    wait_for(Path, [slave_nodes, synchronised_slave_nodes]).
 
-wait_for(Path, Key, 0) ->
-    exit({timeout, {Path, Key}});
+wait_for(Path, Keys) ->
+    wait_for(Path, Keys, 1000).
 
-wait_for(Path, Key, Count) ->
+wait_for(Path, Keys, 0) ->
+    exit({timeout, {Path, Keys}});
+
+wait_for(Path, Keys, Count) ->
     Res = http_get(Path),
-    case pget(Key, http_get(Path)) of
-        undefined -> timer:sleep(10),
-                     wait_for(Path, Key, Count - 1);
-        _         -> Res
+    case present(Keys, Res) of
+        false -> timer:sleep(10),
+                 wait_for(Path, Keys, Count - 1);
+        true  -> Res
     end.
+
+present(Keys, Res) ->
+    lists:all(fun (Key) ->
+                      X = pget(Key, Res),
+                      X =/= [] andalso X =/= undefined
+              end, Keys).
 
 assert_single_node(Exp, Act) ->
     ?assertEqual(1, length(Act)),
