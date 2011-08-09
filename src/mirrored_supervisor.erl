@@ -246,16 +246,10 @@ start_link0(Prefix, Group, Init) ->
 
 init(Mod, Args) ->
     case Mod:init(Args) of
-        Init = {ok, {Restart, _ChildSpecs}} ->
-            case Restart of
-                {Bad, _, _} when Bad =:= simple_one_for_one orelse
-                                 Bad =:= simple_one_for_one_terminate ->
-                    error(badarg);
-                _ ->
-                    Init
-            end;
-        ignore ->
-            ignore
+        {ok, {{Bad, _, _}, _ChildSpecs}} when
+              Bad =:= simple_one_for_one orelse
+              Bad =:= simple_one_for_one_terminate -> error(badarg);
+        Init                                       -> Init
     end.
 
 start_child(Sup, ChildSpec) -> call(Sup, {start_child,  ChildSpec}).
