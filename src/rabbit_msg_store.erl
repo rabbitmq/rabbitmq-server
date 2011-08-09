@@ -377,6 +377,127 @@
 %%
 %% For notes on Clean Shutdown and startup, see documentation in
 %% variable_queue.
+%%
+%%
+%% Promoting reads over writes
+%% ---------------------------
+%%
+%% When a client does a write, at that point it inserts the msg into
+%% the CurFileCacheEts table. From that point on, the client can
+%% expect to do a read promptly: before the write has been processed
+%% by the msg_store, the client can read directly from the
+%% cache. After the write has been processed by the msg_store, if the
+%% msg ends up in the current file, then it will remain in the cache
+%% and can be read directly. If the msg is not in the current file,
+%% then it can be read directly from that file. All of which means
+%% that it is safe for reads to be promoted over writes: the only case
+%% in which the client can't do its read is when a file needs to be
+%% read from and is currently locked due to GC. In such cases, the
+%% file must already exist on disk, with a positive reference count,
+%% and so the overtaken write will do nothing other than increment the
+%% reference count. As such, it's safe to process the read first.
+%%
+%%
+%% On the elimination of writes
+%% ----------------------------
+%%
+%% In order to minimise disk activity, it's helpful to promote removes
+%% over writes. This allows a msg_store under load to receive the
+%% remove first, and eliminate the following write. A remove that is
+%% followed by a read may give undefined results: there's a
+%% possibility that it would return the msg from the CurFileCacheEts,
+%% but given that write and remove are async, it's always been
+%% possible for the read in a write-remove-read sequence to access the
+%% cache and pull the message before it gets removed from the cache.
+%%
+%% In order to eliminate the write, when the msg_store processes the
+%% remove, if the msg being removed is "unknown" to the msg_store, it
+%% simply decrements the Pending Write Count (PWC hereafter) in the
+%% CurFileCacheEts. "Unknown" can include "known, but the msg
+%% ref_count is 0" and "the client is dying and the corresponding
+%% write would be masked out anyway". Then, when the write arrives,
+%% either there is no entry in the CurFileCacheEts for the write, or
+%% there is an entry but its PWC is 0 and so the write is eliminated.
+%%
+%% Thus it's important that every increment of a msg's PWC by a
+%% client-side write is matched by exactly one decrement of a msg's
+%% PWC in the msg_store either as a result of a remove or a write:
+%%
+%% (The letters in (brackets) are explained below.)
+%%
+%% If the sequence is write-remove, then:
+%% 1. If the msg is unknown and the client is not dying, the write
+%%     will actually write the msg and decrement the PWC. The msg's
+%%     ref_count will be 1. The remove will find the msg on disk, and
+%%     will decrement its ref_count, and will not touch the PWC. (E)
+%% 2. If the msg is unknown and the client is dying then the write
+%%     will be masked out. The PWC will be untouched. The remove will
+%%     decrement the PWC. (C)
+%% 3. If the msg is known and the client is not dying then the msg's
+%%     ref_count will be incremented, and the PWC will be
+%%     decremented. The remove will find the msg on disk, and will
+%%     decrement its ref_count, and will not touch the PWC. (A, E)
+%% 4. If the msg is known and the client is dying then the write may
+%%     be masked out, depending on the whether the msg is younger or
+%%     older than the start of the client's death. If the write is
+%%     masked out then the PWC will not be touched, and the subsequent
+%%     remove will decrement the PWC. If the write is not masked out
+%%     then the write will increment the ref_count and decrement the
+%%     PWC, and the remove will decrement the ref_count and will not
+%%     touch the PWC. (A, C, E)
+%%
+%% If the sequence is remove-write, then:
+%% 1. If the msg is unknown and the client is not dying, the remove
+%%     will decrement the PWC. The write will find a PWC of 0 and will
+%%     not write the msg, nor touch the PWC. (B, D)
+%% 2. If the msg is unknown and the client is dying then the remove
+%%     will decrement the PWC. The write will find a PWC of 0 and will
+%%     not write the msg, nor touch the PWC. (B, C)
+%% 3. If the msg is known and the client is not dying, the remove
+%%     will: a) decrement the ref_count and not touch the PWC iff the
+%%     ref_count is > 0; or b) iff the ref_count == 0, will decrement
+%%     the PWC. The write will correspondingly a) increment the
+%%     ref_count (even if the ref_count is 0) and decrement the PWC;
+%%     or b) find a PWC of 0 and will not write the msg, nor touch the
+%%     PWC. (A, B)
+%% 4. If the msg is known and the client is dying, the remove will
+%%     decrement the PWC (unless the ref_count is > 0 and the msg was
+%%     written pre-client-death, in which case it'll decrement
+%%     ref_count and not touch PWC), and the write will find a PWC of
+%%     0 and will not write the msg, nor touch the PWC (or if the msg
+%%     was originally written pre-client-death, it'll increment the
+%%     ref_count and decrement the PWC). (A, B, C, D, E)
+%%
+%% It's also important that we guarantee the CurFileCacheEts cannot
+%% balloon in size. The rule is that we remove from the
+%% CurFileCacheEts iff the PWC == 0 and (either the msg has been
+%% written to a file which is not the current file, or the msg has
+%% been removed).
+%%
+%% When we roll the current file, we delete from the CurFileCacheEts
+%% all entries with a PWC of 0, but given write elimination, we can go
+%% for a very long time before rolling the current file. We therefore
+%% remove from the CurFileCacheEts when:
+%%
+%% A. On write, when incrementing the ref_count and the file =/=
+%%     cur_file.
+%% B. On write, when we find the PWC is 0 and thus know that a remove
+%%     must have overtaken the write.
+%% C. On remove, when the client is dying.
+%% D. On remove, when the msg is either unknown or has a ref_count of
+%%     0: in both cases we know the remove must have overtaken a
+%%     write.
+%% E. On rolling the current file. In the case where we really are
+%%     doing writes and removes to the current file, and thus we can
+%%     prove the current file is making progress towards being rolled,
+%%     we leave entries in the CurFileCacheEts even when their PWC is
+%%     0. (Equally, if it's just a single msg that is having its
+%%     ref_count incremented and decremented then whilst we make no
+%%     progress towards rolling, we equally are not using up further
+%%     memory in the CurFileCacheEts).
+%%
+%% For each of the preceding 8 cases, each one has at least one of A,
+%% B, C, D or E present.
 
 %%----------------------------------------------------------------------------
 %% public API
