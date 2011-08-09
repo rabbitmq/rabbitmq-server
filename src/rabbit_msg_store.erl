@@ -884,7 +884,7 @@ handle_cast({write, CRef, MsgId},
                                 CTM
                         end, CRef, State1)
               end);
-        [{MsgId, Msg, _CacheRefCount}] ->
+        [{MsgId, Msg, 0}] ->
             %% The remove overtook the write, and because of that, we
             %% know a read can't be following, so it's ok to remove
             %% from the cache.
