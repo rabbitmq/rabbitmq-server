@@ -736,7 +736,7 @@ handle_cast({write, CRef, MsgId},
         [] ->
             %% A remove overtook a write, but other writes were going
             %% on which meant that one of the ets:delete_object calls
-            %% above removed the entry from the CurFileCacheEts. Hence
+            %% below removed the entry from the CurFileCacheEts. Hence
             %% the empty list. Something like:
             %%
             %% q1 sent write (pending write count: 1),
