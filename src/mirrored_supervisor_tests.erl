@@ -41,6 +41,7 @@ all_tests() ->
     passed = test_no_migration_on_shutdown(),
     passed = test_start_idempotence(),
     passed = test_unsupported(),
+    passed = test_ignore(),
     passed.
 
 %% Simplest test
@@ -160,6 +161,12 @@ test_unsupported() ->
     end,
     passed.
 
+%% Just test we don't blow up
+test_ignore() ->
+    ?MS:start_link({local, foo}, get_group(group), ?MODULE,
+                   {sup, fake_strategy_for_ignore, []}),
+    passed.
+
 %% ---------------------------------------------------------------------------
 
 with_sups(Fun, Sups) ->
@@ -239,6 +246,9 @@ kill_wait(Pid) ->
 %% ---------------------------------------------------------------------------
 %% Dumb gen_server we can supervise
 %% ---------------------------------------------------------------------------
+
+init({sup, fake_strategy_for_ignore, _ChildSpecs}) ->
+    ignore;
 
 init({sup, Strategy, ChildSpecs}) ->
     {ok, {{Strategy, 0, 1}, ChildSpecs}};
