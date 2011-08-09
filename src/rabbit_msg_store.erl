@@ -1072,8 +1072,7 @@ remove_message(MsgId, CRef,
                                   current_file       = CurFile }) ->
     case should_mask_action(CRef, MsgId, State) of
         {true, Location} ->
-            true = eliminate_pending_write(CurFileCacheEts, CurFile, MsgId,
-                                           Location),
+            true = decrement_cache(CurFileCacheEts, CurFile, MsgId, Location),
             State;
         {false_if_increment, #msg_location { ref_count = 0 } = Location} ->
             %% CRef is dying. If this remove had a corresponding write
@@ -1086,8 +1085,7 @@ remove_message(MsgId, CRef,
             %% CacheRefCount. In either case, it's safe here to
             %% decrement the CacheRefCount as a write either before or
             %% after will not touch the CacheRefCount.
-            true = eliminate_pending_write(CurFileCacheEts, CurFile, MsgId,
-                                           Location),
+            true = decrement_cache(CurFileCacheEts, CurFile, MsgId, Location),
             State;
         {_Mask, #msg_location { ref_count = RefCount, file = File,
                                 total_size = TotalSize }} when RefCount > 0 ->
@@ -1128,12 +1126,11 @@ remove_message(MsgId, CRef,
             %% Because the remove has arrived first, we know that a
             %% read can't be following so it's ok to remove from the
             %% cache.
-            true = eliminate_pending_write(CurFileCacheEts, CurFile, MsgId,
-                                           Location),
+            true = decrement_cache(CurFileCacheEts, CurFile, MsgId, Location),
             State
     end.
 
-eliminate_pending_write(CurFileCacheEts, CurFile, MsgId, Location) ->
+decrement_cache(CurFileCacheEts, CurFile, MsgId, Location) ->
     ok = update_msg_cache(CurFileCacheEts, MsgId, undefined, -1),
     true = maybe_delete_from_cache(CurFileCacheEts, MsgId, Location, CurFile).
 
