@@ -1332,15 +1332,10 @@ list_sorted_file_names(Dir, Ext) ->
 
 update_msg_cache(CacheEts, MsgId, Msg, N) ->
     case ets:insert_new(CacheEts, {MsgId, Msg, N}) of
-        true  -> ok;
+        true  -> true = undefined =/= Msg, %% ASSERTION
+                 ok;
         false -> safe_ets_update_counter(
-                   CacheEts, MsgId, {3, N},
-                   fun (M) when M =:= N ->
-                           true = ets:update_element(CacheEts, MsgId, {2, Msg}),
-                           ok;
-                       (_) ->
-                           ok
-                   end,
+                   CacheEts, MsgId, {3, N}, fun (_) -> ok end,
                    fun () -> update_msg_cache(CacheEts, MsgId, Msg, N) end)
     end.
 
