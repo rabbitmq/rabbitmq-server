@@ -69,7 +69,7 @@ do(_Method, _State) ->
 
 handle_message(force_event_refresh, State = #state{node = Node}) ->
     rpc:call(Node, rabbit_event, notify,
-             [connection_exists, connection_info(State)]),
+             [connection_created, connection_info(State)]),
     {ok, State};
 
 handle_message(Msg, State) ->
