@@ -50,7 +50,7 @@ list_local() ->
     pg_local:get_members(amqp_direct_connections).
 
 list() ->
-    rabbit_misc:rpc_list_all_nodes(amqp_direct_connection, list_local, []).
+    rabbit_misc:append_rpc_all_nodes(amqp_direct_connection, list_local, []).
 
 %%---------------------------------------------------------------------------
 
