@@ -40,6 +40,7 @@ all_tests() ->
     passed = test_anonymous_supervisors(),
     passed = test_no_migration_on_shutdown(),
     passed = test_start_idempotence(),
+    passed = test_unsupported(),
     passed.
 
 %% Simplest test
@@ -142,6 +143,23 @@ test_start_idempotence() ->
                       {error, {already_started, Pid}} = ?MS:start_child(a, CS)
               end, [a]).
 
+test_unsupported() ->
+    try
+        ?MS:start_link({global, foo}, get_group(group), ?MODULE,
+                       {sup, one_for_one, []}),
+        exit(no_global)
+    catch error:badarg ->
+            ok
+    end,
+    try
+        ?MS:start_link({local, foo}, get_group(group), ?MODULE,
+                       {sup, simple_one_for_one, []}),
+        exit(no_sofo)
+    catch error:badarg ->
+            ok
+    end,
+    passed.
+
 %% ---------------------------------------------------------------------------
 
 with_sups(Fun, Sups) ->
@@ -165,10 +183,11 @@ start_sup(Name, Group) ->
     start_sup({Name, []}, Group).
 
 start_sup0(anon, Group, ChildSpecs) ->
-    ?MS:start_link(Group, ?MODULE, {sup, ChildSpecs});
+    ?MS:start_link(Group, ?MODULE, {sup, one_for_one, ChildSpecs});
 
 start_sup0(Name, Group, ChildSpecs) ->
-    ?MS:start_link({local, Name}, Group, ?MODULE, {sup, ChildSpecs}).
+    ?MS:start_link({local, Name}, Group, ?MODULE,
+                   {sup, one_for_one, ChildSpecs}).
 
 childspec(Id) ->
     {Id, {?MODULE, start_gs, [Id]}, transient, 16#ffffffff, worker, [?MODULE]}.
@@ -221,8 +240,8 @@ kill_wait(Pid) ->
 %% Dumb gen_server we can supervise
 %% ---------------------------------------------------------------------------
 
-init({sup, ChildSpecs}) ->
-    {ok, {{one_for_one, 0, 1}, ChildSpecs}};
+init({sup, Strategy, ChildSpecs}) ->
+    {ok, {{Strategy, 0, 1}, ChildSpecs}};
 
 init(server) ->
     {ok, state}.

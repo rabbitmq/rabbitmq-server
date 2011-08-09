@@ -228,20 +228,34 @@
 %%----------------------------------------------------------------------------
 
 start_link(Group, Mod, Args) ->
-    start_link0([], Group, Mod, Args).
+    start_link0([], Group, init(Mod, Args)).
 
 start_link({local, SupName}, Group, Mod, Args) ->
-    start_link0([{local, SupName}], Group, Mod, Args);
+    start_link0([{local, SupName}], Group, init(Mod, Args));
 
 start_link({global, _SupName}, _Group, _Mod, _Args) ->
     error(badarg).
 
-start_link0(Prefix, Group, Mod, Args) ->
+start_link0(Prefix, Group, Init) ->
     case apply(?SUPERVISOR, start_link,
-               Prefix ++ [?MODULE, {overall, Group, Mod, Args}]) of
+               Prefix ++ [?MODULE, {overall, Group, Init}]) of
         {ok, Pid} -> call(Pid, {init, Pid}),
                      {ok, Pid};
         Other     -> Other
+    end.
+
+init(Mod, Args) ->
+    case Mod:init(Args) of
+        Init = {ok, {Restart, _ChildSpecs}} ->
+            case Restart of
+                {Bad, _, _} when Bad =:= simple_one_for_one orelse
+                                 Bad =:= simple_one_for_one_terminate ->
+                    error(badarg);
+                _ ->
+                    Init
+            end;
+        ignore ->
+            ignore
     end.
 
 start_child(Sup, ChildSpec) -> call(Sup, {start_child,  ChildSpec}).
@@ -270,16 +284,21 @@ start_internal(Group, ChildSpecs) ->
 
 %%----------------------------------------------------------------------------
 
-init({overall, Group, Mod, Args}) ->
-    {ok, {Restart, ChildSpecs}} = Mod:init(Args),
-    Delegate = {delegate, {?SUPERVISOR, start_link,
-                           [?MODULE, {delegate, Restart}]},
-                temporary, 16#ffffffff, supervisor, [?SUPERVISOR]},
-    Mirroring = {mirroring, {?MODULE, start_internal, [Group, ChildSpecs]},
-                 permanent, 16#ffffffff, worker, [?MODULE]},
-    %% Important: Delegate MUST start after Mirroring, see comment in
-    %% handle_info('DOWN', ...) below
-    {ok, {{one_for_all, 0, 1}, [Mirroring, Delegate]}};
+init({overall, Group, Init}) ->
+    case Init of
+        {ok, {Restart, ChildSpecs}} ->
+            Delegate = {delegate, {?SUPERVISOR, start_link,
+                                   [?MODULE, {delegate, Restart}]},
+                        temporary, 16#ffffffff, supervisor, [?SUPERVISOR]},
+            Mirroring = {mirroring, {?MODULE, start_internal,
+                                     [Group, ChildSpecs]},
+                         permanent, 16#ffffffff, worker, [?MODULE]},
+            %% Important: Delegate MUST start after Mirroring, see comment in
+            %% handle_info('DOWN', ...) below
+            {ok, {{one_for_all, 0, 1}, [Mirroring, Delegate]}};
+        ignore ->
+            ignore
+    end;
 
 init({delegate, Restart}) ->
     {ok, {Restart, []}};
