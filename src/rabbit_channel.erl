@@ -164,8 +164,7 @@ ready_for_close(Pid) ->
     gen_server2:cast(Pid, ready_for_close).
 
 force_event_refresh() ->
-    rabbit_misc:filter_exit_map(
-      fun (C) -> gen_server2:cast(C, force_event_refresh) end, list()),
+    [gen_server2:cast(C, force_event_refresh) || C <- list()],
     ok.
 
 %%---------------------------------------------------------------------------

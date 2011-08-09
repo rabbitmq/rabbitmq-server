@@ -21,7 +21,7 @@
 -export([lookup/1, with/2, with_or_die/2, assert_equivalence/5,
          check_exclusive_access/2, with_exclusive_access_or_die/3,
          stat/1, deliver/2, requeue/3, ack/3, reject/4]).
--export([list/1, info_keys/0, info/1, info/2, info_all/1, info_all/2]).
+-export([list/0, list/1, info_keys/0, info/1, info/2, info_all/1, info_all/2]).
 -export([force_event_refresh/0]).
 -export([consumers/1, consumers_all/1, consumer_info_keys/0]).
 -export([basic_get/3, basic_consume/7, basic_cancel/4]).
@@ -80,6 +80,7 @@
         -> 'ok' | rabbit_types:channel_exit()).
 -spec(with_exclusive_access_or_die/3 ::
         (name(), pid(), qfun(A)) -> A | rabbit_types:channel_exit()).
+-spec(list/0 :: () -> [rabbit_types:amqqueue()]).
 -spec(list/1 :: (rabbit_types:vhost()) -> [rabbit_types:amqqueue()]).
 -spec(info_keys/0 :: () -> rabbit_types:info_keys()).
 -spec(info/1 :: (rabbit_types:amqqueue()) -> rabbit_types:infos()).

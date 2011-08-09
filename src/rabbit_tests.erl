@@ -1286,8 +1286,12 @@ test_spawn(Node) ->
 test_spawn_remote() ->
     RPC = self(),
     spawn(fun () ->
-                  RPC ! test_spawn(),
-                  timer:sleep(60000)
+                  {Writer, Ch} = test_spawn(),
+                  RPC ! {Writer, Ch},
+                  link(Ch),
+                  receive
+                      _ -> ok
+                  end
           end),
     receive Res -> Res
     after 1000  -> throw(failed_to_receive_result)
