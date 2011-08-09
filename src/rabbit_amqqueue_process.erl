@@ -760,8 +760,8 @@ emit_stats(State) ->
 emit_stats(State, Extra) ->
     rabbit_event:notify(queue_stats, Extra ++ infos(?STATISTICS_KEYS, State)).
 
-emit_consumer_event(ChPid, ConsumerTag, Exclusive, AckRequired, Type) ->
-    rabbit_event:notify(Type,
+emit_consumer_created(ChPid, ConsumerTag, Exclusive, AckRequired) ->
+    rabbit_event:notify(consumer_created,
                         [{consumer_tag, ConsumerTag},
                          {exclusive,    Exclusive},
                          {ack_required, AckRequired},
@@ -935,8 +935,8 @@ handle_call({basic_consume, NoAck, ChPid, LimiterPid,
                                      add_consumer(ChPid, Consumer,
                                                   State1#q.active_consumers)})
                 end,
-            emit_consumer_event(ChPid, ConsumerTag, ExclusiveConsume,
-                                not NoAck, consumer_created),
+            emit_consumer_created(ChPid, ConsumerTag, ExclusiveConsume,
+                                  not NoAck),
             reply(ok, State2)
     end;
 
@@ -1088,14 +1088,12 @@ handle_cast({set_maximum_since_use, Age}, State) ->
     noreply(State);
 
 handle_cast(force_event_refresh, State = #q{exclusive_consumer = Exclusive}) ->
-    rabbit_event:notify(queue_exists, infos(?CREATION_EVENT_KEYS, State)),
+    rabbit_event:notify(queue_created, infos(?CREATION_EVENT_KEYS, State)),
     case Exclusive of
-        none       -> [emit_consumer_event(Ch, CTag, false, AckRequired,
-                                           consumer_exists) ||
+        none       -> [emit_consumer_created(Ch, CTag, false, AckRequired) ||
                           {Ch, CTag, AckRequired} <- consumers(State)];
         {Ch, CTag} -> [{Ch, CTag, AckRequired}] = consumers(State),
-                      emit_consumer_event(Ch, CTag, true, AckRequired,
-                                          consumer_exists)
+                      emit_consumer_created(Ch, CTag, true, AckRequired)
     end,
     noreply(State).
 

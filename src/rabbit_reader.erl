@@ -323,7 +323,7 @@ handle_other({'$gen_call', From, {info, Items}}, Deb, State) ->
                            end),
     mainloop(Deb, State);
 handle_other({'$gen_cast', force_event_refresh}, Deb, State) ->
-    rabbit_event:notify(connection_exists,
+    rabbit_event:notify(connection_created,
                         [{type, network} | infos(?CREATION_EVENT_KEYS, State)]),
     mainloop(Deb, State);
 handle_other(emit_stats, Deb, State) ->

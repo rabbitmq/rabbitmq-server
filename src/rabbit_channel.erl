@@ -310,7 +310,7 @@ handle_cast({deliver, ConsumerTag, AckRequired,
 
 
 handle_cast(force_event_refresh, State) ->
-    rabbit_event:notify(channel_exists, infos(?CREATION_EVENT_KEYS, State)),
+    rabbit_event:notify(channel_created, infos(?CREATION_EVENT_KEYS, State)),
     noreply(State);
 handle_cast({confirm, MsgSeqNos, From}, State) ->
     State1 = #ch{confirmed = C} = confirm(MsgSeqNos, From, State),

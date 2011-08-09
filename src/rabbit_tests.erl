@@ -1457,13 +1457,13 @@ test_refresh_events(SecondaryNode) ->
     {_Writer, Ch} = test_spawn(),
     Expect(Ch, channel_created),
     rabbit:force_event_refresh(),
-    Expect(Ch, channel_exists),
+    Expect(Ch, channel_created),
     rabbit_channel:shutdown(Ch),
 
     {_Writer2, Ch2} = test_spawn(SecondaryNode),
     Expect(Ch2, channel_created),
     rabbit:force_event_refresh(),
-    Expect(Ch2, channel_exists),
+    Expect(Ch2, channel_created),
     rabbit_channel:shutdown(Ch2),
 
     rabbit_tests_event_receiver:stop(),
