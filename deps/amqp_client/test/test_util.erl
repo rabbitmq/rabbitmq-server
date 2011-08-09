@@ -47,7 +47,7 @@
 %%
 
 lifecycle_test() ->
-    Connection = new_connection(),
+    {ok, Connection} = new_connection(),
     X = <<"x">>,
     {ok, Channel} = amqp_connection:open_channel(Connection),
     amqp_channel:call(Channel,
@@ -80,7 +80,7 @@ queue_exchange_binding(Channel, X, Parent, Tag) ->
     Parent ! finished.
 
 nowait_exchange_declare_test() ->
-    Connection = new_connection(),
+    {ok, Connection} = new_connection(),
     X = <<"x">>,
     {ok, Channel} = amqp_connection:open_channel(Connection),
     ?assertEqual(
@@ -91,7 +91,7 @@ nowait_exchange_declare_test() ->
     teardown(Connection, Channel).
 
 channel_lifecycle_test() ->
-    Connection = new_connection(),
+    {ok, Connection} = new_connection(),
     {ok, Channel} = amqp_connection:open_channel(Connection),
     amqp_channel:close(Channel),
     {ok, Channel2} = amqp_connection:open_channel(Connection),
@@ -99,7 +99,7 @@ channel_lifecycle_test() ->
     ok.
 
 abstract_method_serialization_test(BeforeFun, MultiOpFun, AfterFun) ->
-    Connection = new_connection(),
+    {ok, Connection} = new_connection(),
     {ok, Channel} = amqp_connection:open_channel(Connection),
     X = uuid(),
     Payload = list_to_binary(["x" || _ <- lists:seq(1, 1000)]),
@@ -193,7 +193,7 @@ sync_async_method_serialization_test() ->
         end).
 
 queue_unbind_test() ->
-    Connection = new_connection(),
+    {ok, Connection} = new_connection(),
     X = <<"eggs">>, Q = <<"foobar">>, Key = <<"quay">>,
     Payload = <<"foobar">>,
     {ok, Channel} = amqp_connection:open_channel(Connection),
@@ -234,7 +234,7 @@ basic_get_test() ->
 basic_get_ipv6_test() ->
     basic_get_test1(new_connection(just_network, [{host, "::1"}])).
 
-basic_get_test1(Connection) ->
+basic_get_test1({ok, Connection}) ->
     {ok, Channel} = amqp_connection:open_channel(Connection),
     {ok, Q} = setup_publish(Channel),
     get_and_assert_equals(Channel, Q, <<"foobar">>),
@@ -242,7 +242,7 @@ basic_get_test1(Connection) ->
     teardown(Connection, Channel).
 
 basic_return_test() ->
-    Connection = new_connection(),
+    {ok, Connection} = new_connection(),
     X = uuid(),
     Q = uuid(),
     Key = uuid(),
@@ -269,7 +269,7 @@ basic_return_test() ->
     teardown(Connection, Channel).
 
 channel_repeat_open_close_test() ->
-    Connection = new_connection(),
+    {ok, Connection} = new_connection(),
     lists:foreach(
         fun(_) ->
             {ok, Ch} = amqp_connection:open_channel(Connection),
@@ -279,7 +279,7 @@ channel_repeat_open_close_test() ->
     wait_for_death(Connection).
 
 channel_multi_open_close_test() ->
-    Connection = new_connection(),
+    {ok, Connection} = new_connection(),
     [spawn_link(
         fun() ->
             try amqp_connection:open_channel(Connection) of
@@ -301,7 +301,7 @@ channel_multi_open_close_test() ->
     wait_for_death(Connection).
 
 basic_ack_test() ->
-    Connection = new_connection(),
+    {ok, Connection} = new_connection(),
     {ok, Channel} = amqp_connection:open_channel(Connection),
     {ok, Q} = setup_publish(Channel),
     {#'basic.get_ok'{delivery_tag = Tag}, _}
@@ -310,7 +310,7 @@ basic_ack_test() ->
     teardown(Connection, Channel).
 
 basic_ack_call_test() ->
-    Connection = new_connection(),
+    {ok, Connection} = new_connection(),
     {ok, Channel} = amqp_connection:open_channel(Connection),
     {ok, Q} = setup_publish(Channel),
     {#'basic.get_ok'{delivery_tag = Tag}, _}
@@ -319,7 +319,7 @@ basic_ack_call_test() ->
     teardown(Connection, Channel).
 
 basic_consume_test() ->
-    Connection = new_connection(),
+    {ok, Connection} = new_connection(),
     {ok, Channel} = amqp_connection:open_channel(Connection),
     X = uuid(),
     amqp_channel:call(Channel, #'exchange.declare'{exchange = X}),
@@ -352,7 +352,7 @@ consume_loop(Channel, X, RoutingKey, Parent, Tag) ->
     Parent ! finished.
 
 consume_notification_test() ->
-    Connection = new_connection(),
+    {ok, Connection} = new_connection(),
     {ok, Channel} = amqp_connection:open_channel(Connection),
     Q = uuid(),
     #'queue.declare_ok'{} =
@@ -367,7 +367,7 @@ consume_notification_test() ->
     ok.
 
 basic_recover_test() ->
-    Connection = new_connection(),
+    {ok, Connection} = new_connection(),
     {ok, Channel} = amqp_connection:open_channel(
                         Connection, {amqp_direct_consumer, [self()]}),
     #'queue.declare_ok'{queue = Q} =
@@ -393,7 +393,7 @@ basic_recover_test() ->
     teardown(Connection, Channel).
 
 simultaneous_close_test() ->
-    Connection = new_connection(),
+    {ok, Connection} = new_connection(),
     ChannelNumber = 5,
     {ok, Channel1} = amqp_connection:open_channel(Connection, ChannelNumber),
 
@@ -419,7 +419,8 @@ simultaneous_close_test() ->
     teardown(Connection, Channel2).
 
 channel_tune_negotiation_test() ->
-    amqp_connection:close(new_connection([{channel_max, 10}])).
+    {ok, Connection} = new_connection([{channel_max, 10}]),
+    amqp_connection:close(Connection).
 
 basic_qos_test() ->
     [NoQos, Qos] = [basic_qos_test(Prefetch) || Prefetch <- [0,1]],
@@ -428,7 +429,7 @@ basic_qos_test() ->
     ?assertMatch(true, Qos / NoQos < ExpectedRatio * FudgeFactor).
 
 basic_qos_test(Prefetch) ->
-    Connection = new_connection(),
+    {ok, Connection} = new_connection(),
     Messages = 100,
     Workers = [5, 50],
     Parent = self(),
@@ -490,7 +491,7 @@ producer_loop(Channel, RoutingKey, N) ->
     producer_loop(Channel, RoutingKey, N - 1).
 
 confirm_test() ->
-    Connection = new_connection(),
+    {ok, Connection} = new_connection(),
     {ok, Channel} = amqp_connection:open_channel(Connection),
     #'confirm.select_ok'{} = amqp_channel:call(Channel, #'confirm.select'{}),
     amqp_channel:register_confirm_handler(Channel, self()),
@@ -506,7 +507,7 @@ confirm_test() ->
     teardown(Connection, Channel).
 
 confirm_barrier_test() ->
-    Connection = new_connection(),
+    {ok, Connection} = new_connection(),
     {ok, Channel} = amqp_connection:open_channel(Connection),
     #'confirm.select_ok'{} = amqp_channel:call(Channel, #'confirm.select'{}),
     [amqp_channel:call(Channel, #'basic.publish'{routing_key = <<"whoosh">>},
@@ -516,7 +517,7 @@ confirm_barrier_test() ->
     teardown(Connection, Channel).
 
 confirm_barrier_nop_test() ->
-    Connection = new_connection(),
+    {ok, Connection} = new_connection(),
     {ok, Channel} = amqp_connection:open_channel(Connection),
     true = amqp_channel:wait_for_confirms(Channel),
     amqp_channel:call(Channel, #'basic.publish'{routing_key = <<"whoosh">>},
@@ -525,7 +526,7 @@ confirm_barrier_nop_test() ->
     teardown(Connection, Channel).
 
 default_consumer_test() ->
-    Connection = new_connection(),
+    {ok, Connection} = new_connection(),
     {ok, Channel} = amqp_connection:open_channel(Connection),
     amqp_selective_consumer:register_default_consumer(Channel, self()),
 
@@ -557,7 +558,7 @@ default_consumer_test() ->
     teardown(Connection, Channel).
 
 subscribe_nowait_test() ->
-    Connection = new_connection(),
+    {ok, Connection} = new_connection(),
     {ok, Channel} = amqp_connection:open_channel(Connection),
     {ok, Q} = setup_publish(Channel),
     ok = amqp_channel:call(Channel,
@@ -574,7 +575,7 @@ subscribe_nowait_test() ->
     teardown(Connection, Channel).
 
 basic_nack_test() ->
-    Connection = new_connection(),
+    {ok, Connection} = new_connection(),
     {ok, Channel} = amqp_connection:open_channel(Connection),
     #'queue.declare_ok'{queue = Q}
         = amqp_channel:call(Channel, #'queue.declare'{}),
@@ -596,7 +597,7 @@ basic_nack_test() ->
     teardown(Connection, Channel).
 
 large_content_test() ->
-    Connection = new_connection(),
+    {ok, Connection} = new_connection(),
     {ok, Channel} = amqp_connection:open_channel(Connection),
     #'queue.declare_ok'{queue = Q}
         = amqp_channel:call(Channel, #'queue.declare'{}),
@@ -614,7 +615,7 @@ large_content_test() ->
 %% closing the channel. Then gets the messages back from the queue and expects
 %% all of them to have been sent.
 pub_and_close_test() ->
-    Connection1 = new_connection(just_network),
+    {ok, Connection1} = new_connection(just_network),
     X = uuid(), Q = uuid(), Key = uuid(),
     Payload = <<"eggs">>, NMessages = 50000,
     {ok, Channel1} = amqp_connection:open_channel(Connection1),
@@ -629,7 +630,7 @@ pub_and_close_test() ->
     %% Close connection without closing channels
     amqp_connection:close(Connection1),
     %% Get sent messages back and count them
-    Connection2 = new_connection(just_network),
+    {ok, Connection2} = new_connection(just_network),
     {ok, Channel2} = amqp_connection:open_channel(
                          Connection2, {amqp_direct_consumer, [self()]}),
     amqp_channel:call(Channel2, #'basic.consume'{queue = Q, no_ack = true}),
@@ -678,7 +679,7 @@ pc_consumer_loop(Channel, Payload, NReceived) ->
 %% 7. Allow 10 secs to receive the pause and resume, otherwise timeout and
 %%    fail
 channel_flow_test() ->
-    Connection = new_connection(),
+    {ok, Connection} = new_connection(),
     X = <<"amq.direct">>,
     K = Payload = <<"x">>,
     memsup:set_sysmem_high_watermark(0.99),
@@ -715,7 +716,7 @@ channel_flow_test() ->
 %% This tests whether RPC over AMQP produces the same result as invoking the
 %% same argument against the same underlying gen_server instance.
 rpc_test() ->
-    Connection = new_connection(),
+    {ok, Connection} = new_connection(),
     Q = uuid(),
     Fun = fun(X) -> X + 1 end,
     RPCHandler = fun(X) -> term_to_binary(Fun(binary_to_term(X))) end,
@@ -758,7 +759,7 @@ teardown(Connection, Channel) ->
     wait_for_death(Connection).
 
 teardown_test() ->
-    Connection = new_connection(),
+    {ok, Connection} = new_connection(),
     {ok, Channel} = amqp_connection:open_channel(Connection),
     ?assertMatch(true, is_process_alive(Channel)),
     ?assertMatch(true, is_process_alive(Connection)),
@@ -834,10 +835,7 @@ new_connection(AllowedConnectionTypes, Params) ->
                 make_direct_params([{node, rabbit_misc:makenode(rabbit)}] ++
                                        Params)
         end,
-    case amqp_connection:start(Params1) of
-        {ok, Conn}     -> Conn;
-        {error, _} = E -> E
-    end.
+    amqp_connection:start(Params1).
 
 %% Note: not all amqp_params_network fields supported.
 make_network_params(Props) ->

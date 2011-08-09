@@ -22,7 +22,7 @@
 -compile(export_all).
 
 non_existent_exchange_test() ->
-    Connection = test_util:new_connection(),
+    {ok, Connection} = test_util:new_connection(),
     X = test_util:uuid(),
     RoutingKey = <<"a">>,
     Payload = <<"foobar">>,
@@ -43,7 +43,7 @@ non_existent_exchange_test() ->
     amqp_connection:close(Connection).
 
 bogus_rpc_test() ->
-    Connection = test_util:new_connection(),
+    {ok, Connection} = test_util:new_connection(),
     X = test_util:uuid(),
     Q = test_util:uuid(),
     R = test_util:uuid(),
@@ -62,7 +62,7 @@ bogus_rpc_test() ->
     amqp_connection:close(Connection).
 
 hard_error_test() ->
-    Connection = test_util:new_connection(),
+    {ok, Connection} = test_util:new_connection(),
     {ok, Channel} = amqp_connection:open_channel(Connection),
     {ok, OtherChannel} = amqp_connection:open_channel(Connection),
     OtherChannelMonitor = erlang:monitor(process, OtherChannel),
@@ -88,7 +88,7 @@ hard_error_test() ->
 %% The death of the channel is caused by an error in generating the frames
 %% (writer dies) - only in the network case
 channel_writer_death_test() ->
-    Connection = test_util:new_connection(just_network),
+    {ok, Connection} = test_util:new_connection(just_network),
     {ok, Channel} = amqp_connection:open_channel(Connection),
     Publish = #'basic.publish'{routing_key = <<>>, exchange = <<>>},
     Message = #amqp_msg{props = <<>>, payload = <<>>},
@@ -101,7 +101,7 @@ channel_writer_death_test() ->
 %% connection. The death of the channel is caused by making a call with an
 %% invalid message to the channel process
 channel_death_test() ->
-    Connection = test_util:new_connection(),
+    {ok, Connection} = test_util:new_connection(),
     {ok, Channel} = amqp_connection:open_channel(Connection),
     ?assertExit(_, amqp_channel:call(Channel, bogus_message)),
     test_util:wait_for_death(Channel),
@@ -111,7 +111,7 @@ channel_death_test() ->
 %% Attempting to send a shortstr longer than 255 bytes in a property field
 %% should fail - this only applies to the network case
 shortstr_overflow_property_test() ->
-    Connection = test_util:new_connection(just_network),
+    {ok, Connection} = test_util:new_connection(just_network),
     {ok, Channel} = amqp_connection:open_channel(Connection),
     SentString = << <<"k">> || _ <- lists:seq(1, 340)>>,
     Q = test_util:uuid(), X = test_util:uuid(), Key = test_util:uuid(),
@@ -128,7 +128,7 @@ shortstr_overflow_property_test() ->
 %% Attempting to send a shortstr longer than 255 bytes in a method's field
 %% should fail - this only applies to the network case
 shortstr_overflow_field_test() ->
-    Connection = test_util:new_connection(just_network),
+    {ok, Connection} = test_util:new_connection(just_network),
     {ok, Channel} = amqp_connection:open_channel(Connection),
     SentString = << <<"k">> || _ <- lists:seq(1, 340)>>,
     Q = test_util:uuid(), X = test_util:uuid(), Key = test_util:uuid(),
@@ -145,7 +145,7 @@ shortstr_overflow_field_test() ->
 %% connection is expected to send a '#connection.close{}' to the server with
 %% reply code command_invalid
 command_invalid_over_channel_test() ->
-    Connection = test_util:new_connection(),
+    {ok, Connection} = test_util:new_connection(),
     {ok, Channel} = amqp_connection:open_channel(Connection),
     MonitorRef = erlang:monitor(process, Connection),
     case amqp_connection:info(Connection, [type]) of
@@ -161,7 +161,7 @@ command_invalid_over_channel_test() ->
 %% is expected to send a '#connection.close{}' to the server with reply code
 %% command_invalid - this only applies to the network case
 command_invalid_over_channel0_test() ->
-    Connection = test_util:new_connection(just_network),
+    {ok, Connection} = test_util:new_connection(just_network),
     gen_server:cast(Connection, {method, #'basic.ack'{}, none}),
     MonitorRef = erlang:monitor(process, Connection),
     assert_down_with_error(MonitorRef, command_invalid),
