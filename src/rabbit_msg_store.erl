@@ -770,10 +770,7 @@ handle_cast({write, CRef, MsgId},
                   {write, State1} ->
                       ets:update_counter(CurFileCacheEts, MsgId, {3, -1}),
                       write_message(CRef, MsgId, Msg, State1);
-                  {ignore, CurFile,
-                   State1 = #msstate { current_file = CurFile }} ->
-                      State1;
-                  {ignore, _File, State1} ->
+                  {ignore, State1} ->
                       State1;
                   {confirm, CurFile,
                    State1 = #msstate { current_file = CurFile }} ->
@@ -941,10 +938,8 @@ internal_sync(State = #msstate { current_file_handle = CurHdl,
                end, State1, CGs),
     State2 #msstate { on_sync = [] }.
 
-write_action({true, not_found}, _MsgId, State) ->
-    {ignore, undefined, State};
-write_action({true, #msg_location { file = File }}, _MsgId, State) ->
-    {ignore, File, State};
+write_action({true, _Location}, _MsgId, State) ->
+    {ignore, State};
 write_action({false, not_found}, _MsgId, State) ->
     {write, State};
 write_action({Mask, #msg_location { ref_count = 0, file = File,
@@ -959,7 +954,7 @@ write_action({Mask, #msg_location { ref_count = 0, file = File,
             %% message, but as it is being GC'd currently we'll have
             %% to write a new copy, which will then be younger, so
             %% ignore this write.
-            {ignore, File, State};
+            {ignore, State};
         {_Mask, [#file_summary {}]} ->
             ok = index_update_ref_count(MsgId, 1, State),
             State1 = adjust_valid_total_size(File, TotalSize, State),
