@@ -64,7 +64,9 @@
 %%
 %% 3) start_link({global, Name}, Module, Args) is not available.
 %%
-%% 4) Mnesia is used to hold global state. At some point your
+%% 4) The restart strategy simple_one_for_one is not available.
+%%
+%% 5) Mnesia is used to hold global state. At some point your
 %%    application should invoke create_tables() (or table_definitions()
 %%    if it wants to manage table creation itself).
 %%
