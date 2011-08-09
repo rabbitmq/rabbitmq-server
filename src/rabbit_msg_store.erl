@@ -1077,9 +1077,8 @@ remove_message(MsgId, CRef,
                                   current_file       = CurFile }) ->
     case should_mask_action(CRef, MsgId, State) of
         {true, Location} ->
-            ok = update_msg_cache(CurFileCacheEts, MsgId, undefined, -1),
-            true = maybe_delete_from_cache(CurFileCacheEts, MsgId, Location,
-                                           CurFile),
+            true = eliminate_pending_write(CurFileCacheEts, CurFile, MsgId,
+                                           Location),
             State;
         {false_if_increment, #msg_location { ref_count = 0 } = Location} ->
             %% CRef is dying. If this remove had a corresponding write
@@ -1092,9 +1091,8 @@ remove_message(MsgId, CRef,
             %% CacheRefCount. In either case, it's safe here to
             %% decrement the CacheRefCount as a write either before or
             %% after will not touch the CacheRefCount.
-            ok = update_msg_cache(CurFileCacheEts, MsgId, undefined, -1),
-            true = maybe_delete_from_cache(CurFileCacheEts, MsgId, Location,
-                                           CurFile),
+            true = eliminate_pending_write(CurFileCacheEts, CurFile, MsgId,
+                                           Location),
             State;
         {_Mask, #msg_location { ref_count = RefCount, file = File,
                                 total_size = TotalSize }} when RefCount > 0 ->
@@ -1120,7 +1118,7 @@ remove_message(MsgId, CRef,
                 _ -> ok = Dec(),
                      State
             end;
-        {_Mask, _} ->
+        {_Mask, Location} ->
             %% Either:
             %%
             %% a) The remove has overtaken the write and we have not
@@ -1135,10 +1133,14 @@ remove_message(MsgId, CRef,
             %% Because the remove has arrived first, we know that a
             %% read can't be following so it's ok to remove from the
             %% cache.
-            ok = update_msg_cache(CurFileCacheEts, MsgId, undefined, -1),
-            true = ets:match_delete(CurFileCacheEts, {MsgId, '_', 0}),
+            true = eliminate_pending_write(CurFileCacheEts, CurFile, MsgId,
+                                           Location),
             State
     end.
+
+eliminate_pending_write(CurFileCacheEts, CurFile, MsgId, Location) ->
+    ok = update_msg_cache(CurFileCacheEts, MsgId, undefined, -1),
+    true = maybe_delete_from_cache(CurFileCacheEts, MsgId, Location, CurFile).
 
 maybe_delete_from_cache(_CurFileCacheEts, _MsgId,
                         #msg_location { file = CurFile }, CurFile) ->
