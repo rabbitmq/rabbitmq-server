@@ -305,8 +305,7 @@ handle_event(#event{type = queue_stats, props = Stats, timestamp = Timestamp},
 handle_event(Event = #event{type = queue_deleted}, State) ->
     handle_deleted(queue_stats, Event, State);
 
-handle_event(#event{type = Type, props = Stats}, State)
-  when Type =:= connection_created orelse Type =:= connection_exists ->
+handle_event(#event{type = connection_created, props = Stats}, State) ->
     Name = rabbit_mgmt_format:connection(Stats),
     handle_created(
       connection_stats, [{name, Name} | proplists:delete(name, Stats)],
@@ -324,9 +323,8 @@ handle_event(#event{type = connection_stats, props = Stats,
 handle_event(Event = #event{type = connection_closed}, State) ->
     handle_deleted(connection_stats, Event, State);
 
-handle_event(#event{type = Type, props = Stats},
-             State = #state{tables = Tables})
-  when Type =:= channel_created orelse Type =:= channel_exists ->
+handle_event(#event{type = channel_created, props = Stats},
+             State = #state{tables = Tables}) ->
     ConnTable = orddict:fetch(connection_stats, Tables),
     Conn = lookup_element(ConnTable, {id(pget(connection, Stats)), create}),
     Name = rabbit_mgmt_format:print("~s:~w",
@@ -350,8 +348,7 @@ handle_event(Event = #event{type = channel_closed,
         Type <- ?FINE_STATS_TYPES],
     {ok, State};
 
-handle_event(#event{type = Type, props = Props}, State)
-  when Type =:= consumer_created orelse Type =:= consumer_exists ->
+handle_event(#event{type = consumer_created, props = Props}, State) ->
     handle_consumer(fun(Table, Id, P) -> ets:insert(Table, {Id, P}) end,
                     Props, State);
 
