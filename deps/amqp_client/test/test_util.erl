@@ -229,7 +229,12 @@ get_and_assert_equals(Channel, Q, Payload, NoAck) ->
     GetOk.
 
 basic_get_test() ->
-    Connection = new_connection(),
+    basic_get_test1(new_connection()).
+
+basic_get_ipv6_test() ->
+    basic_get_test1(new_connection(just_network, [{host, "::1"}])).
+
+basic_get_test1(Connection) ->
     {ok, Channel} = amqp_connection:open_channel(Connection),
     {ok, Q} = setup_publish(Channel),
     get_and_assert_equals(Channel, Q, <<"foobar">>),
@@ -843,7 +848,8 @@ make_network_params(Props) ->
                          password     = Pgv(password, <<"guest">>),
                          virtual_host = Pgv(virtual_host, <<"/">>),
                          channel_max  = Pgv(channel_max, 0),
-                         ssl_options  = Pgv(ssl_options, none)}.
+                         ssl_options  = Pgv(ssl_options, none),
+                         host         = Pgv(host, "localhost")}.
 
 %% Note: not all amqp_params_direct fields supported.
 make_direct_params(Props) ->

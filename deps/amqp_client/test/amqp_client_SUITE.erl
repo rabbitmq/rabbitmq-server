@@ -34,6 +34,7 @@
 %%---------------------------------------------------------------------------
 
 basic_get_test_()                       -> ?RUN([]).
+basic_get_ipv6_test_()                  -> ?RUN([]).
 basic_return_test_()                    -> ?RUN([]).
 simultaneous_close_test_()              -> ?RUN([repeat, {timeout, 60}]).
 basic_qos_test_()                       -> ?RUN([]).

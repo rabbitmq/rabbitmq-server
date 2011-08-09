@@ -108,7 +108,7 @@ ifdef SSL_CERTS_DIR
 SSL := true
 ALL_SSL := { $(MAKE) test_ssl || OK=false; }
 ALL_SSL_COVERAGE := { $(MAKE) test_ssl_coverage || OK=false; }
-SSL_BROKER_ARGS := -rabbit ssl_listeners [{\\\"0.0.0.0\\\",5671}] \
+SSL_BROKER_ARGS := -rabbit ssl_listeners [{\\\"0.0.0.0\\\",5671},{\\\"::1\\\",5671}] \
 	-rabbit ssl_options [{cacertfile,\\\"$(SSL_CERTS_DIR)/testca/cacert.pem\\\"},{certfile,\\\"$(SSL_CERTS_DIR)/server/cert.pem\\\"},{keyfile,\\\"$(SSL_CERTS_DIR)/server/key.pem\\\"},{verify,verify_peer},{fail_if_no_peer_cert,true}]
 SSL_CLIENT_ARGS := -erlang_client_ssl_dir $(SSL_CERTS_DIR)
 else
@@ -159,7 +159,7 @@ $(DIST_DIR)/$(PACKAGE_NAME_EZ): $(TARGETS) $(EBIN_DIR)/$(PACKAGE).app | $(DIST_D
 	cp -r $(EBIN_DIR)/*.app $(DIST_DIR)/$(PACKAGE_DIR)/$(EBIN_DIR)
 	mkdir -p $(DIST_DIR)/$(PACKAGE_DIR)/$(INCLUDE_DIR)
 	cp -r $(INCLUDE_DIR)/* $(DIST_DIR)/$(PACKAGE_DIR)/$(INCLUDE_DIR)
-	(cd $(DIST_DIR); zip -r $(PACKAGE_NAME_EZ) $(PACKAGE_DIR))
+	(cd $(DIST_DIR); zip -q -r $(PACKAGE_NAME_EZ) $(PACKAGE_DIR))
 
 package: $(DIST_DIR)/$(PACKAGE_NAME_EZ)
 
@@ -170,7 +170,7 @@ package: $(DIST_DIR)/$(PACKAGE_NAME_EZ)
 $(DEPS_DIR)/$(COMMON_PACKAGE_DIR): $(DIST_DIR)/$(COMMON_PACKAGE_EZ) | $(DEPS_DIR)
 	rm -rf $(DEPS_DIR)/$(COMMON_PACKAGE_DIR)
 	mkdir -p $(DEPS_DIR)/$(COMMON_PACKAGE_DIR)
-	unzip -o $< -d $(DEPS_DIR)
+	unzip -q -o $< -d $(DEPS_DIR)
 
 $(DEPS_FILE): $(SOURCES) $(INCLUDES)
 	rm -f $@

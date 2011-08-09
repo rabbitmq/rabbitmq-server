@@ -43,7 +43,7 @@
 %% Interface
 %%---------------------------------------------------------------------------
 
-%% @type ok_error() = {ok, state()} | {error, reason(), state()}
+%% @type ok_error() = {ok, state()} | {error, reason(), state()}.
 %% Denotes a successful or an error return from a consumer module call.
 
 start_link(ConsumerModule, ExtraParams) ->
