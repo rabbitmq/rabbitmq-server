@@ -1366,7 +1366,7 @@ update_msg_cache(CacheEts, MsgId, Msg, N) when N =:= -1 orelse N =:= 1 ->
         true  -> ok;
         false -> safe_ets_update_counter(
                    CacheEts, MsgId, {3, N},
-                   fun (1) when N > 0 ->
+                   fun (M) when M =:= N ->
                            true = ets:update_element(CacheEts, MsgId, {2, Msg}),
                            ok;
                        (_) ->
