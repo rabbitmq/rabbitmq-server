@@ -415,9 +415,13 @@ handle_consumer(Fun, Props,
 
 handle_slave_synchronised(MPid, SSPid, State = #state{tables = Tables}) ->
     Table = orddict:fetch(queue_stats, Tables),
+    SSNode = node(SSPid),
     Synced = case ets:lookup(Table, {MPid, synchronised_slaves}) of
-                 ([])            -> [SSPid];
-                 ([{_, SSPids}]) -> [SSPid | SSPids]
+                 []             -> [SSNode];
+                 [{_, SSNodes}] -> case lists:member(SSNode, SSNodes) of
+                                       true  -> [SSNodes];
+                                       false -> [SSNode | SSNodes]
+                                   end
              end,
     ets:insert(Table, {{MPid, synchronised_slaves}, Synced}),
     {ok, State}.
@@ -425,8 +429,8 @@ handle_slave_synchronised(MPid, SSPid, State = #state{tables = Tables}) ->
 handle_slave_promoted(OldMPid, NewMPid, State = #state{tables = Tables}) ->
     Table = orddict:fetch(queue_stats, Tables),
     Synced = case ets:lookup(Table, {OldMPid, synchronised_slaves}) of
-                 ([])            -> [];
-                 ([{_, SSPids}]) -> SSPids -- [NewMPid]
+                 []             -> [];
+                 [{_, SSNodes}] -> SSNodes -- [node(NewMPid)]
              end,
     ets:delete(Table, {OldMPid, synchronised_slaves}),
     ets:insert(Table, {{NewMPid, synchronised_slaves}, Synced}),
@@ -562,7 +566,7 @@ synchronised_slaves_fun(#state{tables = Tables}) ->
     fun (Props) -> Key = {pget(pid, Props), synchronised_slaves},
                    case ets:lookup(Table, Key) of
                        []       -> [];
-                       [{_, S}] -> [{synchronised_slave_pids, S}]
+                       [{_, N}] -> [{synchronised_slave_nodes, N}]
                    end
     end.
 

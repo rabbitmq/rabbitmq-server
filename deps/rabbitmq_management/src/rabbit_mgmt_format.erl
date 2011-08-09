@@ -322,9 +322,7 @@ strip_pids(Item = [T | _]) when is_tuple(T) ->
     format(Item,
            [{fun node_from_pid/1, [pid]},
             {fun remove/1,        [connection, owner_pid, queue, channel]},
-            {nodes_from_pids(slave_nodes), [slave_pids]},
-            {nodes_from_pids(synchronised_slave_nodes),
-             [synchronised_slave_pids]}
+            {nodes_from_pids(slave_nodes), [slave_pids]}
            ]);
 
 strip_pids(Items) -> [strip_pids(I) || I <- Items].
