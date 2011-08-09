@@ -734,35 +734,12 @@ handle_cast({write, CRef, MsgId},
             State = #msstate { cur_file_cache_ets = CurFileCacheEts }) ->
     case ets:lookup(CurFileCacheEts, MsgId) of
         [] ->
-            %% A remove overtook a write, but other writes were going
-            %% on which meant that one of the ets:delete_object calls
-            %% below removed the entry from the CurFileCacheEts. Hence
-            %% the empty list. Something like:
-            %%
-            %% q1 sent write (pending write count: 1),
-            %% q2 sent write (pending write count: 2),
-            %% q3 sent write (pending write count: 3),
-            %%
-            %% q1 sends remove, which overtakes all writes and is
-            %%     processed by msg_store, which does not know about
-            %%     the msg yet: now pending write count is 2,
-            %%
-            %% msg store processes q1's write (pending write count: 1
-            %%     and msg store now knows about msg, and the cur file
-            %%     is rolled over)
-            %%
-            %% msg store processes q2's write (pending write count
-            %%     falls to 0 and, because we already know about the
-            %%     msg we fall into the lower 'confirm' branch and do
-            %%     the ets:delete_object)
-            %%
-            %% msg store processes q3's write. But there is now no
-            %%     entry in cur_file_cache_ets and so we end up
-            %%     here. Note though that at this point, the msg_store
-            %%     knows of the msg, and the msg has a refcount of 2,
-            %%     which is exactly what is required.
+            %% Simplest cause for arriving here is that a remove
+            %% overtook a write, and when we processed the remove, we
+            %% decremented the pending write count, which went to 0,
+            %% and was then removed from the cache.
             noreply(State);
-        [{MsgId, Msg, CacheRefCount}] when 0 < CacheRefCount ->
+        [{MsgId, Msg, CacheRefCount}] when CacheRefCount > 0 ->
             true = Msg =/= undefined, %% ASSERTION
             noreply(
               case write_action(should_mask_action(CRef, MsgId, State), MsgId,
@@ -1130,14 +1107,12 @@ remove_message(MsgId, CRef,
             State
     end.
 
-decrement_cache(CurFileCacheEts, CurFile, MsgId, Location) ->
+decrement_cache(CurFileCacheEts, CurFile, MsgId,
+                #msg_location { file = CurFile }) ->
     ok = update_msg_cache(CurFileCacheEts, MsgId, undefined, -1),
-    true = maybe_delete_from_cache(CurFileCacheEts, MsgId, Location, CurFile).
-
-maybe_delete_from_cache(_CurFileCacheEts, _MsgId,
-                        #msg_location { file = CurFile }, CurFile) ->
     true;
-maybe_delete_from_cache(CurFileCacheEts, MsgId, _, _CurFile) ->
+decrement_cache(CurFileCacheEts, _CurFile, MsgId, _Location) ->
+    ok = update_msg_cache(CurFileCacheEts, MsgId, undefined, -1),
     true = ets:match_delete(CurFileCacheEts, {MsgId, '_', 0}).
 
 add_to_pending_gc_completion(
