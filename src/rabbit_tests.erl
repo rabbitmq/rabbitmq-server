@@ -1446,25 +1446,32 @@ test_statistics() ->
 test_refresh_events(SecondaryNode) ->
     %% Just make sure we don't have some other events ready to consume...
     drain_mbx(),
-    Expect = fun (Ch, Type) ->
-                     receive #event{type = Type, props = Props} ->
-                             Ch = pget(pid, Props)
-                     after 1000 -> throw({failed_to_receive_event, Type})
-                     end
+    Expect0 = fun (Pid, Type) ->
+                      receive #event{type = Type, props = Props} ->
+                              Pid = pget(pid, Props)
+                      after 1000 -> throw({failed_to_receive_event, Type})
+                      end
+              end,
+    Expect = fun (Pid, Type) ->
+                     Expect0(Pid, Type),
+                     rabbit:force_event_refresh(),
+                     Expect0(Pid, Type)
              end,
+
     rabbit_tests_event_receiver:start(self(), [node(), SecondaryNode]),
 
     {_Writer, Ch} = test_spawn(),
-    Expect(Ch, channel_created),
-    rabbit:force_event_refresh(),
     Expect(Ch, channel_created),
     rabbit_channel:shutdown(Ch),
 
     {_Writer2, Ch2} = test_spawn(SecondaryNode),
     Expect(Ch2, channel_created),
-    rabbit:force_event_refresh(),
-    Expect(Ch2, channel_created),
     rabbit_channel:shutdown(Ch2),
+
+    {new, #amqqueue { pid = QPid } = Q} =
+        rabbit_amqqueue:declare(test_queue(), false, false, [], none),
+    Expect(QPid, queue_created),
+    rabbit_amqqueue:delete(Q, false, false),
 
     rabbit_tests_event_receiver:stop(),
     passed.
