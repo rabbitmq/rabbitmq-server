@@ -32,10 +32,11 @@
 -module(rabbit_stomp_util).
 
 -export([parse_destination/1, parse_routing_information/1,
-         parse_message_id/1]).
+         parse_message_id/1, durable_subscription_queue/2]).
 -export([longstr_field/2]).
 -export([ack_mode/1, consumer_tag/1, message_headers/4, message_properties/1]).
 -export([negotiate_version/2]).
+-export([valid_dest_prefixes/0]).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_stomp_frame.hrl").
@@ -43,6 +44,14 @@
 -define(QUEUE_PREFIX, "/queue").
 -define(TOPIC_PREFIX, "/topic").
 -define(EXCHANGE_PREFIX, "/exchange").
+-define(AMQQUEUE_PREFIX, "/amq/queue").
+-define(TEMP_QUEUE_PREFIX, "/temp-queue").
+%% reply queues names can have slashes in the content so no further
+%% parsing happens.
+-define(REPLY_QUEUE_PREFIX, "/reply-queue/").
+
+-define(VALID_DEST_PREFIXES, [?EXCHANGE_PREFIX, ?TOPIC_PREFIX, ?QUEUE_PREFIX,
+                    ?AMQQUEUE_PREFIX, ?TEMP_QUEUE_PREFIX, ?REPLY_QUEUE_PREFIX]).
 
 -define(MESSAGE_ID_SEPARATOR, "@@").
 -define(HEADER_CONTENT_TYPE, "content-type").
@@ -112,10 +121,10 @@ message_headers(Destination, SessionId,
                   maybe_header(Header, element(Index, Props), Acc)
           end,
           case ConsumerTag of
-              <<"Q_",  _/binary>> ->
-                  Basic;
               <<"T_", Id/binary>> ->
-                  [{"subscription", binary_to_list(Id)} | Basic]
+                  [{"subscription", binary_to_list(Id)} | Basic];
+              _ ->
+                  Basic
           end,
           [{?HEADER_CONTENT_TYPE,     #'P_basic'.content_type},
            {?HEADER_CONTENT_ENCODING, #'P_basic'.content_encoding},
@@ -224,6 +233,13 @@ parse_destination(?QUEUE_PREFIX ++ Rest) ->
     parse_simple_destination(queue, Rest);
 parse_destination(?TOPIC_PREFIX ++ Rest) ->
     parse_simple_destination(topic, Rest);
+parse_destination(?AMQQUEUE_PREFIX ++ Rest) ->
+    parse_simple_destination(amqqueue, Rest);
+parse_destination(?TEMP_QUEUE_PREFIX ++ Rest) ->
+    parse_simple_destination(temp_queue, Rest);
+parse_destination(?REPLY_QUEUE_PREFIX ++ Rest) ->
+    %% reply queue names might have slashes
+    {ok, {reply_queue, Rest}};
 parse_destination(?EXCHANGE_PREFIX ++ Rest) ->
     case parse_content(Rest) of
         %% One cannot refer to the default exchange this way; it has
@@ -240,10 +256,17 @@ parse_routing_information({exchange, {Name, undefined}}) ->
     {Name, ""};
 parse_routing_information({exchange, {Name, Pattern}}) ->
     {Name, Pattern};
-parse_routing_information({queue, Name}) ->
-    {"", Name};
 parse_routing_information({topic, Name}) ->
-    {"amq.topic", Name}.
+    {"amq.topic", Name};
+parse_routing_information({Type, Name})
+  when Type =:= queue orelse Type =:= reply_queue orelse Type =:= amqqueue ->
+    {"", Name}.
+
+valid_dest_prefixes() -> ?VALID_DEST_PREFIXES.
+
+durable_subscription_queue(Destination, SubscriptionId) ->
+    <<(list_to_binary("stomp.dsub." ++ Destination ++ "."))/binary,
+      (erlang:md5(SubscriptionId))/binary>>.
 
 %% ---- Destination parsing helpers ----
 

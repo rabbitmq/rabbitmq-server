@@ -95,17 +95,23 @@ class WaitableListener(object):
 
     def reset(self, count=1):
         if self.debug:
-            print '(reset listener)',
-            print '#messages:', len(self.messages),
-            print '#errors:', len(self.errors),
-            print '#receipts:', len(self.receipts), 'Now expecting:', count
+            self.print_state('(reset listener--old state)')
         self.messages = []
         self.errors = []
         self.receipts = []
         self.latch = Latch(count)
+        if self.debug:
+            self.print_state('(reset listener--new state)')
 
     def await(self, timeout=10):
         return self.latch.await(timeout)
+
+    def print_state(self, hdr=""):
+        print hdr,
+        print '#messages:', len(self.messages),
+        print '#errors:', len(self.errors),
+        print '#receipts:', len(self.receipts),
+        print 'Remaining count:', self.latch.get_count()
 
 class Latch(object):
 
@@ -134,3 +140,9 @@ class Latch(object):
       finally:
          self.cond.release()
 
+   def get_count(self):
+      try:
+          self.cond.acquire()
+          return self.count
+      finally:
+          self.cond.release()

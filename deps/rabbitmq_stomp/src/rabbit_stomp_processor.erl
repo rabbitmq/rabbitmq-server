@@ -42,7 +42,7 @@
 -record(state, {socket, session_id, channel,
                 connection, subscriptions, version,
                 start_heartbeat_fun, pending_receipts,
-                config}).
+                config, reply_queues}).
 
 -record(subscription, {dest_hdr, channel, multi_ack, description}).
 
@@ -76,7 +76,8 @@ init([Sock, StartHeartbeatFun, Configuration]) ->
        version             = none,
        start_heartbeat_fun = StartHeartbeatFun,
        pending_receipts    = undefined,
-       config              = Configuration},
+       config              = Configuration,
+       reply_queues        = dict:new()},
      hibernate,
      {backoff, 1000, 1000, 10000}
     }.
@@ -108,7 +109,10 @@ handle_cast(_Request, State = #state{channel = none,
 handle_cast({Command, Frame}, State) ->
     process_request(
       fun(StateN) ->
-              handle_frame(Command, Frame, StateN)
+              case validate_frame(Command, Frame, StateN) of
+                  R = {error, _, _, _} -> R;
+                  _                    -> handle_frame(Command, Frame, StateN)
+              end
       end,
       fun(StateM) ->
               ensure_receipt(Frame, StateM)
@@ -201,6 +205,23 @@ process_connect(Implicit,
       State).
 
 %%----------------------------------------------------------------------------
+%% Frame Validation
+%%----------------------------------------------------------------------------
+
+validate_frame(Command, Frame, State)
+  when Command =:= "SUBSCRIBE" orelse Command =:= "UNSUBSCRIBE" ->
+    Hdr = fun(Name) -> rabbit_stomp_frame:header(Frame, Name) end,
+    case {Hdr("persistent"), Hdr("id")} of
+        {{ok, "true"}, not_found} ->
+            error("Missing Header",
+                  "Header 'id' is required for durable subscriptions", State);
+        _ ->
+            ok(State)
+    end;
+validate_frame(_Command, _Frame, State) ->
+    ok(State).
+
+%%----------------------------------------------------------------------------
 %% Frame handlers
 %%----------------------------------------------------------------------------
 
@@ -213,7 +234,7 @@ handle_frame("SUBSCRIBE", Frame, State) ->
 
 handle_frame("UNSUBSCRIBE", Frame, State) ->
     ConsumerTag = rabbit_stomp_util:consumer_tag(Frame),
-    cancel_subscription(ConsumerTag, State);
+    cancel_subscription(ConsumerTag, Frame, State);
 
 handle_frame("SEND", Frame, State) ->
     with_destination("SEND", Frame, State, fun do_send/4);
@@ -277,12 +298,12 @@ ack_action(Command, Frame,
 %% Internal helpers for processing frames callbacks
 %%----------------------------------------------------------------------------
 
-cancel_subscription({error, _}, State) ->
+cancel_subscription({error, _}, _Frame, State) ->
     error("Missing destination or id",
           "UNSUBSCRIBE must include a 'destination' or 'id' header\n",
           State);
 
-cancel_subscription({ok, ConsumerTag, Description},
+cancel_subscription({ok, ConsumerTag, Description}, Frame,
                     State = #state{channel       = MainChannel,
                                    subscriptions = Subs}) ->
     case dict:find(ConsumerTag, Subs) of
@@ -292,14 +313,14 @@ cancel_subscription({ok, ConsumerTag, Description},
                   "Subscription to ~p not found.\n",
                   [Description],
                   State);
-        {ok, #subscription{channel = SubChannel}} ->
+        {ok, #subscription{dest_hdr = DestHdr, channel = SubChannel}} ->
             case amqp_channel:call(SubChannel,
                                    #'basic.cancel'{
                                      consumer_tag = ConsumerTag}) of
                 #'basic.cancel_ok'{consumer_tag = ConsumerTag} ->
+                    ok = ensure_subchannel_closed(SubChannel, MainChannel),
                     NewSubs = dict:erase(ConsumerTag, Subs),
-                    ensure_subchannel_closed(SubChannel,
-                                             MainChannel,
+                    maybe_delete_durable_sub(DestHdr, Frame,
                                              State#state{
                                                subscriptions = NewSubs});
                 _ ->
@@ -310,13 +331,32 @@ cancel_subscription({ok, ConsumerTag, Description},
             end
     end.
 
-ensure_subchannel_closed(SubChannel, MainChannel, State)
-  when SubChannel == MainChannel ->
-    ok(State);
+maybe_delete_durable_sub(DestHdr, Frame, State = #state{channel = Channel}) ->
+    case rabbit_stomp_util:parse_destination(DestHdr) of
+        {ok, {topic, Name}} ->
+            case rabbit_stomp_frame:boolean_header(Frame,
+                                                   "persistent", false) of
+                true ->
+                    {ok, Id} = rabbit_stomp_frame:header(Frame, "id"),
+                    QName =
+                        rabbit_stomp_util:durable_subscription_queue(Name, Id),
+                    amqp_channel:call(Channel, #'queue.delete'{queue  = QName,
+                                                               nowait = false}),
+                    ok(State);
+                false ->
+                    ok(State)
+            end;
+        _ ->
+            ok(State)
+    end.
 
-ensure_subchannel_closed(SubChannel, _MainChannel, State) ->
+ensure_subchannel_closed(SubChannel, MainChannel)
+  when SubChannel == MainChannel ->
+    ok;
+
+ensure_subchannel_closed(SubChannel, _MainChannel) ->
     amqp_channel:close(SubChannel),
-    ok(State).
+    ok.
 
 with_destination(Command, Frame, State, Fun) ->
     case rabbit_stomp_frame:header(Frame, "destination") of
@@ -333,7 +373,8 @@ with_destination(Command, Frame, State, Fun) ->
                     error("Unknown destination",
                           "'~s' is not a valid destination.\n" ++
                               "Valid destination types are: " ++
-                              "/exchange, /topic or /queue.\n",
+                   string:join(rabbit_stomp_util:valid_dest_prefixes(),", ") ++
+                              ".\n",
                           [Content],
                           State)
             end;
@@ -443,7 +484,7 @@ do_subscribe(Destination, DestHdr, Frame,
 
     {AckMode, IsMulti} = rabbit_stomp_util:ack_mode(Frame),
 
-    {ok, Queue} = ensure_queue(subscribe, Destination, Channel),
+    {ok, Queue} = ensure_queue(subscribe, Destination, Frame, Channel),
 
     {ok, ConsumerTag, Description} = rabbit_stomp_util:consumer_tag(Frame),
 
@@ -469,9 +510,11 @@ do_subscribe(Destination, DestHdr, Frame,
 do_send(Destination, _DestHdr,
         Frame = #stomp_frame{body_iolist = BodyFragments},
         State = #state{channel = Channel}) ->
-    {ok, _Q} = ensure_queue(send, Destination, Channel),
+    {ok, _Q} = ensure_queue(send, Destination, Frame, Channel),
 
-    Props = rabbit_stomp_util:message_properties(Frame),
+    {Frame1, State1} = ensure_reply_to(Frame, State),
+
+    Props = rabbit_stomp_util:message_properties(Frame1),
 
     {Exchange, RoutingKey} =
         rabbit_stomp_util:parse_routing_information(Destination),
@@ -482,17 +525,17 @@ do_send(Destination, _DestHdr,
       mandatory = false,
       immediate = false},
 
-    case transactional(Frame) of
+    case transactional(Frame1) of
         {yes, Transaction} ->
             extend_transaction(Transaction,
                                fun(StateN) ->
-                                       maybe_record_receipt(Frame, StateN)
+                                       maybe_record_receipt(Frame1, StateN)
                                end,
                                {Method, Props, BodyFragments},
-                               State);
+                               State1);
         no ->
             ok(send_method(Method, Props, BodyFragments,
-                           maybe_record_receipt(Frame, State)))
+                           maybe_record_receipt(Frame1, State1)))
     end.
 
 create_ack_method(DeliveryTag, #subscription{multi_ack = IsMulti}) ->
@@ -571,6 +614,63 @@ default_prefetch({queue, _}) ->
     ?DEFAULT_QUEUE_PREFETCH;
 default_prefetch(_) ->
     undefined.
+
+%%----------------------------------------------------------------------------
+%% Reply-To
+%%----------------------------------------------------------------------------
+ensure_reply_to(Frame = #stomp_frame{headers = Headers}, State) ->
+    case rabbit_stomp_frame:header(Frame, "reply-to") of
+        not_found ->
+            {Frame, State};
+        {ok, ReplyTo} ->
+            {ok, Destination} = rabbit_stomp_util:parse_destination(ReplyTo),
+            case Destination of
+                {temp_queue, TempQueueId} ->
+                    {ReplyQueue, State1} =
+                        ensure_reply_queue(TempQueueId, State),
+                    {Frame#stomp_frame{
+                       headers = lists:keyreplace("reply-to", 1, Headers,
+                                                  {"reply-to", ReplyQueue})},
+                     State1};
+                _ ->
+                    {Frame, State}
+            end
+    end.
+
+ensure_reply_queue(TempQueueId, State = #state{channel       = Channel,
+                                               reply_queues  = RQS,
+                                               subscriptions = Subs}) ->
+    case dict:find(TempQueueId, RQS) of
+        {ok, RQ} ->
+            {RQ, RQS};
+        error ->
+            #'queue.declare_ok'{queue = Queue} =
+                amqp_channel:call(Channel,
+                                  #'queue.declare'{auto_delete = true,
+                                                   exclusive   = true}),
+
+            #'basic.consume_ok'{consumer_tag = ConsumerTag} =
+                amqp_channel:subscribe(Channel,
+                                       #'basic.consume'{
+                                         queue  = Queue,
+                                         no_ack = true,
+                                         nowait = false},
+                                       self()),
+
+            Destination = "/reply-queue/" ++ binary_to_list(Queue),
+
+            %% synthesise a subscription to the reply queue destination
+            Subs1 = dict:store(ConsumerTag,
+                               #subscription{dest_hdr    = Destination,
+                                             channel     = Channel,
+                                             multi_ack   = false},
+                               Subs),
+
+            {Destination, State#state{
+                            reply_queues  = dict:store(TempQueueId, Queue, RQS),
+                            subscriptions = Subs1}}
+    end.
+
 
 %%----------------------------------------------------------------------------
 %% Receipt Handling
@@ -747,16 +847,16 @@ millis_to_seconds(M) ->
 %% Queue and Binding Setup
 %%----------------------------------------------------------------------------
 
-ensure_queue(subscribe, {exchange, _}, Channel) ->
+ensure_queue(subscribe, {exchange, _}, _Frame, Channel) ->
     %% Create anonymous, exclusive queue for SUBSCRIBE on /exchange destinations
     #'queue.declare_ok'{queue = Queue} =
         amqp_channel:call(Channel, #'queue.declare'{auto_delete = true,
                                                     exclusive = true}),
     {ok, Queue};
-ensure_queue(send, {exchange, _}, _Channel) ->
+ensure_queue(send, {exchange, _}, _Frame, _Channel) ->
     %% Don't create queues on SEND for /exchange destinations
     {ok, undefined};
-ensure_queue(_, {queue, Name}, Channel) ->
+ensure_queue(_, {queue, Name}, _Frame, Channel) ->
     %% Always create named queue for /queue destinations
     Queue = list_to_binary(Name),
     amqp_channel:cast(Channel,
@@ -764,15 +864,30 @@ ensure_queue(_, {queue, Name}, Channel) ->
                                        queue   = Queue,
                                        nowait  = true}),
     {ok, Queue};
-ensure_queue(subscribe, {topic, _}, Channel) ->
-    %% Create anonymous, exclusive queue for SUBSCRIBE on /topic destinations
+ensure_queue(subscribe, {topic, Name}, Frame, Channel) ->
+    %% Create queue for SUBSCRIBE on /topic destinations Queues are
+    %% anonymous, auto_delete and exclusive for transient
+    %% subscriptions. Durable subscriptions get shared, named, durable
+    %% queues.
+    Method =
+        case rabbit_stomp_frame:boolean_header(Frame, "persistent", false) of
+            true  ->
+                {ok, Id} = rabbit_stomp_frame:header(Frame, "id"),
+                QName = rabbit_stomp_util:durable_subscription_queue(Name, Id),
+                #'queue.declare'{durable = true, queue = QName};
+            false ->
+                #'queue.declare'{auto_delete = true, exclusive = true}
+        end,
+
     #'queue.declare_ok'{queue = Queue} =
-        amqp_channel:call(Channel, #'queue.declare'{auto_delete = true,
-                                                    exclusive = true}),
+        amqp_channel:call(Channel, Method),
     {ok, Queue};
-ensure_queue(send, {topic, _}, _Channel) ->
+ensure_queue(send, {topic, _}, _Frame, _Channel) ->
     %% Don't create queues on SEND for /topic destinations
-    {ok, undefined}.
+    {ok, undefined};
+ensure_queue(_, {Type, Name}, _Frame, _Channel)
+  when Type =:= reply_queue orelse Type =:= amqqueue ->
+    {ok, list_to_binary(Name)}.
 
 ensure_queue_binding(QueueBin, {"", Queue}, _Channel) ->
     %% i.e., we should only be asked to bind to the default exchange a

@@ -1,6 +1,7 @@
 import base
 import stomp
 import unittest
+import time
 
 class TestReliability(base.BaseTest):
 
@@ -20,10 +21,14 @@ class TestReliability(base.BaseTest):
 
             for x in range(0, count):
                 pub_conn.send(msg + str(x), destination=d)
-
+            time.sleep(2.0)
             pub_conn.close_socket()
-            self.assertTrue(listener.await(10))
-            self.assertEquals(count, len(listener.messages))
+
+            if listener.await(30):
+                self.assertEquals(count, len(listener.messages))
+            else:
+                listener.print_state("Final state of listener:")
+                self.fail("Did not receive %s messages in time" % count)
         finally:
             if pub_conn.is_connected():
                 pub_conn.disconnect()
