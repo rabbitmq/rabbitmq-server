@@ -170,9 +170,9 @@ handle_call({gm_deaths, Deaths}, From,
         {error, not_found} ->
             gen_server2:reply(From, ok),
             {stop, normal, State};
-        {ok, Pid, OldPid, DeadPids} ->
-            rabbit_mirror_queue_misc:report_deaths(false, QueueName, OldPid,
-                                                   DeadPids),
+        {ok, Pid, DeadPids} ->
+            rabbit_mirror_queue_misc:report_deaths(self(), false, QueueName,
+                                                   MPid, DeadPids),
             if node(Pid) =:= node(MPid) ->
                     %% master hasn't changed
                     reply(ok, State);
