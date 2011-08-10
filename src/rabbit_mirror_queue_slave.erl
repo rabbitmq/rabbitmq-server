@@ -164,28 +164,27 @@ handle_call({gm_deaths, Deaths}, From,
             State = #state { q          = #amqqueue { name = QueueName },
                              gm         = GM,
                              master_pid = MPid }) ->
-    rabbit_log:info("Mirrored-queue (~s): Slave ~s saw deaths of mirrors ~s~n",
-                    [rabbit_misc:rs(QueueName),
-                     rabbit_misc:pid_to_string(self()),
-                     [[rabbit_misc:pid_to_string(Pid), $ ] || Pid <- Deaths]]),
     %% The GM has told us about deaths, which means we're not going to
     %% receive any more messages from GM
     case rabbit_mirror_queue_misc:remove_from_queue(QueueName, Deaths) of
-        {ok, Pid} when node(Pid) =:= node(MPid) ->
-            %% master hasn't changed
-            reply(ok, State);
-        {ok, Pid} when node(Pid) =:= node() ->
-            %% we've become master
-            promote_me(From, State);
-        {ok, Pid} ->
-            %% master has changed to not us.
-            gen_server2:reply(From, ok),
-            erlang:monitor(process, Pid),
-            ok = gm:broadcast(GM, heartbeat),
-            noreply(State #state { master_pid = Pid });
         {error, not_found} ->
             gen_server2:reply(From, ok),
-            {stop, normal, State}
+            {stop, normal, State};
+        {ok, Pid, DeadPids} ->
+            rabbit_mirror_queue_misc:report_deaths(false, QueueName, DeadPids),
+            if node(Pid) =:= node(MPid) ->
+                    %% master hasn't changed
+                    reply(ok, State);
+               node(Pid) =:= node() ->
+                    %% we've become master
+                    promote_me(From, State);
+               true ->
+                    %% master has changed to not us.
+                    gen_server2:reply(From, ok),
+                    erlang:monitor(process, Pid),
+                    ok = gm:broadcast(GM, heartbeat),
+                    noreply(State #state { master_pid = Pid })
+            end
     end;
 
 handle_call(info, _From, State) ->
@@ -282,6 +281,7 @@ handle_pre_hibernate(State = #state { backing_queue       = BQ,
 
 prioritise_call(Msg, _From, _State) ->
     case Msg of
+        info                                 -> 9;
         {gm_deaths, _Deaths}                 -> 5;
         _                                    -> 0
     end.

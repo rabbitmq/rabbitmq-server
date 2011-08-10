@@ -55,7 +55,7 @@
 %%
 %% A queue with mirrors consists of the following:
 %%
-%%  #amqqueue{ pid, mirror_pids }
+%%  #amqqueue{ pid, slave_pids }
 %%             |    |
 %%  +----------+    +-------+--------------+-----------...etc...
 %%  |                       |              |
@@ -340,12 +340,9 @@ handle_call(get_gm, _From, State = #state { gm = GM }) ->
 
 handle_cast({gm_deaths, Deaths},
             State = #state { q  = #amqqueue { name = QueueName } }) ->
-    rabbit_log:info("Mirrored-queue (~s): Master ~s saw deaths of mirrors ~s~n",
-                    [rabbit_misc:rs(QueueName),
-                     rabbit_misc:pid_to_string(self()),
-                     [[rabbit_misc:pid_to_string(Pid), $ ] || Pid <- Deaths]]),
     case rabbit_mirror_queue_misc:remove_from_queue(QueueName, Deaths) of
-        {ok, Pid} when node(Pid) =:= node() ->
+        {ok, Pid, DeadPids} when node(Pid) =:= node() ->
+            rabbit_mirror_queue_misc:report_deaths(true, QueueName, DeadPids),
             noreply(State);
         {error, not_found} ->
             {stop, normal, State}
