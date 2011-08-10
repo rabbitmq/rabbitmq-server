@@ -143,7 +143,7 @@
 
 -type child()    :: pid() | 'undefined'.
 -type child_id() :: term().
--type mfargs()   :: {M :: module(), F :: atom(), A :: [term()] | undefined}.
+-type mfargs()   :: {M :: module(), F :: atom(), A :: [term()] | 'undefined'}.
 -type modules()  :: [module()] | 'dynamic'.
 -type restart()  :: 'permanent' | 'transient' | 'temporary'.
 -type shutdown() :: 'brutal_kill' | timeout().
