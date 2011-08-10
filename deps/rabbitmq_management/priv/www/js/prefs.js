@@ -49,7 +49,7 @@ function store_cookie(dict) {
 function get_cookie() {
     var cookies = document.cookie.split(';');
     for (var i in cookies) {
-        var kv = cookies[i].split('=');
+        var kv = jQuery.trim(cookies[i]).split('=');
         if (kv[0] == 'm') return kv[1];
     }
     return '';
