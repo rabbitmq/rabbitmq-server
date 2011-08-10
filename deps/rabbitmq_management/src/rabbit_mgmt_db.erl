@@ -307,8 +307,8 @@ handle_event(#event{type = queue_stats, props = Stats, timestamp = Timestamp},
                  [{fun rabbit_mgmt_format:properties/1,[backing_queue_status]},
                   {fun rabbit_mgmt_format:timestamp/1, [idle_since]}],
                  [], State),
-    remove_dead_synchronised_slaves(
-      pget(pid, Stats), pget(slave_pids, Stats), State);
+    prune_synchronised_slaves(
+      true, pget(pid, Stats), pget(slave_pids, Stats), State);
 
 handle_event(Event = #event{type = queue_deleted}, State) ->
     handle_deleted(queue_stats, Event, State);
@@ -369,6 +369,10 @@ handle_event(#event{type = queue_slave_synchronised, props = Props}, State) ->
 
 handle_event(#event{type = queue_slave_promoted, props = Props}, State) ->
     handle_slave_promoted(pget(old_pid, Props), pget(pid, Props), State);
+
+handle_event(#event{type = queue_mirror_deaths, props = Props}, State) ->
+    prune_synchronised_slaves(
+      false, pget(master_pid, Props), pget(pids, Props), State);
 
 handle_event(_Event, State) ->
     {ok, State}.
@@ -434,7 +438,8 @@ handle_slave_promoted(OldMPid, NewMPid, State = #state{tables = Tables}) ->
     ets:insert(Table, {{NewMPid, synchronised_slaves}, Synced}),
     {ok, State}.
 
-remove_dead_synchronised_slaves(MPid, SPids, State = #state{tables = Tables}) ->
+prune_synchronised_slaves(Member, MPid, SPids,
+                          State = #state{tables = Tables}) ->
     Table = orddict:fetch(queue_stats, Tables),
     Old = case ets:lookup(Table, {MPid, synchronised_slaves}) of
               []             -> [];
@@ -445,7 +450,7 @@ remove_dead_synchronised_slaves(MPid, SPids, State = #state{tables = Tables}) ->
                  _  -> [node(SPid) || SPid <- SPids]
              end,
     New = lists:filter(
-            fun (SSNode) -> lists:member(SSNode, SNodes) end, Old),
+            fun (SSNode) -> lists:member(SSNode, SNodes) =:= Member end, Old),
     ets:insert(Table, {{MPid, synchronised_slaves}, New}),
     {ok, State}.
 
