@@ -693,9 +693,15 @@ handle_input({frame_payload, Type, Channel, PayloadSize},
 
 %% Begin 1-0
 
-handle_input({frame_header_1_0, Mode}, <<Size:32, DOff:8, Type:8, Channel:16>>,
-             State) when DOff >= 2 andalso Type == 0 ->
+handle_input({frame_header_1_0, Mode},
+             Header = <<Size:32, DOff:8, Type:8, Channel:16>>,
+             State) when DOff >= 2 ->
     ?DEBUG("1.0 frame header: doff: ~p size: ~p~n", [DOff, Size]),
+    case {Mode, Type} of
+        {amqp, 0} -> ok;
+        {sasl, 1} -> ok;
+        _         -> throw({bad_1_0_header_type, Header, Mode})
+    end,
     case Size of
         8 -> % length inclusive
             {State, {frame_header_1_0, Mode}, 8}; %% heartbeat
