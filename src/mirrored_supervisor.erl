@@ -427,9 +427,7 @@ check_start(Group, Delegate, ChildSpec) ->
 supervisor(Pid) ->
     with_exit_handler(
       fun() -> dead end,
-      fun() ->
-              gen_server:call(Pid, delegate_supervisor, infinity)
-      end).
+      fun() -> gen_server:call(Pid, delegate_supervisor, infinity) end).
 
 write(Group, ChildSpec) ->
     ok = mnesia:write(#mirrored_sup_childspec{id              = id(ChildSpec),
