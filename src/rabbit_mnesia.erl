@@ -118,8 +118,8 @@ cluster(ClusterNodes, Force) ->
     ensure_mnesia_not_running(),
     ensure_mnesia_dir(),
 
-    case {not Force andalso is_only_disc_node(node(), false),
-          should_be_disc_node(ClusterNodes)} of
+    case not Force andalso is_only_disc_node(node(), false) and
+         not should_be_disc_node(ClusterNodes) of
         {true, false} -> log_both("last disc node leaving cluster");
         _             -> ok
     end,
