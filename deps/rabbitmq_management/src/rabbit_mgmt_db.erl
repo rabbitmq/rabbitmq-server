@@ -370,9 +370,16 @@ handle_event(#event{type = queue_slave_synchronised, props = Props}, State) ->
 handle_event(#event{type = queue_slave_promoted, props = Props}, State) ->
     handle_slave_promoted(pget(old_pid, Props), pget(pid, Props), State);
 
-handle_event(#event{type = queue_mirror_deaths, props = Props}, State) ->
-    prune_synchronised_slaves(
-      false, pget(master_pid, Props), pget(pids, Props), State);
+handle_event(#event{type = queue_mirror_deaths, props = Props},
+             State = #state{tables = Tables}) ->
+    MPid = pget(master_pid, Props),
+    Dead = pget(pids, Props),
+    Table = orddict:fetch(queue_stats, Tables),
+    OldStats = lookup_element(Table, {MPid, stats}),
+    Timestamp = lookup_element(Table, {MPid, stats}, 3),
+    NewStats = pset(slave_pids, pget(slave_pids, OldStats) -- Dead, OldStats),
+    ets:insert(Table, {{MPid, stats}, NewStats, Timestamp}),
+    prune_synchronised_slaves(false, MPid, Dead, State);
 
 handle_event(_Event, State) ->
     {ok, State}.
