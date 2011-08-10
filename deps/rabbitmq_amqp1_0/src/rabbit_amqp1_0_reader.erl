@@ -811,7 +811,7 @@ start_1_0_connection(sasl, {1, 0, 0}, Protocol,
     send_1_0_handshake(Sock, <<"AMQP",3,1,0,0>>),
     Ms = [{symbol, atom_to_list(M)} || M <- auth_mechanisms(Sock)],
     Mechanisms = #'v1_0.sasl_mechanisms'{sasl_server_mechanisms = Ms},
-    %% TODO Our codec does not support arrays. We ened that here.
+    %% TODO Our codec does not support arrays. We need that here.
     %% TODO Enable this when porting to MikeB's new codec impl.
     %% This is required by the spec and the Java client but the Python
     %% client can live without it
