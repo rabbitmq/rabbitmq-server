@@ -118,10 +118,10 @@ cluster(ClusterNodes, Force) ->
     ensure_mnesia_not_running(),
     ensure_mnesia_dir(),
 
-    case not Force andalso is_only_disc_node(node(), false) and
+    case not Force andalso is_only_disc_node(node(), false) andalso
          not should_be_disc_node(ClusterNodes) of
-        {true, false} -> log_both("last disc node leaving cluster");
-        _             -> ok
+        true -> log_both("last disc node leaving cluster");
+        _    -> ok
     end,
 
     %% Wipe mnesia if we're changing type from disc to ram
