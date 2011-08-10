@@ -18,7 +18,7 @@
 
 -export([remove_from_queue/2, on_node_up/0,
          drop_mirror/2, drop_mirror/3, add_mirror/2, add_mirror/3,
-         report_deaths/3]).
+         report_deaths/4]).
 
 -include("rabbit.hrl").
 
@@ -29,6 +29,7 @@
 %% become the new master, which is bad because it could then mean the
 %% slave (now master) receives messages it's not ready for (for
 %% example, new consumers).
+%% Returns {ok, NewMPid, OldMPid, DeadPids}
 remove_from_queue(QueueName, DeadPids) ->
     DeadNodes = [node(DeadPid) || DeadPid <- DeadPids],
     rabbit_misc:execute_mnesia_transaction(
@@ -44,7 +45,7 @@ remove_from_queue(QueueName, DeadPids) ->
                                   not lists:member(node(Pid), DeadNodes)],
                       case {{QPid, SPids}, {QPid1, SPids1}} of
                           {Same, Same} ->
-                              {ok, QPid1, []};
+                              {ok, QPid1, QPid1, []};
                           _ when QPid =:= QPid1 orelse node(QPid1) =:= node() ->
                               %% Either master hasn't changed, so
                               %% we're ok to update mnesia; or we have
@@ -52,13 +53,13 @@ remove_from_queue(QueueName, DeadPids) ->
                               Q1 = Q #amqqueue { pid        = QPid1,
                                                  slave_pids = SPids1 },
                               ok = rabbit_amqqueue:store_queue(Q1),
-                              {ok, QPid1, [QPid | SPids] -- Alive};
+                              {ok, QPid1, QPid, [QPid | SPids] -- Alive};
                           _ ->
                               %% Master has changed, and we're not it,
                               %% so leave alone to allow the promoted
                               %% slave to find it and make its
                               %% promotion atomic.
-                              {ok, QPid1, []}
+                              {ok, QPid1, QPid, []}
                       end
               end
       end).
@@ -135,10 +136,11 @@ if_mirrored_queue(Queue, Fun) ->
                      end
              end).
 
-report_deaths(_IsMaster, _QueueName, []) ->
+report_deaths(_IsMaster, _QueueName, _OldMPid, []) ->
     ok;
-report_deaths(IsMaster, QueueName, DeadPids) ->
-    rabbit_event:notify(queue_mirror_deaths, [{pids, DeadPids}]),
+report_deaths(IsMaster, QueueName, OldMPid, DeadPids) ->
+    rabbit_event:notify(queue_mirror_deaths, [{master_pid, OldMPid},
+                                              {pids,       DeadPids}]),
     rabbit_log:info("Mirrored-queue (~s): ~s ~s saw deaths of mirrors ~s~n",
                     [rabbit_misc:rs(QueueName),
                      case IsMaster of
