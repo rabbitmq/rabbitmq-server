@@ -442,10 +442,17 @@ start(Delegate, ChildSpec) ->
     apply(?SUPERVISOR, start_child, [Delegate, ChildSpec]).
 
 stop(Delegate, Id) ->
+    case mnesia:transaction(fun() -> check_stop(Delegate, Id) end) of
+        {atomic, deleted} -> apply(?SUPERVISOR, delete_child, [Delegate, Id]);
+        {atomic, running} -> {error, running};
+        {aborted, E}      -> {error, E}
+    end.
+
+check_stop(Delegate, Id) ->
     case child(Delegate, Id) of
-        undefined -> {atomic, ok} = mnesia:transaction(fun() -> delete(Id) end),
-                     apply(?SUPERVISOR, delete_child, [Delegate, Id]);
-        _         -> {error, running}
+        undefined -> delete(Id),
+                     deleted;
+        _         -> running
     end.
 
 id({Id, _, _, _, _, _}) -> Id.
