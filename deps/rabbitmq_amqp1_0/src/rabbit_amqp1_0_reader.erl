@@ -547,7 +547,7 @@ handle_1_0_frame(Mode, Channel, Payload, State) ->
     case {Mode, is_connection_frame(Sections)} of
         {amqp, true}  -> handle_1_0_connection_frame(Sections, State);
         {amqp, false} -> handle_1_0_session_frame(Channel, Sections, State);
-        {sasl, _}     -> handle_1_0_sasl_frame(Sections, State)
+        {sasl, false} -> handle_1_0_sasl_frame(Sections, State)
     end.
 
 parse_1_0_frame(Payload) ->
@@ -670,9 +670,21 @@ handle_1_0_session_frame(Channel, Frame, State) ->
             end
     end.
 
+handle_1_0_sasl_frame(#'v1_0.sasl_init'{mechanism        = {symbol, Mechanism},
+                                        initial_response = {binary, Response},
+                                        hostname         = _Hostname},
+                      State0 = #v1{connection_state = starting,
+                                   sock             = Sock}) ->
+    AuthMechanism = auth_mechanism_to_module(list_to_binary(Mechanism), Sock),
+    State = State0#v1{auth_mechanism   = AuthMechanism,
+                      auth_state       = AuthMechanism:init(Sock),
+                      connection_state = securing},
+    auth_phase_1_0(Response, State);
+handle_1_0_sasl_frame(#'v1_0.sasl_response'{response = {binary, Response}},
+                      State = #v1{connection_state = securing}) ->
+    auth_phase_1_0(Response, State);
 handle_1_0_sasl_frame(Frame, State) ->
-    io:format("SASL frame ~p~n", [Frame]),
-    State.
+    throw({unexpected_1_0_sasl_frame, Frame, State}).
 
 %% End 1-0
 
@@ -756,12 +768,11 @@ handle_input(handshake, <<"AMQP", 1, 1, 9, 1>>, State) ->
 %% general where the 0-x code would use it as a module.
 %% FIXME TLS uses a different protocol number, and would go here.
 handle_input(handshake, H = <<"AMQP", 0, 1, 0, 0>>, State) ->
-    start_1_0_connection(amqp, H, {1, 0, 0}, rabbit_amqp1_0_framing, State);
+    start_1_0_connection(amqp, {1, 0, 0}, rabbit_amqp1_0_framing, State);
 
 %% 3 stands for "SASL"
 handle_input(handshake, H = <<"AMQP", 3, 1, 0, 0>>, State) ->
-    io:format("SASL handshake~n"),
-    start_1_0_connection(sasl, H, {1, 0, 0}, rabbit_amqp1_0_framing, State);
+    start_1_0_connection(sasl, {1, 0, 0}, rabbit_amqp1_0_framing, State);
 
 %% End 1-0
 
@@ -795,17 +806,55 @@ start_connection({ProtocolMajor, ProtocolMinor, _ProtocolRevision},
 
 %% Begin 1-0
 
-start_1_0_connection(Mode,
-                     AMQPABCD,
-                     {1, 0, 0},
-                     Protocol,
+start_1_0_connection(sasl, {1, 0, 0}, Protocol,
                      State = #v1{sock = Sock, connection = Connection}) ->
-    ok = inet_op(fun () -> rabbit_net:send(Sock, AMQPABCD) end),
+    send_1_0_handshake(Sock, <<"AMQP",3,1,0,0>>),
+    Ms = [{symbol, atom_to_list(M)} || M <- auth_mechanisms(Sock)],
+    Mechanisms = #'v1_0.sasl_mechanisms'{sasl_server_mechanisms = Ms},
+    %% TODO I don't think our codec supports multiple="true" ????
+    %% This is required by the spec and the Java client but the Python
+    %% client can live without it
+    %% ok = send_on_channel0(Sock, Mechanisms, Protocol),
+    start_1_0_connection0(sasl, Protocol, State);
+
+start_1_0_connection(amqp, {1, 0, 0}, Protocol,
+                     State = #v1{sock       = Sock,
+                                 connection = C = #connection{user = User}}) ->
+    {ok, NoAuthUsername} = application:get_env(rabbitmq_amqp1_0, default_user),
+    case {User, NoAuthUsername} of
+        {none, none} ->
+            %% Amusingly I can't see anything in the spec about what
+            %% to do if the protocol is good but you don't want to let
+            %% just anyone in. At a guess send back the SASL
+            %% handshake. Maybe they'll get the hint.
+            send_1_0_handshake(Sock, <<"AMQP",3,1,0,0>>),
+            throw(banned_unauthenticated_connection);
+        {none, Username} ->
+            case rabbit_access_control:check_user_login(
+                   list_to_binary(Username), []) of
+                {ok, NoAuthUser} ->
+                    State1 = State#v1{
+                               connection = C#connection{user = NoAuthUser}},
+                    send_1_0_handshake(Sock, <<"AMQP",0,1,0,0>>),
+                    start_1_0_connection0(amqp, Protocol, State1);
+                _ ->
+                    send_1_0_handshake(Sock, <<"AMQP",3,1,0,0>>),
+                    throw(default_user_missing)
+            end;
+        _ ->
+            send_1_0_handshake(Sock, <<"AMQP",0,1,0,0>>),
+            start_1_0_connection0(amqp, Protocol, State)
+    end.
+
+start_1_0_connection0(Mode, Protocol, State = #v1{connection = Connection}) ->
     switch_callback(State#v1{connection = Connection#connection{
                                             timeout_sec = ?NORMAL_TIMEOUT,
                                             protocol = Protocol},
                              connection_state = starting},
                     {frame_header_1_0, Mode}, 8).
+
+send_1_0_handshake(Sock, Handshake) ->
+    ok = inet_op(fun () -> rabbit_net:send(Sock, Handshake) end).
 
 %% End 1-0
 
@@ -974,7 +1023,7 @@ auth_mechanism_to_module(TypeBin, Sock) ->
     end.
 
 auth_mechanisms(Sock) ->
-    {ok, Configured} = application:get_env(auth_mechanisms),
+    {ok, Configured} = application:get_env(rabbit, auth_mechanisms),
     [Name || {Name, Module} <- rabbit_registry:lookup_all(auth_mechanism),
              Module:should_offer(Sock), lists:member(Name, Configured)].
 
@@ -1008,6 +1057,37 @@ auth_phase(Response,
             State#v1{connection_state = tuning,
                      connection = Connection#connection{user = User}}
     end.
+
+%% Begin 1-0
+
+auth_phase_1_0(Response,
+           State = #v1{auth_mechanism = AuthMechanism,
+                       auth_state = AuthState,
+                       connection = Connection =
+                           #connection{protocol = Protocol},
+                       sock = Sock}) ->
+    case AuthMechanism:handle_response(Response, AuthState) of
+        {refused, Msg, Args} ->
+            rabbit_misc:protocol_error(
+              access_refused, "~s login refused: ~s",
+              [proplists:get_value(name, AuthMechanism:description()),
+               io_lib:format(Msg, Args)]);
+        {protocol_error, Msg, Args} ->
+            rabbit_misc:protocol_error(syntax_error, Msg, Args);
+        {challenge, Challenge, AuthState1} ->
+            Secure = #'v1_0.sasl_challenge'{challenge = {binary, Challenge}},
+            ok = send_on_channel0(Sock, Secure, Protocol),
+            State#v1{auth_state = AuthState1};
+        {ok, User} ->
+            Outcome = #'v1_0.sasl_outcome'{code = {ubyte, 0}},
+            ok = send_on_channel0(Sock, Outcome, Protocol),
+            switch_callback(
+              State#v1{connection_state = waiting_amqp0100,
+                       connection = Connection#connection{user = User}},
+              handshake, 8)
+    end.
+
+%% End 1-0
 
 %%--------------------------------------------------------------------------
 

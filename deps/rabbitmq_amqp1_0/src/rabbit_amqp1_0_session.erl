@@ -60,19 +60,21 @@
 -include("rabbit_amqp1_0.hrl").
 
 %% TODO account for all these things
-start_link(Channel, ReaderPid, WriterPid, _Username, _VHost,
+start_link(Channel, ReaderPid, WriterPid, User, VHost,
            _Collector, _StartLimiterFun) ->
     gen_server2:start_link(
-      ?MODULE, [Channel, ReaderPid, WriterPid], []).
+      ?MODULE, [Channel, ReaderPid, WriterPid, User, VHost], []).
 
 process_frame(Pid, Frame) ->
     gen_server2:cast(Pid, {frame, Frame}).
 
 %% ---------
 
-init([Channel, ReaderPid, WriterPid]) ->
-    %% TODO pass through authentication information
-    {ok, Conn} = amqp_connection:start(#amqp_params_direct{}),
+init([Channel, ReaderPid, WriterPid, #user{username = Username}, VHost]) ->
+    {ok, Conn} = amqp_connection:start(
+                   %% TODO #adapter_info{}
+                   #amqp_params_direct{username     = Username,
+                                       virtual_host = <<"/">>}),
     {ok, Ch} = amqp_connection:open_channel(Conn),
     {ok, #session{ channel_num            = Channel,
                    backing_connection     = Conn,

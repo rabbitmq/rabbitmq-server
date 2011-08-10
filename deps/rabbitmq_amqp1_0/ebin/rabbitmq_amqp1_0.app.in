@@ -10,5 +10,6 @@
                                {reuseaddr,     true},
                                {backlog,       128},
                                {nodelay,       true},
-                               {exit_on_close, false}]}]},
+                               {exit_on_close, false}]},
+         {default_user,  "guest"}]},
   {applications, [kernel, stdlib, rabbit]}]}.

@@ -25,3 +25,9 @@ configuration that looks like this:
      {rabbitmq_amqp1_0, [{tcp_listeners, [{"0.0.0.0", 5672}]}]}].
 
 It will then serve AMQP 0-8, 0-9-1, and 1.0 on the socket.
+
+AMQP 1-0 conceptually allows connections that are not authenticated
+with SASL (i.e. where no username and password is supplied). By
+default these will connect as the "guest" user. To change this, set
+'default_user' to a string with the name of the user to use, or the
+atom 'none' to prevent unauthenticated connections.
