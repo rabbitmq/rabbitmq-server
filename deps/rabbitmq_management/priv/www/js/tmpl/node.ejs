@@ -3,6 +3,11 @@
 <div class="section">
 <h2>Overview</h2>
 <div class="hider updatable">
+<% if (!node.running) { %>
+<p class="warning">Node not running</p>
+<% } else if (node.external_stats_not_running) { %>
+<p class="warning">Could not contact management agent</p>
+<% } else { %>
   <table class="facts">
     <tr>
       <th>
@@ -107,6 +112,7 @@
       <td><%= node.processors %></td>
     </tr>
   </table>
+<% } %>
 </div>
 </div>
 
@@ -114,7 +120,11 @@
 <div class="section-hidden">
 <h2>Applications</h2>
 <div class="hider updatable">
-<% if (node.running) { %>
+<% if (!node.running) { %>
+<p class="warning">Node not running</p>
+<% } else if (node.external_stats_not_running) { %>
+<p class="warning">Could not contact management agent</p>
+<% } else { %>
 <table class="list">
     <tr>
       <th>Name</th>
@@ -133,8 +143,6 @@
        </tr>
     <% } %>
 </table>
-<% } else {%>
-<p>...node not running...</p>
 <% } %>
 </div>
 </div>
@@ -142,9 +150,15 @@
 <div class="section-hidden">
 <h2>Registry</h2>
 <div class="hider updatable">
+<% if (!node.running) { %>
+<p class="warning">Node not running</p>
+<% } else if (node.external_stats_not_running) { %>
+<p class="warning">Could not contact management agent</p>
+<% } else { %>
 <h3>Exchange types</h3>
 <%= format('registry', {'list': node.exchange_types, 'node': node, 'show_enabled': false} ) %>
 <h3>Authentication mechanisms</h3>
 <%= format('registry', {'list': node.auth_mechanisms, 'node': node, 'show_enabled': true} ) %>
+<% } %>
 </div>
 </div>
