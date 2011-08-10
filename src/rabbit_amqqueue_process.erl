@@ -84,7 +84,6 @@
          auto_delete,
          arguments,
          owner_pid,
-         mirror_nodes,
          slave_pids,
          synchronised_slave_pids
         ]).
@@ -771,12 +770,6 @@ i(consumers, State) ->
 i(memory, _) ->
     {memory, M} = process_info(self(), memory),
     M;
-i(mirror_nodes, #q{q = #amqqueue{name = Name}}) ->
-    {ok, #amqqueue{mirror_nodes = MNodes}} = rabbit_amqqueue:lookup(Name),
-    case MNodes of
-        undefined -> '';
-        _         -> MNodes
-    end;
 i(slave_pids, #q{q = #amqqueue{name = Name}}) ->
     {ok, #amqqueue{mirror_nodes = MNodes,
                    slave_pids = SPids}} = rabbit_amqqueue:lookup(Name),
