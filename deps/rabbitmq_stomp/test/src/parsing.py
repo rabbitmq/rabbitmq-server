@@ -89,6 +89,22 @@ class TestParsing(unittest.TestCase):
                 'hello\n\0')
         self.match(resp, self.cd.recv(4096))
 
+    @connect(['cd'])
+    def test_send_without_content_type(self):
+        self.cd.sendall('\n'
+                        'SUBSCRIBE\n'
+                        'destination:/exchange/amq.fanout\n'
+                        '\n\x00\n'
+                        'SEND\n'
+                        'destination:/exchange/amq.fanout\n\n'
+                        'hello\n\x00')
+        resp = ('MESSAGE\n'
+                'destination:/exchange/amq.fanout\n'
+                'message-id:Q_/exchange/amq.fanout@@session-(.*)\n'
+                'content-length:6\n'
+                '\n'
+                'hello\n\0')
+        self.match(resp, self.cd.recv(4096))
 
     @connect(['cd'])
     def test_newline_after_nul_and_leading_nul(self):
