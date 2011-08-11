@@ -122,7 +122,7 @@
                           {'ok', non_neg_integer(), qmsg()} | 'empty').
 -spec(basic_consume/7 ::
         (rabbit_types:amqqueue(), boolean(), pid(),
-         rabbit_limiter:maybe_token(), rabbit_types:ctag(), boolean(), any())
+         rabbit_limiter:token(), rabbit_types:ctag(), boolean(), any())
         -> rabbit_types:ok_or_error('exclusive_consume_unavailable')).
 -spec(basic_cancel/4 ::
         (rabbit_types:amqqueue(), pid(), rabbit_types:ctag(), any()) -> 'ok').

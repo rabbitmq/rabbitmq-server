@@ -58,7 +58,7 @@
 %% These are held in our process dictionary
 -record(cr, {consumer_count,
              ch_pid,
-             limiter,
+             limiter = rabbit_limiter:make_token(undefined),
              monitor_ref,
              acktags,
              is_limit_active,
@@ -953,7 +953,7 @@ handle_call({basic_cancel, ChPid, ConsumerTag, OkMsg}, _From,
             maybe_store_ch_record(
               case ConsumerCount of
                   1 -> ok = rabbit_limiter:unregister(Limiter, self()),
-                       C1#cr{limiter = undefined};
+                       C1#cr{limiter = rabbit_limiter:make_token(undefined)};
                   _ -> C1
               end),
             emit_consumer_deleted(ChPid, ConsumerTag),
