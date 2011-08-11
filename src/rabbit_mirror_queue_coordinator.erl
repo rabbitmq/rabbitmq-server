@@ -343,7 +343,7 @@ handle_cast({gm_deaths, Deaths},
   when node(MPid) =:= node() ->
     case rabbit_mirror_queue_misc:remove_from_queue(QueueName, Deaths) of
         {ok, MPid, DeadPids} ->
-            rabbit_mirror_queue_misc:report_deaths(MPid, true, QueueName, MPid,
+            rabbit_mirror_queue_misc:report_deaths(MPid, true, QueueName,
                                                    DeadPids),
             noreply(State);
         {error, not_found} ->

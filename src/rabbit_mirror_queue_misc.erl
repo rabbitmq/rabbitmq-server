@@ -18,7 +18,7 @@
 
 -export([remove_from_queue/2, on_node_up/0,
          drop_mirror/2, drop_mirror/3, add_mirror/2, add_mirror/3,
-         report_deaths/5]).
+         report_deaths/4]).
 
 -include("rabbit.hrl").
 
@@ -136,11 +136,11 @@ if_mirrored_queue(Queue, Fun) ->
                      end
              end).
 
-report_deaths(_MirrorPid, _IsMaster, _QueueName, _OldMPid, []) ->
+report_deaths(_MirrorPid, _IsMaster, _QueueName, []) ->
     ok;
-report_deaths(MirrorPid, IsMaster, QueueName, OldMPid, DeadPids) ->
-    rabbit_event:notify(queue_mirror_deaths, [{master_pid, OldMPid},
-                                              {pids,       DeadPids}]),
+report_deaths(MirrorPid, IsMaster, QueueName, DeadPids) ->
+    rabbit_event:notify(queue_mirror_deaths, [{name, QueueName},
+                                              {pids, DeadPids}]),
     rabbit_log:info("Mirrored-queue (~s): ~s ~s saw deaths of mirrors ~s~n",
                     [rabbit_misc:rs(QueueName),
                      case IsMaster of

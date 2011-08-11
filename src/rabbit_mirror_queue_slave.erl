@@ -172,7 +172,7 @@ handle_call({gm_deaths, Deaths}, From,
             {stop, normal, State};
         {ok, Pid, DeadPids} ->
             rabbit_mirror_queue_misc:report_deaths(self(), false, QueueName,
-                                                   MPid, DeadPids),
+                                                   DeadPids),
             if node(Pid) =:= node(MPid) ->
                     %% master hasn't changed
                     reply(ok, State);
@@ -429,8 +429,8 @@ promote_me(From, #state { q                   = Q = #amqqueue { name = QName },
                           msg_id_status       = MS,
                           known_senders       = KS,
                           master_pid          = MPid}) ->
-    rabbit_event:notify(queue_slave_promoted, [{pid,     self()},
-                                               {old_pid, MPid}]),
+    rabbit_event:notify(queue_slave_promoted, [{pid,  self()},
+                                               {name, QName}]),
     rabbit_log:info("Mirrored-queue (~s): Promoting slave ~s to master~n",
                     [rabbit_misc:rs(QName), rabbit_misc:pid_to_string(self())]),
     Q1 = Q #amqqueue { pid = self() },
@@ -897,10 +897,10 @@ maybe_store_ack(true, MsgId, AckTag, State = #state { msg_id_ack = MA,
 
 %% We intentionally leave out the head where a slave becomes
 %% unsynchronised: we assert that can never happen.
-set_synchronised(true, State = #state { master_pid   = MasterPid,
-                                        synchronised = false }) ->
-    rabbit_event:notify(queue_slave_synchronised, [{master_pid, MasterPid},
-                                                   {pid,        self()}]),
+set_synchronised(true, State = #state {q            = #amqqueue {name = QName},
+                                       synchronised = false }) ->
+    rabbit_event:notify(queue_slave_synchronised, [{pid,  self()},
+                                                   {name, QName}]),
     State #state { synchronised = true };
 set_synchronised(true, State) ->
     State;
