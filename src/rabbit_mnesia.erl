@@ -327,18 +327,22 @@ ensure_mnesia_dir() ->
 
 ensure_mnesia_running() ->
     case mnesia:system_info(is_running) of
-        yes -> ok;
-        starting -> wait_for(mnesia_running),
-                    ensure_mnesia_running();
+        yes ->
+            ok;
+        starting ->
+            wait_for(mnesia_running),
+            ensure_mnesia_running();
         Reason when Reason =:= no; Reason =:= stopping ->
-                    throw({error, mnesia_not_running})
+            throw({error, mnesia_not_running})
     end.
 
 ensure_mnesia_not_running() ->
     case mnesia:system_info(is_running) of
-        no  -> ok;
-        stopping -> wait_for(mnesia_not_running),
-                    ensure_mnesia_not_running();
+        no ->
+            ok;
+        stopping ->
+            wait_for(mnesia_not_running),
+            ensure_mnesia_not_running();
         Reason when Reason =:= yes; Reason =:= starting ->
             throw({error, mnesia_unexpectedly_running})
     end.
