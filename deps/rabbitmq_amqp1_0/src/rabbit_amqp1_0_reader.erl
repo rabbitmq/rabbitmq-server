@@ -767,11 +767,11 @@ handle_input(handshake, <<"AMQP", 1, 1, 9, 1>>, State) ->
 %% Protocol supplied is vestigal; we use it as a marker, but not in
 %% general where the 0-x code would use it as a module.
 %% FIXME TLS uses a different protocol number, and would go here.
-handle_input(handshake, H = <<"AMQP", 0, 1, 0, 0>>, State) ->
+handle_input(handshake, <<"AMQP", 0, 1, 0, 0>>, State) ->
     start_1_0_connection(amqp, {1, 0, 0}, rabbit_amqp1_0_framing, State);
 
 %% 3 stands for "SASL"
-handle_input(handshake, H = <<"AMQP", 3, 1, 0, 0>>, State) ->
+handle_input(handshake, <<"AMQP", 3, 1, 0, 0>>, State) ->
     start_1_0_connection(sasl, {1, 0, 0}, rabbit_amqp1_0_framing, State);
 
 %% End 1-0
@@ -806,8 +806,7 @@ start_connection({ProtocolMajor, ProtocolMinor, _ProtocolRevision},
 
 %% Begin 1-0
 
-start_1_0_connection(sasl, {1, 0, 0}, Protocol,
-                     State = #v1{sock = Sock, connection = Connection}) ->
+start_1_0_connection(sasl, {1, 0, 0}, Protocol, State = #v1{sock = Sock}) ->
     send_1_0_handshake(Sock, <<"AMQP",3,1,0,0>>),
     Ms = [{symbol, atom_to_list(M)} || M <- auth_mechanisms(Sock)],
     Mechanisms = #'v1_0.sasl_mechanisms'{sasl_server_mechanisms = Ms},
@@ -824,10 +823,6 @@ start_1_0_connection(amqp, {1, 0, 0}, Protocol,
     {ok, NoAuthUsername} = application:get_env(rabbitmq_amqp1_0, default_user),
     case {User, NoAuthUsername} of
         {none, none} ->
-            %% Amusingly I can't see anything in the spec about what
-            %% to do if the protocol is good but you don't want to let
-            %% just anyone in. At a guess send back the SASL
-            %% handshake. Maybe they'll get the hint.
             send_1_0_handshake(Sock, <<"AMQP",3,1,0,0>>),
             throw(banned_unauthenticated_connection);
         {none, Username} ->
