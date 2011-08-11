@@ -24,7 +24,7 @@
          create_cluster_nodes_config/1, read_cluster_nodes_config/0,
          record_running_nodes/0, read_previously_running_nodes/0,
          delete_previously_running_nodes/0, running_nodes_filename/0,
-         is_disc_node/0, on_node_down/1]).
+         is_disc_node/0, on_node_down/1, on_node_up/1]).
 
 -export([table_names/0]).
 
@@ -67,6 +67,8 @@
 -spec(delete_previously_running_nodes/0 :: () ->  'ok').
 -spec(running_nodes_filename/0 :: () -> file:filename()).
 -spec(is_disc_node/0 :: () -> boolean()).
+-spec(on_node_up/1 :: (node()) -> 'ok').
+-spec(on_node_down/1 :: (node()) -> 'ok').
 
 -endif.
 
@@ -126,8 +128,11 @@ cluster(ClusterNodes, Force) ->
 
     %% Wipe mnesia if we're changing type from disc to ram
     case {is_disc_node(), should_be_disc_node(ClusterNodes)} of
-        {true, false} -> error_logger:warning_msg(
-                           "changing node type; wiping mnesia...~n~n"),
+        {true, false} -> rabbit_misc:with_local_io(
+                           fun () -> error_logger:warning_msg(
+                                       "changing node type; wiping "
+                                       "mnesia...~n~n")
+                           end),
                          rabbit_misc:ensure_ok(mnesia:delete_schema([node()]),
                                                cannot_delete_schema);
         _             -> ok
@@ -746,6 +751,15 @@ leave_cluster(Nodes, RunningNodes) ->
         true -> ok;
         false -> throw({error, {no_running_cluster_nodes,
                                 Nodes, RunningNodes}})
+    end.
+
+on_node_up(Node) ->
+    case is_only_disc_node(Node, true) of
+        true  -> rabbit_misc:with_local_io(
+                   fun () -> rabbit_log:info("cluster contains disc "
+                                             "nodes again~n")
+                   end);
+        false -> ok
     end.
 
 on_node_down(Node) ->

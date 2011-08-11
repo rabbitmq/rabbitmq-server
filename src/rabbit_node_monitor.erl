@@ -67,8 +67,7 @@ handle_call(_Request, _From, State) ->
 
 handle_cast({rabbit_running_on, Node}, State) ->
     rabbit_log:info("rabbit on ~p up~n", [Node]),
-    erlang:monitor(process, {rabbit, Node}),
-    ok = rabbit_alarm:on_node_up(Node),
+    ok = handle_live_rabbit(Node),
     {noreply, State};
 handle_cast(_Msg, State) ->
     {noreply, State}.
@@ -96,3 +95,8 @@ handle_dead_rabbit(Node) ->
     ok = rabbit_amqqueue:on_node_down(Node),
     ok = rabbit_alarm:on_node_down(Node),
     ok = rabbit_mnesia:on_node_down(Node).
+
+handle_live_rabbit(Node) ->
+    erlang:monitor(process, {rabbit, Node}),
+    ok = rabbit_alarm:on_node_up(Node),
+    ok = rabbit_mnesia:on_node_up(Node).
