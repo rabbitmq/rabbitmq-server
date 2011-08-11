@@ -1740,6 +1740,7 @@ test_backing_queue() ->
             passed = test_msg_store(),
             application:set_env(rabbit, msg_store_file_size_limit,
                                 FileSizeLimit, infinity),
+            passed = test_msg_store_quick_client_delete(),
             passed = test_queue_index(),
             passed = test_queue_index_props(),
             passed = test_variable_queue(),
@@ -1948,6 +1949,33 @@ test_msg_store() ->
                    false = msg_store_contains(false, MsgIdsBig, MSCStateM),
                    MSCStateM
            end),
+    %% restart empty
+    restart_msg_store_empty(),
+    passed.
+
+test_msg_store_quick_client_delete() ->
+    Ref = rabbit_guid:guid(),
+    MSCState1 = msg_store_client_init(?PERSISTENT_MSG_STORE, Ref),
+    BigCount = 100000,
+    MsgIdsBig = [MsgId1|_] = [msg_id_bin(X) || X <- lists:seq(1, BigCount)],
+
+    ok = msg_store_write(MsgIdsBig, MSCState1),
+    %% force these writes
+    true = msg_store_contains(true, [MsgId1], MSCState1),
+    ok = msg_store_remove(MsgIdsBig, MSCState1),
+    %% force the removes
+    false = msg_store_contains(false, [MsgId1], MSCState1),
+
+    ok = msg_store_write(MsgIdsBig, MSCState1),
+    %% do remove 1-by-1 to flood msg_store with work
+    [ok = msg_store_remove([MsgId], MSCState1) || MsgId <- MsgIdsBig],
+    ok = rabbit_msg_store:client_delete_and_terminate(MSCState1),
+
+    %% Now do something sync so that we ensure the quick path death
+    %% stuff does work.
+    MSCState2 = msg_store_client_init(?PERSISTENT_MSG_STORE, Ref),
+    ok = rabbit_msg_store:client_terminate(MSCState2),
+
     %% restart empty
     restart_msg_store_empty(),
     passed.
