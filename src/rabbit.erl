@@ -446,7 +446,7 @@ ensure_working_log_handlers() ->
                                     error_logger_tty_h,
                                     log_location(kernel),
                                     Handlers),
-
+    error_logger:delete_report_handler(error_logger_tty_h),
     ok = ensure_working_log_handler(sasl_report_file_h,
                                     rabbit_sasl_report_file_h,
                                     sasl_report_tty_h,
@@ -477,7 +477,7 @@ ensure_working_log_handler(OldFHandler, NewFHandler, TTYHandler,
     end.
 
 log_location(Type) ->
-    case application:get_env(Type, case Type of
+    case application:get_env(rabbit, case Type of
                                        kernel -> error_logger;
                                        sasl   -> sasl_error_logger
                                    end) of

@@ -45,12 +45,21 @@ init({{File, _}, error}) ->
 %% log rotation
 init({File, []}) ->
     init(File);
-init({File, _Type} = FileInfo) ->
+init({File, {error_logger, []}}) ->
     rabbit_misc:ensure_parent_dirs_exist(File),
-    error_logger_file_h:init(FileInfo);
+    init_file(File, error_handler);
 init(File) ->
     rabbit_misc:ensure_parent_dirs_exist(File),
-    error_logger_file_h:init(File).
+    init_file(File, []).
+
+init_file(File, PrevHandler) ->
+    process_flag(trap_exit, true),
+    case file:open(File, [append]) of
+	{ok,Fd} ->
+	    {ok, {Fd, File, PrevHandler}};
+	Error ->
+	    Error
+    end.
 
 handle_event(Event, State) ->
     error_logger_file_h:handle_event(Event, State).
