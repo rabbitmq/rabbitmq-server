@@ -427,7 +427,7 @@ promote_me(From, #state { q                   = Q = #amqqueue { name = QName },
                           sender_queues       = SQ,
                           msg_id_ack          = MA,
                           msg_id_status       = MS,
-                          known_senders       = KS}) ->
+                          known_senders       = KS }) ->
     rabbit_event:notify(queue_slave_promoted, [{pid,  self()},
                                                {name, QName}]),
     rabbit_log:info("Mirrored-queue (~s): Promoting slave ~s to master~n",
@@ -896,8 +896,8 @@ maybe_store_ack(true, MsgId, AckTag, State = #state { msg_id_ack = MA,
 
 %% We intentionally leave out the head where a slave becomes
 %% unsynchronised: we assert that can never happen.
-set_synchronised(true, State = #state {q = #amqqueue { name = QName },
-                                       synchronised = false }) ->
+set_synchronised(true, State = #state { q = #amqqueue { name = QName },
+                                        synchronised = false }) ->
     rabbit_event:notify(queue_slave_synchronised, [{pid,  self()},
                                                    {name, QName}]),
     State #state { synchronised = true };
