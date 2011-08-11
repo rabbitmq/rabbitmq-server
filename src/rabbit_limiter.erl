@@ -21,7 +21,6 @@
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2, prioritise_call/3]).
 -export([start_link/0, make_new_token/1, is_enabled/1, enable/2, disable/1]).
--export_type([token/0]).
 -export([limit/2, can_send/3, ack/2, register/2, unregister/2]).
 -export([get_limit/1, block/1, unblock/1, is_blocked/1]).
 
@@ -31,6 +30,8 @@
 
 -ifdef(use_specs).
 
+-export_type([token/0, maybe_token/0]).
+
 -type(maybe_token() :: token() | 'undefined').
 -opaque(token() :: #token{}).
 
@@ -39,14 +40,15 @@
 -spec(is_enabled/1 :: (token()) -> boolean()).
 -spec(enable/2 :: (token(), non_neg_integer()) -> token()).
 -spec(disable/1 :: (token()) -> token()).
--spec(limit/2 :: (maybe_token(), non_neg_integer()) -> 'ok' | 'stopped').
+-spec(limit/2 :: (maybe_token(), non_neg_integer()) ->
+                      'ok' | {'disabled', token()}).
 -spec(can_send/3 :: (maybe_token(), pid(), boolean()) -> boolean()).
 -spec(ack/2 :: (maybe_token(), non_neg_integer()) -> 'ok').
 -spec(register/2 :: (maybe_token(), pid()) -> 'ok').
 -spec(unregister/2 :: (maybe_token(), pid()) -> 'ok').
 -spec(get_limit/1 :: (maybe_token()) -> non_neg_integer()).
 -spec(block/1 :: (maybe_token()) -> 'ok').
--spec(unblock/1 :: (maybe_token()) -> 'ok' | 'stopped').
+-spec(unblock/1 :: (maybe_token()) -> 'ok' | {'disabled', token()}).
 -spec(is_blocked/1 :: (maybe_token()) -> boolean()).
 
 -endif.
