@@ -316,6 +316,7 @@ handle_control(#'v1_0.begin'{next_outgoing_id = {uint, RemoteNextIn},
 handle_control(#'v1_0.attach'{name = Name,
                               handle = Handle,
                               source = Source,
+                              snd_settle_mode = SndSettleMode,
                               target = Target,
                               initial_delivery_count = {uint, InitTransfer},
                               role = ?SEND_ROLE}, %% client is sender
@@ -326,12 +327,16 @@ handle_control(#'v1_0.attach'{name = Name,
         {ok, ServerTarget,
          IncomingLink = #incoming_link{ delivery_count = InitTransfer },
          State1} ->
-            {_, Outcomes} = outcomes(Source),
+            {_, _Outcomes} = outcomes(Source),
+            %% Default is mixed!
             State2 =
-                case Outcomes of
-                    [?V_1_0_SYMBOL_ACCEPTED] ->
+                case SndSettleMode of
+                    ?V_1_0_SENDER_SETTLE_MODE_SETTLED ->
                         State1;
                     _ ->
+                        %% TODO we need to deal with mixed settlement mode -
+                        %% presumably by turning on confirms and then throwing
+                        %% some away.
                         amqp_channel:register_confirm_handler(Ch, self()),
                         amqp_channel:call(Ch, #'confirm.select'{}),
                         State1#session{ next_publish_id =
@@ -555,10 +560,11 @@ outcomes(Source) ->
 attach_outgoing(DefaultOutcome, Outcomes,
                 #'v1_0.attach'{name = Name,
                                handle = Handle,
-                               source = Source},
+                               source = Source,
+                               rcv_settle_mode = RcvSettleMode},
                State = #session{backing_channel = Ch}) ->
-    NoAck = DefaultOutcome == #'v1_0.accepted'{} andalso
-        Outcomes == [?V_1_0_SYMBOL_ACCEPTED],
+    %% Default is first
+    NoAck = RcvSettleMode =/= ?V_1_0_RECEIVER_SETTLE_MODE_SECOND,
     DOSym = rabbit_amqp1_0_framing:symbol_for(DefaultOutcome),
     case ensure_source(Source,
                        #outgoing_link{ delivery_count = ?INIT_TXFR_COUNT,
