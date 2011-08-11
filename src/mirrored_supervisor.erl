@@ -130,7 +130,7 @@
 -export([start_internal/2]).
 -export([create_tables/0, table_definitions/0]).
 
--record(mirrored_sup_childspec, {id, mirroring_pid, group, childspec}).
+-record(mirrored_sup_childspec, {key, mirroring_pid, childspec}).
 
 -record(state, {overall,
                 delegate,
@@ -329,9 +329,9 @@ handle_call({start_child, ChildSpec}, _From,
                            group    = Group}) ->
     {reply, maybe_start(Group, Delegate, ChildSpec), State};
 
-handle_call({delete_child, Id}, _From,
-            State = #state{delegate = Delegate}) ->
-    {reply, stop(Delegate, Id), State};
+handle_call({delete_child, Id}, _From, State = #state{delegate = Delegate,
+                                                      group    = Group}) ->
+    {reply, stop(Delegate, Id, Group), State};
 
 handle_call({msg, F, A}, _From, State = #state{delegate = Delegate}) ->
     {reply, apply(?SUPERVISOR, F, [Delegate | A]), State};
@@ -408,15 +408,15 @@ maybe_start(Group, Delegate, ChildSpec) ->
     end.
 
 check_start(Group, Delegate, ChildSpec) ->
-    case mnesia:wread({?TABLE, id(ChildSpec)}) of
+    case mnesia:wread({?TABLE, {id(ChildSpec), Group}}) of
         []  -> write(Group, ChildSpec),
                start;
-        [S] -> #mirrored_sup_childspec{id            = Id,
+        [S] -> #mirrored_sup_childspec{key           = {Id, Group},
                                        mirroring_pid = Pid} = S,
                case self() of
                    Pid -> child(Delegate, Id);
                    _   -> case supervisor(Pid) of
-                              dead      -> delete(ChildSpec),
+                              dead      -> delete(Group, Id),
                                            write(Group, ChildSpec),
                                            start;
                               Delegate0 -> child(Delegate0, Id)
@@ -430,51 +430,48 @@ supervisor(Pid) ->
       fun() -> gen_server:call(Pid, delegate_supervisor, infinity) end).
 
 write(Group, ChildSpec) ->
-    ok = mnesia:write(#mirrored_sup_childspec{id              = id(ChildSpec),
-                                              mirroring_pid   = self(),
-                                              group           = Group,
-                                              childspec       = ChildSpec}).
+    ok = mnesia:write(
+           #mirrored_sup_childspec{key           = {id(ChildSpec), Group},
+                                   mirroring_pid = self(),
+                                   childspec     = ChildSpec}),
+    ChildSpec.
 
-delete(Id) ->
-    ok = mnesia:delete({?TABLE, Id}).
+delete(Group, Id) ->
+    ok = mnesia:delete({?TABLE, {Id, Group}}).
 
 start(Delegate, ChildSpec) ->
     apply(?SUPERVISOR, start_child, [Delegate, ChildSpec]).
 
-stop(Delegate, Id) ->
-    case mnesia:transaction(fun() -> check_stop(Delegate, Id) end) of
+stop(Delegate, Id, Group) ->
+    case mnesia:transaction(fun() -> check_stop(Delegate, Id, Group) end) of
         {atomic, deleted} -> apply(?SUPERVISOR, delete_child, [Delegate, Id]);
         {atomic, running} -> {error, running};
         {aborted, E}      -> {error, E}
     end.
 
-check_stop(Delegate, Id) ->
+check_stop(Delegate, Id, Group) ->
     case child(Delegate, Id) of
-        undefined -> delete(Id),
+        undefined -> delete(Group, Id),
                      deleted;
         _         -> running
     end.
 
 id({Id, _, _, _, _, _}) -> Id.
 
-update(Group, ChildSpec) ->
-    delete(ChildSpec),
-    write(Group, ChildSpec),
-    ChildSpec.
-
 update_all(OldPid) ->
-    MatchHead = #mirrored_sup_childspec{mirroring_pid   = OldPid,
-                                        group           = '$1',
-                                        childspec       = '$2',
-                                        _               = '_'},
-    [update(Group, C) ||
-        [Group, C] <- mnesia:select(?TABLE, [{MatchHead, [], ['$$']}])].
+    MatchHead = #mirrored_sup_childspec{mirroring_pid = OldPid,
+                                        key           = '$1',
+                                        childspec     = '$2',
+                                        _             = '_'},
+    [write(Group, C) ||
+        [{_Id, Group}, C] <- mnesia:select(?TABLE, [{MatchHead, [], ['$$']}])].
 
 delete_all(Group) ->
-    MatchHead = #mirrored_sup_childspec{group     = Group,
+    MatchHead = #mirrored_sup_childspec{key       = {'_', Group},
                                         childspec = '$1',
                                         _         = '_'},
-    [delete(C) || C <- mnesia:select(?TABLE, [{MatchHead, [], ['$1']}])].
+    [delete(Group, id(C)) ||
+        C <- mnesia:select(?TABLE, [{MatchHead, [], ['$1']}])].
 
 %%----------------------------------------------------------------------------
 

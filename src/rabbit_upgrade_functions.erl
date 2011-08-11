@@ -174,7 +174,7 @@ exchange_scratch(Table) ->
 mirrored_supervisor() ->
     create(mirrored_sup_childspec,
            [{record_name, mirrored_sup_childspec},
-            {attributes, [id, mirroring_pid, childspec]}]).
+            {attributes, [key, mirroring_pid, childspec]}]).
 
 %%--------------------------------------------------------------------
 
