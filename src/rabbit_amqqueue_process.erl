@@ -776,7 +776,7 @@ i(slave_pids, #q{q = #amqqueue{name = Name}}) ->
     {ok, #amqqueue{mirror_nodes = MNodes,
                    slave_pids = SPids}} = rabbit_amqqueue:lookup(Name),
     case MNodes of
-        undefined -> '';
+        undefined -> [];
         _         -> SPids
     end;
 i(backing_queue_status, #q{backing_queue_state = BQS, backing_queue = BQ}) ->
