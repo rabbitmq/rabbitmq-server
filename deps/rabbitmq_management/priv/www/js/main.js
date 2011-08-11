@@ -563,6 +563,9 @@ function check_bad_response(req, full_page_404) {
     else if (req.status > 12000) { // MSIE: could not connect
         update_status('error');
     }
+    else if (req.status == 503) { // Proxy: could not connect
+        update_status('error');
+    }
     else {
         debug("Got response code " + req.status + " with body " +
               req.responseText);
