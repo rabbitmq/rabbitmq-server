@@ -437,10 +437,7 @@ handle_slave_promoted(QName, NewMPid, State) ->
       fun (SSNodes) -> SSNodes -- [node(NewMPid)] end, QName, State).
 
 prune_synchronised_slaves(Member, QName, SPids, State) ->
-    SNodes = case SPids of
-                 '' -> [];
-                 _  -> [node(SPid) || SPid <- SPids]
-             end,
+    SNodes = [node(SPid) || SPid <- SPids],
     update_synchronised_slaves(
       fun (SSNodes) ->
               lists:filter(fun (S) -> lists:member(S, SNodes) =:= Member end,
