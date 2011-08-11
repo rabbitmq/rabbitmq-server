@@ -35,7 +35,7 @@
 -opaque(token() :: #token{}).
 
 -spec(start_link/0 :: () -> rabbit_types:ok_pid_or_error()).
--spec(make_token/1 :: (pid()) -> token()).
+-spec(make_token/1 :: (undefined | pid()) -> token()).
 -spec(is_enabled/1 :: (token()) -> boolean()).
 -spec(enable/2 :: (token(), non_neg_integer()) -> token()).
 -spec(disable/1 :: (token()) -> token()).
