@@ -89,4 +89,4 @@ start_limiter(SupPid) ->
           SupPid,
           {limiter, {rabbit_limiter, start_link, []},
            transient, ?MAX_WAIT, worker, [rabbit_limiter]}),
-    rabbit_limiter:make_new_token(Pid).
+    rabbit_limiter:make_token(Pid).

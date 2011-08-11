@@ -20,7 +20,7 @@
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2, prioritise_call/3]).
--export([start_link/0, make_new_token/1, is_enabled/1, enable/2, disable/1]).
+-export([start_link/0, make_token/1, is_enabled/1, enable/2, disable/1]).
 -export([limit/2, can_send/3, ack/2, register/2, unregister/2]).
 -export([get_limit/1, block/1, unblock/1, is_blocked/1]).
 
@@ -36,7 +36,7 @@
 -opaque(token() :: #token{}).
 
 -spec(start_link/0 :: () -> rabbit_types:ok_pid_or_error()).
--spec(make_new_token/1 :: (pid()) -> token()).
+-spec(make_token/1 :: (pid()) -> token()).
 -spec(is_enabled/1 :: (token()) -> boolean()).
 -spec(enable/2 :: (token(), non_neg_integer()) -> token()).
 -spec(disable/1 :: (token()) -> token()).
@@ -70,7 +70,7 @@
 
 start_link() -> gen_server2:start_link(?MODULE, [], []).
 
-make_new_token(Pid) -> #token{pid = Pid}.
+make_token(Pid) -> #token{pid = Pid}.
 
 is_enabled(#token{enabled = Enabled}) -> Enabled.
 
@@ -84,13 +84,17 @@ limit(Limiter, PrefetchCount) ->
     maybe_call(Limiter, {limit, PrefetchCount, Limiter}, ok).
 
 %% Ask the limiter whether the queue can deliver a message without
-%% breaching a limit
-can_send(Limiter, QPid, AckRequired) ->
+%% breaching a limit. Note that we don't use maybe_call here in order
+%% to avoid always going through with_exit_handler/2, even when the
+%% limiter is disabled.
+can_send(#token{pid = Pid, enabled = true}, QPid, AckRequired) ->
     rabbit_misc:with_exit_handler(
       fun () -> true end,
       fun () ->
-              maybe_call(Limiter, {can_send, QPid, AckRequired}, true)
-      end).
+              gen_server2:call(Pid, {can_send, QPid, AckRequired}, infinity)
+      end);
+can_send(_, _, _) ->
+    true.
 
 %% Let the limiter know that the channel has received some acks from a
 %% consumer
