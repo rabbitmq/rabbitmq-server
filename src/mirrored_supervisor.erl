@@ -416,8 +416,7 @@ check_start(Group, Delegate, ChildSpec) ->
                case self() of
                    Pid -> child(Delegate, Id);
                    _   -> case supervisor(Pid) of
-                              dead      -> delete(Group, Id),
-                                           write(Group, ChildSpec),
+                              dead      -> write(Group, ChildSpec),
                                            start;
                               Delegate0 -> child(Delegate0, Id)
                           end
