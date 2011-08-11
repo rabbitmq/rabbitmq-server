@@ -144,7 +144,7 @@ upgrade_mode(AllNodes) ->
     case nodes_running(AllNodes) of
         [] ->
             AfterUs = rabbit_mnesia:read_previously_running_nodes(),
-            case {is_disc_node(), AfterUs} of
+            case {is_disc_node_legacy(), AfterUs} of
                 {true, []}  ->
                     primary;
                 {true, _}  ->
@@ -182,12 +182,6 @@ upgrade_mode(AllNodes) ->
             end
     end.
 
-is_disc_node() ->
-    %% This is pretty ugly but we can't start Mnesia and ask it (will hang),
-    %% we can't look at the config file (may not include us even if we're a
-    %% disc node).
-    filelib:is_regular(filename:join(dir(), "rabbit_durable_exchange.DCD")).
-
 die(Msg, Args) ->
     %% We don't throw or exit here since that gets thrown
     %% straight out into do_boot, generating an erl_crash.dump
@@ -218,7 +212,7 @@ force_tables() ->
 
 secondary_upgrade(AllNodes) ->
     %% must do this before we wipe out schema
-    IsDiscNode = is_disc_node(),
+    IsDiscNode = is_disc_node_legacy(),
     rabbit_misc:ensure_ok(mnesia:delete_schema([node()]),
                           cannot_delete_schema),
     %% Note that we cluster with all nodes, rather than all disc nodes
@@ -281,6 +275,14 @@ dir() -> rabbit_mnesia:dir().
 lock_filename() -> lock_filename(dir()).
 lock_filename(Dir) -> filename:join(Dir, ?LOCK_FILENAME).
 backup_dir() -> dir() ++ "-upgrade-backup".
+
+is_disc_node_legacy() ->
+    %% This is pretty ugly but we can't start Mnesia and ask it (will
+    %% hang), we can't look at the config file (may not include us
+    %% even if we're a disc node).  We also can't use
+    %% rabbit_mnesia:is_disc_node/0 because that will give false
+    %% postivies on Rabbit up to 2.5.1.
+    filelib:is_regular(filename:join(dir(), "rabbit_durable_exchange.DCD")).
 
 %% NB: we cannot use rabbit_log here since it may not have been
 %% started yet

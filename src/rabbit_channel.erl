@@ -23,11 +23,11 @@
 -export([start_link/10, do/2, do/3, flush/1, shutdown/1]).
 -export([send_command/2, deliver/4, flushed/2, confirm/2]).
 -export([list/0, info_keys/0, info/1, info/2, info_all/0, info_all/1]).
--export([refresh_config_all/0, emit_stats/1, ready_for_close/1]).
+-export([refresh_config_all/0, ready_for_close/1]).
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2, handle_pre_hibernate/1, prioritise_call/3,
-         prioritise_cast/2]).
+         prioritise_cast/2, prioritise_info/2, format_message_queue/2]).
 
 -record(ch, {state, protocol, channel, reader_pid, writer_pid, conn_pid,
              limiter, tx_status, next_tag,
@@ -90,7 +90,6 @@
 -spec(info_all/0 :: () -> [rabbit_types:infos()]).
 -spec(info_all/1 :: (rabbit_types:info_keys()) -> [rabbit_types:infos()]).
 -spec(refresh_config_all/0 :: () -> 'ok').
--spec(emit_stats/1 :: (pid()) -> 'ok').
 -spec(ready_for_close/1 :: (pid()) -> 'ok').
 
 -endif.
@@ -152,9 +151,6 @@ refresh_config_all() ->
       fun (C) -> gen_server2:call(C, refresh_config) end, list()),
     ok.
 
-emit_stats(Pid) ->
-    gen_server2:cast(Pid, emit_stats).
-
 ready_for_close(Pid) ->
     gen_server2:cast(Pid, ready_for_close).
 
@@ -194,7 +190,7 @@ init([Channel, ReaderPid, WriterPid, ConnPid, Protocol, User, VHost,
                 trace_state             = rabbit_trace:init(VHost)},
     rabbit_event:notify(channel_created, infos(?CREATION_EVENT_KEYS, State)),
     rabbit_event:if_enabled(StatsTimer,
-                            fun() -> internal_emit_stats(State) end),
+                            fun() -> emit_stats(State) end),
     {ok, State, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
@@ -207,8 +203,13 @@ prioritise_call(Msg, _From, _State) ->
 
 prioritise_cast(Msg, _State) ->
     case Msg of
-        emit_stats                   -> 7;
         {confirm, _MsgSeqNos, _QPid} -> 5;
+        _                            -> 0
+    end.
+
+prioritise_info(Msg, _State) ->
+    case Msg of
+        emit_stats                   -> 7;
         _                            -> 0
     end.
 
@@ -293,17 +294,17 @@ handle_cast({deliver, ConsumerTag, AckRequired,
     rabbit_trace:tap_trace_out(Msg, TraceState),
     noreply(State1#ch{next_tag = DeliveryTag + 1});
 
-handle_cast(emit_stats, State = #ch{stats_timer = StatsTimer}) ->
-    internal_emit_stats(State),
-    noreply([ensure_stats_timer],
-            State#ch{stats_timer = rabbit_event:reset_stats_timer(StatsTimer)});
-
 handle_cast({confirm, MsgSeqNos, From}, State) ->
     State1 = #ch{confirmed = C} = confirm(MsgSeqNos, From, State),
     noreply([send_confirms], State1, case C of [] -> hibernate; _ -> 0 end).
 
 handle_info(timeout, State) ->
     noreply(State);
+
+handle_info(emit_stats, State = #ch{stats_timer = StatsTimer}) ->
+    emit_stats(State),
+    noreply([ensure_stats_timer],
+            State#ch{stats_timer = rabbit_event:reset_stats_timer(StatsTimer)});
 
 handle_info({'DOWN', MRef, process, QPid, Reason},
             State = #ch{consumer_monitors = ConsumerMonitors}) ->
@@ -320,11 +321,8 @@ handle_info({'EXIT', _Pid, Reason}, State) ->
 
 handle_pre_hibernate(State = #ch{stats_timer = StatsTimer}) ->
     ok = clear_permission_cache(),
-    rabbit_event:if_enabled(StatsTimer,
-                            fun () ->
-                                    internal_emit_stats(
-                                      State, [{idle_since, now()}])
-                            end),
+    rabbit_event:if_enabled(
+      StatsTimer, fun () -> emit_stats(State, [{idle_since, now()}]) end),
     StatsTimer1 = rabbit_event:stop_stats_timer(StatsTimer),
     {hibernate, State#ch{stats_timer = StatsTimer1}}.
 
@@ -341,6 +339,8 @@ terminate(Reason, State) ->
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
+
+format_message_queue(Opt, MQ) -> rabbit_misc:format_message_queue(Opt, MQ).
 
 %%---------------------------------------------------------------------------
 
@@ -366,8 +366,7 @@ next_state(Mask, State) ->
 ensure_stats_timer(State = #ch{stats_timer = StatsTimer}) ->
     ChPid = self(),
     State#ch{stats_timer = rabbit_event:ensure_stats_timer(
-                             StatsTimer,
-                             fun() -> emit_stats(ChPid) end)}.
+                             StatsTimer, ChPid, emit_stats)}.
 
 return_ok(State, true, _Msg)  -> {noreply, State};
 return_ok(State, false, Msg)  -> {reply, Msg, State}.
@@ -1497,10 +1496,10 @@ update_measures(Type, QX, Inc, Measure) ->
     put({Type, QX},
         orddict:store(Measure, Cur + Inc, Measures)).
 
-internal_emit_stats(State) ->
-    internal_emit_stats(State, []).
+emit_stats(State) ->
+    emit_stats(State, []).
 
-internal_emit_stats(State = #ch{stats_timer = StatsTimer}, Extra) ->
+emit_stats(State = #ch{stats_timer = StatsTimer}, Extra) ->
     CoarseStats = infos(?STATISTICS_KEYS, State),
     case rabbit_event:stats_level(StatsTimer) of
         coarse ->

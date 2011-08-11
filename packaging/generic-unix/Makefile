@@ -4,7 +4,7 @@ TARGET_DIR=rabbitmq_server-$(VERSION)
 TARGET_TARBALL=rabbitmq-server-generic-unix-$(VERSION)
 
 dist:
-	tar -zxvf ../../dist/$(SOURCE_DIR).tar.gz
+	tar -zxf ../../dist/$(SOURCE_DIR).tar.gz
 
 	$(MAKE) -C $(SOURCE_DIR) \
 		TARGET_DIR=`pwd`/$(TARGET_DIR) \
