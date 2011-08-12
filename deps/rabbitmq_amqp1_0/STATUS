@@ -5,13 +5,14 @@ Simple publishing and consuming.
 
 You can publish to:
 
+* /exchange/<Name>/<Key>
 * /exchange/<Name> (and set the subject as routing key)
 * /queue (and set the subject as queue name)
 * /queue/<Name>
 
 You can consume from:
 
-* /exchange/<Name>/<Key>
+* /exchange/<Name>/<Pattern>
 * /queue/<Name>
 
 

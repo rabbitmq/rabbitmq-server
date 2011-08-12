@@ -920,6 +920,16 @@ ensure_target(Target = #'v1_0.target'{address       = Address,
                                 {error, Reason, State2} ->
                                     {error, Reason, State2}
                             end;
+                        ["exchange", Name, RKey] ->
+                            case check_exchange(Name, State) of
+                                {ok, ExchangeName, State1} ->
+                                    {ok, Target,
+                                     Link#incoming_link{exchange = ExchangeName,
+                                                        routing_key = list_to_binary(RKey)},
+                                     State1};
+                                {error, Reason, State2} ->
+                                    {error, Reason, State2}
+                            end;
                         _Otherwise ->
                             {error, {unknown_address, Address}, State}
                     end;
