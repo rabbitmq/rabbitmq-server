@@ -764,7 +764,10 @@ on_node_up(Node) ->
 
 on_node_down(Node) ->
     case is_only_disc_node(Node, true) of
-        true  -> log_both("only disc running node went down");
+        true  -> rabbit_misc:with_local_io(
+                   fun () -> rabbit_log:info("only disc running node "
+                                             "went down~n")
+                   end);
         false -> ok
     end.
 
