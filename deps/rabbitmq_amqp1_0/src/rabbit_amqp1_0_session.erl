@@ -841,7 +841,8 @@ ensure_declaring_channel(State) ->
 %% involve an anonymous queue.
 %%
 %% For targets, addresses are
-%% Address = "/exchange/" Name
+%% Address = "/exchange/" Name "/" RoutingKey
+%%         | "/exchange/" Name
 %%         | "/queue"
 %%         | "/queue/" Name
 %%
