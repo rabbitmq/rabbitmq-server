@@ -3,6 +3,7 @@
 -export([assemble/1, annotated_message/2]).
 
 -define(TYPE_HEADER, <<"x-amqp-1.0-message-type">>).
+-define(SUBJECT_HEADER, <<"x-amqp-1.0-subject">>).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_amqp1_0.hrl").
@@ -61,14 +62,17 @@ parse_header(Header, Props) ->
                     app_id           = undefined, %% TODO
                     cluster_id       = undefined}. %% TODO
 
-parse_properties(Props10, Props) ->
+parse_properties(Props10, Props = #'P_basic'{headers = Headers}) ->
     Props#'P_basic'{
       content_type     = unwrap(Props10#'v1_0.properties'.content_type),
       content_encoding = undefined, %% TODO parse from 1.0 version
       correlation_id   = unwrap(Props10#'v1_0.properties'.correlation_id),
       reply_to         = unwrap(Props10#'v1_0.properties'.reply_to),
       message_id       = unwrap(Props10#'v1_0.properties'.message_id),
-      user_id          = unwrap(Props10#'v1_0.properties'.user_id)}.
+      user_id          = unwrap(Props10#'v1_0.properties'.user_id),
+      headers          = set_header(?SUBJECT_HEADER,
+                                    unwrap(Props10#'v1_0.properties'.subject),
+                                    Headers)}.
 
 routing_key(Props10) ->
     unwrap(Props10#'v1_0.properties'.subject).
@@ -80,12 +84,12 @@ unwrap({long, Num})  -> Num;
 unwrap(undefined)    -> undefined.
 
 set_1_0_type(Type, Props = #'P_basic'{headers = Headers}) ->
-    Props#'P_basic'{headers = set_1_0_type0(Type, Headers)}.
+    Props#'P_basic'{headers = set_header(?TYPE_HEADER, Type, Headers)}.
 
-set_1_0_type0(Type, undefined) ->
-    set_1_0_type0(Type, []);
-set_1_0_type0(Type, Headers) ->
-    rabbit_misc:set_table_value(Headers, ?TYPE_HEADER, longstr, Type).
+set_header(Header, Value, undefined) ->
+    set_header(Header, Value, []);
+set_header(Header, Value, Headers) ->
+    rabbit_misc:set_table_value(Headers, Header, longstr, Value).
 
 %% Meh, this is ugly but what else can we do?
 reserialise(Content) ->
@@ -110,11 +114,11 @@ annotated_message(RKey, #amqp_msg{props = Props, payload = Content}) ->
       message_id     = wrap(Props#'P_basic'.message_id),
       user_id        = wrap(Props#'P_basic'.user_id),
       to             = undefined, %% TODO
-      subject        = wrap(RKey),
+      subject        = wrap(get_1_0(?SUBJECT_HEADER, Props, RKey)),
       reply_to       = wrap(Props#'P_basic'.reply_to),
       correlation_id = wrap(Props#'P_basic'.correlation_id),
       content_type   = wrap(Props#'P_basic'.content_type)}, %% TODO encode to 1.0 ver
-    Data = case get_1_0_type(Props#'P_basic'.headers) of
+    Data = case get_1_0(?TYPE_HEADER, Props, <<"data">>) of
                <<"data">> ->
                    #'v1_0.data'{content = Content};
                <<"amqp-value">> ->
@@ -124,11 +128,13 @@ annotated_message(RKey, #amqp_msg{props = Props, payload = Content}) ->
            end,
     [Header, Props10, Data].
 
-get_1_0_type(undefined) ->
-    <<"data">>;
-get_1_0_type(Headers) ->
-    case rabbit_misc:table_lookup(Headers, ?TYPE_HEADER) of
-        undefined       -> <<"data">>;
+get_1_0(Header, #'P_basic'{headers = Headers}, Default) ->
+    get_1_0(Header, Headers, Default);
+get_1_0(_Header, undefined, Default) ->
+    Default;
+get_1_0(Header, Headers, Default) ->
+    case rabbit_misc:table_lookup(Headers, Header) of
+        undefined       -> Default;
         {longstr, Type} -> Type
     end.
 
