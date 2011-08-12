@@ -122,7 +122,7 @@ cluster(ClusterNodes, Force) ->
 
     case not Force andalso is_only_disc_node(node(), false) andalso
          not should_be_disc_node(ClusterNodes) of
-        true -> log_both("last disc node leaving cluster");
+        true -> log_both("last running disc node leaving cluster");
         _    -> ok
     end,
 
@@ -765,7 +765,7 @@ on_node_up(Node) ->
 on_node_down(Node) ->
     case is_only_disc_node(Node, true) of
         true  -> rabbit_misc:with_local_io(
-                   fun () -> rabbit_log:info("only disc running node "
+                   fun () -> rabbit_log:info("only running disc node "
                                              "went down~n")
                    end);
         false -> ok
