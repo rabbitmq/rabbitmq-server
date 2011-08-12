@@ -703,7 +703,7 @@ wait_for_tables(TableNames) ->
 reset(Force) ->
     ensure_mnesia_not_running(),
     case not Force andalso is_only_disc_node(node(), false) of
-        true  -> log_both("resetting only disc node");
+        true  -> log_both("no other disc nodes running");
         false -> ok
     end,
     Node = node(),
@@ -764,12 +764,13 @@ on_node_up(Node) ->
 
 on_node_down(Node) ->
     case is_only_disc_node(Node, true) of
-        true  -> log_both("only disc node went down");
+        true  -> log_both("only disc running node went down");
         false -> ok
     end.
 
 is_only_disc_node(Node, _MnesiaRunning = true) ->
-    [Node] =:= nodes_of_type(disc_copies);
+    OfflineDiscNodes = nodes_of_type(disc_copies) -- running_clustered_nodes(),
+    [Node] =:= nodes_of_type(disc_copies) -- OfflineDiscNodes;
 is_only_disc_node(Node, false) ->
     start_mnesia(),
     Res = is_only_disc_node(Node, true),
