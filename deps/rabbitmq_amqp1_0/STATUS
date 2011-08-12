@@ -29,6 +29,8 @@ What is known not to work
 * Probably lots around unusual combinations of settlement and outcomes
 * Session window is quite flaky
 * virtual hosts other than "/" don't work
+* transactions
+* link recovery
 * TLS
 * Probably lots of other things
 
