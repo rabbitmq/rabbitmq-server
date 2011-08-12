@@ -20,6 +20,7 @@ What is known not to work
 
 * sasl-mechanisms frame is not sent
 * Multiple-section messages
+* Multiple-transfer messages
 * amqp-sequence messages (maybe)
 * delivery-annotations, message-annotations and application-properties
 * lots of header / footer stuff will just be dropped or wrong
