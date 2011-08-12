@@ -796,12 +796,6 @@ test_log_management() ->
     ok = control_action(rotate_logs, [Suffix]),
     [true, true] = empty_files([[MainLog, Suffix], [SaslLog, Suffix]]),
 
-    %% original sasl log file is not writable
-    ok = make_files_non_writable([SaslLog]),
-    {error, {cannot_rotate_sasl_logs, _}} = control_action(rotate_logs, []),
-    ok = clean_logs([SaslLog], Suffix),
-    ok = add_log_handlers([{rabbit_sasl_report_file_h, SaslLog}]),
-
     %% logs with suffix are not writable
     ok = control_action(rotate_logs, [Suffix]),
     ok = make_files_non_writable([[MainLog, Suffix], [SaslLog, Suffix]]),
