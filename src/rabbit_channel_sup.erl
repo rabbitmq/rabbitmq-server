@@ -47,41 +47,44 @@
 
 start_link({tcp, Sock, Channel, FrameMax, ReaderPid, Protocol, User, VHost,
             Capabilities, Collector}) ->
-    {ok, SupPid} = supervisor2:start_link(?MODULE, []),
-    {ok, WriterPid} =
-        supervisor2:start_child(
-          SupPid,
-          {writer, {rabbit_writer, start_link,
-                    [Sock, Channel, FrameMax, Protocol, ReaderPid]},
-           intrinsic, ?MAX_WAIT, worker, [rabbit_writer]}),
-    [Limiter] = supervisor2:find_child(SupPid, limiter),
+    {ok, SupPid} = supervisor2:start_link(?MODULE,
+                                          {tcp, Sock, Channel, FrameMax,
+                                           ReaderPid, Protocol}),
+    [LimiterPid] = supervisor2:find_child(SupPid, limiter),
+    [WriterPid] = supervisor2:find_child(SupPid, writer),
     {ok, ChannelPid} =
         supervisor2:start_child(
           SupPid,
           {channel, {rabbit_channel, start_link,
                      [Channel, ReaderPid, WriterPid, ReaderPid, Protocol,
                       User, VHost, Capabilities, Collector,
-                      rabbit_limiter:make_token(Limiter)]},
+                      rabbit_limiter:make_token(LimiterPid)]},
            intrinsic, ?MAX_WAIT, worker, [rabbit_channel]}),
     {ok, AState} = rabbit_command_assembler:init(Protocol),
     {ok, SupPid, {ChannelPid, AState}};
 start_link({direct, Channel, ClientChannelPid, ConnPid, Protocol, User, VHost,
             Capabilities, Collector}) ->
-    {ok, SupPid} = supervisor2:start_link(?MODULE, []),
-    [Limiter] = supervisor2:find_child(SupPid, limiter),
+    {ok, SupPid} = supervisor2:start_link(?MODULE, direct),
+    [LimiterPid] = supervisor2:find_child(SupPid, limiter),
     {ok, ChannelPid} =
         supervisor2:start_child(
           SupPid,
           {channel, {rabbit_channel, start_link,
                      [Channel, ClientChannelPid, ClientChannelPid, ConnPid,
                       Protocol, User, VHost, Capabilities, Collector,
-                      rabbit_limiter:make_token(Limiter)]},
+                      rabbit_limiter:make_token(LimiterPid)]},
            intrinsic, ?MAX_WAIT, worker, [rabbit_channel]}),
     {ok, SupPid, {ChannelPid, none}}.
 
 %%----------------------------------------------------------------------------
 
-init([]) ->
-    {ok, {{one_for_all, 0, 1},
-          [{limiter, {rabbit_limiter, start_link, []},
-            transient, ?MAX_WAIT, worker, [rabbit_limiter]}]}}.
+init(Type) ->
+    {ok, {{one_for_all, 0, 1}, child_specs(Type)}}.
+
+child_specs({tcp, Sock, Channel, FrameMax, ReaderPid, Protocol}) ->
+    [{writer, {rabbit_writer, start_link,
+               [Sock, Channel, FrameMax, Protocol, ReaderPid]},
+      intrinsic, ?MAX_WAIT, worker, [rabbit_writer]} | child_specs(direct)];
+child_specs(direct) ->
+    [{limiter, {rabbit_limiter, start_link, []},
+      transient, ?MAX_WAIT, worker, [rabbit_limiter]}].
