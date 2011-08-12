@@ -464,7 +464,7 @@ ensure_working_log_handler(NewFHandler, TTYHandler, LogLocation, Handlers) ->
         _         -> case lists:member(NewFHandler, Handlers) of
                          true  -> ok;
                          false -> case rotate_logs(LogLocation, "",
-                                                   undefined, NewFHandler) of
+                                                   NewFHandler) of
                                       ok -> ok;
                                       {error, Reason} ->
                                           throw({error, {cannot_log_to_file,

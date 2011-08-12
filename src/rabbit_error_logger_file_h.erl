@@ -30,7 +30,8 @@
 %% Used only when swapping handlers in log rotation
 init({{File, Suffix}, []}) ->
     case rabbit_misc:append_file(File, Suffix) of
-        ok  -> ok;
+        ok  -> file:delete(File),
+               ok;
         {error, Error} ->
             rabbit_log:error("Failed to append contents of "
                              "log file '~s' to '~s':~n~p~n",
