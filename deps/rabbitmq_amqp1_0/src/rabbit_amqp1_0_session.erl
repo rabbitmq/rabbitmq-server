@@ -701,7 +701,6 @@ transfer(WriterPid, LinkHandle,
                                  %% The only one in AMQP 1-0
                                  message_format = {uint, 0},
                                  settled = NoAck,
-                                 state = ?DEFAULT_OUTCOME,
                                  resume = false,
                                  more = false,
                                  aborted = false,
