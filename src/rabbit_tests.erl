@@ -2170,8 +2170,36 @@ test_variable_queue() ->
               fun test_variable_queue_all_the_bits_not_covered_elsewhere2/1,
               fun test_dropwhile/1,
               fun test_dropwhile_varying_ram_duration/1,
-              fun test_variable_queue_ack_limiting/1]],
+              fun test_variable_queue_ack_limiting/1,
+              fun test_variable_queue_requeue/1]],
     passed.
+
+test_variable_queue_requeue(VQ0) ->
+    Count = 20000,
+    VQ1 = rabbit_variable_queue:set_ram_duration_target(0, VQ0),
+    VQ2 = variable_queue_publish(true, Count, VQ1),
+    {VQ3, AckMap} = lists:foldl(fun (N, {VQN, AckTags}) ->
+                                    {{#basic_message{}, false, AckTag, _}, VQM} =
+                                         rabbit_variable_queue:fetch(true, VQN),
+                                    {VQM, [{AckTag, N} | AckTags]}
+                                end, {VQ2, []}, lists:seq(0, Count - 1)),
+    SubMap = lists:filter(fun ({_AckTag, N}) ->
+                                 N rem 500 =:= 0
+                             end, AckMap),
+    {_MsgIds, VQ4} =
+        rabbit_variable_queue:requeue(proplists:get_keys(AckMap -- SubMap),
+                                      fun(X) -> X end, VQ3),
+    {_MsgIds2, VQ5} =
+        rabbit_variable_queue:requeue(proplists:get_keys(SubMap),
+                                      fun(X) -> X end, VQ4),
+    VQ6 = lists:foldl(fun ({N, _}, VQN) ->
+                          {{#basic_message{}, true, AckTag, QLen}, VQM} =
+                                         rabbit_variable_queue:fetch(true, VQN),
+                          N = proplists:get_value(AckTag, AckMap),
+                          QLen = Count - N - 1,
+                          VQM
+                      end, VQ5, lists:reverse(AckMap)),
+    VQ6.
 
 test_variable_queue_ack_limiting(VQ0) ->
     %% start by sending in a bunch of messages
