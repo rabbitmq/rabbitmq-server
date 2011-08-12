@@ -921,8 +921,8 @@ ensure_target(Target = #'v1_0.target'{address       = Address,
                                 {error, Reason, State2} ->
                                     {error, Reason, State2}
                             end;
-                        {error, Reason} ->
-                            {error, Reason, State}
+                        _Otherwise ->
+                            {error, {unknown_address, Address}, State}
                     end;
                 _Else ->
                     {error, {unknown_address, Address}, State}
