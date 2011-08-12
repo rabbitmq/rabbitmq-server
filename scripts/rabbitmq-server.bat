@@ -141,10 +141,10 @@ if not "!RABBITMQ_NODE_IP_ADDRESS!"=="" (
 +P 1048576 ^
 -kernel inet_default_connect_options "[{nodelay, true}]" ^
 !RABBITMQ_LISTEN_ARG! ^
--kernel error_logger {file,\""!LOGS:\=/!"\"} ^
+-rabbit error_logger {file,\""!LOGS:\=/!"\"} ^
 !RABBITMQ_SERVER_ERL_ARGS! ^
 -sasl errlog_type error ^
--sasl sasl_error_logger {file,\""!SASL_LOGS:\=/!"\"} ^
+-rabbit sasl_error_logger {file,\""!SASL_LOGS:\=/!"\"} ^
 -os_mon start_cpu_sup true ^
 -os_mon start_disksup false ^
 -os_mon start_memsup false ^
