@@ -110,7 +110,8 @@ handle_info(#'basic.consume_ok'{}, State) ->
     {noreply, State};
 
 handle_info({#'basic.deliver'{consumer_tag = ConsumerTag,
-                              delivery_tag = DeliveryTag}, Msg},
+                              delivery_tag = DeliveryTag,
+                              routing_key  = RKey}, Msg},
             State = #session{ writer_pid = WriterPid,
                               next_transfer_number = TransferNum }) ->
     %% FIXME, don't ignore ack required, keep track of credit, um .. etc.
@@ -118,7 +119,7 @@ handle_info({#'basic.deliver'{consumer_tag = ConsumerTag,
     case get({out, Handle}) of
         Link = #outgoing_link{} ->
             {NewLink, NewState} =
-                transfer(WriterPid, Handle, Link, State, Msg, DeliveryTag),
+                transfer(WriterPid, Handle, Link, State, RKey, Msg, DeliveryTag),
             put({out, Handle}, NewLink),
             {noreply, NewState#session{
                         next_transfer_number = next_transfer_number(TransferNum)}};
@@ -380,17 +381,21 @@ handle_control([Txfr = #'v1_0.transfer'{handle = Handle,
                                 next_publish_id = NextPublishId,
                                 incoming_unsettled_map = Unsettled}) ->
     case get({in, Handle}) of
-        #incoming_link{ exchange = X, routing_key = RK,
+        #incoming_link{ exchange = X, routing_key = LinkRKey,
                         delivery_count = Count,
                         credit_used = CreditUsed } = Link ->
             NewCount = rabbit_misc:serial_add(Count, 1),
-            Msg = rabbit_amqp1_0_message:assemble(AnnotatedMessage),
+            {MsgRKey, Msg} = rabbit_amqp1_0_message:assemble(AnnotatedMessage),
+            RKey = case LinkRKey of
+                       undefined -> MsgRKey;
+                       _         -> LinkRKey
+                   end,
             NextPublishId1 = case NextPublishId of
                                  0 -> 0;
                                  _ -> NextPublishId + 1 % serial?
                              end,
             amqp_channel:call(Ch, #'basic.publish' { exchange    = X,
-                                                     routing_key = RK }, Msg),
+                                                     routing_key = RKey }, Msg),
             {SendFlow, CreditUsed1} = case CreditUsed - 1 of
                                           C when C =< 0 ->
                                               {true,  ?INCOMING_CREDIT div 2};
@@ -674,6 +679,7 @@ transfer(WriterPid, LinkHandle,
                              window_size = WindowSize,
                              backing_channel = AmqpChannel,
                              outgoing_unsettled_map = Unsettled },
+         RKey,
          Msg = #amqp_msg{payload = Content},
          DeliveryTag) ->
     %% FIXME
@@ -713,7 +719,7 @@ transfer(WriterPid, LinkHandle,
                          end,
             rabbit_amqp1_0_writer:send_command(
               WriterPid,
-              [T | rabbit_amqp1_0_message:annotated_message(Msg)]),
+              [T | rabbit_amqp1_0_message:annotated_message(RKey, Msg)]),
             {NewLink, Session#session { outgoing_unsettled_map = Unsettled1 }};
        %% FIXME We can't knowingly exceed our credit.  On the other
        %% hand, we've been handed a message to deliver. This has
