@@ -122,7 +122,7 @@ annotated_message(RKey, #amqp_msg{props = Props, payload = Content}) ->
                <<"amqp-sequence">> ->
                    #'v1_0.amqp_sequence'{content = unreserialise(Content)}
            end,
-    [Header, Props10, Data, #'v1_0.footer'{}].
+    [Header, Props10, Data].
 
 get_1_0_type(undefined) ->
     <<"data">>;
