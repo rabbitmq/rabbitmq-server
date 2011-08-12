@@ -941,7 +941,7 @@ ensure_source(Source = #'v1_0.source'{address       = Address,
                     {ok, QueueName, State1} = create_queue(Timeout, State),
                     {ok,
                      Source#'v1_0.source'{address = {utf8, queue_address(QueueName)}},
-                     #outgoing_link{queue = QueueName},
+                     Link#outgoing_link{queue = QueueName},
                      State1};
                 _Else ->
                     {error, {both_dynamic_and_address_supplied,
