@@ -1019,11 +1019,11 @@ check_exchange(ExchangeName, State) when is_binary(ExchangeName) ->
             {ok, ExchangeName, State1}
     end.
 
-%% TODO Lifetimes: we approximate these with exclusive.
+%% TODO Lifetimes: we approximate these with auto_delete.
 create_queue(_Lifetime, State) ->
     State1 = #session{ declaring_channel = Ch } = ensure_declaring_channel(State),
     #'queue.declare_ok'{queue = QueueName} =
-        amqp_channel:call(Ch, #'queue.declare'{exclusive = true}),
+        amqp_channel:call(Ch, #'queue.declare'{auto_delete = true}),
     {ok, QueueName, State1}.
 
 create_bound_queue(ExchangeName, RoutingKey, State) ->
