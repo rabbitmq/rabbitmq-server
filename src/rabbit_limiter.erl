@@ -20,13 +20,14 @@
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2, prioritise_call/3]).
--export([start_link/0, make_token/1, is_enabled/1, enable/2, disable/1]).
+-export([start_link/0, make_token/0, make_token/1, is_enabled/1, enable/2,
+         disable/1]).
 -export([limit/2, can_send/3, ack/2, register/2, unregister/2]).
 -export([get_limit/1, block/1, unblock/1, is_blocked/1]).
 
 %%----------------------------------------------------------------------------
 
--record(token, {pid, enabled = false}).
+-record(token, {pid, enabled}).
 
 -ifdef(use_specs).
 
@@ -35,6 +36,7 @@
 -opaque(token() :: #token{}).
 
 -spec(start_link/0 :: () -> rabbit_types:ok_pid_or_error()).
+-spec(make_token/0 :: () -> token()).
 -spec(make_token/1 :: (undefined | pid()) -> token()).
 -spec(is_enabled/1 :: (token()) -> boolean()).
 -spec(enable/2 :: (token(), non_neg_integer()) -> token()).
@@ -68,7 +70,8 @@
 
 start_link() -> gen_server2:start_link(?MODULE, [], []).
 
-make_token(Pid) -> #token{pid = Pid}.
+make_token() -> make_token(undefined).
+make_token(Pid) -> #token{pid = Pid, enabled = false}.
 
 is_enabled(#token{enabled = Enabled}) -> Enabled.
 

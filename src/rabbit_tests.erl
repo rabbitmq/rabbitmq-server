@@ -1207,7 +1207,7 @@ test_server_status() ->
                                false, false, [], none)]],
 
     ok = rabbit_amqqueue:basic_consume(
-           Q, true, Ch, rabbit_limiter:make_token(undefined),
+           Q, true, Ch, rabbit_limiter:make_token(),
            <<"ctag">>, true, undefined),
 
     %% list queues
