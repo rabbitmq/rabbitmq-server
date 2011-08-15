@@ -89,7 +89,12 @@ test_delete_restart() ->
                       ok = ?MS:terminate_child(b, worker),
                       {ok, Pid3} = ?MS:restart_child(b, worker),
                       Pid3 = pid_of(worker),
-                      false = (Pid2 =:= Pid3)
+                      false = (Pid2 =:= Pid3),
+                      %% Not the same supervisor as the worker is on
+                      ok = ?MS:terminate_child(a, worker),
+                      ok = ?MS:delete_child(a, worker),
+                      {ok, Pid4} = ?MS:start_child(a, S),
+                      false = (Pid3 =:= Pid4)
               end, [a, b]).
 
 %% Not all the members of the group should actually do the failover
