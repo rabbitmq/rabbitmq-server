@@ -111,6 +111,7 @@
 -define(TABLE_DEF,
         {?TABLE,
          [{record_name, mirrored_sup_childspec},
+          {type, ordered_set},
           {attributes, record_info(fields, mirrored_sup_childspec)}]}).
 -define(TABLE_MATCH, {match, #mirrored_sup_childspec{ _ = '_' }}).
 
@@ -331,7 +332,7 @@ handle_call({start_child, ChildSpec}, _From,
 
 handle_call({delete_child, Id}, _From, State = #state{delegate = Delegate,
                                                       group    = Group}) ->
-    {reply, stop(Delegate, Id, Group), State};
+    {reply, stop(Group, Delegate, Id), State};
 
 handle_call({msg, F, A}, _From, State = #state{delegate = Delegate}) ->
     {reply, apply(?SUPERVISOR, F, [Delegate | A]), State};
@@ -370,9 +371,7 @@ handle_info({'DOWN', _Ref, process, Pid, Reason},
 handle_info({'DOWN', _Ref, process, Pid, _Reason},
             State = #state{delegate = Delegate, group = Group}) ->
     %% TODO load balance this
-    %% We remove the dead pid here because pg2 is slightly racy,
-    %% most of the time it will be gone before we get here but not
-    %% always.
+    %% No guarantee pg2 will have received the DOWN before us.
     Self = self(),
     case lists:sort(?PG2:get_members(Group)) -- [Pid] of
         [Self | _] -> {atomic, ChildSpecs} =
@@ -408,10 +407,10 @@ maybe_start(Group, Delegate, ChildSpec) ->
     end.
 
 check_start(Group, Delegate, ChildSpec) ->
-    case mnesia:wread({?TABLE, {id(ChildSpec), Group}}) of
+    case mnesia:wread({?TABLE, {Group, id(ChildSpec)}}) of
         []  -> write(Group, ChildSpec),
                start;
-        [S] -> #mirrored_sup_childspec{key           = {Id, Group},
+        [S] -> #mirrored_sup_childspec{key           = {Group, Id},
                                        mirroring_pid = Pid} = S,
                case self() of
                    Pid -> child(Delegate, Id);
@@ -430,25 +429,25 @@ supervisor(Pid) ->
 
 write(Group, ChildSpec) ->
     ok = mnesia:write(
-           #mirrored_sup_childspec{key           = {id(ChildSpec), Group},
+           #mirrored_sup_childspec{key           = {Group, id(ChildSpec)},
                                    mirroring_pid = self(),
                                    childspec     = ChildSpec}),
     ChildSpec.
 
 delete(Group, Id) ->
-    ok = mnesia:delete({?TABLE, {Id, Group}}).
+    ok = mnesia:delete({?TABLE, {Group, Id}}).
 
 start(Delegate, ChildSpec) ->
     apply(?SUPERVISOR, start_child, [Delegate, ChildSpec]).
 
-stop(Delegate, Id, Group) ->
-    case mnesia:transaction(fun() -> check_stop(Delegate, Id, Group) end) of
+stop(Group, Delegate, Id) ->
+    case mnesia:transaction(fun() -> check_stop(Group, Delegate, Id) end) of
         {atomic, deleted} -> apply(?SUPERVISOR, delete_child, [Delegate, Id]);
         {atomic, running} -> {error, running};
         {aborted, E}      -> {error, E}
     end.
 
-check_stop(Delegate, Id, Group) ->
+check_stop(Group, Delegate, Id) ->
     case child(Delegate, Id) of
         undefined -> delete(Group, Id),
                      deleted;
@@ -463,10 +462,10 @@ update_all(OldPid) ->
                                         childspec     = '$2',
                                         _             = '_'},
     [write(Group, C) ||
-        [{_Id, Group}, C] <- mnesia:select(?TABLE, [{MatchHead, [], ['$$']}])].
+        [{Group, _Id}, C] <- mnesia:select(?TABLE, [{MatchHead, [], ['$$']}])].
 
 delete_all(Group) ->
-    MatchHead = #mirrored_sup_childspec{key       = {'_', Group},
+    MatchHead = #mirrored_sup_childspec{key       = {Group, '_'},
                                         childspec = '$1',
                                         _         = '_'},
     [delete(Group, id(C)) ||
