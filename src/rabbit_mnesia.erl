@@ -772,8 +772,9 @@ on_node_down(Node) ->
     end.
 
 is_only_disc_node(Node, _MnesiaRunning = true) ->
-    OfflineDiscNodes = nodes_of_type(disc_copies) -- running_clustered_nodes(),
-    [Node] =:= nodes_of_type(disc_copies) -- OfflineDiscNodes;
+    RunningSet = sets:from_list(running_clustered_nodes()),
+    DiscSet = sets:from_list(nodes_of_type(disc_copies)),
+    [Node] =:= sets:to_list(sets:intersection(RunningSet, DiscSet));
 is_only_disc_node(Node, false) ->
     start_mnesia(),
     Res = is_only_disc_node(Node, true),
