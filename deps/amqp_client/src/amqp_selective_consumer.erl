@@ -148,7 +148,7 @@ handle_deliver(Deliver, Message, State) ->
     {ok, State}.
 
 %% @private
-handle_info({'DOWN', MRef, process, Pid, _Info},
+handle_info({'DOWN', _MRef, process, Pid, _Info},
             State = #state{monitors         = Monitors,
                            consumers        = Consumers,
                            default_consumer = DConsumer }) ->
