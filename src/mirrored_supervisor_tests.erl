@@ -35,6 +35,7 @@ all_tests() ->
     passed = test_migrate_twice(),
     passed = test_already_there(),
     passed = test_delete_restart(),
+    passed = test_which_children(),
     passed = test_large_group(),
     passed = test_childspecs_at_init(),
     passed = test_anonymous_supervisors(),
@@ -95,6 +96,13 @@ test_delete_restart() ->
                       ok = ?MS:delete_child(a, worker),
                       {ok, Pid4} = ?MS:start_child(a, S),
                       false = (Pid3 =:= Pid4)
+              end, [a, b]).
+
+test_which_children() ->
+    with_sups(fun([A, B]) ->
+                      ?MS:start_child(A, childspec(worker)),
+                      ?MS:start_child(B, childspec(worker2)),
+                      2 = length(?MS:which_children(A))
               end, [a, b]).
 
 %% Not all the members of the group should actually do the failover

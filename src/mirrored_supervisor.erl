@@ -118,7 +118,7 @@
 -export([start_link/3, start_link/4,
          start_child/2, restart_child/2,
          delete_child/2, terminate_child/2,
-         which_children/1, check_childspecs/1]).
+         which_children/1, count_children/1, check_childspecs/1]).
 
 -export([behaviour_info/1]).
 
@@ -259,7 +259,8 @@ start_child(Sup, ChildSpec) -> call(Sup, {start_child,  ChildSpec}).
 delete_child(Sup, Id)       -> find_call(Sup, Id, {delete_child, Id}).
 restart_child(Sup, Id)      -> find_call(Sup, Id, {msg, restart_child, [Id]}).
 terminate_child(Sup, Id)    -> find_call(Sup, Id, {msg, terminate_child, [Id]}).
-which_children(Sup)         -> ?SUPERVISOR:which_children(child(Sup, delegate)).
+which_children(Sup)         -> fold(which_children, Sup, fun lists:append/2).
+count_children(Sup)         -> fold(count_children, Sup, fun add_proplists/2).
 check_childspecs(Specs)     -> ?SUPERVISOR:check_childspecs(Specs).
 
 behaviour_info(callbacks) -> [{init,1}];
@@ -280,6 +281,13 @@ find_call(Sup, Id, Msg) ->
         [Mirror] -> ?GEN_SERVER:call(Mirror, Msg, infinity);
         []       -> {error, not_found}
     end.
+
+fold(FunAtom, Sup, AggFun) ->
+    Group = call(Sup, group),
+    lists:foldl(AggFun, [],
+                [apply(?SUPERVISOR, FunAtom, [D]) ||
+                    M <- ?PG2:get_members(Group),
+                    D <- [?GEN_SERVER:call(M, delegate_supervisor, infinity)]]).
 
 child(Sup, Id) ->
     [Pid] = [Pid || {Id1, Pid, _, _} <- ?SUPERVISOR:which_children(Sup),
@@ -517,3 +525,10 @@ with_exit_handler(Handler, Thunk) ->
         exit:{{R, _}, _} when R =:= nodedown; R =:= shutdown ->
             Handler()
     end.
+
+add_proplists(P1, []) -> P1;
+add_proplists(P1, [{K, V2} | P2]) ->
+    add_proplists(case proplists:get_value(K, P1) of
+                      undefined -> [{K, V2} | P1];
+                      V1        -> [{K, V1 + V2} | proplists:delete(K, P1)]
+                  end, P2).
