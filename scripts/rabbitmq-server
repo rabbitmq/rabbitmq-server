@@ -102,6 +102,7 @@ exec erl \
     ${RABBITMQ_SERVER_ERL_ARGS} \
     ${RABBITMQ_LISTEN_ARG} \
     -sasl errlog_type error \
+    -sasl sasl_error_logger false \
     -rabbit error_logger '{file,"'${RABBITMQ_LOGS}'"}' \
     -rabbit sasl_error_logger '{file,"'${RABBITMQ_SASL_LOGS}'"}' \
     -os_mon start_cpu_sup true \

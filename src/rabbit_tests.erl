@@ -35,20 +35,20 @@ test_content_prop_roundtrip(Datum, Binary) ->
     Binary = rabbit_binary_generator:encode_properties(Types, Values). %% assertion
 
 all_tests() ->
-    %% passed = gm_tests:all_tests(),
-    %% application:set_env(rabbit, file_handles_high_watermark, 10, infinity),
-    %% ok = file_handle_cache:set_limit(10),
-    %% passed = test_file_handle_cache(),
-    %% passed = test_backing_queue(),
-    %% passed = test_priority_queue(),
-    %% passed = test_bpqueue(),
-    %% passed = test_pg_local(),
-    %% passed = test_unfold(),
-    %% passed = test_supervisor_delayed_restart(),
-    %% passed = test_parsing(),
-    %% passed = test_content_framing(),
-    %% passed = test_content_transcoding(),
-    %% passed = test_topic_matching(),
+    passed = gm_tests:all_tests(),
+    application:set_env(rabbit, file_handles_high_watermark, 10, infinity),
+    ok = file_handle_cache:set_limit(10),
+    passed = test_file_handle_cache(),
+    passed = test_backing_queue(),
+    passed = test_priority_queue(),
+    passed = test_bpqueue(),
+    passed = test_pg_local(),
+    passed = test_unfold(),
+    passed = test_supervisor_delayed_restart(),
+    passed = test_parsing(),
+    passed = test_content_framing(),
+    passed = test_content_transcoding(),
+    passed = test_topic_matching(),
     passed = test_log_management(),
     passed = test_app_management(),
     passed = test_log_management_during_startup(),
@@ -822,8 +822,6 @@ test_log_management() ->
     %% cleanup
     ok = application:set_env(rabbit, sasl_error_logger, {file, SaslLog}),
     ok = application:set_env(rabbit, error_logger, {file, MainLog}),
-    ok = add_log_handlers([{rabbit_error_logger_file_h, MainLog},
-                           {rabbit_sasl_report_file_h, SaslLog}]),
     passed.
 
 test_log_management_during_startup() ->
@@ -850,13 +848,13 @@ test_log_management_during_startup() ->
          end,
 
     %% fix sasl logging
-    ok = application:set_env(rabbit, sasl_error_logger,
-                             {file, SaslLog}),
+    ok = application:unset_env(sasl, sasl_error_logger),
+    ok = application:set_env(rabbit, sasl_error_logger, {file, SaslLog}),
 
     %% start application with logging to non-existing directory
     TmpLog = "/tmp/rabbit-tests/test.log",
     delete_file(TmpLog),
-    ok = application:set_env(rabbit, error_logger, {file, TmpLog}),
+    ok = application:set_env(kernel, error_logger, {file, TmpLog}),
 
     ok = delete_log_handlers([rabbit_error_logger_file_h]),
     ok = add_log_handlers([{error_logger_file_h, MainLog}]),
@@ -877,7 +875,7 @@ test_log_management_during_startup() ->
     %% start application with logging to a subdirectory which
     %% parent directory has no write permissions
     TmpTestDir = "/tmp/rabbit-tests/no-permission/test/log",
-    ok = application:set_env(rabbit, error_logger, {file, TmpTestDir}),
+    ok = application:set_env(kernel, error_logger, {file, TmpTestDir}),
     ok = add_log_handlers([{error_logger_file_h, MainLog}]),
     ok = case control_action(start_app, []) of
              ok -> exit({got_success_but_expected_failure,
@@ -892,6 +890,7 @@ test_log_management_during_startup() ->
 
     %% start application with standard error_logger_file_h
     %% handler not installed
+    ok = application:unset_env(kernel, error_logger),
     ok = application:set_env(rabbit, error_logger, {file, MainLog}),
     ok = control_action(start_app, []),
     ok = control_action(stop_app, []),

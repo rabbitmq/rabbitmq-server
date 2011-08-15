@@ -244,12 +244,14 @@ environment() ->
 
 rotate_logs(BinarySuffix) ->
     Suffix = binary_to_list(BinarySuffix),
-    log_rotation_result(rotate_logs(log_location(kernel),
+    R = log_rotation_result(rotate_logs(log_location(kernel),
                                     Suffix,
                                     rabbit_error_logger_file_h),
                         rotate_logs(log_location(sasl),
                                     Suffix,
-                                    rabbit_sasl_report_file_h)).
+                                    rabbit_sasl_report_file_h)),
+    io:format("Rot Handlers: ~p~n", [gen_event:which_handlers(error_logger)]),
+    R.
 
 %%--------------------------------------------------------------------
 
@@ -441,18 +443,21 @@ insert_default_data() ->
 
 ensure_working_log_handlers() ->
     Handlers = gen_event:which_handlers(error_logger),
-    ok = ensure_working_log_handler(rabbit_error_logger_file_h,
+    ok = ensure_working_log_handler(error_logger_file_h,
+                                    rabbit_error_logger_file_h,
                                     error_logger_tty_h,
                                     log_location(kernel),
                                     Handlers),
-    ok = ensure_working_log_handler(rabbit_sasl_report_file_h,
+    ok = ensure_working_log_handler(sasl_report_file_h,
+                                    rabbit_sasl_report_file_h,
                                     sasl_report_tty_h,
                                     log_location(sasl),
                                     Handlers),
     error_logger:delete_report_handler(error_logger_tty_h),
     ok.
 
-ensure_working_log_handler(NewFHandler, TTYHandler, LogLocation, Handlers) ->
+ensure_working_log_handler(OldFHandler, NewFHandler, TTYHandler, LogLocation,
+                           Handlers) ->
     case LogLocation of
         undefined -> ok;
         tty       -> case lists:member(TTYHandler, Handlers) of
@@ -464,7 +469,7 @@ ensure_working_log_handler(NewFHandler, TTYHandler, LogLocation, Handlers) ->
         _         -> case lists:member(NewFHandler, Handlers) of
                          true  -> ok;
                          false -> case rotate_logs(LogLocation, "",
-                                                   NewFHandler) of
+                                                   OldFHandler, NewFHandler) of
                                       ok -> ok;
                                       {error, Reason} ->
                                           throw({error, {cannot_log_to_file,
