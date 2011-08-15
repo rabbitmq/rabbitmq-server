@@ -51,7 +51,7 @@
 
 -record(state, {consumers             = dict:new(), %% Tag -> ConsumerPid
                 unassigned            = undefined,  %% Pid
-                monitors              = dict:new(), %% Pid -> MRef
+                monitors              = dict:new(), %% Pid -> {Count, MRef}
                 default_consumer      = none}).
 
 %%---------------------------------------------------------------------------
@@ -101,8 +101,7 @@ handle_consume(BasicConsume, Pid, State = #state{consumers = Consumers,
         {true, #'basic.consume'{nowait = true}} ->
             {ok, State#state
              {consumers = dict:store(Tag, Pid, Consumers),
-              monitors  = dict:store(
-                            Pid, erlang:monitor(process, Pid), Monitors)}};
+              monitors  = add_to_monitor_dict(Pid, Monitors)}};
         {true, #'basic.consume'{nowait = false}} ->
             {ok, State#state{unassigned = Pid}};
         {false, #'basic.consume'{nowait = true}} ->
@@ -122,7 +121,7 @@ handle_consume_ok(BasicConsumeOk, _BasicConsume,
     State1 =
         State#state{
           consumers  = dict:store(tag(BasicConsumeOk), Pid, Consumers),
-          monitors   = dict:store(Pid, erlang:monitor(process, Pid), Monitors),
+          monitors   = add_to_monitor_dict(Pid, Monitors),
           unassigned = undefined},
     deliver(BasicConsumeOk, State1),
     {ok, State1}.
@@ -149,12 +148,12 @@ handle_deliver(Deliver, Message, State) ->
     {ok, State}.
 
 %% @private
-handle_info({'DOWN', _MRef, process, Pid, _Info},
+handle_info({'DOWN', MRef, process, Pid, _Info},
             State = #state{monitors         = Monitors,
                            consumers        = Consumers,
                            default_consumer = DConsumer }) ->
     case dict:find(Pid, Monitors) of
-        {ok, _Tag} ->
+        {ok, _CountMRef} ->
             {ok, State#state{monitors = dict:erase(Pid, Monitors),
                              consumers =
                                  dict:filter(
@@ -175,15 +174,13 @@ handle_info({'DOWN', _MRef, process, Pid, _Info},
 handle_call({register_default_consumer, Pid}, _From,
             State = #state{default_consumer = PrevPid,
                            monitors         = Monitors}) ->
-    case PrevPid of
-        none -> ok;
-        _    -> erlang:demonitor(dict:fetch(PrevPid, Monitors)),
-                dict:erase(PrevPid, Monitors)
-    end,
+    Monitors1 = case PrevPid of
+                    none -> Monitors;
+                    _    -> remove_from_monitor_dict(PrevPid, Monitors)
+                end,
     {reply, ok,
      State#state{default_consumer = Pid,
-                 monitors = dict:store(
-                              Pid, erlang:monitor(process, Pid), Monitors)}}.
+                 monitors = add_to_monitor_dict(Pid, Monitors1)}}.
 
 %% @private
 terminate(_Reason, State) ->
@@ -209,10 +206,9 @@ do_cancel(Cancel, State = #state{consumers = Consumers,
                                  monitors  = Monitors}) ->
     Tag = tag(Cancel),
     case dict:find(Tag, Consumers) of
-        {ok, Pid} -> MRef = dict:fetch(Pid, Monitors),
-                     erlang:demonitor(MRef),
-                     State#state{consumers = dict:erase(Tag, Consumers),
-                                 monitors  = dict:erase(Pid, Monitors)};
+        {ok, Pid} -> State#state{
+                       consumers = dict:erase(Tag, Consumers),
+                       monitors  = remove_from_monitor_dict(Pid, Monitors)};
         error     -> %% Untracked consumer. Do nothing.
                      State
     end.
@@ -232,3 +228,18 @@ tag(#'basic.consume_ok'{consumer_tag = Tag})      -> Tag;
 tag(#'basic.cancel'{consumer_tag = Tag})          -> Tag;
 tag(#'basic.cancel_ok'{consumer_tag = Tag})       -> Tag;
 tag(#'basic.deliver'{consumer_tag = Tag})         -> Tag.
+
+add_to_monitor_dict(Pid, Monitors) ->
+    case dict:find(Pid, Monitors) of
+        error               -> dict:store(Pid,
+                                          {1, erlang:monitor(process, Pid)},
+                                          Monitors);
+        {ok, {Count, MRef}} -> dict:store(Pid, {Count + 1, MRef}, Monitors)
+    end.
+
+remove_from_monitor_dict(Pid, Monitors) ->
+    case dict:fetch(Pid, Monitors) of
+        {1, MRef}     -> erlang:demonitor(MRef),
+                         dict:erase(Pid, Monitors);
+        {Count, MRef} -> dict:store(Pid, {Count - 1, MRef}, Monitors)
+    end.
