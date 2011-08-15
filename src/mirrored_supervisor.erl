@@ -256,9 +256,9 @@ init(Mod, Args) ->
     end.
 
 start_child(Sup, ChildSpec) -> call(Sup, {start_child,  ChildSpec}).
-delete_child(Sup, Name)     -> call(Sup, {delete_child, Name}).
-restart_child(Sup, Name)    -> call(Sup, {msg, restart_child,   [Name]}).
-terminate_child(Sup, Name)  -> call(Sup, {msg, terminate_child, [Name]}).
+delete_child(Sup, Id)       -> find_call(Sup, Id, {delete_child, Id}).
+restart_child(Sup, Id)      -> find_call(Sup, Id, {msg, restart_child, [Id]}).
+terminate_child(Sup, Id)    -> find_call(Sup, Id, {msg, terminate_child, [Id]}).
 which_children(Sup)         -> ?SUPERVISOR:which_children(child(Sup, delegate)).
 check_childspecs(Specs)     -> ?SUPERVISOR:check_childspecs(Specs).
 
@@ -268,9 +268,22 @@ behaviour_info(_Other)    -> undefined.
 call(Sup, Msg) ->
     ?GEN_SERVER:call(child(Sup, mirroring), Msg, infinity).
 
-child(Sup, Name) ->
-    [Pid] = [Pid || {Name1, Pid, _, _} <- ?SUPERVISOR:which_children(Sup),
-                    Name1 =:= Name],
+find_call(Sup, Id, Msg) ->
+    Group = call(Sup, group),
+    MatchHead = #mirrored_sup_childspec{mirroring_pid = '$1',
+                                        key           = {Group, Id},
+                                        _             = '_'},
+    %% If we did this inside a tx we could still have failover
+    %% immediately after the tx - we can't be 100% here. So we may as
+    %% well direct_select.
+    case mnesia:dirty_select(?TABLE, [{MatchHead, [], ['$1']}]) of
+        [Mirror] -> ?GEN_SERVER:call(Mirror, Msg, infinity);
+        []       -> {error, not_found}
+    end.
+
+child(Sup, Id) ->
+    [Pid] = [Pid || {Id1, Pid, _, _} <- ?SUPERVISOR:which_children(Sup),
+                    Id1 =:= Id],
     Pid.
 
 %%----------------------------------------------------------------------------
@@ -339,6 +352,9 @@ handle_call({msg, F, A}, _From, State = #state{delegate = Delegate}) ->
 
 handle_call(delegate_supervisor, _From, State = #state{delegate = Delegate}) ->
     {reply, Delegate, State};
+
+handle_call(group, _From, State = #state{group = Group}) ->
+    {reply, Group, State};
 
 handle_call(Msg, _From, State) ->
     {stop, {unexpected_call, Msg}, State}.
