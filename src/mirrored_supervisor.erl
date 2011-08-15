@@ -276,7 +276,7 @@ find_call(Sup, Id, Msg) ->
                                         _             = '_'},
     %% If we did this inside a tx we could still have failover
     %% immediately after the tx - we can't be 100% here. So we may as
-    %% well direct_select.
+    %% well dirty_select.
     case mnesia:dirty_select(?TABLE, [{MatchHead, [], ['$1']}]) of
         [Mirror] -> ?GEN_SERVER:call(Mirror, Msg, infinity);
         []       -> {error, not_found}
