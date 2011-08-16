@@ -1304,25 +1304,6 @@ user(Username) ->
           impl         = #internal_user{username = Username,
                                         tags     = [administrator]}}.
 
-test_statistics_event_receiver(Pid) ->
-    receive
-        Foo -> Pid ! Foo, test_statistics_event_receiver(Pid)
-    end.
-
-test_statistics_receive_event(Ch, Matcher) ->
-    rabbit_channel:flush(Ch),
-    Ch ! emit_stats,
-    test_statistics_receive_event1(Ch, Matcher).
-
-test_statistics_receive_event1(Ch, Matcher) ->
-    receive #event{type = channel_stats, props = Props} ->
-            case Matcher(Props) of
-                true -> Props;
-                _    -> test_statistics_receive_event1(Ch, Matcher)
-            end
-    after 1000 -> throw(failed_to_receive_event)
-    end.
-
 test_confirms() ->
     {_Writer, Ch} = test_spawn(),
     DeclareBindDurableQueue =
@@ -1382,6 +1363,25 @@ test_confirms() ->
     ok = rabbit_channel:shutdown(Ch),
 
     passed.
+
+test_statistics_event_receiver(Pid) ->
+    receive
+        Foo -> Pid ! Foo, test_statistics_event_receiver(Pid)
+    end.
+
+test_statistics_receive_event(Ch, Matcher) ->
+    rabbit_channel:flush(Ch),
+    Ch ! emit_stats,
+    test_statistics_receive_event1(Ch, Matcher).
+
+test_statistics_receive_event1(Ch, Matcher) ->
+    receive #event{type = channel_stats, props = Props} ->
+            case Matcher(Props) of
+                true -> Props;
+                _    -> test_statistics_receive_event1(Ch, Matcher)
+            end
+    after 1000 -> throw(failed_to_receive_event)
+    end.
 
 test_statistics() ->
     application:set_env(rabbit, collect_statistics, fine),
