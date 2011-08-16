@@ -377,7 +377,7 @@ handle_event(#event{type = queue_mirror_deaths, props = Props},
     Dead = pget(pids, Props),
     Table = orddict:fetch(queue_stats, Tables),
     %% This is of course slow. It would be faster if the queue stats
-    %% were keyed off queue name as well. But that's a bug change, and
+    %% were keyed off queue name as well. But that's a big change, and
     %% this doesn't happen very often.
     prune_slaves(ets:match(Table, {{'$1', stats}, '$2', '$3'}, 100),
                  Dead, Table),
