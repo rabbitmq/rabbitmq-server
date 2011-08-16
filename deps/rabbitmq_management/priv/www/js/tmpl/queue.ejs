@@ -67,8 +67,15 @@
       <tr>
         <th>Mirrors</th>
         <td>
-          <% for (var i in queue.mirror_nodes) { %>
-            <%= queue.mirror_nodes[i] %><br/>
+          <% for (var i in queue.slave_nodes) {
+             var node = queue.slave_nodes[i];
+          %>
+            <% if (jQuery.inArray(node, queue.synchronised_slave_nodes) == -1) { %>
+             <%= node %> <b>(unsynchronised)</b>
+            <% } else { %>
+             <%= node %>
+            <% } %>
+            <br/>
           <% } %>
         </td>
       </tr>
