@@ -203,6 +203,7 @@ if_unknown(Val,    _Def) -> Val.
 %%----------------------------------------------------------------------------
 
 init([]) ->
+    rabbit:force_event_refresh(),
     {ok, Interval} = application:get_env(rabbit, collect_statistics_interval),
     {ok, #state{interval = Interval,
                 tables = orddict:from_list(
