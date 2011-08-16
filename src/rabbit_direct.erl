@@ -57,7 +57,8 @@ boot() ->
     ok.
 
 force_event_refresh() ->
-    [Pid ! force_event_refresh || Pid<- list()].
+    [Pid ! force_event_refresh || Pid<- list()],
+    ok.
 
 list_local() ->
     pg_local:get_members(rabbit_direct).
