@@ -1400,7 +1400,7 @@ test_statistics() ->
     QPid = Q#amqqueue.pid,
     X = rabbit_misc:r(<<"/">>, exchange, <<"">>),
 
-    rabbit_tests_event_receiver:start(self(), [node()]),
+    rabbit_tests_event_receiver:start(self(), [node()], [channel_stats]),
 
     %% Check stats empty
     Event = test_statistics_receive_event(Ch, fun (_) -> true end),
@@ -1444,10 +1444,8 @@ test_statistics() ->
     passed.
 
 test_refresh_events(SecondaryNode) ->
-    %% Just make sure we don't have some other events ready to consume...
-    drain_mbx(),
-
-    rabbit_tests_event_receiver:start(self(), [node(), SecondaryNode]),
+    rabbit_tests_event_receiver:start(self(), [node(), SecondaryNode],
+                                      [channel_created, queue_created]),
 
     {_Writer, Ch} = test_spawn(),
     expect_events(Ch, channel_created),
@@ -1473,11 +1471,6 @@ expect_events(Pid, Type) ->
 expect_event(Pid, Type) ->
     receive #event{type = Type, props = Props} -> Pid = pget(pid, Props)
     after 1000 -> throw({failed_to_receive_event, Type})
-    end.
-
-drain_mbx() ->
-    receive _ -> drain_mbx()
-    after 0   -> ok
     end.
 
 test_delegates_async(SecondaryNode) ->
