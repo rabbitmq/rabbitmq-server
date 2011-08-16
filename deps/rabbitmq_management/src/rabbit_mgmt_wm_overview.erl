@@ -74,9 +74,9 @@ listeners() ->
       ["protocol", "port", "node"] ).
 
 rabbit_mochiweb_contexts() ->
-    Nodes = proplists:get_value(running_nodes, rabbit_mnesia:status()),
     rabbit_mgmt_util:sort_list(
-      lists:append([contexts(Node) || Node <- Nodes]),
+      lists:append([contexts(Node) ||
+                       Node <- rabbit_mnesia:running_clustered_nodes()]),
       ["description", "port", "node"]).
 
 contexts(Node) ->
