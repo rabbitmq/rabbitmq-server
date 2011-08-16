@@ -514,6 +514,7 @@ log_rotation_result(ok, ok) ->
     ok.
 
 force_event_refresh() ->
+    rabbit_direct:force_event_refresh(),
     rabbit_networking:force_connection_event_refresh(),
     rabbit_channel:force_event_refresh(),
     rabbit_amqqueue:force_event_refresh().
