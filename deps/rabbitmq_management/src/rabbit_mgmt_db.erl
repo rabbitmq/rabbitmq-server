@@ -293,12 +293,24 @@ code_change(_OldVsn, State, _Extra) ->
 
 %%----------------------------------------------------------------------------
 
+handle_event(#event{type = queue_created, props = Props}, State) ->
+    QName = pget(name, Props),
+    case pget(synchronised_slave_pids, Props) of
+        SSPids when is_list(SSPids) ->
+            [handle_slave_synchronised(QName, SSPid, State) || SSPid <- SSPids];
+        _ ->
+            ok
+    end,
+    {ok, State};
+
 handle_event(#event{type = queue_stats, props = Stats, timestamp = Timestamp},
              State) ->
     handle_stats(queue_stats, Stats, Timestamp,
                  [{fun rabbit_mgmt_format:properties/1,[backing_queue_status]},
                   {fun rabbit_mgmt_format:timestamp/1, [idle_since]}],
-                 [], State);
+                 [], State),
+    prune_synchronised_slaves(
+      true, pget(name, Stats), pget(slave_pids, Stats), State);
 
 handle_event(Event = #event{type = queue_deleted}, State) ->
     handle_deleted(queue_stats, Event, State);
@@ -354,6 +366,23 @@ handle_event(#event{type = consumer_deleted, props = Props}, State) ->
     handle_consumer(fun(Table, Id, _P) -> ets:delete(Table, Id) end,
                     Props, State);
 
+handle_event(#event{type = queue_slave_synchronised, props = Props}, State) ->
+    handle_slave_synchronised(pget(name, Props), pget(pid, Props), State);
+
+handle_event(#event{type = queue_slave_promoted, props = Props}, State) ->
+    handle_slave_promoted(pget(name, Props), pget(pid, Props), State);
+
+handle_event(#event{type = queue_mirror_deaths, props = Props},
+             State = #state{tables = Tables}) ->
+    Dead = pget(pids, Props),
+    Table = orddict:fetch(queue_stats, Tables),
+    %% This is of course slow. It would be faster if the queue stats
+    %% were keyed off queue name as well. But that's a bug change, and
+    %% this doesn't happen very often.
+    prune_slaves(ets:match(Table, {{'$1', stats}, '$2', '$3'}, 100),
+                 Dead, Table),
+    prune_synchronised_slaves(false, pget(name, Props), Dead, State);
+
 handle_event(_Event, State) ->
     {ok, State}.
 
@@ -380,11 +409,13 @@ handle_stats(TName, Stats0, Timestamp, Funs,
     ets:insert(Table, {Id, Stats2, Timestamp}),
     {ok, State}.
 
-handle_deleted(TName, #event{props = [{pid, Pid}]},
-               State = #state{tables = Tables}) ->
+handle_deleted(TName, #event{props = Props}, State = #state{tables = Tables}) ->
     Table = orddict:fetch(TName, Tables),
+    Pid = pget(pid, Props),
+    Name = pget(name, Props),
     ets:delete(Table, {id(Pid), create}),
     ets:delete(Table, {id(Pid), stats}),
+    ets:delete(Table, {Name, synchronised_slaves}),
     {ok, State}.
 
 handle_consumer(Fun, Props,
@@ -393,6 +424,51 @@ handle_consumer(Fun, Props,
     Table = orddict:fetch(consumers, Tables),
     Fun(Table, {pget(queue, P), pget(channel, P)}, P),
     {ok, State}.
+
+handle_slave_synchronised(QName, SSPid, State) ->
+    SSNode = node(SSPid),
+    update_synchronised_slaves(
+      fun (SSNodes) -> case lists:member(SSNode, SSNodes) of
+                           true  -> [SSNodes];
+                           false -> [SSNode | SSNodes]
+                       end
+      end, QName, State).
+
+handle_slave_promoted(QName, NewMPid, State) ->
+    update_synchronised_slaves(
+      fun (SSNodes) -> SSNodes -- [node(NewMPid)] end, QName, State).
+
+prune_synchronised_slaves(Member, QName, SPids, State) ->
+    SNodes = [node(SPid) || SPid <- SPids],
+    update_synchronised_slaves(
+      fun (SSNodes) ->
+              lists:filter(fun (S) -> lists:member(S, SNodes) =:= Member end,
+                           SSNodes)
+      end, QName, State).
+
+update_synchronised_slaves(Fun, QName, State = #state{tables = Tables}) ->
+    Table = orddict:fetch(queue_stats, Tables),
+    New = case ets:lookup(Table, {QName, synchronised_slaves}) of
+              []             -> Fun([]);
+              [{_, SSNodes}] -> Fun(SSNodes)
+          end,
+    ets:insert(Table, {{QName, synchronised_slaves}, New}),
+    {ok, State}.
+
+prune_slaves('$end_of_table', _Dead, Table) -> ok;
+
+prune_slaves({Matches, Continuation}, Dead, Table) ->
+    [prune_slaves0(M, Dead, Table) || M <- Matches],
+    prune_slaves(ets:match(Continuation), Dead, Table).
+
+prune_slaves0([Pid, Stats, Timestamp], Dead, Table) ->
+    Old = pget(slave_pids, Stats),
+    New = Old -- Dead,
+    case New of
+        Old -> ok;
+        _   -> NewStats = pset(slave_pids, New, Stats),
+               ets:insert(Table, {{Pid, stats}, NewStats, Timestamp})
+    end.
 
 handle_fine_stats(Type, Props, Timestamp, State = #state{tables = Tables}) ->
     case pget(Type, Props) of
@@ -519,6 +595,18 @@ consumer_details_fun(PatternFun, State = #state{tables = Tables}) ->
                                   ets:match(Table, {Pattern, '$1'}))]}]
     end.
 
+synchronised_slaves_fun(#state{tables = Tables}) ->
+    Table = orddict:fetch(queue_stats, Tables),
+
+    fun (Props) -> QName = rabbit_misc:r(pget(vhost, Props), queue,
+                                         pget(name, Props)),
+                   Key = {QName, synchronised_slaves},
+                   case ets:lookup(Table, Key) of
+                       []       -> [];
+                       [{_, N}] -> [{synchronised_slave_nodes, N}]
+                   end
+    end.
+
 zero_old_rates(Stats, State) -> [maybe_zero_rate(S, State) || S <- Stats].
 
 maybe_zero_rate({Key, Val}, #state{interval = Interval}) ->
@@ -606,7 +694,8 @@ detail_queue_stats(Objs, State) ->
                       queue_funs(State))).
 
 queue_funs(State) ->
-    [basic_stats_fun(queue_stats, State), augment_msg_stats_fun(State)].
+    [basic_stats_fun(queue_stats, State), augment_msg_stats_fun(State),
+     synchronised_slaves_fun(State)].
 
 exchange_stats(Objs, FineSpecs, State) ->
     merge_stats(Objs, [fine_stats_fun(FineSpecs, State),

@@ -133,6 +133,8 @@ h3 { padding: 0 0 2px 0; margin: 1em 0 1em 0; font-size: 1em; border-bottom: 1px
 
 acronym { background: #add; color: #222; padding: 2px 4px; border-radius: 2px; -moz-border-radius: 2px; border: none; cursor: default; }
 
+acronym.warning { background: #daa; }
+
 table.bindings { margin-bottom: 1em; }
 td.binding-endpoint span.object { border: 1px solid #bbb; padding: 10px; border-radius: 10px; -moz-border-radius: 10px; }
 td.binding-endpoint span.arrow { font-size: 200%; }
