@@ -24,7 +24,7 @@
          create_cluster_nodes_config/1, read_cluster_nodes_config/0,
          record_running_nodes/0, read_previously_running_nodes/0,
          delete_previously_running_nodes/0, running_nodes_filename/0,
-         is_disc_node/0]).
+         is_disc_node/0, on_node_down/1, on_node_up/1]).
 
 -export([table_names/0]).
 
@@ -67,6 +67,8 @@
 -spec(delete_previously_running_nodes/0 :: () ->  'ok').
 -spec(running_nodes_filename/0 :: () -> file:filename()).
 -spec(is_disc_node/0 :: () -> boolean()).
+-spec(on_node_up/1 :: (node()) -> 'ok').
+-spec(on_node_down/1 :: (node()) -> 'ok').
 
 -endif.
 
@@ -120,10 +122,19 @@ cluster(ClusterNodes, Force) ->
     ensure_mnesia_not_running(),
     ensure_mnesia_dir(),
 
+    case not Force andalso is_only_disc_node(node(), false) andalso
+         not should_be_disc_node(ClusterNodes) of
+        true -> log_both("last running disc node leaving cluster");
+        _    -> ok
+    end,
+
     %% Wipe mnesia if we're changing type from disc to ram
     case {is_disc_node(), should_be_disc_node(ClusterNodes)} of
-        {true, false} -> error_logger:warning_msg(
-                           "changing node type; wiping mnesia...~n~n"),
+        {true, false} -> rabbit_misc:with_local_io(
+                           fun () -> error_logger:warning_msg(
+                                       "changing node type; wiping "
+                                       "mnesia...~n~n")
+                           end),
                          rabbit_misc:ensure_ok(mnesia:delete_schema([node()]),
                                                cannot_delete_schema);
         _             -> ok
@@ -161,6 +172,7 @@ cluster(ClusterNodes, Force) ->
     after
         stop_mnesia()
     end,
+
     ok.
 
 %% return node to its virgin state, where it is not member of any
@@ -702,6 +714,10 @@ wait_for_tables(TableNames) ->
 
 reset(Force) ->
     ensure_mnesia_not_running(),
+    case not Force andalso is_only_disc_node(node(), false) of
+        true  -> log_both("no other disc nodes running");
+        false -> ok
+    end,
     Node = node(),
     case Force of
         true  -> ok;
@@ -752,6 +768,39 @@ leave_cluster(Nodes, RunningNodes) ->
 wait_for(Condition) ->
     error_logger:info_msg("Waiting for ~p...~n", [Condition]),
     timer:sleep(1000).
+
+on_node_up(Node) ->
+    case is_only_disc_node(Node, true) of
+        true  -> rabbit_misc:with_local_io(
+                   fun () -> rabbit_log:info("cluster contains disc "
+                                             "nodes again~n")
+                   end);
+        false -> ok
+    end.
+
+on_node_down(Node) ->
+    case is_only_disc_node(Node, true) of
+        true  -> rabbit_misc:with_local_io(
+                   fun () -> rabbit_log:info("only running disc node "
+                                             "went down~n")
+                   end);
+        false -> ok
+    end.
+
+is_only_disc_node(Node, _MnesiaRunning = true) ->
+    RunningSet = sets:from_list(running_clustered_nodes()),
+    DiscSet = sets:from_list(nodes_of_type(disc_copies)),
+    [Node] =:= sets:to_list(sets:intersection(RunningSet, DiscSet));
+is_only_disc_node(Node, false) ->
+    start_mnesia(),
+    Res = is_only_disc_node(Node, true),
+    stop_mnesia(),
+    Res.
+
+log_both(Warning) ->
+    io:format("Warning: ~s~n", [Warning]),
+    rabbit_misc:with_local_io(
+      fun () -> error_logger:warning_msg("~s~n", [Warning]) end).
 
 start_mnesia() ->
     rabbit_misc:ensure_ok(mnesia:start(), cannot_start_mnesia),
