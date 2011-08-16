@@ -866,7 +866,10 @@
               </varlistentry>
               <varlistentry>
                 <term>synchronised_slave_pids</term>
-                <listitem><para>If the queue is mirrored, this gives the IDs of the current slaves which are synchronised with the master.</para></listitem>
+                <listitem><para>If the queue is mirrored, this gives the IDs of
+                the current slaves which are synchronised with the master -
+                i.e. those which could take over from the master without
+                message loss.</para></listitem>
               </varlistentry>
             </variablelist>
             <para>
