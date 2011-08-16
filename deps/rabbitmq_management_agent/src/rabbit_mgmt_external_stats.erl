@@ -10,13 +10,8 @@
 %%
 %%   The Original Code is RabbitMQ Management Console.
 %%
-%%   The Initial Developers of the Original Code are Rabbit Technologies Ltd.
-%%
-%%   Copyright (C) 2010 Rabbit Technologies Ltd.
-%%
-%%   All Rights Reserved.
-%%
-%%   Contributor(s): ______________________________________.
+%%   The Initial Developer of the Original Code is VMware, Inc.
+%%   Copyright (c) 2010-2011 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_mgmt_external_stats).
@@ -51,17 +46,18 @@ info(Node) ->
     info(Node, ?KEYS).
 
 info(Node, Keys) ->
-    try
-        gen_server2:call({?MODULE, Node}, {info, Keys}, infinity)
-    catch
-        exit:{noproc, _} -> [{external_stats_not_running, true}]
-    end.
+    rabbit_misc:with_exit_handler(
+      fun() -> [{external_stats_not_running, true}] end,
+      fun() -> gen_server2:call({?MODULE, Node}, {info, Keys}, infinity) end).
 
 %%--------------------------------------------------------------------
 
 get_used_fd_lsof() ->
-    Lsof = os:cmd("lsof -d \"0-9999999\" -lna -p " ++ os:getpid()),
-    string:words(Lsof, $\n).
+    case os:find_executable("lsof") of
+        false -> unknown;
+        Path  -> Cmd = Path ++ " -d \"0-9999999\" -lna -p " ++ os:getpid(),
+                 string:words(os:cmd(Cmd), $\n) - 1
+    end.
 
 get_used_fd() ->
     get_used_fd(os:type()).
@@ -70,8 +66,7 @@ get_used_fd({unix, linux}) ->
     {ok, Files} = file:list_dir("/proc/" ++ os:getpid() ++ "/fd"),
     length(Files);
 
-get_used_fd({unix, Os}) when Os =:= darwin
-                      orelse Os =:= freebsd ->
+get_used_fd({unix, _}) ->
     get_used_fd_lsof();
 
 %% handle.exe can be obtained from
