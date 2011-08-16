@@ -31,7 +31,7 @@
                sockets_used, sockets_total, mem_used, mem_limit, mem_alarm,
                proc_used, proc_total, statistics_level,
                erlang_version, uptime, run_queue, processors, exchange_types,
-               auth_mechanisms, applications, contexts]).
+               auth_mechanisms, applications]).
 
 %%--------------------------------------------------------------------
 
@@ -164,9 +164,7 @@ i(applications, _State) ->
     [format_application(A) ||
         A <- lists:keysort(1, application:which_applications())];
 i(mem_alarm, _State) -> lists:member({{vm_memory_high_watermark, node()}, []},
-                                     alarm_handler:get_alarms());
-i(contexts, _State) ->
-    [format_context(C) || C <- rabbit_mochiweb_registry:list_all()].
+                                     alarm_handler:get_alarms()).
 
 list_registry_plugins(Type) ->
     list_registry_plugins(Type, fun(_) -> true end).
@@ -182,13 +180,6 @@ format_application({Application, Description, Version}) ->
     [{name, Application},
      {description, list_to_binary(Description)},
      {version, list_to_binary(Version)}].
-
-format_context({Path, Description, Rest}) ->
-    DescPart = case Description of
-                   none -> [];
-                   _    -> [{description, list_to_binary(Description)}]
-               end,
-    DescPart ++ [{path, list_to_binary("/" ++ Path)}] ++ Rest.
 
 %%--------------------------------------------------------------------
 
