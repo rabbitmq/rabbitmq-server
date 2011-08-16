@@ -1768,23 +1768,21 @@ msg_store_client_init(MsgStore, Ref) ->
     rabbit_msg_store:client_init(MsgStore, Ref, undefined, undefined).
 
 on_disk_capture() ->
-    on_disk_capture({gb_sets:new(), gb_sets:new(), undefined}).
+    on_disk_capture({gb_sets:new(), undefined, undefined}).
 on_disk_capture({OnDisk, Awaiting, Pid}) ->
     receive
-        {on_disk, MsgIds} when Awaiting =/= undefined ->
-            Awaiting1 = gb_sets:subtract(Awaiting, MsgIds),
-            OnDisk1 = gb_sets:subtract(gb_sets:union(OnDisk, MsgIds), Awaiting),
-            case (not gb_sets:is_empty(Awaiting))
-                andalso gb_sets:is_empty(Awaiting1) of
-                true  -> Pid ! {self(), arrived},
-                         on_disk_capture({OnDisk1, undefined, undefined});
-                false -> on_disk_capture({OnDisk1, Awaiting1, Pid})
-            end;
-        {on_disk, MsgIds} ->
-            on_disk_capture({gb_sets:union(OnDisk, MsgIds), Awaiting, Pid});
-        {await, MsgIds, Pid} when Awaiting =/= undefined ->
-            OnDisk1 = gb_sets:subtract(OnDisk, MsgIds),
+        {await, MsgIds, Pid1} when Awaiting =:= undefined ->
             Awaiting1 = gb_sets:subtract(MsgIds, OnDisk),
+            case gb_sets:is_empty(Awaiting1) of
+                true  -> Pid1 ! {self(), arrived},
+                         on_disk_capture({OnDisk, undefined, undefined});
+                false -> on_disk_capture({OnDisk, Awaiting1, Pid1})
+            end;
+        {on_disk, MsgIds} when Awaiting =:= undefined ->
+            on_disk_capture({gb_sets:union(OnDisk, MsgIds), Awaiting, Pid});
+        {on_disk, MsgIds} ->
+            OnDisk1 = gb_sets:union(OnDisk, MsgIds),
+            Awaiting1 = gb_sets:subtract(Awaiting, MsgIds),
             case gb_sets:is_empty(Awaiting1) of
                 true  -> Pid ! {self(), arrived},
                          on_disk_capture({OnDisk1, undefined, undefined});
@@ -1794,8 +1792,8 @@ on_disk_capture({OnDisk, Awaiting, Pid}) ->
             done
     end.
 
-on_disk_await(Pid, MsgIds) ->
-    Pid ! {await, MsgIds, self()},
+on_disk_await(Pid, MsgIds) when is_list(MsgIds) ->
+    Pid ! {await, gb_sets:from_list(MsgIds), self()},
     receive {Pid, arrived} -> ok end.
 
 on_disk_stop(Pid) ->
