@@ -90,12 +90,9 @@ contexts(Node) ->
     end.
 
 format_context({Path, Description, Rest}) ->
-    DescPart = case Description of
-                   none -> [];
-                   _    -> [{description, list_to_binary(Description)}]
-               end,
-    DescPart ++ [{path, list_to_binary("/" ++ Path)}] ++
-        format_mochiweb_option_list(Rest).
+    [{description, list_to_binary(Description)},
+     {path,        list_to_binary("/" ++ Path)} |
+     format_mochiweb_option_list(Rest)].
 
 format_mochiweb_option_list(C) ->
     [{K, format_mochiweb_option(K, V)} || {K, V} <- C].
