@@ -16,7 +16,7 @@
 
 %% @doc This is a utility module that is used to expose an arbitrary function
 %% via an asynchronous RPC over AMQP mechanism. It frees the implementor of
-%% a simple function from having to plumb this into AMQP. Note that the 
+%% a simple function from having to plumb this into AMQP. Note that the
 %% RPC server does not handle any data encoding, so it is up to the callback
 %% function to marshall and unmarshall message payloads accordingly.
 -module(amqp_rpc_server).

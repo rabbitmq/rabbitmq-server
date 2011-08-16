@@ -82,7 +82,7 @@
 %% @type amqp_params_direct() = #amqp_params_direct{}.
 %% As defined in amqp_client.hrl. It contains the following fields:
 %% <ul>
-%% <li>username :: binary() - The name of a user registered with the broker, 
+%% <li>username :: binary() - The name of a user registered with the broker,
 %%     defaults to &lt;&lt;guest"&gt;&gt;</li>
 %% <li>virtual_host :: binary() - The name of a virtual host in the broker,
 %%     defaults to &lt;&lt;"/"&gt;&gt;</li>
@@ -96,9 +96,9 @@
 %% @type amqp_params_network() = #amqp_params_network{}.
 %% As defined in amqp_client.hrl. It contains the following fields:
 %% <ul>
-%% <li>username :: binary() - The name of a user registered with the broker, 
+%% <li>username :: binary() - The name of a user registered with the broker,
 %%     defaults to &lt;&lt;guest"&gt;&gt;</li>
-%% <li>password :: binary() - The user's password, defaults to 
+%% <li>password :: binary() - The user's password, defaults to
 %%     &lt;&lt;"guest"&gt;&gt;</li>
 %% <li>virtual_host :: binary() - The name of a virtual host in the broker,
 %%     defaults to &lt;&lt;"/"&gt;&gt;</li>
@@ -211,7 +211,7 @@ close(ConnectionPid) ->
 %%      Text = binary()
 %% @doc Closes the AMQP connection, allowing the caller to set the reply
 %% code and text.
-close(ConnectionPid, Code, Text) -> 
+close(ConnectionPid, Code, Text) ->
     Close = #'connection.close'{reply_text =  Text,
                                 reply_code = Code,
                                 class_id   = 0,

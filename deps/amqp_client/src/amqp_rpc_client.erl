@@ -14,10 +14,10 @@
 %% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
 %%
 
-%% @doc This module allows the simple execution of an asynchronous RPC over 
+%% @doc This module allows the simple execution of an asynchronous RPC over
 %% AMQP. It frees a client programmer of the necessary having to AMQP
 %% plumbing. Note that the this module does not handle any data encoding,
-%% so it is up to the caller to marshall and unmarshall message payloads 
+%% so it is up to the caller to marshall and unmarshall message payloads
 %% accordingly.
 -module(amqp_rpc_client).
 
