@@ -11,7 +11,9 @@
 %%   The Original Code is RabbitMQ Management Plugin.
 %%
 %%   The Initial Developer of the Original Code is VMware, Inc.
-%%   Copyright (c) 2007-2010 VMware, Inc.  All rights reserved.
+%%   Copyright (c) 2010-2011 VMware, Inc.  All rights reserved.
+%%
+
 -module(rabbit_mgmt_app).
 
 -behaviour(application).
@@ -102,28 +104,37 @@ respond(Req, LocalPaths, PL = {Prefix, _}, WMLoop) ->
                "" -> RawPath;
                _  -> string:substr(RawPath, string:len(Prefix) + 2)
            end,
-    Redirect = {301, [{"Location", Prefix ++ "/"}], ""},
+    Redirect = fun(L) -> {301, [{"Location", Prefix ++ L}], ""} end,
     case Path of
         "/api/" ++ Rest when length(Rest) > 0 ->
             WMLoop(PL, Req);
         "" ->
-            Req:respond(Redirect);
+            Req:respond(Redirect("/"));
         "/mgmt/" ->
-            Req:respond(Redirect);
+            Req:respond(Redirect("/"));
+        "/mgmt" ->
+            Req:respond(Redirect("/"));
         "/" ++ Stripped ->
-            serve_file(Req, Stripped, LocalPaths)
+            serve_file(Req, Stripped, LocalPaths, Redirect)
     end.
 
-serve_file(Req, Path, [LocalPath]) ->
+serve_file(Req, Path, [LocalPath], _Redirect) ->
     Req:serve_file(Path, LocalPath);
-serve_file(Req, Path, [LocalPath | Others]) ->
-    Path1 = case Path of
-                "" -> "index.html";
-                _  -> Path
-            end,
-    case filelib:is_regular(filename:join([LocalPath, Path1])) of
+serve_file(Req, Path, [LocalPath | Others], Redirect) ->
+    Path1 = filename:join([LocalPath, Path]),
+    case filelib:is_regular(Path1) of
         true  -> Req:serve_file(Path, LocalPath);
-        false -> serve_file(Req, Path, Others)
+        false -> case filelib:is_regular(Path1 ++ "/index.html") of
+                     true  -> index(Req, Path, LocalPath, Redirect);
+                     false -> serve_file(Req, Path, Others, Redirect)
+                 end
+    end.
+
+index(Req, Path, LocalPath, Redirect) ->
+    case lists:reverse(Path) of
+        ""       -> Req:serve_file("index.html", LocalPath);
+        "/" ++ _ -> Req:serve_file(Path ++ "index.html", LocalPath);
+        _        -> Req:respond(Redirect(Path ++ "/"))
     end.
 
 setup_wm_logging() ->

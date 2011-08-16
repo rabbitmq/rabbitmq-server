@@ -11,7 +11,9 @@
 %%   The Original Code is RabbitMQ Management Plugin.
 %%
 %%   The Initial Developer of the Original Code is VMware, Inc.
-%%   Copyright (c) 2007-2010 VMware, Inc.  All rights reserved.
+%%   Copyright (c) 2010-2011 VMware, Inc.  All rights reserved.
+%%
+
 -module(rabbit_mgmt_wm_user).
 
 -export([init/1, resource_exists/2, to_json/2,
@@ -71,18 +73,15 @@ user(ReqData) ->
     rabbit_auth_backend_internal:lookup_user(rabbit_mgmt_util:id(user, ReqData)).
 
 put_user(User) ->
+    CP = fun rabbit_auth_backend_internal:change_password/2,
+    CPH = fun rabbit_auth_backend_internal:change_password_hash/2,
     case {proplists:is_defined(password, User),
           proplists:is_defined(password_hash, User)} of
-        {true, _} ->
-            Pass = pget(password, User),
-            put_user(User, Pass, fun rabbit_auth_backend_internal:change_password/2);
-        {_, true} ->
-            Hash = base64:decode(pget(password_hash, User)),
-            put_user(User, Hash,
-                     fun rabbit_auth_backend_internal:change_password_hash/2);
-        _ ->
-            put_user(User, <<>>,
-                     fun rabbit_auth_backend_internal:change_password_hash/2)
+        {true, _} -> put_user(User, pget(password, User), CP);
+        {_, true} -> Hash = rabbit_mgmt_util:b64decode_or_throw(
+                              pget(password_hash, User)),
+                     put_user(User, Hash, CPH);
+        _         -> put_user(User, <<>>, CPH)
     end.
 
 put_user(User, PWArg, PWFun) ->

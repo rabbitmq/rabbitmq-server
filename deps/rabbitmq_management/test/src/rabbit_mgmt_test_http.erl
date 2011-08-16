@@ -10,14 +10,10 @@
 %%
 %%   The Original Code is RabbitMQ Management Console.
 %%
-%%   The Initial Developers of the Original Code are Rabbit Technologies Ltd.
+%%   The Initial Developer of the Original Code is VMware, Inc.
+%%   Copyright (c) 2010-2011 VMware, Inc.  All rights reserved.
 %%
-%%   Copyright (C) 2010 Rabbit Technologies Ltd.
-%%
-%%   All Rights Reserved.
-%%
-%%   Contributor(s): ______________________________________.
-%%
+
 -module(rabbit_mgmt_test_http).
 
 -include_lib("eunit/include/eunit.hrl").
@@ -100,6 +96,7 @@ users_test() ->
     http_put_raw("/users/myuser", "Something not JSON", ?BAD_REQUEST),
     http_put("/users/myuser", [{flim, <<"flam">>}], ?BAD_REQUEST),
     http_put("/users/myuser", [{tags, <<"management">>}], ?NO_CONTENT),
+    http_put("/users/myuser", [{password_hash, <<"not_hash">>}], ?BAD_REQUEST),
     http_put("/users/myuser", [{password_hash,
                                 <<"IECV6PZI/Invh0DL187KFpkO5Jc=">>},
                                {tags, <<"management">>}], ?NO_CONTENT),
@@ -704,6 +701,20 @@ queue_purge_test() ->
     http_delete("/queues/%2f/myqueue", ?NO_CONTENT),
     ok.
 
+
+exclusive_consumer_test() ->
+    {ok, Conn} = amqp_connection:start(#amqp_params_network{}),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    #'queue.declare_ok'{ queue = QName } =
+        amqp_channel:call(Ch, #'queue.declare'{exclusive = true}),
+    amqp_channel:subscribe(Ch, #'basic.consume'{queue     = QName,
+                                                exclusive = true}, self()),
+    timer:sleep(1000), %% Sadly we need to sleep to let the stats update
+    http_get("/queues/%2f/"), %% Just check we don't blow up
+    amqp_channel:close(Ch),
+    amqp_connection:close(Conn),
+    ok.
+
 sorting_test() ->
     QArgs = [],
     PermArgs = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
@@ -848,9 +859,13 @@ publish_fail_test() ->
     ok.
 
 publish_base64_test() ->
-    Msg = msg(<<"myqueue">>, [], <<"YWJjZA==">>, <<"base64">>),
+    Msg     = msg(<<"myqueue">>, [], <<"YWJjZA==">>, <<"base64">>),
+    BadMsg1 = msg(<<"myqueue">>, [], <<"flibble">>,  <<"base64">>),
+    BadMsg2 = msg(<<"myqueue">>, [], <<"YWJjZA==">>, <<"base99">>),
     http_put("/queues/%2f/myqueue", [], ?NO_CONTENT),
     http_post("/exchanges/%2f/amq.default/publish", Msg, ?OK),
+    http_post("/exchanges/%2f/amq.default/publish", BadMsg1, ?BAD_REQUEST),
+    http_post("/exchanges/%2f/amq.default/publish", BadMsg2, ?BAD_REQUEST),
     [Msg2] = http_post("/queues/%2f/myqueue/get", [{requeue,  false},
                                                    {count,    1},
                                                    {encoding, auto}], ?OK),

@@ -34,20 +34,9 @@
           <li class="administrator-only"><a href="#/users">Users</a></li>
           <li class="administrator-only"><a href="#/vhosts">Virtual Hosts</a></li>
         </ul>
-        <span class="br"></span>
       </div>
     </div>
     <div id="main"></div>
-    <p id="update-form">
-      <label for="update-every">Update </label>
-      <select id="update-every">
-        <option value="5000">every 5 seconds</option>
-        <option value="30000">every 30 seconds</option>
-        <option value="300000">every 5 minutes</option>
-        <option value="">never</option>
-      </select>
-    </p>
-    <div id="status"></div>
     <div id="footer">
       <div id="footer-nav">
         <ul>
@@ -55,7 +44,17 @@
           <li><a href="cli/">Command Line</a></li>
         </ul>
       </div>
+      <div id="update-form">
+        <label for="update-every">Update </label>
+        <select id="update-every">
+          <option value="5000">every 5 seconds</option>
+          <option value="30000">every 30 seconds</option>
+          <option value="300000">every 5 minutes</option>
+          <option value="">never</option>
+        </select>
+      </p>
     </div>
+    <div id="status"></div>
     <div id="debug"></div>
     <div id="scratch"></div>
   </body>

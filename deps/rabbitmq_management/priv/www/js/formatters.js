@@ -199,7 +199,7 @@ function fmt_table_short(table) {
 
 function fmt_table_long(table) {
     return '<table class="facts">' + fmt_table_body(table, '') +
-        '</table><span class="br"></span>';
+        '</table>';
 }
 
 function fmt_table_body(table, x) {

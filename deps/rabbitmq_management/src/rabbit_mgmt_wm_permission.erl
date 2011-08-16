@@ -11,7 +11,9 @@
 %%   The Original Code is RabbitMQ Management Plugin.
 %%
 %%   The Initial Developer of the Original Code is VMware, Inc.
-%%   Copyright (c) 2007-2010 VMware, Inc.  All rights reserved.
+%%   Copyright (c) 2010-2011 VMware, Inc.  All rights reserved.
+%%
+
 -module(rabbit_mgmt_wm_permission).
 
 -export([init/1, resource_exists/2, to_json/2,

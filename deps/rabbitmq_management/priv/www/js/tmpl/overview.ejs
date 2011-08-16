@@ -1,31 +1,35 @@
 <h1>Overview</h1>
 
-<% if (overview.statistics_db_node != 'not_running') { %>
 <div class="section">
 <h2>Totals</h2>
 <div class="hider updatable">
+<% if (overview.statistics_db_node != 'not_running') { %>
   <h3>Queued messages</h3>
-  <div class="highlight">
-    Ready
-    <strong><%= overview.queue_totals.messages_ready %></strong>
+  <div class="box">
+    <div class="highlight">
+      Ready
+      <strong><%= overview.queue_totals.messages_ready %></strong>
+    </div>
+    <div class="highlight">
+      Unacknowledged
+      <strong><%= overview.queue_totals.messages_unacknowledged %></strong>
+    </div>
+    <div class="highlight">
+      Total
+      <strong><%= overview.queue_totals.messages %></strong>
+    </div>
   </div>
-  <div class="highlight">
-    Unacknowledged
-    <strong><%= overview.queue_totals.messages_unacknowledged %></strong>
-  </div>
-  <div class="highlight">
-    Total
-    <strong><%= overview.queue_totals.messages %></strong>
-  </div>
-<span class="br"></span>
 <% if (statistics_level == 'fine') { %>
   <h3>Message rates</h3>
-  <%= message_rates(overview.message_stats) %>
+  <div class="box">
+    <%= message_rates(overview.message_stats) %>
+  </div>
 <% } %>
-<span class="br"></span>
+<% } else { %>
+    Totals not available
+<% } %>
 </div>
 </div>
-<% } %>
 
 <% if (user_monitor) { %>
 <div class="section">
@@ -54,7 +58,7 @@
       Version
       <sub>(RabbitMQ / Erlang)</sub>
     </th>
-    <th>Mnesia storage <span class="help" id="mnesia-storage"></span></th>
+    <th>Type</th>
   </tr>
 <%
    for (var i = 0; i < nodes.length; i++) {
@@ -73,7 +77,7 @@
 <% } else if (node.external_stats_not_running) { %>
      <td class="status" colspan="6">
        <div class="red">
-         Management agent not installed
+         Could not contact management agent
        </div>
      </td>
 <% } else { %>
@@ -120,18 +124,26 @@
      </td>
 <% } %>
      <td class="c">
-       <%= node.type %>
+       <% if (node.type == 'disc') { %>
+         <acronym title="Broker configuration is held on disc.">Disc</acronym>
+       <% } else { %>
+         <acronym title="Broker configuration is held in RAM. Messages will still be written to disc if necessary.">RAM</acronym>
+       <% } %>
+       <% if (nodes_interesting) { %>
+         <% if (overview.statistics_db_node == node.name) { %>
+           <acronym title="This node contains the management statistics database">Stats</acronym>
+         <% } %>
+         <% if (overview.node == node.name) { %>
+           <acronym title="You are accessing the management UI from this node.">*</acronym>
+         <% } %>
+       <% } %>
      </td>
    </tr>
 <% } %>
 </table>
 
-<% if (nodes_interesting) { %>
 <% if (overview.statistics_db_node == 'not_running') { %>
-  <p class="status-error">Statistics database node could not be contacted. Message rates and queue lengths will not be shown.</p>
-<% } else { %>
-  <p>Connected to: <b><%= overview.node %></b>. Statistics database: <b><%= overview.statistics_db_node %></b>.</b>
-<% } %>
+  <p class="status-error">Statistics database could not be contacted. Message rates and queue lengths will not be shown.</p>
 <% } %>
 </div>
 </div>
@@ -201,14 +213,14 @@
     <table class="two-col-layout">
       <tr>
         <td>
-          <h3>Export <span class="help" id="export-config"></span></h3>
+          <h3>Export</h3>
           <p>
             <label for="download-filename">Filename for download:</label><br/>
             <input type="text" id="download-filename" value="<%= fmt_download_filename(overview.node) %>" class="wide" />
           </p>
         </td>
         <td>
-          <h3>Import <span class="help" id="import-config"></span></h3>
+          <h3>Import</h3>
           <p>
             <label>Configuration file:</label><br/>
             <input type="file" name="file"/>
@@ -219,12 +231,14 @@
         <td>
           <p>
             <button id="download-configuration">Download broker configuration</button>
+            <span class="help" id="export-config"></span>
           </p>
         </td>
         <td>
           <p>
             <input type="hidden" name="redirect" value="../#/import-succeeded"/>
             <input type="submit" value="Upload broker configuration"/>
+            <span class="help" id="import-config"></span>
           </p>
         </td>
       </tr>
@@ -249,7 +263,6 @@
   set <code>force_fine_statistics</code> to <code>true</code> in
   the <code>rabbitmq_management_agent</code> application
 </p>
-<span class="br"></span>
 </div>
 </div>
 <% } %>

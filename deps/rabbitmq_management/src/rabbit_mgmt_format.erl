@@ -11,7 +11,8 @@
 %%   The Original Code is RabbitMQ Management Plugin.
 %%
 %%   The Initial Developer of the Original Code is VMware, Inc.
-%%   Copyright (c) 2007-2010 VMware, Inc.  All rights reserved.
+%%   Copyright (c) 2010-2011 VMware, Inc.  All rights reserved.
+%%
 
 -module(rabbit_mgmt_format).
 
@@ -26,6 +27,9 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
+
+-define(PIDS_TO_STRIP, [connection, owner_pid, queue, channel,
+                        exclusive_consumer_pid]).
 
 %%--------------------------------------------------------------------
 
@@ -321,7 +325,7 @@ a2b(A) ->
 strip_pids(Item = [T | _]) when is_tuple(T) ->
     format(Item,
            [{fun node_from_pid/1, [pid]},
-            {fun remove/1,        [connection, owner_pid, queue, channel]},
+            {fun remove/1,        ?PIDS_TO_STRIP},
             {nodes_from_pids(slave_nodes), [slave_pids]},
             {nodes_from_pids(synchronised_slave_nodes),
              [synchronised_slave_pids]}
