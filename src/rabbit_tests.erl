@@ -1816,19 +1816,6 @@ msg_store_contains(Atom, MsgIds, MSCState) ->
                      rabbit_msg_store:contains(MsgId, MSCState) end,
              Atom, MsgIds).
 
-%% msg_store_sync(MsgIds, MSCState) ->
-%%     Ref = make_ref(),
-%%     Self = self(),
-%%     ok = rabbit_msg_store:sync(MsgIds, fun () -> Self ! {sync, Ref} end,
-%%                                MSCState),
-%%     receive
-%%         {sync, Ref} -> ok
-%%     after
-%%         10000 ->
-%%             io:format("Sync from msg_store missing for msg_ids ~p~n", [MsgIds]),
-%%             throw(timeout)
-%%     end.
-
 msg_store_read(MsgIds, MSCState) ->
     lists:foldl(fun (MsgId, MSCStateM) ->
                         {{ok, MsgId}, MSCStateN} = rabbit_msg_store:read(
