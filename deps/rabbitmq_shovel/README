@@ -21,29 +21,27 @@ reception and publishing of messages.
 Requirements
 ------------
 
-Currently, you must build the server from source. You must also have
-checked out the rabbitmq-public-umbrella hg repository, and have the
-rabbitmq-erlang-client built. From scratch, the following commands
-should build RabbitMQ with the shovel plug-in:
+If you are using a released version of RabbitMQ then the simplest
+means of installing the shovel is to use the ez files available from
+http://www.rabbitmq.com/plugins.html#rabbitmq-shovel (or, if you're
+not using the current release of RabbitMQ, grab the necessary ez files
+from http://www.rabbitmq.com/releases/plugins/).
+
+If you are running an unreleased version of RabbitMQ, compiled from
+source, you will need to compile the shovel from source. From scratch,
+the following commands should build RabbitMQ with the shovel plug-in:
 
 hg clone http://hg.rabbitmq.com/rabbitmq-public-umbrella
 cd rabbitmq-public-umbrella
-hg clone http://hg.rabbitmq.com/rabbitmq-codegen
-hg clone http://hg.rabbitmq.com/rabbitmq-erlang-client
-hg clone http://hg.rabbitmq.com/rabbitmq-server
-hg clone http://hg.rabbitmq.com/rabbitmq-shovel
+make -j4 checkout
 cd rabbitmq-server
 make -j
 mkdir -p plugins
-cd plugins
-ln -s ../../rabbitmq-erlang-client
-ln -s ../../rabbitmq-shovel
-cd ../../rabbitmq-erlang-client
-make
 cd ../rabbitmq-shovel
-make
+make -j
+cp dist/*.ez ../rabbitmq-server/plugins
 cd ../rabbitmq-server
-./scripts/rabbitmq-activate-plugins
+rm plugins/rabbit_common*.ez
 make cleandb run
 
 
@@ -98,8 +96,7 @@ A full example of the shovel configuration is:
                           ]}]},
        {queue, <<>>},
        {prefetch_count, 10},
-       {auto_ack, false},
-       {tx_size, 0},
+       {ack_mode, on_confirm},
        {publish_properties, [{delivery_mode, 2}]},
        {publish_fields, [{exchange, <<"my_exchange">>},
                          {routing_key, <<"from_shovel">>}]},
@@ -112,13 +109,12 @@ A full example of the shovel configuration is:
 Firstly, all shovels are named. Here we have one shovel, called
 'my_first_shovel'. We can have multiple shovels if you wish. Secondly,
 every shovel must have the subfields sources, destinations and queue
-specified, whereas the other fields (prefetch_count, auto_ack,
-tx_size, publish_properties, publish_fields, reconnect_delay) are
-optional and have defaults as follows:
+specified, whereas the other fields (prefetch_count, ack_mode,
+publish_properties, publish_fields, reconnect_delay) are optional and
+have defaults as follows:
 
 {prefetch_count,      0}
-{auto_ack,            false}
-{tx_size,             0}
+{ack_mode,            on_confirm}
 {publish_properties,  []}
 {publish_fields,      []}
 {reconnect_delay,     5}
@@ -213,26 +209,32 @@ the number of messages which are sent to the shovel in advance of the
 message the shovel is currently processing.
 
 
-auto_ack :: boolean
--------------------
+ack_mode :: 'no_ack' | 'on_publish' | 'on_confirm'
+--------------------------------------------------
 
-Setting this to 'true' turns on the no_ack flag when subscribing to
-the source queue.
+This setting controls if or when acknowledgements to the source broker
+are issued by the shovel. The default is 'on_confirm'.
 
+'no_ack' - The shovel consumes from its queue with no_ack = 'true':
+i.e. the shovel does not issue explicit acks for messages it receives,
+and the source broker considers messages acknowledged as soon as it
+has sent them to the shovel.
 
-tx_size :: non-negative-integer
--------------------------------
+'on_publish' - the shovel consumes from its queue with no_ack =
+'false', and a message is acknowledged to the source broker as soon as
+it has been published to the destination broker.
 
-When set to 0, transactions are not used. Other values make publishes
-transactional, with a commit every N messages. In lieu of the auto-ack
-option, when transactions are not used, messages are acknowledged to
-the source immediately after every publish. When transactions are
-used, acks are only issued to the source on receipt of the commit-ok
-message from the destination. This can thus be used to guarantee that
-messages are only acknowledged (and thus forgotten about by the source
-broker) when they are guaranteed to have been received by the
-destination broker.
+'on_confirm' - the shovel consumes from its queue with no_ack =
+'false' and it requests publisher confirmations from the destination
+broker. It only issues acknowledgements to the source broker when it
+has received confirmation from the destination broker that each
+message has been successfully received. This setting gives a guarantee
+that messages will not be discarded from the source broker until after
+the destination broker has confirmed receipt of the message.
 
+'on_confirm' is strongly recommended. However the destination broker
+must support publish confirms, meaning it can only be used with
+RabbitMQ 2.3.1 and up.
 
 publish_properties
 ------------------

@@ -128,8 +128,7 @@ parse_shovel_config_dict(Dict) ->
                   [{fun parse_endpoint/1,             sources},
                    {fun parse_endpoint/1,             destinations},
                    {fun parse_non_negative_integer/1, prefetch_count},
-                   {fun parse_boolean/1,              auto_ack},
-                   {fun parse_non_negative_integer/1, tx_size},
+                   {fun parse_ack_mode/1,             ack_mode},
                    {fun parse_binary/1,               queue},
                    make_parse_publish(publish_fields),
                    make_parse_publish(publish_properties),
@@ -181,7 +180,7 @@ parse_endpoint({Endpoint, _Pos}) ->
     fail({require_list, Endpoint}).
 
 parse_declaration({[{Method, Props} | Rest], Acc}) when is_list(Props) ->
-    FieldNames = try rabbit_framing_amqp_0_8:method_fieldnames(Method)
+    FieldNames = try rabbit_framing_amqp_0_9_1:method_fieldnames(Method)
                  catch exit:Reason -> fail(Reason)
                  end,
     case proplists:get_keys(Props) -- FieldNames of
@@ -195,7 +194,7 @@ parse_declaration({[{Method, Props} | Rest], Acc}) when is_list(Props) ->
                                        V         -> setelement(Idx, R, V)
                                    end,
                             {NewR, Idx + 1}
-                    end, {rabbit_framing_amqp_0_8:method_record(Method), 2},
+                    end, {rabbit_framing_amqp_0_9_1:method_record(Method), 2},
                     FieldNames),
     return({Rest, [Res | Acc]});
 parse_declaration({[{Method, Props} | _Rest], _Acc}) ->
@@ -210,7 +209,7 @@ parse_uri({[Uri | Uris], Acc}) when is_list(Uri) ->
             fail({unable_to_parse_uri, Uri, Reason});
         Parsed ->
             Endpoint = case proplists:get_value(scheme, Parsed) of
-                           "amqp"  -> build_plain_broker(Parsed);
+                           "amqp"  -> build_broker(Parsed);
                            "amqps" -> build_ssl_broker(Parsed);
                            Scheme  -> fail({unexpected_uri_scheme, Scheme, Uri})
                        end,
@@ -244,15 +243,6 @@ build_broker(ParsedUri) ->
                      end
     end.
 
-build_plain_broker(ParsedUri) ->
-    Params = build_broker(ParsedUri),
-    case Params of
-        #amqp_params_network{port = undefined} ->
-            Params#amqp_params_network{port = ?PROTOCOL_PORT};
-        _ ->
-            Params
-    end.
-
 build_ssl_broker(ParsedUri) ->
     Params = build_broker(ParsedUri),
     Query = proplists:get_value('query', ParsedUri),
@@ -276,11 +266,7 @@ build_ssl_broker(ParsedUri) ->
                        {fun find_atom_parameter/1,    verify},
                        {fun find_boolean_parameter/1, fail_if_no_peer_cert}]],
           []),
-    Params1 = Params#amqp_params_network{ssl_options = SSLOptions},
-    case Params1#amqp_params_network.port of
-        undefined -> Params1#amqp_params_network{port = ?PROTOCOL_PORT - 1};
-        _         -> Params1
-    end.
+    Params#amqp_params_network{ssl_options = SSLOptions}.
 
 broker_add_query(Params = #amqp_params_direct{}, Uri) ->
     broker_add_query(Params, Uri, record_info(fields, amqp_params_direct));
@@ -343,15 +329,18 @@ parse_non_negative_number({N, Pos}) when is_number(N) andalso N >= 0 ->
 parse_non_negative_number({N, _Pos}) ->
     fail({require_non_negative_number, N}).
 
-parse_boolean({Bool, Pos}) when is_boolean(Bool) ->
-    return({Bool, Pos});
-parse_boolean({NotABool, _Pos}) ->
-    fail({require_boolean, NotABool}).
-
 parse_binary({Binary, Pos}) when is_binary(Binary) ->
     return({Binary, Pos});
 parse_binary({NotABinary, _Pos}) ->
     fail({require_binary, NotABinary}).
+
+parse_ack_mode({Val, Pos}) when Val =:= no_ack orelse
+                                Val =:= on_publish orelse
+                                Val =:= on_confirm ->
+    return({Val, Pos});
+parse_ack_mode({WrongVal, _Pos}) ->
+    fail({ack_mode_value_requires_one_of, {no_ack, on_publish, on_confirm},
+          WrongVal}).
 
 make_parse_publish(publish_fields) ->
     {make_parse_publish1(record_info(fields, 'basic.publish')), publish_fields};

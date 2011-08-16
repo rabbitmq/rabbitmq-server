@@ -95,7 +95,6 @@ test() ->
           [{broker, "amqp://"},
            {declarations, [{'queue.declare', [invalid]}]}]),
 
-
     {invalid_amqp_params_parameter, heartbeat, "text",
      [{"heartbeat", "text"}], {not_an_integer, "text"}} =
         test_broken_shovel_sources(
@@ -110,9 +109,10 @@ test() ->
      {require_non_negative_integer, invalid}} =
         test_broken_shovel_config([{prefetch_count, invalid} | Config]),
 
-    {invalid_parameter_value, auto_ack,
-     {require_boolean, invalid}} =
-        test_broken_shovel_config([{auto_ack, invalid} | Config]),
+    {invalid_parameter_value, ack_mode,
+     {ack_mode_value_requires_one_of,
+      {no_ack, on_publish, on_confirm}, invalid}} =
+        test_broken_shovel_config([{ack_mode, invalid} | Config]),
 
     {invalid_parameter_value, queue,
      {require_binary, invalid}} =
@@ -151,11 +151,12 @@ test() ->
          {destinations,
           [{broker, "amqp://"}]},
          {queue, <<>>},
-         {tx_size, 1},
+         {ack_mode, on_confirm},
          {publish_fields, [{exchange, ?EXCHANGE}, {routing_key, ?FROM_SHOVEL}]},
          {publish_properties, [{content_type, ?SHOVELLED}]}
         ]}],
       infinity),
+
     ok = application:start(rabbitmq_shovel),
 
     {ok, Conn} = amqp_connection:start(#amqp_params_network{}),
