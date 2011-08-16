@@ -21,7 +21,7 @@
 
 -behaviour(amqp_gen_connection).
 
--export([force_event_refresh/0, list_local/0]).
+-export([force_event_refresh/0, list/0, list_local/0]).
 
 -export([init/1, terminate/2, connect/4, do/2, open_channel_args/1, i/2,
          info_keys/0, handle_message/2, closing/3, channels_terminated/1]).
