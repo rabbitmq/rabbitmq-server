@@ -380,8 +380,9 @@ handle_stats(TName, Stats0, Timestamp, Funs,
     ets:insert(Table, {Id, Stats2, Timestamp}),
     {ok, State}.
 
-handle_deleted(TName, #event{props = [{pid, Pid}]},
+handle_deleted(TName, #event{props = Props},
                State = #state{tables = Tables}) ->
+    Pid = pget(pid, Props),
     Table = orddict:fetch(TName, Tables),
     ets:delete(Table, {id(Pid), create}),
     ets:delete(Table, {id(Pid), stats}),
