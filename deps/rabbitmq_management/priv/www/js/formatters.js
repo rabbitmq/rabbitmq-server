@@ -100,9 +100,12 @@ function fmt_mirrors(queue) {
                                return jQuery.inArray(node, synced) == -1
                            });
     var res = '';
-    if (synced.length > 0 || unsynced.length > 0) {
-        res += ' <acronym title="Mirrors: ' + synced + '">+' +
+    if (synced.length > 0) {
+        res += ' <acronym title="Synchronised mirrors: ' + synced + '">+' +
             synced.length + '</acronym>';
+    }
+    if (synced.length == 0 && unsynced.length > 0) {
+        res += ' <acronym title="There are no synchronised mirrors">+0</acronym>';
     }
     if (unsynced.length > 0) {
         res += ' <acronym class="warning" title="Unsynchronised mirrors: ' +
