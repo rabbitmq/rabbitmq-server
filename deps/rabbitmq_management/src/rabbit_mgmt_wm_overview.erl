@@ -73,6 +73,8 @@ listeners() ->
        || L <- rabbit_networking:active_listeners()],
       ["protocol", "port", "node"] ).
 
+%%--------------------------------------------------------------------
+
 rabbit_mochiweb_contexts() ->
     rabbit_mgmt_util:sort_list(
       lists:append([contexts(Node) ||
@@ -80,12 +82,20 @@ rabbit_mochiweb_contexts() ->
       ["description", "port", "node"]).
 
 contexts(Node) ->
-    case rabbit_mgmt_external_stats:info(Node, [contexts]) of
-        [{contexts, Contexts}] ->
-            [[{node, Node} | format_mochiweb_option_list(C)] || C <- Contexts];
-        [{external_stats_not_running, true}] ->
-            []
+    case rpc:call(Node, rabbit_mochiweb_registry, list_all, [], infinity) of
+        {badrpc, {'EXIT', {undef, _}}} ->
+            [];
+        Contexts ->
+            [[{node, Node} | format_context(C)] || C <- Contexts]
     end.
+
+format_context({Path, Description, Rest}) ->
+    DescPart = case Description of
+                   none -> [];
+                   _    -> [{description, list_to_binary(Description)}]
+               end,
+    DescPart ++ [{path, list_to_binary("/" ++ Path)}] ++
+        format_mochiweb_option_list(Rest).
 
 format_mochiweb_option_list(C) ->
     [{K, format_mochiweb_option(K, V)} || {K, V} <- C].
