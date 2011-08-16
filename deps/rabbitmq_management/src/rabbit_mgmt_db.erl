@@ -455,7 +455,7 @@ update_synchronised_slaves(Fun, QName, State = #state{tables = Tables}) ->
     ets:insert(Table, {{QName, synchronised_slaves}, New}),
     {ok, State}.
 
-prune_slaves('$end_of_table', _Dead, Table) -> ok;
+prune_slaves('$end_of_table', _Dead, _Table) -> ok;
 
 prune_slaves({Matches, Continuation}, Dead, Table) ->
     [prune_slaves0(M, Dead, Table) || M <- Matches],
