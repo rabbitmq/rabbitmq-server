@@ -958,7 +958,7 @@ format_message_queue_entry(_V) ->
     '_'.
 
 append_rpc_all_nodes(M, F, A) ->
-    {ResL, _} = rpc:multicall(M, F, A),
+    {ResL, _} = rpc:multicall(rabbit_mnesia:running_clustered_nodes(), M, F, A),
     lists:append([case Res of
                       {badrpc, _} -> [];
                       _           -> Res
