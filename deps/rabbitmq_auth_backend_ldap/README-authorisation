@@ -5,15 +5,16 @@ Authorisation is effected by three configuration options:
 
 * vhost_access_query
 * resource_access_query
-* is_admin_query
+* tag_queries
 
 Each defines a query that will determine whether a user has access to
 a vhost, a resource (e.g. exchange, queue, binding) or is considered
 an administrator.
 
 The default values are {constant, true}, {constant, true} and
-{constant, false}, granting all users access to all objects in all
-vhosts, but not making them administrators.
+[{administrator, {constant, false}}] respectively, granting all users
+access to all objects in all vhosts, but not making them
+administrators.
 
 A query can be of one of several types:
 
@@ -57,9 +58,14 @@ The terms configure, write and read for resource access have the same
 meanings that they do for the built-in RabbitMQ permissions system,
 see http://www.rabbitmq.com/admin-guide.html#access-control
 
-is_admin_query:
+tag_queries:
   ${username}
   ${user_dn}
+
+Note that tag_queries consists of a proplist, mapping the name of a
+tag to a query to perform to determine whether or not the user has
+that tag. You must list queries for all tags that you want your users
+to have.
 
 In Group Query
 --------------
@@ -119,7 +125,7 @@ TODO improve and explain this
                      {permission, read,  {constant, true}}
                     ]}},
              {resource, queue, {constant, true}} ]}},
-     {is_admin_query,        {constant, false}},
+     {tag_queries,           [{administrator, {constant, false}}]},
      {use_ssl,               false},
      {port,                  389},
      {log,                   false} ] }
