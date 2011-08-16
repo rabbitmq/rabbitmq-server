@@ -1578,17 +1578,19 @@ test_queue_cleanup(_SecondaryNode) ->
             ok
     after 1000 -> throw(failed_to_receive_queue_declare_ok)
     end,
+    rabbit_channel:shutdown(Ch),
     rabbit:stop(),
     rabbit:start(),
-    rabbit_channel:do(Ch, #'queue.declare'{ passive = true,
-                                            queue   = ?CLEANUP_QUEUE_NAME }),
+    {_Writer2, Ch2} = test_spawn(),
+    rabbit_channel:do(Ch2, #'queue.declare'{ passive = true,
+                                             queue   = ?CLEANUP_QUEUE_NAME }),
     receive
         #'channel.close'{reply_code = ?NOT_FOUND} ->
             ok
     after 2000 ->
             throw(failed_to_receive_channel_exit)
     end,
-    rabbit_channel:shutdown(Ch),
+    rabbit_channel:shutdown(Ch2),
     passed.
 
 test_declare_on_dead_queue(SecondaryNode) ->
