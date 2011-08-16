@@ -187,7 +187,7 @@
 -spec(prepare/0 :: () -> 'ok').
 -spec(start/0 :: () -> 'ok').
 -spec(stop/0 :: () -> 'ok').
--spec(stop_and_halt/0 :: () -> 'ok').
+-spec(stop_and_halt/0 :: () -> no_return()).
 -spec(rotate_logs/1 :: (file_suffix()) -> rabbit_types:ok_or_error(any())).
 -spec(force_event_refresh/0 :: () -> 'ok').
 -spec(status/0 ::
