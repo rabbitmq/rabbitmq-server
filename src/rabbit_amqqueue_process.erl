@@ -73,8 +73,8 @@
          messages,
          consumers,
          memory,
-         backing_queue_status,
-         slave_pids
+         slave_pids,
+         backing_queue_status
         ]).
 
 -define(CREATION_EVENT_KEYS,
@@ -84,10 +84,12 @@
          auto_delete,
          arguments,
          owner_pid,
-         mirror_nodes
+         slave_pids,
+         synchronised_slave_pids
         ]).
 
--define(INFO_KEYS, ?CREATION_EVENT_KEYS ++ ?STATISTICS_KEYS -- [pid]).
+-define(INFO_KEYS,
+        ?CREATION_EVENT_KEYS ++ ?STATISTICS_KEYS -- [pid, slave_pids]).
 
 %%----------------------------------------------------------------------------
 
@@ -149,11 +151,13 @@ terminate(shutdown = R,      State = #q{backing_queue = BQ}) ->
     terminate_shutdown(fun (BQS) -> BQ:terminate(R, BQS) end, State);
 terminate({shutdown, _} = R, State = #q{backing_queue = BQ}) ->
     terminate_shutdown(fun (BQS) -> BQ:terminate(R, BQS) end, State);
-terminate(Reason,            State = #q{backing_queue = BQ}) ->
+terminate(Reason,            State = #q{q             = #amqqueue{name = QName},
+                                        backing_queue = BQ}) ->
     %% FIXME: How do we cancel active subscriptions?
     terminate_shutdown(fun (BQS) ->
                                rabbit_event:notify(
-                                 queue_deleted, [{pid, self()}]),
+                                 queue_deleted, [{pid,  self()},
+                                                 {name, QName}]),
                                BQS1 = BQ:delete_and_terminate(Reason, BQS),
                                %% don't care if the internal delete
                                %% doesn't return 'ok'.
@@ -703,7 +707,40 @@ ensure_ttl_timer(State) ->
 
 now_micros() -> timer:now_diff(now(), {0,0,0}).
 
-infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
+infos(Items, State) ->
+    {Prefix, Items1} =
+        case lists:member(synchronised_slave_pids, Items) of
+            true  -> Prefix1 = slaves_status(State),
+                     case lists:member(slave_pids, Items) of
+                         true  -> {Prefix1, Items -- [slave_pids]};
+                         false -> {proplists:delete(slave_pids, Prefix1), Items}
+                     end;
+            false -> {[], Items}
+        end,
+    Prefix ++ [{Item, i(Item, State)}
+               || Item <- (Items1 -- [synchronised_slave_pids])].
+
+slaves_status(#q{q = #amqqueue{name = Name}}) ->
+    {ok, #amqqueue{mirror_nodes = MNodes, slave_pids = SPids}} =
+        rabbit_amqqueue:lookup(Name),
+    case MNodes of
+        undefined ->
+            [{slave_pids, ''}, {synchronised_slave_pids, ''}];
+        _ ->
+            {Results, _Bad} =
+                delegate:invoke(
+                  SPids, fun (Pid) -> rabbit_mirror_queue_slave:info(Pid) end),
+            {SPids1, SSPids} =
+                lists:foldl(
+                  fun ({Pid, Infos}, {SPidsN, SSPidsN}) ->
+                          {[Pid | SPidsN],
+                           case proplists:get_bool(is_synchronised, Infos) of
+                               true  -> [Pid | SSPidsN];
+                               false -> SSPidsN
+                           end}
+                  end, {[], []}, Results),
+            [{slave_pids, SPids1}, {synchronised_slave_pids, SSPids}]
+    end.
 
 i(name,        #q{q = #amqqueue{name        = Name}})       -> Name;
 i(durable,     #q{q = #amqqueue{durable     = Durable}})    -> Durable;
@@ -735,14 +772,15 @@ i(consumers, State) ->
 i(memory, _) ->
     {memory, M} = process_info(self(), memory),
     M;
+i(slave_pids, #q{q = #amqqueue{name = Name}}) ->
+    {ok, #amqqueue{mirror_nodes = MNodes,
+                   slave_pids = SPids}} = rabbit_amqqueue:lookup(Name),
+    case MNodes of
+        undefined -> [];
+        _         -> SPids
+    end;
 i(backing_queue_status, #q{backing_queue_state = BQS, backing_queue = BQ}) ->
     BQ:status(BQS);
-i(slave_pids, #q{q = #amqqueue{name = Name}}) ->
-    {ok, #amqqueue{slave_pids = SPids}} = rabbit_amqqueue:lookup(Name),
-    SPids;
-i(mirror_nodes, #q{q = #amqqueue{name = Name}}) ->
-    {ok, #amqqueue{mirror_nodes = MNodes}} = rabbit_amqqueue:lookup(Name),
-    MNodes;
 i(Item, _) ->
     throw({bad_argument, Item}).
 
