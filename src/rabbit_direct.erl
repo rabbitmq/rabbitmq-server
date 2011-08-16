@@ -16,8 +16,10 @@
 
 -module(rabbit_direct).
 
--export([boot/0, force_event_refresh/0, list/0, list_local/0, connect/5,
+-export([boot/0, force_event_refresh/0, list/0, connect/5,
          start_channel/8, disconnect/2]).
+%% Internal
+-export([list_local/0]).
 
 -include("rabbit.hrl").
 
