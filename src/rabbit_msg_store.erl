@@ -133,7 +133,8 @@
 -type(msg_ref_delta_gen(A) ::
         fun ((A) -> 'finished' |
                     {rabbit_types:msg_id(), non_neg_integer(), A})).
--type(maybe_msg_id_fun() :: 'undefined' | fun ((gb_set()) -> any())).
+-type(maybe_msg_id_fun() ::
+        'undefined' | fun ((gb_set(), 'written' | 'removed') -> any())).
 -type(maybe_close_fds_fun() :: 'undefined' | fun (() -> 'ok')).
 -type(deletion_thunk() :: fun (() -> boolean())).
 
