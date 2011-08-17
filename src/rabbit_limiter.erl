@@ -37,7 +37,7 @@
 
 -spec(start_link/0 :: () -> rabbit_types:ok_pid_or_error()).
 -spec(make_token/0 :: () -> token()).
--spec(make_token/1 :: (undefined | pid()) -> token()).
+-spec(make_token/1 :: ('undefined' | pid()) -> token()).
 -spec(is_enabled/1 :: (token()) -> boolean()).
 -spec(enable/2 :: (token(), non_neg_integer()) -> token()).
 -spec(disable/1 :: (token()) -> token()).
@@ -76,10 +76,10 @@ make_token(Pid) -> #token{pid = Pid, enabled = false}.
 is_enabled(#token{enabled = Enabled}) -> Enabled.
 
 enable(#token{pid = Pid} = Token, Volume) ->
-    gen_server2:call(Pid, {enable, Token, self(), Volume}).
+    gen_server2:call(Pid, {enable, Token, self(), Volume}, infinity).
 
 disable(#token{pid = Pid} = Token) ->
-    gen_server2:call(Pid, {disable, Token}).
+    gen_server2:call(Pid, {disable, Token}, infinity).
 
 limit(Limiter, PrefetchCount) ->
     maybe_call(Limiter, {limit, PrefetchCount, Limiter}, ok).
