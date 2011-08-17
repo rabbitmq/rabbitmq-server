@@ -77,6 +77,7 @@ class TestParsing(unittest.TestCase):
                         'destination:/exchange/amq.fanout\n'
                         '\n\x00\n'
                         'SEND\n'
+                        'content-type:text/plain\n'
                         'destination:/exchange/amq.fanout\n\n'
                         'hello\n\x00\n')
         resp = ('MESSAGE\n'
@@ -88,6 +89,41 @@ class TestParsing(unittest.TestCase):
                 'hello\n\0')
         self.match(resp, self.cd.recv(4096))
 
+    @connect(['cd'])
+    def test_send_without_content_type(self):
+        self.cd.sendall('\n'
+                        'SUBSCRIBE\n'
+                        'destination:/exchange/amq.fanout\n'
+                        '\n\x00\n'
+                        'SEND\n'
+                        'destination:/exchange/amq.fanout\n\n'
+                        'hello\n\x00')
+        resp = ('MESSAGE\n'
+                'destination:/exchange/amq.fanout\n'
+                'message-id:Q_/exchange/amq.fanout@@session-(.*)\n'
+                'content-length:6\n'
+                '\n'
+                'hello\n\0')
+        self.match(resp, self.cd.recv(4096))
+
+    @connect(['cd'])
+    def test_send_without_content_type_binary(self):
+        msg = u'\u0ca0\ufffd\x00\n\x01hello\x00'.encode('utf-8')
+        self.cd.sendall('\n'
+                        'SUBSCRIBE\n'
+                        'destination:/exchange/amq.fanout\n'
+                        '\n\x00\n'
+                        'SEND\n'
+                        'destination:/exchange/amq.fanout\n'
+                        'content-length:'+str(len(msg))+'\n\n'
+                        + msg + '\x00')
+        resp = ('MESSAGE\n'
+                'destination:/exchange/amq.fanout\n'
+                'message-id:Q_/exchange/amq.fanout@@session-(.*)\n'
+                'content-length:'+str(len(msg))+'\n'
+                '\n'
+                + msg + '\0')
+        self.match(resp, self.cd.recv(4096))
 
     @connect(['cd'])
     def test_newline_after_nul_and_leading_nul(self):
@@ -97,6 +133,7 @@ class TestParsing(unittest.TestCase):
                         '\n\x00\n'
                         '\x00SEND\n'
                         'destination:/exchange/amq.fanout\n'
+                        'content-type:text/plain\n'
                         '\nhello\n\x00\n')
         resp = ('MESSAGE\n'
                 'content-type:text/plain\n'
@@ -140,6 +177,7 @@ class TestParsing(unittest.TestCase):
         time.sleep(0.1)
 
         self.sd.sendall('SEND\n'
+                        'content-type:text/plain\n'
                         'destination:/exchange/amq.topic/da9d4779\n'
                         '\n'
                         'message'
@@ -171,6 +209,7 @@ class TestParsing(unittest.TestCase):
 
         self.cd.sendall('SEND\n'
                         'destination:/exchange/amq.topic/test_huge_message\n'
+                        'content-type:text/plain\n'
                         '\n'
                         '%s'
                         '\0' % message)
@@ -217,6 +256,7 @@ class TestParsing(unittest.TestCase):
 
         self.cd.sendall('SEND\n'
                         +dest+
+                        'content-type:text/plain\n'
                         'content-length:%i\n'
                         '\n'
                         '%s'
@@ -266,6 +306,7 @@ class TestParsing(unittest.TestCase):
 
         msg_to_send = ('SEND\n'
                        +dest+
+                       'content-type:text/plain\n'
                        '\n'
                        '%s'
                        '\0' % (message) )

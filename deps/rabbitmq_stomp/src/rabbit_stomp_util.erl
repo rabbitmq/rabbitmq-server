@@ -97,7 +97,7 @@ message_properties(Frame = #stomp_frame{headers = Headers}) ->
         end,
 
     #'P_basic'{
-      content_type     = BinH(?HEADER_CONTENT_TYPE,     <<"text/plain">>),
+      content_type     = BinH(?HEADER_CONTENT_TYPE,     undefined),
       content_encoding = BinH(?HEADER_CONTENT_ENCODING, undefined),
       delivery_mode    = DeliveryMode,
       priority         = IntH(?HEADER_PRIORITY,         undefined),
