@@ -9,7 +9,7 @@ body { font: 12px Verdana,sans-serif; color: #484848; padding: 8px 35px; }
 #menu { border-bottom: 1px solid #FF8C00; overflow: auto; width: 100%; }
 #main { clear: both; }
 #menu a { color: #444; font-weight: bold; text-decoration: none; }
-#main a { color: #444; font-weight: bold; text-decoration: none; color: black; }
+#main a { color: black; font-weight: bold; text-decoration: none; }
 #menu a.selected { background-color: #F60; color:white; -moz-border-radius: 8px 8px 0 0; border-radius: 8px 8px 0 0; }
 #vhost-form { float: right; padding: 0; margin: 0; }
 
