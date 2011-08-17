@@ -1768,26 +1768,20 @@ msg_store_client_init(MsgStore, Ref) ->
     rabbit_msg_store:client_init(MsgStore, Ref, undefined, undefined).
 
 on_disk_capture() ->
-    on_disk_capture({gb_sets:new(), undefined, undefined}).
+    on_disk_capture({gb_sets:new(), gb_sets:new(), undefined}).
 on_disk_capture({OnDisk, Awaiting, Pid}) ->
+    Pid1 = case Pid =/= undefined andalso gb_sets:is_empty(Awaiting) of
+               true  -> Pid ! {self(), arrived}, undefined;
+               false -> Pid
+           end,
     receive
-        {await, MsgIds, Pid1} when Awaiting =:= undefined ->
-            Awaiting1 = gb_sets:subtract(MsgIds, OnDisk),
-            case gb_sets:is_empty(Awaiting1) of
-                true  -> Pid1 ! {self(), arrived},
-                         on_disk_capture({OnDisk, undefined, undefined});
-                false -> on_disk_capture({OnDisk, Awaiting1, Pid1})
-            end;
-        {on_disk, MsgIds} when Awaiting =:= undefined ->
-            on_disk_capture({gb_sets:union(OnDisk, MsgIds), Awaiting, Pid});
+        {await, MsgIds, Pid2} ->
+            true = Pid1 =:= undefined andalso gb_sets:is_empty(Awaiting),
+            on_disk_capture({OnDisk, gb_sets:subtract(MsgIds, OnDisk), Pid2});
         {on_disk, MsgIds} ->
-            OnDisk1 = gb_sets:union(OnDisk, MsgIds),
-            Awaiting1 = gb_sets:subtract(Awaiting, MsgIds),
-            case gb_sets:is_empty(Awaiting1) of
-                true  -> Pid ! {self(), arrived},
-                         on_disk_capture({OnDisk1, undefined, undefined});
-                false -> on_disk_capture({OnDisk1, Awaiting1, Pid})
-            end;
+            on_disk_capture({gb_sets:union(OnDisk, MsgIds),
+                             gb_sets:subtract(Awaiting, MsgIds),
+                             Pid1});
         stop ->
             done
     end.
