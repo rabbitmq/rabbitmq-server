@@ -70,17 +70,8 @@ if "!RABBITMQ_LOG_BASE!"=="" (
 rem We save the previous logs in their respective backup
 rem Log management (rotation, filtering based of size...) is left as an exercice for the user.
 
-set BACKUP_EXTENSION=.1
-
 set LOGS=!RABBITMQ_LOG_BASE!\!RABBITMQ_NODENAME!.log
 set SASL_LOGS=!RABBITMQ_LOG_BASE!\!RABBITMQ_NODENAME!-sasl.log
-
-if exist "!LOGS!" (
-    type "!LOGS!" >> "!LOGS!!BACKUP_EXTENSION!"
-)
-if exist "!SASL_LOGS!" (
-    type "!SASL_LOGS!" >> "!SASL_LOGS!!BACKUP_EXTENSION!"
-)
 
 rem End of log management
 

@@ -860,7 +860,6 @@ test_log_management_during_startup() ->
     TmpLog = "/tmp/rabbit-tests/test.log",
     delete_file(TmpLog),
     ok = application:set_env(rabbit, error_logger, {file, TmpLog}),
-    ok = application:set_env(sasl, error_logger, {file, TmpLog}),
 
     ok = delete_log_handlers([rabbit_error_logger_file_h]),
     ok = add_log_handlers([{error_logger_file_h, MainLog}]),
