@@ -21,7 +21,7 @@
 
 -behaviour(gen_server).
 
--export([start_link/5, connect/1, open_channel/2, hard_error_in_channel/3,
+-export([start_link/5, connect/1, open_channel/3, hard_error_in_channel/3,
          channel_internal_error/3, server_misbehaved/2, channels_terminated/1,
          close/2, info/2, info_keys/0, info_keys/1]).
 -export([behaviour_info/1]).
@@ -61,8 +61,9 @@ start_link(Mod, AmqpParams, SIF, SChMF, ExtraParams) ->
 connect(Pid) ->
     gen_server:call(Pid, connect, infinity).
 
-open_channel(Pid, ProposedNumber) ->
-    case gen_server:call(Pid, {command, {open_channel, ProposedNumber}},
+open_channel(Pid, ProposedNumber, Consumer) ->
+    case gen_server:call(Pid,
+                         {command, {open_channel, ProposedNumber, Consumer}},
                          infinity) of
         {ok, ChannelPid} -> ok = amqp_channel:open(ChannelPid),
                             {ok, ChannelPid};
@@ -234,11 +235,11 @@ i(Item, #state{module = Mod, module_state = MState}) -> Mod:i(Item, MState).
 %% Command handling
 %%---------------------------------------------------------------------------
 
-handle_command({open_channel, ProposedNumber}, _From,
+handle_command({open_channel, ProposedNumber, Consumer}, _From,
                State = #state{channels_manager = ChMgr,
                               module = Mod,
                               module_state = MState}) ->
-    {reply, amqp_channels_manager:open_channel(ChMgr, ProposedNumber,
+    {reply, amqp_channels_manager:open_channel(ChMgr, ProposedNumber, Consumer,
                                                Mod:open_channel_args(MState)),
      State};
  handle_command({close, #'connection.close'{} = Close}, From, State) ->

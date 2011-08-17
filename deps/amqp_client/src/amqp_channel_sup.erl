@@ -21,21 +21,22 @@
 
 -behaviour(supervisor2).
 
--export([start_link/4]).
+-export([start_link/5]).
 -export([init/1]).
 
 %%---------------------------------------------------------------------------
 %% Interface
 %%---------------------------------------------------------------------------
 
-start_link(Type, Connection, InfraArgs, ChNumber) ->
-    {ok, Sup} = supervisor2:start_link(?MODULE, []),
+start_link(Type, Connection, InfraArgs, ChNumber, Consumer = {_, _}) ->
+    {ok, Sup} = supervisor2:start_link(?MODULE, [Consumer]),
+    [{gen_consumer, ConsumerPid, _, _}] = supervisor2:which_children(Sup),
     {ok, ChPid} = supervisor2:start_child(
                     Sup, {channel, {amqp_channel, start_link,
-                                    [Type, Connection, ChNumber,
+                                    [Type, Connection, ChNumber, ConsumerPid,
                                      start_writer_fun(Sup, Type, InfraArgs,
                                                       ChNumber)]},
-                          intrinsic, brutal_kill, worker, [amqp_channel]}),
+                          intrinsic, ?MAX_WAIT, worker, [amqp_channel]}),
     {ok, AState} = init_command_assembler(Type),
     {ok, Sup, {ChPid, AState}}.
 
@@ -60,7 +61,7 @@ start_writer_fun(Sup, network, [Sock], ChNumber) ->
                         {writer, {rabbit_writer, start_link,
                                   [Sock, ChNumber, ?FRAME_MIN_SIZE, ?PROTOCOL,
                                    self()]},
-                         transient, ?MAX_WAIT, worker, [rabbit_writer]})
+                         intrinsic, ?MAX_WAIT, worker, [rabbit_writer]})
     end.
 
 init_command_assembler(direct)  -> {ok, none};
@@ -70,5 +71,8 @@ init_command_assembler(network) -> rabbit_command_assembler:init(?PROTOCOL).
 %% supervisor2 callbacks
 %%---------------------------------------------------------------------------
 
-init([]) ->
-    {ok, {{one_for_all, 0, 1}, []}}.
+init([{ConsumerModule, ConsumerArgs}]) ->
+    {ok, {{one_for_all, 0, 1},
+          [{gen_consumer, {amqp_gen_consumer, start_link,
+                           [ConsumerModule, ConsumerArgs]},
+           intrinsic, ?MAX_WAIT, worker, [amqp_gen_consumer]}]}}.

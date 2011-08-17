@@ -53,6 +53,11 @@ open_channel_args(#state{node = Node,
 do(_Method, _State) ->
     ok.
 
+handle_message(force_event_refresh, State = #state{node = Node}) ->
+    rpc:call(Node, rabbit_event, notify,
+             [connection_created, connection_info(State)]),
+    {ok, State};
+
 handle_message(Msg, State) ->
     {stop, {unexpected_msg, Msg}, State}.
 
@@ -65,7 +70,7 @@ channels_terminated(State = #state{closing_reason = Reason,
     {stop, {shutdown, Reason}, State}.
 
 terminate(_Reason, #state{node = Node}) ->
-    rpc:call(Node, rabbit_direct, disconnect, [[{pid, self()}]]),
+    rpc:call(Node, rabbit_direct, disconnect, [self(), [{pid, self()}]]),
     ok.
 
 i(type, _State) -> direct;
@@ -91,7 +96,8 @@ info_keys() ->
 infos(Items, State) ->
     [{Item, i(Item, State)} || Item <- Items].
 
-additional_info(#state{adapter_info = I}) -> I#adapter_info.additional_info.
+connection_info(State = #state{adapter_info = I}) ->
+    infos(?CREATION_EVENT_KEYS, State) ++ I#adapter_info.additional_info.
 
 connect(Params = #amqp_params_direct{username     = Username,
                                      node         = Node,
@@ -103,9 +109,8 @@ connect(Params = #amqp_params_direct{username     = Username,
                          params       = Params,
                          adapter_info = ensure_adapter_info(Info)},
     case rpc:call(Node, rabbit_direct, connect,
-                  [Username, VHost, ?PROTOCOL,
-                   infos(?CREATION_EVENT_KEYS, State1) ++
-                       additional_info(State1)]) of
+                  [Username, VHost, ?PROTOCOL, self(),
+                   connection_info(State1)]) of
         {ok, {User, ServerProperties}} ->
             {ok, Collector} = SIF(),
             State2 = State1#state{user      = User,

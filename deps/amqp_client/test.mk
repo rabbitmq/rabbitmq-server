@@ -60,7 +60,8 @@ run_test_in_broker:
 run_test_detached: start_test_broker_node
 	OK=true && \
 	TMPFILE=$(MKTEMP) && \
-	{ $(RUN) -noinput $(TESTING_MESSAGE) $(RUN_TEST_ARGS) \
+	{ $(RUN) -noinput $(TESTING_MESSAGE) \
+	   $(SSL_CLIENT_ARGS) $(RUN_TEST_ARGS) \
 	    -s init stop 2>&1 | tee $$TMPFILE || OK=false; } && \
 	{ $(IS_SUCCESS) $$TMPFILE || OK=false; } && \
 	rm $$TMPFILE && \
@@ -79,7 +80,7 @@ stop_test_broker_node:
 	$(MAKE) unboot_broker
 
 boot_broker:
-	$(MAKE) -C $(BROKER_DIR) start-background-node
+	$(MAKE) -C $(BROKER_DIR) start-background-node RABBITMQ_SERVER_START_ARGS="$(RABBITMQ_SERVER_START_ARGS) $(SSL_BROKER_ARGS)"
 	$(MAKE) -C $(BROKER_DIR) start-rabbit-on-node
 
 unboot_broker:
@@ -90,31 +91,32 @@ ssl:
 	$(SSL)
 
 test_ssl: prepare_tests ssl
-	$(MAKE) run_test_detached RUN_TEST_ARGS="-s ssl_client_SUITE test"
+	$(MAKE) run_test_detached AMQP_CLIENT_TEST_CONNECTION_TYPE="network_ssl" RUN_TEST_ARGS="-s amqp_client_SUITE test"
 
 test_network: prepare_tests
-	$(MAKE) run_test_detached RUN_TEST_ARGS="-s network_client_SUITE test"
+	$(MAKE) run_test_detached AMQP_CLIENT_TEST_CONNECTION_TYPE="network" RUN_TEST_ARGS="-s amqp_client_SUITE test"
 
 test_direct: prepare_tests
-	$(MAKE) run_test_in_broker RUN_TEST_ARGS="-s direct_client_SUITE test"
+	$(MAKE) run_test_in_broker AMQP_CLIENT_TEST_CONNECTION_TYPE="direct" RUN_TEST_ARGS="-s amqp_client_SUITE test"
 
 test_remote_direct: prepare_tests
-	$(MAKE) run_test_detached RUN_TEST_ARGS="-s direct_client_SUITE test"
+	$(MAKE) run_test_detached AMQP_CLIENT_TEST_CONNECTION_TYPE="direct" RUN_TEST_ARGS="-s amqp_client_SUITE test"
 
 test_common_package: $(DIST_DIR)/$(COMMON_PACKAGE_EZ) package prepare_tests
 	$(MAKE) run_test_detached RUN="$(LIBS_PATH) erl -pa $(TEST_DIR)" \
-	    RUN_TEST_ARGS="-s network_client_SUITE test"
+	    AMQP_CLIENT_TEST_CONNECTION_TYPE="network" RUN_TEST_ARGS="-s amqp_client_SUITE test"
 	$(MAKE) run_test_detached RUN="$(LIBS_PATH) erl -pa $(TEST_DIR) -sname amqp_client" \
-	    RUN_TEST_ARGS="-s direct_client_SUITE test"
+	    AMQP_CLIENT_TEST_CONNECTION_TYPE="direct" RUN_TEST_ARGS="-s amqp_client_SUITE test"
 
 test_ssl_coverage: prepare_tests ssl
-	$(MAKE) run_test_detached RUN_TEST_ARGS="-s ssl_client_SUITE test_coverage"
+	$(MAKE) run_test_detached AMQP_CLIENT_TEST_CONNECTION_TYPE="network_ssl" RUN_TEST_ARGS="-s amqp_client_SUITE test_coverage"
 
 test_network_coverage: prepare_tests
-	$(MAKE) run_test_detached RUN_TEST_ARGS="-s network_client_SUITE test_coverage"
-
-test_direct_coverage: prepare_tests
-	$(MAKE) run_test_in_broker RUN_TEST_ARGS="-s direct_client_SUITE test_coverage"
+	$(MAKE) run_test_detached AMQP_CLIENT_TEST_CONNECTION_TYPE="network" RUN_TEST_ARGS="-s amqp_client_SUITE test_coverage"
 
 test_remote_direct_coverage: prepare_tests
-	$(MAKE) run_test_detached RUN_TEST_ARGS="-s direct_client_SUITE test_coverage"
+	$(MAKE) run_test_detached AMQP_CLIENT_TEST_CONNECTION_TYPE="direct" RUN_TEST_ARGS="-s amqp_client_SUITE test_coverage"
+
+test_direct_coverage: prepare_tests
+	$(MAKE) run_test_in_broker AMQP_CLIENT_TEST_CONNECTION_TYPE="direct" RUN_TEST_ARGS="-s amqp_client_SUITE test_coverage"
+
