@@ -1296,7 +1296,7 @@
             <para>
               Displays broker status information such as the running
               applications on the current Erlang node, RabbitMQ and
-              Erlang versions and OS name.  (See
+              Erlang versions, OS name and memory statistics. (See
               the <command>cluster_status</command> command to find
               out which nodes are clustered and running.)
             </para>
@@ -1373,7 +1373,37 @@
             </para>
           </listitem>
         </varlistentry>
+          </variablelist>
+        </refsect2>
 
+        <refsect2>
+          <title>Memory Management</title>
+          <variablelist>
+
+        <varlistentry>
+          <term><cmdsynopsis><command>set_vm_memory_high_watermark</command> <arg choice="req"><replaceable>fraction</replaceable></arg></cmdsynopsis></term>
+          <listitem>
+            <variablelist>
+              <varlistentry>
+                <term>fraction</term>
+                <listitem><para>The new memory threshhold fraction as a floating point number between
+                                0.0 and 1.0 . The fractional part is compulsory.</para></listitem>
+              </varlistentry>
+            </variablelist>
+            <para>
+              Sets the memory threshhold fraction at which memory-based flow control is
+              triggered, until the broker restarts. This command is intended for use in
+              systems that support hot-swappable RAM. The corresponding configuration
+              setting should also be changed when the effects of this command should
+              survive a broker restart. Use the <command>status</command> command to
+              confirm the currently active threshhold.
+            </para>
+            <screen role="example">rabbitmqctl set_vm_memory_high_watermark 0.4</screen>
+            <para role="example">
+              This command sets the memory threshhold fraction to the default value of 40%.
+            </para>
+          </listitem>
+        </varlistentry>
       </variablelist>
     </refsect2>
   </refsect1>
