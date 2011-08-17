@@ -1300,8 +1300,9 @@
               In this context <varname>vm_memory_high_watermark</varname>
               indicates to the fraction of memory at which flow control is
               triggered. <varname>vm_memory_limit</varname> refers to the
-              absolute memory threshhold (in bytes) at which flow control
-              is triggered.  (See the <command>cluster_status</command>
+              absolute memory threshhold at which flow control is triggered.
+              The unit of this number and those listed in the <varname>memory</varname>
+              section is bytes. (See the <command>cluster_status</command>
               command to find out which nodes are clustered and running.)
             </para>
             <para role="example-prefix">For example:</para>
