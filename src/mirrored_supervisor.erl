@@ -526,9 +526,13 @@ with_exit_handler(Handler, Thunk) ->
             Handler()
     end.
 
-add_proplists(P1, []) -> P1;
-add_proplists(P1, [{K, V2} | P2]) ->
-    add_proplists(case proplists:get_value(K, P1) of
-                      undefined -> [{K, V2} | P1];
-                      V1        -> [{K, V1 + V2} | proplists:delete(K, P1)]
-                  end, P2).
+add_proplists(P1, P2) ->
+    add_proplists(lists:keysort(1, P1), lists:keysort(1, P2), []).
+add_proplists([], P2, Acc) -> P2 ++ Acc;
+add_proplists(P1, [], Acc) -> P1 ++ Acc;
+add_proplists([{K, V1} | P1], [{K, V2} | P2], Acc) ->
+    add_proplists(P1, P2, [{K, V1 + V2} | Acc]);
+add_proplists([{K1, _} = KV | P1], [{K2, _} | _] = P2, Acc) when K1 < K2 ->
+    add_proplists(P1, P2, [KV | Acc]);
+add_proplists(P1, [KV | P2], Acc) ->
+    add_proplists(P1, P2, [KV | Acc]).
