@@ -1296,9 +1296,13 @@
             <para>
               Displays broker status information such as the running
               applications on the current Erlang node, RabbitMQ and
-              Erlang versions, OS name and memory statistics. (See
-              the <command>cluster_status</command> command to find
-              out which nodes are clustered and running.)
+              Erlang versions, OS name and memory statistics.
+              In this context <varname>vm_memory_high_watermark</varname>
+              indicates to the fraction of memory at which flow control is
+              triggered. <varname>vm_memory_limit</varname> refers to the
+              absolute memory threshhold (in bytes) at which flow control
+              is triggered.  (See the <command>cluster_status</command>
+              command to find out which nodes are clustered and running.)
             </para>
             <para role="example-prefix">For example:</para>
             <screen role="example">rabbitmqctl status</screen>
@@ -1392,11 +1396,15 @@
             </variablelist>
             <para>
               Sets the memory threshhold fraction at which memory-based flow control is
-              triggered, until the broker restarts. This command is intended for use in
-              systems that support hot-swappable RAM. The corresponding configuration
+              triggered, until the broker restarts. The corresponding configuration
               setting should also be changed when the effects of this command should
               survive a broker restart. Use the <command>status</command> command to
-              confirm the currently active threshhold.
+              confirm the currently active memory threshhold.
+            </para>
+            <para>
+              This command may also be used to update the total memory on systems that support
+              hot-swappable RAM. The total amount of RAM is queried and the supplied fraction
+              is used to determine the absolute threshhold.
             </para>
             <screen role="example">rabbitmqctl set_vm_memory_high_watermark 0.4</screen>
             <para role="example">
