@@ -1107,13 +1107,10 @@ handle_cast({limit, ChPid, Limiter}, State) ->
                      is_limit_active = OldLimited}) ->
                 case (ConsumerCount =/= 0 andalso
                       not rabbit_limiter:is_enabled(OldLimiter)) of
-                    true ->
-                        ok = rabbit_limiter:register(Limiter, self());
-                    false ->
-                        ok
+                    true  -> ok = rabbit_limiter:register(Limiter, self());
+                    false -> ok
                 end,
-                Limited =
-                    OldLimited andalso rabbit_limiter:is_enabled(Limiter),
+                Limited = OldLimited andalso rabbit_limiter:is_enabled(Limiter),
                 C#cr{limiter = Limiter, is_limit_active = Limited}
         end));
 

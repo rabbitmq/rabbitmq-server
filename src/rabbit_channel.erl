@@ -814,18 +814,15 @@ handle_method(#'basic.qos'{prefetch_size = Size}, _, _State) when Size /= 0 ->
 
 handle_method(#'basic.qos'{prefetch_count = PrefetchCount}, _,
               State = #ch{limiter = Limiter}) ->
-    Limiter1 =
-        case {rabbit_limiter:is_enabled(Limiter), PrefetchCount} of
-            {false, 0} -> Limiter;
-            {false, _} -> enable_limiter(State);
-            {_, _}     -> Limiter
-        end,
+    Limiter1 = case {rabbit_limiter:is_enabled(Limiter), PrefetchCount} of
+                   {false, 0} -> Limiter;
+                   {false, _} -> enable_limiter(State);
+                   {_, _}     -> Limiter
+               end,
     Limiter3 = case rabbit_limiter:limit(Limiter1, PrefetchCount) of
-                   ok ->
-                       Limiter1;
-                   {disabled, Limiter2} ->
-                       ok = limit_queues(Limiter2, State),
-                       Limiter2
+                   ok                   -> Limiter1;
+                   {disabled, Limiter2} -> ok = limit_queues(Limiter2, State),
+                                           Limiter2
                end,
     {reply, #'basic.qos_ok'{}, State#ch{limiter = Limiter3}};
 
@@ -1094,14 +1091,11 @@ handle_method(#'confirm.select'{nowait = NoWait}, _, State) ->
 handle_method(#'channel.flow'{active = true}, _,
               State = #ch{limiter = Limiter}) ->
     Limiter2 = case rabbit_limiter:unblock(Limiter) of
-                   ok ->
-                       Limiter;
-                   {disabled, Limiter1} ->
-                       ok = limit_queues(Limiter1, State),
-                       Limiter1
+                   ok                   -> Limiter;
+                   {disabled, Limiter1} -> ok = limit_queues(Limiter1, State),
+                                           Limiter1
                end,
-    {reply, #'channel.flow_ok'{active = true},
-     State#ch{limiter = Limiter2}};
+    {reply, #'channel.flow_ok'{active = true}, State#ch{limiter = Limiter2}};
 
 handle_method(#'channel.flow'{active = false}, _,
               State = #ch{consumer_mapping = Consumers,
@@ -1323,10 +1317,9 @@ consumer_queues(Consumers) ->
 notify_limiter(Limiter, Acked) ->
     case rabbit_limiter:is_enabled(Limiter) of
         false -> ok;
-        true  -> case rabbit_misc:queue_fold(
-                        fun ({_, none, _}, Acc) -> Acc;
-                            ({_, _, _}, Acc)    -> Acc + 1
-                        end, 0, Acked) of
+        true  -> case rabbit_misc:queue_fold(fun ({_, none, _}, Acc) -> Acc;
+                                                 ({_, _, _}, Acc)    -> Acc + 1
+                                             end, 0, Acked) of
                      0     -> ok;
                      Count -> rabbit_limiter:ack(Limiter, Count)
                  end
