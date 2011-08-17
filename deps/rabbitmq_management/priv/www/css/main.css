@@ -21,6 +21,7 @@ b, dt { color: black; font-weight: normal; }
 div.box, div.section, div.section-hidden { overflow: auto; width: 100%; }
 
 .help { color: #888; cursor: pointer; }
+.help:hover { color: #444; }
 
 table { border-collapse: collapse; }
 table th { font-weight: normal; color: black; }
