@@ -16,16 +16,18 @@
 
 -module(rabbit_mgmt_sup).
 
--behaviour(supervisor).
+-behaviour(mirrored_supervisor).
 
 -export([init/1]).
 -export([start_link/0]).
 
+-include_lib("rabbit_common/include/rabbit.hrl").
+
 init([]) ->
-    Global = {rabbit_mgmt_global_sup,
-              {rabbit_mgmt_global_sup, start_link, []},
-              permanent, 5000, supervisor, [rabbit_mgmt_global_sup]},
-    {ok, {{one_for_one, 10, 10}, [Global]}}.
+    DB = {rabbit_mgmt_db,
+              {rabbit_mgmt_db, start_link, []},
+              permanent, ?MAX_WAIT, worker, [rabbit_mgmt_db]},
+    {ok, {{one_for_one, 10, 10}, [DB]}}.
 
 start_link() ->
-     supervisor:start_link({local, ?MODULE}, ?MODULE, []).
+     mirrored_supervisor:start_link({local, ?MODULE}, ?MODULE, []).
