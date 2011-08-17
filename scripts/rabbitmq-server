@@ -58,11 +58,6 @@ fi
 [ "x" = "x$RABBITMQ_LOGS" ] && RABBITMQ_LOGS="${RABBITMQ_LOG_BASE}/${RABBITMQ_NODENAME}.log"
 [ "x" = "x$RABBITMQ_SASL_LOGS" ] && RABBITMQ_SASL_LOGS=${SASL_LOGS}
 [ "x" = "x$RABBITMQ_SASL_LOGS" ] && RABBITMQ_SASL_LOGS="${RABBITMQ_LOG_BASE}/${RABBITMQ_NODENAME}-sasl.log"
-[ "x" = "x$RABBITMQ_BACKUP_EXTENSION" ] && RABBITMQ_BACKUP_EXTENSION=${BACKUP_EXTENSION}
-[ "x" = "x$RABBITMQ_BACKUP_EXTENSION" ] && RABBITMQ_BACKUP_EXTENSION=".1"
-
-[ -f  "${RABBITMQ_LOGS}" ] && cat "${RABBITMQ_LOGS}" >> "${RABBITMQ_LOGS}${RABBITMQ_BACKUP_EXTENSION}"
-[ -f  "${RABBITMQ_SASL_LOGS}" ] && cat "${RABBITMQ_SASL_LOGS}" >> "${RABBITMQ_SASL_LOGS}${RABBITMQ_BACKUP_EXTENSION}"
 
 RABBITMQ_START_RABBIT=
 [ "x" = "x$RABBITMQ_ALLOW_INPUT" ] && RABBITMQ_START_RABBIT='-noinput'
@@ -107,8 +102,9 @@ exec erl \
     ${RABBITMQ_SERVER_ERL_ARGS} \
     ${RABBITMQ_LISTEN_ARG} \
     -sasl errlog_type error \
-    -kernel error_logger '{file,"'${RABBITMQ_LOGS}'"}' \
-    -sasl sasl_error_logger '{file,"'${RABBITMQ_SASL_LOGS}'"}' \
+    -sasl sasl_error_logger false \
+    -rabbit error_logger '{file,"'${RABBITMQ_LOGS}'"}' \
+    -rabbit sasl_error_logger '{file,"'${RABBITMQ_SASL_LOGS}'"}' \
     -os_mon start_cpu_sup true \
     -os_mon start_disksup false \
     -os_mon start_memsup false \

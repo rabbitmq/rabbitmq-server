@@ -245,12 +245,14 @@ environment() ->
 
 rotate_logs(BinarySuffix) ->
     Suffix = binary_to_list(BinarySuffix),
-    log_rotation_result(rotate_logs(log_location(kernel),
+    R = log_rotation_result(rotate_logs(log_location(kernel),
                                     Suffix,
                                     rabbit_error_logger_file_h),
                         rotate_logs(log_location(sasl),
                                     Suffix,
-                                    rabbit_sasl_report_file_h)).
+                                    rabbit_sasl_report_file_h)),
+    io:format("Rot Handlers: ~p~n", [gen_event:which_handlers(error_logger)]),
+    R.
 
 %%--------------------------------------------------------------------
 
@@ -447,16 +449,19 @@ ensure_working_log_handlers() ->
                                     error_logger_tty_h,
                                     log_location(kernel),
                                     Handlers),
-
     ok = ensure_working_log_handler(sasl_report_file_h,
                                     rabbit_sasl_report_file_h,
                                     sasl_report_tty_h,
                                     log_location(sasl),
                                     Handlers),
+    case log_location(kernel) of
+        tty -> ok;
+        _   -> error_logger:delete_report_handler(error_logger_tty_h)
+    end,
     ok.
 
-ensure_working_log_handler(OldFHandler, NewFHandler, TTYHandler,
-                           LogLocation, Handlers) ->
+ensure_working_log_handler(OldFHandler, NewFHandler, TTYHandler, LogLocation,
+                           Handlers) ->
     case LogLocation of
         undefined -> ok;
         tty       -> case lists:member(TTYHandler, Handlers) of
@@ -478,7 +483,7 @@ ensure_working_log_handler(OldFHandler, NewFHandler, TTYHandler,
     end.
 
 log_location(Type) ->
-    case application:get_env(Type, case Type of
+    case application:get_env(rabbit, case Type of
                                        kernel -> error_logger;
                                        sasl   -> sasl_error_logger
                                    end) of
