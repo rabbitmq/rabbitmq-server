@@ -10,7 +10,10 @@ body { font: 12px Verdana,sans-serif; color: #484848; padding: 8px 35px; }
 #main { clear: both; }
 #menu a { color: #444; font-weight: bold; text-decoration: none; }
 #main a { color: black; font-weight: bold; text-decoration: none; }
+#main a:hover { color: #222; }
 #menu a.selected { background-color: #F60; color:white; -moz-border-radius: 8px 8px 0 0; border-radius: 8px 8px 0 0; }
+#menu a:hover { color: black; }
+#menu a.selected:hover { color: white; }
 #vhost-form { float: right; padding: 0; margin: 0; }
 
 h1 { font-size: 2em; font-weight: normal; padding: 0; }
@@ -42,6 +45,7 @@ div.section table.list, div.section-hidden table.list { margin-bottom: 0; }
 sub { display: block; font-size: 0.8em; color: #888; }
 small { font-size: 0.8em; color: #888; }
 #main sub a { color: #888; }
+#main sub a:hover { color: #444; }
 .unknown { color: #888; }
 
 table.facts { float: left; margin-right: 50px; }
@@ -88,6 +92,7 @@ div.section, div.section-hidden { margin: 0 0 1em 0; }
 div.section-invisible div.hider { display: none; }
 div.section div.hider, div.section-hidden div.hider { padding: 0.5em 0; }
 div.section h2, div.section-hidden h2 { font-size: 1em; padding: 5px 5px 5px 25px; cursor: pointer; margin: 0; }
+div.section h2:hover, div.section-hidden h2:hover { color: black; }
 div.section-invisible h2 { background: white; border-bottom: 1px solid #ddd; background-image: url(../img/collapse.png); background-repeat:no-repeat; background-position:4px 4px; }
 div.section-visible h2 { background: #f8f8f8;  border-bottom: 1px solid #ddd; background-image: url(../img/expand.png); background-repeat:no-repeat; background-position:4px 4px; }
 
@@ -143,6 +148,7 @@ td.binding-endpoint span.arrow { font-size: 200%; }
 #footer-nav ul li { float: left; border-right: 1px solid #ccc; padding: 2px 5px 2px 0;}
 #footer-nav ul li + li { border-right: none; padding: 2px 5px;}
 #footer-nav ul li a { color: #888; text-decoration: none; }
+#footer-nav ul li a:hover { color: #444; }
 
 #update-form { float: right; margin: 0; padding: 0; }
 
