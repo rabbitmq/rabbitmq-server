@@ -227,7 +227,8 @@ notify_queues(State = #lim{ch_pid = ChPid, queues = Queues}) ->
             %% thus ensuring that each queue has an equal chance of
             %% being notified first.
             {L1, L2} = lists:split(random:uniform(L), QList),
-            [ok = rabbit_amqqueue:unblock(Q, ChPid) || Q <- L2 ++ L1],
+            [[ok = rabbit_amqqueue:unblock(Q, ChPid) || Q <- L3]
+             || L3 <- [L2, L1]],
             ok
     end,
     State#lim{queues = NewQueues}.
