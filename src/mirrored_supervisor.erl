@@ -424,10 +424,11 @@ maybe_start(Group, Delegate, ChildSpec) ->
     case mnesia:transaction(fun() ->
                                     check_start(Group, Delegate, ChildSpec)
                             end) of
-        {atomic, start} -> start(Delegate, ChildSpec);
-        {atomic, Pid}   -> {error, {already_started, Pid}};
+        {atomic, start}     -> start(Delegate, ChildSpec);
+        {atomic, undefined} -> {error, already_present};
+        {atomic, Pid}       -> {error, {already_started, Pid}};
         %% If we are torn down while in the transaction...
-        {aborted, E}    -> {error, E}
+        {aborted, E}        -> {error, E}
     end.
 
 check_start(Group, Delegate, ChildSpec) ->

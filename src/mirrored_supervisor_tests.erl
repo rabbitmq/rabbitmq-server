@@ -154,7 +154,9 @@ test_start_idempotence() ->
     with_sups(fun([_]) ->
                       CS = childspec(worker),
                       {ok, Pid}                       = ?MS:start_child(a, CS),
-                      {error, {already_started, Pid}} = ?MS:start_child(a, CS)
+                      {error, {already_started, Pid}} = ?MS:start_child(a, CS),
+                      ?MS:terminate_child(a, worker),
+                      {error, already_present}        = ?MS:start_child(a, CS)
               end, [a]).
 
 test_unsupported() ->
