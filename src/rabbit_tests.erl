@@ -1824,24 +1824,48 @@ msg_id_bin(X) ->
 msg_store_client_init(MsgStore, Ref) ->
     rabbit_msg_store:client_init(MsgStore, Ref, undefined, undefined).
 
+on_disk_capture() ->
+    on_disk_capture({gb_sets:new(), gb_sets:new(), undefined}).
+on_disk_capture({OnDisk, Awaiting, Pid}) ->
+    Pid1 = case Pid =/= undefined andalso gb_sets:is_empty(Awaiting) of
+               true  -> Pid ! {self(), arrived}, undefined;
+               false -> Pid
+           end,
+    receive
+        {await, MsgIds, Pid2} ->
+            true = Pid1 =:= undefined andalso gb_sets:is_empty(Awaiting),
+            on_disk_capture({OnDisk, gb_sets:subtract(MsgIds, OnDisk), Pid2});
+        {on_disk, MsgIds} ->
+            on_disk_capture({gb_sets:union(OnDisk, MsgIds),
+                             gb_sets:subtract(Awaiting, MsgIds),
+                             Pid1});
+        stop ->
+            done
+    end.
+
+on_disk_await(Pid, MsgIds) when is_list(MsgIds) ->
+    Pid ! {await, gb_sets:from_list(MsgIds), self()},
+    receive {Pid, arrived} -> ok end.
+
+on_disk_stop(Pid) ->
+    MRef = erlang:monitor(process, Pid),
+    Pid ! stop,
+    receive {'DOWN', MRef, process, Pid, _Reason} ->
+            ok
+    end.
+
+msg_store_client_init_capture(MsgStore, Ref) ->
+    Pid = spawn(fun on_disk_capture/0),
+    {Pid, rabbit_msg_store:client_init(
+            MsgStore, Ref, fun (MsgIds, _ActionTaken) ->
+                                   Pid ! {on_disk, MsgIds}
+                           end, undefined)}.
+
 msg_store_contains(Atom, MsgIds, MSCState) ->
     Atom = lists:foldl(
              fun (MsgId, Atom1) when Atom1 =:= Atom ->
                      rabbit_msg_store:contains(MsgId, MSCState) end,
              Atom, MsgIds).
-
-msg_store_sync(MsgIds, MSCState) ->
-    Ref = make_ref(),
-    Self = self(),
-    ok = rabbit_msg_store:sync(MsgIds, fun () -> Self ! {sync, Ref} end,
-                               MSCState),
-    receive
-        {sync, Ref} -> ok
-    after
-        10000 ->
-            io:format("Sync from msg_store missing for msg_ids ~p~n", [MsgIds]),
-            throw(timeout)
-    end.
 
 msg_store_read(MsgIds, MSCState) ->
     lists:foldl(fun (MsgId, MSCStateM) ->
@@ -1876,22 +1900,18 @@ foreach_with_msg_store_client(MsgStore, Ref, Fun, L) ->
 
 test_msg_store() ->
     restart_msg_store_empty(),
-    Self = self(),
     MsgIds = [msg_id_bin(M) || M <- lists:seq(1,100)],
     {MsgIds1stHalf, MsgIds2ndHalf} = lists:split(50, MsgIds),
     Ref = rabbit_guid:guid(),
-    MSCState = msg_store_client_init(?PERSISTENT_MSG_STORE, Ref),
+    {Cap, MSCState} = msg_store_client_init_capture(?PERSISTENT_MSG_STORE, Ref),
     %% check we don't contain any of the msgs we're about to publish
     false = msg_store_contains(false, MsgIds, MSCState),
     %% publish the first half
     ok = msg_store_write(MsgIds1stHalf, MSCState),
     %% sync on the first half
-    ok = msg_store_sync(MsgIds1stHalf, MSCState),
+    ok = on_disk_await(Cap, MsgIds1stHalf),
     %% publish the second half
     ok = msg_store_write(MsgIds2ndHalf, MSCState),
-    %% sync on the first half again - the msg_store will be dirty, but
-    %% we won't need the fsync
-    ok = msg_store_sync(MsgIds1stHalf, MSCState),
     %% check they're all in there
     true = msg_store_contains(true, MsgIds, MSCState),
     %% publish the latter half twice so we hit the caching and ref count code
@@ -1900,25 +1920,8 @@ test_msg_store() ->
     true = msg_store_contains(true, MsgIds, MSCState),
     %% sync on the 2nd half, but do lots of individual syncs to try
     %% and cause coalescing to happen
-    ok = lists:foldl(
-           fun (MsgId, ok) -> rabbit_msg_store:sync(
-                                [MsgId], fun () -> Self ! {sync, MsgId} end,
-                                MSCState)
-           end, ok, MsgIds2ndHalf),
-    lists:foldl(
-      fun(MsgId, ok) ->
-              receive
-                  {sync, MsgId} -> ok
-              after
-                  10000 ->
-                      io:format("Sync from msg_store missing (msg_id: ~p)~n",
-                                [MsgId]),
-                      throw(timeout)
-              end
-      end, ok, MsgIds2ndHalf),
-    %% it's very likely we're not dirty here, so the 1st half sync
-    %% should hit a different code path
-    ok = msg_store_sync(MsgIds1stHalf, MSCState),
+    ok = on_disk_await(Cap, MsgIds2ndHalf),
+    ok = on_disk_stop(Cap),
     %% read them all
     MSCState1 = msg_store_read(MsgIds, MSCState),
     %% read them all again - this will hit the cache, not disk
