@@ -453,7 +453,10 @@ ensure_working_log_handlers() ->
                                     sasl_report_tty_h,
                                     log_location(sasl),
                                     Handlers),
-    error_logger:delete_report_handler(error_logger_tty_h),
+    case log_location(kernel) of
+        tty -> ok;
+        _   -> error_logger:delete_report_handler(error_logger_tty_h)
+    end,
     ok.
 
 ensure_working_log_handler(OldFHandler, NewFHandler, TTYHandler, LogLocation,

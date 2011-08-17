@@ -854,10 +854,12 @@ test_log_management_during_startup() ->
     %% start application with logging to non-existing directory
     TmpLog = "/tmp/rabbit-tests/test.log",
     delete_file(TmpLog),
-    ok = application:set_env(kernel, error_logger, {file, TmpLog}),
+    ok = application:set_env(rabbit, error_logger, {file, TmpLog}),
+    ok = application:set_env(sasl, error_logger, {file, TmpLog}),
 
     ok = delete_log_handlers([rabbit_error_logger_file_h]),
     ok = add_log_handlers([{error_logger_file_h, MainLog}]),
+
     ok = control_action(start_app, []),
 
     %% start application with logging to directory with no
@@ -875,7 +877,7 @@ test_log_management_during_startup() ->
     %% start application with logging to a subdirectory which
     %% parent directory has no write permissions
     TmpTestDir = "/tmp/rabbit-tests/no-permission/test/log",
-    ok = application:set_env(kernel, error_logger, {file, TmpTestDir}),
+    ok = application:set_env(rabbit, error_logger, {file, TmpTestDir}),
     ok = add_log_handlers([{error_logger_file_h, MainLog}]),
     ok = case control_action(start_app, []) of
              ok -> exit({got_success_but_expected_failure,
