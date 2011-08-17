@@ -60,24 +60,19 @@ notify_cluster() ->
 %%--------------------------------------------------------------------
 
 init([]) ->
-    ok = net_kernel:monitor_nodes(true),
     {ok, no_state}.
 
 handle_call(_Request, _From, State) ->
     {noreply, State}.
 
 handle_cast({rabbit_running_on, Node}, State) ->
-    rabbit_log:info("node ~p up~n", [Node]),
+    rabbit_log:info("rabbit on ~p up~n", [Node]),
     erlang:monitor(process, {rabbit, Node}),
-    ok = rabbit_alarm:on_node_up(Node),
+    ok = handle_live_rabbit(Node),
     {noreply, State};
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
-handle_info({nodedown, Node}, State) ->
-    rabbit_log:info("node ~p down~n", [Node]),
-    ok = handle_dead_rabbit(Node),
-    {noreply, State};
 handle_info({'DOWN', _MRef, process, {rabbit, Node}, _Reason}, State) ->
     rabbit_log:info("node ~p lost 'rabbit'~n", [Node]),
     ok = handle_dead_rabbit(Node),
@@ -99,4 +94,9 @@ code_change(_OldVsn, State, _Extra) ->
 handle_dead_rabbit(Node) ->
     ok = rabbit_networking:on_node_down(Node),
     ok = rabbit_amqqueue:on_node_down(Node),
-    ok = rabbit_alarm:on_node_down(Node).
+    ok = rabbit_alarm:on_node_down(Node),
+    ok = rabbit_mnesia:on_node_down(Node).
+
+handle_live_rabbit(Node) ->
+    ok = rabbit_alarm:on_node_up(Node),
+    ok = rabbit_mnesia:on_node_up(Node).

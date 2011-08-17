@@ -11,22 +11,10 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2010 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2010-2011 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_mirror_queue_slave_sup).
-
--rabbit_boot_step({mirror_queue_slave_sup,
-                   [{description, "mirror queue slave sup"},
-                    {mfa,         {rabbit_mirror_queue_slave_sup, start, []}},
-                    {requires,    recovery},
-                    {enables,     routing_ready}]}).
-
--rabbit_boot_step({mirrored_queues,
-                   [{description, "adding mirrors to queues"},
-                    {mfa,         {rabbit_mirror_queue_misc, on_node_up, []}},
-                    {requires,    mirror_queue_slave_sup},
-                    {enables,     routing_ready}]}).
 
 -behaviour(supervisor2).
 

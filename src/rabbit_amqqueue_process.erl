@@ -31,7 +31,7 @@
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2, handle_pre_hibernate/1, prioritise_call/3,
-         prioritise_cast/2, prioritise_info/2]).
+         prioritise_cast/2, prioritise_info/2, format_message_queue/2]).
 
 -export([init_with_backing_queue_state/7]).
 
@@ -58,7 +58,7 @@
 %% These are held in our process dictionary
 -record(cr, {consumer_count,
              ch_pid,
-             limiter_pid,
+             limiter,
              monitor_ref,
              acktags,
              is_limit_active,
@@ -73,8 +73,8 @@
          messages,
          consumers,
          memory,
-         backing_queue_status,
-         slave_pids
+         slave_pids,
+         backing_queue_status
         ]).
 
 -define(CREATION_EVENT_KEYS,
@@ -84,10 +84,12 @@
          auto_delete,
          arguments,
          owner_pid,
-         mirror_nodes
+         slave_pids,
+         synchronised_slave_pids
         ]).
 
--define(INFO_KEYS, ?CREATION_EVENT_KEYS ++ ?STATISTICS_KEYS -- [pid]).
+-define(INFO_KEYS,
+        ?CREATION_EVENT_KEYS ++ ?STATISTICS_KEYS -- [pid, slave_pids]).
 
 %%----------------------------------------------------------------------------
 
@@ -149,11 +151,13 @@ terminate(shutdown = R,      State = #q{backing_queue = BQ}) ->
     terminate_shutdown(fun (BQS) -> BQ:terminate(R, BQS) end, State);
 terminate({shutdown, _} = R, State = #q{backing_queue = BQ}) ->
     terminate_shutdown(fun (BQS) -> BQ:terminate(R, BQS) end, State);
-terminate(Reason,            State = #q{backing_queue = BQ}) ->
+terminate(Reason,            State = #q{q             = #amqqueue{name = QName},
+                                        backing_queue = BQ}) ->
     %% FIXME: How do we cancel active subscriptions?
     terminate_shutdown(fun (BQS) ->
                                rabbit_event:notify(
-                                 queue_deleted, [{pid, self()}]),
+                                 queue_deleted, [{pid,  self()},
+                                                 {name, QName}]),
                                BQS1 = BQ:delete_and_terminate(Reason, BQS),
                                %% don't care if the internal delete
                                %% doesn't return 'ok'.
@@ -249,8 +253,7 @@ backing_queue_module(#amqqueue{arguments = Args}) ->
     end.
 
 ensure_sync_timer(State = #q{sync_timer_ref = undefined}) ->
-    {ok, TRef} = timer:apply_after(
-                   ?SYNC_INTERVAL, rabbit_amqqueue, sync_timeout, [self()]),
+    TRef = erlang:send_after(?SYNC_INTERVAL, self(), sync_timeout),
     State#q{sync_timer_ref = TRef};
 ensure_sync_timer(State) ->
     State.
@@ -258,14 +261,12 @@ ensure_sync_timer(State) ->
 stop_sync_timer(State = #q{sync_timer_ref = undefined}) ->
     State;
 stop_sync_timer(State = #q{sync_timer_ref = TRef}) ->
-    {ok, cancel} = timer:cancel(TRef),
+    erlang:cancel_timer(TRef),
     State#q{sync_timer_ref = undefined}.
 
 ensure_rate_timer(State = #q{rate_timer_ref = undefined}) ->
-    {ok, TRef} = timer:apply_after(
-                   ?RAM_DURATION_UPDATE_INTERVAL,
-                   rabbit_amqqueue, update_ram_duration,
-                   [self()]),
+    TRef = erlang:send_after(
+             ?RAM_DURATION_UPDATE_INTERVAL, self(), update_ram_duration),
     State#q{rate_timer_ref = TRef};
 ensure_rate_timer(State = #q{rate_timer_ref = just_measured}) ->
     State#q{rate_timer_ref = undefined};
@@ -277,13 +278,13 @@ stop_rate_timer(State = #q{rate_timer_ref = undefined}) ->
 stop_rate_timer(State = #q{rate_timer_ref = just_measured}) ->
     State#q{rate_timer_ref = undefined};
 stop_rate_timer(State = #q{rate_timer_ref = TRef}) ->
-    {ok, cancel} = timer:cancel(TRef),
+    erlang:cancel_timer(TRef),
     State#q{rate_timer_ref = undefined}.
 
 stop_expiry_timer(State = #q{expiry_timer_ref = undefined}) ->
     State;
 stop_expiry_timer(State = #q{expiry_timer_ref = TRef}) ->
-    {ok, cancel} = timer:cancel(TRef),
+    erlang:cancel_timer(TRef),
     State#q{expiry_timer_ref = undefined}.
 
 %% We wish to expire only when there are no consumers *and* the expiry
@@ -295,18 +296,16 @@ ensure_expiry_timer(State = #q{expires = Expires}) ->
     case is_unused(State) of
         true ->
             NewState = stop_expiry_timer(State),
-            {ok, TRef} = timer:apply_after(
-                           Expires, rabbit_amqqueue, maybe_expire, [self()]),
+            TRef = erlang:send_after(Expires, self(), maybe_expire),
             NewState#q{expiry_timer_ref = TRef};
         false ->
             State
     end.
 
 ensure_stats_timer(State = #q{stats_timer = StatsTimer,
-                              q = Q}) ->
+                              q = #amqqueue{pid = QPid}}) ->
     State#q{stats_timer = rabbit_event:ensure_stats_timer(
-                            StatsTimer,
-                            fun() -> rabbit_amqqueue:emit_stats(Q) end)}.
+                            StatsTimer, QPid, emit_stats)}.
 
 assert_invariant(#q{active_consumers = AC,
                     backing_queue = BQ, backing_queue_state = BQS}) ->
@@ -327,6 +326,7 @@ ch_record(ChPid) ->
                              monitor_ref          = MonitorRef,
                              acktags              = sets:new(),
                              is_limit_active      = false,
+                             limiter              = rabbit_limiter:make_token(),
                              unsent_message_count = 0},
                      put(Key, C),
                      C;
@@ -347,9 +347,9 @@ maybe_store_ch_record(C = #cr{consumer_count       = ConsumerCount,
     end.
 
 erase_ch_record(#cr{ch_pid      = ChPid,
-                    limiter_pid = LimiterPid,
+                    limiter     = Limiter,
                     monitor_ref = MonitorRef}) ->
-    ok = rabbit_limiter:unregister(LimiterPid, self()),
+    ok = rabbit_limiter:unregister(Limiter, self()),
     erlang:demonitor(MonitorRef),
     erase({ch, ChPid}),
     ok.
@@ -374,12 +374,12 @@ deliver_msgs_to_consumers(Funs = {PredFun, DeliverFun}, FunAcc,
         {{value, QEntry = {ChPid, #consumer{tag = ConsumerTag,
                                             ack_required = AckRequired}}},
          ActiveConsumersTail} ->
-            C = #cr{limiter_pid = LimiterPid,
+            C = #cr{limiter              = Limiter,
                     unsent_message_count = Count,
                     acktags = ChAckTags} = ch_record(ChPid),
             IsMsgReady = PredFun(FunAcc, State),
             case (IsMsgReady andalso
-                  rabbit_limiter:can_send( LimiterPid, self(), AckRequired )) of
+                  rabbit_limiter:can_send(Limiter, self(), AckRequired)) of
                 true ->
                     {{Message, IsDelivered, AckTag}, FunAcc1, State1} =
                         DeliverFun(AckRequired, FunAcc, State),
@@ -700,8 +700,7 @@ ensure_ttl_timer(State = #q{backing_queue       = BQ,
   when TTL =/= undefined ->
     case BQ:is_empty(BQS) of
         true  -> State;
-        false -> TRef = timer:apply_after(TTL, rabbit_amqqueue, drop_expired,
-                                          [self()]),
+        false -> TRef = erlang:send_after(TTL, self(), drop_expired),
                  State#q{ttl_timer_ref = TRef}
     end;
 ensure_ttl_timer(State) ->
@@ -709,7 +708,40 @@ ensure_ttl_timer(State) ->
 
 now_micros() -> timer:now_diff(now(), {0,0,0}).
 
-infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
+infos(Items, State) ->
+    {Prefix, Items1} =
+        case lists:member(synchronised_slave_pids, Items) of
+            true  -> Prefix1 = slaves_status(State),
+                     case lists:member(slave_pids, Items) of
+                         true  -> {Prefix1, Items -- [slave_pids]};
+                         false -> {proplists:delete(slave_pids, Prefix1), Items}
+                     end;
+            false -> {[], Items}
+        end,
+    Prefix ++ [{Item, i(Item, State)}
+               || Item <- (Items1 -- [synchronised_slave_pids])].
+
+slaves_status(#q{q = #amqqueue{name = Name}}) ->
+    {ok, #amqqueue{mirror_nodes = MNodes, slave_pids = SPids}} =
+        rabbit_amqqueue:lookup(Name),
+    case MNodes of
+        undefined ->
+            [{slave_pids, ''}, {synchronised_slave_pids, ''}];
+        _ ->
+            {Results, _Bad} =
+                delegate:invoke(
+                  SPids, fun (Pid) -> rabbit_mirror_queue_slave:info(Pid) end),
+            {SPids1, SSPids} =
+                lists:foldl(
+                  fun ({Pid, Infos}, {SPidsN, SSPidsN}) ->
+                          {[Pid | SPidsN],
+                           case proplists:get_bool(is_synchronised, Infos) of
+                               true  -> [Pid | SSPidsN];
+                               false -> SSPidsN
+                           end}
+                  end, {[], []}, Results),
+            [{slave_pids, SPids1}, {synchronised_slave_pids, SSPids}]
+    end.
 
 i(name,        #q{q = #amqqueue{name        = Name}})       -> Name;
 i(durable,     #q{q = #amqqueue{durable     = Durable}})    -> Durable;
@@ -741,14 +773,15 @@ i(consumers, State) ->
 i(memory, _) ->
     {memory, M} = process_info(self(), memory),
     M;
+i(slave_pids, #q{q = #amqqueue{name = Name}}) ->
+    {ok, #amqqueue{mirror_nodes = MNodes,
+                   slave_pids = SPids}} = rabbit_amqqueue:lookup(Name),
+    case MNodes of
+        undefined -> [];
+        _         -> SPids
+    end;
 i(backing_queue_status, #q{backing_queue_state = BQS, backing_queue = BQ}) ->
     BQ:status(BQS);
-i(slave_pids, #q{q = #amqqueue{name = Name}}) ->
-    {ok, #amqqueue{slave_pids = SPids}} = rabbit_amqqueue:lookup(Name),
-    SPids;
-i(mirror_nodes, #q{q = #amqqueue{name = Name}}) ->
-    {ok, #amqqueue{mirror_nodes = MNodes}} = rabbit_amqqueue:lookup(Name),
-    MNodes;
 i(Item, _) ->
     throw({bad_argument, Item}).
 
@@ -792,25 +825,27 @@ prioritise_call(Msg, _From, _State) ->
 
 prioritise_cast(Msg, _State) ->
     case Msg of
-        update_ram_duration                  -> 8;
         delete_immediately                   -> 8;
         {set_ram_duration_target, _Duration} -> 8;
         {set_maximum_since_use, _Age}        -> 8;
-        maybe_expire                         -> 8;
-        drop_expired                         -> 8;
-        emit_stats                           -> 7;
         {ack, _AckTags, _ChPid}              -> 7;
         {reject, _AckTags, _Requeue, _ChPid} -> 7;
         {notify_sent, _ChPid}                -> 7;
         {unblock, _ChPid}                    -> 7;
         {run_backing_queue, _Mod, _Fun}      -> 6;
-        sync_timeout                         -> 6;
         _                                    -> 0
     end.
 
-prioritise_info({'DOWN', _MonitorRef, process, DownPid, _Reason},
-                #q{q = #amqqueue{exclusive_owner = DownPid}}) -> 8;
-prioritise_info(_Msg, _State)                                 -> 0.
+prioritise_info(Msg, #q{q = #amqqueue{exclusive_owner = DownPid}}) ->
+    case Msg of
+        {'DOWN', _, process, DownPid, _}     -> 8;
+        update_ram_duration                  -> 8;
+        maybe_expire                         -> 8;
+        drop_expired                         -> 8;
+        emit_stats                           -> 7;
+        sync_timeout                         -> 6;
+        _                                    -> 0
+    end.
 
 handle_call({init, Recover}, From,
             State = #q{q = #amqqueue{exclusive_owner = none}}) ->
@@ -904,7 +939,7 @@ handle_call({basic_get, ChPid, NoAck}, _From,
             reply({ok, Remaining, Msg}, State3)
     end;
 
-handle_call({basic_consume, NoAck, ChPid, LimiterPid,
+handle_call({basic_consume, NoAck, ChPid, Limiter,
              ConsumerTag, ExclusiveConsume, OkMsg},
             _From, State = #q{exclusive_consumer = ExistingHolder}) ->
     case check_exclusive_access(ExistingHolder, ExclusiveConsume,
@@ -915,10 +950,11 @@ handle_call({basic_consume, NoAck, ChPid, LimiterPid,
             C = #cr{consumer_count = ConsumerCount} = ch_record(ChPid),
             Consumer = #consumer{tag = ConsumerTag,
                                  ack_required = not NoAck},
-            true = maybe_store_ch_record(C#cr{consumer_count = ConsumerCount +1,
-                                              limiter_pid    = LimiterPid}),
+            true = maybe_store_ch_record(
+                     C#cr{consumer_count = ConsumerCount +1,
+                          limiter        = Limiter}),
             ok = case ConsumerCount of
-                     0 -> rabbit_limiter:register(LimiterPid, self());
+                     0 -> rabbit_limiter:register(Limiter, self());
                      _ -> ok
                  end,
             ExclusiveConsumer = if ExclusiveConsume -> {ChPid, ConsumerTag};
@@ -951,12 +987,12 @@ handle_call({basic_cancel, ChPid, ConsumerTag, OkMsg}, _From,
             ok = maybe_send_reply(ChPid, OkMsg),
             reply(ok, State);
         C = #cr{consumer_count = ConsumerCount,
-                limiter_pid    = LimiterPid} ->
+                limiter        = Limiter} ->
             C1 = C#cr{consumer_count = ConsumerCount -1},
             maybe_store_ch_record(
               case ConsumerCount of
-                  1 -> ok = rabbit_limiter:unregister(LimiterPid, self()),
-                       C1#cr{limiter_pid = undefined};
+                  1 -> ok = rabbit_limiter:unregister(Limiter, self()),
+                       C1#cr{limiter = rabbit_limiter:make_token()};
                   _ -> C1
               end),
             emit_consumer_deleted(ChPid, ConsumerTag),
@@ -1015,9 +1051,6 @@ handle_call({requeue, AckTags, ChPid}, From, State) ->
 handle_cast({run_backing_queue, Mod, Fun}, State) ->
     noreply(run_backing_queue(Mod, Fun, State));
 
-handle_cast(sync_timeout, State) ->
-    noreply(backing_queue_timeout(State#q{sync_timer_ref = undefined}));
-
 handle_cast({deliver, Delivery}, State) ->
     %% Asynchronous, non-"mandatory", non-"immediate" deliver mode.
     noreply(deliver_or_enqueue(Delivery, State));
@@ -1065,34 +1098,25 @@ handle_cast({notify_sent, ChPid}, State) ->
                                C#cr{unsent_message_count = Count - 1}
                        end));
 
-handle_cast({limit, ChPid, LimiterPid}, State) ->
+handle_cast({limit, ChPid, Limiter}, State) ->
     noreply(
       possibly_unblock(
         State, ChPid,
-        fun (C = #cr{consumer_count = ConsumerCount,
-                     limiter_pid = OldLimiterPid,
-                     is_limit_active = Limited}) ->
-                if ConsumerCount =/= 0 andalso OldLimiterPid == undefined ->
-                        ok = rabbit_limiter:register(LimiterPid, self());
-                   true ->
-                        ok
+        fun (C = #cr{consumer_count  = ConsumerCount,
+                     limiter         = OldLimiter,
+                     is_limit_active = OldLimited}) ->
+                case (ConsumerCount =/= 0 andalso
+                      not rabbit_limiter:is_enabled(OldLimiter)) of
+                    true  -> ok = rabbit_limiter:register(Limiter, self());
+                    false -> ok
                 end,
-                NewLimited = Limited andalso LimiterPid =/= undefined,
-                C#cr{limiter_pid = LimiterPid, is_limit_active = NewLimited}
+                Limited = OldLimited andalso rabbit_limiter:is_enabled(Limiter),
+                C#cr{limiter = Limiter, is_limit_active = Limited}
         end));
 
 handle_cast({flush, ChPid}, State) ->
     ok = rabbit_channel:flushed(ChPid, self()),
     noreply(State);
-
-handle_cast(update_ram_duration, State = #q{backing_queue = BQ,
-                                            backing_queue_state = BQS}) ->
-    {RamDuration, BQS1} = BQ:ram_duration(BQS),
-    DesiredDuration =
-        rabbit_memory_monitor:report_ram_duration(self(), RamDuration),
-    BQS2 = BQ:set_ram_duration_target(DesiredDuration, BQS1),
-    noreply(State#q{rate_timer_ref = just_measured,
-                    backing_queue_state = BQS2});
 
 handle_cast({set_ram_duration_target, Duration},
             State = #q{backing_queue = BQ, backing_queue_state = BQS}) ->
@@ -1103,22 +1127,32 @@ handle_cast({set_maximum_since_use, Age}, State) ->
     ok = file_handle_cache:set_maximum_since_use(Age),
     noreply(State);
 
-handle_cast(maybe_expire, State) ->
+handle_cast(force_event_refresh, State = #q{exclusive_consumer = Exclusive}) ->
+    rabbit_event:notify(queue_created, infos(?CREATION_EVENT_KEYS, State)),
+    case Exclusive of
+        none       -> [emit_consumer_created(Ch, CTag, false, AckRequired) ||
+                          {Ch, CTag, AckRequired} <- consumers(State)];
+        {Ch, CTag} -> [{Ch, CTag, AckRequired}] = consumers(State),
+                      emit_consumer_created(Ch, CTag, true, AckRequired)
+    end,
+    noreply(State).
+
+handle_info(maybe_expire, State) ->
     case is_unused(State) of
         true  -> ?LOGDEBUG("Queue lease expired for ~p~n", [State#q.q]),
                  {stop, normal, State};
         false -> noreply(ensure_expiry_timer(State))
     end;
 
-handle_cast(drop_expired, State) ->
+handle_info(drop_expired, State) ->
     noreply(drop_expired_messages(State#q{ttl_timer_ref = undefined}));
 
-handle_cast(emit_stats, State = #q{stats_timer = StatsTimer}) ->
+handle_info(emit_stats, State = #q{stats_timer = StatsTimer}) ->
     %% Do not invoke noreply as it would see no timer and create a new one.
     emit_stats(State),
     State1 = State#q{stats_timer = rabbit_event:reset_stats_timer(StatsTimer)},
     assert_invariant(State1),
-    {noreply, State1, hibernate}.
+    {noreply, State1, hibernate};
 
 handle_info({'DOWN', _MonitorRef, process, DownPid, _Reason},
             State = #q{q = #amqqueue{exclusive_owner = DownPid}}) ->
@@ -1134,6 +1168,18 @@ handle_info({'DOWN', _MonitorRef, process, DownPid, _Reason}, State) ->
         {ok, NewState}   -> noreply(NewState);
         {stop, NewState} -> {stop, normal, NewState}
     end;
+
+handle_info(update_ram_duration, State = #q{backing_queue = BQ,
+                                            backing_queue_state = BQS}) ->
+    {RamDuration, BQS1} = BQ:ram_duration(BQS),
+    DesiredDuration =
+        rabbit_memory_monitor:report_ram_duration(self(), RamDuration),
+    BQS2 = BQ:set_ram_duration_target(DesiredDuration, BQS1),
+    noreply(State#q{rate_timer_ref = just_measured,
+                    backing_queue_state = BQS2});
+
+handle_info(sync_timeout, State) ->
+    noreply(backing_queue_timeout(State#q{sync_timer_ref = undefined}));
 
 handle_info(timeout, State) ->
     noreply(backing_queue_timeout(State));
@@ -1155,10 +1201,11 @@ handle_pre_hibernate(State = #q{backing_queue = BQ,
         rabbit_memory_monitor:report_ram_duration(self(), RamDuration),
     BQS2 = BQ:set_ram_duration_target(DesiredDuration, BQS1),
     BQS3 = BQ:handle_pre_hibernate(BQS2),
-    rabbit_event:if_enabled(StatsTimer,
-                            fun () ->
-                                    emit_stats(State, [{idle_since, now()}])
-                            end),
+    rabbit_event:if_enabled(
+      StatsTimer,
+      fun () -> emit_stats(State, [{idle_since, now()}]) end),
     State1 = State#q{stats_timer = rabbit_event:stop_stats_timer(StatsTimer),
                      backing_queue_state = BQS3},
     {hibernate, stop_rate_timer(State1)}.
+
+format_message_queue(Opt, MQ) -> rabbit_misc:format_message_queue(Opt, MQ).

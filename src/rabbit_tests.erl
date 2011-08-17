@@ -20,6 +20,8 @@
 
 -export([all_tests/0, test_parsing/0]).
 
+-import(rabbit_misc, [pget/2]).
+
 -include("rabbit.hrl").
 -include("rabbit_framing.hrl").
 -include_lib("kernel/include/file.hrl").
@@ -86,6 +88,7 @@ run_cluster_dependent_tests(SecondaryNode) ->
     passed = test_delegates_sync(SecondaryNode),
     passed = test_queue_cleanup(SecondaryNode),
     passed = test_declare_on_dead_queue(SecondaryNode),
+    passed = test_refresh_events(SecondaryNode),
 
     %% we now run the tests remotely, so that code coverage on the
     %% local node picks up more of the delegate
@@ -95,7 +98,8 @@ run_cluster_dependent_tests(SecondaryNode) ->
                    fun () -> Rs = [ test_delegates_async(Node),
                                     test_delegates_sync(Node),
                                     test_queue_cleanup(Node),
-                                    test_declare_on_dead_queue(Node) ],
+                                    test_declare_on_dead_queue(Node),
+                                    test_refresh_events(Node) ],
                              Self ! {self(), Rs}
                    end),
     receive
@@ -203,6 +207,42 @@ test_priority_queue() ->
     Q15 = priority_queue:in(baz, 1, Q5),
     {true, false, 3, [{1, baz}, {0, foo}, {0, bar}], [baz, foo, bar]} =
         test_priority_queue(Q15),
+
+    %% 1-element infinity priority Q
+    Q16 = priority_queue:in(foo, infinity, Q),
+    {true, false, 1, [{infinity, foo}], [foo]} = test_priority_queue(Q16),
+
+    %% add infinity to 0-priority Q
+    Q17 = priority_queue:in(foo, infinity, priority_queue:in(bar, Q)),
+    {true, false, 2, [{infinity, foo}, {0, bar}], [foo, bar]} =
+        test_priority_queue(Q17),
+
+    %% and the other way around
+    Q18 = priority_queue:in(bar, priority_queue:in(foo, infinity, Q)),
+    {true, false, 2, [{infinity, foo}, {0, bar}], [foo, bar]} =
+        test_priority_queue(Q18),
+
+    %% add infinity to mixed-priority Q
+    Q19 = priority_queue:in(qux, infinity, Q3),
+    {true, false, 3, [{infinity, qux}, {2, bar}, {1, foo}], [qux, bar, foo]} =
+        test_priority_queue(Q19),
+
+    %% merge the above with a negative priority Q
+    Q20 = priority_queue:join(Q19, Q4),
+    {true, false, 4, [{infinity, qux}, {2, bar}, {1, foo}, {-1, foo}],
+     [qux, bar, foo, foo]} = test_priority_queue(Q20),
+
+    %% merge two infinity priority queues
+    Q21 = priority_queue:join(priority_queue:in(foo, infinity, Q),
+                              priority_queue:in(bar, infinity, Q)),
+    {true, false, 2, [{infinity, foo}, {infinity, bar}], [foo, bar]} =
+        test_priority_queue(Q21),
+
+    %% merge two mixed priority with infinity queues
+    Q22 = priority_queue:join(Q18, Q20),
+    {true, false, 6, [{infinity, foo}, {infinity, qux}, {2, bar}, {1, foo},
+                      {0, bar}, {-1, foo}], [foo, qux, bar, foo, bar, foo]} =
+        test_priority_queue(Q22),
 
     passed.
 
@@ -905,7 +945,6 @@ test_option_parser() ->
     passed.
 
 test_cluster_management() ->
-
     %% 'cluster' and 'reset' should only work if the app is stopped
     {error, _} = control_action(cluster, []),
     {error, _} = control_action(reset, []),
@@ -953,13 +992,16 @@ test_cluster_management() ->
     ok = control_action(reset, []),
     ok = control_action(start_app, []),
     ok = control_action(stop_app, []),
+    ok = assert_disc_node(),
     ok = control_action(force_cluster, ["invalid1@invalid",
                                         "invalid2@invalid"]),
+    ok = assert_ram_node(),
 
     %% join a non-existing cluster as a ram node
     ok = control_action(reset, []),
     ok = control_action(force_cluster, ["invalid1@invalid",
                                         "invalid2@invalid"]),
+    ok = assert_ram_node(),
 
     SecondaryNode = rabbit_misc:makenode("hare"),
     case net_adm:ping(SecondaryNode) of
@@ -978,15 +1020,18 @@ test_cluster_management2(SecondaryNode) ->
     %% make a disk node
     ok = control_action(reset, []),
     ok = control_action(cluster, [NodeS]),
+    ok = assert_disc_node(),
     %% make a ram node
     ok = control_action(reset, []),
     ok = control_action(cluster, [SecondaryNodeS]),
+    ok = assert_ram_node(),
 
     %% join cluster as a ram node
     ok = control_action(reset, []),
     ok = control_action(force_cluster, [SecondaryNodeS, "invalid1@invalid"]),
     ok = control_action(start_app, []),
     ok = control_action(stop_app, []),
+    ok = assert_ram_node(),
 
     %% change cluster config while remaining in same cluster
     ok = control_action(force_cluster, ["invalid2@invalid", SecondaryNodeS]),
@@ -998,27 +1043,45 @@ test_cluster_management2(SecondaryNode) ->
                                         "invalid2@invalid"]),
     ok = control_action(start_app, []),
     ok = control_action(stop_app, []),
+    ok = assert_ram_node(),
 
-    %% join empty cluster as a ram node
+    %% join empty cluster as a ram node (converts to disc)
     ok = control_action(cluster, []),
     ok = control_action(start_app, []),
     ok = control_action(stop_app, []),
+    ok = assert_disc_node(),
+
+    %% make a new ram node
+    ok = control_action(reset, []),
+    ok = control_action(force_cluster, [SecondaryNodeS]),
+    ok = control_action(start_app, []),
+    ok = control_action(stop_app, []),
+    ok = assert_ram_node(),
 
     %% turn ram node into disk node
-    ok = control_action(reset, []),
     ok = control_action(cluster, [SecondaryNodeS, NodeS]),
     ok = control_action(start_app, []),
     ok = control_action(stop_app, []),
+    ok = assert_disc_node(),
 
     %% convert a disk node into a ram node
+    ok = assert_disc_node(),
     ok = control_action(force_cluster, ["invalid1@invalid",
                                         "invalid2@invalid"]),
+    ok = assert_ram_node(),
+
+    %% make a new disk node
+    ok = control_action(force_reset, []),
+    ok = control_action(start_app, []),
+    ok = control_action(stop_app, []),
+    ok = assert_disc_node(),
 
     %% turn a disk node into a ram node
     ok = control_action(reset, []),
     ok = control_action(cluster, [SecondaryNodeS]),
     ok = control_action(start_app, []),
     ok = control_action(stop_app, []),
+    ok = assert_ram_node(),
 
     %% NB: this will log an inconsistent_database error, which is harmless
     %% Turning cover on / off is OK even if we're not in general using cover,
@@ -1043,6 +1106,10 @@ test_cluster_management2(SecondaryNode) ->
     ok = control_action(stop_app, []),
     {error, {no_running_cluster_nodes, _, _}} =
         control_action(reset, []),
+
+    %% attempt to change type when no other node is alive
+    {error, {no_running_cluster_nodes, _, _}} =
+        control_action(cluster, [SecondaryNodeS]),
 
     %% leave system clustered, with the secondary node as a ram node
     ok = control_action(force_reset, []),
@@ -1137,15 +1204,16 @@ test_server_status() ->
     {ok, Ch} = rabbit_channel:start_link(
                  1, self(), Writer, self(), rabbit_framing_amqp_0_9_1,
                  user(<<"user">>), <<"/">>, [], self(),
-                 fun (_) -> {ok, self()} end),
+                 rabbit_limiter:make_token(self())),
     [Q, Q2] = [Queue || Name <- [<<"foo">>, <<"bar">>],
                         {new, Queue = #amqqueue{}} <-
                             [rabbit_amqqueue:declare(
                                rabbit_misc:r(<<"/">>, queue, Name),
                                false, false, [], none)]],
 
-    ok = rabbit_amqqueue:basic_consume(Q, true, Ch, undefined,
-                                       <<"ctag">>, true, undefined),
+    ok = rabbit_amqqueue:basic_consume(
+           Q, true, Ch, rabbit_limiter:make_token(),
+           <<"ctag">>, true, undefined),
 
     %% list queues
     ok = info_action(list_queues, rabbit_amqqueue:info_keys(), true),
@@ -1203,13 +1271,33 @@ test_spawn() ->
     Writer = spawn(fun () -> test_writer(Me) end),
     {ok, Ch} = rabbit_channel:start_link(
                  1, Me, Writer, Me, rabbit_framing_amqp_0_9_1,
-                 user(<<"guest">>), <<"/">>, [], self(),
-                 fun (_) -> {ok, self()} end),
+                 user(<<"guest">>), <<"/">>, [], Me,
+                  rabbit_limiter:make_token(self())),
     ok = rabbit_channel:do(Ch, #'channel.open'{}),
     receive #'channel.open_ok'{} -> ok
     after 1000 -> throw(failed_to_receive_channel_open_ok)
     end,
     {Writer, Ch}.
+
+test_spawn(Node) ->
+    rpc:call(Node, ?MODULE, test_spawn_remote, []).
+
+%% Spawn an arbitrary long lived process, so we don't end up linking
+%% the channel to the short-lived process (RPC, here) spun up by the
+%% RPC server.
+test_spawn_remote() ->
+    RPC = self(),
+    spawn(fun () ->
+                  {Writer, Ch} = test_spawn(),
+                  RPC ! {Writer, Ch},
+                  link(Ch),
+                  receive
+                      _ -> ok
+                  end
+          end),
+    receive Res -> Res
+    after 1000  -> throw(failed_to_receive_result)
+    end.
 
 user(Username) ->
     #user{username     = Username,
@@ -1217,25 +1305,6 @@ user(Username) ->
           auth_backend = rabbit_auth_backend_internal,
           impl         = #internal_user{username = Username,
                                         tags     = [administrator]}}.
-
-test_statistics_event_receiver(Pid) ->
-    receive
-        Foo -> Pid ! Foo, test_statistics_event_receiver(Pid)
-    end.
-
-test_statistics_receive_event(Ch, Matcher) ->
-    rabbit_channel:flush(Ch),
-    rabbit_channel:emit_stats(Ch),
-    test_statistics_receive_event1(Ch, Matcher).
-
-test_statistics_receive_event1(Ch, Matcher) ->
-    receive #event{type = channel_stats, props = Props} ->
-            case Matcher(Props) of
-                true -> Props;
-                _    -> test_statistics_receive_event1(Ch, Matcher)
-            end
-    after 1000 -> throw(failed_to_receive_event)
-    end.
 
 test_confirms() ->
     {_Writer, Ch} = test_spawn(),
@@ -1297,6 +1366,25 @@ test_confirms() ->
 
     passed.
 
+test_statistics_event_receiver(Pid) ->
+    receive
+        Foo -> Pid ! Foo, test_statistics_event_receiver(Pid)
+    end.
+
+test_statistics_receive_event(Ch, Matcher) ->
+    rabbit_channel:flush(Ch),
+    Ch ! emit_stats,
+    test_statistics_receive_event1(Ch, Matcher).
+
+test_statistics_receive_event1(Ch, Matcher) ->
+    receive #event{type = channel_stats, props = Props} ->
+            case Matcher(Props) of
+                true -> Props;
+                _    -> test_statistics_receive_event1(Ch, Matcher)
+            end
+    after 1000 -> throw(failed_to_receive_event)
+    end.
+
 test_statistics() ->
     application:set_env(rabbit, collect_statistics, fine),
 
@@ -1314,7 +1402,7 @@ test_statistics() ->
     QPid = Q#amqqueue.pid,
     X = rabbit_misc:r(<<"/">>, exchange, <<"">>),
 
-    rabbit_tests_event_receiver:start(self()),
+    rabbit_tests_event_receiver:start(self(), [node()], [channel_stats]),
 
     %% Check stats empty
     Event = test_statistics_receive_event(Ch, fun (_) -> true end),
@@ -1356,6 +1444,36 @@ test_statistics() ->
     rabbit_channel:shutdown(Ch),
     rabbit_tests_event_receiver:stop(),
     passed.
+
+test_refresh_events(SecondaryNode) ->
+    rabbit_tests_event_receiver:start(self(), [node(), SecondaryNode],
+                                      [channel_created, queue_created]),
+
+    {_Writer, Ch} = test_spawn(),
+    expect_events(Ch, channel_created),
+    rabbit_channel:shutdown(Ch),
+
+    {_Writer2, Ch2} = test_spawn(SecondaryNode),
+    expect_events(Ch2, channel_created),
+    rabbit_channel:shutdown(Ch2),
+
+    {new, #amqqueue { pid = QPid } = Q} =
+        rabbit_amqqueue:declare(test_queue(), false, false, [], none),
+    expect_events(QPid, queue_created),
+    rabbit_amqqueue:delete(Q, false, false),
+
+    rabbit_tests_event_receiver:stop(),
+    passed.
+
+expect_events(Pid, Type) ->
+    expect_event(Pid, Type),
+    rabbit:force_event_refresh(),
+    expect_event(Pid, Type).
+
+expect_event(Pid, Type) ->
+    receive #event{type = Type, props = Props} -> Pid = pget(pid, Props)
+    after 1000 -> throw({failed_to_receive_event, Type})
+    end.
 
 test_delegates_async(SecondaryNode) ->
     Self = self(),
@@ -1462,16 +1580,19 @@ test_queue_cleanup(_SecondaryNode) ->
             ok
     after 1000 -> throw(failed_to_receive_queue_declare_ok)
     end,
+    rabbit_channel:shutdown(Ch),
     rabbit:stop(),
     rabbit:start(),
-    rabbit_channel:do(Ch, #'queue.declare'{ passive = true,
-                                            queue   = ?CLEANUP_QUEUE_NAME }),
+    {_Writer2, Ch2} = test_spawn(),
+    rabbit_channel:do(Ch2, #'queue.declare'{ passive = true,
+                                             queue   = ?CLEANUP_QUEUE_NAME }),
     receive
         #'channel.close'{reply_code = ?NOT_FOUND} ->
             ok
     after 2000 ->
             throw(failed_to_receive_channel_exit)
     end,
+    rabbit_channel:shutdown(Ch2),
     passed.
 
 test_declare_on_dead_queue(SecondaryNode) ->
@@ -1582,6 +1703,18 @@ clean_logs(Files, Suffix) ->
      end || File <- Files],
     ok.
 
+assert_ram_node() ->
+    case rabbit_mnesia:is_disc_node() of
+        true  -> exit('not_ram_node');
+        false -> ok
+    end.
+
+assert_disc_node() ->
+    case rabbit_mnesia:is_disc_node() of
+        true  -> ok;
+        false -> exit('not_disc_node')
+    end.
+
 delete_file(File) ->
     case file:delete(File) of
         ok              -> ok;
@@ -1673,6 +1806,10 @@ test_backing_queue() ->
             passed = test_queue_recover(),
             application:set_env(rabbit, queue_index_max_journal_entries,
                                 MaxJournal, infinity),
+            %% We will have restarted the message store, and thus changed
+            %% the order of the children of rabbit_sup. This will cause
+            %% problems if there are subsequent failures - see bug 24262.
+            ok = restart_app(),
             passed;
         _ ->
             passed
@@ -1689,24 +1826,48 @@ msg_id_bin(X) ->
 msg_store_client_init(MsgStore, Ref) ->
     rabbit_msg_store:client_init(MsgStore, Ref, undefined, undefined).
 
+on_disk_capture() ->
+    on_disk_capture({gb_sets:new(), gb_sets:new(), undefined}).
+on_disk_capture({OnDisk, Awaiting, Pid}) ->
+    Pid1 = case Pid =/= undefined andalso gb_sets:is_empty(Awaiting) of
+               true  -> Pid ! {self(), arrived}, undefined;
+               false -> Pid
+           end,
+    receive
+        {await, MsgIds, Pid2} ->
+            true = Pid1 =:= undefined andalso gb_sets:is_empty(Awaiting),
+            on_disk_capture({OnDisk, gb_sets:subtract(MsgIds, OnDisk), Pid2});
+        {on_disk, MsgIds} ->
+            on_disk_capture({gb_sets:union(OnDisk, MsgIds),
+                             gb_sets:subtract(Awaiting, MsgIds),
+                             Pid1});
+        stop ->
+            done
+    end.
+
+on_disk_await(Pid, MsgIds) when is_list(MsgIds) ->
+    Pid ! {await, gb_sets:from_list(MsgIds), self()},
+    receive {Pid, arrived} -> ok end.
+
+on_disk_stop(Pid) ->
+    MRef = erlang:monitor(process, Pid),
+    Pid ! stop,
+    receive {'DOWN', MRef, process, Pid, _Reason} ->
+            ok
+    end.
+
+msg_store_client_init_capture(MsgStore, Ref) ->
+    Pid = spawn(fun on_disk_capture/0),
+    {Pid, rabbit_msg_store:client_init(
+            MsgStore, Ref, fun (MsgIds, _ActionTaken) ->
+                                   Pid ! {on_disk, MsgIds}
+                           end, undefined)}.
+
 msg_store_contains(Atom, MsgIds, MSCState) ->
     Atom = lists:foldl(
              fun (MsgId, Atom1) when Atom1 =:= Atom ->
                      rabbit_msg_store:contains(MsgId, MSCState) end,
              Atom, MsgIds).
-
-msg_store_sync(MsgIds, MSCState) ->
-    Ref = make_ref(),
-    Self = self(),
-    ok = rabbit_msg_store:sync(MsgIds, fun () -> Self ! {sync, Ref} end,
-                               MSCState),
-    receive
-        {sync, Ref} -> ok
-    after
-        10000 ->
-            io:format("Sync from msg_store missing for msg_ids ~p~n", [MsgIds]),
-            throw(timeout)
-    end.
 
 msg_store_read(MsgIds, MSCState) ->
     lists:foldl(fun (MsgId, MSCStateM) ->
@@ -1741,22 +1902,18 @@ foreach_with_msg_store_client(MsgStore, Ref, Fun, L) ->
 
 test_msg_store() ->
     restart_msg_store_empty(),
-    Self = self(),
     MsgIds = [msg_id_bin(M) || M <- lists:seq(1,100)],
     {MsgIds1stHalf, MsgIds2ndHalf} = lists:split(50, MsgIds),
     Ref = rabbit_guid:guid(),
-    MSCState = msg_store_client_init(?PERSISTENT_MSG_STORE, Ref),
+    {Cap, MSCState} = msg_store_client_init_capture(?PERSISTENT_MSG_STORE, Ref),
     %% check we don't contain any of the msgs we're about to publish
     false = msg_store_contains(false, MsgIds, MSCState),
     %% publish the first half
     ok = msg_store_write(MsgIds1stHalf, MSCState),
     %% sync on the first half
-    ok = msg_store_sync(MsgIds1stHalf, MSCState),
+    ok = on_disk_await(Cap, MsgIds1stHalf),
     %% publish the second half
     ok = msg_store_write(MsgIds2ndHalf, MSCState),
-    %% sync on the first half again - the msg_store will be dirty, but
-    %% we won't need the fsync
-    ok = msg_store_sync(MsgIds1stHalf, MSCState),
     %% check they're all in there
     true = msg_store_contains(true, MsgIds, MSCState),
     %% publish the latter half twice so we hit the caching and ref count code
@@ -1765,25 +1922,8 @@ test_msg_store() ->
     true = msg_store_contains(true, MsgIds, MSCState),
     %% sync on the 2nd half, but do lots of individual syncs to try
     %% and cause coalescing to happen
-    ok = lists:foldl(
-           fun (MsgId, ok) -> rabbit_msg_store:sync(
-                                [MsgId], fun () -> Self ! {sync, MsgId} end,
-                                MSCState)
-           end, ok, MsgIds2ndHalf),
-    lists:foldl(
-      fun(MsgId, ok) ->
-              receive
-                  {sync, MsgId} -> ok
-              after
-                  10000 ->
-                      io:format("Sync from msg_store missing (msg_id: ~p)~n",
-                                [MsgId]),
-                      throw(timeout)
-              end
-      end, ok, MsgIds2ndHalf),
-    %% it's very likely we're not dirty here, so the 1st half sync
-    %% should hit a different code path
-    ok = msg_store_sync(MsgIds1stHalf, MSCState),
+    ok = on_disk_await(Cap, MsgIds2ndHalf),
+    ok = on_disk_stop(Cap),
     %% read them all
     MSCState1 = msg_store_read(MsgIds, MSCState),
     %% read them all again - this will hit the cache, not disk
@@ -1911,6 +2051,10 @@ with_empty_test_queue(Fun) ->
     ok = empty_test_queue(),
     {0, Qi} = init_test_queue(),
     rabbit_queue_index:delete_and_terminate(Fun(Qi)).
+
+restart_app() ->
+    rabbit:stop(),
+    rabbit:start().
 
 queue_index_publish(SeqIds, Persistent, Qi) ->
     Ref = rabbit_guid:guid(),
@@ -2151,7 +2295,7 @@ wait_for_confirms(Unconfirmed) ->
                          wait_for_confirms(
                            gb_sets:difference(Unconfirmed,
                                               gb_sets:from_list(Confirmed)))
-                 after 1000 -> exit(timeout_waiting_for_confirm)
+                 after 5000 -> exit(timeout_waiting_for_confirm)
                  end
     end.
 

@@ -20,27 +20,36 @@
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2, prioritise_call/3]).
--export([start_link/2]).
+-export([start_link/0, make_token/0, make_token/1, is_enabled/1, enable/2,
+         disable/1]).
 -export([limit/2, can_send/3, ack/2, register/2, unregister/2]).
 -export([get_limit/1, block/1, unblock/1, is_blocked/1]).
 
 %%----------------------------------------------------------------------------
 
+-record(token, {pid, enabled}).
+
 -ifdef(use_specs).
 
--type(maybe_pid() :: pid() | 'undefined').
+-export_type([token/0]).
 
--spec(start_link/2 :: (pid(), non_neg_integer()) ->
-                           rabbit_types:ok_pid_or_error()).
--spec(limit/2 :: (maybe_pid(), non_neg_integer()) -> 'ok' | 'stopped').
--spec(can_send/3 :: (maybe_pid(), pid(), boolean()) -> boolean()).
--spec(ack/2 :: (maybe_pid(), non_neg_integer()) -> 'ok').
--spec(register/2 :: (maybe_pid(), pid()) -> 'ok').
--spec(unregister/2 :: (maybe_pid(), pid()) -> 'ok').
--spec(get_limit/1 :: (maybe_pid()) -> non_neg_integer()).
--spec(block/1 :: (maybe_pid()) -> 'ok').
--spec(unblock/1 :: (maybe_pid()) -> 'ok' | 'stopped').
--spec(is_blocked/1 :: (maybe_pid()) -> boolean()).
+-opaque(token() :: #token{}).
+
+-spec(start_link/0 :: () -> rabbit_types:ok_pid_or_error()).
+-spec(make_token/0 :: () -> token()).
+-spec(make_token/1 :: ('undefined' | pid()) -> token()).
+-spec(is_enabled/1 :: (token()) -> boolean()).
+-spec(enable/2 :: (token(), non_neg_integer()) -> token()).
+-spec(disable/1 :: (token()) -> token()).
+-spec(limit/2 :: (token(), non_neg_integer()) -> 'ok' | {'disabled', token()}).
+-spec(can_send/3 :: (token(), pid(), boolean()) -> boolean()).
+-spec(ack/2 :: (token(), non_neg_integer()) -> 'ok').
+-spec(register/2 :: (token(), pid()) -> 'ok').
+-spec(unregister/2 :: (token(), pid()) -> 'ok').
+-spec(get_limit/1 :: (token()) -> non_neg_integer()).
+-spec(block/1 :: (token()) -> 'ok').
+-spec(unblock/1 :: (token()) -> 'ok' | {'disabled', token()}).
+-spec(is_blocked/1 :: (token()) -> boolean()).
 
 -endif.
 
@@ -49,7 +58,7 @@
 -record(lim, {prefetch_count = 0,
               ch_pid,
               blocked = false,
-              queues = dict:new(), % QPid -> {MonitorRef, Notify}
+              queues = orddict:new(), % QPid -> {MonitorRef, Notify}
               volume = 0}).
 %% 'Notify' is a boolean that indicates whether a queue should be
 %% notified of a change in the limit or volume that may allow it to
@@ -59,63 +68,63 @@
 %% API
 %%----------------------------------------------------------------------------
 
-start_link(ChPid, UnackedMsgCount) ->
-    gen_server2:start_link(?MODULE, [ChPid, UnackedMsgCount], []).
+start_link() -> gen_server2:start_link(?MODULE, [], []).
 
-limit(undefined, 0) ->
-    ok;
-limit(LimiterPid, PrefetchCount) ->
-    gen_server2:call(LimiterPid, {limit, PrefetchCount}, infinity).
+make_token() -> make_token(undefined).
+make_token(Pid) -> #token{pid = Pid, enabled = false}.
+
+is_enabled(#token{enabled = Enabled}) -> Enabled.
+
+enable(#token{pid = Pid} = Token, Volume) ->
+    gen_server2:call(Pid, {enable, Token, self(), Volume}, infinity).
+
+disable(#token{pid = Pid} = Token) ->
+    gen_server2:call(Pid, {disable, Token}, infinity).
+
+limit(Limiter, PrefetchCount) ->
+    maybe_call(Limiter, {limit, PrefetchCount, Limiter}, ok).
 
 %% Ask the limiter whether the queue can deliver a message without
-%% breaching a limit
-can_send(undefined, _QPid, _AckRequired) ->
-    true;
-can_send(LimiterPid, QPid, AckRequired) ->
+%% breaching a limit. Note that we don't use maybe_call here in order
+%% to avoid always going through with_exit_handler/2, even when the
+%% limiter is disabled.
+can_send(#token{pid = Pid, enabled = true}, QPid, AckRequired) ->
     rabbit_misc:with_exit_handler(
       fun () -> true end,
-      fun () -> gen_server2:call(LimiterPid, {can_send, QPid, AckRequired},
-                                 infinity) end).
+      fun () ->
+              gen_server2:call(Pid, {can_send, QPid, AckRequired}, infinity)
+      end);
+can_send(_, _, _) ->
+    true.
 
 %% Let the limiter know that the channel has received some acks from a
 %% consumer
-ack(undefined, _Count) -> ok;
-ack(LimiterPid, Count) -> gen_server2:cast(LimiterPid, {ack, Count}).
+ack(Limiter, Count) -> maybe_cast(Limiter, {ack, Count}).
 
-register(undefined, _QPid) -> ok;
-register(LimiterPid, QPid) -> gen_server2:cast(LimiterPid, {register, QPid}).
+register(Limiter, QPid) -> maybe_cast(Limiter, {register, QPid}).
 
-unregister(undefined, _QPid) -> ok;
-unregister(LimiterPid, QPid) -> gen_server2:cast(LimiterPid, {unregister, QPid}).
+unregister(Limiter, QPid) -> maybe_cast(Limiter, {unregister, QPid}).
 
-get_limit(undefined) ->
-    0;
-get_limit(Pid) ->
+get_limit(Limiter) ->
     rabbit_misc:with_exit_handler(
       fun () -> 0 end,
-      fun () -> gen_server2:call(Pid, get_limit, infinity) end).
+      fun () -> maybe_call(Limiter, get_limit, ok) end).
 
-block(undefined) ->
-    ok;
-block(LimiterPid) ->
-    gen_server2:call(LimiterPid, block, infinity).
+block(Limiter) ->
+    maybe_call(Limiter, block, ok).
 
-unblock(undefined) ->
-    ok;
-unblock(LimiterPid) ->
-    gen_server2:call(LimiterPid, unblock, infinity).
+unblock(Limiter) ->
+    maybe_call(Limiter, {unblock, Limiter}, ok).
 
-is_blocked(undefined) ->
-    false;
-is_blocked(LimiterPid) ->
-    gen_server2:call(LimiterPid, is_blocked, infinity).
+is_blocked(Limiter) ->
+    maybe_call(Limiter, is_blocked, false).
 
 %%----------------------------------------------------------------------------
 %% gen_server callbacks
 %%----------------------------------------------------------------------------
 
-init([ChPid, UnackedMsgCount]) ->
-    {ok, #lim{ch_pid = ChPid, volume = UnackedMsgCount}}.
+init([]) ->
+    {ok, #lim{}}.
 
 prioritise_call(get_limit, _From, _State) -> 9;
 prioritise_call(_Msg,      _From, _State) -> 0.
@@ -135,23 +144,33 @@ handle_call({can_send, QPid, AckRequired}, _From,
 handle_call(get_limit, _From, State = #lim{prefetch_count = PrefetchCount}) ->
     {reply, PrefetchCount, State};
 
-handle_call({limit, PrefetchCount}, _From, State) ->
+handle_call({limit, PrefetchCount, Token}, _From, State) ->
     case maybe_notify(State, State#lim{prefetch_count = PrefetchCount}) of
-        {cont, State1} -> {reply, ok, State1};
-        {stop, State1} -> {stop, normal, stopped, State1}
+        {cont, State1} ->
+            {reply, ok, State1};
+        {stop, State1} ->
+            {reply, {disabled, Token#token{enabled = false}}, State1}
     end;
 
 handle_call(block, _From, State) ->
     {reply, ok, State#lim{blocked = true}};
 
-handle_call(unblock, _From, State) ->
+handle_call({unblock, Token}, _From, State) ->
     case maybe_notify(State, State#lim{blocked = false}) of
-        {cont, State1} -> {reply, ok, State1};
-        {stop, State1} -> {stop, normal, stopped, State1}
+        {cont, State1} ->
+            {reply, ok, State1};
+        {stop, State1} ->
+            {reply, {disabled, Token#token{enabled = false}}, State1}
     end;
 
 handle_call(is_blocked, _From, State) ->
-    {reply, blocked(State), State}.
+    {reply, blocked(State), State};
+
+handle_call({enable, Token, Channel, Volume}, _From, State) ->
+    {reply, Token#token{enabled = true},
+     State#lim{ch_pid = Channel, volume = Volume}};
+handle_call({disable, Token}, _From, State) ->
+    {reply, Token#token{enabled = false}, State}.
 
 handle_cast({ack, Count}, State = #lim{volume = Volume}) ->
     NewVolume = if Volume == 0 -> 0;
@@ -190,37 +209,46 @@ maybe_notify(OldState, NewState) ->
         false -> {cont, NewState}
     end.
 
+maybe_call(#token{pid = Pid, enabled = true}, Call, _Default) ->
+    gen_server2:call(Pid, Call, infinity);
+maybe_call(_, _Call, Default) ->
+    Default.
+
+maybe_cast(#token{pid = Pid, enabled = true}, Cast) ->
+    gen_server2:cast(Pid, Cast);
+maybe_cast(_, _Call) ->
+    ok.
+
 limit_reached(#lim{prefetch_count = Limit, volume = Volume}) ->
     Limit =/= 0 andalso Volume >= Limit.
 
 blocked(#lim{blocked = Blocked}) -> Blocked.
 
 remember_queue(QPid, State = #lim{queues = Queues}) ->
-    case dict:is_key(QPid, Queues) of
+    case orddict:is_key(QPid, Queues) of
         false -> MRef = erlang:monitor(process, QPid),
-                 State#lim{queues = dict:store(QPid, {MRef, false}, Queues)};
+                 State#lim{queues = orddict:store(QPid, {MRef, false}, Queues)};
         true  -> State
     end.
 
 forget_queue(QPid, State = #lim{ch_pid = ChPid, queues = Queues}) ->
-    case dict:find(QPid, Queues) of
-        {ok, {MRef, _}} ->
-            true = erlang:demonitor(MRef),
-            ok = rabbit_amqqueue:unblock(QPid, ChPid),
-            State#lim{queues = dict:erase(QPid, Queues)};
-        error -> State
+    case orddict:find(QPid, Queues) of
+        {ok, {MRef, _}} -> true = erlang:demonitor(MRef),
+                           ok = rabbit_amqqueue:unblock(QPid, ChPid),
+                           State#lim{queues = orddict:erase(QPid, Queues)};
+        error           -> State
     end.
 
 limit_queue(QPid, State = #lim{queues = Queues}) ->
     UpdateFun = fun ({MRef, _}) -> {MRef, true} end,
-    State#lim{queues = dict:update(QPid, UpdateFun, Queues)}.
+    State#lim{queues = orddict:update(QPid, UpdateFun, Queues)}.
 
 notify_queues(State = #lim{ch_pid = ChPid, queues = Queues}) ->
     {QList, NewQueues} =
-        dict:fold(fun (_QPid, {_, false}, Acc) -> Acc;
-                      (QPid, {MRef, true}, {L, D}) ->
-                          {[QPid | L], dict:store(QPid, {MRef, false}, D)}
-                  end, {[], Queues}, Queues),
+        orddict:fold(fun (_QPid, {_, false}, Acc) -> Acc;
+                         (QPid, {MRef, true}, {L, D}) ->
+                             {[QPid | L], orddict:store(QPid, {MRef, false}, D)}
+                     end, {[], Queues}, Queues),
     case length(QList) of
         0 -> ok;
         L ->
@@ -228,7 +256,8 @@ notify_queues(State = #lim{ch_pid = ChPid, queues = Queues}) ->
             %% thus ensuring that each queue has an equal chance of
             %% being notified first.
             {L1, L2} = lists:split(random:uniform(L), QList),
-            [ok = rabbit_amqqueue:unblock(Q, ChPid) || Q <- L2 ++ L1],
+            [[ok = rabbit_amqqueue:unblock(Q, ChPid) || Q <- L3]
+             || L3 <- [L2, L1]],
             ok
     end,
     State#lim{queues = NewQueues}.
