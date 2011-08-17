@@ -237,7 +237,7 @@ start_link({local, SupName}, Group, Mod, Args) ->
     start_link0([{local, SupName}], Group, init(Mod, Args));
 
 start_link({global, _SupName}, _Group, _Mod, _Args) ->
-    error(badarg).
+    erlang:error(badarg).
 
 start_link0(Prefix, Group, Init) ->
     case apply(?SUPERVISOR, start_link,
@@ -251,7 +251,7 @@ init(Mod, Args) ->
     case Mod:init(Args) of
         {ok, {{Bad, _, _}, _ChildSpecs}} when
               Bad =:= simple_one_for_one orelse
-              Bad =:= simple_one_for_one_terminate -> error(badarg);
+              Bad =:= simple_one_for_one_terminate -> erlang:error(badarg);
         Init                                       -> Init
     end.
 
