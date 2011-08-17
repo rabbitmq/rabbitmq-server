@@ -108,7 +108,7 @@ unregister(Limiter, QPid) -> maybe_cast(Limiter, {unregister, QPid}).
 get_limit(Limiter) ->
     rabbit_misc:with_exit_handler(
       fun () -> 0 end,
-      fun () -> maybe_call(Limiter, get_limit, ok) end).
+      fun () -> maybe_call(Limiter, get_limit, 0) end).
 
 block(Limiter) ->
     maybe_call(Limiter, block, ok).
