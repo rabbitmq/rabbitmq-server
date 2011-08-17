@@ -99,11 +99,24 @@ test_delete_restart() ->
               end, [a, b]).
 
 test_which_children() ->
-    with_sups(fun([A, B]) ->
-                      ?MS:start_child(A, childspec(worker)),
-                      ?MS:start_child(B, childspec(worker2)),
-                      2 = length(?MS:which_children(A))
-              end, [a, b]).
+    with_sups(
+      fun([A, B] = Both) ->
+              ?MS:start_child(A, childspec(worker)),
+              assert_wc(Both, fun ([C]) -> true = is_pid(wc_pid(C)) end),
+              ok = ?MS:terminate_child(a, worker),
+              assert_wc(Both, fun ([C]) -> undefined = wc_pid(C) end),
+              {ok, _} = ?MS:restart_child(a, worker),
+              assert_wc(Both, fun ([C]) -> true = is_pid(wc_pid(C)) end),
+              ?MS:start_child(B, childspec(worker2)),
+              assert_wc(Both, fun (C) -> 2 = length(C) end)
+      end, [a, b]).
+
+assert_wc(Sups, Fun) ->
+    [Fun(?MS:which_children(Sup)) || Sup <- Sups].
+
+wc_pid(Child) ->
+    {worker, Pid, worker, [mirrored_supervisor_tests]} = Child,
+    Pid.
 
 %% Not all the members of the group should actually do the failover
 test_large_group() ->
