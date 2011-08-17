@@ -53,6 +53,7 @@
 -spec(ha_mirrors/0            :: () -> 'ok').
 -spec(gm/0                    :: () -> 'ok').
 -spec(exchange_scratch/0      :: () -> 'ok').
+-spec(mirrored_supervisor/0   :: () -> 'ok').
 
 -endif.
 
