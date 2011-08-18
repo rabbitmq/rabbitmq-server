@@ -185,10 +185,9 @@ sync_async_method_serialization_test() ->
                 %% All queues must have gotten this message
                 lists:foreach(
                     fun (Q) ->
-                            #'queue.declare_ok'{message_count = 1} =
+                            #'queue.purge_ok'{message_count = 1} =
                                 amqp_channel:call(
-                                    Channel,
-                                    #'queue.declare'{queue = Q, passive = true})
+                                  Channel, #'queue.purge'{queue = Q})
                     end, lists:flatten(MultiOpRet))
         end).
 
