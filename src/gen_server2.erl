@@ -700,11 +700,11 @@ out({multiple, PidAvgWeight, Queues} = Queue) ->
         _ -> {{value, {Weight, V}}, Q1} = priority_queue:out(Q),
              Result = {value, V},
              case {Pid =/= undefined andalso QLen =:= 1,
-                   gb_trees:size(Queues1) =:= 1 andalso
-                   gb_trees:keys(Queues1) == [{infinity, undefined}]} of
+                   gb_trees:size(Queues1) =:= 1} of
                  {true, true} ->
+                     AvgWeight = orddict:fetch(undefined, PidAvgWeight),
                      {NonInfSum1, InfCount1, QLen1, Q2} =
-                         gb_trees:get({infinity, undefined}, Queues1),
+                         gb_trees:get({AvgWeight, undefined}, Queues1),
                      {Result, {single, NonInfSum1, InfCount1, QLen1, Q2}};
                  {true, _} ->
                      {Result,
