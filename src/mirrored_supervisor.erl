@@ -311,9 +311,12 @@ init({overall, Group, Init}) ->
             Mirroring = {mirroring, {?MODULE, start_internal,
                                      [Group, ChildSpecs]},
                          permanent, 16#ffffffff, worker, [?MODULE]},
-            %% Important: Delegate MUST start after Mirroring, see comment in
-            %% handle_info('DOWN', ...) below
-            {ok, {{one_for_all, 0, 1}, [Mirroring, Delegate]}};
+            %% Important: Delegate MUST start before Mirroring so that
+            %% when we shut down from above it shuts down last, so
+            %% Mirroring does not see it die.
+            %%
+            %% See comment in handle_info('DOWN', ...) below
+            {ok, {{one_for_all, 0, 1}, [Delegate, Mirroring]}};
         ignore ->
             ignore
     end;
