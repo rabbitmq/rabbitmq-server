@@ -1,9 +1,10 @@
 %% This is the version of pg2 from R14B02, which contains the fix
 %% described at
 %% http://erlang.2086793.n4.nabble.com/pg2-still-busted-in-R13B04-td2230601.html.
-%% The only changes are a search-and-replace to rename the module and
-%% avoid clashes with other versions of pg2.
-
+%% The changes are a search-and-replace to rename the module and avoid
+%% clashes with other versions of pg2, and also a simple rewrite of
+%% "andalso" and "orelse" expressions to case statements where the second
+%% operands is not a boolean since R12B does not allow this.
 
 %%
 %% %CopyrightBegin%
@@ -188,10 +189,16 @@ handle_call({create, Name}, _From, S) ->
     assure_group(Name),
     {reply, ok, S};
 handle_call({join, Name, Pid}, _From, S) ->
-    ets:member(pg2_fixed_table, {group, Name}) andalso join_group(Name, Pid),
+    case ets:member(pg2_fixed_table, {group, Name}) of
+        true -> join_group(Name, Pid);
+        _    -> ok
+    end,
     {reply, ok, S};
 handle_call({leave, Name, Pid}, _From, S) ->
-    ets:member(pg2_fixed_table, {group, Name}) andalso leave_group(Name, Pid),
+    case ets:member(pg2_fixed_table, {group, Name}) of
+        true -> leave_group(Name, Pid);
+        _    -> ok
+    end,
     {reply, ok, S};
 handle_call({delete, Name}, _From, S) ->
     delete_group(Name),
@@ -258,10 +265,12 @@ terminate(_Reason, _S) ->
 %%%    Pid is a member of group Name.
 
 store(List) ->
-    _ = [(assure_group(Name)
-          andalso
-          [join_group(Name, P) || P <- Members -- group_members(Name)]) ||
-            [Name, Members] <- List],
+    _ = [case assure_group(Name) of
+             true ->
+                 [join_group(Name, P) || P <- Members -- group_members(Name)];
+             _ ->
+                 ok
+         end || [Name, Members] <- List],
     ok.
 
 assure_group(Name) ->
@@ -367,7 +376,10 @@ ensure_started() ->
 
 
 kill_monitor_proc(RPid, Pid) ->
-    RPid =:= Pid orelse exit(RPid, kill).
+    case RPid of
+        Pid -> ok;
+        _   -> exit(RPid, kill)
+    end.
 
 %% When/if erlang:monitor() returns before trying to connect to the
 %% other node this function can be removed.
