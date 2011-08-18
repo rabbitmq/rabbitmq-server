@@ -645,6 +645,8 @@ in({system, _From, _Req} = Input, GS2State) ->
 in(Input, GS2State = #gs2_state { prioritise_info = PI }) ->
     in(Input, PI(Input, GS2State), GS2State).
 
+in(Input, {Weight, Priority}, GS2State) ->
+    in(Input, undefined, {Weight, Priority}, GS2State);
 in(Input, Priority, GS2State = #gs2_state { queue = {single, Queue} }) ->
     GS2State #gs2_state {
       queue = {single, priority_queue:in(Input, Priority, Queue)} };
@@ -653,21 +655,28 @@ in(Input, Priority, GS2State = #gs2_state { queue = {multiple, _, _} }) ->
 
 in(Input, Pid, {Weight, Priority},
    GS2State = #gs2_state { queue = {multiple, Order, Queues} }) ->
-    {TotalWeight, Queue} = case orddict:find(Pid, Queues) of
-                               error   -> {0, priority_queue:new()};
-                               {ok, V} -> V
-                           end,
-    Queue1 = priority_queue:in({Weight, Input}, Priority, Queue),
-    TotalWeight1 = sum_weights(TotalWeight, Weight),
-    Order1 = gb_trees:enter({TotalWeight1, Pid}, ok,
-                            gb_trees:delete_any({TotalWeight, Pid}, Order)),
+    {TotalWeight, Length, Queue, Order1} =
+        case orddict:find(Pid, Queues) of
+            error ->
+                {0, 0, priority_queue:new()};
+            {ok, {AvgWeight1, Queue1}} ->
+                {TotalWeight1, Len} = gb_trees:get({AvgWeight1, Pid}, Order),
+                {TotalWeight1, Len, Queue1,
+                 gb_trees:delete({AvgWeight1, Pid}, Order)}
+        end,
+    Queue2 = priority_queue:in({Weight, Input}, Priority, Queue),
+    TotalWeight2 = sum_weights(TotalWeight, Weight),
+    Length2 = Length + 1,
+    AvgWeight2 = avg_weights(TotalWeight2, Length2),
+    Order2 = gb_trees:enter({AvgWeight2, Pid}, {TotalWeight2, Length2}, Order1),
     GS2State #gs2_state {
-      queue = {multiple, Order1,
-               orddict:store(Pid, {TotalWeight1, Queue1}, Queues)} };
+      queue = {multiple, Order2,
+               orddict:store(Pid, {AvgWeight2, Queue2}, Queues)} };
 in(Input, Pid, {Weight, Priority},
    GS2State = #gs2_state { queue = {single, Queue} }) ->
-    Order = gb_trees:from_orddict([{{infinity, undefined}, ok}]),
-    Queues = orddict:from_list([{undefined, Queue}]),
+    Order = gb_trees:from_orddict([{{infinity, undefined},
+                                    {infinity, priority_queue:len(Queue)}}]),
+    Queues = orddict:from_list([{undefined, {infinity, Queue}}]),
     in(Input, Pid, {Weight, Priority},
        GS2State #gs2_state { queue = {multiple, Order, Queues} }).
 
@@ -675,17 +684,22 @@ out({single, Queue}) ->
     {Result, Queue1} = priority_queue:out(Queue),
     {Result, {single, Queue1}};
 out({multiple, Order, Queues}) ->
-    {{TotalWeight, Pid}, ok, Order1} = gb_trees:take_largest(Order),
-    Queue = orddict:fetch(Pid, Queues),
+    {{AvgWeight, Pid}, {TotalWeight, Length}, Order1} =
+        gb_trees:take_largest(Order),
+    {AvgWeight, Queue} = orddict:fetch(Pid, Queues),
     {{value, {Weight, Result}}, Queue1} = priority_queue:out(Queue),
-    case {priority_queue:is_empty(Queue1), gb_trees:size(Order1)} of
-        {true, 1} -> {{_TotalWeight, OnlyPid}, ok} = gb_trees:largest(Order1),
-                     {Result, {single, orddict:fetch(OnlyPid, Queues)}};
-        {true, _} -> {Result, {multiple, Order1, orddict:erase(Pid, Queues)}};
+    case {Length, gb_trees:keys(Order1) == [{infinity, undefined}]} of
+        {1, true} -> {infinity, OnlyQueue} = orddict:fetch(undefined, Queues),
+                     {Result, {single, OnlyQueue}};
+        {1, _}    -> {Result, {multiple, Order1, orddict:erase(Pid, Queues)}};
         _         -> TotalWeight1 = subtract_weights(TotalWeight, Weight),
-                     {Result, {multiple,
-                               gb_trees:enter({TotalWeight1, Pid}, ok, Order1),
-                               orddict:store(Pid, Queue1, Queues)}}
+                     Length1 = Length - 1,
+                     AvgWeight1 = avg_weights(TotalWeight1, Length1),
+                     {Result,
+                      {multiple,
+                       gb_trees:enter(
+                         {AvgWeight1, Pid}, {TotalWeight1, Length1}, Order1),
+                       orddict:store(Pid, {AvgWeight1, Queue1}, Queues)}}
     end.
 
 sum_weights(infinity, _) -> infinity;
@@ -695,6 +709,9 @@ sum_weights(A, B)        -> A+B.
 subtract_weights(infinity, _) -> infinity;
 subtract_weights(_, infinity) -> infinity;
 subtract_weights(A, B)        -> A - B.
+
+avg_weights(infinity, _) -> infinity;
+avg_weights(A, B)        -> A / B.
 
 process_msg({system, From, Req},
             GS2State = #gs2_state { parent = Parent, debug  = Debug }) ->
