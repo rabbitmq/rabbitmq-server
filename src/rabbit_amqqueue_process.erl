@@ -822,6 +822,7 @@ prioritise_call(Msg, _From, _State) ->
         consumers                            -> 9;
         {basic_consume, _, _, _, _, _, _}    -> 7;
         {basic_cancel, _, _, _}              -> 7;
+        stat                                 -> 7;
         _                                    -> 0
     end.
 
