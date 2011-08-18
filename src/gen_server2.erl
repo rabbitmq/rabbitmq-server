@@ -408,7 +408,7 @@ enter_loop(Mod, Options, State, ServerName, Timeout, Backoff) ->
     loop(find_prioritisers(
            #gs2_state { parent = Parent, name = Name, state = State,
                         mod = Mod, time = Timeout, timeout_state = Backoff1,
-                        queue = Queue, debug = Debug })).
+                        queue = {single, Queue}, debug = Debug })).
 
 %%%========================================================================
 %%% Gen-callback functions
@@ -431,7 +431,7 @@ init_it(Starter, Parent, Name0, Mod, Args, Options) ->
                  #gs2_state { parent  = Parent,
                               name    = Name,
                               mod     = Mod,
-                              queue   = Queue,
+                              queue   = {single, Queue},
                               debug   = Debug }),
     case catch Mod:init(Args) of
         {ok, State} ->
@@ -516,7 +516,7 @@ drain(GS2State) ->
 process_next_msg(GS2State = #gs2_state { time          = Time,
                                          timeout_state = TimeoutState,
                                          queue         = Queue }) ->
-    case priority_queue:out(Queue) of
+    case out(Queue) of
         {{value, Msg}, Queue1} ->
             process_msg(Msg, GS2State #gs2_state { queue = Queue1 });
         {empty, Queue1} ->
@@ -629,9 +629,15 @@ adjust_timeout_state(SleptAt, AwokeAt, {backoff, CurrentTO, MinimumTO,
 in({'$gen_cast', Msg} = Input,
    GS2State = #gs2_state { prioritise_cast = PC }) ->
     in(Input, PC(Msg, GS2State), GS2State);
+in({{'$gen_cast', Pid}, Msg} = Input,
+   GS2State = #gs2_state { prioritise_cast = PC }) ->
+    in(Input, Pid, PC(Msg, GS2State), GS2State);
 in({'$gen_call', From, Msg} = Input,
    GS2State = #gs2_state { prioritise_call = PC }) ->
     in(Input, PC(Msg, From, GS2State), GS2State);
+in({{'$gen_call', Pid}, From, Msg} = Input,
+   GS2State = #gs2_state { prioritise_call = PC }) ->
+    in(Input, Pid, PC(Msg, From, GS2State), GS2State);
 in({'EXIT', Parent, _R} = Input, GS2State = #gs2_state { parent = Parent }) ->
     in(Input, infinity, GS2State);
 in({system, _From, _Req} = Input, GS2State) ->
@@ -639,8 +645,56 @@ in({system, _From, _Req} = Input, GS2State) ->
 in(Input, GS2State = #gs2_state { prioritise_info = PI }) ->
     in(Input, PI(Input, GS2State), GS2State).
 
-in(Input, Priority, GS2State = #gs2_state { queue = Queue }) ->
-    GS2State # gs2_state { queue = priority_queue:in(Input, Priority, Queue) }.
+in(Input, Priority, GS2State = #gs2_state { queue = {single, Queue} }) ->
+    GS2State #gs2_state {
+      queue = {single, priority_queue:in(Input, Priority, Queue)} };
+in(Input, Priority, GS2State = #gs2_state { queue = {multiple, _, _} }) ->
+    in(Input, undefined, {infinity, Priority}, GS2State).
+
+in(Input, Pid, {Weight, Priority},
+   GS2State = #gs2_state { queue = {multiple, Order, Queues} }) ->
+    {TotalWeight, Queue} = case orddict:find(Pid, Queues) of
+                               error   -> {0, priority_queue:new()};
+                               {ok, V} -> V
+                           end,
+    Queue1 = priority_queue:in({Weight, Input}, Priority, Queue),
+    TotalWeight1 = sum_weights(TotalWeight, Weight),
+    Order1 = gb_trees:enter({TotalWeight1, Pid}, ok,
+                            gb_trees:delete_any({TotalWeight, Pid}, Order)),
+    GS2State #gs2_state {
+      queue = {multiple, Order1,
+               orddict:store(Pid, {TotalWeight1, Queue1}, Queues)} };
+in(Input, Pid, {Weight, Priority},
+   GS2State = #gs2_state { queue = {single, Queue} }) ->
+    Order = gb_trees:from_orddict([{{infinity, undefined}, ok}]),
+    Queues = orddict:from_list([{undefined, Queue}]),
+    in(Input, Pid, {Weight, Priority},
+       GS2State #gs2_state { queue = {multiple, Order, Queues} }).
+
+out({single, Queue}) ->
+    {Result, Queue1} = priority_queue:out(Queue),
+    {Result, {single, Queue1}};
+out({multiple, Order, Queues}) ->
+    {{TotalWeight, Pid}, ok, Order1} = gb_trees:take_largest(Order),
+    Queue = orddict:fetch(Pid, Queues),
+    {{value, {Weight, Result}}, Queue1} = priority_queue:out(Queue),
+    case {priority_queue:is_empty(Queue1), gb_trees:size(Order1)} of
+        {true, 1} -> {{_TotalWeight, OnlyPid}, ok} = gb_trees:largest(Order1),
+                     {Result, {single, orddict:fetch(OnlyPid, Queues)}};
+        {true, _} -> {Result, {multiple, Order1, orddict:erase(Pid, Queues)}};
+        _         -> TotalWeight1 = subtract_weights(TotalWeight, Weight),
+                     {Result, {multiple,
+                               gb_trees:enter({TotalWeight1, Pid}, ok, Order1),
+                               orddict:store(Pid, Queue1, Queues)}}
+    end.
+
+sum_weights(infinity, _) -> infinity;
+sum_weights(_, infinity) -> infinity;
+sum_weights(A, B)        -> A+B.
+
+subtract_weights(infinity, _) -> infinity;
+subtract_weights(_, infinity) -> infinity;
+subtract_weights(A, B)        -> A - B.
 
 process_msg({system, From, Req},
             GS2State = #gs2_state { parent = Parent, debug  = Debug }) ->
