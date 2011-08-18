@@ -178,6 +178,7 @@
          start_link/3, start_link/4,
          call/2, call/3,
          cast/2, reply/2,
+         pcall/2, pcall/3, pcast/2,
          abcast/2, abcast/3,
          multi_call/2, multi_call/3, multi_call/4,
          enter_loop/3, enter_loop/4, enter_loop/5, enter_loop/6, wake_hib/1]).
@@ -263,19 +264,31 @@ start_link(Name, Mod, Args, Options) ->
 %% is handled here (? Shall we do that here (or rely on timeouts) ?).
 %% -----------------------------------------------------------------
 call(Name, Request) ->
-    case catch gen:call(Name, '$gen_call', Request) of
-        {ok,Res} ->
-            Res;
-        {'EXIT',Reason} ->
-            exit({Reason, {?MODULE, call, [Name, Request]}})
-    end.
+    do_call(Name, '$gen_call', Request, call).
 
 call(Name, Request, Timeout) ->
-    case catch gen:call(Name, '$gen_call', Request, Timeout) of
+    do_call(Name, '$gen_call', Request, Timeout, call).
+
+pcall(Name, Request) ->
+    do_call(Name, {'$gen_call', self()}, Request, pcall).
+
+pcall(Name, Request, Timeout) ->
+    do_call(Name, {'$gen_call', self()}, Request, Timeout, pcall).
+
+do_call(Name, Tag, Request, Call) ->
+    case catch gen:call(Name, Tag, Request) of
         {ok,Res} ->
             Res;
         {'EXIT',Reason} ->
-            exit({Reason, {?MODULE, call, [Name, Request, Timeout]}})
+            exit({Reason, {?MODULE, Call, [Name, Request]}})
+    end.
+
+do_call(Name, Tag, Request, Timeout, Call) ->
+    case catch gen:call(Name, Tag, Request, Timeout) of
+        {ok,Res} ->
+            Res;
+        {'EXIT',Reason} ->
+            exit({Reason, {?MODULE, Call, [Name, Request, Timeout]}})
     end.
 
 %% -----------------------------------------------------------------
@@ -291,11 +304,26 @@ cast(Dest, Request) when is_atom(Dest) ->
 cast(Dest, Request) when is_pid(Dest) ->
     do_cast(Dest, Request).
 
+pcast({global,Name}, Request) ->
+    catch global:send(Name, pcast_msg(Request, self())),
+    ok;
+pcast({Name,Node}=Dest, Request) when is_atom(Name), is_atom(Node) ->
+    do_pcast(Dest, Request);
+pcast(Dest, Request) when is_atom(Dest) ->
+    do_pcast(Dest, Request);
+pcast(Dest, Request) when is_pid(Dest) ->
+    do_pcast(Dest, Request).
+
 do_cast(Dest, Request) ->
     do_send(Dest, cast_msg(Request)),
     ok.
 
-cast_msg(Request) -> {'$gen_cast',Request}.
+do_pcast(Dest, Request) ->
+    do_send(Dest, pcast_msg(Request, self())),
+    ok.
+
+cast_msg(Request)      -> {'$gen_cast', Request}.
+pcast_msg(Request, Pid) -> {{'$gen_cast', Pid}, Request}.
 
 %% -----------------------------------------------------------------
 %% Send a reply to the client.
