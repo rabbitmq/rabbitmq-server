@@ -408,7 +408,7 @@ enter_loop(Mod, Options, State, ServerName, Timeout, Backoff) ->
     loop(find_prioritisers(
            #gs2_state { parent = Parent, name = Name, state = State,
                         mod = Mod, time = Timeout, timeout_state = Backoff1,
-                        queue = {single, Queue}, debug = Debug })).
+                        queue = {single, 0, 0, 0, Queue}, debug = Debug })).
 
 %%%========================================================================
 %%% Gen-callback functions
@@ -431,7 +431,7 @@ init_it(Starter, Parent, Name0, Mod, Args, Options) ->
                  #gs2_state { parent  = Parent,
                               name    = Name,
                               mod     = Mod,
-                              queue   = {single, Queue},
+                              queue   = {single, 0, 0, 0, Queue},
                               debug   = Debug }),
     case catch Mod:init(Args) of
         {ok, State} ->
@@ -647,71 +647,89 @@ in(Input, GS2State = #gs2_state { prioritise_info = PI }) ->
 
 in(Input, {Weight, Priority}, GS2State) ->
     in(Input, undefined, {Weight, Priority}, GS2State);
-in(Input, Priority, GS2State = #gs2_state { queue = {single, Queue} }) ->
-    GS2State #gs2_state {
-      queue = {single, priority_queue:in(Input, Priority, Queue)} };
-in(Input, Priority, GS2State = #gs2_state { queue = {multiple, _, _} }) ->
-    in(Input, undefined, {infinity, Priority}, GS2State).
+in(Input, Priority, GS2State) ->
+    in(Input, undefined, {0, Priority}, GS2State).
 
-in(Input, Pid, {Weight, Priority},
-   GS2State = #gs2_state { queue = {multiple, Order, Queues} }) ->
-    {TotalWeight, Length, Queue, Order1} =
-        case orddict:find(Pid, Queues) of
-            error ->
-                {0, 0, priority_queue:new()};
-            {ok, {AvgWeight1, Queue1}} ->
-                {TotalWeight1, Len} = gb_trees:get({AvgWeight1, Pid}, Order),
-                {TotalWeight1, Len, Queue1,
-                 gb_trees:delete({AvgWeight1, Pid}, Order)}
-        end,
-    Queue2 = priority_queue:in({Weight, Input}, Priority, Queue),
-    TotalWeight2 = sum_weights(TotalWeight, Weight),
-    Length2 = Length + 1,
-    AvgWeight2 = avg_weights(TotalWeight2, Length2),
-    Order2 = gb_trees:enter({AvgWeight2, Pid}, {TotalWeight2, Length2}, Order1),
+in(Input, undefined, {Weight, Priority},
+   GS2State = #gs2_state { queue = {single, NonInfSum, InfCount, QLen, Q} }) ->
+    {NonInfSum1, InfCount1} = sum_weights({NonInfSum, InfCount}, Weight),
     GS2State #gs2_state {
-      queue = {multiple, Order2,
-               orddict:store(Pid, {AvgWeight2, Queue2}, Queues)} };
+      queue = {single, NonInfSum1, InfCount1, QLen + 1,
+               priority_queue:in({Weight, Input}, Priority, Q)} };
 in(Input, Pid, {Weight, Priority},
-   GS2State = #gs2_state { queue = {single, Queue} }) ->
-    Order = gb_trees:from_orddict([{{infinity, undefined},
-                                    {infinity, priority_queue:len(Queue)}}]),
-    Queues = orddict:from_list([{undefined, {infinity, Queue}}]),
+   GS2State = #gs2_state { queue = {single, NonInfSum, InfCount, QLen, Q} }) ->
+    AvgWeight = avg_weights({NonInfSum, InfCount}, QLen),
+    PidAvgWeight = orddict:from_list([{undefined, AvgWeight}]),
+    Queues = gb_trees:from_orddict(
+               [{{AvgWeight, undefined}, {NonInfSum, InfCount, QLen, Q}}]),
     in(Input, Pid, {Weight, Priority},
-       GS2State #gs2_state { queue = {multiple, Order, Queues} }).
+       GS2State #gs2_state { queue = {multiple, PidAvgWeight, Queues} });
+in(Input, Pid, {Weight, Priority},
+   GS2State = #gs2_state { queue = {multiple, PidAvgWeight, Queues} }) ->
+    {NonInfSum, InfCount, QLen, Q, Queues1} =
+        case orddict:find(Pid, PidAvgWeight) of
+            error ->
+                {0, 0, 0, priority_queue:new(), Queues};
+            {ok, AvgWeight} ->
+                {NonInfSum1, InfCount1, QLen1, Q1}
+                    = gb_trees:get({AvgWeight, Pid}, Queues),
+                {NonInfSum1, InfCount1, QLen1, Q1,
+                 gb_trees:delete({AvgWeight, Pid}, Queues)}
+        end,
+    Q2 = priority_queue:in({Weight, Input}, Priority, Q),
+    QLen2 = QLen + 1,
+    {NonInfSum2, InfCount2} = sum_weights({NonInfSum, InfCount}, Weight),
+    AvgWeight2 = avg_weights({NonInfSum2, InfCount2}, QLen2),
+    Queues2 = gb_trees:enter(
+                {AvgWeight2, Pid}, {NonInfSum2, InfCount2, QLen2, Q2}, Queues1),
+    GS2State #gs2_state {
+      queue = {multiple, orddict:store(Pid, AvgWeight2, PidAvgWeight), Queues2}
+     }.
 
-out({single, Queue}) ->
-    {Result, Queue1} = priority_queue:out(Queue),
-    {Result, {single, Queue1}};
-out({multiple, Order, Queues}) ->
-    {{AvgWeight, Pid}, {TotalWeight, Length}, Order1} =
-        gb_trees:take_largest(Order),
-    {AvgWeight, Queue} = orddict:fetch(Pid, Queues),
-    {{value, {Weight, Result}}, Queue1} = priority_queue:out(Queue),
-    case {Length, gb_trees:keys(Order1) == [{infinity, undefined}]} of
-        {1, true} -> {infinity, OnlyQueue} = orddict:fetch(undefined, Queues),
-                     {Result, {single, OnlyQueue}};
-        {1, _}    -> {Result, {multiple, Order1, orddict:erase(Pid, Queues)}};
-        _         -> TotalWeight1 = subtract_weights(TotalWeight, Weight),
-                     Length1 = Length - 1,
-                     AvgWeight1 = avg_weights(TotalWeight1, Length1),
+out({single, _NonInfSum, _InfCount, 0, _Q} = Queue) ->
+    {empty, Queue};
+out({single, NonInfSum, InfCount, QLen, Q}) ->
+    {{value, {Weight, Result}}, Queue1} = priority_queue:out(Q),
+    {NonInfSum1, InfCount1} = subtract_weights({NonInfSum, InfCount}, Weight),
+    {Result, {single, NonInfSum1, InfCount1, QLen - 1, Queue1}};
+out({multiple, PidAvgWeight, Queues} = Queue) ->
+    {{_AvgWeight, Pid}, {NonInfSum, InfCount, QLen, Q}, Queues1} =
+        gb_trees:take_largest(Queues),
+    case QLen of
+        0 -> {empty, Queue};
+        _ -> {{value, {Weight, Result}}, Q1} = priority_queue:out(Q),
+             case {Pid =/= undefined andalso QLen =:= 1,
+                   gb_trees:size(Queues1) =:= 1 andalso
+                   gb_trees:keys(Queues1) == [{infinity, undefined}]} of
+                 {true, true} ->
+                     {NonInfSum1, InfCount1, QLen1, Q2} =
+                         gb_trees:get({infinity, undefined}, Queues1),
+                     {Result, {single, NonInfSum1, InfCount1, QLen1, Q2}};
+                 {true, _} ->
                      {Result,
-                      {multiple,
+                      {multiple, orddict:erase(Pid, PidAvgWeight), Queues1}};
+                 _ ->
+                     {NonInfSum1, InfCount1} =
+                         subtract_weights({NonInfSum, InfCount}, Weight),
+                     QLen1 = QLen - 1,
+                     AvgWeight1 = avg_weights({NonInfSum1, InfCount1}, QLen1),
+                     {Result,
+                      {multiple, orddict:store(Pid, AvgWeight1, PidAvgWeight),
                        gb_trees:enter(
-                         {AvgWeight1, Pid}, {TotalWeight1, Length1}, Order1),
-                       orddict:store(Pid, {AvgWeight1, Queue1}, Queues)}}
+                            {AvgWeight1, Pid},
+                            {NonInfSum1, InfCount1, QLen1, Q1}, Queues)}}
+             end
     end.
 
-sum_weights(infinity, _) -> infinity;
-sum_weights(_, infinity) -> infinity;
-sum_weights(A, B)        -> A+B.
+sum_weights({NonInfSum, InfCount}, infinity) -> {NonInfSum, InfCount + 1};
+sum_weights({NonInfSum, InfCount}, N)        -> {NonInfSum + N, InfCount}.
 
-subtract_weights(infinity, _) -> infinity;
-subtract_weights(_, infinity) -> infinity;
-subtract_weights(A, B)        -> A - B.
+subtract_weights({NonInfSum, InfCount}, infinity) -> {NonInfSum, InfCount - 1};
+subtract_weights({NonInfSum, InfCount}, N)        -> {NonInfSum - N, InfCount}.
 
-avg_weights(infinity, _) -> infinity;
-avg_weights(A, B)        -> A / B.
+avg_weights({_NonInfSum, 0}, 0) -> 0;
+avg_weights({ NonInfSum, 0}, N) -> NonInfSum / N;
+avg_weights({_NonInfSum, _}, _) -> infinity.
 
 process_msg({system, From, Req},
             GS2State = #gs2_state { parent = Parent, debug  = Debug }) ->
