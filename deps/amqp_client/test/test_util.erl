@@ -178,11 +178,14 @@ sync_async_method_serialization_test() ->
                 Q
         end,
         fun (Channel, X, Payload, _, MultiOpRet) ->
+                #'confirm.select_ok'{} = amqp_channel:call(
+                                           Channel, #'confirm.select'{}),
                 ok = amqp_channel:call(Channel,
                                        #'basic.publish'{exchange = X,
                                                         routing_key = <<"a">>},
                                        #amqp_msg{payload = Payload}),
                 %% All queues must have gotten this message
+                true = amqp_channel:wait_for_confirms(Channel),
                 lists:foreach(
                     fun (Q) ->
                             #'queue.purge_ok'{message_count = 1} =
