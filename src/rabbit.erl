@@ -484,9 +484,9 @@ ensure_working_log_handler(OldFHandler, NewFHandler, TTYHandler,
 
 log_location(Type) ->
     case application:get_env(rabbit, case Type of
-                                       kernel -> error_logger;
-                                       sasl   -> sasl_error_logger
-                                   end) of
+                                         kernel -> error_logger;
+                                         sasl   -> sasl_error_logger
+                                     end) of
         {ok, {file, File}} -> File;
         {ok, false}        -> undefined;
         {ok, tty}          -> tty;

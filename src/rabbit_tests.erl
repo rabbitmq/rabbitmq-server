@@ -853,7 +853,6 @@ test_log_management_during_startup() ->
          end,
 
     %% fix sasl logging
-    ok = application:unset_env(sasl, sasl_error_logger),
     ok = application:set_env(rabbit, sasl_error_logger, {file, SaslLog}),
 
     %% start application with logging to non-existing directory
@@ -863,7 +862,6 @@ test_log_management_during_startup() ->
 
     ok = delete_log_handlers([rabbit_error_logger_file_h]),
     ok = add_log_handlers([{error_logger_file_h, MainLog}]),
-
     ok = control_action(start_app, []),
 
     %% start application with logging to directory with no
@@ -896,7 +894,6 @@ test_log_management_during_startup() ->
 
     %% start application with standard error_logger_file_h
     %% handler not installed
-    ok = application:unset_env(kernel, error_logger),
     ok = application:set_env(rabbit, error_logger, {file, MainLog}),
     ok = control_action(start_app, []),
     ok = control_action(stop_app, []),
