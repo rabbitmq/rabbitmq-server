@@ -30,4 +30,4 @@ init([]) ->
     {ok, {{one_for_one, 10, 10}, [DB]}}.
 
 start_link() ->
-     mirrored_supervisor:start_link({local, ?MODULE}, ?MODULE, []).
+     mirrored_supervisor:start_link({local, ?MODULE}, ?MODULE, ?MODULE, []).
