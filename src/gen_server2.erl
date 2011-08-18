@@ -629,15 +629,15 @@ adjust_timeout_state(SleptAt, AwokeAt, {backoff, CurrentTO, MinimumTO,
 in({'$gen_cast', Msg} = Input,
    GS2State = #gs2_state { prioritise_cast = PC }) ->
     in(Input, PC(Msg, GS2State), GS2State);
-in({{'$gen_cast', Pid}, Msg} = Input,
+in({{'$gen_cast', Pid}, Msg},
    GS2State = #gs2_state { prioritise_cast = PC }) ->
-    in(Input, Pid, PC(Msg, GS2State), GS2State);
+    in({'$gen_cast', Msg}, Pid, PC(Msg, GS2State), GS2State);
 in({'$gen_call', From, Msg} = Input,
    GS2State = #gs2_state { prioritise_call = PC }) ->
     in(Input, PC(Msg, From, GS2State), GS2State);
-in({{'$gen_call', Pid}, From, Msg} = Input,
+in({{'$gen_call', Pid}, From, Msg},
    GS2State = #gs2_state { prioritise_call = PC }) ->
-    in(Input, Pid, PC(Msg, From, GS2State), GS2State);
+    in({'$gen_call', From, Msg}, Pid, PC(Msg, From, GS2State), GS2State);
 in({'EXIT', Parent, _R} = Input, GS2State = #gs2_state { parent = Parent }) ->
     in(Input, infinity, GS2State);
 in({system, _From, _Req} = Input, GS2State) ->
@@ -691,13 +691,14 @@ out({single, _NonInfSum, _InfCount, 0, _Q} = Queue) ->
 out({single, NonInfSum, InfCount, QLen, Q}) ->
     {{value, {Weight, Result}}, Queue1} = priority_queue:out(Q),
     {NonInfSum1, InfCount1} = subtract_weights({NonInfSum, InfCount}, Weight),
-    {Result, {single, NonInfSum1, InfCount1, QLen - 1, Queue1}};
+    {{value, Result}, {single, NonInfSum1, InfCount1, QLen - 1, Queue1}};
 out({multiple, PidAvgWeight, Queues} = Queue) ->
     {{_AvgWeight, Pid}, {NonInfSum, InfCount, QLen, Q}, Queues1} =
         gb_trees:take_largest(Queues),
     case QLen of
         0 -> {empty, Queue};
-        _ -> {{value, {Weight, Result}}, Q1} = priority_queue:out(Q),
+        _ -> {{value, {Weight, V}}, Q1} = priority_queue:out(Q),
+             Result = {value, V},
              case {Pid =/= undefined andalso QLen =:= 1,
                    gb_trees:size(Queues1) =:= 1 andalso
                    gb_trees:keys(Queues1) == [{infinity, undefined}]} of
@@ -1233,30 +1234,35 @@ find_prioritisers(GS2State = #gs2_state { mod = Mod }) ->
                    Mod, 'prioritise_call', 3,
                    fun (_Msg, _From, _State) -> 0 end),
     PrioriCast = function_exported_or_default(Mod, 'prioritise_cast', 2,
-                                              fun (_Msg, _State) -> 0 end),
+                                              fun (_Msg, _State) -> {0, 0} end),
     PrioriInfo = function_exported_or_default(Mod, 'prioritise_info', 2,
-                                              fun (_Msg, _State) -> 0 end),
+                                              fun (_Msg, _State) -> {0, 0} end),
     GS2State #gs2_state { prioritise_call = PrioriCall,
                           prioritise_cast = PrioriCast,
                           prioritise_info = PrioriInfo }.
+
+is_valid_priority(infinity) -> true;
+is_valid_priority(N) when is_integer(N) -> true;
+is_valid_priority({A, B}) -> is_valid_priority(A) andalso is_valid_priority(B);
+is_valid_priority(_) -> false.
 
 function_exported_or_default(Mod, Fun, Arity, Default) ->
     case erlang:function_exported(Mod, Fun, Arity) of
         true -> case Arity of
                     2 -> fun (Msg, GS2State = #gs2_state { state = State }) ->
-                                 case catch Mod:Fun(Msg, State) of
-                                     Res when is_integer(Res) ->
-                                         Res;
-                                     Err ->
-                                         handle_common_termination(Err, Msg, GS2State)
+                                 Res = (catch Mod:Fun(Msg, State)),
+                                 case is_valid_priority(Res) of
+                                     true  -> Res;
+                                     false -> handle_common_termination(
+                                                Res, Msg, GS2State)
                                  end
                          end;
                     3 -> fun (Msg, From, GS2State = #gs2_state { state = State }) ->
-                                 case catch Mod:Fun(Msg, From, State) of
-                                     Res when is_integer(Res) ->
-                                         Res;
-                                     Err ->
-                                         handle_common_termination(Err, Msg, GS2State)
+                                 Res = (catch Mod:Fun(Msg, From, State)),
+                                 case is_valid_priority(Res) of
+                                     true  -> Res;
+                                     false -> handle_common_termination(
+                                                Res, Msg, GS2State)
                                  end
                          end
                 end;
