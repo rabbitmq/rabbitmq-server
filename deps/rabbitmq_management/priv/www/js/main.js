@@ -627,6 +627,9 @@ function add_known_arguments(params) {
             var type = KNOWN_ARGS[k].type;
             if (type == 'int') {
                 v = parseInt(v);
+                if (isNaN(v)) {
+                    throw(k + " must be an integer.");
+                }
             }
             else if (type == 'array' && typeof(v) == 'string') {
                 v = v.split(' ');
