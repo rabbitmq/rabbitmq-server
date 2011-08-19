@@ -817,10 +817,13 @@ emit_consumer_deleted(ChPid, ConsumerTag) ->
 
 prioritise_call(Msg, _From, _State) ->
     case Msg of
-        info                            -> 9;
-        {info, _Items}                  -> 9;
-        consumers                       -> 9;
-        _                               -> 0
+        info                                 -> 9;
+        {info, _Items}                       -> 9;
+        consumers                            -> 9;
+        {basic_consume, _, _, _, _, _, _}    -> 7;
+        {basic_cancel, _, _, _}              -> 7;
+        stat                                 -> 7;
+        _                                    -> 0
     end.
 
 prioritise_cast(Msg, _State) ->
