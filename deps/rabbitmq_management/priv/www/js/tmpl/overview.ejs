@@ -129,13 +129,11 @@
        <% } else { %>
          <acronym title="Broker configuration is held in RAM. Messages will still be written to disc if necessary.">RAM</acronym>
        <% } %>
-       <% if (nodes_interesting) { %>
-         <% if (overview.statistics_db_node == node.name) { %>
-           <acronym title="This node contains the management statistics database">Stats</acronym>
-         <% } %>
-         <% if (overview.node == node.name) { %>
-           <acronym title="You are accessing the management UI from this node.">*</acronym>
-         <% } %>
+       <% if (overview.statistics_db_node == node.name) { %>
+         <acronym title="This node contains the management statistics database">Stats</acronym>
+       <% } %>
+       <% if (overview.node == node.name) { %>
+         <acronym title="You are accessing the management UI from this node.">*</acronym>
        <% } %>
      </td>
    </tr>
