@@ -19,9 +19,40 @@
 %% 4) The callback module can optionally implement prioritise_call/3,
 %% prioritise_cast/2 and prioritise_info/2.  These functions take
 %% Message, From and State or just Message and State and return a
-%% single integer representing the priority attached to the message.
-%% Messages with higher priorities are processed before requests with
-%% lower priorities. The default priority is 0.
+%% either a single integer or 'infinity', or a tuple of 2 elements
+%% where each element is a single integer or 'infinity'. The meaning
+%% is as follows:
+%%
+%% a) Returning a tuple is returning {Weight, Priority}
+%% b) Returning a single element is returning {0, Priority}
+%%
+%% If gen_server2:pcall or gen_server2:pcast are used, then the
+%% message will end up in a queue specifically for messages from that
+%% sending Pid. The queue's weight is the average weights of the
+%% messages within that queue, as determined by the prioritise_*
+%% callbacks. Within that queue, priorities apply, and thus can
+%% reorder messages from the same Pid.
+%%
+%% If gen_server2:call, gen_server2:cast or just ! are used, then the
+%% gen_server2 process does not known the sender. These messages are
+%% placed into a queue containing all messages for which the sender is
+%% not known. Again, this queue has a weight which is the average of
+%% the weights of the messages in the queue, and again, priorities can
+%% reorder messages within this queue.
+%%
+%% The next message processed by the gen_server2 callback module is
+%% the highest priority message taken from the queue with the largest
+%% weight.
+%%
+%% If you wish only for messages to be reordered by priority and the
+%% sender to be ignored, then do not use :pcall or :pcast, and have
+%% prioritise_* return single elements or {0, Priority}.
+%%
+%% If you wish for messages to be sorted per sender, and wish to
+%% prioritise particular senders based on detection of more important
+%% messages, but otherwise want to ensure that messages from the same
+%% sender are processed in the same order, then always use :pcall and
+%% :pcast and have prioritise_* functions return {Weight, 0}.
 %%
 %% 5) The callback module can optionally implement
 %% handle_pre_hibernate/1 and handle_post_hibernate/1. These will be
@@ -639,9 +670,9 @@ in({{'$gen_call', Pid}, From, Msg},
    GS2State = #gs2_state { prioritise_call = PC }) ->
     in({'$gen_call', From, Msg}, Pid, PC(Msg, From, GS2State), GS2State);
 in({'EXIT', Parent, _R} = Input, GS2State = #gs2_state { parent = Parent }) ->
-    in(Input, infinity, GS2State);
+    in(Input, {infinity, infinity}, GS2State);
 in({system, _From, _Req} = Input, GS2State) ->
-    in(Input, infinity, GS2State);
+    in(Input, {infinity, infinity}, GS2State);
 in(Input, GS2State = #gs2_state { prioritise_info = PI }) ->
     in(Input, PI(Input, GS2State), GS2State).
 
@@ -684,7 +715,9 @@ in(Input, Pid, {Weight, Priority},
                 {AvgWeight2, Pid}, {NonInfSum2, InfCount2, QLen2, Q2}, Queues1),
     GS2State #gs2_state {
       queue = {multiple, orddict:store(Pid, AvgWeight2, PidAvgWeight), Queues2}
-     }.
+     };
+in(Input, Pid, Priority, GS2State) ->
+    in(Input, Pid, {0, Priority}, GS2State).
 
 out({single, _NonInfSum, _InfCount, 0, _Q} = Queue) ->
     {empty, Queue};
@@ -718,7 +751,7 @@ out({multiple, PidAvgWeight, Queues} = Queue) ->
                       {multiple, orddict:store(Pid, AvgWeight1, PidAvgWeight),
                        gb_trees:enter(
                             {AvgWeight1, Pid},
-                            {NonInfSum1, InfCount1, QLen1, Q1}, Queues)}}
+                            {NonInfSum1, InfCount1, QLen1, Q1}, Queues1)}}
              end
     end.
 
@@ -1232,7 +1265,7 @@ name_to_pid(Name) ->
 find_prioritisers(GS2State = #gs2_state { mod = Mod }) ->
     PrioriCall = function_exported_or_default(
                    Mod, 'prioritise_call', 3,
-                   fun (_Msg, _From, _State) -> 0 end),
+                   fun (_Msg, _From, _State) -> {0, 0} end),
     PrioriCast = function_exported_or_default(Mod, 'prioritise_cast', 2,
                                               fun (_Msg, _State) -> {0, 0} end),
     PrioriInfo = function_exported_or_default(Mod, 'prioritise_info', 2,
@@ -1285,14 +1318,26 @@ format_status(Opt, StatusData) ->
     Log = sys:get_debug(log, Debug, []),
     Specfic = callback(Mod, format_status, [Opt, [PDict, State]],
                        fun () -> [{data, [{"State", State}]}] end),
-    Messages = callback(Mod, format_message_queue, [Opt, Queue],
-                        fun () -> priority_queue:to_list(Queue) end),
+    Messages = format_message_queue(Mod, Opt, Queue),
     [{header, Header},
      {data, [{"Status", SysState},
              {"Parent", Parent},
              {"Logged events", Log},
              {"Queued messages", Messages}]} |
      Specfic].
+
+format_message_queue(Mod, Opt, {single, _NonInfSum, _InfCount, _QLen, Q}) ->
+    format_message_queue_callback(Mod, Opt, Q);
+format_message_queue(Mod, Opt, {multiple, PidAvgWeight, Queues}) ->
+    lists:keysort(
+      1, [{{AvgWeight, Pid}, format_message_queue_callback(Mod, Opt, Q)} ||
+             {Pid, AvgWeight} <- orddict:to_list(PidAvgWeight),
+             {_NonInfSum, _InfCount, _QLen, Q} <-
+                 [gb_trees:get({AvgWeight, Pid}, Queues)]]).
+
+format_message_queue_callback(Mod, Opt, Queue) ->
+    callback(Mod, format_message_queue, [Opt, Queue],
+             fun () -> priority_queue:to_list(Queue) end).
 
 callback(Mod, FunName, Args, DefaultThunk) ->
     case erlang:function_exported(Mod, FunName, length(Args)) of

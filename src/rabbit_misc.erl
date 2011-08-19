@@ -940,14 +940,16 @@ format_message_queue(_Opt, MQ) ->
     Len = priority_queue:len(MQ),
     {Len,
      case Len > 100 of
-         false -> priority_queue:to_list(MQ);
-         true  -> {summary,
-                   orddict:to_list(
-                     lists:foldl(
-                       fun ({P, V}, Counts) ->
-                               orddict:update_counter(
-                                 {P, format_message_queue_entry(V)}, 1, Counts)
-                       end, orddict:new(), priority_queue:to_list(MQ)))}
+         false ->
+             priority_queue:to_list(MQ);
+         true ->
+             {summary,
+              orddict:to_list(
+                lists:foldl(
+                  fun ({P, {W, V}}, Counts) ->
+                          orddict:update_counter(
+                            {P, W, format_message_queue_entry(V)}, 1, Counts)
+                  end, orddict:new(), priority_queue:to_list(MQ)))}
      end}.
 
 format_message_queue_entry(V) when is_atom(V) ->
