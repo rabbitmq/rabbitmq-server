@@ -44,7 +44,6 @@
 %% 4) You can find out what your 'real' offset is, and what your
 %% 'virtual' offset is (i.e. where the hdl really is, and where it
 %% would be after the write buffer is written out).
-%% 5) You can find out what the offset was when you last sync'd.
 %%
 %% There is also a server component which serves to limit the number
 %% of open file descriptors. This is a hard limit: the server
@@ -144,8 +143,8 @@
 
 -export([register_callback/3]).
 -export([open/3, close/1, read/2, append/2, sync/1, position/2, truncate/1,
-         last_sync_offset/1, current_virtual_offset/1, current_raw_offset/1,
-         flush/1, copy/3, set_maximum_since_use/1, delete/1, clear/1]).
+         current_virtual_offset/1, current_raw_offset/1, flush/1, copy/3,
+         set_maximum_since_use/1, delete/1, clear/1]).
 -export([obtain/0, transfer/1, set_limit/1, get_limit/0, info_keys/0, info/0,
          info/1]).
 -export([ulimit/0]).
@@ -172,7 +171,6 @@
 -record(handle,
         { hdl,
           offset,
-          trusted_offset,
           is_dirty,
           write_buffer_size,
           write_buffer_size_limit,
@@ -240,7 +238,6 @@
 -spec(sync/1 :: (ref()) ->  ok_or_error()).
 -spec(position/2 :: (ref(), position()) -> val_or_error(offset())).
 -spec(truncate/1 :: (ref()) -> ok_or_error()).
--spec(last_sync_offset/1       :: (ref()) -> val_or_error(offset())).
 -spec(current_virtual_offset/1 :: (ref()) -> val_or_error(offset())).
 -spec(current_raw_offset/1     :: (ref()) -> val_or_error(offset())).
 -spec(flush/1 :: (ref()) -> ok_or_error()).
@@ -365,11 +362,10 @@ sync(Ref) ->
       [Ref],
       fun ([#handle { is_dirty = false, write_buffer = [] }]) ->
               ok;
-          ([Handle = #handle { hdl = Hdl, offset = Offset,
+          ([Handle = #handle { hdl = Hdl,
                                is_dirty = true, write_buffer = [] }]) ->
               case file:sync(Hdl) of
-                  ok    -> {ok, [Handle #handle { trusted_offset = Offset,
-                                                  is_dirty = false }]};
+                  ok    -> {ok, [Handle #handle { is_dirty = false }]};
                   Error -> {Error, [Handle]}
               end
       end).
@@ -384,20 +380,12 @@ position(Ref, NewOffset) ->
 truncate(Ref) ->
     with_flushed_handles(
       [Ref],
-      fun ([Handle1 = #handle { hdl = Hdl, offset = Offset,
-                                trusted_offset = TOffset }]) ->
+      fun ([Handle1 = #handle { hdl = Hdl }]) ->
               case file:truncate(Hdl) of
-                  ok    -> TOffset1 = lists:min([Offset, TOffset]),
-                           {ok, [Handle1 #handle { trusted_offset = TOffset1,
-                                                   at_eof = true }]};
+                  ok    -> {ok, [Handle1 #handle { at_eof = true }]};
                   Error -> {Error, [Handle1]}
               end
       end).
-
-last_sync_offset(Ref) ->
-    with_handles([Ref], fun ([#handle { trusted_offset = TOffset }]) ->
-                                {ok, TOffset}
-                        end).
 
 current_virtual_offset(Ref) ->
     with_handles([Ref], fun ([#handle { at_eof = true, is_write = true,
@@ -456,8 +444,7 @@ clear(Ref) ->
                                                     write_buffer_size = 0 }) of
                   {{ok, 0}, Handle1 = #handle { hdl = Hdl }} ->
                       case file:truncate(Hdl) of
-                          ok    -> {ok, [Handle1 #handle {trusted_offset = 0,
-                                                          at_eof = true }]};
+                          ok    -> {ok, [Handle1 #handle { at_eof = true }]};
                           Error -> {Error, [Handle1]}
                       end;
                   {{error, _} = Error, Handle1} ->
@@ -585,14 +572,13 @@ reopen([{Ref, NewOrReopen, Handle = #handle { hdl          = closed,
                          end) of
         {ok, Hdl} ->
             Now = now(),
-            {{ok, Offset1}, Handle1} =
+            {{ok, _Offset}, Handle1} =
                 maybe_seek(Offset, Handle #handle { hdl          = Hdl,
                                                     offset       = 0,
                                                     last_used_at = Now }),
-            Handle2 = Handle1 #handle { trusted_offset = Offset1 },
-            put({Ref, fhc_handle}, Handle2),
+            put({Ref, fhc_handle}, Handle1),
             reopen(RefNewOrReopenHdls, gb_trees:insert(Now, Ref, Tree),
-                   [{Ref, Handle2} | RefHdls]);
+                   [{Ref, Handle1} | RefHdls]);
         Error ->
             %% NB: none of the handles in ToOpen are in the age tree
             Oldest = oldest(Tree, fun () -> undefined end),
@@ -677,7 +663,6 @@ new_closed_handle(Path, Mode, Options) ->
     Ref = make_ref(),
     put({Ref, fhc_handle}, #handle { hdl                     = closed,
                                      offset                  = 0,
-                                     trusted_offset          = 0,
                                      is_dirty                = false,
                                      write_buffer_size       = 0,
                                      write_buffer_size_limit = WriteBufferSize,
@@ -705,7 +690,6 @@ soft_close(Handle = #handle { hdl = closed }) ->
 soft_close(Handle) ->
     case write_buffer(Handle) of
         {ok, #handle { hdl         = Hdl,
-                       offset      = Offset,
                        is_dirty    = IsDirty,
                        last_used_at = Then } = Handle1 } ->
             ok = case IsDirty of
@@ -715,7 +699,6 @@ soft_close(Handle) ->
             ok = file:close(Hdl),
             age_tree_delete(Then),
             {ok, Handle1 #handle { hdl            = closed,
-                                   trusted_offset = Offset,
                                    is_dirty       = false,
                                    last_used_at   = undefined }};
         {_Error, _Handle} = Result ->
@@ -925,10 +908,10 @@ handle_cast({transfer, FromPid, ToPid}, State) ->
     ok = track_client(ToPid, State#fhc_state.clients),
     {noreply, process_pending(
                 update_counts(obtain, ToPid, +1,
-                              update_counts(obtain, FromPid, -1, State)))};
+                              update_counts(obtain, FromPid, -1, State)))}.
 
-handle_cast(check_counts, State) ->
-    {noreply, maybe_reduce(State #fhc_state { timer_ref = undefined })}.
+handle_info(check_counts, State) ->
+    {noreply, maybe_reduce(State #fhc_state { timer_ref = undefined })};
 
 handle_info({'DOWN', _MRef, process, Pid, _Reason},
             State = #fhc_state { elders         = Elders,
@@ -1133,9 +1116,9 @@ reduce(State = #fhc_state { open_pending   = OpenPending,
               end
     end,
     case TRef of
-        undefined -> {ok, TRef1} = timer:apply_after(
-                                     ?FILE_HANDLES_CHECK_INTERVAL,
-                                     gen_server, cast, [?SERVER, check_counts]),
+        undefined -> TRef1 = erlang:send_after(
+                               ?FILE_HANDLES_CHECK_INTERVAL, ?SERVER,
+                               check_counts),
                      State #fhc_state { timer_ref = TRef1 };
         _         -> State
     end.

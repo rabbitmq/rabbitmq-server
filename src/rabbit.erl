@@ -19,7 +19,7 @@
 -behaviour(application).
 
 -export([prepare/0, start/0, stop/0, stop_and_halt/0, status/0, environment/0,
-         rotate_logs/1]).
+         rotate_logs/1, force_event_refresh/0]).
 
 -export([start/2, stop/1]).
 
@@ -134,6 +134,18 @@
                     {requires,    empty_db_check},
                     {enables,     routing_ready}]}).
 
+-rabbit_boot_step({mirror_queue_slave_sup,
+                   [{description, "mirror queue slave sup"},
+                    {mfa,         {rabbit_mirror_queue_slave_sup, start, []}},
+                    {requires,    recovery},
+                    {enables,     routing_ready}]}).
+
+-rabbit_boot_step({mirrored_queues,
+                   [{description, "adding mirrors to queues"},
+                    {mfa,         {rabbit_mirror_queue_misc, on_node_up, []}},
+                    {requires,    mirror_queue_slave_sup},
+                    {enables,     routing_ready}]}).
+
 -rabbit_boot_step({routing_ready,
                    [{description, "message delivery logic ready"},
                     {requires,    core_initialized}]}).
@@ -175,8 +187,9 @@
 -spec(prepare/0 :: () -> 'ok').
 -spec(start/0 :: () -> 'ok').
 -spec(stop/0 :: () -> 'ok').
--spec(stop_and_halt/0 :: () -> 'ok').
+-spec(stop_and_halt/0 :: () -> no_return()).
 -spec(rotate_logs/1 :: (file_suffix()) -> rabbit_types:ok_or_error(any())).
+-spec(force_event_refresh/0 :: () -> 'ok').
 -spec(status/0 ::
         () -> [{pid, integer()} |
                {running_applications, [{atom(), string(), string()}]} |
@@ -499,6 +512,12 @@ log_rotation_result(ok, {error, SaslLogError}) ->
     {error, {cannot_rotate_sasl_logs, SaslLogError}};
 log_rotation_result(ok, ok) ->
     ok.
+
+force_event_refresh() ->
+    rabbit_direct:force_event_refresh(),
+    rabbit_networking:force_connection_event_refresh(),
+    rabbit_channel:force_event_refresh(),
+    rabbit_amqqueue:force_event_refresh().
 
 %%---------------------------------------------------------------------------
 %% misc

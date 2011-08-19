@@ -301,7 +301,7 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 die_if_my_supervisor_is_evil() ->
-    try lists:keyfind(self(), 2, ?MS:which_children(evil)) of
+    try lists:keysearch(self(), 2, ?MS:which_children(evil)) of
         false -> ok;
         _     -> exit(doooom)
     catch

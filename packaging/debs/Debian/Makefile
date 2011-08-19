@@ -19,7 +19,7 @@ all:
 
 package: clean
 	cp $(TARBALL_DIR)/$(TARBALL) $(DEBIAN_ORIG_TARBALL)
-	tar -zxvf $(DEBIAN_ORIG_TARBALL)
+	tar -zxf $(DEBIAN_ORIG_TARBALL)
 	cp -r debian $(UNPACKED_DIR)
 	cp $(COMMON_DIR)/* $(UNPACKED_DIR)/debian/
 # Debian and descendants differ from most other distros in that

@@ -21,7 +21,8 @@
 -export([lookup/1, with/2, with_or_die/2, assert_equivalence/5,
          check_exclusive_access/2, with_exclusive_access_or_die/3,
          stat/1, deliver/2, requeue/3, ack/3, reject/4]).
--export([list/1, info_keys/0, info/1, info/2, info_all/1, info_all/2]).
+-export([list/0, list/1, info_keys/0, info/1, info/2, info_all/1, info_all/2]).
+-export([force_event_refresh/0]).
 -export([consumers/1, consumers_all/1, consumer_info_keys/0]).
 -export([basic_get/3, basic_consume/7, basic_cancel/4]).
 -export([notify_sent/2, unblock/2, flush_all/2]).
@@ -32,9 +33,7 @@
 
 %% internal
 -export([internal_declare/2, internal_delete/1, run_backing_queue/3,
-         sync_timeout/1, update_ram_duration/1, set_ram_duration_target/2,
-         set_maximum_since_use/2, maybe_expire/1, drop_expired/1,
-         emit_stats/1]).
+         set_ram_duration_target/2, set_maximum_since_use/2]).
 
 -include("rabbit.hrl").
 -include_lib("stdlib/include/qlc.hrl").
@@ -81,6 +80,7 @@
         -> 'ok' | rabbit_types:channel_exit()).
 -spec(with_exclusive_access_or_die/3 ::
         (name(), pid(), qfun(A)) -> A | rabbit_types:channel_exit()).
+-spec(list/0 :: () -> [rabbit_types:amqqueue()]).
 -spec(list/1 :: (rabbit_types:vhost()) -> [rabbit_types:amqqueue()]).
 -spec(info_keys/0 :: () -> rabbit_types:info_keys()).
 -spec(info/1 :: (rabbit_types:amqqueue()) -> rabbit_types:infos()).
@@ -90,6 +90,7 @@
 -spec(info_all/1 :: (rabbit_types:vhost()) -> [rabbit_types:infos()]).
 -spec(info_all/2 :: (rabbit_types:vhost(), rabbit_types:info_keys())
                     -> [rabbit_types:infos()]).
+-spec(force_event_refresh/0 :: () -> 'ok').
 -spec(consumers/1 ::
         (rabbit_types:amqqueue())
         -> [{pid(), rabbit_types:ctag(), boolean()}]).
@@ -100,7 +101,6 @@
 -spec(stat/1 ::
         (rabbit_types:amqqueue())
         -> {'ok', non_neg_integer(), non_neg_integer()}).
--spec(emit_stats/1 :: (rabbit_types:amqqueue()) -> 'ok').
 -spec(delete_immediately/1 :: (rabbit_types:amqqueue()) -> 'ok').
 -spec(delete/3 ::
         (rabbit_types:amqqueue(), 'false', 'false')
@@ -119,12 +119,13 @@
 -spec(ack/3 :: (pid(), [msg_id()], pid()) -> 'ok').
 -spec(reject/4 :: (pid(), [msg_id()], boolean(), pid()) -> 'ok').
 -spec(notify_down_all/2 :: ([pid()], pid()) -> ok_or_errors()).
--spec(limit_all/3 :: ([pid()], pid(), pid() | 'undefined') -> ok_or_errors()).
+-spec(limit_all/3 :: ([pid()], pid(), rabbit_limiter:token()) ->
+                          ok_or_errors()).
 -spec(basic_get/3 :: (rabbit_types:amqqueue(), pid(), boolean()) ->
                           {'ok', non_neg_integer(), qmsg()} | 'empty').
 -spec(basic_consume/7 ::
-        (rabbit_types:amqqueue(), boolean(), pid(), pid() | 'undefined',
-         rabbit_types:ctag(), boolean(), any())
+        (rabbit_types:amqqueue(), boolean(), pid(),
+         rabbit_limiter:token(), rabbit_types:ctag(), boolean(), any())
         -> rabbit_types:ok_or_error('exclusive_consume_unavailable')).
 -spec(basic_cancel/4 ::
         (rabbit_types:amqqueue(), pid(), rabbit_types:ctag(), any()) -> 'ok').
@@ -142,11 +143,8 @@
 -spec(run_backing_queue/3 ::
         (pid(), atom(),
          (fun ((atom(), A) -> {[rabbit_types:msg_id()], A}))) -> 'ok').
--spec(sync_timeout/1 :: (pid()) -> 'ok').
--spec(update_ram_duration/1 :: (pid()) -> 'ok').
 -spec(set_ram_duration_target/2 :: (pid(), number() | 'infinity') -> 'ok').
 -spec(set_maximum_since_use/2 :: (pid(), non_neg_integer()) -> 'ok').
--spec(maybe_expire/1 :: (pid()) -> 'ok').
 -spec(on_node_down/1 :: (node()) -> 'ok').
 -spec(pseudo_queue/2 :: (name(), pid()) -> rabbit_types:amqqueue()).
 
@@ -230,7 +228,7 @@ internal_declare(Q = #amqqueue{name = QueueName}, false) ->
       end).
 
 store_queue(Q = #amqqueue{durable = true}) ->
-    ok = mnesia:write(rabbit_durable_queue, Q, write),
+    ok = mnesia:write(rabbit_durable_queue, Q#amqqueue{slave_pids = []}, write),
     ok = mnesia:write(rabbit_queue, Q, write),
     ok;
 store_queue(Q = #amqqueue{durable = false}) ->
@@ -365,6 +363,9 @@ check_ha_policy_argument({longstr, Policy}, _Args) ->
 check_ha_policy_argument({Type, _}, _Args) ->
     {error, {unacceptable_type, Type}}.
 
+list() ->
+    mnesia:dirty_match_object(rabbit_queue, #amqqueue{_ = '_'}).
+
 list(VHostPath) ->
     mnesia:dirty_match_object(
       rabbit_queue,
@@ -387,6 +388,10 @@ info_all(VHostPath) -> map(VHostPath, fun (Q) -> info(Q) end).
 
 info_all(VHostPath, Items) -> map(VHostPath, fun (Q) -> info(Q, Items) end).
 
+force_event_refresh() ->
+    [gen_server2:cast(Q#amqqueue.pid, force_event_refresh) || Q <- list()],
+    ok.
+
 consumers(#amqqueue{ pid = QPid }) ->
     delegate_call(QPid, consumers).
 
@@ -404,9 +409,6 @@ consumers_all(VHostPath) ->
 
 stat(#amqqueue{pid = QPid}) ->
     delegate_call(QPid, stat).
-
-emit_stats(#amqqueue{pid = QPid}) ->
-    delegate_cast(QPid, emit_stats).
 
 delete_immediately(#amqqueue{ pid = QPid }) ->
     gen_server2:cast(QPid, delete_immediately).
@@ -439,19 +441,17 @@ notify_down_all(QPids, ChPid) ->
       fun (QPid) -> gen_server2:call(QPid, {notify_down, ChPid}, infinity) end,
       QPids).
 
-limit_all(QPids, ChPid, LimiterPid) ->
+limit_all(QPids, ChPid, Limiter) ->
     delegate:invoke_no_result(
-      QPids, fun (QPid) ->
-                     gen_server2:cast(QPid, {limit, ChPid, LimiterPid})
-             end).
+      QPids, fun (QPid) -> gen_server2:cast(QPid, {limit, ChPid, Limiter}) end).
 
 basic_get(#amqqueue{pid = QPid}, ChPid, NoAck) ->
     delegate_call(QPid, {basic_get, ChPid, NoAck}).
 
-basic_consume(#amqqueue{pid = QPid}, NoAck, ChPid, LimiterPid,
+basic_consume(#amqqueue{pid = QPid}, NoAck, ChPid, Limiter,
               ConsumerTag, ExclusiveConsume, OkMsg) ->
     delegate_call(QPid, {basic_consume, NoAck, ChPid,
-                         LimiterPid, ConsumerTag, ExclusiveConsume, OkMsg}).
+                         Limiter, ConsumerTag, ExclusiveConsume, OkMsg}).
 
 basic_cancel(#amqqueue{pid = QPid}, ChPid, ConsumerTag, OkMsg) ->
     ok = delegate_call(QPid, {basic_cancel, ChPid, ConsumerTag, OkMsg}).
@@ -486,23 +486,11 @@ internal_delete(QueueName) ->
 run_backing_queue(QPid, Mod, Fun) ->
     gen_server2:cast(QPid, {run_backing_queue, Mod, Fun}).
 
-sync_timeout(QPid) ->
-    gen_server2:cast(QPid, sync_timeout).
-
-update_ram_duration(QPid) ->
-    gen_server2:cast(QPid, update_ram_duration).
-
 set_ram_duration_target(QPid, Duration) ->
     gen_server2:cast(QPid, {set_ram_duration_target, Duration}).
 
 set_maximum_since_use(QPid, Age) ->
     gen_server2:cast(QPid, {set_maximum_since_use, Age}).
-
-maybe_expire(QPid) ->
-    gen_server2:cast(QPid, maybe_expire).
-
-drop_expired(QPid) ->
-    gen_server2:cast(QPid, drop_expired).
 
 on_node_down(Node) ->
     rabbit_misc:execute_mnesia_tx_with_tail(
