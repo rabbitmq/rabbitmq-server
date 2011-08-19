@@ -49,7 +49,13 @@ to_string(#upstream{params   = #amqp_params_network{host         = H,
                                                     port         = P,
                                                     virtual_host = V},
                     exchange = XNameBin}) ->
-    iolist_to_binary(io_lib:format("~s:~w:~s:~s", [H, P, V, XNameBin])).
+    PortPart = case P of
+                   undefined -> <<>>;
+                   _         -> print("~w:", [P])
+               end,
+    print("~s:~s~s:~s", [H, PortPart, V, XNameBin]).
+
+print(Fmt, Args) -> iolist_to_binary(io_lib:format(Fmt, Args)).
 
 from_set(SetName, #resource{name         = DefaultXNameBin,
                             virtual_host = DefaultVHost}) ->
