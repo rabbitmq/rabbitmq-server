@@ -1298,7 +1298,7 @@
               applications on the current Erlang node, RabbitMQ and
               Erlang versions, OS name and memory statistics.
               In this context <varname>vm_memory_high_watermark</varname>
-              indicates to the fraction of memory at which flow control is
+              indicates the fraction of memory at which flow control is
               triggered. <varname>vm_memory_limit</varname> refers to the
               absolute memory threshhold at which flow control is triggered.
               The unit of this number and those listed in the <varname>memory</varname>
@@ -1392,7 +1392,7 @@
               <varlistentry>
                 <term>fraction</term>
                 <listitem><para>The new memory threshhold fraction as a floating point number between
-                                0.0 and 1.0 . The fractional part is compulsory.</para></listitem>
+                                0.0 and 1.0 with a mandatory fractional part.</para></listitem>
               </varlistentry>
             </variablelist>
             <para>
@@ -1403,9 +1403,14 @@
               confirm the currently active memory threshhold.
             </para>
             <para>
-              This command may also be used to update the total memory on systems that support
-              hot-swappable RAM. The total amount of RAM is queried and the supplied fraction
-              is used to determine the absolute threshhold.
+              This command will update the memory threshhold as a fraction of the total RAM
+              by querying the total RAM when the command is executed. Therefore the absolute
+              threshhold may change on systems with hot-swappable RAM when this command is executed
+              without altering the fraction.
+            </para>
+            <para>
+              The memory monitor polls memory usage every second. The memory monitor will
+              compare the memory in use with the updated threshhold after a second.
             </para>
             <screen role="example">rabbitmqctl set_vm_memory_high_watermark 0.4</screen>
             <para role="example">
