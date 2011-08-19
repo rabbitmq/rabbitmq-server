@@ -4,7 +4,7 @@
 %% The changes are a search-and-replace to rename the module and avoid
 %% clashes with other versions of pg2, and also a simple rewrite of
 %% "andalso" and "orelse" expressions to case statements where the second
-%% operands is not a boolean since R12B does not allow this.
+%% operand is not a boolean since R12B does not allow this.
 
 %%
 %% %CopyrightBegin%
