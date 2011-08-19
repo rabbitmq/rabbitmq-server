@@ -1471,7 +1471,11 @@ expect_events(Pid, Type) ->
     expect_event(Pid, Type).
 
 expect_event(Pid, Type) ->
-    receive #event{type = Type, props = Props} -> Pid = pget(pid, Props)
+    receive #event{type = Type, props = Props} ->
+            case pget(pid, Props) of
+                Pid -> ok;
+                _   -> expect_event(Pid, Type)
+            end
     after 1000 -> throw({failed_to_receive_event, Type})
     end.
 
