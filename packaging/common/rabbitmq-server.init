@@ -24,6 +24,7 @@ DESC=rabbitmq-server
 USER=rabbitmq
 ROTATE_SUFFIX=
 INIT_LOG_DIR=/var/log/rabbitmq
+PID_FILE=/var/run/rabbitmq/pid
 
 LOCK_FILE= # This is filled in when building packages
 
@@ -40,9 +41,9 @@ start_rabbitmq () {
     else
         RETVAL=0
         set +e
-        setsid sh -c "$DAEMON > ${INIT_LOG_DIR}/startup_log \
-            2> ${INIT_LOG_DIR}/startup_err" &
-        $CONTROL wait >/dev/null 2>&1
+        setsid sh -c "RABBITMQ_PID_FILE=$PID_FILE $DAEMON > \
+            ${INIT_LOG_DIR}/startup_log 2> ${INIT_LOG_DIR}/startup_err" &
+        $CONTROL wait $PID_FILE >/dev/null 2>&1
         RETVAL=$?
         set -e
         case "$RETVAL" in
@@ -53,6 +54,7 @@ start_rabbitmq () {
                 fi
                 ;;
             *)
+                rm -f $PID_FILE
                 echo FAILED - check ${INIT_LOG_DIR}/startup_\{log, _err\}
                 RETVAL=1
                 ;;
@@ -68,6 +70,7 @@ stop_rabbitmq () {
         RETVAL=$?
         set -e
         if [ $RETVAL = 0 ] ; then
+            rm -f $PID_FILE
             if [ -n "$LOCK_FILE" ] ; then
                 rm -f $LOCK_FILE
             fi

@@ -50,6 +50,7 @@ make install TARGET_DIR=%{_maindir} \
 
 mkdir -p %{buildroot}%{_localstatedir}/lib/rabbitmq/mnesia
 mkdir -p %{buildroot}%{_localstatedir}/log/rabbitmq
+mkdir -p %{buildroot}%{_localstatedir}/run/rabbitmq
 
 #Copy all necessary lib files etc.
 install -p -D -m 0755 %{S:1} %{buildroot}%{_initrddir}/rabbitmq-server
@@ -111,6 +112,7 @@ done
 %defattr(-,root,root,-)
 %attr(0750, rabbitmq, rabbitmq) %dir %{_localstatedir}/lib/rabbitmq
 %attr(0750, rabbitmq, rabbitmq) %dir %{_localstatedir}/log/rabbitmq
+%attr(0750, rabbitmq, rabbitmq) %dir %{_localstatedir}/run/rabbitmq
 %dir %{_sysconfdir}/rabbitmq
 %{_initrddir}/rabbitmq-server
 %config(noreplace) %{_sysconfdir}/logrotate.d/rabbitmq-server
