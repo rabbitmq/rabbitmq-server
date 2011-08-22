@@ -47,7 +47,6 @@
 -record(subscription, {dest_hdr, channel, multi_ack, description}).
 
 -define(SUPPORTED_VERSIONS, ["1.0", "1.1"]).
--define(DEFAULT_QUEUE_PREFETCH, 1).
 -define(FLUSH_TIMEOUT, 60000).
 
 %%----------------------------------------------------------------------------
@@ -467,8 +466,8 @@ do_subscribe(Destination, DestHdr, Frame,
              State = #state{subscriptions = Subs,
                             connection    = Connection,
                             channel       = MainChannel}) ->
-    Prefetch = rabbit_stomp_frame:integer_header(Frame, "prefetch-count",
-                                                 default_prefetch(Destination)),
+    Prefetch =
+        rabbit_stomp_frame:integer_header(Frame, "prefetch-count", undefined),
 
     Channel = case Prefetch of
                   undefined ->
@@ -609,11 +608,6 @@ shutdown_channel_and_connection(State = #state{channel       = Channel,
     amqp_channel:close(Channel),
     amqp_connection:close(Connection),
     State#state{channel = none, connection = none, subscriptions = none}.
-
-default_prefetch({queue, _}) ->
-    ?DEFAULT_QUEUE_PREFETCH;
-default_prefetch(_) ->
-    undefined.
 
 %%----------------------------------------------------------------------------
 %% Reply-To
