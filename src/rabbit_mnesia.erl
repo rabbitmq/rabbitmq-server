@@ -720,16 +720,16 @@ reset(Force) ->
         false -> ok
     end,
     Node = node(),
+    Nodes = all_clustered_nodes() -- [Node],
     case Force of
         true  -> ok;
         false ->
             ensure_mnesia_dir(),
             start_mnesia(),
-            {Nodes, RunningNodes} =
+            RunningNodes =
                 try
                     ok = init(),
-                    {all_clustered_nodes() -- [Node],
-                     running_clustered_nodes() -- [Node]}
+                    running_clustered_nodes() -- [Node]
                 after
                     stop_mnesia()
                 end,
@@ -737,6 +737,10 @@ reset(Force) ->
             rabbit_misc:ensure_ok(mnesia:delete_schema([Node]),
                                   cannot_delete_schema)
     end,
+    %% We need to make sure that we don't end up in a distributed
+    %% Erlang system with nodes while not being in an Mnesia cluster
+    %% with them. We don't handle that well.
+    [erlang:disconnect_node(N) || N <- Nodes],
     ok = delete_cluster_nodes_config(),
     %% remove persisted messages and any other garbage we find
     ok = rabbit_misc:recursive_delete(filelib:wildcard(dir() ++ "/*")),
