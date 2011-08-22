@@ -31,7 +31,8 @@
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2, handle_pre_hibernate/1, prioritise_call/3,
-         prioritise_cast/2, prioritise_info/2, format_message_queue/2]).
+         prioritise_cast/2, prioritise_info/2, format_message_queue/2,
+         format_status/2]).
 
 -export([init_with_backing_queue_state/7]).
 
@@ -1212,3 +1213,8 @@ handle_pre_hibernate(State = #q{backing_queue = BQ,
     {hibernate, stop_rate_timer(State1)}.
 
 format_message_queue(Opt, MQ) -> rabbit_misc:format_message_queue(Opt, MQ).
+
+format_status(Opt, [PDict, State = #q{backing_queue       = BQ,
+                                      backing_queue_state = BQS}]) ->
+    [{data, [{"State", State#q{backing_queue_state =
+                                   BQ:format_status(Opt, [PDict, BQS])}}]}].

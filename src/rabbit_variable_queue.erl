@@ -21,7 +21,7 @@
          dropwhile/2, fetch/2, ack/2, requeue/3, len/1, is_empty/1,
          set_ram_duration_target/2, ram_duration/1,
          needs_timeout/1, timeout/1, handle_pre_hibernate/1,
-         status/1, invoke/3, is_duplicate/2, discard/3,
+         status/1, invoke/3, is_duplicate/2, discard/3, format_status/2,
          multiple_routing_keys/0]).
 
 -export([start/1, stop/0]).
@@ -731,6 +731,9 @@ invoke(?MODULE, Fun, State) -> Fun(?MODULE, State).
 is_duplicate(_Msg, State) -> {false, State}.
 
 discard(_Msg, _ChPid, State) -> State.
+
+format_status(_Opt, [_PDict, State]) ->
+    State.
 
 %%----------------------------------------------------------------------------
 %% Minor helpers

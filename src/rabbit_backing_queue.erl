@@ -165,7 +165,12 @@ behaviour_info(callbacks) ->
      %% reason. Note that this is may be invoked for messages for
      %% which BQ:is_duplicate/2 has already returned {'published' |
      %% 'discarded', BQS}.
-     {discard, 3}
+     {discard, 3},
+
+     %% As for format_status in gen_server, except it is not optional,
+     %% and the returned term should be the plain term and not wrapped
+     %% in [{data, [{"State", Term}]}].
+     {format_status, 2}
     ];
 behaviour_info(_Other) ->
     undefined.
