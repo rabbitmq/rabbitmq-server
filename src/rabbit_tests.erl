@@ -1114,7 +1114,13 @@ test_cluster_management2(SecondaryNode) ->
     %% leave system clustered, with the secondary node as a ram node
     ok = control_action(force_reset, []),
     ok = control_action(start_app, []),
-    ok = control_action(force_reset, SecondaryNode, [], []),
+    %% Yes, this is rather ugly. But since we're a clustered Mnesia
+    %% node and we're telling another clustered node to reset itself,
+    %% we will get disconnected half way through causing a
+    %% badrpc. This never happens in real life since rabbitmqctl is
+    %% not a clustered Mnesia node.
+    {badrpc, nodedown} = control_action(force_reset, SecondaryNode, [], []),
+    pong = net_adm:ping(SecondaryNode),
     ok = control_action(cluster, SecondaryNode, [NodeS], []),
     ok = control_action(start_app, SecondaryNode, [], []),
 
