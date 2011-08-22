@@ -411,9 +411,9 @@ init(#amqqueue { name = QueueName, durable = true }, true,
      AsyncCallback, MsgOnDiskFun, MsgIdxOnDiskFun) ->
     Terms = rabbit_queue_index:shutdown_terms(QueueName),
     {PRef, Terms1} =
-        case [persistent_ref] -- proplists:get_keys(Terms) of
-            [] -> {proplists:get_value(persistent_ref, Terms), Terms};
-            _  -> {rabbit_guid:guid(), []}
+        case proplists:get_value(persistent_ref, Terms) of
+            undefined -> {rabbit_guid:guid(), []};
+            PRef1     -> {PRef1, Terms}
         end,
     PersistentClient = msg_store_client_init(?PERSISTENT_MSG_STORE, PRef,
                                              MsgOnDiskFun, AsyncCallback),
