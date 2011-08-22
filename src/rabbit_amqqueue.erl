@@ -320,7 +320,7 @@ check_declare_arguments(QueueName, Args) ->
          ok             -> ok;
          {error, Error} -> rabbit_misc:protocol_error(
                              precondition_failed,
-                             "invalid arg '~s' for ~s: ~w",
+                             "invalid arg '~s' for ~s: ~256p",
                              [Key, rabbit_misc:rs(QueueName), Error])
      end || {Key, Fun} <-
                 [{<<"x-expires">>,     fun check_integer_argument/2},
