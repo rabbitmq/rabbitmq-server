@@ -412,8 +412,7 @@ init(#amqqueue { name = QueueName, durable = true }, true,
     Terms = rabbit_queue_index:shutdown_terms(QueueName),
     {PRef, Terms1} =
         case [persistent_ref] -- proplists:get_keys(Terms) of
-            [] -> {proplists:get_value(persistent_ref, Terms),
-                   Terms};
+            [] -> {proplists:get_value(persistent_ref, Terms), Terms};
             _  -> {rabbit_guid:guid(), []}
         end,
     PersistentClient = msg_store_client_init(?PERSISTENT_MSG_STORE, PRef,
