@@ -742,16 +742,19 @@ format_status(_Opt, [_PDict, State = #vqstate { q1                  = Q1,
                                                 msg_indices_on_disk = MIOD,
                                                 unconfirmed         = UC,
                                                 confirmed           = C }]) ->
-    State #vqstate { q1                  = format_queue(Q1),
-                     q2                  = format_bpqueue(Q2),
-                     q3                  = format_bpqueue(Q3),
-                     q4                  = format_queue(Q4),
-                     pending_ack         = format_pending_acks(PA),
-                     ram_ack_index       = gb_trees:to_list(RAI),
-                     msgs_on_disk        = gb_sets:to_list(MOD),
-                     msg_indices_on_disk = gb_sets:to_list(MIOD),
-                     unconfirmed         = gb_sets:to_list(UC),
-                     confirmed           = gb_sets:to_list(C) }.
+    State1 = setelement(1, State, vqstate_formatted),
+    lists:foldl(
+      fun ({Pos, Value}, StateN) -> setelement(Pos, StateN, Value) end,
+      State1, [{#vqstate.q1,                  format_queue(Q1)},
+               {#vqstate.q2,                  format_bpqueue(Q2)},
+               {#vqstate.q3,                  format_bpqueue(Q3)},
+               {#vqstate.q4,                  format_queue(Q4)},
+               {#vqstate.pending_ack,         format_pending_acks(PA)},
+               {#vqstate.ram_ack_index,       gb_trees:to_list(RAI)},
+               {#vqstate.msgs_on_disk,        gb_sets:to_list(MOD)},
+               {#vqstate.msg_indices_on_disk, gb_sets:to_list(MIOD)},
+               {#vqstate.unconfirmed,         gb_sets:to_list(UC)},
+               {#vqstate.confirmed,           gb_sets:to_list(C)}]).
 
 %%----------------------------------------------------------------------------
 %% Minor helpers
