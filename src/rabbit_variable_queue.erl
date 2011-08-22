@@ -732,8 +732,26 @@ is_duplicate(_Msg, State) -> {false, State}.
 
 discard(_Msg, _ChPid, State) -> State.
 
-format_status(_Opt, [_PDict, State]) ->
-    State.
+format_status(_Opt, [_PDict, State = #vqstate { q1                  = Q1,
+                                                q2                  = Q2,
+                                                q3                  = Q3,
+                                                q4                  = Q4,
+                                                pending_ack         = PA,
+                                                ram_ack_index       = RAI,
+                                                msgs_on_disk        = MOD,
+                                                msg_indices_on_disk = MIOD,
+                                                unconfirmed         = UC,
+                                                confirmed           = C }]) ->
+    State #vqstate { q1                  = format_queue(Q1),
+                     q2                  = format_bpqueue(Q2),
+                     q3                  = format_bpqueue(Q3),
+                     q4                  = format_queue(Q4),
+                     pending_ack         = format_pending_acks(PA),
+                     ram_ack_index       = gb_trees:to_list(RAI),
+                     msgs_on_disk        = gb_sets:to_list(MOD),
+                     msg_indices_on_disk = gb_sets:to_list(MIOD),
+                     unconfirmed         = gb_sets:to_list(UC),
+                     confirmed           = gb_sets:to_list(C) }.
 
 %%----------------------------------------------------------------------------
 %% Minor helpers
@@ -782,6 +800,23 @@ cons_if(false, _E, L) -> L.
 gb_sets_maybe_insert(false, _Val, Set) -> Set;
 %% when requeueing, we re-add a msg_id to the unconfirmed set
 gb_sets_maybe_insert(true,  Val,  Set) -> gb_sets:add(Val, Set).
+
+format_queue(Q) ->
+    [format_msg_status(MsgStatus) || MsgStatus <- queue:to_list(Q)].
+
+format_bpqueue(Q) ->
+    beta_fold(fun (MsgStatus, Acc) -> [format_msg_status(MsgStatus) | Acc] end,
+              [], Q).
+
+format_pending_acks(PA) ->
+    dict:fold(fun (SeqId, {_IsPersistent, _MsgId, _MsgProps} = OnDisk, Acc) ->
+                      [{SeqId, OnDisk} | Acc];
+                  (SeqId, MsgStatus = #msg_status {}, Acc) ->
+                      [{SeqId, format_msg_status(MsgStatus)} | Acc]
+              end, [], PA).
+
+format_msg_status(MsgStatus = #msg_status { msg = undefined }) -> MsgStatus;
+format_msg_status(MsgStatus) -> MsgStatus #msg_status { msg = '_' }.
 
 msg_status(IsPersistent, SeqId, Msg = #basic_message { id = MsgId },
            MsgProps) ->
