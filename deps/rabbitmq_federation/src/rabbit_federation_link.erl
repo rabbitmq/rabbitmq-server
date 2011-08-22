@@ -71,6 +71,7 @@ start_link(Args) ->
     gen_server2:start_link(?MODULE, Args, [{timeout, infinity}]).
 
 init(Args = {_, XName}) ->
+    process_flag(trap_exit, true), %% So terminate/2 gets called
     join(rabbit_federation_exchanges),
     join({rabbit_federation_exchange, XName}),
     gen_server2:cast(self(), maybe_go),
