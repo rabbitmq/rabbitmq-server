@@ -7,4 +7,3 @@ $(PACKAGE_DIR)+pre-test::
 	for R in hare flopsy mopsy cottontail ; do \
 	  erl_call -sname $$R -q ; \
 	done
-
