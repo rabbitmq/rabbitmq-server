@@ -79,10 +79,10 @@ start_link_1_0({Protocol, Sock, Channel, FrameMax, ReaderPid, Username, VHost,
     {ok, ChannelPid} =
         supervisor2:start_child(
           SupPid,
-          {channel, {rabbit_amqp1_0_session, start_link,
+          {channel, {rabbit_amqp1_0_session_process, start_link,
                      [Channel, ReaderPid, WriterPid, Username, VHost,
                       Collector, start_limiter_fun(SupPid)]},
-           intrinsic, ?MAX_WAIT, worker, [rabbit_amqp1_0_session]}),
+           intrinsic, ?MAX_WAIT, worker, [rabbit_amqp1_0_session_process]}),
     %% Not bothering with the framing channel just yet
     {ok, SupPid, ChannelPid}.
 
