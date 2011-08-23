@@ -445,7 +445,7 @@ attach_outgoing(DefaultOutcome, Outcomes,
                                        default_outcome = DOSym}, State) of
         {ok, Source1,
          OutgoingLink = #outgoing_link{ queue = QueueName,
-                                        delivery_count = Count }, State1} ->
+                                        delivery_count = Count }} ->
             CTag = handle_to_ctag(Handle),
             %% Zero the credit before we start consuming, so that we only
             %% use explicitly given credit.
@@ -475,12 +475,12 @@ attach_outgoing(DefaultOutcome, Outcomes,
                                   %% and [...]. We think we're correct here
                                   %% outcomes = Outcomes
                                  },
-                       role = ?SEND_ROLE}, State1};
+                       role = ?SEND_ROLE}, State};
                 Fail ->
                     protocol_error(?V_1_0_AMQP_ERROR_INTERNAL_ERROR, "Consume failed: ~p", Fail)
             end;
-        {error, _Reason, State1} ->
-            {reply, #'v1_0.attach'{source = undefined}, State1}
+        {error, _Reason} ->
+            {reply, #'v1_0.attach'{source = undefined}, State}
     end.
 
 flow_session_fields(Frames, State) ->
@@ -699,20 +699,19 @@ ensure_source(Source = #'v1_0.source'{address       = Address,
                                       dynamic       = Dynamic,
                                       expiry_policy = ExpiryPolicy,
                                       timeout       = Timeout},
-              Link = #outgoing_link{}, State) ->
+              Link = #outgoing_link{},
+              #session{declaring_channel = DCh}) ->
     case Dynamic of
         true ->
             case Address of
                 undefined ->
-                    {ok, QueueName, State1} = rabbit_amqp1_0_link_util:create_queue(Timeout, State),
+                    {ok, QueueName} = rabbit_amqp1_0_link_util:create_queue(Timeout, DCh),
                     {ok,
                      Source#'v1_0.source'{address = {utf8, rabbit_amqp1_0_link_util:queue_address(QueueName)}},
-                     Link#outgoing_link{queue = QueueName},
-                     State1};
+                     Link#outgoing_link{queue = QueueName}};
                 _Else ->
                     {error, {both_dynamic_and_address_supplied,
-                             Dynamic, Address},
-                     State}
+                             Dynamic, Address}}
             end;
         _ ->
             %% TODO ugh. This will go away after the planned codec rewrite.
@@ -722,27 +721,26 @@ ensure_source(Source = #'v1_0.source'{address       = Address,
                           end,
             case rabbit_amqp1_0_link_util:parse_destination(Destination) of
                 ["queue", Name] ->
-                    case rabbit_amqp1_0_link_util:check_queue(Name, State) of
-                        {ok, QueueName, State1} ->
+                    case rabbit_amqp1_0_link_util:check_queue(Name, DCh) of
+                        {ok, QueueName} ->
                             {ok, Source,
-                             Link#outgoing_link{queue = QueueName}, State1};
-                        {error, Reason, State1} ->
-                            {error, Reason, State1}
+                             Link#outgoing_link{queue = QueueName}};
+                        {error, Reason} ->
+                            {error, Reason}
                     end;
                 ["exchange", Name, RK] ->
-                    case rabbit_amqp1_0_link_util:check_exchange(Name, State) of
-                        {ok, ExchangeName, State1} ->
+                    case rabbit_amqp1_0_link_util:check_exchange(Name, DCh) of
+                        {ok, ExchangeName} ->
                             RoutingKey = list_to_binary(RK),
-                            {ok, QueueName, State2} =
-                                rabbit_amqp1_0_link_util:create_bound_queue(ExchangeName, RoutingKey,
-                                                   State1),
-                            {ok, Source, Link#outgoing_link{queue = QueueName},
-                             State2};
-                        {error, Reason, State1} ->
-                            {error, Reason, State1}
+                            {ok, QueueName} =
+                                rabbit_amqp1_0_link_util:create_bound_queue(
+                                  ExchangeName, RoutingKey, DCh),
+                            {ok, Source, Link#outgoing_link{queue = QueueName}};
+                        {error, Reason} ->
+                            {error, Reason}
                     end;
                 _Otherwise ->
-                    {error, {unknown_address, Destination}, State}
+                    {error, {unknown_address, Destination}}
             end
     end.
 
