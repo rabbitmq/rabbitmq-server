@@ -1,6 +1,7 @@
 -module(rabbit_amqp1_0_session).
 
 -export([process_frame/2, maybe_init_publish_id/2, publish/3]).
+-export([next_transfer_number/1]).
 
 -include("rabbit_amqp1_0_session.hrl").
 
@@ -36,5 +37,4 @@ publish(Settled, TxfrId,
                     incoming_unsettled_map = Unsettled1}.
 
 next_transfer_number(TransferNumber) ->
-    %% TODO this should be a serial number
     rabbit_misc:serial_add(TransferNumber, 1).
