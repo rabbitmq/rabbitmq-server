@@ -21,7 +21,7 @@
 -export([start_link/4, successfully_recovered_state/1,
          client_init/4, client_terminate/1, client_delete_and_terminate/1,
          client_ref/1, close_all_indicated/1,
-         write/3, read/2, contains/2, remove/2, sync/3]).
+         write/3, read/2, contains/2, remove/2]).
 
 -export([set_maximum_since_use/2, has_readers/2, combine_files/3,
          delete_file/2]). %% internal
@@ -36,7 +36,7 @@
 
 -include("rabbit_msg_store.hrl").
 
--define(SYNC_INTERVAL,  5).   %% milliseconds
+-define(SYNC_INTERVAL,  25).   %% milliseconds
 -define(CLEAN_FILENAME, "clean.dot").
 -define(FILE_SUMMARY_FILENAME, "file_summary.ets").
 -define(TRANSFORM_TMP, "transform_tmp").
@@ -60,7 +60,6 @@
           current_file,           %% current file name as number
           current_file_handle,    %% current file handle since the last fsync?
           file_handle_cache,      %% file handle cache
-          on_sync,                %% pending sync requests
           sync_timer_ref,         %% TRef for our interval timer
           sum_valid_data,         %% sum of valid data in all files
           sum_file_size,          %% sum of file sizes
@@ -133,7 +132,8 @@
 -type(msg_ref_delta_gen(A) ::
         fun ((A) -> 'finished' |
                     {rabbit_types:msg_id(), non_neg_integer(), A})).
--type(maybe_msg_id_fun() :: 'undefined' | fun ((gb_set()) -> any())).
+-type(maybe_msg_id_fun() ::
+        'undefined' | fun ((gb_set(), 'written' | 'removed') -> any())).
 -type(maybe_close_fds_fun() :: 'undefined' | fun (() -> 'ok')).
 -type(deletion_thunk() :: fun (() -> boolean())).
 
@@ -151,8 +151,6 @@
                      {rabbit_types:ok(msg()) | 'not_found', client_msstate()}).
 -spec(contains/2 :: (rabbit_types:msg_id(), client_msstate()) -> boolean()).
 -spec(remove/2 :: ([rabbit_types:msg_id()], client_msstate()) -> 'ok').
--spec(sync/3 ::
-        ([rabbit_types:msg_id()], fun (() -> any()), client_msstate()) -> 'ok').
 
 -spec(set_maximum_since_use/2 :: (server(), non_neg_integer()) -> 'ok').
 -spec(has_readers/2 :: (non_neg_integer(), gc_state()) -> boolean()).
@@ -441,7 +439,6 @@ contains(MsgId, CState) -> server_call(CState, {contains, MsgId}).
 remove([],    _CState) -> ok;
 remove(MsgIds, CState = #client_msstate { client_ref = CRef }) ->
     server_cast(CState, {remove, CRef, MsgIds}).
-sync(MsgIds, K, CState) -> server_cast(CState, {sync, MsgIds, K}).
 
 set_maximum_since_use(Server, Age) ->
     gen_server2:cast(Server, {set_maximum_since_use, Age}).
@@ -638,7 +635,6 @@ init([Server, BaseDir, ClientRefs, StartupFunState]) ->
                        current_file           = 0,
                        current_file_handle    = undefined,
                        file_handle_cache      = dict:new(),
-                       on_sync                = [],
                        sync_timer_ref         = undefined,
                        sum_valid_data         = 0,
                        sum_file_size          = 0,
@@ -760,21 +756,6 @@ handle_cast({remove, CRef, MsgIds}, State) ->
     noreply(maybe_compact(client_confirm(CRef, gb_sets:from_list(MsgIds),
                                          removed, State1)));
 
-handle_cast({sync, MsgIds, K},
-            State = #msstate { current_file        = CurFile,
-                               current_file_handle = CurHdl,
-                               on_sync             = Syncs }) ->
-    {ok, SyncOffset} = file_handle_cache:last_sync_offset(CurHdl),
-    case lists:any(fun (MsgId) ->
-                           #msg_location { file = File, offset = Offset } =
-                               index_lookup(MsgId, State),
-                           File =:= CurFile andalso Offset >= SyncOffset
-                   end, MsgIds) of
-        false -> K(),
-                 noreply(State);
-        true  -> noreply(State #msstate { on_sync = [K | Syncs] })
-    end;
-
 handle_cast({combine_files, Source, Destination, Reclaimed},
             State = #msstate { sum_file_size    = SumFileSize,
                                file_handles_ets = FileHandlesEts,
@@ -853,17 +834,15 @@ reply(Reply, State) ->
     {reply, Reply, State1, Timeout}.
 
 next_state(State = #msstate { sync_timer_ref  = undefined,
-                              on_sync         = Syncs,
                               cref_to_msg_ids = CTM }) ->
-    case {Syncs, dict:size(CTM)} of
-        {[], 0} -> {State, hibernate};
-        _       -> {start_sync_timer(State), 0}
+    case dict:size(CTM) of
+        0 -> {State, hibernate};
+        _ -> {start_sync_timer(State), 0}
     end;
-next_state(State = #msstate { on_sync         = Syncs,
-                              cref_to_msg_ids = CTM }) ->
-    case {Syncs, dict:size(CTM)} of
-        {[], 0} -> {stop_sync_timer(State), hibernate};
-        _       -> {State, 0}
+next_state(State = #msstate { cref_to_msg_ids = CTM }) ->
+    case dict:size(CTM) of
+        0 -> {stop_sync_timer(State), hibernate};
+        _ -> {State, 0}
     end.
 
 start_sync_timer(State = #msstate { sync_timer_ref = undefined }) ->
@@ -877,7 +856,6 @@ stop_sync_timer(State = #msstate { sync_timer_ref = TRef }) ->
     State #msstate { sync_timer_ref = undefined }.
 
 internal_sync(State = #msstate { current_file_handle = CurHdl,
-                                 on_sync             = Syncs,
                                  cref_to_msg_ids     = CTM }) ->
     State1 = stop_sync_timer(State),
     CGs = dict:fold(fun (CRef, MsgIds, NS) ->
@@ -886,16 +864,13 @@ internal_sync(State = #msstate { current_file_handle = CurHdl,
                                 false -> [{CRef, MsgIds} | NS]
                             end
                     end, [], CTM),
-    ok = case {Syncs, CGs} of
-             {[], []} -> ok;
-             _        -> file_handle_cache:sync(CurHdl)
+    ok = case CGs of
+             [] -> ok;
+             _  -> file_handle_cache:sync(CurHdl)
          end,
-    [K() || K <- lists:reverse(Syncs)],
-    State2 = lists:foldl(
-               fun ({CRef, MsgIds}, StateN) ->
-                       client_confirm(CRef, MsgIds, written, StateN)
-               end, State1, CGs),
-    State2 #msstate { on_sync = [] }.
+    lists:foldl(fun ({CRef, MsgIds}, StateN) ->
+                        client_confirm(CRef, MsgIds, written, StateN)
+                end, State1, CGs).
 
 write_action({true, not_found}, _MsgId, State) ->
     {ignore, undefined, State};

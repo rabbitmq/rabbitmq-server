@@ -19,7 +19,7 @@
 -behaviour(application).
 
 -export([prepare/0, start/0, stop/0, stop_and_halt/0, status/0, environment/0,
-         rotate_logs/1]).
+         rotate_logs/1, force_event_refresh/0]).
 
 -export([start/2, stop/1]).
 
@@ -187,8 +187,9 @@
 -spec(prepare/0 :: () -> 'ok').
 -spec(start/0 :: () -> 'ok').
 -spec(stop/0 :: () -> 'ok').
--spec(stop_and_halt/0 :: () -> 'ok').
+-spec(stop_and_halt/0 :: () -> no_return()).
 -spec(rotate_logs/1 :: (file_suffix()) -> rabbit_types:ok_or_error(any())).
+-spec(force_event_refresh/0 :: () -> 'ok').
 -spec(status/0 ::
         () -> [{pid, integer()} |
                {running_applications, [{atom(), string(), string()}]} |
@@ -511,6 +512,12 @@ log_rotation_result(ok, {error, SaslLogError}) ->
     {error, {cannot_rotate_sasl_logs, SaslLogError}};
 log_rotation_result(ok, ok) ->
     ok.
+
+force_event_refresh() ->
+    rabbit_direct:force_event_refresh(),
+    rabbit_networking:force_connection_event_refresh(),
+    rabbit_channel:force_event_refresh(),
+    rabbit_amqqueue:force_event_refresh().
 
 %%---------------------------------------------------------------------------
 %% misc

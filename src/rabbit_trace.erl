@@ -76,7 +76,7 @@ update_config(Fun) ->
     {ok, VHosts0} = application:get_env(rabbit, ?TRACE_VHOSTS),
     VHosts = Fun(VHosts0),
     application:set_env(rabbit, ?TRACE_VHOSTS, VHosts),
-    rabbit_channel:refresh_config_all(),
+    rabbit_channel:refresh_config_local(),
     ok.
 
 %%----------------------------------------------------------------------------

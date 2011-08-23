@@ -34,6 +34,7 @@
 -rabbit_upgrade({ha_mirrors,            mnesia, []}).
 -rabbit_upgrade({gm,                    mnesia, []}).
 -rabbit_upgrade({exchange_scratch,      mnesia, [trace_exchanges]}).
+-rabbit_upgrade({mirrored_supervisor,   mnesia, []}).
 
 %% -------------------------------------------------------------------
 
@@ -52,6 +53,7 @@
 -spec(ha_mirrors/0            :: () -> 'ok').
 -spec(gm/0                    :: () -> 'ok').
 -spec(exchange_scratch/0      :: () -> 'ok').
+-spec(mirrored_supervisor/0   :: () -> 'ok').
 
 -endif.
 
@@ -169,6 +171,11 @@ exchange_scratch(Table) ->
               {exchange, Name, Type, Dur, AutoDel, Int, Args, undefined}
       end,
       [name, type, durable, auto_delete, internal, arguments, scratch]).
+
+mirrored_supervisor() ->
+    create(mirrored_sup_childspec,
+           [{record_name, mirrored_sup_childspec},
+            {attributes, [key, mirroring_pid, childspec]}]).
 
 %%--------------------------------------------------------------------
 

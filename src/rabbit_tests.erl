@@ -20,6 +20,8 @@
 
 -export([all_tests/0, test_parsing/0, test_serial_arithmetic/0]).
 
+-import(rabbit_misc, [pget/2]).
+
 -include("rabbit.hrl").
 -include("rabbit_framing.hrl").
 -include_lib("kernel/include/file.hrl").
@@ -36,6 +38,7 @@ test_content_prop_roundtrip(Datum, Binary) ->
 
 all_tests() ->
     passed = gm_tests:all_tests(),
+    passed = mirrored_supervisor_tests:all_tests(),
     application:set_env(rabbit, file_handles_high_watermark, 10, infinity),
     ok = file_handle_cache:set_limit(10),
     passed = test_file_handle_cache(),
@@ -86,6 +89,7 @@ run_cluster_dependent_tests(SecondaryNode) ->
     passed = test_delegates_sync(SecondaryNode),
     passed = test_queue_cleanup(SecondaryNode),
     passed = test_declare_on_dead_queue(SecondaryNode),
+    passed = test_refresh_events(SecondaryNode),
 
     %% we now run the tests remotely, so that code coverage on the
     %% local node picks up more of the delegate
@@ -95,7 +99,8 @@ run_cluster_dependent_tests(SecondaryNode) ->
                    fun () -> Rs = [ test_delegates_async(Node),
                                     test_delegates_sync(Node),
                                     test_queue_cleanup(Node),
-                                    test_declare_on_dead_queue(Node) ],
+                                    test_declare_on_dead_queue(Node),
+                                    test_refresh_events(Node) ],
                              Self ! {self(), Rs}
                    end),
     receive
@@ -1223,15 +1228,16 @@ test_server_status() ->
     {ok, Ch} = rabbit_channel:start_link(
                  1, self(), Writer, self(), rabbit_framing_amqp_0_9_1,
                  user(<<"user">>), <<"/">>, [], self(),
-                 fun (_) -> {ok, self()} end),
+                 rabbit_limiter:make_token(self())),
     [Q, Q2] = [Queue || Name <- [<<"foo">>, <<"bar">>],
                         {new, Queue = #amqqueue{}} <-
                             [rabbit_amqqueue:declare(
                                rabbit_misc:r(<<"/">>, queue, Name),
                                false, false, [], none)]],
 
-    ok = rabbit_amqqueue:basic_consume(Q, true, Ch, undefined,
-                                       <<"ctag">>, true, undefined),
+    ok = rabbit_amqqueue:basic_consume(
+           Q, true, Ch, rabbit_limiter:make_token(),
+           <<"ctag">>, true, undefined),
 
     %% list queues
     ok = info_action(list_queues, rabbit_amqqueue:info_keys(), true),
@@ -1289,13 +1295,33 @@ test_spawn() ->
     Writer = spawn(fun () -> test_writer(Me) end),
     {ok, Ch} = rabbit_channel:start_link(
                  1, Me, Writer, Me, rabbit_framing_amqp_0_9_1,
-                 user(<<"guest">>), <<"/">>, [], self(),
-                 fun (_) -> {ok, self()} end),
+                 user(<<"guest">>), <<"/">>, [], Me,
+                  rabbit_limiter:make_token(self())),
     ok = rabbit_channel:do(Ch, #'channel.open'{}),
     receive #'channel.open_ok'{} -> ok
     after 1000 -> throw(failed_to_receive_channel_open_ok)
     end,
     {Writer, Ch}.
+
+test_spawn(Node) ->
+    rpc:call(Node, ?MODULE, test_spawn_remote, []).
+
+%% Spawn an arbitrary long lived process, so we don't end up linking
+%% the channel to the short-lived process (RPC, here) spun up by the
+%% RPC server.
+test_spawn_remote() ->
+    RPC = self(),
+    spawn(fun () ->
+                  {Writer, Ch} = test_spawn(),
+                  RPC ! {Writer, Ch},
+                  link(Ch),
+                  receive
+                      _ -> ok
+                  end
+          end),
+    receive Res -> Res
+    after 1000  -> throw(failed_to_receive_result)
+    end.
 
 user(Username) ->
     #user{username     = Username,
@@ -1303,25 +1329,6 @@ user(Username) ->
           auth_backend = rabbit_auth_backend_internal,
           impl         = #internal_user{username = Username,
                                         tags     = [administrator]}}.
-
-test_statistics_event_receiver(Pid) ->
-    receive
-        Foo -> Pid ! Foo, test_statistics_event_receiver(Pid)
-    end.
-
-test_statistics_receive_event(Ch, Matcher) ->
-    rabbit_channel:flush(Ch),
-    Ch ! emit_stats,
-    test_statistics_receive_event1(Ch, Matcher).
-
-test_statistics_receive_event1(Ch, Matcher) ->
-    receive #event{type = channel_stats, props = Props} ->
-            case Matcher(Props) of
-                true -> Props;
-                _    -> test_statistics_receive_event1(Ch, Matcher)
-            end
-    after 1000 -> throw(failed_to_receive_event)
-    end.
 
 test_confirms() ->
     {_Writer, Ch} = test_spawn(),
@@ -1383,6 +1390,25 @@ test_confirms() ->
 
     passed.
 
+test_statistics_event_receiver(Pid) ->
+    receive
+        Foo -> Pid ! Foo, test_statistics_event_receiver(Pid)
+    end.
+
+test_statistics_receive_event(Ch, Matcher) ->
+    rabbit_channel:flush(Ch),
+    Ch ! emit_stats,
+    test_statistics_receive_event1(Ch, Matcher).
+
+test_statistics_receive_event1(Ch, Matcher) ->
+    receive #event{type = channel_stats, props = Props} ->
+            case Matcher(Props) of
+                true -> Props;
+                _    -> test_statistics_receive_event1(Ch, Matcher)
+            end
+    after 1000 -> throw(failed_to_receive_event)
+    end.
+
 test_statistics() ->
     application:set_env(rabbit, collect_statistics, fine),
 
@@ -1400,7 +1426,7 @@ test_statistics() ->
     QPid = Q#amqqueue.pid,
     X = rabbit_misc:r(<<"/">>, exchange, <<"">>),
 
-    rabbit_tests_event_receiver:start(self()),
+    rabbit_tests_event_receiver:start(self(), [node()], [channel_stats]),
 
     %% Check stats empty
     Event = test_statistics_receive_event(Ch, fun (_) -> true end),
@@ -1442,6 +1468,40 @@ test_statistics() ->
     rabbit_channel:shutdown(Ch),
     rabbit_tests_event_receiver:stop(),
     passed.
+
+test_refresh_events(SecondaryNode) ->
+    rabbit_tests_event_receiver:start(self(), [node(), SecondaryNode],
+                                      [channel_created, queue_created]),
+
+    {_Writer, Ch} = test_spawn(),
+    expect_events(Ch, channel_created),
+    rabbit_channel:shutdown(Ch),
+
+    {_Writer2, Ch2} = test_spawn(SecondaryNode),
+    expect_events(Ch2, channel_created),
+    rabbit_channel:shutdown(Ch2),
+
+    {new, #amqqueue { pid = QPid } = Q} =
+        rabbit_amqqueue:declare(test_queue(), false, false, [], none),
+    expect_events(QPid, queue_created),
+    rabbit_amqqueue:delete(Q, false, false),
+
+    rabbit_tests_event_receiver:stop(),
+    passed.
+
+expect_events(Pid, Type) ->
+    expect_event(Pid, Type),
+    rabbit:force_event_refresh(),
+    expect_event(Pid, Type).
+
+expect_event(Pid, Type) ->
+    receive #event{type = Type, props = Props} ->
+            case pget(pid, Props) of
+                Pid -> ok;
+                _   -> expect_event(Pid, Type)
+            end
+    after 1000 -> throw({failed_to_receive_event, Type})
+    end.
 
 test_delegates_async(SecondaryNode) ->
     Self = self(),
@@ -1548,16 +1608,19 @@ test_queue_cleanup(_SecondaryNode) ->
             ok
     after 1000 -> throw(failed_to_receive_queue_declare_ok)
     end,
+    rabbit_channel:shutdown(Ch),
     rabbit:stop(),
     rabbit:start(),
-    rabbit_channel:do(Ch, #'queue.declare'{ passive = true,
-                                            queue   = ?CLEANUP_QUEUE_NAME }),
+    {_Writer2, Ch2} = test_spawn(),
+    rabbit_channel:do(Ch2, #'queue.declare'{ passive = true,
+                                             queue   = ?CLEANUP_QUEUE_NAME }),
     receive
         #'channel.close'{reply_code = ?NOT_FOUND} ->
             ok
     after 2000 ->
             throw(failed_to_receive_channel_exit)
     end,
+    rabbit_channel:shutdown(Ch2),
     passed.
 
 test_declare_on_dead_queue(SecondaryNode) ->
@@ -1791,24 +1854,48 @@ msg_id_bin(X) ->
 msg_store_client_init(MsgStore, Ref) ->
     rabbit_msg_store:client_init(MsgStore, Ref, undefined, undefined).
 
+on_disk_capture() ->
+    on_disk_capture({gb_sets:new(), gb_sets:new(), undefined}).
+on_disk_capture({OnDisk, Awaiting, Pid}) ->
+    Pid1 = case Pid =/= undefined andalso gb_sets:is_empty(Awaiting) of
+               true  -> Pid ! {self(), arrived}, undefined;
+               false -> Pid
+           end,
+    receive
+        {await, MsgIds, Pid2} ->
+            true = Pid1 =:= undefined andalso gb_sets:is_empty(Awaiting),
+            on_disk_capture({OnDisk, gb_sets:subtract(MsgIds, OnDisk), Pid2});
+        {on_disk, MsgIds} ->
+            on_disk_capture({gb_sets:union(OnDisk, MsgIds),
+                             gb_sets:subtract(Awaiting, MsgIds),
+                             Pid1});
+        stop ->
+            done
+    end.
+
+on_disk_await(Pid, MsgIds) when is_list(MsgIds) ->
+    Pid ! {await, gb_sets:from_list(MsgIds), self()},
+    receive {Pid, arrived} -> ok end.
+
+on_disk_stop(Pid) ->
+    MRef = erlang:monitor(process, Pid),
+    Pid ! stop,
+    receive {'DOWN', MRef, process, Pid, _Reason} ->
+            ok
+    end.
+
+msg_store_client_init_capture(MsgStore, Ref) ->
+    Pid = spawn(fun on_disk_capture/0),
+    {Pid, rabbit_msg_store:client_init(
+            MsgStore, Ref, fun (MsgIds, _ActionTaken) ->
+                                   Pid ! {on_disk, MsgIds}
+                           end, undefined)}.
+
 msg_store_contains(Atom, MsgIds, MSCState) ->
     Atom = lists:foldl(
              fun (MsgId, Atom1) when Atom1 =:= Atom ->
                      rabbit_msg_store:contains(MsgId, MSCState) end,
              Atom, MsgIds).
-
-msg_store_sync(MsgIds, MSCState) ->
-    Ref = make_ref(),
-    Self = self(),
-    ok = rabbit_msg_store:sync(MsgIds, fun () -> Self ! {sync, Ref} end,
-                               MSCState),
-    receive
-        {sync, Ref} -> ok
-    after
-        10000 ->
-            io:format("Sync from msg_store missing for msg_ids ~p~n", [MsgIds]),
-            throw(timeout)
-    end.
 
 msg_store_read(MsgIds, MSCState) ->
     lists:foldl(fun (MsgId, MSCStateM) ->
@@ -1843,22 +1930,18 @@ foreach_with_msg_store_client(MsgStore, Ref, Fun, L) ->
 
 test_msg_store() ->
     restart_msg_store_empty(),
-    Self = self(),
     MsgIds = [msg_id_bin(M) || M <- lists:seq(1,100)],
     {MsgIds1stHalf, MsgIds2ndHalf} = lists:split(50, MsgIds),
     Ref = rabbit_guid:guid(),
-    MSCState = msg_store_client_init(?PERSISTENT_MSG_STORE, Ref),
+    {Cap, MSCState} = msg_store_client_init_capture(?PERSISTENT_MSG_STORE, Ref),
     %% check we don't contain any of the msgs we're about to publish
     false = msg_store_contains(false, MsgIds, MSCState),
     %% publish the first half
     ok = msg_store_write(MsgIds1stHalf, MSCState),
     %% sync on the first half
-    ok = msg_store_sync(MsgIds1stHalf, MSCState),
+    ok = on_disk_await(Cap, MsgIds1stHalf),
     %% publish the second half
     ok = msg_store_write(MsgIds2ndHalf, MSCState),
-    %% sync on the first half again - the msg_store will be dirty, but
-    %% we won't need the fsync
-    ok = msg_store_sync(MsgIds1stHalf, MSCState),
     %% check they're all in there
     true = msg_store_contains(true, MsgIds, MSCState),
     %% publish the latter half twice so we hit the caching and ref count code
@@ -1867,25 +1950,8 @@ test_msg_store() ->
     true = msg_store_contains(true, MsgIds, MSCState),
     %% sync on the 2nd half, but do lots of individual syncs to try
     %% and cause coalescing to happen
-    ok = lists:foldl(
-           fun (MsgId, ok) -> rabbit_msg_store:sync(
-                                [MsgId], fun () -> Self ! {sync, MsgId} end,
-                                MSCState)
-           end, ok, MsgIds2ndHalf),
-    lists:foldl(
-      fun(MsgId, ok) ->
-              receive
-                  {sync, MsgId} -> ok
-              after
-                  10000 ->
-                      io:format("Sync from msg_store missing (msg_id: ~p)~n",
-                                [MsgId]),
-                      throw(timeout)
-              end
-      end, ok, MsgIds2ndHalf),
-    %% it's very likely we're not dirty here, so the 1st half sync
-    %% should hit a different code path
-    ok = msg_store_sync(MsgIds1stHalf, MSCState),
+    ok = on_disk_await(Cap, MsgIds2ndHalf),
+    ok = on_disk_stop(Cap),
     %% read them all
     MSCState1 = msg_store_read(MsgIds, MSCState),
     %% read them all again - this will hit the cache, not disk

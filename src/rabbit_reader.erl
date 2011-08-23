@@ -18,7 +18,8 @@
 -include("rabbit_framing.hrl").
 -include("rabbit.hrl").
 
--export([start_link/3, info_keys/0, info/1, info/2, shutdown/2]).
+-export([start_link/3, info_keys/0, info/1, info/2, force_event_refresh/1,
+         shutdown/2]).
 
 -export([system_continue/3, system_terminate/4, system_code_change/4]).
 
@@ -68,6 +69,7 @@
 -spec(info_keys/0 :: () -> rabbit_types:info_keys()).
 -spec(info/1 :: (pid()) -> rabbit_types:infos()).
 -spec(info/2 :: (pid(), rabbit_types:info_keys()) -> rabbit_types:infos()).
+-spec(force_event_refresh/1 :: (pid()) -> 'ok').
 -spec(shutdown/2 :: (pid(), string()) -> 'ok').
 -spec(conserve_memory/2 :: (pid(), boolean()) -> 'ok').
 -spec(server_properties/1 :: (rabbit_types:protocol()) ->
@@ -122,6 +124,9 @@ info(Pid, Items) ->
         {ok, Res}      -> Res;
         {error, Error} -> throw(Error)
     end.
+
+force_event_refresh(Pid) ->
+    gen_server:cast(Pid, force_event_refresh).
 
 conserve_memory(Pid, Conserve) ->
     Pid ! {conserve_memory, Conserve},
@@ -316,6 +321,10 @@ handle_other({'$gen_call', From, {info, Items}}, Deb, State) ->
     gen_server:reply(From, try {ok, infos(Items, State)}
                            catch Error -> {error, Error}
                            end),
+    mainloop(Deb, State);
+handle_other({'$gen_cast', force_event_refresh}, Deb, State) ->
+    rabbit_event:notify(connection_created,
+                        [{type, network} | infos(?CREATION_EVENT_KEYS, State)]),
     mainloop(Deb, State);
 handle_other(emit_stats, Deb, State) ->
     mainloop(Deb, emit_stats(State));

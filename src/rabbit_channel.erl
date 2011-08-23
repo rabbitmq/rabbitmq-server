@@ -23,14 +23,17 @@
 -export([start_link/10, do/2, do/3, flush/1, shutdown/1]).
 -export([send_command/2, deliver/4, flushed/2, confirm/2]).
 -export([list/0, info_keys/0, info/1, info/2, info_all/0, info_all/1]).
--export([refresh_config_all/0, ready_for_close/1]).
+-export([refresh_config_local/0, ready_for_close/1]).
+-export([force_event_refresh/0]).
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2, handle_pre_hibernate/1, prioritise_call/3,
          prioritise_cast/2, prioritise_info/2, format_message_queue/2]).
+%% Internal
+-export([list_local/0]).
 
 -record(ch, {state, protocol, channel, reader_pid, writer_pid, conn_pid,
-             limiter_pid, start_limiter_fun, tx_status, next_tag,
+             limiter, tx_status, next_tag,
              unacked_message_q, uncommitted_message_q, uncommitted_ack_q,
              user, virtual_host, most_recently_declared_queue,
              consumer_mapping, blocking, consumer_monitors, queue_collector_pid,
@@ -71,8 +74,7 @@
 -spec(start_link/10 ::
         (channel_number(), pid(), pid(), pid(), rabbit_types:protocol(),
          rabbit_types:user(), rabbit_types:vhost(), rabbit_framing:amqp_table(),
-         pid(), fun ((non_neg_integer()) -> rabbit_types:ok(pid()))) ->
-                           rabbit_types:ok_pid_or_error()).
+         pid(), rabbit_limiter:token()) -> rabbit_types:ok_pid_or_error()).
 -spec(do/2 :: (pid(), rabbit_framing:amqp_method_record()) -> 'ok').
 -spec(do/3 :: (pid(), rabbit_framing:amqp_method_record(),
                rabbit_types:maybe(rabbit_types:content())) -> 'ok').
@@ -85,23 +87,25 @@
 -spec(flushed/2 :: (pid(), pid()) -> 'ok').
 -spec(confirm/2 ::(pid(), [non_neg_integer()]) -> 'ok').
 -spec(list/0 :: () -> [pid()]).
+-spec(list_local/0 :: () -> [pid()]).
 -spec(info_keys/0 :: () -> rabbit_types:info_keys()).
 -spec(info/1 :: (pid()) -> rabbit_types:infos()).
 -spec(info/2 :: (pid(), rabbit_types:info_keys()) -> rabbit_types:infos()).
 -spec(info_all/0 :: () -> [rabbit_types:infos()]).
 -spec(info_all/1 :: (rabbit_types:info_keys()) -> [rabbit_types:infos()]).
--spec(refresh_config_all/0 :: () -> 'ok').
+-spec(refresh_config_local/0 :: () -> 'ok').
 -spec(ready_for_close/1 :: (pid()) -> 'ok').
+-spec(force_event_refresh/0 :: () -> 'ok').
 
 -endif.
 
 %%----------------------------------------------------------------------------
 
 start_link(Channel, ReaderPid, WriterPid, ConnPid, Protocol, User, VHost,
-           Capabilities, CollectorPid, StartLimiterFun) ->
+           Capabilities, CollectorPid, Limiter) ->
     gen_server2:start_link(
       ?MODULE, [Channel, ReaderPid, WriterPid, ConnPid, Protocol, User,
-                VHost, Capabilities, CollectorPid, StartLimiterFun], []).
+                VHost, Capabilities, CollectorPid, Limiter], []).
 
 do(Pid, Method) ->
     do(Pid, Method, none).
@@ -128,6 +132,10 @@ confirm(Pid, MsgSeqNos) ->
     gen_server2:cast(Pid, {confirm, MsgSeqNos, self()}).
 
 list() ->
+    rabbit_misc:append_rpc_all_nodes(rabbit_mnesia:running_clustered_nodes(),
+                                     rabbit_channel, list_local, []).
+
+list_local() ->
     pg_local:get_members(rabbit_channels).
 
 info_keys() -> ?INFO_KEYS.
@@ -147,18 +155,22 @@ info_all() ->
 info_all(Items) ->
     rabbit_misc:filter_exit_map(fun (C) -> info(C, Items) end, list()).
 
-refresh_config_all() ->
+refresh_config_local() ->
     rabbit_misc:upmap(
-      fun (C) -> gen_server2:call(C, refresh_config) end, list()),
+      fun (C) -> gen_server2:call(C, refresh_config) end, list_local()),
     ok.
 
 ready_for_close(Pid) ->
     gen_server2:cast(Pid, ready_for_close).
 
+force_event_refresh() ->
+    [gen_server2:cast(C, force_event_refresh) || C <- list()],
+    ok.
+
 %%---------------------------------------------------------------------------
 
 init([Channel, ReaderPid, WriterPid, ConnPid, Protocol, User, VHost,
-      Capabilities, CollectorPid, StartLimiterFun]) ->
+      Capabilities, CollectorPid, Limiter]) ->
     process_flag(trap_exit, true),
     ok = pg_local:join(rabbit_channels, self()),
     StatsTimer = rabbit_event:init_stats_timer(),
@@ -168,8 +180,7 @@ init([Channel, ReaderPid, WriterPid, ConnPid, Protocol, User, VHost,
                 reader_pid              = ReaderPid,
                 writer_pid              = WriterPid,
                 conn_pid                = ConnPid,
-                limiter_pid             = undefined,
-                start_limiter_fun       = StartLimiterFun,
+                limiter                 = Limiter,
                 tx_status               = none,
                 next_tag                = 1,
                 unacked_message_q       = queue:new(),
@@ -296,6 +307,10 @@ handle_cast({deliver, ConsumerTag, AckRequired,
     rabbit_trace:tap_trace_out(Msg, TraceState),
     noreply(State1#ch{next_tag = DeliveryTag + 1});
 
+
+handle_cast(force_event_refresh, State) ->
+    rabbit_event:notify(channel_created, infos(?CREATION_EVENT_KEYS, State)),
+    noreply(State);
 handle_cast({confirm, MsgSeqNos, From}, State) ->
     State1 = #ch{confirmed = C} = confirm(MsgSeqNos, From, State),
     noreply([send_confirms], State1, case C of [] -> hibernate; _ -> 0 end).
@@ -704,7 +719,7 @@ handle_method(#'basic.consume'{queue        = QueueNameBin,
                                exclusive    = ExclusiveConsume,
                                nowait       = NoWait},
               _, State = #ch{conn_pid          = ConnPid,
-                             limiter_pid       = LimiterPid,
+                             limiter           = Limiter,
                              consumer_mapping  = ConsumerMapping}) ->
     case dict:find(ConsumerTag, ConsumerMapping) of
         error ->
@@ -723,7 +738,7 @@ handle_method(#'basic.consume'{queue        = QueueNameBin,
                    QueueName, ConnPid,
                    fun (Q) ->
                            {rabbit_amqqueue:basic_consume(
-                              Q, NoAck, self(), LimiterPid,
+                              Q, NoAck, self(), Limiter,
                               ActualConsumerTag, ExclusiveConsume,
                               ok_msg(NoWait, #'basic.consume_ok'{
                                        consumer_tag = ActualConsumerTag})),
@@ -797,22 +812,23 @@ handle_method(#'basic.qos'{prefetch_size = Size}, _, _State) when Size /= 0 ->
     rabbit_misc:protocol_error(not_implemented,
                                "prefetch_size!=0 (~w)", [Size]);
 
-handle_method(#'basic.qos'{prefetch_count = PrefetchCount},
-              _, State = #ch{limiter_pid = LimiterPid}) ->
-    LimiterPid1 = case {LimiterPid, PrefetchCount} of
-                      {undefined, 0} -> undefined;
-                      {undefined, _} -> start_limiter(State);
-                      {_, _}         -> LimiterPid
-                  end,
-    LimiterPid2 = case rabbit_limiter:limit(LimiterPid1, PrefetchCount) of
-                      ok      -> LimiterPid1;
-                      stopped -> unlimit_queues(State)
-                  end,
-    {reply, #'basic.qos_ok'{}, State#ch{limiter_pid = LimiterPid2}};
+handle_method(#'basic.qos'{prefetch_count = PrefetchCount}, _,
+              State = #ch{limiter = Limiter}) ->
+    Limiter1 = case {rabbit_limiter:is_enabled(Limiter), PrefetchCount} of
+                   {false, 0} -> Limiter;
+                   {false, _} -> enable_limiter(State);
+                   {_, _}     -> Limiter
+               end,
+    Limiter3 = case rabbit_limiter:limit(Limiter1, PrefetchCount) of
+                   ok                   -> Limiter1;
+                   {disabled, Limiter2} -> ok = limit_queues(Limiter2, State),
+                                           Limiter2
+               end,
+    {reply, #'basic.qos_ok'{}, State#ch{limiter = Limiter3}};
 
 handle_method(#'basic.recover_async'{requeue = true},
               _, State = #ch{unacked_message_q = UAMQ,
-                             limiter_pid = LimiterPid}) ->
+                             limiter = Limiter}) ->
     OkFun = fun () -> ok end,
     ok = fold_per_queue(
            fun (QPid, MsgIds, ok) ->
@@ -826,7 +842,7 @@ handle_method(#'basic.recover_async'{requeue = true},
                                       QPid, lists:reverse(MsgIds), self())
                             end)
            end, ok, UAMQ),
-    ok = notify_limiter(LimiterPid, UAMQ),
+    ok = notify_limiter(Limiter, UAMQ),
     %% No answer required - basic.recover is the newer, synchronous
     %% variant of this method
     {noreply, State#ch{unacked_message_q = queue:new()}};
@@ -1073,23 +1089,23 @@ handle_method(#'confirm.select'{nowait = NoWait}, _, State) ->
               NoWait, #'confirm.select_ok'{});
 
 handle_method(#'channel.flow'{active = true}, _,
-              State = #ch{limiter_pid = LimiterPid}) ->
-    LimiterPid1 = case rabbit_limiter:unblock(LimiterPid) of
-                      ok      -> LimiterPid;
-                      stopped -> unlimit_queues(State)
-                  end,
-    {reply, #'channel.flow_ok'{active = true},
-     State#ch{limiter_pid = LimiterPid1}};
+              State = #ch{limiter = Limiter}) ->
+    Limiter2 = case rabbit_limiter:unblock(Limiter) of
+                   ok                   -> Limiter;
+                   {disabled, Limiter1} -> ok = limit_queues(Limiter1, State),
+                                           Limiter1
+               end,
+    {reply, #'channel.flow_ok'{active = true}, State#ch{limiter = Limiter2}};
 
 handle_method(#'channel.flow'{active = false}, _,
-              State = #ch{limiter_pid = LimiterPid,
-                          consumer_mapping = Consumers}) ->
-    LimiterPid1 = case LimiterPid of
-                      undefined -> start_limiter(State);
-                      Other     -> Other
-                  end,
-    State1 = State#ch{limiter_pid = LimiterPid1},
-    ok = rabbit_limiter:block(LimiterPid1),
+              State = #ch{consumer_mapping = Consumers,
+                          limiter          = Limiter}) ->
+    Limiter1 = case rabbit_limiter:is_enabled(Limiter) of
+                   true  -> Limiter;
+                   false -> enable_limiter(State)
+               end,
+    State1 = State#ch{limiter = Limiter1},
+    ok = rabbit_limiter:block(Limiter1),
     case consumer_queues(Consumers) of
         []    -> {reply, #'channel.flow_ok'{active = false}, State1};
         QPids -> Queues = [{QPid, erlang:monitor(process, QPid)} ||
@@ -1102,7 +1118,7 @@ handle_method(#'basic.credit'{consumer_tag = CTag,
                               credit = Credit,
                               count = Count,
                               drain = Drain}, _,
-              State = #ch{limiter_pid      = LimiterPid,
+              State = #ch{limiter      = Limiter,
                           consumer_mapping = Consumers}) ->
     %% We get Available first because it's likely that as soon as we set
     %% the credit msgs will get consumed and it'll be out of date. Why do we
@@ -1115,18 +1131,18 @@ handle_method(#'basic.credit'{consumer_tag = CTag,
                                     end;
                     error        -> -1 %% TODO these -1s smell very iffy!
                 end,
-    LimiterPid1 = case LimiterPid of
-                      undefined -> start_limiter(State);
-                      Other     -> Other
-                  end,
-    LimiterPid2 =
+    Limiter1 = case rabbit_limiter:is_enabled(Limiter) of
+                   true  -> Limiter;
+                   false -> enable_limiter(State)
+               end,
+    Limiter3 =
         case rabbit_limiter:set_credit(
-               LimiterPid1, CTag, Credit, Count, Drain) of
-            ok      -> limit_queues(LimiterPid1, State),
-                       LimiterPid1;
-            stopped -> unlimit_queues(State)
+               Limiter1, CTag, Credit, Count, Drain) of
+            ok                   -> Limiter1;
+            {disabled, Limiter2} -> ok = limit_queues(Limiter2, State),
+                                    Limiter2
         end,
-    State1 = State#ch{limiter_pid = LimiterPid2},
+    State1 = State#ch{limiter = Limiter3},
     return_ok(State1, false, #'basic.credit_ok'{available = Available});
 
 handle_method(_MethodRecord, _Content, _State) ->
@@ -1250,7 +1266,7 @@ reject(DeliveryTag, Requeue, Multiple, State = #ch{unacked_message_q = UAMQ}) ->
            fun (QPid, MsgIds, ok) ->
                    rabbit_amqqueue:reject(QPid, MsgIds, Requeue, self())
            end, ok, Acked),
-    ok = notify_limiter(State#ch.limiter_pid, Acked),
+    ok = notify_limiter(State#ch.limiter, Acked),
     {noreply, State#ch{unacked_message_q = Remaining}}.
 
 ack_record(DeliveryTag, ConsumerTag,
@@ -1287,7 +1303,7 @@ ack(Acked, State) ->
                       [{QPid, length(MsgIds)} | L]
               end, [], Acked),
     maybe_incr_stats(QIncs, ack, State),
-    ok = notify_limiter(State#ch.limiter_pid, Acked),
+    ok = notify_limiter(State#ch.limiter, Acked),
     State.
 
 new_tx(State) -> State#ch{uncommitted_message_q = queue:new(),
@@ -1311,17 +1327,14 @@ fold_per_queue(F, Acc0, UAQ) ->
     dict:fold(fun (QPid, MsgIds, Acc) -> F(QPid, MsgIds, Acc) end,
               Acc0, D).
 
-start_limiter(State = #ch{unacked_message_q = UAMQ, start_limiter_fun = SLF}) ->
-    {ok, LPid} = SLF(queue:len(UAMQ)),
-    ok = limit_queues(LPid, State),
-    LPid.
+enable_limiter(State = #ch{unacked_message_q = UAMQ,
+                           limiter           = Limiter}) ->
+    Limiter1 = rabbit_limiter:enable(Limiter, queue:len(UAMQ)),
+    ok = limit_queues(Limiter1, State),
+    Limiter1.
 
-unlimit_queues(State) ->
-    ok = limit_queues(undefined, State),
-    undefined.
-
-limit_queues(LPid, #ch{consumer_mapping = Consumers}) ->
-    rabbit_amqqueue:limit_all(consumer_queues(Consumers), self(), LPid).
+limit_queues(Limiter, #ch{consumer_mapping = Consumers}) ->
+    rabbit_amqqueue:limit_all(consumer_queues(Consumers), self(), Limiter).
 
 consumer_queues(Consumers) ->
     lists:usort([QPid ||
@@ -1332,15 +1345,16 @@ consumer_queues(Consumers) ->
 %% for messages delivered to subscribed consumers, but not acks for
 %% messages sent in a response to a basic.get (identified by their
 %% 'none' consumer tag)
-notify_limiter(undefined, _Acked) ->
-    ok;
-notify_limiter(LimiterPid, Acked) ->
-    %% TODO this could be faster, group the acks
-    rabbit_misc:queue_fold(
-      fun ({_, none, _}, Acc) -> Acc;
-          ({_, CTag, _}, Acc) -> rabbit_limiter:ack(LimiterPid, CTag),
-                                 Acc
-      end, ok, Acked).
+notify_limiter(Limiter, Acked) ->
+    case rabbit_limiter:is_enabled(Limiter) of
+        false -> ok;
+        true  -> case rabbit_misc:queue_fold(fun ({_, none, _}, Acc) -> Acc;
+                                                 ({_, _, _}, Acc)    -> Acc + 1
+                                             end, 0, Acked) of
+                     0     -> ok;
+                     Count -> rabbit_limiter:ack(Limiter, Count)
+                 end
+    end.
 
 deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{
                                                        exchange_name = XName},
@@ -1477,10 +1491,10 @@ i(messages_uncommitted, #ch{uncommitted_message_q = TMQ}) ->
     queue:len(TMQ);
 i(acks_uncommitted, #ch{uncommitted_ack_q = TAQ}) ->
     queue:len(TAQ);
-i(prefetch_count, #ch{limiter_pid = LimiterPid}) ->
-    rabbit_limiter:get_limit(LimiterPid);
-i(client_flow_blocked, #ch{limiter_pid = LimiterPid}) ->
-    rabbit_limiter:is_blocked(LimiterPid);
+i(prefetch_count, #ch{limiter = Limiter}) ->
+    rabbit_limiter:get_limit(Limiter);
+i(client_flow_blocked, #ch{limiter = Limiter}) ->
+    rabbit_limiter:is_blocked(Limiter);
 i(Item, _) ->
     throw({bad_argument, Item}).
 
