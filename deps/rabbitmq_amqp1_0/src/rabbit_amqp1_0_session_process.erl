@@ -104,7 +104,7 @@ handle_info({#'basic.deliver'{consumer_tag = ConsumerTag,
                 transfer(WriterPid, Handle, Link, BCh, Session, RKey, Msg, DeliveryTag),
             put({out, Handle}, NewLink),
             {noreply, State#state{session = NewSession#session{
-                                              next_transfer_number = next_transfer_number(TransferNum)}}};
+                                              next_transfer_number = rabbit_amqp1_0_session:next_transfer_number(TransferNum)}}};
         undefined ->
             %% FIXME handle missing link -- why does the queue think it's there?
             rabbit_log:warning("Delivery to non-existent consumer ~p", [ConsumerTag]),
@@ -302,12 +302,12 @@ handle_control(#'v1_0.begin'{next_outgoing_id = {uint, RemoteNextIn},
 handle_control(#'v1_0.attach'{role = ?SEND_ROLE} = Attach,
                State = #state{ backing_channel = BCh,
                                declaring_channel = DCh,
-                               session = Session = #session{
-                                           next_publish_id = NextPublishId }}) ->
-    {ok, Reply, NextPublishId1} =
-        rabbit_amqp1_0_incoming_link:attach(Attach, BCh, DCh, NextPublishId),
-    {reply, flow_session_fields(Reply, State#state.session),
-     State#state{session = Session#session{next_publish_id = NextPublishId1}}};
+                               session = Session}) ->
+    {ok, Reply, Confirm} =
+        rabbit_amqp1_0_incoming_link:attach(Attach, BCh, DCh),
+    {reply, flow_session_fields(Reply, Session),
+     State#state{session = rabbit_amqp1_0_session:maybe_init_publish_id(
+                             Confirm, Session)}};
 
 handle_control(#'v1_0.attach'{source = Source,
                               initial_delivery_count = undefined,
@@ -317,21 +317,13 @@ handle_control(#'v1_0.attach'{source = Source,
     {DefaultOutcome, Outcomes} = rabbit_amqp1_0_link_util:outcomes(Source),
     attach_outgoing(DefaultOutcome, Outcomes, Attach, State);
 
-handle_control([Txfr = #'v1_0.transfer'{delivery_id = {uint, TxfrId}} |
-                AnnotatedMessage],
-               State = #state{backing_channel        = BCh,
-                              session = Session = #session{
-                                          next_publish_id = NextPublishId,
-                                          incoming_unsettled_map = Unsettled}}) ->
-    {ok, Reply, NextPublishId1, Unsettled1} =
-        rabbit_amqp1_0_incoming_link:transfer(
-          Txfr, AnnotatedMessage, BCh, NextPublishId, Unsettled),
-    {reply, Reply,
-     State#state{session = Session#session{
-                             next_publish_id        = NextPublishId1,
-                             next_transfer_number   = next_transfer_number(TxfrId),
-                             incoming_unsettled_map = Unsettled1}}};
-
+handle_control([Txfr = #'v1_0.transfer'{settled = Settled,
+                                        delivery_id = {uint, TxfrId}} | Msg],
+               State = #state{backing_channel = BCh,
+                              session         = Session}) ->
+    {ok, Reply} = rabbit_amqp1_0_incoming_link:transfer(Txfr, Msg, BCh),
+    {reply, Reply, State#state{session = rabbit_amqp1_0_session:publish(
+                                           Settled, TxfrId, Session)}};
 
 %% Disposition: a single extent is settled at a time.  This may
 %% involve more than one message. TODO: should we send a flow after
@@ -743,10 +735,6 @@ ensure_source(Source = #'v1_0.source'{address       = Address,
                     {error, {unknown_address, Destination}}
             end
     end.
-
-next_transfer_number(TransferNumber) ->
-    %% TODO this should be a serial number
-    rabbit_misc:serial_add(TransferNumber, 1).
 
 handle_to_ctag({uint, H}) ->
     <<"ctag-", H:32/integer>>.

@@ -1,6 +1,6 @@
 -module(rabbit_amqp1_0_incoming_link).
 
--export([attach/4, transfer/5]).
+-export([attach/3, transfer/3]).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_amqp1_0.hrl").
@@ -21,24 +21,24 @@ attach(#'v1_0.attach'{name = Name,
                       snd_settle_mode = SndSettleMode,
                       target = Target,
                       initial_delivery_count = {uint, InitTransfer}},
-       BCh, DCh, NextPublishId) ->
+       BCh, DCh) ->
     %% TODO associate link name with target
     case ensure_target(Target, #incoming_link{ name = Name }, DCh) of
         {ok, ServerTarget,
          IncomingLink = #incoming_link{ delivery_count = InitTransfer }} ->
             {_, _Outcomes} = rabbit_amqp1_0_link_util:outcomes(Source),
             %% Default is mixed!
-            NextPublishId1 =
+            Confirm =
                 case SndSettleMode of
                     ?V_1_0_SENDER_SETTLE_MODE_SETTLED ->
-                        NextPublishId;
+                        false;
                     _ ->
                         %% TODO we need to deal with mixed settlement mode -
                         %% presumably by turning on confirms and then throwing
                         %% some away.
                         amqp_channel:register_confirm_handler(BCh, self()),
                         amqp_channel:call(BCh, #'confirm.select'{}),
-                        erlang:max(1, NextPublishId)
+                        true
                 end,
             put({in, Handle}, IncomingLink),
             Flow = #'v1_0.flow'{ handle = Handle,
@@ -52,7 +52,7 @@ attach(#'v1_0.attach'{name = Name,
               target = ServerTarget,
               initial_delivery_count = undefined, % must be, I am the recvr
               role = ?RECV_ROLE}, %% server is receiver
-            {ok, [Attach, Flow], NextPublishId1};
+            {ok, [Attach, Flow], Confirm};
         {error, Reason} ->
             rabbit_log:warning("AMQP 1.0 attach rejected ~p~n", [Reason]),
             %% TODO proper link estalishment protocol here?
@@ -60,10 +60,7 @@ attach(#'v1_0.attach'{name = Name,
                                "Attach rejected: ~p", [Reason])
     end.
 
-transfer(#'v1_0.transfer'{handle = Handle,
-                          settled = Settled,
-                          delivery_id = {uint, TxfrId}},
-         AnnotatedMessage, BCh, NextPublishId, Unsettled) ->
+transfer(#'v1_0.transfer'{handle = Handle}, AnnotatedMessage, BCh) ->
     case get({in, Handle}) of
         #incoming_link{ exchange = X, routing_key = LinkRKey,
                         delivery_count = Count,
@@ -74,10 +71,6 @@ transfer(#'v1_0.transfer'{handle = Handle,
                        undefined -> MsgRKey;
                        _         -> LinkRKey
                    end,
-            NextPublishId1 = case NextPublishId of
-                                 0 -> 0;
-                                 _ -> NextPublishId + 1 % serial?
-                             end,
             amqp_channel:call(BCh, #'basic.publish'{exchange    = X,
                                                     routing_key = RKey}, Msg),
             {SendFlow, CreditUsed1} = case CreditUsed - 1 of
@@ -89,18 +82,6 @@ transfer(#'v1_0.transfer'{handle = Handle,
             NewLink = Link#incoming_link{ delivery_count = NewCount,
                                           credit_used = CreditUsed1 },
             put({in, Handle}, NewLink),
-            Unsettled1 = case Settled of
-                             true  -> Unsettled;
-                             %% Be lenient -- this is a boolean and really ought
-                             %% to have a value, but the spec doesn't currently
-                             %% require it.
-                             Symbol when
-                                   Symbol =:= false orelse
-                                   Symbol =:= undefined ->
-                                 gb_trees:insert(NextPublishId,
-                                                 TxfrId,
-                                                 Unsettled)
-                         end,
             Reply = case SendFlow of
                         true ->
                             ?DEBUG("sending flow for incoming ~p", [NewLink]),
@@ -108,7 +89,7 @@ transfer(#'v1_0.transfer'{handle = Handle,
                         false ->
                             []
                     end,
-            {ok, Reply, NextPublishId1, Unsettled1};
+            {ok, Reply};
         undefined ->
             protocol_error(?V_1_0_AMQP_ERROR_ILLEGAL_STATE,
                            "Unknown link handle ~p", [Handle])
