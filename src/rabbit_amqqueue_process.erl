@@ -1215,6 +1215,12 @@ handle_pre_hibernate(State = #q{backing_queue = BQ,
 format_message_queue(Opt, MQ) -> rabbit_misc:format_message_queue(Opt, MQ).
 
 format_status(Opt, [PDict, State = #q{backing_queue       = BQ,
-                                      backing_queue_state = BQS}]) ->
-    [{data, [{"State", State#q{backing_queue_state =
-                                   BQ:format_status(Opt, [PDict, BQS])}}]}].
+                                      backing_queue_state = BQS,
+                                      msg_id_to_channel   = MTC}]) ->
+    State1 = setelement(1, State, q_formatted),
+    State2 = lists:foldl(
+               fun({Pos, Value}, StateN) -> setelement(Pos, StateN, Value) end,
+               State1, [{#q.backing_queue_state,
+                         BQ:format_status(Opt, [PDict, BQS])},
+                        {#q.msg_id_to_channel, dict:to_list(MTC)}]),
+    [{data, [{"State", State2}]}].
