@@ -24,7 +24,7 @@ var SORT_QUERIES  = map(['/connections', '/channels', '/vhosts', '/users',
 var KNOWN_ARGS = {'alternate-exchange': {'short': 'AE',  'type': 'string'},
                   'x-message-ttl':      {'short': 'TTL', 'type': 'int'},
                   'x-expires':          {'short': 'Exp', 'type': 'int'},
-                  'x-ha-policy':        {'short': 'M',   'type': 'string'}};
+                  'x-ha-policy':        {'short': 'HA',  'type': 'string'}};
 
 // Things that are like arguments that we format the same way in listings.
 var IMPLICIT_ARGS = {'durable':         {'short': 'D',   'type': 'boolean'},

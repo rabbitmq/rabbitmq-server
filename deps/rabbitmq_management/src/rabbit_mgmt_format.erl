@@ -62,6 +62,11 @@ node_from_pid('')                   -> [];
 node_from_pid(unknown)              -> [];
 node_from_pid(none)                 -> [].
 
+nodes_from_pids(Name) ->
+    fun('')   -> [];
+       (Pids) -> [{Name, [node(Pid) || Pid <- Pids]}]
+    end.
+
 ip(unknown) -> unknown;
 ip(IP)      -> list_to_binary(rabbit_misc:ntoa(IP)).
 
@@ -226,7 +231,8 @@ type_val({struct, M})         -> {table,   to_amqp_table(M)};
 type_val(L) when is_list(L)   -> {array,   to_amqp_array(L)};
 type_val(X) when is_binary(X) -> {longstr, X};
 type_val(X) when is_number(X) -> {long,    X};
-type_val(X)                   -> throw({unhandled_type, X}).
+type_val(null)                -> throw({error, null_not_allowed});
+type_val(X)                   -> throw({error, {unhandled_type, X}}).
 
 url(Fmt, Vals) ->
     print(Fmt, [mochiweb_util:quote_plus(V) || V <- Vals]).
@@ -321,8 +327,7 @@ strip_pids(Item = [T | _]) when is_tuple(T) ->
     format(Item,
            [{fun node_from_pid/1, [pid]},
             {fun remove/1,        ?PIDS_TO_STRIP},
-            {fun mirror_nodes/1,  [slave_pids]}]);
+            {nodes_from_pids(slave_nodes), [slave_pids]}
+           ]);
 
 strip_pids(Items) -> [strip_pids(I) || I <- Items].
-
-mirror_nodes(Pids) -> [{mirror_nodes, [node(Pid) || Pid <- Pids]}].

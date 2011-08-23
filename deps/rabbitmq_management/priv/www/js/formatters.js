@@ -93,11 +93,25 @@ function args_to_params(obj) {
 }
 
 function fmt_mirrors(queue) {
-    if (queue.mirror_nodes && queue.mirror_nodes.length > 0) {
-        return '<acronym title="Mirrors: ' + queue.mirror_nodes + '">+' +
-            queue.mirror_nodes.length + '</acronym>';
+    var synced = queue.synchronised_slave_nodes || [];
+    var unsynced = queue.slave_nodes || [];
+    unsynced = jQuery.grep(unsynced,
+                           function (node, i) {
+                               return jQuery.inArray(node, synced) == -1
+                           });
+    var res = '';
+    if (synced.length > 0) {
+        res += ' <acronym title="Synchronised mirrors: ' + synced + '">+' +
+            synced.length + '</acronym>';
     }
-    return '';
+    if (synced.length == 0 && unsynced.length > 0) {
+        res += ' <acronym title="There are no synchronised mirrors">+0</acronym>';
+    }
+    if (unsynced.length > 0) {
+        res += ' <acronym class="warning" title="Unsynchronised mirrors: ' +
+            unsynced + '">+' + unsynced.length + '</acronym>';
+    }
+    return res;
 }
 
 function fmt_channel_mode(ch) {

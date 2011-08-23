@@ -11,24 +11,23 @@
 %%   The Original Code is RabbitMQ Management Console.
 %%
 %%   The Initial Developer of the Original Code is VMware, Inc.
-%%   Copyright (c) 2010-2011 VMware, Inc.  All rights reserved.
+%%   Copyright (c) 2011 VMware, Inc.  All rights reserved.
 %%
 
--module(rabbit_mgmt_global_sup).
+-module(rabbit_mgmt_sup).
 
--behaviour(supervisor).
+-behaviour(mirrored_supervisor).
 
 -export([init/1]).
 -export([start_link/0]).
 
+-include_lib("rabbit_common/include/rabbit.hrl").
+
 init([]) ->
     DB = {rabbit_mgmt_db,
-          {rabbit_mgmt_db, start_link, []},
-          permanent, 5000, worker, [rabbit_mgmt_db]},
+              {rabbit_mgmt_db, start_link, []},
+              permanent, ?MAX_WAIT, worker, [rabbit_mgmt_db]},
     {ok, {{one_for_one, 10, 10}, [DB]}}.
 
 start_link() ->
-    case supervisor:start_link({global, ?MODULE}, ?MODULE, []) of
-        {error, {already_started, _}} -> ignore;
-        Else                          -> Else
-    end.
+     mirrored_supervisor:start_link({local, ?MODULE}, ?MODULE, ?MODULE, []).

@@ -73,19 +73,26 @@ listeners() ->
        || L <- rabbit_networking:active_listeners()],
       ["protocol", "port", "node"] ).
 
+%%--------------------------------------------------------------------
+
 rabbit_mochiweb_contexts() ->
-    Nodes = proplists:get_value(running_nodes, rabbit_mnesia:status()),
     rabbit_mgmt_util:sort_list(
-      lists:append([contexts(Node) || Node <- Nodes]),
+      lists:append([contexts(Node) ||
+                       Node <- rabbit_mnesia:running_clustered_nodes()]),
       ["description", "port", "node"]).
 
 contexts(Node) ->
-    case rabbit_mgmt_external_stats:info(Node, [contexts]) of
-        [{contexts, Contexts}] ->
-            [[{node, Node} | format_mochiweb_option_list(C)] || C <- Contexts];
-        [{external_stats_not_running, true}] ->
-            []
+    case rpc:call(Node, rabbit_mochiweb_registry, list_all, [], infinity) of
+        {badrpc, {'EXIT', {undef, _}}} ->
+            [];
+        Contexts ->
+            [[{node, Node} | format_context(C)] || C <- Contexts]
     end.
+
+format_context({Path, Description, Rest}) ->
+    [{description, list_to_binary(Description)},
+     {path,        list_to_binary("/" ++ Path)} |
+     format_mochiweb_option_list(Rest)].
 
 format_mochiweb_option_list(C) ->
     [{K, format_mochiweb_option(K, V)} || {K, V} <- C].
