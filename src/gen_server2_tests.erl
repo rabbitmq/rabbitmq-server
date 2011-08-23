@@ -27,10 +27,10 @@
 init([]) ->
     {ok, queue:new()}.
 
-handle_call(pause, From, Q) ->
+handle_call(await_go, From, Q) ->
     gen_server2:reply(From, ok),
-    timer:sleep(1000),
-    {noreply, queue:in({call, pause}, Q)};
+    receive go -> ok end,
+    {noreply, queue:in({call, await_go}, Q)};
 handle_call(stop, _From, Q) ->
     Q1 = queue:in({call, stop}, Q),
     {stop, normal, queue:to_list(Q1), Q1};
@@ -49,26 +49,27 @@ terminate(_Reason, _Q) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
-prioritise_call(pause, _From, _State)  -> {infinity, infinity};
-prioritise_call(stop, _From, _State)   -> {0, 0};
-prioritise_call({W, P}, _From, _State) -> {W, P};
-prioritise_call(P, _From, _State)      -> P.
+prioritise_call(await_go, _From, _State)  -> {infinity, infinity};
+prioritise_call(stop, _From, _State)      -> {0, 0};
+prioritise_call({W, P}, _From, _State)    -> {W, P};
+prioritise_call(P, _From, _State)         -> P.
 
-prioritise_cast({W, P}, _State)        -> {W, P};
-prioritise_cast(P, _State)             -> P.
+prioritise_cast({W, P}, _State)           -> {W, P};
+prioritise_cast(P, _State)                -> P.
 
-prioritise_info({W, P}, _State)        -> {W, P};
-prioritise_info(P, _State)             -> P.
+prioritise_info({W, P}, _State)           -> {W, P};
+prioritise_info(P, _State)                -> P.
 
 test() ->
     {ok, Pid} = gen_server2:start_link(?MODULE, [], []),
     unlink(Pid),
-    ok = gen_server2:pcall(Pid, pause, infinity),
+    ok = gen_server2:pcall(Pid, await_go, infinity),
     [gen_server2:pcast(Pid, {W, P})
      || W <- [infinity | lists:seq(0, 10)],
         P <- [infinity | lists:seq(0, 10)]],
+    Pid ! go,
     Order = gen_server2:pcall(Pid, stop, infinity),
-    Order = [{call, pause} |
+    Order = [{call, await_go} |
              [{cast, {W, P}} ||
                  P <- [infinity | lists:seq(10, 0, -1)],
                  W <- [infinity | lists:seq(0, 10)]] ++
