@@ -44,12 +44,12 @@ serialise_events() -> true.
 
 route(X, Delivery) -> with_module(X, fun (M) -> M:route(X, Delivery) end).
 
-validate(#exchange{name      = #resource{name = XNameBin, virtual_host = VHost},
+validate(#exchange{name      = XName,
                    arguments = Args} = X) ->
     validate_arg(<<"upstream-set">>, longstr, Args),
     validate_arg(<<"type">>,         longstr, Args),
     {longstr, SetName} = rabbit_misc:table_lookup(Args, <<"upstream-set">>),
-    case rabbit_federation_upstream:from_set(SetName, XNameBin, VHost) of
+    case rabbit_federation_upstream:from_set(SetName, XName) of
         {error, E} -> fail_error(SetName, E);
         {ok, _}    -> ok
     end,
@@ -62,10 +62,12 @@ validate(#exchange{name      = #resource{name = XNameBin, virtual_host = VHost},
 
 create(transaction, X) ->
     with_module(X, fun (M) -> M:create(transaction, X) end);
-create(none, X = #exchange{name = XName}) ->
-    Upstreams = upstreams(X),
+create(none, X = #exchange{name      = XName,
+                           arguments = Args}) ->
+    {longstr, Set} = rabbit_misc:table_lookup(Args, <<"upstream-set">>),
+    {ok, Upstreams} = rabbit_federation_upstream:from_set(Set, XName),
     ok = rabbit_federation_db:prune_scratch(XName, Upstreams),
-    {ok, _} = rabbit_federation_sup:start_child(XName, {Upstreams, XName}),
+    {ok, _} = rabbit_federation_sup:start_child(XName, {Set, XName}),
     with_module(X, fun (M) -> M:create(none, X) end).
 
 delete(transaction, X, Bs) ->
@@ -107,13 +109,6 @@ with_module(#exchange{arguments = Args}, Fun) ->
     {ok, Module} = rabbit_registry:lookup_module(
                      exchange, list_to_existing_atom(binary_to_list(Type))),
     Fun(Module).
-
-upstreams(#exchange{name      = #resource{name         = XNameBin,
-                                          virtual_host = VHost},
-                    arguments = Args}) ->
-    {longstr, Set} = rabbit_misc:table_lookup(Args, <<"upstream-set">>),
-    {ok, Upstreams} = rabbit_federation_upstream:from_set(Set, XNameBin, VHost),
-    Upstreams.
 
 validate_arg(Name, Type, Args) ->
     case rabbit_misc:table_lookup(Args, Name) of

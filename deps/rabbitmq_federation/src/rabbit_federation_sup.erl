@@ -16,7 +16,7 @@
 
 -module(rabbit_federation_sup).
 
--behaviour(supervisor).
+-behaviour(mirrored_supervisor).
 
 %% Supervises everything. There is just one of these.
 
@@ -40,10 +40,11 @@
 %%----------------------------------------------------------------------------
 
 start_link() ->
-    supervisor:start_link({local, ?SUPERVISOR}, ?MODULE, []).
+    mirrored_supervisor:start_link({local, ?SUPERVISOR},
+                                   ?SUPERVISOR, ?MODULE, []).
 
 start_child(Id, Args) ->
-    {ok, Pid} = supervisor:start_child(
+    {ok, Pid} = mirrored_supervisor:start_child(
                   ?SUPERVISOR,
                   {Id, {rabbit_federation_link_sup, start_link, [Args]},
                    transient, ?MAX_WAIT, supervisor,
@@ -51,8 +52,8 @@ start_child(Id, Args) ->
     {ok, Pid}.
 
 stop_child(Id) ->
-    ok = supervisor:terminate_child(?SUPERVISOR, Id),
-    ok = supervisor:delete_child(?SUPERVISOR, Id),
+    ok = mirrored_supervisor:terminate_child(?SUPERVISOR, Id),
+    ok = mirrored_supervisor:delete_child(?SUPERVISOR, Id),
     ok.
 
 %%----------------------------------------------------------------------------

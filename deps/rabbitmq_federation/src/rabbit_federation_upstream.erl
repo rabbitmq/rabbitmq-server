@@ -19,7 +19,7 @@
 -include("rabbit_federation.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
--export([to_table/1, to_string/1, from_set/3]).
+-export([to_table/1, to_string/1, from_set/2]).
 
 -import(rabbit_misc, [pget/2, pget/3]).
 -import(rabbit_federation_util, [pget_bin/3]).
@@ -49,9 +49,16 @@ to_string(#upstream{params   = #amqp_params_network{host         = H,
                                                     port         = P,
                                                     virtual_host = V},
                     exchange = XNameBin}) ->
-    iolist_to_binary(io_lib:format("~s:~w:~s:~s", [H, P, V, XNameBin])).
+    PortPart = case P of
+                   undefined -> <<>>;
+                   _         -> print("~w:", [P])
+               end,
+    print("~s:~s~s:~s", [H, PortPart, V, XNameBin]).
 
-from_set(SetName, DefaultXNameBin, DefaultVHost) ->
+print(Fmt, Args) -> iolist_to_binary(io_lib:format(Fmt, Args)).
+
+from_set(SetName, #resource{name         = DefaultXNameBin,
+                            virtual_host = DefaultVHost}) ->
     {ok, Sets} = application:get_env(rabbitmq_federation, upstream_sets),
     case pget(binary_to_list(SetName), Sets) of
         undefined -> {error, set_not_found};

@@ -294,6 +294,13 @@ key(#binding{key = Key, args = Args}) -> {Key, Args}.
 
 go(S0 = {not_started, {Upstream, DownXName =
                            #resource{virtual_host = DownVHost}}}) ->
+    %% We trap exits so terminate/2 gets called. Note that this is not
+    %% in init() since we need to cope with the link getting restarted
+    %% during shutdown (when a broker federates with itself), which
+    %% means we hang in federation_up() and the supervisor must force
+    %% us to exit. We can therefore only trap exits when past that
+    %% point. Bug 24372 may help us do something nicer.
+    process_flag(trap_exit, true),
     case open(rabbit_federation_util:local_params(DownVHost)) of
         {ok, DConn, DCh} ->
             #'confirm.select_ok'{} =

@@ -253,7 +253,7 @@ max_hops() ->
     Q3 = bind_queue(Cottontail, <<"ring">>, <<"key">>),
 
     %% Wait for federation to come up on all nodes
-    timer:sleep(1000),
+    timer:sleep(5000),
 
     publish(Flopsy,     <<"ring">>, <<"key">>, <<"HELLO flopsy">>),
     publish(Mopsy,      <<"ring">>, <<"key">>, <<"HELLO mopsy">>),

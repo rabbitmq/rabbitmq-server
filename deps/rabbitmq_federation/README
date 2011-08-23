@@ -11,13 +11,9 @@ Generic build instructions are at:
 Limitations
 ===========
 
-Significant limitation: rabbitmq-federation is not compatible with
-clustering. *Do not deploy it in a cluster*. We intend to fix this
-at some point.
-
-Other limitations: You can't federate headers exchanges. You can't
-make a broker federate with a new upstream without restarting
-it. There's no status reporting. Again these will get fixed.
+You can't federate headers exchanges. You can't make a broker federate
+with a new upstream without restarting it. There's no status
+reporting. These will likely get fixed.
 
 
 Purpose
@@ -263,11 +259,16 @@ args.put("upstream-set", "my-upstream-set");
 Channel ch = ...;
 ch.exchangeDeclare("my-federated-exchange", "x-federation", true, false, args);
 
+Note On Clustering
+==================
+
+When using federation with clustering, all cluster nodes must have the
+federation plugin installed. Any node may establish connections to
+upstream exchanges. If a node fails, any upstream links will fail over
+to a surviving node.
 
 Possible Future Enhancements
 ============================
-
-* Compatibility with clustering
 
 * Simple status reporting, similar to the shovel
 
