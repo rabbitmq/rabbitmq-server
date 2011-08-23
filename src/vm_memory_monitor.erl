@@ -111,13 +111,13 @@ init([MemFraction]) ->
     State = #state { timeout = ?DEFAULT_MEMORY_CHECK_INTERVAL,
                      timer = TRef,
                      alarmed = false},
-    {ok, internal_update(init_mem_state(State, MemFraction))}.
+    {ok, internal_update(set_mem_limits(State, MemFraction))}.
 
 handle_call(get_vm_memory_high_watermark, _From, State) ->
     {reply, State#state.memory_limit / State#state.total_memory, State};
 
 handle_call({set_vm_memory_high_watermark, MemFraction}, _From, State) ->
-    State1 = init_mem_state(State, MemFraction),
+    State1 = set_mem_limits(State, MemFraction),
     MemLimit = get_mem_limit(MemFraction, State1#state.total_memory),
     error_logger:info_msg("Memory alarm changed to ~p, ~p bytes.~n",
                           [MemFraction, MemLimit]),
@@ -155,14 +155,21 @@ code_change(_OldVsn, State, _Extra) ->
 %% Server Internals
 %%----------------------------------------------------------------------------
 
-init_mem_state(State, MemFraction) ->
+set_mem_limits(State, MemFraction) ->
     TotalMemory =
         case get_total_memory() of
             unknown ->
-                error_logger:warning_msg(
-                  "Unknown total memory size for your OS ~p. "
-                  "Assuming memory size is ~pMB.~n",
-                  [os:type(), trunc(?MEMORY_SIZE_FOR_UNKNOWN_OS/?ONE_MB)]),
+                case State of
+                    #state { total_memory = undefined,
+                             memory_limit = undefined } ->
+                        error_logger:warning_msg(
+                          "Unknown total memory size for your OS ~p. "
+                          "Assuming memory size is ~pMB.~n",
+                          [os:type(),
+                           trunc(?MEMORY_SIZE_FOR_UNKNOWN_OS/?ONE_MB)]);
+                    _ ->
+                        ok
+                end,
                 ?MEMORY_SIZE_FOR_UNKNOWN_OS;
             M -> M
         end,
