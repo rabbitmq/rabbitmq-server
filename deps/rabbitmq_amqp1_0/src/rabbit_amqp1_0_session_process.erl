@@ -14,20 +14,10 @@
 %% TODO monitor declaring channel since we now don't reopen it if an error
 %% occurs
 
--record(session, {channel_num, %% we just use the incoming (AMQP 1.0) channel number
-                  backing_connection, backing_channel,
-                  declaring_channel, %% a sacrificial client channel for declaring things
-                  reader_pid, writer_pid,
-                  next_transfer_number = 0, % next outgoing id
-                  max_outgoing_id, % based on the remote incoming window size
-                  next_incoming_id, % just to keep a check
-                  next_publish_id, %% the 0-9-1-side counter for confirms
-                  %% we make incoming and outgoing session buffers the
-                  %% same size
-                  window_size,
-                  ack_counter = 0,
-                  incoming_unsettled_map,
-                  outgoing_unsettled_map }).
+-record(state, {backing_connection, backing_channel,
+                declaring_channel, %% a sacrificial client channel for declaring things
+                reader_pid, writer_pid, session}).
+
 -record(outgoing_link, {queue,
                         delivery_count = 0,
                         no_ack,
@@ -45,6 +35,7 @@
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_amqp1_0.hrl").
+-include("rabbit_amqp1_0_session.hrl").
 
 -import(rabbit_amqp1_0_link_util, [protocol_error/3]).
 
@@ -63,20 +54,21 @@ init([Channel, ReaderPid, WriterPid, #user{username = Username}, VHost]) ->
                                        virtual_host = <<"/">>}),
     {ok, Ch} = amqp_connection:open_channel(Conn),
     {ok, Ch2} = amqp_connection:open_channel(Conn),
-    {ok, #session{ channel_num            = Channel,
-                   backing_connection     = Conn,
-                   backing_channel        = Ch,
-                   declaring_channel      = Ch2,
-                   reader_pid             = ReaderPid,
-                   writer_pid             = WriterPid,
-                   next_publish_id        = 0,
-                   ack_counter            = 0,
-                   incoming_unsettled_map = gb_trees:empty(),
-                   outgoing_unsettled_map = gb_trees:empty()}}.
+    {ok, #state{backing_connection     = Conn,
+                backing_channel        = Ch,
+                declaring_channel      = Ch2,
+                reader_pid             = ReaderPid,
+                writer_pid             = WriterPid,
+                session = #session{ channel_num            = Channel,
+                                    next_publish_id        = 0,
+                                    ack_counter            = 0,
+                                    incoming_unsettled_map = gb_trees:empty(),
+                                    outgoing_unsettled_map = gb_trees:empty()}
+               }}.
 
-terminate(_Reason, _State = #session{ backing_connection = Conn,
-                                     declaring_channel  = DeclCh,
-                                     backing_channel    = Ch}) ->
+terminate(_Reason, _State = #state{ backing_connection = Conn,
+                                      declaring_channel  = DeclCh,
+                                      backing_channel    = Ch}) ->
     ?DEBUG("Shutting down session ~p", [_State]),
     case DeclCh of
         undefined -> ok;
@@ -100,17 +92,19 @@ handle_info(#'basic.consume_ok'{}, State) ->
 handle_info({#'basic.deliver'{consumer_tag = ConsumerTag,
                               delivery_tag = DeliveryTag,
                               routing_key  = RKey}, Msg},
-            State = #session{ writer_pid = WriterPid,
-                              next_transfer_number = TransferNum }) ->
+            State = #state{writer_pid = WriterPid,
+                           backing_channel = BCh,
+                           session = Session = #session{next_transfer_number =
+                                                            TransferNum}}) ->
     %% FIXME, don't ignore ack required, keep track of credit, um .. etc.
     Handle = ctag_to_handle(ConsumerTag),
     case get({out, Handle}) of
         Link = #outgoing_link{} ->
-            {NewLink, NewState} =
-                transfer(WriterPid, Handle, Link, State, RKey, Msg, DeliveryTag),
+            {NewLink, NewSession} =
+                transfer(WriterPid, Handle, Link, BCh, Session, RKey, Msg, DeliveryTag),
             put({out, Handle}, NewLink),
-            {noreply, NewState#session{
-                        next_transfer_number = next_transfer_number(TransferNum)}};
+            {noreply, State#state{session = NewSession#session{
+                                              next_transfer_number = next_transfer_number(TransferNum)}}};
         undefined ->
             %% FIXME handle missing link -- why does the queue think it's there?
             rabbit_log:warning("Delivery to non-existent consumer ~p", [ConsumerTag]),
@@ -124,7 +118,7 @@ handle_info(#'basic.credit_state'{consumer_tag = CTag,
                                   count        = Count,
                                   available    = Available0,
                                   drain        = Drain},
-            State = #session{writer_pid = WriterPid}) ->
+            State = #state{writer_pid = WriterPid}) ->
     Available = case Available0 of
                     -1  -> undefined;
                     Num -> {uint, Num}
@@ -154,10 +148,11 @@ handle_info(#'basic.credit_state'{consumer_tag = CTag,
 %% once in a while.  Assuming that the buffer is an appropriate size,
 %% about once every window_size / 2 is a good heuristic.
 handle_info(#'basic.ack'{delivery_tag = DTag, multiple = Multiple},
-            State = #session{incoming_unsettled_map = Unsettled,
-                             window_size = Window,
-                             ack_counter = AckCounter,
-                             writer_pid = WriterPid}) ->
+            State = #state{writer_pid = WriterPid,
+                           session = Session = #session{
+                                       incoming_unsettled_map = Unsettled,
+                                       window_size = Window,
+                                       ack_counter = AckCounter}}) ->
     {TransferIds, Unsettled1} =
         case Multiple of
             true  -> acknowledgement_range(DTag, Unsettled);
@@ -177,20 +172,20 @@ handle_info(#'basic.ack'{delivery_tag = DTag, multiple = Multiple},
     HalfWindow = Window div 2,
     AckCounter1 = case (AckCounter + length(TransferIds)) of
                       Over when Over >= HalfWindow ->
-                          F = flow_session_fields(State),
+                          F = flow_session_fields(State#state.session),
                           rabbit_amqp1_0_writer:send_command(WriterPid, F),
                           Over - HalfWindow;
                       Counter ->
                           Counter
                   end,
-    {noreply, State#session{
-                ack_counter = AckCounter1,
-                incoming_unsettled_map = Unsettled1 }};
+    {noreply, State#state{session = Session#session{
+                                      ack_counter = AckCounter1,
+                                      incoming_unsettled_map = Unsettled1}}};
 
 %% TODO these pretty much copied wholesale from rabbit_channel
 handle_info({'EXIT', WriterPid, Reason = {writer, send_failed, _Error}},
-            State = #session{writer_pid = WriterPid}) ->
-    State#session.reader_pid ! {channel_exit, State#session.channel_num, Reason},
+            State = #state{writer_pid = WriterPid}) ->
+    State#state.reader_pid ! {channel_exit, State#state.session#session.channel_num, Reason},
     {stop, normal, State};
 handle_info({'EXIT', _Pid, Reason}, State) ->
     {stop, Reason, State};
@@ -199,7 +194,7 @@ handle_info({'DOWN', _MRef, process, _QPid, _Reason}, State) ->
     {noreply, State}. % FIXME rabbit_channel uses queue_blocked?
 
 handle_cast({frame, Frame},
-            State = #session{ writer_pid = Sock }) ->
+            State = #state{ writer_pid = Sock }) ->
     try handle_control(Frame, State) of
         {reply, Replies, NewState} when is_list(Replies) ->
             lists:foreach(fun (Reply) ->
@@ -273,10 +268,11 @@ handle_control(#'v1_0.begin'{next_outgoing_id = {uint, RemoteNextIn},
                              incoming_window = RemoteInWindow,
                              outgoing_window = RemoteOutWindow,
                              handle_max = HandleMax0},
-               State = #session{
-                 next_transfer_number = LocalNextOut,
+               State = #state{
                  backing_channel = AmqpChannel,
-                 channel_num = Channel }) ->
+                 session = Session = #session{
+                             next_transfer_number = LocalNextOut,
+                             channel_num = Channel}}) ->
     Window =
         case RemoteInWindow of
             {uint, Size} -> Size;
@@ -297,19 +293,21 @@ handle_control(#'v1_0.begin'{next_outgoing_id = {uint, RemoteNextIn},
        next_outgoing_id = {uint, LocalNextOut},
        incoming_window = {uint, SessionBufferSize},
        outgoing_window = {uint, SessionBufferSize}},
-     State#session{
-       next_incoming_id = RemoteNextIn,
-       max_outgoing_id = rabbit_misc:serial_add(RemoteNextIn, Window),
-       window_size = SessionBufferSize}};
+     State#state{
+       session = Session#session{
+                   next_incoming_id = RemoteNextIn,
+                   max_outgoing_id = rabbit_misc:serial_add(RemoteNextIn, Window),
+                   window_size = SessionBufferSize}}};
 
 handle_control(#'v1_0.attach'{role = ?SEND_ROLE} = Attach,
-               State = #session{ backing_channel = BCh,
-                                 declaring_channel = DCh,
-                                 next_publish_id = NextPublishId }) ->
+               State = #state{ backing_channel = BCh,
+                               declaring_channel = DCh,
+                               session = Session = #session{
+                                           next_publish_id = NextPublishId }}) ->
     {ok, Reply, NextPublishId1} =
         rabbit_amqp1_0_incoming_link:attach(Attach, BCh, DCh, NextPublishId),
-    {reply, flow_session_fields(Reply, State),
-     State#session{next_publish_id = NextPublishId1}};
+    {reply, flow_session_fields(Reply, State#state.session),
+     State#state{session = Session#session{next_publish_id = NextPublishId1}}};
 
 handle_control(#'v1_0.attach'{source = Source,
                               initial_delivery_count = undefined,
@@ -321,16 +319,18 @@ handle_control(#'v1_0.attach'{source = Source,
 
 handle_control([Txfr = #'v1_0.transfer'{delivery_id = {uint, TxfrId}} |
                 AnnotatedMessage],
-               State = #session{backing_channel        = BCh,
-                                next_publish_id        = NextPublishId,
-                                incoming_unsettled_map = Unsettled}) ->
+               State = #state{backing_channel        = BCh,
+                              session = Session = #session{
+                                          next_publish_id = NextPublishId,
+                                          incoming_unsettled_map = Unsettled}}) ->
     {ok, Reply, NextPublishId1, Unsettled1} =
         rabbit_amqp1_0_incoming_link:transfer(
           Txfr, AnnotatedMessage, BCh, NextPublishId, Unsettled),
     {reply, Reply,
-     State#session{next_publish_id        = NextPublishId1,
-                   next_transfer_number   = next_transfer_number(TxfrId),
-                   incoming_unsettled_map = Unsettled1}};
+     State#state{session = Session#session{
+                             next_publish_id        = NextPublishId1,
+                             next_transfer_number   = next_transfer_number(TxfrId),
+                             incoming_unsettled_map = Unsettled1}}};
 
 
 %% Disposition: a single extent is settled at a time.  This may
@@ -349,7 +349,7 @@ handle_control(#'v1_0.detach'{ handle = Handle }, State) ->
     erase({in, Handle}),
     {reply, #'v1_0.detach'{ handle = Handle }, State};
 
-handle_control(#'v1_0.end'{}, _State = #session{ writer_pid = Sock }) ->
+handle_control(#'v1_0.end'{}, _State = #state{ writer_pid = Sock }) ->
     ok = rabbit_amqp1_0_writer:send_command(Sock, #'v1_0.end'{}),
     stop;
 
@@ -375,9 +375,10 @@ handle_control(#'v1_0.end'{}, _State = #session{ writer_pid = Sock }) ->
 %% concerned; it's only because AMQP 0-9-1 defines QoS in terms of the
 %% total number of unacked messages, whereas 1.0 has an explicit window.
 handle_control(Flow = #'v1_0.flow'{},
-               State = #session{ next_incoming_id = LocalNextIn,
-                                 max_outgoing_id = _LocalMaxOut,
-                                 next_transfer_number = LocalNextOut }) ->
+               State = #state{session = Session = #session{
+                                          next_incoming_id = LocalNextIn,
+                                          max_outgoing_id = _LocalMaxOut,
+                                          next_transfer_number = LocalNextOut}}) ->
     #'v1_0.flow'{ next_incoming_id = RemoteNextIn0,
                   incoming_window = {uint, RemoteWindowIn},
                   next_outgoing_id = {uint, RemoteNextOut},
@@ -397,7 +398,8 @@ handle_control(Flow = #'v1_0.flow'{},
     true = (RemoteNextIn =< LocalNextOut),
     %% Adjust our window
     RemoteMaxOut = RemoteNextIn + RemoteWindowIn,
-    State1 = State#session{ max_outgoing_id = RemoteMaxOut },
+    State1 = State#state{session = Session#session{
+                                     max_outgoing_id = RemoteMaxOut}},
     case Flow#'v1_0.flow'.handle of
         undefined ->
             {noreply, State1};
@@ -432,7 +434,7 @@ attach_outgoing(DefaultOutcome, Outcomes,
                                handle = Handle,
                                source = Source,
                                rcv_settle_mode = RcvSettleMode},
-               State = #session{backing_channel = Ch}) ->
+               State = #state{backing_channel = Ch}) ->
     %% Default is first
     NoAck = RcvSettleMode =/= ?V_1_0_RECEIVER_SETTLE_MODE_SECOND,
     DOSym = rabbit_amqp1_0_framing:symbol_for(DefaultOutcome),
@@ -480,11 +482,11 @@ attach_outgoing(DefaultOutcome, Outcomes,
             {reply, #'v1_0.attach'{source = undefined}, State}
     end.
 
-flow_session_fields(Frames, State) ->
-    [flow_session_fields0(F, State) || F <- Frames].
+flow_session_fields(Frames, Session) ->
+    [flow_session_fields0(F, Session) || F <- Frames].
 
-flow_session_fields(State) ->
-    flow_session_fields0(#'v1_0.flow'{}, State).
+flow_session_fields(Session) ->
+    flow_session_fields0(#'v1_0.flow'{}, Session).
 
 flow_session_fields0(Flow = #'v1_0.flow'{},
                      #session{next_transfer_number = NextOut,
@@ -497,7 +499,7 @@ flow_session_fields0(Flow = #'v1_0.flow'{},
       outgoing_window = {uint, Window - gb_trees:size(UnsettledOut)},
       next_incoming_id = {uint, NextIn},
       incoming_window = {uint, Window - gb_trees:size(UnsettledIn)}};
-flow_session_fields0(Frame, _State) ->
+flow_session_fields0(Frame, _Session) ->
     Frame.
 
 outgoing_flow(#outgoing_link{ delivery_count = LocalCount },
@@ -506,7 +508,7 @@ outgoing_flow(#outgoing_link{ delivery_count = LocalCount },
                 delivery_count = Count0,
                 link_credit = {uint, RemoteCredit},
                 drain = Drain},
-              State = #session{backing_channel = Ch}) ->
+              State = #state{backing_channel = Ch}) ->
     RemoteCount = case Count0 of
                       undefined -> LocalCount;
                       {uint, Count} -> Count
@@ -528,7 +530,7 @@ outgoing_flow(#outgoing_link{ delivery_count = LocalCount },
         %% to a handle that does not yet exist
         %% TODO is this an error?
         _  ->
-            Flow1 = flow_session_fields(State),
+            Flow1 = flow_session_fields(State#state.session),
             {reply, Flow1#'v1_0.flow'{
                       handle = Handle,
                       delivery_count = {uint, LocalCount},
@@ -541,11 +543,11 @@ transfer(WriterPid, LinkHandle,
          Link = #outgoing_link{ delivery_count = Count,
                                 no_ack = NoAck,
                                 default_outcome = DefaultOutcome },
-         Session = #session{ next_transfer_number = TransferNumber,
-                             max_outgoing_id = LocalMaxOut,
-                             window_size = WindowSize,
-                             backing_channel = AmqpChannel,
-                             outgoing_unsettled_map = Unsettled },
+         AmqpChannel,
+         Session = #session{next_transfer_number = TransferNumber,
+                            max_outgoing_id = LocalMaxOut,
+                            window_size = WindowSize,
+                            outgoing_unsettled_map = Unsettled},
          RKey,
          Msg = #amqp_msg{payload = Content},
          DeliveryTag) ->
@@ -607,8 +609,9 @@ settle(Disp = #'v1_0.disposition'{ first = First0,
                                    last = Last0,
                                    settled = Settled,
                                    state = Outcome },
-       State = #session{backing_channel = Ch,
-                        outgoing_unsettled_map = Unsettled}) ->
+       State = #state{backing_channel = Ch,
+                      session = Session = #session{
+                                  outgoing_unsettled_map = Unsettled}}) ->
     {uint, First} = First0,
     %% Last may be omitted, in which case it's the same as first
     Last = case Last0 of
@@ -662,7 +665,7 @@ settle(Disp = #'v1_0.disposition'{ first = First0,
                          false -> Disp#'v1_0.disposition'{ settled = true,
                                                            role = ?SEND_ROLE }
                      end,
-                     State#session{outgoing_unsettled_map = Unsettled1}}
+                     State#state{session = Session#session{outgoing_unsettled_map = Unsettled1}}}
             end
     end.
 
@@ -697,7 +700,7 @@ ensure_source(Source = #'v1_0.source'{address       = Address,
                                       expiry_policy = ExpiryPolicy,
                                       timeout       = Timeout},
               Link = #outgoing_link{},
-              #session{declaring_channel = DCh}) ->
+              #state{declaring_channel = DCh}) ->
     case Dynamic of
         true ->
             case Address of
