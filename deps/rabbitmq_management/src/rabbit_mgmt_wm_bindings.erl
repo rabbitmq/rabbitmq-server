@@ -19,7 +19,7 @@
 -export([init/1, to_json/2, content_types_provided/2, is_authorized/2]).
 -export([allowed_methods/2, post_is_create/2, create_path/2]).
 -export([content_types_accepted/2, accept_content/2, resource_exists/2]).
--export([bindings/1]).
+-export([bindings/1, annotated/2]).
 
 -include("rabbit_mgmt.hrl").
 -include_lib("webmachine/include/webmachine.hrl").
@@ -93,6 +93,9 @@ is_authorized(ReqData, {Mode, Context}) ->
 bindings(ReqData) ->
     [rabbit_mgmt_format:binding(B) ||
         B <- list_bindings(all, ReqData)].
+
+annotated(ReqData, Context) ->
+    rabbit_mgmt_util:filter_vhost(bindings(ReqData), ReqData, Context).
 
 method_key_args(<<"q">>, Source, Dest, Props) ->
     M = #'queue.bind'{routing_key = K, arguments = A} =

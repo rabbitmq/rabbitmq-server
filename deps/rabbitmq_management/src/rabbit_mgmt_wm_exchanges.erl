@@ -17,7 +17,7 @@
 -module(rabbit_mgmt_wm_exchanges).
 
 -export([init/1, to_json/2, content_types_provided/2, is_authorized/2,
-         resource_exists/2, exchanges/1]).
+         resource_exists/2, exchanges/1, annotated/2]).
 
 -include("rabbit_mgmt.hrl").
 -include_lib("webmachine/include/webmachine.hrl").
@@ -37,16 +37,17 @@ resource_exists(ReqData, Context) ->
      end, ReqData, Context}.
 
 to_json(ReqData, Context) ->
-    rabbit_mgmt_util:reply_list(
-      rabbit_mgmt_db:augment_exchanges(
-        rabbit_mgmt_util:filter_vhost(exchanges(ReqData), ReqData, Context),
-        basic),
-      ReqData, Context).
+    rabbit_mgmt_util:reply_list(annotated(ReqData, Context), ReqData, Context).
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized_vhost(ReqData, Context).
 
 %%--------------------------------------------------------------------
+
+annotated(ReqData, Context) ->
+    rabbit_mgmt_db:augment_exchanges(
+      rabbit_mgmt_util:filter_vhost(exchanges(ReqData), ReqData, Context),
+      basic).
 
 exchanges(ReqData) ->
     [rabbit_mgmt_format:exchange(X) || X <- exchanges0(ReqData)].

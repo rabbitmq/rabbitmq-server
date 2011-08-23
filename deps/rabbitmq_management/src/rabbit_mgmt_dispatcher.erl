@@ -41,6 +41,8 @@ dispatcher() ->
      {["nodes", node],                                             rabbit_mgmt_wm_node, []},
      {["extensions"],                                              rabbit_mgmt_wm_extensions, []},
      {["all-configuration"],                                       rabbit_mgmt_wm_all_configuration, []},
+     {["all"],                                                     rabbit_mgmt_wm_all, []},
+     {["all", vhost],                                              rabbit_mgmt_wm_all, []},
      {["connections"],                                             rabbit_mgmt_wm_connections, []},
      {["connections", connection],                                 rabbit_mgmt_wm_connection, []},
      {["connections", connection, "channels"],                     rabbit_mgmt_wm_connection_channels, []},
