@@ -11,6 +11,9 @@
 -export([parse_destination/1]).
 -endif.
 
+%% TODO monitor declaring channel since we now don't reopen it if an error
+%% occurs
+
 -record(session, {channel_num, %% we just use the incoming (AMQP 1.0) channel number
                   backing_connection, backing_channel,
                   declaring_channel, %% a sacrificial client channel for declaring things
@@ -31,26 +34,10 @@
                         default_outcome}).
 
 %% Just make these constant for the time being.
--define(INCOMING_CREDIT, 65536).
+-define(INCOMING_CREDIT, 65536). %% TODO lose this one
 -define(INIT_TXFR_COUNT, 0).
 
--record(incoming_link, {name, exchange, routing_key,
-                        delivery_count = 0,
-                        credit_used = ?INCOMING_CREDIT div 2
-                       }).
-
 -record(outgoing_transfer, {delivery_tag, expected_outcome}).
-
--define(SEND_ROLE, false).
--define(RECV_ROLE, true).
-
--define(EXCHANGE_SUB_LIFETIME, "delete-on-close").
-
--define(DEFAULT_OUTCOME, #'v1_0.released'{}).
-
--define(OUTCOMES, [?V_1_0_SYMBOL_ACCEPTED,
-                   ?V_1_0_SYMBOL_REJECTED,
-                   ?V_1_0_SYMBOL_RELEASED]).
 
 %% TODO test where the sweetspot for gb_trees is
 -define(MAX_SESSION_BUFFER_SIZE, 4096).
@@ -58,6 +45,8 @@
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_amqp1_0.hrl").
+
+-import(rabbit_amqp1_0_link_util, [protocol_error/3]).
 
 %% TODO account for all these things
 start_link(Channel, ReaderPid, WriterPid, User, VHost,
@@ -76,9 +65,11 @@ init([Channel, ReaderPid, WriterPid, #user{username = Username}, VHost]) ->
                    #amqp_params_direct{username     = Username,
                                        virtual_host = <<"/">>}),
     {ok, Ch} = amqp_connection:open_channel(Conn),
+    {ok, Ch2} = amqp_connection:open_channel(Conn),
     {ok, #session{ channel_num            = Channel,
                    backing_connection     = Conn,
                    backing_channel        = Ch,
+                   declaring_channel      = Ch2,
                    reader_pid             = ReaderPid,
                    writer_pid             = WriterPid,
                    next_publish_id        = 0,
@@ -314,126 +305,36 @@ handle_control(#'v1_0.begin'{next_outgoing_id = {uint, RemoteNextIn},
        max_outgoing_id = rabbit_misc:serial_add(RemoteNextIn, Window),
        window_size = SessionBufferSize}};
 
-handle_control(#'v1_0.attach'{name = Name,
-                              handle = Handle,
-                              source = Source,
-                              snd_settle_mode = SndSettleMode,
-                              target = Target,
-                              initial_delivery_count = {uint, InitTransfer},
-                              role = ?SEND_ROLE}, %% client is sender
-               State = #session{ backing_channel = Ch,
+handle_control(#'v1_0.attach'{role = ?SEND_ROLE} = Attach,
+               State = #session{ backing_channel = BCh,
+                                 declaring_channel = DCh,
                                  next_publish_id = NextPublishId }) ->
-    %% TODO associate link name with target
-    case ensure_target(Target, #incoming_link{ name = Name }, State) of
-        {ok, ServerTarget,
-         IncomingLink = #incoming_link{ delivery_count = InitTransfer },
-         State1} ->
-            {_, _Outcomes} = outcomes(Source),
-            %% Default is mixed!
-            State2 =
-                case SndSettleMode of
-                    ?V_1_0_SENDER_SETTLE_MODE_SETTLED ->
-                        State1;
-                    _ ->
-                        %% TODO we need to deal with mixed settlement mode -
-                        %% presumably by turning on confirms and then throwing
-                        %% some away.
-                        amqp_channel:register_confirm_handler(Ch, self()),
-                        amqp_channel:call(Ch, #'confirm.select'{}),
-                        State1#session{ next_publish_id =
-                                            erlang:max(1, NextPublishId) }
-            end,
-            put({in, Handle}, IncomingLink),
-            Flow = flow_session_fields(State2),
-            Flow1 = Flow#'v1_0.flow'{ handle = Handle,
-                                      link_credit = {uint, ?INCOMING_CREDIT},
-                                      drain = false,
-                                      echo = false },
-            Attach = #'v1_0.attach'{
-              name = Name,
-              handle = Handle,
-              source = Source,
-              target = ServerTarget,
-              initial_delivery_count = undefined, % must be, I am the recvr
-              role = ?RECV_ROLE}, %% server is receiver
-            {reply, [Attach, Flow1], State2};
-        {error, Reason, State1} ->
-            rabbit_log:warning("AMQP 1.0 attach rejected ~p~n", [Reason]),
-            %% TODO proper link estalishment protocol here?
-            protocol_error(?V_1_0_AMQP_ERROR_INVALID_FIELD,
-                               "Attach rejected: ~p", [Reason]),
-            {noreply, State1}
-    end;
+    {ok, Reply, NextPublishId1} =
+        rabbit_amqp1_0_incoming_link:attach(Attach, BCh, DCh, NextPublishId),
+    {reply, flow_session_fields(Reply, State),
+     State#session{next_publish_id = NextPublishId1}};
 
 handle_control(#'v1_0.attach'{source = Source,
                               initial_delivery_count = undefined,
                               role = ?RECV_ROLE} = Attach, %% client is receiver
                State) ->
     %% TODO ensure_destination
-    {DefaultOutcome, Outcomes} = outcomes(Source),
+    {DefaultOutcome, Outcomes} = rabbit_amqp1_0_link_util:outcomes(Source),
     attach_outgoing(DefaultOutcome, Outcomes, Attach, State);
 
-handle_control([Txfr = #'v1_0.transfer'{handle = Handle,
-                                        settled = Settled,
-                                        delivery_id = {uint, TxfrId}} |
+handle_control([Txfr = #'v1_0.transfer'{delivery_id = {uint, TxfrId}} |
                 AnnotatedMessage],
-               State = #session{backing_channel = Ch,
-                                next_publish_id = NextPublishId,
+               State = #session{backing_channel        = BCh,
+                                next_publish_id        = NextPublishId,
                                 incoming_unsettled_map = Unsettled}) ->
-    case get({in, Handle}) of
-        #incoming_link{ exchange = X, routing_key = LinkRKey,
-                        delivery_count = Count,
-                        credit_used = CreditUsed } = Link ->
-            NewCount = rabbit_misc:serial_add(Count, 1),
-            {MsgRKey, Msg} = rabbit_amqp1_0_message:assemble(AnnotatedMessage),
-            RKey = case LinkRKey of
-                       undefined -> MsgRKey;
-                       _         -> LinkRKey
-                   end,
-            NextPublishId1 = case NextPublishId of
-                                 0 -> 0;
-                                 _ -> NextPublishId + 1 % serial?
-                             end,
-            amqp_channel:call(Ch, #'basic.publish' { exchange    = X,
-                                                     routing_key = RKey }, Msg),
-            {SendFlow, CreditUsed1} = case CreditUsed - 1 of
-                                          C when C =< 0 ->
-                                              {true,  ?INCOMING_CREDIT div 2};
-                                          D ->
-                                              {false, D}
-                                      end,
-            NewLink = Link#incoming_link{ delivery_count = NewCount,
-                                          credit_used = CreditUsed1 },
-            put({in, Handle}, NewLink),
-            State1 = State#session{
-                       next_publish_id = NextPublishId1,
-                       next_incoming_id = next_transfer_number(TxfrId) },
-            State2 = case Settled of
-                         true  -> State1;
-                         %% Be lenient -- this is a boolean and really ought
-                         %% to have a value, but the spec doesn't currently
-                         %% require it.
-                         Symbol when
-                         Symbol =:= false orelse
-                         Symbol =:= undefined ->
-                             Unsettled1 = gb_trees:insert(
-                                            NextPublishId,
-                                            TxfrId,
-                                            Unsettled),
-                             State1#session{
-                               incoming_unsettled_map = Unsettled1}
-                     end,
-            case SendFlow of
-                true ->
-                    ?DEBUG("sending flow for incoming ~p", [NewLink]),
-                    incoming_flow(NewLink, Handle, State2);
-                false ->
-                    {noreply, State2}
-            end;
-        undefined ->
-            protocol_error(?V_1_0_AMQP_ERROR_ILLEGAL_STATE,
-                           "Unknown link handle ~p", [Handle])
-    end;
+    {ok, Reply, NextPublishId1, Unsettled1} =
+        rabbit_amqp1_0_incoming_link:transfer(
+          Txfr, AnnotatedMessage, BCh, NextPublishId, Unsettled),
+    {reply, Reply,
+     State#session{next_publish_id        = NextPublishId1,
+                   next_transfer_number   = next_transfer_number(TxfrId),
+                   incoming_unsettled_map = Unsettled1}};
+
 
 %% Disposition: a single extent is settled at a time.  This may
 %% involve more than one message. TODO: should we send a flow after
@@ -514,7 +415,7 @@ handle_control(Flow = #'v1_0.flow'{},
                         Out = #outgoing_link{} ->
                             outgoing_flow(Out, Flow, State1)
                     end;
-                _In = #incoming_link{} ->
+                _In ->
                     %% We're being told about available messages at
                     %% the sender.  Yawn.
                     %% TODO at least check transfer-count?
@@ -528,39 +429,6 @@ handle_control(Frame, State) ->
     {noreply, State}.
 
 %% ------
-
-protocol_error(Condition, Msg, Args) ->
-    exit(#'v1_0.error'{
-        condition = Condition,
-        description = {utf8, list_to_binary(
-                               lists:flatten(io_lib:format(Msg, Args)))}
-       }).
-
-
-outcomes(Source) ->
-    {DefaultOutcome, Outcomes} =
-        case Source of
-            #'v1_0.source' {
-                      default_outcome = DO,
-                      outcomes = Os
-                     } ->
-                DO1 = case DO of
-                          undefined -> ?DEFAULT_OUTCOME;
-                          _         -> DO
-                      end,
-                Os1 = case Os of
-                          undefined -> ?OUTCOMES;
-                          _         -> Os
-                      end,
-                {DO1, Os1};
-            _ ->
-                {?DEFAULT_OUTCOME, ?OUTCOMES}
-        end,
-    case [O || O <- Outcomes, not lists:member(O, ?OUTCOMES)] of
-        []   -> {DefaultOutcome, Outcomes};
-        Bad  -> protocol_error(?V_1_0_AMQP_ERROR_NOT_IMPLEMENTED,
-                               "Outcomes not supported: ~p", [Bad])
-    end.
 
 attach_outgoing(DefaultOutcome, Outcomes,
                 #'v1_0.attach'{name = Name,
@@ -615,15 +483,25 @@ attach_outgoing(DefaultOutcome, Outcomes,
             {reply, #'v1_0.attach'{source = undefined}, State1}
     end.
 
-flow_session_fields(#session{ next_transfer_number = NextOut,
+flow_session_fields(Frames, State) ->
+    [flow_session_fields0(F, State) || F <- Frames].
+
+flow_session_fields(State) ->
+    flow_session_fields0(#'v1_0.flow'{}, State).
+
+flow_session_fields0(Flow = #'v1_0.flow'{},
+                     #session{next_transfer_number = NextOut,
                               next_incoming_id = NextIn,
                               window_size = Window,
                               outgoing_unsettled_map = UnsettledOut,
                               incoming_unsettled_map = UnsettledIn }) ->
-    #'v1_0.flow'{ next_outgoing_id = {uint, NextOut},
-                  outgoing_window = {uint, Window - gb_trees:size(UnsettledOut)},
-                  next_incoming_id = {uint, NextIn},
-                  incoming_window = {uint, Window - gb_trees:size(UnsettledIn)}}.
+    Flow#'v1_0.flow'{
+      next_outgoing_id = {uint, NextOut},
+      outgoing_window = {uint, Window - gb_trees:size(UnsettledOut)},
+      next_incoming_id = {uint, NextIn},
+      incoming_window = {uint, Window - gb_trees:size(UnsettledIn)}};
+flow_session_fields0(Frame, _State) ->
+    Frame.
 
 outgoing_flow(#outgoing_link{ delivery_count = LocalCount },
               #'v1_0.flow'{
@@ -661,14 +539,6 @@ outgoing_flow(#outgoing_link{ delivery_count = LocalCount },
                       available = {uint, Available},
                       drain = Drain}, State}
     end.
-
-incoming_flow(#incoming_link{ delivery_count = Count }, Handle, State) ->
-    Flow = flow_session_fields(State),
-    {reply, Flow#'v1_0.flow'{
-              handle = Handle,
-              delivery_count = {uint, Count},
-              link_credit = {uint, ?INCOMING_CREDIT}},
-     State}.
 
 transfer(WriterPid, LinkHandle,
          Link = #outgoing_link{ delivery_count = Count,
@@ -824,121 +694,7 @@ acknowledgement(TransferIds, Disposition) ->
                                     settled = true,
                                     state = #'v1_0.accepted'{} }.
 
-ensure_declaring_channel(State = #session{
-                           backing_connection = Conn,
-                           declaring_channel = undefined}) ->
-    {ok, Ch} = amqp_connection:open_channel(Conn),
-    State#session{declaring_channel = Ch};
-ensure_declaring_channel(State) ->
-    State.
-
-%% There are a few things that influence what source and target
-%% definitions mean for our purposes.
-%%
-%% Addresses: we artificially segregate exchanges and queues, since
-%% they have different namespaces. However, we allow both incoming and
-%% outgoing links to exchanges: outgoing links from an exchange
-%% involve an anonymous queue.
-%%
-%% For targets, addresses are
-%% Address = "/exchange/" Name "/" RoutingKey
-%%         | "/exchange/" Name
-%%         | "/queue"
-%%         | "/queue/" Name
-%%
-%% For sources, addresses are
-%% Address = "/exchange/" Name "/" RoutingKey
-%%         | "/queue/" Name
-%%
-%% We use the message property "Subject" as the equivalent of the
-%% routing key.  In AMQP 0-9-1 terms, a target of /queue is equivalent
-%% to the default exchange; that is, the message is routed to the
-%% queue named by the subject.  A target of "/queue/Name" ignores the
-%% subject.  The reason for both varieties is that a
-%% dynamically-created queue must be fully addressable as a target,
-%% while a service may wish to use /queue and route each message to
-%% its reply-to queue name (as it is done in 0-9-1).
-%%
-%% A dynamic source or target only ever creates a queue, and the
-%% address is returned in full; e.g., "/queue/amq.gen.123456".
-%% However, that cannot be used as a reply-to, since a 0-9-1 client
-%% will use it unaltered as the routing key naming the queue.
-%% Therefore, we rewrite reply-to from 1.0 clients to be just the
-%% queue name, and expect replying clients to use /queue and the
-%% subject field.
-%%
-%% For a source queue, the distribution-mode is always move.  For a
-%% source exchange, it is always copy. Anything else should be
-%% refused.
-%%
-%% TODO default-outcome and outcomes, dynamic lifetimes
-
-ensure_target(Target = #'v1_0.target'{address       = Address,
-                                      dynamic       = Dynamic,
-                                      expiry_policy = ExpiryPolicy,
-                                      timeout       = Timeout},
-              Link = #incoming_link{},
-              State) ->
-    case Dynamic of
-        true ->
-            case Address of
-                undefined ->
-                    {ok, QueueName, State1} = create_queue(Timeout, State),
-                    {ok,
-                     Target#'v1_0.target'{address = {utf8, queue_address(QueueName)}},
-                     Link#incoming_link{exchange = <<"">>,
-                                        routing_key = QueueName},
-                     State1};
-                _Else ->
-                    {error, {both_dynamic_and_address_supplied,
-                             Dynamic, Address},
-                     State}
-            end;
-        _ ->
-            case Address of
-                {Enc, Destination}
-                when Enc =:= utf8 orelse Enc =:= utf16 ->
-                    case parse_destination(Destination, Enc) of
-                        ["queue", Name] ->
-                            case check_queue(Name, State) of
-                                {ok, QueueName, State1} ->
-                                    {ok, Target,
-                                     Link#incoming_link{exchange = <<"">>,
-                                                        routing_key = QueueName},
-                                     State1};
-                                {error, Reason, State1} ->
-                                    {error, Reason, State1}
-                            end;
-                        ["queue"] ->
-                            %% Rely on the Subject being set
-                            {ok, Target, Link#incoming_link{exchange = <<"">>}, State};
-                        ["exchange", Name] ->
-                            case check_exchange(Name, State) of
-                                {ok, ExchangeName, State1} ->
-                                    {ok, Target,
-                                     Link#incoming_link{exchange = ExchangeName},
-                                     State1};
-                                {error, Reason, State2} ->
-                                    {error, Reason, State2}
-                            end;
-                        ["exchange", Name, RKey] ->
-                            case check_exchange(Name, State) of
-                                {ok, ExchangeName, State1} ->
-                                    {ok, Target,
-                                     Link#incoming_link{exchange = ExchangeName,
-                                                        routing_key = list_to_binary(RKey)},
-                                     State1};
-                                {error, Reason, State2} ->
-                                    {error, Reason, State2}
-                            end;
-                        _Otherwise ->
-                            {error, {unknown_address, Address}, State}
-                    end;
-                _Else ->
-                    {error, {unknown_address, Address}, State}
-            end
-    end.
-
+%% TODO this looks to have a lot in common with ensure_target
 ensure_source(Source = #'v1_0.source'{address       = Address,
                                       dynamic       = Dynamic,
                                       expiry_policy = ExpiryPolicy,
@@ -948,9 +704,9 @@ ensure_source(Source = #'v1_0.source'{address       = Address,
         true ->
             case Address of
                 undefined ->
-                    {ok, QueueName, State1} = create_queue(Timeout, State),
+                    {ok, QueueName, State1} = rabbit_amqp1_0_link_util:create_queue(Timeout, State),
                     {ok,
-                     Source#'v1_0.source'{address = {utf8, queue_address(QueueName)}},
+                     Source#'v1_0.source'{address = {utf8, rabbit_amqp1_0_link_util:queue_address(QueueName)}},
                      Link#outgoing_link{queue = QueueName},
                      State1};
                 _Else ->
@@ -964,9 +720,9 @@ ensure_source(Source = #'v1_0.source'{address       = Address,
                               {_Enc, D} -> binary_to_list(D);
                               D         -> D
                           end,
-            case parse_destination(Destination) of
+            case rabbit_amqp1_0_link_util:parse_destination(Destination) of
                 ["queue", Name] ->
-                    case check_queue(Name, State) of
+                    case rabbit_amqp1_0_link_util:check_queue(Name, State) of
                         {ok, QueueName, State1} ->
                             {ok, Source,
                              Link#outgoing_link{queue = QueueName}, State1};
@@ -974,11 +730,11 @@ ensure_source(Source = #'v1_0.source'{address       = Address,
                             {error, Reason, State1}
                     end;
                 ["exchange", Name, RK] ->
-                    case check_exchange(Name, State) of
+                    case rabbit_amqp1_0_link_util:check_exchange(Name, State) of
                         {ok, ExchangeName, State1} ->
                             RoutingKey = list_to_binary(RK),
                             {ok, QueueName, State2} =
-                                create_bound_queue(ExchangeName, RoutingKey,
+                                rabbit_amqp1_0_link_util:create_bound_queue(ExchangeName, RoutingKey,
                                                    State1),
                             {ok, Source, Link#outgoing_link{queue = QueueName},
                              State2};
@@ -989,65 +745,6 @@ ensure_source(Source = #'v1_0.source'{address       = Address,
                     {error, {unknown_address, Destination}, State}
             end
     end.
-
-parse_destination(Destination, Enc) when is_binary(Destination) ->
-    parse_destination(unicode:characters_to_list(Destination, Enc)).
-
-parse_destination(Destination) when is_list(Destination) ->
-    case re:split(Destination, "/", [{return, list}]) of
-        ["", Type | Tail] when
-              Type =:= "queue" orelse Type =:= "exchange" ->
-            [Type | Tail];
-        _Else ->
-            {error, {malformed_address, Destination}}
-    end.
-
-%% Check that a queue exists
-check_queue(QueueName, State) when is_list(QueueName) ->
-    check_queue(list_to_binary(QueueName), State);
-check_queue(QueueName, State) ->
-    QDecl = #'queue.declare'{queue = QueueName, passive = true},
-    State1 = #session{
-      declaring_channel = Channel} = ensure_declaring_channel(State),
-    case catch amqp_channel:call(Channel, QDecl) of
-        {'EXIT', _Reason} ->
-            {error, not_found, State1#session{ declaring_channel = undefined }};
-        #'queue.declare_ok'{} ->
-            {ok, QueueName, State1}
-    end.
-
-check_exchange(ExchangeName, State) when is_list(ExchangeName) ->
-    check_exchange(list_to_binary(ExchangeName), State);
-check_exchange(ExchangeName, State) when is_binary(ExchangeName) ->
-    XDecl = #'exchange.declare'{ exchange = ExchangeName, passive = true },
-    State1 = #session{
-      declaring_channel = Channel } = ensure_declaring_channel(State),
-    case catch amqp_channel:call(Channel, XDecl) of
-        {'EXIT', _Reason} ->
-            {error, not_found, State1#session{declaring_channel = undefined}};
-        #'exchange.declare_ok'{} ->
-            {ok, ExchangeName, State1}
-    end.
-
-%% TODO Lifetimes: we approximate these with auto_delete.
-create_queue(_Lifetime, State) ->
-    State1 = #session{ declaring_channel = Ch } = ensure_declaring_channel(State),
-    #'queue.declare_ok'{queue = QueueName} =
-        amqp_channel:call(Ch, #'queue.declare'{auto_delete = true}),
-    {ok, QueueName, State1}.
-
-create_bound_queue(ExchangeName, RoutingKey, State) ->
-    {ok, QueueName, State1 = #session{ declaring_channel = Ch}} =
-        create_queue(?EXCHANGE_SUB_LIFETIME, State),
-    %% Don't both ensuring the channel, the previous should have done it
-    #'queue.bind_ok'{} =
-        amqp_channel:call(Ch, #'queue.bind'{ exchange = ExchangeName,
-                                             queue = QueueName,
-                                             routing_key = RoutingKey }),
-    {ok, QueueName, State1}.
-
-queue_address(QueueName) when is_binary(QueueName) ->
-    <<"/queue/", QueueName/binary>>.
 
 next_transfer_number(TransferNumber) ->
     %% TODO this should be a serial number
