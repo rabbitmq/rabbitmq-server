@@ -12,22 +12,11 @@
 -endif.
 
 %% TODO monitor declaring channel since we now don't reopen it if an error
-%% occurs
+%% occurs (or with_sacrificial_channel() ala federation)
 
 -record(state, {backing_connection, backing_channel,
                 declaring_channel, %% a sacrificial client channel for declaring things
                 reader_pid, writer_pid, session}).
-
--record(outgoing_link, {queue,
-                        delivery_count = 0,
-                        no_ack,
-                        default_outcome}).
-
-%% Just make these constant for the time being.
--define(INCOMING_CREDIT, 65536). %% TODO lose this one
--define(INIT_TXFR_COUNT, 0).
-
--record(outgoing_transfer, {delivery_tag, expected_outcome}).
 
 %% TODO test where the sweetspot for gb_trees is
 -define(MAX_SESSION_BUFFER_SIZE, 4096).
@@ -89,58 +78,19 @@ handle_info(#'basic.consume_ok'{}, State) ->
     %% Handled above
     {noreply, State};
 
-handle_info({#'basic.deliver'{consumer_tag = ConsumerTag,
-                              delivery_tag = DeliveryTag,
-                              routing_key  = RKey}, Msg},
-            State = #state{writer_pid = WriterPid,
+handle_info({#'basic.deliver'{} = Deliver, Msg},
+            State = #state{writer_pid      = WriterPid,
                            backing_channel = BCh,
-                           session = Session = #session{next_transfer_number =
-                                                            TransferNum}}) ->
-    %% FIXME, don't ignore ack required, keep track of credit, um .. etc.
-    Handle = ctag_to_handle(ConsumerTag),
-    case get({out, Handle}) of
-        Link = #outgoing_link{} ->
-            {NewLink, NewSession} =
-                transfer(WriterPid, Handle, Link, BCh, Session, RKey, Msg, DeliveryTag),
-            put({out, Handle}, NewLink),
-            {noreply, State#state{session = NewSession#session{
-                                              next_transfer_number = rabbit_amqp1_0_session:next_transfer_number(TransferNum)}}};
-        undefined ->
-            %% FIXME handle missing link -- why does the queue think it's there?
-            rabbit_log:warning("Delivery to non-existent consumer ~p", [ConsumerTag]),
-            {noreply, State}
-    end;
+                           session         = Session}) ->
+    {ok, Session1} = rabbit_amqp1_0_outgoing_link:deliver(
+                       Deliver, Msg, WriterPid, BCh, Session),
+    {noreply, State#state{session = Session1}};
 
 %% A message from the queue saying that the credit is either exhausted
 %% or there are no more messages
-handle_info(#'basic.credit_state'{consumer_tag = CTag,
-                                  credit       = LinkCredit,
-                                  count        = Count,
-                                  available    = Available0,
-                                  drain        = Drain},
+handle_info(#'basic.credit_state'{} = CreditState,
             State = #state{writer_pid = WriterPid}) ->
-    Available = case Available0 of
-                    -1  -> undefined;
-                    Num -> {uint, Num}
-                end,
-    Handle = ctag_to_handle(CTag),
-    
-    %% The transfer count that is given by the queue should be at
-    %% least that we have locally, since we will either have received
-    %% all the deliveries and transfered them, or the queue will have
-    %% advanced it due to drain. So we adopt the queue's idea of the
-    %% count.
-
-    %% FIXME account for it not being there any more
-    Out = get({out, Handle}),
-    
-    F = #'v1_0.flow'{ handle      = Handle,
-                      delivery_count = {uint, Count},
-                      link_credit = {uint, LinkCredit},
-                      available   = Available,
-                      drain       = Drain },
-    put({out, Handle}, Out#outgoing_link{ delivery_count = Count }),
-    rabbit_amqp1_0_writer:send_command(WriterPid, F),
+    rabbit_amqp1_0_outgoing_link:update_credit(CreditState, WriterPid),
     {noreply, State};
 
 %% An acknowledgement from the queue.  To keep the incoming window
@@ -300,29 +250,29 @@ handle_control(#'v1_0.begin'{next_outgoing_id = {uint, RemoteNextIn},
                    window_size = SessionBufferSize}}};
 
 handle_control(#'v1_0.attach'{role = ?SEND_ROLE} = Attach,
-               State = #state{ backing_channel = BCh,
-                               declaring_channel = DCh,
-                               session = Session}) ->
+               State = #state{backing_channel   = BCh,
+                              declaring_channel = DCh,
+                              session           = Session}) ->
     {ok, Reply, Confirm} =
         rabbit_amqp1_0_incoming_link:attach(Attach, BCh, DCh),
     {reply, flow_session_fields(Reply, Session),
      State#state{session = rabbit_amqp1_0_session:maybe_init_publish_id(
                              Confirm, Session)}};
 
-handle_control(#'v1_0.attach'{source = Source,
-                              initial_delivery_count = undefined,
-                              role = ?RECV_ROLE} = Attach, %% client is receiver
-               State) ->
-    %% TODO ensure_destination
-    {DefaultOutcome, Outcomes} = rabbit_amqp1_0_link_util:outcomes(Source),
-    attach_outgoing(DefaultOutcome, Outcomes, Attach, State);
+handle_control(#'v1_0.attach'{role                   = ?RECV_ROLE,
+                              initial_delivery_count = undefined} = Attach,
+               State = #state{backing_channel   = BCh,
+                              declaring_channel = DCh,
+                              session           = Session}) ->
+    {ok, Reply} = rabbit_amqp1_0_outgoing_link:attach(Attach, BCh, DCh),
+    {reply, flow_session_fields(Reply, Session), State};
 
 handle_control([Txfr = #'v1_0.transfer'{settled = Settled,
                                         delivery_id = {uint, TxfrId}} | Msg],
                State = #state{backing_channel = BCh,
                               session         = Session}) ->
     {ok, Reply} = rabbit_amqp1_0_incoming_link:transfer(Txfr, Msg, BCh),
-    {reply, Reply, State#state{session = rabbit_amqp1_0_session:publish(
+    {reply, Reply, State#state{session = rabbit_amqp1_0_session:record_publish(
                                            Settled, TxfrId, Session)}};
 
 %% Disposition: a single extent is settled at a time.  This may
@@ -367,7 +317,8 @@ handle_control(#'v1_0.end'{}, _State = #state{ writer_pid = Sock }) ->
 %% concerned; it's only because AMQP 0-9-1 defines QoS in terms of the
 %% total number of unacked messages, whereas 1.0 has an explicit window.
 handle_control(Flow = #'v1_0.flow'{},
-               State = #state{session = Session = #session{
+               State = #state{backing_channel = BCh,
+                              session = Session = #session{
                                           next_incoming_id = LocalNextIn,
                                           max_outgoing_id = _LocalMaxOut,
                                           next_transfer_number = LocalNextOut}}) ->
@@ -403,8 +354,15 @@ handle_control(Flow = #'v1_0.flow'{},
                             rabbit_log:warning("Flow for unknown link handle ~p", [Flow]),
                             protocol_error(?V_1_0_AMQP_ERROR_INVALID_FIELD,
                                            "Unattached handle: ~p", [Handle]);
-                        Out = #outgoing_link{} ->
-                            outgoing_flow(Out, Flow, State1)
+                        Out ->
+                            case rabbit_amqp1_0_outgoing_link:flow(
+                                   Out, Flow, BCh) of
+                                ok ->
+                                    {noreply, State1};
+                                {ok, Reply} ->
+                                    {reply, flow_session_fields(Reply, Session),
+                                     State1}
+                            end
                     end;
                 _In ->
                     %% We're being told about available messages at
@@ -420,59 +378,6 @@ handle_control(Frame, State) ->
     {noreply, State}.
 
 %% ------
-
-attach_outgoing(DefaultOutcome, Outcomes,
-                #'v1_0.attach'{name = Name,
-                               handle = Handle,
-                               source = Source,
-                               rcv_settle_mode = RcvSettleMode},
-               State = #state{backing_channel = Ch}) ->
-    %% Default is first
-    NoAck = RcvSettleMode =/= ?V_1_0_RECEIVER_SETTLE_MODE_SECOND,
-    DOSym = rabbit_amqp1_0_framing:symbol_for(DefaultOutcome),
-    case ensure_source(Source,
-                       #outgoing_link{ delivery_count = ?INIT_TXFR_COUNT,
-                                       no_ack = NoAck,
-                                       default_outcome = DOSym}, State) of
-        {ok, Source1,
-         OutgoingLink = #outgoing_link{ queue = QueueName,
-                                        delivery_count = Count }} ->
-            CTag = handle_to_ctag(Handle),
-            %% Zero the credit before we start consuming, so that we only
-            %% use explicitly given credit.
-            amqp_channel:cast(Ch, #'basic.credit'{consumer_tag = CTag,
-                                                  credit       = 0,
-                                                  count        = Count,
-                                                  drain        = false}),
-            case amqp_channel:subscribe(
-                   Ch, #'basic.consume' { queue = QueueName,
-                                          consumer_tag = CTag,
-                                          no_ack = NoAck,
-                                          %% TODO exclusive?
-                                          exclusive = false}, self()) of
-                #'basic.consume_ok'{} ->
-                    %% FIXME we should avoid the race by getting the queue to send
-                    %% attach back, but a.t.m. it would use the wrong codec.
-                    put({out, Handle}, OutgoingLink),
-                    {reply, #'v1_0.attach'{
-                       name = Name,
-                       handle = Handle,
-                       initial_delivery_count = {uint, ?INIT_TXFR_COUNT},
-                       source = Source1#'v1_0.source'{
-                                  default_outcome = DefaultOutcome
-                                  %% TODO this breaks the Python client, when it
-                                  %% tries to send us back a matching detach message
-                                  %% it gets confused between described(true, [...])
-                                  %% and [...]. We think we're correct here
-                                  %% outcomes = Outcomes
-                                 },
-                       role = ?SEND_ROLE}, State};
-                Fail ->
-                    protocol_error(?V_1_0_AMQP_ERROR_INTERNAL_ERROR, "Consume failed: ~p", Fail)
-            end;
-        {error, _Reason} ->
-            {reply, #'v1_0.attach'{source = undefined}, State}
-    end.
 
 flow_session_fields(Frames, Session) ->
     [flow_session_fields0(F, Session) || F <- Frames].
@@ -493,105 +398,6 @@ flow_session_fields0(Flow = #'v1_0.flow'{},
       incoming_window = {uint, Window - gb_trees:size(UnsettledIn)}};
 flow_session_fields0(Frame, _Session) ->
     Frame.
-
-outgoing_flow(#outgoing_link{ delivery_count = LocalCount },
-              #'v1_0.flow'{
-                handle = Handle,
-                delivery_count = Count0,
-                link_credit = {uint, RemoteCredit},
-                drain = Drain},
-              State = #state{backing_channel = Ch}) ->
-    RemoteCount = case Count0 of
-                      undefined -> LocalCount;
-                      {uint, Count} -> Count
-                  end,
-    %% Rebase to our transfer-count
-    Credit = RemoteCount + RemoteCredit - LocalCount,
-    CTag = handle_to_ctag(Handle),
-    #'basic.credit_ok'{available = Available} =
-        %% FIXME calculate the credit based on the transfer count
-        amqp_channel:call(Ch,
-                          #'basic.credit'{consumer_tag = CTag,
-                                          credit       = Credit,
-                                          count        = LocalCount,
-                                          drain        = Drain}),
-    case Available of
-        -1 ->
-            {noreply, State};
-        %% We don't know - probably because this flow relates
-        %% to a handle that does not yet exist
-        %% TODO is this an error?
-        _  ->
-            Flow1 = flow_session_fields(State#state.session),
-            {reply, Flow1#'v1_0.flow'{
-                      handle = Handle,
-                      delivery_count = {uint, LocalCount},
-                      link_credit = {uint, Credit},
-                      available = {uint, Available},
-                      drain = Drain}, State}
-    end.
-
-transfer(WriterPid, LinkHandle,
-         Link = #outgoing_link{ delivery_count = Count,
-                                no_ack = NoAck,
-                                default_outcome = DefaultOutcome },
-         AmqpChannel,
-         Session = #session{next_transfer_number = TransferNumber,
-                            max_outgoing_id = LocalMaxOut,
-                            window_size = WindowSize,
-                            outgoing_unsettled_map = Unsettled},
-         RKey,
-         Msg = #amqp_msg{payload = Content},
-         DeliveryTag) ->
-    %% FIXME
-    %% If either the outgoing session window, or the remote incoming
-    %% session window, is closed, we can't send this. This probably
-    %% happened because the far side is basing its window on the low
-    %% water mark, whereas we can only tell the queue to have at most
-    %% "prefetch_count" messages in flight (i.e., a total). For the
-    %% minute we will have to just break things.
-    NumUnsettled = gb_trees:size(Unsettled),
-    if (LocalMaxOut > TransferNumber) andalso
-       (WindowSize >= NumUnsettled) ->
-            NewLink = Link#outgoing_link{
-                        delivery_count = Count + 1
-                       },
-            T = #'v1_0.transfer'{handle = LinkHandle,
-                                 delivery_tag = {binary, <<DeliveryTag:64>>},
-                                 delivery_id = {uint, TransferNumber},
-                                 %% The only one in AMQP 1-0
-                                 message_format = {uint, 0},
-                                 settled = NoAck,
-                                 resume = false,
-                                 more = false,
-                                 aborted = false,
-                                 %% TODO: actually batchable would be
-                                 %% fine, but in any case it's only a
-                                 %% hint
-                                 batchable = false},
-            Unsettled1 = case NoAck of
-                             true -> Unsettled;
-                             false -> gb_trees:insert(TransferNumber,
-                                                      #outgoing_transfer{
-                                                        delivery_tag = DeliveryTag,
-                                                        expected_outcome = DefaultOutcome },
-                                                      Unsettled)
-                         end,
-            rabbit_amqp1_0_writer:send_command(
-              WriterPid,
-              [T | rabbit_amqp1_0_message:annotated_message(RKey, Msg)]),
-            {NewLink, Session#session { outgoing_unsettled_map = Unsettled1 }};
-       %% FIXME We can't knowingly exceed our credit.  On the other
-       %% hand, we've been handed a message to deliver. This has
-       %% probably happened because the receiver has suddenly reduced
-       %% the credit or session window.
-       NoAck ->
-            {Link, Session};
-       true ->
-            amqp_channel:call(AmqpChannel, #'basic.reject'{requeue = true,
-                                                           delivery_tag = DeliveryTag}),
-            {Link, Session}
-    end.
 
 %% We've been told that the fate of a transfer has been determined.
 %% Generally if the other side has not settled it, we will do so.  If
@@ -685,59 +491,3 @@ acknowledgement(TransferIds, Disposition) ->
                                     last = {uint, lists:last(TransferIds)},
                                     settled = true,
                                     state = #'v1_0.accepted'{} }.
-
-%% TODO this looks to have a lot in common with ensure_target
-ensure_source(Source = #'v1_0.source'{address       = Address,
-                                      dynamic       = Dynamic,
-                                      expiry_policy = ExpiryPolicy,
-                                      timeout       = Timeout},
-              Link = #outgoing_link{},
-              #state{declaring_channel = DCh}) ->
-    case Dynamic of
-        true ->
-            case Address of
-                undefined ->
-                    {ok, QueueName} = rabbit_amqp1_0_link_util:create_queue(Timeout, DCh),
-                    {ok,
-                     Source#'v1_0.source'{address = {utf8, rabbit_amqp1_0_link_util:queue_address(QueueName)}},
-                     Link#outgoing_link{queue = QueueName}};
-                _Else ->
-                    {error, {both_dynamic_and_address_supplied,
-                             Dynamic, Address}}
-            end;
-        _ ->
-            %% TODO ugh. This will go away after the planned codec rewrite.
-            Destination = case Address of
-                              {_Enc, D} -> binary_to_list(D);
-                              D         -> D
-                          end,
-            case rabbit_amqp1_0_link_util:parse_destination(Destination) of
-                ["queue", Name] ->
-                    case rabbit_amqp1_0_link_util:check_queue(Name, DCh) of
-                        {ok, QueueName} ->
-                            {ok, Source,
-                             Link#outgoing_link{queue = QueueName}};
-                        {error, Reason} ->
-                            {error, Reason}
-                    end;
-                ["exchange", Name, RK] ->
-                    case rabbit_amqp1_0_link_util:check_exchange(Name, DCh) of
-                        {ok, ExchangeName} ->
-                            RoutingKey = list_to_binary(RK),
-                            {ok, QueueName} =
-                                rabbit_amqp1_0_link_util:create_bound_queue(
-                                  ExchangeName, RoutingKey, DCh),
-                            {ok, Source, Link#outgoing_link{queue = QueueName}};
-                        {error, Reason} ->
-                            {error, Reason}
-                    end;
-                _Otherwise ->
-                    {error, {unknown_address, Destination}}
-            end
-    end.
-
-handle_to_ctag({uint, H}) ->
-    <<"ctag-", H:32/integer>>.
-
-ctag_to_handle(<<"ctag-", H:32/integer>>) ->
-    {uint, H}.
