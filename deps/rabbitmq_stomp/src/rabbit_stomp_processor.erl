@@ -611,21 +611,17 @@ shutdown_channel_and_connection(State = #state{channel       = Channel,
                                                connection    = Connection,
                                                subscriptions = Subs}) ->
     %% push through all attempts at closure to avoid debris
-    try
-        catch
-            dict:fold(
-                fun(_ConsumerTag, #subscription{channel = SubChannel}, Acc) ->
-                    case SubChannel of
-                        Channel -> Acc;
-                    _ ->
-                        amqp_channel:close(SubChannel),
-                        Acc
-                    end
-                end, 0, Subs)
-    after
-        catch amqp_channel:close(Channel),
-        catch amqp_connection:close(Connection)
-    end,
+    dict:fold(
+        fun(_ConsumerTag, #subscription{channel = SubChannel}, Acc) ->
+            case SubChannel of
+                Channel -> Acc;
+                _ ->
+                    catch amqp_channel:close(SubChannel),
+                    Acc
+            end
+        end, 0, Subs),
+    catch amqp_channel:close(Channel),
+    catch amqp_connection:close(Connection),
     State#state{channel = none, connection = none, subscriptions = none}.
 
 default_prefetch({queue, _}) ->
