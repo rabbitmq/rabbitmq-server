@@ -20,7 +20,6 @@
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_amqp1_0.hrl").
--include("rabbit_amqp1_0_session.hrl").
 
 -import(rabbit_amqp1_0_link_util, [protocol_error/3]).
 
@@ -84,50 +83,18 @@ handle_info(#'basic.credit_state'{} = CreditState,
     rabbit_amqp1_0_outgoing_link:update_credit(CreditState, WriterPid),
     {noreply, State};
 
-%% An acknowledgement from the queue.  To keep the incoming window
-%% moving, we make sure to update them with the session counters every
-%% once in a while.  Assuming that the buffer is an appropriate size,
-%% about once every window_size / 2 is a good heuristic.
-handle_info(#'basic.ack'{delivery_tag = DTag, multiple = Multiple},
-            State = #state{writer_pid = WriterPid,
-                           session = Session = #session{
-                                       incoming_unsettled_map = Unsettled,
-                                       window_size = Window,
-                                       ack_counter = AckCounter}}) ->
-    {TransferIds, Unsettled1} =
-        case Multiple of
-            true  -> acknowledgement_range(DTag, Unsettled);
-            false -> case gb_trees:lookup(DTag, Unsettled) of
-                         {value, Id} ->
-                             {[Id], gb_trees:delete(DTag, Unsettled)};
-                         none ->
-                             {[], Unsettled}
-                     end
-        end,
-    case TransferIds of
-        [] -> ok;
-        _  -> D = acknowledgement(TransferIds,
-                                  #'v1_0.disposition'{role = ?RECV_ROLE}),
-              rabbit_amqp1_0_writer:send_command(WriterPid, D)
-    end,
-    HalfWindow = Window div 2,
-    AckCounter1 = case (AckCounter + length(TransferIds)) of
-                      Over when Over >= HalfWindow ->
-                          F = rabbit_amqp1_0_session:flow_fields(
-                                State#state.session),
-                          rabbit_amqp1_0_writer:send_command(WriterPid, F),
-                          Over - HalfWindow;
-                      Counter ->
-                          Counter
-                  end,
-    {noreply, state(Session#session{
-                      ack_counter = AckCounter1,
-                      incoming_unsettled_map = Unsettled1}, State)};
+handle_info(#'basic.ack'{} = Ack, State = #state{writer_pid = WriterPid,
+                                                 session    = Session}) ->
+    {Reply, Session1} = rabbit_amqp1_0_session:ack(Ack, Session),
+    [rabbit_amqp1_0_writer:send_command(WriterPid, F) ||
+        F <- rabbit_amqp1_0_session:flow_fields(Reply, Session)],
+    {noreply, state(Session1, State)};
 
 %% TODO these pretty much copied wholesale from rabbit_channel
 handle_info({'EXIT', WriterPid, Reason = {writer, send_failed, _Error}},
             State = #state{writer_pid = WriterPid}) ->
-    State#state.reader_pid ! {channel_exit, State#state.session#session.channel_num, Reason},
+    State#state.reader_pid !
+        {channel_exit, rabbit_amqp1_0_session:channel(session(State)), Reason},
     {stop, normal, State};
 handle_info({'EXIT', _Pid, Reason}, State) ->
     {stop, Reason, State};
@@ -239,50 +206,10 @@ handle_control(#'v1_0.end'{}, _State = #state{ writer_pid = Sock }) ->
 %% Flow control.  These frames come with two pieces of information:
 %% the session window, and optionally, credit for a particular link.
 %% We'll deal with each of them separately.
-%%
-%% See above regarding the session window. We should already know the
-%% next outgoing transfer sequence number, because it's one more than
-%% the last transfer we saw; and, we don't need to know the next
-%% incoming transfer sequence number (although we might use it to
-%% detect congestion -- e.g., if it's lagging far behind our outgoing
-%% sequence number). We probably care about the outgoing window, since
-%% we want to keep it open by sending back settlements, but there's
-%% not much we can do to hurry things along.
-%%
-%% We do care about the incoming window, because we must not send
-%% beyond it. This may cause us problems, even in normal operation,
-%% since we want our unsettled transfers to be exactly those that are
-%% held as unacked by the backing channel; however, the far side may
-%% close the window while we still have messages pending
-%% transfer. Note that this isn't a race so far as AMQP 1.0 is
-%% concerned; it's only because AMQP 0-9-1 defines QoS in terms of the
-%% total number of unacked messages, whereas 1.0 has an explicit window.
 handle_control(Flow = #'v1_0.flow'{},
                State = #state{backing_channel = BCh,
-                              session = Session = #session{
-                                          next_incoming_id = LocalNextIn,
-                                          max_outgoing_id = _LocalMaxOut,
-                                          next_transfer_number = LocalNextOut}}) ->
-    #'v1_0.flow'{ next_incoming_id = RemoteNextIn0,
-                  incoming_window = {uint, RemoteWindowIn},
-                  next_outgoing_id = {uint, RemoteNextOut},
-                  outgoing_window = {uint, RemoteWindowOut}} = Flow,
-    %% Check the things that we know for sure
-    %% TODO sequence number comparisons
-    ?DEBUG("~p == ~p~n", [RemoteNextOut, LocalNextIn]),
-    %% TODO the Python client sets next_outgoing_id=2 on begin, then sends a
-    %% flow with next_outgoing_id=1. Not sure what that's meant to mean.
-    %% RemoteNextOut = LocalNextIn,
-    %% The far side may not have our begin{} with our next-transfer-id
-    RemoteNextIn = case RemoteNextIn0 of
-                       {uint, Id} -> Id;
-                       undefined  -> LocalNextOut
-                   end,
-    ?DEBUG("~p =< ~p~n", [RemoteNextIn, LocalNextOut]),
-    true = (RemoteNextIn =< LocalNextOut),
-    %% Adjust our window
-    RemoteMaxOut = RemoteNextIn + RemoteWindowIn,
-    State1 = state(Session#session{max_outgoing_id = RemoteMaxOut}, State),
+                              session         = Session}) ->
+    State1 = state(rabbit_amqp1_0_session:flow(Flow, Session), State),
     case Flow#'v1_0.flow'.handle of
         undefined ->
             {noreply, State1};
@@ -318,31 +245,6 @@ reply([], State) ->
     {noreply, State};
 reply(Reply, State) ->
     {reply, rabbit_amqp1_0_session:flow_fields(Reply, session(State)), State}.
-
-acknowledgement_range(DTag, Unsettled) ->
-    acknowledgement_range(DTag, Unsettled, []).
-
-acknowledgement_range(DTag, Unsettled, Acc) ->
-    case gb_trees:is_empty(Unsettled) of
-        true ->
-            {lists:reverse(Acc), Unsettled};
-        false ->
-            {DTag1, TransferId} = gb_trees:smallest(Unsettled),
-            case DTag1 =< DTag of
-                true ->
-                    {_K, _V, Unsettled1} = gb_trees:take_smallest(Unsettled),
-                    acknowledgement_range(DTag, Unsettled1,
-                                          [TransferId|Acc]);
-                false ->
-                    {lists:reverse(Acc), Unsettled}
-            end
-    end.
-
-acknowledgement(TransferIds, Disposition) ->
-    Disposition#'v1_0.disposition'{ first = {uint, hd(TransferIds)},
-                                    last = {uint, lists:last(TransferIds)},
-                                    settled = true,
-                                    state = #'v1_0.accepted'{} }.
 
 session(#state{session = Session}) -> Session.
 state(Session, State) -> State#state{session = Session}.

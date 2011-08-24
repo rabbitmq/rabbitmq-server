@@ -4,14 +4,26 @@
 
 -export([init/1, begin_/2, maybe_init_publish_id/2, record_publish/3,
          incr_transfer_number/1, next_transfer_number/1, may_send/1,
-         record_delivery/3, settle/3, flow_fields/2, flow_fields/1]).
+         record_delivery/3, settle/3, flow_fields/2, channel/1, flow/2, ack/2]).
 
+-include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_amqp1_0.hrl").
--include("rabbit_amqp1_0_session.hrl").
 
 %% TODO test where the sweetspot for gb_trees is
 -define(MAX_SESSION_BUFFER_SIZE, 4096).
 -define(DEFAULT_MAX_HANDLE, 16#ffffffff).
+
+-record(session, {channel_num, %% we just use the incoming (AMQP 1.0) channel number
+                  next_transfer_number = 0, % next outgoing id
+                  max_outgoing_id, % based on the remote incoming window size
+                  next_incoming_id, % just to keep a check
+                  next_publish_id, %% the 0-9-1-side counter for confirms
+                  %% we make incoming and outgoing session buffers the
+                  %% same size
+                  window_size,
+                  ack_counter = 0,
+                  incoming_unsettled_map,
+                  outgoing_unsettled_map }).
 
 -record(outgoing_transfer, {delivery_tag, expected_outcome}).
 
@@ -216,6 +228,104 @@ flow_fields(Flow = #'v1_0.flow'{},
 flow_fields(Frame, _Session) ->
     Frame.
 
-flow_fields(Session) ->
-    flow_fields(#'v1_0.flow'{}, Session).
+channel(#session{channel_num = Channel}) -> Channel.
 
+%% See above regarding the session window. We should already know the
+%% next outgoing transfer sequence number, because it's one more than
+%% the last transfer we saw; and, we don't need to know the next
+%% incoming transfer sequence number (although we might use it to
+%% detect congestion -- e.g., if it's lagging far behind our outgoing
+%% sequence number). We probably care about the outgoing window, since
+%% we want to keep it open by sending back settlements, but there's
+%% not much we can do to hurry things along.
+%%
+%% We do care about the incoming window, because we must not send
+%% beyond it. This may cause us problems, even in normal operation,
+%% since we want our unsettled transfers to be exactly those that are
+%% held as unacked by the backing channel; however, the far side may
+%% close the window while we still have messages pending
+%% transfer. Note that this isn't a race so far as AMQP 1.0 is
+%% concerned; it's only because AMQP 0-9-1 defines QoS in terms of the
+%% total number of unacked messages, whereas 1.0 has an explicit window.
+flow(#'v1_0.flow'{next_incoming_id = RemoteNextIn0,
+                  incoming_window  = {uint, RemoteWindowIn},
+                  next_outgoing_id = {uint, RemoteNextOut},
+                  outgoing_window  = {uint, RemoteWindowOut}},
+     Session = #session{next_incoming_id     = LocalNextIn,
+                        max_outgoing_id      = _LocalMaxOut,
+                        next_transfer_number = LocalNextOut}) ->
+    %% Check the things that we know for sure
+    %% TODO sequence number comparisons
+    ?DEBUG("~p == ~p~n", [RemoteNextOut, LocalNextIn]),
+    %% TODO the Python client sets next_outgoing_id=2 on begin, then sends a
+    %% flow with next_outgoing_id=1. Not sure what that's meant to mean.
+    %% RemoteNextOut = LocalNextIn,
+    %% The far side may not have our begin{} with our next-transfer-id
+    RemoteNextIn = case RemoteNextIn0 of
+                       {uint, Id} -> Id;
+                       undefined  -> LocalNextOut
+                   end,
+    ?DEBUG("~p =< ~p~n", [RemoteNextIn, LocalNextOut]),
+    true = (RemoteNextIn =< LocalNextOut),
+    %% Adjust our window
+    RemoteMaxOut = RemoteNextIn + RemoteWindowIn,
+    Session#session{max_outgoing_id = RemoteMaxOut}.
+
+%% An acknowledgement from the queue.  To keep the incoming window
+%% moving, we make sure to update them with the session counters every
+%% once in a while.  Assuming that the buffer is an appropriate size,
+%% about once every window_size / 2 is a good heuristic.
+ack(#'basic.ack'{delivery_tag = DTag, multiple = Multiple},
+    Session = #session{incoming_unsettled_map = Unsettled,
+                       window_size            = Window,
+                       ack_counter            = AckCounter}) ->
+    {TransferIds, Unsettled1} =
+        case Multiple of
+            true  -> acknowledgement_range(DTag, Unsettled);
+            false -> case gb_trees:lookup(DTag, Unsettled) of
+                         {value, Id} ->
+                             {[Id], gb_trees:delete(DTag, Unsettled)};
+                         none ->
+                             {[], Unsettled}
+                     end
+        end,
+    Disposition = case TransferIds of
+                      [] -> [];
+                      _  -> [acknowledgement(
+                               TransferIds,
+                               #'v1_0.disposition'{role = ?RECV_ROLE})]
+    end,
+    HalfWin = Window div 2,
+    {AckCounter1, Flow} =
+        case AckCounter + length(TransferIds) of
+            Over when Over >= HalfWin -> {Over - HalfWin, [#'v1_0.flow'{}]};
+            Counter                   -> {Counter,        []}
+        end,
+    {Disposition ++ Flow,
+     Session#session{ack_counter            = AckCounter1,
+                     incoming_unsettled_map = Unsettled1}}.
+
+acknowledgement_range(DTag, Unsettled) ->
+    acknowledgement_range(DTag, Unsettled, []).
+
+acknowledgement_range(DTag, Unsettled, Acc) ->
+    case gb_trees:is_empty(Unsettled) of
+        true ->
+            {lists:reverse(Acc), Unsettled};
+        false ->
+            {DTag1, TransferId} = gb_trees:smallest(Unsettled),
+            case DTag1 =< DTag of
+                true ->
+                    {_K, _V, Unsettled1} = gb_trees:take_smallest(Unsettled),
+                    acknowledgement_range(DTag, Unsettled1,
+                                          [TransferId|Acc]);
+                false ->
+                    {lists:reverse(Acc), Unsettled}
+            end
+    end.
+
+acknowledgement(TransferIds, Disposition) ->
+    Disposition#'v1_0.disposition'{ first = {uint, hd(TransferIds)},
+                                    last = {uint, lists:last(TransferIds)},
+                                    settled = true,
+                                    state = #'v1_0.accepted'{} }.
