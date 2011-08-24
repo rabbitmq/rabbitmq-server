@@ -11,5 +11,3 @@
                   ack_counter = 0,
                   incoming_unsettled_map,
                   outgoing_unsettled_map }).
-
--record(outgoing_transfer, {delivery_tag, expected_outcome}).

@@ -278,12 +278,30 @@ handle_control([Txfr = #'v1_0.transfer'{settled = Settled,
 %% Disposition: a single extent is settled at a time.  This may
 %% involve more than one message. TODO: should we send a flow after
 %% this, to indicate the state of the session window?
-handle_control(#'v1_0.disposition'{ role = ?RECV_ROLE } = Disp, State) ->
-    case settle(Disp, State) of
-        {none, NewState} ->
-            {noreply, NewState};
-        {ReplyDisp, NewState} ->
-            {reply, ReplyDisp, NewState}
+handle_control(#'v1_0.disposition'{state = Outcome,
+                                   role = ?RECV_ROLE} = Disp,
+               State = #state{backing_channel = Ch,
+                              session         = Session}) ->
+    AckFun =
+        fun (DeliveryTag) ->
+                ok = amqp_channel:call(
+                       Ch, case Outcome of
+                               #'v1_0.accepted'{} ->
+                                   #'basic.ack'{delivery_tag = DeliveryTag,
+                                                multiple     = false};
+                               #'v1_0.rejected'{} ->
+                                   #'basic.reject'{delivery_tag = DeliveryTag,
+                                                   requeue      = false};
+                               #'v1_0.released'{} ->
+                                   #'basic.reject'{delivery_tag = DeliveryTag,
+                                                   requeue      = true}
+                           end)
+        end,
+    case rabbit_amqp1_0_session:settle(Disp, Session, AckFun) of
+        {none, Session1} ->
+            {noreply, State#state{session = Session1}};
+        {Reply, Session1} ->
+            {reply, Reply, State#state{session = Session1}}
     end;
 
 handle_control(#'v1_0.detach'{ handle = Handle }, State) ->
@@ -378,74 +396,6 @@ reply([], State) ->
     {noreply, State};
 reply(Reply, State = #state{session = Session}) ->
     {reply, rabbit_amqp1_0_session:flow_fields(Reply, Session), State}.
-
-%% We've been told that the fate of a transfer has been determined.
-%% Generally if the other side has not settled it, we will do so.  If
-%% the other side /has/ settled it, we don't need to reply -- it's
-%% already forgotten its state for the transfer anyway.
-settle(Disp = #'v1_0.disposition'{ first = First0,
-                                   last = Last0,
-                                   settled = Settled,
-                                   state = Outcome },
-       State = #state{backing_channel = Ch,
-                      session = Session = #session{
-                                  outgoing_unsettled_map = Unsettled}}) ->
-    {uint, First} = First0,
-    %% Last may be omitted, in which case it's the same as first
-    Last = case Last0 of
-               {uint, L} -> L;
-               undefined -> First
-           end,
-
-    %% The other party may be talking about something we've already
-    %% forgotten; this isn't a crime, we can just ignore it.
-
-    case gb_trees:is_empty(Unsettled) of
-        true ->
-            {none, State};
-        false ->
-            {LWM, _} = gb_trees:smallest(Unsettled),
-            {HWM, _} = gb_trees:largest(Unsettled),
-            if Last < LWM ->
-                    {none, State};
-               First > HWM ->
-                    State; %% FIXME this should probably be an error, rather than ignored.
-               true ->
-                    Unsettled1 =
-                        lists:foldl(
-                          fun (Transfer, Map) ->
-                                  case gb_trees:lookup(Transfer, Map) of
-                                      none ->
-                                          Map;
-                                      {value, Entry} ->
-                                          ?DEBUG("Settling ~p with ~p~n", [Transfer, Outcome]),
-                                          #outgoing_transfer{ delivery_tag = DeliveryTag } = Entry,
-                                          Ack =
-                                              case Outcome of
-                                                  #'v1_0.accepted'{} ->
-                                                      #'basic.ack' {delivery_tag = DeliveryTag,
-                                                                    multiple     = false };
-                                                  #'v1_0.rejected'{} ->
-                                                      #'basic.reject' {delivery_tag = DeliveryTag,
-                                                                       requeue      = false };
-                                                  #'v1_0.released'{} ->
-                                                      #'basic.reject' {delivery_tag = DeliveryTag,
-                                                                       requeue      = true }
-                                              end,
-                                          ok = amqp_channel:call(Ch, Ack),
-                                          gb_trees:delete(Transfer, Map)
-                                  end
-                          end,
-                          Unsettled, lists:seq(erlang:max(LWM, First),
-                                               erlang:min(HWM, Last))),
-                    {case Settled of
-                         true  -> none;
-                         false -> Disp#'v1_0.disposition'{ settled = true,
-                                                           role = ?SEND_ROLE }
-                     end,
-                     State#state{session = Session#session{outgoing_unsettled_map = Unsettled1}}}
-            end
-    end.
 
 acknowledgement_range(DTag, Unsettled) ->
     acknowledgement_range(DTag, Unsettled, []).

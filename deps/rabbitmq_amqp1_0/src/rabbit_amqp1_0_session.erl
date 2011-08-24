@@ -2,10 +2,12 @@
 
 -export([process_frame/2, maybe_init_publish_id/2, record_publish/3,
          incr_transfer_number/1, next_transfer_number/1, may_send/1,
-         record_delivery/3, flow_fields/2, flow_fields/1]).
+         record_delivery/3, settle/3, flow_fields/2, flow_fields/1]).
 
 -include("rabbit_amqp1_0.hrl").
 -include("rabbit_amqp1_0_session.hrl").
+
+-record(outgoing_transfer, {delivery_tag, expected_outcome}).
 
 process_frame(Pid, Frame) ->
     gen_server2:cast(Pid, {frame, Frame}).
@@ -66,6 +68,59 @@ record_delivery(DeliveryTag, DefaultOutcome,
                                    expected_outcome = DefaultOutcome },
                                  Unsettled),
     Session#session{outgoing_unsettled_map = Unsettled1}.
+
+%% We've been told that the fate of a transfer has been determined.
+%% Generally if the other side has not settled it, we will do so.  If
+%% the other side /has/ settled it, we don't need to reply -- it's
+%% already forgotten its state for the transfer anyway.
+settle(Disp = #'v1_0.disposition'{first   = First0,
+                                  last    = Last0,
+                                  settled = Settled},
+       Session = #session{outgoing_unsettled_map = Unsettled},
+       UpstreamAckFun) ->
+    {uint, First} = First0,
+    %% Last may be omitted, in which case it's the same as first
+    Last = case Last0 of
+               {uint, L} -> L;
+               undefined -> First
+           end,
+    %% The other party may be talking about something we've already
+    %% forgotten; this isn't a crime, we can just ignore it.
+    case gb_trees:is_empty(Unsettled) of
+        true ->
+            {none, Session};
+        false ->
+            {LWM, _} = gb_trees:smallest(Unsettled),
+            {HWM, _} = gb_trees:largest(Unsettled),
+            if Last < LWM ->
+                    {none, Session};
+               %% FIXME this should probably be an error, rather than ignored.
+               First > HWM ->
+                    {none, Session};
+               true ->
+                    Unsettled1 =
+                        lists:foldl(
+                          fun (Transfer, Map) ->
+                                  case gb_trees:lookup(Transfer, Map) of
+                                      none ->
+                                          Map;
+                                      {value, Entry} ->
+                                          ?DEBUG("Settling ~p with ~p~n", [Transfer, Outcome]),
+                                          #outgoing_transfer{ delivery_tag = DeliveryTag } = Entry,
+                                          UpstreamAckFun(DeliveryTag),
+                                          gb_trees:delete(Transfer, Map)
+                                  end
+                          end,
+                          Unsettled, lists:seq(erlang:max(LWM, First),
+                                               erlang:min(HWM, Last))),
+                    {case Settled of
+                         true  -> none;
+                         false -> Disp#'v1_0.disposition'{ settled = true,
+                                                           role = ?SEND_ROLE }
+                     end,
+                     Session#session{outgoing_unsettled_map = Unsettled1}}
+            end
+    end.
 
 flow_fields(Frames, Session) ->
     [flow_fields0(F, Session) || F <- Frames].
