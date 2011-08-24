@@ -369,7 +369,9 @@ ch_record_state_transition(OldCR, NewCR) ->
 deliver_msgs_to_consumers(Funs = {PredFun, DeliverFun}, FunAcc,
                           State = #q{q = #amqqueue{name = QName},
                                      active_consumers = ActiveConsumers,
-                                     blocked_consumers = BlockedConsumers}) ->
+                                     blocked_consumers = BlockedConsumers,
+                                     backing_queue = BQ,
+                                     backing_queue_state = BQS}) ->
     case queue:out(ActiveConsumers) of
         {{value, QEntry = {ChPid, #consumer{tag = ConsumerTag,
                                             ack_required = AckRequired}}},
@@ -379,7 +381,9 @@ deliver_msgs_to_consumers(Funs = {PredFun, DeliverFun}, FunAcc,
                     acktags = ChAckTags} = ch_record(ChPid),
             IsMsgReady = PredFun(FunAcc, State),
             case (IsMsgReady andalso
-                  rabbit_limiter:can_send(Limiter, self(), AckRequired)) of
+                  rabbit_limiter:can_send(Limiter, self(),
+                                          AckRequired, ConsumerTag,
+                                          BQ:len(BQS))) of
                 true ->
                     {{Message, IsDelivered, AckTag}, FunAcc1, State1} =
                         DeliverFun(AckRequired, FunAcc, State),
@@ -1117,6 +1121,7 @@ handle_cast({limit, ChPid, Limiter}, State) ->
                     andalso rabbit_limiter:is_blocked(Limiter),
                 C#cr{limiter = Limiter, is_limit_active = Limited}
         end));
+
 handle_cast({flush, ChPid}, State) ->
     ok = rabbit_channel:flushed(ChPid, self()),
     noreply(State);

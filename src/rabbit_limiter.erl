@@ -24,7 +24,7 @@
 
 -export([start_link/0, make_token/0, make_token/1, is_enabled/1, enable/2,
          disable/1]).
--export([limit/2, can_send/3, ack/2, register/2, unregister/2]).
+-export([limit/2, can_send/5, ack/2, register/2, unregister/2]).
 -export([get_limit/1, block/1, unblock/1, is_blocked/1]).
 -export([set_credit/5]).
 
@@ -47,7 +47,7 @@
 -spec(enable/2 :: (token(), non_neg_integer()) -> token()).
 -spec(disable/1 :: (token()) -> token()).
 -spec(limit/2 :: (token(), non_neg_integer()) -> 'ok' | {'disabled', token()}).
--spec(can_send/3 :: (token(), pid(), boolean()) -> boolean()).
+-spec(can_send/3 :: (token(), pid(), boolean(), ) -> boolean()).
 -spec(ack/2 :: (token(), non_neg_integer()) -> 'ok').
 -spec(register/2 :: (token(), pid()) -> 'ok').
 -spec(unregister/2 :: (token(), pid()) -> 'ok').
@@ -94,18 +94,19 @@ limit(Limiter, PrefetchCount) ->
 %% breaching a limit. Note that we don't use maybe_call here in order
 %% to avoid always going through with_exit_handler/2, even when the
 %% limiter is disabled.
-can_send(#token{pid = Pid, enabled = true}, QPid, AckRequired) ->
+can_send(#token{pid = Pid, enabled = true}, QPid, AckRequired, CTag, Len) ->
     rabbit_misc:with_exit_handler(
       fun () -> true end,
       fun () ->
-              gen_server2:call(Pid, {can_send, QPid, AckRequired}, infinity)
+              gen_server2:call(Pid, {can_send, QPid, AckRequired, CTag, Len},
+                               infinity)
       end);
-can_send(_, _, _) ->
+can_send(_, _, _, _, _) ->
     true.
 
 %% Let the limiter know that the channel has received some acks from a
 %% consumer
-ack(Limiter, Count) -> maybe_cast(Limiter, {ack, Count}).
+ack(Limiter, CTag) -> maybe_cast(Limiter, {ack, CTag}).
 
 register(Limiter, QPid) -> maybe_cast(Limiter, {register, QPid}).
 
