@@ -291,10 +291,13 @@ start_other_node({Name, Port}) ->
     start_other_node({Name, Port}, Name).
 
 start_other_node({Name, Port}, Config) ->
-    ?assertCmd("make -C " ++ plugin_dir() ++ " OTHER_NODE=" ++ Name ++
-                   " OTHER_PORT=" ++ integer_to_list(Port) ++
-                   " OTHER_CONFIG=" ++ Config ++
-                   " start-other-node"),
+    %% ?assertCmd seems to hang if you background anything. Bah!
+    Res = os:cmd("make -C " ++ plugin_dir() ++ " OTHER_NODE=" ++ Name ++
+                     " OTHER_PORT=" ++ integer_to_list(Port) ++
+                     " OTHER_CONFIG=" ++ Config ++
+                     " start-other-node ; echo $?"),
+    LastLine = hd(lists:reverse(string:tokens(Res, "\n"))),
+    ?assertEqual("0", LastLine),
     {ok, Conn} = amqp_connection:start(#amqp_params_network{port = Port}),
     {ok, Ch} = amqp_connection:open_channel(Conn),
     Ch.
