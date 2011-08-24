@@ -50,7 +50,7 @@ start_link(Sock, Configuration) ->
                                {rabbit_stomp_reader,
                                 {rabbit_stomp_reader,
                                  start_link, [ProcessorPid]},
-                                intrinsic, ?MAX_WAIT, worker,
+                                temporary, ?MAX_WAIT, worker,
                                 [rabbit_stomp_reader]}),
     {ok, SupPid, ReaderPid}.
 
