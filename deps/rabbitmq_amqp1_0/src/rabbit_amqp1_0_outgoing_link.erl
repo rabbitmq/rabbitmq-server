@@ -1,11 +1,11 @@
 -module(rabbit_amqp1_0_outgoing_link).
 
--export([attach/3, deliver/5, update_credit/2, flow/3]).
+-export([attach/3, deliver/7, update_credit/4, flow/3]).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_amqp1_0.hrl").
 
--import(rabbit_amqp1_0_link_util, [protocol_error/3]).
+-import(rabbit_amqp1_0_link_util, [protocol_error/3, handle_to_ctag/1]).
 
 -define(INIT_TXFR_COUNT, 0).
 
@@ -46,7 +46,6 @@ attach(#'v1_0.attach'{name = Name,
                 #'basic.consume_ok'{} ->
                     %% FIXME we should avoid the race by getting the queue to send
                     %% attach back, but a.t.m. it would use the wrong codec.
-                    put({out, Handle}, OutgoingLink),
                     {ok, [#'v1_0.attach'{
                        name = Name,
                        handle = Handle,
@@ -59,7 +58,7 @@ attach(#'v1_0.attach'{name = Name,
                                   %% and [...]. We think we're correct here
                                   %% outcomes = Outcomes
                                  },
-                       role = ?SEND_ROLE}]};
+                       role = ?SEND_ROLE}], OutgoingLink};
                 Fail ->
                     protocol_error(?V_1_0_AMQP_ERROR_INTERNAL_ERROR, "Consume failed: ~p", Fail)
             end;
@@ -68,52 +67,28 @@ attach(#'v1_0.attach'{name = Name,
             {ok, [#'v1_0.attach'{source = undefined}]}
     end.
 
-deliver(#'basic.deliver'{consumer_tag = ConsumerTag,
-                         delivery_tag = DeliveryTag,
-                         routing_key  = RKey},
-        Msg, WriterPid, BCh, Session) ->
-    %% FIXME, don't ignore ack required, keep track of credit, um .. etc.
-    Handle = ctag_to_handle(ConsumerTag),
-    case get({out, Handle}) of
-        Link = #outgoing_link{} ->
-            {Link1, Session1} =
-                transfer(WriterPid, Handle, Link, BCh, Session,
-                         RKey, Msg, DeliveryTag),
-            put({out, Handle}, Link1),
-            {ok, rabbit_amqp1_0_session:incr_transfer_number(Session1)};
-        undefined ->
-            %% FIXME handle missing link -- why does the queue think it's there?
-            rabbit_log:warning("Delivery to non-existent consumer ~p",
-                               [ConsumerTag]),
-            {ok, Session}
-    end.
-
-update_credit(#'basic.credit_state'{consumer_tag = CTag,
-                                    credit       = LinkCredit,
+update_credit(#'basic.credit_state'{credit       = LinkCredit,
                                     count        = Count,
                                     available    = Available0,
                                     drain        = Drain},
-              WriterPid) ->
+              Handle, Link, WriterPid) ->
     Available = case Available0 of
                     -1  -> undefined;
                     Num -> {uint, Num}
                 end,
-    Handle = ctag_to_handle(CTag),
     %% The transfer count that is given by the queue should be at
     %% least that we have locally, since we will either have received
     %% all the deliveries and transfered them, or the queue will have
     %% advanced it due to drain. So we adopt the queue's idea of the
     %% count.
     %% FIXME account for it not being there any more
-    Out = get({out, Handle}),
     F = #'v1_0.flow'{ handle      = Handle,
                       delivery_count = {uint, Count},
                       link_credit = {uint, LinkCredit},
                       available   = Available,
                       drain       = Drain },
-    put({out, Handle}, Out#outgoing_link{ delivery_count = Count }),
     rabbit_amqp1_0_writer:send_command(WriterPid, F),
-    ok.
+    Link#outgoing_link{delivery_count = Count}.
 
 flow(#outgoing_link{delivery_count = LocalCount},
      #'v1_0.flow'{handle         = Handle,
@@ -197,16 +172,19 @@ ensure_source(Source = #'v1_0.source'{address       = Address,
             end
     end.
 
-transfer(WriterPid, LinkHandle,
-         Link = #outgoing_link{delivery_count = Count,
-                               no_ack = NoAck,
-                               default_outcome = DefaultOutcome},
-         BCh, Session, RKey, Msg, DeliveryTag) ->
+%% FIXME, don't ignore ack required, keep track of credit, um .. etc.
+deliver(#'basic.deliver'{delivery_tag = DeliveryTag,
+                         routing_key  = RKey},
+        Msg, WriterPid, BCh, Handle,
+        Link = #outgoing_link{delivery_count = Count,
+                              no_ack = NoAck,
+                              default_outcome = DefaultOutcome},
+        Session) ->
     MaySend = rabbit_amqp1_0_session:may_send(Session),
     if MaySend ->
             NewLink = Link#outgoing_link{delivery_count = Count + 1},
             DeliveryId = rabbit_amqp1_0_session:next_transfer_number(Session),
-            T = #'v1_0.transfer'{handle = LinkHandle,
+            T = #'v1_0.transfer'{handle = Handle,
                                  delivery_tag = {binary, <<DeliveryTag:64>>},
                                  delivery_id = {uint, DeliveryId},
                                  %% The only one in AMQP 1-0
@@ -222,25 +200,19 @@ transfer(WriterPid, LinkHandle,
             rabbit_amqp1_0_writer:send_command(
               WriterPid,
               [T | rabbit_amqp1_0_message:annotated_message(RKey, Msg)]),
-            {NewLink, case NoAck of
-                          true  -> Session;
-                          false -> rabbit_amqp1_0_session:record_delivery(
-                                     DeliveryTag, DefaultOutcome, Session)
-                      end};
+            {ok, NewLink, case NoAck of
+                              true  -> Session;
+                              false -> rabbit_amqp1_0_session:record_delivery(
+                                         DeliveryTag, DefaultOutcome, Session)
+                          end};
        %% FIXME We can't knowingly exceed our credit.  On the other
        %% hand, we've been handed a message to deliver. This has
        %% probably happened because the receiver has suddenly reduced
        %% the credit or session window.
        NoAck ->
-            {Link, Session};
+            {ok, Link, Session};
        true ->
             amqp_channel:call(BCh, #'basic.reject'{requeue = true,
                                                    delivery_tag = DeliveryTag}),
-            {Link, Session}
+            {ok, Link, Session}
     end.
-
-handle_to_ctag({uint, H}) ->
-    <<"ctag-", H:32/integer>>.
-
-ctag_to_handle(<<"ctag-", H:32/integer>>) ->
-    {uint, H}.

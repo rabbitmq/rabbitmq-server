@@ -5,7 +5,7 @@
 
 -export([check_queue/2, check_exchange/2, create_queue/2, create_bound_queue/3,
          parse_destination/2, parse_destination/1, queue_address/1, outcomes/1,
-         protocol_error/3]).
+         protocol_error/3, ctag_to_handle/1, handle_to_ctag/1]).
 
 -define(EXCHANGE_SUB_LIFETIME, "delete-on-close").
 -define(DEFAULT_OUTCOME, #'v1_0.released'{}).
@@ -93,3 +93,9 @@ protocol_error(Condition, Msg, Args) ->
         description = {utf8, list_to_binary(
                                lists:flatten(io_lib:format(Msg, Args)))}
        }).
+
+handle_to_ctag({uint, H}) ->
+    <<"ctag-", H:32/integer>>.
+
+ctag_to_handle(<<"ctag-", H:32/integer>>) ->
+    {uint, H}.

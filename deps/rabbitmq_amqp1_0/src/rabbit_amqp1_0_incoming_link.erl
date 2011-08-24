@@ -1,6 +1,6 @@
 -module(rabbit_amqp1_0_incoming_link).
 
--export([attach/3, transfer/3]).
+-export([attach/3, transfer/4]).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_amqp1_0.hrl").
@@ -40,7 +40,6 @@ attach(#'v1_0.attach'{name = Name,
                         amqp_channel:call(BCh, #'confirm.select'{}),
                         true
                 end,
-            put({in, Handle}, IncomingLink),
             Flow = #'v1_0.flow'{ handle = Handle,
                                  link_credit = {uint, ?INCOMING_CREDIT},
                                  drain = false,
@@ -52,7 +51,7 @@ attach(#'v1_0.attach'{name = Name,
               target = ServerTarget,
               initial_delivery_count = undefined, % must be, I am the recvr
               role = ?RECV_ROLE}, %% server is receiver
-            {ok, [Attach, Flow], Confirm};
+            {ok, [Attach, Flow], IncomingLink, Confirm};
         {error, Reason} ->
             rabbit_log:warning("AMQP 1.0 attach rejected ~p~n", [Reason]),
             %% TODO proper link estalishment protocol here?
@@ -60,40 +59,33 @@ attach(#'v1_0.attach'{name = Name,
                                "Attach rejected: ~p", [Reason])
     end.
 
-transfer(#'v1_0.transfer'{handle = Handle}, AnnotatedMessage, BCh) ->
-    case get({in, Handle}) of
-        #incoming_link{ exchange = X, routing_key = LinkRKey,
+transfer(#'v1_0.transfer'{handle = Handle}, AnnotatedMessage,
+         #incoming_link{exchange       = X,
+                        routing_key    = LinkRKey,
                         delivery_count = Count,
-                        credit_used = CreditUsed } = Link ->
-            NewCount = rabbit_misc:serial_add(Count, 1),
-            {MsgRKey, Msg} = rabbit_amqp1_0_message:assemble(AnnotatedMessage),
-            RKey = case LinkRKey of
-                       undefined -> MsgRKey;
-                       _         -> LinkRKey
-                   end,
-            amqp_channel:call(BCh, #'basic.publish'{exchange    = X,
-                                                    routing_key = RKey}, Msg),
-            {SendFlow, CreditUsed1} = case CreditUsed - 1 of
-                                          C when C =< 0 ->
-                                              {true,  ?INCOMING_CREDIT div 2};
-                                          D ->
-                                              {false, D}
-                                      end,
-            NewLink = Link#incoming_link{ delivery_count = NewCount,
-                                          credit_used = CreditUsed1 },
-            put({in, Handle}, NewLink),
-            Reply = case SendFlow of
-                        true ->
-                            ?DEBUG("sending flow for incoming ~p", [NewLink]),
-                            [incoming_flow(NewLink, Handle)];
-                        false ->
-                            []
-                    end,
-            {ok, Reply};
-        undefined ->
-            protocol_error(?V_1_0_AMQP_ERROR_ILLEGAL_STATE,
-                           "Unknown link handle ~p", [Handle])
-    end.
+                        credit_used    = CreditUsed} = Link, BCh) ->
+    NewCount = rabbit_misc:serial_add(Count, 1),
+    {MsgRKey, Msg} = rabbit_amqp1_0_message:assemble(AnnotatedMessage),
+    RKey = case LinkRKey of
+               undefined -> MsgRKey;
+               _         -> LinkRKey
+           end,
+    amqp_channel:call(BCh, #'basic.publish'{exchange    = X,
+                                            routing_key = RKey}, Msg),
+    {SendFlow, CreditUsed1} = case CreditUsed - 1 of
+                                  C when C =< 0 ->
+                                      {true,  ?INCOMING_CREDIT div 2};
+                                  D ->
+                                      {false, D}
+                              end,
+    NewLink = Link#incoming_link{ delivery_count = NewCount,
+                                  credit_used = CreditUsed1 },
+    Reply = case SendFlow of
+                true  -> ?DEBUG("sending flow for incoming ~p", [NewLink]),
+                         [incoming_flow(NewLink, Handle)];
+                false -> []
+            end,
+    {ok, Reply, NewLink}.
 
 %% There are a few things that influence what source and target
 %% definitions mean for our purposes.

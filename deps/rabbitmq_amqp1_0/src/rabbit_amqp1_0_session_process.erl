@@ -13,7 +13,7 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_amqp1_0.hrl").
 
--import(rabbit_amqp1_0_link_util, [protocol_error/3]).
+-import(rabbit_amqp1_0_link_util, [protocol_error/3, ctag_to_handle/1]).
 
 %% TODO account for all these things
 start_link(Channel, ReaderPid, WriterPid, User, VHost,
@@ -54,18 +54,35 @@ handle_info(#'basic.consume_ok'{}, State) ->
     %% Handled above
     {noreply, State};
 
-handle_info({#'basic.deliver'{} = Deliver, Msg},
+handle_info({#'basic.deliver'{consumer_tag = ConsumerTag} = Deliver, Msg},
             State = #state{writer_pid      = WriterPid,
-                           backing_channel = BCh}) ->
-    {ok, Session1} = rabbit_amqp1_0_outgoing_link:deliver(
-                       Deliver, Msg, WriterPid, BCh, session(State)),
-    {noreply, state(Session1, State)};
+                           backing_channel = BCh,
+                           session         = Session}) ->
+    Handle = ctag_to_handle(ConsumerTag),
+    case get({out, Handle}) of
+        undefined ->
+            %% FIXME handle missing link -- why does the queue think it's there?
+            rabbit_log:warning("Delivery to non-existent consumer ~p",
+                               [ConsumerTag]),
+            {noreply, State};
+        Link ->
+            {ok, Link1, Session1} =
+                rabbit_amqp1_0_outgoing_link:deliver(
+                  Deliver, Msg, WriterPid, BCh, Handle, Link, Session),
+            put({out, Handle}, Link1),
+            {noreply, state(rabbit_amqp1_0_session:incr_transfer_number(
+                              Session1), State)}
+    end;
 
 %% A message from the queue saying that the credit is either exhausted
 %% or there are no more messages
-handle_info(#'basic.credit_state'{} = CreditState,
+handle_info(#'basic.credit_state'{consumer_tag = CTag} = CreditState,
             State = #state{writer_pid = WriterPid}) ->
-    rabbit_amqp1_0_outgoing_link:update_credit(CreditState, WriterPid),
+    Handle = ctag_to_handle(CTag),
+    Link = get({out, Handle}),
+    Link1 = rabbit_amqp1_0_outgoing_link:update_credit(
+              CreditState, Handle, Link, WriterPid),
+    put({out, Handle}, Link1),
     {noreply, State};
 
 handle_info(#'basic.ack'{} = Ack, State = #state{writer_pid = WriterPid,
@@ -130,35 +147,48 @@ handle_control(#'v1_0.begin'{} = Begin,
     amqp_channel:cast(AmqpChannel, #'basic.qos'{prefetch_count = Prefetch}),
     reply(Reply, state(Session1, State));
 
-handle_control(#'v1_0.attach'{role = ?SEND_ROLE} = Attach,
+handle_control(#'v1_0.attach'{handle = Handle,
+                              role   = ?SEND_ROLE} = Attach,
                State = #state{backing_channel    = BCh,
                               backing_connection = Conn}) ->
-    {ok, Reply, Confirm} =
+    {ok, Reply, Link, Confirm} =
         with_disposable_channel(
           Conn, fun (DCh) ->
                         rabbit_amqp1_0_incoming_link:attach(Attach, BCh, DCh)
                 end),
+    put({in, Handle}, Link),
     reply(Reply, state(rabbit_amqp1_0_session:maybe_init_publish_id(
                          Confirm, session(State)), State));
 
-handle_control(#'v1_0.attach'{role                   = ?RECV_ROLE,
+handle_control(#'v1_0.attach'{handle                 = Handle,
+                              role                   = ?RECV_ROLE,
                               initial_delivery_count = undefined} = Attach,
                State = #state{backing_channel    = BCh,
                               backing_connection = Conn}) ->
-    {ok, Reply} =
+    {ok, Reply, Link} =
         with_disposable_channel(
           Conn, fun (DCh) ->
                         rabbit_amqp1_0_outgoing_link:attach(Attach, BCh, DCh)
                 end),
+    put({out, Handle}, Link),
     reply(Reply, State);
 
-handle_control([Txfr = #'v1_0.transfer'{settled = Settled,
+handle_control([Txfr = #'v1_0.transfer'{handle      = Handle,
+                                        settled     = Settled,
                                         delivery_id = {uint, TxfrId}} | Msg],
                State = #state{backing_channel = BCh,
                               session         = Session}) ->
-    {ok, Reply} = rabbit_amqp1_0_incoming_link:transfer(Txfr, Msg, BCh),
-    reply(Reply, state(rabbit_amqp1_0_session:record_publish(
-                         Settled, TxfrId, Session), State));
+    case get({in, Handle}) of
+        undefined ->
+            protocol_error(?V_1_0_AMQP_ERROR_ILLEGAL_STATE,
+                           "Unknown link handle ~p", [Handle]);
+        Link ->
+            {ok, Reply, Link1} =
+                rabbit_amqp1_0_incoming_link:transfer(Txfr, Msg, Link, BCh),
+            put({in, Handle}, Link1),
+            reply(Reply, state(rabbit_amqp1_0_session:record_publish(
+                                 Settled, TxfrId, Session), State))
+    end;
 
 %% Disposition: a single extent is settled at a time.  This may
 %% involve more than one message. TODO: should we send a flow after
