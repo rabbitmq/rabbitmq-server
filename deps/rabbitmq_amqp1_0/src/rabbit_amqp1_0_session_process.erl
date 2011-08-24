@@ -11,11 +11,7 @@
 -export([parse_destination/1]).
 -endif.
 
-%% TODO monitor declaring channel since we now don't reopen it if an error
-%% occurs (or with_sacrificial_channel() ala federation)
-
 -record(state, {backing_connection, backing_channel,
-                declaring_channel, %% a sacrificial client channel for declaring things
                 reader_pid, writer_pid, session}).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
@@ -37,23 +33,16 @@ init([Channel, ReaderPid, WriterPid, #user{username = Username}, VHost]) ->
                    #amqp_params_direct{username     = Username,
                                        virtual_host = <<"/">>}),
     {ok, Ch} = amqp_connection:open_channel(Conn),
-    {ok, Ch2} = amqp_connection:open_channel(Conn),
     {ok, #state{backing_connection = Conn,
                 backing_channel    = Ch,
-                declaring_channel  = Ch2,
                 reader_pid         = ReaderPid,
                 writer_pid         = WriterPid,
                 session            = rabbit_amqp1_0_session:init(Channel)
                }}.
 
-terminate(_Reason, _State = #state{ backing_connection = Conn,
-                                      declaring_channel  = DeclCh,
-                                      backing_channel    = Ch}) ->
+terminate(_Reason, #state{backing_connection = Conn,
+                          backing_channel    = Ch}) ->
     ?DEBUG("Shutting down session ~p", [_State]),
-    case DeclCh of
-        undefined -> ok;
-        Channel   -> amqp_channel:close(Channel)
-    end,
     amqp_channel:close(Ch),
     %% TODO: closing the connection here leads to errors in the logs
     amqp_connection:close(Conn),
@@ -146,18 +135,25 @@ handle_control(#'v1_0.begin'{} = Begin,
     reply(Reply, state(Session1, State));
 
 handle_control(#'v1_0.attach'{role = ?SEND_ROLE} = Attach,
-               State = #state{backing_channel   = BCh,
-                              declaring_channel = DCh}) ->
+               State = #state{backing_channel    = BCh,
+                              backing_connection = Conn}) ->
     {ok, Reply, Confirm} =
-        rabbit_amqp1_0_incoming_link:attach(Attach, BCh, DCh),
+        with_disposable_channel(
+          Conn, fun (DCh) ->
+                        rabbit_amqp1_0_incoming_link:attach(Attach, BCh, DCh)
+                end),
     reply(Reply, state(rabbit_amqp1_0_session:maybe_init_publish_id(
                          Confirm, session(State)), State));
 
 handle_control(#'v1_0.attach'{role                   = ?RECV_ROLE,
                               initial_delivery_count = undefined} = Attach,
-               State = #state{backing_channel   = BCh,
-                              declaring_channel = DCh}) ->
-    {ok, Reply} = rabbit_amqp1_0_outgoing_link:attach(Attach, BCh, DCh),
+               State = #state{backing_channel    = BCh,
+                              backing_connection = Conn}) ->
+    {ok, Reply} =
+        with_disposable_channel(
+          Conn, fun (DCh) ->
+                        rabbit_amqp1_0_outgoing_link:attach(Attach, BCh, DCh)
+                end),
     reply(Reply, State);
 
 handle_control([Txfr = #'v1_0.transfer'{settled = Settled,
@@ -248,3 +244,13 @@ reply(Reply, State) ->
 
 session(#state{session = Session}) -> Session.
 state(Session, State) -> State#state{session = Session}.
+
+with_disposable_channel(Conn, Fun) ->
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    try
+        Fun(Ch)
+    catch exit:{{shutdown, {server_initiated_close, _, _}}, _} ->
+            ok
+    after
+    catch amqp_channel:close(Ch)
+    end.
