@@ -1,6 +1,7 @@
 -module(rabbit_amqp1_0_session).
 
--export([process_frame/2, maybe_init_publish_id/2, publish/3]).
+-export([process_frame/2, maybe_init_publish_id/2, publish/3,
+         next_transfer_number/1]).
 
 -include("rabbit_amqp1_0_session.hrl").
 
