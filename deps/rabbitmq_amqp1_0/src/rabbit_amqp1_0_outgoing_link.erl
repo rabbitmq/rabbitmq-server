@@ -135,7 +135,7 @@ flow(#outgoing_link{delivery_count = LocalCount},
                                                drain        = Drain}),
     case Available of
         -1 ->
-            ok;
+            {ok, []};
         %% We don't know - probably because this flow relates
         %% to a handle that does not yet exist
         %% TODO is this an error?

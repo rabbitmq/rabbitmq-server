@@ -2,8 +2,9 @@
 
 -export([process_frame/2, maybe_init_publish_id/2, record_publish/3,
          incr_transfer_number/1, next_transfer_number/1, may_send/1,
-         record_delivery/3]).
+         record_delivery/3, flow_fields/2, flow_fields/1]).
 
+-include("rabbit_amqp1_0.hrl").
 -include("rabbit_amqp1_0_session.hrl").
 
 process_frame(Pid, Frame) ->
@@ -66,4 +67,22 @@ record_delivery(DeliveryTag, DefaultOutcome,
                                  Unsettled),
     Session#session{outgoing_unsettled_map = Unsettled1}.
 
+flow_fields(Frames, Session) ->
+    [flow_fields0(F, Session) || F <- Frames].
 
+flow_fields(Session) ->
+    flow_fields0(#'v1_0.flow'{}, Session).
+
+flow_fields0(Flow = #'v1_0.flow'{},
+                     #session{next_transfer_number = NextOut,
+                              next_incoming_id = NextIn,
+                              window_size = Window,
+                              outgoing_unsettled_map = UnsettledOut,
+                              incoming_unsettled_map = UnsettledIn }) ->
+    Flow#'v1_0.flow'{
+      next_outgoing_id = {uint, NextOut},
+      outgoing_window = {uint, Window - gb_trees:size(UnsettledOut)},
+      next_incoming_id = {uint, NextIn},
+      incoming_window = {uint, Window - gb_trees:size(UnsettledIn)}};
+flow_fields0(Frame, _Session) ->
+    Frame.

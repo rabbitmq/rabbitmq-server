@@ -122,7 +122,8 @@ handle_info(#'basic.ack'{delivery_tag = DTag, multiple = Multiple},
     HalfWindow = Window div 2,
     AckCounter1 = case (AckCounter + length(TransferIds)) of
                       Over when Over >= HalfWindow ->
-                          F = flow_session_fields(State#state.session),
+                          F = rabbit_amqp1_0_session:flow_fields(
+                                State#state.session),
                           rabbit_amqp1_0_writer:send_command(WriterPid, F),
                           Over - HalfWindow;
                       Counter ->
@@ -255,25 +256,24 @@ handle_control(#'v1_0.attach'{role = ?SEND_ROLE} = Attach,
                               session           = Session}) ->
     {ok, Reply, Confirm} =
         rabbit_amqp1_0_incoming_link:attach(Attach, BCh, DCh),
-    {reply, flow_session_fields(Reply, Session),
-     State#state{session = rabbit_amqp1_0_session:maybe_init_publish_id(
-                             Confirm, Session)}};
+    reply(Reply,
+          State#state{session = rabbit_amqp1_0_session:maybe_init_publish_id(
+                                  Confirm, Session)});
 
 handle_control(#'v1_0.attach'{role                   = ?RECV_ROLE,
                               initial_delivery_count = undefined} = Attach,
                State = #state{backing_channel   = BCh,
-                              declaring_channel = DCh,
-                              session           = Session}) ->
+                              declaring_channel = DCh}) ->
     {ok, Reply} = rabbit_amqp1_0_outgoing_link:attach(Attach, BCh, DCh),
-    {reply, flow_session_fields(Reply, Session), State};
+    reply(Reply, State);
 
 handle_control([Txfr = #'v1_0.transfer'{settled = Settled,
                                         delivery_id = {uint, TxfrId}} | Msg],
                State = #state{backing_channel = BCh,
                               session         = Session}) ->
     {ok, Reply} = rabbit_amqp1_0_incoming_link:transfer(Txfr, Msg, BCh),
-    {reply, Reply, State#state{session = rabbit_amqp1_0_session:record_publish(
-                                           Settled, TxfrId, Session)}};
+    reply(Reply, State#state{session = rabbit_amqp1_0_session:record_publish(
+                                         Settled, TxfrId, Session)});
 
 %% Disposition: a single extent is settled at a time.  This may
 %% involve more than one message. TODO: should we send a flow after
@@ -355,14 +355,9 @@ handle_control(Flow = #'v1_0.flow'{},
                             protocol_error(?V_1_0_AMQP_ERROR_INVALID_FIELD,
                                            "Unattached handle: ~p", [Handle]);
                         Out ->
-                            case rabbit_amqp1_0_outgoing_link:flow(
-                                   Out, Flow, BCh) of
-                                ok ->
-                                    {noreply, State1};
-                                {ok, Reply} ->
-                                    {reply, flow_session_fields(Reply, Session),
-                                     State1}
-                            end
+                            {ok, Reply} = rabbit_amqp1_0_outgoing_link:flow(
+                                            Out, Flow, BCh),
+                            reply(Reply, State1)
                     end;
                 _In ->
                     %% We're being told about available messages at
@@ -379,25 +374,10 @@ handle_control(Frame, State) ->
 
 %% ------
 
-flow_session_fields(Frames, Session) ->
-    [flow_session_fields0(F, Session) || F <- Frames].
-
-flow_session_fields(Session) ->
-    flow_session_fields0(#'v1_0.flow'{}, Session).
-
-flow_session_fields0(Flow = #'v1_0.flow'{},
-                     #session{next_transfer_number = NextOut,
-                              next_incoming_id = NextIn,
-                              window_size = Window,
-                              outgoing_unsettled_map = UnsettledOut,
-                              incoming_unsettled_map = UnsettledIn }) ->
-    Flow#'v1_0.flow'{
-      next_outgoing_id = {uint, NextOut},
-      outgoing_window = {uint, Window - gb_trees:size(UnsettledOut)},
-      next_incoming_id = {uint, NextIn},
-      incoming_window = {uint, Window - gb_trees:size(UnsettledIn)}};
-flow_session_fields0(Frame, _Session) ->
-    Frame.
+reply([], State) ->
+    {noreply, State};
+reply(Reply, State = #state{session = Session}) ->
+    {reply, rabbit_amqp1_0_session:flow_fields(Reply, Session), State}.
 
 %% We've been told that the fate of a transfer has been determined.
 %% Generally if the other side has not settled it, we will do so.  If
