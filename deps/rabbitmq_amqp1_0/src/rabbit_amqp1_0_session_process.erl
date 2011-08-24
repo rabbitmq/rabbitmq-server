@@ -18,10 +18,6 @@
                 declaring_channel, %% a sacrificial client channel for declaring things
                 reader_pid, writer_pid, session}).
 
-%% TODO test where the sweetspot for gb_trees is
--define(MAX_SESSION_BUFFER_SIZE, 4096).
--define(DEFAULT_MAX_HANDLE, 16#ffffffff).
-
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_amqp1_0.hrl").
 -include("rabbit_amqp1_0_session.hrl").
@@ -43,16 +39,12 @@ init([Channel, ReaderPid, WriterPid, #user{username = Username}, VHost]) ->
                                        virtual_host = <<"/">>}),
     {ok, Ch} = amqp_connection:open_channel(Conn),
     {ok, Ch2} = amqp_connection:open_channel(Conn),
-    {ok, #state{backing_connection     = Conn,
-                backing_channel        = Ch,
-                declaring_channel      = Ch2,
-                reader_pid             = ReaderPid,
-                writer_pid             = WriterPid,
-                session = #session{ channel_num            = Channel,
-                                    next_publish_id        = 0,
-                                    ack_counter            = 0,
-                                    incoming_unsettled_map = gb_trees:empty(),
-                                    outgoing_unsettled_map = gb_trees:empty()}
+    {ok, #state{backing_connection = Conn,
+                backing_channel    = Ch,
+                declaring_channel  = Ch2,
+                reader_pid         = ReaderPid,
+                writer_pid         = WriterPid,
+                session            = rabbit_amqp1_0_session:init(Channel)
                }}.
 
 terminate(_Reason, _State = #state{ backing_connection = Conn,
@@ -177,76 +169,14 @@ noreply(State) ->
 
 %% ------
 
-%% Session window:
-%%
-%% Each session has two buffers, one to record the unsettled state of
-%% incoming messages, one to record the unsettled state of outgoing
-%% messages.  In general we want to bound these buffers; but if we
-%% bound them, and don't tell the other side, we may end up
-%% deadlocking the other party.
-%%
-%% Hence the flow frame contains a session window, expressed as the
-%% next-id and the window size for each of the buffers. The frame
-%% refers to the buffers of the sender of the frame, of course.
-%%
-%% The numbers work this way: for the outgoing buffer, the next-id is
-%% the next transfer id the session will send, and it will stop
-%% sending at next-id + window.  For the incoming buffer, the next-id
-%% is the next transfer id expected, and it will not accept messages
-%% beyond next-id + window (in fact it will probably close the
-%% session, since sending outside the window is a transgression of the
-%% protocol).
-%%
-%% Usually we will want to base our incoming window size on the other
-%% party's outgoing window size (given in begin{}), since we will
-%% never need more state than they are keeping (they'll stop sending
-%% before that happens), subject to a maximum.  Similarly the outgoing
-%% window, on the basis that the other party is likely to make its
-%% buffers the same size (or that's our best guess).
-%%
-%% Note that we will occasionally overestimate these buffers, because
-%% the far side may be using a circular buffer, in which case they
-%% care about the distance from the low water mark (i.e., the least
-%% transfer for which they have unsettled state) rather than the
-%% number of entries.
-%%
-%% We use ordered sets for our buffers, which means we care about the
-%% total number of entries, rather than the smallest entry. Thus, our
-%% window will always be, by definition, BOUND - TOTAL.
-
-handle_control(#'v1_0.begin'{next_outgoing_id = {uint, RemoteNextIn},
-                             incoming_window = RemoteInWindow,
-                             outgoing_window = RemoteOutWindow,
-                             handle_max = HandleMax0},
-               State = #state{
-                 backing_channel = AmqpChannel,
-                 session = Session = #session{
-                             next_transfer_number = LocalNextOut,
-                             channel_num = Channel}}) ->
-    Window =
-        case RemoteInWindow of
-            {uint, Size} -> Size;
-            undefined    -> ?MAX_SESSION_BUFFER_SIZE
-        end,
-    HandleMax = case HandleMax0 of
-                    {uint, Max} -> Max;
-                    _ -> ?DEFAULT_MAX_HANDLE
-                end,
-    %% TODO does it make sense to have two different sizes
-    SessionBufferSize = erlang:min(Window, ?MAX_SESSION_BUFFER_SIZE),
+handle_control(#'v1_0.begin'{} = Begin,
+               State = #state{backing_channel = AmqpChannel,
+                              session         = Session}) ->
+    {ok, Reply, Session1, Prefetch} =
+        rabbit_amqp1_0_session:begin_(Begin, Session),
     %% Attempt to limit the number of "at risk" messages we can have.
-    amqp_channel:cast(AmqpChannel,
-                      #'basic.qos'{prefetch_count = SessionBufferSize}),
-    {reply, #'v1_0.begin'{
-       remote_channel = {ushort, Channel},
-       handle_max = {uint, HandleMax},
-       next_outgoing_id = {uint, LocalNextOut},
-       incoming_window = {uint, SessionBufferSize},
-       outgoing_window = {uint, SessionBufferSize}},
-     state(Session#session{
-             next_incoming_id = RemoteNextIn,
-             max_outgoing_id = rabbit_misc:serial_add(RemoteNextIn, Window),
-             window_size = SessionBufferSize}, State)};
+    amqp_channel:cast(AmqpChannel, #'basic.qos'{prefetch_count = Prefetch}),
+    reply(Reply, state(Session1, State));
 
 handle_control(#'v1_0.attach'{role = ?SEND_ROLE} = Attach,
                State = #state{backing_channel   = BCh,

@@ -1,16 +1,92 @@
 -module(rabbit_amqp1_0_session).
 
--export([process_frame/2, maybe_init_publish_id/2, record_publish/3,
+-export([process_frame/2]).
+
+-export([init/1, begin_/2, maybe_init_publish_id/2, record_publish/3,
          incr_transfer_number/1, next_transfer_number/1, may_send/1,
          record_delivery/3, settle/3, flow_fields/2, flow_fields/1]).
 
 -include("rabbit_amqp1_0.hrl").
 -include("rabbit_amqp1_0_session.hrl").
 
+%% TODO test where the sweetspot for gb_trees is
+-define(MAX_SESSION_BUFFER_SIZE, 4096).
+-define(DEFAULT_MAX_HANDLE, 16#ffffffff).
+
 -record(outgoing_transfer, {delivery_tag, expected_outcome}).
 
 process_frame(Pid, Frame) ->
     gen_server2:cast(Pid, {frame, Frame}).
+
+init(Channel) ->
+    #session{channel_num            = Channel,
+             next_publish_id        = 0,
+             ack_counter            = 0,
+             incoming_unsettled_map = gb_trees:empty(),
+             outgoing_unsettled_map = gb_trees:empty()}.
+
+%% Session window:
+%%
+%% Each session has two buffers, one to record the unsettled state of
+%% incoming messages, one to record the unsettled state of outgoing
+%% messages.  In general we want to bound these buffers; but if we
+%% bound them, and don't tell the other side, we may end up
+%% deadlocking the other party.
+%%
+%% Hence the flow frame contains a session window, expressed as the
+%% next-id and the window size for each of the buffers. The frame
+%% refers to the buffers of the sender of the frame, of course.
+%%
+%% The numbers work this way: for the outgoing buffer, the next-id is
+%% the next transfer id the session will send, and it will stop
+%% sending at next-id + window.  For the incoming buffer, the next-id
+%% is the next transfer id expected, and it will not accept messages
+%% beyond next-id + window (in fact it will probably close the
+%% session, since sending outside the window is a transgression of the
+%% protocol).
+%%
+%% Usually we will want to base our incoming window size on the other
+%% party's outgoing window size (given in begin{}), since we will
+%% never need more state than they are keeping (they'll stop sending
+%% before that happens), subject to a maximum.  Similarly the outgoing
+%% window, on the basis that the other party is likely to make its
+%% buffers the same size (or that's our best guess).
+%%
+%% Note that we will occasionally overestimate these buffers, because
+%% the far side may be using a circular buffer, in which case they
+%% care about the distance from the low water mark (i.e., the least
+%% transfer for which they have unsettled state) rather than the
+%% number of entries.
+%%
+%% We use ordered sets for our buffers, which means we care about the
+%% total number of entries, rather than the smallest entry. Thus, our
+%% window will always be, by definition, BOUND - TOTAL.
+begin_(#'v1_0.begin'{next_outgoing_id = {uint, RemoteNextIn},
+                     incoming_window  = RemoteInWindow,
+                     outgoing_window  = RemoteOutWindow,
+                     handle_max       = HandleMax0},
+       Session = #session{next_transfer_number = LocalNextOut,
+                          channel_num          = Channel}) ->
+    Window = case RemoteInWindow of
+                 {uint, Size} -> Size;
+                 undefined    -> ?MAX_SESSION_BUFFER_SIZE
+             end,
+    %% TODO does it make sense to have two different sizes
+    SessionBufferSize = erlang:min(Window, ?MAX_SESSION_BUFFER_SIZE),
+    HandleMax = case HandleMax0 of
+                    {uint, Max} -> Max;
+                    _ -> ?DEFAULT_MAX_HANDLE
+                end,
+    {ok, #'v1_0.begin'{remote_channel = {ushort, Channel},
+                       handle_max = {uint, HandleMax},
+                       next_outgoing_id = {uint, LocalNextOut},
+                       incoming_window = {uint, SessionBufferSize},
+                       outgoing_window = {uint, SessionBufferSize}},
+     Session#session{
+       next_incoming_id = RemoteNextIn,
+       max_outgoing_id  = rabbit_misc:serial_add(RemoteNextIn, Window),
+       window_size      = SessionBufferSize},
+     SessionBufferSize}.
 
 maybe_init_publish_id(false, Session) ->
     Session;
@@ -122,22 +198,24 @@ settle(Disp = #'v1_0.disposition'{first   = First0,
             end
     end.
 
-flow_fields(Frames, Session) ->
-    [flow_fields0(F, Session) || F <- Frames].
+flow_fields(Frames, Session) when is_list(Frames) ->
+    [flow_fields(F, Session) || F <- Frames];
 
-flow_fields(Session) ->
-    flow_fields0(#'v1_0.flow'{}, Session).
-
-flow_fields0(Flow = #'v1_0.flow'{},
-                     #session{next_transfer_number = NextOut,
-                              next_incoming_id = NextIn,
-                              window_size = Window,
-                              outgoing_unsettled_map = UnsettledOut,
-                              incoming_unsettled_map = UnsettledIn }) ->
+flow_fields(Flow = #'v1_0.flow'{},
+             #session{next_transfer_number = NextOut,
+                      next_incoming_id = NextIn,
+                      window_size = Window,
+                      outgoing_unsettled_map = UnsettledOut,
+                      incoming_unsettled_map = UnsettledIn }) ->
     Flow#'v1_0.flow'{
       next_outgoing_id = {uint, NextOut},
       outgoing_window = {uint, Window - gb_trees:size(UnsettledOut)},
       next_incoming_id = {uint, NextIn},
       incoming_window = {uint, Window - gb_trees:size(UnsettledIn)}};
-flow_fields0(Frame, _Session) ->
+
+flow_fields(Frame, _Session) ->
     Frame.
+
+flow_fields(Session) ->
+    flow_fields(#'v1_0.flow'{}, Session).
+
