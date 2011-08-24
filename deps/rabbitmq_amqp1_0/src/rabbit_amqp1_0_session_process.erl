@@ -7,10 +7,6 @@
 
 -export([start_link/7]).
 
--ifdef(debug).
--export([parse_destination/1]).
--endif.
-
 -record(state, {backing_connection, backing_channel,
                 reader_pid, writer_pid, session}).
 
