@@ -47,7 +47,8 @@
 -spec(enable/2 :: (token(), non_neg_integer()) -> token()).
 -spec(disable/1 :: (token()) -> token()).
 -spec(limit/2 :: (token(), non_neg_integer()) -> 'ok' | {'disabled', token()}).
--spec(can_send/3 :: (token(), pid(), boolean(), ) -> boolean()).
+-spec(can_send/5 :: (token(), pid(), boolean(),
+                     rabbit_types:ctag(), non_neg_integer()) -> boolean()).
 -spec(ack/2 :: (token(), non_neg_integer()) -> 'ok').
 -spec(register/2 :: (token(), pid()) -> 'ok').
 -spec(unregister/2 :: (token(), pid()) -> 'ok').
@@ -55,7 +56,9 @@
 -spec(block/1 :: (token()) -> 'ok').
 -spec(unblock/1 :: (token()) -> 'ok' | {'disabled', token()}).
 -spec(is_blocked/1 :: (token()) -> boolean()).
-%% Missing: set_credit
+-spec(set_credit/5 :: (token(), rabbit_types:ctag(),
+                       non_neg_integer(),
+                       non_neg_integer(), boolean()) -> 'ok').
 
 -endif.
 
