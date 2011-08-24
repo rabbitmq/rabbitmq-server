@@ -80,11 +80,10 @@ handle_info(#'basic.consume_ok'{}, State) ->
 
 handle_info({#'basic.deliver'{} = Deliver, Msg},
             State = #state{writer_pid      = WriterPid,
-                           backing_channel = BCh,
-                           session         = Session}) ->
+                           backing_channel = BCh}) ->
     {ok, Session1} = rabbit_amqp1_0_outgoing_link:deliver(
-                       Deliver, Msg, WriterPid, BCh, Session),
-    {noreply, State#state{session = Session1}};
+                       Deliver, Msg, WriterPid, BCh, session(State)),
+    {noreply, state(Session1, State)};
 
 %% A message from the queue saying that the credit is either exhausted
 %% or there are no more messages
@@ -129,9 +128,9 @@ handle_info(#'basic.ack'{delivery_tag = DTag, multiple = Multiple},
                       Counter ->
                           Counter
                   end,
-    {noreply, State#state{session = Session#session{
-                                      ack_counter = AckCounter1,
-                                      incoming_unsettled_map = Unsettled1}}};
+    {noreply, state(Session#session{
+                      ack_counter = AckCounter1,
+                      incoming_unsettled_map = Unsettled1}, State)};
 
 %% TODO these pretty much copied wholesale from rabbit_channel
 handle_info({'EXIT', WriterPid, Reason = {writer, send_failed, _Error}},
@@ -244,21 +243,18 @@ handle_control(#'v1_0.begin'{next_outgoing_id = {uint, RemoteNextIn},
        next_outgoing_id = {uint, LocalNextOut},
        incoming_window = {uint, SessionBufferSize},
        outgoing_window = {uint, SessionBufferSize}},
-     State#state{
-       session = Session#session{
-                   next_incoming_id = RemoteNextIn,
-                   max_outgoing_id = rabbit_misc:serial_add(RemoteNextIn, Window),
-                   window_size = SessionBufferSize}}};
+     state(Session#session{
+             next_incoming_id = RemoteNextIn,
+             max_outgoing_id = rabbit_misc:serial_add(RemoteNextIn, Window),
+             window_size = SessionBufferSize}, State)};
 
 handle_control(#'v1_0.attach'{role = ?SEND_ROLE} = Attach,
                State = #state{backing_channel   = BCh,
-                              declaring_channel = DCh,
-                              session           = Session}) ->
+                              declaring_channel = DCh}) ->
     {ok, Reply, Confirm} =
         rabbit_amqp1_0_incoming_link:attach(Attach, BCh, DCh),
-    reply(Reply,
-          State#state{session = rabbit_amqp1_0_session:maybe_init_publish_id(
-                                  Confirm, Session)});
+    reply(Reply, state(rabbit_amqp1_0_session:maybe_init_publish_id(
+                         Confirm, session(State)), State));
 
 handle_control(#'v1_0.attach'{role                   = ?RECV_ROLE,
                               initial_delivery_count = undefined} = Attach,
@@ -272,16 +268,15 @@ handle_control([Txfr = #'v1_0.transfer'{settled = Settled,
                State = #state{backing_channel = BCh,
                               session         = Session}) ->
     {ok, Reply} = rabbit_amqp1_0_incoming_link:transfer(Txfr, Msg, BCh),
-    reply(Reply, State#state{session = rabbit_amqp1_0_session:record_publish(
-                                         Settled, TxfrId, Session)});
+    reply(Reply, state(rabbit_amqp1_0_session:record_publish(
+                         Settled, TxfrId, Session), State));
 
 %% Disposition: a single extent is settled at a time.  This may
 %% involve more than one message. TODO: should we send a flow after
 %% this, to indicate the state of the session window?
 handle_control(#'v1_0.disposition'{state = Outcome,
                                    role = ?RECV_ROLE} = Disp,
-               State = #state{backing_channel = Ch,
-                              session         = Session}) ->
+               State = #state{backing_channel = Ch}) ->
     AckFun =
         fun (DeliveryTag) ->
                 ok = amqp_channel:call(
@@ -297,11 +292,9 @@ handle_control(#'v1_0.disposition'{state = Outcome,
                                                    requeue      = true}
                            end)
         end,
-    case rabbit_amqp1_0_session:settle(Disp, Session, AckFun) of
-        {none, Session1} ->
-            {noreply, State#state{session = Session1}};
-        {Reply, Session1} ->
-            {reply, Reply, State#state{session = Session1}}
+    case rabbit_amqp1_0_session:settle(Disp, session(State), AckFun) of
+        {none,  Session1} -> {noreply,        state(Session1, State)};
+        {Reply, Session1} -> {reply,   Reply, state(Session1, State)}
     end;
 
 handle_control(#'v1_0.detach'{ handle = Handle }, State) ->
@@ -359,8 +352,7 @@ handle_control(Flow = #'v1_0.flow'{},
     true = (RemoteNextIn =< LocalNextOut),
     %% Adjust our window
     RemoteMaxOut = RemoteNextIn + RemoteWindowIn,
-    State1 = State#state{session = Session#session{
-                                     max_outgoing_id = RemoteMaxOut}},
+    State1 = state(Session#session{max_outgoing_id = RemoteMaxOut}, State),
     case Flow#'v1_0.flow'.handle of
         undefined ->
             {noreply, State1};
@@ -394,8 +386,8 @@ handle_control(Frame, State) ->
 
 reply([], State) ->
     {noreply, State};
-reply(Reply, State = #state{session = Session}) ->
-    {reply, rabbit_amqp1_0_session:flow_fields(Reply, Session), State}.
+reply(Reply, State) ->
+    {reply, rabbit_amqp1_0_session:flow_fields(Reply, session(State)), State}.
 
 acknowledgement_range(DTag, Unsettled) ->
     acknowledgement_range(DTag, Unsettled, []).
@@ -421,3 +413,6 @@ acknowledgement(TransferIds, Disposition) ->
                                     last = {uint, lists:last(TransferIds)},
                                     settled = true,
                                     state = #'v1_0.accepted'{} }.
+
+session(#state{session = Session}) -> Session.
+state(Session, State) -> State#state{session = Session}.
