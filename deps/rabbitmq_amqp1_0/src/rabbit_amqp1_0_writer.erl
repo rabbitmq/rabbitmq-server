@@ -169,8 +169,7 @@ call(Pid, Msg) ->
 
 assemble_frame(Channel, Performative, rabbit_amqp1_0_framing) ->
     ?LOGMESSAGE(out, Channel, Performative, none),
-    PerfBin = rabbit_amqp1_0_binary_generator:generate(
-                rabbit_amqp1_0_framing:encode(Performative)),
+    PerfBin = rabbit_amqp1_0_framing:encode_bin(Performative),
     rabbit_amqp1_0_binary_generator:build_frame(Channel, PerfBin);
 
 %% End 1-0
@@ -190,8 +189,7 @@ assemble_frame(Channel, MethodRecord, Protocol) ->
 assemble_frames(Channel, Performative, Content, FrameMax,
                 rabbit_amqp1_0_framing) ->
     ?LOGMESSAGE(out, Channel, Performative, Contents),
-    PerfBin = rabbit_amqp1_0_binary_generator:generate(
-                rabbit_amqp1_0_framing:encode(Performative)),
+    PerfBin = rabbit_amqp1_0_framing:encode_bin(Performative),
     rabbit_amqp1_0_binary_generator:build_frame(Channel, [PerfBin, Content]);
 
 %% End 1-0

@@ -1,7 +1,7 @@
 -module(rabbit_amqp1_0_framing).
 
 -export([encode/1, encode_described/3, decode/1, version/0,
-         symbol_for/1, number_for/1]).
+         symbol_for/1, number_for/1, encode_bin/1]).
 
 %% debug
 -export([fill_from_list/2, fill_from_map/2]).
@@ -89,6 +89,9 @@ encode_described(annotations, ListOrNumber, Frame) ->
 
 encode(X) ->
     rabbit_amqp1_0_framing0:encode(X).
+
+encode_bin(X) ->
+    rabbit_amqp1_0_binary_generator:generate(encode(X)).
 
 symbol_for(X) ->
     rabbit_amqp1_0_framing0:symbol_for(X).

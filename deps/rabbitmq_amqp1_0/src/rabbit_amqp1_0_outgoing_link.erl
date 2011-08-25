@@ -217,12 +217,9 @@ deliver(#'basic.deliver'{delivery_tag = DeliveryTag,
     end.
 
 send_frames(WriterPid, T, Msg1_0, FrameMax) ->
-    TBin = iolist_to_binary(
-             rabbit_amqp1_0_binary_generator:generate(
-               rabbit_amqp1_0_framing:encode(T))),
+    TBin = iolist_to_binary(rabbit_amqp1_0_framing:encode_bin(T)),
     MsgBin = iolist_to_binary(
-               [rabbit_amqp1_0_binary_generator:generate(
-                  rabbit_amqp1_0_framing:encode(R)) || R <- Msg1_0]),
+               [rabbit_amqp1_0_framing:encode_bin(R) || R <- Msg1_0]),
     send_frames0(WriterPid, T, MsgBin, FrameMax - size(TBin)).
 
 send_frames0(WriterPid, T, MsgBin, MaxContentSize) ->
