@@ -198,7 +198,10 @@ deliver(#'basic.deliver'{delivery_tag = DeliveryTag,
                                  %% hint
                                  batchable = false},
             Msg1_0 = rabbit_amqp1_0_message:annotated_message(RKey, Msg),
-            send_frames(WriterPid, T, Msg1_0, FrameMax),
+            TLen = lists:flatlength(rabbit_amqp1_0_framing:encode_bin(T)),
+            MsgBin = iolist_to_binary(
+                       [rabbit_amqp1_0_framing:encode_bin(R) || R <- Msg1_0]),
+            send_frames(WriterPid, T, MsgBin, FrameMax - TLen),
             {ok, NewLink, case NoAck of
                               true  -> Session;
                               false -> rabbit_amqp1_0_session:record_delivery(
@@ -216,18 +219,11 @@ deliver(#'basic.deliver'{delivery_tag = DeliveryTag,
             {ok, Link, Session}
     end.
 
-send_frames(WriterPid, T, Msg1_0, FrameMax) ->
-    TBin = iolist_to_binary(rabbit_amqp1_0_framing:encode_bin(T)),
-    MsgBin = iolist_to_binary(
-               [rabbit_amqp1_0_framing:encode_bin(R) || R <- Msg1_0]),
-    send_frames0(WriterPid, T, MsgBin, FrameMax - size(TBin)).
-
-send_frames0(WriterPid, T, MsgBin, MaxContentSize) ->
-    ContentSize = size(MsgBin),
-    case ContentSize > MaxContentSize of
-        true  -> <<Chunk:MaxContentSize/binary, Rest/binary>> = MsgBin,
+send_frames(WriterPid, T, MsgBin, MaxContentLen) ->
+    case size(MsgBin) > MaxContentLen of
+        true  -> <<Chunk:MaxContentLen/binary, Rest/binary>> = MsgBin,
                  T1 = T#'v1_0.transfer'{more = true},
                  rabbit_amqp1_0_writer:send_command(WriterPid, T1, Chunk),
-                 send_frames0(WriterPid, T, Rest, MaxContentSize);
+                 send_frames(WriterPid, T, Rest, MaxContentLen);
         false -> rabbit_amqp1_0_writer:send_command(WriterPid, T, MsgBin)
     end.
