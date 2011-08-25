@@ -155,9 +155,9 @@ class TestParsing(unittest.TestCase):
                 'message:Bad command\n'
                 'content-type:text/plain\n'
                 'version:1.0,1.1\n'
-                'content-length:41\n'
+                'content-length:43\n'
                 '\n'
-                'Could not interpret command WRONGCOMMAND\n'
+                'Could not interpret command "WRONGCOMMAND"\n'
                 '\0')
         self.match(resp, self.cd.recv(4096))
 
