@@ -31,7 +31,7 @@
 -module(rabbit_stomp_processor).
 -behaviour(gen_server2).
 
--export([start_link/3, process_frame/2]).
+-export([start_link/3, process_frame/2, flush_and_die/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          code_change/3, terminate/2]).
 
@@ -59,6 +59,9 @@ start_link(Sock, StartHeartbeatFun, Configuration) ->
 process_frame(Pid, Frame = #stomp_frame{command = Command}) ->
     gen_server2:cast(Pid, {Command, Frame}).
 
+flush_and_die(Pid) ->
+    gen_server2:cast(Pid, flush_and_die).
+
 %%----------------------------------------------------------------------------
 %% Basic gen_server2 callbacks
 %%----------------------------------------------------------------------------
@@ -82,7 +85,10 @@ init([Sock, StartHeartbeatFun, Configuration]) ->
     }.
 
 terminate(_Reason, State) ->
-    shutdown_channel_and_connection(State).
+    close_connection(State).
+
+handle_cast(flush_and_die, State) ->
+    {stop, normal, close_connection(State)};
 
 handle_cast({"STOMP", Frame}, State) ->
     process_connect(no_implicit, Frame, State);
@@ -96,6 +102,7 @@ handle_cast(Request, State = #state{channel = none,
     {noreply, State1, _} =
         process_connect(implicit, #stomp_frame{headers = []}, State),
     handle_cast(Request, State1);
+
 handle_cast(_Request, State = #state{channel = none,
                                      config = #stomp_configuration{
                                       implicit_connect = false}}) ->
@@ -225,8 +232,7 @@ validate_frame(_Command, _Frame, State) ->
 %%----------------------------------------------------------------------------
 
 handle_frame("DISCONNECT", _Frame, State) ->
-    %% We'll get to shutdown the channels in terminate
-    {stop, normal, shutdown_channel_and_connection(State)};
+    {stop, normal, close_connection(State)};
 
 handle_frame("SUBSCRIBE", Frame, State) ->
     with_destination("SUBSCRIBE", Frame, State, fun do_subscribe/4);
@@ -255,7 +261,8 @@ handle_frame("ABORT", Frame, State) ->
 
 handle_frame(Command, _Frame, State) ->
     error("Bad command",
-          "Could not interpret command " ++ Command ++ "\n",
+          "Could not interpret command ~p\n",
+          [Command],
           State).
 
 %%----------------------------------------------------------------------------
@@ -422,8 +429,14 @@ do_login(Username0, Password0, VirtualHost0, Heartbeat, AdapterInfo,
     end.
 
 adapter_info(Sock, Version) ->
-    {ok, {Addr,     Port}}     = rabbit_net:sockname(Sock),
-    {ok, {PeerAddr, PeerPort}} = rabbit_net:peername(Sock),
+    {Addr, Port} = case rabbit_net:sockname(Sock) of
+                       {ok, Res} -> Res;
+                       _         -> {unknown, unknown}
+                   end,
+    {PeerAddr, PeerPort} = case rabbit_net:peername(Sock) of
+                               {ok, Res2} -> Res2;
+                               _          -> {unknown, unknown}
+                           end,
     #adapter_info{protocol        = {'STOMP', Version},
                   address         = Addr,
                   port            = Port,
@@ -590,23 +603,10 @@ send_method(Method, Channel, Properties, BodyFragments, State) ->
                 payload = list_to_binary(BodyFragments)}),
     State.
 
-shutdown_channel_and_connection(State = #state{channel = none}) ->
-    State;
-shutdown_channel_and_connection(State = #state{channel       = Channel,
-                                               connection    = Connection,
-                                               subscriptions = Subs}) ->
-    dict:fold(
-      fun(_ConsumerTag, #subscription{channel = SubChannel}, Acc) ->
-              case SubChannel of
-                  Channel -> Acc;
-                  _ ->
-                      amqp_channel:close(SubChannel),
-                      Acc
-              end
-      end, 0, Subs),
-
-    amqp_channel:close(Channel),
-    amqp_connection:close(Connection),
+%% Closing the connection will close the channel and subchannels
+close_connection(State = #state{connection = Connection}) ->
+    %% ignore noproc or other exceptions to avoid debris
+    catch amqp_connection:close(Connection),
     State#state{channel = none, connection = none, subscriptions = none}.
 
 %%----------------------------------------------------------------------------
@@ -746,7 +746,8 @@ transactional_action(Frame, Name, Fun, State) ->
             Fun(Transaction, State);
         no ->
             error("Missing transaction",
-                  Name ++ " must include a 'transaction' header\n",
+                  "~p must include a 'transaction' header\n",
+                  [Name],
                   State)
     end.
 
@@ -948,7 +949,7 @@ send_frame(Frame, State = #state{socket = Sock}) ->
     %% We ignore certain errors here, as we will be receiving an
     %% asynchronous notification of the same (or a related) fault
     %% shortly anyway. See bug 21365.
-    rabbit_net:port_command(Sock, rabbit_stomp_frame:serialize(Frame)),
+    catch rabbit_net:port_command(Sock, rabbit_stomp_frame:serialize(Frame)), 
     State.
 
 send_error(Message, Detail, State) ->

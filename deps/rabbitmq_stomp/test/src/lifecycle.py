@@ -48,11 +48,12 @@ class TestLifecycle(base.BaseTest):
     def test_connect_version_1_1(self):
         ''' Test CONNECT with version 1.1'''
         self.conn.disconnect()
-        new_conn = self.create_connection(version="1.1,1.0")
+        new_conn = self.create_connection(version="1.1")
         try:
             self.assertTrue(new_conn.is_connected())
         finally:
             new_conn.disconnect()
+            self.assertFalse(new_conn.is_connected())
 
     def test_heartbeat_disconnects_client(self):
         ''' Test heart-beat disconnection'''

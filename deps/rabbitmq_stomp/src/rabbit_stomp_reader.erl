@@ -31,7 +31,7 @@
 -module(rabbit_stomp_reader).
 
 -export([start_link/1]).
--export([init/1, mainloop/2]).
+-export([init/1]).
 -export([conserve_memory/2]).
 
 -include("rabbit_stomp_frame.hrl").
@@ -51,7 +51,7 @@ init(ProcessorPid) ->
 
             ParseState = rabbit_stomp_frame:initial_state(),
             try
-                ?MODULE:mainloop(
+                mainloop(
                    register_memory_alarm(
                      #reader_state{socket      = Sock,
                                    parse_state = ParseState,
@@ -59,6 +59,7 @@ init(ProcessorPid) ->
                                    state       = running,
                                    iterations  = 0}), 0)
             after
+                rabbit_stomp_processor:flush_and_die(ProcessorPid),
                 error_logger:info_msg("ending STOMP connection ~p from ~s:~p~n",
                                       [self(), PeerAddressS, PeerPort])
             end
@@ -82,7 +83,7 @@ mainloop(State = #reader_state{socket = Sock}, ByteCount) ->
     end.
 
 process_received_bytes([], State) ->
-    ?MODULE:mainloop(State, 0);
+    mainloop(State, 0);
 process_received_bytes(Bytes,
                        State = #reader_state{
                          processor   = Processor,
@@ -90,8 +91,7 @@ process_received_bytes(Bytes,
                          state       = S}) ->
     case rabbit_stomp_frame:parse(Bytes, ParseState) of
         {more, ParseState1, Length} ->
-            ?MODULE:mainloop(State#reader_state{parse_state = ParseState1},
-                             Length);
+            mainloop(State#reader_state{parse_state = ParseState1}, Length);
         {ok, Frame, Rest} ->
             rabbit_stomp_processor:process_frame(Processor, Frame),
             PS = rabbit_stomp_frame:initial_state(),
