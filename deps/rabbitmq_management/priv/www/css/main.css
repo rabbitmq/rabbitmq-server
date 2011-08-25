@@ -126,11 +126,11 @@ input[type=submit], button {
     border: 1px solid #88d;
 }
 
-input[type=submit], button[disabled] {
+button[disabled] {
     background: #aac;
 }
 
-input[type=submit]:hover, button[disabled]:hover {
+button[disabled]:hover {
     background: #aac;
 }
 
