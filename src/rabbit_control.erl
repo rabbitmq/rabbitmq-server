@@ -362,7 +362,7 @@ wait_for_application(Node, PidFile, Inform) ->
 
 wait_for_application(Node, Pid) ->
     case process_up(Pid) of
-        true  -> case node_up(Node) of
+        true  -> case rabbit:is_running(Node) of
                      true  -> ok;
                      false -> timer:sleep(1000),
                               wait_for_application(Node, Pid)
@@ -376,12 +376,6 @@ wait_and_read_pid_file(PidFile) ->
         {error, enoent} -> timer:sleep(500),
                            wait_and_read_pid_file(PidFile);
         {error, _} = E  -> exit({error, {could_not_read_pid, E}})
-    end.
-
-node_up(Node) ->
-    case rpc_call(Node, application, which_applications, [infinity]) of
-        {badrpc, _} -> false;
-        Apps        -> proplists:is_defined(rabbit, Apps)
     end.
 
 % Test using some OS clunkiness since we shouldn't trust
