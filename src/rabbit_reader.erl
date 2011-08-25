@@ -85,6 +85,15 @@
                      rabbit_types:ok_or_error2(
                        rabbit_net:socket(), any()))) -> no_return()).
 
+-spec(mainloop/2 :: (_,#v1{}) -> any()).
+-spec(system_code_change/4 :: (_,_,_,_) -> {'ok',_}).
+-spec(system_continue/3 :: (_,_,#v1{}) -> any()).
+-spec(system_terminate/4 :: (_,_,_,_) -> none()).
+
+-spec(process_channel_frame/5 ::
+        (rabbit_command_assembler:frame(), pid(), non_neg_integer(), pid(),
+         tuple()) -> tuple()).
+
 -endif.
 
 %%--------------------------------------------------------------------------

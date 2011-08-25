@@ -67,6 +67,9 @@
          non_neg_integer(), rabbit_types:protocol())
         -> 'ok').
 
+-spec(mainloop/2 :: (_,_) -> 'done').
+-spec(mainloop1/2 :: (_,_) -> any()).
+
 -endif.
 
 %%---------------------------------------------------------------------------

@@ -22,6 +22,26 @@
 
 -include("rabbit.hrl").
 
+%%----------------------------------------------------------------------------
+
+-ifdef(use_specs).
+
+-spec(remove_from_queue/2 ::
+        (rabbit_amqqueue:name(), [pid()])
+        -> rabbit_types:ok_or_error2(pid(), not_found)).
+-spec(on_node_up/0 :: () -> 'ok').
+-spec(drop_mirror/2 ::
+        (rabbit_amqqueue:name(), node()) -> rabbit_types:ok_or_error(any())).
+-spec(add_mirror/2 ::
+        (rabbit_amqqueue:name(), node()) -> rabbit_types:ok_or_error(any())).
+-spec(add_mirror/3 ::
+        (rabbit_types:vhost(), binary(), atom())
+        -> rabbit_types:ok_or_error(any())).
+
+-endif.
+
+%%----------------------------------------------------------------------------
+
 %% If the dead pids include the queue pid (i.e. the master has died)
 %% then only remove that if we are about to be promoted. Otherwise we
 %% can have the situation where a slave updates the mnesia record for

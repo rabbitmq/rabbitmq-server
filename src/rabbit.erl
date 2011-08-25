@@ -203,6 +203,14 @@
 -spec(boot_delegate/0 :: () -> 'ok').
 -spec(recover/0 :: () -> 'ok').
 
+-spec(start/2 :: ('normal',[]) ->
+		      {'error',
+		       {'erlang_version_too_old',
+			{'found',[any()]},
+			{'required',[any(),...]}}} |
+		      {'ok',pid()}).
+-spec(stop/1 :: (_) -> 'ok').
+
 -endif.
 
 %%----------------------------------------------------------------------------
