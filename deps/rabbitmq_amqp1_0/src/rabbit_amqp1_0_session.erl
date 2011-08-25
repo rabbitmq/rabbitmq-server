@@ -163,6 +163,7 @@ record_delivery(DeliveryTag, DefaultOutcome,
 %% already forgotten its state for the transfer anyway.
 settle(Disp = #'v1_0.disposition'{first   = First0,
                                   last    = Last0,
+                                  state   = _Outcome,
                                   settled = Settled},
        Session = #session{outgoing_unsettled_map = Unsettled},
        UpstreamAckFun) ->
@@ -193,7 +194,7 @@ settle(Disp = #'v1_0.disposition'{first   = First0,
                                       none ->
                                           Map;
                                       {value, Entry} ->
-                                          ?DEBUG("Settling ~p with ~p~n", [Transfer, Outcome]),
+                                          ?DEBUG("Settling ~p with ~p~n", [Transfer, _Outcome]),
                                           #outgoing_transfer{ delivery_tag = DeliveryTag } = Entry,
                                           UpstreamAckFun(DeliveryTag),
                                           gb_trees:delete(Transfer, Map)
