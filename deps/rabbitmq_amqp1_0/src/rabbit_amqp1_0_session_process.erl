@@ -5,9 +5,9 @@
 -export([init/1, terminate/2, code_change/3,
          handle_call/3, handle_cast/2, handle_info/2]).
 
--export([start_link/7]).
+-export([start_link/8]).
 
--record(state, {backing_connection, backing_channel,
+-record(state, {backing_connection, backing_channel, frame_max,
                 reader_pid, writer_pid, session}).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
@@ -16,14 +16,15 @@
 -import(rabbit_amqp1_0_link_util, [protocol_error/3, ctag_to_handle/1]).
 
 %% TODO account for all these things
-start_link(Channel, ReaderPid, WriterPid, User, VHost,
+start_link(Channel, ReaderPid, WriterPid, User, VHost, FrameMax,
            _Collector, _StartLimiterFun) ->
     gen_server2:start_link(
-      ?MODULE, [Channel, ReaderPid, WriterPid, User, VHost], []).
+      ?MODULE, [Channel, ReaderPid, WriterPid, User, VHost, FrameMax], []).
 
 %% ---------
 
-init([Channel, ReaderPid, WriterPid, #user{username = Username}, VHost]) ->
+init([Channel, ReaderPid, WriterPid, #user{username = Username}, VHost,
+      FrameMax]) ->
     {ok, Conn} = amqp_connection:start(
                    %% TODO #adapter_info{}
                    #amqp_params_direct{username     = Username,
@@ -33,6 +34,7 @@ init([Channel, ReaderPid, WriterPid, #user{username = Username}, VHost]) ->
                 backing_channel    = Ch,
                 reader_pid         = ReaderPid,
                 writer_pid         = WriterPid,
+                frame_max          = FrameMax,
                 session            = rabbit_amqp1_0_session:init(Channel)
                }}.
 
@@ -56,6 +58,7 @@ handle_info(#'basic.consume_ok'{}, State) ->
 
 handle_info({#'basic.deliver'{consumer_tag = ConsumerTag} = Deliver, Msg},
             State = #state{writer_pid      = WriterPid,
+                           frame_max       = FrameMax,
                            backing_channel = BCh,
                            session         = Session}) ->
     Handle = ctag_to_handle(ConsumerTag),
@@ -68,7 +71,8 @@ handle_info({#'basic.deliver'{consumer_tag = ConsumerTag} = Deliver, Msg},
         Link ->
             {ok, Link1, Session1} =
                 rabbit_amqp1_0_outgoing_link:deliver(
-                  Deliver, Msg, WriterPid, BCh, Handle, Link, Session),
+                  Deliver, Msg, WriterPid, BCh, Handle, Link, Session,
+                  FrameMax),
             put({out, Handle}, Link1),
             {noreply, state(rabbit_amqp1_0_session:incr_transfer_number(
                               Session1), State)}

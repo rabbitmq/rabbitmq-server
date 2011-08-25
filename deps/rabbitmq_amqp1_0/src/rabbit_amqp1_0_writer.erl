@@ -167,19 +167,11 @@ call(Pid, Msg) ->
 
 %% Begin 1-0
 
-%% Note: no (direct) AMQP 1.0 equivalent of content frames, a transfer
-%% record can be followed by a number of other records to make a
-%% complete frame but it's less predictable so we just model that as a
-%% sequence of records going into assemble_frame/3.
-
-assemble_frame(Channel, FrameRecords, rabbit_amqp1_0_framing)
-  when is_list(FrameRecords) ->
-    ?LOGMESSAGE(out, Channel, FrameRecords, none),
-    FrameBin = [rabbit_amqp1_0_binary_generator:generate(
-                  rabbit_amqp1_0_framing:encode(F)) || F <- FrameRecords],
-    rabbit_amqp1_0_binary_generator:build_frame(Channel, FrameBin);
-assemble_frame(Channel, FrameRecord, rabbit_amqp1_0_framing) ->
-    assemble_frame(Channel, [FrameRecord], rabbit_amqp1_0_framing);
+assemble_frame(Channel, Performative, rabbit_amqp1_0_framing) ->
+    ?LOGMESSAGE(out, Channel, Performative, none),
+    PerfBin = rabbit_amqp1_0_binary_generator:generate(
+                rabbit_amqp1_0_framing:encode(Performative)),
+    rabbit_amqp1_0_binary_generator:build_frame(Channel, PerfBin);
 
 %% End 1-0
 
@@ -187,6 +179,22 @@ assemble_frame(Channel, MethodRecord, Protocol) ->
     ?LOGMESSAGE(out, Channel, MethodRecord, none),
     rabbit_binary_generator:build_simple_method_frame(
       Channel, MethodRecord, Protocol).
+
+%% Begin 1-0
+
+%% Note: a transfer record can be followed by a number of other
+%% records to make a complete frame but unlike 0-9-1 we may have many
+%% content records. However, that's already been handled for us, we're
+%% just sending a chunk, so from this perspective it's just a binary.
+
+assemble_frames(Channel, Performative, Content, FrameMax,
+                rabbit_amqp1_0_framing) ->
+    ?LOGMESSAGE(out, Channel, Performative, Contents),
+    PerfBin = rabbit_amqp1_0_binary_generator:generate(
+                rabbit_amqp1_0_framing:encode(Performative)),
+    rabbit_amqp1_0_binary_generator:build_frame(Channel, [PerfBin, Content]);
+
+%% End 1-0
 
 assemble_frames(Channel, MethodRecord, Content, FrameMax, Protocol) ->
     ?LOGMESSAGE(out, Channel, MethodRecord, Content),

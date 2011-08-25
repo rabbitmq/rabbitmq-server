@@ -1,6 +1,6 @@
 -module(rabbit_amqp1_0_outgoing_link).
 
--export([attach/3, deliver/7, update_credit/4, flow/3]).
+-export([attach/3, deliver/8, update_credit/4, flow/3]).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_amqp1_0.hrl").
@@ -179,7 +179,7 @@ deliver(#'basic.deliver'{delivery_tag = DeliveryTag,
         Link = #outgoing_link{delivery_count = Count,
                               no_ack = NoAck,
                               default_outcome = DefaultOutcome},
-        Session) ->
+        Session, FrameMax) ->
     MaySend = rabbit_amqp1_0_session:may_send(Session),
     if MaySend ->
             NewLink = Link#outgoing_link{delivery_count = Count + 1},
@@ -197,9 +197,8 @@ deliver(#'basic.deliver'{delivery_tag = DeliveryTag,
                                  %% fine, but in any case it's only a
                                  %% hint
                                  batchable = false},
-            rabbit_amqp1_0_writer:send_command(
-              WriterPid,
-              [T | rabbit_amqp1_0_message:annotated_message(RKey, Msg)]),
+            Msg1_0 = rabbit_amqp1_0_message:annotated_message(RKey, Msg),
+            send_frames(WriterPid, T, Msg1_0, FrameMax),
             {ok, NewLink, case NoAck of
                               true  -> Session;
                               false -> rabbit_amqp1_0_session:record_delivery(
@@ -215,4 +214,23 @@ deliver(#'basic.deliver'{delivery_tag = DeliveryTag,
             amqp_channel:call(BCh, #'basic.reject'{requeue = true,
                                                    delivery_tag = DeliveryTag}),
             {ok, Link, Session}
+    end.
+
+send_frames(WriterPid, T, Msg1_0, FrameMax) ->
+    TBin = iolist_to_binary(
+             rabbit_amqp1_0_binary_generator:generate(
+               rabbit_amqp1_0_framing:encode(T))),
+    MsgBin = iolist_to_binary(
+               [rabbit_amqp1_0_binary_generator:generate(
+                  rabbit_amqp1_0_framing:encode(R)) || R <- Msg1_0]),
+    send_frames0(WriterPid, T, MsgBin, FrameMax - size(TBin)).
+
+send_frames0(WriterPid, T, MsgBin, MaxContentSize) ->
+    ContentSize = size(MsgBin),
+    case ContentSize > MaxContentSize of
+        true  -> <<Chunk:MaxContentSize/binary, Rest/binary>> = MsgBin,
+                 T1 = T#'v1_0.transfer'{more = true},
+                 rabbit_amqp1_0_writer:send_command(WriterPid, T1, Chunk),
+                 send_frames0(WriterPid, T, Rest, MaxContentSize);
+        false -> rabbit_amqp1_0_writer:send_command(WriterPid, T, MsgBin)
     end.
