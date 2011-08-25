@@ -85,10 +85,10 @@ init([Sock, StartHeartbeatFun, Configuration]) ->
     }.
 
 terminate(_Reason, State) ->
-    shutdown_channel_and_connection(State).
+    close_connection(State).
 
 handle_cast(flush_and_die, State) ->
-    {stop, normal, shutdown_channel_and_connection(State)};
+    {stop, normal, close_connection(State)};
 
 handle_cast({"STOMP", Frame}, State) ->
     process_connect(no_implicit, Frame, State);
@@ -232,8 +232,7 @@ validate_frame(_Command, _Frame, State) ->
 %%----------------------------------------------------------------------------
 
 handle_frame("DISCONNECT", _Frame, State) ->
-    %% We'll get to shutdown the channels in terminate
-    {stop, normal, shutdown_channel_and_connection(State)};
+    {stop, normal, close_connection(State)};
 
 handle_frame("SUBSCRIBE", Frame, State) ->
     with_destination("SUBSCRIBE", Frame, State, fun do_subscribe/4);
@@ -604,22 +603,9 @@ send_method(Method, Channel, Properties, BodyFragments, State) ->
                 payload = list_to_binary(BodyFragments)}),
     State.
 
-shutdown_channel_and_connection(State = #state{channel = none}) ->
-    State;
-shutdown_channel_and_connection(State = #state{channel       = Channel,
-                                               connection    = Connection,
-                                               subscriptions = Subs}) ->
-    %% push through all attempts at closure to avoid debris
-    dict:fold(
-        fun(_ConsumerTag, #subscription{channel = SubChannel}, Acc) ->
-            case SubChannel of
-                Channel -> Acc;
-                _ ->
-                    catch amqp_channel:close(SubChannel),
-                    Acc
-            end
-        end, 0, Subs),
-    catch amqp_channel:close(Channel),
+%% Closing the connection will close the channel and subchannels
+close_connection(State = #state{connection = Connection}) ->
+    %% ignore noproc or other exceptions to avoid debris
     catch amqp_connection:close(Connection),
     State#state{channel = none, connection = none, subscriptions = none}.
 
