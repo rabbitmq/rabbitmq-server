@@ -42,7 +42,7 @@
 -record(state, {socket, session_id, channel,
                 connection, subscriptions, version,
                 start_heartbeat_fun, pending_receipts,
-                config, reply_queues}).
+                config, reply_queues, frame_transformer}).
 
 -record(subscription, {dest_hdr, channel, multi_ack, description}).
 
@@ -76,7 +76,8 @@ init([Sock, StartHeartbeatFun, Configuration]) ->
        start_heartbeat_fun = StartHeartbeatFun,
        pending_receipts    = undefined,
        config              = Configuration,
-       reply_queues        = dict:new()},
+       reply_queues        = dict:new(),
+       frame_transformer   = undefined},
      hibernate,
      {backoff, 1000, 1000, 10000}
     }.
@@ -105,16 +106,17 @@ handle_cast(_Request, State = #state{channel = none,
                 State),
      hibernate};
 
-handle_cast({Command, Frame}, State) ->
+handle_cast({Command, Frame}, State = #state{frame_transformer = FT}) ->
+    Frame1 = FT(Frame),
     process_request(
       fun(StateN) ->
-              case validate_frame(Command, Frame, StateN) of
+              case validate_frame(Command, Frame1, StateN) of
                   R = {error, _, _, _} -> R;
-                  _                    -> handle_frame(Command, Frame, StateN)
+                  _                    -> handle_frame(Command, Frame1, StateN)
               end
       end,
       fun(StateM) ->
-              ensure_receipt(Frame, StateM)
+              ensure_receipt(Frame1, StateM)
       end,
       State);
 
@@ -174,21 +176,23 @@ process_connect(Implicit,
       fun(StateN) ->
               case negotiate_version(Frame) of
                   {ok, Version} ->
+                      FT = frame_transformer(Version),
+                      Frame1 = FT(Frame),
                       {ok, DefaultVHost} =
                           application:get_env(rabbit, default_vhost),
                       Res = do_login(
-                                rabbit_stomp_frame:header(Frame, "login",
+                                rabbit_stomp_frame:header(Frame1, "login",
                                                           DefaultLogin),
-                                rabbit_stomp_frame:header(Frame, "passcode",
+                                rabbit_stomp_frame:header(Frame1, "passcode",
                                                           DefaultPasscode),
-                                rabbit_stomp_frame:header(Frame, "host",
+                                rabbit_stomp_frame:header(Frame1, "host",
                                                           binary_to_list(
                                                             DefaultVHost)),
-                                rabbit_stomp_frame:header(Frame, "heart-beat",
+                                rabbit_stomp_frame:header(Frame1, "heart-beat",
                                                           "0,0"),
                                 adapter_info(Sock, Version),
                                 Version,
-                                StateN),
+                                StateN#state{frame_transformer = FT}),
                       case {Res, Implicit} of
                           {{ok, _, StateN1}, implicit} -> ok(StateN1);
                           _                            -> Res
@@ -202,6 +206,12 @@ process_connect(Implicit,
       end,
       fun(StateM) -> StateM end,
       State).
+
+%%----------------------------------------------------------------------------
+%% Frame Transformation
+%%----------------------------------------------------------------------------
+frame_transformer("1.0") -> fun rabbit_stomp_util:trim_headers/1;
+frame_transformer(_) -> fun(Frame) -> Frame end.
 
 %%----------------------------------------------------------------------------
 %% Frame Validation

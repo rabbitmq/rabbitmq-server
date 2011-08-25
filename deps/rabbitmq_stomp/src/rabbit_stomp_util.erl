@@ -36,6 +36,7 @@
 -export([longstr_field/2]).
 -export([ack_mode/1, consumer_tag/1, message_headers/4, message_properties/1]).
 -export([negotiate_version/2]).
+-export([trim_headers/1]).
 -export([valid_dest_prefixes/0]).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
@@ -224,6 +225,9 @@ create_message_id(ConsumerTag, SessionId, DeliveryTag) ->
      SessionId,
      ?MESSAGE_ID_SEPARATOR,
      integer_to_list(DeliveryTag)].
+
+trim_headers(Frame = #stomp_frame{headers = Hdrs}) ->
+    Frame#stomp_frame{headers = [{K, string:strip(V, left)} || {K, V} <- Hdrs]}.
 
 %%--------------------------------------------------------------------
 %% Destination Parsing
