@@ -556,13 +556,15 @@
         <varlistentry>
           <term><cmdsynopsis><command>list_users</command></cmdsynopsis></term>
           <listitem>
-            <para>Lists users</para>
+            <para>
+              Lists users. Each result row will contain the user name
+              followed by a list of the tags set for that user.
+            </para>
             <para role="example-prefix">For example:</para>
             <screen role="example">rabbitmqctl list_users</screen>
             <para role="example">
               This command instructs the RabbitMQ broker to list all
-              users. Each result row will contain the user name and
-              the administrator status of the user, in that order.
+              users.
             </para>
           </listitem>
         </varlistentry>
