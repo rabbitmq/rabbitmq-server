@@ -551,12 +551,13 @@ handle_1_0_frame(Mode, Channel, Payload, State) ->
     end.
 
 parse_1_0_frame(Payload) ->
-    Sections = case [rabbit_amqp1_0_framing:decode(Parsed) ||
-                        Parsed <- rabbit_amqp1_0_binary_parser:parse(Payload)] of
-                   [Value] -> Value;
-                   List    -> List
+    {PerfDesc, Rest} = rabbit_amqp1_0_binary_parser:parse(Payload),
+    Perf = rabbit_amqp1_0_framing:decode(PerfDesc),
+    Sections = case Rest of
+                   <<>> -> Perf;
+                   _    -> {Perf, Rest}
                end,
-    ?DEBUG("1.0 frame(s) decoded: ~p~n", [Sections]),
+    ?DEBUG("1.0 frame decoded: ~p~n", [Sections]),
     Sections.
 
 handle_1_0_connection_frame(#'v1_0.open'{ max_frame_size = ClientFrameMax,

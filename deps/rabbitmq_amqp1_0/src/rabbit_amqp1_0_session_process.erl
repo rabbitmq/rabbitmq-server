@@ -173,9 +173,9 @@ handle_control(#'v1_0.attach'{handle                 = Handle,
     put({out, Handle}, Link),
     reply(Reply, State);
 
-handle_control([Txfr = #'v1_0.transfer'{handle      = Handle,
+handle_control({Txfr = #'v1_0.transfer'{handle      = Handle,
                                         settled     = Settled,
-                                        delivery_id = {uint, TxfrId}} | Msg],
+                                        delivery_id = {uint, TxfrId}}, MsgPart},
                State = #state{backing_channel = BCh,
                               session         = Session}) ->
     case get({in, Handle}) of
@@ -184,7 +184,7 @@ handle_control([Txfr = #'v1_0.transfer'{handle      = Handle,
                            "Unknown link handle ~p", [Handle]);
         Link ->
             {ok, Reply, Link1} =
-                rabbit_amqp1_0_incoming_link:transfer(Txfr, Msg, Link, BCh),
+                rabbit_amqp1_0_incoming_link:transfer(Txfr, MsgPart, Link, BCh),
             put({in, Handle}, Link1),
             reply(Reply, state(rabbit_amqp1_0_session:record_publish(
                                  Settled, TxfrId, Session), State))

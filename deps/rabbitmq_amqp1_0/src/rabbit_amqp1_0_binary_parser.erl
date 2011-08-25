@@ -1,6 +1,6 @@
 -module(rabbit_amqp1_0_binary_parser).
 
--export([parse/1]).
+-export([parse/1, parse_all/1]).
 
 -include("rabbit_amqp1_0.hrl").
 
@@ -8,21 +8,21 @@
 -spec(parse/1 :: (binary()) -> tuple()). 
 -endif.
 
-parse(ValueBin) when is_binary(ValueBin) ->
-    lists:reverse(parse_all([], parse1(ValueBin))).
+parse_all(ValueBin) when is_binary(ValueBin) ->
+    lists:reverse(parse_all([], parse(ValueBin))).
 
 parse_all(Acc, {Value, <<>>}) -> [Value | Acc];
-parse_all(Acc, {Value, Rest}) -> parse_all([Value | Acc], parse1(Rest)).
+parse_all(Acc, {Value, Rest}) -> parse_all([Value | Acc], parse(Rest)).
 
-parse1(<<?DESCRIBED,Rest/binary>>) ->
+parse(<<?DESCRIBED,Rest/binary>>) ->
     parse_described(Rest);
-parse1(Rest) ->
+parse(Rest) ->
     parse_primitive0(Rest).
 
 parse_described(Bin) ->
-    {Descriptor, Rest1} = parse1(Bin),
+    {Descriptor, Rest1} = parse(Bin),
 %%    io:format("Descriptor: ~p~n", [Descriptor]),
-    {Value, Rest2} = parse1(Rest1),
+    {Value, Rest2} = parse(Rest1),
     {{described, Descriptor, Value}, Rest2}.
 
 parse_primitive0(<<Subcategory:4,Subtype:4,Rest/binary>>) ->
@@ -148,7 +148,7 @@ parse_compound(UnitSize, Bin) ->
 parse_compound1(0, <<>>, List) ->
     lists:reverse(List);
 parse_compound1(Count, Bin, Acc) ->
-    {Value, Rest} = parse1(Bin),
+    {Value, Rest} = parse(Bin),
     parse_compound1(Count - 1, Rest, [Value | Acc]).
 
 parse_array(UnitSize, Bin) ->
@@ -156,7 +156,7 @@ parse_array(UnitSize, Bin) ->
     parse_array1(Count, Bin1).
 
 parse_array1(Count, <<?DESCRIBED,Rest/binary>>) ->
-    {Descriptor, Rest1} = parse1(Rest),
+    {Descriptor, Rest1} = parse(Rest),
     List = parse_array1(Count, Rest1),
     lists:map(fun (Value) ->
                       {described, Descriptor, Value}

@@ -12,8 +12,8 @@
 
 -record(incoming_link, {name, exchange, routing_key,
                         delivery_count = 0,
-                        credit_used = ?INCOMING_CREDIT div 2
-                       }).
+                        credit_used = ?INCOMING_CREDIT div 2,
+                        msg_acc = <<>>}).
 
 attach(#'v1_0.attach'{name = Name,
                       handle = Handle,
@@ -59,13 +59,20 @@ attach(#'v1_0.attach'{name = Name,
                                "Attach rejected: ~p", [Reason])
     end.
 
-transfer(#'v1_0.transfer'{handle = Handle}, AnnotatedMessage,
+transfer(#'v1_0.transfer'{more = true}, MsgPart,
+         #incoming_link{msg_acc = MsgAcc} = Link, _BCh) ->
+    {ok, [], Link#incoming_link{msg_acc = <<MsgAcc/binary, MsgPart/binary>>}};
+
+transfer(#'v1_0.transfer'{handle = Handle}, MsgPart,
          #incoming_link{exchange       = X,
                         routing_key    = LinkRKey,
                         delivery_count = Count,
-                        credit_used    = CreditUsed} = Link, BCh) ->
-    NewCount = rabbit_misc:serial_add(Count, 1),
-    {MsgRKey, Msg} = rabbit_amqp1_0_message:assemble(AnnotatedMessage),
+                        credit_used    = CreditUsed,
+                        msg_acc        = MsgAcc} = Link, BCh) ->
+    MsgBin = <<MsgAcc/binary, MsgPart/binary>>,
+    Msg1_0 = [rabbit_amqp1_0_framing:decode(P) ||
+                 P <- rabbit_amqp1_0_binary_parser:parse_all(MsgBin)],
+    {MsgRKey, Msg} = rabbit_amqp1_0_message:assemble(Msg1_0),
     RKey = case LinkRKey of
                undefined -> MsgRKey;
                _         -> LinkRKey
@@ -78,8 +85,10 @@ transfer(#'v1_0.transfer'{handle = Handle}, AnnotatedMessage,
                                   D ->
                                       {false, D}
                               end,
-    NewLink = Link#incoming_link{ delivery_count = NewCount,
-                                  credit_used = CreditUsed1 },
+    NewLink = Link#incoming_link{
+                delivery_count = rabbit_misc:serial_add(Count, 1),
+                credit_used    = CreditUsed1,
+                msg_acc        = <<>>},
     Reply = case SendFlow of
                 true  -> ?DEBUG("sending flow for incoming ~p", [NewLink]),
                          [incoming_flow(NewLink, Handle)];
