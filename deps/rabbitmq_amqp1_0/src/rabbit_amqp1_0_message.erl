@@ -140,7 +140,7 @@ get_1_0(Header, Headers, Default) ->
 
 unreserialise(Bin) ->
     %% TODO again, multi-section messages
-    [Section] = rabbit_amqp1_0_binary_parser:parse(Bin),
+    [Section] = rabbit_amqp1_0_binary_parser:parse_all(Bin),
     Section.
 
 %% TODO again, talk to Mike about this + new codec.
