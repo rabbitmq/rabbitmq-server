@@ -430,11 +430,11 @@ do_login(Username0, Password0, VirtualHost0, Heartbeat, AdapterInfo,
     end.
 
 adapter_info(Sock, Version) ->
-    {Addr, Port} = case catch rabbit_net:sockname(Sock) of
+    {Addr, Port} = case rabbit_net:sockname(Sock) of
                        {ok, Res} -> Res;
                        _         -> {unknown, unknown}
                    end,
-    {PeerAddr, PeerPort} = case catch rabbit_net:peername(Sock) of
+    {PeerAddr, PeerPort} = case rabbit_net:peername(Sock) of
                                {ok, Res2} -> Res2;
                                _          -> {unknown, unknown}
                            end,
