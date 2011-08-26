@@ -104,4 +104,26 @@ generate({map, ListOfPairs}) ->
        true ->
             [ <<?COMPOUND_1:4,1:4,(Size + 1):8,Count:8>>,
               Compound ]
+    end;
+
+generate({array, Type, List}) ->
+    Count = length(List),
+    Body = iolist_to_binary(
+             [constructor(Type), [generate(Type, I) || I <- List]]),
+    Size = size(Body),
+    if Size > 255  -> % Size < 256 -> Count < 256
+            [ <<?ARRAY_4:4, 0:4, (Size + 4):32/unsigned, Count:32/unsigned>>,
+              Body ];
+       true ->
+            [ <<?ARRAY_1:4, 0:4, (Size + 1):8/unsigned, Count:8/unsigned>>,
+              Body ]
     end.
+
+%% TODO again these are a stub to get SASL working. New codec? Will
+%% that ever happen? If not we really just need to split generate/1
+%% up into things like these...
+constructor(symbol) ->
+     <<?VAR_1:4,3:4>>.
+
+generate(symbol, Value) ->
+    [<<(length(Value)):8>>, list_to_binary(Value)].
