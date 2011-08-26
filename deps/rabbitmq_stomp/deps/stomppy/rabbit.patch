@@ -1,6 +1,6 @@
 diff -r 16a4000624a7 stomp/connect.py
 --- a/stomp/connect.py	Sun May 02 18:15:34 2010 +0100
-+++ b/stomp/connect.py	Mon Aug 01 17:25:05 2011 +0100
++++ b/stomp/connect.py	Fri Aug 26 15:35:33 2011 +0100
 @@ -88,7 +88,10 @@
                   ssl_key_file = None,
                   ssl_cert_file = None,
@@ -57,7 +57,7 @@ diff -r 16a4000624a7 stomp/connect.py
          if self.__socket is not None:
              if self.__ssl:
                  #
-@@ -390,20 +416,20 @@
+@@ -390,20 +416,23 @@
                  #
                  try:
                      self.__socket = self.__socket.unwrap()
@@ -70,7 +70,11 @@ diff -r 16a4000624a7 stomp/connect.py
 -                    log.warn(e)
 +                    log.warning("socket unwrap() threw exception: %s" % e)
              elif hasattr(socket, 'SHUT_RDWR'):
-                 self.__socket.shutdown(socket.SHUT_RDWR)
+-                self.__socket.shutdown(socket.SHUT_RDWR)
++                try:
++                    self.__socket.shutdown(socket.SHUT_RDWR)
++                except Exception as e:
++                    log.warning("socket shutdown() threw exception: %s" % e)
          #
 -        # split this into a separate check, because sometimes the socket is nulled between shutdown and this call
 +        # caution, because sometimes the socket is nulled between shutdown and this call
@@ -84,7 +88,7 @@ diff -r 16a4000624a7 stomp/connect.py
  
      def __convert_dict(self, payload):
          """
-@@ -449,6 +475,9 @@
+@@ -449,6 +478,9 @@
                  raise KeyError("Command %s requires header %r" % (command, required_header_key))
          self.__send_frame(command, headers, payload)
  
@@ -94,7 +98,7 @@ diff -r 16a4000624a7 stomp/connect.py
      def __send_frame(self, command, headers={}, payload=''):
          """
          Send a STOMP frame.
-@@ -680,4 +709,4 @@
+@@ -680,4 +712,4 @@
                      sleep_exp += 1
  
          if not self.__socket:
