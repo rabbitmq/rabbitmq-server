@@ -725,18 +725,27 @@ accumulate_receipts(DeliveryTag, false, PR) ->
         {value, ReceiptId} -> {[ReceiptId], gb_trees:delete(DeliveryTag, PR)};
         none               -> {[], PR}
     end;
+
 accumulate_receipts(DeliveryTag, true, PR) ->
-    {Key, Value, PR1} = gb_trees:take_smallest(PR),
-    case DeliveryTag >= Key of
-        true  -> accumulate_receipts1(DeliveryTag, {Key, Value, PR1}, []);
-        false -> {[], PR}
+    case gb_trees:is_empty(PR) of
+        true  -> {[], PR};
+        false -> accumulate_receipts1(DeliveryTag,
+                                      gb_trees:take_smallest(PR), [])
     end.
 
-accumulate_receipts1(DeliveryTag, {DeliveryTag, Value, PR}, Acc) ->
-    {lists:reverse([Value | Acc]), PR};
+accumulate_receipts1(DeliveryTag, {Key, Value, PR}, Acc)
+  when Key > DeliveryTag ->
+    {lists:reverse(Acc), gb_trees:insert(Key, Value, PR)};
 accumulate_receipts1(DeliveryTag, {_Key, Value, PR}, Acc) ->
-    accumulate_receipts1(DeliveryTag,
-                         gb_trees:take_smallest(PR), [Value | Acc]).
+    Acc1 = [Value | Acc],
+
+    case gb_trees:is_empty(PR) of
+        true ->
+            {lists:reverse(Acc1), PR};
+        false ->
+            accumulate_receipts1(DeliveryTag, gb_trees:take_smallest(PR), Acc1)
+    end.
+
 
 %%----------------------------------------------------------------------------
 %% Transaction Support
@@ -959,7 +968,7 @@ send_frame(Frame, State = #state{socket = Sock}) ->
     %% We ignore certain errors here, as we will be receiving an
     %% asynchronous notification of the same (or a related) fault
     %% shortly anyway. See bug 21365.
-    catch rabbit_net:port_command(Sock, rabbit_stomp_frame:serialize(Frame)), 
+    catch rabbit_net:port_command(Sock, rabbit_stomp_frame:serialize(Frame)),
     State.
 
 send_error(Message, Detail, State) ->
