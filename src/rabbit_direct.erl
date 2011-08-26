@@ -72,7 +72,7 @@ list() ->
 %%----------------------------------------------------------------------------
 
 connect(Username, VHost, Protocol, Pid, Infos) ->
-    case lists:keymember(rabbit, 1, application:which_applications()) of
+    case rabbit:is_running() of
         true  ->
             case rabbit_access_control:check_user_login(Username, []) of
                 {ok, User} ->

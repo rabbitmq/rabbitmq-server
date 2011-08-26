@@ -18,7 +18,8 @@
 
 -behaviour(application).
 
--export([prepare/0, start/0, stop/0, stop_and_halt/0, status/0, environment/0,
+-export([prepare/0, start/0, stop/0, stop_and_halt/0, status/0,
+         is_running/0 , is_running/1, environment/0,
          rotate_logs/1, force_event_refresh/0]).
 
 -export([start/2, stop/1]).
@@ -196,6 +197,8 @@
                {os, {atom(), atom()}} |
                {erlang_version, string()} |
                {memory, any()}]).
+-spec(is_running/0 :: () -> boolean()).
+-spec(is_running/1 :: (node()) -> boolean()).
 -spec(environment/0 :: () -> [{atom() | term()}]).
 -spec(log_location/1 :: ('sasl' | 'kernel') -> log_location()).
 
@@ -233,10 +236,18 @@ stop_and_halt() ->
 
 status() ->
     [{pid, list_to_integer(os:getpid())},
-     {running_applications, application:which_applications()},
+     {running_applications, application:which_applications(infinity)},
      {os, os:type()},
      {erlang_version, erlang:system_info(system_version)},
      {memory, erlang:memory()}].
+
+is_running() -> is_running(node()).
+
+is_running(Node) ->
+    case rpc:call(Node, application, which_applications, [infinity]) of
+        {badrpc, _} -> false;
+        Apps        -> proplists:is_defined(rabbit, Apps)
+    end.
 
 environment() ->
     lists:keysort(
