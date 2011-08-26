@@ -717,7 +717,11 @@ accumulate_receipts(DeliveryTag, false, PR) ->
     end;
 
 accumulate_receipts(DeliveryTag, true, PR) ->
-    accumulate_receipts1(DeliveryTag, gb_trees:take_smallest(PR), []).
+    case gb_trees:is_empty(PR) of
+        true  -> {[], PR};
+        false -> accumulate_receipts1(DeliveryTag,
+                                      gb_trees:take_smallest(PR), [])
+    end.
 
 accumulate_receipts1(DeliveryTag, {Key, Value, PR}, Acc)
   when Key > DeliveryTag ->
