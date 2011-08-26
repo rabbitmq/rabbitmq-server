@@ -1377,28 +1377,10 @@
             <variablelist>
               <varlistentry>
                 <term>fraction</term>
-                <listitem><para>The new memory threshhold fraction as a floating point number between
-                                0.0 and 1.0 with a mandatory fractional part.</para></listitem>
+                <listitem><para>The new memory threshhold fraction at which flow control is triggered, as a
+                                floating point number between 0.0 and 1.0 with a mandatory fractional part.</para></listitem>
               </varlistentry>
             </variablelist>
-            <para>
-              Sets the memory threshhold fraction at which memory-based flow control is
-              triggered, until the broker restarts. The corresponding configuration
-              setting should also be changed when the effects of this command should
-              survive a broker restart. Use the <command>status</command> command to
-              confirm the currently active memory threshhold. The command takes effect
-              within the memory monitor polling interval.
-            </para>
-            <para>
-              This command will update the memory threshhold as a fraction of the total RAM
-              by querying the total RAM when the command is executed. Therefore the absolute
-              threshhold may change on systems with hot-swappable RAM when this command is executed
-              without altering the fraction.
-            </para>
-            <screen role="example">rabbitmqctl set_vm_memory_high_watermark 0.4</screen>
-            <para role="example">
-              This command sets the memory threshhold fraction to 40%.
-            </para>
           </listitem>
         </varlistentry>
       </variablelist>
