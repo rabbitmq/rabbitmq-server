@@ -235,10 +235,13 @@ status() ->
      {running_applications, application:which_applications()},
      {os, os:type()},
      {erlang_version, erlang:system_info(system_version)},
-     {vm_memory_high_watermark,
-        vm_memory_monitor:get_vm_memory_high_watermark()},
-     {vm_memory_limit, vm_memory_monitor:get_memory_limit()},
-     {memory, erlang:memory()}].
+     {memory, erlang:memory()}] ++
+     case is_rabbit_running() of
+        true  -> [{vm_memory_high_watermark,
+                   vm_memory_monitor:get_vm_memory_high_watermark()},
+                  {vm_memory_limit, vm_memory_monitor:get_memory_limit()}];
+        false -> []
+     end.
 
 environment() ->
     lists:keysort(
@@ -586,3 +589,8 @@ config_files() ->
                            File <- Files];
         error       -> []
     end.
+
+is_rabbit_running() ->
+    lists:any(fun ({rabbit, _Descr, _Vsn}) -> true;
+                  ({_App,   _Descr, _Vsn}) -> false end,
+              application:which_applications()).
