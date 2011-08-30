@@ -201,8 +201,8 @@ x(XName) ->
 %%----------------------------------------------------------------------------
 
 federation_up() ->
-    lists:keysearch(rabbitmq_federation, 1,
-                    application:which_applications(infinity)) =/= false.
+    proplists:is_defined(rabbitmq_federation,
+                         application:which_applications(infinity)).
 
 handle_command({add_binding, Binding}, State) ->
     add_binding(Binding, State);
