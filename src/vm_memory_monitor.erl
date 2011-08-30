@@ -35,7 +35,7 @@
 -export([update/0, get_total_memory/0, get_vm_limit/0,
          get_check_interval/0, set_check_interval/1,
          get_vm_memory_high_watermark/0, set_vm_memory_high_watermark/1,
-         get_memory_limit/0]).
+         get_memory_limit/0, get_vm_info/0]).
 
 
 -define(SERVER, ?MODULE).
@@ -98,6 +98,11 @@ set_vm_memory_high_watermark(Fraction) ->
 
 get_memory_limit() ->
     gen_server:call(?MODULE, get_memory_limit, infinity).
+
+get_vm_info() ->
+    [{os_total_memory,              get_total_memory()},
+     {monitoring_memory_limit,      get_memory_limit()},
+     {monitoring_memory_threshhold, get_vm_memory_high_watermark()}].
 
 %%----------------------------------------------------------------------------
 %% gen_server callbacks

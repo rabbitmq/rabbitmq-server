@@ -1371,6 +1371,7 @@
             </para>
           </listitem>
         </varlistentry>
+
         <varlistentry>
           <term><cmdsynopsis><command>set_vm_memory_high_watermark</command> <arg choice="req"><replaceable>fraction</replaceable></arg></cmdsynopsis></term>
           <listitem>
@@ -1383,6 +1384,17 @@
             </variablelist>
           </listitem>
         </varlistentry>
+
+        <varlistentry>
+          <term><cmdsynopsis><command>get_vm_memory_limits</command></cmdsynopsis></term>
+          <listitem>
+            <para>
+              Show total memory reported by OS; and memory monitoring limit and threshhold.
+              The memory total and limit are reported in bytes.
+            </para>
+          </listitem>
+        </varlistentry>
+
       </variablelist>
     </refsect2>
   </refsect1>

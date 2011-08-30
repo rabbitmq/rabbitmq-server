@@ -329,6 +329,10 @@ action(set_vm_memory_high_watermark, Node, [Arg], _Opts, Inform) ->
     Inform("Setting memory threshhold on ~p to ~p", [Node, Frac]),
     rpc_call(Node, vm_memory_monitor, set_vm_memory_high_watermark, [Frac]);
 
+action(get_vm_memory_limits, Node, _Args, _Opts, Inform) ->
+    Inform("Getting memory monitoring limits of node ~p", [Node]),
+    display_call_result(Node, {vm_memory_monitor, get_vm_info, []});
+
 action(set_permissions, Node, [Username, CPerm, WPerm, RPerm], Opts, Inform) ->
     VHost = proplists:get_value(?VHOST_OPT, Opts),
     Inform("Setting permissions for user ~p in vhost ~p", [Username, VHost]),
@@ -352,7 +356,7 @@ action(report, Node, _Args, _Opts, Inform) ->
     io:format("Reporting server status on ~p~n~n", [erlang:universaltime()]),
     [begin ok = action(Action, N, [], [], Inform), io:nl() end ||
         N      <- unsafe_rpc(Node, rabbit_mnesia, running_clustered_nodes, []),
-        Action <- [status, cluster_status, environment]],
+        Action <- [status, cluster_status, environment, get_vm_memory_limits]],
     VHosts = unsafe_rpc(Node, rabbit_vhost, list, []),
     [print_report(Node, Q)      || Q <- ?GLOBAL_QUERIES],
     [print_report(Node, Q, [V]) || Q <- ?VHOST_QUERIES, V <- VHosts],
