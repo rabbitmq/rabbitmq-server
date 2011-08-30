@@ -150,6 +150,11 @@ negotiate_version_choice_duplicates_test() ->
     {ok, "1.2"} =
         rabbit_stomp_util:negotiate_version(["1.2", "1.2"],
                                             ["1.2", "1.2"]).
+trim_headers_test() ->
+    #stomp_frame{headers = [{"one", "foo"}, {"two", "baz "}]} =
+        rabbit_stomp_util:trim_headers(
+          #stomp_frame{headers = [{"one", "  foo"}, {"two", " baz "}]}).
+
 %%--------------------------------------------------------------------
 %% Frame Parsing Tests
 %%--------------------------------------------------------------------
