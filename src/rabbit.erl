@@ -235,6 +235,9 @@ status() ->
      {running_applications, application:which_applications()},
      {os, os:type()},
      {erlang_version, erlang:system_info(system_version)},
+     {vm_memory_high_watermark,
+        vm_memory_monitor:get_vm_memory_high_watermark()},
+     {vm_memory_limit, vm_memory_monitor:get_memory_limit()},
      {memory, erlang:memory()}].
 
 environment() ->
