@@ -17,7 +17,7 @@
 -module(rabbit_mgmt_wm_vhosts).
 
 -export([init/1, to_json/2, content_types_provided/2, is_authorized/2]).
--export([vhosts/0, annotated/2]).
+-export([basic/0, augmented/2]).
 
 -include("rabbit_mgmt.hrl").
 -include_lib("webmachine/include/webmachine.hrl").
@@ -31,15 +31,15 @@ content_types_provided(ReqData, Context) ->
    {[{"application/json", to_json}], ReqData, Context}.
 
 to_json(ReqData, Context) ->
-    rabbit_mgmt_util:reply_list(annotated(ReqData, Context), ReqData, Context).
+    rabbit_mgmt_util:reply_list(augmented(ReqData, Context), ReqData, Context).
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized(ReqData, Context).
 
 %%--------------------------------------------------------------------
 
-annotated(_ReqData, #context{user = User}) ->
+augmented(_ReqData, #context{user = User}) ->
     [rabbit_vhost:info(V) || V <- rabbit_mgmt_util:list_visible_vhosts(User)].
 
-vhosts() ->
+basic() ->
     rabbit_vhost:info_all([name]).

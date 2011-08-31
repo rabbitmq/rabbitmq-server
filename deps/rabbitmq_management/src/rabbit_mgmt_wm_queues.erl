@@ -17,7 +17,7 @@
 -module(rabbit_mgmt_wm_queues).
 
 -export([init/1, to_json/2, content_types_provided/2, is_authorized/2,
-         resource_exists/2, queues/1, annotated/2]).
+         resource_exists/2, basic/1, augmented/2]).
 
 -include("rabbit_mgmt.hrl").
 -include_lib("webmachine/include/webmachine.hrl").
@@ -37,20 +37,20 @@ resource_exists(ReqData, Context) ->
      end, ReqData, Context}.
 
 to_json(ReqData, Context) ->
-    rabbit_mgmt_util:reply_list(annotated(ReqData, Context), ReqData, Context).
+    rabbit_mgmt_util:reply_list(augmented(ReqData, Context), ReqData, Context).
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized_vhost(ReqData, Context).
 
 %%--------------------------------------------------------------------
 
-annotated(ReqData, Context) ->
+augmented(ReqData, Context) ->
     rabbit_mgmt_format:strip_pids(
       rabbit_mgmt_db:augment_queues(
-        rabbit_mgmt_util:filter_vhost(queues(ReqData), ReqData, Context),
+        rabbit_mgmt_util:filter_vhost(basic(ReqData), ReqData, Context),
         basic)).
 
-queues(ReqData) ->
+basic(ReqData) ->
     [rabbit_mgmt_format:queue(Q) || Q <- queues0(ReqData)].
 
 queues0(ReqData) ->
