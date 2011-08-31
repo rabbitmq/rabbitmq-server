@@ -321,6 +321,11 @@ action(trace_off, Node, [], Opts, Inform) ->
     Inform("Stopping tracing for vhost ~p", [VHost]),
     rpc_call(Node, rabbit_trace, stop, [list_to_binary(VHost)]);
 
+action(set_vm_memory_high_watermark, Node, [Arg], _Opts, Inform) ->
+    Frac = list_to_float("0" ++ Arg),
+    Inform("Setting memory threshhold on ~p to ~p", [Node, Frac]),
+    rpc_call(Node, vm_memory_monitor, set_vm_memory_high_watermark, [Frac]);
+
 action(set_permissions, Node, [Username, CPerm, WPerm, RPerm], Opts, Inform) ->
     VHost = proplists:get_value(?VHOST_OPT, Opts),
     Inform("Setting permissions for user ~p in vhost ~p", [Username, VHost]),

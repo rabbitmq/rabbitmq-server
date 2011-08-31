@@ -239,7 +239,13 @@ status() ->
      {running_applications, application:which_applications(infinity)},
      {os, os:type()},
      {erlang_version, erlang:system_info(system_version)},
-     {memory, erlang:memory()}].
+     {memory, erlang:memory()}] ++
+    case is_running() of
+        true  -> [{vm_memory_high_watermark,
+                       vm_memory_monitor:get_vm_memory_high_watermark()},
+                  {vm_memory_limit, vm_memory_monitor:get_memory_limit()}];
+        false -> []
+    end.
 
 is_running() -> is_running(node()).
 
