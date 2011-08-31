@@ -30,7 +30,10 @@
 %%----------------------------------------------------------------------------
 
 start_second_node() ->
-    ?assertCmd("make -C " ++ plugin_dir() ++ " start-second-node").
+    %% ?assertCmd seems to hang if you background anything. Bah!
+    Res = os:cmd("make -C " ++ plugin_dir() ++ " start-second-node ; echo $?"),
+    LastLine = hd(lists:reverse(string:tokens(Res, "\n"))),
+    ?assertEqual("0", LastLine).
 
 stop_second_node() ->
     ?assertCmd("make -C " ++ plugin_dir() ++ " stop-second-node").
