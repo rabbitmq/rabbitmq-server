@@ -24,7 +24,7 @@
 -export([list/0, list/1, info_keys/0, info/1, info/2, info_all/1, info_all/2]).
 -export([force_event_refresh/0]).
 -export([consumers/1, consumers_all/1, consumer_info_keys/0]).
--export([basic_get/3, basic_consume/7, basic_cancel/4]).
+-export([basic_get/3, basic_consume/7, basic_cancel/4, set_credit/6]).
 -export([notify_sent/2, unblock/2, flush_all/2]).
 -export([notify_down_all/2, limit_all/3]).
 -export([on_node_down/1]).
@@ -129,6 +129,10 @@
         -> rabbit_types:ok_or_error('exclusive_consume_unavailable')).
 -spec(basic_cancel/4 ::
         (rabbit_types:amqqueue(), pid(), rabbit_types:ctag(), any()) -> 'ok').
+-spec(set_credit/6 ::
+        (rabbit_types:amqqueue(), rabbit_types:ctag(), non_neg_integer(),
+         non_neg_integer() | 'unlimited', boolean(), pid() | 'undefined') ->
+                           'ok').
 -spec(notify_sent/2 :: (pid(), pid()) -> 'ok').
 -spec(unblock/2 :: (pid(), pid()) -> 'ok').
 -spec(flush_all/2 :: ([pid()], pid()) -> 'ok').
@@ -444,6 +448,9 @@ notify_down_all(QPids, ChPid) ->
 limit_all(QPids, ChPid, Limiter) ->
     delegate:invoke_no_result(
       QPids, fun (QPid) -> gen_server2:cast(QPid, {limit, ChPid, Limiter}) end).
+
+set_credit(#amqqueue{pid = QPid}, CTag, Credit, Count, Drain, EchoTo) ->
+    delegate_cast(QPid, {set_credit, CTag, Credit, Count, Drain, EchoTo}).
 
 basic_get(#amqqueue{pid = QPid}, ChPid, NoAck) ->
     delegate_call(QPid, {basic_get, ChPid, NoAck}).

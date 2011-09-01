@@ -35,6 +35,20 @@
 
 -export([init_with_backing_queue_state/7]).
 
+-import(rabbit_misc, [serial_add/2, serial_diff/2]).
+
+%% We need queue-like active consumers, but random access for
+%% updating credit. This introduces an additional lookup step.
+
+%% - update credit (channel has to know how to access queue)
+%% - check credit on consumer when
+%% - remove ctag version of procedures from limiter
+
+%% In general the only invariant we maintain is that the blocked
+%% consumer queue will contain only blocked consumers; the active
+%% queue may also contain blocked consumers, which will be moved the
+%% next time a delivery is attempted.
+
 %% Queue's state
 -record(q, {q,
             exclusive_consumer,
@@ -43,6 +57,7 @@
             backing_queue_state,
             active_consumers,
             blocked_consumers,
+            credit_map,
             expires,
             sync_timer_ref,
             rate_timer_ref,
@@ -54,6 +69,8 @@
            }).
 
 -record(consumer, {tag, ack_required}).
+
+-record(credit, {count = 0, credit = 0, drain = false}).
 
 %% These are held in our process dictionary
 -record(cr, {consumer_count,
@@ -110,6 +127,7 @@ init(Q) ->
             backing_queue_state = undefined,
             active_consumers    = queue:new(),
             blocked_consumers   = queue:new(),
+            credit_map          = orddict:new(),
             expires             = undefined,
             sync_timer_ref      = undefined,
             rate_timer_ref      = undefined,
@@ -136,6 +154,7 @@ init_with_backing_queue_state(Q = #amqqueue{exclusive_owner = Owner}, BQ, BQS,
                    backing_queue_state = BQS,
                    active_consumers    = queue:new(),
                    blocked_consumers   = queue:new(),
+                   credit_map          = orddict:new(),
                    expires             = undefined,
                    sync_timer_ref      = undefined,
                    rate_timer_ref      = RateTRef,
@@ -366,10 +385,108 @@ ch_record_state_transition(OldCR, NewCR) ->
         {_, _}        -> ok
     end.
 
+consumer_credit(CTag, Map) ->
+    case orddict:find(CTag, Map) of
+        error ->
+            unlimited;
+        {ok, CreditRec} ->
+            CreditRec
+    end.
+
+erase_credit(CTag, Map) ->
+    orddict:erase(CTag, Map).
+
+%% NB assumes nothing can become unlimited
+store_credit(_, unlimited, Map) ->
+    Map;
+store_credit(CTag, CreditRec, Map) ->
+    orddict:store(CTag, CreditRec, Map).
+
+credit_left(#credit{ credit = 0 }) ->
+    false;
+credit_left(_) ->
+    true.
+
+in_drain_mode(#credit{ drain = true }) ->
+    true;
+in_drain_mode(_) ->
+    false.
+
+decr_credit(unlimited, _) ->
+    unlimited;
+decr_credit(#credit{ credit = Credit, count = Count, drain = Drain }, Available) ->
+    {NewCredit, NewCount} =
+        case {Credit, Available, Drain} of
+            {1, _, _}    -> {0, serial_add(Count, 1)};
+            {_, 1, true} ->
+                %% Drain, and just the message we're about to send
+                %% left, so advance til credit = 0
+                NewCount0 = serial_add(Count, Credit),
+                {0, NewCount0};
+            {_, _, _}    -> {Credit - 1, serial_add(Count, 1)}
+        end,
+    #credit{ credit = NewCredit, count = NewCount, drain = Drain }.
+
+%% Assert the credit state.  The count may not match ours, in which
+%% case we must rebase the credit.
+%% TODO Edge case: if the queue has nothing in it, and drain is set,
+%% we want to send a basic.credit back.
+reset_credit(CTag, Credit0, Count0, Drain, EchoTo,
+             State = #q{credit_map = CreditMap,
+                        active_consumers = Active,
+                        blocked_consumers = Blocked,
+                        backing_queue = BQ,
+                        backing_queue_state = BQS}) ->
+    CreditRec = consumer_credit(CTag, CreditMap),
+    {NewMap, NewRec} =
+        case {CreditRec, Credit0} of
+            {#credit{count = LocalCount}, _} ->
+                %% Our credit may have been reduced while
+                %% messages are in flight, so we bottom out at 0.
+                Credit = erlang:max(0, serial_diff(
+                                         serial_add(Count0, Credit0),
+                                         LocalCount)),
+                NC = #credit{count = LocalCount,
+                             credit = Credit,
+                             drain = Drain},
+                {store_credit(CTag, NC, CreditMap), NC};
+            {unlimited, Credit0} ->
+                NC = #credit{count = Count0,
+                             credit = Credit0,
+                             drain = Drain},
+                {store_credit(CTag, NC, CreditMap), NC}
+        end,
+    {NewActive, NewBlocked} =
+        case {credit_left(CreditRec), credit_left(NewRec)} of
+            {false, true} ->
+                %% We may have put this consumer on the blocked queue. Try
+                %% to move it back.
+                case split_consumer(CTag, Blocked) of
+                    {none, Blocked} ->
+                        {Active, Blocked};
+                    {Consumer, Blocked1} ->
+                        {queue:in(Consumer, Active), Blocked1}
+                end;
+            {_, _} ->
+                {Active, Blocked}
+        end,
+    case EchoTo of
+        undefined ->
+            ok;
+        ChPid ->
+            Available = BQ:len(BQS),
+            #credit{ count = Count1, credit = Credit1, drain = Drain1} = NewRec,
+            rabbit_channel:send_credit(ChPid, CTag, Count1, Credit1, Available, Drain1)
+    end,
+    run_message_queue(State#q{credit_map = NewMap,
+            active_consumers = NewActive,
+            blocked_consumers = NewBlocked}).
+
 deliver_msgs_to_consumers(Funs = {PredFun, DeliverFun}, FunAcc,
                           State = #q{q = #amqqueue{name = QName},
                                      active_consumers = ActiveConsumers,
                                      blocked_consumers = BlockedConsumers,
+                                     credit_map = CreditMap,
                                      backing_queue = BQ,
                                      backing_queue_state = BQS}) ->
     case queue:out(ActiveConsumers) of
@@ -380,10 +497,10 @@ deliver_msgs_to_consumers(Funs = {PredFun, DeliverFun}, FunAcc,
                     unsent_message_count = Count,
                     acktags = ChAckTags} = ch_record(ChPid),
             IsMsgReady = PredFun(FunAcc, State),
+            Credit = consumer_credit(ConsumerTag, CreditMap),
             case (IsMsgReady andalso
-                  rabbit_limiter:can_send(Limiter, self(),
-                                          AckRequired, ConsumerTag,
-                                          BQ:len(BQS))) of
+                  credit_left(Credit) andalso
+                  rabbit_limiter:can_send(Limiter, self(), AckRequired)) of
                 true ->
                     {{Message, IsDelivered, AckTag}, FunAcc1, State1} =
                         DeliverFun(AckRequired, FunAcc, State),
@@ -398,28 +515,58 @@ deliver_msgs_to_consumers(Funs = {PredFun, DeliverFun}, FunAcc,
                     NewC = C#cr{unsent_message_count = Count + 1,
                                 acktags = ChAckTags1},
                     true = maybe_store_ch_record(NewC),
+                    Available = BQ:len(BQS),
+                    NewCreditRec = decr_credit(Credit, Available),
+                    case in_drain_mode(NewCreditRec) andalso
+                        not credit_left(NewCreditRec) of
+                        true ->
+                            #credit{ count = NewCount } = NewCreditRec,
+                            rabbit_channel:send_credit(
+                              ChPid, ConsumerTag, NewCount,
+                              0, Available - 1, true);
+                        _ -> ok
+                    end,
                     {NewActiveConsumers, NewBlockedConsumers} =
                         case ch_record_state_transition(C, NewC) of
-                            ok    -> {queue:in(QEntry, ActiveConsumersTail),
-                                      BlockedConsumers};
-                            block -> {ActiveConsumers1, BlockedConsumers1} =
-                                         move_consumers(ChPid,
-                                                        ActiveConsumersTail,
-                                                        BlockedConsumers),
-                                     {ActiveConsumers1,
-                                      queue:in(QEntry, BlockedConsumers1)}
+                            ok ->
+                                case credit_left(NewCreditRec) of
+                                    true ->
+                                        {queue:in(QEntry, ActiveConsumersTail),
+                                         BlockedConsumers};
+                                    false ->
+                                        {ActiveConsumersTail,
+                                         queue:in(QEntry, BlockedConsumers)}
+                                end;
+                            block ->
+                                {ActiveConsumers1, BlockedConsumers1} =
+                                    move_consumers(ChPid,
+                                                   ActiveConsumersTail,
+                                                   BlockedConsumers),
+                                {ActiveConsumers1,
+                                 queue:in(QEntry, BlockedConsumers1)}
                         end,
                     State2 = State1#q{
                                active_consumers = NewActiveConsumers,
-                               blocked_consumers = NewBlockedConsumers},
+                               blocked_consumers = NewBlockedConsumers,
+                               credit_map = store_credit(ConsumerTag,
+                                                         NewCreditRec,
+                                                         CreditMap)},
                     deliver_msgs_to_consumers(Funs, FunAcc1, State2);
-                %% if IsMsgReady then we've hit the limiter
+                %% IsMsgReady then we've hit the limiter or there's no
+                %% credit
                 false when IsMsgReady ->
-                    true = maybe_store_ch_record(C#cr{is_limit_active = true}),
                     {NewActiveConsumers, NewBlockedConsumers} =
-                        move_consumers(ChPid,
-                                       ActiveConsumers,
-                                       BlockedConsumers),
+                        case credit_left(Credit) of
+                            true ->
+                                true = maybe_store_ch_record(
+                                         C#cr{is_limit_active = true}),
+                                move_consumers(ChPid,
+                                               ActiveConsumers,
+                                               BlockedConsumers);
+                            false ->
+                                {ActiveConsumersTail,
+                                 queue:in(QEntry, BlockedConsumers)}
+                        end,
                     deliver_msgs_to_consumers(
                       Funs, FunAcc,
                       State#q{active_consumers = NewActiveConsumers,
@@ -570,18 +717,32 @@ fetch(AckRequired, State = #q{backing_queue_state = BQS,
     {Result, BQS1} = BQ:fetch(AckRequired, BQS),
     {Result, State#q{backing_queue_state = BQS1}}.
 
-add_consumer(ChPid, Consumer, Queue) -> queue:in({ChPid, Consumer}, Queue).
+with_consumer(ChPid, Consumer, Queue) -> queue:in({ChPid, Consumer}, Queue).
 
-remove_consumer(ChPid, ConsumerTag, Queue) ->
+without_consumer(ChPid, ConsumerTag, Queue) ->
     queue:filter(fun ({CP, #consumer{tag = CT}}) ->
                          (CP /= ChPid) or (CT /= ConsumerTag)
                  end, Queue).
 
-remove_consumers(ChPid, Queue) ->
+split_consumer(ConsumerTag, Queue) ->
+    {MaybeConsumer, Remainder} =
+        lists:partition(fun({_Ch, #consumer{tag = CT}}) ->
+                                CT == ConsumerTag
+                        end, queue:to_list(Queue)),
+    case MaybeConsumer of
+        [] ->
+            {none, Queue};
+        [Consumer] ->
+            {Consumer, queue:from_list(Remainder)}
+    end.
+
+remove_consumers(ChPid, Queue, CreditMap) ->
     {Kept, Removed} = split_by_channel(ChPid, Queue),
-    [emit_consumer_deleted(Ch, CTag) ||
-        {Ch, #consumer{tag = CTag}} <- queue:to_list(Removed)],
-    Kept.
+    NewCreditMap = lists:foldl(fun({Ch, #consumer{tag = CTag}}, Map) ->
+                                       emit_consumer_deleted(Ch, CTag),
+                                       erase_credit(CTag, Map)
+                               end, CreditMap, queue:to_list(Removed)),
+    {Kept, NewCreditMap}.
 
 move_consumers(ChPid, From, To) ->
     {Kept, Removed} = split_by_channel(ChPid, From),
@@ -615,21 +776,25 @@ should_auto_delete(#q{q = #amqqueue{auto_delete = false}}) -> false;
 should_auto_delete(#q{has_had_consumers = false}) -> false;
 should_auto_delete(State) -> is_unused(State).
 
-handle_ch_down(DownPid, State = #q{exclusive_consumer = Holder}) ->
+handle_ch_down(DownPid, State = #q{exclusive_consumer = Holder,
+                                   credit_map = CreditMap }) ->
     case lookup_ch(DownPid) of
         not_found ->
             {ok, State};
         C = #cr{ch_pid = ChPid, acktags = ChAckTags} ->
             ok = erase_ch_record(C),
+            {ActiveConsumers, CreditMap1} =
+                remove_consumers(ChPid, State#q.active_consumers, CreditMap),
+            {BlockedConsumers, CreditMap2} =
+                remove_consumers(ChPid, State#q.blocked_consumers, CreditMap1),
             State1 = State#q{
                        exclusive_consumer = case Holder of
                                                 {ChPid, _} -> none;
                                                 Other      -> Other
                                             end,
-                       active_consumers = remove_consumers(
-                                            ChPid, State#q.active_consumers),
-                       blocked_consumers = remove_consumers(
-                                             ChPid, State#q.blocked_consumers)},
+                       active_consumers = ActiveConsumers,
+                       blocked_consumers = BlockedConsumers,
+                       credit_map = CreditMap2},
             case should_auto_delete(State1) of
                 true  -> {stop, State1};
                 false -> {ok, requeue_and_run(sets:to_list(ChAckTags),
@@ -974,12 +1139,12 @@ handle_call({basic_consume, NoAck, ChPid, Limiter,
                 case is_ch_blocked(C) of
                     true  -> State1#q{
                                blocked_consumers =
-                                   add_consumer(ChPid, Consumer,
+                                   with_consumer(ChPid, Consumer,
                                                 State1#q.blocked_consumers)};
                     false -> run_message_queue(
                                State1#q{
                                  active_consumers =
-                                     add_consumer(ChPid, Consumer,
+                                     with_consumer(ChPid, Consumer,
                                                   State1#q.active_consumers)})
                 end,
             emit_consumer_created(ChPid, ConsumerTag, ExclusiveConsume,
@@ -988,7 +1153,7 @@ handle_call({basic_consume, NoAck, ChPid, Limiter,
     end;
 
 handle_call({basic_cancel, ChPid, ConsumerTag, OkMsg}, _From,
-            State = #q{exclusive_consumer = Holder}) ->
+            State = #q{exclusive_consumer = Holder, credit_map = CreditMap }) ->
     case lookup_ch(ChPid) of
         not_found ->
             ok = maybe_send_reply(ChPid, OkMsg),
@@ -1008,12 +1173,13 @@ handle_call({basic_cancel, ChPid, ConsumerTag, OkMsg}, _From,
                 State#q{exclusive_consumer = cancel_holder(ChPid,
                                                            ConsumerTag,
                                                            Holder),
-                        active_consumers = remove_consumer(
+                        active_consumers = without_consumer(
                                              ChPid, ConsumerTag,
                                              State#q.active_consumers),
-                        blocked_consumers = remove_consumer(
+                        blocked_consumers = without_consumer(
                                               ChPid, ConsumerTag,
-                                              State#q.blocked_consumers)},
+                                              State#q.blocked_consumers),
+                        credit_map = erase_credit(ConsumerTag, CreditMap)},
             case should_auto_delete(NewState) of
                 false -> reply(ok, ensure_expiry_timer(NewState));
                 true  -> {stop, normal, ok, NewState}
@@ -1121,6 +1287,9 @@ handle_cast({limit, ChPid, Limiter}, State) ->
                     andalso rabbit_limiter:is_blocked(Limiter),
                 C#cr{limiter = Limiter, is_limit_active = Limited}
         end));
+
+handle_cast({set_credit, CTag, Credit, Count, Drain, EchoTo}, State) ->
+    noreply(reset_credit(CTag, Credit, Count, Drain, EchoTo, State));
 
 handle_cast({flush, ChPid}, State) ->
     ok = rabbit_channel:flushed(ChPid, self()),

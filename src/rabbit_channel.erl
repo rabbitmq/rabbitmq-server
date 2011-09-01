@@ -21,7 +21,7 @@
 -behaviour(gen_server2).
 
 -export([start_link/10, do/2, do/3, flush/1, shutdown/1]).
--export([send_command/2, deliver/4, flushed/2, confirm/2]).
+-export([send_command/2, deliver/4, send_credit/6, flushed/2, confirm/2]).
 -export([list/0, info_keys/0, info/1, info/2, info_all/0, info_all/1]).
 -export([refresh_config_local/0, ready_for_close/1]).
 -export([force_event_refresh/0]).
@@ -130,6 +130,9 @@ flushed(Pid, QPid) ->
 
 confirm(Pid, MsgSeqNos) ->
     gen_server2:cast(Pid, {confirm, MsgSeqNos, self()}).
+
+send_credit(Pid, CTag, Count, Credit, Available, Drain) ->
+    gen_server2:cast(Pid, {send_credit, CTag, Count, Credit, Available, Drain}).
 
 list() ->
     rabbit_misc:append_rpc_all_nodes(rabbit_mnesia:running_clustered_nodes(),
@@ -307,6 +310,16 @@ handle_cast({deliver, ConsumerTag, AckRequired,
     rabbit_trace:tap_trace_out(Msg, TraceState),
     noreply(State1#ch{next_tag = DeliveryTag + 1});
 
+handle_cast({send_credit, CTag, Count, Credit, Available, Drain},
+            State = #ch{writer_pid = WriterPid}) ->
+    ok = rabbit_writer:send_command(
+           WriterPid, #'basic.credit'{consumer_tag = CTag,
+                                      count = Count,
+                                      credit = Credit,
+                                      available = Available,
+                                      drain = Drain,
+                                      echo = false}),
+    noreply(State);
 
 handle_cast(force_event_refresh, State) ->
     rabbit_event:notify(channel_created, infos(?CREATION_EVENT_KEYS, State)),
@@ -1117,33 +1130,20 @@ handle_method(#'channel.flow'{active = false}, _,
 handle_method(#'basic.credit'{consumer_tag = CTag,
                               credit = Credit,
                               count = Count,
-                              drain = Drain}, _,
-              State = #ch{limiter      = Limiter,
-                          consumer_mapping = Consumers}) ->
-    %% We get Available first because it's likely that as soon as we set
-    %% the credit msgs will get consumed and it'll be out of date. Why do we
-    %% want that? Because at least then it's consistent with the credit value
-    %% we return. And Available is always going to be racy.
-    Available = case dict:find(CTag, Consumers) of
-                    {ok, {Q, _}} -> case rabbit_amqqueue:stat(Q) of
-                                        {ok, Len, _} -> Len;
-                                        _            -> -1
-                                    end;
-                    error        -> -1 %% TODO these -1s smell very iffy!
-                end,
-    Limiter1 = case rabbit_limiter:is_enabled(Limiter) of
-                   true  -> Limiter;
-                   false -> enable_limiter(State)
-               end,
-    Limiter3 =
-        case rabbit_limiter:set_credit(
-               Limiter1, CTag, Credit, Count, Drain) of
-            ok                   -> Limiter1;
-            {disabled, Limiter2} -> ok = limit_queues(Limiter2, State),
-                                    Limiter2
-        end,
-    State1 = State#ch{limiter = Limiter3},
-    return_ok(State1, false, #'basic.credit_ok'{available = Available});
+                              drain = Drain,
+                              echo = Echo}, _,
+              State = #ch{consumer_mapping = Consumers}) ->
+    case dict:find(CTag, Consumers) of
+        {ok, {Q, _}} ->
+            ok = rabbit_amqqueue:set_credit(Q, CTag, Credit, Count,
+                                            Drain, if Echo -> self();
+                                                      true -> undefined
+                                                   end),
+            ok;
+        error ->
+            ok
+    end,
+    {noreply, State};
 
 handle_method(_MethodRecord, _Content, _State) ->
     rabbit_misc:protocol_error(

@@ -21,14 +21,10 @@
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2, prioritise_call/3]).
-
 -export([start_link/0, make_token/0, make_token/1, is_enabled/1, enable/2,
          disable/1]).
--export([limit/2, can_send/5, ack/2, register/2, unregister/2]).
+-export([limit/2, can_send/3, ack/2, register/2, unregister/2]).
 -export([get_limit/1, block/1, unblock/1, is_blocked/1]).
--export([set_credit/5]).
-
--import(rabbit_misc, [serial_add/2, serial_diff/2]).
 
 %%----------------------------------------------------------------------------
 
@@ -47,8 +43,7 @@
 -spec(enable/2 :: (token(), non_neg_integer()) -> token()).
 -spec(disable/1 :: (token()) -> token()).
 -spec(limit/2 :: (token(), non_neg_integer()) -> 'ok' | {'disabled', token()}).
--spec(can_send/5 :: (token(), pid(), boolean(),
-                     rabbit_types:ctag(), non_neg_integer()) -> boolean()).
+-spec(can_send/3 :: (token(), pid(), boolean()) -> boolean()).
 -spec(ack/2 :: (token(), non_neg_integer()) -> 'ok').
 -spec(register/2 :: (token(), pid()) -> 'ok').
 -spec(unregister/2 :: (token(), pid()) -> 'ok').
@@ -56,9 +51,6 @@
 -spec(block/1 :: (token()) -> 'ok').
 -spec(unblock/1 :: (token()) -> 'ok' | {'disabled', token()}).
 -spec(is_blocked/1 :: (token()) -> boolean()).
--spec(set_credit/5 :: (token(), rabbit_types:ctag(),
-                       non_neg_integer(),
-                       non_neg_integer(), boolean()) -> 'ok').
 
 -endif.
 
@@ -67,11 +59,8 @@
 -record(lim, {prefetch_count = 0,
               ch_pid,
               blocked = false,
-              credits = dict:new(),
               queues = orddict:new(), % QPid -> {MonitorRef, Notify}
               volume = 0}).
-
--record(credit, {count = 0, credit = 0, drain = false}).
 
 %%----------------------------------------------------------------------------
 %% API
@@ -97,19 +86,18 @@ limit(Limiter, PrefetchCount) ->
 %% breaching a limit. Note that we don't use maybe_call here in order
 %% to avoid always going through with_exit_handler/2, even when the
 %% limiter is disabled.
-can_send(#token{pid = Pid, enabled = true}, QPid, AckRequired, CTag, Len) ->
+can_send(#token{pid = Pid, enabled = true}, QPid, AckRequired) ->
     rabbit_misc:with_exit_handler(
       fun () -> true end,
       fun () ->
-              gen_server2:call(Pid, {can_send, QPid, AckRequired, CTag, Len},
-                               infinity)
+              gen_server2:call(Pid, {can_send, QPid, AckRequired}, infinity)
       end);
-can_send(_, _, _, _, _) ->
+can_send(_, _, _) ->
     true.
 
 %% Let the limiter know that the channel has received some acks from a
 %% consumer
-ack(Limiter, CTag) -> maybe_cast(Limiter, {ack, CTag}).
+ack(Limiter, Count) -> maybe_cast(Limiter, {ack, Count}).
 
 register(Limiter, QPid) -> maybe_cast(Limiter, {register, QPid}).
 
@@ -126,9 +114,6 @@ block(Limiter) ->
 unblock(Limiter) ->
     maybe_call(Limiter, {unblock, Limiter}, ok).
 
-set_credit(Limiter, CTag, Credit, Count, Drain) ->
-    maybe_call(Limiter, {set_credit, CTag, Credit, Count, Drain, Limiter}, ok).
-
 is_blocked(Limiter) ->
     maybe_call(Limiter, is_blocked, false).
 
@@ -142,26 +127,23 @@ init([]) ->
 prioritise_call(get_limit, _From, _State) -> 9;
 prioritise_call(_Msg,      _From, _State) -> 0.
 
-handle_call({can_send, QPid, _AckRequired, _CTag, _Len}, _From,
+handle_call({can_send, QPid, _AckRequired}, _From,
             State = #lim{blocked = true}) ->
     {reply, false, limit_queue(QPid, State)};
-handle_call({can_send, QPid, AckRequired, CTag, Len}, _From,
+handle_call({can_send, QPid, AckRequired}, _From,
             State = #lim{volume = Volume}) ->
-    case limit_reached(CTag, State) of
+    case limit_reached(State) of
         true  -> {reply, false, limit_queue(QPid, State)};
-        false -> {reply, true,
-                  decr_credit(CTag, Len,
-                              State#lim{volume = if AckRequired -> Volume + 1;
-                                                    true        -> Volume
-                                                 end})}
+        false -> {reply, true, State#lim{volume = if AckRequired -> Volume + 1;
+                                                     true        -> Volume
+                                                  end}}
     end;
 
 handle_call(get_limit, _From, State = #lim{prefetch_count = PrefetchCount}) ->
     {reply, PrefetchCount, State};
 
 handle_call({limit, PrefetchCount, Token}, _From, State) ->
-    case maybe_notify(irrelevant,
-                      State, State#lim{prefetch_count = PrefetchCount}) of
+    case maybe_notify(State, State#lim{prefetch_count = PrefetchCount}) of
         {cont, State1} ->
             {reply, ok, State1};
         {stop, State1} ->
@@ -171,17 +153,8 @@ handle_call({limit, PrefetchCount, Token}, _From, State) ->
 handle_call(block, _From, State) ->
     {reply, ok, State#lim{blocked = true}};
 
-handle_call({set_credit, CTag, Credit, Count, Drain, Token}, _From, State) ->
-    case maybe_notify(CTag, State,
-                      reset_credit(CTag, Credit, Count, Drain, State)) of
-        {cont, State1} ->
-            {reply, ok, State1};
-        {stop, State1} ->
-            {reply, {disabled, Token#token{enabled = false}}, State1}
-    end;
-
 handle_call({unblock, Token}, _From, State) ->
-    case maybe_notify(irrelevant, State, State#lim{blocked = false}) of
+    case maybe_notify(State, State#lim{blocked = false}) of
         {cont, State1} ->
             {reply, ok, State1};
         {stop, State1} ->
@@ -197,11 +170,11 @@ handle_call({enable, Token, Channel, Volume}, _From, State) ->
 handle_call({disable, Token}, _From, State) ->
     {reply, Token#token{enabled = false}, State}.
 
-handle_cast({ack, CTag}, State = #lim{volume = Volume}) ->
+handle_cast({ack, Count}, State = #lim{volume = Volume}) ->
     NewVolume = if Volume == 0 -> 0;
-                   true        -> Volume - 1
+                   true        -> Volume - Count
                 end,
-    {cont, State1} = maybe_notify(CTag, State, State#lim{volume = NewVolume}),
+    {cont, State1} = maybe_notify(State, State#lim{volume = NewVolume}),
     {noreply, State1};
 
 handle_cast({register, QPid}, State) ->
@@ -223,14 +196,13 @@ code_change(_, State, _) ->
 %% Internal plumbing
 %%----------------------------------------------------------------------------
 
-maybe_notify(CTag, OldState, NewState) ->
-    case (limit_reached(CTag, OldState) orelse blocked(OldState)) andalso
-        not (limit_reached(CTag, NewState) orelse blocked(NewState)) of
+maybe_notify(OldState, NewState) ->
+    case (limit_reached(OldState) orelse blocked(OldState)) andalso
+        not (limit_reached(NewState) orelse blocked(NewState)) of
         true  -> NewState1 = notify_queues(NewState),
-                 {case {NewState1#lim.prefetch_count,
-                        dict:size(NewState1#lim.credits)} of
-                      {0, 0} -> stop;
-                      _      -> cont
+                 {case NewState1#lim.prefetch_count of
+                      0 -> stop;
+                      _ -> cont
                   end, NewState1};
         false -> {cont, NewState}
     end.
@@ -245,67 +217,8 @@ maybe_cast(#token{pid = Pid, enabled = true}, Cast) ->
 maybe_cast(_, _Call) ->
     ok.
 
-limit_reached(irrelevant, _) ->
-    false;
-limit_reached(CTag, #lim{prefetch_count = Limit, volume = Volume,
-                         credits = Credits}) ->
-    case dict:find(CTag, Credits) of
-        {ok, #credit{ credit = 0 }} -> true;
-        _                           -> false
-    end orelse (Limit =/= 0 andalso Volume >= Limit).
-
-decr_credit(CTag, Len, State = #lim{ credits = Credits,
-                                     ch_pid = ChPid } ) ->
-    case dict:find(CTag, Credits) of
-        {ok, #credit{ credit = Credit, count = Count, drain = Drain }} ->
-            {NewCredit, NewCount} =
-                case {Credit, Len, Drain} of
-                    {1, _, _}    -> {0, serial_add(Count, 1)};
-                    {_, 1, true} ->
-                        %% Drain, so advance til credit = 0
-                        NewCount0 = serial_add(Count, (Credit - 1)),
-                        send_drained(ChPid, CTag, NewCount0),
-                        {0, NewCount0}; %% Magic reduction to 0
-                    {_, _, _}    -> {Credit - 1, serial_add(Count, 1)}
-                end,
-            update_credit(CTag, NewCredit, NewCount, Drain, State);
-        error ->
-            State
-    end.
-
-send_drained(ChPid, CTag, Count) ->
-    rabbit_channel:send_command(ChPid,
-                                #'basic.credit_state'{consumer_tag = CTag,
-                                                      credit       = 0,
-                                                      count        = Count,
-                                                      available    = 0,
-                                                      drain        = true}).
-
-%% Assert the credit state.  The count may not match ours, in which
-%% case we must rebase the credit.
-%% TODO Edge case: if the queue has nothing in it, and drain is set,
-%% we want to send a basic.credit back.
-reset_credit(CTag, Credit0, Count0, Drain, State = #lim{credits = Credits}) ->
-    Count =
-        case dict:find(CTag, Credits) of
-            {ok, #credit{ count = LocalCount }} ->
-                LocalCount;
-            _ -> Count0
-        end,
-    %% Our credit may have been reduced while messages are in flight,
-    %% so we bottom out at 0.
-    Credit = erlang:max(0, serial_diff(serial_add(Count0, Credit0), Count)),
-    update_credit(CTag, Credit, Count, Drain, State).
-
-%% Store the credit
-update_credit(CTag, -1, _Count, _Drain, State = #lim{credits = Credits}) ->
-    State#lim{credits = dict:erase(CTag, Credits)};
-
-update_credit(CTag, Credit, Count, Drain, State = #lim{credits = Credits}) ->
-    State#lim{credits = dict:store(CTag,
-                                   #credit{credit = Credit,
-                                           count = Count,
-                                           drain = Drain}, Credits)}.
+limit_reached(#lim{prefetch_count = Limit, volume = Volume}) ->
+    Limit =/= 0 andalso Volume >= Limit.
 
 blocked(#lim{blocked = Blocked}) -> Blocked.
 
