@@ -200,7 +200,8 @@ set ERLANG_SERVICE_ARGUMENTS= ^
 -rabbit error_logger {file,\""!LOGS:\=/!"\"} ^
 !RABBITMQ_SERVER_ERL_ARGS! ^
 -sasl errlog_type error ^
--sasl sasl_error_logger {file,\""!SASL_LOGS:\=/!"\"} ^
+-sasl sasl_error_logger false ^
+-rabbit sasl_error_logger {file,\""!SASL_LOGS:\=/!"\"} ^
 -os_mon start_cpu_sup true ^
 -os_mon start_disksup false ^
 -os_mon start_memsup false ^
