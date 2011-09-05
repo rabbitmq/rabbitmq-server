@@ -453,7 +453,7 @@ insert_default_data() ->
 
 ensure_working_log_handlers() ->
     Handlers = gen_event:which_handlers(error_logger),
-    ok = ensure_working_log_handler(error_logger_file_h,
+    ok = ensure_working_log_handler(error_logger_tty_h,
                                     rabbit_error_logger_file_h,
                                     error_logger_tty_h,
                                     log_location(kernel),
@@ -464,11 +464,6 @@ ensure_working_log_handlers() ->
                                     sasl_report_tty_h,
                                     log_location(sasl),
                                     Handlers),
-    case log_location(kernel) of
-        tty       -> ok;
-        undefined -> ok;
-        _         -> error_logger:delete_report_handler(error_logger_tty_h)
-    end,
     ok.
 
 ensure_working_log_handler(OldFHandler, NewFHandler, TTYHandler,

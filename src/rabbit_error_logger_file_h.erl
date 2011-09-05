@@ -46,6 +46,9 @@ init({{File, _}, error}) ->
 %% log rotation
 init({File, []}) ->
     init(File);
+%% Used only when taking over from the tty handler
+init({{File, []}, _}) ->
+    init(File);
 init({File, {error_logger, []}}) ->
     rabbit_misc:ensure_parent_dirs_exist(File),
     init_file(File, error_logger);
