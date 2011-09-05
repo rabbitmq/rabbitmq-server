@@ -1404,6 +1404,7 @@ test_confirms() ->
 
 test_credit() ->
     passed = test_credit_limit(),
+    passed = test_credit_drain(),
     passed.
 
 %% ---- credit
@@ -1467,6 +1468,28 @@ test_credit_limit() ->
         {#'basic.deliver'{}, _} ->
             ok
     after 1000 -> throw(expected_delivery_after_credit_increase)
+    end,
+
+    passed.
+
+test_credit_drain() ->
+    {_W, Ch} = test_spawn(),
+    QName = declare_and_bind_queue(Ch, false, <<"drain">>),
+    CTag = consumer(Ch, QName, true),
+    {ok, Q} = rabbit_amqqueue:lookup(rabbit_misc:r(<<"/">>, queue, QName)),
+    rabbit_amqqueue:set_credit(Q, CTag, 10, 0, true, self()),
+    %% We set drain and we gave a pid to which to reply; that means
+    %% we'll get two flow controls back, the response to echo, and the
+    %% drain indicting all credit is spent.
+    receive
+        {'$gen_cast', {send_credit, CTag, 10, 0, 0, true}} ->
+            receive
+                {'$gen_cast', {send_credit, CTag, 0, 0, 0, true}} -> ok;
+                Else -> throw({unexpected, Else})
+            after 1000 -> throw(no_credit_drain_received)
+            end;
+        Else1 -> throw({unexpected, Else1})
+    after 1000 -> throw(no_credit_echo_received)
     end,
 
     passed.
