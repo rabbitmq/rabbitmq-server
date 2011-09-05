@@ -31,7 +31,8 @@
 %% log rotation
 init({{File, Suffix}, []}) ->
     case rabbit_misc:append_file(File, Suffix) of
-        ok -> ok;
+        ok -> file:delete(File),
+              ok;
         {error, Error} ->
             rabbit_log:error("Failed to append contents of "
                              "sasl log file '~s' to '~s':~n~p~n",
@@ -48,10 +49,19 @@ init({File, []}) ->
     init(File);
 init({File, _Type} = FileInfo) ->
     rabbit_misc:ensure_parent_dirs_exist(File),
-    sasl_report_file_h:init(FileInfo);
+    init_file(FileInfo);
 init(File) ->
     rabbit_misc:ensure_parent_dirs_exist(File),
-    sasl_report_file_h:init({File, sasl_error_logger_type()}).
+    init_file({File, sasl_error_logger_type()}).
+
+init_file({File, Type}) ->
+    process_flag(trap_exit, true),
+    case file:open(File, [append]) of
+	{ok,Fd} ->
+	    {ok, {Fd, File, Type}};
+	What ->
+	    What
+    end.
 
 handle_event(Event, State) ->
     sasl_report_file_h:handle_event(Event, State).

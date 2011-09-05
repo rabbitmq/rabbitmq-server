@@ -30,7 +30,8 @@
 %% Used only when swapping handlers in log rotation
 init({{File, Suffix}, []}) ->
     case rabbit_misc:append_file(File, Suffix) of
-        ok  -> ok;
+        ok -> file:delete(File),
+              ok;
         {error, Error} ->
             rabbit_log:error("Failed to append contents of "
                              "log file '~s' to '~s':~n~p~n",
@@ -45,12 +46,21 @@ init({{File, _}, error}) ->
 %% log rotation
 init({File, []}) ->
     init(File);
-init({File, _Type} = FileInfo) ->
+init({File, {error_logger, []}}) ->
     rabbit_misc:ensure_parent_dirs_exist(File),
-    error_logger_file_h:init(FileInfo);
+    init_file(File, error_logger);
 init(File) ->
     rabbit_misc:ensure_parent_dirs_exist(File),
-    error_logger_file_h:init(File).
+    init_file(File, []).
+
+init_file(File, PrevHandler) ->
+    process_flag(trap_exit, true),
+    case file:open(File, [append]) of
+	{ok,Fd} ->
+	    {ok, {Fd, File, PrevHandler}};
+	Error ->
+	    Error
+    end.
 
 handle_event(Event, State) ->
     error_logger_file_h:handle_event(Event, State).
