@@ -476,7 +476,7 @@ reset_credit(CTag, Credit0, Count0, Drain, EchoTo,
         ChPid ->
             Available = BQ:len(BQS),
             #credit{ count = Count1, credit = Credit1, drain = Drain1} = NewRec,
-            rabbit_channel:send_credit(ChPid, CTag, Count1, Credit1, Available, Drain1)
+            rabbit_channel:send_credit(ChPid, CTag, Credit1, Count1, Available, Drain1)
     end,
     run_message_queue(State#q{credit_map = NewMap,
             active_consumers = NewActive,
@@ -522,8 +522,8 @@ deliver_msgs_to_consumers(Funs = {PredFun, DeliverFun}, FunAcc,
                         true ->
                             #credit{ count = NewCount } = NewCreditRec,
                             rabbit_channel:send_credit(
-                              ChPid, ConsumerTag, NewCount,
-                              0, Available - 1, true);
+                              ChPid, ConsumerTag, 0,
+                              NewCount, Available - 1, true);
                         _ -> ok
                     end,
                     {NewActiveConsumers, NewBlockedConsumers} =

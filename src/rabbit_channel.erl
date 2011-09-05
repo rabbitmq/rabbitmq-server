@@ -131,8 +131,8 @@ flushed(Pid, QPid) ->
 confirm(Pid, MsgSeqNos) ->
     gen_server2:cast(Pid, {confirm, MsgSeqNos, self()}).
 
-send_credit(Pid, CTag, Count, Credit, Available, Drain) ->
-    gen_server2:cast(Pid, {send_credit, CTag, Count, Credit, Available, Drain}).
+send_credit(Pid, CTag, Credit, Count, Available, Drain) ->
+    gen_server2:cast(Pid, {send_credit, CTag, Credit, Count, Available, Drain}).
 
 list() ->
     rabbit_misc:append_rpc_all_nodes(rabbit_mnesia:running_clustered_nodes(),
@@ -310,7 +310,7 @@ handle_cast({deliver, ConsumerTag, AckRequired,
     rabbit_trace:tap_trace_out(Msg, TraceState),
     noreply(State1#ch{next_tag = DeliveryTag + 1});
 
-handle_cast({send_credit, CTag, Count, Credit, Available, Drain},
+handle_cast({send_credit, CTag, Credit, Count, Available, Drain},
             State = #ch{writer_pid = WriterPid}) ->
     ok = rabbit_writer:send_command(
            WriterPid, #'basic.credit'{consumer_tag = CTag,

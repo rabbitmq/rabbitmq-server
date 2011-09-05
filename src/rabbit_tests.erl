@@ -18,7 +18,9 @@
 
 -compile([export_all]).
 
--export([all_tests/0, test_parsing/0, test_serial_arithmetic/0]).
+-export([all_tests/0]).
+
+%-compile(export_all).
 
 -import(rabbit_misc, [pget/2]).
 
@@ -62,6 +64,7 @@ all_tests() ->
     passed = test_user_management(),
     passed = test_server_status(),
     passed = test_confirms(),
+    passed = test_credit(),
     passed = maybe_run_cluster_dependent_tests(),
     passed = test_configurable_server_properties(),
     passed.
@@ -1287,7 +1290,16 @@ test_server_status() ->
 test_writer(Pid) ->
     receive
         shutdown               -> ok;
-        {send_command, Method} -> Pid ! Method, test_writer(Pid)
+        {send_command, Method} ->
+            Pid ! Method, test_writer(Pid);
+        {send_command_and_notify, QPid, ChPid, Method} ->
+            Pid ! Method,
+            rabbit_amqqueue:notify_sent(QPid, ChPid),
+            test_writer(Pid);
+        {send_command_and_notify, QPid, ChPid, Method, Content} ->
+            Pid ! {Method, Content},
+            rabbit_amqqueue:notify_sent(QPid, ChPid),
+            test_writer(Pid)
     end.
 
 test_spawn() ->
@@ -1330,28 +1342,31 @@ user(Username) ->
           impl         = #internal_user{username = Username,
                                         tags     = [administrator]}}.
 
+declare_and_bind_queue(Ch, Durable, RK) ->
+    rabbit_channel:do(Ch, #'queue.declare'{durable = Durable}),
+    receive #'queue.declare_ok'{queue = Q0} ->
+            rabbit_channel:do(Ch, #'queue.bind'{
+                                queue = Q0,
+                                exchange = <<"amq.direct">>,
+                                routing_key = RK }),
+            receive #'queue.bind_ok'{} ->
+                    Q0
+            after 1000 -> throw(failed_to_bind_queue)
+            end
+    after 1000 -> throw(failed_to_declare_queue)
+    end.
+
+send_msg(Ch, RK) ->
+    rabbit_channel:do(Ch, #'basic.publish'{exchange = <<"amq.direct">>,
+                                           routing_key = RK},
+                      rabbit_basic:build_content(
+                        #'P_basic'{delivery_mode = 2}, <<"">>)).
+
 test_confirms() ->
     {_Writer, Ch} = test_spawn(),
-    DeclareBindDurableQueue =
-        fun() ->
-                rabbit_channel:do(Ch, #'queue.declare'{durable = true}),
-                receive #'queue.declare_ok'{queue = Q0} ->
-                        rabbit_channel:do(Ch, #'queue.bind'{
-                                            queue = Q0,
-                                            exchange = <<"amq.direct">>,
-                                            routing_key = "magic" }),
-                        receive #'queue.bind_ok'{} ->
-                                Q0
-                        after 1000 ->
-                                throw(failed_to_bind_queue)
-                        end
-                after 1000 ->
-                        throw(failed_to_declare_queue)
-                end
-        end,
     %% Declare and bind two queues
-    QName1 = DeclareBindDurableQueue(),
-    QName2 = DeclareBindDurableQueue(),
+    QName1 = declare_and_bind_queue(Ch, true, "magic"),
+    QName2 = declare_and_bind_queue(Ch, true, "magic"),
     %% Get the first one's pid (we'll crash it later)
     {ok, Q1} = rabbit_amqqueue:lookup(rabbit_misc:r(<<"/">>, queue, QName1)),
     QPid1 = Q1#amqqueue.pid,
@@ -1362,11 +1377,7 @@ test_confirms() ->
     after 1000 -> throw(failed_to_enable_confirms)
     end,
     %% Publish a message
-    rabbit_channel:do(Ch, #'basic.publish'{exchange = <<"amq.direct">>,
-                                           routing_key = "magic"
-                                          },
-                      rabbit_basic:build_content(
-                        #'P_basic'{delivery_mode = 2}, <<"">>)),
+    send_msg(Ch, "magic"),
     %% Crash the queue
     QPid1 ! boom,
     %% Wait for a nack
@@ -1389,6 +1400,77 @@ test_confirms() ->
     ok = rabbit_channel:shutdown(Ch),
 
     passed.
+
+test_credit() ->
+    passed = test_credit_limit(),
+    passed.
+
+%% ---- credit
+
+consumer(Ch, Queue, NoAck) ->
+    rabbit_channel:do(Ch, #'basic.consume'{ queue = Queue, no_ack = NoAck }),
+    receive
+        #'basic.consume_ok'{ consumer_tag = CTag } -> CTag
+    after 1000 -> throw(no_consume_ok_received)
+    end.
+
+check_no_deliveries(Ch, QName, Durable) ->
+    rabbit_channel:do(Ch, #'queue.declare'{  queue = QName,
+                                             durable = Durable,
+                                             passive = true }),
+    receive
+        {#'basic.deliver'{}, _} ->
+            throw(unexpected_delivery);
+        #'queue.declare_ok'{} ->
+            ok
+    after 1000 -> throw(no_queue_declare_ok_received)
+    end.
+
+test_credit_limit() ->
+    {_Writer, Ch} = test_spawn(),
+    QName = declare_and_bind_queue(Ch, false, <<"credit">>),
+    CTag = consumer(Ch, QName, true),
+    {ok, Q} = rabbit_amqqueue:lookup(rabbit_misc:r(<<"/">>, queue, QName)),
+    rabbit_amqqueue:set_credit(Q, CTag, 10, 0, false, self()),
+    receive
+        {'$gen_cast', {send_credit, CTag, 10, 0, 0, false}} -> ok
+    after 1000 -> throw(no_credit_echo_received)
+    end,
+
+    %% We've given the queue a credit. Send a message and make sure
+    %% 1. it comes back through the consumer 2. the credit is reduced.
+
+    send_msg(Ch, <<"credit">>),
+    receive
+        {#'basic.deliver'{}, _} ->
+            %% pretend count is at 0 still
+            rabbit_amqqueue:set_credit(Q, CTag, 1, 0, false, self()),
+            receive
+                %% told count is at 1 (and so 0 credit rather than 1)
+                {'$gen_cast', {send_credit, CTag, 0, 1, 0, false}} -> ok;
+                Else -> throw({unexpected, Else})
+            after 1000 ->
+                    throw(expected_credit_echo)
+            end
+    after 1000 -> throw(delivery_expected)
+    end,
+
+    %% No credit now. Send another message, and make sure it's not
+    %% delivered.
+    send_msg(Ch, <<"credit">>),
+    ok = check_no_deliveries(Ch, QName, false),
+
+    %% Increase the credit and make sure we get a message again.
+    rabbit_amqqueue:set_credit(Q, CTag, 1, 1, false, undefined),
+    receive
+        {#'basic.deliver'{}, _} ->
+            ok
+    after 1000 -> throw(expected_delivery_after_credit_increase)
+    end,
+
+    passed.
+
+%% ----
 
 test_statistics_event_receiver(Pid) ->
     receive
