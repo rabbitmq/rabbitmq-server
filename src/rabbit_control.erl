@@ -92,21 +92,22 @@ start() ->
             end,
             quit(0);
         {'EXIT', {function_clause, [{?MODULE, action, _} | _]}} ->
-            print_error(Node, "invalid command '~s'",
+            print_error(Node, Command, "invalid command '~s'",
                         [string:join([atom_to_list(Command) | Args], " ")]),
             usage();
         {error, Reason} ->
-            print_error(Node, "~p", [Reason]),
+            print_error(Node, Command, "~p", [Reason]),
             quit(2);
         {badrpc, {'EXIT', Reason}} ->
-            print_error(Node, "~p", [Reason]),
+            print_error(Node, Command, "~p", [Reason]),
             quit(2);
         {badrpc, Reason} ->
-            print_error(Node, "unable to connect to node ~w: ~w", [Node, Reason]),
+            print_error(Node, Command, "unable to connect to node ~w: ~w",
+                        [Node, Reason]),
             print_badrpc_diagnostics(Node),
             quit(2);
         Other ->
-            print_error(Node, "~p", [Other]),
+            print_error(Node, Command, "~p", [Other]),
             quit(2)
     end.
 
@@ -129,11 +130,14 @@ print_report0(Node, {Module, InfoFun, KeysFun}, VHostArg) ->
     end,
     io:nl().
 
-print_error(Node, Format, Args) ->
+print_error(Node, Command, Format, Args) ->
     fmt_stderr("Error: " ++ Format, Args),
+    ControlNode = node(),
     rpc_call(Node, rabbit_misc, with_local_io,
-             [fun () -> error_logger:warning_msg("Command failed: " ++ Format
-                                                 ++ "~n", Args) end]).
+             [fun () -> error_logger:warning_msg("~w '~w' command failed: "
+                                                 ++ Format ++ "~n",
+                                                 [ControlNode, Command] ++ Args)
+              end]).
 
 print_badrpc_diagnostics(Node) ->
     [fmt_stderr(Fmt, Args) || {Fmt, Args} <- diagnostics(Node)].
@@ -525,7 +529,7 @@ quit(Status) ->
 log_action(Node, Command, Opts, Args) ->
     rabbit_misc:with_local_io(
       fun () ->
-              error_logger:info_msg("~p executing ~w~n  Options: ~p~n"
+              error_logger:info_msg("~p executing '~w'~n  Options: ~p~n"
                                     "  Arguments: ~p~n",
                                     [Node, Command, Opts, mask_args(Command, Args)])
       end).
