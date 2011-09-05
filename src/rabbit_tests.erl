@@ -757,13 +757,21 @@ test_topic_expect_match(X, List) ->
       end, List).
 
 test_app_management() ->
+    control_action(wait, [mnesia:system_info(directory) ++ ".pid"]),
     %% starting, stopping, status
+    ok = control_action(trace_on, []),
     ok = control_action(stop_app, []),
     ok = control_action(stop_app, []),
     ok = control_action(status, []),
+    ok = control_action(cluster_status, []),
+    ok = control_action(environment, []),
     ok = control_action(start_app, []),
     ok = control_action(start_app, []),
     ok = control_action(status, []),
+    ok = control_action(report, []),
+    ok = control_action(cluster_status, []),
+    ok = control_action(environment, []),
+    ok = control_action(trace_off, []),
     passed.
 
 test_log_management() ->
@@ -1146,6 +1154,7 @@ test_user_management() ->
     ok = control_action(add_user, ["foo", "bar"]),
     {error, {user_already_exists, _}} =
         control_action(add_user, ["foo", "bar"]),
+    ok = control_action(clear_password, ["foo"]),
     ok = control_action(change_password, ["foo", "baz"]),
 
     TestTags = fun (Tags) ->
