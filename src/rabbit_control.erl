@@ -519,12 +519,20 @@ quit(Status) ->
     end.
 
 log_action(Node, Command, Opts, Args) ->
-    rabbit_misc:with_local_io(
-      fun () ->
-              error_logger:info_msg("~p executing ~w~n  Options: ~p~n"
-                                    "  Arguments: ~p~n",
-                                    [Node, Command, Opts, mask_args(Command, Args)])
-      end).
+    case lists:member(Command, [list_users, list_vhosts, list_permissions,
+                                list_user_permissions, list_queues, list_exchanges,
+                                list_bindings, list_connections, list_channels,
+                                list_consumers, status, environment, report]) of
+        true  -> ok;
+        false ->
+            rabbit_misc:with_local_io(
+              fun () ->
+                      error_logger:info_msg("~p executing ~w~n  Options: ~p~n"
+                                            "  Arguments: ~p~n",
+                                            [Node, Command, Opts, mask_args(Command,
+                                                                            Args)])
+              end)
+    end.
 
 %% Mask passwords and other sensitive info before logging.
 mask_args(add_user, [Name, _Password | Args]) ->
