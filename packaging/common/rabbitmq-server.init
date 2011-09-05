@@ -34,12 +34,22 @@ test -x $CONTROL || exit 0
 RETVAL=0
 set -e
 
+ensure_pid_dir () {
+    PID_DIR=`dirname ${PID_FILE}`
+    if [ ! -d ${PID_DIR} ] ; then
+        mkdir -p ${PID_DIR}
+        chown -R ${USER}:${USER} ${PID_DIR}
+        chmod 755 ${PID_DIR}
+    fi
+}
+
 start_rabbitmq () {
     status_rabbitmq quiet
     if [ $RETVAL = 0 ] ; then
         echo RabbitMQ is currently running
     else
         RETVAL=0
+        ensure_pid_dir
         set +e
         setsid sh -c "RABBITMQ_PID_FILE=$PID_FILE $DAEMON > \
             ${INIT_LOG_DIR}/startup_log 2> ${INIT_LOG_DIR}/startup_err" &
