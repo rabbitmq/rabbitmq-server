@@ -1268,14 +1268,9 @@
             <para>
               Displays broker status information such as the running
               applications on the current Erlang node, RabbitMQ and
-              Erlang versions, OS name and memory statistics.
-              In this context <varname>vm_memory_high_watermark</varname>
-              indicates the fraction of memory at which flow control is
-              triggered. <varname>vm_memory_limit</varname> refers to the
-              absolute memory threshhold at which flow control is triggered.
-              The unit of this number and those listed in the <varname>memory</varname>
-              section is bytes. (See the <command>cluster_status</command>
-              command to find out which nodes are clustered and running.)
+              Erlang versions, OS name and memory statistics. (See
+              the <command>cluster_status</command> command to find
+              out which nodes are clustered and running.)
             </para>
             <para role="example-prefix">For example:</para>
             <screen role="example">rabbitmqctl status</screen>
