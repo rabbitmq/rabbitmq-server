@@ -17,7 +17,7 @@
 -module(rabbit_control).
 -include("rabbit.hrl").
 
--export([start/0, stop/0, action/5, diagnostics/1, log_action/3]).
+-export([start/0, stop/0, action/5, diagnostics/1, log_action/4]).
 
 -define(RPC_TIMEOUT, infinity).
 
@@ -42,15 +42,17 @@
 
 -ifdef(use_specs).
 
+-type(options() :: [{string(), any()}]).
+
 -spec(start/0 :: () -> no_return()).
 -spec(stop/0 :: () -> 'ok').
 -spec(action/5 ::
-        (atom(), node(), [string()], [{string(), any()}],
+        (atom(), node(), [string()], options(),
          fun ((string(), [any()]) -> 'ok'))
         -> 'ok').
--spec(diagnostics/1 :: (node()) -> [{string(), [any()]}]).
+-spec(diagnostics/1 :: (node()) -> options()).
 -spec(usage/0 :: () -> no_return()).
--spec(log_action/3 :: (node(), string(), [term()]) -> ok).
+-spec(log_action/4 :: (node(), string(), options(), [term()]) -> ok).
 
 -endif.
 
@@ -73,7 +75,7 @@ start() ->
     Command = list_to_atom(Command0),
     Quiet = proplists:get_bool(?QUIET_OPT, Opts1),
     Node = proplists:get_value(?NODE_OPT, Opts1),
-    rpc_call(Node, rabbit_control, log_action, [node(), Command0, Args]),
+    rpc_call(Node, rabbit_control, log_action, [node(), Command, Opts, Args]),
     Inform = case Quiet of
                  true  -> fun (_Format, _Args1) -> ok end;
                  false -> fun (Format, Args1) ->
@@ -516,21 +518,18 @@ quit(Status) ->
         {win32, _} -> init:stop(Status)
     end.
 
-log_action(Node, Command, Args) ->
+log_action(Node, Command, Opts, Args) ->
     rabbit_misc:with_local_io(
       fun () ->
-              error_logger:info_msg("~p executing~n  rabbitmqctl ~s ~s~n",
-                                    [Node, Command,
-                                     format_args(mask_args(Command, Args))])
+              error_logger:info_msg("~p executing ~w~n  Options: ~p~n"
+                                    "  Arguments: ~p~n",
+                                    [Node, Command, Opts, mask_args(Command, Args)])
       end).
 
 %% Mask passwords and other sensitive info before logging.
-mask_args("add_user", [Name, _Password | Args]) ->
+mask_args(add_user, [Name, _Password | Args]) ->
     [Name, "****" | Args];
-mask_args("change_password", [Name, _Password | Args]) ->
+mask_args(change_password, [Name, _Password | Args]) ->
     [Name, "****" | Args];
 mask_args(_, Args) ->
     Args.
-
-format_args(Args) ->
-    string:join([io_lib:format("~p", [A]) || A <- Args], " ").
