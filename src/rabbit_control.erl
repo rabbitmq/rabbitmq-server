@@ -92,21 +92,21 @@ start() ->
             end,
             quit(0);
         {'EXIT', {function_clause, [{?MODULE, action, _} | _]}} ->
-            print_error("invalid command '~s'",
+            print_error(Node, "invalid command '~s'",
                         [string:join([atom_to_list(Command) | Args], " ")]),
             usage();
         {error, Reason} ->
-            print_error("~p", [Reason]),
+            print_error(Node, "~p", [Reason]),
             quit(2);
         {badrpc, {'EXIT', Reason}} ->
-            print_error("~p", [Reason]),
+            print_error(Node, "~p", [Reason]),
             quit(2);
         {badrpc, Reason} ->
-            print_error("unable to connect to node ~w: ~w", [Node, Reason]),
+            print_error(Node, "unable to connect to node ~w: ~w", [Node, Reason]),
             print_badrpc_diagnostics(Node),
             quit(2);
         Other ->
-            print_error("~p", [Other]),
+            print_error(Node, "~p", [Other]),
             quit(2)
     end.
 
@@ -129,7 +129,11 @@ print_report0(Node, {Module, InfoFun, KeysFun}, VHostArg) ->
     end,
     io:nl().
 
-print_error(Format, Args) -> fmt_stderr("Error: " ++ Format, Args).
+print_error(Node, Format, Args) ->
+    fmt_stderr("Error: " ++ Format, Args),
+    rpc_call(Node, rabbit_misc, with_local_io,
+             [fun () -> error_logger:warning_msg("Command failed: " ++ Format
+                                                 ++ "~n", Args) end]).
 
 print_badrpc_diagnostics(Node) ->
     [fmt_stderr(Fmt, Args) || {Fmt, Args} <- diagnostics(Node)].
