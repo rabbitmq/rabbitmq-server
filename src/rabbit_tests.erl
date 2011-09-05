@@ -1270,6 +1270,9 @@ test_server_status() ->
     [ConnPid] = rabbit_networking:connections(),
     ok = control_action(close_connection, [rabbit_misc:pid_to_string(ConnPid),
                                            "go away"]),
+    receive {tcp_closed, _} -> ok
+    after 1000 -> throw (connection_not_closed)
+    end,
 
     %% list channels
     ok = info_action(list_channels, rabbit_channel:info_keys(), false),
