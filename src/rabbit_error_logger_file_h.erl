@@ -49,13 +49,22 @@ init({File, []}) ->
 %% Used only when taking over from the tty handler
 init({{File, []}, _}) ->
     init(File);
-init({File, {error_logger, []}}) ->
+init({File, {error_logger, Buf}}) ->
     rabbit_misc:ensure_parent_dirs_exist(File),
-    init_file(File, error_logger);
+    init_file(File, {error_logger, Buf});
 init(File) ->
     rabbit_misc:ensure_parent_dirs_exist(File),
     init_file(File, []).
 
+init_file(File, {error_logger, Buf}) ->
+    case init_file(File, error_logger) of
+        {ok, {Fd, File, PrevHandler}} ->
+            [handle_event(Event, {Fd, File, PrevHandler})
+             || {_, Event} <- lists:reverse(Buf)],
+            {ok, {Fd, File, PrevHandler}};
+        Error ->
+            Error
+    end;
 init_file(File, PrevHandler) ->
     process_flag(trap_exit, true),
     case file:open(File, [append]) of
