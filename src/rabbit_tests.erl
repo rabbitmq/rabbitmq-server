@@ -20,8 +20,6 @@
 
 -export([all_tests/0]).
 
-%-compile(export_all).
-
 -import(rabbit_misc, [pget/2]).
 
 -include("rabbit.hrl").
