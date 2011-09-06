@@ -795,11 +795,11 @@ test_log_management() ->
     ok = control_action(rotate_logs, []),
     ok = test_logs_working(MainLog, SaslLog),
 
-    %% log rotation on empty file
+    %% log rotation on empty files (the main log will have a ctl action logged)
     ok = clean_logs([MainLog, SaslLog], Suffix),
     ok = control_action(rotate_logs, []),
     ok = control_action(rotate_logs, [Suffix]),
-    [true, true] = empty_files([[MainLog, Suffix], [SaslLog, Suffix]]),
+    [false, true] = empty_files([[MainLog, Suffix], [SaslLog, Suffix]]),
 
     %% original main log file is not writable
     ok = make_files_non_writable([MainLog]),
