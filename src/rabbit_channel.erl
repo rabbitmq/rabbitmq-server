@@ -567,8 +567,8 @@ remove_unconfirmed(MsgSeqNo, QPid, {XName, Qs}, {MXs, UMQ, UQM, CQs}, Nack) ->
                            MsgSeqNos1 = gb_sets:delete(MsgSeqNo, MsgSeqNos),
                            case gb_sets:is_empty(MsgSeqNos1) of
                                true  -> erlang:demonitor(MRef),
-                                        CQs1 = gb_sets:del_element(QPid, CQs),
-                                        {gb_trees:delete(QPid, UQM), CQs1};
+                                        {gb_trees:delete(QPid, UQM),
+                                         gb_sets:del_element(QPid, CQs)};
                                false -> {gb_trees:update(QPid, {MRef, MsgSeqNos1},
                                                          UQM), CQs}
                            end;
@@ -1150,15 +1150,17 @@ monitor_confirm_queue(QPid, ConfirmQueues) ->
                  {MRef, gb_sets:insert(MRef, ConfirmQueues)}
     end.
 
-handle_publishing_queue_down(QPid, Reason, State = #ch{unconfirmed_qm = UQM}) ->
-    MsgSeqNos = case gb_trees:lookup(QPid, UQM) of
+handle_publishing_queue_down(QPid, Reason, State = #ch{unconfirmed_qm = UQM,
+                                                       confirm_queues = CQs}) ->
+   MsgSeqNos = case gb_trees:lookup(QPid, UQM) of
                     {value, {_MRef, MsgSet}} -> gb_sets:to_list(MsgSet);
                     none                     -> []
                 end,
     %% We remove the MsgSeqNos from UQM before calling
     %% process_confirms to prevent each MsgSeqNo being removed from
     %% the set one by one which which would be inefficient
-    State1 = State#ch{unconfirmed_qm = gb_trees:delete_any(QPid, UQM)},
+    State1 = State#ch{unconfirmed_qm = gb_trees:delete_any(QPid, UQM),
+                      confirm_queues = gb_sets:del_element(QPid, CQs)},
     {Nack, SendFun} =
         case Reason of
             Reason when Reason =:= noproc; Reason =:= noconnection;
