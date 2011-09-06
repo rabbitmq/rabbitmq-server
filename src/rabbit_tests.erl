@@ -757,8 +757,10 @@ test_topic_expect_match(X, List) ->
       end, List).
 
 test_app_management() ->
-    control_action(wait, [mnesia:system_info(directory) ++ ".pid"]),
-    %% starting, stopping, status
+    control_action(wait, [rabbit_mnesia:dir() ++ ".pid"]),
+    %% Starting, stopping and diagnostics.  Note that we don't try
+    %% 'report' when the rabbit app is stopped and that we enable
+    %% tracing for the duration of this function.
     ok = control_action(trace_on, []),
     ok = control_action(stop_app, []),
     ok = control_action(stop_app, []),
