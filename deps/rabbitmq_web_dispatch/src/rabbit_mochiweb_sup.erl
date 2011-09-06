@@ -5,7 +5,7 @@
 -define(SUP, ?MODULE).
 
 %% External exports
--export([start_link/1, upgrade/1, ensure_listener/1]).
+-export([start_link/1, upgrade/1, ensure_listener/1, stop_listener/1]).
 
 %% supervisor callbacks
 -export([init/1]).
@@ -42,6 +42,10 @@ ensure_listener({Listener, Spec}) ->
         {ok,                      Pid}  -> {ok, Pid};
         {error, {already_started, Pid}} -> {ok, Pid}
     end.
+
+stop_listener({Listener, _Spec}) ->
+    ok = supervisor:terminate_child(?SUP, {rabbit_mochiweb_web, Listener}),
+    ok = supervisor:delete_child(?SUP, {rabbit_mochiweb_web, Listener}).
 
 %% @spec init([[instance()]]) -> SupervisorTree
 %% @doc supervisor callback.

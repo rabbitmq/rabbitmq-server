@@ -3,6 +3,7 @@
 -export([all_listeners/0]).
 -export([register_context_handler/4, register_static_context/5]).
 -export([register_authenticated_static_context/6]).
+-export([unregister_context/1]).
 -export([context_listener/1, context_path/2]).
 
 -define(APP, rabbitmq_mochiweb).
@@ -136,3 +137,7 @@ serve_file(Req, Path, LocalPath) ->
             Req:respond({405, [{"Allow", "GET, HEAD"}],
                          "Only GET or HEAD supported for static content"})
     end.
+
+unregister_context(Context) ->
+    rabbit_mochiweb_registry:remove(Context).
+
