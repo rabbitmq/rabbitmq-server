@@ -113,7 +113,7 @@ lookup_dispatch(Listener) ->
     end.
 
 set_dispatch(Listener, Dispatch) ->
-    application:set_env(?APP, {dispatch, Listener}, Dispatch).
+    application:set_env(?APP, {dispatch, Listener}, Dispatch, infinity).
 
 match_request([], _) ->
     no_handler;
