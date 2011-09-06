@@ -136,7 +136,7 @@ determine_version(App) ->
     {App, Vsn}.
 
 delete_recursively(Fn) ->
-    case filelib:is_dir(Fn) and not(is_symlink(Fn)) of
+    case filelib:is_dir(Fn) of
         true ->
             case file:list_dir(Fn) of
                 {ok, Files} ->
