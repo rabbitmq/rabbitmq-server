@@ -931,7 +931,8 @@ format_sender_queues(SQ) ->
      || {ChPid, {MQ, PendingCh}} <- dict:to_list(SQ)].
 
 format_sender_queue(MQ) ->
-    [{Delivery #delivery { message = Msg #basic_message { content = '_' } },
-      EnqueueOnPromotion}
+    [{Delivery #delivery {
+        message = setelement(#basic_message.content, Msg, '_') },
+     EnqueueOnPromotion}
      || {Delivery = #delivery { message = Msg }, EnqueueOnPromotion}
             <- queue:to_list(MQ)].
