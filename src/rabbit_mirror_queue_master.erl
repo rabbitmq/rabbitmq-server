@@ -352,13 +352,11 @@ format_status(State = #state { backing_queue       = BQ,
                                seen_status         = SS,
                                ack_msg_id          = AM,
                                known_senders       = KS }) ->
-    State1 = setelement(1, State, state_formatted),
-    lists:foldl(
-      fun ({Pos, Value}, StateN) -> setelement(Pos, StateN, Value) end,
-      State1, [{#state.backing_queue_state, BQ:format_status(BQS)},
-               {#state.seen_status,         dict:to_list(SS)},
-               {#state.ack_msg_id,          dict:to_list(AM)},
-               {#state.known_senders,       sets:to_list(KS)}]).
+    rabbit_misc:update_and_convert_record(
+      state_formatted, [{#state.backing_queue_state, BQ:format_status(BQS)},
+                        {#state.seen_status,         dict:to_list(SS)},
+                        {#state.ack_msg_id,          dict:to_list(AM)},
+                        {#state.known_senders,       sets:to_list(KS)}], State).
 
 %% ---------------------------------------------------------------------------
 %% Other exported functions
