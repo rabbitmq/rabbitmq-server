@@ -241,9 +241,7 @@ status() ->
      {erlang_version, erlang:system_info(system_version)},
      {memory, erlang:memory()}] ++
     rabbit_misc:filter_exit_map(
-        fun ({Key, {M, F, A}}) ->
-             {Key, erlang:apply(M, F, A)}
-        end,
+        fun ({Key, {M, F, A}}) -> {Key, erlang:apply(M, F, A)} end,
         [{vm_memory_high_watermark, {vm_memory_monitor,
                                      get_vm_memory_high_watermark, []}},
          {vm_memory_limit,          {vm_memory_monitor,
