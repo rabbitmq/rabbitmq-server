@@ -80,7 +80,7 @@ stop_rabbitmq () {
         RETVAL=$?
         set -e
         if [ $RETVAL = 0 ] ; then
-            rm -f $PID_FILE
+            rm -rf `dirname $PID_FILE`
             if [ -n "$LOCK_FILE" ] ; then
                 rm -f $LOCK_FILE
             fi

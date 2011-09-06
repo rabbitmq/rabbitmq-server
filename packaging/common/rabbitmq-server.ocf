@@ -309,7 +309,7 @@ rabbit_stop() {
         rabbit_status
         rc=$?
         if [ "$rc" = $OCF_NOT_RUNNING ]; then
-            rm -f $RABBITMQ_PID_FILE
+            rm -rf `dirname ${RABBITMQ_PID_FILE}`
             stop_wait=0
             break
         elif [ "$rc" != $OCF_SUCCESS ]; then
