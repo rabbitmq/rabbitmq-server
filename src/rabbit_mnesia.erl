@@ -119,6 +119,13 @@ force_cluster(ClusterNodes) ->
 %% node.  If Force is false, only connections to online nodes are
 %% allowed.
 cluster(ClusterNodes, Force) ->
+    rabbit_misc:with_local_io(
+      fun () -> error_logger:info_msg("Clustering with ~p~s~n",
+                                      [ClusterNodes, if Force -> " forcefully";
+                                                        true  -> ""
+                                                     end])
+      end),
+
     ensure_mnesia_not_running(),
     ensure_mnesia_dir(),
 
@@ -716,6 +723,13 @@ wait_for_tables(TableNames) ->
     end.
 
 reset(Force) ->
+    rabbit_misc:with_local_io(
+      fun () ->
+              error_logger:info_msg("Resetting Rabbit~s~n",
+                                    [if Force -> " forcefully";
+                                        true  -> ""
+                                     end])
+      end),
     ensure_mnesia_not_running(),
     case not Force andalso is_clustered() andalso
          is_only_disc_node(node(), false)
