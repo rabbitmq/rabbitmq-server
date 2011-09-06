@@ -21,7 +21,7 @@
          dropwhile/2, fetch/2, ack/2, requeue/3, len/1, is_empty/1,
          set_ram_duration_target/2, ram_duration/1,
          needs_timeout/1, timeout/1, handle_pre_hibernate/1,
-         status/1, invoke/3, is_duplicate/2, discard/3, format_status/2,
+         status/1, invoke/3, is_duplicate/2, discard/3, format_status/1,
          multiple_routing_keys/0]).
 
 -export([start/1, stop/0]).
@@ -732,16 +732,16 @@ is_duplicate(_Msg, State) -> {false, State}.
 
 discard(_Msg, _ChPid, State) -> State.
 
-format_status(_Opt, [_PDict, State = #vqstate { q1                  = Q1,
-                                                q2                  = Q2,
-                                                q3                  = Q3,
-                                                q4                  = Q4,
-                                                pending_ack         = PA,
-                                                ram_ack_index       = RAI,
-                                                msgs_on_disk        = MOD,
-                                                msg_indices_on_disk = MIOD,
-                                                unconfirmed         = UC,
-                                                confirmed           = C }]) ->
+format_status(State = #vqstate { q1                  = Q1,
+                                 q2                  = Q2,
+                                 q3                  = Q3,
+                                 q4                  = Q4,
+                                 pending_ack         = PA,
+                                 ram_ack_index       = RAI,
+                                 msgs_on_disk        = MOD,
+                                 msg_indices_on_disk = MIOD,
+                                 unconfirmed         = UC,
+                                 confirmed           = C }) ->
     State1 = setelement(1, State, vqstate_formatted),
     lists:foldl(
       fun ({Pos, Value}, StateN) -> setelement(Pos, StateN, Value) end,

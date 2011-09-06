@@ -21,7 +21,7 @@
          requeue/3, len/1, is_empty/1, drain_confirmed/1, dropwhile/2,
          set_ram_duration_target/2, ram_duration/1,
          needs_timeout/1, timeout/1, handle_pre_hibernate/1,
-         status/1, invoke/3, is_duplicate/2, discard/3, format_status/2]).
+         status/1, invoke/3, is_duplicate/2, discard/3, format_status/1]).
 
 -export([start/1, stop/0]).
 
@@ -347,19 +347,18 @@ discard(Msg = #basic_message { id = MsgId }, ChPid,
             State
     end.
 
-format_status(Opt, [PDict, State = #state { backing_queue       = BQ,
-                                            backing_queue_state = BQS,
-                                            seen_status         = SS,
-                                            ack_msg_id          = AM,
-                                            known_senders       = KS }]) ->
+format_status(State = #state { backing_queue       = BQ,
+                               backing_queue_state = BQS,
+                               seen_status         = SS,
+                               ack_msg_id          = AM,
+                               known_senders       = KS }) ->
     State1 = setelement(1, State, state_formatted),
     lists:foldl(
       fun ({Pos, Value}, StateN) -> setelement(Pos, StateN, Value) end,
-      State1, [{#state.backing_queue_state,
-                BQ:format_status(Opt, [PDict, BQS])},
-               {#state.seen_status,   dict:to_list(SS)},
-               {#state.ack_msg_id,    dict:to_list(AM)},
-               {#state.known_senders, sets:to_list(KS)}]).
+      State1, [{#state.backing_queue_state, BQ:format_status(BQS)},
+               {#state.seen_status,         dict:to_list(SS)},
+               {#state.ack_msg_id,          dict:to_list(AM)},
+               {#state.known_senders,       sets:to_list(KS)}]).
 
 %% ---------------------------------------------------------------------------
 %% Other exported functions

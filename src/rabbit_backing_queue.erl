@@ -168,9 +168,10 @@ behaviour_info(callbacks) ->
      {discard, 3},
 
      %% As for format_status in gen_server, except it is not optional,
-     %% and the returned term should be the plain term and not wrapped
-     %% in [{data, [{"State", Term}]}].
-     {format_status, 2}
+     %% it is only passed the backing queue's state, and the returned
+     %% term should be the plain term and not wrapped in [{data,
+     %% [{"State", Term}]}].
+     {format_status, 1}
     ];
 behaviour_info(_Other) ->
     undefined.
