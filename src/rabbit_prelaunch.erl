@@ -136,38 +136,10 @@ determine_version(App) ->
     {App, Vsn}.
 
 delete_recursively(Fn) ->
-    case filelib:is_dir(Fn) of
-        true ->
-            case file:list_dir(Fn) of
-                {ok, Files} ->
-                    case lists:foldl(fun ( Fn1,  ok) -> delete_recursively(
-                                                          Fn ++ "/" ++ Fn1);
-                                         (_Fn1, Err) -> Err
-                                     end, ok, Files) of
-                        ok  -> case file:del_dir(Fn) of
-                                   ok         -> ok;
-                                   {error, E} -> {error,
-                                                  {cannot_delete, Fn, E}}
-                               end;
-                        Err -> Err
-                    end;
-                {error, E} ->
-                    {error, {cannot_list_files, Fn, E}}
-            end;
-        false ->
-            case filelib:is_file(Fn) of
-                true  -> case file:delete(Fn) of
-                             ok         -> ok;
-                             {error, E} -> {error, {cannot_delete, Fn, E}}
-                         end;
-                false -> ok
-            end
-    end.
-
-is_symlink(Name) ->
-    case file:read_link(Name) of
-        {ok, _} -> true;
-        _       -> false
+    case rabbit_misc:recursive_delete([Fn]) of
+        ok                 -> ok;
+        {error, {Path, E}} -> {error, {cannot_delete, Path, E}};
+        Error              -> Error
     end.
 
 unpack_ez_plugins(SrcDir, DestDir) ->
