@@ -189,6 +189,11 @@ ensure_pid_dir () {
     return $OCF_SUCCESS
 }
 
+remove_pid () {
+    rm -f ${RABBITMQ_PID_FILE}
+    rmdir `dirname ${RABBITMQ_PID_FILE}` || :
+}
+
 export_vars() {
     [ ! -z $RABBITMQ_NODE_IP_ADDRESS ]     && export RABBITMQ_NODE_IP_ADDRESS
     [ ! -z $RABBITMQ_NODE_PORT ]           && export RABBITMQ_NODE_PORT
@@ -278,7 +283,7 @@ rabbit_start() {
     rabbit_wait $RABBITMQ_PID_FILE
     rc=$?
     if [ "$rc" != $OCF_SUCCESS ]; then
-        rm -f $RABBITMQ_PID_FILE
+        remove_pid
         ocf_log info "rabbitmq-server start failed: $rc"
         exit $OCF_ERR_GENERIC
     fi
@@ -309,7 +314,7 @@ rabbit_stop() {
         rabbit_status
         rc=$?
         if [ "$rc" = $OCF_NOT_RUNNING ]; then
-            rm -rf `dirname ${RABBITMQ_PID_FILE}`
+            remove_pid
             stop_wait=0
             break
         elif [ "$rc" != $OCF_SUCCESS ]; then

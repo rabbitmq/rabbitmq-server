@@ -43,6 +43,11 @@ ensure_pid_dir () {
     fi
 }
 
+remove_pid () {
+    rm -f ${PID_FILE}
+    rmdir `dirname ${PID_FILE}` || :
+}
+
 start_rabbitmq () {
     status_rabbitmq quiet
     if [ $RETVAL = 0 ] ; then
@@ -64,7 +69,7 @@ start_rabbitmq () {
                 fi
                 ;;
             *)
-                rm -f $PID_FILE
+                remove_pid
                 echo FAILED - check ${INIT_LOG_DIR}/startup_\{log, _err\}
                 RETVAL=1
                 ;;
@@ -80,7 +85,7 @@ stop_rabbitmq () {
         RETVAL=$?
         set -e
         if [ $RETVAL = 0 ] ; then
-            rm -rf `dirname $PID_FILE`
+            remove_pid
             if [ -n "$LOCK_FILE" ] ; then
                 rm -f $LOCK_FILE
             fi
