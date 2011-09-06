@@ -231,8 +231,7 @@ stop_and_halt() ->
     try
         stop()
     after
-        rabbit_misc:with_local_io(
-          fun () -> error_logger:info_msg("Halting Erlang VM~n") end),
+        rabbit_misc:local_info_msg("Halting Erlang VM~n", []),
         init:stop()
     end,
     ok.
@@ -258,11 +257,8 @@ environment() ->
                K =/= default_pass]).
 
 rotate_logs(BinarySuffix) ->
-    rabbit_misc:with_local_io(
-      fun () -> error_logger:info_msg("Rotating logs with suffix '~s'~n",
-                                      [BinarySuffix])
-      end),
     Suffix = binary_to_list(BinarySuffix),
+    rabbit_misc:local_info_msg("Rotating logs with suffix '~s'~n", [Suffix]),
     log_rotation_result(rotate_logs(log_location(kernel),
                                     Suffix,
                                     rabbit_error_logger_file_h),
