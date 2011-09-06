@@ -812,6 +812,8 @@ test_log_management() ->
     ok = control_action(rotate_logs, []),
 
     %% logging directed to tty (handlers were removed in last test)
+    ok = delete_log_handlers([rabbit_sasl_report_file_h,
+                              rabbit_error_logger_file_h]),
     ok = clean_logs([MainLog, SaslLog], Suffix),
     ok = application:set_env(rabbit, sasl_error_logger, tty),
     ok = application:set_env(rabbit, error_logger, tty),
@@ -827,6 +829,8 @@ test_log_management() ->
     %% cleanup
     ok = application:set_env(rabbit, sasl_error_logger, {file, SaslLog}),
     ok = application:set_env(rabbit, error_logger, {file, MainLog}),
+    ok = add_log_handlers([{rabbit_error_logger_file_h, MainLog},
+                           {rabbit_sasl_report_file_h, SaslLog}]),
     passed.
 
 test_log_management_during_startup() ->
