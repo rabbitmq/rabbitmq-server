@@ -1,3 +1,6 @@
+%% This is a version of 'file' from R14B03, which runs calls to
+%% file_server2 thorugh the worker_pool.
+
 %%
 %% %CopyrightBegin%
 %%
@@ -16,7 +19,7 @@
 %%
 %% %CopyrightEnd%
 %%
--module(file).
+-module(file2).
 
 %% Interface module for the file server and the file io servers.
 
@@ -66,7 +69,7 @@
 	      name/0, posix/0]).
 
 %%% Includes and defines
--include("file.hrl").
+-include_lib("kernel/include/file.hrl").
 
 -define(FILE_IO_SERVER_TABLE, file_io_servers).
 
@@ -1241,7 +1244,11 @@ mode_list(_) ->
 %% Functions for communicating with the file server
 
 call(Command, Args) when is_list(Args) ->
-    gen_server:call(?FILE_SERVER, list_to_tuple([Command | Args]), infinity).
+    worker_pool:submit(
+      fun () ->
+              gen_server:call(?FILE_SERVER, list_to_tuple([Command | Args]),
+                              infinity)
+      end).
 
 check_and_call(Command, Args) when is_list(Args) ->
     case check_args(Args) of
