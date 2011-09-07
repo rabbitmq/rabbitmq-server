@@ -59,10 +59,16 @@ start_link() ->
                            [{timeout, infinity}]).
 
 submit(Fun) ->
-    case get(worker_pool_worker) of
-        true -> worker_pool_worker:run(Fun);
-        _    -> Pid = gen_server2:call(?SERVER, next_free, infinity),
-                worker_pool_worker:submit(Pid, Fun)
+    %% If the worker_pool is not running, just run the Fun in the
+    %% current process.
+    case whereis(?SERVER) of
+        undefined -> Fun();
+        _         -> case get(worker_pool_worker) of
+                         true -> worker_pool_worker:run(Fun);
+                         _    -> Pid = gen_server2:call(?SERVER, next_free,
+                                                        infinity),
+                                 worker_pool_worker:submit(Pid, Fun)
+                     end
     end.
 
 submit_async(Fun) ->
