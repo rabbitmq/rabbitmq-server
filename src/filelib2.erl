@@ -1,5 +1,6 @@
 %% This is a version of 'filelib' from R14B03, which uses 'file2'
-%% instead of 'file'.
+%% instead of 'file'.  Use this module when you expect a large number
+%% of concurrent file operations.
 
 %%
 %% %CopyrightBegin%

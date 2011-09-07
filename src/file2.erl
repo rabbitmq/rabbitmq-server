@@ -1,6 +1,7 @@
 %% This is a version of 'file' from R14B03, which runs calls to
 %% file_server2 thorugh the worker_pool and uses the file_name/1
-%% function from R12B-5.
+%% function from R12B-5. Use this module when you expect a large
+%% number of concurrent file operations.
 
 %%
 %% %CopyrightBegin%
