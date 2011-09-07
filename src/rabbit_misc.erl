@@ -587,7 +587,7 @@ append_file(File, _, Suffix) ->
     end.
 
 ensure_parent_dirs_exist(Filename) ->
-    case filelib:ensure_dir(Filename) of
+    case filelib2:ensure_dir(Filename) of
         ok              -> ok;
         {error, Reason} ->
             throw({error, {cannot_create_parent_dirs, Filename, Reason}})
@@ -749,7 +749,7 @@ recursive_delete(Files) ->
                 end, ok, Files).
 
 recursive_delete1(Path) ->
-    case filelib:is_dir(Path) of
+    case filelib2:is_dir(Path) of
         false -> case file2:delete(Path) of
                      ok              -> ok;
                      {error, enoent} -> ok; %% Path doesn't exist anyway
@@ -778,7 +778,7 @@ recursive_delete1(Path) ->
     end.
 
 recursive_copy(Src, Dest) ->
-    case filelib:is_dir(Src) of
+    case filelib2:is_dir(Src) of
         false -> case file2:copy(Src, Dest) of
                      {ok, _Bytes}    -> ok;
                      {error, enoent} -> ok; %% Path doesn't exist anyway
@@ -896,7 +896,7 @@ build_acyclic_graph(VertexFun, EdgeFun, Graph) ->
 %% TODO: When we stop supporting Erlang prior to R14, this should be
 %% replaced with file:open [write, exclusive]
 lock_file(Path) ->
-    case filelib:is_file(Path) of
+    case filelib2:is_file(Path) of
         true  -> {error, eexist};
         false -> {ok, Lock} = file2:open(Path, [write]),
                  ok = file2:close(Lock)
