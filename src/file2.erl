@@ -66,10 +66,6 @@
 
 -export([ipread_s32bu_p32bu_int/3]).
 
-%% Types that can be used from other modules -- alphabetically ordered.
--export_type([date_time/0, fd/0, file_info/0, filename/0, io_device/0,
-	      name/0, posix/0]).
-
 %%% Includes and defines
 -include_lib("kernel/include/file.hrl").
 
@@ -144,8 +140,6 @@ del_dir(Name) ->
 
 read_file_info(Name) ->
     check_and_call(read_file_info, [file_name(Name)]).
-
--spec altname(Name :: name()) -> any().
 
 altname(Name) ->
     check_and_call(altname, [file_name(Name)]).
