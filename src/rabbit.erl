@@ -211,8 +211,11 @@
 %%----------------------------------------------------------------------------
 
 prepare() ->
+    %% Some of the rabbit_misc functions use worker_pool, so start it now.
+    {ok, Pid} = worker_pool_sup:start_link(),
     ok = ensure_working_log_handlers(),
-    ok = rabbit_upgrade:maybe_upgrade_mnesia().
+    ok = rabbit_upgrade:maybe_upgrade_mnesia(),
+    exit(Pid, shutdown).
 
 start() ->
     try

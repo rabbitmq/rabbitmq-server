@@ -526,7 +526,7 @@ dirty_dump_log1(LH, {K, Terms, BadBytes}) ->
     dirty_dump_log1(LH, disk_log:chunk(LH, K)).
 
 
-read_term_file(File) -> file:consult(File).
+read_term_file(File) -> file2:consult(File).
 
 write_term_file(File, Terms) ->
     write_file(File, list_to_binary([io_lib:format("~w.~n", [Term]) ||
@@ -544,12 +544,12 @@ write_file(Path, Data, Modes) ->
     Modes1 = [binary, write | (Modes -- [binary, write])],
     case make_binary(Data) of
         Bin when is_binary(Bin) ->
-            case file:open(Path, Modes1) of
-                {ok, Hdl}      -> try file:write(Hdl, Bin) of
-                                      ok             -> file:sync(Hdl);
+            case file2:open(Path, Modes1) of
+                {ok, Hdl}      -> try file2:write(Hdl, Bin) of
+                                      ok             -> file2:sync(Hdl);
                                       {error, _} = E -> E
                                   after
-                                      file:close(Hdl)
+                                      file2:close(Hdl)
                                   end;
                 {error, _} = E -> E
             end;
@@ -567,7 +567,7 @@ make_binary(List) ->
 
 
 append_file(File, Suffix) ->
-    case file:read_file_info(File) of
+    case file2:read_file_info(File) of
         {ok, FInfo}     -> append_file(File, FInfo#file_info.size, Suffix);
         {error, enoent} -> append_file(File, 0, Suffix);
         Error           -> Error
@@ -576,12 +576,12 @@ append_file(File, Suffix) ->
 append_file(_, _, "") ->
     ok;
 append_file(File, 0, Suffix) ->
-    case file:open([File, Suffix], [append]) of
-        {ok, Fd} -> file:close(Fd);
+    case file2:open([File, Suffix], [append]) of
+        {ok, Fd} -> file2:close(Fd);
         Error    -> Error
     end;
 append_file(File, _, Suffix) ->
-    case file:read_file(File) of
+    case file2:read_file(File) of
         {ok, Data} -> write_file([File, Suffix], Data, [append]);
         Error      -> Error
     end.
@@ -750,12 +750,12 @@ recursive_delete(Files) ->
 
 recursive_delete1(Path) ->
     case filelib:is_dir(Path) of
-        false -> case file:delete(Path) of
+        false -> case file2:delete(Path) of
                      ok              -> ok;
                      {error, enoent} -> ok; %% Path doesn't exist anyway
                      {error, Err}    -> {error, {Path, Err}}
                  end;
-        true  -> case file:list_dir(Path) of
+        true  -> case file2:list_dir(Path) of
                      {ok, FileNames} ->
                          case lists:foldl(
                                 fun (FileName, ok) ->
@@ -765,7 +765,7 @@ recursive_delete1(Path) ->
                                         Error
                                 end, ok, FileNames) of
                              ok ->
-                                 case file:del_dir(Path) of
+                                 case file2:del_dir(Path) of
                                      ok           -> ok;
                                      {error, Err} -> {error, {Path, Err}}
                                  end;
@@ -779,14 +779,14 @@ recursive_delete1(Path) ->
 
 recursive_copy(Src, Dest) ->
     case filelib:is_dir(Src) of
-        false -> case file:copy(Src, Dest) of
+        false -> case file2:copy(Src, Dest) of
                      {ok, _Bytes}    -> ok;
                      {error, enoent} -> ok; %% Path doesn't exist anyway
                      {error, Err}    -> {error, {Src, Dest, Err}}
                  end;
-        true  -> case file:list_dir(Src) of
+        true  -> case file2:list_dir(Src) of
                      {ok, FileNames} ->
-                         case file:make_dir(Dest) of
+                         case file2:make_dir(Dest) of
                              ok ->
                                  lists:foldl(
                                    fun (FileName, ok) ->
@@ -898,8 +898,8 @@ build_acyclic_graph(VertexFun, EdgeFun, Graph) ->
 lock_file(Path) ->
     case filelib:is_file(Path) of
         true  -> {error, eexist};
-        false -> {ok, Lock} = file:open(Path, [write]),
-                 ok = file:close(Lock)
+        false -> {ok, Lock} = file2:open(Path, [write]),
+                 ok = file2:close(Lock)
     end.
 
 const_ok() -> ok.
