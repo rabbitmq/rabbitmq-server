@@ -1,3 +1,6 @@
+%% This is a version of 'filelib' from R14B03, which uses 'file2'
+%% instead of 'file'.
+
 %%
 %% %CopyrightBegin%
 %%
@@ -16,7 +19,7 @@
 %%
 %% %CopyrightEnd%
 
--module(filelib).
+-module(filelib2).
 
 %% File utilities.
 
@@ -266,7 +269,7 @@ ensure_dir(F) ->
 	    ok;
 	false ->
 	    ensure_dir(Dir),
-	    case file:make_dir(Dir) of
+	    case file2:make_dir(Dir) of
 		{error,eexist}=EExist ->
 		    case do_is_dir(Dir, file) of
 			true ->
@@ -478,7 +481,7 @@ error(Reason) ->
     erlang:error({badpattern,Reason}).
 
 eval_read_file_info(File, file) ->
-    file:read_file_info(File);
+    file2:read_file_info(File);
 eval_read_file_info(File, erl_prim_loader) ->
     case erl_prim_loader:read_file_info(File) of
 	error -> {error, erl_prim_loader};
@@ -488,7 +491,7 @@ eval_read_file_info(File, Mod) ->
     Mod:read_file_info(File).
 
 eval_list_dir(Dir, file) ->
-    file:list_dir(Dir);
+    file2:list_dir(Dir);
 eval_list_dir(Dir, erl_prim_loader) ->
     case erl_prim_loader:list_dir(Dir) of
 	error -> {error, erl_prim_loader};

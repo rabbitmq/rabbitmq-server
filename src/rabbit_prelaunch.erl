@@ -37,7 +37,7 @@
 start() ->
     io:format("Activating RabbitMQ plugins ...~n"),
 
-    %% Some of the rabbit_misc functions use worker_pool.
+    %% Some of the rabbit_misc functions use worker_pool, so start it now.
     worker_pool_sup:start_link(),
 
     %% Determine our various directories
