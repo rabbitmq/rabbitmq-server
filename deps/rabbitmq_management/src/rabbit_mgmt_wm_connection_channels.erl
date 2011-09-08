@@ -38,12 +38,11 @@ resource_exists(ReqData, Context) ->
 
 to_json(ReqData, Context) ->
     Name = proplists:get_value(name, rabbit_mgmt_wm_connection:conn(ReqData)),
-    Chs = rabbit_mgmt_util:filter_user(
-            [Ch || Ch <- rabbit_mgmt_db:get_all_channels(basic),
-                   conn_name(Ch) =:= Name],
-            ReqData, Context),
+    Chs = rabbit_mgmt_db:get_all_channels(basic),
     rabbit_mgmt_util:reply_list(
-      rabbit_mgmt_format:strip_pids(Chs), ReqData, Context).
+      [Ch || Ch <- rabbit_mgmt_util:filter_conn_ch_list(Chs, ReqData, Context),
+             conn_name(Ch) =:= Name],
+      ReqData, Context).
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized(ReqData, Context).
