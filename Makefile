@@ -102,6 +102,11 @@ endif
 
 all: $(TARGETS)
 
+plugins:
+	[ -d "plugins-src" ] || echo No plugins source distribution found
+	mkdir -p provided_plugins
+	$(MAKE) -C plugins-src plugins-dist PLUGINS_DIST_DIR=$(CURDIR)/provided_plugins VERSION=$(VERSION)
+
 $(DEPS_FILE): $(SOURCES) $(INCLUDES)
 	rm -f $@
 	echo $(subst : ,:,$(foreach FILE,$^,$(FILE):)) | escript generate_deps $@ $(EBIN_DIR)
@@ -238,7 +243,7 @@ srcdist: distclean
 	cp -r $(DOCS_DIR) $(TARGET_SRC_DIR)
 	chmod 0755 $(TARGET_SRC_DIR)/scripts/*
 
-	[ "x" != "x$(PLUGINS_SRC_DIR)" ] && ln -s $(PLUGINS_SRC_DIR) $(TARGET_SRC_DIR)/provided_plugins || echo No plugins source distribution found
+	[ "x" != "x$(PLUGINS_SRC_DIR)" ] && ln -s $(PLUGINS_SRC_DIR) $(TARGET_SRC_DIR)/plugins-src || echo No plugins source distribution found
 
 	(cd dist; tar -zchf $(TARBALL_NAME).tar.gz $(TARBALL_NAME))
 	(cd dist; zip -q -r $(TARBALL_NAME).zip $(TARBALL_NAME))
