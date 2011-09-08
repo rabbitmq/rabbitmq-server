@@ -105,8 +105,8 @@ all: $(TARGETS)
 
 .PHONY: plugins
 plugins:
-	[ -d "plugins-src" ] || { echo No plugins source distribution found; false; }
-	ln -sf .. plugins-src/rabbitmq-server
+	[ -d "plugins-src" ] || { echo 'No plugins source distribution found (try linking public-umbrella to plugins-src/)'; false; }
+	-ln -s .. plugins-src/rabbitmq-server
 	mkdir -p provided_plugins
 	$(MAKE) -C plugins-src plugins-dist PLUGINS_DIST_DIR=$(CURDIR)/provided_plugins VERSION=$(VERSION)
 
