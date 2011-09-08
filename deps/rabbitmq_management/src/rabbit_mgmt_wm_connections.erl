@@ -42,8 +42,7 @@ augmented(ReqData, Context) ->
     rabbit_mgmt_format:strip_pids(
       rabbit_mgmt_util:filter_user(
         case rabbit_mgmt_util:vhost(ReqData) of
-            none      -> rabbit_mgmt_db:get_all_connections();
-            not_found -> vhost_not_found;
-            VHost     -> [I || I <- rabbit_mgmt_db:get_all_connections(),
-                               pget(vhost, I) =:= VHost]
+            none  -> rabbit_mgmt_db:get_all_connections();
+            VHost -> [I || I <- rabbit_mgmt_db:get_all_connections(),
+                           pget(vhost, I) =:= VHost]
         end, ReqData, Context)).
