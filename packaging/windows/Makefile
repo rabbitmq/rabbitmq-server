@@ -2,6 +2,7 @@ VERSION=0.0.0
 SOURCE_DIR=rabbitmq-server-$(VERSION)
 TARGET_DIR=rabbitmq_server-$(VERSION)
 TARGET_ZIP=rabbitmq-server-windows-$(VERSION)
+PLUGINS_DIST_DIR=
 
 dist:
 	tar -zxf ../../dist/$(SOURCE_DIR).tar.gz
@@ -20,6 +21,8 @@ dist:
 	mkdir -p $(TARGET_DIR)
 	mkdir -p $(TARGET_DIR)/plugins
 	echo Put your .ez plugin files in this directory > $(TARGET_DIR)/plugins/README
+	mkdir -p $(TARGET_DIR)/provided_plugins
+	-cp $(PLUGINS_DIST_DIR)/*.ez $(TARGET_DIR)/provided_plugins
 	xmlto -o . xhtml-nochunks ../../docs/rabbitmq-service.xml
 	elinks -dump -no-references -no-numbering rabbitmq-service.html \
 		> $(TARGET_DIR)/readme-service.txt
