@@ -16,7 +16,10 @@
 
 -module(rabbit_mgmt_wm_channels).
 
--export([init/1, to_json/2, content_types_provided/2, is_authorized/2]).
+-export([init/1, to_json/2, content_types_provided/2, is_authorized/2,
+         augmented/2]).
+
+-import(rabbit_misc, [pget/2]).
 
 -include("rabbit_mgmt.hrl").
 -include_lib("webmachine/include/webmachine.hrl").
@@ -30,10 +33,11 @@ content_types_provided(ReqData, Context) ->
    {[{"application/json", to_json}], ReqData, Context}.
 
 to_json(ReqData, Context) ->
-    Chs = rabbit_mgmt_util:filter_user(
-            rabbit_mgmt_db:get_all_channels(basic), ReqData, Context),
-    rabbit_mgmt_util:reply_list(
-      rabbit_mgmt_format:strip_pids(Chs), ReqData, Context).
+    rabbit_mgmt_util:reply_list(augmented(ReqData, Context), ReqData, Context).
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized(ReqData, Context).
+
+augmented(ReqData, Context) ->
+    rabbit_mgmt_util:filter_conn_ch_list(
+      rabbit_mgmt_db:get_all_channels(basic), ReqData, Context).

@@ -46,19 +46,19 @@ create_path(ReqData, Context) ->
     {"dummy", ReqData, Context}.
 
 to_json(ReqData, Context) ->
-    Xs = [X || X <- rabbit_mgmt_wm_exchanges:exchanges(ReqData),
+    Xs = [X || X <- rabbit_mgmt_wm_exchanges:basic(ReqData),
                export_exchange(X)],
-    Qs = [Q || Q <- rabbit_mgmt_wm_queues:queues(ReqData),
+    Qs = [Q || Q <- rabbit_mgmt_wm_queues:basic(ReqData),
                export_queue(Q)],
     QNames = [{pget(name, Q), pget(vhost, Q)} || Q <- Qs],
-    Bs = [B || B <- rabbit_mgmt_wm_bindings:bindings(ReqData),
+    Bs = [B || B <- rabbit_mgmt_wm_bindings:basic(ReqData),
                export_binding(B, QNames)],
     {ok, Vsn} = application:get_key(rabbit, vsn),
     rabbit_mgmt_util:reply(
       [{rabbit_version, list_to_binary(Vsn)}] ++
       filter(
         [{users,       rabbit_mgmt_wm_users:users()},
-         {vhosts,      rabbit_mgmt_wm_vhosts:vhosts()},
+         {vhosts,      rabbit_mgmt_wm_vhosts:basic()},
          {permissions, rabbit_mgmt_wm_permissions:permissions()},
          {queues,      Qs},
          {exchanges,   Xs},

@@ -132,6 +132,9 @@ input[type=submit]:hover, button:hover {
     border: 1px solid #66b;
 }
 
+button[disabled] { background: #aac; }
+button[disabled]:hover { background: #aac; }
+
 .form-popup-warn, .form-popup-info, .form-popup-help { display: none; position: fixed; min-width: 500px; }
 .form-popup-warn span, .form-popup-info span, .form-popup-help span { color: black; font-weight: bold; cursor: pointer; }
 
