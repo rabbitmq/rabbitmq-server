@@ -57,6 +57,7 @@ endif
 ERLC_OPTS=-I $(INCLUDE_DIR) -o $(EBIN_DIR) -Wall -v +debug_info $(call boolean_macro,$(USE_SPECS),use_specs) $(call boolean_macro,$(USE_PROPER_QC),use_proper_qc)
 
 VERSION=0.0.0
+PLUGINS_SRC_DIR=
 TARBALL_NAME=rabbitmq-server-$(VERSION)
 TARGET_SRC_DIR=dist/$(TARBALL_NAME)
 
@@ -237,7 +238,9 @@ srcdist: distclean
 	cp -r $(DOCS_DIR) $(TARGET_SRC_DIR)
 	chmod 0755 $(TARGET_SRC_DIR)/scripts/*
 
-	(cd dist; tar -zcf $(TARBALL_NAME).tar.gz $(TARBALL_NAME))
+	[ "x" != "x$(PLUGINS_SRC_DIR)" ] && ln -s $(PLUGINS_SRC_DIR) $(TARGET_SRC_DIR)/provided_plugins || echo No plugins source distribution found
+
+	(cd dist; tar -zchf $(TARBALL_NAME).tar.gz $(TARBALL_NAME))
 	(cd dist; zip -q -r $(TARBALL_NAME).zip $(TARBALL_NAME))
 	rm -rf $(TARGET_SRC_DIR)
 
