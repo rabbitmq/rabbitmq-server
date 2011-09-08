@@ -58,6 +58,7 @@ ERLC_OPTS=-I $(INCLUDE_DIR) -o $(EBIN_DIR) -Wall -v +debug_info $(call boolean_m
 
 VERSION=0.0.0
 PLUGINS_SRC_DIR=
+PLUGINS_DIST_DIR=provided_plugins
 TARBALL_NAME=rabbitmq-server-$(VERSION)
 TARGET_SRC_DIR=dist/$(TARBALL_NAME)
 
@@ -102,9 +103,10 @@ endif
 
 all: $(TARGETS)
 
+.PHONY: plugins
 plugins:
-	[ -d "plugins-src" ] || echo No plugins source distribution found
-	ln -s .. plugins-src/rabbitmq-server
+	[ -d "plugins-src" ] || { echo No plugins source distribution found; false; }
+	ln -sf .. plugins-src/rabbitmq-server
 	mkdir -p provided_plugins
 	$(MAKE) -C plugins-src plugins-dist PLUGINS_DIST_DIR=$(CURDIR)/provided_plugins VERSION=$(VERSION)
 
@@ -299,6 +301,8 @@ install_bin: all install_dirs
 	done
 	mkdir -p $(TARGET_DIR)/plugins
 	echo Put your .ez plugin files in this directory. > $(TARGET_DIR)/plugins/README
+	mkdir -p $(TARGET_DIR)/provided_plugins
+	-cp $(PLUGINS_DIST_DIR)/*.ez $(TARGET_DIR)/provided_plugins
 
 install_docs: docs_all install_dirs
 	for section in 1 5; do \

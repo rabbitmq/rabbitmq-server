@@ -2,6 +2,7 @@ VERSION=0.0.0
 SOURCE_DIR=rabbitmq-server-$(VERSION)
 TARGET_DIR=rabbitmq_server-$(VERSION)
 TARGET_TARBALL=rabbitmq-server-generic-unix-$(VERSION)
+PLUGINS_DIST_DIR=
 
 dist:
 	tar -zxf ../../dist/$(SOURCE_DIR).tar.gz
@@ -10,6 +11,7 @@ dist:
 		TARGET_DIR=`pwd`/$(TARGET_DIR) \
 		SBIN_DIR=`pwd`/$(TARGET_DIR)/sbin \
 		MAN_DIR=`pwd`/$(TARGET_DIR)/share/man \
+		PLUGINS_DIST_DIR=$(PLUGINS_DIST_DIR) \
 			install
 
 	tar -zcf $(TARGET_TARBALL).tar.gz $(TARGET_DIR)
