@@ -104,6 +104,7 @@ all: $(TARGETS)
 
 plugins:
 	[ -d "plugins-src" ] || echo No plugins source distribution found
+	ln -s .. plugins-src/rabbitmq-server
 	mkdir -p provided_plugins
 	$(MAKE) -C plugins-src plugins-dist PLUGINS_DIST_DIR=$(CURDIR)/provided_plugins VERSION=$(VERSION)
 
