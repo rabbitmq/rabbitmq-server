@@ -111,16 +111,12 @@ internal_check_user_login(Username, Fun) ->
     end.
 
 check_vhost_access(#user{username = Username}, VHost) ->
-    %% TODO: use dirty ops instead
-    rabbit_misc:execute_mnesia_transaction(
-      fun () ->
-              case mnesia:read({rabbit_user_permission,
-                                #user_vhost{username     = Username,
-                                            virtual_host = VHost}}) of
-                  []   -> false;
-                  [_R] -> true
-              end
-      end).
+    case mnesia:dirty_read({rabbit_user_permission,
+                            #user_vhost{username     = Username,
+                                        virtual_host = VHost}}) of
+        []   -> false;
+        [_R] -> true
+    end.
 
 check_resource_access(#user{username = Username},
                       #resource{virtual_host = VHostPath, name = Name},
