@@ -2,6 +2,7 @@ TARBALL_DIR=../../../dist
 TARBALL=$(notdir $(wildcard $(TARBALL_DIR)/rabbitmq-server-[0-9.]*.tar.gz))
 COMMON_DIR=../../common
 VERSION=$(shell echo $(TARBALL) | sed -e 's:rabbitmq-server-\(.*\)\.tar\.gz:\1:g')
+PLUGINS_DIST_DIR=
 
 DEBIAN_ORIG_TARBALL=$(shell echo $(TARBALL) |  sed -e 's:\(.*\)-\(.*\)\(\.tar\.gz\):\1_\2\.orig\3:g')
 UNPACKED_DIR=rabbitmq-server-$(VERSION)
@@ -33,7 +34,7 @@ package: clean
 	    $(UNPACKED_DIR)/debian/rabbitmq-script-wrapper
 	chmod a+x $(UNPACKED_DIR)/debian/rules
 	UNOFFICIAL_RELEASE=$(UNOFFICIAL_RELEASE) VERSION=$(VERSION) ./check-changelog.sh rabbitmq-server $(UNPACKED_DIR)
-	cd $(UNPACKED_DIR); GNUPGHOME=$(GNUPG_PATH)/.gnupg dpkg-buildpackage -rfakeroot $(SIGNING)
+	cd $(UNPACKED_DIR); PLUGINS_DIST_DIR=$(PLUGINS_DIST_DIR) GNUPGHOME=$(GNUPG_PATH)/.gnupg dpkg-buildpackage -rfakeroot $(SIGNING)
 	rm -rf $(UNPACKED_DIR)
 
 clean:

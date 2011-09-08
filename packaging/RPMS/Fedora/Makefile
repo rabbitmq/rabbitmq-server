@@ -2,6 +2,7 @@ TARBALL_DIR=../../../dist
 TARBALL=$(notdir $(wildcard $(TARBALL_DIR)/rabbitmq-server-[0-9.]*.tar.gz))
 COMMON_DIR=../../common
 VERSION=$(shell echo $(TARBALL) | sed -e 's:rabbitmq-server-\(.*\)\.tar\.gz:\1:g')
+PLUGINS_DIST_DIR=
 
 TOP_DIR=$(shell pwd)
 #Under debian we do not want to check build dependencies, since that
@@ -43,7 +44,7 @@ endif
 	cp rabbitmq-server.logrotate SOURCES/rabbitmq-server.logrotate
 
 server: prepare
-	rpmbuild -ba --nodeps SPECS/rabbitmq-server.spec $(DEFINES) $(OS_DEFINES)
+	PLUGINS_DIST_DIR=$(PLUGINS_DIST_DIR) rpmbuild -ba --nodeps SPECS/rabbitmq-server.spec $(DEFINES) $(OS_DEFINES)
 
 clean:
 	rm -rf SOURCES SPECS RPMS SRPMS BUILD tmp

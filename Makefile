@@ -58,7 +58,7 @@ ERLC_OPTS=-I $(INCLUDE_DIR) -o $(EBIN_DIR) -Wall -v +debug_info $(call boolean_m
 
 VERSION=0.0.0
 PLUGINS_SRC_DIR=
-PLUGINS_DIST_DIR=provided_plugins
+PLUGINS_DIST_DIR?=provided_plugins
 TARBALL_NAME=rabbitmq-server-$(VERSION)
 TARGET_SRC_DIR=dist/$(TARBALL_NAME)
 
