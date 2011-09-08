@@ -73,8 +73,7 @@ handle_call({create, VHost, Name, Trace0}, _From,
         true  -> ok;
         false -> rabbit_trace:start(VHost)
     end,
-    rabbit_tracing_sup:start_child({VHost, Name}, Trace),
-    {reply, ok, State};
+    {reply, rabbit_tracing_sup:start_child({VHost, Name}, Trace), State};
 
 handle_call({stop, VHost, Name}, _From, State = #state{table = Table}) ->
     true = ets:delete(Table, {VHost, Name}),

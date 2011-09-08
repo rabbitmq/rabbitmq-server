@@ -63,14 +63,23 @@ init(Args) ->
                                                     no_ack = false}, self()),
     {ok, Dir} = application:get_env(directory),
     Filename = Dir ++ "/" ++ binary_to_list(Name) ++ ".log",
-    ok = filelib:ensure_dir(Filename),
-    {ok, F} = file:open(Filename, [append]),
-    rabbit_tracing_traces:announce(VHost, Name, self()),
-    Format = list_to_atom(binary_to_list(pget(format, Args))),
-    rabbit_log:info("Tracer opened log file ~p with format ~p~n",
-                    [Filename, Format]),
-    {ok, #state{conn = Conn, ch = Ch, vhost = VHost, queue = Q,
-                file = F, filename = Filename, format = Format}}.
+    case filelib:ensure_dir(Filename) of
+        ok ->
+            case file:open(Filename, [append]) of
+                {ok, F} ->
+                    rabbit_tracing_traces:announce(VHost, Name, self()),
+                    Format = list_to_atom(binary_to_list(pget(format, Args))),
+                    rabbit_log:info("Tracer opened log file ~p with "
+                                    "format ~p~n", [Filename, Format]),
+                    {ok, #state{conn = Conn, ch = Ch, vhost = VHost, queue = Q,
+                                file = F, filename = Filename,
+                                format = Format}};
+                {error, E} ->
+                    {stop, {could_not_open, Filename, E}}
+            end;
+        {error, E} ->
+            {stop, {could_not_create_dir, Dir, E}}
+    end.
 
 handle_call(info_all, _From, State = #state{vhost = V, queue = Q}) ->
     [QInfo] = rabbit_mgmt_db:augment_queues(

@@ -33,11 +33,19 @@
                 <td><%= trace.name %></td>
                 <td><%= trace.pattern %></td>
                 <td><%= trace.format %></td>
-                <td class="r"><%= fmt_rate(trace.queue.message_stats, 'ack', false) %></td>
+                <% if (trace.queue) { %>
+                <td class="r">
+                  <%= fmt_rate(trace.queue.message_stats, 'ack', false) %>
+                </td>
                 <td class="r">
                   <%= trace.queue.messages %>
                   <sub><%= link_to("(queue)", '#/queues/' + esc(trace.vhost) + '/' + esc(trace.queue.name)) %></sub>
                 </td>
+                <% } else { %>
+                <td colspan="2" class="status">
+                  <div class="red">FAILED</div>
+                </td>
+                <% } %>
                 <td>
                   <form action="#/traces" method="delete">
                     <input type="hidden" name="vhost" value="<%= trace.vhost %>"/>

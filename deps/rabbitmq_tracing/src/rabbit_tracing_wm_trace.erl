@@ -20,6 +20,9 @@
          is_authorized/2, allowed_methods/2, accept_content/2,
          delete_resource/2]).
 
+-define(ERR, <<"Something went wrong trying to start the trace - check the "
+               "logs.">>).
+
 -include_lib("rabbitmq_management/include/rabbit_mgmt.hrl").
 -include_lib("webmachine/include/webmachine.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
@@ -52,9 +55,12 @@ accept_content(ReqData, Context) ->
                      rabbit_mgmt_util:with_decode(
                        [format], ReqData, Context,
                        fun([_], Trace) ->
-                               ok = rabbit_tracing_traces:create(
-                                      VHost, Name, Trace),
-                               {true, ReqData, Context}
+                               case rabbit_tracing_traces:create(
+                                      VHost, Name, Trace) of
+                                   {ok, _} -> {true, ReqData, Context};
+                                   _       -> rabbit_mgmt_util:bad_request(
+                                                ?ERR, ReqData, Context)
+                               end
                        end)
     end.
 
