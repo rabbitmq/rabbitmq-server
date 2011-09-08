@@ -110,10 +110,10 @@ internal_check_user_login(Username, Fun) ->
             Refused
     end.
 
-check_vhost_access(#user{username = Username}, VHost) ->
+check_vhost_access(#user{username = Username}, VHostPath) ->
     case mnesia:dirty_read({rabbit_user_permission,
                             #user_vhost{username     = Username,
-                                        virtual_host = VHost}}) of
+                                        virtual_host = VHostPath}}) of
         []   -> false;
         [_R] -> true
     end.
