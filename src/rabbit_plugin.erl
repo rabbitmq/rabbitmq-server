@@ -80,8 +80,8 @@ action(list, [], _Opts, PluginsDir, PluginsDistDir) ->
     format_plugins(find_plugins(PluginsDir), find_plugins(PluginsDistDir));
 
 action(enable, ToEnable, _Opts, PluginsDir, PluginsDistDir) ->
-    AllPlugins = usort_plugins(find_plugins(PluginsDir) ++
-                               find_plugins(PluginsDistDir)),
+    AllPlugins = usort_plugins(find_plugins(PluginsDistDir) ++
+                               find_plugins(PluginsDir)),
     ToEnable1 = [list_to_atom(Name) || Name <- ToEnable],
     {Found, Missing} = lists:foldl(fun (#plugin{name = Name}, {Fs, Ms}) ->
                                            case lists:member(Name, Ms) of
