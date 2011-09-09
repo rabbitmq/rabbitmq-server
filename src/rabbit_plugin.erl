@@ -119,7 +119,8 @@ get_plugin_info(EZ) ->
         {application, Name, Props} ->
             Version = proplists:get_value(vsn, Props, "0"),
             Description = proplists:get_value(description, Props, ""),
-            Dependencies = proplists:get_value(applications, Props, []),
+            Dependencies =
+                filter_applications(proplists:get_value(applications, Props, [])),
             #plugin{name = Name, version = Version, description = Description,
                     dependencies = Dependencies, location = EZ};
         {error, Reason} ->
@@ -181,3 +182,13 @@ usort_plugins(Plugins) ->
 
 plugins_cmp(#plugin{name = N1, version = V1}, #plugin{name = N2, version = V2}) ->
     {N1, V1} =< {N2, V2}.
+
+%% Filter applications that can be loaded *right now*.
+filter_applications(Applications) ->
+    [Application || Application <- Applications,
+                    case application:load(Application) of
+                        {error, {already_loaded, _}} -> false;
+                        ok -> application:unload(Application),
+                              false;
+                        _  -> true
+                    end].
