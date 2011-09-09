@@ -21,6 +21,12 @@
 
 -define(FORCE_OPT, "-f").
 
+-record(plugin, {name,          %% atom()
+                 version,       %% string()
+                 description,   %% string()
+                 dependencies,  %% [{atom(), string()}]
+                 location}).    %% string()
+
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
@@ -76,4 +82,49 @@ action(list, [], _Opts, PluginsDir, PluginsDistDir) ->
 %%----------------------------------------------------------------------------
 
 find_available_plugins(PluginsDistDir) ->
-    filelib:wildcard("*.ez", PluginsDistDir).
+    EZs = filelib:wildcard("*.ez", PluginsDistDir),
+    [get_plugin_info(filename:join([PluginsDistDir, EZ])) || EZ <- EZs].
+
+get_plugin_info(EZ) ->
+    case read_app_file(EZ) of
+        {application, Name, Props} ->
+            Version = proplists:get_value(vsn, Props),
+            Description = proplists:get_value(description, Props, ""),
+            Dependencies = proplists:get_value(applications, Props, []),
+            #plugin{name = Name, version = Version, description = Description,
+                    dependencies = Dependencies, location = EZ};
+        {error, _} = Error ->
+            Error
+    end.
+
+%% Read the .app file from an ez.
+read_app_file(EZ) ->
+    case zip:list_dir(EZ) of
+        {ok, [_|ZippedFiles]} ->
+            case find_app_files(ZippedFiles) of
+                [AppPath|_] ->
+                    {ok, [{AppPath, AppFile}]} =
+                        zip:extract(EZ, [{file_list, [AppPath]}, memory]),
+                    parse_binary(AppFile);
+                [] ->
+                    {error, no_app_file}
+            end;
+        {error, Reason} ->
+            {error, {invalid_ez, Reason}}
+    end.
+
+%% Return the path of the .app files in ebin/.
+find_app_files(ZippedFiles) ->
+    {ok, RE} = re:compile("^.*/ebin/.*.app$"),
+    [Path || {zip_file, Path, _, _, _, _} <- ZippedFiles,
+             re:run(Path, RE, [{capture, none}]) =:= match].
+
+%% Parse a binary into a term.
+parse_binary(Bin) ->
+    try
+        {ok, Ts, _} = erl_scan:string(binary:bin_to_list(Bin)),
+        {ok, Term} = erl_parse:parse_term(Ts),
+        Term
+    catch
+        Err -> {error, {invalid_app, Err}}
+    end.
