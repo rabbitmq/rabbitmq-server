@@ -26,7 +26,7 @@ setlocal enabledelayedexpansion
 if not exist "!ERLANG_HOME!\bin\erl.exe" (
     echo.
     echo ******************************
-    echo ERLANG_HOME not set correctly. 
+    echo ERLANG_HOME not set correctly.
     echo ******************************
     echo.
     echo Please either set ERLANG_HOME to point to your Erlang installation or place the
@@ -35,7 +35,10 @@ if not exist "!ERLANG_HOME!\bin\erl.exe" (
     exit /B
 )
 
-"!ERLANG_HOME!\bin\erl.exe" -pa "!TDP0!..\ebin" -noinput -hidden -sname rabbitmq-plugin!RANDOM! -s rabbit_plugin -extra !STAR!
+set RABBITMQ_PLUGINS_DIR=!TDP0!..\plugins
+set RABBITMQ_PLUGINS_DIST_DIR=!TDP0!..\provided_plugins
+
+"!ERLANG_HOME!\bin\erl.exe" -pa "!TDP0!..\ebin" -noinput -hidden -sname rabbitmq-plugin!RANDOM! -s rabbit_plugin -plugins_dir "!RABBITMQ_PLUGINS_DIR:\=/!" -plugins_dist_dir "!RABBITMQ_PLUGINS_DIST_DIR:\=/!" -extra !STAR!
 
 endlocal
 endlocal

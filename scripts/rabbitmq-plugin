@@ -17,10 +17,16 @@
 
 . `dirname $0`/rabbitmq-env
 
+[ "x" = "x$RABBITMQ_PLUGINS_DIR" ] && RABBITMQ_PLUGINS_DIR="${RABBITMQ_HOME}/plugins"
+
+[ "x" = "x$RABBITMQ_PLUGINS_DIST_DIR" ] && RABBITMQ_PLUGINS_DIST_DIR="${RABBITMQ_HOME}/provided_plugins"
+
 exec erl \
     -pa "${RABBITMQ_HOME}/ebin" \
     -noinput \
     -hidden \
     -sname rabbitmq-plugin$$ \
     -s rabbit_plugin \
+    -plugins_dir "$RABBITMQ_PLUGINS_DIR" \
+    -plugins_dist_dir "$RABBITMQ_PLUGINS_DIST_DIR" \
     -extra "$@"

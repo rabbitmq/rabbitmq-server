@@ -33,6 +33,8 @@
 %%----------------------------------------------------------------------------
 
 start() ->
+    {ok, [[PluginsDir|_]|_]} = init:get_argument(plugins_dir),
+    {ok, [[PluginsDistDir|_]|_]} = init:get_argument(plugins_dist_dir),
     {[Command0 | Args], Opts} =
         case rabbit_misc:get_options([{flag, ?FORCE_OPT}],
                                      init:get_plain_arguments()) of
@@ -41,7 +43,7 @@ start() ->
         end,
     Command = list_to_atom(Command0),
 
-    case catch action(Command, Args, Opts) of
+    case catch action(Command, Args, Opts, PluginsDir, PluginsDistDir) of
         ok ->
             rabbit_misc:quit(0);
         {'EXIT', {function_clause, [{?MODULE, action, _} | _]}} ->
@@ -68,5 +70,10 @@ usage() ->
 
 %%----------------------------------------------------------------------------
 
-action(test, [], _Opts) ->
-    io:format("Test ok~n").
+action(list, [], _Opts, PluginsDir, PluginsDistDir) ->
+    io:format("All plugins: ~p~n", [find_available_plugins(PluginsDistDir)]).
+
+%%----------------------------------------------------------------------------
+
+find_available_plugins(PluginsDistDir) ->
+    filelib:wildcard("*.ez", PluginsDistDir).
