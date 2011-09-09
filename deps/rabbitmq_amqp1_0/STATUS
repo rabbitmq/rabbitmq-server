@@ -1,0 +1,37 @@
+What works
+==========
+
+Simple publishing and consuming.
+
+You can publish to:
+
+* /exchange/<Name>/<Key>
+* /exchange/<Name> (and set the subject as routing key)
+* /queue (and set the subject as queue name)
+* /queue/<Name>
+
+You can consume from:
+
+* /exchange/<Name>/<Pattern>
+* /queue/<Name>
+
+
+What is known not to work
+=========================
+
+* sasl-mechanisms frame is not sent
+* Multiple-section messages
+* Multiple-transfer messages
+* amqp-sequence messages (maybe)
+* delivery-annotations, message-annotations and application-properties
+* lots of header / footer stuff will just be dropped or wrong
+* Much in the way of error recovery is missing
+* mixed snd_settle_mode
+* Probably lots around unusual combinations of settlement and outcomes
+* Session window is quite flaky
+* virtual hosts other than "/" don't work
+* transactions
+* link recovery
+* TLS
+* Probably lots of other things
+

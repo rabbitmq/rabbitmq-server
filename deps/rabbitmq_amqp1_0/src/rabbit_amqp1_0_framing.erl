@@ -1,7 +1,7 @@
 -module(rabbit_amqp1_0_framing).
 
 -export([encode/1, encode_described/3, decode/1, version/0,
-         symbol_for/1, number_for/1]).
+         symbol_for/1, number_for/1, encode_bin/1]).
 
 %% debug
 -export([fill_from_list/2, fill_from_map/2]).
@@ -40,6 +40,12 @@ fill_from_map(Record, Fields) ->
 fill_from_binary(F = #'v1_0.data'{}, Field) ->
     F#'v1_0.data'{content = Field}.
 
+%% TODO so should this?
+fill_from_amqp(F = #'v1_0.amqp_value'{}, Field) ->
+    F#'v1_0.amqp_value'{content = Field};
+fill_from_amqp(F = #'v1_0.amqp_sequence'{}, Field) ->
+    F#'v1_0.amqp_sequence'{content = Field}.
+
 keys(Record) ->
     [{symbol, symbolify(K)} || K <- rabbit_amqp1_0_framing0:fields(Record)].
 
@@ -57,6 +63,8 @@ decode({described, Descriptor, {map, Fields}}) ->
     fill_from_map(rabbit_amqp1_0_framing0:record_for(Descriptor), Fields);
 decode({described, Descriptor, {binary, Field}}) ->
     fill_from_binary(rabbit_amqp1_0_framing0:record_for(Descriptor), Field);
+decode({described, Descriptor, Field}) ->
+    fill_from_amqp(rabbit_amqp1_0_framing0:record_for(Descriptor), Field);
 decode(null) -> undefined;
 decode(Other) ->
      Other.
@@ -73,11 +81,17 @@ encode_described(map, ListOrNumber, Frame) ->
 encode_described(binary, ListOrNumber, #'v1_0.data'{content = Content}) ->
     Desc = descriptor(ListOrNumber),
     {described, Desc, {binary, Content}};
+encode_described('*', ListOrNumber, #'v1_0.amqp_value'{content = Content}) ->
+    Desc = descriptor(ListOrNumber),
+    {described, Desc, Content};
 encode_described(annotations, ListOrNumber, Frame) ->
     encode_described(map, ListOrNumber, Frame).
 
 encode(X) ->
     rabbit_amqp1_0_framing0:encode(X).
+
+encode_bin(X) ->
+    rabbit_amqp1_0_binary_generator:generate(encode(X)).
 
 symbol_for(X) ->
     rabbit_amqp1_0_framing0:symbol_for(X).
