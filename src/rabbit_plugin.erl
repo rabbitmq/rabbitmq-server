@@ -83,7 +83,19 @@ action(list, [], _Opts, PluginsDir, PluginsDistDir) ->
 
 find_available_plugins(PluginsDistDir) ->
     EZs = filelib:wildcard("*.ez", PluginsDistDir),
-    [get_plugin_info(filename:join([PluginsDistDir, EZ])) || EZ <- EZs].
+    {Plugins, Problems} =
+        lists:foldl(fun ({error, EZ, Reason}, {Plugins1, Problems1}) ->
+                            {Plugins1, [{EZ, Reason} | Problems1]};
+                        (Plugin = #plugin{}, {Plugins1, Problems1}) ->
+                            {[Plugin|Plugins1], Problems1}
+                    end, {[], []},
+                    [get_plugin_info(filename:join([PluginsDistDir, EZ]))
+                     || EZ <- EZs]),
+    case Problems of
+        [] -> ok;
+        _  -> io:format("Warning: Problem reading some plugins: ~p~n", [Problems])
+    end,
+    Plugins.
 
 get_plugin_info(EZ) ->
     case read_app_file(EZ) of
@@ -93,8 +105,8 @@ get_plugin_info(EZ) ->
             Dependencies = proplists:get_value(applications, Props, []),
             #plugin{name = Name, version = Version, description = Description,
                     dependencies = Dependencies, location = EZ};
-        {error, _} = Error ->
-            Error
+        {error, Reason} ->
+            {error, EZ, Reason}
     end.
 
 %% Read the .app file from an ez.
