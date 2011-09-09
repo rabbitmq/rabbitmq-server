@@ -9,3 +9,5 @@ syntax: regexp
 ^ebin/rabbitmq_amqp1_0.app$
 ^include/rabbit_amqp1_0_framing.hrl$
 ^src/rabbit_amqp1_0_framing0.erl$
+^amqp/
+^qpid/
