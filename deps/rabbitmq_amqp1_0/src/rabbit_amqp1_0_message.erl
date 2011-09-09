@@ -79,6 +79,8 @@ routing_key(Props10) ->
 
 %% TODO talk to Mike about this + new codec.
 unwrap({utf8, Bin})  -> Bin;
+unwrap({ubyte, Num}) -> Num;
+unwrap({uint, Num})  -> Num;
 unwrap({ulong, Num}) -> Num;
 unwrap({long, Num})  -> Num;
 unwrap(undefined)    -> undefined.

@@ -5,7 +5,7 @@
 -include("rabbit_amqp1_0.hrl").
 
 -ifdef(use_specs).
--spec(parse/1 :: (binary()) -> tuple()). 
+-spec(parse/1 :: (binary()) -> tuple()).
 -endif.
 
 parse_all(ValueBin) when is_binary(ValueBin) ->
