@@ -77,7 +77,24 @@ usage() ->
 %%----------------------------------------------------------------------------
 
 action(list, [], _Opts, PluginsDir, PluginsDistDir) ->
-    format_plugins(find_plugins(PluginsDir), find_plugins(PluginsDistDir)).
+    format_plugins(find_plugins(PluginsDir), find_plugins(PluginsDistDir));
+
+action(enable, ToInstall, _Opts, PluginsDir, PluginsDistDir) ->
+    AllPlugins = usort_plugins(find_plugins(PluginsDir) ++
+                               find_plugins(PluginsDistDir)),
+    ToInstall1 = [list_to_atom(Name) || Name <- ToInstall],
+    {Found, Missing} = lists:foldl(fun (P = #plugin{name = Name}, {Fs, Ms}) ->
+                                           case lists:member(Name, Ms) of
+                                               true  -> {[P|Fs], Ms -- [Name]};
+                                               false -> {Fs, Ms}
+                                           end
+                                   end, {[], ToInstall1}, AllPlugins),
+    case Missing of
+        [] -> ok;
+        _  -> io:format("Warning: the following plugins could not be found: ~p~n",
+                        [Missing])
+    end,
+    io:format("Marked for installation: ~p~n", [Found]).
 
 %%----------------------------------------------------------------------------
 
@@ -141,14 +158,14 @@ parse_binary(Bin) ->
         Err -> {error, {invalid_app, Err}}
     end.
 
-format_plugins(Enabled, Available) ->
+%% Pretty print a list of plugins.
+format_plugins(Enabled, Provided) ->
     EnabledSet = sets:from_list([Name || #plugin{name = Name} <- Enabled]),
     [case sets:is_element(Name, EnabledSet) of
          false -> format_available_plugin(Plugin);
          true  -> format_enabled_plugin(Plugin)
      end
-     || Plugin = #plugin{name = Name} <- lists:usort(fun plugins_cmp/2,
-                                                     Enabled ++ Available)],
+     || Plugin = #plugin{name = Name} <- usort_plugins(Enabled ++ Provided)],
     ok.
 
 format_available_plugin(#plugin{name = Name, version = Version,
@@ -158,6 +175,9 @@ format_available_plugin(#plugin{name = Name, version = Version,
 format_enabled_plugin(#plugin{name = Name, version = Version,
                               description = Description}) ->
     io:format("[E] ~w-~s: ~s~n", [Name, Version, Description]).
+
+usort_plugins(Plugins) ->
+    lists:usort(fun plugins_cmp/2, Plugins).
 
 plugins_cmp(#plugin{name = N1, version = V1}, #plugin{name = N2, version = V2}) ->
     {N1, V1} =< {N2, V2}.
