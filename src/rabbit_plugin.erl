@@ -83,9 +83,9 @@ action(enable, ToInstall, _Opts, PluginsDir, PluginsDistDir) ->
     AllPlugins = usort_plugins(find_plugins(PluginsDir) ++
                                find_plugins(PluginsDistDir)),
     ToInstall1 = [list_to_atom(Name) || Name <- ToInstall],
-    {Found, Missing} = lists:foldl(fun (P = #plugin{name = Name}, {Fs, Ms}) ->
+    {Found, Missing} = lists:foldl(fun (#plugin{name = Name}, {Fs, Ms}) ->
                                            case lists:member(Name, Ms) of
-                                               true  -> {[P|Fs], Ms -- [Name]};
+                                               true  -> {[Name|Fs], Ms -- [Name]};
                                                false -> {Fs, Ms}
                                            end
                                    end, {[], ToInstall1}, AllPlugins),
@@ -94,7 +94,14 @@ action(enable, ToInstall, _Opts, PluginsDir, PluginsDistDir) ->
         _  -> io:format("Warning: the following plugins could not be found: ~p~n",
                         [Missing])
     end,
-    io:format("Marked for installation: ~p~n", [Found]).
+    {ok, G} = rabbit_misc:build_acyclic_graph(
+                fun (App, _Deps) -> [{App, App}] end,
+                fun (App,  Deps) -> [{App, Dep} || Dep <- Deps] end,
+                [{Name, Deps}
+                 || #plugin{name = Name, dependencies = Deps} <- AllPlugins]),
+    InstallOrder = digraph_utils:reachable(Found, G),
+    true = digraph:delete(G),
+    io:format("Marked for installation: ~p~n", [InstallOrder]).
 
 %%----------------------------------------------------------------------------
 
