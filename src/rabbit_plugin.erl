@@ -77,11 +77,11 @@ usage() ->
 %%----------------------------------------------------------------------------
 
 action(list, [], _Opts, PluginsDir, PluginsDistDir) ->
-    io:format("All plugins: ~p~n", [find_available_plugins(PluginsDistDir)]).
+    format_plugins(find_plugins(PluginsDir), find_plugins(PluginsDistDir)).
 
 %%----------------------------------------------------------------------------
 
-find_available_plugins(PluginsDistDir) ->
+find_plugins(PluginsDistDir) ->
     EZs = filelib:wildcard("*.ez", PluginsDistDir),
     {Plugins, Problems} =
         lists:foldl(fun ({error, EZ, Reason}, {Plugins1, Problems1}) ->
@@ -100,7 +100,7 @@ find_available_plugins(PluginsDistDir) ->
 get_plugin_info(EZ) ->
     case read_app_file(EZ) of
         {application, Name, Props} ->
-            Version = proplists:get_value(vsn, Props),
+            Version = proplists:get_value(vsn, Props, "0"),
             Description = proplists:get_value(description, Props, ""),
             Dependencies = proplists:get_value(applications, Props, []),
             #plugin{name = Name, version = Version, description = Description,
@@ -140,3 +140,24 @@ parse_binary(Bin) ->
     catch
         Err -> {error, {invalid_app, Err}}
     end.
+
+format_plugins(Enabled, Available) ->
+    EnabledSet = sets:from_list([Name || #plugin{name = Name} <- Enabled]),
+    [case sets:is_element(Name, EnabledSet) of
+         false -> format_available_plugin(Plugin);
+         true  -> format_enabled_plugin(Plugin)
+     end
+     || Plugin = #plugin{name = Name} <- lists:usort(fun plugins_cmp/2,
+                                                     Enabled ++ Available)],
+    ok.
+
+format_available_plugin(#plugin{name = Name, version = Version,
+                                description = Description}) ->
+    io:format("[N] ~w-~s: ~s~n", [Name, Version, Description]).
+
+format_enabled_plugin(#plugin{name = Name, version = Version,
+                              description = Description}) ->
+    io:format("[E] ~w-~s: ~s~n", [Name, Version, Description]).
+
+plugins_cmp(#plugin{name = N1, version = V1}, #plugin{name = N2, version = V2}) ->
+    {N1, V1} =< {N2, V2}.
