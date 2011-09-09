@@ -104,9 +104,17 @@ action(enable, ToEnable, _Opts, PluginsDir, PluginsDistDir) ->
     io:format("Marked for enabling: ~p~n", [EnableOrder]),
     EnableOrderPlugins = [Plugin || Plugin = #plugin{name = Name} <- AllPlugins,
                                     lists:member(Name, EnableOrder)],
-    ok = lists:foldl(fun (#plugin{name = Name}, ok) ->
-                             io:format("Enabling ~p~n", [Name])
-                     end, ok, EnableOrderPlugins),
+    ok = lists:foldl(
+           fun (#plugin{name = Name, version = Version, location = Path}, ok) ->
+                   io:format("Enabling ~w-~s~n", [Name, Version]),
+                   case file:copy(Path, filename:join(PluginsDir,
+                                                      filename:basename(Path))) of
+                       {ok, _Bytes}    -> ok;
+                       {error, Reason} -> io:format("Error enabling ~p (~p)~n",
+                                                    [Name, Reason]),
+                                          rabbit_misc:quit(2)
+                   end
+           end, ok, EnableOrderPlugins),
     update_enabled_plugins(Found).
 
 %%----------------------------------------------------------------------------
