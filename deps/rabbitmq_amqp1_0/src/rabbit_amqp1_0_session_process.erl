@@ -75,7 +75,7 @@ handle_info({#'basic.deliver'{consumer_tag = ConsumerTag} = Deliver, Msg},
                   Deliver, Msg, WriterPid, BCh, Handle, Link, Session,
                   FrameMax),
             put({out, Handle}, Link1),
-            {noreply, state(rabbit_amqp1_0_session:incr_transfer_number(
+            {noreply, state(rabbit_amqp1_0_session:incr_outgoing_id(
                               Session1), State)}
     end;
 

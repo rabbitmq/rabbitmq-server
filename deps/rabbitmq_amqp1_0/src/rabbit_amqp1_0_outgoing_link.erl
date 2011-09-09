@@ -183,7 +183,7 @@ deliver(#'basic.deliver'{delivery_tag = DeliveryTag,
     MaySend = rabbit_amqp1_0_session:may_send(Session),
     if MaySend ->
             NewLink = Link#outgoing_link{delivery_count = Count + 1},
-            DeliveryId = rabbit_amqp1_0_session:next_transfer_number(Session),
+            DeliveryId = rabbit_amqp1_0_session:next_outgoing_id(Session),
             T = #'v1_0.transfer'{handle = Handle,
                                  delivery_tag = {binary, <<DeliveryTag:64>>},
                                  delivery_id = {uint, DeliveryId},

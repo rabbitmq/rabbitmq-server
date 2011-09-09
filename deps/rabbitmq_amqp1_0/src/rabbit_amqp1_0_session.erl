@@ -3,7 +3,7 @@
 -export([process_frame/2]).
 
 -export([init/1, begin_/2, maybe_init_publish_id/2, record_publish/3,
-         incr_transfer_number/1, next_transfer_number/1, may_send/1,
+         incr_outgoing_id/1, next_outgoing_id/1, may_send/1,
          record_delivery/3, settle/3, flow_fields/2, channel/1, flow/2, ack/2]).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
@@ -14,7 +14,7 @@
 -define(DEFAULT_MAX_HANDLE, 16#ffffffff).
 
 -record(session, {channel_num, %% we just use the incoming (AMQP 1.0) channel number
-                  next_transfer_number = 0, % next outgoing id
+                  next_outgoing_id = 0, % next outgoing id
                   max_outgoing_id, % based on the remote incoming window size
                   next_incoming_id, % just to keep a check
                   next_publish_id, %% the 0-9-1-side counter for confirms
@@ -77,7 +77,7 @@ begin_(#'v1_0.begin'{next_outgoing_id = {uint, RemoteNextIn},
                      incoming_window  = RemoteInWindow,
                      outgoing_window  = RemoteOutWindow,
                      handle_max       = HandleMax0},
-       Session = #session{next_transfer_number = LocalNextOut,
+       Session = #session{next_outgoing_id = LocalNextOut,
                           channel_num          = Channel}) ->
     Window = case RemoteInWindow of
                  {uint, Size} -> Size;
@@ -124,16 +124,18 @@ record_publish(Settled, TxfrId,
                                          TxfrId,
                                          Unsettled)
                  end,
-    incr_transfer_number(Session#session{next_publish_id        = Id1,
-                                         incoming_unsettled_map = Unsettled1}).
+    Session#session{
+      next_publish_id = Id1,
+      next_incoming_id = rabbit_misc:serial_add(TxfrId, 1),
+      incoming_unsettled_map = Unsettled1}.
 
-incr_transfer_number(Session = #session{next_transfer_number = Num}) ->
+incr_outgoing_id(Session = #session{next_outgoing_id = Num}) ->
     %% TODO this should be a serial number
-    Session#session{next_transfer_number = rabbit_misc:serial_add(Num, 1)}.
+    Session#session{next_outgoing_id = rabbit_misc:serial_add(Num, 1)}.
 
-next_transfer_number(#session{next_transfer_number = Num}) -> Num.
+next_outgoing_id(#session{next_outgoing_id = Num}) -> Num.
 
-may_send(#session{next_transfer_number   = TransferNumber,
+may_send(#session{next_outgoing_id   = TransferNumber,
                   max_outgoing_id        = LocalMaxOut,
                   window_size            = WindowSize,
                   outgoing_unsettled_map = Unsettled}) ->
@@ -148,7 +150,7 @@ may_send(#session{next_transfer_number   = TransferNumber,
     (LocalMaxOut > TransferNumber) andalso (WindowSize >= NumUnsettled).
 
 record_delivery(DeliveryTag, DefaultOutcome,
-                Session = #session{next_transfer_number   = TransferNumber,
+                Session = #session{next_outgoing_id   = TransferNumber,
                                    outgoing_unsettled_map = Unsettled}) ->
     Unsettled1 = gb_trees:insert(TransferNumber,
                                  #outgoing_transfer{
@@ -215,7 +217,7 @@ flow_fields(Frames, Session) when is_list(Frames) ->
     [flow_fields(F, Session) || F <- Frames];
 
 flow_fields(Flow = #'v1_0.flow'{},
-             #session{next_transfer_number = NextOut,
+             #session{next_outgoing_id = NextOut,
                       next_incoming_id = NextIn,
                       window_size = Window,
                       outgoing_unsettled_map = UnsettledOut,
@@ -254,7 +256,7 @@ flow(#'v1_0.flow'{next_incoming_id = RemoteNextIn0,
                   outgoing_window  = {uint, RemoteWindowOut}},
      Session = #session{next_incoming_id     = LocalNextIn,
                         max_outgoing_id      = _LocalMaxOut,
-                        next_transfer_number = LocalNextOut}) ->
+                        next_outgoing_id = LocalNextOut}) ->
     %% Check the things that we know for sure
     %% TODO sequence number comparisons
     ?DEBUG("~p == ~p~n", [RemoteNextOut, LocalNextIn]),
