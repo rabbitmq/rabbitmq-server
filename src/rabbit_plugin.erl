@@ -33,16 +33,9 @@
 start() ->
     io:format("Rabbitmq-plugin, GO!~n"),
 
-    quit(0).
+    rabbit_misc:quit(0).
 
 stop() ->
     ok.
 
 %%----------------------------------------------------------------------------
-
-%% the slower shutdown on windows required to flush stdout
-quit(Status) ->
-    case os:type() of
-        {unix,  _} -> halt(Status);
-        {win32, _} -> init:stop(Status)
-    end.

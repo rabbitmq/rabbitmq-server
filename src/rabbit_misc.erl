@@ -59,6 +59,7 @@
 -export([pget/2, pget/3, pget_or_die/2]).
 -export([format_message_queue/2]).
 -export([append_rpc_all_nodes/4]).
+-export([quit/1]).
 
 %%----------------------------------------------------------------------------
 
@@ -210,6 +211,7 @@
 -spec(pget_or_die/2 :: (term(), [term()]) -> term() | no_return()).
 -spec(format_message_queue/2 :: (any(), priority_queue:q()) -> term()).
 -spec(append_rpc_all_nodes/4 :: ([node()], atom(), atom(), [any()]) -> [any()]).
+-spec(quit/1 :: (integer() | string()) -> no_return()).
 
 -endif.
 
@@ -963,3 +965,10 @@ append_rpc_all_nodes(Nodes, M, F, A) ->
                       {badrpc, _} -> [];
                       _           -> Res
                   end || Res <- ResL]).
+
+%% the slower shutdown on windows required to flush stdout
+quit(Status) ->
+    case os:type() of
+        {unix,  _} -> halt(Status);
+        {win32, _} -> init:stop(Status)
+    end.
