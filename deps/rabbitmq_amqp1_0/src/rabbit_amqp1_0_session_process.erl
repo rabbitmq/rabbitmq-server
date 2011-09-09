@@ -25,6 +25,7 @@ start_link(Channel, ReaderPid, WriterPid, User, VHost, FrameMax,
 
 init([Channel, ReaderPid, WriterPid, #user{username = Username}, VHost,
       FrameMax]) ->
+    process_flag(trap_exit, true),
     {ok, Conn} = amqp_connection:start(
                    %% TODO #adapter_info{}
                    #amqp_params_direct{username     = Username,
