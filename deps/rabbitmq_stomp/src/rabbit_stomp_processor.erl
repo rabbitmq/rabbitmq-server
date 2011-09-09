@@ -122,9 +122,7 @@ handle_cast({Command, Frame}, State = #state{frame_transformer = FT}) ->
                   _                    -> handle_frame(Command, Frame1, StateN)
               end
       end,
-      fun(StateM) ->
-              ensure_receipt(Frame1, StateM)
-      end,
+      fun(StateM) -> ensure_receipt(Frame1, StateM) end,
       State);
 
 handle_cast(client_timeout, State) ->
@@ -738,12 +736,10 @@ accumulate_receipts1(DeliveryTag, {Key, Value, PR}, Acc)
     {lists:reverse(Acc), gb_trees:insert(Key, Value, PR)};
 accumulate_receipts1(DeliveryTag, {_Key, Value, PR}, Acc) ->
     Acc1 = [Value | Acc],
-
     case gb_trees:is_empty(PR) of
-        true ->
-            {lists:reverse(Acc1), PR};
-        false ->
-            accumulate_receipts1(DeliveryTag, gb_trees:take_smallest(PR), Acc1)
+        true  -> {lists:reverse(Acc1), PR};
+        false -> accumulate_receipts1(DeliveryTag,
+                                      gb_trees:take_smallest(PR), Acc1)
     end.
 
 
@@ -753,10 +749,8 @@ accumulate_receipts1(DeliveryTag, {_Key, Value, PR}, Acc) ->
 
 transactional(Frame) ->
     case rabbit_stomp_frame:header(Frame, "transaction") of
-        {ok, Transaction} ->
-            {yes, Transaction};
-        not_found ->
-            no
+        {ok, Transaction} -> {yes, Transaction};
+        not_found         -> no
     end.
 
 transactional_action(Frame, Name, Fun, State) ->
@@ -833,14 +827,9 @@ ensure_heartbeats(Heartbeats,
     [CX, CY] = [list_to_integer(X) ||
                    X <- re:split(Heartbeats, ",", [{return, list}])],
 
-    SendFun = fun() ->
-                      catch rabbit_net:send(Sock, <<$\n>>)
-              end,
-
+    SendFun = fun() -> catch rabbit_net:send(Sock, <<$\n>>) end,
     Pid = self(),
-    ReceiveFun = fun() ->
-                         gen_server2:cast(Pid, client_timeout)
-                 end,
+    ReceiveFun = fun() -> gen_server2:cast(Pid, client_timeout) end,
 
     {SendTimeout, ReceiveTimeout} =
         {millis_to_seconds(CY), millis_to_seconds(CX)},
@@ -849,13 +838,9 @@ ensure_heartbeats(Heartbeats,
 
     {{SendTimeout * 1000 , ReceiveTimeout * 1000}, State}.
 
-millis_to_seconds(M) when M =< 0 ->
-    0;
-millis_to_seconds(M) ->
-    case M < 1000 of
-        true  -> 1;
-        false -> M div 1000
-    end.
+millis_to_seconds(M) when M =< 0   -> 0;
+millis_to_seconds(M) when M < 1000 -> 1;
+millis_to_seconds(M)               -> M div 1000.
 
 %%----------------------------------------------------------------------------
 %% Queue and Binding Setup
