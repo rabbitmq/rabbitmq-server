@@ -960,9 +960,8 @@ format_message_queue_entry(_V) ->
     '_'.
 
 update_and_convert_record(NewRecordName, PosValList, Record) ->
-    Tuple = setelement(1, Record, NewRecordName),
-    lists:foldl(fun ({Pos, Val}, TupleN) -> setelement(Pos, TupleN, Val) end,
-                Tuple, PosValList).
+    lists:foldl(fun ({Pos, Val}, Tuple) -> setelement(Pos, Tuple, Val) end,
+                setelement(1, Record, NewRecordName), PosValList).
 
 append_rpc_all_nodes(Nodes, M, F, A) ->
     {ResL, _} = rpc:multicall(Nodes, M, F, A),
