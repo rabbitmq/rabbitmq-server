@@ -6,7 +6,7 @@ Configuration
 =============
 
 There is one configuration option, "directory". This controls where
-the log files go. It defaults to "/tmp/rabbitmq-tracing".
+the log files go. It defaults to "/var/tmp/rabbitmq-tracing".
 
 Performance
 ===========
