@@ -108,7 +108,7 @@ annotated_message(RKey, #amqp_msg{props = Props, payload = Content}) ->
                                2 -> true;
                                _ -> false
                            end,
-       priority          = wrap(uint, Props#'P_basic'.priority),
+       priority          = wrap(ubyte, Props#'P_basic'.priority),
        ttl               = wrap(uint, Props#'P_basic'.expiration),
        first_acquirer    = undefined, %% TODO
        delivery_count    = undefined}, %% TODO
