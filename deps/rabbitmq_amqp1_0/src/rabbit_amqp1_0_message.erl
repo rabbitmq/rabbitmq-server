@@ -108,8 +108,8 @@ annotated_message(RKey, #amqp_msg{props = Props, payload = Content}) ->
                                2 -> true;
                                _ -> false
                            end,
-       priority          = Props#'P_basic'.priority,
-       ttl               = Props#'P_basic'.expiration,
+       priority          = wrap(uint, Props#'P_basic'.priority),
+       ttl               = wrap(uint, Props#'P_basic'.expiration),
        first_acquirer    = undefined, %% TODO
        delivery_count    = undefined}, %% TODO
     Props10 = #'v1_0.properties'{
@@ -149,3 +149,8 @@ unreserialise(Bin) ->
 wrap(Bin) when is_binary(Bin) -> {utf8, Bin};
 wrap(Num) when is_number(Num) -> {ulong, Num};
 wrap(undefined)               -> undefined.
+
+wrap(_Type, undefined) ->
+    undefined;
+wrap(Type, Val) ->
+    {Type, Val}.
