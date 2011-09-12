@@ -42,9 +42,7 @@ fill_from_binary(F = #'v1_0.data'{}, Field) ->
 
 %% TODO so should this?
 fill_from_amqp(F = #'v1_0.amqp_value'{}, Field) ->
-    F#'v1_0.amqp_value'{content = Field};
-fill_from_amqp(F = #'v1_0.amqp_sequence'{}, Field) ->
-    F#'v1_0.amqp_sequence'{content = Field}.
+    F#'v1_0.amqp_value'{content = Field}.
 
 keys(Record) ->
     [{symbol, symbolify(K)} || K <- rabbit_amqp1_0_framing0:fields(Record)].
@@ -57,15 +55,23 @@ symbolify(FieldName) when is_atom(FieldName) ->
 %% list value. (Yes that is gross)
 decode({described, true, {list, Fields}}) ->
     [decode(F) || F <- Fields];
+%% A sequence comes as an arbitrary list of values; it's not a
+%% composite type.
 decode({described, Descriptor, {list, Fields}}) ->
-    fill_from_list(rabbit_amqp1_0_framing0:record_for(Descriptor), Fields);
+    case rabbit_amqp1_0_framing0:record_for(Descriptor) of
+        #'v1_0.amqp_sequence'{} ->
+            #'v1_0.amqp_sequence'{content = [decode(F) || F <- Fields]};
+        Else ->
+            fill_from_list(Else, Fields)
+    end;
 decode({described, Descriptor, {map, Fields}}) ->
     fill_from_map(rabbit_amqp1_0_framing0:record_for(Descriptor), Fields);
 decode({described, Descriptor, {binary, Field}}) ->
     fill_from_binary(rabbit_amqp1_0_framing0:record_for(Descriptor), Field);
 decode({described, Descriptor, Field}) ->
     fill_from_amqp(rabbit_amqp1_0_framing0:record_for(Descriptor), Field);
-decode(null) -> undefined;
+decode(null) ->
+    undefined;
 decode(Other) ->
      Other.
 
