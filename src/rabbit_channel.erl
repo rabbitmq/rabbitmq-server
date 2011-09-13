@@ -325,12 +325,11 @@ handle_info(emit_stats, State = #ch{stats_timer = StatsTimer}) ->
 
 handle_info({'DOWN', MRef, process, QPid, Reason},
             State = #ch{consumer_monitors = ConsumerMonitors}) ->
+    State1 = handle_publishing_queue_down(QPid, Reason, State),
     noreply(
       case dict:find(MRef, ConsumerMonitors) of
-          error ->
-              handle_publishing_queue_down(QPid, Reason, State);
-          {ok, ConsumerTag} ->
-              handle_consuming_queue_down(MRef, ConsumerTag, State)
+          error             -> State1;
+          {ok, ConsumerTag} -> handle_consuming_queue_down(MRef, ConsumerTag, State1)
       end);
 
 handle_info({'EXIT', _Pid, Reason}, State) ->
@@ -1129,13 +1128,6 @@ maybe_monitor(QPid) ->
         MRef      -> MRef
     end.
 
-confirm_maybe_monitor(QPid, UQM) ->
-    case gb_trees:is_defined(QPid, UQM) of
-        true  -> ok;
-        false -> maybe_monitor(QPid),
-                 ok
-    end.
-
 consumer_maybe_monitor(ConsumerTag, State = #ch{consumer_mapping = ConsumerMapping,
                                                 consumer_monitors = ConsumerMonitors,
                                                 capabilities = Capabilities}) ->
@@ -1160,7 +1152,8 @@ maybe_demonitor(QPid, #ch{stats_timer       = StatsTimer,
                      QueueBlocked = gb_sets:is_element(QPid, Blocking),
                      case not StatsEnabled and not ConsumerMonitored and
                           not QueueBlocked of
-                         true  -> true = erlang:demonitor(MRef);
+                         true  -> true = erlang:demonitor(MRef),
+                                  erase({monitoring, QPid});
                          false -> ok
                      end,
                      ok
@@ -1389,7 +1382,7 @@ process_routing_result(routed,    QPids, XName,  MsgSeqNo,   _, State) ->
                              MsgSeqNos1 = gb_sets:insert(MsgSeqNo, MsgSeqNos),
                              gb_trees:update(QPid, MsgSeqNos1, UQM2);
                          none ->
-                             ok = confirm_maybe_monitor(QPid, UQM2),
+                             maybe_monitor(QPid),
                              gb_trees:insert(QPid, SingletonSet, UQM2)
                      end
              end, UQM, QPids),
