@@ -77,7 +77,7 @@ usage() ->
 %%----------------------------------------------------------------------------
 
 action(list, [], _Opts, PluginsDir, PluginsDistDir) ->
-    format_plugins(find_plugins(PluginsDir), find_plugins(PluginsDistDir));
+    format_plugins(PluginsDir, PluginsDistDir);
 
 action(enable, ToEnable0, _Opts, PluginsDir, PluginsDistDir) ->
     AllPlugins = find_plugins(PluginsDistDir),
@@ -108,8 +108,9 @@ action(enable, ToEnable0, _Opts, PluginsDir, PluginsDistDir) ->
                                           rabbit_misc:quit(2)
                    end
            end, ok, lookup_plugins(EnableOrder, AllPlugins)),
-    InstalledPlugins = lookup_plugins(read_enabled_plugins(), AllPlugins),
-    update_enabled_plugins(plugin_names(merge_plugin_lists(InstalledPlugins,
+    EnabledPlugins = lookup_plugins(read_enabled_plugins(PluginsDir), AllPlugins),
+    update_enabled_plugins(PluginsDir,
+                           plugin_names(merge_plugin_lists(EnabledPlugins,
                                                            ToEnablePlugins))).
 
 %%----------------------------------------------------------------------------
@@ -176,22 +177,24 @@ parse_binary(Bin) ->
     end.
 
 %% Pretty print a list of plugins.
-format_plugins(Enabled, Provided) ->
-    EnabledSet = sets:from_list([Name || #plugin{name = Name} <- Enabled]),
-    [case sets:is_element(Name, EnabledSet) of
-         false -> format_available_plugin(Plugin);
-         true  -> format_enabled_plugin(Plugin)
-     end
-     || Plugin = #plugin{name = Name} <- usort_plugins(Enabled ++ Provided)],
+format_plugins(PluginsDir, PluginsDistDir) ->
+    AvailablePlugins = find_plugins(PluginsDistDir),
+    EnabledExplicitly = read_enabled_plugins(PluginsDir),
+    EnabledPlugins = find_plugins(PluginsDir),
+    EnabledImplicitly = plugin_names(EnabledPlugins) -- EnabledExplicitly,
+    [ format_plugin(Plugin, EnabledExplicitly, EnabledImplicitly)
+     || Plugin <- usort_plugins(EnabledPlugins ++ AvailablePlugins)],
     ok.
 
-format_available_plugin(#plugin{name = Name, version = Version,
-                                description = Description}) ->
-    io:format("[N] ~w-~s: ~s~n", [Name, Version, Description]).
-
-format_enabled_plugin(#plugin{name = Name, version = Version,
-                              description = Description}) ->
-    io:format("[E] ~w-~s: ~s~n", [Name, Version, Description]).
+format_plugin(#plugin{name = Name, version = Version, description = Description},
+              EnabledExplicitly, EnabledImplicitly) ->
+    Glyph = case {lists:member(Name, EnabledExplicitly),
+                  lists:member(Name, EnabledImplicitly)} of
+                {true, false} -> "E";
+                {false, true} -> "e";
+                _             -> "N"
+            end,
+    io:format("[~s] ~w-~s: ~s~n", [Glyph, Name, Version, Description]).
 
 usort_plugins(Plugins) ->
     lists:usort(fun plugins_cmp/2, Plugins).
@@ -233,9 +236,23 @@ lookup_plugins(Names, AllPlugins) ->
     [P || P = #plugin{name = Name} <- AllPlugins, lists:member(Name, Names)].
 
 %% Read the enabled plugin names from disk.
-read_enabled_plugins() ->
-    [].
+read_enabled_plugins(PluginsDir) ->
+    FileName = enabled_plugins_filename(PluginsDir),
+    case rabbit_misc:read_term_file(FileName) of
+        {ok, [Plugins]} -> Plugins;
+        {error, enoent} -> [];
+        {error, Reason} -> throw({error, {cannot_read_enabled_plugins_file,
+                                          FileName, Reason}})
+    end.
 
 %% Update the enabled plugin names on disk.
-update_enabled_plugins(NewPlugins) ->
-    io:format("Adding ~p to enabled plugins~n", [NewPlugins]).
+update_enabled_plugins(PluginsDir, Plugins) ->
+    FileName = enabled_plugins_filename(PluginsDir),
+    case rabbit_misc:write_term_file(FileName, [Plugins]) of
+        ok              -> ok;
+        {error, Reason} -> throw({error, {cannot_write_enabled_plugins_file,
+                                          FileName, Reason}})
+    end.
+
+enabled_plugins_filename(PluginsDir) ->
+    filename:join([PluginsDir, "enabled_plugins"]).
