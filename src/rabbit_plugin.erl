@@ -79,15 +79,11 @@ usage() ->
 action(list, [], _Opts, PluginsDir, PluginsDistDir) ->
     format_plugins(find_plugins(PluginsDir), find_plugins(PluginsDistDir));
 
-action(enable, ToEnable, _Opts, PluginsDir, PluginsDistDir) ->
+action(enable, ToEnable0, _Opts, PluginsDir, PluginsDistDir) ->
     AllPlugins = find_plugins(PluginsDistDir),
-    ToEnable1 = [list_to_atom(Name) || Name <- ToEnable],
-    {Found, Missing} = lists:foldl(fun (#plugin{name = Name}, {Fs, Ms}) ->
-                                           case lists:member(Name, Ms) of
-                                               true  -> {[Name|Fs], Ms -- [Name]};
-                                               false -> {Fs, Ms}
-                                           end
-                                   end, {[], ToEnable1}, AllPlugins),
+    ToEnable = [list_to_atom(Name) || Name <- ToEnable0],
+    ToEnablePlugins = lookup_plugins(ToEnable, AllPlugins),
+    Missing = ToEnable -- plugin_names(ToEnablePlugins),
     case Missing of
         [] -> ok;
         _  -> io:format("Warning: the following plugins could not be found: ~p~n",
@@ -98,11 +94,9 @@ action(enable, ToEnable, _Opts, PluginsDir, PluginsDistDir) ->
                 fun (App,  Deps) -> [{App, Dep} || Dep <- Deps] end,
                 [{Name, Deps}
                  || #plugin{name = Name, dependencies = Deps} <- AllPlugins]),
-    EnableOrder = digraph_utils:reachable(Found, G),
+    EnableOrder = digraph_utils:reachable(plugin_names(ToEnablePlugins), G),
     true = digraph:delete(G),
     io:format("Marked for enabling: ~p~n", [EnableOrder]),
-    EnableOrderPlugins = [Plugin || Plugin = #plugin{name = Name} <- AllPlugins,
-                                    lists:member(Name, EnableOrder)],
     ok = lists:foldl(
            fun (#plugin{name = Name, version = Version, location = Path}, ok) ->
                    io:format("Enabling ~w-~s~n", [Name, Version]),
@@ -113,9 +107,10 @@ action(enable, ToEnable, _Opts, PluginsDir, PluginsDistDir) ->
                                                     [Name, Reason]),
                                           rabbit_misc:quit(2)
                    end
-           end, ok, EnableOrderPlugins),
-    InstalledPlugins = read_enabled_plugins(),
-    update_enabled_plugins(merge_plugin_lists(InstalledPlugins, ToEnable)).
+           end, ok, lookup_plugins(EnableOrder, AllPlugins)),
+    InstalledPlugins = lookup_plugins(read_enabled_plugins(), AllPlugins),
+    update_enabled_plugins(plugin_names(merge_plugin_lists(InstalledPlugins,
+                                                           ToEnablePlugins))).
 
 %%----------------------------------------------------------------------------
 
@@ -228,6 +223,14 @@ filter_applications(Applications) ->
                               false;
                         _  -> true
                     end].
+
+%% Return the names of the given plugins.
+plugin_names(Plugins) ->
+    [Name || #plugin{name = Name} <- Plugins].
+
+%% Find plugins by name in a list of plugins.
+lookup_plugins(Names, AllPlugins) ->
+    [P || P = #plugin{name = Name} <- AllPlugins, lists:member(Name, Names)].
 
 %% Read the enabled plugin names from disk.
 read_enabled_plugins() ->
