@@ -749,7 +749,7 @@ recursive_delete(Files) ->
                 end, ok, Files).
 
 recursive_delete1(Path) ->
-    case filelib:is_dir(Path) of
+    case filelib:is_dir(Path) and not(is_symlink(Path)) of
         false -> case file:delete(Path) of
                      ok              -> ok;
                      {error, enoent} -> ok; %% Path doesn't exist anyway
@@ -775,6 +775,12 @@ recursive_delete1(Path) ->
                      {error, Err} ->
                          {error, {Path, Err}}
                  end
+    end.
+
+is_symlink(Name) ->
+    case file:read_link(Name) of
+        {ok, _} -> true;
+        _       -> false
     end.
 
 recursive_copy(Src, Dest) ->

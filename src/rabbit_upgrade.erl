@@ -228,13 +228,7 @@ secondary_upgrade(AllNodes) ->
     ok.
 
 nodes_running(Nodes) ->
-    [N || N <- Nodes, node_running(N)].
-
-node_running(Node) ->
-    case rpc:call(Node, application, which_applications, []) of
-        {badrpc, _} -> false;
-        Apps        -> lists:keysearch(rabbit, 1, Apps) =/= false
-    end.
+    [N || N <- Nodes, rabbit:is_running(N)].
 
 %% -------------------------------------------------------------------
 
