@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2011 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_plugin).
@@ -80,8 +80,7 @@ action(list, [], _Opts, PluginsDir, PluginsDistDir) ->
     format_plugins(find_plugins(PluginsDir), find_plugins(PluginsDistDir));
 
 action(enable, ToEnable, _Opts, PluginsDir, PluginsDistDir) ->
-    AllPlugins = usort_plugins(find_plugins(PluginsDistDir) ++
-                               find_plugins(PluginsDir)),
+    AllPlugins = find_plugins(PluginsDistDir),
     ToEnable1 = [list_to_atom(Name) || Name <- ToEnable],
     {Found, Missing} = lists:foldl(fun (#plugin{name = Name}, {Fs, Ms}) ->
                                            case lists:member(Name, Ms) of
@@ -115,7 +114,8 @@ action(enable, ToEnable, _Opts, PluginsDir, PluginsDistDir) ->
                                           rabbit_misc:quit(2)
                    end
            end, ok, EnableOrderPlugins),
-    update_enabled_plugins(Found).
+    InstalledPlugins = read_enabled_plugins(),
+    update_enabled_plugins(merge_plugin_lists(InstalledPlugins, ToEnable)).
 
 %%----------------------------------------------------------------------------
 
@@ -201,6 +201,21 @@ format_enabled_plugin(#plugin{name = Name, version = Version,
 usort_plugins(Plugins) ->
     lists:usort(fun plugins_cmp/2, Plugins).
 
+%% Merge two plugin lists.  In case of duplicates, only keep highest
+%% version.
+merge_plugin_lists(Ps1, Ps2) ->
+    filter_duplicates(usort_plugins(Ps1 ++ Ps2)).
+
+filter_duplicates([P1 = #plugin{name = N, version = V1},
+                   P2 = #plugin{name = N, version = V2} | Ps]) ->
+    if V1 < V2 -> [P2 | filter_duplicates(Ps)];
+       true    -> [P1 | filter_duplicates(Ps)]
+    end;
+filter_duplicates([P | Ps]) ->
+    [P | filter_duplicates(Ps)];
+filter_duplicates(Ps) ->
+    Ps.
+
 plugins_cmp(#plugin{name = N1, version = V1}, #plugin{name = N2, version = V2}) ->
     {N1, V1} =< {N2, V2}.
 
@@ -214,5 +229,10 @@ filter_applications(Applications) ->
                         _  -> true
                     end].
 
+%% Read the enabled plugin names from disk.
+read_enabled_plugins() ->
+    [].
+
+%% Update the enabled plugin names on disk.
 update_enabled_plugins(NewPlugins) ->
     io:format("Adding ~p to enabled plugins~n", [NewPlugins]).
