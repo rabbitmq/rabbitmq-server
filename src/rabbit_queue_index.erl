@@ -229,7 +229,7 @@
 
 init(Name, OnSyncFun) ->
     State = #qistate { dir = Dir } = blank_state(Name),
-    false = filelib:is_file(Dir), %% is_file == is file or dir
+    false = filelib2:is_file(Dir), %% is_file == is file or dir
     State #qistate { on_sync = OnSyncFun }.
 
 shutdown_terms(Name) ->
@@ -366,9 +366,9 @@ recover(DurableQueues) ->
     {DurableTerms, {fun queue_index_walker/1, {start, DurableQueueNames}}}.
 
 all_queue_directory_names(Dir) ->
-    case file:list_dir(Dir) of
+    case file2:list_dir(Dir) of
         {ok, Entries}   -> [ Entry || Entry <- Entries,
-                                      filelib:is_dir(
+                                      filelib2:is_dir(
                                         filename:join(Dir, Entry)) ];
         {error, enoent} -> []
     end.
@@ -392,7 +392,7 @@ blank_state(QueueName) ->
 clean_file_name(Dir) -> filename:join(Dir, ?CLEAN_FILENAME).
 
 detect_clean_shutdown(Dir) ->
-    case file:delete(clean_file_name(Dir)) of
+    case file2:delete(clean_file_name(Dir)) of
         ok              -> true;
         {error, enoent} -> false
     end.
@@ -402,7 +402,7 @@ read_shutdown_terms(Dir) ->
 
 store_clean_shutdown(Terms, Dir) ->
     CleanFileName = clean_file_name(Dir),
-    ok = filelib:ensure_dir(CleanFileName),
+    ok = filelib2:ensure_dir(CleanFileName),
     rabbit_misc:write_term_file(CleanFileName, Terms).
 
 init_clean(RecoveredCounts, State) ->
@@ -603,8 +603,8 @@ flush_journal(State = #qistate { segments = Segments }) ->
     Segments1 =
         segment_fold(
           fun (#segment { unacked = 0, path = Path }, SegmentsN) ->
-                  case filelib:is_file(Path) of
-                      true  -> ok = file:delete(Path);
+                  case filelib2:is_file(Path) of
+                      true  -> ok = file2:delete(Path);
                       false -> ok
                   end,
                   SegmentsN;
@@ -630,7 +630,7 @@ append_journal_to_segment(#segment { journal_entries = JEntries,
 get_journal_handle(State = #qistate { journal_handle = undefined,
                                       dir = Dir }) ->
     Path = filename:join(Dir, ?JOURNAL_FILENAME),
-    ok = filelib:ensure_dir(Path),
+    ok = filelib2:ensure_dir(Path),
     {ok, Hdl} = file_handle_cache:open(Path, ?WRITE_MODE,
                                        [{write_buffer, infinity}]),
     {Hdl, State #qistate { journal_handle = Hdl }};
@@ -735,7 +735,7 @@ all_segment_nums(#qistate { dir = Dir, segments = Segments }) ->
                       lists:takewhile(fun (C) -> $0 =< C andalso C =< $9 end,
                                       SegName)), Set)
           end, sets:from_list(segment_nums(Segments)),
-          filelib:wildcard("*" ++ ?SEGMENT_EXTENSION, Dir)))).
+          filelib2:wildcard("*" ++ ?SEGMENT_EXTENSION, Dir)))).
 
 segment_find_or_new(Seg, Dir, Segments) ->
     case segment_find(Seg, Segments) of
@@ -836,7 +836,7 @@ segment_entries_foldr(Fun, Init,
 %%
 %% Does not do any combining with the journal at all.
 load_segment(KeepAcked, #segment { path = Path }) ->
-    case filelib:is_file(Path) of
+    case filelib2:is_file(Path) of
         false -> {array_new(), 0};
         true  -> {ok, Hdl} = file_handle_cache:open(Path, ?READ_AHEAD_MODE, []),
                  {ok, 0} = file_handle_cache:position(Hdl, bof),
@@ -1040,12 +1040,12 @@ foreach_queue_index(Funs) ->
 transform_queue(Dir, Gatherer, {JournalFun, SegmentFun}) ->
     ok = transform_file(filename:join(Dir, ?JOURNAL_FILENAME), JournalFun),
     [ok = transform_file(filename:join(Dir, Seg), SegmentFun)
-     || Seg <- filelib:wildcard("*" ++ ?SEGMENT_EXTENSION, Dir)],
+     || Seg <- filelib2:wildcard("*" ++ ?SEGMENT_EXTENSION, Dir)],
     ok = gatherer:finish(Gatherer).
 
 transform_file(Path, Fun) ->
     PathTmp = Path ++ ".upgrade",
-    case filelib:file_size(Path) of
+    case filelib2:file_size(Path) of
         0    -> ok;
         Size -> {ok, PathTmpHdl} =
                     file_handle_cache:open(PathTmp, ?WRITE_MODE,
@@ -1059,7 +1059,7 @@ transform_file(Path, Fun) ->
                 ok = drive_transform_fun(Fun, PathTmpHdl, Content),
 
                 ok = file_handle_cache:close(PathTmpHdl),
-                ok = file:rename(PathTmp, Path)
+                ok = file2:rename(PathTmp, Path)
     end.
 
 drive_transform_fun(Fun, Hdl, Contents) ->

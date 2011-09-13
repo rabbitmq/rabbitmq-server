@@ -58,6 +58,12 @@
                     {requires,    pre_boot},
                     {enables,     external_infrastructure}]}).
 
+-rabbit_boot_step({io_runner,
+                   [{description, "IO runner"},
+                    {mfa,         {rabbit_sup, start_child, [io_runner]}},
+                    {requires,    pre_boot},
+                    {enables,     external_infrastructure}]}).
+
 -rabbit_boot_step({external_infrastructure,
                    [{description, "external infrastructure ready"}]}).
 
