@@ -9,4 +9,4 @@
          {contexts,         [{rabbit_mgmt, mgmt}]},
          {default_listener, [{port, 55670}]}
         ]},
-  {applications, [kernel, stdlib]}]}.
+  {applications, [kernel, stdlib, mochiweb]}]}.
