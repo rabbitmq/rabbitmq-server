@@ -101,7 +101,8 @@ action(enable, ToEnable0, _Opts, PluginsDir, PluginsDistDir) ->
     EnabledPlugins = lookup_plugins(read_enabled_plugins(PluginsDir), AllPlugins),
     update_enabled_plugins(PluginsDir,
                            plugin_names(merge_plugin_lists(EnabledPlugins,
-                                                           ToEnablePlugins)));
+                                                           ToEnablePlugins))),
+    action(prune, [], {}, PluginsDir, PluginsDistDir);
 
 action(prune, [], _Opts, PluginsDir, PluginsDistDir) ->
     ExplicitlyEnabledPlugins = read_enabled_plugins(PluginsDir),
