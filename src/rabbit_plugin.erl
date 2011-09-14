@@ -19,7 +19,6 @@
 
 -export([start/0, stop/0]).
 
--define(FORCE_OPT, "-f").
 -define(COMPACT_OPT, "-c").
 
 -record(plugin, {name,          %% atom()
@@ -43,8 +42,7 @@ start() ->
     {ok, [[PluginsDir|_]|_]} = init:get_argument(plugins_dir),
     {ok, [[PluginsDistDir|_]|_]} = init:get_argument(plugins_dist_dir),
     {[Command0 | Args], Opts} =
-        case rabbit_misc:get_options([{flag, ?FORCE_OPT},
-                                      {flag, ?COMPACT_OPT}],
+        case rabbit_misc:get_options([{flag, ?COMPACT_OPT}],
                                      init:get_plain_arguments()) of
             {[], _Opts}    -> usage();
             CmdArgsAndOpts -> CmdArgsAndOpts
@@ -94,13 +92,8 @@ action(enable, ToEnable0, _Opts, PluginsDir, PluginsDistDir) ->
         _  -> io:format("Warning: the following plugins could not be found: ~p~n",
                         [Missing])
     end,
-    {ok, G} = rabbit_misc:build_acyclic_graph(
-                fun (App, _Deps) -> [{App, App}] end,
-                fun (App,  Deps) -> [{App, Dep} || Dep <- Deps] end,
-                [{Name, Deps}
-                 || #plugin{name = Name, dependencies = Deps} <- AllPlugins]),
-    EnableOrder = digraph_utils:reachable(plugin_names(ToEnablePlugins), G),
-    true = digraph:delete(G),
+    EnableOrder = calculate_required_plugins(plugin_names(ToEnablePlugins),
+                                             AllPlugins),
     io:format("Marked for enabling: ~p~n", [EnableOrder]),
     ok = lists:foldl(
            fun (#plugin{name = Name, version = Version, location = Path}, ok) ->
@@ -116,7 +109,23 @@ action(enable, ToEnable0, _Opts, PluginsDir, PluginsDistDir) ->
     EnabledPlugins = lookup_plugins(read_enabled_plugins(PluginsDir), AllPlugins),
     update_enabled_plugins(PluginsDir,
                            plugin_names(merge_plugin_lists(EnabledPlugins,
-                                                           ToEnablePlugins))).
+                                                           ToEnablePlugins)));
+
+action(prune, [], _Opts, PluginsDir, PluginsDistDir) ->
+    ExplicitlyEnabledPlugins = read_enabled_plugins(PluginsDir),
+    AllPlugins = find_plugins(PluginsDistDir),
+    Required = calculate_required_plugins(ExplicitlyEnabledPlugins, AllPlugins),
+    AllEnabledPlugins = find_plugins(PluginsDir),
+    AllEnabled = plugin_names(AllEnabledPlugins),
+    ToDisable = AllEnabled -- Required,
+    case ToDisable of
+        [] ->
+            io:format("No unnecessary plugins found.~n");
+        _ ->
+            io:format("Disabling unnecessary plugins: ~p~n", [ToDisable]),
+            ok = lists:foldl(fun (Plugin, ok) -> disable_one_plugin(Plugin) end,
+                             ok, lookup_plugins(ToDisable, AllEnabledPlugins))
+    end.
 
 %%----------------------------------------------------------------------------
 
@@ -277,3 +286,23 @@ update_enabled_plugins(PluginsDir, Plugins) ->
 
 enabled_plugins_filename(PluginsDir) ->
     filename:join([PluginsDir, "enabled_plugins"]).
+
+%% Return a list of plugins that must be enabled when enabling the
+%% ones in ToEnable.
+calculate_required_plugins(ToEnable, AllPlugins) ->
+    {ok, G} = rabbit_misc:build_acyclic_graph(
+                fun (App, _Deps) -> [{App, App}] end,
+                fun (App,  Deps) -> [{App, Dep} || Dep <- Deps] end,
+                [{Name, Deps}
+                 || #plugin{name = Name, dependencies = Deps} <- AllPlugins]),
+    EnableOrder = digraph_utils:reachable(ToEnable, G),
+    true = digraph:delete(G),
+    EnableOrder.
+
+%% Disable the given plugin by deleting it.
+disable_one_plugin(#plugin{location = Path}) ->
+    case file:delete(Path) of
+        ok              -> ok;
+        {error, enoent} -> ok;
+        {error, Err}    -> throw({error, {cannot_delete_plugin, Path, Err}})
+    end.
