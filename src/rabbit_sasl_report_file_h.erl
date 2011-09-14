@@ -57,10 +57,8 @@ init(File) ->
 init_file({File, Type}) ->
     process_flag(trap_exit, true),
     case file:open(File, [append]) of
-	{ok,Fd} ->
-	    {ok, {Fd, File, Type}};
-	What ->
-	    What
+        {ok,Fd} -> {ok, {Fd, File, Type}};
+        Error   -> Error
     end.
 
 handle_event(Event, State) ->

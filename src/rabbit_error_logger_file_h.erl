@@ -59,8 +59,8 @@ init(File) ->
 init_file(File, {error_logger, Buf}) ->
     case init_file(File, error_logger) of
         {ok, {Fd, File, PrevHandler}} ->
-            [handle_event(Event, {Fd, File, PrevHandler})
-             || {_, Event} <- lists:reverse(Buf)],
+            [handle_event(Event, {Fd, File, PrevHandler}) ||
+                {_, Event} <- lists:reverse(Buf)],
             {ok, {Fd, File, PrevHandler}};
         Error ->
             Error
@@ -68,10 +68,8 @@ init_file(File, {error_logger, Buf}) ->
 init_file(File, PrevHandler) ->
     process_flag(trap_exit, true),
     case file:open(File, [append]) of
-	{ok,Fd} ->
-	    {ok, {Fd, File, PrevHandler}};
-	Error ->
-	    Error
+        {ok,Fd} -> {ok, {Fd, File, PrevHandler}};
+        Error   -> Error
     end.
 
 handle_event(Event, State) ->
