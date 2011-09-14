@@ -20,6 +20,7 @@
 -export([start/0, stop/0]).
 
 -define(FORCE_OPT, "-f").
+-define(COMPACT_OPT, "-c").
 
 -record(plugin, {name,          %% atom()
                  version,       %% string()
@@ -42,7 +43,8 @@ start() ->
     {ok, [[PluginsDir|_]|_]} = init:get_argument(plugins_dir),
     {ok, [[PluginsDistDir|_]|_]} = init:get_argument(plugins_dist_dir),
     {[Command0 | Args], Opts} =
-        case rabbit_misc:get_options([{flag, ?FORCE_OPT}],
+        case rabbit_misc:get_options([{flag, ?FORCE_OPT},
+                                      {flag, ?COMPACT_OPT}],
                                      init:get_plain_arguments()) of
             {[], _Opts}    -> usage();
             CmdArgsAndOpts -> CmdArgsAndOpts
@@ -76,8 +78,9 @@ usage() ->
 
 %%----------------------------------------------------------------------------
 
-action(list, [], _Opts, PluginsDir, PluginsDistDir) ->
-    format_plugins(PluginsDir, PluginsDistDir);
+action(list, [], Opts, PluginsDir, PluginsDistDir) ->
+    format_plugins(PluginsDir, PluginsDistDir,
+                   proplists:get_bool(?COMPACT_OPT, Opts));
 
 action(enable, ToEnable0, _Opts, PluginsDir, PluginsDistDir) ->
     AllPlugins = find_plugins(PluginsDistDir),
@@ -177,32 +180,37 @@ parse_binary(Bin) ->
     end.
 
 %% Pretty print a list of plugins.
-format_plugins(PluginsDir, PluginsDistDir) ->
+format_plugins(PluginsDir, PluginsDistDir, Compact) ->
     AvailablePlugins = find_plugins(PluginsDistDir),
     EnabledExplicitly = read_enabled_plugins(PluginsDir),
     EnabledPlugins = find_plugins(PluginsDir),
     EnabledImplicitly = plugin_names(EnabledPlugins) -- EnabledExplicitly,
-    [ format_plugin(Plugin, EnabledExplicitly, EnabledImplicitly)
+    [ format_plugin(Plugin, EnabledExplicitly, EnabledImplicitly, Compact)
      || Plugin <- usort_plugins(EnabledPlugins ++ AvailablePlugins)],
     ok.
 
 format_plugin(#plugin{name = Name, version = Version, description = Description,
                       dependencies = Dependencies},
-              EnabledExplicitly, EnabledImplicitly) ->
+              EnabledExplicitly, EnabledImplicitly, Compact) ->
     Glyph = case {lists:member(Name, EnabledExplicitly),
                   lists:member(Name, EnabledImplicitly)} of
                 {true, false} -> "[E]";
                 {false, true} -> "[e]";
-                _             -> " * "
+                _             -> "[A]"
             end,
-    io:format("~s ~w~n", [Glyph, Name]),
-    io:format("    Version:    \t~s~n", [Version]),
-    case Dependencies of
-        [] -> ok;
-        _  -> io:format("    Dependencies:\t~p~n", [Dependencies])
-    end,
-    io:format("    Description:\t~s~n", [Description]),
-    io:format("~n").
+    case Compact of
+        true ->
+            io:format("~s ~w-~s: ~s~n", [Glyph, Name, Version, Description]);
+        false ->
+            io:format("~s ~w~n", [Glyph, Name]),
+            io:format("    Version:    \t~s~n", [Version]),
+            case Dependencies of
+                [] -> ok;
+                _  -> io:format("    Dependencies:\t~p~n", [Dependencies])
+            end,
+            io:format("    Description:\t~s~n", [Description]),
+            io:format("~n")
+    end.
 
 usort_plugins(Plugins) ->
     lists:usort(fun plugins_cmp/2, Plugins).
