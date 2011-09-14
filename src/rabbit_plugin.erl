@@ -94,7 +94,7 @@ action(enable, ToEnable0, _Opts, PluginsDir, PluginsDistDir) ->
     end,
     EnableOrder = calculate_required_plugins(plugin_names(ToEnablePlugins),
                                              AllPlugins),
-    io:format("Marked for enabling: ~p~n", [EnableOrder]),
+    io:format("Will enable: ~p~n", [EnableOrder]),
     ok = lists:foldl(
            fun (Plugin, ok) -> enable_one_plugin(Plugin, PluginsDir) end,
            ok, lookup_plugins(EnableOrder, AllPlugins)),
@@ -119,7 +119,27 @@ action(prune, [], _Opts, PluginsDir, PluginsDistDir) ->
                       [plugin_names(ToDisablePlugins)]),
             ok = lists:foldl(fun (Plugin, ok) -> disable_one_plugin(Plugin) end,
                              ok, ToDisablePlugins)
-    end.
+    end;
+
+action(disable, ToDisable0, _Opts, PluginsDir, PluginsDistDir) ->
+    ToDisable = [list_to_atom(Name) || Name <- ToDisable0],
+    EnabledPlugins = find_plugins(PluginsDir),
+    ToDisablePlugins = lookup_plugins(ToDisable, EnabledPlugins),
+    Missing = ToDisable -- plugin_names(ToDisablePlugins),
+    case Missing of
+        [] -> ok;
+        _  -> io:format("Warning: the following plugins could not be found: ~p~n",
+                        [Missing])
+    end,
+    ExplicitlyEnabled = read_enabled_plugins(PluginsDir),
+    DisableOrder = calculate_requires_plugins(plugin_names(ToDisablePlugins),
+                                              EnabledPlugins),
+    ExplicitlyDisabled = sets:to_list(
+                           sets:intersection(sets:from_list(DisableOrder),
+                                             sets:from_list(ExplicitlyEnabled))),
+    io:format("Will disable: ~p~n", [ExplicitlyDisabled]),
+    update_enabled_plugins(PluginsDir, ExplicitlyEnabled -- ExplicitlyDisabled),
+    action(prune, [], {}, PluginsDir, PluginsDistDir).
 
 %%----------------------------------------------------------------------------
 
@@ -285,7 +305,7 @@ enabled_plugins_filename(PluginsDir) ->
     filename:join([PluginsDir, "enabled_plugins"]).
 
 %% Return a list of plugins that must be enabled when enabling the
-%% ones in ToEnable.
+%% ones in ToEnable.  I.e. calculates dependencies.
 calculate_required_plugins(ToEnable, AllPlugins) ->
     AllPlugins1 = filter_duplicates(usort_plugins(AllPlugins)),
     {ok, G} = rabbit_misc:build_acyclic_graph(
@@ -296,6 +316,19 @@ calculate_required_plugins(ToEnable, AllPlugins) ->
     EnableOrder = digraph_utils:reachable(ToEnable, G),
     true = digraph:delete(G),
     EnableOrder.
+
+%% Return a list of plugins that must be disabled when disabling the
+%% ones in ToDisable.  I.e. calculates *reverse* dependencies.
+calculate_requires_plugins(ToDisable, AllPlugins) ->
+    AllPlugins1 = filter_duplicates(usort_plugins(AllPlugins)),
+    {ok, G} = rabbit_misc:build_acyclic_graph(
+                fun (App, _Deps) -> [{App, App}] end,
+                fun (App,  Deps) -> [{Dep, App} || Dep <- Deps] end,
+                [{Name, Deps}
+                 || #plugin{name = Name, dependencies = Deps} <- AllPlugins1]),
+    DisableOrder = digraph_utils:reachable(ToDisable, G),
+    true = digraph:delete(G),
+    DisableOrder.
 
 %% Enable one plugin by copying it to the PluginsDir.
 enable_one_plugin(#plugin{name = Name, version = Version, location = Path},
