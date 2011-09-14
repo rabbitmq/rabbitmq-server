@@ -18,7 +18,7 @@
 
 -behaviour(gen_server2).
 
--export([start_link/0, submit/1]).
+-export([start_link/0, submit/2]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -28,28 +28,29 @@
 -ifdef(use_specs).
 
 -spec(start_link/0 :: () -> {'ok', pid()} | {'error', any()}).
--spec(submit/1 :: (fun (() -> A) | {atom(), atom(), [any()]}) -> A).
+-spec(submit/2 ::
+        (pid() | atom(), fun (() -> A) | {atom(), atom(), [any()]}) -> A).
 
 -endif.
 
 %%----------------------------------------------------------------------------
 
--define(SERVER, ?MODULE).
 -define(HIBERNATE_AFTER_MIN, 1000).
 -define(DESIRED_HIBERNATE, 10000).
 
 %%----------------------------------------------------------------------------
 
 start_link() ->
-    gen_server2:start_link({local, ?SERVER}, ?MODULE, [],
-                           [{timeout, infinity}]).
+    gen_server2:start_link(?MODULE, [], [{timeout, infinity}]).
 
-submit(Fun) ->
+submit(Pid, Fun) when is_pid(Pid) ->
+    gen_server2:call(Pid, {run, Fun}, infinity);
+submit(Server, Fun) ->
     %% If the io_runner is not running, just run the Fun in the
     %% current process.
-    case whereis(?SERVER) of
+    case whereis(Server) of
         undefined  -> run(Fun);
-        _          -> gen_server2:call(?SERVER, {run, Fun}, infinity)
+        _          -> gen_server2:call(Server, {run, Fun}, infinity)
     end.
 
 %%----------------------------------------------------------------------------
@@ -77,7 +78,5 @@ terminate(_Reason, State) ->
 
 %%----------------------------------------------------------------------------
 
-run({M, F, A}) ->
-    apply(M, F, A);
-run(Fun) ->
-    Fun().
+run({M, F, A}) -> apply(M, F, A);
+run(Fun)       -> Fun().

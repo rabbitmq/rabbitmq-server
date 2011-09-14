@@ -900,7 +900,8 @@ mode_list(_) ->
 %% Functions for communicating with the file server
 
 call(Command, Args) when is_list(Args) ->
-    io_runner:submit(
+    serialiser:submit(
+      serialiser,
       fun () ->
               gen_server:call(?FILE_SERVER, list_to_tuple([Command | Args]),
                               infinity)
