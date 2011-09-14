@@ -138,7 +138,7 @@ action(disable, ToDisable0, _Opts, PluginsDir, PluginsDistDir) ->
                            sets:intersection(sets:from_list(DisableOrder),
                                              sets:from_list(ExplicitlyEnabled))),
     io:format("Will disable: ~p~n", [ExplicitlyDisabled]),
-    update_enabled_plugins(PluginsDir, ExplicitlyEnabled -- ExplicitlyDisabled),
+    update_enabled_plugins(PluginsDir, ExplicitlyEnabled -- DisableOrder),
     action(prune, [], {}, PluginsDir, PluginsDistDir).
 
 %%----------------------------------------------------------------------------
