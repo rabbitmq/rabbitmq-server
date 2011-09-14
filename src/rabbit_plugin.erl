@@ -96,16 +96,8 @@ action(enable, ToEnable0, _Opts, PluginsDir, PluginsDistDir) ->
                                              AllPlugins),
     io:format("Marked for enabling: ~p~n", [EnableOrder]),
     ok = lists:foldl(
-           fun (#plugin{name = Name, version = Version, location = Path}, ok) ->
-                   io:format("Enabling ~w-~s~n", [Name, Version]),
-                   case file:copy(Path, filename:join(PluginsDir,
-                                                      filename:basename(Path))) of
-                       {ok, _Bytes}    -> ok;
-                       {error, Reason} -> io:format("Error enabling ~p (~p)~n",
-                                                    [Name, Reason]),
-                                          rabbit_misc:quit(2)
-                   end
-           end, ok, lookup_plugins(EnableOrder, AllPlugins)),
+           fun (Plugin, ok) -> enable_one_plugin(Plugin, PluginsDir) end,
+           ok, lookup_plugins(EnableOrder, AllPlugins)),
     EnabledPlugins = lookup_plugins(read_enabled_plugins(PluginsDir), AllPlugins),
     update_enabled_plugins(PluginsDir,
                            plugin_names(merge_plugin_lists(EnabledPlugins,
@@ -129,6 +121,7 @@ action(prune, [], _Opts, PluginsDir, PluginsDistDir) ->
 
 %%----------------------------------------------------------------------------
 
+%% Get the #plugin{}s from the .ezs in the given directory.
 find_plugins(PluginsDistDir) ->
     EZs = filelib:wildcard("*.ez", PluginsDistDir),
     {Plugins, Problems} =
@@ -145,6 +138,7 @@ find_plugins(PluginsDistDir) ->
     end,
     Plugins.
 
+%% Get the #plugin{} from an .ez.
 get_plugin_info(EZ) ->
     case read_app_file(EZ) of
         {application, Name, Props} ->
@@ -299,10 +293,24 @@ calculate_required_plugins(ToEnable, AllPlugins) ->
     true = digraph:delete(G),
     EnableOrder.
 
+%% Enable one plugin by copying it to the PluginsDir.
+enable_one_plugin(#plugin{name = Name, version = Version, location = Path},
+                  PluginsDir) ->
+    io:format("Enabling ~w-~s~n", [Name, Version]),
+    case file:copy(Path, filename:join(PluginsDir, filename:basename(Path))) of
+        {ok, _Bytes} -> ok;
+        {error, Err} -> io:format("Error enabling ~p (~p)~n",
+                                  [Name, {cannot_enable_plugin, Path, Err}]),
+                        rabbit_misc:quit(2)
+    end.
+
 %% Disable the given plugin by deleting it.
-disable_one_plugin(#plugin{location = Path}) ->
+disable_one_plugin(#plugin{name = Name, version = Version, location = Path}) ->
+    io:format("Disabling ~w-~s~n", [Name, Version]),
     case file:delete(Path) of
         ok              -> ok;
         {error, enoent} -> ok;
-        {error, Err}    -> throw({error, {cannot_delete_plugin, Path, Err}})
+        {error, Err}    -> io:format("Error disabling ~p (~p)~n",
+                                     [Name, {cannot_delete_plugin, Path, Err}]),
+                           rabbit_misc:quit(2)
     end.
