@@ -29,6 +29,9 @@
 
 -spec(start/0 :: () -> no_return()).
 -spec(stop/0 :: () -> 'ok').
+%% Shut dialyzer up
+-spec(terminate/1 :: (string()) -> no_return()).
+-spec(terminate/2 :: (string(), [any()]) -> no_return()).
 
 -endif.
 

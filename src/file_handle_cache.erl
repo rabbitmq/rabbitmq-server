@@ -228,7 +228,7 @@
 
 -spec(register_callback/3 :: (atom(), atom(), [any()]) -> 'ok').
 -spec(open/3 ::
-        (string(), [any()],
+        (file:filename(), [any()],
          [{'write_buffer', (non_neg_integer() | 'infinity' | 'unbuffered')}])
         -> val_or_error(ref())).
 -spec(close/1 :: (ref()) -> ok_or_error()).
@@ -243,17 +243,17 @@
 -spec(flush/1 :: (ref()) -> ok_or_error()).
 -spec(copy/3 :: (ref(), ref(), non_neg_integer()) ->
                      val_or_error(non_neg_integer())).
--spec(set_maximum_since_use/1 :: (non_neg_integer()) -> 'ok').
 -spec(delete/1 :: (ref()) -> ok_or_error()).
 -spec(clear/1 :: (ref()) -> ok_or_error()).
+-spec(set_maximum_since_use/1 :: (non_neg_integer()) -> 'ok').
 -spec(obtain/0 :: () -> 'ok').
 -spec(transfer/1 :: (pid()) -> 'ok').
 -spec(set_limit/1 :: (non_neg_integer()) -> 'ok').
 -spec(get_limit/0 :: () -> non_neg_integer()).
--spec(info_keys/0 :: () -> [atom()]).
--spec(info/0 :: () -> [{atom(), any()}]).
--spec(info/1 :: ([atom()]) -> [{atom(), any()}]).
--spec(ulimit/0 :: () -> 'infinity' | 'unknown' | non_neg_integer()).
+-spec(info_keys/0 :: () -> rabbit_types:info_keys()).
+-spec(info/0 :: () -> rabbit_types:infos()).
+-spec(info/1 :: ([atom()]) -> rabbit_types:infos()).
+-spec(ulimit/0 :: () -> 'unknown' | non_neg_integer()).
 
 -endif.
 
@@ -794,7 +794,6 @@ init([]) ->
                     Watermark;
                 _ ->
                     case ulimit() of
-                        infinity -> infinity;
                         unknown  -> ?FILE_HANDLES_LIMIT_OTHER;
                         Lim      -> lists:max([2, Lim - ?RESERVED_FOR_OTHERS])
                     end

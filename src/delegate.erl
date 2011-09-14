@@ -28,13 +28,13 @@
 -ifdef(use_specs).
 
 -spec(start_link/1 ::
-        (non_neg_integer()) -> {'ok', pid()} | {'error', any()}).
--spec(invoke_no_result/2 ::
-        (pid() | [pid()], fun ((pid()) -> any())) -> 'ok').
+        (non_neg_integer()) -> {'ok', pid()} | ignore | {'error', any()}).
 -spec(invoke/2 ::
         ( pid(),  fun ((pid()) -> A)) -> A;
         ([pid()], fun ((pid()) -> A)) -> {[{pid(), A}],
                                           [{pid(), term()}]}).
+-spec(invoke_no_result/2 ::
+        (pid() | [pid()], fun ((pid()) -> any())) -> 'ok').
 
 -endif.
 
