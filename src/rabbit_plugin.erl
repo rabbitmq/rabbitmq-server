@@ -79,7 +79,9 @@ usage() ->
 %%----------------------------------------------------------------------------
 
 action(list, [], Opts, PluginsDir, PluginsDistDir) ->
-    format_plugins(PluginsDir, PluginsDistDir,
+    action(list, [".*"], Opts, PluginsDir, PluginsDistDir);
+action(list, [Pattern], Opts, PluginsDir, PluginsDistDir) ->
+    format_plugins(PluginsDir, PluginsDistDir, Pattern,
                    proplists:get_bool(?COMPACT_OPT, Opts));
 
 action(enable, ToEnable0, _Opts, PluginsDir, PluginsDistDir) ->
@@ -180,13 +182,16 @@ parse_binary(Bin) ->
     end.
 
 %% Pretty print a list of plugins.
-format_plugins(PluginsDir, PluginsDistDir, Compact) ->
+format_plugins(PluginsDir, PluginsDistDir, Pattern, Compact) ->
     AvailablePlugins = find_plugins(PluginsDistDir),
     EnabledExplicitly = read_enabled_plugins(PluginsDir),
     EnabledPlugins = find_plugins(PluginsDir),
     EnabledImplicitly = plugin_names(EnabledPlugins) -- EnabledExplicitly,
-    [ format_plugin(Plugin, EnabledExplicitly, EnabledImplicitly, Compact)
-     || Plugin <- usort_plugins(EnabledPlugins ++ AvailablePlugins)],
+    {ok, RE} = re:compile(Pattern),
+    [ format_plugin(P, EnabledExplicitly, EnabledImplicitly, Compact)
+     || P = #plugin{name = Name} <- usort_plugins(EnabledPlugins ++
+                                                  AvailablePlugins),
+        re:run(atom_to_list(Name), RE, [{capture, none}]) =:= match],
     ok.
 
 format_plugin(#plugin{name = Name, version = Version, description = Description,
