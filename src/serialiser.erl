@@ -43,15 +43,8 @@
 start_link() ->
     gen_server2:start_link(?MODULE, [], [{timeout, infinity}]).
 
-submit(Pid, Fun) when is_pid(Pid) ->
-    gen_server2:call(Pid, {run, Fun}, infinity);
-submit(Server, Fun) ->
-    %% If the io_runner is not running, just run the Fun in the
-    %% current process.
-    case whereis(Server) of
-        undefined  -> run(Fun);
-        _          -> gen_server2:call(Server, {run, Fun}, infinity)
-    end.
+submit(Pid, Fun) ->
+    gen_server2:call(Pid, {run, Fun}, infinity).
 
 %%----------------------------------------------------------------------------
 

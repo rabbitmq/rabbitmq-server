@@ -900,12 +900,24 @@ mode_list(_) ->
 %% Functions for communicating with the file server
 
 call(Command, Args) when is_list(Args) ->
+    Pid = case whereis(serialiser) of
+              undefined -> start_serialiser();
+              Pid2      -> Pid2
+          end,
     serialiser:submit(
-      serialiser,
+      Pid,
       fun () ->
               gen_server:call(?FILE_SERVER, list_to_tuple([Command | Args]),
                               infinity)
       end).
+
+start_serialiser() ->
+    {ok, Pid} = supervisor:start_child(kernel_sup,
+                                       {serialiser, {serialiser, start_link, []},
+                                        permanent, 16#ffffffff, worker,
+                                        [serialiser]}),
+    true = register(serialiser, Pid),
+    Pid.
 
 check_and_call(Command, Args) when is_list(Args) ->
     case check_args(Args) of
