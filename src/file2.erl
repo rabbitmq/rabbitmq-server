@@ -63,7 +63,7 @@
 
 
 %%% Includes and defines
--include("file.hrl").
+-include_lib("kernel/include/file.hrl").
 
 -define(FILE_IO_SERVER_TABLE, file_io_servers).
 
@@ -73,20 +73,9 @@
 
 %% data types
 -type filename()  :: string().
--type io_device() :: pid() | #file_descriptor{}.
--type location()  :: integer() | {'bof', integer()} | {'cur', integer()}
-		   | {'eof', integer()} | 'bof' | 'cur' | 'eof'.
--type mode()      :: 'read' | 'write' | 'append' | 'raw' | 'binary' | 
-		     {'delayed_write', non_neg_integer(), non_neg_integer()} | 
-		     'delayed_write' | {'read_ahead', pos_integer()} | 
-		     'read_ahead' | 'compressed'.
--type bindings()  :: any().
 
 %%%-----------------------------------------------------------------
 %%% General functions
-
--spec format_error(Reason :: posix() | {integer(), atom(), any()}) ->
-	string().	
 
 format_error({_Line, ?MODULE, undefined_script}) ->
     "no value returned from script";
@@ -126,88 +115,53 @@ pid2name(Pid) when is_pid(Pid) ->
 %%% File server functions.
 %%% Functions that do not operate on a single open file.
 %%% Stateless.
--spec get_cwd() -> {'ok', filename()} | {'error', posix()}. 
-
 get_cwd() ->
     call(get_cwd, []).
-
--spec get_cwd(Drive :: string()) -> {'ok', filename()} | {'error', posix()}.
 
 get_cwd(Drive) ->
     check_and_call(get_cwd, [file_name(Drive)]).
 
--spec set_cwd(Dirname :: name()) -> 'ok' | {'error', posix()}.
-
 set_cwd(Dirname) -> 
     check_and_call(set_cwd, [file_name(Dirname)]).
-
--spec delete(Name :: name()) -> 'ok' | {'error', posix()}.
 
 delete(Name) ->
     check_and_call(delete, [file_name(Name)]).
 
--spec rename(From :: name(), To :: name()) -> 'ok' | {'error', posix()}.
-
 rename(From, To) ->
     check_and_call(rename, [file_name(From), file_name(To)]).
-
--spec make_dir(Name :: name()) -> 'ok' | {'error', posix()}.
 
 make_dir(Name) ->
     check_and_call(make_dir, [file_name(Name)]).
 
--spec del_dir(Name :: name()) -> 'ok' | {'error', posix()}.
-
 del_dir(Name) ->
     check_and_call(del_dir, [file_name(Name)]).
-
--spec read_file_info(Name :: name()) -> {'ok', #file_info{}} | {'error', posix()}.
 
 read_file_info(Name) ->
     check_and_call(read_file_info, [file_name(Name)]).
 
--spec altname(Name :: name()) -> any().
-
 altname(Name) ->
     check_and_call(altname, [file_name(Name)]).
-
--spec read_link_info(Name :: name()) -> {'ok', #file_info{}} | {'error', posix()}.
 
 read_link_info(Name) ->
     check_and_call(read_link_info, [file_name(Name)]).
 
--spec read_link(Name :: name()) -> {'ok', filename()} | {'error', posix()}.
-
 read_link(Name) ->
     check_and_call(read_link, [file_name(Name)]).
-
--spec write_file_info(Name :: name(), Info :: #file_info{}) ->
-	'ok' | {'error', posix()}.
 
 write_file_info(Name, Info = #file_info{}) ->
     check_and_call(write_file_info, [file_name(Name), Info]).
 
--spec list_dir(Name :: name()) -> {'ok', [filename()]} | {'error', posix()}.
-
 list_dir(Name) ->
     check_and_call(list_dir, [file_name(Name)]).
-
--spec read_file(Name :: name()) -> {'ok', binary()} | {'error', posix()}.
 
 read_file(Name) ->
     check_and_call(read_file, [file_name(Name)]).
 
--spec make_link(Old :: name(), New :: name()) -> 'ok' | {'error', posix()}.
-
 make_link(Old, New) ->
     check_and_call(make_link, [file_name(Old), file_name(New)]).
 
--spec make_symlink(Old :: name(), New :: name()) -> 'ok' | {'error', posix()}.
-
 make_symlink(Old, New) ->
     check_and_call(make_symlink, [file_name(Old), file_name(New)]).
-
--spec write_file(Name :: name(), Bin :: binary()) -> 'ok' | {'error', posix()}.
 
 write_file(Name, Bin) ->
     check_and_call(write_file, [file_name(Name), make_binary(Bin)]).
@@ -216,9 +170,6 @@ write_file(Name, Bin) ->
 %% when it is time to change file server protocol again.
 %% Meanwhile, it is implemented here, slihtly less efficient.
 %%
-
--spec write_file(Name :: name(), Bin :: binary(), Modes :: [mode()]) -> 
-	'ok' | {'error', posix()}.
 
 write_file(Name, Bin, ModeList) when is_list(ModeList) ->
     case make_binary(Bin) of
@@ -272,9 +223,6 @@ raw_write_file_info(Name, #file_info{} = Info) ->
 
 %% Contemporary mode specification - list of options
 
--spec open(Name :: name(), Modes :: [mode()]) ->
-	{'ok', io_device()} | {'error', posix()}.
-
 open(Item, ModeList) when is_list(ModeList) ->
     case lists:member(raw, ModeList) of
 	%% Raw file, use ?PRIM_FILE to handle this file
@@ -326,8 +274,6 @@ open(Item, Mode) ->
 %%% The File argument must be either a Pid or a handle 
 %%% returned from ?PRIM_FILE:open.
 
--spec close(File :: io_device()) -> 'ok' | {'error', posix()}.
-
 close(File) when is_pid(File) ->
     R = file_request(File, close),
     case wait_file_reply(File, R) of
@@ -344,9 +290,6 @@ close(#file_descriptor{module = Module} = Handle) ->
 close(_) ->
     {error, badarg}.
 
--spec read(File :: io_device(), Size :: non_neg_integer()) ->
-	'eof' | {'ok', [char()] | binary()} | {'error', posix()}.
-
 read(File, Sz) when is_pid(File), is_integer(Sz), Sz >= 0 ->
     case io:request(File, {get_chars, '', Sz}) of
 	Data when is_list(Data); is_binary(Data) ->
@@ -360,9 +303,6 @@ read(#file_descriptor{module = Module} = Handle, Sz)
 read(_, _) ->
     {error, badarg}.
 
--spec read_line(File :: io_device()) ->
-	'eof' | {'ok', [char()] | binary()} | {'error', posix()}.
-
 read_line(File) when is_pid(File) ->
     case io:request(File, {get_line, ''}) of
 	Data when is_list(Data); is_binary(Data) ->
@@ -374,10 +314,6 @@ read_line(#file_descriptor{module = Module} = Handle) ->
     Module:read_line(Handle);
 read_line(_) ->
     {error, badarg}.
-
--spec pread(File :: io_device(),
-	    LocationNumbers :: [{location(), non_neg_integer()}]) ->
-	{'ok', [string() | binary() | 'eof']} | {'error', posix()}.
 
 pread(File, L) when is_pid(File), is_list(L) ->
     pread_int(File, L, []);
@@ -400,11 +336,6 @@ pread_int(File, [{At, Sz} | T], R) when is_integer(Sz), Sz >= 0 ->
 pread_int(_, _, _) ->
     {error, badarg}.
 
--spec pread(File :: io_device(),
-	    Location :: location(),
-	    Size :: non_neg_integer()) ->
-	'eof' | {'ok', string() | binary()} | {'error', posix()}.
-
 pread(File, At, Sz) when is_pid(File), is_integer(Sz), Sz >= 0 ->
     R = file_request(File, {pread, At, Sz}),
     wait_file_reply(File, R);
@@ -413,9 +344,6 @@ pread(#file_descriptor{module = Module} = Handle, Offs, Sz)
     Module:pread(Handle, Offs, Sz);
 pread(_, _, _) ->
     {error, badarg}.
-
--spec write(File :: io_device(), Byte :: iodata()) ->
-	'ok' | {'error', posix()}.
 
 write(File, Bytes) when is_pid(File) ->
     case make_binary(Bytes) of
@@ -428,9 +356,6 @@ write(#file_descriptor{module = Module} = Handle, Bytes) ->
     Module:write(Handle, Bytes);
 write(_, _) ->
     {error, badarg}.
-
--spec pwrite(File :: io_device(), L :: [{location(), iodata()}]) ->
-	'ok' | {'error', {non_neg_integer(), posix()}}.
 
 pwrite(File, L) when is_pid(File), is_list(L) ->
     pwrite_int(File, L, 0);
@@ -451,11 +376,6 @@ pwrite_int(File, [{At, Bytes} | T], R) ->
 pwrite_int(_, _, _) ->
     {error, badarg}.
 
--spec pwrite(File :: io_device(),
-	     Location :: location(),
-	     Bytes :: iodata()) ->
-	'ok' | {'error', posix()}.	
-
 pwrite(File, At, Bytes) when is_pid(File) ->
     R = file_request(File, {pwrite, At, Bytes}),
     wait_file_reply(File, R);
@@ -463,8 +383,6 @@ pwrite(#file_descriptor{module = Module} = Handle, Offs, Bytes) ->
     Module:pwrite(Handle, Offs, Bytes);
 pwrite(_, _, _) ->
     {error, badarg}.
-
--spec sync(File :: io_device()) -> 'ok' | {'error', posix()}.
 
 sync(File) when is_pid(File) ->
     R = file_request(File, sync),
@@ -474,9 +392,6 @@ sync(#file_descriptor{module = Module} = Handle) ->
 sync(_) ->
     {error, badarg}.
 
--spec position(File :: io_device(), Location :: location()) ->
-	{'ok',integer()} | {'error', posix()}.
-
 position(File, At) when is_pid(File) ->
     R = file_request(File, {position,At}),
     wait_file_reply(File, R);
@@ -484,8 +399,6 @@ position(#file_descriptor{module = Module} = Handle, At) ->
     Module:position(Handle, At);
 position(_, _) ->
     {error, badarg}.
-
--spec truncate(File :: io_device()) -> 'ok' | {'error', posix()}.
 
 truncate(File) when is_pid(File) ->
     R = file_request(File, truncate),
@@ -495,17 +408,8 @@ truncate(#file_descriptor{module = Module} = Handle) ->
 truncate(_) ->
     {error, badarg}.
 
--spec copy(Source :: io_device() | name() | {name(), [mode()]},
-	   Destination :: io_device() | name() | {name(), [mode()]}) ->
-	{'ok', non_neg_integer()} | {'error', posix()}.
-
 copy(Source, Dest) ->
     copy_int(Source, Dest, infinity).
-
--spec copy(Source :: io_device() | name() | {name(), [mode()]},
-	   Destination :: io_device() | name() | {name(), [mode()]},
-	   Length :: non_neg_integer() | 'infinity') ->
-	{'ok', non_neg_integer()} | {'error', posix()}.
 
 copy(Source, Dest, Length) 
   when is_integer(Length), Length >= 0;
@@ -727,9 +631,6 @@ ipread_s32bu_p32bu_2(File,
 %%% The following functions, built upon the other interface functions,
 %%% provide a higher-lever interface to files.
 
--spec consult(File :: name()) ->
-	{'ok', list()} | {'error', posix() | {integer(), atom(), any()}}.
-
 consult(File) ->
     case open(File, [read]) of
 	{ok, Fd} ->
@@ -739,9 +640,6 @@ consult(File) ->
 	Error ->
 	    Error
     end.
-
--spec path_consult(Paths :: [name()], File :: name()) ->
-	{'ok', list(), filename()} | {'error', posix() | {integer(), atom(), any()}}.
 
 path_consult(Path, File) ->
     case path_open(Path, File, [read]) of
@@ -758,13 +656,8 @@ path_consult(Path, File) ->
 	    E2
     end.
 
--spec eval(File :: name()) -> 'ok' | {'error', posix()}.
-
 eval(File) ->
     eval(File, erl_eval:new_bindings()).
-
--spec eval(File :: name(), Bindings :: bindings()) ->
-	'ok' | {'error', posix()}.
 
 eval(File, Bs) ->
     case open(File, [read]) of
@@ -776,14 +669,8 @@ eval(File, Bs) ->
 	    Error
     end.
 
--spec path_eval(Paths :: [name()], File :: name()) ->
-	{'ok', filename()} | {'error', posix() | {integer(), atom(), any()}}.
-
 path_eval(Path, File) ->
     path_eval(Path, File, erl_eval:new_bindings()).
-
--spec path_eval(Paths :: [name()], File :: name(), Bindings :: bindings()) ->
-	{'ok', filename()} | {'error', posix() | {integer(), atom(), any()}}.
 
 path_eval(Path, File, Bs) ->
     case path_open(Path, File, [read]) of
@@ -800,14 +687,8 @@ path_eval(Path, File, Bs) ->
 	    E2
     end.
 
--spec script(File :: name()) ->
-	{'ok', any()} | {'error', posix() | {integer(), atom(), any()}}.
-
 script(File) ->
     script(File, erl_eval:new_bindings()).
-
--spec script(File :: name(), Bindings :: bindings()) ->
-	{'ok', any()} | {'error', posix() | {integer(), atom(), any()}}.	
 
 script(File, Bs) ->
     case open(File, [read]) of
@@ -819,16 +700,8 @@ script(File, Bs) ->
 	    Error
     end.
 
--spec path_script/2 :: (Paths :: [name()], File :: name()) ->
-	{'ok', term(), filename()} | {'error', posix() | {integer(), atom(), _}}.
-
 path_script(Path, File) ->
     path_script(Path, File, erl_eval:new_bindings()).
-
--spec path_script(Paths :: [name()],
-		  File :: name(),
-		  Bindings :: bindings()) ->
-	{'ok', term(), filename()} | {'error', posix() | {integer(), atom(), _}}.
 
 path_script(Path, File, Bs) ->
     case path_open(Path, File, [read]) of
@@ -853,9 +726,6 @@ path_script(Path, File, Bs) ->
 %% Searches the Paths for file Filename which can be opened with Mode.
 %% The path list is ignored if Filename contains an absolute path.
 
--spec path_open(Paths :: [name()], Name :: name(), Modes :: [mode()]) ->
-	{'ok', io_device(), filename()} | {'error', posix()}.
-
 path_open(PathList, Name, Mode) ->
     case file_name(Name) of
 	{error, _} = Error ->
@@ -874,47 +744,25 @@ path_open(PathList, Name, Mode) ->
 	    end
     end.
 
--spec change_mode(Name :: name(), Mode :: integer()) ->
-	'ok' | {'error', posix()}.
-
 change_mode(Name, Mode) 
   when is_integer(Mode) ->
     write_file_info(Name, #file_info{mode=Mode}).
-
--spec change_owner(Name :: name(), OwnerId :: integer()) ->
-	'ok' | {'error', posix()}.
 
 change_owner(Name, OwnerId) 
   when is_integer(OwnerId) ->
     write_file_info(Name, #file_info{uid=OwnerId}).
 
--spec change_owner(Name :: name(),
-		   OwnerId :: integer(),
-		   GroupId :: integer()) ->
-	'ok' | {'error', posix()}.
-
 change_owner(Name, OwnerId, GroupId) 
   when is_integer(OwnerId), is_integer(GroupId) ->
     write_file_info(Name, #file_info{uid=OwnerId, gid=GroupId}).
-
--spec change_group(Name :: name(), GroupId :: integer()) ->
-	'ok' | {'error', posix()}.
 
 change_group(Name, GroupId) 
   when is_integer(GroupId) ->
     write_file_info(Name, #file_info{gid=GroupId}).
 
--spec change_time(Name :: name(), Time :: date_time()) ->
-	'ok' | {'error', posix()}.
-
 change_time(Name, Time) 
   when is_tuple(Time) ->
     write_file_info(Name, #file_info{mtime=Time}).
-
--spec change_time(Name :: name(),
-		  ATime :: date_time(),
-		  MTime :: date_time()) ->
-	'ok' | {'error', posix()}.
 
 change_time(Name, Atime, Mtime) 
   when is_tuple(Atime), is_tuple(Mtime) ->
@@ -1035,7 +883,24 @@ mode_list(_) ->
 %% Functions for communicating with the file server
 
 call(Command, Args) when is_list(Args) ->
-    gen_server:call(?FILE_SERVER, list_to_tuple([Command | Args]), infinity).
+    Pid = case whereis(serialiser) of
+              undefined -> start_serialiser();
+              Pid2      -> Pid2
+          end,
+    serialiser:submit(
+      Pid,
+      fun () ->
+              gen_server:call(?FILE_SERVER, list_to_tuple([Command | Args]),
+                              infinity)
+      end).
+
+start_serialiser() ->
+    {ok, Pid} = supervisor:start_child(kernel_sup,
+                                       {serialiser, {serialiser, start_link, []},
+                                        permanent, 16#ffffffff, worker,
+                                        [serialiser]}),
+    true = register(serialiser, Pid),
+    Pid.
 
 check_and_call(Command, Args) when is_list(Args) ->
     case check_args(Args) of
