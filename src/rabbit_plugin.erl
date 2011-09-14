@@ -109,15 +109,16 @@ action(prune, [], _Opts, PluginsDir, PluginsDistDir) ->
     AllPlugins = find_plugins(PluginsDistDir),
     Required = calculate_required_plugins(ExplicitlyEnabledPlugins, AllPlugins),
     AllEnabledPlugins = find_plugins(PluginsDir),
-    AllEnabled = plugin_names(AllEnabledPlugins),
-    ToDisable = AllEnabled -- Required,
-    case ToDisable of
+    ToDisablePlugins =
+        AllEnabledPlugins -- lookup_plugins(Required, AllEnabledPlugins),
+    case ToDisablePlugins of
         [] ->
             io:format("No unnecessary plugins found.~n");
         _ ->
-            io:format("Disabling unnecessary plugins: ~p~n", [ToDisable]),
+            io:format("Disabling unnecessary plugins: ~p~n",
+                      [plugin_names(ToDisablePlugins)]),
             ok = lists:foldl(fun (Plugin, ok) -> disable_one_plugin(Plugin) end,
-                             ok, lookup_plugins(ToDisable, AllEnabledPlugins))
+                             ok, ToDisablePlugins)
     end.
 
 %%----------------------------------------------------------------------------
@@ -231,8 +232,8 @@ merge_plugin_lists(Ps1, Ps2) ->
 
 filter_duplicates([P1 = #plugin{name = N, version = V1},
                    P2 = #plugin{name = N, version = V2} | Ps]) ->
-    if V1 < V2 -> [P2 | filter_duplicates(Ps)];
-       true    -> [P1 | filter_duplicates(Ps)]
+    if V1 < V2 -> filter_duplicates([P2 | Ps]);
+       true    -> filter_duplicates([P1 | Ps])
     end;
 filter_duplicates([P | Ps]) ->
     [P | filter_duplicates(Ps)];
@@ -258,7 +259,8 @@ plugin_names(Plugins) ->
 
 %% Find plugins by name in a list of plugins.
 lookup_plugins(Names, AllPlugins) ->
-    [P || P = #plugin{name = Name} <- AllPlugins, lists:member(Name, Names)].
+    AllPlugins1 = filter_duplicates(usort_plugins(AllPlugins)),
+    [P || P = #plugin{name = Name} <- AllPlugins1, lists:member(Name, Names)].
 
 %% Read the enabled plugin names from disk.
 read_enabled_plugins(PluginsDir) ->
@@ -285,11 +287,12 @@ enabled_plugins_filename(PluginsDir) ->
 %% Return a list of plugins that must be enabled when enabling the
 %% ones in ToEnable.
 calculate_required_plugins(ToEnable, AllPlugins) ->
+    AllPlugins1 = filter_duplicates(usort_plugins(AllPlugins)),
     {ok, G} = rabbit_misc:build_acyclic_graph(
                 fun (App, _Deps) -> [{App, App}] end,
                 fun (App,  Deps) -> [{App, Dep} || Dep <- Deps] end,
                 [{Name, Deps}
-                 || #plugin{name = Name, dependencies = Deps} <- AllPlugins]),
+                 || #plugin{name = Name, dependencies = Deps} <- AllPlugins1]),
     EnableOrder = digraph_utils:reachable(ToEnable, G),
     true = digraph:delete(G),
     EnableOrder.
