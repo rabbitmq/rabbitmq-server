@@ -70,9 +70,7 @@ transfer(#'v1_0.transfer'{handle = Handle}, MsgPart,
                         credit_used    = CreditUsed,
                         msg_acc        = MsgAcc} = Link, BCh) ->
     MsgBin = <<MsgAcc/binary, MsgPart/binary>>,
-    Msg1_0 = [rabbit_amqp1_0_framing:decode(P) ||
-                 P <- rabbit_amqp1_0_binary_parser:parse_all(MsgBin)],
-    {MsgRKey, Msg} = rabbit_amqp1_0_message:assemble(Msg1_0),
+    {MsgRKey, Msg} = rabbit_amqp1_0_message:assemble(MsgBin),
     RKey = case LinkRKey of
                undefined -> MsgRKey;
                _         -> LinkRKey

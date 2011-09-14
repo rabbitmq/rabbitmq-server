@@ -8,47 +8,79 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_amqp1_0.hrl").
 
-assemble(Msg) ->
-    {RKey, Props, Content} = assemble(header, {<<"">>, #'P_basic'{}, undefined},
-                                      Msg),
+assemble(MsgBin) ->
+    {RKey, Props, Content} = assemble(header, {<<"">>, #'P_basic'{}, []},
+                                      decode_section(MsgBin), MsgBin),
     {RKey, #amqp_msg{props = Props, payload = Content}}.
 
 %% TODO handle delivery-annotations, message-annotations and
 %% application-properties
 
-assemble(header, {R, P, C}, [H = #'v1_0.header'{} | Rest]) ->
-    assemble(properties, {R, parse_header(H, P), C}, Rest);
-assemble(header, {R, P, C}, Rest) ->
-    assemble(properties, {R, P, C}, Rest);
+assemble(header, {R, P, C}, {H = #'v1_0.header'{}, Rest}, _Uneaten) ->
+    assemble(properties, {R, parse_header(H, P), C},
+             decode_section(Rest), Rest);
+assemble(header, {R, P, C}, Else, Uneaten) ->
+    assemble(properties, {R, P, C}, Else, Uneaten);
 
-assemble(properties, {_R, P, C}, [X = #'v1_0.properties'{} | Rest]) ->
-    assemble(properties, {routing_key(X), parse_properties(X, P), C}, Rest);
-assemble(properties, {R, P, C}, Rest) ->
-    assemble(body, {R, P, C}, Rest);
+assemble(properties, {_R, P, C}, {X = #'v1_0.properties'{}, Rest}, _Uneaten) ->
+    assemble(body, {routing_key(X), parse_properties(X, P), C},
+             decode_section(Rest), Rest);
+assemble(properties, {R, P, C}, Else, Uneaten) ->
+    assemble(body, {R, P, C}, Else, Uneaten);
 
-%% TODO support more than one section
+%% The only 'interoperable' content is a single amqp-data section.
+%% Everything else we will leave as-is. We still have to parse the
+%% sections one-by-one, however, to see when we hit the footer or
+%% whatever comes next.
 
-assemble(body, {R, P, _C}, [#'v1_0.data'{content = Content} | Rest]) ->
-    assemble(footer, {R, set_1_0_type(<<"data">>, P), Content}, Rest);
-assemble(body, {R, P, _C}, [#'v1_0.amqp_value'{content = Content} | Rest]) ->
-    assemble(footer, {R, set_1_0_type(<<"amqp-value">>, P),
-                      reserialise(Content)}, Rest);
-assemble(body, {R, P, _C}, [#'v1_0.amqp_sequence'{content = Content} | Rest]) ->
-    assemble(footer, {R, set_1_0_type(<<"amqp-sequence">>, P),
-                      reserialise(Content)}, Rest);
-assemble(body, {R, P, C}, Rest) ->
-    assemble(footer, {R, P, C}, Rest);
+assemble(body, {R, P, _}, {#'v1_0.data'{content = Content}, Rest}, Uneaten) ->
+    Chunk = chunk(Rest, Uneaten),
+    assemble(amqp10body, {R, set_1_0_type(<<"binary">>, P), {data, Content, Chunk}},
+             decode_section(Rest), Rest);
+assemble(body, {R, P, C}, Else, Uneaten) ->
+    assemble(amqp10body, {R, P, C}, Else, Uneaten);
 
-assemble(footer, {R, P, C}, [#'v1_0.footer'{}]) ->
-    %% TODO parse FOOTER
+assemble(amqp10body, {R, P, C}, {{Type, _}, Rest}, Uneaten)
+  when Type =:= 'v1_0.data' orelse
+       Type =:= 'v1_0.amqp_sequence' orelse
+       Type =:= 'v1_0.amqp_value' ->
+    Encoded = chunk(Rest, Uneaten),
+    assemble(amqp10body,
+             {R, set_1_0_type(<<"amqp-1.0">>, P), add_body_section(Encoded, C)},
+             decode_section(Rest), Rest);
+assemble(amqp10body, {R, P, C}, Else, Uneaten) ->
+    assemble(footer, {R, P, compile_body(C)}, Else, Uneaten);
+
+assemble(footer, {R, P, C}, {#'v1_0.footer'{}, <<>>}, _) ->
     {R, P, C};
-assemble(footer, {R, P, C}, []) ->
+assemble(footer, {R, P, C}, none, _) ->
     {R, P, C};
-assemble(footer, _, [Left | _]) ->
-    exit({unexpected_trailing_sections, Left});
+assemble(footer, _, Else, _) ->
+    exit({unexpected_trailing_sections, Else});
 
-assemble(Expected, _, Actual) ->
+assemble(Expected, _, Actual, _) ->
     exit({expected_section, Expected, Actual}).
+
+decode_section(<<>>) ->
+    none;
+decode_section(MsgBin) ->
+    {AmqpValue, Rest} = rabbit_amqp1_0_binary_parser:parse(MsgBin),
+    {rabbit_amqp1_0_framing:decode(AmqpValue), Rest}.
+
+chunk(Rest, Uneaten) ->
+    ChunkLen = size(Uneaten) - size(Rest),
+    <<Chunk:ChunkLen/binary, _ActuallyRest/binary>> = Uneaten,
+    Chunk.
+
+add_body_section(C, {data, _, Bin}) ->
+    [C, Bin];
+add_body_section(C, Cs) ->
+    [C | Cs].
+
+compile_body({data, Content, _}) ->
+    Content;
+compile_body(Sections) ->
+    lists:reverse(Sections).
 
 parse_header(Header, Props) ->
     Props#'P_basic'{headers          = undefined, %% TODO
@@ -85,17 +117,13 @@ unwrap({ulong, Num}) -> Num;
 unwrap({long, Num})  -> Num;
 unwrap(undefined)    -> undefined.
 
-set_1_0_type(Type, Props = #'P_basic'{headers = Headers}) ->
-    Props#'P_basic'{headers = set_header(?TYPE_HEADER, Type, Headers)}.
-
 set_header(Header, Value, undefined) ->
     set_header(Header, Value, []);
 set_header(Header, Value, Headers) ->
     rabbit_misc:set_table_value(Headers, Header, longstr, Value).
 
-%% Meh, this is ugly but what else can we do?
-reserialise(Content) ->
-    iolist_to_binary(rabbit_amqp1_0_binary_generator:generate(Content)).
+set_1_0_type(Type, Props = #'P_basic'{}) ->
+    Props#'P_basic'{type = Type}.
 
 %%--------------------------------------------------------------------
 
@@ -120,15 +148,16 @@ annotated_message(RKey, #amqp_msg{props = Props, payload = Content}) ->
       reply_to       = wrap(Props#'P_basic'.reply_to),
       correlation_id = wrap(Props#'P_basic'.correlation_id),
       content_type   = wrap(Props#'P_basic'.content_type)}, %% TODO encode to 1.0 ver
-    Data = case get_1_0(?TYPE_HEADER, Props, <<"data">>) of
-               <<"data">> ->
-                   #'v1_0.data'{content = Content};
-               <<"amqp-value">> ->
-                   #'v1_0.amqp_value'{content = unreserialise(Content)};
-               <<"amqp-sequence">> ->
-                   #'v1_0.amqp_sequence'{content = unreserialise(Content)}
+    Data = case Props#'P_basic'.type of
+               <<"binary">> ->
+                   rabbit_amqp1_0_framing:encode_bin(
+                     #'v1_0.data'{content = Content});
+               <<"amqp-1.0">> ->
+                   Content
            end,
-    [Header, Props10, Data].
+    [rabbit_amqp1_0_framing:encode_bin(Header),
+     rabbit_amqp1_0_framing:encode_bin(Props10),
+     Data].
 
 get_1_0(Header, #'P_basic'{headers = Headers}, Default) ->
     get_1_0(Header, Headers, Default);
