@@ -1146,18 +1146,20 @@ consumer_monitor(ConsumerTag,
 
 demonitor_queue(QPid, #ch{stats_timer       = StatsTimer,
                           consumer_monitors = ConsumerMonitors,
-                          blocking          = Blocking}) ->
+                          blocking          = Blocking,
+                          unconfirmed_qm    = UQM}) ->
     case get({monitoring, QPid}) of
         undefined -> ok;
         MRef      -> StatsEnabled = rabbit_event:stats_level(StatsTimer) =:= fine,
                      ConsumerMonitored =
                          dict:find(MRef, ConsumerMonitors) =/= error,
                      QueueBlocked = gb_sets:is_element(QPid, Blocking),
-                     case not StatsEnabled and not ConsumerMonitored and
-                          not QueueBlocked of
-                         true  -> true = erlang:demonitor(MRef),
+                     ConfirmMonitored = gb_trees:is_defined(QPid, UQM),
+                     case StatsEnabled or ConsumerMonitored or
+                          QueueBlocked or ConfirmMonitored of
+                         false -> true = erlang:demonitor(MRef),
                                   erase({monitoring, QPid});
-                         false -> ok
+                         true  -> ok
                      end,
                      ok
     end.
