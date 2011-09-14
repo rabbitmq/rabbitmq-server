@@ -28,7 +28,7 @@
 
 -spec(remove_from_queue/2 ::
         (rabbit_amqqueue:name(), [pid()])
-        -> rabbit_types:ok_or_error2(pid(), not_found)).
+        -> {'ok', pid(), [pid()]} | {'error', 'not_found'}).
 -spec(on_node_up/0 :: () -> 'ok').
 -spec(drop_mirror/2 ::
         (rabbit_amqqueue:name(), node()) -> rabbit_types:ok_or_error(any())).
