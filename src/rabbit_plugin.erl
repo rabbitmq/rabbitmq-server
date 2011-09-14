@@ -71,7 +71,7 @@ print_error(Format, Args) ->
     rabbit_misc:format_stderr("Error: " ++ Format ++ "~n", Args).
 
 usage() ->
-    io:format("Insert USAGE here.~n"),
+    io:format("~s", [rabbit_plugin_usage:usage()]),
     rabbit_misc:quit(1).
 
 %%----------------------------------------------------------------------------
