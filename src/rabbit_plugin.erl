@@ -186,15 +186,23 @@ format_plugins(PluginsDir, PluginsDistDir) ->
      || Plugin <- usort_plugins(EnabledPlugins ++ AvailablePlugins)],
     ok.
 
-format_plugin(#plugin{name = Name, version = Version, description = Description},
+format_plugin(#plugin{name = Name, version = Version, description = Description,
+                      dependencies = Dependencies},
               EnabledExplicitly, EnabledImplicitly) ->
     Glyph = case {lists:member(Name, EnabledExplicitly),
                   lists:member(Name, EnabledImplicitly)} of
-                {true, false} -> "E";
-                {false, true} -> "e";
-                _             -> "N"
+                {true, false} -> "[E]";
+                {false, true} -> "[e]";
+                _             -> " * "
             end,
-    io:format("[~s] ~w-~s: ~s~n", [Glyph, Name, Version, Description]).
+    io:format("~s ~w~n", [Glyph, Name]),
+    io:format("    Version:    \t~s~n", [Version]),
+    case Dependencies of
+        [] -> ok;
+        _  -> io:format("    Dependencies:\t~p~n", [Dependencies])
+    end,
+    io:format("    Description:\t~s~n", [Description]),
+    io:format("~n").
 
 usort_plugins(Plugins) ->
     lists:usort(fun plugins_cmp/2, Plugins).
