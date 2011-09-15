@@ -149,11 +149,11 @@ annotated_message(RKey, #amqp_msg{props = Props, payload = Content}) ->
       correlation_id = wrap(Props#'P_basic'.correlation_id),
       content_type   = wrap(Props#'P_basic'.content_type)}, %% TODO encode to 1.0 ver
     Data = case Props#'P_basic'.type of
-               <<"binary">> ->
-                   rabbit_amqp1_0_framing:encode_bin(
-                     #'v1_0.data'{content = Content});
                <<"amqp-1.0">> ->
                    Content
+               _Else -> % e.g., <<"binary">> if originally from 1.0
+                   rabbit_amqp1_0_framing:encode_bin(
+                     #'v1_0.data'{content = Content});
            end,
     [rabbit_amqp1_0_framing:encode_bin(Header),
      rabbit_amqp1_0_framing:encode_bin(Props10),
