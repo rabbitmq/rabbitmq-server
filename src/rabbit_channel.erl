@@ -1576,7 +1576,6 @@ emit_stats(State = #ch{stats_timer = StatsTimer}, Extra) ->
     end.
 
 erase_queue_stats(QPid) ->
-    erase({monitoring, QPid}),
     erase({queue_stats, QPid}),
     [erase({queue_exchange_stats, QX}) ||
         {{queue_exchange_stats, QX = {QPid0, _}}, _} <- get(), QPid =:= QPid0].
