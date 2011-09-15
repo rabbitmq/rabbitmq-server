@@ -2,7 +2,10 @@
 <xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
                 version='1.0'>
 
-<xsl:output doctype-public="-//OASIS//DTD DocBook XML V4.5//EN" doctype-system="http://www.docbook.org/xml/4.5/docbookx.dtd" />
+<xsl:output doctype-public="-//OASIS//DTD DocBook XML V4.5//EN" 
+            doctype-system="http://www.docbook.org/xml/4.5/docbookx.dtd" 
+            indent="yes"
+/>
 
 <!-- Don't copy examples through in place -->
 <xsl:template match="*[@role='example-prefix']"/>
@@ -27,7 +30,7 @@
             <varlistentry>
                 <term><command><xsl:copy-of select="text()"/></command></term>
                 <listitem>
-                    <xsl:copy-of select="following-sibling::para[@role='example']"/>
+                    <xsl:copy-of select="following-sibling::para[@role='example' and preceding-sibling::screen[1] = current()]"/>
                 </listitem>
             </varlistentry>
 </xsl:for-each>
