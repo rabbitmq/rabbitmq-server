@@ -32,9 +32,6 @@ case "$1" in
         if [ -d /var/log/rabbitmq ]; then
                 rm -r /var/log/rabbitmq
         fi
-        if [ -d /var/run/rabbitmq ]; then
-                rm -r /var/run/rabbitmq
-        fi
         if [ -d /etc/rabbitmq ]; then
                 rm -r /etc/rabbitmq
         fi

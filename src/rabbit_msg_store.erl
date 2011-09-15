@@ -146,6 +146,8 @@
 -spec(client_terminate/1 :: (client_msstate()) -> 'ok').
 -spec(client_delete_and_terminate/1 :: (client_msstate()) -> 'ok').
 -spec(client_ref/1 :: (client_msstate()) -> client_ref()).
+-spec(close_all_indicated/1 ::
+        (client_msstate()) -> rabbit_types:ok(client_msstate())).
 -spec(write/3 :: (rabbit_types:msg_id(), msg(), client_msstate()) -> 'ok').
 -spec(read/2 :: (rabbit_types:msg_id(), client_msstate()) ->
                      {rabbit_types:ok(msg()) | 'not_found', client_msstate()}).

@@ -757,13 +757,23 @@ test_topic_expect_match(X, List) ->
       end, List).
 
 test_app_management() ->
-    %% starting, stopping, status
+    control_action(wait, [rabbit_mnesia:dir() ++ ".pid"]),
+    %% Starting, stopping and diagnostics.  Note that we don't try
+    %% 'report' when the rabbit app is stopped and that we enable
+    %% tracing for the duration of this function.
+    ok = control_action(trace_on, []),
     ok = control_action(stop_app, []),
     ok = control_action(stop_app, []),
     ok = control_action(status, []),
+    ok = control_action(cluster_status, []),
+    ok = control_action(environment, []),
     ok = control_action(start_app, []),
     ok = control_action(start_app, []),
     ok = control_action(status, []),
+    ok = control_action(report, []),
+    ok = control_action(cluster_status, []),
+    ok = control_action(environment, []),
+    ok = control_action(trace_off, []),
     passed.
 
 test_log_management() ->
@@ -1134,6 +1144,7 @@ test_user_management() ->
     ok = control_action(add_user, ["foo", "bar"]),
     {error, {user_already_exists, _}} =
         control_action(add_user, ["foo", "bar"]),
+    ok = control_action(clear_password, ["foo"]),
     ok = control_action(change_password, ["foo", "baz"]),
 
     TestTags = fun (Tags) ->

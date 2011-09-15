@@ -195,6 +195,7 @@ set ERLANG_SERVICE_ARGUMENTS= ^
 -s rabbit ^
 +W w ^
 +A30 ^
++P 1048576 ^
 -kernel inet_default_connect_options "[{nodelay,true}]" ^
 !RABBITMQ_LISTEN_ARG! ^
 -rabbit error_logger {file,\""!LOGS:\=/!"\"} ^

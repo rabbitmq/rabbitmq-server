@@ -32,6 +32,9 @@
 -spec(check_user_pass_login/2 ::
         (rabbit_types:username(), rabbit_types:password())
         -> {'ok', rabbit_types:user()} | {'refused', string(), [any()]}).
+-spec(check_user_login/2 ::
+        (rabbit_types:username(), [{atom(), any()}])
+        -> {'ok', rabbit_types:user()} | {'refused', string(), [any()]}).
 -spec(check_vhost_access/2 ::
         (rabbit_types:user(), rabbit_types:vhost())
         -> 'ok' | rabbit_types:channel_exit()).

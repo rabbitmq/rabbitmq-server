@@ -34,12 +34,27 @@ test -x $CONTROL || exit 0
 RETVAL=0
 set -e
 
+ensure_pid_dir () {
+    PID_DIR=`dirname ${PID_FILE}`
+    if [ ! -d ${PID_DIR} ] ; then
+        mkdir -p ${PID_DIR}
+        chown -R ${USER}:${USER} ${PID_DIR}
+        chmod 755 ${PID_DIR}
+    fi
+}
+
+remove_pid () {
+    rm -f ${PID_FILE}
+    rmdir `dirname ${PID_FILE}` || :
+}
+
 start_rabbitmq () {
     status_rabbitmq quiet
     if [ $RETVAL = 0 ] ; then
         echo RabbitMQ is currently running
     else
         RETVAL=0
+        ensure_pid_dir
         set +e
         setsid sh -c "RABBITMQ_PID_FILE=$PID_FILE $DAEMON > \
             ${INIT_LOG_DIR}/startup_log 2> ${INIT_LOG_DIR}/startup_err" &
@@ -54,7 +69,7 @@ start_rabbitmq () {
                 fi
                 ;;
             *)
-                rm -f $PID_FILE
+                remove_pid
                 echo FAILED - check ${INIT_LOG_DIR}/startup_\{log, _err\}
                 RETVAL=1
                 ;;
@@ -70,7 +85,7 @@ stop_rabbitmq () {
         RETVAL=$?
         set -e
         if [ $RETVAL = 0 ] ; then
-            rm -f $PID_FILE
+            remove_pid
             if [ -n "$LOCK_FILE" ] ; then
                 rm -f $LOCK_FILE
             fi

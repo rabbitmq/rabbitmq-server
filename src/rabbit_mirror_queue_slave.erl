@@ -45,7 +45,18 @@
 -behaviour(gm).
 
 -include("rabbit.hrl").
+
+%%----------------------------------------------------------------------------
+
 -include("gm_specs.hrl").
+
+-ifdef(use_specs).
+%% Shut dialyzer up
+-spec(promote_me/2 :: (_, _) -> no_return()).
+-endif.
+
+%%----------------------------------------------------------------------------
+
 
 -define(CREATION_EVENT_KEYS,
         [pid,
