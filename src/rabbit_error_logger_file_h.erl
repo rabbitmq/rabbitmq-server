@@ -26,6 +26,10 @@
 %% with the result of closing the old handler when swapping handlers.
 %% The first init/1 additionally allows for simple log rotation
 %% when the suffix is not the empty string.
+%% The original init/2 also opened the file in 'write' mode, thus
+%% overwriting old logs.  To remedy this, init/2 from
+%% lib/stdlib/src/error_logger_file_h.erl from R14B3 was copied as
+%% init_file/2 and changed so that it opens the file in 'append' mode.
 
 %% Used only when swapping handlers in log rotation
 init({{File, Suffix}, []}) ->

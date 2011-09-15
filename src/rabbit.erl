@@ -467,14 +467,14 @@ ensure_working_log_handlers() ->
                                     log_location(kernel),
                                     Handlers),
 
-    ok = ensure_working_log_handler(sasl_report_file_h,
+    ok = ensure_working_log_handler(sasl_report_tty_h,
                                     rabbit_sasl_report_file_h,
                                     sasl_report_tty_h,
                                     log_location(sasl),
                                     Handlers),
     ok.
 
-ensure_working_log_handler(OldFHandler, NewFHandler, TTYHandler,
+ensure_working_log_handler(OldHandler, NewHandler, TTYHandler,
                            LogLocation, Handlers) ->
     case LogLocation of
         undefined -> ok;
@@ -484,10 +484,10 @@ ensure_working_log_handler(OldFHandler, NewFHandler, TTYHandler,
                              throw({error, {cannot_log_to_tty,
                                             TTYHandler, not_installed}})
                      end;
-        _         -> case lists:member(NewFHandler, Handlers) of
+        _         -> case lists:member(NewHandler, Handlers) of
                          true  -> ok;
                          false -> case rotate_logs(LogLocation, "",
-                                                   OldFHandler, NewFHandler) of
+                                                   OldHandler, NewHandler) of
                                       ok -> ok;
                                       {error, Reason} ->
                                           throw({error, {cannot_log_to_file,

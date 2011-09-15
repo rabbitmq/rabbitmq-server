@@ -821,7 +821,7 @@ test_log_management() ->
     ok = make_files_non_writable([MainLog, SaslLog]),
     ok = control_action(rotate_logs, []),
 
-    %% logging directed to tty (handlers were removed in last test)
+    %% logging directed to tty (first, remove handlers)
     ok = delete_log_handlers([rabbit_sasl_report_file_h,
                               rabbit_error_logger_file_h]),
     ok = clean_logs([MainLog, SaslLog], Suffix),

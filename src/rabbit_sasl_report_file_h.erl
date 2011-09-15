@@ -26,6 +26,10 @@
 %% with the result of closing the old handler when swapping handlers.
 %% The first init/1 additionally allows for simple log rotation
 %% when the suffix is not the empty string.
+%% The original init/1 also opened the file in 'write' mode, thus
+%% overwriting old logs.  To remedy this, init/1 from
+%% lib/sasl/src/sasl_report_file_h.erl from R14B3 was copied as
+%% init_file/1 and changed so that it opens the file in 'append' mode.
 
 %% Used only when swapping handlers and performing
 %% log rotation
