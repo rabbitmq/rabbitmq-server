@@ -325,15 +325,11 @@ handle_info(emit_stats, State = #ch{stats_timer = StatsTimer}) ->
     noreply([ensure_stats_timer],
             State#ch{stats_timer = rabbit_event:reset_stats_timer(StatsTimer)});
 
-handle_info({'DOWN', _MRef, process, QPid, Reason},
-            State = #ch{consumer_monitors = ConsumerMonitors}) ->
+handle_info({'DOWN', _MRef, process, QPid, Reason}, State) ->
     State1 = handle_publishing_queue_down(QPid, Reason, State),
     erase_queue_stats(QPid),
     State2 = queue_blocked(QPid, State1),
-    State3 = case dict:is_key(QPid, ConsumerMonitors) of
-                 false -> State2;
-                 true  -> handle_consuming_queue_down(QPid, State1)
-             end,
+    State3 = handle_consuming_queue_down(QPid, State2),
     noreply(State3#ch{queue_monitors =
                           dict:erase(QPid, State3#ch.queue_monitors)});
 
@@ -1213,7 +1209,7 @@ handle_consuming_queue_down(QPid,
                                         consumer_monitors = ConsumerMonitors,
                                         writer_pid        = WriterPid}) ->
     ConsumerTags = case dict:find(QPid, ConsumerMonitors) of
-                       error       -> [];
+                       error       -> gb_sets:new();
                        {ok, CTags} -> CTags
                    end,
     ConsumerMonitors1 = dict:erase(QPid, ConsumerMonitors),
