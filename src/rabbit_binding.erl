@@ -122,31 +122,26 @@ recover_semi_durable_route(Gatherer, R = #route{binding = B}, ToRecover) ->
         true  -> {ok, X} = rabbit_exchange:lookup(Src),
                  ok = gatherer:fork(Gatherer),
                  ok = worker_pool:submit_async(
-                        recover_semi_durable_route_txn_fun(Gatherer, R, X));
+                        fun () ->
+                                recover_semi_durable_route_txn(R, X),
+                                gatherer:finish(Gatherer)
+                        end);
         false -> ok
     end.
 
-recover_semi_durable_route_txn_fun(Gatherer, R = #route{binding = B}, X) ->
-    fun () ->
-            rabbit_misc:execute_mnesia_transaction(
-              fun () ->
-                      case [] =/= mnesia:match_object(
-                                    rabbit_semi_durable_route, R, read) of
-                          false -> no_recover;
-                          true  -> ok = sync_transient_route(
-                                          R, fun mnesia:write/3),
-                                   rabbit_exchange:serial(X)
-                      end
-              end,
-              fun (no_recover, _) ->
-                      ok;
-                  (_Serial,    true) ->
-                      x_callback(transaction, X, add_binding, B);
-                  (Serial,     false) ->
-                      x_callback(Serial,      X, add_binding, B)
-              end),
-            ok = gatherer:finish(Gatherer)
-    end.
+recover_semi_durable_route_txn(R = #route{binding = B}, X) ->
+    rabbit_misc:execute_mnesia_transaction(
+      fun () ->
+              case mnesia:match_object(rabbit_semi_durable_route, R, read) of
+                  [] -> no_recover;
+                  _  -> ok = sync_transient_route(R, fun mnesia:write/3),
+                        rabbit_exchange:serial(X)
+              end
+      end,
+      fun (no_recover, _)     -> ok;
+          (_Serial,    true)  -> x_callback(transaction, X, add_binding, B);
+          (Serial,     false) -> x_callback(Serial,      X, add_binding, B)
+      end).
 
 exists(Binding) ->
     binding_action(
