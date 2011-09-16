@@ -318,7 +318,7 @@ read(Ref, Count) ->
       fun ([#handle { is_read = false }]) ->
               {error, not_open_for_reading};
           ([Handle = #handle { hdl = Hdl, offset = Offset }]) ->
-              case file:read(Hdl, Count) of
+              case prim_file:read(Hdl, Count) of
                   {ok, Data} = Obj -> Offset1 = Offset + iolist_size(Data),
                                       {Obj,
                                        [Handle #handle { offset = Offset1 }]};
@@ -338,7 +338,7 @@ append(Ref, Data) ->
                                             write_buffer_size_limit = 0,
                                             at_eof = true } = Handle1} ->
                       Offset1 = Offset + iolist_size(Data),
-                      {file:write(Hdl, Data),
+                      {prim_file:write(Hdl, Data),
                        [Handle1 #handle { is_dirty = true, offset = Offset1 }]};
                   {{ok, _Offset}, #handle { write_buffer = WriteBuffer,
                                             write_buffer_size = Size,
@@ -365,7 +365,7 @@ sync(Ref) ->
               ok;
           ([Handle = #handle { hdl = Hdl,
                                is_dirty = true, write_buffer = [] }]) ->
-              case file:sync(Hdl) of
+              case prim_file:sync(Hdl) of
                   ok    -> {ok, [Handle #handle { is_dirty = false }]};
                   Error -> {Error, [Handle]}
               end
@@ -382,7 +382,7 @@ truncate(Ref) ->
     with_flushed_handles(
       [Ref],
       fun ([Handle1 = #handle { hdl = Hdl }]) ->
-              case file:truncate(Hdl) of
+              case prim_file:truncate(Hdl) of
                   ok    -> {ok, [Handle1 #handle { at_eof = true }]};
                   Error -> {Error, [Handle1]}
               end
@@ -409,7 +409,7 @@ copy(Src, Dest, Count) ->
       fun ([SHandle = #handle { is_read  = true, hdl = SHdl, offset = SOffset },
             DHandle = #handle { is_write = true, hdl = DHdl, offset = DOffset }]
           ) ->
-              case file:copy(SHdl, DHdl, Count) of
+              case prim_file:copy(SHdl, DHdl, Count) of
                   {ok, Count1} = Result1 ->
                       {Result1,
                        [SHandle #handle { offset = SOffset + Count1 },
@@ -429,7 +429,7 @@ delete(Ref) ->
         Handle = #handle { path = Path } ->
             case hard_close(Handle #handle { is_dirty = false,
                                              write_buffer = [] }) of
-                ok               -> file:delete(Path);
+                ok               -> prim_file:delete(Path);
                 {Error, Handle1} -> put_handle(Ref, Handle1),
                                     Error
             end
@@ -444,7 +444,7 @@ clear(Ref) ->
               case maybe_seek(bof, Handle #handle { write_buffer = [],
                                                     write_buffer_size = 0 }) of
                   {{ok, 0}, Handle1 = #handle { hdl = Hdl }} ->
-                      case file:truncate(Hdl) of
+                      case prim_file:truncate(Hdl) of
                           ok    -> {ok, [Handle1 #handle { at_eof = true }]};
                           Error -> {Error, [Handle1]}
                       end;
@@ -567,10 +567,10 @@ reopen([{Ref, NewOrReopen, Handle = #handle { hdl          = closed,
                                               offset       = Offset,
                                               last_used_at = undefined }} |
         RefNewOrReopenHdls] = ToOpen, Tree, RefHdls) ->
-    case file:open(Path, case NewOrReopen of
-                             new    -> Mode;
-                             reopen -> [read | Mode]
-                         end) of
+    case prim_file:open(Path, case NewOrReopen of
+                                  new    -> Mode;
+                                  reopen -> [read | Mode]
+                              end) of
         {ok, Hdl} ->
             Now = now(),
             {{ok, _Offset}, Handle1} =
@@ -694,10 +694,10 @@ soft_close(Handle) ->
                        is_dirty    = IsDirty,
                        last_used_at = Then } = Handle1 } ->
             ok = case IsDirty of
-                     true  -> file:sync(Hdl);
+                     true  -> prim_file:sync(Hdl);
                      false -> ok
                  end,
-            ok = file:close(Hdl),
+            ok = prim_file:close(Hdl),
             age_tree_delete(Then),
             {ok, Handle1 #handle { hdl            = closed,
                                    is_dirty       = false,
@@ -732,7 +732,7 @@ maybe_seek(NewOffset, Handle = #handle { hdl = Hdl, offset = Offset,
                                          at_eof = AtEoF }) ->
     {AtEoF1, NeedsSeek} = needs_seek(AtEoF, Offset, NewOffset),
     case (case NeedsSeek of
-              true  -> file:position(Hdl, NewOffset);
+              true  -> prim_file:position(Hdl, NewOffset);
               false -> {ok, Offset}
           end) of
         {ok, Offset1} = Result ->
@@ -769,7 +769,7 @@ write_buffer(Handle = #handle { hdl = Hdl, offset = Offset,
                                 write_buffer = WriteBuffer,
                                 write_buffer_size = DataSize,
                                 at_eof = true }) ->
-    case file:write(Hdl, lists:reverse(WriteBuffer)) of
+    case prim_file:write(Hdl, lists:reverse(WriteBuffer)) of
         ok ->
             Offset1 = Offset + DataSize,
             {ok, Handle #handle { offset = Offset1, is_dirty = true,
