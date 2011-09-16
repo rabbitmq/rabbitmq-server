@@ -112,7 +112,9 @@ register_memory_alarm(State) ->
 internal_conserve_memory(true, State = #reader_state{state = running}) ->
     State#reader_state{state = blocking};
 internal_conserve_memory(false, State) ->
-    State#reader_state{state = running}.
+    State#reader_state{state = running};
+internal_conserve_memory(_Conserve, State) ->
+    State.
 
 next_state(blocking, #stomp_frame{command = "SEND"}) ->
     blocked;
