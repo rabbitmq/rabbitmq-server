@@ -56,11 +56,11 @@
 -record(consumer, {tag, ack_required}).
 
 %% These are held in our process dictionary
--record(cr, {consumer_count,
-             ch_pid,
-             limiter,
+-record(cr, {ch_pid,
              monitor_ref,
              acktags,
+             consumer_count,
+             limiter,
              is_limit_active,
              unsent_message_count}).
 
@@ -336,10 +336,10 @@ ch_record(ChPid) ->
     Key = {ch, ChPid},
     case get(Key) of
         undefined -> MonitorRef = erlang:monitor(process, ChPid),
-                     C = #cr{consumer_count       = 0,
-                             ch_pid               = ChPid,
+                     C = #cr{ch_pid               = ChPid,
                              monitor_ref          = MonitorRef,
                              acktags              = sets:new(),
+                             consumer_count       = 0,
                              is_limit_active      = false,
                              limiter              = rabbit_limiter:make_token(),
                              unsent_message_count = 0},
