@@ -1126,14 +1126,6 @@ handle_method(_MethodRecord, _Content, _State) ->
 
 %%----------------------------------------------------------------------------
 
-monitor_queue(QPid, State = #ch{queue_monitors = QMons}) ->
-    case (not dict:is_key(QPid, QMons) andalso
-          queue_monitor_needed(QPid, State)) of
-        true -> MRef = erlang:monitor(process, QPid),
-                State#ch{queue_monitors = dict:store(QPid, MRef, QMons)};
-        false -> State
-    end.
-
 consumer_monitor(ConsumerTag,
                  State = #ch{consumer_mapping = ConsumerMapping,
                              queue_consumers  = QCons,
@@ -1153,15 +1145,20 @@ consumer_monitor(ConsumerTag,
             State
     end.
 
+monitor_queue(QPid, State = #ch{queue_monitors = QMons}) ->
+    case (not dict:is_key(QPid, QMons) andalso
+          queue_monitor_needed(QPid, State)) of
+        true  -> MRef = erlang:monitor(process, QPid),
+                 State#ch{queue_monitors = dict:store(QPid, MRef, QMons)};
+        false -> State
+    end.
+
 demonitor_queue(QPid, State = #ch{queue_monitors = QMons}) ->
-    case dict:find(QPid, QMons) of
-        error      -> State;
-        {ok, MRef} -> case queue_monitor_needed(QPid, State) of
-                          false -> true = erlang:demonitor(MRef),
-                                   State#ch{queue_monitors =
-                                                dict:erase(QPid, QMons)};
-                          true  -> State
-                      end
+    case (dict:is_key(QPid, QMons) andalso
+          not queue_monitor_needed(QPid, State)) of
+        true  -> true = erlang:demonitor(dict:fetch(QPid, QMons)),
+                 State#ch{queue_monitors = dict:erase(QPid, QMons)};
+        false -> State
     end.
 
 queue_monitor_needed(QPid, #ch{stats_timer     = StatsTimer,
