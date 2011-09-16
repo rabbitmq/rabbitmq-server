@@ -27,7 +27,8 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 -define(REFRESH_RATIO, 5000).
--define(KEYS, [os_pid, mem_ets, mem_binary, fd_used, fd_total,
+-define(KEYS, [os_pid, mem_ets, mem_binary, mem_proc, mem_proc_used,
+               mem_atom, mem_atom_used, mem_code, fd_used, fd_total,
                sockets_used, sockets_total, mem_used, mem_limit, mem_alarm,
                proc_used, proc_total, statistics_level,
                erlang_version, uptime, run_queue, processors, exchange_types,
@@ -140,6 +141,11 @@ i(sockets_total,  _State) ->
 i(os_pid,         _State) -> list_to_binary(os:getpid());
 i(mem_ets,        _State) -> erlang:memory(ets);
 i(mem_binary,     _State) -> erlang:memory(binary);
+i(mem_proc,       _State) -> erlang:memory(processes);
+i(mem_proc_used,  _State) -> erlang:memory(processes_used);
+i(mem_atom,       _State) -> erlang:memory(atom);
+i(mem_atom_used,  _State) -> erlang:memory(atom_used);
+i(mem_code,       _State) -> erlang:memory(code);
 i(mem_used,       _State) -> erlang:memory(total);
 i(mem_limit,      _State) -> get_memory_limit();
 i(proc_used,      _State) -> erlang:system_info(process_count);
