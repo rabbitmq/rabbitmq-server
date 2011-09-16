@@ -119,18 +119,18 @@ routing key.
 For interoperability with AMQP 0-9-1, we adopt the following
 addressing scheme:
 
-    Link target    Subject  AMQP 0-9-1 equivalent
+    Link target    Subject    AMQP 0-9-1 equivalent
 
-    /exchange/X    RK       Publish to exchange X with routing key RK
-    /queue         Q        Publish to default exchange with routing key Q
-    /queue/Q       ignore   Publish to default exchange with routing key Q
+    /exchange/X    RK         Publish to exchange X with routing key RK
+    /queue         Q          Publish to default exchange with routing key Q
+    /queue/Q       ignore[9]  Publish to default exchange with routing key Q
 
 
-    Link source             AMQP 0-9-1 equivalent
+    Link source               AMQP 0-9-1 equivalent
 
-    /queue/Q                Consume from queue Q
-    /exchange/X             Declare a private queue, bind it to
-                            exchange X, and consume from it.
+    /queue/Q                  Consume from queue Q
+    /exchange/X               Declare a private queue, bind it to
+                              exchange X, and consume from it.
 
 [9] Properties are immutable, so a 1.0 client receiving this message
 will get exactly the value given; however it is not used for routing,
