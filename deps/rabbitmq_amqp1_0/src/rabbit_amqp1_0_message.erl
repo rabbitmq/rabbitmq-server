@@ -3,7 +3,7 @@
 -export([assemble/1, annotated_message/3]).
 
 -define(PROPERTIES_HEADER, <<"x-amqp-1.0-properties">>).
--define(HEADERS_HEADER, <<"x-amqp-1.0-header">>).
+-define(APP_PROPERTIES_HEADER, <<"x-amqp-1.0-app-properties">>).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_amqp1_0.hrl").
@@ -16,19 +16,28 @@ assemble(MsgBin) ->
 %% TODO handle delivery-annotations, message-annotations and
 %% application-properties
 
-assemble(header, {R, P, C}, {H = #'v1_0.header'{}, Rest}, Uneaten) ->
-    HeaderBin = chunk(Rest, Uneaten),
-    assemble(properties, {R, translate_header(H, HeaderBin, P), C},
+assemble(header, {R, P, C}, {H = #'v1_0.header'{}, Rest}, _Uneaten) ->
+    assemble(properties, {R, translate_header(H, P), C},
              decode_section(Rest), Rest);
 assemble(header, {R, P, C}, Else, Uneaten) ->
     assemble(properties, {R, P, C}, Else, Uneaten);
 
 assemble(properties, {_R, P, C}, {X = #'v1_0.properties'{}, Rest}, Uneaten) ->
     PropsBin = chunk(Rest, Uneaten),
-    assemble(body, {routing_key(X),
+    assemble(app_properties, {routing_key(X),
                     translate_properties(X, PropsBin, P), C},
              decode_section(Rest), Rest);
 assemble(properties, {R, P, C}, Else, Uneaten) ->
+    assemble(app_properties, {R, P, C}, Else, Uneaten);
+
+assemble(app_properties, {R, P = #'P_basic'{headers = Headers}, C},
+         {#'v1_0.application_properties'{}, Rest}, Uneaten) ->
+    AppPropsBin = chunk(Rest, Uneaten),
+    assemble(body, {R, P#'P_basic'{
+                         headers = set_header(?APP_PROPERTIES_HEADER,
+                                              AppPropsBin, Headers)}, C},
+             decode_section(Rest), Rest);
+assemble(app_properties, {R, P, C}, Else, Uneaten) ->
     assemble(body, {R, P, C}, Else, Uneaten);
 
 %% The only 'interoperable' content is a single amqp-data section.
@@ -93,9 +102,8 @@ compile_body({data, Content, _}) ->
 compile_body(Sections) ->
     lists:reverse(Sections).
 
-translate_header(Header10, Header10Bin, Props) ->
+translate_header(Header10, Props) ->
     Props#'P_basic'{
-      headers = set_header(?HEADERS_HEADER, Header10Bin, []),
       delivery_mode = case Header10#'v1_0.header'.durable of
                           true -> 2;
                           _    -> 1
@@ -163,22 +171,16 @@ annotated_message(RKey, #'basic.deliver'{redelivered = Redelivered},
                   #amqp_msg{props = Props,
                             payload = Content}) ->
     #'P_basic'{ headers = Headers } = Props,
-    HeadersBin =
-        case rabbit_misc:table_lookup(Headers, ?HEADERS_HEADER) of
-            {_, Headers10Bin} ->
-                Headers10Bin;
-            undefined ->
-                Header10 = #'v1_0.header'
-                  {durable = case Props#'P_basic'.delivery_mode of
-                                 2 -> true;
-                                 _ -> false
-                             end,
-                   priority = wrap(ubyte, Props#'P_basic'.priority),
-                   ttl = undefined,
-                   first_acquirer = not Redelivered,
-                   delivery_count = undefined},
-                rabbit_amqp1_0_framing:encode_bin(Header10)
-        end,
+    Header10 = #'v1_0.header'
+      {durable = case Props#'P_basic'.delivery_mode of
+                     2 -> true;
+                     _ -> false
+                 end,
+       priority = wrap(ubyte, Props#'P_basic'.priority),
+       ttl = undefined,
+       first_acquirer = not Redelivered,
+       delivery_count = undefined},
+    HeadersBin = rabbit_amqp1_0_framing:encode_bin(Header10),
     PropsBin =
         case rabbit_misc:table_lookup(Headers, ?PROPERTIES_HEADER) of
             {_, Props10Bin} ->
@@ -199,6 +201,13 @@ annotated_message(RKey, #'basic.deliver'{redelivered = Redelivered},
                   creation_time = wrap(timstamp, Props#'P_basic'.timestamp)},
                 rabbit_amqp1_0_framing:encode_bin(Props10)
         end,
+    AppPropsBin =
+        case rabbit_misc:table_lookup(Headers, ?APP_PROPERTIES_HEADER) of
+            {_, AppProps10Bin} ->
+                AppProps10Bin;
+            undefined ->
+                []
+        end,
     DataBin = case Props#'P_basic'.type of
                   <<"amqp-1.0">> ->
                       Content;
@@ -206,7 +215,7 @@ annotated_message(RKey, #'basic.deliver'{redelivered = Redelivered},
                       rabbit_amqp1_0_framing:encode_bin(
                         #'v1_0.data'{content = Content})
               end,
-    [HeadersBin, PropsBin, DataBin].
+    [HeadersBin, PropsBin, AppPropsBin, DataBin].
 
 %% TODO <new codec>.
 wrap(Bin) when is_binary(Bin) -> {utf8, Bin};

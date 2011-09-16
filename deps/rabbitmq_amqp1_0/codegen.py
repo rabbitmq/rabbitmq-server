@@ -16,7 +16,10 @@ class AMQPType:
         self.number = parse_code(self.code)
         self.fields = [safe(el.getAttribute('name')) for el in
                        dom.getElementsByTagName('field')]
-        if self.desc in ['amqp:data:binary', 'amqp:amqp-sequence:list', 'amqp:amqp-value:*']:
+        # These are 'restricted' types, rather than composite, so they
+        # do not have defined fields.
+        if self.desc in ['amqp:data:binary', 'amqp:amqp-sequence:list',
+                         'amqp:amqp-value:*', 'amqp:application-properties:map']:
             self.fields = ['content']
 
     def define(self):

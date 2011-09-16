@@ -65,7 +65,12 @@ decode({described, Descriptor, {list, Fields}}) ->
             fill_from_list(Else, Fields)
     end;
 decode({described, Descriptor, {map, Fields}}) ->
-    fill_from_map(rabbit_amqp1_0_framing0:record_for(Descriptor), Fields);
+    case rabbit_amqp1_0_framing0:record_for(Descriptor) of
+        #'v1_0.application_properties'{} ->
+            #'v1_0.application_properties'{content = pair_up([decode(F) || F <- Fields])};
+        Else ->
+            fill_from_map(Else, Fields)
+    end;
 decode({described, Descriptor, {binary, Field}}) ->
     fill_from_binary(rabbit_amqp1_0_framing0:record_for(Descriptor), Field);
 decode({described, Descriptor, Field}) ->
@@ -109,3 +114,11 @@ descriptor(Symbol) when is_list(Symbol) ->
     {symbol, Symbol};
 descriptor(Number) when is_number(Number) ->
     {ulong, Number}.
+
+pair_up(List) ->
+    pair_up(List, []).
+
+pair_up([], Pairs) ->
+    lists:reverse(Pairs);
+pair_up([A, B | Rest], Pairs) ->
+    pair_up(Rest, [{A, B} | Pairs]).

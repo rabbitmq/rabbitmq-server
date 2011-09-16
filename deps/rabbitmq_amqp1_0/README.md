@@ -105,9 +105,9 @@ application headers (of AMQP 1.0 messages) and headers (of AMQP 0-9-1
 messages sent through to AMQP 1.0). In other words, the application
 headers section is ignored.
 
-Note that properties and headers (in both AMQP 1.0 and AMQP 0-9-1) are
-immutable; however, this can only apply when the sending and receiving
-clients are using the same protocol.
+Note that properties (in both AMQP 1.0 and AMQP 0-9-1) and application
+properties (in AMQP 1.0) are immutable; however, this can only apply
+when the sending and receiving clients are using the same protocol.
 
 ## Routing and Addressing
 
