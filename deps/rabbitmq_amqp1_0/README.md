@@ -58,8 +58,8 @@ Currently we expect no message- or delivery-annotations, and discard
 any footer. Otherwise, the various headers and properties map as
 follows:
 
-    AMQP 1.0                              AMQP 0-9-1
-    Header                                Properties
+    AMQP 1.0                                 AMQP 0-9-1
+    Header                                   Properties
       durable              <--------------->   delivery-mode   [1]
       priority             <--------------->   priority
       ttl                                                      [2]
@@ -79,18 +79,25 @@ follows:
     Application headers    <-------/------->   headers         [8]
 
 [1] `durable` is `true` if and only if `delivery-mode` is `2`.
+
 [2] `ttl` has no corresponding field in AMQP 0-9-1, and is not supported
 per message in RabbitMQ in any case.
+
 [3] `first-acquirer` is true if and only if the `basic.deliver` field
 `redelivered` is false.
+
 [4] `delivery-count` is left null.
+
 [5] AMQP 0-9-1 expects this to be a shortstr.
+
 [6] See Routing and Addressing below.
+
 [7] `expiration` is a shortstr; since many clients will expect this to
 be an encoded string, we translate an `absolute-expiry-time` to the
 string representation of its integer value. An expiration that is not
 a string representation of an integer is discarded (going via a string
 also avoids some ambiguity)
+
 [8] The application headers section and the `basic.properties` field
 `headers` are natural analogues. However, rather than try to transcode
 an AMQP 1.0 map to an AMQP 0-9-1 field-table, currently we discard
