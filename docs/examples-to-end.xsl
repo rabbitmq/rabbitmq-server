@@ -2,8 +2,8 @@
 <xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
                 version='1.0'>
 
-<xsl:output doctype-public="-//OASIS//DTD DocBook XML V4.5//EN" 
-            doctype-system="http://www.docbook.org/xml/4.5/docbookx.dtd" 
+<xsl:output doctype-public="-//OASIS//DTD DocBook XML V4.5//EN"
+            doctype-system="http://www.docbook.org/xml/4.5/docbookx.dtd"
             indent="yes"
 />
 
