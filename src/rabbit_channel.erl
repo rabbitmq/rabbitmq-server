@@ -1207,13 +1207,13 @@ handle_consuming_queue_down(QPid,
                        error       -> gb_sets:new();
                        {ok, CTags} -> CTags
                    end,
-    ConsumerMapping1 = gb_sets:fold(fun dict:erase/2,
-                                    ConsumerMapping, ConsumerTags),
-    [begin
-         Cancel = #'basic.cancel'{consumer_tag = ConsumerTag,
-                                  nowait       = true},
-         ok = rabbit_writer:send_command(WriterPid, Cancel)
-     end || ConsumerTag <- gb_sets:to_list(ConsumerTags)],
+    ConsumerMapping1 =
+        gb_sets:fold(fun (CTag, CMap) ->
+                             Cancel = #'basic.cancel'{consumer_tag = CTag,
+                                                      nowait       = true},
+                             ok = rabbit_writer:send_command(WriterPid, Cancel),
+                             dict:erase(CTag, CMap)
+                     end, ConsumerMapping, ConsumerTags),
     State#ch{consumer_mapping = ConsumerMapping1,
              queue_consumers  = dict:erase(QPid, QCons)}.
 
