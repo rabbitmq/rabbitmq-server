@@ -16,6 +16,10 @@
 %% 
 %% %CopyrightEnd%
 
+%% This is the 'filelib' module ported from R13B03.  The only changes
+%% are replacing calls to 'file' with calls to 'prim_file', removing
+%% most of the specs and inlining the call to error.
+
 -module(filelib2).
 
 %% File utilities.
@@ -212,7 +216,7 @@ ensure_dir(F) ->
 	    ok;
 	false ->
 	    ensure_dir(Dir),
-	    file2:make_dir(Dir)
+	    prim_file:make_dir(Dir)
     end.
 
 
@@ -404,7 +408,7 @@ compile_alt(Pattern, Result) ->
     end.
 
 eval_read_file_info(File, file) ->
-    file2:read_file_info(File);
+    prim_file:read_file_info(File);
 eval_read_file_info(File, erl_prim_loader) ->
     case erl_prim_loader:read_file_info(File) of
 	error -> {error, erl_prim_loader};
@@ -414,7 +418,7 @@ eval_read_file_info(File, Mod) ->
     Mod:read_file_info(File).
 
 eval_list_dir(Dir, file) ->
-    file2:list_dir(Dir);
+    prim_file:list_dir(Dir);
 eval_list_dir(Dir, erl_prim_loader) ->
     case erl_prim_loader:list_dir(Dir) of
 	error -> {error, erl_prim_loader};

@@ -256,6 +256,7 @@ terminate(Terms, State) ->
 
 delete_and_terminate(State) ->
     {_SegmentCounts, State1 = #qistate { dir = Dir }} = terminate(State),
+    ok = file_handle_cache:obtain(),
     ok = rabbit_misc:recursive_delete([Dir]),
     State1.
 
@@ -366,7 +367,7 @@ recover(DurableQueues) ->
     {DurableTerms, {fun queue_index_walker/1, {start, DurableQueueNames}}}.
 
 all_queue_directory_names(Dir) ->
-    case file2:list_dir(Dir) of
+    case prim_file:list_dir(Dir) of
         {ok, Entries}   -> [ Entry || Entry <- Entries,
                                       filelib2:is_dir(
                                         filename:join(Dir, Entry)) ];
@@ -392,7 +393,7 @@ blank_state(QueueName) ->
 clean_file_name(Dir) -> filename:join(Dir, ?CLEAN_FILENAME).
 
 detect_clean_shutdown(Dir) ->
-    case file2:delete(clean_file_name(Dir)) of
+    case prim_file:delete(clean_file_name(Dir)) of
         ok              -> true;
         {error, enoent} -> false
     end.
@@ -604,7 +605,7 @@ flush_journal(State = #qistate { segments = Segments }) ->
         segment_fold(
           fun (#segment { unacked = 0, path = Path }, SegmentsN) ->
                   case filelib2:is_file(Path) of
-                      true  -> ok = file2:delete(Path);
+                      true  -> ok = prim_file:delete(Path);
                       false -> ok
                   end,
                   SegmentsN;
@@ -1059,7 +1060,7 @@ transform_file(Path, Fun) ->
                 ok = drive_transform_fun(Fun, PathTmpHdl, Content),
 
                 ok = file_handle_cache:close(PathTmpHdl),
-                ok = file2:rename(PathTmp, Path)
+                ok = prim_file:rename(PathTmp, Path)
     end.
 
 drive_transform_fun(Fun, Hdl, Contents) ->
