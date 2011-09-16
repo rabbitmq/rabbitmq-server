@@ -14,7 +14,7 @@ DOCS_DIR=docs
 INCLUDES=$(wildcard $(INCLUDE_DIR)/*.hrl) $(INCLUDE_DIR)/rabbit_framing.hrl
 SOURCES=$(wildcard $(SOURCE_DIR)/*.erl) $(SOURCE_DIR)/rabbit_framing_amqp_0_9_1.erl $(SOURCE_DIR)/rabbit_framing_amqp_0_8.erl $(USAGES_ERL)
 BEAM_TARGETS=$(patsubst $(SOURCE_DIR)/%.erl, $(EBIN_DIR)/%.beam, $(SOURCES))
-TARGETS=$(EBIN_DIR)/rabbit.app $(INCLUDE_DIR)/rabbit_framing.hrl $(BEAM_TARGETS)
+TARGETS=$(EBIN_DIR)/rabbit.app $(INCLUDE_DIR)/rabbit_framing.hrl $(BEAM_TARGETS) plugins
 WEB_URL=http://www.rabbitmq.com/
 MANPAGES=$(patsubst %.xml, %.gz, $(wildcard $(DOCS_DIR)/*.[0-9].xml))
 WEB_MANPAGES=$(patsubst %.xml, %.man.xml, $(wildcard $(DOCS_DIR)/*.[0-9].xml) $(DOCS_DIR)/rabbitmq-service.xml)
@@ -57,7 +57,7 @@ endif
 ERLC_OPTS=-I $(INCLUDE_DIR) -o $(EBIN_DIR) -Wall -v +debug_info $(call boolean_macro,$(USE_SPECS),use_specs) $(call boolean_macro,$(USE_PROPER_QC),use_proper_qc)
 
 VERSION=0.0.0
-PLUGINS_SRC_DIR=
+PLUGINS_SRC_DIR?=$(shell [ -d "plugins-src" ] && echo "plugins-src" || echo )
 PLUGINS_DIST_DIR?=provided_plugins
 TARBALL_NAME=rabbitmq-server-$(VERSION)
 TARGET_SRC_DIR=dist/$(TARBALL_NAME)
@@ -104,11 +104,16 @@ endif
 all: $(TARGETS)
 
 .PHONY: plugins
+ifneq "$(PLUGINS_SRC_DIR)" ""
 plugins:
-	[ -d "plugins-src" ] || { echo 'No plugins source distribution found (try linking public-umbrella to plugins-src/)'; false; }
-	-ln -s .. plugins-src/rabbitmq-server
+	[ -d "$(PLUGINS_SRC_DIR)" ] || { echo "No plugins source distribution found (try linking public-umbrella to $(PLUGINS_SRC_DIR)"; false; }
+	-ln -s .. "$(PLUGINS_SRC_DIR)/rabbitmq-server"
 	mkdir -p provided_plugins
-	$(MAKE) -C plugins-src plugins-dist PLUGINS_DIST_DIR=$(CURDIR)/provided_plugins VERSION=$(VERSION)
+	$(MAKE) -C "$(PLUGINS_SRC_DIR)" plugins-dist PLUGINS_DIST_DIR="$(CURDIR)/provided_plugins" VERSION=$(VERSION)
+else
+plugins:
+# Not building plugins
+endif
 
 $(DEPS_FILE): $(SOURCES) $(INCLUDES)
 	rm -f $@

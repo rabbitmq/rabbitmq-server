@@ -44,7 +44,7 @@ endif
 	cp rabbitmq-server.logrotate SOURCES/rabbitmq-server.logrotate
 
 server: prepare
-	PLUGINS_DIST_DIR=$(PLUGINS_DIST_DIR) rpmbuild -ba --nodeps SPECS/rabbitmq-server.spec $(DEFINES) $(OS_DEFINES)
+	rpmbuild -ba --nodeps SPECS/rabbitmq-server.spec $(DEFINES) $(OS_DEFINES)
 
 clean:
 	rm -rf SOURCES SPECS RPMS SRPMS BUILD tmp
