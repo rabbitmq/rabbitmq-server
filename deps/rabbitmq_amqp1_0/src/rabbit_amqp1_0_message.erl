@@ -1,9 +1,9 @@
 -module(rabbit_amqp1_0_message).
 
--export([assemble/1, annotated_message/2]).
+-export([assemble/1, annotated_message/3]).
 
--define(TYPE_HEADER, <<"x-amqp-1.0-message-type">>).
--define(SUBJECT_HEADER, <<"x-amqp-1.0-subject">>).
+-define(PROPERTIES_HEADER, <<"x-amqp-1.0-properties">>).
+-define(HEADERS_HEADER, <<"x-amqp-1.0-header">>).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_amqp1_0.hrl").
@@ -16,14 +16,17 @@ assemble(MsgBin) ->
 %% TODO handle delivery-annotations, message-annotations and
 %% application-properties
 
-assemble(header, {R, P, C}, {H = #'v1_0.header'{}, Rest}, _Uneaten) ->
-    assemble(properties, {R, parse_header(H, P), C},
+assemble(header, {R, P, C}, {H = #'v1_0.header'{}, Rest}, Uneaten) ->
+    HeaderBin = chunk(Rest, Uneaten),
+    assemble(properties, {R, translate_header(H, HeaderBin, P), C},
              decode_section(Rest), Rest);
 assemble(header, {R, P, C}, Else, Uneaten) ->
     assemble(properties, {R, P, C}, Else, Uneaten);
 
-assemble(properties, {_R, P, C}, {X = #'v1_0.properties'{}, Rest}, _Uneaten) ->
-    assemble(body, {routing_key(X), parse_properties(X, P), C},
+assemble(properties, {_R, P, C}, {X = #'v1_0.properties'{}, Rest}, Uneaten) ->
+    PropsBin = chunk(Rest, Uneaten),
+    assemble(body, {routing_key(X),
+                    translate_properties(X, PropsBin, P), C},
              decode_section(Rest), Rest);
 assemble(properties, {R, P, C}, Else, Uneaten) ->
     assemble(body, {R, P, C}, Else, Uneaten);
@@ -33,9 +36,17 @@ assemble(properties, {R, P, C}, Else, Uneaten) ->
 %% sections one-by-one, however, to see when we hit the footer or
 %% whatever comes next.
 
+%% NB we do not strictly enforce the (slightly random) rules
+%% pertaining to body sections, that is:
+%%  - one amqp-value; OR
+%%  - one or more amqp-sequence; OR
+%%  - one or more amqp-data.
+%% We allow any number of each kind, in any permutation.
+
 assemble(body, {R, P, _}, {#'v1_0.data'{content = Content}, Rest}, Uneaten) ->
     Chunk = chunk(Rest, Uneaten),
-    assemble(amqp10body, {R, set_1_0_type(<<"binary">>, P), {data, Content, Chunk}},
+    assemble(amqp10body, {R, set_1_0_type(<<"binary">>, P),
+                          {data, Content, Chunk}},
              decode_section(Rest), Rest);
 assemble(body, {R, P, C}, Else, Uneaten) ->
     assemble(amqp10body, {R, P, C}, Else, Uneaten);
@@ -82,40 +93,58 @@ compile_body({data, Content, _}) ->
 compile_body(Sections) ->
     lists:reverse(Sections).
 
-parse_header(Header, Props) ->
-    Props#'P_basic'{headers          = undefined, %% TODO
-                    delivery_mode    = case Header#'v1_0.header'.durable of
-                                           true -> 2;
-                                           _    -> 1
-                                       end,
-                    priority         = unwrap(Header#'v1_0.header'.priority),
-                    expiration       = unwrap(Header#'v1_0.header'.ttl),
-                    type             = undefined, %% TODO
-                    app_id           = undefined, %% TODO
-                    cluster_id       = undefined}. %% TODO
-
-parse_properties(Props10, Props = #'P_basic'{headers = Headers}) ->
+translate_header(Header10, Header10Bin, Props) ->
     Props#'P_basic'{
+      headers = set_header(?HEADERS_HEADER, Header10Bin, []),
+      delivery_mode = case Header10#'v1_0.header'.durable of
+                          true -> 2;
+                          _    -> 1
+                      end,
+      priority = unwrap(Header10#'v1_0.header'.priority),
+      type = undefined,
+      app_id = undefined,
+      cluster_id = undefined}.
+
+translate_properties(Props10, Props10Bin,
+                     Props = #'P_basic'{headers = Headers}) ->
+    Props#'P_basic'{
+      headers          = set_header(?PROPERTIES_HEADER, Props10Bin,
+                                     Headers),
       content_type     = unwrap(Props10#'v1_0.properties'.content_type),
-      content_encoding = undefined, %% TODO parse from 1.0 version
+      content_encoding = unwrap(Props10#'v1_0.properties'.content_encoding),
       correlation_id   = unwrap(Props10#'v1_0.properties'.correlation_id),
-      reply_to         = unwrap(Props10#'v1_0.properties'.reply_to),
+      expiration       = to_expiration(Props10 #'v1_0.properties'.absolute_expiry_time),
+      reply_to         = case unwrap(Props10#'v1_0.properties'.reply_to) of
+                             <<"/queue/", Q/binary>> -> Q;
+                             Else                    -> Else
+                         end,
       message_id       = unwrap(Props10#'v1_0.properties'.message_id),
-      user_id          = unwrap(Props10#'v1_0.properties'.user_id),
-      headers          = set_header(?SUBJECT_HEADER,
-                                    unwrap(Props10#'v1_0.properties'.subject),
-                                    Headers)}.
+      user_id          = unwrap(Props10#'v1_0.properties'.user_id)}.
 
 routing_key(Props10) ->
     unwrap(Props10#'v1_0.properties'.subject).
 
-%% TODO talk to Mike about this + new codec.
+%% TODO <new codec>
 unwrap({utf8, Bin})  -> Bin;
 unwrap({ubyte, Num}) -> Num;
 unwrap({uint, Num})  -> Num;
 unwrap({ulong, Num}) -> Num;
 unwrap({long, Num})  -> Num;
 unwrap(undefined)    -> undefined.
+
+to_expiration(undefined) ->
+    undefined;
+to_expiration({timestamp, Num}) ->
+    list_to_binary(integer_to_list(Num)).
+
+to_absolute_expiry_time(undefined) ->
+    undefined;
+to_absolute_expiry_time(MaybeIntegerBin) ->
+    case catch list_to_integer(binary_to_list(MaybeIntegerBin)) of
+        {'EXIT', {badarg, _}} ->
+            undefined;
+        Integer -> {timestamp, Integer}
+    end.
 
 set_header(Header, Value, undefined) ->
     set_header(Header, Value, []);
@@ -130,51 +159,56 @@ set_1_0_type(Type, Props = #'P_basic'{}) ->
 %% TODO create delivery-annotations, message-annotations and
 %% application-properties if we feel like it.
 
-annotated_message(RKey, #amqp_msg{props = Props, payload = Content}) ->
-    Header = #'v1_0.header'
-      {durable           = case Props#'P_basic'.delivery_mode of
-                               2 -> true;
-                               _ -> false
-                           end,
-       priority          = wrap(ubyte, Props#'P_basic'.priority),
-       ttl               = wrap(uint, Props#'P_basic'.expiration),
-       first_acquirer    = undefined, %% TODO
-       delivery_count    = undefined}, %% TODO
-    Props10 = #'v1_0.properties'{
-      message_id     = wrap(Props#'P_basic'.message_id),
-      user_id        = wrap(Props#'P_basic'.user_id),
-      to             = undefined, %% TODO
-      subject        = wrap(get_1_0(?SUBJECT_HEADER, Props, RKey)),
-      reply_to       = wrap(Props#'P_basic'.reply_to),
-      correlation_id = wrap(Props#'P_basic'.correlation_id),
-      content_type   = wrap(Props#'P_basic'.content_type)}, %% TODO encode to 1.0 ver
-    Data = case Props#'P_basic'.type of
-               <<"amqp-1.0">> ->
-                   Content
-               _Else -> % e.g., <<"binary">> if originally from 1.0
-                   rabbit_amqp1_0_framing:encode_bin(
-                     #'v1_0.data'{content = Content});
-           end,
-    [rabbit_amqp1_0_framing:encode_bin(Header),
-     rabbit_amqp1_0_framing:encode_bin(Props10),
-     Data].
+annotated_message(RKey, #'basic.deliver'{redelivered = Redelivered},
+                  #amqp_msg{props = Props,
+                            payload = Content}) ->
+    #'P_basic'{ headers = Headers } = Props,
+    HeadersBin =
+        case rabbit_misc:table_lookup(Headers, ?HEADERS_HEADER) of
+            {_, Headers10Bin} ->
+                Headers10Bin;
+            undefined ->
+                Header10 = #'v1_0.header'
+                  {durable = case Props#'P_basic'.delivery_mode of
+                                 2 -> true;
+                                 _ -> false
+                             end,
+                   priority = wrap(ubyte, Props#'P_basic'.priority),
+                   ttl = undefined,
+                   first_acquirer = not Redelivered,
+                   delivery_count = undefined},
+                rabbit_amqp1_0_framing:encode_bin(Header10)
+        end,
+    PropsBin =
+        case rabbit_misc:table_lookup(Headers, ?PROPERTIES_HEADER) of
+            {_, Props10Bin} ->
+                Props10Bin;
+            undefined ->
+                Props10 = #'v1_0.properties'{
+                  message_id = wrap(Props#'P_basic'.message_id),
+                  user_id = wrap(Props#'P_basic'.user_id),
+                  to = undefined,
+                  subject = wrap(RKey),
+                  reply_to = wrap(<<"/queue/",
+                                    (Props#'P_basic'.reply_to)/binary>>),
+                  correlation_id = wrap(Props#'P_basic'.correlation_id),
+                  content_type = wrap(Props#'P_basic'.content_type),
+                  content_encoding = wrap(Props#'P_basic'.content_encoding),
+                  absolute_expiry_time = to_absolute_expiry_time(
+                                           Props#'P_basic'.expiration),
+                  creation_time = wrap(timstamp, Props#'P_basic'.timestamp)},
+                rabbit_amqp1_0_framing:encode_bin(Props10)
+        end,
+    DataBin = case Props#'P_basic'.type of
+                  <<"amqp-1.0">> ->
+                      Content;
+                  _Else -> % e.g., <<"binary">> if originally from 1.0
+                      rabbit_amqp1_0_framing:encode_bin(
+                        #'v1_0.data'{content = Content})
+              end,
+    [HeadersBin, PropsBin, DataBin].
 
-get_1_0(Header, #'P_basic'{headers = Headers}, Default) ->
-    get_1_0(Header, Headers, Default);
-get_1_0(_Header, undefined, Default) ->
-    Default;
-get_1_0(Header, Headers, Default) ->
-    case rabbit_misc:table_lookup(Headers, Header) of
-        undefined       -> Default;
-        {longstr, Type} -> Type
-    end.
-
-unreserialise(Bin) ->
-    %% TODO again, multi-section messages
-    [Section] = rabbit_amqp1_0_binary_parser:parse_all(Bin),
-    Section.
-
-%% TODO again, talk to Mike about this + new codec.
+%% TODO <new codec>.
 wrap(Bin) when is_binary(Bin) -> {utf8, Bin};
 wrap(Num) when is_number(Num) -> {ulong, Num};
 wrap(undefined)               -> undefined.

@@ -173,8 +173,8 @@ ensure_source(Source = #'v1_0.source'{address       = Address,
     end.
 
 %% FIXME, don't ignore ack required, keep track of credit, um .. etc.
-deliver(#'basic.deliver'{delivery_tag = DeliveryTag,
-                         routing_key  = RKey},
+deliver(Deliver = #'basic.deliver'{delivery_tag = DeliveryTag,
+                                   routing_key  = RKey},
         Msg, WriterPid, BCh, Handle,
         Link = #outgoing_link{delivery_count = Count,
                               no_ack = NoAck,
@@ -197,7 +197,8 @@ deliver(#'basic.deliver'{delivery_tag = DeliveryTag,
                                  %% fine, but in any case it's only a
                                  %% hint
                                  batchable = false},
-            Msg1_0 = rabbit_amqp1_0_message:annotated_message(RKey, Msg),
+            Msg1_0 = rabbit_amqp1_0_message:annotated_message(
+                       RKey, Deliver, Msg),
             %% FIXME ugh.
             TLen = iolist_size(rabbit_amqp1_0_framing:encode_bin(T)),
             send_frames(WriterPid, T, Msg1_0, FrameMax - TLen),
