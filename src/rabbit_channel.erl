@@ -1127,14 +1127,11 @@ handle_method(_MethodRecord, _Content, _State) ->
 %%----------------------------------------------------------------------------
 
 monitor_queue(QPid, State = #ch{queue_monitors = QMons}) ->
-    case dict:is_key(QPid, QMons) of
-        false -> case queue_monitor_needed(QPid, State) of
-                     false -> State;
-                     true  -> MRef = erlang:monitor(process, QPid),
-                              State#ch{queue_monitors =
-                                           dict:store(QPid, MRef, QMons)}
-                 end;
-        true  -> State
+    case (not dict:is_key(QPid, QMons) andalso
+          queue_monitor_needed(QPid, State)) of
+        true -> MRef = erlang:monitor(process, QPid),
+                State#ch{queue_monitors = dict:store(QPid, MRef, QMons)};
+        false -> State
     end.
 
 consumer_monitor(ConsumerTag,
