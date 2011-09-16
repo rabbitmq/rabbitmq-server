@@ -102,8 +102,10 @@ also avoids some ambiguity)
 `headers` are natural analogues. However, rather than try to transcode
 an AMQP 1.0 map to an AMQP 0-9-1 field-table, currently we discard
 application headers (of AMQP 1.0 messages) and headers (of AMQP 0-9-1
-messages sent through to AMQP 1.0). In other words, the application
-headers section is ignored.
+messages sent through to AMQP 1.0). In other words, the (AMQP 1.0)
+application headers section is only available to AMQP 1.0 clients, and
+the (AMQP 0-9-1) headers field is only available to AMQP 0-9-1
+clients.
 
 Note that properties (in both AMQP 1.0 and AMQP 0-9-1) and application
 properties (in AMQP 1.0) are immutable; however, this can only apply
