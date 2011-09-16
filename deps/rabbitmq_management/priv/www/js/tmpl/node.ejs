@@ -33,6 +33,8 @@
        </div>
       </td>
     </tr>
+  </table>
+  <table class="facts">
     <tr>
       <th>
         Erlang processes
@@ -93,25 +95,6 @@
       </td>
     </tr>
   </table>
-
-  <table class="facts">
-    <tr>
-      <th>OS pid</th>
-      <td><%= node.os_pid %></td>
-    </tr>
-    <tr>
-      <th>Statistics</th>
-      <td><%= node.statistics_level %></td>
-    </tr>
-    <tr>
-      <th>Run queue</th>
-      <td><%= node.run_queue %></td>
-    </tr>
-    <tr>
-      <th>Processors</th>
-      <td><%= node.processors %></td>
-    </tr>
-  </table>
 <% } %>
 </div>
 </div>
@@ -159,6 +142,78 @@
 <%= format('registry', {'list': node.exchange_types, 'node': node, 'show_enabled': false} ) %>
 <h3>Authentication mechanisms</h3>
 <%= format('registry', {'list': node.auth_mechanisms, 'node': node, 'show_enabled': true} ) %>
+<% } %>
+</div>
+</div>
+
+<div class="section-hidden">
+<h2>Advanced</h2>
+<div class="hider updatable">
+<% if (!node.running) { %>
+<p class="warning">Node not running</p>
+<% } else if (node.external_stats_not_running) { %>
+<p class="warning">Could not contact management agent</p>
+<% } else { %>
+  <div class="box">
+  <h3>Memory</h3>
+  <table class="facts">
+    <tr>
+      <th>Processes</th>
+      <td>
+        <%= fmt_bytes(node.mem_proc) %>
+        <sub><%= fmt_bytes(node.mem_proc_used) %> used</sub>
+      </td>
+    </tr>
+    <tr>
+      <th>Binaries</th>
+      <td><%= fmt_bytes(node.mem_binary) %></td>
+    </tr>
+  </table>
+
+  <table class="facts">
+    <tr>
+      <th>ETS</th>
+      <td><%= fmt_bytes(node.mem_ets) %></td>
+    </tr>
+    <tr>
+      <th>Code</th>
+      <td><%= fmt_bytes(node.mem_code) %></td>
+    </tr>
+  </table>
+
+  <table class="facts">
+    <tr>
+      <th>Atoms</th>
+      <td>
+        <%= fmt_bytes(node.mem_atom) %>
+        <sub><%= fmt_bytes(node.mem_atom_used) %> used</sub>
+      </td>
+    </tr>
+  </table>
+  </div>
+
+  <h3>VM</h3>
+  <table class="facts">
+    <tr>
+      <th>OS pid</th>
+      <td><%= node.os_pid %></td>
+    </tr>
+    <tr>
+      <th>Statistics</th>
+      <td><%= node.statistics_level %></td>
+    </tr>
+  </table>
+
+  <table class="facts">
+    <tr>
+      <th>Run queue</th>
+      <td><%= node.run_queue %></td>
+    </tr>
+    <tr>
+      <th>Processors</th>
+      <td><%= node.processors %></td>
+    </tr>
+  </table>
 <% } %>
 </div>
 </div>
