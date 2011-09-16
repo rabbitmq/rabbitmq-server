@@ -258,6 +258,7 @@ delete_and_terminate(State) ->
     {_SegmentCounts, State1 = #qistate { dir = Dir }} = terminate(State),
     ok = file_handle_cache:obtain(),
     ok = rabbit_misc:recursive_delete([Dir]),
+    ok = file_handle_cache:release(),
     State1.
 
 publish(MsgId, SeqId, MsgProps, IsPersistent,

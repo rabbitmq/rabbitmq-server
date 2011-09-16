@@ -120,20 +120,22 @@
 %% do not need to worry about their handles being closed by the server
 %% - reopening them when necessary is handled transparently.
 %%
-%% The server also supports obtain and transfer. obtain/0 blocks until
-%% a file descriptor is available, at which point the requesting
-%% process is considered to 'own' one more descriptor. transfer/1
-%% transfers ownership of a file descriptor between processes. It is
-%% non-blocking. Obtain is used to obtain permission to accept file
-%% descriptors. Obtain has a lower limit, set by the ?OBTAIN_LIMIT/1
-%% macro. File handles can use the entire limit, but will be evicted
-%% by obtain calls up to the point at which no more obtain calls can
-%% be satisfied by the obtains limit. Thus there will always be some
-%% capacity available for file handles. Processes that use obtain are
-%% never asked to return them, and they are not managed in any way by
-%% the server. It is simply a mechanism to ensure that processes that
-%% need file descriptors such as sockets can do so in such a way that
-%% the overall number of open file descriptors is managed.
+%% The server also supports obtain, release and transfer. obtain/0
+%% blocks until a file descriptor is available, at which point the
+%% requesting process is considered to 'own' one more
+%% descriptor. release/0 is the inverse operation and releases a
+%% previously obtained descriptor. transfer/1 transfers ownership of a
+%% file descriptor between processes. It is non-blocking. Obtain is
+%% used to obtain permission to accept file descriptors. Obtain has a
+%% lower limit, set by the ?OBTAIN_LIMIT/1 macro. File handles can use
+%% the entire limit, but will be evicted by obtain calls up to the
+%% point at which no more obtain calls can be satisfied by the obtains
+%% limit. Thus there will always be some capacity available for file
+%% handles. Processes that use obtain are never asked to return them,
+%% and they are not managed in any way by the server. It is simply a
+%% mechanism to ensure that processes that need file descriptors such
+%% as sockets can do so in such a way that the overall number of open
+%% file descriptors is managed.
 %%
 %% The callers of register_callback/3, obtain/0, and the argument of
 %% transfer/1 are monitored, reducing the count of handles in use
@@ -145,8 +147,8 @@
 -export([open/3, close/1, read/2, append/2, sync/1, position/2, truncate/1,
          current_virtual_offset/1, current_raw_offset/1, flush/1, copy/3,
          set_maximum_since_use/1, delete/1, clear/1]).
--export([obtain/0, transfer/1, set_limit/1, get_limit/0, info_keys/0, info/0,
-         info/1]).
+-export([obtain/0, release/0, transfer/1, set_limit/1, get_limit/0, info_keys/0,
+         info/0, info/1]).
 -export([ulimit/0]).
 
 -export([start_link/0, init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -248,6 +250,7 @@
 -spec(clear/1 :: (ref()) -> ok_or_error()).
 -spec(set_maximum_since_use/1 :: (non_neg_integer()) -> 'ok').
 -spec(obtain/0 :: () -> 'ok').
+-spec(release/0 :: () -> 'ok').
 -spec(transfer/1 :: (pid()) -> 'ok').
 -spec(set_limit/1 :: (non_neg_integer()) -> 'ok').
 -spec(get_limit/0 :: () -> non_neg_integer()).
@@ -472,6 +475,9 @@ set_maximum_since_use(MaximumAge) ->
 
 obtain() ->
     gen_server:call(?SERVER, {obtain, self()}, infinity).
+
+release() ->
+    gen_server:call(?SERVER, {release, self()}, infinity).
 
 transfer(Pid) ->
     gen_server:cast(?SERVER, {transfer, self(), Pid}).
@@ -864,6 +870,11 @@ handle_call({obtain, Pid}, From, State = #fhc_state { obtain_count   = Count,
                                       State, run_pending_item(Item, State))
                      end
         end};
+
+handle_call({release, Pid}, _From, State) ->
+    {reply, ok,
+     adjust_alarm(State, process_pending(
+                           update_counts(obtain, Pid, -1, State)))};
 
 handle_call({set_limit, Limit}, _From, State) ->
     {reply, ok, adjust_alarm(
