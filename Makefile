@@ -109,7 +109,7 @@ plugins:
 	[ -d "$(PLUGINS_SRC_DIR)" ] || { echo "No plugins source distribution found (try linking public-umbrella to $(PLUGINS_SRC_DIR)"; false; }
 	-ln -s .. "$(PLUGINS_SRC_DIR)/rabbitmq-server"
 	mkdir -p provided_plugins
-	$(MAKE) -C "$(PLUGINS_SRC_DIR)" plugins-dist PLUGINS_DIST_DIR="$(CURDIR)/provided_plugins" VERSION=$(VERSION)
+	PLUGINS_SRC_DIR="" $(MAKE) -C "$(PLUGINS_SRC_DIR)" plugins-dist PLUGINS_DIST_DIR="$(CURDIR)/provided_plugins" VERSION=$(VERSION)
 else
 plugins:
 # Not building plugins

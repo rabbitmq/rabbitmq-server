@@ -21,12 +21,11 @@ dist:
 	mkdir -p $(TARGET_DIR)
 	mkdir -p $(TARGET_DIR)/plugins
 	echo Put your .ez plugin files in this directory > $(TARGET_DIR)/plugins/README
-	mkdir -p $(TARGET_DIR)/provided_plugins
-	-cp $(PLUGINS_DIST_DIR)/*.ez $(TARGET_DIR)/provided_plugins
 	xmlto -o . xhtml-nochunks ../../docs/rabbitmq-service.xml
 	elinks -dump -no-references -no-numbering rabbitmq-service.html \
 		> $(TARGET_DIR)/readme-service.txt
 	todos $(TARGET_DIR)/readme-service.txt
+	rm -f $(TARGET_DIR)/plugins-src/rabbitmq-server
 	zip -q -r $(TARGET_ZIP).zip $(TARGET_DIR)
 	rm -rf $(TARGET_DIR) rabbitmq-service.html
 
