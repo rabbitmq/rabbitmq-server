@@ -655,11 +655,6 @@ handle_ch_down(DownPid, State = #q{exclusive_consumer = Holder}) ->
             end
     end.
 
-cancel_holder(ChPid, ConsumerTag, {ChPid, ConsumerTag}) ->
-    none;
-cancel_holder(_ChPid, _ConsumerTag, Holder) ->
-    Holder.
-
 check_exclusive_access({_ChPid, _ConsumerTag}, _ExclusiveConsume, _State) ->
     in_use;
 check_exclusive_access(none, false, _State) ->
@@ -1007,27 +1002,27 @@ handle_call({basic_consume, NoAck, ChPid, Limiter,
 
 handle_call({basic_cancel, ChPid, ConsumerTag, OkMsg}, _From,
             State = #q{exclusive_consumer = Holder}) ->
+    ok = maybe_send_reply(ChPid, OkMsg),
     case lookup_ch(ChPid) of
         not_found ->
-            ok = maybe_send_reply(ChPid, OkMsg),
             reply(ok, State);
         C ->
             update_consumer_count(C, -1),
             emit_consumer_deleted(ChPid, ConsumerTag),
-            ok = maybe_send_reply(ChPid, OkMsg),
-            NewState =
-                State#q{exclusive_consumer = cancel_holder(ChPid,
-                                                           ConsumerTag,
-                                                           Holder),
-                        active_consumers = remove_consumer(
-                                             ChPid, ConsumerTag,
-                                             State#q.active_consumers),
-                        blocked_consumers = remove_consumer(
+            State1 = State#q{
+                       exclusive_consumer = case Holder of
+                                                {ChPid, ConsumerTag} -> none;
+                                                _                    -> Holder
+                                            end,
+                       active_consumers   = remove_consumer(
+                                              ChPid, ConsumerTag,
+                                              State#q.active_consumers),
+                       blocked_consumers  = remove_consumer(
                                               ChPid, ConsumerTag,
                                               State#q.blocked_consumers)},
-            case should_auto_delete(NewState) of
-                false -> reply(ok, ensure_expiry_timer(NewState));
-                true  -> {stop, normal, ok, NewState}
+            case should_auto_delete(State1) of
+                false -> reply(ok, ensure_expiry_timer(State1));
+                true  -> {stop, normal, ok, State1}
             end
     end;
 
