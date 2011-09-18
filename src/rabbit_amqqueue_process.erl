@@ -685,9 +685,8 @@ subtract_acks(ChPid, AckTags, State, Fun) ->
         not_found ->
             State;
         C = #cr{acktags = ChAckTags} ->
-            update_ch_record(
-              C#cr{acktags = lists:foldl(fun sets:del_element/2,
-                                         ChAckTags, AckTags)}),
+            update_ch_record(C#cr{acktags = lists:foldl(fun sets:del_element/2,
+                                                        ChAckTags, AckTags)}),
             Fun(State)
     end.
 
