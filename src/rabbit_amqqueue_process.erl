@@ -570,11 +570,9 @@ deliver_or_enqueue(Delivery = #delivery{message = Message,
         maybe_record_confirm_message(Confirm, State1),
     case Delivered of
         true  -> State2;
-        false -> BQS1 =
-                     BQ:publish(Message,
-                                (message_properties(State)) #message_properties{
-                                  needs_confirming = needs_confirming(Confirm)},
-                                ChPid, BQS),
+        false -> Props = (message_properties(State)) #message_properties{
+                           needs_confirming = needs_confirming(Confirm)},
+                 BQS1 = BQ:publish(Message, Props, ChPid, BQS),
                  ensure_ttl_timer(State2#q{backing_queue_state = BQS1})
     end.
 
@@ -594,8 +592,8 @@ fetch(AckRequired, State = #q{backing_queue_state = BQS,
 add_consumer(ChPid, Consumer, Queue) -> queue:in({ChPid, Consumer}, Queue).
 
 remove_consumer(ChPid, ConsumerTag, Queue) ->
-    queue:filter(fun ({CP, #consumer{tag = CT}}) ->
-                         (CP /= ChPid) or (CT /= ConsumerTag)
+    queue:filter(fun ({CP, #consumer{tag = CTag}}) ->
+                         (CP /= ChPid) or (CTag /= ConsumerTag)
                  end, Queue).
 
 remove_consumers(ChPid, Queue) ->
