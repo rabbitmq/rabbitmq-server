@@ -19,7 +19,7 @@
 
 [ "x" = "x$RABBITMQ_PLUGINS_DIR" ] && RABBITMQ_PLUGINS_DIR="${RABBITMQ_HOME}/plugins"
 
-[ "x" = "x$RABBITMQ_PLUGINS_DIST_DIR" ] && RABBITMQ_PLUGINS_DIST_DIR="${RABBITMQ_HOME}/provided_plugins"
+[ "x" = "x$RABBITMQ_PLUGINS_DIST_DIR" ] && RABBITMQ_PLUGINS_DIST_DIR="${RABBITMQ_HOME}/plugins-dist"
 
 exec erl \
     -pa "${RABBITMQ_HOME}/ebin" \

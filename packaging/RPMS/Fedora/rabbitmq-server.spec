@@ -30,7 +30,6 @@ scalable implementation of an AMQP broker.
 %define _rabbit_wrapper %{_builddir}/`basename %{S:2}`
 %define _rabbit_server_ocf %{_builddir}/`basename %{S:4}`
 %define _plugins_state_dir %{_localstatedir}/lib/rabbitmq/plugins
-%define _provided_plugins_dir %{_localstatedir}/lib/rabbitmq/provided_plugins
 
 %define _maindir %{buildroot}%{_rabbit_erllibdir}
 
