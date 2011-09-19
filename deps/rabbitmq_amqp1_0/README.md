@@ -32,7 +32,7 @@ default these will connect as the "guest" user. To change this, set
 'default_user' to a string with the name of the user to use, or the
 atom 'none' to prevent unauthenticated connections.
 
-# Limitations, interoperability, and supported features
+# Interoperability with AMQP 0-9-1
 
 ## Message payloads
 
@@ -144,3 +144,32 @@ thus:
 
     AMQP 1.0             AMQP 0-9-1
     /queue/ReplyTo <---> ReplyTo
+
+# Limitations and unsupported features
+
+At the minute, the RabbitMQ AMQP 1.0 adapter does not support:
+
+ - "Exactly once" delivery [10]
+ - Link recovery [10]
+ - Full message fragmentation [11]
+ - Resuming messages
+ - "Released" outcome
+ - "Modified" outcome
+ - Filters [12]
+ - Transactions
+ - Mixed settlement mode
+ - Source/target expiry-policy other than link-detach and timeout
+   other than 0
+ - Max message size for links
+
+[10] We do not deduplicate as a target, though we may resend as a
+source (messages that have no settled outcome when an outgoing link is
+detached will be requeued).
+
+[11] We do fragment messages over multiple frames; however, if this
+would overflow the transfer we may discard or requeue messages.
+
+[12] In principle, filters for consuming from an exchange could
+translate to AMQP 0-9-1 bindings. This is not implemented, so
+effectively only consuming from fanout exchanges and queues is useful
+currently.
