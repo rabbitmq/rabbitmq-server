@@ -585,10 +585,10 @@ handle_1_0_connection_frame(#'v1_0.open'{ max_frame_size = ClientFrameMax,
                end,
     ServerFrameMax = server_frame_max(),
     State1 =
-        if (FrameMax /= 0) and (FrameMax < ?FRAME_MIN_SIZE) ->
+        if (FrameMax /= 0) and (FrameMax < ?FRAME_1_0_MIN_SIZE) ->
                 rabbit_misc:protocol_error(
                   not_allowed, "frame_max=~w < ~w min size",
-                  [FrameMax, ?FRAME_MIN_SIZE]);
+                  [FrameMax, ?FRAME_1_0_MIN_SIZE]);
            %% TODO Python client sets 2^32-1
            %% (ServerFrameMax /= 0) and (FrameMax > ServerFrameMax) ->
            %%      rabbit_misc:protocol_error(
