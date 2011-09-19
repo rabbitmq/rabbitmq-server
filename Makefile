@@ -7,6 +7,7 @@ RABBITMQ_PLUGINS_EXPAND_DIR ?= $(TMPDIR)/rabbitmq-$(RABBITMQ_NODENAME)-plugins-s
 RABBITMQ_LOG_BASE ?= $(TMPDIR)
 
 DEPS_FILE=deps.mk
+TOP_SOURCE_DIR=$(shell pwd)
 SOURCE_DIR=src
 EBIN_DIR=ebin
 INCLUDE_DIR=include
@@ -107,7 +108,7 @@ all: $(TARGETS)
 ifneq "$(PLUGINS_SRC_DIR)" ""
 plugins:
 	[ -d "$(PLUGINS_SRC_DIR)" ] || { echo "No plugins source distribution found (try linking public-umbrella to $(PLUGINS_SRC_DIR)"; false; }
-	-ln -s .. "$(PLUGINS_SRC_DIR)/rabbitmq-server"
+	-ln -s $(TOP_SOURCE_DIR) "$(PLUGINS_SRC_DIR)/rabbitmq-server"
 	mkdir -p provided_plugins
 	PLUGINS_SRC_DIR="" $(MAKE) -C "$(PLUGINS_SRC_DIR)" plugins-dist PLUGINS_DIST_DIR="$(CURDIR)/provided_plugins" VERSION=$(VERSION)
 else
