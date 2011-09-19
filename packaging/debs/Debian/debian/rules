@@ -14,7 +14,7 @@ DOCDIR=$(DEB_DESTDIR)usr/share/doc/rabbitmq-server/
 install/rabbitmq-server::
 	mkdir -p $(DOCDIR)
 	rm $(RABBIT_LIB)LICENSE* $(RABBIT_LIB)INSTALL*
-	for script in rabbitmqctl rabbitmq-server; do \
+	for script in rabbitmqctl rabbitmq-server rabbitmq-plugin; do \
 		install -p -D -m 0755 debian/rabbitmq-script-wrapper $(DEB_DESTDIR)usr/sbin/$$script; \
 	done
 	sed -e 's|@RABBIT_LIB@|/usr/lib/rabbitmq/lib/rabbitmq_server-$(DEB_UPSTREAM_VERSION)|g' <debian/postrm.in >debian/postrm
