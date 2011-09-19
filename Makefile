@@ -7,7 +7,6 @@ RABBITMQ_PLUGINS_EXPAND_DIR ?= $(TMPDIR)/rabbitmq-$(RABBITMQ_NODENAME)-plugins-s
 RABBITMQ_LOG_BASE ?= $(TMPDIR)
 
 DEPS_FILE=deps.mk
-TOP_SOURCE_DIR=$(shell pwd)
 SOURCE_DIR=src
 EBIN_DIR=ebin
 INCLUDE_DIR=include
@@ -108,7 +107,7 @@ all: $(TARGETS)
 ifneq "$(PLUGINS_SRC_DIR)" ""
 plugins:
 	[ -d "$(PLUGINS_SRC_DIR)" ] || { echo "No plugins source distribution found (try linking public-umbrella to $(PLUGINS_SRC_DIR)"; false; }
-	-ln -s $(TOP_SOURCE_DIR) "$(PLUGINS_SRC_DIR)/rabbitmq-server"
+	-ln -s $(CURDIR) "$(PLUGINS_SRC_DIR)/rabbitmq-server"
 	mkdir -p provided_plugins
 	PLUGINS_SRC_DIR="" $(MAKE) -C "$(PLUGINS_SRC_DIR)" plugins-dist PLUGINS_DIST_DIR="$(CURDIR)/provided_plugins" VERSION=$(VERSION)
 else
@@ -159,6 +158,7 @@ clean:
 	rm -f $(EBIN_DIR)/*.beam
 	rm -f $(EBIN_DIR)/rabbit.app $(EBIN_DIR)/rabbit.boot $(EBIN_DIR)/rabbit.script $(EBIN_DIR)/rabbit.rel
 	rm -f provided_plugins/*.ez
+	-PLUGINS_SRC_DIR="" PRESERVE_CLONE_DIR=1 make -C $(PLUGINS_SRC_DIR) clean
 	rm -f $(INCLUDE_DIR)/rabbit_framing.hrl $(SOURCE_DIR)/rabbit_framing_amqp_*.erl codegen.pyc
 	rm -f $(DOCS_DIR)/*.[0-9].gz $(DOCS_DIR)/*.man.xml $(DOCS_DIR)/*.erl $(USAGES_ERL)
 	rm -f $(RABBIT_PLT)
