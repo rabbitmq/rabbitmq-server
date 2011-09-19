@@ -39,6 +39,13 @@ case "$1" in
            [ ! -f /etc/rabbitmq/rabbitmq-env.conf ]; then
             mv /etc/rabbitmq/rabbitmq.conf /etc/rabbitmq/rabbitmq-env.conf
         fi
+
+        ENABLED_PLUGINS_FILE="/usr/lib/rabbitmq/lib/rabbitmq_server-$2/plugins/enabled_plugins"
+        if [ -f "$ENABLED_PLUGINS_FILE" ]; then
+            RABBIT_LIB=$(ls -1td /usr/lib/rabbitmq/lib/rabbitmq_server-* | head -1)
+            cp $ENABLED_PLUGINS_FILE $RABBIT_LIB/plugins/
+            rabbitmq-plugin enable
+        fi
     ;;
 
     abort-upgrade|abort-remove|abort-deconfigure)
