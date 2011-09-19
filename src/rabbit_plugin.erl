@@ -84,6 +84,8 @@ action(list, [Pattern], Opts, PluginsDir, PluginsDistDir) ->
 
 action(enable, ToEnable0, _Opts, PluginsDir, PluginsDistDir) ->
     AllPlugins = find_plugins(PluginsDistDir),
+    Enabled = read_enabled_plugins(PluginsDir),
+    EnabledPlugins = lookup_plugins(Enabled, AllPlugins),
     ToEnable = [list_to_atom(Name) || Name <- ToEnable0],
     ToEnablePlugins = lookup_plugins(ToEnable, AllPlugins),
     Missing = ToEnable -- plugin_names(ToEnablePlugins),
@@ -92,17 +94,19 @@ action(enable, ToEnable0, _Opts, PluginsDir, PluginsDistDir) ->
         _  -> io:format("Warning: the following plugins could not be found: ~p~n",
                         [Missing])
     end,
-    EnableOrder = calculate_required_plugins(plugin_names(ToEnablePlugins),
+    NewEnabledPlugins = merge_plugin_lists(EnabledPlugins, ToEnablePlugins),
+    EnableOrder = calculate_required_plugins(plugin_names(NewEnabledPlugins),
                                              AllPlugins),
-    io:format("Will enable: ~p~n", [EnableOrder]),
-    ok = lists:foldl(
-           fun (Plugin, ok) -> enable_one_plugin(Plugin, PluginsDir) end,
-           ok, lookup_plugins(EnableOrder, AllPlugins)),
-    EnabledPlugins = lookup_plugins(read_enabled_plugins(PluginsDir), AllPlugins),
-    update_enabled_plugins(PluginsDir,
-                           plugin_names(merge_plugin_lists(EnabledPlugins,
-                                                           ToEnablePlugins))),
-    action(prune, [], {}, PluginsDir, PluginsDistDir);
+    EnableOrder1 = EnableOrder -- plugin_names(find_plugins(PluginsDir)),
+    case EnableOrder1 of
+        [] -> io:format("No plugins to enable.~n");
+        _  -> io:format("Will enable: ~p~n", [EnableOrder1]),
+              ok = lists:foldl(
+                     fun (Plugin, ok) -> enable_one_plugin(Plugin, PluginsDir) end,
+                     ok, lookup_plugins(EnableOrder1, AllPlugins)),
+              update_enabled_plugins(PluginsDir, plugin_names(NewEnabledPlugins)),
+              action(prune, [], {}, PluginsDir, PluginsDistDir)
+    end;
 
 action(prune, [], _Opts, PluginsDir, PluginsDistDir) ->
     ExplicitlyEnabledPlugins = read_enabled_plugins(PluginsDir),
