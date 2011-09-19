@@ -36,7 +36,6 @@
                 queue_durations,      %% ets #process
                 queue_duration_sum,   %% sum of all queue_durations
                 queue_duration_count, %% number of elements in sum
-                last_memory_limit,    %% memory limit at last update
                 desired_duration      %% the desired queue duration
                }).
 
@@ -110,8 +109,6 @@ stop() ->
 %%----------------------------------------------------------------------------
 
 init([]) ->
-    LastLimit = memory_limit(?MEMORY_SIZE_FOR_DISABLED_VMM),
-
     {ok, TRef} = timer:apply_interval(?DEFAULT_UPDATE_INTERVAL,
                                       ?SERVER, update, []),
 
@@ -122,7 +119,6 @@ init([]) ->
                     queue_durations      = Ets,
                     queue_duration_sum   = 0.0,
                     queue_duration_count = 0,
-                    last_memory_limit    = LastLimit,
                     desired_duration     = infinity })}.
 
 handle_call({report_ram_duration, Pid, QueueDuration}, From,
@@ -218,12 +214,11 @@ internal_deregister(Pid, Demonitor,
                            queue_duration_count = Count1 }
     end.
 
-internal_update(State = #state { last_memory_limit = LastLimit,
-                                 queue_durations = Durations,
+internal_update(State = #state { queue_durations = Durations,
                                  desired_duration = DesiredDurationAvg,
                                  queue_duration_sum = Sum,
                                  queue_duration_count = Count }) ->
-    MemoryLimit = memory_limit(LastLimit),
+    MemoryLimit = ?MEMORY_LIMIT_SCALING * vm_memory_monitor:get_memory_limit(),
     MemoryRatio = erlang:memory(total) / MemoryLimit,
     DesiredDurationAvg1 =
         case MemoryRatio < ?LIMIT_THRESHOLD orelse Count == 0 of
@@ -236,8 +231,7 @@ internal_update(State = #state { last_memory_limit = LastLimit,
                        end,
                 (Sum1 / Count) / MemoryRatio
         end,
-    State1 = State #state { last_memory_limit = MemoryLimit,
-                            desired_duration  = DesiredDurationAvg1 },
+    State1 = State #state { desired_duration = DesiredDurationAvg1 },
 
     %% only inform queues immediately if the desired duration has
     %% decreased
@@ -275,11 +269,3 @@ internal_update(State = #state { last_memory_limit = LastLimit,
                   end, true, Durations)
     end,
     State1.
-
-memory_limit(Default) ->
-    trunc(?MEMORY_LIMIT_SCALING *
-              (try
-                   vm_memory_monitor:get_memory_limit()
-               catch
-                   exit:{noproc, _} -> Default
-               end)).
