@@ -11,7 +11,6 @@ dist:
 		TARGET_DIR=`pwd`/$(TARGET_DIR) \
 		SBIN_DIR=`pwd`/$(TARGET_DIR)/sbin \
 		MAN_DIR=`pwd`/$(TARGET_DIR)/share/man \
-		PLUGINS_DIST_DIR=$(PLUGINS_DIST_DIR) \
 			install
 
 	tar -zcf $(TARGET_TARBALL).tar.gz $(TARGET_DIR)
