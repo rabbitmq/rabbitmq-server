@@ -112,7 +112,7 @@ like:
 
 [
   {rabbit, [{auth_backends, [rabbit_auth_backend_ldap]}]},
-  {rabbit_auth_backend_ldap,
+  {rabbitmq_auth_backend_ldap,
    [ {servers,               ["my-ldap-server"]},
      {user_dn_pattern,       "cn=${username},ou=People,dc=example,dc=com"} ] }
 ].
