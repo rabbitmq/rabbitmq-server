@@ -92,6 +92,16 @@ if [ -f %{_sysconfdir}/rabbitmq/rabbitmq.conf ] && [ ! -f %{_sysconfdir}/rabbitm
     mv %{_sysconfdir}/rabbitmq/rabbitmq.conf %{_sysconfdir}/rabbitmq/rabbitmq-env.conf
 fi
 
+if [ $1 -gt 1 ]; then
+    # Upgrade - find the old enabled_plugins file, copy it to the new
+    # version and re-enable plugins
+    ENABLED_PLUGINS_FILE=find %{_rabbit_libdir} -name 'enabled_plugins'
+    if [ "x" != "x$ENABLED_PLUGINS_FILE" ]; then
+        cp $ENABLED_PLUGINS_FILE %{_maindir}/plugins/
+        rabbitmq-plugin enable
+    fi
+fi
+
 %preun
 if [ $1 = 0 ]; then
   #Complete uninstall
