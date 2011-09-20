@@ -18,19 +18,18 @@ dist:
 	rm -f $(SOURCE_DIR)/README
 	rm -rf $(SOURCE_DIR)/docs
 	rm -rf $(SOURCE_DIR)/src
-	rm -rf $(SOURCE_DIR)/plugins-src
 	rm -rf $(SOURCE_DIR)/dist
 
 	mv $(SOURCE_DIR) $(TARGET_DIR)
 	mkdir -p $(TARGET_DIR)
 	mkdir -p $(TARGET_DIR)/plugins
 	echo Put your .ez plugin files in this directory > $(TARGET_DIR)/plugins/README.txt
-	mv $(TARGET_DIR)/plugins-src/README $(TARGET_DIR)/plugins-src/README.txt
+	mv $(TARGET_DIR)/plugins-src/README $(TARGET_DIR)/plugins-dist/README.txt
 	xmlto -o . xhtml-nochunks ../../docs/rabbitmq-service.xml
 	elinks -dump -no-references -no-numbering rabbitmq-service.html \
 		> $(TARGET_DIR)/readme-service.txt
 	todos $(TARGET_DIR)/readme-service.txt
-	rm -f $(TARGET_DIR)/plugins-src/rabbitmq-server
+	rm -rf $(TARGET_DIR)/plugins-src
 	zip -q -r $(TARGET_ZIP).zip $(TARGET_DIR)
 	rm -rf $(TARGET_DIR) rabbitmq-service.html
 
