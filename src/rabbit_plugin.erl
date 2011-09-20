@@ -103,10 +103,10 @@ action(enable, ToEnable0, _Opts, PluginsDir, PluginsDistDir) ->
         _  -> io:format("Will enable: ~p~n", [EnableOrder1]),
               ok = lists:foldl(
                      fun (Plugin, ok) -> enable_one_plugin(Plugin, PluginsDir) end,
-                     ok, lookup_plugins(EnableOrder1, AllPlugins)),
-              update_enabled_plugins(PluginsDir, plugin_names(NewEnabledPlugins)),
-              action(prune, [], {}, PluginsDir, PluginsDistDir)
-    end;
+                     ok, lookup_plugins(EnableOrder1, AllPlugins))
+    end,
+    update_enabled_plugins(PluginsDir, plugin_names(NewEnabledPlugins)),
+    action(prune, [], {}, PluginsDir, PluginsDistDir);
 
 action(prune, [], _Opts, PluginsDir, PluginsDistDir) ->
     ExplicitlyEnabledPlugins = read_enabled_plugins(PluginsDir),
