@@ -938,8 +938,9 @@ ntoab(IP) ->
 %% 2 ^ (SERIAL_BITS - 1) - 1
 -define(SERIAL_MAX_ADDEND, 16#7fffffff).
 
-serial_add(S, N) when N =< ?SERIAL_MAX_ADDEND ->
-    (S + N) rem ?SERIAL_MAX;
+serial_add(S, N) when
+      N =< ?SERIAL_MAX_ADDEND andalso N > - ?SERIAL_MAX_ADDEND ->
+    (S + N + ?SERIAL_MAX) rem ?SERIAL_MAX;
 serial_add(S, N) ->
     exit({out_of_bound_serial_addition, S, N}).
 
