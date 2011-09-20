@@ -141,7 +141,7 @@
 %% transfer/1 are monitored, reducing the count of handles in use
 %% appropriately when the processes terminate.
 
--behaviour(gen_server).
+-behaviour(gen_server2).
 
 -export([register_callback/3]).
 -export([open/3, close/1, read/2, append/2, sync/1, position/2, truncate/1,
@@ -152,7 +152,7 @@
 -export([ulimit/0]).
 
 -export([start_link/0, init/1, handle_call/3, handle_cast/2, handle_info/2,
-         terminate/2, code_change/3]).
+         terminate/2, code_change/3, prioritise_cast/2]).
 
 -define(SERVER, ?MODULE).
 -define(RESERVED_FOR_OTHERS, 100).
@@ -269,11 +269,11 @@
 %%----------------------------------------------------------------------------
 
 start_link() ->
-    gen_server:start_link({local, ?SERVER}, ?MODULE, [], [{timeout, infinity}]).
+    gen_server2:start_link({local, ?SERVER}, ?MODULE, [], [{timeout, infinity}]).
 
 register_callback(M, F, A)
   when is_atom(M) andalso is_atom(F) andalso is_list(A) ->
-    gen_server:cast(?SERVER, {register_callback, self(), {M, F, A}}).
+    gen_server2:cast(?SERVER, {register_callback, self(), {M, F, A}}).
 
 open(Path, Mode, Options) ->
     Path1 = filename:absname(Path),
@@ -474,24 +474,24 @@ set_maximum_since_use(MaximumAge) ->
     end.
 
 obtain() ->
-    gen_server:call(?SERVER, {obtain, self()}, infinity).
+    gen_server2:call(?SERVER, {obtain, self()}, infinity).
 
 release() ->
-    gen_server:call(?SERVER, {release, self()}, infinity).
+    gen_server2:cast(?SERVER, {release, self()}).
 
 transfer(Pid) ->
-    gen_server:cast(?SERVER, {transfer, self(), Pid}).
+    gen_server2:cast(?SERVER, {transfer, self(), Pid}).
 
 set_limit(Limit) ->
-    gen_server:call(?SERVER, {set_limit, Limit}, infinity).
+    gen_server2:call(?SERVER, {set_limit, Limit}, infinity).
 
 get_limit() ->
-    gen_server:call(?SERVER, get_limit, infinity).
+    gen_server2:call(?SERVER, get_limit, infinity).
 
 info_keys() -> ?INFO_KEYS.
 
 info() -> info(?INFO_KEYS).
-info(Items) -> gen_server:call(?SERVER, {info, Items}, infinity).
+info(Items) -> gen_server2:call(?SERVER, {info, Items}, infinity).
 
 %%----------------------------------------------------------------------------
 %% Internal functions
@@ -545,8 +545,8 @@ get_or_reopen(RefNewOrReopens) ->
             {ok, [Handle || {_Ref, Handle} <- OpenHdls]};
         {OpenHdls, ClosedHdls} ->
             Oldest = oldest(get_age_tree(), fun () -> now() end),
-            case gen_server:call(?SERVER, {open, self(), length(ClosedHdls),
-                                           Oldest}, infinity) of
+            case gen_server2:call(?SERVER, {open, self(), length(ClosedHdls),
+                                            Oldest}, infinity) of
                 ok ->
                     case reopen(ClosedHdls) of
                         {ok, RefHdls}  -> sort_handles(RefNewOrReopens,
@@ -589,7 +589,7 @@ reopen([{Ref, NewOrReopen, Handle = #handle { hdl          = closed,
         Error ->
             %% NB: none of the handles in ToOpen are in the age tree
             Oldest = oldest(Tree, fun () -> undefined end),
-            [gen_server:cast(?SERVER, {close, self(), Oldest}) || _ <- ToOpen],
+            [gen_server2:cast(?SERVER, {close, self(), Oldest}) || _ <- ToOpen],
             put_age_tree(Tree),
             Error
     end.
@@ -638,7 +638,7 @@ age_tree_delete(Then) ->
       fun (Tree) ->
               Tree1 = gb_trees:delete_any(Then, Tree),
               Oldest = oldest(Tree1, fun () -> undefined end),
-              gen_server:cast(?SERVER, {close, self(), Oldest}),
+              gen_server2:cast(?SERVER, {close, self(), Oldest}),
               Tree1
       end).
 
@@ -648,7 +648,7 @@ age_tree_change() ->
               case gb_trees:is_empty(Tree) of
                   true  -> Tree;
                   false -> {Oldest, _Ref} = gb_trees:smallest(Tree),
-                           gen_server:cast(?SERVER, {update, self(), Oldest})
+                           gen_server2:cast(?SERVER, {update, self(), Oldest})
               end,
               Tree
       end).
@@ -791,7 +791,7 @@ i(obtain_limit, #fhc_state{obtain_limit = Limit}) -> Limit;
 i(Item, _) -> throw({bad_argument, Item}).
 
 %%----------------------------------------------------------------------------
-%% gen_server callbacks
+%% gen_server2 callbacks
 %%----------------------------------------------------------------------------
 
 init([]) ->
@@ -819,6 +819,12 @@ init([]) ->
                       obtain_pending = pending_new(),
                       clients        = Clients,
                       timer_ref      = undefined }}.
+
+prioritise_cast(Msg, _State) ->
+    case Msg of
+        {release, _}                 -> 5;
+        _                            -> 0
+    end.
 
 handle_call({open, Pid, Requested, EldestUnusedSince}, From,
             State = #fhc_state { open_count   = Count,
@@ -871,11 +877,6 @@ handle_call({obtain, Pid}, From, State = #fhc_state { obtain_count   = Count,
                      end
         end};
 
-handle_call({release, Pid}, _From, State) ->
-    {reply, ok,
-     adjust_alarm(State, process_pending(
-                           update_counts(obtain, Pid, -1, State)))};
-
 handle_call({set_limit, Limit}, _From, State) ->
     {reply, ok, adjust_alarm(
                   State, maybe_reduce(
@@ -903,6 +904,10 @@ handle_cast({update, Pid, EldestUnusedSince},
     %% don't call maybe_reduce from here otherwise we can create a
     %% storm of messages
     {noreply, State};
+
+handle_cast({release, Pid}, State) ->
+    {noreply, adjust_alarm(State, process_pending(
+                                    update_counts(obtain, Pid, -1, State)))};
 
 handle_cast({close, Pid, EldestUnusedSince},
             State = #fhc_state { elders = Elders, clients = Clients }) ->
@@ -1059,7 +1064,7 @@ run_pending_item(#pending { kind      = Kind,
                             requested = Requested,
                             from      = From },
                  State = #fhc_state { clients = Clients }) ->
-    gen_server:reply(From, ok),
+    gen_server2:reply(From, ok),
     true = ets:update_element(Clients, Pid, {#cstate.blocked, false}),
     update_counts(Kind, Pid, Requested, State).
 
