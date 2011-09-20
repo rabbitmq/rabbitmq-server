@@ -338,7 +338,9 @@ calculate_requires_plugins(ToDisable, AllPlugins) ->
 enable_one_plugin(#plugin{name = Name, version = Version, location = Path},
                   PluginsDir) ->
     io:format("Enabling ~w-~s~n", [Name, Version]),
-    case file:copy(Path, filename:join(PluginsDir, filename:basename(Path))) of
+    TargetPath = filename:join(PluginsDir, filename:basename(Path)),
+    ok = rabbit_misc:ensure_parent_dirs_exist(TargetPath),
+    case file:copy(Path, TargetPath) of
         {ok, _Bytes} -> ok;
         {error, Err} -> io:format("Error enabling ~p (~p)~n",
                                   [Name, {cannot_enable_plugin, Path, Err}]),
