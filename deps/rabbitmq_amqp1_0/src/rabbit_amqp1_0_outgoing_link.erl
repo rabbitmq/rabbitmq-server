@@ -19,7 +19,7 @@ attach(#'v1_0.attach'{name = Name,
                       handle = Handle,
                       source = Source,
                       rcv_settle_mode = RcvSettleMode}, BCh, DCh) ->
-    {DefaultOutcome, Outcomes} = rabbit_amqp1_0_link_util:outcomes(Source),
+    {DefaultOutcome, _Outcomes} = rabbit_amqp1_0_link_util:outcomes(Source),
     %% Default is first
     NoAck = RcvSettleMode =/= ?V_1_0_RECEIVER_SETTLE_MODE_SECOND,
     DOSym = rabbit_amqp1_0_framing:symbol_for(DefaultOutcome),
@@ -126,7 +126,7 @@ flow(#outgoing_link{delivery_count = LocalCount},
 %% TODO this looks to have a lot in common with ensure_target
 ensure_source(Source = #'v1_0.source'{address       = Address,
                                       dynamic       = Dynamic,
-                                      expiry_policy = ExpiryPolicy,
+                                      expiry_policy = _ExpiryPolicy, % TODO
                                       timeout       = Timeout},
               Link = #outgoing_link{}, DCh) ->
     case Dynamic of
@@ -180,37 +180,37 @@ deliver(Deliver = #'basic.deliver'{delivery_tag = DeliveryTag,
                               no_ack = NoAck,
                               default_outcome = DefaultOutcome},
         Session, FrameMax) ->
-    MaySend = rabbit_amqp1_0_session:may_send(Session),
+    DeliveryId = rabbit_amqp1_0_session:next_delivery_id(Session),
+    Txfr = #'v1_0.transfer'{handle = Handle,
+                            delivery_tag = {binary, <<DeliveryTag:64>>},
+                            delivery_id = {uint, DeliveryId},
+                            %% The only one in AMQP 1-0
+                            message_format = {uint, 0},
+                            settled = NoAck,
+                            resume = false,
+                            more = false,
+                            aborted = false,
+                            %% TODO: actually batchable would be fine,
+                            %% but in any case it's only a hint
+                            batchable = false},
+    Msg1_0 = rabbit_amqp1_0_message:annotated_message(
+               RKey, Deliver, Msg),
+    %% FIXME ugh.
+    TLen = iolist_size(rabbit_amqp1_0_framing:encode_bin(Txfr)),
+    Frames = encode_frames(Txfr, Msg1_0, FrameMax - TLen, []),
+    NumTransfers = length(Frames),
+    MaySend = rabbit_amqp1_0_session:may_send(NumTransfers, Session),
     if MaySend ->
             NewLink = Link#outgoing_link{delivery_count = Count + 1},
-            DeliveryId = rabbit_amqp1_0_session:next_outgoing_id(Session),
-            T = #'v1_0.transfer'{handle = Handle,
-                                 delivery_tag = {binary, <<DeliveryTag:64>>},
-                                 delivery_id = {uint, DeliveryId},
-                                 %% The only one in AMQP 1-0
-                                 message_format = {uint, 0},
-                                 settled = NoAck,
-                                 resume = false,
-                                 more = false,
-                                 aborted = false,
-                                 %% TODO: actually batchable would be
-                                 %% fine, but in any case it's only a
-                                 %% hint
-                                 batchable = false},
-            Msg1_0 = rabbit_amqp1_0_message:annotated_message(
-                       RKey, Deliver, Msg),
-            %% FIXME ugh.
-            TLen = iolist_size(rabbit_amqp1_0_framing:encode_bin(T)),
-            send_frames(WriterPid, T, Msg1_0, FrameMax - TLen),
-            {ok, NewLink, case NoAck of
-                              true  -> Session;
-                              false -> rabbit_amqp1_0_session:record_delivery(
-                                         DeliveryTag, DefaultOutcome, Session)
-                          end};
+            [rabbit_amqp1_0_writer:send_command(WriterPid, T, C) ||
+                [T, C] <- Frames],
+            {ok, NewLink, rabbit_amqp1_0_session:record_outgoing(
+                            DeliveryTag, NoAck, DefaultOutcome,
+                            NumTransfers, Session)};
        %% FIXME We can't knowingly exceed our credit.  On the other
-       %% hand, we've been handed a message to deliver. This has
-       %% probably happened because the receiver has suddenly reduced
-       %% the credit or session window.
+       %% hand, we've been handed a message to deliver. This can
+       %% happen if messages typically require a single frame, since
+       %% we cannot adequately control deliveries with basic.qos.
        NoAck ->
             {ok, Link, Session};
        true ->
@@ -219,12 +219,14 @@ deliver(Deliver = #'basic.deliver'{delivery_tag = DeliveryTag,
             {ok, Link, Session}
     end.
 
-send_frames(WriterPid, T, Msg, MaxContentLen) ->
+encode_frames(T, Msg, MaxContentLen, Transfers) ->
     case iolist_size(Msg) > MaxContentLen of
-        true  -> <<Chunk:MaxContentLen/binary, Rest/binary>> =
-                     iolist_to_binary(Msg),
-                 T1 = T#'v1_0.transfer'{more = true},
-                 rabbit_amqp1_0_writer:send_command(WriterPid, T1, Chunk),
-                 send_frames(WriterPid, T, Rest, MaxContentLen);
-        false -> rabbit_amqp1_0_writer:send_command(WriterPid, T, Msg)
+        true  ->
+            <<Chunk:MaxContentLen/binary, Rest/binary>> =
+                iolist_to_binary(Msg),
+            T1 = T#'v1_0.transfer'{more = true},
+            encode_frames(T, Rest, MaxContentLen,
+                          [[T1, Chunk] | Transfers]);
+        false ->
+            lists:reverse([[T, Msg] | Transfers])
     end.

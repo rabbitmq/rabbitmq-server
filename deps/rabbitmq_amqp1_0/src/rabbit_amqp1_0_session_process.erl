@@ -75,8 +75,7 @@ handle_info({#'basic.deliver'{consumer_tag = ConsumerTag} = Deliver, Msg},
                   Deliver, Msg, WriterPid, BCh, Handle, Link, Session,
                   FrameMax),
             put({out, Handle}, Link1),
-            {noreply, state(rabbit_amqp1_0_session:incr_outgoing_id(
-                              Session1), State)}
+            {noreply, state(Session1, State)}
     end;
 
 %% A message from the queue saying that the credit is either exhausted
@@ -180,7 +179,8 @@ handle_control(#'v1_0.attach'{handle                 = Handle,
 
 handle_control({Txfr = #'v1_0.transfer'{handle      = Handle,
                                         settled     = Settled,
-                                        delivery_id = {uint, TxfrId}}, MsgPart},
+                                        delivery_id = {uint, DeliveryId}},
+                MsgPart},
                State = #state{backing_channel = BCh,
                               session         = Session}) ->
     case get({in, Handle}) of
@@ -188,11 +188,18 @@ handle_control({Txfr = #'v1_0.transfer'{handle      = Handle,
             protocol_error(?V_1_0_AMQP_ERROR_ILLEGAL_STATE,
                            "Unknown link handle ~p", [Handle]);
         Link ->
-            {ok, Reply, Link1} =
-                rabbit_amqp1_0_incoming_link:transfer(Txfr, MsgPart, Link, BCh),
-            put({in, Handle}, Link1),
-            reply(Reply, state(rabbit_amqp1_0_session:record_publish(
-                                 Settled, TxfrId, Session), State))
+            {Flows, Session1} = rabbit_amqp1_0_session:incr_incoming_id(Session),
+            case rabbit_amqp1_0_incoming_link:transfer(
+                   Txfr, MsgPart, Link, BCh) of
+                {message, Reply, Link1} ->
+                    put({in, Handle}, Link1),
+                    Session2 = rabbit_amqp1_0_session:record_delivery(
+                                 DeliveryId, Settled, Session1),
+                    reply(Reply ++ Flows, state(Session2, State));
+                {ok, Link1} ->
+                    put({in, Handle}, Link1),
+                    reply(Flows, state(Session1, State))
+            end
     end;
 
 %% Disposition: a single extent is settled at a time.  This may
@@ -223,6 +230,7 @@ handle_control(#'v1_0.disposition'{state = Outcome,
 
 handle_control(#'v1_0.detach'{ handle = Handle }, State) ->
     %% TODO keep the state around depending on the lifetime
+    %% TODO outgoing links?
     erase({in, Handle}),
     {reply, #'v1_0.detach'{ handle = Handle }, State};
 

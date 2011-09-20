@@ -583,7 +583,6 @@ handle_1_0_connection_frame(#'v1_0.open'{ max_frame_size = ClientFrameMax,
                    undefined -> 0;
                    {_, FM} -> FM
                end,
-    ServerFrameMax = server_frame_max(),
     State1 =
         if (FrameMax /= 0) and (FrameMax < ?FRAME_1_0_MIN_SIZE) ->
                 rabbit_misc:protocol_error(

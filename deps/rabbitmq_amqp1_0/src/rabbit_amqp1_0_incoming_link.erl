@@ -13,7 +13,7 @@
 -record(incoming_link, {name, exchange, routing_key,
                         delivery_count = 0,
                         credit_used = ?INCOMING_CREDIT div 2,
-                        msg_acc = <<>>}).
+                        msg_acc = []}).
 
 attach(#'v1_0.attach'{name = Name,
                       handle = Handle,
@@ -61,15 +61,14 @@ attach(#'v1_0.attach'{name = Name,
 
 transfer(#'v1_0.transfer'{more = true}, MsgPart,
          #incoming_link{msg_acc = MsgAcc} = Link, _BCh) ->
-    {ok, [], Link#incoming_link{msg_acc = <<MsgAcc/binary, MsgPart/binary>>}};
-
+    {ok, Link#incoming_link{msg_acc = [MsgPart | MsgAcc]}};
 transfer(#'v1_0.transfer'{handle = Handle}, MsgPart,
          #incoming_link{exchange       = X,
                         routing_key    = LinkRKey,
                         delivery_count = Count,
                         credit_used    = CreditUsed,
                         msg_acc        = MsgAcc} = Link, BCh) ->
-    MsgBin = <<MsgAcc/binary, MsgPart/binary>>,
+    MsgBin = iolist_to_binary(lists:reverse([MsgPart | MsgAcc])),
     {MsgRKey, Msg} = rabbit_amqp1_0_message:assemble(MsgBin),
     RKey = case LinkRKey of
                undefined -> MsgRKey;
@@ -86,13 +85,13 @@ transfer(#'v1_0.transfer'{handle = Handle}, MsgPart,
     NewLink = Link#incoming_link{
                 delivery_count = rabbit_misc:serial_add(Count, 1),
                 credit_used    = CreditUsed1,
-                msg_acc        = <<>>},
+                msg_acc        = []},
     Reply = case SendFlow of
                 true  -> ?DEBUG("sending flow for incoming ~p", [NewLink]),
                          [incoming_flow(NewLink, Handle)];
                 false -> []
             end,
-    {ok, Reply, NewLink}.
+    {message, Reply, NewLink}.
 
 %% There are a few things that influence what source and target
 %% definitions mean for our purposes.
