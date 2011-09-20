@@ -216,7 +216,11 @@ post_process_script(ScriptFile) ->
     end.
 
 process_entry(Entry = {apply,{application,start_boot,[mnesia,permanent]}}) ->
-    [{apply,{rabbit,prepare,[]}}, Entry];
+    [{apply,{application,start_boot,[sasl,permanent]}},
+     {apply,{rabbit,prepare,[]}},
+     Entry];
+process_entry(Entry = {application,start_boot,[sasl,permanent]}) ->
+    [];
 process_entry(Entry) ->
     [Entry].
 
