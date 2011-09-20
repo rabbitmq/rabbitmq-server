@@ -86,6 +86,8 @@ if ! getent passwd rabbitmq >/dev/null; then
             -c "RabbitMQ messaging server"
 fi
 
+chown -R rabbitmq:rabbitmq %{_rabbit_erllibdir}/plugins/
+
 %post
 /sbin/chkconfig --add %{name}
 if [ -f %{_sysconfdir}/rabbitmq/rabbitmq.conf ] && [ ! -f %{_sysconfdir}/rabbitmq/rabbitmq-env.conf ]; then
