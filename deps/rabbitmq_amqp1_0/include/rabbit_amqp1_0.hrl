@@ -9,7 +9,7 @@
 
 %% General consts
 
--define(FRAME_1_0_MIN_SIZE, 4096).
+-define(FRAME_1_0_MIN_SIZE, 512).
 
 -define(SEND_ROLE, false).
 -define(RECV_ROLE, true).
