@@ -343,7 +343,8 @@ enable_one_plugin(#plugin{name = Name, version = Version, location = Path},
     case file:copy(Path, TargetPath) of
         {ok, _Bytes} -> ok;
         {error, Err} -> io:format("Error enabling ~p (~p)~n",
-                                  [Name, {cannot_enable_plugin, Path, Err}]),
+                                  [Name, {cannot_enable_plugin,
+                                          Path, TargetPath, Err}]),
                         rabbit_misc:quit(2)
     end.
 
