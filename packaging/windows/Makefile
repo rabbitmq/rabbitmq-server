@@ -25,7 +25,7 @@ dist:
 	mkdir -p $(TARGET_DIR)
 	mkdir -p $(TARGET_DIR)/plugins
 	echo Put your .ez plugin files in this directory > $(TARGET_DIR)/plugins/README.txt
-	cp $(TARGET_DIR)/plugins-dist/README $(TARGET_DIR)/plugins-dist/README.txt
+	mv $(TARGET_DIR)/plugins-src/README $(TARGET_DIR)/plugins-src/README.txt
 	xmlto -o . xhtml-nochunks ../../docs/rabbitmq-service.xml
 	elinks -dump -no-references -no-numbering rabbitmq-service.html \
 		> $(TARGET_DIR)/readme-service.txt
