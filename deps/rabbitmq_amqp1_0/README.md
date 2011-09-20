@@ -153,7 +153,6 @@ At the minute, the RabbitMQ AMQP 1.0 adapter does not support:
  - Link recovery [10]
  - Full message fragmentation [11]
  - Resuming messages
- - "Released" outcome
  - "Modified" outcome
  - Filters [12]
  - Transactions
