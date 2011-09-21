@@ -166,7 +166,7 @@ source (messages that have no settled outcome when an outgoing link is
 detached will be requeued).
 
 [11] We do fragment messages over multiple frames; however, if this
-would overflow the transfer we may discard or requeue messages.
+would overflow the session window we may discard or requeue messages.
 
 [12] In principle, filters for consuming from an exchange could
 translate to AMQP 0-9-1 bindings. This is not implemented, so
