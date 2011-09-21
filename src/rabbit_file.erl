@@ -119,23 +119,17 @@ read_term_file(File) ->
         error:{badmatch, Error} -> Error
     end.
 
-group_tokens([]) ->
-    [];
-group_tokens([{_, N, _} | _] = Tokens) ->
-    lists:reverse(group_tokens([], N, Tokens));
-group_tokens([{_, N} | _] = Tokens) ->
-    lists:reverse(group_tokens([], N, Tokens)).
+group_tokens(Ts) -> lists:reverse([lists:reverse(G) || G <- group_tokens1(Ts)]).
 
-group_tokens(Cur, _, []) ->
-    [lists:reverse(Cur)];
-group_tokens(Cur, N, [Tok = {_, N} | Toks]) ->
-    group_tokens([Tok | Cur], N, Toks);
-group_tokens(Cur, _, [{_, M} | _] = Toks) ->
-    [lists:reverse(Cur) | group_tokens([], M, Toks)];
-group_tokens(Cur, N, [Tok = {_, N, _} | Toks]) ->
-    group_tokens([Tok | Cur], N, Toks);
-group_tokens(Cur, _, [{_, M, _} | _] = Toks) ->
-    [lists:reverse(Cur) | group_tokens([], M, Toks)].
+group_tokens1([])                       -> [];
+group_tokens1([{_, N, _} | _] = Tokens) -> group_tokens([], N, Tokens);
+group_tokens1([{_, N} | _] = Tokens)    -> group_tokens([], N, Tokens).
+
+group_tokens(Cur, _, [])                     -> [Cur];
+group_tokens(Cur, N, [T = {_, N} | Toks])    -> group_tokens([T | Cur], N, Toks);
+group_tokens(Cur, _, [{_, M} | _] = Toks)    -> [Cur | group_tokens([], M, Toks)];
+group_tokens(Cur, N, [T = {_, N, _} | Toks]) -> group_tokens([T | Cur], N, Toks);
+group_tokens(Cur, _, [{_, M, _} | _] = Toks) -> [Cur | group_tokens([], M, Toks)].
 
 write_term_file(File, Terms) ->
     write_file(File, list_to_binary([io_lib:format("~w.~n", [Term]) ||
