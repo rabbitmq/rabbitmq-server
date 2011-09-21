@@ -66,6 +66,7 @@ is_file(File) ->
     end.
 
 is_dir(Dir) -> is_dir_internal(read_file_info(Dir)).
+
 is_dir_no_handle(Dir) -> is_dir_internal(prim_file:read_file_info(Dir)).
 
 is_dir_internal({ok, #file_info{type=directory}}) -> true;
@@ -94,8 +95,7 @@ wildcard(Pattern, Dir) ->
     {ok, RE} = re:compile(Pattern, [anchored]),
     [File || File <- Files, match =:= re:run(File, RE, [{capture, none}])].
 
-list_dir(Dir) ->
-    with_fhc_handle(fun () -> prim_file:list_dir(Dir) end).
+list_dir(Dir) -> with_fhc_handle(fun () -> prim_file:list_dir(Dir) end).
 
 read_file_info(File) ->
     with_fhc_handle(fun () -> prim_file:read_file_info(File) end).
@@ -123,20 +123,19 @@ group_tokens(Ts) -> lists:reverse([lists:reverse(G) || G <- group_tokens1(Ts)]).
 
 group_tokens1([])                       -> [];
 group_tokens1([{_, N, _} | _] = Tokens) -> group_tokens([], N, Tokens);
-group_tokens1([{_, N} | _] = Tokens)    -> group_tokens([], N, Tokens).
+group_tokens1([{_, N}    | _] = Tokens) -> group_tokens([], N, Tokens).
 
-group_tokens(Cur, _, [])                     -> [Cur];
-group_tokens(Cur, N, [T = {_, N} | Toks])    -> group_tokens([T | Cur], N, Toks);
-group_tokens(Cur, _, [{_, M} | _] = Toks)    -> [Cur | group_tokens([], M, Toks)];
-group_tokens(Cur, N, [T = {_, N, _} | Toks]) -> group_tokens([T | Cur], N, Toks);
-group_tokens(Cur, _, [{_, M, _} | _] = Toks) -> [Cur | group_tokens([], M, Toks)].
+group_tokens(Cur, _, [])                   -> [Cur];
+group_tokens(Cur, N, [T = {_, N} | Ts])    -> group_tokens([T | Cur], N, Ts);
+group_tokens(Cur, _, [{_, M} | _] = Ts)    -> [Cur | group_tokens([], M, Ts)];
+group_tokens(Cur, N, [T = {_, N, _} | Ts]) -> group_tokens([T | Cur], N, Ts);
+group_tokens(Cur, _, [{_, M, _} | _] = Ts) -> [Cur | group_tokens([], M, Ts)].
 
 write_term_file(File, Terms) ->
     write_file(File, list_to_binary([io_lib:format("~w.~n", [Term]) ||
                                         Term <- Terms])).
 
-write_file(Path, Data) ->
-    write_file(Path, Data, []).
+write_file(Path, Data) -> write_file(Path, Data, []).
 
 %% write_file/3 and make_binary/1 are both based on corresponding
 %% functions in the kernel/file.erl module of the Erlang R14B02
