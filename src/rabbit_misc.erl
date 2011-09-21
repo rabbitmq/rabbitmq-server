@@ -18,8 +18,6 @@
 -include("rabbit.hrl").
 -include("rabbit_framing.hrl").
 
--include_lib("kernel/include/file.hrl").
-
 -export([method_record_type/1, polite_pause/0, polite_pause/1]).
 -export([die/1, frame_error/2, amqp_error/4,
          protocol_error/3, protocol_error/4, protocol_error/1]).
@@ -40,28 +38,22 @@
 -export([upmap/2, map_in_order/2]).
 -export([table_filter/3]).
 -export([dirty_read_all/1, dirty_foreach_key/2, dirty_dump_log/1]).
--export([read_term_file/1, write_term_file/2, write_file/2, write_file/3]).
--export([append_file/2, ensure_parent_dirs_exist/1]).
--export([is_file/1, is_dir/1, file_size/1, ensure_dir/1, wildcard/2, list_dir/1]).
 -export([format_stderr/2, with_local_io/1]).
 -export([start_applications/1, stop_applications/1]).
 -export([unfold/2, ceil/1, queue_fold/3]).
 -export([sort_field_table/1]).
 -export([pid_to_string/1, string_to_pid/1]).
 -export([version_compare/2, version_compare/3]).
--export([delete/1, recursive_delete/1, recursive_copy/2]).
 -export([dict_cons/3, orddict_cons/3]).
 -export([get_options/2]).
 -export([all_module_attributes/1, build_acyclic_graph/3]).
 -export([now_ms/0]).
--export([lock_file/1]).
 -export([const_ok/0, const/1]).
 -export([ntoa/1, ntoab/1]).
 -export([is_process_alive/1]).
 -export([pget/2, pget/3, pget_or_die/2]).
 -export([format_message_queue/2]).
 -export([append_rpc_all_nodes/4]).
--export([with_fhc_handle/1]).
 
 %%----------------------------------------------------------------------------
 
@@ -161,13 +153,6 @@
 -spec(dirty_foreach_key/2 :: (fun ((any()) -> any()), atom())
                              -> 'ok' | 'aborted').
 -spec(dirty_dump_log/1 :: (file:filename()) -> ok_or_error()).
--spec(read_term_file/1 ::
-        (file:filename()) -> {'ok', [any()]} | rabbit_types:error(any())).
--spec(write_term_file/2 :: (file:filename(), [any()]) -> ok_or_error()).
--spec(write_file/2 :: (file:filename(), iodata()) -> ok_or_error()).
--spec(write_file/3 :: (file:filename(), iodata(), [any()]) -> ok_or_error()).
--spec(append_file/2 :: (file:filename(), string()) -> ok_or_error()).
--spec(ensure_parent_dirs_exist/1 :: (string()) -> 'ok').
 -spec(format_stderr/2 :: (string(), [any()]) -> 'ok').
 -spec(with_local_io/1 :: (fun (() -> A)) -> A).
 -spec(start_applications/1 :: ([atom()]) -> 'ok').
@@ -183,12 +168,6 @@
 -spec(version_compare/3 ::
         (string(), string(), ('lt' | 'lte' | 'eq' | 'gte' | 'gt'))
         -> boolean()).
--spec(recursive_delete/1 ::
-        ([file:filename()])
-        -> rabbit_types:ok_or_error({file:filename(), any()})).
--spec(recursive_copy/2 ::
-        (file:filename(), file:filename())
-        -> rabbit_types:ok_or_error({file:filename(), file:filename(), any()})).
 -spec(dict_cons/3 :: (any(), any(), dict()) -> dict()).
 -spec(orddict_cons/3 :: (any(), any(), orddict:orddict()) -> orddict:orddict()).
 -spec(get_options/2 :: ([optdef()], [string()])
@@ -202,7 +181,6 @@
                                                {bad_edge, [digraph:vertex()]}),
                                       digraph:vertex(), digraph:vertex()})).
 -spec(now_ms/0 :: () -> non_neg_integer()).
--spec(lock_file/1 :: (file:filename()) -> rabbit_types:ok_or_error('eexist')).
 -spec(const_ok/0 :: () -> 'ok').
 -spec(const/1 :: (A) -> thunk(A)).
 -spec(ntoa/1 :: (inet:ip_address()) -> string()).
@@ -528,155 +506,6 @@ dirty_dump_log1(LH, {K, Terms, BadBytes}) ->
     io:format("Bad Chunk, ~p: ~p~n", [BadBytes, Terms]),
     dirty_dump_log1(LH, disk_log:chunk(LH, K)).
 
-
-read_term_file(File) ->
-    try
-        {ok, Data} = with_fhc_handle(fun () -> prim_file:read_file(File) end),
-        {ok, Tokens, _} = erl_scan:string(binary:bin_to_list(Data)),
-        TokenGroups = group_tokens(Tokens),
-        {ok, [begin
-                  {ok, Term} = erl_parse:parse_term(Tokens1),
-                  Term
-              end || Tokens1 <- TokenGroups]}
-    catch
-        error:{badmatch, Error} -> Error
-    end.
-
-group_tokens([]) ->
-    [];
-group_tokens([{_, N, _} | _] = Tokens) ->
-    lists:reverse(group_tokens([], N, Tokens));
-group_tokens([{_, N} | _] = Tokens) ->
-    lists:reverse(group_tokens([], N, Tokens)).
-
-group_tokens(Cur, _, []) ->
-    [lists:reverse(Cur)];
-group_tokens(Cur, N, [Tok = {_, N} | Toks]) ->
-    group_tokens([Tok | Cur], N, Toks);
-group_tokens(Cur, _, [{_, M} | _] = Toks) ->
-    [lists:reverse(Cur) | group_tokens([], M, Toks)];
-group_tokens(Cur, N, [Tok = {_, N, _} | Toks]) ->
-    group_tokens([Tok | Cur], N, Toks);
-group_tokens(Cur, _, [{_, M, _} | _] = Toks) ->
-    [lists:reverse(Cur) | group_tokens([], M, Toks)].
-
-write_term_file(File, Terms) ->
-    write_file(File, list_to_binary([io_lib:format("~w.~n", [Term]) ||
-                                        Term <- Terms])).
-
-write_file(Path, Data) ->
-    write_file(Path, Data, []).
-
-%% write_file/3 and make_binary/1 are both based on corresponding
-%% functions in the kernel/file.erl module of the Erlang R14B02
-%% release, which is licensed under the EPL. That implementation of
-%% write_file/3 does not do an fsync prior to closing the file, hence
-%% the existence of this version. APIs are otherwise identical.
-write_file(Path, Data, Modes) ->
-    Modes1 = [binary, write | (Modes -- [binary, write])],
-    case make_binary(Data) of
-        Bin when is_binary(Bin) ->
-            with_fhc_handle(
-              fun () -> case prim_file:open(Path, Modes1) of
-                            {ok, Hdl}      -> try prim_file:write(Hdl, Bin) of
-                                                  ok -> prim_file:sync(Hdl);
-                                                  {error, _} = E -> E
-                                              after
-                                                  prim_file:close(Hdl)
-                                              end;
-                            {error, _} = E -> E
-                        end
-              end);
-        {error, _} = E -> E
-    end.
-
-make_binary(Bin) when is_binary(Bin) ->
-    Bin;
-make_binary(List) ->
-    try
-        iolist_to_binary(List)
-    catch error:Reason ->
-            {error, Reason}
-    end.
-
-
-append_file(File, Suffix) ->
-    case read_file_info(File) of
-        {ok, FInfo}     -> append_file(File, FInfo#file_info.size, Suffix);
-        {error, enoent} -> append_file(File, 0, Suffix);
-        Error           -> Error
-    end.
-
-append_file(_, _, "") ->
-    ok;
-append_file(File, 0, Suffix) ->
-    with_fhc_handle(fun () ->
-                            case prim_file:open([File, Suffix], [append]) of
-                                {ok, Fd} -> prim_file:close(Fd);
-                                Error    -> Error
-                            end
-                    end);
-append_file(File, _, Suffix) ->
-    case with_fhc_handle(fun () -> prim_file:read_file(File) end) of
-        {ok, Data} -> write_file([File, Suffix], Data, [append]);
-        Error      -> Error
-    end.
-
-ensure_parent_dirs_exist(Filename) ->
-    case ensure_dir(Filename) of
-        ok              -> ok;
-        {error, Reason} ->
-            throw({error, {cannot_create_parent_dirs, Filename, Reason}})
-    end.
-
-is_file(File) ->
-    case read_file_info(File) of
-        {ok, #file_info{type=regular}}   -> true;
-        {ok, #file_info{type=directory}} -> true;
-        _                                -> false
-    end.
-
-is_dir(Dir) -> is_dir_internal(read_file_info(Dir)).
-is_dir_no_handle(Dir) -> is_dir_internal(prim_file:read_file_info(Dir)).
-
-is_dir_internal({ok, #file_info{type=directory}}) -> true;
-is_dir_internal(_)                                -> false.
-
-file_size(File) ->
-    case read_file_info(File) of
-        {ok, #file_info{size=Size}} -> Size;
-        _                           -> 0
-    end.
-
-ensure_dir(File) -> with_fhc_handle(fun () -> ensure_dir_internal(File) end).
-
-ensure_dir_internal("/")  ->
-    ok;
-ensure_dir_internal(File) ->
-    Dir = filename:dirname(File),
-    case is_dir_no_handle(Dir) of
-        true  -> ok;
-        false -> ensure_dir_internal(Dir),
-                 prim_file:make_dir(Dir)
-    end.
-
-wildcard(Pattern, Dir) ->
-    {ok, Files} = list_dir(Dir),
-    {ok, RE} = re:compile(Pattern, [anchored]),
-    [File || File <- Files, match =:= re:run(File, RE, [{capture, none}])].
-
-list_dir(Dir) ->
-    with_fhc_handle(fun () -> prim_file:list_dir(Dir) end).
-
-read_file_info(File) ->
-    with_fhc_handle(fun () -> prim_file:read_file_info(File) end).
-
-with_fhc_handle(Fun) ->
-    ok = file_handle_cache:obtain(),
-    try Fun()
-    after ok = file_handle_cache:release()
-    end.
-
 format_stderr(Fmt, Args) ->
     case os:type() of
         {unix, _} ->
@@ -827,79 +656,6 @@ version_compare(A,  B) ->
 
 dropdot(A) -> lists:dropwhile(fun (X) -> X =:= $. end, A).
 
-delete(File) -> with_fhc_handle(fun () -> prim_file:delete(File) end).
-
-recursive_delete(Files) ->
-    with_fhc_handle(
-      fun () -> lists:foldl(fun (Path,  ok) -> recursive_delete1(Path);
-                                (_Path, {error, _Err} = Error) -> Error
-                            end, ok, Files)
-      end).
-
-recursive_delete1(Path) ->
-    case is_dir_no_handle(Path) and not(is_symlink_no_handle(Path)) of
-        false -> case prim_file:delete(Path) of
-                     ok              -> ok;
-                     {error, enoent} -> ok; %% Path doesn't exist anyway
-                     {error, Err}    -> {error, {Path, Err}}
-                 end;
-        true  -> case prim_file:list_dir(Path) of
-                     {ok, FileNames} ->
-                         case lists:foldl(
-                                fun (FileName, ok) ->
-                                        recursive_delete1(
-                                          filename:join(Path, FileName));
-                                    (_FileName, Error) ->
-                                        Error
-                                end, ok, FileNames) of
-                             ok ->
-                                 case prim_file:del_dir(Path) of
-                                     ok           -> ok;
-                                     {error, Err} -> {error, {Path, Err}}
-                                 end;
-                             {error, _Err} = Error ->
-                                 Error
-                         end;
-                     {error, Err} ->
-                         {error, {Path, Err}}
-                 end
-    end.
-
-is_symlink_no_handle(File) ->
-    case prim_file:read_link(File) of
-        {ok, _} -> true;
-        _       -> false
-    end.
-
-recursive_copy(Src, Dest) ->
-    %% Note that this uses the 'file' module and, hence, shouldn't be
-    %% run on many processes at once.
-    case is_dir(Src) of
-        false -> case file:copy(Src, Dest) of
-                     {ok, _Bytes}    -> ok;
-                     {error, enoent} -> ok; %% Path doesn't exist anyway
-                     {error, Err}    -> {error, {Src, Dest, Err}}
-                 end;
-        true  -> case file:list_dir(Src) of
-                     {ok, FileNames} ->
-                         case file:make_dir(Dest) of
-                             ok ->
-                                 lists:foldl(
-                                   fun (FileName, ok) ->
-                                           recursive_copy(
-                                             filename:join(Src, FileName),
-                                             filename:join(Dest, FileName));
-                                       (_FileName, Error) ->
-                                           Error
-                                   end, ok, FileNames);
-                             {error, Err} ->
-                                 {error, {Src, Dest, Err}}
-                         end;
-                     {error, Err} ->
-                         {error, {Src, Dest, Err}}
-                 end
-    end.
-
 dict_cons(Key, Value, Dict) ->
     dict:update(Key, fun (List) -> [Value | List] end, [Value], Dict).
 
@@ -987,17 +743,6 @@ build_acyclic_graph(VertexFun, EdgeFun, Graph) ->
     catch {graph_error, Reason} ->
             true = digraph:delete(G),
             {error, Reason}
-    end.
-
-%% TODO: When we stop supporting Erlang prior to R14, this should be
-%% replaced with file:open [write, exclusive]
-lock_file(Path) ->
-    case is_file(Path) of
-        true  -> {error, eexist};
-        false -> with_fhc_handle(
-                   fun () -> {ok, Lock} = prim_file:open(Path, [write]),
-                             ok = prim_file:close(Lock)
-                   end)
     end.
 
 const_ok() -> ok.

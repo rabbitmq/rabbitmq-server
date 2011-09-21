@@ -229,7 +229,7 @@
 
 init(Name, OnSyncFun) ->
     State = #qistate { dir = Dir } = blank_state(Name),
-    false = rabbit_misc:is_file(Dir), %% is_file == is file or dir
+    false = rabbit_file:is_file(Dir), %% is_file == is file or dir
     State #qistate { on_sync = OnSyncFun }.
 
 shutdown_terms(Name) ->
@@ -256,7 +256,7 @@ terminate(Terms, State) ->
 
 delete_and_terminate(State) ->
     {_SegmentCounts, State1 = #qistate { dir = Dir }} = terminate(State),
-    ok = rabbit_misc:recursive_delete([Dir]),
+    ok = rabbit_file:recursive_delete([Dir]),
     State1.
 
 publish(MsgId, SeqId, MsgProps, IsPersistent,
@@ -359,16 +359,16 @@ recover(DurableQueues) ->
                           {[dict:fetch(QueueDirName, DurableDict) | DurableAcc],
                            TermsAcc1};
                       false ->
-                          ok = rabbit_misc:recursive_delete([QueueDirPath]),
+                          ok = rabbit_file:recursive_delete([QueueDirPath]),
                           {DurableAcc, TermsAcc}
                   end
           end, {[], []}, QueueDirNames),
     {DurableTerms, {fun queue_index_walker/1, {start, DurableQueueNames}}}.
 
 all_queue_directory_names(Dir) ->
-    case rabbit_misc:list_dir(Dir) of
+    case rabbit_file:list_dir(Dir) of
         {ok, Entries}   -> [ Entry || Entry <- Entries,
-                                      rabbit_misc:is_dir(
+                                      rabbit_file:is_dir(
                                         filename:join(Dir, Entry)) ];
         {error, enoent} -> []
     end.
@@ -392,18 +392,18 @@ blank_state(QueueName) ->
 clean_file_name(Dir) -> filename:join(Dir, ?CLEAN_FILENAME).
 
 detect_clean_shutdown(Dir) ->
-    case rabbit_misc:delete(clean_file_name(Dir)) of
+    case rabbit_file:delete(clean_file_name(Dir)) of
         ok              -> true;
         {error, enoent} -> false
     end.
 
 read_shutdown_terms(Dir) ->
-    rabbit_misc:read_term_file(clean_file_name(Dir)).
+    rabbit_file:read_term_file(clean_file_name(Dir)).
 
 store_clean_shutdown(Terms, Dir) ->
     CleanFileName = clean_file_name(Dir),
-    ok = rabbit_misc:ensure_dir(CleanFileName),
-    rabbit_misc:write_term_file(CleanFileName, Terms).
+    ok = rabbit_file:ensure_dir(CleanFileName),
+    rabbit_file:write_term_file(CleanFileName, Terms).
 
 init_clean(RecoveredCounts, State) ->
     %% Load the journal. Since this is a clean recovery this (almost)
@@ -603,8 +603,8 @@ flush_journal(State = #qistate { segments = Segments }) ->
     Segments1 =
         segment_fold(
           fun (#segment { unacked = 0, path = Path }, SegmentsN) ->
-                  case rabbit_misc:is_file(Path) of
-                      true  -> ok = rabbit_misc:delete(Path);
+                  case rabbit_file:is_file(Path) of
+                      true  -> ok = rabbit_file:delete(Path);
                       false -> ok
                   end,
                   SegmentsN;
@@ -630,7 +630,7 @@ append_journal_to_segment(#segment { journal_entries = JEntries,
 get_journal_handle(State = #qistate { journal_handle = undefined,
                                       dir = Dir }) ->
     Path = filename:join(Dir, ?JOURNAL_FILENAME),
-    ok = rabbit_misc:ensure_dir(Path),
+    ok = rabbit_file:ensure_dir(Path),
     {ok, Hdl} = file_handle_cache:open(Path, ?WRITE_MODE,
                                        [{write_buffer, infinity}]),
     {Hdl, State #qistate { journal_handle = Hdl }};
@@ -735,7 +735,7 @@ all_segment_nums(#qistate { dir = Dir, segments = Segments }) ->
                       lists:takewhile(fun (C) -> $0 =< C andalso C =< $9 end,
                                       SegName)), Set)
           end, sets:from_list(segment_nums(Segments)),
-          rabbit_misc:wildcard(".*\\" ++ ?SEGMENT_EXTENSION, Dir)))).
+          rabbit_file:wildcard(".*\\" ++ ?SEGMENT_EXTENSION, Dir)))).
 
 segment_find_or_new(Seg, Dir, Segments) ->
     case segment_find(Seg, Segments) of
@@ -836,7 +836,7 @@ segment_entries_foldr(Fun, Init,
 %%
 %% Does not do any combining with the journal at all.
 load_segment(KeepAcked, #segment { path = Path }) ->
-    case rabbit_misc:is_file(Path) of
+    case rabbit_file:is_file(Path) of
         false -> {array_new(), 0};
         true  -> {ok, Hdl} = file_handle_cache:open(Path, ?READ_AHEAD_MODE, []),
                  {ok, 0} = file_handle_cache:position(Hdl, bof),
@@ -1040,12 +1040,12 @@ foreach_queue_index(Funs) ->
 transform_queue(Dir, Gatherer, {JournalFun, SegmentFun}) ->
     ok = transform_file(filename:join(Dir, ?JOURNAL_FILENAME), JournalFun),
     [ok = transform_file(filename:join(Dir, Seg), SegmentFun)
-     || Seg <- rabbit_misc:wildcard(".*\\" ++ ?SEGMENT_EXTENSION, Dir)],
+     || Seg <- rabbit_file:wildcard(".*\\" ++ ?SEGMENT_EXTENSION, Dir)],
     ok = gatherer:finish(Gatherer).
 
 transform_file(Path, Fun) ->
     PathTmp = Path ++ ".upgrade",
-    case rabbit_misc:file_size(Path) of
+    case rabbit_file:file_size(Path) of
         0    -> ok;
         Size -> {ok, PathTmpHdl} =
                     file_handle_cache:open(PathTmp, ?WRITE_MODE,
@@ -1059,8 +1059,7 @@ transform_file(Path, Fun) ->
                 ok = drive_transform_fun(Fun, PathTmpHdl, Content),
 
                 ok = file_handle_cache:close(PathTmpHdl),
-                ok = rabbit_misc:with_fhc_handle(
-                       fun () -> prim_file:rename(PathTmp, Path) end)
+                ok = rabbit_file:rename(PathTmp, Path)
     end.
 
 drive_transform_fun(Fun, Hdl, Contents) ->
