@@ -474,7 +474,11 @@ set_maximum_since_use(MaximumAge) ->
     end.
 
 obtain() ->
-    gen_server2:call(?SERVER, {obtain, self()}, infinity).
+    %% If the FHC isn't running, obtains succeed immediately.
+    case whereis(?SERVER) of
+        undefined -> ok;
+        _         -> gen_server2:call(?SERVER, {obtain, self()}, infinity)
+    end.
 
 release() ->
     gen_server2:cast(?SERVER, {release, self()}).

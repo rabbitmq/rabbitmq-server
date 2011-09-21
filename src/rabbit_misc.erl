@@ -42,13 +42,15 @@
 -export([dirty_read_all/1, dirty_foreach_key/2, dirty_dump_log/1]).
 -export([read_term_file/1, write_term_file/2, write_file/2, write_file/3]).
 -export([append_file/2, ensure_parent_dirs_exist/1]).
+-export([is_file/1, is_dir/1, file_size/1, ensure_dir/1, wildcard/2, list_dir/1]).
 -export([format_stderr/2, with_local_io/1]).
 -export([start_applications/1, stop_applications/1]).
 -export([unfold/2, ceil/1, queue_fold/3]).
 -export([sort_field_table/1]).
 -export([pid_to_string/1, string_to_pid/1]).
 -export([version_compare/2, version_compare/3]).
--export([recursive_delete/1, recursive_copy/2, dict_cons/3, orddict_cons/3]).
+-export([delete/1, recursive_delete/1, recursive_copy/2]).
+-export([dict_cons/3, orddict_cons/3]).
 -export([get_options/2]).
 -export([all_module_attributes/1, build_acyclic_graph/3]).
 -export([now_ms/0]).
@@ -59,6 +61,7 @@
 -export([pget/2, pget/3, pget_or_die/2]).
 -export([format_message_queue/2]).
 -export([append_rpc_all_nodes/4]).
+-export([with_fhc_handle/1]).
 
 %%----------------------------------------------------------------------------
 
@@ -528,7 +531,7 @@ dirty_dump_log1(LH, {K, Terms, BadBytes}) ->
 
 read_term_file(File) ->
     try
-        {ok, Data} = prim_file:read_file(File),
+        {ok, Data} = with_fhc_handle(fun () -> prim_file:read_file(File) end),
         {ok, Tokens, _} = erl_scan:string(binary:bin_to_list(Data)),
         TokenGroups = group_tokens(Tokens),
         {ok, [begin
@@ -573,15 +576,17 @@ write_file(Path, Data, Modes) ->
     Modes1 = [binary, write | (Modes -- [binary, write])],
     case make_binary(Data) of
         Bin when is_binary(Bin) ->
-            case prim_file:open(Path, Modes1) of
-                {ok, Hdl}      -> try prim_file:write(Hdl, Bin) of
-                                      ok             -> prim_file:sync(Hdl);
-                                      {error, _} = E -> E
-                                  after
-                                      prim_file:close(Hdl)
-                                  end;
-                {error, _} = E -> E
-            end;
+            with_fhc_handle(
+              fun () -> case prim_file:open(Path, Modes1) of
+                            {ok, Hdl}      -> try prim_file:write(Hdl, Bin) of
+                                                  ok -> prim_file:sync(Hdl);
+                                                  {error, _} = E -> E
+                                              after
+                                                  prim_file:close(Hdl)
+                                              end;
+                            {error, _} = E -> E
+                        end
+              end);
         {error, _} = E -> E
     end.
 
@@ -596,7 +601,7 @@ make_binary(List) ->
 
 
 append_file(File, Suffix) ->
-    case prim_file:read_file_info(File) of
+    case read_file_info(File) of
         {ok, FInfo}     -> append_file(File, FInfo#file_info.size, Suffix);
         {error, enoent} -> append_file(File, 0, Suffix);
         Error           -> Error
@@ -605,21 +610,71 @@ append_file(File, Suffix) ->
 append_file(_, _, "") ->
     ok;
 append_file(File, 0, Suffix) ->
-    case prim_file:open([File, Suffix], [append]) of
-        {ok, Fd} -> prim_file:close(Fd);
-        Error    -> Error
-    end;
+    with_fhc_handle(fun () ->
+                            case prim_file:open([File, Suffix], [append]) of
+                                {ok, Fd} -> prim_file:close(Fd);
+                                Error    -> Error
+                            end
+                    end);
 append_file(File, _, Suffix) ->
-    case prim_file:read_file(File) of
+    case with_fhc_handle(fun () -> prim_file:read_file(File) end) of
         {ok, Data} -> write_file([File, Suffix], Data, [append]);
         Error      -> Error
     end.
 
 ensure_parent_dirs_exist(Filename) ->
-    case filelib2:ensure_dir(Filename) of
+    case ensure_dir(Filename) of
         ok              -> ok;
         {error, Reason} ->
             throw({error, {cannot_create_parent_dirs, Filename, Reason}})
+    end.
+
+is_file(File) ->
+    case read_file_info(File) of
+        {ok, #file_info{type=regular}}   -> true;
+        {ok, #file_info{type=directory}} -> true;
+        _                                -> false
+    end.
+
+is_dir(Dir) -> is_dir_internal(read_file_info(Dir)).
+is_dir_no_handle(Dir) -> is_dir_internal(prim_file:read_file_info(Dir)).
+
+is_dir_internal({ok, #file_info{type=directory}}) -> true;
+is_dir_internal(_)                                -> false.
+
+file_size(File) ->
+    case read_file_info(File) of
+        {ok, #file_info{size=Size}} -> Size;
+        _                           -> 0
+    end.
+
+ensure_dir(File) -> with_fhc_handle(fun () -> ensure_dir_internal(File) end).
+
+ensure_dir_internal("/")  ->
+    ok;
+ensure_dir_internal(File) ->
+    Dir = filename:dirname(File),
+    case is_dir_no_handle(Dir) of
+        true  -> ok;
+        false -> ensure_dir_internal(Dir),
+                 prim_file:make_dir(Dir)
+    end.
+
+wildcard(Pattern, Dir) ->
+    {ok, Files} = list_dir(Dir),
+    {ok, RE} = re:compile(Pattern, [anchored]),
+    [File || File <- Files, match =:= re:run(File, RE, [{capture, none}])].
+
+list_dir(Dir) ->
+    with_fhc_handle(fun () -> prim_file:list_dir(Dir) end).
+
+read_file_info(File) ->
+    with_fhc_handle(fun () -> prim_file:read_file_info(File) end).
+
+with_fhc_handle(Fun) ->
+    ok = file_handle_cache:obtain(),
+    try Fun()
+    after ok = file_handle_cache:release()
     end.
 
 format_stderr(Fmt, Args) ->
@@ -772,13 +827,17 @@ version_compare(A,  B) ->
 
 dropdot(A) -> lists:dropwhile(fun (X) -> X =:= $. end, A).
 
+delete(File) -> with_fhc_handle(fun () -> prim_file:delete(File) end).
+
 recursive_delete(Files) ->
-    lists:foldl(fun (Path,  ok                   ) -> recursive_delete1(Path);
-                    (_Path, {error, _Err} = Error) -> Error
-                end, ok, Files).
+    with_fhc_handle(
+      fun () -> lists:foldl(fun (Path,  ok) -> recursive_delete1(Path);
+                                (_Path, {error, _Err} = Error) -> Error
+                            end, ok, Files)
+      end).
 
 recursive_delete1(Path) ->
-    case filelib2:is_dir(Path) and not(is_symlink(Path)) of
+    case is_dir_no_handle(Path) and not(is_symlink_no_handle(Path)) of
         false -> case prim_file:delete(Path) of
                      ok              -> ok;
                      {error, enoent} -> ok; %% Path doesn't exist anyway
@@ -806,22 +865,24 @@ recursive_delete1(Path) ->
                  end
     end.
 
-is_symlink(Name) ->
-    case file:read_link(Name) of
+is_symlink_no_handle(File) ->
+    case prim_file:read_link(File) of
         {ok, _} -> true;
         _       -> false
     end.
 
 recursive_copy(Src, Dest) ->
-    case filelib2:is_dir(Src) of
-        false -> case prim_file:copy(Src, Dest, infinity) of
+    %% Note that this uses the 'file' module and, hence, shouldn't be
+    %% run on many processes at once.
+    case is_dir(Src) of
+        false -> case file:copy(Src, Dest) of
                      {ok, _Bytes}    -> ok;
                      {error, enoent} -> ok; %% Path doesn't exist anyway
                      {error, Err}    -> {error, {Src, Dest, Err}}
                  end;
-        true  -> case prim_file:list_dir(Src) of
+        true  -> case file:list_dir(Src) of
                      {ok, FileNames} ->
-                         case prim_file:make_dir(Dest) of
+                         case file:make_dir(Dest) of
                              ok ->
                                  lists:foldl(
                                    fun (FileName, ok) ->
@@ -931,10 +992,12 @@ build_acyclic_graph(VertexFun, EdgeFun, Graph) ->
 %% TODO: When we stop supporting Erlang prior to R14, this should be
 %% replaced with file:open [write, exclusive]
 lock_file(Path) ->
-    case filelib2:is_file(Path) of
+    case is_file(Path) of
         true  -> {error, eexist};
-        false -> {ok, Lock} = prim_file:open(Path, [write]),
-                 ok = prim_file:close(Lock)
+        false -> with_fhc_handle(
+                   fun () -> {ok, Lock} = prim_file:open(Path, [write]),
+                             ok = prim_file:close(Lock)
+                   end)
     end.
 
 const_ok() -> ok.
