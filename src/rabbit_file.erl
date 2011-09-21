@@ -35,8 +35,8 @@
 -spec(file_size/1 :: ((file:filename())) -> non_neg_integer()).
 -spec(ensure_dir/1 :: ((file:filename())) -> ok_or_error()).
 -spec(wildcard/2 :: (string(), file:filename()) -> [file:filename()]).
--spec(list_dir/1 ::
-        (file:filename()) -> rabbit_types:ok_or_error([file:filename()], any())).
+-spec(list_dir/1 :: (file:filename()) -> rabbit_types:ok_or_error2(
+                                           [file:filename()], any())).
 -spec(read_term_file/1 ::
         (file:filename()) -> {'ok', [any()]} | rabbit_types:error(any())).
 -spec(write_term_file/2 :: (file:filename(), [any()]) -> ok_or_error()).
