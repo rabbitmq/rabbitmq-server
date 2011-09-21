@@ -201,15 +201,14 @@ set ERLANG_SERVICE_ARGUMENTS= ^
 !RABBITMQ_EBIN_PATH! ^
 -boot "!RABBITMQ_BOOT_FILE!" ^
 !RABBITMQ_CONFIG_ARG! ^
--s rabbit ^
 +W w ^
 +A30 ^
 +P 1048576 ^
 -kernel inet_default_connect_options "[{nodelay,true}]" ^
 !RABBITMQ_LISTEN_ARG! ^
--kernel error_logger {file,\""!LOGS:\=/!"\"} ^
 !RABBITMQ_SERVER_ERL_ARGS! ^
 -sasl errlog_type error ^
+-kernel error_logger {file,\""!LOGS:\=/!"\"} ^
 -sasl sasl_error_logger {file,\""!SASL_LOGS:\=/!"\"} ^
 -os_mon start_cpu_sup true ^
 -os_mon start_disksup false ^
