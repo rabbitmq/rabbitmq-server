@@ -20,7 +20,7 @@
 -export([start/0, stop/0, find_plugins/1, read_enabled_plugins/1,
          lookup_plugins/2, calculate_required_plugins/2]).
 
--define(COMPACT_OPT, "-c").
+-define(VERBOSE_OPT, "-v").
 
 %%----------------------------------------------------------------------------
 
@@ -39,7 +39,7 @@ start() ->
     {ok, [[PluginsDistDir|_]|_]} = init:get_argument(plugins_dist_dir),
     put(plugins_dist_dir, PluginsDistDir),
     {[Command0 | Args], Opts} =
-        case rabbit_misc:get_options([{flag, ?COMPACT_OPT}],
+        case rabbit_misc:get_options([{flag, ?VERBOSE_OPT}],
                                      init:get_plain_arguments()) of
             {[], _Opts}    -> usage();
             CmdArgsAndOpts -> CmdArgsAndOpts
@@ -76,7 +76,7 @@ usage() ->
 action(list, [], Opts) ->
     action(list, [".*"], Opts);
 action(list, [Pat], Opts) ->
-    format_plugins(Pat, proplists:get_bool(?COMPACT_OPT, Opts));
+    format_plugins(Pat, proplists:get_bool(?VERBOSE_OPT, Opts));
 
 action(enable, ToEnable0, _Opts) ->
     AllPlugins = find_plugins(),
@@ -201,7 +201,7 @@ parse_binary(Bin) ->
     end.
 
 %% Pretty print a list of plugins.
-format_plugins(Pattern, Compact) ->
+format_plugins(Pattern, Verbose) ->
     AvailablePlugins = find_plugins(),
     EnabledExplicitly = read_enabled_plugins(),
     EnabledImplicitly =
@@ -212,25 +212,25 @@ format_plugins(Pattern, Compact) ->
                   Plugin = #plugin{name = Name} <- AvailablePlugins,
                   re:run(atom_to_list(Name), RE, [{capture, none}]) =:= match],
     MaxWidth = lists:max([length(atom_to_list(Name)) ||
-                             #plugin{name = Name} <- Plugins]),
-    [ format_plugin(P, EnabledExplicitly, EnabledImplicitly, Compact, MaxWidth) ||
+                             #plugin{name = Name} <- Plugins] ++ [0]),
+    [ format_plugin(P, EnabledExplicitly, EnabledImplicitly, Verbose, MaxWidth) ||
         P <- Plugins],
     ok.
 
 format_plugin(#plugin{name = Name, version = Version, description = Description,
                       dependencies = Dependencies},
-              EnabledExplicitly, EnabledImplicitly, Compact, MaxWidth) ->
+              EnabledExplicitly, EnabledImplicitly, Verbose, MaxWidth) ->
     Glyph = case {lists:member(Name, EnabledExplicitly),
                   lists:member(Name, EnabledImplicitly)} of
                 {true, false} -> "[E]";
                 {false, true} -> "[e]";
                 _             -> "[ ]"
             end,
-    case Compact of
-        true ->
+    case Verbose of
+        false ->
             io:format("~s ~-" ++ integer_to_list(MaxWidth) ++
                           "w ~s~n", [Glyph, Name, Version]);
-        false ->
+        true ->
             io:format("~s ~w~n", [Glyph, Name]),
             io:format("    Version:    \t~s~n", [Version]),
             case Dependencies of
