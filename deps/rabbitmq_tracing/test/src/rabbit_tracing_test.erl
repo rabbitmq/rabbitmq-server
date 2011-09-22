@@ -16,7 +16,7 @@
 
 -module(rabbit_tracing_test).
 
--define(LOG_DIR, "/tmp/rabbitmq-tracing/").
+-define(LOG_DIR, "/var/tmp/rabbitmq-tracing/").
 
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
@@ -25,8 +25,11 @@
 -import(rabbit_misc, [pget/2]).
 
 tracing_test() ->
-    {ok, Files} = file:list_dir(?LOG_DIR),
-    [ok = file:delete(?LOG_DIR ++ F) || F <- Files],
+    case filelib:is_dir(?LOG_DIR) of
+        true -> {ok, Files} = file:list_dir(?LOG_DIR),
+                [ok = file:delete(?LOG_DIR ++ F) || F <- Files];
+        _    -> ok
+    end,
 
     [] = http_get("/traces/%2f/"),
     [] = http_get("/trace-files/"),
