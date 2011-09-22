@@ -2,6 +2,7 @@ TARBALL_DIR=../../../dist
 TARBALL=$(notdir $(wildcard $(TARBALL_DIR)/rabbitmq-server-[0-9.]*.tar.gz))
 COMMON_DIR=../../common
 VERSION=$(shell echo $(TARBALL) | sed -e 's:rabbitmq-server-\(.*\)\.tar\.gz:\1:g')
+PLUGINS_DIST_DIR=
 
 DEBIAN_ORIG_TARBALL=$(shell echo $(TARBALL) |  sed -e 's:\(.*\)-\(.*\)\(\.tar\.gz\):\1_\2\.orig\3:g')
 UNPACKED_DIR=rabbitmq-server-$(VERSION)

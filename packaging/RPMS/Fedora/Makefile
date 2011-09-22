@@ -2,6 +2,7 @@ TARBALL_DIR=../../../dist
 TARBALL=$(notdir $(wildcard $(TARBALL_DIR)/rabbitmq-server-[0-9.]*.tar.gz))
 COMMON_DIR=../../common
 VERSION=$(shell echo $(TARBALL) | sed -e 's:rabbitmq-server-\(.*\)\.tar\.gz:\1:g')
+PLUGINS_DIST_DIR=
 
 TOP_DIR=$(shell pwd)
 #Under debian we do not want to check build dependencies, since that

@@ -55,6 +55,7 @@ mkdir -p %{buildroot}%{_localstatedir}/log/rabbitmq
 install -p -D -m 0755 %{S:1} %{buildroot}%{_initrddir}/rabbitmq-server
 install -p -D -m 0755 %{_rabbit_wrapper} %{buildroot}%{_sbindir}/rabbitmqctl
 install -p -D -m 0755 %{_rabbit_wrapper} %{buildroot}%{_sbindir}/rabbitmq-server
+install -p -D -m 0755 %{_rabbit_wrapper} %{buildroot}%{_sbindir}/rabbitmq-plugin
 install -p -D -m 0755 %{_rabbit_server_ocf} %{buildroot}%{_exec_prefix}/lib/ocf/resource.d/rabbitmq/rabbitmq-server
 
 install -p -D -m 0644 %{S:3} %{buildroot}%{_sysconfdir}/logrotate.d/rabbitmq-server
@@ -85,10 +86,22 @@ if ! getent passwd rabbitmq >/dev/null; then
             -c "RabbitMQ messaging server"
 fi
 
+chown -R rabbitmq:rabbitmq %{_rabbit_erllibdir}/plugins/
+
 %post
 /sbin/chkconfig --add %{name}
 if [ -f %{_sysconfdir}/rabbitmq/rabbitmq.conf ] && [ ! -f %{_sysconfdir}/rabbitmq/rabbitmq-env.conf ]; then
     mv %{_sysconfdir}/rabbitmq/rabbitmq.conf %{_sysconfdir}/rabbitmq/rabbitmq-env.conf
+fi
+
+if [ $1 -gt 1 ]; then
+    # Upgrade - find the old enabled_plugins file, copy it to the new
+    # version and re-enable plugins
+    ENABLED_PLUGINS_FILE=find %{_rabbit_libdir} -name 'enabled_plugins'
+    if [ "x" != "x$ENABLED_PLUGINS_FILE" ]; then
+        cp $ENABLED_PLUGINS_FILE %{_maindir}/plugins/
+        rabbitmq-plugin enable
+    fi
 fi
 
 %preun

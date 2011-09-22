@@ -14,11 +14,11 @@ DOCS_DIR=docs
 INCLUDES=$(wildcard $(INCLUDE_DIR)/*.hrl) $(INCLUDE_DIR)/rabbit_framing.hrl
 SOURCES=$(wildcard $(SOURCE_DIR)/*.erl) $(SOURCE_DIR)/rabbit_framing_amqp_0_9_1.erl $(SOURCE_DIR)/rabbit_framing_amqp_0_8.erl $(USAGES_ERL)
 BEAM_TARGETS=$(patsubst $(SOURCE_DIR)/%.erl, $(EBIN_DIR)/%.beam, $(SOURCES))
-TARGETS=$(EBIN_DIR)/rabbit.app $(INCLUDE_DIR)/rabbit_framing.hrl $(BEAM_TARGETS)
+TARGETS=$(EBIN_DIR)/rabbit.app $(INCLUDE_DIR)/rabbit_framing.hrl $(BEAM_TARGETS) plugins
 WEB_URL=http://www.rabbitmq.com/
 MANPAGES=$(patsubst %.xml, %.gz, $(wildcard $(DOCS_DIR)/*.[0-9].xml))
 WEB_MANPAGES=$(patsubst %.xml, %.man.xml, $(wildcard $(DOCS_DIR)/*.[0-9].xml) $(DOCS_DIR)/rabbitmq-service.xml)
-USAGES_XML=$(DOCS_DIR)/rabbitmqctl.1.xml
+USAGES_XML=$(DOCS_DIR)/rabbitmqctl.1.xml $(DOCS_DIR)/rabbitmq-plugins.1.xml
 USAGES_ERL=$(foreach XML, $(USAGES_XML), $(call usage_xml_to_erl, $(XML)))
 QC_MODULES := rabbit_backing_queue_qc
 QC_TRIALS ?= 100
@@ -57,6 +57,8 @@ endif
 ERLC_OPTS=-I $(INCLUDE_DIR) -o $(EBIN_DIR) -Wall -v +debug_info $(call boolean_macro,$(USE_SPECS),use_specs) $(call boolean_macro,$(USE_PROPER_QC),use_proper_qc)
 
 VERSION=0.0.0
+PLUGINS_SRC_DIR?=$(shell [ -d "plugins-src" ] && echo "plugins-src" || echo )
+PLUGINS_DIST_DIR=plugins-dist
 TARBALL_NAME=rabbitmq-server-$(VERSION)
 TARGET_SRC_DIR=dist/$(TARBALL_NAME)
 
@@ -101,6 +103,18 @@ endif
 
 all: $(TARGETS)
 
+.PHONY: plugins
+ifneq "$(PLUGINS_SRC_DIR)" ""
+plugins:
+	[ -d "$(PLUGINS_SRC_DIR)" ] || { echo "No plugins source distribution found (try linking public-umbrella to $(PLUGINS_SRC_DIR)"; false; }
+	-ln -s "$(CURDIR)" "$(PLUGINS_SRC_DIR)/rabbitmq-server"
+	mkdir -p $(PLUGINS_DIST_DIR)
+	PLUGINS_SRC_DIR="" $(MAKE) -C "$(PLUGINS_SRC_DIR)" plugins-dist PLUGINS_DIST_DIR="$(CURDIR)/$(PLUGINS_DIST_DIR)" VERSION=$(VERSION)
+else
+plugins:
+# Not building plugins
+endif
+
 $(DEPS_FILE): $(SOURCES) $(INCLUDES)
 	rm -f $@
 	echo $(subst : ,:,$(foreach FILE,$^,$(FILE):)) | escript generate_deps $@ $(EBIN_DIR)
@@ -143,6 +157,8 @@ $(BASIC_PLT): $(BEAM_TARGETS)
 clean:
 	rm -f $(EBIN_DIR)/*.beam
 	rm -f $(EBIN_DIR)/rabbit.app $(EBIN_DIR)/rabbit.boot $(EBIN_DIR)/rabbit.script $(EBIN_DIR)/rabbit.rel
+	rm -f $(PLUGINS_DIST_DIR)/*.ez
+	-PLUGINS_SRC_DIR="" PRESERVE_CLONE_DIR=1 make -C $(PLUGINS_SRC_DIR) clean
 	rm -f $(INCLUDE_DIR)/rabbit_framing.hrl $(SOURCE_DIR)/rabbit_framing_amqp_*.erl codegen.pyc
 	rm -f $(DOCS_DIR)/*.[0-9].gz $(DOCS_DIR)/*.man.xml $(DOCS_DIR)/*.erl $(USAGES_ERL)
 	rm -f $(RABBIT_PLT)
@@ -237,7 +253,9 @@ srcdist: distclean
 	cp -r $(DOCS_DIR) $(TARGET_SRC_DIR)
 	chmod 0755 $(TARGET_SRC_DIR)/scripts/*
 
-	(cd dist; tar -zcf $(TARBALL_NAME).tar.gz $(TARBALL_NAME))
+	[ "x" != "x$(PLUGINS_SRC_DIR)" ] && ln -s $(PLUGINS_SRC_DIR) $(TARGET_SRC_DIR)/plugins-src || echo No plugins source distribution found
+
+	(cd dist; tar -zchf $(TARBALL_NAME).tar.gz $(TARBALL_NAME))
 	(cd dist; zip -q -r $(TARBALL_NAME).zip $(TARBALL_NAME))
 	rm -rf $(TARGET_SRC_DIR)
 
@@ -284,12 +302,14 @@ install_bin: all install_dirs
 	cp -r ebin include LICENSE LICENSE-MPL-RabbitMQ INSTALL $(TARGET_DIR)
 
 	chmod 0755 scripts/*
-	for script in rabbitmq-env rabbitmq-server rabbitmqctl; do \
+	for script in rabbitmq-env rabbitmq-server rabbitmqctl rabbitmq-plugins; do \
 		cp scripts/$$script $(TARGET_DIR)/sbin; \
 		[ -e $(SBIN_DIR)/$$script ] || ln -s $(SCRIPTS_REL_PATH)/$$script $(SBIN_DIR)/$$script; \
 	done
 	mkdir -p $(TARGET_DIR)/plugins
 	echo Put your .ez plugin files in this directory. > $(TARGET_DIR)/plugins/README
+	mkdir -p $(TARGET_DIR)/$(PLUGINS_DIST_DIR)
+	-cp $(PLUGINS_DIST_DIR)/*.ez $(TARGET_DIR)/$(PLUGINS_DIST_DIR)
 
 install_docs: docs_all install_dirs
 	for section in 1 5; do \

@@ -93,7 +93,11 @@ if "!RABBITMQ_PLUGINS_EXPAND_DIR!"=="" (
     set RABBITMQ_PLUGINS_EXPAND_DIR=!RABBITMQ_MNESIA_BASE!/!RABBITMQ_NODENAME!-plugins-expand
 )
 
-set RABBITMQ_PLUGINS_DIR=!TDP0!..\plugins
+if "!RABBITMQ_ENABLED_PLUGINS_FILE!"=="" (
+    set RABBITMQ_ENABLED_PLUGINS_FILE=!RABBITMQ_BASE!\enabled_plugins
+)
+
+set RABBITMQ_PLUGINS_DIST_DIR=!TDP0!..\plugins-dist
 set RABBITMQ_EBIN_ROOT=!TDP0!..\ebin
 
 "!ERLANG_HOME!\bin\erl.exe" ^
@@ -101,7 +105,8 @@ set RABBITMQ_EBIN_ROOT=!TDP0!..\ebin
 -noinput -hidden ^
 -s rabbit_prelaunch ^
 -sname rabbitmqprelaunch!RANDOM! ^
--extra "!RABBITMQ_PLUGINS_DIR:\=/!" ^
+-extra "!RABBITMQ_ENABLED_PLUGINS_FILE!" ^
+       "!RABBITMQ_PLUGINS_DIST_DIR:\=/!" ^
        "!RABBITMQ_PLUGINS_EXPAND_DIR:\=/!" ^
        "!RABBITMQ_NODENAME!"
 
