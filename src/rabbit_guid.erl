@@ -52,13 +52,13 @@ start_link() ->
 
 update_disk_serial() ->
     Filename = filename:join(rabbit_mnesia:dir(), ?SERIAL_FILENAME),
-    Serial = case rabbit_misc:read_term_file(Filename) of
+    Serial = case rabbit_file:read_term_file(Filename) of
                  {ok, [Num]}     -> Num;
                  {error, enoent} -> 0;
                  {error, Reason} ->
                      throw({error, {cannot_read_serial_file, Filename, Reason}})
              end,
-    case rabbit_misc:write_term_file(Filename, [Serial + 1]) of
+    case rabbit_file:write_term_file(Filename, [Serial + 1]) of
         ok -> ok;
         {error, Reason1} ->
             throw({error, {cannot_write_serial_file, Filename, Reason1}})

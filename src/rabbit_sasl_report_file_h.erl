@@ -34,7 +34,7 @@
 %% Used only when swapping handlers and performing
 %% log rotation
 init({{File, Suffix}, []}) ->
-    case rabbit_misc:append_file(File, Suffix) of
+    case rabbit_file:append_file(File, Suffix) of
         ok -> file:delete(File),
               ok;
         {error, Error} ->
@@ -52,10 +52,10 @@ init({{File, _}, error}) ->
 init({File, []}) ->
     init(File);
 init({File, _Type} = FileInfo) ->
-    rabbit_misc:ensure_parent_dirs_exist(File),
+    rabbit_file:ensure_parent_dirs_exist(File),
     init_file(FileInfo);
 init(File) ->
-    rabbit_misc:ensure_parent_dirs_exist(File),
+    rabbit_file:ensure_parent_dirs_exist(File),
     init_file({File, sasl_error_logger_type()}).
 
 init_file({File, Type}) ->

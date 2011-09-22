@@ -49,12 +49,12 @@
 
 %% -------------------------------------------------------------------
 
-recorded() -> case rabbit_misc:read_term_file(schema_filename()) of
+recorded() -> case rabbit_file:read_term_file(schema_filename()) of
                   {ok, [V]}        -> {ok, V};
                   {error, _} = Err -> Err
               end.
 
-record(V) -> ok = rabbit_misc:write_term_file(schema_filename(), [V]).
+record(V) -> ok = rabbit_file:write_term_file(schema_filename(), [V]).
 
 recorded_for_scope(Scope) ->
     case recorded() of

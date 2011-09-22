@@ -70,7 +70,7 @@ start() ->
              AppVersions},
 
     %% Write it out to $RABBITMQ_PLUGINS_EXPAND_DIR/rabbit.rel
-    rabbit_misc:write_file(RootName ++ ".rel", io_lib:format("~p.~n", [RDesc])),
+    rabbit_file:write_file(RootName ++ ".rel", io_lib:format("~p.~n", [RDesc])),
 
     %% We exclude mochiweb due to its optional use of fdsrv.
     XRefExclude = [mochiweb],
@@ -139,7 +139,7 @@ determine_version(App) ->
     {App, Vsn}.
 
 delete_recursively(Fn) ->
-    case rabbit_misc:recursive_delete([Fn]) of
+    case rabbit_file:recursive_delete([Fn]) of
         ok                 -> ok;
         {error, {Path, E}} -> {error, {cannot_delete, Path, E}};
         Error              -> Error

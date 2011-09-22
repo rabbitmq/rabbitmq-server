@@ -434,7 +434,7 @@ cluster_nodes_config_filename() ->
 
 create_cluster_nodes_config(ClusterNodes) ->
     FileName = cluster_nodes_config_filename(),
-    case rabbit_misc:write_term_file(FileName, [ClusterNodes]) of
+    case rabbit_file:write_term_file(FileName, [ClusterNodes]) of
         ok -> ok;
         {error, Reason} ->
             throw({error, {cannot_create_cluster_nodes_config,
@@ -443,7 +443,7 @@ create_cluster_nodes_config(ClusterNodes) ->
 
 read_cluster_nodes_config() ->
     FileName = cluster_nodes_config_filename(),
-    case rabbit_misc:read_term_file(FileName) of
+    case rabbit_file:read_term_file(FileName) of
         {ok, [ClusterNodes]} -> ClusterNodes;
         {error, enoent} ->
             {ok, ClusterNodes} = application:get_env(rabbit, cluster_nodes),
@@ -471,12 +471,12 @@ record_running_nodes() ->
     Nodes = running_clustered_nodes() -- [node()],
     %% Don't check the result: we're shutting down anyway and this is
     %% a best-effort-basis.
-    rabbit_misc:write_term_file(FileName, [Nodes]),
+    rabbit_file:write_term_file(FileName, [Nodes]),
     ok.
 
 read_previously_running_nodes() ->
     FileName = running_nodes_filename(),
-    case rabbit_misc:read_term_file(FileName) of
+    case rabbit_file:read_term_file(FileName) of
         {ok, [Nodes]}   -> Nodes;
         {error, enoent} -> [];
         {error, Reason} -> throw({error, {cannot_read_previous_nodes_file,
@@ -638,7 +638,7 @@ move_db() ->
 
 copy_db(Destination) ->
     ok = ensure_mnesia_not_running(),
-    rabbit_misc:recursive_copy(dir(), Destination).
+    rabbit_file:recursive_copy(dir(), Destination).
 
 create_tables() -> create_tables(disc).
 
@@ -745,7 +745,7 @@ reset(Force) ->
     end,
     ok = delete_cluster_nodes_config(),
     %% remove persisted messages and any other garbage we find
-    ok = rabbit_misc:recursive_delete(filelib:wildcard(dir() ++ "/*")),
+    ok = rabbit_file:recursive_delete(filelib:wildcard(dir() ++ "/*")),
     ok.
 
 leave_cluster([], _) -> ok;
