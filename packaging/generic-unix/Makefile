@@ -2,7 +2,6 @@ VERSION=0.0.0
 SOURCE_DIR=rabbitmq-server-$(VERSION)
 TARGET_DIR=rabbitmq_server-$(VERSION)
 TARGET_TARBALL=rabbitmq-server-generic-unix-$(VERSION)
-PLUGINS_DIST_DIR=
 
 dist:
 	tar -zxf ../../dist/$(SOURCE_DIR).tar.gz
