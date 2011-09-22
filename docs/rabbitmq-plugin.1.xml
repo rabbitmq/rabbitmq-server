@@ -59,93 +59,93 @@
   <refsect1>
     <title>Commands</title>
 
-      <variablelist>
-        <varlistentry>
-          <term><cmdsynopsis><command>list</command> <arg choice="opt">-c</arg> <arg choice="opt"><replaceable>pattern</replaceable></arg></cmdsynopsis></term>
-          <listitem>
-            <variablelist>
-              <varlistentry>
-                <term>-c</term>
-                <listitem><para>List plugins compactly.</para></listitem>
-              </varlistentry>
-              <varlistentry>
-                <term>pattern</term>
-                <listitem><para>Pattern to filter the plugin names by.</para></listitem>
-              </varlistentry>
-            </variablelist>
-            <para>
-              Lists available plugins, their versions, dependencies
-              and descriptions.
-            </para>
-            <para>
-              If the optional pattern is given, only plugins whose
-              name mathes pattern are shown.
-            </para>
-            <para role="example-prefix">For example:</para>
-            <screen role="example">rabbitmq-plugin list</screen>
-            <para role="example">
-              This command lists all the plugins available..
-            </para>
-            <screen role="example">rabbitmq-plugin list -c</screen>
-            <para role="example">
-              This command lists all the plugins available, on one line each.
-            </para>
-            <screen role="example">rabbitmq-plugin list -c management</screen>
-            <para role="example">
-              This command lists all the plugins available, on one
-              line each, but does not display plugins whose name does
-              not contain "management".
-            </para>
-          </listitem>
-        </varlistentry>
+    <variablelist>
+      <varlistentry>
+        <term><cmdsynopsis><command>list</command> <arg choice="opt">-c</arg> <arg choice="opt"><replaceable>pattern</replaceable></arg></cmdsynopsis></term>
+        <listitem>
+          <variablelist>
+            <varlistentry>
+              <term>-c</term>
+              <listitem><para>List plugins compactly.</para></listitem>
+            </varlistentry>
+            <varlistentry>
+              <term>pattern</term>
+              <listitem><para>Pattern to filter the plugin names by.</para></listitem>
+            </varlistentry>
+          </variablelist>
+          <para>
+            Lists available plugins, their versions, dependencies
+            and descriptions.
+          </para>
+          <para>
+            If the optional pattern is given, only plugins whose
+            name mathes pattern are shown.
+          </para>
+          <para role="example-prefix">For example:</para>
+          <screen role="example">rabbitmq-plugin list</screen>
+          <para role="example">
+            This command lists all the plugins available..
+          </para>
+          <screen role="example">rabbitmq-plugin list -c</screen>
+          <para role="example">
+            This command lists all the plugins available, on one line each.
+          </para>
+          <screen role="example">rabbitmq-plugin list -c management</screen>
+          <para role="example">
+            This command lists all the plugins available, on one
+            line each, but does not display plugins whose name does
+            not contain "management".
+          </para>
+        </listitem>
+      </varlistentry>
 
-        <varlistentry>
-          <term><cmdsynopsis><command>enable</command> <arg choice="req"><replaceable>plugin</replaceable> ...</arg></cmdsynopsis></term>
-          <listitem>
-            <variablelist>
-              <varlistentry>
-                <term>plugin</term>
-                <listitem><para>One or more plugins to enable.</para></listitem>
-              </varlistentry>
-            </variablelist>
-            <para>
-              Enables the specified plugins and all their
-              dependencies.
-            </para>
+      <varlistentry>
+        <term><cmdsynopsis><command>enable</command> <arg choice="req"><replaceable>plugin</replaceable> ...</arg></cmdsynopsis></term>
+        <listitem>
+          <variablelist>
+            <varlistentry>
+              <term>plugin</term>
+              <listitem><para>One or more plugins to enable.</para></listitem>
+            </varlistentry>
+          </variablelist>
+          <para>
+            Enables the specified plugins and all their
+            dependencies.
+          </para>
 
-            <para role="example-prefix">For example:</para>
-            <screen role="example">rabbitmq-plugin enable rabbitmq_shovel rabbitmq_management</screen>
-            <para role="example">
-              This command enables the <command>shovel</command> and
-              <command>management</command> plugins and all their
-              dependencies.
-            </para>
-          </listitem>
-        </varlistentry>
+          <para role="example-prefix">For example:</para>
+          <screen role="example">rabbitmq-plugin enable rabbitmq_shovel rabbitmq_management</screen>
+          <para role="example">
+            This command enables the <command>shovel</command> and
+            <command>management</command> plugins and all their
+            dependencies.
+          </para>
+        </listitem>
+      </varlistentry>
 
-        <varlistentry>
-          <term><cmdsynopsis><command>disable</command> <arg choice="req"><replaceable>plugin</replaceable> ...</arg></cmdsynopsis></term>
-          <listitem>
-            <variablelist>
-              <varlistentry>
-                <term>plugin</term>
-                <listitem><para>One or more plugins to disable.</para></listitem>
-              </varlistentry>
-            </variablelist>
-            <para>
-              Disables the specified plugins and all plugins that
-              depend on them.
-            </para>
+      <varlistentry>
+        <term><cmdsynopsis><command>disable</command> <arg choice="req"><replaceable>plugin</replaceable> ...</arg></cmdsynopsis></term>
+        <listitem>
+          <variablelist>
+            <varlistentry>
+              <term>plugin</term>
+              <listitem><para>One or more plugins to disable.</para></listitem>
+            </varlistentry>
+          </variablelist>
+          <para>
+            Disables the specified plugins and all plugins that
+            depend on them.
+          </para>
 
-            <para role="example-prefix">For example:</para>
-            <screen role="example">rabbitmq-plugin disable amqp_client</screen>
-            <para role="example">
-              This command disables the <command>amqp_client</command>
-              and all other plugins that depend on it.
-            </para>
-          </listitem>
-        </varlistentry>
-      </variablelist>
+          <para role="example-prefix">For example:</para>
+          <screen role="example">rabbitmq-plugin disable amqp_client</screen>
+          <para role="example">
+            This command disables the <command>amqp_client</command>
+            and all other plugins that depend on it.
+          </para>
+        </listitem>
+      </varlistentry>
+    </variablelist>
 
   </refsect1>
 
