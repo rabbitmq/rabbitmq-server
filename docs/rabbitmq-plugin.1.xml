@@ -49,10 +49,9 @@
     <title>Description</title>
     <para>
       <command>rabbitmq-plugin</command> is a command line tool for
-      managing a RabbitMQ broker plugins.  It allows you to easily
-      enable, disable and browse plugins.  Note that it must be run by
-      a user with write permissions to the RabbitMQ installation
-      directory.
+      managing RabbitMQ broker plugins.  It allows one to enable,
+      disable and browse plugins.  Note that it must be run by a user
+      with write permissions to the RabbitMQ configuration directory.
     </para>
   </refsect1>
 
@@ -79,12 +78,12 @@
           </para>
           <para>
             If the optional pattern is given, only plugins whose
-            name mathes pattern are shown.
+            name mathes <command>pattern</command> are shown.
           </para>
           <para role="example-prefix">For example:</para>
           <screen role="example">rabbitmq-plugin list</screen>
           <para role="example">
-            This command lists all the plugins available..
+            This command lists all the plugins available.
           </para>
           <screen role="example">rabbitmq-plugin list -c</screen>
           <para role="example">
@@ -140,8 +139,8 @@
           <para role="example-prefix">For example:</para>
           <screen role="example">rabbitmq-plugin disable amqp_client</screen>
           <para role="example">
-            This command disables the <command>amqp_client</command>
-            and all other plugins that depend on it.
+            This command disables <command>amqp_client</command> and
+            all plugins that depend on it.
           </para>
         </listitem>
       </varlistentry>
