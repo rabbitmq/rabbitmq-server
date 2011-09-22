@@ -84,7 +84,9 @@ action(list, [Pat], Opts) ->
 
 action(enable, ToEnable0, _Opts) ->
     AllPlugins = find_plugins(),
-    EnabledPlugins = lookup_plugins(read_enabled_plugins(), AllPlugins),
+    Enabled = read_enabled_plugins(),
+    EnabledPlugins = lookup_plugins(Enabled, AllPlugins),
+    ImplicitlyEnabled = calculate_required_plugins(Enabled, AllPlugins),
     ToEnable = [list_to_atom(Name) || Name <- ToEnable0],
     ToEnablePlugins = lookup_plugins(ToEnable, AllPlugins),
     Missing = ToEnable -- plugin_names(ToEnablePlugins),
@@ -93,8 +95,13 @@ action(enable, ToEnable0, _Opts) ->
         _  -> io:format("Warning: the following plugins could not be found: ~p~n",
                         [Missing])
     end,
-    NewEnabledPlugins = merge_plugin_lists(EnabledPlugins, ToEnablePlugins),
-    update_enabled_plugins(plugin_names(NewEnabledPlugins));
+    NewEnabled = plugin_names(merge_plugin_lists(EnabledPlugins, ToEnablePlugins)),
+    update_enabled_plugins(NewEnabled),
+    case NewEnabled -- ImplicitlyEnabled of
+        [] -> ok;
+        _  -> io:format("Plugin configuration has changed. "
+                        "You should restart RabbitMQ.~n")
+    end;
 
 action(disable, ToDisable0, _Opts) ->
     ToDisable = [list_to_atom(Name) || Name <- ToDisable0],
@@ -117,7 +124,13 @@ action(disable, ToDisable0, _Opts) ->
                         "because their dependencies are no longer met: ~p~n",
                         [AlsoDisabled])
     end,
-    update_enabled_plugins(Enabled -- ToDisable2).
+    NewEnabled = Enabled -- ToDisable2,
+    case length(Enabled) =:= length(NewEnabled) of
+        true  -> ok;
+        false -> update_enabled_plugins(NewEnabled),
+                 io:format("Plugin configuration has changed. "
+                           "You should restart RabbitMQ.~n")
+    end.
 
 %%----------------------------------------------------------------------------
 
