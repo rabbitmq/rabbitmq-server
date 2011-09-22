@@ -208,23 +208,28 @@ format_plugins(Pattern, Compact) ->
         calculate_required_plugins(EnabledExplicitly, AvailablePlugins) --
         EnabledExplicitly,
     {ok, RE} = re:compile(Pattern),
-    [ format_plugin(P, EnabledExplicitly, EnabledImplicitly, Compact)
-     || P = #plugin{name = Name} <- AvailablePlugins,
-        re:run(atom_to_list(Name), RE, [{capture, none}]) =:= match],
+    Plugins = [ Plugin ||
+                  Plugin = #plugin{name = Name} <- AvailablePlugins,
+                  re:run(atom_to_list(Name), RE, [{capture, none}]) =:= match],
+    MaxWidth = lists:max([length(atom_to_list(Name)) ||
+                             #plugin{name = Name} <- Plugins]),
+    [ format_plugin(P, EnabledExplicitly, EnabledImplicitly, Compact, MaxWidth) ||
+        P <- Plugins],
     ok.
 
 format_plugin(#plugin{name = Name, version = Version, description = Description,
                       dependencies = Dependencies},
-              EnabledExplicitly, EnabledImplicitly, Compact) ->
+              EnabledExplicitly, EnabledImplicitly, Compact, MaxWidth) ->
     Glyph = case {lists:member(Name, EnabledExplicitly),
                   lists:member(Name, EnabledImplicitly)} of
                 {true, false} -> "[E]";
                 {false, true} -> "[e]";
-                _             -> "[A]"
+                _             -> "[ ]"
             end,
     case Compact of
         true ->
-            io:format("~s ~w-~s: ~s~n", [Glyph, Name, Version, Description]);
+            io:format("~s ~-" ++ integer_to_list(MaxWidth) ++
+                          "w ~s~n", [Glyph, Name, Version]);
         false ->
             io:format("~s ~w~n", [Glyph, Name]),
             io:format("    Version:    \t~s~n", [Version]),
