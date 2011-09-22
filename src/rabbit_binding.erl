@@ -40,7 +40,7 @@
                                           'source_and_destination_not_found')).
 -type(bind_ok_or_error() :: 'ok' | bind_errors() |
                             rabbit_types:error('binding_not_found')).
--type(bind_res() :: bind_ok_or_error() | rabbit_misc:const(bind_ok_or_error())).
+-type(bind_res() :: bind_ok_or_error() | rabbit_misc:thunk(bind_ok_or_error())).
 -type(inner_fun() ::
         fun((rabbit_types:exchange(),
              rabbit_types:exchange() | rabbit_types:amqqueue()) ->
@@ -108,21 +108,34 @@ recover(XNames, QNames) ->
     SelectSet = fun (#resource{kind = exchange}) -> XNameSet;
                     (#resource{kind = queue})    -> QNameSet
                 end,
-    [recover_semi_durable_route(R, SelectSet(Dst)) ||
+    {ok, Gatherer} = gatherer:start_link(),
+    [recover_semi_durable_route(Gatherer, R, SelectSet(Dst)) ||
         R = #route{binding = #binding{destination = Dst}} <-
             rabbit_misc:dirty_read_all(rabbit_semi_durable_route)],
+    empty = gatherer:out(Gatherer),
+    ok = gatherer:stop(Gatherer),
     ok.
 
-recover_semi_durable_route(R = #route{binding = B}, ToRecover) ->
+recover_semi_durable_route(Gatherer, R = #route{binding = B}, ToRecover) ->
     #binding{source = Src, destination = Dst} = B,
-    {ok, X} = rabbit_exchange:lookup(Src),
+    case sets:is_element(Dst, ToRecover) of
+        true  -> {ok, X} = rabbit_exchange:lookup(Src),
+                 ok = gatherer:fork(Gatherer),
+                 ok = worker_pool:submit_async(
+                        fun () ->
+                                recover_semi_durable_route_txn(R, X),
+                                gatherer:finish(Gatherer)
+                        end);
+        false -> ok
+    end.
+
+recover_semi_durable_route_txn(R = #route{binding = B}, X) ->
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
-              Rs = mnesia:match_object(rabbit_semi_durable_route, R, read),
-              case Rs =/= [] andalso sets:is_element(Dst, ToRecover) of
-                  false -> no_recover;
-                  true  -> ok = sync_transient_route(R, fun mnesia:write/3),
-                           rabbit_exchange:serial(X)
+              case mnesia:match_object(rabbit_semi_durable_route, R, read) of
+                  [] -> no_recover;
+                  _  -> ok = sync_transient_route(R, fun mnesia:write/3),
+                        rabbit_exchange:serial(X)
               end
       end,
       fun (no_recover, _)     -> ok;

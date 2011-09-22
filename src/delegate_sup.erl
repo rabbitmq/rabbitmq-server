@@ -28,7 +28,7 @@
 
 -ifdef(use_specs).
 
--spec(start_link/1 :: (integer()) -> {'ok', pid()} | {'error', any()}).
+-spec(start_link/1 :: (integer()) -> rabbit_types:ok_pid_or_error()).
 -spec(count/1 :: ([node()]) -> integer()).
 
 -endif.

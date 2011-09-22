@@ -1,3 +1,9 @@
+rabbitmq-server (2.6.1-1) natty; urgency=low
+
+  * New Upstream Release
+
+ -- Tim <tim@rabbitmq.com>  Fri, 09 Sep 2011 14:38:45 +0100
+
 rabbitmq-server (2.6.0-1) natty; urgency=low
 
   * New Upstream Release

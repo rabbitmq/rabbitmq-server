@@ -22,7 +22,11 @@
 
 %%----------------------------------------------------------------------------
 
+%%----------------------------------------------------------------------------
+
 -ifdef(use_specs).
+
+-export_type([frame/0]).
 
 -type(frame_type() :: ?FRAME_METHOD | ?FRAME_HEADER | ?FRAME_BODY |
                       ?FRAME_OOB_METHOD | ?FRAME_OOB_HEADER | ?FRAME_OOB_BODY |

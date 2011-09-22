@@ -29,11 +29,11 @@
 
 -export([start_link/1, info_keys/0]).
 
+-export([init_with_backing_queue_state/7]).
+
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2, handle_pre_hibernate/1, prioritise_call/3,
          prioritise_cast/2, prioritise_info/2, format_message_queue/2]).
-
--export([init_with_backing_queue_state/7]).
 
 %% Queue's state
 -record(q, {q,
@@ -56,13 +56,28 @@
 -record(consumer, {tag, ack_required}).
 
 %% These are held in our process dictionary
--record(cr, {consumer_count,
-             ch_pid,
-             limiter,
+-record(cr, {ch_pid,
              monitor_ref,
              acktags,
+             consumer_count,
+             limiter,
              is_limit_active,
              unsent_message_count}).
+
+%%----------------------------------------------------------------------------
+
+-ifdef(use_specs).
+
+-spec(start_link/1 ::
+        (rabbit_types:amqqueue()) -> rabbit_types:ok_pid_or_error()).
+-spec(info_keys/0 :: () -> rabbit_types:info_keys()).
+-spec(init_with_backing_queue_state/7 ::
+        (rabbit_types:amqqueue(), atom(), tuple(), any(), [any()],
+         [rabbit_types:delivery()], dict()) -> #q{}).
+
+-endif.
+
+%%----------------------------------------------------------------------------
 
 -define(STATISTICS_KEYS,
         [pid,
@@ -321,10 +336,10 @@ ch_record(ChPid) ->
     Key = {ch, ChPid},
     case get(Key) of
         undefined -> MonitorRef = erlang:monitor(process, ChPid),
-                     C = #cr{consumer_count       = 0,
-                             ch_pid               = ChPid,
+                     C = #cr{ch_pid               = ChPid,
                              monitor_ref          = MonitorRef,
                              acktags              = sets:new(),
+                             consumer_count       = 0,
                              is_limit_active      = false,
                              limiter              = rabbit_limiter:make_token(),
                              unsent_message_count = 0},
@@ -333,18 +348,18 @@ ch_record(ChPid) ->
         C = #cr{} -> C
     end.
 
-store_ch_record(C = #cr{ch_pid = ChPid}) ->
-    put({ch, ChPid}, C).
-
-maybe_store_ch_record(C = #cr{consumer_count       = ConsumerCount,
-                              acktags              = ChAckTags,
-                              unsent_message_count = UnsentMessageCount}) ->
+update_ch_record(C = #cr{consumer_count       = ConsumerCount,
+                         acktags              = ChAckTags,
+                         unsent_message_count = UnsentMessageCount}) ->
     case {sets:size(ChAckTags), ConsumerCount, UnsentMessageCount} of
-        {0, 0, 0} -> ok = erase_ch_record(C),
-                     false;
-        _         -> store_ch_record(C),
-                     true
-    end.
+        {0, 0, 0} -> ok = erase_ch_record(C);
+        _         -> ok = store_ch_record(C)
+    end,
+    C.
+
+store_ch_record(C = #cr{ch_pid = ChPid}) ->
+    put({ch, ChPid}, C),
+    ok.
 
 erase_ch_record(#cr{ch_pid      = ChPid,
                     limiter     = Limiter,
@@ -353,6 +368,16 @@ erase_ch_record(#cr{ch_pid      = ChPid,
     erlang:demonitor(MonitorRef),
     erase({ch, ChPid}),
     ok.
+
+update_consumer_count(C = #cr{consumer_count = 0, limiter = Limiter}, +1) ->
+    ok = rabbit_limiter:register(Limiter, self()),
+    update_ch_record(C#cr{consumer_count = 1});
+update_consumer_count(C = #cr{consumer_count = 1, limiter = Limiter}, -1) ->
+    ok = rabbit_limiter:unregister(Limiter, self()),
+    update_ch_record(C#cr{consumer_count = 0,
+                          limiter = rabbit_limiter:make_token()});
+update_consumer_count(C = #cr{consumer_count = Count}, Delta) ->
+    update_ch_record(C#cr{consumer_count = Count + Delta}).
 
 all_ch_record() -> [C || {{ch, _}, C} <- get()].
 
@@ -391,9 +416,9 @@ deliver_msgs_to_consumers(Funs = {PredFun, DeliverFun}, FunAcc,
                             true  -> sets:add_element(AckTag, ChAckTags);
                             false -> ChAckTags
                         end,
-                    NewC = C#cr{unsent_message_count = Count + 1,
-                                acktags = ChAckTags1},
-                    true = maybe_store_ch_record(NewC),
+                    NewC = update_ch_record(
+                             C#cr{unsent_message_count = Count + 1,
+                                  acktags = ChAckTags1}),
                     {NewActiveConsumers, NewBlockedConsumers} =
                         case ch_record_state_transition(C, NewC) of
                             ok    -> {queue:in(QEntry, ActiveConsumersTail),
@@ -411,7 +436,7 @@ deliver_msgs_to_consumers(Funs = {PredFun, DeliverFun}, FunAcc,
                     deliver_msgs_to_consumers(Funs, FunAcc1, State2);
                 %% if IsMsgReady then we've hit the limiter
                 false when IsMsgReady ->
-                    true = maybe_store_ch_record(C#cr{is_limit_active = true}),
+                    update_ch_record(C#cr{is_limit_active = true}),
                     {NewActiveConsumers, NewBlockedConsumers} =
                         move_consumers(ChPid,
                                        ActiveConsumers,
@@ -545,11 +570,9 @@ deliver_or_enqueue(Delivery = #delivery{message = Message,
         maybe_record_confirm_message(Confirm, State1),
     case Delivered of
         true  -> State2;
-        false -> BQS1 =
-                     BQ:publish(Message,
-                                (message_properties(State)) #message_properties{
-                                  needs_confirming = needs_confirming(Confirm)},
-                                ChPid, BQS),
+        false -> Props = (message_properties(State)) #message_properties{
+                           needs_confirming = needs_confirming(Confirm)},
+                 BQS1 = BQ:publish(Message, Props, ChPid, BQS),
                  ensure_ttl_timer(State2#q{backing_queue_state = BQS1})
     end.
 
@@ -569,8 +592,8 @@ fetch(AckRequired, State = #q{backing_queue_state = BQS,
 add_consumer(ChPid, Consumer, Queue) -> queue:in({ChPid, Consumer}, Queue).
 
 remove_consumer(ChPid, ConsumerTag, Queue) ->
-    queue:filter(fun ({CP, #consumer{tag = CT}}) ->
-                         (CP /= ChPid) or (CT /= ConsumerTag)
+    queue:filter(fun ({CP, #consumer{tag = CTag}}) ->
+                         (CP /= ChPid) or (CTag /= ConsumerTag)
                  end, Queue).
 
 remove_consumers(ChPid, Queue) ->
@@ -593,8 +616,7 @@ possibly_unblock(State, ChPid, Update) ->
         not_found ->
             State;
         C ->
-            NewC = Update(C),
-            maybe_store_ch_record(NewC),
+            NewC = update_ch_record(Update(C)),
             case ch_record_state_transition(C, NewC) of
                 ok      -> State;
                 unblock -> {NewBlockedConsumers, NewActiveConsumers} =
@@ -633,11 +655,6 @@ handle_ch_down(DownPid, State = #q{exclusive_consumer = Holder}) ->
             end
     end.
 
-cancel_holder(ChPid, ConsumerTag, {ChPid, ConsumerTag}) ->
-    none;
-cancel_holder(_ChPid, _ConsumerTag, Holder) ->
-    Holder.
-
 check_exclusive_access({_ChPid, _ConsumerTag}, _ExclusiveConsume, _State) ->
     in_use;
 check_exclusive_access(none, false, _State) ->
@@ -663,8 +680,15 @@ run_backing_queue(Mod, Fun, State = #q{backing_queue = BQ,
                                        backing_queue_state = BQS}) ->
     run_message_queue(State#q{backing_queue_state = BQ:invoke(Mod, Fun, BQS)}).
 
-subtract_acks(A, B) when is_list(B) ->
-    lists:foldl(fun sets:del_element/2, A, B).
+subtract_acks(ChPid, AckTags, State, Fun) ->
+    case lookup_ch(ChPid) of
+        not_found ->
+            State;
+        C = #cr{acktags = ChAckTags} ->
+            update_ch_record(C#cr{acktags = lists:foldl(fun sets:del_element/2,
+                                                        ChAckTags, AckTags)}),
+            Fun(State)
+    end.
 
 discard_delivery(#delivery{sender = ChPid,
                            message = Message},
@@ -931,10 +955,8 @@ handle_call({basic_get, ChPid, NoAck}, _From,
             State3 =
                 case AckRequired of
                     true  -> C = #cr{acktags = ChAckTags} = ch_record(ChPid),
-                             true = maybe_store_ch_record(
-                                      C#cr{acktags =
-                                               sets:add_element(AckTag,
-                                                                ChAckTags)}),
+                             ChAckTags1 = sets:add_element(AckTag, ChAckTags),
+                             update_ch_record(C#cr{acktags = ChAckTags1}),
                              State2;
                     false -> State2
                 end,
@@ -950,16 +972,10 @@ handle_call({basic_consume, NoAck, ChPid, Limiter,
         in_use ->
             reply({error, exclusive_consume_unavailable}, State);
         ok ->
-            C = #cr{consumer_count = ConsumerCount} = ch_record(ChPid),
+            C = ch_record(ChPid),
+            C1 = update_consumer_count(C#cr{limiter = Limiter}, +1),
             Consumer = #consumer{tag = ConsumerTag,
                                  ack_required = not NoAck},
-            true = maybe_store_ch_record(
-                     C#cr{consumer_count = ConsumerCount +1,
-                          limiter        = Limiter}),
-            ok = case ConsumerCount of
-                     0 -> rabbit_limiter:register(Limiter, self());
-                     _ -> ok
-                 end,
             ExclusiveConsumer = if ExclusiveConsume -> {ChPid, ConsumerTag};
                                    true             -> ExistingHolder
                                 end,
@@ -967,7 +983,7 @@ handle_call({basic_consume, NoAck, ChPid, Limiter,
                              exclusive_consumer = ExclusiveConsumer},
             ok = maybe_send_reply(ChPid, OkMsg),
             State2 =
-                case is_ch_blocked(C) of
+                case is_ch_blocked(C1) of
                     true  -> State1#q{
                                blocked_consumers =
                                    add_consumer(ChPid, Consumer,
@@ -985,34 +1001,27 @@ handle_call({basic_consume, NoAck, ChPid, Limiter,
 
 handle_call({basic_cancel, ChPid, ConsumerTag, OkMsg}, _From,
             State = #q{exclusive_consumer = Holder}) ->
+    ok = maybe_send_reply(ChPid, OkMsg),
     case lookup_ch(ChPid) of
         not_found ->
-            ok = maybe_send_reply(ChPid, OkMsg),
             reply(ok, State);
-        C = #cr{consumer_count = ConsumerCount,
-                limiter        = Limiter} ->
-            C1 = C#cr{consumer_count = ConsumerCount -1},
-            maybe_store_ch_record(
-              case ConsumerCount of
-                  1 -> ok = rabbit_limiter:unregister(Limiter, self()),
-                       C1#cr{limiter = rabbit_limiter:make_token()};
-                  _ -> C1
-              end),
+        C ->
+            update_consumer_count(C, -1),
             emit_consumer_deleted(ChPid, ConsumerTag),
-            ok = maybe_send_reply(ChPid, OkMsg),
-            NewState =
-                State#q{exclusive_consumer = cancel_holder(ChPid,
-                                                           ConsumerTag,
-                                                           Holder),
-                        active_consumers = remove_consumer(
-                                             ChPid, ConsumerTag,
-                                             State#q.active_consumers),
-                        blocked_consumers = remove_consumer(
+            State1 = State#q{
+                       exclusive_consumer = case Holder of
+                                                {ChPid, ConsumerTag} -> none;
+                                                _                    -> Holder
+                                            end,
+                       active_consumers   = remove_consumer(
+                                              ChPid, ConsumerTag,
+                                              State#q.active_consumers),
+                       blocked_consumers  = remove_consumer(
                                               ChPid, ConsumerTag,
                                               State#q.blocked_consumers)},
-            case should_auto_delete(NewState) of
-                false -> reply(ok, ensure_expiry_timer(NewState));
-                true  -> {stop, normal, ok, NewState}
+            case should_auto_delete(State1) of
+                false -> reply(ok, ensure_expiry_timer(State1));
+                true  -> {stop, normal, ok, State1}
             end
     end;
 
@@ -1042,14 +1051,9 @@ handle_call(purge, _From, State = #q{backing_queue = BQ,
 
 handle_call({requeue, AckTags, ChPid}, From, State) ->
     gen_server2:reply(From, ok),
-    case lookup_ch(ChPid) of
-        not_found ->
-            noreply(State);
-        C = #cr{acktags = ChAckTags} ->
-            ChAckTags1 = subtract_acks(ChAckTags, AckTags),
-            maybe_store_ch_record(C#cr{acktags = ChAckTags1}),
-            noreply(requeue_and_run(AckTags, State))
-    end.
+    noreply(subtract_acks(
+              ChPid, AckTags, State,
+              fun (State1) -> requeue_and_run(AckTags, State1) end)).
 
 handle_cast({run_backing_queue, Mod, Fun}, State) ->
     noreply(run_backing_queue(Mod, Fun, State));
@@ -1058,33 +1062,26 @@ handle_cast({deliver, Delivery}, State) ->
     %% Asynchronous, non-"mandatory", non-"immediate" deliver mode.
     noreply(deliver_or_enqueue(Delivery, State));
 
-handle_cast({ack, AckTags, ChPid},
-            State = #q{backing_queue = BQ, backing_queue_state = BQS}) ->
-    case lookup_ch(ChPid) of
-        not_found ->
-            noreply(State);
-        C = #cr{acktags = ChAckTags} ->
-            maybe_store_ch_record(C#cr{acktags = subtract_acks(
-                                                   ChAckTags, AckTags)}),
-            {_Guids, BQS1} = BQ:ack(AckTags, BQS),
-            noreply(State#q{backing_queue_state = BQS1})
-    end;
+handle_cast({ack, AckTags, ChPid}, State) ->
+    noreply(subtract_acks(
+              ChPid, AckTags, State,
+              fun (State1 = #q{backing_queue       = BQ,
+                               backing_queue_state = BQS}) ->
+                      {_Guids, BQS1} = BQ:ack(AckTags, BQS),
+                      State1#q{backing_queue_state = BQS1}
+              end));
 
-handle_cast({reject, AckTags, Requeue, ChPid},
-            State = #q{backing_queue       = BQ,
-                       backing_queue_state = BQS}) ->
-    case lookup_ch(ChPid) of
-        not_found ->
-            noreply(State);
-        C = #cr{acktags = ChAckTags} ->
-            ChAckTags1 = subtract_acks(ChAckTags, AckTags),
-            maybe_store_ch_record(C#cr{acktags = ChAckTags1}),
-            noreply(case Requeue of
-                        true  -> requeue_and_run(AckTags, State);
-                        false -> {_Guids, BQS1} = BQ:ack(AckTags, BQS),
-                                 State#q{backing_queue_state = BQS1}
-                    end)
-    end;
+handle_cast({reject, AckTags, Requeue, ChPid}, State) ->
+    noreply(subtract_acks(
+              ChPid, AckTags, State,
+              fun (State1 = #q{backing_queue       = BQ,
+                               backing_queue_state = BQS}) ->
+                      case Requeue of
+                          true  -> requeue_and_run(AckTags, State1);
+                          false -> {_Guids, BQS1} = BQ:ack(AckTags, BQS),
+                                   State1#q{backing_queue_state = BQS1}
+                      end
+              end));
 
 handle_cast(delete_immediately, State) ->
     {stop, normal, State};
