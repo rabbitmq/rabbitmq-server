@@ -27,6 +27,16 @@
 -export([init/1, terminate/2, code_change/3, handle_call/2, handle_event/2,
          handle_info/2]).
 
+%%----------------------------------------------------------------------------
+
+-ifdef(use_specs).
+
+-spec(boot/0 :: () -> 'ok').
+
+-endif.
+
+%%----------------------------------------------------------------------------
+
 boot() ->
     {ok, DefaultVHost} = application:get_env(default_vhost),
     ok = error_logger:add_report_handler(?MODULE, [DefaultVHost]).

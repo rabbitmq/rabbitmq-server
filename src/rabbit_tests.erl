@@ -1765,7 +1765,11 @@ test_file_handle_cache() ->
         [filename:join(TmpDir, Str) || Str <- ["file1", "file2", "file3", "file4"]],
     Content = <<"foo">>,
     CopyFun = fun (Src, Dst) ->
-                      ok = rabbit_misc:write_file(Src, Content),
+                      {ok, Hdl} = prim_file:open(Src, [binary, write]),
+                      ok = prim_file:write(Hdl, Content),
+                      ok = prim_file:sync(Hdl),
+                      prim_file:close(Hdl),
+
                       {ok, SrcHdl} = file_handle_cache:open(Src, [read], []),
                       {ok, DstHdl} = file_handle_cache:open(Dst, [write], []),
                       Size = size(Content),
