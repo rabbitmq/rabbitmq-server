@@ -110,7 +110,7 @@ with_fhc_handle(Fun) ->
 read_term_file(File) ->
     try
         {ok, Data} = with_fhc_handle(fun () -> prim_file:read_file(File) end),
-        {ok, Tokens, _} = erl_scan:string(binary:bin_to_list(Data)),
+        {ok, Tokens, _} = erl_scan:string(binary_to_list(Data)),
         TokenGroups = group_tokens(Tokens),
         {ok, [begin
                   {ok, Term} = erl_parse:parse_term(Tokens1),
