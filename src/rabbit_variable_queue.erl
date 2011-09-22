@@ -21,7 +21,7 @@
          dropwhile/2, fetch/2, ack/2, requeue/3, len/1, is_empty/1,
          set_ram_duration_target/2, ram_duration/1,
          needs_timeout/1, timeout/1, handle_pre_hibernate/1,
-         status/1, invoke/3, is_duplicate/2, discard/3,
+         status/1, invoke/3, is_duplicate/2, discard/3, format_status/1,
          multiple_routing_keys/0]).
 
 -export([start/1, stop/0]).
@@ -732,6 +732,30 @@ is_duplicate(_Msg, State) -> {false, State}.
 
 discard(_Msg, _ChPid, State) -> State.
 
+format_status(State = #vqstate { q1                  = Q1,
+                                 q2                  = Q2,
+                                 q3                  = Q3,
+                                 q4                  = Q4,
+                                 pending_ack         = PA,
+                                 ram_ack_index       = RAI,
+                                 msgs_on_disk        = MOD,
+                                 msg_indices_on_disk = MIOD,
+                                 unconfirmed         = UC,
+                                 confirmed           = C }) ->
+    rabbit_misc:update_and_convert_record(
+      vqstate_formatted,
+      [{#vqstate.q1,                  format_queue(Q1)},
+       {#vqstate.q2,                  format_bpqueue(Q2)},
+       {#vqstate.q3,                  format_bpqueue(Q3)},
+       {#vqstate.q4,                  format_queue(Q4)},
+       {#vqstate.pending_ack,         format_pending_acks(PA)},
+       {#vqstate.ram_ack_index,       gb_trees:to_list(RAI)} |
+       [{Pos, gb_sets:to_list(Set)} ||
+           {Pos, Set} <- [{#vqstate.msgs_on_disk,        MOD},
+                          {#vqstate.msg_indices_on_disk, MIOD},
+                          {#vqstate.unconfirmed,         UC},
+                          {#vqstate.confirmed,           C}]]], State).
+
 %%----------------------------------------------------------------------------
 %% Minor helpers
 %%----------------------------------------------------------------------------
@@ -779,6 +803,23 @@ cons_if(false, _E, L) -> L.
 gb_sets_maybe_insert(false, _Val, Set) -> Set;
 %% when requeueing, we re-add a msg_id to the unconfirmed set
 gb_sets_maybe_insert(true,  Val,  Set) -> gb_sets:add(Val, Set).
+
+format_queue(Q) ->
+    [format_msg_status(MsgStatus) || MsgStatus <- queue:to_list(Q)].
+
+format_bpqueue(Q) ->
+    beta_fold(fun (MsgStatus, Acc) -> [format_msg_status(MsgStatus) | Acc] end,
+              [], Q).
+
+format_pending_acks(PA) ->
+    dict:fold(fun (SeqId, {_IsPersistent, _MsgId, _MsgProps} = OnDisk, Acc) ->
+                      [{SeqId, OnDisk} | Acc];
+                  (SeqId, MsgStatus = #msg_status {}, Acc) ->
+                      [{SeqId, format_msg_status(MsgStatus)} | Acc]
+              end, [], PA).
+
+format_msg_status(MsgStatus = #msg_status { msg = undefined }) -> MsgStatus;
+format_msg_status(MsgStatus) -> setelement(#msg_status.msg, MsgStatus, '_').
 
 msg_status(IsPersistent, SeqId, Msg = #basic_message { id = MsgId },
            MsgProps) ->

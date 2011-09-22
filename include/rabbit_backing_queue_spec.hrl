@@ -67,3 +67,4 @@
         (rabbit_types:basic_message(), state()) ->
                              {'false'|'published'|'discarded', state()}).
 -spec(discard/3 :: (rabbit_types:basic_message(), pid(), state()) -> state()).
+-spec(format_status/1 :: (state()) -> term()).

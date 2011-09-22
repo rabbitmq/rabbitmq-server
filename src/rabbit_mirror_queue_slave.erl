@@ -37,7 +37,8 @@
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3, handle_pre_hibernate/1, prioritise_call/3,
-         prioritise_cast/2, prioritise_info/2]).
+         prioritise_cast/2, prioritise_info/2, format_message_queue/2,
+         format_status/2]).
 
 -export([joined/2, members_changed/3, handle_msg/3]).
 
@@ -314,6 +315,25 @@ prioritise_info(Msg, _State) ->
         sync_timeout                         -> 6;
         _                                    -> 0
     end.
+
+format_message_queue(Opt, MQ) -> rabbit_misc:format_message_queue(Opt, MQ).
+
+format_status(_Opt, [_PDict, State = #state { backing_queue       = BQ,
+                                              backing_queue_state = BQS,
+                                              sender_queues       = SQ,
+                                              msg_id_ack          = MA,
+                                              msg_id_status       = MS,
+                                              known_senders       = KS }]) ->
+    FState =
+        rabbit_misc:update_and_convert_record(
+          state_formatted, [{#state.backing_queue_state, BQ:format_status(BQS)},
+                            {#state.sender_queues, format_sender_queues(SQ)} |
+                            [{Pos, dict:to_list(Dict)} ||
+                                {Pos, Dict} <- [{#state.msg_id_ack,    MA},
+                                                {#state.msg_id_status, MS},
+                                                {#state.known_senders, KS}]]],
+          State),
+    [{data, [{"State", FState}]}].
 
 %% ---------------------------------------------------------------------------
 %% GM
@@ -916,3 +936,14 @@ set_synchronised(true, State) ->
     State;
 set_synchronised(false, State = #state { synchronised = false }) ->
     State.
+
+format_sender_queues(SQ) ->
+    [{ChPid, {format_sender_queue(MQ), sets:to_list(PendingCh)}}
+     || {ChPid, {MQ, PendingCh}} <- dict:to_list(SQ)].
+
+format_sender_queue(MQ) ->
+    [{Delivery #delivery {
+        message = setelement(#basic_message.content, Msg, '_') },
+     EnqueueOnPromotion}
+     || {Delivery = #delivery { message = Msg }, EnqueueOnPromotion}
+            <- queue:to_list(MQ)].

@@ -52,7 +52,7 @@
 -export([ntoa/1, ntoab/1]).
 -export([is_process_alive/1]).
 -export([pget/2, pget/3, pget_or_die/2]).
--export([format_message_queue/2]).
+-export([format_message_queue/2, update_and_convert_record/3]).
 -export([append_rpc_all_nodes/4]).
 
 %%----------------------------------------------------------------------------
@@ -190,6 +190,8 @@
 -spec(pget/3 :: (term(), [term()], term()) -> term()).
 -spec(pget_or_die/2 :: (term(), [term()]) -> term() | no_return()).
 -spec(format_message_queue/2 :: (any(), priority_queue:q()) -> term()).
+-spec(update_and_convert_record/3 :: (atom(), [{non_neg_integer(), any()}],
+                                      tuple()) -> tuple()).
 -spec(append_rpc_all_nodes/4 :: ([node()], atom(), atom(), [any()]) -> [any()]).
 
 -endif.
@@ -799,6 +801,10 @@ format_message_queue_entry(V) when is_tuple(V) ->
     list_to_tuple([format_message_queue_entry(E) || E <- tuple_to_list(V)]);
 format_message_queue_entry(_V) ->
     '_'.
+
+update_and_convert_record(NewRecordName, PosValList, Record) ->
+    lists:foldl(fun ({Pos, Val}, Tuple) -> setelement(Pos, Tuple, Val) end,
+                setelement(1, Record, NewRecordName), PosValList).
 
 append_rpc_all_nodes(Nodes, M, F, A) ->
     {ResL, _} = rpc:multicall(Nodes, M, F, A),

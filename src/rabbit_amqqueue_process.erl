@@ -33,7 +33,8 @@
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2, handle_pre_hibernate/1, prioritise_call/3,
-         prioritise_cast/2, prioritise_info/2, format_message_queue/2]).
+         prioritise_cast/2, prioritise_info/2, format_message_queue/2,
+         format_status/2]).
 
 %% Queue's state
 -record(q, {q,
@@ -1209,3 +1210,16 @@ handle_pre_hibernate(State = #q{backing_queue = BQ,
     {hibernate, stop_rate_timer(State1)}.
 
 format_message_queue(Opt, MQ) -> rabbit_misc:format_message_queue(Opt, MQ).
+
+format_status(_Opt, [_PDict, State = #q{backing_queue       = BQ,
+                                        backing_queue_state = BQS,
+                                        msg_id_to_channel   = MTC,
+                                        active_consumers    = AC,
+                                        blocked_consumers   = BC}]) ->
+    FState =
+        rabbit_misc:update_and_convert_record(
+          q_formatted, [{#q.backing_queue_state, BQ:format_status(BQS)},
+                        {#q.msg_id_to_channel,   dict:to_list(MTC)},
+                        {#q.active_consumers,    queue:to_list(AC)},
+                        {#q.blocked_consumers,   queue:to_list(BC)}], State),
+    [{data, [{"State", FState}]}].
