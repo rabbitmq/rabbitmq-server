@@ -5,8 +5,14 @@ the management UI. Hopefully use is obvious.
 Configuration
 =============
 
-There is one configuration option, "directory". This controls where
-the log files go. It defaults to "/var/tmp/rabbitmq-tracing".
+There is two configuration options:
+
+directory: This controls where the log files go. It defaults to
+"/var/tmp/rabbitmq-tracing".
+
+username: name of the user as which to create queues and bind to the
+tracing exchange. Obviously this user will need to exist and have
+permission to do those things.
 
 Performance
 ===========

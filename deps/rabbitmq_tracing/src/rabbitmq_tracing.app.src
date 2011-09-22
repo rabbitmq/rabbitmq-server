@@ -4,5 +4,6 @@
   {modules, []},
   {registered, []},
   {mod, {rabbit_tracing_app, []}},
-  {env, [{directory, "/var/tmp/rabbitmq-tracing"}]},
+  {env, [{username,  <<"guest">>},
+         {directory, "/var/tmp/rabbitmq-tracing"}]},
   {applications, [kernel, stdlib, rabbit, rabbitmq_management]}]}.
