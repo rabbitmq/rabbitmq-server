@@ -732,29 +732,15 @@ is_duplicate(_Msg, State) -> {false, State}.
 
 discard(_Msg, _ChPid, State) -> State.
 
-format_status(State = #vqstate { q1                  = Q1,
-                                 q2                  = Q2,
-                                 q3                  = Q3,
-                                 q4                  = Q4,
-                                 pending_ack         = PA,
-                                 ram_ack_index       = RAI,
-                                 msgs_on_disk        = MOD,
-                                 msg_indices_on_disk = MIOD,
-                                 unconfirmed         = UC,
-                                 confirmed           = C }) ->
+format_status(State = #vqstate{q1 = Q1,
+                               q2 = Q2,
+                               q3 = Q3,
+                               q4 = Q4}) ->
     rabbit_misc:update_and_convert_record(
-      vqstate_formatted,
-      [{#vqstate.q1,                  format_queue(Q1)},
-       {#vqstate.q2,                  format_bpqueue(Q2)},
-       {#vqstate.q3,                  format_bpqueue(Q3)},
-       {#vqstate.q4,                  format_queue(Q4)},
-       {#vqstate.pending_ack,         format_pending_acks(PA)},
-       {#vqstate.ram_ack_index,       gb_trees:to_list(RAI)} |
-       [{Pos, gb_sets:to_list(Set)} ||
-           {Pos, Set} <- [{#vqstate.msgs_on_disk,        MOD},
-                          {#vqstate.msg_indices_on_disk, MIOD},
-                          {#vqstate.unconfirmed,         UC},
-                          {#vqstate.confirmed,           C}]]], State).
+      vqstate_formatted, [{#vqstate.q1, format_queue(Q1)},
+                          {#vqstate.q2, format_bpqueue(Q2)},
+                          {#vqstate.q3, format_bpqueue(Q3)},
+                          {#vqstate.q4, format_queue(Q4)}], State).
 
 %%----------------------------------------------------------------------------
 %% Minor helpers
@@ -810,13 +796,6 @@ format_queue(Q) ->
 format_bpqueue(Q) ->
     beta_fold(fun (MsgStatus, Acc) -> [format_msg_status(MsgStatus) | Acc] end,
               [], Q).
-
-format_pending_acks(PA) ->
-    dict:fold(fun (SeqId, {_IsPersistent, _MsgId, _MsgProps} = OnDisk, Acc) ->
-                      [{SeqId, OnDisk} | Acc];
-                  (SeqId, MsgStatus = #msg_status {}, Acc) ->
-                      [{SeqId, format_msg_status(MsgStatus)} | Acc]
-              end, [], PA).
 
 format_msg_status(MsgStatus = #msg_status { msg = undefined }) -> MsgStatus;
 format_msg_status(MsgStatus) -> setelement(#msg_status.msg, MsgStatus, '_').

@@ -319,20 +319,11 @@ prioritise_info(Msg, _State) ->
 format_message_queue(Opt, MQ) -> rabbit_misc:format_message_queue(Opt, MQ).
 
 format_status(_Opt, [_PDict, State = #state { backing_queue       = BQ,
-                                              backing_queue_state = BQS,
-                                              sender_queues       = SQ,
-                                              msg_id_ack          = MA,
-                                              msg_id_status       = MS,
-                                              known_senders       = KS }]) ->
+                                              backing_queue_state = BQS }]) ->
     FState =
         rabbit_misc:update_and_convert_record(
-          state_formatted, [{#state.backing_queue_state, BQ:format_status(BQS)},
-                            {#state.sender_queues, format_sender_queues(SQ)} |
-                            [{Pos, dict:to_list(Dict)} ||
-                                {Pos, Dict} <- [{#state.msg_id_ack,    MA},
-                                                {#state.msg_id_status, MS},
-                                                {#state.known_senders, KS}]]],
-          State),
+          state_formatted,
+          [{#state.backing_queue_state, BQ:format_status(BQS)}], State),
     [{data, [{"State", FState}]}].
 
 %% ---------------------------------------------------------------------------
@@ -936,14 +927,3 @@ set_synchronised(true, State) ->
     State;
 set_synchronised(false, State = #state { synchronised = false }) ->
     State.
-
-format_sender_queues(SQ) ->
-    [{ChPid, {format_sender_queue(MQ), sets:to_list(PendingCh)}}
-     || {ChPid, {MQ, PendingCh}} <- dict:to_list(SQ)].
-
-format_sender_queue(MQ) ->
-    [{Delivery #delivery {
-        message = setelement(#basic_message.content, Msg, '_') },
-     EnqueueOnPromotion}
-     || {Delivery = #delivery { message = Msg }, EnqueueOnPromotion}
-            <- queue:to_list(MQ)].

@@ -352,15 +352,10 @@ discard(Msg = #basic_message { id = MsgId }, ChPid,
     end.
 
 format_status(State = #state { backing_queue       = BQ,
-                               backing_queue_state = BQS,
-                               seen_status         = SS,
-                               ack_msg_id          = AM,
-                               known_senders       = KS }) ->
+                               backing_queue_state = BQS}) ->
     rabbit_misc:update_and_convert_record(
-      state_formatted, [{#state.backing_queue_state, BQ:format_status(BQS)},
-                        {#state.seen_status,         dict:to_list(SS)},
-                        {#state.ack_msg_id,          dict:to_list(AM)},
-                        {#state.known_senders,       sets:to_list(KS)}], State).
+      state_formatted, [{#state.backing_queue_state, BQ:format_status(BQS)}],
+      State).
 
 %% ---------------------------------------------------------------------------
 %% Other exported functions

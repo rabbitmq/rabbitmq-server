@@ -1212,14 +1212,9 @@ handle_pre_hibernate(State = #q{backing_queue = BQ,
 format_message_queue(Opt, MQ) -> rabbit_misc:format_message_queue(Opt, MQ).
 
 format_status(_Opt, [_PDict, State = #q{backing_queue       = BQ,
-                                        backing_queue_state = BQS,
-                                        msg_id_to_channel   = MTC,
-                                        active_consumers    = AC,
-                                        blocked_consumers   = BC}]) ->
+                                        backing_queue_state = BQS}]) ->
     FState =
         rabbit_misc:update_and_convert_record(
-          q_formatted, [{#q.backing_queue_state, BQ:format_status(BQS)},
-                        {#q.msg_id_to_channel,   dict:to_list(MTC)},
-                        {#q.active_consumers,    queue:to_list(AC)},
-                        {#q.blocked_consumers,   queue:to_list(BC)}], State),
+          q_formatted, [{#q.backing_queue_state, BQ:format_status(BQS)}],
+          State),
     [{data, [{"State", FState}]}].
