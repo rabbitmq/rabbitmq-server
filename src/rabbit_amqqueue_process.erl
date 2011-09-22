@@ -800,13 +800,14 @@ i(Item, _) ->
     throw({bad_argument, Item}).
 
 consumers(#q{active_consumers = ActiveConsumers}) ->
+    lists:foldl(fun (C, Acc) -> consumers(C#cr.blocked_consumers, Acc) end,
+                consumers(ActiveConsumers, []), all_ch_record()).
+
+consumers(Consumers, Acc) ->
     rabbit_misc:queue_fold(
-      fun ({ChPid, #consumer{tag = ConsumerTag,
-                             ack_required = AckRequired}}, Acc) ->
-              [{ChPid, ConsumerTag, AckRequired} | Acc]
-      end, [], lists:foldl(fun (#cr{blocked_consumers = Consumers}, Acc) ->
-                                   queue:join(Acc, Consumers)
-                           end, ActiveConsumers, all_ch_record())).
+      fun ({ChPid, #consumer{tag = CTag, ack_required = AckRequired}}, Acc1) ->
+              [{ChPid, CTag, AckRequired} | Acc1]
+      end, Acc, Consumers).
 
 emit_stats(State) ->
     emit_stats(State, []).
