@@ -27,19 +27,19 @@
   </refentryinfo>
 
   <refmeta>
-    <refentrytitle>rabbitmq-plugin</refentrytitle>
+    <refentrytitle>rabbitmq-plugins</refentrytitle>
     <manvolnum>1</manvolnum>
     <refmiscinfo class="manual">RabbitMQ Service</refmiscinfo>
   </refmeta>
 
   <refnamediv>
-    <refname>rabbitmq-plugin</refname>
+    <refname>rabbitmq-plugins</refname>
     <refpurpose>command line tool for managing a RabbitMQ broker plugins</refpurpose>
   </refnamediv>
 
   <refsynopsisdiv>
     <cmdsynopsis>
-      <command>rabbitmq-plugin</command>
+      <command>rabbitmq-plugins</command>
       <arg choice="req"><replaceable>command</replaceable></arg>
       <arg choice="opt" rep="repeat"><replaceable>command options</replaceable></arg>
     </cmdsynopsis>
@@ -48,7 +48,7 @@
   <refsect1>
     <title>Description</title>
     <para>
-      <command>rabbitmq-plugin</command> is a command line tool for
+      <command>rabbitmq-plugins</command> is a command line tool for
       managing RabbitMQ broker plugins.  It allows one to enable,
       disable and browse plugins.  Note that it must be run by a user
       with write permissions to the RabbitMQ configuration directory.
@@ -81,15 +81,15 @@
             name mathes <command>pattern</command> are shown.
           </para>
           <para role="example-prefix">For example:</para>
-          <screen role="example">rabbitmq-plugin list</screen>
+          <screen role="example">rabbitmq-plugins list</screen>
           <para role="example">
             This command lists all the plugins available.
           </para>
-          <screen role="example">rabbitmq-plugin list -c</screen>
+          <screen role="example">rabbitmq-plugins list -c</screen>
           <para role="example">
             This command lists all the plugins available, on one line each.
           </para>
-          <screen role="example">rabbitmq-plugin list -c management</screen>
+          <screen role="example">rabbitmq-plugins list -c management</screen>
           <para role="example">
             This command lists all the plugins available, on one
             line each, but does not display plugins whose name does
@@ -113,7 +113,7 @@
           </para>
 
           <para role="example-prefix">For example:</para>
-          <screen role="example">rabbitmq-plugin enable rabbitmq_shovel rabbitmq_management</screen>
+          <screen role="example">rabbitmq-plugins enable rabbitmq_shovel rabbitmq_management</screen>
           <para role="example">
             This command enables the <command>shovel</command> and
             <command>management</command> plugins and all their
@@ -137,7 +137,7 @@
           </para>
 
           <para role="example-prefix">For example:</para>
-          <screen role="example">rabbitmq-plugin disable amqp_client</screen>
+          <screen role="example">rabbitmq-plugins disable amqp_client</screen>
           <para role="example">
             This command disables <command>amqp_client</command> and
             all plugins that depend on it.

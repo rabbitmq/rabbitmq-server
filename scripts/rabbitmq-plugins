@@ -25,8 +25,8 @@ exec erl \
     -pa "${RABBITMQ_HOME}/ebin" \
     -noinput \
     -hidden \
-    -sname rabbitmq-plugin$$ \
-    -s rabbit_plugin \
+    -sname rabbitmq-plugins$$ \
+    -s rabbit_plugins \
     -plugins_dir "$RABBITMQ_PLUGINS_DIR" \
     -plugins_dist_dir "$RABBITMQ_PLUGINS_DIST_DIR" \
     -extra "$@"

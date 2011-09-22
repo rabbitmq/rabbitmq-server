@@ -14,7 +14,7 @@
 %% Copyright (c) 2011 VMware, Inc.  All rights reserved.
 %%
 
--module(rabbit_plugin).
+-module(rabbit_plugins).
 -include("rabbit.hrl").
 
 -export([start/0, stop/0]).
@@ -71,7 +71,7 @@ print_error(Format, Args) ->
     rabbit_misc:format_stderr("Error: " ++ Format ++ "~n", Args).
 
 usage() ->
-    io:format("~s", [rabbit_plugin_usage:usage()]),
+    io:format("~s", [rabbit_plugins_usage:usage()]),
     rabbit_misc:quit(1).
 
 %%----------------------------------------------------------------------------
@@ -289,7 +289,7 @@ lookup_plugins(Names, AllPlugins) ->
 %% Read the enabled plugin names from disk.
 read_enabled_plugins(PluginsDir) ->
     FileName = enabled_plugins_filename(PluginsDir),
-    case rabbit_misc:read_term_file(FileName) of
+    case rabbit_file:read_term_file(FileName) of
         {ok, [Plugins]} -> Plugins;
         {error, enoent} -> [];
         {error, Reason} -> throw({error, {cannot_read_enabled_plugins_file,
@@ -299,7 +299,7 @@ read_enabled_plugins(PluginsDir) ->
 %% Update the enabled plugin names on disk.
 update_enabled_plugins(PluginsDir, Plugins) ->
     FileName = enabled_plugins_filename(PluginsDir),
-    case rabbit_misc:write_term_file(FileName, [Plugins]) of
+    case rabbit_file:write_term_file(FileName, [Plugins]) of
         ok              -> ok;
         {error, Reason} -> throw({error, {cannot_write_enabled_plugins_file,
                                           FileName, Reason}})
@@ -339,7 +339,7 @@ enable_one_plugin(#plugin{name = Name, version = Version, location = Path},
                   PluginsDir) ->
     io:format("Enabling ~w-~s~n", [Name, Version]),
     TargetPath = filename:join(PluginsDir, filename:basename(Path)),
-    ok = rabbit_misc:ensure_parent_dirs_exist(TargetPath),
+    ok = rabbit_file:ensure_parent_dirs_exist(TargetPath),
     case file:copy(Path, TargetPath) of
         {ok, _Bytes} -> ok;
         {error, Err} -> io:format("Error enabling ~p (~p)~n",
