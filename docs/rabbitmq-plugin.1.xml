@@ -59,9 +59,6 @@
   <refsect1>
     <title>Commands</title>
 
-    <refsect2>
-      <title>Local Plugin Management</title>
-
       <variablelist>
         <varlistentry>
           <term><cmdsynopsis><command>list</command> <arg choice="opt">-c</arg> <arg choice="opt"><replaceable>pattern</replaceable></arg></cmdsynopsis></term>
@@ -149,7 +146,6 @@
           </listitem>
         </varlistentry>
       </variablelist>
-    </refsect2>
 
   </refsect1>
 

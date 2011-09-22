@@ -106,24 +106,7 @@ action(enable, ToEnable0, _Opts, PluginsDir, PluginsDistDir) ->
                      ok, lookup_plugins(EnableOrder1, AllPlugins))
     end,
     update_enabled_plugins(PluginsDir, plugin_names(NewEnabledPlugins)),
-    action(prune, [], {}, PluginsDir, PluginsDistDir);
-
-action(prune, [], _Opts, PluginsDir, PluginsDistDir) ->
-    ExplicitlyEnabledPlugins = read_enabled_plugins(PluginsDir),
-    AllPlugins = find_plugins(PluginsDistDir),
-    Required = calculate_required_plugins(ExplicitlyEnabledPlugins, AllPlugins),
-    AllEnabledPlugins = find_plugins(PluginsDir),
-    ToDisablePlugins =
-        AllEnabledPlugins -- lookup_plugins(Required, AllEnabledPlugins),
-    case ToDisablePlugins of
-        [] ->
-            io:format("No unnecessary plugins found.~n");
-        _ ->
-            io:format("Disabling unnecessary plugins: ~p~n",
-                      [plugin_names(ToDisablePlugins)]),
-            ok = lists:foldl(fun (Plugin, ok) -> disable_one_plugin(Plugin) end,
-                             ok, ToDisablePlugins)
-    end;
+    prune(PluginsDir, PluginsDistDir);
 
 action(disable, ToDisable0, _Opts, PluginsDir, PluginsDistDir) ->
     ToDisable = [list_to_atom(Name) || Name <- ToDisable0],
@@ -143,9 +126,26 @@ action(disable, ToDisable0, _Opts, PluginsDir, PluginsDistDir) ->
                                              sets:from_list(ExplicitlyEnabled))),
     io:format("Will disable: ~p~n", [ExplicitlyDisabled]),
     update_enabled_plugins(PluginsDir, ExplicitlyEnabled -- DisableOrder),
-    action(prune, [], {}, PluginsDir, PluginsDistDir).
+    prune(PluginsDir, PluginsDistDir).
 
 %%----------------------------------------------------------------------------
+
+prune(PluginsDir, PluginsDistDir) ->
+    ExplicitlyEnabledPlugins = read_enabled_plugins(PluginsDir),
+    AllPlugins = find_plugins(PluginsDistDir),
+    Required = calculate_required_plugins(ExplicitlyEnabledPlugins, AllPlugins),
+    AllEnabledPlugins = find_plugins(PluginsDir),
+    ToDisablePlugins =
+        AllEnabledPlugins -- lookup_plugins(Required, AllEnabledPlugins),
+    case ToDisablePlugins of
+        [] ->
+            io:format("No unnecessary plugins found.~n");
+        _ ->
+            io:format("Disabling unnecessary plugins: ~p~n",
+                      [plugin_names(ToDisablePlugins)]),
+            ok = lists:foldl(fun (Plugin, ok) -> disable_one_plugin(Plugin) end,
+                             ok, ToDisablePlugins)
+    end.
 
 %% Get the #plugin{}s from the .ezs in the given directory.
 find_plugins(PluginsDistDir) ->
