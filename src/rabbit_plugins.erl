@@ -21,6 +21,8 @@
          lookup_plugins/2, calculate_required_plugins/2]).
 
 -define(VERBOSE_OPT, "-v").
+-define(ENABLED_OPT, "-E").
+-define(ENABLED_ALL_OPT, "-e").
 
 %%----------------------------------------------------------------------------
 
@@ -39,7 +41,9 @@ start() ->
     {ok, [[PluginsDistDir|_]|_]} = init:get_argument(plugins_dist_dir),
     put(plugins_dist_dir, PluginsDistDir),
     {[Command0 | Args], Opts} =
-        case rabbit_misc:get_options([{flag, ?VERBOSE_OPT}],
+        case rabbit_misc:get_options([{flag, ?VERBOSE_OPT},
+                                      {flag, ?ENABLED_OPT},
+                                      {flag, ?ENABLED_ALL_OPT}],
                                      init:get_plain_arguments()) of
             {[], _Opts}    -> usage();
             CmdArgsAndOpts -> CmdArgsAndOpts
@@ -76,7 +80,7 @@ usage() ->
 action(list, [], Opts) ->
     action(list, [".*"], Opts);
 action(list, [Pat], Opts) ->
-    format_plugins(Pat, proplists:get_bool(?VERBOSE_OPT, Opts));
+    format_plugins(Pat, Opts);
 
 action(enable, ToEnable0, _Opts) ->
     AllPlugins = find_plugins(),
@@ -201,7 +205,11 @@ parse_binary(Bin) ->
     end.
 
 %% Pretty print a list of plugins.
-format_plugins(Pattern, Verbose) ->
+format_plugins(Pattern, Opts) ->
+    Verbose = proplists:get_bool(?VERBOSE_OPT, Opts),
+    OnlyEnabled = proplists:get_bool(?ENABLED_OPT, Opts),
+    OnlyEnabledAll = proplists:get_bool(?ENABLED_ALL_OPT, Opts),
+
     AvailablePlugins = find_plugins(),
     EnabledExplicitly = read_enabled_plugins(),
     EnabledImplicitly =
@@ -210,7 +218,14 @@ format_plugins(Pattern, Verbose) ->
     {ok, RE} = re:compile(Pattern),
     Plugins = [ Plugin ||
                   Plugin = #plugin{name = Name} <- AvailablePlugins,
-                  re:run(atom_to_list(Name), RE, [{capture, none}]) =:= match],
+                  re:run(atom_to_list(Name), RE, [{capture, none}]) =:= match,
+                  if OnlyEnabled -> lists:member(Name, EnabledExplicitly);
+                     true        -> true
+                  end,
+                  if OnlyEnabledAll -> lists:member(Name, EnabledImplicitly) or
+                                           lists:member(Name, EnabledExplicitly);
+                     true           -> true
+                  end],
     MaxWidth = lists:max([length(atom_to_list(Name)) ||
                              #plugin{name = Name} <- Plugins] ++ [0]),
     [ format_plugin(P, EnabledExplicitly, EnabledImplicitly, Verbose, MaxWidth) ||

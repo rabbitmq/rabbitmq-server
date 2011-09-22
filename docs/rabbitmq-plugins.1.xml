@@ -60,12 +60,22 @@
 
     <variablelist>
       <varlistentry>
-        <term><cmdsynopsis><command>list</command> <arg choice="opt">-v</arg> <arg choice="opt"><replaceable>pattern</replaceable></arg></cmdsynopsis></term>
+        <term><cmdsynopsis><command>list</command> <arg choice="opt">-v</arg> <arg choice="opt">-E</arg> <arg choice="opt">-e</arg> <arg choice="opt"><replaceable>pattern</replaceable></arg></cmdsynopsis></term>
         <listitem>
           <variablelist>
             <varlistentry>
               <term>-v</term>
               <listitem><para>Show all plugin details.</para></listitem>
+            </varlistentry>
+            <varlistentry>
+              <term>-E</term>
+              <listitem><para>Show only explicitly enabled
+              plugins.</para></listitem>
+            </varlistentry>
+            <varlistentry>
+              <term>-e</term>
+              <listitem><para>Show only explicitly or implicitly
+              enabled plugins.</para></listitem>
             </varlistentry>
             <varlistentry>
               <term>pattern</term>
@@ -93,6 +103,11 @@
           <para role="example">
             This command lists all the plugins available, but does not
             display plugins whose name does not contain "management".
+          </para>
+          <screen role="example">rabbitmq-plugins list -e rabbit</screen>
+          <para role="example">
+            This command lists all implicitly or explicitly enabled
+            rabbit plugins.
           </para>
         </listitem>
       </varlistentry>
