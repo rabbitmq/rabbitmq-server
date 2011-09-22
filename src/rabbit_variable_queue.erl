@@ -738,8 +738,6 @@ format_status(State = #vqstate{q1 = Q1,
                                q4 = Q4}) ->
     rabbit_misc:update_and_convert_record(
       vqstate_formatted, [{#vqstate.q1, format_queue(Q1)},
-                          {#vqstate.q2, format_bpqueue(Q2)},
-                          {#vqstate.q3, format_bpqueue(Q3)},
                           {#vqstate.q4, format_queue(Q4)}], State).
 
 %%----------------------------------------------------------------------------
@@ -792,10 +790,6 @@ gb_sets_maybe_insert(true,  Val,  Set) -> gb_sets:add(Val, Set).
 
 format_queue(Q) ->
     [format_msg_status(MsgStatus) || MsgStatus <- queue:to_list(Q)].
-
-format_bpqueue(Q) ->
-    beta_fold(fun (MsgStatus, Acc) -> [format_msg_status(MsgStatus) | Acc] end,
-              [], Q).
 
 format_msg_status(MsgStatus = #msg_status { msg = undefined }) -> MsgStatus;
 format_msg_status(MsgStatus) -> setelement(#msg_status.msg, MsgStatus, '_').
