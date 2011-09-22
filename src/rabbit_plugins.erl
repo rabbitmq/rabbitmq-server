@@ -121,15 +121,17 @@ action(disable, ToDisable0, _Opts) ->
 find_plugins() ->
     find_plugins(get(plugins_dist_dir)).
 find_plugins(PluginsDistDir) ->
-    EZs = filelib:wildcard("*.ez", PluginsDistDir),
+    EZs = [{ez, EZ} || EZ <- filelib:wildcard("*.ez", PluginsDistDir)],
+    FreeApps = [{app, App} ||
+                   App <- filelib:wildcard("*/ebin/*.app", PluginsDistDir)],
     {Plugins, Problems} =
         lists:foldl(fun ({error, EZ, Reason}, {Plugins1, Problems1}) ->
                             {Plugins1, [{EZ, Reason} | Problems1]};
                         (Plugin = #plugin{}, {Plugins1, Problems1}) ->
                             {[Plugin|Plugins1], Problems1}
                     end, {[], []},
-                    [get_plugin_info(filename:join([PluginsDistDir, EZ]))
-                     || EZ <- EZs]),
+                    [get_plugin_info(PluginsDistDir, Plug) ||
+                        Plug <- EZs ++ FreeApps]),
     case Problems of
         [] -> ok;
         _  -> io:format("Warning: Problem reading some plugins: ~p~n", [Problems])
@@ -137,7 +139,8 @@ find_plugins(PluginsDistDir) ->
     Plugins.
 
 %% Get the #plugin{} from an .ez.
-get_plugin_info(EZ) ->
+get_plugin_info(Base, {ez, EZ0}) ->
+    EZ = filename:join([Base, EZ0]),
     case read_app_file(EZ) of
         {application, Name, Props} ->
             Version = proplists:get_value(vsn, Props, "0"),
@@ -145,9 +148,24 @@ get_plugin_info(EZ) ->
             Dependencies =
                 filter_applications(proplists:get_value(applications, Props, [])),
             #plugin{name = Name, version = Version, description = Description,
-                    dependencies = Dependencies, location = EZ};
+                    dependencies = Dependencies, location = EZ, type = ez};
         {error, Reason} ->
             {error, EZ, Reason}
+    end;
+%% Get the #plugin{} from an .app.
+get_plugin_info(Base, {app, App0}) ->
+    App = filename:join([Base, App0]),
+    case rabbit_file:read_term_file(App) of
+        {ok, [{application, Name, Props}]} ->
+            Version = proplists:get_value(vsn, Props, "0"),
+            Description = proplists:get_value(description, Props, ""),
+            Dependencies =
+                filter_applications(proplists:get_value(applications, Props, [])),
+            Location = filename:absname(filename:dirname(filename:dirname(App))),
+            #plugin{name = Name, version = Version, description = Description,
+                    dependencies = Dependencies, location = Location, type = dir};
+        {error, Reason} ->
+            {error, App, {invalid_app, Reason}}
     end.
 
 %% Read the .app file from an ez.

@@ -47,8 +47,7 @@ start() ->
         init:get_plain_arguments(),
     RootName = UnpackedPluginDir ++ "/rabbit",
 
-    %% Unpack any .ez plugins
-    unpack_ez_plugins(EnabledPluginsFile, PluginsDistDir, UnpackedPluginDir),
+    prepare_plugins(EnabledPluginsFile, PluginsDistDir, UnpackedPluginDir),
 
     %% Build a list of required apps based on the fixed set, and any plugins
     PluginApps = find_plugins(UnpackedPluginDir),
@@ -148,7 +147,7 @@ delete_recursively(Fn) ->
         Error              -> Error
     end.
 
-unpack_ez_plugins(EnabledPluginsFile, PluginsDistDir, DestDir) ->
+prepare_plugins(EnabledPluginsFile, PluginsDistDir, DestDir) ->
     AllPlugins = rabbit_plugins:find_plugins(PluginsDistDir),
     Enabled = rabbit_plugins:read_enabled_plugins(EnabledPluginsFile),
     ToUnpack = rabbit_plugins:calculate_required_plugins(Enabled, AllPlugins),
@@ -162,13 +161,15 @@ unpack_ez_plugins(EnabledPluginsFile, PluginsDistDir, DestDir) ->
         ok          -> ok;
         {error, E2} -> terminate("Could not create dir ~s (~p)", [DestDir, E2])
     end,
-    [unpack_ez_plugin(PluginLocation, DestDir) ||
-        #plugin{location = PluginLocation} <-
-            rabbit_plugins:lookup_plugins(ToUnpack, AllPlugins)].
 
-unpack_ez_plugin(PluginFn, PluginDestDir) ->
-    zip:unzip(PluginFn, [{cwd, PluginDestDir}]),
-    ok.
+    [prepare_plugin(Plugin, DestDir) ||
+        Plugin <- rabbit_plugins:lookup_plugins(ToUnpack, AllPlugins)].
+
+prepare_plugin(#plugin{type = ez, location = Location}, PluginDestDir) ->
+    zip:unzip(Location, [{cwd, PluginDestDir}]);
+prepare_plugin(#plugin{type = dir, name = Name, location = Location},
+               PluginsDestDir) ->
+    file:make_symlink(Location, filename:join([PluginsDestDir, Name])).
 
 find_plugins(PluginDir) ->
     [prepare_dir_plugin(PluginName) ||
