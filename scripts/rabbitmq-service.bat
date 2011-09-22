@@ -162,14 +162,19 @@ if errorlevel 1 (
     echo !RABBITMQ_SERVICENAME! service is already present - only updating service parameters
 )
 
-set RABBITMQ_PLUGINS_DIR=!TDP0!..\plugins
+if "!RABBITMQ_ENABLED_PLUGINS_FILE!"=="" (
+    set RABBITMQ_ENABLED_PLUGINS_FILE=!RABBITMQ_BASE!\enabled_plugins
+)
+
+set RABBITMQ_PLUGINS_DIST_DIR=!TDP0!..\plugins-dist
 set RABBITMQ_EBIN_ROOT=!TDP0!..\ebin
 
 "!ERLANG_HOME!\bin\erl.exe" ^
 -pa "!RABBITMQ_EBIN_ROOT!" ^
 -noinput -hidden ^
 -s rabbit_prelaunch ^
--extra "!RABBITMQ_PLUGINS_DIR:\=/!" ^
+-extra "!RABBITMQ_ENABLED_PLUGINS_FILE!" ^
+       "!RABBITMQ_PLUGINS_DIST_DIR:\=/!" ^
        "!RABBITMQ_PLUGINS_EXPAND_DIR:\=/!" ^
        ""
 

@@ -17,15 +17,10 @@
 -module(rabbit_plugins).
 -include("rabbit.hrl").
 
--export([start/0, stop/0]).
+-export([start/0, stop/0, find_plugins/1, read_enabled_plugins/1,
+         lookup_plugins/2, calculate_required_plugins/2]).
 
 -define(COMPACT_OPT, "-c").
-
--record(plugin, {name,          %% atom()
-                 version,       %% string()
-                 description,   %% string()
-                 dependencies,  %% [{atom(), string()}]
-                 location}).    %% string()
 
 %%----------------------------------------------------------------------------
 
@@ -39,8 +34,10 @@
 %%----------------------------------------------------------------------------
 
 start() ->
-    {ok, [[PluginsDir|_]|_]} = init:get_argument(plugins_dir),
+    {ok, [[EnabledPluginsFile|_]|_]} = init:get_argument(enabled_plugins_file),
+    put(enabled_plugins_file, EnabledPluginsFile),
     {ok, [[PluginsDistDir|_]|_]} = init:get_argument(plugins_dist_dir),
+    put(plugins_dist_dir, PluginsDistDir),
     {[Command0 | Args], Opts} =
         case rabbit_misc:get_options([{flag, ?COMPACT_OPT}],
                                      init:get_plain_arguments()) of
@@ -49,7 +46,7 @@ start() ->
         end,
     Command = list_to_atom(Command0),
 
-    case catch action(Command, Args, Opts, PluginsDir, PluginsDistDir) of
+    case catch action(Command, Args, Opts) of
         ok ->
             rabbit_misc:quit(0);
         {'EXIT', {function_clause, [{?MODULE, action, _} | _]}} ->
@@ -76,16 +73,14 @@ usage() ->
 
 %%----------------------------------------------------------------------------
 
-action(list, [], Opts, PluginsDir, PluginsDistDir) ->
-    action(list, [".*"], Opts, PluginsDir, PluginsDistDir);
-action(list, [Pattern], Opts, PluginsDir, PluginsDistDir) ->
-    format_plugins(PluginsDir, PluginsDistDir, Pattern,
-                   proplists:get_bool(?COMPACT_OPT, Opts));
+action(list, [], Opts) ->
+    action(list, [".*"], Opts);
+action(list, [Pat], Opts) ->
+    format_plugins(Pat, proplists:get_bool(?COMPACT_OPT, Opts));
 
-action(enable, ToEnable0, _Opts, PluginsDir, PluginsDistDir) ->
-    AllPlugins = find_plugins(PluginsDistDir),
-    Enabled = read_enabled_plugins(PluginsDir),
-    EnabledPlugins = lookup_plugins(Enabled, AllPlugins),
+action(enable, ToEnable0, _Opts) ->
+    AllPlugins = find_plugins(),
+    EnabledPlugins = lookup_plugins(read_enabled_plugins(), AllPlugins),
     ToEnable = [list_to_atom(Name) || Name <- ToEnable0],
     ToEnablePlugins = lookup_plugins(ToEnable, AllPlugins),
     Missing = ToEnable -- plugin_names(ToEnablePlugins),
@@ -95,59 +90,36 @@ action(enable, ToEnable0, _Opts, PluginsDir, PluginsDistDir) ->
                         [Missing])
     end,
     NewEnabledPlugins = merge_plugin_lists(EnabledPlugins, ToEnablePlugins),
-    EnableOrder = calculate_required_plugins(plugin_names(NewEnabledPlugins),
-                                             AllPlugins),
-    EnableOrder1 = EnableOrder -- plugin_names(find_plugins(PluginsDir)),
-    case EnableOrder1 of
-        [] -> io:format("No plugins to enable.~n");
-        _  -> io:format("Will enable: ~p~n", [EnableOrder1]),
-              ok = lists:foldl(
-                     fun (Plugin, ok) -> enable_one_plugin(Plugin, PluginsDir) end,
-                     ok, lookup_plugins(EnableOrder1, AllPlugins))
-    end,
-    update_enabled_plugins(PluginsDir, plugin_names(NewEnabledPlugins)),
-    prune(PluginsDir, PluginsDistDir);
+    update_enabled_plugins(plugin_names(NewEnabledPlugins));
 
-action(disable, ToDisable0, _Opts, PluginsDir, PluginsDistDir) ->
+action(disable, ToDisable0, _Opts) ->
     ToDisable = [list_to_atom(Name) || Name <- ToDisable0],
-    EnabledPlugins = find_plugins(PluginsDir),
-    ToDisablePlugins = lookup_plugins(ToDisable, EnabledPlugins),
-    Missing = ToDisable -- plugin_names(ToDisablePlugins),
+    Enabled = read_enabled_plugins(),
+    AllPlugins = find_plugins(),
+    Missing = ToDisable -- plugin_names(AllPlugins),
     case Missing of
         [] -> ok;
         _  -> io:format("Warning: the following plugins could not be found: ~p~n",
                         [Missing])
     end,
-    ExplicitlyEnabled = read_enabled_plugins(PluginsDir),
-    DisableOrder = calculate_requires_plugins(plugin_names(ToDisablePlugins),
-                                              EnabledPlugins),
-    ExplicitlyDisabled = sets:to_list(
-                           sets:intersection(sets:from_list(DisableOrder),
-                                             sets:from_list(ExplicitlyEnabled))),
-    io:format("Will disable: ~p~n", [ExplicitlyDisabled]),
-    update_enabled_plugins(PluginsDir, ExplicitlyEnabled -- DisableOrder),
-    prune(PluginsDir, PluginsDistDir).
+    ToDisable1 = ToDisable -- Missing,
+    ToDisable2 = calculate_dependencies(true, ToDisable1, AllPlugins),
+    AlsoDisabled = sets:to_list(
+                     sets:intersection(sets:from_list(ToDisable2 -- ToDisable1),
+                                       sets:from_list(Enabled))),
+    case AlsoDisabled of
+        [] -> ok;
+        _  -> io:format("Warning: the following plugins will also be disabled "
+                        "because their dependencies are no longer met: ~p~n",
+                        [AlsoDisabled])
+    end,
+    update_enabled_plugins(Enabled -- ToDisable2).
 
 %%----------------------------------------------------------------------------
 
-prune(PluginsDir, PluginsDistDir) ->
-    ExplicitlyEnabledPlugins = read_enabled_plugins(PluginsDir),
-    AllPlugins = find_plugins(PluginsDistDir),
-    Required = calculate_required_plugins(ExplicitlyEnabledPlugins, AllPlugins),
-    AllEnabledPlugins = find_plugins(PluginsDir),
-    ToDisablePlugins =
-        AllEnabledPlugins -- lookup_plugins(Required, AllEnabledPlugins),
-    case ToDisablePlugins of
-        [] ->
-            io:format("No unnecessary plugins found.~n");
-        _ ->
-            io:format("Disabling unnecessary plugins: ~p~n",
-                      [plugin_names(ToDisablePlugins)]),
-            ok = lists:foldl(fun (Plugin, ok) -> disable_one_plugin(Plugin) end,
-                             ok, ToDisablePlugins)
-    end.
-
-%% Get the #plugin{}s from the .ezs in the given directory.
+%% Get the #plugin{}s ready to be enabled.
+find_plugins() ->
+    find_plugins(get(plugins_dist_dir)).
 find_plugins(PluginsDistDir) ->
     EZs = filelib:wildcard("*.ez", PluginsDistDir),
     {Plugins, Problems} =
@@ -211,15 +183,15 @@ parse_binary(Bin) ->
     end.
 
 %% Pretty print a list of plugins.
-format_plugins(PluginsDir, PluginsDistDir, Pattern, Compact) ->
-    AvailablePlugins = find_plugins(PluginsDistDir),
-    EnabledExplicitly = read_enabled_plugins(PluginsDir),
-    EnabledPlugins = find_plugins(PluginsDir),
-    EnabledImplicitly = plugin_names(EnabledPlugins) -- EnabledExplicitly,
+format_plugins(Pattern, Compact) ->
+    AvailablePlugins = find_plugins(),
+    EnabledExplicitly = read_enabled_plugins(),
+    EnabledImplicitly =
+        calculate_required_plugins(EnabledExplicitly, AvailablePlugins) --
+        EnabledExplicitly,
     {ok, RE} = re:compile(Pattern),
     [ format_plugin(P, EnabledExplicitly, EnabledImplicitly, Compact)
-     || P = #plugin{name = Name} <- usort_plugins(EnabledPlugins ++
-                                                  AvailablePlugins),
+     || P = #plugin{name = Name} <- AvailablePlugins,
         re:run(atom_to_list(Name), RE, [{capture, none}]) =:= match],
     ok.
 
@@ -287,8 +259,10 @@ lookup_plugins(Names, AllPlugins) ->
     [P || P = #plugin{name = Name} <- AllPlugins1, lists:member(Name, Names)].
 
 %% Read the enabled plugin names from disk.
-read_enabled_plugins(PluginsDir) ->
-    FileName = enabled_plugins_filename(PluginsDir),
+read_enabled_plugins() ->
+    read_enabled_plugins(get(enabled_plugins_file)).
+
+read_enabled_plugins(FileName) ->
     case rabbit_file:read_term_file(FileName) of
         {ok, [Plugins]} -> Plugins;
         {error, enoent} -> [];
@@ -297,64 +271,27 @@ read_enabled_plugins(PluginsDir) ->
     end.
 
 %% Update the enabled plugin names on disk.
-update_enabled_plugins(PluginsDir, Plugins) ->
-    FileName = enabled_plugins_filename(PluginsDir),
+update_enabled_plugins(Plugins) ->
+    FileName = get(enabled_plugins_file),
     case rabbit_file:write_term_file(FileName, [Plugins]) of
         ok              -> ok;
         {error, Reason} -> throw({error, {cannot_write_enabled_plugins_file,
                                           FileName, Reason}})
     end.
 
-enabled_plugins_filename(PluginsDir) ->
-    filename:join([PluginsDir, "enabled_plugins"]).
+calculate_required_plugins(Sources, AllPlugins) ->
+    calculate_dependencies(false, Sources, AllPlugins).
 
-%% Return a list of plugins that must be enabled when enabling the
-%% ones in ToEnable.  I.e. calculates dependencies.
-calculate_required_plugins(ToEnable, AllPlugins) ->
+calculate_dependencies(Reverse, Sources, AllPlugins) ->
     AllPlugins1 = filter_duplicates(usort_plugins(AllPlugins)),
     {ok, G} = rabbit_misc:build_acyclic_graph(
                 fun (App, _Deps) -> [{App, App}] end,
                 fun (App,  Deps) -> [{App, Dep} || Dep <- Deps] end,
                 [{Name, Deps}
                  || #plugin{name = Name, dependencies = Deps} <- AllPlugins1]),
-    EnableOrder = digraph_utils:reachable(ToEnable, G),
+    Dests = case Reverse of
+                false -> digraph_utils:reachable(Sources, G);
+                true  -> digraph_utils:reaching(Sources, G)
+            end,
     true = digraph:delete(G),
-    EnableOrder.
-
-%% Return a list of plugins that must be disabled when disabling the
-%% ones in ToDisable.  I.e. calculates *reverse* dependencies.
-calculate_requires_plugins(ToDisable, AllPlugins) ->
-    AllPlugins1 = filter_duplicates(usort_plugins(AllPlugins)),
-    {ok, G} = rabbit_misc:build_acyclic_graph(
-                fun (App, _Deps) -> [{App, App}] end,
-                fun (App,  Deps) -> [{Dep, App} || Dep <- Deps] end,
-                [{Name, Deps}
-                 || #plugin{name = Name, dependencies = Deps} <- AllPlugins1]),
-    DisableOrder = digraph_utils:reachable(ToDisable, G),
-    true = digraph:delete(G),
-    DisableOrder.
-
-%% Enable one plugin by copying it to the PluginsDir.
-enable_one_plugin(#plugin{name = Name, version = Version, location = Path},
-                  PluginsDir) ->
-    io:format("Enabling ~w-~s~n", [Name, Version]),
-    TargetPath = filename:join(PluginsDir, filename:basename(Path)),
-    ok = rabbit_file:ensure_parent_dirs_exist(TargetPath),
-    case file:copy(Path, TargetPath) of
-        {ok, _Bytes} -> ok;
-        {error, Err} -> io:format("Error enabling ~p (~p)~n",
-                                  [Name, {cannot_enable_plugin,
-                                          Path, TargetPath, Err}]),
-                        rabbit_misc:quit(2)
-    end.
-
-%% Disable the given plugin by deleting it.
-disable_one_plugin(#plugin{name = Name, version = Version, location = Path}) ->
-    io:format("Disabling ~w-~s~n", [Name, Version]),
-    case file:delete(Path) of
-        ok              -> ok;
-        {error, enoent} -> ok;
-        {error, Err}    -> io:format("Error disabling ~p (~p)~n",
-                                     [Name, {cannot_delete_plugin, Path, Err}]),
-                           rabbit_misc:quit(2)
-    end.
+    Dests.

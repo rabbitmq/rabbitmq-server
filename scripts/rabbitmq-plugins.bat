@@ -35,10 +35,13 @@ if not exist "!ERLANG_HOME!\bin\erl.exe" (
     exit /B
 )
 
-set RABBITMQ_PLUGINS_DIR=!TDP0!..\plugins
+if "!RABBITMQ_ENABLED_PLUGINS_FILE!"=="" (
+    set RABBITMQ_ENABLED_PLUGINS_FILE=!RABBITMQ_BASE!\enabled_plugins
+)
+
 set RABBITMQ_PLUGINS_DIST_DIR=!TDP0!..\plugins-dist
 
-"!ERLANG_HOME!\bin\erl.exe" -pa "!TDP0!..\ebin" -noinput -hidden -sname rabbitmq-plugins!RANDOM! -s rabbit_plugins -plugins_dir "!RABBITMQ_PLUGINS_DIR:\=/!" -plugins_dist_dir "!RABBITMQ_PLUGINS_DIST_DIR:\=/!" -extra !STAR!
+"!ERLANG_HOME!\bin\erl.exe" -pa "!TDP0!..\ebin" -noinput -hidden -sname rabbitmq-plugins!RANDOM! -s rabbit_plugins -enabled_plugins_file "!RABBITMQ_ENABLED_PLUGINS_FILE!" -plugins_dist_dir "!RABBITMQ_PLUGINS_DIST_DIR:\=/!" -extra !STAR!
 
 endlocal
 endlocal
