@@ -589,7 +589,7 @@ init([Server, BaseDir, ClientRefs, StartupFunState]) ->
 
     AttemptFileSummaryRecovery =
         case ClientRefs of
-            undefined -> ok = rabbit_misc:recursive_delete([Dir]),
+            undefined -> ok = rabbit_file:recursive_delete([Dir]),
                          ok = filelib:ensure_dir(filename:join(Dir, "nothing")),
                          false;
             _         -> ok = filelib:ensure_dir(filename:join(Dir, "nothing")),
@@ -1340,11 +1340,11 @@ recover_index_and_client_refs(IndexModule, true, ClientRefs, Dir, Server) ->
     end.
 
 store_recovery_terms(Terms, Dir) ->
-    rabbit_misc:write_term_file(filename:join(Dir, ?CLEAN_FILENAME), Terms).
+    rabbit_file:write_term_file(filename:join(Dir, ?CLEAN_FILENAME), Terms).
 
 read_recovery_terms(Dir) ->
     Path = filename:join(Dir, ?CLEAN_FILENAME),
-    case rabbit_misc:read_term_file(Path) of
+    case rabbit_file:read_term_file(Path) of
         {ok, Terms}    -> case file:delete(Path) of
                               ok             -> {true,  Terms};
                               {error, Error} -> {false, Error}
@@ -1901,7 +1901,7 @@ transform_dir(BaseDir, Store, TransformFun) ->
     end.
 
 transform_msg_file(FileOld, FileNew, TransformFun) ->
-    ok = rabbit_misc:ensure_parent_dirs_exist(FileNew),
+    ok = rabbit_file:ensure_parent_dirs_exist(FileNew),
     {ok, RefOld} = file_handle_cache:open(FileOld, [raw, binary, read], []),
     {ok, RefNew} = file_handle_cache:open(FileNew, [raw, binary, write],
                                           [{write_buffer,
