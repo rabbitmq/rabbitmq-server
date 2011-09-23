@@ -58,7 +58,7 @@ ERLC_OPTS=-I $(INCLUDE_DIR) -o $(EBIN_DIR) -Wall -v +debug_info $(call boolean_m
 
 VERSION=0.0.0
 PLUGINS_SRC_DIR?=$(shell [ -d "plugins-src" ] && echo "plugins-src" || echo )
-PLUGINS_DIST_DIR=plugins-dist
+PLUGINS_DIST_DIR=plugins
 TARBALL_NAME=rabbitmq-server-$(VERSION)
 TARGET_SRC_DIR=dist/$(TARBALL_NAME)
 
@@ -109,7 +109,7 @@ plugins:
 	[ -d "$(PLUGINS_SRC_DIR)" ] || { echo "No plugins source distribution found (try linking public-umbrella to $(PLUGINS_SRC_DIR)"; false; }
 	-ln -s "$(CURDIR)" "$(PLUGINS_SRC_DIR)/rabbitmq-server"
 	mkdir -p $(PLUGINS_DIST_DIR)
-	PLUGINS_SRC_DIR="" $(MAKE) -C "$(PLUGINS_SRC_DIR)" plugins-dist PLUGINS_DIST_DIR="$(CURDIR)/$(PLUGINS_DIST_DIR)" VERSION=$(VERSION)
+	PLUGINS_SRC_DIR="" $(MAKE) -C "$(PLUGINS_SRC_DIR)" plugins PLUGINS_DIST_DIR="$(CURDIR)/$(PLUGINS_DIST_DIR)" VERSION=$(VERSION)
 else
 plugins:
 # Not building plugins
@@ -306,8 +306,6 @@ install_bin: all install_dirs
 		cp scripts/$$script $(TARGET_DIR)/sbin; \
 		[ -e $(SBIN_DIR)/$$script ] || ln -s $(SCRIPTS_REL_PATH)/$$script $(SBIN_DIR)/$$script; \
 	done
-	mkdir -p $(TARGET_DIR)/plugins
-	echo Put your .ez plugin files in this directory. > $(TARGET_DIR)/plugins/README
 	mkdir -p $(TARGET_DIR)/$(PLUGINS_DIST_DIR)
 	-cp $(PLUGINS_DIST_DIR)/*.ez $(TARGET_DIR)/$(PLUGINS_DIST_DIR)
 

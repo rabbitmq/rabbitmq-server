@@ -32,7 +32,6 @@ fi
 
 chown -R rabbitmq:rabbitmq /var/lib/rabbitmq
 chown -R rabbitmq:rabbitmq /var/log/rabbitmq
-chmod -w rabbitmq:rabbitmq /usr/lib/rabbitmq/lib/rabbitmq_server-*/plugins/
 
 case "$1" in
     configure)

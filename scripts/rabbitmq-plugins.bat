@@ -39,7 +39,7 @@ if "!RABBITMQ_ENABLED_PLUGINS_FILE!"=="" (
     set RABBITMQ_ENABLED_PLUGINS_FILE=!RABBITMQ_BASE!\enabled_plugins
 )
 
-set RABBITMQ_PLUGINS_DIST_DIR=!TDP0!..\plugins-dist
+set RABBITMQ_PLUGINS_DIST_DIR=!TDP0!..\plugins
 
 "!ERLANG_HOME!\bin\erl.exe" -pa "!TDP0!..\ebin" -noinput -hidden -sname rabbitmq-plugins!RANDOM! -s rabbit_plugins -enabled_plugins_file "!RABBITMQ_ENABLED_PLUGINS_FILE!" -plugins_dist_dir "!RABBITMQ_PLUGINS_DIST_DIR:\=/!" -extra !STAR!
 
