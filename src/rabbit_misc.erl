@@ -38,7 +38,7 @@
 -export([upmap/2, map_in_order/2]).
 -export([table_filter/3]).
 -export([dirty_read_all/1, dirty_foreach_key/2, dirty_dump_log/1]).
--export([format_stderr/2, with_local_io/1]).
+-export([format_stderr/2, with_local_io/1, local_info_msg/2]).
 -export([start_applications/1, stop_applications/1]).
 -export([unfold/2, ceil/1, queue_fold/3]).
 -export([sort_field_table/1]).
@@ -155,6 +155,7 @@
 -spec(dirty_dump_log/1 :: (file:filename()) -> ok_or_error()).
 -spec(format_stderr/2 :: (string(), [any()]) -> 'ok').
 -spec(with_local_io/1 :: (fun (() -> A)) -> A).
+-spec(local_info_msg/2 :: (string(), [any()]) -> 'ok').
 -spec(start_applications/1 :: ([atom()]) -> 'ok').
 -spec(stop_applications/1 :: ([atom()]) -> 'ok').
 -spec(unfold/2  :: (fun ((A) -> ({'true', B, A} | 'false')), A) -> {[B], A}).
@@ -531,6 +532,12 @@ with_local_io(Fun) ->
     after
         group_leader(GL, self())
     end.
+
+%% Log an info message on the local node using the standard logger.
+%% Use this if rabbit isn't running and the call didn't originate on
+%% the local node (e.g. rabbitmqctl calls).
+local_info_msg(Format, Args) ->
+    with_local_io(fun () -> error_logger:info_msg(Format, Args) end).
 
 manage_applications(Iterate, Do, Undo, SkipError, ErrorTag, Apps) ->
     Iterate(fun (App, Acc) ->
