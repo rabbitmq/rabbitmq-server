@@ -534,6 +534,8 @@ with_local_io(Fun) ->
     end.
 
 %% Log an info message on the local node using the standard logger.
+%% Use this if rabbit isn't running and the call didn't originate on
+%% the local node (e.g. rabbitmqctl calls).
 local_info_msg(Format, Args) ->
     with_local_io(fun () -> error_logger:info_msg(Format, Args) end).
 
