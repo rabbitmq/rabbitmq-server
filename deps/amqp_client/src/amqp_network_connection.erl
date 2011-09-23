@@ -55,9 +55,6 @@ do2(Method, #state{writer0 = Writer}) ->
     %% Catching because it expects the {channel_exit, _} message on error
     catch rabbit_writer:send_command_sync(Writer, Method).
 
-handle_message(timeout_waiting_for_close_ok,
-               State = #state{closing_reason = Reason}) ->
-    {stop, {timeout_waiting_for_close_ok, Reason}, State};
 handle_message(socket_closing_timeout,
                State = #state{closing_reason = Reason}) ->
     {stop, {socket_closing_timeout, Reason}, State};
