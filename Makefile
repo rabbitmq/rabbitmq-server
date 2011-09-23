@@ -107,7 +107,7 @@ all: $(TARGETS)
 ifneq "$(PLUGINS_SRC_DIR)" ""
 plugins:
 	[ -d "$(PLUGINS_SRC_DIR)" ] || { echo "No plugins source distribution found (try linking public-umbrella to $(PLUGINS_SRC_DIR)"; false; }
-	-ln -s "$(CURDIR)" "$(PLUGINS_SRC_DIR)/rabbitmq-server"
+	[ -d "$(PLUGINS_SRC_DIR)/rabbitmq-server" ] || ln -s "$(CURDIR)" "$(PLUGINS_SRC_DIR)/rabbitmq-server"
 	mkdir -p $(PLUGINS_DIST_DIR)
 	PLUGINS_SRC_DIR="" $(MAKE) -C "$(PLUGINS_SRC_DIR)" plugins-dist PLUGINS_DIST_DIR="$(CURDIR)/$(PLUGINS_DIST_DIR)" VERSION=$(VERSION)
 else
@@ -158,7 +158,7 @@ clean:
 	rm -f $(EBIN_DIR)/*.beam
 	rm -f $(EBIN_DIR)/rabbit.app $(EBIN_DIR)/rabbit.boot $(EBIN_DIR)/rabbit.script $(EBIN_DIR)/rabbit.rel
 	rm -f $(PLUGINS_DIST_DIR)/*.ez
-	-PLUGINS_SRC_DIR="" PRESERVE_CLONE_DIR=1 make -C $(PLUGINS_SRC_DIR) clean
+	[ -d "$(PLUGINS_SRC_DIR)" ] && PLUGINS_SRC_DIR="" PRESERVE_CLONE_DIR=1 make -C $(PLUGINS_SRC_DIR) clean || true
 	rm -f $(INCLUDE_DIR)/rabbit_framing.hrl $(SOURCE_DIR)/rabbit_framing_amqp_*.erl codegen.pyc
 	rm -f $(DOCS_DIR)/*.[0-9].gz $(DOCS_DIR)/*.man.xml $(DOCS_DIR)/*.erl $(USAGES_ERL)
 	rm -f $(RABBIT_PLT)
@@ -308,7 +308,7 @@ install_bin: all install_dirs
 	done
 
 	mkdir -p $(TARGET_DIR)/$(PLUGINS_DIST_DIR)
-	-cp $(PLUGINS_DIST_DIR)/*.ez $(TARGET_DIR)/$(PLUGINS_DIST_DIR)
+	[ -d "$(PLUGINS_DIST_DIR)" ] && cp $(PLUGINS_DIST_DIR)/*.ez $(TARGET_DIR)/$(PLUGINS_DIST_DIR) || true
 
 install_docs: docs_all install_dirs
 	for section in 1 5; do \
