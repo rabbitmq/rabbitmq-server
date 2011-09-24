@@ -13,7 +13,8 @@ However, arranging things this way can be problematic:
 
 1. It is difficult to ensure that all queues bound to the exchange
 will receive a (roughly) equal number of messages without baking in to
-the publishers quite a lot of knowledge about the number of queues.
+the publishers quite a lot of knowledge about the number of queues and
+their bindings.
 
 2. If the number of queues changes, it is not easy to ensure that the
 new topology still distributes messages between the different queues
@@ -22,22 +23,28 @@ evenly.
 [Consistent Hashing](http://en.wikipedia.org/wiki/Consistent_hashing)
 is a hashing technique whereby each bucket appears at multiple points
 throughout the hash space, and the bucket selected is the nearest
-lower bucket to the computed hash. The effect of this is that when a
-new bucket is added or an existing bucket removed, only very few
-hashes change which bucket they are routed to.
+higher bucket to the computed hash (and the hash space wraps
+around). The effect of this is that when a new bucket is added or an
+existing bucket removed, only a very few hashes change which bucket
+they are routed to.
 
 In the case of Consistent Hashing as an exchange type, the hash is
-calculated from the hash of the routing key of each message received.
+calculated from the hash of the routing key of each message
+received. Thus messages that have the same routing key will have the
+same hash computed, and thus will be routed to the same queue,
+assuming no bindings have changed.
 
-When you bind a queue to an exchange, the binding key is a
-number-as-a-string which represents the number of points in the hash
-space you wish that queue to appear as. The actual points are
-generated randomly.
+When you bind a queue to a consistent-hash exchange, the binding key
+is a number-as-a-string which indicates the number of points in the
+hash space at which you wish the queue to appear. The actual points
+are generated randomly.
 
-So, if you wish for one queue to receive twice as many messages as
-another, then you bind the first queue with a binding key of twice the
-number (as a string - binding keys are always strings) of the binding
-key of the binding to the second queue.
+So, if you wish for queue A to receive twice as many messages as queue
+B, then you bind the queue A with a binding key of twice the number
+(as a string -- binding keys are always strings) of the binding key of
+the binding to queue B.
+
+Each message gets delivered to at most one queue.
 
 The exchange type is "x-consistent-hash".
 
@@ -79,15 +86,18 @@ roughly the same number of messages. The queues `q2` and `q3` however,
 get 20 points each which means they'll each get roughly the same
 number of messages too, but that will be approximately twice as many
 as `q0` and `q1`. We then publish 100,000 messages to our exchange
-with random routing keys.
+with random routing keys. After this has completed, running
+`rabbitmqctl list_queues` should show that the messages have been
+distributed approximately as desired.
 
 Note the `routing_key`s in the bindings are numbers-as-strings. This
 is because AMQP specifies the routing_key must be a string.
 
 The more points in the hash space each binding has, the closer the
-actual distribution will be to the desired distribution as indicated
-by the ratio of points by binding. However, large numbers of points
-will substantially decrease performance of the exchange type.
+actual distribution will be to the desired distribution (as indicated
+by the ratio of points by binding). However, large numbers of points
+(many thousands) will substantially decrease performance of the
+exchange type.
 
 Equally, it is important to ensure that the messages being published
 to the exchange have a range of different `routing_key`s: if a very
