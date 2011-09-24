@@ -90,12 +90,11 @@ add_binding(transaction, _X,
             ok = mnesia:write_lock_table(?TABLE),
             BucketCount = lists:min([list_to_integer(binary_to_list(K)),
                                      ?PHASH2_RANGE]),
-            Numbers = find_numbers(S, BucketCount, []),
             [ok = mnesia:write(?TABLE,
                                #bucket { source_number = {S, N},
                                          destination   = D,
                                          binding       = B },
-                               write) || N <- Numbers],
+                               write) || N <- find_numbers(S, BucketCount, [])],
             ok;
         _ ->
             ok
