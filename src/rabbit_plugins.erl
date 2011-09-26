@@ -315,8 +315,7 @@ plugin_names(Plugins) ->
 
 %% Find plugins by name in a list of plugins.
 lookup_plugins(Names, AllPlugins) ->
-    AllPlugins1 = filter_duplicates(usort_plugins(AllPlugins)),
-    [P || P = #plugin{name = Name} <- AllPlugins1, lists:member(Name, Names)].
+    [P || P = #plugin{name = Name} <- AllPlugins, lists:member(Name, Names)].
 
 %% Read the enabled plugin names from disk.
 read_enabled_plugins() ->
@@ -343,12 +342,11 @@ calculate_required_plugins(Sources, AllPlugins) ->
     calculate_dependencies(false, Sources, AllPlugins).
 
 calculate_dependencies(Reverse, Sources, AllPlugins) ->
-    AllPlugins1 = filter_duplicates(usort_plugins(AllPlugins)),
     {ok, G} = rabbit_misc:build_acyclic_graph(
                 fun (App, _Deps) -> [{App, App}] end,
                 fun (App,  Deps) -> [{App, Dep} || Dep <- Deps] end,
                 [{Name, Deps}
-                 || #plugin{name = Name, dependencies = Deps} <- AllPlugins1]),
+                 || #plugin{name = Name, dependencies = Deps} <- AllPlugins]),
     Dests = case Reverse of
                 false -> digraph_utils:reachable(Sources, G);
                 true  -> digraph_utils:reaching(Sources, G)
