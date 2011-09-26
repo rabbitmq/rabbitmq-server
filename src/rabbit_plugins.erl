@@ -30,6 +30,10 @@
 
 -spec(start/0 :: () -> no_return()).
 -spec(stop/0 :: () -> 'ok').
+-spec(find_plugins/1 :: (file:filename()) -> [#plugin{}]).
+-spec(read_enabled_plugins/1 :: (file:filename()) -> [atom()]).
+-spec(lookup_plugins/2 :: ([atom()], [#plugin{}]) -> [#plugin{}]).
+-spec(calculate_required_plugins/2 :: ([atom()], [#plugin{}]) -> [atom()]).
 
 -endif.
 
