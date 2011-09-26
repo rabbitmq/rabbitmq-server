@@ -282,30 +282,30 @@ info_keys() ->
 %% AMQP URL Parsing
 %%---------------------------------------------------------------------------
 
-parse_url({[Uri | Uris], Acc}) when is_list(Uri) ->
-    case uri_parser:parse(Uri, [{host, undefined}, {path, "/"},
+parse_url({[Url | Urls], Acc}) when is_list(Url) ->
+    case uri_parser:parse(Url, [{host, undefined}, {path, "/"},
                                 {port, undefined}, {'query', []}]) of
         {error, Reason} ->
-            fail({unable_to_parse_url, Uri, Reason});
+            fail({unable_to_parse_url, Url, Reason});
         Parsed ->
             Endpoint = case proplists:get_value(scheme, Parsed) of
                            "amqp"  -> build_broker(Parsed);
                            "amqps" -> build_ssl_broker(Parsed);
-                           Scheme  -> fail({unexpected_uri_scheme, Scheme, Uri})
+                           Scheme  -> fail({unexpected_url_scheme, Scheme, Url})
                        end,
-            return({Uris, [broker_add_query(Endpoint, Parsed) | Acc]})
+            return({Urls, [broker_add_query(Endpoint, Parsed) | Acc]})
     end;
-parse_url({[Uri | _Uris], _Acc}) ->
-    fail({expected_string_uri, Uri}).
+parse_url({[Url | _Urls], _Acc}) ->
+    fail({expected_string_url, Url}).
 
-build_broker(ParsedUri) ->
+build_broker(ParsedUrl) ->
     [Host, Port, Path] =
-        [proplists:get_value(F, ParsedUri) || F <- [host, port, path]],
+        [proplists:get_value(F, ParsedUrl) || F <- [host, port, path]],
     VHost = case Path of
                 "/"       -> <<"/">>;
                 [$/|Rest] -> list_to_binary(Rest)
             end,
-    UserInfo = proplists:get_value(userinfo, ParsedUri),
+    UserInfo = proplists:get_value(userinfo, ParsedUrl),
     case Host of
         undefined -> Ps = #amqp_params_direct{virtual_host = VHost},
                      case UserInfo of
@@ -323,9 +323,9 @@ build_broker(ParsedUri) ->
                      end
     end.
 
-build_ssl_broker(ParsedUri) ->
-    Params = build_broker(ParsedUri),
-    Query = proplists:get_value('query', ParsedUri),
+build_ssl_broker(ParsedUrl) ->
+    Params = build_broker(ParsedUrl),
+    Query = proplists:get_value('query', ParsedUrl),
     SSLOptions =
         run_state_monad(
           [fun (L) -> KeyString = atom_to_list(Key),
@@ -348,13 +348,13 @@ build_ssl_broker(ParsedUri) ->
           []),
     Params#amqp_params_network{ssl_options = SSLOptions}.
 
-broker_add_query(Params = #amqp_params_direct{}, Uri) ->
-    broker_add_query(Params, Uri, record_info(fields, amqp_params_direct));
-broker_add_query(Params = #amqp_params_network{}, Uri) ->
-    broker_add_query(Params, Uri, record_info(fields, amqp_params_network)).
+broker_add_query(Params = #amqp_params_direct{}, Url) ->
+    broker_add_query(Params, Url, record_info(fields, amqp_params_direct));
+broker_add_query(Params = #amqp_params_network{}, Url) ->
+    broker_add_query(Params, Url, record_info(fields, amqp_params_network)).
 
-broker_add_query(Params, ParsedUri, Fields) ->
-    Query = proplists:get_value('query', ParsedUri),
+broker_add_query(Params, ParsedUrl, Fields) ->
+    Query = proplists:get_value('query', ParsedUrl),
     {Params1, _Pos} =
         run_state_monad(
           [fun ({ParamsN, Pos}) ->
