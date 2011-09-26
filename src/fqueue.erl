@@ -1,4 +1,27 @@
+%% The contents of this file are subject to the Mozilla Public License
+%% Version 1.1 (the "License"); you may not use this file except in
+%% compliance with the License. You may obtain a copy of the License
+%% at http://www.mozilla.org/MPL/
+%%
+%% Software distributed under the License is distributed on an "AS IS"
+%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
+%% the License for the specific language governing rights and
+%% limitations under the License.
+%%
+%% The Original Code is RabbitMQ.
+%%
+%% The Initial Developer of the Original Code is VMware, Inc.
+%% Copyright (c) 2011-2011 VMware, Inc.  All rights reserved.
+%%
+
 -module(fqueue).
+
+%% This is a queue module, but optimised so that join is O(1). This
+%% forces the queue to go deep and then there are some neat pivotting
+%% tricks on out and out_r such that we ensure that we don't
+%% constantly have to dive deep into the structure. However, in a deep
+%% queue case, repeated out and out_r applications will be more
+%% expensive. This is the pathological case.
 
 %% Creation, inspection and conversion
 -export([new/0,is_queue/1,is_empty/1,len/1,to_list/1,from_list/1,member/2]).
