@@ -169,7 +169,8 @@ prepare_plugin(#plugin{type = ez, location = Location}, PluginDestDir) ->
     zip:unzip(Location, [{cwd, PluginDestDir}]);
 prepare_plugin(#plugin{type = dir, name = Name, location = Location},
                PluginsDestDir) ->
-    file:make_symlink(Location, filename:join([PluginsDestDir, Name])).
+    rabbit_file:recursive_copy(Location,
+                               filename:join([PluginsDestDir, Name])).
 
 find_plugins(PluginDir) ->
     [prepare_dir_plugin(PluginName) ||
