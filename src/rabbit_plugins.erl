@@ -98,8 +98,12 @@ action(enable, ToEnable0, _Opts) ->
     NewEnabled = plugin_names(merge_plugin_lists(EnabledPlugins, ToEnablePlugins)),
     update_enabled_plugins(NewEnabled),
     case NewEnabled -- ImplicitlyEnabled of
-        [] -> ok;
-        _  -> io:format("Plugin configuration has changed. "
+        [] -> io:format("Plugin configuration unchanged.~n");
+        _  -> NewImplicitlyEnabled =
+                  calculate_required_plugins(NewEnabled, AllPlugins),
+              io:format("The following plugins have been enabled: ~p~n",
+                        [NewImplicitlyEnabled -- ImplicitlyEnabled]),
+              io:format("Plugin configuration has changed. "
                         "You should restart RabbitMQ.~n")
     end;
 
@@ -115,19 +119,16 @@ action(disable, ToDisable0, _Opts) ->
     end,
     ToDisable1 = ToDisable -- Missing,
     ToDisable2 = calculate_dependencies(true, ToDisable1, AllPlugins),
-    AlsoDisabled = sets:to_list(
-                     sets:intersection(sets:from_list(ToDisable2 -- ToDisable1),
-                                       sets:from_list(Enabled))),
-    case AlsoDisabled of
-        [] -> ok;
-        _  -> io:format("Warning: the following plugins will also be disabled "
-                        "because their dependencies are no longer met: ~p~n",
-                        [AlsoDisabled])
-    end,
     NewEnabled = Enabled -- ToDisable2,
     case length(Enabled) =:= length(NewEnabled) of
-        true  -> ok;
-        false -> update_enabled_plugins(NewEnabled),
+        true  -> io:format("Plugin configuration unchanged.~n");
+        false -> ImplicitlyEnabled =
+                     calculate_required_plugins(Enabled, AllPlugins),
+                 NewImplicitlyEnabled =
+                     calculate_required_plugins(NewEnabled, AllPlugins),
+                 io:format("The following plugins have been disabled: ~p~n",
+                           [ImplicitlyEnabled -- NewImplicitlyEnabled]),
+                 update_enabled_plugins(NewEnabled),
                  io:format("Plugin configuration has changed. "
                            "You should restart RabbitMQ.~n")
     end.
