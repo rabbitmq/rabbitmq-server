@@ -172,31 +172,27 @@ find_plugins(PluginsDistDir) ->
 get_plugin_info(Base, {ez, EZ0}) ->
     EZ = filename:join([Base, EZ0]),
     case read_app_file(EZ) of
-        {application, Name, Props} ->
-            Version = proplists:get_value(vsn, Props, "0"),
-            Description = proplists:get_value(description, Props, ""),
-            Dependencies =
-                filter_applications(proplists:get_value(applications, Props, [])),
-            #plugin{name = Name, version = Version, description = Description,
-                    dependencies = Dependencies, location = EZ, type = ez};
-        {error, Reason} ->
-            {error, EZ, Reason}
+        {application, Name, Props} -> mkplugin(Name, Props, ez, EZ);
+        {error, Reason}            -> {error, EZ, Reason}
     end;
 %% Get the #plugin{} from an .app.
 get_plugin_info(Base, {app, App0}) ->
     App = filename:join([Base, App0]),
     case rabbit_file:read_term_file(App) of
         {ok, [{application, Name, Props}]} ->
-            Version = proplists:get_value(vsn, Props, "0"),
-            Description = proplists:get_value(description, Props, ""),
-            Dependencies =
-                filter_applications(proplists:get_value(applications, Props, [])),
-            Location = filename:absname(filename:dirname(filename:dirname(App))),
-            #plugin{name = Name, version = Version, description = Description,
-                    dependencies = Dependencies, location = Location, type = dir};
+            mkplugin(Name, Props, dir,
+                     filename:absname(filename:dirname(filename:dirname(App))));
         {error, Reason} ->
             {error, App, {invalid_app, Reason}}
     end.
+
+mkplugin(Name, Props, Type, Location) ->
+    Version = proplists:get_value(vsn, Props, "0"),
+    Description = proplists:get_value(description, Props, ""),
+    Dependencies =
+        filter_applications(proplists:get_value(applications, Props, [])),
+    #plugin{name = Name, version = Version, description = Description,
+            dependencies = Dependencies, location = Location, type = Type}.
 
 %% Read the .app file from an ez.
 read_app_file(EZ) ->
