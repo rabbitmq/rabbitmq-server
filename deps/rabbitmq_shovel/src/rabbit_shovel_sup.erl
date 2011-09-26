@@ -181,8 +181,17 @@ parse_endpoint({Endpoint, _Pos}) ->
     fail({require_list, Endpoint}).
 
 parse_url({[Url | Urls], Acc}) ->
-    {ok, Parsed} = amqp_connection:parse_url(Url),
-    return({Urls, [Parsed | Acc]}).
+    case amqp_url:parse(Url) of
+        {ok, #amqp_params_network{host         = <<"localhost">>,
+                                  username     = User,
+                                  virtual_host = Vhost}} ->
+            return({Urls, [#amqp_params_direct{username     = User,
+                                               virtual_host = Vhost} | Acc]});
+        {ok, Params} ->
+            return({Urls, [Params | Acc]});
+        {error, _} = Err ->
+            throw(Err)
+    end.
 
 parse_declaration({[{Method, Props} | Rest], Acc}) when is_list(Props) ->
     FieldNames = try rabbit_framing_amqp_0_9_1:method_fieldnames(Method)
