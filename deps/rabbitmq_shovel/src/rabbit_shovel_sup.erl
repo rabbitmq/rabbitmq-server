@@ -158,7 +158,8 @@ parse_endpoint({Endpoint, Pos}) when is_list(Endpoint) ->
                       fail({expected_list, brokers, B})
               end,
     {[], Brokers1} = run_state_monad(
-                       lists:duplicate(length(Brokers), fun parse_uri/1),
+                       lists:duplicate(length(Brokers),
+                                       fun amqp_connection:parse_url/1),
                        {Brokers, []}),
 
     ResourceDecls =
@@ -201,123 +202,6 @@ parse_declaration({[{Method, Props} | _Rest], _Acc}) ->
     fail({expected_method_field_list, Method, Props});
 parse_declaration({[Method | Rest], Acc}) ->
     parse_declaration({[{Method, []} | Rest], Acc}).
-
-parse_uri({[Uri | Uris], Acc}) when is_list(Uri) ->
-    case uri_parser:parse(Uri, [{host, undefined}, {path, "/"},
-                                {port, undefined}, {'query', []}]) of
-        {error, Reason} ->
-            fail({unable_to_parse_uri, Uri, Reason});
-        Parsed ->
-            Endpoint = case proplists:get_value(scheme, Parsed) of
-                           "amqp"  -> build_broker(Parsed);
-                           "amqps" -> build_ssl_broker(Parsed);
-                           Scheme  -> fail({unexpected_uri_scheme, Scheme, Uri})
-                       end,
-            return({Uris, [broker_add_query(Endpoint, Parsed) | Acc]})
-    end;
-parse_uri({[Uri | _Uris], _Acc}) ->
-    fail({expected_string_uri, Uri}).
-
-build_broker(ParsedUri) ->
-    [Host, Port, Path] =
-        [proplists:get_value(F, ParsedUri) || F <- [host, port, path]],
-    VHost = case Path of
-                "/"       -> <<"/">>;
-                [$/|Rest] -> list_to_binary(Rest)
-            end,
-    UserInfo = proplists:get_value(userinfo, ParsedUri),
-    case Host of
-        undefined -> Ps = #amqp_params_direct{virtual_host = VHost},
-                     case UserInfo of
-                         [U | _] -> Ps#amqp_params_direct{
-                                      username = list_to_binary(U)};
-                         _       -> Ps
-                     end;
-        _         -> Ps = #amqp_params_network{host = Host, port = Port,
-                                               virtual_host = VHost},
-                     case UserInfo of
-                         [U, P | _] -> Ps#amqp_params_network{
-                                         username = list_to_binary(U),
-                                         password = list_to_binary(P)};
-                         _          -> Ps
-                     end
-    end.
-
-build_ssl_broker(ParsedUri) ->
-    Params = build_broker(ParsedUri),
-    Query = proplists:get_value('query', ParsedUri),
-    SSLOptions =
-        run_state_monad(
-          [fun (L) -> KeyString = atom_to_list(Key),
-                      case lists:keysearch(KeyString, 1, Query) of
-                          {value, {_, Value}} ->
-                              try return([{Key, Fun(Value)} | L])
-                              catch throw:{error, Reason} ->
-                                      fail({invalid_ssl_parameter,
-                                            Key, Value, Query, Reason})
-                              end;
-                          false ->
-                              fail({missing_ssl_parameter, Key, Query})
-                      end
-           end || {Fun, Key} <-
-                      [{fun find_path_parameter/1,    cacertfile},
-                       {fun find_path_parameter/1,    certfile},
-                       {fun find_path_parameter/1,    keyfile},
-                       {fun find_atom_parameter/1,    verify},
-                       {fun find_boolean_parameter/1, fail_if_no_peer_cert}]],
-          []),
-    Params#amqp_params_network{ssl_options = SSLOptions}.
-
-broker_add_query(Params = #amqp_params_direct{}, Uri) ->
-    broker_add_query(Params, Uri, record_info(fields, amqp_params_direct));
-broker_add_query(Params = #amqp_params_network{}, Uri) ->
-    broker_add_query(Params, Uri, record_info(fields, amqp_params_network)).
-
-broker_add_query(Params, ParsedUri, Fields) ->
-    Query = proplists:get_value('query', ParsedUri),
-    {Params1, _Pos} =
-        run_state_monad(
-          [fun ({ParamsN, Pos}) ->
-                   Pos1 = Pos + 1,
-                   KeyString = atom_to_list(Field),
-                   case proplists:get_value(KeyString, Query) of
-                       undefined ->
-                           return({ParamsN, Pos1});
-                       true -> %% proplists short form, not permitted
-                           return({ParamsN, Pos1});
-                       Value ->
-                           try
-                               ValueParsed = parse_amqp_param(Field, Value),
-                               return(
-                                 {setelement(Pos, ParamsN, ValueParsed), Pos1})
-                           catch throw:{error, Reason} ->
-                                   fail({invalid_amqp_params_parameter,
-                                         Field, Value, Query, Reason})
-                           end
-                   end
-           end || Field <- Fields], {Params, 2}),
-    Params1.
-
-parse_amqp_param(Field, String) when Field =:= channel_max orelse
-                                     Field =:= frame_max   orelse
-                                     Field =:= heartbeat   ->
-    try return(list_to_integer(String))
-    catch error:badarg -> fail({not_an_integer, String})
-    end;
-parse_amqp_param(Field, String) ->
-    fail({parameter_unconfigurable_in_query, Field, String}).
-
-find_path_parameter(Value) -> return(Value).
-
-find_boolean_parameter(Value) ->
-    Bool = list_to_atom(Value),
-    case is_boolean(Bool) of
-        true  -> return(Bool);
-        false -> fail({require_boolean, Bool})
-    end.
-
-find_atom_parameter(Value) ->
-    return(list_to_atom(Value)).
 
 parse_non_negative_integer({N, Pos}) when is_integer(N) andalso N >= 0 ->
     return({N, Pos});
