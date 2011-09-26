@@ -41,7 +41,6 @@ macports: dirs $(DEST)/Portfile
 	cp $(COMMON_DIR)/rabbitmq-script-wrapper $(DEST)/files
 	sed -i -e 's|@SU_RABBITMQ_SH_C@|SHELL=/bin/sh HOME=/var/lib/rabbitmq USER=rabbitmq LOGNAME=rabbitmq PATH="$$(eval `PATH=MACPORTS_PREFIX/bin /usr/libexec/path_helper -s`; echo $$PATH)" su -m rabbitmq -c|' \
 	    $(DEST)/files/rabbitmq-script-wrapper
-	cp $(COMMON_DIR)/rabbitmq-simple-script-wrapper $(DEST)/files
 	cp patch-org.macports.rabbitmq-server.plist.diff $(DEST)/files
 	if [ -n "$(MACPORTS_USERHOST)" ] ; then \
 	  tar cf - -C $(MACPORTS_DIR) . | ssh $(SSH_OPTS) $(MACPORTS_USERHOST) ' \
