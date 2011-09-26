@@ -23,6 +23,10 @@ set TDP0=%~dp0
 set STAR=%*
 setlocal enabledelayedexpansion
 
+if "!RABBITMQ_BASE!"=="" (
+    set RABBITMQ_BASE=!APPDATA!\RabbitMQ
+)
+
 if not exist "!ERLANG_HOME!\bin\erl.exe" (
     echo.
     echo ******************************
