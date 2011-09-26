@@ -83,6 +83,10 @@ action(list, [Pat], Opts) ->
     format_plugins(Pat, Opts);
 
 action(enable, ToEnable0, _Opts) ->
+    case ToEnable0 of
+        [] -> throw("Not enough arguments for 'enable'");
+        _  -> ok
+    end,
     AllPlugins = find_plugins(),
     Enabled = read_enabled_plugins(),
     EnabledPlugins = lookup_plugins(Enabled, AllPlugins),
@@ -108,6 +112,10 @@ action(enable, ToEnable0, _Opts) ->
     end;
 
 action(disable, ToDisable0, _Opts) ->
+    case ToDisable0 of
+        [] -> throw("Not enough arguments for 'disable'");
+        _  -> ok
+    end,
     ToDisable = [list_to_atom(Name) || Name <- ToDisable0],
     Enabled = read_enabled_plugins(),
     AllPlugins = find_plugins(),
