@@ -40,7 +40,8 @@
 %%----------------------------------------------------------------------------
 
 start() ->
-    {ok, [[EnabledPluginsFile|_]|_]} = init:get_argument(enabled_plugins_file),
+    {ok, [[EnabledPluginsFile|_]|_]} =
+        init:get_argument(enabled_plugins_file),
     put(enabled_plugins_file, EnabledPluginsFile),
     {ok, [[PluginsDistDir|_]|_]} = init:get_argument(plugins_dist_dir),
     put(plugins_dist_dir, PluginsDistDir),
@@ -100,11 +101,12 @@ action(enable, ToEnable0, _Opts) ->
     Missing = ToEnable -- plugin_names(ToEnablePlugins),
     case Missing of
         [] -> ok;
-        _  -> io:format("Warning: the following plugins could not be found: ~p~n",
-                        [Missing])
+        _  -> io:format("Warning: the following plugins could not be "
+                        "found: ~p~n", [Missing])
     end,
-    NewEnabled = plugin_names(merge_plugin_lists(EnabledPlugins, ToEnablePlugins)),
-    update_enabled_plugins(NewEnabled),
+    NewEnabled = plugin_names(merge_plugin_lists(EnabledPlugins,
+                                                 ToEnablePlugins)),
+    write_enabled_plugins(NewEnabled),
     case NewEnabled -- ImplicitlyEnabled of
         [] -> io:format("Plugin configuration unchanged.~n");
         _  -> NewImplicitlyEnabled =
@@ -126,8 +128,8 @@ action(disable, ToDisable0, _Opts) ->
     Missing = ToDisable -- plugin_names(AllPlugins),
     case Missing of
         [] -> ok;
-        _  -> io:format("Warning: the following plugins could not be found: ~p~n",
-                        [Missing])
+        _  -> io:format("Warning: the following plugins could not be "
+                        "found: ~p~n", [Missing])
     end,
     ToDisable1 = ToDisable -- Missing,
     ToDisable2 = calculate_dependencies(true, ToDisable1, AllPlugins),
@@ -140,7 +142,7 @@ action(disable, ToDisable0, _Opts) ->
                      calculate_required_plugins(NewEnabled, AllPlugins),
                  io:format("The following plugins have been disabled: ~p~n",
                            [ImplicitlyEnabled -- NewImplicitlyEnabled]),
-                 update_enabled_plugins(NewEnabled),
+                 write_enabled_plugins(NewEnabled),
                  io:format("Plugin configuration has changed. "
                            "You should restart RabbitMQ.~n")
     end.
@@ -164,7 +166,8 @@ find_plugins(PluginsDistDir) ->
                         Plug <- EZs ++ FreeApps]),
     case Problems of
         [] -> ok;
-        _  -> io:format("Warning: Problem reading some plugins: ~p~n", [Problems])
+        _  -> io:format("Warning: Problem reading some plugins: ~p~n",
+                        [Problems])
     end,
     Plugins.
 
@@ -181,7 +184,8 @@ get_plugin_info(Base, {app, App0}) ->
     case rabbit_file:read_term_file(App) of
         {ok, [{application, Name, Props}]} ->
             mkplugin(Name, Props, dir,
-                     filename:absname(filename:dirname(filename:dirname(App))));
+                     filename:absname(
+                       filename:dirname(filename:dirname(App))));
         {error, Reason} ->
             {error, App, {invalid_app, Reason}}
     end.
@@ -244,18 +248,20 @@ format_plugins(Pattern, Opts) ->
                   if OnlyEnabled -> lists:member(Name, EnabledExplicitly);
                      true        -> true
                   end,
-                  if OnlyEnabledAll -> lists:member(Name, EnabledImplicitly) or
-                                           lists:member(Name, EnabledExplicitly);
-                     true           -> true
+                  if OnlyEnabledAll ->
+                          lists:member(Name, EnabledImplicitly) or
+                              lists:member(Name, EnabledExplicitly);
+                     true ->
+                          true
                   end],
     MaxWidth = lists:max([length(atom_to_list(Name)) ||
                              #plugin{name = Name} <- Plugins] ++ [0]),
-    [ format_plugin(P, EnabledExplicitly, EnabledImplicitly, Verbose, MaxWidth) ||
-        P <- Plugins],
+    [ format_plugin(P, EnabledExplicitly, EnabledImplicitly, Verbose,
+                    MaxWidth) || P <- Plugins],
     ok.
 
-format_plugin(#plugin{name = Name, version = Version, description = Description,
-                      dependencies = Dependencies},
+format_plugin(#plugin{name = Name, version = Version,
+                      description = Description, dependencies = Dependencies},
               EnabledExplicitly, EnabledImplicitly, Verbose, MaxWidth) ->
     Glyph = case {lists:member(Name, EnabledExplicitly),
                   lists:member(Name, EnabledImplicitly)} of
@@ -296,7 +302,8 @@ filter_duplicates([P | Ps]) ->
 filter_duplicates(Ps) ->
     Ps.
 
-plugins_cmp(#plugin{name = N1, version = V1}, #plugin{name = N2, version = V2}) ->
+plugins_cmp(#plugin{name = N1, version = V1},
+            #plugin{name = N2, version = V2}) ->
     {N1, V1} =< {N2, V2}.
 
 %% Filter applications that can be loaded *right now*.
@@ -329,8 +336,8 @@ read_enabled_plugins(FileName) ->
                                           FileName, Reason}})
     end.
 
-%% Update the enabled plugin names on disk.
-update_enabled_plugins(Plugins) ->
+%% Write the enabled plugin names on disk.
+write_enabled_plugins(Plugins) ->
     FileName = get(enabled_plugins_file),
     case rabbit_file:write_term_file(FileName, [Plugins]) of
         ok              -> ok;
