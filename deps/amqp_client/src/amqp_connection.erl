@@ -282,7 +282,7 @@ info_keys() ->
 %% AMQP URL Parsing
 %%---------------------------------------------------------------------------
 
-parse_url({[Url | Urls], Acc}) when is_list(Url) ->
+parse_url(Url) when is_list(Url) ->
     case uri_parser:parse(Url, [{host, undefined}, {path, "/"},
                                 {port, undefined}, {'query', []}]) of
         {error, Reason} ->
@@ -293,9 +293,9 @@ parse_url({[Url | Urls], Acc}) when is_list(Url) ->
                            "amqps" -> build_ssl_broker(Parsed);
                            Scheme  -> fail({unexpected_url_scheme, Scheme, Url})
                        end,
-            return({Urls, [broker_add_query(Endpoint, Parsed) | Acc]})
+            return({ok, broker_add_query(Endpoint, Parsed)})
     end;
-parse_url({[Url | _Urls], _Acc}) ->
+parse_url(Url) ->
     fail({expected_string_url, Url}).
 
 build_broker(ParsedUrl) ->
