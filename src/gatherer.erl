@@ -27,7 +27,7 @@
 
 -ifdef(use_specs).
 
--spec(start_link/0 :: () -> {'ok', pid()} | {'error', any()}).
+-spec(start_link/0 :: () -> rabbit_types:ok_pid_or_error()).
 -spec(stop/1 :: (pid()) -> 'ok').
 -spec(fork/1 :: (pid()) -> 'ok').
 -spec(finish/1 :: (pid()) -> 'ok').

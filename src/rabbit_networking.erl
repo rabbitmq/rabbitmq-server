@@ -21,7 +21,7 @@
          node_listeners/1, connections/0, connection_info_keys/0,
          connection_info/1, connection_info/2,
          connection_info_all/0, connection_info_all/1,
-         close_connection/2]).
+         close_connection/2, force_connection_event_refresh/0]).
 
 %%used by TCP-based transports, e.g. STOMP adapter
 -export([check_tcp_listener_address/2,
@@ -29,6 +29,9 @@
 
 -export([tcp_listener_started/3, tcp_listener_stopped/3,
          start_client/1, start_ssl_client/2]).
+
+%% Internal
+-export([connections_local/0]).
 
 -include("rabbit.hrl").
 -include_lib("kernel/include/inet.hrl").
@@ -59,6 +62,7 @@
 -spec(active_listeners/0 :: () -> [rabbit_types:listener()]).
 -spec(node_listeners/1 :: (node()) -> [rabbit_types:listener()]).
 -spec(connections/0 :: () -> [rabbit_types:connection()]).
+-spec(connections_local/0 :: () -> [rabbit_types:connection()]).
 -spec(connection_info_keys/0 :: () -> rabbit_types:info_keys()).
 -spec(connection_info/1 ::
         (rabbit_types:connection()) -> rabbit_types:infos()).
@@ -69,9 +73,38 @@
 -spec(connection_info_all/1 ::
         (rabbit_types:info_keys()) -> [rabbit_types:infos()]).
 -spec(close_connection/2 :: (pid(), string()) -> 'ok').
+-spec(force_connection_event_refresh/0 :: () -> 'ok').
+
 -spec(on_node_down/1 :: (node()) -> 'ok').
 -spec(check_tcp_listener_address/2 :: (atom(), listener_config())
         -> [{inet:ip_address(), ip_port(), family(), atom()}]).
+-spec(ensure_ssl/0 :: () -> rabbit_types:infos()).
+-spec(ssl_transform_fun/1 ::
+        (rabbit_types:infos())
+        -> fun ((rabbit_net:socket())
+                -> rabbit_types:ok_or_error(#ssl_socket{}))).
+
+-spec(boot/0 :: () -> 'ok').
+-spec(start_client/1 ::
+	(port() | #ssl_socket{ssl::{'sslsocket',_,_}}) ->
+			     atom() | pid() | port() | {atom(),atom()}).
+-spec(start_ssl_client/2 ::
+	(_,port() | #ssl_socket{ssl::{'sslsocket',_,_}}) ->
+				 atom() | pid() | port() | {atom(),atom()}).
+-spec(tcp_listener_started/3 ::
+	(_,
+         string() |
+	 {byte(),byte(),byte(),byte()} |
+	 {char(),char(),char(),char(),char(),char(),char(),char()},
+	 _) ->
+				     'ok').
+-spec(tcp_listener_stopped/3 ::
+	(_,
+         string() |
+	 {byte(),byte(),byte(),byte()} |
+	 {char(),char(),char(),char(),char(),char(),char(),char()},
+	 _) ->
+				     'ok').
 
 -endif.
 
@@ -270,10 +303,13 @@ start_ssl_client(SslOpts, Sock) ->
     start_client(Sock, ssl_transform_fun(SslOpts)).
 
 connections() ->
+    rabbit_misc:append_rpc_all_nodes(rabbit_mnesia:running_clustered_nodes(),
+                                     rabbit_networking, connections_local, []).
+
+connections_local() ->
     [rabbit_connection_sup:reader(ConnSup) ||
-        Node <- rabbit_mnesia:running_clustered_nodes(),
         {_, ConnSup, supervisor, _}
-            <- supervisor:which_children({rabbit_tcp_client_sup, Node})].
+            <- supervisor:which_children(rabbit_tcp_client_sup)].
 
 connection_info_keys() -> rabbit_reader:info_keys().
 
@@ -284,10 +320,15 @@ connection_info_all() -> cmap(fun (Q) -> connection_info(Q) end).
 connection_info_all(Items) -> cmap(fun (Q) -> connection_info(Q, Items) end).
 
 close_connection(Pid, Explanation) ->
+    rabbit_log:info("Closing connection ~p because ~p~n", [Pid, Explanation]),
     case lists:member(Pid, connections()) of
         true  -> rabbit_reader:shutdown(Pid, Explanation);
         false -> throw({error, {not_a_connection_pid, Pid}})
     end.
+
+force_connection_event_refresh() ->
+    [rabbit_reader:force_event_refresh(C) || C <- connections()],
+    ok.
 
 %%--------------------------------------------------------------------
 

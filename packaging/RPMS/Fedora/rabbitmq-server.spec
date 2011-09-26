@@ -120,6 +120,15 @@ done
 rm -rf %{buildroot}
 
 %changelog
+* Fri Sep 9 2011 tim@rabbitmq.com 2.6.1-1
+- New Upstream Release
+
+* Fri Aug 26 2011 tim@rabbitmq.com 2.6.0-1
+- New Upstream Release
+
+* Mon Jun 27 2011 simon@rabbitmq.com 2.5.1-1
+- New Upstream Release
+
 * Thu Jun 9 2011 jerryk@vmware.com 2.5.0-1
 - New Upstream Release
 

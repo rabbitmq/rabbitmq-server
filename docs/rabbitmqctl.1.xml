@@ -163,20 +163,28 @@
         </varlistentry>
 
         <varlistentry>
-          <term><cmdsynopsis><command>wait</command></cmdsynopsis></term>
+          <term><cmdsynopsis><command>wait</command> <arg choice="req"><replaceable>pid_file</replaceable></arg></cmdsynopsis></term>
           <listitem>
             <para>
               Wait for the RabbitMQ application to start.
             </para>
             <para>
               This command will wait for the RabbitMQ application to
-              start at the node. As long as the Erlang node is up but
-              the RabbitMQ application is down it will wait
-              indefinitely. If the node itself goes down, or takes
-              more than five seconds to come up, it will fail.
+              start at the node. It will wait for the pid file to
+              be created, then for a process with a pid specified in the
+              pid file to start, and then for the RabbitMQ application
+              to start in that process. It will fail if the process
+              terminates without starting the RabbitMQ application.
+            </para>
+            <para>
+              A suitable pid file is created by
+              the <command>rabbitmq-server</command> script. By
+              default this is located in the Mnesia directory. Modify
+              the <command>RABBITMQ_PID_FILE</command> environment
+              variable to change the location.
             </para>
             <para role="example-prefix">For example:</para>
-            <screen role="example">rabbitmqctl wait</screen>
+            <screen role="example">rabbitmqctl wait /var/run/rabbitmq/pid</screen>
             <para role="example">
               This command will return when the RabbitMQ node has
               started up.
@@ -243,29 +251,28 @@
               Instruct the RabbitMQ node to rotate the log files.
             </para>
             <para>
-              The RabbitMQ broker will attempt to append the current contents
-              of the log file to the file with name composed of the original
-              name and the suffix.
-              It will create a new file if such a file does not already exist.
-              When no <option>suffix</option> is specified, the empty log file is
-              simply created at the original location; no rotation takes place.
+              The RabbitMQ broker appends the contents of its log
+              files to files with names composed of the original name
+              and the suffix, and then resumes logging to freshly
+              created files at the original location. I.e. effectively
+              the current log contents are moved to the end of the
+              suffixed files.
             </para>
             <para>
-              When an error occurs while appending the contents of the old log
-              file, the operation behaves in the same way as if no <option>suffix</option> was
-              specified.
-            </para>
-            <para>
-              This command might be helpful when you are e.g. writing your
-              own logrotate script and you do not want to restart the RabbitMQ
-              node.
+              When the target files do not exist they are created.
+              target files do not already exist.  When
+              no <option>suffix</option> is specified, the empty log
+              files are simply created at the original location; no
+              rotation takes place.
             </para>
             <para role="example-prefix">For example:</para>
             <screen role="example">rabbitmqctl rotate_logs .1</screen>
             <para role="example">
-              This command instructs the RabbitMQ node to append the current content
-              of the log files to the files with names consisting of the original logs'
-              names and ".1" suffix, e.g. rabbit.log.1. Finally, the old log files are reopened.
+              This command instructs the RabbitMQ node to append the contents
+              of the log files to files with names consisting of the original logs'
+              names and ".1" suffix, e.g. rabbit@mymachine.log.1 and
+              rabbit@mymachine-sasl.log.1. Finally, logging resumes to
+              fresh files at the old locations.
             </para>
           </listitem>
         </varlistentry>
@@ -548,13 +555,15 @@
         <varlistentry>
           <term><cmdsynopsis><command>list_users</command></cmdsynopsis></term>
           <listitem>
-            <para>Lists users</para>
+            <para>
+              Lists users. Each result row will contain the user name
+              followed by a list of the tags set for that user.
+            </para>
             <para role="example-prefix">For example:</para>
             <screen role="example">rabbitmqctl list_users</screen>
             <para role="example">
               This command instructs the RabbitMQ broker to list all
-              users. Each result row will contain the user name and
-              the administrator status of the user, in that order.
+              users.
             </para>
           </listitem>
         </varlistentry>
@@ -859,6 +868,17 @@
                 <term>memory</term>
                 <listitem><para>Bytes of memory consumed by the Erlang process associated with the
                   queue, including stack, heap and internal structures.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>slave_pids</term>
+                <listitem><para>If the queue is mirrored, this gives the IDs of the current slaves.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>synchronised_slave_pids</term>
+                <listitem><para>If the queue is mirrored, this gives the IDs of
+                the current slaves which are synchronised with the master -
+                i.e. those which could take over from the master without
+                message loss.</para></listitem>
               </varlistentry>
             </variablelist>
             <para>

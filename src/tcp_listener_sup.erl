@@ -22,6 +22,21 @@
 
 -export([init/1]).
 
+%%----------------------------------------------------------------------------
+
+-ifdef(use_specs).
+
+-spec(start_link/7 ::
+        (gen_tcp:ip_address(), integer(), rabbit_types:infos(), mfa(), mfa(),
+         mfa(), string()) -> rabbit_types:ok_pid_or_error()).
+-spec(start_link/8 ::
+        (gen_tcp:ip_address(), integer(), rabbit_types:infos(), mfa(), mfa(),
+         mfa(), integer(), string()) -> rabbit_types:ok_pid_or_error()).
+
+-endif.
+
+%%----------------------------------------------------------------------------
+
 start_link(IPAddress, Port, SocketOpts, OnStartup, OnShutdown,
            AcceptCallback, Label) ->
     start_link(IPAddress, Port, SocketOpts, OnStartup, OnShutdown,

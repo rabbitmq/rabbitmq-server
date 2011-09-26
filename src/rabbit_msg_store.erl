@@ -21,21 +21,22 @@
 -export([start_link/4, successfully_recovered_state/1,
          client_init/4, client_terminate/1, client_delete_and_terminate/1,
          client_ref/1, close_all_indicated/1,
-         write/3, read/2, contains/2, remove/2, sync/3]).
+         write/3, read/2, contains/2, remove/2]).
 
--export([sync/1, set_maximum_since_use/2,
-         has_readers/2, combine_files/3, delete_file/2]). %% internal
+-export([set_maximum_since_use/2, has_readers/2, combine_files/3,
+         delete_file/2]). %% internal
 
 -export([transform_dir/3, force_recovery/2]). %% upgrade
 
--export([init/1, handle_call/3, handle_cast/2, handle_info/2,
-         terminate/2, code_change/3, prioritise_call/3, prioritise_cast/2]).
+-export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
+         code_change/3, prioritise_call/3, prioritise_cast/2,
+         prioritise_info/2, format_message_queue/2]).
 
 %%----------------------------------------------------------------------------
 
 -include("rabbit_msg_store.hrl").
 
--define(SYNC_INTERVAL,  5).   %% milliseconds
+-define(SYNC_INTERVAL,  25).   %% milliseconds
 -define(CLEAN_FILENAME, "clean.dot").
 -define(FILE_SUMMARY_FILENAME, "file_summary.ets").
 -define(TRANSFORM_TMP, "transform_tmp").
@@ -59,7 +60,6 @@
           current_file,           %% current file name as number
           current_file_handle,    %% current file handle since the last fsync?
           file_handle_cache,      %% file handle cache
-          on_sync,                %% pending sync requests
           sync_timer_ref,         %% TRef for our interval timer
           sum_valid_data,         %% sum of valid data in all files
           sum_file_size,          %% sum of file sizes
@@ -132,7 +132,8 @@
 -type(msg_ref_delta_gen(A) ::
         fun ((A) -> 'finished' |
                     {rabbit_types:msg_id(), non_neg_integer(), A})).
--type(maybe_msg_id_fun() :: 'undefined' | fun ((gb_set()) -> any())).
+-type(maybe_msg_id_fun() ::
+        'undefined' | fun ((gb_set(), 'written' | 'removed') -> any())).
 -type(maybe_close_fds_fun() :: 'undefined' | fun (() -> 'ok')).
 -type(deletion_thunk() :: fun (() -> boolean())).
 
@@ -145,15 +146,14 @@
 -spec(client_terminate/1 :: (client_msstate()) -> 'ok').
 -spec(client_delete_and_terminate/1 :: (client_msstate()) -> 'ok').
 -spec(client_ref/1 :: (client_msstate()) -> client_ref()).
+-spec(close_all_indicated/1 ::
+        (client_msstate()) -> rabbit_types:ok(client_msstate())).
 -spec(write/3 :: (rabbit_types:msg_id(), msg(), client_msstate()) -> 'ok').
 -spec(read/2 :: (rabbit_types:msg_id(), client_msstate()) ->
                      {rabbit_types:ok(msg()) | 'not_found', client_msstate()}).
 -spec(contains/2 :: (rabbit_types:msg_id(), client_msstate()) -> boolean()).
 -spec(remove/2 :: ([rabbit_types:msg_id()], client_msstate()) -> 'ok').
--spec(sync/3 ::
-        ([rabbit_types:msg_id()], fun (() -> any()), client_msstate()) -> 'ok').
 
--spec(sync/1 :: (server()) -> 'ok').
 -spec(set_maximum_since_use/2 :: (server(), non_neg_integer()) -> 'ok').
 -spec(has_readers/2 :: (non_neg_integer(), gc_state()) -> boolean()).
 -spec(combine_files/3 :: (non_neg_integer(), non_neg_integer(), gc_state()) ->
@@ -441,10 +441,6 @@ contains(MsgId, CState) -> server_call(CState, {contains, MsgId}).
 remove([],    _CState) -> ok;
 remove(MsgIds, CState = #client_msstate { client_ref = CRef }) ->
     server_cast(CState, {remove, CRef, MsgIds}).
-sync(MsgIds, K, CState) -> server_cast(CState, {sync, MsgIds, K}).
-
-sync(Server) ->
-    gen_server2:cast(Server, sync).
 
 set_maximum_since_use(Server, Age) ->
     gen_server2:cast(Server, {set_maximum_since_use, Age}).
@@ -593,7 +589,7 @@ init([Server, BaseDir, ClientRefs, StartupFunState]) ->
 
     AttemptFileSummaryRecovery =
         case ClientRefs of
-            undefined -> ok = rabbit_misc:recursive_delete([Dir]),
+            undefined -> ok = rabbit_file:recursive_delete([Dir]),
                          ok = filelib:ensure_dir(filename:join(Dir, "nothing")),
                          false;
             _         -> ok = filelib:ensure_dir(filename:join(Dir, "nothing")),
@@ -641,7 +637,6 @@ init([Server, BaseDir, ClientRefs, StartupFunState]) ->
                        current_file           = 0,
                        current_file_handle    = undefined,
                        file_handle_cache      = dict:new(),
-                       on_sync                = [],
                        sync_timer_ref         = undefined,
                        sum_valid_data         = 0,
                        sum_file_size          = 0,
@@ -682,11 +677,16 @@ prioritise_call(Msg, _From, _State) ->
 
 prioritise_cast(Msg, _State) ->
     case Msg of
-        sync                                               -> 8;
         {combine_files, _Source, _Destination, _Reclaimed} -> 8;
         {delete_file, _File, _Reclaimed}                   -> 8;
         {set_maximum_since_use, _Age}                      -> 8;
         {client_dying, _Pid}                               -> 7;
+        _                                                  -> 0
+    end.
+
+prioritise_info(Msg, _State) ->
+    case Msg of
+        sync                                               -> 8;
         _                                                  -> 0
     end.
 
@@ -758,24 +758,6 @@ handle_cast({remove, CRef, MsgIds}, State) ->
     noreply(maybe_compact(client_confirm(CRef, gb_sets:from_list(MsgIds),
                                          removed, State1)));
 
-handle_cast({sync, MsgIds, K},
-            State = #msstate { current_file        = CurFile,
-                               current_file_handle = CurHdl,
-                               on_sync             = Syncs }) ->
-    {ok, SyncOffset} = file_handle_cache:last_sync_offset(CurHdl),
-    case lists:any(fun (MsgId) ->
-                           #msg_location { file = File, offset = Offset } =
-                               index_lookup(MsgId, State),
-                           File =:= CurFile andalso Offset >= SyncOffset
-                   end, MsgIds) of
-        false -> K(),
-                 noreply(State);
-        true  -> noreply(State #msstate { on_sync = [K | Syncs] })
-    end;
-
-handle_cast(sync, State) ->
-    noreply(internal_sync(State));
-
 handle_cast({combine_files, Source, Destination, Reclaimed},
             State = #msstate { sum_file_size    = SumFileSize,
                                file_handles_ets = FileHandlesEts,
@@ -798,6 +780,9 @@ handle_cast({delete_file, File, Reclaimed},
 handle_cast({set_maximum_since_use, Age}, State) ->
     ok = file_handle_cache:set_maximum_since_use(Age),
     noreply(State).
+
+handle_info(sync, State) ->
+    noreply(internal_sync(State));
 
 handle_info(timeout, State) ->
     noreply(internal_sync(State));
@@ -836,6 +821,8 @@ terminate(_Reason, State = #msstate { index_state         = IndexState,
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
+format_message_queue(Opt, MQ) -> rabbit_misc:format_message_queue(Opt, MQ).
+
 %%----------------------------------------------------------------------------
 %% general helper functions
 %%----------------------------------------------------------------------------
@@ -849,31 +836,28 @@ reply(Reply, State) ->
     {reply, Reply, State1, Timeout}.
 
 next_state(State = #msstate { sync_timer_ref  = undefined,
-                              on_sync         = Syncs,
                               cref_to_msg_ids = CTM }) ->
-    case {Syncs, dict:size(CTM)} of
-        {[], 0} -> {State, hibernate};
-        _       -> {start_sync_timer(State), 0}
+    case dict:size(CTM) of
+        0 -> {State, hibernate};
+        _ -> {start_sync_timer(State), 0}
     end;
-next_state(State = #msstate { on_sync         = Syncs,
-                              cref_to_msg_ids = CTM }) ->
-    case {Syncs, dict:size(CTM)} of
-        {[], 0} -> {stop_sync_timer(State), hibernate};
-        _       -> {State, 0}
+next_state(State = #msstate { cref_to_msg_ids = CTM }) ->
+    case dict:size(CTM) of
+        0 -> {stop_sync_timer(State), hibernate};
+        _ -> {State, 0}
     end.
 
 start_sync_timer(State = #msstate { sync_timer_ref = undefined }) ->
-    {ok, TRef} = timer:apply_after(?SYNC_INTERVAL, ?MODULE, sync, [self()]),
+    TRef = erlang:send_after(?SYNC_INTERVAL, self(), sync),
     State #msstate { sync_timer_ref = TRef }.
 
 stop_sync_timer(State = #msstate { sync_timer_ref = undefined }) ->
     State;
 stop_sync_timer(State = #msstate { sync_timer_ref = TRef }) ->
-    {ok, cancel} = timer:cancel(TRef),
+    erlang:cancel_timer(TRef),
     State #msstate { sync_timer_ref = undefined }.
 
 internal_sync(State = #msstate { current_file_handle = CurHdl,
-                                 on_sync             = Syncs,
                                  cref_to_msg_ids     = CTM }) ->
     State1 = stop_sync_timer(State),
     CGs = dict:fold(fun (CRef, MsgIds, NS) ->
@@ -882,16 +866,13 @@ internal_sync(State = #msstate { current_file_handle = CurHdl,
                                 false -> [{CRef, MsgIds} | NS]
                             end
                     end, [], CTM),
-    ok = case {Syncs, CGs} of
-             {[], []} -> ok;
-             _        -> file_handle_cache:sync(CurHdl)
+    ok = case CGs of
+             [] -> ok;
+             _  -> file_handle_cache:sync(CurHdl)
          end,
-    [K() || K <- lists:reverse(Syncs)],
-    State2 = lists:foldl(
-               fun ({CRef, MsgIds}, StateN) ->
-                       client_confirm(CRef, MsgIds, written, StateN)
-               end, State1, CGs),
-    State2 #msstate { on_sync = [] }.
+    lists:foldl(fun ({CRef, MsgIds}, StateN) ->
+                        client_confirm(CRef, MsgIds, written, StateN)
+                end, State1, CGs).
 
 write_action({true, not_found}, _MsgId, State) ->
     {ignore, undefined, State};
@@ -1359,11 +1340,11 @@ recover_index_and_client_refs(IndexModule, true, ClientRefs, Dir, Server) ->
     end.
 
 store_recovery_terms(Terms, Dir) ->
-    rabbit_misc:write_term_file(filename:join(Dir, ?CLEAN_FILENAME), Terms).
+    rabbit_file:write_term_file(filename:join(Dir, ?CLEAN_FILENAME), Terms).
 
 read_recovery_terms(Dir) ->
     Path = filename:join(Dir, ?CLEAN_FILENAME),
-    case rabbit_misc:read_term_file(Path) of
+    case rabbit_file:read_term_file(Path) of
         {ok, Terms}    -> case file:delete(Path) of
                               ok             -> {true,  Terms};
                               {error, Error} -> {false, Error}
@@ -1920,7 +1901,7 @@ transform_dir(BaseDir, Store, TransformFun) ->
     end.
 
 transform_msg_file(FileOld, FileNew, TransformFun) ->
-    ok = rabbit_misc:ensure_parent_dirs_exist(FileNew),
+    ok = rabbit_file:ensure_parent_dirs_exist(FileNew),
     {ok, RefOld} = file_handle_cache:open(FileOld, [raw, binary, read], []),
     {ok, RefNew} = file_handle_cache:open(FileNew, [raw, binary, write],
                                           [{write_buffer,

@@ -18,8 +18,6 @@
 -include("rabbit.hrl").
 -include("rabbit_framing.hrl").
 
--include_lib("kernel/include/file.hrl").
-
 -export([method_record_type/1, polite_pause/0, polite_pause/1]).
 -export([die/1, frame_error/2, amqp_error/4,
          protocol_error/3, protocol_error/4, protocol_error/1]).
@@ -40,23 +38,22 @@
 -export([upmap/2, map_in_order/2]).
 -export([table_filter/3]).
 -export([dirty_read_all/1, dirty_foreach_key/2, dirty_dump_log/1]).
--export([read_term_file/1, write_term_file/2, write_file/2, write_file/3]).
--export([append_file/2, ensure_parent_dirs_exist/1]).
--export([format_stderr/2]).
+-export([format_stderr/2, with_local_io/1, local_info_msg/2]).
 -export([start_applications/1, stop_applications/1]).
 -export([unfold/2, ceil/1, queue_fold/3]).
 -export([sort_field_table/1]).
 -export([pid_to_string/1, string_to_pid/1]).
 -export([version_compare/2, version_compare/3]).
--export([recursive_delete/1, recursive_copy/2, dict_cons/3, orddict_cons/3]).
+-export([dict_cons/3, orddict_cons/3]).
 -export([get_options/2]).
 -export([all_module_attributes/1, build_acyclic_graph/3]).
 -export([now_ms/0]).
--export([lock_file/1]).
 -export([const_ok/0, const/1]).
 -export([ntoa/1, ntoab/1]).
 -export([is_process_alive/1]).
 -export([pget/2, pget/3, pget_or_die/2]).
+-export([format_message_queue/2]).
+-export([append_rpc_all_nodes/4]).
 
 %%----------------------------------------------------------------------------
 
@@ -156,14 +153,9 @@
 -spec(dirty_foreach_key/2 :: (fun ((any()) -> any()), atom())
                              -> 'ok' | 'aborted').
 -spec(dirty_dump_log/1 :: (file:filename()) -> ok_or_error()).
--spec(read_term_file/1 ::
-        (file:filename()) -> {'ok', [any()]} | rabbit_types:error(any())).
--spec(write_term_file/2 :: (file:filename(), [any()]) -> ok_or_error()).
--spec(write_file/2 :: (file:filename(), iodata()) -> ok_or_error()).
--spec(write_file/3 :: (file:filename(), iodata(), [any()]) -> ok_or_error()).
--spec(append_file/2 :: (file:filename(), string()) -> ok_or_error()).
--spec(ensure_parent_dirs_exist/1 :: (string()) -> 'ok').
 -spec(format_stderr/2 :: (string(), [any()]) -> 'ok').
+-spec(with_local_io/1 :: (fun (() -> A)) -> A).
+-spec(local_info_msg/2 :: (string(), [any()]) -> 'ok').
 -spec(start_applications/1 :: ([atom()]) -> 'ok').
 -spec(stop_applications/1 :: ([atom()]) -> 'ok').
 -spec(unfold/2  :: (fun ((A) -> ({'true', B, A} | 'false')), A) -> {[B], A}).
@@ -177,12 +169,6 @@
 -spec(version_compare/3 ::
         (string(), string(), ('lt' | 'lte' | 'eq' | 'gte' | 'gt'))
         -> boolean()).
--spec(recursive_delete/1 ::
-        ([file:filename()])
-        -> rabbit_types:ok_or_error({file:filename(), any()})).
--spec(recursive_copy/2 ::
-        (file:filename(), file:filename())
-        -> rabbit_types:ok_or_error({file:filename(), file:filename(), any()})).
 -spec(dict_cons/3 :: (any(), any(), dict()) -> dict()).
 -spec(orddict_cons/3 :: (any(), any(), orddict:orddict()) -> orddict:orddict()).
 -spec(get_options/2 :: ([optdef()], [string()])
@@ -196,7 +182,6 @@
                                                {bad_edge, [digraph:vertex()]}),
                                       digraph:vertex(), digraph:vertex()})).
 -spec(now_ms/0 :: () -> non_neg_integer()).
--spec(lock_file/1 :: (file:filename()) -> rabbit_types:ok_or_error('eexist')).
 -spec(const_ok/0 :: () -> 'ok').
 -spec(const/1 :: (A) -> thunk(A)).
 -spec(ntoa/1 :: (inet:ip_address()) -> string()).
@@ -205,6 +190,8 @@
 -spec(pget/2 :: (term(), [term()]) -> term()).
 -spec(pget/3 :: (term(), [term()], term()) -> term()).
 -spec(pget_or_die/2 :: (term(), [term()]) -> term() | no_return()).
+-spec(format_message_queue/2 :: (any(), priority_queue:q()) -> term()).
+-spec(append_rpc_all_nodes/4 :: ([node()], atom(), atom(), [any()]) -> [any()]).
 
 -endif.
 
@@ -520,74 +507,6 @@ dirty_dump_log1(LH, {K, Terms, BadBytes}) ->
     io:format("Bad Chunk, ~p: ~p~n", [BadBytes, Terms]),
     dirty_dump_log1(LH, disk_log:chunk(LH, K)).
 
-
-read_term_file(File) -> file:consult(File).
-
-write_term_file(File, Terms) ->
-    write_file(File, list_to_binary([io_lib:format("~w.~n", [Term]) ||
-                                        Term <- Terms])).
-
-write_file(Path, Data) ->
-    write_file(Path, Data, []).
-
-%% write_file/3 and make_binary/1 are both based on corresponding
-%% functions in the kernel/file.erl module of the Erlang R14B02
-%% release, which is licensed under the EPL. That implementation of
-%% write_file/3 does not do an fsync prior to closing the file, hence
-%% the existence of this version. APIs are otherwise identical.
-write_file(Path, Data, Modes) ->
-    Modes1 = [binary, write | (Modes -- [binary, write])],
-    case make_binary(Data) of
-        Bin when is_binary(Bin) ->
-            case file:open(Path, Modes1) of
-                {ok, Hdl}      -> try file:write(Hdl, Bin) of
-                                      ok             -> file:sync(Hdl);
-                                      {error, _} = E -> E
-                                  after
-                                      file:close(Hdl)
-                                  end;
-                {error, _} = E -> E
-            end;
-        {error, _} = E -> E
-    end.
-
-make_binary(Bin) when is_binary(Bin) ->
-    Bin;
-make_binary(List) ->
-    try
-        iolist_to_binary(List)
-    catch error:Reason ->
-            {error, Reason}
-    end.
-
-
-append_file(File, Suffix) ->
-    case file:read_file_info(File) of
-        {ok, FInfo}     -> append_file(File, FInfo#file_info.size, Suffix);
-        {error, enoent} -> append_file(File, 0, Suffix);
-        Error           -> Error
-    end.
-
-append_file(_, _, "") ->
-    ok;
-append_file(File, 0, Suffix) ->
-    case file:open([File, Suffix], [append]) of
-        {ok, Fd} -> file:close(Fd);
-        Error    -> Error
-    end;
-append_file(File, _, Suffix) ->
-    case file:read_file(File) of
-        {ok, Data} -> write_file([File, Suffix], Data, [append]);
-        Error      -> Error
-    end.
-
-ensure_parent_dirs_exist(Filename) ->
-    case filelib:ensure_dir(Filename) of
-        ok              -> ok;
-        {error, Reason} ->
-            throw({error, {cannot_create_parent_dirs, Filename, Reason}})
-    end.
-
 format_stderr(Fmt, Args) ->
     case os:type() of
         {unix, _} ->
@@ -602,6 +521,23 @@ format_stderr(Fmt, Args) ->
             io:format(Fmt, Args)
     end,
     ok.
+
+%% Execute Fun using the IO system of the local node (i.e. the node on
+%% which the code is executing).
+with_local_io(Fun) ->
+    GL = group_leader(),
+    group_leader(whereis(user), self()),
+    try
+        Fun()
+    after
+        group_leader(GL, self())
+    end.
+
+%% Log an info message on the local node using the standard logger.
+%% Use this if rabbit isn't running and the call didn't originate on
+%% the local node (e.g. rabbitmqctl calls).
+local_info_msg(Format, Args) ->
+    with_local_io(fun () -> error_logger:info_msg(Format, Args) end).
 
 manage_applications(Iterate, Do, Undo, SkipError, ErrorTag, Apps) ->
     Iterate(fun (App, Acc) ->
@@ -727,67 +663,6 @@ version_compare(A,  B) ->
 
 dropdot(A) -> lists:dropwhile(fun (X) -> X =:= $. end, A).
 
-recursive_delete(Files) ->
-    lists:foldl(fun (Path,  ok                   ) -> recursive_delete1(Path);
-                    (_Path, {error, _Err} = Error) -> Error
-                end, ok, Files).
-
-recursive_delete1(Path) ->
-    case filelib:is_dir(Path) of
-        false -> case file:delete(Path) of
-                     ok              -> ok;
-                     {error, enoent} -> ok; %% Path doesn't exist anyway
-                     {error, Err}    -> {error, {Path, Err}}
-                 end;
-        true  -> case file:list_dir(Path) of
-                     {ok, FileNames} ->
-                         case lists:foldl(
-                                fun (FileName, ok) ->
-                                        recursive_delete1(
-                                          filename:join(Path, FileName));
-                                    (_FileName, Error) ->
-                                        Error
-                                end, ok, FileNames) of
-                             ok ->
-                                 case file:del_dir(Path) of
-                                     ok           -> ok;
-                                     {error, Err} -> {error, {Path, Err}}
-                                 end;
-                             {error, _Err} = Error ->
-                                 Error
-                         end;
-                     {error, Err} ->
-                         {error, {Path, Err}}
-                 end
-    end.
-
-recursive_copy(Src, Dest) ->
-    case filelib:is_dir(Src) of
-        false -> case file:copy(Src, Dest) of
-                     {ok, _Bytes}    -> ok;
-                     {error, enoent} -> ok; %% Path doesn't exist anyway
-                     {error, Err}    -> {error, {Src, Dest, Err}}
-                 end;
-        true  -> case file:list_dir(Src) of
-                     {ok, FileNames} ->
-                         case file:make_dir(Dest) of
-                             ok ->
-                                 lists:foldl(
-                                   fun (FileName, ok) ->
-                                           recursive_copy(
-                                             filename:join(Src, FileName),
-                                             filename:join(Dest, FileName));
-                                       (_FileName, Error) ->
-                                           Error
-                                   end, ok, FileNames);
-                             {error, Err} ->
-                                 {error, {Src, Dest, Err}}
-                         end;
-                     {error, Err} ->
-                         {error, {Src, Dest, Err}}
-                 end
-    end.
-
 dict_cons(Key, Value, Dict) ->
     dict:update(Key, fun (List) -> [Value | List] end, [Value], Dict).
 
@@ -877,15 +752,6 @@ build_acyclic_graph(VertexFun, EdgeFun, Graph) ->
             {error, Reason}
     end.
 
-%% TODO: When we stop supporting Erlang prior to R14, this should be
-%% replaced with file:open [write, exclusive]
-lock_file(Path) ->
-    case filelib:is_file(Path) of
-        true  -> {error, eexist};
-        false -> {ok, Lock} = file:open(Path, [write]),
-                 ok = file:close(Lock)
-    end.
-
 const_ok() -> ok.
 const(X) -> fun () -> X end.
 
@@ -919,3 +785,31 @@ pget_or_die(K, P) ->
         undefined -> exit({error, key_missing, K});
         V         -> V
     end.
+
+format_message_queue(_Opt, MQ) ->
+    Len = priority_queue:len(MQ),
+    {Len,
+     case Len > 100 of
+         false -> priority_queue:to_list(MQ);
+         true  -> {summary,
+                   orddict:to_list(
+                     lists:foldl(
+                       fun ({P, V}, Counts) ->
+                               orddict:update_counter(
+                                 {P, format_message_queue_entry(V)}, 1, Counts)
+                       end, orddict:new(), priority_queue:to_list(MQ)))}
+     end}.
+
+format_message_queue_entry(V) when is_atom(V) ->
+    V;
+format_message_queue_entry(V) when is_tuple(V) ->
+    list_to_tuple([format_message_queue_entry(E) || E <- tuple_to_list(V)]);
+format_message_queue_entry(_V) ->
+    '_'.
+
+append_rpc_all_nodes(Nodes, M, F, A) ->
+    {ResL, _} = rpc:multicall(Nodes, M, F, A),
+    lists:append([case Res of
+                      {badrpc, _} -> [];
+                      _           -> Res
+                  end || Res <- ResL]).

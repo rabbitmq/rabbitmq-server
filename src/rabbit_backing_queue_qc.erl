@@ -108,7 +108,7 @@ qc_publish(#state{bqstate = BQ}) ->
       [qc_message(),
        #message_properties{needs_confirming = frequency([{1,  true},
                                                          {20, false}]),
-                           expiry = choose(0, 10)},
+                           expiry = oneof([undefined | lists:seq(1, 10)])},
        self(), BQ]}.
 
 qc_publish_multiple(#state{bqstate = BQ}) ->
@@ -386,7 +386,7 @@ rand_choice(List) -> [lists:nth(random:uniform(length(List)), List)].
 dropfun(Props) ->
     Expiry = eval({call, erlang, element,
                        [?RECORD_INDEX(expiry, message_properties), Props]}),
-    Expiry =/= 0.
+    Expiry =/= 1.
 
 drop_messages(Messages) ->
     case gb_trees:is_empty(Messages) of

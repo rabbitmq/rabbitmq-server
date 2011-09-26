@@ -376,11 +376,11 @@
          confirmed_broadcast/2, group_members/1]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
-         code_change/3, prioritise_cast/2, prioritise_info/2]).
+         code_change/3, prioritise_info/2]).
 
 -export([behaviour_info/1]).
 
--export([table_definitions/0, flush/1]).
+-export([table_definitions/0]).
 
 -define(GROUP_TABLE, gm_group).
 -define(HIBERNATE_AFTER_MIN, 1000).
@@ -422,9 +422,9 @@
 
 -type(group_name() :: any()).
 
--spec(create_tables/0 :: () -> 'ok').
+-spec(create_tables/0 :: () -> 'ok' | {'aborted', any()}).
 -spec(start_link/3 :: (group_name(), atom(), any()) ->
-                           {'ok', pid()} | {'error', any()}).
+                           rabbit_types:ok_pid_or_error()).
 -spec(leave/1 :: (pid()) -> 'ok').
 -spec(broadcast/2 :: (pid(), any()) -> 'ok').
 -spec(confirmed_broadcast/2 :: (pid(), any()) -> 'ok').
@@ -510,9 +510,6 @@ confirmed_broadcast(Server, Msg) ->
 
 group_members(Server) ->
     gen_server2:call(Server, group_members, infinity).
-
-flush(Server) ->
-    gen_server2:cast(Server, flush).
 
 
 init([GroupName, Module, Args]) ->
@@ -629,12 +626,12 @@ handle_cast(join, State = #state { self          = Self,
       {Module:joined(Args, all_known_members(View)), State1});
 
 handle_cast(leave, State) ->
-    {stop, normal, State};
+    {stop, normal, State}.
 
-handle_cast(flush, State) ->
+
+handle_info(flush, State) ->
     noreply(
-      flush_broadcast_buffer(State #state { broadcast_timer = undefined })).
-
+      flush_broadcast_buffer(State #state { broadcast_timer = undefined }));
 
 handle_info({'DOWN', MRef, process, _Pid, _Reason},
             State = #state { self          = Self,
@@ -684,9 +681,7 @@ terminate(Reason, State = #state { module        = Module,
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
-prioritise_cast(flush, _State) -> 1;
-prioritise_cast(_    , _State) -> 0.
-
+prioritise_info(flush,                                   _State) -> 1;
 prioritise_info({'DOWN', _MRef, process, _Pid, _Reason}, _State) -> 1;
 prioritise_info(_                                      , _State) -> 0.
 
@@ -808,10 +803,10 @@ ensure_broadcast_timer(State = #state { broadcast_buffer = [],
     State;
 ensure_broadcast_timer(State = #state { broadcast_buffer = [],
                                         broadcast_timer  = TRef }) ->
-    timer:cancel(TRef),
+    erlang:cancel_timer(TRef),
     State #state { broadcast_timer = undefined };
 ensure_broadcast_timer(State = #state { broadcast_timer = undefined }) ->
-    {ok, TRef} = timer:apply_after(?BROADCAST_TIMER, ?MODULE, flush, [self()]),
+    TRef = erlang:send_after(?BROADCAST_TIMER, self(), flush),
     State #state { broadcast_timer = TRef };
 ensure_broadcast_timer(State) ->
     State.

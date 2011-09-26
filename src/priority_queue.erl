@@ -47,7 +47,10 @@
 
 -ifdef(use_specs).
 
--type(priority() :: integer()).
+-export_type([q/0]).
+
+-type(q() :: pqueue()).
+-type(priority() :: integer() | 'infinity').
 -type(squeue() :: {queue, [any()], [any()]}).
 -type(pqueue() ::  squeue() | {pqueue, [{priority(), squeue()}]}).
 
@@ -71,8 +74,9 @@ new() ->
 is_queue({queue, R, F}) when is_list(R), is_list(F) ->
     true;
 is_queue({pqueue, Queues}) when is_list(Queues) ->
-    lists:all(fun ({P, Q}) -> is_integer(P) andalso is_queue(Q) end,
-              Queues);
+    lists:all(fun ({infinity, Q}) -> is_queue(Q);
+                  ({P,        Q}) -> is_integer(P) andalso is_queue(Q)
+              end, Queues);
 is_queue(_) ->
     false.
 
@@ -89,7 +93,8 @@ len({pqueue, Queues}) ->
 to_list({queue, In, Out}) when is_list(In), is_list(Out) ->
     [{0, V} || V <- Out ++ lists:reverse(In, [])];
 to_list({pqueue, Queues}) ->
-    [{-P, V} || {P, Q} <- Queues, {0, V} <- to_list(Q)].
+    [{maybe_negate_priority(P), V} || {P, Q} <- Queues,
+                                      {0, V} <- to_list(Q)].
 
 in(Item, Q) ->
     in(Item, 0, Q).
@@ -103,12 +108,20 @@ in(X, Priority, _Q = {queue, [], []}) ->
 in(X, Priority, Q = {queue, _, _}) ->
     in(X, Priority, {pqueue, [{0, Q}]});
 in(X, Priority, {pqueue, Queues}) ->
-    P = -Priority,
+    P = maybe_negate_priority(Priority),
     {pqueue, case lists:keysearch(P, 1, Queues) of
                  {value, {_, Q}} ->
                      lists:keyreplace(P, 1, Queues, {P, in(X, Q)});
+                 false when P == infinity ->
+                     [{P, {queue, [X], []}} | Queues];
                  false ->
-                     lists:keysort(1, [{P, {queue, [X], []}} | Queues])
+                     case Queues of
+                         [{infinity, InfQueue} | Queues1] ->
+                             [{infinity, InfQueue} |
+                              lists:keysort(1, [{P, {queue, [X], []}} | Queues1])];
+                         _ ->
+                             lists:keysort(1, [{P, {queue, [X], []}} | Queues])
+                     end
              end}.
 
 out({queue, [], []} = Q) ->
@@ -141,7 +154,8 @@ join({queue, [], []}, B) ->
 join({queue, AIn, AOut}, {queue, BIn, BOut}) ->
     {queue, BIn, AOut ++ lists:reverse(AIn, BOut)};
 join(A = {queue, _, _}, {pqueue, BPQ}) ->
-    {Pre, Post} = lists:splitwith(fun ({P, _}) -> P < 0 end, BPQ),
+    {Pre, Post} =
+        lists:splitwith(fun ({P, _}) -> P < 0 orelse P == infinity end, BPQ),
     Post1 = case Post of
                 []                        -> [ {0, A} ];
                 [ {0, ZeroQueue} | Rest ] -> [ {0, join(A, ZeroQueue)} | Rest ];
@@ -149,7 +163,8 @@ join(A = {queue, _, _}, {pqueue, BPQ}) ->
             end,
     {pqueue, Pre ++ Post1};
 join({pqueue, APQ}, B = {queue, _, _}) ->
-    {Pre, Post} = lists:splitwith(fun ({P, _}) -> P < 0 end, APQ),
+    {Pre, Post} =
+        lists:splitwith(fun ({P, _}) -> P < 0 orelse P == infinity end, APQ),
     Post1 = case Post of
                 []                        -> [ {0, B} ];
                 [ {0, ZeroQueue} | Rest ] -> [ {0, join(ZeroQueue, B)} | Rest ];
@@ -165,7 +180,7 @@ merge(APQ, [], Acc) ->
     lists:reverse(Acc, APQ);
 merge([{P, A}|As], [{P, B}|Bs], Acc) ->
     merge(As, Bs, [ {P, join(A, B)} | Acc ]);
-merge([{PA, A}|As], Bs = [{PB, _}|_], Acc) when PA < PB ->
+merge([{PA, A}|As], Bs = [{PB, _}|_], Acc) when PA < PB orelse PA == infinity ->
     merge(As, Bs, [ {PA, A} | Acc ]);
 merge(As = [{_, _}|_], [{PB, B}|Bs], Acc) ->
     merge(As, Bs, [ {PB, B} | Acc ]).
@@ -174,3 +189,6 @@ r2f([])      -> {queue, [], []};
 r2f([_] = R) -> {queue, [], R};
 r2f([X,Y])   -> {queue, [X], [Y]};
 r2f([X,Y|R]) -> {queue, [X,Y], lists:reverse(R, [])}.
+
+maybe_negate_priority(infinity) -> infinity;
+maybe_negate_priority(P)        -> -P.

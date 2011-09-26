@@ -26,11 +26,16 @@
 %% with the result of closing the old handler when swapping handlers.
 %% The first init/1 additionally allows for simple log rotation
 %% when the suffix is not the empty string.
+%% The original init/2 also opened the file in 'write' mode, thus
+%% overwriting old logs.  To remedy this, init/2 from
+%% lib/stdlib/src/error_logger_file_h.erl from R14B3 was copied as
+%% init_file/2 and changed so that it opens the file in 'append' mode.
 
 %% Used only when swapping handlers in log rotation
 init({{File, Suffix}, []}) ->
-    case rabbit_misc:append_file(File, Suffix) of
-        ok  -> ok;
+    case rabbit_file:append_file(File, Suffix) of
+        ok -> file:delete(File),
+              ok;
         {error, Error} ->
             rabbit_log:error("Failed to append contents of "
                              "log file '~s' to '~s':~n~p~n",
@@ -45,12 +50,31 @@ init({{File, _}, error}) ->
 %% log rotation
 init({File, []}) ->
     init(File);
-init({File, _Type} = FileInfo) ->
-    rabbit_misc:ensure_parent_dirs_exist(File),
-    error_logger_file_h:init(FileInfo);
+%% Used only when taking over from the tty handler
+init({{File, []}, _}) ->
+    init(File);
+init({File, {error_logger, Buf}}) ->
+    rabbit_file:ensure_parent_dirs_exist(File),
+    init_file(File, {error_logger, Buf});
 init(File) ->
-    rabbit_misc:ensure_parent_dirs_exist(File),
-    error_logger_file_h:init(File).
+    rabbit_file:ensure_parent_dirs_exist(File),
+    init_file(File, []).
+
+init_file(File, {error_logger, Buf}) ->
+    case init_file(File, error_logger) of
+        {ok, {Fd, File, PrevHandler}} ->
+            [handle_event(Event, {Fd, File, PrevHandler}) ||
+                {_, Event} <- lists:reverse(Buf)],
+            {ok, {Fd, File, PrevHandler}};
+        Error ->
+            Error
+    end;
+init_file(File, PrevHandler) ->
+    process_flag(trap_exit, true),
+    case file:open(File, [append]) of
+        {ok,Fd} -> {ok, {Fd, File, PrevHandler}};
+        Error   -> Error
+    end.
 
 handle_event(Event, State) ->
     error_logger_file_h:handle_event(Event, State).

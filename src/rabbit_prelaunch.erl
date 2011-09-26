@@ -29,6 +29,9 @@
 
 -spec(start/0 :: () -> no_return()).
 -spec(stop/0 :: () -> 'ok').
+%% Shut dialyzer up
+-spec(terminate/1 :: (string()) -> no_return()).
+-spec(terminate/2 :: (string(), [any()]) -> no_return()).
 
 -endif.
 
@@ -67,7 +70,7 @@ start() ->
              AppVersions},
 
     %% Write it out to $RABBITMQ_PLUGINS_EXPAND_DIR/rabbit.rel
-    rabbit_misc:write_file(RootName ++ ".rel", io_lib:format("~p.~n", [RDesc])),
+    rabbit_file:write_file(RootName ++ ".rel", io_lib:format("~p.~n", [RDesc])),
 
     %% We exclude mochiweb due to its optional use of fdsrv.
     XRefExclude = [mochiweb],
@@ -136,38 +139,10 @@ determine_version(App) ->
     {App, Vsn}.
 
 delete_recursively(Fn) ->
-    case filelib:is_dir(Fn) and not(is_symlink(Fn)) of
-        true ->
-            case file:list_dir(Fn) of
-                {ok, Files} ->
-                    case lists:foldl(fun ( Fn1,  ok) -> delete_recursively(
-                                                          Fn ++ "/" ++ Fn1);
-                                         (_Fn1, Err) -> Err
-                                     end, ok, Files) of
-                        ok  -> case file:del_dir(Fn) of
-                                   ok         -> ok;
-                                   {error, E} -> {error,
-                                                  {cannot_delete, Fn, E}}
-                               end;
-                        Err -> Err
-                    end;
-                {error, E} ->
-                    {error, {cannot_list_files, Fn, E}}
-            end;
-        false ->
-            case filelib:is_file(Fn) of
-                true  -> case file:delete(Fn) of
-                             ok         -> ok;
-                             {error, E} -> {error, {cannot_delete, Fn, E}}
-                         end;
-                false -> ok
-            end
-    end.
-
-is_symlink(Name) ->
-    case file:read_link(Name) of
-        {ok, _} -> true;
-        _       -> false
+    case rabbit_file:recursive_delete([Fn]) of
+        ok                 -> ok;
+        {error, {Path, E}} -> {error, {cannot_delete, Path, E}};
+        Error              -> Error
     end.
 
 unpack_ez_plugins(SrcDir, DestDir) ->
