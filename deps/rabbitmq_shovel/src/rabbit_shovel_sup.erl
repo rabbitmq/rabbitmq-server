@@ -159,7 +159,7 @@ parse_endpoint({Endpoint, Pos}) when is_list(Endpoint) ->
               end,
     {[], Brokers1} = run_state_monad(
                        lists:duplicate(length(Brokers),
-                                       fun amqp_connection:parse_url/1),
+                                       fun parse_url/1),
                        {Brokers, []}),
 
     ResourceDecls =
@@ -179,6 +179,10 @@ parse_endpoint({Endpoint, Pos}) when is_list(Endpoint) ->
             Pos});
 parse_endpoint({Endpoint, _Pos}) ->
     fail({require_list, Endpoint}).
+
+parse_url({[Url | Urls], Acc}) ->
+    {ok, Parsed} = amqp_connection:parse_url(Url),
+    return({Urls, [Parsed | Acc]}).
 
 parse_declaration({[{Method, Props} | Rest], Acc}) when is_list(Props) ->
     FieldNames = try rabbit_framing_amqp_0_9_1:method_fieldnames(Method)
