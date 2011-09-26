@@ -17,7 +17,9 @@
 
 . `dirname $0`/rabbitmq-env
 
-[ "x" = "x$RABBITMQ_ENABLED_PLUGINS_FILE" ] && RABBITMQ_ENABLED_PLUGINS_FILE=/etc/rabbitmq/enabled_plugins
+ENABLED_PLUGINS_FILE=/etc/rabbitmq/enabled_plugins
+
+[ "x" = "x$RABBITMQ_ENABLED_PLUGINS_FILE" ] && RABBITMQ_ENABLED_PLUGINS_FILE=${ENABLED_PLUGINS_FILE}
 
 [ "x" = "x$RABBITMQ_PLUGINS_DIST_DIR" ] && RABBITMQ_PLUGINS_DIST_DIR="${RABBITMQ_HOME}/plugins"
 

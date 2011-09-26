@@ -12,31 +12,9 @@
 ##  The Original Code is RabbitMQ.
 ##
 ##  The Initial Developer of the Original Code is VMware, Inc.
-##  Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
+##  Copyright (c) 2011 VMware, Inc.  All rights reserved.
 ##
-
-# Escape spaces and quotes, because shell is revolting.
-for arg in "$@" ; do
-	# Escape quotes in parameters, so that they're passed through cleanly.
-	arg=$(sed -e 's/"/\\"/g' <<-END
-		$arg
-		END
-	)
-	CMDLINE="${CMDLINE} \"${arg}\""
-done
 
 cd /var/lib/rabbitmq
 
-SCRIPT=`basename $0`
-
-if [ `id -u` = 0 ] ; then
-    @SU_RABBITMQ_SH_C@ "/usr/lib/rabbitmq/bin/${SCRIPT} ${CMDLINE}"
-elif [ `id -u` = `id -u rabbitmq` ] ; then
-    /usr/lib/rabbitmq/bin/${SCRIPT} "$@"
-else
-    /usr/lib/rabbitmq/bin/${SCRIPT}
-    echo
-    echo "Only root or rabbitmq should run ${SCRIPT}"
-    echo
-    exit 1
-fi
+/usr/lib/rabbitmq/bin/$(basename $0) "$@"

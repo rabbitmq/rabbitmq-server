@@ -83,14 +83,18 @@ post-destroot {
 
     reinplace -E "s:(/etc/rabbitmq/rabbitmq):${prefix}\\1:g" \
         ${realsbin}/rabbitmq-env
-    foreach var {CONFIG_FILE LOG_BASE MNESIA_BASE} {
+    foreach var {CONFIG_FILE LOG_BASE MNESIA_BASE ENABLED_PLUGINS_FILE} {
         reinplace -E "s:^($var)=/:\\1=${prefix}/:" \
             ${realsbin}/rabbitmq-server \
-            ${realsbin}/rabbitmqctl
+            ${realsbin}/rabbitmqctl \
+            ${realsbin}/rabbitmq-plugins
     }
 
     xinstall -m 555 ${filespath}/rabbitmq-script-wrapper \
                 ${wrappersbin}/rabbitmq-server
+
+    xinstall -m 555 ${filespath}/rabbitmq-simple-script-wrapper \
+                ${wrappersbin}/rabbitmq-plugins
 
     reinplace -E "s:MACPORTS_PREFIX/bin:${prefix}/bin:" \
                 ${wrappersbin}/rabbitmq-server
@@ -100,7 +104,7 @@ post-destroot {
                 ${wrappersbin}/rabbitmq-server
     file copy ${wrappersbin}/rabbitmq-server ${wrappersbin}/rabbitmqctl
 
-    xinstall -m 644 -W ${mansrc}/man1 rabbitmq-server.1.gz rabbitmqctl.1.gz \
+    xinstall -m 644 -W ${mansrc}/man1 rabbitmq-server.1.gz rabbitmqctl.1.gz rabbitmq-plugins.1.gz \
         ${mandest}/man1/
     xinstall -m 644 -W ${mansrc}/man5 rabbitmq-env.conf.5.gz ${mandest}/man5/
 }
