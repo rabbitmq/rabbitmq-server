@@ -82,7 +82,10 @@ parse_authority(Authority) ->
 parse_host_port("[" ++ HostPort) -> %ipv6
     {Host, ColonPort} = split_uri(HostPort, "\\]", {HostPort, ""}),
     [{host, Host} | case split_uri(ColonPort, ":", not_found, 0, 1) of
-                        not_found -> [];
+                        not_found -> case ColonPort of
+                                         [] -> [];
+                                         _  -> throw({invalid_port, ColonPort})
+                                     end;
                         {_, Port} -> [{port, list_to_integer(Port)}]
                     end];
 
