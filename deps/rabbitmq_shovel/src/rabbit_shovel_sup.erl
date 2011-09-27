@@ -159,7 +159,7 @@ parse_endpoint({Endpoint, Pos}) when is_list(Endpoint) ->
               end,
     {[], Brokers1} = run_state_monad(
                        lists:duplicate(length(Brokers),
-                                       fun parse_url/1),
+                                       fun parse_uri/1),
                        {Brokers, []}),
 
     ResourceDecls =
@@ -180,15 +180,10 @@ parse_endpoint({Endpoint, Pos}) when is_list(Endpoint) ->
 parse_endpoint({Endpoint, _Pos}) ->
     fail({require_list, Endpoint}).
 
-parse_url({[Url | Urls], Acc}) ->
-    case amqp_url:parse(Url) of
-        {ok, #amqp_params_network{host         = undefined,
-                                  username     = User,
-                                  virtual_host = Vhost}} ->
-            return({Urls, [#amqp_params_direct{username     = User,
-                                               virtual_host = Vhost} | Acc]});
+parse_uri({[Uri | Uris], Acc}) ->
+    case amqp_uri:parse(Uri) of
         {ok, Params} ->
-            return({Urls, [Params | Acc]});
+            return({Uris, [Params | Acc]});
         {error, _} = Err ->
             throw(Err)
     end.

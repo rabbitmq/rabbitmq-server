@@ -70,13 +70,13 @@ test() ->
     {expected_list, brokers, invalid} =
         test_broken_shovel_sources([{brokers, invalid}]),
 
-    {expected_string_url, 42} =
+    {expected_string_uri, 42} =
         test_broken_shovel_sources([{brokers, [42]}]),
 
-    {{unexpected_url_scheme, "invalid"}, "invalid://"} =
+    {{unexpected_uri_scheme, "invalid"}, "invalid://"} =
         test_broken_shovel_sources([{broker, "invalid://"}]),
 
-    {{unable_to_parse_url, no_scheme}, "invalid"} =
+    {{unable_to_parse_uri, no_scheme}, "invalid"} =
         test_broken_shovel_sources([{broker, "invalid"}]),
 
     {expected_list,declarations, invalid} =
