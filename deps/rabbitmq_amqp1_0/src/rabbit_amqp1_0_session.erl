@@ -17,8 +17,7 @@
 -define(DEFAULT_MAX_HANDLE, 16#ffffffff).
 
 -record(session, {channel_num, %% we just use the incoming (AMQP 1.0) channel number
-                  remote_incoming_id,     % ) what we know of the remote
-                  remote_incoming_window, % ) incoming window
+                  remote_incoming_window, % keep track of the window until we're told
                   remote_outgoing_window,
                   next_incoming_id, % just to keep a check
                   incoming_window_max, % )
@@ -155,12 +154,11 @@ incr_incoming_id(Session = #session{ next_incoming_id = NextIn,
 
 next_delivery_id(#session{next_delivery_id = Num}) -> Num.
 
-may_send(NumTransfers, #session{next_outgoing_id   = TransferNumber,
-                                remote_incoming_id = RemoteId,
+may_send(NumTransfers, #session{next_outgoing_id = TransferNumber,
                                 remote_incoming_window = RemoteWindow}) ->
-    OutMax = serial_add(RemoteId, RemoteWindow),
+    OutMax = serial_add(TransferNumber, RemoteWindow),
     Out = serial_add(TransferNumber, NumTransfers),
-    serial_compare(Out, OutMax) =:= less.
+    serial_compare(Out, OutMax) =/= greater.
 
 record_outgoing(DeliveryTag, NoAck, DefaultOutcome, NumTransfers,
                 Session = #session{next_outgoing_id = OutCount,
@@ -273,38 +271,42 @@ channel(#session{channel_num = Channel}) -> Channel.
 %% Note that this isn't a race so far as AMQP 1.0 is concerned; it's
 %% only because AMQP 0-9-1 defines QoS in terms of the total number of
 %% unacked messages, whereas 1.0 has an explicit window.
-flow(#'v1_0.flow'{next_incoming_id = RemoteNextIn0,
-                  incoming_window  = {uint, RemoteWindowIn},
-                  next_outgoing_id = {uint, RemoteNextOut},
-                  outgoing_window  = {uint, RemoteWindowOut}},
+flow(#'v1_0.flow'{next_incoming_id = FlowNextIn0,
+                  incoming_window  = {uint, FlowInWindow},
+                  next_outgoing_id = {uint, FlowNextOut},
+                  outgoing_window  = {uint, FlowOutWindow}},
      Session = #session{next_incoming_id     = LocalNextIn,
                         outgoing_window      = LocalOutWindow,
                         next_outgoing_id     = LocalNextOut}) ->
-    %% TODO the Python client sets next_outgoing_id=2 on begin, then sends a
-    %% flow with next_outgoing_id=1. Not sure what that's meant to mean.
     %% The far side may not have our begin{} with our next-transfer-id
-    RemoteNextIn = case RemoteNextIn0 of
+    FlowNextIn = case FlowNextIn0 of
                        {uint, Id} -> Id;
                        undefined  -> LocalNextOut
                    end,
-    case serial_compare(RemoteNextOut, LocalNextIn) of
+    case serial_compare(FlowNextOut, LocalNextIn) of
         equal ->
-            case serial_compare(RemoteNextIn, LocalNextOut) of
+            case serial_compare(FlowNextIn, LocalNextOut) of
                 greater ->
                     protocol_error(?V_1_0_SESSION_ERROR_WINDOW_VIOLATION,
                                    "Remote incoming id (~p) leads "
                                    "local outgoing id (~p)",
-                                   [RemoteNextIn, LocalNextOut]);
-                _ ->
+                                   [FlowNextIn, LocalNextOut]);
+                equal ->
                     Session#session{
-                      remote_incoming_id = RemoteNextIn,
-                      remote_incoming_window = RemoteWindowIn}
+                      remote_outgoing_window = FlowOutWindow,
+                      remote_incoming_window = FlowInWindow};
+                less ->
+                    Session#session{
+                      remote_outgoing_window = FlowOutWindow,
+                      remote_incoming_window =
+                      serial_diff(serial_add(FlowNextIn, FlowInWindow),
+                                  LocalNextOut)}
             end;
         _ ->
             protocol_error(?V_1_0_SESSION_ERROR_WINDOW_VIOLATION,
                            "Remote outgoing id (~p) not equal to "
                            "local incoming id (~p)",
-                           [RemoteNextOut, LocalNextIn])
+                           [FlowNextOut, LocalNextIn])
     end.
 
 %% An acknowledgement from the queue, which we'll get if we are
