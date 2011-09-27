@@ -14,4 +14,4 @@
           {use_ssl,               false},
           {port,                  389},
           {log,                   false} ] },
-  {applications, [kernel, stdlib]}]}.
+  {applications, [kernel, stdlib, eldap]}]}.
