@@ -42,20 +42,20 @@ parse1(Url) when is_list(Url) ->
     case uri_parser:parse(Url, [{host, undefined}, {path, "/"},
                                 {port, undefined}, {'query', []}]) of
         {error, Err} ->
-            throw(Err);
+            throw({unable_to_parse_url, Err});
         Parsed ->
             Endpoint = case proplists:get_value(scheme, Parsed) of
                            "amqp"  -> build_broker(Parsed);
                            "amqps" -> build_ssl_broker(Parsed);
-                           Scheme  -> fail({unexpected_url_scheme, Scheme, Url})
+                           Scheme  -> fail({unexpected_url_scheme, Scheme})
                        end,
             return({ok, broker_add_query(Endpoint, Parsed)})
     end;
 parse1(Url) ->
-    fail({expected_string_url, Url}).
+    fail(expected_string_url).
 
-unescape_string(undefined) ->
-    undefined;
+unescape_string(Atom) when is_atom(Atom) ->
+    Atom;
 unescape_string([]) ->
     [];
 unescape_string([$%, N1, N2 | Rest]) ->
@@ -105,7 +105,7 @@ build_ssl_broker(ParsedUrl) ->
                       case lists:keysearch(KeyString, 1, Query) of
                           {value, {_, Value}} ->
                               try return([{Key, unescape_string(Fun(Value))} | L])
-                              catch throw:{error, Reason} ->
+                              catch throw:Reason ->
                                       fail({invalid_ssl_parameter,
                                             Key, Value, Query, Reason})
                               end;
@@ -141,7 +141,7 @@ broker_add_query(Params, ParsedUrl, Fields) ->
                                ValueParsed = parse_amqp_param(Field, Value),
                                return(
                                  {setelement(Pos, ParamsN, ValueParsed), Pos1})
-                           catch throw:{error, Reason} ->
+                           catch throw:Reason ->
                                    fail({invalid_amqp_params_parameter,
                                          Field, Value, Query, Reason})
                            end
