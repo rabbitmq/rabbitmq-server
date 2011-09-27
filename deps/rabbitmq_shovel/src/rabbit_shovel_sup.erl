@@ -182,7 +182,7 @@ parse_endpoint({Endpoint, _Pos}) ->
 
 parse_url({[Url | Urls], Acc}) ->
     case amqp_url:parse(Url) of
-        {ok, #amqp_params_network{host         = <<"localhost">>,
+        {ok, #amqp_params_network{host         = undefined,
                                   username     = User,
                                   virtual_host = Vhost}} ->
             return({Urls, [#amqp_params_direct{username     = User,

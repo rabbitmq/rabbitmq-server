@@ -70,13 +70,13 @@ test() ->
     {expected_list, brokers, invalid} =
         test_broken_shovel_sources([{brokers, invalid}]),
 
-    {expected_string_uri, 42} =
+    {expected_string_url, 42} =
         test_broken_shovel_sources([{brokers, [42]}]),
 
-    {unexpected_uri_scheme, "invalid", "invalid://"} =
+    {{unexpected_url_scheme, "invalid"}, "invalid://"} =
         test_broken_shovel_sources([{broker, "invalid://"}]),
 
-    {unable_to_parse_uri, "invalid", no_scheme} =
+    {{unable_to_parse_url, no_scheme}, "invalid"} =
         test_broken_shovel_sources([{broker, "invalid"}]),
 
     {expected_list,declarations, invalid} =
@@ -95,14 +95,14 @@ test() ->
           [{broker, "amqp://"},
            {declarations, [{'queue.declare', [invalid]}]}]),
 
-    {invalid_amqp_params_parameter, heartbeat, "text",
-     [{"heartbeat", "text"}], {not_an_integer, "text"}} =
+    {{invalid_amqp_params_parameter, heartbeat, "text",
+      [{"heartbeat", "text"}], {not_an_integer, "text"}}, _} =
         test_broken_shovel_sources(
           [{broker, "amqp://localhost/?heartbeat=text"}]),
 
-    {invalid_amqp_params_parameter, username, "text",
-     [{"username", "text"}],
-     {parameter_unconfigurable_in_query, username, "text"}} =
+    {{invalid_amqp_params_parameter, username, "text",
+      [{"username", "text"}],
+      {parameter_unconfigurable_in_query, username, "text"}}, _} =
         test_broken_shovel_sources([{broker, "amqp://?username=text"}]),
 
     {invalid_parameter_value, prefetch_count,
@@ -128,11 +128,11 @@ test() ->
      {unexpected_fields, [invalid], _}} =
         test_broken_shovel_config([{publish_properties, [invalid]} | Config]),
 
-    {missing_ssl_parameter, fail_if_no_peer_cert, _} =
+    {{missing_ssl_parameter, fail_if_no_peer_cert, _}, _} =
         test_broken_shovel_sources([{broker, "amqps://username:password@host:5673/vhost?cacertfile=/path/to/cacert.pem&certfile=/path/to/certfile.pem&keyfile=/path/to/keyfile.pem&verify=verify_peer"}]),
 
-    {invalid_ssl_parameter, fail_if_no_peer_cert, "42", _,
-     {require_boolean, '42'}} =
+    {{invalid_ssl_parameter, fail_if_no_peer_cert, "42", _,
+      {require_boolean, '42'}}, _} =
         test_broken_shovel_sources([{broker, "amqps://username:password@host:5673/vhost?cacertfile=/path/to/cacert.pem&certfile=/path/to/certfile.pem&keyfile=/path/to/keyfile.pem&verify=verify_peer&fail_if_no_peer_cert=42"}]),
 
     %% a working config
@@ -141,7 +141,7 @@ test() ->
       shovels,
       [{test_shovel,
         [{sources,
-          [{broker, "amqp://?heartbeat=5"},
+          [{broker, "amqp:///%2f?heartbeat=5"},
            {declarations,
             [{'queue.declare',    [exclusive, auto_delete]},
              {'exchange.declare', [{exchange, ?EXCHANGE}, auto_delete]},
@@ -149,7 +149,7 @@ test() ->
                                    {routing_key, ?TO_SHOVEL}]}
             ]}]},
          {destinations,
-          [{broker, "amqp://"}]},
+          [{broker, "amqp:///%2f"}]},
          {queue, <<>>},
          {ack_mode, on_confirm},
          {publish_fields, [{exchange, ?EXCHANGE}, {routing_key, ?FROM_SHOVEL}]},
@@ -177,7 +177,7 @@ test() ->
                                self()),
     receive
         #'basic.consume_ok'{ consumer_tag = CTag } -> ok
-    after ?TIMEOUT -> throw(timeout)
+    after ?TIMEOUT -> throw(timeout_waiting_for_consume_ok)
     end,
 
     ok = amqp_channel:call(Chan,
@@ -197,7 +197,7 @@ test() ->
                                             content_type  = ?SHOVELLED }
                    }} ->
             ok = amqp_channel:call(Chan, #'basic.ack'{ delivery_tag = AckTag })
-    after ?TIMEOUT -> throw(timeout)
+    after ?TIMEOUT -> throw(timeout_waiting_for_deliver1)
     end,
 
     [{test_shovel,
@@ -212,7 +212,7 @@ test() ->
                                             content_type  = ?UNSHOVELLED }
                    }} ->
             ok = amqp_channel:call(Chan, #'basic.ack'{ delivery_tag = AckTag1 })
-    after ?TIMEOUT -> throw(timeout)
+    after ?TIMEOUT -> throw(timeout_waiting_for_deliver2)
     end,
 
     amqp_channel:close(Chan),
