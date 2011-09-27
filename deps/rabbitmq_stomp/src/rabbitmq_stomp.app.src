@@ -14,4 +14,4 @@
                                {reuseaddr, true},
                                {backlog,   128},
                                {nodelay,   true}]}]},
-  {applications, [kernel, stdlib, rabbit]}]}.
+  {applications, [kernel, stdlib, rabbit, amqp_client]}]}.
