@@ -383,10 +383,12 @@ qc_test_queue(Durable) ->
 rand_choice([])   -> [];
 rand_choice(List) -> rand_choice(List, [], random:uniform(length(List))).
 
-rand_choice(_List, Selection, 0) -> Selection;
-rand_choice(List, Selection, N)  -> Picked = lists:nth(random:uniform(length(List)), List),
-                                    rand_choice(List -- [Picked],
-                                                [Picked | Selection], N - 1).
+rand_choice(_List, Selection, 0) ->
+    Selection;
+rand_choice(List, Selection, N)  ->
+    Picked = lists:nth(random:uniform(length(List)), List),
+                       rand_choice(List -- [Picked], [Picked | Selection],
+                       N - 1).
 
 dropfun(Props) ->
     Expiry = eval({call, erlang, element,
