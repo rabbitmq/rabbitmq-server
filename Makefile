@@ -110,6 +110,8 @@ plugins:
 	[ -d "$(PLUGINS_SRC_DIR)/rabbitmq-server" ] || ln -s "$(CURDIR)" "$(PLUGINS_SRC_DIR)/rabbitmq-server"
 	mkdir -p $(PLUGINS_DIST_DIR)
 	PLUGINS_SRC_DIR="" $(MAKE) -C "$(PLUGINS_SRC_DIR)" plugins-dist PLUGINS_DIST_DIR="$(CURDIR)/$(PLUGINS_DIST_DIR)" VERSION=$(VERSION)
+	echo "Put your EZs here and use rabbitmq-plugins to enable them." > $(PLUGINS_DIST_DIR)/README
+	rm -f $(PLUGINS_DIST_DIR)/rabbit_common*.ez
 else
 plugins:
 # Not building plugins
