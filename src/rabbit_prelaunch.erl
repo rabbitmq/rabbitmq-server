@@ -151,6 +151,14 @@ prepare_plugins(EnabledPluginsFile, PluginsDistDir, DestDir) ->
     AllPlugins = rabbit_plugins:find_plugins(PluginsDistDir),
     Enabled = rabbit_plugins:read_enabled_plugins(EnabledPluginsFile),
     ToUnpack = rabbit_plugins:calculate_required_plugins(Enabled, AllPlugins),
+    ToUnpackPlugins = rabbit_plugins:lookup_plugins(ToUnpack, AllPlugins),
+
+    Missing = Enabled -- rabbit_plugins:plugin_names(ToUnpackPlugins),
+    case Missing of
+        [] -> ok;
+        _  -> io:format("Warning: the following enabled plugins were "
+                        "not found: ~p~n", [Missing])
+    end,
 
     %% Eliminate the contents of the destination directory
     case delete_recursively(DestDir) of
@@ -162,8 +170,7 @@ prepare_plugins(EnabledPluginsFile, PluginsDistDir, DestDir) ->
         {error, E2} -> terminate("Could not create dir ~s (~p)", [DestDir, E2])
     end,
 
-    [prepare_plugin(Plugin, DestDir) ||
-        Plugin <- rabbit_plugins:lookup_plugins(ToUnpack, AllPlugins)].
+    [prepare_plugin(Plugin, DestDir) || Plugin <- ToUnpackPlugins].
 
 prepare_plugin(#plugin{type = ez, location = Location}, PluginDestDir) ->
     zip:unzip(Location, [{cwd, PluginDestDir}]);

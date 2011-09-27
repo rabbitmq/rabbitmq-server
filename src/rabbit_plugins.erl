@@ -18,7 +18,7 @@
 -include("rabbit.hrl").
 
 -export([start/0, stop/0, find_plugins/1, read_enabled_plugins/1,
-         lookup_plugins/2, calculate_required_plugins/2]).
+         lookup_plugins/2, calculate_required_plugins/2, plugin_names/1]).
 
 -define(VERBOSE_OPT, "-v").
 -define(ENABLED_OPT, "-E").
@@ -34,6 +34,7 @@
 -spec(read_enabled_plugins/1 :: (file:filename()) -> [atom()]).
 -spec(lookup_plugins/2 :: ([atom()], [#plugin{}]) -> [#plugin{}]).
 -spec(calculate_required_plugins/2 :: ([atom()], [#plugin{}]) -> [atom()]).
+-spec(plugin_names/1 :: ([#plugin{}]) -> [atom()]).
 
 -endif.
 
