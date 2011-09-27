@@ -33,7 +33,7 @@
 %% Tests
 %%---------------------------------------------------------------------------
 
-amqp_url_parse_test_()                  -> ?RUN([]).
+amqp_uri_parse_test_()                  -> ?RUN([]).
 basic_get_test_()                       -> ?RUN([]).
 basic_get_ipv6_test_()                  -> ?RUN([]).
 basic_return_test_()                    -> ?RUN([]).

@@ -14,45 +14,56 @@
 %% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
 %%
 
--module(amqp_url).
+-module(amqp_uri).
 
 -include("amqp_client.hrl").
 
 -export([parse/1]).
 
 %%---------------------------------------------------------------------------
-%% AMQP URL Parsing
+%% AMQP URI Parsing
 %%---------------------------------------------------------------------------
 
-%% @spec (Url) -> {ok, #amqp_params_network{}} | {error, Info}
+%% @spec (Uri) -> {ok, #amqp_params_network{} | #amqp_params_direct{}} |
+%%                {error, {Info, Uri}}
 %% where
-%%      Url =  string()
+%%      Uri  = string()
 %%      Info = any()
 %%
-%% @doc Parses an AMQP URL.  If any of the URL parts are missing, the
-%% default values are used. The connection is assumed to be a network
-%% one, and an #amqp_params_network{} record is returned.  In case of
-%% failure, an {error, Info} tuple is returned.
-parse(Url) ->
-    try parse1(Url)
-    catch throw:Err -> {error, {Err, Url}}
+%% @doc Parses an AMQP URI.  If any of the URI parts are missing, the
+%% default values are used.  If the hostname is omited, an
+%% #amqp_params_direct{} record is returned; otherwise, an
+%% #amqp_params_network{} record is returned.  Extra parameters may be
+%% specified via the query string (e.g. "?heartbeat=5"). In case of
+%% failure, an {error, {Info, Uri}} tuple is returned.
+parse(Uri) ->
+    try case parse1(Uri) of
+            {ok, #amqp_params_network{host         = undefined,
+                                      username     = User,
+                                      virtual_host = Vhost}} ->
+                return({ok, #amqp_params_direct{username     = User,
+                                                virtual_host = Vhost}});
+            {ok, Params} ->
+                return({ok, Params})
+        end
+    catch throw:Err -> {error, {Err, Uri}}
     end.
 
-parse1(Url) when is_list(Url) ->
-    case uri_parser:parse(Url, [{host, undefined}, {path, "/"},
+parse1(Uri) when is_list(Uri) ->
+    case uri_parser:parse(Uri, [{host, undefined}, {path, "/"},
                                 {port, undefined}, {'query', []}]) of
         {error, Err} ->
-            throw({unable_to_parse_url, Err});
+            throw({unable_to_parse_uri, Err});
         Parsed ->
             Endpoint = case proplists:get_value(scheme, Parsed) of
                            "amqp"  -> build_broker(Parsed);
                            "amqps" -> build_ssl_broker(Parsed);
-                           Scheme  -> fail({unexpected_url_scheme, Scheme})
+                           Scheme  -> fail({unexpected_uri_scheme, Scheme})
                        end,
             return({ok, broker_add_query(Endpoint, Parsed)})
     end;
-parse1(Url) ->
-    fail(expected_string_url).
+parse1(_) ->
+    fail(expected_string_uri).
 
 unescape_string(Atom) when is_atom(Atom) ->
     Atom;
@@ -69,9 +80,9 @@ unescape_string([$% | Rest]) ->
 unescape_string([C | Rest]) ->
     [C | unescape_string(Rest)].
 
-build_broker(ParsedUrl) ->
+build_broker(ParsedUri) ->
     [Host, Port, Path] =
-        [proplists:get_value(F, ParsedUrl) || F <- [host, port, path]],
+        [proplists:get_value(F, ParsedUri) || F <- [host, port, path]],
     case Port =:= undefined orelse (0 < Port andalso Port < 65535) of
         true  -> ok;
         false -> fail({port_out_of_range, Port})
@@ -83,7 +94,7 @@ build_broker(ParsedUrl) ->
                                  _ -> fail({invalid_vhost, Rest})
                              end
             end,
-    UserInfo = proplists:get_value(userinfo, ParsedUrl),
+    UserInfo = proplists:get_value(userinfo, ParsedUri),
     Ps = #amqp_params_network{host = unescape_string(Host),
                               port = Port,
                               virtual_host = VHost},
@@ -96,9 +107,9 @@ build_broker(ParsedUrl) ->
         _          -> Ps
     end.
 
-build_ssl_broker(ParsedUrl) ->
-    Params = build_broker(ParsedUrl),
-    Query = proplists:get_value('query', ParsedUrl),
+build_ssl_broker(ParsedUri) ->
+    Params = build_broker(ParsedUri),
+    Query = proplists:get_value('query', ParsedUri),
     SSLOptions =
         run_state_monad(
           [fun (L) -> KeyString = atom_to_list(Key),
@@ -121,11 +132,11 @@ build_ssl_broker(ParsedUrl) ->
           []),
     Params#amqp_params_network{ssl_options = SSLOptions}.
 
-broker_add_query(Params = #amqp_params_network{}, Url) ->
-    broker_add_query(Params, Url, record_info(fields, amqp_params_network)).
+broker_add_query(Params = #amqp_params_network{}, Uri) ->
+    broker_add_query(Params, Uri, record_info(fields, amqp_params_network)).
 
-broker_add_query(Params, ParsedUrl, Fields) ->
-    Query = proplists:get_value('query', ParsedUrl),
+broker_add_query(Params, ParsedUri, Fields) ->
+    Query = proplists:get_value('query', ParsedUri),
     {Params1, _Pos} =
         run_state_monad(
           [fun ({ParamsN, Pos}) ->
