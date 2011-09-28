@@ -1617,17 +1617,17 @@ push_betas_to_deltas(Generator, Limit, Quota, Q, Count, RamIndexCount, IndexStat
           when SeqId < Limit ->
             {Count, Q, RamIndexCount, IndexState};
         {{value, MsgStatus = #msg_status { index_on_disk = IndexOnDisk }}, Qa} ->
-            {RamIndexCount1, IndexState1} =
+            {Quota1, RamIndexCount1, IndexState1} =
                 case IndexOnDisk of
-                    true  -> {RamIndexCount, IndexState};
+                    true  -> {Quota, RamIndexCount, IndexState};
                     false -> {#msg_status { index_on_disk = true },
                               IndexState2} =
                                  maybe_write_index_to_disk(true, MsgStatus,
                                                            IndexState),
-                             {RamIndexCount - 1, IndexState2}
+                             {Quota - 1, RamIndexCount - 1, IndexState2}
                 end,
             push_betas_to_deltas(
-              Generator, Limit, Quota, Qa, Count + 1, RamIndexCount1, IndexState1)
+              Generator, Limit, Quota1, Qa, Count + 1, RamIndexCount1, IndexState1)
     end.
 
 %%----------------------------------------------------------------------------
