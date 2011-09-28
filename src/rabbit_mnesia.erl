@@ -121,6 +121,10 @@ force_cluster(ClusterNodes) ->
 %% node.  If Force is false, only connections to online nodes are
 %% allowed.
 cluster(ClusterNodes, Force) ->
+    rabbit_misc:local_info_msg("Clustering with ~p~s~n",
+                               [ClusterNodes, if Force -> " forcefully";
+                                                 true  -> ""
+                                              end]),
     ensure_mnesia_not_running(),
     ensure_mnesia_dir(),
 
@@ -434,7 +438,7 @@ cluster_nodes_config_filename() ->
 
 create_cluster_nodes_config(ClusterNodes) ->
     FileName = cluster_nodes_config_filename(),
-    case rabbit_misc:write_term_file(FileName, [ClusterNodes]) of
+    case rabbit_file:write_term_file(FileName, [ClusterNodes]) of
         ok -> ok;
         {error, Reason} ->
             throw({error, {cannot_create_cluster_nodes_config,
@@ -443,7 +447,7 @@ create_cluster_nodes_config(ClusterNodes) ->
 
 read_cluster_nodes_config() ->
     FileName = cluster_nodes_config_filename(),
-    case rabbit_misc:read_term_file(FileName) of
+    case rabbit_file:read_term_file(FileName) of
         {ok, [ClusterNodes]} -> ClusterNodes;
         {error, enoent} ->
             {ok, ClusterNodes} = application:get_env(rabbit, cluster_nodes),
@@ -471,12 +475,12 @@ record_running_nodes() ->
     Nodes = running_clustered_nodes() -- [node()],
     %% Don't check the result: we're shutting down anyway and this is
     %% a best-effort-basis.
-    rabbit_misc:write_term_file(FileName, [Nodes]),
+    rabbit_file:write_term_file(FileName, [Nodes]),
     ok.
 
 read_previously_running_nodes() ->
     FileName = running_nodes_filename(),
-    case rabbit_misc:read_term_file(FileName) of
+    case rabbit_file:read_term_file(FileName) of
         {ok, [Nodes]}   -> Nodes;
         {error, enoent} -> [];
         {error, Reason} -> throw({error, {cannot_read_previous_nodes_file,
@@ -638,7 +642,7 @@ move_db() ->
 
 copy_db(Destination) ->
     ok = ensure_mnesia_not_running(),
-    rabbit_misc:recursive_copy(dir(), Destination).
+    rabbit_file:recursive_copy(dir(), Destination).
 
 create_tables() -> create_tables(disc).
 
@@ -718,6 +722,9 @@ wait_for_tables(TableNames) ->
     end.
 
 reset(Force) ->
+    rabbit_misc:local_info_msg("Resetting Rabbit~s~n", [if Force -> " forcefully";
+                                                           true  -> ""
+                                                        end]),
     ensure_mnesia_not_running(),
     case not Force andalso is_clustered() andalso
          is_only_disc_node(node(), false)
@@ -745,7 +752,7 @@ reset(Force) ->
     end,
     ok = delete_cluster_nodes_config(),
     %% remove persisted messages and any other garbage we find
-    ok = rabbit_misc:recursive_delete(filelib:wildcard(dir() ++ "/*")),
+    ok = rabbit_file:recursive_delete(filelib:wildcard(dir() ++ "/*")),
     ok.
 
 leave_cluster([], _) -> ok;
@@ -778,19 +785,13 @@ wait_for(Condition) ->
 
 on_node_up(Node) ->
     case is_only_disc_node(Node, true) of
-        true  -> rabbit_misc:with_local_io(
-                   fun () -> rabbit_log:info("cluster contains disc "
-                                             "nodes again~n")
-                   end);
+        true  -> rabbit_log:info("cluster contains disc nodes again~n");
         false -> ok
     end.
 
 on_node_down(Node) ->
     case is_only_disc_node(Node, true) of
-        true  -> rabbit_misc:with_local_io(
-                   fun () -> rabbit_log:info("only running disc node "
-                                             "went down~n")
-                   end);
+        true  -> rabbit_log:info("only running disc node went down~n");
         false -> ok
     end.
 

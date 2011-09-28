@@ -44,6 +44,7 @@
 -define(INFO_KEYS, [name, tracing]).
 
 add(VHostPath) ->
+    rabbit_log:info("Adding vhost '~s'~n", [VHostPath]),
     R = rabbit_misc:execute_mnesia_transaction(
           fun () ->
                   case mnesia:wread({rabbit_vhost, VHostPath}) of
@@ -69,7 +70,6 @@ add(VHostPath) ->
                            {<<"amq.rabbitmq.trace">>, topic}]],
                   ok
           end),
-    rabbit_log:info("Added vhost ~p~n", [VHostPath]),
     R.
 
 delete(VHostPath) ->
@@ -78,6 +78,7 @@ delete(VHostPath) ->
     %% process, which in turn results in further mnesia actions and
     %% eventually the termination of that process. Exchange deletion causes
     %% notifications which must be sent outside the TX
+    rabbit_log:info("Deleting vhost '~s'~n", [VHostPath]),
     [{ok,_} = rabbit_amqqueue:delete(Q, false, false) ||
         Q <- rabbit_amqqueue:list(VHostPath)],
     [ok = rabbit_exchange:delete(Name, false) ||
@@ -86,7 +87,6 @@ delete(VHostPath) ->
           with(VHostPath, fun () ->
                                   ok = internal_delete(VHostPath)
                           end)),
-    rabbit_log:info("Deleted vhost ~p~n", [VHostPath]),
     R.
 
 internal_delete(VHostPath) ->

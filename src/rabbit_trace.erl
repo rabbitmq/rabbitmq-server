@@ -67,9 +67,11 @@ tap_trace_out({#resource{name = QName}, _QPid, _QMsgId, Redelivered, Msg},
 %%----------------------------------------------------------------------------
 
 start(VHost) ->
+    rabbit_log:info("Enabling tracing for vhost '~s'~n", [VHost]),
     update_config(fun (VHosts) -> [VHost | VHosts -- [VHost]] end).
 
 stop(VHost) ->
+    rabbit_log:info("Disabling tracing for vhost '~s'~n", [VHost]),
     update_config(fun (VHosts) -> VHosts -- [VHost] end).
 
 update_config(Fun) ->

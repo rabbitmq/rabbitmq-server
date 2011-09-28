@@ -232,12 +232,14 @@ start() ->
     end.
 
 stop() ->
+    rabbit_log:info("Stopping Rabbit~n"),
     ok = rabbit_misc:stop_applications(application_load_order()).
 
 stop_and_halt() ->
     try
         stop()
     after
+        rabbit_misc:local_info_msg("Halting Erlang VM~n", []),
         init:stop()
     end,
     ok.
@@ -264,6 +266,7 @@ environment() ->
 
 rotate_logs(BinarySuffix) ->
     Suffix = binary_to_list(BinarySuffix),
+    rabbit_misc:local_info_msg("Rotating logs with suffix '~s'~n", [Suffix]),
     log_rotation_result(rotate_logs(log_location(kernel),
                                     Suffix,
                                     rabbit_error_logger_file_h),
@@ -461,20 +464,20 @@ insert_default_data() ->
 
 ensure_working_log_handlers() ->
     Handlers = gen_event:which_handlers(error_logger),
-    ok = ensure_working_log_handler(error_logger_file_h,
+    ok = ensure_working_log_handler(error_logger_tty_h,
                                     rabbit_error_logger_file_h,
                                     error_logger_tty_h,
                                     log_location(kernel),
                                     Handlers),
 
-    ok = ensure_working_log_handler(sasl_report_file_h,
+    ok = ensure_working_log_handler(sasl_report_tty_h,
                                     rabbit_sasl_report_file_h,
                                     sasl_report_tty_h,
                                     log_location(sasl),
                                     Handlers),
     ok.
 
-ensure_working_log_handler(OldFHandler, NewFHandler, TTYHandler,
+ensure_working_log_handler(OldHandler, NewHandler, TTYHandler,
                            LogLocation, Handlers) ->
     case LogLocation of
         undefined -> ok;
@@ -484,10 +487,10 @@ ensure_working_log_handler(OldFHandler, NewFHandler, TTYHandler,
                              throw({error, {cannot_log_to_tty,
                                             TTYHandler, not_installed}})
                      end;
-        _         -> case lists:member(NewFHandler, Handlers) of
+        _         -> case lists:member(NewHandler, Handlers) of
                          true  -> ok;
                          false -> case rotate_logs(LogLocation, "",
-                                                   OldFHandler, NewFHandler) of
+                                                   OldHandler, NewHandler) of
                                       ok -> ok;
                                       {error, Reason} ->
                                           throw({error, {cannot_log_to_file,
@@ -497,10 +500,10 @@ ensure_working_log_handler(OldFHandler, NewFHandler, TTYHandler,
     end.
 
 log_location(Type) ->
-    case application:get_env(Type, case Type of
-                                       kernel -> error_logger;
-                                       sasl   -> sasl_error_logger
-                                   end) of
+    case application:get_env(rabbit, case Type of
+                                         kernel -> error_logger;
+                                         sasl   -> sasl_error_logger
+                                     end) of
         {ok, {file, File}} -> File;
         {ok, false}        -> undefined;
         {ok, tty}          -> tty;
