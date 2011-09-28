@@ -2328,14 +2328,16 @@ test_variable_queue_requeue(VQ0) ->
                                     {VQM, [{AckTag, N} | AckTags]}
                                 end, {VQ2, []}, lists:seq(0, Count - 1)),
     SubMap = lists:filter(fun ({_AckTag, N}) ->
-                                 N rem 500 =:= 0
+                                 N rem 50 =:= 0
                              end, AckMap),
     {_MsgIds, VQ4} =
         rabbit_variable_queue:requeue(proplists:get_keys(AckMap -- SubMap),
                                       fun(X) -> X end, VQ3),
-    {_MsgIds2, VQ5} =
-        rabbit_variable_queue:requeue(proplists:get_keys(SubMap),
-                                      fun(X) -> X end, VQ4),
+     VQ5 = lists:foldl(fun (AckTag, VQN) ->
+                           {_MsgId, VQM} = rabbit_variable_queue:requeue(
+                                             [AckTag], fun(X) -> X end, VQN),
+                           VQM
+                       end, VQ4, proplists:get_keys(SubMap)),
     VQ6 = lists:foldl(fun ({N, _}, VQN) ->
                           {{#basic_message{}, true, AckTag, QLen}, VQM} =
                                          rabbit_variable_queue:fetch(true, VQN),
