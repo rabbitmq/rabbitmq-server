@@ -187,7 +187,7 @@ run-qc: all
 	$(foreach MOD,$(QC_MODULES),./quickcheck $(RABBITMQ_NODENAME) $(MOD) $(QC_TRIALS))
 
 start-background-node:
-	-rm $(RABBITMQ_MNESIA_DIR).pid
+	-rm -f $(RABBITMQ_MNESIA_DIR).pid
 	mkdir -p $(RABBITMQ_MNESIA_DIR)
 	setsid sh -c "$(MAKE) run-background-node > $(RABBITMQ_MNESIA_DIR)/startup_log 2> $(RABBITMQ_MNESIA_DIR)/startup_err" &
 	sleep 1
