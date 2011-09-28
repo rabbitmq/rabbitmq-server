@@ -320,11 +320,8 @@ format_message_queue(Opt, MQ) -> rabbit_misc:format_message_queue(Opt, MQ).
 
 format_status(_Opt, [_PDict, State = #state { backing_queue       = BQ,
                                               backing_queue_state = BQS }]) ->
-    FState =
-        rabbit_misc:update_and_convert_record(
-          state_formatted,
-          [{#state.backing_queue_state, BQ:format_status(BQS)}], State),
-    [{data, [{"State", FState}]}].
+    [{data, [{"State", State #state {
+                         backing_queue_state = BQ:format_status(BQS) }}]}].
 
 %% ---------------------------------------------------------------------------
 %% GM

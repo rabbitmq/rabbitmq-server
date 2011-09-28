@@ -353,9 +353,7 @@ discard(Msg = #basic_message { id = MsgId }, ChPid,
 
 format_status(State = #state { backing_queue       = BQ,
                                backing_queue_state = BQS}) ->
-    rabbit_misc:update_and_convert_record(
-      state_formatted, [{#state.backing_queue_state, BQ:format_status(BQS)}],
-      State).
+    State #state { backing_queue_state = BQ:format_status(BQS) }.
 
 %% ---------------------------------------------------------------------------
 %% Other exported functions

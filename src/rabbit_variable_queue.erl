@@ -732,13 +732,8 @@ is_duplicate(_Msg, State) -> {false, State}.
 
 discard(_Msg, _ChPid, State) -> State.
 
-format_status(State = #vqstate{q1 = Q1,
-                               q2 = Q2,
-                               q3 = Q3,
-                               q4 = Q4}) ->
-    rabbit_misc:update_and_convert_record(
-      vqstate_formatted, [{#vqstate.q1, format_queue(Q1)},
-                          {#vqstate.q4, format_queue(Q4)}], State).
+format_status(State = #vqstate { q1 = Q1, q4 = Q4 }) ->
+    State #vqstate { q1 = format_queue(Q1), q4 = format_queue(Q4) }.
 
 %%----------------------------------------------------------------------------
 %% Minor helpers
