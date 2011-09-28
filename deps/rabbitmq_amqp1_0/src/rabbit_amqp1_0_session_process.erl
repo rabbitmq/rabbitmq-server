@@ -8,7 +8,9 @@
 -export([start_link/8]).
 
 -record(state, {backing_connection, backing_channel, frame_max,
-                reader_pid, writer_pid, session}).
+                reader_pid, writer_pid, buffer, session}).
+
+-record(pending, {delivery_tag, frames, link_handle }).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_amqp1_0.hrl").
@@ -36,6 +38,7 @@ init([Channel, ReaderPid, WriterPid, #user{username = Username}, VHost,
                 reader_pid         = ReaderPid,
                 writer_pid         = WriterPid,
                 frame_max          = FrameMax,
+                buffer             = queue:new(),
                 session            = rabbit_amqp1_0_session:init(Channel)
                }}.
 
@@ -57,10 +60,10 @@ handle_info(#'basic.consume_ok'{}, State) ->
     %% Handled above
     {noreply, State};
 
-handle_info({#'basic.deliver'{consumer_tag = ConsumerTag} = Deliver, Msg},
-            State = #state{writer_pid      = WriterPid,
-                           frame_max       = FrameMax,
-                           backing_channel = BCh,
+handle_info({#'basic.deliver'{ consumer_tag = ConsumerTag,
+                               delivery_tag = DeliveryTag } = Deliver, Msg},
+            State = #state{frame_max       = FrameMax,
+                           buffer          = Buffer,
                            session         = Session}) ->
     Handle = ctag_to_handle(ConsumerTag),
     case get({out, Handle}) of
@@ -70,12 +73,15 @@ handle_info({#'basic.deliver'{consumer_tag = ConsumerTag} = Deliver, Msg},
                                [ConsumerTag]),
             {noreply, State};
         Link ->
-            {ok, Link1, Session1} =
-                rabbit_amqp1_0_outgoing_link:deliver(
-                  Deliver, Msg, WriterPid, BCh, Handle, Link, Session,
-                  FrameMax),
-            put({out, Handle}, Link1),
-            {noreply, state(Session1, State)}
+            {ok, Frames, Session1} =
+                rabbit_amqp1_0_outgoing_link:delivery(
+                  Deliver, Msg, FrameMax, Handle, Session, Link),
+            Pending = #pending{ delivery_tag = DeliveryTag,
+                                frames = Frames,
+                                link_handle = Handle },
+            Buffer1 = queue:in(Pending, Buffer),
+            {noreply, run_buffer(
+                        state(Session1, State#state{ buffer = Buffer1 }))}
     end;
 
 %% A message from the queue saying that the credit is either exhausted
@@ -245,6 +251,7 @@ handle_control(Flow = #'v1_0.flow'{},
                State = #state{backing_channel = BCh,
                               session         = Session}) ->
     State1 = state(rabbit_amqp1_0_session:flow(Flow, Session), State),
+    State2 = run_buffer(State1),
     case Flow#'v1_0.flow'.handle of
         undefined ->
             {noreply, State1};
@@ -273,6 +280,57 @@ handle_control(Frame, State) ->
     %% FIXME should this bork?
     io:format("Ignoring frame: ~p~n", [Frame]),
     {noreply, State}.
+
+run_buffer(State = #state{ writer_pid = WriterPid,
+                           session = Session,
+                           backing_channel = BCh,
+                           buffer = Buffer }) ->
+    {Session1, Buffer1} =
+        run_buffer1(WriterPid, BCh, Session, Buffer),
+    State#state{ buffer = Buffer1, session = Session1 }.
+
+run_buffer1(WriterPid, BCh, Session, Buffer) ->
+    case rabbit_amqp1_0_session:transfers_left(Session) of
+        Space when Space > 0 ->
+            case queue:out(Buffer) of
+                {empty, Buffer} ->
+                    {Session, Buffer};
+                {{value, #pending{ delivery_tag = DeliveryTag,
+                                   frames = Frames,
+                                   link_handle = Handle } = Pending},
+                 BufferTail} ->
+                    Link = get({out, Handle}),
+                    %% At this point, we will either be able to
+                    %% 1. send all the frames
+                    %% 2. send some of the frames
+                    case send_frames(WriterPid, Frames, Space) of
+                        {all, SpaceLeft} ->
+                            NewLink =
+                                rabbit_amqp1_0_outgoing_link:transfered(
+                                  DeliveryTag, BCh, Link),
+                            put({out, Handle}, NewLink),
+                            Session1 = rabbit_amqp1_0_session:record_transfers(
+                                         Space - SpaceLeft, Session),
+                            run_buffer1(WriterPid, BCh, Session1, BufferTail);
+                        {some, Rest} ->
+                            Session1 = rabbit_amqp1_0_session:record_transfers(
+                                         Space, Session),
+                            Buffer1 = queue:in_r(Pending#pending{ frames = Rest },
+                                                 BufferTail),
+                            {Session1, Buffer1}
+                    end
+            end;
+        _ ->
+            {Session, Buffer}
+    end.
+
+send_frames(_WriterPid, [], Left) ->
+    {all, Left};
+send_frames(_WriterPid, Rest, 0) ->
+    {some, Rest};
+send_frames(WriterPid, [[T, C] | Rest], Left) ->
+    rabbit_amqp1_0_writer:send_command(WriterPid, T, C),
+    send_frames(WriterPid, Rest, Left - 1).
 
 %% ------
 

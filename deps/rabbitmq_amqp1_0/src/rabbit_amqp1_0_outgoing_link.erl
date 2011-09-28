@@ -1,11 +1,12 @@
 -module(rabbit_amqp1_0_outgoing_link).
 
--export([attach/3, deliver/8, update_credit/4, flow/3]).
+-export([attach/3, delivery/6, transfered/3, update_credit/4, flow/3]).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_amqp1_0.hrl").
 
 -import(rabbit_amqp1_0_link_util, [protocol_error/3, handle_to_ctag/1]).
+-import(rabbit_misc, [serial_add/2]).
 
 -define(INIT_TXFR_COUNT, 0).
 
@@ -40,7 +41,10 @@ attach(#'v1_0.attach'{name = Name,
             case amqp_channel:subscribe(
                    BCh, #'basic.consume' { queue = QueueName,
                                            consumer_tag = CTag,
-                                           no_ack = NoAck,
+                                           %% we will ack when we've transfered
+                                           %% a message, or when we get an ack
+                                           %% from the client.
+                                           no_ack = false,
                                            %% TODO exclusive?
                                            exclusive = false}, self()) of
                 #'basic.consume_ok'{} ->
@@ -172,15 +176,14 @@ ensure_source(Source = #'v1_0.source'{address       = Address,
             end
     end.
 
-%% FIXME, don't ignore ack required, keep track of credit, um .. etc.
-deliver(Deliver = #'basic.deliver'{delivery_tag = DeliveryTag,
-                                   routing_key  = RKey},
-        Msg, WriterPid, BCh, Handle,
-        Link = #outgoing_link{delivery_count = Count,
-                              no_ack = NoAck,
-                              default_outcome = DefaultOutcome},
-        Session, FrameMax) ->
+delivery(Deliver = #'basic.deliver'{delivery_tag = DeliveryTag,
+                                    routing_key  = RKey},
+                Msg, FrameMax, Handle, Session,
+                Link = #outgoing_link{no_ack = NoAck,
+                                      default_outcome = DefaultOutcome}) ->
     DeliveryId = rabbit_amqp1_0_session:next_delivery_id(Session),
+    Session1 = rabbit_amqp1_0_session:record_outgoing(
+                 DeliveryTag, NoAck, DefaultOutcome, Session),
     Txfr = #'v1_0.transfer'{handle = Handle,
                             delivery_tag = {binary, <<DeliveryTag:64>>},
                             delivery_id = {uint, DeliveryId},
@@ -198,26 +201,7 @@ deliver(Deliver = #'basic.deliver'{delivery_tag = DeliveryTag,
     %% FIXME ugh.
     TLen = iolist_size(rabbit_amqp1_0_framing:encode_bin(Txfr)),
     Frames = encode_frames(Txfr, Msg1_0, FrameMax - TLen, []),
-    NumTransfers = length(Frames),
-    MaySend = rabbit_amqp1_0_session:may_send(NumTransfers, Session),
-    if MaySend ->
-            NewLink = Link#outgoing_link{delivery_count = Count + 1},
-            [rabbit_amqp1_0_writer:send_command(WriterPid, T, C) ||
-                [T, C] <- Frames],
-            {ok, NewLink, rabbit_amqp1_0_session:record_outgoing(
-                            DeliveryTag, NoAck, DefaultOutcome,
-                            NumTransfers, Session)};
-       %% FIXME We can't knowingly exceed our credit.  On the other
-       %% hand, we've been handed a message to deliver. This can
-       %% happen if messages typically require a single frame, since
-       %% we cannot adequately control deliveries with basic.qos.
-       NoAck ->
-            {ok, Link, Session};
-       true ->
-            amqp_channel:call(BCh, #'basic.reject'{requeue = true,
-                                                   delivery_tag = DeliveryTag}),
-            {ok, Link, Session}
-    end.
+    {ok, Frames, Session1}.
 
 encode_frames(T, Msg, MaxContentLen, Transfers) ->
     case iolist_size(Msg) > MaxContentLen of
@@ -230,3 +214,14 @@ encode_frames(T, Msg, MaxContentLen, Transfers) ->
         false ->
             lists:reverse([[T, Msg] | Transfers])
     end.
+
+transfered(DeliveryTag, Channel,
+           Link = #outgoing_link{ delivery_count = Count,
+                                  no_ack = NoAck }) ->
+    if NoAck ->
+            amqp_channel:cast(Channel,
+                              #'basic.ack'{ delivery_tag = DeliveryTag });
+       true ->
+            ok
+    end,
+    Link#outgoing_link{delivery_count = serial_add(Count, 1)}.

@@ -3,8 +3,9 @@
 -export([process_frame/2]).
 
 -export([init/1, begin_/2, maybe_init_publish_id/2, record_delivery/3,
-         incr_incoming_id/1, next_delivery_id/1, may_send/2,
-         record_outgoing/5, settle/3, flow_fields/2, channel/1,
+         incr_incoming_id/1, next_delivery_id/1, transfers_left/1,
+         record_transfers/2,
+         record_outgoing/4, settle/3, flow_fields/2, channel/1,
          flow/2, ack/2]).
 
 -import(rabbit_misc, [serial_add/2, serial_diff/2, serial_compare/2]).
@@ -154,16 +155,11 @@ incr_incoming_id(Session = #session{ next_incoming_id = NextIn,
 
 next_delivery_id(#session{next_delivery_id = Num}) -> Num.
 
-may_send(NumTransfers, #session{next_outgoing_id = TransferNumber,
-                                remote_incoming_window = RemoteWindow}) ->
-    OutMax = serial_add(TransferNumber, RemoteWindow),
-    Out = serial_add(TransferNumber, NumTransfers),
-    serial_compare(Out, OutMax) =/= greater.
+transfers_left(#session{remote_incoming_window = RemoteWindow}) ->
+    RemoteWindow.
 
-record_outgoing(DeliveryTag, NoAck, DefaultOutcome, NumTransfers,
-                Session = #session{next_outgoing_id = OutCount,
-                                   next_delivery_id = DeliveryId,
-                                   remote_incoming_window = RemoteIn,
+record_outgoing(DeliveryTag, NoAck, DefaultOutcome,
+                Session = #session{next_delivery_id = DeliveryId,
                                    outgoing_unsettled_map = Unsettled}) ->
     Unsettled1 = case NoAck of
                      true ->
@@ -176,9 +172,13 @@ record_outgoing(DeliveryTag, NoAck, DefaultOutcome, NumTransfers,
                                          Unsettled)
                  end,
     Session#session{outgoing_unsettled_map = Unsettled1,
-                    next_delivery_id = serial_add(DeliveryId, 1),
-                    next_outgoing_id = serial_add(OutCount, NumTransfers),
-                    remote_incoming_window = RemoteIn - NumTransfers}.
+                    next_delivery_id = serial_add(DeliveryId, 1)}.
+
+record_transfers(NumTransfers,
+                 Session = #session{ remote_incoming_window = RemoteInWindow,
+                                     next_outgoing_id = NextOutId }) ->
+    Session#session{ remote_incoming_window = RemoteInWindow - NumTransfers,
+                     next_outgoing_id = serial_add(NextOutId, NumTransfers) }.
 
 %% We've been told that the fate of a delivery has been determined.
 %% Generally if the other side has not settled it, we will do so.  If
@@ -276,7 +276,6 @@ flow(#'v1_0.flow'{next_incoming_id = FlowNextIn0,
                   next_outgoing_id = {uint, FlowNextOut},
                   outgoing_window  = {uint, FlowOutWindow}},
      Session = #session{next_incoming_id     = LocalNextIn,
-                        outgoing_window      = LocalOutWindow,
                         next_outgoing_id     = LocalNextOut}) ->
     %% The far side may not have our begin{} with our next-transfer-id
     FlowNextIn = case FlowNextIn0 of
@@ -312,9 +311,7 @@ flow(#'v1_0.flow'{next_incoming_id = FlowNextIn0,
 %% An acknowledgement from the queue, which we'll get if we are
 %% using confirms.
 ack(#'basic.ack'{delivery_tag = DTag, multiple = Multiple},
-    Session = #session{incoming_unsettled_map = Unsettled,
-                       incoming_window        = InWindow,
-                       incoming_window_max    = InWindowMax}) ->
+    Session = #session{incoming_unsettled_map = Unsettled}) ->
     {DeliveryIds, Unsettled1} =
         case Multiple of
             true  -> acknowledgement_range(DTag, Unsettled);
