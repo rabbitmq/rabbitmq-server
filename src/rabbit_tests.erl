@@ -2333,11 +2333,11 @@ test_variable_queue_requeue(VQ0) ->
     {_MsgIds, VQ4} =
         rabbit_variable_queue:requeue(proplists:get_keys(AckMap -- SubMap),
                                       fun(X) -> X end, VQ3),
-     VQ5 = lists:foldl(fun (AckTag, VQN) ->
-                           {_MsgId, VQM} = rabbit_variable_queue:requeue(
-                                             [AckTag], fun(X) -> X end, VQN),
-                           VQM
-                       end, VQ4, proplists:get_keys(SubMap)),
+    VQ5 = lists:foldl(fun (AckTag, VQN) ->
+                          {_MsgId, VQM} = rabbit_variable_queue:requeue(
+                                            [AckTag], fun(X) -> X end, VQN),
+                          VQM
+                      end, VQ4, proplists:get_keys(SubMap)),
     VQ6 = lists:foldl(fun ({N, _}, VQN) ->
                           {{#basic_message{}, true, AckTag, QLen}, VQM} =
                                          rabbit_variable_queue:fetch(true, VQN),
