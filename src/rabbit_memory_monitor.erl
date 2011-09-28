@@ -62,9 +62,6 @@
 -define(SUM_INC_THRESHOLD, 0.95).
 -define(SUM_INC_AMOUNT, 1.0).
 
-%% If user disabled vm_memory_monitor, let's assume 1GB of memory we can use.
--define(MEMORY_SIZE_FOR_DISABLED_VMM, 1073741824).
-
 -define(EPSILON, 0.000001). %% less than this and we clamp to 0
 
 %%----------------------------------------------------------------------------
