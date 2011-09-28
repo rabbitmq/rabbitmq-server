@@ -179,8 +179,8 @@ ensure_source(Source = #'v1_0.source'{address       = Address,
 delivery(Deliver = #'basic.deliver'{delivery_tag = DeliveryTag,
                                     routing_key  = RKey},
                 Msg, FrameMax, Handle, Session,
-                Link = #outgoing_link{no_ack = NoAck,
-                                      default_outcome = DefaultOutcome}) ->
+                #outgoing_link{no_ack = NoAck,
+                               default_outcome = DefaultOutcome}) ->
     DeliveryId = rabbit_amqp1_0_session:next_delivery_id(Session),
     Session1 = rabbit_amqp1_0_session:record_outgoing(
                  DeliveryTag, NoAck, DefaultOutcome, Session),

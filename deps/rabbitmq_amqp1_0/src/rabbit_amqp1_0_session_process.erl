@@ -254,7 +254,7 @@ handle_control(Flow = #'v1_0.flow'{},
     State2 = run_buffer(State1),
     case Flow#'v1_0.flow'.handle of
         undefined ->
-            {noreply, State1};
+            {noreply, State2};
         Handle ->
             case get({in, Handle}) of
                 undefined ->
@@ -266,13 +266,13 @@ handle_control(Flow = #'v1_0.flow'{},
                         Out ->
                             {ok, Reply} = rabbit_amqp1_0_outgoing_link:flow(
                                             Out, Flow, BCh),
-                            reply(Reply, State1)
+                            reply(Reply, State2)
                     end;
                 _In ->
                     %% We're being told about available messages at
                     %% the sender.  Yawn.
                     %% TODO at least check transfer-count?
-                    {noreply, State1}
+                    {noreply, State2}
             end
     end;
 
