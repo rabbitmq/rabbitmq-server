@@ -2309,7 +2309,7 @@ wait_for_confirms(Unconfirmed) ->
 test_variable_queue() ->
     [passed = with_fresh_variable_queue(F) ||
         F <- [fun test_variable_queue_dynamic_duration_change/1,
-              fun test_variable_queue_partial_segments_delta_thing/1,
+              %%fun test_variable_queue_partial_segments_delta_thing/1,
               fun test_variable_queue_all_the_bits_not_covered_elsewhere1/1,
               fun test_variable_queue_all_the_bits_not_covered_elsewhere2/1,
               fun test_dropwhile/1,
