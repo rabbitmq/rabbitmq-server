@@ -784,7 +784,9 @@ gb_sets_maybe_insert(false, _Val, Set) -> Set;
 gb_sets_maybe_insert(true,  Val,  Set) -> gb_sets:add(Val, Set).
 
 format_queue(Q) ->
-    [format_msg_status(MsgStatus) || MsgStatus <- queue:to_list(Q)].
+    rabbit_misc:queue_fold(
+      fun (MsgStatus, Q1) -> queue:in(format_msg_status(MsgStatus), Q1) end,
+      queue:new()).
 
 format_msg_status(MsgStatus = #msg_status { msg = undefined }) -> MsgStatus;
 format_msg_status(MsgStatus) -> setelement(#msg_status.msg, MsgStatus, '_').
