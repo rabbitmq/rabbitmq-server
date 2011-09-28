@@ -1207,7 +1207,8 @@ send_to_new_1_0_session(Channel, Frame, State) ->
     {ok, ChSupPid, ChFrPid} =
         %% Note: the equivalent, start_channel is in channel_sup_sup
         rabbit_amqp1_0_session_sup_sup:start_session(
-          ChanSupSup, {Protocol, Sock, Channel, FrameMax,
+          %% NB subtract fixed frame header size
+          ChanSupSup, {Protocol, Sock, Channel, FrameMax - 8,
                        self(), User, VHost, Collector}),
     erlang:monitor(process, ChFrPid),
     put({channel, Channel}, {ch_fr_pid, ChFrPid}),
