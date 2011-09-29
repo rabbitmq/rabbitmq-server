@@ -264,6 +264,17 @@
 
 -record(rates, { egress, ingress, avg_egress, avg_ingress, timestamp }).
 
+-record(msg_status,
+        { seq_id,
+          msg_id,
+          msg,
+          is_persistent,
+          is_delivered,
+          msg_on_disk,
+          index_on_disk,
+          msg_props
+        }).
+
 -record(delta,
         { start_seq_id, %% start_seq_id is inclusive
           count,
@@ -283,7 +294,6 @@
 -define(TRANSIENT_MSG_STORE,  msg_store_transient).
 
 -include("rabbit.hrl").
--include("rabbit_backing_queue.hrl").
 
 %%----------------------------------------------------------------------------
 
