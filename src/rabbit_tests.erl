@@ -2319,33 +2319,35 @@ test_variable_queue() ->
     passed.
 
 test_variable_queue_requeue(VQ0) ->
-    Count = 20000,
+    Interval = 50,
+    Count = rabbit_queue_index:next_segment_boundary(0) + 2 * Interval,
+    Seq = lists:seq(1, Count),
     VQ1 = rabbit_variable_queue:set_ram_duration_target(0, VQ0),
-    VQ2 = variable_queue_publish(true, Count, VQ1),
-    {VQ3, AckMap} = lists:foldl(fun (N, {VQN, AckTags}) ->
-                                    {{#basic_message{}, false, AckTag, _}, VQM} =
-                                         rabbit_variable_queue:fetch(true, VQN),
-                                    {VQM, [{AckTag, N} | AckTags]}
-                                end, {VQ2, []}, lists:seq(0, Count - 1)),
-    SubMap = lists:filter(fun ({_AckTag, N}) ->
-                                 N rem 50 =:= 0
-                             end, AckMap),
-    {_MsgIds, VQ4} =
-        rabbit_variable_queue:requeue(proplists:get_keys(AckMap -- SubMap),
-                                      fun(X) -> X end, VQ3),
+    VQ2 = variable_queue_publish(false, Count, VQ1),
+    {VQ3, Acks} = lists:foldl(fun (_N, {VQN, AckTags}) ->
+                                  {{#basic_message{}, false, AckTag, _}, VQM} =
+                                      rabbit_variable_queue:fetch(true, VQN),
+                                  {VQM, [AckTag | AckTags]}
+                              end, {VQ2, []}, Seq),
+    Subset = lists:foldl(fun ({Ack, N}, Acc) when N rem Interval == 0 ->
+                             [Ack | Acc];
+                             (_, Acc) ->
+                             Acc
+                         end, [], lists:zip(Acks, Seq)),
+    {_MsgIds, VQ4} = rabbit_variable_queue:requeue(Acks -- Subset,
+                                                   fun(X) -> X end, VQ3),
     VQ5 = lists:foldl(fun (AckTag, VQN) ->
                           {_MsgId, VQM} = rabbit_variable_queue:requeue(
                                             [AckTag], fun(X) -> X end, VQN),
                           VQM
-                      end, VQ4, proplists:get_keys(SubMap)),
-    VQ6 = lists:foldl(fun ({N, _}, VQN) ->
-                          {{#basic_message{}, true, AckTag, QLen}, VQM} =
-                                         rabbit_variable_queue:fetch(true, VQN),
-                          N = proplists:get_value(AckTag, AckMap),
-                          QLen = Count - N - 1,
-                          VQM
-                      end, VQ5, lists:reverse(AckMap)),
-    VQ6.
+                      end, VQ4, Subset),
+    VQ6 = lists:foldl(fun (AckTag, VQa) ->
+                          {{#basic_message{}, true, AckTag, _}, VQb} =
+                                         rabbit_variable_queue:fetch(true, VQa),
+                          VQb
+                      end, VQ5, lists:reverse(Acks)),
+    {empty, VQ7} = rabbit_variable_queue:fetch(true, VQ6),
+    VQ7.
 
 test_variable_queue_ack_limiting(VQ0) ->
     %% start by sending in a bunch of messages
