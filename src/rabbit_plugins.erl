@@ -95,18 +95,15 @@ action(enable, ToEnable0, _Opts) ->
     end,
     AllPlugins = find_plugins(),
     Enabled = read_enabled_plugins(),
-    EnabledPlugins = lookup_plugins(Enabled, AllPlugins),
     ImplicitlyEnabled = calculate_required_plugins(Enabled, AllPlugins),
     ToEnable = [list_to_atom(Name) || Name <- ToEnable0],
-    ToEnablePlugins = lookup_plugins(ToEnable, AllPlugins),
-    Missing = ToEnable -- plugin_names(ToEnablePlugins),
+    Missing = ToEnable -- plugin_names(AllPlugins),
     case Missing of
         [] -> ok;
         _  -> io:format("Warning: the following plugins could not be "
                         "found: ~p~n", [Missing])
     end,
-    NewEnabled = plugin_names(merge_plugin_lists(EnabledPlugins,
-                                                 ToEnablePlugins)),
+    NewEnabled = lists:usort(Enabled ++ ToEnable),
     write_enabled_plugins(NewEnabled),
     case NewEnabled -- ImplicitlyEnabled of
         [] -> io:format("Plugin configuration unchanged.~n");
@@ -255,10 +252,11 @@ format_plugins(Pattern, Opts) ->
                      true ->
                           true
                   end],
+    Plugins1 = usort_plugins(Plugins),
     MaxWidth = lists:max([length(atom_to_list(Name)) ||
-                             #plugin{name = Name} <- Plugins] ++ [0]),
+                             #plugin{name = Name} <- Plugins1] ++ [0]),
     [ format_plugin(P, EnabledExplicitly, EnabledImplicitly, Verbose,
-                    MaxWidth) || P <- Plugins],
+                    MaxWidth) || P <- Plugins1],
     ok.
 
 format_plugin(#plugin{name = Name, version = Version,
@@ -287,21 +285,6 @@ format_plugin(#plugin{name = Name, version = Version,
 
 usort_plugins(Plugins) ->
     lists:usort(fun plugins_cmp/2, Plugins).
-
-%% Merge two plugin lists.  In case of duplicates, only keep highest
-%% version.
-merge_plugin_lists(Ps1, Ps2) ->
-    filter_duplicates(usort_plugins(Ps1 ++ Ps2)).
-
-filter_duplicates([P1 = #plugin{name = N, version = V1},
-                   P2 = #plugin{name = N, version = V2} | Ps]) ->
-    if V1 < V2 -> filter_duplicates([P2 | Ps]);
-       true    -> filter_duplicates([P1 | Ps])
-    end;
-filter_duplicates([P | Ps]) ->
-    [P | filter_duplicates(Ps)];
-filter_duplicates(Ps) ->
-    Ps.
 
 plugins_cmp(#plugin{name = N1, version = V1},
             #plugin{name = N2, version = V2}) ->
