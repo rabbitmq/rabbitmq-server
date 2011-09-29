@@ -24,6 +24,16 @@
 
 -include("rabbit.hrl").
 
+%%----------------------------------------------------------------------------
+
+-ifdef(use_specs).
+
+-spec(start_link/2 :: (atom(), mfa()) -> rabbit_types:ok_pid_or_error()).
+
+-endif.
+
+%%----------------------------------------------------------------------------
+
 start_link(Name, {_M, _F, _A} = Fun) ->
     supervisor:start_link({local, Name}, ?MODULE, [Fun]).
 

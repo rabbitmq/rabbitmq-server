@@ -115,7 +115,7 @@ ensure_backup_removed() ->
     end.
 
 remove_backup() ->
-    ok = rabbit_misc:recursive_delete([backup_dir()]),
+    ok = rabbit_file:recursive_delete([backup_dir()]),
     info("upgrades: Mnesia backup removed~n", []).
 
 maybe_upgrade_mnesia() ->
@@ -228,13 +228,7 @@ secondary_upgrade(AllNodes) ->
     ok.
 
 nodes_running(Nodes) ->
-    [N || N <- Nodes, node_running(N)].
-
-node_running(Node) ->
-    case rpc:call(Node, application, which_applications, []) of
-        {badrpc, _} -> false;
-        Apps        -> lists:keysearch(rabbit, 1, Apps) =/= false
-    end.
+    [N || N <- Nodes, rabbit:is_running(N)].
 
 %% -------------------------------------------------------------------
 
@@ -255,7 +249,7 @@ maybe_upgrade_local() ->
 %% -------------------------------------------------------------------
 
 apply_upgrades(Scope, Upgrades, Fun) ->
-    ok = rabbit_misc:lock_file(lock_filename()),
+    ok = rabbit_file:lock_file(lock_filename()),
     info("~s upgrades: ~w to apply~n", [Scope, length(Upgrades)]),
     rabbit_misc:ensure_ok(mnesia:start(), cannot_start_mnesia),
     Fun(),

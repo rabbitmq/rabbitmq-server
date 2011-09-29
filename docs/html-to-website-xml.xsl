@@ -6,7 +6,7 @@
 
 <xsl:param name="original"/>
 
-<xsl:output method="xml" doctype-public="bug in xslt processor requires fake doctype" doctype-system="otherwise css isn't included" />
+<xsl:output method="xml" />
 
 <xsl:template match="*"/>
 

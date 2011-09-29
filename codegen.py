@@ -371,6 +371,8 @@ def genErl(spec):
         classIds.add(m.klass.index)
     print prettyType("amqp_class_id()",
                      ["%i" % ci for ci in classIds])
+    print prettyType("amqp_class_name()",
+                     ["%s" % c.erlangName() for c in spec.allClasses()])
     print "-endif. % use_specs"
 
     print """
@@ -378,6 +380,7 @@ def genErl(spec):
 -ifdef(use_specs).
 -spec(version/0 :: () -> {non_neg_integer(), non_neg_integer(), non_neg_integer()}).
 -spec(lookup_method_name/1 :: (amqp_method()) -> amqp_method_name()).
+-spec(lookup_class_name/1 :: (amqp_class_id()) -> amqp_class_name()).
 -spec(method_id/1 :: (amqp_method_name()) -> amqp_method()).
 -spec(method_has_content/1 :: (amqp_method_name()) -> boolean()).
 -spec(is_method_synchronous/1 :: (amqp_method_record()) -> boolean()).

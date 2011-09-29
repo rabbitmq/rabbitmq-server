@@ -25,6 +25,14 @@
 
 -record(state, {sock, on_startup, on_shutdown, label}).
 
+%%----------------------------------------------------------------------------
+
+-ifdef(use_specs).
+-spec(start_link/8 ::
+        (gen_tcp:ip_address(), integer(), rabbit_types:infos(), integer(),
+         atom(), mfa(), mfa(), string()) -> rabbit_types:ok_pid_or_error()).
+-endif.
+
 %%--------------------------------------------------------------------
 
 start_link(IPAddress, Port, SocketOpts,

@@ -110,17 +110,13 @@ internal_check_user_login(Username, Fun) ->
             Refused
     end.
 
-check_vhost_access(#user{username = Username}, VHost) ->
-    %% TODO: use dirty ops instead
-    rabbit_misc:execute_mnesia_transaction(
-      fun () ->
-              case mnesia:read({rabbit_user_permission,
-                                #user_vhost{username     = Username,
-                                            virtual_host = VHost}}) of
-                  []   -> false;
-                  [_R] -> true
-              end
-      end).
+check_vhost_access(#user{username = Username}, VHostPath) ->
+    case mnesia:dirty_read({rabbit_user_permission,
+                            #user_vhost{username     = Username,
+                                        virtual_host = VHostPath}}) of
+        []   -> false;
+        [_R] -> true
+    end.
 
 check_resource_access(#user{username = Username},
                       #resource{virtual_host = VHostPath, name = Name},
@@ -150,6 +146,7 @@ permission_index(read)      -> #permission.read.
 %% Manipulation of the user database
 
 add_user(Username, Password) ->
+    rabbit_log:info("Creating user '~s'~n", [Username]),
     R = rabbit_misc:execute_mnesia_transaction(
           fun () ->
                   case mnesia:wread({rabbit_user, Username}) of
@@ -165,10 +162,10 @@ add_user(Username, Password) ->
                           mnesia:abort({user_already_exists, Username})
                   end
           end),
-    rabbit_log:info("Created user ~p~n", [Username]),
     R.
 
 delete_user(Username) ->
+    rabbit_log:info("Deleting user '~s'~n", [Username]),
     R = rabbit_misc:execute_mnesia_transaction(
           rabbit_misc:with_user(
             Username,
@@ -185,13 +182,14 @@ delete_user(Username) ->
                                write)],
                     ok
             end)),
-    rabbit_log:info("Deleted user ~p~n", [Username]),
     R.
 
 change_password(Username, Password) ->
+    rabbit_log:info("Changing password for '~s'~n", [Username]),
     change_password_hash(Username, hash_password(Password)).
 
 clear_password(Username) ->
+    rabbit_log:info("Clearing password for '~s'~n", [Username]),
     change_password_hash(Username, <<"">>).
 
 change_password_hash(Username, PasswordHash) ->
@@ -199,7 +197,6 @@ change_password_hash(Username, PasswordHash) ->
                                       User#internal_user{
                                         password_hash = PasswordHash }
                               end),
-    rabbit_log:info("Changed password for user ~p~n", [Username]),
     R.
 
 hash_password(Cleartext) ->
@@ -221,11 +218,10 @@ salted_md5(Salt, Cleartext) ->
     erlang:md5(Salted).
 
 set_tags(Username, Tags) ->
+    rabbit_log:info("Setting user tags for user '~s' to ~p~n", [Username, Tags]),
     R = update_user(Username, fun(User) ->
                                       User#internal_user{tags = Tags}
                               end),
-    rabbit_log:info("Set user tags for user ~p to ~p~n",
-                    [Username, Tags]),
     R.
 
 update_user(Username, Fun) ->
@@ -255,6 +251,8 @@ validate_regexp(RegexpBin) ->
     end.
 
 set_permissions(Username, VHostPath, ConfigurePerm, WritePerm, ReadPerm) ->
+    rabbit_log:info("Setting permissions for '~s' in '~s' to '~s', '~s', '~s'~n",
+                    [Username, VHostPath, ConfigurePerm, WritePerm, ReadPerm]),
     lists:map(fun validate_regexp/1, [ConfigurePerm, WritePerm, ReadPerm]),
     rabbit_misc:execute_mnesia_transaction(
       rabbit_misc:with_user_and_vhost(

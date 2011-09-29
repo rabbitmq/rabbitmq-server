@@ -31,6 +31,7 @@
 
 -ifdef(use_specs).
 
+-spec(start_link/0 :: () -> rabbit_types:ok_pid_or_error()).
 -spec(rabbit_running_on/1 :: (node()) -> 'ok').
 -spec(notify_cluster/0 :: () -> 'ok').
 

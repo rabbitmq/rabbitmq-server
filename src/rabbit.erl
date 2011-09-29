@@ -18,7 +18,8 @@
 
 -behaviour(application).
 
--export([prepare/0, start/0, stop/0, stop_and_halt/0, status/0, environment/0,
+-export([prepare/0, start/0, stop/0, stop_and_halt/0, status/0,
+         is_running/0 , is_running/1, environment/0,
          rotate_logs/1, force_event_refresh/0]).
 
 -export([start/2, stop/1]).
@@ -196,12 +197,22 @@
                {os, {atom(), atom()}} |
                {erlang_version, string()} |
                {memory, any()}]).
+-spec(is_running/0 :: () -> boolean()).
+-spec(is_running/1 :: (node()) -> boolean()).
 -spec(environment/0 :: () -> [{atom() | term()}]).
 -spec(log_location/1 :: ('sasl' | 'kernel') -> log_location()).
 
 -spec(maybe_insert_default_data/0 :: () -> 'ok').
 -spec(boot_delegate/0 :: () -> 'ok').
 -spec(recover/0 :: () -> 'ok').
+
+-spec(start/2 :: ('normal',[]) ->
+		      {'error',
+		       {'erlang_version_too_old',
+			{'found',[any()]},
+			{'required',[any(),...]}}} |
+		      {'ok',pid()}).
+-spec(stop/1 :: (_) -> 'ok').
 
 -endif.
 
@@ -221,22 +232,32 @@ start() ->
     end.
 
 stop() ->
+    rabbit_log:info("Stopping Rabbit~n"),
     ok = rabbit_misc:stop_applications(application_load_order()).
 
 stop_and_halt() ->
     try
         stop()
     after
+        rabbit_misc:local_info_msg("Halting Erlang VM~n", []),
         init:stop()
     end,
     ok.
 
 status() ->
     [{pid, list_to_integer(os:getpid())},
-     {running_applications, application:which_applications()},
+     {running_applications, application:which_applications(infinity)},
      {os, os:type()},
      {erlang_version, erlang:system_info(system_version)},
      {memory, erlang:memory()}].
+
+is_running() -> is_running(node()).
+
+is_running(Node) ->
+    case rpc:call(Node, application, which_applications, [infinity]) of
+        {badrpc, _} -> false;
+        Apps        -> proplists:is_defined(rabbit, Apps)
+    end.
 
 environment() ->
     lists:keysort(
@@ -245,6 +266,7 @@ environment() ->
 
 rotate_logs(BinarySuffix) ->
     Suffix = binary_to_list(BinarySuffix),
+    rabbit_misc:local_info_msg("Rotating logs with suffix '~s'~n", [Suffix]),
     log_rotation_result(rotate_logs(log_location(kernel),
                                     Suffix,
                                     rabbit_error_logger_file_h),
@@ -442,20 +464,20 @@ insert_default_data() ->
 
 ensure_working_log_handlers() ->
     Handlers = gen_event:which_handlers(error_logger),
-    ok = ensure_working_log_handler(error_logger_file_h,
+    ok = ensure_working_log_handler(error_logger_tty_h,
                                     rabbit_error_logger_file_h,
                                     error_logger_tty_h,
                                     log_location(kernel),
                                     Handlers),
 
-    ok = ensure_working_log_handler(sasl_report_file_h,
+    ok = ensure_working_log_handler(sasl_report_tty_h,
                                     rabbit_sasl_report_file_h,
                                     sasl_report_tty_h,
                                     log_location(sasl),
                                     Handlers),
     ok.
 
-ensure_working_log_handler(OldFHandler, NewFHandler, TTYHandler,
+ensure_working_log_handler(OldHandler, NewHandler, TTYHandler,
                            LogLocation, Handlers) ->
     case LogLocation of
         undefined -> ok;
@@ -465,10 +487,10 @@ ensure_working_log_handler(OldFHandler, NewFHandler, TTYHandler,
                              throw({error, {cannot_log_to_tty,
                                             TTYHandler, not_installed}})
                      end;
-        _         -> case lists:member(NewFHandler, Handlers) of
+        _         -> case lists:member(NewHandler, Handlers) of
                          true  -> ok;
                          false -> case rotate_logs(LogLocation, "",
-                                                   OldFHandler, NewFHandler) of
+                                                   OldHandler, NewHandler) of
                                       ok -> ok;
                                       {error, Reason} ->
                                           throw({error, {cannot_log_to_file,
@@ -478,10 +500,10 @@ ensure_working_log_handler(OldFHandler, NewFHandler, TTYHandler,
     end.
 
 log_location(Type) ->
-    case application:get_env(Type, case Type of
-                                       kernel -> error_logger;
-                                       sasl   -> sasl_error_logger
-                                   end) of
+    case application:get_env(rabbit, case Type of
+                                         kernel -> error_logger;
+                                         sasl   -> sasl_error_logger
+                                     end) of
         {ok, {file, File}} -> File;
         {ok, false}        -> undefined;
         {ok, tty}          -> tty;
