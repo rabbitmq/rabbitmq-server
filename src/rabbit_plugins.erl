@@ -41,11 +41,9 @@
 %%----------------------------------------------------------------------------
 
 start() ->
-    {ok, [[EnabledPluginsFile|_]|_]} =
+    {ok, [[PluginsFile|_]|_]} =
         init:get_argument(enabled_plugins_file),
-    put(enabled_plugins_file, EnabledPluginsFile),
-    {ok, [[PluginsDistDir|_]|_]} = init:get_argument(plugins_dist_dir),
-    put(plugins_dist_dir, PluginsDistDir),
+    {ok, [[PluginsDir|_]|_]} = init:get_argument(plugins_dist_dir),
     {[Command0 | Args], Opts} =
         case rabbit_misc:get_options([{flag, ?VERBOSE_OPT},
                                       {flag, ?ENABLED_OPT},
@@ -56,7 +54,7 @@ start() ->
         end,
     Command = list_to_atom(Command0),
 
-    case catch action(Command, Args, Opts) of
+    case catch action(Command, Args, Opts, PluginsFile, PluginsDir) of
         ok ->
             rabbit_misc:quit(0);
         {'EXIT', {function_clause, [{?MODULE, action, _} | _]}} ->
@@ -83,18 +81,18 @@ usage() ->
 
 %%----------------------------------------------------------------------------
 
-action(list, [], Opts) ->
-    action(list, [".*"], Opts);
-action(list, [Pat], Opts) ->
-    format_plugins(Pat, Opts);
+action(list, [], Opts, PluginsFile, PluginsDir) ->
+    action(list, [".*"], Opts, PluginsFile, PluginsDir);
+action(list, [Pat], Opts, PluginsFile, PluginsDir) ->
+    format_plugins(Pat, Opts, PluginsFile, PluginsDir);
 
-action(enable, ToEnable0, _Opts) ->
+action(enable, ToEnable0, _Opts, PluginsFile, PluginsDir) ->
     case ToEnable0 of
         [] -> throw("Not enough arguments for 'enable'");
         _  -> ok
     end,
-    AllPlugins = find_plugins(),
-    Enabled = read_enabled_plugins(),
+    AllPlugins = find_plugins(PluginsDir),
+    Enabled = read_enabled_plugins(PluginsFile),
     ImplicitlyEnabled = calculate_required_plugins(Enabled, AllPlugins),
     ToEnable = [list_to_atom(Name) || Name <- ToEnable0],
     Missing = ToEnable -- plugin_names(AllPlugins),
@@ -104,7 +102,7 @@ action(enable, ToEnable0, _Opts) ->
                         "found: ~p~n", [Missing])
     end,
     NewEnabled = lists:usort(Enabled ++ ToEnable),
-    write_enabled_plugins(NewEnabled),
+    write_enabled_plugins(PluginsFile, NewEnabled),
     case NewEnabled -- ImplicitlyEnabled of
         [] -> io:format("Plugin configuration unchanged.~n");
         _  -> NewImplicitlyEnabled =
@@ -115,14 +113,14 @@ action(enable, ToEnable0, _Opts) ->
                         "You should restart RabbitMQ.~n")
     end;
 
-action(disable, ToDisable0, _Opts) ->
+action(disable, ToDisable0, _Opts, PluginsFile, PluginsDir) ->
     case ToDisable0 of
         [] -> throw("Not enough arguments for 'disable'");
         _  -> ok
     end,
     ToDisable = [list_to_atom(Name) || Name <- ToDisable0],
-    Enabled = read_enabled_plugins(),
-    AllPlugins = find_plugins(),
+    Enabled = read_enabled_plugins(PluginsFile),
+    AllPlugins = find_plugins(PluginsDir),
     Missing = ToDisable -- plugin_names(AllPlugins),
     case Missing of
         [] -> ok;
@@ -140,7 +138,7 @@ action(disable, ToDisable0, _Opts) ->
                      calculate_required_plugins(NewEnabled, AllPlugins),
                  io:format("The following plugins have been disabled: ~p~n",
                            [ImplicitlyEnabled -- NewImplicitlyEnabled]),
-                 write_enabled_plugins(NewEnabled),
+                 write_enabled_plugins(PluginsFile, NewEnabled),
                  io:format("Plugin configuration has changed. "
                            "You should restart RabbitMQ.~n")
     end.
@@ -148,19 +146,17 @@ action(disable, ToDisable0, _Opts) ->
 %%----------------------------------------------------------------------------
 
 %% Get the #plugin{}s ready to be enabled.
-find_plugins() ->
-    find_plugins(get(plugins_dist_dir)).
-find_plugins(PluginsDistDir) ->
-    EZs = [{ez, EZ} || EZ <- filelib:wildcard("*.ez", PluginsDistDir)],
+find_plugins(PluginsDir) ->
+    EZs = [{ez, EZ} || EZ <- filelib:wildcard("*.ez", PluginsDir)],
     FreeApps = [{app, App} ||
-                   App <- filelib:wildcard("*/ebin/*.app", PluginsDistDir)],
+                   App <- filelib:wildcard("*/ebin/*.app", PluginsDir)],
     {Plugins, Problems} =
         lists:foldl(fun ({error, EZ, Reason}, {Plugins1, Problems1}) ->
                             {Plugins1, [{EZ, Reason} | Problems1]};
                         (Plugin = #plugin{}, {Plugins1, Problems1}) ->
                             {[Plugin|Plugins1], Problems1}
                     end, {[], []},
-                    [get_plugin_info(PluginsDistDir, Plug) ||
+                    [get_plugin_info(PluginsDir, Plug) ||
                         Plug <- EZs ++ FreeApps]),
     case Problems of
         [] -> ok;
@@ -229,13 +225,13 @@ parse_binary(Bin) ->
     end.
 
 %% Pretty print a list of plugins.
-format_plugins(Pattern, Opts) ->
+format_plugins(Pattern, Opts, PluginsFile, PluginsDir) ->
     Verbose = proplists:get_bool(?VERBOSE_OPT, Opts),
     OnlyEnabled = proplists:get_bool(?ENABLED_OPT, Opts),
     OnlyEnabledAll = proplists:get_bool(?ENABLED_ALL_OPT, Opts),
 
-    AvailablePlugins = find_plugins(),
-    EnabledExplicitly = read_enabled_plugins(),
+    AvailablePlugins = find_plugins(PluginsDir),
+    EnabledExplicitly = read_enabled_plugins(PluginsFile),
     EnabledImplicitly =
         calculate_required_plugins(EnabledExplicitly, AvailablePlugins) --
         EnabledExplicitly,
@@ -314,24 +310,20 @@ lookup_plugins(Names, AllPlugins) ->
     [P || P = #plugin{name = Name} <- AllPlugins, lists:member(Name, Names)].
 
 %% Read the enabled plugin names from disk.
-read_enabled_plugins() ->
-    read_enabled_plugins(get(enabled_plugins_file)).
-
-read_enabled_plugins(FileName) ->
-    case rabbit_file:read_term_file(FileName) of
+read_enabled_plugins(PluginsFile) ->
+    case rabbit_file:read_term_file(PluginsFile) of
         {ok, [Plugins]} -> Plugins;
         {error, enoent} -> [];
         {error, Reason} -> throw({error, {cannot_read_enabled_plugins_file,
-                                          FileName, Reason}})
+                                          PluginsFile, Reason}})
     end.
 
 %% Write the enabled plugin names on disk.
-write_enabled_plugins(Plugins) ->
-    FileName = get(enabled_plugins_file),
-    case rabbit_file:write_term_file(FileName, [Plugins]) of
+write_enabled_plugins(PluginsFile, Plugins) ->
+    case rabbit_file:write_term_file(PluginsFile, [Plugins]) of
         ok              -> ok;
         {error, Reason} -> throw({error, {cannot_write_enabled_plugins_file,
-                                          FileName, Reason}})
+                                          PluginsFile, Reason}})
     end.
 
 calculate_required_plugins(Sources, AllPlugins) ->
