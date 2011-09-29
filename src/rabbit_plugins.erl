@@ -307,15 +307,20 @@ plugins_cmp(#plugin{name = N1, version = V1},
             #plugin{name = N2, version = V2}) ->
     {N1, V1} =< {N2, V2}.
 
-%% Filter applications that can be loaded *right now*.
+%% Filter out applications that can be loaded *right now*.
 filter_applications(Applications) ->
     [Application || Application <- Applications,
-                    case application:load(Application) of
-                        {error, {already_loaded, _}} -> false;
-                        ok -> application:unload(Application),
-                              false;
-                        _  -> true
-                    end].
+                    not is_available_app(Application)].
+
+%% Return whether is application is already available (and hence
+%% doesn't need enabling).
+is_available_app(Application) ->
+    case application:load(Application) of
+        {error, {already_loaded, _}} -> true;
+        ok                           -> application:unload(Application),
+                                        true;
+        _                            -> false
+    end.
 
 %% Return the names of the given plugins.
 plugin_names(Plugins) ->
