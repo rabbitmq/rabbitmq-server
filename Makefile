@@ -58,7 +58,7 @@ ERLC_OPTS=-I $(INCLUDE_DIR) -o $(EBIN_DIR) -Wall -v +debug_info $(call boolean_m
 
 VERSION=0.0.0
 PLUGINS_SRC_DIR?=$(shell [ -d "plugins-src" ] && echo "plugins-src" || echo )
-PLUGINS_DIST_DIR=plugins
+PLUGINS_DIR=plugins
 TARBALL_NAME=rabbitmq-server-$(VERSION)
 TARGET_SRC_DIR=dist/$(TARBALL_NAME)
 
@@ -108,10 +108,10 @@ ifneq "$(PLUGINS_SRC_DIR)" ""
 plugins:
 	[ -d "$(PLUGINS_SRC_DIR)" ] || { echo "No plugins source distribution found (try linking public-umbrella to $(PLUGINS_SRC_DIR)"; false; }
 	[ -d "$(PLUGINS_SRC_DIR)/rabbitmq-server" ] || ln -s "$(CURDIR)" "$(PLUGINS_SRC_DIR)/rabbitmq-server"
-	mkdir -p $(PLUGINS_DIST_DIR)
-	PLUGINS_SRC_DIR="" $(MAKE) -C "$(PLUGINS_SRC_DIR)" plugins-dist PLUGINS_DIST_DIR="$(CURDIR)/$(PLUGINS_DIST_DIR)" VERSION=$(VERSION)
-	echo "Put your EZs here and use rabbitmq-plugins to enable them." > $(PLUGINS_DIST_DIR)/README
-	rm -f $(PLUGINS_DIST_DIR)/rabbit_common*.ez
+	mkdir -p $(PLUGINS_DIR)
+	PLUGINS_SRC_DIR="" $(MAKE) -C "$(PLUGINS_SRC_DIR)" plugins-dist PLUGINS_DIST_DIR="$(CURDIR)/$(PLUGINS_DIR)" VERSION=$(VERSION)
+	echo "Put your EZs here and use rabbitmq-plugins to enable them." > $(PLUGINS_DIR)/README
+	rm -f $(PLUGINS_DIR)/rabbit_common*.ez
 else
 plugins:
 # Not building plugins
@@ -159,7 +159,7 @@ $(BASIC_PLT): $(BEAM_TARGETS)
 clean:
 	rm -f $(EBIN_DIR)/*.beam
 	rm -f $(EBIN_DIR)/rabbit.app $(EBIN_DIR)/rabbit.boot $(EBIN_DIR)/rabbit.script $(EBIN_DIR)/rabbit.rel
-	rm -f $(PLUGINS_DIST_DIR)/*.ez
+	rm -f $(PLUGINS_DIR)/*.ez
 	[ -d "$(PLUGINS_SRC_DIR)" ] && PLUGINS_SRC_DIR="" PRESERVE_CLONE_DIR=1 make -C $(PLUGINS_SRC_DIR) clean || true
 	rm -f $(INCLUDE_DIR)/rabbit_framing.hrl $(SOURCE_DIR)/rabbit_framing_amqp_*.erl codegen.pyc
 	rm -f $(DOCS_DIR)/*.[0-9].gz $(DOCS_DIR)/*.man.xml $(DOCS_DIR)/*.erl $(USAGES_ERL)
@@ -309,8 +309,8 @@ install_bin: all install_dirs
 		[ -e $(SBIN_DIR)/$$script ] || ln -s $(SCRIPTS_REL_PATH)/$$script $(SBIN_DIR)/$$script; \
 	done
 
-	mkdir -p $(TARGET_DIR)/$(PLUGINS_DIST_DIR)
-	[ -d "$(PLUGINS_DIST_DIR)" ] && cp $(PLUGINS_DIST_DIR)/*.ez $(TARGET_DIR)/$(PLUGINS_DIST_DIR) || true
+	mkdir -p $(TARGET_DIR)/$(PLUGINS_DIR)
+	[ -d "$(PLUGINS_DIR)" ] && cp $(PLUGINS_DIR)/*.ez $(TARGET_DIR)/$(PLUGINS_DIR) || true
 
 install_docs: docs_all install_dirs
 	for section in 1 5; do \

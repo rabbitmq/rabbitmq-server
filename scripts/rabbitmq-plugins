@@ -21,7 +21,7 @@ ENABLED_PLUGINS_FILE=/etc/rabbitmq/enabled_plugins
 
 [ "x" = "x$RABBITMQ_ENABLED_PLUGINS_FILE" ] && RABBITMQ_ENABLED_PLUGINS_FILE=${ENABLED_PLUGINS_FILE}
 
-[ "x" = "x$RABBITMQ_PLUGINS_DIST_DIR" ] && RABBITMQ_PLUGINS_DIST_DIR="${RABBITMQ_HOME}/plugins"
+[ "x" = "x$RABBITMQ_PLUGINS_DIR" ] && RABBITMQ_PLUGINS_DIR="${RABBITMQ_HOME}/plugins"
 
 exec erl \
     -pa "${RABBITMQ_HOME}/ebin" \
@@ -30,5 +30,5 @@ exec erl \
     -sname rabbitmq-plugins$$ \
     -s rabbit_plugins \
     -enabled_plugins_file "$RABBITMQ_ENABLED_PLUGINS_FILE" \
-    -plugins_dist_dir "$RABBITMQ_PLUGINS_DIST_DIR" \
+    -plugins_dist_dir "$RABBITMQ_PLUGINS_DIR" \
     -extra "$@"
