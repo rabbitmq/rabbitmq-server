@@ -2324,27 +2324,28 @@ test_variable_queue_requeue(VQ0) ->
     Seq = lists:seq(1, Count),
     VQ1 = rabbit_variable_queue:set_ram_duration_target(0, VQ0),
     VQ2 = variable_queue_publish(false, Count, VQ1),
-    {VQ3, Acks} = lists:foldl(fun (_N, {VQN, AckTags}) ->
-                                  {{#basic_message{}, false, AckTag, _}, VQM} =
-                                      rabbit_variable_queue:fetch(true, VQN),
-                                  {VQM, [AckTag | AckTags]}
-                              end, {VQ2, []}, Seq),
+    {VQ3, Acks} = lists:foldl(
+                    fun (_N, {VQN, AckTags}) ->
+                            {{#basic_message{}, false, AckTag, _}, VQM} =
+                                rabbit_variable_queue:fetch(true, VQN),
+                            {VQM, [AckTag | AckTags]}
+                    end, {VQ2, []}, Seq),
     Subset = lists:foldl(fun ({Ack, N}, Acc) when N rem Interval == 0 ->
-                             [Ack | Acc];
+                                 [Ack | Acc];
                              (_, Acc) ->
-                             Acc
+                                 Acc
                          end, [], lists:zip(Acks, Seq)),
     {_MsgIds, VQ4} = rabbit_variable_queue:requeue(Acks -- Subset,
                                                    fun(X) -> X end, VQ3),
     VQ5 = lists:foldl(fun (AckTag, VQN) ->
-                          {_MsgId, VQM} = rabbit_variable_queue:requeue(
-                                            [AckTag], fun(X) -> X end, VQN),
-                          VQM
+                              {_MsgId, VQM} = rabbit_variable_queue:requeue(
+                                                [AckTag], fun(X) -> X end, VQN),
+                              VQM
                       end, VQ4, Subset),
     VQ6 = lists:foldl(fun (AckTag, VQa) ->
-                          {{#basic_message{}, true, AckTag, _}, VQb} =
-                                         rabbit_variable_queue:fetch(true, VQa),
-                          VQb
+                              {{#basic_message{}, true, AckTag, _}, VQb} =
+                                  rabbit_variable_queue:fetch(true, VQa),
+                              VQb
                       end, VQ5, lists:reverse(Acks)),
     {empty, VQ7} = rabbit_variable_queue:fetch(true, VQ6),
     VQ7.
