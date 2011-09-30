@@ -1414,6 +1414,8 @@ send_nacks(MXs, State = #ch{tx_status = none}) ->
 send_nacks(_, State) ->
     maybe_complete_tx(State#ch{tx_status = failed}).
 
+send_confirms(State = #ch{tx_status = none, confirmed = []}) ->
+    State;
 send_confirms(State = #ch{tx_status = none, confirmed = C}) ->
     {MsgSeqNos, State1} =
         lists:foldl(fun ({MsgSeqNo, ExchangeName}, {MSNs, State0}) ->
