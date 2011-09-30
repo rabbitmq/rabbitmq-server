@@ -27,8 +27,9 @@
 -define(TIMEOUT_LIMIT, 100).
 
 -define(RECORD_INDEX(Key, Record),
-    proplists:get_value(Key, lists:zip(
-       record_info(fields, Record), lists:seq(2, record_info(size, Record))))).
+        proplists:get_value(
+          Key, lists:zip(record_info(fields, Record),
+                         lists:seq(2, record_info(size, Record))))).
 
 -export([initial_state/0, command/1, precondition/2, postcondition/3,
          next_state/3]).
@@ -54,7 +55,7 @@ initial_state() ->
 
 prop_backing_queue_test() ->
     ?FORALL(Cmds, commands(?MODULE, initial_state()),
-        backing_queue_test(Cmds)).
+            backing_queue_test(Cmds)).
 
 backing_queue_test(Cmds) ->
     {ok, FileSizeLimit} =
@@ -75,8 +76,8 @@ backing_queue_test(Cmds) ->
 
     ?BQMOD:delete_and_terminate(shutdown, BQ),
     ?WHENFAIL(
-        io:format("Result: ~p~n", [Res]),
-        aggregate(command_names(Cmds), Res =:= ok)).
+       io:format("Result: ~p~n", [Res]),
+       aggregate(command_names(Cmds), Res =:= ok)).
 
 %% Commands
 
@@ -103,20 +104,20 @@ command(S) ->
 
 qc_publish(#state{bqstate = BQ}) ->
     {call, ?BQMOD, publish,
-      [qc_message(),
-       #message_properties{needs_confirming = frequency([{1,  true},
-                                                         {20, false}]),
-                           expiry = oneof([undefined | lists:seq(1, 10)])},
-       self(), BQ]}.
+     [qc_message(),
+      #message_properties{needs_confirming = frequency([{1,  true},
+                                                        {20, false}]),
+                          expiry = oneof([undefined | lists:seq(1, 10)])},
+      self(), BQ]}.
 
 qc_publish_multiple(#state{bqstate = BQ}) ->
     {call, ?MODULE, publish_multiple,
-      [qc_message(), #message_properties{}, BQ,
-       resize(?QUEUE_MAXLEN, pos_integer())]}.
+     [qc_message(), #message_properties{}, BQ,
+      resize(?QUEUE_MAXLEN, pos_integer())]}.
 
 qc_publish_delivered(#state{bqstate = BQ}) ->
     {call, ?BQMOD, publish_delivered,
-      [boolean(), qc_message(), #message_properties{}, self(), BQ]}.
+     [boolean(), qc_message(), #message_properties{}, self(), BQ]}.
 
 qc_fetch(#state{bqstate = BQ}) ->
     {call, ?BQMOD, fetch, [boolean(), BQ]}.
@@ -126,11 +127,11 @@ qc_ack(#state{bqstate = BQ, acks = Acks}) ->
 
 qc_requeue(#state{bqstate = BQ, acks = Acks}) ->
     {call, ?BQMOD, requeue,
-      [rand_choice(orddict:fetch_keys(Acks)), fun(MsgOpts) -> MsgOpts end, BQ]}.
+     [rand_choice(orddict:fetch_keys(Acks)), fun(MsgOpts) -> MsgOpts end, BQ]}.
 
 qc_set_ram_duration_target(#state{bqstate = BQ}) ->
     {call, ?BQMOD, set_ram_duration_target,
-      [oneof([0, 1, 2, resize(1000, pos_integer()), infinity]), BQ]}.
+     [oneof([0, 1, 2, resize(1000, pos_integer()), infinity]), BQ]}.
 
 qc_ram_duration(#state{bqstate = BQ}) ->
     {call, ?BQMOD, ram_duration, [BQ]}.
@@ -153,7 +154,7 @@ qc_purge(#state{bqstate = BQ}) ->
 %% Preconditions
 
 precondition(#state{acks = Acks}, {call, ?BQMOD, Fun, _Arg})
-    when Fun =:= ack; Fun =:= requeue ->
+  when Fun =:= ack; Fun =:= requeue ->
     orddict:size(Acks) > 0;
 precondition(#state{messages = Messages},
              {call, ?BQMOD, publish_delivered, _Arg}) ->
@@ -172,7 +173,7 @@ next_state(S, BQ, {call, ?BQMOD, publish, [Msg, MsgProps, _Pid, _BQ]}) ->
     MsgId = {call, erlang, element, [?RECORD_INDEX(id, basic_message), Msg]},
     NeedsConfirm =
         {call, erlang, element,
-            [?RECORD_INDEX(needs_confirming, message_properties), MsgProps]},
+         [?RECORD_INDEX(needs_confirming, message_properties), MsgProps]},
     S#state{bqstate  = BQ,
             len      = Len + 1,
             messages = queue:in({MsgProps, Msg}, Messages),
@@ -184,7 +185,7 @@ next_state(S, BQ, {call, ?BQMOD, publish, [Msg, MsgProps, _Pid, _BQ]}) ->
 next_state(S, BQ, {call, _, publish_multiple, [Msg, MsgProps, _BQ, Count]}) ->
     #state{len = Len, messages = Messages} = S,
     Messages1 = repeat(Messages, fun(Msgs) ->
-                                    queue:in({MsgProps, Msg}, Msgs)
+                                         queue:in({MsgProps, Msg}, Msgs)
                                  end, Count),
     S#state{bqstate  = BQ,
             len      = Len + Count,
@@ -192,14 +193,14 @@ next_state(S, BQ, {call, _, publish_multiple, [Msg, MsgProps, _BQ, Count]}) ->
 
 next_state(S, Res,
            {call, ?BQMOD, publish_delivered,
-               [AckReq, Msg, MsgProps, _Pid, _BQ]}) ->
+            [AckReq, Msg, MsgProps, _Pid, _BQ]}) ->
     #state{confirms = Confirms, acks = Acks} = S,
     AckTag = {call, erlang, element, [1, Res]},
     BQ1    = {call, erlang, element, [2, Res]},
     MsgId  = {call, erlang, element, [?RECORD_INDEX(id, basic_message), Msg]},
     NeedsConfirm =
         {call, erlang, element,
-            [?RECORD_INDEX(needs_confirming, message_properties), MsgProps]},
+         [?RECORD_INDEX(needs_confirming, message_properties), MsgProps]},
     S#state{bqstate  = BQ1,
             confirms = case eval(NeedsConfirm) of
                            true -> gb_sets:add(MsgId, Confirms);
@@ -227,7 +228,7 @@ next_state(S, Res, {call, ?BQMOD, fetch, [AckReq, _BQ]}) ->
                     S2#state{acks = orddict:append(AckTag, MsgProp_Msg, Acks)};
                 false ->
                     S2
-           end
+            end
     end;
 
 next_state(S, Res, {call, ?BQMOD, ack, [AcksArg, _BQ]}) ->
@@ -240,7 +241,7 @@ next_state(S, Res, {call, ?BQMOD, requeue, [AcksArg, _F, _V]}) ->
     #state{len = Len, messages = Messages, acks = AcksState} = S,
     BQ1 = {call, erlang, element, [2, Res]},
     RequeueMsgs = lists:append([orddict:fetch(Key, AcksState) ||
-                                Key <- AcksArg]),
+                                   Key <- AcksArg]),
     S#state{bqstate  = BQ1,
             len      = Len + length(RequeueMsgs),
             messages = queue:join(Messages, queue:from_list(RequeueMsgs)),
@@ -280,9 +281,9 @@ postcondition(S, {call, ?BQMOD, fetch, _Args}, Res) ->
         {{MsgFetched, _IsDelivered, AckTag, RemainingLen}, _BQ} ->
             {_MsgProps, Msg} = queue:head(Messages),
             MsgFetched =:= Msg andalso
-            not orddict:is_key(AckTag, Acks) andalso
-            not gb_sets:is_element(AckTag, Confrms) andalso
-            RemainingLen =:= Len - 1;
+                not orddict:is_key(AckTag, Acks) andalso
+                not gb_sets:is_element(AckTag, Confrms) andalso
+                RemainingLen =:= Len - 1;
         {empty, _BQ} ->
             Len =:= 0
     end;
@@ -290,37 +291,32 @@ postcondition(S, {call, ?BQMOD, fetch, _Args}, Res) ->
 postcondition(S, {call, ?BQMOD, publish_delivered, _Args}, {AckTag, _BQ}) ->
     #state{acks = Acks, confirms = Confrms} = S,
     not orddict:is_key(AckTag, Acks) andalso
-    not gb_sets:is_element(AckTag, Confrms);
+        not gb_sets:is_element(AckTag, Confrms);
 
 postcondition(#state{len = Len}, {call, ?BQMOD, purge, _Args}, Res) ->
     {PurgeCount, _BQ} = Res,
     Len =:= PurgeCount;
 
-postcondition(#state{len = Len},
-              {call, ?BQMOD, is_empty, _Args}, Res) ->
+postcondition(#state{len = Len}, {call, ?BQMOD, is_empty, _Args}, Res) ->
     (Len =:= 0) =:= Res;
 
 postcondition(S, {call, ?BQMOD, drain_confirmed, _Args}, Res) ->
     #state{confirms = Confirms} = S,
     {ReportedConfirmed, _BQ} = Res,
-    lists:all(fun (M) ->
-                  gb_sets:is_element(M, Confirms)
-              end, ReportedConfirmed);
+    lists:all(fun (M) -> gb_sets:is_element(M, Confirms) end,
+              ReportedConfirmed);
 
 postcondition(#state{bqstate = BQ, len = Len}, {call, _M, _F, _A}, _Res) ->
     ?BQMOD:len(BQ) =:= Len.
 
 %% Helpers
 
-repeat(Result, _Fun, 0) ->
-    Result;
-repeat(Result, Fun, Times) ->
-    repeat(Fun(Result), Fun, Times - 1).
+repeat(Result, _Fun, 0)    -> Result;
+repeat(Result, Fun, Times) -> repeat(Fun(Result), Fun, Times - 1).
 
 publish_multiple(Msg, MsgProps, BQ, Count) ->
-    repeat(BQ, fun(BQ1) ->
-                   ?BQMOD:publish(Msg, MsgProps, self(), BQ1)
-               end, Count).
+    repeat(BQ, fun(BQ1) -> ?BQMOD:publish(Msg, MsgProps, self(), BQ1) end,
+           Count).
 
 timeout(BQ, 0) ->
     BQ;
@@ -330,37 +326,30 @@ timeout(BQ, AtMost) ->
         _     -> timeout(?BQMOD:timeout(BQ), AtMost - 1)
     end.
 
-qc_message_payload() ->
-    ?SIZED(Size, resize(Size * Size, binary())).
+qc_message_payload() -> ?SIZED(Size, resize(Size * Size, binary())).
 
-qc_routing_key() ->
-    noshrink(binary(10)).
+qc_routing_key() -> noshrink(binary(10)).
 
-qc_delivery_mode() ->
-    oneof([1, 2]).
+qc_delivery_mode() -> oneof([1, 2]).
 
-qc_message() ->
-    qc_message(qc_delivery_mode()).
+qc_message() -> qc_message(qc_delivery_mode()).
 
 qc_message(DeliveryMode) ->
-    {call, rabbit_basic, message, [
-        qc_default_exchange(),
-        qc_routing_key(),
-        #'P_basic'{delivery_mode = DeliveryMode},
-        qc_message_payload()]}.
+    {call, rabbit_basic, message, [qc_default_exchange(),
+                                   qc_routing_key(),
+                                   #'P_basic'{delivery_mode = DeliveryMode},
+                                   qc_message_payload()]}.
 
 qc_default_exchange() ->
     {call, rabbit_misc, r, [<<>>, exchange, <<>>]}.
 
 qc_variable_queue_init(Q) ->
     {call, ?BQMOD, init,
-        [Q, false, function(2, ok)]}.
+     [Q, false, function(2, ok)]}.
 
-qc_test_q() ->
-    {call, rabbit_misc, r, [<<"/">>, queue, noshrink(binary(16))]}.
+qc_test_q() -> {call, rabbit_misc, r, [<<"/">>, queue, noshrink(binary(16))]}.
 
-qc_test_queue() ->
-    qc_test_queue(boolean()).
+qc_test_queue() -> qc_test_queue(boolean()).
 
 qc_test_queue(Durable) ->
     #amqqueue{name        = qc_test_q(),
@@ -374,7 +363,7 @@ rand_choice(List) -> [lists:nth(random:uniform(length(List)), List)].
 
 dropfun(Props) ->
     Expiry = eval({call, erlang, element,
-                       [?RECORD_INDEX(expiry, message_properties), Props]}),
+                   [?RECORD_INDEX(expiry, message_properties), Props]}),
     Expiry =/= 1.
 
 drop_messages(Messages) ->
