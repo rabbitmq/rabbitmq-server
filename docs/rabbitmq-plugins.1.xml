@@ -55,11 +55,11 @@
     </para>
     <para>
       Some plugins depend on others to work
-      correctly. <command>rabbitmq-plugins</command> will traverse these
-      dependencies and enable all required plugins. Plugins listed on
+      correctly. <command>rabbitmq-plugins</command> traverses these
+      dependencies and enables all required plugins. Plugins listed on
       the <command>rabbitmq-plugins</command> command line are marked as
       explicitly enabled; dependent plugins are marked as implicitly
-      enabled. Implicitly enabled plugins will be automatically disabled again
+      enabled. Implicitly enabled plugins are automatically disabled again
       when they are no longer required.
     </para>
   </refsect1>
