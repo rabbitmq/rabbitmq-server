@@ -859,7 +859,7 @@ maybe_write_delivered(false, _SeqId, IndexState) ->
 maybe_write_delivered(true, SeqId, IndexState) ->
     rabbit_queue_index:deliver([SeqId], IndexState).
 
-betas_from_index_entries(List, TransientThreshold, PendingAcks, IndexState) ->
+betas_from_index_entries(List, TransientThreshold, PA, IndexState) ->
     {Filtered, Delivers, Acks} =
         lists:foldr(
           fun ({MsgId, SeqId, MsgProps, IsPersistent, IsDelivered},
@@ -868,11 +868,11 @@ betas_from_index_entries(List, TransientThreshold, PendingAcks, IndexState) ->
                       true  -> {Filtered1,
                                 cons_if(not IsDelivered, SeqId, Delivers1),
                                 [SeqId | Acks1]};
-                      false -> case dict:is_key(SeqId, PendingAcks) of
+                      false -> case dict:is_key(SeqId, PA) of
                                    false -> {[m(#msg_status {
-                                                  msg           = undefined,
-                                                  msg_id        = MsgId,
                                                   seq_id        = SeqId,
+                                                  msg_id        = MsgId,
+                                                  msg           = undefined,
                                                   is_persistent = IsPersistent,
                                                   is_delivered  = IsDelivered,
                                                   msg_on_disk   = true,
@@ -1241,10 +1241,10 @@ purge_pending_ack(KeepPersistent,
 
 accumulate_ack_init() -> {[], orddict:new(), []}.
 
-accumulate_ack(_SeqId, #msg_status { is_persistent = false, %% ASSERTIONS
+accumulate_ack(_SeqId, #msg_status { msg_id        = MsgId,
+                                     is_persistent = false, %% ASSERTIONS
                                      msg_on_disk   = false,
-                                     index_on_disk = false,
-                                     msg_id        = MsgId },
+                                     index_on_disk = false },
               {IndexOnDiskSeqIdsAcc, MsgIdsByStore, AllMsgIds}) ->
     {IndexOnDiskSeqIdsAcc, MsgIdsByStore, [MsgId | AllMsgIds]};
 accumulate_ack(SeqId, {IsPersistent, MsgId, _MsgProps, IndexOnDisk},
@@ -1726,7 +1726,7 @@ maybe_push_alphas_to_betas(Generator, Consumer, Quota, Q, State) ->
                 maybe_write_to_disk(true, false, MsgStatus, State),
             MsgStatus2 = m(MsgStatus1 #msg_status { msg = undefined }),
             RamIndexCount1 = RamIndexCount + one_if(not IndexOnDisk),
-            State2 = State1 #vqstate { ram_msg_count = RamMsgCount - 1,
+            State2 = State1 #vqstate { ram_msg_count   = RamMsgCount - 1,
                                        ram_index_count = RamIndexCount1 },
             maybe_push_alphas_to_betas(Generator, Consumer, Quota - 1, Qa,
                                        Consumer(MsgStatus2, Qa, State2))
