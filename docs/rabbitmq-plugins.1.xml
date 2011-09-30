@@ -34,7 +34,7 @@
 
   <refnamediv>
     <refname>rabbitmq-plugins</refname>
-    <refpurpose>command line tool for managing a RabbitMQ broker plugins</refpurpose>
+    <refpurpose>command line tool for managing RabbitMQ broker plugins</refpurpose>
   </refnamediv>
 
   <refsynopsisdiv>
