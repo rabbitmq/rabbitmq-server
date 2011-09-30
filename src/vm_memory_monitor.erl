@@ -111,7 +111,7 @@ init([MemFraction]) ->
     State = #state { timeout = ?DEFAULT_MEMORY_CHECK_INTERVAL,
                      timer = TRef,
                      alarmed = false},
-    {ok, internal_update(set_mem_limits(State, MemFraction))}.
+    {ok, set_mem_limits(State, MemFraction)}.
 
 handle_call(get_vm_memory_high_watermark, _From, State) ->
     {reply, State#state.memory_limit / State#state.total_memory, State};
@@ -175,8 +175,8 @@ set_mem_limits(State, MemFraction) ->
     MemLim = get_mem_limit(MemFraction, TotalMemory),
     error_logger:info_msg("Memory limit set to ~pMB of ~pMB total.~n",
                           [trunc(MemLim/?ONE_MB), trunc(TotalMemory/?ONE_MB)]),
-    State #state { total_memory = TotalMemory,
-                   memory_limit = MemLim }.
+    internal_update(State #state { total_memory = TotalMemory,
+                                   memory_limit = MemLim }).
 
 internal_update(State = #state { memory_limit = MemLimit,
                                  alarmed = Alarmed}) ->

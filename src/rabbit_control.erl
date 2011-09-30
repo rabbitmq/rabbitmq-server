@@ -91,6 +91,9 @@ start() ->
             print_error("invalid command '~s'",
                         [string:join([atom_to_list(Command) | Args], " ")]),
             usage();
+        {badarg, Reason} ->
+            print_error("invalid parameter: ~s ~p", [Reason, Args]),
+            usage();
         {error, Reason} ->
             print_error("~p", [Reason]),
             quit(2);
@@ -322,9 +325,13 @@ action(trace_off, Node, [], Opts, Inform) ->
     rpc_call(Node, rabbit_trace, stop, [list_to_binary(VHost)]);
 
 action(set_vm_memory_high_watermark, Node, [Arg], _Opts, Inform) ->
-    Frac = list_to_float("0" ++ Arg),
-    Inform("Setting memory threshhold on ~p to ~p", [Node, Frac]),
-    rpc_call(Node, vm_memory_monitor, set_vm_memory_high_watermark, [Frac]);
+    try list_to_float(Arg) of
+        Frac -> Inform("Setting memory threshhold on ~p to ~p", [Node, Frac]),
+                rpc_call(Node, vm_memory_monitor, set_vm_memory_high_watermark,
+                         [Frac])
+    catch
+        error:badarg = X -> {X, "invalid floating point format"}
+    end;
 
 action(set_permissions, Node, [Username, CPerm, WPerm, RPerm], Opts, Inform) ->
     VHost = proplists:get_value(?VHOST_OPT, Opts),

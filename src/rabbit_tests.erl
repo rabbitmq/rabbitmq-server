@@ -1252,6 +1252,11 @@ test_server_status() ->
     %% list consumers
     ok = control_action(list_consumers, []),
 
+    %% set vm memory high watermark
+    io:format("Expecting failure: "),
+    {badarg, _} = control_action(set_vm_memory_high_watermark, ["1"]),
+    ok = control_action(set_vm_memory_high_watermark, ["1.0"]),
+
     %% cleanup
     [{ok, _} = rabbit_amqqueue:delete(QR, false, false) || QR <- [Q, Q2]],
 
