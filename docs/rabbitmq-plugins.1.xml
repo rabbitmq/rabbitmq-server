@@ -54,7 +54,7 @@
       configuration directory.
     </para>
     <para>
-      Some plugins are dependent on others to work
+      Some plugins depend on others to work
       correctly. <command>rabbitmq-plugins</command> will traverse these
       dependencies and enable all required plugins. Plugins listed on
       the <command>rabbitmq-plugins</command> command line are marked as
