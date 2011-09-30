@@ -158,19 +158,18 @@
 %% to search through qi segments looking for messages that are yet to
 %% be acknowledged.
 %%
-%% Pending acks are recorded in memory either as the tuple {SeqId,
-%% MsgId, MsgProps} (tuple-form) or as the message itself (message-
-%% form). Acks for persistent messages are always stored in the tuple-
-%% form. Acks for transient messages are also stored in tuple-form if
-%% the message has been sent to disk as part of the memory reduction
-%% process. For transient messages that haven't already been written
-%% to disk, acks are stored in message-form.
+%% Pending acks are recorded in memory by storing the message itself.
+%% If the message has been sent to disk, we do not store the message
+%% content. During memory reduction, pending acks containing message
+%% content have that content removed and the corresponding messages
+%% are pushed out to disk.
 %%
-%% During memory reduction, acks stored in message-form are converted
-%% to tuple-form, and the corresponding messages are pushed out to
-%% disk.
+%% Messages from pending acks are returned to q4, q3 and delta during
+%% requeue, based on the limits of seq_id contained in each. Requeued
+%% messages retain their original seq_id, maintaining order
+%% when requeued.
 %%
-%% The order in which alphas are pushed to betas and message-form acks
+%% The order in which alphas are pushed to betas and pending acks
 %% are pushed to disk is determined dynamically. We always prefer to
 %% push messages for the source (alphas or acks) that is growing the
 %% fastest (with growth measured as avg. ingress - avg. egress). In
@@ -280,6 +279,8 @@
           count,
           end_seq_id    %% end_seq_id is exclusive
         }).
+
+-record(merge_funs, {new, join, out, in, publish}).
 
 %% When we discover, on publish, that we should write some indices to
 %% disk for some betas, the IO_BATCH_SIZE sets the number of betas
@@ -434,7 +435,7 @@ terminate(_Reason, State) ->
     State1 = #vqstate { persistent_count  = PCount,
                         index_state       = IndexState,
                         msg_store_clients = {MSCStateP, MSCStateT} } =
-        remove_pending_ack(true, State),
+        purge_pending_ack(true, State),
     PRef = case MSCStateP of
                undefined -> undefined;
                _         -> ok = rabbit_msg_store:client_terminate(MSCStateP),
@@ -450,12 +451,12 @@ terminate(_Reason, State) ->
 %% needs to delete everything that's been delivered and not ack'd.
 delete_and_terminate(_Reason, State) ->
     %% TODO: there is no need to interact with qi at all - which we do
-    %% as part of 'purge' and 'remove_pending_ack', other than
+    %% as part of 'purge' and 'purge_pending_ack', other than
     %% deleting it.
     {_PurgeCount, State1} = purge(State),
     State2 = #vqstate { index_state         = IndexState,
                         msg_store_clients   = {MSCStateP, MSCStateT} } =
-        remove_pending_ack(false, State1),
+        purge_pending_ack(false, State1),
     IndexState1 = rabbit_queue_index:delete_and_terminate(IndexState),
     case MSCStateP of
         undefined -> ok;
@@ -558,34 +559,51 @@ fetch(AckRequired, State) ->
             {Res, a(State3)}
     end.
 
+ack([], State) ->
+    {[], State};
 ack(AckTags, State) ->
-    {MsgIds, State1} = ack(fun msg_store_remove/3,
-                           fun (_, State0) -> State0 end,
-                           AckTags, State),
-    {MsgIds, a(State1)}.
+    {{IndexOnDiskSeqIds, MsgIdsByStore, AllMsgIds},
+     State1 = #vqstate { index_state       = IndexState,
+                         msg_store_clients = MSCState,
+                         persistent_count  = PCount,
+                         ack_out_counter   = AckOutCount }} =
+        lists:foldl(
+          fun (SeqId, {Acc, State2}) ->
+                  {MsgStatus, State3} = remove_pending_ack(SeqId, State2),
+                  {accumulate_ack(MsgStatus, Acc), State3}
+          end, {accumulate_ack_init(), State}, AckTags),
+    IndexState1 = rabbit_queue_index:ack(IndexOnDiskSeqIds, IndexState),
+    [ok = msg_store_remove(MSCState, IsPersistent, MsgIds)
+     || {IsPersistent, MsgIds} <- orddict:to_list(MsgIdsByStore)],
+    PCount1 = PCount - find_persistent_count(sum_msg_ids_by_store_to_len(
+                                               orddict:new(), MsgIdsByStore)),
+    {lists:reverse(AllMsgIds),
+     a(State1 #vqstate { index_state      = IndexState1,
+                         persistent_count = PCount1,
+                         ack_out_counter  = AckOutCount + length(AckTags) })}.
 
-requeue(AckTags, MsgPropsFun, State) ->
-    MsgPropsFun1 = fun (MsgProps) ->
-                           (MsgPropsFun(MsgProps)) #message_properties {
-                             needs_confirming = false }
-                   end,
-    {MsgIds, State1} =
-        ack(fun (_, _, _) -> ok end,
-            fun (#msg_status { msg = Msg, msg_props = MsgProps }, State1) ->
-                    {_SeqId, State2} = publish(Msg, MsgPropsFun1(MsgProps),
-                                               true, false, State1),
-                    State2;
-                ({IsPersistent, MsgId, MsgProps}, State1) ->
-                    #vqstate { msg_store_clients = MSCState } = State1,
-                    {{ok, Msg = #basic_message{}}, MSCState1} =
-                        msg_store_read(MSCState, IsPersistent, MsgId),
-                    State2 = State1 #vqstate { msg_store_clients = MSCState1 },
-                    {_SeqId, State3} = publish(Msg, MsgPropsFun1(MsgProps),
-                                               true, true, State2),
-                    State3
-            end,
-            AckTags, State),
-    {MsgIds, a(reduce_memory_use(State1))}.
+requeue(AckTags, MsgPropsFun, #vqstate { delta      = Delta,
+                                         q3         = Q3,
+                                         q4         = Q4,
+                                         in_counter = InCounter,
+                                         len        = Len } = State) ->
+    {SeqIds,  Q4a, MsgIds,  State1} = queue_merge(lists:sort(AckTags), Q4, [],
+                                                  beta_limit(Q3),
+                                                  alpha_funs(),
+                                                  MsgPropsFun, State),
+    {SeqIds1, Q3a, MsgIds1, State2} = queue_merge(SeqIds, Q3, MsgIds,
+                                                  delta_limit(Delta),
+                                                  beta_funs(),
+                                                  MsgPropsFun, State1),
+    {Delta1, MsgIds2, State3}       = delta_merge(SeqIds1, Delta, MsgIds1,
+                                                  MsgPropsFun, State2),
+    MsgCount = length(MsgIds2),
+    {MsgIds2, a(reduce_memory_use(
+                  State3 #vqstate { delta      = Delta1,
+                                    q3         = Q3a,
+                                    q4         = Q4a,
+                                    in_counter = InCounter + MsgCount,
+                                    len        = Len + MsgCount }))}.
 
 len(#vqstate { len = Len }) -> Len.
 
@@ -782,6 +800,8 @@ msg_status(IsPersistent, SeqId, Msg = #basic_message { id = MsgId },
                   msg_on_disk = false, index_on_disk = false,
                   msg_props = MsgProps }.
 
+trim_msg_status(MsgStatus) -> MsgStatus #msg_status { msg = undefined }.
+
 with_msg_store_state({MSCStateP, MSCStateT},  true, Fun) ->
     {Result, MSCStateP1} = Fun(MSCStateP),
     {Result, {MSCStateP1, MSCStateT}};
@@ -835,26 +855,30 @@ maybe_write_delivered(false, _SeqId, IndexState) ->
 maybe_write_delivered(true, SeqId, IndexState) ->
     rabbit_queue_index:deliver([SeqId], IndexState).
 
-betas_from_index_entries(List, TransientThreshold, IndexState) ->
+betas_from_index_entries(List, TransientThreshold, PA, IndexState) ->
     {Filtered, Delivers, Acks} =
         lists:foldr(
           fun ({MsgId, SeqId, MsgProps, IsPersistent, IsDelivered},
-               {Filtered1, Delivers1, Acks1}) ->
+               {Filtered1, Delivers1, Acks1} = Acc) ->
                   case SeqId < TransientThreshold andalso not IsPersistent of
                       true  -> {Filtered1,
                                 cons_if(not IsDelivered, SeqId, Delivers1),
                                 [SeqId | Acks1]};
-                      false -> {[m(#msg_status { msg           = undefined,
-                                                 msg_id        = MsgId,
-                                                 seq_id        = SeqId,
-                                                 is_persistent = IsPersistent,
-                                                 is_delivered  = IsDelivered,
-                                                 msg_on_disk   = true,
-                                                 index_on_disk = true,
-                                                 msg_props     = MsgProps
-                                               }) | Filtered1],
-                                Delivers1,
-                                Acks1}
+                      false -> case dict:is_key(SeqId, PA) of
+                                   false -> {[m(#msg_status {
+                                                  seq_id        = SeqId,
+                                                  msg_id        = MsgId,
+                                                  msg           = undefined,
+                                                  is_persistent = IsPersistent,
+                                                  is_delivered  = IsDelivered,
+                                                  msg_on_disk   = true,
+                                                  index_on_disk = true,
+                                                  msg_props     = MsgProps
+                                                }) | Filtered1],
+                                            Delivers1,
+                                            Acks1};
+                                   true  -> Acc
+                           end
                   end
           end, {[], [], []}, List),
     {bpqueue:from_list([{true, Filtered}]),
@@ -1015,11 +1039,10 @@ internal_fetch(AckRequired, MsgStatus = #msg_status {
           end,
     Ack = fun () -> rabbit_queue_index:ack([SeqId], IndexState1) end,
     IndexState2 =
-        case {AckRequired, MsgOnDisk, IndexOnDisk, IsPersistent} of
-            {false, true, false,     _} -> Rem(), IndexState1;
-            {false, true,  true,     _} -> Rem(), Ack();
-            { true, true,  true, false} -> Ack();
-            _                           -> IndexState1
+        case {AckRequired, MsgOnDisk, IndexOnDisk} of
+            {false, true, false} -> Rem(), IndexState1;
+            {false, true,  true} -> Rem(), Ack();
+            _                    -> IndexState1
         end,
 
     %% 3. If an ack is required, add something sensible to PA
@@ -1167,15 +1190,13 @@ maybe_write_to_disk(ForceMsg, ForceIndex, MsgStatus,
 
 record_pending_ack(#msg_status { seq_id        = SeqId,
                                  msg_id        = MsgId,
-                                 is_persistent = IsPersistent,
-                                 msg_on_disk   = MsgOnDisk,
-                                 msg_props     = MsgProps } = MsgStatus,
+                                 msg_on_disk   = MsgOnDisk } = MsgStatus,
                    State = #vqstate { pending_ack     = PA,
                                       ram_ack_index   = RAI,
                                       ack_in_counter  = AckInCount}) ->
     {AckEntry, RAI1} =
         case MsgOnDisk of
-            true  -> {{IsPersistent, MsgId, MsgProps}, RAI};
+            true  -> {m(trim_msg_status(MsgStatus)), RAI};
             false -> {MsgStatus, gb_trees:insert(SeqId, MsgId, RAI)}
         end,
     PA1 = dict:store(SeqId, AckEntry, PA),
@@ -1183,12 +1204,20 @@ record_pending_ack(#msg_status { seq_id        = SeqId,
                      ram_ack_index  = RAI1,
                      ack_in_counter = AckInCount + 1}.
 
-remove_pending_ack(KeepPersistent,
-                   State = #vqstate { pending_ack       = PA,
-                                      index_state       = IndexState,
-                                      msg_store_clients = MSCState }) ->
-    {PersistentSeqIds, MsgIdsByStore, _AllMsgIds} =
-        dict:fold(fun accumulate_ack/3, accumulate_ack_init(), PA),
+remove_pending_ack(SeqId, State = #vqstate { pending_ack   = PA,
+                                             ram_ack_index = RAI }) ->
+    {dict:fetch(SeqId, PA),
+     State #vqstate { pending_ack   = dict:erase(SeqId, PA),
+                      ram_ack_index = gb_trees:delete_any(SeqId, RAI) }}.
+
+purge_pending_ack(KeepPersistent,
+                  State = #vqstate { pending_ack       = PA,
+                                     index_state       = IndexState,
+                                     msg_store_clients = MSCState }) ->
+    {IndexOnDiskSeqIds, MsgIdsByStore, _AllMsgIds} =
+        dict:fold(fun (_SeqId, MsgStatus, Acc) ->
+                          accumulate_ack(MsgStatus, Acc)
+                  end, accumulate_ack_init(), PA),
     State1 = State #vqstate { pending_ack   = dict:new(),
                               ram_ack_index = gb_trees:empty() },
     case KeepPersistent of
@@ -1199,52 +1228,25 @@ remove_pending_ack(KeepPersistent,
                                     State1
                  end;
         false -> IndexState1 =
-                     rabbit_queue_index:ack(PersistentSeqIds, IndexState),
+                     rabbit_queue_index:ack(IndexOnDiskSeqIds, IndexState),
                  [ok = msg_store_remove(MSCState, IsPersistent, MsgIds)
                   || {IsPersistent, MsgIds} <- orddict:to_list(MsgIdsByStore)],
                  State1 #vqstate { index_state = IndexState1 }
     end.
 
-ack(_MsgStoreFun, _Fun, [], State) ->
-    {[], State};
-ack(MsgStoreFun, Fun, AckTags, State) ->
-    {{PersistentSeqIds, MsgIdsByStore, AllMsgIds},
-     State1 = #vqstate { index_state       = IndexState,
-                         msg_store_clients = MSCState,
-                         persistent_count  = PCount,
-                         ack_out_counter   = AckOutCount }} =
-        lists:foldl(
-          fun (SeqId, {Acc, State2 = #vqstate { pending_ack   = PA,
-                                                ram_ack_index = RAI }}) ->
-                  AckEntry = dict:fetch(SeqId, PA),
-                  {accumulate_ack(SeqId, AckEntry, Acc),
-                   Fun(AckEntry, State2 #vqstate {
-                                   pending_ack   = dict:erase(SeqId, PA),
-                                   ram_ack_index =
-                                       gb_trees:delete_any(SeqId, RAI)})}
-          end, {accumulate_ack_init(), State}, AckTags),
-    IndexState1 = rabbit_queue_index:ack(PersistentSeqIds, IndexState),
-    [ok = MsgStoreFun(MSCState, IsPersistent, MsgIds)
-     || {IsPersistent, MsgIds} <- orddict:to_list(MsgIdsByStore)],
-    PCount1 = PCount - find_persistent_count(sum_msg_ids_by_store_to_len(
-                                               orddict:new(), MsgIdsByStore)),
-    {lists:reverse(AllMsgIds),
-     State1 #vqstate { index_state      = IndexState1,
-                       persistent_count = PCount1,
-                       ack_out_counter  = AckOutCount + length(AckTags) }}.
-
 accumulate_ack_init() -> {[], orddict:new(), []}.
 
-accumulate_ack(_SeqId, #msg_status { is_persistent = false, %% ASSERTIONS
-                                     msg_on_disk   = false,
-                                     index_on_disk = false,
-                                     msg_id        = MsgId },
-              {PersistentSeqIdsAcc, MsgIdsByStore, AllMsgIds}) ->
-    {PersistentSeqIdsAcc, MsgIdsByStore, [MsgId | AllMsgIds]};
-accumulate_ack(SeqId, {IsPersistent, MsgId, _MsgProps},
-               {PersistentSeqIdsAcc, MsgIdsByStore, AllMsgIds}) ->
-    {cons_if(IsPersistent, SeqId, PersistentSeqIdsAcc),
-     rabbit_misc:orddict_cons(IsPersistent, MsgId, MsgIdsByStore),
+accumulate_ack(#msg_status { seq_id        = SeqId,
+                             msg_id        = MsgId,
+                             is_persistent = IsPersistent,
+                             msg_on_disk   = MsgOnDisk,
+                             index_on_disk = IndexOnDisk },
+               {IndexOnDiskSeqIdsAcc, MsgIdsByStore, AllMsgIds}) ->
+    {cons_if(IndexOnDisk, SeqId, IndexOnDiskSeqIdsAcc),
+     case MsgOnDisk of
+         true  -> rabbit_misc:orddict_cons(IsPersistent, MsgId, MsgIdsByStore);
+         false -> MsgIdsByStore
+     end,
      [MsgId | AllMsgIds]}.
 
 find_persistent_count(LensByStore) ->
@@ -1317,6 +1319,122 @@ msg_indices_written_to_disk(Callback, MsgIdSet) ->
                                        msg_indices_on_disk =
                                            gb_sets:union(MIOD, Confirmed) })
              end).
+
+%%----------------------------------------------------------------------------
+%% Internal plumbing for requeue
+%%----------------------------------------------------------------------------
+
+alpha_funs() ->
+    #merge_funs {
+         new     = fun queue:new/0,
+         join    = fun queue:join/2,
+         out     = fun queue:out/1,
+         in      = fun queue:in/2,
+         publish = fun (#msg_status { msg = undefined } = MsgStatus, State) ->
+                           read_msg(MsgStatus, State);
+                       (MsgStatus, #vqstate {
+                          ram_msg_count = RamMsgCount } = State) ->
+                           {MsgStatus, State #vqstate {
+                                         ram_msg_count = RamMsgCount + 1 }}
+                   end}.
+
+beta_funs() ->
+    #merge_funs {
+         new     = fun bpqueue:new/0,
+         join    = fun bpqueue:join/2,
+         out     = fun (Q) ->
+                           case bpqueue:out(Q) of
+                               {{value, _IndexOnDisk, MsgStatus}, Q1} ->
+                                   {{value, MsgStatus}, Q1};
+                               {empty, _Q1} = X ->
+                                   X
+                           end
+                   end,
+         in      = fun (#msg_status { index_on_disk = IOD } = MsgStatus, Q) ->
+                           bpqueue:in(IOD, MsgStatus, Q)
+                   end,
+         publish = fun (#msg_status { msg_on_disk = MsgOnDisk } = MsgStatus,
+                        State) ->
+                           {#msg_status { index_on_disk = IndexOnDisk,
+                                          msg           = Msg} = MsgStatus1,
+                            #vqstate { ram_index_count = RamIndexCount,
+                                       ram_msg_count   = RamMsgCount } =
+                                State1} =
+                               maybe_write_to_disk(not MsgOnDisk, false,
+                                                   MsgStatus, State),
+                           {MsgStatus1, State1 #vqstate {
+                                          ram_msg_count   = RamMsgCount +
+                                              one_if(Msg =/= undefined),
+                                          ram_index_count = RamIndexCount +
+                                              one_if(not IndexOnDisk) }}
+                   end}.
+
+%% Rebuild queue, inserting sequence ids to maintain ordering
+queue_merge(SeqIds, Q, MsgIds, Limit, #merge_funs { new = QNew } = Funs,
+            MsgPropsFun, State) ->
+    queue_merge(SeqIds, Q, QNew(), MsgIds, Limit, Funs, MsgPropsFun, State).
+
+queue_merge([SeqId | Rest] = SeqIds, Q, Front, MsgIds, Limit,
+            #merge_funs { out = QOut, in = QIn, publish = QPublish } = Funs,
+            MsgPropsFun, State)
+  when Limit == undefined orelse SeqId < Limit ->
+    case QOut(Q) of
+        {{value, #msg_status { seq_id = SeqIdQ } = MsgStatus}, Q1}
+          when SeqIdQ < SeqId ->
+            %% enqueue from the remaining queue
+            queue_merge(SeqIds, Q1, QIn(MsgStatus, Front), MsgIds,
+                        Limit, Funs, MsgPropsFun, State);
+        {_, _Q1} ->
+            %% enqueue from the remaining list of sequence ids
+            {MsgStatus, State1} = msg_from_pending_ack(SeqId, MsgPropsFun,
+                                                       State),
+            {#msg_status { msg_id = MsgId } = MsgStatus1, State2} =
+                QPublish(MsgStatus, State1),
+            queue_merge(Rest, Q, QIn(MsgStatus1, Front), [MsgId | MsgIds],
+                        Limit, Funs, MsgPropsFun, State2)
+    end;
+queue_merge(SeqIds, Q, Front, MsgIds, _Limit, #merge_funs { join = QJoin },
+            _MsgPropsFun, State) ->
+    {SeqIds, QJoin(Front, Q), MsgIds, State}.
+
+delta_merge([], Delta, MsgIds, _MsgPropsFun, State) ->
+    {Delta, MsgIds, State};
+delta_merge(SeqIds, #delta { start_seq_id = StartSeqId,
+                             count        = Count,
+                             end_seq_id   = EndSeqId} = Delta,
+            MsgIds, MsgPropsFun, State) ->
+    lists:foldl(fun (SeqId, {Delta0, MsgIds0, State0}) ->
+                        {#msg_status { msg_id        = MsgId,
+                                       index_on_disk = IndexOnDisk,
+                                       msg_on_disk   = MsgOnDisk} = MsgStatus,
+                         State1} =
+                            msg_from_pending_ack(SeqId, MsgPropsFun, State0),
+                        {_MsgStatus, State2} =
+                            maybe_write_to_disk(not MsgOnDisk, not IndexOnDisk,
+                                                MsgStatus, State1),
+                        {Delta0 #delta {
+                           start_seq_id = lists:min([SeqId, StartSeqId]),
+                           count        = Count + 1,
+                           end_seq_id   = lists:max([SeqId + 1, EndSeqId]) },
+                         [MsgId | MsgIds0], State2}
+                end, {Delta, MsgIds, State}, SeqIds).
+
+%% Mostly opposite of record_pending_ack/2
+msg_from_pending_ack(SeqId, MsgPropsFun, State) ->
+    {#msg_status { msg_props = MsgProps } = MsgStatus, State1} =
+        remove_pending_ack(SeqId, State),
+    {MsgStatus #msg_status {
+       msg_props = (MsgPropsFun(MsgProps)) #message_properties {
+                     needs_confirming = false } }, State1}.
+
+beta_limit(BPQ) ->
+    case bpqueue:out(BPQ) of
+        {{value, _Prefix, #msg_status { seq_id = SeqId }}, _BPQ} -> SeqId;
+        {empty, _BPQ}                                            -> undefined
+    end.
+
+delta_limit(?BLANK_DELTA_PATTERN(_X)) -> undefined;
+delta_limit(#delta { start_seq_id = StartSeqId }) -> StartSeqId.
 
 %%----------------------------------------------------------------------------
 %% Phase changes
@@ -1394,12 +1512,11 @@ limit_ram_acks(Quota, State = #vqstate { pending_ack   = PA,
             {Quota, State};
         false ->
             {SeqId, MsgId, RAI1} = gb_trees:take_largest(RAI),
-            MsgStatus = #msg_status {
-              msg_id        = MsgId, %% ASSERTION
-              is_persistent = false, %% ASSERTION
-              msg_props     = MsgProps } = dict:fetch(SeqId, PA),
-            {_, State1} = maybe_write_to_disk(true, false, MsgStatus, State),
-            PA1 = dict:store(SeqId, {false, MsgId, MsgProps}, PA),
+            MsgStatus = #msg_status { msg_id = MsgId, is_persistent = false} =
+                dict:fetch(SeqId, PA),
+            {MsgStatus1, State1} =
+                maybe_write_to_disk(true, false, MsgStatus, State),
+            PA1 = dict:store(SeqId, m(trim_msg_status(MsgStatus1)), PA),
             limit_ram_acks(Quota - 1,
                            State1 #vqstate { pending_ack   = PA1,
                                              ram_ack_index = RAI1 })
@@ -1505,6 +1622,7 @@ maybe_deltas_to_betas(State = #vqstate {
                         delta                = Delta,
                         q3                   = Q3,
                         index_state          = IndexState,
+                        pending_ack          = PA,
                         transient_threshold  = TransientThreshold }) ->
     #delta { start_seq_id = DeltaSeqId,
              count        = DeltaCount,
@@ -1515,7 +1633,7 @@ maybe_deltas_to_betas(State = #vqstate {
     {List, IndexState1} =
         rabbit_queue_index:read(DeltaSeqId, DeltaSeqId1, IndexState),
     {Q3a, IndexState2} =
-        betas_from_index_entries(List, TransientThreshold, IndexState1),
+        betas_from_index_entries(List, TransientThreshold, PA, IndexState1),
     State1 = State #vqstate { index_state = IndexState2 },
     case bpqueue:len(Q3a) of
         0 ->
@@ -1587,9 +1705,9 @@ maybe_push_alphas_to_betas(Generator, Consumer, Quota, Q, State) ->
              State1 = #vqstate { ram_msg_count   = RamMsgCount,
                                  ram_index_count = RamIndexCount }} =
                 maybe_write_to_disk(true, false, MsgStatus, State),
-            MsgStatus2 = m(MsgStatus1 #msg_status { msg = undefined }),
+            MsgStatus2 = m(trim_msg_status(MsgStatus1)),
             RamIndexCount1 = RamIndexCount + one_if(not IndexOnDisk),
-            State2 = State1 #vqstate { ram_msg_count = RamMsgCount - 1,
+            State2 = State1 #vqstate { ram_msg_count   = RamMsgCount - 1,
                                        ram_index_count = RamIndexCount1 },
             maybe_push_alphas_to_betas(Generator, Consumer, Quota - 1, Qa,
                                        Consumer(MsgStatus2, Qa, State2))
