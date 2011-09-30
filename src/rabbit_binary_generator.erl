@@ -122,10 +122,9 @@ build_content_frames(SizeAcc, FramesAcc, FragSizeRem, FragAcc,
 build_heartbeat_frame() ->
     create_frame(?FRAME_HEARTBEAT, 0, <<>>).
 
-create_frame(TypeInt, ChannelInt, PayloadBin) when is_binary(PayloadBin) ->
-    [<<TypeInt:8, ChannelInt:16, (size(PayloadBin)):32>>, PayloadBin, <<?FRAME_END>>];
 create_frame(TypeInt, ChannelInt, Payload) ->
-    create_frame(TypeInt, ChannelInt, list_to_binary(Payload)).
+    [<<TypeInt:8, ChannelInt:16, (iolist_size(Payload)):32>>, Payload,
+     ?FRAME_END].
 
 %% table_field_to_binary supports the AMQP 0-8/0-9 standard types, S,
 %% I, D, T and F, as well as the QPid extensions b, d, f, l, s, t, x,
