@@ -173,6 +173,12 @@ run-node: all
 		RABBITMQ_SERVER_START_ARGS="$(RABBITMQ_SERVER_START_ARGS)" \
 		./scripts/rabbitmq-server
 
+run-background-node: all
+	$(BASIC_SCRIPT_ENVIRONMENT_SETTINGS) \
+		RABBITMQ_NODE_ONLY=true \
+		RABBITMQ_SERVER_START_ARGS="$(RABBITMQ_SERVER_START_ARGS)" \
+		./scripts/rabbitmq-server
+
 run-tests: all
 	OUT=$$(echo "rabbit_tests:all_tests()." | $(ERL_CALL)) ; \
 	  echo $$OUT ; echo $$OUT | grep '^{ok, passed}$$' > /dev/null
@@ -180,14 +186,15 @@ run-tests: all
 run-qc: all
 	$(foreach MOD,$(QC_MODULES),./quickcheck $(RABBITMQ_NODENAME) $(MOD) $(QC_TRIALS))
 
-start-background-node:
-	$(BASIC_SCRIPT_ENVIRONMENT_SETTINGS) \
-		RABBITMQ_NODE_ONLY=true \
-		RABBITMQ_SERVER_START_ARGS="$(RABBITMQ_SERVER_START_ARGS) -detached" \
-		./scripts/rabbitmq-server; sleep 1
+start-background-node: all
+	-rm -f $(RABBITMQ_MNESIA_DIR).pid
+	mkdir -p $(RABBITMQ_MNESIA_DIR)
+	setsid sh -c "$(MAKE) run-background-node > $(RABBITMQ_MNESIA_DIR)/startup_log 2> $(RABBITMQ_MNESIA_DIR)/startup_err" &
+	sleep 1
 
 start-rabbit-on-node: all
 	echo "rabbit:start()." | $(ERL_CALL)
+	./scripts/rabbitmqctl -n $(RABBITMQ_NODENAME) wait $(RABBITMQ_MNESIA_DIR).pid
 
 stop-rabbit-on-node: all
 	echo "rabbit:stop()." | $(ERL_CALL)

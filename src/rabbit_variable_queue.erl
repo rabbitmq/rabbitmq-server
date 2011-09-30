@@ -411,16 +411,14 @@ init(#amqqueue { name = QueueName, durable = IsDurable }, false,
 init(#amqqueue { name = QueueName, durable = true }, true,
      AsyncCallback, MsgOnDiskFun, MsgIdxOnDiskFun) ->
     Terms = rabbit_queue_index:shutdown_terms(QueueName),
-    {PRef, TRef, Terms1} =
-        case [persistent_ref, transient_ref] -- proplists:get_keys(Terms) of
-            [] -> {proplists:get_value(persistent_ref, Terms),
-                   proplists:get_value(transient_ref, Terms),
-                   Terms};
-            _  -> {rabbit_guid:guid(), rabbit_guid:guid(), []}
+    {PRef, Terms1} =
+        case proplists:get_value(persistent_ref, Terms) of
+            undefined -> {rabbit_guid:guid(), []};
+            PRef1     -> {PRef1, Terms}
         end,
     PersistentClient = msg_store_client_init(?PERSISTENT_MSG_STORE, PRef,
                                              MsgOnDiskFun, AsyncCallback),
-    TransientClient  = msg_store_client_init(?TRANSIENT_MSG_STORE, TRef,
+    TransientClient  = msg_store_client_init(?TRANSIENT_MSG_STORE,
                                              undefined, AsyncCallback),
     {DeltaCount, IndexState} =
         rabbit_queue_index:recover(
@@ -443,11 +441,8 @@ terminate(_Reason, State) ->
                _         -> ok = rabbit_msg_store:client_terminate(MSCStateP),
                             rabbit_msg_store:client_ref(MSCStateP)
            end,
-    ok = rabbit_msg_store:client_terminate(MSCStateT),
-    TRef = rabbit_msg_store:client_ref(MSCStateT),
-    Terms = [{persistent_ref, PRef},
-             {transient_ref, TRef},
-             {persistent_count, PCount}],
+    ok = rabbit_msg_store:client_delete_and_terminate(MSCStateT),
+    Terms = [{persistent_ref, PRef}, {persistent_count, PCount}],
     a(State1 #vqstate { index_state       = rabbit_queue_index:terminate(
                                               Terms, IndexState),
                         msg_store_clients = undefined }).
