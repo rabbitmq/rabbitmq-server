@@ -164,6 +164,11 @@
 %% content have that content removed and the corresponding messages
 %% are pushed out to disk.
 %%
+%% Messages from pending acks are returned to q4, q3 and delta during
+%% requeue, based on the limits of seq_id contained in each. Requeued
+%% messages retain their original seq_id, maintaining order
+%% when requeued.
+%%
 %% The order in which alphas are pushed to betas and pending acks
 %% are pushed to disk is determined dynamically. We always prefer to
 %% push messages for the source (alphas or acks) that is growing the
