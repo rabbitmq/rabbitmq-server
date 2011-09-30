@@ -380,9 +380,8 @@ next_state(Mask, State) ->
                 end, State, [ensure_stats_timer, send_confirms] -- Mask).
 
 ensure_stats_timer(State = #ch{stats_timer = StatsTimer}) ->
-    ChPid = self(),
     State#ch{stats_timer = rabbit_event:ensure_stats_timer(
-                             StatsTimer, ChPid, emit_stats)}.
+                             StatsTimer, self(), emit_stats)}.
 
 return_ok(State, true, _Msg)  -> {noreply, State};
 return_ok(State, false, Msg)  -> {reply, Msg, State}.
