@@ -25,6 +25,7 @@
          info_keys/0, handle_message/2, closing/3, channels_terminated/1]).
 
 -define(RABBIT_TCP_OPTS, [binary, {packet, 0}, {active,false}, {nodelay, true}]).
+-define(SOCKET_CLOSING_TIMEOUT, 1000).
 -define(HANDSHAKE_RECEIVE_TIMEOUT, 60000).
 
 -record(state, {sock,
@@ -44,10 +45,19 @@ init([]) ->
 open_channel_args(#state{sock = Sock}) ->
     [Sock].
 
-do(Method, #state{writer0 = Writer}) ->
+do(#'connection.close_ok'{} = CloseOk, State) ->
+    erlang:send_after(?SOCKET_CLOSING_TIMEOUT, self(), socket_closing_timeout),
+    do2(CloseOk, State);
+do(Method, State) ->
+    do2(Method, State).
+
+do2(Method, #state{writer0 = Writer}) ->
     %% Catching because it expects the {channel_exit, _} message on error
     catch rabbit_writer:send_command_sync(Writer, Method).
 
+handle_message(socket_closing_timeout,
+               State = #state{closing_reason = Reason}) ->
+    {stop, {socket_closing_timeout, Reason}, State};
 handle_message(socket_closed, State = #state{waiting_socket_close = true,
                                              closing_reason = Reason}) ->
     {stop, {shutdown, Reason}, State};
@@ -147,8 +157,8 @@ network_handshake(AmqpParams = #amqp_params_network{virtual_host = VHost},
     ok = check_version(Start),
     Tune = login(AmqpParams, Mechanisms, State0),
     {TuneOk, ChannelMax, State1} = tune(Tune, AmqpParams, SHF, State0),
-    do(TuneOk, State1),
-    do(#'connection.open'{virtual_host = VHost}, State1),
+    do2(TuneOk, State1),
+    do2(#'connection.open'{virtual_host = VHost}, State1),
     Params = {ServerProperties, ChannelMax, State1},
     case handshake_recv('connection.open_ok') of
         #'connection.open_ok'{}                     -> {ok, Params};
@@ -205,7 +215,7 @@ login(Params = #amqp_params_network{auth_mechanisms = ClientMechanisms,
               client_properties = client_properties(UserProps),
               mechanism = Name,
               response = Resp},
-            do(StartOk, State),
+            do2(StartOk, State),
             login_loop(Mech, MState1, Params, State);
         [] ->
             exit({no_suitable_auth_mechanism, ServerMechanisms})
@@ -217,7 +227,7 @@ login_loop(Mech, MState0, Params, State) ->
             Tune;
         #'connection.secure'{challenge = Challenge} ->
             {Resp, MState1} = Mech(Challenge, Params, MState0),
-            do(#'connection.secure_ok'{response = Resp}, State),
+            do2(#'connection.secure_ok'{response = Resp}, State),
             login_loop(Mech, MState1, Params, State)
     end.
 
