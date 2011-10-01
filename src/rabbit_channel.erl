@@ -1317,16 +1317,11 @@ notify_queues(State = #ch{consumer_mapping = Consumers}) ->
      State#ch{state = closing}}.
 
 fold_per_queue(F, Acc0, UAQ) ->
-    D = rabbit_misc:queue_fold(
-          fun ({_DTag, _CTag, {QPid, MsgId}}, D) ->
-                  %% dict:append would avoid the lists:reverse in
-                  %% handle_message({recover, true}, ...). However, it
-                  %% is significantly slower when going beyond a few
-                  %% thousand elements.
-                  rabbit_misc:dict_cons(QPid, MsgId, D)
-          end, dict:new(), UAQ),
-    dict:fold(fun (QPid, MsgIds, Acc) -> F(QPid, MsgIds, Acc) end,
-              Acc0, D).
+    T = rabbit_misc:queue_fold(
+          fun ({_DTag, _CTag, {QPid, MsgId}}, T) ->
+                  rabbit_misc:gb_trees_cons(QPid, MsgId, T)
+          end, gb_trees:empty(), UAQ),
+    rabbit_misc:gb_trees_fold(F, Acc0, T).
 
 enable_limiter(State = #ch{unacked_message_q = UAMQ,
                            limiter           = Limiter}) ->
