@@ -374,10 +374,16 @@ noreply(Mask, NewState) -> noreply(Mask, NewState, hibernate).
 noreply(Mask, NewState, Timeout) ->
     {noreply, next_state(Mask, NewState), Timeout}.
 
+-define(MASKED_CALL(Fun, Mask, State),
+        case lists:member(Fun, Mask) of
+            true  -> State;
+            false -> Fun(State)
+        end).
+
 next_state(Mask, State) ->
-    lists:foldl(fun (ensure_stats_timer, State1) -> ensure_stats_timer(State1);
-                    (send_confirms,      State1) -> send_confirms(State1)
-                end, State, [ensure_stats_timer, send_confirms] -- Mask).
+    State1 = ?MASKED_CALL(ensure_stats_timer, Mask, State),
+    State2 = ?MASKED_CALL(send_confirms,      Mask, State1),
+    State2.
 
 ensure_stats_timer(State = #ch{stats_timer = StatsTimer}) ->
     State#ch{stats_timer = rabbit_event:ensure_stats_timer(
