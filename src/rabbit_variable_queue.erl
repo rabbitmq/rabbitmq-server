@@ -533,7 +533,11 @@ publish_delivered(true, Msg = #basic_message { is_persistent = IsPersistent,
                                   unconfirmed      = UC1 }))}.
 
 drain_confirmed(State = #vqstate { confirmed = C }) ->
-    {gb_sets:to_list(C), State #vqstate { confirmed = gb_sets:new() }}.
+    case gb_sets:is_empty(C) of
+        true  -> {[], State}; %% common case
+        false -> {gb_sets:to_list(C), State #vqstate {
+                                        confirmed = gb_sets:new() }}
+    end.
 
 dropwhile(Pred, State) ->
     case queue_out(State) of
