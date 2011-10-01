@@ -454,17 +454,17 @@ deliver_from_queue_deliver(AckRequired, false, State) ->
 confirm_messages([], State) ->
     State;
 confirm_messages(MsgIds, State = #q{msg_id_to_channel = MTC}) ->
-    {CMs, MTC1} = lists:foldl(
-                    fun(MsgId, {CMs, MTC0}) ->
-                            case dict:find(MsgId, MTC0) of
-                                {ok, {ChPid, MsgSeqNo}} ->
-                                    {rabbit_misc:gb_trees_cons(ChPid, MsgSeqNo,
-                                                               CMs),
-                                     dict:erase(MsgId, MTC0)};
-                                _ ->
-                                    {CMs, MTC0}
-                            end
-                    end, {gb_trees:empty(), MTC}, MsgIds),
+    {CMs, MTC1} =
+        lists:foldl(
+          fun(MsgId, {CMs, MTC0}) ->
+                  case dict:find(MsgId, MTC0) of
+                      {ok, {ChPid, MsgSeqNo}} ->
+                          {rabbit_misc:gb_trees_cons(ChPid, MsgSeqNo, CMs),
+                           dict:erase(MsgId, MTC0)};
+                      _ ->
+                          {CMs, MTC0}
+                  end
+          end, {gb_trees:empty(), MTC}, MsgIds),
     gb_trees_foreach(fun rabbit_channel:confirm/2, CMs),
     State#q{msg_id_to_channel = MTC1}.
 
