@@ -458,7 +458,8 @@ confirm_messages(MsgIds, State = #q{msg_id_to_channel = MTC}) ->
                     fun(MsgId, {CMs, MTC0}) ->
                             case dict:find(MsgId, MTC0) of
                                 {ok, {ChPid, MsgSeqNo}} ->
-                                    {gb_trees_cons(ChPid, MsgSeqNo, CMs),
+                                    {rabbit_misc:gb_trees_cons(ChPid, MsgSeqNo,
+                                                               CMs),
                                      dict:erase(MsgId, MTC0)};
                                 _ ->
                                     {CMs, MTC0}
@@ -474,12 +475,6 @@ gb_trees_foreach(Fun, {Key, Val, It}) ->
     gb_trees_foreach(Fun, gb_trees:next(It));
 gb_trees_foreach(Fun, Tree) ->
     gb_trees_foreach(Fun, gb_trees:next(gb_trees:iterator(Tree))).
-
-gb_trees_cons(Key, Value, Tree) ->
-    case gb_trees:lookup(Key, Tree) of
-        {value, Values} -> gb_trees:update(Key, [Value | Values], Tree);
-        none            -> gb_trees:insert(Key, [Value], Tree)
-    end.
 
 should_confirm_message(#delivery{msg_seq_no = undefined}, _State) ->
     never;

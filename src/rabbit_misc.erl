@@ -44,7 +44,7 @@
 -export([sort_field_table/1]).
 -export([pid_to_string/1, string_to_pid/1]).
 -export([version_compare/2, version_compare/3]).
--export([dict_cons/3, orddict_cons/3]).
+-export([dict_cons/3, orddict_cons/3, gb_trees_cons/3]).
 -export([get_options/2]).
 -export([all_module_attributes/1, build_acyclic_graph/3]).
 -export([now_ms/0]).
@@ -171,6 +171,7 @@
         -> boolean()).
 -spec(dict_cons/3 :: (any(), any(), dict()) -> dict()).
 -spec(orddict_cons/3 :: (any(), any(), orddict:orddict()) -> orddict:orddict()).
+-spec(gb_trees_cons/3 :: (any(), any(), gb_tree()) -> gb_tree()).
 -spec(get_options/2 :: ([optdef()], [string()])
                        -> {[string()], [{string(), any()}]}).
 -spec(all_module_attributes/1 :: (atom()) -> [{atom(), [term()]}]).
@@ -668,6 +669,12 @@ dict_cons(Key, Value, Dict) ->
 
 orddict_cons(Key, Value, Dict) ->
     orddict:update(Key, fun (List) -> [Value | List] end, [Value], Dict).
+
+gb_trees_cons(Key, Value, Tree) ->
+    case gb_trees:lookup(Key, Tree) of
+        {value, Values} -> gb_trees:update(Key, [Value | Values], Tree);
+        none            -> gb_trees:insert(Key, [Value], Tree)
+    end.
 
 %% Separate flags and options from arguments.
 %% get_options([{flag, "-q"}, {option, "-p", "/"}],
