@@ -45,6 +45,7 @@
 -export([pid_to_string/1, string_to_pid/1]).
 -export([version_compare/2, version_compare/3]).
 -export([dict_cons/3, orddict_cons/3, gb_trees_cons/3]).
+-export([gb_trees_fold/3, gb_trees_foreach/2]).
 -export([get_options/2]).
 -export([all_module_attributes/1, build_acyclic_graph/3]).
 -export([now_ms/0]).
@@ -172,6 +173,9 @@
 -spec(dict_cons/3 :: (any(), any(), dict()) -> dict()).
 -spec(orddict_cons/3 :: (any(), any(), orddict:orddict()) -> orddict:orddict()).
 -spec(gb_trees_cons/3 :: (any(), any(), gb_tree()) -> gb_tree()).
+-spec(gb_trees_fold/3 :: (fun ((any(), any(), A) -> A), A, gb_tree()) -> A).
+-spec(gb_trees_foreach/2 ::
+        (fun ((any(), any()) -> any()), gb_tree()) -> 'ok').
 -spec(get_options/2 :: ([optdef()], [string()])
                        -> {[string()], [{string(), any()}]}).
 -spec(all_module_attributes/1 :: (atom()) -> [{atom(), [term()]}]).
@@ -675,6 +679,17 @@ gb_trees_cons(Key, Value, Tree) ->
         {value, Values} -> gb_trees:update(Key, [Value | Values], Tree);
         none            -> gb_trees:insert(Key, [Value], Tree)
     end.
+
+gb_trees_fold(Fun, Acc, Tree) ->
+    gb_trees_fold1(Fun, Acc, gb_trees:next(gb_trees:iterator(Tree))).
+
+gb_trees_fold1(_Fun, Acc, none) ->
+    Acc;
+gb_trees_fold1(Fun, Acc, {Key, Val, It}) ->
+    gb_trees_fold1(Fun, Fun(Key, Val, Acc), gb_trees:next(It)).
+
+gb_trees_foreach(Fun, Tree) ->
+    gb_trees_fold(fun (Key, Val, Acc) -> Fun(Key, Val), Acc end, ok, Tree).
 
 %% Separate flags and options from arguments.
 %% get_options([{flag, "-q"}, {option, "-p", "/"}],

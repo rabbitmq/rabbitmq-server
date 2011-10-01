@@ -465,16 +465,8 @@ confirm_messages(MsgIds, State = #q{msg_id_to_channel = MTC}) ->
                           {CMs, MTC0}
                   end
           end, {gb_trees:empty(), MTC}, MsgIds),
-    gb_trees_foreach(fun rabbit_channel:confirm/2, CMs),
+    rabbit_misc:gb_trees_foreach(fun rabbit_channel:confirm/2, CMs),
     State#q{msg_id_to_channel = MTC1}.
-
-gb_trees_foreach(_, none) ->
-    ok;
-gb_trees_foreach(Fun, {Key, Val, It}) ->
-    Fun(Key, Val),
-    gb_trees_foreach(Fun, gb_trees:next(It));
-gb_trees_foreach(Fun, Tree) ->
-    gb_trees_foreach(Fun, gb_trees:next(gb_trees:iterator(Tree))).
 
 should_confirm_message(#delivery{msg_seq_no = undefined}, _State) ->
     never;

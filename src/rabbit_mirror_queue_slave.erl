@@ -417,8 +417,7 @@ confirm_messages(MsgIds, State = #state { msg_id_status = MS }) ->
                           Acc
                   end
           end, {gb_trees:empty(), MS}, MsgIds),
-    [ok = rabbit_channel:confirm(ChPid, MsgSeqNos)
-     || {ChPid, MsgSeqNos} <- gb_trees:to_list(CMs)],
+    rabbit_misc:gb_trees_foreach(fun rabbit_channel:confirm/2, CMs),
     State #state { msg_id_status = MS1 }.
 
 handle_process_result({ok,   State}) -> noreply(State);
