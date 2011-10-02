@@ -879,8 +879,7 @@ betas_from_index_entries(List, TransientThreshold, PA, IndexState) ->
                                                 index_on_disk = true,
                                                 msg_props     = MsgProps
                                                }), Filtered1),
-                                            Delivers1,
-                                            Acks1};
+                                        Delivers1, Acks1};
                                    true ->
                                        Acc
                            end
