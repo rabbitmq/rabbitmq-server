@@ -119,6 +119,12 @@
                     {requires,    kernel_ready},
                     {enables,     core_initialized}]}).
 
+-rabbit_boot_step({rabbit_limiter,
+                   [{description, "limiter"},
+                    {mfa,      {rabbit_limiter, start, []}},
+                    {requires, kernel_ready},
+                    {enables, core_initialized}]}).
+
 -rabbit_boot_step({core_initialized,
                    [{description, "core initialized"},
                     {requires,    kernel_ready}]}).
