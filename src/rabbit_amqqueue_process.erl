@@ -454,32 +454,19 @@ deliver_from_queue_deliver(AckRequired, false, State) ->
 confirm_messages([], State) ->
     State;
 confirm_messages(MsgIds, State = #q{msg_id_to_channel = MTC}) ->
-    {CMs, MTC1} = lists:foldl(
-                    fun(MsgId, {CMs, MTC0}) ->
-                            case dict:find(MsgId, MTC0) of
-                                {ok, {ChPid, MsgSeqNo}} ->
-                                    {gb_trees_cons(ChPid, MsgSeqNo, CMs),
-                                     dict:erase(MsgId, MTC0)};
-                                _ ->
-                                    {CMs, MTC0}
-                            end
-                    end, {gb_trees:empty(), MTC}, MsgIds),
-    gb_trees_foreach(fun rabbit_channel:confirm/2, CMs),
+    {CMs, MTC1} =
+        lists:foldl(
+          fun(MsgId, {CMs, MTC0}) ->
+                  case dict:find(MsgId, MTC0) of
+                      {ok, {ChPid, MsgSeqNo}} ->
+                          {rabbit_misc:gb_trees_cons(ChPid, MsgSeqNo, CMs),
+                           dict:erase(MsgId, MTC0)};
+                      _ ->
+                          {CMs, MTC0}
+                  end
+          end, {gb_trees:empty(), MTC}, MsgIds),
+    rabbit_misc:gb_trees_foreach(fun rabbit_channel:confirm/2, CMs),
     State#q{msg_id_to_channel = MTC1}.
-
-gb_trees_foreach(_, none) ->
-    ok;
-gb_trees_foreach(Fun, {Key, Val, It}) ->
-    Fun(Key, Val),
-    gb_trees_foreach(Fun, gb_trees:next(It));
-gb_trees_foreach(Fun, Tree) ->
-    gb_trees_foreach(Fun, gb_trees:next(gb_trees:iterator(Tree))).
-
-gb_trees_cons(Key, Value, Tree) ->
-    case gb_trees:lookup(Key, Tree) of
-        {value, Values} -> gb_trees:update(Key, [Value | Values], Tree);
-        none            -> gb_trees:insert(Key, [Value], Tree)
-    end.
 
 should_confirm_message(#delivery{msg_seq_no = undefined}, _State) ->
     never;
