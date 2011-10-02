@@ -21,6 +21,30 @@
 
 -define(QUEUE, queue).
 
+-ifdef(use_specs).
+
+-export_type([?MODULE/0]).
+
+-type(?MODULE() :: {non_neg_integer(), ?MODULE()}).
+-type(value() :: any()).
+-type(result() :: ({'empty', ?MODULE()} |
+                   {{'value', value()}, ?MODULE()})).
+
+-spec(new/0 :: () -> ?MODULE()).
+-spec(is_empty/1 :: (?MODULE()) -> boolean()).
+-spec(len/1 :: (?MODULE()) -> non_neg_integer()).
+-spec(in/2 :: (value(), ?MODULE()) -> ?MODULE()).
+-spec(in_r/2 :: (value(), ?MODULE()) -> ?MODULE()).
+-spec(out/1 :: (?MODULE()) -> result()).
+-spec(out_r/1 :: (?MODULE()) -> result()).
+-spec(join/2 :: (?MODULE(), ?MODULE()) -> ?MODULE()).
+-spec(foldl/3 :: (fun ((value(), B) -> B), B, ?MODULE()) -> B).
+-spec(foldr/3 :: (fun ((value(), B) -> B), B, ?MODULE()) -> B).
+-spec(from_list/1 :: ([value()]) -> ?MODULE()).
+-spec(to_list/1 :: (?MODULE()) -> [value()]).
+
+-endif.
+
 new() -> {0, ?QUEUE:new()}.
 
 is_empty({0, _Q}) -> true;

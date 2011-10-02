@@ -316,11 +316,11 @@
                           end_seq_id   :: non_neg_integer() }).
 
 -type(state() :: #vqstate {
-             q1                    :: queue(),
-             q2                    :: queue(),
+             q1                    :: ?QUEUE:?QUEUE(),
+             q2                    :: ?QUEUE:?QUEUE(),
              delta                 :: delta(),
-             q3                    :: queue(),
-             q4                    :: queue(),
+             q3                    :: ?QUEUE:?QUEUE(),
+             q4                    :: ?QUEUE:?QUEUE(),
              next_seq_id           :: seq_id(),
              pending_ack           :: gb_tree(),
              ram_ack_index         :: gb_tree(),
