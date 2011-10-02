@@ -25,7 +25,7 @@
 
 -export_type([?MODULE/0]).
 
--type(?MODULE() :: {non_neg_integer(), ?MODULE()}).
+-opaque(?MODULE() :: {non_neg_integer(), ?MODULE()}).
 -type(value() :: any()).
 -type(result() :: ({'empty', ?MODULE()} |
                    {{'value', value()}, ?MODULE()})).
