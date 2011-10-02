@@ -886,9 +886,8 @@ betas_from_index_entries(List, TransientThreshold, PA, IndexState) ->
                            end
                   end
           end, {?QUEUE:new(), [], []}, List),
-    {Filtered,
-     rabbit_queue_index:ack(Acks,
-                            rabbit_queue_index:deliver(Delivers, IndexState))}.
+    {Filtered, rabbit_queue_index:ack(
+                 Acks, rabbit_queue_index:deliver(Delivers, IndexState))}.
 
 %% the first arg is the older delta
 combine_deltas(?BLANK_DELTA_PATTERN(X), ?BLANK_DELTA_PATTERN(Y)) ->
