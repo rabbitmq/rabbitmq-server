@@ -918,8 +918,6 @@ combine_deltas(#delta { start_seq_id = StartLow,
         andalso ((StartLow + Count) =< EndHigh),
     #delta { start_seq_id = StartLow, count = Count, end_seq_id = EndHigh }.
 
-beta_fold(Fun, Init, Q) -> ?QUEUE:foldl(Fun, Init, Q).
-
 update_rate(Now, Then, Count, {OThen, OCount}) ->
     %% avg over the current period and the previous
     {1000000.0 * (Count + OCount) / timer:now_diff(Now, OThen), {Then, Count}}.
@@ -1078,7 +1076,7 @@ purge_betas_and_deltas(LensByStore,
     case ?QUEUE:is_empty(Q3) of
         true  -> {LensByStore, State};
         false -> {LensByStore1, IndexState1} =
-                     remove_queue_entries(fun beta_fold/3, Q3,
+                     remove_queue_entries(fun ?QUEUE:foldl/3, Q3,
                                           LensByStore, IndexState, MSCState),
                  purge_betas_and_deltas(LensByStore1,
                                         maybe_deltas_to_betas(
@@ -1533,8 +1531,8 @@ permitted_beta_count(#vqstate { len = Len,
     case ?QUEUE:out(Q3) of
         {empty, _Q3} -> Permitted;
         {{value, #msg_status { seq_id = MinSeqId }}, _Q3} ->
-            lists:max([Permitted,
-                       rabbit_queue_index:next_segment_boundary(MinSeqId) - MinSeqId])
+            lists:max([Permitted, rabbit_queue_index:next_segment_boundary(
+                                    MinSeqId) - MinSeqId])
     end.
 
 chunk_size(Current, Permitted)
@@ -1696,14 +1694,15 @@ push_betas_to_deltas(Quota,
                                   end_seq_id = High + 1 }
                  end,
     {Quota1, Delta2, Q2a, RamIndexCount2, IndexState2} =
-        push_betas_to_deltas(Q2DeltaFun, fun (Q2MinSeqId) -> Q2MinSeqId end,
-                             fun ?QUEUE:out/1, Quota, Q2,
-                             RamIndexCount, IndexState),
+        push_betas_to_deltas(Q2DeltaFun,
+                             fun (Q2MinSeqId) -> Q2MinSeqId end,
+                             fun ?QUEUE:out/1,
+                             Quota, Q2, RamIndexCount, IndexState),
     {_Quota2, Delta3, Q3a, RamIndexCount3, IndexState3} =
         push_betas_to_deltas(Q3DeltaFun,
                              fun rabbit_queue_index:next_segment_boundary/1,
-                             fun ?QUEUE:out_r/1, Quota1, Q3,
-                             RamIndexCount2, IndexState2),
+                             fun ?QUEUE:out_r/1,
+                             Quota1, Q3, RamIndexCount2, IndexState2),
     Delta4 = combine_deltas(Delta3, combine_deltas(Delta, Delta2)),
     State #vqstate { q2              = Q2a,
                      delta           = Delta4,
@@ -1716,10 +1715,11 @@ push_betas_to_deltas(_DeltaFun, _LimitFun, _Generator, 0, Q, RamIndexCount,
     {0, ?BLANK_DELTA, Q, RamIndexCount, IndexState};
 push_betas_to_deltas(DeltaFun, LimitFun, Generator, Quota, Q, RamIndexCount,
                      IndexState) ->
-    case ?QUEUE:out(Q) of
-        {empty, _Q} ->
+    case ?QUEUE:is_empty(Q) of
+        true ->
             {Quota, ?BLANK_DELTA, Q, RamIndexCount, IndexState};
-        {{value, #msg_status { seq_id = MinSeqId }}, _Qa} ->
+        false ->
+            {{value, #msg_status { seq_id = MinSeqId }}, _Qa} = ?QUEUE:out(Q),
             {{value, #msg_status { seq_id = MaxSeqId }}, _Qb} = ?QUEUE:out_r(Q),
             Limit = LimitFun(MinSeqId),
             case MaxSeqId < Limit of
