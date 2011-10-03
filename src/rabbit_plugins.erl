@@ -98,8 +98,8 @@ action(enable, ToEnable0, _Opts, PluginsFile, PluginsDir) ->
     Missing = ToEnable -- plugin_names(AllPlugins),
     case Missing of
         [] -> ok;
-        _  -> io:format("Warning: the following plugins could not be "
-                        "found: ~p~n", [Missing])
+        _  -> print_list("Warning: the following plugins could not be found:",
+                         Missing)
     end,
     NewEnabled = lists:usort(Enabled ++ ToEnable),
     write_enabled_plugins(PluginsFile, NewEnabled),
@@ -107,8 +107,8 @@ action(enable, ToEnable0, _Opts, PluginsFile, PluginsDir) ->
         [] -> io:format("Plugin configuration unchanged.~n");
         _  -> NewImplicitlyEnabled =
                   calculate_required_plugins(NewEnabled, AllPlugins),
-              io:format("The following plugins have been enabled: ~p~n",
-                        [NewImplicitlyEnabled -- ImplicitlyEnabled]),
+              print_list("The following plugins have been enabled:",
+                         NewImplicitlyEnabled -- ImplicitlyEnabled),
               io:format("Plugin configuration has changed. "
                         "You should restart RabbitMQ.~n")
     end;
@@ -124,8 +124,8 @@ action(disable, ToDisable0, _Opts, PluginsFile, PluginsDir) ->
     Missing = ToDisable -- plugin_names(AllPlugins),
     case Missing of
         [] -> ok;
-        _  -> io:format("Warning: the following plugins could not be "
-                        "found: ~p~n", [Missing])
+        _  -> print_list("Warning: the following plugins could not be found:",
+                         Missing)
     end,
     ToDisable1 = ToDisable -- Missing,
     ToDisable2 = calculate_dependencies(true, ToDisable1, AllPlugins),
@@ -136,8 +136,8 @@ action(disable, ToDisable0, _Opts, PluginsFile, PluginsDir) ->
                      calculate_required_plugins(Enabled, AllPlugins),
                  NewImplicitlyEnabled =
                      calculate_required_plugins(NewEnabled, AllPlugins),
-                 io:format("The following plugins have been disabled: ~p~n",
-                           [ImplicitlyEnabled -- NewImplicitlyEnabled]),
+                 print_list("The following plugins have been disabled:",
+                            ImplicitlyEnabled -- NewImplicitlyEnabled),
                  write_enabled_plugins(PluginsFile, NewEnabled),
                  io:format("Plugin configuration has changed. "
                            "You should restart RabbitMQ.~n")
@@ -278,6 +278,11 @@ format_plugin(#plugin{name = Name, version = Version,
             io:format("    Description:\t~s~n", [Description]),
             io:format("~n")
     end.
+
+print_list(Header, Plugins) ->
+    io:format("~s~n", [Header]),
+    [io:format("  ~s~n", [P]) || P <- Plugins],
+    io:format("~n").
 
 usort_plugins(Plugins) ->
     lists:usort(fun plugins_cmp/2, Plugins).
