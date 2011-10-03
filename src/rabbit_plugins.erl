@@ -217,7 +217,7 @@ find_app_files(ZippedFiles) ->
 %% Parse a binary into a term.
 parse_binary(Bin) ->
     try
-        {ok, Ts, _} = erl_scan:string(binary:bin_to_list(Bin)),
+        {ok, Ts, _} = erl_scan:string(binary_to_list(Bin)),
         {ok, Term} = erl_parse:parse_term(Ts),
         Term
     catch
