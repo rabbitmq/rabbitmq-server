@@ -4,11 +4,29 @@ Wed,  3 Jan 2007 15:43:44 +0000.
 It was downloaded from http://www.rabbitmq.com/
 
 The files codegen/amqp-rabbitmq-0.8.json and
-codegen/amqp-rabbitmq-0.9.1.json are covered by the following terms:
+codegen/amqp-rabbitmq-0.9.1.json are "Copyright (C) 2008-2011 VMware",
+Inc. and are covered by the MIT license.
 
-        "Copyright (C) 2008-2011 VMware, Inc.
+jQuery is "Copyright (c) 2010 John Resig" and is covered by the MIT
+license.  It was downloaded from http://jquery.com/
 
-        Permission is hereby granted, free of charge, to any person
+EJS is "Copyright (c) 2007 Edward Benson" and is covered by the MIT
+license.  It was downloaded from http://embeddedjs.com/
+
+Sammy is "Copyright (c) 2008 Aaron Quint, Quirkey NYC, LLC" and is
+covered by the MIT license.  It was downloaded from
+http://code.quirkey.com/sammy/
+
+Eldap is "Copyright (c) 2010, Torbjorn Tornkvist" and is covered by
+the MIT license.  It was downloaded from https://github.com/etnt/eldap
+
+Mochiweb is "Copyright (c) 2007 Mochi Media, Inc." and is covered by
+the MIT license.  It was downloaded from
+http://github.com/mochi/mochiweb/
+
+The MIT license is as follows:
+
+        "Permission is hereby granted, free of charge, to any person
         obtaining a copy of this file (the Software), to deal in the
         Software without restriction, including without limitation the
         rights to use, copy, modify, merge, publish, distribute,
@@ -27,6 +45,44 @@ codegen/amqp-rabbitmq-0.9.1.json are covered by the following terms:
         WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
         FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
         OTHER DEALINGS IN THE SOFTWARE."
+
+
+Webmachine is Copyright (c) Basho Technologies and is covered by the
+Apache License 2.0.  It was downloaded from http://webmachine.basho.com/
+
+glMatrix was downloaded from http://code.google.com/p/glmatrix/ and is
+covered by the following license:
+
+        "Copyright (c) 2011, Brandon Jones
+        All rights reserved.
+
+        Redistribution and use in source and binary forms, with or
+        without modification, are permitted provided that the
+        following conditions are met:
+
+        1. Redistributions of source code must retain the above
+        copyright notice, this list of conditions and the following
+        disclaimer.
+
+        2. Redistributions in binary form must reproduce the above
+        copyright notice, this list of conditions and the following
+        disclaimer in the documentation and/or other materials
+        provided with the distribution.
+
+        THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+        CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
+        INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+        MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+        DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR
+        CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+        SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+        NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+        LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+        HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+        CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+        OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
+        EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE."
+
 
 The rest of this package is licensed under the Mozilla Public License 1.1
 Authors and Copyright are as described below:
