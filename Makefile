@@ -325,7 +325,7 @@ install_bin: all install_dirs
 	done
 
 	mkdir -p $(TARGET_DIR)/$(PLUGINS_DIR)
-	[ -d "$(PLUGINS_DIR)" ] && cp $(PLUGINS_DIR)/*.ez $(TARGET_DIR)/$(PLUGINS_DIR) || true
+	[ -d "$(PLUGINS_DIR)" ] && cp $(PLUGINS_DIR)/*.ez $(PLUGINS_DIR)/README $(TARGET_DIR)/$(PLUGINS_DIR) || true
 
 install_docs: docs_all install_dirs
 	for section in 1 5; do \

@@ -21,7 +21,7 @@ dist:
 
 	mv $(SOURCE_DIR) $(TARGET_DIR)
 	mkdir -p $(TARGET_DIR)
-	mv $(TARGET_DIR)/plugins-src/README $(TARGET_DIR)/plugins/README.txt
+	mv $(TARGET_DIR)/plugins/README $(TARGET_DIR)/plugins/README.txt
 	xmlto -o . xhtml-nochunks ../../docs/rabbitmq-service.xml
 	elinks -dump -no-references -no-numbering rabbitmq-service.html \
 		> $(TARGET_DIR)/readme-service.txt
