@@ -1,0 +1,14 @@
+This package, the RabbitMQ server is licensed under the MPL. For the
+MPL, please see LICENSE-MPL-RabbitMQ.
+
+This package makes use of the following third party libraries:
+jQuery     - http://jquery.com/                 - MIT license, see LICENSE-MIT-jQuery142
+EJS        - http://embeddedjs.com/             - MIT license, see LICENSE-MIT-EJS10
+Sammy      - http://code.quirkey.com/sammy/     - MIT license, see LICENSE-MIT-Sammy060
+webmachine - http://webmachine.basho.com/       - Apache license, 2.0, LICENSE-Apache-Basho
+mochiweb   - http://github.com/mochi/mochiweb/  - MIT license, see LICENSE-MIT-Mochi
+glMatrix   - http://code.google.com/p/glmatrix/ - BSD 2-clause license, see plugins-src/rabbitmq-management-visualiser/LICENSE-BSD-glMatrix
+eldap      - https://github.com/etnt/eldap      - MIT license, see /plugins-src/eldap-wrapper/eldap-git/LICENSE
+
+If you have any questions regarding licensing, please contact us at
+info@rabbitmq.com.

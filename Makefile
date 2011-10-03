@@ -106,15 +106,24 @@ all: $(TARGETS)
 .PHONY: plugins
 ifneq "$(PLUGINS_SRC_DIR)" ""
 plugins:
-	[ -d "$(PLUGINS_SRC_DIR)" ] || { echo "No plugins source distribution found (try linking public-umbrella to $(PLUGINS_SRC_DIR)"; false; }
 	[ -d "$(PLUGINS_SRC_DIR)/rabbitmq-server" ] || ln -s "$(CURDIR)" "$(PLUGINS_SRC_DIR)/rabbitmq-server"
 	mkdir -p $(PLUGINS_DIR)
 	PLUGINS_SRC_DIR="" $(MAKE) -C "$(PLUGINS_SRC_DIR)" plugins-dist PLUGINS_DIST_DIR="$(CURDIR)/$(PLUGINS_DIR)" VERSION=$(VERSION)
 	echo "Put your EZs here and use rabbitmq-plugins to enable them." > $(PLUGINS_DIR)/README
 	rm -f $(PLUGINS_DIR)/rabbit_common*.ez
+
+# If you add a license here, make sure to also add it to packaging/common/LICENSE.
+PLUGINS_SRC_LICENSES := "plugins-src/rabbitmq-management/LICENSE-MIT-jQuery142" \
+                        "plugins-src/rabbitmq-management/LICENSE-MIT-EJS10" \
+                        "plugins-src/rabbitmq-management/LICENSE-MIT-Sammy060" \
+                        "plugins-src/webmachine-wrapper/LICENSE-Apache-Basho" \
+                        "plugins-src/mochiweb-wrapper/LICENSE-MIT-Mochi" \
+                        "plugins-src/rabbitmq-management-visualiser/LICENSE-BSD-glMatrix" \
+                        "plugins-src/eldap-wrapper/LICENSE-MIT-eldap"
 else
 plugins:
 # Not building plugins
+PLUGINS_SRC_LICENSES :=
 endif
 
 $(DEPS_FILE): $(SOURCES) $(INCLUDES)
@@ -255,7 +264,13 @@ srcdist: distclean
 	cp -r $(DOCS_DIR) $(TARGET_SRC_DIR)
 	chmod 0755 $(TARGET_SRC_DIR)/scripts/*
 
-	[ "x" != "x$(PLUGINS_SRC_DIR)" ] && ln -s $(PLUGINS_SRC_DIR) $(TARGET_SRC_DIR)/plugins-src || echo No plugins source distribution found
+ifneq "$(PLUGINS_SRC_DIR)" ""
+	ln -s $(PLUGINS_SRC_DIR) $(TARGET_SRC_DIR)/plugins-src
+	cp packaging/common/LICENSE $(TARGET_SRC_DIR)
+	cp $(PLUGINS_SRC_LICENSES) $(TARGET_SRC_DIR)
+else
+	@echo No plugins source distribution found
+endif
 
 	(cd dist; tar -zchf $(TARBALL_NAME).tar.gz $(TARBALL_NAME))
 	(cd dist; zip -q -r $(TARBALL_NAME).zip $(TARBALL_NAME))
@@ -301,7 +316,7 @@ docs_all: $(MANPAGES) $(WEB_MANPAGES)
 install: install_bin install_docs
 
 install_bin: all install_dirs
-	cp -r ebin include LICENSE LICENSE-MPL-RabbitMQ INSTALL $(TARGET_DIR)
+	cp -r ebin include LICENSE* INSTALL $(TARGET_DIR)
 
 	chmod 0755 scripts/*
 	for script in rabbitmq-env rabbitmq-server rabbitmqctl rabbitmq-plugins; do \
