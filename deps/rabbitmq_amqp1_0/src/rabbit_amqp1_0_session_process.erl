@@ -291,7 +291,8 @@ run_buffer(State = #state{ writer_pid = WriterPid,
 
 run_buffer1(WriterPid, BCh, Session, Buffer) ->
     case rabbit_amqp1_0_session:transfers_left(Session) of
-        Space when Space > 0 ->
+        {LocalSpace, RemoteSpace} when RemoteSpace > 0 andalso LocalSpace > 0 ->
+            Space = erlang:min(LocalSpace, RemoteSpace),
             case queue:out(Buffer) of
                 {empty, Buffer} ->
                     {Session, Buffer};
@@ -300,9 +301,6 @@ run_buffer1(WriterPid, BCh, Session, Buffer) ->
                                    link_handle = Handle } = Pending},
                  BufferTail} ->
                     Link = get({out, Handle}),
-                    %% At this point, we will either be able to
-                    %% 1. send all the frames
-                    %% 2. send some of the frames
                     case send_frames(WriterPid, Frames, Space) of
                         {all, SpaceLeft} ->
                             NewLink =
@@ -317,8 +315,18 @@ run_buffer1(WriterPid, BCh, Session, Buffer) ->
                                          Space, Session),
                             Buffer1 = queue:in_r(Pending#pending{ frames = Rest },
                                                  BufferTail),
-                            {Session1, Buffer1}
+                            run_buffer1(WriterPid, BCh, Session1, Buffer1)
                     end
+            end;
+         {_, RemoteSpace} when RemoteSpace > 0 ->
+            case rabbit_amqp1_0_session:bump_outgoing_window(Session) of
+                {Flow = #'v1_0.flow'{}, Session1} ->
+                    rabbit_amqp1_0_writer:send_command(
+                      WriterPid,
+                      rabbit_amqp1_0_session:flow_fields(Flow, Session1)),
+                    run_buffer1(WriterPid, BCh, Session1, Buffer);
+                {none, Session1} ->
+                    {Session1, Buffer}
             end;
         _ ->
             {Session, Buffer}

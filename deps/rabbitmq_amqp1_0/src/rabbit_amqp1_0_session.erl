@@ -4,7 +4,7 @@
 
 -export([init/1, begin_/2, maybe_init_publish_id/2, record_delivery/3,
          incr_incoming_id/1, next_delivery_id/1, transfers_left/1,
-         record_transfers/2,
+         record_transfers/2, bump_outgoing_window/1,
          record_outgoing/4, settle/3, flow_fields/2, channel/1,
          flow/2, ack/2]).
 
@@ -25,6 +25,7 @@
                   incoming_window,     % ) so we know when to open the session window
                   next_outgoing_id = 0, % arbitrary count of outgoing transfers
                   outgoing_window,
+                  outgoing_window_max,
                   next_publish_id, %% the 0-9-1-side counter for confirms
                   next_delivery_id = 0,
                   incoming_unsettled_map,
@@ -60,22 +61,19 @@ init(Channel) ->
 %%
 %% Hence the flow frame contains a session window, expressed as the
 %% next-id and the window size for each of the buffers. The frame
-%% refers to the buffers of the sender of the frame, of course.
+%% refers to the window of the sender of the frame, of course.
 %%
-%% The numbers work this way: for the outgoing buffer, the next-id
+%% The numbers work this way: for the outgoing window, the next-id
 %% counts the next transfer the session will send, and it will stop
-%% sending at next-id + window.  For the incoming buffer, the next-id
+%% sending at next-id + window.  For the incoming window, the next-id
 %% counts the next transfer id expected, and it will not accept
 %% messages beyond next-id + window (in fact it will probably close
 %% the session, since sending outside the window is a transgression of
 %% the protocol).
 %%
-%% Usually we will want to base our incoming window size on the other
-%% party's outgoing window size (given in begin{}), since we will
-%% never need more state than they are keeping (they'll stop sending
-%% before that happens), subject to a maximum.  Similarly the outgoing
-%% window, on the basis that the other party is likely to make its
-%% window the same size (or that's our best guess).
+%% We may as well just pick a value for the incoming and outgoing
+%% windows; choosing based on what the client says may just stop
+%% things dead, if the value is zero for instance.
 %%
 %% [1] Abstract because there probably won't be a data structure with
 %% a size directly related to transfers; settlement is done with
@@ -86,8 +84,8 @@ begin_(#'v1_0.begin'{next_outgoing_id = {uint, RemoteNextOut},
                      handle_max       = HandleMax0},
        Session = #session{next_outgoing_id = LocalNextOut,
                           channel_num          = Channel}) ->
-    OutWindow = erlang:min(RemoteInWindow, ?MAX_SESSION_WINDOW_SIZE),
-    InWindow = erlang:min(RemoteOutWindow, ?MAX_SESSION_WINDOW_SIZE),
+    InWindow = ?MAX_SESSION_WINDOW_SIZE,
+    OutWindow = ?MAX_SESSION_WINDOW_SIZE,
     HandleMax = case HandleMax0 of
                     {uint, Max} -> Max;
                     _ -> ?DEFAULT_MAX_HANDLE
@@ -99,6 +97,7 @@ begin_(#'v1_0.begin'{next_outgoing_id = {uint, RemoteNextOut},
                        outgoing_window = {uint, OutWindow}},
      Session#session{
        outgoing_window = OutWindow,
+       outgoing_window_max = OutWindow,
        next_incoming_id = RemoteNextOut,
        remote_incoming_window = RemoteInWindow,
        remote_outgoing_window = RemoteOutWindow,
@@ -155,8 +154,9 @@ incr_incoming_id(Session = #session{ next_incoming_id = NextIn,
 
 next_delivery_id(#session{next_delivery_id = Num}) -> Num.
 
-transfers_left(#session{remote_incoming_window = RemoteWindow}) ->
-    RemoteWindow.
+transfers_left(#session{remote_incoming_window = RemoteWindow,
+                        outgoing_window = LocalWindow}) ->
+    {LocalWindow, RemoteWindow}.
 
 record_outgoing(DeliveryTag, NoAck, DefaultOutcome,
                 Session = #session{next_delivery_id = DeliveryId,
@@ -176,9 +176,17 @@ record_outgoing(DeliveryTag, NoAck, DefaultOutcome,
 
 record_transfers(NumTransfers,
                  Session = #session{ remote_incoming_window = RemoteInWindow,
+                                     outgoing_window = OutWindow,
                                      next_outgoing_id = NextOutId }) ->
     Session#session{ remote_incoming_window = RemoteInWindow - NumTransfers,
+                     outgoing_window = OutWindow - NumTransfers,
                      next_outgoing_id = serial_add(NextOutId, NumTransfers) }.
+
+%% Make sure we have "room" in our outgoing window by bumping the
+%% window if necessary. TODO this *could* be based on how much
+%% notional "room" there is in outgoing_unsettled.
+bump_outgoing_window(Session = #session{ outgoing_window_max = OutMax }) ->
+    {#'v1_0.flow'{}, Session#session{ outgoing_window = OutMax }}.
 
 %% We've been told that the fate of a delivery has been determined.
 %% Generally if the other side has not settled it, we will do so.  If
