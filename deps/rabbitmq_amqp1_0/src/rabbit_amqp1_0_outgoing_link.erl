@@ -198,9 +198,14 @@ delivery(Deliver = #'basic.deliver'{delivery_tag = DeliveryTag,
                             batchable = false},
     Msg1_0 = rabbit_amqp1_0_message:annotated_message(
                RKey, Deliver, Msg),
-    %% FIXME ugh.
+    %% FIXME Ugh
     TLen = iolist_size(rabbit_amqp1_0_framing:encode_bin(Txfr)),
-    Frames = encode_frames(Txfr, Msg1_0, FrameMax - TLen, []),
+    Frames = case FrameMax of
+                 0 ->
+                     [[Txfr, Msg1_0]];
+                 _ ->
+                     encode_frames(Txfr, Msg1_0, FrameMax - TLen, [])
+             end,
     {ok, Frames, Session1}.
 
 encode_frames(T, Msg, MaxContentLen, Transfers) ->
