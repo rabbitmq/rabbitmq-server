@@ -108,12 +108,7 @@ check_delivery(_   , true, {_    , []}) -> {not_delivered, []};
 check_delivery(_   , _   , {_    , Qs}) -> {routed, Qs}.
 
 %% Normally we'd call mnesia:dirty_read/1 here, but that is quite
-%% expensive due to general mnesia overheads (figuring out table types
-%% and locations, etc). We get away with bypassing these because we
-%% know that the table
-%% - is not the schema table
-%% - has a local ram copy
-%% - does not have any indices
+%% expensive for the reasons explained in rabbit_misc:dirty_read/1.
 lookup_qpids(QNames) ->
     lists:foldl(fun (QName, QPids) ->
                         case ets:lookup(rabbit_queue, QName) of
