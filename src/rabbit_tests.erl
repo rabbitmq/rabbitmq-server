@@ -757,13 +757,23 @@ test_topic_expect_match(X, List) ->
       end, List).
 
 test_app_management() ->
-    %% starting, stopping, status
+    control_action(wait, [rabbit_mnesia:dir() ++ ".pid"]),
+    %% Starting, stopping and diagnostics.  Note that we don't try
+    %% 'report' when the rabbit app is stopped and that we enable
+    %% tracing for the duration of this function.
+    ok = control_action(trace_on, []),
     ok = control_action(stop_app, []),
     ok = control_action(stop_app, []),
     ok = control_action(status, []),
+    ok = control_action(cluster_status, []),
+    ok = control_action(environment, []),
     ok = control_action(start_app, []),
     ok = control_action(start_app, []),
     ok = control_action(status, []),
+    ok = control_action(report, []),
+    ok = control_action(cluster_status, []),
+    ok = control_action(environment, []),
+    ok = control_action(trace_off, []),
     passed.
 
 test_log_management() ->
@@ -795,23 +805,11 @@ test_log_management() ->
     ok = control_action(rotate_logs, []),
     ok = test_logs_working(MainLog, SaslLog),
 
-    %% log rotation on empty file
+    %% log rotation on empty files (the main log will have a ctl action logged)
     ok = clean_logs([MainLog, SaslLog], Suffix),
     ok = control_action(rotate_logs, []),
     ok = control_action(rotate_logs, [Suffix]),
-    [true, true] = empty_files([[MainLog, Suffix], [SaslLog, Suffix]]),
-
-    %% original main log file is not writable
-    ok = make_files_non_writable([MainLog]),
-    {error, {cannot_rotate_main_logs, _}} = control_action(rotate_logs, []),
-    ok = clean_logs([MainLog], Suffix),
-    ok = add_log_handlers([{rabbit_error_logger_file_h, MainLog}]),
-
-    %% original sasl log file is not writable
-    ok = make_files_non_writable([SaslLog]),
-    {error, {cannot_rotate_sasl_logs, _}} = control_action(rotate_logs, []),
-    ok = clean_logs([SaslLog], Suffix),
-    ok = add_log_handlers([{rabbit_sasl_report_file_h, SaslLog}]),
+    [false, true] = empty_files([[MainLog, Suffix], [SaslLog, Suffix]]),
 
     %% logs with suffix are not writable
     ok = control_action(rotate_logs, [Suffix]),
@@ -819,27 +817,28 @@ test_log_management() ->
     ok = control_action(rotate_logs, [Suffix]),
     ok = test_logs_working(MainLog, SaslLog),
 
-    %% original log files are not writable
+    %% rotate when original log files are not writable
     ok = make_files_non_writable([MainLog, SaslLog]),
-    {error, {{cannot_rotate_main_logs, _},
-             {cannot_rotate_sasl_logs, _}}} = control_action(rotate_logs, []),
+    ok = control_action(rotate_logs, []),
 
-    %% logging directed to tty (handlers were removed in last test)
+    %% logging directed to tty (first, remove handlers)
+    ok = delete_log_handlers([rabbit_sasl_report_file_h,
+                              rabbit_error_logger_file_h]),
     ok = clean_logs([MainLog, SaslLog], Suffix),
-    ok = application:set_env(sasl, sasl_error_logger, tty),
-    ok = application:set_env(kernel, error_logger, tty),
+    ok = application:set_env(rabbit, sasl_error_logger, tty),
+    ok = application:set_env(rabbit, error_logger, tty),
     ok = control_action(rotate_logs, []),
     [{error, enoent}, {error, enoent}] = empty_files([MainLog, SaslLog]),
 
     %% rotate logs when logging is turned off
-    ok = application:set_env(sasl, sasl_error_logger, false),
-    ok = application:set_env(kernel, error_logger, silent),
+    ok = application:set_env(rabbit, sasl_error_logger, false),
+    ok = application:set_env(rabbit, error_logger, silent),
     ok = control_action(rotate_logs, []),
     [{error, enoent}, {error, enoent}] = empty_files([MainLog, SaslLog]),
 
     %% cleanup
-    ok = application:set_env(sasl, sasl_error_logger, {file, SaslLog}),
-    ok = application:set_env(kernel, error_logger, {file, MainLog}),
+    ok = application:set_env(rabbit, sasl_error_logger, {file, SaslLog}),
+    ok = application:set_env(rabbit, error_logger, {file, MainLog}),
     ok = add_log_handlers([{rabbit_error_logger_file_h, MainLog},
                            {rabbit_sasl_report_file_h, SaslLog}]),
     passed.
@@ -850,8 +849,8 @@ test_log_management_during_startup() ->
 
     %% start application with simple tty logging
     ok = control_action(stop_app, []),
-    ok = application:set_env(kernel, error_logger, tty),
-    ok = application:set_env(sasl, sasl_error_logger, tty),
+    ok = application:set_env(rabbit, error_logger, tty),
+    ok = application:set_env(rabbit, sasl_error_logger, tty),
     ok = add_log_handlers([{error_logger_tty_h, []},
                            {sasl_report_tty_h, []}]),
     ok = control_action(start_app, []),
@@ -868,13 +867,12 @@ test_log_management_during_startup() ->
          end,
 
     %% fix sasl logging
-    ok = application:set_env(sasl, sasl_error_logger,
-                             {file, SaslLog}),
+    ok = application:set_env(rabbit, sasl_error_logger, {file, SaslLog}),
 
     %% start application with logging to non-existing directory
     TmpLog = "/tmp/rabbit-tests/test.log",
     delete_file(TmpLog),
-    ok = application:set_env(kernel, error_logger, {file, TmpLog}),
+    ok = application:set_env(rabbit, error_logger, {file, TmpLog}),
 
     ok = delete_log_handlers([rabbit_error_logger_file_h]),
     ok = add_log_handlers([{error_logger_file_h, MainLog}]),
@@ -895,7 +893,7 @@ test_log_management_during_startup() ->
     %% start application with logging to a subdirectory which
     %% parent directory has no write permissions
     TmpTestDir = "/tmp/rabbit-tests/no-permission/test/log",
-    ok = application:set_env(kernel, error_logger, {file, TmpTestDir}),
+    ok = application:set_env(rabbit, error_logger, {file, TmpTestDir}),
     ok = add_log_handlers([{error_logger_file_h, MainLog}]),
     ok = case control_action(start_app, []) of
              ok -> exit({got_success_but_expected_failure,
@@ -910,7 +908,7 @@ test_log_management_during_startup() ->
 
     %% start application with standard error_logger_file_h
     %% handler not installed
-    ok = application:set_env(kernel, error_logger, {file, MainLog}),
+    ok = application:set_env(rabbit, error_logger, {file, MainLog}),
     ok = control_action(start_app, []),
     ok = control_action(stop_app, []),
 
@@ -1146,6 +1144,7 @@ test_user_management() ->
     ok = control_action(add_user, ["foo", "bar"]),
     {error, {user_already_exists, _}} =
         control_action(add_user, ["foo", "bar"]),
+    ok = control_action(clear_password, ["foo"]),
     ok = control_action(change_password, ["foo", "baz"]),
 
     TestTags = fun (Tags) ->
@@ -1757,7 +1756,11 @@ test_file_handle_cache() ->
         [filename:join(TmpDir, Str) || Str <- ["file1", "file2", "file3", "file4"]],
     Content = <<"foo">>,
     CopyFun = fun (Src, Dst) ->
-                      ok = rabbit_misc:write_file(Src, Content),
+                      {ok, Hdl} = prim_file:open(Src, [binary, write]),
+                      ok = prim_file:write(Hdl, Content),
+                      ok = prim_file:sync(Hdl),
+                      prim_file:close(Hdl),
+
                       {ok, SrcHdl} = file_handle_cache:open(Src, [read], []),
                       {ok, DstHdl} = file_handle_cache:open(Dst, [write], []),
                       Size = size(Content),
@@ -2314,8 +2317,41 @@ test_variable_queue() ->
               fun test_variable_queue_all_the_bits_not_covered_elsewhere2/1,
               fun test_dropwhile/1,
               fun test_dropwhile_varying_ram_duration/1,
-              fun test_variable_queue_ack_limiting/1]],
+              fun test_variable_queue_ack_limiting/1,
+              fun test_variable_queue_requeue/1]],
     passed.
+
+test_variable_queue_requeue(VQ0) ->
+    Interval = 50,
+    Count = rabbit_queue_index:next_segment_boundary(0) + 2 * Interval,
+    Seq = lists:seq(1, Count),
+    VQ1 = rabbit_variable_queue:set_ram_duration_target(0, VQ0),
+    VQ2 = variable_queue_publish(false, Count, VQ1),
+    {VQ3, Acks} = lists:foldl(
+                    fun (_N, {VQN, AckTags}) ->
+                            {{#basic_message{}, false, AckTag, _}, VQM} =
+                                rabbit_variable_queue:fetch(true, VQN),
+                            {VQM, [AckTag | AckTags]}
+                    end, {VQ2, []}, Seq),
+    Subset = lists:foldl(fun ({Ack, N}, Acc) when N rem Interval == 0 ->
+                                 [Ack | Acc];
+                             (_, Acc) ->
+                                 Acc
+                         end, [], lists:zip(Acks, Seq)),
+    {_MsgIds, VQ4} = rabbit_variable_queue:requeue(Acks -- Subset,
+                                                   fun(X) -> X end, VQ3),
+    VQ5 = lists:foldl(fun (AckTag, VQN) ->
+                              {_MsgId, VQM} = rabbit_variable_queue:requeue(
+                                                [AckTag], fun(X) -> X end, VQN),
+                              VQM
+                      end, VQ4, Subset),
+    VQ6 = lists:foldl(fun (AckTag, VQa) ->
+                              {{#basic_message{}, true, AckTag, _}, VQb} =
+                                  rabbit_variable_queue:fetch(true, VQa),
+                              VQb
+                      end, VQ5, lists:reverse(Acks)),
+    {empty, VQ7} = rabbit_variable_queue:fetch(true, VQ6),
+    VQ7.
 
 test_variable_queue_ack_limiting(VQ0) ->
     %% start by sending in a bunch of messages

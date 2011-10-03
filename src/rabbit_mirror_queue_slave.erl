@@ -45,7 +45,18 @@
 -behaviour(gm).
 
 -include("rabbit.hrl").
+
+%%----------------------------------------------------------------------------
+
 -include("gm_specs.hrl").
+
+-ifdef(use_specs).
+%% Shut dialyzer up
+-spec(promote_me/2 :: (_, _) -> no_return()).
+-endif.
+
+%%----------------------------------------------------------------------------
+
 
 -define(CREATION_EVENT_KEYS,
         [pid,
@@ -379,9 +390,9 @@ needs_confirming(_Delivery, _State) ->
     immediately.
 
 confirm_messages(MsgIds, State = #state { msg_id_status = MS }) ->
-    {MS1, CMs} =
+    {CMs, MS1} =
         lists:foldl(
-          fun (MsgId, {MSN, CMsN} = Acc) ->
+          fun (MsgId, {CMsN, MSN} = Acc) ->
                   %% We will never see 'discarded' here
                   case dict:find(MsgId, MSN) of
                       error ->
@@ -391,12 +402,12 @@ confirm_messages(MsgIds, State = #state { msg_id_status = MS }) ->
                       {ok, {published, ChPid}} ->
                           %% Still not seen it from the channel, just
                           %% record that it's been confirmed.
-                          {dict:store(MsgId, {confirmed, ChPid}, MSN), CMsN};
+                          {CMsN, dict:store(MsgId, {confirmed, ChPid}, MSN)};
                       {ok, {published, ChPid, MsgSeqNo}} ->
                           %% Seen from both GM and Channel. Can now
                           %% confirm.
-                          {dict:erase(MsgId, MSN),
-                           gb_trees_cons(ChPid, MsgSeqNo, CMsN)};
+                          {rabbit_misc:gb_trees_cons(ChPid, MsgSeqNo, CMsN),
+                           dict:erase(MsgId, MSN)};
                       {ok, {confirmed, _ChPid}} ->
                           %% It's already been confirmed. This is
                           %% probably it's been both sync'd to disk
@@ -405,16 +416,9 @@ confirm_messages(MsgIds, State = #state { msg_id_status = MS }) ->
                           %% channel. Nothing to do here.
                           Acc
                   end
-          end, {MS, gb_trees:empty()}, MsgIds),
-    [ok = rabbit_channel:confirm(ChPid, MsgSeqNos)
-     || {ChPid, MsgSeqNos} <- gb_trees:to_list(CMs)],
+          end, {gb_trees:empty(), MS}, MsgIds),
+    rabbit_misc:gb_trees_foreach(fun rabbit_channel:confirm/2, CMs),
     State #state { msg_id_status = MS1 }.
-
-gb_trees_cons(Key, Value, Tree) ->
-    case gb_trees:lookup(Key, Tree) of
-        {value, Values} -> gb_trees:update(Key, [Value | Values], Tree);
-        none            -> gb_trees:insert(Key, [Value], Tree)
-    end.
 
 handle_process_result({ok,   State}) -> noreply(State);
 handle_process_result({stop, State}) -> {stop, normal, State}.

@@ -85,6 +85,15 @@
                      rabbit_types:ok_or_error2(
                        rabbit_net:socket(), any()))) -> no_return()).
 
+-spec(mainloop/2 :: (_,#v1{}) -> any()).
+-spec(system_code_change/4 :: (_,_,_,_) -> {'ok',_}).
+-spec(system_continue/3 :: (_,_,#v1{}) -> any()).
+-spec(system_terminate/4 :: (_,_,_,_) -> none()).
+
+-spec(process_channel_frame/5 ::
+        (rabbit_command_assembler:frame(), pid(), non_neg_integer(), pid(),
+         tuple()) -> tuple()).
+
 -endif.
 
 %%--------------------------------------------------------------------------
@@ -493,20 +502,7 @@ handle_frame(Type, Channel, Payload,
                                   AnalyzedFrame, self(),
                                   Channel, ChPid, FramingState),
                     put({channel, Channel}, {ChPid, NewAState}),
-                    case AnalyzedFrame of
-                        {method, 'channel.close_ok', _} ->
-                            channel_cleanup(ChPid),
-                            State;
-                        {method, MethodName, _} ->
-                            case (State#v1.connection_state =:= blocking
-                                  andalso
-                                  Protocol:method_has_content(MethodName)) of
-                                true  -> State#v1{connection_state = blocked};
-                                false -> State
-                            end;
-                        _ ->
-                            State
-                    end;
+                    post_process_frame(AnalyzedFrame, ChPid, State);
                 undefined ->
                     case ?IS_RUNNING(State) of
                         true  -> send_to_new_channel(
@@ -517,6 +513,23 @@ handle_frame(Type, Channel, Payload,
                     end
             end
     end.
+
+post_process_frame({method, 'channel.close_ok', _}, ChPid, State) ->
+    channel_cleanup(ChPid),
+    State;
+post_process_frame({method, MethodName, _}, _ChPid,
+                   State = #v1{connection = #connection{
+                                 protocol = Protocol}}) ->
+    case Protocol:method_has_content(MethodName) of
+        true  -> erlang:bump_reductions(2000),
+                 case State#v1.connection_state of
+                     blocking -> State#v1{connection_state = blocked};
+                     _        -> State
+                 end;
+        false -> State
+    end;
+post_process_frame(_Frame, _ChPid, State) ->
+    State.
 
 handle_input(frame_header, <<Type:8,Channel:16,PayloadSize:32>>, State) ->
     ensure_stats_timer(

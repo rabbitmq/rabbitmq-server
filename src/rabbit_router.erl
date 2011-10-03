@@ -107,9 +107,11 @@ check_delivery(true, _   , {false, []}) -> {unroutable, []};
 check_delivery(_   , true, {_    , []}) -> {not_delivered, []};
 check_delivery(_   , _   , {_    , Qs}) -> {routed, Qs}.
 
+%% Normally we'd call mnesia:dirty_read/1 here, but that is quite
+%% expensive for the reasons explained in rabbit_misc:dirty_read/1.
 lookup_qpids(QNames) ->
     lists:foldl(fun (QName, QPids) ->
-                        case mnesia:dirty_read({rabbit_queue, QName}) of
+                        case ets:lookup(rabbit_queue, QName) of
                             [#amqqueue{pid = QPid, slave_pids = SPids}] ->
                                 [QPid | SPids ++ QPids];
                             [] ->
@@ -118,16 +120,8 @@ lookup_qpids(QNames) ->
                 end, [], QNames).
 
 %% Normally we'd call mnesia:dirty_select/2 here, but that is quite
-%% expensive due to
-%%
-%% 1) general mnesia overheads (figuring out table types and
-%% locations, etc). We get away with bypassing these because we know
-%% that the table
-%% - is not the schema table
-%% - has a local ram copy
-%% - does not have any indices
-%%
-%% 2) 'fixing' of the table with ets:safe_fixtable/2, which is wholly
+%% expensive for the same reasons as above, and, additionally, due to
+%% mnesia 'fixing' the table with ets:safe_fixtable/2, which is wholly
 %% unnecessary. According to the ets docs (and the code in erl_db.c),
 %% 'select' is safe anyway ("Functions that internally traverse over a
 %% table, like select and match, will give the same guarantee as

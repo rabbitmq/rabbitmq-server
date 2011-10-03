@@ -26,8 +26,8 @@
 
 -ifdef(use_specs).
 
--spec(start_link/0 :: () -> {'ok', pid()} | {'error', any()}).
--spec(start_link/1 :: (non_neg_integer()) -> {'ok', pid()} | {'error', any()}).
+-spec(start_link/0 :: () -> rabbit_types:ok_pid_or_error()).
+-spec(start_link/1 :: (non_neg_integer()) -> rabbit_types:ok_pid_or_error()).
 
 -endif.
 

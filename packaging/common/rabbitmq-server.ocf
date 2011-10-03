@@ -43,7 +43,7 @@ OCF_RESKEY_server_default="/usr/sbin/rabbitmq-server"
 OCF_RESKEY_ctl_default="/usr/sbin/rabbitmqctl"
 OCF_RESKEY_nodename_default="rabbit@localhost"
 OCF_RESKEY_log_base_default="/var/log/rabbitmq"
-OCF_RESKEY_pid_file_default="/var/lib/rabbitmq/pid"
+OCF_RESKEY_pid_file_default="/var/run/rabbitmq/pid"
 : ${OCF_RESKEY_server=${OCF_RESKEY_server_default}}
 : ${OCF_RESKEY_ctl=${OCF_RESKEY_ctl_default}}
 : ${OCF_RESKEY_nodename=${OCF_RESKEY_nodename_default}}
@@ -179,6 +179,21 @@ RABBITMQ_PID_FILE=$OCF_RESKEY_pid_file
 [ ! -z $RABBITMQ_NODENAME ] && NODENAME_ARG="-n $RABBITMQ_NODENAME"
 [ ! -z $RABBITMQ_NODENAME ]            && export RABBITMQ_NODENAME
 
+ensure_pid_dir () {
+    PID_DIR=`dirname ${RABBITMQ_PID_FILE}`
+    if [ ! -d ${PID_DIR} ] ; then
+        mkdir -p ${PID_DIR}
+        chown -R rabbitmq:rabbitmq ${PID_DIR}
+        chmod 755 ${PID_DIR}
+    fi
+    return $OCF_SUCCESS
+}
+
+remove_pid () {
+    rm -f ${RABBITMQ_PID_FILE}
+    rmdir `dirname ${RABBITMQ_PID_FILE}` || :
+}
+
 export_vars() {
     [ ! -z $RABBITMQ_NODE_IP_ADDRESS ]     && export RABBITMQ_NODE_IP_ADDRESS
     [ ! -z $RABBITMQ_NODE_PORT ]           && export RABBITMQ_NODE_PORT
@@ -186,7 +201,7 @@ export_vars() {
     [ ! -z $RABBITMQ_LOG_BASE ]            && export RABBITMQ_LOG_BASE
     [ ! -z $RABBITMQ_MNESIA_BASE ]         && export RABBITMQ_MNESIA_BASE
     [ ! -z $RABBITMQ_SERVER_START_ARGS ]   && export RABBITMQ_SERVER_START_ARGS
-    [ ! -z $RABBITMQ_PID_FILE ]            && export RABBITMQ_PID_FILE
+    [ ! -z $RABBITMQ_PID_FILE ]            && ensure_pid_dir && export RABBITMQ_PID_FILE
 }
 
 rabbit_validate_partial() {
@@ -268,7 +283,7 @@ rabbit_start() {
     rabbit_wait $RABBITMQ_PID_FILE
     rc=$?
     if [ "$rc" != $OCF_SUCCESS ]; then
-        rm -f $RABBITMQ_PID_FILE
+        remove_pid
         ocf_log info "rabbitmq-server start failed: $rc"
         exit $OCF_ERR_GENERIC
     fi
@@ -299,7 +314,7 @@ rabbit_stop() {
         rabbit_status
         rc=$?
         if [ "$rc" = $OCF_NOT_RUNNING ]; then
-            rm -f $RABBITMQ_PID_FILE
+            remove_pid
             stop_wait=0
             break
         elif [ "$rc" != $OCF_SUCCESS ]; then

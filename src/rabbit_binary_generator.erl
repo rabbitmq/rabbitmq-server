@@ -122,10 +122,9 @@ build_content_frames(SizeAcc, FramesAcc, FragSizeRem, FragAcc,
 build_heartbeat_frame() ->
     create_frame(?FRAME_HEARTBEAT, 0, <<>>).
 
-create_frame(TypeInt, ChannelInt, PayloadBin) when is_binary(PayloadBin) ->
-    [<<TypeInt:8, ChannelInt:16, (size(PayloadBin)):32>>, PayloadBin, <<?FRAME_END>>];
 create_frame(TypeInt, ChannelInt, Payload) ->
-    create_frame(TypeInt, ChannelInt, list_to_binary(Payload)).
+    [<<TypeInt:8, ChannelInt:16, (iolist_size(Payload)):32>>, Payload,
+     ?FRAME_END].
 
 %% table_field_to_binary supports the AMQP 0-8/0-9 standard types, S,
 %% I, D, T and F, as well as the QPid extensions b, d, f, l, s, t, x,
@@ -194,13 +193,13 @@ generate_array(Array) when is_list(Array) ->
 
 short_string_to_binary(String) when is_binary(String) ->
     Len = size(String),
-    if Len < 256 -> [<<(size(String)):8>>, String];
+    if Len < 256 -> [<<Len:8>>, String];
        true      -> exit(content_properties_shortstr_overflow)
     end;
 short_string_to_binary(String) ->
-    StringLength = length(String),
-    if StringLength < 256 -> [<<StringLength:8>>, String];
-       true               -> exit(content_properties_shortstr_overflow)
+    Len = length(String),
+    if Len < 256 -> [<<Len:8>>, String];
+       true      -> exit(content_properties_shortstr_overflow)
     end.
 
 long_string_to_binary(String) when is_binary(String) ->
@@ -240,11 +239,11 @@ encode_properties(Bit, [T | TypeList], [Value | ValueList], FirstShortAcc, Flags
 
 encode_property(shortstr, String) ->
     Len = size(String),
-    if Len < 256 -> <<Len:8/unsigned, String:Len/binary>>;
+    if Len < 256 -> <<Len:8, String:Len/binary>>;
        true      -> exit(content_properties_shortstr_overflow)
     end;
 encode_property(longstr, String) ->
-    Len = size(String), <<Len:32/unsigned, String:Len/binary>>;
+    Len = size(String), <<Len:32, String:Len/binary>>;
 encode_property(octet, Int) ->
     <<Int:8/unsigned>>;
 encode_property(shortint, Int) ->
@@ -261,7 +260,7 @@ encode_property(table, Table) ->
 check_empty_content_body_frame_size() ->
     %% Intended to ensure that EMPTY_CONTENT_BODY_FRAME_SIZE is
     %% defined correctly.
-    ComputedSize = size(list_to_binary(create_frame(?FRAME_BODY, 0, <<>>))),
+    ComputedSize = iolist_size(create_frame(?FRAME_BODY, 0, <<>>)),
     if ComputedSize == ?EMPTY_CONTENT_BODY_FRAME_SIZE ->
             ok;
        true ->

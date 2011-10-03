@@ -26,12 +26,17 @@
 %% with the result of closing the old handler when swapping handlers.
 %% The first init/1 additionally allows for simple log rotation
 %% when the suffix is not the empty string.
+%% The original init/1 also opened the file in 'write' mode, thus
+%% overwriting old logs.  To remedy this, init/1 from
+%% lib/sasl/src/sasl_report_file_h.erl from R14B3 was copied as
+%% init_file/1 and changed so that it opens the file in 'append' mode.
 
 %% Used only when swapping handlers and performing
 %% log rotation
 init({{File, Suffix}, []}) ->
-    case rabbit_misc:append_file(File, Suffix) of
-        ok -> ok;
+    case rabbit_file:append_file(File, Suffix) of
+        ok -> file:delete(File),
+              ok;
         {error, Error} ->
             rabbit_log:error("Failed to append contents of "
                              "sasl log file '~s' to '~s':~n~p~n",
@@ -47,11 +52,18 @@ init({{File, _}, error}) ->
 init({File, []}) ->
     init(File);
 init({File, _Type} = FileInfo) ->
-    rabbit_misc:ensure_parent_dirs_exist(File),
-    sasl_report_file_h:init(FileInfo);
+    rabbit_file:ensure_parent_dirs_exist(File),
+    init_file(FileInfo);
 init(File) ->
-    rabbit_misc:ensure_parent_dirs_exist(File),
-    sasl_report_file_h:init({File, sasl_error_logger_type()}).
+    rabbit_file:ensure_parent_dirs_exist(File),
+    init_file({File, sasl_error_logger_type()}).
+
+init_file({File, Type}) ->
+    process_flag(trap_exit, true),
+    case file:open(File, [append]) of
+        {ok,Fd} -> {ok, {Fd, File, Type}};
+        Error   -> Error
+    end.
 
 handle_event(Event, State) ->
     sasl_report_file_h:handle_event(Event, State).

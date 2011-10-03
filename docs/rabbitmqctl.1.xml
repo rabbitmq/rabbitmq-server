@@ -251,29 +251,28 @@
               Instruct the RabbitMQ node to rotate the log files.
             </para>
             <para>
-              The RabbitMQ broker will attempt to append the current contents
-              of the log file to the file with name composed of the original
-              name and the suffix.
-              It will create a new file if such a file does not already exist.
-              When no <option>suffix</option> is specified, the empty log file is
-              simply created at the original location; no rotation takes place.
+              The RabbitMQ broker appends the contents of its log
+              files to files with names composed of the original name
+              and the suffix, and then resumes logging to freshly
+              created files at the original location. I.e. effectively
+              the current log contents are moved to the end of the
+              suffixed files.
             </para>
             <para>
-              When an error occurs while appending the contents of the old log
-              file, the operation behaves in the same way as if no <option>suffix</option> was
-              specified.
-            </para>
-            <para>
-              This command might be helpful when you are e.g. writing your
-              own logrotate script and you do not want to restart the RabbitMQ
-              node.
+              When the target files do not exist they are created.
+              target files do not already exist.  When
+              no <option>suffix</option> is specified, the empty log
+              files are simply created at the original location; no
+              rotation takes place.
             </para>
             <para role="example-prefix">For example:</para>
             <screen role="example">rabbitmqctl rotate_logs .1</screen>
             <para role="example">
-              This command instructs the RabbitMQ node to append the current content
-              of the log files to the files with names consisting of the original logs'
-              names and ".1" suffix, e.g. rabbit.log.1. Finally, the old log files are reopened.
+              This command instructs the RabbitMQ node to append the contents
+              of the log files to files with names consisting of the original logs'
+              names and ".1" suffix, e.g. rabbit@mymachine.log.1 and
+              rabbit@mymachine-sasl.log.1. Finally, logging resumes to
+              fresh files at the old locations.
             </para>
           </listitem>
         </varlistentry>
