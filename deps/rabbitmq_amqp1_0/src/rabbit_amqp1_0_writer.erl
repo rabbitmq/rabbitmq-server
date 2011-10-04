@@ -27,6 +27,7 @@
 -record(wstate, {sock, channel, frame_max, protocol}).
 
 -define(HIBERNATE_AFTER, 5000).
+-define(AMQP_SASL_FRAME_TYPE, 1).
 
 %%---------------------------------------------------------------------------
 
@@ -171,6 +172,12 @@ assemble_frame(Channel, Performative, rabbit_amqp1_0_framing) ->
     ?LOGMESSAGE(out, Channel, Performative, none),
     PerfBin = rabbit_amqp1_0_framing:encode_bin(Performative),
     rabbit_amqp1_0_binary_generator:build_frame(Channel, PerfBin);
+
+assemble_frame(Channel, Performative, rabbit_amqp1_0_sasl) ->
+    ?LOGMESSAGE(out, Channel, Performative, none),
+    PerfBin = rabbit_amqp1_0_framing:encode_bin(Performative),
+    rabbit_amqp1_0_binary_generator:build_frame(Channel,
+                                                ?AMQP_SASL_FRAME_TYPE, PerfBin);
 
 %% End 1-0
 

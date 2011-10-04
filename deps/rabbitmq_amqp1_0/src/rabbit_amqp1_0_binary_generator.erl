@@ -1,6 +1,7 @@
 -module(rabbit_amqp1_0_binary_generator).
 
--export([generate/1, build_frame/2, build_heartbeat_frame/0]).
+-export([generate/1, build_frame/2, build_frame/3,
+         build_heartbeat_frame/0]).
 
 -include("rabbit_amqp1_0.hrl").
 
@@ -13,8 +14,11 @@
 -define(DOFF, 2).
 
 build_frame(Channel, Payload) ->
+    build_frame(Channel, ?AMQP_FRAME_TYPE, Payload).
+
+build_frame(Channel, FrameType, Payload) ->
     Size = iolist_size(Payload) + 8, % frame header and no extension
-    [ <<Size:32/unsigned, 2:8, ?AMQP_FRAME_TYPE:8, Channel:16/unsigned>>, Payload ].
+    [ <<Size:32/unsigned, 2:8, FrameType:8, Channel:16/unsigned>>, Payload ].
 
 build_heartbeat_frame() ->
     %% length is inclusive

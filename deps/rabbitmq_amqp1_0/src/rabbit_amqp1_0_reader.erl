@@ -816,7 +816,7 @@ start_1_0_connection(sasl, {1, 0, 0}, Protocol, State = #v1{sock = Sock}) ->
     send_1_0_handshake(Sock, <<"AMQP",3,1,0,0>>),
     Ms = {array, symbol, [atom_to_list(M) || M <- auth_mechanisms(Sock)]},
     Mechanisms = #'v1_0.sasl_mechanisms'{sasl_server_mechanisms = Ms},
-    ok = send_on_channel0(Sock, Mechanisms, Protocol),
+    ok = send_on_channel0(Sock, Mechanisms, rabbit_amqp1_0_sasl),
     start_1_0_connection0(sasl, Protocol, State);
 
 start_1_0_connection(amqp, {1, 0, 0}, Protocol,
