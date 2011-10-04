@@ -1074,11 +1074,11 @@ auth_phase_1_0(Response,
             rabbit_misc:protocol_error(syntax_error, Msg, Args);
         {challenge, Challenge, AuthState1} ->
             Secure = #'v1_0.sasl_challenge'{challenge = {binary, Challenge}},
-            ok = send_on_channel0(Sock, Secure, Protocol),
+            ok = send_on_channel0(Sock, Secure, rabbit_amqp1_0_sasl),
             State#v1{auth_state = AuthState1};
         {ok, User} ->
             Outcome = #'v1_0.sasl_outcome'{code = {ubyte, 0}},
-            ok = send_on_channel0(Sock, Outcome, Protocol),
+            ok = send_on_channel0(Sock, Outcome, rabbit_amqp1_0_sasl),
             switch_callback(
               State#v1{connection_state = waiting_amqp0100,
                        connection = Connection#connection{user = User}},
