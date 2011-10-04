@@ -156,7 +156,7 @@ ensure_target(Target = #'v1_0.target'{address       = Address,
         _ ->
             case Address of
                 {Enc, Destination}
-                when Enc =:= utf8 orelse Enc =:= utf16 ->
+                  when Enc =:= utf8 orelse Enc =:= utf16 ->
                     case rabbit_amqp1_0_link_util:parse_destination(Destination, Enc) of
                         ["queue", Name] ->
                             case rabbit_amqp1_0_link_util:check_queue(Name, DCh) of

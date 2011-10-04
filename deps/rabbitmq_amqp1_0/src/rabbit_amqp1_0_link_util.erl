@@ -52,6 +52,8 @@ parse_destination(Destination, Enc) when is_binary(Destination) ->
 
 parse_destination(Destination) when is_list(Destination) ->
     case re:split(Destination, "/", [{return, list}]) of
+        [Name] ->
+            ["queue", Name];
         ["", Type | Tail] when
               Type =:= "queue" orelse Type =:= "exchange" ->
             [Type | Tail];

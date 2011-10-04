@@ -15,7 +15,6 @@
                         no_ack,
                         default_outcome}).
 
-%% TODO ensure_destination
 attach(#'v1_0.attach'{name = Name,
                       handle = Handle,
                       source = Source,
@@ -67,7 +66,7 @@ attach(#'v1_0.attach'{name = Name,
                     protocol_error(?V_1_0_AMQP_ERROR_INTERNAL_ERROR, "Consume failed: ~p", Fail)
             end;
         {error, _Reason} ->
-            %% TODO Y U NO protocol_error?
+            %% TODO Deal with this properly -- detach and what have you
             {ok, [#'v1_0.attach'{source = undefined}]}
     end.
 
@@ -147,32 +146,34 @@ ensure_source(Source = #'v1_0.source'{address       = Address,
             end;
         _ ->
             %% TODO ugh. This will go away after the planned codec rewrite.
-            Destination = case Address of
-                              {_Enc, D} -> binary_to_list(D);
-                              D         -> D
-                          end,
-            case rabbit_amqp1_0_link_util:parse_destination(Destination) of
-                ["queue", Name] ->
-                    case rabbit_amqp1_0_link_util:check_queue(Name, DCh) of
-                        {ok, QueueName} ->
-                            {ok, Source,
-                             Link#outgoing_link{queue = QueueName}};
-                        {error, Reason} ->
-                            {error, Reason}
+            case Address of
+                {Enc, Destination}
+                  when Enc =:= utf8 orelse Enc =:= utf16 ->
+                    case rabbit_amqp1_0_link_util:parse_destination(Destination, Enc) of
+                        ["queue", Name] ->
+                            case rabbit_amqp1_0_link_util:check_queue(Name, DCh) of
+                                {ok, QueueName} ->
+                                    {ok, Source,
+                                     Link#outgoing_link{queue = QueueName}};
+                                {error, Reason} ->
+                                    {error, Reason}
+                            end;
+                        ["exchange", Name, RK] ->
+                            case rabbit_amqp1_0_link_util:check_exchange(Name, DCh) of
+                                {ok, ExchangeName} ->
+                                    RoutingKey = list_to_binary(RK),
+                                    {ok, QueueName} =
+                                        rabbit_amqp1_0_link_util:create_bound_queue(
+                                          ExchangeName, RoutingKey, DCh),
+                                    {ok, Source, Link#outgoing_link{queue = QueueName}};
+                                {error, Reason} ->
+                                    {error, Reason}
+                            end;
+                        _Otherwise ->
+                            {error, {unknown_address, Address}}
                     end;
-                ["exchange", Name, RK] ->
-                    case rabbit_amqp1_0_link_util:check_exchange(Name, DCh) of
-                        {ok, ExchangeName} ->
-                            RoutingKey = list_to_binary(RK),
-                            {ok, QueueName} =
-                                rabbit_amqp1_0_link_util:create_bound_queue(
-                                  ExchangeName, RoutingKey, DCh),
-                            {ok, Source, Link#outgoing_link{queue = QueueName}};
-                        {error, Reason} ->
-                            {error, Reason}
-                    end;
-                _Otherwise ->
-                    {error, {unknown_address, Destination}}
+                _ ->
+                    {error, {unknown_address, Address}}
             end
     end.
 
