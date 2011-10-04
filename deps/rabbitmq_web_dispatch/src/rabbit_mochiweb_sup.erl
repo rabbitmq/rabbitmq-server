@@ -37,7 +37,7 @@ upgrade(ListenerSpecs) ->
 ensure_listener({Listener, Spec}) ->
     Child = {{rabbit_mochiweb_web, Listener},
              {rabbit_mochiweb_web, start, [{Listener, Spec}]},
-             permanent, 5000, worker, dynamic},
+             transient, 5000, worker, dynamic},
     case supervisor:start_child(?SUP, Child) of
         {ok,                      Pid}  -> {ok, Pid};
         {error, {already_started, Pid}} -> {ok, Pid}
@@ -52,5 +52,5 @@ stop_listener({Listener, _Spec}) ->
 init([ListenerSpecs]) ->
     Registry = {rabbit_mochiweb_registry,
                 {rabbit_mochiweb_registry, start_link, [ListenerSpecs]},
-                permanent, 5000, worker, dynamic},
+                transient, 5000, worker, dynamic},
     {ok, {{one_for_one, 10, 10}, [Registry]}}.
