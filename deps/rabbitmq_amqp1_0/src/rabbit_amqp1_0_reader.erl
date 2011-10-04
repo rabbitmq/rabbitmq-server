@@ -561,6 +561,8 @@ parse_1_0_frame(Payload) ->
     Sections.
 
 handle_1_0_connection_frame(#'v1_0.open'{ max_frame_size = ClientFrameMax,
+                                          channel_max = ClientChannelMax,
+                                          %% TODO idle_time_out
                                           hostname = _Hostname,
                                           properties = Props },
                             State = #v1{
@@ -570,7 +572,6 @@ handle_1_0_connection_frame(#'v1_0.open'{ max_frame_size = ClientFrameMax,
                               connection = Connection,
                               sock = Sock}) ->
     Interval = undefined, %% TODO does 1-0 really no longer have heartbeating?
-    %% TODO channel_max?
     ClientProps = case Props of
                       undefined -> [];
                       {map, Ps} -> Ps
@@ -580,11 +581,15 @@ handle_1_0_connection_frame(#'v1_0.open'{ max_frame_size = ClientFrameMax,
                           {_, HB} -> HB
                       end,
     FrameMax = case ClientFrameMax of
-                   undefined -> 0;
+                   undefined -> unlimited;
                    {_, FM} -> FM
                end,
+    ChannelMax = case ClientChannelMax of
+                     undefined -> unlimited;
+                     {_, CM} -> CM
+                 end,
     State1 =
-        if (FrameMax /= 0) and (FrameMax < ?FRAME_1_0_MIN_SIZE) ->
+        if (FrameMax =/= unlimited) and (FrameMax < ?FRAME_1_0_MIN_SIZE) ->
                 rabbit_misc:protocol_error(
                   not_allowed, "frame_max=~w < ~w min size",
                   [FrameMax, ?FRAME_1_0_MIN_SIZE]);
@@ -616,10 +621,11 @@ handle_1_0_connection_frame(#'v1_0.open'{ max_frame_size = ClientFrameMax,
                                         frame_max = FrameMax},
                          heartbeater = Heartbeater}
         end,
+    %% TODO enforce channel_max
     ok = send_on_channel0(
            Sock,
-           #'v1_0.open'{channel_max = {ushort, 0},
-                        max_frame_size = {uint, FrameMax},
+           #'v1_0.open'{channel_max = ClientChannelMax,
+                        max_frame_size = ClientFrameMax,
                         container_id = {utf8, list_to_binary(atom_to_list(node()))}},
            rabbit_amqp1_0_framing),
     State2 = internal_conserve_memory(
@@ -1210,8 +1216,8 @@ send_to_new_1_0_session(Channel, Frame, State) ->
           %% NB subtract fixed frame header size
           ChanSupSup, {Protocol, Sock, Channel,
                        case FrameMax of
-                           0 -> 0;
-                           _ -> FrameMax - 8
+                           unlimited -> unlimited;
+                           _         -> FrameMax - 8
                        end,
                        self(), User, VHost, Collector}),
     erlang:monitor(process, ChFrPid),

@@ -201,7 +201,7 @@ delivery(Deliver = #'basic.deliver'{delivery_tag = DeliveryTag,
     %% FIXME Ugh
     TLen = iolist_size(rabbit_amqp1_0_framing:encode_bin(Txfr)),
     Frames = case FrameMax of
-                 0 ->
+                 unlimited ->
                      [[Txfr, Msg1_0]];
                  _ ->
                      encode_frames(Txfr, Msg1_0, FrameMax - TLen, [])
