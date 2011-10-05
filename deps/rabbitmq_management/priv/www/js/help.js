@@ -20,11 +20,11 @@ HELP = {
     'internal-users-only':
       'Only users within the internal RabbitMQ database are shown here. Other users (e.g. those authenticated over LDAP) will not appear.',
 
-    'export-config':
-    'The configuration consists of users, virtual hosts, permissions, exchanges, queues and bindings. It does not include the contents of queues. Exclusive queues will not be exported.',
+    'export-schema':
+    'The schema consists of users, virtual hosts, permissions, exchanges, queues and bindings. It does not include the contents of queues. Exclusive queues will not be exported.',
 
-    'import-config':
-      'The configuration that is imported will be merged with the current configuration. If an error occurs during import, any configuration changes made will not be rolled back.',
+    'import-schema':
+      'The schema that is imported will be merged with the current schema. If an error occurs during import, any changes made will not be rolled back.',
 
     'exchange-rates-incoming':
       'The incoming rate is the rate at which messages are published directly to this exchange.',

@@ -125,9 +125,9 @@
 <% } %>
      <td class="c">
        <% if (node.type == 'disc') { %>
-         <acronym title="Broker configuration is held on disc.">Disc</acronym>
+         <acronym title="Broker schema is held on disc.">Disc</acronym>
        <% } else { %>
-         <acronym title="Broker configuration is held in RAM. Messages will still be written to disc if necessary.">RAM</acronym>
+         <acronym title="Broker schema is held in RAM. Messages will still be written to disc if necessary.">RAM</acronym>
        <% } %>
        <% if (overview.statistics_db_node == node.name) { %>
          <acronym title="This node contains the management statistics database">Stats</acronym>
@@ -205,9 +205,9 @@
 </div>
 
 <div class="section-hidden administrator-only">
-<h2>Import / export configuration</h2>
+<h2>Import / export schema</h2>
 <div class="hider">
-  <form action="api/all-configuration" method="post" enctype="multipart/form-data">
+  <form action="api/schema" method="post" enctype="multipart/form-data">
     <table class="two-col-layout">
       <tr>
         <td>
@@ -220,7 +220,7 @@
         <td>
           <h3>Import</h3>
           <p>
-            <label>Configuration file:</label><br/>
+            <label>Schema file:</label><br/>
             <input type="file" name="file"/>
           </p>
         </td>
@@ -228,15 +228,15 @@
       <tr>
         <td>
           <p>
-            <button id="download-configuration">Download broker configuration</button>
-            <span class="help" id="export-config"></span>
+            <button id="download-schema">Download broker schema</button>
+            <span class="help" id="export-schema"></span>
           </p>
         </td>
         <td>
           <p>
             <input type="hidden" name="redirect" value="../#/import-succeeded"/>
-            <input type="submit" value="Upload broker configuration"/>
-            <span class="help" id="import-config"></span>
+            <input type="submit" value="Upload broker schema"/>
+            <span class="help" id="import-schema"></span>
           </p>
         </td>
       </tr>

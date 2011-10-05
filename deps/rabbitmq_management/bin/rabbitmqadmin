@@ -301,18 +301,18 @@ class Management:
 
     def invoke_export(self):
         path = self.get_arg()
-        config = self.get("/all-configuration")
+        schema = self.get("/schema")
         with open(path, 'w') as f:
-            f.write(config)
-        self.verbose("Exported configuration for %s to \"%s\""
+            f.write(schema)
+        self.verbose("Exported schema for %s to \"%s\""
                      % (self.options.hostname, path))
 
     def invoke_import(self):
         path = self.get_arg()
         with open(path, 'r') as f:
-            config = f.read()
-        self.post("/all-configuration", config)
-        self.verbose("Imported configuration for %s from \"%s\""
+            schema = f.read()
+        self.post("/schema", schema)
+        self.verbose("Imported schema for %s from \"%s\""
                      % (self.options.hostname, path))
 
     def invoke_list(self):

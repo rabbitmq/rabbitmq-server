@@ -538,7 +538,7 @@ unicode_test() ->
     http_delete("/queues/%2f/♫♪♫♪", ?NO_CONTENT),
     ok.
 
-all_configuration_test() ->
+schema_test() ->
     XArgs = [{type, <<"direct">>}],
     QArgs = [],
     http_put("/queues/%2f/my-queue", QArgs, ?NO_CONTENT),
@@ -546,13 +546,13 @@ all_configuration_test() ->
     http_put("/bindings/%2f/e/my-exchange/q/my-queue/routing", [], ?NO_CONTENT),
     http_put("/bindings/%2f/e/amq.direct/q/my-queue/routing", [], ?NO_CONTENT),
     http_put("/bindings/%2f/e/amq.direct/e/amq.fanout/routing", [], ?NO_CONTENT),
-    AllConfig = http_get("/all-configuration", ?OK),
+    Schema = http_get("/schema", ?OK),
     http_delete("/bindings/%2f/e/my-exchange/q/my-queue/routing", ?NO_CONTENT),
     http_delete("/bindings/%2f/e/amq.direct/q/my-queue/routing", ?NO_CONTENT),
     http_delete("/bindings/%2f/e/amq.direct/e/amq.fanout/routing", ?NO_CONTENT),
     http_delete("/queues/%2f/my-queue", ?NO_CONTENT),
     http_delete("/exchanges/%2f/my-exchange", ?NO_CONTENT),
-    http_post("/all-configuration", AllConfig, ?NO_CONTENT),
+    http_post("/schema", Schema, ?NO_CONTENT),
     http_delete("/bindings/%2f/e/my-exchange/q/my-queue/routing", ?NO_CONTENT),
     http_delete("/bindings/%2f/e/amq.direct/q/my-queue/routing", ?NO_CONTENT),
     http_delete("/bindings/%2f/e/amq.direct/e/amq.fanout/routing", ?NO_CONTENT),
@@ -583,26 +583,26 @@ all_configuration_test() ->
                          {arguments,   []}
                         ]]},
          {bindings,    []}],
-    http_post("/all-configuration", ExtraConfig, ?NO_CONTENT),
-    http_post("/all-configuration", BrokenConfig, ?BAD_REQUEST),
+    http_post("/schema", ExtraConfig, ?NO_CONTENT),
+    http_post("/schema", BrokenConfig, ?BAD_REQUEST),
     http_delete("/queues/%2f/another-queue", ?NO_CONTENT),
     ok.
 
-all_configuration_remove_things_test() ->
+schema_remove_things_test() ->
     {ok, Conn} = amqp_connection:start(#amqp_params_network{}),
     {ok, Ch} = amqp_connection:open_channel(Conn),
     amqp_channel:call(Ch, #'queue.declare'{ queue = <<"my-exclusive">>,
                                             exclusive = true }),
     http_get("/queues/%2f/my-exclusive", ?OK),
-    AllConfig = http_get("/all-configuration", ?OK),
-    [] = pget(queues, AllConfig),
-    [] = pget(exchanges, AllConfig),
-    [] = pget(bindings, AllConfig),
+    Schema = http_get("/schema", ?OK),
+    [] = pget(queues, Schema),
+    [] = pget(exchanges, Schema),
+    [] = pget(bindings, Schema),
     amqp_channel:close(Ch),
     amqp_connection:close(Conn),
     ok.
 
-all_configuration_server_named_queue_test() ->
+schema_server_named_queue_test() ->
     {ok, Conn} = amqp_connection:start(#amqp_params_network{}),
     {ok, Ch} = amqp_connection:open_channel(Conn),
     #'queue.declare_ok'{ queue = QName } =
@@ -611,10 +611,10 @@ all_configuration_server_named_queue_test() ->
     amqp_connection:close(Conn),
     Path = "/queues/%2f/" ++ mochiweb_util:quote_plus(QName),
     http_get(Path, ?OK),
-    AllConfig = http_get("/all-configuration", ?OK),
+    Schema = http_get("/schema", ?OK),
     http_delete(Path, ?NO_CONTENT),
     http_get(Path, ?NOT_FOUND),
-    http_post("/all-configuration", AllConfig, ?NO_CONTENT),
+    http_post("/schema", Schema, ?NO_CONTENT),
     http_get(Path, ?OK),
     http_delete(Path, ?NO_CONTENT),
     ok.
@@ -635,10 +635,10 @@ arguments_test() ->
     http_put("/exchanges/%2f/myexchange", XArgs, ?NO_CONTENT),
     http_put("/queues/%2f/myqueue", QArgs, ?NO_CONTENT),
     http_post("/bindings/%2f/e/myexchange/q/myqueue", BArgs, ?CREATED),
-    AllConfig = http_get("/all-configuration", ?OK),
+    Schema = http_get("/schema", ?OK),
     http_delete("/exchanges/%2f/myexchange", ?NO_CONTENT),
     http_delete("/queues/%2f/myqueue", ?NO_CONTENT),
-    http_post("/all-configuration", AllConfig, ?NO_CONTENT),
+    http_post("/schema", Schema, ?NO_CONTENT),
     [{'alternate-exchange', <<"amq.direct">>}] =
         pget(arguments, http_get("/exchanges/%2f/myexchange", ?OK)),
     [{'x-expires', 1800000}] =
@@ -657,9 +657,9 @@ arguments_table_test() ->
     XArgs = [{type, <<"headers">>},
              {arguments, Args}],
     http_put("/exchanges/%2f/myexchange", XArgs, ?NO_CONTENT),
-    AllConfig = http_get("/all-configuration", ?OK),
+    Schema = http_get("/schema", ?OK),
     http_delete("/exchanges/%2f/myexchange", ?NO_CONTENT),
-    http_post("/all-configuration", AllConfig, ?NO_CONTENT),
+    http_post("/schema", Schema, ?NO_CONTENT),
     Args = pget(arguments, http_get("/exchanges/%2f/myexchange", ?OK)),
     http_delete("/exchanges/%2f/myexchange", ?NO_CONTENT),
     ok.

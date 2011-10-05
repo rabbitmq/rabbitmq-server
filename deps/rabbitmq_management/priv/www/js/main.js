@@ -260,8 +260,8 @@ function postprocess() {
                 }
             }
         });
-    $('#download-configuration').click(function() {
-            var path = 'api/all-configuration?download=' +
+    $('#download-schema').click(function() {
+            var path = 'api/schema?download=' +
                 esc($('#download-filename').val());
             window.location = path;
             setTimeout('app.run()');
