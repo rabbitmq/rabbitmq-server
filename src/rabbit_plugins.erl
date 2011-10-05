@@ -110,7 +110,7 @@ action(enable, ToEnable0, _Opts, PluginsFile, PluginsDir) ->
               print_list("The following plugins have been enabled:",
                          NewImplicitlyEnabled -- ImplicitlyEnabled),
               io:format("Plugin configuration has changed. "
-                        "You should restart RabbitMQ.~n")
+                        "Restart RabbitMQ for changes to take effect.~n")
     end;
 
 action(disable, ToDisable0, _Opts, PluginsFile, PluginsDir) ->
@@ -140,7 +140,7 @@ action(disable, ToDisable0, _Opts, PluginsFile, PluginsDir) ->
                             ImplicitlyEnabled -- NewImplicitlyEnabled),
                  write_enabled_plugins(PluginsFile, NewEnabled),
                  io:format("Plugin configuration has changed. "
-                           "You should restart RabbitMQ.~n")
+                           "Restart RabbitMQ for changes to take effect.~n")
     end.
 
 %%----------------------------------------------------------------------------
