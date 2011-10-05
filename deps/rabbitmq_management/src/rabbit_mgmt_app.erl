@@ -42,11 +42,15 @@ start(_Type, _StartArgs) ->
     rabbit_mgmt_sup:start_link().
 
 stop(_State) ->
+    unregister_context(),
     ok.
 
 register_context() ->
     rabbit_mochiweb:register_context_handler(
       ?CONTEXT, "", make_loop(), "RabbitMQ Management").
+
+unregister_context() ->
+    rabbit_mochiweb:unregister_context(?CONTEXT).
 
 make_loop() ->
     Dispatch = rabbit_mgmt_dispatcher:build_dispatcher(),
