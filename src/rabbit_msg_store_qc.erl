@@ -25,8 +25,6 @@
 -export([initial_state/0, command/1, precondition/2, postcondition/3,
          next_state/3]).
 
--export([sync/2]).
-
 -record(state, {msgids,
                 mscstate}).
 
@@ -66,7 +64,6 @@ command(S) ->
     frequency([{10, qc_write(S)},
                {1,  qc_read(S)},
                {1,  qc_remove(S)},
-               {1,  qc_sync(S)},
                {1,  qc_contains(S)}]).
 
 qc_write(#state{mscstate = MS}) ->
@@ -79,9 +76,6 @@ qc_read(#state{msgids = MsgIds, mscstate = MS}) ->
 qc_remove(#state{msgids = MsgIds, mscstate = MS}) ->
     {call, ?MSMOD, remove, [rand_sublist(gb_trees:keys(MsgIds)), MS]}.
 
-qc_sync(#state{msgids = MsgIds, mscstate = MS}) ->
-    {call, ?MODULE, sync, [rand_sublist(gb_trees:keys(MsgIds)), MS]}.
-
 qc_contains(#state{msgids = MsgIds, mscstate = MS}) ->
     {call, ?MSMOD, contains, [frequency([{10, rand_elem(gb_trees:keys(MsgIds))},
                                          {1,  qc_msg_id()}]), MS]}.
@@ -93,9 +87,6 @@ precondition(#state{msgids = MsgIds},
     not gb_trees:is_defined(MsgId, MsgIds);
 
 precondition(#state{msgids = MsgIds}, {call, ?MSMOD, remove, _Arg}) ->
-    not gb_trees:is_empty(MsgIds);
-
-precondition(#state{msgids = MsgIds}, {call, ?MODULE, sync, _Arg}) ->
     not gb_trees:is_empty(MsgIds);
 
 precondition(_S, {call, ?MSMOD, _Fun, _Arg}) ->
@@ -116,9 +107,6 @@ next_state(#state{msgids = MsgIds} = S, _Res,
     S#state{msgids = lists:foldl(fun(Elem, Tree) ->
                                      gb_trees:delete(Elem, Tree)
                                  end, MsgIds, MsgIdList)};
-
-next_state(S, _Res, {call, ?MODULE, sync, [_MsgIdList, _MS]}) ->
-    S;
 
 next_state(S, _Res, {call, ?MSMOD, contains, [_MsgId, _MS]}) ->
     S.
@@ -142,20 +130,6 @@ postcondition(_S, {call, _Mod, _Fun, _Args}, _Res) ->
     true.
 
 %% Helpers
-
-sync(MsgIds, MS) ->
-    Ref = make_ref(),
-    Self = self(),
-    ok = ?MSMOD:sync(MsgIds,
-                     fun () -> Self ! {sync, Ref} end,
-                     MS),
-    receive
-        {sync, Ref} -> ok
-    after
-        10000 ->
-            io:format("Sync from msg_store missing for msg_ids ~p~n", [MsgIds]),
-            throw(timeout)
-    end.
 
 qc_payload() ->
     binary().
