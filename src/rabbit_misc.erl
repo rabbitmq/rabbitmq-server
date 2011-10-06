@@ -257,8 +257,15 @@ val({Type, Value}) ->
           end,
     lists:flatten(io_lib:format(Fmt, [Value, Type])).
 
-dirty_read(ReadSpec) ->
-    case mnesia:dirty_read(ReadSpec) of
+%% Normally we'd call mnesia:dirty_read/1 here, but that is quite
+%% expensive due to general mnesia overheads (figuring out table types
+%% and locations, etc). We get away with bypassing these because we
+%% know that the tables we are looking at here
+%% - are not the schema table
+%% - have a local ram copy
+%% - do not have any indices
+dirty_read({Table, Key}) ->
+    case ets:lookup(Table, Key) of
         [Result] -> {ok, Result};
         []       -> {error, not_found}
     end.

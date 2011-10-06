@@ -40,6 +40,7 @@
 
 -define(SERVER, ?MODULE).
 -define(DEFAULT_MEMORY_CHECK_INTERVAL, 1000).
+-define(ONE_MB, 1048576).
 
 %% For an unknown OS, we assume that we have 1GB of memory. It'll be
 %% wrong. Scale by vm_memory_high_watermark in configuration to get a
@@ -106,35 +107,20 @@ start_link(Args) ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [Args], []).
 
 init([MemFraction]) ->
-    TotalMemory =
-        case get_total_memory() of
-            unknown ->
-                error_logger:warning_msg(
-                  "Unknown total memory size for your OS ~p. "
-                  "Assuming memory size is ~pMB.~n",
-                  [os:type(), trunc(?MEMORY_SIZE_FOR_UNKNOWN_OS/1048576)]),
-                ?MEMORY_SIZE_FOR_UNKNOWN_OS;
-            M -> M
-        end,
-    MemLimit = get_mem_limit(MemFraction, TotalMemory),
-    error_logger:info_msg("Memory limit set to ~pMB.~n",
-                          [trunc(MemLimit/1048576)]),
     TRef = start_timer(?DEFAULT_MEMORY_CHECK_INTERVAL),
-    State = #state { total_memory = TotalMemory,
-                     memory_limit = MemLimit,
-                     timeout = ?DEFAULT_MEMORY_CHECK_INTERVAL,
+    State = #state { timeout = ?DEFAULT_MEMORY_CHECK_INTERVAL,
                      timer = TRef,
                      alarmed = false},
-    {ok, internal_update(State)}.
+    {ok, set_mem_limits(State, MemFraction)}.
 
 handle_call(get_vm_memory_high_watermark, _From, State) ->
     {reply, State#state.memory_limit / State#state.total_memory, State};
 
 handle_call({set_vm_memory_high_watermark, MemFraction}, _From, State) ->
-    MemLimit = get_mem_limit(MemFraction, State#state.total_memory),
+    State1 = set_mem_limits(State, MemFraction),
     error_logger:info_msg("Memory alarm changed to ~p, ~p bytes.~n",
-                          [MemFraction, MemLimit]),
-    {reply, ok, State#state{memory_limit = MemLimit}};
+                          [MemFraction, State1#state.memory_limit]),
+    {reply, ok, State1};
 
 handle_call(get_check_interval, _From, State) ->
     {reply, State#state.timeout, State};
@@ -167,6 +153,30 @@ code_change(_OldVsn, State, _Extra) ->
 %%----------------------------------------------------------------------------
 %% Server Internals
 %%----------------------------------------------------------------------------
+
+set_mem_limits(State, MemFraction) ->
+    TotalMemory =
+        case get_total_memory() of
+            unknown ->
+                case State of
+                    #state { total_memory = undefined,
+                             memory_limit = undefined } ->
+                        error_logger:warning_msg(
+                          "Unknown total memory size for your OS ~p. "
+                          "Assuming memory size is ~pMB.~n",
+                          [os:type(),
+                           trunc(?MEMORY_SIZE_FOR_UNKNOWN_OS/?ONE_MB)]);
+                    _ ->
+                        ok
+                end,
+                ?MEMORY_SIZE_FOR_UNKNOWN_OS;
+            M -> M
+        end,
+    MemLim = get_mem_limit(MemFraction, TotalMemory),
+    error_logger:info_msg("Memory limit set to ~pMB of ~pMB total.~n",
+                          [trunc(MemLim/?ONE_MB), trunc(TotalMemory/?ONE_MB)]),
+    internal_update(State #state { total_memory = TotalMemory,
+                                   memory_limit = MemLim }).
 
 internal_update(State = #state { memory_limit = MemLimit,
                                  alarmed = Alarmed}) ->
@@ -322,9 +332,9 @@ parse_line_sunos(Line) ->
             [Value1 | UnitsRest] = string:tokens(RHS, " "),
             Value2 = case UnitsRest of
                          ["Gigabytes"] ->
-                             list_to_integer(Value1) * 1024 * 1024 * 1024;
+                             list_to_integer(Value1) * ?ONE_MB * 1024;
                          ["Megabytes"] ->
-                             list_to_integer(Value1) * 1024 * 1024;
+                             list_to_integer(Value1) * ?ONE_MB;
                          ["Kilobytes"] ->
                              list_to_integer(Value1) * 1024;
                          _ ->

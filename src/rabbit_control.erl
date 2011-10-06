@@ -91,6 +91,9 @@ start() ->
             print_error("invalid command '~s'",
                         [string:join([atom_to_list(Command) | Args], " ")]),
             usage();
+        {'EXIT', {badarg, _}} ->
+            print_error("invalid parameter: ~p", [Args]),
+            usage();
         {error, Reason} ->
             print_error("~p", [Reason]),
             quit(2);
@@ -320,6 +323,11 @@ action(trace_off, Node, [], Opts, Inform) ->
     VHost = proplists:get_value(?VHOST_OPT, Opts),
     Inform("Stopping tracing for vhost ~p", [VHost]),
     rpc_call(Node, rabbit_trace, stop, [list_to_binary(VHost)]);
+
+action(set_vm_memory_high_watermark, Node, [Arg], _Opts, Inform) ->
+    Frac = list_to_float(Arg),
+    Inform("Setting memory threshhold on ~p to ~p", [Node, Frac]),
+    rpc_call(Node, vm_memory_monitor, set_vm_memory_high_watermark, [Frac]);
 
 action(set_permissions, Node, [Username, CPerm, WPerm, RPerm], Opts, Inform) ->
     VHost = proplists:get_value(?VHOST_OPT, Opts),

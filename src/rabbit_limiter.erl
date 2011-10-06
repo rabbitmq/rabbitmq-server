@@ -251,6 +251,7 @@ notify_queues(State = #lim{ch_pid = ChPid, queues = Queues}) ->
                      end, {[], Queues}, Queues),
     case length(QList) of
         0 -> ok;
+        1 -> ok = rabbit_amqqueue:unblock(hd(QList), ChPid); %% common case
         L ->
             %% We randomly vary the position of queues in the list,
             %% thus ensuring that each queue has an equal chance of

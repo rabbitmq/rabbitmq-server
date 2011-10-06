@@ -36,7 +36,6 @@
                 queue_durations,      %% ets #process
                 queue_duration_sum,   %% sum of all queue_durations
                 queue_duration_count, %% number of elements in sum
-                memory_limit,         %% how much memory we intend to use
                 desired_duration      %% the desired queue duration
                }).
 
@@ -62,9 +61,6 @@
 %% SUM_INC_THRESHOLD, increase the sum artificially by SUM_INC_AMOUNT.
 -define(SUM_INC_THRESHOLD, 0.95).
 -define(SUM_INC_AMOUNT, 1.0).
-
-%% If user disabled vm_memory_monitor, let's assume 1GB of memory we can use.
--define(MEMORY_SIZE_FOR_DISABLED_VMM, 1073741824).
 
 -define(EPSILON, 0.000001). %% less than this and we clamp to 0
 
@@ -110,13 +106,6 @@ stop() ->
 %%----------------------------------------------------------------------------
 
 init([]) ->
-    MemoryLimit = trunc(?MEMORY_LIMIT_SCALING *
-                            (try
-                                 vm_memory_monitor:get_memory_limit()
-                             catch
-                                 exit:{noproc, _} -> ?MEMORY_SIZE_FOR_DISABLED_VMM
-                             end)),
-
     {ok, TRef} = timer:apply_interval(?DEFAULT_UPDATE_INTERVAL,
                                       ?SERVER, update, []),
 
@@ -127,7 +116,6 @@ init([]) ->
                     queue_durations      = Ets,
                     queue_duration_sum   = 0.0,
                     queue_duration_count = 0,
-                    memory_limit         = MemoryLimit,
                     desired_duration     = infinity })}.
 
 handle_call({report_ram_duration, Pid, QueueDuration}, From,
@@ -223,12 +211,12 @@ internal_deregister(Pid, Demonitor,
                            queue_duration_count = Count1 }
     end.
 
-internal_update(State = #state { memory_limit = Limit,
-                                 queue_durations = Durations,
+internal_update(State = #state { queue_durations = Durations,
                                  desired_duration = DesiredDurationAvg,
                                  queue_duration_sum = Sum,
                                  queue_duration_count = Count }) ->
-    MemoryRatio = erlang:memory(total) / Limit,
+    MemoryLimit = ?MEMORY_LIMIT_SCALING * vm_memory_monitor:get_memory_limit(),
+    MemoryRatio = erlang:memory(total) / MemoryLimit,
     DesiredDurationAvg1 =
         case MemoryRatio < ?LIMIT_THRESHOLD orelse Count == 0 of
             true ->

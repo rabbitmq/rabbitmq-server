@@ -389,44 +389,6 @@
     </refsect2>
 
     <refsect2>
-      <title>Closing individual connections</title>
-
-      <variablelist>
-        <varlistentry>
-          <term><cmdsynopsis><command>close_connection</command> <arg choice="req"><replaceable>connectionpid</replaceable></arg> <arg choice="req"><replaceable>explanation</replaceable></arg></cmdsynopsis></term>
-          <listitem>
-            <variablelist>
-              <varlistentry>
-                <term>connectionpid</term>
-                <listitem><para>Id of the Erlang process associated with the connection to close.</para></listitem>
-              </varlistentry>
-              <varlistentry>
-                <term>explanation</term>
-                <listitem><para>Explanation string.</para></listitem>
-              </varlistentry>
-            </variablelist>
-            <para>
-              Instruct the broker to close the connection associated
-              with the Erlang process id <option>connectionpid</option> (see also the
-              <link linkend="list_connections"><command>list_connections</command></link>
-              command), passing the <option>explanation</option> string to the
-              connected client as part of the AMQP connection shutdown
-              protocol.
-            </para>
-            <para role="example-prefix">For example:</para>
-            <screen role="example">rabbitmqctl close_connection "&lt;rabbit@tanto.4262.0&gt;" "go away"</screen>
-            <para role="example">
-              This command instructs the RabbitMQ broker to close the
-              connection associated with the Erlang process
-              id <command>&lt;rabbit@tanto.4262.0&gt;</command>, passing the
-              explanation <command>go away</command> to the connected client.
-            </para>
-          </listitem>
-        </varlistentry>
-      </variablelist>
-    </refsect2>
-
-    <refsect2>
       <title>User management</title>
       <para>
         Note that <command>rabbitmqctl</command> manages the RabbitMQ
@@ -1305,7 +1267,7 @@
             <para>
               Displays broker status information such as the running
               applications on the current Erlang node, RabbitMQ and
-              Erlang versions and OS name.  (See
+              Erlang versions, OS name and memory statistics. (See
               the <command>cluster_status</command> command to find
               out which nodes are clustered and running.)
             </para>
@@ -1351,8 +1313,39 @@
     </refsect2>
 
     <refsect2>
-      <title>Message Tracing</title>
+      <title>Miscellaneous</title>
       <variablelist>
+        <varlistentry>
+          <term><cmdsynopsis><command>close_connection</command> <arg choice="req"><replaceable>connectionpid</replaceable></arg> <arg choice="req"><replaceable>explanation</replaceable></arg></cmdsynopsis></term>
+          <listitem>
+            <variablelist>
+              <varlistentry>
+                <term>connectionpid</term>
+                <listitem><para>Id of the Erlang process associated with the connection to close.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>explanation</term>
+                <listitem><para>Explanation string.</para></listitem>
+              </varlistentry>
+            </variablelist>
+            <para>
+              Instruct the broker to close the connection associated
+              with the Erlang process id <option>connectionpid</option> (see also the
+              <link linkend="list_connections"><command>list_connections</command></link>
+              command), passing the <option>explanation</option> string to the
+              connected client as part of the AMQP connection shutdown
+              protocol.
+            </para>
+            <para role="example-prefix">For example:</para>
+            <screen role="example">rabbitmqctl close_connection "&lt;rabbit@tanto.4262.0&gt;" "go away"</screen>
+            <para role="example">
+              This command instructs the RabbitMQ broker to close the
+              connection associated with the Erlang process
+              id <command>&lt;rabbit@tanto.4262.0&gt;</command>, passing the
+              explanation <command>go away</command> to the connected client.
+            </para>
+          </listitem>
+        </varlistentry>
         <varlistentry>
           <term><cmdsynopsis><command>trace_on</command> <arg choice="opt">-p <replaceable>vhost</replaceable></arg></cmdsynopsis></term>
           <listitem>
@@ -1382,7 +1375,18 @@
             </para>
           </listitem>
         </varlistentry>
-
+        <varlistentry>
+          <term><cmdsynopsis><command>set_vm_memory_high_watermark</command> <arg choice="req"><replaceable>fraction</replaceable></arg></cmdsynopsis></term>
+          <listitem>
+            <variablelist>
+              <varlistentry>
+                <term>fraction</term>
+                <listitem><para>The new memory threshhold fraction at which flow control is triggered, as a
+                                floating point number between 0.0 and 1.0 with a mandatory fractional part.</para></listitem>
+              </varlistentry>
+            </variablelist>
+          </listitem>
+        </varlistentry>
       </variablelist>
     </refsect2>
   </refsect1>
