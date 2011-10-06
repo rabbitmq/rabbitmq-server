@@ -10,4 +10,4 @@
                      {reconnect_delay,    5}]
          }]},
   {mod, {rabbit_shovel, []}},
-  {applications, [kernel, stdlib, rabbit, amqp_client]}]}.
+  {applications, [kernel, stdlib, rabbit, amqp_client, erlando]}]}.
