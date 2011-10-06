@@ -745,10 +745,10 @@ handle_cast({client_delete, CRef},
 handle_cast({write, CRef, MsgId},
             State = #msstate { cur_file_cache_ets = CurFileCacheEts,
                                flying_writes_ets  = FlyingWritesEts }) ->
-    case ets:update_counter(FlyingWritesEts, {MsgId, CRef}, {2, +1}) of
-        2 ->
+    true = 0 =< ets:update_counter(CurFileCacheEts, MsgId, {3, -1}),
+    case ets:update_counter(FlyingWritesEts, {MsgId, CRef}, {2, -1}) of
+        0 ->
             true = ets:delete(FlyingWritesEts, {MsgId, CRef}),
-            true = 0 =< ets:update_counter(CurFileCacheEts, MsgId, {3, -1}),
             [{MsgId, Msg, _PWC}] = ets:lookup(CurFileCacheEts, MsgId),
             noreply(
               case write_action(
@@ -774,10 +774,13 @@ handle_cast({write, CRef, MsgId},
                                 CTM
                         end, CRef, State1)
               end);
-        1 ->
-            %% This means that a remove has already been issued and
-            %% eliminated the write. We shall do nothing here and
-            %% instead allow the remove to tidy up.
+        -1 ->
+            %% A remove has already been issued and eliminated the
+            %% write.  When a msg has been removed, then it won't be
+            %% followed by a read, so let's remove it from the
+            %% cur_file_cache_ets here in order to avoid unbounded
+            %% cache growth when all writes are eliminated.
+            true = ets:match_delete(CurFileCacheEts, {MsgId, '_', 0}),
             noreply(State)
     end;
 
@@ -1037,7 +1040,6 @@ contains_message(MsgId, From,
 
 remove_message(MsgId, CRef,
                State = #msstate { file_summary_ets   = FileSummaryEts,
-                                  cur_file_cache_ets = CurFileCacheEts,
                                   flying_writes_ets  = FlyingWritesEts }) ->
     case ets:lookup(FlyingWritesEts, {MsgId, CRef}) of
         [] ->
@@ -1075,14 +1077,9 @@ remove_message(MsgId, CRef,
                              State
                     end
             end;
-        [{{MsgId, CRef}, 1}] ->
+        [{{MsgId, CRef}, -1}] ->
             %% Remove eliminated the corresponding write.
             true = ets:delete(FlyingWritesEts, {MsgId, CRef}),
-            true = 0 =< ets:update_counter(CurFileCacheEts, MsgId, {3, -1}),
-            %% If the msg has been removed, then it won't be followed
-            %% by a read, so it's safe to remove from the
-            %% cur_file_cache_ets.
-            true = ets:match_delete(CurFileCacheEts, {MsgId, '_', 0}),
             State
     end.
 
