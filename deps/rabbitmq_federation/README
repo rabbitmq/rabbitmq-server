@@ -94,7 +94,7 @@ Static Configuration
 
 A verbose static configuration might look like:
 
-  {rabbit_federation,
+  {rabbitmq_federation,
    [ {exchanges, [[{exchange,     "my-exchange"},
                    {virtual_host, "/"},
                    {type,         "topic"},
