@@ -572,8 +572,8 @@ client_read3(#msg_location { msg_id = MsgId, file = File }, Defer,
             end
     end.
 
-update_flying(Diff, MsgId, #client_msstate { flying_ets  = FlyingEts,
-                                             client_ref  = CRef }) ->
+update_flying(Diff, MsgId, #client_msstate { flying_ets = FlyingEts,
+                                             client_ref = CRef }) ->
     Key = {MsgId, CRef},
     case ets:insert_new(FlyingEts, {Key, Diff}) of
         true  -> ok;
