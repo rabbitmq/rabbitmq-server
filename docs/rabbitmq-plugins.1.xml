@@ -100,7 +100,7 @@
           </para>
           <para>
             If the optional pattern is given, only plugins whose
-            name mathes <command>pattern</command> are shown.
+            name matches <command>pattern</command> are shown.
           </para>
           <para role="example-prefix">For example:</para>
           <screen role="example">rabbitmq-plugins list</screen>
