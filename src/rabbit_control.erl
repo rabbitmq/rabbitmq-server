@@ -86,7 +86,7 @@ start() ->
                 true  -> ok;
                 false -> io:format("...done.~n")
             end,
-            quit(0);
+            rabbit_misc:quit(0);
         {'EXIT', {function_clause, [{?MODULE, action, _} | _]}} ->
             print_error("invalid command '~s'",
                         [string:join([atom_to_list(Command) | Args], " ")]),
@@ -96,17 +96,17 @@ start() ->
             usage();
         {error, Reason} ->
             print_error("~p", [Reason]),
-            quit(2);
+            rabbit_misc:quit(2);
         {badrpc, {'EXIT', Reason}} ->
             print_error("~p", [Reason]),
-            quit(2);
+            rabbit_misc:quit(2);
         {badrpc, Reason} ->
             print_error("unable to connect to node ~w: ~w", [Node, Reason]),
             print_badrpc_diagnostics(Node),
-            quit(2);
+            rabbit_misc:quit(2);
         Other ->
             print_error("~p", [Other]),
-            quit(2)
+            rabbit_misc:quit(2)
     end.
 
 fmt_stderr(Format, Args) -> rabbit_misc:format_stderr(Format ++ "~n", Args).
@@ -157,7 +157,7 @@ stop() ->
 
 usage() ->
     io:format("~s", [rabbit_ctl_usage:usage()]),
-    quit(1).
+    rabbit_misc:quit(1).
 
 %%----------------------------------------------------------------------------
 
@@ -514,10 +514,3 @@ prettify_typed_amqp_value(table,   Value) -> prettify_amqp_table(Value);
 prettify_typed_amqp_value(array,   Value) -> [prettify_typed_amqp_value(T, V) ||
                                                  {T, V} <- Value];
 prettify_typed_amqp_value(_Type,   Value) -> Value.
-
-%% the slower shutdown on windows required to flush stdout
-quit(Status) ->
-    case os:type() of
-        {unix,  _} -> halt(Status);
-        {win32, _} -> init:stop(Status)
-    end.
