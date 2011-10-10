@@ -262,10 +262,13 @@ srcdist: distclean
 	chmod 0755 $(TARGET_SRC_DIR)/scripts/*
 
 ifneq "$(PLUGINS_SRC_DIR)" ""
-	ln -s $(PLUGINS_SRC_DIR) $(TARGET_SRC_DIR)/plugins-src
-	cp packaging/common/LICENSE $(TARGET_SRC_DIR)
-	echo $(PLUGINS_SRC_DIR)
-	cp -n $(shell find $(PLUGINS_SRC_DIR) -name "LICENSE-*") $(TARGET_SRC_DIR)
+	cp -r $(PLUGINS_SRC_DIR) $(TARGET_SRC_DIR)/plugins-src
+	rm $(TARGET_SRC_DIR)/LICENSE
+	cat packaging/common/LICENSE.head >> $(TARGET_SRC_DIR)/LICENSE
+	find $(PLUGINS_SRC_DIR)/licensing -name "license_info_*" -exec cat '{}' >> $(TARGET_SRC_DIR)/LICENSE \;
+	cat packaging/common/LICENSE.tail >> $(TARGET_SRC_DIR)/LICENSE
+	find $(PLUGINS_SRC_DIR)/licensing -name "LICENSE-*" -exec cp '{}' $(TARGET_SRC_DIR) \;
+	rm -rf $(TARGET_SRC_DIR)/licensing
 else
 	@echo No plugins source distribution found
 endif

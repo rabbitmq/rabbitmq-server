@@ -32,6 +32,9 @@ package: clean
 	sed -i -e 's|@SU_RABBITMQ_SH_C@|su rabbitmq -s /bin/sh -c|' \
 	    $(UNPACKED_DIR)/debian/rabbitmq-script-wrapper
 	chmod a+x $(UNPACKED_DIR)/debian/rules
+	echo "This package was debianized by Tony Garnock-Jones <tonyg@rabbitmq.com> on\nWed,  3 Jan 2007 15:43:44 +0000.\n\nIt was downloaded from http://www.rabbitmq.com/\n\n" > $(UNPACKED_DIR)/debian/copyright
+	cat $(UNPACKED_DIR)/LICENSE >> $(UNPACKED_DIR)/debian/copyright
+	echo "\n\nThe Debian packaging is (C) 2007-2011, VMware, Inc. and is licensed\nunder the MPL 1.1, see above.\n" >> $(UNPACKED_DIR)/debian/copyright
 	UNOFFICIAL_RELEASE=$(UNOFFICIAL_RELEASE) VERSION=$(VERSION) ./check-changelog.sh rabbitmq-server $(UNPACKED_DIR)
 	cd $(UNPACKED_DIR); GNUPGHOME=$(GNUPG_PATH)/.gnupg dpkg-buildpackage -rfakeroot $(SIGNING)
 	rm -rf $(UNPACKED_DIR)
