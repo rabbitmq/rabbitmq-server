@@ -92,8 +92,11 @@
             </varlistentry>
           </variablelist>
           <para>
-            Lists available plugins, their versions, dependencies
-            and descriptions.
+            Lists available plugins, their versions, dependencies and
+            descriptions. Each plugin is prefixed with a status
+            indicator - [ ] to indicate that the plugin is not
+            enabled, [E] to indicate that it is explicitly enabled,
+            and [e] to indicate that it is implicitly enabled.
           </para>
           <para>
             If the optional pattern is given, only plugins whose
