@@ -265,6 +265,7 @@ ifneq "$(PLUGINS_SRC_DIR)" ""
 	cp -r $(PLUGINS_SRC_DIR) $(TARGET_SRC_DIR)/plugins-src
 	rm $(TARGET_SRC_DIR)/LICENSE
 	cat packaging/common/LICENSE.head >> $(TARGET_SRC_DIR)/LICENSE
+	cat $(AMQP_CODEGEN_DIR)/license_info >> $(TARGET_SRC_DIR)/LICENSE
 	find $(PLUGINS_SRC_DIR)/licensing -name "license_info_*" -exec cat '{}' >> $(TARGET_SRC_DIR)/LICENSE \;
 	cat packaging/common/LICENSE.tail >> $(TARGET_SRC_DIR)/LICENSE
 	find $(PLUGINS_SRC_DIR)/licensing -name "LICENSE-*" -exec cp '{}' $(TARGET_SRC_DIR) \;
