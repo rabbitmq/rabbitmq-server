@@ -3,7 +3,7 @@
 -behaviour(gen_server).
 
 -export([start_link/1]).
--export([add/4, set_fallback/2, lookup/2, list_all/0]).
+-export([add/4, remove/1, set_fallback/2, lookup/2, list_all/0]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3]).
 
@@ -17,6 +17,9 @@ start_link(ListenerSpecs) ->
 
 add(Context, Selector, Handler, Link) ->
     gen_server:call(?MODULE, {add, Context, Selector, Handler, Link}, infinity).
+
+remove(Context) ->
+    gen_server:cast(?MODULE, {remove, Context}).
 
 set_fallback(Listener, FallbackHandler) ->
     gen_server:call(?MODULE, {set_fallback, Listener, FallbackHandler},
@@ -90,6 +93,24 @@ handle_call(Req, _From, State) ->
     error_logger:format("Unexpected call to ~p: ~p~n", [?MODULE, Req]),
     {stop, unknown_request, State}.
 
+%% This is a cast since it's likely to be called from the application
+%% stop callback, i.e. by the application controller - but it calls
+%% into the application controller. We do not want to deadlock.
+handle_cast({remove, Context}, undefined) ->
+    ListenerSpec = {Listener, _Opts} =
+        rabbit_mochiweb:context_listener(Context),
+    case lookup_dispatch(Listener) of
+        {Selectors, Fallback} ->
+            Selectors1 = lists:keydelete(Context, 1, Selectors),
+            set_dispatch(Listener, {Selectors1, Fallback}),
+            case Selectors1 of
+                [] -> rabbit_mochiweb_sup:stop_listener(ListenerSpec);
+                _  -> ok
+            end,
+            {noreply, undefined};
+        Err ->
+            {stop, Err, undefined}
+    end;
 handle_cast(_, State) ->
 	{noreply, State}.
 
