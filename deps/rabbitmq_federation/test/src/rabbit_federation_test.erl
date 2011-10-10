@@ -297,10 +297,6 @@ start_other_node({Name, Port}, Config) ->
                      " OTHER_CONFIG=" ++ Config ++
                      " start-other-node ; echo $?"),
     LastLine = hd(lists:reverse(string:tokens(Res, "\n"))),
-    case LastLine of
-        "0" -> ok;
-        _   -> ?debugVal(Res)
-    end,
     ?assertEqual("0", LastLine),
     {ok, Conn} = amqp_connection:start(#amqp_params_network{port = Port}),
     {ok, Ch} = amqp_connection:open_channel(Conn),
