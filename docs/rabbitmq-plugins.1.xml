@@ -119,7 +119,7 @@
           <screen role="example">rabbitmq-plugins list -e rabbit</screen>
           <para role="example">
             This command lists all implicitly or explicitly enabled
-            rabbit plugins.
+            RabbitMQ plugins.
           </para>
         </listitem>
       </varlistentry>
