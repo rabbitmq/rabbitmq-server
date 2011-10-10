@@ -31,7 +31,7 @@
 %%      Info = any()
 %%
 %% @doc Parses an AMQP URI.  If any of the URI parts are missing, the
-%% default values are used.  If the hostname is omited, an
+%% default values are used.  If the hostname is zero-length, an
 %% #amqp_params_direct{} record is returned; otherwise, an
 %% #amqp_params_network{} record is returned.  Extra parameters may be
 %% specified via the query string (e.g. "?heartbeat=5"). In case of
@@ -46,7 +46,8 @@ parse(Uri) ->
             {ok, Params} ->
                 return({ok, Params})
         end
-    catch throw:Err -> {error, {Err, Uri}}
+    catch throw:Err -> {error, {Err, Uri}};
+          error:Err -> {error, {Err, Uri}}
     end.
 
 parse1(Uri) when is_list(Uri) ->
@@ -71,7 +72,7 @@ unescape_string([]) ->
     [];
 unescape_string([$%, N1, N2 | Rest]) ->
     try
-        [list_to_integer([N1, N2], 16) | unescape_string(Rest)]
+        [erlang:list_to_integer([N1, N2], 16) | unescape_string(Rest)]
     catch
         error:badarg -> throw({invalid_entitiy, ['%', N1, N2]})
     end;
@@ -83,7 +84,7 @@ unescape_string([C | Rest]) ->
 build_broker(ParsedUri) ->
     [Host, Port, Path] =
         [proplists:get_value(F, ParsedUri) || F <- [host, port, path]],
-    case Port =:= undefined orelse (0 < Port andalso Port < 65535) of
+    case Port =:= undefined orelse (0 < Port andalso Port =< 65535) of
         true  -> ok;
         false -> fail({port_out_of_range, Port})
     end,

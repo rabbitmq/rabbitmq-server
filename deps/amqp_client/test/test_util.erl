@@ -635,7 +635,7 @@ default_consumer_test() ->
                 end),
     #'basic.consume_ok'{} =
         amqp_channel:subscribe(Channel, #'basic.consume'{queue = Q}, Pid),
-    monitor(process, Pid),
+    erlang:monitor(process, Pid),
     exit(Pid, shutdown),
     receive
         {'DOWN', _, process, _, _} ->
