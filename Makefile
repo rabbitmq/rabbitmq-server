@@ -111,19 +111,9 @@ plugins:
 	PLUGINS_SRC_DIR="" $(MAKE) -C "$(PLUGINS_SRC_DIR)" plugins-dist PLUGINS_DIST_DIR="$(CURDIR)/$(PLUGINS_DIR)" VERSION=$(VERSION)
 	echo "Put your EZs here and use rabbitmq-plugins to enable them." > $(PLUGINS_DIR)/README
 	rm -f $(PLUGINS_DIR)/rabbit_common*.ez
-
-# If you add a license here, make sure to also add it to packaging/common/LICENSE.
-PLUGINS_SRC_LICENSES := "plugins-src/rabbitmq-management/LICENSE-MIT-jQuery142" \
-                        "plugins-src/rabbitmq-management/LICENSE-MIT-EJS10" \
-                        "plugins-src/rabbitmq-management/LICENSE-MIT-Sammy060" \
-                        "plugins-src/webmachine-wrapper/LICENSE-Apache-Basho" \
-                        "plugins-src/mochiweb-wrapper/LICENSE-MIT-Mochi" \
-                        "plugins-src/rabbitmq-management-visualiser/LICENSE-BSD-glMatrix" \
-                        "plugins-src/eldap-wrapper/LICENSE-MIT-eldap"
 else
 plugins:
 # Not building plugins
-PLUGINS_SRC_LICENSES :=
 endif
 
 $(DEPS_FILE): $(SOURCES) $(INCLUDES)
@@ -274,7 +264,8 @@ srcdist: distclean
 ifneq "$(PLUGINS_SRC_DIR)" ""
 	ln -s $(PLUGINS_SRC_DIR) $(TARGET_SRC_DIR)/plugins-src
 	cp packaging/common/LICENSE $(TARGET_SRC_DIR)
-	cp $(PLUGINS_SRC_LICENSES) $(TARGET_SRC_DIR)
+	echo $(PLUGINS_SRC_DIR)
+	cp -n $(shell find $(PLUGINS_SRC_DIR) -name "LICENSE-*") $(TARGET_SRC_DIR)
 else
 	@echo No plugins source distribution found
 endif
