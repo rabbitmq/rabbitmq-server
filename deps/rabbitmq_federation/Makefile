@@ -6,6 +6,7 @@ OTHER_CONFIG=undefined
 PID_FILE=/tmp/$(OTHER_NODE).pid
 
 start-other-node:
+	rm -f $(PID_FILE)
 	RABBITMQ_MNESIA_BASE=/tmp/rabbitmq-$(OTHER_NODE)-mnesia \
 	RABBITMQ_LOG_BASE=/tmp \
 	RABBITMQ_NODENAME=$(OTHER_NODE) \
