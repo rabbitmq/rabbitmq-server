@@ -781,12 +781,23 @@ handle_cast({write, CRef, MsgId},
                         end, CRef, State1)
               end);
         ignore ->
-            %% A remove has already been issued and eliminated the
-            %% write.  When a msg has been removed, then it won't be
-            %% followed by a read, so let's remove it from the
-            %% cur_file_cache_ets here in order to avoid unbounded
-            %% cache growth when all writes are eliminated.
-            true = ets:match_delete(CurFileCacheEts, {MsgId, '_', 0}),
+            %% A 'remove' has already been issued and eliminated the
+            %% 'write'. If all writes get eliminated,
+            %% cur_file_cache_ets could grow unbounded. To prevent
+            %% that we delete the cache entry here, but only if the
+            %% message isn't in the current file. That way reads of
+            %% the message can continue to be done client side, from
+            %% either the cache or the non-current files. If the
+            %% message *is* in the current file then the cache entry
+            %% will be removed by the normal logic for that,
+            %% e.g. above and during file rolling.
+            case index_lookup(MsgId, State) of
+                [#msg_location { file = File }]
+                  when File == State #msstate.current_file ->
+                    ok;
+                _ ->
+                    true = ets:match_delete(CurFileCacheEts, {MsgId, '_', 0})
+            end,
             noreply(State)
     end;
 
