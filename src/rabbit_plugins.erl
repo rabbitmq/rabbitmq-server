@@ -250,8 +250,8 @@ format_plugins(Pattern, Opts, PluginsFile, PluginsDir) ->
     Plugins1 = usort_plugins(Plugins),
     MaxWidth = lists:max([length(atom_to_list(Name)) ||
                              #plugin{name = Name} <- Plugins1] ++ [0]),
-    [ format_plugin(P, EnabledExplicitly, EnabledImplicitly, Verbose,
-                    MaxWidth) || P <- Plugins1],
+    [format_plugin(P, EnabledExplicitly, EnabledImplicitly, Verbose,
+                   MaxWidth) || P <- Plugins1],
     ok.
 
 format_plugin(#plugin{name = Name, version = Version,
