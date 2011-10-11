@@ -2174,7 +2174,7 @@ wait_for_confirms(Unconfirmed) ->
 test_variable_queue() ->
     [passed = with_fresh_variable_queue(F) ||
         F <- [fun test_variable_queue_dynamic_duration_change/1,
-              %%fun test_variable_queue_partial_segments_delta_thing/1,
+              fun test_variable_queue_partial_segments_delta_thing/1,
               fun test_variable_queue_all_the_bits_not_covered_elsewhere1/1,
               fun test_variable_queue_all_the_bits_not_covered_elsewhere2/1,
               fun test_dropwhile/1,
@@ -2322,7 +2322,7 @@ test_variable_queue_partial_segments_delta_thing(VQ0) ->
     {_Duration, VQ2} = rabbit_variable_queue:ram_duration(VQ1),
     VQ3 = check_variable_queue_status(
             rabbit_variable_queue:set_ram_duration_target(0, VQ2),
-            %% one segment in q3 as betas, and half a segment in delta
+            %% one segment in q3, and half a segment in delta
             [{delta, {delta, SegmentSize, HalfSegment, OneAndAHalfSegment}},
              {q3, SegmentSize},
              {len, SegmentSize + HalfSegment}]),
@@ -2338,7 +2338,7 @@ test_variable_queue_partial_segments_delta_thing(VQ0) ->
                                           SegmentSize + HalfSegment + 1, VQ5),
     VQ7 = check_variable_queue_status(
             VQ6,
-            %% the half segment should now be in q3 as betas
+            %% the half segment should now be in q3
             [{q1, 1},
              {delta, {delta, undefined, 0, undefined}},
              {q3, HalfSegment},

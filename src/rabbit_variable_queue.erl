@@ -1467,10 +1467,14 @@ reduce_memory_use(AlphaBetaFun, BetaDeltaFun, AckFun,
                   {true, State2}
         end,
 
+    %% AlphaBetaFun may have produced gammas that are bordering
+    %% delta. We must ensure that we push these into delta, which is
+    %% largely a no-op. This is why we call BetaDeltaFun even with a
+    %% quota of 0.
     case chunk_size(State1 #vqstate.ram_index_count,
                     permitted_beta_count(State1)) of
         ?IO_BATCH_SIZE = S2 -> {true, BetaDeltaFun(S2, State1)};
-        _                   -> {Reduce, State1}
+        _                   -> {Reduce, BetaDeltaFun(0, State1)}
     end.
 
 limit_ram_acks(0, State) ->
@@ -1676,9 +1680,6 @@ push_betas_to_deltas(Quota,
                      index_state     = IndexState1,
                      ram_index_count = RamIndexCount1 }.
 
-push_betas_to_deltas(_Generator, _LimitFun, Q,
-                     {0, _Delta, _RamIndexCount, _IndexState} = PushState) ->
-    {Q, PushState};
 push_betas_to_deltas(Generator, LimitFun, Q, PushState) ->
     case ?QUEUE:is_empty(Q) of
         true ->
@@ -1693,9 +1694,10 @@ push_betas_to_deltas(Generator, LimitFun, Q, PushState) ->
             end
     end.
 
-push_betas_to_deltas1(_Generator, _Limit, Q,
-                      {0, _Delta, _RamIndexCount, _IndexState} = PushState) ->
-    {Q, PushState};
+push_betas_to_deltas1(Generator, Limit, Q,
+                      {0, Delta, RamIndexCount, IndexState}) ->
+    {Qb, Delta1} = push_gammas_to_deltas(Generator, Limit, Q, Delta),
+    {Qb, {0, Delta1, RamIndexCount, IndexState}};
 push_betas_to_deltas1(Generator, Limit, Q,
                       {Quota, Delta, RamIndexCount, IndexState} = PushState) ->
     case Generator(Q) of
@@ -1718,6 +1720,16 @@ push_betas_to_deltas1(Generator, Limit, Q,
             Delta1 = expand_delta(SeqId, Delta),
             push_betas_to_deltas1(Generator, Limit, Qa,
                                   {Quota1, Delta1, RamIndexCount1, IndexState1})
+    end.
+
+push_gammas_to_deltas(Generator, Limit, Q, Delta) ->
+    case Generator(Q) of
+        {{value, #msg_status { seq_id = SeqId, index_on_disk = true }}, Q1}
+          when SeqId >= Limit ->
+            push_gammas_to_deltas(Generator, Limit, Q1,
+                                  expand_delta(SeqId, Delta));
+        {_, _Q} ->
+            {Q, Delta}
     end.
 
 %%----------------------------------------------------------------------------
