@@ -1482,11 +1482,10 @@ permitted_beta_count(#vqstate { len = 0 }) ->
     infinity;
 permitted_beta_count(#vqstate { target_ram_count = 0 }) ->
     rabbit_queue_index:next_segment_boundary(0);
-permitted_beta_count(#vqstate { len = Len,
-                                q1  = Q1,
-                                q4  = Q4 }) ->
-    BetaDeltaLen = Len - ?QUEUE:len(Q1) - ?QUEUE:len(Q4),
-    lists:max([BetaDeltaLen - ((BetaDeltaLen * BetaDeltaLen) div Len),
+permitted_beta_count(#vqstate { target_ram_count = TargetRamCount,
+                                len = Len }) ->
+    BetaDelta = lists:max([0, Len - TargetRamCount]),
+    lists:max([BetaDelta - ((BetaDelta * BetaDelta) div Len),
                rabbit_queue_index:next_segment_boundary(0)]).
 
 chunk_size(Current, Permitted)
