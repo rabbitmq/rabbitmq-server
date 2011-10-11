@@ -724,17 +724,17 @@ needs_timeout(State) ->
     end.
 
 null_gamma_delta(#vqstate { q2 = Q2, q3 = Q3 } = State) ->
-    {null_gamma_delta_msg(?QUEUE:out(Q2), ?QUEUE:out(Q2),
+    {null_gamma_delta_msg(?QUEUE:peek(Q2), ?QUEUE:peek(Q2),
                           fun (SeqId) -> SeqId end) orelse
-     null_gamma_delta_msg(?QUEUE:out_r(Q3), ?QUEUE:out(Q3),
+     null_gamma_delta_msg(?QUEUE:peek_r(Q3), ?QUEUE:peek(Q3),
                           fun rabbit_queue_index:next_segment_boundary/1),
      State}.
 
-null_gamma_delta_msg({{value, #msg_status { seq_id = SeqId1,
-                                            index_on_disk = true }}, _Q},
-                     {{value, #msg_status { seq_id = SeqId2 }}, _Q2},
+null_gamma_delta_msg({value, #msg_status { seq_id = SeqId1,
+                                           index_on_disk = true }},
+                     {value, #msg_status { seq_id = SeqId2 }},
                      LimitFun) ->
-    SeqId1 >= LimitFun(SeqId2);
+    LimitFun =:= undefined orelse SeqId1 >= LimitFun(SeqId2);
 null_gamma_delta_msg(_, _, _) ->
     false.
 
@@ -1376,9 +1376,9 @@ msg_from_pending_ack(SeqId, MsgPropsFun, State) ->
                      needs_confirming = false } }, State1}.
 
 beta_limit(Q) ->
-    case ?QUEUE:out(Q) of
-        {{value, #msg_status { seq_id = SeqId }}, _Q} -> SeqId;
-        {empty, _Q}                                   -> undefined
+    case ?QUEUE:peek(Q) of
+        {value, #msg_status { seq_id = SeqId }} -> SeqId;
+        empty                                   -> undefined
     end.
 
 delta_limit(?BLANK_DELTA_PATTERN(_X))             -> undefined;

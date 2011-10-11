@@ -17,7 +17,7 @@
 -module(lqueue).
 
 -export([new/0, is_empty/1, len/1, in/2, in_r/2, out/1, out_r/1, join/2,
-         foldl/3, foldr/3, from_list/1, to_list/1]).
+         foldl/3, foldr/3, from_list/1, to_list/1, peek/1, peek_r/1]).
 
 -define(QUEUE, queue).
 
@@ -42,6 +42,8 @@
 -spec(foldr/3 :: (fun ((value(), B) -> B), B, ?MODULE()) -> B).
 -spec(from_list/1 :: ([value()]) -> ?MODULE()).
 -spec(to_list/1 :: (?MODULE()) -> [value()]).
+-spec(peek(?MODULE) -> 'empty' | {'value',value()}).
+-spec(peek_r(?MODULE) -> 'empty' | {'value',value()}).
 
 -endif.
 
@@ -87,3 +89,9 @@ foldr(Fun, Init, Q) ->
 
 len({L, _Q}) ->
     L.
+
+peek({0, _Q}) -> empty;
+peek({_L, Q}) -> ?QUEUE:peek(Q).
+
+peek_r({0, _Q}) -> empty;
+peek_r({_L, Q}) -> ?QUEUE:peek_r(Q).
