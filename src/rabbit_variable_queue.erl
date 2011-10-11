@@ -493,9 +493,31 @@ purge(State = #vqstate { q4                = Q4,
                               ram_index_count   = 0,
                               persistent_count  = PCount1 })}.
 
-publish(Msg, MsgProps, _ChPid, State) ->
-    {_SeqId, State1} = publish(Msg, MsgProps, false, false, State),
-    a(reduce_memory_use(State1)).
+publish(Msg = #basic_message { is_persistent = IsPersistent, id = MsgId },
+        MsgProps = #message_properties { needs_confirming = NeedsConfirming },
+        _ChPid, State = #vqstate { q1 = Q1, q3 = Q3, q4 = Q4,
+                                   next_seq_id      = SeqId,
+                                   len              = Len,
+                                   in_counter       = InCount,
+                                   persistent_count = PCount,
+                                   durable          = IsDurable,
+                                   ram_msg_count    = RamMsgCount,
+                                   unconfirmed      = UC }) ->
+    IsPersistent1 = IsDurable andalso IsPersistent,
+    MsgStatus = msg_status(IsPersistent1, SeqId, Msg, MsgProps),
+    {MsgStatus1, State1} = maybe_write_to_disk(false, false, MsgStatus, State),
+    State2 = case ?QUEUE:is_empty(Q3) of
+                 false -> State1 #vqstate { q1 = ?QUEUE:in(m(MsgStatus1), Q1) };
+                 true  -> State1 #vqstate { q4 = ?QUEUE:in(m(MsgStatus1), Q4) }
+             end,
+    PCount1 = PCount + one_if(IsPersistent1),
+    UC1 = gb_sets_maybe_insert(NeedsConfirming, MsgId, UC),
+    a(reduce_memory_use(State2 #vqstate { next_seq_id      = SeqId   + 1,
+                                          len              = Len     + 1,
+                                          in_counter       = InCount + 1,
+                                          persistent_count = PCount1,
+                                          ram_msg_count    = RamMsgCount + 1,
+                                          unconfirmed      = UC1 })).
 
 publish_delivered(false, #basic_message { id = MsgId },
                   #message_properties { needs_confirming = NeedsConfirming },
@@ -1125,34 +1147,6 @@ sum_msg_ids_by_store_to_len(LensByStore, MsgIdsByStore) ->
 %%----------------------------------------------------------------------------
 %% Internal gubbins for publishing
 %%----------------------------------------------------------------------------
-
-publish(Msg = #basic_message { is_persistent = IsPersistent, id = MsgId },
-        MsgProps = #message_properties { needs_confirming = NeedsConfirming },
-        IsDelivered, MsgOnDisk,
-        State = #vqstate { q1 = Q1, q3 = Q3, q4 = Q4,
-                           next_seq_id      = SeqId,
-                           len              = Len,
-                           in_counter       = InCount,
-                           persistent_count = PCount,
-                           durable          = IsDurable,
-                           ram_msg_count    = RamMsgCount,
-                           unconfirmed      = UC }) ->
-    IsPersistent1 = IsDurable andalso IsPersistent,
-    MsgStatus = (msg_status(IsPersistent1, SeqId, Msg, MsgProps))
-        #msg_status { is_delivered = IsDelivered, msg_on_disk = MsgOnDisk},
-    {MsgStatus1, State1} = maybe_write_to_disk(false, false, MsgStatus, State),
-    State2 = case ?QUEUE:is_empty(Q3) of
-                 false -> State1 #vqstate { q1 = ?QUEUE:in(m(MsgStatus1), Q1) };
-                 true  -> State1 #vqstate { q4 = ?QUEUE:in(m(MsgStatus1), Q4) }
-             end,
-    PCount1 = PCount + one_if(IsPersistent1),
-    UC1 = gb_sets_maybe_insert(NeedsConfirming, MsgId, UC),
-    {SeqId, State2 #vqstate { next_seq_id      = SeqId   + 1,
-                              len              = Len     + 1,
-                              in_counter       = InCount + 1,
-                              persistent_count = PCount1,
-                              ram_msg_count    = RamMsgCount + 1,
-                              unconfirmed      = UC1 }}.
 
 maybe_write_msg_to_disk(_Force, MsgStatus = #msg_status {
                                   msg_on_disk = true }, _MSCState) ->

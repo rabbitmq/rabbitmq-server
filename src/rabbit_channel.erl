@@ -34,7 +34,7 @@
 
 -record(ch, {state, protocol, channel, reader_pid, writer_pid, conn_pid,
              limiter, tx_status, next_tag,
-             unacked_message_q, uncommitted_message_q, uncommitted_ack_q,
+             unacked_message_q, uncommitted_message_q, uncommitted_acks,
              user, virtual_host, most_recently_declared_queue, queue_monitors,
              consumer_mapping, blocking, queue_consumers, queue_collector_pid,
              stats_timer, confirm_enabled, publish_seqno, unconfirmed_mq,
@@ -173,7 +173,6 @@ init([Channel, ReaderPid, WriterPid, ConnPid, Protocol, User, VHost,
       Capabilities, CollectorPid, Limiter]) ->
     process_flag(trap_exit, true),
     ok = pg_local:join(rabbit_channels, self()),
-    StatsTimer = rabbit_event:init_stats_timer(),
     State = #ch{state                   = starting,
                 protocol                = Protocol,
                 channel                 = Channel,
@@ -185,7 +184,7 @@ init([Channel, ReaderPid, WriterPid, ConnPid, Protocol, User, VHost,
                 next_tag                = 1,
                 unacked_message_q       = queue:new(),
                 uncommitted_message_q   = queue:new(),
-                uncommitted_ack_q       = queue:new(),
+                uncommitted_acks        = [],
                 user                    = User,
                 virtual_host            = VHost,
                 most_recently_declared_queue = <<>>,
@@ -194,7 +193,6 @@ init([Channel, ReaderPid, WriterPid, ConnPid, Protocol, User, VHost,
                 blocking                = sets:new(),
                 queue_consumers         = dict:new(),
                 queue_collector_pid     = CollectorPid,
-                stats_timer             = StatsTimer,
                 confirm_enabled         = false,
                 publish_seqno           = 1,
                 unconfirmed_mq          = gb_trees:empty(),
@@ -202,10 +200,11 @@ init([Channel, ReaderPid, WriterPid, ConnPid, Protocol, User, VHost,
                 confirmed               = [],
                 capabilities            = Capabilities,
                 trace_state             = rabbit_trace:init(VHost)},
-    rabbit_event:notify(channel_created, infos(?CREATION_EVENT_KEYS, State)),
-    rabbit_event:if_enabled(StatsTimer,
-                            fun() -> emit_stats(State) end),
-    {ok, State, hibernate,
+    State1 = rabbit_event:init_stats_timer(State, #ch.stats_timer),
+    rabbit_event:notify(channel_created, infos(?CREATION_EVENT_KEYS, State1)),
+    rabbit_event:if_enabled(State1, #ch.stats_timer,
+                            fun() -> emit_stats(State1) end),
+    {ok, State1, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
 prioritise_call(Msg, _From, _State) ->
@@ -319,10 +318,10 @@ handle_cast({confirm, MsgSeqNos, From}, State) ->
 handle_info(timeout, State) ->
     noreply(State);
 
-handle_info(emit_stats, State = #ch{stats_timer = StatsTimer}) ->
+handle_info(emit_stats, State) ->
     emit_stats(State),
     noreply([ensure_stats_timer],
-            State#ch{stats_timer = rabbit_event:reset_stats_timer(StatsTimer)});
+            rabbit_event:reset_stats_timer(State, #ch.stats_timer));
 
 handle_info({'DOWN', _MRef, process, QPid, Reason}, State) ->
     State1 = handle_publishing_queue_down(QPid, Reason, State),
@@ -335,12 +334,12 @@ handle_info({'DOWN', _MRef, process, QPid, Reason}, State) ->
 handle_info({'EXIT', _Pid, Reason}, State) ->
     {stop, Reason, State}.
 
-handle_pre_hibernate(State = #ch{stats_timer = StatsTimer}) ->
+handle_pre_hibernate(State) ->
     ok = clear_permission_cache(),
     rabbit_event:if_enabled(
-      StatsTimer, fun () -> emit_stats(State, [{idle_since, now()}]) end),
-    StatsTimer1 = rabbit_event:stop_stats_timer(StatsTimer),
-    {hibernate, State#ch{stats_timer = StatsTimer1}}.
+      State, #ch.stats_timer,
+      fun () -> emit_stats(State, [{idle_since, now()}]) end),
+    {hibernate, rabbit_event:stop_stats_timer(State, #ch.stats_timer)}.
 
 terminate(Reason, State) ->
     {Res, _State1} = notify_queues(State),
@@ -385,9 +384,8 @@ next_state(Mask, State) ->
     State2 = ?MASKED_CALL(send_confirms,      Mask, State1),
     State2.
 
-ensure_stats_timer(State = #ch{stats_timer = StatsTimer}) ->
-    State#ch{stats_timer = rabbit_event:ensure_stats_timer(
-                             StatsTimer, self(), emit_stats)}.
+ensure_stats_timer(State) ->
+    rabbit_event:ensure_stats_timer(State, #ch.stats_timer, emit_stats).
 
 return_ok(State, true, _Msg)  -> {noreply, State};
 return_ok(State, false, Msg)  -> {reply, Msg, State}.
@@ -669,15 +667,14 @@ handle_method(#'basic.nack'{delivery_tag = DeliveryTag,
 
 handle_method(#'basic.ack'{delivery_tag = DeliveryTag,
                            multiple = Multiple},
-              _, State = #ch{unacked_message_q = UAMQ,
-                             tx_status = TxStatus}) ->
+              _, State = #ch{unacked_message_q = UAMQ, tx_status = TxStatus}) ->
     {Acked, Remaining} = collect_acks(UAMQ, DeliveryTag, Multiple),
     State1 = State#ch{unacked_message_q = Remaining},
     {noreply,
      case TxStatus of
          none        -> ack(Acked, State1);
-         in_progress -> NewTAQ = queue:join(State1#ch.uncommitted_ack_q, Acked),
-                        State1#ch{uncommitted_ack_q = NewTAQ}
+         in_progress -> State1#ch{uncommitted_acks =
+                                      Acked ++ State1#ch.uncommitted_acks}
      end};
 
 handle_method(#'basic.get'{queue = QueueNameBin,
@@ -839,6 +836,7 @@ handle_method(#'basic.recover_async'{requeue = true},
               _, State = #ch{unacked_message_q = UAMQ,
                              limiter = Limiter}) ->
     OkFun = fun () -> ok end,
+    UAMQL = queue:to_list(UAMQ),
     ok = fold_per_queue(
            fun (QPid, MsgIds, ok) ->
                    rabbit_misc:with_exit_handler(
@@ -846,8 +844,8 @@ handle_method(#'basic.recover_async'{requeue = true},
                                     rabbit_amqqueue:requeue(
                                       QPid, MsgIds, self())
                             end)
-           end, ok, UAMQ),
-    ok = notify_limiter(Limiter, UAMQ),
+           end, ok, UAMQL),
+    ok = notify_limiter(Limiter, UAMQL),
     %% No answer required - basic.recover is the newer, synchronous
     %% variant of this method
     {noreply, State#ch{unacked_message_q = queue:new()}};
@@ -1071,8 +1069,8 @@ handle_method(#'tx.commit'{}, _, #ch{tx_status = none}) ->
       precondition_failed, "channel is not transactional", []);
 
 handle_method(#'tx.commit'{}, _, State = #ch{uncommitted_message_q = TMQ,
-                                             uncommitted_ack_q     = TAQ}) ->
-    State1 = new_tx(ack(TAQ, rabbit_misc:queue_fold(fun deliver_to_queues/2,
+                                             uncommitted_acks      = TAL}) ->
+    State1 = new_tx(ack(TAL, rabbit_misc:queue_fold(fun deliver_to_queues/2,
                                                     State, TMQ))),
     {noreply, maybe_complete_tx(State1#ch{tx_status = committing})};
 
@@ -1080,10 +1078,11 @@ handle_method(#'tx.rollback'{}, _, #ch{tx_status = none}) ->
     rabbit_misc:protocol_error(
       precondition_failed, "channel is not transactional", []);
 
-handle_method(#'tx.rollback'{}, _, State = #ch{unacked_message_q     = UAMQ,
-                                               uncommitted_ack_q     = TAQ}) ->
-    {reply, #'tx.rollback_ok'{}, new_tx(State#ch{unacked_message_q =
-                                                     queue:join(TAQ, UAMQ)})};
+handle_method(#'tx.rollback'{}, _, State = #ch{unacked_message_q = UAMQ,
+                                               uncommitted_acks  = TAL}) ->
+    TAQ = queue:from_list(lists:reverse(TAL)),
+    {reply, #'tx.rollback_ok'{},
+     new_tx(State#ch{unacked_message_q = queue:join(TAQ, UAMQ)})};
 
 handle_method(#'confirm.select'{}, _, #ch{tx_status = in_progress}) ->
     rabbit_misc:protocol_error(
@@ -1162,11 +1161,11 @@ demonitor_queue(QPid, State = #ch{queue_monitors = QMons}) ->
         false -> State
     end.
 
-queue_monitor_needed(QPid, #ch{stats_timer     = StatsTimer,
-                               queue_consumers = QCons,
+queue_monitor_needed(QPid, #ch{queue_consumers = QCons,
                                blocking        = Blocking,
-                               unconfirmed_qm  = UQM}) ->
-    StatsEnabled      = rabbit_event:stats_level(StatsTimer) =:= fine,
+                               unconfirmed_qm  = UQM} = State) ->
+    StatsEnabled      = rabbit_event:stats_level(
+                          State, #ch.stats_timer) =:= fine,
     ConsumerMonitored = dict:is_key(QPid, QCons),
     QueueBlocked      = sets:is_element(QPid, Blocking),
     ConfirmMonitored  = gb_trees:is_defined(QPid, UQM),
@@ -1282,18 +1281,18 @@ ack_record(DeliveryTag, ConsumerTag,
     {DeliveryTag, ConsumerTag, {QPid, MsgId}}.
 
 collect_acks(Q, 0, true) ->
-    {Q, queue:new()};
+    {queue:to_list(Q), queue:new()};
 collect_acks(Q, DeliveryTag, Multiple) ->
-    collect_acks(queue:new(), queue:new(), Q, DeliveryTag, Multiple).
+    collect_acks([], queue:new(), Q, DeliveryTag, Multiple).
 
 collect_acks(ToAcc, PrefixAcc, Q, DeliveryTag, Multiple) ->
     case queue:out(Q) of
         {{value, UnackedMsg = {CurrentDeliveryTag, _ConsumerTag, _Msg}},
          QTail} ->
             if CurrentDeliveryTag == DeliveryTag ->
-                    {queue:in(UnackedMsg, ToAcc), queue:join(PrefixAcc, QTail)};
+                    {[UnackedMsg | ToAcc], queue:join(PrefixAcc, QTail)};
                Multiple ->
-                    collect_acks(queue:in(UnackedMsg, ToAcc), PrefixAcc,
+                    collect_acks([UnackedMsg | ToAcc], PrefixAcc,
                                  QTail, DeliveryTag, Multiple);
                true ->
                     collect_acks(ToAcc, queue:in(UnackedMsg, PrefixAcc),
@@ -1314,7 +1313,7 @@ ack(Acked, State) ->
     maybe_incr_stats(QIncs, ack, State).
 
 new_tx(State) -> State#ch{uncommitted_message_q = queue:new(),
-                          uncommitted_ack_q     = queue:new()}.
+                          uncommitted_acks      = []}.
 
 notify_queues(State = #ch{state = closing}) ->
     {ok, State};
@@ -1322,12 +1321,15 @@ notify_queues(State = #ch{consumer_mapping = Consumers}) ->
     {rabbit_amqqueue:notify_down_all(consumer_queues(Consumers), self()),
      State#ch{state = closing}}.
 
-fold_per_queue(F, Acc0, UAQ) ->
-    T = rabbit_misc:queue_fold(
-          fun ({_DTag, _CTag, {QPid, MsgId}}, T) ->
-                  rabbit_misc:gb_trees_cons(QPid, MsgId, T)
-          end, gb_trees:empty(), UAQ),
-    rabbit_misc:gb_trees_fold(F, Acc0, T).
+fold_per_queue(_F, Acc, []) ->
+    Acc;
+fold_per_queue(F, Acc, [{_DTag, _CTag, {QPid, MsgId}}]) -> %% common case
+    F(QPid, [MsgId], Acc);
+fold_per_queue(F, Acc, UAL) ->
+    T = lists:foldl(fun ({_DTag, _CTag, {QPid, MsgId}}, T) ->
+                            rabbit_misc:gb_trees_cons(QPid, MsgId, T)
+                    end, gb_trees:empty(), UAL),
+    rabbit_misc:gb_trees_fold(F, Acc, T).
 
 enable_limiter(State = #ch{unacked_message_q = UAMQ,
                            limiter           = Limiter}) ->
@@ -1349,9 +1351,9 @@ consumer_queues(Consumers) ->
 notify_limiter(Limiter, Acked) ->
     case rabbit_limiter:is_enabled(Limiter) of
         false -> ok;
-        true  -> case rabbit_misc:queue_fold(fun ({_, none, _}, Acc) -> Acc;
-                                                 ({_, _, _}, Acc)    -> Acc + 1
-                                             end, 0, Acked) of
+        true  -> case lists:foldl(fun ({_, none, _}, Acc) -> Acc;
+                                      ({_, _, _}, Acc)    -> Acc + 1
+                                  end, 0, Acked) of
                      0     -> ok;
                      Count -> rabbit_limiter:ack(Limiter, Count)
                  end
@@ -1493,8 +1495,8 @@ i(messages_unacknowledged, #ch{unacked_message_q = UAMQ}) ->
     queue:len(UAMQ);
 i(messages_uncommitted, #ch{uncommitted_message_q = TMQ}) ->
     queue:len(TMQ);
-i(acks_uncommitted, #ch{uncommitted_ack_q = TAQ}) ->
-    queue:len(TAQ);
+i(acks_uncommitted, #ch{uncommitted_acks = TAL}) ->
+    length(TAL);
 i(prefetch_count, #ch{limiter = Limiter}) ->
     rabbit_limiter:get_limit(Limiter);
 i(client_flow_blocked, #ch{limiter = Limiter}) ->
@@ -1507,8 +1509,8 @@ maybe_incr_redeliver_stats(true, QPid, State) ->
 maybe_incr_redeliver_stats(_, _, State) ->
     State.
 
-maybe_incr_stats(QXIncs, Measure, State = #ch{stats_timer = StatsTimer}) ->
-    case rabbit_event:stats_level(StatsTimer) of
+maybe_incr_stats(QXIncs, Measure, State) ->
+    case rabbit_event:stats_level(State, #ch.stats_timer) of
         fine -> lists:foldl(fun ({QX, Inc}, State0) ->
                                     incr_stats(QX, Inc, Measure, State0)
                             end, State, QXIncs);
@@ -1540,9 +1542,9 @@ update_measures(Type, QX, Inc, Measure) ->
 emit_stats(State) ->
     emit_stats(State, []).
 
-emit_stats(State = #ch{stats_timer = StatsTimer}, Extra) ->
+emit_stats(State, Extra) ->
     CoarseStats = infos(?STATISTICS_KEYS, State),
-    case rabbit_event:stats_level(StatsTimer) of
+    case rabbit_event:stats_level(State, #ch.stats_timer) of
         coarse ->
             rabbit_event:notify(channel_stats, Extra ++ CoarseStats);
         fine ->

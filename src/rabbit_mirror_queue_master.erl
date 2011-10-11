@@ -95,7 +95,7 @@ init(#amqqueue { name = QName, mirror_nodes = MNodes } = Q, Recover,
         (case MNodes of
              all       -> rabbit_mnesia:all_clustered_nodes();
              undefined -> [];
-             _         -> [list_to_atom(binary_to_list(Node)) || Node <- MNodes]
+             _         -> MNodes
          end) -- [node()],
     [rabbit_mirror_queue_misc:add_mirror(QName, Node) || Node <- MNodes1],
     {ok, BQ} = application:get_env(backing_queue_module),

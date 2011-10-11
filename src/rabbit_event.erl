@@ -19,9 +19,9 @@
 -include("rabbit.hrl").
 
 -export([start_link/0]).
--export([init_stats_timer/0, ensure_stats_timer/3, stop_stats_timer/1]).
--export([reset_stats_timer/1]).
--export([stats_level/1, if_enabled/2]).
+-export([init_stats_timer/2, ensure_stats_timer/3, stop_stats_timer/2]).
+-export([reset_stats_timer/2]).
+-export([stats_level/2, if_enabled/3]).
 -export([notify/2, notify_if/3]).
 
 %%----------------------------------------------------------------------------
@@ -39,29 +39,23 @@
 -type(event_timestamp() ::
         {non_neg_integer(), non_neg_integer(), non_neg_integer()}).
 
--type(event() :: #event {
-             type :: event_type(),
-             props :: event_props(),
-             timestamp :: event_timestamp()
-            }).
+-type(event() :: #event { type      :: event_type(),
+                          props     :: event_props(),
+                          timestamp :: event_timestamp() }).
 
 -type(level() :: 'none' | 'coarse' | 'fine').
 
--opaque(state() :: #state {
-               level :: level(),
-               interval :: integer(),
-               timer :: atom()
-              }).
-
 -type(timer_fun() :: fun (() -> 'ok')).
+-type(container() :: tuple()).
+-type(pos() :: non_neg_integer()).
 
 -spec(start_link/0 :: () -> rabbit_types:ok_pid_or_error()).
--spec(init_stats_timer/0 :: () -> state()).
--spec(ensure_stats_timer/3 :: (state(), pid(), term()) -> state()).
--spec(stop_stats_timer/1 :: (state()) -> state()).
--spec(reset_stats_timer/1 :: (state()) -> state()).
--spec(stats_level/1 :: (state()) -> level()).
--spec(if_enabled/2 :: (state(), timer_fun()) -> 'ok').
+-spec(init_stats_timer/2 :: (container(), pos()) -> container()).
+-spec(ensure_stats_timer/3 :: (container(), pos(), term()) -> container()).
+-spec(stop_stats_timer/2 :: (container(), pos()) -> container()).
+-spec(reset_stats_timer/2 :: (container(), pos()) -> container()).
+-spec(stats_level/2 :: (container(), pos()) -> level()).
+-spec(if_enabled/3 :: (container(), pos(), timer_fun()) -> 'ok').
 -spec(notify/2 :: (event_type(), event_props()) -> 'ok').
 -spec(notify_if/3 :: (boolean(), event_type(), event_props()) -> 'ok').
 
@@ -75,58 +69,69 @@ start_link() ->
 %% The idea is, for each stat-emitting object:
 %%
 %% On startup:
-%%   Timer = init_stats_timer()
+%%   init_stats_timer(State)
 %%   notify(created event)
 %%   if_enabled(internal_emit_stats) - so we immediately send something
 %%
 %% On wakeup:
-%%   ensure_stats_timer(Timer, Pid, emit_stats)
+%%   ensure_stats_timer(State, emit_stats)
 %%   (Note we can't emit stats immediately, the timer may have fired 1ms ago.)
 %%
 %% emit_stats:
 %%   if_enabled(internal_emit_stats)
-%%   reset_stats_timer(Timer) - just bookkeeping
+%%   reset_stats_timer(State) - just bookkeeping
 %%
 %% Pre-hibernation:
 %%   if_enabled(internal_emit_stats)
-%%   stop_stats_timer(Timer)
+%%   stop_stats_timer(State)
 %%
 %% internal_emit_stats:
 %%   notify(stats)
 
-init_stats_timer() ->
+init_stats_timer(C, P) ->
     {ok, StatsLevel} = application:get_env(rabbit, collect_statistics),
     {ok, Interval} = application:get_env(rabbit, collect_statistics_interval),
-    #state{level = StatsLevel, interval = Interval, timer = undefined}.
+    setelement(P, C, #state{level = StatsLevel, interval = Interval,
+                            timer = undefined}).
 
-ensure_stats_timer(State = #state{level = none}, _Pid, _Msg) ->
-    State;
-ensure_stats_timer(State = #state{interval = Interval,
-                                  timer    = undefined}, Pid, Msg) ->
-    TRef = erlang:send_after(Interval, Pid, Msg),
-    State#state{timer = TRef};
-ensure_stats_timer(State, _Pid, _Msg) ->
-    State.
+ensure_stats_timer(C, P, Msg) ->
+    case element(P, C) of
+        #state{level = Level, interval = Interval, timer = undefined} = State
+          when Level =/= none ->
+            TRef = erlang:send_after(Interval, self(), Msg),
+            setelement(P, C, State#state{timer = TRef});
+        #state{} ->
+            C
+    end.
 
-stop_stats_timer(State = #state{level = none}) ->
-    State;
-stop_stats_timer(State = #state{timer = undefined}) ->
-    State;
-stop_stats_timer(State = #state{timer = TRef}) ->
-    erlang:cancel_timer(TRef),
-    State#state{timer = undefined}.
+stop_stats_timer(C, P) ->
+    case element(P, C) of
+        #state{level = Level, timer = TRef} = State
+          when Level =/= none andalso TRef =/= undefined ->
+            erlang:cancel_timer(TRef),
+            setelement(P, C, State#state{timer = undefined});
+        #state{} ->
+            C
+    end.
 
-reset_stats_timer(State) ->
-    State#state{timer = undefined}.
+reset_stats_timer(C, P) ->
+    case element(P, C) of
+        #state{timer = TRef} = State
+          when TRef =/= undefined ->
+            setelement(P, C, State#state{timer = undefined});
+        #state{} ->
+            C
+    end.
 
-stats_level(#state{level = Level}) ->
+stats_level(C, P) ->
+    #state{level = Level} = element(P, C),
     Level.
 
-if_enabled(#state{level = none}, _Fun) ->
-    ok;
-if_enabled(_State, Fun) ->
-    Fun(),
-    ok.
+if_enabled(C, P, Fun) ->
+    case element(P, C) of
+        #state{level = none} -> ok;
+        #state{}             -> Fun(), ok
+    end.
 
 notify_if(true,   Type,  Props) -> notify(Type, Props);
 notify_if(false, _Type, _Props) -> ok.
