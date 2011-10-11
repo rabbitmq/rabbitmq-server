@@ -1103,9 +1103,10 @@ record_pending_confirm(CRef, MsgId, State) ->
 client_confirm(CRef, MsgIds, ActionTaken, State) ->
     update_pending_confirms(
       fun (MsgOnDiskFun, CTM) ->
-              MsgOnDiskFun(MsgIds, ActionTaken),
               case dict:find(CRef, CTM) of
-                  {ok, Gs} -> MsgIds1 = gb_sets:difference(Gs, MsgIds),
+                  {ok, Gs} -> MsgOnDiskFun(gb_sets:intersection(Gs, MsgIds),
+                                           ActionTaken),
+                              MsgIds1 = gb_sets:difference(Gs, MsgIds),
                               case gb_sets:is_empty(MsgIds1) of
                                   true  -> dict:erase(CRef, CTM);
                                   false -> dict:store(CRef, MsgIds1, CTM)
