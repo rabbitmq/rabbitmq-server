@@ -65,7 +65,7 @@ start() ->
             print_error("~p", [Reason]),
             rabbit_misc:quit(2);
         Other ->
-            print_error("~p", [Other]),
+            print_error("~s", [Other]),
             rabbit_misc:quit(2)
     end.
 
@@ -98,8 +98,8 @@ action(enable, ToEnable0, _Opts, PluginsFile, PluginsDir) ->
     Missing = ToEnable -- plugin_names(AllPlugins),
     case Missing of
         [] -> ok;
-        _  -> print_list("Warning: the following plugins could not be found:",
-                         Missing)
+        _  -> throw(fmt_list("The following plugins could not be found:",
+                             Missing))
     end,
     NewEnabled = lists:usort(Enabled ++ ToEnable),
     write_enabled_plugins(PluginsFile, NewEnabled),
@@ -280,9 +280,11 @@ format_plugin(#plugin{name = Name, version = Version,
     end.
 
 print_list(Header, Plugins) ->
-    io:format("~s~n", [Header]),
-    [io:format("  ~s~n", [P]) || P <- Plugins],
-    io:format("~n").
+    io:format(fmt_list(Header, Plugins)).
+
+fmt_list(Header, Plugins) ->
+    lists:flatten(
+      [Header, $\n, [io_lib:format("  ~s~n", [P]) || P <- Plugins], $\n]).
 
 usort_plugins(Plugins) ->
     lists:usort(fun plugins_cmp/2, Plugins).
