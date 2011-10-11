@@ -1837,27 +1837,34 @@ msg_store_client_init(MsgStore, Ref) ->
     rabbit_msg_store:client_init(MsgStore, Ref, undefined, undefined).
 
 on_disk_capture() ->
-    on_disk_capture({gb_sets:new(), gb_sets:new(), undefined}).
-on_disk_capture({OnDisk, Awaiting, Pid}) ->
-    Pid1 = case Pid =/= undefined andalso gb_sets:is_empty(Awaiting) of
-               true  -> Pid ! {self(), arrived}, undefined;
-               false -> Pid
-           end,
     receive
-        {await, MsgIds, Pid2} ->
-            true = Pid1 =:= undefined andalso gb_sets:is_empty(Awaiting),
-            on_disk_capture({OnDisk, gb_sets:subtract(MsgIds, OnDisk), Pid2});
-        {on_disk, MsgIds} ->
-            on_disk_capture({gb_sets:union(OnDisk, MsgIds),
-                             gb_sets:subtract(Awaiting, MsgIds),
-                             Pid1});
+        {await, MsgIds, Pid} -> on_disk_capture([], MsgIds, Pid);
+        stop                 -> done
+    end.
+
+on_disk_capture(OnDisk, Awaiting, Pid) ->
+    receive
+        {on_disk, MsgIdsS} ->
+            MsgIds = gb_sets:to_list(MsgIdsS),
+            on_disk_capture(OnDisk ++ (MsgIds -- Awaiting), Awaiting -- MsgIds,
+                            Pid);
         stop ->
             done
+    after 100 ->
+            case {OnDisk, Awaiting} of
+                {[], []} -> Pid ! {self(), arrived}, on_disk_capture();
+                {_,  []} -> Pid ! {self(), surplus};
+                {[],  _} -> Pid ! {self(), timeout};
+                {_,   _} -> Pid ! {self(), surplus_timeout}
+            end
     end.
 
 on_disk_await(Pid, MsgIds) when is_list(MsgIds) ->
-    Pid ! {await, gb_sets:from_list(MsgIds), self()},
-    receive {Pid, arrived} -> ok end.
+    Pid ! {await, MsgIds, self()},
+    receive
+        {Pid, arrived} -> ok;
+        {Pid, Error}   -> Error
+    end.
 
 on_disk_stop(Pid) ->
     MRef = erlang:monitor(process, Pid),
