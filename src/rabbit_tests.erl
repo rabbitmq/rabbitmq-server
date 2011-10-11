@@ -1929,6 +1929,8 @@ test_msg_store() ->
                           ?PERSISTENT_MSG_STORE, Ref2),
     %% check we don't contain any of the msgs we're about to publish
     false = msg_store_contains(false, MsgIds, MSCState),
+    %% test confirm logic
+    passed = test_msg_store_confirms([hd(MsgIds)], Cap, MSCState),
     %% publish the first half
     ok = msg_store_write(MsgIds1stHalf, MSCState),
     %% sync on the first half
@@ -2038,6 +2040,33 @@ test_msg_store() ->
            end),
     %% restart empty
     restart_msg_store_empty(),
+    passed.
+
+test_msg_store_confirms(MsgIds, Cap, MSCState) ->
+    %% write -> confirmed
+    ok = msg_store_write(MsgIds, MSCState),
+    ok = on_disk_await(Cap, MsgIds),
+    %% remove -> _
+    ok = msg_store_remove(MsgIds, MSCState),
+    ok = on_disk_await(Cap, []),
+    %% write, remove -> confirmed
+    ok = msg_store_write(MsgIds, MSCState),
+    ok = msg_store_remove(MsgIds, MSCState),
+    ok = on_disk_await(Cap, MsgIds),
+    %% write, remove, write -> confirmed, confirmed
+    ok = msg_store_write(MsgIds, MSCState),
+    ok = msg_store_remove(MsgIds, MSCState),
+    ok = msg_store_write(MsgIds, MSCState),
+    ok = on_disk_await(Cap, MsgIds ++ MsgIds),
+    %% remove, write -> confirmed
+    ok = msg_store_remove(MsgIds, MSCState),
+    ok = msg_store_write(MsgIds, MSCState),
+    ok = on_disk_await(Cap, MsgIds),
+    %% remove, write, remove -> confirmed
+    ok = msg_store_remove(MsgIds, MSCState),
+    ok = msg_store_write(MsgIds, MSCState),
+    ok = msg_store_remove(MsgIds, MSCState),
+    ok = on_disk_await(Cap, MsgIds),
     passed.
 
 queue_name(Name) ->
