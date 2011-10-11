@@ -127,9 +127,8 @@ action(disable, ToDisable0, _Opts, PluginsFile, PluginsDir) ->
         _  -> print_list("Warning: the following plugins could not be found:",
                          Missing)
     end,
-    ToDisable1 = ToDisable -- Missing,
-    ToDisable2 = calculate_dependencies(true, ToDisable1, AllPlugins),
-    NewEnabled = Enabled -- ToDisable2,
+    ToDisableDeps = calculate_dependencies(true, ToDisable, AllPlugins),
+    NewEnabled = Enabled -- ToDisableDeps,
     case length(Enabled) =:= length(NewEnabled) of
         true  -> io:format("Plugin configuration unchanged.~n");
         false -> ImplicitlyEnabled =
