@@ -69,12 +69,16 @@
 
     <variablelist>
       <varlistentry>
-        <term><cmdsynopsis><command>list</command> <arg choice="opt">-v</arg> <arg choice="opt">-E</arg> <arg choice="opt">-e</arg> <arg choice="opt"><replaceable>pattern</replaceable></arg></cmdsynopsis></term>
+        <term><cmdsynopsis><command>list</command> <arg choice="opt">-v</arg> <arg choice="opt">-m</arg> <arg choice="opt">-E</arg> <arg choice="opt">-e</arg> <arg choice="opt"><replaceable>pattern</replaceable></arg></cmdsynopsis></term>
         <listitem>
           <variablelist>
             <varlistentry>
               <term>-v</term>
-              <listitem><para>Show all plugin details.</para></listitem>
+              <listitem><para>Show all plugin details (verbose).</para></listitem>
+            </varlistentry>
+            <varlistentry>
+              <term>-m</term>
+              <listitem><para>Show only plugin names (minimal).</para></listitem>
             </varlistentry>
             <varlistentry>
               <term>-E</term>
