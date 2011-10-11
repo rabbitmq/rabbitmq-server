@@ -2189,12 +2189,7 @@ test_variable_queue_requeue(VQ0) ->
     Seq = lists:seq(1, Count),
     VQ1 = rabbit_variable_queue:set_ram_duration_target(0, VQ0),
     VQ2 = variable_queue_publish(false, Count, VQ1),
-    {VQ3, Acks} = lists:foldl(
-                    fun (_N, {VQN, AckTags}) ->
-                            {{#basic_message{}, false, AckTag, _}, VQM} =
-                                rabbit_variable_queue:fetch(true, VQN),
-                            {VQM, [AckTag | AckTags]}
-                    end, {VQ2, []}, Seq),
+    {VQ3, Acks} = variable_queue_fetch(Count, false, false, Count, VQ2),
     Subset = lists:foldl(fun ({Ack, N}, Acc) when N rem Interval == 0 ->
                                  [Ack | Acc];
                              (_, Acc) ->
