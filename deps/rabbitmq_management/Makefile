@@ -5,6 +5,7 @@ TEST_TMPDIR=/tmp/rabbitmq-test
 
 
 start-second-node:
+	rm -f $(TEST_TMPDIR)/rabbitmq-hare-pid
 	RABBITMQ_MNESIA_BASE=$(TEST_TMPDIR)/rabbitmq-hare-mnesia \
 	RABBITMQ_PID_FILE=$(TEST_TMPDIR)/rabbitmq-hare-pid \
 	RABBITMQ_LOG_BASE=$(TEST_TMPDIR)/log \
