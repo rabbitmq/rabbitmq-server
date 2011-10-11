@@ -1915,7 +1915,11 @@ test_msg_store() ->
     MsgIds = [msg_id_bin(M) || M <- lists:seq(1,100)],
     {MsgIds1stHalf, MsgIds2ndHalf} = lists:split(50, MsgIds),
     Ref = rabbit_guid:guid(),
-    {Cap, MSCState} = msg_store_client_init_capture(?PERSISTENT_MSG_STORE, Ref),
+    {Cap, MSCState} = msg_store_client_init_capture(
+                        ?PERSISTENT_MSG_STORE, Ref),
+    Ref2 = rabbit_guid:guid(),
+    {Cap2, MSC2State} = msg_store_client_init_capture(
+                          ?PERSISTENT_MSG_STORE, Ref2),
     %% check we don't contain any of the msgs we're about to publish
     false = msg_store_contains(false, MsgIds, MSCState),
     %% publish the first half
@@ -1926,20 +1930,25 @@ test_msg_store() ->
     ok = msg_store_write(MsgIds2ndHalf, MSCState),
     %% check they're all in there
     true = msg_store_contains(true, MsgIds, MSCState),
-    %% publish the latter half twice so we hit the caching and ref count code
-    ok = msg_store_write(MsgIds2ndHalf, MSCState),
+    %% publish the latter half twice so we hit the caching and ref
+    %% count code. We need to do this through a 2nd client since a
+    %% single client is not supposed to write the same message more
+    %% than once without first removing it.
+    ok = msg_store_write(MsgIds2ndHalf, MSC2State),
     %% check they're still all in there
     true = msg_store_contains(true, MsgIds, MSCState),
-    %% sync on the 2nd half, but do lots of individual syncs to try
-    %% and cause coalescing to happen
-    ok = on_disk_await(Cap, MsgIds2ndHalf),
+    %% sync on the 2nd half
+    ok = on_disk_await(Cap2, MsgIds2ndHalf),
+    %% cleanup
+    ok = on_disk_stop(Cap2),
+    ok = rabbit_msg_store:client_delete_and_terminate(MSC2State),
     ok = on_disk_stop(Cap),
     %% read them all
     MSCState1 = msg_store_read(MsgIds, MSCState),
     %% read them all again - this will hit the cache, not disk
     MSCState2 = msg_store_read(MsgIds, MSCState1),
     %% remove them all
-    ok = rabbit_msg_store:remove(MsgIds, MSCState2),
+    ok = msg_store_remove(MsgIds, MSCState2),
     %% check first half doesn't exist
     false = msg_store_contains(false, MsgIds1stHalf, MSCState2),
     %% check second half does exist
@@ -1977,7 +1986,7 @@ test_msg_store() ->
     ok = rabbit_msg_store:client_terminate(
            msg_store_read(MsgIds1stHalf, MSCState6)),
     MSCState7 = msg_store_client_init(?PERSISTENT_MSG_STORE, Ref),
-    ok = rabbit_msg_store:remove(MsgIds1stHalf, MSCState7),
+    ok = msg_store_remove(MsgIds1stHalf, MSCState7),
     ok = rabbit_msg_store:client_terminate(MSCState7),
     %% restart empty
     restart_msg_store_empty(), %% now safe to reuse msg_ids
