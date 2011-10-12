@@ -1482,18 +1482,11 @@ permitted_beta_count(#vqstate { len = 0 }) ->
     infinity;
 permitted_beta_count(#vqstate { target_ram_count = 0 }) ->
     rabbit_queue_index:next_segment_boundary(0);
-permitted_beta_count(#vqstate { q3 = Q3,
-                                target_ram_count = TargetRamCount,
+permitted_beta_count(#vqstate { target_ram_count = TargetRamCount,
                                 len = Len }) ->
     BetaDelta = lists:max([0, Len - TargetRamCount]),
-    Q3SizeLimit =
-        case ?QUEUE:peek(Q3) of
-            empty ->
-                0;
-            {value, #msg_status { seq_id = SeqId }} ->
-                rabbit_queue_index:next_segment_boundary(SeqId) - SeqId
-        end,
-    lists:max([BetaDelta - ((BetaDelta * BetaDelta) div Len), Q3SizeLimit]).
+    lists:max([BetaDelta - ((BetaDelta * BetaDelta) div Len),
+               rabbit_queue_index:next_segment_boundary(0)]).
 
 chunk_size(Current, Permitted)
   when Permitted =:= infinity orelse Permitted >= Current ->
@@ -1630,14 +1623,14 @@ push_betas_to_deltas(Quota, State = #vqstate { q2          = Q2,
                                                q3          = Q3,
                                                index_state = IndexState }) ->
     PushState = {Quota, Delta, IndexState},
-    {Q2a, PushState1} = push_with_limit(
-                          fun ?QUEUE:out/1,
-                          fun (Q2MinSeqId) -> Q2MinSeqId end,
-                          Q2, fun push_betas_to_deltas1/4, PushState),
-    {Q3a, PushState2} = push_with_limit(
+    {Q3a, PushState1} = push_with_limit(
                           fun ?QUEUE:out_r/1,
                           fun rabbit_queue_index:next_segment_boundary/1,
-                          Q3, fun push_betas_to_deltas1/4, PushState1),
+                          Q3, fun push_betas_to_deltas1/4, PushState),
+    {Q2a, PushState2} = push_with_limit(
+                          fun ?QUEUE:out/1,
+                          fun (Q2MinSeqId) -> Q2MinSeqId end,
+                          Q2, fun push_betas_to_deltas1/4, PushState1),
     {_, Delta1, IndexState1} = PushState2,
     State #vqstate { q2          = Q2a,
                      delta       = Delta1,
