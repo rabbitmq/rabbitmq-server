@@ -49,17 +49,15 @@
 %% within the queue are always held on disk, *in addition* to being in
 %% one of the above classifications.
 %%
-%% Also note that within this code, the term gamma never
-%% appears. Instead, gammas are defined by betas who have had their
-%% queue position recorded on disk.
+%% Also note that within this code, the term gamma seldom
+%% appears. It's frequently the case that gammas are defined by betas
+%% who have had their queue position recorded on disk.
 %%
 %% In general, messages move q1 -> q2 -> delta -> q3 -> q4, though
 %% many of these steps are frequently skipped. q1 and q4 only hold
-%% alphas, q2 and q3 hold both betas and gammas (as queues of queues,
-%% using the bpqueue module where the block prefix determines whether
-%% they're betas or gammas). When a message arrives, its
-%% classification is determined. It is then added to the rightmost
-%% appropriate queue.
+%% alphas, q2 and q3 hold both betas and gammas. When a message
+%% arrives, its classification is determined. It is then added to the
+%% rightmost appropriate queue.
 %%
 %% If a new message is determined to be a beta or gamma, q1 is
 %% empty. If a new message is determined to be a delta, q1 and q2 are
@@ -74,14 +72,15 @@
 %%
 %% The duration indicated to us by the memory_monitor is used to
 %% calculate, given our current ingress and egress rates, how many
-%% messages we should hold in RAM. We track the ingress and egress
-%% rates for both messages and pending acks and rates for both are
-%% considered when calculating the number of messages to hold in
-%% RAM. When we need to push alphas to betas or betas to gammas, we
-%% favour writing out messages that are further from the head of the
-%% queue. This minimises writes to disk, as the messages closer to the
-%% tail of the queue stay in the queue for longer, thus do not need to
-%% be replaced as quickly by sending other messages to disk.
+%% messages we should hold in RAM (i.e. as alphas). We track the
+%% ingress and egress rates for both messages and pending acks and
+%% rates for both are considered when calculating the number of
+%% messages to hold in RAM. When we need to push alphas to betas or
+%% betas to gammas, we favour writing out messages that are further
+%% from the head of the queue. This minimises writes to disk, as the
+%% messages closer to the tail of the queue stay in the queue for
+%% longer, thus do not need to be replaced as quickly by sending other
+%% messages to disk.
 %%
 %% Whilst messages are pushed to disk and forgotten from RAM as soon
 %% as requested by a new setting of the queue RAM duration, the
@@ -119,17 +118,60 @@
 %% getting rid of messages as fast as possible and remaining
 %% responsive, and using only the egress rate impacts that goal.
 %%
-%% If a queue is full of transient messages, then the transition from
-%% betas to deltas will be potentially very expensive as millions of
-%% entries must be written to disk by the queue_index module. This can
-%% badly stall the queue. In order to avoid this, the proportion of
-%% gammas / (betas+gammas) must not be lower than (betas+gammas) /
-%% (alphas+betas+gammas). As the queue grows or available memory
-%% shrinks, the latter ratio increases, requiring the conversion of
-%% more gammas to betas in order to maintain the invariant. At the
-%% point at which betas and gammas must be converted to deltas, there
-%% should be very few betas remaining, thus the transition is fast (no
-%% work needs to be done for the gamma -> delta transition).
+%% Once the queue has more alphas than the target_ram_count, the
+%% surplus must be converted to betas, if not gammas, if not rolled
+%% into delta. The conditions under which these transitions occur
+%% reflect the conflicting goals of minimising RAM cost per msg, and
+%% minimising CPU cost per msg. Once the msg has become a beta, its
+%% payload is no longer in RAM, thus a read from the msg_store must
+%% occur before the msg can be delivered, but the RAM cost of a beta
+%% is the same as a gamma, so converting a beta to gamma will not free
+%% up any further RAM. To reduce the RAM cost further, the gamma must
+%% be rolled into delta. Whilst recovering a beta or a gamma to an
+%% alpha requires only one disk read (from the msg_store), recovering
+%% a msg from within delta will require two reads (queue_index and
+%% then msg_store). But delta has a near-0 per-msg RAM cost. So the
+%% conflict is between you using delta more, which will free up more
+%% memory, but require additional CPU and disk ops, versus using delta
+%% less and gammas and betas more, which will cost more memory, but
+%% require fewer disk ops and less CPU overhead.
+%%
+%% The decision taken is that once a gamma is at the head of q2, or at
+%% the tail of q3, it'll be immediately rolled into delta. This
+%% ensures that the memory use of a queue stays relatively flat, even
+%% as it gets longer: we avoid a cliff face where an event forces
+%% potentially millions of gammas to be suddenly rolled into
+%% delta. This comes at the cost of needing to do additional reads
+%% from queue_index as gammas are eventually brought out of delta.
+%%
+%% However, that does not yet explain when a beta is converted to a
+%% gamma. In the case of a persistent msg published to a durable
+%% queue, the msg is immediately written to the msg_store and
+%% queue_index. If then additionally converted from an alpha, it'll
+%% immediately go to a gamma (as it's already in queue_index), and
+%% cannot exist as a beta. Thus a durable queue with a mixture of
+%% persistent and transient msgs in it which has more messages than
+%% permitted by the target_ram_count may contain an interspersed
+%% mixture of betas and gammas in q2 and q3, but with a beta at the
+%% head of q2 and the tail of q3.
+%%
+%% There is then a ratio that controls how many betas and gammas there
+%% can be. This is based on the target_ram_count and thus expresses
+%% the fact that as the number of permitted alphas in the queue falls,
+%% so should the number of betas and gammas fall (i.e. delta
+%% grows). If q2 and q3 contain more than the permitted number of
+%% betas and gammas, then the surplus are forcibly converted to gammas
+%% (as necessary) and then rolled into delta. The ratio is that the
+%% size of delta / (betas+gammas+delta) should equal
+%% (betas+gammas+delta)/(alphas+betas+gammas+delta). I.e. as alphas
+%% shrink to 0, so must betas and gammas. The actual calculation done
+%% is a rearrangement of this, and uses target_ram_count instead of
+%% alphas. The reason for this is that once the queue length starts
+%% falling, any alphas in q4 will be sent out first, thus reducing the
+%% number of alphas. Thus if the real number of alphas was used then
+%% this scenario could result in more conversions towards delta,
+%% simply because the queue is starting to drain. By using the
+%% target_ram_count, we avoid this problem.
 %%
 %% The conversion of betas to gammas is done in batches of exactly
 %% ?IO_BATCH_SIZE. This value should not be too small, otherwise the
@@ -137,8 +179,7 @@
 %% effectively amortised (switching the direction of queue access
 %% defeats amortisation), nor should it be too big, otherwise
 %% converting a batch stalls the queue for too long. Therefore, it
-%% must be just right. ram_index_count is used here and is the number
-%% of betas.
+%% must be just right.
 %%
 %% The conversion from alphas to betas is also chunked, but only to
 %% ensure no more than ?IO_BATCH_SIZE alphas are converted to betas at
