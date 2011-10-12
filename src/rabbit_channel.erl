@@ -173,7 +173,6 @@ init([Channel, ReaderPid, WriterPid, ConnPid, Protocol, User, VHost,
       Capabilities, CollectorPid, Limiter]) ->
     process_flag(trap_exit, true),
     ok = pg_local:join(rabbit_channels, self()),
-    StatsTimer = rabbit_event:init_stats_timer(),
     State = #ch{state                   = starting,
                 protocol                = Protocol,
                 channel                 = Channel,
@@ -194,7 +193,6 @@ init([Channel, ReaderPid, WriterPid, ConnPid, Protocol, User, VHost,
                 blocking                = sets:new(),
                 queue_consumers         = dict:new(),
                 queue_collector_pid     = CollectorPid,
-                stats_timer             = StatsTimer,
                 confirm_enabled         = false,
                 publish_seqno           = 1,
                 unconfirmed_mq          = gb_trees:empty(),
@@ -202,10 +200,11 @@ init([Channel, ReaderPid, WriterPid, ConnPid, Protocol, User, VHost,
                 confirmed               = [],
                 capabilities            = Capabilities,
                 trace_state             = rabbit_trace:init(VHost)},
-    rabbit_event:notify(channel_created, infos(?CREATION_EVENT_KEYS, State)),
-    rabbit_event:if_enabled(StatsTimer,
-                            fun() -> emit_stats(State) end),
-    {ok, State, hibernate,
+    State1 = rabbit_event:init_stats_timer(State, #ch.stats_timer),
+    rabbit_event:notify(channel_created, infos(?CREATION_EVENT_KEYS, State1)),
+    rabbit_event:if_enabled(State1, #ch.stats_timer,
+                            fun() -> emit_stats(State1) end),
+    {ok, State1, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
 prioritise_call(Msg, _From, _State) ->
@@ -319,10 +318,10 @@ handle_cast({confirm, MsgSeqNos, From}, State) ->
 handle_info(timeout, State) ->
     noreply(State);
 
-handle_info(emit_stats, State = #ch{stats_timer = StatsTimer}) ->
+handle_info(emit_stats, State) ->
     emit_stats(State),
     noreply([ensure_stats_timer],
-            State#ch{stats_timer = rabbit_event:reset_stats_timer(StatsTimer)});
+            rabbit_event:reset_stats_timer(State, #ch.stats_timer));
 
 handle_info({'DOWN', _MRef, process, QPid, Reason}, State) ->
     State1 = handle_publishing_queue_down(QPid, Reason, State),
@@ -335,12 +334,12 @@ handle_info({'DOWN', _MRef, process, QPid, Reason}, State) ->
 handle_info({'EXIT', _Pid, Reason}, State) ->
     {stop, Reason, State}.
 
-handle_pre_hibernate(State = #ch{stats_timer = StatsTimer}) ->
+handle_pre_hibernate(State) ->
     ok = clear_permission_cache(),
     rabbit_event:if_enabled(
-      StatsTimer, fun () -> emit_stats(State, [{idle_since, now()}]) end),
-    StatsTimer1 = rabbit_event:stop_stats_timer(StatsTimer),
-    {hibernate, State#ch{stats_timer = StatsTimer1}}.
+      State, #ch.stats_timer,
+      fun () -> emit_stats(State, [{idle_since, now()}]) end),
+    {hibernate, rabbit_event:stop_stats_timer(State, #ch.stats_timer)}.
 
 terminate(Reason, State) ->
     {Res, _State1} = notify_queues(State),
@@ -385,9 +384,8 @@ next_state(Mask, State) ->
     State2 = ?MASKED_CALL(send_confirms,      Mask, State1),
     State2.
 
-ensure_stats_timer(State = #ch{stats_timer = StatsTimer}) ->
-    State#ch{stats_timer = rabbit_event:ensure_stats_timer(
-                             StatsTimer, self(), emit_stats)}.
+ensure_stats_timer(State) ->
+    rabbit_event:ensure_stats_timer(State, #ch.stats_timer, emit_stats).
 
 return_ok(State, true, _Msg)  -> {noreply, State};
 return_ok(State, false, Msg)  -> {reply, Msg, State}.
@@ -1163,11 +1161,11 @@ demonitor_queue(QPid, State = #ch{queue_monitors = QMons}) ->
         false -> State
     end.
 
-queue_monitor_needed(QPid, #ch{stats_timer     = StatsTimer,
-                               queue_consumers = QCons,
+queue_monitor_needed(QPid, #ch{queue_consumers = QCons,
                                blocking        = Blocking,
-                               unconfirmed_qm  = UQM}) ->
-    StatsEnabled      = rabbit_event:stats_level(StatsTimer) =:= fine,
+                               unconfirmed_qm  = UQM} = State) ->
+    StatsEnabled      = rabbit_event:stats_level(
+                          State, #ch.stats_timer) =:= fine,
     ConsumerMonitored = dict:is_key(QPid, QCons),
     QueueBlocked      = sets:is_element(QPid, Blocking),
     ConfirmMonitored  = gb_trees:is_defined(QPid, UQM),
@@ -1511,8 +1509,8 @@ maybe_incr_redeliver_stats(true, QPid, State) ->
 maybe_incr_redeliver_stats(_, _, State) ->
     State.
 
-maybe_incr_stats(QXIncs, Measure, State = #ch{stats_timer = StatsTimer}) ->
-    case rabbit_event:stats_level(StatsTimer) of
+maybe_incr_stats(QXIncs, Measure, State) ->
+    case rabbit_event:stats_level(State, #ch.stats_timer) of
         fine -> lists:foldl(fun ({QX, Inc}, State0) ->
                                     incr_stats(QX, Inc, Measure, State0)
                             end, State, QXIncs);
@@ -1544,9 +1542,9 @@ update_measures(Type, QX, Inc, Measure) ->
 emit_stats(State) ->
     emit_stats(State, []).
 
-emit_stats(State = #ch{stats_timer = StatsTimer}, Extra) ->
+emit_stats(State, Extra) ->
     CoarseStats = infos(?STATISTICS_KEYS, State),
-    case rabbit_event:stats_level(StatsTimer) of
+    case rabbit_event:stats_level(State, #ch.stats_timer) of
         coarse ->
             rabbit_event:notify(channel_stats, Extra ++ CoarseStats);
         fine ->

@@ -1,0 +1,181 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE refentry PUBLIC "-//OASIS//DTD DocBook XML V4.5//EN" "http://www.docbook.org/xml/4.5/docbookx.dtd">
+<!--
+ There is some extra magic in this document besides the usual DocBook semantics
+ to allow us to derive manpages, HTML and usage messages from the same source
+ document.
+
+ Examples need to be moved to the end for man pages. To this end, <para>s and
+ <screen>s with role="example" will be moved, and with role="example-prefix"
+ will be removed.
+
+ The usage messages are more involved. We have some magic in usage.xsl to pull
+ out the command synopsis, global option and subcommand synopses. We also pull
+ out <para>s with role="usage".
+
+ Finally we construct lists of possible values for subcommand options, if the
+ subcommand's <varlistentry> has role="usage-has-option-list". The option which
+ takes the values should be marked with role="usage-option-list".
+-->
+
+<refentry lang="en">
+  <refentryinfo>
+    <productname>RabbitMQ Server</productname>
+    <authorgroup>
+      <corpauthor>The RabbitMQ Team &lt;<ulink url="mailto:info@rabbitmq.com"><email>info@rabbitmq.com</email></ulink>&gt;</corpauthor>
+    </authorgroup>
+  </refentryinfo>
+
+  <refmeta>
+    <refentrytitle>rabbitmq-plugins</refentrytitle>
+    <manvolnum>1</manvolnum>
+    <refmiscinfo class="manual">RabbitMQ Service</refmiscinfo>
+  </refmeta>
+
+  <refnamediv>
+    <refname>rabbitmq-plugins</refname>
+    <refpurpose>command line tool for managing RabbitMQ broker plugins</refpurpose>
+  </refnamediv>
+
+  <refsynopsisdiv>
+    <cmdsynopsis>
+      <command>rabbitmq-plugins</command>
+      <arg choice="req"><replaceable>command</replaceable></arg>
+      <arg choice="opt" rep="repeat"><replaceable>command options</replaceable></arg>
+    </cmdsynopsis>
+  </refsynopsisdiv>
+
+  <refsect1>
+    <title>Description</title>
+    <para>
+      <command>rabbitmq-plugins</command> is a command line tool for managing
+      RabbitMQ broker plugins. It allows one to enable, disable and browse
+      plugins. It must be run by a user with write permissions to the RabbitMQ
+      configuration directory.
+    </para>
+    <para>
+      Some plugins depend on others to work
+      correctly. <command>rabbitmq-plugins</command> traverses these
+      dependencies and enables all required plugins. Plugins listed on
+      the <command>rabbitmq-plugins</command> command line are marked as
+      explicitly enabled; dependent plugins are marked as implicitly
+      enabled. Implicitly enabled plugins are automatically disabled again
+      when they are no longer required.
+    </para>
+  </refsect1>
+
+  <refsect1>
+    <title>Commands</title>
+
+    <variablelist>
+      <varlistentry>
+        <term><cmdsynopsis><command>list</command> <arg choice="opt">-v</arg> <arg choice="opt">-m</arg> <arg choice="opt">-E</arg> <arg choice="opt">-e</arg> <arg choice="opt"><replaceable>pattern</replaceable></arg></cmdsynopsis></term>
+        <listitem>
+          <variablelist>
+            <varlistentry>
+              <term>-v</term>
+              <listitem><para>Show all plugin details (verbose).</para></listitem>
+            </varlistentry>
+            <varlistentry>
+              <term>-m</term>
+              <listitem><para>Show only plugin names (minimal).</para></listitem>
+            </varlistentry>
+            <varlistentry>
+              <term>-E</term>
+              <listitem><para>Show only explicitly enabled
+              plugins.</para></listitem>
+            </varlistentry>
+            <varlistentry>
+              <term>-e</term>
+              <listitem><para>Show only explicitly or implicitly
+              enabled plugins.</para></listitem>
+            </varlistentry>
+            <varlistentry>
+              <term>pattern</term>
+              <listitem><para>Pattern to filter the plugin names by.</para></listitem>
+            </varlistentry>
+          </variablelist>
+          <para>
+            Lists available plugins, their versions, dependencies and
+            descriptions. Each plugin is prefixed with a status
+            indicator - [ ] to indicate that the plugin is not
+            enabled, [E] to indicate that it is explicitly enabled,
+            and [e] to indicate that it is implicitly enabled.
+          </para>
+          <para>
+            If the optional pattern is given, only plugins whose
+            name matches <command>pattern</command> are shown.
+          </para>
+          <para role="example-prefix">For example:</para>
+          <screen role="example">rabbitmq-plugins list</screen>
+          <para role="example">
+            This command lists all the plugins available, on one line each.
+          </para>
+          <screen role="example">rabbitmq-plugins list -v </screen>
+          <para role="example">
+            This command lists all the plugins available.
+          </para>
+          <screen role="example">rabbitmq-plugins list -v management</screen>
+          <para role="example">
+            This command lists all the plugins available, but does not
+            display plugins whose name does not contain "management".
+          </para>
+          <screen role="example">rabbitmq-plugins list -e rabbit</screen>
+          <para role="example">
+            This command lists all implicitly or explicitly enabled
+            RabbitMQ plugins.
+          </para>
+        </listitem>
+      </varlistentry>
+
+      <varlistentry>
+        <term><cmdsynopsis><command>enable</command> <arg choice="req"><replaceable>plugin</replaceable> ...</arg></cmdsynopsis></term>
+        <listitem>
+          <variablelist>
+            <varlistentry>
+              <term>plugin</term>
+              <listitem><para>One or more plugins to enable.</para></listitem>
+            </varlistentry>
+          </variablelist>
+          <para>
+            Enables the specified plugins and all their
+            dependencies.
+          </para>
+
+          <para role="example-prefix">For example:</para>
+          <screen role="example">rabbitmq-plugins enable rabbitmq_shovel rabbitmq_management</screen>
+          <para role="example">
+            This command enables the <command>shovel</command> and
+            <command>management</command> plugins and all their
+            dependencies.
+          </para>
+        </listitem>
+      </varlistentry>
+
+      <varlistentry>
+        <term><cmdsynopsis><command>disable</command> <arg choice="req"><replaceable>plugin</replaceable> ...</arg></cmdsynopsis></term>
+        <listitem>
+          <variablelist>
+            <varlistentry>
+              <term>plugin</term>
+              <listitem><para>One or more plugins to disable.</para></listitem>
+            </varlistentry>
+          </variablelist>
+          <para>
+            Disables the specified plugins and all plugins that
+            depend on them.
+          </para>
+
+          <para role="example-prefix">For example:</para>
+          <screen role="example">rabbitmq-plugins disable amqp_client</screen>
+          <para role="example">
+            This command disables <command>amqp_client</command> and
+            all plugins that depend on it.
+          </para>
+        </listitem>
+      </varlistentry>
+    </variablelist>
+
+  </refsect1>
+
+</refentry>

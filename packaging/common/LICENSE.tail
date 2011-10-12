@@ -1,14 +1,7 @@
-This package was debianized by Tony Garnock-Jones <tonyg@rabbitmq.com> on
-Wed,  3 Jan 2007 15:43:44 +0000.
 
-It was downloaded from http://www.rabbitmq.com/
+The MIT license is as follows:
 
-The files codegen/amqp-rabbitmq-0.8.json and
-codegen/amqp-rabbitmq-0.9.1.json are covered by the following terms:
-
-        "Copyright (C) 2008-2011 VMware, Inc.
-
-        Permission is hereby granted, free of charge, to any person
+        "Permission is hereby granted, free of charge, to any person
         obtaining a copy of this file (the Software), to deal in the
         Software without restriction, including without limitation the
         rights to use, copy, modify, merge, publish, distribute,
@@ -27,6 +20,37 @@ codegen/amqp-rabbitmq-0.9.1.json are covered by the following terms:
         WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
         FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
         OTHER DEALINGS IN THE SOFTWARE."
+
+
+The BSD 2-Clause license is as follows:
+
+        "Redistribution and use in source and binary forms, with or
+        without modification, are permitted provided that the
+        following conditions are met:
+
+        1. Redistributions of source code must retain the above
+        copyright notice, this list of conditions and the following
+        disclaimer.
+
+        2. Redistributions in binary form must reproduce the above
+        copyright notice, this list of conditions and the following
+        disclaimer in the documentation and/or other materials
+        provided with the distribution.
+
+        THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+        CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
+        INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+        MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+        DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR
+        CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+        SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+        NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+        LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+        HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+        CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+        OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
+        EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE."
+
 
 The rest of this package is licensed under the Mozilla Public License 1.1
 Authors and Copyright are as described below:
@@ -490,13 +514,3 @@ EXHIBIT A -Mozilla Public License.
      the notices in the Source Code files of the Original Code. You should
      use the text of this Exhibit A rather than the text found in the
      Original Code Source Code for Your Modifications.]
-
-
-
-
-
-If you have any questions regarding licensing, please contact us at
-info@rabbitmq.com.
-
-The Debian packaging is (C) 2007-2011, VMware, Inc. and is licensed
-under the MPL 1.1, see above.

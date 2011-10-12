@@ -75,6 +75,13 @@
 
 -record(message_properties, {expiry, needs_confirming = false}).
 
+-record(plugin, {name,          %% atom()
+                 version,       %% string()
+                 description,   %% string()
+                 type,          %% 'ez' or 'dir'
+                 dependencies,  %% [{atom(), string()}]
+                 location}).    %% string()
+
 %%----------------------------------------------------------------------------
 
 -define(COPYRIGHT_MESSAGE, "Copyright (C) 2007-2011 VMware, Inc.").

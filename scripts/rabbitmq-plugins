@@ -15,28 +15,20 @@
 ##  Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
 ##
 
-# Escape spaces and quotes, because shell is revolting.
-for arg in "$@" ; do
-	# Escape quotes in parameters, so that they're passed through cleanly.
-	arg=$(sed -e 's/"/\\"/g' <<-END
-		$arg
-		END
-	)
-	CMDLINE="${CMDLINE} \"${arg}\""
-done
+. `dirname $0`/rabbitmq-env
 
-cd /var/lib/rabbitmq
+ENABLED_PLUGINS_FILE=/etc/rabbitmq/enabled_plugins
 
-SCRIPT=`basename $0`
+[ "x" = "x$RABBITMQ_ENABLED_PLUGINS_FILE" ] && RABBITMQ_ENABLED_PLUGINS_FILE=${ENABLED_PLUGINS_FILE}
 
-if [ `id -u` = `id -u rabbitmq` -o "$SCRIPT" = "rabbitmq-plugins" ] ; then
-    /usr/lib/rabbitmq/bin/${SCRIPT} "$@"
-elif [ `id -u` = 0 ] ; then
-    @SU_RABBITMQ_SH_C@ "/usr/lib/rabbitmq/bin/${SCRIPT} ${CMDLINE}"
-else
-    /usr/lib/rabbitmq/bin/${SCRIPT}
-    echo
-    echo "Only root or rabbitmq should run ${SCRIPT}"
-    echo
-    exit 1
-fi
+[ "x" = "x$RABBITMQ_PLUGINS_DIR" ] && RABBITMQ_PLUGINS_DIR="${RABBITMQ_HOME}/plugins"
+
+exec erl \
+    -pa "${RABBITMQ_HOME}/ebin" \
+    -noinput \
+    -hidden \
+    -sname rabbitmq-plugins$$ \
+    -s rabbit_plugins \
+    -enabled_plugins_file "$RABBITMQ_ENABLED_PLUGINS_FILE" \
+    -plugins_dist_dir "$RABBITMQ_PLUGINS_DIR" \
+    -extra "$@"
