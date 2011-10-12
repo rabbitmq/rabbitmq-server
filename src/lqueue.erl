@@ -119,10 +119,10 @@ foldr(Fun, Init, Q) ->
 len({L, _Q, _I, _O}) ->
     L.
 
-peek({0, _, _, _}) -> empty;
-peek({1, _, V, empty}) -> V;
-peek({_L, _Q, _I, O}) -> O.
+peek({0, _, _, _})       -> empty;
+peek({1, _, V, empty})   -> V;
+peek({_L, _Q, _I, O})    -> O.
 
-peek_r({0, _, _, _}) -> empty;
+peek_r({0, _, _, _})     -> empty;
 peek_r({1, _, empty, V}) -> V;
-peek_r({_L, _Q, I, _O}) -> I.
+peek_r({_L, _Q, I, _O})  -> I.
