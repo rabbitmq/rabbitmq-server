@@ -2042,6 +2042,8 @@ test_msg_store() ->
     restart_msg_store_empty(),
     passed.
 
+%% We want to test that writes that get eliminated due to removes still
+%% get confirmed. Removes themselves do not.
 test_msg_store_confirms(MsgIds, Cap, MSCState) ->
     %% write -> confirmed
     ok = msg_store_write(MsgIds, MSCState),
