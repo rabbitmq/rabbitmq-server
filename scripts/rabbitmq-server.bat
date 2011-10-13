@@ -85,7 +85,7 @@ if "!RABBITMQ_PLUGINS_EXPAND_DIR!"=="" (
 )
 
 if "!RABBITMQ_ENABLED_PLUGINS_FILE!"=="" (
-    set RABBITMQ_ENABLED_PLUGINS_FILE=!RABBITMQ_BASE!\enabled_plugins
+    set RABBITMQ_ENABLED_PLUGINS_FILE=!RABBITMQ_BASE!/enabled_plugins
 )
 
 set RABBITMQ_PLUGINS_DIR=!TDP0!..\plugins
@@ -96,12 +96,12 @@ set RABBITMQ_EBIN_ROOT=!TDP0!..\ebin
 -noinput -hidden ^
 -s rabbit_prelaunch ^
 -sname rabbitmqprelaunch!RANDOM! ^
--extra "!RABBITMQ_ENABLED_PLUGINS_FILE!" ^
+-extra "!RABBITMQ_ENABLED_PLUGINS_FILE:\=/!" ^
        "!RABBITMQ_PLUGINS_DIR:\=/!" ^
        "!RABBITMQ_PLUGINS_EXPAND_DIR:\=/!" ^
        "!RABBITMQ_NODENAME!"
 
-set RABBITMQ_BOOT_FILE=!RABBITMQ_PLUGINS_EXPAND_DIR!\rabbit
+set RABBITMQ_BOOT_FILE=!RABBITMQ_PLUGINS_EXPAND_DIR!/rabbit
 if ERRORLEVEL 1 (
     exit /B 1
 )
@@ -109,7 +109,7 @@ if ERRORLEVEL 1 (
 set RABBITMQ_EBIN_PATH=
 
 if "!RABBITMQ_CONFIG_FILE!"=="" (
-    set RABBITMQ_CONFIG_FILE=!RABBITMQ_BASE!\rabbitmq
+    set RABBITMQ_CONFIG_FILE=!RABBITMQ_BASE!/rabbitmq
 )
 
 if exist "!RABBITMQ_CONFIG_FILE!.config" (
@@ -144,7 +144,7 @@ if not "!RABBITMQ_NODE_IP_ADDRESS!"=="" (
 -os_mon start_cpu_sup true ^
 -os_mon start_disksup false ^
 -os_mon start_memsup false ^
--mnesia dir \""!RABBITMQ_MNESIA_DIR!"\" ^
+-mnesia dir \""!RABBITMQ_MNESIA_DIR:\=/!"\" ^
 !RABBITMQ_SERVER_START_ARGS! ^
 !STAR!
 
