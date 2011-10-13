@@ -65,8 +65,9 @@ fi
 RABBITMQ_START_RABBIT=
 [ "x" = "x$RABBITMQ_ALLOW_INPUT" ] && RABBITMQ_START_RABBIT='-noinput'
 
-case "`uname -s`" in
-  CYGWIN*) # we make no attempt to record the cygwin pid
+case "$(uname -s)" in
+  CYGWIN*) # we make no attempt to record the cygwin pid; rabbitmqctl wait
+           # will not be able to make sense of it anyway
            ;;
   *)       mkdir -p $(dirname ${RABBITMQ_PID_FILE});
            echo $$ > ${RABBITMQ_PID_FILE}
