@@ -40,8 +40,8 @@ dispatcher() ->
      {["nodes"],                                                   rabbit_mgmt_wm_nodes, []},
      {["nodes", node],                                             rabbit_mgmt_wm_node, []},
      {["extensions"],                                              rabbit_mgmt_wm_extensions, []},
-     {["all-configuration"],                                       rabbit_mgmt_wm_schema, []}, %% This was the old name, let's not break things gratuitously.
-     {["schema"],                                                  rabbit_mgmt_wm_schema, []},
+     {["all-configuration"],                                       rabbit_mgmt_wm_definitions, []}, %% This was the old name, let's not break things gratuitously.
+     {["definitions"],                                             rabbit_mgmt_wm_definitions, []},
      {["connections"],                                             rabbit_mgmt_wm_connections, []},
      {["connections", connection],                                 rabbit_mgmt_wm_connection, []},
      {["connections", connection, "channels"],                     rabbit_mgmt_wm_connection_channels, []},

@@ -14,7 +14,7 @@
 %%   Copyright (c) 2010-2011 VMware, Inc.  All rights reserved.
 %%
 
--module(rabbit_mgmt_wm_schema).
+-module(rabbit_mgmt_wm_definitions).
 
 -export([init/1, to_json/2, content_types_provided/2, is_authorized/2]).
 -export([content_types_accepted/2, allowed_methods/2, accept_json/2]).

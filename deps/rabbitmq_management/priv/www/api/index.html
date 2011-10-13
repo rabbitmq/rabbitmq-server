@@ -168,23 +168,23 @@ Content-Length: 0</pre>
         <td></td>
         <td></td>
         <td>X</td>
-        <td class="path"><a href="/api/schema">/api/schema</a></td>
+        <td class="path"><a href="/api/definitions">/api/definitions</a></td>
         <td>
-          The server schema - exchanges, queues, bindings, users,
+          The server definitions - exchanges, queues, bindings, users,
           virtual hosts, permissions. Everything apart from
-          messages. POST to upload an existing schema. Note
+          messages. POST to upload an existing set of definitions. Note
           that:
           <ul>
-            <li>The schema is merged. Anything already existing is
+            <li>The definitions are merged. Anything already existing is
             untouched.</li>
             <li>Conflicts will cause an error.</li>
             <li>In the event of an error you will be left with a
-            part-applied schema.</li>
+            part-applied set of definitions.</li>
           </ul>
           For convenience you may upload a file from a browser to this
           URI (i.e. you can use <code>multipart/form-data</code> as
           well as <code>application/json</code>) in which case the
-          schema should be uploaded as a form field named
+          definitions should be uploaded as a form field named
           "file".
         </td>
       </tr>
