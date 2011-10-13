@@ -65,8 +65,13 @@ fi
 RABBITMQ_START_RABBIT=
 [ "x" = "x$RABBITMQ_ALLOW_INPUT" ] && RABBITMQ_START_RABBIT='-noinput'
 
-mkdir -p $(dirname ${RABBITMQ_PID_FILE})
-echo $$ > ${RABBITMQ_PID_FILE}
+case "`uname -s`" in
+  CYGWIN*) # we make no attempt to record the cygwin pid
+           ;;
+  *)       mkdir -p $(dirname ${RABBITMQ_PID_FILE});
+           echo $$ > ${RABBITMQ_PID_FILE}
+           ;;
+esac
 
 RABBITMQ_EBIN_ROOT="${RABBITMQ_HOME}/ebin"
 if [ "x" = "x$RABBITMQ_NODE_ONLY" ]; then
