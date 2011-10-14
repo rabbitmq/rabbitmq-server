@@ -1920,7 +1920,7 @@ foreach_with_msg_store_client(MsgStore, Ref, Fun, L) ->
 test_msg_store() ->
     restart_msg_store_empty(),
     MsgIds = [msg_id_bin(M) || M <- lists:seq(1,100)],
-    {MsgIds1stHalf, MsgIds2ndHalf} = lists:split(50, MsgIds),
+    {MsgIds1stHalf, MsgIds2ndHalf} = lists:split(length(MsgIds) div 2, MsgIds),
     Ref = rabbit_guid:guid(),
     {Cap, MSCState} = msg_store_client_init_capture(
                         ?PERSISTENT_MSG_STORE, Ref),
@@ -2038,6 +2038,8 @@ test_msg_store() ->
                    false = msg_store_contains(false, MsgIdsBig, MSCStateM),
                    MSCStateM
            end),
+    %%
+    passed = test_msg_store_client_delete_and_terminate(),
     %% restart empty
     restart_msg_store_empty(),
     passed.
@@ -2069,6 +2071,16 @@ test_msg_store_confirms(MsgIds, Cap, MSCState) ->
     ok = msg_store_write(MsgIds, MSCState),
     ok = msg_store_remove(MsgIds, MSCState),
     ok = on_disk_await(Cap, MsgIds),
+    passed.
+
+test_msg_store_client_delete_and_terminate() ->
+    restart_msg_store_empty(),
+    MsgIds = [msg_id_bin(1)],
+    Ref = rabbit_guid:guid(),
+    MSCState = msg_store_client_init(?PERSISTENT_MSG_STORE, Ref),
+    ok = msg_store_write(MsgIds, MSCState),
+    %% test the 'dying client' fast path for writes
+    ok = rabbit_msg_store:client_delete_and_terminate(MSCState),
     passed.
 
 queue_name(Name) ->
