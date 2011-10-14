@@ -13,7 +13,7 @@
 [{description, "recent history exchange type: registry"},
   {mfa, {rabbit_registry, register,
           [exchange, <<"x-recent-history">>,
-           rabbit_exchange_type_rh]}},
+           ?MODULE]}},
   {requires, rabbit_registry},
   {enables, kernel_ready}]}).
 
