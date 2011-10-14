@@ -67,7 +67,7 @@ start() ->
             print_error("~p", [Reason]),
             rabbit_misc:quit(2);
         Other ->
-            print_error("~s", [Other]),
+            print_error("~p", [Other]),
             rabbit_misc:quit(2)
     end.
 
