@@ -1,4 +1,4 @@
 .DS_Store
-deps
-dist
 ebin
+dist
+build
