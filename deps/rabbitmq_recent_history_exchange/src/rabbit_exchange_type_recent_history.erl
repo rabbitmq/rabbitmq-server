@@ -105,6 +105,6 @@ load_from_content(Cached, XName) ->
 deliver_messages(Queue, Msgs) ->
   lists:map(
     fun (Msg) ->
-      Delivery = rabbit_basic:delivery(false, false, none, Msg, undefined),
+      Delivery = rabbit_basic:delivery(false, false, Msg, undefined),
       rabbit_amqqueue:deliver(Queue, Delivery)
     end,  Msgs).
