@@ -1,4 +1,4 @@
--module(rabbit_exchange_type_rh).
+-module(rabbit_exchange_type_recent_history).
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit_common/include/rabbit_exchange_type_spec.hrl").
 
