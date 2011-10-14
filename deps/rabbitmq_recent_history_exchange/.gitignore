@@ -1,4 +1,5 @@
-.DS_Store
-ebin
-dist
 build
+.DS_Store
+dist
+ebin
+erl_crash.dump
