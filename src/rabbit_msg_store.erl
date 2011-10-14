@@ -378,6 +378,45 @@
 %% performance with many healthy clients and few, if any, dying
 %% clients, which is the typical case.
 %%
+%% When the msg_store has a backlog (i.e. it has unprocessed messages
+%% in its mailbox / gen_server priority queue), a further optimisation
+%% opportunity arises: we can eliminate pairs of 'write' and 'remove'
+%% from the same client for the same message. A typical occurrence of
+%% these is when an empty durable queue delivers persistent messages
+%% to ack'ing consumers. The queue will asynchronously ask the
+%% msg_store to 'write' such messages, and when they are acknowledged
+%% it will issue a 'remove'. That 'remove' may be issued before the
+%% msg_store has processed the 'write'. There is then no point going
+%% ahead with the processing of that 'write'.
+%%
+%% To detect this situation a 'flying_ets' table is shared between the
+%% clients and the server. The table is keyed on the combination of
+%% client (reference) and msg id, and the value represents an
+%% integration of all the writes and removes currently "in flight" for
+%% that message between the client and server - '+1' means all the
+%% writes/removes add up to a single 'write', '-1' to a 'remove', and
+%% '0' to nothing. (NB: the integration can never add up to more than
+%% one 'write' or 'read' since clients must not write/remove a message
+%% more than once without first removing/writing it).
+%%
+%% Maintaining this table poses two challenges: 1) both the clients
+%% and the server access and update the table, which causes
+%% concurrency issues, 2) we must ensure that entries do not stay in
+%% the table forever, since that would constitute a memory leak. We
+%% address the former by carefully modelling all operations as
+%% sequences of atomic actions that produce valid results in all
+%% possible interleavings. We address the latter by deleting table
+%% entries whenever the server finds a 0-valued entry during the
+%% processing of a write/remove. 0 is essentially equivalent to "no
+%% entry". If, OTOH, the value is non-zero we know there is at least
+%% one other 'write' or 'remove' in flight, so we get an opportunity
+%% later to delete the table entry when processing these.
+%%
+%% There are two further complications. We need to ensure that 1)
+%% eliminated writes still get confirmed, and 2) the write-back cache
+%% doesn't grow unbounded. These are quite straightforward to
+%% address. See the comments in the code.
+%%
 %% For notes on Clean Shutdown and startup, see documentation in
 %% variable_queue.
 
