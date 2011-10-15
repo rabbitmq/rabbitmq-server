@@ -1069,8 +1069,13 @@ safe_ets_update_counter(Tab, Key, UpdateOp, SuccessFun, FailThunk) ->
     catch error:badarg -> FailThunk()
     end.
 
-safe_ets_update_counter_ok(Tab, Key, UpdateOp, FailThunk) ->
-    safe_ets_update_counter(Tab, Key, UpdateOp, fun (_) -> ok end, FailThunk).
+update_msg_cache(CacheEts, MsgId, Msg) ->
+    case ets:insert_new(CacheEts, {MsgId, Msg, 1}) of
+        true  -> ok;
+        false -> safe_ets_update_counter(
+                   CacheEts, MsgId, {3, +1}, fun (_) -> ok end,
+                   fun () -> update_msg_cache(CacheEts, MsgId, Msg) end)
+    end.
 
 adjust_valid_total_size(File, Delta, State = #msstate {
                                        sum_valid_data   = SumValid,
@@ -1255,18 +1260,6 @@ filename_to_num(FileName) -> list_to_integer(filename:rootname(FileName)).
 list_sorted_file_names(Dir, Ext) ->
     lists:sort(fun (A, B) -> filename_to_num(A) < filename_to_num(B) end,
                filelib:wildcard("*" ++ Ext, Dir)).
-
-%%----------------------------------------------------------------------------
-%% message cache helper functions
-%%----------------------------------------------------------------------------
-
-update_msg_cache(CacheEts, MsgId, Msg) ->
-    case ets:insert_new(CacheEts, {MsgId, Msg, 1}) of
-        true  -> ok;
-        false -> safe_ets_update_counter_ok(
-                   CacheEts, MsgId, {3, +1},
-                   fun () -> update_msg_cache(CacheEts, MsgId, Msg) end)
-    end.
 
 %%----------------------------------------------------------------------------
 %% index
