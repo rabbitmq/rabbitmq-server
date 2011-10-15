@@ -26,23 +26,23 @@
 -export_type([?MODULE/0]).
 
 -opaque(?MODULE() :: {non_neg_integer(), ?QUEUE()}).
--type(value() :: any()).
--type(result() :: 'empty' | {'value', value()}).
+-type(value()     :: any()).
+-type(result()    :: 'empty' | {'value', value()}).
 
--spec(new/0 :: () -> ?MODULE()).
--spec(is_empty/1 :: (?MODULE()) -> boolean()).
--spec(len/1 :: (?MODULE()) -> non_neg_integer()).
--spec(in/2 :: (value(), ?MODULE()) -> ?MODULE()).
--spec(in_r/2 :: (value(), ?MODULE()) -> ?MODULE()).
--spec(out/1 :: (?MODULE()) -> {result(), ?MODULE()}).
--spec(out_r/1 :: (?MODULE()) -> {result(), ?MODULE()}).
--spec(join/2 :: (?MODULE(), ?MODULE()) -> ?MODULE()).
--spec(foldl/3 :: (fun ((value(), B) -> B), B, ?MODULE()) -> B).
--spec(foldr/3 :: (fun ((value(), B) -> B), B, ?MODULE()) -> B).
+-spec(new/0       :: () -> ?MODULE()).
+-spec(is_empty/1  :: (?MODULE()) -> boolean()).
+-spec(len/1       :: (?MODULE()) -> non_neg_integer()).
+-spec(in/2        :: (value(), ?MODULE()) -> ?MODULE()).
+-spec(in_r/2      :: (value(), ?MODULE()) -> ?MODULE()).
+-spec(out/1       :: (?MODULE()) -> {result(), ?MODULE()}).
+-spec(out_r/1     :: (?MODULE()) -> {result(), ?MODULE()}).
+-spec(join/2      :: (?MODULE(), ?MODULE()) -> ?MODULE()).
+-spec(foldl/3     :: (fun ((value(), B) -> B), B, ?MODULE()) -> B).
+-spec(foldr/3     :: (fun ((value(), B) -> B), B, ?MODULE()) -> B).
 -spec(from_list/1 :: ([value()]) -> ?MODULE()).
--spec(to_list/1 :: (?MODULE()) -> [value()]).
--spec(peek/1 :: (?MODULE) -> result()).
--spec(peek_r/1 :: (?MODULE) -> result()).
+-spec(to_list/1   :: (?MODULE()) -> [value()]).
+-spec(peek/1      :: (?MODULE()) -> result()).
+-spec(peek_r/1    :: (?MODULE()) -> result()).
 
 -endif.
 
