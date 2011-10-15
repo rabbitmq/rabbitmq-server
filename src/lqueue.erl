@@ -25,84 +25,49 @@
 
 -export_type([?MODULE/0]).
 
--opaque(?MODULE() ::
-           {non_neg_integer(), ?QUEUE(), maybe_value(), maybe_value()}).
+-opaque(?MODULE() :: {non_neg_integer(), ?QUEUE()}).
 -type(value() :: any()).
--type(maybe_value() :: {'value', value()} | 'empty').
--type(result() :: {maybe_value(), ?MODULE}).
+-type(result() :: 'empty' | {'value', value()}).
 
 -spec(new/0 :: () -> ?MODULE()).
 -spec(is_empty/1 :: (?MODULE()) -> boolean()).
 -spec(len/1 :: (?MODULE()) -> non_neg_integer()).
 -spec(in/2 :: (value(), ?MODULE()) -> ?MODULE()).
 -spec(in_r/2 :: (value(), ?MODULE()) -> ?MODULE()).
--spec(out/1 :: (?MODULE()) -> result()).
--spec(out_r/1 :: (?MODULE()) -> result()).
+-spec(out/1 :: (?MODULE()) -> {result(), ?MODULE()}).
+-spec(out_r/1 :: (?MODULE()) -> {result(), ?MODULE()}).
 -spec(join/2 :: (?MODULE(), ?MODULE()) -> ?MODULE()).
 -spec(foldl/3 :: (fun ((value(), B) -> B), B, ?MODULE()) -> B).
 -spec(foldr/3 :: (fun ((value(), B) -> B), B, ?MODULE()) -> B).
 -spec(from_list/1 :: ([value()]) -> ?MODULE()).
 -spec(to_list/1 :: (?MODULE()) -> [value()]).
--spec(peek(?MODULE) -> maybe_value()).
--spec(peek_r(?MODULE) -> maybe_value()).
+-spec(peek/1 :: (?MODULE) -> result()).
+-spec(peek_r/1 :: (?MODULE) -> result()).
 
 -endif.
 
-new() -> {0, ?QUEUE:new(), empty, empty}.
+new() -> {0, ?QUEUE:new()}.
 
-is_empty({0, _Q, _I, _O}) -> true;
-is_empty(_              ) -> false.
+is_empty({0, _Q}) -> true;
+is_empty(_)       -> false.
 
-in(V, {0, Q, empty,       empty}) -> {1, Q, empty, {value, V}};
-in(V, {1, Q, empty,       V1   }) -> {2, Q, {value, V}, V1};
-in(V, {1, Q, V1,          empty}) -> {2, Q, {value, V}, V1};
-in(V, {N, Q, {value, V1}, V2   }) -> {N+1, ?QUEUE:in(V1, Q), {value, V}, V2}.
+in(V, {L, Q}) -> {L+1, ?QUEUE:in(V, Q)}.
 
-in_r(V, {0, Q, empty, empty      }) -> {1, Q, {value, V}, empty};
-in_r(V, {1, Q, V1,    empty      }) -> {2, Q, V1, {value, V}};
-in_r(V, {1, Q, empty, V1         }) -> {2, Q, V1, {value, V}};
-in_r(V, {N, Q, V1,    {value, V2}}) -> {N+1, ?QUEUE:in_r(V2, Q), V1, {value, V}}.
+in_r(V, {L, Q}) -> {L+1, ?QUEUE:in_r(V, Q)}.
 
-out({0, _Q, _I, _O} = Q)   -> {empty, Q};
-out({1,  Q, empty,     V}) -> {V,  {0, Q, empty, empty}};
-out({1,  Q,     V, empty}) -> {V,  {0, Q, empty, empty}};
-out({2,  Q,    V1,    V2}) -> {V2, {1, Q, empty, V1}};
-out({N,  Q,    V1,    V2}) -> {V3 = {value, _V}, Q1} = ?QUEUE:out(Q),
-                              {V2, {N-1, Q1, V1, V3}}.
+out({0, _Q} = Q) -> {empty, Q};
+out({L,  Q})     -> {Result, Q1} = ?QUEUE:out(Q),
+                    {Result, {L-1, Q1}}.
 
-out_r({0, _Q, _I, _O} = Q)   -> {empty, Q};
-out_r({1,  Q, empty,     V}) -> {V,  {0, Q, empty, empty}};
-out_r({1,  Q,     V, empty}) -> {V,  {0, Q, empty, empty}};
-out_r({2,  Q,    V1,    V2}) -> {V1, {1, Q, V2,    empty}};
-out_r({N,  Q,    V1,    V2}) -> {V3 = {value, _V}, Q1} = ?QUEUE:out_r(Q),
-                                {V1, {N-1, Q1, V3, V2}}.
+out_r({0, _Q} = Q) -> {empty, Q};
+out_r({L,  Q})     -> {Result, Q1} = ?QUEUE:out_r(Q),
+                      {Result, {L-1, Q1}}.
 
-join({0, _, _, _}, Q) -> Q;
-join(Q, {0, _, _, _}) -> Q;
+join({L1, Q1}, {L2, Q2}) -> {L1 + L2, ?QUEUE:join(Q1, Q2)}.
 
-join({1, _, empty,       {value, V} }, Q) -> in_r(V, Q);
-join({1, _, {value, V},  empty      }, Q) -> in_r(V, Q);
-join({2, _, {value, V1}, {value, V2}}, Q) -> in_r(V2, in_r(V1, Q));
+to_list({_L, Q}) -> ?QUEUE:to_list(Q).
 
-join(Q, {1, _, empty,       {value, V} }) -> in(V, Q);
-join(Q, {1, _, {value, V},  empty      }) -> in(V, Q);
-join(Q, {2, _, {value, V1}, {value, V2}}) -> in(V1, in(V2, Q));
-
-join({L1, Q1, {value, InV}, Out}, {L2, Q2, In, {value, OutV}}) ->
-    {L1+L2, ?QUEUE:join(?QUEUE:in(InV, Q1), ?QUEUE:in_r(OutV, Q2)), In, Out}.
-
-to_list({0, _, _, _}) -> [];
-to_list({1, _, empty, {value, V}}) -> [V];
-to_list({1, _, {value, V}, empty}) -> [V];
-to_list({_, Q, {value, InV}, {value, OutV}}) ->
-    [OutV | ?QUEUE:to_list(Q) ++ [InV]].
-
-from_list([])            -> new();
-from_list([V])           -> in(V, new());
-from_list([V1, V2])      -> in(V2, in(V1, new()));
-from_list([V1 | Vs] = L) -> Q = ?QUEUE:from_list(Vs),
-                            {V2, Q1} = ?QUEUE:out_r(Q),
-                            {length(L), Q1, V2, V1}.
+from_list(L) -> {length(L), ?QUEUE:from_list(L)}.
 
 foldl(Fun, Init, Q) ->
     case out(Q) of
@@ -116,13 +81,10 @@ foldr(Fun, Init, Q) ->
         {{value, V}, Q1} -> foldr(Fun, Fun(V, Init), Q1)
     end.
 
-len({L, _Q, _I, _O}) ->
-    L.
+len({L, _Q}) -> L.
 
-peek({0, _, _, _})       -> empty;
-peek({1, _, V, empty})   -> V;
-peek({_L, _Q, _I, O})    -> O.
+peek({ 0, _Q}) -> empty;
+peek({_L,  Q}) -> ?QUEUE:peek(Q).
 
-peek_r({0, _, _, _})     -> empty;
-peek_r({1, _, empty, V}) -> V;
-peek_r({_L, _Q, I, _O})  -> I.
+peek_r({ 0, _Q}) -> empty;
+peek_r({_L,  Q}) -> ?QUEUE:peek_r(Q).
