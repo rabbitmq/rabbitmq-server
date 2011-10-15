@@ -824,6 +824,10 @@ a(State = #vqstate { q1 = Q1, q2 = Q2, delta = Delta, q3 = Q3, q4 = Q4,
 
     State.
 
+d(Delta = #delta { start_seq_id = Start, count = Count, end_seq_id = End })
+  when Start + Count =< End ->
+    Delta.
+
 m(MsgStatus = #msg_status { msg           = Msg,
                             is_persistent = IsPersistent,
                             msg_on_disk   = MsgOnDisk,
@@ -938,24 +942,21 @@ betas_from_index_entries(List, TransientThreshold, PA, IndexState) ->
                  Acks, rabbit_queue_index:deliver(Delivers, IndexState))}.
 
 expand_delta(SeqId, ?BLANK_DELTA_PATTERN(X)) ->
-    #delta { start_seq_id = SeqId, count = 1, end_seq_id = SeqId + 1 };
+    d(#delta { start_seq_id = SeqId, count = 1, end_seq_id = SeqId + 1 });
 expand_delta(SeqId, #delta { start_seq_id = StartSeqId,
                              count        = Count,
                              end_seq_id   = EndSeqId } = Delta)
   when SeqId < StartSeqId ->
-    true = StartSeqId + Count =< EndSeqId, %% ASSERTION
-    Delta #delta { start_seq_id = SeqId, count = Count + 1 };
+    d(Delta #delta { start_seq_id = SeqId, count = Count + 1 });
 expand_delta(SeqId, #delta { start_seq_id = StartSeqId,
                              count        = Count,
                              end_seq_id   = EndSeqId } = Delta)
   when SeqId >= EndSeqId ->
-    true = StartSeqId + Count =< EndSeqId, %% ASSERTION
-    Delta #delta { count = Count + 1, end_seq_id = SeqId + 1 };
+    d(Delta #delta { count = Count + 1, end_seq_id = SeqId + 1 });
 expand_delta(_SeqId, #delta { start_seq_id = StartSeqId,
                               count        = Count,
                               end_seq_id   = EndSeqId } = Delta) ->
-    true = StartSeqId + Count + 1 =< EndSeqId, %% ASSERTION
-    Delta #delta { count = Count + 1 }.
+    d(Delta #delta { count = Count + 1 }).
 
 update_rate(Now, Then, Count, {OThen, OCount}) ->
     %% avg over the current period and the previous
@@ -972,9 +973,9 @@ init(IsDurable, IndexState, DeltaCount, Terms, AsyncCallback,
     DeltaCount1 = proplists:get_value(persistent_count, Terms, DeltaCount),
     Delta = case DeltaCount1 == 0 andalso DeltaCount /= undefined of
                 true  -> ?BLANK_DELTA;
-                false -> #delta { start_seq_id = LowSeqId,
-                                  count        = DeltaCount1,
-                                  end_seq_id   = NextSeqId }
+                false -> d(#delta { start_seq_id = LowSeqId,
+                                    count        = DeltaCount1,
+                                    end_seq_id   = NextSeqId })
             end,
     Now = now(),
     State = #vqstate {
@@ -1566,7 +1567,7 @@ maybe_deltas_to_betas(State = #vqstate {
             %% transient and below the threshold
             maybe_deltas_to_betas(
               State1 #vqstate {
-                delta = Delta #delta { start_seq_id = DeltaSeqId1 }});
+                delta = d(Delta #delta { start_seq_id = DeltaSeqId1 })});
         Q3aLen ->
             Q3b = ?QUEUE:join(Q3, Q3a),
             case DeltaCount - Q3aLen of
@@ -1577,9 +1578,9 @@ maybe_deltas_to_betas(State = #vqstate {
                                       delta = ?BLANK_DELTA,
                                       q3    = ?QUEUE:join(Q3b, Q2) };
                 N when N > 0 ->
-                    Delta1 = #delta { start_seq_id = DeltaSeqId1,
-                                      count        = N,
-                                      end_seq_id   = DeltaSeqIdEnd },
+                    Delta1 = d(#delta { start_seq_id = DeltaSeqId1,
+                                        count        = N,
+                                        end_seq_id   = DeltaSeqIdEnd }),
                     State1 #vqstate { delta = Delta1,
                                       q3    = Q3b }
             end
