@@ -2075,7 +2075,7 @@ test_msg_store_confirms(MsgIds, Cap, MSCState) ->
 
 test_msg_store_client_delete_and_terminate() ->
     restart_msg_store_empty(),
-    MsgIds = [msg_id_bin(1)],
+    MsgIds = [msg_id_bin(M) || M <- lists:seq(1, 10)],
     Ref = rabbit_guid:guid(),
     MSCState = msg_store_client_init(?PERSISTENT_MSG_STORE, Ref),
     ok = msg_store_write(MsgIds, MSCState),
