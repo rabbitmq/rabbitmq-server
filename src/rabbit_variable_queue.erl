@@ -131,7 +131,7 @@
 %% alpha requires only one disk read (from the msg_store), recovering
 %% a msg from within delta will require two reads (queue_index and
 %% then msg_store). But delta has a near-0 per-msg RAM cost. So the
-%% conflict is between you using delta more, which will free up more
+%% conflict is between using delta more, which will free up more
 %% memory, but require additional CPU and disk ops, versus using delta
 %% less and gammas and betas more, which will cost more memory, but
 %% require fewer disk ops and less CPU overhead.
@@ -163,15 +163,8 @@
 %% betas and gammas, then the surplus are forcibly converted to gammas
 %% (as necessary) and then rolled into delta. The ratio is that the
 %% size of delta / (betas+gammas+delta) should equal
-%% (betas+gammas+delta)/(alphas+betas+gammas+delta). I.e. as alphas
-%% shrink to 0, so must betas and gammas. The actual calculation done
-%% is a rearrangement of this, and uses target_ram_count instead of
-%% alphas. The reason for this is that once the queue length starts
-%% falling, any alphas in q4 will be sent out first, thus reducing the
-%% number of alphas. Thus if the real number of alphas was used then
-%% this scenario could result in more conversions towards delta,
-%% simply because the queue is starting to drain. By using the
-%% target_ram_count, we avoid this problem.
+%% (betas+gammas+delta)/(target_ram_count+betas+gammas+delta). I.e. as
+%% the target_ram_count shrinks to 0, so must betas and gammas.
 %%
 %% The conversion of betas to gammas is done in batches of exactly
 %% ?IO_BATCH_SIZE. This value should not be too small, otherwise the
