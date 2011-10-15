@@ -136,7 +136,7 @@
         fun ((A) -> 'finished' |
                     {rabbit_types:msg_id(), non_neg_integer(), A})).
 -type(maybe_msg_id_fun() ::
-        'undefined' | fun ((gb_set(), 'written' | 'removed') -> any())).
+        'undefined' | fun ((gb_set(), 'written' | 'ignored') -> any())).
 -type(maybe_close_fds_fun() :: 'undefined' | fun (() -> 'ok')).
 -type(deletion_thunk() :: fun (() -> boolean())).
 
@@ -800,7 +800,7 @@ handle_cast({write, CRef, MsgId},
             %% A 'remove' has already been issued and eliminated the
             %% 'write'.
             State1 = blind_confirm(CRef, gb_sets:singleton(MsgId),
-                                   removed, State),
+                                   ignored, State),
             %% If all writes get eliminated, cur_file_cache_ets could
             %% grow unbounded. To prevent that we delete the cache
             %% entry here, but only if the message isn't in the
@@ -831,7 +831,7 @@ handle_cast({remove, CRef, MsgIds}, State) ->
                   end
           end, {[], State}, MsgIds),
     noreply(maybe_compact(client_confirm(CRef, gb_sets:from_list(RemovedMsgIds),
-                                         removed, State1)));
+                                         ignored, State1)));
 
 handle_cast({combine_files, Source, Destination, Reclaimed},
             State = #msstate { sum_file_size    = SumFileSize,

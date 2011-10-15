@@ -1291,7 +1291,7 @@ blind_confirm(Callback, MsgIdSet) ->
     Callback(?MODULE,
              fun (?MODULE, State) -> record_confirms(MsgIdSet, State) end).
 
-msgs_written_to_disk(Callback, MsgIdSet, removed) ->
+msgs_written_to_disk(Callback, MsgIdSet, ignored) ->
     blind_confirm(Callback, MsgIdSet);
 msgs_written_to_disk(Callback, MsgIdSet, written) ->
     Callback(?MODULE,
