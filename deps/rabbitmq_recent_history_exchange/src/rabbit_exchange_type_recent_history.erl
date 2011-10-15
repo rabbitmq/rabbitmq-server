@@ -95,7 +95,7 @@ setup_schema() ->
       {aborted, {already_exists, ?RH_TABLE}} -> ok
   end.
 
-load_from_content(Cached, XName) ->
+load_from_content(XName, Cached) ->
   lists:map(
     fun(Content) ->
         {Props, Payload} = rabbit_basic:from_content(Content),
