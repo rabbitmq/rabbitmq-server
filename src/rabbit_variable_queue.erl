@@ -944,18 +944,14 @@ betas_from_index_entries(List, TransientThreshold, PA, IndexState) ->
 expand_delta(SeqId, ?BLANK_DELTA_PATTERN(X)) ->
     d(#delta { start_seq_id = SeqId, count = 1, end_seq_id = SeqId + 1 });
 expand_delta(SeqId, #delta { start_seq_id = StartSeqId,
-                             count        = Count,
-                             end_seq_id   = EndSeqId } = Delta)
+                             count        = Count } = Delta)
   when SeqId < StartSeqId ->
     d(Delta #delta { start_seq_id = SeqId, count = Count + 1 });
-expand_delta(SeqId, #delta { start_seq_id = StartSeqId,
-                             count        = Count,
+expand_delta(SeqId, #delta { count        = Count,
                              end_seq_id   = EndSeqId } = Delta)
   when SeqId >= EndSeqId ->
     d(Delta #delta { count = Count + 1, end_seq_id = SeqId + 1 });
-expand_delta(_SeqId, #delta { start_seq_id = StartSeqId,
-                              count        = Count,
-                              end_seq_id   = EndSeqId } = Delta) ->
+expand_delta(_SeqId, #delta { count       = Count } = Delta) ->
     d(Delta #delta { count = Count + 1 }).
 
 update_rate(Now, Then, Count, {OThen, OCount}) ->
