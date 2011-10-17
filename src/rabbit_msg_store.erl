@@ -825,7 +825,7 @@ handle_cast({remove, CRef, MsgIds}, State) ->
         lists:foldl(
           fun (MsgId, {Removed, State2}) ->
                   case update_flying(+1, MsgId, CRef, State2) of
-                      process -> {[MsgId, Removed],
+                      process -> {[MsgId | Removed],
                                   remove_message(MsgId, CRef, State2)};
                       ignore  -> {Removed, State2}
                   end
