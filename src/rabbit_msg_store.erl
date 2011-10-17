@@ -618,6 +618,9 @@ client_update_flying(Diff, MsgId, #client_msstate { flying_ets = FlyingEts,
         true  -> ok;
         false -> try ets:update_counter(FlyingEts, Key, {2, Diff})
                  catch error:badarg ->
+                         %% this is guaranteed to succeed since the
+                         %% server only removes and updates flying_ets
+                         %% entries; it never inserts them
                          true = ets:insert_new(FlyingEts, {Key, Diff})
                  end,
                  ok
