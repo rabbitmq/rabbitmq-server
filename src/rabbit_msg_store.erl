@@ -477,7 +477,7 @@ read(MsgId,
                 not_found   -> Defer();
                 MsgLocation -> client_read1(MsgLocation, Defer, CState)
             end;
-        [{MsgId, Msg, _PendingWriteCount}] ->
+        [{MsgId, Msg, _CacheRefCount}] ->
             {{ok, Msg}, CState}
     end.
 
@@ -1100,7 +1100,7 @@ read_message1(From, #msg_location { msg_id = MsgId, file = File,
                                       false -> ok
                                   end,
                              read_from_disk(MsgLoc, State);
-                         [{MsgId, Msg1, _PendingWriteCount}] ->
+                         [{MsgId, Msg1, _CacheRefCount}] ->
                              {Msg1, State}
                      end,
                  gen_server2:reply(From, {ok, Msg}),
