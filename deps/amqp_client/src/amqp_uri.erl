@@ -56,7 +56,7 @@ parse(Uri) ->
     end.
 
 parse1(Uri) when is_list(Uri) ->
-    case uri_parser:parse(Uri, [{host, undefined}, {path, "/"},
+    case uri_parser:parse(Uri, [{host, undefined}, {path, undefined},
                                 {port, undefined}, {'query', []}]) of
         {error, Err} ->
             throw({unable_to_parse_uri, Err});
@@ -95,15 +95,15 @@ build_broker(ParsedUri) ->
         false -> fail({port_out_of_range, Port})
     end,
     VHost = case Path of
-                "/"       -> <<"">>;
+                undefined -> <<"/">>;
                 [$/|Rest] -> case string:chr(Rest, $/) of
                                  0 -> list_to_binary(unescape_string(Rest));
                                  _ -> fail({invalid_vhost, Rest})
                              end
             end,
     UserInfo = proplists:get_value(userinfo, ParsedUri),
-    Ps = #amqp_params_network{host = unescape_string(Host),
-                              port = Port,
+    Ps = #amqp_params_network{host         = unescape_string(Host),
+                              port         = Port,
                               virtual_host = VHost},
     case UserInfo of
         [U, P | _] -> Ps#amqp_params_network{
