@@ -664,27 +664,27 @@ terminate_simple_children(Child, Dynamics, SupName) ->
         lists:foldl(
           fun (_Pid, {Replies, Timedout}) ->
               receive
-                  {'DOWN', _, process, Pid, Reason}
+                  {'DOWN', _MRef, process, Pid, Reason}
                       when Child#child.shutdown == brutal_kill andalso
                            Reason == killed andalso Timedout == false orelse
-                           Reason == shutdown ->
+                           Reason == shutdown andalso Timedout == false ->
                       {dict:append(Pid, ok, Replies), Timedout};
-                  {'DOWN', _, process, Pid, Reason} ->
+                  {'DOWN', _MRef, process, Pid, Reason} ->
                       {dict:append(Pid, {error, Reason}, Replies), Timedout};
                   {'EXIT', Pid, Reason} ->
-                      receive {'DOWN', _, process, Pid, _} ->
+                      receive {'DOWN', _MRef, process, Pid, _} ->
                           {dict:append(Pid, {error, Reason}, Replies), Timedout}
                       end
               after Timeout ->
                   case Timedout of
                       false -> lists:foldl(fun (Pid, ok) -> exit(Pid, kill) end,
-                                           Pids -- dict:fetch_keys(Replies)),
-                               receive {'DOWN', _, process, Pid, Reason} ->
-                                    {dict:append(Pid, {error, Reason}, Replies),
-                                     true}
-                               end;
+                                           Pids -- dict:fetch_keys(Replies));
                       true -> ok %% actually not ok - we await replies to kill
                                  %% signals after 2 timeouts
+                  end,
+                  receive {'DOWN', _, process, Pid, Reason} ->
+                       {dict:append(Pid, {error, Reason}, Replies),
+                        true}
                   end
               end
           end, {dict:new(), false}, Pids),
@@ -694,14 +694,14 @@ terminate_simple_children(Child, Dynamics, SupName) ->
                        _                   -> false
                    end,
      ReportAcc = fun (NormalErrorFun) ->
-                     fun (Pid, ok, ok) ->
-                             ok;
-                         (Pid, {error, normal}, ok) ->
+                     fun (Pid, ok, Acc) ->
+                             Acc;
+                         (Pid, {error, normal}, Acc) ->
                              NormalErrorFun(Pid),
-                             ok;
-                         (Pid, {error, Reason}, ok) ->
+                             Acc;
+                         (Pid, {error, Reason}, Acc) ->
                              ReportError(Reason, Child#child{pid = Pid}),
-                             ok
+                             Acc
                      end
                  end,
      dict:fold(case RestartPerm of
@@ -710,7 +710,7 @@ terminate_simple_children(Child, Dynamics, SupName) ->
                                      ReportError(normal, Child#child{pid = Pid})
                                  end);
                    false ->
-                       ReportAcc(fun (_Pid) -> ok end)
+                       ReportAcc(fun rabbit_misc:const_ok/0)
                end, ok, Replies),
      ok.
 
