@@ -1479,11 +1479,10 @@ reduce_memory_use(State) ->
                                     State),
     State1.
 
-permitted_beta_count(#vqstate { target_ram_count = 0,
-                                q3 = Q3 }) ->
-    lists:min([?QUEUE:len(Q3), rabbit_queue_index:next_segment_boundary(0)]);
 permitted_beta_count(#vqstate { len = 0 }) ->
     infinity;
+permitted_beta_count(#vqstate { target_ram_count = 0, q3 = Q3 }) ->
+    lists:min([?QUEUE:len(Q3), rabbit_queue_index:next_segment_boundary(0)]);
 permitted_beta_count(#vqstate { q1               = Q1,
                                 q4               = Q4,
                                 target_ram_count = TargetRamCount,
@@ -1667,17 +1666,9 @@ push_betas_to_deltas1(Generator, Limit, Q,
         {{value, #msg_status { seq_id = SeqId }}, _Qa}
           when SeqId < Limit ->
             {Q, PushState};
-        {{value, MsgStatus = #msg_status { index_on_disk = IndexOnDisk,
-                                           seq_id = SeqId }}, Qa} ->
-            IndexState1 =
-                case IndexOnDisk of
-                    true  -> IndexState;
-                    false -> {#msg_status { index_on_disk = true },
-                              IndexState2} =
-                                 maybe_write_index_to_disk(true, MsgStatus,
-                                                           IndexState),
-                             IndexState2
-                end,
+        {{value, MsgStatus = #msg_status { seq_id = SeqId }}, Qa} ->
+            {#msg_status { index_on_disk = true }, IndexState1} =
+                maybe_write_index_to_disk(true, MsgStatus, IndexState),
             Delta1 = expand_delta(SeqId, Delta),
             push_betas_to_deltas1(Generator, Limit, Qa,
                                   {Quota - 1, Delta1, IndexState1})
