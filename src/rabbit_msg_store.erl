@@ -68,7 +68,7 @@
           file_handles_ets,       %% tid of the shared file handles table
           file_summary_ets,       %% tid of the file summary table
           cur_file_cache_ets,     %% tid of current file cache table
-          flying_ets,             %% tid of writes in flight
+          flying_ets,             %% tid of writes/removes in flight
           dying_clients,          %% set of dying clients
           clients,                %% map of references of all registered clients
                                   %% to callbacks
