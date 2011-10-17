@@ -803,12 +803,12 @@ handle_cast({write, CRef, MsgId},
                                    ignored, State),
             %% If all writes get eliminated, cur_file_cache_ets could
             %% grow unbounded. To prevent that we delete the cache
-            %% entry here, but only if the message isn't in the
-            %% current file. That way reads of the message can
-            %% continue to be done client side, from either the cache
-            %% or the non-current files. If the message *is* in the
-            %% current file then the cache entry will be removed by
-            %% the normal logic for that in write_message/4 and
+            %% entry here, but only if the message hasn't been written
+            %% into the current file. That way reads of the message
+            %% can continue to be done client side, from either the
+            %% cache or the non-current files. If the message *is* in
+            %% the current file then the cache entry will be removed
+            %% by the normal logic for that in write_message/4 and
             %% maybe_roll_to_new_file/2.
             case index_lookup(MsgId, State1) of
                 [#msg_location { file = File }]
