@@ -89,14 +89,11 @@ if not exist "!ERLANG_SERVICE_MANAGER_PATH!\erlsrv.exe" (
     exit /B 1
 )
 
-rem erlang prefers forwardslash as separator in paths
-set RABBITMQ_BASE_UNIX=!RABBITMQ_BASE:\=/!
-
 if "!RABBITMQ_MNESIA_BASE!"=="" (
-    set RABBITMQ_MNESIA_BASE=!RABBITMQ_BASE_UNIX!/db
+    set RABBITMQ_MNESIA_BASE=!RABBITMQ_BASE!/db
 )
 if "!RABBITMQ_LOG_BASE!"=="" (
-    set RABBITMQ_LOG_BASE=!RABBITMQ_BASE_UNIX!/log
+    set RABBITMQ_LOG_BASE=!RABBITMQ_BASE!/log
 )
 
 
@@ -169,7 +166,7 @@ set RABBITMQ_EBIN_ROOT=!TDP0!..\ebin
        "!RABBITMQ_PLUGINS_EXPAND_DIR:\=/!" ^
        ""
 
-set RABBITMQ_BOOT_FILE=!RABBITMQ_PLUGINS_EXPAND_DIR!/rabbit
+set RABBITMQ_BOOT_FILE=!RABBITMQ_PLUGINS_EXPAND_DIR!\rabbit
 if ERRORLEVEL 1 (
     exit /B 1
 )
@@ -177,7 +174,7 @@ if ERRORLEVEL 1 (
 set RABBITMQ_EBIN_PATH=
 
 if "!RABBITMQ_CONFIG_FILE!"=="" (
-    set RABBITMQ_CONFIG_FILE=!RABBITMQ_BASE!/rabbitmq
+    set RABBITMQ_CONFIG_FILE=!RABBITMQ_BASE!\rabbitmq
 )
 
 if exist "!RABBITMQ_CONFIG_FILE!.config" (
@@ -219,7 +216,7 @@ set ERLANG_SERVICE_ARGUMENTS=!ERLANG_SERVICE_ARGUMENTS:"=\"!
 
 "!ERLANG_SERVICE_MANAGER_PATH!\erlsrv" set !RABBITMQ_SERVICENAME! ^
 -machine "!ERLANG_SERVICE_MANAGER_PATH!\erl.exe" ^
--env ERL_CRASH_DUMP="!RABBITMQ_BASE_UNIX!/erl_crash.dump" ^
+-env ERL_CRASH_DUMP="!RABBITMQ_BASE:\=/!/erl_crash.dump" ^
 -workdir "!RABBITMQ_BASE!" ^
 -stopaction "rabbit:stop_and_halt()." ^
 -sname !RABBITMQ_NODENAME! ^
