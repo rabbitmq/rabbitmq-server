@@ -36,6 +36,11 @@
 %% #amqp_params_network{} record is returned.  Extra parameters may be
 %% specified via the query string (e.g. "?heartbeat=5"). In case of
 %% failure, an {error, {Info, Uri}} tuple is returned.
+%%
+%% The extra parameters that may be specified are channel_max,
+%% frame_max, and heartbeat.  The extra parameters that may be
+%% specified for an SSL connection are cacertfile, certfile, keyfile,
+%% verify, and fail_if_no_peer_cert.
 parse(Uri) ->
     try case parse1(Uri) of
             {ok, #amqp_params_network{host         = undefined,
@@ -56,11 +61,12 @@ parse1(Uri) when is_list(Uri) ->
         {error, Err} ->
             throw({unable_to_parse_uri, Err});
         Parsed ->
-            Endpoint = case proplists:get_value(scheme, Parsed) of
-                           "amqp"  -> build_broker(Parsed);
-                           "amqps" -> build_ssl_broker(Parsed);
-                           Scheme  -> fail({unexpected_uri_scheme, Scheme})
-                       end,
+            Endpoint =
+                case string:to_lower(proplists:get_value(scheme, Parsed)) of
+                    "amqp"  -> build_broker(Parsed);
+                    "amqps" -> build_ssl_broker(Parsed);
+                    Scheme  -> fail({unexpected_uri_scheme, Scheme})
+                end,
             return({ok, broker_add_query(Endpoint, Parsed)})
     end;
 parse1(_) ->
@@ -122,7 +128,7 @@ build_ssl_broker(ParsedUri) ->
                                             Key, Value, Query, Reason})
                               end;
                           false ->
-                              fail({missing_ssl_parameter, Key, Query})
+                              L
                       end
            end || {Fun, Key} <-
                       [{fun find_path_parameter/1,    cacertfile},

@@ -50,7 +50,7 @@ amqp_uri_parse_test() ->
                                            port         = 10000,
                                            virtual_host = <<"v/host">>}},
                  amqp_uri:parse(
-                   "amqp://user%61:%61pass@ho%61st:10000/v%2fhost")),
+                   "aMQp://user%61:%61pass@ho%61st:10000/v%2fhost")),
     ?assertMatch({ok, #amqp_params_direct{}}, amqp_uri:parse("amqp://")),
     ?assertMatch({ok, #amqp_params_direct{username     = <<"">>,
                                           virtual_host = <<"">>}},
