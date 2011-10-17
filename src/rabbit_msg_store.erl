@@ -463,7 +463,7 @@ client_ref(#client_msstate { client_ref = Ref }) -> Ref.
 write(MsgId, Msg,
       CState = #client_msstate { cur_file_cache_ets = CurFileCacheEts,
                                  client_ref         = CRef }) ->
-    ok = update_flying(+1, MsgId, CState),
+    ok = client_update_flying(+1, MsgId, CState),
     ok = update_msg_cache(CurFileCacheEts, MsgId, Msg),
     ok = server_cast(CState, {write, CRef, MsgId}).
 
@@ -484,7 +484,7 @@ read(MsgId,
 contains(MsgId, CState) -> server_call(CState, {contains, MsgId}).
 remove([],    _CState) -> ok;
 remove(MsgIds, CState = #client_msstate { client_ref = CRef }) ->
-    [update_flying(-1, MsgId, CState) || MsgId <- MsgIds],
+    [client_update_flying(-1, MsgId, CState) || MsgId <- MsgIds],
     server_cast(CState, {remove, CRef, MsgIds}).
 
 set_maximum_since_use(Server, Age) ->
@@ -611,8 +611,8 @@ client_read3(#msg_location { msg_id = MsgId, file = File }, Defer,
             end
     end.
 
-update_flying(Diff, MsgId, #client_msstate { flying_ets = FlyingEts,
-                                             client_ref = CRef }) ->
+client_update_flying(Diff, MsgId, #client_msstate { flying_ets = FlyingEts,
+                                                    client_ref = CRef }) ->
     Key = {MsgId, CRef},
     case ets:insert_new(FlyingEts, {Key, Diff}) of
         true  -> ok;
