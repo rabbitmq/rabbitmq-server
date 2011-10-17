@@ -128,9 +128,6 @@ test() ->
      {unexpected_fields, [invalid], _}} =
         test_broken_shovel_config([{publish_properties, [invalid]} | Config]),
 
-    {{missing_ssl_parameter, fail_if_no_peer_cert, _}, _} =
-        test_broken_shovel_sources([{broker, "amqps://username:password@host:5673/vhost?cacertfile=/path/to/cacert.pem&certfile=/path/to/certfile.pem&keyfile=/path/to/keyfile.pem&verify=verify_peer"}]),
-
     {{invalid_ssl_parameter, fail_if_no_peer_cert, "42", _,
       {require_boolean, '42'}}, _} =
         test_broken_shovel_sources([{broker, "amqps://username:password@host:5673/vhost?cacertfile=/path/to/cacert.pem&certfile=/path/to/certfile.pem&keyfile=/path/to/keyfile.pem&verify=verify_peer&fail_if_no_peer_cert=42"}]),
