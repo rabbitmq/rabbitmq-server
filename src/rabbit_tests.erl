@@ -1712,7 +1712,7 @@ on_disk_capture(OnDisk, Awaiting, Pid) ->
                             Pid);
         stop ->
             done
-    after 200 ->
+    after 500 ->
             case {OnDisk, Awaiting} of
                 {[], []} -> Pid ! {self(), arrived}, on_disk_capture();
                 {_,  []} -> Pid ! {self(), surplus};
