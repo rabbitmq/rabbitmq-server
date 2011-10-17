@@ -42,7 +42,8 @@ erlangTypeMap = {
 def convertTable(d):
     if len(d) == 0:
         return "[]"
-    else: raise 'Non-empty table defaults not supported', d
+    else:
+        raise Exception('Non-empty table defaults not supported ' + d)
 
 erlangDefaultValueTypeConvMap = {
     bool : lambda x: str(x).lower(),
@@ -229,9 +230,27 @@ def genErl(spec):
         print "  %s;" % (recordConstructorExpr,)
 
     def genDecodeProperties(c):
-        print "decode_properties(%d, PropBin) ->" % (c.index)
-        print "  %s = rabbit_binary_parser:parse_properties(%s, PropBin)," % \
-              (fieldTempList(c.fields), fieldTypeList(c.fields))
+        def presentBin(fields):
+            return '<<' + ', '.join(['P' + str(f.index) + ':1' for f in fields]) + ', _:2, R0/binary>>'
+        def mkMacroName(field):
+            return '?' + field.domain.upper() + '_PROP'
+        def writePropFieldLine(field, bin_next = None):
+            i = str(field.index)
+            if not bin_next:
+                i1 = str(field.index + 1)
+                bin_next = 'R' + i1
+            if field.domain in ['octet', 'timestamp']:
+                print "  {%s, %s} = %s(%s, %s, %s, %s)," % ('F' + i, bin_next, mkMacroName(field), 'P' + i, 'R' + i, 'I' + i, 'X' + i)
+            else:
+                print "  {%s, %s} = %s(%s, %s, %s, %s, %s)," % ('F' + i, bin_next, mkMacroName(field), 'P' + i, 'R' + i, 'L' + i, 'S' + i, 'X' + i)
+
+        if len(c.fields) == 0:
+            print "decode_properties(%d, _) ->" % (c.index)
+        else:
+            print "decode_properties(%d, %s) ->" % (c.index, presentBin(c.fields))
+            for field in c.fields[:-1]:
+                writePropFieldLine(field)
+            writePropFieldLine(c.fields[-1], "<<>>")
         print "  #'P_%s'{%s};" % (erlangize(c.name), fieldMapList(c.fields))
 
     def genFieldPreprocessing(packed):
@@ -272,7 +291,7 @@ def genErl(spec):
         if mCls == 'SOFT_ERROR': genLookupException1(c,'false')
         elif mCls == 'HARD_ERROR': genLookupException1(c, 'true')
         elif mCls == '': pass
-        else: raise 'Unknown constant class', cls
+        else: raise Exception('Unknown constant class' + cls)
 
     def genLookupException1(c,hardErrorBoolStr):
         n = erlangConstantName(c)
@@ -404,6 +423,27 @@ shortstr_size(S) ->
         Len when Len =< 255 -> Len;
         _                   -> exit(method_field_shortstr_overflow)
     end.
+
+-define(SHORTSTR_PROP(P, R, L, S, X),
+        if P =:= 0 -> {undefined, R};
+           true    -> <<L:8/unsigned, S:L/binary, X/binary>> = R,
+                      {S, X}
+        end).
+-define(TABLE_PROP(P, R, L, T, X),
+        if P =:= 0 -> {undefined, R};
+           true    -> <<L:32/unsigned, T:L/binary, X/binary>> = R,
+                      {rabbit_binary_parser:parse_table(T), X}
+        end).
+-define(OCTET_PROP(P, R, I, X),
+        if P =:= 0 -> {undefined, R};
+           true    -> <<I:8/unsigned, X/binary>> = R,
+                      {I, X}
+        end).
+-define(TIMESTAMP_PROP(P, R, I, X),
+        if P =:= 0 -> {undefined, R};
+           true    -> <<I:64/unsigned, X/binary>> = R,
+                      {I, X}
+        end).
 """
     version = "{%d, %d, %d}" % (spec.major, spec.minor, spec.revision)
     if version == '{8, 0, 0}': version = '{0, 8, 0}'
