@@ -39,7 +39,6 @@
 %% terminated.<br/>
 -module(amqp_selective_consumer).
 
--include("amqp_client.hrl").
 -include("amqp_gen_consumer_spec.hrl").
 
 -behaviour(amqp_gen_consumer).
