@@ -21,28 +21,8 @@ reception and publishing of messages.
 Requirements
 ------------
 
-If you are using a released version of RabbitMQ then the simplest
-means of installing the shovel is to use the ez files available from
-http://www.rabbitmq.com/plugins.html#rabbitmq-shovel (or, if you're
-not using the current release of RabbitMQ, grab the necessary ez files
-from http://www.rabbitmq.com/releases/plugins/).
-
-If you are running an unreleased version of RabbitMQ, compiled from
-source, you will need to compile the shovel from source. From scratch,
-the following commands should build RabbitMQ with the shovel plug-in:
-
-hg clone http://hg.rabbitmq.com/rabbitmq-public-umbrella
-cd rabbitmq-public-umbrella
-make -j4 checkout
-cd rabbitmq-server
-make -j
-mkdir -p plugins
-cd ../rabbitmq-shovel
-make -j
-cp dist/*.ez ../rabbitmq-server/plugins
-cd ../rabbitmq-server
-rm plugins/rabbit_common*.ez
-make cleandb run
+You can build and install it like any other plugin (see
+http://www.rabbitmq.com/plugin-development.html).
 
 
 Configuration
