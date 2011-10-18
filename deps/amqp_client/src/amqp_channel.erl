@@ -774,15 +774,26 @@ handle_nack(State = #state{waiting_set = WSet}) ->
               close(self(), 200, <<"Nacks Received">>)
     end.
 
-update_confirm_set(#'basic.ack'{delivery_tag = SeqNo},
+update_confirm_set(#'basic.ack'{delivery_tag = SeqNo,
+                                multiple     = Multiple},
                    State = #state{unconfirmed_set = USet}) ->
     maybe_notify_waiters(
-      State#state{unconfirmed_set = gb_sets:del_element(SeqNo, USet)});
-update_confirm_set(#'basic.nack'{delivery_tag = SeqNo},
+      State#state{unconfirmed_set = update_unconfirmed(SeqNo, Multiple, USet)});
+update_confirm_set(#'basic.nack'{delivery_tag = SeqNo,
+                                 multiple     = Multiple},
                    State = #state{unconfirmed_set = USet}) ->
     maybe_notify_waiters(
-      State#state{unconfirmed_set = gb_sets:del_element(SeqNo, USet),
+      State#state{unconfirmed_set = update_unconfirmed(SeqNo, Multiple, USet),
                   only_acks_received = false}).
+
+update_unconfirmed(SeqNo, false, USet) ->
+    gb_sets:del_element(SeqNo, USet);
+update_unconfirmed(SeqNo, true, USet) ->
+    {S, USet1} = gb_sets:take_smallest(USet),
+    case S > SeqNo of
+        true  -> USet;
+        false -> update_unconfirmed(SeqNo, true, USet1)
+    end.
 
 maybe_notify_waiters(State = #state{unconfirmed_set = USet}) ->
     case gb_sets:is_empty(USet) of

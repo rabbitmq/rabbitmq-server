@@ -619,7 +619,7 @@ confirm_barrier_test() ->
     #'confirm.select_ok'{} = amqp_channel:call(Channel, #'confirm.select'{}),
     [amqp_channel:call(Channel, #'basic.publish'{routing_key = <<"whoosh">>},
                        #amqp_msg{payload = <<"foo">>})
-     || _ <- lists:seq(1, 10)],
+     || _ <- lists:seq(1, 1000)], %% Hopefully enough to get a multi-ack
     true = amqp_channel:wait_for_confirms(Channel),
     teardown(Connection, Channel).
 
