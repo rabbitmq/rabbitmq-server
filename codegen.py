@@ -231,23 +231,28 @@ def genErl(spec):
 
     def genDecodeProperties(c):
         def presentBin(fields):
-            return '<<' + ', '.join(['P' + str(f.index) + ':1' for f in fields]) + ', _:2, R0/binary>>'
+            ps = ', '.join(['P' + str(f.index) + ':1' for f in fields])
+            return '<<' + ps + ', _:%d, R0/binary>>' % (16 - len(fields),)
         def mkMacroName(field):
             return '?' + field.domain.upper() + '_PROP'
         def writePropFieldLine(field, bin_next = None):
             i = str(field.index)
             if not bin_next:
-                i1 = str(field.index + 1)
-                bin_next = 'R' + i1
+                bin_next = 'R' + str(field.index + 1)
             if field.domain in ['octet', 'timestamp']:
-                print "  {%s, %s} = %s(%s, %s, %s, %s)," % ('F' + i, bin_next, mkMacroName(field), 'P' + i, 'R' + i, 'I' + i, 'X' + i)
+                print ("  {%s, %s} = %s(%s, %s, %s, %s)," %
+                       ('F' + i, bin_next, mkMacroName(field), 'P' + i,
+                        'R' + i, 'I' + i, 'X' + i))
             else:
-                print "  {%s, %s} = %s(%s, %s, %s, %s, %s)," % ('F' + i, bin_next, mkMacroName(field), 'P' + i, 'R' + i, 'L' + i, 'S' + i, 'X' + i)
+                print ("  {%s, %s} = %s(%s, %s, %s, %s, %s)," %
+                       ('F' + i, bin_next, mkMacroName(field), 'P' + i,
+                        'R' + i, 'L' + i, 'S' + i, 'X' + i))
 
         if len(c.fields) == 0:
-            print "decode_properties(%d, _) ->" % (c.index)
+            print "decode_properties(%d, _) ->" % (c.index,)
         else:
-            print "decode_properties(%d, %s) ->" % (c.index, presentBin(c.fields))
+            print ("decode_properties(%d, %s) ->" %
+                   (c.index, presentBin(c.fields)))
             for field in c.fields[:-1]:
                 writePropFieldLine(field)
             writePropFieldLine(c.fields[-1], "<<>>")
