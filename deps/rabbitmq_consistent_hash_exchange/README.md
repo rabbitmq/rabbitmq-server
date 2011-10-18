@@ -4,10 +4,10 @@ This plugin adds a consistent-hash exchange type to RabbitMQ.
 
 In various scenarios, you may wish to ensure that messages sent to an
 exchange are consistently and equally distributed across a number of
-different queues. You could arrange for this to occur yourself by
-using a direct or topic exchange, binding queues to that exchange and
-then publishing messages to that exchange that match the various
-binding keys.
+different queues based on the routing key of the message. You could
+arrange for this to occur yourself by using a direct or topic
+exchange, binding queues to that exchange and then publishing messages
+to that exchange that match the various binding keys.
 
 However, arranging things this way can be problematic:
 
@@ -23,10 +23,10 @@ evenly.
 [Consistent Hashing](http://en.wikipedia.org/wiki/Consistent_hashing)
 is a hashing technique whereby each bucket appears at multiple points
 throughout the hash space, and the bucket selected is the nearest
-higher bucket to the computed hash (and the hash space wraps
-around). The effect of this is that when a new bucket is added or an
-existing bucket removed, only a very few hashes change which bucket
-they are routed to.
+higher (or lower, it doesn't matter, provided it's consistent) bucket
+to the computed hash (and the hash space wraps around). The effect of
+this is that when a new bucket is added or an existing bucket removed,
+only a very few hashes change which bucket they are routed to.
 
 In the case of Consistent Hashing as an exchange type, the hash is
 calculated from the hash of the routing key of each message
@@ -44,7 +44,12 @@ B, then you bind the queue A with a binding key of twice the number
 (as a string -- binding keys are always strings) of the binding key of
 the binding to queue B.
 
-Each message gets delivered to at most one queue.
+Each message gets delivered to at most one queue. Normally, each
+message gets delivered to exactly one queue, but there is a race
+between the determination of which queue to send a message to, and the
+deletion/death of that queue that does permit the possibility of the
+message being sent to a queue which then disappears before the message
+is processed. Hence in general, at most one queue.
 
 The exchange type is "x-consistent-hash".
 

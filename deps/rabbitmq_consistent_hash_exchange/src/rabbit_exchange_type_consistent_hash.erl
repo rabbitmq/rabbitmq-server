@@ -56,6 +56,15 @@ route(#exchange { name = Name } = X,
     %% Yes, we're being exceptionally naughty here, by using ets on an
     %% mnesia table. However, RabbitMQ-server itself is just as
     %% naughty, and for good reasons.
+
+    %% Note that given the nature of this select, it will force mnesia
+    %% to do a linear scan of the entries in the table that have the
+    %% correct exchange name. More sophisticated solutions include,
+    %% for example, having some sort of tree as the value of a single
+    %% mnesia entry for each exchange. However, such values tend to
+    %% end up as relatively deep data structures which cost a lot to
+    %% continually copy to the process heap. Consequently, such
+    %% approaches have not been found to be much faster, if at all.
     H = erlang:phash2(Routes, ?PHASH2_RANGE),
     case ets:select(?TABLE, [{#bucket { source_number = {Name, '$2'},
                                         destination   = '$1',
