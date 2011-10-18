@@ -18,7 +18,7 @@
 
 -include("rabbit.hrl").
 
--export([parse_table/1]).
+-export([parse_table/1, parse_properties/2]).
 -export([ensure_content_decoded/1, clear_decoded_content/1]).
 
 %%----------------------------------------------------------------------------
@@ -26,6 +26,8 @@
 -ifdef(use_specs).
 
 -spec(parse_table/1 :: (binary()) -> rabbit_framing:amqp_table()).
+-spec(parse_properties/2 ::
+        ([rabbit_framing:amqp_property_type()], binary()) -> [any()]).
 -spec(ensure_content_decoded/1 ::
         (rabbit_types:content()) -> rabbit_types:decoded_content()).
 -spec(clear_decoded_content/1 ::
@@ -91,6 +93,57 @@ parse_field_value(<<"x", VLen:32/unsigned, ValueString:VLen/binary, Rest/binary>
 
 parse_field_value(<<"V", Rest/binary>>) ->
     {void, undefined, Rest}.
+
+
+parse_properties([], _PropBin) ->
+    [];
+parse_properties(TypeList, PropBin) ->
+    FlagCount = length(TypeList),
+    %% round up to the nearest multiple of 15 bits, since the 16th bit
+    %% in each short is a "continuation" bit.
+    FlagsLengthBytes = trunc((FlagCount + 14) / 15) * 2,
+    <<Flags:FlagsLengthBytes/binary, Properties/binary>> = PropBin,
+    <<FirstShort:16, Remainder/binary>> = Flags,
+    parse_properties(0, TypeList, [], FirstShort, Remainder, Properties).
+
+parse_properties(_Bit, [], Acc, _FirstShort,
+                 _Remainder, <<>>) ->
+    lists:reverse(Acc);
+parse_properties(_Bit, [], _Acc, _FirstShort,
+                 _Remainder, _LeftoverBin) ->
+    exit(content_properties_binary_overflow);
+parse_properties(15, TypeList, Acc, _OldFirstShort,
+                 <<NewFirstShort:16,Remainder/binary>>, Properties) ->
+    parse_properties(0, TypeList, Acc, NewFirstShort, Remainder, Properties);
+parse_properties(Bit, [Type | TypeListRest], Acc, FirstShort,
+                 Remainder, Properties) ->
+    {Value, Rest} =
+        if (FirstShort band (1 bsl (15 - Bit))) /= 0 ->
+                parse_property(Type, Properties);
+           Type == bit -> {false    , Properties};
+           true        -> {undefined, Properties}
+        end,
+    parse_properties(Bit + 1, TypeListRest, [Value | Acc], FirstShort,
+                     Remainder, Rest).
+
+parse_property(shortstr, <<Len:8/unsigned, String:Len/binary, Rest/binary>>) ->
+    {String, Rest};
+parse_property(longstr, <<Len:32/unsigned, String:Len/binary, Rest/binary>>) ->
+    {String, Rest};
+parse_property(octet, <<Int:8/unsigned, Rest/binary>>) ->
+    {Int, Rest};
+parse_property(shortint, <<Int:16/unsigned, Rest/binary>>) ->
+    {Int, Rest};
+parse_property(longint, <<Int:32/unsigned, Rest/binary>>) ->
+    {Int, Rest};
+parse_property(longlongint, <<Int:64/unsigned, Rest/binary>>) ->
+    {Int, Rest};
+parse_property(timestamp, <<Int:64/unsigned, Rest/binary>>) ->
+    {Int, Rest};
+parse_property(bit, Rest) ->
+    {true, Rest};
+parse_property(table, <<Len:32/unsigned, Table:Len/binary, Rest/binary>>) ->
+    {parse_table(Table), Rest}.
 
 ensure_content_decoded(Content = #content{properties = Props})
   when Props =/= none ->

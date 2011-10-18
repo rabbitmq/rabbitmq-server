@@ -44,6 +44,10 @@
 
 %%----------------------------------------------------------------------------
 
+deliver([], #delivery{mandatory = false,
+                      immediate = false}) ->
+    %% /dev/null optimisation
+    {routed, []};
 deliver(QNames, Delivery = #delivery{mandatory = false,
                                      immediate = false}) ->
     %% optimisation: when Mandatory = false and Immediate = false,
