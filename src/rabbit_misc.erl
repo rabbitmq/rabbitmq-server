@@ -236,18 +236,32 @@ protocol_error(#amqp_error{} = Error) ->
 
 not_found(R) -> protocol_error(not_found, "no ~s", [rs(R)]).
 
+type_class(byte)      -> int_class;
+type_class(short)     -> int_class;
+type_class(signedint) -> int_class;
+type_class(long)      -> int_class;
+type_class(decimal)   -> int_class;
+type_class(float)     -> float_class;
+type_class(double)    -> float_class;
+type_class(Other)     -> Other.
+
 assert_args_equivalence(Orig, New, Name, Keys) ->
     [assert_args_equivalence1(Orig, New, Name, Key) || Key <- Keys],
     ok.
 
 assert_args_equivalence1(Orig, New, Name, Key) ->
     case {table_lookup(Orig, Key), table_lookup(New, Key)} of
-        {Same, Same}  -> ok;
-        {Orig1, New1} -> protocol_error(
-                           precondition_failed,
-                           "inequivalent arg '~s' for ~s: "
-                           "received ~s but current is ~s",
-                           [Key, rs(Name), val(New1), val(Orig1)])
+        {Same, Same} ->
+            ok;
+        {{Type1, OrigVal1} = Orig1, {Type2, NewVal1}  = New1} ->
+            case type_class(Type1) == type_class(Type2) andalso
+                 OrigVal1 == NewVal1 of
+                 true  -> ok;
+                 false -> protocol_error(precondition_failed, "inequivalent arg"
+                                         " '~s' for ~s: received ~s but current"
+                                         " is ~s",
+                                         [Key, rs(Name), val(New1), val(Orig1)])
+            end
     end.
 
 val(undefined) ->
