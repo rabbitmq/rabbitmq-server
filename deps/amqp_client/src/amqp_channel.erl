@@ -790,10 +790,13 @@ update_confirm_set(#'basic.nack'{delivery_tag = SeqNo,
 update_unconfirmed(SeqNo, false, USet) ->
     gb_sets:del_element(SeqNo, USet);
 update_unconfirmed(SeqNo, true, USet) ->
-    {S, USet1} = gb_sets:take_smallest(USet),
-    case S > SeqNo of
+    case gb_sets:is_empty(USet) of
         true  -> USet;
-        false -> update_unconfirmed(SeqNo, true, USet1)
+        false -> {S, USet1} = gb_sets:take_smallest(USet),
+                 case S > SeqNo of
+                     true  -> USet;
+                     false -> update_unconfirmed(SeqNo, true, USet1)
+                 end
     end.
 
 maybe_notify_waiters(State = #state{unconfirmed_set = USet}) ->
