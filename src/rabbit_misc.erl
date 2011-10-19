@@ -253,9 +253,9 @@ assert_args_equivalence1(Orig, New, Name, Key) ->
     case {table_lookup(Orig, Key), table_lookup(New, Key)} of
         {Same, Same} ->
             ok;
-        {{Type1, OrigVal1} = Orig1, {Type2, NewVal1}  = New1} ->
-            case type_class(Type1) == type_class(Type2) andalso
-                 OrigVal1 == NewVal1 of
+        {{OrigType, OrigVal} = Orig1, {NewType, NewVal}  = New1} ->
+            case type_class(OrigType) == type_class(NewType) andalso
+                 OrigVal == NewVal of
                  true  -> ok;
                  false -> protocol_error(precondition_failed, "inequivalent arg"
                                          " '~s' for ~s: received ~s but current"
