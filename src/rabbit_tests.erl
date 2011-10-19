@@ -30,12 +30,6 @@
 -define(TRANSIENT_MSG_STORE,  msg_store_transient).
 -define(CLEANUP_QUEUE_NAME, <<"cleanup-queue">>).
 
-test_content_prop_roundtrip(Datum, Binary) ->
-    Types =  [element(1, E) || E <- Datum],
-    Values = [element(2, E) || E <- Datum],
-    Values = rabbit_binary_parser:parse_properties(Types, Binary), %% assertion
-    Binary = rabbit_binary_generator:encode_properties(Types, Values). %% assertion
-
 all_tests() ->
     passed = gm_tests:all_tests(),
     passed = mirrored_supervisor_tests:all_tests(),
@@ -306,67 +300,69 @@ test_parsing() ->
     passed = test_field_values(),
     passed.
 
+test_content_prop_encoding(Datum, Binary) ->
+    Types =  [element(1, E) || E <- Datum],
+    Values = [element(2, E) || E <- Datum],
+    Binary = rabbit_binary_generator:encode_properties(Types, Values). %% assertion
+
 test_content_properties() ->
-    test_content_prop_roundtrip([], <<0, 0>>),
-    test_content_prop_roundtrip([{bit, true}, {bit, false}, {bit, true}, {bit, false}],
-                                <<16#A0, 0>>),
-    test_content_prop_roundtrip([{bit, true}, {octet, 123}, {bit, true}, {octet, undefined},
-                                 {bit, true}],
-                                <<16#E8,0,123>>),
-    test_content_prop_roundtrip([{bit, true}, {octet, 123}, {octet, 123}, {bit, true}],
-                                <<16#F0,0,123,123>>),
-    test_content_prop_roundtrip([{bit, true}, {shortstr, <<"hi">>}, {bit, true},
-                                 {shortint, 54321}, {bit, true}],
-                                <<16#F8,0,2,"hi",16#D4,16#31>>),
-    test_content_prop_roundtrip([{bit, true}, {shortstr, undefined}, {bit, true},
-                                 {shortint, 54321}, {bit, true}],
-                                <<16#B8,0,16#D4,16#31>>),
-    test_content_prop_roundtrip([{table, [{<<"a signedint">>, signedint, 12345678},
-                                          {<<"a longstr">>, longstr, <<"yes please">>},
-                                          {<<"a decimal">>, decimal, {123, 12345678}},
-                                          {<<"a timestamp">>, timestamp, 123456789012345},
-                                          {<<"a nested table">>, table,
-                                           [{<<"one">>, signedint, 1},
-                                            {<<"two">>, signedint, 2}]}]}],
-                                <<
-                                  %% property-flags
-                                  16#8000:16,
+    test_content_prop_encoding([], <<0, 0>>),
+    test_content_prop_encoding([{bit, true}, {bit, false}, {bit, true}, {bit, false}],
+                               <<16#A0, 0>>),
+    test_content_prop_encoding([{bit, true}, {octet, 123}, {bit, true}, {octet, undefined},
+                                {bit, true}],
+                               <<16#E8,0,123>>),
+    test_content_prop_encoding([{bit, true}, {octet, 123}, {octet, 123}, {bit, true}],
+                               <<16#F0,0,123,123>>),
+    test_content_prop_encoding([{bit, true}, {shortstr, <<"hi">>}, {bit, true},
+                                {shortint, 54321}, {bit, true}],
+                               <<16#F8,0,2,"hi",16#D4,16#31>>),
+    test_content_prop_encoding([{bit, true}, {shortstr, undefined}, {bit, true},
+                                {shortint, 54321}, {bit, true}],
+                               <<16#B8,0,16#D4,16#31>>),
+    test_content_prop_encoding([{table, [{<<"a signedint">>, signedint, 12345678},
+                                         {<<"a longstr">>, longstr, <<"yes please">>},
+                                         {<<"a decimal">>, decimal, {123, 12345678}},
+                                         {<<"a timestamp">>, timestamp, 123456789012345},
+                                         {<<"a nested table">>, table,
+                                          [{<<"one">>, signedint, 1},
+                                           {<<"two">>, signedint, 2}]}]}],
+                               <<
+                                 %% property-flags
+                                 16#8000:16,
 
-                                  %% property-list:
+                                 %% property-list:
 
-                                  %% table
-                                  117:32,                % table length in bytes
+                                 %% table
+                                 117:32,                % table length in bytes
 
-                                  11,"a signedint",      % name
-                                  "I",12345678:32,       % type and value
+                                 11,"a signedint",      % name
+                                 "I",12345678:32,       % type and value
 
-                                  9,"a longstr",
-                                  "S",10:32,"yes please",
+                                 9,"a longstr",
+                                 "S",10:32,"yes please",
 
-                                  9,"a decimal",
-                                  "D",123,12345678:32,
+                                 9,"a decimal",
+                                 "D",123,12345678:32,
 
-                                  11,"a timestamp",
-                                  "T", 123456789012345:64,
+                                 11,"a timestamp",
+                                 "T", 123456789012345:64,
 
-                                  14,"a nested table",
-                                  "F",
-                                  18:32,
+                                 14,"a nested table",
+                                 "F",
+                                 18:32,
 
-                                  3,"one",
-                                  "I",1:32,
+                                 3,"one",
+                                 "I",1:32,
 
-                                  3,"two",
-                                  "I",2:32 >>),
-    case catch rabbit_binary_parser:parse_properties([bit, bit, bit, bit], <<16#A0,0,1>>) of
-        {'EXIT', content_properties_binary_overflow} -> passed;
-        V -> exit({got_success_but_expected_failure, V})
-    end.
+                                 3,"two",
+                                 "I",2:32 >>),
+    passed.
 
 test_field_values() ->
     %% FIXME this does not test inexact numbers (double and float) yet,
     %% because they won't pass the equality assertions
-    test_content_prop_roundtrip(
+    test_content_prop_encoding(
       [{table, [{<<"longstr">>, longstr, <<"Here is a long string">>},
                 {<<"signedint">>, signedint, 12345},
                 {<<"decimal">>, decimal, {3, 123456}},
