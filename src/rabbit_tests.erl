@@ -30,12 +30,6 @@
 -define(TRANSIENT_MSG_STORE,  msg_store_transient).
 -define(CLEANUP_QUEUE_NAME, <<"cleanup-queue">>).
 
-test_content_prop_roundtrip(Datum, Binary) ->
-    Types =  [element(1, E) || E <- Datum],
-    Values = [element(2, E) || E <- Datum],
-    Values = rabbit_binary_parser:parse_properties(Types, Binary), %% assertion
-    Binary = rabbit_binary_generator:encode_properties(Types, Values). %% assertion
-
 all_tests() ->
     passed = gm_tests:all_tests(),
     passed = mirrored_supervisor_tests:all_tests(),
@@ -44,7 +38,6 @@ all_tests() ->
     passed = test_file_handle_cache(),
     passed = test_backing_queue(),
     passed = test_priority_queue(),
-    passed = test_bpqueue(),
     passed = test_pg_local(),
     passed = test_unfold(),
     passed = test_supervisor_delayed_restart(),
@@ -262,143 +255,6 @@ test_priority_queue(Q) ->
      priority_queue:to_list(Q),
      priority_queue_out_all(Q)}.
 
-test_bpqueue() ->
-    Q = bpqueue:new(),
-    true = bpqueue:is_empty(Q),
-    0 = bpqueue:len(Q),
-    [] = bpqueue:to_list(Q),
-
-    Q1 = bpqueue_test(fun bpqueue:in/3, fun bpqueue:out/1,
-                      fun bpqueue:to_list/1,
-                      fun bpqueue:foldl/3, fun bpqueue:map_fold_filter_l/4),
-    Q2 = bpqueue_test(fun bpqueue:in_r/3, fun bpqueue:out_r/1,
-                      fun (QR) -> lists:reverse(
-                                    [{P, lists:reverse(L)} ||
-                                        {P, L} <- bpqueue:to_list(QR)])
-                      end,
-                      fun bpqueue:foldr/3, fun bpqueue:map_fold_filter_r/4),
-
-    [{foo, [1, 2]}, {bar, [3]}] = bpqueue:to_list(bpqueue:join(Q, Q1)),
-    [{bar, [3]}, {foo, [2, 1]}] = bpqueue:to_list(bpqueue:join(Q2, Q)),
-    [{foo, [1, 2]}, {bar, [3, 3]}, {foo, [2,1]}] =
-        bpqueue:to_list(bpqueue:join(Q1, Q2)),
-
-    [{foo, [1, 2]}, {bar, [3]}, {foo, [1, 2]}, {bar, [3]}] =
-        bpqueue:to_list(bpqueue:join(Q1, Q1)),
-
-    [{foo, [1, 2]}, {bar, [3]}] =
-        bpqueue:to_list(
-          bpqueue:from_list(
-            [{x, []}, {foo, [1]}, {y, []}, {foo, [2]}, {bar, [3]}, {z, []}])),
-
-    [{undefined, [a]}] = bpqueue:to_list(bpqueue:from_list([{undefined, [a]}])),
-
-    {4, [a,b,c,d]} =
-        bpqueue:foldl(
-          fun (Prefix, Value, {Prefix, Acc}) ->
-                  {Prefix + 1, [Value | Acc]}
-          end,
-          {0, []}, bpqueue:from_list([{0,[d]}, {1,[c]}, {2,[b]}, {3,[a]}])),
-
-    [{bar,3}, {foo,2}, {foo,1}] =
-        bpqueue:foldr(fun (P, V, I) -> [{P,V} | I] end, [], Q2),
-
-    BPQL = [{foo,[1,2,2]}, {bar,[3,4,5]}, {foo,[5,6,7]}],
-    BPQ = bpqueue:from_list(BPQL),
-
-    %% no effect
-    {BPQL, 0} = bpqueue_mffl([none], {none, []}, BPQ),
-    {BPQL, 0} = bpqueue_mffl([foo,bar], {none, [1]}, BPQ),
-    {BPQL, 0} = bpqueue_mffl([bar], {none, [3]}, BPQ),
-    {BPQL, 0} = bpqueue_mffr([bar], {foo, [5]}, BPQ),
-
-    %% process 1 item
-    {[{foo,[-1,2,2]}, {bar,[3,4,5]}, {foo,[5,6,7]}], 1} =
-        bpqueue_mffl([foo,bar], {foo, [2]}, BPQ),
-    {[{foo,[1,2,2]}, {bar,[-3,4,5]}, {foo,[5,6,7]}], 1} =
-        bpqueue_mffl([bar], {bar, [4]}, BPQ),
-    {[{foo,[1,2,2]}, {bar,[3,4,5]}, {foo,[5,6,-7]}], 1} =
-        bpqueue_mffr([foo,bar], {foo, [6]}, BPQ),
-    {[{foo,[1,2,2]}, {bar,[3,4]}, {baz,[-5]}, {foo,[5,6,7]}], 1} =
-        bpqueue_mffr([bar], {baz, [4]}, BPQ),
-
-    %% change prefix
-    {[{bar,[-1,-2,-2,-3,-4,-5,-5,-6,-7]}], 9} =
-        bpqueue_mffl([foo,bar], {bar, []}, BPQ),
-    {[{bar,[-1,-2,-2,3,4,5]}, {foo,[5,6,7]}], 3} =
-        bpqueue_mffl([foo], {bar, [5]}, BPQ),
-    {[{bar,[-1,-2,-2,3,4,5,-5,-6]}, {foo,[7]}], 5} =
-        bpqueue_mffl([foo], {bar, [7]}, BPQ),
-    {[{foo,[1,2,2,-3,-4]}, {bar,[5]}, {foo,[5,6,7]}], 2} =
-        bpqueue_mffl([bar], {foo, [5]}, BPQ),
-    {[{bar,[-1,-2,-2,3,4,5,-5,-6,-7]}], 6} =
-        bpqueue_mffl([foo], {bar, []}, BPQ),
-    {[{foo,[1,2,2,-3,-4,-5,5,6,7]}], 3} =
-        bpqueue_mffl([bar], {foo, []}, BPQ),
-
-    %% edge cases
-    {[{foo,[-1,-2,-2]}, {bar,[3,4,5]}, {foo,[5,6,7]}], 3} =
-        bpqueue_mffl([foo], {foo, [5]}, BPQ),
-    {[{foo,[1,2,2]}, {bar,[3,4,5]}, {foo,[-5,-6,-7]}], 3} =
-        bpqueue_mffr([foo], {foo, [2]}, BPQ),
-
-    passed.
-
-bpqueue_test(In, Out, List, Fold, MapFoldFilter) ->
-    Q = bpqueue:new(),
-    {empty, _Q} = Out(Q),
-
-    ok = Fold(fun (Prefix, Value, ok) -> {error, Prefix, Value} end, ok, Q),
-    {Q1M, 0} = MapFoldFilter(fun(_P)     -> throw(explosion) end,
-                             fun(_V, _N) -> throw(explosion) end, 0, Q),
-    [] = bpqueue:to_list(Q1M),
-
-    Q1 = In(bar, 3, In(foo, 2, In(foo, 1, Q))),
-    false = bpqueue:is_empty(Q1),
-    3 = bpqueue:len(Q1),
-    [{foo, [1, 2]}, {bar, [3]}] = List(Q1),
-
-    {{value, foo, 1}, Q3}  = Out(Q1),
-    {{value, foo, 2}, Q4}  = Out(Q3),
-    {{value, bar, 3}, _Q5} = Out(Q4),
-
-    F = fun (QN) ->
-                MapFoldFilter(fun (foo) -> true;
-                                  (_)   -> false
-                              end,
-                              fun (2, _Num) -> stop;
-                                  (V, Num)  -> {bar, -V, V - Num} end,
-                              0, QN)
-        end,
-    {Q6, 0} = F(Q),
-    [] = bpqueue:to_list(Q6),
-    {Q7, 1} = F(Q1),
-    [{bar, [-1]}, {foo, [2]}, {bar, [3]}] = List(Q7),
-
-    Q1.
-
-bpqueue_mffl(FF1A, FF2A, BPQ) ->
-    bpqueue_mff(fun bpqueue:map_fold_filter_l/4, FF1A, FF2A, BPQ).
-
-bpqueue_mffr(FF1A, FF2A, BPQ) ->
-    bpqueue_mff(fun bpqueue:map_fold_filter_r/4, FF1A, FF2A, BPQ).
-
-bpqueue_mff(Fold, FF1A, FF2A, BPQ) ->
-    FF1 = fun (Prefixes) ->
-                  fun (P) -> lists:member(P, Prefixes) end
-          end,
-    FF2 = fun ({Prefix, Stoppers}) ->
-                  fun (Val, Num) ->
-                          case lists:member(Val, Stoppers) of
-                              true -> stop;
-                              false -> {Prefix, -Val, 1 + Num}
-                          end
-                  end
-          end,
-    Queue_to_list = fun ({LHS, RHS}) -> {bpqueue:to_list(LHS), RHS} end,
-
-    Queue_to_list(Fold(FF1(FF1A), FF2(FF2A), 0, BPQ)).
-
 test_simple_n_element_queue(N) ->
     Items = lists:seq(1, N),
     Q = priority_queue_in_all(priority_queue:new(), Items),
@@ -444,67 +300,69 @@ test_parsing() ->
     passed = test_field_values(),
     passed.
 
+test_content_prop_encoding(Datum, Binary) ->
+    Types =  [element(1, E) || E <- Datum],
+    Values = [element(2, E) || E <- Datum],
+    Binary = rabbit_binary_generator:encode_properties(Types, Values). %% assertion
+
 test_content_properties() ->
-    test_content_prop_roundtrip([], <<0, 0>>),
-    test_content_prop_roundtrip([{bit, true}, {bit, false}, {bit, true}, {bit, false}],
-                                <<16#A0, 0>>),
-    test_content_prop_roundtrip([{bit, true}, {octet, 123}, {bit, true}, {octet, undefined},
-                                 {bit, true}],
-                                <<16#E8,0,123>>),
-    test_content_prop_roundtrip([{bit, true}, {octet, 123}, {octet, 123}, {bit, true}],
-                                <<16#F0,0,123,123>>),
-    test_content_prop_roundtrip([{bit, true}, {shortstr, <<"hi">>}, {bit, true},
-                                 {shortint, 54321}, {bit, true}],
-                                <<16#F8,0,2,"hi",16#D4,16#31>>),
-    test_content_prop_roundtrip([{bit, true}, {shortstr, undefined}, {bit, true},
-                                 {shortint, 54321}, {bit, true}],
-                                <<16#B8,0,16#D4,16#31>>),
-    test_content_prop_roundtrip([{table, [{<<"a signedint">>, signedint, 12345678},
-                                          {<<"a longstr">>, longstr, <<"yes please">>},
-                                          {<<"a decimal">>, decimal, {123, 12345678}},
-                                          {<<"a timestamp">>, timestamp, 123456789012345},
-                                          {<<"a nested table">>, table,
-                                           [{<<"one">>, signedint, 1},
-                                            {<<"two">>, signedint, 2}]}]}],
-                                <<
-                                  %% property-flags
-                                  16#8000:16,
+    test_content_prop_encoding([], <<0, 0>>),
+    test_content_prop_encoding([{bit, true}, {bit, false}, {bit, true}, {bit, false}],
+                               <<16#A0, 0>>),
+    test_content_prop_encoding([{bit, true}, {octet, 123}, {bit, true}, {octet, undefined},
+                                {bit, true}],
+                               <<16#E8,0,123>>),
+    test_content_prop_encoding([{bit, true}, {octet, 123}, {octet, 123}, {bit, true}],
+                               <<16#F0,0,123,123>>),
+    test_content_prop_encoding([{bit, true}, {shortstr, <<"hi">>}, {bit, true},
+                                {shortint, 54321}, {bit, true}],
+                               <<16#F8,0,2,"hi",16#D4,16#31>>),
+    test_content_prop_encoding([{bit, true}, {shortstr, undefined}, {bit, true},
+                                {shortint, 54321}, {bit, true}],
+                               <<16#B8,0,16#D4,16#31>>),
+    test_content_prop_encoding([{table, [{<<"a signedint">>, signedint, 12345678},
+                                         {<<"a longstr">>, longstr, <<"yes please">>},
+                                         {<<"a decimal">>, decimal, {123, 12345678}},
+                                         {<<"a timestamp">>, timestamp, 123456789012345},
+                                         {<<"a nested table">>, table,
+                                          [{<<"one">>, signedint, 1},
+                                           {<<"two">>, signedint, 2}]}]}],
+                               <<
+                                 %% property-flags
+                                 16#8000:16,
 
-                                  %% property-list:
+                                 %% property-list:
 
-                                  %% table
-                                  117:32,                % table length in bytes
+                                 %% table
+                                 117:32,                % table length in bytes
 
-                                  11,"a signedint",      % name
-                                  "I",12345678:32,       % type and value
+                                 11,"a signedint",      % name
+                                 "I",12345678:32,       % type and value
 
-                                  9,"a longstr",
-                                  "S",10:32,"yes please",
+                                 9,"a longstr",
+                                 "S",10:32,"yes please",
 
-                                  9,"a decimal",
-                                  "D",123,12345678:32,
+                                 9,"a decimal",
+                                 "D",123,12345678:32,
 
-                                  11,"a timestamp",
-                                  "T", 123456789012345:64,
+                                 11,"a timestamp",
+                                 "T", 123456789012345:64,
 
-                                  14,"a nested table",
-                                  "F",
-                                  18:32,
+                                 14,"a nested table",
+                                 "F",
+                                 18:32,
 
-                                  3,"one",
-                                  "I",1:32,
+                                 3,"one",
+                                 "I",1:32,
 
-                                  3,"two",
-                                  "I",2:32 >>),
-    case catch rabbit_binary_parser:parse_properties([bit, bit, bit, bit], <<16#A0,0,1>>) of
-        {'EXIT', content_properties_binary_overflow} -> passed;
-        V -> exit({got_success_but_expected_failure, V})
-    end.
+                                 3,"two",
+                                 "I",2:32 >>),
+    passed.
 
 test_field_values() ->
     %% FIXME this does not test inexact numbers (double and float) yet,
     %% because they won't pass the equality assertions
-    test_content_prop_roundtrip(
+    test_content_prop_encoding(
       [{table, [{<<"longstr">>, longstr, <<"Here is a long string">>},
                 {<<"signedint">>, signedint, 12345},
                 {<<"decimal">>, decimal, {3, 123456}},
@@ -1842,6 +1700,8 @@ on_disk_capture() ->
         stop                 -> done
     end.
 
+on_disk_capture([_|_], _Awaiting, Pid) ->
+    Pid ! {self(), surplus};
 on_disk_capture(OnDisk, Awaiting, Pid) ->
     receive
         {on_disk, MsgIdsS} ->
@@ -1850,12 +1710,10 @@ on_disk_capture(OnDisk, Awaiting, Pid) ->
                             Pid);
         stop ->
             done
-    after 200 ->
-            case {OnDisk, Awaiting} of
-                {[], []} -> Pid ! {self(), arrived}, on_disk_capture();
-                {_,  []} -> Pid ! {self(), surplus};
-                {[],  _} -> Pid ! {self(), timeout};
-                {_,   _} -> Pid ! {self(), surplus_timeout}
+    after (case Awaiting of [] -> 200; _ -> 1000 end) ->
+            case Awaiting of
+                [] -> Pid ! {self(), arrived}, on_disk_capture();
+                _  -> Pid ! {self(), timeout}
             end
     end.
 
@@ -2374,12 +2232,7 @@ test_variable_queue_requeue(VQ0) ->
     Seq = lists:seq(1, Count),
     VQ1 = rabbit_variable_queue:set_ram_duration_target(0, VQ0),
     VQ2 = variable_queue_publish(false, Count, VQ1),
-    {VQ3, Acks} = lists:foldl(
-                    fun (_N, {VQN, AckTags}) ->
-                            {{#basic_message{}, false, AckTag, _}, VQM} =
-                                rabbit_variable_queue:fetch(true, VQN),
-                            {VQM, [AckTag | AckTags]}
-                    end, {VQ2, []}, Seq),
+    {VQ3, Acks} = variable_queue_fetch(Count, false, false, Count, VQ2),
     Subset = lists:foldl(fun ({Ack, N}, Acc) when N rem Interval == 0 ->
                                  [Ack | Acc];
                              (_, Acc) ->
@@ -2507,7 +2360,7 @@ test_variable_queue_partial_segments_delta_thing(VQ0) ->
     {_Duration, VQ2} = rabbit_variable_queue:ram_duration(VQ1),
     VQ3 = check_variable_queue_status(
             rabbit_variable_queue:set_ram_duration_target(0, VQ2),
-            %% one segment in q3 as betas, and half a segment in delta
+            %% one segment in q3, and half a segment in delta
             [{delta, {delta, SegmentSize, HalfSegment, OneAndAHalfSegment}},
              {q3, SegmentSize},
              {len, SegmentSize + HalfSegment}]),
@@ -2523,7 +2376,7 @@ test_variable_queue_partial_segments_delta_thing(VQ0) ->
                                           SegmentSize + HalfSegment + 1, VQ5),
     VQ7 = check_variable_queue_status(
             VQ6,
-            %% the half segment should now be in q3 as betas
+            %% the half segment should now be in q3
             [{q1, 1},
              {delta, {delta, undefined, 0, undefined}},
              {q3, HalfSegment},

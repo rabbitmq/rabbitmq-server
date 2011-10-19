@@ -1080,9 +1080,8 @@ handle_method(#'tx.rollback'{}, _, #ch{tx_status = none}) ->
 
 handle_method(#'tx.rollback'{}, _, State = #ch{unacked_message_q = UAMQ,
                                                uncommitted_acks  = TAL}) ->
-    TAQ = queue:from_list(lists:reverse(TAL)),
-    {reply, #'tx.rollback_ok'{},
-     new_tx(State#ch{unacked_message_q = queue:join(TAQ, UAMQ)})};
+    UAMQ1 = queue:from_list(lists:usort(TAL ++ queue:to_list(UAMQ))),
+    {reply, #'tx.rollback_ok'{}, new_tx(State#ch{unacked_message_q = UAMQ1})};
 
 handle_method(#'confirm.select'{}, _, #ch{tx_status = in_progress}) ->
     rabbit_misc:protocol_error(
