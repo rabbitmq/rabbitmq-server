@@ -32,7 +32,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--export([update/0, get_total_memory/0, get_vm_limit/0,
+-export([get_total_memory/0, get_vm_limit/0,
          get_check_interval/0, set_check_interval/1,
          get_vm_memory_high_watermark/0, set_vm_memory_high_watermark/1,
          get_memory_limit/0]).
@@ -59,7 +59,6 @@
 -ifdef(use_specs).
 
 -spec(start_link/1 :: (float()) -> rabbit_types:ok_pid_or_error()).
--spec(update/0 :: () -> 'ok').
 -spec(get_total_memory/0 :: () -> (non_neg_integer() | 'unknown')).
 -spec(get_vm_limit/0 :: () -> non_neg_integer()).
 -spec(get_check_interval/0 :: () -> non_neg_integer()).
@@ -73,9 +72,6 @@
 %%----------------------------------------------------------------------------
 %% Public API
 %%----------------------------------------------------------------------------
-
-update() ->
-    gen_server:cast(?SERVER, update).
 
 get_total_memory() ->
     get_total_memory(os:type()).
@@ -135,11 +131,11 @@ handle_call(get_memory_limit, _From, State) ->
 handle_call(_Request, _From, State) ->
     {noreply, State}.
 
-handle_cast(update, State) ->
-    {noreply, internal_update(State)};
-
 handle_cast(_Request, State) ->
     {noreply, State}.
+
+handle_info(update, State) ->
+    {noreply, internal_update(State)};
 
 handle_info(_Info, State) ->
     {noreply, State}.
@@ -200,7 +196,7 @@ emit_update_info(State, MemUsed, MemLimit) ->
       [State, MemUsed, MemLimit]).
 
 start_timer(Timeout) ->
-    {ok, TRef} = timer:apply_interval(Timeout, ?MODULE, update, []),
+    {ok, TRef} = timer:send_interval(Timeout, update),
     TRef.
 
 %% According to http://msdn.microsoft.com/en-us/library/aa366778(VS.85).aspx
