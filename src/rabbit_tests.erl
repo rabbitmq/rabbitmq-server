@@ -1704,6 +1704,8 @@ on_disk_capture() ->
         stop                 -> done
     end.
 
+on_disk_capture([_|_], _Awaiting, Pid) ->
+    Pid ! {self(), surplus};
 on_disk_capture(OnDisk, Awaiting, Pid) ->
     receive
         {on_disk, MsgIdsS} ->
@@ -1712,12 +1714,10 @@ on_disk_capture(OnDisk, Awaiting, Pid) ->
                             Pid);
         stop ->
             done
-    after 500 ->
-            case {OnDisk, Awaiting} of
-                {[], []} -> Pid ! {self(), arrived}, on_disk_capture();
-                {_,  []} -> Pid ! {self(), surplus};
-                {[],  _} -> Pid ! {self(), timeout};
-                {_,   _} -> Pid ! {self(), surplus_timeout}
+    after (case Awaiting of [] -> 200; _ -> 1000 end) ->
+            case Awaiting of
+                [] -> Pid ! {self(), arrived}, on_disk_capture();
+                _  -> Pid ! {self(), timeout}
             end
     end.
 
