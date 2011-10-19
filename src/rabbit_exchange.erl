@@ -358,5 +358,9 @@ peek_serial(XName) ->
 
 %% Used with atoms from records; e.g., the type is expected to exist.
 type_to_module(T) ->
-    {ok, Module} = rabbit_registry:lookup_module(exchange, T),
-    Module.
+    case get({xtype_to_module, T}) of
+        undefined -> {ok, Module} = rabbit_registry:lookup_module(exchange, T),
+                     put({xtype_to_module, T}, Module),
+                     Module;
+        Module    -> Module
+    end.
