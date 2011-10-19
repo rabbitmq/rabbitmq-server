@@ -80,13 +80,13 @@ guid() ->
     %% includes the node name) uniquely identifies a process in space
     %% and time. We combine that with a process-local counter to give
     %% us a GUID.
-    G = case get(guid) of
-            undefined -> {{gen_server:call(?SERVER, serial, infinity), self()},
-                          0};
-            {S, I}   -> {S, I+1}
-        end,
-    put(guid, G),
-    erlang:md5(term_to_binary(G)).
+    {S, I} = case get(guid) of
+                 undefined -> S0 = gen_server:call(?SERVER, serial, infinity),
+                              {erlang:md5(term_to_binary({S0, self()})), 0};
+                 {S0, I0}  -> {S0, I0 + 1}
+             end,
+    put(guid, {S, I}),
+    <<S/binary, I:64>>.
 
 %% generate a readable string representation of a GUID.
 string_guid(Prefix) ->
