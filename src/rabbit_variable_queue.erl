@@ -18,7 +18,7 @@
 
 -export([init/3, terminate/2, delete_and_terminate/2,
          purge/1, publish/4, publish_delivered/5, drain_confirmed/1,
-         dropwhile/2, fetch/2, ack/2, requeue/3, len/1, is_empty/1,
+         dropwhile/3, fetch/2, ack/3, requeue/3, len/1, is_empty/1,
          set_ram_duration_target/2, ram_duration/1,
          needs_timeout/1, timeout/1, handle_pre_hibernate/1,
          status/1, invoke/3, is_duplicate/2, discard/3,
@@ -581,14 +581,14 @@ drain_confirmed(State = #vqstate { confirmed = C }) ->
                                         confirmed = gb_sets:new() }}
     end.
 
-dropwhile(Pred, State) ->
+dropwhile(Pred, DropFun, State) ->
     case queue_out(State) of
         {empty, State1} ->
             a(State1);
         {{value, MsgStatus = #msg_status { msg_props = MsgProps }}, State1} ->
             case Pred(MsgProps) of
-                true ->  {_, State2} = internal_fetch(false, MsgStatus, State1),
-                         dropwhile(Pred, State2);
+                true ->  State2 = DropFun(read_msg_callback(MsgStatus), State1),
+                         dropwhile(Pred, DropFun, State2);
                 false -> a(in_r(MsgStatus, State1))
             end
     end.
@@ -603,20 +603,45 @@ fetch(AckRequired, State) ->
             {MsgStatus1, State2} = read_msg(MsgStatus, State1),
             {Res, State3} = internal_fetch(AckRequired, MsgStatus1, State2),
             {Res, a(State3)}
+
     end.
 
-ack([], State) ->
+read_msg_callback(#msg_status { msg           = undefined,
+                                msg_id        = MsgId,
+                                is_persistent = IsPersistent }) ->
+    fun(State) ->
+            read_msg_callback1(MsgId, IsPersistent, State)
+    end;
+read_msg_callback(#msg_status{ msg = Msg}) ->
+    fun(State) ->
+            {Msg, State}
+    end;
+read_msg_callback({IsPersistent, MsgId, _MsgProps}) ->
+    fun(State) ->
+            read_msg_callback1(MsgId, IsPersistent, State)
+    end.
+
+read_msg_callback1(MsgId, IsPersistent,
+                   State = #vqstate{ msg_store_clients = MSCState }) ->
+    {{ok, Msg = #basic_message{}}, MSCState1} =
+        msg_store_read(MSCState, IsPersistent, MsgId),
+    {Msg, State #vqstate { msg_store_clients = MSCState1 }}.
+
+ack([], _Fun, State) ->
     {[], State};
-ack(AckTags, State) ->
+
+ack(AckTags, Fun, State) ->
     {{IndexOnDiskSeqIds, MsgIdsByStore, AllMsgIds},
      State1 = #vqstate { index_state       = IndexState,
                          msg_store_clients = MSCState,
                          persistent_count  = PCount,
                          ack_out_counter   = AckOutCount }} =
         lists:foldl(
-          fun (SeqId, {Acc, State2}) ->
+          fun (SeqId, {Acc, State2 = #vqstate{pending_ack = PA}}) ->
+                  AckEntry = gb_trees:get(SeqId, PA),
                   {MsgStatus, State3} = remove_pending_ack(SeqId, State2),
-                  {accumulate_ack(MsgStatus, Acc), State3}
+                  {accumulate_ack(MsgStatus, Acc),
+                   Fun(read_msg_callback(AckEntry), State3)}
           end, {accumulate_ack_init(), State}, AckTags),
     IndexState1 = rabbit_queue_index:ack(IndexOnDiskSeqIds, IndexState),
     [ok = msg_store_remove(MSCState, IsPersistent, MsgIds)

@@ -316,34 +316,49 @@ assert_args_equivalence(#amqqueue{name = QueueName, arguments = Args},
       Args, RequiredArgs, QueueName,
       [<<"x-expires">>, <<"x-message-ttl">>, <<"x-ha-policy">>]).
 
-check_declare_arguments(QueueName, Args) ->
-    [case Fun(rabbit_misc:table_lookup(Args, Key), Args) of
+check_declare_arguments(QueueName = #resource{virtual_host = VHostPath},
+                        Args) ->
+    [case Fun(rabbit_misc:table_lookup(Args, Key), Args, VHostPath) of
          ok             -> ok;
          {error, Error} -> rabbit_misc:protocol_error(
                              precondition_failed,
                              "invalid arg '~s' for ~s: ~255p",
                              [Key, rabbit_misc:rs(QueueName), Error])
-     end || {Key, Fun} <-
-                [{<<"x-expires">>,     fun check_integer_argument/2},
-                 {<<"x-message-ttl">>, fun check_integer_argument/2},
-                 {<<"x-ha-policy">>,   fun check_ha_policy_argument/2}]],
+     end ||
+        {Key, Fun} <-
+                [{<<"x-expires">>,     fun check_integer_argument/3},
+                 {<<"x-message-ttl">>, fun check_integer_argument/3},
+                 {<<"x-ha-policy">>,   fun check_ha_policy_argument/3},
+                 {<<"x-dead-letter-exchange">>, fun check_exchange_argument/3}]],
     ok.
 
-check_integer_argument(undefined, _Args) ->
+check_integer_argument(undefined, _Args, _VHostPath) ->
     ok;
-check_integer_argument({Type, Val}, _Args) when Val > 0 ->
+check_integer_argument({Type, Val}, _Args, _VHostPath) when Val > 0 ->
     case lists:member(Type, ?INTEGER_ARG_TYPES) of
         true  -> ok;
         false -> {error, {unacceptable_type, Type}}
     end;
-check_integer_argument({_Type, Val}, _Args) ->
+check_integer_argument({_Type, Val}, _Args, _VHostPath) ->
     {error, {value_zero_or_less, Val}}.
 
-check_ha_policy_argument(undefined, _Args) ->
+check_exchange_argument(undefined, _Args, _VHostPath) ->
     ok;
-check_ha_policy_argument({longstr, <<"all">>}, _Args) ->
+check_exchange_argument({longstr, Val}, _Args, VHostPath) ->
+    case rabbit_exchange:lookup(rabbit_misc:r(VHostPath, exchange, Val)) of
+        {ok, _Exchange}    -> ok;
+        {error, not_found} -> {error, {non_existent_exchange, Val}}
+    end;
+check_exchange_argument({Type, _Val}, _Args, _VHostPath) ->
+    {error, {unacceptable_type, Type}}.
+
+
+
+check_ha_policy_argument(undefined, _Args, _VHostPath) ->
     ok;
-check_ha_policy_argument({longstr, <<"nodes">>}, Args) ->
+check_ha_policy_argument({longstr, <<"all">>}, _Args, _VHostPath) ->
+    ok;
+check_ha_policy_argument({longstr, <<"nodes">>}, Args, _VHostPath) ->
     case rabbit_misc:table_lookup(Args, <<"x-ha-policy-params">>) of
         undefined ->
             {error, {require, 'x-ha-policy-params'}};
@@ -359,9 +374,9 @@ check_ha_policy_argument({longstr, <<"nodes">>}, Args) ->
         {Type, _} ->
             {error, {ha_nodes_policy_params_not_array_of_longstr, Type}}
     end;
-check_ha_policy_argument({longstr, Policy}, _Args) ->
+check_ha_policy_argument({longstr, Policy}, _Args, _VHostPath) ->
     {error, {invalid_ha_policy, Policy}};
-check_ha_policy_argument({Type, _}, _Args) ->
+check_ha_policy_argument({Type, _}, _Args, _VHostPath) ->
     {error, {unacceptable_type, Type}}.
 
 list() ->
