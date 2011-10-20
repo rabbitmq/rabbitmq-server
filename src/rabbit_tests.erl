@@ -2238,11 +2238,10 @@ test_variable_queue_requeue(VQ0) ->
                              (_, Acc) ->
                                  Acc
                          end, [], lists:zip(Acks, Seq)),
-    {_MsgIds, VQ4} = rabbit_variable_queue:requeue(Acks -- Subset,
-                                                   fun(X) -> X end, VQ3),
+    {_MsgIds, VQ4} = rabbit_variable_queue:requeue(Acks -- Subset, VQ3),
     VQ5 = lists:foldl(fun (AckTag, VQN) ->
                               {_MsgId, VQM} = rabbit_variable_queue:requeue(
-                                                [AckTag], fun(X) -> X end, VQN),
+                                                [AckTag], VQN),
                               VQM
                       end, VQ4, Subset),
     VQ6 = lists:foldl(fun (AckTag, VQa) ->
@@ -2426,7 +2425,7 @@ test_variable_queue_all_the_bits_not_covered_elsewhere2(VQ0) ->
     VQ2 = variable_queue_publish(false, 4, VQ1),
     {VQ3, AckTags} = variable_queue_fetch(2, false, false, 4, VQ2),
     {_Guids, VQ4} =
-        rabbit_variable_queue:requeue(AckTags, fun(X) -> X end, VQ3),
+        rabbit_variable_queue:requeue(AckTags, VQ3),
     VQ5 = rabbit_variable_queue:timeout(VQ4),
     _VQ6 = rabbit_variable_queue:terminate(shutdown, VQ5),
     VQ7 = variable_queue_init(test_amqqueue(true), true),

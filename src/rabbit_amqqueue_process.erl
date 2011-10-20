@@ -554,9 +554,7 @@ deliver_or_enqueue(Delivery = #delivery{message = Message,
 requeue_and_run(AckTags, State = #q{backing_queue = BQ, ttl=TTL}) ->
     run_backing_queue(
       BQ, fun (M, BQS) ->
-                  {_MsgIds, BQS1} =
-                      M:requeue(AckTags, reset_msg_expiry_fun(TTL), BQS),
-                  BQS1
+                  {_MsgIds, BQS1} = M:requeue(AckTags, BQS), BQS1
           end, State).
 
 fetch(AckRequired, State = #q{backing_queue_state = BQS,
@@ -669,11 +667,6 @@ discard_delivery(#delivery{sender = ChPid,
                  State = #q{backing_queue = BQ,
                             backing_queue_state = BQS}) ->
     State#q{backing_queue_state = BQ:discard(Message, ChPid, BQS)}.
-
-reset_msg_expiry_fun(TTL) ->
-    fun(MsgProps) ->
-            MsgProps#message_properties{expiry = calculate_msg_expiry(TTL)}
-    end.
 
 message_properties(#q{ttl=TTL}) ->
     #message_properties{expiry = calculate_msg_expiry(TTL)}.
