@@ -224,6 +224,9 @@ prepare() ->
 
 start() ->
     try
+        %% prepare/1 ends up looking at the rabbit app's env, so it
+        %% needs to be loaded.
+        ok = application:load(rabbit),
         ok = prepare(),
         ok = rabbit_misc:start_applications(application_load_order())
     after
