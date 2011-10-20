@@ -202,6 +202,7 @@ with_sups(Fun, Sups) ->
     Pids = [begin {ok, Pid} = start_sup(Sup), Pid end || Sup <- Sups],
     Fun(Pids),
     [kill(Pid) || Pid <- Pids, is_process_alive(Pid)],
+    timer:sleep(100),
     passed.
 
 start_sup(Spec) ->
