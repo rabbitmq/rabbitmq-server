@@ -18,7 +18,7 @@
 
 -export([init/3, terminate/2, delete_and_terminate/2,
          purge/1, publish/4, publish_delivered/5, fetch/2, ack/2,
-         requeue/3, len/1, is_empty/1, drain_confirmed/1, dropwhile/2,
+         requeue/2, len/1, is_empty/1, drain_confirmed/1, dropwhile/2,
          set_ram_duration_target/2, ram_duration/1,
          needs_timeout/1, timeout/1, handle_pre_hibernate/1,
          status/1, invoke/3, is_duplicate/2, discard/3]).
@@ -248,11 +248,11 @@ ack(AckTags, State = #state { gm                  = GM,
     {MsgIds, State #state { backing_queue_state = BQS1,
                             ack_msg_id          = AM1 }}.
 
-requeue(AckTags, MsgPropsFun, State = #state { gm                  = GM,
-                                               backing_queue       = BQ,
-                                               backing_queue_state = BQS }) ->
-    {MsgIds, BQS1} = BQ:requeue(AckTags, MsgPropsFun, BQS),
-    ok = gm:broadcast(GM, {requeue, MsgPropsFun, MsgIds}),
+requeue(AckTags, State = #state { gm                  = GM,
+                                  backing_queue       = BQ,
+                                  backing_queue_state = BQS }) ->
+    {MsgIds, BQS1} = BQ:requeue(AckTags, BQS),
+    ok = gm:broadcast(GM, {requeue, MsgIds}),
     {MsgIds, State #state { backing_queue_state = BQS1 }}.
 
 len(#state { backing_queue = BQ, backing_queue_state = BQS }) ->
