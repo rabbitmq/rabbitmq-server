@@ -257,9 +257,8 @@ route1(Delivery, {WorkList, SeenXs, QNames}) ->
                                DstNames))
     end.
 
-%% Optimisation
-process_alternate(#exchange{arguments = []}, []) -> [];
-
+process_alternate(#exchange{arguments = []}, Results) -> %% optimisation
+     Results;
 process_alternate(#exchange{name = XName, arguments = Args}, []) ->
     case rabbit_misc:r_arg(XName, exchange, Args, <<"alternate-exchange">>) of
         undefined -> [];
