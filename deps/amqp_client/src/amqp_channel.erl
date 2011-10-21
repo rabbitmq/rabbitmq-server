@@ -79,7 +79,6 @@
          handle_info/2]).
 
 -define(TIMEOUT_FLUSH, 60000).
--define(TIMEOUT_CLOSE_OK, 3000).
 
 -record(state, {number,
                 connection,
@@ -393,11 +392,6 @@ handle_info(timed_out_flushing_channel, State) ->
               "connection closing~n", [self()]),
     {stop, timed_out_flushing_channel, State};
 %% @private
-handle_info(timed_out_waiting_close_ok, State) ->
-    ?LOG_WARN("Channel (~p) closing: timed out waiting for "
-              "channel.close_ok while connection closing~n", [self()]),
-    {stop, timed_out_waiting_close_ok, State};
-%% @private
 handle_info({'DOWN', _, process, ReturnHandler, Reason},
             State = #state{return_handler_pid = ReturnHandler}) ->
     ?LOG_WARN("Channel (~p): Unregistering return handler ~p because it died. "
@@ -569,7 +563,6 @@ handle_method_from_server1(#'channel.close'{reply_code = Code,
     %% Both client and server sent close at the same time. Don't shutdown yet,
     %% wait for close_ok.
     do(#'channel.close_ok'{}, none, State),
-    erlang:send_after(?TIMEOUT_CLOSE_OK, self(), timed_out_waiting_close_ok),
     {noreply,
      State#state{
          closing = {just_channel, {server_initiated_close, Code, Text}}}};
@@ -662,8 +655,6 @@ handle_connection_closing(CloseType, Reason,
                               timed_out_flushing_channel),
             {noreply, NewState};
         {flush, {just_channel, _}, false} ->
-            erlang:send_after(?TIMEOUT_CLOSE_OK, self(),
-                              timed_out_waiting_close_ok),
             {noreply, NewState};
         _ ->
             handle_shutdown({connection_closing, Reason}, NewState)

@@ -28,8 +28,6 @@
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2]).
 
--define(CLIENT_CLOSE_TIMEOUT, 60000).
-
 -define(INFO_KEYS, [server_properties, is_closing, amqp_params, num_channels,
                     channel_max]).
 
@@ -331,9 +329,7 @@ handle_channels_terminated(State = #state{closing = Closing,
         server_initiated_close ->
             Mod:do(#'connection.close_ok'{}, MState);
         _ ->
-            Mod:do(Close, MState),
-            erlang:send_after(?CLIENT_CLOSE_TIMEOUT, self(),
-                              {'$gen_cast', timeout_waiting_for_close_ok})
+            Mod:do(Close, MState)
     end,
     case callback(channels_terminated, [], State) of
         {stop, _, _} = Stop -> case From of none -> ok;
