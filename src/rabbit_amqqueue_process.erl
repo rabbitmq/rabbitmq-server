@@ -554,7 +554,8 @@ deliver_or_enqueue(Delivery = #delivery{message = Message,
 requeue_and_run(AckTags, State = #q{backing_queue = BQ, ttl=TTL}) ->
     run_backing_queue(
       BQ, fun (M, BQS) ->
-                  {_MsgIds, BQS1} = M:requeue(AckTags, BQS), BQS1
+                  {_MsgIds, BQS1} = M:requeue(AckTags, BQS),
+                  BQS1
           end, State).
 
 fetch(AckRequired, State = #q{backing_queue_state = BQS,
