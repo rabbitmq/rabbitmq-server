@@ -129,7 +129,7 @@ init(Q) ->
                rate_timer_ref      = undefined,
                expiry_timer_ref    = undefined,
                ttl                 = undefined,
-               msg_id_to_channel   = dict:new()},
+               msg_id_to_channel   = gb_trees:empty()},
     {ok, rabbit_event:init_stats_timer(State, #q.stats_timer), hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
@@ -454,11 +454,11 @@ confirm_messages(MsgIds, State = #q{msg_id_to_channel = MTC}) ->
     {CMs, MTC1} =
         lists:foldl(
           fun(MsgId, {CMs, MTC0}) ->
-                  case dict:find(MsgId, MTC0) of
-                      {ok, {ChPid, MsgSeqNo}} ->
+                  case gb_trees:lookup(MsgId, MTC0) of
+                      {value, {ChPid, MsgSeqNo}} ->
                           {rabbit_misc:gb_trees_cons(ChPid, MsgSeqNo, CMs),
-                           dict:erase(MsgId, MTC0)};
-                      _ ->
+                           gb_trees:delete(MsgId, MTC0)};
+                      none ->
                           {CMs, MTC0}
                   end
           end, {gb_trees:empty(), MTC}, MsgIds),
@@ -482,7 +482,7 @@ needs_confirming(_)                     -> false.
 
 maybe_record_confirm_message({eventually, ChPid, MsgSeqNo, MsgId},
                              State = #q{msg_id_to_channel = MTC}) ->
-    State#q{msg_id_to_channel = dict:store(MsgId, {ChPid, MsgSeqNo}, MTC)};
+    State#q{msg_id_to_channel = gb_trees:insert(MsgId, {ChPid, MsgSeqNo}, MTC)};
 maybe_record_confirm_message(_Confirm, State) ->
     State.
 
