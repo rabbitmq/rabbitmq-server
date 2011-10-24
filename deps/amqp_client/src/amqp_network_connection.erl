@@ -112,11 +112,12 @@ do_connect({Addr, Family},
         {error, _} = E -> E
     end;
 do_connect({Addr, Family},
-           AmqpParams = #amqp_params_network{ssl_options = SslOpts,
-                                             port        = Port},
+           AmqpParams = #amqp_params_network{ssl_options        = SslOpts,
+                                             port               = Port,
+                                             connection_timeout = Timeout},
            SIF, ChMgr, State) ->
     rabbit_misc:start_applications([crypto, public_key, ssl]),
-    case gen_tcp:connect(Addr, Port, [Family | ?RABBIT_TCP_OPTS]) of
+    case gen_tcp:connect(Addr, Port, [Family | ?RABBIT_TCP_OPTS], Timeout) of
         {ok, Sock} ->
             case ssl:connect(Sock, SslOpts) of
                 {ok, SslSock} ->
