@@ -1573,39 +1573,31 @@ maybe_deltas_to_betas(State = #vqstate {
     end.
 
 push_alphas_to_betas(Quota, State) ->
-    {Quota1, State1} = maybe_push_q1_to_betas(Quota,  State),
-    {Quota2, State2} = maybe_push_q4_to_betas(Quota1, State1),
+    {Quota1, State1} =
+        push_alphas_to_betas(
+          fun ?QUEUE:out/1,
+          fun (MsgStatus, Q1a,
+               State0 = #vqstate { q3 = Q3, delta = #delta { count = 0 } }) ->
+                  State0 #vqstate { q1 = Q1a, q3 = ?QUEUE:in(MsgStatus, Q3) };
+              (MsgStatus, Q1a, State0 = #vqstate { q2 = Q2 }) ->
+                  State0 #vqstate { q1 = Q1a, q2 = ?QUEUE:in(MsgStatus, Q2) }
+          end, Quota, State #vqstate.q1, State),
+    {Quota2, State2} =
+        push_alphas_to_betas(
+          fun ?QUEUE:out_r/1,
+          fun (MsgStatus, Q4a, State0 = #vqstate { q3 = Q3 }) ->
+                  State0 #vqstate { q3 = ?QUEUE:in_r(MsgStatus, Q3), q4 = Q4a }
+          end, Quota1, State1 #vqstate.q4, State1),
     {Quota2, State2}.
 
-maybe_push_q1_to_betas(Quota, State = #vqstate { q1 = Q1 }) ->
-    maybe_push_alphas_to_betas(
-      fun ?QUEUE:out/1,
-      fun (MsgStatus, Q1a,
-           State1 = #vqstate { q3 = Q3, delta = #delta { count = 0 } }) ->
-              State1 #vqstate { q1 = Q1a,
-                                q3 = ?QUEUE:in(MsgStatus, Q3) };
-          (MsgStatus, Q1a, State1 = #vqstate { q2 = Q2 }) ->
-              State1 #vqstate { q1 = Q1a,
-                                q2 = ?QUEUE:in(MsgStatus, Q2) }
-      end, Quota, Q1, State).
-
-maybe_push_q4_to_betas(Quota, State = #vqstate { q4 = Q4 }) ->
-    maybe_push_alphas_to_betas(
-      fun ?QUEUE:out_r/1,
-      fun (MsgStatus, Q4a, State1 = #vqstate { q3 = Q3 }) ->
-              State1 #vqstate { q3 = ?QUEUE:in_r(MsgStatus, Q3),
-                                q4 = Q4a }
-      end, Quota, Q4, State).
-
-maybe_push_alphas_to_betas(_Generator, _Consumer, Quota, _Q,
-                           State = #vqstate {
-                             ram_msg_count    = RamMsgCount,
-                             target_ram_count = TargetRamCount })
+push_alphas_to_betas(_Generator, _Consumer, Quota, _Q,
+                     State = #vqstate { ram_msg_count    = RamMsgCount,
+                                        target_ram_count = TargetRamCount })
   when Quota =:= 0 orelse
        TargetRamCount =:= infinity orelse
        TargetRamCount >= RamMsgCount ->
     {Quota, State};
-maybe_push_alphas_to_betas(Generator, Consumer, Quota, Q, State) ->
+push_alphas_to_betas(Generator, Consumer, Quota, Q, State) ->
     case Generator(Q) of
         {empty, _Q} ->
             {Quota, State};
@@ -1615,8 +1607,8 @@ maybe_push_alphas_to_betas(Generator, Consumer, Quota, Q, State) ->
                 maybe_write_to_disk(true, false, MsgStatus, State),
             MsgStatus2 = m(trim_msg_status(MsgStatus1)),
             State2 = State1 #vqstate { ram_msg_count = RamMsgCount - 1 },
-            maybe_push_alphas_to_betas(Generator, Consumer, Quota - 1, Qa,
-                                       Consumer(MsgStatus2, Qa, State2))
+            push_alphas_to_betas(Generator, Consumer, Quota - 1, Qa,
+                                 Consumer(MsgStatus2, Qa, State2))
     end.
 
 push_betas_to_deltas(Quota, State = #vqstate { q2          = Q2,
