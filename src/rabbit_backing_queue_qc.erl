@@ -128,8 +128,7 @@ qc_ack(#state{bqstate = BQ, acks = Acks}) ->
     {call, ?BQMOD, ack, [rand_choice(proplists:get_keys(Acks)), BQ]}.
 
 qc_requeue(#state{bqstate = BQ, acks = Acks}) ->
-    {call, ?BQMOD, requeue,
-      [rand_choice(proplists:get_keys(Acks)), fun(MsgOpts) -> MsgOpts end, BQ]}.
+    {call, ?BQMOD, requeue, [rand_choice(proplists:get_keys(Acks)), BQ]}.
 
 qc_set_ram_duration_target(#state{bqstate = BQ}) ->
     {call, ?BQMOD, set_ram_duration_target,
@@ -245,7 +244,7 @@ next_state(S, Res, {call, ?BQMOD, ack, [AcksArg, _BQ]}) ->
     S#state{bqstate = BQ1,
             acks    = lists:foldl(fun proplists:delete/2, AcksState, AcksArg)};
 
-next_state(S, Res, {call, ?BQMOD, requeue, [AcksArg, _F, _V]}) ->
+next_state(S, Res, {call, ?BQMOD, requeue, [AcksArg, _V]}) ->
     #state{messages = Messages, acks = AcksState} = S,
     BQ1 = {call, erlang, element, [2, Res]},
     Messages1 = lists:foldl(fun (AckTag, Msgs) ->
