@@ -56,6 +56,8 @@
 %%----------------------------------------------------------------------------
 
 start() ->
+    rabbit_misc:start_net_kernel("rabbitmqctl"),
+
     {ok, [[NodeStr|_]|_]} = init:get_argument(nodename),
     {[Command0 | Args], Opts} =
         case rabbit_misc:get_options([{flag, ?QUIET_OPT},

@@ -40,12 +40,7 @@
 %%----------------------------------------------------------------------------
 
 start() ->
-    ThisNode = rabbit_misc:makenode("rabbitmqprelaunch" ++ os:getpid()),
-    case net_kernel:start([ThisNode, shortnames]) of
-        {ok, _}          -> ok;
-        {error, Reason2} -> rabbit_misc:print_error("~p", [Reason2]),
-                            rabbit_misc:quit(1)
-    end,
+    rabbit_misc:start_net_kernel("rabbitmqprelaunch"),
 
     io:format("Activating RabbitMQ plugins ...~n"),
 

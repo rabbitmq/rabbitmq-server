@@ -20,12 +20,14 @@
 [ "x" = "x$RABBITMQ_NODENAME" ] && RABBITMQ_NODENAME=${NODENAME}
 [ "x" = "x$RABBITMQ_CTL_ERL_ARGS" ] && RABBITMQ_CTL_ERL_ARGS=${CTL_ERL_ARGS}
 
+epmd -daemon || exit 1
+# epmd is now running
+
 exec erl \
     -pa "${RABBITMQ_HOME}/ebin" \
     -noinput \
     -hidden \
     ${RABBITMQ_CTL_ERL_ARGS} \
-    -sname rabbitmqctl$$ \
     -s rabbit_control \
     -nodename $RABBITMQ_NODENAME \
     -extra "$@"
