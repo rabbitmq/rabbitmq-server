@@ -18,8 +18,8 @@
 
 -behaviour(application).
 
--export([prepare/0, start/0, stop/0, stop_and_halt/0, status/0,
-         is_running/0 , is_running/1, environment/0,
+-export([maybe_hipe_compile/0, prepare/0, start/0, stop/0, stop_and_halt/0,
+         status/0, is_running/0, is_running/1, environment/0,
          rotate_logs/1, force_event_refresh/0]).
 
 -export([start/2, stop/1]).
@@ -177,6 +177,20 @@
 
 -define(APPS, [os_mon, mnesia, rabbit]).
 
+-define(HIPE_WORTHY,
+        [rabbit_reader, rabbit_channel, gen_server2,
+         rabbit_exchange, rabbit_command_assembler, rabbit_framing_amqp_0_9_1,
+         rabbit_basic, rabbit_event, lists, queue, priority_queue,
+         rabbit_router, rabbit_trace, rabbit_misc, rabbit_binary_parser,
+         rabbit_exchange_type_direct, rabbit_guid, rabbit_net,
+         rabbit_amqqueue_process, rabbit_variable_queue,
+         rabbit_binary_generator, rabbit_writer, delegate, gb_sets, lqueue,
+         sets, orddict, rabbit_amqqueue, rabbit_limiter, gb_trees,
+         rabbit_queue_index, gen, dict, ordsets, file_handle_cache,
+         rabbit_msg_store, array, rabbit_msg_store_ets_index, rabbit_msg_file,
+         rabbit_exchange_type_fanout, rabbit_exchange_type_topic, mnesia,
+         mnesia_lib, rpc, mnesia_tm, qlc, sofs]).
+
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
@@ -185,6 +199,7 @@
 %% this really should be an abstract type
 -type(log_location() :: 'tty' | 'undefined' | file:filename()).
 
+-spec(maybe_hipe_compile/0 :: () -> 'ok').
 -spec(prepare/0 :: () -> 'ok').
 -spec(start/0 :: () -> 'ok').
 -spec(stop/0 :: () -> 'ok').
@@ -217,6 +232,24 @@
 -endif.
 
 %%----------------------------------------------------------------------------
+
+maybe_hipe_compile() ->
+    {ok, Compile} = application:get_env(rabbit, hipe_compile),
+    case Compile of
+        true  -> Count = length(?HIPE_WORTHY),
+                 io:format("HiPE compiling:  |~s|~n                 ",
+                           [string:copies("-", Count - 2)]),
+                 T1 = erlang:now(),
+                 [hipe_compile(M) || M <- ?HIPE_WORTHY],
+                 T2 = erlang:now(),
+                 io:format("~n~nCompiled ~B modules in ~Bs~n",
+                           [Count, trunc(timer:now_diff(T2, T1) / 1000000)]);
+        false -> ok
+    end.
+
+hipe_compile(M) ->
+    io:format("#"),
+    {ok, M} = hipe:c(M, [o3]).
 
 prepare() ->
     ok = ensure_working_log_handlers(),

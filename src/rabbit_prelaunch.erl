@@ -233,7 +233,8 @@ post_process_script(ScriptFile) ->
     end.
 
 process_entry(Entry = {apply,{application,start_boot,[mnesia,permanent]}}) ->
-    [{apply,{rabbit,prepare,[]}}, Entry];
+    [{apply,{rabbit,maybe_hipe_compile,[]}},
+     {apply,{rabbit,prepare,[]}}, Entry];
 process_entry(Entry) ->
     [Entry].
 
