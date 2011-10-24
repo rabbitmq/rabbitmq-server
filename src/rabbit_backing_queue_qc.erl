@@ -42,7 +42,7 @@
                 messages,    %% gb_trees of seqid => {msg_props, basic_msg}
                 acks,        %% [{acktag, {seqid, {msg_props, basic_msg}}}]
                 confirms,    %% set of msgid
-                publishing}).%% int (induce long chain of publishes)
+                publishing}).%% int
 
 %% Initialise model
 
@@ -155,6 +155,7 @@ qc_purge(#state{bqstate = BQ}) ->
 
 %% Preconditions
 
+%% Create long queues by only allowing publishing
 precondition(#state{publishing = Count}, {call, _Mod, Fun, _Arg})
   when Count > 0, Fun /= publish ->
     false;
@@ -320,7 +321,7 @@ postcondition(#state{bqstate = BQ, len = Len}, {call, _M, _F, _A}, _Res) ->
 
 %% Helpers
 
-publish_multiple(C) ->
+publish_multiple(_C) ->
     ok.
 
 timeout(BQ, 0) ->

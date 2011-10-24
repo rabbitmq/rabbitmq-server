@@ -6,15 +6,16 @@
 %% A helper to test quickcheck properties on a running broker
 %% NodeStr is a local broker node name
 %% ModStr is the module containing quickcheck properties
-%% The number of trials is optional
-main([NodeStr, ModStr | TrialsStr]) ->
+%% TrialsStr is the number of trials
+main([NodeStr, ModStr, TrialsStr]) ->
     {ok, Hostname} = inet:gethostname(),
     Node = list_to_atom(NodeStr ++ "@" ++ Hostname),
     Mod  = list_to_atom(ModStr),
-    Trials = lists:map(fun erlang:list_to_integer/1, TrialsStr),
+    Trials = erlang:list_to_integer(TrialsStr),
     case rpc:call(Node, code, ensure_loaded, [proper]) of
         {module, proper} ->
-            case rpc:call(Node, proper, module, [Mod] ++ Trials) of
+            case rpc:call(Node, proper, module,
+                          [Mod] ++ [[{numtests, Trials}, {constraint_tries, 200}]]) of
                 [] -> ok;
                 _  -> quit(1)
             end;
