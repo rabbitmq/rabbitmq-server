@@ -552,7 +552,7 @@ format_stderr(Fmt, Args) ->
     ok.
 
 print_error(Format, Args) ->
-    rabbit_misc:format_stderr("Error: " ++ Format ++ "~n", Args).
+    format_stderr("Error: " ++ Format ++ "~n", Args).
 
 %% Execute Fun using the IO system of the local node (i.e. the node on
 %% which the code is executing).
@@ -603,9 +603,15 @@ start_net_kernel(NodeNamePrefix) ->
     {ok, Hostname} = inet:gethostname(),
     MyNodeName = makenode({NodeNamePrefix ++ os:getpid(), Hostname}),
     case net_kernel:start([MyNodeName, shortnames]) of
-        {ok, _} -> ok;
-        {error, Reason2} ->
-            print_error("Networking failed to start: ~p", [Reason2]),
+        {ok, _} ->
+            ok;
+        {error, Reason = {shutdown, {child, undefined,
+                                     net_sup_dynamic, _, _, _, _, _}}} ->
+            print_error("epmd could not be started: ~p", [Reason]),
+            format_stderr("Check you network setup (firewall, etc.)~n", []),
+            quit(1);
+        {error, Reason} ->
+            print_error("Networking failed to start: ~p", [Reason]),
             quit(1)
     end.
 
