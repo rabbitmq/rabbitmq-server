@@ -44,7 +44,8 @@
                               auth_mechanisms   =
                                   [fun amqp_auth_mechanisms:plain/3,
                                    fun amqp_auth_mechanisms:amqplain/3],
-                              client_properties = []}).
+                              client_properties = [],
+                              socket_options    = []}).
 
 -record(amqp_params_direct, {username          = <<"guest">>,
                              virtual_host      = <<"/">>,

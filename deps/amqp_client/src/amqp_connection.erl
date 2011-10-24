@@ -116,6 +116,11 @@
 %%     ssl:connect/2 function, defaults to 'none' (network only)</li>
 %% <li>client_properties :: [{binary(), atom(), binary()}] - A list of extra
 %%     client properties to be sent to the server, defaults to []</li>
+%% <li>socket_options :: [any()] - Extra socket options.  These are
+%%     appended to the default options.  See
+%%     <a href="http://www.erlang.org/doc/man/inet.html#setopts-2">inet:setopts/2</a>
+%%     and <a href="http://www.erlang.org/doc/man/gen_tcp.html#connect-4">
+%%     gen_tcp:connect/4</a> for descriptions of the available options.</li>
 %% </ul>
 
 
