@@ -20,6 +20,7 @@
 -export([start/0, stop/0, action/5, diagnostics/1]).
 
 -define(RPC_TIMEOUT, infinity).
+-define(FILE_CHECK_INTERVAL, 1000).
 
 -define(QUIET_OPT, "-q").
 -define(NODE_OPT, "-n").
@@ -163,7 +164,7 @@ usage() ->
 
 action(stop, Node, [PidFile], _Opts, Inform) ->
     action(stop, Node, [], _Opts, Inform),
-    wait_for_process_death(PidFile);
+    wait_for_process_death(wait_and_read_pid_file(PidFile, false));
 
 action(stop, Node, [], _Opts, Inform) ->
     Inform("Stopping and halting node ~p", [Node]),
@@ -366,7 +367,7 @@ action(report, Node, _Args, _Opts, Inform) ->
 %%----------------------------------------------------------------------------
 
 wait_for_application(Node, PidFile, Inform) ->
-    Pid = wait_and_read_pid_file(PidFile),
+    Pid = wait_and_read_pid_file(PidFile, true),
     Inform("pid is ~s", [Pid]),
     wait_for_application(Node, Pid).
 
@@ -374,31 +375,34 @@ wait_for_application(Node, Pid) ->
     case process_up(Pid) of
         true  -> case rabbit:is_running(Node) of
                      true  -> ok;
-                     false -> timer:sleep(1000),
+                     false -> timer:sleep(?FILE_CHECK_INTERVAL),
                               wait_for_application(Node, Pid)
                  end;
         false -> {error, process_not_running}
     end.
 
-wait_for_process_death(PidFile) ->
-    Pid = case file:read_file(PidFile) of
-              {ok, Bin}      -> string:strip(binary_to_list(Bin), right, $\n);
-              {error, _} = E -> exit({error, {could_not_read_pid, E}})
-          end,
-    wait_for_process_death1(Pid).
-
-wait_for_process_death1(Pid) ->
+wait_for_process_death(Pid) ->
     case process_up(Pid) of
-        true  -> timer:sleep(1000),
-                 wait_for_process_death1(Pid);
+        true  -> timer:sleep(?FILE_CHECK_INTERVAL),
+                 wait_for_process_death(Pid);
         false -> ok
     end.
 
-wait_and_read_pid_file(PidFile) ->
+wait_and_read_pid_file(PidFile, Wait) ->
     case file:read_file(PidFile) of
-        {ok,    Bin}    -> string:strip(binary_to_list(Bin), right, $\n);
-        {error, enoent} -> timer:sleep(500),
-                           wait_and_read_pid_file(PidFile);
+        {ok,    Bin}    -> S = string:strip(binary_to_list(Bin), right, $\n),
+                           try
+                               list_to_integer(S)
+                           catch
+                               error:badarg ->
+                                   exit({error, {garbage_in_pid_file, S}})
+                           end,
+                           S;
+        {error, enoent} -> case Wait of
+                               true  -> timer:sleep(500),
+                                        wait_and_read_pid_file(PidFile, Wait);
+                               false -> exit({error, enoent})
+                           end;
         {error, _} = E  -> exit({error, {could_not_read_pid, E}})
     end.
 
