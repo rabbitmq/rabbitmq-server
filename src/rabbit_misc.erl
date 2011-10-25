@@ -607,8 +607,13 @@ start_net_kernel(NodeNamePrefix) ->
             ok;
         {error, Reason = {shutdown, {child, undefined,
                                      net_sup_dynamic, _, _, _, _, _}}} ->
-            print_error("epmd could not be started: ~p", [Reason]),
-            format_stderr("Check you network setup (firewall, etc.)~n", []),
+            Port = case os:getenv("ERL_EPMD_PORT") of
+                       false -> 4369;
+                       P     -> P
+                   end,
+            print_error("epmd could not be contacted: ~p", [Reason]),
+            format_stderr("Check your network setup (in particular "
+                          "check you can contact port ~w).~n", [Port]),
             quit(1);
         {error, Reason} ->
             print_error("Networking failed to start: ~p", [Reason]),
