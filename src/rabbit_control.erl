@@ -381,7 +381,10 @@ wait_for_application(Node, Pid) ->
     end.
 
 wait_for_process_death(PidFile) ->
-    Pid = wait_and_read_pid_file(PidFile),
+    Pid = case file:read_file(PidFile) of
+              {ok, Bin}      -> string:strip(binary_to_list(Bin), right, $\n);
+              {error, _} = E -> exit({error, {could_not_read_pid, E}})
+          end,
     wait_for_process_death1(Pid).
 
 wait_for_process_death1(Pid) ->
