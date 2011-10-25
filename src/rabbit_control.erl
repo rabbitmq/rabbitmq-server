@@ -20,7 +20,7 @@
 -export([start/0, stop/0, action/5, diagnostics/1]).
 
 -define(RPC_TIMEOUT, infinity).
--define(FILE_CHECK_INTERVAL, 1000).
+-define(EXTERNAL_CHECK_INTERVAL, 1000).
 
 -define(QUIET_OPT, "-q").
 -define(NODE_OPT, "-n").
@@ -375,7 +375,7 @@ wait_for_application(Node, Pid) ->
     case process_up(Pid) of
         true  -> case rabbit:is_running(Node) of
                      true  -> ok;
-                     false -> timer:sleep(?FILE_CHECK_INTERVAL),
+                     false -> timer:sleep(?EXTERNAL_CHECK_INTERVAL),
                               wait_for_application(Node, Pid)
                  end;
         false -> {error, process_not_running}
@@ -383,7 +383,7 @@ wait_for_application(Node, Pid) ->
 
 wait_for_process_death(Pid) ->
     case process_up(Pid) of
-        true  -> timer:sleep(?FILE_CHECK_INTERVAL),
+        true  -> timer:sleep(?EXTERNAL_CHECK_INTERVAL),
                  wait_for_process_death(Pid);
         false -> ok
     end.
@@ -399,7 +399,7 @@ wait_and_read_pid_file(PidFile, Wait) ->
                            end,
                            S;
         {error, enoent} -> case Wait of
-                               true  -> timer:sleep(500),
+                               true  -> timer:sleep(?EXTERNAL_CHECK_INTERVAL),
                                         wait_and_read_pid_file(PidFile, Wait);
                                false -> exit({error, enoent})
                            end;
