@@ -112,6 +112,9 @@
 %%     defaults to 0 (network only)</li>
 %% <li>heartbeat :: non_neg_integer() - The hearbeat interval in seconds,
 %%     defaults to 0 (turned off) (network only)</li>
+%% <li>connection_timeout :: non_neg_integer() | 'infinity'
+%%          - The connection timeout in milliseconds,
+%%     defaults to 'infinity' (network only)</li>
 %% <li>ssl_options :: term() - The second parameter to be used with the
 %%     ssl:connect/2 function, defaults to 'none' (network only)</li>
 %% <li>client_properties :: [{binary(), atom(), binary()}] - A list of extra
