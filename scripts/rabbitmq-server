@@ -75,7 +75,6 @@ case "$(uname -s)" in
 esac
 
 epmd -daemon || exit 1
-# epmd is now running
 
 RABBITMQ_EBIN_ROOT="${RABBITMQ_HOME}/ebin"
 if [ "x" = "x$RABBITMQ_NODE_ONLY" ]; then

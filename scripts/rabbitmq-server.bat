@@ -95,7 +95,6 @@ set RABBITMQ_EBIN_ROOT=!TDP0!..\ebin
 if ERRORLEVEL 1 (
    exit /B 1
 )
-rem epmd is now running
 
 "!ERLANG_HOME!\bin\erl.exe" ^
 -pa "!RABBITMQ_EBIN_ROOT!" ^

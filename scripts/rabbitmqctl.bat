@@ -49,7 +49,6 @@ if not exist "!ERLANG_HOME!\bin\erl.exe" (
 if ERRORLEVEL 1 (
    exit /B 1
 )
-rem epmd is now running
 
 "!ERLANG_HOME!\bin\erl.exe" -pa "!TDP0!..\ebin" -noinput -hidden !RABBITMQ_CTL_ERL_ARGS! -s rabbit_control -nodename !RABBITMQ_NODENAME! -extra !STAR!
 
