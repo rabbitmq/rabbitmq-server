@@ -613,7 +613,8 @@ start_net_kernel(NodeNamePrefix) ->
                    end,
             print_error("epmd could not be contacted: ~p", [Reason]),
             format_stderr("Check your network setup (in particular "
-                          "check you can contact port ~w).~n", [Port]),
+                          "check you can contact port ~w on localhost).~n",
+                          [Port]),
             quit(1);
         {error, Reason} ->
             print_error("Networking failed to start: ~p", [Reason]),
