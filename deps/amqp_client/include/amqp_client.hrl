@@ -32,20 +32,21 @@
 
 -record(amqp_msg, {props = #'P_basic'{}, payload = <<>>}).
 
--record(amqp_params_network, {username          = <<"guest">>,
-                              password          = <<"guest">>,
-                              virtual_host      = <<"/">>,
-                              host              = "localhost",
-                              port              = undefined,
-                              channel_max       = 0,
-                              frame_max         = 0,
-                              heartbeat         = 0,
-                              ssl_options       = none,
-                              auth_mechanisms   =
+-record(amqp_params_network, {username           = <<"guest">>,
+                              password           = <<"guest">>,
+                              virtual_host       = <<"/">>,
+                              host               = "localhost",
+                              port               = undefined,
+                              channel_max        = 0,
+                              frame_max          = 0,
+                              heartbeat          = 0,
+                              connection_timeout = infinity,
+                              ssl_options        = none,
+                              auth_mechanisms    =
                                   [fun amqp_auth_mechanisms:plain/3,
                                    fun amqp_auth_mechanisms:amqplain/3],
-                              client_properties = [],
-                              socket_options    = []}).
+                              client_properties  = [],
+                              socket_options     = []}).
 
 -record(amqp_params_direct, {username          = <<"guest">>,
                              virtual_host      = <<"/">>,

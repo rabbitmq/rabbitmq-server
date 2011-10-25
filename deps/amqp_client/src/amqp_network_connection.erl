@@ -102,24 +102,28 @@ connect(AmqpParams = #amqp_params_network{host = Host}, SIF, ChMgr, State) ->
     end.
 
 do_connect({Addr, Family},
-           AmqpParams = #amqp_params_network{ssl_options    = none,
-                                             port           = Port,
-                                             socket_options = ExtraOpts},
+           AmqpParams = #amqp_params_network{ssl_options        = none,
+                                             port               = Port,
+                                             connection_timeout = Timeout,
+                                             socket_options     = ExtraOpts},
            SIF, ChMgr, State) ->
     case gen_tcp:connect(Addr, Port,
-                         [Family | ?RABBIT_TCP_OPTS] ++ ExtraOpts) of
+                         [Family | ?RABBIT_TCP_OPTS] ++ ExtraOpts,
+                         Timeout) of
         {ok, Sock}     -> try_handshake(AmqpParams, SIF, ChMgr,
                                         State#state{sock = Sock});
         {error, _} = E -> E
     end;
 do_connect({Addr, Family},
-           AmqpParams = #amqp_params_network{ssl_options    = SslOpts,
-                                             port           = Port,
-                                             socket_options = ExtraOpts},
+           AmqpParams = #amqp_params_network{ssl_options        = SslOpts,
+                                             port               = Port,
+                                             connection_timeout = Timeout,
+                                             socket_options     = ExtraOpts},
            SIF, ChMgr, State) ->
     rabbit_misc:start_applications([crypto, public_key, ssl]),
     case gen_tcp:connect(Addr, Port,
-                         [Family | ?RABBIT_TCP_OPTS] ++ ExtraOpts) of
+                         [Family | ?RABBIT_TCP_OPTS] ++ ExtraOpts,
+                         Timeout) of
         {ok, Sock} ->
             case ssl:connect(Sock, SslOpts) of
                 {ok, SslSock} ->
