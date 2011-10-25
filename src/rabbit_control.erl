@@ -161,6 +161,10 @@ usage() ->
 
 %%----------------------------------------------------------------------------
 
+action(stop, Node, [PidFile], _Opts, Inform) ->
+    action(stop, Node, [], _Opts, Inform),
+    wait_for_process_death(PidFile);
+
 action(stop, Node, [], _Opts, Inform) ->
     Inform("Stopping and halting node ~p", [Node]),
     call(Node, {rabbit, stop_and_halt, []});
@@ -374,6 +378,20 @@ wait_for_application(Node, Pid) ->
                               wait_for_application(Node, Pid)
                  end;
         false -> {error, process_not_running}
+    end.
+
+wait_for_process_death(PidFile) ->
+    Pid = case file:read_file(PidFile) of
+              {ok, Bin}      -> string:strip(binary_to_list(Bin), right, $\n);
+              {error, _} = E -> exit({error, {could_not_read_pid, E}})
+          end,
+    wait_for_process_death1(Pid).
+
+wait_for_process_death1(Pid) ->
+    case process_up(Pid) of
+        true  -> timer:sleep(1000),
+                 wait_for_process_death1(Pid);
+        false -> ok
     end.
 
 wait_and_read_pid_file(PidFile) ->
