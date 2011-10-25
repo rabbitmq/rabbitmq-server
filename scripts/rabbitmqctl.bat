@@ -43,8 +43,7 @@ if not exist "!ERLANG_HOME!\bin\erl.exe" (
     exit /B
 )
 
-"!ERLANG_HOME!\bin\epmd.exe" ^
--daemon
+"!ERLANG_HOME!\bin\epmd.exe" -daemon
 
 if ERRORLEVEL 1 (
    exit /B 1
