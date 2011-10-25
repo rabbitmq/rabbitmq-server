@@ -34,14 +34,15 @@
 -export([initial_state/0, command/1, precondition/2, postcondition/3,
          next_state/3]).
 
--export([prop_backing_queue_test/0, publish_multiple/4, timeout/2]).
+-export([prop_backing_queue_test/0, publish_multiple/1, timeout/2]).
 
 -record(state, {bqstate,
                 len,         %% int
                 next_seq_id, %% int
                 messages,    %% gb_trees of seqid => {msg_props, basic_msg}
                 acks,        %% [{acktag, {seqid, {msg_props, basic_msg}}}]
-                confirms}).  %% set of msgid
+                confirms,    %% set of msgid
+                publishing}).%% int
 
 %% Initialise model
 
@@ -51,7 +52,8 @@ initial_state() ->
            next_seq_id = 0,
            messages    = gb_trees:empty(),
            acks        = [],
-           confirms    = gb_sets:new()}.
+           confirms    = gb_sets:new(),
+           publishing  = 0}.
 
 %% Property
 
@@ -112,10 +114,8 @@ qc_publish(#state{bqstate = BQ}) ->
                           expiry = oneof([undefined | lists:seq(1, 10)])},
       self(), BQ]}.
 
-qc_publish_multiple(#state{bqstate = BQ}) ->
-    {call, ?MODULE, publish_multiple,
-     [qc_message(), #message_properties{}, BQ,
-      resize(?QUEUE_MAXLEN, pos_integer())]}.
+qc_publish_multiple(#state{}) ->
+    {call, ?MODULE, publish_multiple, [resize(?QUEUE_MAXLEN, pos_integer())]}.
 
 qc_publish_delivered(#state{bqstate = BQ}) ->
     {call, ?BQMOD, publish_delivered,
@@ -154,6 +154,10 @@ qc_purge(#state{bqstate = BQ}) ->
 
 %% Preconditions
 
+%% Create long queues by only allowing publishing
+precondition(#state{publishing = Count}, {call, _Mod, Fun, _Arg})
+  when Count > 0, Fun /= publish ->
+    false;
 precondition(#state{acks = Acks}, {call, ?BQMOD, Fun, _Arg})
   when Fun =:= ack; Fun =:= requeue ->
     length(Acks) > 0;
@@ -173,6 +177,7 @@ next_state(S, BQ, {call, ?BQMOD, publish, [Msg, MsgProps, _Pid, _BQ]}) ->
     #state{len         = Len,
            messages    = Messages,
            confirms    = Confirms,
+           publishing  = PublishCount,
            next_seq_id = NextSeq} = S,
     MsgId = {call, erlang, element, [?RECORD_INDEX(id, basic_message), Msg]},
     NeedsConfirm =
@@ -182,21 +187,15 @@ next_state(S, BQ, {call, ?BQMOD, publish, [Msg, MsgProps, _Pid, _BQ]}) ->
             len      = Len + 1,
             next_seq_id = NextSeq + 1,
             messages = gb_trees:insert(NextSeq, {MsgProps, Msg}, Messages),
+            publishing = {call, erlang, max, [0, {call, erlang, '-',
+                                                  [PublishCount, 1]}]},
             confirms = case eval(NeedsConfirm) of
                            true -> gb_sets:add(MsgId, Confirms);
                            _    -> Confirms
                        end};
 
-next_state(S, BQ, {call, _, publish_multiple, [Msg, MsgProps, _BQ, Count]}) ->
-    #state{len = Len, messages = Messages} = S,
-    {S1, Msgs1} = repeat({S, Messages},
-                    fun ({#state{next_seq_id = NextSeq} = State, Msgs}) ->
-                        {State #state { next_seq_id = NextSeq + 1},
-                         gb_trees:insert(NextSeq, {MsgProps, Msg}, Msgs)}
-                    end, Count),
-    S1#state{bqstate  = BQ,
-             len      = Len + Count,
-             messages = Msgs1};
+next_state(S, _BQ, {call, ?MODULE, publish_multiple, [PublishCount]}) ->
+    S#state{publishing = PublishCount};
 
 next_state(S, Res,
            {call, ?BQMOD, publish_delivered,
@@ -321,12 +320,8 @@ postcondition(#state{bqstate = BQ, len = Len}, {call, _M, _F, _A}, _Res) ->
 
 %% Helpers
 
-repeat(Result, _Fun, 0)    -> Result;
-repeat(Result, Fun, Times) -> repeat(Fun(Result), Fun, Times - 1).
-
-publish_multiple(Msg, MsgProps, BQ, Count) ->
-    repeat(BQ, fun(BQ1) -> ?BQMOD:publish(Msg, MsgProps, self(), BQ1) end,
-           Count).
+publish_multiple(_C) ->
+    ok.
 
 timeout(BQ, 0) ->
     BQ;
