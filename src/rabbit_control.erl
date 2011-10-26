@@ -56,6 +56,8 @@
 %%----------------------------------------------------------------------------
 
 start() ->
+    rabbit_misc:start_net_kernel("rabbitmqctl"),
+
     {ok, [[NodeStr|_]|_]} = init:get_argument(nodename),
     {[Command0 | Args], Opts} =
         case rabbit_misc:get_options([{flag, ?QUIET_OPT},
@@ -88,28 +90,28 @@ start() ->
             end,
             rabbit_misc:quit(0);
         {'EXIT', {function_clause, [{?MODULE, action, _} | _]}} ->
-            print_error("invalid command '~s'",
-                        [string:join([atom_to_list(Command) | Args], " ")]),
+            rabbit_misc:print_error(
+              "invalid command '~s'",
+              [string:join([atom_to_list(Command) | Args], " ")]),
             usage();
         {'EXIT', {badarg, _}} ->
-            print_error("invalid parameter: ~p", [Args]),
+            rabbit_misc:print_error("invalid parameter: ~p", [Args]),
             usage();
         {error, Reason} ->
-            print_error("~p", [Reason]),
+            rabbit_misc:print_error("~p", [Reason]),
             rabbit_misc:quit(2);
         {badrpc, {'EXIT', Reason}} ->
-            print_error("~p", [Reason]),
+            rabbit_misc:print_error("~p", [Reason]),
             rabbit_misc:quit(2);
         {badrpc, Reason} ->
-            print_error("unable to connect to node ~w: ~w", [Node, Reason]),
+            rabbit_misc:print_error("unable to connect to node ~w: ~w",
+                                    [Node, Reason]),
             print_badrpc_diagnostics(Node),
             rabbit_misc:quit(2);
         Other ->
-            print_error("~p", [Other]),
+            rabbit_misc:print_error("~p", [Other]),
             rabbit_misc:quit(2)
     end.
-
-fmt_stderr(Format, Args) -> rabbit_misc:format_stderr(Format ++ "~n", Args).
 
 print_report(Node, {Descr, Module, InfoFun, KeysFun}) ->
     io:format("~s:~n", [Descr]),
@@ -128,10 +130,9 @@ print_report0(Node, {Module, InfoFun, KeysFun}, VHostArg) ->
     end,
     io:nl().
 
-print_error(Format, Args) -> fmt_stderr("Error: " ++ Format, Args).
-
 print_badrpc_diagnostics(Node) ->
-    [fmt_stderr(Fmt, Args) || {Fmt, Args} <- diagnostics(Node)].
+    [rabbit_misc:format_stderr(Fmt ++ "~n", Args) ||
+        {Fmt, Args} <- diagnostics(Node)].
 
 diagnostics(Node) ->
     {_NodeName, NodeHost} = rabbit_misc:nodeparts(Node),
