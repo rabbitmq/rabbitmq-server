@@ -234,18 +234,24 @@
 %%----------------------------------------------------------------------------
 
 maybe_hipe_compile() ->
-    {ok, Compile} = application:get_env(rabbit, hipe_compile),
-    case Compile of
-        true  -> Count = length(?HIPE_WORTHY),
-                 io:format("HiPE compiling:  |~s|~n                 ",
-                           [string:copies("-", Count - 2)]),
-                 T1 = erlang:now(),
-                 [hipe_compile(M) || M <- ?HIPE_WORTHY],
-                 T2 = erlang:now(),
-                 io:format("~n~nCompiled ~B modules in ~Bs~n",
-                           [Count, trunc(timer:now_diff(T2, T1) / 1000000)]);
-        false -> ok
+    {ok, Want} = application:get_env(rabbit, hipe_compile),
+    Can = code:which(hipe) =/= non_existing,
+    case {Want, Can} of
+        {true,  true}  -> hipe_compile();
+        {true,  false} -> io:format("Not HiPE compiling: HiPE not found in "
+                                    "this Erlang installation.~n");
+        {false, _}     -> ok
     end.
+
+hipe_compile() ->
+    Count = length(?HIPE_WORTHY),
+    io:format("HiPE compiling:  |~s|~n                 ",
+              [string:copies("-", Count - 2)]),
+    T1 = erlang:now(),
+    [hipe_compile(M) || M <- ?HIPE_WORTHY],
+    T2 = erlang:now(),
+    T = trunc(timer:now_diff(T2, T1) / 1000000),
+    io:format("~n~nCompiled ~B modules in ~Bs~n", [Count, T]).
 
 hipe_compile(M) ->
     io:format("#"),
