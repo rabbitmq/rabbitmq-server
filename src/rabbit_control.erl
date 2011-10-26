@@ -168,7 +168,8 @@ action(stop, Node, Args, _Opts, Inform) ->
     case {Res, Args} of
         {ok, [PidFile]} -> wait_for_process_death(
                              read_pid_file(PidFile, false));
-        _               -> ok
+        {_, []}         -> ok;
+        _               -> exit({badarg, Args})
     end,
     Res;
 
