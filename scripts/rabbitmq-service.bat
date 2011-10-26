@@ -80,7 +80,7 @@ rem *** End of configuration ***
 if not exist "!ERLANG_SERVICE_MANAGER_PATH!\erlsrv.exe" (
     echo.
     echo **********************************************
-    echo ERLANG_SERVICE_MANAGER_PATH not set correctly. 
+    echo ERLANG_SERVICE_MANAGER_PATH not set correctly.
     echo **********************************************
     echo.
     echo "!ERLANG_SERVICE_MANAGER_PATH!\erlsrv.exe" not found
@@ -89,14 +89,11 @@ if not exist "!ERLANG_SERVICE_MANAGER_PATH!\erlsrv.exe" (
     exit /B 1
 )
 
-rem erlang prefers forwardslash as separator in paths
-set RABBITMQ_BASE_UNIX=!RABBITMQ_BASE:\=/!
-
 if "!RABBITMQ_MNESIA_BASE!"=="" (
-    set RABBITMQ_MNESIA_BASE=!RABBITMQ_BASE_UNIX!/db
+    set RABBITMQ_MNESIA_BASE=!RABBITMQ_BASE!/db
 )
 if "!RABBITMQ_LOG_BASE!"=="" (
-    set RABBITMQ_LOG_BASE=!RABBITMQ_BASE_UNIX!/log
+    set RABBITMQ_LOG_BASE=!RABBITMQ_BASE!/log
 )
 
 
@@ -118,7 +115,7 @@ if "!RABBITMQ_PLUGINS_EXPAND_DIR!"=="" (
 )
 
 if "!P1!" == "install" goto INSTALL_SERVICE
-for %%i in (start stop disable enable list remove) do if "%%i" == "!P1!" goto MODIFY_SERVICE 
+for %%i in (start stop disable enable list remove) do if "%%i" == "!P1!" goto MODIFY_SERVICE
 
 echo.
 echo *********************
@@ -129,7 +126,7 @@ echo !TN0! help    - Display this help
 echo !TN0! install - Install the !RABBITMQ_SERVICENAME! service
 echo !TN0! remove  - Remove the !RABBITMQ_SERVICENAME! service
 echo.
-echo The following actions can also be accomplished by using 
+echo The following actions can also be accomplished by using
 echo Windows Services Management Console (services.msc):
 echo.
 echo !TN0! start   - Start the !RABBITMQ_SERVICENAME! service
@@ -143,7 +140,7 @@ exit /B
 :INSTALL_SERVICE
 
 if not exist "!RABBITMQ_BASE!" (
-    echo Creating base directory !RABBITMQ_BASE! & md "!RABBITMQ_BASE!" 
+    echo Creating base directory !RABBITMQ_BASE! & md "!RABBITMQ_BASE!"
 )
 
 "!ERLANG_SERVICE_MANAGER_PATH!\erlsrv" list !RABBITMQ_SERVICENAME! 2>NUL 1>NUL
@@ -164,7 +161,7 @@ set RABBITMQ_EBIN_ROOT=!TDP0!..\ebin
 -pa "!RABBITMQ_EBIN_ROOT!" ^
 -noinput -hidden ^
 -s rabbit_prelaunch ^
--extra "!RABBITMQ_ENABLED_PLUGINS_FILE!" ^
+-extra "!RABBITMQ_ENABLED_PLUGINS_FILE:\=/!" ^
        "!RABBITMQ_PLUGINS_DIR:\=/!" ^
        "!RABBITMQ_PLUGINS_EXPAND_DIR:\=/!" ^
        ""
@@ -179,7 +176,7 @@ set RABBITMQ_EBIN_PATH=
 if "!RABBITMQ_CONFIG_FILE!"=="" (
     set RABBITMQ_CONFIG_FILE=!RABBITMQ_BASE!\rabbitmq
 )
-   
+
 if exist "!RABBITMQ_CONFIG_FILE!.config" (
     set RABBITMQ_CONFIG_ARG=-config "!RABBITMQ_CONFIG_FILE!"
 ) else (
@@ -210,7 +207,7 @@ set ERLANG_SERVICE_ARGUMENTS= ^
 -os_mon start_cpu_sup true ^
 -os_mon start_disksup false ^
 -os_mon start_memsup false ^
--mnesia dir \""!RABBITMQ_MNESIA_DIR!"\" ^
+-mnesia dir \""!RABBITMQ_MNESIA_DIR:\=/!"\" ^
 !RABBITMQ_SERVER_START_ARGS! ^
 !STAR!
 
@@ -219,7 +216,7 @@ set ERLANG_SERVICE_ARGUMENTS=!ERLANG_SERVICE_ARGUMENTS:"=\"!
 
 "!ERLANG_SERVICE_MANAGER_PATH!\erlsrv" set !RABBITMQ_SERVICENAME! ^
 -machine "!ERLANG_SERVICE_MANAGER_PATH!\erl.exe" ^
--env ERL_CRASH_DUMP="!RABBITMQ_BASE_UNIX!/erl_crash.dump" ^
+-env ERL_CRASH_DUMP="!RABBITMQ_BASE:\=/!/erl_crash.dump" ^
 -workdir "!RABBITMQ_BASE!" ^
 -stopaction "rabbit:stop_and_halt()." ^
 -sname !RABBITMQ_NODENAME! ^

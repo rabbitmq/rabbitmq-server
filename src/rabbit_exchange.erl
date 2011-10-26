@@ -257,6 +257,8 @@ route1(Delivery, {WorkList, SeenXs, QNames}) ->
                                DstNames))
     end.
 
+process_alternate(#exchange{arguments = []}, Results) -> %% optimisation
+     Results;
 process_alternate(#exchange{name = XName, arguments = Args}, []) ->
     case rabbit_misc:r_arg(XName, exchange, Args, <<"alternate-exchange">>) of
         undefined -> [];
@@ -355,5 +357,9 @@ peek_serial(XName) ->
 
 %% Used with atoms from records; e.g., the type is expected to exist.
 type_to_module(T) ->
-    {ok, Module} = rabbit_registry:lookup_module(exchange, T),
-    Module.
+    case get({xtype_to_module, T}) of
+        undefined -> {ok, Module} = rabbit_registry:lookup_module(exchange, T),
+                     put({xtype_to_module, T}, Module),
+                     Module;
+        Module    -> Module
+    end.

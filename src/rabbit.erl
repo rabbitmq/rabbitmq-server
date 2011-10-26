@@ -224,6 +224,13 @@ prepare() ->
 
 start() ->
     try
+        %% prepare/1 ends up looking at the rabbit app's env, so it
+        %% needs to be loaded, but during the tests, it may end up
+        %% getting loaded twice, so guard against that
+        case application:load(rabbit) of
+            ok                                -> ok;
+            {error, {already_loaded, rabbit}} -> ok
+        end,
         ok = prepare(),
         ok = rabbit_misc:start_applications(application_load_order())
     after
