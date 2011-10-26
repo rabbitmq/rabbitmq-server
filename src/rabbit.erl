@@ -250,7 +250,7 @@ hipe_compile() ->
     T1 = erlang:now(),
     [hipe_compile(M) || M <- ?HIPE_WORTHY],
     T2 = erlang:now(),
-    T = trunc(timer:now_diff(T2, T1) / 1000000),
+    T = timer:now_diff(T2, T1) div 1000000,
     io:format("~n~nCompiled ~B modules in ~Bs~n", [Count, T]).
 
 hipe_compile(M) ->
