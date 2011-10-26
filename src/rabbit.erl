@@ -191,6 +191,12 @@
          rabbit_exchange_type_fanout, rabbit_exchange_type_topic, mnesia,
          mnesia_lib, rpc, mnesia_tm, qlc, sofs, proplists]).
 
+%% HiPE compilation uses multiple cores anyway, but some bits are
+%% IO-bound so we can go faster if we parallelise a bit more. In
+%% practice 2 processes seems just as fast as any other number > 1,
+%% and keeps the progress bar realistic-ish.
+-define(HIPE_PROCESSES, 2).
+
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
@@ -248,14 +254,35 @@ hipe_compile() ->
     io:format("HiPE compiling:  |~s|~n                 |",
               [string:copies("-", Count)]),
     T1 = erlang:now(),
-    [hipe_compile(M) || M <- ?HIPE_WORTHY],
+    S = self(),
+    [spawn(fun () -> hipe_compile(S, Ms) end)
+     || Ms <- split(?HIPE_WORTHY, ?HIPE_PROCESSES)],
+    wait(?HIPE_PROCESSES),
     T2 = erlang:now(),
     T = timer:now_diff(T2, T1) div 1000000,
     io:format("|~n~nCompiled ~B modules in ~Bs~n", [Count, T]).
 
+wait(0) -> ok;
+wait(C) -> receive
+               ok         -> wait(C - 1);
+               {error, E} -> exit(E)
+           end.
+
+split(L, N) -> split0(L, [[] || _ <- lists:seq(1, N)]).
+
+split0([],       Ls)       -> Ls;
+split0([I | Is], [L | Ls]) -> split0(Is, Ls ++ [[I | L]]).
+
+hipe_compile(S, Ms) ->
+    S ! try [hipe_compile(M) || M <- Ms],
+             ok
+        catch _:E ->
+                {error, E}
+        end.
+
 hipe_compile(M) ->
-    io:format("#"),
-    {ok, M} = hipe:c(M, [o3]).
+    {ok, M} = hipe:c(M, [o3]),
+    io:format("#").
 
 prepare() ->
     ok = ensure_working_log_handlers(),
