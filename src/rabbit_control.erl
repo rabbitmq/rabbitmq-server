@@ -162,13 +162,15 @@ usage() ->
 
 %%----------------------------------------------------------------------------
 
-action(stop, Node, [PidFile], _Opts, Inform) ->
-    action(stop, Node, [], _Opts, Inform),
-    wait_for_process_death(wait_and_read_pid_file(PidFile, false));
-
-action(stop, Node, [], _Opts, Inform) ->
+action(stop, Node, Args, _Opts, Inform) ->
     Inform("Stopping and halting node ~p", [Node]),
-    call(Node, {rabbit, stop_and_halt, []});
+    Res = call(Node, {rabbit, stop_and_halt, []}),
+    case {Res, Args} of
+        {ok, [PidFile]} -> wait_for_process_death(
+                             read_pid_file(PidFile, false));
+        _               -> ok
+    end,
+    Res;
 
 action(stop_app, Node, [], _Opts, Inform) ->
     Inform("Stopping node ~p", [Node]),
@@ -367,7 +369,7 @@ action(report, Node, _Args, _Opts, Inform) ->
 %%----------------------------------------------------------------------------
 
 wait_for_application(Node, PidFile, Inform) ->
-    Pid = wait_and_read_pid_file(PidFile, true),
+    Pid = read_pid_file(PidFile, true),
     Inform("pid is ~s", [Pid]),
     wait_for_application(Node, Pid).
 
@@ -388,22 +390,17 @@ wait_for_process_death(Pid) ->
         false -> ok
     end.
 
-wait_and_read_pid_file(PidFile, Wait) ->
-    case file:read_file(PidFile) of
-        {ok,    Bin}    -> S = string:strip(binary_to_list(Bin), right, $\n),
-                           try
-                               list_to_integer(S)
-                           catch
-                               error:badarg ->
-                                   exit({error, {garbage_in_pid_file, S}})
-                           end,
-                           S;
-        {error, enoent} -> case Wait of
-                               true  -> timer:sleep(?EXTERNAL_CHECK_INTERVAL),
-                                        wait_and_read_pid_file(PidFile, Wait);
-                               false -> exit({error, enoent})
-                           end;
-        {error, _} = E  -> exit({error, {could_not_read_pid, E}})
+read_pid_file(PidFile, Wait) ->
+    case {file:read_file(PidFile), Wait} of
+        {{ok, Bin}, _} -> S = string:strip(binary_to_list(Bin), right, $\n),
+                          try list_to_integer(S)
+                          catch error:badarg ->
+                                  exit({error, {garbage_in_pid_file, S}})
+                          end,
+                          S;
+        {{error, enoent}, true} -> timer:sleep(?EXTERNAL_CHECK_INTERVAL),
+                                   read_pid_file(PidFile, Wait);
+        {error, _} = E -> exit({error, {could_not_read_pid, E}})
     end.
 
 % Test using some OS clunkiness since we shouldn't trust
