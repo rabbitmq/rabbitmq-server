@@ -245,13 +245,13 @@ maybe_hipe_compile() ->
 
 hipe_compile() ->
     Count = length(?HIPE_WORTHY),
-    io:format("HiPE compiling:  |~s|~n                 ",
-              [string:copies("-", Count - 2)]),
+    io:format("HiPE compiling:  |~s|~n                 |",
+              [string:copies("-", Count)]),
     T1 = erlang:now(),
     [hipe_compile(M) || M <- ?HIPE_WORTHY],
     T2 = erlang:now(),
     T = timer:now_diff(T2, T1) div 1000000,
-    io:format("~n~nCompiled ~B modules in ~Bs~n", [Count, T]).
+    io:format("|~n~nCompiled ~B modules in ~Bs~n", [Count, T]).
 
 hipe_compile(M) ->
     io:format("#"),
