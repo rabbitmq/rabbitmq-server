@@ -6,4 +6,3 @@ dn: cn=wheel,ou=groups,dc=example,dc=com
 objectclass: groupOfNames
 cn: wheel
 member: cn=Simon MacMullen,ou=people,dc=example,dc=com
-member: cn=Michael Bridgen,ou=people,dc=example,dc=com
