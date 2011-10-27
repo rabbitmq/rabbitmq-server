@@ -211,17 +211,22 @@ internal_update(State = #state { queue_durations = Durations,
                                  queue_duration_sum = Sum,
                                  queue_duration_count = Count }) ->
     MemoryLimit = ?MEMORY_LIMIT_SCALING * vm_memory_monitor:get_memory_limit(),
-    MemoryRatio = erlang:memory(total) / MemoryLimit,
     DesiredDurationAvg1 =
-        case MemoryRatio < ?LIMIT_THRESHOLD orelse Count == 0 of
+        case MemoryLimit > 0.0 of
             true ->
-                infinity;
+                MemoryRatio = erlang:memory(total) / MemoryLimit,
+                case MemoryRatio < ?LIMIT_THRESHOLD orelse Count == 0 of
+                    true ->
+                        infinity;
+                    false ->
+                        Sum1 = case MemoryRatio < ?SUM_INC_THRESHOLD of
+                                   true  -> Sum + ?SUM_INC_AMOUNT;
+                                   false -> Sum
+                               end,
+                        (Sum1 / Count) / MemoryRatio
+                end;
             false ->
-                Sum1 = case MemoryRatio < ?SUM_INC_THRESHOLD of
-                           true  -> Sum + ?SUM_INC_AMOUNT;
-                           false -> Sum
-                       end,
-                (Sum1 / Count) / MemoryRatio
+                0.0
         end,
     State1 = State #state { desired_duration = DesiredDurationAvg1 },
 
