@@ -123,6 +123,19 @@ evaluate({in_group, DNPattern}, Args, #user{impl = UserDN}, LDAP) ->
                           eldap:equalityMatch("member",      UserDN)]),
     object_exists(DNPattern, Filter, Args, LDAP);
 
+evaluate({match, StringQuery, REQuery}, Args, User, LDAP) ->
+    case re:run(evaluate(StringQuery, Args, User, LDAP),
+                evaluate(REQuery, Args, User, LDAP)) of
+        {match, _} -> true;
+        nomatch    -> false
+    end;
+
+evaluate({string, StringPattern}, Args, _User, _LDAP) ->
+    rabbit_auth_backend_ldap_util:fill(StringPattern, Args);
+
+evaluate({attribute, DNPattern, AttributeName}, Args, _User, LDAP) ->
+    attribute(DNPattern, AttributeName, Args, LDAP);
+
 evaluate(Q, Args, _User, _LDAP) ->
     {error, {unrecognised_query, Q, Args}}.
 
@@ -134,6 +147,21 @@ object_exists(DNPattern, Filter, Args, LDAP) ->
                        {scope, eldap:baseObject()}]) of
         {ok, #eldap_search_result{entries = Entries}} ->
             length(Entries) > 0;
+        {error, _} ->
+            false
+    end.
+
+attribute(DNPattern, AttributeName, Args, LDAP) ->
+    DN = rabbit_auth_backend_ldap_util:fill(DNPattern, Args),
+    case eldap:search(LDAP,
+                      [{base, DN},
+                       {filter, eldap:present("objectClass")},
+                       {attributes, [AttributeName]}]) of
+        {ok, #eldap_search_result{entries = [#eldap_entry{attributes = A}]}} ->
+            [Attr] = proplists:get_value(AttributeName, A),
+            Attr;
+        {ok, #eldap_search_result{entries = _}} ->
+            false;
         {error, _} ->
             false
     end.

@@ -32,21 +32,41 @@ login_test_() ->
      ?_test(fail(#amqp_params_network{username     = <<"Simon MacMullen">>})),
      ?_test(fail(#amqp_params_network{username     = <<"Simon MacMullen">>,
                                       password     = <<"password">>})),
-     ?_test(succ(?SIMON))].
+     ?_test(succ(?SIMON)),
+     ?_test(succ(?MIKEB))].
 
 succ(Params) -> ?assertMatch({ok, _}, amqp_connection:start(Params)).
 fail(Params) -> ?assertMatch({error, _}, amqp_connection:start(Params)).
 
-resource_test_() ->
-    X = #'exchange.declare'{exchange = <<"test">>},
-    Q = #'queue.declare'{queue = <<"test">>},
-    [fun() ->
-             {ok, Conn} = amqp_connection:start(Person),
-             {ok, Ch} = amqp_connection:open_channel(Conn),
-             ?assertEqual(Result, try amqp_channel:call(Ch, Thing), ok
-                                  catch exit:_ -> fail
-                                  end)
-     end || {Person, Thing, Result} <- [{?SIMON, X, ok},
-                                        {?SIMON, Q, ok},
-                                        {?MIKEB, X, fail},
-                                        {?MIKEB, Q, ok}]].
+in_group_test_() ->
+    X = [#'exchange.declare'{exchange = <<"test">>}],
+    [test_resource_fun(PTR) || PTR <- [{?SIMON, X, ok},
+                                       {?MIKEB, X, fail}]].
+
+const_test_() ->
+    Q = [#'queue.declare'{queue = <<"test">>}],
+    [test_resource_fun(PTR) || PTR <- [{?SIMON, Q, ok},
+                                       {?MIKEB, Q, fail}]].
+
+string_match_test_() ->
+    B = fun(N) ->
+                [#'exchange.declare'{exchange = N},
+                 #'queue.declare'{queue = <<"test">>},
+                 #'queue.bind'{exchange = N, queue = <<"test">>}]
+        end,
+    [test_resource_fun(PTR) ||
+        PTR <- [{?SIMON, B(<<"xch-Simon MacMullen-abc123">>), ok},
+                {?SIMON, B(<<"abc123">>),                     fail},
+                {?SIMON, B(<<"xch-Someone Else-abc123">>),    fail}]].
+
+test_resource_fun({Person, Things, Result}) ->
+    fun() ->
+            {ok, Conn} = amqp_connection:start(Person),
+            {ok, Ch} = amqp_connection:open_channel(Conn),
+            ?assertEqual(Result,
+                         try
+                             [amqp_channel:call(Ch, T) || T <- Things],
+                             ok
+                         catch exit:_ -> fail
+                         end)
+    end.

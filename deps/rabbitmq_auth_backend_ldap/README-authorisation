@@ -76,6 +76,32 @@ Like the Exists Query, substitutes arguments into a pattern to look
 for an object. However, this query assumes that the object pointed to
 is a groupOfNames and returns true if the logged in user is a member.
 
+Match Query
+-----------
+
+{match, StringSubQuery, RESubQuery}
+
+Takes a string and a regular expression, and checks that the one
+matches the other. Note that the string and the regular expression are
+both queries in turn.
+
+String Query
+------------
+
+{string, Pattern}
+
+Just substitutes arguments into a string. As this returns a string
+rather than a boolean it should be used within a match query.
+
+Attribute Query
+---------------
+
+{attribute, DNPattern, AttributeName}
+
+Returns the value of an attribute of an object retrieved from LDAP. As
+this returns a string rather than a boolean it should be used within a
+match query.
+
 For Query
 ---------
 

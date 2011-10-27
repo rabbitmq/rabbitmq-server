@@ -15,6 +15,7 @@ objectClass: person
 cn: Simon MacMullen
 sn: MacMullen
 userPassword: password
+description: can-declare-queues
 
 dn: cn=Mike Bridgen,ou=people,dc=example,dc=com
 objectClass: person

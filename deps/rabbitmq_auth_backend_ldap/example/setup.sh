@@ -9,7 +9,9 @@ sudo rm -rf /var/lib/ldap
 sudo apt-get --yes install slapd
 sleep 1
 
-sudo ldapadd -Y EXTERNAL -H ldapi:/// -f global.ldif
-ldapadd -x -D cn=admin,dc=example,dc=com -w admin -f people.ldif
-ldapadd -x -D cn=admin,dc=example,dc=com -w admin -f groups.ldif
-ldapadd -x -D cn=admin,dc=example,dc=com -w admin -f rabbit.ldif
+DIR=$(dirname $0)
+
+sudo ldapadd -Y EXTERNAL -H ldapi:/// -f ${DIR}/global.ldif
+ldapadd -x -D cn=admin,dc=example,dc=com -w admin -f ${DIR}/people.ldif
+ldapadd -x -D cn=admin,dc=example,dc=com -w admin -f ${DIR}/groups.ldif
+ldapadd -x -D cn=admin,dc=example,dc=com -w admin -f ${DIR}/rabbit.ldif
