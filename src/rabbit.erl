@@ -254,7 +254,11 @@ hipe_compile() ->
     io:format("HiPE compiling:  |~s|~n                 |",
               [string:copies("-", Count)]),
     T1 = erlang:now(),
-    PidMRefs = [spawn_monitor(fun () -> hipe_compile(Ms) end)
+    PidMRefs = [spawn_monitor(fun () -> [begin
+                                             {ok, M} = hipe:c(M, [o3]),
+                                             io:format("#")
+                                         end || M <- Ms]
+                              end)
                 || Ms <- split(?HIPE_WORTHY, ?HIPE_PROCESSES)],
     [receive
          {'DOWN', MRef, process, _, normal} -> ok;
@@ -268,13 +272,6 @@ split(L, N) -> split0(L, [[] || _ <- lists:seq(1, N)]).
 
 split0([],       Ls)       -> Ls;
 split0([I | Is], [L | Ls]) -> split0(Is, Ls ++ [[I | L]]).
-
-hipe_compile(Ms) ->
-    [hipe_compile0(M) || M <- Ms].
-
-hipe_compile0(M) ->
-    {ok, M} = hipe:c(M, [o3]),
-    io:format("#").
 
 prepare() ->
     ok = ensure_working_log_handlers(),
