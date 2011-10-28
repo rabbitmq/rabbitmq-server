@@ -258,8 +258,8 @@ hipe_compile() ->
                                              {ok, M} = hipe:c(M, [o3]),
                                              io:format("#")
                                          end || M <- Ms]
-                              end)
-                || Ms <- split(?HIPE_WORTHY, ?HIPE_PROCESSES)],
+                              end) ||
+                   Ms <- split(?HIPE_WORTHY, ?HIPE_PROCESSES)],
     [receive
          {'DOWN', MRef, process, _, normal} -> ok;
          {'DOWN', MRef, process, _, Reason} -> exit(Reason)
