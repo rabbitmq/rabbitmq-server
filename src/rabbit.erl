@@ -255,27 +255,28 @@ hipe_compile() ->
               [string:copies("-", Count)]),
     T1 = erlang:now(),
     S = self(),
-    [spawn(fun () -> hipe_compile(S, Ms) end)
+    Ref = make_ref(),
+    [spawn(fun () -> hipe_compile(S, Ref, Ms) end)
      || Ms <- split(?HIPE_WORTHY, ?HIPE_PROCESSES)],
-    wait(?HIPE_PROCESSES),
+    wait(Ref, ?HIPE_PROCESSES),
     T2 = erlang:now(),
     T = timer:now_diff(T2, T1) div 1000000,
     io:format("|~n~nCompiled ~B modules in ~Bs~n", [Count, T]).
 
-wait(0) -> ok;
-wait(C) -> receive
-               ok         -> wait(C - 1);
-               {error, E} -> exit(E)
-           end.
+wait(_  , 0) -> ok;
+wait(Ref, C) -> receive
+                    Ref        -> wait(Ref, C - 1);
+                    {error, E} -> exit(E)
+                end.
 
 split(L, N) -> split0(L, [[] || _ <- lists:seq(1, N)]).
 
 split0([],       Ls)       -> Ls;
 split0([I | Is], [L | Ls]) -> split0(Is, Ls ++ [[I | L]]).
 
-hipe_compile(S, Ms) ->
+hipe_compile(S, Ref, Ms) ->
     S ! try [hipe_compile(M) || M <- Ms],
-             ok
+             Ref
         catch _:E ->
                 {error, E}
         end.
