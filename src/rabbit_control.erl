@@ -325,7 +325,10 @@ action(trace_off, Node, [], Opts, Inform) ->
     rpc_call(Node, rabbit_trace, stop, [list_to_binary(VHost)]);
 
 action(set_vm_memory_high_watermark, Node, [Arg], _Opts, Inform) ->
-    Frac = list_to_float(Arg),
+    Frac = list_to_float(case string:chr(Arg, $.) of
+                             0 -> Arg ++ ".0";
+                             _ -> Arg
+                         end),
     Inform("Setting memory threshhold on ~p to ~p", [Node, Frac]),
     rpc_call(Node, vm_memory_monitor, set_vm_memory_high_watermark, [Frac]);
 

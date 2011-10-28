@@ -1778,7 +1778,7 @@ foreach_with_msg_store_client(MsgStore, Ref, Fun, L) ->
 test_msg_store() ->
     restart_msg_store_empty(),
     MsgIds = [msg_id_bin(M) || M <- lists:seq(1,100)],
-    {MsgIds1stHalf, MsgIds2ndHalf} = lists:split(50, MsgIds),
+    {MsgIds1stHalf, MsgIds2ndHalf} = lists:split(length(MsgIds) div 2, MsgIds),
     Ref = rabbit_guid:guid(),
     {Cap, MSCState} = msg_store_client_init_capture(
                         ?PERSISTENT_MSG_STORE, Ref),
@@ -1789,6 +1789,8 @@ test_msg_store() ->
     false = msg_store_contains(false, MsgIds, MSCState),
     %% test confirm logic
     passed = test_msg_store_confirms([hd(MsgIds)], Cap, MSCState),
+    %% check we don't contain any of the msgs we're about to publish
+    false = msg_store_contains(false, MsgIds, MSCState),
     %% publish the first half
     ok = msg_store_write(MsgIds1stHalf, MSCState),
     %% sync on the first half
@@ -1896,12 +1898,12 @@ test_msg_store() ->
                    false = msg_store_contains(false, MsgIdsBig, MSCStateM),
                    MSCStateM
            end),
+    %%
+    passed = test_msg_store_client_delete_and_terminate(),
     %% restart empty
     restart_msg_store_empty(),
     passed.
 
-%% We want to test that writes that get eliminated due to removes still
-%% get confirmed. Removes themselves do not.
 test_msg_store_confirms(MsgIds, Cap, MSCState) ->
     %% write -> confirmed
     ok = msg_store_write(MsgIds, MSCState),
@@ -1927,6 +1929,45 @@ test_msg_store_confirms(MsgIds, Cap, MSCState) ->
     ok = msg_store_write(MsgIds, MSCState),
     ok = msg_store_remove(MsgIds, MSCState),
     ok = on_disk_await(Cap, MsgIds),
+    %% confirmation on timer-based sync
+    passed = test_msg_store_confirm_timer(),
+    passed.
+
+test_msg_store_confirm_timer() ->
+    Ref = rabbit_guid:guid(),
+    MsgId  = msg_id_bin(1),
+    Self = self(),
+    MSCState = rabbit_msg_store:client_init(
+                 ?PERSISTENT_MSG_STORE, Ref,
+                 fun (MsgIds, _ActionTaken) ->
+                         case gb_sets:is_member(MsgId, MsgIds) of
+                             true  -> Self ! on_disk;
+                             false -> ok
+                         end
+                 end, undefined),
+    ok = msg_store_write([MsgId], MSCState),
+    ok = msg_store_keep_busy_until_confirm([msg_id_bin(2)], MSCState),
+    ok = msg_store_remove([MsgId], MSCState),
+    ok = rabbit_msg_store:client_delete_and_terminate(MSCState),
+    passed.
+
+msg_store_keep_busy_until_confirm(MsgIds, MSCState) ->
+    receive
+        on_disk -> ok
+    after 0 ->
+            ok = msg_store_write(MsgIds, MSCState),
+            ok = msg_store_remove(MsgIds, MSCState),
+            msg_store_keep_busy_until_confirm(MsgIds, MSCState)
+    end.
+
+test_msg_store_client_delete_and_terminate() ->
+    restart_msg_store_empty(),
+    MsgIds = [msg_id_bin(M) || M <- lists:seq(1, 10)],
+    Ref = rabbit_guid:guid(),
+    MSCState = msg_store_client_init(?PERSISTENT_MSG_STORE, Ref),
+    ok = msg_store_write(MsgIds, MSCState),
+    %% test the 'dying client' fast path for writes
+    ok = rabbit_msg_store:client_delete_and_terminate(MSCState),
     passed.
 
 queue_name(Name) ->
