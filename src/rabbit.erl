@@ -177,6 +177,7 @@
 
 -define(APPS, [os_mon, mnesia, rabbit]).
 
+%% see bug 24513 for how this list was created
 -define(HIPE_WORTHY,
         [rabbit_reader, rabbit_channel, gen_server2,
          rabbit_exchange, rabbit_command_assembler, rabbit_framing_amqp_0_9_1,
@@ -265,8 +266,8 @@ hipe_compile() ->
          {'DOWN', MRef, process, _, Reason} -> exit(Reason)
      end || {_Pid, MRef} <- PidMRefs],
     T2 = erlang:now(),
-    T = timer:now_diff(T2, T1) div 1000000,
-    io:format("|~n~nCompiled ~B modules in ~Bs~n", [Count, T]).
+    io:format("|~n~nCompiled ~B modules in ~Bs~n",
+              [Count, timer:now_diff(T2, T1) div 1000000]).
 
 split(L, N) -> split0(L, [[] || _ <- lists:seq(1, N)]).
 
