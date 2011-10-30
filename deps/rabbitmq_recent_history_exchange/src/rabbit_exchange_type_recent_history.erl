@@ -65,9 +65,8 @@ add_binding(_Tx, #exchange{ name = XName },
 remove_bindings(_Tx, _X, _Bs) -> ok.
 
 assert_args_equivalence(X, Args) ->
-  rabbit_exchange_type_direct:assert_args_equivalence(X, Args).
+  rabbit_exchange:assert_args_equivalence(X, Args).
 
-%%private
 setup_schema() ->
   case mnesia:create_table(?RH_TABLE,
           [{attributes, record_info(fields, cached)},
@@ -77,6 +76,7 @@ setup_schema() ->
       {aborted, {already_exists, ?RH_TABLE}} -> ok
   end.
 
+%%private
 cache_msg(XName, Content) ->
   rabbit_misc:execute_mnesia_transaction(
     fun () ->
@@ -98,7 +98,7 @@ get_msgs_from_cache(XName) ->
 store_msg(Key, Cached, Content) ->
   mnesia:write(?RH_TABLE,
     #cached{key     = Key,
-            content = [Content|lists:sublist(Cached, ?KEEP_NB)]},
+            content = [Content|lists:sublist(Cached, ?KEEP_NB-1)]},
     write).
 
 msgs_from_content(XName, Cached) ->
@@ -113,7 +113,7 @@ deliver_messages(Queue, Msgs) ->
     fun (Msg) ->
       Delivery = rabbit_basic:delivery(false, false, Msg, undefined),
       rabbit_amqqueue:deliver(Queue, Delivery)
-    end,  Msgs).
+    end, lists:reverse(Msgs)).
 
 queue_not_found_error(QName) ->
   rabbit_misc:protocol_error(
