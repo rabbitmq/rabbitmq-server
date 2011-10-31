@@ -248,7 +248,6 @@ duplicate_node_check(NodeStr) ->
     {NodeName, NodeHost} = rabbit_misc:nodeparts(Node),
     case names(NodeHost) of
         {ok, NamePorts}  ->
-            io:format("Got a repsonse~n"),
             case proplists:is_defined(NodeName, NamePorts) of
                 true -> io:format("node with name ~p "
                                   "already running on ~p~n",
