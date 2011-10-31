@@ -169,8 +169,8 @@ action(stop, Node, Args, _Opts, Inform) ->
     case {Res, Args} of
         {ok, [PidFile]} -> wait_for_process_death(
                              read_pid_file(PidFile, false));
-        {_, []}         -> ok;
-        _               -> exit({badarg, Args})
+        {ok, [_, _| _]} -> exit({badarg, Args});
+        _               -> ok
     end,
     Res;
 
@@ -398,7 +398,7 @@ read_pid_file(PidFile, Wait) ->
             S = string:strip(binary_to_list(Bin), right, $\n),
             try list_to_integer(S)
             catch error:badarg ->
-                    exit({error, {garbage_in_pid_file, S}})
+                    exit({error, {garbage_in_pid_file, PidFile}})
             end,
             S;
         {{error, enoent}, true} ->
