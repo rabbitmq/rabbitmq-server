@@ -284,14 +284,11 @@ terminate(Status) ->
 names(Hostname) ->
     Self = self(),
     process_flag(trap_exit, true),
-    Pid = spawn_link(fun () ->
-                             Res = net_adm:names(Hostname),
-                             Self ! {names, Res}
-                     end),
+    Pid = spawn_link(fun () -> Self ! {names, net_adm:names(Hostname)} end),
     timer:exit_after(?EPMD_TIMEOUT, Pid, timeout),
     Res = receive
-              {names, Names}     -> Names;
-              {'EXIT', Pid, Why} -> {error, Why}
+              {names, Names}        -> Names;
+              {'EXIT', Pid, Reason} -> {error, Reason}
           end,
     process_flag(trap_exit, false),
     Res.
