@@ -22,6 +22,7 @@
 
 -define(BaseApps, [rabbit]).
 -define(ERROR_CODE, 1).
+-define(EPMD_TIMEOUT, 60000).
 
 %%----------------------------------------------------------------------------
 %% Specs
@@ -245,8 +246,9 @@ duplicate_node_check([]) ->
 duplicate_node_check(NodeStr) ->
     Node = rabbit_misc:makenode(NodeStr),
     {NodeName, NodeHost} = rabbit_misc:nodeparts(Node),
-    case net_adm:names(NodeHost) of
+    case names(NodeHost) of
         {ok, NamePorts}  ->
+            io:format("Got a repsonse~n"),
             case proplists:is_defined(NodeName, NamePorts) of
                 true -> io:format("node with name ~p "
                                   "already running on ~p~n",
@@ -261,6 +263,7 @@ duplicate_node_check(NodeStr) ->
                       [NodeHost, EpmdReason,
                        case EpmdReason of
                            address -> "unable to establish tcp connection";
+                           timeout -> "timed out establishing tcp connection";
                            _       -> inet:format_error(EpmdReason)
                        end])
     end.
@@ -277,3 +280,18 @@ terminate(Status) ->
                       after infinity -> ok
                       end
     end.
+
+names(Hostname) ->
+    Self = self(),
+    process_flag(trap_exit, true),
+    Pid = spawn_link(fun () ->
+                             Res = net_adm:names(Hostname),
+                             Self ! {names, Res}
+                     end),
+    timer:exit_after(?EPMD_TIMEOUT, Pid, timeout),
+    Res = receive
+              {names, Names}     -> Names;
+              {'EXIT', Pid, Why} -> {error, Why}
+          end,
+    process_flag(trap_exit, false),
+    Res.
