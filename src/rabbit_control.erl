@@ -1,3 +1,4 @@
+
 %% The contents of this file are subject to the Mozilla Public License
 %% Version 1.1 (the "License"); you may not use this file except in
 %% compliance with the License. You may obtain a copy of the License
@@ -393,15 +394,18 @@ wait_for_process_death(Pid) ->
 
 read_pid_file(PidFile, Wait) ->
     case {file:read_file(PidFile), Wait} of
-        {{ok, Bin}, _} -> S = string:strip(binary_to_list(Bin), right, $\n),
-                          try list_to_integer(S)
-                          catch error:badarg ->
-                                  exit({error, {garbage_in_pid_file, S}})
-                          end,
-                          S;
-        {{error, enoent}, true} -> timer:sleep(?EXTERNAL_CHECK_INTERVAL),
-                                   read_pid_file(PidFile, Wait);
-        {error, _} = E -> exit({error, {could_not_read_pid, E}})
+        {{ok, Bin}, _} ->
+            S = string:strip(binary_to_list(Bin), right, $\n),
+            try list_to_integer(S)
+            catch error:badarg ->
+                    exit({error, {garbage_in_pid_file, S}})
+            end,
+            S;
+        {{error, enoent}, true} ->
+            timer:sleep(?EXTERNAL_CHECK_INTERVAL),
+            read_pid_file(PidFile, Wait);
+        {{error, _} = E, _} ->
+            exit({error, {could_not_read_pid, E}})
     end.
 
 % Test using some OS clunkiness since we shouldn't trust
