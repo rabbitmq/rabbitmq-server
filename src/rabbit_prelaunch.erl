@@ -22,7 +22,7 @@
 
 -define(BaseApps, [rabbit]).
 -define(ERROR_CODE, 1).
--define(EPMD_TIMEOUT, 60000).
+-define(EPMD_TIMEOUT, 30000).
 
 %%----------------------------------------------------------------------------
 %% Specs
