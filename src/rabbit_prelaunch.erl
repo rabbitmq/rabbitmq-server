@@ -41,6 +41,8 @@
 %%----------------------------------------------------------------------------
 
 start() ->
+    rabbit_misc:start_net_kernel("rabbitmqprelaunch"),
+
     io:format("Activating RabbitMQ plugins ...~n"),
 
     %% Determine our various directories
