@@ -660,10 +660,17 @@ terminate_simple_children(Child, Dynamics, SupName) ->
                          exit(Pid, ExitReason),
                          [Pid | Pids]
                      end, [], Dynamics),
+    Ref = make_ref(),
+    {ok, TRef} = timer:send_after(Timeout, {timeout, Ref}),
     {Replies, _Timedout} =
         lists:foldl(
           fun (_Pid, {Replies, Timedout}) ->
               receive
+                  {timeout, Ref} ->
+                      [exit(P, kill) || P <- Pids -- dict:fetch_keys(Replies)],
+                      receive {'DOWN', _, process, Pid, Reason} ->
+                           {dict:append(Pid, {error, Reason}, Replies), true}
+                      end;
                   {'DOWN', _MRef, process, Pid, Reason}
                       when Child#child.shutdown == brutal_kill andalso
                            Reason == killed andalso Timedout == false orelse
@@ -675,19 +682,9 @@ terminate_simple_children(Child, Dynamics, SupName) ->
                       receive {'DOWN', _MRef, process, Pid, _} ->
                           {dict:append(Pid, {error, Reason}, Replies), Timedout}
                       end
-              after Timeout ->
-                  case Timedout of
-                      false -> lists:foldl(fun (Pid, ok) -> exit(Pid, kill) end,
-                                           Pids -- dict:fetch_keys(Replies));
-                      true -> ok %% actually not ok - we await replies to kill
-                                 %% signals after 2 timeouts
-                  end,
-                  receive {'DOWN', _, process, Pid, Reason} ->
-                       {dict:append(Pid, {error, Reason}, Replies),
-                        true}
-                  end
               end
           end, {dict:new(), false}, Pids),
+     timer:cancel(TRef),
      RestartPerm = case Child#child.restart_type of
                        permanent           -> true;
                        {permanent, _Delay} -> true;
