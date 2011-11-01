@@ -671,13 +671,10 @@ terminate_simple_children(Child, Dynamics, SupName) ->
                       receive {'DOWN', _, process, Pid, Reason} ->
                            {dict:append(Pid, {error, Reason}, Replies), true}
                       end;
-                  {'DOWN', _MRef, process, Pid, Reason}
-                      when Child#child.shutdown == brutal_kill andalso
-                           Reason == killed andalso Timedout == false orelse
-                           Reason == shutdown andalso Timedout == false ->
-                      {dict:append(Pid, ok, Replies), Timedout};
                   {'DOWN', _MRef, process, Pid, Reason} ->
-                      {dict:append(Pid, {error, Reason}, Replies), Timedout};
+                      {dict:append(Pid, child_tally(Child#child.shutdown,
+                                                    Reason, Timedout),
+                                   Replies), Timedout};
                   {'EXIT', Pid, Reason} ->
                       receive {'DOWN', _MRef, process, Pid, _} ->
                           {dict:append(Pid, {error, Reason}, Replies), Timedout}
@@ -707,9 +704,15 @@ terminate_simple_children(Child, Dynamics, SupName) ->
                end, ok, Replies),
      ok.
 
+child_tally(Shutdown, Reason, Timedout)
+    when Shutdown == brutal_kill andalso Reason == killed andalso
+         Timedout == false orelse Reason == shutdown andalso
+         Timedout == false -> ok;
+child_tally(_Shutdown, Reason, _Timedout) -> {error, Reason}.
+
 restart_permanent(permanent)           -> true;
 restart_permanent({permanent, _Delay}) -> true;
-restart_permanent(_)                   -> false;
+restart_permanent(_)                   -> false.
 
 do_terminate(Child, SupName) when Child#child.pid =/= undefined ->
     ReportError = shutdown_error_reporter(SupName),
