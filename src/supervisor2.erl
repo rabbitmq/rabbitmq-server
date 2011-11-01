@@ -685,11 +685,7 @@ terminate_simple_children(Child, Dynamics, SupName) ->
               end
           end, {dict:new(), false}, Pids),
      timer:cancel(TRef),
-     RestartPerm = case Child#child.restart_type of
-                       permanent           -> true;
-                       {permanent, _Delay} -> true;
-                       _                   -> false
-                   end,
+     RestartPerm = restart_permanent(Child#child.restart_type),
      ReportAcc = fun (NormalErrorFun) ->
                      fun (Pid, ok, Acc) ->
                              Acc;
@@ -711,16 +707,19 @@ terminate_simple_children(Child, Dynamics, SupName) ->
                end, ok, Replies),
      ok.
 
+restart_permanent(permanent)           -> true;
+restart_permanent({permanent, _Delay}) -> true;
+restart_permanent(_)                   -> false;
+
 do_terminate(Child, SupName) when Child#child.pid =/= undefined ->
     ReportError = shutdown_error_reporter(SupName),
     case shutdown(Child#child.pid, Child#child.shutdown) of
         ok ->
             ok;
         {error, normal} ->
-            case Child#child.restart_type of
-                permanent           -> ReportError(normal, Child);
-                {permanent, _Delay} -> ReportError(normal, Child);
-                _                   -> ok
+            case restart_permanent(Child#child.restart_type) of
+                true  -> ReportError(normal, Child);
+                false -> ok
             end;
         {error, OtherReason} ->
             ReportError(OtherReason, Child)
