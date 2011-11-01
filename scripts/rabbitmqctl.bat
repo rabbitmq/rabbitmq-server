@@ -43,7 +43,8 @@ if not exist "!ERLANG_HOME!\bin\erl.exe" (
     exit /B
 )
 
-"!ERLANG_HOME!\bin\epmd.exe" -daemon
+rem Ensures that epmd is running.
+"!ERLANG_HOME!\bin\erl.exe" -sname epmd_primer -noinput -run init stop
 
 if ERRORLEVEL 1 (
    exit /B 1

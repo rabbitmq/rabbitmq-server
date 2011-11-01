@@ -20,7 +20,8 @@
 [ "x" = "x$RABBITMQ_NODENAME" ] && RABBITMQ_NODENAME=${NODENAME}
 [ "x" = "x$RABBITMQ_CTL_ERL_ARGS" ] && RABBITMQ_CTL_ERL_ARGS=${CTL_ERL_ARGS}
 
-epmd -daemon || exit 1
+# Ensures that epmd is running.
+erl -sname epmd_primer -noinput -run init stop || exit 1
 
 exec erl \
     -pa "${RABBITMQ_HOME}/ebin" \
