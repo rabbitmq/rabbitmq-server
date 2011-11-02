@@ -649,36 +649,33 @@ terminate_children([], _SupName, Res) ->
     Res.
 
 terminate_simple_children(Child, Dynamics, SupName) ->
-    {ExitReason, Timeout} = case Child#child.shutdown of
-                                 brutal_kill -> {kill, infinity};
-                                 Time        -> {shutdown, Time}
-                            end,
     Pids = dict:fold(fun (Pid, _Args, Pids) ->
                          erlang:monitor(process, Pid),
                          unlink(Pid),
-                         exit(Pid, ExitReason),
+                         exit(Pid, child_exit_reason(Child)),
                          [Pid | Pids]
                      end, [], Dynamics),
     Ref = make_ref(),
-    {ok, TRef} = timer:send_after(Timeout, {timeout, Ref}),
+    {ok, TRef} = timer:send_after(child_timeout(Child), {timeout, Ref}),
     {Replies, _Timedout} =
         lists:foldl(
           fun (_Pid, {Replies, Timedout}) ->
-              receive
-                  {timeout, Ref} ->
-                      [exit(P, kill) || P <- Pids -- dict:fetch_keys(Replies)],
-                      receive {'DOWN', _MRef, process, Pid, Reason} ->
-                           {dict:append(Pid, {error, Reason}, Replies), true}
-                      end;
-                  {'DOWN', _MRef, process, Pid, Reason} ->
-                      {dict:append(Pid, child_tally(Child#child.shutdown,
-                                                    Reason, Timedout),
-                                   Replies), Timedout};
-                  {'EXIT', Pid, Reason} ->
-                      receive {'DOWN', _MRef, process, Pid, _} ->
-                          {dict:append(Pid, {error, Reason}, Replies), Timedout}
-                      end
-              end
+                  {Reply, Timedout1} =
+                      receive
+                          {timeout, Ref} ->
+                              Remaining = Pids -- dict:fetch_keys(Replies),
+                              [exit(P, kill) || P <- Remaining],
+                              receive {'DOWN', _MRef, process, Pid, Reason} ->
+                                      {{error, Reason}, true}
+                              end;
+                          {'DOWN', _MRef, process, Pid, Reason} ->
+                              {child_result(Child, Reason, Timedout), Timedout};
+                          {'EXIT', Pid, Reason} ->
+                              receive {'DOWN', _MRef, process, Pid, _} ->
+                                      {{error, Reason}, Timedout}
+                              end
+                      end,
+                  {dict:append(Pid, Reply, Replies), Timedout1}
           end, {dict:new(), false}, Pids),
     timer:cancel(TRef),
     receive
@@ -688,7 +685,7 @@ terminate_simple_children(Child, Dynamics, SupName) ->
     end,
     ReportError = shutdown_error_reporter(SupName),
     ReportAcc = fun (NormalErrorFun) ->
-                    fun (Pid, ok, Acc) ->
+                    fun (_Pid, ok, Acc) ->
                             Acc;
                         (Pid, {error, normal}, Acc) ->
                             NormalErrorFun(Pid),
@@ -708,11 +705,15 @@ terminate_simple_children(Child, Dynamics, SupName) ->
               end, ok, Replies),
     ok.
 
-child_tally(Shutdown, Reason, Timedout)
-    when Shutdown == brutal_kill andalso Reason == killed andalso
-         Timedout == false orelse Reason == shutdown andalso
-         Timedout == false -> ok;
-child_tally(_Shutdown, Reason, _Timedout) -> {error, Reason}.
+child_exit_reason(#child{shutdown = brutal_kill}) -> kill;
+child_exit_reason(#child{})                       -> shutdown.
+
+child_timeout(#child{shutdown = brutal_kill}) -> infinity;
+child_timeout(#child{shutdown = Time})        -> Time.
+
+child_result(#child{shutdown = brutal_kill}, killed,   false) -> ok;
+child_result(#child{},                       shutdown, false) -> ok;
+child_result(#child{},                       R,        _)     -> {error, R}.
 
 restart_permanent(permanent)           -> true;
 restart_permanent({permanent, _Delay}) -> true;
