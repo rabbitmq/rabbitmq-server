@@ -663,7 +663,7 @@ terminate_simple_children(Child, Dynamics, SupName) ->
                   {Reply, Timedout1} =
                       receive
                           {timeout, Ref} ->
-                              Remaining = Pids -- dict:fetch_keys(Replies),
+                              Remaining = Pids -- [P || {P, _} <- Replies],
                               [exit(P, kill) || P <- Remaining],
                               receive {'DOWN', _MRef, process, Pid, Reason} ->
                                       {{error, Reason}, true}
