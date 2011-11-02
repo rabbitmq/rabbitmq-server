@@ -649,15 +649,63 @@ terminate_children([], _SupName, Res) ->
     Res.
 
 terminate_simple_children(Child, Dynamics, SupName) ->
-    dict:fold(fun (Pid, _Args, _Any) ->
-                      do_terminate(Child#child{pid = Pid}, SupName)
-              end, ok, Dynamics),
+    Pids = dict:fold(fun (Pid, _Args, Pids) ->
+                         erlang:monitor(process, Pid),
+                         unlink(Pid),
+                         exit(Pid, child_exit_reason(Child)),
+                         [Pid | Pids]
+                     end, [], Dynamics),
+    Ref = make_ref(),
+    {ok, TRef} = timer:send_after(child_timeout(Child), {timeout, Ref}),
+    {Replies, _Timedout} =
+        lists:foldl(
+          fun (_Pid, {Replies, Timedout}) ->
+                  {Reply, Timedout1} =
+                      receive
+                          {timeout, Ref} ->
+                              Remaining = Pids -- [P || {P, _} <- Replies],
+                              [exit(P, kill) || P <- Remaining],
+                              receive {'DOWN', _MRef, process, Pid, Reason} ->
+                                      {{error, Reason}, true}
+                              end;
+                          {'DOWN', _MRef, process, Pid, Reason} ->
+                              {child_res(Child, Reason, Timedout), Timedout};
+                          {'EXIT', Pid, Reason} ->
+                              receive {'DOWN', _MRef, process, Pid, _} ->
+                                      {{error, Reason}, Timedout}
+                              end
+                      end,
+                  {[{Pid, Reply} | Replies], Timedout1}
+          end, {[], false}, Pids),
+    timer:cancel(TRef),
+    receive
+        {timeout, Ref} -> ok
+    after
+        0 -> ok
+    end,
+    ReportError = shutdown_error_reporter(SupName),
+    [case Reply of
+         {_Pid, ok}         -> ok;
+         {Pid,  {error, R}} -> ReportError(R, Child#child{pid = Pid})
+     end || Reply <- Replies],
     ok.
 
+
+child_exit_reason(#child{shutdown = brutal_kill}) -> kill;
+child_exit_reason(#child{})                       -> shutdown.
+
+child_timeout(#child{shutdown = brutal_kill}) -> infinity;
+child_timeout(#child{shutdown = Time})        -> Time.
+
+child_res(#child{shutdown=brutal_kill},   killed,    false) -> ok;
+child_res(#child{},                       shutdown,  false) -> ok;
+child_res(#child{restart_type=permanent}, normal,    false) -> {error, normal};
+child_res(#child{restart_type={permanent,_}},normal, false) -> {error, normal};
+child_res(#child{},                       normal,    false) -> ok;
+child_res(#child{},                       R,         _)     -> {error, R}.
+
 do_terminate(Child, SupName) when Child#child.pid =/= undefined ->
-    ReportError = fun (Reason) ->
-                          report_error(shutdown_error, Reason, Child, SupName)
-                  end,
+    ReportError = shutdown_error_reporter(SupName),
     case shutdown(Child#child.pid, Child#child.shutdown) of
         ok ->
             ok;
@@ -668,7 +716,7 @@ do_terminate(Child, SupName) when Child#child.pid =/= undefined ->
                 _                   -> ok
             end;
         {error, OtherReason} ->
-            ReportError(OtherReason)
+            ReportError(OtherReason, Child)
     end,
     Child#child{pid = undefined};
 do_terminate(Child, _SupName) ->
@@ -998,6 +1046,10 @@ report_error(Error, Reason, Child, SupName) ->
 		{offender, extract_child(Child)}],
     error_logger:error_report(supervisor_report, ErrorMsg).
 
+shutdown_error_reporter(SupName) ->
+    fun(Reason, Child) ->
+        report_error(shutdown_error, Reason, Child, SupName)
+    end.
 
 extract_child(Child) ->
     [{pid, Child#child.pid},
