@@ -649,7 +649,6 @@ terminate_children([], _SupName, Res) ->
     Res.
 
 terminate_simple_children(Child, Dynamics, SupName) ->
-    ReportError = shutdown_error_reporter(SupName),
     {ExitReason, Timeout} = case Child#child.shutdown of
                                  brutal_kill -> {kill, infinity};
                                  Time        -> {shutdown, Time}
@@ -668,7 +667,7 @@ terminate_simple_children(Child, Dynamics, SupName) ->
               receive
                   {timeout, Ref} ->
                       [exit(P, kill) || P <- Pids -- dict:fetch_keys(Replies)],
-                      receive {'DOWN', _, process, Pid, Reason} ->
+                      receive {'DOWN', _MRef, process, Pid, Reason} ->
                            {dict:append(Pid, {error, Reason}, Replies), true}
                       end;
                   {'DOWN', _MRef, process, Pid, Reason} ->
@@ -681,28 +680,33 @@ terminate_simple_children(Child, Dynamics, SupName) ->
                       end
               end
           end, {dict:new(), false}, Pids),
-     timer:cancel(TRef),
-     RestartPerm = restart_permanent(Child#child.restart_type),
-     ReportAcc = fun (NormalErrorFun) ->
-                     fun (Pid, ok, Acc) ->
-                             Acc;
-                         (Pid, {error, normal}, Acc) ->
-                             NormalErrorFun(Pid),
-                             Acc;
-                         (Pid, {error, Reason}, Acc) ->
-                             ReportError(Reason, Child#child{pid = Pid}),
-                             Acc
-                     end
-                 end,
-     dict:fold(case RestartPerm of
-                   true ->
-                       ReportAcc(fun (Pid)  ->
-                                     ReportError(normal, Child#child{pid = Pid})
-                                 end);
-                   false ->
-                       ReportAcc(fun rabbit_misc:const_ok/0)
-               end, ok, Replies),
-     ok.
+    timer:cancel(TRef),
+    receive
+        {timeout, Ref} -> ok
+    after
+        0 -> ok
+    end,
+    ReportError = shutdown_error_reporter(SupName),
+    ReportAcc = fun (NormalErrorFun) ->
+                    fun (Pid, ok, Acc) ->
+                            Acc;
+                        (Pid, {error, normal}, Acc) ->
+                            NormalErrorFun(Pid),
+                            Acc;
+                        (Pid, {error, Reason}, Acc) ->
+                            ReportError(Reason, Child#child{pid = Pid}),
+                            Acc
+                    end
+                end,
+    dict:fold(case restart_permanent(Child#child.restart_type) of
+                  true ->
+                      ReportAcc(fun (Pid)  ->
+                                    ReportError(normal, Child#child{pid = Pid})
+                                end);
+                  false ->
+                      ReportAcc(fun (_Pid) -> ok end)
+              end, ok, Replies),
+    ok.
 
 child_tally(Shutdown, Reason, Timedout)
     when Shutdown == brutal_kill andalso Reason == killed andalso
