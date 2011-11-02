@@ -684,25 +684,16 @@ terminate_simple_children(Child, Dynamics, SupName) ->
         0 -> ok
     end,
     ReportError = shutdown_error_reporter(SupName),
-    ReportAcc = fun (NormalErrorFun) ->
-                    fun (_Pid, ok, Acc) ->
-                            Acc;
-                        (Pid, {error, normal}, Acc) ->
-                            NormalErrorFun(Pid),
-                            Acc;
-                        (Pid, {error, Reason}, Acc) ->
-                            ReportError(Reason, Child#child{pid = Pid}),
-                            Acc
-                    end
-                end,
-    dict:fold(case restart_permanent(Child#child.restart_type) of
-                  true ->
-                      ReportAcc(fun (Pid)  ->
-                                    ReportError(normal, Child#child{pid = Pid})
-                                end);
-                  false ->
-                      ReportAcc(fun (_Pid) -> ok end)
-              end, ok, Replies),
+    dict:map(fun (_Pid, ok) ->
+                     ok;
+                 (Pid, {error, normal}) ->
+                     case restart_permanent(Child#child.restart_type) of
+                         true  -> ReportError(normal, Child#child{pid = Pid});
+                         false -> ok
+                     end;
+                 (Pid, {error, Reason}) ->
+                     ReportError(Reason, Child#child{pid = Pid})
+             end, Replies),
     ok.
 
 child_exit_reason(#child{shutdown = brutal_kill}) -> kill;
