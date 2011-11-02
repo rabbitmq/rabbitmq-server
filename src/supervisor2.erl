@@ -697,11 +697,12 @@ child_exit_reason(#child{})                       -> shutdown.
 child_timeout(#child{shutdown = brutal_kill}) -> infinity;
 child_timeout(#child{shutdown = Time})        -> Time.
 
-child_res(#child{shutdown = brutal_kill},        killed,   false) -> ok;
-child_res(#child{},                              shutdown, false) -> ok;
-child_res(#child{restart_type = permanent},      normal,   false) -> ok;
-child_res(#child{restart_type = {permanent, _}}, normal,   false) -> ok;
-child_res(#child{},                              R,        _)     -> {error, R}.
+child_res(#child{shutdown=brutal_kill},   killed,    false) -> ok;
+child_res(#child{},                       shutdown,  false) -> ok;
+child_res(#child{restart_type=permanent}, normal,    false) -> {error, normal};
+child_res(#child{restart_type={permanent,_}},normal, false) -> {error, normal};
+child_res(#child{},                       normal,    false) -> ok;
+child_res(#child{},                       R,         _)     -> {error, R}.
 
 do_terminate(Child, SupName) when Child#child.pid =/= undefined ->
     ReportError = shutdown_error_reporter(SupName),
