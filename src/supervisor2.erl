@@ -669,7 +669,7 @@ terminate_simple_children(Child, Dynamics, SupName) ->
                                       {{error, Reason}, true}
                               end;
                           {'DOWN', _MRef, process, Pid, Reason} ->
-                              {child_result(Child, Reason, Timedout), Timedout};
+                              {child_res(Child, Reason, Timedout), Timedout};
                           {'EXIT', Pid, Reason} ->
                               receive {'DOWN', _MRef, process, Pid, _} ->
                                       {{error, Reason}, Timedout}
@@ -684,15 +684,8 @@ terminate_simple_children(Child, Dynamics, SupName) ->
         0 -> ok
     end,
     ReportError = shutdown_error_reporter(SupName),
-    dict:map(fun (_Pid, ok) ->
-                     ok;
-                 (Pid, {error, normal}) ->
-                     case restart_permanent(Child#child.restart_type) of
-                         true  -> ReportError(normal, Child#child{pid = Pid});
-                         false -> ok
-                     end;
-                 (Pid, {error, Reason}) ->
-                     ReportError(Reason, Child#child{pid = Pid})
+    dict:map(fun (_Pid, ok)         -> ok;
+                 (Pid,  {error, R}) -> ReportError(R, Child#child{pid = Pid})
              end, Replies),
     ok.
 
@@ -702,9 +695,11 @@ child_exit_reason(#child{})                       -> shutdown.
 child_timeout(#child{shutdown = brutal_kill}) -> infinity;
 child_timeout(#child{shutdown = Time})        -> Time.
 
-child_result(#child{shutdown = brutal_kill}, killed,   false) -> ok;
-child_result(#child{},                       shutdown, false) -> ok;
-child_result(#child{},                       R,        _)     -> {error, R}.
+child_res(#child{shutdown = brutal_kill},        killed,   false) -> ok;
+child_res(#child{},                              shutdown, false) -> ok;
+child_res(#child{restart_type = permanent},      normal,   false) -> ok;
+child_res(#child{restart_type = {permanent, _}}, normal,   false) -> ok;
+child_res(#child{},                              R,        _)     -> {error, R}.
 
 restart_permanent(permanent)           -> true;
 restart_permanent({permanent, _Delay}) -> true;
