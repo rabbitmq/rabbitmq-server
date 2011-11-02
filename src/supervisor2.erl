@@ -703,19 +703,16 @@ child_res(#child{restart_type = permanent},      normal,   false) -> ok;
 child_res(#child{restart_type = {permanent, _}}, normal,   false) -> ok;
 child_res(#child{},                              R,        _)     -> {error, R}.
 
-restart_permanent(permanent)           -> true;
-restart_permanent({permanent, _Delay}) -> true;
-restart_permanent(_)                   -> false.
-
 do_terminate(Child, SupName) when Child#child.pid =/= undefined ->
     ReportError = shutdown_error_reporter(SupName),
     case shutdown(Child#child.pid, Child#child.shutdown) of
         ok ->
             ok;
         {error, normal} ->
-            case restart_permanent(Child#child.restart_type) of
-                true  -> ReportError(normal, Child);
-                false -> ok
+            case Child#child.restart_type of
+                permanent           -> ReportError(normal);
+                {permanent, _Delay} -> ReportError(normal);
+                _                   -> ok
             end;
         {error, OtherReason} ->
             ReportError(OtherReason, Child)
