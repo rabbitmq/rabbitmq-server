@@ -675,8 +675,8 @@ terminate_simple_children(Child, Dynamics, SupName) ->
                                       {{error, Reason}, Timedout}
                               end
                       end,
-                  {dict:append(Pid, Reply, Replies), Timedout1}
-          end, {dict:new(), false}, Pids),
+                  {[{Pid, Reply} | Replies], Timedout1}
+          end, {[], false}, Pids),
     timer:cancel(TRef),
     receive
         {timeout, Ref} -> ok
@@ -684,10 +684,12 @@ terminate_simple_children(Child, Dynamics, SupName) ->
         0 -> ok
     end,
     ReportError = shutdown_error_reporter(SupName),
-    dict:map(fun (_Pid, ok)         -> ok;
-                 (Pid,  {error, R}) -> ReportError(R, Child#child{pid = Pid})
-             end, Replies),
+    [case Reply of
+         {_Pid, ok}         -> ok;
+         {Pid,  {error, R}} -> ReportError(R, Child#child{pid = Pid})
+     end || Reply <- Replies],
     ok.
+
 
 child_exit_reason(#child{shutdown = brutal_kill}) -> kill;
 child_exit_reason(#child{})                       -> shutdown.
