@@ -655,14 +655,14 @@ terminate_simple_children(Child, Dynamics, SupName) ->
                          exit(Pid, child_exit_reason(Child)),
                          [Pid | Pids]
                      end, [], Dynamics),
-    Ref = make_ref(),
-    {ok, TRef} = timer:send_after(child_timeout(Child), {timeout, Ref}),
-    {Replies, _Timedout} =
+    TimeoutMsg = {timeout, make_ref()},
+    TRef = timeout_start(Child, TimeoutMsg),
+    {Replies, Timedout} =
         lists:foldl(
           fun (_Pid, {Replies, Timedout}) ->
                   {Reply, Timedout1} =
                       receive
-                          {timeout, Ref} ->
+                          TimeoutMsg ->
                               Remaining = Pids -- [P || {P, _} <- Replies],
                               [exit(P, kill) || P <- Remaining],
                               receive {'DOWN', _MRef, process, Pid, Reason} ->
@@ -677,12 +677,7 @@ terminate_simple_children(Child, Dynamics, SupName) ->
                       end,
                   {[{Pid, Reply} | Replies], Timedout1}
           end, {[], false}, Pids),
-    timer:cancel(TRef),
-    receive
-        {timeout, Ref} -> ok
-    after
-        0 -> ok
-    end,
+    timeout_stop(Child, TRef, TimeoutMsg, Timedout),
     ReportError = shutdown_error_reporter(SupName),
     [case Reply of
          {_Pid, ok}         -> ok;
@@ -690,12 +685,8 @@ terminate_simple_children(Child, Dynamics, SupName) ->
      end || Reply <- Replies],
     ok.
 
-
 child_exit_reason(#child{shutdown = brutal_kill}) -> kill;
 child_exit_reason(#child{})                       -> shutdown.
-
-child_timeout(#child{shutdown = brutal_kill}) -> infinity;
-child_timeout(#child{shutdown = Time})        -> Time.
 
 child_res(#child{shutdown=brutal_kill},   killed,    false) -> ok;
 child_res(#child{},                       shutdown,  false) -> ok;
@@ -703,6 +694,23 @@ child_res(#child{restart_type=permanent}, normal,    false) -> {error, normal};
 child_res(#child{restart_type={permanent,_}},normal, false) -> {error, normal};
 child_res(#child{},                       normal,    false) -> ok;
 child_res(#child{},                       R,         _)     -> {error, R}.
+
+timeout_start(#child{shutdown = Time}, TimeoutMsg)
+    when is_integer(Time) ->
+    erlang:send_after(Time, self(), TimeoutMsg);
+timeout_start(#child{}, _TimeoutMsg) ->
+    ok.
+
+timeout_stop(#child{shutdown = Time}, TRef, TimeoutMsg, false)
+    when is_integer(Time) ->
+    erlang:cancel_timer(TRef),
+    receive
+        TimeoutMsg -> ok
+    after
+        0 -> ok
+    end;
+timeout_stop(#child{}, ok, _TimeoutMsg, _Timedout) ->
+    ok.
 
 do_terminate(Child, SupName) when Child#child.pid =/= undefined ->
     ReportError = shutdown_error_reporter(SupName),
