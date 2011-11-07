@@ -18,8 +18,8 @@
 
 -behaviour(application).
 
--export([prepare/0, start/0, stop/0, stop_and_halt/0, status/0,
-         is_running/0 , is_running/1, environment/0,
+-export([maybe_hipe_compile/0, prepare/0, start/0, stop/0, stop_and_halt/0,
+         status/0, is_running/0, is_running/1, environment/0,
          rotate_logs/1, force_event_refresh/0]).
 
 -export([start/2, stop/1]).
@@ -177,6 +177,27 @@
 
 -define(APPS, [os_mon, mnesia, rabbit]).
 
+%% see bug 24513 for how this list was created
+-define(HIPE_WORTHY,
+        [rabbit_reader, rabbit_channel, gen_server2,
+         rabbit_exchange, rabbit_command_assembler, rabbit_framing_amqp_0_9_1,
+         rabbit_basic, rabbit_event, lists, queue, priority_queue,
+         rabbit_router, rabbit_trace, rabbit_misc, rabbit_binary_parser,
+         rabbit_exchange_type_direct, rabbit_guid, rabbit_net,
+         rabbit_amqqueue_process, rabbit_variable_queue,
+         rabbit_binary_generator, rabbit_writer, delegate, gb_sets, lqueue,
+         sets, orddict, rabbit_amqqueue, rabbit_limiter, gb_trees,
+         rabbit_queue_index, gen, dict, ordsets, file_handle_cache,
+         rabbit_msg_store, array, rabbit_msg_store_ets_index, rabbit_msg_file,
+         rabbit_exchange_type_fanout, rabbit_exchange_type_topic, mnesia,
+         mnesia_lib, rpc, mnesia_tm, qlc, sofs, proplists]).
+
+%% HiPE compilation uses multiple cores anyway, but some bits are
+%% IO-bound so we can go faster if we parallelise a bit more. In
+%% practice 2 processes seems just as fast as any other number > 1,
+%% and keeps the progress bar realistic-ish.
+-define(HIPE_PROCESSES, 2).
+
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
@@ -185,6 +206,7 @@
 %% this really should be an abstract type
 -type(log_location() :: 'tty' | 'undefined' | file:filename()).
 
+-spec(maybe_hipe_compile/0 :: () -> 'ok').
 -spec(prepare/0 :: () -> 'ok').
 -spec(start/0 :: () -> 'ok').
 -spec(stop/0 :: () -> 'ok').
@@ -218,12 +240,53 @@
 
 %%----------------------------------------------------------------------------
 
+maybe_hipe_compile() ->
+    {ok, Want} = application:get_env(rabbit, hipe_compile),
+    Can = code:which(hipe) =/= non_existing,
+    case {Want, Can} of
+        {true,  true}  -> hipe_compile();
+        {true,  false} -> io:format("Not HiPE compiling: HiPE not found in "
+                                    "this Erlang installation.~n");
+        {false, _}     -> ok
+    end.
+
+hipe_compile() ->
+    Count = length(?HIPE_WORTHY),
+    io:format("HiPE compiling:  |~s|~n                 |",
+              [string:copies("-", Count)]),
+    T1 = erlang:now(),
+    PidMRefs = [spawn_monitor(fun () -> [begin
+                                             {ok, M} = hipe:c(M, [o3]),
+                                             io:format("#")
+                                         end || M <- Ms]
+                              end) ||
+                   Ms <- split(?HIPE_WORTHY, ?HIPE_PROCESSES)],
+    [receive
+         {'DOWN', MRef, process, _, normal} -> ok;
+         {'DOWN', MRef, process, _, Reason} -> exit(Reason)
+     end || {_Pid, MRef} <- PidMRefs],
+    T2 = erlang:now(),
+    io:format("|~n~nCompiled ~B modules in ~Bs~n",
+              [Count, timer:now_diff(T2, T1) div 1000000]).
+
+split(L, N) -> split0(L, [[] || _ <- lists:seq(1, N)]).
+
+split0([],       Ls)       -> Ls;
+split0([I | Is], [L | Ls]) -> split0(Is, Ls ++ [[I | L]]).
+
 prepare() ->
     ok = ensure_working_log_handlers(),
     ok = rabbit_upgrade:maybe_upgrade_mnesia().
 
 start() ->
     try
+        %% prepare/1 ends up looking at the rabbit app's env, so it
+        %% needs to be loaded, but during the tests, it may end up
+        %% getting loaded twice, so guard against that
+        case application:load(rabbit) of
+            ok                                -> ok;
+            {error, {already_loaded, rabbit}} -> ok
+        end,
         ok = prepare(),
         ok = rabbit_misc:start_applications(application_load_order())
     after

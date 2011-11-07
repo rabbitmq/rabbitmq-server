@@ -111,7 +111,7 @@ behaviour_info(callbacks) ->
 
      %% Reinsert messages into the queue which have already been
      %% delivered and were pending acknowledgement.
-     {requeue, 3},
+     {requeue, 2},
 
      %% How long is my queue?
      {len, 1},

@@ -18,7 +18,7 @@
 
 -export([init/3, terminate/2, delete_and_terminate/2,
          purge/1, publish/4, publish_delivered/5, drain_confirmed/1,
-         dropwhile/3, fetch/2, ack/3, requeue/3, len/1, is_empty/1,
+         dropwhile/3, fetch/2, ack/3, requeue/2, len/1, is_empty/1,
          set_ram_duration_target/2, ram_duration/1,
          needs_timeout/1, timeout/1, handle_pre_hibernate/1,
          status/1, invoke/3, is_duplicate/2, discard/3,
@@ -653,21 +653,19 @@ ack(AckTags, Fun, State) ->
                          persistent_count = PCount1,
                          ack_out_counter  = AckOutCount + length(AckTags) })}.
 
-requeue(AckTags, MsgPropsFun, #vqstate { delta      = Delta,
-                                         q3         = Q3,
-                                         q4         = Q4,
-                                         in_counter = InCounter,
-                                         len        = Len } = State) ->
+requeue(AckTags, #vqstate { delta = Delta,
+                                    q3         = Q3,
+                                    q4         = Q4,
+                                    in_counter = InCounter,
+                                    len        = Len } = State) ->
     {SeqIds,  Q4a, MsgIds,  State1} = queue_merge(lists:sort(AckTags), Q4, [],
                                                   beta_limit(Q3),
-                                                  fun publish_alpha/2,
-                                                  MsgPropsFun, State),
+                                                  fun publish_alpha/2, State),
     {SeqIds1, Q3a, MsgIds1, State2} = queue_merge(SeqIds, Q3, MsgIds,
                                                   delta_limit(Delta),
-                                                  fun publish_beta/2,
-                                                  MsgPropsFun, State1),
+                                                  fun publish_beta/2, State1),
     {Delta1, MsgIds2, State3}       = delta_merge(SeqIds1, Delta, MsgIds1,
-                                                  MsgPropsFun, State2),
+                                                  State2),
     MsgCount = length(MsgIds2),
     {MsgIds2, a(reduce_memory_use(
                   State3 #vqstate { delta      = Delta1,
@@ -1317,7 +1315,7 @@ blind_confirm(Callback, MsgIdSet) ->
     Callback(?MODULE,
              fun (?MODULE, State) -> record_confirms(MsgIdSet, State) end).
 
-msgs_written_to_disk(Callback, MsgIdSet, removed) ->
+msgs_written_to_disk(Callback, MsgIdSet, ignored) ->
     blind_confirm(Callback, MsgIdSet);
 msgs_written_to_disk(Callback, MsgIdSet, written) ->
     Callback(?MODULE,
@@ -1360,50 +1358,49 @@ publish_beta(MsgStatus, State) ->
                    ram_msg_count = RamMsgCount + one_if(Msg =/= undefined) }}.
 
 %% Rebuild queue, inserting sequence ids to maintain ordering
-queue_merge(SeqIds, Q, MsgIds, Limit, PubFun, MsgPropsFun, State) ->
+queue_merge(SeqIds, Q, MsgIds, Limit, PubFun, State) ->
     queue_merge(SeqIds, Q, ?QUEUE:new(), MsgIds,
-                Limit, PubFun, MsgPropsFun, State).
+                Limit, PubFun, State).
 
 queue_merge([SeqId | Rest] = SeqIds, Q, Front, MsgIds,
-            Limit, PubFun, MsgPropsFun, State)
+            Limit, PubFun, State)
   when Limit == undefined orelse SeqId < Limit ->
     case ?QUEUE:out(Q) of
         {{value, #msg_status { seq_id = SeqIdQ } = MsgStatus}, Q1}
           when SeqIdQ < SeqId ->
             %% enqueue from the remaining queue
             queue_merge(SeqIds, Q1, ?QUEUE:in(MsgStatus, Front), MsgIds,
-                        Limit, PubFun, MsgPropsFun, State);
+                        Limit, PubFun, State);
         {_, _Q1} ->
             %% enqueue from the remaining list of sequence ids
-            {MsgStatus, State1} = msg_from_pending_ack(SeqId, MsgPropsFun,
-                                                       State),
+            {MsgStatus, State1} = msg_from_pending_ack(SeqId, State),
             {#msg_status { msg_id = MsgId } = MsgStatus1, State2} =
                 PubFun(MsgStatus, State1),
             queue_merge(Rest, Q, ?QUEUE:in(MsgStatus1, Front), [MsgId | MsgIds],
-                        Limit, PubFun, MsgPropsFun, State2)
+                        Limit, PubFun, State2)
     end;
 queue_merge(SeqIds, Q, Front, MsgIds,
-            _Limit, _PubFun, _MsgPropsFun, State) ->
+            _Limit, _PubFun, State) ->
     {SeqIds, ?QUEUE:join(Front, Q), MsgIds, State}.
 
-delta_merge([], Delta, MsgIds, _MsgPropsFun, State) ->
+delta_merge([], Delta, MsgIds, State) ->
     {Delta, MsgIds, State};
-delta_merge(SeqIds, Delta, MsgIds, MsgPropsFun, State) ->
+delta_merge(SeqIds, Delta, MsgIds, State) ->
     lists:foldl(fun (SeqId, {Delta0, MsgIds0, State0}) ->
                         {#msg_status { msg_id = MsgId } = MsgStatus, State1} =
-                            msg_from_pending_ack(SeqId, MsgPropsFun, State0),
+                            msg_from_pending_ack(SeqId, State0),
                         {_MsgStatus, State2} =
                             maybe_write_to_disk(true, true, MsgStatus, State1),
                         {expand_delta(SeqId, Delta0), [MsgId | MsgIds0], State2}
                 end, {Delta, MsgIds, State}, SeqIds).
 
 %% Mostly opposite of record_pending_ack/2
-msg_from_pending_ack(SeqId, MsgPropsFun, State) ->
+msg_from_pending_ack(SeqId, State) ->
     {#msg_status { msg_props = MsgProps } = MsgStatus, State1} =
         remove_pending_ack(SeqId, State),
     {MsgStatus #msg_status {
-       msg_props = (MsgPropsFun(MsgProps)) #message_properties {
-                     needs_confirming = false } }, State1}.
+       msg_props = MsgProps #message_properties { needs_confirming = false } },
+     State1}.
 
 beta_limit(Q) ->
     case ?QUEUE:peek(Q) of
@@ -1601,39 +1598,31 @@ maybe_deltas_to_betas(State = #vqstate {
     end.
 
 push_alphas_to_betas(Quota, State) ->
-    {Quota1, State1} = maybe_push_q1_to_betas(Quota,  State),
-    {Quota2, State2} = maybe_push_q4_to_betas(Quota1, State1),
+    {Quota1, State1} =
+        push_alphas_to_betas(
+          fun ?QUEUE:out/1,
+          fun (MsgStatus, Q1a,
+               State0 = #vqstate { q3 = Q3, delta = #delta { count = 0 } }) ->
+                  State0 #vqstate { q1 = Q1a, q3 = ?QUEUE:in(MsgStatus, Q3) };
+              (MsgStatus, Q1a, State0 = #vqstate { q2 = Q2 }) ->
+                  State0 #vqstate { q1 = Q1a, q2 = ?QUEUE:in(MsgStatus, Q2) }
+          end, Quota, State #vqstate.q1, State),
+    {Quota2, State2} =
+        push_alphas_to_betas(
+          fun ?QUEUE:out_r/1,
+          fun (MsgStatus, Q4a, State0 = #vqstate { q3 = Q3 }) ->
+                  State0 #vqstate { q3 = ?QUEUE:in_r(MsgStatus, Q3), q4 = Q4a }
+          end, Quota1, State1 #vqstate.q4, State1),
     {Quota2, State2}.
 
-maybe_push_q1_to_betas(Quota, State = #vqstate { q1 = Q1 }) ->
-    maybe_push_alphas_to_betas(
-      fun ?QUEUE:out/1,
-      fun (MsgStatus, Q1a,
-           State1 = #vqstate { q3 = Q3, delta = #delta { count = 0 } }) ->
-              State1 #vqstate { q1 = Q1a,
-                                q3 = ?QUEUE:in(MsgStatus, Q3) };
-          (MsgStatus, Q1a, State1 = #vqstate { q2 = Q2 }) ->
-              State1 #vqstate { q1 = Q1a,
-                                q2 = ?QUEUE:in(MsgStatus, Q2) }
-      end, Quota, Q1, State).
-
-maybe_push_q4_to_betas(Quota, State = #vqstate { q4 = Q4 }) ->
-    maybe_push_alphas_to_betas(
-      fun ?QUEUE:out_r/1,
-      fun (MsgStatus, Q4a, State1 = #vqstate { q3 = Q3 }) ->
-              State1 #vqstate { q3 = ?QUEUE:in_r(MsgStatus, Q3),
-                                q4 = Q4a }
-      end, Quota, Q4, State).
-
-maybe_push_alphas_to_betas(_Generator, _Consumer, Quota, _Q,
-                           State = #vqstate {
-                             ram_msg_count    = RamMsgCount,
-                             target_ram_count = TargetRamCount })
+push_alphas_to_betas(_Generator, _Consumer, Quota, _Q,
+                     State = #vqstate { ram_msg_count    = RamMsgCount,
+                                        target_ram_count = TargetRamCount })
   when Quota =:= 0 orelse
        TargetRamCount =:= infinity orelse
        TargetRamCount >= RamMsgCount ->
     {Quota, State};
-maybe_push_alphas_to_betas(Generator, Consumer, Quota, Q, State) ->
+push_alphas_to_betas(Generator, Consumer, Quota, Q, State) ->
     case Generator(Q) of
         {empty, _Q} ->
             {Quota, State};
@@ -1643,8 +1632,8 @@ maybe_push_alphas_to_betas(Generator, Consumer, Quota, Q, State) ->
                 maybe_write_to_disk(true, false, MsgStatus, State),
             MsgStatus2 = m(trim_msg_status(MsgStatus1)),
             State2 = State1 #vqstate { ram_msg_count = RamMsgCount - 1 },
-            maybe_push_alphas_to_betas(Generator, Consumer, Quota - 1, Qa,
-                                       Consumer(MsgStatus2, Qa, State2))
+            push_alphas_to_betas(Generator, Consumer, Quota - 1, Qa,
+                                 Consumer(MsgStatus2, Qa, State2))
     end.
 
 push_betas_to_deltas(Quota, State = #vqstate { q2          = Q2,
