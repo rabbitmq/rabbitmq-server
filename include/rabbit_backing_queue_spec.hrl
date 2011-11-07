@@ -29,8 +29,7 @@
 
 -type(msg_lookup_fun() :: fun((state()) -> msg_lookup_result())).
 
--type(msg_lookup_callback() ::
-        fun((msg_lookup_fun(), state()) -> state())).
+-type(msg_fun() :: fun((msg_lookup_fun(), state()) -> state())).
 
 -spec(start/1 :: ([rabbit_amqqueue:name()]) -> 'ok').
 -spec(stop/0 :: () -> 'ok').
@@ -51,11 +50,11 @@
 -spec(drain_confirmed/1 :: (state()) -> {[rabbit_guid:guid()], state()}).
 -spec(dropwhile/3 ::
         (fun ((rabbit_types:message_properties()) -> boolean()),
-             msg_lookup_callback(), state())
+             msg_fun(), state())
         -> state()).
 -spec(fetch/2 :: (true,  state()) -> {fetch_result(ack()), state()};
                  (false, state()) -> {fetch_result(undefined), state()}).
--spec(ack/3 :: ([ack()], msg_lookup_callback(), state()) ->
+-spec(ack/3 :: ([ack()], msg_fun(), state()) ->
                     {[rabbit_guid:guid()], state()}).
 -spec(requeue/2 :: ([ack()], state())
                    -> {[rabbit_guid:guid()], state()}).

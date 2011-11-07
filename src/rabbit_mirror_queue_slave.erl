@@ -818,12 +818,12 @@ process_instruction({fetch, AckRequired, MsgId, Remaining},
                  %% we must be shorter than the master
                  State
          end};
-process_instruction({ack, Fun, MsgIds},
+process_instruction({ack, MsgFun, MsgIds},
                     State = #state { backing_queue       = BQ,
                                      backing_queue_state = BQS,
                                      msg_id_ack          = MA }) ->
     {AckTags, MA1} = msg_ids_to_acktags(MsgIds, MA),
-    {MsgIds1, BQS1} = BQ:ack(AckTags, Fun, BQS),
+    {MsgIds1, BQS1} = BQ:ack(AckTags, MsgFun, BQS),
     [] = MsgIds1 -- MsgIds, %% ASSERTION
     {ok, State #state { msg_id_ack          = MA1,
                         backing_queue_state = BQS1 }};

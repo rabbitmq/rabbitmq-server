@@ -223,15 +223,14 @@ process_args(State = #q{q = #amqqueue{arguments = Arguments}}) ->
                         end
                 end, State, [{<<"x-expires">>,     fun init_expires/2},
                              {<<"x-message-ttl">>, fun init_ttl/2},
-                             {<<"x-dead-letter-exchange">>,
-                              fun init_dlx/2}]).
+                             {<<"x-dead-letter-exchange">>, fun init_dlx/2}]).
 
 init_expires(Expires, State) -> ensure_expiry_timer(State#q{expires = Expires}).
 
 init_ttl(TTL, State) -> drop_expired_messages(State#q{ttl = TTL}).
 
 init_dlx(DLX, State = #q{q = #amqqueue{name = #resource{
-                                              virtual_host = VHostPath}}}) ->
+                                         virtual_host = VHostPath}}}) ->
     State#q{dlx = rabbit_misc:r(VHostPath, exchange, DLX)}.
 
 terminate_shutdown(Fun, State) ->
@@ -691,7 +690,7 @@ drop_expired_messages(State = #q{backing_queue_state = BQS,
     Now = now_micros(),
     BQS1 = BQ:dropwhile(
              fun (#message_properties{expiry = Expiry}) -> Now > Expiry end,
-             dead_letter_callback_fun(expired, State),
+             mk_dead_letter_fun(expired, State),
              BQS),
     ensure_ttl_timer(State#q{backing_queue_state = BQS1}).
 
@@ -708,11 +707,11 @@ ensure_ttl_timer(State = #q{backing_queue       = BQ,
 ensure_ttl_timer(State) ->
     State.
 
-dead_letter_callback_fun(_Reason, #q{dlx = undefined}) ->
-    fun(_MsgFun, BQS) -> BQS end;
-dead_letter_callback_fun(Reason, State) ->
-    fun(MsgFun, BQS) ->
-            {Msg, BQS1} = MsgFun(BQS),
+mk_dead_letter_fun(_Reason, #q{dlx = undefined}) ->
+    fun(_MsgLookupFun, BQS) -> BQS end;
+mk_dead_letter_fun(Reason, State) ->
+    fun(MsgLookupFun, BQS) ->
+            {Msg, BQS1} = MsgLookupFun(BQS),
             dead_letter_msg(Msg, Reason, State),
             BQS1
     end.
@@ -731,7 +730,7 @@ maybe_dead_letter_queue(Reason, State = #q{
     end.
 
 dead_letter_msg(Msg, Reason, State = #q{dlx = DLX}) ->
-    Exchange = rabbit_exchange:lookup_or_die(DLX),
+    rabbit_exchange:lookup_or_die(DLX),
 
     rabbit_basic:publish(
       rabbit_basic:delivery(
@@ -1110,8 +1109,7 @@ handle_cast({reject, AckTags, Requeue, ChPid}, State) ->
                                backing_queue_state = BQS}) ->
                       case Requeue of
                           true  -> requeue_and_run(AckTags, State1);
-                          false -> Fun = dead_letter_callback_fun(rejected,
-                                                                  State),
+                          false -> Fun = mk_dead_letter_fun(rejected, State),
                                    {_Guids, BQS1} = BQ:ack(AckTags, Fun, BQS),
                                    State1#q{backing_queue_state = BQS1}
                       end

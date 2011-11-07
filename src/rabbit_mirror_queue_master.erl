@@ -172,12 +172,12 @@ publish_delivered(AckRequired, Msg = #basic_message { id = MsgId }, MsgProps,
      ensure_monitoring(ChPid, State #state { backing_queue_state = BQS1,
                                              ack_msg_id          = AM1 })}.
 
-dropwhile(Pred, DropFun, State = #state{gm                  = GM,
-                                        backing_queue       = BQ,
-                                        backing_queue_state = BQS,
-                                        set_delivered       = SetDelivered }) ->
+dropwhile(Pred, MsgFun, State = #state{gm                  = GM,
+                                       backing_queue       = BQ,
+                                       set_delivered       = SetDelivered,
+                                       backing_queue_state = BQS }) ->
     Len = BQ:len(BQS),
-    BQS1 = BQ:dropwhile(Pred, DropFun, BQS),
+    BQS1 = BQ:dropwhile(Pred, MsgFun, BQS),
     Dropped = Len - BQ:len(BQS1),
     SetDelivered1 = lists:max([0, SetDelivered - Dropped]),
     ok = gm:broadcast(GM, {set_length, BQ:len(BQS1)}),
@@ -235,15 +235,15 @@ fetch(AckRequired, State = #state { gm                  = GM,
                              ack_msg_id    = AM1 }}
     end.
 
-ack(AckTags, Fun, State = #state { gm                  = GM,
-                                   backing_queue       = BQ,
-                                   backing_queue_state = BQS,
-                                   ack_msg_id          = AM }) ->
-    {MsgIds, BQS1} = BQ:ack(AckTags, Fun, BQS),
+ack(AckTags, MsgFun, State = #state { gm                  = GM,
+                                      backing_queue       = BQ,
+                                      backing_queue_state = BQS,
+                                      ack_msg_id          = AM }) ->
+    {MsgIds, BQS1} = BQ:ack(AckTags, MsgFun, BQS),
     AM1 = lists:foldl(fun dict:erase/2, AM, AckTags),
     case MsgIds of
         [] -> ok;
-        _  -> ok = gm:broadcast(GM, {ack, Fun, MsgIds})
+        _  -> ok = gm:broadcast(GM, {ack, MsgFun, MsgIds})
     end,
     {MsgIds, State #state { backing_queue_state = BQS1,
                             ack_msg_id          = AM1 }}.

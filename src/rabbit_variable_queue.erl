@@ -581,15 +581,17 @@ drain_confirmed(State = #vqstate { confirmed = C }) ->
                                         confirmed = gb_sets:new() }}
     end.
 
-dropwhile(Pred, DropFun, State) ->
+dropwhile(Pred, MsgFun, State) ->
     case queue_out(State) of
         {empty, State1} ->
             a(State1);
         {{value, MsgStatus = #msg_status { msg_props = MsgProps }}, State1} ->
             case Pred(MsgProps) of
-                true ->  State2 = DropFun(read_msg_callback(MsgStatus), State1),
-                         dropwhile(Pred, DropFun, State2);
-                false -> a(in_r(MsgStatus, State1))
+                true ->
+                    State2 = MsgFun(read_msg_callback(MsgStatus), State1),
+                    dropwhile(Pred, MsgFun, State2);
+                false ->
+                    a(in_r(MsgStatus, State1))
             end
     end.
 
@@ -609,17 +611,13 @@ fetch(AckRequired, State) ->
 read_msg_callback(#msg_status { msg           = undefined,
                                 msg_id        = MsgId,
                                 is_persistent = IsPersistent }) ->
-    fun(State) ->
-            read_msg_callback1(MsgId, IsPersistent, State)
-    end;
-read_msg_callback(#msg_status{ msg = Msg}) ->
-    fun(State) ->
-            {Msg, State}
-    end;
+    fun(State) -> read_msg_callback1(MsgId, IsPersistent, State) end;
+
+read_msg_callback(#msg_status{ msg = Msg }) ->
+    fun(State) -> {Msg, State} end;
+
 read_msg_callback({IsPersistent, MsgId, _MsgProps}) ->
-    fun(State) ->
-            read_msg_callback1(MsgId, IsPersistent, State)
-    end.
+    fun(State) -> read_msg_callback1(MsgId, IsPersistent, State) end.
 
 read_msg_callback1(MsgId, IsPersistent,
                    State = #vqstate{ msg_store_clients = MSCState }) ->
