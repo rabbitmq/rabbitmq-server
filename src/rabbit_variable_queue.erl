@@ -589,7 +589,8 @@ dropwhile(Pred, MsgFun, State) ->
             case Pred(MsgProps) of
                 true ->
                     State2 = MsgFun(read_msg_callback(MsgStatus), State1),
-                    dropwhile(Pred, MsgFun, State2);
+                    {_, State3} = internal_fetch(false, MsgStatus, State2),
+                    dropwhile(Pred, MsgFun, State3);
                 false ->
                     a(in_r(MsgStatus, State1))
             end
@@ -605,7 +606,6 @@ fetch(AckRequired, State) ->
             {MsgStatus1, State2} = read_msg(MsgStatus, State1),
             {Res, State3} = internal_fetch(AckRequired, MsgStatus1, State2),
             {Res, a(State3)}
-
     end.
 
 read_msg_callback(#msg_status { msg           = undefined,
