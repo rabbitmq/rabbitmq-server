@@ -695,21 +695,19 @@ child_res(#child{restart_type={permanent,_}},normal, false) -> {error, normal};
 child_res(#child{},                       normal,    false) -> ok;
 child_res(#child{},                       R,         _)     -> {error, R}.
 
-timeout_start(#child{shutdown = Time}, TimeoutMsg)
-    when is_integer(Time) ->
-    erlang:send_after(Time, self(), TimeoutMsg);
-timeout_start(#child{}, _TimeoutMsg) ->
+timeout_start(#child{shutdown = Time}, Msg) when is_integer(Time) ->
+    erlang:send_after(Time, self(), Msg);
+timeout_start(#child{}, _Msg) ->
     ok.
 
-timeout_stop(#child{shutdown = Time}, TRef, TimeoutMsg, false)
-    when is_integer(Time) ->
+timeout_stop(#child{shutdown = Time}, TRef, Msg, false) when is_integer(Time) ->
     erlang:cancel_timer(TRef),
     receive
-        TimeoutMsg -> ok
+        Msg -> ok
     after
         0 -> ok
     end;
-timeout_stop(#child{}, ok, _TimeoutMsg, _Timedout) ->
+timeout_stop(#child{}, ok, _Msg, _Timedout) ->
     ok.
 
 do_terminate(Child, SupName) when Child#child.pid =/= undefined ->
