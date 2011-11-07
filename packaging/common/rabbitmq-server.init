@@ -56,8 +56,10 @@ start_rabbitmq () {
         RETVAL=0
         ensure_pid_dir
         set +e
-        setsid sh -c "RABBITMQ_PID_FILE=$PID_FILE $DAEMON > \
-            ${INIT_LOG_DIR}/startup_log 2> ${INIT_LOG_DIR}/startup_err" &
+        RABBITMQ_PID_FILE=$PID_FILE setsid $DAEMON \
+            > "${INIT_LOG_DIR}/startup_log" \
+            2> "${INIT_LOG_DIR}/startup_err" \
+            0<&- &
         $CONTROL wait $PID_FILE >/dev/null 2>&1
         RETVAL=$?
         set -e
@@ -81,7 +83,7 @@ stop_rabbitmq () {
     status_rabbitmq quiet
     if [ $RETVAL = 0 ] ; then
         set +e
-        $CONTROL stop > ${INIT_LOG_DIR}/shutdown_log 2> ${INIT_LOG_DIR}/shutdown_err
+        $CONTROL stop ${PID_FILE} > ${INIT_LOG_DIR}/shutdown_log 2> ${INIT_LOG_DIR}/shutdown_err
         RETVAL=$?
         set -e
         if [ $RETVAL = 0 ] ; then

@@ -57,13 +57,11 @@ if not exist "!ERLANG_HOME!\bin\erl.exe" (
     exit /B
 )
 
-set RABBITMQ_BASE_UNIX=!RABBITMQ_BASE:\=/!
-
 if "!RABBITMQ_MNESIA_BASE!"=="" (
-    set RABBITMQ_MNESIA_BASE=!RABBITMQ_BASE_UNIX!/db
+    set RABBITMQ_MNESIA_BASE=!RABBITMQ_BASE!/db
 )
 if "!RABBITMQ_LOG_BASE!"=="" (
-    set RABBITMQ_LOG_BASE=!RABBITMQ_BASE_UNIX!/log
+    set RABBITMQ_LOG_BASE=!RABBITMQ_BASE!/log
 )
 
 
@@ -96,7 +94,7 @@ set RABBITMQ_EBIN_ROOT=!TDP0!..\ebin
 -noinput -hidden ^
 -s rabbit_prelaunch ^
 -sname rabbitmqprelaunch!RANDOM! ^
--extra "!RABBITMQ_ENABLED_PLUGINS_FILE!" ^
+-extra "!RABBITMQ_ENABLED_PLUGINS_FILE:\=/!" ^
        "!RABBITMQ_PLUGINS_DIR:\=/!" ^
        "!RABBITMQ_PLUGINS_EXPAND_DIR:\=/!" ^
        "!RABBITMQ_NODENAME!"
@@ -144,7 +142,7 @@ if not "!RABBITMQ_NODE_IP_ADDRESS!"=="" (
 -os_mon start_cpu_sup true ^
 -os_mon start_disksup false ^
 -os_mon start_memsup false ^
--mnesia dir \""!RABBITMQ_MNESIA_DIR!"\" ^
+-mnesia dir \""!RABBITMQ_MNESIA_DIR:\=/!"\" ^
 !RABBITMQ_SERVER_START_ARGS! ^
 !STAR!
 

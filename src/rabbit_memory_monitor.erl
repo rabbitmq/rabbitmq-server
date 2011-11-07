@@ -24,7 +24,7 @@
 
 -behaviour(gen_server2).
 
--export([start_link/0, update/0, register/2, deregister/1,
+-export([start_link/0, register/2, deregister/1,
          report_ram_duration/2, stop/0]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -69,7 +69,6 @@
 -ifdef(use_specs).
 
 -spec(start_link/0 :: () -> rabbit_types:ok_pid_or_error()).
--spec(update/0 :: () -> 'ok').
 -spec(register/2 :: (pid(), {atom(),atom(),[any()]}) -> 'ok').
 -spec(deregister/1 :: (pid()) -> 'ok').
 -spec(report_ram_duration/2 ::
@@ -84,9 +83,6 @@
 
 start_link() ->
     gen_server2:start_link({local, ?SERVER}, ?MODULE, [], []).
-
-update() ->
-    gen_server2:cast(?SERVER, update).
 
 register(Pid, MFA = {_M, _F, _A}) ->
     gen_server2:call(?SERVER, {register, Pid, MFA}, infinity).
@@ -106,8 +102,7 @@ stop() ->
 %%----------------------------------------------------------------------------
 
 init([]) ->
-    {ok, TRef} = timer:apply_interval(?DEFAULT_UPDATE_INTERVAL,
-                                      ?SERVER, update, []),
+    {ok, TRef} = timer:send_interval(?DEFAULT_UPDATE_INTERVAL, update),
 
     Ets = ets:new(?TABLE_NAME, [set, private, {keypos, #process.pid}]),
 
@@ -153,9 +148,6 @@ handle_call({register, Pid, MFA}, _From,
 handle_call(_Request, _From, State) ->
     {noreply, State}.
 
-handle_cast(update, State) ->
-    {noreply, internal_update(State)};
-
 handle_cast({deregister, Pid}, State) ->
     {noreply, internal_deregister(Pid, true, State)};
 
@@ -164,6 +156,9 @@ handle_cast(stop, State) ->
 
 handle_cast(_Request, State) ->
     {noreply, State}.
+
+handle_info(update, State) ->
+    {noreply, internal_update(State)};
 
 handle_info({'DOWN', _MRef, process, Pid, _Reason}, State) ->
     {noreply, internal_deregister(Pid, false, State)};
@@ -216,17 +211,19 @@ internal_update(State = #state { queue_durations = Durations,
                                  queue_duration_sum = Sum,
                                  queue_duration_count = Count }) ->
     MemoryLimit = ?MEMORY_LIMIT_SCALING * vm_memory_monitor:get_memory_limit(),
-    MemoryRatio = erlang:memory(total) / MemoryLimit,
+    MemoryRatio = case MemoryLimit > 0.0 of
+                      true  -> erlang:memory(total) / MemoryLimit;
+                      false -> infinity
+                  end,
     DesiredDurationAvg1 =
-        case MemoryRatio < ?LIMIT_THRESHOLD orelse Count == 0 of
-            true ->
+        if MemoryRatio =:= infinity ->
+                0.0;
+           MemoryRatio < ?LIMIT_THRESHOLD orelse Count == 0 ->
                 infinity;
-            false ->
-                Sum1 = case MemoryRatio < ?SUM_INC_THRESHOLD of
-                           true  -> Sum + ?SUM_INC_AMOUNT;
-                           false -> Sum
-                       end,
-                (Sum1 / Count) / MemoryRatio
+           MemoryRatio < ?SUM_INC_THRESHOLD ->
+                ((Sum + ?SUM_INC_AMOUNT) / Count) / MemoryRatio;
+           true ->
+                (Sum / Count) / MemoryRatio
         end,
     State1 = State #state { desired_duration = DesiredDurationAvg1 },
 
