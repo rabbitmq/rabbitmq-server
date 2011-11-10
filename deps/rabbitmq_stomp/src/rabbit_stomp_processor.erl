@@ -38,6 +38,7 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_stomp_frame.hrl").
 -include("rabbit_stomp.hrl").
+-include("rabbit_stomp_prefixes.hrl").
 
 -record(state, {socket, session_id, channel,
                 connection, subscriptions, version,
@@ -48,7 +49,6 @@
 
 -define(SUPPORTED_VERSIONS, ["1.0", "1.1"]).
 -define(FLUSH_TIMEOUT, 60000).
--define(REPLY_QUEUE_PREFIX, "/reply-queue/").
 
 %%----------------------------------------------------------------------------
 %% Public API
