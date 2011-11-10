@@ -284,6 +284,41 @@ class TestReplyQueue(base.BaseTest):
         finally:
             conn2.stop()
 
+    def test_reuse_reply_queue(self):
+        ''' Test re-use of reply-to queue '''
+
+        known2 = '/queue/known2'
+        known3 = '/queue/known3'
+        reply = '/temp-queue/foo'
+
+        def respond(cntn, listna):
+            self.assertTrue(listna.await(5))
+            self.assertEquals(1, len(listna.messages))
+            reply_to = listna.messages[0]['headers']['reply-to']
+            self.assertTrue(reply_to.startswith('/reply-queue/'))
+            cntn.send("reply", destination=reply_to)
+
+        ## Client 1 uses pre-supplied connection and listener
+        ## Set up clients 2 and 3
+        conn2, listener2 = self.create_subscriber_connection(known2)
+        conn3, listener3 = self.create_subscriber_connection(known3)
+        try:
+            self.listener.reset(2)
+            self.conn.send("test2", destination=known2,
+                           headers = {"reply-to": reply})
+            self.conn.send("test3", destination=known3,
+                           headers = {"reply-to": reply})
+            respond(conn2, listener2)
+            respond(conn3, listener3)
+            
+            self.assertTrue(self.listener.await(5))
+            self.assertEquals(2, len(self.listener.messages))
+            self.assertEquals("reply", self.listener.messages[0]['message'])
+            self.assertEquals("reply", self.listener.messages[1]['message'])
+        finally:
+            conn2.stop()
+            conn3.stop()
+
 class TestDurableSubscription(base.BaseTest):
 
     ID = 'test.subscription'
