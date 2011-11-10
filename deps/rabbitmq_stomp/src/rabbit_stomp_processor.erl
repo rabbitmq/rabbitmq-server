@@ -48,6 +48,7 @@
 
 -define(SUPPORTED_VERSIONS, ["1.0", "1.1"]).
 -define(FLUSH_TIMEOUT, 60000).
+-define(REPLY_QUEUE_PREFIX, "/reply-queue/").
 
 %%----------------------------------------------------------------------------
 %% Public API
@@ -644,7 +645,7 @@ ensure_reply_queue(TempQueueId, State = #state{channel       = Channel,
                                                subscriptions = Subs}) ->
     case dict:find(TempQueueId, RQS) of
         {ok, RQ} ->
-            {RQ, RQS};
+            {reply_to_destination(RQ), State};
         error ->
             #'queue.declare_ok'{queue = Queue} =
                 amqp_channel:call(Channel,
@@ -659,7 +660,7 @@ ensure_reply_queue(TempQueueId, State = #state{channel       = Channel,
                                          nowait = false},
                                        self()),
 
-            Destination = "/reply-queue/" ++ binary_to_list(Queue),
+            Destination = reply_to_destination(Queue),
 
             %% synthesise a subscription to the reply queue destination
             Subs1 = dict:store(ConsumerTag,
@@ -673,6 +674,8 @@ ensure_reply_queue(TempQueueId, State = #state{channel       = Channel,
                             subscriptions = Subs1}}
     end.
 
+reply_to_destination(Queue) ->
+    ?REPLY_QUEUE_PREFIX ++ binary_to_list(Queue).
 
 %%----------------------------------------------------------------------------
 %% Receipt Handling
