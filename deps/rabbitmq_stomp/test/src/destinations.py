@@ -310,7 +310,7 @@ class TestReplyQueue(base.BaseTest):
                            headers = {"reply-to": reply})
             respond(conn2, listener2)
             respond(conn3, listener3)
-            
+
             self.assertTrue(self.listener.await(5))
             self.assertEquals(2, len(self.listener.messages))
             self.assertEquals("reply", self.listener.messages[0]['message'])
