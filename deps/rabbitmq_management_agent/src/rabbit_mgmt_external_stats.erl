@@ -65,8 +65,8 @@ get_used_fd() ->
 
 get_used_fd({unix, linux}) ->
     case file:list_dir("/proc/" ++ os:getpid() ++ "/fd") of
-        {ok,    Files} -> length(Files);
-        {error, _}     -> get_used_fd({unix, generic})
+        {ok, Files} -> length(Files);
+        {error, _}  -> get_used_fd({unix, generic})
     end;
 
 get_used_fd({unix, _}) ->
