@@ -50,6 +50,7 @@
             msg_id_to_channel,
             ttl,
             ttl_timer_ref,
+            publish_seqno,
             dlx
            }).
 
@@ -131,6 +132,7 @@ init(Q) ->
                expiry_timer_ref    = undefined,
                ttl                 = undefined,
                dlx                 = undefined,
+               publish_seqno       = 1,
                msg_id_to_channel   = gb_trees:empty()},
     {ok, rabbit_event:init_stats_timer(State, #q.stats_timer), hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
@@ -153,6 +155,7 @@ init_with_backing_queue_state(Q = #amqqueue{exclusive_owner = Owner}, BQ, BQS,
                rate_timer_ref      = RateTRef,
                expiry_timer_ref    = undefined,
                ttl                 = undefined,
+               publish_seqno       = 1,
                msg_id_to_channel   = MTC},
     State1 = requeue_and_run(AckTags, process_args(
                                         rabbit_event:init_stats_timer(
@@ -471,8 +474,11 @@ confirm_messages(MsgIds, State = #q{msg_id_to_channel = MTC}) ->
                           {CMs, MTC0}
                   end
           end, {gb_trees:empty(), MTC}, MsgIds),
-    rabbit_misc:gb_trees_foreach(fun rabbit_channel:confirm/2, CMs),
+    rabbit_misc:gb_trees_foreach(fun confirm_to_sender/2, CMs),
     State#q{msg_id_to_channel = MTC1}.
+
+confirm_to_sender(Pid, MsgSeqNos) ->
+    gen_server2:cast(Pid, {confirm, MsgSeqNos, self()}).
 
 should_confirm_message(#delivery{msg_seq_no = undefined}, _State) ->
     never;
@@ -510,7 +516,7 @@ attempt_delivery(Delivery = #delivery{sender     = ChPid,
                  State = #q{backing_queue = BQ, backing_queue_state = BQS}) ->
     Confirm = should_confirm_message(Delivery, State),
     case Confirm of
-        immediately -> rabbit_channel:confirm(ChPid, [MsgSeqNo]);
+        immediately -> confirm_to_sender(ChPid, [MsgSeqNo]);
         _           -> ok
     end,
     case BQ:is_duplicate(Message, BQS) of
@@ -686,13 +692,17 @@ calculate_msg_expiry(TTL)       -> now_micros() + (TTL * 1000).
 drop_expired_messages(State = #q{ttl = undefined}) ->
     State;
 drop_expired_messages(State = #q{backing_queue_state = BQS,
-                                 backing_queue = BQ}) ->
+                                 backing_queue       = BQ,
+                                 publish_seqno       = MsgSeqNo}) ->
     Now = now_micros(),
-    BQS1 = BQ:dropwhile(
-             fun (#message_properties{expiry = Expiry}) -> Now > Expiry end,
-             mk_dead_letter_fun(expired, State),
-             BQS),
-    ensure_ttl_timer(State#q{backing_queue_state = BQS1}).
+    {MsgSeqNo1, BQS1} =
+        BQ:dropwhile(
+          fun (#message_properties{expiry = Expiry}) -> Now > Expiry end,
+          mk_dead_letter_fun(expired, State),
+          MsgSeqNo,
+          BQS),
+    ensure_ttl_timer(State#q{backing_queue_state = BQS1,
+                             publish_seqno       = MsgSeqNo1}).
 
 ensure_ttl_timer(State = #q{backing_queue       = BQ,
                             backing_queue_state = BQS,
@@ -708,35 +718,38 @@ ensure_ttl_timer(State) ->
     State.
 
 mk_dead_letter_fun(_Reason, #q{dlx = undefined}) ->
-    fun(_MsgLookupFun, BQS) -> BQS end;
+    fun(_MsgLookupFun, MsgSeqNo, BQS) -> {MsgSeqNo, BQS} end;
 mk_dead_letter_fun(Reason, State) ->
-    fun(MsgLookupFun, BQS) ->
+    fun(MsgLookupFun, MsgSeqNo, BQS) ->
             {Msg, BQS1} = MsgLookupFun(BQS),
-            dead_letter_msg(Msg, Reason, State),
-            BQS1
+            MsgSeqNo1 = dead_letter_msg(Msg, Reason, MsgSeqNo, State),
+            {MsgSeqNo1, BQS1}
     end.
 
 maybe_dead_letter_queue(_Reason, State = #q{dlx = undefined}) ->
     State;
 maybe_dead_letter_queue(Reason, State = #q{
                                   backing_queue_state  = BQS,
-                                  backing_queue        = BQ}) ->
+                                  backing_queue        = BQ,
+                                  publish_seqno        = MsgSeqNo}) ->
     case BQ:fetch(false, BQS) of
         {empty, BQS1} ->
             State#q{backing_queue_state = BQS1};
         {{Msg, _IsDelivered, _AckTag, _Remaining}, BQS1} ->
-            dead_letter_msg(Msg, Reason, State),
-            maybe_dead_letter_queue(Reason, State#q{backing_queue_state = BQS1})
+            MsgSeqNo1 = dead_letter_msg(Msg, Reason, MsgSeqNo, State),
+            maybe_dead_letter_queue(Reason,
+                                    State#q{backing_queue_state = BQS1,
+                                            publish_seqno       = MsgSeqNo1})
     end.
 
-dead_letter_msg(Msg, Reason, State = #q{dlx = DLX}) ->
+dead_letter_msg(Msg, Reason, MsgSeqNo, State = #q{dlx = DLX}) ->
     rabbit_exchange:lookup_or_die(DLX),
 
     rabbit_basic:publish(
       rabbit_basic:delivery(
         false, false, make_dead_letter_msg(DLX, Reason, Msg, State),
-        undefined)),
-    ok.
+        MsgSeqNo)),
+    MsgSeqNo+1.
 
 make_dead_letter_msg(DLX, Reason, Msg = #basic_message{content = Content},
                      State) ->
@@ -1096,22 +1109,28 @@ handle_cast({ack, AckTags, ChPid}, State) ->
     noreply(subtract_acks(
               ChPid, AckTags, State,
               fun (State1 = #q{backing_queue       = BQ,
-                               backing_queue_state = BQS}) ->
-                      Fun = fun(_, BQS0) -> BQS0 end,
-                      {_Guids, BQS1} = BQ:ack(AckTags, Fun, BQS),
-                      State1#q{backing_queue_state = BQS1}
+                               backing_queue_state = BQS,
+                               publish_seqno       = MsgSeqNo}) ->
+                      Fun = fun(_, MsgSeqNo1, BQS0) -> {MsgSeqNo1, BQS0} end,
+                      {_Guids, MsgSeqNo1, BQS1} =
+                          BQ:ack(AckTags, Fun, MsgSeqNo, BQS),
+                      State1#q{backing_queue_state = BQS1,
+                               publish_seqno       = MsgSeqNo1}
               end));
 
 handle_cast({reject, AckTags, Requeue, ChPid}, State) ->
     noreply(subtract_acks(
               ChPid, AckTags, State,
               fun (State1 = #q{backing_queue       = BQ,
-                               backing_queue_state = BQS}) ->
+                               backing_queue_state = BQS,
+                               publish_seqno       = MsgSeqNo}) ->
                       case Requeue of
                           true  -> requeue_and_run(AckTags, State1);
                           false -> Fun = mk_dead_letter_fun(rejected, State),
-                                   {_Guids, BQS1} = BQ:ack(AckTags, Fun, BQS),
-                                   State1#q{backing_queue_state = BQS1}
+                                   {_Guids, MsgSeqNo1, BQS1} =
+                                       BQ:ack(AckTags, Fun, MsgSeqNo, BQS),
+                                   State1#q{backing_queue_state = BQS1,
+                                            publish_seqno       = MsgSeqNo1}
                       end
               end));
 
@@ -1167,6 +1186,10 @@ handle_cast(force_event_refresh, State = #q{exclusive_consumer = Exclusive}) ->
         {Ch, CTag} -> [{Ch, CTag, AckRequired}] = consumers(State),
                       emit_consumer_created(Ch, CTag, true, AckRequired)
     end,
+    noreply(State);
+
+handle_cast({confirm, MsgSeqNos, From}, State) ->
+    rabbit_log:info("Got a confirm for ~p~n", [MsgSeqNos]),
     noreply(State).
 
 handle_info(maybe_expire, State) ->

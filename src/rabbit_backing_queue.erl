@@ -97,8 +97,9 @@ behaviour_info(callbacks) ->
      %% Drop messages from the head of the queue while the supplied
      %% predicate returns true. A callback function is supplied
      %% allowing callers access to messages that are about to be
-     %% dropped.
-     {dropwhile, 3},
+     %% dropped; the callback may publish messages and requires the
+     %% next message sequence number, which must also be supplied.
+     {dropwhile, 4},
 
      %% Produce the next message.
      {fetch, 2},
@@ -106,8 +107,10 @@ behaviour_info(callbacks) ->
      %% Acktags supplied are for messages which can now be forgotten
      %% about. Must return 1 msg_id per Ack, in the same order as
      %% Acks. A callback function is supplied allowing callers to
-     %% access messages that are being acked.
-     {ack, 3},
+     %% access messages that are being acked; the callback may publish
+     %% messages and requires the next message sequence number, which
+     %% must also be supplied.
+     {ack, 4},
 
      %% Reinsert messages into the queue which have already been
      %% delivered and were pending acknowledgement.
