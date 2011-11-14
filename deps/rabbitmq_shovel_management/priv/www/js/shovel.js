@@ -8,6 +8,8 @@ dispatcher_add(function(sammy) {
 $("#tabs").append('<li class="administrator-only"><a href="#/shovels">Shovels</a></li>');
 
 function fmt_shovel_endpoint(point) {
+    if (point == undefined) return '';
+
     if (point.node) {
         delete point.heartbeat;
         delete point.frame_max;
