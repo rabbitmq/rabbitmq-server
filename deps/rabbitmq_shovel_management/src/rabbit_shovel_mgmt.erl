@@ -74,18 +74,28 @@ format_ts({{Y, M, D}, {H, Min, S}}) ->
     print("~w-~2.2.0w-~2.2.0w ~w:~2.2.0w:~2.2.0w", [Y, M, D, H, Min, S]).
 
 format_params(Params) ->
-    [{K, V} || {K, V} <- format_params0(Params), V =/= none].
+    [{K, V} || {K, V} <- format_params0(Params), V =/= undefined].
 
-format_params0(Params = #amqp_params_direct{}) ->
-    [{type, direct} | rabbit_mgmt_format:record(
-                        Params, record_info(fields, amqp_params_direct))];
+format_params0(Params = #amqp_params_direct{username     = Username,
+                                            virtual_host = VHost,
+                                            node         = Node}) ->
+    [{type,         direct},
+     {virtual_host, VHost},
+     {node,         Node},
+     {username,     Username}];
 
-format_params0(Params = #amqp_params_network{}) ->
-    [{type, network} |
-     rabbit_mgmt_format:record(
-       Params#amqp_params_network{password        = undefined,
-                                  auth_mechanisms = undefined},
-       record_info(fields, amqp_params_network))].
+format_params0(Params = #amqp_params_network{username     = Username,
+                                             virtual_host = VHost,
+                                             host         = Host,
+                                             port         = Port,
+                                             ssl_options  = SSLOptions}) ->
+    [{type,         network},
+     {virtual_host, VHost},
+     {host,         list_to_binary(Host)},
+     {username,     Username},
+     {port,         Port},
+     {ssl,          SSLOptions =/= none}].
+
 
 print(Fmt, Val) ->
     list_to_binary(io_lib:format(Fmt, Val)).
