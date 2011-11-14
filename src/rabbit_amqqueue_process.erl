@@ -176,19 +176,17 @@ terminate({shutdown, _} = R, State = #q{backing_queue = BQ}) ->
     terminate_shutdown(fun (BQS) -> BQ:terminate(R, BQS) end, State);
 terminate(Reason,            State = #q{q             = #amqqueue{name = QName},
                                         backing_queue = BQ}) ->
-    State1 = maybe_dead_letter_queue(queue_deleted, State),
     %% FIXME: How do we cancel active subscriptions?
     terminate_shutdown(fun (BQS) ->
-
                                rabbit_event:notify(
                                  queue_deleted, [{pid,  self()},
                                                  {name, QName}]),
                                BQS1 = BQ:delete_and_terminate(Reason, BQS),
                                %% don't care if the internal delete
                                %% doesn't return 'ok'.
-                               rabbit_amqqueue:internal_delete(qname(State1)),
+                               rabbit_amqqueue:internal_delete(qname(State)),
                                BQS1
-                       end, State1).
+                       end, State).
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
@@ -1083,7 +1081,8 @@ handle_call({delete, IfUnused, IfEmpty}, _From,
         IfUnused and not(IsUnused) ->
             reply({error, in_use}, State);
         true ->
-            {stop, normal, {ok, BQ:len(BQS)}, State}
+            State1 = maybe_dead_letter_queue(queue_deleted, State),
+            {stop, normal, {ok, BQ:len(BQS)}, State1}
     end;
 
 handle_call(purge, _From, State = #q{backing_queue       = BQ,
@@ -1139,7 +1138,8 @@ handle_cast({reject, AckTags, Requeue, ChPid}, State) ->
               end));
 
 handle_cast(delete_immediately, State) ->
-    {stop, normal, State};
+    State1 = maybe_dead_letter_queue(queue_deleted, State),
+    {stop, normal, State1};
 
 handle_cast({unblock, ChPid}, State) ->
     noreply(
@@ -1231,7 +1231,8 @@ handle_cast({dead_letter, {Msg, Extra}, Reason}, State) ->
 handle_info(maybe_expire, State) ->
     case is_unused(State) of
         true  -> ?LOGDEBUG("Queue lease expired for ~p~n", [State#q.q]),
-                 {stop, normal, State};
+                 State1 = maybe_dead_letter_queue(queue_deleted, State),
+                 {stop, normal, State1};
         false -> noreply(ensure_expiry_timer(State))
     end;
 
