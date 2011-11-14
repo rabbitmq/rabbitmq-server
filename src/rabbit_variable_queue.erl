@@ -586,12 +586,16 @@ dropwhile(Pred, MsgFun, State) ->
         {empty, State1} ->
             a(State1);
         {{value, MsgStatus = #msg_status { msg_props = MsgProps }}, State1} ->
-            case Pred(MsgProps) of
-                true ->
-                    State2 = MsgFun(read_msg_callback(MsgStatus), undefined, State1),
-                    {_, State3} = internal_fetch(false, MsgStatus, State2),
+            case {Pred(MsgProps), MsgFun} of
+                {true, undefined} ->
+                    {_, State2} = internal_fetch(false, MsgStatus, State1),
+                    dropwhile(Pred, MsgFun, State2);
+                {true, _} ->
+                    {{_, _, AckTag, _}, State2} =
+                        internal_fetch(true, MsgStatus, State1),
+                    State3 = MsgFun(read_msg_callback(MsgStatus), AckTag, State2),
                     dropwhile(Pred, MsgFun, State3);
-                false ->
+                {false, _} ->
                     a(in_r(MsgStatus, State1))
             end
     end.

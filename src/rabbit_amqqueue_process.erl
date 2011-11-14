@@ -1189,8 +1189,8 @@ handle_cast({confirm, MsgSeqNos, _From}, State) ->
                                backing_queue_state = BQS}) ->
                       Reason = gb_trees:get(MsgSeqNo, Unconfirmed),
                       case Reason of
-                          {expired, _} ->
-                              ok;
+                          {expired, AckTag} ->
+                              BQ:ack([AckTag], undefined, BQS);
                           {rejected, AckTag} ->
                               BQ:ack([AckTag], undefined, BQS);
                           {queue_deleted, _} ->
