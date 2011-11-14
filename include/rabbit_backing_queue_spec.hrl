@@ -48,14 +48,14 @@
                               rabbit_types:message_properties(), pid(), state())
                              -> {undefined, state()}).
 -spec(drain_confirmed/1 :: (state()) -> {[rabbit_guid:guid()], state()}).
--spec(dropwhile/4 ::
+-spec(dropwhile/3 ::
         (fun ((rabbit_types:message_properties()) -> boolean()),
-             msg_fun(), non_neg_integer(), state())
-        -> {non_neg_integer(), state()}).
+             msg_fun(), state())
+        -> state()).
 -spec(fetch/2 :: (true,  state()) -> {fetch_result(ack()), state()};
                  (false, state()) -> {fetch_result(undefined), state()}).
--spec(ack/4 :: ([ack()], msg_fun(), non_neg_integer(), state()) ->
-                    {[rabbit_guid:guid()], non_neg_integer(), state()}).
+-spec(ack/3 :: ([ack()], msg_fun(), state()) ->
+                    {[rabbit_guid:guid()], state()}).
 -spec(requeue/2 :: ([ack()], state())
                    -> {[rabbit_guid:guid()], state()}).
 -spec(len/1 :: (state()) -> non_neg_integer()).

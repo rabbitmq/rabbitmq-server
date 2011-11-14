@@ -17,8 +17,8 @@
 -module(rabbit_mirror_queue_master).
 
 -export([init/3, terminate/2, delete_and_terminate/2,
-         purge/1, publish/4, publish_delivered/5, fetch/2, ack/4,
-         requeue/2, len/1, is_empty/1, drain_confirmed/1, dropwhile/4,
+         purge/1, publish/4, publish_delivered/5, fetch/2, ack/3,
+         requeue/2, len/1, is_empty/1, drain_confirmed/1, dropwhile/3,
          set_ram_duration_target/2, ram_duration/1,
          needs_timeout/1, timeout/1, handle_pre_hibernate/1,
          status/1, invoke/3, is_duplicate/2, discard/3]).
@@ -172,18 +172,18 @@ publish_delivered(AckRequired, Msg = #basic_message { id = MsgId }, MsgProps,
      ensure_monitoring(ChPid, State #state { backing_queue_state = BQS1,
                                              ack_msg_id          = AM1 })}.
 
-dropwhile(Pred, MsgFun, MsgSeqNo,
+dropwhile(Pred, MsgFun,
           State = #state{gm                  = GM,
                          backing_queue       = BQ,
                          set_delivered       = SetDelivered,
                          backing_queue_state = BQS }) ->
     Len = BQ:len(BQS),
-    {MsgSeqNo1, BQS1} = BQ:dropwhile(Pred, MsgFun, MsgSeqNo, BQS),
+    BQS1 = BQ:dropwhile(Pred, MsgFun, BQS),
     Dropped = Len - BQ:len(BQS1),
     SetDelivered1 = lists:max([0, SetDelivered - Dropped]),
     ok = gm:broadcast(GM, {set_length, BQ:len(BQS1)}),
-    {MsgSeqNo1, State #state { backing_queue_state = BQS1,
-                               set_delivered       = SetDelivered1 }}.
+    State #state { backing_queue_state = BQS1,
+                   set_delivered       = SetDelivered1 }.
 
 drain_confirmed(State = #state { backing_queue       = BQ,
                                  backing_queue_state = BQS,
@@ -236,18 +236,18 @@ fetch(AckRequired, State = #state { gm                  = GM,
                              ack_msg_id    = AM1 }}
     end.
 
-ack(AckTags, MsgFun, MsgSeqNo, State = #state { gm                  = GM,
-                                                backing_queue       = BQ,
-                                                backing_queue_state = BQS,
-                                                ack_msg_id          = AM }) ->
-    {MsgIds, MsgSeqNo1, BQS1} = BQ:ack(AckTags, MsgFun, MsgSeqNo, BQS),
+ack(AckTags, MsgFun, State = #state { gm                  = GM,
+                                      backing_queue       = BQ,
+                                      backing_queue_state = BQS,
+                                      ack_msg_id          = AM }) ->
+    {MsgIds, BQS1} = BQ:ack(AckTags, MsgFun, BQS),
     AM1 = lists:foldl(fun dict:erase/2, AM, AckTags),
     case MsgIds of
         [] -> ok;
         _  -> ok = gm:broadcast(GM, {ack, MsgFun, MsgIds})
     end,
-    {MsgIds, MsgSeqNo1, State #state { backing_queue_state = BQS1,
-                                       ack_msg_id          = AM1 }}.
+    {MsgIds, State #state { backing_queue_state = BQS1,
+                            ack_msg_id          = AM1 }}.
 
 requeue(AckTags, State = #state { gm                  = GM,
                                   backing_queue       = BQ,

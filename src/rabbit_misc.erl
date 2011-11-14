@@ -28,6 +28,7 @@
 -export([enable_cover/0, report_cover/0]).
 -export([enable_cover/1, report_cover/1]).
 -export([start_cover/1]).
+-export([confirm_to_sender/2]).
 -export([throw_on_error/2, with_exit_handler/2, filter_exit_map/2]).
 -export([with_user/2, with_user_and_vhost/3]).
 -export([execute_mnesia_transaction/1]).
@@ -369,6 +370,9 @@ report_coverage_percentage(File, Cov, NotCov, Mod) ->
                    true -> 100.0
                end,
                Mod]).
+
+confirm_to_sender(Pid, MsgSeqNos) ->
+    gen_server2:cast(Pid, {confirm, MsgSeqNos, self()}).
 
 throw_on_error(E, Thunk) ->
     case Thunk() of
