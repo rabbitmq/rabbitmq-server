@@ -430,7 +430,7 @@ handle_slave_synchronised(QName, SSPid, State) ->
     SSNode = node(SSPid),
     update_synchronised_slaves(
       fun (SSNodes) -> case lists:member(SSNode, SSNodes) of
-                           true  -> [SSNodes];
+                           true  -> SSNodes;
                            false -> [SSNode | SSNodes]
                        end
       end, QName, State).
