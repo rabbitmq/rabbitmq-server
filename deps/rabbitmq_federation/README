@@ -1,21 +1,3 @@
-WARNING
-=======
-
-This is all somewhat experimental. There hasn't been much real-world
-testing, although we have a test suite with reasonable coverage.
-
-Generic build instructions are at:
-        http://www.rabbitmq.com/plugin-development.html
-
-
-Limitations
-===========
-
-You can't federate headers exchanges. You can't make a broker federate
-with a new upstream without restarting it. There's no status
-reporting. These will likely get fixed.
-
-
 Purpose
 =======
 
@@ -43,6 +25,14 @@ requiring clustering. This is useful for the following reasons:
    brokers.
 
 For the time being, federation is primarily useful in pub/sub scenarios.
+
+
+Limitations
+===========
+
+You can't federate headers exchanges. You can't make a broker federate
+with a new upstream without restarting it. There's no status
+reporting. These will likely get fixed.
 
 
 HOWTO
