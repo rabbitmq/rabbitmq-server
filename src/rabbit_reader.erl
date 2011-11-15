@@ -281,7 +281,7 @@ handle_other({conserve_memory, Conserve}, Deb, State) ->
 handle_other({channel_closing, ChPid}, Deb, State) ->
     ok = rabbit_channel:ready_for_close(ChPid),
     channel_cleanup(ChPid),
-    mainloop(Deb, State);
+    mainloop(Deb, maybe_close(State));
 handle_other({'EXIT', Parent, Reason}, _Deb, State = #v1{parent = Parent}) ->
     terminate(io_lib:format("broker forced connection closure "
                             "with reason '~w'", [Reason]), State),
