@@ -76,19 +76,19 @@ format_ts({{Y, M, D}, {H, Min, S}}) ->
 format_params(Params) ->
     [{K, V} || {K, V} <- format_params0(Params), V =/= undefined].
 
-format_params0(Params = #amqp_params_direct{username     = Username,
-                                            virtual_host = VHost,
-                                            node         = Node}) ->
+format_params0(#amqp_params_direct{username     = Username,
+                                   virtual_host = VHost,
+                                   node         = Node}) ->
     [{type,         direct},
      {virtual_host, VHost},
      {node,         Node},
      {username,     Username}];
 
-format_params0(Params = #amqp_params_network{username     = Username,
-                                             virtual_host = VHost,
-                                             host         = Host,
-                                             port         = Port,
-                                             ssl_options  = SSLOptions}) ->
+format_params0(#amqp_params_network{username     = Username,
+                                    virtual_host = VHost,
+                                    host         = Host,
+                                    port         = Port,
+                                    ssl_options  = SSLOptions}) ->
     [{type,         network},
      {virtual_host, VHost},
      {host,         list_to_binary(Host)},
