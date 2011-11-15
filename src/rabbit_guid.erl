@@ -77,8 +77,9 @@ guid() ->
     %% slow since it takes a global lock and makes a system call.
     %%
     %% A persisted serial number, the node, and a unique reference
-    %% uniquely identifies a process in space and time. We combine
-    %% that with a process-local counter to give us a GUID.
+    %% (per node-incarnation) uniquely identifies a process in space
+    %% and time. We combine that with a process-local counter to give
+    %% us a GUID.
     %%
     %% We used to use self/0 here instead of the node and unique
     %% reference. But PIDs wrap.
