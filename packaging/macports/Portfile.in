@@ -92,17 +92,15 @@ post-destroot {
 
     xinstall -m 555 ${filespath}/rabbitmq-script-wrapper \
                 ${wrappersbin}/rabbitmq-server
-
+    reinplace -E "s:MACPORTS_PREFIX/bin:${prefix}/bin:g" \
+                ${wrappersbin}/rabbitmq-server
     reinplace -E "s:/usr/lib/rabbitmq/bin/:${prefix}/lib/rabbitmq/bin/:g" \
-                ${wrappersbin}/rabbitmq-server/rabbitmq-script-wrapper
+                ${wrappersbin}/rabbitmq-server
     reinplace -E "s:/var/lib/rabbitmq:${prefix}/var/lib/rabbitmq:g" \
-                ${wrappersbin}/rabbitmq-server/rabbitmq-script-wrapper
+                ${wrappersbin}/rabbitmq-server
 
-    file copy ${wrappersbin}/rabbitmq-server/rabbitmq-script-wrapper \
-                ${wrappersbin}/rabbitmqctl/rabbitmq-script-wrapper
-    file copy ${wrappersbin}/rabbitmq-server/rabbitmq-script-wrapper \
-                ${wrappersbin}/rabbitmq-plugins/rabbitmq-script-wrapper
-
+    file copy ${wrappersbin}/rabbitmq-server ${wrappersbin}/rabbitmqctl
+    file copy ${wrappersbin}/rabbitmq-server ${wrappersbin}/rabbitmq-plugins
 
     xinstall -m 644 -W ${mansrc}/man1 rabbitmq-server.1.gz rabbitmqctl.1.gz rabbitmq-plugins.1.gz \
         ${mandest}/man1/
