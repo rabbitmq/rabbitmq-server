@@ -1201,8 +1201,7 @@ handle_cast({confirm, MsgSeqNos, _From},
     {BQS3, UC3} =
         lists:foldl(
           fun (MsgSeqNo, {BQS1, UC1}) ->
-                  %% FIXME Forward confirms to channels
-                  {_, BQS2} =
+                  {_Guids, BQS2} =
                       case gb_trees:get(MsgSeqNo, UC1) of
                           {Reason, AckTag} when Reason =:= expired;
                                                 Reason =:= rejected;
