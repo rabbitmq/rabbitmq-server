@@ -76,14 +76,17 @@ guid() ->
     %% now() to move ahead of the system time), and b) it is really
     %% slow since it takes a global lock and makes a system call.
     %%
-    %% A persisted serial number, in combination with self/0 (which
-    %% includes the node name) uniquely identifies a process in space
+    %% A persisted serial number, the node, and a unique reference
+    %% (per node-incarnation) uniquely identifies a process in space
     %% and time. We combine that with a process-local counter to give
     %% us a GUID.
+    %%
+    %% We used to use self/0 here instead of the node and unique
+    %% reference. But PIDs wrap.
     G = case get(guid) of
-            undefined -> {{gen_server:call(?SERVER, serial, infinity), self()},
-                          0};
-            {S, I}   -> {S, I+1}
+            undefined -> Serial = gen_server:call(?SERVER, serial, infinity),
+                         {{Serial, node(), make_ref()}, 0};
+            {S, I}    -> {S, I+1}
         end,
     put(guid, G),
     erlang:md5(term_to_binary(G)).
