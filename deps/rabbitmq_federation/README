@@ -259,12 +259,12 @@ federated exchange and an upstream. It can contain the following keys:
 * exchange         - the name of the federated exchange
 * vhost            - the virtual host containing the federated exchange
 * connection       - the name of the connection for this link (from config)
+* host             - the name of the host this link connects to
+* port             - the port this link connects to
+* ssl              - whether this link uses SSL
 * status           - status of the link: starting
                                          {running, LocalConnectionName}
                                          {stopped, Error}
-                                         {disconnected, Error}
-                                         {upstream_channel_down, Error}
-                                         {downstream_channel_down, Error}
 * timestamp        - time the status was last updated
 
 Note On Clustering
