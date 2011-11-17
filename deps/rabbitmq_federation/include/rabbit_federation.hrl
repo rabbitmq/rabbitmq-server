@@ -22,5 +22,3 @@
                    expires,
                    message_ttl,
                    connection_name}).
-
--define(SUPERVISOR, rabbit_federation_sup).

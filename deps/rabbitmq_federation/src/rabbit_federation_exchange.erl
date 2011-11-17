@@ -67,14 +67,14 @@ create(none, X = #exchange{name      = XName,
     {longstr, Set} = rabbit_misc:table_lookup(Args, <<"upstream-set">>),
     {ok, Upstreams} = rabbit_federation_upstream:from_set(Set, XName),
     ok = rabbit_federation_db:prune_scratch(XName, Upstreams),
-    {ok, _} = rabbit_federation_sup:start_child(XName, {Set, XName}),
+    {ok, _} = rabbit_federation_link_sup_sup:start_child(XName, {Set, XName}),
     with_module(X, fun (M) -> M:create(none, X) end).
 
 delete(transaction, X, Bs) ->
     with_module(X, fun (M) -> M:delete(transaction, X, Bs) end);
 delete(none, X = #exchange{name = XName}, Bs) ->
     rabbit_federation_link:stop(XName),
-    ok = rabbit_federation_sup:stop_child(XName),
+    ok = rabbit_federation_link_sup_sup:stop_child(XName),
     rabbit_federation_status:remove(XName),
     with_module(X, fun (M) -> M:delete(none, X, Bs) end).
 
