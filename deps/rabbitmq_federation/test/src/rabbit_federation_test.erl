@@ -20,6 +20,8 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
+-import(rabbit_misc, [pget/2]).
+
 -define(UPSTREAM_DOWNSTREAM, [x(<<"upstream">>),
                               fed(<<"downstream">>, <<"upstream">>)]).
 
@@ -278,6 +280,7 @@ with_ch(Fun, Xs) ->
     {ok, Conn} = amqp_connection:start(#amqp_params_network{}),
     {ok, Ch} = amqp_connection:open_channel(Conn),
     declare_all(Ch, Xs),
+    assert_status(Xs),
     Fun(Ch),
     delete_all(Ch, Xs),
     amqp_connection:close(Conn),
@@ -421,3 +424,33 @@ test_args(Ch, Args) ->
                         type      = <<"x-federation">>,
                         arguments = Args}),
     delete_exchange(Ch, <<"test">>).
+
+assert_status(Xs) ->
+    Links = lists:append([links(X) || X <- Xs]),
+    Remaining = lists:foldl(fun assert_link_status/2,
+                            rabbit_federation_status:status(), Links),
+    ?assertEqual([], remove_configured_links(Remaining)),
+    ok.
+
+assert_link_status({DXNameBin, ConnectionName, UXNameBin}, Status) ->
+    {[_], Rest} = lists:partition(
+                    fun(St) ->
+                            pget(connection, St) =:= ConnectionName andalso
+                                pget(exchange, St) =:= DXNameBin andalso
+                                pget(upstream_exchange, St) =:= UXNameBin
+                    end, Status),
+    Rest.
+
+links(#'exchange.declare'{exchange  = Name,
+                          type      = <<"x-federation">>,
+                          arguments = Args}) ->
+    {longstr, Set} = rabbit_misc:table_lookup(Args,  <<"upstream-set">>),
+    {ok, Upstreams} = rabbit_federation_upstream:from_set(
+                        Set, rabbit_misc:r(<<"/">>, exchange, Name)),
+    [{Name, U#upstream.connection_name, U#upstream.exchange} || U <- Upstreams];
+
+links(#'exchange.declare'{}) ->
+    [].
+
+remove_configured_links(Status) ->
+    [St || St <- Status, pget(exchange, St) =/= <<"down-conf">>].

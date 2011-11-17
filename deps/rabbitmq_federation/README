@@ -31,8 +31,7 @@ Limitations
 ===========
 
 You can't federate headers exchanges. You can't make a broker federate
-with a new upstream without restarting it. There's no status
-reporting. These will likely get fixed.
+with a new upstream without restarting it. These will likely get fixed.
 
 
 HOWTO
@@ -249,6 +248,26 @@ args.put("upstream-set", "my-upstream-set");
 Channel ch = ...;
 ch.exchangeDeclare("my-federated-exchange", "x-federation", true, false, args);
 
+Link Status Reporting
+=====================
+
+From the broker Erlang prompt, call
+rabbit_federation_status:status(). This will return a list of
+proplists. Each proplist represents a link; that is a combination of a
+federated exchange and an upstream. It can contain the following keys:
+
+* exchange         - the name of the federated exchange
+* vhost            - the virtual host containing the federated exchange
+* connection       - the name of the connection for this link (from config)
+* status           - status of the link: starting
+                                         shutting_down
+                                         {connected, LocalConnectionName}
+                                         {connect_failed, Error}
+                                         {disconnected, Error}
+                                         {upstream_channel_down, Error}
+                                         {downstream_channel_down, Error}
+* timestamp        - time the status was last updated
+
 Note On Clustering
 ==================
 
@@ -260,7 +279,6 @@ to a surviving node.
 Possible Future Enhancements
 ============================
 
-* Simple status reporting, similar to the shovel
 
 * Modify upstream sets dynamically
 

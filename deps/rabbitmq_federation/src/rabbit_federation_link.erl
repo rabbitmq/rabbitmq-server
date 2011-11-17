@@ -32,6 +32,8 @@
 
 -export([add_routing_to_headers/2]).
 
+-import(rabbit_misc, [pget/2]).
+
 -define(ROUTING_HEADER, <<"x-received-from">>).
 
 -record(state, {upstream,
@@ -68,6 +70,7 @@ list_routing_keys(XN) -> call(XN, list_routing_keys).
 %%----------------------------------------------------------------------------
 
 start_link(Args) ->
+    report_status(Args, starting),
     gen_server2:start_link(?MODULE, Args, [{timeout, infinity}]).
 
 init(Args = {_, XName}) ->
@@ -166,13 +169,15 @@ handle_info({'DOWN', _Ref, process, Ch, Reason},
 handle_info(Msg, State) ->
     {stop, {unexpected_info, Msg}, State}.
 
-terminate(_Reason, {not_started, _}) ->
+terminate(Reason, State = {not_started, _}) ->
+    report_status(State, map_error(Reason)),
     ok;
 
-terminate(_Reason, #state{downstream_channel    = DCh,
-                          downstream_connection = DConn,
-                          connection            = Conn,
-                          channel               = Ch}) ->
+terminate(Reason, State = #state{downstream_channel    = DCh,
+                                 downstream_connection = DConn,
+                                 connection            = Conn,
+                                 channel               = Ch}) ->
+    report_status(State, map_error(Reason)),
     ensure_closed(DConn, DCh),
     ensure_closed(Conn, Ch),
     ok.
@@ -335,8 +340,9 @@ go(S0 = {not_started, {Upstream, DownXName =
                                     [rabbit_misc:rs(DownXName),
                                      rabbit_federation_upstream:to_string(
                                        Upstream)]),
+                    Name = pget(name, amqp_connection:info(DConn, [name])),
+                    report_status(State, {connected, Name}),
                     {noreply, State};
-
                 E ->
                     ensure_closed(DConn, DCh),
                     connection_error(E, S0)
@@ -349,14 +355,14 @@ connection_error(E, State = {not_started, {U, XName}}) ->
     rabbit_log:info("Federation ~s failed to establish connection to ~s~n~p~n",
                     [rabbit_misc:rs(XName),
                      rabbit_federation_upstream:to_string(U), E]),
-    {stop, {shutdown, E}, State};
+    {stop, {shutdown, {connect_failed, E}}, State};
 
 connection_error(E, State = #state{upstream            = U,
                                    downstream_exchange = XName}) ->
     rabbit_log:info("Federation ~s disconnected from ~s:~n~p~n",
                     [rabbit_misc:rs(XName),
                      rabbit_federation_upstream:to_string(U), E]),
-    {stop, {shutdown, E}, State}.
+    {stop, {shutdown, {disconnected, E}}, State}.
 
 
 consume_from_upstream_queue(
@@ -509,3 +515,18 @@ add_routing_to_headers(Headers, Info) ->
             end,
     rabbit_misc:set_table_value(
       Headers, ?ROUTING_HEADER, array, [{table, Info} | Prior]).
+
+report_status({#upstream{connection_name = Connection,
+                         exchange        = UXNameBin}, XName}, Status) ->
+    rabbit_federation_status:report(XName, Connection, UXNameBin, Status);
+
+report_status({not_started, Args}, Status) ->
+    report_status(Args, Status);
+
+report_status(#state{upstream            = Upstream,
+                     downstream_exchange = XName}, Status) ->
+    report_status({Upstream, XName}, Status).
+
+map_error({shutdown, {connect_failed, {error, E}}}) -> {connect_failed, E};
+map_error({shutdown, Reason})                       -> Reason;
+map_error(Term)                                     -> Term.
