@@ -8,7 +8,7 @@
     <th>Virtual Host</th>
 <% } %>
     <th>Exchange</th>
-    <th>Connection name</th>
+    <th>Connection</th>
 <% if (nodes_interesting) { %>
     <th>Node</th>
 <% } %>
@@ -27,7 +27,13 @@
     <td><%= link.vhost %></td>
 <% } %>
     <td><%= link_exchange(link.vhost, link.exchange) %></td>
-    <td><%= link.connection %></td>
+    <td>
+      <%= link.connection %>
+      <sub>
+        <%= link.host %>:<%= link.port %>
+        <% if (link.ssl) { %>(SSL)<% } %>
+      </sub>
+    </td>
 <% if (nodes_interesting) { %>
     <td><%= link.node %></td>
 <% } %>
@@ -39,7 +45,7 @@
     <td><%= link.timestamp %></td>
   </tr>
   <tr>
-    <td colspan="5">
+    <td colspan="7">
       <pre><%= fmt_escape_html(link.error) %></pre>
     </td>
   </tr>
