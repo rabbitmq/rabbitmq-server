@@ -343,7 +343,7 @@ go(S0 = {not_started, {Upstream, DownXName =
                                      rabbit_federation_upstream:to_string(
                                        Upstream)]),
                     Name = pget(name, amqp_connection:info(DConn, [name])),
-                    report_status({Upstream, DownXName}, {connected, Name}),
+                    report_status({Upstream, DownXName}, {running, Name}),
                     {noreply, State};
                 E ->
                     ensure_closed(DConn, DCh),
@@ -357,7 +357,7 @@ connection_error(E, State = {not_started, {U, XName}}) ->
     rabbit_log:info("Federation ~s failed to establish connection to ~s~n~p~n",
                     [rabbit_misc:rs(XName),
                      rabbit_federation_upstream:to_string(U), E]),
-    {stop, {shutdown, {connect_failed, E}}, State};
+    {stop, {shutdown, {stopped, E}}, State};
 
 connection_error(E, State = #state{upstream            = U,
                                    downstream_exchange = XName}) ->
@@ -522,6 +522,6 @@ report_status({#upstream{connection_name = Connection,
                          exchange        = UXNameBin}, XName}, Status) ->
     rabbit_federation_status:report(XName, Connection, UXNameBin, Status).
 
-map_error({shutdown, {connect_failed, {error, E}}}) -> {connect_failed, E};
-map_error({shutdown, Reason})                       -> Reason;
-map_error(Term)                                     -> Term.
+map_error({shutdown, {stopped, {error, E}}}) -> {stopped, E};
+map_error({shutdown, Reason})                -> Reason;
+map_error(Term)                              -> Term.
