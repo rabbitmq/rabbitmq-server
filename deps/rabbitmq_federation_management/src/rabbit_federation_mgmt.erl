@@ -63,8 +63,9 @@ status() ->
 
 status(Node) ->
     case rpc:call(Node, rabbit_federation_status, status, [], infinity) of
-        {badrpc, {'EXIT', {undef, _}}} -> [];
-        Status                         -> [format(Node, I) || I <- Status]
+        {badrpc, {'EXIT', {undef, _}}}  -> [];
+        {badrpc, {'EXIT', {noproc, _}}} -> [];
+        Status                          -> [format(Node, I) || I <- Status]
     end.
 
 format(Node, Info0) ->
