@@ -70,7 +70,7 @@ status(Node) ->
 format(Node, Info0) ->
     Info1 = proplists:delete(status, Info0),
     Info = case pget(status, Info0) of
-               {connected, Name} -> [{status,           connected},
+               {running, Name}   -> [{status,           running},
                                      {local_connection, Name} | Info1];
                {Status, E}       -> Fmted = rabbit_mgmt_format:print("~p", [E]),
                                     [{status, Status},
