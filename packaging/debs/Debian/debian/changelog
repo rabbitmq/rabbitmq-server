@@ -1,3 +1,9 @@
+rabbitmq-server (2.7.0-1) natty; urgency=low
+
+  * New Upstream Release
+
+ -- Steve Powell <steve@rabbitmq.com>  Tue, 08 Nov 2011 16:47:50 +0000
+
 rabbitmq-server (2.6.1-1) natty; urgency=low
 
   * New Upstream Release
