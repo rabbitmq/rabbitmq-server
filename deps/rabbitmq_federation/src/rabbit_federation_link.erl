@@ -357,7 +357,7 @@ connection_error(E, State = {not_started, {U, XName}}) ->
     rabbit_log:info("Federation ~s failed to establish connection to ~s~n~p~n",
                     [rabbit_misc:rs(XName),
                      rabbit_federation_upstream:to_string(U), E]),
-    {stop, {shutdown, {stopped, E}}, State};
+    {stop, {shutdown, {connect_failed, E}}, State};
 
 connection_error(E, State = #state{upstream            = U,
                                    downstream_exchange = XName}) ->
@@ -522,6 +522,6 @@ report_status({#upstream{connection_name = Connection,
                          exchange        = UXNameBin}, XName}, Status) ->
     rabbit_federation_status:report(XName, Connection, UXNameBin, Status).
 
-map_error({shutdown, {stopped, {error, E}}}) -> {stopped, E};
-map_error({shutdown, Reason})                -> Reason;
-map_error(Term)                              -> Term.
+map_error({shutdown, {connect_failed, {error, E}}}) -> {stopped, E};
+map_error({shutdown, Reason})                       -> {stopped, Reason};
+map_error(Term)                                     -> Term.
