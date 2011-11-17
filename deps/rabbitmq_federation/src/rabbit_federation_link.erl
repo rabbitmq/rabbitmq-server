@@ -169,15 +169,17 @@ handle_info({'DOWN', _Ref, process, Ch, Reason},
 handle_info(Msg, State) ->
     {stop, {unexpected_info, Msg}, State}.
 
-terminate(Reason, State = {not_started, _}) ->
-    report_status(State, map_error(Reason)),
+terminate(Reason, {not_started, Args}) ->
+    report_status(Args, map_error(Reason)),
     ok;
 
-terminate(Reason, State = #state{downstream_channel    = DCh,
-                                 downstream_connection = DConn,
-                                 connection            = Conn,
-                                 channel               = Ch}) ->
-    report_status(State, map_error(Reason)),
+terminate(Reason, #state{downstream_channel    = DCh,
+                         downstream_connection = DConn,
+                         downstream_exchange   = XName,
+                         upstream              = Upstream,
+                         connection            = Conn,
+                         channel               = Ch}) ->
+    report_status({Upstream, XName}, map_error(Reason)),
     ensure_closed(DConn, DCh),
     ensure_closed(Conn, Ch),
     ok.
@@ -341,7 +343,7 @@ go(S0 = {not_started, {Upstream, DownXName =
                                      rabbit_federation_upstream:to_string(
                                        Upstream)]),
                     Name = pget(name, amqp_connection:info(DConn, [name])),
-                    report_status(State, {connected, Name}),
+                    report_status({Upstream, DownXName}, {connected, Name}),
                     {noreply, State};
                 E ->
                     ensure_closed(DConn, DCh),
@@ -518,14 +520,7 @@ add_routing_to_headers(Headers, Info) ->
 
 report_status({#upstream{connection_name = Connection,
                          exchange        = UXNameBin}, XName}, Status) ->
-    rabbit_federation_status:report(XName, Connection, UXNameBin, Status);
-
-report_status({not_started, Args}, Status) ->
-    report_status(Args, Status);
-
-report_status(#state{upstream            = Upstream,
-                     downstream_exchange = XName}, Status) ->
-    report_status({Upstream, XName}, Status).
+    rabbit_federation_status:report(XName, Connection, UXNameBin, Status).
 
 map_error({shutdown, {connect_failed, {error, E}}}) -> {connect_failed, E};
 map_error({shutdown, Reason})                       -> Reason;
