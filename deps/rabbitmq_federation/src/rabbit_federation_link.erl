@@ -518,9 +518,8 @@ add_routing_to_headers(Headers, Info) ->
     rabbit_misc:set_table_value(
       Headers, ?ROUTING_HEADER, array, [{table, Info} | Prior]).
 
-report_status({#upstream{connection_name = Connection,
-                         exchange        = UXNameBin}, XName}, Status) ->
-    rabbit_federation_status:report(XName, Connection, UXNameBin, Status).
+report_status({Upstream, XName}, Status) ->
+    rabbit_federation_status:report(Upstream, XName, Status).
 
 map_error({shutdown, {connect_failed, {error, E}}}) -> {stopped, E};
 map_error({shutdown, Reason})                       -> {stopped, Reason};

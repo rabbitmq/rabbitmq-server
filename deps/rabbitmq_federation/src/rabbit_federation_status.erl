@@ -17,11 +17,12 @@
 -module(rabbit_federation_status).
 -behaviour(gen_server).
 
--include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("amqp_client/include/amqp_client.hrl").
+-include("rabbit_federation.hrl").
 
 -export([start_link/0]).
 
--export([report/4, remove/1, status/0]).
+-export([report/3, remove/1, status/0]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -35,8 +36,8 @@
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
-report(XName, Connection, UXNameBin, Status) ->
-    gen_server:cast(?SERVER, {report, XName, Connection, UXNameBin, Status,
+report(Upstream, XName, Status) ->
+    gen_server:cast(?SERVER, {report, Upstream, XName, Status,
                               calendar:local_time()}).
 
 remove(XName) ->
@@ -51,7 +52,7 @@ init([]) ->
     {ok, #state{}}.
 
 handle_call({remove, XName}, _From, State) ->
-    true = ets:match_delete(?ETS_NAME, #entry{key       = {XName, '_', '_'},
+    true = ets:match_delete(?ETS_NAME, #entry{key       = {XName, '_'},
                                               status    = '_',
                                               timestamp = '_'}),
     {reply, ok, State};
@@ -60,9 +61,8 @@ handle_call(status, _From, State) ->
     Entries = ets:tab2list(?ETS_NAME),
     {reply, [format(Entry) || Entry <- Entries], State}.
 
-handle_cast({report, XName, Connection, UXNameBin, Status, Timestamp}, State) ->
-    true = ets:insert(?ETS_NAME, #entry{key        = {XName, Connection,
-                                                      UXNameBin},
+handle_cast({report, Upstream, XName, Status, Timestamp}, State) ->
+    true = ets:insert(?ETS_NAME, #entry{key        = {XName, Upstream},
                                         status     = Status,
                                         timestamp  = Timestamp}),
     {noreply, State}.
@@ -79,12 +79,22 @@ code_change(_OldVsn, State, _Extra) ->
 format(#entry{key       = {#resource{virtual_host = VHost,
                                      kind         = exchange,
                                      name         = XNameBin},
-                          Connection, UXNameBin},
+                           #upstream{connection_name = Connection,
+                                     exchange        = UXNameBin,
+                                     params          = Params}},
               status    = Status,
               timestamp = Timestamp}) ->
-    [{exchange,          XNameBin},
-     {vhost,             VHost},
-     {connection,        Connection},
-     {upstream_exchange, UXNameBin},
-     {status,            Status},
-     {timestamp,         Timestamp}].
+    format_params(Params) ++
+        [{exchange,          XNameBin},
+         {vhost,             VHost},
+         {connection,        Connection},
+         {upstream_exchange, UXNameBin},
+         {status,            Status},
+         {timestamp,         Timestamp}].
+
+format_params(#amqp_params_network{host        = Host,
+                                   port        = Port,
+                                   ssl_options = SSLOptions}) ->
+    [{host, Host},
+     {port, Port},
+     {ssl,  SSLOptions =/= none}].
