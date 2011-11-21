@@ -142,7 +142,7 @@ connection parameters, permitting heartbeat, channel_max, and
 frame_max to be specified. These can be given in any order, and
 omitted fields assume default values. For example:
 
-amqp://myhost/?heartbeat=5&frame_max=8192
+amqp://myhost?heartbeat=5&frame_max=8192
 
 Specifies a non-encrypted network connection to the host 'myhost',
 using default username, password, port, vhost and channel_max, but
