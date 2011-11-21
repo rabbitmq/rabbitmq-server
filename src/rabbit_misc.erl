@@ -267,11 +267,12 @@ assert_args_equivalence1(Orig, New, Name, Key) ->
 val(undefined) ->
     "none";
 val({Type, Value}) ->
-    Fmt = case is_binary(Value) of
-              true  -> "the value '~s' of type '~s'";
-              false -> "the value '~w' of type '~s'"
-          end,
-    lists:flatten(io_lib:format(Fmt, [Value, Type])).
+    ValFmt = case is_binary(Value) of
+                 true  -> "~s";
+                 false -> "~w"
+             end,
+    lists:flatten(io_lib:format("the value '" ++ ValFmt ++ "' of type '~s'",
+                                [Value, Type])).
 
 %% Normally we'd call mnesia:dirty_read/1 here, but that is quite
 %% expensive due to general mnesia overheads (figuring out table types
