@@ -140,15 +140,29 @@ user_header(_) ->
     true.
 
 parse_message_id(MessageId) ->
-    {ok, Pieces} = regexp:split(MessageId, ?MESSAGE_ID_SEPARATOR),
-    case Pieces of
-        [ConsumerTag, SessionId, DeliveryTag] ->
+    case rev_message_id_pieces(MessageId) of
+        [DeliveryTag, SessionId, ConsumerTag] ->
             {ok, {list_to_binary(ConsumerTag),
                   SessionId,
                   list_to_integer(DeliveryTag)}};
         _ ->
             {error, invalid_message_id}
     end.
+
+rev_message_id_pieces(MessageId) ->
+    rev_message_id_pieces(MessageId, [], []).
+
+rev_message_id_pieces(?MESSAGE_ID_SEPARATOR ++ Str, RPiece, RPieces) ->
+    rev_message_id_pieces(Str, [], push_non_null_rstr(RPiece, RPieces));
+rev_message_id_pieces([Char | Str], RPiece, RPieces) ->
+    rev_message_id_pieces(Str, [Char | RPiece], RPieces);
+rev_message_id_pieces([], RPiece, RPieces) ->
+    push_non_null_rstr(RPiece, RPieces).
+
+push_non_null_rstr([], Strs) ->
+    Strs;
+push_non_null_rstr(RStr, Strs) ->
+    [lists:reverse(RStr) | Strs].
 
 negotiate_version(ClientVers, ServerVers) ->
     Common = lists:filter(fun(Ver) ->
@@ -270,11 +284,17 @@ parse_simple_destination(Type, Content) ->
     end.
 
 parse_content(Content)->
-    case regexp:split(Content, "/") of
-        {ok, Matches} -> [unescape(X) ||
-                             X <- strip_leading_blank(Matches)];
-        Other -> Other
-    end.
+    [unescape(X) || X <- strip_leading_blank(slash_split(Content))].
+
+slash_split(Content) ->
+    slash_split(Content, [], []).
+
+slash_split("/" ++ Str, RName, RNames) ->
+    slash_split(Str, [], [lists:reverse(RName) | RNames]);    
+slash_split([Char | Str], RName, RNames) ->
+    slash_split(Str, [Char | RName], RNames);
+slash_split([], RName, RNames) ->
+    lists:reverse([lists:reverse(RName) | RNames]).
 
 strip_leading_blank([[] | Rest]) ->
     Rest;
@@ -282,6 +302,11 @@ strip_leading_blank(Matches) ->
     Matches.
 
 unescape(Str) ->
-    {ok, OutStr, _} = regexp:gsub(Str, "%2F", "/"),
-    OutStr.
+    unescape(Str, []).
 
+unescape("%2F" ++ Str, Acc) ->
+    unescape(Str, [$/ | Acc]);
+unescape([C | Str], Acc) ->
+    unescape(Str, [C | Acc]);
+unescape([], Acc) ->
+    lists:reverse(Acc).
