@@ -725,7 +725,7 @@ process_instruction(
                     never ->
                         {MQ2, PendingCh, MS};
                     eventually ->
-                        {MQ2, sets:add_element(MsgId, PendingCh),
+                        {MQ2, PendingCh,
                          dict:store(MsgId, {published, ChPid, MsgSeqNo}, MS)};
                     immediately ->
                         ok = rabbit_channel:confirm(ChPid, [MsgSeqNo]),
