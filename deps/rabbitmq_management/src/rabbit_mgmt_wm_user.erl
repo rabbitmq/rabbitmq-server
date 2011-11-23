@@ -98,7 +98,7 @@ put_user(User, PWArg, PWFun) ->
     case rabbit_auth_backend_internal:lookup_user(Username) of
         {error, not_found} ->
             rabbit_auth_backend_internal:add_user(
-              Username, rabbit_guid:binstring_guid("tmp_"));
+              Username, rabbit_guid:binstring_guid("tmp"));
         _ ->
             ok
     end,
