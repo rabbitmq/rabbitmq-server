@@ -140,8 +140,8 @@ user_header(_) ->
     true.
 
 parse_message_id(MessageId) ->
-    case rev_message_id_pieces(MessageId) of
-        [DeliveryTag, SessionId, ConsumerTag] ->
+    case split_message_id(MessageId) of
+        [ConsumerTag, SessionId, DeliveryTag] ->
             {ok, {list_to_binary(ConsumerTag),
                   SessionId,
                   list_to_integer(DeliveryTag)}};
@@ -149,20 +149,17 @@ parse_message_id(MessageId) ->
             {error, invalid_message_id}
     end.
 
-rev_message_id_pieces(MessageId) ->
-    rev_message_id_pieces(MessageId, [], []).
+split_message_id([]) ->
+    [];
+split_message_id(MessageId) ->
+    split_message_id(MessageId, [], []).
 
-rev_message_id_pieces(?MESSAGE_ID_SEPARATOR ++ Str, RPiece, RPieces) ->
-    rev_message_id_pieces(Str, [], push_non_null_rstr(RPiece, RPieces));
-rev_message_id_pieces([Char | Str], RPiece, RPieces) ->
-    rev_message_id_pieces(Str, [Char | RPiece], RPieces);
-rev_message_id_pieces([], RPiece, RPieces) ->
-    push_non_null_rstr(RPiece, RPieces).
-
-push_non_null_rstr([], Strs) ->
-    Strs;
-push_non_null_rstr(RStr, Strs) ->
-    [lists:reverse(RStr) | Strs].
+split_message_id(?MESSAGE_ID_SEPARATOR ++ Str, RPiece, RPieces) ->
+    split_message_id(Str, [], [lists:reverse(RPiece) | RPieces]);
+split_message_id([Char | Str], RPiece, RPieces) ->
+    split_message_id(Str, [Char | RPiece], RPieces);
+split_message_id([], RPiece, RPieces) ->
+    lists:reverse([lists:reverse(RPiece) | RPieces]).
 
 negotiate_version(ClientVers, ServerVers) ->
     Common = lists:filter(fun(Ver) ->
@@ -284,22 +281,21 @@ parse_simple_destination(Type, Content) ->
     end.
 
 parse_content(Content)->
-    [unescape(X) || X <- strip_leading_blank(slash_split(Content))].
+    [unescape(X) || X <- split_content(Content)].
 
-slash_split(Content) ->
-    slash_split(Content, [], []).
+split_content([]) ->
+    [];
+split_content("/" ++ Content) ->
+    split_content(Content, [], []);
+split_content(Content) ->
+    split_content(Content, [], []).
 
-slash_split("/" ++ Str, RName, RNames) ->
-    slash_split(Str, [], [lists:reverse(RName) | RNames]);    
-slash_split([Char | Str], RName, RNames) ->
-    slash_split(Str, [Char | RName], RNames);
-slash_split([], RName, RNames) ->
+split_content("/" ++ Str, RName, RNames) ->
+    split_content(Str, [], [lists:reverse(RName) | RNames]);    
+split_content([Char | Str], RName, RNames) ->
+    split_content(Str, [Char | RName], RNames);
+split_content([], RName, RNames) ->
     lists:reverse([lists:reverse(RName) | RNames]).
-
-strip_leading_blank([[] | Rest]) ->
-    Rest;
-strip_leading_blank(Matches) ->
-    Matches.
 
 unescape(Str) ->
     unescape(Str, []).
