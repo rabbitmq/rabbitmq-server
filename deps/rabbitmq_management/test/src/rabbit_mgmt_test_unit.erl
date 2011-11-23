@@ -32,6 +32,8 @@ pack_binding_test() ->
                    <<"foo">>, []),
     assert_binding(<<"foo%5Fbar%2Fbash">>,
                    <<"foo_bar/bash">>, []),
+    assert_binding(<<"foo%5Fbar%5Fbash">>,
+                   <<"foo_bar_bash">>, []),
     assert_binding(<<"foo_arg1_foo%5Fbar%2Fbash">>,
                    <<"foo">>, [{<<"arg1">>, longstr, <<"foo_bar/bash">>}]),
     assert_binding(<<"foo_arg1_bar_arg2_bash">>,
