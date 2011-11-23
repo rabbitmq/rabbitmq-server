@@ -145,7 +145,7 @@ if not exist "!RABBITMQ_BASE!" (
 
 "!ERLANG_SERVICE_MANAGER_PATH!\erlsrv" list !RABBITMQ_SERVICENAME! 2>NUL 1>NUL
 if errorlevel 1 (
-    "!ERLANG_SERVICE_MANAGER_PATH!\erlsrv" add !RABBITMQ_SERVICENAME!
+    "!ERLANG_SERVICE_MANAGER_PATH!\erlsrv" add !RABBITMQ_SERVICENAME! -internalservicename !RABBITMQ_SERVICENAME!
 ) else (
     echo !RABBITMQ_SERVICENAME! service is already present - only updating service parameters
 )
