@@ -372,10 +372,14 @@ action(report, Node, _Args, _Opts, Inform) ->
 
 action(eval, Node, [Expr], _Opts, _Inform) ->
     {ok, Scanned, _} = erl_scan:string(Expr),
-    {ok, Parsed} = erl_parse:parse_exprs(Scanned),
-    {value, Value, _Bindings} = rpc_call(Node, erl_eval, exprs, [Parsed, []]),
-    io:format("~p~n", [Value]),
-    ok.
+    case erl_parse:parse_exprs(Scanned) of
+        {ok, Parsed} ->
+            {value, Value, _} = rpc_call(Node, erl_eval, exprs, [Parsed, []]),
+            io:format("~p~n", [Value]),
+            ok;
+        {error, {1, erl_parse, Err}} ->
+            {error, Err}
+    end.
 
 %%----------------------------------------------------------------------------
 
