@@ -158,7 +158,7 @@ test_no_migration_on_shutdown() ->
                       try
                           call(worker, ping),
                           exit(worker_should_not_have_migrated)
-                      catch exit:{timeout_waiting_for_server, _} ->
+                      catch exit:{timeout_waiting_for_server, _, _} ->
                               ok
                       end
               end, [evil, good]).
@@ -248,7 +248,7 @@ get_group(Group) ->
 call(Id, Msg) -> call(Id, Msg, 1000, 100).
 
 call(Id, Msg, 0, _Decr) ->
-    exit({timeout_waiting_for_server, {Id, Msg}});
+    exit({timeout_waiting_for_server, {Id, Msg}, erlang:get_stacktrace()});
 
 call(Id, Msg, MaxDelay, Decr) ->
     try
