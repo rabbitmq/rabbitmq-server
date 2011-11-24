@@ -310,7 +310,11 @@ connections_local() ->
     [Reader ||
         {_, ConnSup, supervisor, _}
             <- supervisor:which_children(rabbit_tcp_client_sup),
-        Reader <- [rabbit_connection_sup:reader(ConnSup)],
+        Reader <- [try
+                       rabbit_connection_sup:reader(ConnSup)
+                   catch exit:{noproc, _} ->
+                           noproc
+                   end],
         Reader =/= noproc].
 
 connection_info_keys() -> rabbit_reader:info_keys().
