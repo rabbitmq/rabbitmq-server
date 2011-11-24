@@ -252,8 +252,9 @@ call(Id, Msg, 0, _Decr) ->
 call(Id, Msg, MaxDelay, Decr) ->
     try
         gen_server:call(Id, Msg, infinity)
-    catch exit:_ -> timer:sleep(Decr),
-                    call(Id, Msg, MaxDelay - Decr, Decr)
+    catch exit:{Fail, _} when Fail =:= noproc orelse Fail =:= doooom ->
+            timer:sleep(Decr),
+            call(Id, Msg, MaxDelay - Decr, Decr)
     end.
 
 kill(Pid) -> kill(Pid, []).
