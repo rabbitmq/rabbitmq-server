@@ -29,7 +29,7 @@
 -ifdef(use_specs).
 
 -spec(start_link/0 :: () -> {'ok', pid(), pid()}).
--spec(reader/1 :: (pid()) -> pid()).
+-spec(reader/1 :: (pid()) -> pid() | noproc).
 
 -endif.
 
@@ -57,7 +57,11 @@ start_link() ->
     {ok, SupPid, ReaderPid}.
 
 reader(Pid) ->
-    hd(supervisor2:find_child(Pid, reader)).
+    try
+        hd(supervisor2:find_child(Pid, reader))
+    catch exit:{noproc, _} ->
+            noproc
+    end.
 
 %%--------------------------------------------------------------------------
 
