@@ -371,14 +371,19 @@ action(report, Node, _Args, _Opts, Inform) ->
     ok;
 
 action(eval, Node, [Expr], _Opts, _Inform) ->
-    {ok, Scanned, _} = erl_scan:string(Expr),
-    case erl_parse:parse_exprs(Scanned) of
-        {ok, Parsed} ->
-            {value, Value, _} = unsafe_rpc(Node, erl_eval, exprs, [Parsed, []]),
-            io:format("~p~n", [Value]),
-            ok;
-        {error, {1, erl_parse, Err}} ->
-            {error, Err}
+    case erl_scan:string(Expr) of
+        {ok, Scanned, _} ->
+            case erl_parse:parse_exprs(Scanned) of
+                {ok, Parsed} ->
+                    {value, Value, _} = unsafe_rpc(
+                                          Node, erl_eval, exprs, [Parsed, []]),
+                    io:format("~p~n", [Value]),
+                    ok;
+                {error, {1, erl_parse, Err}} ->
+                    {error, Err}
+            end;
+        {error, {1, erl_scan, E}, _} ->
+            {error, ["scan error: ", E]}
     end.
 
 %%----------------------------------------------------------------------------
