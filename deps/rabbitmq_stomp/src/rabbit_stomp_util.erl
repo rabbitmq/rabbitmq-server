@@ -289,14 +289,11 @@ split(Content = [Elem | Rest1], RPart, RParts, Splitter) ->
             split(Rest1, [Elem | RPart], RParts, Splitter)
     end.
 
-take_prefix(Prefix, List) ->
-    take_prefix(Prefix, List, true).
-
-take_prefix([Char | Prefix], [Char | List], AllMatched) ->
-    take_prefix(Prefix, List, AllMatched);
-take_prefix([], List, AllMatched) ->
-    {AllMatched, List};
-take_prefix(_Prefix, List, _AllMatched) ->
+take_prefix([Char | Prefix], [Char | List]) ->
+    take_prefix(Prefix, List);
+take_prefix([], List) ->
+    {true, List};
+take_prefix(_Prefix, List) ->
     {false, List}.
 
 unescape(Str) ->
