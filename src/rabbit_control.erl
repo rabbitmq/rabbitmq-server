@@ -374,7 +374,7 @@ action(eval, Node, [Expr], _Opts, _Inform) ->
     {ok, Scanned, _} = erl_scan:string(Expr),
     case erl_parse:parse_exprs(Scanned) of
         {ok, Parsed} ->
-            {value, Value, _} = rpc_call(Node, erl_eval, exprs, [Parsed, []]),
+            {value, Value, _} = unsafe_rpc(Node, erl_eval, exprs, [Parsed, []]),
             io:format("~p~n", [Value]),
             ok;
         {error, {1, erl_parse, Err}} ->
