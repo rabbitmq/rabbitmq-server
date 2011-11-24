@@ -140,7 +140,7 @@ user_header(_) ->
     true.
 
 parse_message_id(MessageId) ->
-    case split_message_id(MessageId) of
+    case split(MessageId, ?MESSAGE_ID_SEPARATOR) of
         [ConsumerTag, SessionId, DeliveryTag] ->
             {ok, {list_to_binary(ConsumerTag),
                   SessionId,
@@ -148,18 +148,6 @@ parse_message_id(MessageId) ->
         _ ->
             {error, invalid_message_id}
     end.
-
-split_message_id([]) ->
-    [];
-split_message_id(MessageId) ->
-    split_message_id(MessageId, [], []).
-
-split_message_id(?MESSAGE_ID_SEPARATOR ++ Str, RPiece, RPieces) ->
-    split_message_id(Str, [], [lists:reverse(RPiece) | RPieces]);
-split_message_id([Char | Str], RPiece, RPieces) ->
-    split_message_id(Str, [Char | RPiece], RPieces);
-split_message_id([], RPiece, RPieces) ->
-    lists:reverse([lists:reverse(RPiece) | RPieces]).
 
 negotiate_version(ClientVers, ServerVers) ->
     Common = lists:filter(fun(Ver) ->
@@ -281,21 +269,35 @@ parse_simple_destination(Type, Content) ->
     end.
 
 parse_content(Content)->
-    [unescape(X) || X <- split_content(Content)].
+    {_, Content2} = take_prefix("/", Content),
+    [unescape(X) || X <- split(Content2, "/")].
 
-split_content([]) ->
+split([], _Splitter) ->
     [];
-split_content("/" ++ Content) ->
-    split_content(Content, [], []);
-split_content(Content) ->
-    split_content(Content, [], []).
+split(Content, []) ->
+    Content;
+split(Content, Splitter) ->
+    split(Content, [], [], Splitter).
 
-split_content("/" ++ Str, RName, RNames) ->
-    split_content(Str, [], [lists:reverse(RName) | RNames]);    
-split_content([Char | Str], RName, RNames) ->
-    split_content(Str, [Char | RName], RNames);
-split_content([], RName, RNames) ->
-    lists:reverse([lists:reverse(RName) | RNames]).
+split([], RPart, RParts, _Splitter) ->
+    lists:reverse([lists:reverse(RPart) | RParts]);
+split(Content = [Elem | Rest1], RPart, RParts, Splitter) ->
+    case take_prefix(Splitter, Content) of
+        {true, Rest2} ->
+            split(Rest2, [], [lists:reverse(RPart) | RParts], Splitter);
+        {false, _} ->
+            split(Rest1, [Elem | RPart], RParts, Splitter)
+    end.
+
+take_prefix(Prefix, List) ->
+    take_prefix(Prefix, List, true).
+
+take_prefix([Char | Prefix], [Char | List], AllMatched) ->
+    take_prefix(Prefix, List, AllMatched);
+take_prefix([], List, AllMatched) ->
+    {AllMatched, List};
+take_prefix(_Prefix, List, _AllMatched) ->
+    {false, List}.
 
 unescape(Str) ->
     unescape(Str, []).
