@@ -236,28 +236,43 @@ protocol_error(#amqp_error{} = Error) ->
 
 not_found(R) -> protocol_error(not_found, "no ~s", [rs(R)]).
 
+type_class(byte)      -> int;
+type_class(short)     -> int;
+type_class(signedint) -> int;
+type_class(long)      -> int;
+type_class(decimal)   -> int;
+type_class(float)     -> float;
+type_class(double)    -> float;
+type_class(Other)     -> Other.
+
 assert_args_equivalence(Orig, New, Name, Keys) ->
     [assert_args_equivalence1(Orig, New, Name, Key) || Key <- Keys],
     ok.
 
 assert_args_equivalence1(Orig, New, Name, Key) ->
     case {table_lookup(Orig, Key), table_lookup(New, Key)} of
-        {Same, Same}  -> ok;
-        {Orig1, New1} -> protocol_error(
-                           precondition_failed,
-                           "inequivalent arg '~s' for ~s: "
-                           "received ~s but current is ~s",
-                           [Key, rs(Name), val(New1), val(Orig1)])
+        {Same, Same} ->
+            ok;
+        {{OrigType, OrigVal} = Orig1, {NewType, NewVal} = New1} ->
+            case type_class(OrigType) == type_class(NewType) andalso
+                 OrigVal == NewVal of
+                 true  -> ok;
+                 false -> protocol_error(precondition_failed, "inequivalent arg"
+                                         " '~s' for ~s: received ~s but current"
+                                         " is ~s",
+                                         [Key, rs(Name), val(New1), val(Orig1)])
+            end
     end.
 
 val(undefined) ->
     "none";
 val({Type, Value}) ->
-    Fmt = case is_binary(Value) of
-              true  -> "the value '~s' of type '~s'";
-              false -> "the value '~w' of type '~s'"
-          end,
-    lists:flatten(io_lib:format(Fmt, [Value, Type])).
+    ValFmt = case is_binary(Value) of
+                 true  -> "~s";
+                 false -> "~w"
+             end,
+    lists:flatten(io_lib:format("the value '" ++ ValFmt ++ "' of type '~s'",
+                                [Value, Type])).
 
 %% Normally we'd call mnesia:dirty_read/1 here, but that is quite
 %% expensive due to general mnesia overheads (figuring out table types

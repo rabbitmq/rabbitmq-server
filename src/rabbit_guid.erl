@@ -76,21 +76,28 @@ guid() ->
     %% now() to move ahead of the system time), and b) it is really
     %% slow since it takes a global lock and makes a system call.
     %%
-    %% A persisted serial number, in combination with self/0 (which
-    %% includes the node name) uniquely identifies a process in space
+    %% A persisted serial number, the node, and a unique reference
+    %% (per node incarnation) uniquely identifies a process in space
     %% and time. We combine that with a process-local counter to give
     %% us a GUID.
     G = case get(guid) of
-            undefined -> {{gen_server:call(?SERVER, serial, infinity), self()},
-                          0};
-            {S, I}   -> {S, I+1}
+            undefined -> Serial = gen_server:call(?SERVER, serial, infinity),
+                         {{Serial, node(), make_ref()}, 0};
+            {S, I}    -> {S, I+1}
         end,
     put(guid, G),
     erlang:md5(term_to_binary(G)).
 
 %% generate a readable string representation of a GUID.
+%%
+%% employs base64url encoding, which is safer in more contexts than
+%% plain base64.
 string_guid(Prefix) ->
-    Prefix ++ "-" ++ base64:encode_to_string(guid()).
+    Prefix ++ "-" ++ lists:foldl(fun ($\+, Acc) -> [$\- | Acc];
+                                     ($\/, Acc) -> [$\_ | Acc];
+                                     ($\=, Acc) -> Acc;
+                                     (Chr, Acc) -> [Chr | Acc]
+                                 end, [], base64:encode_to_string(guid())).
 
 binstring_guid(Prefix) ->
     list_to_binary(string_guid(Prefix)).

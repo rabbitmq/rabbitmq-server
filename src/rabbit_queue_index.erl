@@ -188,7 +188,7 @@
                               dirty_count         :: integer(),
                               max_journal_entries :: non_neg_integer(),
                               on_sync             :: on_sync_fun(),
-                              unsynced_msg_ids    :: [rabbit_types:msg_id()]
+                              unsynced_msg_ids    :: gb_set()
                             }).
 -type(contains_predicate() :: fun ((rabbit_types:msg_id()) -> boolean())).
 -type(walker(A) :: fun ((A) -> 'finished' |
@@ -263,9 +263,10 @@ publish(MsgId, SeqId, MsgProps, IsPersistent,
         State = #qistate { unsynced_msg_ids = UnsyncedMsgIds })
   when is_binary(MsgId) ->
     ?MSG_ID_BYTES = size(MsgId),
-    {JournalHdl, State1} = get_journal_handle(
-                             State #qistate {
-                               unsynced_msg_ids = [MsgId | UnsyncedMsgIds] }),
+    {JournalHdl, State1} =
+        get_journal_handle(
+          State #qistate {
+            unsynced_msg_ids = gb_sets:add_element(MsgId, UnsyncedMsgIds) }),
     ok = file_handle_cache:append(
            JournalHdl, [<<(case IsPersistent of
                                true  -> ?PUB_PERSIST_JPREFIX;
@@ -285,7 +286,7 @@ ack(SeqIds, State) ->
 %% This is only called when there are outstanding confirms and the
 %% queue is idle.
 sync(State = #qistate { unsynced_msg_ids = MsgIds }) ->
-    sync_if([] =/= MsgIds, State).
+    sync_if(not gb_sets:is_empty(MsgIds), State).
 
 sync(SeqIds, State) ->
     %% The SeqIds here contains the SeqId of every publish and ack to
@@ -387,7 +388,7 @@ blank_state(QueueName) ->
                dirty_count         = 0,
                max_journal_entries = MaxJournal,
                on_sync             = fun (_) -> ok end,
-               unsynced_msg_ids    = [] }.
+               unsynced_msg_ids    = gb_sets:new() }.
 
 clean_file_name(Dir) -> filename:join(Dir, ?CLEAN_FILENAME).
 
@@ -712,8 +713,8 @@ sync_if(true, State = #qistate { journal_handle = JournalHdl }) ->
     notify_sync(State).
 
 notify_sync(State = #qistate { unsynced_msg_ids = UG, on_sync = OnSyncFun }) ->
-    OnSyncFun(gb_sets:from_list(UG)),
-    State #qistate { unsynced_msg_ids = [] }.
+    OnSyncFun(UG),
+    State #qistate { unsynced_msg_ids = gb_sets:new() }.
 
 %%----------------------------------------------------------------------------
 %% segment manipulation

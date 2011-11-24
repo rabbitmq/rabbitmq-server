@@ -202,7 +202,7 @@ with_sups(Fun, Sups) ->
     Pids = [begin {ok, Pid} = start_sup(Sup), Pid end || Sup <- Sups],
     Fun(Pids),
     [kill(Pid) || Pid <- Pids, is_process_alive(Pid)],
-    timer:sleep(100),
+    timer:sleep(500),
     passed.
 
 start_sup(Spec) ->
@@ -245,7 +245,7 @@ inc_group() ->
 get_group(Group) ->
     {Group, get(counter)}.
 
-call(Id, Msg) -> call(Id, Msg, 100, 10).
+call(Id, Msg) -> call(Id, Msg, 1000, 100).
 
 call(Id, Msg, 0, _Decr) ->
     exit({timeout_waiting_for_server, {Id, Msg}});

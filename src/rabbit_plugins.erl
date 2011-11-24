@@ -67,7 +67,7 @@ start() ->
             print_error("~p", [Reason]),
             rabbit_misc:quit(2);
         Other ->
-            print_error("~s", [Other]),
+            print_error("~p", [Other]),
             rabbit_misc:quit(2)
     end.
 
@@ -105,11 +105,11 @@ action(enable, ToEnable0, _Opts, PluginsFile, PluginsDir) ->
     end,
     NewEnabled = lists:usort(Enabled ++ ToEnable),
     write_enabled_plugins(PluginsFile, NewEnabled),
+    NewImplicitlyEnabled = calculate_required_plugins(NewEnabled, AllPlugins),
+    maybe_warn_mochiweb(NewImplicitlyEnabled),
     case NewEnabled -- ImplicitlyEnabled of
         [] -> io:format("Plugin configuration unchanged.~n");
-        _  -> NewImplicitlyEnabled =
-                  calculate_required_plugins(NewEnabled, AllPlugins),
-              print_list("The following plugins have been enabled:",
+        _  -> print_list("The following plugins have been enabled:",
                          NewImplicitlyEnabled -- ImplicitlyEnabled),
               io:format("Plugin configuration has changed. "
                         "Restart RabbitMQ for changes to take effect.~n")
@@ -355,3 +355,22 @@ calculate_dependencies(Reverse, Sources, AllPlugins) ->
             end,
     true = digraph:delete(G),
     Dests.
+
+maybe_warn_mochiweb(Enabled) ->
+    V = erlang:system_info(otp_release),
+    case lists:member(mochiweb, Enabled) andalso V < "R13B01" of
+        true ->
+            Stars = string:copies("*", 80),
+            io:format("~n~n~s~n"
+                      "  Warning: Mochiweb enabled and Erlang version ~s "
+                      "detected.~n"
+                      "  Enabling plugins that depend on Mochiweb is not "
+                      "supported on this Erlang~n"
+                      "  version. At least R13B01 is required.~n~n"
+                      "  RabbitMQ will not start successfully in this "
+                      "configuration. You *must*~n"
+                      "  disable the Mochiweb plugin, or upgrade Erlang.~n"
+                      "~s~n~n~n", [Stars, V, Stars]);
+        false ->
+            ok
+    end.

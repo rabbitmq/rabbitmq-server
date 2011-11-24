@@ -103,13 +103,19 @@
 
       <variablelist>
         <varlistentry>
-          <term><cmdsynopsis><command>stop</command></cmdsynopsis></term>
+          <term><cmdsynopsis><command>stop</command> <arg choice="opt"><replaceable>pid_file</replaceable></arg></cmdsynopsis></term>
           <listitem>
             <para>
               Stops the Erlang node on which RabbitMQ is running. To
               restart the node follow the instructions for <citetitle>Running
               the Server</citetitle> in the <ulink url="http://www.rabbitmq.com/install.html">installation
               guide</ulink>.
+            </para>
+            <para>
+              If a <option>pid_file</option> is specified, also waits
+              for the process specified there to terminate.  See the
+              description of the <option>wait</option> command below
+              for details on this file.
             </para>
             <para role="example-prefix">For example:</para>
             <screen role="example">rabbitmqctl stop</screen>
