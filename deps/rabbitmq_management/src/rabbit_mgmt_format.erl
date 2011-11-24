@@ -178,7 +178,7 @@ pack_binding_props(Key, Args) ->
 quote_binding(Name) ->
     binary_to_list(
       iolist_to_binary(
-        re:replace(mochiweb_util:quote_plus(Name), "_", "%5F"))).
+        re:replace(mochiweb_util:quote_plus(Name), "_", "%5F", [global]))).
 
 unpack_binding_props(B) when is_binary(B) ->
     unpack_binding_props(binary_to_list(B));
