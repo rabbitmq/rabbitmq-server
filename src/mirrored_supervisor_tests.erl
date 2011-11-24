@@ -47,65 +47,65 @@ all_tests() ->
 
 %% Simplest test
 test_migrate() ->
-    with_sups(fun([A, _]) ->
-                      ?MS:start_child(a, childspec(worker)),
-                      Pid1 = pid_of(worker),
+    with_sups(fun([A, _], Worker) ->
+                      ?MS:start_child(a, childspec(Worker)),
+                      Pid1 = pid_of(Worker),
                       kill(A, Pid1),
-                      Pid2 = pid_of(worker),
+                      Pid2 = pid_of(Worker),
                       false = (Pid1 =:= Pid2)
               end, [a, b]).
 
 %% Is migration transitive?
 test_migrate_twice() ->
-    with_sups(fun([A, B]) ->
-                      ?MS:start_child(a, childspec(worker)),
-                      Pid1 = pid_of(worker),
+    with_sups(fun([A, B], Worker) ->
+                      ?MS:start_child(a, childspec(Worker)),
+                      Pid1 = pid_of(Worker),
                       kill(A, Pid1),
                       {ok, C} = start_sup(c),
-                      Pid2 = pid_of(worker),
+                      Pid2 = pid_of(Worker),
                       kill(B, Pid2),
-                      Pid3 = pid_of(worker),
+                      Pid3 = pid_of(Worker),
                       false = (Pid1 =:= Pid3),
                       kill(C)
               end, [a, b]).
 
 %% Can't start the same child twice
 test_already_there() ->
-    with_sups(fun([_, _]) ->
-                      S = childspec(worker),
+    with_sups(fun([_, _], Worker) ->
+                      S = childspec(Worker),
                       {ok, Pid}                       = ?MS:start_child(a, S),
                       {error, {already_started, Pid}} = ?MS:start_child(b, S)
               end, [a, b]).
 
 %% Deleting and restarting should work as per a normal supervisor
 test_delete_restart() ->
-    with_sups(fun([_, _]) ->
-                      S = childspec(worker),
+    with_sups(fun([_, _], Worker) ->
+                      S = childspec(Worker),
                       {ok, Pid1} = ?MS:start_child(a, S),
-                      {error, running} = ?MS:delete_child(a, worker),
-                      ok = ?MS:terminate_child(a, worker),
-                      ok = ?MS:delete_child(a, worker),
+                      {error, running} = ?MS:delete_child(a, Worker),
+                      ok = ?MS:terminate_child(a, Worker),
+                      ok = ?MS:delete_child(a, Worker),
                       {ok, Pid2} = ?MS:start_child(b, S),
                       false = (Pid1 =:= Pid2),
-                      ok = ?MS:terminate_child(b, worker),
-                      {ok, Pid3} = ?MS:restart_child(b, worker),
-                      Pid3 = pid_of(worker),
+                      ok = ?MS:terminate_child(b, Worker),
+                      {ok, Pid3} = ?MS:restart_child(b, Worker),
+                      Pid3 = pid_of(Worker),
                       false = (Pid2 =:= Pid3),
-                      %% Not the same supervisor as the worker is on
-                      ok = ?MS:terminate_child(a, worker),
-                      ok = ?MS:delete_child(a, worker),
+                      %% Not the same supervisor as the Worker is on
+                      ok = ?MS:terminate_child(a, Worker),
+                      ok = ?MS:delete_child(a, Worker),
                       {ok, Pid4} = ?MS:start_child(a, S),
                       false = (Pid3 =:= Pid4)
               end, [a, b]).
 
 test_which_children() ->
     with_sups(
-      fun([A, B] = Both) ->
-              ?MS:start_child(A, childspec(worker)),
+      fun([A, B] = Both, Worker) ->
+              ?MS:start_child(A, childspec(Worker)),
               assert_wc(Both, fun ([C]) -> true = is_pid(wc_pid(C)) end),
-              ok = ?MS:terminate_child(a, worker),
+              ok = ?MS:terminate_child(a, Worker),
               assert_wc(Both, fun ([C]) -> undefined = wc_pid(C) end),
-              {ok, _} = ?MS:restart_child(a, worker),
+              {ok, _} = ?MS:restart_child(a, Worker),
               assert_wc(Both, fun ([C]) -> true = is_pid(wc_pid(C)) end),
               ?MS:start_child(B, childspec(worker2)),
               assert_wc(Both, fun (C) -> 2 = length(C) end)
@@ -115,23 +115,23 @@ assert_wc(Sups, Fun) ->
     [Fun(?MS:which_children(Sup)) || Sup <- Sups].
 
 wc_pid(Child) ->
-    {worker, Pid, worker, [mirrored_supervisor_tests]} = Child,
+    {Worker, Pid, worker, [mirrored_supervisor_tests]} = Child,
     Pid.
 
 %% Not all the members of the group should actually do the failover
 test_large_group() ->
-    with_sups(fun([A, _, _, _]) ->
-                      ?MS:start_child(a, childspec(worker)),
-                      Pid1 = pid_of(worker),
+    with_sups(fun([A, _, _, _], Worker) ->
+                      ?MS:start_child(a, childspec(Worker)),
+                      Pid1 = pid_of(Worker),
                       kill(A, Pid1),
-                      Pid2 = pid_of(worker),
+                      Pid2 = pid_of(Worker),
                       false = (Pid1 =:= Pid2)
               end, [a, b, c, d]).
 
 %% Do childspecs work when returned from init?
 test_childspecs_at_init() ->
     S = childspec(worker),
-    with_sups(fun([A, _]) ->
+    with_sups(fun([A, _], _Worker) ->
                       Pid1 = pid_of(worker),
                       kill(A, Pid1),
                       Pid2 = pid_of(worker),
@@ -139,11 +139,11 @@ test_childspecs_at_init() ->
               end, [{a, [S]}, {b, [S]}]).
 
 test_anonymous_supervisors() ->
-    with_sups(fun([A, _B]) ->
-                      ?MS:start_child(A, childspec(worker)),
-                      Pid1 = pid_of(worker),
+    with_sups(fun([A, _B], Worker) ->
+                      ?MS:start_child(A, childspec(Worker)),
+                      Pid1 = pid_of(Worker),
                       kill(A, Pid1),
-                      Pid2 = pid_of(worker),
+                      Pid2 = pid_of(Worker),
                       false = (Pid1 =:= Pid2)
               end, [anon, anon]).
 
@@ -153,10 +153,10 @@ test_anonymous_supervisors() ->
 %% under the supervisor called 'evil'. It should not migrate to
 %% 'good' and survive, rather the whole group should go away.
 test_no_migration_on_shutdown() ->
-    with_sups(fun([Evil, _]) ->
-                      ?MS:start_child(Evil, childspec(worker)),
+    with_sups(fun([Evil, _], Worker) ->
+                      ?MS:start_child(Evil, childspec(Worker)),
                       try
-                          call(worker, ping),
+                          call(Worker, ping),
                           exit(worker_should_not_have_migrated)
                       catch exit:{timeout_waiting_for_server, _} ->
                               ok
@@ -164,24 +164,24 @@ test_no_migration_on_shutdown() ->
               end, [evil, good]).
 
 test_start_idempotence() ->
-    with_sups(fun([_]) ->
-                      CS = childspec(worker),
+    with_sups(fun([_], Worker) ->
+                      CS = childspec(Worker),
                       {ok, Pid}                       = ?MS:start_child(a, CS),
                       {error, {already_started, Pid}} = ?MS:start_child(a, CS),
-                      ?MS:terminate_child(a, worker),
+                      ?MS:terminate_child(a, Worker),
                       {error, already_present}        = ?MS:start_child(a, CS)
               end, [a]).
 
 test_unsupported() ->
     try
-        ?MS:start_link({global, foo}, get_group(group), ?MODULE,
+        ?MS:start_link({global, foo}, gen_name(group), ?MODULE,
                        {sup, one_for_one, []}),
         exit(no_global)
     catch error:badarg ->
             ok
     end,
     try
-        ?MS:start_link({local, foo}, get_group(group), ?MODULE,
+        ?MS:start_link({local, foo}, gen_name(group), ?MODULE,
                        {sup, simple_one_for_one, []}),
         exit(no_sofo)
     catch error:badarg ->
@@ -191,16 +191,16 @@ test_unsupported() ->
 
 %% Just test we don't blow up
 test_ignore() ->
-    ?MS:start_link({local, foo}, get_group(group), ?MODULE,
+    ?MS:start_link({local, foo}, gen_name(group), ?MODULE,
                    {sup, fake_strategy_for_ignore, []}),
     passed.
 
 %% ---------------------------------------------------------------------------
 
 with_sups(Fun, Sups) ->
-    inc_group(),
+    inc_gen_name(),
     Pids = [begin {ok, Pid} = start_sup(Sup), Pid end || Sup <- Sups],
-    Fun(Pids),
+    Fun(Pids, gen_name(worker)),
     [kill(Pid) || Pid <- Pids, is_process_alive(Pid)],
     passed.
 
@@ -208,7 +208,7 @@ start_sup(Spec) ->
     start_sup(Spec, group).
 
 start_sup({Name, ChildSpecs}, Group) ->
-    {ok, Pid} = start_sup0(Name, get_group(Group), ChildSpecs),
+    {ok, Pid} = start_sup0(Name, gen_name(Group), ChildSpecs),
     %% We are not a supervisor, when we kill the supervisor we do not
     %% want to die!
     unlink(Pid),
@@ -234,15 +234,15 @@ pid_of(Id) ->
     {received, Pid, ping} = call(Id, ping),
     Pid.
 
-inc_group() ->
+inc_gen_name() ->
     Count = case get(counter) of
                 undefined -> 0;
                 C         -> C
             end + 1,
     put(counter, Count).
 
-get_group(Group) ->
-    {Group, get(counter)}.
+gen_name(Name) ->
+    list_to_atom(atom_to_list(Name) ++ integer_to_list(get(counter))).
 
 call(Id, Msg) -> call(Id, Msg, 100, 10).
 
