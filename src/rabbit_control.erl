@@ -368,6 +368,13 @@ action(report, Node, _Args, _Opts, Inform) ->
     [print_report(Node, Q)      || Q <- ?GLOBAL_QUERIES],
     [print_report(Node, Q, [V]) || Q <- ?VHOST_QUERIES, V <- VHosts],
     io:format("End of server status report~n"),
+    ok;
+
+action(eval, Node, [Expr], _Opts, _Inform) ->
+    {ok, Scanned, _} = erl_scan:string(Expr),
+    {ok, Parsed} = erl_parse:parse_exprs(Scanned),
+    {value, Value, _Bindings} = rpc_call(Node, erl_eval, exprs, [Parsed, []]),
+    io:format("~p~n", [Value]),
     ok.
 
 %%----------------------------------------------------------------------------
