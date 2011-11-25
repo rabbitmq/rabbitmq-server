@@ -42,26 +42,18 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_stomp_frame.hrl").
 -include("rabbit_stomp_prefixes.hrl").
-
--define(MESSAGE_ID_SEPARATOR, "@@").
--define(HEADER_CONTENT_TYPE, "content-type").
--define(HEADER_CONTENT_ENCODING, "content-encoding").
--define(HEADER_PERSISTENT, "persistent").
--define(HEADER_PRIORITY, "priority").
--define(HEADER_CORRELATION_ID, "correlation-id").
--define(HEADER_REPLY_TO, "reply-to").
--define(HEADER_AMQP_MESSAGE_ID, "amqp-message-id").
+-include("rabbit_stomp_headers.hrl").
 
 %%--------------------------------------------------------------------
 %% Frame and Header Parsing
 %%--------------------------------------------------------------------
 
 consumer_tag(Frame) ->
-    case rabbit_stomp_frame:header(Frame, "id") of
+    case rabbit_stomp_frame:header(Frame, ?HEADER_ID) of
         {ok, Str} ->
             {ok, list_to_binary("T_" ++ Str), "id='" ++ Str ++ "'"};
         not_found ->
-            case rabbit_stomp_frame:header(Frame, "destination") of
+            case rabbit_stomp_frame:header(Frame, ?HEADER_DESTINATION) of
                 {ok, DestHdr} ->
                     {ok, list_to_binary("Q_" ++ DestHdr), "destination='" ++ DestHdr ++ "'"};
                 not_found ->
@@ -81,7 +73,8 @@ message_properties(Frame = #stomp_frame{headers = Headers}) ->
     IntH = fun(K, V) -> rabbit_stomp_frame:integer_header(Frame, K, V) end,
 
     DeliveryMode =
-        case rabbit_stomp_frame:boolean_header(Frame, "persistent", false) of
+        case rabbit_stomp_frame:boolean_header
+                                (Frame, ?HEADER_PERSISTENT, false) of
             true  -> 2;
             false -> undefined
         end,
@@ -101,7 +94,7 @@ message_headers(Destination, SessionId,
                 #'basic.deliver'{consumer_tag = ConsumerTag,
                                  delivery_tag = DeliveryTag},
                 Props = #'P_basic'{headers       = Headers}) ->
-    Basic = [{"destination", Destination},
+    Basic = [{?HEADER_DESTINATION, Destination},
              {"message-id",
               create_message_id(ConsumerTag, SessionId, DeliveryTag)}],
 
@@ -134,7 +127,7 @@ user_header(Hdr)
        Hdr =:= ?HEADER_CORRELATION_ID orelse
        Hdr =:= ?HEADER_REPLY_TO orelse
        Hdr =:= ?HEADER_AMQP_MESSAGE_ID orelse
-       Hdr =:= "destination" ->
+       Hdr =:= ?HEADER_DESTINATION ->
     false;
 user_header(_) ->
     true.

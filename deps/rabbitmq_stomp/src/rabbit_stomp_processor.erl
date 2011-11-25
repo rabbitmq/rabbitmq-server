@@ -39,6 +39,7 @@
 -include("rabbit_stomp_frame.hrl").
 -include("rabbit_stomp.hrl").
 -include("rabbit_stomp_prefixes.hrl").
+-include("rabbit_stomp_headers.hrl").
 
 -record(state, {socket, session_id, channel,
                 connection, subscriptions, version,
@@ -226,7 +227,7 @@ frame_transformer(_) -> fun(Frame) -> Frame end.
 validate_frame(Command, Frame, State)
   when Command =:= "SUBSCRIBE" orelse Command =:= "UNSUBSCRIBE" ->
     Hdr = fun(Name) -> rabbit_stomp_frame:header(Frame, Name) end,
-    case {Hdr("persistent"), Hdr("id")} of
+    case {Hdr(?HEADER_PERSISTENT), Hdr(?HEADER_ID)} of
         {{ok, "true"}, not_found} ->
             error("Missing Header",
                   "Header 'id' is required for durable subscriptions", State);
@@ -349,10 +350,10 @@ cancel_subscription({ok, ConsumerTag, Description}, Frame,
 maybe_delete_durable_sub(DestHdr, Frame, State = #state{channel = Channel}) ->
     case rabbit_stomp_util:parse_destination(DestHdr) of
         {ok, {topic, Name}} ->
-            case rabbit_stomp_frame:boolean_header(Frame,
-                                                   "persistent", false) of
+            case rabbit_stomp_frame:boolean_header
+                                    (Frame, ?HEADER_PERSISTENT, false) of
                 true ->
-                    {ok, Id} = rabbit_stomp_frame:header(Frame, "id"),
+                    {ok, Id} = rabbit_stomp_frame:header(Frame, ?HEADER_ID),
                     QName =
                         rabbit_stomp_util:durable_subscription_queue(Name, Id),
                     amqp_channel:call(Channel, #'queue.delete'{queue  = QName,
@@ -374,7 +375,7 @@ ensure_subchannel_closed(SubChannel, _MainChannel) ->
     ok.
 
 with_destination(Command, Frame, State, Fun) ->
-    case rabbit_stomp_frame:header(Frame, "destination") of
+    case rabbit_stomp_frame:header(Frame, ?HEADER_DESTINATION) of
         {ok, DestHdr} ->
             case rabbit_stomp_util:parse_destination(DestHdr) of
                 {ok, Destination} ->
@@ -622,7 +623,7 @@ close_connection(State = #state{connection = Connection}) ->
 %% Reply-To
 %%----------------------------------------------------------------------------
 ensure_reply_to(Frame = #stomp_frame{headers = Headers}, State) ->
-    case rabbit_stomp_frame:header(Frame, "reply-to") of
+    case rabbit_stomp_frame:header(Frame, ?HEADER_REPLY_TO) of
         not_found ->
             {Frame, State};
         {ok, ReplyTo} ->
@@ -632,8 +633,8 @@ ensure_reply_to(Frame = #stomp_frame{headers = Headers}, State) ->
                     {ReplyQueue, State1} =
                         ensure_reply_queue(TempQueueId, State),
                     {Frame#stomp_frame{
-                       headers = lists:keyreplace("reply-to", 1, Headers,
-                                                  {"reply-to", ReplyQueue})},
+                       headers = lists:keyreplace(?HEADER_REPLY_TO, 1, Headers,
+                                              {?HEADER_REPLY_TO, ReplyQueue})},
                      State1};
                 _ ->
                     {Frame, State}
@@ -872,9 +873,10 @@ ensure_queue(subscribe, {topic, Name}, Frame, Channel) ->
     %% subscriptions. Durable subscriptions get shared, named, durable
     %% queues.
     Method =
-        case rabbit_stomp_frame:boolean_header(Frame, "persistent", false) of
+        case rabbit_stomp_frame:boolean_header
+                                          (Frame, ?HEADER_PERSISTENT, false) of
             true  ->
-                {ok, Id} = rabbit_stomp_frame:header(Frame, "id"),
+                {ok, Id} = rabbit_stomp_frame:header(Frame, ?HEADER_ID),
                 QName = rabbit_stomp_util:durable_subscription_queue(Name, Id),
                 #'queue.declare'{durable = true, queue = QName};
             false ->
