@@ -188,14 +188,18 @@ process_connect(Implicit,
                       {ok, DefaultVHost} =
                           application:get_env(rabbit, default_vhost),
                       Res = do_login(
-                                rabbit_stomp_frame:header(Frame1, "login",
+                                rabbit_stomp_frame:header(Frame1,
+                                                          ?HEADER_LOGIN,
                                                           DefaultLogin),
-                                rabbit_stomp_frame:header(Frame1, "passcode",
+                                rabbit_stomp_frame:header(Frame1,
+                                                          ?HEADER_PASSCODE,
                                                           DefaultPasscode),
-                                rabbit_stomp_frame:header(Frame1, "host",
+                                rabbit_stomp_frame:header(Frame1,
+                                                          ?HEADER_HOST,
                                                           binary_to_list(
                                                             DefaultVHost)),
-                                rabbit_stomp_frame:header(Frame1, "heart-beat",
+                                rabbit_stomp_frame:header(Frame1,
+                                                          ?HEADER_HEART_BEAT,
                                                           "0,0"),
                                 adapter_info(Sock, Version),
                                 Version,
@@ -252,7 +256,10 @@ handle_frame("UNSUBSCRIBE", Frame, State) ->
     cancel_subscription(ConsumerTag, Frame, State);
 
 handle_frame("SEND", Frame, State) ->
-    with_destination("SEND", Frame, State, fun do_send/4);
+    without_headers(?HEADERS_NOT_ON_SEND, "SEND", Frame, State,
+        fun (Command, Frame, State) ->
+            with_destination("SEND", Frame, State, fun do_send/4)
+        end);
 
 handle_frame("ACK", Frame, State) ->
     ack_action("ACK", Frame, State, fun create_ack_method/2);
@@ -281,7 +288,7 @@ handle_frame(Command, _Frame, State) ->
 
 ack_action(Command, Frame,
            State = #state{subscriptions = Subs}, MethodFun) ->
-    case rabbit_stomp_frame:header(Frame, "message-id") of
+    case rabbit_stomp_frame:header(Frame, ?HEADER_MESSAGE_ID) of
         {ok, IdStr} ->
             case rabbit_stomp_util:parse_message_id(IdStr) of
                 {ok, {ConsumerTag, _SessionId, DeliveryTag}} ->
@@ -401,6 +408,19 @@ with_destination(Command, Frame, State, Fun) ->
                   State)
     end.
 
+without_headers([Hdr | Hdrs], Command, Frame, State, Fun) ->
+    case rabbit_stomp_frame:header(Frame, Hdr) of
+        {ok, _} ->
+            error("Invalid header",
+                  "'~s' is not allowed on '~s'.\n",
+                  [Hdr, Command],
+                  State);
+        not_found ->
+            without_headers(Hdrs, Command, Frame, State, Fun)
+    end;
+without_headers([], Command, Frame, State, Fun) ->
+    Fun(Command, Frame, State).
+
 do_login(undefined, _, _, _, _, _, State) ->
     error("Bad CONNECT", "Missing login or passcode header(s)\n", State);
 
@@ -421,10 +441,10 @@ do_login(Username0, Password0, VirtualHost0, Heartbeat, AdapterInfo,
                     {{SendTimeout, ReceiveTimeout}, State1} =
                         ensure_heartbeats(Heartbeat, State),
                     ok("CONNECTED",
-                       [{"session", SessionId},
-                        {"heart-beat", io_lib:format("~B,~B",
+                       [{?HEADER_SESSION, SessionId},
+                        {?HEADER_HEART_BEAT, io_lib:format("~B,~B",
                                             [SendTimeout, ReceiveTimeout])},
-                        {"version", Version}],
+                        {?HEADER_VERSION, Version}],
                        "",
                        State1#state{session_id = SessionId,
                                     channel    = Channel,
@@ -570,7 +590,8 @@ create_nack_method(DeliveryTag, #subscription{multi_ack = IsMulti}) ->
 
 negotiate_version(Frame) ->
     ClientVers = re:split(
-                   rabbit_stomp_frame:header(Frame, "accept-version", "1.0"),
+                   rabbit_stomp_frame:header(Frame, ?HEADER_ACCEPT_VERSION,
+                                                                        "1.0"),
                    ",",
                    [{return, list}]),
     rabbit_stomp_util:negotiate_version(ClientVers, ?SUPPORTED_VERSIONS).
@@ -683,7 +704,7 @@ reply_to_destination(Queue) ->
 %%----------------------------------------------------------------------------
 
 ensure_receipt(Frame = #stomp_frame{command = Command}, State) ->
-    case rabbit_stomp_frame:header(Frame, "receipt") of
+    case rabbit_stomp_frame:header(Frame, ?HEADER_RECEIPT) of
         {ok, Id}  -> do_receipt(Command, Id, State);
         not_found -> State
     end.
@@ -696,7 +717,7 @@ do_receipt(_Frame, ReceiptId, State) ->
 
 maybe_record_receipt(Frame, State = #state{channel          = Channel,
                                            pending_receipts = PR}) ->
-    case rabbit_stomp_frame:header(Frame, "receipt") of
+    case rabbit_stomp_frame:header(Frame, ?HEADER_RECEIPT) of
         {ok, Id} ->
             PR1 = case PR of
                       undefined ->

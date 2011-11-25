@@ -62,7 +62,7 @@ consumer_tag(Frame) ->
     end.
 
 ack_mode(Frame) ->
-    case rabbit_stomp_frame:header(Frame, "ack", "auto") of
+    case rabbit_stomp_frame:header(Frame, ?HEADER_ACK, "auto") of
         "auto"              -> {auto, false};
         "client"            -> {client, true};
         "client-individual" -> {client, false}
@@ -95,7 +95,7 @@ message_headers(Destination, SessionId,
                                  delivery_tag = DeliveryTag},
                 Props = #'P_basic'{headers       = Headers}) ->
     Basic = [{?HEADER_DESTINATION, Destination},
-             {"message-id",
+             {?HEADER_MESSAGE_ID,
               create_message_id(ConsumerTag, SessionId, DeliveryTag)}],
 
     Standard =
