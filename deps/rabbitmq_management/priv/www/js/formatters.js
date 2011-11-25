@@ -389,7 +389,7 @@ function message_rates(stats) {
     if (keys(stats).length > 0) {
         var items = [['Publish', 'publish'], ['Confirm', 'confirm'],
                      ['Deliver', 'deliver'],
-                     ['Of which redelivered', 'redeliver'],
+                     ['Redelivered', 'redeliver'],
                      ['Acknowledge', 'ack'],
                      ['Get', 'get'], ['Deliver (noack)', 'deliver_no_ack'],
                      ['Get (noack)', 'get_no_ack'],
