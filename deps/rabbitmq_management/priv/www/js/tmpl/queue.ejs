@@ -5,18 +5,9 @@
   <div class="hider updatable">
     <h3>Messages</h3>
     <div class="box">
-      <div class="highlight">
-        Ready
-        <strong><%= fmt_string(queue.messages_ready) %></strong>
-      </div>
-      <div class="highlight">
-        Unacknowledged
-        <strong><%= fmt_string(queue.messages_unacknowledged) %></strong>
-      </div>
-      <div class="highlight">
-      Total
-      <strong><%= fmt_string(queue.messages) %></strong>
-      </div>
+      <%= queue_length(queue, 'Ready', 'messages_ready') %>
+      <%= queue_length(queue, 'Unacknowledged', 'messages_unacknowledged') %>
+      <%= queue_length(queue, 'Total', 'messages') %>
     </div>
 
     <h3>Details</h3>

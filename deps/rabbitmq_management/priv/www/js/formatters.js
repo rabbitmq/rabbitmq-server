@@ -416,6 +416,17 @@ function message_rates(stats) {
     return res;
 }
 
+function queue_length(stats, name, key) {
+    var rate = Math.round(stats[key + '_details'].rate);
+    var rateMsg
+    if (rate == 0) rateMsg = '&nbsp;';
+    else if (rate > 0) rateMsg = '+' + rate + ' msg/s';
+    else rateMsg = rate + ' msg/s';
+
+    return '<div class="highlight">' + name +
+        '<strong>' + stats[key] + '</strong>' + rateMsg + '</div>';
+}
+
 function maybe_truncate(items) {
     var maximum = 500;
     var str = '';
