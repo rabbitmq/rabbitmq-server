@@ -269,7 +269,10 @@ parse_simple_destination(Type, Content) ->
     end.
 
 parse_content(Content)->
-    {_, Content2} = take_prefix("/", Content),
+    Content2 = case take_prefix("/", Content) of
+                  {ok, Rest} -> Rest;
+                  not_found  -> Content
+               end,
     [unescape(X) || X <- split(Content2, "/")].
 
 split([],      _Splitter) -> [];
@@ -280,15 +283,15 @@ split([], RPart, RParts, _Splitter) ->
     lists:reverse([lists:reverse(RPart) | RParts]);
 split(Content = [Elem | Rest1], RPart, RParts, Splitter) ->
     case take_prefix(Splitter, Content) of
-        {true, Rest2} ->
+        {ok, Rest2} ->
             split(Rest2, [], [lists:reverse(RPart) | RParts], Splitter);
-        {false, _} ->
+        not_found ->
             split(Rest1, [Elem | RPart], RParts, Splitter)
     end.
 
 take_prefix([Char | Prefix], [Char | List]) -> take_prefix(Prefix, List);
-take_prefix([],              List)          -> {true, List};
-take_prefix(_Prefix,         List)          -> {false, List}.
+take_prefix([],              List)          -> {ok, List};
+take_prefix(_Prefix,         List)          -> not_found.
 
 unescape(Str) -> unescape(Str, []).
 
