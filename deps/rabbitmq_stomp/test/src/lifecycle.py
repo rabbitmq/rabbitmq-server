@@ -108,6 +108,15 @@ class TestLifecycle(base.BaseTest):
             if new_conn.is_connected():
                 new_conn.disconnect()
 
+    def test_bad_header_on_send(self):
+        self.listener.reset(1)
+        self.conn.send_frame("SEND", {"destination":"a", "message-id":"1"})
+        self.assertTrue(self.listener.await())
+        self.assertEquals(1, len(self.listener.errors))
+        errorReceived = self.listener.errors[0]
+        self.assertEquals("Invalid header", errorReceived['headers']['message'])
+        self.assertEquals("'message-id' is not allowed on 'SEND'.\n", errorReceived['message'])
+
     def test_disconnect(self):
         ''' Test DISCONNECT command'''
         self.conn.disconnect()
