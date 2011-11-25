@@ -272,12 +272,9 @@ parse_content(Content)->
     {_, Content2} = take_prefix("/", Content),
     [unescape(X) || X <- split(Content2, "/")].
 
-split([], _Splitter) ->
-    [];
-split(Content, []) ->
-    Content;
-split(Content, Splitter) ->
-    split(Content, [], [], Splitter).
+split([],      _Splitter) -> [];
+split(Content, [])        -> Content;
+split(Content, Splitter)  -> split(Content, [], [], Splitter).
 
 split([], RPart, RParts, _Splitter) ->
     lists:reverse([lists:reverse(RPart) | RParts]);
@@ -289,19 +286,12 @@ split(Content = [Elem | Rest1], RPart, RParts, Splitter) ->
             split(Rest1, [Elem | RPart], RParts, Splitter)
     end.
 
-take_prefix([Char | Prefix], [Char | List]) ->
-    take_prefix(Prefix, List);
-take_prefix([], List) ->
-    {true, List};
-take_prefix(_Prefix, List) ->
-    {false, List}.
+take_prefix([Char | Prefix], [Char | List]) -> take_prefix(Prefix, List);
+take_prefix([],              List)          -> {true, List};
+take_prefix(_Prefix,         List)          -> {false, List}.
 
-unescape(Str) ->
-    unescape(Str, []).
+unescape(Str) -> unescape(Str, []).
 
-unescape("%2F" ++ Str, Acc) ->
-    unescape(Str, [$/ | Acc]);
-unescape([C | Str], Acc) ->
-    unescape(Str, [C | Acc]);
-unescape([], Acc) ->
-    lists:reverse(Acc).
+unescape("%2F" ++ Str, Acc) -> unescape(Str, [$/ | Acc]);
+unescape([C | Str],    Acc) -> unescape(Str, [C | Acc]);
+unescape([],           Acc) -> lists:reverse(Acc).
