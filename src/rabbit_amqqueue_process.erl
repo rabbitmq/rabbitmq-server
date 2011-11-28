@@ -824,14 +824,23 @@ make_dead_letter_msg(DLX, Reason, Msg = #basic_message{content = Content},
 
     #resource{name = QName} = qname(State),
 
-    DeathHeaders = [{<<"x-death-reason">>, longstr,
-                     list_to_binary(atom_to_list(Reason))},
-                    {<<"x-death-queue">>, longstr, QName}],
+    DeathTable = {table, [{<<"x-death-reason">>, longstr,
+                           list_to_binary(atom_to_list(Reason))},
+                          {<<"x-death-queue">>, longstr, QName}]},
 
-    Headers1 = case Headers of
-                   undefined -> DeathHeaders;
-                   _         -> Headers ++ DeathHeaders
-               end,
+    Headers1 =
+        case Headers of
+            undefined ->
+                [{<<"x-death">>, array, [DeathTable]}];
+            _ ->
+                case rabbit_misc:table_lookup(Headers, <<"x-death">>) of
+                    undefined ->
+                        [{<<"x-death">>, array, [DeathTable]} | Headers];
+                    {array, Prior} ->
+                        rabbit_misc:set_table_value(
+                          Headers, <<"x-death">>, array, [DeathTable | Prior])
+                end
+        end,
     Content2 =
         rabbit_binary_generator:clear_encoded_content(
           Content1#content{properties = Props#'P_basic'{headers = Headers1}}),
