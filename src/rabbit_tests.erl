@@ -2334,7 +2334,9 @@ test_dropwhile(VQ0) ->
     VQ2 = rabbit_variable_queue:dropwhile(
             fun(#message_properties { expiry = Expiry }) ->
                     Expiry =< 5
-            end, VQ1),
+            end,
+            dummy_msg_fun(),
+            VQ1),
 
     %% fetch five now
     VQ3 = lists:foldl(fun (_N, VQN) ->
@@ -2348,13 +2350,17 @@ test_dropwhile(VQ0) ->
 
     VQ4.
 
+dummy_msg_fun() -> fun(_Fun, _Extra, State) -> State end.
+
 test_dropwhile_varying_ram_duration(VQ0) ->
     VQ1 = variable_queue_publish(false, 1, VQ0),
     VQ2 = rabbit_variable_queue:set_ram_duration_target(0, VQ1),
-    VQ3 = rabbit_variable_queue:dropwhile(fun(_) -> false end, VQ2),
+    VQ3 = rabbit_variable_queue:dropwhile(
+            fun(_) -> false end, dummy_msg_fun(), VQ2),
     VQ4 = rabbit_variable_queue:set_ram_duration_target(infinity, VQ3),
     VQ5 = variable_queue_publish(false, 1, VQ4),
-    rabbit_variable_queue:dropwhile(fun(_) -> false end, VQ5).
+    rabbit_variable_queue:dropwhile(
+      fun(_) -> false end, dummy_msg_fun(), VQ5).
 
 test_variable_queue_dynamic_duration_change(VQ0) ->
     SegmentSize = rabbit_queue_index:next_segment_boundary(0),
@@ -2379,7 +2385,7 @@ test_variable_queue_dynamic_duration_change(VQ0) ->
 
     %% drain
     {VQ8, AckTags} = variable_queue_fetch(Len, false, false, Len, VQ7),
-    {_Guids, VQ9} = rabbit_variable_queue:ack(AckTags, VQ8),
+    {_Guids, VQ9} = rabbit_variable_queue:ack(AckTags, undefined, VQ8),
     {empty, VQ10} = rabbit_variable_queue:fetch(true, VQ9),
 
     VQ10.
@@ -2389,7 +2395,7 @@ publish_fetch_and_ack(0, _Len, VQ0) ->
 publish_fetch_and_ack(N, Len, VQ0) ->
     VQ1 = variable_queue_publish(false, 1, VQ0),
     {{_Msg, false, AckTag, Len}, VQ2} = rabbit_variable_queue:fetch(true, VQ1),
-    {_Guids, VQ3} = rabbit_variable_queue:ack([AckTag], VQ2),
+    {_Guids, VQ3} = rabbit_variable_queue:ack([AckTag], undefined, VQ2),
     publish_fetch_and_ack(N-1, Len, VQ3).
 
 test_variable_queue_partial_segments_delta_thing(VQ0) ->
@@ -2423,7 +2429,8 @@ test_variable_queue_partial_segments_delta_thing(VQ0) ->
              {len, HalfSegment + 1}]),
     {VQ8, AckTags1} = variable_queue_fetch(HalfSegment + 1, true, false,
                                            HalfSegment + 1, VQ7),
-    {_Guids, VQ9} = rabbit_variable_queue:ack(AckTags ++ AckTags1, VQ8),
+    {_Guids, VQ9} = rabbit_variable_queue:ack(AckTags ++ AckTags1,
+                                              undefined, VQ8),
     %% should be empty now
     {empty, VQ10} = rabbit_variable_queue:fetch(true, VQ9),
     VQ10.

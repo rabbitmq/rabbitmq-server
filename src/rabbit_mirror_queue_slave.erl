@@ -417,7 +417,7 @@ confirm_messages(MsgIds, State = #state { msg_id_status = MS }) ->
                           Acc
                   end
           end, {gb_trees:empty(), MS}, MsgIds),
-    rabbit_misc:gb_trees_foreach(fun rabbit_channel:confirm/2, CMs),
+    rabbit_misc:gb_trees_foreach(fun rabbit_misc:confirm_to_sender/2, CMs),
     State #state { msg_id_status = MS1 }.
 
 handle_process_result({ok,   State}) -> noreply(State);
@@ -649,7 +649,7 @@ maybe_enqueue_message(
         {ok, {confirmed, ChPid}} ->
             %% BQ has confirmed it but we didn't know what the
             %% msg_seq_no was at the time. We do now!
-            ok = rabbit_channel:confirm(ChPid, [MsgSeqNo]),
+            ok = rabbit_misc:confirm_to_sender(ChPid, [MsgSeqNo]),
             SQ1 = remove_from_pending_ch(MsgId, ChPid, SQ),
             State1 #state { sender_queues = SQ1,
                             msg_id_status = dict:erase(MsgId, MS) };
@@ -666,7 +666,7 @@ maybe_enqueue_message(
                       msg_id_status =
                           dict:store(MsgId, {published, ChPid, MsgSeqNo}, MS) };
                 immediately ->
-                    ok = rabbit_channel:confirm(ChPid, [MsgSeqNo]),
+                    ok = rabbit_misc:confirm_to_sender(ChPid, [MsgSeqNo]),
                     SQ1 = remove_from_pending_ch(MsgId, ChPid, SQ),
                     State1 #state { msg_id_status = dict:erase(MsgId, MS),
                                     sender_queues = SQ1 }
@@ -728,7 +728,7 @@ process_instruction(
                         {MQ2, sets:add_element(MsgId, PendingCh),
                          dict:store(MsgId, {published, ChPid, MsgSeqNo}, MS)};
                     immediately ->
-                        ok = rabbit_channel:confirm(ChPid, [MsgSeqNo]),
+                        ok = rabbit_misc:confirm_to_sender(ChPid, [MsgSeqNo]),
                         {MQ2, PendingCh, MS}
                 end;
             {{value, {#delivery {}, _EnqueueOnPromotion}}, _MQ2} ->
@@ -818,12 +818,12 @@ process_instruction({fetch, AckRequired, MsgId, Remaining},
                  %% we must be shorter than the master
                  State
          end};
-process_instruction({ack, MsgIds},
+process_instruction({ack, MsgFun, MsgIds},
                     State = #state { backing_queue       = BQ,
                                      backing_queue_state = BQS,
                                      msg_id_ack          = MA }) ->
     {AckTags, MA1} = msg_ids_to_acktags(MsgIds, MA),
-    {MsgIds1, BQS1} = BQ:ack(AckTags, BQS),
+    {MsgIds1, BQS1} = BQ:ack(AckTags, MsgFun, BQS),
     [] = MsgIds1 -- MsgIds, %% ASSERTION
     {ok, State #state { msg_id_ack          = MA1,
                         backing_queue_state = BQS1 }};
