@@ -778,13 +778,13 @@ monitor_queue(QPid, State = #q{queue_monitors = QMons}) ->
 handle_queue_down(QPid, State = #q{queue_monitors = QMons,
                                    unconfirmed    = UC}) ->
     case dict:find(QPid, QMons) of
-        error   ->
+        error ->
             noreply(State);
         {ok, _} ->
             #resource{name = QName} = qname(State),
             rabbit_log:info("DLQ ~p (for ~p) died~n", [QPid, QName]),
             MsgSeqNos = [MsgSeqNo ||
-                            {MsgSeqNo, {QPids, _, _}} <- gb_trees:to_list(UC),
+                            {MsgSeqNo, {QPids, _}} <- gb_trees:to_list(UC),
                             gb_sets:is_member(QPid, QPids)],
             handle_confirm(MsgSeqNos, QPid,
                            State#q{queue_monitors = dict:erase(QPid, QMons)})
