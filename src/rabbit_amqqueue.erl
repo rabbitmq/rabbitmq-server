@@ -345,14 +345,12 @@ check_integer_argument({_Type, Val}, _Args, _VHostPath) ->
 check_exchange_argument(undefined, _Args, _VHostPath) ->
     ok;
 check_exchange_argument({longstr, Val}, _Args, VHostPath) ->
-    case rabbit_exchange:lookup(rabbit_misc:r(VHostPath, exchange, Val)) of
-        {ok, _Exchange}    -> ok;
-        {error, not_found} -> {error, {non_existent_exchange, Val}}
+    try rabbit_misc:r(VHostPath, exchange, Val)
+    of _Exchange -> ok
+    catch _:_ -> {error, {invalid_exchange_name, Val}}
     end;
 check_exchange_argument({Type, _Val}, _Args, _VHostPath) ->
     {error, {unacceptable_type, Type}}.
-
-
 
 check_ha_policy_argument(undefined, _Args, _VHostPath) ->
     ok;
