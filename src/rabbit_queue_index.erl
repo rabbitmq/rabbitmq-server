@@ -505,7 +505,10 @@ queue_index_walker({start, DurableQueues}) when is_list(DurableQueues) ->
     [begin
          ok = gatherer:fork(Gatherer),
          ok = worker_pool:submit_async(
-                fun () -> queue_index_walker_reader(QueueName, Gatherer)
+                fun () -> link(Gatherer),
+                          ok = queue_index_walker_reader(QueueName, Gatherer),
+                          unlink(Gatherer),
+                          ok
                 end)
      end || QueueName <- DurableQueues],
     queue_index_walker({next, Gatherer});
