@@ -109,6 +109,7 @@ class TestLifecycle(base.BaseTest):
                 new_conn.disconnect()
 
     def test_bad_header_on_send(self):
+        ''' Test disallowed header on SEND '''
         self.listener.reset(1)
         self.conn.send_frame("SEND", {"destination":"a", "message-id":"1"})
         self.assertTrue(self.listener.await())
