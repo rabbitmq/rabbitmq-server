@@ -1315,6 +1315,22 @@
             </para>
           </listitem>
         </varlistentry>
+
+        <varlistentry>
+          <term><cmdsynopsis><command>eval</command> <arg choice="req"><replaceable>expr</replaceable></arg></cmdsynopsis></term>
+          <listitem>
+            <para>
+              Evaluate an arbitrary Erlang expression.
+            </para>
+            <para role="example-prefix">
+              For example:
+            </para>
+            <screen role="example">rabbitmqctl eval 'node().'</screen>
+            <para role="example">
+              This command returns the name of the node to which rabbitmqctl has connected.
+            </para>
+          </listitem>
+        </varlistentry>
       </variablelist>
     </refsect2>
 

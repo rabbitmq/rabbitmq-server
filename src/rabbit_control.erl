@@ -98,6 +98,9 @@ start() ->
         {error, Reason} ->
             print_error("~p", [Reason]),
             rabbit_misc:quit(2);
+        {error_string, Reason} ->
+            print_error("~s", [Reason]),
+            rabbit_misc:quit(2);
         {badrpc, {'EXIT', Reason}} ->
             print_error("~p", [Reason]),
             rabbit_misc:quit(2);
@@ -368,7 +371,23 @@ action(report, Node, _Args, _Opts, Inform) ->
     [print_report(Node, Q)      || Q <- ?GLOBAL_QUERIES],
     [print_report(Node, Q, [V]) || Q <- ?VHOST_QUERIES, V <- VHosts],
     io:format("End of server status report~n"),
-    ok.
+    ok;
+
+action(eval, Node, [Expr], _Opts, _Inform) ->
+    case erl_scan:string(Expr) of
+        {ok, Scanned, _} ->
+            case erl_parse:parse_exprs(Scanned) of
+                {ok, Parsed} ->
+                    {value, Value, _} = unsafe_rpc(
+                                          Node, erl_eval, exprs, [Parsed, []]),
+                    io:format("~p~n", [Value]),
+                    ok;
+                {error, E} ->
+                    {error_string, format_parse_error(E)}
+            end;
+        {error, E, _} ->
+            {error_string, format_parse_error(E)}
+    end.
 
 %%----------------------------------------------------------------------------
 
@@ -442,6 +461,9 @@ system(Cmd) ->
 % Escape the quotes in a shell command so that it can be used in "sh -c 'cmd'"
 escape_quotes(Cmd) ->
     lists:flatten(lists:map(fun ($') -> "'\\''"; (Ch) -> Ch end, Cmd)).
+
+format_parse_error({_Line, Mod, Err}) ->
+    lists:flatten(Mod:format_error(Err)).
 
 %%----------------------------------------------------------------------------
 
