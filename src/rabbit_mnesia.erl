@@ -272,7 +272,7 @@ table_definitions() ->
       [{record_name, topic_trie_node},
        {attributes, record_info(fields, topic_trie_node)},
        {type, ordered_set},
-       {match, #topic_trie_node{}}]},
+       {match, #topic_trie_node{trie_node = trie_node_match(), _='_'}}]},
      {rabbit_topic_trie_edge,
       [{record_name, topic_trie_edge},
        {attributes, record_info(fields, topic_trie_edge)},
@@ -319,12 +319,12 @@ reverse_binding_match() ->
                      _='_'}.
 binding_destination_match() ->
     resource_match('_').
+trie_node_match() ->
+    #trie_node{   exchange_name = exchange_name_match(), _='_'}.
 trie_edge_match() ->
-    #trie_edge{exchange_name = exchange_name_match(),
-               _='_'}.
+    #trie_edge{   exchange_name = exchange_name_match(), _='_'}.
 trie_binding_match() ->
-    #trie_binding{exchange_name = exchange_name_match(),
-                  _='_'}.
+    #trie_binding{exchange_name = exchange_name_match(), _='_'}.
 exchange_name_match() ->
     resource_match(exchange).
 queue_name_match() ->
