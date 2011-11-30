@@ -73,12 +73,17 @@ remove_bindings(transaction, #exchange{name = X}, Bs) ->
     %% rows. The downside of all this is that no other binding
     %% operations except lookup/routing (which uses dirty ops) on
     %% topic exchanges can take place concurrently. However, that is
-    %% the case already since the removal of bindings from the
-    %% rabbit_route etc table, which precedes all this, uses
-    %% match_object with a partial key, which results in a table lock.
-    [mnesia:lock({table, T}, write) || T <- [rabbit_topic_trie_node,
-                                             rabbit_topic_trie_edge,
-                                             rabbit_topic_trie_binding]],
+    %% the case for any bulk binding removal operations since the
+    %% removal of bindings from the rabbit_route etc table, which
+    %% precedes all this, calls match_object with a partial key, which
+    %% results in a table lock.
+    case Bs of
+        [_] -> ok;
+        _   -> [mnesia:lock({table, T}, write) ||
+                   T <- [rabbit_topic_trie_node,
+                         rabbit_topic_trie_edge,
+                         rabbit_topic_trie_binding]]
+    end,
     %% The remove process is split into two distinct phases. In the
     %% first phase we gather the lists of bindings and edges to
     %% delete, then in the second phase we process all the
