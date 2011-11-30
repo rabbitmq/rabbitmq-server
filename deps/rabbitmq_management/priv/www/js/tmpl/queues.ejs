@@ -48,12 +48,12 @@
 %>
   <tr<%= alt_rows(i) %>>
 <% if (vhosts_interesting) { %>
-   <td><%= queue.vhost %></td>
+   <td><%= fmt_string(queue.vhost) %></td>
 <% } %>
    <td><%= link_queue(queue.vhost, queue.name) %></td>
 <% if (nodes_interesting) { %>
    <td>
-     <%= queue.node %>
+     <%= fmt_string(queue.node) %>
      <%= fmt_mirrors(queue) %>
    </td>
 <% } %>
@@ -95,13 +95,13 @@
           <td>
             <select name="vhost">
               <% for (var i = 0; i < vhosts.length; i++) { %>
-              <option value="<%= vhosts[i].name %>"><%= vhosts[i].name %></option>
+              <option value="<%= fmt_string(vhosts[i].name) %>"><%= fmt_string(vhosts[i].name) %></option>
               <% } %>
             </select>
           </td>
         </tr>
 <% } else { %>
-        <tr><td><input type="hidden" name="vhost" value="<%= vhosts[0].name %>"/></td></tr>
+        <tr><td><input type="hidden" name="vhost" value="<%= fmt_string(vhosts[0].name) %>"/></td></tr>
 <% } %>
         <tr>
           <th><label>Name:</label></th>
@@ -125,7 +125,7 @@
           <td>
             <select name="node">
               <% for (var i = 0; i < nodes.length; i++) { %>
-              <option value="<%= nodes[i].name %>"><%= nodes[i].name %></option>
+              <option value="<%= fmt_string(nodes[i].name) %>"><%= nodes[i].name %></option>
               <% } %>
             </select>
           </td>

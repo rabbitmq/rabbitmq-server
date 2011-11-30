@@ -89,13 +89,13 @@
       <%= link_channel(channel.name) %>
     </td>
 <% if (mode == 'standalone' && nodes_interesting) { %>
-    <td><%= channel.node %></td>
+    <td><%= fmt_string(channel.node) %></td>
 <% } %>
 <% if (mode == 'standalone') { %>
 <% if (vhosts_interesting) { %>
-    <td class="c"><%= channel.vhost %></td>
+    <td class="c"><%= fmt_string(channel.vhost) %></td>
 <% } %>
-    <td class="c"><%= channel.user %></td>
+    <td class="c"><%= fmt_string(channel.user) %></td>
 <% } %>
     <td class="c">
       <%= fmt_channel_mode(channel) %>

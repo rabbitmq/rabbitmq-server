@@ -9,11 +9,11 @@
           </td>
 <% } %>
           <td>
-            <input type="hidden" name="vhost" value="<%= parent.vhost %>"/>
+            <input type="hidden" name="vhost" value="<%= fmt_string(parent.vhost) %>"/>
 <% if (mode == 'queue') { %>
-            <input type="hidden" name="destination" value="<%= parent.name %>"/>
+            <input type="hidden" name="destination" value="<%= fmt_string(parent.name) %>"/>
 <% } else { %>
-            <input type="hidden" name="source" value="<%= parent.name %>"/>
+            <input type="hidden" name="source" value="<%= fmt_string(parent.name) %>"/>
 <% } %>
             <table class="form">
 <% if (mode == 'queue') { %>
@@ -54,7 +54,7 @@
 <% if (mode == 'queue') { %>
           <td class="binding-endpoint">
             <span class="arrow">&rarr;</span>
-            <span class="object"><%= parent.name %></span>
+            <span class="object"><%= fmt_string(parent.name) %></span>
           </td>
 <% } %>
         </tr>

@@ -1,4 +1,4 @@
-<h1>Queue <b><%= queue.name %></b></h1>
+<h1>Queue <b><%= fmt_string(queue.name) %></b></h1>
 
 <div class="section">
   <h2>Overview</h2>
@@ -56,13 +56,13 @@
 <% if (vhosts_interesting) { %>
       <tr>
         <th>Virtual host</th>
-        <td><%= queue.vhost %></td>
+        <td><%= fmt_string(queue.vhost) %></td>
       </tr>
 <% } %>
 <% if (nodes_interesting) { %>
       <tr>
         <th>Node</th>
-        <td><%= queue.node %></td>
+        <td><%= fmt_string(queue.node) %></td>
       </tr>
       <tr>
         <th>Mirrors</th>
@@ -71,9 +71,9 @@
              var node = queue.slave_nodes[i];
           %>
             <% if (jQuery.inArray(node, queue.synchronised_slave_nodes) == -1) { %>
-             <%= node %> <b>(unsynchronised)</b>
+             <%= fmt_string(node) %> <b>(unsynchronised)</b>
             <% } else { %>
-             <%= node %>
+             <%= fmt_string(node) %>
             <% } %>
             <br/>
           <% } %>
@@ -120,7 +120,7 @@
 <div class="section-hidden">
   <h2>Bindings</h2>
   <div class="hider">
-    <h3>Incoming to <b><%= queue.name %></b></h3>
+    <h3>Incoming to <b><%= fmt_string(queue.name) %></b></h3>
     <table class="bindings updatable">
       <tr>
         <td>
@@ -146,8 +146,8 @@
       <span class="help" id="message-get-requeue"></span>
     </p>
     <form action="#/queues/get" method="post">
-      <input type="hidden" name="vhost" value="<%= queue.vhost %>"/>
-      <input type="hidden" name="name" value="<%= queue.name %>"/>
+      <input type="hidden" name="vhost" value="<%= fmt_string(queue.vhost) %>"/>
+      <input type="hidden" name="name" value="<%= fmt_string(queue.name) %>"/>
       <input type="hidden" name="truncate" value="50000"/>
       <table class="form">
         <tr>
@@ -184,15 +184,15 @@
   <h2>Delete / purge</h2>
   <div class="hider">
     <form action="#/queues" method="delete" class="confirm inline-form">
-      <input type="hidden" name="vhost" value="<%= queue.vhost %>"/>
-      <input type="hidden" name="name" value="<%= queue.name %>"/>
+      <input type="hidden" name="vhost" value="<%= fmt_string(queue.vhost) %>"/>
+      <input type="hidden" name="name" value="<%= fmt_string(queue.name) %>"/>
       <input type="hidden" name="mode" value="delete"/>
       <input type="submit" value="Delete" />
     </form>
 
     <form action="#/queues" method="delete" class="inline-form-right">
-      <input type="hidden" name="vhost" value="<%= queue.vhost %>"/>
-      <input type="hidden" name="name" value="<%= queue.name %>"/>
+      <input type="hidden" name="vhost" value="<%= fmt_string(queue.vhost) %>"/>
+      <input type="hidden" name="name" value="<%= fmt_string(queue.name) %>"/>
       <input type="hidden" name="mode" value="purge"/>
       <input type="submit" value="Purge" />
     </form>

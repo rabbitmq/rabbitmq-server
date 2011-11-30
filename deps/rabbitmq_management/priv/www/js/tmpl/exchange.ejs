@@ -6,7 +6,7 @@
     <table class="facts">
       <tr>
         <th>Type</th>
-        <td><%= exchange.type %></td>
+        <td><%= fmt_string(exchange.type) %></td>
       </tr>
       <tr>
         <th>Parameters</th>
@@ -15,7 +15,7 @@
 <% if (vhosts_interesting) { %>
       <tr>
         <th>Virtual host</th>
-        <td><%= exchange.vhost %></td>
+        <td><%= fmt_string(exchange.vhost) %></td>
       </tr>
 <% } %>
     </table>
@@ -97,7 +97,7 @@
   <h2>Publish message</h2>
   <div class="hider">
     <form action="#/exchanges/publish" method="post">
-      <input type="hidden" name="vhost" value="<%= exchange.vhost %>"/>
+      <input type="hidden" name="vhost" value="<%= fmt_string(exchange.vhost) %>"/>
       <input type="hidden" name="name" value="<%= fmt_exchange_url(exchange.name) %>"/>
       <input type="hidden" name="properties" value=""/>
       <table class="form">
@@ -152,7 +152,7 @@
   <h2>Delete this exchange</h2>
   <div class="hider">
     <form action="#/exchanges" method="delete" class="confirm">
-      <input type="hidden" name="vhost" value="<%= exchange.vhost %>"/>
+      <input type="hidden" name="vhost" value="<%= fmt_string(exchange.vhost) %>"/>
       <input type="hidden" name="name" value="<%= fmt_exchange_url(exchange.name) %>"/>
       <input type="submit" value="Delete"/>
     </form>

@@ -12,8 +12,8 @@
         var item = list[i];
     %>
        <tr<%= alt_rows(i)%>>
-         <td><%= item.name %></td>
-         <td><%= item.description %></td>
+         <td><%= fmt_string(item.name) %></td>
+         <td><%= fmt_string(item.description) %></td>
 <% if (show_enabled) { %>
          <td class="c"><%= fmt_boolean(item.enabled) %></td>
 <% } %>

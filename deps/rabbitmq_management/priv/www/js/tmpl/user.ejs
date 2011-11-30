@@ -1,4 +1,4 @@
-<h1>User: <b><%= user.name %></b></h1>
+<h1>User: <b><%= fmt_string(user.name) %></b></h1>
 
 <% if (permissions.length == 0) { %>
 <p class="warning">
@@ -13,7 +13,7 @@
 <table class="facts">
   <tr>
     <th>Tags</th>
-    <td><%= user.tags %></td>
+    <td><%= fmt_string(user.tags) %></td>
   </tr>
   <tr>
     <th>Can log in with password</th>
@@ -29,7 +29,7 @@
   <h2>Delete this user</h2>
   <div class="hider">
     <form action="#/users" method="delete" class="confirm">
-      <input type="hidden" name="username" value="<%= user.name %>"/>
+      <input type="hidden" name="username" value="<%= fmt_string(user.name) %>"/>
       <input type="submit" value="Delete"/>
     </form>
   </div>

@@ -24,10 +24,10 @@
 %>
   <tr<%= alt_rows(i)%>>
 <% if (vhosts_interesting) { %>
-   <td><%= exchange.vhost %></td>
+   <td><%= fmt_string(exchange.vhost) %></td>
 <% } %>
    <td><%= link_exchange(exchange.vhost, exchange.name) %></td>
-   <td class="c"><%= exchange.type %></td>
+   <td class="c"><%= fmt_string(exchange.type) %></td>
    <td class="c"><%= fmt_parameters_short(exchange) %></td>
    <td class="r"><%= fmt_rate(exchange.message_stats_in, 'publish', false) %></td>
   </tr>
@@ -48,13 +48,13 @@
           <td>
             <select name="vhost">
               <% for (var i = 0; i < vhosts.length; i++) { %>
-              <option value="<%= vhosts[i].name %>"><%= vhosts[i].name %></option>
+              <option value="<%= fmt_string(vhosts[i].name) %>"><%= fmt_string(vhosts[i].name) %></option>
               <% } %>
             </select>
           </td>
         </tr>
 <% } else { %>
-        <tr><td><input type="hidden" name="vhost" value="<%= vhosts[0].name %>"/></td></tr>
+        <tr><td><input type="hidden" name="vhost" value="<%= fmt_string(vhosts[0].name) %>"/></td></tr>
 <% } %>
         <tr>
           <th><label>Name:</label></th>

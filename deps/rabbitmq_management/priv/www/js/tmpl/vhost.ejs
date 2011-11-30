@@ -1,4 +1,4 @@
-<h1>Virtual Host: <b><%= vhost.name %></b></h1>
+<h1>Virtual Host: <b><%= fmt_string(vhost.name) %></b></h1>
 
 <% if (permissions.length == 0) { %>
 <p class="warning">
@@ -25,7 +25,7 @@
 <h2>Delete this vhost</h2>
 <div class="hider">
 <form action="#/vhosts" method="delete" class="confirm">
-<input type="hidden" name="name" value="<%= vhost.name %>"/>
+<input type="hidden" name="name" value="<%= fmt_string(vhost.name) %>"/>
 <input type="submit" value="Delete this virtual host"/>
 </form>
 </div>

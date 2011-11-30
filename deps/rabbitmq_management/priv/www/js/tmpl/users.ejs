@@ -17,7 +17,7 @@
     %>
        <tr<%= alt_rows(i)%>>
          <td><%= link_user(user.name) %></td>
-         <td class="c"><%= user.tags %></td>
+         <td class="c"><%= fmt_string(user.tags) %></td>
          <td class="c"><%= fmt_permissions(user, permissions, 'user', 'vhost',
                            '<p class="warning">No access</p>') %></td>
        </tr>

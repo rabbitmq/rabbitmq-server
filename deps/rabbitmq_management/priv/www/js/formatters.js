@@ -8,7 +8,7 @@ PROCESS_THRESHOLDS=[[0.75, 'red'],
 
 function fmt_string(str) {
     if (str == undefined) return UNKNOWN_REPR;
-    return str;
+    return fmt_escape_html("" + str);
 }
 
 function fmt_num(num) {
@@ -57,8 +57,8 @@ function fmt_parameters_short(obj) {
 
     for (var k in ALL_ARGS) {
         if (params[k] != undefined) {
-            res += '<acronym title="' + k + ': ' + params[k] + '">' +
-                ALL_ARGS[k].short + '</acronym> ';
+            res += '<acronym title="' + k + ': ' + fmt_string(params[k]) +
+                '">' + ALL_ARGS[k].short + '</acronym> ';
         }
     }
 
@@ -194,11 +194,11 @@ function is_col_empty(objects, name, accessor) {
 }
 
 function fmt_exchange(name) {
-    return name == '' ? '(AMQP default)' : name;
+    return name == '' ? '(AMQP default)' : fmt_escape_html(name);
 }
 
 function fmt_exchange_url(name) {
-    return name == '' ? 'amq.default' : name;
+    return name == '' ? 'amq.default' : fmt_escape_html(name);
 }
 
 function fmt_download_filename(host) {
@@ -330,10 +330,6 @@ function fmt_maybe_wrap(txt, encoding) {
         }
     }
     return fmt_escape_html(res);
-}
-
-function fmt_escape_html(txt) {
-    return txt.replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 function fmt_node_host(node_host) {
