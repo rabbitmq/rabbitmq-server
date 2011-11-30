@@ -24,18 +24,18 @@
 %>
    <tr<%= alt_rows(i)%>>
 <% if (vhosts_interesting) { %>
-    <td><%= link.vhost %></td>
+    <td><%= fmt_string(link.vhost) %></td>
 <% } %>
     <td><%= link_exchange(link.vhost, link.exchange) %></td>
     <td>
-      <%= link.connection %>
+      <%= fmt_string(link.connection) %>
       <sub>
-        <%= link.host %>:<%= link.port %>
+        <%= fmt_string(link.host) %>:<%= link.port %>
         <% if (link.ssl) { %>(SSL)<% } %>
       </sub>
     </td>
 <% if (nodes_interesting) { %>
-    <td><%= link.node %></td>
+    <td><%= fmt_string(link.node) %></td>
 <% } %>
 <% if (link.error) { %>
     <td class="status">
@@ -46,7 +46,7 @@
   </tr>
   <tr>
     <td colspan="7">
-      <pre><%= fmt_escape_html(link.error) %></pre>
+      <pre><%= fmt_string(link.error) %></pre>
     </td>
   </tr>
 <% } else { %>
