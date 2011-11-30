@@ -111,8 +111,7 @@ action(enable, ToEnable0, _Opts, PluginsFile, PluginsDir) ->
         [] -> io:format("Plugin configuration unchanged.~n");
         _  -> print_list("The following plugins have been enabled:",
                          NewImplicitlyEnabled -- ImplicitlyEnabled),
-              io:format("Plugin configuration has changed. "
-                        "Restart RabbitMQ for changes to take effect.~n")
+              report_change()
     end;
 
 action(disable, ToDisable0, _Opts, PluginsFile, PluginsDir) ->
@@ -140,8 +139,7 @@ action(disable, ToDisable0, _Opts, PluginsFile, PluginsDir) ->
                  print_list("The following plugins have been disabled:",
                             ImplicitlyEnabled -- NewImplicitlyEnabled),
                  write_enabled_plugins(PluginsFile, NewEnabled),
-                 io:format("Plugin configuration has changed. "
-                           "Restart RabbitMQ for changes to take effect.~n")
+                 report_change()
     end.
 
 %%----------------------------------------------------------------------------
@@ -374,3 +372,17 @@ maybe_warn_mochiweb(Enabled) ->
         false ->
             ok
     end.
+
+report_change() ->
+    io:format("Plugin configuration has changed. "
+              "Restart RabbitMQ for changes to take effect.~n"),
+    case os:type() of
+        {win32, _OsName} ->
+             io:format("If you have RabbitMQ running as a service then you must"
+                       " reinstall by running~n  rabbitmq-service.bat stop~n"
+                       "  rabbitmq-service.bat install~n"
+                       "  rabbitmq-service.bat start~n~n");
+        _ ->
+             ok
+    end.
+
