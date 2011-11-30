@@ -28,11 +28,11 @@
               %>
               <tr<%= alt_rows(i)%>>
                 <% if (vhosts_interesting) { %>
-                  <td><%= trace.vhost %></td>
+                  <td><%= fmt_string(trace.vhost) %></td>
                 <% } %>
-                <td><%= trace.name %></td>
-                <td><%= trace.pattern %></td>
-                <td><%= trace.format %></td>
+                <td><%= fmt_string(trace.name) %></td>
+                <td><%= fmt_string(trace.pattern) %></td>
+                <td><%= fmt_string(trace.format) %></td>
                 <% if (trace.queue) { %>
                 <td class="r">
                   <%= fmt_rate(trace.queue.message_stats, 'ack', false) %>
@@ -48,8 +48,8 @@
                 <% } %>
                 <td>
                   <form action="#/traces" method="delete">
-                    <input type="hidden" name="vhost" value="<%= trace.vhost %>"/>
-                    <input type="hidden" name="name" value="<%= trace.name %>"/>
+                    <input type="hidden" name="vhost" value="<%= fmt_string(trace.vhost) %>"/>
+                    <input type="hidden" name="name" value="<%= fmt_string(trace.name) %>"/>
                     <input type="submit" value="Stop"/>
                   </form>
                 </td>
@@ -82,7 +82,7 @@
                   <td class="r"><%= fmt_bytes(file.size) %></td>
                   <td>
                     <form action="#/trace-files" method="delete" class="inline-form">
-                      <input type="hidden" name="name" value="<%= file.name %>"/>
+                      <input type="hidden" name="name" value="<%= fmt_string(file.name) %>"/>
                       <input type="submit" value="Delete" />
                     </form>
                   </td>
@@ -110,13 +110,13 @@
           <td>
             <select name="vhost">
               <% for (var i = 0; i < vhosts.length; i++) { %>
-              <option value="<%= vhosts[i].name %>"><%= vhosts[i].name %></option>
+              <option value="<%= fmt_string(vhosts[i].name) %>"><%= fmt_string(vhosts[i].name) %></option>
               <% } %>
             </select>
           </td>
         </tr>
 <% } else { %>
-        <tr><td><input type="hidden" name="vhost" value="<%= vhosts[0].name %>"/></td></tr>
+        <tr><td><input type="hidden" name="vhost" value="<%= fmt_string(vhosts[0].name) %>"/></td></tr>
 <% } %>
         <tr>
           <th><label>Name:</label></th>
