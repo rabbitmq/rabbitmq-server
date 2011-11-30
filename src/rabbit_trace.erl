@@ -16,7 +16,8 @@
 
 -module(rabbit_trace).
 
--export([init/1, tracing/1, tap_trace_in/2, tap_trace_out/2, start/1, stop/1]).
+-export([init/1, tracing/1, tap_trace_in/2, tap_trace_out/2,
+         tap_trace_method_in/3, tap_trace_method_out/3, start/1, stop/1]).
 
 -include("rabbit.hrl").
 -include("rabbit_framing.hrl").
@@ -64,6 +65,16 @@ tap_trace_out({#resource{name = QName}, _QPid, _QMsgId, Redelivered, Msg},
     maybe_trace(TraceX, Msg, <<"deliver">>, QName,
                 [{<<"redelivered">>, signedint, RedeliveredNum}]).
 
+tap_trace_method_in(ChPid, Method, TraceX) ->
+    %% TODO pid_to_string is probably too slow here!
+    maybe_trace(TraceX, Method, <<"method_in">>,
+                list_to_binary(rabbit_misc:pid_to_string(ChPid)), []).
+
+tap_trace_method_out(ChPid, Method, TraceX) ->
+    %% TODO pid_to_string is probably too slow here!
+    maybe_trace(TraceX, Method, <<"method_out">>,
+                list_to_binary(rabbit_misc:pid_to_string(ChPid)), []).
+
 %%----------------------------------------------------------------------------
 
 start(VHost) ->
@@ -88,32 +99,43 @@ maybe_trace(none, _Msg, _RKPrefix, _RKSuffix, _Extra) ->
 maybe_trace(#exchange{name = Name}, #basic_message{exchange_name = Name},
             _RKPrefix, _RKSuffix, _Extra) ->
     ok;
-maybe_trace(X, Msg = #basic_message{content = #content{
-                                      payload_fragments_rev = PFR}},
-            RKPrefix, RKSuffix, Extra) ->
+maybe_trace(X, Event, RKPrefix, RKSuffix, Extra) ->
+    {Headers, Body} = event_to_table(Event),
     {ok, _, _} = rabbit_basic:publish(
                    X, <<RKPrefix/binary, ".", RKSuffix/binary>>,
-                   #'P_basic'{headers = msg_to_table(Msg) ++ Extra}, PFR),
+                   #'P_basic'{headers = Headers ++ Extra}, Body),
     ok.
 
-msg_to_table(#basic_message{exchange_name = #resource{name = XName},
-                            routing_keys  = RoutingKeys,
-                            content       = Content}) ->
-    #content{properties = Props} =
+event_to_table(#basic_message{exchange_name = #resource{name = XName},
+                              routing_keys  = RoutingKeys,
+                              content       = Content}) ->
+    #content{properties            = Props,
+             payload_fragments_rev = PFR} =
         rabbit_binary_parser:ensure_content_decoded(Content),
-    {PropsTable, _Ix} =
+    PropsTable = record_to_table(record_info(fields, 'P_basic'), Props),
+    {[{<<"exchange_name">>, longstr, XName},
+      {<<"routing_keys">>,  array,   [{longstr, K} || K <- RoutingKeys]},
+      {<<"properties">>,    table,   PropsTable},
+      {<<"node">>,          longstr, a2b(node())}], PFR};
+
+event_to_table(Method) ->
+    Protocol = rabbit_framing_amqp_0_9_1, %% TODO duh
+    MethodName = element(1, Method),
+    Arguments = record_to_table(Protocol:method_fieldnames(MethodName), Method),
+    {[{<<"method">>,     longstr, a2b(MethodName)},
+      {<<"parameters">>, table,   Arguments}], []}.
+
+record_to_table(FieldNames, Record) ->
+    {Table, _Ix} =
         lists:foldl(fun (K, {L, Ix}) ->
-                            V = element(Ix, Props),
+                            V = element(Ix, Record),
                             NewL = case V of
                                        undefined -> L;
                                        _         -> [{a2b(K), type(V), V} | L]
                                    end,
                             {NewL, Ix + 1}
-                    end, {[], 2}, record_info(fields, 'P_basic')),
-    [{<<"exchange_name">>, longstr, XName},
-     {<<"routing_keys">>,  array,   [{longstr, K} || K <- RoutingKeys]},
-     {<<"properties">>,    table,   PropsTable},
-     {<<"node">>,          longstr, a2b(node())}].
+                    end, {[], 2}, FieldNames),
+    lists:reverse(Table).
 
 a2b(A) -> list_to_binary(atom_to_list(A)).
 
