@@ -57,23 +57,27 @@ tracing(VHost) ->
 
 tap_trace_in(Msg = #basic_message{exchange_name = #resource{name = XName}},
              TraceX) ->
-    maybe_trace(TraceX, Msg, <<"publish">>, XName, []).
+    maybe_trace(TraceX, Msg, <<"publish.", XName/binary>>, []).
 
 tap_trace_out({#resource{name = QName}, _QPid, _QMsgId, Redelivered, Msg},
               TraceX) ->
     RedeliveredNum = case Redelivered of true -> 1; false -> 0 end,
-    maybe_trace(TraceX, Msg, <<"deliver">>, QName,
+    maybe_trace(TraceX, Msg, <<"deliver.", QName/binary>>,
                 [{<<"redelivered">>, signedint, RedeliveredNum}]).
 
 tap_trace_method_in(ChPid, Method, TraceX) ->
-    %% TODO pid_to_string is probably too slow here!
-    maybe_trace(TraceX, Method, <<"method_in">>,
-                list_to_binary(rabbit_misc:pid_to_string(ChPid)), []).
+    tap_trace_method(ChPid, Method, TraceX, <<"method_in">>).
 
 tap_trace_method_out(ChPid, Method, TraceX) ->
+    tap_trace_method(ChPid, Method, TraceX, <<"method_out">>).
+
+tap_trace_method(ChPid, Method, TraceX, Prefix) ->
     %% TODO pid_to_string is probably too slow here!
-    maybe_trace(TraceX, Method, <<"method_out">>,
-                list_to_binary(rabbit_misc:pid_to_string(ChPid)), []).
+    MethodName = a2b(element(1, Method)),
+    PidStr = list_to_binary(rabbit_misc:pid_to_string(ChPid)),
+    maybe_trace(TraceX, Method,
+                <<Prefix/binary, ".", MethodName/binary,".", PidStr/binary>>,
+                []).
 
 %%----------------------------------------------------------------------------
 
@@ -94,16 +98,15 @@ update_config(Fun) ->
 
 %%----------------------------------------------------------------------------
 
-maybe_trace(none, _Msg, _RKPrefix, _RKSuffix, _Extra) ->
+maybe_trace(none, _Msg, _RoutingKey, _Extra) ->
     ok;
 maybe_trace(#exchange{name = Name}, #basic_message{exchange_name = Name},
-            _RKPrefix, _RKSuffix, _Extra) ->
+            _RoutingKey, _Extra) ->
     ok;
-maybe_trace(X, Event, RKPrefix, RKSuffix, Extra) ->
+maybe_trace(X, Event, RoutingKey, Extra) ->
     {Headers, Body} = event_to_table(Event),
     {ok, _, _} = rabbit_basic:publish(
-                   X, <<RKPrefix/binary, ".", RKSuffix/binary>>,
-                   #'P_basic'{headers = Headers ++ Extra}, Body),
+                   X, RoutingKey, #'P_basic'{headers = Headers ++ Extra}, Body),
     ok.
 
 event_to_table(#basic_message{exchange_name = #resource{name = XName},
