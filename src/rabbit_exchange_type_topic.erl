@@ -212,7 +212,7 @@ trie_bindings(X, Node) ->
                                    destination   = '$1'}},
     mnesia:select(rabbit_topic_trie_binding, [{MatchHead, [], ['$1']}]).
 
-trie_update_node(X, Node, Fun) ->
+trie_update_node_counts(X, Node, Field, Delta) ->
     E = case mnesia:read(rabbit_topic_trie_node,
                          #trie_node{exchange_name = X,
                                     node_id       = Node}, write) of
@@ -223,7 +223,7 @@ trie_update_node(X, Node, Fun) ->
                                      binding_count = 0};
             [E0] -> E0
         end,
-    case Fun(E) of
+    case setelement(Field, E, element(Field, E) + Delta) of
         #topic_trie_node{edge_count = 0, binding_count = 0} ->
             ok = mnesia:delete_object(rabbit_topic_trie_node, E, write);
         EN ->
@@ -231,17 +231,11 @@ trie_update_node(X, Node, Fun) ->
     end.
 
 trie_add_edge(X, FromNode, ToNode, W) ->
-    trie_update_node(X, FromNode,
-                     fun(E = #topic_trie_node{edge_count = C}) ->
-                             E#topic_trie_node{edge_count = C + 1}
-                     end),
+    trie_update_node_counts(X, FromNode, #topic_trie_node.edge_count, +1),
     trie_edge_op(X, FromNode, ToNode, W, fun mnesia:write/3).
 
 trie_remove_edge(X, FromNode, ToNode, W) ->
-    trie_update_node(X, FromNode,
-                     fun(E = #topic_trie_node{edge_count = C}) ->
-                             E#topic_trie_node{edge_count = C - 1}
-                     end),
+    trie_update_node_counts(X, FromNode, #topic_trie_node.edge_count, -1),
     trie_edge_op(X, FromNode, ToNode, W, fun mnesia:delete_object/3).
 
 trie_edge_op(X, FromNode, ToNode, W, Op) ->
@@ -253,17 +247,11 @@ trie_edge_op(X, FromNode, ToNode, W, Op) ->
             write).
 
 trie_add_binding(X, Node, D) ->
-    trie_update_node(X, Node,
-                     fun(E = #topic_trie_node{binding_count = C}) ->
-                             E#topic_trie_node{binding_count = C + 1}
-                     end),
+    trie_update_node_counts(X, Node, #topic_trie_node.binding_count, +1),
     trie_binding_op(X, Node, D, fun mnesia:write/3).
 
 trie_remove_binding(X, Node, D) ->
-    trie_update_node(X, Node,
-                     fun(E = #topic_trie_node{binding_count = C}) ->
-                             E#topic_trie_node{binding_count = C - 1}
-                     end),
+    trie_update_node_counts(X, Node, #topic_trie_node.binding_count, -1),
     trie_binding_op(X, Node, D, fun mnesia:delete_object/3).
 
 trie_binding_op(X, Node, D, Op) ->
