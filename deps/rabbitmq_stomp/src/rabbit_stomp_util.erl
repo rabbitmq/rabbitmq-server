@@ -134,8 +134,7 @@ user_header(_) ->
     true.
 
 parse_message_id(MessageId) ->
-    {ok, Pieces} = regexp:split(MessageId, ?MESSAGE_ID_SEPARATOR),
-    case Pieces of
+    case split(MessageId, ?MESSAGE_ID_SEPARATOR) of
         [ConsumerTag, SessionId, DeliveryTag] ->
             {ok, {list_to_binary(ConsumerTag),
                   SessionId,
@@ -264,18 +263,32 @@ parse_simple_destination(Type, Content) ->
     end.
 
 parse_content(Content)->
-    case regexp:split(Content, "/") of
-        {ok, Matches} -> [unescape(X) ||
-                             X <- strip_leading_blank(Matches)];
-        Other -> Other
+    Content2 = case take_prefix("/", Content) of
+                  {ok, Rest} -> Rest;
+                  not_found  -> Content
+               end,
+    [unescape(X) || X <- split(Content2, "/")].
+
+split([],      _Splitter) -> [];
+split(Content, [])        -> Content;
+split(Content, Splitter)  -> split(Content, [], [], Splitter).
+
+split([], RPart, RParts, _Splitter) ->
+    lists:reverse([lists:reverse(RPart) | RParts]);
+split(Content = [Elem | Rest1], RPart, RParts, Splitter) ->
+    case take_prefix(Splitter, Content) of
+        {ok, Rest2} ->
+            split(Rest2, [], [lists:reverse(RPart) | RParts], Splitter);
+        not_found ->
+            split(Rest1, [Elem | RPart], RParts, Splitter)
     end.
 
-strip_leading_blank([[] | Rest]) ->
-    Rest;
-strip_leading_blank(Matches) ->
-    Matches.
+take_prefix([Char | Prefix], [Char | List]) -> take_prefix(Prefix, List);
+take_prefix([],              List)          -> {ok, List};
+take_prefix(_Prefix,         List)          -> not_found.
 
-unescape(Str) ->
-    {ok, OutStr, _} = regexp:gsub(Str, "%2F", "/"),
-    OutStr.
+unescape(Str) -> unescape(Str, []).
 
+unescape("%2F" ++ Str, Acc) -> unescape(Str, [$/ | Acc]);
+unescape([C | Str],    Acc) -> unescape(Str, [C | Acc]);
+unescape([],           Acc) -> lists:reverse(Acc).
