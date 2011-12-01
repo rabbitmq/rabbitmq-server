@@ -526,9 +526,11 @@ promote_me(From, #state { q                   = Q = #amqqueue { name = QName },
     MasterState = rabbit_mirror_queue_master:promote_backing_queue_state(
                     CPid, BQ, BQS, GM, SS, MonitoringPids),
 
-    MTC = dict:from_list(
-            [{MsgId, {ChPid, MsgSeqNo}} ||
-                {MsgId, {published, ChPid, MsgSeqNo}} <- dict:to_list(MS)]),
+    MTC = lists:foldl(fun ({MsgId, {published, ChPid, MsgSeqNo}}, MTC0) ->
+                          gb_trees:insert(MsgId, {ChPid, MsgSeqNo}, MTC0);
+                          (_, MTC0) ->
+                          MTC0
+                      end, gb_trees:empty(), MSList),
     NumAckTags = [NumAckTag || {_MsgId, NumAckTag} <- dict:to_list(MA)],
     AckTags = [AckTag || {_Num, AckTag} <- lists:sort(NumAckTags)],
     Deliveries = [Delivery || {_ChPid, {PubQ, _PendCh}} <- dict:to_list(SQ),
