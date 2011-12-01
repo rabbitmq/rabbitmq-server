@@ -81,6 +81,10 @@
 
 -define(FINE_STATS_NONE, []).
 
+-define(OVERVIEW_QUEUE_STATS,
+        [messages, messages_ready, messages_unacknowledged, messages_details,
+         messages_ready_details, messages_unacknowledged_details]).
+
 %%----------------------------------------------------------------------------
 
 start_link() ->
@@ -152,10 +156,8 @@ rate(Stats, Timestamp, OldStats, OldTimestamp, Key) ->
     end.
 
 sum(List, Keys) ->
-    lists:foldl(fun (Stats, Acc) ->
-                        [{Key, Val + pget(Key, Stats, 0)} || {Key, Val} <- Acc]
-                end,
-                [{Key, 0} || Key <- Keys], List).
+    lists:foldl(fun (I0, I1) -> gs_update(I0, I1, Keys) end,
+                gs_update([], [], Keys), List).
 
 %% List = [{ [{channel, Pid}, ...], [{deliver, 123}, ...] } ...]
 group_sum([], List) ->
@@ -175,6 +177,9 @@ group_sum([Group | Groups], List) ->
 
 gs_update(Item0, Item1) ->
     Keys = lists:usort([K || {K, _} <- Item0 ++ Item1]),
+    gs_update(Item0, Item1, Keys).
+
+gs_update(Item0, Item1, Keys) ->
     [{Key, gs_update_add(Key, pget(Key, Item0), pget(Key, Item1))} ||
         Key <- Keys].
 
@@ -257,7 +262,7 @@ handle_call({get_overview, User}, _From, State = #state{tables = Tables}) ->
     Qs0 = [rabbit_mgmt_format:queue(Q) || V <- VHosts,
                                           Q <- rabbit_amqqueue:list(V)],
     Qs1 = basic_queue_stats(Qs0, State),
-    Totals = sum(Qs1, [messages, messages_ready, messages_unacknowledged]),
+    Totals = sum(Qs1, ?OVERVIEW_QUEUE_STATS),
     Filter = fun(Id, Name) ->
                      lists:member(pget(vhost, pget(Name, Id)), VHosts)
              end,
@@ -309,7 +314,7 @@ handle_event(#event{type = queue_stats, props = Stats, timestamp = Timestamp},
     handle_stats(queue_stats, Stats, Timestamp,
                  [{fun rabbit_mgmt_format:properties/1,[backing_queue_status]},
                   {fun rabbit_mgmt_format:timestamp/1, [idle_since]}],
-                 [], State),
+                 [messages, messages_ready, messages_unacknowledged], State),
     prune_synchronised_slaves(
       true, pget(name, Stats), pget(slave_pids, Stats), State);
 
