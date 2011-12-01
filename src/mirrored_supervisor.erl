@@ -511,8 +511,7 @@ delete_all(Group) ->
     [delete(Group, id(C)) ||
         C <- mnesia:select(?TABLE, [{MatchHead, [], ['$1']}])].
 
-all_started(Results) ->
-    [] =:= [R || R = {error, _} <- Results].
+all_started(Results) -> [] =:= [R || R = {error, _} <- Results].
 
 %%----------------------------------------------------------------------------
 
