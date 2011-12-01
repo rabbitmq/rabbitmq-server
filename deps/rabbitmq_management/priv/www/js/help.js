@@ -126,6 +126,44 @@ HELP = {
         </dd> \
       </dl>',
 
+    'queued-messages':
+    'Total messages in all queues:\
+      <dl>\
+        <dt>Ready</dt>\
+        <dd>Number of messages that are available to be delivered now.</dd>\
+        <dt>Unacknowledged</dt>\
+        <dd>Number of messages for which the server is waiting for acknowledgement.</dd>\
+        <dt>Total</dt>\
+        <dd>The total of these two numbers.</dd>\
+      </dl>\
+    Note that the rate of change of total queued messages does \
+    <b>not</b> include messages removed due to queue deletion.',
+
+    'message-rates':
+    'Total rates for all queues. Only rates for which some activity is taking place will be shown.\
+      <dl>\
+        <dt>Publish</dt>\
+        <dd>Rate at which messages are entering the server.</dd>\
+        <dt>Confirm</dt>\
+        <dd>Rate at which the server is confirming publishes.</dd>\
+        <dt>Deliver</dt>\
+        <dd>Rate at which messages requiring acknowledgement are being delivered in response to basic.consume.</dd>\
+        <dt>Deliver (noack)</dt>\
+        <dd>Rate at which messages not requiring acknowledgement are being delivered in response to basic.consume.</dd>\
+        <dt>Get</dt>\
+        <dd>Rate at which messages requiring acknowledgement are being delivered in response to basic.get.</dd>\
+        <dt>Get (noack)</dt>\
+        <dd>Rate at which messages not requiring acknowledgement are being delivered in response to basic.get.</dd>\
+        <dt>Acknowledge</dt>\
+        <dd>Rate at which messages are being acknowledged.</dd>\
+        <dt>Redelivered</dt>\
+        <dd>Rate at which messages with the \'redelivered\' flag set are being delivered. Note that these messages will <b>also</b> be counted in one of the delivery rates above.</dd>\
+        <dt>Return (mandatory)</dt>\
+        <dd>Rate at which basic.return is sent to publishers for unroutable  messages published with the \'mandatory\' flag set.</dd>\
+        <dt>Return (immediate)</dt>\
+        <dd>Rate at which basic.return is sent to publishers for undeliverable  messages published with the \'immediate\' flag set.</dd>\
+      </dl>',
+
     'foo': 'foo' // No comma.
 };
 

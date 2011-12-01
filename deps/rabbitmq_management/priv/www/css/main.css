@@ -18,6 +18,7 @@ body { font: 12px Verdana,sans-serif; color: #484848; padding: 8px 35px; }
 
 h1 { font-size: 2em; font-weight: normal; padding: 0; }
 b, dt { color: black; font-weight: normal; }
+dd { margin-bottom: 5px; }
 div.box, div.section, div.section-hidden { overflow: auto; width: 100%; }
 
 .help { color: #888; cursor: pointer; }

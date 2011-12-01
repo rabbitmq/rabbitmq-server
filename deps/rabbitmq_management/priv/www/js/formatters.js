@@ -385,7 +385,7 @@ function message_rates(stats) {
     if (keys(stats).length > 0) {
         var items = [['Publish', 'publish'], ['Confirm', 'confirm'],
                      ['Deliver', 'deliver'],
-                     ['Of which redelivered', 'redeliver'],
+                     ['Redelivered', 'redeliver'],
                      ['Acknowledge', 'ack'],
                      ['Get', 'get'], ['Deliver (noack)', 'deliver_no_ack'],
                      ['Get (noack)', 'get_no_ack'],
@@ -410,6 +410,17 @@ function message_rates(stats) {
     }
 
     return res;
+}
+
+function queue_length(stats, name, key) {
+    var rate = Math.round(stats[key + '_details'].rate);
+    var rateMsg
+    if (rate == 0) rateMsg = '&nbsp;';
+    else if (rate > 0) rateMsg = '+' + rate + ' msg/s';
+    else rateMsg = rate + ' msg/s';
+
+    return '<div class="highlight">' + name +
+        '<strong>' + stats[key] + '</strong>' + rateMsg + '</div>';
 }
 
 function maybe_truncate(items) {
