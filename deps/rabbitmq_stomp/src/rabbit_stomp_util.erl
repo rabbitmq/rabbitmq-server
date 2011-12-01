@@ -55,7 +55,8 @@ consumer_tag(Frame) ->
         not_found ->
             case rabbit_stomp_frame:header(Frame, ?HEADER_DESTINATION) of
                 {ok, DestHdr} ->
-                    {ok, list_to_binary("Q_" ++ DestHdr), "destination='" ++ DestHdr ++ "'"};
+                    {ok, list_to_binary("Q_" ++ DestHdr),
+                     "destination='" ++ DestHdr ++ "'"};
                 not_found ->
                     {error, missing_destination_header}
             end

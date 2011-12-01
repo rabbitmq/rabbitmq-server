@@ -357,8 +357,8 @@ cancel_subscription({ok, ConsumerTag, Description}, Frame,
 maybe_delete_durable_sub(DestHdr, Frame, State = #state{channel = Channel}) ->
     case rabbit_stomp_util:parse_destination(DestHdr) of
         {ok, {topic, Name}} ->
-            case rabbit_stomp_frame:boolean_header
-                                    (Frame, ?HEADER_PERSISTENT, false) of
+            case rabbit_stomp_frame:boolean_header(Frame,
+                                                   ?HEADER_PERSISTENT, false) of
                 true ->
                     {ok, Id} = rabbit_stomp_frame:header(Frame, ?HEADER_ID),
                     QName =
@@ -442,8 +442,8 @@ do_login(Username0, Password0, VirtualHost0, Heartbeat, AdapterInfo,
                         ensure_heartbeats(Heartbeat, State),
                     ok("CONNECTED",
                        [{?HEADER_SESSION, SessionId},
-                        {?HEADER_HEART_BEAT, io_lib:format("~B,~B",
-                                            [SendTimeout, ReceiveTimeout])},
+                        {?HEADER_HEART_BEAT,
+                         io_lib:format("~B,~B", [SendTimeout, ReceiveTimeout])},
                         {?HEADER_VERSION, Version}],
                        "",
                        State1#state{session_id = SessionId,
@@ -589,11 +589,9 @@ create_nack_method(DeliveryTag, #subscription{multi_ack = IsMulti}) ->
                   multiple     = IsMulti}.
 
 negotiate_version(Frame) ->
-    ClientVers = re:split(
-                   rabbit_stomp_frame:header(Frame, ?HEADER_ACCEPT_VERSION,
-                                                                        "1.0"),
-                   ",",
-                   [{return, list}]),
+    ClientVers = re:split(rabbit_stomp_frame:header(
+                            Frame, ?HEADER_ACCEPT_VERSION, "1.0"),
+                          ",", [{return, list}]),
     rabbit_stomp_util:negotiate_version(ClientVers, ?SUPPORTED_VERSIONS).
 
 
@@ -654,8 +652,9 @@ ensure_reply_to(Frame = #stomp_frame{headers = Headers}, State) ->
                     {ReplyQueue, State1} =
                         ensure_reply_queue(TempQueueId, State),
                     {Frame#stomp_frame{
-                       headers = lists:keyreplace(?HEADER_REPLY_TO, 1, Headers,
-                                              {?HEADER_REPLY_TO, ReplyQueue})},
+                       headers = lists:keyreplace(
+                                   ?HEADER_REPLY_TO, 1, Headers,
+                                   {?HEADER_REPLY_TO, ReplyQueue})},
                      State1};
                 _ ->
                     {Frame, State}
@@ -894,8 +893,8 @@ ensure_queue(subscribe, {topic, Name}, Frame, Channel) ->
     %% subscriptions. Durable subscriptions get shared, named, durable
     %% queues.
     Method =
-        case rabbit_stomp_frame:boolean_header
-                                          (Frame, ?HEADER_PERSISTENT, false) of
+        case rabbit_stomp_frame:boolean_header(Frame,
+                                               ?HEADER_PERSISTENT, false) of
             true  ->
                 {ok, Id} = rabbit_stomp_frame:header(Frame, ?HEADER_ID),
                 QName = rabbit_stomp_util:durable_subscription_queue(Name, Id),
