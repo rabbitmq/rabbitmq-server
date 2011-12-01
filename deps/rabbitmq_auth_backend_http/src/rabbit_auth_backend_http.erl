@@ -21,7 +21,7 @@
 -include_lib("rabbit_common/include/rabbit_auth_backend_spec.hrl").
 
 -export([description/0, q/2]).
--export([check_user_login/2, check_vhost_access/3, check_resource_access/3]).
+-export([check_user_login/2, check_vhost_access/2, check_resource_access/3]).
 
 %% httpc seems to get racy when using HTTP 1.1
 -define(HTTPC_OPTS, [{version, "HTTP/1.0"}]).
@@ -35,20 +35,21 @@ description() ->
 %%--------------------------------------------------------------------
 
 check_user_login(Username, AuthProps) ->
-    case http_get(q(user_path, [{username, Username}|AuthProps]),
-                  ["deny", "allow", "admin"]) of
-        {error, _} = E -> E;
-        deny           -> {refused, "Denied by HTTP plugin", []};
-        Resp           -> {ok, #user{username     = Username,
-                                     is_admin     = Resp =:= admin,
-                                     auth_backend = ?MODULE,
-                                     impl         = none}}
+    case http_get(q(user_path, [{username, Username}|AuthProps])) of
+        {error, _} = E  -> E;
+        deny            -> {refused, "Denied by HTTP plugin", []};
+        "allow" ++ Rest -> Tags = [list_to_atom(T) ||
+                                      T <- string:tokens(Rest, " ")],
+                           {ok, #user{username     = Username,
+                                      tags         = Tags,
+                                      auth_backend = ?MODULE,
+                                      impl         = none}};
+        Other           -> {error, {bad_response, Other}}
     end.
 
-check_vhost_access(#user{username = Username}, VHost, Permission) ->
-    bool_req(vhost_path, [{username,   Username},
-                          {vhost,      VHost},
-                          {permission, Permission}]).
+check_vhost_access(#user{username = Username}, VHost) ->
+    bool_req(vhost_path, [{username, Username},
+                          {vhost,    VHost}]).
 
 check_resource_access(#user{username = Username},
                       #resource{virtual_host = VHost, kind = Type, name = Name},
@@ -63,19 +64,16 @@ check_resource_access(#user{username = Username},
 
 bool_req(PathName, Props) ->
     case http_get(q(PathName, Props)) of
-        deny  -> false;
-        allow -> true;
-        E     -> E
+        "deny"  -> false;
+        "allow" -> true;
+        E       -> E
     end.
 
 http_get(Path) ->
-    http_get(Path, ["allow", "deny"]).
-
-http_get(Path, Allowed) ->
     case httpc:request(get, {Path, []}, ?HTTPC_OPTS, []) of
         {ok, {{_HTTP, Code, _}, _Headers, Body}} ->
             case Code of
-                200 -> case parse_resp(Body, Allowed) of
+                200 -> case parse_resp(Body) of
                            {error, _} = E -> E;
                            Resp           -> Resp
                        end;
@@ -86,7 +84,7 @@ http_get(Path, Allowed) ->
     end.
 
 q(PathName, Args) ->
-    {ok, Path} = application:get_env(rabbit_auth_backend_http, PathName),
+    {ok, Path} = application:get_env(rabbitmq_auth_backend_http, PathName),
     R = Path ++ "?" ++ string:join([escape(K, V) || {K, V} <- Args], "&"),
     %%io:format("Q: ~p~n", [R]),
     R.
@@ -101,11 +99,6 @@ escape(V) when is_atom(V) ->
 escape(V) when is_list(V) ->
     edoc_lib:escape_uri(V).
 
-parse_resp(Resp, Allowed) ->
-    Resp1 = string:to_lower(string:strip(Resp)),
-    case lists:member(Resp1, Allowed) of
-        true  -> list_to_atom(Resp1);
-        false -> {error, {response, Resp}}
-    end.
+parse_resp(Resp) -> string:to_lower(string:strip(Resp)).
 
 %%--------------------------------------------------------------------

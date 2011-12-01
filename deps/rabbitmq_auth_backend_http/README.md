@@ -68,9 +68,6 @@ as follows:
 
 * `username`   - the name of the user
 * `vhost`      - the name of the virtual host being accessed
-* `permission` - the access level to the vhost:
-  * `read` (meaning learn it exists)
-  * `write` (meaning log in and use it)
 
 Note that you cannot create arbitrary virtual hosts using this plugin; you can only determine whether your users can see / access the ones that exist.
 
@@ -80,14 +77,14 @@ Note that you cannot create arbitrary virtual hosts using this plugin; you can o
 * `vhost`      - the name of the virtual host containing the resource
 * `resource`   - the type of resource (`exchange`, `queue`)
 * `name`       - the name of the resource
-* `permission` - the access level to the resource (`configure`, `write`, `read`) - see [the admin guide](http://www.rabbitmq.com/admin-guide.html#access-control) for their meaning
+* `permission` - the access level to the resource (`configure`, `write`, `read`) - see [the admin guide](http://www.rabbitmq.com/access-control.html) for their meaning
 
 Your web server should always return HTTP 200 OK, with a body
-containing a single word:
+containing:
 
 * `deny`  - deny access to the user / vhost / resource
 * `allow` - allow access to the user / vhost / resource
-* `admin` - (for `user_path` only) - allow access, and mark the user as an administrator
+* `allow [list of tags]` - (for `user_path` only) - allow access, and mark the user as an having the tags listed
 
 # Debugging
 

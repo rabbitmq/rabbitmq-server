@@ -8,9 +8,9 @@ def user(request):
         user = authenticate(username=username, password=password)
         if user:
             if user.is_superuser:
-                return HttpResponse("admin")
+                return HttpResponse("allow administrator")
             else:
-                return HttpResponse("allow")
+                return HttpResponse("allow management")
     return HttpResponse("deny")
 
 def vhost(request):
