@@ -20,9 +20,9 @@
     var shovel = shovels[i];
 %>
   <tr<%= alt_rows(i)%>>
-    <td><%= shovel.name %></td>
+    <td><%= fmt_string(shovel.name) %></td>
 <% if (nodes_interesting) { %>
-    <td><%= shovel.node %></td>
+    <td><%= fmt_string(shovel.node) %></td>
 <% } %>
 <% if (shovel.state == 'terminated') { %>
     <td class="status" colspan="3">
@@ -32,7 +32,7 @@
   </tr>
   <tr>
     <td colspan="6">
-      <pre><%= fmt_escape_html(shovel.reason) %></pre>
+      <pre><%= fmt_string(shovel.reason) %></pre>
     </td>
   </tr>
 <% } else { %>
