@@ -65,21 +65,8 @@ add_binding(none, _Exchange, _Binding) ->
     ok.
 
 remove_bindings(transaction, _X, Bs) ->
-    %% We need to lock the tables we are operating on in order to
-    %% reduce the time complexity. Without the table locks we end up
-    %% with K*length(Bs) row-level locks. Inserting each lock takes
-    %% time proportional to the number of existing locks, thus
-    %% resulting in O(length(Bs)^2) complexity.
-    %%
-    %% The locks need to be write locks since ultimately we end up
-    %% removing all these rows.
-    %%
-    %% The downside of all this is that no other binding operations
-    %% except lookup/routing (which uses dirty ops) on topic exchanges
-    %% can take place concurrently. However, that is the case for any
-    %% bulk binding removal operations since the removal of bindings
-    %% from the rabbit_route etc table, which precedes all this, calls
-    %% match_object with a partial key, which results in a table lock.
+    %% See rabbit_binding:lock_route_tables for the rationale for
+    %% taking table locks.
     case Bs of
         [_] -> ok;
         _   -> [mnesia:lock({table, T}, write) ||
