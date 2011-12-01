@@ -409,7 +409,7 @@ handle_info({'DOWN', _Ref, process, Pid, _Reason},
             [Self | _] -> {atomic, ChildSpecs} =
                               mnesia:transaction(fun() -> update_all(Pid) end),
                           [start(Delegate, ChildSpec) || ChildSpec <- ChildSpecs];
-            _          -> ok
+            _          -> []
         end,
     case all_started(R) of
         true  -> {noreply, State};
