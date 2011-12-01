@@ -197,6 +197,22 @@ test_ignore() ->
                    {sup, fake_strategy_for_ignore, []}),
     passed.
 
+test_startup_failure() ->
+    [test_startup_failure(F) || F <- [error, exit]],
+    passed.
+
+test_startup_failure(Fail) ->
+    process_flag(trap_exit, true),
+    ?MS:start_link(get_group(group), ?MODULE,
+                   {sup, one_for_one, [childspec(Fail)]}),
+    process_flag(trap_exit, false),
+    receive
+        {'EXIT', _, shutdown} ->
+            ok
+    after 1000 ->
+            exit({did_not_exit, Fail})
+    end.
+
 %% ---------------------------------------------------------------------------
 
 with_sups(Fun, Sups) ->
@@ -229,6 +245,12 @@ start_sup0(Name, Group, ChildSpecs) ->
 
 childspec(Id) ->
     {Id, {?MODULE, start_gs, [Id]}, transient, 16#ffffffff, worker, [?MODULE]}.
+
+start_gs(error) ->
+    {error, foo};
+
+start_gs(exit) ->
+    {exit, foo};
 
 start_gs(Id) ->
     gen_server:start_link({local, Id}, ?MODULE, server, []).
@@ -280,6 +302,12 @@ kill_wait(Pid) ->
 
 init({sup, fake_strategy_for_ignore, _ChildSpecs}) ->
     ignore;
+
+init({sup, fake_strategy_for_startup_error, _ChildSpecs}) ->
+    {error, foo};
+
+init({sup, fake_strategy_for_startup_exit, _ChildSpecs}) ->
+    exit(foo);
 
 init({sup, Strategy, ChildSpecs}) ->
     {ok, {{Strategy, 0, 1}, ChildSpecs}};
