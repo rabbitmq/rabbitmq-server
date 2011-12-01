@@ -357,7 +357,11 @@ handle_call({init, Overall}, _From,
 handle_call({start_child, ChildSpec}, _From,
             State = #state{delegate = Delegate,
                            group    = Group}) ->
-    {reply, maybe_start(Group, Delegate, ChildSpec), State};
+    {reply, case maybe_start(Group, Delegate, ChildSpec) of
+                already_in_mnesia        -> {error, already_present};
+                {already_in_mnesia, Pid} -> {error, {already_started, Pid}};
+                Else                     -> Else
+            end, State};
 
 handle_call({delete_child, Id}, _From, State = #state{delegate = Delegate,
                                                       group    = Group}) ->
@@ -436,8 +440,8 @@ maybe_start(Group, Delegate, ChildSpec) ->
                                     check_start(Group, Delegate, ChildSpec)
                             end) of
         {atomic, start}     -> start(Delegate, ChildSpec);
-        {atomic, undefined} -> {error, already_present};
-        {atomic, Pid}       -> {error, {already_started, Pid}};
+        {atomic, undefined} -> already_in_mnesia;
+        {atomic, Pid}       -> {already_in_mnesia, Pid};
         %% If we are torn down while in the transaction...
         {aborted, E}        -> {error, E}
     end.
