@@ -206,13 +206,13 @@ test_startup_failure(Fail) ->
     process_flag(trap_exit, true),
     ?MS:start_link(get_group(group), ?MODULE,
                    {sup, one_for_one, [childspec(Fail)]}),
-    process_flag(trap_exit, false),
     receive
         {'EXIT', _, shutdown} ->
             ok
     after 1000 ->
             exit({did_not_exit, Fail})
-    end.
+    end,
+    process_flag(trap_exit, false).
 
 %% ---------------------------------------------------------------------------
 

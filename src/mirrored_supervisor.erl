@@ -242,8 +242,10 @@ start_link({global, _SupName}, _Group, _Mod, _Args) ->
 start_link0(Prefix, Group, Init) ->
     case apply(?SUPERVISOR, start_link,
                Prefix ++ [?MODULE, {overall, Group, Init}]) of
-        {ok, Pid} -> call(Pid, {init, Pid}),
-                     {ok, Pid};
+        {ok, Pid} -> case catch call(Pid, {init, Pid}) of
+                         ok -> {ok, Pid};
+                         E  -> E
+                     end;
         Other     -> Other
     end.
 
@@ -346,8 +348,11 @@ handle_call({init, Overall}, _From,
      end || Pid <- Rest],
     Delegate = child(Overall, delegate),
     erlang:monitor(process, Delegate),
-    [maybe_start(Group, Delegate, S) || S <- ChildSpecs],
-    {reply, ok, State#state{overall = Overall, delegate = Delegate}};
+    State1 = State#state{overall = Overall, delegate = Delegate},
+    case all_started([maybe_start(Group, Delegate, S) || S <- ChildSpecs]) of
+        true  -> {reply, ok, State1};
+        false -> {stop, shutdown, State1}
+    end;
 
 handle_call({start_child, ChildSpec}, _From,
             State = #state{delegate = Delegate,
@@ -400,13 +405,16 @@ handle_info({'DOWN', _Ref, process, Pid, _Reason},
     %% TODO load balance this
     %% No guarantee pg2 will have received the DOWN before us.
     Self = self(),
-    case lists:sort(?PG2:get_members(Group)) -- [Pid] of
-        [Self | _] -> {atomic, ChildSpecs} =
-                          mnesia:transaction(fun() -> update_all(Pid) end),
-                      [start(Delegate, ChildSpec) || ChildSpec <- ChildSpecs];
-        _          -> ok
-    end,
-    {noreply, State};
+    R = case lists:sort(?PG2:get_members(Group)) -- [Pid] of
+            [Self | _] -> {atomic, ChildSpecs} =
+                              mnesia:transaction(fun() -> update_all(Pid) end),
+                          [start(Delegate, ChildSpec) || ChildSpec <- ChildSpecs];
+            _          -> ok
+        end,
+    case all_started(R) of
+        true  -> {noreply, State};
+        false -> {stop, shutdown, State}
+    end;
 
 handle_info(Info, State) ->
     {stop, {unexpected_info, Info}, State}.
@@ -498,6 +506,9 @@ delete_all(Group) ->
                                         _         = '_'},
     [delete(Group, id(C)) ||
         C <- mnesia:select(?TABLE, [{MatchHead, [], ['$1']}])].
+
+all_started(Results) ->
+    [] =:= [R || R = {error, _} <- Results].
 
 %%----------------------------------------------------------------------------
 
