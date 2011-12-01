@@ -45,6 +45,7 @@ all_tests() ->
     passed = test_start_idempotence(),
     passed = test_unsupported(),
     passed = test_ignore(),
+    passed = test_startup_failure(),
     passed.
 
 %% Simplest test
