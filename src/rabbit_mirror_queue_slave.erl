@@ -527,9 +527,9 @@ promote_me(From, #state { q                   = Q = #amqqueue { name = QName },
                     CPid, BQ, BQS, GM, SS, MonitoringPids),
 
     MTC = lists:foldl(fun ({MsgId, {published, ChPid, MsgSeqNo}}, MTC0) ->
-                          gb_trees:insert(MsgId, {ChPid, MsgSeqNo}, MTC0);
+                              gb_trees:insert(MsgId, {ChPid, MsgSeqNo}, MTC0);
                           (_, MTC0) ->
-                          MTC0
+                              MTC0
                       end, gb_trees:empty(), MSList),
     NumAckTags = [NumAckTag || {_MsgId, NumAckTag} <- dict:to_list(MA)],
     AckTags = [AckTag || {_Num, AckTag} <- lists:sort(NumAckTags)],
