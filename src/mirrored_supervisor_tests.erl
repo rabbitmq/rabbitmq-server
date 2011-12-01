@@ -199,7 +199,7 @@ test_ignore() ->
     passed.
 
 test_startup_failure() ->
-    [test_startup_failure(F) || F <- [error, exit]],
+    [test_startup_failure(F) || F <- [want_error, want_exit]],
     passed.
 
 test_startup_failure(Fail) ->
@@ -247,11 +247,11 @@ start_sup0(Name, Group, ChildSpecs) ->
 childspec(Id) ->
     {Id, {?MODULE, start_gs, [Id]}, transient, 16#ffffffff, worker, [?MODULE]}.
 
-start_gs(error) ->
+start_gs(want_error) ->
     {error, foo};
 
-start_gs(exit) ->
-    {exit, foo};
+start_gs(want_exit) ->
+    exit(foo);
 
 start_gs(Id) ->
     gen_server:start_link({local, Id}, ?MODULE, server, []).
@@ -303,12 +303,6 @@ kill_wait(Pid) ->
 
 init({sup, fake_strategy_for_ignore, _ChildSpecs}) ->
     ignore;
-
-init({sup, fake_strategy_for_startup_error, _ChildSpecs}) ->
-    {error, foo};
-
-init({sup, fake_strategy_for_startup_exit, _ChildSpecs}) ->
-    exit(foo);
 
 init({sup, Strategy, ChildSpecs}) ->
     {ok, {{Strategy, 0, 1}, ChildSpecs}};
