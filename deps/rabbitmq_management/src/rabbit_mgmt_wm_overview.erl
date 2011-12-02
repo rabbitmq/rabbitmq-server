@@ -83,7 +83,7 @@ rabbit_mochiweb_contexts() ->
 
 contexts(Node) ->
     case rpc:call(Node, rabbit_mochiweb_registry, list_all, [], infinity) of
-        {badrpc, {'EXIT', {undef, _}}} ->
+        {badrpc, {'EXIT', _}} ->
             [];
         Contexts ->
             [[{node, Node} | format_context(C)] || C <- Contexts]
