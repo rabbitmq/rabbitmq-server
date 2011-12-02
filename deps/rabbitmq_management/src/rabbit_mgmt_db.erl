@@ -88,16 +88,7 @@
 %%----------------------------------------------------------------------------
 
 start_link() ->
-    case gen_server:start_link({global, ?MODULE}, ?MODULE, [], []) of
-        {error, {already_started, Pid}} ->
-            rabbit_log:info(
-              "Statistics database already registered at ~p.~n", [Pid]),
-            ignore;
-        Else ->
-            rabbit_log:info(
-              "Statistics database started.~n", []),
-            Else
-    end.
+    gen_server:start_link({global, ?MODULE}, ?MODULE, [], []).
 
 augment_exchanges(Xs, Mode) -> safe_call({augment_exchanges, Xs, Mode}, Xs).
 augment_queues(Qs, Mode)    -> safe_call({augment_queues, Qs, Mode}, Qs).
@@ -210,6 +201,7 @@ if_unknown(Val,    _Def) -> Val.
 init([]) ->
     rabbit:force_event_refresh(),
     {ok, Interval} = application:get_env(rabbit, collect_statistics_interval),
+    rabbit_log:info("Statistics database started.~n", []),
     {ok, #state{interval = Interval,
                 tables = orddict:from_list(
                            [{Key, ets:new(anon, [private, ordered_set])} ||
