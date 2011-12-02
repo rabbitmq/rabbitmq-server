@@ -154,7 +154,6 @@ if exist "%PID_FILE%" (
    del /f "%PID_FILE%"
 )
 
-
 :: check that wmic exists ::
 set WMIC_PATH=%SYSTEMROOT%\System32\Wbem\wmic.exe
 if not exist "%WMIC_PATH%" (
@@ -165,9 +164,6 @@ if not exist "%WMIC_PATH%" (
 :: declare node name ::
 set RABBITMQ_NODENAME_CLI=-sname %RABBITMQ_NODENAME%
 
-:: show ::
-echo sname is %RABBITMQ_NODENAME%
-
 FOR /F "usebackq tokens=* skip=1" %%P IN (`%%WMIC_PATH%% process where "name='erl.exe' and commandline like '%%%RABBITMQ_NODENAME_CLI%%%'" get processid`) do (
   SET PID=%%P
   goto :wmic_writepid
@@ -176,7 +172,7 @@ FOR /F "usebackq tokens=* skip=1" %%P IN (`%%WMIC_PATH%% process where "name='er
 :wmic_writepid
 
 :: check for pid not found ::
-if "%PID%" == "" ( 
+if "%PID%" == "" (
   echo Could not find erl.exe pid
   goto :wmic_end
 )
