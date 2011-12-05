@@ -54,7 +54,8 @@
             unconfirmed,
             blocked_op,
             queue_monitors,
-            dlx
+            dlx,
+            dlx_routing_key
            }).
 
 -record(consumer, {tag, ack_required}).
@@ -135,6 +136,7 @@ init(Q) ->
                expiry_timer_ref    = undefined,
                ttl                 = undefined,
                dlx                 = undefined,
+               dlx_routing_key     = undefined,
                publish_seqno       = 1,
                unconfirmed         = gb_trees:empty(),
                blocked_op          = undefined,
@@ -233,7 +235,9 @@ process_args(State = #q{q = #amqqueue{arguments = Arguments}}) ->
                         end
                 end, State, [{<<"x-expires">>,     fun init_expires/2},
                              {<<"x-message-ttl">>, fun init_ttl/2},
-                             {<<"x-dead-letter-exchange">>, fun init_dlx/2}]).
+                             {<<"x-dead-letter-exchange">>, fun init_dlx/2},
+                             {<<"x-dead-letter-routing-key">>,
+                              fun init_dlx_routing_key/2}]).
 
 init_expires(Expires, State) -> ensure_expiry_timer(State#q{expires = Expires}).
 
@@ -242,6 +246,9 @@ init_ttl(TTL, State) -> drop_expired_messages(State#q{ttl = TTL}).
 init_dlx(DLX, State = #q{q = #amqqueue{name = #resource{
                                          virtual_host = VHostPath}}}) ->
     State#q{dlx = rabbit_misc:r(VHostPath, exchange, DLX)}.
+
+init_dlx_routing_key(RoutingKey, State) ->
+    State#q{dlx_routing_key = RoutingKey}.
 
 terminate_shutdown(Fun, State) ->
     State1 = #q{backing_queue_state = BQS} =
@@ -830,7 +837,7 @@ make_dead_letter_msg(DLX, Reason,
                      Msg = #basic_message{content       = Content,
                                           exchange_name = Exchange,
                                           routing_keys  = RoutingKeys},
-                     State) ->
+                     State = #q{dlx_routing_key = DlxRoutingKey}) ->
     Content1 = #content{
       properties = Props = #'P_basic'{headers = Headers}} =
         rabbit_binary_parser:ensure_content_decoded(Content),
@@ -846,9 +853,8 @@ make_dead_letter_msg(DLX, Reason,
                           {<<"time">>, longstr,
                            list_to_binary(httpd_util:rfc1123_date())},
                           {<<"exchange">>, longstr, Exchange#resource.name},
-                          {<<"routing-key">>, array,
+                          {<<"routing-keys">>, array,
                            [{longstr, Key} || Key <- RoutingKeys1]}]},
-
     Headers1 =
         case Headers of
             undefined ->
@@ -862,12 +868,17 @@ make_dead_letter_msg(DLX, Reason,
                           Headers, <<"x-death">>, array, [DeathTable | Prior])
                 end
         end,
+    {DeathRoutingKeys, Headers2} =
+        case DlxRoutingKey of
+            undefined -> {RoutingKeys, Headers1};
+            _         -> {[DlxRoutingKey],
+                          rabbit_misc:remove_table_value(Headers1, <<"CC">>)}
+        end,
     Content2 =
         rabbit_binary_generator:clear_encoded_content(
-          Content1#content{properties = Props#'P_basic'{headers = Headers1}}),
-
+          Content1#content{properties = Props#'P_basic'{headers = Headers2}}),
     Msg#basic_message{exchange_name = DLX, id = rabbit_guid:guid(),
-                      content = Content2}.
+                      routing_keys = DeathRoutingKeys, content = Content2}.
 
 
 now_micros() -> timer:now_diff(now(), {0,0,0}).

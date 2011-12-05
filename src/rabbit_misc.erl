@@ -23,7 +23,7 @@
          protocol_error/3, protocol_error/4, protocol_error/1]).
 -export([not_found/1, assert_args_equivalence/4]).
 -export([dirty_read/1]).
--export([table_lookup/2, set_table_value/4]).
+-export([table_lookup/2, set_table_value/4, remove_table_value/2]).
 -export([r/3, r/2, r_arg/4, rs/1]).
 -export([enable_cover/0, report_cover/0]).
 -export([enable_cover/1, report_cover/1]).
@@ -109,6 +109,8 @@
         (rabbit_framing:amqp_table(), binary(),
          rabbit_framing:amqp_field_type(), rabbit_framing:amqp_value())
         -> rabbit_framing:amqp_table()).
+-spec(remove_table_value/2 ::
+        (rabbit_framing:amqp_table(), binary()) -> rabbit_framing:amqp_table()).
 
 -spec(r/2 :: (rabbit_types:vhost(), K)
              -> rabbit_types:r3(rabbit_types:vhost(), K, '_')
@@ -297,6 +299,12 @@ table_lookup(Table, Key) ->
 set_table_value(Table, Key, Type, Value) ->
     sort_field_table(
       lists:keystore(Key, 1, Table, {Key, Type, Value})).
+
+remove_table_value(Table, Key) ->
+    case lists:keytake(Key, 1, Table) of
+        false              -> Table;
+        {value, _, Table2} -> Table2
+    end.
 
 r(#resource{virtual_host = VHostPath}, Kind, Name)
   when is_binary(Name) ->
