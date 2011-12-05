@@ -89,8 +89,7 @@ if "!RABBITMQ_ENABLED_PLUGINS_FILE!"=="" (
 set RABBITMQ_PLUGINS_DIR=!TDP0!..\plugins
 set RABBITMQ_EBIN_ROOT=!TDP0!..\ebin
 
-rem Ensures that epmd is running.
-"!ERLANG_HOME!\bin\erl.exe" -sname epmd_primer -noinput -run init stop
+"!ERLANG_HOME!\bin\epmd.exe" -daemon
 
 if ERRORLEVEL 1 (
    exit /B 1
