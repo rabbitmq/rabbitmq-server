@@ -837,7 +837,9 @@ make_dead_letter_msg(DLX, Reason, Msg = #basic_message{content = Content},
 
     DeathTable = {table, [{<<"x-death-reason">>, longstr,
                            list_to_binary(atom_to_list(Reason))},
-                          {<<"x-death-queue">>, longstr, QName}]},
+                          {<<"x-death-queue">>, longstr, QName},
+                          {<<"x-death-time">>, longstr,
+                           list_to_binary(httpd_util:rfc1123_date())}]},
 
     Headers1 =
         case Headers of
