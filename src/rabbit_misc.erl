@@ -251,28 +251,34 @@ assert_args_equivalence(Orig, New, Name, Keys) ->
     ok.
 
 assert_args_equivalence1(Orig, New, Name, Key) ->
-    case {table_lookup(Orig, Key), table_lookup(New, Key)} of
+    {Orig1, New1} = {table_lookup(Orig, Key), table_lookup(New, Key)},
+    FailureFun = fun () ->
+                     protocol_error(precondition_failed, "inequivalent arg '~s'"
+                                    "for ~s: received ~s but current is ~s",
+                                    [Key, rs(Name), val(New1), val(Orig1)])
+                 end,
+    case {Orig1, New1} of
         {Same, Same} ->
             ok;
-        {{OrigType, OrigVal} = Orig1, {NewType, NewVal} = New1} ->
+        {{OrigType, OrigVal}, {NewType, NewVal}} ->
             case type_class(OrigType) == type_class(NewType) andalso
                  OrigVal == NewVal of
                  true  -> ok;
-                 false -> protocol_error(precondition_failed, "inequivalent arg"
-                                         " '~s' for ~s: received ~s but current"
-                                         " is ~s",
-                                         [Key, rs(Name), val(New1), val(Orig1)])
-            end
+                 false -> FailureFun()
+            end;
+        {_, _} ->
+            FailureFun()
     end.
 
 val(undefined) ->
     "none";
 val({Type, Value}) ->
-    Fmt = case is_binary(Value) of
-              true  -> "the value '~s' of type '~s'";
-              false -> "the value '~w' of type '~s'"
-          end,
-    lists:flatten(io_lib:format(Fmt, [Value, Type])).
+    ValFmt = case is_binary(Value) of
+                 true  -> "~s";
+                 false -> "~w"
+             end,
+    lists:flatten(io_lib:format("the value '" ++ ValFmt ++ "' of type '~s'",
+                                [Value, Type])).
 
 %% Normally we'd call mnesia:dirty_read/1 here, but that is quite
 %% expensive due to general mnesia overheads (figuring out table types
