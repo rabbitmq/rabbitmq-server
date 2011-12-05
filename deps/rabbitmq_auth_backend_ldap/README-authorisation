@@ -73,8 +73,8 @@ In Group Query
 {in_group, Pattern}
 
 Like the Exists Query, substitutes arguments into a pattern to look
-for an object. However, this query assumes that the object pointed to
-is a groupOfNames and returns true if the logged in user is a member.
+for an object. However, this query returns true if the logged in user
+is a member.
 
 Match Query
 -----------
