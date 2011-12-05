@@ -119,8 +119,7 @@ evaluate({exists, DNPattern}, Args, _User, LDAP) ->
     object_exists(DNPattern, Filter, Args, LDAP);
 
 evaluate({in_group, DNPattern}, Args, #user{impl = UserDN}, LDAP) ->
-    Filter = eldap:'and'([eldap:equalityMatch("objectClass", "groupOfNames"),
-                          eldap:equalityMatch("member",      UserDN)]),
+    Filter = eldap:equalityMatch("member", UserDN),
     object_exists(DNPattern, Filter, Args, LDAP);
 
 evaluate({match, StringQuery, REQuery}, Args, User, LDAP) ->
