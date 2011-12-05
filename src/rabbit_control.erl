@@ -102,7 +102,7 @@ start() ->
             rabbit_misc:print_error("~p", [Reason]),
             rabbit_misc:quit(2);
         {error_string, Reason} ->
-            print_error("~s", [Reason]),
+            rabbit_misc:print_error("~s", [Reason]),
             rabbit_misc:quit(2);
         {badrpc, {'EXIT', Reason}} ->
             rabbit_misc:print_error("~p", [Reason]),
