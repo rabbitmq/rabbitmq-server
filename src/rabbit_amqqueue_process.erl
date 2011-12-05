@@ -826,20 +826,28 @@ cleanup_after_confirm(State = #q{blocked_op  = Op,
             noreply(State1#q{blocked_op = Op})
     end.
 
-make_dead_letter_msg(DLX, Reason, Msg = #basic_message{content = Content},
+make_dead_letter_msg(DLX, Reason,
+                     Msg = #basic_message{content       = Content,
+                                          exchange_name = Exchange,
+                                          routing_keys  = RoutingKeys},
                      State) ->
-
     Content1 = #content{
       properties = Props = #'P_basic'{headers = Headers}} =
         rabbit_binary_parser:ensure_content_decoded(Content),
 
     #resource{name = QName} = qname(State),
 
-    DeathTable = {table, [{<<"x-death-reason">>, longstr,
+    %% The first routing key is the one specified in the
+    %% basic.publish; all others are CC or BCC keys.
+    RoutingKeys1 = [hd(RoutingKeys) | rabbit_basic:header_routes(Headers)],
+    DeathTable = {table, [{<<"reason">>, longstr,
                            list_to_binary(atom_to_list(Reason))},
-                          {<<"x-death-queue">>, longstr, QName},
-                          {<<"x-death-time">>, longstr,
-                           list_to_binary(httpd_util:rfc1123_date())}]},
+                          {<<"queue">>, longstr, QName},
+                          {<<"time">>, longstr,
+                           list_to_binary(httpd_util:rfc1123_date())},
+                          {<<"exchange">>, longstr, Exchange#resource.name},
+                          {<<"routing-key">>, array,
+                           [{longstr, Key} || Key <- RoutingKeys1]}]},
 
     Headers1 =
         case Headers of
