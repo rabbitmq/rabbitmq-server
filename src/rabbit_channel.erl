@@ -20,7 +20,7 @@
 
 -behaviour(gen_server2).
 
--export([start_link/10, do/2, do/3, flush/1, shutdown/1]).
+-export([start_link/11, do/2, do/3, flush/1, shutdown/1]).
 -export([send_command/2, deliver/4, flushed/2, confirm/2]).
 -export([list/0, info_keys/0, info/1, info/2, info_all/0, info_all/1]).
 -export([refresh_config_local/0, ready_for_close/1]).
@@ -38,7 +38,8 @@
              user, virtual_host, most_recently_declared_queue, queue_monitors,
              consumer_mapping, blocking, queue_consumers, queue_collector_pid,
              stats_timer, confirm_enabled, publish_seqno, unconfirmed_mq,
-             unconfirmed_qm, confirmed, capabilities, trace_state}).
+             unconfirmed_qm, confirmed, client_properties, capabilities,
+             trace_state}).
 
 -define(MAX_PERMISSION_CACHE_SIZE, 12).
 
@@ -71,10 +72,11 @@
 
 -type(channel_number() :: non_neg_integer()).
 
--spec(start_link/10 ::
+-spec(start_link/11 ::
         (channel_number(), pid(), pid(), pid(), rabbit_types:protocol(),
          rabbit_types:user(), rabbit_types:vhost(), rabbit_framing:amqp_table(),
-         pid(), rabbit_limiter:token()) -> rabbit_types:ok_pid_or_error()).
+         rabbit_framing:amqp_table(), pid(), rabbit_limiter:token())
+        -> rabbit_types:ok_pid_or_error()).
 -spec(do/2 :: (pid(), rabbit_framing:amqp_method_record()) -> 'ok').
 -spec(do/3 :: (pid(), rabbit_framing:amqp_method_record(),
                rabbit_types:maybe(rabbit_types:content())) -> 'ok').
@@ -102,10 +104,11 @@
 %%----------------------------------------------------------------------------
 
 start_link(Channel, ReaderPid, WriterPid, ConnPid, Protocol, User, VHost,
-           Capabilities, CollectorPid, Limiter) ->
+           ClientProperties, Capabilities, CollectorPid, Limiter) ->
     gen_server2:start_link(
       ?MODULE, [Channel, ReaderPid, WriterPid, ConnPid, Protocol, User,
-                VHost, Capabilities, CollectorPid, Limiter], []).
+                VHost, ClientProperties, Capabilities, CollectorPid, Limiter],
+      []).
 
 do(Pid, Method) ->
     do(Pid, Method, none).
@@ -170,7 +173,7 @@ force_event_refresh() ->
 %%---------------------------------------------------------------------------
 
 init([Channel, ReaderPid, WriterPid, ConnPid, Protocol, User, VHost,
-      Capabilities, CollectorPid, Limiter]) ->
+      ClientProperties, Capabilities, CollectorPid, Limiter]) ->
     process_flag(trap_exit, true),
     ok = pg_local:join(rabbit_channels, self()),
     State = #ch{state                   = starting,
@@ -198,8 +201,10 @@ init([Channel, ReaderPid, WriterPid, ConnPid, Protocol, User, VHost,
                 unconfirmed_mq          = gb_trees:empty(),
                 unconfirmed_qm          = gb_trees:empty(),
                 confirmed               = [],
+                client_properties       = ClientProperties,
                 capabilities            = Capabilities,
-                trace_state             = rabbit_trace:init(VHost)},
+                trace_state             = rabbit_trace:init(
+                                            VHost, User, ClientProperties)},
     State1 = rabbit_event:init_stats_timer(State, #ch.stats_timer),
     rabbit_event:notify(channel_created, infos(?CREATION_EVENT_KEYS, State1)),
     rabbit_event:if_enabled(State1, #ch.stats_timer,
@@ -238,8 +243,12 @@ handle_call({info, Items}, _From, State) ->
     catch Error -> reply({error, Error}, State)
     end;
 
-handle_call(refresh_config, _From, State = #ch{virtual_host = VHost}) ->
-    reply(ok, State#ch{trace_state = rabbit_trace:init(VHost)});
+handle_call(refresh_config, _From,
+            State = #ch{virtual_host      = VHost,
+                        user              = User,
+                        client_properties = ClientProperties}) ->
+    reply(ok, State#ch{trace_state = rabbit_trace:init(
+                                       VHost, User, ClientProperties)});
 
 handle_call(_Request, _From, State) ->
     noreply(State).

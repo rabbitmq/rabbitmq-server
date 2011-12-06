@@ -1060,7 +1060,7 @@ test_server_status() ->
     Writer = spawn(fun () -> receive shutdown -> ok end end),
     {ok, Ch} = rabbit_channel:start_link(
                  1, self(), Writer, self(), rabbit_framing_amqp_0_9_1,
-                 user(<<"user">>), <<"/">>, [], self(),
+                 user(<<"user">>), <<"/">>, [], [], self(),
                  rabbit_limiter:make_token(self())),
     [Q, Q2] = [Queue || Name <- [<<"foo">>, <<"bar">>],
                         {new, Queue = #amqqueue{}} <-
@@ -1131,7 +1131,7 @@ test_spawn() ->
     Writer = spawn(fun () -> test_writer(Me) end),
     {ok, Ch} = rabbit_channel:start_link(
                  1, Me, Writer, Me, rabbit_framing_amqp_0_9_1,
-                 user(<<"guest">>), <<"/">>, [], Me,
+                 user(<<"guest">>), <<"/">>, [], [], Me,
                   rabbit_limiter:make_token(self())),
     ok = rabbit_channel:do(Ch, #'channel.open'{}),
     receive #'channel.open_ok'{} -> ok

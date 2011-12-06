@@ -16,7 +16,7 @@
 
 -module(rabbit_trace).
 
--export([init/1, tracing/1, tap_trace_in/2, tap_trace_out/2,
+-export([init/3, tracing/1, tap_trace_in/2, tap_trace_out/2,
          tap_trace_method_in/3, tap_trace_method_out/3, start/1, stop/1]).
 
 -include("rabbit.hrl").
@@ -31,7 +31,7 @@
 
 -type(state() :: rabbit_types:exchange() | 'none').
 
--spec(init/1 :: (rabbit_types:vhost()) -> state()).
+%%-spec(init/1 :: (rabbit_types:vhost()) -> state()).
 -spec(tracing/1 :: (rabbit_types:vhost()) -> boolean()).
 -spec(tap_trace_in/2 :: (rabbit_types:basic_message(), state()) -> 'ok').
 -spec(tap_trace_out/2 :: (rabbit_amqqueue:qmsg(), state()) -> 'ok').
@@ -43,8 +43,11 @@
 
 %%----------------------------------------------------------------------------
 
-init(VHost) ->
-    case tracing(VHost) of
+init(VHost, #user{tags = Tags}, ClientProps) ->
+    Suppress = rabbit_misc:table_lookup(ClientProps, <<"suppress-tracing">>)
+        =:= {bool, true},
+    case tracing(VHost) andalso
+        not (Suppress andalso lists:member(administrator, Tags)) of
         false -> none;
         true  -> {ok, X} = rabbit_exchange:lookup(
                              rabbit_misc:r(VHost, exchange, ?XNAME)),

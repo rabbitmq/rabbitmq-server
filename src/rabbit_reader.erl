@@ -888,15 +888,16 @@ cert_info(F, Sock) ->
 send_to_new_channel(Channel, AnalyzedFrame, State) ->
     #v1{sock = Sock, queue_collector = Collector,
         channel_sup_sup_pid = ChanSupSup,
-        connection = #connection{protocol     = Protocol,
-                                 frame_max    = FrameMax,
-                                 user         = User,
-                                 vhost        = VHost,
-                                 capabilities = Capabilities}} = State,
+        connection = #connection{protocol          = Protocol,
+                                 frame_max         = FrameMax,
+                                 user              = User,
+                                 vhost             = VHost,
+                                 client_properties = ClientProperties,
+                                 capabilities      = Capabilities}} = State,
     {ok, _ChSupPid, {ChPid, AState}} =
         rabbit_channel_sup_sup:start_channel(
           ChanSupSup, {tcp, Sock, Channel, FrameMax, self(), Protocol, User,
-                       VHost, Capabilities, Collector}),
+                       VHost, ClientProperties, Capabilities, Collector}),
     MRef = erlang:monitor(process, ChPid),
     NewAState = process_channel_frame(AnalyzedFrame, self(),
                                       Channel, ChPid, AState),
