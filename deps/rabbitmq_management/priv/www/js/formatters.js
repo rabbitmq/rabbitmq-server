@@ -413,11 +413,13 @@ function message_rates(stats) {
 }
 
 function queue_length(stats, name, key) {
-    var rate = Math.round(stats[key + '_details'].rate);
-    var rateMsg
-    if (rate == 0) rateMsg = '&nbsp;';
-    else if (rate > 0) rateMsg = '+' + rate + ' msg/s';
-    else rateMsg = rate + ' msg/s';
+    var rateMsg = '&nbsp;';
+    var detail = stats[key + '_details']
+    if (detail != undefined) {
+        var rate = Math.round(detail.rate);
+        if (rate > 0) rateMsg = '+' + rate + ' msg/s';
+        else if (rate < 0) rateMsg = rate + ' msg/s';
+    }
 
     return '<div class="highlight">' + name +
         '<strong>' + stats[key] + '</strong>' + rateMsg + '</div>';
