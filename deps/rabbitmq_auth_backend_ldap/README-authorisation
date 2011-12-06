@@ -43,8 +43,6 @@ vhost_access_query:
   ${username}
   ${user_dn}
   ${vhost}
-  ${permission} (read, meaning see it in the management plugin,
-                 or write, meaning log in)
 
 resource_access_query:
   ${username}
@@ -56,7 +54,7 @@ resource_access_query:
 
 The terms configure, write and read for resource access have the same
 meanings that they do for the built-in RabbitMQ permissions system,
-see http://www.rabbitmq.com/admin-guide.html#access-control
+see http://www.rabbitmq.com/access-control.html
 
 tag_queries:
   ${username}
