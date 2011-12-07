@@ -201,7 +201,7 @@ if_unknown(Val,    _Def) -> Val.
 init([]) ->
     rabbit:force_event_refresh(),
     {ok, Interval} = application:get_env(rabbit, collect_statistics_interval),
-    rabbit_log:info("Statistics database started.~n", []),
+    rabbit_log:info("Statistics database started.~n"),
     {ok, #state{interval = Interval,
                 tables = orddict:from_list(
                            [{Key, ets:new(anon, [private, ordered_set])} ||
