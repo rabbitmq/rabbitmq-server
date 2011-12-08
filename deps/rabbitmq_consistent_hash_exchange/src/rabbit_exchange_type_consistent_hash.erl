@@ -72,12 +72,10 @@ route(#exchange { name = Name } = X,
                               [{'>=', '$2', H}],
                               ['$1']}], 1) of
         '$end_of_table' ->
-            case ets:first(?TABLE) of
-                '$end_of_table' -> [];
-                SN              -> case ets:lookup(?TABLE, SN) of
-                                       []       -> route(X, D);
-                                       [Bucket] -> [Bucket#bucket.destination]
-                                   end
+            case ets:match_object(?TABLE, #bucket { source_number = {Name, '_'},
+                                                    _ = '_' }, 1) of
+                {[Bucket], _Cont} -> [Bucket#bucket.destination];
+                _                 -> []
             end;
         {Destinations, _Continuation} ->
             Destinations
