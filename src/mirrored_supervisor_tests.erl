@@ -36,9 +36,7 @@ all_tests() ->
     passed = test_already_there(),
     passed = test_delete_restart(),
     passed = test_which_children(),
-%% commented out in order to determine whether this is the only test
-%% that is failing - see bug 24362
-%%    passed = test_large_group(),
+    passed = test_large_group(),
     passed = test_childspecs_at_init(),
     passed = test_anonymous_supervisors(),
     passed = test_no_migration_on_shutdown(),
