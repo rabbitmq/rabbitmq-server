@@ -515,7 +515,7 @@ group_members(Server) ->
 init([GroupName, Module, Args]) ->
     {MegaSecs, Secs, MicroSecs} = now(),
     random:seed(MegaSecs, Secs, MicroSecs),
-    Self = {rabbit_guid:guid(), self()},
+    Self = make_member(self()),
     gen_server2:cast(self(), join),
     {ok, #state { self             = Self,
                   left             = {Self, undefined},
@@ -1240,6 +1240,8 @@ prepare_members_state(MembersState) ->
 
 build_members_state(MembersStateList) ->
     ?DICT:from_list(MembersStateList).
+
+make_member(Pid) -> {rabbit_guid:guid(), Pid}.
 
 get_pid({_Guid, Pid}) -> Pid.
 
