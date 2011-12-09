@@ -17,7 +17,7 @@
 -module(rabbit_direct).
 
 -export([boot/0, force_event_refresh/0, list/0, connect/5,
-         start_channel/9, disconnect/2]).
+         start_channel/8, disconnect/2]).
 %% Internal
 -export([list_local/0]).
 
@@ -36,10 +36,10 @@
                     rabbit_event:event_props()) ->
                         {'ok', {rabbit_types:user(),
                                 rabbit_framing:amqp_table()}}).
--spec(start_channel/9 ::
+-spec(start_channel/8 ::
         (rabbit_channel:channel_number(), pid(), pid(), rabbit_types:protocol(),
          rabbit_types:user(), rabbit_types:vhost(), rabbit_framing:amqp_table(),
-         rabbit_framing:amqp_table(), pid()) -> {'ok', pid()}).
+         pid()) -> {'ok', pid()}).
 
 -spec(disconnect/2 :: (pid(), rabbit_event:event_props()) -> 'ok').
 
@@ -93,12 +93,12 @@ connect(Username, VHost, Protocol, Pid, Infos) ->
     end.
 
 start_channel(Number, ClientChannelPid, ConnPid, Protocol, User, VHost,
-              ClientProperties, Capabilities, Collector) ->
+              ClientProperties, Collector) ->
     {ok, _, {ChannelPid, _}} =
         supervisor2:start_child(
           rabbit_direct_client_sup,
           [{direct, Number, ClientChannelPid, ConnPid, Protocol, User, VHost,
-            ClientProperties, Capabilities, Collector}]),
+            ClientProperties, Collector}]),
     {ok, ChannelPid}.
 
 disconnect(Pid, Infos) ->

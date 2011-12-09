@@ -20,7 +20,7 @@
 
 -behaviour(gen_server2).
 
--export([start_link/11, do/2, do/3, flush/1, shutdown/1]).
+-export([start_link/10, do/2, do/3, flush/1, shutdown/1]).
 -export([send_command/2, deliver/4, flushed/2, confirm/2]).
 -export([list/0, info_keys/0, info/1, info/2, info_all/0, info_all/1]).
 -export([refresh_config_local/0, ready_for_close/1]).
@@ -72,11 +72,10 @@
 
 -type(channel_number() :: non_neg_integer()).
 
--spec(start_link/11 ::
+-spec(start_link/10 ::
         (channel_number(), pid(), pid(), pid(), rabbit_types:protocol(),
          rabbit_types:user(), rabbit_types:vhost(), rabbit_framing:amqp_table(),
-         rabbit_framing:amqp_table(), pid(), rabbit_limiter:token())
-        -> rabbit_types:ok_pid_or_error()).
+         pid(), rabbit_limiter:token()) -> rabbit_types:ok_pid_or_error()).
 -spec(do/2 :: (pid(), rabbit_framing:amqp_method_record()) -> 'ok').
 -spec(do/3 :: (pid(), rabbit_framing:amqp_method_record(),
                rabbit_types:maybe(rabbit_types:content())) -> 'ok').
@@ -104,11 +103,10 @@
 %%----------------------------------------------------------------------------
 
 start_link(Channel, ReaderPid, WriterPid, ConnPid, Protocol, User, VHost,
-           ClientProperties, Capabilities, CollectorPid, Limiter) ->
+           ClientProperties, CollectorPid, Limiter) ->
     gen_server2:start_link(
       ?MODULE, [Channel, ReaderPid, WriterPid, ConnPid, Protocol, User,
-                VHost, ClientProperties, Capabilities, CollectorPid, Limiter],
-      []).
+                VHost, ClientProperties, CollectorPid, Limiter], []).
 
 do(Pid, Method) ->
     do(Pid, Method, none).
@@ -173,9 +171,14 @@ force_event_refresh() ->
 %%---------------------------------------------------------------------------
 
 init([Channel, ReaderPid, WriterPid, ConnPid, Protocol, User, VHost,
-      ClientProperties, Capabilities, CollectorPid, Limiter]) ->
+      ClientProperties, CollectorPid, Limiter]) ->
     process_flag(trap_exit, true),
     ok = pg_local:join(rabbit_channels, self()),
+    Capabilities =
+        case rabbit_misc:table_lookup(ClientProperties, <<"capabilities">>) of
+            {table, Capabilities1} -> Capabilities1;
+            _                      -> []
+        end,
     State = #ch{state                   = starting,
                 protocol                = Protocol,
                 channel                 = Channel,
