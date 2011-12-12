@@ -1347,8 +1347,7 @@ maybe_confirm(_Self, _Id, Confirms, _PubNums) ->
     Confirms.
 
 purge_confirms(Confirms) ->
-    [gen_server2:reply(From, ok) ||
-     {_PubNum, From} <- queue:to_list(Confirms)],
+    [gen_server2:reply(From, ok) || {_PubNum, From} <- queue:to_list(Confirms)],
     queue:new().
 
 
