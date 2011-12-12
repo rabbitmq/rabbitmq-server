@@ -386,6 +386,7 @@
 -define(HIBERNATE_AFTER_MIN, 1000).
 -define(DESIRED_HIBERNATE, 10000).
 -define(BROADCAST_TIMER, 25).
+-define(VERSION_START, 0).
 -define(SETS, ordsets).
 -define(DICT, orddict).
 
@@ -515,7 +516,7 @@ group_members(Server) ->
 init([GroupName, Module, Args]) ->
     {MegaSecs, Secs, MicroSecs} = now(),
     random:seed(MegaSecs, Secs, MicroSecs),
-    Self = make_member(self()),
+    Self = make_member(GroupName),
     gen_server2:cast(self(), join),
     {ok, #state { self             = Self,
                   left             = {Self, undefined},
@@ -1007,7 +1008,7 @@ prune_or_create_group(Self, GroupName) ->
         mnesia:sync_transaction(
           fun () -> GroupNew = #gm_group { name    = GroupName,
                                            members = [Self],
-                                           version = 0 },
+                                           version = ?VERSION_START },
                     case mnesia:read({?GROUP_TABLE, GroupName}) of
                         [] ->
                             mnesia:write(GroupNew),
@@ -1241,11 +1242,15 @@ prepare_members_state(MembersState) ->
 build_members_state(MembersStateList) ->
     ?DICT:from_list(MembersStateList).
 
-make_member(Pid) -> {rabbit_guid:guid(), Pid}.
+make_member(GroupName) ->
+   {case read_group(GroupName) of
+        #gm_group { version = Version } -> Version;
+        {error, not_found}              -> ?VERSION_START
+    end, self()}.
 
-get_pid({_Guid, Pid}) -> Pid.
+get_pid({_Version, Pid}) -> Pid.
 
-get_pids(Ids) -> [Pid || {_Guid, Pid} <- Ids].
+get_pids(Ids) -> [Pid || {_Version, Pid} <- Ids].
 
 %% ---------------------------------------------------------------------------
 %% Activity assembly
