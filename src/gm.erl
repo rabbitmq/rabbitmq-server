@@ -566,6 +566,27 @@ handle_call({add_on_right, NewMember}, _From,
                              members_state = MembersState,
                              module        = Module,
                              callback_args = Args }) ->
+    %% Note: the fun below executes in an Mnesia transaction and has
+    %% side effects.  This is unfortunately necessary, but means that
+    %% it's possible for spurious catchup messages to be generated.
+    %%
+    %% It's necessary because of the following scenario:
+    %%
+    %% If we have A -> B -> C, B publishes a message which starts
+    %% making its way around. Now B' joins, adding itself to mnesia
+    %% leading to A -> B -> B' -> C. At this point, B dies, _before_
+    %% it sends to B' the catchup message. According to mnesia, B' is
+    %% responsible for B's msgs, but B' will actually receive the
+    %% catchup from A, thus having the least of all information about
+    %% the messages from B - in particular, it'll crash when it
+    %% receives the msg B sent before dying as it's not a msg it's
+    %% seen before (which should be impossible).
+    %%
+    %% So we have to send the catchup message in the tx. If we die
+    %% after sending the catchup but before the tx commits, the
+    %% catchup will be ignored as coming from the wrong Left. But txs
+    %% can retry, so we have to deal with spurious catchup
+    %% messages. See comment in handle_msg({catchup, ...}).
     Group = record_new_member_in_group(
               GroupName, Self, NewMember,
               fun (Group1) ->
@@ -704,7 +725,11 @@ handle_msg({catchup, Left, Ver, MembersStateLeft},
                                {catchup, Self, Ver, MembersStateLeft}),
                MembersStateLeft1 = build_members_state(MembersStateLeft),
                {ok, State #state { members_state = MembersStateLeft1 }};
-        _   -> {ok, State} %% ignore catchup with out-of-date view
+        %% ignore catchup with out-of-date view, see
+        %% handle_call({add_on_right, ...). In this case we *know*
+        %% that there will be another catchup message along in a
+        %% minute (this one was a side effect of a retried tx).
+        _   -> {ok, State}
     end;
 
 handle_msg({catchup, Left, _Ver, MembersStateLeft},
