@@ -571,8 +571,8 @@ handle_call({add_on_right, NewMember}, _From,
               fun (Group1) ->
                       View1 = group_to_view(Group1),
                       ok = send_right(NewMember, View1,
-                                      {catchup, Self, prepare_members_state(
-                                                        MembersState)})
+                                      {catchup, Self, view_version(View1),
+                                       prepare_members_state(MembersState)})
               end),
     View2 = group_to_view(Group),
     State1 = check_neighbours(State #state { view = View2 }),
@@ -693,17 +693,21 @@ handle_msg(check_neighbours, State) ->
     %% no-op - it's already been done by the calling handle_cast
     {ok, State};
 
-handle_msg({catchup, Left, MembersStateLeft},
+handle_msg({catchup, Left, Ver, MembersStateLeft},
            State = #state { self          = Self,
                             left          = {Left, _MRefL},
                             right         = {Right, _MRefR},
                             view          = View,
                             members_state = undefined }) ->
-    ok = send_right(Right, View, {catchup, Self, MembersStateLeft}),
-    MembersStateLeft1 = build_members_state(MembersStateLeft),
-    {ok, State #state { members_state = MembersStateLeft1 }};
+    case view_version(View) of
+        Ver -> ok = send_right(Right, View,
+                               {catchup, Self, Ver, MembersStateLeft}),
+               MembersStateLeft1 = build_members_state(MembersStateLeft),
+               {ok, State #state { members_state = MembersStateLeft1 }};
+        _   -> {ok, State} %% ignore catchup with out-of-date view
+    end;
 
-handle_msg({catchup, Left, MembersStateLeft},
+handle_msg({catchup, Left, _Ver, MembersStateLeft},
            State = #state { self = Self,
                             left = {Left, _MRefL},
                             view = View,
@@ -739,7 +743,7 @@ handle_msg({catchup, Left, MembersStateLeft},
     handle_msg({activity, Left, activity_finalise(Activity)},
                State #state { members_state = MembersState1 });
 
-handle_msg({catchup, _NotLeft, _MembersState}, State) ->
+handle_msg({catchup, _NotLeft, _Ver, _MembersState}, State) ->
     {ok, State};
 
 handle_msg({activity, Left, Activity},
@@ -1168,7 +1172,8 @@ maybe_send_catchup(_Right, #state { self          = Self,
                                     view          = View,
                                     members_state = MembersState }) ->
     send_right(Right, View,
-               {catchup, Self, prepare_members_state(MembersState)}).
+               {catchup, Self, view_version(View),
+                prepare_members_state(MembersState)}).
 
 
 %% ---------------------------------------------------------------------------
