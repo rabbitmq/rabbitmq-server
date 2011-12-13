@@ -22,7 +22,7 @@
          status/0, is_running/0, is_running/1, environment/0,
          rotate_logs/1, force_event_refresh/0]).
 
--export([start/2, stop/1]).
+-export([start/2, stop/1, diagnostics/1]).
 
 -export([log_location/1]). %% for testing
 
@@ -235,6 +235,7 @@
 			{'required',[any(),...]}}} |
 		      {'ok',pid()}).
 -spec(stop/1 :: (_) -> 'ok').
+-spec(diagnostics/1 :: (node()) -> [{string(), [any()]}]).
 
 -endif.
 
@@ -348,12 +349,11 @@ rotate_logs(BinarySuffix) ->
 start(normal, []) ->
     case erts_version_check() of
         ok ->
-            ok = rabbit_mnesia:delete_previously_running_nodes(),
             {ok, SupPid} = rabbit_sup:start_link(),
             true = register(rabbit, self()),
-
             print_banner(),
             [ok = run_boot_step(Step) || Step <- boot_steps()],
+            ok = rabbit_mnesia:delete_previously_running_nodes(),
             io:format("~nbroker running~n"),
             {ok, SupPid};
         Error ->
@@ -430,8 +430,7 @@ run_boot_step({StepName, Attributes}) ->
             [try
                  apply(M,F,A)
              catch
-                 _:Reason -> boot_error("FAILED~nReason: ~p~nStacktrace: ~p~n",
-                                        [Reason, erlang:get_stacktrace()])
+                 _:Reason -> boot_failed(Reason, erlang:get_stacktrace())
              end || {M,F,A} <- MFAs],
             io:format("done~n"),
             ok
@@ -490,11 +489,51 @@ sort_boot_steps(UnsortedSteps) ->
                end])
     end.
 
+boot_failed({error, {timeout_waiting_for_tables, _}}, _Stacktrace) ->
+    {Fmt0, Args0, Nodes} =
+        case rabbit_mnesia:read_previously_running_nodes() of
+            [] -> {"Timeout waiting for tables.~n"
+                   "Diagnostics for all cluster nodes follow:~n", [],
+                   rabbit_mnesia:all_clustered_nodes()};
+            Ns -> {"Timeout waiting for tables from nodes: ~p.~n"
+                   "Diagnostics for these nodes follow:~n", [Ns], Ns}
+        end,
+    {Fmt, Args} = lists:foldl(
+                    fun({F, A}, {Fmt1, Args1}) ->
+                            {Fmt1 ++ "~n" ++ F, Args1 ++ A}
+                    end, {[], []}, [{Fmt0, Args0} | diagnostics(Nodes)]),
+    boot_error(Fmt ++ "~n~n", Args);
+
+boot_failed(Reason, Stacktrace) ->
+    boot_error("FAILED~nReason: ~p~nStacktrace: ~p~n", [Reason, Stacktrace]).
+
 boot_error(Format, Args) ->
-    io:format("BOOT ERROR: " ++ Format, Args),
+    io:format("~n~nBOOT ERROR: " ++ Format, Args),
     error_logger:error_msg(Format, Args),
     timer:sleep(1000),
     exit({?MODULE, failure_during_boot}).
+
+diagnostics(Nodes) ->
+    lists:flatten([diagnostics_node(Node) || Node <- Nodes]) ++
+        [{"- current node: ~w", [node()]},
+         case init:get_argument(home) of
+             {ok, [[Home]]} -> {"- current node home dir: ~s", [Home]};
+             Other          -> {"- no current node home dir: ~p", [Other]}
+         end,
+         {"- current node cookie hash: ~s", [rabbit_misc:cookie_hash()]}].
+
+diagnostics_node(Node) ->
+    {_NodeName, NodeHost} = rabbit_misc:nodeparts(Node),
+    [{"diagnostics for node ~s:", [Node]},
+     case net_adm:names(NodeHost) of
+         {error, EpmdReason} ->
+             {"- unable to connect to epmd on ~s: ~w",
+              [NodeHost, EpmdReason]};
+         {ok, NamePorts} ->
+             {"- nodes and their ports on ~s: ~p",
+              [NodeHost, [{list_to_atom(Name), Port} ||
+                             {Name, Port} <- NamePorts]]}
+     end].
 
 %%---------------------------------------------------------------------------
 %% boot step functions
