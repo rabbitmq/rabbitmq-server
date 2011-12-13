@@ -235,7 +235,7 @@
 			{'required',[any(),...]}}} |
 		      {'ok',pid()}).
 -spec(stop/1 :: (_) -> 'ok').
--spec(diagnostics/1 :: (node()) -> [{string(), [any()]}]).
+-spec(diagnostics/1 :: ([node()]) -> [{string(), [any()]}]).
 
 -endif.
 
