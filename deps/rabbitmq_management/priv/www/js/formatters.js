@@ -309,7 +309,8 @@ function fmt_idle_long(obj) {
 function fmt_escape_html(txt) {
     return txt.replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
-        .replace(/\n/g, '<br/>');
+        .replace(/\n/g, '<br/>')
+        .replace(/\"/g, '&quot;');
 }
 
 function fmt_maybe_wrap(txt, encoding) {
