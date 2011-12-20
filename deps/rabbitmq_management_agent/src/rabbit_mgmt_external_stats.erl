@@ -69,6 +69,12 @@ get_used_fd({unix, linux}) ->
         {error, _}  -> get_used_fd({unix, generic})
     end;
 
+get_used_fd({unix, openbsd}) ->
+    length(lists:filter(
+        fun (Line) -> hd(lists:nth(4, string:tokens(Line, " "))) < 58 end,
+        string:tokens(os:cmd("fstat -p " ++ os:getpid()), "\n")
+    ));
+
 get_used_fd({unix, _}) ->
     get_used_fd_lsof();
 
