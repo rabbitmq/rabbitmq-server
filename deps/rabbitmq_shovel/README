@@ -109,18 +109,19 @@ specified, and 'broker' is simply shorthand for when only one broker
 needs specifying. Using 'brokers' allows a list of brokers to be
 specified: whenever the connection to a broker is lost, another one is
 chosen at random from the list and a connection attempt is made to
-that. The syntax for broker URIs is:
+that. The syntax for broker URIs is
 
 amqp://username:password@host:port/vhost?key1=value1&key2=value2...
 
-If username or password are omitted, the default values of guest and
-guest are used. If the vhost is omitted, the default value of / is
-used. If the host is omitted, then the plugin uses the "direct"
-connection internally rather than a network connection: this means it
-connects to the RabbitMQ-server node on which it is running without
-going through the network stack. This is much more efficient. If port
-is omitted then the default value is used (5672 or 5671 if SSL is
-used).
+and is based on the AMQP URI scheme specified at
+http://www.rabbitmq.com/uri-spec.html. If username or password are
+omitted, the default values of guest and guest are used. If the vhost
+is omitted, the default value of / is used. If the host is omitted,
+then the plugin uses the "direct" connection internally rather than a
+network connection: this means it connects to the RabbitMQ-server node
+on which it is running without going through the network stack. This
+is much more efficient. If port is omitted then the default value is
+used (5672 or 5671 if SSL is used).
 
 SSL is implemented, for which additional parameters are needed:
 
