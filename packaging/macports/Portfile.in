@@ -60,6 +60,8 @@ use_configure   no
 
 use_parallel_build yes
 
+build.env-append HOME=${workpath}
+
 destroot.target install_bin
 
 destroot.destdir \
