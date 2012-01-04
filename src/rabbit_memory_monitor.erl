@@ -178,11 +178,8 @@ code_change(_OldVsn, State, _Extra) ->
 %% Internal functions
 %%----------------------------------------------------------------------------
 
-zero_clamp(Sum) ->
-    case Sum < ?EPSILON of
-        true -> 0.0;
-        false -> Sum
-    end.
+zero_clamp(Sum) when Sum < ?EPSILON -> 0.0;
+zero_clamp(Sum)                     -> Sum.
 
 internal_deregister(Pid, Demonitor,
                     State = #state { queue_duration_sum = Sum,
