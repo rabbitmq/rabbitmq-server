@@ -11,11 +11,6 @@ function fmt_string(str) {
     return fmt_escape_html("" + str);
 }
 
-function fmt_num(num) {
-    if (num == undefined) return UNKNOWN_REPR;
-    return num.toFixed(0);
-}
-
 function fmt_bytes(bytes) {
     if (bytes == undefined) return UNKNOWN_REPR;
 
@@ -141,13 +136,20 @@ function fmt_color(r, thresholds) {
 }
 
 function fmt_rate(obj, name, show_total, cssClass) {
-    var res = fmt_rate0(obj, name, fmt_num, show_total);
+    var res = fmt_rate0(obj, name, fmt_rate_num, show_total);
     if (cssClass == undefined || res == '') {
         return res;
     }
     else {
         return '<span class="' + cssClass + '">' + res + '</span>';
     }
+}
+
+function fmt_rate_num(num) {
+    if (num == undefined) return UNKNOWN_REPR;
+    else if (num < 1)     return num.toFixed(2);
+    else if (num < 10)    return num.toFixed(1);
+    else                  return num.toFixed(0);
 }
 
 function fmt_rate_bytes(obj, name) {
@@ -397,7 +399,7 @@ function message_rates(stats) {
             var key = items[i][1] + '_details';
             if (key in stats) {
                 res += '<div class="highlight">' + name;
-                res += '<strong>' + Math.round(stats[key].rate) + '</strong>';
+                res += '<strong>' + fmt_rate_num(stats[key].rate) + '</strong>';
                 res += 'msg/s</div>';
             }
         }
@@ -417,9 +419,9 @@ function queue_length(stats, name, key) {
     var rateMsg = '&nbsp;';
     var detail = stats[key + '_details']
     if (detail != undefined) {
-        var rate = Math.round(detail.rate);
-        if (rate > 0) rateMsg = '+' + rate + ' msg/s';
-        else if (rate < 0) rateMsg = rate + ' msg/s';
+        var rate = detail.rate;
+        if (rate > 0)      rateMsg = '+' + fmt_rate_num(rate)  + ' msg/s';
+        else if (rate < 0) rateMsg = '-' + fmt_rate_num(-rate) + ' msg/s';
     }
 
     return '<div class="highlight">' + name +
