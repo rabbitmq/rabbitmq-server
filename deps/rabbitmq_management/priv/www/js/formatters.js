@@ -147,9 +147,9 @@ function fmt_rate(obj, name, show_total, cssClass) {
 
 function fmt_rate_num(num) {
     if (num == undefined) return UNKNOWN_REPR;
-    else if (num > 10)    return num.toFixed(0);
-    else if (num > 1)     return num.toFixed(1);
-    else                  return num.toFixed(2);
+    else if (num < 1)     return num.toFixed(2);
+    else if (num < 10)    return num.toFixed(1);
+    else                  return num.toFixed(0);
 }
 
 function fmt_rate_bytes(obj, name) {
