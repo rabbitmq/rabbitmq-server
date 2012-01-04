@@ -438,15 +438,22 @@ class Lister:
         def add(prefix, depth, item, fun):
             for key in item:
                 column = prefix == '' and key or (prefix + '.' + key)
-                if type(item[key]) == dict:
+                subitem = item[key]
+                if type(subitem) == dict:
                     if depth < max_depth:
-                        add(column, depth + 1, item[key], fun)
-                elif type(item[key]) == list:
-                    # TODO - ATM this is only applications inside nodes. Not
-                    # sure how to handle this sensibly.
-                    pass
+                        add(column, depth + 1, subitem, fun)
+                elif type(subitem) == list:
+                    # The first branch has slave nodes in queues in
+                    # mind (which come out looking decent); the second
+                    # one has applications in nodes (which look less
+                    # so, but what would look good?).
+                    if [x for x in subitem if type(x) != unicode] == []:
+                        serialised = " ".join(subitem)
+                    else:
+                        serialised = json.dumps(subitem)
+                    fun(column, serialised)
                 else:
-                    fun(column, item[key])
+                    fun(column, subitem)
 
         def add_to_columns(col, val):
             columns[col] = True
