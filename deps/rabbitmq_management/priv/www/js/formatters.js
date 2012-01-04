@@ -419,9 +419,9 @@ function queue_length(stats, name, key) {
     var rateMsg = '&nbsp;';
     var detail = stats[key + '_details']
     if (detail != undefined) {
-        var rate = Math.round(detail.rate);
-        if (rate > 0) rateMsg = '+' + rate + ' msg/s';
-        else if (rate < 0) rateMsg = rate + ' msg/s';
+        var rate = detail.rate;
+        if (rate > 0)      rateMsg = '+' + fmt_rate_num(rate)  + ' msg/s';
+        else if (rate < 0) rateMsg = '-' + fmt_rate_num(-rate) + ' msg/s';
     }
 
     return '<div class="highlight">' + name +
