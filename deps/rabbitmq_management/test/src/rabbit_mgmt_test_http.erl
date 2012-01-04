@@ -104,6 +104,17 @@ users_test() ->
     http_get("/users/myuser", ?NOT_FOUND),
     ok.
 
+users_legacy_administrator_test() ->
+    http_put("/users/myuser1", [{administrator, <<"true">>}], ?NO_CONTENT),
+    http_put("/users/myuser2", [{administrator, <<"false">>}], ?NO_CONTENT),
+    assert_item([{name, <<"myuser1">>}, {tags, <<"administrator">>}],
+                http_get("/users/myuser1")),
+    assert_item([{name, <<"myuser2">>}, {tags, <<"">>}],
+                http_get("/users/myuser2")),
+    http_delete("/users/myuser1", ?NO_CONTENT),
+    http_delete("/users/myuser2", ?NO_CONTENT),
+    ok.
+
 permissions_validation_test() ->
     Good = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
     http_put("/permissions/wrong/guest", Good, ?BAD_REQUEST),
