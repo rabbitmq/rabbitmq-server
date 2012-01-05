@@ -39,7 +39,7 @@ distribution: documentation source_tarball package
 
 %.app: %.app.in $(SOURCES) $(BROKER_DIR)/generate_app
 	escript  $(BROKER_DIR)/generate_app $< $@ $(SOURCE_DIR)
-	sed -i.save 's/%%VSN%%/$(VERSION)/' $@ && rm $@.save
+	sed 's/%%VSN%%/$(VERSION)/' $@ > $@.tmp && mv $@.tmp $@
 
 ###############################################################################
 ##  Dialyzer
