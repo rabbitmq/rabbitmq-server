@@ -21,7 +21,7 @@
          is_authorized/2, allowed_methods/2, accept_content/2,
          delete_resource/2, put_user/1]).
 
--import(rabbit_misc, [pget/2, pget/3]).
+-import(rabbit_misc, [pget/2]).
 
 -include("rabbit_mgmt.hrl").
 -include_lib("webmachine/include/webmachine.hrl").
