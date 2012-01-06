@@ -150,7 +150,7 @@ escape_rdn_value([$ ], middle) ->
 escape_rdn_value([C | S], middle) when C =:= $"; C =:= $+; C =:= $,; C =:= $;;
                                        C =:= $<; C =:= $>; C =:= $\\ ->
     [$\\, C | escape_rdn_value(S, middle)];
-escape_rdn_value([C | S], middle) when C < 32 ; C =:= 127 ->
+escape_rdn_value([C | S], middle) when C < 32 ; C >= 126 ->
     %% only U+0000 needs escaping, but for display purposes it's handy
     %% to escape all non-printable chars
     lists:flatten(io_lib:format("\\~2.16.0B", [C])) ++
