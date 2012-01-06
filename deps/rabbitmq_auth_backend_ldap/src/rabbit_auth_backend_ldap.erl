@@ -161,8 +161,8 @@ attribute(DNPattern, AttributeName, Args, LDAP) ->
             Attr;
         {ok, #eldap_search_result{entries = _}} ->
             false;
-        {error, _} ->
-            false
+        {error, _} = E ->
+            E
     end.
 
 evaluate_ldap(Q, Args, User, State) ->
