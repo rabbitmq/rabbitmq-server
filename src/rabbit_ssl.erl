@@ -21,7 +21,7 @@
 -include_lib("public_key/include/public_key.hrl").
 
 -export([peer_cert_issuer/1, peer_cert_subject/1, peer_cert_validity/1]).
--export([peer_cert_subject_item/2]).
+-export([peer_cert_subject_items/2]).
 
 %%--------------------------------------------------------------------------
 
@@ -34,8 +34,8 @@
 -spec(peer_cert_issuer/1        :: (certificate()) -> string()).
 -spec(peer_cert_subject/1       :: (certificate()) -> string()).
 -spec(peer_cert_validity/1      :: (certificate()) -> string()).
--spec(peer_cert_subject_item/2  ::
-        (certificate(), tuple()) -> string() | 'not_found').
+-spec(peer_cert_subject_items/2  ::
+        (certificate(), tuple()) -> [string()] | 'not_found').
 
 -endif.
 
@@ -60,7 +60,7 @@ peer_cert_subject(Cert) ->
               end, Cert).
 
 %% Return a part of the certificate's subject.
-peer_cert_subject_item(Cert, Type) ->
+peer_cert_subject_items(Cert, Type) ->
     cert_info(fun(#'OTPCertificate' {
                      tbsCertificate = #'OTPTBSCertificate' {
                        subject = Subject }}) ->
@@ -89,8 +89,8 @@ find_by_type(Type, {rdnSequence, RDNs}) ->
     case [V || #'AttributeTypeAndValue'{type = T, value = V}
                    <- lists:flatten(RDNs),
                T == Type] of
-        [Val] -> format_asn1_value(Val);
-        []    -> not_found
+        [] -> not_found;
+        L  -> [format_asn1_value(V) || V <- L]
     end.
 
 %%--------------------------------------------------------------------------
