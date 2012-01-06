@@ -86,14 +86,17 @@ put_user(User) ->
 
 put_user(User, PWArg, PWFun) ->
     Username = pget(name, User),
-    Tags = case pget(tags, User) of
-               undefined -> case rabbit_mgmt_util:parse_bool(
-                                   pget(administrator, User)) of
-                                true  -> [administrator];
-                                false -> []
-                            end;
-               TagsS     -> [list_to_atom(string:strip(T)) ||
-                                T <- string:tokens(binary_to_list(TagsS), ",")]
+    Tags = case {pget(tags, User), pget(administrator, User)} of
+               {undefined, undefined} ->
+                   throw({error, tags_not_present});
+               {undefined, AdminS} ->
+                   case rabbit_mgmt_util:parse_bool(AdminS) of
+                       true  -> [administrator];
+                       false -> []
+                   end;
+               {TagsS, _} ->
+                   [list_to_atom(string:strip(T)) ||
+                       T <- string:tokens(binary_to_list(TagsS), ",")]
            end,
     case rabbit_auth_backend_internal:lookup_user(Username) of
         {error, not_found} ->
