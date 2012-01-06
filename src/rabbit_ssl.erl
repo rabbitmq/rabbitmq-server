@@ -167,6 +167,10 @@ format_asn1_value({utcTime, [Y1, Y2, M1, M2, D1, D2, H1, H2,
                              Min1, Min2, S1, S2, $Z]}) ->
     io_lib:format("20~c~c-~c~c-~c~cT~c~c:~c~c:~c~cZ",
                   [Y1, Y2, M1, M2, D1, D2, H1, H2, Min1, Min2, S1, S2]);
+%% We appear to get an untagged value back for an ia5string
+%% (e.g. domainComponent).
+format_asn1_value(V) when is_list(V) ->
+    io_lib:format("~s", [V]);
 format_asn1_value(V) ->
     io_lib:format("~p", [V]).
 
