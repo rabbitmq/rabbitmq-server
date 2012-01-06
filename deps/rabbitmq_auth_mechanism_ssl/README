@@ -1,5 +1,5 @@
-Authenticates the user taking the Common Name of the client's SSL
-certificate as the username. The user's password is not checked.
+Authenticates the user, obtaining the username from the client's
+SSL certificate. The user's password is not checked.
 
 In order to use this mechanism the client must connect over SSL, and
 present a client certificate.
@@ -7,6 +7,14 @@ present a client certificate.
 For safety the server must be configured with the SSL options
 fail_if_no_peer_cert set to true and verify set to verify_peer, to
 force all SSL clients to have a verifiable client certificate.
+
+By default this will set the username to an RFC4514-ish string form of
+the certificate's subject's Distinguished Name. To use the Common Name
+instead, set:
+
+{rabbitmq_auth_mechanism_ssl, [{name_from, common_name}]}
+
+in your configuration.
 
 Note that the authenticated user will then be looked up in the
 configured authentication / authorisation backend(s) - this will be

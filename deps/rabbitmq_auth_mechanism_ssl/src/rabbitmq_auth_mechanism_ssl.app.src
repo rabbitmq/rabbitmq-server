@@ -5,5 +5,5 @@
   {modules, []},
   {registered, []},
   {mod, {rabbit_auth_mechanism_ssl_app, []}},
-  {env, [] },
+  {env, [{name_from, distinguished_name}] },
   {applications, [kernel, stdlib]}]}.

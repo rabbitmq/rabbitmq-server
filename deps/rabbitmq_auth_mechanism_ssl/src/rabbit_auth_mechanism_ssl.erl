@@ -64,15 +64,11 @@ should_offer(Sock) ->
     end.
 
 init(Sock) ->
+    {ok, Mode} = application:get_env(rabbitmq_auth_mechanism_ssl, name_from),
     Username = case rabbit_net:peercert(Sock) of
                    {ok, C} ->
-                       CN = case rabbit_ssl:peer_cert_subject_item(
-                                   C, ?'id-at-commonName') of
-                                not_found -> {refused, "no CN found", []};
-                                CN0       -> list_to_binary(CN0)
-                            end,
                        case config_sane() of
-                           true  -> CN;
+                           true  -> extract_name(Mode, C);
                            false -> {refused, "configuration unsafe", []}
                        end;
                    {error, no_peercert} ->
@@ -102,4 +98,13 @@ config_sane() ->
                                "fail_if_no_peer_cert=~p; "
                                "verify=~p~n", [F, V]),
             false
+    end.
+
+extract_name(distinguished_name, Cert) ->
+    iolist_to_binary(rabbit_ssl:peer_cert_subject(Cert));
+
+extract_name(common_name, Cert) ->
+    case rabbit_ssl:peer_cert_subject_item(Cert, ?'id-at-commonName') of
+        not_found -> {refused, "no CN found", []};
+        CN        -> list_to_binary(CN)
     end.
