@@ -146,8 +146,8 @@ object_exists(DNPattern, Filter, Args, LDAP) ->
                        {scope, eldap:baseObject()}]) of
         {ok, #eldap_search_result{entries = Entries}} ->
             length(Entries) > 0;
-        {error, _} ->
-            false
+        {error, _} = E ->
+            E
     end.
 
 attribute(DNPattern, AttributeName, Args, LDAP) ->
