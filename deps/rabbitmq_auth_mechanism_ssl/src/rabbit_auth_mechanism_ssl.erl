@@ -104,7 +104,11 @@ extract_name(distinguished_name, Cert) ->
     iolist_to_binary(rabbit_ssl:peer_cert_subject(Cert));
 
 extract_name(common_name, Cert) ->
-    case rabbit_ssl:peer_cert_subject_item(Cert, ?'id-at-commonName') of
-        not_found -> {refused, "no CN found", []};
-        CN        -> list_to_binary(CN)
+    %% If there is more than one CN then we join them with "," in a
+    %% vaguely DN-like way. But this is more just so we do something
+    %% more intelligent than crashing, if you actually want to escape
+    %% things properly etc, use DN mode.
+    case rabbit_ssl:peer_cert_subject_items(Cert, ?'id-at-commonName') of
+        not_found -> {refused, "no CNs found", []};
+        CNs       -> list_to_binary(string:join(CNs, ","))
     end.
