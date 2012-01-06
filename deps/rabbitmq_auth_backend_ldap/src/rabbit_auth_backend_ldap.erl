@@ -60,6 +60,8 @@
                  log,
                  port }).
 
+-record(impl, { user_dn, password }).
+
 %%--------------------------------------------------------------------
 
 description() ->
@@ -81,13 +83,14 @@ check_user_login(Username, AuthProps) ->
     exit({unknown_auth_props, Username, AuthProps}).
 
 check_vhost_access(User = #user{username = Username,
-                                impl = UserDN}, VHost) ->
+                                impl     = #impl{user_dn = UserDN}}, VHost) ->
     gen_server:call(?SERVER, {check_vhost, [{username, Username},
                                             {user_dn,  UserDN},
                                             {vhost,    VHost}], User},
                     infinity).
 
-check_resource_access(User = #user{username = Username, impl = UserDN},
+check_resource_access(User = #user{username = Username,
+                                   impl     = #impl{user_dn = UserDN}},
                       #resource{virtual_host = VHost, kind = Type, name = Name},
                       Permission) ->
     gen_server:call(?SERVER, {check_resource, [{username,   Username},
@@ -118,7 +121,8 @@ evaluate({exists, DNPattern}, Args, _User, LDAP) ->
     Filter = eldap:present("objectClass"),
     object_exists(DNPattern, Filter, Args, LDAP);
 
-evaluate({in_group, DNPattern}, Args, #user{impl = UserDN}, LDAP) ->
+evaluate({in_group, DNPattern}, Args, #user{impl = #impl{user_dn = UserDN}},
+         LDAP) ->
     Filter = eldap:equalityMatch("member", UserDN),
     object_exists(DNPattern, Filter, Args, LDAP);
 
@@ -166,16 +170,16 @@ attribute(DNPattern, AttributeName, Args, LDAP) ->
     end.
 
 evaluate_ldap(Q, Args, User, State) ->
-    with_ldap(fun(LDAP) -> evaluate(Q, Args, User, LDAP) end, State).
+    with_ldap(fun(LDAP) -> evaluate(Q, Args, User, LDAP) end, User, State).
 
 %%--------------------------------------------------------------------
 
-with_ldap(Fun, State = #state{ other_bind = BindOpts }) ->
-    with_ldap(BindOpts, Fun, State).
+with_ldap(Fun, User, State = #state{ other_bind = BindOpts }) ->
+    with_ldap(BindOpts, Fun, User, State).
 
 %% TODO - ATM we create and destroy a new LDAP connection on every
 %% call. This could almost certainly be more efficient.
-with_ldap(BindOpts, Fun,
+with_ldap(BindOpts, Fun, User,
           State = #state{ servers = Servers,
                           use_ssl = SSL,
                           log     = Log,
@@ -197,16 +201,18 @@ with_ldap(BindOpts, Fun,
                         case BindOpts of
                             anon ->
                                 Fun(LDAP);
+                            as_user ->
+                                #user{impl = #impl{user_dn  = UserDN,
+                                                   password = Password}} = User,
+                                case Password of
+                                    none ->
+                                        {reply, as_user_no_password, State};
+                                    _ ->
+                                        with_ldap_bind(LDAP, UserDN, Password,
+                                                       Fun)
+                                end;
                             {UserDN, Password} ->
-                                case eldap:simple_bind(LDAP,
-                                                       UserDN, Password) of
-                                    ok ->
-                                        Fun(LDAP);
-                                    {error, invalidCredentials} ->
-                                        {refused, UserDN, []};
-                                    {error, _} = E ->
-                                        E
-                                end
+                                with_ldap_bind(LDAP, UserDN, Password, Fun)
                         end
                     after
                         eldap:close(LDAP)
@@ -216,15 +222,27 @@ with_ldap(BindOpts, Fun,
             {reply, Error, State}
     end.
 
+with_ldap_bind(LDAP, UserDN, Password, Fun) ->
+    case eldap:simple_bind(LDAP, UserDN, Password) of
+        ok ->
+            Fun(LDAP);
+        {error, invalidCredentials} ->
+            {refused, UserDN, []};
+        {error, _} = E ->
+            E
+    end.
+
 get_env(F) ->
     {ok, V} = application:get_env(F),
     V.
 
-do_login(Username, LDAP, State = #state{ tag_queries = TagQueries }) ->
+do_login(Username, Password, LDAP,
+         State = #state{ tag_queries = TagQueries }) ->
     UserDN = username_to_dn(Username, State),
     User = #user{username     = Username,
                  auth_backend = ?MODULE,
-                 impl         = UserDN},
+                 impl         = #impl{user_dn  = UserDN,
+                                      password = Password}},
     TagRes = [{Tag, evaluate(Q, [{username, Username},
                                  {user_dn,  UserDN}], User, LDAP)} ||
                  {Tag, Q} <- TagQueries],
@@ -244,11 +262,13 @@ init([]) ->
 
 handle_call({login, Username}, _From, State) ->
     %% Without password, e.g. EXTERNAL
-    with_ldap(fun(LDAP) -> do_login(Username, LDAP, State) end, State);
+    with_ldap(fun(LDAP) -> do_login(Username, none, LDAP, State) end,
+              none, State);
 
 handle_call({login, Username, Password}, _From, State) ->
     with_ldap({username_to_dn(Username, State), Password},
-              fun(LDAP) -> do_login(Username, LDAP, State) end, State);
+              fun(LDAP) -> do_login(Username, Password, LDAP, State) end,
+              none, State);
 
 handle_call({check_vhost, Args, User},
             _From, State = #state{vhost_access_query = Q}) ->
