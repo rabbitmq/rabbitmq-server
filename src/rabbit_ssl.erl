@@ -151,8 +151,10 @@ escape_rdn_value([C | S], middle) when C =:= $"; C =:= $+; C =:= $,; C =:= $;;
                                        C =:= $<; C =:= $>; C =:= $\\ ->
     [$\\, C | escape_rdn_value(S, middle)];
 escape_rdn_value([C | S], middle) when C < 32 ; C >= 126 ->
-    %% only U+0000 needs escaping, but for display purposes it's handy
-    %% to escape all non-printable chars
+    %% Of ASCII characters only U+0000 needs escaping, but for display
+    %% purposes it's handy to escape all non-printable chars. All non-ASCII
+    %% characters get converted to UTF-8 sequences and then escaped. We've
+    %% already got a UTF-8 sequence here, so just escape it.
     lists:flatten(io_lib:format("\\~2.16.0B", [C])) ++
         escape_rdn_value(S, middle);
 escape_rdn_value([C | S], middle) ->
