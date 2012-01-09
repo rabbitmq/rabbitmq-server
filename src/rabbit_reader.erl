@@ -341,6 +341,8 @@ handle_other(emit_stats, Deb, State) ->
     mainloop(Deb, emit_stats(State));
 handle_other({system, From, Request}, Deb, State = #v1{parent = Parent}) ->
     sys:handle_system_msg(Request, From, Parent, ?MODULE, Deb, State);
+handle_other({bump_credit, Msg}, Deb, State) ->
+    recvloop(Deb, internal_bump_credit(Msg, State));
 handle_other(Other, _Deb, _State) ->
     %% internal error -> something worth dying for
     exit({unexpected_message, Other}).
@@ -369,6 +371,16 @@ internal_conserve_memory(false, State = #v1{connection_state = blocked,
     State#v1{connection_state = running};
 internal_conserve_memory(_Conserve, State) ->
     State.
+
+internal_bump_credit(Msg, State) ->
+    rabbit_flow:bump(Msg),
+    internal_conserve_memory(false, State).
+
+internal_check_credit(State) when ?IS_RUNNING(State) ->
+    case rabbit_flow:blocked() of
+        true  -> internal_conserve_memory(true, State);
+        false -> State
+    end.
 
 close_connection(State = #v1{queue_collector = Collector,
                              connection = #connection{
@@ -504,7 +516,8 @@ handle_frame(Type, Channel, Payload,
                                   AnalyzedFrame, self(),
                                   Channel, ChPid, FramingState),
                     put({channel, Channel}, {ChPid, NewAState}),
-                    post_process_frame(AnalyzedFrame, ChPid, State);
+                    post_process_frame(AnalyzedFrame, ChPid,
+                                       internal_check_credit(State));
                 undefined ->
                     case ?IS_RUNNING(State) of
                         true  -> send_to_new_channel(
@@ -911,9 +924,11 @@ send_to_new_channel(Channel, AnalyzedFrame, State) ->
 process_channel_frame(Frame, ErrPid, Channel, ChPid, AState) ->
     case rabbit_command_assembler:process(Frame, AState) of
         {ok, NewAState}                  -> NewAState;
-        {ok, Method, NewAState}          -> rabbit_channel:do(ChPid, Method),
+        {ok, Method, NewAState}          -> rabbit_flow:consume(ChPid),
+                                            rabbit_channel:do(ChPid, Method),
                                             NewAState;
-        {ok, Method, Content, NewAState} -> rabbit_channel:do(ChPid,
+        {ok, Method, Content, NewAState} -> rabbit_flow:consume(ChPid),
+                                            rabbit_channel:do(ChPid,
                                                               Method, Content),
                                             NewAState;
         {error, Reason}                  -> ErrPid ! {channel_exit, Channel,

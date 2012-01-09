@@ -204,6 +204,7 @@ init([Channel, ReaderPid, WriterPid, ConnPid, Protocol, User, VHost,
     rabbit_event:notify(channel_created, infos(?CREATION_EVENT_KEYS, State1)),
     rabbit_event:if_enabled(State1, #ch.stats_timer,
                             fun() -> emit_stats(State1) end),
+    rabbit_flow:issue_initial(ReaderPid),
     {ok, State1, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
@@ -244,7 +245,8 @@ handle_call(refresh_config, _From, State = #ch{virtual_host = VHost}) ->
 handle_call(_Request, _From, State) ->
     noreply(State).
 
-handle_cast({method, Method, Content}, State) ->
+handle_cast({method, Method, Content}, State = #ch{reader_pid = ReaderPid}) ->
+    rabbit_flow:maybe_issue(ReaderPid),
     try handle_method(Method, Content, State) of
         {reply, Reply, NewState} ->
             ok = rabbit_writer:send_command(NewState#ch.writer_pid, Reply),
