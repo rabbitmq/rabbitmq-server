@@ -272,7 +272,7 @@ function postprocess() {
             update_multifields();
         });
     $('.controls-appearance').change(function() {
-        var controls = $(this).attr('controls');
+        var controls = $(this).attr('controls-divs');
         if ($(this).val() == 'true') {
             $('#' + controls + '-yes').slideDown(100);
             $('#' + controls + '-no').slideUp(100);

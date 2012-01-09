@@ -89,7 +89,7 @@ EXTRA_VERBS = {
                 'uri':       '/exchanges/{vhost}/{exchange}/publish'},
     'get':     {'mandatory': ['queue'],
                 'optional':  {'count': '1', 'requeue': 'true',
-                              'payload_file': None},
+                              'payload_file': None, 'encoding': 'auto'},
                 'uri':       '/queues/{vhost}/{queue}/get'}
 }
 
