@@ -7,6 +7,8 @@
   {mod, {rabbit_auth_backend_ldap_app, []}},
   {env, [ {servers,               ["ldap"]},
           {user_dn_pattern,       "cn=${username},ou=People,dc=example,dc=com"},
+          {dn_lookup_attribute,   none},
+          {dn_lookup_base,        none},
           {other_bind,            as_user},
           {vhost_access_query,    {constant, true}},
           {resource_access_query, {constant, true}},

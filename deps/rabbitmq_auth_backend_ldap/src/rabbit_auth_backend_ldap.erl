@@ -52,6 +52,8 @@
 
 -record(state, { servers,
                  user_dn_pattern,
+                 dn_lookup_attribute,
+                 dn_lookup_base,
                  other_bind,
                  vhost_access_query,
                  resource_access_query,
@@ -223,7 +225,7 @@ get_env(F) ->
 
 do_login(Username, Password, LDAP,
          State = #state{ tag_queries = TagQueries }) ->
-    UserDN = username_to_dn(Username, State),
+    UserDN = username_to_dn(Username, LDAP, State),
     User = #user{username     = Username,
                  auth_backend = ?MODULE,
                  impl         = #impl{user_dn  = UserDN,
@@ -236,7 +238,28 @@ do_login(Username, Password, LDAP,
         [E | _] -> E
     end.
 
-username_to_dn(Username, #state{ user_dn_pattern = UserDNPattern }) ->
+username_to_dn(Username, _LDAP, State = #state{dn_lookup_attribute = none}) ->
+    fill_user_dn_pattern(Username, State);
+
+username_to_dn(Username, LDAP, State = #state{dn_lookup_attribute = Attr,
+                                              dn_lookup_base      = Base}) ->
+    Filled = fill_user_dn_pattern(Username, State),
+    case eldap:search(LDAP,
+                      [{base, Base},
+                       {filter, eldap:equalityMatch(Attr, Filled)},
+                       {attributes, ["distinguishedName"]}]) of
+        {ok, #eldap_search_result{entries = [#eldap_entry{attributes = A}]}} ->
+            [DN] = proplists:get_value("distinguishedName", A),
+            DN;
+        {ok, #eldap_search_result{entries = Entries}} ->
+            rabbit_log:warning("Searching for DN for ~s, got back ~p~n",
+                               [Filled, Entries]),
+            Filled;
+        {error, _} = E ->
+            exit(E)
+    end.
+
+fill_user_dn_pattern(Username, #state{user_dn_pattern = UserDNPattern}) ->
     rabbit_auth_backend_ldap_util:fill(UserDNPattern, [{username, Username}]).
 
 creds(none, #state{other_bind = as_user}) ->
@@ -259,7 +282,7 @@ handle_call({login, Username}, _From, State) ->
               fun(LDAP) -> do_login(Username, none, LDAP, State) end, State);
 
 handle_call({login, Username, Password}, _From, State) ->
-    with_ldap({username_to_dn(Username, State), Password},
+    with_ldap({fill_user_dn_pattern(Username, State), Password},
               fun(LDAP) -> do_login(Username, Password, LDAP, State) end,
               State);
 
