@@ -71,14 +71,16 @@ is substituted. You almost certainly want to change this.
 other_bind
 ----------
 
-Default: anon
+Default: as_user
 
-Normally for authentication this plugin binds to the LDAP server as
+For authentication this plugin binds to the LDAP server as
 the user it is trying to authenticate. This option controls how to
 bind for authorisation queries, and to retrieve the details of a user
 who is logging in without presenting a password (e.g. SASL EXTERNAL).
 
-This option must either be the atom anon, or a tuple {UserDN, Password}.
+This option must either be one of the atoms 'as_user' or 'anon', or a
+tuple {UserDN, Password}. 'as_user' means to bind as the authenticated
+user.
 
 use_ssl
 -------
