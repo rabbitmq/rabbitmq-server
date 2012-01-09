@@ -62,11 +62,40 @@ want to change this.
 user_dn_pattern
 ---------------
 
-Default: "cn=${username},ou=People,dc=example,dc=com"
+Default: "${username}"
 
-Pattern for a user's DN. Must contain exactly one instance of
-"${username}". This will be where the username supplied by the client
-is substituted. You almost certainly want to change this.
+There are two ways to convert a username as provided through AMQP to a
+Distinguished Name. The simplest way is via string substitution with
+user_dn_pattern. To do this, set user_dn_pattern to a string
+containing exactly one instance of "${username}".
+
+For example, setting user_dn_pattern to:
+  "cn=${username},ou=People,dc=example,dc=com"
+
+would cause the username "simon" to be converted to the DN
+  "cn=simon,ou=People,dc=example,dc=com"
+
+dn_lookup_attribute and dn_lookup_base
+--------------------------------------
+
+Default: 'none' and 'none'
+
+The other way to convert a username to a Distinguished Name is via an
+LDAP lookup after binding. In order for this to work your LDAP server
+needs to be configured to allow binding with the unadorned username
+(Microsoft Active Directory typically does this).
+
+To do this, set dn_lookup_attribute to the name of the attribute the
+represents the user name, and dn_lookup_base to the base DN for the
+query.
+
+For example, if I set
+
+     {dn_lookup_attribute,   "userPrincipalName"},
+     {dn_lookup_base,        "DC=vmware,DC=com"}
+
+I can authenticate as "smacmullen@vmware.com" and have my local Active
+Directory server return my real DN.
 
 other_bind
 ----------
@@ -104,7 +133,7 @@ Default: false
 
 Set to true to cause LDAP traffic to be written to the RabbitMQ
 log. You probably only want to use this for debugging, since it will
-usually cause passwords to be written to the logs.
+usually cause passwords to be written to the logs, and is rather verbose.
 
 Example configuration file
 ==========================
