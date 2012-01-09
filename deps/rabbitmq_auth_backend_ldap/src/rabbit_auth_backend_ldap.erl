@@ -149,6 +149,7 @@ object_exists(DNPattern, Filter, Args, LDAP) ->
     case eldap:search(LDAP,
                       [{base, DN},
                        {filter, Filter},
+                       {attributes, ["objectClass"]}, %% Reduce verbiage
                        {scope, eldap:baseObject()}]) of
         {ok, #eldap_search_result{entries = Entries}} ->
             length(Entries) > 0;
