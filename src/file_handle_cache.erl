@@ -125,8 +125,7 @@
 %% requesting process is considered to 'own' one more
 %% descriptor. release/0 is the inverse operation and releases a
 %% previously obtained descriptor. transfer/1 transfers ownership of a
-%% file descriptor between processes. It is non-blocking. Obtain is
-%% used to obtain permission to accept file descriptors. Obtain has a
+%% file descriptor between processes. It is non-blocking. Obtain has a
 %% lower limit, set by the ?OBTAIN_LIMIT/1 macro. File handles can use
 %% the entire limit, but will be evicted by obtain calls up to the
 %% point at which no more obtain calls can be satisfied by the obtains
