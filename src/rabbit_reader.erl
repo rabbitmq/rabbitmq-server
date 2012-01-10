@@ -343,7 +343,8 @@ handle_other(emit_stats, Deb, State) ->
 handle_other({system, From, Request}, Deb, State = #v1{parent = Parent}) ->
     sys:handle_system_msg(Request, From, Parent, ?MODULE, Deb, State);
 handle_other({bump_credit, Msg}, Deb, State) ->
-    recvloop(Deb, bump_credit(Msg, State));
+    rabbit_flow:bump(Msg),
+    recvloop(Deb, update_blockers(false, self(), State));
 handle_other(Other, _Deb, _State) ->
     %% internal error -> something worth dying for
     exit({unexpected_message, Other}).
@@ -388,16 +389,6 @@ remove_blocker(Blocker, State = #v1{blockers = Blockers}) ->
         0 -> State#v1{connection_state = running,
                       blockers         = NewBlockers};
         _ -> State#v1{blockers = NewBlockers}
-    end.
-
-bump_credit(Msg, State) ->
-    rabbit_flow:bump(Msg),
-    update_blockers(false, self(), State).
-
-check_credit(State) when ?IS_RUNNING(State) ->
-    case rabbit_flow:blocked() of
-        true  -> update_blockers(true, self(), State);
-        false -> State
     end.
 
 close_connection(State = #v1{queue_collector = Collector,
@@ -534,8 +525,11 @@ handle_frame(Type, Channel, Payload,
                                   AnalyzedFrame, self(),
                                   Channel, ChPid, FramingState),
                     put({channel, Channel}, {ChPid, NewAState}),
-                    post_process_frame(AnalyzedFrame, ChPid,
-                                       check_credit(State));
+                    State1 = case rabbit_flow:blocked() of
+                                 true  -> update_blockers(true, self(), State);
+                                 false -> State
+                             end,
+                    post_process_frame(AnalyzedFrame, ChPid, State1);
                 undefined ->
                     case ?IS_RUNNING(State) of
                         true  -> send_to_new_channel(
