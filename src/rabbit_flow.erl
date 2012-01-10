@@ -19,40 +19,44 @@
 -define(MAX_CREDIT, 100).
 -define(MORE_CREDIT_AT, 50).
 
--export([issue_initial/1, maybe_issue/1, bump/1, blocked/0, consume/1]).
-
-issue_initial(To) ->
-    To ! {bump_credit, {self(), ?MAX_CREDIT}},
-    put({credit_to, To}, ?MAX_CREDIT).
+-export([maybe_issue/1, bump/1, blocked/0, consume/1]).
 
 maybe_issue(To) ->
     Credit =
-        case get({credit_to, To}) - 1 of
-            ?MORE_CREDIT_AT ->
+        case get({credit_to, To}) of
+            undefined ->
+                ?MAX_CREDIT;
+            ?MORE_CREDIT_AT + 1 ->
                 To ! {bump_credit, {self(), ?MAX_CREDIT - ?MORE_CREDIT_AT}},
                 ?MAX_CREDIT;
             C ->
-                C
+                C - 1
         end,
     put({credit_to, To}, Credit).
 
-bump({From, NewCredit}) ->
+bump({From, MoreCredit}) ->
     Credit = case get({credit_from, From}) of
-                 undefined -> NewCredit;
-                 0         -> erase(credit_blocked),
-                              NewCredit;
-                 C         -> C + NewCredit
+                 undefined -> MoreCredit;
+                 C         -> C + MoreCredit
              end,
-    put({credit_from, From}, Credit).
+    put({credit_from, From}, Credit),
+    case Credit > 0 of
+        true  -> erase(credit_blocked),
+                 false;
+        false -> true
+    end.
 
-blocked() -> get(credit_blocked) =:= true.
+%% TODO we assume only one From can block at once. Is this true?
+blocked() ->
+    get(credit_blocked) =:= true.
 
 consume(From) ->
-    case get({credit_from, From}) of
-        undefined -> ok;
-        Credit    -> case Credit of
-                         1 -> put(credit_blocked, true);
-                         _ -> ok
-                     end,
-                     put({credit_from, From}, Credit - 1)
-    end.
+    Credit = case get({credit_from, From}) of
+                 undefined -> ?MAX_CREDIT;
+                 C         -> C
+             end - 1,
+    case Credit of
+        0 -> put(credit_blocked, true);
+        _ -> ok
+    end,
+    put({credit_from, From}, Credit).

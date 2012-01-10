@@ -38,7 +38,8 @@
              user, virtual_host, most_recently_declared_queue, queue_monitors,
              consumer_mapping, blocking, queue_consumers, queue_collector_pid,
              stats_timer, confirm_enabled, publish_seqno, unconfirmed_mq,
-             unconfirmed_qm, confirmed, capabilities, trace_state}).
+             unconfirmed_qm, confirmed, capabilities, trace_state,
+             block_reader}).
 
 -define(MAX_PERMISSION_CACHE_SIZE, 12).
 
@@ -199,12 +200,12 @@ init([Channel, ReaderPid, WriterPid, ConnPid, Protocol, User, VHost,
                 unconfirmed_qm          = gb_trees:empty(),
                 confirmed               = [],
                 capabilities            = Capabilities,
-                trace_state             = rabbit_trace:init(VHost)},
+                trace_state             = rabbit_trace:init(VHost),
+                block_reader            = false},
     State1 = rabbit_event:init_stats_timer(State, #ch.stats_timer),
     rabbit_event:notify(channel_created, infos(?CREATION_EVENT_KEYS, State1)),
     rabbit_event:if_enabled(State1, #ch.stats_timer,
                             fun() -> emit_stats(State1) end),
-    rabbit_flow:issue_initial(ReaderPid),
     {ok, State1, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
@@ -245,8 +246,19 @@ handle_call(refresh_config, _From, State = #ch{virtual_host = VHost}) ->
 handle_call(_Request, _From, State) ->
     noreply(State).
 
-handle_cast({method, Method, Content}, State = #ch{reader_pid = ReaderPid}) ->
-    rabbit_flow:maybe_issue(ReaderPid),
+handle_cast({method, Method, Content},
+            State0 = #ch{reader_pid   = Reader,
+                         block_reader = BlockReader}) ->
+
+    rabbit_flow:maybe_issue(Reader),
+    State =
+        case {rabbit_flow:blocked(), BlockReader} of
+            {true, false} ->
+                rabbit_reader:conserve_memory(self(), Reader, true),
+                State0#ch{block_reader = true};
+            _ ->
+                State0
+        end,
     try handle_method(Method, Content, State) of
         {reply, Reply, NewState} ->
             ok = rabbit_writer:send_command(NewState#ch.writer_pid, Reply),
@@ -316,6 +328,17 @@ handle_cast(force_event_refresh, State) ->
 handle_cast({confirm, MsgSeqNos, From}, State) ->
     State1 = #ch{confirmed = C} = confirm(MsgSeqNos, From, State),
     noreply([send_confirms], State1, case C of [] -> hibernate; _ -> 0 end).
+
+handle_info({bump_credit, Msg}, State = #ch{block_reader = BlockReader,
+                                            reader_pid   = ReaderPid}) ->
+    State1 =
+        case {rabbit_flow:bump(Msg), BlockReader} of
+            {false, true} -> rabbit_reader:conserve_memory(
+                               self(), ReaderPid, false),
+                             State#ch{block_reader = false};
+            _             -> State
+    end,
+    noreply(State1);
 
 handle_info(timeout, State) ->
     noreply(State);
