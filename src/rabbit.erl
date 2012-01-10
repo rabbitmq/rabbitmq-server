@@ -319,7 +319,14 @@ status() ->
                                         get_vm_memory_high_watermark, []}},
             {vm_memory_limit,          {vm_memory_monitor,
                                         get_memory_limit, []}}]),
-    S3 = [{file_descriptors, file_handle_cache:info()}],
+    S3 = [{file_descriptors, file_handle_cache:info()},
+          {processes, [{count, erlang:system_info(process_count)},
+                       {limit, erlang:system_info(process_limit)}]},
+          {run_queue, erlang:statistics(run_queue)},
+          {uptime, begin
+                       {T,_} = erlang:statistics(wall_clock),
+                       T div 1000
+                   end}],
     S1 ++ S2 ++ S3.
 
 is_running() -> is_running(node()).
