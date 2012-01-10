@@ -331,13 +331,12 @@ handle_cast({confirm, MsgSeqNos, From}, State) ->
 
 handle_info({bump_credit, Msg}, State = #ch{block_reader = BlockReader,
                                             reader_pid   = ReaderPid}) ->
-    State1 =
-        case {rabbit_flow:bump(Msg), BlockReader} of
-            {false, true} -> rabbit_reader:conserve_memory(
-                               self(), ReaderPid, false),
-                             State#ch{block_reader = false};
-            _             -> State
-    end,
+    State1 = case {rabbit_flow:bump(Msg), BlockReader} of
+                 {false, true} -> rabbit_reader:conserve_memory(
+                                    self(), ReaderPid, false),
+                                  State#ch{block_reader = false};
+                 _             -> State
+             end,
     noreply(State1);
 
 handle_info(timeout, State) ->
