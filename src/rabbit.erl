@@ -45,6 +45,11 @@
                     {requires,    file_handle_cache},
                     {enables,     external_infrastructure}]}).
 
+-rabbit_boot_step({database_sync,
+                   [{mfa,         {rabbit_sup, start_child, [mnesia_sync]}},
+                    {requires,    database},
+                    {enables,     external_infrastructure}]}).
+
 -rabbit_boot_step({file_handle_cache,
                    [{description, "file handle cache server"},
                     {mfa,         {rabbit_sup, start_restartable_child,
