@@ -261,7 +261,7 @@
 -endif.
 
 %%----------------------------------------------------------------------------
--define(INFO_KEYS, [count, limit, socket_count, socket_limit]).
+-define(INFO_KEYS, [total_limit, total_used, sockets_limit, sockets_used]).
 
 %%----------------------------------------------------------------------------
 %% Public API
@@ -789,10 +789,10 @@ write_buffer(Handle = #handle { hdl = Hdl, offset = Offset,
 
 infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
 
-i(count,        #fhc_state{open_count = C1, obtain_count = C2}) -> C1 + C2;
-i(limit,        #fhc_state{limit        = Limit})               -> Limit;
-i(socket_count, #fhc_state{obtain_count = Count})               -> Count;
-i(socket_limit, #fhc_state{obtain_limit = Limit})               -> Limit;
+i(total_limit,   #fhc_state{limit        = Limit})               -> Limit;
+i(total_used,    #fhc_state{open_count = C1, obtain_count = C2}) -> C1 + C2;
+i(sockets_limit, #fhc_state{obtain_limit = Limit})               -> Limit;
+i(sockets_used,  #fhc_state{obtain_count = Count})               -> Count;
 i(Item, _) -> throw({bad_argument, Item}).
 
 %%----------------------------------------------------------------------------
