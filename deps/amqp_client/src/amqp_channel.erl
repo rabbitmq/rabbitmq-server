@@ -392,10 +392,6 @@ handle_info(timed_out_flushing_channel, State) ->
               "connection closing~n", [self()]),
     {stop, timed_out_flushing_channel, State};
 %% @private
-handle_info({bump_credit, _Msg}, State) ->
-    %% TODO flow-control the direct client
-    {noreply, State};
-%% @private
 handle_info({'DOWN', _, process, ReturnHandler, Reason},
             State = #state{return_handler_pid = ReturnHandler}) ->
     ?LOG_WARN("Channel (~p): Unregistering return handler ~p because it died. "

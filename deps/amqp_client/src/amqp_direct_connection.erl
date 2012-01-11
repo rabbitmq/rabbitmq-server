@@ -58,6 +58,10 @@ handle_message(force_event_refresh, State = #state{node = Node}) ->
              [connection_created, connection_info(State)]),
     {ok, State};
 
+handle_message({bump_credit, _Msg}, State) ->
+    %% TODO flow-control direct client
+    {ok, State};
+
 handle_message(Msg, State) ->
     {stop, {unexpected_msg, Msg}, State}.
 
