@@ -244,8 +244,8 @@ handle_call(refresh_config, _From, State = #ch{virtual_host = VHost}) ->
 handle_call(_Request, _From, State) ->
     noreply(State).
 
-handle_cast({method, Method, Content}, State = #ch{reader_pid = Reader}) ->
-    rabbit_flow:ack(Reader),
+handle_cast({method, Method, Content}, State = #ch{conn_pid = Conn}) ->
+    rabbit_flow:ack(Conn),
     try handle_method(Method, Content, State) of
         {reply, Reply, NewState} ->
             ok = rabbit_writer:send_command(NewState#ch.writer_pid, Reply),
