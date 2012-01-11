@@ -38,10 +38,10 @@
 %%----------------------------------------------------------------------------
 
 start_link() ->
-    gen_server2:start_link({local, ?SERVER}, ?MODULE, [], [{timeout, infinity}]).
+    gen_server2:start_link({local, ?SERVER}, ?MODULE, [], []).
 
 sync() ->
-    gen_server2:call(?SERVER, sync).
+    gen_server2:call(?SERVER, sync, infinity).
 
 %%----------------------------------------------------------------------------
 
@@ -64,10 +64,10 @@ sync_proc(Waiting) ->
 %%----------------------------------------------------------------------------
 
 init([]) ->
-    {ok, #state{sync_pid  = case rabbit_mnesia:is_disc_node() of
-                                true  -> proc_lib:spawn_link(fun sync_proc/0);
-                                false -> undefined
-                            end}}.
+    {ok, #state{sync_pid = case mnesia:system_info(use_dir) of
+                               true  -> proc_lib:spawn_link(fun sync_proc/0);
+                               false -> undefined
+                           end}}.
 
 handle_call(sync, _From, #state{sync_pid = undefined} = State) ->
     {reply, ok, State};
