@@ -1023,7 +1023,7 @@ handle_cast({run_backing_queue, Mod, Fun}, State) ->
 
 handle_cast({deliver, Delivery}, State) ->
     %% Asynchronous, non-"mandatory", non-"immediate" deliver mode.
-    rabbit_flow:maybe_issue(Delivery#delivery.sender),
+    rabbit_flow:ack(Delivery#delivery.sender),
     noreply(deliver_or_enqueue(Delivery, State));
 
 handle_cast({ack, AckTags, ChPid}, State) ->

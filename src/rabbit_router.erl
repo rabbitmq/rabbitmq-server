@@ -59,7 +59,7 @@ deliver(QNames, Delivery = #delivery{mandatory = false,
     %% is preserved. This scales much better than the non-immediate
     %% case below.
     QPids = lookup_qpids(QNames),
-    [rabbit_flow:consume(QPid) || QPid <- QPids],
+    [rabbit_flow:send(QPid) || QPid <- QPids],
     delegate:invoke_no_result(
       QPids, fun (Pid) -> rabbit_amqqueue:deliver(Pid, Delivery) end),
     {routed, QPids};

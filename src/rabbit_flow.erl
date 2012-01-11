@@ -19,18 +19,23 @@
 -define(MAX_CREDIT, 100).
 -define(MORE_CREDIT_AT, 50).
 
--export([maybe_issue/1, bump/1, blocked/0, consume/1]).
+-export([ack/1, bump/1, blocked/0, send/1]).
 
-maybe_issue(To) ->
+%% There are two "flows" here; of messages and of credit, going in
+%% opposite directions. The variable names "From" and "To" refer to
+%% the flow of credit, but the function names refer to the flow of
+%% messages. This is the clearest I can make it (since the function
+%% names form the API and want to make sense externally, while the
+%% variable names are used in credit bookkeeping and want to make
+%% sense internally).
+
+ack(To) ->
     Credit =
         case get({credit_to, To}) of
-            undefined ->
-                ?MAX_CREDIT;
-            ?MORE_CREDIT_AT + 1 ->
-                To ! {bump_credit, {self(), ?MAX_CREDIT - ?MORE_CREDIT_AT}},
-                ?MAX_CREDIT;
-            C ->
-                C - 1
+            undefined           -> ?MAX_CREDIT;
+            ?MORE_CREDIT_AT + 1 -> grant(To, ?MAX_CREDIT - ?MORE_CREDIT_AT),
+                                   ?MAX_CREDIT;
+            C                   -> C - 1
         end,
     put({credit_to, To}, Credit).
 
@@ -41,7 +46,7 @@ bump({From, MoreCredit}) ->
              end,
     put({credit_from, From}, Credit),
     case Credit > 0 of
-        true  -> erase(credit_blocked),
+        true  -> unblock(),
                  false;
         false -> true
     end.
@@ -50,7 +55,7 @@ bump({From, MoreCredit}) ->
 blocked() ->
     get(credit_blocked) =:= true.
 
-consume(From) ->
+send(From) ->
     Credit = case get({credit_from, From}) of
                  undefined -> ?MAX_CREDIT;
                  C         -> C
@@ -60,3 +65,24 @@ consume(From) ->
         _ -> ok
     end,
     put({credit_from, From}, Credit).
+
+%% --------------------------------------------------------------------------
+
+grant(To, Quantity) ->
+    Msg = {bump_credit, {self(), Quantity}},
+    case blocked() of
+        false -> To ! Msg;
+        true  -> Deferred = case get(credit_deferred) of
+                                undefined -> [];
+                                L         -> L
+                            end,
+                 put(credit_deferred, [{To, Msg} | Deferred])
+    end.
+
+unblock() ->
+    erase(credit_blocked),
+    case get(credit_deferred) of
+        undefined -> ok;
+        Deferred  -> [To ! Msg || {To, Msg} <- Deferred],
+                     erase(credit_deferred)
+    end.

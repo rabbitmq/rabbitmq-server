@@ -25,7 +25,7 @@
 
 -export([init/4, mainloop/2]).
 
--export([conserve_memory/3, server_properties/1]).
+-export([conserve_memory/2, server_properties/1]).
 
 -export([process_channel_frame/5]). %% used by erlang-client
 
@@ -71,7 +71,7 @@
 -spec(info/2 :: (pid(), rabbit_types:info_keys()) -> rabbit_types:infos()).
 -spec(force_event_refresh/1 :: (pid()) -> 'ok').
 -spec(shutdown/2 :: (pid(), string()) -> 'ok').
--spec(conserve_memory/3 :: (pid() | atom(), pid(), boolean()) -> 'ok').
+-spec(conserve_memory/2 :: (pid(), boolean()) -> 'ok').
 -spec(server_properties/1 :: (rabbit_types:protocol()) ->
                                   rabbit_framing:amqp_table()).
 
@@ -137,8 +137,8 @@ info(Pid, Items) ->
 force_event_refresh(Pid) ->
     gen_server:cast(Pid, force_event_refresh).
 
-conserve_memory(Blocker, Pid, Conserve) ->
-    Pid ! {conserve_memory, Blocker, Conserve},
+conserve_memory(Pid, Conserve) ->
+    Pid ! {conserve_memory, Conserve},
     ok.
 
 server_properties(Protocol) ->
@@ -277,8 +277,8 @@ mainloop(Deb, State = #v1{sock = Sock, buf = Buf, buf_len = BufLen}) ->
         {other, Other}  -> handle_other(Other, Deb, State)
     end.
 
-handle_other({conserve_memory, Blocker, Conserve}, Deb, State) ->
-    recvloop(Deb, update_blockers(Conserve, Blocker, State));
+handle_other({conserve_memory, Conserve}, Deb, State) ->
+    recvloop(Deb, update_blockers(Conserve, mem, State));
 handle_other({channel_closing, ChPid}, Deb, State) ->
     ok = rabbit_channel:ready_for_close(ChPid),
     channel_cleanup(ChPid),
@@ -937,10 +937,10 @@ send_to_new_channel(Channel, AnalyzedFrame, State) ->
 process_channel_frame(Frame, ErrPid, Channel, ChPid, AState) ->
     case rabbit_command_assembler:process(Frame, AState) of
         {ok, NewAState}                  -> NewAState;
-        {ok, Method, NewAState}          -> rabbit_flow:consume(ChPid),
+        {ok, Method, NewAState}          -> rabbit_flow:send(ChPid),
                                             rabbit_channel:do(ChPid, Method),
                                             NewAState;
-        {ok, Method, Content, NewAState} -> rabbit_flow:consume(ChPid),
+        {ok, Method, Content, NewAState} -> rabbit_flow:send(ChPid),
                                             rabbit_channel:do(ChPid,
                                                               Method, Content),
                                             NewAState;
