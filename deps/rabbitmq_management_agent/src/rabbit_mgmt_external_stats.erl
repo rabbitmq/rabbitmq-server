@@ -147,9 +147,9 @@ infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
 i(fd_used,  #state{fd_used  = FdUsed})  -> FdUsed;
 i(fd_total, #state{fd_total = FdTotal}) -> FdTotal;
 i(sockets_used,   _State) ->
-    proplists:get_value(socket_count, file_handle_cache:info([socket_count]));
+    proplists:get_value(sockets_used, file_handle_cache:info([sockets_used]));
 i(sockets_total,  _State) ->
-    proplists:get_value(socket_limit, file_handle_cache:info([socket_limit]));
+    proplists:get_value(sockets_limit, file_handle_cache:info([sockets_limit]));
 i(os_pid,         _State) -> list_to_binary(os:getpid());
 i(mem_ets,        _State) -> erlang:memory(ets);
 i(mem_binary,     _State) -> erlang:memory(binary);
