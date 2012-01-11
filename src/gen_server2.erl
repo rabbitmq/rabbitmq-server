@@ -200,6 +200,8 @@
                     timeout_state, queue, debug, prioritise_call,
                     prioritise_cast, prioritise_info}).
 
+-define(QLEN_SAMPLE_SIZE, 10000).
+
 %%%=========================================================================
 %%%  Specs. These exist only to shut up dialyzer's warnings
 %%%=========================================================================
@@ -405,6 +407,8 @@ init_it(Starter, Parent, Name0, Mod, Args, Options) ->
                               mod     = Mod,
                               queue   = Queue,
                               debug   = Debug }),
+    put(gs2_avg, 0),
+    put(gs2_stats, queue:from_list(lists:duplicate(?QLEN_SAMPLE_SIZE, 0))),
     case catch Mod:init(Args) of
         {ok, State} ->
             proc_lib:init_ack(Starter, {ok, self()}),
@@ -479,10 +483,20 @@ loop(GS2State = #gs2_state { time          = hibernate,
 loop(GS2State) ->
     process_next_msg(drain(GS2State)).
 
-drain(GS2State) ->
+drain(GS2State) -> drain(GS2State, 0).
+
+drain(GS2State, Count) ->
     receive
-        Input -> drain(in(Input, GS2State))
-    after 0 -> GS2State
+        Input -> drain(in(Input, GS2State), Count + 1)
+    after 0 -> Avg = get(gs2_avg),
+               Q = get(gs2_stats),
+               %%V = priority_queue:len(GS2State#gs2_state.queue),
+               V = Count,
+               {{value, C}, Q1} = queue:out(Q),
+               put(gs2_avg, Avg + (V - C) / ?QLEN_SAMPLE_SIZE),
+               put(gs2_stats, queue:in(V, Q1)),
+               put(gs2_pq, priority_queue:len(GS2State#gs2_state.queue)),
+               GS2State
     end.
 
 process_next_msg(GS2State = #gs2_state { time          = Time,
