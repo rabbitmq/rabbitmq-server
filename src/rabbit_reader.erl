@@ -40,10 +40,11 @@
 -record(v1, {parent, sock, connection, callback, recv_len, pending_recv,
              connection_state, queue_collector, heartbeater, stats_timer,
              channel_sup_sup_pid, start_heartbeat_fun, buf, buf_len,
-             auth_mechanism, auth_state, blockers}).
+             auth_mechanism, auth_state, blockers, last_flow_ctl_at}).
 
 -define(STATISTICS_KEYS, [pid, recv_oct, recv_cnt, send_oct, send_cnt,
-                          send_pend, state, channels]).
+                          send_pend, state, mem_blocked, time_since_flow_ctl,
+                          channels]).
 
 -define(CREATION_EVENT_KEYS, [pid, address, port, peer_address, peer_port, ssl,
                               peer_cert_subject, peer_cert_issuer,
@@ -221,7 +222,8 @@ start_connection(Parent, ChannelSupSupPid, Collector, StartHeartbeatFun, Deb,
                 buf_len             = 0,
                 auth_mechanism      = none,
                 auth_state          = none,
-                blockers            = sets:new()},
+                blockers            = sets:new(),
+                last_flow_ctl_at    = never},
     try
         recvloop(Deb, switch_callback(rabbit_event:init_stats_timer(
                                        State, #v1.stats_timer),
@@ -527,7 +529,9 @@ handle_frame(Type, Channel, Payload,
                                   Channel, ChPid, FramingState),
                     put({channel, Channel}, {ChPid, NewAState}),
                     State1 = case rabbit_flow:blocked() of
-                                 true  -> update_blockers(true, self(), State);
+                                 true  -> S = State#v1{last_flow_ctl_at =
+                                                           erlang:now()},
+                                          update_blockers(true, self(), S);
                                  false -> State
                              end,
                     post_process_frame(AnalyzedFrame, ChPid, State1);
@@ -859,8 +863,21 @@ i(SockStat, #v1{sock = Sock}) when SockStat =:= recv_oct;
                                    SockStat =:= send_pend ->
     socket_info(fun () -> rabbit_net:getstat(Sock, [SockStat]) end,
                 fun ([{_, I}]) -> I end);
+i(state, State) when ?IS_RUNNING(State)->
+    running;
 i(state, #v1{connection_state = S}) ->
     S;
+i(mem_blocked, #v1{connection_state = S,
+                   blockers         = Blockers}) ->
+    case {sets:is_element(mem, Blockers), S} of
+        {true, blocking} -> if_publish;
+        {true, blocked}  -> true;
+        {false, _}       -> false
+    end;
+i(time_since_flow_ctl, #v1{last_flow_ctl_at = never}) ->
+    never;
+i(time_since_flow_ctl, #v1{last_flow_ctl_at = T1}) ->
+    timer:now_diff(erlang:now(), T1) / 1000000;
 i(channels, #v1{}) ->
     length(all_channels());
 i(protocol, #v1{connection = #connection{protocol = none}}) ->

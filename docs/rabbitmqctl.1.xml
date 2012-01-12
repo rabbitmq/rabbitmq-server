@@ -1067,6 +1067,25 @@
                 <listitem><para>The period for which the peer's SSL
                 certificate is valid.</para></listitem>
               </varlistentry>
+
+              <varlistentry>
+                <term>time_since_flow_ctl</term>
+                <listitem><para>Time since RabbitMQ last imposed flow
+                control on this connection as it was attempting to
+                publish too fast for the server to keep
+                up. Connections which are flow controlled can still
+                publish but at a reduced rate.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>mem_blocked</term>
+                <listitem><para>Whether this connection is blocked due
+                to the memory high watermark having been exceeded. One
+                of <command>true</command>, <command>false</command>
+                or <command>if_publish</command>. Connections will be
+                blocked if the watermark is exceeded and they attempt
+                to publish a message.</para></listitem>
+              </varlistentry>
+
               <varlistentry>
                 <term>state</term>
                 <listitem><para>Connection state (one of [<command>starting</command>, <command>tuning</command>,
@@ -1127,8 +1146,9 @@
               </varlistentry>
             </variablelist>
             <para>
-              If no <command>connectioninfoitem</command>s are specified then  user, peer
-              address, peer port and connection state are displayed.
+              If no <command>connectioninfoitem</command>s are
+              specified then user, peer address, peer port, time since
+              flow control and memory block state are displayed.
             </para>
 
             <para role="example-prefix">

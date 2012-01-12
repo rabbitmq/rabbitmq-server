@@ -307,7 +307,8 @@ action(list_bindings, Node, Args, Opts, Inform) ->
 
 action(list_connections, Node, Args, _Opts, Inform) ->
     Inform("Listing connections", []),
-    ArgAtoms = default_if_empty(Args, [user, peer_address, peer_port, state]),
+    ArgAtoms = default_if_empty(Args, [user, peer_address, peer_port,
+                                       time_since_flow_ctl, mem_blocked]),
     display_info_list(rpc_call(Node, rabbit_networking, connection_info_all,
                                [ArgAtoms]),
                       ArgAtoms);
