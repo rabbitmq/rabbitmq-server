@@ -725,7 +725,7 @@ handle_method0(#'connection.open'{virtual_host = VHostPath},
     NewConnection = Connection#connection{vhost = VHostPath},
     ok = send_on_channel0(Sock, #'connection.open_ok'{}, Protocol),
     State1 = update_blockers(
-               rabbit_alarm:register(self(), {?MODULE, conserve_memory, [mem]}),
+               rabbit_alarm:register(self(), {?MODULE, conserve_memory, []}),
                mem,
                State#v1{connection_state = running,
                         connection = NewConnection}),
