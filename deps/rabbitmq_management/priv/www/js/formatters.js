@@ -342,6 +342,30 @@ function fmt_node_host(node_host) {
     return host + ' <small>(' + node_host + ')</small>';
 }
 
+function fmt_mem_blocked(blocked) {
+    if (blocked == 'if_publish') {
+        return '<div class="yellow">...</div>';
+    }
+    else if (blocked) {
+        return '<div class="red">Yes</div>';
+    }
+    else {
+        return '<div class="green">No</div>';
+    }
+}
+
+function fmt_time_since_flow_ctl(time) {
+    if (time == 'never') {
+        return '<div class="green">Never</div>';
+    }
+    else {
+        var t = time.toFixed();
+        var colour = (t < 10) ? 'yellow' : 'green';
+        var ts = (t == 0) ? 'Now' : t + 's';
+        return '<div class="' + colour + '">' + ts + '</div>';
+    }
+}
+
 function alt_rows(i) {
     return (i % 2 == 0) ? ' class="alt1"' : ' class="alt2"';
 }

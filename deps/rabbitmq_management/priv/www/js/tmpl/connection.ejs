@@ -65,6 +65,14 @@
 <% if (connection.state) { %>
 <table class="facts">
 <tr>
+ <th>Last flow controlled <span class="help" id="last-flow-controlled"></th>
+ <td class="status"><%= fmt_time_since_flow_ctl(connection.time_since_flow_ctl) %></td>
+</tr>
+<tr>
+ <th>Blocked <span class="help" id="mem-blocked"></th>
+ <td class="status"><%= fmt_mem_blocked(connection.mem_blocked) %></td>
+</tr>
+<tr>
  <th>State</th>
  <td><%= connection.state %></td>
 </tr>

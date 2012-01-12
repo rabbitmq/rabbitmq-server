@@ -6,7 +6,7 @@
  <thead>
   <tr>
    <th colspan="<% if (nodes_interesting) { %>5<% } else { %>4<% } %>">Network</th>
-   <th colspan="<% if (vhosts_interesting) { %>4<% } else { %>3<% } %>">Overview</th>
+   <th colspan="<% if (vhosts_interesting) { %>5<% } else { %>4<% } %>">Overview</th>
   </tr>
   <tr>
     <th><%= fmt_sort('Protocol',     'protocol') %></th>
@@ -21,7 +21,8 @@
     <th><%= fmt_sort('Virtual host', 'vhost') %></th>
 <% } %>
     <th><%= fmt_sort('User name',    'user') %></th>
-    <th><%= fmt_sort('State',        'state') %></th>
+    <th><%= fmt_sort('Flow ctl',     'time_since_flow_ctl') %> <span class="help" id="last-flow-controlled"></th>
+    <th><%= fmt_sort('Blocked',      'mem_blocked') %> <span class="help" id="mem-blocked"></th>
   </tr>
  </thead>
  <tbody>
@@ -47,7 +48,8 @@
     <td><%= fmt_string(connection.vhost) %></td>
 <% } %>
     <td><%= fmt_string(connection.user) %></td>
-    <td><%= connection.state %></td>
+    <td class="status"><%= fmt_time_since_flow_ctl(connection.time_since_flow_ctl) %></td>
+    <td class="status c"><%= fmt_mem_blocked(connection.mem_blocked) %></td>
   </tr>
   <% } %>
  </tbody>
