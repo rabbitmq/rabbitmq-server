@@ -16,8 +16,8 @@
 
 -module(rabbit_flow).
 
--define(MAX_CREDIT, 100).
--define(MORE_CREDIT_AT, 50).
+-define(MAX_CREDIT, 2).
+-define(MORE_CREDIT_AT, 1).
 
 -export([ack/1, bump/1, blocked/0, send/1]).
 
@@ -31,8 +31,7 @@
 
 ack(To) ->
     Credit =
-        case get({credit_to, To}) of
-            undefined           -> ?MAX_CREDIT;
+        case get({credit_to, To}, ?MAX_CREDIT) of
             ?MORE_CREDIT_AT + 1 -> grant(To, ?MAX_CREDIT - ?MORE_CREDIT_AT),
                                    ?MAX_CREDIT;
             C                   -> C - 1
@@ -40,10 +39,7 @@ ack(To) ->
     put({credit_to, To}, Credit).
 
 bump({From, MoreCredit}) ->
-    Credit = case get({credit_from, From}) of
-                 undefined -> MoreCredit;
-                 C         -> C + MoreCredit
-             end,
+    Credit = get({credit_from, From}, 0) + MoreCredit,
     put({credit_from, From}, Credit),
     case Credit > 0 of
         true  -> unblock(),
@@ -56,10 +52,7 @@ blocked() ->
     get(credit_blocked) =:= true.
 
 send(From) ->
-    Credit = case get({credit_from, From}) of
-                 undefined -> ?MAX_CREDIT;
-                 C         -> C
-             end - 1,
+    Credit = get({credit_from, From}, ?MAX_CREDIT) - 1,
     case Credit of
         0 -> put(credit_blocked, true);
         _ -> ok
@@ -72,17 +65,17 @@ grant(To, Quantity) ->
     Msg = {bump_credit, {self(), Quantity}},
     case blocked() of
         false -> To ! Msg;
-        true  -> Deferred = case get(credit_deferred) of
-                                undefined -> [];
-                                L         -> L
-                            end,
+        true  -> Deferred = get(credit_deferred, []),
                  put(credit_deferred, [{To, Msg} | Deferred])
     end.
 
 unblock() ->
     erase(credit_blocked),
-    case get(credit_deferred) of
-        undefined -> ok;
-        Deferred  -> [To ! Msg || {To, Msg} <- Deferred],
-                     erase(credit_deferred)
+    [To ! Msg || {To, Msg} <- get(credit_deferred, [])],
+    erase(credit_deferred).
+
+get(Key, Default) ->
+    case get(Key) of
+        undefined -> Default;
+        Value     -> Value
     end.
