@@ -317,7 +317,7 @@ handle_cast({confirm, MsgSeqNos, From}, State) ->
     noreply([send_confirms], State1, case C of [] -> hibernate; _ -> 0 end).
 
 handle_info({bump_credit, Msg}, State) ->
-    rabbit_flow:bump(Msg),
+    rabbit_flow:handle_bump_msg(Msg),
     noreply(State);
 
 handle_info(timeout, State) ->

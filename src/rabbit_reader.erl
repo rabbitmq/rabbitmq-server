@@ -343,7 +343,7 @@ handle_other(emit_stats, Deb, State) ->
 handle_other({system, From, Request}, Deb, State = #v1{parent = Parent}) ->
     sys:handle_system_msg(Request, From, Parent, ?MODULE, Deb, State);
 handle_other({bump_credit, Msg}, Deb, State) ->
-    rabbit_flow:bump(Msg),
+    rabbit_flow:handle_bump_msg(Msg),
     recvloop(Deb, update_blockers(false, self(), State));
 handle_other(Other, _Deb, _State) ->
     %% internal error -> something worth dying for
