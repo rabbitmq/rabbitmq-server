@@ -16,8 +16,8 @@
 
 -module(rabbit_flow).
 
--define(MAX_CREDIT, 2).
--define(MORE_CREDIT_AT, 1).
+-define(MAX_CREDIT, 100).
+-define(MORE_CREDIT_AT, 50).
 
 -export([ack/1, bump/1, blocked/0, send/1]).
 
