@@ -642,11 +642,9 @@ handle_ch_down(DownPid, State = #q{exclusive_consumer = Holder}) ->
 
 handle_ch_publisher_down(DownPid) ->
     case lookup_ch_publisher(DownPid) of
-        not_found ->
-            ok;
-        _ ->
-            erase_ch_record_publisher(DownPid),
-            rabbit_flow:sender_down(DownPid)
+        not_found -> ok;
+        _         -> erase_ch_record_publisher(DownPid),
+                     rabbit_flow:sender_down(DownPid)
     end.
 
 check_exclusive_access({_ChPid, _ConsumerTag}, _ExclusiveConsume, _State) ->
