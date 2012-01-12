@@ -332,6 +332,7 @@ handle_info({'DOWN', _MRef, process, QPid, Reason}, State) ->
     State1 = handle_publishing_queue_down(QPid, Reason, State),
     State2 = queue_blocked(QPid, State1),
     State3 = handle_consuming_queue_down(QPid, State2),
+    rabbit_flow:receiver_down(QPid),
     erase_queue_stats(QPid),
     noreply(State3#ch{queue_monitors =
                           dict:erase(QPid, State3#ch.queue_monitors)});
@@ -1150,30 +1151,18 @@ consumer_monitor(ConsumerTag,
     end.
 
 monitor_queue(QPid, State = #ch{queue_monitors = QMons}) ->
-    case (not dict:is_key(QPid, QMons) andalso
-          queue_monitor_needed(QPid, State)) of
+    case not dict:is_key(QPid, QMons) of
         true  -> MRef = erlang:monitor(process, QPid),
                  State#ch{queue_monitors = dict:store(QPid, MRef, QMons)};
         false -> State
     end.
 
 demonitor_queue(QPid, State = #ch{queue_monitors = QMons}) ->
-    case (dict:is_key(QPid, QMons) andalso
-          not queue_monitor_needed(QPid, State)) of
+    case dict:is_key(QPid, QMons) of
         true  -> true = erlang:demonitor(dict:fetch(QPid, QMons)),
                  State#ch{queue_monitors = dict:erase(QPid, QMons)};
         false -> State
     end.
-
-queue_monitor_needed(QPid, #ch{queue_consumers = QCons,
-                               blocking        = Blocking,
-                               unconfirmed_qm  = UQM} = State) ->
-    StatsEnabled      = rabbit_event:stats_level(
-                          State, #ch.stats_timer) =:= fine,
-    ConsumerMonitored = dict:is_key(QPid, QCons),
-    QueueBlocked      = sets:is_element(QPid, Blocking),
-    ConfirmMonitored  = gb_trees:is_defined(QPid, UQM),
-    StatsEnabled or ConsumerMonitored or QueueBlocked or ConfirmMonitored.
 
 handle_publishing_queue_down(QPid, Reason, State = #ch{unconfirmed_qm = UQM}) ->
     MsgSeqNos = case gb_trees:lookup(QPid, UQM) of

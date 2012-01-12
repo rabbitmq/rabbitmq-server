@@ -428,7 +428,8 @@ handle_dependent_exit(ChPid, Reason, State) ->
 channel_cleanup(ChPid) ->
     case get({ch_pid, ChPid}) of
         undefined       -> undefined;
-        {Channel, MRef} -> erase({channel, Channel}),
+        {Channel, MRef} -> rabbit_flow:receiver_down(ChPid),
+                           erase({channel, Channel}),
                            erase({ch_pid, ChPid}),
                            erlang:demonitor(MRef, [flush]),
                            Channel

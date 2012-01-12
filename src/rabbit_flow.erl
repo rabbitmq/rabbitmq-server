@@ -16,10 +16,10 @@
 
 -module(rabbit_flow).
 
--define(MAX_CREDIT, 100).
--define(MORE_CREDIT_AT, 50).
+-define(MAX_CREDIT, 200).
+-define(MORE_CREDIT_AT, 150).
 
--export([ack/1, bump/1, blocked/0, send/1]).
+-export([ack/1, bump/1, blocked/0, send/1, receiver_down/1]).
 
 %% There are two "flows" here; of messages and of credit, going in
 %% opposite directions. The variable names "From" and "To" refer to
@@ -51,12 +51,16 @@ blocked() ->
     get(credit_blocked, []) =/= [].
 
 send(From) ->
-    Credit = get({credit_from, From}, ?MAX_CREDIT) - 1,
+    Credit = get_credit(From) - 1,
     case Credit of
         0 -> block(From);
         _ -> ok
     end,
     put({credit_from, From}, Credit).
+
+receiver_down(From) ->
+    unblock(From),
+    put({credit_from, From}, quiescing).
 
 %% --------------------------------------------------------------------------
 
@@ -84,4 +88,10 @@ get(Key, Default) ->
     case get(Key) of
         undefined -> Default;
         Value     -> Value
+    end.
+
+get_credit(From) ->
+    case get({credit_from, From}, ?MAX_CREDIT) of
+        quiescing -> 1;
+        Credit    -> Credit
     end.
