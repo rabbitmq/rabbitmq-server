@@ -51,7 +51,7 @@ blocked() ->
     get(credit_blocked, []) =/= [].
 
 send(From) ->
-    Credit = get_credit(From) - 1,
+    Credit = get({credit_from, From}, ?MAX_CREDIT) - 1,
     case Credit of
         0 -> block(From);
         _ -> ok
@@ -60,7 +60,7 @@ send(From) ->
 
 receiver_down(From) ->
     unblock(From),
-    put({credit_from, From}, quiescing).
+    erase({credit_from, From}).
 
 %% --------------------------------------------------------------------------
 
@@ -88,10 +88,4 @@ get(Key, Default) ->
     case get(Key) of
         undefined -> Default;
         Value     -> Value
-    end.
-
-get_credit(From) ->
-    case get({credit_from, From}, ?MAX_CREDIT) of
-        quiescing -> 1;
-        Credit    -> Credit
     end.
