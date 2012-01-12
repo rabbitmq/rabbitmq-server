@@ -47,7 +47,8 @@ DECLARABLE = {
                    'optional':  {'auto_delete': 'false', 'durable': 'true',
                                  'internal': 'false'}},
     'queue':      {'mandatory': ['name'],
-                   'optional':  {'auto_delete': 'false', 'durable': 'true'}},
+                   'optional':  {'auto_delete': 'false', 'durable': 'true',
+                                 'node': None}},
     'binding':    {'mandatory': ['source', 'destination_type', 'destination',
                                  'routing_key'],
                    'optional':  {}},
@@ -374,7 +375,8 @@ class Management:
         uri_template = obj['uri']
         upload = {}
         for k in optional.keys():
-            upload[k] = optional[k]
+            if optional[k]:
+                upload[k] = optional[k]
         for arg in args:
             assert_usage("=" in arg,
                          'Argument "{0}" not in format name=value'.format(arg))
