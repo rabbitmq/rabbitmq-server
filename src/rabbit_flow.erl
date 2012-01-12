@@ -42,19 +42,18 @@ bump({From, MoreCredit}) ->
     Credit = get({credit_from, From}, 0) + MoreCredit,
     put({credit_from, From}, Credit),
     case Credit > 0 of
-        true  -> unblock(),
+        true  -> unblock(From),
                  false;
         false -> true
     end.
 
-%% TODO we assume only one From can block at once. Is this true?
 blocked() ->
-    get(credit_blocked) =:= true.
+    get(credit_blocked, []) =/= [].
 
 send(From) ->
     Credit = get({credit_from, From}, ?MAX_CREDIT) - 1,
     case Credit of
-        0 -> put(credit_blocked, true);
+        0 -> block(From);
         _ -> ok
     end,
     put({credit_from, From}, Credit).
@@ -69,10 +68,17 @@ grant(To, Quantity) ->
                  put(credit_deferred, [{To, Msg} | Deferred])
     end.
 
-unblock() ->
-    erase(credit_blocked),
-    [To ! Msg || {To, Msg} <- get(credit_deferred, [])],
-    erase(credit_deferred).
+block(From) ->
+    put(credit_blocked, [From | get(credit_blocked, [])]).
+
+unblock(From) ->
+    NewBlocks = get(credit_blocked, []) -- [From],
+    put(credit_blocked, NewBlocks),
+    case NewBlocks of
+        [] -> [To ! Msg || {To, Msg} <- get(credit_deferred, [])],
+              erase(credit_deferred);
+        _  -> ok
+    end.
 
 get(Key, Default) ->
     case get(Key) of
