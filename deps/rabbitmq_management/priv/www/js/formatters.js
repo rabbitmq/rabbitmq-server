@@ -360,7 +360,7 @@ function fmt_connection_state(conn) {
         if (age < 5) {
             colour = 'yellow';
             text = 'flow';
-            explanation = 'Connection publishing rate recently restricted by RabbitMQ.';
+            explanation = 'Publishing rate recently restricted by server.';
         }
     }
 
