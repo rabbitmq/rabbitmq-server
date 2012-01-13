@@ -1069,27 +1069,24 @@
               </varlistentry>
 
               <varlistentry>
-                <term>time_since_flow_ctl</term>
-                <listitem><para>Time since RabbitMQ last imposed flow
-                control on this connection as it was attempting to
-                publish too fast for the server to keep
-                up. Connections which are flow controlled can still
-                publish but at a reduced rate.</para></listitem>
+                <term>last_blocked_by</term>
+                <listitem><para>The reason for which this connection
+                    was last blocked. One of 'mem' - due to a memory
+                    alarm, 'flow' - due to internal flow control, or
+                    'none' if the connection was never
+                    blocked.</para></listitem>
               </varlistentry>
               <varlistentry>
-                <term>mem_blocked</term>
-                <listitem><para>Whether this connection is blocked due
-                to the memory high watermark having been exceeded. One
-                of <command>true</command>, <command>false</command>
-                or <command>if_publish</command>. Connections will be
-                blocked if the watermark is exceeded and they attempt
-                to publish a message.</para></listitem>
+                <term>last_blocked_age</term>
+                <listitem><para>Time, in seconds, since this
+                    connection was last blocked, or
+                    'infinity'.</para></listitem>
               </varlistentry>
 
               <varlistentry>
                 <term>state</term>
                 <listitem><para>Connection state (one of [<command>starting</command>, <command>tuning</command>,
-                  <command>opening</command>, <command>running</command>, <command>closing</command>, <command>closed</command>]).</para></listitem>
+                  <command>opening</command>, <command>running</command>, <command>blocking</command>, <command>blocked</command>, <command>closing</command>, <command>closed</command>]).</para></listitem>
               </varlistentry>
               <varlistentry>
                 <term>channels</term>
