@@ -1345,15 +1345,15 @@ notify_limiter(Limiter, Acked) ->
 
 deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{
                                                        exchange_name = XName},
-                                        mandatory = Mandatory,
-                                        immediate = Immediate,
+                                        mandatory  = Mandatory,
+                                        immediate  = Immediate,
                                         msg_seq_no = MsgSeqNo},
                    QNames}, State) ->
     {RoutingRes, DeliveredQPids} = rabbit_router:deliver(QNames, Delivery),
     State1 = lists:foldl(fun monitor_queue/2, State, DeliveredQPids),
-    case Mandatory orelse Immediate of
-        false -> [rabbit_flow:send(QPid) || QPid <- DeliveredQPids];
-        _     -> ok
+    case {Mandatory, Immediate} of
+        {false, false} -> [rabbit_flow:send(QPid) || QPid <- DeliveredQPids];
+        _              -> ok
     end,
     State2 = process_routing_result(RoutingRes, DeliveredQPids,
                                     XName, MsgSeqNo, Message, State1),
