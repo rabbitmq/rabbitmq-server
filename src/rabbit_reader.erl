@@ -284,7 +284,7 @@ handle_other({conserve_memory, Conserve}, Deb, State) ->
 handle_other({channel_closing, ChPid}, Deb, State) ->
     ok = rabbit_channel:ready_for_close(ChPid),
     channel_cleanup(ChPid),
-    mainloop(Deb, maybe_close(State));
+    mainloop(Deb, maybe_close(control_throttle(State)));
 handle_other({'EXIT', Parent, Reason}, _Deb, State = #v1{parent = Parent}) ->
     terminate(io_lib:format("broker forced connection closure "
                             "with reason '~w'", [Reason]), State),
@@ -404,11 +404,12 @@ handle_dependent_exit(ChPid, Reason, State) ->
         {undefined, uncontrolled} ->
             exit({abnormal_dependent_exit, ChPid, Reason});
         {_Channel, controlled} ->
-            maybe_close(State);
+            maybe_close(control_throttle(State));
         {Channel, uncontrolled} ->
             rabbit_log:error("connection ~p, channel ~p - error:~n~p~n",
                              [self(), Channel, Reason]),
-            maybe_close(handle_exception(State, Channel, Reason))
+            maybe_close(handle_exception(control_throttle(State),
+                                         Channel, Reason))
     end.
 
 channel_cleanup(ChPid) ->
@@ -523,7 +524,7 @@ handle_frame(Type, Channel, Payload,
 
 post_process_frame({method, 'channel.close_ok', _}, ChPid, State) ->
     channel_cleanup(ChPid),
-    State;
+    control_throttle(State);
 post_process_frame({method, MethodName, _}, _ChPid,
                    State = #v1{connection = #connection{
                                  protocol = Protocol}}) ->
