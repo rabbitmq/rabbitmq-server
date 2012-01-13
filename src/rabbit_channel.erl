@@ -1119,8 +1119,9 @@ handle_method(#'channel.flow'{active = false}, _,
     ok = rabbit_limiter:block(Limiter1),
     case consumer_queues(Consumers) of
         []    -> {reply, #'channel.flow_ok'{active = false}, State1};
-        QPids -> ok = rabbit_amqqueue:flush_all(QPids, self()),
-                 {noreply, State1}
+        QPids -> State2 = State1#ch{blocking = sets:from_list(QPids)},
+                 ok = rabbit_amqqueue:flush_all(QPids, self()),
+                 {noreply, State2}
     end;
 
 handle_method(_MethodRecord, _Content, _State) ->
