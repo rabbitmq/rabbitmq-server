@@ -335,7 +335,7 @@ handle_info({'DOWN', _MRef, process, QPid, Reason}, State) ->
     State1 = handle_publishing_queue_down(QPid, Reason, State),
     State2 = queue_blocked(QPid, State1),
     State3 = handle_consuming_queue_down(QPid, State2),
-    credit_flow:receiver_down(QPid),
+    credit_flow:peer_down(QPid),
     erase_queue_stats(QPid),
     noreply(State3#ch{queue_monitors =
                           sets:del_element(QPid, State3#ch.queue_monitors)});

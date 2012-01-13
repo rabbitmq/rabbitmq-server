@@ -29,7 +29,7 @@
 -define(MORE_CREDIT_AT, 150).
 
 -export([ack/1, handle_bump_msg/1, blocked/0, send/1]).
--export([sender_down/1, receiver_down/1]).
+-export([peer_down/1]).
 
 %%----------------------------------------------------------------------------
 
@@ -41,8 +41,7 @@
 -spec(handle_bump_msg/1 :: (bump_msg()) -> 'ok').
 -spec(blocked/0 :: () -> boolean()).
 -spec(send/1 :: (pid()) -> 'ok').
--spec(sender_down/1 :: (pid()) -> 'ok').
--spec(receiver_down/1 :: (pid()) -> 'ok').
+-spec(peer_down/1 :: (pid()) -> 'ok').
 
 -endif.
 
@@ -85,15 +84,13 @@ send(From) ->
     end,
     put({credit_from, From}, Credit).
 
-sender_down(To) ->
-    %% In theory we could remove it from credit_deferred here, but it
+peer_down(Peer) ->
+    %% In theory we could also remove it from credit_deferred here, but it
     %% doesn't really matter; at some point later we will drain
     %% credit_deferred and thus send messages into the void...
-    erase({credit_to, To}).
-
-receiver_down(From) ->
-    unblock(From),
-    erase({credit_from, From}).
+    unblock(Peer),
+    erase({credit_from, Peer}),
+    erase({credit_to, Peer}).
 
 %% --------------------------------------------------------------------------
 

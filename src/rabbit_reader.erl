@@ -419,7 +419,7 @@ handle_dependent_exit(ChPid, Reason, State) ->
 channel_cleanup(ChPid) ->
     case get({ch_pid, ChPid}) of
         undefined       -> undefined;
-        {Channel, MRef} -> credit_flow:receiver_down(ChPid),
+        {Channel, MRef} -> credit_flow:peer_down(ChPid),
                            erase({channel, Channel}),
                            erase({ch_pid, ChPid}),
                            erlang:demonitor(MRef, [flush]),

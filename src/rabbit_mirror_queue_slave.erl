@@ -602,7 +602,7 @@ ensure_monitoring(ChPid, State = #state { known_senders = KS }) ->
 local_sender_death(ChPid, State = #state { known_senders = KS }) ->
     ok = case dict:is_key(ChPid, KS) of
              false -> ok;
-             true  -> credit_flow:sender_down(ChPid),
+             true  -> credit_flow:peer_down(ChPid),
                       confirm_sender_death(ChPid)
          end,
     State.
