@@ -342,27 +342,34 @@ function fmt_node_host(node_host) {
     return host + ' <small>(' + node_host + ')</small>';
 }
 
-function fmt_mem_blocked(blocked) {
-    if (blocked == 'if_publish') {
-        return '<div class="yellow">...</div>';
-    }
-    else if (blocked) {
-        return '<div class="red">Yes</div>';
-    }
-    else {
-        return '<div class="green">No</div>';
-    }
-}
+function fmt_connection_state(conn) {
+    var colour = 'green';
+    var text = conn.state;
+    var explanation;
 
-function fmt_time_since_flow_ctl(time) {
-    if (time == 'never') {
-        return '<div class="green">Never</div>';
+    if (conn.last_blocked_by == 'mem' && conn.state == 'blocked') {
+        colour = 'red';
+        explanation = 'Memory alarm: Connection blocked.';
+    }
+    else if (conn.state == 'blocking') {
+        colour = 'yellow';
+        explanation = 'Memory alarm: Connection will block on publish.';
+    }
+    else if (conn.last_blocked_by == 'flow') {
+        var age = conn.last_blocked_age.toFixed();
+        if (age < 5) {
+            colour = 'yellow';
+            text = 'flow';
+            explanation = 'Connection publishing rate recently restricted by RabbitMQ.';
+        }
+    }
+
+    if (explanation) {
+        return '<div class="' + colour + '"><acronym title="' + explanation +
+            '">' + text + '</acronym></div>';
     }
     else {
-        var t = time.toFixed();
-        var colour = (t < 10) ? 'yellow' : 'green';
-        var ts = (t == 0) ? 'Now' : t + 's';
-        return '<div class="' + colour + '">' + ts + '</div>';
+        return '<div class="' + colour + '">' + text + '</div>';
     }
 }
 

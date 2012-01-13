@@ -21,8 +21,7 @@
     <th><%= fmt_sort('Virtual host', 'vhost') %></th>
 <% } %>
     <th><%= fmt_sort('User name',    'user') %></th>
-    <th><%= fmt_sort('Flow ctl',     'time_since_flow_ctl') %> <span class="help" id="last-flow-controlled"></th>
-    <th><%= fmt_sort('Blocked',      'mem_blocked') %> <span class="help" id="mem-blocked"></th>
+    <th><%= fmt_sort('State',        'state') %></th>
   </tr>
  </thead>
  <tbody>
@@ -48,8 +47,7 @@
     <td><%= fmt_string(connection.vhost) %></td>
 <% } %>
     <td><%= fmt_string(connection.user) %></td>
-    <td class="status"><%= fmt_time_since_flow_ctl(connection.time_since_flow_ctl) %></td>
-    <td class="status c"><%= fmt_mem_blocked(connection.mem_blocked) %></td>
+    <td class="status"><%= fmt_connection_state(connection) %></td>
   </tr>
   <% } %>
  </tbody>

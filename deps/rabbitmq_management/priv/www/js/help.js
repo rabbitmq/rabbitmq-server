@@ -164,11 +164,6 @@ HELP = {
         <dd>Rate at which basic.return is sent to publishers for undeliverable  messages published with the \'immediate\' flag set.</dd>\
       </dl>',
 
-    'last-flow-controlled':
-    'Time since RabbitMQ last imposed flow control on this connection as it was attempting to publish too fast for the server to keep up. Connections which are flow controlled can still publish but at a reduced rate.',
-
-    'mem-blocked':
-    'Whether this connection is blocked due to the memory high watermark having been exceeded. Connections will be blocked if the watermark is exceeded and they attempt to publish a message.',
     'foo': 'foo' // No comma.
 };
 
