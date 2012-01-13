@@ -644,7 +644,7 @@ handle_ch_publisher_down(DownPid) ->
     case lookup_ch_publisher(DownPid) of
         not_found -> ok;
         _         -> erase_ch_record_publisher(DownPid),
-                     rabbit_flow:sender_down(DownPid)
+                     credit_flow:sender_down(DownPid)
     end.
 
 check_exclusive_access({_ChPid, _ConsumerTag}, _ExclusiveConsume, _State) ->
@@ -1051,7 +1051,7 @@ handle_cast({run_backing_queue, Mod, Fun}, State) ->
 handle_cast({deliver, Delivery = #delivery{sender = Sender}}, State) ->
     %% Asynchronous, non-"mandatory", non-"immediate" deliver mode.
     ch_record_publisher(Sender),
-    rabbit_flow:ack(Sender),
+    credit_flow:ack(Sender),
     noreply(deliver_or_enqueue(Delivery, State));
 
 handle_cast({ack, AckTags, ChPid}, State) ->

@@ -347,7 +347,7 @@ handle_other(emit_stats, Deb, State) ->
 handle_other({system, From, Request}, Deb, State = #v1{parent = Parent}) ->
     sys:handle_system_msg(Request, From, Parent, ?MODULE, Deb, State);
 handle_other({bump_credit, Msg}, Deb, State) ->
-    rabbit_flow:handle_bump_msg(Msg),
+    credit_flow:handle_bump_msg(Msg),
     recvloop(Deb, control_throttle(State));
 handle_other(Other, _Deb, _State) ->
     %% internal error -> something worth dying for
@@ -365,7 +365,7 @@ terminate(_Explanation, State) ->
 
 control_throttle(State = #v1{connection_state = CS,
                              conserve_memory  = Mem}) ->
-    case {CS, Mem orelse rabbit_flow:blocked()} of
+    case {CS, Mem orelse credit_flow:blocked()} of
         {running,   true} -> State#v1{connection_state = blocking};
         {blocking, false} -> State#v1{connection_state = running};
         {blocked,  false} -> ok = rabbit_heartbeat:resume_monitor(
@@ -419,7 +419,7 @@ handle_dependent_exit(ChPid, Reason, State) ->
 channel_cleanup(ChPid) ->
     case get({ch_pid, ChPid}) of
         undefined       -> undefined;
-        {Channel, MRef} -> rabbit_flow:receiver_down(ChPid),
+        {Channel, MRef} -> credit_flow:receiver_down(ChPid),
                            erase({channel, Channel}),
                            erase({ch_pid, ChPid}),
                            erlang:demonitor(MRef, [flush]),
@@ -927,7 +927,7 @@ process_channel_frame(Frame, ErrPid, Channel, ChPid, AState) ->
         {ok, NewAState}                  -> NewAState;
         {ok, Method, NewAState}          -> rabbit_channel:do(ChPid, Method),
                                             NewAState;
-        {ok, Method, Content, NewAState} -> rabbit_flow:send(ChPid),
+        {ok, Method, Content, NewAState} -> credit_flow:send(ChPid),
                                             rabbit_channel:do(ChPid,
                                                               Method, Content),
                                             NewAState;

@@ -14,7 +14,7 @@
 %% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
 %%
 
--module(rabbit_flow).
+-module(credit_flow).
 
 %% Credit starts at ?MAX_CREDIT and goes down. Both sides keep
 %% track. When the receiver goes below ?MORE_CREDIT_AT it issues more
