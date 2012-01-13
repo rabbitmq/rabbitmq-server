@@ -43,14 +43,14 @@
              auth_mechanism, auth_state}).
 
 -define(STATISTICS_KEYS, [pid, recv_oct, recv_cnt, send_oct, send_cnt,
-                          send_pend, state, channels]).
+                          send_pend, state, channels, timeout]).
 
 -define(CREATION_EVENT_KEYS, [pid, address, port, peer_address, peer_port, ssl,
                               peer_cert_subject, peer_cert_issuer,
                               peer_cert_validity, auth_mechanism,
                               ssl_protocol, ssl_key_exchange,
                               ssl_cipher, ssl_hash,
-                              protocol, user, vhost, timeout, frame_max,
+                              protocol, user, vhost, frame_max,
                               client_properties]).
 
 -define(INFO_KEYS, ?CREATION_EVENT_KEYS ++ ?STATISTICS_KEYS -- [pid]).
