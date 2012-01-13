@@ -38,7 +38,7 @@ function fmt_date(d) {
     }
 
     return d.getFullYear() + "-" + f(d.getMonth() + 1) + "-" +
-        f(d.getDay() + 1) + " " + f(d.getHours()) + ":" + f(d.getMinutes()) +
+        f(d.getDate()) + " " + f(d.getHours()) + ":" + f(d.getMinutes()) +
         ":" + f(d.getSeconds());
 }
 
