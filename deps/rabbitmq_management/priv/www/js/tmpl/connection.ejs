@@ -70,7 +70,11 @@
 </tr>
 <tr>
  <th>Timeout</th>
- <td><%= connection.timeout %></td>
+ <td><% if (connection.timeout != 0) { %><%= connection.timeout %>s<% } %></td>
+</tr>
+<tr>
+ <th>Frame max</th>
+ <td><%= connection.frame_max %> bytes</td>
 </tr>
 </table>
 <% } %>

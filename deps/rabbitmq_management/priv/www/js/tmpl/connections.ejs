@@ -5,7 +5,7 @@
 <table class="list">
  <thead>
   <tr>
-   <th colspan="<% if (nodes_interesting) { %>5<% } else { %>4<% } %>">Network</th>
+   <th colspan="<% if (nodes_interesting) { %>6<% } else { %>5<% } %>">Network</th>
    <th colspan="<% if (vhosts_interesting) { %>4<% } else { %>3<% } %>">Overview</th>
   </tr>
   <tr>
@@ -16,6 +16,7 @@
 <% } %>
     <th><%= fmt_sort('From client',  'recv_oct_details.rate') %></th>
     <th><%= fmt_sort('To client',    'send_oct_details.rate') %></th>
+    <th><%= fmt_sort('Timeout',      'timeout') %></th>
     <th><%= fmt_sort('Channels',     'channels') %></th>
 <% if (vhosts_interesting) { %>
     <th><%= fmt_sort('Virtual host', 'vhost') %></th>
@@ -42,6 +43,7 @@
 <% } %>
     <td><%= fmt_rate_bytes(connection, 'recv_oct') %></td>
     <td><%= fmt_rate_bytes(connection, 'send_oct') %></td>
+    <td><% if (connection.timeout != 0) { %><%= connection.timeout %>s<% } %></td>
     <td><%= connection.channels %></td>
 <% if (vhosts_interesting) { %>
     <td><%= fmt_string(connection.vhost) %></td>
