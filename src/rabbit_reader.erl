@@ -923,8 +923,7 @@ send_to_new_channel(Channel, AnalyzedFrame, State) ->
 process_channel_frame(Frame, ErrPid, Channel, ChPid, AState) ->
     case rabbit_command_assembler:process(Frame, AState) of
         {ok, NewAState}                  -> NewAState;
-        {ok, Method, NewAState}          -> rabbit_flow:send(ChPid),
-                                            rabbit_channel:do(ChPid, Method),
+        {ok, Method, NewAState}          -> rabbit_channel:do(ChPid, Method),
                                             NewAState;
         {ok, Method, Content, NewAState} -> rabbit_flow:send(ChPid),
                                             rabbit_channel:do(ChPid,

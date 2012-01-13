@@ -245,7 +245,10 @@ handle_call(_Request, _From, State) ->
     noreply(State).
 
 handle_cast({method, Method, Content}, State = #ch{conn_pid = Conn}) ->
-    rabbit_flow:ack(Conn),
+    case Content of
+        none -> ok;
+        _    -> rabbit_flow:ack(Conn)
+    end,
     try handle_method(Method, Content, State) of
         {reply, Reply, NewState} ->
             ok = rabbit_writer:send_command(NewState#ch.writer_pid, Reply),
