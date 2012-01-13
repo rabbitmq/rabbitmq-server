@@ -210,7 +210,7 @@ handle_cast({gm, Instruction}, State) ->
 
 handle_cast({deliver, Delivery = #delivery{sender = Sender}}, State) ->
     %% Asynchronous, non-"mandatory", non-"immediate" deliver mode.
-    rabbit_flow:ack(Sender),
+    credit_flow:ack(Sender),
     noreply(maybe_enqueue_message(Delivery, true, State));
 
 handle_cast({set_maximum_since_use, Age}, State) ->
@@ -602,7 +602,7 @@ ensure_monitoring(ChPid, State = #state { known_senders = KS }) ->
 local_sender_death(ChPid, State = #state { known_senders = KS }) ->
     ok = case dict:is_key(ChPid, KS) of
              false -> ok;
-             true  -> rabbit_flow:sender_down(ChPid),
+             true  -> credit_flow:sender_down(ChPid),
                       confirm_sender_death(ChPid)
          end,
     State.

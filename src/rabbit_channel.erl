@@ -247,7 +247,7 @@ handle_call(_Request, _From, State) ->
 handle_cast({method, Method, Content}, State = #ch{conn_pid = Conn}) ->
     case Content of
         none -> ok;
-        _    -> rabbit_flow:ack(Conn)
+        _    -> credit_flow:ack(Conn)
     end,
     try handle_method(Method, Content, State) of
         {reply, Reply, NewState} ->
@@ -320,7 +320,7 @@ handle_cast({confirm, MsgSeqNos, From}, State) ->
     noreply([send_confirms], State1, case C of [] -> hibernate; _ -> 0 end).
 
 handle_info({bump_credit, Msg}, State) ->
-    rabbit_flow:handle_bump_msg(Msg),
+    credit_flow:handle_bump_msg(Msg),
     noreply(State);
 
 handle_info(timeout, State) ->
@@ -335,7 +335,7 @@ handle_info({'DOWN', _MRef, process, QPid, Reason}, State) ->
     State1 = handle_publishing_queue_down(QPid, Reason, State),
     State2 = queue_blocked(QPid, State1),
     State3 = handle_consuming_queue_down(QPid, State2),
-    rabbit_flow:receiver_down(QPid),
+    credit_flow:receiver_down(QPid),
     erase_queue_stats(QPid),
     noreply(State3#ch{queue_monitors =
                           sets:del_element(QPid, State3#ch.queue_monitors)});
@@ -1352,7 +1352,7 @@ deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{
     {RoutingRes, DeliveredQPids} = rabbit_router:deliver(QNames, Delivery),
     State1 = lists:foldl(fun monitor_queue/2, State, DeliveredQPids),
     case Mandatory orelse Immediate of
-        false -> [rabbit_flow:send(QPid) || QPid <- DeliveredQPids];
+        false -> [credit_flow:send(QPid) || QPid <- DeliveredQPids];
         _     -> ok
     end,
     State2 = process_routing_result(RoutingRes, DeliveredQPids,
