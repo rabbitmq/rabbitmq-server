@@ -9,8 +9,18 @@ fail_if_no_peer_cert set to true and verify set to verify_peer, to
 force all SSL clients to have a verifiable client certificate.
 
 By default this will set the username to an RFC4514-ish string form of
-the certificate's subject's Distinguished Name. To use the Common Name
-instead, set:
+the certificate's subject's Distinguished Name, similar to that
+produced by OpenSSL's "-nameopt RFC2253" option.
+
+You can obtain this string form from a certificate with a command like:
+
+$ openssl x509 -in path/to/cert.pem -nameopt RFC2253 -subject -noout
+
+or from an existing amqps connection with commands like:
+
+$ rabbitmqctl list_connections peer_cert_subject
+
+To use the Common Name instead, set:
 
 {rabbitmq_auth_mechanism_ssl, [{name_from, common_name}]}
 
