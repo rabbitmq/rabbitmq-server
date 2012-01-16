@@ -27,8 +27,6 @@
 
 -export([conserve_memory/2, server_properties/1]).
 
--export([process_channel_frame/5]). %% used by erlang-client
-
 -define(HANDSHAKE_TIMEOUT, 10).
 -define(NORMAL_TIMEOUT, 3).
 -define(CLOSING_TIMEOUT, 1).
@@ -91,12 +89,6 @@
 -spec(system_code_change/4 :: (_,_,_,_) -> {'ok',_}).
 -spec(system_continue/3 :: (_,_,#v1{}) -> any()).
 -spec(system_terminate/4 :: (_,_,_,_) -> none()).
-
--spec(process_channel_frame/5 ::
-        (rabbit_command_assembler:frame(), pid(), non_neg_integer(),
-         fun ((rabbit_framing:amqp_method_record(),
-               rabbit_types:maybe(rabbit_types:content())) -> 'ok'), tuple()) ->
- tuple()).
 
 -endif.
 
@@ -923,23 +915,15 @@ send_to_new_channel(Channel, AnalyzedFrame, State) ->
     State.
 
 process_channel_frame(Frame, Channel, ChPid, AState) ->
-    process_channel_frame(
-      Frame, self(), Channel,
-      fun (Method, none) ->
-              rabbit_channel:do(ChPid, Method);
-          (Method, Content) ->
-              credit_flow:send(ChPid),
-              rabbit_channel:do(ChPid, Method, Content)
-      end, AState).
-
-process_channel_frame(Frame, ErrPid, Channel, CommandFun, AState) ->
     case rabbit_command_assembler:process(Frame, AState) of
         {ok, NewAState}                  -> NewAState;
-        {ok, Method, NewAState}          -> ok = CommandFun(Method, none),
+        {ok, Method, NewAState}          -> rabbit_channel:do(ChPid, Method),
                                             NewAState;
-        {ok, Method, Content, NewAState} -> ok = CommandFun(Method, Content),
+        {ok, Method, Content, NewAState} -> credit_flow:send(ChPid),
+                                            rabbit_channel:do(ChPid, Method,
+                                                              Content),
                                             NewAState;
-        {error, Reason}                  -> ErrPid ! {channel_exit, Channel,
+        {error, Reason}                  -> self() ! {channel_exit, Channel,
                                                       Reason},
                                             AState
     end.
