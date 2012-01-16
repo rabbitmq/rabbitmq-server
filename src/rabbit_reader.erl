@@ -919,9 +919,8 @@ process_channel_frame(Frame, Channel, ChPid, AState) ->
         {ok, NewAState}                  -> NewAState;
         {ok, Method, NewAState}          -> rabbit_channel:do(ChPid, Method),
                                             NewAState;
-        {ok, Method, Content, NewAState} -> credit_flow:send(ChPid),
-                                            rabbit_channel:do(ChPid, Method,
-                                                              Content),
+        {ok, Method, Content, NewAState} -> rabbit_channel:do_flow(
+                                              ChPid, Method, Content),
                                             NewAState;
         {error, Reason}                  -> self() ! {channel_exit, Channel,
                                                       Reason},

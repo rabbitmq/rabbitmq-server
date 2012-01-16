@@ -20,7 +20,7 @@
 
 -behaviour(gen_server2).
 
--export([start_link/10, do/2, do/3, flush/1, shutdown/1]).
+-export([start_link/10, do/2, do/3, do_flow/3, flush/1, shutdown/1]).
 -export([send_command/2, deliver/4, flushed/2, confirm/2]).
 -export([list/0, info_keys/0, info/1, info/2, info_all/0, info_all/1]).
 -export([refresh_config_local/0, ready_for_close/1]).
@@ -78,6 +78,8 @@
 -spec(do/2 :: (pid(), rabbit_framing:amqp_method_record()) -> 'ok').
 -spec(do/3 :: (pid(), rabbit_framing:amqp_method_record(),
                rabbit_types:maybe(rabbit_types:content())) -> 'ok').
+-spec(do_flow/3 :: (pid(), rabbit_framing:amqp_method_record(),
+                    rabbit_types:maybe(rabbit_types:content())) -> 'ok').
 -spec(flush/1 :: (pid()) -> 'ok').
 -spec(shutdown/1 :: (pid()) -> 'ok').
 -spec(send_command/2 :: (pid(), rabbit_framing:amqp_method_record()) -> 'ok').
@@ -111,7 +113,11 @@ do(Pid, Method) ->
     do(Pid, Method, none).
 
 do(Pid, Method, Content) ->
-    gen_server2:cast(Pid, {method, Method, Content}).
+    gen_server2:cast(Pid, {method, Method, Content, noflow}).
+
+do_flow(Pid, Method, Content) ->
+    credit_flow:send(Pid),
+    gen_server2:cast(Pid, {method, Method, Content, flow}).
 
 flush(Pid) ->
     gen_server2:call(Pid, flush, infinity).
@@ -244,10 +250,10 @@ handle_call(refresh_config, _From, State = #ch{virtual_host = VHost}) ->
 handle_call(_Request, _From, State) ->
     noreply(State).
 
-handle_cast({method, Method, Content}, State = #ch{conn_pid = Conn}) ->
-    case Content of
-        none -> ok;
-        _    -> credit_flow:ack(Conn)
+handle_cast({method, Method, Content, Flow}, State = #ch{conn_pid = Conn}) ->
+    case Flow of
+        flow   -> credit_flow:ack(Conn);
+        noflow -> ok
     end,
     try handle_method(Method, Content, State) of
         {reply, Reply, NewState} ->
