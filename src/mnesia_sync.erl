@@ -16,7 +16,7 @@
 
 -module(mnesia_sync).
 
--behaviour(gen_server2).
+-behaviour(gen_server).
 
 -export([sync/0]).
 
@@ -25,7 +25,7 @@
 
 -define(SERVER, ?MODULE).
 
--record(state, {sync_pid}).
+-record(state, {waiting, disc_node}).
 
 %%----------------------------------------------------------------------------
 
@@ -38,55 +38,34 @@
 %%----------------------------------------------------------------------------
 
 start_link() ->
-    gen_server2:start_link({local, ?SERVER}, ?MODULE, [], []).
+    gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
 sync() ->
-    gen_server2:call(?SERVER, sync, infinity).
-
-%%----------------------------------------------------------------------------
-
-sync_proc() ->
-    receive
-        {sync_request, From} -> sync_proc([From]);
-        stop                 -> ok;
-        Other                -> error({unexpected_non_sync, Other})
-    end.
-
-sync_proc(Waiting) ->
-    receive
-        {sync_request, From} -> sync_proc([From | Waiting])
-    after 0 ->
-        disk_log:sync(latest_log),
-        [gen_server2:reply(From, ok) || From <- Waiting],
-        sync_proc()
-    end.
+    gen_server:call(?SERVER, sync, infinity).
 
 %%----------------------------------------------------------------------------
 
 init([]) ->
-    {ok, #state{sync_pid = case mnesia:system_info(use_dir) of
-                               true  -> proc_lib:spawn_link(fun sync_proc/0);
-                               false -> undefined
-                           end}}.
+    {ok, #state{disc_node = mnesia:system_info(use_dir), waiting = []}}.
 
-handle_call(sync, _From, #state{sync_pid = undefined} = State) ->
+handle_call(sync, _From, #state{disc_node = false} = State) ->
     {reply, ok, State};
-handle_call(sync, From, #state{sync_pid = SyncProcPid} = State) ->
-    SyncProcPid ! {sync_request, From},
-    {noreply, State};
+handle_call(sync, From, #state{waiting = Waiting} = State) ->
+    {noreply, State#state{waiting = [From | Waiting]}, 0};
 handle_call(Request, _From, State) ->
     {stop, {unhandled_call, Request}, State}.
 
 handle_cast(Request, State) ->
     {stop, {unhandled_cast, Request}, State}.
 
+handle_info(timeout, #state{waiting = Waiting} = State) ->
+    disk_log:sync(latest_log),
+    [gen_server:reply(From, ok) || From <- Waiting],
+    {noreply, State#state{waiting = []}};
 handle_info(Message, State) ->
     {stop, {unhandled_info, Message}, State}.
 
-terminate(_Reason, #state{sync_pid = undefined}) ->
-    ok;
-terminate(_Reason, #state{sync_pid = SyncProcPid}) ->
-    SyncProcPid ! stop,
+terminate(_Reason, _State) ->
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
