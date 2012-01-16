@@ -148,9 +148,8 @@ init([#amqqueue { name = QueueName } = Q]) ->
     {ok, State, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
-handle_call({deliver_immediately, Delivery = #delivery {}}, From, State) ->
-    %% Synchronous, "immediate" delivery mode
-
+handle_call({deliver, Delivery = #delivery { immediate = true }},
+            From, State) ->
     %% It is safe to reply 'false' here even if a) we've not seen the
     %% msg via gm, or b) the master dies before we receive the msg via
     %% gm. In the case of (a), we will eventually receive the msg via
@@ -166,8 +165,8 @@ handle_call({deliver_immediately, Delivery = #delivery {}}, From, State) ->
     gen_server2:reply(From, false), %% master may deliver it, not us
     noreply(maybe_enqueue_message(Delivery, false, State));
 
-handle_call({deliver, Delivery = #delivery {}}, From, State) ->
-    %% Synchronous, "mandatory" delivery mode
+handle_call({deliver, Delivery = #delivery { mandatory = true }},
+            From, State) ->
     gen_server2:reply(From, true), %% amqqueue throws away the result anyway
     noreply(maybe_enqueue_message(Delivery, true, State));
 
