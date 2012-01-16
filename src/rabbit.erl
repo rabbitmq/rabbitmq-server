@@ -319,15 +319,17 @@ status() ->
                                         get_vm_memory_high_watermark, []}},
             {vm_memory_limit,          {vm_memory_monitor,
                                         get_memory_limit, []}}]),
-    S3 = [{file_descriptors, file_handle_cache:info()},
-          {processes,        [{limit, erlang:system_info(process_limit)},
+    S3 = rabbit_misc:with_exit_handler(
+           fun () -> [] end,
+           fun () -> [{file_descriptors, file_handle_cache:info()}] end),
+    S4 = [{processes,        [{limit, erlang:system_info(process_limit)},
                               {used, erlang:system_info(process_count)}]},
           {run_queue,        erlang:statistics(run_queue)},
           {uptime,           begin
                                  {T,_} = erlang:statistics(wall_clock),
                                  T div 1000
                              end}],
-    S1 ++ S2 ++ S3.
+    S1 ++ S2 ++ S3 ++ S4.
 
 is_running() -> is_running(node()).
 
