@@ -1047,9 +1047,9 @@ handle_cast({run_backing_queue, Mod, Fun}, State) ->
 
 handle_cast({deliver, Delivery = #delivery{sender = Sender}, Flow}, State) ->
     %% Asynchronous, non-"mandatory", non-"immediate" deliver mode.
-    ch_record_publisher(Sender),
     case Flow of
-        flow   -> credit_flow:ack(Sender);
+        flow   -> ch_record_publisher(Sender),
+                  credit_flow:ack(Sender);
         noflow -> ok
     end,
     noreply(deliver_or_enqueue(Delivery, State));
