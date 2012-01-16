@@ -1346,17 +1346,11 @@ notify_limiter(Limiter, Acked) ->
 
 deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{
                                                        exchange_name = XName},
-                                        mandatory  = Mandatory,
-                                        immediate  = Immediate,
                                         msg_seq_no = MsgSeqNo},
                    QNames}, State) ->
     {RoutingRes, DeliveredQPids} =
-        rabbit_amqqueue:deliver(rabbit_amqqueue:lookup(QNames), Delivery),
+        rabbit_amqqueue:deliver_flow(rabbit_amqqueue:lookup(QNames), Delivery),
     State1 = lists:foldl(fun monitor_queue/2, State, DeliveredQPids),
-    case {Mandatory, Immediate} of
-        {false, false} -> [credit_flow:send(QPid) || QPid <- DeliveredQPids];
-        _              -> ok
-    end,
     State2 = process_routing_result(RoutingRes, DeliveredQPids,
                                     XName, MsgSeqNo, Message, State1),
     maybe_incr_stats([{XName, 1} |

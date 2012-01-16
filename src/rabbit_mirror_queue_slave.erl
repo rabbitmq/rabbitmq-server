@@ -207,9 +207,12 @@ handle_cast({run_backing_queue, Mod, Fun}, State) ->
 handle_cast({gm, Instruction}, State) ->
     handle_process_result(process_instruction(Instruction, State));
 
-handle_cast({deliver, Delivery = #delivery{sender = Sender}}, State) ->
+handle_cast({deliver, Delivery = #delivery{sender = Sender}, Flow}, State) ->
     %% Asynchronous, non-"mandatory", non-"immediate" deliver mode.
-    credit_flow:ack(Sender),
+    case Flow of
+        flow   -> credit_flow:ack(Sender);
+        noflow -> ok
+    end,
     noreply(maybe_enqueue_message(Delivery, true, State));
 
 handle_cast({set_maximum_since_use, Age}, State) ->

@@ -1045,10 +1045,13 @@ handle_call({requeue, AckTags, ChPid}, From, State) ->
 handle_cast({run_backing_queue, Mod, Fun}, State) ->
     noreply(run_backing_queue(Mod, Fun, State));
 
-handle_cast({deliver, Delivery = #delivery{sender = Sender}}, State) ->
+handle_cast({deliver, Delivery = #delivery{sender = Sender}, Flow}, State) ->
     %% Asynchronous, non-"mandatory", non-"immediate" deliver mode.
     ch_record_publisher(Sender),
-    credit_flow:ack(Sender),
+    case Flow of
+        flow   -> credit_flow:ack(Sender);
+        noflow -> ok
+    end,
     noreply(deliver_or_enqueue(Delivery, State));
 
 handle_cast({ack, AckTags, ChPid}, State) ->
