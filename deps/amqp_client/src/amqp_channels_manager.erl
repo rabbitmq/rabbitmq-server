@@ -22,7 +22,8 @@
 -behaviour(gen_server).
 
 -export([start_link/2, open_channel/4, set_channel_max/2, is_empty/1,
-         num_channels/1, pass_frame/3, signal_connection_closing/3]).
+         num_channels/1, pass_frame/3, signal_connection_closing/3,
+         process_channel_frame/4]).
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2]).
 
@@ -58,6 +59,19 @@ pass_frame(ChMgr, ChNumber, Frame) ->
 
 signal_connection_closing(ChMgr, ChannelCloseType, Reason) ->
     gen_server:cast(ChMgr, {connection_closing, ChannelCloseType, Reason}).
+
+process_channel_frame(Frame, Channel, ChPid, AState) ->
+    case rabbit_command_assembler:process(Frame, AState) of
+        {ok, NewAState}                  -> NewAState;
+        {ok, Method, NewAState}          -> rabbit_channel:do(ChPid, Method),
+                                            NewAState;
+        {ok, Method, Content, NewAState} -> rabbit_channel:do(ChPid, Method,
+                                                              Content),
+                                            NewAState;
+        {error, Reason}                  -> ChPid ! {channel_exit, Channel,
+                                                     Reason},
+                                            AState
+    end.
 
 %%---------------------------------------------------------------------------
 %% gen_server callbacks
@@ -197,11 +211,7 @@ internal_pass_frame(Number, Frame, State) ->
             ?LOG_INFO("Dropping frame ~p for invalid or closed "
                       "channel number ~p~n", [Frame, Number]);
         {ChPid, AState} ->
-            NewAState = rabbit_reader:process_channel_frame(
-                          Frame, ChPid, Number,
-                          fun (Method, Content) ->
-                                  rabbit_channel:do(ChPid, Method, Content)
-                          end, AState),
+            NewAState = process_channel_frame(Frame, Number, ChPid, AState),
             internal_update_npa(Number, ChPid, NewAState, State)
     end.
 
