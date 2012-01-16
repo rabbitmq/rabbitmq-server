@@ -23,7 +23,10 @@
 -define(FUNCTION,
         begin
             catch throw(x),
-            [{_, Fun, _} | _] = erlang:get_stacktrace(),
+            Fun = case erlang:get_stacktrace() of
+                      [{_, F, _}    | _] -> F; %% < R15
+                      [{_, F, _, _} | _] -> F %% >= R15
+                  end,
             list_to_atom(string:strip(atom_to_list(Fun), right, $_))
         end).
 
