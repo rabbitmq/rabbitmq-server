@@ -468,7 +468,7 @@ write(MsgId, Msg,
     ok = client_update_flying(+1, MsgId, CState),
     ok = update_msg_cache(CurFileCacheEts, MsgId, Msg),
     credit_flow:send(whereis(Server)),
-    ok = server_cast(CState, {write, CRef, self(), MsgId}).
+    ok = server_cast(CState, {write, CRef, MsgId}).
 
 read(MsgId,
      CState = #client_msstate { cur_file_cache_ets = CurFileCacheEts }) ->
@@ -798,8 +798,10 @@ handle_cast({client_delete, CRef},
     State1 = State #msstate { clients = dict:erase(CRef, Clients) },
     noreply(remove_message(CRef, CRef, clear_client(CRef, State1)));
 
-handle_cast({write, CRef, CPid, MsgId},
-            State = #msstate { cur_file_cache_ets = CurFileCacheEts }) ->
+handle_cast({write, CRef, MsgId},
+            State = #msstate { cur_file_cache_ets = CurFileCacheEts,
+                               clients            = Clients }) ->
+    {_, _, CPid} = dict:fetch(CRef, Clients),
     credit_flow:ack(CPid),
     true = 0 =< ets:update_counter(CurFileCacheEts, MsgId, {3, -1}),
     case update_flying(-1, MsgId, CRef, State) of
