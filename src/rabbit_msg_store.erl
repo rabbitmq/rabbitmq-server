@@ -436,7 +436,7 @@ client_init(Server, Ref, MsgOnDiskFun, CloseFDsFun) ->
     {IState, IModule, Dir, GCPid,
      FileHandlesEts, FileSummaryEts, CurFileCacheEts, FlyingEts} =
         gen_server2:call(
-          Server, {new_client_state, Ref, MsgOnDiskFun, CloseFDsFun, self()},
+          Server, {new_client_state, Ref, self(), MsgOnDiskFun, CloseFDsFun},
           infinity),
     #client_msstate { server             = Server,
                       client_ref         = Ref,
@@ -736,7 +736,7 @@ init([Server, BaseDir, ClientRefs, StartupFunState]) ->
 prioritise_call(Msg, _From, _State) ->
     case Msg of
         successfully_recovered_state                        -> 7;
-        {new_client_state, _Ref, _MODC, _CloseFDsFun, _Pid} -> 7;
+        {new_client_state, _Ref, _Pid, _MODC, _CloseFDsFun} -> 7;
         {read, _MsgId}                                      -> 2;
         _                                                   -> 0
     end.
@@ -759,7 +759,7 @@ prioritise_info(Msg, _State) ->
 handle_call(successfully_recovered_state, _From, State) ->
     reply(State #msstate.successfully_recovered, State);
 
-handle_call({new_client_state, CRef, MsgOnDiskFun, CloseFDsFun, Pid}, _From,
+handle_call({new_client_state, CRef, CPid, MsgOnDiskFun, CloseFDsFun}, _From,
             State = #msstate { dir                = Dir,
                                index_state        = IndexState,
                                index_module       = IndexModule,
@@ -769,7 +769,7 @@ handle_call({new_client_state, CRef, MsgOnDiskFun, CloseFDsFun, Pid}, _From,
                                flying_ets         = FlyingEts,
                                clients            = Clients,
                                gc_pid             = GCPid }) ->
-    Clients1 = dict:store(CRef, {MsgOnDiskFun, CloseFDsFun, Pid}, Clients),
+    Clients1 = dict:store(CRef, {CPid, MsgOnDiskFun, CloseFDsFun}, Clients),
     reply({IndexState, IndexModule, Dir, GCPid, FileHandlesEts, FileSummaryEts,
            CurFileCacheEts, FlyingEts},
           State #msstate { clients = Clients1 });
@@ -793,15 +793,15 @@ handle_cast({client_dying, CRef},
 
 handle_cast({client_delete, CRef},
             State = #msstate { clients = Clients }) ->
-    {_, _, Pid} = dict:fetch(CRef, Clients),
-    credit_flow:peer_down(Pid),
+    {CPid, _, _} = dict:fetch(CRef, Clients),
+    credit_flow:peer_down(CPid),
     State1 = State #msstate { clients = dict:erase(CRef, Clients) },
     noreply(remove_message(CRef, CRef, clear_client(CRef, State1)));
 
 handle_cast({write, CRef, MsgId},
             State = #msstate { cur_file_cache_ets = CurFileCacheEts,
                                clients            = Clients }) ->
-    {_, _, CPid} = dict:fetch(CRef, Clients),
+    {CPid, _, _} = dict:fetch(CRef, Clients),
     credit_flow:ack(CPid),
     true = 0 =< ets:update_counter(CurFileCacheEts, MsgId, {3, -1}),
     case update_flying(-1, MsgId, CRef, State) of
@@ -1213,10 +1213,10 @@ update_pending_confirms(Fun, CRef,
                         State = #msstate { clients         = Clients,
                                            cref_to_msg_ids = CTM }) ->
     case dict:fetch(CRef, Clients) of
-        {undefined,    _CloseFDsFun, _Pid} -> State;
-        {MsgOnDiskFun, _CloseFDsFun, _Pid} -> CTM1 = Fun(MsgOnDiskFun, CTM),
-                                              State #msstate {
-                                                cref_to_msg_ids = CTM1 }
+        {_CPid, undefined,    _CloseFDsFun} -> State;
+        {_CPid, MsgOnDiskFun, _CloseFDsFun} -> CTM1 = Fun(MsgOnDiskFun, CTM),
+                                               State #msstate {
+                                                 cref_to_msg_ids = CTM1 }
     end.
 
 record_pending_confirm(CRef, MsgId, State) ->
@@ -1303,9 +1303,9 @@ mark_handle_to_close(ClientRefs, FileHandlesEts, File, Invoke) ->
           case (ets:update_element(FileHandlesEts, Key, {2, close})
                 andalso Invoke) of
               true  -> case dict:fetch(Ref, ClientRefs) of
-                           {_MsgOnDiskFun, undefined,   _Pid} ->
+                           {_CPid, _MsgOnDiskFun, undefined} ->
                                ok;
-                           {_MsgOnDiskFun, CloseFDsFun, _Pid} ->
+                           {_CPid, _MsgOnDiskFun, CloseFDsFun} ->
                                ok = CloseFDsFun()
                        end;
               false -> ok
