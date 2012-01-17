@@ -19,7 +19,7 @@
 -behaviour(gen_server).
 
 -export([start_link/0]).
--export([guid/0, fast_guid/0, string_guid/1, binstring_guid/1]).
+-export([gen/0, gen_secure/0, string/2, binary/2]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3]).
@@ -38,10 +38,10 @@
 -type(guid() :: binary()).
 
 -spec(start_link/0 :: () -> rabbit_types:ok_pid_or_error()).
--spec(guid/0 :: () -> guid()).
--spec(fast_guid/0 :: () -> guid()).
--spec(string_guid/1 :: (any()) -> string()).
--spec(binstring_guid/1 :: (any()) -> binary()).
+-spec(gen/0 :: () -> guid()).
+-spec(gen_secure/0 :: () -> guid()).
+-spec(string/2 :: (guid(), any()) -> string()).
+-spec(binary/2 :: (guid(), any()) -> binary()).
 
 -endif.
 
@@ -66,9 +66,8 @@ update_disk_serial() ->
     end,
     Serial.
 
-%% Generate an un-hashed guid. To be used when one is hashed in the process
-%% dictionary.
-fresh_guid() ->
+%% Generate an un-hashed guid.
+fresh() ->
     %% We don't use erlang:now() here because a) it may return
     %% duplicates when the system clock has been rewound prior to a
     %% restart, or ids were generated at a high rate (which causes
@@ -81,30 +80,14 @@ fresh_guid() ->
     Serial = gen_server:call(?SERVER, serial, infinity),
     {Serial, node(), make_ref()}.
 
-%% generate a non-predictable GUID.
-%%
-%% The id is only unique within a single cluster and as long as the
-%% serial store hasn't been deleted.
-%%
-%% If you are not concerned with predictability, fast_guid/0 is faster.
-guid() ->
-    %% Here instead of hashing once we hash the GUID and the counter each time,
-    %% so that the GUID is not predictable.
-    G = case get(fast_guid) of
-            undefined -> {fresh_guid(), 0};
-            {S, I}    -> {S, I+1}
-        end,
-    put(fast_guid, G),
-    erlang:md5(term_to_binary(G)).
-
 %% generate a GUID. This function should be used when performance is a
-%% priority and predictability is not an issue.
-fast_guid() ->
+%% priority and predictability is not an issue. Otherwise, use gen_secure/0.
+gen() ->
     %% We hash a fresh GUID and then XOR it with a process-local counter
     %% to get a new GUID each time.
     {S, I} =
         case get(guid) of
-            undefined -> G = fresh_guid(),
+            undefined -> G = fresh(),
                          <<S0:128/integer>> = erlang:md5(term_to_binary(G)),
                          {S0, 0};
             {S0, I0}  -> {S0, I0+1}
@@ -112,19 +95,35 @@ fast_guid() ->
     put(guid, {S, I}),
     <<(S bxor I):128>>.
 
+%% generate a non-predictable GUID.
+%%
+%% The id is only unique within a single cluster and as long as the
+%% serial store hasn't been deleted.
+%%
+%% If you are not concerned with predictability, gen/0 is faster.
+gen_secure() ->
+    %% Here instead of hashing once we hash the GUID and the counter each time,
+    %% so that the GUID is not predictable.
+    G = case get(fast_guid) of
+            undefined -> {fresh(), 0};
+            {S, I}    -> {S, I+1}
+        end,
+    put(fast_guid, G),
+    erlang:md5(term_to_binary(G)).
+
 %% generate a readable string representation of a GUID.
 %%
 %% employs base64url encoding, which is safer in more contexts than
 %% plain base64.
-string_guid(Prefix) ->
+string(G, Prefix) ->
     Prefix ++ "-" ++ lists:foldl(fun ($\+, Acc) -> [$\- | Acc];
                                      ($\/, Acc) -> [$\_ | Acc];
                                      ($\=, Acc) -> Acc;
                                      (Chr, Acc) -> [Chr | Acc]
-                                 end, [], base64:encode_to_string(guid())).
+                                 end, [], base64:encode_to_string(G)).
 
-binstring_guid(Prefix) ->
-    list_to_binary(string_guid(Prefix)).
+binary(G, Prefix) ->
+    list_to_binary(string(G, Prefix)).
 
 %%----------------------------------------------------------------------------
 

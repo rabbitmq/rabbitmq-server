@@ -730,7 +730,8 @@ handle_method(#'basic.consume'{queue        = QueueNameBin,
             check_read_permitted(QueueName, State),
             ActualConsumerTag =
                 case ConsumerTag of
-                    <<>>  -> rabbit_guid:binstring_guid("amq.ctag");
+                    <<>>  -> rabbit_guid:binary(rabbit_guid:gen_secure(),
+                                                "amq.ctag");
                     Other -> Other
                 end,
 
@@ -960,7 +961,8 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
                 false -> none
             end,
     ActualNameBin = case QueueNameBin of
-                        <<>>  -> rabbit_guid:binstring_guid("amq.gen");
+                        <<>>  -> rabbit_guid:binary(rabbit_guid:gen_secure(),
+                                                    "amq.gen");
                         Other -> check_name('queue', Other)
                     end,
     QueueName = rabbit_misc:r(VHostPath, queue, ActualNameBin),
