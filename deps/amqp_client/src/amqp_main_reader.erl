@@ -104,7 +104,7 @@ process_frame(Type, ChNumber, Payload, State = #state{connection = Connection}) 
     end.
 
 pass_frame(0, Frame, State = #state{connection = Conn, astate = AState}) ->
-    State#state{astate = rabbit_channels_manager:process_channel_frame(
+    State#state{astate = amqp_channels_manager:process_channel_frame(
                            Frame, 0, Conn, AState)};
 pass_frame(Number, Frame, State = #state{channels_manager = ChMgr}) ->
     amqp_channels_manager:pass_frame(ChMgr, Number, Frame),
