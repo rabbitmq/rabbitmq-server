@@ -139,7 +139,7 @@ message(XName, RoutingKey, #content{properties = Props} = DecodedContent) ->
         {ok, #basic_message{
            exchange_name = XName,
            content       = strip_header(DecodedContent, ?DELETED_HEADER),
-           id            = rabbit_guid:guid(),
+           id            = rabbit_guid:fast_guid(),
            is_persistent = is_message_persistent(DecodedContent),
            routing_keys  = [RoutingKey |
                             header_routes(Props#'P_basic'.headers)]}}
