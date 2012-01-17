@@ -104,11 +104,11 @@ gen() ->
 gen_secure() ->
     %% Here instead of hashing once we hash the GUID and the counter each time,
     %% so that the GUID is not predictable.
-    G = case get(fast_guid) of
+    G = case get(guid_secure) of
             undefined -> {fresh(), 0};
             {S, I}    -> {S, I+1}
         end,
-    put(fast_guid, G),
+    put(guid_secure, G),
     erlang:md5(term_to_binary(G)).
 
 %% generate a readable string representation of a GUID.
