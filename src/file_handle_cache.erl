@@ -125,8 +125,7 @@
 %% requesting process is considered to 'own' one more
 %% descriptor. release/0 is the inverse operation and releases a
 %% previously obtained descriptor. transfer/1 transfers ownership of a
-%% file descriptor between processes. It is non-blocking. Obtain is
-%% used to obtain permission to accept file descriptors. Obtain has a
+%% file descriptor between processes. It is non-blocking. Obtain has a
 %% lower limit, set by the ?OBTAIN_LIMIT/1 macro. File handles can use
 %% the entire limit, but will be evicted by obtain calls up to the
 %% point at which no more obtain calls can be satisfied by the obtains
@@ -262,7 +261,7 @@
 -endif.
 
 %%----------------------------------------------------------------------------
--define(INFO_KEYS, [obtain_count, obtain_limit]).
+-define(INFO_KEYS, [total_limit, total_used, sockets_limit, sockets_used]).
 
 %%----------------------------------------------------------------------------
 %% Public API
@@ -790,8 +789,10 @@ write_buffer(Handle = #handle { hdl = Hdl, offset = Offset,
 
 infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
 
-i(obtain_count, #fhc_state{obtain_count = Count}) -> Count;
-i(obtain_limit, #fhc_state{obtain_limit = Limit}) -> Limit;
+i(total_limit,   #fhc_state{limit        = Limit})               -> Limit;
+i(total_used,    #fhc_state{open_count = C1, obtain_count = C2}) -> C1 + C2;
+i(sockets_limit, #fhc_state{obtain_limit = Limit})               -> Limit;
+i(sockets_used,  #fhc_state{obtain_count = Count})               -> Count;
 i(Item, _) -> throw({bad_argument, Item}).
 
 %%----------------------------------------------------------------------------

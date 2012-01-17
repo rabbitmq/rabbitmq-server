@@ -2232,7 +2232,7 @@ with_fresh_variable_queue(Fun) ->
     _ = rabbit_variable_queue:delete_and_terminate(shutdown, Fun(VQ)),
     passed.
 
-publish_and_confirm(QPid, Payload, Count) ->
+publish_and_confirm(Q, Payload, Count) ->
     Seqs = lists:seq(1, Count),
     [begin
          Msg = rabbit_basic:message(rabbit_misc:r(<<>>, exchange, <<>>),
@@ -2240,7 +2240,7 @@ publish_and_confirm(QPid, Payload, Count) ->
                                     Payload),
          Delivery = #delivery{mandatory = false, immediate = false,
                               sender = self(), message = Msg, msg_seq_no = Seq},
-         true = rabbit_amqqueue:deliver(QPid, Delivery)
+         {routed, _} = rabbit_amqqueue:deliver([Q], Delivery)
      end || Seq <- Seqs],
     wait_for_confirms(gb_sets:from_list(Seqs)).
 
@@ -2477,7 +2477,7 @@ test_queue_recover() ->
     Count = 2 * rabbit_queue_index:next_segment_boundary(0),
     {new, #amqqueue { pid = QPid, name = QName } = Q} =
         rabbit_amqqueue:declare(test_queue(), true, false, [], none),
-    publish_and_confirm(QPid, <<>>, Count),
+    publish_and_confirm(Q, <<>>, Count),
 
     exit(QPid, kill),
     MRef = erlang:monitor(process, QPid),
@@ -2507,7 +2507,7 @@ test_variable_queue_delete_msg_store_files_callback() ->
         rabbit_amqqueue:declare(test_queue(), true, false, [], none),
     Payload = <<0:8388608>>, %% 1MB
     Count = 30,
-    publish_and_confirm(QPid, Payload, Count),
+    publish_and_confirm(Q, Payload, Count),
 
     rabbit_amqqueue:set_ram_duration_target(QPid, 0),
 

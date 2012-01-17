@@ -59,7 +59,7 @@ peer_cert_subject(Cert) ->
                       format_rdn_sequence(Subject)
               end, Cert).
 
-%% Return a part of the certificate's subject.
+%% Return the parts of the certificate's subject.
 peer_cert_subject_items(Cert, Type) ->
     cert_info(fun(#'OTPCertificate' {
                      tbsCertificate = #'OTPTBSCertificate' {
