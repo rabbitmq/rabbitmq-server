@@ -66,7 +66,7 @@
 
 -behaviour(gen_server).
 
--export([call/2, call/3, cast/2, cast/3]).
+-export([call/2, call/3, cast/2, cast/3, cast_flow/3]).
 -export([close/1, close/3]).
 -export([register_return_handler/2, register_flow_handler/2,
          register_confirm_handler/2]).
@@ -158,7 +158,7 @@ call(Channel, Method, Content) ->
 %% @spec (Channel, Method) -> ok
 %% @doc This is equivalent to amqp_channel:cast(Channel, Method, none).
 cast(Channel, Method) ->
-    gen_server:cast(Channel, {cast, Method, none, self()}).
+    gen_server:cast(Channel, {cast, Method, none, self(), noflow}).
 
 %% @spec (Channel, Method, Content) -> ok
 %% where
@@ -170,7 +170,17 @@ cast(Channel, Method) ->
 %% This function is not recommended with synchronous methods, since there is no
 %% way to verify that the server has received the method.
 cast(Channel, Method, Content) ->
-    gen_server:cast(Channel, {cast, Method, Content, self()}).
+    gen_server:cast(Channel, {cast, Method, Content, self(), noflow}).
+
+%% @spec (Channel, Method, Content) -> ok
+%% where
+%%      Channel = pid()
+%%      Method = amqp_method()
+%%      Content = amqp_msg() | none
+%% @doc Like cast/3, with flow control.
+cast_flow(Channel, Method, Content) ->
+    credit_flow:send(Channel),
+    gen_server:cast(Channel, {cast, Method, Content, self(), flow}).
 
 %% @spec (Channel) -> ok | closing
 %% where
@@ -336,7 +346,10 @@ handle_call({subscribe, BasicConsume, Subscriber}, From, State) ->
     handle_method_to_server(BasicConsume, none, From, Subscriber, State).
 
 %% @private
-handle_cast({cast, Method, AmqpMsg, Sender}, State) ->
+handle_cast({cast, Method, AmqpMsg, Sender, noflow}, State) ->
+    handle_method_to_server(Method, AmqpMsg, none, Sender, State);
+handle_cast({cast, Method, AmqpMsg, Sender, flow}, State) ->
+    credit_flow:ack(Sender),
     handle_method_to_server(Method, AmqpMsg, none, Sender, State);
 %% @private
 handle_cast({register_return_handler, ReturnHandler}, State) ->
@@ -385,6 +398,10 @@ handle_info({channel_exit, _ChNumber, Reason}, State) ->
 %% This comes from rabbit_channel in the direct case
 handle_info({channel_closing, ChPid}, State) ->
     ok = rabbit_channel:ready_for_close(ChPid),
+    {noreply, State};
+%% @private
+handle_info({bump_credit, Msg}, State) ->
+    credit_flow:handle_bump_msg(Msg),
     {noreply, State};
 %% @private
 handle_info(timed_out_flushing_channel, State) ->
@@ -700,7 +717,7 @@ do(Method, Content, #state{driver = Driver, writer = W}) ->
               {network, _}    -> rabbit_writer:send_command_sync(W, Method,
                                                                  Content);
               {direct, none}  -> rabbit_channel:do(W, Method);
-              {direct, _}     -> rabbit_channel:do(W, Method, Content)
+              {direct, _}     -> rabbit_channel:do_flow(W, Method, Content)
           end.
 
 start_writer(State = #state{start_writer_fun = SWF}) ->
