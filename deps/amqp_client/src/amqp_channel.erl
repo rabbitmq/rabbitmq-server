@@ -306,13 +306,13 @@ init([Driver, Connection, ChannelNumber, Consumer, SWF]) ->
 
 %% @private
 handle_call(open, From, State) ->
-    {noreply, rpc_top_half(#'channel.open'{}, none, From, none, State)};
+    {noreply, rpc_top_half(#'channel.open'{}, none, From, none, noflow, State)};
 %% @private
 handle_call({close, Code, Text}, From, State) ->
     handle_close(Code, Text, From, State);
 %% @private
 handle_call({call, Method, AmqpMsg, Sender}, From, State) ->
-    handle_method_to_server(Method, AmqpMsg, From, Sender, State);
+    handle_method_to_server(Method, AmqpMsg, From, Sender, noflow, State);
 %% Handles the delivery of messages from a direct channel
 %% @private
 handle_call({send_command_sync, Method, Content}, From, State) ->
@@ -343,14 +343,15 @@ handle_call({call_consumer, Msg}, _From,
     {reply, amqp_gen_consumer:call_consumer(Consumer, Msg), State};
 %% @private
 handle_call({subscribe, BasicConsume, Subscriber}, From, State) ->
-    handle_method_to_server(BasicConsume, none, From, Subscriber, State).
+    handle_method_to_server(BasicConsume, none, From, Subscriber, noflow,
+                            State).
 
 %% @private
 handle_cast({cast, Method, AmqpMsg, Sender, noflow}, State) ->
-    handle_method_to_server(Method, AmqpMsg, none, Sender, State);
+    handle_method_to_server(Method, AmqpMsg, none, Sender, noflow, State);
 handle_cast({cast, Method, AmqpMsg, Sender, flow}, State) ->
     credit_flow:ack(Sender),
-    handle_method_to_server(Method, AmqpMsg, none, Sender, State);
+    handle_method_to_server(Method, AmqpMsg, none, Sender, flow, State);
 %% @private
 handle_cast({register_return_handler, ReturnHandler}, State) ->
     erlang:monitor(process, ReturnHandler),
@@ -439,7 +440,7 @@ code_change(_OldVsn, State, _Extra) ->
 %% RPC mechanism
 %%---------------------------------------------------------------------------
 
-handle_method_to_server(Method, AmqpMsg, From, Sender,
+handle_method_to_server(Method, AmqpMsg, From, Sender, Flow,
                         State = #state{unconfirmed_set = USet}) ->
     case {check_invalid_method(Method), From,
           check_block(Method, AmqpMsg, State)} of
@@ -457,7 +458,7 @@ handle_method_to_server(Method, AmqpMsg, From, Sender,
                              State
                      end,
             {noreply, rpc_top_half(Method, build_content(AmqpMsg),
-                                   From, Sender, State1)};
+                                   From, Sender, Flow, State1)};
         {ok, none, BlockReply} ->
             ?LOG_WARN("Channel (~p): discarding method ~p in cast.~n"
                       "Reason: ~p~n", [self(), Method, BlockReply]),
@@ -478,22 +479,23 @@ handle_close(Code, Text, From, State) ->
                              class_id   = 0,
                              method_id  = 0},
     case check_block(Close, none, State) of
-        ok         -> {noreply, rpc_top_half(Close, none, From, none, State)};
+        ok         -> {noreply, rpc_top_half(Close, none, From, none, noflow,
+                                             State)};
         BlockReply -> {reply, BlockReply, State}
     end.
 
-rpc_top_half(Method, Content, From, Sender,
+rpc_top_half(Method, Content, From, Sender, Flow,
              State0 = #state{rpc_requests = RequestQueue}) ->
     State1 = State0#state{
-        rpc_requests =
-                   queue:in({From, Sender, Method, Content}, RequestQueue)},
+        rpc_requests = queue:in({From, Sender, Method, Content, Flow},
+                                RequestQueue)},
     IsFirstElement = queue:is_empty(RequestQueue),
     if IsFirstElement -> do_rpc(State1);
        true           -> State1
     end.
 
 rpc_bottom_half(Reply, State = #state{rpc_requests = RequestQueue}) ->
-    {{value, {From, _Sender, _Method, _Content}}, RequestQueue1} =
+    {{value, {From, _Sender, _Method, _Content, _Flow}}, RequestQueue1} =
         queue:out(RequestQueue),
     case From of
         none -> ok;
@@ -504,9 +506,9 @@ rpc_bottom_half(Reply, State = #state{rpc_requests = RequestQueue}) ->
 do_rpc(State = #state{rpc_requests = Q,
                       closing      = Closing}) ->
     case queue:out(Q) of
-        {{value, {From, Sender, Method, Content}}, NewQ} ->
+        {{value, {From, Sender, Method, Content, Flow}}, NewQ} ->
             State1 = pre_do(Method, Content, Sender, State),
-            DoRet = do(Method, Content, State1),
+            DoRet = do(Method, Content, Flow, State1),
             case ?PROTOCOL:is_method_synchronous(Method) of
                 true  -> State1;
                 false -> case {From, DoRet} of
@@ -530,7 +532,7 @@ do_rpc(State = #state{rpc_requests = Q,
     end.
 
 pending_rpc_method(#state{rpc_requests = Q}) ->
-    {value, {_From, _Sender, Method, _Content}} = queue:peek(Q),
+    {value, {_From, _Sender, Method, _Content, _Flow}} = queue:peek(Q),
     Method.
 
 pre_do(#'channel.open'{}, none, _Sender, State) ->
@@ -579,13 +581,13 @@ handle_method_from_server1(#'channel.close'{reply_code = Code,
                            State = #state{closing = {just_channel, _}}) ->
     %% Both client and server sent close at the same time. Don't shutdown yet,
     %% wait for close_ok.
-    do(#'channel.close_ok'{}, none, State),
+    do(#'channel.close_ok'{}, none, noflow, State),
     {noreply,
      State#state{
          closing = {just_channel, {server_initiated_close, Code, Text}}}};
 handle_method_from_server1(#'channel.close'{reply_code = Code,
                                             reply_text = Text}, none, State) ->
-    do(#'channel.close_ok'{}, none, State),
+    do(#'channel.close_ok'{}, none, noflow, State),
     handle_shutdown({server_initiated_close, Code, Text}, State);
 handle_method_from_server1(#'channel.close_ok'{}, none,
                            State = #state{closing = Closing}) ->
@@ -621,7 +623,7 @@ handle_method_from_server1(#'channel.flow'{active = Active} = Flow, none,
     %% flushed beforehand. Methods that made it to the queue are not
     %% blocked in any circumstance.
     {noreply, rpc_top_half(#'channel.flow_ok'{active = Active}, none, none,
-                           none, State#state{flow_active = Active})};
+                           none, noflow, State#state{flow_active = Active})};
 handle_method_from_server1(
         #'basic.return'{} = BasicReturn, AmqpMsg,
         State = #state{return_handler_pid = ReturnHandler}) ->
@@ -710,14 +712,15 @@ handle_shutdown(Reason, State) ->
 %% Internal plumbing
 %%---------------------------------------------------------------------------
 
-do(Method, Content, #state{driver = Driver, writer = W}) ->
+do(Method, Content, Flow, #state{driver = Driver, writer = W}) ->
     %% Catching because it expects the {channel_exit, _, _} message on error
-    catch case {Driver, Content} of
-              {network, none} -> rabbit_writer:send_command_sync(W, Method);
-              {network, _}    -> rabbit_writer:send_command_sync(W, Method,
-                                                                 Content);
-              {direct, none}  -> rabbit_channel:do(W, Method);
-              {direct, _}     -> rabbit_channel:do_flow(W, Method, Content)
+    catch case {Driver, Content, Flow} of
+              {network, none, _}  -> rabbit_writer:send_command_sync(W, Method);
+              {network, _, _}     -> rabbit_writer:send_command_sync(W, Method,
+                                                                     Content);
+              {direct, none, _}   -> rabbit_channel:do(W, Method);
+              {direct, _, flow}   -> rabbit_channel:do_flow(W, Method, Content);
+              {direct, _, noflow} -> rabbit_channel:do(W, Method, Content)
           end.
 
 start_writer(State = #state{start_writer_fun = SWF}) ->
