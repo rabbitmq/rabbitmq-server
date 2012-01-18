@@ -343,6 +343,8 @@ function fmt_node_host(node_host) {
 }
 
 function fmt_connection_state(conn) {
+    if (conn.state == undefined) return '';
+
     var colour = 'green';
     var text = conn.state;
     var explanation;
