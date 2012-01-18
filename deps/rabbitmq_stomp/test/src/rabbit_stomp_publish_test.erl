@@ -26,7 +26,7 @@
 
 -define(DESTINATION, "/queue/test").
 
--define(MICROS_PER_UPDATE,     1000000).
+-define(MICROS_PER_UPDATE,     5000000).
 -define(MICROS_PER_UPDATE_MSG, 100000).
 
 %% A very simple publish-and-consume-as-fast-as-you-can test.
