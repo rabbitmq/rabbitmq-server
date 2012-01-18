@@ -36,19 +36,21 @@ all_tests() ->
 run_test(TestFun) ->
     {ok, Connection} = amqp_connection:start(#amqp_params_direct{}),
     {ok, Channel} = amqp_connection:open_channel(Connection),
-    {ok, Sock} = stomp_connect(),
+    {ok, Sock} = rabbit_stomp_client:connect(),
 
     Result = (catch TestFun(Channel, Sock)),
 
-    stomp_disconnect(Sock),
+    rabbit_stomp_client:disconnect(Sock),
     amqp_channel:close(Channel),
     amqp_connection:close(Connection),
     Result.
 
 test_subscribe_error(_Channel, Sock) ->
     %% SUBSCRIBE to missing queue
-    stomp_send(Sock, "SUBSCRIBE", [{"destination", ?DESTINATION}]),
-    #stomp_frame{command = "ERROR", headers = Hdrs} = stomp_recv(Sock),
+    rabbit_stomp_client:send(
+      Sock, "SUBSCRIBE", [{"destination", ?DESTINATION}]),
+    #stomp_frame{command = "ERROR",
+                 headers = Hdrs} = rabbit_stomp_client:recv(Sock),
     "not_found" = proplists:get_value("message", Hdrs),
     ok.
 
@@ -58,10 +60,9 @@ test_subscribe(Channel, Sock) ->
                                                     auto_delete = true}),
 
     %% subscribe and wait for receipt
-    stomp_send(Sock, "SUBSCRIBE", [{"destination", ?DESTINATION},
-                                   {"receipt", "foo"}]),
-    #stomp_frame{command = "RECEIPT"} = stomp_recv(Sock),
-
+    rabbit_stomp_client:send(Sock, "SUBSCRIBE", [{"destination", ?DESTINATION},
+                                                 {"receipt", "foo"}]),
+    #stomp_frame{command = "RECEIPT"} = rabbit_stomp_client:recv(Sock),
 
     %% send from amqp
     Method = #'basic.publish'{
@@ -72,7 +73,7 @@ test_subscribe(Channel, Sock) ->
                                                  payload = <<"hello">>}),
 
     #stomp_frame{command     = "MESSAGE",
-                 body_iolist = [<<"hello">>]} = stomp_recv(Sock),
+                 body_iolist = [<<"hello">>]} = rabbit_stomp_client:recv(Sock),
 
     ok.
 
@@ -82,44 +83,15 @@ test_send(Channel, Sock) ->
                                                     auto_delete = true}),
 
     %% subscribe and wait for receipt
-    stomp_send(Sock, "SUBSCRIBE", [{"destination", ?DESTINATION},
-                                   {"receipt", "foo"}]),
-    #stomp_frame{command = "RECEIPT"} = stomp_recv(Sock),
-
+    rabbit_stomp_client:send(
+      Sock, "SUBSCRIBE", [{"destination", ?DESTINATION}, {"receipt", "foo"}]),
+    #stomp_frame{command = "RECEIPT"} = rabbit_stomp_client:recv(Sock),
 
     %% send from stomp
-    stomp_send(Sock, "SEND", [{"destination", ?DESTINATION}], ["hello"]),
+    rabbit_stomp_client:send(
+      Sock, "SEND", [{"destination", ?DESTINATION}], ["hello"]),
 
     #stomp_frame{command     = "MESSAGE",
-                 body_iolist = [<<"hello">>]} = stomp_recv(Sock),
+                 body_iolist = [<<"hello">>]} = rabbit_stomp_client:recv(Sock),
 
     ok.
-
-stomp_connect() ->
-    {ok, Sock} = gen_tcp:connect(localhost, 61613, [{active, false}, binary]),
-    stomp_send(Sock, "CONNECT"),
-    #stomp_frame{command = "CONNECTED"} = stomp_recv(Sock),
-    {ok, Sock}.
-
-stomp_disconnect(Sock) ->
-    stomp_send(Sock, "DISCONNECT").
-
-stomp_send(Sock, Command) ->
-    stomp_send(Sock, Command, []).
-
-stomp_send(Sock, Command, Headers) ->
-    stomp_send(Sock, Command, Headers, []).
-
-stomp_send(Sock, Command, Headers, Body) ->
-    gen_tcp:send(Sock, rabbit_stomp_frame:serialize(
-                         #stomp_frame{command     = list_to_binary(Command),
-                                      headers     = Headers,
-                                      body_iolist = Body})).
-
-stomp_recv(Sock) ->
-    {ok, Payload} = gen_tcp:recv(Sock, 0),
-    {ok, Frame, _Rest} =
-        rabbit_stomp_frame:parse(Payload,
-                                 rabbit_stomp_frame:initial_state()),
-    Frame.
-
