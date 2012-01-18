@@ -26,9 +26,14 @@
 
 -define(DESTINATION, "/queue/test").
 
+-define(MICROS_PER_UPDATE,     1000000).
+-define(MICROS_PER_UPDATE_MSG, 100000).
+
 %% A very simple publish-and-consume-as-fast-as-you-can test.
 
 run() ->
+    [put(K, 0) || K <- [sent, recd, last_sent, last_recd]],
+    put(last_ts, erlang:now()),
     {ok, Pub} = rabbit_stomp_client:connect(),
     {ok, Recv} = rabbit_stomp_client:connect(),
     Self = self(),
@@ -40,12 +45,20 @@ run() ->
 
 report() ->
     receive
-        {send, Send} ->
-            receive
-                {recv, Recv} ->
-                    io:format("Send ~p msg/s | Receive ~p msg/s~n",
-                              [Send, Recv])
-            end
+        {sent, C} -> put(sent, get(sent) + C);
+        {recd, C} -> put(recd, get(recd) + C)
+    end,
+    Diff = timer:now_diff(erlang:now(), get(last_ts)),
+    case Diff > ?MICROS_PER_UPDATE of
+        true  -> S = get(sent) - get(last_sent),
+                 R = get(recd) - get(last_recd),
+                 put(last_sent, get(sent)),
+                 put(last_recd, get(recd)),
+                 put(last_ts, erlang:now()),
+                 io:format("Send ~p msg/s | Recv ~p msg/s~n",
+                           [trunc(S * ?MICROS_PER_UPDATE / Diff),
+                            trunc(R * ?MICROS_PER_UPDATE / Diff)]);
+        false -> ok
     end,
     report().
 
@@ -53,22 +66,18 @@ publish(Owner, Sock, Count, TS) ->
     rabbit_stomp_client:send(
       Sock, "SEND", [{"destination", ?DESTINATION}], ["hello"]),
     Diff = timer:now_diff(erlang:now(), TS),
-    case Diff > 1000000 of
-        true ->
-            Owner ! {send, Count},
-            publish(Owner, Sock, 0, erlang:now());
-        false ->
-            publish(Owner, Sock, Count + 1, TS)
+    case Diff > ?MICROS_PER_UPDATE_MSG of
+        true  -> Owner ! {sent, Count},
+                 publish(Owner, Sock, 0, erlang:now());
+        false -> publish(Owner, Sock, Count + 1, TS)
     end.
 
 recv(Owner, Sock, Count, TS) ->
     #stomp_frame{} = rabbit_stomp_client:recv(Sock),
     Diff = timer:now_diff(erlang:now(), TS),
-    case Diff > 1000000 of
-        true ->
-            Owner ! {recv, Count},
-            recv(Owner, Sock, 0, erlang:now());
-        false ->
-            recv(Owner, Sock, Count + 1, TS)
+    case Diff > ?MICROS_PER_UPDATE_MSG of
+        true  -> Owner ! {recd, Count},
+                 recv(Owner, Sock, 0, erlang:now());
+        false -> recv(Owner, Sock, Count + 1, TS)
     end.
 
