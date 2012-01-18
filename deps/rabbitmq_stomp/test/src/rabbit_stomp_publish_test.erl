@@ -28,6 +28,7 @@
 
 -define(MICROS_PER_UPDATE,     5000000).
 -define(MICROS_PER_UPDATE_MSG, 100000).
+-define(MICROS_PER_SECOND,     1000000).
 
 %% A very simple publish-and-consume-as-fast-as-you-can test.
 
@@ -56,8 +57,8 @@ report() ->
                  put(last_recd, get(recd)),
                  put(last_ts, erlang:now()),
                  io:format("Send ~p msg/s | Recv ~p msg/s~n",
-                           [trunc(S * ?MICROS_PER_UPDATE / Diff),
-                            trunc(R * ?MICROS_PER_UPDATE / Diff)]);
+                           [trunc(S * ?MICROS_PER_SECOND / Diff),
+                            trunc(R * ?MICROS_PER_SECOND / Diff)]);
         false -> ok
     end,
     report().
