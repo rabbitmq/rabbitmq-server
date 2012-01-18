@@ -2222,14 +2222,25 @@ test_amqqueue(Durable) ->
         #amqqueue { durable = Durable }.
 
 with_fresh_variable_queue(Fun) ->
-    ok = empty_test_queue(),
-    VQ = variable_queue_init(test_amqqueue(true), false),
-    S0 = rabbit_variable_queue:status(VQ),
-    assert_props(S0, [{q1, 0}, {q2, 0},
-                      {delta, {delta, undefined, 0, undefined}},
-                      {q3, 0}, {q4, 0},
-                      {len, 0}]),
-    _ = rabbit_variable_queue:delete_and_terminate(shutdown, Fun(VQ)),
+    Ref = make_ref(),
+    Me = self(),
+    %% Run in a separate process since rabbit_variable_queue will send
+    %% bump_credit messages and we want to ignore them
+    spawn(fun() ->
+                  ok = empty_test_queue(),
+                  VQ = variable_queue_init(test_amqqueue(true), false),
+                  S0 = rabbit_variable_queue:status(VQ),
+                  assert_props(S0, [{q1, 0}, {q2, 0},
+                                    {delta, {delta, undefined, 0, undefined}},
+                                    {q3, 0}, {q4, 0},
+                                    {len, 0}]),
+                  _ = rabbit_variable_queue:delete_and_terminate(
+                        shutdown, Fun(VQ)),
+                  Me ! Ref
+          end),
+    receive
+        Ref -> ok
+    end,
     passed.
 
 publish_and_confirm(Q, Payload, Count) ->
