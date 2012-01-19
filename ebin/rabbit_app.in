@@ -42,5 +42,6 @@
                                {reuseaddr,     true},
                                {backlog,       128},
                                {nodelay,       true},
+                               {linger,        {true, 0}},
                                {exit_on_close, false}]}
          ]}]}.
