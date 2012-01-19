@@ -56,9 +56,11 @@
 -record(binding, {source, key, destination, args = []}).
 -record(reverse_binding, {destination, key, source, args = []}).
 
+-record(topic_trie_node, {trie_node, edge_count, binding_count}).
 -record(topic_trie_edge, {trie_edge, node_id}).
 -record(topic_trie_binding, {trie_binding, value = const}).
 
+-record(trie_node, {exchange_name, node_id}).
 -record(trie_edge, {exchange_name, node_id, word}).
 -record(trie_binding, {exchange_name, node_id, destination}).
 
