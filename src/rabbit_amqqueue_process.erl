@@ -1032,7 +1032,7 @@ handle_cast({deliver, Delivery = #delivery{sender = Sender}, Flow}, State) ->
                       undefined -> put(Key, erlang:monitor(process, Sender));
                       _         -> ok
                   end,
-                  credit_flow:ack(Sender);
+                  credit_flow:ack(Sender, ?CREDIT_CPU_BOUND);
         noflow -> ok
     end,
     noreply(deliver_or_enqueue(Delivery, State));

@@ -535,7 +535,7 @@ deliver(Qs, Delivery = #delivery{mandatory = false, immediate = false}, Flow) ->
     %% case below.
     QPids = qpids(Qs),
     case Flow of
-        flow   -> [credit_flow:send(QPid) || QPid <- QPids];
+        flow   -> [credit_flow:send(QPid, ?CREDIT_CPU_BOUND) || QPid <- QPids];
         noflow -> ok
     end,
     delegate:invoke_no_result(

@@ -463,7 +463,7 @@ client_delete_and_terminate(CState = #client_msstate { client_ref = Ref }) ->
 client_ref(#client_msstate { client_ref = Ref }) -> Ref.
 
 write_flow(MsgId, Msg, CState = #client_msstate { server = Server }) ->
-    credit_flow:send(whereis(Server)),
+    credit_flow:send(whereis(Server), ?CREDIT_DISC_BOUND),
     client_write(MsgId, Msg, flow, CState).
 
 write(MsgId, Msg, CState) -> client_write(MsgId, Msg, noflow, CState).
@@ -808,7 +808,7 @@ handle_cast({write, CRef, MsgId, Flow},
                                clients            = Clients }) ->
     case Flow of
         flow   -> {CPid, _, _} = dict:fetch(CRef, Clients),
-                  credit_flow:ack(CPid);
+                  credit_flow:ack(CPid, ?CREDIT_DISC_BOUND);
         noflow -> ok
     end,
     true = 0 =< ets:update_counter(CurFileCacheEts, MsgId, {3, -1}),
