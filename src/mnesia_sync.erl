@@ -64,7 +64,7 @@ handle_cast(Request, State) ->
     {stop, {unhandled_cast, Request}, State}.
 
 handle_info(timeout, #state{waiting = Waiting} = State) ->
-    disk_log:sync(latest_log),
+    ok = disk_log:sync(latest_log),
     [gen_server:reply(From, ok) || From <- Waiting],
     {noreply, State#state{waiting = []}};
 handle_info(Message, State) ->
