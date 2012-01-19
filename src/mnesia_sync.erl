@@ -16,6 +16,11 @@
 
 -module(mnesia_sync).
 
+%% mnesia:sync_transaction/3 fails to guarantee that the log is flushed to disk
+%% at commit. This module is an attempt to minimise the risk of data loss by
+%% performing a coalesced log fsync, regardless of whether or not the log was
+%% appended to.
+
 -behaviour(gen_server).
 
 -export([sync/0]).
