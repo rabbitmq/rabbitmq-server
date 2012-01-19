@@ -104,6 +104,7 @@ init() ->
     %% Mnesia is up. In fact that's not guaranteed to be the case - let's
     %% make it so.
     ok = global:sync(),
+    rabbit_sup:start_child(mnesia_sync),
     ok.
 
 is_db_empty() ->
