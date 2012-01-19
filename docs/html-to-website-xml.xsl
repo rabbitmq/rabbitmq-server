@@ -28,36 +28,30 @@
   <head>
     <title><xsl:value-of select="document($original)/refentry/refnamediv/refname"/><xsl:if test="document($original)/refentry/refmeta/manvolnum">(<xsl:value-of select="document($original)/refentry/refmeta/manvolnum"/>)</xsl:if> manual page</title>
   </head>
-  <body>
-    <doc:div>
-      <xsl:choose>
+  <body show-in-this-page="true">
+    <xsl:choose>
       <xsl:when test="document($original)/refentry/refmeta/manvolnum">
-      <p>
-        This is the manual page for
-        <code><xsl:value-of select="document($original)/refentry/refnamediv/refname"/>(<xsl:value-of select="document($original)/refentry/refmeta/manvolnum"/>)</code>.
-      </p>
-      <p>
-        <a href="../manpages.html">See a list of all manual pages</a>.
-      </p>
+        <p>
+          This is the manual page for
+          <code><xsl:value-of select="document($original)/refentry/refnamediv/refname"/>(<xsl:value-of select="document($original)/refentry/refmeta/manvolnum"/>)</code>.
+        </p>
+        <p>
+          <a href="../manpages.html">See a list of all manual pages</a>.
+        </p>
       </xsl:when>
       <xsl:otherwise>
-      <p>
-        This is the documentation for
-        <code><xsl:value-of select="document($original)/refentry/refnamediv/refname"/></code>.
-      </p>
+        <p>
+          This is the documentation for
+          <code><xsl:value-of select="document($original)/refentry/refnamediv/refname"/></code>.
+        </p>
       </xsl:otherwise>
-      </xsl:choose>
-      <p>
+    </xsl:choose>
+    <p>
          For more general documentation, please see the
-        <a href="../admin-guide.html">administrator's guide</a>.
-      </p>
+         <a href="../admin-guide.html">administrator's guide</a>.
+    </p>
 
-      <doc:toc class="compact">
-        <doc:heading>Table of Contents</doc:heading>
-      </doc:toc>
-
-      <xsl:apply-templates select="body/div[@class='refentry']"/>
-    </doc:div>
+    <xsl:apply-templates select="body/div[@class='refentry']"/>
   </body>
 </html>
 </xsl:template>
