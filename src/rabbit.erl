@@ -158,8 +158,9 @@
                     {enables,     networking}]}).
 
 -rabbit_boot_step({direct_client,
-                   [{mfa,        {rabbit_direct, boot, []}},
-                    {requires,   log_relay}]}).
+                   [{description, "direct client"},
+                    {mfa,         {rabbit_direct, boot, []}},
+                    {requires,    log_relay}]}).
 
 -rabbit_boot_step({networking,
                    [{mfa,         {rabbit_networking, boot, []}},
