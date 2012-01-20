@@ -240,15 +240,20 @@ start_listener(Listener, Protocol, Label, OnConnect) ->
     ok.
 
 start_listener0({IPAddress, Port, Family, Name}, Protocol, Label, OnConnect) ->
-    {ok,_} = supervisor:start_child(
-               rabbit_sup,
-               {Name,
-                {tcp_listener_sup, start_link,
-                 [IPAddress, Port, [Family | tcp_opts()],
-                  {?MODULE, tcp_listener_started, [Protocol]},
-                  {?MODULE, tcp_listener_stopped, [Protocol]},
-                  OnConnect, Label]},
-                transient, infinity, supervisor, [tcp_listener_sup]}).
+    case supervisor:start_child(
+           rabbit_sup,
+           {Name,
+            {tcp_listener_sup, start_link,
+             [IPAddress, Port, [Family | tcp_opts()],
+              {?MODULE, tcp_listener_started, [Protocol]},
+              {?MODULE, tcp_listener_stopped, [Protocol]},
+              OnConnect, Label]},
+            transient, infinity, supervisor, [tcp_listener_sup]}) of
+        {ok, _} ->
+            ok;
+        {error, {shutdown, _}} ->
+            exit({could_not_start_tcp_listener, {IPAddress, Port}})
+    end.
 
 stop_tcp_listener(Listener) ->
     [stop_tcp_listener0(Spec) ||
