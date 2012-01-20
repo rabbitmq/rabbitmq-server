@@ -96,7 +96,7 @@ run(TestName, Props) ->
                  true  -> negative_test_util;
                  false -> test_util
              end,
-    {timeout, proplists:get_value(timeout, Props, 5),
+    {timeout, proplists:get_value(timeout, Props, 10),
      fun () ->
              lists:foreach(
                  fun (_) ->
