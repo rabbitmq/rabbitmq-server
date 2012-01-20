@@ -4,6 +4,7 @@
   {modules, []},
   {registered, []},
   {mod, {rabbit_mgmt_app, []}},
-  {env, [{http_log_dir, none}]},
+  {env, [{http_log_dir,          none},
+         {load_definitions,      none}]},
   {applications, [kernel, stdlib, rabbit, rabbitmq_mochiweb, amqp_client,
                   rabbitmq_management_agent]}]}.

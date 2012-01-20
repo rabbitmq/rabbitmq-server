@@ -20,6 +20,8 @@
 -export([content_types_accepted/2, allowed_methods/2, accept_json/2]).
 -export([post_is_create/2, create_path/2, accept_multipart/2]).
 
+-export([apply_defs/3]).
+
 -import(rabbit_misc, [pget/2]).
 
 -include("rabbit_mgmt.hrl").
@@ -100,23 +102,27 @@ is_authorized(ReqData, Context) ->
 %%--------------------------------------------------------------------
 
 accept(Body, ReqData, Context) ->
-    rabbit_mgmt_util:with_decode(
-      [users, vhosts, permissions, queues, exchanges, bindings],
-      Body, ReqData, Context,
-      fun([Users, VHosts, Permissions, Queues, Exchanges, Bindings], _) ->
-              try
-                  for_all(Users,       fun add_user/1),
-                  for_all(VHosts,      fun add_vhost/1),
-                  for_all(Permissions, fun add_permission/1),
-                  for_all(Queues,      fun add_queue/1),
-                  for_all(Exchanges,   fun add_exchange/1),
-                  for_all(Bindings,    fun add_binding/1),
-                  {true, ReqData, Context}
-              catch
-                  exit:E ->
-                      rabbit_mgmt_util:bad_request(E, ReqData, Context)
-              end
-      end).
+    apply_defs(Body, fun() -> {true, ReqData, Context} end,
+               fun(E) -> rabbit_mgmt_util:bad_request(E, ReqData, Context) end).
+
+apply_defs(Body, SuccessFun, ErrorFun) ->
+    case rabbit_mgmt_util:decode(
+           [users, vhosts, permissions, queues, exchanges, bindings], Body) of
+        {error, E} ->
+            ErrorFun(E);
+        {ok, [Users, VHosts, Permissions, Queues, Exchanges, Bindings], _} ->
+            try
+                for_all(Users,       fun add_user/1),
+                for_all(VHosts,      fun add_vhost/1),
+                for_all(Permissions, fun add_permission/1),
+                for_all(Queues,      fun add_queue/1),
+                for_all(Exchanges,   fun add_exchange/1),
+                for_all(Bindings,    fun add_binding/1),
+                SuccessFun()
+            catch {error, E} -> ErrorFun(E);
+                  exit:E     -> ErrorFun(E)
+            end
+    end.
 
 get_part(Name, Parts) ->
     Filtered = [Value || {N, _Meta, Value} <- Parts, N == Name],

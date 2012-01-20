@@ -27,7 +27,8 @@
 -export([with_channel/4, with_channel/5]).
 -export([props_to_method/2, props_to_method/4]).
 -export([all_or_one_vhost/2, http_to_amqp/5, reply/3, filter_vhost/3]).
--export([filter_conn_ch_list/3, with_decode/5, decode/1, redirect/2, args/1]).
+-export([filter_conn_ch_list/3, with_decode/5, decode/1, decode/2, redirect/2,
+         args/1]).
 -export([reply_list/3, reply_list/4, sort_list/2, destination_type/1]).
 -export([post_respond/1, columns/1, want_column/2, is_monitor/1]).
 -export([list_visible_vhosts/1, b64decode_or_throw/1]).
