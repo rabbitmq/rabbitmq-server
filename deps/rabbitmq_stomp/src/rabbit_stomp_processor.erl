@@ -257,8 +257,8 @@ handle_frame("UNSUBSCRIBE", Frame, State) ->
 
 handle_frame("SEND", Frame, State) ->
     without_headers(?HEADERS_NOT_ON_SEND, "SEND", Frame, State,
-        fun (Command, Frame, State) ->
-            with_destination("SEND", Frame, State, fun do_send/4)
+        fun (_Command, Frame1, State1) ->
+            with_destination("SEND", Frame1, State1, fun do_send/4)
         end);
 
 handle_frame("ACK", Frame, State) ->
