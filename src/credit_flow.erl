@@ -53,6 +53,9 @@
 %% variable names are used in credit bookkeeping and want to make
 %% sense internally).
 
+%% For any given pair of processes, ack/2 and send/2 must always be
+%% called with the same credit_spec().
+
 ack(To, {MaxCredit, MoreCreditAt}) ->
     MoreCreditAt1 = MoreCreditAt + 1,
     Credit =
