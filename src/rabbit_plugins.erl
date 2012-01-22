@@ -332,6 +332,7 @@ lookup_plugins(Names, AllPlugins) ->
 read_enabled_plugins(PluginsFile) ->
     case rabbit_file:read_term_file(PluginsFile) of
         {ok, [Plugins]} -> Plugins;
+        {ok, []}        -> [];
         {error, enoent} -> [];
         {error, Reason} -> throw({error, {cannot_read_enabled_plugins_file,
                                           PluginsFile, Reason}})
