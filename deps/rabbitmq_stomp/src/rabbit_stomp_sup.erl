@@ -33,8 +33,7 @@
 
 -export([start_link/2, init/1]).
 
--export([listener_started/3, listener_stopped/3,
-         start_client/2, start_ssl_client/3]).
+-export([start_client/2, start_ssl_client/3]).
 
 start_link(Listeners, Configuration) ->
     supervisor:start_link({local, ?MODULE}, ?MODULE,
@@ -81,16 +80,10 @@ listener_spec({IPAddress, Port, Family, Name},
      {tcp_listener_sup, start_link,
       [IPAddress, Port,
        [Family | SocketOpts],
-       {?MODULE, listener_started, [Protocol]},
-       {?MODULE, listener_stopped, [Protocol]},
+       {rabbit_networking, tcp_listener_started, [Protocol]},
+       {rabbit_networking, tcp_listener_stopped, [Protocol]},
        OnConnect, Label]},
      transient, infinity, supervisor, [tcp_listener_sup]}.
-
-listener_started(Protocol, IPAddress, Port) ->
-    rabbit_networking:tcp_listener_started(Protocol, IPAddress, Port).
-
-listener_stopped(Protocol, IPAddress, Port) ->
-    rabbit_networking:tcp_listener_stopped(Protocol, IPAddress, Port).
 
 start_client(Configuration, Sock) ->
     {ok, SupPid, ReaderPid} =
