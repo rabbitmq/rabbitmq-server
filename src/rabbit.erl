@@ -442,8 +442,7 @@ run_boot_step({StepName, Attributes}) ->
             [try
                  apply(M,F,A)
              catch
-                 _:Reason -> boot_error("FAILED~nReason: ~p~nStacktrace: ~p~n",
-                                        [Reason, erlang:get_stacktrace()])
+                 _:Reason -> boot_step_error(Reason, erlang:get_stacktrace())
              end || {M,F,A} <- MFAs],
             io:format("done~n"),
             ok
@@ -502,8 +501,14 @@ sort_boot_steps(UnsortedSteps) ->
                end])
     end.
 
+boot_step_error(Reason, Stacktrace) ->
+    boot_error("Error description:~n   ~p~n~n"
+               "Log file (may contain more information):~n   ~s~n~n"
+               "Stack trace:~n   ~p~n~n",
+               [Reason, log_location(sasl), Stacktrace]).
+
 boot_error(Format, Args) ->
-    io:format("BOOT ERROR: " ++ Format, Args),
+    io:format("~n~nBOOT FAILED~n===========~n~n" ++ Format, Args),
     error_logger:error_msg(Format, Args),
     timer:sleep(1000),
     exit({?MODULE, failure_during_boot}).
