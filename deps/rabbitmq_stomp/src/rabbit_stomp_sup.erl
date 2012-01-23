@@ -61,8 +61,7 @@ init([{Listeners, SslListeners}, Configuration]) ->
 listener_specs(Fun, Args, Listeners) ->
     [Fun([Address | Args]) ||
         Listener <- Listeners,
-        Address <- rabbit_networking:check_tcp_listener_address(
-                     rabbit_stomp_listener_sup, Listener)].
+        Address  <- rabbit_networking:tcp_listener_addresses(Listener)].
 
 tcp_listener_spec([Address, SocketOpts, Configuration]) ->
     listener_spec(Address, SocketOpts, stomp,
@@ -74,9 +73,9 @@ ssl_listener_spec([Address, SocketOpts, SslOpts, Configuration]) ->
                   {?MODULE, start_ssl_client, [Configuration, SslOpts]},
                   "STOMP SSL Listener").
 
-listener_spec({IPAddress, Port, Family, Name},
+listener_spec({IPAddress, Port, Family},
               SocketOpts, Protocol, OnConnect, Label) ->
-    {Name,
+    {rabbit_misc:tcp_name(rabbit_stomp_listener_sup, IPAddress, Port),
      {tcp_listener_sup, start_link,
       [IPAddress, Port,
        [Family | SocketOpts],
