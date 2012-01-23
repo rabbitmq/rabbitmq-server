@@ -140,39 +140,6 @@ start() ->
                 transient, infinity, supervisor, [rabbit_client_sup]}),
     ok.
 
-%% inet_parse:address takes care of ip string, like "0.0.0.0"
-%% inet:getaddr returns immediately for ip tuple {0,0,0,0},
-%%  and runs 'inet_gethost' port process for dns lookups.
-%% On Windows inet:getaddr runs dns resolver for ip string, which may fail.
-
-getaddr(Host, Family) ->
-    case inet_parse:address(Host) of
-        {ok, IPAddress} -> [{IPAddress, resolve_family(IPAddress, Family)}];
-        {error, _}      -> gethostaddr(Host, Family)
-    end.
-
-gethostaddr(Host, auto) ->
-    Lookups = [{Family, inet:getaddr(Host, Family)} || Family <- [inet, inet6]],
-    case [{IP, Family} || {Family, {ok, IP}} <- Lookups] of
-        []  -> host_lookup_error(Host, Lookups);
-        IPs -> IPs
-    end;
-
-gethostaddr(Host, Family) ->
-    case inet:getaddr(Host, Family) of
-        {ok, IPAddress} -> [{IPAddress, Family}];
-        {error, Reason} -> host_lookup_error(Host, Reason)
-    end.
-
-host_lookup_error(Host, Reason) ->
-    error_logger:error_msg("invalid host ~p - ~p~n", [Host, Reason]),
-    throw({error, {invalid_host, Host, Reason}}).
-
-resolve_family({_,_,_,_},         auto) -> inet;
-resolve_family({_,_,_,_,_,_,_,_}, auto) -> inet6;
-resolve_family(IP,                auto) -> throw({error, {strange_family, IP}});
-resolve_family(_,                 F)    -> F.
-
 ensure_ssl() ->
     ok = rabbit_misc:start_applications([crypto, public_key, ssl]),
     {ok, SslOptsConfig} = application:get_env(rabbit, ssl_options),
@@ -362,6 +329,38 @@ cmap(F) -> rabbit_misc:filter_exit_map(F, connections()).
 tcp_opts() ->
     {ok, Opts} = application:get_env(rabbit, tcp_listen_options),
     Opts.
+
+%% inet_parse:address takes care of ip string, like "0.0.0.0"
+%% inet:getaddr returns immediately for ip tuple {0,0,0,0},
+%%  and runs 'inet_gethost' port process for dns lookups.
+%% On Windows inet:getaddr runs dns resolver for ip string, which may fail.
+getaddr(Host, Family) ->
+    case inet_parse:address(Host) of
+        {ok, IPAddress} -> [{IPAddress, resolve_family(IPAddress, Family)}];
+        {error, _}      -> gethostaddr(Host, Family)
+    end.
+
+gethostaddr(Host, auto) ->
+    Lookups = [{Family, inet:getaddr(Host, Family)} || Family <- [inet, inet6]],
+    case [{IP, Family} || {Family, {ok, IP}} <- Lookups] of
+        []  -> host_lookup_error(Host, Lookups);
+        IPs -> IPs
+    end;
+
+gethostaddr(Host, Family) ->
+    case inet:getaddr(Host, Family) of
+        {ok, IPAddress} -> [{IPAddress, Family}];
+        {error, Reason} -> host_lookup_error(Host, Reason)
+    end.
+
+host_lookup_error(Host, Reason) ->
+    error_logger:error_msg("invalid host ~p - ~p~n", [Host, Reason]),
+    throw({error, {invalid_host, Host, Reason}}).
+
+resolve_family({_,_,_,_},         auto) -> inet;
+resolve_family({_,_,_,_,_,_,_,_}, auto) -> inet6;
+resolve_family(IP,                auto) -> throw({error, {strange_family, IP}});
+resolve_family(_,                 F)    -> F.
 
 %%--------------------------------------------------------------------
 
