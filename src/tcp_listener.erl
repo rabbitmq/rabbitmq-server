@@ -32,7 +32,7 @@
 -type(mfargs() :: {atom(), atom(), [any()]}).
 
 -spec(start_link/8 ::
-        (gen_tcp:ip_address(), integer(), [gen_tcp:listen_option()],
+        (inet:ip_address(), inet:port_number(), [gen_tcp:listen_option()],
          integer(), atom(), mfargs(), mfargs(), string()) ->
                            rabbit_types:ok_pid_or_error()).
 

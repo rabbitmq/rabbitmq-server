@@ -29,11 +29,11 @@
 -type(mfargs() :: {atom(), atom(), [any()]}).
 
 -spec(start_link/7 ::
-        (gen_tcp:ip_address(), integer(), [gen_tcp:listen_option()],
+        (inet:ip_address(), inet:port_number(), [gen_tcp:listen_option()],
          mfargs(), mfargs(), mfargs(), string()) ->
                            rabbit_types:ok_pid_or_error()).
 -spec(start_link/8 ::
-        (gen_tcp:ip_address(), integer(), [gen_tcp:listen_option()],
+        (inet:ip_address(), inet:port_number(), [gen_tcp:listen_option()],
          mfargs(), mfargs(), mfargs(), integer(), string()) ->
                            rabbit_types:ok_pid_or_error()).
 

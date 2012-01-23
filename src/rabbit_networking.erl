@@ -46,7 +46,7 @@
 -export_type([ip_port/0, hostname/0]).
 
 -type(hostname() :: inet:hostname()).
--type(ip_port() :: inet:ip_port()).
+-type(ip_port() :: inet:port_number()).
 
 -type(family() :: atom()).
 -type(listener_config() :: ip_port() |
