@@ -28,12 +28,9 @@
               binding/0, binding_source/0, binding_destination/0,
               amqqueue/0, exchange/0,
               connection/0, protocol/0, user/0, internal_user/0,
-              username/0, password/0, password_hash/0, ok/1, error/1,
-              ok_or_error/1, ok_or_error2/2, ok_pid_or_error/0, channel_exit/0,
-              connection_exit/0]).
-
--type(channel_exit() :: no_return()).
--type(connection_exit() :: no_return()).
+              username/0, password/0, password_hash/0,
+              ok/1, error/1, ok_or_error/1, ok_or_error2/2, ok_pid_or_error/0,
+              channel_exit/0, connection_exit/0, mfargs/0]).
 
 -type(maybe(T) :: T | 'none').
 -type(vhost() :: binary()).
@@ -155,5 +152,10 @@
 -type(ok_or_error(A) :: 'ok' | error(A)).
 -type(ok_or_error2(A, B) :: ok(A) | error(B)).
 -type(ok_pid_or_error() :: ok_or_error2(pid(), any())).
+
+-type(channel_exit() :: no_return()).
+-type(connection_exit() :: no_return()).
+
+-type(mfargs() :: {atom(), atom(), [any()]}).
 
 -endif. % use_specs
