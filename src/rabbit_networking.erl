@@ -252,7 +252,8 @@ start_listener0({IPAddress, Port, Family, Name}, Protocol, Label, OnConnect) ->
         {ok, _} ->
             ok;
         {error, {shutdown, _}} ->
-            exit({could_not_start_tcp_listener, {IPAddress, Port}})
+            exit({could_not_start_tcp_listener, [{port,      Port},
+                                                 {interface, IPAddress}]})
     end.
 
 stop_tcp_listener(Listener) ->
