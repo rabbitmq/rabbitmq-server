@@ -24,8 +24,7 @@
          close_connection/2, force_connection_event_refresh/0]).
 
 %%used by TCP-based transports, e.g. STOMP adapter
--export([check_tcp_listener_address/2,
-         ensure_ssl/0, ssl_transform_fun/1]).
+-export([tcp_listener_addresses/1, ensure_ssl/0, ssl_transform_fun/1]).
 
 -export([tcp_listener_started/3, tcp_listener_stopped/3,
          start_client/1, start_ssl_client/2]).
@@ -76,8 +75,8 @@
 -spec(force_connection_event_refresh/0 :: () -> 'ok').
 
 -spec(on_node_down/1 :: (node()) -> 'ok').
--spec(check_tcp_listener_address/2 :: (atom(), listener_config())
-        -> [{inet:ip_address(), ip_port(), family(), atom()}]).
+-spec(tcp_listener_addresses/1 :: (listener_config())
+        -> [{inet:ip_address(), ip_port(), family()}]).
 -spec(ensure_ssl/0 :: () -> rabbit_types:infos()).
 -spec(ssl_transform_fun/1 ::
         (rabbit_types:infos())
@@ -168,25 +167,24 @@ ssl_transform_fun(SslOpts) ->
             end
     end.
 
-check_tcp_listener_address(NamePrefix, Port) when is_integer(Port) ->
-    check_tcp_listener_address_auto(NamePrefix, Port);
-check_tcp_listener_address(NamePrefix, {"auto", Port}) ->
+tcp_listener_addresses(Port) when is_integer(Port) ->
+    tcp_listener_addresses_auto(Port);
+tcp_listener_addresses({"auto", Port}) ->
     %% Variant to prevent lots of hacking around in bash and batch files
-    check_tcp_listener_address_auto(NamePrefix, Port);
-check_tcp_listener_address(NamePrefix, {Host, Port}) ->
+    tcp_listener_addresses_auto(Port);
+tcp_listener_addresses({Host, Port}) ->
     %% auto: determine family IPv4 / IPv6 after converting to IP address
-    check_tcp_listener_address(NamePrefix, {Host, Port, auto});
-check_tcp_listener_address(NamePrefix, {Host, Port, Family0})
+    tcp_listener_addresses({Host, Port, auto});
+tcp_listener_addresses({Host, Port, Family0})
   when is_integer(Port) andalso (Port >= 0) andalso (Port =< 65535) ->
-    [{IPAddress, Port, Family,
-      rabbit_misc:tcp_name(NamePrefix, IPAddress, Port)} ||
+    [{IPAddress, Port, Family} ||
         {IPAddress, Family} <- getaddr(Host, Family0)];
-check_tcp_listener_address(_, {_Host, Port, _Family0}) ->
+tcp_listener_addresses({_Host, Port, _Family0}) ->
     error_logger:error_msg("invalid port ~p - not 0..65535~n", [Port]),
     throw({error, {invalid_port, Port}}).
 
-check_tcp_listener_address_auto(NamePrefix, Port) ->
-    lists:append([check_tcp_listener_address(NamePrefix, Listener) ||
+tcp_listener_addresses_auto(Port) ->
+    lists:append([tcp_listener_addresses(Listener) ||
                      Listener <- port_to_listeners(Port)]).
 
 start_tcp_listener(Listener) ->
@@ -198,14 +196,14 @@ start_ssl_listener(Listener, SslOpts) ->
                    {?MODULE, start_ssl_client, [SslOpts]}).
 
 start_listener(Listener, Protocol, Label, OnConnect) ->
-    [start_listener0(Spec, Protocol, Label, OnConnect) ||
-        Spec <- check_tcp_listener_address(rabbit_tcp_listener_sup, Listener)],
+    [start_listener0(Address, Protocol, Label, OnConnect) ||
+        Address <- tcp_listener_addresses(Listener)],
     ok.
 
-start_listener0({IPAddress, Port, Family, Name}, Protocol, Label, OnConnect) ->
+start_listener0({IPAddress, Port, Family}, Protocol, Label, OnConnect) ->
     {ok,_} = supervisor:start_child(
                rabbit_sup,
-               {Name,
+               {rabbit_misc:tcp_name(rabbit_tcp_listener_sup, IPAddress, Port),
                 {tcp_listener_sup, start_link,
                  [IPAddress, Port, [Family | tcp_opts()],
                   {?MODULE, tcp_listener_started, [Protocol]},
@@ -214,11 +212,11 @@ start_listener0({IPAddress, Port, Family, Name}, Protocol, Label, OnConnect) ->
                 transient, infinity, supervisor, [tcp_listener_sup]}).
 
 stop_tcp_listener(Listener) ->
-    [stop_tcp_listener0(Spec) ||
-        Spec <- check_tcp_listener_address(rabbit_tcp_listener_sup, Listener)],
+    [stop_tcp_listener0(Address) ||
+        Address <- tcp_listener_addresses(Listener)],
     ok.
 
-stop_tcp_listener0({IPAddress, Port, _Family, Name}) ->
+stop_tcp_listener0({IPAddress, Port, _Family}) ->
     Name = rabbit_misc:tcp_name(rabbit_tcp_listener_sup, IPAddress, Port),
     ok = supervisor:terminate_child(rabbit_sup, Name),
     ok = supervisor:delete_child(rabbit_sup, Name).
