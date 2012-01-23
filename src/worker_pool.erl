@@ -37,10 +37,11 @@
 
 -ifdef(use_specs).
 
+-type(mfargs() :: {atom(), atom(), [any()]}).
+
 -spec(start_link/0 :: () -> {'ok', pid()} | {'error', any()}).
--spec(submit/1 :: (fun (() -> A) | {atom(), atom(), [any()]}) -> A).
--spec(submit_async/1 ::
-      (fun (() -> any()) | {atom(), atom(), [any()]}) -> 'ok').
+-spec(submit/1 :: (fun (() -> A) | mfargs()) -> A).
+-spec(submit_async/1 :: (fun (() -> any()) | mfargs()) -> 'ok').
 -spec(idle/1 :: (any()) -> 'ok').
 
 -endif.
