@@ -24,7 +24,8 @@
          close_connection/2, force_connection_event_refresh/0]).
 
 %%used by TCP-based transports, e.g. STOMP adapter
--export([tcp_listener_addresses/1, ensure_ssl/0, ssl_transform_fun/1]).
+-export([tcp_listener_addresses/1, tcp_listener_spec/6,
+         ensure_ssl/0, ssl_transform_fun/1]).
 
 -export([tcp_listener_started/3, tcp_listener_stopped/3,
          start_client/1, start_ssl_client/2]).
@@ -52,6 +53,10 @@
 -type(listener_config() :: ip_port() |
                            {hostname(), ip_port()} |
                            {hostname(), ip_port(), family()}).
+-type(address() :: {inet:ip_address(), ip_port(), family()}).
+-type(name_prefix() :: atom()).
+-type(protocol() :: atom()).
+-type(label() :: string()).
 
 -spec(start/0 :: () -> 'ok').
 -spec(start_tcp_listener/1 :: (listener_config()) -> 'ok').
@@ -75,8 +80,10 @@
 -spec(force_connection_event_refresh/0 :: () -> 'ok').
 
 -spec(on_node_down/1 :: (node()) -> 'ok').
--spec(tcp_listener_addresses/1 :: (listener_config())
-        -> [{inet:ip_address(), ip_port(), family()}]).
+-spec(tcp_listener_addresses/1 :: (listener_config()) -> [address()]).
+-spec(tcp_listener_spec/6 ::
+        (name_prefix(), address(), [gen_tcp:listen_option()], protocol(),
+         label(), rabbit_types:mfargs()) -> supervisor:child_spec()).
 -spec(ensure_ssl/0 :: () -> rabbit_types:infos()).
 -spec(ssl_transform_fun/1 ::
         (rabbit_types:infos())
@@ -187,6 +194,16 @@ tcp_listener_addresses_auto(Port) ->
     lists:append([tcp_listener_addresses(Listener) ||
                      Listener <- port_to_listeners(Port)]).
 
+tcp_listener_spec(NamePrefix, {IPAddress, Port, Family}, SocketOpts,
+                  Protocol, Label, OnConnect) ->
+    {rabbit_misc:tcp_name(NamePrefix, IPAddress, Port),
+     {tcp_listener_sup, start_link,
+      [IPAddress, Port, [Family | SocketOpts],
+       {?MODULE, tcp_listener_started, [Protocol]},
+       {?MODULE, tcp_listener_stopped, [Protocol]},
+       OnConnect, Label]},
+     transient, infinity, supervisor, [tcp_listener_sup]}.
+
 start_tcp_listener(Listener) ->
     start_listener(Listener, amqp, "TCP Listener",
                    {?MODULE, start_client, []}).
@@ -200,16 +217,10 @@ start_listener(Listener, Protocol, Label, OnConnect) ->
         Address <- tcp_listener_addresses(Listener)],
     ok.
 
-start_listener0({IPAddress, Port, Family}, Protocol, Label, OnConnect) ->
-    {ok,_} = supervisor:start_child(
-               rabbit_sup,
-               {rabbit_misc:tcp_name(rabbit_tcp_listener_sup, IPAddress, Port),
-                {tcp_listener_sup, start_link,
-                 [IPAddress, Port, [Family | tcp_opts()],
-                  {?MODULE, tcp_listener_started, [Protocol]},
-                  {?MODULE, tcp_listener_stopped, [Protocol]},
-                  OnConnect, Label]},
-                transient, infinity, supervisor, [tcp_listener_sup]}).
+start_listener0(Address, Protocol, Label, OnConnect) ->
+    Spec = tcp_listener_spec(rabbit_tcp_listener_sup, Address, tcp_opts(),
+                             Protocol, Label, OnConnect),
+    {ok,_} = supervisor:start_child(rabbit_sup, Spec).
 
 stop_tcp_listener(Listener) ->
     [stop_tcp_listener0(Address) ||
