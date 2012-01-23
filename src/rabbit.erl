@@ -503,9 +503,9 @@ sort_boot_steps(UnsortedSteps) ->
 
 boot_step_error(Reason, Stacktrace) ->
     boot_error("Error description:~n   ~p~n~n"
-               "Log file (may contain more information):~n   ~s~n~n"
+               "Log files (may contain more information):~n   ~s~n   ~s~n~n"
                "Stack trace:~n   ~p~n~n",
-               [Reason, log_location(sasl), Stacktrace]).
+               [Reason, log_location(kernel), log_location(sasl), Stacktrace]).
 
 boot_error(Format, Args) ->
     io:format("~n~nBOOT FAILED~n===========~n~n" ++ Format, Args),
