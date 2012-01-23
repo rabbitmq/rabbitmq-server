@@ -64,25 +64,16 @@ listener_specs(Fun, Args, Listeners) ->
         Address  <- rabbit_networking:tcp_listener_addresses(Listener)].
 
 tcp_listener_spec([Address, SocketOpts, Configuration]) ->
-    listener_spec(Address, SocketOpts, stomp,
-                  {?MODULE, start_client, [Configuration]},
-                  "STOMP TCP Listener").
+    rabbit_networking:tcp_listener_spec(
+      rabbit_stomp_listener_sup, Address, SocketOpts,
+      stomp, "STOMP TCP Listener",
+      {?MODULE, start_client, [Configuration]}).
 
 ssl_listener_spec([Address, SocketOpts, SslOpts, Configuration]) ->
-    listener_spec(Address, SocketOpts, 'stomp/ssl',
-                  {?MODULE, start_ssl_client, [Configuration, SslOpts]},
-                  "STOMP SSL Listener").
-
-listener_spec({IPAddress, Port, Family},
-              SocketOpts, Protocol, OnConnect, Label) ->
-    {rabbit_misc:tcp_name(rabbit_stomp_listener_sup, IPAddress, Port),
-     {tcp_listener_sup, start_link,
-      [IPAddress, Port,
-       [Family | SocketOpts],
-       {rabbit_networking, tcp_listener_started, [Protocol]},
-       {rabbit_networking, tcp_listener_stopped, [Protocol]},
-       OnConnect, Label]},
-     transient, infinity, supervisor, [tcp_listener_sup]}.
+    rabbit_networking:tcp_listener_spec(
+      rabbit_stomp_listener_sup, Address, SocketOpts,
+      'stomp/ssl', "STOMP SSL Listener",
+      {?MODULE, start_ssl_client, [Configuration, SslOpts]}).
 
 start_client(Configuration, Sock) ->
     {ok, SupPid, ReaderPid} =
