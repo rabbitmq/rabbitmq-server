@@ -170,24 +170,20 @@ ssl_transform_fun(SslOpts) ->
 
 check_tcp_listener_address(NamePrefix, Port) when is_integer(Port) ->
     check_tcp_listener_address_auto(NamePrefix, Port);
-
 check_tcp_listener_address(NamePrefix, {"auto", Port}) ->
     %% Variant to prevent lots of hacking around in bash and batch files
     check_tcp_listener_address_auto(NamePrefix, Port);
-
 check_tcp_listener_address(NamePrefix, {Host, Port}) ->
     %% auto: determine family IPv4 / IPv6 after converting to IP address
     check_tcp_listener_address(NamePrefix, {Host, Port, auto});
-
-check_tcp_listener_address(NamePrefix, {Host, Port, Family0}) ->
-    if is_integer(Port) andalso (Port >= 0) andalso (Port =< 65535) -> ok;
-       true -> error_logger:error_msg("invalid port ~p - not 0..65535~n",
-                                      [Port]),
-               throw({error, {invalid_port, Port}})
-    end,
+check_tcp_listener_address(NamePrefix, {Host, Port, Family0})
+  when is_integer(Port) andalso (Port >= 0) andalso (Port =< 65535) ->
     [{IPAddress, Port, Family,
       rabbit_misc:tcp_name(NamePrefix, IPAddress, Port)} ||
-        {IPAddress, Family} <- getaddr(Host, Family0)].
+        {IPAddress, Family} <- getaddr(Host, Family0)];
+check_tcp_listener_address(_, {_Host, Port, _Family0}) ->
+    error_logger:error_msg("invalid port ~p - not 0..65535~n", [Port]),
+    throw({error, {invalid_port, Port}}).
 
 check_tcp_listener_address_auto(NamePrefix, Port) ->
     lists:append([check_tcp_listener_address(NamePrefix, Listener) ||
