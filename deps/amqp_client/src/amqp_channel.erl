@@ -236,8 +236,13 @@ wait_for_confirms_or_die(Channel) ->
 %% exit(nack_received). If the timeout expires, the calling process is
 %% sent an exit(timeout).
 wait_for_confirms_or_die(Channel, Timeout) ->
-    gen_server:call(Channel, {wait_for_confirms_or_die, self(), Timeout},
-                    infinity).
+    case wait_for_confirms(Channel, Timeout) of
+        timeout -> close(Channel, 200, <<"Confirm Timeout">>),
+                   exit(timeout);
+        false   -> close(Channel, 200, <<"Nacks Received">>),
+                   exit(nacks_received);
+        true    -> true
+    end.
 
 %% @spec (Channel, ReturnHandler) -> ok
 %% where
@@ -343,11 +348,7 @@ handle_call(next_publish_seqno, _From,
             State = #state{next_pub_seqno = SeqNo}) ->
     {reply, SeqNo, State};
 handle_call({wait_for_confirms, Timeout}, From, State) ->
-    handle_wait_for_confirms(From, none, true, Timeout, State);
-%% Lets the channel know that the process should be sent an exit
-%% signal if a nack is received.
-handle_call({wait_for_confirms_or_die, Pid, Timeout}, From, State) ->
-    handle_wait_for_confirms(From, Pid, ok, Timeout, State);
+    handle_wait_for_confirms(From, true, Timeout, State);
 %% @private
 handle_call({call_consumer, Msg}, _From,
             State = #state{consumer = Consumer}) ->
@@ -434,13 +435,9 @@ handle_info({confirm_timeout, From}, State = #state{waiting_set = WSet}) ->
     case gb_trees:lookup(From, WSet) of
         none ->
             {noreply, State};
-        {value, {none, _}} ->
+        {value, _} ->
             gen_server:reply(From, timeout),
-            {noreply,
-             State#state{waiting_set = gb_trees:delete(From, WSet)}};
-        {value, {Pid, _}} ->
-            exit(Pid, timeout),
-            close_self("Confirm Timeout", State)
+            {noreply, State#state{waiting_set = gb_trees:delete(From, WSet)}}
     end.
 
 %% @private
@@ -662,12 +659,12 @@ handle_method_from_server1(#'basic.nack'{} = BasicNack, none,
                            #state{confirm_handler_pid = none} = State) ->
     ?LOG_WARN("Channel (~p): received ~p but there is no "
               "confirm handler registered~n", [self(), BasicNack]),
-    handle_nack(BasicNack, State);
+    {noreply, update_confirm_set(BasicNack, State)};
 handle_method_from_server1(
         #'basic.nack'{} = BasicNack, none,
         #state{confirm_handler_pid = ConfirmHandler} = State) ->
     ConfirmHandler ! BasicNack,
-    handle_nack(BasicNack, State);
+    {noreply, update_confirm_set(BasicNack, State)};
 
 handle_method_from_server1(Method, none, State) ->
     {noreply, rpc_bottom_half(Method, State)};
@@ -790,18 +787,6 @@ server_misbehaved(#amqp_error{} = AmqpError, State = #state{number = Number}) ->
             {noreply, State}
     end.
 
-handle_nack(BasicNack, State = #state{waiting_set = WSet}) ->
-    Dying = [{Pid, TRef} ||
-                {_, {Pid, TRef}} <- gb_trees:to_list(WSet), Pid =/= none],
-    case Dying of
-        [] -> {noreply, update_confirm_set(BasicNack, State)};
-        _  -> [begin
-                   safe_cancel_timer(TRef),
-                   exit(Pid, nack_received)
-               end || {Pid, TRef} <- Dying],
-              close_self("Nacks Received", State)
-    end.
-
 update_confirm_set(#'basic.ack'{delivery_tag = SeqNo,
                                 multiple     = Multiple},
                    State = #state{unconfirmed_set = USet}) ->
@@ -833,16 +818,16 @@ maybe_notify_waiters(State = #state{unconfirmed_set = USet}) ->
         true  -> notify_confirm_waiters(State)
     end.
 
-notify_confirm_waiters(State = #state{waiting_set = WSet,
+notify_confirm_waiters(State = #state{waiting_set        = WSet,
                                       only_acks_received = OAR}) ->
     [begin
          safe_cancel_timer(TRef),
          gen_server:reply(From, OAR)
-     end || {From, {_, TRef}} <- gb_trees:to_list(WSet)],
-    State#state{waiting_set = gb_trees:empty(),
+     end || {From, TRef} <- gb_trees:to_list(WSet)],
+    State#state{waiting_set        = gb_trees:empty(),
                 only_acks_received = true}.
 
-handle_wait_for_confirms(From, Notify, EmptyReply, Timeout,
+handle_wait_for_confirms(From, EmptyReply, Timeout,
                          State = #state{unconfirmed_set = USet,
                                         waiting_set     = WSet}) ->
     case gb_sets:is_empty(USet) of
@@ -855,8 +840,7 @@ handle_wait_for_confirms(From, Notify, EmptyReply, Timeout,
                                                      {confirm_timeout, From})
                    end,
             {noreply,
-             State#state{waiting_set =
-                             gb_trees:insert(From, {Notify, TRef}, WSet)}}
+             State#state{waiting_set = gb_trees:insert(From, TRef, WSet)}}
     end.
 
 call_to_consumer(Method, Args, #state{consumer = Consumer}) ->
@@ -864,9 +848,3 @@ call_to_consumer(Method, Args, #state{consumer = Consumer}) ->
 
 safe_cancel_timer(undefined) -> ok;
 safe_cancel_timer(TRef)      -> erlang:cancel_timer(TRef).
-
-close_self(Reason, State) ->
-    case handle_close(200, erlang:list_to_binary(Reason), none, State) of
-        {noreply, State1}  -> {noreply, State1};
-        {reply, _, State1} -> {noreply, State1}
-    end.

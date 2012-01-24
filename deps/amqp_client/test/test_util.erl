@@ -652,11 +652,10 @@ confirm_barrier_die_timeout_test() ->
     [amqp_channel:call(Channel, #'basic.publish'{routing_key = <<"whoosh">>},
                        #amqp_msg{payload = <<"foo">>})
      || _ <- lists:seq(1, 1000)],
-    erlang:process_flag(trap_exit, true),
     try amqp_channel:wait_for_confirms_or_die(Channel, 0) of
         true    -> ok
     catch
-        _:_ -> ok
+        exit:timeout -> ok
     end,
     amqp_connection:close(Connection),
     wait_for_death(Connection).
