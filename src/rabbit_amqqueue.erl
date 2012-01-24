@@ -335,8 +335,18 @@ check_declare_arguments(QueueName = #resource{virtual_host = VHostPath},
                 [{<<"x-expires">>,     fun check_integer_argument/3},
                  {<<"x-message-ttl">>, fun check_integer_argument/3},
                  {<<"x-ha-policy">>,   fun check_ha_policy_argument/3},
-                 {<<"x-dead-letter-exchange">>, fun check_exchange_argument/3}]],
+                 {<<"x-dead-letter-exchange">>,
+                  fun check_exchange_argument/3},
+                 {<<"x-dead-letter-routing-key">>,
+                  fun check_string_argument/3}]],
     ok.
+
+check_string_argument(undefined, _Args, _VHostPath) ->
+    ok;
+check_string_argument({longstr, _}, _Args, _VHostPath) ->
+    ok;
+check_string_argument({Type, _}, _, _) ->
+    {error, {unacceptable_type, Type}}.
 
 check_integer_argument(undefined, _Args, _VHostPath) ->
     ok;
