@@ -25,7 +25,9 @@
 %% senders when it is itself blocked - thus the only processes that
 %% need to check blocked/0 are ones that read from network sockets.
 
--export([ack/2, handle_bump_msg/1, blocked/0, send/2]).
+-define(DEFAULT_CREDIT, {200, 150}).
+
+-export([ack/1, ack/2, handle_bump_msg/1, blocked/0, send/1, send/2]).
 -export([peer_down/1]).
 
 %%----------------------------------------------------------------------------
@@ -35,9 +37,11 @@
 -opaque(bump_msg() :: {pid(), non_neg_integer()}).
 -opaque(credit_spec() :: {non_neg_integer(), non_neg_integer()}).
 
+-spec(ack/1 :: (pid()) -> 'ok').
 -spec(ack/2 :: (pid(), credit_spec()) -> 'ok').
 -spec(handle_bump_msg/1 :: (bump_msg()) -> 'ok').
 -spec(blocked/0 :: () -> boolean()).
+-spec(send/1 :: (pid()) -> 'ok').
 -spec(send/2 :: (pid(), credit_spec()) -> 'ok').
 -spec(peer_down/1 :: (pid()) -> 'ok').
 
@@ -55,6 +59,8 @@
 
 %% For any given pair of processes, ack/2 and send/2 must always be
 %% called with the same credit_spec().
+
+ack(To) -> ack(To, ?DEFAULT_CREDIT).
 
 ack(To, {MaxCredit, MoreCreditAt}) ->
     MoreCreditAt1 = MoreCreditAt + 1,
@@ -77,6 +83,8 @@ handle_bump_msg({From, MoreCredit}) ->
 
 blocked() ->
     get(credit_blocked, []) =/= [].
+
+send(From) -> send(From, ?DEFAULT_CREDIT).
 
 send(From, {MaxCredit, _MoreCreditAt}) ->
     Credit = get({credit_from, From}, MaxCredit) - 1,

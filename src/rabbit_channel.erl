@@ -116,7 +116,7 @@ do(Pid, Method, Content) ->
     gen_server2:cast(Pid, {method, Method, Content, noflow}).
 
 do_flow(Pid, Method, Content) ->
-    credit_flow:send(Pid, ?CREDIT_CPU_BOUND),
+    credit_flow:send(Pid),
     gen_server2:cast(Pid, {method, Method, Content, flow}).
 
 flush(Pid) ->
@@ -252,7 +252,7 @@ handle_call(_Request, _From, State) ->
 
 handle_cast({method, Method, Content, Flow}, State = #ch{conn_pid = Conn}) ->
     case Flow of
-        flow   -> credit_flow:ack(Conn, ?CREDIT_CPU_BOUND);
+        flow   -> credit_flow:ack(Conn);
         noflow -> ok
     end,
     try handle_method(Method, Content, State) of
