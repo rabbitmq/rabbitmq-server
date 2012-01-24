@@ -98,7 +98,7 @@ status() ->
 init() ->
     ensure_mnesia_running(),
     ensure_mnesia_dir(),
-    ok = init_db(read_cluster_nodes_config(), false),
+    ok = init_db(read_cluster_nodes_config(), at_least_one),
     %% We intuitively expect the global name server to be synced when
     %% Mnesia is up. In fact that's not guaranteed to be the case - let's
     %% make it so.
@@ -173,7 +173,10 @@ cluster(ClusterNodes, Force) ->
     %% Join the cluster
     start_mnesia(),
     try
-        ok = init_db(ClusterNodes, Force),
+        ok = init_db(ClusterNodes, case Force of
+                                       true  -> none;
+                                       false -> all
+                                   end),
         ok = create_cluster_nodes_config(ClusterNodes)
     after
         stop_mnesia()
@@ -499,28 +502,34 @@ delete_previously_running_nodes() ->
                                           FileName, Reason}})
     end.
 
-init_db(ClusterNodes, Force) ->
-    init_db(ClusterNodes, Force, fun maybe_upgrade_local_or_record_desired/0).
+init_db(ClusterNodes, RequiredDiscNodes) ->
+    init_db(ClusterNodes, RequiredDiscNodes,
+            fun maybe_upgrade_local_or_record_desired/0).
 
 %% Take a cluster node config and create the right kind of node - a
 %% standalone disk node, or disk or ram node connected to the
-%% specified cluster nodes.  If Force is false, don't allow
-%% connections to offline nodes.
-init_db(ClusterNodes, Force, SecondaryPostMnesiaFun) ->
+%% specified cluster nodes. RequiredDiscNodes can be 'all',
+%% 'at_least_one' or 'none' to describe the number of disc nodes that
+%% are not this one that must be up for this operation to succeed.
+init_db(ClusterNodes, RequiredDiscNodes, SecondaryPostMnesiaFun) ->
     UClusterNodes = lists:usort(ClusterNodes),
     ProperClusterNodes = UClusterNodes -- [node()],
     case mnesia:change_config(extra_db_nodes, ProperClusterNodes) of
         {ok, Nodes} ->
-            case Force of
-                false -> FailedClusterNodes = ProperClusterNodes -- Nodes,
-                         case FailedClusterNodes of
-                             [] -> ok;
-                             _  -> throw({error, {failed_to_cluster_with,
-                                                  FailedClusterNodes,
-                                                  "Mnesia could not connect "
-                                                  "to some nodes."}})
-                         end;
-                true  -> ok
+            %% The ClusterNodes parameter is a list of *disc* nodes
+            FailedDiscNodes = ProperClusterNodes -- Nodes,
+            OK = case {FailedDiscNodes, Nodes, RequiredDiscNodes} of
+                     {[], _,  all}          -> true;
+                     {_,  _,  all}          -> false;
+                     {[], [], at_least_one} -> true;
+                     {_,  [], at_least_one} -> false;
+                     _                      -> true
+                 end,
+            case OK of
+                true  -> ok;
+                false -> throw({error, {failed_to_cluster_with, FailedDiscNodes,
+                                        "Mnesia could not connect "
+                                        "to some disc nodes."}})
             end,
             WantDiscNode = should_be_disc_node(ClusterNodes),
             WasDiscNode = is_disc_node(),
@@ -747,9 +756,11 @@ reset(Force) ->
             ensure_mnesia_running(),
             {Nodes, RunningNodes} =
                 try
-                    %% Force=true here so that reset still works when clustered
-                    %% with a node which is down
-                    ok = init_db(read_cluster_nodes_config(), true),
+                    %% Since we are going to leave the cluster we need
+                    %% to ensure that all other nodes are up - any
+                    %% that are down will remember us and not come
+                    %% back up.
+                    ok = init_db(read_cluster_nodes_config(), all),
                     {all_clustered_nodes() -- [Node],
                      running_clustered_nodes() -- [Node]}
                 after

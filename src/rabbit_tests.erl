@@ -810,23 +810,29 @@ test_cluster_management() ->
 
     %% various ways of creating a standalone node
     NodeS = atom_to_list(node()),
-    ClusteringSequence = [[],
-                          [NodeS],
-                          ["invalid@invalid", NodeS],
-                          [NodeS, "invalid@invalid"]],
+    CanStart = [[], [NodeS]],
+    WontStart = [["invalid@invalid", NodeS], [NodeS, "invalid@invalid"]],
+    Both = CanStart ++ WontStart,
 
     ok = control_action(reset, []),
     lists:foreach(fun (Arg) ->
+                          ok         = control_action(force_cluster, Arg),
+                          {error, _} = control_action(start_app, []),
+                          ok
+                  end,
+                  WontStart),
+    ok = control_action(reset, []),
+    lists:foreach(fun (Arg) ->
                           ok = control_action(force_cluster, Arg),
                           ok
                   end,
-                  ClusteringSequence),
+                  Both),
     lists:foreach(fun (Arg) ->
                           ok = control_action(reset, []),
                           ok = control_action(force_cluster, Arg),
                           ok
                   end,
-                  ClusteringSequence),
+                  Both),
     ok = control_action(reset, []),
     lists:foreach(fun (Arg) ->
                           ok = control_action(force_cluster, Arg),
@@ -834,7 +840,7 @@ test_cluster_management() ->
                           ok = control_action(stop_app, []),
                           ok
                   end,
-                  ClusteringSequence),
+                  CanStart),
     lists:foreach(fun (Arg) ->
                           ok = control_action(reset, []),
                           ok = control_action(force_cluster, Arg),
@@ -842,7 +848,7 @@ test_cluster_management() ->
                           ok = control_action(stop_app, []),
                           ok
                   end,
-                  ClusteringSequence),
+                  CanStart),
 
     %% convert a disk node into a ram node
     ok = control_action(reset, []),
@@ -862,7 +868,8 @@ test_cluster_management() ->
     SecondaryNode = rabbit_misc:makenode("hare"),
     case net_adm:ping(SecondaryNode) of
         pong -> passed = test_cluster_management2(SecondaryNode);
-        pang -> io:format("Skipping clustering tests with node ~p~n",
+        pang -> ok = control_action(reset, []),
+                io:format("Skipping clustering tests with node ~p~n",
                           [SecondaryNode])
     end,
 
@@ -882,24 +889,18 @@ test_cluster_management2(SecondaryNode) ->
     ok = control_action(cluster, [SecondaryNodeS]),
     ok = assert_ram_node(),
 
-    %% join cluster as a ram node
-    ok = control_action(reset, []),
-    ok = control_action(force_cluster, [SecondaryNodeS, "invalid1@invalid"]),
-    ok = control_action(start_app, []),
-    ok = control_action(stop_app, []),
-    ok = assert_ram_node(),
-
     %% change cluster config while remaining in same cluster
     ok = control_action(force_cluster, ["invalid2@invalid", SecondaryNodeS]),
+    ok = control_action(cluster, [SecondaryNodeS]),
     ok = control_action(start_app, []),
     ok = control_action(stop_app, []),
 
-    %% join non-existing cluster as a ram node
+    %% attempt to join non-existing cluster as a ram node
     ok = control_action(force_cluster, ["invalid1@invalid",
                                         "invalid2@invalid"]),
-    ok = control_action(start_app, []),
-    ok = control_action(stop_app, []),
-    ok = assert_ram_node(),
+    ok = control_action(reset, []),
+    {error, _} = control_action(cluster, ["invalid1@invalid",
+                                          "invalid2@invalid"]),
 
     %% join empty cluster as a ram node (converts to disc)
     ok = control_action(cluster, []),
@@ -919,12 +920,6 @@ test_cluster_management2(SecondaryNode) ->
     ok = control_action(start_app, []),
     ok = control_action(stop_app, []),
     ok = assert_disc_node(),
-
-    %% convert a disk node into a ram node
-    ok = assert_disc_node(),
-    ok = control_action(force_cluster, ["invalid1@invalid",
-                                        "invalid2@invalid"]),
-    ok = assert_ram_node(),
 
     %% make a new disk node
     ok = control_action(force_reset, []),
