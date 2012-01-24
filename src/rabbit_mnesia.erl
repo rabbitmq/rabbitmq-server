@@ -98,8 +98,7 @@ status() ->
 init() ->
     ensure_mnesia_running(),
     ensure_mnesia_dir(),
-    ok = init_db(read_cluster_nodes_config(), true,
-                 fun maybe_upgrade_local_or_record_desired/0),
+    ok = init_db(read_cluster_nodes_config(), false),
     %% We intuitively expect the global name server to be synced when
     %% Mnesia is up. In fact that's not guaranteed to be the case - let's
     %% make it so.
@@ -174,8 +173,7 @@ cluster(ClusterNodes, Force) ->
     %% Join the cluster
     start_mnesia(),
     try
-        ok = init_db(ClusterNodes, Force,
-                     fun maybe_upgrade_local_or_record_desired/0),
+        ok = init_db(ClusterNodes, Force),
         ok = create_cluster_nodes_config(ClusterNodes)
     after
         stop_mnesia()
@@ -500,6 +498,9 @@ delete_previously_running_nodes() ->
         {error, Reason} -> throw({error, {cannot_delete_previous_nodes_file,
                                           FileName, Reason}})
     end.
+
+init_db(ClusterNodes, Force) ->
+    init_db(ClusterNodes, Force, fun maybe_upgrade_local_or_record_desired/0).
 
 %% Take a cluster node config and create the right kind of node - a
 %% standalone disk node, or disk or ram node connected to the
