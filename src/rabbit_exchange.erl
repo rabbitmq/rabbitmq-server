@@ -355,11 +355,20 @@ peek_serial(XName) ->
         _                                  -> undefined
     end.
 
+inert_module(T) ->
+    rabbit_log:warning(
+      "Could not find exchange type ~p, using inert exchange instead~n", [T]),
+    put({xtype_to_module, T}, rabbit_exchange_type_inert),
+    rabbit_exchange_type_inert.
+
 %% Used with atoms from records; e.g., the type is expected to exist.
 type_to_module(T) ->
     case get({xtype_to_module, T}) of
-        undefined -> {ok, Module} = rabbit_registry:lookup_module(exchange, T),
-                     put({xtype_to_module, T}, Module),
-                     Module;
+         undefined ->
+            case rabbit_registry:lookup_module(exchange, T) of
+                {ok, Module}       -> put({xtype_to_module, T}, Module),
+                                      Module;
+                {error, not_found} -> inert_module(T)
+            end;
         Module    -> Module
     end.
