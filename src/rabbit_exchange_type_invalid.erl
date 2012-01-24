@@ -14,7 +14,7 @@
 %% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
--module(rabbit_exchange_type_inert).
+-module(rabbit_exchange_type_invalid).
 -include("rabbit.hrl").
 
 -behaviour(rabbit_exchange_type).
@@ -26,13 +26,13 @@
 
 description() ->
     D = <<"Dummy exchange type, to be used when the intended one is not found">>,
-    [{name, <<"inert">>}, {description, D}].
+    [{name, <<"invalid">>}, {description, D}].
 
 serialise_events() -> false.
 
 route(#exchange{name = Name}, _) ->
     rabbit_misc:protocol_error(
-      command_invalid, "cannot route message through inert ~s",
+      command_invalid, "cannot route message through invalid ~s",
       [rabbit_misc:rs(Name)]).
 
 validate(_X) -> ok.
