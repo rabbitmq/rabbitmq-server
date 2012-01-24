@@ -17,6 +17,9 @@ HELP = {
     'queue-auto-delete':
       'If yes, the queue will delete itself after at least one consumer has connected, and then all consumers have disconnected.',
 
+    'queue-dead-letter-exchange':
+      'Optional name of an exchange to which messages will be republished if the queue is deleted or purged, or the message is rejected or expires.',
+
     'internal-users-only':
       'Only users within the internal RabbitMQ database are shown here. Other users (e.g. those authenticated over LDAP) will not appear.',
 

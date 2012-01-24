@@ -21,10 +21,11 @@ var SORT_QUERIES  = map(['/connections', '/channels', '/vhosts', '/users',
                          '/queues', '/exchanges']);
 
 // Extension arguments that we know about and present specially in the UI.
-var KNOWN_ARGS = {'alternate-exchange': {'short': 'AE',  'type': 'string'},
-                  'x-message-ttl':      {'short': 'TTL', 'type': 'int'},
-                  'x-expires':          {'short': 'Exp', 'type': 'int'},
-                  'x-ha-policy':        {'short': 'HA',  'type': 'string'}};
+var KNOWN_ARGS = {'alternate-exchange':     {'short': 'AE',  'type': 'string'},
+                  'x-message-ttl':          {'short': 'TTL', 'type': 'int'},
+                  'x-expires':              {'short': 'Exp', 'type': 'int'},
+                  'x-ha-policy':            {'short': 'HA',  'type': 'string'},
+                  'x-dead-letter-exchange': {'short': 'DLX', 'type': 'string'}};
 
 // Things that are like arguments that we format the same way in listings.
 var IMPLICIT_ARGS = {'durable':         {'short': 'D',   'type': 'boolean'},
