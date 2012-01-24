@@ -744,9 +744,12 @@ reset(Force) ->
         false ->
             ensure_mnesia_dir(),
             start_mnesia(),
+            ensure_mnesia_running(),
             {Nodes, RunningNodes} =
                 try
-                    ok = init(),
+                    %% Force=true here so that reset still works when clustered
+                    %% with a node which is down
+                    ok = init_db(read_cluster_nodes_config(), true),
                     {all_clustered_nodes() -- [Node],
                      running_clustered_nodes() -- [Node]}
                 after
