@@ -810,7 +810,6 @@ test_cluster_management() ->
 
     %% various ways of creating a standalone node
     NodeS = atom_to_list(node()),
-    %% For "Start" read "StartOrReset"
     CanStartAndReset = [[], [NodeS]],
     WontStartOrReset = [["invalid@invalid", NodeS], [NodeS, "invalid@invalid"]],
     Both = CanStartAndReset ++ WontStartOrReset,
