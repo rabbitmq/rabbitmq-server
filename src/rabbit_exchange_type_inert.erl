@@ -30,9 +30,7 @@ description() ->
 
 serialise_events() -> false.
 
-route(#exchange{name = Name}, _) ->
-    rabbit_log:warning("Received message at inert exchange ~p, dropping~n",
-                       [Name]).
+route(_, _) -> ok.
 
 validate(_X) -> ok.
 create(_Tx, _X) -> ok.
