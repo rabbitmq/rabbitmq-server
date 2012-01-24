@@ -810,37 +810,33 @@ test_cluster_management() ->
 
     %% various ways of creating a standalone node
     NodeS = atom_to_list(node()),
-    CanStart = [[], [NodeS]],
-    WontStart = [["invalid@invalid", NodeS], [NodeS, "invalid@invalid"]],
-    Both = CanStart ++ WontStart,
+    %% For "Start" read "StartOrReset"
+    CanStartAndReset = [[], [NodeS]],
+    WontStartOrReset = [["invalid@invalid", NodeS], [NodeS, "invalid@invalid"]],
+    Both = CanStartAndReset ++ WontStartOrReset,
 
     ok = control_action(reset, []),
     lists:foreach(fun (Arg) ->
                           ok         = control_action(force_cluster, Arg),
+                          {error, _} = control_action(reset, []),
                           {error, _} = control_action(start_app, []),
                           ok
                   end,
-                  WontStart),
-    ok = control_action(reset, []),
+                  WontStartOrReset),
+    ok = control_action(force_reset, []),
     lists:foreach(fun (Arg) ->
                           ok = control_action(force_cluster, Arg),
                           ok
                   end,
                   Both),
-    lists:foreach(fun (Arg) ->
-                          ok = control_action(reset, []),
-                          ok = control_action(force_cluster, Arg),
-                          ok
-                  end,
-                  Both),
-    ok = control_action(reset, []),
+    ok = control_action(force_reset, []),
     lists:foreach(fun (Arg) ->
                           ok = control_action(force_cluster, Arg),
                           ok = control_action(start_app, []),
                           ok = control_action(stop_app, []),
                           ok
                   end,
-                  CanStart),
+                  CanStartAndReset),
     lists:foreach(fun (Arg) ->
                           ok = control_action(reset, []),
                           ok = control_action(force_cluster, Arg),
@@ -848,7 +844,7 @@ test_cluster_management() ->
                           ok = control_action(stop_app, []),
                           ok
                   end,
-                  CanStart),
+                  CanStartAndReset),
 
     %% convert a disk node into a ram node
     ok = control_action(reset, []),
@@ -860,16 +856,16 @@ test_cluster_management() ->
     ok = assert_ram_node(),
 
     %% join a non-existing cluster as a ram node
-    ok = control_action(reset, []),
+    ok = control_action(force_reset, []),
     ok = control_action(force_cluster, ["invalid1@invalid",
                                         "invalid2@invalid"]),
     ok = assert_ram_node(),
+    ok = control_action(force_reset, []),
 
     SecondaryNode = rabbit_misc:makenode("hare"),
     case net_adm:ping(SecondaryNode) of
         pong -> passed = test_cluster_management2(SecondaryNode);
-        pang -> ok = control_action(reset, []),
-                io:format("Skipping clustering tests with node ~p~n",
+        pang -> io:format("Skipping clustering tests with node ~p~n",
                           [SecondaryNode])
     end,
 
@@ -898,7 +894,8 @@ test_cluster_management2(SecondaryNode) ->
     %% attempt to join non-existing cluster as a ram node
     ok = control_action(force_cluster, ["invalid1@invalid",
                                         "invalid2@invalid"]),
-    ok = control_action(reset, []),
+    {error, _} = control_action(reset, []),
+    ok = control_action(force_reset, []),
     {error, _} = control_action(cluster, ["invalid1@invalid",
                                           "invalid2@invalid"]),
 
@@ -955,7 +952,7 @@ test_cluster_management2(SecondaryNode) ->
     ok = control_action(start_app, []),
     ok = control_action(stop_app, SecondaryNode, [], []),
     ok = control_action(stop_app, []),
-    {error, {no_running_cluster_nodes, _, _}} =
+    {error, {failed_to_cluster_with, _, _}} =
         control_action(reset, []),
 
     %% attempt to change type when no other node is alive
