@@ -33,7 +33,8 @@ serialise_events() -> false.
 route(#exchange{name = Name}, _) ->
     rabbit_misc:protocol_error(
       command_invalid,
-      "cannot route message through inert exchange ~p", [Name]).
+      "cannot route message through inert exchange ~s",
+      [rabbit_misc:rs(Name)]).
 
 validate(_X) -> ok.
 create(_Tx, _X) -> ok.
