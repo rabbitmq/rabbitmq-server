@@ -717,8 +717,8 @@ do_terminate(Child, SupName) when Child#child.pid =/= undefined ->
             ok;
         {error, normal} ->
             case Child#child.restart_type of
-                permanent           -> ReportError(normal);
-                {permanent, _Delay} -> ReportError(normal);
+                permanent           -> ReportError(normal, Child);
+                {permanent, _Delay} -> ReportError(normal, Child);
                 _                   -> ok
             end;
         {error, OtherReason} ->

@@ -148,9 +148,8 @@ init([#amqqueue { name = QueueName } = Q]) ->
     {ok, State, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
-handle_call({deliver_immediately, Delivery = #delivery {}}, From, State) ->
-    %% Synchronous, "immediate" delivery mode
-
+handle_call({deliver, Delivery = #delivery { immediate = true }},
+            From, State) ->
     %% It is safe to reply 'false' here even if a) we've not seen the
     %% msg via gm, or b) the master dies before we receive the msg via
     %% gm. In the case of (a), we will eventually receive the msg via
@@ -166,8 +165,8 @@ handle_call({deliver_immediately, Delivery = #delivery {}}, From, State) ->
     gen_server2:reply(From, false), %% master may deliver it, not us
     noreply(maybe_enqueue_message(Delivery, false, State));
 
-handle_call({deliver, Delivery = #delivery {}}, From, State) ->
-    %% Synchronous, "mandatory" delivery mode
+handle_call({deliver, Delivery = #delivery { mandatory = true }},
+            From, State) ->
     gen_server2:reply(From, true), %% amqqueue throws away the result anyway
     noreply(maybe_enqueue_message(Delivery, true, State));
 
@@ -526,9 +525,11 @@ promote_me(From, #state { q                   = Q = #amqqueue { name = QName },
     MasterState = rabbit_mirror_queue_master:promote_backing_queue_state(
                     CPid, BQ, BQS, GM, SS, MonitoringPids),
 
-    MTC = dict:from_list(
-            [{MsgId, {ChPid, MsgSeqNo}} ||
-                {MsgId, {published, ChPid, MsgSeqNo}} <- dict:to_list(MS)]),
+    MTC = lists:foldl(fun ({MsgId, {published, ChPid, MsgSeqNo}}, MTC0) ->
+                              gb_trees:insert(MsgId, {ChPid, MsgSeqNo}, MTC0);
+                          (_, MTC0) ->
+                              MTC0
+                      end, gb_trees:empty(), MSList),
     NumAckTags = [NumAckTag || {_MsgId, NumAckTag} <- dict:to_list(MA)],
     AckTags = [AckTag || {_Num, AckTag} <- lists:sort(NumAckTags)],
     Deliveries = [Delivery || {_ChPid, {PubQ, _PendCh}} <- dict:to_list(SQ),
@@ -725,7 +726,7 @@ process_instruction(
                     never ->
                         {MQ2, PendingCh, MS};
                     eventually ->
-                        {MQ2, sets:add_element(MsgId, PendingCh),
+                        {MQ2, PendingCh,
                          dict:store(MsgId, {published, ChPid, MsgSeqNo}, MS)};
                     immediately ->
                         ok = rabbit_misc:confirm_to_sender(ChPid, [MsgSeqNo]),

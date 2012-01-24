@@ -1273,9 +1273,10 @@
             <para>
               Displays broker status information such as the running
               applications on the current Erlang node, RabbitMQ and
-              Erlang versions, OS name and memory statistics. (See
-              the <command>cluster_status</command> command to find
-              out which nodes are clustered and running.)
+              Erlang versions, OS name, memory and file descriptor
+              statistics. (See the <command>cluster_status</command>
+              command to find out which nodes are clustered and
+              running.)
             </para>
             <para role="example-prefix">For example:</para>
             <screen role="example">rabbitmqctl status</screen>

@@ -1358,7 +1358,8 @@ deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{
                                                        exchange_name = XName},
                                         msg_seq_no = MsgSeqNo},
                    QNames}, State) ->
-    {RoutingRes, DeliveredQPids} = rabbit_router:deliver(QNames, Delivery),
+    {RoutingRes, DeliveredQPids} =
+        rabbit_amqqueue:deliver(rabbit_amqqueue:lookup(QNames), Delivery),
     State1 = process_routing_result(RoutingRes, DeliveredQPids,
                                     XName, MsgSeqNo, Message, State),
     maybe_incr_stats([{XName, 1} |

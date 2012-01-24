@@ -35,6 +35,7 @@
 -rabbit_upgrade({gm,                    mnesia, []}).
 -rabbit_upgrade({exchange_scratch,      mnesia, [trace_exchanges]}).
 -rabbit_upgrade({mirrored_supervisor,   mnesia, []}).
+-rabbit_upgrade({topic_trie_node,       mnesia, []}).
 
 %% -------------------------------------------------------------------
 
@@ -54,6 +55,7 @@
 -spec(gm/0                    :: () -> 'ok').
 -spec(exchange_scratch/0      :: () -> 'ok').
 -spec(mirrored_supervisor/0   :: () -> 'ok').
+-spec(topic_trie_node/0       :: () -> 'ok').
 
 -endif.
 
@@ -176,6 +178,12 @@ mirrored_supervisor() ->
     create(mirrored_sup_childspec,
            [{record_name, mirrored_sup_childspec},
             {attributes, [key, mirroring_pid, childspec]}]).
+
+topic_trie_node() ->
+    create(rabbit_topic_trie_node,
+           [{record_name, topic_trie_node},
+            {attributes, [trie_node, edge_count, binding_count]},
+            {type, ordered_set}]).
 
 %%--------------------------------------------------------------------
 

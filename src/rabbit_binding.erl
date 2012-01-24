@@ -277,6 +277,7 @@ has_for_source(SrcName) ->
         contains(rabbit_semi_durable_route, Match).
 
 remove_for_source(SrcName) ->
+    lock_route_tables(),
     Match = #route{binding = #binding{source = SrcName, _ = '_'}},
     Routes = lists:usort(
                mnesia:match_object(rabbit_route, Match, write) ++
@@ -351,7 +352,28 @@ continue('$end_of_table')    -> false;
 continue({[_|_], _})         -> true;
 continue({[], Continuation}) -> continue(mnesia:select(Continuation)).
 
+%% For bulk operations we lock the tables we are operating on in order
+%% to reduce the time complexity. Without the table locks we end up
+%% with num_tables*num_bulk_bindings row-level locks. Taking each lock
+%% takes time proportional to the number of existing locks, thus
+%% resulting in O(num_bulk_bindings^2) complexity.
+%%
+%% The locks need to be write locks since ultimately we end up
+%% removing all these rows.
+%%
+%% The downside of all this is that no other binding operations except
+%% lookup/routing (which uses dirty ops) can take place
+%% concurrently. However, that is the case already since the bulk
+%% operations involve mnesia:match_object calls with a partial key,
+%% which entails taking a table lock.
+lock_route_tables() ->
+    [mnesia:lock({table, T}, write) || T <- [rabbit_route,
+                                             rabbit_reverse_route,
+                                             rabbit_semi_durable_route,
+                                             rabbit_durable_route]].
+
 remove_for_destination(DstName, DeleteFun) ->
+    lock_route_tables(),
     Match = reverse_route(
               #route{binding = #binding{destination = DstName, _ = '_'}}),
     ReverseRoutes = mnesia:match_object(rabbit_reverse_route, Match, write),

@@ -43,6 +43,7 @@ all_tests() ->
     passed = test_start_idempotence(),
     passed = test_unsupported(),
     passed = test_ignore(),
+    passed = test_startup_failure(),
     passed.
 
 %% Simplest test
@@ -195,6 +196,22 @@ test_ignore() ->
                    {sup, fake_strategy_for_ignore, []}),
     passed.
 
+test_startup_failure() ->
+    [test_startup_failure(F) || F <- [want_error, want_exit]],
+    passed.
+
+test_startup_failure(Fail) ->
+    process_flag(trap_exit, true),
+    ?MS:start_link(get_group(group), ?MODULE,
+                   {sup, one_for_one, [childspec(Fail)]}),
+    receive
+        {'EXIT', _, shutdown} ->
+            ok
+    after 1000 ->
+            exit({did_not_exit, Fail})
+    end,
+    process_flag(trap_exit, false).
+
 %% ---------------------------------------------------------------------------
 
 with_sups(Fun, Sups) ->
@@ -227,6 +244,12 @@ start_sup0(Name, Group, ChildSpecs) ->
 
 childspec(Id) ->
     {Id, {?MODULE, start_gs, [Id]}, transient, 16#ffffffff, worker, [?MODULE]}.
+
+start_gs(want_error) ->
+    {error, foo};
+
+start_gs(want_exit) ->
+    exit(foo);
 
 start_gs(Id) ->
     gen_server:start_link({local, Id}, ?MODULE, server, []).

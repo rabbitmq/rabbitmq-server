@@ -1061,9 +1061,7 @@ handle_call({info, Items}, _From, State) ->
 handle_call(consumers, _From, State) ->
     reply(consumers(State), State);
 
-handle_call({deliver_immediately, Delivery}, _From, State) ->
-    %% Synchronous, "immediate" delivery mode
-    %%
+handle_call({deliver, Delivery = #delivery{immediate = true}}, _From, State) ->
     %% FIXME: Is this correct semantics?
     %%
     %% I'm worried in particular about the case where an exchange has
@@ -1081,8 +1079,7 @@ handle_call({deliver_immediately, Delivery}, _From, State) ->
                          false -> discard_delivery(Delivery, State1)
                      end);
 
-handle_call({deliver, Delivery}, From, State) ->
-    %% Synchronous, "mandatory" delivery mode. Reply asap.
+handle_call({deliver, Delivery = #delivery{mandatory = true}}, From, State) ->
     gen_server2:reply(From, true),
     noreply(deliver_or_enqueue(Delivery, State));
 
