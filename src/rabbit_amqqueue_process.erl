@@ -861,11 +861,12 @@ make_dead_letter_msg(DLX, Reason,
                 [{<<"x-death">>, array, [DeathTable]}];
             _ ->
                 case rabbit_misc:table_lookup(Headers, <<"x-death">>) of
-                    undefined ->
-                        [{<<"x-death">>, array, [DeathTable]} | Headers];
                     {array, Prior} ->
                         rabbit_misc:set_table_value(
-                          Headers, <<"x-death">>, array, [DeathTable | Prior])
+                          Headers, <<"x-death">>, array,
+                          [DeathTable | Prior]);
+                    _ ->
+                        [{<<"x-death">>, array, [DeathTable]} | Headers]
                 end
         end,
     {DeathRoutingKeys, Headers2} =
