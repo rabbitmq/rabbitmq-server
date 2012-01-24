@@ -195,7 +195,8 @@ internal_pass_frame(Number, Frame, State) ->
     case internal_lookup_npa(Number, State) of
         undefined ->
             ?LOG_INFO("Dropping frame ~p for invalid or closed "
-                      "channel number ~p~n", [Frame, Number]);
+                      "channel number ~p~n", [Frame, Number]),
+            State;
         {ChPid, AState} ->
             NewAState = rabbit_reader:process_channel_frame(
                           Frame, ChPid, Number, ChPid, AState),
