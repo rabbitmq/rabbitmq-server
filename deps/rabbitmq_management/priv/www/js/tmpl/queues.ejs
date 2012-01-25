@@ -143,7 +143,7 @@
         </tr>
 <% } %>
         <tr>
-          <th><label>Auto delete: <span class="help" id="queue-auto-delete"></label></th>
+          <th><label>Auto delete: <span class="help" id="queue-auto-delete"></span></label></th>
           <td>
             <select name="auto_delete">
               <option value="false">No</option>
@@ -152,16 +152,20 @@
           </td>
         </tr>
         <tr>
-          <th><label>Message TTL: <span class="help" id="queue-message-ttl"></label></th>
+          <th><label>Message TTL: <span class="help" id="queue-message-ttl"></span></label></th>
           <td><input type="text" name="x-message-ttl"/> ms</td>
         </tr>
         <tr>
-          <th><label>Auto expire: <span class="help" id="queue-expires"></label></th>
+          <th><label>Auto expire: <span class="help" id="queue-expires"></span></label></th>
           <td><input type="text" name="x-expires"/> ms</td>
         </tr>
         <tr>
-          <th><label>Dead letter exchange: <span class="help" id="queue-dead-letter-exchange"></label></th>
-          <td><input type="text" name="x-dead-letter-exchange"/> ms</td>
+          <th><label>Dead letter exchange: <span class="help" id="queue-dead-letter-exchange"></span></label></th>
+          <td><input type="text" name="x-dead-letter-exchange"/></td>
+        </tr>
+        <tr>
+          <th><label>Dead letter routing key: <span class="help" id="queue-dead-letter-routing-key"></span></label></th>
+          <td><input type="text" name="x-dead-letter-routing-key"/></td>
         </tr>
         <tr>
           <th><label>Arguments:</label></th>
