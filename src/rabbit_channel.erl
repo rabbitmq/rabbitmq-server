@@ -867,8 +867,6 @@ handle_method(#'basic.reject'{delivery_tag = DeliveryTag,
               _, State) ->
     reject_tx(DeliveryTag, false, Requeue, State);
 
-
-
 handle_method(#'exchange.declare'{exchange = ExchangeNameBin,
                                   type = TypeNameBin,
                                   passive = false,
