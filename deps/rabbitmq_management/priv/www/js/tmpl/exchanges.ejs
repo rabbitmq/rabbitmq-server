@@ -27,7 +27,7 @@
    <td><%= fmt_string(exchange.vhost) %></td>
 <% } %>
    <td><%= link_exchange(exchange.vhost, exchange.name) %></td>
-   <td class="c"><%= fmt_string(exchange.type) %></td>
+   <td class="status c"><%= fmt_exchange_type(exchange.type) %></td>
    <td class="c"><%= fmt_parameters_short(exchange) %></td>
    <td class="r"><%= fmt_rate(exchange.message_stats_in, 'publish', false) %></td>
   </tr>
@@ -62,7 +62,13 @@
         </tr>
         <tr>
           <th><label>Type:</label></th>
-          <td><input type="text" name="type"/><span class="mand">*</span></td>
+          <td>
+            <select name="type">
+              <% for (var i = 0; i < exchange_types.length; i++) { %>
+              <option value="<%= fmt_string(exchange_types[i].name) %>"><%= fmt_string(exchange_types[i].name) %></option>
+              <% } %>
+            </select>
+          </td>
         </tr>
         <tr>
           <th><label>Durability:</label></th>

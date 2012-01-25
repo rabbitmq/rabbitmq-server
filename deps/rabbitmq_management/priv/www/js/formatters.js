@@ -199,6 +199,17 @@ function fmt_exchange(name) {
     return name == '' ? '(AMQP default)' : fmt_escape_html(name);
 }
 
+function fmt_exchange_type(type) {
+    for (var i in exchange_types) {
+        if (exchange_types[i].name == type) {
+            return fmt_escape_html(type);
+        }
+    }
+    return '<div class="red"><acronym title="Exchange type not found. ' +
+        'Publishing to this exchange will fail.">' + fmt_escape_html(type) +
+        '</acronym></div>';
+}
+
 function fmt_exchange_url(name) {
     return name == '' ? 'amq.default' : fmt_escape_html(name);
 }
