@@ -1089,7 +1089,7 @@ handle_method(#'tx.rollback'{}, _, #ch{tx_status = none}) ->
 handle_method(#'tx.rollback'{}, _, State = #ch{unacked_message_q = UAMQ,
                                                uncommitted_acks  = TAL,
                                                uncommitted_nacks = TNL}) ->
-    TNL1 = lists:map(fun ({_, L}) -> L end, TNL),
+    TNL1 = lists:append(lists:map(fun ({_, L}) -> L end, TNL)),
     UAMQ1 = queue:from_list(lists:usort(TAL ++ TNL1 ++ queue:to_list(UAMQ))),
     {reply, #'tx.rollback_ok'{}, new_tx(State#ch{unacked_message_q = UAMQ1})};
 
