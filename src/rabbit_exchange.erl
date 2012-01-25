@@ -364,7 +364,7 @@ invalid_module(T) ->
 %% Used with atoms from records; e.g., the type is expected to exist.
 type_to_module(T) ->
     case get({xtype_to_module, T}) of
-         undefined ->
+        undefined ->
             case rabbit_registry:lookup_module(exchange, T) of
                 {ok, Module}       -> put({xtype_to_module, T}, Module),
                                       Module;
