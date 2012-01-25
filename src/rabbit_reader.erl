@@ -182,20 +182,19 @@ inet_op(F) -> rabbit_misc:throw_on_error(inet_error, F).
 socket_op(Sock, Fun) ->
     case Fun(Sock) of
         {ok, Res}       -> Res;
-        {error, Reason} -> rabbit_log:error("error on TCP connection ~p:~p~n",
+        {error, Reason} -> rabbit_log:error("error on AMQP connection ~p: ~p~n",
                                             [self(), Reason]),
-                           rabbit_log:info("closing TCP connection ~p~n",
-                                           [self()]),
                            exit(normal)
     end.
 
 start_connection(Parent, ChannelSupSupPid, Collector, StartHeartbeatFun, Deb,
                  Sock, SockTransform) ->
     process_flag(trap_exit, true),
-    {PeerAddress, PeerPort} = socket_op(Sock, fun rabbit_net:peername/1),
-    PeerAddressS = rabbit_misc:ntoab(PeerAddress),
-    rabbit_log:info("starting TCP connection ~p from ~s:~p~n",
-                    [self(), PeerAddressS, PeerPort]),
+    ConnStr = socket_op(Sock, fun (Sock0) ->
+                                      rabbit_net:connection_string(
+                                        Sock0, inbound)
+                              end),
+    rabbit_log:info("accepting AMQP connection ~p (~s)~n", [self(), ConnStr]),
     ClientSock = socket_op(Sock, SockTransform),
     erlang:send_after(?HANDSHAKE_TIMEOUT * 1000, self(),
                       handshake_timeout),
@@ -230,11 +229,11 @@ start_connection(Parent, ChannelSupSupPid, Collector, StartHeartbeatFun, Deb,
                        fun rabbit_log:warning/2;
                   true ->
                        fun rabbit_log:error/2
-               end)("exception on TCP connection ~p from ~s:~p~n~p~n",
-                    [self(), PeerAddressS, PeerPort, Ex])
+               end)("exception on AMQP connection ~p (~s)~n~p~n",
+                    [self(), ConnStr, Ex])
     after
-        rabbit_log:info("closing TCP connection ~p from ~s:~p~n",
-                        [self(), PeerAddressS, PeerPort]),
+        rabbit_log:info("closing AMQP connection ~p (~s)~n",
+                        [self(), ConnStr]),
         %% We don't close the socket explicitly. The reader is the
         %% controlling process and hence its termination will close
         %% the socket. Furthermore, gen_tcp:close/1 waits for pending

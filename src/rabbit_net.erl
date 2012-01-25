@@ -19,7 +19,7 @@
 
 -export([is_ssl/1, ssl_info/1, controlling_process/2, getstat/2,
          recv/1, async_recv/3, port_command/2, setopts/2, send/2, close/1,
-         sockname/1, peername/1, peercert/1]).
+         sockname/1, peername/1, peercert/1, connection_string/2]).
 
 %%---------------------------------------------------------------------------
 
@@ -62,6 +62,8 @@
 -spec(peercert/1 ::
         (socket())
         -> 'nossl' | ok_val_or_error(rabbit_ssl:certificate())).
+-spec(connection_string/2 ::
+        (socket(), 'inbound' | 'outbound') -> ok_val_or_error(string())).
 
 -endif.
 
@@ -141,3 +143,20 @@ peername(Sock)   when is_port(Sock) -> inet:peername(Sock).
 
 peercert(Sock)   when ?IS_SSL(Sock) -> ssl:peercert(Sock#ssl_socket.ssl);
 peercert(Sock)   when is_port(Sock) -> nossl.
+
+connection_string(Sock, Direction) ->
+    {From, To} = case Direction of
+                     inbound  -> {fun peername/1, fun sockname/1};
+                     outbound -> {fun sockname/1, fun peername/1}
+                 end,
+    case {From(Sock), To(Sock)} of
+        {{ok, {FromAddress, FromPort}}, {ok, {ToAddress, ToPort}}} ->
+            {ok, lists:flatten(
+                   io_lib:format("~s:~p -> ~s:~p",
+                                 [rabbit_misc:ntoab(FromAddress), FromPort,
+                                  rabbit_misc:ntoab(ToAddress),   ToPort]))};
+        {{error, _Reason} = Error, _} ->
+            Error;
+        {_, {error, _Reason} = Error} ->
+            Error
+    end.
