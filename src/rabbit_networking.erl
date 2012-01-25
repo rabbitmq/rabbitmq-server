@@ -164,8 +164,6 @@ ssl_transform_fun(SslOpts) ->
     fun (Sock) ->
             case catch ssl:ssl_accept(Sock, SslOpts, ?SSL_TIMEOUT * 1000) of
                 {ok, SslSock} ->
-                    rabbit_log:info("upgraded TCP connection ~p to SSL~n",
-                                    [self()]),
                     {ok, #ssl_socket{tcp = Sock, ssl = SslSock}};
                 {error, Reason} ->
                     {error, {ssl_upgrade_error, Reason}};
