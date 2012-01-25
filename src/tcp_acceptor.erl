@@ -54,14 +54,6 @@ handle_info({inet_async, LSock, Ref, {ok, Sock}},
     {ok, Mod} = inet_db:lookup_socket(LSock),
     inet_db:register_socket(Sock, Mod),
 
-    %% In the event that somebody floods us with connections we can
-    %% spew log events at error_logger faster than it can keep up.  So
-    %% error_logger's mailbox grows unbounded until we eat all the
-    %% memory available and crash. So here's a meaningless synchronous
-    %% call to the underlying gen_event mechanism - when it returns
-    %% the mailbox is drained.
-    gen_event:which_handlers(error_logger),
-
     %% handle
     file_handle_cache:transfer(apply(M, F, A ++ [Sock])),
     ok = file_handle_cache:obtain(),

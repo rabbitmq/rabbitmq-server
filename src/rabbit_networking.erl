@@ -264,6 +264,16 @@ start_client(Sock, SockTransform) ->
     {ok, _Child, Reader} = supervisor:start_child(rabbit_tcp_client_sup, []),
     ok = rabbit_net:controlling_process(Sock, Reader),
     Reader ! {go, Sock, SockTransform},
+
+    %% In the event that somebody floods us with connections, the
+    %% reader processes can spew log events at error_logger faster
+    %% than it can keep up, causing its mailbox to grow unbounded
+    %% until we eat all the memory available and crash. So here is a
+    %% meaningless synchronous call to the underlying gen_event
+    %% mechanism. When it returns the mailbox is drained, and we
+    %% return to our caller to accept more connetions.
+    gen_event:which_handlers(error_logger),
+
     Reader.
 
 start_client(Sock) ->
