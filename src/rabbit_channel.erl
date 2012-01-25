@@ -1073,11 +1073,12 @@ handle_method(#'tx.commit'{}, _, #ch{tx_status = none}) ->
 
 handle_method(#'tx.commit'{}, _, State = #ch{uncommitted_message_q = TMQ,
                                              uncommitted_acks      = TAL,
-                                             uncommitted_nacks     = TNL}) ->
+                                             uncommitted_nacks     = TNL,
+                                             limiter = Limiter}) ->
     State1 = rabbit_misc:queue_fold(fun deliver_to_queues/2, State, TMQ),
     State2 = ack(TAL, State1),
     State3 = lists:foldl(
-               fun ({Requeue, Acked}, S) -> reject(Requeue, Acked, S) end,
+               fun ({Requeue, Acked}, S) -> reject(Requeue, Acked, Limiter) end,
                State2, TNL),
     State4 = new_tx(State3),
     {noreply, maybe_complete_tx(State4#ch{tx_status = committing})};
@@ -1282,19 +1283,19 @@ reject_tx(DeliveryTag, Multiple, Requeue,
     State1 = State#ch{unacked_message_q = Remaining},
     {noreply,
      case TxStatus of
-         none        -> reject(Requeue, Acked, State1),
+         none        -> reject(Requeue, Acked, State1#ch.limiter),
                         State1;
          in_progress ->
              State1#ch{uncommitted_nacks =
                            {Requeue, Acked} ++ State1#ch.uncommitted_nacks}
      end}.
 
-reject(Requeue, Acked, State) ->
+reject(Requeue, Acked, Limiter) ->
     ok = fold_per_queue(
            fun (QPid, MsgIds, ok) ->
                    rabbit_amqqueue:reject(QPid, MsgIds, Requeue, self())
            end, ok, Acked),
-    ok = notify_limiter(State#ch.limiter, Acked).
+    ok = notify_limiter(Limiter, Acked).
 
 ack_record(DeliveryTag, ConsumerTag,
            _MsgStruct = {_QName, QPid, MsgId, _Redelivered, _Msg}) ->
