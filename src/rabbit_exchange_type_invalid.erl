@@ -25,15 +25,18 @@
 -include("rabbit_exchange_type_spec.hrl").
 
 description() ->
-    D = <<"Dummy exchange type, to be used when the intended one is not found">>,
-    [{name, <<"invalid">>}, {description, D}].
+    [{name, <<"invalid">>},
+     {description,
+      <<"Dummy exchange type, to be used when the intended one is not found">>
+     }].
 
 serialise_events() -> false.
 
-route(#exchange{name = Name}, _) ->
+route(#exchange{name = Name, type = Type}, _) ->
     rabbit_misc:protocol_error(
-      command_invalid, "cannot route message through invalid ~s",
-      [rabbit_misc:rs(Name)]).
+      command_invalid,
+      "cannot route message through ~s, exchange type ~p not found",
+      [rabbit_misc:rs(Name), Type]).
 
 validate(_X) -> ok.
 create(_Tx, _X) -> ok.
