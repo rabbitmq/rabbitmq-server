@@ -1077,11 +1077,10 @@ handle_method(#'tx.commit'{}, _, State = #ch{uncommitted_message_q = TMQ,
                                              limiter = Limiter}) ->
     State1 = rabbit_misc:queue_fold(fun deliver_to_queues/2, State, TMQ),
     State2 = ack(TAL, State1),
-    State3 = lists:foldl(
-               fun ({Requeue, Acked}, S) -> reject(Requeue, Acked, Limiter) end,
-               State2, TNL),
-    State4 = new_tx(State3),
-    {noreply, maybe_complete_tx(State4#ch{tx_status = committing})};
+    lists:foreach(
+      fun({Requeue, Acked}) -> reject(Requeue, Acked, Limiter) end, TNL),
+    State3 = new_tx(State2),
+    {noreply, maybe_complete_tx(State3#ch{tx_status = committing})};
 
 handle_method(#'tx.rollback'{}, _, #ch{tx_status = none}) ->
     rabbit_misc:protocol_error(
@@ -1288,7 +1287,7 @@ reject_tx(DeliveryTag, Multiple, Requeue,
              State1;
          in_progress ->
              State1#ch{uncommitted_nacks =
-                           {Requeue, Acked} ++ State1#ch.uncommitted_nacks}
+                           [{Requeue, Acked} | State1#ch.uncommitted_nacks]}
      end}.
 
 reject(Requeue, Acked, Limiter) ->
