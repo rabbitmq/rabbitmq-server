@@ -76,12 +76,11 @@ ssl_listener_spec([Address, SocketOpts, SslOpts, Configuration]) ->
       {?MODULE, start_ssl_client, [Configuration, SslOpts]}).
 
 start_client(Configuration, Sock) ->
-    {ok, SupPid, ReaderPid} =
-        supervisor:start_child(rabbit_stomp_client_sup_sup,
-                               [Sock, Configuration]),
-    ok = rabbit_net:controlling_process(Sock, ReaderPid),
-    ReaderPid ! {go, Sock},
-    SupPid.
+    {ok, _Child, Reader} = supervisor:start_child(rabbit_stomp_client_sup_sup,
+                                                  [Sock, Configuration]),
+    ok = rabbit_net:controlling_process(Sock, Reader),
+    Reader ! {go, Sock},
+    Reader.
 
 start_ssl_client(Configuration, SslOpts, Sock) ->
     Transform = rabbit_networking:ssl_transform_fun(SslOpts),
