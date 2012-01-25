@@ -132,7 +132,7 @@
 -rabbit_boot_step({recovery,
                    [{description, "exchange, queue and binding recovery"},
                     {mfa,         {rabbit, recover, []}},
-                    {requires,    empty_db_check},
+                    {requires,    core_initialized},
                     {enables,     routing_ready}]}).
 
 -rabbit_boot_step({mirror_queue_slave_sup,
@@ -158,8 +158,9 @@
                     {enables,     networking}]}).
 
 -rabbit_boot_step({direct_client,
-                   [{mfa,        {rabbit_direct, boot, []}},
-                    {requires,   log_relay}]}).
+                   [{description, "direct client"},
+                    {mfa,         {rabbit_direct, boot, []}},
+                    {requires,    log_relay}]}).
 
 -rabbit_boot_step({networking,
                    [{mfa,         {rabbit_networking, boot, []}},
