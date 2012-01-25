@@ -27,7 +27,7 @@
 description() ->
     [{name, <<"invalid">>},
      {description,
-      <<"Dummy exchange type, to be used when the intended one is not found">>
+      <<"Dummy exchange type, to be used when the intended one is not found.">>
      }].
 
 serialise_events() -> false.
@@ -35,7 +35,7 @@ serialise_events() -> false.
 route(#exchange{name = Name, type = Type}, _) ->
     rabbit_misc:protocol_error(
       command_invalid,
-      "cannot route message through ~s, exchange type ~p not found",
+      "Cannot route message through ~s: exchange type ~s not found",
       [rabbit_misc:rs(Name), Type]).
 
 validate(_X) -> ok.
