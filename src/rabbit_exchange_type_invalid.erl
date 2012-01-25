@@ -34,7 +34,7 @@ serialise_events() -> false.
 
 route(#exchange{name = Name, type = Type}, _) ->
     rabbit_misc:protocol_error(
-      command_invalid,
+      precondition_failed,
       "Cannot route message through ~s: exchange type ~s not found",
       [rabbit_misc:rs(Name), Type]).
 
