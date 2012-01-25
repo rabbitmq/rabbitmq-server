@@ -1283,8 +1283,9 @@ reject_tx(DeliveryTag, Multiple, Requeue,
     State1 = State#ch{unacked_message_q = Remaining},
     {noreply,
      case TxStatus of
-         none        -> reject(Requeue, Acked, State1#ch.limiter),
-                        State1;
+         none ->
+             reject(Requeue, Acked, State1#ch.limiter),
+             State1;
          in_progress ->
              State1#ch{uncommitted_nacks =
                            {Requeue, Acked} ++ State1#ch.uncommitted_nacks}
