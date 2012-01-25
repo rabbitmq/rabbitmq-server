@@ -256,7 +256,7 @@ client_properties(UserProperties) ->
 
 handshake_recv(Expecting) ->
     receive
-        {'$gen_cast', {method, Method, none}} ->
+        {'$gen_cast', {method, Method, none, noflow}} ->
             case {Expecting, element(1, Method)} of
                 {E, M} when E =:= M ->
                     Method;

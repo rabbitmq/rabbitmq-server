@@ -195,7 +195,7 @@ after_connect({ServerProperties, ChannelMax, NewMState},
                 channel_max       = ChannelMax,
                 module_state      = NewMState}.
 
-handle_cast({method, Method, none}, State) ->
+handle_cast({method, Method, none, noflow}, State) ->
     handle_method(Method, State);
 handle_cast(channels_terminated, State) ->
     handle_channels_terminated(State);
