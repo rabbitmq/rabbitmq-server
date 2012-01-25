@@ -352,36 +352,36 @@ function esc(str) {
 }
 
 function link_conn(name) {
-    return link_to(name, '#/connections/' + esc(name))
+    return _link_to(name, '#/connections/' + esc(name))
 }
 
 function link_channel(name) {
-    return link_to(name, '#/channels/' + esc(name))
+    return _link_to(name, '#/channels/' + esc(name))
 }
 
 function link_exchange(vhost, name) {
     var url = esc(vhost) + '/' + (name == '' ? 'amq.default' : esc(name));
-    return link_to(fmt_exchange(name), '#/exchanges/' + url)
+    return _link_to(fmt_exchange(name), '#/exchanges/' + url)
 }
 
 function link_queue(vhost, name) {
-    return link_to(name, '#/queues/' + esc(vhost) + '/' + esc(name))
+    return _link_to(fmt_escape_html(name), '#/queues/' + esc(vhost) + '/' + esc(name))
 }
 
 function link_vhost(name) {
-    return link_to(name, '#/vhosts/' + esc(name))
+    return _link_to(fmt_escape_html(name), '#/vhosts/' + esc(name))
 }
 
 function link_user(name) {
-    return link_to(name, '#/users/' + esc(name))
+    return _link_to(fmt_escape_html(name), '#/users/' + esc(name))
 }
 
 function link_node(name) {
-    return link_to(name, '#/nodes/' + esc(name))
+    return _link_to(fmt_escape_html(name), '#/nodes/' + esc(name))
 }
 
-function link_to(name, url) {
-    return '<a href="' + url + '">' + fmt_escape_html(name) + '</a>';
+function _link_to(name, url) {
+    return '<a href="' + url + '">' + name + '</a>';
 }
 
 function message_rates(stats) {
