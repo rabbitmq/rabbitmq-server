@@ -75,16 +75,16 @@ ssl_listener_spec([Address, SocketOpts, SslOpts, Configuration]) ->
       'stomp/ssl', "STOMP SSL Listener",
       {?MODULE, start_ssl_client, [Configuration, SslOpts]}).
 
-start_client(Configuration, Sock) ->
+start_client(Configuration, Sock, SockTransform) ->
     {ok, SupPid, ReaderPid} =
-        supervisor:start_child(rabbit_stomp_client_sup_sup,
-                               [Sock, Configuration]),
+        supervisor:start_child(rabbit_stomp_client_sup_sup, [Configuration]),
     ok = rabbit_net:controlling_process(Sock, ReaderPid),
-    ReaderPid ! {go, Sock},
+    ReaderPid ! {go, Sock, SockTransform},
     SupPid.
+
+start_client(Configuration, Sock) ->
+    start_client(Configuration, Sock, fun (S) -> {ok, S} end).
 
 start_ssl_client(Configuration, SslOpts, Sock) ->
     Transform = rabbit_networking:ssl_transform_fun(SslOpts),
-    {ok, SslSock} = Transform(Sock),
-    start_client(Configuration, SslSock).
-
+    start_client(Configuration, Sock, Transform).

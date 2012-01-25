@@ -30,20 +30,23 @@
 %%
 -module(rabbit_stomp_reader).
 
--export([start_link/1]).
--export([init/1]).
+-export([start_link/2]).
+-export([init/2]).
 -export([conserve_memory/2]).
 
 -include("rabbit_stomp_frame.hrl").
 
 -record(reader_state, {socket, parse_state, processor, state, iterations}).
 
-start_link(ProcessorPid) ->
-        {ok, proc_lib:spawn_link(?MODULE, init, [ProcessorPid])}.
+start_link(SupPid, Configuration) ->
+        {ok, proc_lib:spawn_link(?MODULE, init, [SupPid, Configuration])}.
 
-init(ProcessorPid) ->
+init(SupPid, Configuration) ->
     receive
-        {go, Sock} ->
+        {go, Sock0, SockTransform} ->
+            {ok, Sock} = SockTransform(Sock0),
+            {ok, ProcessorPid} = rabbit_stomp_client_sup:start_processor(
+                                   SupPid, Configuration, Sock),
             {ok, {PeerAddress, PeerPort}} = rabbit_net:peername(Sock),
             PeerAddressS = inet_parse:ntoa(PeerAddress),
             error_logger:info_msg("starting STOMP connection ~p from ~s:~p~n",
