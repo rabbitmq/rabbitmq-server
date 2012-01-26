@@ -887,6 +887,14 @@ test_cluster_management2(SecondaryNode) ->
     ok = control_action(cluster, [SecondaryNodeS]),
     ok = assert_ram_node(),
 
+    %% ram node will not start by itself
+    ok = control_action(stop_app, []),
+    ok = control_action(stop_app, SecondaryNode, [], []),
+    {error, _} = control_action(start_app, []),
+    ok = control_action(start_app, SecondaryNode, [], []),
+    ok = control_action(start_app, []),
+    ok = control_action(stop_app, []),
+
     %% change cluster config while remaining in same cluster
     ok = control_action(force_cluster, ["invalid2@invalid", SecondaryNodeS]),
     ok = control_action(cluster, [SecondaryNodeS]),
