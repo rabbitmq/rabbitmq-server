@@ -69,13 +69,14 @@ mainloop(State = #reader_state{socket = Sock}, ByteCount) ->
     receive
         {inet_async, Sock, _Ref, {ok, Data}} ->
             process_received_bytes(Data, State);
-        {inet_async, Sock, _Ref, {error, closed}} ->
-            error_logger:info_msg("Socket ~p closed by client~n", [Sock]),
+        {inet_async, _Sock, _Ref, {error, closed}} ->
+            error_logger:info_msg("STOMP connection ~p closed by client~n",
+                                  [self()]),
             ok;
-        {inet_async, Sock, _Ref, {error, Reason}} ->
-            error_logger:error_msg("Socket ~p closed abruptly with "
+        {inet_async, _Sock, _Ref, {error, Reason}} ->
+            error_logger:error_msg("STOMP connection ~p closed abruptly with "
                                    "error code ~p~n",
-                                   [Sock, Reason]),
+                                   [self(), Reason]),
             ok;
         {conserve_memory, Conserve} ->
             mainloop(internal_conserve_memory(Conserve, State), ByteCount)
