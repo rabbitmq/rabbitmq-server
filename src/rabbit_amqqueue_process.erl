@@ -115,7 +115,6 @@ info_keys() -> ?INFO_KEYS.
 %%----------------------------------------------------------------------------
 
 init(Q) ->
-    ?LOGDEBUG("Queue starting - ~p~n", [Q]),
     process_flag(trap_exit, true),
 
     State = #q{q                   = Q#amqqueue{pid = self()},
@@ -135,7 +134,6 @@ init(Q) ->
 
 init_with_backing_queue_state(Q = #amqqueue{exclusive_owner = Owner}, BQ, BQS,
                               RateTRef, AckTags, Deliveries, MTC) ->
-    ?LOGDEBUG("Queue starting - ~p~n", [Q]),
     case Owner of
         none -> ok;
         _    -> erlang:monitor(process, Owner)
@@ -1099,8 +1097,7 @@ handle_cast(force_event_refresh, State = #q{exclusive_consumer = Exclusive}) ->
 
 handle_info(maybe_expire, State) ->
     case is_unused(State) of
-        true  -> ?LOGDEBUG("Queue lease expired for ~p~n", [State#q.q]),
-                 {stop, normal, State};
+        true  -> {stop, normal, State};
         false -> noreply(ensure_expiry_timer(State))
     end;
 
@@ -1148,7 +1145,6 @@ handle_info({'EXIT', _Pid, Reason}, State) ->
     {stop, Reason, State};
 
 handle_info(Info, State) ->
-    ?LOGDEBUG("Info in queue: ~p~n", [Info]),
     {stop, {unhandled_info, Info}, State}.
 
 handle_pre_hibernate(State = #q{backing_queue_state = undefined}) ->

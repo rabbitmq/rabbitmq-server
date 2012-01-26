@@ -169,12 +169,10 @@ call(Pid, Msg) ->
 %%---------------------------------------------------------------------------
 
 assemble_frame(Channel, MethodRecord, Protocol) ->
-    ?LOGMESSAGE(out, Channel, MethodRecord, none),
     rabbit_binary_generator:build_simple_method_frame(
       Channel, MethodRecord, Protocol).
 
 assemble_frames(Channel, MethodRecord, Content, FrameMax, Protocol) ->
-    ?LOGMESSAGE(out, Channel, MethodRecord, Content),
     MethodName = rabbit_misc:method_record_type(MethodRecord),
     true = Protocol:method_has_content(MethodName), % assertion
     MethodFrame = rabbit_binary_generator:build_simple_method_frame(
