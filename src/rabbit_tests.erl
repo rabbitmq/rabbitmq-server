@@ -862,10 +862,13 @@ test_cluster_management() ->
     ok = control_action(force_reset, []),
 
     SecondaryNode = rabbit_misc:makenode("hare"),
-    case net_adm:ping(SecondaryNode) of
-        pong -> passed = test_cluster_management2(SecondaryNode);
-        pang -> io:format("Skipping clustering tests with node ~p~n",
-                          [SecondaryNode])
+    TertiaryNode = rabbit_misc:makenode("bunny"),
+    case {net_adm:ping(SecondaryNode), net_adm:ping(TertiaryNode)} of
+        {pong, pong} -> passed = test_cluster_management2(SecondaryNode),
+                        passed = test_cluster_management3(
+                                   SecondaryNode, TertiaryNode);
+        _            -> io:format("Skipping clustering tests with nodes ~p~n",
+                                  [[SecondaryNode, TertiaryNode]])
     end,
 
     ok = control_action(start_app, []),
@@ -958,7 +961,47 @@ test_cluster_management2(SecondaryNode) ->
     {error, {no_running_cluster_nodes, _, _}} =
         control_action(cluster, [SecondaryNodeS]),
 
-    %% leave system clustered, with the secondary node as a ram node
+    passed.
+
+test_cluster_management3(SecondaryNode, TertiaryNode) ->
+    NodeS = atom_to_list(node()),
+    SecondaryNodeS = atom_to_list(SecondaryNode),
+    TertiaryNodeS = atom_to_list(TertiaryNode),
+
+    %% 3-node cluster, 2 x disc 1 x ram
+    ok = control_action(stop_app, SecondaryNode, [], []),
+    ok = control_action(stop_app, TertiaryNode, [], []),
+    ok = control_action(force_reset, [], []),
+    ok = control_action(force_reset, SecondaryNode, [], []),
+    ok = control_action(force_reset, TertiaryNode, [], []),
+    ok = control_action(start_app, [], []),
+    ok = control_action(cluster, SecondaryNode, [NodeS, SecondaryNodeS], []),
+    ok = control_action(start_app, SecondaryNode, [], []),
+    ok = control_action(cluster, TertiaryNode, [NodeS, SecondaryNodeS], []),
+    ok = control_action(start_app, TertiaryNode, [], []),
+
+    %% Reset fails as disc node 2 not up
+    ok = control_action(stop_app, SecondaryNode, [], []),
+    ok = control_action(stop_app, TertiaryNode, [], []),
+    {error, _} = control_action(reset, TertiaryNode, [], []),
+    ok = control_action(start_app, SecondaryNode, [], []),
+    ok = control_action(reset, TertiaryNode, [], []),
+    ok = control_action(cluster, TertiaryNode, [NodeS], []),
+    ok = control_action(start_app, TertiaryNode, [], []),
+
+    %% Convert node 2 to ram node
+    ok = control_action(stop_app, SecondaryNode, [], []),
+    ok = control_action(reset, SecondaryNode, [], []),
+    ok = control_action(cluster, SecondaryNode, [NodeS], []),
+    ok = control_action(start_app, SecondaryNode, [], []),
+
+    %% Reset succeeds when ram node 2 not up
+    ok = control_action(stop_app, SecondaryNode, [], []),
+    ok = control_action(stop_app, TertiaryNode, [], []),
+    ok = control_action(reset, TertiaryNode, [], []),
+
+    %% Leave system clustered, with two nodes, the secondary node as a ram node
+    ok = control_action(stop_app, []),
     ok = control_action(force_reset, []),
     ok = control_action(start_app, []),
     ok = control_action(force_reset, SecondaryNode, [], []),
