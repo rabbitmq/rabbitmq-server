@@ -83,22 +83,21 @@ parse_default_user([implicit_connect | Rest], Configuration) ->
     parse_default_user(Rest, Configuration#stomp_configuration{
                                implicit_connect = true});
 parse_default_user([Unknown | Rest], Configuration) ->
-    error_logger:error_msg("Invalid default_user configuration option: ~p~n",
-                           [Unknown]),
+    rabbit_log:error("rabbit_stomp: invalid default_user configuration "
+                     "option: ~p~n", [Unknown]),
     parse_default_user(Rest, Configuration).
 
 report_configuration(#stomp_configuration{
                         default_login    = Login,
                         implicit_connect = ImplicitConnect}) ->
     case Login of
-        undefined ->
-            ok;
-        _ ->
-            error_logger:info_msg("Default user '~s' enabled~n", [Login])
+        undefined -> ok;
+        _         -> rabbit_log:info("rabbit_stomp: default user '~s' "
+                                     "enabled~n", [Login])
     end,
 
     case ImplicitConnect of
-        true  -> error_logger:info_msg("Implicit connect enabled~n");
+        true  -> rabbit_log:info("rabbit_stomp: implicit connect enabled~n");
         false -> ok
     end,
 
