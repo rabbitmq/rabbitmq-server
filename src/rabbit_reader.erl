@@ -388,7 +388,7 @@ handle_dependent_exit(ChPid, Reason, State) ->
         {_Channel, controlled} ->
             maybe_close(State);
         {Channel, uncontrolled} ->
-            log(error, "connection ~p, channel ~p - error:~n~p~n",
+            log(error, "AMQP connection ~p, channel ~p - error:~n~p~n",
                 [self(), Channel, Reason]),
             maybe_close(handle_exception(State, Channel, Reason))
     end.
@@ -432,7 +432,7 @@ wait_for_channel_termination(N, TimerRef) ->
                     wait_for_channel_termination(N-1, TimerRef);
                 {Channel, uncontrolled} ->
                     log(error,
-                        "connection ~p, channel ~p - "
+                        "AMQP connection ~p, channel ~p - "
                         "error while terminating:~n~p~n",
                         [self(), Channel, Reason]),
                     wait_for_channel_termination(N-1, TimerRef)
