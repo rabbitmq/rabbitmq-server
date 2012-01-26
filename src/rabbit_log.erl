@@ -27,8 +27,6 @@
 
 -define(SERVER, ?MODULE).
 
--define(LEVELS, [info, warning, error, none]).
-
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
@@ -52,12 +50,8 @@
 -endif.
 
 %%----------------------------------------------------------------------------
-
--record(state, {levels, config}).
-
-%%----------------------------------------------------------------------------
 start_link() ->
-    gen_server:start_link({local, ?SERVER}, ?MODULE, [?LEVELS], []).
+    gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 log(Category, Level, Fmt) -> log(Category, Level, Fmt, []).
 
 log(Category, Level, Fmt, Args) when is_list(Args) ->
@@ -72,22 +66,20 @@ error(Fmt, Args)   -> log(default, error,   Fmt, Args).
 
 %%--------------------------------------------------------------------
 
-init([Levels]) ->
-    {ok, LevelConfig} = application:get_env(log_levels),
-    {ok, #state{levels = orddict:from_list(
-                           lists:zip(Levels, lists:seq(1, length(Levels)))),
-                config = orddict:from_list(LevelConfig)}}.
+init([]) ->
+    {ok, CatLevelList} = application:get_env(log_levels),
+    CatLevels = [{Cat, level(Level)} || {Cat, Level} <- CatLevelList],
+    {ok, orddict:from_list(CatLevels)}.
 
 handle_call(_Request, _From, State) ->
     {noreply, State}.
 
-handle_cast({log, Category, Level, Fmt, Args},
-            State = #state{levels = Levels, config = Config}) ->
-    CatLevel = case orddict:find(Category, Config) of
+handle_cast({log, Category, Level, Fmt, Args}, CatLevels) ->
+    CatLevel = case orddict:find(Category, CatLevels) of
                    {ok, L} -> L;
-                   error   -> info
+                   error   -> level(info)
                end,
-    case orddict:fetch(Level, Levels) >= orddict:fetch(CatLevel, Levels) of
+    case level(Level) =< CatLevel of
         false -> ok;
         true  -> (case Level of
                       info    -> fun error_logger:info_msg/2;
@@ -95,7 +87,7 @@ handle_cast({log, Category, Level, Fmt, Args},
                       error   -> fun error_logger:error_msg/2
                   end)(Fmt, Args)
     end,
-    {noreply, State};
+    {noreply, CatLevels};
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
@@ -107,3 +99,10 @@ terminate(_Reason, _State) ->
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
+
+%%--------------------------------------------------------------------
+
+level(info)    -> 3;
+level(warning) -> 2;
+level(error)   -> 1;
+level(none)    -> 0.
