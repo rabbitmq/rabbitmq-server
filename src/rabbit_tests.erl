@@ -974,7 +974,6 @@ test_cluster_management2(SecondaryNode) ->
 test_cluster_management3(SecondaryNode, TertiaryNode) ->
     NodeS = atom_to_list(node()),
     SecondaryNodeS = atom_to_list(SecondaryNode),
-    TertiaryNodeS = atom_to_list(TertiaryNode),
 
     %% 3-node cluster, 2 x disc 1 x ram
     ok = control_action(stop_app, SecondaryNode, [], []),
