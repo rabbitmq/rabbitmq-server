@@ -39,13 +39,13 @@ NODENAME=rabbit@${HOSTNAME%%.*}
 ## Set (non-empty) default values for rabbitmq-env.conf variables to override
 SERVER_ERL_ARGS="+K true +A30 +P 1048576 \
 -kernel inet_default_connect_options [{nodelay,true}]"
-CONFIG_FILE=/etc/rabbitmq/rabbitmq
-LOG_BASE=/var/log/rabbitmq
-MNESIA_BASE=/var/lib/rabbitmq/mnesia
-PLUGINS_DIR="${RABBITMQ_HOME}/plugins"
-ENABLED_PLUGINS_FILE=/etc/rabbitmq/enabled_plugins
+CONFIG_FILE=${RABBITMQ_HOME}/rabbitmq
+LOG_BASE=${RABBITMQ_HOME}/log
+MNESIA_BASE=${RABBITMQ_HOME}/mnesia
+PLUGINS_DIR=${RABBITMQ_HOME}/plugins
+ENABLED_PLUGINS_FILE=${RABBITMQ_HOME}/enabled_plugins
 
-## Load configuration from the rabbitmq.conf file
+## Get configuration variables from the rabbitmq-env.conf file
 if [ -f /etc/rabbitmq/rabbitmq.conf ] && \
    [ ! -f /etc/rabbitmq/rabbitmq-env.conf ] ; then
     echo -n "WARNING: ignoring /etc/rabbitmq/rabbitmq.conf -- "
