@@ -44,10 +44,9 @@ start_link(ProcessorPid) ->
 init(ProcessorPid) ->
     receive
         {go, Sock} ->
-            {ok, {PeerAddress, PeerPort}} = rabbit_net:peername(Sock),
-            PeerAddressS = inet_parse:ntoa(PeerAddress),
-            error_logger:info_msg("starting STOMP connection ~p from ~s:~p~n",
-                                  [self(), PeerAddressS, PeerPort]),
+            {ok, ConnStr} = rabbit_net:connection_string(Sock, inbound),
+            error_logger:info_msg("accepting STOMP connection ~p (~s)~n",
+                                  [self(), ConnStr]),
 
             ParseState = rabbit_stomp_frame:initial_state(),
             try
@@ -60,8 +59,8 @@ init(ProcessorPid) ->
                                    iterations  = 0}), 0)
             after
                 rabbit_stomp_processor:flush_and_die(ProcessorPid),
-                error_logger:info_msg("ending STOMP connection ~p from ~s:~p~n",
-                                      [self(), PeerAddressS, PeerPort])
+                error_logger:info_msg("closing STOMP connection ~p (~s)~n",
+                                      [self(), ConnStr])
             end
     end.
 
