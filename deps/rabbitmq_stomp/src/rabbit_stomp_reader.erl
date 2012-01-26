@@ -41,12 +41,14 @@
 start_link(ProcessorPid) ->
         {ok, proc_lib:spawn_link(?MODULE, init, [ProcessorPid])}.
 
+log(Level, Fmt, Args) -> rabbit_log:log(connection, Level, Fmt, Args).
+
 init(ProcessorPid) ->
     receive
         {go, Sock} ->
             {ok, ConnStr} = rabbit_net:connection_string(Sock, inbound),
-            error_logger:info_msg("accepting STOMP connection ~p (~s)~n",
-                                  [self(), ConnStr]),
+            log(info, "accepting STOMP connection ~p (~s)~n",
+                [self(), ConnStr]),
 
             ParseState = rabbit_stomp_frame:initial_state(),
             try
@@ -59,8 +61,8 @@ init(ProcessorPid) ->
                                    iterations  = 0}), 0)
             after
                 rabbit_stomp_processor:flush_and_die(ProcessorPid),
-                error_logger:info_msg("closing STOMP connection ~p (~s)~n",
-                                      [self(), ConnStr])
+                log(info, "closing STOMP connection ~p (~s)~n",
+                    [self(), ConnStr])
             end
     end.
 
@@ -70,13 +72,12 @@ mainloop(State = #reader_state{socket = Sock}, ByteCount) ->
         {inet_async, Sock, _Ref, {ok, Data}} ->
             process_received_bytes(Data, State);
         {inet_async, _Sock, _Ref, {error, closed}} ->
-            error_logger:info_msg("STOMP connection ~p closed by client~n",
-                                  [self()]),
+            log(info, "STOMP connection ~p closed by client~n", [self()]),
             ok;
         {inet_async, _Sock, _Ref, {error, Reason}} ->
-            error_logger:error_msg("STOMP connection ~p closed abruptly with "
-                                   "error code ~p~n",
-                                   [self(), Reason]),
+            log(error,
+                "STOMP connection ~p closed abruptly with error code ~p~n",
+                [self(), Reason]),
             ok;
         {conserve_memory, Conserve} ->
             mainloop(internal_conserve_memory(Conserve, State), ByteCount)
