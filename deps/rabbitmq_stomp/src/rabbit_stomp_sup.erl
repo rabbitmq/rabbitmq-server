@@ -80,6 +80,10 @@ start_client(Configuration, Sock) ->
                                                   [Sock, Configuration]),
     ok = rabbit_net:controlling_process(Sock, Reader),
     Reader ! {go, Sock},
+
+    %% see comment in rabbit_networking:start_client/2
+    gen_event:which_handlers(error_logger),
+
     Reader.
 
 start_ssl_client(Configuration, SslOpts, Sock) ->
