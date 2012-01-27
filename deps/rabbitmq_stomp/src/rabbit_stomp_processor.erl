@@ -150,8 +150,7 @@ handle_info({'EXIT', Pid, Reason},
                     Ch   -> "channel";
                     _    -> "subscription channel"
                 end,
-    send_error("AMQP " ++ DeadThing ++ " died",
-               io_lib:format("Reason: ~p", [Reason]), State),
+    send_error("AMQP " ++ DeadThing ++ " died", "Reason: ~p", [Reason], State),
     {stop, {conn_died, Reason}, State};
 handle_info({inet_reply, _, ok}, State) ->
     {noreply, State, hibernate};
