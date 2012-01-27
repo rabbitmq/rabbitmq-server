@@ -44,7 +44,7 @@
 -record(state, {socket, session_id, channel,
                 connection, subscriptions, version,
                 start_heartbeat_fun, pending_receipts,
-                config, reply_queues, frame_transformer}).
+                config, dest_queues, reply_queues, frame_transformer}).
 
 -record(subscription, {dest_hdr, channel, multi_ack, description}).
 
@@ -81,6 +81,7 @@ init([Sock, StartHeartbeatFun, Configuration]) ->
        start_heartbeat_fun = StartHeartbeatFun,
        pending_receipts    = undefined,
        config              = Configuration,
+       dest_queues         = sets:new(),
        reply_queues        = dict:new(),
        frame_transformer   = undefined},
      hibernate,
@@ -507,6 +508,7 @@ ssl_cert_info(Sock) ->
 
 do_subscribe(Destination, DestHdr, Frame,
              State = #state{subscriptions = Subs,
+                            dest_queues   = DestQs,
                             connection    = Connection,
                             channel       = MainChannel}) ->
     Prefetch =
@@ -526,7 +528,8 @@ do_subscribe(Destination, DestHdr, Frame,
 
     {AckMode, IsMulti} = rabbit_stomp_util:ack_mode(Frame),
 
-    {ok, Queue} = ensure_queue(subscribe, Destination, Frame, Channel),
+    {ok, Queue, DestQs1} = ensure_queue(subscribe, Destination, Frame, Channel,
+                                        DestQs),
 
     {ok, ConsumerTag, Description} = rabbit_stomp_util:consumer_tag(Frame),
 
@@ -547,14 +550,16 @@ do_subscribe(Destination, DestHdr, Frame,
                                                 channel     = Channel,
                                                 multi_ack   = IsMulti,
                                                 description = Description},
-                                  Subs)}).
+                                  Subs),
+                   dest_queues = DestQs1}).
 
 do_send(Destination, _DestHdr,
         Frame = #stomp_frame{body_iolist = BodyFragments},
-        State = #state{channel = Channel}) ->
-    {ok, _Q} = ensure_queue(send, Destination, Frame, Channel),
+        State = #state{channel = Channel, dest_queues = DestQs}) ->
+    {ok, _Q, DestQs1} = ensure_queue(send, Destination, Frame, Channel, DestQs),
 
-    {Frame1, State1} = ensure_reply_to(Frame, State),
+    {Frame1, State1} =
+        ensure_reply_to(Frame, State#state{dest_queues = DestQs1}),
 
     Props = rabbit_stomp_util:message_properties(Frame1),
 
@@ -870,24 +875,29 @@ millis_to_seconds(M)               -> M div 1000.
 %% Queue and Binding Setup
 %%----------------------------------------------------------------------------
 
-ensure_queue(subscribe, {exchange, _}, _Frame, Channel) ->
+ensure_queue(subscribe, {exchange, _}, _Frame, Channel, DestQs) ->
     %% Create anonymous, exclusive queue for SUBSCRIBE on /exchange destinations
     #'queue.declare_ok'{queue = Queue} =
         amqp_channel:call(Channel, #'queue.declare'{auto_delete = true,
                                                     exclusive = true}),
-    {ok, Queue};
-ensure_queue(send, {exchange, _}, _Frame, _Channel) ->
+    {ok, Queue, DestQs};
+ensure_queue(send, {exchange, _}, _Frame, _Channel, DestQs) ->
     %% Don't create queues on SEND for /exchange destinations
-    {ok, undefined};
-ensure_queue(_, {queue, Name}, _Frame, Channel) ->
-    %% Always create named queue for /queue destinations
+    {ok, undefined, DestQs};
+ensure_queue(_, {queue, Name}, _Frame, Channel, DestQs) ->
+    %% Always create named queue for /queue destinations the first
+    %% time we encounter it
     Queue = list_to_binary(Name),
-    amqp_channel:cast(Channel,
-                      #'queue.declare'{durable = true,
-                                       queue   = Queue,
-                                       nowait  = true}),
-    {ok, Queue};
-ensure_queue(subscribe, {topic, Name}, Frame, Channel) ->
+    DestQs1 = case sets:is_element(Queue, DestQs) of
+                  true  -> DestQs;
+                  false -> amqp_channel:cast(Channel,
+                                             #'queue.declare'{durable = true,
+                                                              queue   = Queue,
+                                                              nowait  = true}),
+                           sets:add_element(Queue, DestQs)
+              end,
+    {ok, Queue, DestQs1};
+ensure_queue(subscribe, {topic, Name}, Frame, Channel, DestQs) ->
     %% Create queue for SUBSCRIBE on /topic destinations Queues are
     %% anonymous, auto_delete and exclusive for transient
     %% subscriptions. Durable subscriptions get shared, named, durable
@@ -905,13 +915,13 @@ ensure_queue(subscribe, {topic, Name}, Frame, Channel) ->
 
     #'queue.declare_ok'{queue = Queue} =
         amqp_channel:call(Channel, Method),
-    {ok, Queue};
-ensure_queue(send, {topic, _}, _Frame, _Channel) ->
+    {ok, Queue, DestQs};
+ensure_queue(send, {topic, _}, _Frame, _Channel, DestQs) ->
     %% Don't create queues on SEND for /topic destinations
-    {ok, undefined};
-ensure_queue(_, {Type, Name}, _Frame, _Channel)
+    {ok, undefined, DestQs};
+ensure_queue(_, {Type, Name}, _Frame, _Channel, DestQs)
   when Type =:= reply_queue orelse Type =:= amqqueue ->
-    {ok, list_to_binary(Name)}.
+    {ok, list_to_binary(Name), DestQs}.
 
 ensure_queue_binding(QueueBin, {"", Queue}, _Channel) ->
     %% i.e., we should only be asked to bind to the default exchange a
