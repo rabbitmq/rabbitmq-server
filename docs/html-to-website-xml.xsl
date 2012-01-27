@@ -8,8 +8,6 @@
 
 <xsl:output method="xml" />
 
-<xsl:template match="*"/>
-
 <!-- Copy every element through -->
 <xsl:template match="*">
   <xsl:element name="{name()}" namespace="http://www.w3.org/1999/xhtml">
