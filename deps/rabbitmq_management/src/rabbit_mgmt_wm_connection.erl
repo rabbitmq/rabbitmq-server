@@ -48,7 +48,7 @@ delete_resource(ReqData, Context) ->
     Pid = proplists:get_value(pid, Conn),
     Reason = "Closed via management plugin",
     case proplists:get_value(type, Conn) of
-        direct  -> amqp_connection:close(Pid, 200, Reason);
+        direct  -> amqp_direct_connection:server_close(Pid, 320, Reason);
         network -> rabbit_networking:close_connection(Pid, Reason)
     end,
     {true, ReqData, Context}.
