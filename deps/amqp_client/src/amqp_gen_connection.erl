@@ -23,7 +23,7 @@
 
 -export([start_link/5, connect/1, open_channel/3, hard_error_in_channel/3,
          channel_internal_error/3, server_misbehaved/2, channels_terminated/1,
-         close/2, info/2, info_keys/0, info_keys/1]).
+         close/2, server_close/2, info/2, info_keys/0, info_keys/1]).
 -export([behaviour_info/1]).
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2]).
@@ -82,6 +82,9 @@ channels_terminated(Pid) ->
 
 close(Pid, Close) ->
     gen_server:call(Pid, {command, {close, Close}}, infinity).
+
+server_close(Pid, Close) ->
+    gen_server:call(Pid, {command, {server_close, Close}}, infinity).
 
 info(Pid, Items) ->
     gen_server:call(Pid, {info, Items}, infinity).
@@ -241,7 +244,9 @@ handle_command({open_channel, ProposedNumber, Consumer}, _From,
                                                Mod:open_channel_args(MState)),
      State};
 handle_command({close, #'connection.close'{} = Close}, From, State) ->
-     app_initiated_close(Close, From, State).
+     app_initiated_close(Close, From, State);
+handle_command({server_close, #'connection.close'{} = Close}, _From, State) ->
+     server_initiated_close(Close, State).
 
 %%---------------------------------------------------------------------------
 %% Handling methods from broker

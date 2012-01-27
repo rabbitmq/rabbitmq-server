@@ -21,6 +21,8 @@
 
 -behaviour(amqp_gen_connection).
 
+-export([server_close/3]).
+
 -export([init/1, terminate/2, connect/4, do/2, open_channel_args/1, i/2,
          info_keys/0, handle_message/2, closing/3, channels_terminated/1]).
 
@@ -40,6 +42,20 @@
                               user, vhost, client_properties, type]).
 
 %%---------------------------------------------------------------------------
+
+%% amqp_connection:close() logically closes from the client end. We may
+%% want to close from the server end.
+server_close(ConnectionPid, Code, Text) ->
+    Close = #'connection.close'{reply_text =  Text,
+                                reply_code = Code,
+                                class_id   = 0,
+                                method_id  = 0},
+    try
+        amqp_gen_connection:server_close(ConnectionPid, Close)
+    catch
+        exit:{{shutdown, {server_initiated_close, Code, Text}}, _} ->
+            ok
+    end.
 
 init([]) ->
     {ok, #state{}}.
