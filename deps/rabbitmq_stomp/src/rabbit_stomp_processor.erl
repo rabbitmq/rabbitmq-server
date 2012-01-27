@@ -139,18 +139,12 @@ handle_info(#'basic.ack'{delivery_tag = Tag, multiple = IsMulti}, State) ->
 handle_info({Delivery = #'basic.deliver'{},
              #amqp_msg{props = Props, payload = Payload}}, State) ->
     {noreply, send_delivery(Delivery, Props, Payload, State), hibernate};
-handle_info({'EXIT', Pid, {{shutdown,
+handle_info({'EXIT', Conn, {{shutdown,
                             {server_initiated_close, Code, Explanation}}, _}},
-            State = #state{}) ->
+            State = #state{connection = Conn}) ->
     amqp_death(Code, Explanation, State);
-handle_info({'EXIT', Pid, Reason},
-            State = #state{connection = Conn, channel = Ch}) ->
-    DeadThing = case Pid of
-                    Conn -> "connection";
-                    Ch   -> "channel";
-                    _    -> "subscription channel"
-                end,
-    send_error("AMQP " ++ DeadThing ++ " died", "Reason: ~p", [Reason], State),
+handle_info({'EXIT', Conn, Reason}, State = #state{connection = Conn}) ->
+    send_error("AMQP connection died", "Reason: ~p", [Reason], State),
     {stop, {conn_died, Reason}, State};
 handle_info({inet_reply, _, ok}, State) ->
     {noreply, State, hibernate};
@@ -451,7 +445,6 @@ do_login(Username0, Password0, VirtualHost0, Heartbeat, AdapterInfo,
                 {ok, Connection} ->
                     link(Connection),
                     {ok, Channel} = amqp_connection:open_channel(Connection),
-                    link(Channel),
                     SessionId = rabbit_guid:string_guid("session"),
                     {{SendTimeout, ReceiveTimeout}, State1} =
                         ensure_heartbeats(Heartbeat, State),
@@ -532,7 +525,6 @@ do_subscribe(Destination, DestHdr, Frame,
                       MainChannel;
                   _ ->
                       {ok, Channel1} = amqp_connection:open_channel(Connection),
-                      link(Channel1),
                       amqp_channel:call(Channel1,
                                         #'basic.qos'{prefetch_size  = 0,
                                                      prefetch_count = Prefetch,
