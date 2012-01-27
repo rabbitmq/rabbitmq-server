@@ -33,8 +33,7 @@
 
 -export([start_link/2, init/1]).
 
--export([listener_started/3, listener_stopped/3,
-         start_client/2, start_ssl_client/3]).
+-export([start_client/2, start_ssl_client/3]).
 
 start_link(Listeners, Configuration) ->
     supervisor:start_link({local, ?MODULE}, ?MODULE,
@@ -62,43 +61,26 @@ init([{Listeners, SslListeners}, Configuration]) ->
 listener_specs(Fun, Args, Listeners) ->
     [Fun([Address | Args]) ||
         Listener <- Listeners,
-        Address <- rabbit_networking:check_tcp_listener_address(
-                     rabbit_stomp_listener_sup, Listener)].
+        Address  <- rabbit_networking:tcp_listener_addresses(Listener)].
 
 tcp_listener_spec([Address, SocketOpts, Configuration]) ->
-    listener_spec(Address, SocketOpts, stomp,
-                  {?MODULE, start_client, [Configuration]},
-                  "STOMP TCP Listener").
+    rabbit_networking:tcp_listener_spec(
+      rabbit_stomp_listener_sup, Address, SocketOpts,
+      stomp, "STOMP TCP Listener",
+      {?MODULE, start_client, [Configuration]}).
 
 ssl_listener_spec([Address, SocketOpts, SslOpts, Configuration]) ->
-    listener_spec(Address, SocketOpts, 'stomp/ssl',
-                  {?MODULE, start_ssl_client, [Configuration, SslOpts]},
-                  "STOMP SSL Listener").
-
-listener_spec({IPAddress, Port, Family, Name},
-              SocketOpts, Protocol, OnConnect, Label) ->
-    {Name,
-     {tcp_listener_sup, start_link,
-      [IPAddress, Port,
-       [Family | SocketOpts],
-       {?MODULE, listener_started, [Protocol]},
-       {?MODULE, listener_stopped, [Protocol]},
-       OnConnect, Label]},
-     transient, infinity, supervisor, [tcp_listener_sup]}.
-
-listener_started(Protocol, IPAddress, Port) ->
-    rabbit_networking:tcp_listener_started(Protocol, IPAddress, Port).
-
-listener_stopped(Protocol, IPAddress, Port) ->
-    rabbit_networking:tcp_listener_stopped(Protocol, IPAddress, Port).
+    rabbit_networking:tcp_listener_spec(
+      rabbit_stomp_listener_sup, Address, SocketOpts,
+      'stomp/ssl', "STOMP SSL Listener",
+      {?MODULE, start_ssl_client, [Configuration, SslOpts]}).
 
 start_client(Configuration, Sock) ->
-    {ok, SupPid, ReaderPid} =
-        supervisor:start_child(rabbit_stomp_client_sup_sup,
-                               [Sock, Configuration]),
-    ok = rabbit_net:controlling_process(Sock, ReaderPid),
-    ReaderPid ! {go, Sock},
-    SupPid.
+    {ok, _Child, Reader} = supervisor:start_child(rabbit_stomp_client_sup_sup,
+                                                  [Sock, Configuration]),
+    ok = rabbit_net:controlling_process(Sock, Reader),
+    Reader ! {go, Sock},
+    Reader.
 
 start_ssl_client(Configuration, SslOpts, Sock) ->
     Transform = rabbit_networking:ssl_transform_fun(SslOpts),

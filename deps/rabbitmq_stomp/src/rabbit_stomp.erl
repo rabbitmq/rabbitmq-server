@@ -44,11 +44,7 @@
 start(normal, []) ->
     Config = parse_configuration(),
     Listeners = parse_listener_configuration(),
-    io:format("starting ~s (binding to ~p)  ...",
-              ["STOMP Adapter", Listeners]),
-    {ok, SupPid} = rabbit_stomp_sup:start_link(Listeners, Config),
-    io:format("done~n"),
-    {ok, SupPid}.
+    rabbit_stomp_sup:start_link(Listeners, Config).
 
 stop(_State) ->
     ok.
