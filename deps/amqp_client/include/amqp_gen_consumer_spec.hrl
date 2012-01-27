@@ -16,6 +16,7 @@
 
 -include("amqp_client.hrl").
 
+-ifndef(edoc).
 -type(state() :: any()).
 -type(consume() :: #'basic.consume'{}).
 -type(consume_ok() :: #'basic.consume_ok'{}).
@@ -38,3 +39,4 @@
                            {reply, any(), state()} | {noreply, state()} |
                             {error, reason(), state()}).
 -spec(terminate/2 :: (any(), state()) -> state()).
+-endif.
