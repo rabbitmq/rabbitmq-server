@@ -139,8 +139,8 @@ handle_info(#'basic.ack'{delivery_tag = Tag, multiple = IsMulti}, State) ->
 handle_info({Delivery = #'basic.deliver'{},
              #amqp_msg{props = Props, payload = Payload}}, State) ->
     {noreply, send_delivery(Delivery, Props, Payload, State), hibernate};
-handle_info({'EXIT', Conn, {{shutdown,
-                            {server_initiated_close, Code, Explanation}}, _}},
+handle_info({'EXIT', Conn,
+             {shutdown, {server_initiated_close, Code, Explanation}}},
             State = #state{connection = Conn}) ->
     amqp_death(Code, Explanation, State);
 handle_info({'EXIT', Conn, Reason}, State = #state{connection = Conn}) ->
