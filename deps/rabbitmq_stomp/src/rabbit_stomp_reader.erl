@@ -41,16 +41,17 @@
 start_link(SupPid, Configuration) ->
         {ok, proc_lib:spawn_link(?MODULE, init, [SupPid, Configuration])}.
 
+log(Level, Fmt, Args) -> rabbit_log:log(connection, Level, Fmt, Args).
+
 init(SupPid, Configuration) ->
     receive
         {go, Sock0, SockTransform} ->
             {ok, Sock} = SockTransform(Sock0),
             {ok, ProcessorPid} = rabbit_stomp_client_sup:start_processor(
                                    SupPid, Configuration, Sock),
-            {ok, {PeerAddress, PeerPort}} = rabbit_net:peername(Sock),
-            PeerAddressS = inet_parse:ntoa(PeerAddress),
-            error_logger:info_msg("starting STOMP connection ~p from ~s:~p~n",
-                                  [self(), PeerAddressS, PeerPort]),
+            {ok, ConnStr} = rabbit_net:connection_string(Sock, inbound),
+            log(info, "accepting STOMP connection ~p (~s)~n",
+                [self(), ConnStr]),
 
             ParseState = rabbit_stomp_frame:initial_state(),
             try
@@ -63,8 +64,8 @@ init(SupPid, Configuration) ->
                                    iterations  = 0}), 0)
             after
                 rabbit_stomp_processor:flush_and_die(ProcessorPid),
-                error_logger:info_msg("ending STOMP connection ~p from ~s:~p~n",
-                                      [self(), PeerAddressS, PeerPort])
+                log(info, "closing STOMP connection ~p (~s)~n",
+                    [self(), ConnStr])
             end
     end.
 
@@ -73,13 +74,13 @@ mainloop(State = #reader_state{socket = Sock}, ByteCount) ->
     receive
         {inet_async, Sock, _Ref, {ok, Data}} ->
             process_received_bytes(Data, State);
-        {inet_async, Sock, _Ref, {error, closed}} ->
-            error_logger:info_msg("Socket ~p closed by client~n", [Sock]),
+        {inet_async, _Sock, _Ref, {error, closed}} ->
+            log(info, "STOMP connection ~p closed by client~n", [self()]),
             ok;
-        {inet_async, Sock, _Ref, {error, Reason}} ->
-            error_logger:error_msg("Socket ~p closed abruptly with "
-                                   "error code ~p~n",
-                                   [Sock, Reason]),
+        {inet_async, _Sock, _Ref, {error, Reason}} ->
+            log(error,
+                "STOMP connection ~p closed abruptly with error code ~p~n",
+                [self(), Reason]),
             ok;
         {conserve_memory, Conserve} ->
             mainloop(internal_conserve_memory(Conserve, State), ByteCount)

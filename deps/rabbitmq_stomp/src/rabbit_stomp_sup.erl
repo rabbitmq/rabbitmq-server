@@ -80,6 +80,10 @@ start_client(Configuration, Sock, SockTransform) ->
                                                   [Configuration]),
     ok = rabbit_net:controlling_process(Sock, Reader),
     Reader ! {go, Sock, SockTransform},
+
+    %% see comment in rabbit_networking:start_client/2
+    gen_event:which_handlers(error_logger),
+
     Reader.
 
 start_client(Configuration, Sock) ->
