@@ -145,12 +145,13 @@ handle_info({'EXIT', Pid, {{shutdown,
     amqp_death(Code, Explanation, State);
 handle_info({'EXIT', Pid, Reason},
             State = #state{connection = Conn, channel = Ch}) ->
-    Msg = case Pid of
-              Conn -> "Connection died~n";
-              Ch   -> "Channel died~n";
-              _    -> "Subscription channel died~n"
-          end,
-    send_error(Msg, io_lib:format("Reason: ~p", [Reason]), State),
+    DeadThing = case Pid of
+                    Conn -> "connection";
+                    Ch   -> "channel";
+                    _    -> "subscription channel"
+                end,
+    send_error("AMQP " ++ DeadThing ++ " died",
+               io_lib:format("Reason: ~p", [Reason]), State),
     {stop, {conn_died, Reason}, State};
 handle_info({inet_reply, _, ok}, State) ->
     {noreply, State, hibernate};
