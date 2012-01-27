@@ -79,6 +79,12 @@ start() ->
                                   io:format(Format ++ " ...~n", Args1)
                           end
              end,
+    PrintInvalidCommandError =
+        fun () ->
+                print_error("invalid command '~s'",
+                            [string:join([atom_to_list(Command) | Args], " ")])
+        end,
+
     %% The reason we don't use a try/catch here is that rpc:call turns
     %% thrown errors into normal return values
     case catch action(Command, Node, Args, Opts, Inform) of
@@ -88,9 +94,11 @@ start() ->
                 false -> io:format("...done.~n")
             end,
             rabbit_misc:quit(0);
-        {'EXIT', {function_clause, [{?MODULE, action, _} | _]}} ->
-            print_error("invalid command '~s'",
-                        [string:join([atom_to_list(Command) | Args], " ")]),
+        {'EXIT', {function_clause, [{?MODULE, action, _}    | _]}} -> %% < R15
+            PrintInvalidCommandError(),
+            usage();
+        {'EXIT', {function_clause, [{?MODULE, action, _, _} | _]}} -> %% >= R15
+            PrintInvalidCommandError(),
             usage();
         {'EXIT', {badarg, _}} ->
             print_error("invalid parameter: ~p", [Args]),
