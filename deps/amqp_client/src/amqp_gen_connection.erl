@@ -176,10 +176,10 @@ handle_call(connect, _From,
         {error, _} = Error ->
             {stop, {shutdown, Error}, Error, State0}
     end;
-handle_call({command, Command}, From, State = #state{closing = Closing}) ->
-    case Closing of false -> handle_command(Command, From, State);
-                    _     -> {reply, closing, State}
-    end;
+handle_call({command, Command}, From, State = #state{closing = false}) ->
+    handle_command(Command, From, State);
+handle_call({command, _Command}, _From, State) ->
+    {reply, closing, State};
 handle_call({info, Items}, _From, State) ->
     {reply, [{Item, i(Item, State)} || Item <- Items], State};
 handle_call(info_keys, _From, State = #state{module = Mod}) ->
