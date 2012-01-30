@@ -117,8 +117,8 @@ conserve_memory(Pid, Conserve) ->
 register_memory_alarm(State) ->
     rabbit_alarm:register(self(), {?MODULE, conserve_memory, []}), State.
 
-control_throttle(State = #reader_state{state = CS,
-                             conserve_memory  = Mem}) ->
+control_throttle(State = #reader_state{state            = CS,
+                                       conserve_memory  = Mem}) ->
     case {CS, Mem orelse credit_flow:blocked()} of
         {running,   true} -> State#reader_state{state = blocking};
         {blocking, false} -> State#reader_state{state = running};
