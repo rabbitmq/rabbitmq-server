@@ -148,9 +148,8 @@ init([#amqqueue { name = QueueName } = Q]) ->
     {ok, State, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
-handle_call({deliver_immediately, Delivery = #delivery {}}, From, State) ->
-    %% Synchronous, "immediate" delivery mode
-
+handle_call({deliver, Delivery = #delivery { immediate = true }},
+            From, State) ->
     %% It is safe to reply 'false' here even if a) we've not seen the
     %% msg via gm, or b) the master dies before we receive the msg via
     %% gm. In the case of (a), we will eventually receive the msg via
@@ -166,8 +165,8 @@ handle_call({deliver_immediately, Delivery = #delivery {}}, From, State) ->
     gen_server2:reply(From, false), %% master may deliver it, not us
     noreply(maybe_enqueue_message(Delivery, false, State));
 
-handle_call({deliver, Delivery = #delivery {}}, From, State) ->
-    %% Synchronous, "mandatory" delivery mode
+handle_call({deliver, Delivery = #delivery { mandatory = true }},
+            From, State) ->
     gen_server2:reply(From, true), %% amqqueue throws away the result anyway
     noreply(maybe_enqueue_message(Delivery, true, State));
 
@@ -208,8 +207,12 @@ handle_cast({run_backing_queue, Mod, Fun}, State) ->
 handle_cast({gm, Instruction}, State) ->
     handle_process_result(process_instruction(Instruction, State));
 
-handle_cast({deliver, Delivery = #delivery {}}, State) ->
+handle_cast({deliver, Delivery = #delivery{sender = Sender}, Flow}, State) ->
     %% Asynchronous, non-"mandatory", non-"immediate" deliver mode.
+    case Flow of
+        flow   -> credit_flow:ack(Sender);
+        noflow -> ok
+    end,
     noreply(maybe_enqueue_message(Delivery, true, State));
 
 handle_cast({set_maximum_since_use, Age}, State) ->
@@ -447,7 +450,7 @@ promote_me(From, #state { q                   = Q = #amqqueue { name = QName },
     %% Everything that we're monitoring, we need to ensure our new
     %% coordinator is monitoring.
 
-    MonitoringPids = [begin true = erlang:demonitor(MRef),
+    MonitoringPids = [begin put({ch_publisher, Pid}, MRef),
                             Pid
                       end || {Pid, MRef} <- dict:to_list(KS)],
     ok = rabbit_mirror_queue_coordinator:ensure_monitoring(
@@ -601,7 +604,8 @@ ensure_monitoring(ChPid, State = #state { known_senders = KS }) ->
 local_sender_death(ChPid, State = #state { known_senders = KS }) ->
     ok = case dict:is_key(ChPid, KS) of
              false -> ok;
-             true  -> confirm_sender_death(ChPid)
+             true  -> credit_flow:peer_down(ChPid),
+                      confirm_sender_death(ChPid)
          end,
     State.
 

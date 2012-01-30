@@ -90,7 +90,7 @@ set RABBITMQ_PLUGINS_DIR=!TDP0!..\plugins
 set RABBITMQ_EBIN_ROOT=!TDP0!..\ebin
 
 for /f "delims=" %%i in ('dir /ad/b "!ERLANG_HOME!"') do if exist "!ERLANG_HOME!\%%i\bin\epmd.exe" (
-    call !ERLANG_HOME!\%%i\bin\epmd.exe -daemon
+    call "!ERLANG_HOME!\%%i\bin\epmd.exe" -daemon
     if ERRORLEVEL 1 (
        exit /B 1
     )
@@ -145,7 +145,7 @@ if not "!RABBITMQ_NODE_IP_ADDRESS!"=="" (
 -sasl sasl_error_logger false ^
 -rabbit error_logger {file,\""!LOGS:\=/!"\"} ^
 -rabbit sasl_error_logger {file,\""!SASL_LOGS:\=/!"\"} ^
--os_mon start_cpu_sup true ^
+-os_mon start_cpu_sup false ^
 -os_mon start_disksup false ^
 -os_mon start_memsup false ^
 -mnesia dir \""!RABBITMQ_MNESIA_DIR:\=/!"\" ^

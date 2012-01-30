@@ -55,14 +55,21 @@ start() ->
             CmdArgsAndOpts -> CmdArgsAndOpts
         end,
     Command = list_to_atom(Command0),
+    PrintInvalidCommandError =
+        fun () ->
+                rabbitmq_misc:print_error(
+                  "invalid command '~s'",
+                  [string:join([atom_to_list(Command) | Args], " ")])
+        end,
 
     case catch action(Command, Args, Opts, PluginsFile, PluginsDir) of
         ok ->
             rabbit_misc:quit(0);
         {'EXIT', {function_clause, [{?MODULE, action, _} | _]}} ->
-            rabbit_misc:print_error(
-              "invalid command '~s'",
-              [string:join([atom_to_list(Command) | Args], " ")]),
+            PrintInvalidCommandError(),
+            usage();
+        {'EXIT', {function_clause, [{?MODULE, action, _, _} | _]}} ->
+            PrintInvalidCommandError(),
             usage();
         {error, Reason} ->
             rabbit_misc:print_error("~p", [Reason]),
@@ -109,8 +116,7 @@ action(enable, ToEnable0, _Opts, PluginsFile, PluginsDir) ->
         [] -> io:format("Plugin configuration unchanged.~n");
         _  -> print_list("The following plugins have been enabled:",
                          NewImplicitlyEnabled -- ImplicitlyEnabled),
-              io:format("Plugin configuration has changed. "
-                        "Restart RabbitMQ for changes to take effect.~n")
+              report_change()
     end;
 
 action(disable, ToDisable0, _Opts, PluginsFile, PluginsDir) ->
@@ -138,8 +144,7 @@ action(disable, ToDisable0, _Opts, PluginsFile, PluginsDir) ->
                  print_list("The following plugins have been disabled:",
                             ImplicitlyEnabled -- NewImplicitlyEnabled),
                  write_enabled_plugins(PluginsFile, NewEnabled),
-                 io:format("Plugin configuration has changed. "
-                           "Restart RabbitMQ for changes to take effect.~n")
+                 report_change()
     end.
 
 %%----------------------------------------------------------------------------
@@ -325,6 +330,9 @@ lookup_plugins(Names, AllPlugins) ->
 read_enabled_plugins(PluginsFile) ->
     case rabbit_file:read_term_file(PluginsFile) of
         {ok, [Plugins]} -> Plugins;
+        {ok, []}        -> [];
+        {ok, [_|_]}      -> throw({error, {malformed_enabled_plugins_file,
+                                           PluginsFile}});
         {error, enoent} -> [];
         {error, Reason} -> throw({error, {cannot_read_enabled_plugins_file,
                                           PluginsFile, Reason}})
@@ -372,3 +380,17 @@ maybe_warn_mochiweb(Enabled) ->
         false ->
             ok
     end.
+
+report_change() ->
+    io:format("Plugin configuration has changed. "
+              "Restart RabbitMQ for changes to take effect.~n"),
+    case os:type() of
+        {win32, _OsName} ->
+             io:format("If you have RabbitMQ running as a service then you must"
+                       " reinstall by running~n  rabbitmq-service.bat stop~n"
+                       "  rabbitmq-service.bat install~n"
+                       "  rabbitmq-service.bat start~n~n");
+        _ ->
+             ok
+    end.
+

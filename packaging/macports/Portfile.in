@@ -60,6 +60,12 @@ use_configure   no
 
 use_parallel_build yes
 
+build.env-append HOME=${workpath}
+
+build.env-append VERSION=${version}
+
+destroot.env-append VERSION=${version}
+
 destroot.target install_bin
 
 destroot.destdir \

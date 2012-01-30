@@ -145,7 +145,7 @@ if not exist "!RABBITMQ_BASE!" (
 
 "!ERLANG_SERVICE_MANAGER_PATH!\erlsrv" list !RABBITMQ_SERVICENAME! 2>NUL 1>NUL
 if errorlevel 1 (
-    "!ERLANG_SERVICE_MANAGER_PATH!\erlsrv" add !RABBITMQ_SERVICENAME!
+    "!ERLANG_SERVICE_MANAGER_PATH!\erlsrv" add !RABBITMQ_SERVICENAME! -internalservicename !RABBITMQ_SERVICENAME!
 ) else (
     echo !RABBITMQ_SERVICENAME! service is already present - only updating service parameters
 )
@@ -204,7 +204,7 @@ set ERLANG_SERVICE_ARGUMENTS= ^
 -sasl sasl_error_logger false ^
 -rabbit error_logger {file,\""!LOGS:\=/!"\"} ^
 -rabbit sasl_error_logger {file,\""!SASL_LOGS:\=/!"\"} ^
--os_mon start_cpu_sup true ^
+-os_mon start_cpu_sup false ^
 -os_mon start_disksup false ^
 -os_mon start_memsup false ^
 -mnesia dir \""!RABBITMQ_MNESIA_DIR:\=/!"\" ^

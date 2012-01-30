@@ -115,7 +115,6 @@ info_keys() -> ?INFO_KEYS.
 %%----------------------------------------------------------------------------
 
 init(Q) ->
-    ?LOGDEBUG("Queue starting - ~p~n", [Q]),
     process_flag(trap_exit, true),
 
     State = #q{q                   = Q#amqqueue{pid = self()},
@@ -135,7 +134,6 @@ init(Q) ->
 
 init_with_backing_queue_state(Q = #amqqueue{exclusive_owner = Owner}, BQ, BQS,
                               RateTRef, AckTags, Deliveries, MTC) ->
-    ?LOGDEBUG("Queue starting - ~p~n", [Q]),
     case Owner of
         none -> ok;
         _    -> erlang:monitor(process, Owner)
@@ -598,6 +596,12 @@ should_auto_delete(#q{has_had_consumers = false}) -> false;
 should_auto_delete(State) -> is_unused(State).
 
 handle_ch_down(DownPid, State = #q{exclusive_consumer = Holder}) ->
+    case get({ch_publisher, DownPid}) of
+        undefined -> ok;
+        MRef      -> erlang:demonitor(MRef),
+                     erase({ch_publisher, DownPid}),
+                     credit_flow:peer_down(DownPid)
+    end,
     case lookup_ch(DownPid) of
         not_found ->
             {ok, State};
@@ -877,9 +881,7 @@ handle_call({info, Items}, _From, State) ->
 handle_call(consumers, _From, State) ->
     reply(consumers(State), State);
 
-handle_call({deliver_immediately, Delivery}, _From, State) ->
-    %% Synchronous, "immediate" delivery mode
-    %%
+handle_call({deliver, Delivery = #delivery{immediate = true}}, _From, State) ->
     %% FIXME: Is this correct semantics?
     %%
     %% I'm worried in particular about the case where an exchange has
@@ -897,8 +899,7 @@ handle_call({deliver_immediately, Delivery}, _From, State) ->
                          false -> discard_delivery(Delivery, State1)
                      end);
 
-handle_call({deliver, Delivery}, From, State) ->
-    %% Synchronous, "mandatory" delivery mode. Reply asap.
+handle_call({deliver, Delivery = #delivery{mandatory = true}}, From, State) ->
     gen_server2:reply(From, true),
     noreply(deliver_or_enqueue(Delivery, State));
 
@@ -1021,8 +1022,17 @@ handle_call({requeue, AckTags, ChPid}, From, State) ->
 handle_cast({run_backing_queue, Mod, Fun}, State) ->
     noreply(run_backing_queue(Mod, Fun, State));
 
-handle_cast({deliver, Delivery}, State) ->
+handle_cast({deliver, Delivery = #delivery{sender = Sender}, Flow}, State) ->
     %% Asynchronous, non-"mandatory", non-"immediate" deliver mode.
+    case Flow of
+        flow   -> Key = {ch_publisher, Sender},
+                  case get(Key) of
+                      undefined -> put(Key, erlang:monitor(process, Sender));
+                      _         -> ok
+                  end,
+                  credit_flow:ack(Sender);
+        noflow -> ok
+    end,
     noreply(deliver_or_enqueue(Delivery, State));
 
 handle_cast({ack, AckTags, ChPid}, State) ->
@@ -1102,8 +1112,7 @@ handle_cast(force_event_refresh, State = #q{exclusive_consumer = Exclusive}) ->
 
 handle_info(maybe_expire, State) ->
     case is_unused(State) of
-        true  -> ?LOGDEBUG("Queue lease expired for ~p~n", [State#q.q]),
-                 {stop, normal, State};
+        true  -> {stop, normal, State};
         false -> noreply(ensure_expiry_timer(State))
     end;
 
@@ -1151,7 +1160,6 @@ handle_info({'EXIT', _Pid, Reason}, State) ->
     {stop, Reason, State};
 
 handle_info(Info, State) ->
-    ?LOGDEBUG("Info in queue: ~p~n", [Info]),
     {stop, {unhandled_info, Info}, State}.
 
 handle_pre_hibernate(State = #q{backing_queue_state = undefined}) ->

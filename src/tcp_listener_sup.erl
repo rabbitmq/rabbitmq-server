@@ -26,12 +26,16 @@
 
 -ifdef(use_specs).
 
+-type(mfargs() :: {atom(), atom(), [any()]}).
+
 -spec(start_link/7 ::
-        (gen_tcp:ip_address(), integer(), rabbit_types:infos(), mfa(), mfa(),
-         mfa(), string()) -> rabbit_types:ok_pid_or_error()).
+        (inet:ip_address(), inet:port_number(), [gen_tcp:listen_option()],
+         mfargs(), mfargs(), mfargs(), string()) ->
+                           rabbit_types:ok_pid_or_error()).
 -spec(start_link/8 ::
-        (gen_tcp:ip_address(), integer(), rabbit_types:infos(), mfa(), mfa(),
-         mfa(), integer(), string()) -> rabbit_types:ok_pid_or_error()).
+        (inet:ip_address(), inet:port_number(), [gen_tcp:listen_option()],
+         mfargs(), mfargs(), mfargs(), integer(), string()) ->
+                           rabbit_types:ok_pid_or_error()).
 
 -endif.
 

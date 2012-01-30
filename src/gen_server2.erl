@@ -1079,7 +1079,7 @@ get_proc_name({local, Name}) ->
             exit(process_not_registered)
     end;
 get_proc_name({global, Name}) ->
-    case global:safe_whereis_name(Name) of
+    case whereis_name(Name) of
         undefined ->
             exit(process_not_registered_globally);
         Pid when Pid =:= self() ->
@@ -1101,7 +1101,7 @@ get_parent() ->
 name_to_pid(Name) ->
     case whereis(Name) of
         undefined ->
-            case global:safe_whereis_name(Name) of
+            case whereis_name(Name) of
                 undefined ->
                     exit(could_not_find_registerd_name);
                 Pid ->
@@ -1109,6 +1109,20 @@ name_to_pid(Name) ->
             end;
         Pid ->
             Pid
+    end.
+
+whereis_name(Name) ->
+    case ets:lookup(global_names, Name) of
+    [{_Name, Pid, _Method, _RPid, _Ref}] ->
+        if node(Pid) == node() ->
+            case is_process_alive(Pid) of
+            true  -> Pid;
+            false -> undefined
+            end;
+           true ->
+            Pid
+        end;
+    [] -> undefined
     end.
 
 find_prioritisers(GS2State = #gs2_state { mod = Mod }) ->
