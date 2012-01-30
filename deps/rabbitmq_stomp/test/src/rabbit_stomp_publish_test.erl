@@ -46,8 +46,8 @@ run() ->
 
 report() ->
     receive
-        {sent, C} -> put(sent, get(sent) + C);
-        {recd, C} -> put(recd, get(recd) + C)
+        {sent, C} -> put(sent, C);
+        {recd, C} -> put(recd, C)
     end,
     Diff = timer:now_diff(erlang:now(), get(last_ts)),
     case Diff > ?MICROS_PER_UPDATE of
@@ -63,22 +63,26 @@ report() ->
     end,
     report().
 
-publish(Owner, Sock, Count, TS) ->
+publish(Owner, Client, Count, TS) ->
     rabbit_stomp_client:send(
-      Sock, "SEND", [{"destination", ?DESTINATION}], ["hello"]),
+      Client, "SEND", [{"destination", ?DESTINATION}],
+      [integer_to_list(Count)]),
     Diff = timer:now_diff(erlang:now(), TS),
     case Diff > ?MICROS_PER_UPDATE_MSG of
-        true  -> Owner ! {sent, Count},
-                 publish(Owner, Sock, 0, erlang:now());
-        false -> publish(Owner, Sock, Count + 1, TS)
+        true  -> Owner ! {sent, Count + 1},
+                 publish(Owner, Client, Count + 1, erlang:now());
+        false -> publish(Owner, Client, Count + 1, TS)
     end.
 
-recv(Owner, Sock, Count, TS) ->
-    #stomp_frame{} = rabbit_stomp_client:recv(Sock),
+recv(Owner, Client0, Count, TS) ->
+    {#stomp_frame{body_iolist = Body}, Client1} =
+        rabbit_stomp_client:recv(Client0),
+    BodyInt = list_to_integer(binary_to_list(iolist_to_binary(Body))),
+    Count = BodyInt,
     Diff = timer:now_diff(erlang:now(), TS),
     case Diff > ?MICROS_PER_UPDATE_MSG of
-        true  -> Owner ! {recd, Count},
-                 recv(Owner, Sock, 0, erlang:now());
-        false -> recv(Owner, Sock, Count + 1, TS)
+        true  -> Owner ! {recd, Count + 1},
+                 recv(Owner, Client1, Count + 1, erlang:now());
+        false -> recv(Owner, Client1, Count + 1, TS)
     end.
 

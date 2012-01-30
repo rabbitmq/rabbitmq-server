@@ -36,33 +36,35 @@ all_tests() ->
 run_test(TestFun) ->
     {ok, Connection} = amqp_connection:start(#amqp_params_direct{}),
     {ok, Channel} = amqp_connection:open_channel(Connection),
-    {ok, Sock} = rabbit_stomp_client:connect(),
+    {ok, Client} = rabbit_stomp_client:connect(),
 
-    Result = (catch TestFun(Channel, Sock)),
+    Result = (catch TestFun(Channel, Client)),
 
-    rabbit_stomp_client:disconnect(Sock),
+    rabbit_stomp_client:disconnect(Client),
     amqp_channel:close(Channel),
     amqp_connection:close(Connection),
     Result.
 
-test_subscribe_error(_Channel, Sock) ->
+test_subscribe_error(_Channel, Client) ->
     %% SUBSCRIBE to missing queue
     rabbit_stomp_client:send(
-      Sock, "SUBSCRIBE", [{"destination", ?DESTINATION}]),
-    #stomp_frame{command = "ERROR",
-                 headers = Hdrs} = rabbit_stomp_client:recv(Sock),
+      Client, "SUBSCRIBE", [{"destination", ?DESTINATION}]),
+    {#stomp_frame{command = "ERROR",
+                  headers = Hdrs}, _} = rabbit_stomp_client:recv(Client),
     "not_found" = proplists:get_value("message", Hdrs),
     ok.
 
-test_subscribe(Channel, Sock) ->
+test_subscribe(Channel, Client) ->
     #'queue.declare_ok'{} =
         amqp_channel:call(Channel, #'queue.declare'{queue       = ?QUEUE,
                                                     auto_delete = true}),
 
     %% subscribe and wait for receipt
-    rabbit_stomp_client:send(Sock, "SUBSCRIBE", [{"destination", ?DESTINATION},
-                                                 {"receipt", "foo"}]),
-    #stomp_frame{command = "RECEIPT"} = rabbit_stomp_client:recv(Sock),
+    rabbit_stomp_client:send(Client, "SUBSCRIBE",
+                             [{"destination", ?DESTINATION},
+                              {"receipt", "foo"}]),
+    {#stomp_frame{command = "RECEIPT"}, Client1} =
+        rabbit_stomp_client:recv(Client),
 
     %% send from amqp
     Method = #'basic.publish'{
@@ -72,26 +74,27 @@ test_subscribe(Channel, Sock) ->
     amqp_channel:call(Channel, Method, #amqp_msg{props = #'P_basic'{},
                                                  payload = <<"hello">>}),
 
-    #stomp_frame{command     = "MESSAGE",
-                 body_iolist = [<<"hello">>]} = rabbit_stomp_client:recv(Sock),
-
+    {#stomp_frame{command     = "MESSAGE",
+                  body_iolist = [<<"hello">>]}, Client2} =
+        rabbit_stomp_client:recv(Client),
     ok.
 
-test_send(Channel, Sock) ->
+test_send(Channel, Client) ->
     #'queue.declare_ok'{} =
         amqp_channel:call(Channel, #'queue.declare'{queue       = ?QUEUE,
                                                     auto_delete = true}),
 
     %% subscribe and wait for receipt
     rabbit_stomp_client:send(
-      Sock, "SUBSCRIBE", [{"destination", ?DESTINATION}, {"receipt", "foo"}]),
-    #stomp_frame{command = "RECEIPT"} = rabbit_stomp_client:recv(Sock),
+      Client, "SUBSCRIBE", [{"destination", ?DESTINATION}, {"receipt", "foo"}]),
+    {#stomp_frame{command = "RECEIPT"}, Client1} =
+        rabbit_stomp_client:recv(Client),
 
     %% send from stomp
     rabbit_stomp_client:send(
-      Sock, "SEND", [{"destination", ?DESTINATION}], ["hello"]),
+      Client1, "SEND", [{"destination", ?DESTINATION}], ["hello"]),
 
-    #stomp_frame{command     = "MESSAGE",
-                 body_iolist = [<<"hello">>]} = rabbit_stomp_client:recv(Sock),
-
+    {#stomp_frame{command     = "MESSAGE",
+                  body_iolist = [<<"hello">>]}, _Client2} =
+        rabbit_stomp_client:recv(Client1),
     ok.

@@ -29,32 +29,46 @@
 
 connect() ->
     {ok, Sock} = gen_tcp:connect(localhost, 61613, [{active, false}, binary]),
-    send(Sock, "CONNECT"),
-    #stomp_frame{command = "CONNECTED"} = recv(Sock),
-    {ok, Sock}.
+    Client0 = recv_state(Sock),
+    send(Client0, "CONNECT"),
+    {#stomp_frame{command = "CONNECTED"}, Client1} = recv(Client0),
+    {ok, Client1}.
 
-disconnect(Sock) ->
-    send(Sock, "DISCONNECT").
+disconnect(Client) ->
+    send(Client, "DISCONNECT").
 
-send(Sock, Command) ->
-    send(Sock, Command, []).
+send(Client, Command) ->
+    send(Client, Command, []).
 
-send(Sock, Command, Headers) ->
-    send(Sock, Command, Headers, []).
+send(Client, Command, Headers) ->
+    send(Client, Command, Headers, []).
 
-send(Sock, Command, Headers, Body) ->
+send({Sock, _}, Command, Headers, Body) ->
     Frame = rabbit_stomp_frame:serialize(
               #stomp_frame{command     = list_to_binary(Command),
                            headers     = Headers,
                            body_iolist = Body}),
     gen_tcp:send(Sock, Frame).
 
-recv(Sock) ->
-    recv(Sock, rabbit_stomp_frame:initial_state(), 0).
+recv_state(Sock) ->
+    {Sock, []}.
 
-recv(Sock, State, Length) ->
+recv({_Sock, []} = Client) ->
+    recv(Client, rabbit_stomp_frame:initial_state(), 0);
+recv({Sock, [Frame | Frames]}) ->
+    {Frame, {Sock, Frames}}.
+
+recv(Client = {Sock, _}, FrameState, Length) ->
     {ok, Payload} = gen_tcp:recv(Sock, Length),
-    case rabbit_stomp_frame:parse(Payload, State) of
-        {ok, Frame, _Rest}         -> Frame;
-        {more, NewState, Length}   -> recv(Sock, NewState, Length)
+    parse(Payload, Client, FrameState, Length).
+
+parse(Payload, Client = {Sock, FramesRev}, FrameState, Length) ->
+    case rabbit_stomp_frame:parse(Payload, FrameState) of
+        {ok, Frame, <<>>} ->
+            recv({Sock, lists:reverse([Frame | FramesRev])});
+        {ok, Frame, Rest} ->
+            parse(Rest, {Sock, [Frame | FramesRev]},
+                  rabbit_stomp_frame:initial_state(), Length);
+        {more, NewState, NewLength} ->
+            recv(Client, NewState, NewLength)
     end.
