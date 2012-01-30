@@ -20,7 +20,7 @@
 
 -behaviour(gen_server2).
 
--export([start_link/10, do/2, do/3, flush/1, shutdown/1]).
+-export([start_link/10, do/2, do/3, do_flow/3, flush/1, shutdown/1]).
 -export([send_command/2, deliver/4, flushed/2, confirm/2]).
 -export([list/0, info_keys/0, info/1, info/2, info_all/0, info_all/1]).
 -export([refresh_config_local/0, ready_for_close/1]).
@@ -78,6 +78,8 @@
 -spec(do/2 :: (pid(), rabbit_framing:amqp_method_record()) -> 'ok').
 -spec(do/3 :: (pid(), rabbit_framing:amqp_method_record(),
                rabbit_types:maybe(rabbit_types:content())) -> 'ok').
+-spec(do_flow/3 :: (pid(), rabbit_framing:amqp_method_record(),
+                    rabbit_types:maybe(rabbit_types:content())) -> 'ok').
 -spec(flush/1 :: (pid()) -> 'ok').
 -spec(shutdown/1 :: (pid()) -> 'ok').
 -spec(send_command/2 :: (pid(), rabbit_framing:amqp_method_record()) -> 'ok').
@@ -111,7 +113,11 @@ do(Pid, Method) ->
     do(Pid, Method, none).
 
 do(Pid, Method, Content) ->
-    gen_server2:cast(Pid, {method, Method, Content}).
+    gen_server2:cast(Pid, {method, Method, Content, noflow}).
+
+do_flow(Pid, Method, Content) ->
+    credit_flow:send(Pid),
+    gen_server2:cast(Pid, {method, Method, Content, flow}).
 
 flush(Pid) ->
     gen_server2:call(Pid, flush, infinity).
@@ -188,7 +194,7 @@ init([Channel, ReaderPid, WriterPid, ConnPid, Protocol, User, VHost,
                 user                    = User,
                 virtual_host            = VHost,
                 most_recently_declared_queue = <<>>,
-                queue_monitors          = dict:new(),
+                queue_monitors          = sets:new(),
                 consumer_mapping        = dict:new(),
                 blocking                = sets:new(),
                 queue_consumers         = dict:new(),
@@ -244,7 +250,12 @@ handle_call(refresh_config, _From, State = #ch{virtual_host = VHost}) ->
 handle_call(_Request, _From, State) ->
     noreply(State).
 
-handle_cast({method, Method, Content}, State) ->
+handle_cast({method, Method, Content, Flow},
+            State = #ch{reader_pid = Reader}) ->
+    case Flow of
+        flow   -> credit_flow:ack(Reader);
+        noflow -> ok
+    end,
     try handle_method(Method, Content, State) of
         {reply, Reply, NewState} ->
             ok = rabbit_writer:send_command(NewState#ch.writer_pid, Reply),
@@ -299,13 +310,13 @@ handle_cast({deliver, ConsumerTag, AckRequired,
                          exchange = ExchangeName#resource.name,
                          routing_key = RoutingKey},
     rabbit_writer:send_command_and_notify(WriterPid, QPid, self(), M, Content),
-    State2 = maybe_incr_stats([{QPid, 1}], case AckRequired of
-                                               true  -> deliver;
-                                               false -> deliver_no_ack
-                                           end, State1),
-    State3 = maybe_incr_redeliver_stats(Redelivered, QPid, State2),
+    maybe_incr_stats([{QPid, 1}], case AckRequired of
+                                      true  -> deliver;
+                                      false -> deliver_no_ack
+                                  end, State1),
+    maybe_incr_redeliver_stats(Redelivered, QPid, State1),
     rabbit_trace:tap_trace_out(Msg, TraceState),
-    noreply(State3#ch{next_tag = DeliveryTag + 1});
+    noreply(State1#ch{next_tag = DeliveryTag + 1});
 
 
 handle_cast(force_event_refresh, State) ->
@@ -314,6 +325,10 @@ handle_cast(force_event_refresh, State) ->
 handle_cast({confirm, MsgSeqNos, From}, State) ->
     State1 = #ch{confirmed = C} = confirm(MsgSeqNos, From, State),
     noreply([send_confirms], State1, case C of [] -> hibernate; _ -> 0 end).
+
+handle_info({bump_credit, Msg}, State) ->
+    credit_flow:handle_bump_msg(Msg),
+    noreply(State);
 
 handle_info(timeout, State) ->
     noreply(State);
@@ -327,9 +342,10 @@ handle_info({'DOWN', _MRef, process, QPid, Reason}, State) ->
     State1 = handle_publishing_queue_down(QPid, Reason, State),
     State2 = queue_blocked(QPid, State1),
     State3 = handle_consuming_queue_down(QPid, State2),
+    credit_flow:peer_down(QPid),
     erase_queue_stats(QPid),
     noreply(State3#ch{queue_monitors =
-                          dict:erase(QPid, State3#ch.queue_monitors)});
+                          sets:del_element(QPid, State3#ch.queue_monitors)});
 
 handle_info({'EXIT', _Pid, Reason}, State) ->
     {stop, Reason, State}.
@@ -527,7 +543,7 @@ queue_blocked(QPid, State = #ch{blocking = Blocking}) ->
                                  #'channel.flow_ok'{active = false});
                           _ -> ok
                       end,
-                 demonitor_queue(QPid, State#ch{blocking = Blocking1})
+                 State#ch{blocking = Blocking1}
     end.
 
 record_confirm(undefined, _, State) ->
@@ -565,8 +581,7 @@ remove_unconfirmed(MsgSeqNo, QPid, {XName, Qs},
                      MsgSeqNos1 = gb_sets:delete(MsgSeqNo, MsgSeqNos),
                      case gb_sets:is_empty(MsgSeqNos1) of
                          true  -> UQM1 = gb_trees:delete(QPid, UQM),
-                                  demonitor_queue(
-                                    QPid, State#ch{unconfirmed_qm = UQM1});
+                                  State#ch{unconfirmed_qm = UQM1};
                          false -> UQM1 = gb_trees:update(QPid, MsgSeqNos1, UQM),
                                   State#ch{unconfirmed_qm = UQM1}
                      end;
@@ -672,7 +687,8 @@ handle_method(#'basic.ack'{delivery_tag = DeliveryTag,
     State1 = State#ch{unacked_message_q = Remaining},
     {noreply,
      case TxStatus of
-         none        -> ack(Acked, State1);
+         none        -> ack(Acked, State1),
+                        State1;
          in_progress -> State1#ch{uncommitted_acks =
                                       Acked ++ State1#ch.uncommitted_acks}
      end};
@@ -696,11 +712,11 @@ handle_method(#'basic.get'{queue = QueueNameBin,
             State1 = lock_message(not(NoAck),
                                   ack_record(DeliveryTag, none, Msg),
                                   State),
-            State2 = maybe_incr_stats([{QPid, 1}], case NoAck of
-                                                       true  -> get_no_ack;
-                                                       false -> get
-                                                   end, State1),
-            State3 = maybe_incr_redeliver_stats(Redelivered, QPid, State2),
+            maybe_incr_stats([{QPid, 1}], case NoAck of
+                                              true  -> get_no_ack;
+                                              false -> get
+                                          end, State1),
+            maybe_incr_redeliver_stats(Redelivered, QPid, State1),
             rabbit_trace:tap_trace_out(Msg, TraceState),
             ok = rabbit_writer:send_command(
                    WriterPid,
@@ -710,7 +726,7 @@ handle_method(#'basic.get'{queue = QueueNameBin,
                                    routing_key = RoutingKey,
                                    message_count = MessageCount},
                    Content),
-            {noreply, State3#ch{next_tag = DeliveryTag + 1}};
+            {noreply, State1#ch{next_tag = DeliveryTag + 1}};
         empty ->
             {reply, #'basic.get_empty'{}, State}
     end;
@@ -787,9 +803,8 @@ handle_method(#'basic.cancel'{consumer_tag = ConsumerTag,
                                        false -> dict:store(QPid, CTags1, QCons)
                                    end
                 end,
-            NewState = demonitor_queue(
-                         Q, State#ch{consumer_mapping = ConsumerMapping1,
-                                     queue_consumers  = QCons1}),
+            NewState = State#ch{consumer_mapping = ConsumerMapping1,
+                                queue_consumers  = QCons1},
             %% In order to ensure that no more messages are sent to
             %% the consumer after the cancel_ok has been sent, we get
             %% the queue process to send the cancel_ok on our
@@ -1070,8 +1085,8 @@ handle_method(#'tx.commit'{}, _, #ch{tx_status = none}) ->
 
 handle_method(#'tx.commit'{}, _, State = #ch{uncommitted_message_q = TMQ,
                                              uncommitted_acks      = TAL}) ->
-    State1 = new_tx(ack(TAL, rabbit_misc:queue_fold(fun deliver_to_queues/2,
-                                                    State, TMQ))),
+    ack(TAL, rabbit_misc:queue_fold(fun deliver_to_queues/2, State, TMQ)),
+    State1 = new_tx(State),
     {noreply, maybe_complete_tx(State1#ch{tx_status = committing})};
 
 handle_method(#'tx.rollback'{}, _, #ch{tx_status = none}) ->
@@ -1111,10 +1126,7 @@ handle_method(#'channel.flow'{active = false}, _,
     ok = rabbit_limiter:block(Limiter1),
     case consumer_queues(Consumers) of
         []    -> {reply, #'channel.flow_ok'{active = false}, State1};
-        QPids -> State2 = lists:foldl(fun monitor_queue/2,
-                                      State1#ch{blocking =
-                                                    sets:from_list(QPids)},
-                                      QPids),
+        QPids -> State2 = State1#ch{blocking = sets:from_list(QPids)},
                  ok = rabbit_amqqueue:flush_all(QPids, self()),
                  {noreply, State2}
     end;
@@ -1145,30 +1157,11 @@ consumer_monitor(ConsumerTag,
     end.
 
 monitor_queue(QPid, State = #ch{queue_monitors = QMons}) ->
-    case (not dict:is_key(QPid, QMons) andalso
-          queue_monitor_needed(QPid, State)) of
-        true  -> MRef = erlang:monitor(process, QPid),
-                 State#ch{queue_monitors = dict:store(QPid, MRef, QMons)};
+    case not sets:is_element(QPid, QMons) of
+        true  -> erlang:monitor(process, QPid),
+                 State#ch{queue_monitors = sets:add_element(QPid, QMons)};
         false -> State
     end.
-
-demonitor_queue(QPid, State = #ch{queue_monitors = QMons}) ->
-    case (dict:is_key(QPid, QMons) andalso
-          not queue_monitor_needed(QPid, State)) of
-        true  -> true = erlang:demonitor(dict:fetch(QPid, QMons)),
-                 State#ch{queue_monitors = dict:erase(QPid, QMons)};
-        false -> State
-    end.
-
-queue_monitor_needed(QPid, #ch{queue_consumers = QCons,
-                               blocking        = Blocking,
-                               unconfirmed_qm  = UQM} = State) ->
-    StatsEnabled      = rabbit_event:stats_level(
-                          State, #ch.stats_timer) =:= fine,
-    ConsumerMonitored = dict:is_key(QPid, QCons),
-    QueueBlocked      = sets:is_element(QPid, Blocking),
-    ConfirmMonitored  = gb_trees:is_defined(QPid, UQM),
-    StatsEnabled or ConsumerMonitored or QueueBlocked or ConfirmMonitored.
 
 handle_publishing_queue_down(QPid, Reason, State = #ch{unconfirmed_qm = UQM}) ->
     MsgSeqNos = case gb_trees:lookup(QPid, UQM) of
@@ -1363,22 +1356,24 @@ deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{
                                         msg_seq_no = MsgSeqNo},
                    QNames}, State) ->
     {RoutingRes, DeliveredQPids} =
-        rabbit_amqqueue:deliver(rabbit_amqqueue:lookup(QNames), Delivery),
-    State1 = process_routing_result(RoutingRes, DeliveredQPids,
-                                    XName, MsgSeqNo, Message, State),
+        rabbit_amqqueue:deliver_flow(rabbit_amqqueue:lookup(QNames), Delivery),
+    State1 = lists:foldl(fun monitor_queue/2, State, DeliveredQPids),
+    State2 = process_routing_result(RoutingRes, DeliveredQPids,
+                                    XName, MsgSeqNo, Message, State1),
     maybe_incr_stats([{XName, 1} |
                       [{{QPid, XName}, 1} ||
-                          QPid <- DeliveredQPids]], publish, State1).
+                          QPid <- DeliveredQPids]], publish, State2),
+    State2.
 
 process_routing_result(unroutable,    _, XName,  MsgSeqNo, Msg, State) ->
     ok = basic_return(Msg, State, no_route),
-    record_confirm(MsgSeqNo, XName,
-                   maybe_incr_stats([{Msg#basic_message.exchange_name, 1}],
-                                    return_unroutable, State));
+    maybe_incr_stats([{Msg#basic_message.exchange_name, 1}],
+                     return_unroutable, State),
+    record_confirm(MsgSeqNo, XName, State);
 process_routing_result(not_delivered, _, XName,  MsgSeqNo, Msg, State) ->
     ok = basic_return(Msg, State, no_consumers),
-    record_confirm(MsgSeqNo, XName,
-                   maybe_incr_stats([{XName, 1}], return_not_delivered, State));
+    maybe_incr_stats([{XName, 1}], return_not_delivered, State),
+    record_confirm(MsgSeqNo, XName, State);
 process_routing_result(routed,       [], XName,  MsgSeqNo,   _, State) ->
     record_confirm(MsgSeqNo, XName, State);
 process_routing_result(routed,        _,     _, undefined,   _, State) ->
@@ -1396,7 +1391,7 @@ process_routing_result(routed,    QPids, XName,  MsgSeqNo,   _, State) ->
                       State0#ch{unconfirmed_qm = UQM1};
                   none ->
                       UQM1 = gb_trees:insert(QPid, SingletonSet, UQM),
-                      monitor_queue(QPid, State0#ch{unconfirmed_qm = UQM1})
+                      State0#ch{unconfirmed_qm = UQM1}
               end
       end, State#ch{unconfirmed_mq = UMQ1}, QPids).
 
@@ -1420,13 +1415,12 @@ send_nacks(_, State) ->
 send_confirms(State = #ch{tx_status = none, confirmed = []}) ->
     State;
 send_confirms(State = #ch{tx_status = none, confirmed = C}) ->
-    {MsgSeqNos, State1} =
-        lists:foldl(fun ({MsgSeqNo, ExchangeName}, {MSNs, State0}) ->
-                            {[MsgSeqNo | MSNs],
-                             maybe_incr_stats([{ExchangeName, 1}], confirm,
-                                              State0)}
-                    end, {[], State}, lists:append(C)),
-    send_confirms(MsgSeqNos, State1 #ch{confirmed = []});
+    MsgSeqNos =
+        lists:foldl(fun ({MsgSeqNo, XName}, MSNs) ->
+                            maybe_incr_stats([{XName, 1}], confirm, State),
+                            [MsgSeqNo | MSNs]
+                    end, [], lists:append(C)),
+    send_confirms(MsgSeqNos, State#ch{confirmed = []});
 send_confirms(State) ->
     maybe_complete_tx(State).
 
@@ -1506,26 +1500,21 @@ i(Item, _) ->
 
 maybe_incr_redeliver_stats(true, QPid, State) ->
     maybe_incr_stats([{QPid, 1}], redeliver, State);
-maybe_incr_redeliver_stats(_, _, State) ->
-    State.
+maybe_incr_redeliver_stats(_, _, _State) ->
+    ok.
 
 maybe_incr_stats(QXIncs, Measure, State) ->
     case rabbit_event:stats_level(State, #ch.stats_timer) of
-        fine -> lists:foldl(fun ({QX, Inc}, State0) ->
-                                    incr_stats(QX, Inc, Measure, State0)
-                            end, State, QXIncs);
-        _    -> State
+        fine -> [incr_stats(QX, Inc, Measure) || {QX, Inc} <- QXIncs];
+        _    -> ok
     end.
 
-incr_stats({QPid, _} = QX, Inc, Measure, State) ->
-    update_measures(queue_exchange_stats, QX, Inc, Measure),
-    monitor_queue(QPid, State);
-incr_stats(QPid, Inc, Measure, State) when is_pid(QPid) ->
-    update_measures(queue_stats, QPid, Inc, Measure),
-    monitor_queue(QPid, State);
-incr_stats(X, Inc, Measure, State) ->
-    update_measures(exchange_stats, X, Inc, Measure),
-    State.
+incr_stats({_, _} = QX, Inc, Measure) ->
+    update_measures(queue_exchange_stats, QX, Inc, Measure);
+incr_stats(QPid, Inc, Measure) when is_pid(QPid) ->
+    update_measures(queue_stats, QPid, Inc, Measure);
+incr_stats(X, Inc, Measure) ->
+    update_measures(exchange_stats, X, Inc, Measure).
 
 update_measures(Type, QX, Inc, Measure) ->
     Measures = case get({Type, QX}) of
