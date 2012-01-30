@@ -225,15 +225,15 @@ start_connection(Parent, ChannelSupSupPid, Collector, StartHeartbeatFun, Deb,
     try
         recvloop(Deb, switch_callback(rabbit_event:init_stats_timer(
                                        State, #v1.stats_timer),
-                                      handshake, 8))
+                                      handshake, 8)),
+        log(info, "closing AMQP connection ~p (~s)~n", [self(), ConnStr])
     catch
         Ex -> log(case Ex of
                       connection_closed_abruptly -> warning;
                       _                          -> error
-                  end, "exception on AMQP connection ~p (~s)~n~p~n",
+                  end, "closing AMQP connection ~p (~s):~n~p~n",
                   [self(), ConnStr, Ex])
     after
-        log(info, "closing AMQP connection ~p (~s)~n", [self(), ConnStr]),
         %% We don't close the socket explicitly. The reader is the
         %% controlling process and hence its termination will close
         %% the socket. Furthermore, gen_tcp:close/1 waits for pending
