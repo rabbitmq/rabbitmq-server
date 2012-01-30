@@ -325,8 +325,7 @@ init([#amqqueue { name = QueueName } = Q, GM, DeathFun, LengthFun]) ->
                   true = link(GM),
                   GM
           end,
-    {ok, _TRef} =
-        timer:apply_interval(?ONE_SECOND, gm, broadcast, [GM1, heartbeat]),
+    ensure_gm_heartbeat(),
     {ok, #state { q          = Q,
                   gm         = GM1,
                   monitors   = dict:new(),
@@ -365,6 +364,11 @@ handle_cast({ensure_monitoring, Pids},
                             end
                     end, Monitors, Pids),
     noreply(State #state { monitors = Monitors1 }).
+
+handle_info(send_gm_heartbeat, State = #state{gm = GM}) ->
+    gm:broadcast(GM, heartbeat),
+    ensure_gm_heartbeat(),
+    noreply(State);
 
 handle_info({'DOWN', _MonitorRef, process, Pid, _Reason},
             State = #state { monitors  = Monitors,
@@ -409,6 +413,9 @@ handle_msg([CPid], _From, {ensure_monitoring, _Pids} = Msg) ->
     ok = gen_server2:cast(CPid, Msg);
 handle_msg([_CPid], _From, _Msg) ->
     ok.
+
+ensure_gm_heartbeat() ->
+    erlang:send_after(?ONE_SECOND, self(), send_gm_heartbeat).
 
 %% ---------------------------------------------------------------------------
 %% Others
