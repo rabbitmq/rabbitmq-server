@@ -50,9 +50,11 @@ send(Sock, Command, Headers, Body) ->
     gen_tcp:send(Sock, Frame).
 
 recv(Sock) ->
-    {ok, Payload} = gen_tcp:recv(Sock, 0),
-    {ok, Frame, _Rest} =
-        rabbit_stomp_frame:parse(Payload,
-                                 rabbit_stomp_frame:initial_state()),
-    Frame.
+    recv(Sock, rabbit_stomp_frame:initial_state(), 0).
 
+recv(Sock, State, Length) ->
+    {ok, Payload} = gen_tcp:recv(Sock, Length),
+    case rabbit_stomp_frame:parse(Payload, State) of
+        {ok, Frame, _Rest}         -> Frame;
+        {more, NewState, Length}   -> recv(Sock, NewState, Length)
+    end.
