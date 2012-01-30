@@ -358,8 +358,11 @@ check_integer_argument({Type, Val}, _Args, _VHostPath) when Val > 0 ->
 check_integer_argument({_Type, Val}, _Args, _VHostPath) ->
     {error, {value_zero_or_less, Val}}.
 
-check_exchange_argument(undefined, _Args, _VHostPath) ->
-    ok;
+check_exchange_argument(undefined, Args, _VHostPath) ->
+    case rabbit_misc:table_lookup(Args, <<"x-dead-letter-routing-key">>) of
+        undefined -> ok;
+        _         -> {error, routing_key_but_no_dlx_defined}
+    end;
 check_exchange_argument({longstr, Val}, _Args, VHostPath) ->
     try rabbit_misc:r(VHostPath, exchange, Val)
     of _Exchange -> ok
