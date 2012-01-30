@@ -36,14 +36,14 @@ RABBITMQ_HOME="${SCRIPT_DIR}/.."
 [ "x" = "x$HOSTNAME" ] && HOSTNAME=`env hostname`
 NODENAME=rabbit@${HOSTNAME%%.*}
 
-## Set (non-empty) default values for rabbitmq-env.conf variables to override
-SERVER_ERL_ARGS="+K true +A30 +P 1048576 \
--kernel inet_default_connect_options [{nodelay,true}]"
-CONFIG_FILE=${RABBITMQ_HOME}/rabbitmq
-LOG_BASE=${RABBITMQ_HOME}/log
-MNESIA_BASE=${RABBITMQ_HOME}/mnesia
-PLUGINS_DIR=${RABBITMQ_HOME}/plugins
-ENABLED_PLUGINS_FILE=${RABBITMQ_HOME}/enabled_plugins
+## Set system default values for rabbitmq-env.conf variables to override
+if [ ! -f ${SCRIPT_DIR}/rabbitmq-sys ]; then
+    echo -n "WARNING: system defaults are not available -- "
+    echo "check the installation completed correctly."
+    exit 1
+fi
+
+. ${SCRIPT_DIR}/rabbitmq-sys
 
 ## Get configuration variables from the rabbitmq-env.conf file
 if [ -f /etc/rabbitmq/rabbitmq.conf ] && \
