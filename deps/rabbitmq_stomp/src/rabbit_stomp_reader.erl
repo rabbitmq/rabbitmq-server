@@ -61,12 +61,17 @@ init(SupPid, Configuration) ->
                                    parse_state = ParseState,
                                    processor   = ProcessorPid,
                                    state       = running,
-                                   iterations  = 0}), 0)
-            after
-                rabbit_stomp_processor:flush_and_die(ProcessorPid),
+                                   iterations  = 0}), 0),
                 log(info, "closing STOMP connection ~p (~s)~n",
                     [self(), ConnStr])
-            end
+            catch
+                Ex -> log(error, "closing STOMP connection ~p (~s):~n~p~n",
+                          [self(), ConnStr, Ex])
+            after
+                rabbit_stomp_processor:flush_and_die(ProcessorPid)
+            end,
+
+            done
     end.
 
 mainloop(State = #reader_state{socket = Sock}, ByteCount) ->
@@ -75,13 +80,9 @@ mainloop(State = #reader_state{socket = Sock}, ByteCount) ->
         {inet_async, Sock, _Ref, {ok, Data}} ->
             process_received_bytes(Data, State);
         {inet_async, _Sock, _Ref, {error, closed}} ->
-            log(info, "STOMP connection ~p closed by client~n", [self()]),
             ok;
         {inet_async, _Sock, _Ref, {error, Reason}} ->
-            log(error,
-                "STOMP connection ~p closed abruptly with error code ~p~n",
-                [self(), Reason]),
-            ok;
+            throw({inet_error, Reason});
         {conserve_memory, Conserve} ->
             mainloop(internal_conserve_memory(Conserve, State), ByteCount)
     end.
