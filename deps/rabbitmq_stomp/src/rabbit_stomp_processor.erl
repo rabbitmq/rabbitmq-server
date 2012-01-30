@@ -58,8 +58,11 @@ start_link(Sock, StartHeartbeatFun, Configuration) ->
     gen_server2:start_link(?MODULE, [Sock, StartHeartbeatFun, Configuration],
                            []).
 
+process_frame(Pid, Frame = #stomp_frame{command = "SEND"}) ->
+    credit_flow:send(Pid),
+    gen_server2:cast(Pid, {"SEND", Frame, self()});
 process_frame(Pid, Frame = #stomp_frame{command = Command}) ->
-    gen_server2:cast(Pid, {Command, Frame}).
+    gen_server2:cast(Pid, {Command, Frame, noflow}).
 
 flush_and_die(Pid) ->
     gen_server2:cast(Pid, flush_and_die).
@@ -94,10 +97,10 @@ terminate(_Reason, State) ->
 handle_cast(flush_and_die, State) ->
     {stop, normal, close_connection(State)};
 
-handle_cast({"STOMP", Frame}, State) ->
+handle_cast({"STOMP", Frame, noflow}, State) ->
     process_connect(no_implicit, Frame, State);
 
-handle_cast({"CONNECT", Frame}, State) ->
+handle_cast({"CONNECT", Frame, noflow}, State) ->
     process_connect(no_implicit, Frame, State);
 
 handle_cast(Request, State = #state{channel = none,
@@ -116,7 +119,12 @@ handle_cast(_Request, State = #state{channel = none,
                 State),
      hibernate};
 
-handle_cast({Command, Frame}, State = #state{frame_transformer = FT}) ->
+handle_cast({Command, Frame, FlowPid},
+            State = #state{frame_transformer = FT}) ->
+    case FlowPid of
+        noflow -> ok;
+        _      -> credit_flow:ack(FlowPid)
+    end,
     Frame1 = FT(Frame),
     process_request(
       fun(StateN) ->
@@ -142,6 +150,10 @@ handle_info({Delivery = #'basic.deliver'{},
     {noreply, send_delivery(Delivery, Props, Payload, State), hibernate};
 handle_info({inet_reply, _, ok}, State) ->
     {noreply, State, hibernate};
+handle_info({bump_credit, Msg}, State) ->
+    credit_flow:handle_bump_msg(Msg),
+    {noreply, State, hibernate};
+
 handle_info({inet_reply, _, Status}, State) ->
     {stop, Status, State}.
 
@@ -630,8 +642,9 @@ send_method(Method, Properties, BodyFragments,
             State = #state{channel = Channel}) ->
     send_method(Method, Channel, Properties, BodyFragments, State).
 
-send_method(Method, Channel, Properties, BodyFragments, State) ->
-    amqp_channel:call(
+send_method(Method = #'basic.publish'{}, Channel, Properties, BodyFragments,
+            State) ->
+    amqp_channel:cast_flow(
       Channel, Method,
       #amqp_msg{props   = Properties,
                 payload = list_to_binary(BodyFragments)}),
