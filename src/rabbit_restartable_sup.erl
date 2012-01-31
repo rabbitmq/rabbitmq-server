@@ -28,7 +28,8 @@
 
 -ifdef(use_specs).
 
--spec(start_link/2 :: (atom(), mfa()) -> rabbit_types:ok_pid_or_error()).
+-spec(start_link/2 :: (atom(), rabbit_types:mfargs()) ->
+                           rabbit_types:ok_pid_or_error()).
 
 -endif.
 

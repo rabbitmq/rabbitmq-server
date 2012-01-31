@@ -37,10 +37,12 @@
          {auth_backends, [rabbit_auth_backend_internal]},
          {delegate_count, 16},
          {trace_vhosts, []},
+         {log_levels, [{connection, info}]},
          {tcp_listen_options, [binary,
                                {packet,        raw},
                                {reuseaddr,     true},
                                {backlog,       128},
                                {nodelay,       true},
+                               {linger,        {true, 0}},
                                {exit_on_close, false}]}
          ]}]}.

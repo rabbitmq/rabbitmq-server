@@ -56,9 +56,11 @@
 -record(binding, {source, key, destination, args = []}).
 -record(reverse_binding, {destination, key, source, args = []}).
 
+-record(topic_trie_node, {trie_node, edge_count, binding_count}).
 -record(topic_trie_edge, {trie_edge, node_id}).
 -record(topic_trie_binding, {trie_binding, value = const}).
 
+-record(trie_node, {exchange_name, node_id}).
 -record(trie_edge, {exchange_name, node_id, word}).
 -record(trie_binding, {exchange_name, node_id, destination}).
 
@@ -97,13 +99,3 @@
 
 -define(ROUTING_HEADERS, [<<"CC">>, <<"BCC">>]).
 -define(DELETED_HEADER, <<"BCC">>).
-
--ifdef(debug).
--define(LOGDEBUG0(F), rabbit_log:debug(F)).
--define(LOGDEBUG(F,A), rabbit_log:debug(F,A)).
--define(LOGMESSAGE(D,C,M,Co), rabbit_log:message(D,C,M,Co)).
--else.
--define(LOGDEBUG0(F), ok).
--define(LOGDEBUG(F,A), ok).
--define(LOGMESSAGE(D,C,M,Co), ok).
--endif.

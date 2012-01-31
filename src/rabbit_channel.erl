@@ -250,9 +250,10 @@ handle_call(refresh_config, _From, State = #ch{virtual_host = VHost}) ->
 handle_call(_Request, _From, State) ->
     noreply(State).
 
-handle_cast({method, Method, Content, Flow}, State = #ch{conn_pid = Conn}) ->
+handle_cast({method, Method, Content, Flow},
+            State = #ch{reader_pid = Reader}) ->
     case Flow of
-        flow   -> credit_flow:ack(Conn);
+        flow   -> credit_flow:ack(Reader);
         noflow -> ok
     end,
     try handle_method(Method, Content, State) of
@@ -1084,9 +1085,9 @@ handle_method(#'tx.commit'{}, _, #ch{tx_status = none}) ->
 
 handle_method(#'tx.commit'{}, _, State = #ch{uncommitted_message_q = TMQ,
                                              uncommitted_acks      = TAL}) ->
-    ack(TAL, rabbit_misc:queue_fold(fun deliver_to_queues/2, State, TMQ)),
-    State1 = new_tx(State),
-    {noreply, maybe_complete_tx(State1#ch{tx_status = committing})};
+    State1 = rabbit_misc:queue_fold(fun deliver_to_queues/2, State, TMQ),
+    ack(TAL, State1),
+    {noreply, maybe_complete_tx(new_tx(State1#ch{tx_status = committing}))};
 
 handle_method(#'tx.rollback'{}, _, #ch{tx_status = none}) ->
     rabbit_misc:protocol_error(
