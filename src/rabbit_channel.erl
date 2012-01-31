@@ -664,7 +664,7 @@ handle_method(#'basic.nack'{delivery_tag = DeliveryTag,
                             multiple     = Multiple,
                             requeue      = Requeue},
               _, State) ->
-    reject_tx(DeliveryTag, Multiple, Requeue, State);
+    reject(DeliveryTag, Multiple, Requeue, State);
 
 handle_method(#'basic.ack'{delivery_tag = DeliveryTag,
                            multiple = Multiple},
@@ -865,7 +865,7 @@ handle_method(#'basic.recover'{requeue = Requeue}, Content, State) ->
 handle_method(#'basic.reject'{delivery_tag = DeliveryTag,
                               requeue = Requeue},
               _, State) ->
-    reject_tx(DeliveryTag, false, Requeue, State);
+    reject(DeliveryTag, false, Requeue, State);
 
 handle_method(#'exchange.declare'{exchange = ExchangeNameBin,
                                   type = TypeNameBin,
@@ -1274,8 +1274,8 @@ basic_return(#basic_message{exchange_name = ExchangeName,
                            routing_key = RoutingKey},
            Content).
 
-reject_tx(DeliveryTag, Multiple, Requeue,
-          State = #ch{unacked_message_q = UAMQ, tx_status = TxStatus}) ->
+reject(DeliveryTag, Multiple, Requeue,
+       State = #ch{unacked_message_q = UAMQ, tx_status = TxStatus}) ->
     {Acked, Remaining} = collect_acks(UAMQ, DeliveryTag, Multiple),
     State1 = State#ch{unacked_message_q = Remaining},
     {noreply,
