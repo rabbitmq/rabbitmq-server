@@ -51,7 +51,7 @@
             ttl,
             ttl_timer_ref,
             publish_seqno,
-            unconfirmed,
+            unconfirmed_mq,
             unconfirmed_qm,
             blocked_op,
             queue_monitors,
@@ -139,7 +139,7 @@ init(Q) ->
                dlx                 = undefined,
                dlx_routing_key     = undefined,
                publish_seqno       = 1,
-               unconfirmed         = gb_trees:empty(),
+               unconfirmed_mq      = gb_trees:empty(),
                unconfirmed_qm      = gb_trees:empty(),
                blocked_op          = undefined,
                queue_monitors      = dict:new(),
@@ -166,7 +166,7 @@ init_with_backing_queue_state(Q = #amqqueue{exclusive_owner = Owner}, BQ, BQS,
                expiry_timer_ref    = undefined,
                ttl                 = undefined,
                publish_seqno       = 1,
-               unconfirmed         = gb_trees:empty(),
+               unconfirmed_mq      = gb_trees:empty(),
                unconfirmed_qm      = gb_trees:empty(),
                blocked_op          = undefined,
                queue_monitors      = dict:new(),
@@ -755,7 +755,7 @@ dead_letter_deleted_queue(From, State = #q{backing_queue_state = BQS,
 
 dead_letter_msg(Msg, AckTag, Reason,
                 State = #q{publish_seqno       = MsgSeqNo,
-                           unconfirmed         = UC,
+                           unconfirmed_mq      = UMQ,
                            dlx                 = DLX,
                            backing_queue       = BQ,
                            backing_queue_state = BQS}) ->
@@ -788,9 +788,10 @@ dead_letter_msg(Msg, AckTag, Reason,
                             end
                     end, State2, QPids),
               noreply(State3#q{
-                        unconfirmed = gb_trees:insert(
-                                        MsgSeqNo, {gb_sets:from_list(QPids),
-                                                   AckTag}, UC)})
+                        unconfirmed_mq =
+                            gb_trees:insert(
+                              MsgSeqNo, {gb_sets:from_list(QPids),
+                                         AckTag}, UMQ)})
     end.
 
 monitor_queue(QPid, State = #q{queue_monitors = QMons}) ->
@@ -809,7 +810,7 @@ demonitor_queue(QPid, State = #q{queue_monitors = QMons}) ->
     end.
 
 handle_queue_down(QPid, State = #q{queue_monitors = QMons,
-                                   unconfirmed    = UC}) ->
+                                   unconfirmed_mq = UMQ}) ->
     case dict:find(QPid, QMons) of
         error ->
             noreply(State);
@@ -817,29 +818,29 @@ handle_queue_down(QPid, State = #q{queue_monitors = QMons,
             #resource{name = QName} = qname(State),
             rabbit_log:info("DLQ ~p (for ~p) died~n", [QPid, QName]),
             MsgSeqNos = [MsgSeqNo ||
-                            {MsgSeqNo, {QPids, _}} <- gb_trees:to_list(UC),
+                            {MsgSeqNo, {QPids, _}} <- gb_trees:to_list(UMQ),
                             gb_sets:is_member(QPid, QPids)],
             handle_confirm(MsgSeqNos, QPid,
                            State#q{queue_monitors = dict:erase(QPid, QMons)})
     end.
 
-handle_confirm(MsgSeqNos, QPid, State = #q{unconfirmed         = UC,
+handle_confirm(MsgSeqNos, QPid, State = #q{unconfirmed_mq      = UMQ,
                                            unconfirmed_qm      = UQM,
                                            backing_queue       = BQ,
                                            backing_queue_state = BQS}) ->
-    {BQS3, UC3} =
+    {BQS3, UMQ3} =
         lists:foldl(
-          fun (MsgSeqNo, {BQS1, UC1}) ->
-                  {QPids, AckTag} = gb_trees:get(MsgSeqNo, UC1),
+          fun (MsgSeqNo, {BQS1, UMQ1}) ->
+                  {QPids, AckTag} = gb_trees:get(MsgSeqNo, UMQ1),
                   QPids1 = gb_sets:delete(QPid, QPids),
                   case gb_sets:is_empty(QPids1) of
                       true  -> {_Guids, BQS2} =
                                    BQ:ack([AckTag], undefined, BQS1),
-                               {BQS2, gb_trees:delete(MsgSeqNo, UC1)};
+                               {BQS2, gb_trees:delete(MsgSeqNo, UMQ1)};
                       false -> {BQS1, gb_trees:update(MsgSeqNo,
-                                                      {QPids1, AckTag}, UC1)}
+                                                      {QPids1, AckTag}, UMQ1)}
                   end
-          end, {BQS, UC}, MsgSeqNos),
+          end, {BQS, UMQ}, MsgSeqNos),
     MsgSeqNos1 = gb_sets:difference(gb_trees:get(QPid, UQM),
                                     gb_sets:from_list(MsgSeqNos)),
     State1 = case gb_sets:is_empty(MsgSeqNos1) of
@@ -851,13 +852,13 @@ handle_confirm(MsgSeqNos, QPid, State = #q{unconfirmed         = UC,
                                     unconfirmed_qm =
                                         gb_trees:delete(QPid, UQM)})
              end,
-    cleanup_after_confirm(State1#q{unconfirmed         = UC3,
+    cleanup_after_confirm(State1#q{unconfirmed_mq      = UMQ3,
                                    backing_queue_state = BQS3}).
 
-cleanup_after_confirm(State = #q{blocked_op  = Op,
-                                 unconfirmed = UC}) ->
+cleanup_after_confirm(State = #q{blocked_op     = Op,
+                                 unconfirmed_mq = UMQ}) ->
     State1 = State#q{blocked_op = undefined},
-    case {gb_trees:is_empty(UC), Op} of
+    case {gb_trees:is_empty(UMQ), Op} of
         {true, {purge, {From, Count}}} ->
             gen_server2:reply(From, {ok, Count}),
             noreply(State1);
