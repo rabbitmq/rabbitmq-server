@@ -90,9 +90,10 @@ blocks_to_binary({B1, B2, B3, B4}) ->
 %% generate a GUID. This function should be used when performance is a
 %% priority and predictability is not an issue. Otherwise, use gen_secure/0.
 gen() ->
-    %% We hash a fresh GUID with md5, split it in 5 blocks, and each time we
-    %% need a new guid we hash the first block and the counter and xor the
-    %% result with the remaining blocks.
+    %% We hash a fresh GUID with md5, split it in 4 blocks, and each time we
+    %% need a new guid we hash the first block and the counter and XOR the
+    %% result with the remaining blocks, removing the first block and inserting
+    %% the hash as the last block.
     {BS, I} =
         case get(guid) of
             undefined ->
