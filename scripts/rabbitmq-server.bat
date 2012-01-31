@@ -90,7 +90,10 @@ set RABBITMQ_PLUGINS_DIR=!TDP0!..\plugins
 set RABBITMQ_EBIN_ROOT=!TDP0!..\ebin
 
 rem FIXME Find out why "epmd -daemon" doesn't work on Windows
-erl -sname foo -s init stop
+"!ERLANG_HOME!\bin\erl.exe" ^
+-noinput -hidden ^
+-sname "epmd_!RABBITMQ_NODENAME!" ^
+-s init stop
 
 "!ERLANG_HOME!\bin\erl.exe" ^
 -pa "!RABBITMQ_EBIN_ROOT!" ^

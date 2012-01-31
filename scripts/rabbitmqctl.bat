@@ -44,7 +44,10 @@ if not exist "!ERLANG_HOME!\bin\erl.exe" (
 )
 
 rem FIXME Find out why "epmd -daemon" doesn't work on Windows
-erl -sname foo -s init stop
+"!ERLANG_HOME!\bin\erl.exe" ^
+-noinput -hidden ^
+-sname "epmd_!RABBITMQ_NODENAME!" ^
+-s init stop
 
 "!ERLANG_HOME!\bin\erl.exe" -pa "!TDP0!..\ebin" -noinput -hidden !RABBITMQ_CTL_ERL_ARGS! -s rabbit_control -nodename !RABBITMQ_NODENAME! -extra !STAR!
 

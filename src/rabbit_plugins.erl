@@ -57,7 +57,7 @@ start() ->
     Command = list_to_atom(Command0),
     PrintInvalidCommandError =
         fun () ->
-                rabbitmq_misc:print_error(
+                rabbit_misc:print_error(
                   "invalid command '~s'",
                   [string:join([atom_to_list(Command) | Args], " ")])
         end,
