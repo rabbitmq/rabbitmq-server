@@ -20,7 +20,7 @@
 -export([pseudo_queue/2]).
 -export([lookup/1, with/2, with_or_die/2, assert_equivalence/5,
          check_exclusive_access/2, with_exclusive_access_or_die/3,
-         stat/1, deliver/2, requeue/3, ack/3, reject/4]).
+         stat/1, deliver/2, deliver_flow/2, requeue/3, ack/3, reject/4]).
 -export([list/0, list/1, info_keys/0, info/1, info/2, info_all/1, info_all/2]).
 -export([force_event_refresh/0]).
 -export([consumers/1, consumers_all/1, consumer_info_keys/0]).
@@ -120,6 +120,8 @@
 -spec(purge/1 :: (rabbit_types:amqqueue()) -> qlen()).
 -spec(deliver/2 :: ([rabbit_types:amqqueue()], rabbit_types:delivery()) ->
                         {routing_result(), qpids()}).
+-spec(deliver_flow/2 :: ([rabbit_types:amqqueue()], rabbit_types:delivery()) ->
+                             {routing_result(), qpids()}).
 -spec(requeue/3 :: (pid(), [msg_id()],  pid()) -> 'ok').
 -spec(ack/3 :: (pid(), [msg_id()], pid()) -> 'ok').
 -spec(reject/4 :: (pid(), [msg_id()], boolean(), pid()) -> 'ok').
@@ -425,39 +427,9 @@ delete(#amqqueue{ pid = QPid }, IfUnused, IfEmpty) ->
 
 purge(#amqqueue{ pid = QPid }) -> delegate_call(QPid, purge).
 
-deliver([], #delivery{mandatory = false, immediate = false}) ->
-    %% /dev/null optimisation
-    {routed, []};
+deliver(Qs, Delivery) -> deliver(Qs, Delivery, noflow).
 
-deliver(Qs, Delivery = #delivery{mandatory = false, immediate = false}) ->
-    %% optimisation: when Mandatory = false and Immediate = false,
-    %% rabbit_amqqueue:deliver will deliver the message to the queue
-    %% process asynchronously, and return true, which means all the
-    %% QPids will always be returned. It is therefore safe to use a
-    %% fire-and-forget cast here and return the QPids - the semantics
-    %% is preserved. This scales much better than the non-immediate
-    %% case below.
-    QPids = qpids(Qs),
-    delegate:invoke_no_result(
-      QPids, fun (QPid) -> gen_server2:cast(QPid, {deliver, Delivery}) end),
-    {routed, QPids};
-
-deliver(Qs, Delivery = #delivery{mandatory = Mandatory,
-                                 immediate = Immediate}) ->
-    QPids = qpids(Qs),
-    {Success, _} =
-        delegate:invoke(
-          QPids, fun (QPid) ->
-                         gen_server2:call(QPid, {deliver, Delivery}, infinity)
-                 end),
-    case {Mandatory, Immediate,
-          lists:foldl(fun ({QPid, true}, {_, H}) -> {true, [QPid | H]};
-                          ({_,   false}, {_, H}) -> {true, H}
-                      end, {false, []}, Success)} of
-        {true, _   , {false, []}} -> {unroutable,    []};
-        {_   , true, {_    , []}} -> {not_delivered, []};
-        {_   , _   , {_    ,  R}} -> {routed,         R}
-    end.
+deliver_flow(Qs, Delivery) -> deliver(Qs, Delivery, flow).
 
 requeue(QPid, MsgIds, ChPid) ->
     delegate_call(QPid, {requeue, MsgIds, ChPid}).
@@ -548,6 +520,46 @@ pseudo_queue(QueueName, Pid) ->
               pid          = Pid,
               slave_pids   = [],
               mirror_nodes = undefined}.
+
+deliver([], #delivery{mandatory = false, immediate = false}, _Flow) ->
+    %% /dev/null optimisation
+    {routed, []};
+
+deliver(Qs, Delivery = #delivery{mandatory = false, immediate = false}, Flow) ->
+    %% optimisation: when Mandatory = false and Immediate = false,
+    %% rabbit_amqqueue:deliver will deliver the message to the queue
+    %% process asynchronously, and return true, which means all the
+    %% QPids will always be returned. It is therefore safe to use a
+    %% fire-and-forget cast here and return the QPids - the semantics
+    %% is preserved. This scales much better than the non-immediate
+    %% case below.
+    QPids = qpids(Qs),
+    case Flow of
+        flow   -> [credit_flow:send(QPid) || QPid <- QPids];
+        noflow -> ok
+    end,
+    delegate:invoke_no_result(
+      QPids, fun (QPid) ->
+                     gen_server2:cast(QPid, {deliver, Delivery, Flow})
+             end),
+    {routed, QPids};
+
+deliver(Qs, Delivery = #delivery{mandatory = Mandatory, immediate = Immediate},
+        _Flow) ->
+    QPids = qpids(Qs),
+    {Success, _} =
+        delegate:invoke(
+          QPids, fun (QPid) ->
+                         gen_server2:call(QPid, {deliver, Delivery}, infinity)
+                 end),
+    case {Mandatory, Immediate,
+          lists:foldl(fun ({QPid, true}, {_, H}) -> {true, [QPid | H]};
+                          ({_,   false}, {_, H}) -> {true, H}
+                      end, {false, []}, Success)} of
+        {true, _   , {false, []}} -> {unroutable,    []};
+        {_   , true, {_    , []}} -> {not_delivered, []};
+        {_   , _   , {_    ,  R}} -> {routed,         R}
+    end.
 
 qpids(Qs) -> lists:append([[QPid | SPids] ||
                               #amqqueue{pid = QPid, slave_pids = SPids} <- Qs]).

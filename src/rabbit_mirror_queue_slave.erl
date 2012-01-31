@@ -207,8 +207,12 @@ handle_cast({run_backing_queue, Mod, Fun}, State) ->
 handle_cast({gm, Instruction}, State) ->
     handle_process_result(process_instruction(Instruction, State));
 
-handle_cast({deliver, Delivery = #delivery {}}, State) ->
+handle_cast({deliver, Delivery = #delivery{sender = Sender}, Flow}, State) ->
     %% Asynchronous, non-"mandatory", non-"immediate" deliver mode.
+    case Flow of
+        flow   -> credit_flow:ack(Sender);
+        noflow -> ok
+    end,
     noreply(maybe_enqueue_message(Delivery, true, State));
 
 handle_cast({set_maximum_since_use, Age}, State) ->
@@ -446,7 +450,7 @@ promote_me(From, #state { q                   = Q = #amqqueue { name = QName },
     %% Everything that we're monitoring, we need to ensure our new
     %% coordinator is monitoring.
 
-    MonitoringPids = [begin true = erlang:demonitor(MRef),
+    MonitoringPids = [begin put({ch_publisher, Pid}, MRef),
                             Pid
                       end || {Pid, MRef} <- dict:to_list(KS)],
     ok = rabbit_mirror_queue_coordinator:ensure_monitoring(
@@ -600,7 +604,8 @@ ensure_monitoring(ChPid, State = #state { known_senders = KS }) ->
 local_sender_death(ChPid, State = #state { known_senders = KS }) ->
     ok = case dict:is_key(ChPid, KS) of
              false -> ok;
-             true  -> confirm_sender_death(ChPid)
+             true  -> credit_flow:peer_down(ChPid),
+                      confirm_sender_death(ChPid)
          end,
     State.
 

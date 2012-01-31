@@ -66,7 +66,6 @@ check_user_login(Username, AuthProps) ->
 
 check_vhost_access(User = #user{ username     = Username,
                                  auth_backend = Module }, VHostPath) ->
-    ?LOGDEBUG("Checking VHost access for ~p to ~p~n", [Username, VHostPath]),
     check_access(
       fun() ->
               rabbit_vhost:exists(VHostPath) andalso
