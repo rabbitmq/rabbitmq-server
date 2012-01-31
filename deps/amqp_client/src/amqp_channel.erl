@@ -352,7 +352,7 @@ handle_cast({register_flow_handler, FlowHandler}, State) ->
     {noreply, State#state{flow_handler_pid = FlowHandler}};
 %% Received from channels manager
 %% @private
-handle_cast({method, Method, Content}, State) ->
+handle_cast({method, Method, Content, noflow}, State) ->
     handle_method_from_server(Method, Content, State);
 %% Handles the situation when the connection closes without closing the channel
 %% beforehand. The channel must block all further RPCs,
