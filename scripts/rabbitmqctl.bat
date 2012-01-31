@@ -43,12 +43,7 @@ if not exist "!ERLANG_HOME!\bin\erl.exe" (
     exit /B
 )
 
-for /f "delims=" %%i in ('dir /ad/b "!ERLANG_HOME!"') do if exist "!ERLANG_HOME!\%%i\bin\epmd.exe" (
-    call !ERLANG_HOME!\%%i\bin\epmd.exe -daemon
-    if ERRORLEVEL 1 (
-       exit /B 1
-    )
-)
+start /B epmd.bat
 
 "!ERLANG_HOME!\bin\erl.exe" -pa "!TDP0!..\ebin" -noinput -hidden !RABBITMQ_CTL_ERL_ARGS! -s rabbit_control -nodename !RABBITMQ_NODENAME! -extra !STAR!
 
