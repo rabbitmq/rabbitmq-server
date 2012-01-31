@@ -949,7 +949,7 @@ ok(Command, Headers, BodyFragments, State) ->
 amqp_death(ReplyCode, Explanation, State) ->
     ErrorName = ?PROTOCOL:amqp_exception(ReplyCode),
     ErrorDesc = format_detail("~s~n", [Explanation]),
-    error(ErrorName, ErrorDesc, State),
+    log_error(ErrorName, ErrorDesc, State),
     {stop, normal, send_error(atom_to_list(ErrorName), ErrorDesc, State)}.
 
 error(Message, Detail, State) ->
@@ -959,19 +959,22 @@ error(Message, Format, Args, State) ->
     priv_error(Message, Format, Args, none, State).
 
 priv_error(Message, Detail, ServerPrivateDetail, State) ->
-    error_logger:error_msg("STOMP error frame sent:~n" ++
-                           "Message: ~p~n" ++
-                           "Detail: ~p~n" ++
-                           "Server private detail: ~p~n",
-                           [Message, Detail, ServerPrivateDetail]),
+    log_error(Message, Detail, ServerPrivateDetail),
     {error, Message, Detail, State}.
 
 priv_error(Message, Format, Args, ServerPrivateDetail, State) ->
-    priv_error(Message, format_detail(Format, Args),
-                    ServerPrivateDetail, State).
+    priv_error(Message, format_detail(Format, Args), ServerPrivateDetail,
+               State).
 
-format_detail(Format, Args) ->
-    lists:flatten(io_lib:format(Format, Args)).
+log_error(Message, Detail, ServerPrivateDetail) ->
+    error_logger:error_msg("STOMP error frame sent:~n"
+                           "Message: ~p~n"
+                           "Detail: ~p~n"
+                           "Server private detail: ~p~n",
+                           [Message, Detail, ServerPrivateDetail]).
+
+format_detail(Format, Args) -> lists:flatten(io_lib:format(Format, Args)).
+
 %%----------------------------------------------------------------------------
 %% Frame sending utilities
 %%----------------------------------------------------------------------------
