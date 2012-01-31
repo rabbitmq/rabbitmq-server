@@ -89,12 +89,8 @@ if "!RABBITMQ_ENABLED_PLUGINS_FILE!"=="" (
 set RABBITMQ_PLUGINS_DIR=!TDP0!..\plugins
 set RABBITMQ_EBIN_ROOT=!TDP0!..\ebin
 
-for /f "delims=" %%i in ('dir /ad/b "!ERLANG_HOME!"') do if exist "!ERLANG_HOME!\%%i\bin\epmd.exe" (
-    call "!ERLANG_HOME!\%%i\bin\epmd.exe" -daemon
-    if ERRORLEVEL 1 (
-       exit /B 1
-    )
-)
+rem FIXME Find out why "epmd -daemon" doesn't work on Windows
+erl -sname foo -s init stop
 
 "!ERLANG_HOME!\bin\erl.exe" ^
 -pa "!RABBITMQ_EBIN_ROOT!" ^
