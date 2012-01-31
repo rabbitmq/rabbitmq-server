@@ -948,10 +948,9 @@ ok(Command, Headers, BodyFragments, State) ->
 
 amqp_death(ReplyCode, Explanation, State) ->
     ErrorName = ?PROTOCOL:amqp_exception(ReplyCode),
-    {stop, amqp_death,
-     send_error(atom_to_list(ErrorName),
-                format_detail("~s~n", [Explanation]),
-                State)}.
+    ErrorDesc = format_detail("~s~n", [Explanation]),
+    error(ErrorName, ErrorDesc, State),
+    {stop, normal, send_error(atom_to_list(ErrorName), ErrorDesc, State)}.
 
 error(Message, Detail, State) ->
     priv_error(Message, Detail, none, State).
