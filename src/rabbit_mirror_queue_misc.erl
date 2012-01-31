@@ -137,7 +137,7 @@ add_mirror(Queue, MirrorNode) ->
                   []  -> Result = rabbit_mirror_queue_slave_sup:start_child(
                                     MirrorNode, [Q]),
                          rabbit_log:info(
-                           "Adding mirror of queue ~s on node ~p: ~p~n",
+                           "Adding mirror of ~s on node ~p: ~p~n",
                            [rabbit_misc:rs(Name), MirrorNode, Result]),
                          case Result of
                              {ok, _Pid} -> ok;

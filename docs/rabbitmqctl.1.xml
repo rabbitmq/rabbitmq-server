@@ -1067,10 +1067,26 @@
                 <listitem><para>The period for which the peer's SSL
                 certificate is valid.</para></listitem>
               </varlistentry>
+
+              <varlistentry>
+                <term>last_blocked_by</term>
+                <listitem><para>The reason for which this connection
+                    was last blocked. One of 'mem' - due to a memory
+                    alarm, 'flow' - due to internal flow control, or
+                    'none' if the connection was never
+                    blocked.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>last_blocked_age</term>
+                <listitem><para>Time, in seconds, since this
+                    connection was last blocked, or
+                    'infinity'.</para></listitem>
+              </varlistentry>
+
               <varlistentry>
                 <term>state</term>
                 <listitem><para>Connection state (one of [<command>starting</command>, <command>tuning</command>,
-                  <command>opening</command>, <command>running</command>, <command>closing</command>, <command>closed</command>]).</para></listitem>
+                  <command>opening</command>, <command>running</command>, <command>blocking</command>, <command>blocked</command>, <command>closing</command>, <command>closed</command>]).</para></listitem>
               </varlistentry>
               <varlistentry>
                 <term>channels</term>
@@ -1127,8 +1143,9 @@
               </varlistentry>
             </variablelist>
             <para>
-              If no <command>connectioninfoitem</command>s are specified then  user, peer
-              address, peer port and connection state are displayed.
+              If no <command>connectioninfoitem</command>s are
+              specified then user, peer address, peer port, time since
+              flow control and memory block state are displayed.
             </para>
 
             <para role="example-prefix">

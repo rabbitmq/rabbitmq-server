@@ -220,7 +220,12 @@ start_listener(Listener, Protocol, Label, OnConnect) ->
 start_listener0(Address, Protocol, Label, OnConnect) ->
     Spec = tcp_listener_spec(rabbit_tcp_listener_sup, Address, tcp_opts(),
                              Protocol, Label, OnConnect),
-    {ok,_} = supervisor:start_child(rabbit_sup, Spec).
+    case supervisor:start_child(rabbit_sup, Spec) of
+        {ok, _}                -> ok;
+        {error, {shutdown, _}} -> {IPAddress, Port, _Family} = Address,
+                                  exit({could_not_start_tcp_listener,
+                                        {rabbit_misc:ntoa(IPAddress), Port}})
+    end.
 
 stop_tcp_listener(Listener) ->
     [stop_tcp_listener0(Address) ||
