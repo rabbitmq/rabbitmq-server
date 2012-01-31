@@ -962,11 +962,11 @@ error(Message, Format, Args, State) ->
     priv_error(Message, Format, Args, none, State).
 
 priv_error(Message, Detail, ServerPrivateDetail, State) ->
-    error_logger:error_msg("STOMP error frame sent:~n" ++
-                           "Message: ~p~n" ++
-                           "Detail: ~p~n" ++
-                           "Server private detail: ~p~n",
-                           [Message, Detail, ServerPrivateDetail]),
+    rabbit_log:error("STOMP error frame sent:~n"
+                     "Message: ~p~n"
+                     "Detail: ~p~n"
+                     "Server private detail: ~p~n",
+                     [Message, Detail, ServerPrivateDetail]),
     {error, Message, Detail, State}.
 
 priv_error(Message, Format, Args, ServerPrivateDetail, State) ->
