@@ -81,7 +81,16 @@ fresh() ->
     {Serial, node(), make_ref()}.
 
 advance_blocks({B1, B2, B3, B4}, I) ->
-    B5 = erlang:phash2({B1, I}),
+    %% To produce a new set of blocks, we create a new 32bit block hashing {B5,
+    %% I}. The new hash is used as last block, and the other three blocks are
+    %% XORed with it.
+    %% Doing this is convenient because it avoids cascading conflits, while
+    %% being very fast. The conflicts are avoided by propagating the changes
+    %% through all the blocks at each round by XORing, so the only occasion in
+    %% which a collision will take place is when all 4 blocks are the same and
+    %% the counter is the same.
+    %% The range (2^32) is provided explicitly since phash uses 2^27 by default.
+    B5 = erlang:phash2({B1, I}, 4294967296),
     {{(B2 bxor B5), (B3 bxor B5), (B4 bxor B5), B5}, I+1}.
 
 blocks_to_binary({B1, B2, B3, B4}) ->
@@ -91,9 +100,8 @@ blocks_to_binary({B1, B2, B3, B4}) ->
 %% priority and predictability is not an issue. Otherwise, use gen_secure/0.
 gen() ->
     %% We hash a fresh GUID with md5, split it in 4 blocks, and each time we
-    %% need a new guid we hash the first block and the counter and XOR the
-    %% result with the remaining blocks, removing the first block and inserting
-    %% the hash as the last block.
+    %% need a new guid we rotate them producing a new hash with the aid of the
+    %% counter. Look at the comments in advance_blocks/2 for details.
     {BS, I} =
         case get(guid) of
             undefined ->
