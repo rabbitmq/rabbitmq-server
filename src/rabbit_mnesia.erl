@@ -744,7 +744,6 @@ reset(Force) ->
         false ->
             ensure_mnesia_dir(),
             start_mnesia(),
-            ensure_mnesia_running(),
             {Nodes, RunningNodes} =
                 try
                     %% Force=true here so that reset still works when clustered
