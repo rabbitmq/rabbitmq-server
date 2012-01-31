@@ -140,6 +140,13 @@ handle_info(#'basic.ack'{delivery_tag = Tag, multiple = IsMulti}, State) ->
 handle_info({Delivery = #'basic.deliver'{},
              #amqp_msg{props = Props, payload = Payload}}, State) ->
     {noreply, send_delivery(Delivery, Props, Payload, State), hibernate};
+handle_info({'EXIT', Conn,
+             {shutdown, {server_initiated_close, Code, Explanation}}},
+            State = #state{connection = Conn}) ->
+    amqp_death(Code, Explanation, State);
+handle_info({'EXIT', Conn, Reason}, State = #state{connection = Conn}) ->
+    send_error("AMQP connection died", "Reason: ~p", [Reason], State),
+    {stop, {conn_died, Reason}, State};
 handle_info({inet_reply, _, ok}, State) ->
     {noreply, State, hibernate};
 handle_info({inet_reply, _, Status}, State) ->
@@ -437,6 +444,7 @@ do_login(Username0, Password0, VirtualHost0, Heartbeat, AdapterInfo,
                                        virtual_host = VirtualHost,
                                        adapter_info = AdapterInfo}) of
                 {ok, Connection} ->
+                    link(Connection),
                     {ok, Channel} = amqp_connection:open_channel(Connection),
                     SessionId = rabbit_guid:string_guid("session"),
                     {{SendTimeout, ReceiveTimeout}, State1} =
@@ -950,10 +958,9 @@ ok(Command, Headers, BodyFragments, State) ->
 
 amqp_death(ReplyCode, Explanation, State) ->
     ErrorName = ?PROTOCOL:amqp_exception(ReplyCode),
-    {stop, amqp_death,
-     send_error(atom_to_list(ErrorName),
-                format_detail("~s~n", [Explanation]),
-                State)}.
+    ErrorDesc = format_detail("~s~n", [Explanation]),
+    log_error(ErrorName, ErrorDesc, none),
+    {stop, normal, send_error(atom_to_list(ErrorName), ErrorDesc, State)}.
 
 error(Message, Detail, State) ->
     priv_error(Message, Detail, none, State).
@@ -962,19 +969,22 @@ error(Message, Format, Args, State) ->
     priv_error(Message, Format, Args, none, State).
 
 priv_error(Message, Detail, ServerPrivateDetail, State) ->
+    log_error(Message, Detail, ServerPrivateDetail),
+    {error, Message, Detail, State}.
+
+priv_error(Message, Format, Args, ServerPrivateDetail, State) ->
+    priv_error(Message, format_detail(Format, Args), ServerPrivateDetail,
+               State).
+
+log_error(Message, Detail, ServerPrivateDetail) ->
     rabbit_log:error("STOMP error frame sent:~n"
                      "Message: ~p~n"
                      "Detail: ~p~n"
                      "Server private detail: ~p~n",
-                     [Message, Detail, ServerPrivateDetail]),
-    {error, Message, Detail, State}.
+                     [Message, Detail, ServerPrivateDetail]).
 
-priv_error(Message, Format, Args, ServerPrivateDetail, State) ->
-    priv_error(Message, format_detail(Format, Args),
-                    ServerPrivateDetail, State).
+format_detail(Format, Args) -> lists:flatten(io_lib:format(Format, Args)).
 
-format_detail(Format, Args) ->
-    lists:flatten(io_lib:format(Format, Args)).
 %%----------------------------------------------------------------------------
 %% Frame sending utilities
 %%----------------------------------------------------------------------------
