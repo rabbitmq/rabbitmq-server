@@ -173,25 +173,26 @@ server_capabilities(rabbit_framing_amqp_0_9_1) ->
 server_capabilities(_) ->
     [].
 
+log(Level, Fmt, Args) -> rabbit_log:log(connection, Level, Fmt, Args).
+
 inet_op(F) -> rabbit_misc:throw_on_error(inet_error, F).
 
 socket_op(Sock, Fun) ->
     case Fun(Sock) of
         {ok, Res}       -> Res;
-        {error, Reason} -> rabbit_log:error("error on TCP connection ~p:~p~n",
-                                            [self(), Reason]),
-                           rabbit_log:info("closing TCP connection ~p~n",
-                                           [self()]),
+        {error, Reason} -> log(error, "error on AMQP connection ~p: ~p~n",
+                               [self(), Reason]),
                            exit(normal)
     end.
 
 start_connection(Parent, ChannelSupSupPid, Collector, StartHeartbeatFun, Deb,
                  Sock, SockTransform) ->
     process_flag(trap_exit, true),
-    {PeerAddress, PeerPort} = socket_op(Sock, fun rabbit_net:peername/1),
-    PeerAddressS = rabbit_misc:ntoab(PeerAddress),
-    rabbit_log:info("starting TCP connection ~p from ~s:~p~n",
-                    [self(), PeerAddressS, PeerPort]),
+    ConnStr = socket_op(Sock, fun (Sock0) ->
+                                      rabbit_net:connection_string(
+                                        Sock0, inbound)
+                              end),
+    log(info, "accepting AMQP connection ~p (~s)~n", [self(), ConnStr]),
     ClientSock = socket_op(Sock, SockTransform),
     erlang:send_after(?HANDSHAKE_TIMEOUT * 1000, self(),
                       handshake_timeout),
@@ -223,17 +224,15 @@ start_connection(Parent, ChannelSupSupPid, Collector, StartHeartbeatFun, Deb,
     try
         recvloop(Deb, switch_callback(rabbit_event:init_stats_timer(
                                        State, #v1.stats_timer),
-                                      handshake, 8))
+                                      handshake, 8)),
+        log(info, "closing AMQP connection ~p (~s)~n", [self(), ConnStr])
     catch
-        Ex -> (if Ex == connection_closed_abruptly ->
-                       fun rabbit_log:warning/2;
-                  true ->
-                       fun rabbit_log:error/2
-               end)("exception on TCP connection ~p from ~s:~p~n~p~n",
-                    [self(), PeerAddressS, PeerPort, Ex])
+        Ex -> log(case Ex of
+                      connection_closed_abruptly -> warning;
+                      _                          -> error
+                  end, "closing AMQP connection ~p (~s):~n~p~n",
+                  [self(), ConnStr, Ex])
     after
-        rabbit_log:info("closing TCP connection ~p from ~s:~p~n",
-                        [self(), PeerAddressS, PeerPort]),
         %% We don't close the socket explicitly. The reader is the
         %% controlling process and hence its termination will close
         %% the socket. Furthermore, gen_tcp:close/1 waits for pending
@@ -404,8 +403,8 @@ handle_dependent_exit(ChPid, Reason, State) ->
         {_Channel, controlled} ->
             maybe_close(control_throttle(State));
         {Channel, uncontrolled} ->
-            rabbit_log:error("connection ~p, channel ~p - error:~n~p~n",
-                             [self(), Channel, Reason]),
+            log(error, "AMQP connection ~p, channel ~p - error:~n~p~n",
+                [self(), Channel, Reason]),
             maybe_close(handle_exception(control_throttle(State),
                                          Channel, Reason))
     end.
@@ -449,9 +448,10 @@ wait_for_channel_termination(N, TimerRef) ->
                 {_Channel, controlled} ->
                     wait_for_channel_termination(N-1, TimerRef);
                 {Channel, uncontrolled} ->
-                    rabbit_log:error("connection ~p, channel ~p - "
-                                     "error while terminating:~n~p~n",
-                                     [self(), Channel, Reason]),
+                    log(error,
+                        "AMQP connection ~p, channel ~p - "
+                        "error while terminating:~n~p~n",
+                        [self(), Channel, Reason]),
                     wait_for_channel_termination(N-1, TimerRef)
             end;
         cancel_wait ->
