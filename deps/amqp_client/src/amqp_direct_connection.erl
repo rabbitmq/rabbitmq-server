@@ -50,12 +50,7 @@ server_close(ConnectionPid, Code, Text) ->
                                 reply_code = Code,
                                 class_id   = 0,
                                 method_id  = 0},
-    try
-        amqp_gen_connection:server_close(ConnectionPid, Close)
-    catch
-        exit:{{shutdown, {server_initiated_close, Code, Text}}, _} ->
-            ok
-    end.
+    amqp_gen_connection:server_close(ConnectionPid, Close).
 
 init([]) ->
     {ok, #state{}}.

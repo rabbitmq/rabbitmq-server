@@ -84,7 +84,7 @@ close(Pid, Close) ->
     gen_server:call(Pid, {command, {close, Close}}, infinity).
 
 server_close(Pid, Close) ->
-    gen_server:call(Pid, {command, {server_close, Close}}, infinity).
+    gen_server:cast(Pid, {server_close, Close}).
 
 info(Pid, Items) ->
     gen_server:call(Pid, {info, Items}, infinity).
@@ -209,7 +209,9 @@ handle_cast({channel_internal_error, Pid, Reason}, State) ->
               [self(), Pid, Reason]),
     internal_error(State);
 handle_cast({server_misbehaved, AmqpError}, State) ->
-    server_misbehaved_close(AmqpError, State).
+    server_misbehaved_close(AmqpError, State);
+handle_cast({server_close, #'connection.close'{} = Close}, State) ->
+    server_initiated_close(Close, State).
 
 handle_info(Info, State) ->
     callback(handle_message, [Info], State).
@@ -244,9 +246,7 @@ handle_command({open_channel, ProposedNumber, Consumer}, _From,
                                                Mod:open_channel_args(MState)),
      State};
 handle_command({close, #'connection.close'{} = Close}, From, State) ->
-     app_initiated_close(Close, From, State);
-handle_command({server_close, #'connection.close'{} = Close}, _From, State) ->
-     server_initiated_close(Close, State).
+     app_initiated_close(Close, From, State).
 
 %%---------------------------------------------------------------------------
 %% Handling methods from broker
