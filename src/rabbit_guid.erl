@@ -80,20 +80,30 @@ fresh() ->
     Serial = gen_server:call(?SERVER, serial, infinity),
     {Serial, node(), make_ref()}.
 
+advance_blocks({B1, B2, B3, B4}, I) ->
+    B5 = erlang:phash2({B1, I}),
+    {{(B2 bxor B5), (B3 bxor B5), (B4 bxor B5), B5}, I+1}.
+
+blocks_to_binary({B1, B2, B3, B4}) ->
+    <<B1:32/integer,B2:32/integer, B3:32/integer,B4:32/integer>>.
+
 %% generate a GUID. This function should be used when performance is a
 %% priority and predictability is not an issue. Otherwise, use gen_secure/0.
 gen() ->
     %% We hash a fresh GUID and then XOR it with a process-local counter
     %% to get a new GUID each time.
-    {S, I} =
+    {BS, I} =
         case get(guid) of
-            undefined -> G = fresh(),
-                         <<S0:128/integer>> = erlang:md5(term_to_binary(G)),
-                         {S0, 0};
-            {S0, I0}  -> {S0, I0+1}
+            undefined ->
+                G = fresh(),
+                <<B1:32/integer,B2:32/integer, B3:32/integer,B4:32/integer>> =
+                    erlang:md5(term_to_binary(G)),
+                {{B1,B2,B3,B4}, 0};
+            {BS0, I0}  ->
+                advance_blocks(BS0, I0)
         end,
-    put(guid, {S, I}),
-    <<(S bxor I):128>>.
+    put(guid, {BS, I}),
+    blocks_to_binary(BS).
 
 %% generate a non-predictable GUID.
 %%
