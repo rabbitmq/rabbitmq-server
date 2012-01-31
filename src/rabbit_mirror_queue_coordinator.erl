@@ -414,9 +414,6 @@ handle_msg([CPid], _From, {ensure_monitoring, _Pids} = Msg) ->
 handle_msg([_CPid], _From, _Msg) ->
     ok.
 
-ensure_gm_heartbeat() ->
-    erlang:send_after(?ONE_SECOND, self(), send_gm_heartbeat).
-
 %% ---------------------------------------------------------------------------
 %% Others
 %% ---------------------------------------------------------------------------
@@ -426,3 +423,6 @@ noreply(State) ->
 
 reply(Reply, State) ->
     {reply, Reply, State, hibernate}.
+
+ensure_gm_heartbeat() ->
+    erlang:send_after(?ONE_SECOND, self(), send_gm_heartbeat).
