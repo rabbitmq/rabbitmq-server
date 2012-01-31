@@ -959,7 +959,7 @@ ok(Command, Headers, BodyFragments, State) ->
 amqp_death(ReplyCode, Explanation, State) ->
     ErrorName = ?PROTOCOL:amqp_exception(ReplyCode),
     ErrorDesc = format_detail("~s~n", [Explanation]),
-    log_error(ErrorName, ErrorDesc, State),
+    log_error(ErrorName, ErrorDesc, none),
     {stop, normal, send_error(atom_to_list(ErrorName), ErrorDesc, State)}.
 
 error(Message, Detail, State) ->
