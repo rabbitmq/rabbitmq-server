@@ -280,8 +280,10 @@ handle_pre_hibernate(State = #state { backing_queue       = BQ,
                                       backing_queue_state = BQS }) ->
     State #state { backing_queue_state = BQ:handle_pre_hibernate(BQS) }.
 
-status(#state { backing_queue = BQ, backing_queue_state = BQS }) ->
-    BQ:status(BQS).
+status(State = #state { backing_queue = BQ, backing_queue_state = BQS }) ->
+    BQ:status(BQS) ++
+        [ {mirror_seen,    dict:size(State #state.seen_status)},
+          {mirror_senders, sets:size(State #state.known_senders)} ].
 
 invoke(?MODULE, Fun, State) ->
     Fun(?MODULE, State);
