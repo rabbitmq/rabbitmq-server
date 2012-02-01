@@ -266,10 +266,9 @@
             </para>
             <para>
               When the target files do not exist they are created.
-              target files do not already exist.  When
-              no <option>suffix</option> is specified, the empty log
-              files are simply created at the original location; no
-              rotation takes place.
+              When no <option>suffix</option> is specified, the empty
+              log files are simply created at the original location;
+              no rotation takes place.
             </para>
             <para role="example-prefix">For example:</para>
             <screen role="example">rabbitmqctl rotate_logs .1</screen>
