@@ -46,7 +46,8 @@
 -spec(dir/0 :: () -> file:filename()).
 -spec(ensure_mnesia_dir/0 :: () -> 'ok').
 -spec(init/0 :: () -> 'ok').
--spec(init_db/3 :: ([node()], boolean(), rabbit_misc:thunk('ok')) -> 'ok').
+-spec(init_db/3 :: ([node()], 'all' | 'some' | 'none',
+                    rabbit_misc:thunk('ok')) -> 'ok').
 -spec(is_db_empty/0 :: () -> boolean()).
 -spec(cluster/1 :: ([node()]) -> 'ok').
 -spec(force_cluster/1 :: ([node()]) -> 'ok').
@@ -98,7 +99,11 @@ status() ->
 init() ->
     ensure_mnesia_running(),
     ensure_mnesia_dir(),
-    ok = init_db(read_cluster_nodes_config(), false),
+    Nodes = read_cluster_nodes_config(),
+    ok = init_db(Nodes, case should_be_disc_node(Nodes) of
+                            true  -> none;
+                            false -> some
+                        end),
     %% We intuitively expect the global name server to be synced when
     %% Mnesia is up. In fact that's not guaranteed to be the case - let's
     %% make it so.
@@ -173,7 +178,10 @@ cluster(ClusterNodes, Force) ->
     %% Join the cluster
     start_mnesia(),
     try
-        ok = init_db(ClusterNodes, Force),
+        ok = init_db(ClusterNodes, case Force of
+                                       true  -> none;
+                                       false -> all
+                                   end),
         ok = create_cluster_nodes_config(ClusterNodes)
     after
         stop_mnesia()
@@ -499,9 +507,9 @@ delete_previously_running_nodes() ->
                                           FileName, Reason}})
     end.
 
-init_db(ClusterNodes, Force) ->
+init_db(ClusterNodes, RequiredNodes) ->
     init_db(
-      ClusterNodes, Force,
+      ClusterNodes, RequiredNodes,
       fun () ->
               case rabbit_upgrade:maybe_upgrade_local() of
                   ok                    -> ok;
@@ -513,21 +521,31 @@ init_db(ClusterNodes, Force) ->
 
 %% Take a cluster node config and create the right kind of node - a
 %% standalone disk node, or disk or ram node connected to the
-%% specified cluster nodes.  If Force is false, don't allow
-%% connections if all disc nodes are offline and we are a RAM node.
-init_db(ClusterNodes, Force, SecondaryPostMnesiaFun) ->
+%% specified cluster nodes. RequiredDiscNodes determines how many disc
+%% nodes must be up for us to succeed - 'none' (used when forcing
+%% cluster or starting a disc node), 'some' (used when starting a RAM
+%% node) or 'all' (used when non-forced clustering).
+init_db(ClusterNodes, RequiredDiscNodes, SecondaryPostMnesiaFun) ->
     UClusterNodes = lists:usort(ClusterNodes),
     ProperClusterNodes = UClusterNodes -- [node()],
     case mnesia:change_config(extra_db_nodes, ProperClusterNodes) of
         {ok, Nodes} ->
-            WantDiscNode = should_be_disc_node(ClusterNodes),
-            case Nodes =:= [] andalso not WantDiscNode andalso not Force of
-                false -> ok;
-                true  -> throw({error, {failed_to_cluster_with,
-                                        ProperClusterNodes,
+            FailedDiscNodes = ProperClusterNodes -- Nodes,
+            OK = case {FailedDiscNodes, Nodes, RequiredDiscNodes} of
+                     {[], _,  all}  -> true;
+                     {_,  _,  all}  -> false;
+                     {_,  [], some} -> false;
+                     {_,  _,  some} -> true;
+                     {_,  _,  none} -> true
+                 end,
+            case OK of
+                true  -> ok;
+                false -> throw({error, {failed_to_cluster_with,
+                                        FailedDiscNodes,
                                         "Mnesia could not connect "
-                                        "to any disc nodes."}})
+                                        "to some nodes."}})
             end,
+            WantDiscNode = should_be_disc_node(ClusterNodes),
             WasDiscNode = is_disc_node(),
             %% We create a new db (on disk, or in ram) in the first
             %% two cases and attempt to upgrade the in the other two
@@ -745,7 +763,7 @@ reset(Force) ->
                 try
                     %% Force=true here so that reset still works when clustered
                     %% with a node which is down
-                    ok = init_db(read_cluster_nodes_config(), true),
+                    ok = init_db(read_cluster_nodes_config(), none),
                     {all_clustered_nodes() -- [Node],
                      running_clustered_nodes() -- [Node]}
                 after
