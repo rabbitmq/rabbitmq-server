@@ -98,8 +98,8 @@ status() ->
 init() ->
     ensure_mnesia_running(),
     ensure_mnesia_dir(),
-    ok = init_db(read_cluster_nodes_config(), true,
-                 fun maybe_upgrade_local_or_record_desired/0),
+    Nodes = read_cluster_nodes_config(),
+    ok = init_db(Nodes, should_be_disc_node(Nodes)),
     %% We intuitively expect the global name server to be synced when
     %% Mnesia is up. In fact that's not guaranteed to be the case - let's
     %% make it so.
@@ -174,8 +174,7 @@ cluster(ClusterNodes, Force) ->
     %% Join the cluster
     start_mnesia(),
     try
-        ok = init_db(ClusterNodes, Force,
-                     fun maybe_upgrade_local_or_record_desired/0),
+        ok = init_db(ClusterNodes, Force),
         ok = create_cluster_nodes_config(ClusterNodes)
     after
         stop_mnesia()
@@ -501,6 +500,18 @@ delete_previously_running_nodes() ->
                                           FileName, Reason}})
     end.
 
+init_db(ClusterNodes, Force) ->
+    init_db(
+      ClusterNodes, Force,
+      fun () ->
+              case rabbit_upgrade:maybe_upgrade_local() of
+                  ok                    -> ok;
+                  %% If we're just starting up a new node we won't have a
+                  %% version
+                  version_not_available -> ok = rabbit_version:record_desired()
+              end
+      end).
+
 %% Take a cluster node config and create the right kind of node - a
 %% standalone disk node, or disk or ram node connected to the
 %% specified cluster nodes.  If Force is false, don't allow
@@ -509,20 +520,12 @@ init_db(ClusterNodes, Force, SecondaryPostMnesiaFun) ->
     UClusterNodes = lists:usort(ClusterNodes),
     ProperClusterNodes = UClusterNodes -- [node()],
     case mnesia:change_config(extra_db_nodes, ProperClusterNodes) of
+        {ok, []} when not Force andalso ProperClusterNodes =/= [] ->
+            throw({error, {failed_to_cluster_with, ProperClusterNodes,
+                           "Mnesia could not connect to any disc nodes."}});
         {ok, Nodes} ->
-            case Force of
-                false -> FailedClusterNodes = ProperClusterNodes -- Nodes,
-                         case FailedClusterNodes of
-                             [] -> ok;
-                             _  -> throw({error, {failed_to_cluster_with,
-                                                  FailedClusterNodes,
-                                                  "Mnesia could not connect "
-                                                  "to some nodes."}})
-                         end;
-                true  -> ok
-            end,
-            WantDiscNode = should_be_disc_node(ClusterNodes),
             WasDiscNode = is_disc_node(),
+            WantDiscNode = should_be_disc_node(ClusterNodes),
             %% We create a new db (on disk, or in ram) in the first
             %% two cases and attempt to upgrade the in the other two
             case {Nodes, WasDiscNode, WantDiscNode} of
@@ -570,14 +573,6 @@ init_db(ClusterNodes, Force, SecondaryPostMnesiaFun) ->
             %% nodes together that are currently running standalone or
             %% are members of a different cluster
             throw({error, {unable_to_join_cluster, ClusterNodes, Reason}})
-    end.
-
-maybe_upgrade_local_or_record_desired() ->
-    case rabbit_upgrade:maybe_upgrade_local() of
-        ok                    -> ok;
-        %% If we're just starting up a new node we won't have a
-        %% version
-        version_not_available -> ok = rabbit_version:record_desired()
     end.
 
 schema_ok_or_move() ->
@@ -745,7 +740,9 @@ reset(Force) ->
             start_mnesia(),
             {Nodes, RunningNodes} =
                 try
-                    ok = init(),
+                    %% Force=true here so that reset still works when clustered
+                    %% with a node which is down
+                    ok = init_db(read_cluster_nodes_config(), true),
                     {all_clustered_nodes() -- [Node],
                      running_clustered_nodes() -- [Node]}
                 after
