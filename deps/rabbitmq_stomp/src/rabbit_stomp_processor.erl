@@ -437,7 +437,8 @@ do_login(Username0, Password0, VirtualHost0, Heartbeat, AdapterInfo,
                                        adapter_info = AdapterInfo}) of
                 {ok, Connection} ->
                     {ok, Channel} = amqp_connection:open_channel(Connection),
-                    SessionId = rabbit_guid:string_guid("session"),
+                    SessionId =
+                        rabbit_guid:string(rabbit_guid:gen_secure(), "session"),
                     {{SendTimeout, ReceiveTimeout}, State1} =
                         ensure_heartbeats(Heartbeat, State),
                     ok("CONNECTED",
@@ -998,4 +999,3 @@ handle_call(_Msg, _From, State) ->
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
-
