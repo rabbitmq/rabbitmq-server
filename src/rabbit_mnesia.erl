@@ -520,15 +520,10 @@ init_db(ClusterNodes, Force, SecondaryPostMnesiaFun) ->
     UClusterNodes = lists:usort(ClusterNodes),
     ProperClusterNodes = UClusterNodes -- [node()],
     case mnesia:change_config(extra_db_nodes, ProperClusterNodes) of
+        {ok, []} when not Force andalso ProperClusterNodes =/= [] ->
+            throw({error, {failed_to_cluster_with, ProperClusterNodes,
+                           "Mnesia could not connect to any disc nodes."}});
         {ok, Nodes} ->
-            case {ProperClusterNodes, Nodes, Force} of
-                {[], [], false} -> ok;
-                {_,  [], false} -> throw({error, {failed_to_cluster_with,
-                                                  ProperClusterNodes,
-                                                  "Mnesia could not connect "
-                                                  "to any disc nodes."}});
-                _               -> ok
-            end,
             WasDiscNode = is_disc_node(),
             WantDiscNode = should_be_disc_node(ClusterNodes),
             %% We create a new db (on disk, or in ram) in the first
