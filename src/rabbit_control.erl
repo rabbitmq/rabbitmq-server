@@ -212,6 +212,12 @@ action(force_cluster, Node, ClusterNodeSs, _Opts, Inform) ->
            [Node, ClusterNodes]),
     rpc_call(Node, rabbit_mnesia, force_cluster, [ClusterNodes]);
 
+action(force_cluster_forget, Node, ClusterNodeSs, _Opts, Inform) ->
+    ClusterNodes = lists:map(fun list_to_atom/1, ClusterNodeSs),
+    Inform("Telling node ~p to forget ~p",
+           [Node, ClusterNodes]),
+    rpc_call(Node, rabbit_mnesia, cluster_forget, [ClusterNodes]);
+
 action(wait, Node, [PidFile], _Opts, Inform) ->
     Inform("Waiting for ~p", [Node]),
     wait_for_application(Node, PidFile, Inform);

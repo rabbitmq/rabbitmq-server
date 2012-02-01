@@ -24,7 +24,7 @@
          create_cluster_nodes_config/1, read_cluster_nodes_config/0,
          record_running_nodes/0, read_previously_running_nodes/0,
          delete_previously_running_nodes/0, running_nodes_filename/0,
-         is_disc_node/0, on_node_down/1, on_node_up/1]).
+         is_disc_node/0, on_node_down/1, on_node_up/1, cluster_forget/1]).
 
 -export([table_names/0]).
 
@@ -181,6 +181,21 @@ cluster(ClusterNodes, Force) ->
         stop_mnesia()
     end,
 
+    ok.
+
+cluster_forget(Nodes) ->
+    rabbit_misc:local_info_msg("Forgetting ~p forcefully~n", [Nodes]),
+    ensure_mnesia_not_running(),
+    ensure_mnesia_dir(),
+
+    start_mnesia(),
+    try
+        [mnesia:force_load_table(T) || T <- rabbit_mnesia:table_names()],
+        [{atomic, ok} = mnesia:del_table_copy(schema, Node) || Node <- Nodes]
+
+    after
+        stop_mnesia()
+    end,
     ok.
 
 %% return node to its virgin state, where it is not member of any
