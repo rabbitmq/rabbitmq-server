@@ -511,14 +511,14 @@ init_db(ClusterNodes, Force, SecondaryPostMnesiaFun) ->
     ProperClusterNodes = UClusterNodes -- [node()],
     case mnesia:change_config(extra_db_nodes, ProperClusterNodes) of
         {ok, Nodes} ->
-            case Nodes =:= [] andalso not is_disc_node() andalso not Force of
+            WantDiscNode = should_be_disc_node(ClusterNodes),
+            case Nodes =:= [] andalso not WantDiscNode andalso not Force of
                 false -> ok;
                 true  -> throw({error, {failed_to_cluster_with,
                                         ProperClusterNodes,
                                         "Mnesia could not connect "
                                         "to any disc nodes."}})
             end,
-            WantDiscNode = should_be_disc_node(ClusterNodes),
             WasDiscNode = is_disc_node(),
             %% We create a new db (on disk, or in ram) in the first
             %% two cases and attempt to upgrade the in the other two
