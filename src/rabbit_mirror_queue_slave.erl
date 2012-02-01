@@ -90,11 +90,7 @@
                }).
 
 start_link(Q) ->
-    {ok, Pid} = gen_server2:start_link(?MODULE, [], []),
-    case gen_server2:call(Pid, {init, Q}, infinity) of
-        ok       -> {ok, Pid};
-        existing -> ignore
-    end.
+    gen_server2:start_link(?MODULE, Q, []).
 
 set_maximum_since_use(QPid, Age) ->
     gen_server2:cast(QPid, {set_maximum_since_use, Age}).
@@ -102,11 +98,7 @@ set_maximum_since_use(QPid, Age) ->
 info(QPid) ->
     gen_server2:call(QPid, info, infinity).
 
-init([]) ->
-    {ok, not_started, hibernate,
-     {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
-
-handle_call({init, #amqqueue { name = QueueName } = Q}, _From, not_started) ->
+init(#amqqueue { name = QueueName } = Q) ->
     Self = self(),
     Node = node(),
     case rabbit_misc:execute_mnesia_transaction(
@@ -155,10 +147,12 @@ handle_call({init, #amqqueue { name = QueueName } = Q}, _From, not_started) ->
             rabbit_event:notify(queue_slave_created,
                                 infos(?CREATION_EVENT_KEYS, State)),
             ok = gm:broadcast(GM, request_length),
-            reply(ok, State);
+            {ok, State, hibernate,
+             {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN,
+              ?DESIRED_HIBERNATE}};
         existing ->
-            {stop, normal, existing, #state{}}
-    end;
+            ignore
+    end.
 
 handle_call({deliver, Delivery = #delivery { immediate = true }},
             From, State) ->
