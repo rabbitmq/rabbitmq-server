@@ -505,22 +505,18 @@ init_db(ClusterNodes, Force) ->
 %% Take a cluster node config and create the right kind of node - a
 %% standalone disk node, or disk or ram node connected to the
 %% specified cluster nodes.  If Force is false, don't allow
-%% connections to offline nodes.
+%% connections if all disc nodes are offline and we are a RAM node.
 init_db(ClusterNodes, Force, SecondaryPostMnesiaFun) ->
     UClusterNodes = lists:usort(ClusterNodes),
     ProperClusterNodes = UClusterNodes -- [node()],
     case mnesia:change_config(extra_db_nodes, ProperClusterNodes) of
         {ok, Nodes} ->
-            case Force of
-                false -> FailedClusterNodes = ProperClusterNodes -- Nodes,
-                         case FailedClusterNodes of
-                             [] -> ok;
-                             _  -> throw({error, {failed_to_cluster_with,
-                                                  FailedClusterNodes,
-                                                  "Mnesia could not connect "
-                                                  "to some nodes."}})
-                         end;
-                true  -> ok
+            case Nodes =:= [] andalso not is_disc_node() andalso not Force of
+                false -> ok;
+                true  -> throw({error, {failed_to_cluster_with,
+                                        ProperClusterNodes,
+                                        "Mnesia could not connect "
+                                        "to any disc nodes."}})
             end,
             WantDiscNode = should_be_disc_node(ClusterNodes),
             WasDiscNode = is_disc_node(),
