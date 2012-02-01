@@ -731,28 +731,21 @@ ram_duration(State = #vqstate {
                  ram_msg_count_prev = RamMsgCount,
                  ram_ack_count_prev = RamAckCount }}.
 
-needs_timeout(State = #vqstate { index_state = IndexState }) ->
-    case rabbit_queue_index:needs_sync(IndexState) of
-        true  ->
-            timed;
-        false ->
-            case needs_index_sync(State) of
-                false -> case reduce_memory_use(
-                                fun (_Quota, State1) -> {0, State1} end,
-                                fun (_Quota, State1) -> State1 end,
-                                fun (_Quota, State1) -> {0, State1} end,
-                                State) of
-                             {true,  _State} -> idle;
-                             {false, _State} -> false
-                         end;
-                true  -> timed
-            end
+needs_timeout(State) ->
+    case needs_index_sync(State) of
+        false -> case reduce_memory_use(
+                        fun (_Quota, State1) -> {0, State1} end,
+                        fun (_Quota, State1) -> State1 end,
+                        fun (_Quota, State1) -> {0, State1} end,
+                        State) of
+                     {true,  _State} -> idle;
+                     {false, _State} -> false
+                 end;
+        true  -> timed
     end.
 
-timeout(State = #vqstate { index_state = IndexState }) ->
-    State1 = State #vqstate {
-               index_state = rabbit_queue_index:sync(IndexState) },
-    a(reduce_memory_use(State1)).
+timeout(State) ->
+    a(reduce_memory_use(confirm_commit_index(State))).
 
 handle_pre_hibernate(State = #vqstate { index_state = IndexState }) ->
     State #vqstate { index_state = rabbit_queue_index:flush(IndexState) }.

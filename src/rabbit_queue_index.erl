@@ -22,7 +22,6 @@
          next_segment_boundary/1, bounds/1, recover/1]).
 
 -export([add_queue_ttl/0]).
--export([needs_sync/1]).
 
 -define(CLEAN_FILENAME, "clean.dot").
 
@@ -298,9 +297,6 @@ sync(SeqIds, State) ->
     %% syncs, all in one operation, there is no possibility of the
     %% seqids not being in the journal.
     sync_if([] =/= SeqIds, State).
-
-needs_sync(#qistate { journal_handle = JournalHdl }) ->
-    file_handle_cache:needs_sync(JournalHdl).
 
 flush(State = #qistate { dirty_count = 0 }) -> State;
 flush(State)                                -> flush_journal(State).

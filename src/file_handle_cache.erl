@@ -149,7 +149,6 @@
 -export([obtain/0, release/0, transfer/1, set_limit/1, get_limit/0, info_keys/0,
          info/0, info/1]).
 -export([ulimit/0]).
--export([needs_sync/1]).
 
 -export([start_link/0, init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3, prioritise_cast/2]).
@@ -372,13 +371,6 @@ sync(Ref) ->
                   ok    -> {ok, [Handle #handle { is_dirty = false }]};
                   Error -> {Error, [Handle]}
               end
-      end).
-
-needs_sync(Ref) ->
-    with_flushed_handles(
-      [Ref],
-      fun ([#handle { is_dirty = false, write_buffer = [] }]) -> false;
-          (_)                                                 -> true
       end).
 
 position(Ref, NewOffset) ->
