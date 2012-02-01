@@ -679,7 +679,7 @@ handle_method(#'basic.nack'{delivery_tag = DeliveryTag,
                             multiple     = Multiple,
                             requeue      = Requeue},
               _, State) ->
-    reject(DeliveryTag, Multiple, Requeue, State);
+    reject(DeliveryTag, Requeue, Multiple, State);
 
 handle_method(#'basic.ack'{delivery_tag = DeliveryTag,
                            multiple = Multiple},
@@ -880,7 +880,7 @@ handle_method(#'basic.recover'{requeue = Requeue}, Content, State) ->
 handle_method(#'basic.reject'{delivery_tag = DeliveryTag,
                               requeue = Requeue},
               _, State) ->
-    reject(DeliveryTag, false, Requeue, State);
+    reject(DeliveryTag, Requeue, false, State);
 
 handle_method(#'exchange.declare'{exchange = ExchangeNameBin,
                                   type = TypeNameBin,
@@ -1084,10 +1084,11 @@ handle_method(#'tx.commit'{}, _, #ch{tx_status = none}) ->
     rabbit_misc:protocol_error(
       precondition_failed, "channel is not transactional", []);
 
-handle_method(#'tx.commit'{}, _, State = #ch{uncommitted_message_q = TMQ,
-                                             uncommitted_acks      = TAL,
-                                             uncommitted_nacks     = TNL,
-                                             limiter = Limiter}) ->
+handle_method(#'tx.commit'{}, _,
+              State = #ch{uncommitted_message_q = TMQ,
+                          uncommitted_acks      = TAL,
+                          uncommitted_nacks     = TNL,
+                          limiter               = Limiter}) ->
     State1 = rabbit_misc:queue_fold(fun deliver_to_queues/2, State, TMQ),
     ack(TAL, State1),
     lists:foreach(
@@ -1266,7 +1267,7 @@ basic_return(#basic_message{exchange_name = ExchangeName,
                            routing_key = RoutingKey},
            Content).
 
-reject(DeliveryTag, Multiple, Requeue,
+reject(DeliveryTag, Requeue, Multiple,
        State = #ch{unacked_message_q = UAMQ, tx_status = TxStatus}) ->
     {Acked, Remaining} = collect_acks(UAMQ, DeliveryTag, Multiple),
     State1 = State#ch{unacked_message_q = Remaining},
