@@ -515,7 +515,7 @@ init_db(ClusterNodes, Force) ->
 %% Take a cluster node config and create the right kind of node - a
 %% standalone disk node, or disk or ram node connected to the
 %% specified cluster nodes.  If Force is false, don't allow
-%% connections if all disc nodes are offline and we are a RAM node.
+%% connections to offline nodes.
 init_db(ClusterNodes, Force, SecondaryPostMnesiaFun) ->
     UClusterNodes = lists:usort(ClusterNodes),
     ProperClusterNodes = UClusterNodes -- [node()],
