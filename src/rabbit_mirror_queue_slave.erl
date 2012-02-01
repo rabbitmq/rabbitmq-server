@@ -91,8 +91,10 @@
 
 start_link(Q) ->
     {ok, Pid} = gen_server2:start_link(?MODULE, [], []),
-    gen_server2:call(Pid, {init, Q}, infinity),
-    {ok, Pid}.
+    case gen_server2:call(Pid, {init, Q}, infinity) of
+        ok       -> {ok, Pid};
+        existing -> ignore
+    end.
 
 set_maximum_since_use(QPid, Age) ->
     gen_server2:cast(QPid, {set_maximum_since_use, Age}).
