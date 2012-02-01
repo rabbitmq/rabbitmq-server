@@ -253,6 +253,10 @@ handle_info({'DOWN', _MonitorRef, process, ChPid, _Reason}, State) ->
 handle_info({'EXIT', _Pid, Reason}, State) ->
     {stop, Reason, State};
 
+handle_info({bump_credit, Msg}, State) ->
+    credit_flow:handle_bump_msg(Msg),
+    noreply(State);
+
 handle_info(Msg, State) ->
     {stop, {unexpected_info, Msg}, State}.
 

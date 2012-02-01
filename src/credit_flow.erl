@@ -16,8 +16,8 @@
 
 -module(credit_flow).
 
-%% Credit starts at ?MAX_CREDIT and goes down. Both sides keep
-%% track. When the receiver goes below ?MORE_CREDIT_AT it issues more
+%% Credit starts at MaxCredit and goes down. Both sides keep
+%% track. When the receiver goes below MoreCreditAt it issues more
 %% credit by sending a message to the sender. The sender should pass
 %% this message in to handle_bump_msg/1. The sender should block when
 %% it goes below 0 (check by invoking blocked/0). If a process is both
@@ -25,10 +25,9 @@
 %% senders when it is itself blocked - thus the only processes that
 %% need to check blocked/0 are ones that read from network sockets.
 
--define(MAX_CREDIT, 200).
--define(MORE_CREDIT_AT, 150).
+-define(DEFAULT_CREDIT, {200, 150}).
 
--export([ack/1, handle_bump_msg/1, blocked/0, send/1]).
+-export([ack/1, ack/2, handle_bump_msg/1, blocked/0, send/1, send/2]).
 -export([peer_down/1]).
 
 %%----------------------------------------------------------------------------
@@ -36,11 +35,14 @@
 -ifdef(use_specs).
 
 -opaque(bump_msg() :: {pid(), non_neg_integer()}).
+-opaque(credit_spec() :: {non_neg_integer(), non_neg_integer()}).
 
 -spec(ack/1 :: (pid()) -> 'ok').
+-spec(ack/2 :: (pid(), credit_spec()) -> 'ok').
 -spec(handle_bump_msg/1 :: (bump_msg()) -> 'ok').
 -spec(blocked/0 :: () -> boolean()).
 -spec(send/1 :: (pid()) -> 'ok').
+-spec(send/2 :: (pid(), credit_spec()) -> 'ok').
 -spec(peer_down/1 :: (pid()) -> 'ok').
 
 -endif.
@@ -55,12 +57,18 @@
 %% variable names are used in credit bookkeeping and want to make
 %% sense internally).
 
-ack(To) ->
+%% For any given pair of processes, ack/2 and send/2 must always be
+%% called with the same credit_spec().
+
+ack(To) -> ack(To, ?DEFAULT_CREDIT).
+
+ack(To, {MaxCredit, MoreCreditAt}) ->
+    MoreCreditAt1 = MoreCreditAt + 1,
     Credit =
-        case get({credit_to, To}, ?MAX_CREDIT) of
-            ?MORE_CREDIT_AT + 1 -> grant(To, ?MAX_CREDIT - ?MORE_CREDIT_AT),
-                                   ?MAX_CREDIT;
-            C                   -> C - 1
+        case get({credit_to, To}, MaxCredit) of
+            MoreCreditAt1 -> grant(To, MaxCredit - MoreCreditAt),
+                             MaxCredit;
+            C             -> C - 1
         end,
     put({credit_to, To}, Credit).
 
@@ -76,8 +84,10 @@ handle_bump_msg({From, MoreCredit}) ->
 blocked() ->
     get(credit_blocked, []) =/= [].
 
-send(From) ->
-    Credit = get({credit_from, From}, ?MAX_CREDIT) - 1,
+send(From) -> send(From, ?DEFAULT_CREDIT).
+
+send(From, {MaxCredit, _MoreCreditAt}) ->
+    Credit = get({credit_from, From}, MaxCredit) - 1,
     case Credit of
         0 -> block(From);
         _ -> ok

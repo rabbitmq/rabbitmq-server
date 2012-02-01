@@ -1159,6 +1159,10 @@ handle_info(timeout, State) ->
 handle_info({'EXIT', _Pid, Reason}, State) ->
     {stop, Reason, State};
 
+handle_info({bump_credit, Msg}, State) ->
+    credit_flow:handle_bump_msg(Msg),
+    noreply(State);
+
 handle_info(Info, State) ->
     {stop, {unhandled_info, Info}, State}.
 
