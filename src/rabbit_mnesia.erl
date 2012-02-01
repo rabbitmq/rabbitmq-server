@@ -500,7 +500,16 @@ delete_previously_running_nodes() ->
     end.
 
 init_db(ClusterNodes, Force) ->
-    init_db(ClusterNodes, Force, fun maybe_upgrade_local_or_record_desired/0).
+    init_db(
+      ClusterNodes, Force,
+      fun () ->
+              case rabbit_upgrade:maybe_upgrade_local() of
+                  ok                    -> ok;
+                  %% If we're just starting up a new node we won't have a
+                  %% version
+                  version_not_available -> ok = rabbit_version:record_desired()
+              end
+      end).
 
 %% Take a cluster node config and create the right kind of node - a
 %% standalone disk node, or disk or ram node connected to the
@@ -567,14 +576,6 @@ init_db(ClusterNodes, Force, SecondaryPostMnesiaFun) ->
             %% nodes together that are currently running standalone or
             %% are members of a different cluster
             throw({error, {unable_to_join_cluster, ClusterNodes, Reason}})
-    end.
-
-maybe_upgrade_local_or_record_desired() ->
-    case rabbit_upgrade:maybe_upgrade_local() of
-        ok                    -> ok;
-        %% If we're just starting up a new node we won't have a
-        %% version
-        version_not_available -> ok = rabbit_version:record_desired()
     end.
 
 schema_ok_or_move() ->
