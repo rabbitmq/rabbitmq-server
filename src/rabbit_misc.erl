@@ -34,7 +34,7 @@
 -export([execute_mnesia_transaction/2]).
 -export([execute_mnesia_tx_with_tail/1]).
 -export([ensure_ok/2]).
--export([cookie_hash/0, tcp_name/3]).
+-export([tcp_name/3]).
 -export([upmap/2, map_in_order/2]).
 -export([table_filter/3]).
 -export([dirty_read_all/1, dirty_foreach_key/2, dirty_dump_log/1]).
@@ -141,7 +141,6 @@
 -spec(execute_mnesia_tx_with_tail/1 ::
         (thunk(fun ((boolean()) -> B))) -> B | (fun ((boolean()) -> B))).
 -spec(ensure_ok/2 :: (ok_or_error(), atom()) -> 'ok').
--spec(cookie_hash/0 :: () -> string()).
 -spec(tcp_name/3 ::
         (atom(), inet:ip_address(), rabbit_networking:ip_port())
         -> atom()).
@@ -447,9 +446,6 @@ execute_mnesia_tx_with_tail(TxFun) ->
 
 ensure_ok(ok, _) -> ok;
 ensure_ok({error, Reason}, ErrorTag) -> throw({error, {ErrorTag, Reason}}).
-
-cookie_hash() ->
-    base64:encode_to_string(erlang:md5(atom_to_list(erlang:get_cookie()))).
 
 tcp_name(Prefix, IPAddress, Port)
   when is_atom(Prefix) andalso is_number(Port) ->

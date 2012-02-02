@@ -674,7 +674,7 @@ print_banner() ->
                 {"app descriptor", app_location()},
                 {"home dir",       home_dir()},
                 {"config file(s)", config_files()},
-                {"cookie hash",    rabbit_misc:cookie_hash()},
+                {"cookie hash",    rabbit_nodes:cookie_hash()},
                 {"log",            log_location(kernel)},
                 {"sasl log",       log_location(sasl)},
                 {"database dir",   rabbit_mnesia:dir()},

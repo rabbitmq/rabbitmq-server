@@ -16,7 +16,7 @@
 
 -module(rabbit_nodes).
 
--export([names/1, diagnostics/1, make/1, parts/1]).
+-export([names/1, diagnostics/1, make/1, parts/1, cookie_hash/0]).
 
 -define(EPMD_TIMEOUT, 30000).
 
@@ -31,6 +31,7 @@
 -spec(diagnostics/1 :: ([node()]) -> string()).
 -spec(make/1 :: ({string(), string()} | string()) -> node()).
 -spec(parts/1 :: (node() | string()) -> {string(), string()}).
+-spec(cookie_hash/0 :: () -> string()).
 
 -endif.
 
@@ -64,7 +65,7 @@ diagnostics0() ->
          {ok, [[Home]]} -> {"- home dir: ~s", [Home]};
          Other          -> {"- no home dir: ~p", [Other]}
      end,
-     {"- cookie hash: ~s", [rabbit_misc:cookie_hash()]}].
+     {"- cookie hash: ~s", [cookie_hash()]}].
 
 diagnostics_host(Host) ->
     case names(Host) of
@@ -90,3 +91,6 @@ parts(NodeStr) ->
                             {Prefix, Suffix};
         {Prefix, Suffix} -> {Prefix, tl(Suffix)}
     end.
+
+cookie_hash() ->
+    base64:encode_to_string(erlang:md5(atom_to_list(erlang:get_cookie()))).
