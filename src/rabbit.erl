@@ -506,8 +506,9 @@ boot_step_error({error, {timeout_waiting_for_tables, _}}, _Stacktrace) ->
                    " shut down forcefully~nit cannot determine which nodes"
                    " are timing out. Details on all nodes will~nfollow.~n",
                    rabbit_mnesia:all_clustered_nodes() -- [node()]};
-            Ns -> {format("Timeout contacting cluster nodes: ~p.~n",
-                          [Ns]), Ns}
+            Ns -> {rabbit_misc:format(
+                     "Timeout contacting cluster nodes: ~p.~n", [Ns]),
+                   Ns}
         end,
     boot_error(Err ++ rabbit_nodes:diagnostics(Nodes) ++ "~n~n", []);
 
@@ -522,8 +523,6 @@ boot_error(Format, Args) ->
     error_logger:error_msg(Format, Args),
     timer:sleep(1000),
     exit({?MODULE, failure_during_boot}).
-
-format(F, A) -> lists:flatten(io_lib:format(F, A)).
 
 %%---------------------------------------------------------------------------
 %% boot step functions
