@@ -365,7 +365,6 @@ start(normal, []) ->
             true = register(rabbit, self()),
             print_banner(),
             [ok = run_boot_step(Step) || Step <- boot_steps()],
-            ok = rabbit_mnesia:delete_previously_running_nodes(),
             io:format("~nbroker running~n"),
             {ok, SupPid};
         Error ->
