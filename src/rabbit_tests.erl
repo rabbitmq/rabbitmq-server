@@ -59,7 +59,7 @@ all_tests() ->
     passed.
 
 maybe_run_cluster_dependent_tests() ->
-    SecondaryNode = rabbit_misc:makenode("hare"),
+    SecondaryNode = rabbit_nodes:make("hare"),
 
     case net_adm:ping(SecondaryNode) of
         pong -> passed = run_cluster_dependent_tests(SecondaryNode);
@@ -859,7 +859,7 @@ test_cluster_management() ->
                                         "invalid2@invalid"]),
     ok = assert_ram_node(),
 
-    SecondaryNode = rabbit_misc:makenode("hare"),
+    SecondaryNode = rabbit_nodes:make("hare"),
     case net_adm:ping(SecondaryNode) of
         pong -> passed = test_cluster_management2(SecondaryNode);
         pang -> io:format("Skipping clustering tests with node ~p~n",

@@ -243,8 +243,8 @@ duplicate_node_check([]) ->
     %% Ignore running node while installing windows service
     ok;
 duplicate_node_check(NodeStr) ->
-    Node = rabbit_misc:makenode(NodeStr),
-    {NodeName, NodeHost} = rabbit_misc:nodeparts(Node),
+    Node = rabbit_nodes:make(NodeStr),
+    {NodeName, NodeHost} = rabbit_nodes:parts(Node),
     case rabbit_nodes:names(NodeHost) of
         {ok, NamePorts}  ->
             case proplists:is_defined(NodeName, NamePorts) of

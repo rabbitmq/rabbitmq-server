@@ -66,7 +66,7 @@ start() ->
             CmdArgsAndOpts -> CmdArgsAndOpts
         end,
     Opts1 = [case K of
-                 ?NODE_OPT -> {?NODE_OPT, rabbit_misc:makenode(V)};
+                 ?NODE_OPT -> {?NODE_OPT, rabbit_nodes:make(V)};
                  _         -> {K, V}
              end || {K, V} <- Opts],
     Command = list_to_atom(Command0),

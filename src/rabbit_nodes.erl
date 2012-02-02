@@ -11,12 +11,12 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_nodes).
 
--export([names/1, diagnostics/1]).
+-export([names/1, diagnostics/1, make/1, parts/1]).
 
 -define(EPMD_TIMEOUT, 30000).
 
@@ -29,6 +29,8 @@
 -spec(names/1 :: (string()) -> rabbit_types:ok_or_error2(
                                  [{string(), integer()}], term())).
 -spec(diagnostics/1 :: ([node()]) -> string()).
+-spec(make/1 :: ({string(), string()} | string()) -> node()).
+-spec(parts/1 :: (node() | string()) -> {string(), string()}).
 
 -endif.
 
@@ -47,8 +49,7 @@ names(Hostname) ->
     Res.
 
 diagnostics(Nodes) ->
-    Hosts = lists:usort([element(2, rabbit_misc:nodeparts(Node)) ||
-                            Node <- Nodes]),
+    Hosts = lists:usort([element(2, parts(Node)) || Node <- Nodes]),
     NodeDiags = [{"~nDIAGNOSTICS~n===========~n~n"
                   "nodes in question: ~p~n~n"
                   "hosts, their running nodes and ports:", [Nodes]}] ++
@@ -74,4 +75,18 @@ diagnostics_host(Host) ->
             {"- ~s: ~p",
              [Host, [{list_to_atom(Name), Port} ||
                         {Name, Port} <- NamePorts]]}
+    end.
+
+make({Prefix, Suffix}) ->
+    list_to_atom(lists:append([Prefix, "@", Suffix]));
+make(NodeStr) ->
+    make(parts(NodeStr)).
+
+parts(Node) when is_atom(Node) ->
+    parts(atom_to_list(Node));
+parts(NodeStr) ->
+    case lists:splitwith(fun (E) -> E =/= $@ end, NodeStr) of
+        {Prefix, []}     -> {_, Suffix} = parts(node()),
+                            {Prefix, Suffix};
+        {Prefix, Suffix} -> {Prefix, tl(Suffix)}
     end.
