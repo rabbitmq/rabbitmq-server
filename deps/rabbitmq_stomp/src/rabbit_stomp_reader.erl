@@ -36,7 +36,8 @@
 
 -include("rabbit_stomp_frame.hrl").
 
--record(reader_state, {socket, parse_state, processor, state, iterations}).
+-record(reader_state, {socket, parse_state, processor, state, iterations,
+                       conserve_memory}).
 
 start_link(SupPid, Configuration) ->
         {ok, proc_lib:spawn_link(?MODULE, init, [SupPid, Configuration])}.
@@ -56,12 +57,14 @@ init(SupPid, Configuration) ->
             ParseState = rabbit_stomp_frame:initial_state(),
             try
                 mainloop(
-                   register_memory_alarm(
-                     #reader_state{socket      = Sock,
-                                   parse_state = ParseState,
-                                   processor   = ProcessorPid,
-                                   state       = running,
-                                   iterations  = 0}), 0),
+                  control_throttle(
+                    register_memory_alarm(
+                      #reader_state{socket          = Sock,
+                                    parse_state     = ParseState,
+                                    processor       = ProcessorPid,
+                                    state           = running,
+                                    iterations      = 0,
+                                    conserve_memory = false})), 0),
                 log(info, "closing STOMP connection ~p (~s)~n",
                     [self(), ConnStr])
             catch
@@ -84,7 +87,12 @@ mainloop(State = #reader_state{socket = Sock}, ByteCount) ->
         {inet_async, _Sock, _Ref, {error, Reason}} ->
             throw({inet_error, Reason});
         {conserve_memory, Conserve} ->
-            mainloop(internal_conserve_memory(Conserve, State), ByteCount)
+            mainloop(
+              control_throttle(
+                State#reader_state{conserve_memory = Conserve}), ByteCount);
+        {bump_credit, Msg} ->
+            credit_flow:handle_bump_msg(Msg),
+            mainloop(control_throttle(State), ByteCount)
     end.
 
 process_received_bytes([], State) ->
@@ -101,9 +109,10 @@ process_received_bytes(Bytes,
             rabbit_stomp_processor:process_frame(Processor, Frame),
             PS = rabbit_stomp_frame:initial_state(),
             process_received_bytes(Rest,
-                                   State#reader_state{
-                                     parse_state = PS,
-                                     state       = next_state(S, Frame)})
+                                   control_throttle(
+                                     State#reader_state{
+                                       parse_state = PS,
+                                       state       = next_state(S, Frame)}))
     end.
 
 conserve_memory(Pid, Conserve) ->
@@ -111,15 +120,16 @@ conserve_memory(Pid, Conserve) ->
     ok.
 
 register_memory_alarm(State) ->
-    internal_conserve_memory(
-      rabbit_alarm:register(self(), {?MODULE, conserve_memory, []}), State).
+    rabbit_alarm:register(self(), {?MODULE, conserve_memory, []}), State.
 
-internal_conserve_memory(true, State = #reader_state{state = running}) ->
-    State#reader_state{state = blocking};
-internal_conserve_memory(false, State) ->
-    State#reader_state{state = running};
-internal_conserve_memory(_Conserve, State) ->
-    State.
+control_throttle(State = #reader_state{state            = CS,
+                                       conserve_memory  = Mem}) ->
+    case {CS, Mem orelse credit_flow:blocked()} of
+        {running,   true} -> State#reader_state{state = blocking};
+        {blocking, false} -> State#reader_state{state = running};
+        {blocked,  false} -> State#reader_state{state = running};
+        {_,            _} -> State
+    end.
 
 next_state(blocking, #stomp_frame{command = "SEND"}) ->
     blocked;
