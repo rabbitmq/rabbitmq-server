@@ -193,8 +193,8 @@ binding_recovery() ->
     ok.
 
 suffix({Nodename, _}, X) ->
-    {_, NodeHost} = rabbit_misc:nodeparts(node()),
-    Node = rabbit_misc:makenode({Nodename, NodeHost}),
+    {_, NodeHost} = rabbit_nodes:parts(node()),
+    Node = rabbit_nodes:make({Nodename, NodeHost}),
     rpc:call(Node, rabbit_federation_db, get_active_suffix,
              [rabbit_misc:r(<<"/">>, exchange, <<"downstream">>),
               #upstream{connection_name = Nodename,
