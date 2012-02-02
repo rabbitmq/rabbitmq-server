@@ -22,7 +22,7 @@
          status/0, is_running/0, is_running/1, environment/0,
          rotate_logs/1, force_event_refresh/0]).
 
--export([start/2, stop/1, diagnostics/1]).
+-export([start/2, stop/1]).
 
 -export([log_location/1]). %% for testing
 
@@ -236,7 +236,6 @@
 			{'required',[any(),...]}}} |
 		      {'ok',pid()}).
 -spec(stop/1 :: (_) -> 'ok').
--spec(diagnostics/1 :: ([node()]) -> string()).
 
 -endif.
 
@@ -510,7 +509,7 @@ boot_step_error({error, {timeout_waiting_for_tables, _}}, _Stacktrace) ->
             Ns -> {format("Timeout contacting cluster nodes: ~p.~n",
                           [Ns]), Ns}
         end,
-    boot_error(Err ++ diagnostics(Nodes) ++ "~n~n", []);
+    boot_error(Err ++ rabbit_nodes:diagnostics(Nodes) ++ "~n~n", []);
 
 boot_step_error(Reason, Stacktrace) ->
     boot_error("Error description:~n   ~p~n~n"
@@ -523,37 +522,6 @@ boot_error(Format, Args) ->
     error_logger:error_msg(Format, Args),
     timer:sleep(1000),
     exit({?MODULE, failure_during_boot}).
-
-
-diagnostics(Nodes) ->
-    Hosts = lists:usort([element(2, rabbit_misc:nodeparts(Node)) ||
-                            Node <- Nodes]),
-    NodeDiags = [{"~nDIAGNOSTICS~n===========~n~n"
-                  "nodes to contact: ~p~n~n"
-                  "hosts, their running nodes and ports:", [Nodes]}] ++
-        [diagnostics_host(Host) || Host <- Hosts] ++
-        diagnostics0(),
-    lists:flatten([io_lib:format(F ++ "~n", A) || NodeDiag <- NodeDiags,
-                                                  {F, A}   <- [NodeDiag]]).
-
-diagnostics0() ->
-    [{"~ncurrent node details:~n- node name: ~w", [node()]},
-     case init:get_argument(home) of
-         {ok, [[Home]]} -> {"- home dir: ~s", [Home]};
-         Other          -> {"- no home dir: ~p", [Other]}
-     end,
-     {"- cookie hash: ~s", [rabbit_misc:cookie_hash()]}].
-
-diagnostics_host(Host) ->
-    case net_adm:names(Host) of
-        {error, EpmdReason} ->
-            {"- unable to connect to epmd on ~s: ~w",
-             [Host, EpmdReason]};
-        {ok, NamePorts} ->
-            {"- ~s: ~p",
-             [Host, [{list_to_atom(Name), Port} ||
-                        {Name, Port} <- NamePorts]]}
-    end.
 
 format(F, A) -> lists:flatten(io_lib:format(F, A)).
 

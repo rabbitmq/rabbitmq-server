@@ -142,7 +142,7 @@ print_report0(Node, {Module, InfoFun, KeysFun}, VHostArg) ->
 print_error(Format, Args) -> fmt_stderr("Error: " ++ Format, Args).
 
 print_badrpc_diagnostics(Node) ->
-    fmt_stderr(rabbit:diagnostics([Node]), []).
+    fmt_stderr(rabbit_nodes:diagnostics([Node]), []).
 
 stop() ->
     ok.

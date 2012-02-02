@@ -22,7 +22,6 @@
 
 -define(BaseApps, [rabbit]).
 -define(ERROR_CODE, 1).
--define(EPMD_TIMEOUT, 30000).
 
 %%----------------------------------------------------------------------------
 %% Specs
@@ -246,13 +245,13 @@ duplicate_node_check([]) ->
 duplicate_node_check(NodeStr) ->
     Node = rabbit_misc:makenode(NodeStr),
     {NodeName, NodeHost} = rabbit_misc:nodeparts(Node),
-    case names(NodeHost) of
+    case rabbit_nodes:names(NodeHost) of
         {ok, NamePorts}  ->
             case proplists:is_defined(NodeName, NamePorts) of
                 true -> io:format("node with name ~p "
                                   "already running on ~p~n",
                                   [NodeName, NodeHost]),
-                        io:format(rabbit:diagnostics([Node]) ++ "~n"),
+                        io:format(rabbit_nodes:diagnostics([Node]) ++ "~n"),
                         terminate(?ERROR_CODE);
                 false -> ok
             end;
@@ -278,15 +277,3 @@ terminate(Status) ->
                       after infinity -> ok
                       end
     end.
-
-names(Hostname) ->
-    Self = self(),
-    process_flag(trap_exit, true),
-    Pid = spawn_link(fun () -> Self ! {names, net_adm:names(Hostname)} end),
-    timer:exit_after(?EPMD_TIMEOUT, Pid, timeout),
-    Res = receive
-              {names, Names}        -> Names;
-              {'EXIT', Pid, Reason} -> {error, Reason}
-          end,
-    process_flag(trap_exit, false),
-    Res.
