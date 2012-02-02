@@ -958,7 +958,7 @@ ok(Command, Headers, BodyFragments, State) ->
 
 amqp_death(ReplyCode, Explanation, State) ->
     ErrorName = ?PROTOCOL:amqp_exception(ReplyCode),
-    ErrorDesc = format_detail("~s~n", [Explanation]),
+    ErrorDesc = rabbit_misc:format("~s~n", [Explanation]),
     log_error(ErrorName, ErrorDesc, none),
     {stop, normal, send_error(atom_to_list(ErrorName), ErrorDesc, State)}.
 
@@ -973,7 +973,7 @@ priv_error(Message, Detail, ServerPrivateDetail, State) ->
     {error, Message, Detail, State}.
 
 priv_error(Message, Format, Args, ServerPrivateDetail, State) ->
-    priv_error(Message, format_detail(Format, Args), ServerPrivateDetail,
+    priv_error(Message, rabbit_misc:format(Format, Args), ServerPrivateDetail,
                State).
 
 log_error(Message, Detail, ServerPrivateDetail) ->
@@ -982,8 +982,6 @@ log_error(Message, Detail, ServerPrivateDetail) ->
                      "Detail: ~p~n"
                      "Server private detail: ~p~n",
                      [Message, Detail, ServerPrivateDetail]).
-
-format_detail(Format, Args) -> lists:flatten(io_lib:format(Format, Args)).
 
 %%----------------------------------------------------------------------------
 %% Frame sending utilities
@@ -1008,7 +1006,7 @@ send_error(Message, Detail, State) ->
                          Detail, State).
 
 send_error(Message, Format, Args, State) ->
-    send_error(Message, format_detail(Format, Args), State).
+    send_error(Message, rabbit_misc:format(Format, Args), State).
 
 %%----------------------------------------------------------------------------
 %% Skeleton gen_server2 callbacks

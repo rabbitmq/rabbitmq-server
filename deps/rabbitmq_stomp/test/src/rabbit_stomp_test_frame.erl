@@ -116,7 +116,7 @@ headers_escaping_roundtrip_test() ->
     {ok, Val} = rabbit_stomp_frame:header(Frame, "header"),
     ?assertEqual(":\n\\", Val),
     Serialized = lists:flatten(rabbit_stomp_frame:serialize(Frame)),
-    ?assertEqual(Content, lists:flatten(io_lib:format("~s", [Serialized]))).
+    ?assertEqual(Content, rabbit_misc:format("~s", [Serialized])).
 
 parse(Content) ->
     parse(Content, rabbit_stomp_frame:initial_state()).
