@@ -385,11 +385,11 @@ function esc(str) {
 }
 
 function link_conn(name) {
-    return _link_to(name, '#/connections/' + esc(name))
+    return _link_to(fmt_escape_html(name), '#/connections/' + esc(name))
 }
 
 function link_channel(name) {
-    return _link_to(name, '#/channels/' + esc(name))
+    return _link_to(fmt_escape_html(name), '#/channels/' + esc(name))
 }
 
 function link_exchange(vhost, name) {
