@@ -50,7 +50,7 @@ diagnostics(Nodes) ->
     Hosts = lists:usort([element(2, rabbit_misc:nodeparts(Node)) ||
                             Node <- Nodes]),
     NodeDiags = [{"~nDIAGNOSTICS~n===========~n~n"
-                  "nodes to contact: ~p~n~n"
+                  "nodes in question: ~p~n~n"
                   "hosts, their running nodes and ports:", [Nodes]}] ++
         [diagnostics_host(Host) || Host <- Hosts] ++
         diagnostics0(),
