@@ -13,6 +13,7 @@
 %% The Initial Developer of the Original Code is VMware, Inc.
 %% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
+
 -record(stomp_configuration, {default_login,
                               default_passcode,
                               implicit_connect}).
