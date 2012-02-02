@@ -252,8 +252,7 @@ duplicate_node_check(NodeStr) ->
                 true -> io:format("node with name ~p "
                                   "already running on ~p~n",
                                   [NodeName, NodeHost]),
-                        [io:format(Fmt ++ "~n", Args) ||
-                            {Fmt, Args} <- rabbit_control:diagnostics(Node)],
+                        io:format(rabbit:diagnostics([Node]) ++ "~n"),
                         terminate(?ERROR_CODE);
                 false -> ok
             end;
