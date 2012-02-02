@@ -12,6 +12,9 @@ dist:
 		MAN_DIR=`pwd`/$(TARGET_DIR)/share/man \
 			install
 
+	cp -f rabbitmq-sys $(TARGET_DIR)/sbin
+	chmod 0755 $(TARGET_DIR)/sbin/rabbitmq-sys
+
 	tar -zcf $(TARGET_TARBALL).tar.gz $(TARGET_DIR)
 	rm -rf $(SOURCE_DIR) $(TARGET_DIR)
 

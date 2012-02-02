@@ -15,13 +15,16 @@
 ##  Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
 ##
 
+# Get default settings with user overrides for (RABBITMQ_)<var_name>
+# Non-empty defaults should be set in rabbitmq-env
 . `dirname $0`/rabbitmq-env
 
-ENABLED_PLUGINS_FILE=/etc/rabbitmq/enabled_plugins
+##--- Set environment vars RABBITMQ_<var_name> to defaults if not set
 
 [ "x" = "x$RABBITMQ_ENABLED_PLUGINS_FILE" ] && RABBITMQ_ENABLED_PLUGINS_FILE=${ENABLED_PLUGINS_FILE}
+[ "x" = "x$RABBITMQ_PLUGINS_DIR" ] && RABBITMQ_PLUGINS_DIR=${PLUGINS_DIR}
 
-[ "x" = "x$RABBITMQ_PLUGINS_DIR" ] && RABBITMQ_PLUGINS_DIR="${RABBITMQ_HOME}/plugins"
+##--- End of overridden <var_name> variables
 
 exec erl \
     -pa "${RABBITMQ_HOME}/ebin" \
