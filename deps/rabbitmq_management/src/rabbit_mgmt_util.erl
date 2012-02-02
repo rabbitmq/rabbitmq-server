@@ -266,7 +266,7 @@ http_to_amqp(MethodName, ReqData, Context, Transformers, Extra) ->
                     try
                         Node = case pget(<<"node">>, Props) of
                                    undefined -> node();
-                                   N         -> rabbit_misc:makenode(
+                                   N         -> rabbit_nodes:make(
                                                   binary_to_list(N))
                                end,
                         amqp_request(VHost, ReqData, Context, Node,
