@@ -712,7 +712,7 @@ wait_for_replicated_tables() -> wait_for_tables(replicated_table_names()).
 wait_for_tables() -> wait_for_tables(table_names()).
 
 wait_for_tables(TableNames) ->
-    case mnesia:wait_for_tables(TableNames, 3000) of
+    case mnesia:wait_for_tables(TableNames, 30000) of
         ok ->
             ok;
         {timeout, BadTabs} ->
