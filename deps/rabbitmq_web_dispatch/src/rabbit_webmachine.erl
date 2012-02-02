@@ -1,7 +1,7 @@
 %% This file contains an adapted version of webmachine_mochiweb:loop/1
 %% from webmachine (revision 0c4b60ac68b4).
 
-%% All modifications are (C) 2011 VMware, Inc.
+%% All modifications are (C) 2011-2012 VMware, Inc.
 
 -module(rabbit_webmachine).
 
