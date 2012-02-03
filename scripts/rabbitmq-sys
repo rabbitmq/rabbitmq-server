@@ -18,13 +18,12 @@
 ## Set system default values
 SERVER_ERL_ARGS="+K true +A30 +P 1048576 \
 -kernel inet_default_connect_options [{nodelay,true}]"
-
 CONFIG_FILE=/etc/rabbitmq/rabbitmq
-
 LOG_BASE=/var/log/rabbitmq
-
 MNESIA_BASE=/var/lib/rabbitmq/mnesia
-
 PLUGINS_DIR="${RABBITMQ_HOME}/plugins"
-
 ENABLED_PLUGINS_FILE=/etc/rabbitmq/enabled_plugins
+
+## conditional system defaults
+DEFAULT_NODE_IP_ADDRESS=auto
+DEFAULT_NODE_PORT=5672

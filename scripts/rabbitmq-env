@@ -43,12 +43,60 @@ if [ ! -f ${SCRIPT_DIR}/rabbitmq-sys ]; then
     exit 1
 fi
 
-. ${SCRIPT_DIR}/rabbitmq-sys
-
-## Get configuration variables from the rabbitmq-env.conf file
+## Get configuration variables from the rabbitmq-env.conf file and rabbitmq-sys
 if [ -f /etc/rabbitmq/rabbitmq.conf ] && \
    [ ! -f /etc/rabbitmq/rabbitmq-env.conf ] ; then
     echo -n "WARNING: ignoring /etc/rabbitmq/rabbitmq.conf -- "
     echo "location has moved to /etc/rabbitmq/rabbitmq-env.conf"
 fi
-[ -f /etc/rabbitmq/rabbitmq-env.conf ] && . /etc/rabbitmq/rabbitmq-env.conf
+
+if [ -f /etc/rabbitmq/rabbitmq-env.conf ] ; then
+    RABBITMQ_ENV_CONF_SETTINGS=`(. ${SCRIPT_DIR}/rabbitmq-sys; \
+                                 . /etc/rabbitmq/rabbitmq-env.conf; set;)`
+else
+    RABBITMQ_ENV_CONF_SETTINGS=`(. ${SCRIPT_DIR}/rabbitmq-sys; set;)`
+fi
+
+setRabbitEnvVarWithDefault()
+{   # Get value of var $2 from RABBITMQ_ENV_CONF_SETTINGS to set $1, only if $1 is empty
+    # $1 - var to set; $2 - var to use from RABBITMQ_ENV_CONF_SETTINGS
+    local $2; getRabbitEnvVar $2; applyDefault $1 $2
+}
+getRabbitEnvVar()
+{   # $1 - var to set
+    eval `echo "$RABBITMQ_ENV_CONF_SETTINGS" | grep "^$1"`
+}
+applyDefault()
+{   # $1 - var to set; $2 - var with default value
+    [ -z "${!1}" ] && eval "$1="'"${!2}"'
+}
+
+# use default value of $2 (obtained from RABBITMQ_ENV_CONF_SETTINGS) to set empty value of $1:
+setRabbitEnvVarWithDefault RABBITMQ_NODE_IP_ADDRESS      NODE_IP_ADDRESS
+setRabbitEnvVarWithDefault RABBITMQ_NODE_PORT            NODE_PORT
+setRabbitEnvVarWithDefault RABBITMQ_NODENAME             NODENAME
+setRabbitEnvVarWithDefault RABBITMQ_SERVER_ERL_ARGS      SERVER_ERL_ARGS
+setRabbitEnvVarWithDefault RABBITMQ_CTL_ERL_ARGS         CTL_ERL_ARGS
+setRabbitEnvVarWithDefault RABBITMQ_CONFIG_FILE          CONFIG_FILE
+setRabbitEnvVarWithDefault RABBITMQ_LOG_BASE             LOG_BASE
+setRabbitEnvVarWithDefault RABBITMQ_MNESIA_BASE          MNESIA_BASE
+setRabbitEnvVarWithDefault RABBITMQ_SERVER_START_ARGS    SERVER_START_ARGS
+setRabbitEnvVarWithDefault RABBITMQ_MNESIA_DIR           MNESIA_DIR
+setRabbitEnvVarWithDefault RABBITMQ_PID_FILE             PID_FILE
+setRabbitEnvVarWithDefault RABBITMQ_PLUGINS_EXPAND_DIR   PLUGINS_EXPAND_DIR
+setRabbitEnvVarWithDefault RABBITMQ_ENABLED_PLUGINS_FILE ENABLED_PLUGINS_FILE
+setRabbitEnvVarWithDefault RABBITMQ_PLUGINS_DIR          PLUGINS_DIR
+setRabbitEnvVarWithDefault RABBITMQ_LOGS                 LOGS
+setRabbitEnvVarWithDefault RABBITMQ_SASL_LOGS            SASL_LOGS
+
+# dependent default settings:
+[ -z "$RABBITMQ_MNESIA_DIR" ]         && RABBITMQ_MNESIA_DIR=${RABBITMQ_MNESIA_BASE}/${RABBITMQ_NODENAME}
+[ -z "$RABBITMQ_PID_FILE" ]           && RABBITMQ_PID_FILE=${RABBITMQ_MNESIA_DIR}.pid
+[ -z "$RABBITMQ_PLUGINS_EXPAND_DIR" ] && RABBITMQ_PLUGINS_EXPAND_DIR=${RABBITMQ_MNESIA_BASE}/${RABBITMQ_NODENAME}-plugins-expand
+[ -z "$RABBITMQ_LOGS" ]               && RABBITMQ_LOGS="${RABBITMQ_LOG_BASE}/${RABBITMQ_NODENAME}.log"
+[ -z "$RABBITMQ_SASL_LOGS" ]          && RABBITMQ_SASL_LOGS="${RABBITMQ_LOG_BASE}/${RABBITMQ_NODENAME}-sasl.log"
+
+# inter-dependent defaults not user modifiable:
+RABBITMQ_ENV_CONF_SETTINGS=`(. ${SCRIPT_DIR}/rabbitmq-sys; set;)`
+[ -n "$RABBITMQ_NODE_PORT" ]          && setRabbitEnvVarWithDefault RABBITMQ_NODE_IP_ADDRESS DEFAULT_NODE_IP_ADDRESS
+[ -n "$RABBITMQ_NODE_IP_ADDRESS" ]    && setRabbitEnvVarWithDefault RABBITMQ_NODE_PORT       DEFAULT_NODE_PORT
