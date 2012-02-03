@@ -23,7 +23,7 @@
 
 -export([start_link/5, connect/1, open_channel/3, hard_error_in_channel/3,
          channel_internal_error/3, server_misbehaved/2, channels_terminated/1,
-         close/2, info/2, info_keys/0, info_keys/1]).
+         close/2, server_close/2, info/2, info_keys/0, info_keys/1]).
 -export([behaviour_info/1]).
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2]).
@@ -82,6 +82,9 @@ channels_terminated(Pid) ->
 
 close(Pid, Close) ->
     gen_server:call(Pid, {command, {close, Close}}, infinity).
+
+server_close(Pid, Close) ->
+    gen_server:cast(Pid, {server_close, Close}).
 
 info(Pid, Items) ->
     gen_server:call(Pid, {info, Items}, infinity).
@@ -176,10 +179,10 @@ handle_call(connect, _From,
         {error, _} = Error ->
             {stop, {shutdown, Error}, Error, State0}
     end;
-handle_call({command, Command}, From, State = #state{closing = Closing}) ->
-    case Closing of false -> handle_command(Command, From, State);
-                    _     -> {reply, closing, State}
-    end;
+handle_call({command, Command}, From, State = #state{closing = false}) ->
+    handle_command(Command, From, State);
+handle_call({command, _Command}, _From, State) ->
+    {reply, closing, State};
 handle_call({info, Items}, _From, State) ->
     {reply, [{Item, i(Item, State)} || Item <- Items], State};
 handle_call(info_keys, _From, State = #state{module = Mod}) ->
@@ -195,7 +198,7 @@ after_connect({ServerProperties, ChannelMax, NewMState},
                 channel_max       = ChannelMax,
                 module_state      = NewMState}.
 
-handle_cast({method, Method, none}, State) ->
+handle_cast({method, Method, none, noflow}, State) ->
     handle_method(Method, State);
 handle_cast(channels_terminated, State) ->
     handle_channels_terminated(State);
@@ -206,7 +209,9 @@ handle_cast({channel_internal_error, Pid, Reason}, State) ->
               [self(), Pid, Reason]),
     internal_error(State);
 handle_cast({server_misbehaved, AmqpError}, State) ->
-    server_misbehaved_close(AmqpError, State).
+    server_misbehaved_close(AmqpError, State);
+handle_cast({server_close, #'connection.close'{} = Close}, State) ->
+    server_initiated_close(Close, State).
 
 handle_info(Info, State) ->
     callback(handle_message, [Info], State).
