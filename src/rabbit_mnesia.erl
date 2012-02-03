@@ -622,10 +622,9 @@ move_db() ->
     stop_mnesia(),
     MnesiaDir = filename:dirname(dir() ++ "/"),
     {{Year, Month, Day}, {Hour, Minute, Second}} = erlang:universaltime(),
-    BackupDir = lists:flatten(
-                  io_lib:format("~s_~w~2..0w~2..0w~2..0w~2..0w~2..0w",
-                                [MnesiaDir,
-                                 Year, Month, Day, Hour, Minute, Second])),
+    BackupDir = rabbit_misc:format(
+                  "~s_~w~2..0w~2..0w~2..0w~2..0w~2..0w",
+                  [MnesiaDir, Year, Month, Day, Hour, Minute, Second]),
     case file:rename(MnesiaDir, BackupDir) of
         ok ->
             %% NB: we cannot use rabbit_log here since it may not have

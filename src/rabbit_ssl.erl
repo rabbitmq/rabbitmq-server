@@ -72,9 +72,8 @@ peer_cert_validity(Cert) ->
     cert_info(fun(#'OTPCertificate' {
                      tbsCertificate = #'OTPTBSCertificate' {
                        validity = {'Validity', Start, End} }}) ->
-                      lists:flatten(
-                        io_lib:format("~s - ~s", [format_asn1_value(Start),
-                                                  format_asn1_value(End)]))
+                      rabbit_misc:format("~s - ~s", [format_asn1_value(Start),
+                                                     format_asn1_value(End)])
               end, Cert).
 
 %%--------------------------------------------------------------------------
@@ -155,8 +154,7 @@ escape_rdn_value([C | S], middle) when C < 32 ; C >= 126 ->
     %% purposes it's handy to escape all non-printable chars. All non-ASCII
     %% characters get converted to UTF-8 sequences and then escaped. We've
     %% already got a UTF-8 sequence here, so just escape it.
-    lists:flatten(io_lib:format("\\~2.16.0B", [C])) ++
-        escape_rdn_value(S, middle);
+    rabbit_misc:format("\\~2.16.0B", [C]) ++ escape_rdn_value(S, middle);
 escape_rdn_value([C | S], middle) ->
     [C | escape_rdn_value(S, middle)].
 
