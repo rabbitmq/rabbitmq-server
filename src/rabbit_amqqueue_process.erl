@@ -885,12 +885,8 @@ already_been_here(Delivery = #delivery{message = #basic_message{content = Conten
                 {array, DeathTables} ->
                     OldQueues = [rabbit_misc:table_lookup(D, <<"queue">>) ||
                                     {table, D} <- DeathTables],
-                    OldQueues1 = lists:append(
-                                   lists:map(fun (undefined) -> [];
-                                                 ({longstr, QName}) -> [QName]
-                                             end, OldQueues)),
-                    case lists:any(fun(QName) -> QName == QueueName end,
-                                   OldQueues1) of
+                    OldQueues1 = [QName || {longstr, QName} <- OldQueues],
+                    case lists:member(QueueName, OldQueues1) of
                         true -> [QueueName | OldQueues1];
                         _    -> false
                     end;
