@@ -348,7 +348,7 @@ handle_call(next_publish_seqno, _From,
             State = #state{next_pub_seqno = SeqNo}) ->
     {reply, SeqNo, State};
 handle_call({wait_for_confirms, Timeout}, From, State) ->
-    handle_wait_for_confirms(From, true, Timeout, State);
+    handle_wait_for_confirms(From, Timeout, State);
 %% @private
 handle_call({call_consumer, Msg}, _From,
             State = #state{consumer = Consumer}) ->
@@ -827,12 +827,12 @@ notify_confirm_waiters(State = #state{waiting_set        = WSet,
     State#state{waiting_set        = gb_trees:empty(),
                 only_acks_received = true}.
 
-handle_wait_for_confirms(From, EmptyReply, Timeout,
+handle_wait_for_confirms(From, Timeout,
                          State = #state{unconfirmed_set = USet,
                                         waiting_set     = WSet}) ->
     case gb_sets:is_empty(USet) of
         true ->
-            {reply, EmptyReply, State};
+            {reply, true, State};
         false ->
             TRef = case Timeout of
                        infinity -> undefined;
