@@ -46,7 +46,8 @@
                     {enables,     external_infrastructure}]}).
 
 -rabbit_boot_step({database_sync,
-                   [{mfa,         {rabbit_sup, start_child, [mnesia_sync]}},
+                   [{description, "database sync"},
+                    {mfa,         {rabbit_sup, start_child, [mnesia_sync]}},
                     {requires,    database},
                     {enables,     external_infrastructure}]}).
 
