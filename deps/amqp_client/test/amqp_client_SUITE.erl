@@ -65,6 +65,8 @@ channel_tune_negotiation_test_()        -> ?RUN([]).
 confirm_test_()                         -> ?RUN([]).
 confirm_barrier_test_()                 -> ?RUN([]).
 confirm_barrier_nop_test_()             -> ?RUN([]).
+confirm_barrier_timeout_test_()         -> ?RUN([]).
+confirm_barrier_die_timeout_test_()     -> ?RUN([]).
 default_consumer_test()                 -> ?RUN([]).
 subscribe_nowait_test_()                -> ?RUN([]).
 
