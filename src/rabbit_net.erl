@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_net).
@@ -151,10 +151,9 @@ connection_string(Sock, Direction) ->
                  end,
     case {From(Sock), To(Sock)} of
         {{ok, {FromAddress, FromPort}}, {ok, {ToAddress, ToPort}}} ->
-            {ok, lists:flatten(
-                   io_lib:format("~s:~p -> ~s:~p",
-                                 [rabbit_misc:ntoab(FromAddress), FromPort,
-                                  rabbit_misc:ntoab(ToAddress),   ToPort]))};
+            {ok, rabbit_misc:format("~s:~p -> ~s:~p",
+                                    [rabbit_misc:ntoab(FromAddress), FromPort,
+                                     rabbit_misc:ntoab(ToAddress),   ToPort])};
         {{error, _Reason} = Error, _} ->
             Error;
         {_, {error, _Reason} = Error} ->

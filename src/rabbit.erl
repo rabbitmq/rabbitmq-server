@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit).
@@ -43,6 +43,12 @@
 -rabbit_boot_step({database,
                    [{mfa,         {rabbit_mnesia, init, []}},
                     {requires,    file_handle_cache},
+                    {enables,     external_infrastructure}]}).
+
+-rabbit_boot_step({database_sync,
+                   [{description, "database sync"},
+                    {mfa,         {rabbit_sup, start_child, [mnesia_sync]}},
+                    {requires,    database},
                     {enables,     external_infrastructure}]}).
 
 -rabbit_boot_step({file_handle_cache,
