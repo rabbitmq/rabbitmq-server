@@ -83,7 +83,10 @@ handle_info({inet_async, Sock, _, {error, Reason}},
 %% Internal plumbing
 %%---------------------------------------------------------------------------
 
-process_frame(Type, ChNumber, Payload, State = #state{connection = Connection}) ->
+process_frame(Type, ChNumber, Payload,
+              State = #state{connection       = Connection,
+                             channels_manager = ChMgr,
+                             astate           = AState}) ->
     case rabbit_command_assembler:analyze_frame(Type, Payload, ?PROTOCOL) of
         heartbeat when ChNumber /= 0 ->
             amqp_gen_connection:server_misbehaved(
@@ -94,13 +97,10 @@ process_frame(Type, ChNumber, Payload, State = #state{connection = Connection}) 
         %% Match heartbeats but don't do anything with them
         heartbeat ->
             State;
+        AnalyzedFrame when ChNumber /= 0 ->
+            amqp_channels_manager:pass_frame(ChMgr, ChNumber, AnalyzedFrame),
+            State;
         AnalyzedFrame ->
-            pass_frame(ChNumber, AnalyzedFrame, State)
+            State#state{astate = amqp_channels_manager:process_channel_frame(
+                                   AnalyzedFrame, 0, Connection, AState)}
     end.
-
-pass_frame(0, Frame, State = #state{connection = Conn, astate = AState}) ->
-    State#state{astate = amqp_channels_manager:process_channel_frame(
-                           Frame, 0, Conn, AState)};
-pass_frame(Number, Frame, State = #state{channels_manager = ChMgr}) ->
-    amqp_channels_manager:pass_frame(ChMgr, Number, Frame),
-    State.
