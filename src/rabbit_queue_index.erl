@@ -491,7 +491,7 @@ recover_message(false,     _, no_del,  RelSeq, Segment) ->
 
 queue_name_to_dir_name(Name = #resource { kind = queue }) ->
     <<Num:128>> = erlang:md5(term_to_binary(Name)),
-    lists:flatten(io_lib:format("~.36B", [Num])).
+    rabbit_misc:format("~.36B", [Num]).
 
 queues_dir() ->
     filename:join(rabbit_mnesia:dir(), "queues").
