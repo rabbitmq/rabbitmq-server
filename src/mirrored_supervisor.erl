@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2011 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2011-2012 VMware, Inc.  All rights reserved.
 %%
 
 -module(mirrored_supervisor).
@@ -144,31 +144,16 @@
 
 -type child()    :: pid() | 'undefined'.
 -type child_id() :: term().
--type mfargs()   :: {M :: module(), F :: atom(), A :: [term()] | 'undefined'}.
 -type modules()  :: [module()] | 'dynamic'.
--type restart()  :: 'permanent' | 'transient' | 'temporary'.
--type shutdown() :: 'brutal_kill' | timeout().
 -type worker()   :: 'worker' | 'supervisor'.
 -type sup_name() :: {'local', Name :: atom()} | {'global', Name :: atom()}.
 -type sup_ref()  :: (Name :: atom())
                   | {Name :: atom(), Node :: node()}
                   | {'global', Name :: atom()}
                   | pid().
--type child_spec() :: {Id :: child_id(),
-                       StartFunc :: mfargs(),
-                       Restart :: restart(),
-                       Shutdown :: shutdown(),
-                       Type :: worker(),
-                       Modules :: modules()}.
 
 -type startlink_err() :: {'already_started', pid()} | 'shutdown' | term().
 -type startlink_ret() :: {'ok', pid()} | 'ignore' | {'error', startlink_err()}.
-
--type startchild_err() :: 'already_present'
-                        | {'already_started', Child :: child()} | term().
--type startchild_ret() :: {'ok', Child :: child()}
-                        | {'ok', Child :: child(), Info :: term()}
-                        | {'error', startchild_err()}.
 
 -type group_name() :: any().
 
@@ -183,9 +168,9 @@
       Module :: module(),
       Args :: term().
 
--spec start_child(SupRef, ChildSpec) -> startchild_ret() when
+-spec start_child(SupRef, ChildSpec) -> supervisor:startchild_ret() when
       SupRef :: sup_ref(),
-      ChildSpec :: child_spec() | (List :: [term()]).
+      ChildSpec :: supervisor:child_spec() | (List :: [term()]).
 
 -spec restart_child(SupRef, Id) -> Result when
       SupRef :: sup_ref(),
@@ -215,12 +200,12 @@
       Modules :: modules().
 
 -spec check_childspecs(ChildSpecs) -> Result when
-      ChildSpecs :: [child_spec()],
+      ChildSpecs :: [supervisor:child_spec()],
       Result :: 'ok' | {'error', Error :: term()}.
 
 -spec start_internal(Group, ChildSpecs) -> Result when
       Group :: group_name(),
-      ChildSpecs :: [child_spec()],
+      ChildSpecs :: [supervisor:child_spec()],
       Result :: startlink_ret().
 
 -spec create_tables() -> Result when

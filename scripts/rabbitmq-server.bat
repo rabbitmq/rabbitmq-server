@@ -12,7 +12,7 @@ REM
 REM  The Original Code is RabbitMQ.
 REM
 REM  The Initial Developer of the Original Code is VMware, Inc.
-REM  Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
+REM  Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 REM
 
 setlocal
@@ -139,7 +139,7 @@ if not "!RABBITMQ_NODE_IP_ADDRESS!"=="" (
 -sasl sasl_error_logger false ^
 -rabbit error_logger {file,\""!LOGS:\=/!"\"} ^
 -rabbit sasl_error_logger {file,\""!SASL_LOGS:\=/!"\"} ^
--os_mon start_cpu_sup true ^
+-os_mon start_cpu_sup false ^
 -os_mon start_disksup false ^
 -os_mon start_memsup false ^
 -mnesia dir \""!RABBITMQ_MNESIA_DIR:\=/!"\" ^

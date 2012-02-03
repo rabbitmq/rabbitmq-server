@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
 -module(tcp_listener).
@@ -28,9 +28,14 @@
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
+
+-type(mfargs() :: {atom(), atom(), [any()]}).
+
 -spec(start_link/8 ::
-        (gen_tcp:ip_address(), integer(), rabbit_types:infos(), integer(),
-         atom(), mfa(), mfa(), string()) -> rabbit_types:ok_pid_or_error()).
+        (inet:ip_address(), inet:port_number(), [gen_tcp:listen_option()],
+         integer(), atom(), mfargs(), mfargs(), string()) ->
+                           rabbit_types:ok_pid_or_error()).
+
 -endif.
 
 %%--------------------------------------------------------------------
@@ -67,8 +72,9 @@ init({IPAddress, Port, SocketOpts,
                         label = Label}};
         {error, Reason} ->
             error_logger:error_msg(
-              "failed to start ~s on ~s:~p - ~p~n",
-              [Label, rabbit_misc:ntoab(IPAddress), Port, Reason]),
+              "failed to start ~s on ~s:~p - ~p (~s)~n",
+              [Label, rabbit_misc:ntoab(IPAddress), Port,
+               Reason, inet:format_error(Reason)]),
             {stop, {cannot_listen, IPAddress, Port, Reason}}
     end.
 

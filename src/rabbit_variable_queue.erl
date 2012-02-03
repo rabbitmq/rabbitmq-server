@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_variable_queue).
@@ -870,17 +870,23 @@ msg_store_client_init(MsgStore, Ref, MsgOnDiskFun, Callback) ->
 msg_store_write(MSCState, IsPersistent, MsgId, Msg) ->
     with_immutable_msg_store_state(
       MSCState, IsPersistent,
-      fun (MSCState1) -> rabbit_msg_store:write(MsgId, Msg, MSCState1) end).
+      fun (MSCState1) ->
+              rabbit_msg_store:write_flow(MsgId, Msg, MSCState1)
+      end).
 
 msg_store_read(MSCState, IsPersistent, MsgId) ->
     with_msg_store_state(
       MSCState, IsPersistent,
-      fun (MSCState1) -> rabbit_msg_store:read(MsgId, MSCState1) end).
+      fun (MSCState1) ->
+              rabbit_msg_store:read(MsgId, MSCState1)
+      end).
 
 msg_store_remove(MSCState, IsPersistent, MsgIds) ->
     with_immutable_msg_store_state(
       MSCState, IsPersistent,
-      fun (MCSState1) -> rabbit_msg_store:remove(MsgIds, MCSState1) end).
+      fun (MCSState1) ->
+              rabbit_msg_store:remove(MsgIds, MCSState1)
+      end).
 
 msg_store_close_fds(MSCState, IsPersistent) ->
     with_msg_store_state(

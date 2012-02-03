@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_reader).
@@ -27,11 +27,9 @@
 
 -export([conserve_memory/2, server_properties/1]).
 
--export([process_channel_frame/5]). %% used by erlang-client
-
 -define(HANDSHAKE_TIMEOUT, 10).
 -define(NORMAL_TIMEOUT, 3).
--define(CLOSING_TIMEOUT, 1).
+-define(CLOSING_TIMEOUT, 30).
 -define(CHANNEL_TERMINATION_TIMEOUT, 3).
 -define(SILENT_CLOSE_DELAY, 3).
 
@@ -40,10 +38,12 @@
 -record(v1, {parent, sock, connection, callback, recv_len, pending_recv,
              connection_state, queue_collector, heartbeater, stats_timer,
              channel_sup_sup_pid, start_heartbeat_fun, buf, buf_len,
-             auth_mechanism, auth_state}).
+             auth_mechanism, auth_state, conserve_memory,
+             last_blocked_by, last_blocked_at}).
 
 -define(STATISTICS_KEYS, [pid, recv_oct, recv_cnt, send_oct, send_cnt,
-                          send_pend, state, channels]).
+                          send_pend, state, last_blocked_by, last_blocked_age,
+                          channels]).
 
 -define(CREATION_EVENT_KEYS, [pid, address, port, peer_address, peer_port, ssl,
                               peer_cert_subject, peer_cert_issuer,
@@ -89,10 +89,6 @@
 -spec(system_code_change/4 :: (_,_,_,_) -> {'ok',_}).
 -spec(system_continue/3 :: (_,_,#v1{}) -> any()).
 -spec(system_terminate/4 :: (_,_,_,_) -> none()).
-
--spec(process_channel_frame/5 ::
-        (rabbit_command_assembler:frame(), pid(), non_neg_integer(), pid(),
-         tuple()) -> tuple()).
 
 -endif.
 
@@ -177,25 +173,26 @@ server_capabilities(rabbit_framing_amqp_0_9_1) ->
 server_capabilities(_) ->
     [].
 
+log(Level, Fmt, Args) -> rabbit_log:log(connection, Level, Fmt, Args).
+
 inet_op(F) -> rabbit_misc:throw_on_error(inet_error, F).
 
 socket_op(Sock, Fun) ->
     case Fun(Sock) of
         {ok, Res}       -> Res;
-        {error, Reason} -> rabbit_log:error("error on TCP connection ~p:~p~n",
-                                            [self(), Reason]),
-                           rabbit_log:info("closing TCP connection ~p~n",
-                                           [self()]),
+        {error, Reason} -> log(error, "error on AMQP connection ~p: ~p~n",
+                               [self(), Reason]),
                            exit(normal)
     end.
 
 start_connection(Parent, ChannelSupSupPid, Collector, StartHeartbeatFun, Deb,
                  Sock, SockTransform) ->
     process_flag(trap_exit, true),
-    {PeerAddress, PeerPort} = socket_op(Sock, fun rabbit_net:peername/1),
-    PeerAddressS = rabbit_misc:ntoab(PeerAddress),
-    rabbit_log:info("starting TCP connection ~p from ~s:~p~n",
-                    [self(), PeerAddressS, PeerPort]),
+    ConnStr = socket_op(Sock, fun (Sock0) ->
+                                      rabbit_net:connection_string(
+                                        Sock0, inbound)
+                              end),
+    log(info, "accepting AMQP connection ~p (~s)~n", [self(), ConnStr]),
     ClientSock = socket_op(Sock, SockTransform),
     erlang:send_after(?HANDSHAKE_TIMEOUT * 1000, self(),
                       handshake_timeout),
@@ -220,21 +217,22 @@ start_connection(Parent, ChannelSupSupPid, Collector, StartHeartbeatFun, Deb,
                 buf                 = [],
                 buf_len             = 0,
                 auth_mechanism      = none,
-                auth_state          = none},
+                auth_state          = none,
+                conserve_memory     = false,
+                last_blocked_by     = none,
+                last_blocked_at     = never},
     try
         recvloop(Deb, switch_callback(rabbit_event:init_stats_timer(
                                        State, #v1.stats_timer),
-                                      handshake, 8))
+                                      handshake, 8)),
+        log(info, "closing AMQP connection ~p (~s)~n", [self(), ConnStr])
     catch
-        Ex -> (if Ex == connection_closed_abruptly ->
-                       fun rabbit_log:warning/2;
-                  true ->
-                       fun rabbit_log:error/2
-               end)("exception on TCP connection ~p from ~s:~p~n~p~n",
-                    [self(), PeerAddressS, PeerPort, Ex])
+        Ex -> log(case Ex of
+                      connection_closed_abruptly -> warning;
+                      _                          -> error
+                  end, "closing AMQP connection ~p (~s):~n~p~n",
+                  [self(), ConnStr, Ex])
     after
-        rabbit_log:info("closing TCP connection ~p from ~s:~p~n",
-                        [self(), PeerAddressS, PeerPort]),
         %% We don't close the socket explicitly. The reader is the
         %% controlling process and hence its termination will close
         %% the socket. Furthermore, gen_tcp:close/1 waits for pending
@@ -277,11 +275,11 @@ mainloop(Deb, State = #v1{sock = Sock, buf = Buf, buf_len = BufLen}) ->
     end.
 
 handle_other({conserve_memory, Conserve}, Deb, State) ->
-    recvloop(Deb, internal_conserve_memory(Conserve, State));
+    recvloop(Deb, control_throttle(State#v1{conserve_memory = Conserve}));
 handle_other({channel_closing, ChPid}, Deb, State) ->
     ok = rabbit_channel:ready_for_close(ChPid),
     channel_cleanup(ChPid),
-    mainloop(Deb, maybe_close(State));
+    mainloop(Deb, maybe_close(control_throttle(State)));
 handle_other({'EXIT', Parent, Reason}, _Deb, State = #v1{parent = Parent}) ->
     terminate(io_lib:format("broker forced connection closure "
                             "with reason '~w'", [Reason]), State),
@@ -341,14 +339,13 @@ handle_other(emit_stats, Deb, State) ->
     mainloop(Deb, emit_stats(State));
 handle_other({system, From, Request}, Deb, State = #v1{parent = Parent}) ->
     sys:handle_system_msg(Request, From, Parent, ?MODULE, Deb, State);
+handle_other({bump_credit, Msg}, Deb, State) ->
+    credit_flow:handle_bump_msg(Msg),
+    recvloop(Deb, control_throttle(State));
 handle_other(Other, _Deb, _State) ->
     %% internal error -> something worth dying for
     exit({unexpected_message, Other}).
 
-switch_callback(State = #v1{connection_state = blocked,
-                            heartbeater = Heartbeater}, Callback, Length) ->
-    ok = rabbit_heartbeat:pause_monitor(Heartbeater),
-    State#v1{callback = Callback, recv_len = Length};
 switch_callback(State, Callback, Length) ->
     State#v1{callback = Callback, recv_len = Length}.
 
@@ -359,16 +356,29 @@ terminate(Explanation, State) when ?IS_RUNNING(State) ->
 terminate(_Explanation, State) ->
     {force, State}.
 
-internal_conserve_memory(true,  State = #v1{connection_state = running}) ->
-    State#v1{connection_state = blocking};
-internal_conserve_memory(false, State = #v1{connection_state = blocking}) ->
-    State#v1{connection_state = running};
-internal_conserve_memory(false, State = #v1{connection_state = blocked,
-                                            heartbeater      = Heartbeater}) ->
-    ok = rabbit_heartbeat:resume_monitor(Heartbeater),
-    State#v1{connection_state = running};
-internal_conserve_memory(_Conserve, State) ->
+control_throttle(State = #v1{connection_state = CS,
+                             conserve_memory  = Mem}) ->
+    case {CS, Mem orelse credit_flow:blocked()} of
+        {running,   true} -> State#v1{connection_state = blocking};
+        {blocking, false} -> State#v1{connection_state = running};
+        {blocked,  false} -> ok = rabbit_heartbeat:resume_monitor(
+                                    State#v1.heartbeater),
+                             State#v1{connection_state = running};
+        {blocked,   true} -> update_last_blocked_by(State);
+        {_,            _} -> State
+    end.
+
+maybe_block(State = #v1{connection_state = blocking}) ->
+    ok = rabbit_heartbeat:pause_monitor(State#v1.heartbeater),
+    update_last_blocked_by(State#v1{connection_state = blocked,
+                                    last_blocked_at  = erlang:now()});
+maybe_block(State) ->
     State.
+
+update_last_blocked_by(State = #v1{conserve_memory = true}) ->
+    State#v1{last_blocked_by = mem};
+update_last_blocked_by(State = #v1{conserve_memory = false}) ->
+    State#v1{last_blocked_by = flow}.
 
 close_connection(State = #v1{queue_collector = Collector,
                              connection = #connection{
@@ -380,34 +390,30 @@ close_connection(State = #v1{queue_collector = Collector,
     rabbit_queue_collector:delete_all(Collector),
     %% We terminate the connection after the specified interval, but
     %% no later than ?CLOSING_TIMEOUT seconds.
-    TimeoutMillisec =
-        1000 * if TimeoutSec > 0 andalso
-                  TimeoutSec < ?CLOSING_TIMEOUT -> TimeoutSec;
-                  true -> ?CLOSING_TIMEOUT
-               end,
-    erlang:send_after(TimeoutMillisec, self(), terminate_connection),
+    erlang:send_after((if TimeoutSec > 0 andalso
+                          TimeoutSec < ?CLOSING_TIMEOUT -> TimeoutSec;
+                          true                          -> ?CLOSING_TIMEOUT
+                       end) * 1000, self(), terminate_connection),
     State#v1{connection_state = closed}.
 
 handle_dependent_exit(ChPid, Reason, State) ->
-    case termination_kind(Reason) of
-        controlled ->
-            channel_cleanup(ChPid),
-            maybe_close(State);
-        uncontrolled ->
-            case channel_cleanup(ChPid) of
-                undefined -> exit({abnormal_dependent_exit, ChPid, Reason});
-                Channel   -> rabbit_log:error(
-                               "connection ~p, channel ~p - error:~n~p~n",
-                               [self(), Channel, Reason]),
-                             maybe_close(
-                               handle_exception(State, Channel, Reason))
-            end
+    case {channel_cleanup(ChPid), termination_kind(Reason)} of
+        {undefined, uncontrolled} ->
+            exit({abnormal_dependent_exit, ChPid, Reason});
+        {_Channel, controlled} ->
+            maybe_close(control_throttle(State));
+        {Channel, uncontrolled} ->
+            log(error, "AMQP connection ~p, channel ~p - error:~n~p~n",
+                [self(), Channel, Reason]),
+            maybe_close(handle_exception(control_throttle(State),
+                                         Channel, Reason))
     end.
 
 channel_cleanup(ChPid) ->
     case get({ch_pid, ChPid}) of
         undefined       -> undefined;
-        {Channel, MRef} -> erase({channel, Channel}),
+        {Channel, MRef} -> credit_flow:peer_down(ChPid),
+                           erase({channel, Channel}),
                            erase({ch_pid, ChPid}),
                            erlang:demonitor(MRef, [flush]),
                            Channel
@@ -436,19 +442,16 @@ wait_for_channel_termination(0, TimerRef) ->
 wait_for_channel_termination(N, TimerRef) ->
     receive
         {'DOWN', _MRef, process, ChPid, Reason} ->
-            case channel_cleanup(ChPid) of
-                undefined ->
+            case {channel_cleanup(ChPid), termination_kind(Reason)} of
+                {undefined, _} ->
                     exit({abnormal_dependent_exit, ChPid, Reason});
-                Channel ->
-                    case termination_kind(Reason) of
-                        controlled ->
-                            ok;
-                        uncontrolled ->
-                            rabbit_log:error(
-                              "connection ~p, channel ~p - "
-                              "error while terminating:~n~p~n",
-                              [self(), Channel, Reason])
-                    end,
+                {_Channel, controlled} ->
+                    wait_for_channel_termination(N-1, TimerRef);
+                {Channel, uncontrolled} ->
+                    log(error,
+                        "AMQP connection ~p, channel ~p - "
+                        "error while terminating:~n~p~n",
+                        [self(), Channel, Reason]),
                     wait_for_channel_termination(N-1, TimerRef)
             end;
         cancel_wait ->
@@ -499,12 +502,12 @@ handle_frame(Type, Channel, Payload,
         heartbeat     -> throw({unexpected_heartbeat_frame, Channel});
         AnalyzedFrame ->
             case get({channel, Channel}) of
-                {ChPid, FramingState} ->
+                {ChPid, AState} ->
                     NewAState = process_channel_frame(
-                                  AnalyzedFrame, self(),
-                                  Channel, ChPid, FramingState),
+                                  AnalyzedFrame, Channel, ChPid, AState),
                     put({channel, Channel}, {ChPid, NewAState}),
-                    post_process_frame(AnalyzedFrame, ChPid, State);
+                    post_process_frame(AnalyzedFrame, ChPid,
+                                       control_throttle(State));
                 undefined ->
                     case ?IS_RUNNING(State) of
                         true  -> send_to_new_channel(
@@ -518,16 +521,13 @@ handle_frame(Type, Channel, Payload,
 
 post_process_frame({method, 'channel.close_ok', _}, ChPid, State) ->
     channel_cleanup(ChPid),
-    State;
+    control_throttle(State);
 post_process_frame({method, MethodName, _}, _ChPid,
                    State = #v1{connection = #connection{
                                  protocol = Protocol}}) ->
     case Protocol:method_has_content(MethodName) of
         true  -> erlang:bump_reductions(2000),
-                 case State#v1.connection_state of
-                     blocking -> State#v1{connection_state = blocked};
-                     _        -> State
-                 end;
+                 maybe_block(State);
         false -> State
     end;
 post_process_frame(_Frame, _ChPid, State) ->
@@ -699,10 +699,11 @@ handle_method0(#'connection.open'{virtual_host = VHostPath},
     ok = rabbit_access_control:check_vhost_access(User, VHostPath),
     NewConnection = Connection#connection{vhost = VHostPath},
     ok = send_on_channel0(Sock, #'connection.open_ok'{}, Protocol),
-    State1 = internal_conserve_memory(
-               rabbit_alarm:register(self(), {?MODULE, conserve_memory, []}),
+    Conserve = rabbit_alarm:register(self(), {?MODULE, conserve_memory, []}),
+    State1 = control_throttle(
                State#v1{connection_state = running,
-                        connection = NewConnection}),
+                        connection       = NewConnection,
+                        conserve_memory  = Conserve}),
     rabbit_event:notify(connection_created,
                         [{type, network} |
                          infos(?CREATION_EVENT_KEYS, State1)]),
@@ -834,6 +835,12 @@ i(SockStat, #v1{sock = Sock}) when SockStat =:= recv_oct;
                 fun ([{_, I}]) -> I end);
 i(state, #v1{connection_state = S}) ->
     S;
+i(last_blocked_by, #v1{last_blocked_by = By}) ->
+    By;
+i(last_blocked_age, #v1{last_blocked_at = never}) ->
+    infinity;
+i(last_blocked_age, #v1{last_blocked_at = T}) ->
+    timer:now_diff(erlang:now(), T) / 1000000;
 i(channels, #v1{}) ->
     length(all_channels());
 i(protocol, #v1{connection = #connection{protocol = none}}) ->
@@ -902,21 +909,20 @@ send_to_new_channel(Channel, AnalyzedFrame, State) ->
           ChanSupSup, {tcp, Sock, Channel, FrameMax, self(), Protocol, User,
                        VHost, Capabilities, Collector}),
     MRef = erlang:monitor(process, ChPid),
-    NewAState = process_channel_frame(AnalyzedFrame, self(),
-                                      Channel, ChPid, AState),
+    NewAState = process_channel_frame(AnalyzedFrame, Channel, ChPid, AState),
     put({channel, Channel}, {ChPid, NewAState}),
     put({ch_pid, ChPid}, {Channel, MRef}),
     State.
 
-process_channel_frame(Frame, ErrPid, Channel, ChPid, AState) ->
+process_channel_frame(Frame, Channel, ChPid, AState) ->
     case rabbit_command_assembler:process(Frame, AState) of
         {ok, NewAState}                  -> NewAState;
         {ok, Method, NewAState}          -> rabbit_channel:do(ChPid, Method),
                                             NewAState;
-        {ok, Method, Content, NewAState} -> rabbit_channel:do(ChPid,
-                                                              Method, Content),
+        {ok, Method, Content, NewAState} -> rabbit_channel:do_flow(
+                                              ChPid, Method, Content),
                                             NewAState;
-        {error, Reason}                  -> ErrPid ! {channel_exit, Channel,
+        {error, Reason}                  -> self() ! {channel_exit, Channel,
                                                       Reason},
                                             AState
     end.

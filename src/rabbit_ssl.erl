@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_ssl).
@@ -21,7 +21,7 @@
 -include_lib("public_key/include/public_key.hrl").
 
 -export([peer_cert_issuer/1, peer_cert_subject/1, peer_cert_validity/1]).
--export([peer_cert_subject_item/2]).
+-export([peer_cert_subject_items/2]).
 
 %%--------------------------------------------------------------------------
 
@@ -34,8 +34,8 @@
 -spec(peer_cert_issuer/1        :: (certificate()) -> string()).
 -spec(peer_cert_subject/1       :: (certificate()) -> string()).
 -spec(peer_cert_validity/1      :: (certificate()) -> string()).
--spec(peer_cert_subject_item/2  ::
-        (certificate(), tuple()) -> string() | 'not_found').
+-spec(peer_cert_subject_items/2  ::
+        (certificate(), tuple()) -> [string()] | 'not_found').
 
 -endif.
 
@@ -59,8 +59,8 @@ peer_cert_subject(Cert) ->
                       format_rdn_sequence(Subject)
               end, Cert).
 
-%% Return a part of the certificate's subject.
-peer_cert_subject_item(Cert, Type) ->
+%% Return the parts of the certificate's subject.
+peer_cert_subject_items(Cert, Type) ->
     cert_info(fun(#'OTPCertificate' {
                      tbsCertificate = #'OTPTBSCertificate' {
                        subject = Subject }}) ->
@@ -72,9 +72,8 @@ peer_cert_validity(Cert) ->
     cert_info(fun(#'OTPCertificate' {
                      tbsCertificate = #'OTPTBSCertificate' {
                        validity = {'Validity', Start, End} }}) ->
-                      lists:flatten(
-                        io_lib:format("~s - ~s", [format_asn1_value(Start),
-                                                  format_asn1_value(End)]))
+                      rabbit_misc:format("~s - ~s", [format_asn1_value(Start),
+                                                     format_asn1_value(End)])
               end, Cert).
 
 %%--------------------------------------------------------------------------
@@ -89,8 +88,8 @@ find_by_type(Type, {rdnSequence, RDNs}) ->
     case [V || #'AttributeTypeAndValue'{type = T, value = V}
                    <- lists:flatten(RDNs),
                T == Type] of
-        [Val] -> format_asn1_value(Val);
-        []    -> not_found
+        [] -> not_found;
+        L  -> [format_asn1_value(V) || V <- L]
     end.
 
 %%--------------------------------------------------------------------------
@@ -150,11 +149,12 @@ escape_rdn_value([$ ], middle) ->
 escape_rdn_value([C | S], middle) when C =:= $"; C =:= $+; C =:= $,; C =:= $;;
                                        C =:= $<; C =:= $>; C =:= $\\ ->
     [$\\, C | escape_rdn_value(S, middle)];
-escape_rdn_value([C | S], middle) when C < 32 ; C =:= 127 ->
-    %% only U+0000 needs escaping, but for display purposes it's handy
-    %% to escape all non-printable chars
-    lists:flatten(io_lib:format("\\~2.16.0B", [C])) ++
-        escape_rdn_value(S, middle);
+escape_rdn_value([C | S], middle) when C < 32 ; C >= 126 ->
+    %% Of ASCII characters only U+0000 needs escaping, but for display
+    %% purposes it's handy to escape all non-printable chars. All non-ASCII
+    %% characters get converted to UTF-8 sequences and then escaped. We've
+    %% already got a UTF-8 sequence here, so just escape it.
+    rabbit_misc:format("\\~2.16.0B", [C]) ++ escape_rdn_value(S, middle);
 escape_rdn_value([C | S], middle) ->
     [C | escape_rdn_value(S, middle)].
 
@@ -167,6 +167,10 @@ format_asn1_value({utcTime, [Y1, Y2, M1, M2, D1, D2, H1, H2,
                              Min1, Min2, S1, S2, $Z]}) ->
     io_lib:format("20~c~c-~c~c-~c~cT~c~c:~c~c:~c~cZ",
                   [Y1, Y2, M1, M2, D1, D2, H1, H2, Min1, Min2, S1, S2]);
+%% We appear to get an untagged value back for an ia5string
+%% (e.g. domainComponent).
+format_asn1_value(V) when is_list(V) ->
+    V;
 format_asn1_value(V) ->
     io_lib:format("~p", [V]).
 

@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit).
@@ -138,7 +138,7 @@
 -rabbit_boot_step({recovery,
                    [{description, "exchange, queue and binding recovery"},
                     {mfa,         {rabbit, recover, []}},
-                    {requires,    empty_db_check},
+                    {requires,    core_initialized},
                     {enables,     routing_ready}]}).
 
 -rabbit_boot_step({mirror_queue_slave_sup,
@@ -164,8 +164,9 @@
                     {enables,     networking}]}).
 
 -rabbit_boot_step({direct_client,
-                   [{mfa,        {rabbit_direct, boot, []}},
-                    {requires,   log_relay}]}).
+                   [{description, "direct client"},
+                    {mfa,         {rabbit_direct, boot, []}},
+                    {requires,    log_relay}]}).
 
 -rabbit_boot_step({networking,
                    [{mfa,         {rabbit_networking, boot, []}},
@@ -196,7 +197,7 @@
          rabbit_queue_index, gen, dict, ordsets, file_handle_cache,
          rabbit_msg_store, array, rabbit_msg_store_ets_index, rabbit_msg_file,
          rabbit_exchange_type_fanout, rabbit_exchange_type_topic, mnesia,
-         mnesia_lib, rpc, mnesia_tm, qlc, sofs, proplists]).
+         mnesia_lib, rpc, mnesia_tm, qlc, sofs, proplists, credit_flow]).
 
 %% HiPE compilation uses multiple cores anyway, but some bits are
 %% IO-bound so we can go faster if we parallelise a bit more. In
@@ -314,17 +315,28 @@ stop_and_halt() ->
     ok.
 
 status() ->
-    [{pid, list_to_integer(os:getpid())},
-     {running_applications, application:which_applications(infinity)},
-     {os, os:type()},
-     {erlang_version, erlang:system_info(system_version)},
-     {memory, erlang:memory()}] ++
-    rabbit_misc:filter_exit_map(
-        fun ({Key, {M, F, A}}) -> {Key, erlang:apply(M, F, A)} end,
-        [{vm_memory_high_watermark, {vm_memory_monitor,
-                                     get_vm_memory_high_watermark, []}},
-         {vm_memory_limit,          {vm_memory_monitor,
-                                     get_memory_limit, []}}]).
+    S1 = [{pid,                  list_to_integer(os:getpid())},
+          {running_applications, application:which_applications(infinity)},
+          {os,                   os:type()},
+          {erlang_version,       erlang:system_info(system_version)},
+          {memory,               erlang:memory()}],
+    S2 = rabbit_misc:filter_exit_map(
+           fun ({Key, {M, F, A}}) -> {Key, erlang:apply(M, F, A)} end,
+           [{vm_memory_high_watermark, {vm_memory_monitor,
+                                        get_vm_memory_high_watermark, []}},
+            {vm_memory_limit,          {vm_memory_monitor,
+                                        get_memory_limit, []}}]),
+    S3 = rabbit_misc:with_exit_handler(
+           fun () -> [] end,
+           fun () -> [{file_descriptors, file_handle_cache:info()}] end),
+    S4 = [{processes,        [{limit, erlang:system_info(process_limit)},
+                              {used, erlang:system_info(process_count)}]},
+          {run_queue,        erlang:statistics(run_queue)},
+          {uptime,           begin
+                                 {T,_} = erlang:statistics(wall_clock),
+                                 T div 1000
+                             end}],
+    S1 ++ S2 ++ S3 ++ S4.
 
 is_running() -> is_running(node()).
 
@@ -436,8 +448,7 @@ run_boot_step({StepName, Attributes}) ->
             [try
                  apply(M,F,A)
              catch
-                 _:Reason -> boot_error("FAILED~nReason: ~p~nStacktrace: ~p~n",
-                                        [Reason, erlang:get_stacktrace()])
+                 _:Reason -> boot_step_error(Reason, erlang:get_stacktrace())
              end || {M,F,A} <- MFAs],
             io:format("done~n"),
             ok
@@ -496,8 +507,14 @@ sort_boot_steps(UnsortedSteps) ->
                end])
     end.
 
+boot_step_error(Reason, Stacktrace) ->
+    boot_error("Error description:~n   ~p~n~n"
+               "Log files (may contain more information):~n   ~s~n   ~s~n~n"
+               "Stack trace:~n   ~p~n~n",
+               [Reason, log_location(kernel), log_location(sasl), Stacktrace]).
+
 boot_error(Format, Args) ->
-    io:format("BOOT ERROR: " ++ Format, Args),
+    io:format("~n~nBOOT FAILED~n===========~n~n" ++ Format, Args),
     error_logger:error_msg(Format, Args),
     timer:sleep(1000),
     exit({?MODULE, failure_during_boot}).

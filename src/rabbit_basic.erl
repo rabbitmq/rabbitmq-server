@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_basic).
@@ -29,7 +29,7 @@
 -type(properties_input() ::
         (rabbit_framing:amqp_property_record() | [{atom(), any()}])).
 -type(publish_result() ::
-        ({ok, rabbit_router:routing_result(), [pid()]}
+        ({ok, rabbit_amqqueue:routing_result(), [pid()]}
          | rabbit_types:error('not_found'))).
 
 -type(exchange_input() :: (rabbit_types:exchange() | rabbit_exchange:name())).
@@ -88,8 +88,8 @@ publish(Delivery = #delivery{
     end.
 
 publish(X, Delivery) ->
-    {RoutingRes, DeliveredQPids} =
-        rabbit_router:deliver(rabbit_exchange:route(X, Delivery), Delivery),
+    Qs = rabbit_amqqueue:lookup(rabbit_exchange:route(X, Delivery)),
+    {RoutingRes, DeliveredQPids} = rabbit_amqqueue:deliver(Qs, Delivery),
     {ok, RoutingRes, DeliveredQPids}.
 
 delivery(Mandatory, Immediate, Message, MsgSeqNo) ->
