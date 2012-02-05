@@ -265,10 +265,9 @@ mainloop(Deb, State = #v1{sock = Sock, buf = Buf, buf_len = BufLen}) ->
         {data, Data}    -> recvloop(Deb, State#v1{buf = [Data | Buf],
                                                   buf_len = BufLen + size(Data),
                                                   pending_recv = false});
-        closed          -> if State#v1.connection_state =:= closed ->
-                                   State;
-                              true ->
-                                   throw(connection_closed_abruptly)
+        closed          -> case State#v1.connection_state of
+                               closed -> State;
+                               _      -> throw(connection_closed_abruptly)
                            end;
         {error, Reason} -> throw({inet_error, Reason});
         {other, Other}  -> handle_other(Other, Deb, State)
