@@ -34,7 +34,7 @@
 -export([execute_mnesia_transaction/2]).
 -export([execute_mnesia_tx_with_tail/1]).
 -export([ensure_ok/2]).
--export([makenode/1, nodeparts/1, cookie_hash/0, tcp_name/3]).
+-export([tcp_name/3]).
 -export([upmap/2, map_in_order/2]).
 -export([table_filter/3]).
 -export([dirty_read_all/1, dirty_foreach_key/2, dirty_dump_log/1]).
@@ -141,9 +141,6 @@
 -spec(execute_mnesia_tx_with_tail/1 ::
         (thunk(fun ((boolean()) -> B))) -> B | (fun ((boolean()) -> B))).
 -spec(ensure_ok/2 :: (ok_or_error(), atom()) -> 'ok').
--spec(makenode/1 :: ({string(), string()} | string()) -> node()).
--spec(nodeparts/1 :: (node() | string()) -> {string(), string()}).
--spec(cookie_hash/0 :: () -> string()).
 -spec(tcp_name/3 ::
         (atom(), inet:ip_address(), rabbit_networking:ip_port())
         -> atom()).
@@ -336,7 +333,7 @@ enable_cover(Dirs) ->
                 end, ok, Dirs).
 
 start_cover(NodesS) ->
-    {ok, _} = cover:start([makenode(N) || N <- NodesS]),
+    {ok, _} = cover:start([rabbit_nodes:make(N) || N <- NodesS]),
     ok.
 
 report_cover() -> report_cover(["."]).
@@ -452,23 +449,6 @@ execute_mnesia_tx_with_tail(TxFun) ->
 
 ensure_ok(ok, _) -> ok;
 ensure_ok({error, Reason}, ErrorTag) -> throw({error, {ErrorTag, Reason}}).
-
-makenode({Prefix, Suffix}) ->
-    list_to_atom(lists:append([Prefix, "@", Suffix]));
-makenode(NodeStr) ->
-    makenode(nodeparts(NodeStr)).
-
-nodeparts(Node) when is_atom(Node) ->
-    nodeparts(atom_to_list(Node));
-nodeparts(NodeStr) ->
-    case lists:splitwith(fun (E) -> E =/= $@ end, NodeStr) of
-        {Prefix, []}     -> {_, Suffix} = nodeparts(node()),
-                            {Prefix, Suffix};
-        {Prefix, Suffix} -> {Prefix, tl(Suffix)}
-    end.
-
-cookie_hash() ->
-    base64:encode_to_string(erlang:md5(atom_to_list(erlang:get_cookie()))).
 
 tcp_name(Prefix, IPAddress, Port)
   when is_atom(Prefix) andalso is_number(Port) ->

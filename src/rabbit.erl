@@ -366,10 +366,8 @@ rotate_logs(BinarySuffix) ->
 start(normal, []) ->
     case erts_version_check() of
         ok ->
-            ok = rabbit_mnesia:delete_previously_running_nodes(),
             {ok, SupPid} = rabbit_sup:start_link(),
             true = register(rabbit, self()),
-
             print_banner(),
             [ok = run_boot_step(Step) || Step <- boot_steps()],
             io:format("~nbroker running~n"),
@@ -506,6 +504,19 @@ sort_boot_steps(UnsortedSteps) ->
                         io_lib:format(" depends on ~w~n", [First])]
                end])
     end.
+
+boot_step_error({error, {timeout_waiting_for_tables, _}}, _Stacktrace) ->
+    {Err, Nodes} =
+        case rabbit_mnesia:read_previously_running_nodes() of
+            [] -> {"Timeout contacting cluster nodes. Since RabbitMQ was"
+                   " shut down forcefully~nit cannot determine which nodes"
+                   " are timing out. Details on all nodes will~nfollow.~n",
+                   rabbit_mnesia:all_clustered_nodes() -- [node()]};
+            Ns -> {rabbit_misc:format(
+                     "Timeout contacting cluster nodes: ~p.~n", [Ns]),
+                   Ns}
+        end,
+    boot_error(Err ++ rabbit_nodes:diagnostics(Nodes) ++ "~n~n", []);
 
 boot_step_error(Reason, Stacktrace) ->
     boot_error("Error description:~n   ~p~n~n"
@@ -668,7 +679,7 @@ print_banner() ->
                 {"app descriptor", app_location()},
                 {"home dir",       home_dir()},
                 {"config file(s)", config_files()},
-                {"cookie hash",    rabbit_misc:cookie_hash()},
+                {"cookie hash",    rabbit_nodes:cookie_hash()},
                 {"log",            log_location(kernel)},
                 {"sasl log",       log_location(sasl)},
                 {"database dir",   rabbit_mnesia:dir()},

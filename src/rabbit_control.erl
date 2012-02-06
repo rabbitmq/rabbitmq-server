@@ -17,7 +17,7 @@
 -module(rabbit_control).
 -include("rabbit.hrl").
 
--export([start/0, stop/0, action/5, diagnostics/1]).
+-export([start/0, stop/0, action/5]).
 
 -define(RPC_TIMEOUT, infinity).
 -define(EXTERNAL_CHECK_INTERVAL, 1000).
@@ -49,7 +49,6 @@
         (atom(), node(), [string()], [{string(), any()}],
          fun ((string(), [any()]) -> 'ok'))
         -> 'ok').
--spec(diagnostics/1 :: (node()) -> [{string(), [any()]}]).
 -spec(usage/0 :: () -> no_return()).
 
 -endif.
@@ -67,7 +66,7 @@ start() ->
             CmdArgsAndOpts -> CmdArgsAndOpts
         end,
     Opts1 = [case K of
-                 ?NODE_OPT -> {?NODE_OPT, rabbit_misc:makenode(V)};
+                 ?NODE_OPT -> {?NODE_OPT, rabbit_nodes:make(V)};
                  _         -> {K, V}
              end || {K, V} <- Opts],
     Command = list_to_atom(Command0),
@@ -143,26 +142,7 @@ print_report0(Node, {Module, InfoFun, KeysFun}, VHostArg) ->
 print_error(Format, Args) -> fmt_stderr("Error: " ++ Format, Args).
 
 print_badrpc_diagnostics(Node) ->
-    [fmt_stderr(Fmt, Args) || {Fmt, Args} <- diagnostics(Node)].
-
-diagnostics(Node) ->
-    {_NodeName, NodeHost} = rabbit_misc:nodeparts(Node),
-    [{"diagnostics:", []},
-     case net_adm:names(NodeHost) of
-         {error, EpmdReason} ->
-             {"- unable to connect to epmd on ~s: ~w",
-              [NodeHost, EpmdReason]};
-         {ok, NamePorts} ->
-             {"- nodes and their ports on ~s: ~p",
-              [NodeHost, [{list_to_atom(Name), Port} ||
-                             {Name, Port} <- NamePorts]]}
-     end,
-     {"- current node: ~w", [node()]},
-     case init:get_argument(home) of
-         {ok, [[Home]]} -> {"- current node home dir: ~s", [Home]};
-         Other          -> {"- no current node home dir: ~p", [Other]}
-     end,
-     {"- current node cookie hash: ~s", [rabbit_misc:cookie_hash()]}].
+    fmt_stderr(rabbit_nodes:diagnostics([Node]), []).
 
 stop() ->
     ok.
