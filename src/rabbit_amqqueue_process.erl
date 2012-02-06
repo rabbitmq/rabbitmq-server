@@ -1289,33 +1289,30 @@ handle_cast({deliver, Delivery = #delivery{sender     = Sender,
                 true;
             _ ->
                 case already_been_here(Delivery, State) of
-                    false ->
-                        true;
-                    Qs ->
-                        rabbit_log:warning(
-                          "Message dropped. Dead-letter queues " ++
-                          "cycle detected: ~p~n", [Qs]),
-                        rabbit_misc:confirm_to_sender(Sender, [MsgSeqNo]),
-                        false
+                    false -> true;
+                    Qs    -> rabbit_log:warning(
+                               "Message dropped. Dead-letter queues " ++
+                               "cycle detected: ~p~n", [Qs]),
+                             rabbit_misc:confirm_to_sender(Sender,
+                                                           [MsgSeqNo]),
+                             false
                 end
         end,
     case ShouldDeliver of
-        false ->
-            noreply(State);
-        true ->
-            case Flow of
-                flow ->
-                    Key = {ch_publisher, Sender},
-                    case get(Key) of
-                        undefined -> put(Key,
-                                         erlang:monitor(process, Sender));
-                        _         -> ok
-                    end,
-                    credit_flow:ack(Sender);
-                noflow ->
-                    ok
-            end,
-            noreply(deliver_or_enqueue(Delivery, State))
+        false -> noreply(State);
+        true  -> case Flow of
+                     flow ->
+                         Key = {ch_publisher, Sender},
+                         case get(Key) of
+                             undefined -> put(Key, erlang:monitor(process,
+                                                                  Sender));
+                             _         -> ok
+                         end,
+                         credit_flow:ack(Sender);
+                     noflow ->
+                         ok
+                 end,
+                 noreply(deliver_or_enqueue(Delivery, State))
     end;
 
 handle_cast({ack, AckTags, ChPid}, State) ->
