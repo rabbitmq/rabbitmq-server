@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_misc).
@@ -418,7 +418,11 @@ execute_mnesia_transaction(TxFun) ->
     %% elsewhere and get a consistent result even when that read
     %% executes on a different node.
     case worker_pool:submit({mnesia, sync_transaction, [TxFun]}) of
-        {atomic,  Result} -> Result;
+        {atomic,  Result} -> case mnesia:is_transaction() of
+                                 true  -> ok;
+                                 false -> mnesia_sync:sync()
+                             end,
+                             Result;
         {aborted, Reason} -> throw({error, Reason})
     end.
 
