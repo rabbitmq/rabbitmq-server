@@ -152,7 +152,7 @@
 -spec(dirty_foreach_key/2 :: (fun ((any()) -> any()), atom())
                              -> 'ok' | 'aborted').
 -spec(dirty_dump_log/1 :: (file:filename()) -> ok_or_error()).
--spec(format/2 :: (string(), [any()]) -> 'ok').
+-spec(format/2 :: (string(), [any()]) -> string()).
 -spec(format_stderr/2 :: (string(), [any()]) -> 'ok').
 -spec(with_local_io/1 :: (fun (() -> A)) -> A).
 -spec(local_info_msg/2 :: (string(), [any()]) -> 'ok').

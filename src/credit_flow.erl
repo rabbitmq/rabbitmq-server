@@ -38,7 +38,7 @@
 -ifdef(use_specs).
 
 -opaque(bump_msg() :: {pid(), non_neg_integer()}).
--opaque(credit_spec() :: {non_neg_integer(), non_neg_integer()}).
+-type(credit_spec() :: {non_neg_integer(), non_neg_integer()}).
 
 -spec(send/1 :: (pid()) -> 'ok').
 -spec(send/2 :: (pid(), credit_spec()) -> 'ok').
@@ -124,4 +124,4 @@ get(Key, Default) ->
         Value     -> Value
     end.
 
-update(Key, Default, Fun) -> put(Key, Fun(get(Key, Default))).
+update(Key, Default, Fun) -> put(Key, Fun(get(Key, Default))), ok.
