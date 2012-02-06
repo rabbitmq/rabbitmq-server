@@ -64,12 +64,11 @@ ack(To) -> ack(To, ?DEFAULT_CREDIT).
 
 ack(To, {MaxCredit, MoreCreditAt}) ->
     MoreCreditAt1 = MoreCreditAt + 1,
-    Credit =
-        case get({credit_to, To}, MaxCredit) of
-            MoreCreditAt1 -> grant(To, MaxCredit - MoreCreditAt),
-                             MaxCredit;
-            C             -> C - 1
-        end,
+    Credit = case get({credit_to, To}, MaxCredit) of
+                 MoreCreditAt1 -> grant(To, MaxCredit - MoreCreditAt),
+                                  MaxCredit;
+                 C             -> C - 1
+             end,
     put({credit_to, To}, Credit).
 
 handle_bump_msg({From, MoreCredit}) ->
@@ -81,8 +80,7 @@ handle_bump_msg({From, MoreCredit}) ->
         false -> ok
     end.
 
-blocked() ->
-    get(credit_blocked, []) =/= [].
+blocked() -> get(credit_blocked, []) =/= [].
 
 send(From) -> send(From, ?DEFAULT_CREDIT).
 
@@ -112,8 +110,7 @@ grant(To, Quantity) ->
                  put(credit_deferred, [{To, Msg} | Deferred])
     end.
 
-block(From) ->
-    put(credit_blocked, [From | get(credit_blocked, [])]).
+block(From) -> put(credit_blocked, [From | get(credit_blocked, [])]).
 
 unblock(From) ->
     NewBlocks = get(credit_blocked, []) -- [From],
