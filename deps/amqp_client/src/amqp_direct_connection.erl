@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
 %% @private
@@ -20,6 +20,8 @@
 -include("amqp_client.hrl").
 
 -behaviour(amqp_gen_connection).
+
+-export([server_close/3]).
 
 -export([init/1, terminate/2, connect/4, do/2, open_channel_args/1, i/2,
          info_keys/0, handle_message/2, closing/3, channels_terminated/1]).
@@ -40,6 +42,15 @@
                               user, vhost, client_properties, type]).
 
 %%---------------------------------------------------------------------------
+
+%% amqp_connection:close() logically closes from the client end. We may
+%% want to close from the server end.
+server_close(ConnectionPid, Code, Text) ->
+    Close = #'connection.close'{reply_text =  Text,
+                                reply_code = Code,
+                                class_id   = 0,
+                                method_id  = 0},
+    amqp_gen_connection:server_close(ConnectionPid, Close).
 
 init([]) ->
     {ok, #state{}}.
