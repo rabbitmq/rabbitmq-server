@@ -73,7 +73,7 @@
 %% but where the second argument is specifically the priority_queue
 %% which contains the prioritised message_queue.
 
-%% All modifications are (C) 2009-2011 VMware, Inc.
+%% All modifications are (C) 2009-2012 VMware, Inc.
 
 %% ``The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
