@@ -20,6 +20,7 @@
              rabbit_misc,
              rabbit_msg_store_index,
              rabbit_net,
+             rabbit_nodes,
              rabbit_reader,
              rabbit_writer,
              rabbit_queue_collector,
