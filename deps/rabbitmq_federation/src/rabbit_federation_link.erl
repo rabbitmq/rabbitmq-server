@@ -443,11 +443,11 @@ upstream_exchange_name(XNameBin, VHost, DownXName, Suffix) ->
 local_nodename() ->
     {ok, Explicit} = application:get_env(rabbitmq_federation, local_nodename),
     case Explicit of
-        automatic -> {ID, _} = rabbit_misc:nodeparts(node()),
+        automatic -> {ID, _} = rabbit_nodes:parts(node()),
                      {ok, Host} = inet:gethostname(),
                      {ok, #hostent{h_name = FQDN}} = inet:gethostbyname(Host),
                      list_to_binary(atom_to_list(
-                                      rabbit_misc:makenode({ID, FQDN})));
+                                      rabbit_nodes:make({ID, FQDN})));
         _         -> list_to_binary(Explicit)
     end.
 
