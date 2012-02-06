@@ -15,10 +15,16 @@
 ##  Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 ##
 
+# Get default settings with user overrides for (RABBITMQ_)<var_name>
+# Non-empty defaults should be set in rabbitmq-env
 . `dirname $0`/rabbitmq-env
+
+##--- Set environment vars RABBITMQ_<var_name> to defaults if not set
 
 [ "x" = "x$RABBITMQ_NODENAME" ] && RABBITMQ_NODENAME=${NODENAME}
 [ "x" = "x$RABBITMQ_CTL_ERL_ARGS" ] && RABBITMQ_CTL_ERL_ARGS=${CTL_ERL_ARGS}
+
+##--- End of overridden <var_name> variables
 
 exec erl \
     -pa "${RABBITMQ_HOME}/ebin" \
