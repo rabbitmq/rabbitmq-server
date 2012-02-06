@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_tests).
@@ -889,6 +889,14 @@ test_cluster_management2(SecondaryNode) ->
     ok = control_action(stop_app, []),
     ok = assert_ram_node(),
 
+    %% ram node will not start by itself
+    ok = control_action(stop_app, []),
+    ok = control_action(stop_app, SecondaryNode, [], []),
+    {error, _} = control_action(start_app, []),
+    ok = control_action(start_app, SecondaryNode, [], []),
+    ok = control_action(start_app, []),
+    ok = control_action(stop_app, []),
+
     %% change cluster config while remaining in same cluster
     ok = control_action(force_cluster, ["invalid2@invalid", SecondaryNodeS]),
     ok = control_action(start_app, []),
@@ -897,8 +905,7 @@ test_cluster_management2(SecondaryNode) ->
     %% join non-existing cluster as a ram node
     ok = control_action(force_cluster, ["invalid1@invalid",
                                         "invalid2@invalid"]),
-    ok = control_action(start_app, []),
-    ok = control_action(stop_app, []),
+    {error, _} = control_action(start_app, []),
     ok = assert_ram_node(),
 
     %% join empty cluster as a ram node (converts to disc)
@@ -2222,14 +2229,26 @@ test_amqqueue(Durable) ->
         #amqqueue { durable = Durable }.
 
 with_fresh_variable_queue(Fun) ->
-    ok = empty_test_queue(),
-    VQ = variable_queue_init(test_amqqueue(true), false),
-    S0 = rabbit_variable_queue:status(VQ),
-    assert_props(S0, [{q1, 0}, {q2, 0},
-                      {delta, {delta, undefined, 0, undefined}},
-                      {q3, 0}, {q4, 0},
-                      {len, 0}]),
-    _ = rabbit_variable_queue:delete_and_terminate(shutdown, Fun(VQ)),
+    Ref = make_ref(),
+    Me = self(),
+    %% Run in a separate process since rabbit_msg_store will send
+    %% bump_credit messages and we want to ignore them
+    spawn_link(fun() ->
+                       ok = empty_test_queue(),
+                       VQ = variable_queue_init(test_amqqueue(true), false),
+                       S0 = rabbit_variable_queue:status(VQ),
+                       assert_props(S0, [{q1, 0}, {q2, 0},
+                                         {delta,
+                                          {delta, undefined, 0, undefined}},
+                                         {q3, 0}, {q4, 0},
+                                         {len, 0}]),
+                       _ = rabbit_variable_queue:delete_and_terminate(
+                        shutdown, Fun(VQ)),
+                       Me ! Ref
+               end),
+    receive
+        Ref -> ok
+    end,
     passed.
 
 publish_and_confirm(Q, Payload, Count) ->

@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_amqqueue_process).
@@ -122,7 +122,6 @@ info_keys() -> ?INFO_KEYS.
 %%----------------------------------------------------------------------------
 
 init(Q) ->
-    ?LOGDEBUG("Queue starting - ~p~n", [Q]),
     process_flag(trap_exit, true),
 
     State = #q{q                   = Q#amqqueue{pid = self()},
@@ -149,7 +148,6 @@ init(Q) ->
 
 init_with_backing_queue_state(Q = #amqqueue{exclusive_owner = Owner}, BQ, BQS,
                               RateTRef, AckTags, Deliveries, MTC) ->
-    ?LOGDEBUG("Queue starting - ~p~n", [Q]),
     case Owner of
         none -> ok;
         _    -> erlang:monitor(process, Owner)
@@ -627,6 +625,12 @@ should_auto_delete(#q{has_had_consumers = false}) -> false;
 should_auto_delete(State) -> is_unused(State).
 
 handle_ch_down(DownPid, State = #q{exclusive_consumer = Holder}) ->
+    case get({ch_publisher, DownPid}) of
+        undefined -> ok;
+        MRef      -> erlang:demonitor(MRef),
+                     erase({ch_publisher, DownPid}),
+                     credit_flow:peer_down(DownPid)
+    end,
     case lookup_ch(DownPid) of
         not_found ->
             {ok, State};
@@ -872,7 +876,7 @@ cleanup_after_confirm(State = #q{blocked_op     = Op,
             noreply(State1#q{blocked_op = Op})
     end.
 
-already_been_here(Delivery = #delivery{message = #basic_message{content = Content}},
+already_been_here(#delivery{message = #basic_message{content = Content}},
                   State) ->
     #content{properties = #'P_basic'{headers = Headers}} =
         rabbit_binary_parser:ensure_content_decoded(Content),
@@ -1275,24 +1279,43 @@ handle_call({requeue, AckTags, ChPid}, From, State) ->
 handle_cast({run_backing_queue, Mod, Fun}, State) ->
     noreply(run_backing_queue(Mod, Fun, State));
 
-handle_cast({deliver, Delivery = #delivery{sender = Sender,
-                                           msg_seq_no = MsgSeqNo}},
-            State = #q{dlx = DLX}) ->
+handle_cast({deliver, Delivery = #delivery{sender     = Sender,
+                                           msg_seq_no = MsgSeqNo},
+             Flow}, State = #q{dlx = DLX}) ->
     %% Asynchronous, non-"mandatory", non-"immediate" deliver mode.
-    case DLX of
-        undefined ->
-            noreply(deliver_or_enqueue(Delivery, State));
-        _ ->
-            case already_been_here(Delivery, State) of
-                false ->
-                    noreply(deliver_or_enqueue(Delivery, State));
-                Qs ->
-                    rabbit_log:warning(
-                      "Message dropped. Dead-letter queues " ++
-                      "cycle detected: ~p~n", [Qs]),
-                    rabbit_misc:confirm_to_sender(Sender, [MsgSeqNo]),
-                    noreply(State)
-            end
+    ShouldDeliver =
+        case DLX of
+            undefined ->
+                true;
+            _ ->
+                case already_been_here(Delivery, State) of
+                    false ->
+                        true;
+                    Qs ->
+                        rabbit_log:warning(
+                          "Message dropped. Dead-letter queues " ++
+                          "cycle detected: ~p~n", [Qs]),
+                        rabbit_misc:confirm_to_sender(Sender, [MsgSeqNo]),
+                        false
+                end
+        end,
+    case ShouldDeliver of
+        false ->
+            noreply(State);
+        true ->
+            case Flow of
+                flow ->
+                    Key = {ch_publisher, Sender},
+                    case get(Key) of
+                        undefined -> put(Key,
+                                         erlang:monitor(process, Sender));
+                        _         -> ok
+                    end,
+                    credit_flow:ack(Sender);
+                noflow ->
+                    ok
+            end,
+            noreply(deliver_or_enqueue(Delivery, State))
     end;
 
 handle_cast({ack, AckTags, ChPid}, State) ->
@@ -1381,8 +1404,7 @@ handle_cast({dead_letter, {Msg, AckTag}, Reason}, State) ->
 
 handle_info(maybe_expire, State) ->
     case is_unused(State) of
-        true  -> ?LOGDEBUG("Queue lease expired for ~p~n", [State#q.q]),
-                 dead_letter_deleted_queue(undefined, State);
+        true  -> dead_letter_deleted_queue(undefined, State);
         false -> noreply(ensure_expiry_timer(State))
     end;
 
@@ -1429,8 +1451,11 @@ handle_info(timeout, State) ->
 handle_info({'EXIT', _Pid, Reason}, State) ->
     {stop, Reason, State};
 
+handle_info({bump_credit, Msg}, State) ->
+    credit_flow:handle_bump_msg(Msg),
+    noreply(State);
+
 handle_info(Info, State) ->
-    ?LOGDEBUG("Info in queue: ~p~n", [Info]),
     {stop, {unhandled_info, Info}, State}.
 
 handle_pre_hibernate(State = #q{backing_queue_state = undefined}) ->

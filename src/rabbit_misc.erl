@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_misc).
@@ -39,7 +39,7 @@
 -export([upmap/2, map_in_order/2]).
 -export([table_filter/3]).
 -export([dirty_read_all/1, dirty_foreach_key/2, dirty_dump_log/1]).
--export([format_stderr/2, with_local_io/1, local_info_msg/2]).
+-export([format/2, format_stderr/2, with_local_io/1, local_info_msg/2]).
 -export([start_applications/1, stop_applications/1]).
 -export([unfold/2, ceil/1, queue_fold/3]).
 -export([sort_field_table/1]).
@@ -158,6 +158,7 @@
 -spec(dirty_foreach_key/2 :: (fun ((any()) -> any()), atom())
                              -> 'ok' | 'aborted').
 -spec(dirty_dump_log/1 :: (file:filename()) -> ok_or_error()).
+-spec(format/2 :: (string(), [any()]) -> 'ok').
 -spec(format_stderr/2 :: (string(), [any()]) -> 'ok').
 -spec(with_local_io/1 :: (fun (() -> A)) -> A).
 -spec(local_info_msg/2 :: (string(), [any()]) -> 'ok').
@@ -225,7 +226,7 @@ frame_error(MethodName, BinaryFields) ->
     protocol_error(frame_error, "cannot decode ~w", [BinaryFields], MethodName).
 
 amqp_error(Name, ExplanationFormat, Params, Method) ->
-    Explanation = lists:flatten(io_lib:format(ExplanationFormat, Params)),
+    Explanation = format(ExplanationFormat, Params),
     #amqp_error{name = Name, explanation = Explanation, method = Method}.
 
 protocol_error(Name, ExplanationFormat, Params) ->
@@ -279,8 +280,7 @@ val({Type, Value}) ->
                  true  -> "~s";
                  false -> "~w"
              end,
-    lists:flatten(io_lib:format("the value '" ++ ValFmt ++ "' of type '~s'",
-                                [Value, Type])).
+    format("the value '" ++ ValFmt ++ "' of type '~s'", [Value, Type]).
 
 %% Normally we'd call mnesia:dirty_read/1 here, but that is quite
 %% expensive due to general mnesia overheads (figuring out table types
@@ -329,8 +329,7 @@ r_arg(VHostPath, Kind, Table, Key) ->
     end.
 
 rs(#resource{virtual_host = VHostPath, kind = Kind, name = Name}) ->
-    lists:flatten(io_lib:format("~s '~s' in vhost '~s'",
-                                [Kind, Name, VHostPath])).
+    format("~s '~s' in vhost '~s'", [Kind, Name, VHostPath]).
 
 enable_cover() -> enable_cover(["."]).
 
@@ -431,7 +430,11 @@ execute_mnesia_transaction(TxFun) ->
     %% elsewhere and get a consistent result even when that read
     %% executes on a different node.
     case worker_pool:submit({mnesia, sync_transaction, [TxFun]}) of
-        {atomic,  Result} -> Result;
+        {atomic,  Result} -> case mnesia:is_transaction() of
+                                 true  -> ok;
+                                 false -> mnesia_sync:sync()
+                             end,
+                             Result;
         {aborted, Reason} -> throw({error, Reason})
     end.
 
@@ -482,9 +485,7 @@ cookie_hash() ->
 tcp_name(Prefix, IPAddress, Port)
   when is_atom(Prefix) andalso is_number(Port) ->
     list_to_atom(
-      lists:flatten(
-        io_lib:format("~w_~s:~w",
-                      [Prefix, inet_parse:ntoa(IPAddress), Port]))).
+      format("~w_~s:~w", [Prefix, inet_parse:ntoa(IPAddress), Port])).
 
 %% This is a modified version of Luke Gorrie's pmap -
 %% http://lukego.livejournal.com/6753.html - that doesn't care about
@@ -552,6 +553,8 @@ dirty_dump_log1(LH, {K, Terms}) ->
 dirty_dump_log1(LH, {K, Terms, BadBytes}) ->
     io:format("Bad Chunk, ~p: ~p~n", [BadBytes, Terms]),
     dirty_dump_log1(LH, disk_log:chunk(LH, K)).
+
+format(Fmt, Args) -> lists:flatten(io_lib:format(Fmt, Args)).
 
 format_stderr(Fmt, Args) ->
     case os:type() of
@@ -648,7 +651,7 @@ pid_to_string(Pid) when is_pid(Pid) ->
     <<131,103,100,NodeLen:16,NodeBin:NodeLen/binary,Id:32,Ser:32,Cre:8>>
         = term_to_binary(Pid),
     Node = binary_to_term(<<131,100,NodeLen:16,NodeBin:NodeLen/binary>>),
-    lists:flatten(io_lib:format("<~w.~B.~B.~B>", [Node, Cre, Id, Ser])).
+    format("<~w.~B.~B.~B>", [Node, Cre, Id, Ser]).
 
 %% inverse of above
 string_to_pid(Str) ->

@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit).
@@ -43,6 +43,12 @@
 -rabbit_boot_step({database,
                    [{mfa,         {rabbit_mnesia, init, []}},
                     {requires,    file_handle_cache},
+                    {enables,     external_infrastructure}]}).
+
+-rabbit_boot_step({database_sync,
+                   [{description, "database sync"},
+                    {mfa,         {rabbit_sup, start_child, [mnesia_sync]}},
+                    {requires,    database},
                     {enables,     external_infrastructure}]}).
 
 -rabbit_boot_step({file_handle_cache,
@@ -191,7 +197,7 @@
          rabbit_queue_index, gen, dict, ordsets, file_handle_cache,
          rabbit_msg_store, array, rabbit_msg_store_ets_index, rabbit_msg_file,
          rabbit_exchange_type_fanout, rabbit_exchange_type_topic, mnesia,
-         mnesia_lib, rpc, mnesia_tm, qlc, sofs, proplists]).
+         mnesia_lib, rpc, mnesia_tm, qlc, sofs, proplists, credit_flow]).
 
 %% HiPE compilation uses multiple cores anyway, but some bits are
 %% IO-bound so we can go faster if we parallelise a bit more. In
@@ -442,8 +448,7 @@ run_boot_step({StepName, Attributes}) ->
             [try
                  apply(M,F,A)
              catch
-                 _:Reason -> boot_error("FAILED~nReason: ~p~nStacktrace: ~p~n",
-                                        [Reason, erlang:get_stacktrace()])
+                 _:Reason -> boot_step_error(Reason, erlang:get_stacktrace())
              end || {M,F,A} <- MFAs],
             io:format("done~n"),
             ok
@@ -502,8 +507,14 @@ sort_boot_steps(UnsortedSteps) ->
                end])
     end.
 
+boot_step_error(Reason, Stacktrace) ->
+    boot_error("Error description:~n   ~p~n~n"
+               "Log files (may contain more information):~n   ~s~n   ~s~n~n"
+               "Stack trace:~n   ~p~n~n",
+               [Reason, log_location(kernel), log_location(sasl), Stacktrace]).
+
 boot_error(Format, Args) ->
-    io:format("BOOT ERROR: " ++ Format, Args),
+    io:format("~n~nBOOT FAILED~n===========~n~n" ++ Format, Args),
     error_logger:error_msg(Format, Args),
     timer:sleep(1000),
     exit({?MODULE, failure_during_boot}).
