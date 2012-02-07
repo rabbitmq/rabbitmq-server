@@ -18,8 +18,8 @@
 
 -export([init/2, shutdown_terms/1, recover/5,
          terminate/2, delete_and_terminate/1,
-         publish/5, deliver/2, ack/2, sync/1, sync/2, flush/1, read/3,
-         next_segment_boundary/1, bounds/1, recover/1]).
+         publish/5, deliver/2, ack/2, sync/1, sync/2, flush/1, needs_flush/1,
+         read/3, next_segment_boundary/1, bounds/1, recover/1]).
 
 -export([add_queue_ttl/0]).
 
@@ -300,6 +300,9 @@ sync(SeqIds, State) ->
 
 flush(State = #qistate { dirty_count = 0 }) -> State;
 flush(State)                                -> flush_journal(State).
+
+needs_flush(State = #qistate { dirty_count = 0}) -> false;
+needs_flush(_State)                              -> true.
 
 read(StartEnd, StartEnd, State) ->
     {[], State};

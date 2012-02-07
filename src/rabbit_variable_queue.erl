@@ -731,10 +731,13 @@ ram_duration(State = #vqstate {
                  ram_msg_count_prev = RamMsgCount,
                  ram_ack_count_prev = RamAckCount }}.
 
-needs_timeout(State) ->
+needs_timeout(State = #vqstate { index_state = IndexState }) ->
     case needs_index_sync(State) of
-        false -> idle;
-        true  -> timed
+        true  -> timed;
+        false -> case rabbit_queue_index:needs_flush(IndexState) of
+                     true  -> idle;
+                     false -> false
+                 end
     end.
 
 timeout(State = #vqstate { index_state = IndexState }) ->
