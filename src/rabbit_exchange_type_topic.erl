@@ -250,7 +250,7 @@ remove_all(Table, Pattern) ->
                   mnesia:match_object(Table, Pattern, write)).
 
 new_node_id() ->
-    rabbit_guid:guid().
+    rabbit_guid:gen().
 
 split_topic_key(Key) ->
     split_topic_key(Key, [], []).
@@ -263,4 +263,3 @@ split_topic_key(<<$., Rest/binary>>, RevWordAcc, RevResAcc) ->
     split_topic_key(Rest, [], [lists:reverse(RevWordAcc) | RevResAcc]);
 split_topic_key(<<C:8, Rest/binary>>, RevWordAcc, RevResAcc) ->
     split_topic_key(Rest, [C | RevWordAcc], RevResAcc).
-
