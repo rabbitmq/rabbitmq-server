@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
 %% @private
@@ -21,7 +21,7 @@
 
 -behaviour(supervisor2).
 
--export([start_link/0, start_connection_sup/3]).
+-export([start_link/0, start_connection_sup/1]).
 -export([init/1]).
 
 %%---------------------------------------------------------------------------
@@ -31,8 +31,8 @@
 start_link() ->
     supervisor2:start_link({local, amqp_sup}, ?MODULE, []).
 
-start_connection_sup(Type, Module, AmqpParams) ->
-    supervisor2:start_child(amqp_sup, [Type, Module, AmqpParams]).
+start_connection_sup(AmqpParams) ->
+    supervisor2:start_child(amqp_sup, [AmqpParams]).
 
 %%---------------------------------------------------------------------------
 %% supervisor2 callbacks

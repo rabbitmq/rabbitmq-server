@@ -3,6 +3,8 @@
   {vsn, "%%VSN%%"},
   {modules, [
              gen_server2,
+             mirrored_supervisor,
+             priority_queue,
              rabbit_backing_queue,
              rabbit_basic,
              rabbit_binary_generator,
@@ -18,6 +20,7 @@
              rabbit_misc,
              rabbit_msg_store_index,
              rabbit_net,
+             rabbit_nodes,
              rabbit_reader,
              rabbit_writer,
              rabbit_queue_collector,

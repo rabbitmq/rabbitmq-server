@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
 %% @private
@@ -21,24 +21,24 @@
 
 -behaviour(supervisor2).
 
--export([start_link/1, start_channel_sup/3]).
+-export([start_link/2, start_channel_sup/4]).
 -export([init/1]).
 
 %%---------------------------------------------------------------------------
 %% Interface
 %%---------------------------------------------------------------------------
 
-start_link(Type) ->
-    supervisor2:start_link(?MODULE, [Type]).
+start_link(Type, Connection) ->
+    supervisor2:start_link(?MODULE, [Type, Connection]).
 
-start_channel_sup(Sup, InfraArgs, ChannelNumber) ->
-    supervisor2:start_child(Sup, [InfraArgs, ChannelNumber]).
+start_channel_sup(Sup, InfraArgs, ChannelNumber, Consumer) ->
+    supervisor2:start_child(Sup, [InfraArgs, ChannelNumber, Consumer]).
 
 %%---------------------------------------------------------------------------
 %% supervisor2 callbacks
 %%---------------------------------------------------------------------------
 
-init([Type]) ->
+init([Type, Connection]) ->
     {ok, {{simple_one_for_one, 0, 1},
-          [{channel_sup, {amqp_channel_sup, start_link, [Type]},
+          [{channel_sup, {amqp_channel_sup, start_link, [Type, Connection]},
             temporary, brutal_kill, supervisor, [amqp_channel_sup]}]}}.

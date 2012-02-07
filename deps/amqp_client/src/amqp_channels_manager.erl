@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
 %% @private
@@ -21,8 +21,9 @@
 
 -behaviour(gen_server).
 
--export([start_link/2, open_channel/3, set_channel_max/2, is_empty/1,
-         num_channels/1, pass_frame/3, signal_connection_closing/3]).
+-export([start_link/2, open_channel/4, set_channel_max/2, is_empty/1,
+         num_channels/1, pass_frame/3, signal_connection_closing/3,
+         process_channel_frame/4]).
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2]).
 
@@ -40,8 +41,9 @@
 start_link(Connection, ChSupSup) ->
     gen_server:start_link(?MODULE, [Connection, ChSupSup], []).
 
-open_channel(ChMgr, ProposedNumber, InfraArgs) ->
-    gen_server:call(ChMgr, {open_channel, ProposedNumber, InfraArgs}, infinity).
+open_channel(ChMgr, ProposedNumber, Consumer, InfraArgs) ->
+    gen_server:call(ChMgr, {open_channel, ProposedNumber, Consumer, InfraArgs},
+                    infinity).
 
 set_channel_max(ChMgr, ChannelMax) ->
     gen_server:cast(ChMgr, {set_channel_max, ChannelMax}).
@@ -58,6 +60,19 @@ pass_frame(ChMgr, ChNumber, Frame) ->
 signal_connection_closing(ChMgr, ChannelCloseType, Reason) ->
     gen_server:cast(ChMgr, {connection_closing, ChannelCloseType, Reason}).
 
+process_channel_frame(Frame, Channel, ChPid, AState) ->
+    case rabbit_command_assembler:process(Frame, AState) of
+        {ok, NewAState}                  -> NewAState;
+        {ok, Method, NewAState}          -> rabbit_channel:do(ChPid, Method),
+                                            NewAState;
+        {ok, Method, Content, NewAState} -> rabbit_channel:do(ChPid, Method,
+                                                              Content),
+                                            NewAState;
+        {error, Reason}                  -> ChPid ! {channel_exit, Channel,
+                                                     Reason},
+                                            AState
+    end.
+
 %%---------------------------------------------------------------------------
 %% gen_server callbacks
 %%---------------------------------------------------------------------------
@@ -71,9 +86,9 @@ terminate(_Reason, _State) ->
 code_change(_OldVsn, State, _Extra) ->
     State.
 
-handle_call({open_channel, ProposedNumber, InfraArgs}, _,
+handle_call({open_channel, ProposedNumber, Consumer, InfraArgs}, _,
             State = #state{closing = false}) ->
-    handle_open_channel(ProposedNumber, InfraArgs, State);
+    handle_open_channel(ProposedNumber, Consumer, InfraArgs, State);
 handle_call(is_empty, _, State) ->
     {reply, internal_is_empty(State), State};
 handle_call(num_channels, _, State) ->
@@ -93,13 +108,13 @@ handle_info({'DOWN', _, process, Pid, Reason}, State) ->
 %% Internal plumbing
 %%---------------------------------------------------------------------------
 
-handle_open_channel(ProposedNumber, InfraArgs,
+handle_open_channel(ProposedNumber, Consumer, InfraArgs,
                     State = #state{channel_sup_sup = ChSupSup}) ->
     case new_number(ProposedNumber, State) of
         {ok, Number} ->
             {ok, _ChSup, {Ch, AState}} =
                 amqp_channel_sup_sup:start_channel_sup(ChSupSup, InfraArgs,
-                                                       Number),
+                                                       Number, Consumer),
             NewState = internal_register(Number, Ch, AState, State),
             erlang:monitor(process, Ch),
             {reply, {ok, Ch}, NewState};
@@ -148,7 +163,10 @@ handle_down(Pid, Reason, State) ->
     end.
 
 handle_channel_down(Pid, Number, Reason, State) ->
-    maybe_report_down(Pid, Reason, State),
+    maybe_report_down(Pid, case Reason of {shutdown, R} -> R;
+                                          _             -> Reason
+                           end,
+                      State),
     NewState = internal_unregister(Number, Pid, State),
     check_all_channels_terminated(NewState),
     {noreply, NewState}.
@@ -159,10 +177,6 @@ maybe_report_down(_Pid, {app_initiated_close, _, _}, _State) ->
     ok;
 maybe_report_down(_Pid, {server_initiated_close, _, _}, _State) ->
     ok;
-maybe_report_down(Pid, {connection_closing,
-                        {server_initiated_hard_close, _, _} = Reason},
-                  #state{connection = Connection}) ->
-    amqp_gen_connection:hard_error_in_channel(Connection, Pid, Reason);
 maybe_report_down(_Pid, {connection_closing, _}, _State) ->
     ok;
 maybe_report_down(_Pid, {server_misbehaved, AmqpError},
@@ -195,10 +209,10 @@ internal_pass_frame(Number, Frame, State) ->
     case internal_lookup_npa(Number, State) of
         undefined ->
             ?LOG_INFO("Dropping frame ~p for invalid or closed "
-                      "channel number ~p~n", [Frame, Number]);
+                      "channel number ~p~n", [Frame, Number]),
+            State;
         {ChPid, AState} ->
-            NewAState = rabbit_reader:process_channel_frame(
-                          Frame, ChPid, Number, ChPid, AState),
+            NewAState = process_channel_frame(Frame, Number, ChPid, AState),
             internal_update_npa(Number, ChPid, NewAState, State)
     end.
 

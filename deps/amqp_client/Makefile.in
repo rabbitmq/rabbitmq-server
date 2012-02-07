@@ -11,16 +11,16 @@
 # The Original Code is RabbitMQ.
 #
 # The Initial Developer of the Original Code is VMware, Inc.
-# Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
+# Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 #
 
 VERSION=%%VSN%%
 
 include common.mk
+include test.mk
 
 clean: common_clean
 
-test: compile
+compile_tests:
 	$(MAKE) -C test VERSION=$(VERSION)
-	$(LIBS_PATH) erl -pa ebin test -noinput -eval \
-	    'error_logger:tty(false), io:format("Testing in progress. Please wait...~n"), network_client_SUITE:test(), init:stop()'
+

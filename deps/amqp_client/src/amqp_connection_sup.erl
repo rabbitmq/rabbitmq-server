@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
 %% @private
@@ -21,22 +21,21 @@
 
 -behaviour(supervisor2).
 
--export([start_link/3]).
+-export([start_link/1]).
 -export([init/1]).
 
 %%---------------------------------------------------------------------------
 %% Interface
 %%---------------------------------------------------------------------------
 
-start_link(Type, Module, AmqpParams) ->
+start_link(AmqpParams) ->
     {ok, Sup} = supervisor2:start_link(?MODULE, []),
-    {ok, ChSupSup} = supervisor2:start_child(
-                       Sup,
-                       {channel_sup_sup, {amqp_channel_sup_sup, start_link,
-                                          [Type]},
-                        intrinsic, infinity, supervisor,
-                        [amqp_channel_sup_sup]}),
-    SChMF = start_channels_manager_fun(Sup, ChSupSup),
+    {Type, Module} =
+        case AmqpParams of
+            #amqp_params_direct{}  -> {direct,  amqp_direct_connection};
+            #amqp_params_network{} -> {network, amqp_network_connection}
+        end,
+    SChMF = start_channels_manager_fun(Sup, Type),
     SIF = start_infrastructure_fun(Sup, Type),
     {ok, Connection} = supervisor2:start_child(
                          Sup,
@@ -76,9 +75,15 @@ start_infrastructure_fun(Sup, direct) ->
             {ok, Collector}
     end.
 
-start_channels_manager_fun(Sup, ChSupSup) ->
+start_channels_manager_fun(Sup, Type) ->
     fun () ->
             Connection = self(),
+            {ok, ChSupSup} = supervisor2:start_child(
+                       Sup,
+                       {channel_sup_sup, {amqp_channel_sup_sup, start_link,
+                                          [Type, Connection]},
+                        intrinsic, infinity, supervisor,
+                        [amqp_channel_sup_sup]}),
             {ok, _} = supervisor2:start_child(
                         Sup,
                         {channels_manager, {amqp_channels_manager, start_link,

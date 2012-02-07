@@ -11,12 +11,12 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
 %% @doc This is a utility module that is used to expose an arbitrary function
 %% via an asynchronous RPC over AMQP mechanism. It frees the implementor of
-%% a simple function from having to plumb this into AMQP. Note that the 
+%% a simple function from having to plumb this into AMQP. Note that the
 %% RPC server does not handle any data encoding, so it is up to the callback
 %% function to marshall and unmarshall message payloads accordingly.
 -module(amqp_rpc_server).
@@ -64,9 +64,10 @@ stop(Pid) ->
 
 %% @private
 init([Connection, Q, Fun]) ->
-    {ok, Channel} = amqp_connection:open_channel(Connection),
+    {ok, Channel} = amqp_connection:open_channel(
+                        Connection, {amqp_direct_consumer, [self()]}),
     amqp_channel:call(Channel, #'queue.declare'{queue = Q}),
-    amqp_channel:subscribe(Channel, #'basic.consume'{queue = Q}, self()),
+    amqp_channel:call(Channel, #'basic.consume'{queue = Q}),
     {ok, #state{channel = Channel, handler = Fun} }.
 
 %% @private
@@ -74,7 +75,15 @@ handle_info(shutdown, State) ->
     {stop, normal, State};
 
 %% @private
+handle_info({#'basic.consume'{}, _}, State) ->
+    {noreply, State};
+
+%% @private
 handle_info(#'basic.consume_ok'{}, State) ->
+    {noreply, State};
+
+%% @private
+handle_info(#'basic.cancel'{}, State) ->
     {noreply, State};
 
 %% @private
@@ -95,6 +104,10 @@ handle_info({#'basic.deliver'{delivery_tag = DeliveryTag},
     amqp_channel:call(Channel, Publish, #amqp_msg{props = Properties,
                                                   payload = Response}),
     amqp_channel:call(Channel, #'basic.ack'{delivery_tag = DeliveryTag}),
+    {noreply, State};
+
+%% @private
+handle_info({'DOWN', _MRef, process, _Pid, _Info}, State) ->
     {noreply, State}.
 
 %% @private

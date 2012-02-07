@@ -11,9 +11,10 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
+%% @private
 -module(amqp_auth_mechanisms).
 
 -include("amqp_client.hrl").
@@ -24,14 +25,14 @@
 
 plain(none, _, init) ->
     {<<"PLAIN">>, []};
-plain(none, #amqp_params{username = Username,
-                         password = Password}, _State) ->
+plain(none, #amqp_params_network{username = Username,
+                                 password = Password}, _State) ->
     {<<0, Username/binary, 0, Password/binary>>, _State}.
 
 amqplain(none, _, init) ->
     {<<"AMQPLAIN">>, []};
-amqplain(none, #amqp_params{username = Username,
-                            password = Password}, _State) ->
+amqplain(none, #amqp_params_network{username = Username,
+                                    password = Password}, _State) ->
     LoginTable = [{<<"LOGIN">>,    longstr, Username},
                   {<<"PASSWORD">>, longstr, Password}],
     {rabbit_binary_generator:generate_table(LoginTable), _State}.
