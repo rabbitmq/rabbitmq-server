@@ -449,6 +449,9 @@ handle_info({'DOWN', _, process, FlowHandler, Reason},
     ?LOG_WARN("Channel (~p): Unregistering flow handler ~p because it died. "
               "Reason: ~p~n", [self(), FlowHandler, Reason]),
     {noreply, State#state{flow_handler_pid = none}};
+handle_info({'DOWN', _, process, QPid, _Reason}, State) ->
+    rabbit_amqqueue:notify_sent_queue_down(QPid),
+    {noreply, State};
 handle_info({confirm_timeout, From}, State = #state{waiting_set = WSet}) ->
     case gb_trees:lookup(From, WSet) of
         none ->
