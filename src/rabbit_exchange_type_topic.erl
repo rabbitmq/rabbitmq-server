@@ -250,7 +250,7 @@ remove_all(Table, Pattern) ->
                   mnesia:match_object(Table, Pattern, write)).
 
 new_node_id() ->
-    rabbit_guid:gen_secure().
+    rabbit_guid:gen().
 
 split_topic_key(Key) ->
     split_topic_key(Key, [], []).
