@@ -81,37 +81,37 @@ fresh() ->
     {Serial, node(), make_ref()}.
 
 advance_blocks({B1, B2, B3, B4}, I) ->
-    %% To produce a new set of blocks, we create a new 32bit block hashing {B5,
-    %% I}. The new hash is used as last block, and the other three blocks are
-    %% XORed with it.
-    %% Doing this is convenient because it avoids cascading conflits, while
-    %% being very fast. The conflicts are avoided by propagating the changes
-    %% through all the blocks at each round by XORing, so the only occasion in
-    %% which a collision will take place is when all 4 blocks are the same and
-    %% the counter is the same.
-    %% The range (2^32) is provided explicitly since phash uses 2^27 by default.
+    %% To produce a new set of blocks, we create a new 32bit block
+    %% hashing {B5, I}. The new hash is used as last block, and the
+    %% other three blocks are XORed with it.
+    %%
+    %% Doing this is convenient because it avoids cascading conflits,
+    %% while being very fast. The conflicts are avoided by propagating
+    %% the changes through all the blocks at each round by XORing, so
+    %% the only occasion in which a collision will take place is when
+    %% all 4 blocks are the same and the counter is the same.
+    %%
+    %% The range (2^32) is provided explicitly since phash uses 2^27
+    %% by default.
     B5 = erlang:phash2({B1, I}, 4294967296),
     {{(B2 bxor B5), (B3 bxor B5), (B4 bxor B5), B5}, I+1}.
 
-blocks_to_binary({B1, B2, B3, B4}) ->
-    <<B1:32/integer,B2:32/integer, B3:32/integer,B4:32/integer>>.
+blocks_to_binary({B1, B2, B3, B4}) -> <<B1:32, B2:32, B3:32, B4:32>>.
 
 %% generate a GUID. This function should be used when performance is a
-%% priority and predictability is not an issue. Otherwise, use gen_secure/0.
+%% priority and predictability is not an issue. Otherwise use
+%% gen_secure/0.
 gen() ->
-    %% We hash a fresh GUID with md5, split it in 4 blocks, and each time we
-    %% need a new guid we rotate them producing a new hash with the aid of the
-    %% counter. Look at the comments in advance_blocks/2 for details.
-    {BS, I} =
-        case get(guid) of
-            undefined ->
-                G = fresh(),
-                <<B1:32/integer,B2:32/integer, B3:32/integer,B4:32/integer>> =
-                    erlang:md5(term_to_binary(G)),
-                {{B1,B2,B3,B4}, 0};
-            {BS0, I0}  ->
-                advance_blocks(BS0, I0)
-        end,
+    %% We hash a fresh GUID with md5, split it in 4 blocks, and each
+    %% time we need a new guid we rotate them producing a new hash
+    %% with the aid of the counter. Look at the comments in
+    %% advance_blocks/2 for details.
+    {BS, I} = case get(guid) of
+                  undefined -> <<B1:32, B2:32, B3:32, B4:32>> =
+                                   erlang:md5(term_to_binary(fresh())),
+                               {{B1,B2,B3,B4}, 0};
+                  {BS0, I0} -> advance_blocks(BS0, I0)
+              end,
     put(guid, {BS, I}),
     blocks_to_binary(BS).
 
@@ -122,8 +122,8 @@ gen() ->
 %%
 %% If you are not concerned with predictability, gen/0 is faster.
 gen_secure() ->
-    %% Here instead of hashing once we hash the GUID and the counter each time,
-    %% so that the GUID is not predictable.
+    %% Here instead of hashing once we hash the GUID and the counter
+    %% each time, so that the GUID is not predictable.
     G = case get(guid_secure) of
             undefined -> {fresh(), 0};
             {S, I}    -> {S, I+1}
