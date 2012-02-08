@@ -145,6 +145,8 @@ acronym { background: #add; color: #222; padding: 2px 4px; border-radius: 2px; -
 
 acronym.warning { background: #daa; }
 
+.status acronym, small acronym { background: none; color: inherit; padding: 0; border-bottom: 1px dotted; cursor: default; }
+
 table.bindings { margin-bottom: 1em; }
 td.binding-endpoint span.object { border: 1px solid #bbb; padding: 10px; border-radius: 10px; -moz-border-radius: 10px; }
 td.binding-endpoint span.arrow { font-size: 200%; }

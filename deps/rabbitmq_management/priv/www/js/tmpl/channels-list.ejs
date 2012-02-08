@@ -97,11 +97,10 @@
 <% } %>
     <td class="c"><%= fmt_string(channel.user) %></td>
 <% } %>
-    <td class="c">
+    <td class="l">
       <%= fmt_channel_mode(channel) %>
       <% if (channel.transactional) { %>
-      <sub><%= channel.messages_uncommitted %> uncommitted messages</sub>
-      <sub><%= channel.acks_uncommitted %> uncommitted acks</sub>
+      <small><acronym title="<%= channel.messages_uncommitted %> uncommitted messages"><%= channel.messages_uncommitted %>m</acronym>/<acronym title="<%= channel.acks_uncommitted %> uncommitted acks"><%= channel.acks_uncommitted %>a</acronym></small>
       <% } %>
     </td>
     <td class="c"><%= channel.prefetch_count %></td>

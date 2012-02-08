@@ -11,7 +11,7 @@
 %%   The Original Code is RabbitMQ Management Plugin.
 %%
 %%   The Initial Developer of the Original Code is VMware, Inc.
-%%   Copyright (c) 2010-2011 VMware, Inc.  All rights reserved.
+%%   Copyright (c) 2010-2012 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_mgmt_wm_connection).
@@ -48,7 +48,7 @@ delete_resource(ReqData, Context) ->
     Pid = proplists:get_value(pid, Conn),
     Reason = "Closed via management plugin",
     case proplists:get_value(type, Conn) of
-        direct  -> amqp_connection:close(Pid, 200, Reason);
+        direct  -> amqp_direct_connection:server_close(Pid, 320, Reason);
         network -> rabbit_networking:close_connection(Pid, Reason)
     end,
     {true, ReqData, Context}.

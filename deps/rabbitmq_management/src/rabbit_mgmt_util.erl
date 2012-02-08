@@ -11,7 +11,7 @@
 %%   The Original Code is RabbitMQ Management Plugin.
 %%
 %%   The Initial Developer of the Original Code is VMware, Inc.
-%%   Copyright (c) 2010-2011 VMware, Inc.  All rights reserved.
+%%   Copyright (c) 2010-2012 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_mgmt_util).
@@ -266,7 +266,7 @@ http_to_amqp(MethodName, ReqData, Context, Transformers, Extra) ->
                     try
                         Node = case pget(<<"node">>, Props) of
                                    undefined -> node();
-                                   N         -> rabbit_misc:makenode(
+                                   N         -> rabbit_nodes:make(
                                                   binary_to_list(N))
                                end,
                         amqp_request(VHost, ReqData, Context, Node,

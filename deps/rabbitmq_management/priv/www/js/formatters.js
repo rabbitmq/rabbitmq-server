@@ -343,6 +343,39 @@ function fmt_node_host(node_host) {
     return host + ' <small>(' + node_host + ')</small>';
 }
 
+function fmt_connection_state(conn) {
+    if (conn.state == undefined) return '';
+
+    var colour = 'green';
+    var text = conn.state;
+    var explanation;
+
+    if (conn.last_blocked_by == 'mem' && conn.state == 'blocked') {
+        colour = 'red';
+        explanation = 'Memory alarm: Connection blocked.';
+    }
+    else if (conn.state == 'blocking') {
+        colour = 'yellow';
+        explanation = 'Memory alarm: Connection will block on publish.';
+    }
+    else if (conn.last_blocked_by == 'flow') {
+        var age = conn.last_blocked_age.toFixed();
+        if (age < 5) {
+            colour = 'yellow';
+            text = 'flow';
+            explanation = 'Publishing rate recently restricted by server.';
+        }
+    }
+
+    if (explanation) {
+        return '<div class="' + colour + '"><acronym title="' + explanation +
+            '">' + text + '</acronym></div>';
+    }
+    else {
+        return '<div class="' + colour + '">' + text + '</div>';
+    }
+}
+
 function alt_rows(i) {
     return (i % 2 == 0) ? ' class="alt1"' : ' class="alt2"';
 }
@@ -352,11 +385,11 @@ function esc(str) {
 }
 
 function link_conn(name) {
-    return _link_to(name, '#/connections/' + esc(name))
+    return _link_to(fmt_escape_html(name), '#/connections/' + esc(name))
 }
 
 function link_channel(name) {
-    return _link_to(name, '#/channels/' + esc(name))
+    return _link_to(fmt_escape_html(name), '#/channels/' + esc(name))
 }
 
 function link_exchange(vhost, name) {

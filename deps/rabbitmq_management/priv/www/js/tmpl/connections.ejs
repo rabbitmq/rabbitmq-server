@@ -6,7 +6,7 @@
  <thead>
   <tr>
    <th colspan="<% if (nodes_interesting) { %>6<% } else { %>5<% } %>">Network</th>
-   <th colspan="<% if (vhosts_interesting) { %>4<% } else { %>3<% } %>">Overview</th>
+   <th colspan="<% if (vhosts_interesting) { %>5<% } else { %>4<% } %>">Overview</th>
   </tr>
   <tr>
     <th><%= fmt_sort('Protocol',     'protocol') %></th>
@@ -49,7 +49,7 @@
     <td><%= fmt_string(connection.vhost) %></td>
 <% } %>
     <td><%= fmt_string(connection.user) %></td>
-    <td><%= connection.state %></td>
+    <td class="status"><%= fmt_connection_state(connection) %></td>
   </tr>
   <% } %>
  </tbody>
