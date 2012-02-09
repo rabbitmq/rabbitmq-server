@@ -152,7 +152,7 @@
 -spec(dirty_foreach_key/2 :: (fun ((any()) -> any()), atom())
                              -> 'ok' | 'aborted').
 -spec(dirty_dump_log/1 :: (file:filename()) -> ok_or_error()).
--spec(format/2 :: (string(), [any()]) -> 'ok').
+-spec(format/2 :: (string(), [any()]) -> string()).
 -spec(format_stderr/2 :: (string(), [any()]) -> 'ok').
 -spec(with_local_io/1 :: (fun (() -> A)) -> A).
 -spec(local_info_msg/2 :: (string(), [any()]) -> 'ok').
@@ -414,15 +414,24 @@ execute_mnesia_transaction(TxFun) ->
     %% Making this a sync_transaction allows us to use dirty_read
     %% elsewhere and get a consistent result even when that read
     %% executes on a different node.
-    case worker_pool:submit({mnesia, sync_transaction, [TxFun]}) of
-        {atomic,  Result} -> case mnesia:is_transaction() of
-                                 true  -> ok;
-                                 false -> mnesia_sync:sync()
-                             end,
-                             Result;
-        {aborted, Reason} -> throw({error, Reason})
+    case worker_pool:submit(
+           fun () ->
+                   case mnesia:is_transaction() of
+                       false -> DiskLogBefore = mnesia_dumper:get_log_writes(),
+                                Res = mnesia:sync_transaction(TxFun),
+                                DiskLogAfter  = mnesia_dumper:get_log_writes(),
+                                case DiskLogAfter == DiskLogBefore of
+                                    true  -> Res;
+                                    false -> {sync, Res}
+                                end;
+                       true  -> mnesia:sync_transaction(TxFun)
+                   end
+           end) of
+        {sync, {atomic,  Result}} -> mnesia_sync:sync(), Result;
+        {sync, {aborted, Reason}} -> throw({error, Reason});
+        {atomic,  Result}         -> Result;
+        {aborted, Reason}         -> throw({error, Reason})
     end.
-
 
 %% Like execute_mnesia_transaction/1 with additional Pre- and Post-
 %% commit function

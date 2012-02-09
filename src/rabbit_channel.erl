@@ -33,9 +33,9 @@
 -export([list_local/0]).
 
 -record(ch, {state, protocol, channel, reader_pid, writer_pid, conn_pid,
-             limiter, tx_status, next_tag,
-             unacked_message_q, uncommitted_message_q, uncommitted_acks,
-             user, virtual_host, most_recently_declared_queue, queue_monitors,
+             limiter, tx_status, next_tag, unacked_message_q,
+             uncommitted_message_q, uncommitted_acks, uncommitted_nacks, user,
+             virtual_host, most_recently_declared_queue, queue_monitors,
              consumer_mapping, blocking, queue_consumers, queue_collector_pid,
              stats_timer, confirm_enabled, publish_seqno, unconfirmed_mq,
              unconfirmed_qm, confirmed, capabilities, trace_state}).
@@ -191,6 +191,7 @@ init([Channel, ReaderPid, WriterPid, ConnPid, Protocol, User, VHost,
                 unacked_message_q       = queue:new(),
                 uncommitted_message_q   = queue:new(),
                 uncommitted_acks        = [],
+                uncommitted_nacks       = [],
                 user                    = User,
                 virtual_host            = VHost,
                 most_recently_declared_queue = <<>>,
@@ -295,29 +296,19 @@ handle_cast({command, Msg}, State = #ch{writer_pid = WriterPid}) ->
 handle_cast({deliver, ConsumerTag, AckRequired,
              Msg = {_QName, QPid, _MsgId, Redelivered,
                     #basic_message{exchange_name = ExchangeName,
-                                   routing_keys = [RoutingKey | _CcRoutes],
-                                   content = Content}}},
-            State = #ch{writer_pid  = WriterPid,
-                        next_tag    = DeliveryTag,
-                        trace_state = TraceState}) ->
-    State1 = lock_message(AckRequired,
-                          ack_record(DeliveryTag, ConsumerTag, Msg),
-                          State),
-
-    M = #'basic.deliver'{consumer_tag = ConsumerTag,
-                         delivery_tag = DeliveryTag,
-                         redelivered = Redelivered,
-                         exchange = ExchangeName#resource.name,
-                         routing_key = RoutingKey},
-    rabbit_writer:send_command_and_notify(WriterPid, QPid, self(), M, Content),
-    maybe_incr_stats([{QPid, 1}], case AckRequired of
-                                      true  -> deliver;
-                                      false -> deliver_no_ack
-                                  end, State1),
-    maybe_incr_redeliver_stats(Redelivered, QPid, State1),
-    rabbit_trace:tap_trace_out(Msg, TraceState),
-    noreply(State1#ch{next_tag = DeliveryTag + 1});
-
+                                   routing_keys  = [RoutingKey | _CcRoutes],
+                                   content       = Content}}},
+            State = #ch{writer_pid = WriterPid,
+                        next_tag   = DeliveryTag}) ->
+    ok = rabbit_writer:send_command_and_notify(
+           WriterPid, QPid, self(),
+           #'basic.deliver'{consumer_tag = ConsumerTag,
+                            delivery_tag = DeliveryTag,
+                            redelivered  = Redelivered,
+                            exchange     = ExchangeName#resource.name,
+                            routing_key  = RoutingKey},
+           Content),
+    noreply(record_sent(ConsumerTag, AckRequired, Msg, State));
 
 handle_cast(force_event_refresh, State) ->
     rabbit_event:notify(channel_created, infos(?CREATION_EVENT_KEYS, State)),
@@ -695,38 +686,28 @@ handle_method(#'basic.ack'{delivery_tag = DeliveryTag,
 
 handle_method(#'basic.get'{queue = QueueNameBin,
                            no_ack = NoAck},
-              _, State = #ch{writer_pid  = WriterPid,
-                             conn_pid    = ConnPid,
-                             next_tag    = DeliveryTag,
-                             trace_state = TraceState}) ->
+              _, State = #ch{writer_pid = WriterPid,
+                             conn_pid   = ConnPid,
+                             next_tag   = DeliveryTag}) ->
     QueueName = expand_queue_name_shortcut(QueueNameBin, State),
     check_read_permitted(QueueName, State),
     case rabbit_amqqueue:with_exclusive_access_or_die(
            QueueName, ConnPid,
            fun (Q) -> rabbit_amqqueue:basic_get(Q, self(), NoAck) end) of
         {ok, MessageCount,
-         Msg = {_QName, QPid, _MsgId, Redelivered,
+         Msg = {_QName, _QPid, _MsgId, Redelivered,
                 #basic_message{exchange_name = ExchangeName,
-                               routing_keys = [RoutingKey | _CcRoutes],
-                               content = Content}}} ->
-            State1 = lock_message(not(NoAck),
-                                  ack_record(DeliveryTag, none, Msg),
-                                  State),
-            maybe_incr_stats([{QPid, 1}], case NoAck of
-                                              true  -> get_no_ack;
-                                              false -> get
-                                          end, State1),
-            maybe_incr_redeliver_stats(Redelivered, QPid, State1),
-            rabbit_trace:tap_trace_out(Msg, TraceState),
+                               routing_keys  = [RoutingKey | _CcRoutes],
+                               content       = Content}}} ->
             ok = rabbit_writer:send_command(
                    WriterPid,
-                   #'basic.get_ok'{delivery_tag = DeliveryTag,
-                                   redelivered = Redelivered,
-                                   exchange = ExchangeName#resource.name,
-                                   routing_key = RoutingKey,
+                   #'basic.get_ok'{delivery_tag  = DeliveryTag,
+                                   redelivered   = Redelivered,
+                                   exchange      = ExchangeName#resource.name,
+                                   routing_key   = RoutingKey,
                                    message_count = MessageCount},
                    Content),
-            {noreply, State1#ch{next_tag = DeliveryTag + 1}};
+            {noreply, record_sent(none, not(NoAck), Msg, State)};
         empty ->
             {reply, #'basic.get_empty'{}, State}
     end;
@@ -746,7 +727,8 @@ handle_method(#'basic.consume'{queue        = QueueNameBin,
             check_read_permitted(QueueName, State),
             ActualConsumerTag =
                 case ConsumerTag of
-                    <<>>  -> rabbit_guid:binstring_guid("amq.ctag");
+                    <<>>  -> rabbit_guid:binary(rabbit_guid:gen_secure(),
+                                                "amq.ctag");
                     Other -> Other
                 end,
 
@@ -975,7 +957,8 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
                 false -> none
             end,
     ActualNameBin = case QueueNameBin of
-                        <<>>  -> rabbit_guid:binstring_guid("amq.gen");
+                        <<>>  -> rabbit_guid:binary(rabbit_guid:gen_secure(),
+                                                    "amq.gen");
                         Other -> check_name('queue', Other)
                     end,
     QueueName = rabbit_misc:r(VHostPath, queue, ActualNameBin),
@@ -1083,10 +1066,15 @@ handle_method(#'tx.commit'{}, _, #ch{tx_status = none}) ->
     rabbit_misc:protocol_error(
       precondition_failed, "channel is not transactional", []);
 
-handle_method(#'tx.commit'{}, _, State = #ch{uncommitted_message_q = TMQ,
-                                             uncommitted_acks      = TAL}) ->
+handle_method(#'tx.commit'{}, _,
+              State = #ch{uncommitted_message_q = TMQ,
+                          uncommitted_acks      = TAL,
+                          uncommitted_nacks     = TNL,
+                          limiter               = Limiter}) ->
     State1 = rabbit_misc:queue_fold(fun deliver_to_queues/2, State, TMQ),
     ack(TAL, State1),
+    lists:foreach(
+      fun({Requeue, Acked}) -> reject(Requeue, Acked, Limiter) end, TNL),
     {noreply, maybe_complete_tx(new_tx(State1#ch{tx_status = committing}))};
 
 handle_method(#'tx.rollback'{}, _, #ch{tx_status = none}) ->
@@ -1094,8 +1082,10 @@ handle_method(#'tx.rollback'{}, _, #ch{tx_status = none}) ->
       precondition_failed, "channel is not transactional", []);
 
 handle_method(#'tx.rollback'{}, _, State = #ch{unacked_message_q = UAMQ,
-                                               uncommitted_acks  = TAL}) ->
-    UAMQ1 = queue:from_list(lists:usort(TAL ++ queue:to_list(UAMQ))),
+                                               uncommitted_acks  = TAL,
+                                               uncommitted_nacks = TNL}) ->
+    TNL1 = lists:append([L || {_, L} <- TNL]),
+    UAMQ1 = queue:from_list(lists:usort(TAL ++ TNL1 ++ queue:to_list(UAMQ))),
     {reply, #'tx.rollback_ok'{}, new_tx(State#ch{unacked_message_q = UAMQ1})};
 
 handle_method(#'confirm.select'{}, _, #ch{tx_status = in_progress}) ->
@@ -1259,18 +1249,46 @@ basic_return(#basic_message{exchange_name = ExchangeName,
                            routing_key = RoutingKey},
            Content).
 
-reject(DeliveryTag, Requeue, Multiple, State = #ch{unacked_message_q = UAMQ}) ->
+reject(DeliveryTag, Requeue, Multiple,
+       State = #ch{unacked_message_q = UAMQ, tx_status = TxStatus}) ->
     {Acked, Remaining} = collect_acks(UAMQ, DeliveryTag, Multiple),
+    State1 = State#ch{unacked_message_q = Remaining},
+    {noreply,
+     case TxStatus of
+         none ->
+             reject(Requeue, Acked, State1#ch.limiter),
+             State1;
+         in_progress ->
+             State1#ch{uncommitted_nacks =
+                           [{Requeue, Acked} | State1#ch.uncommitted_nacks]}
+     end}.
+
+reject(Requeue, Acked, Limiter) ->
     ok = fold_per_queue(
            fun (QPid, MsgIds, ok) ->
                    rabbit_amqqueue:reject(QPid, MsgIds, Requeue, self())
            end, ok, Acked),
-    ok = notify_limiter(State#ch.limiter, Acked),
-    {noreply, State#ch{unacked_message_q = Remaining}}.
+    ok = notify_limiter(Limiter, Acked).
 
-ack_record(DeliveryTag, ConsumerTag,
-           _MsgStruct = {_QName, QPid, MsgId, _Redelivered, _Msg}) ->
-    {DeliveryTag, ConsumerTag, {QPid, MsgId}}.
+record_sent(ConsumerTag, AckRequired,
+            Msg = {_QName, QPid, MsgId, Redelivered, _Message},
+            State = #ch{unacked_message_q = UAMQ,
+                        next_tag          = DeliveryTag,
+                        trace_state       = TraceState}) ->
+    maybe_incr_stats([{QPid, 1}], case {ConsumerTag, AckRequired} of
+                                      {none,  true} -> get;
+                                      {none, false} -> get_no_ack;
+                                      {_   ,  true} -> deliver;
+                                      {_   , false} -> deliver_no_ack
+                                  end, State),
+    maybe_incr_redeliver_stats(Redelivered, QPid, State),
+    rabbit_trace:tap_trace_out(Msg, TraceState),
+    UAMQ1 = case AckRequired of
+                true  -> queue:in({DeliveryTag, ConsumerTag, {QPid, MsgId}},
+                                  UAMQ);
+                false -> UAMQ
+            end,
+    State#ch{unacked_message_q = UAMQ1, next_tag = DeliveryTag + 1}.
 
 collect_acks(Q, 0, true) ->
     {queue:to_list(Q), queue:new()};
@@ -1305,7 +1323,8 @@ ack(Acked, State) ->
     maybe_incr_stats(QIncs, ack, State).
 
 new_tx(State) -> State#ch{uncommitted_message_q = queue:new(),
-                          uncommitted_acks      = []}.
+                          uncommitted_acks      = [],
+                          uncommitted_nacks     = []}.
 
 notify_queues(State = #ch{state = closing}) ->
     {ok, State};
@@ -1394,11 +1413,6 @@ process_routing_result(routed,    QPids, XName,  MsgSeqNo,   _, State) ->
                       State0#ch{unconfirmed_qm = UQM1}
               end
       end, State#ch{unconfirmed_mq = UMQ1}, QPids).
-
-lock_message(true, MsgStruct, State = #ch{unacked_message_q = UAMQ}) ->
-    State#ch{unacked_message_q = queue:in(MsgStruct, UAMQ)};
-lock_message(false, _MsgStruct, State) ->
-    State.
 
 send_nacks([], State) ->
     State;

@@ -78,10 +78,8 @@ diagnostics_host(Host) ->
                         {Name, Port} <- NamePorts]]}
     end.
 
-make({Prefix, Suffix}) ->
-    list_to_atom(lists:append([Prefix, "@", Suffix]));
-make(NodeStr) ->
-    make(parts(NodeStr)).
+make({Prefix, Suffix}) -> list_to_atom(lists:append([Prefix, "@", Suffix]));
+make(NodeStr)          -> make(parts(NodeStr)).
 
 parts(Node) when is_atom(Node) ->
     parts(atom_to_list(Node));
