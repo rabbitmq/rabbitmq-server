@@ -55,7 +55,7 @@ notify_cluster() ->
         {_, Bad} -> rabbit_log:info("failed to contact nodes ~p~n", [Bad])
     end,
     %% register other active rabbits with this rabbit
-    [ rabbit_node_monitor:rabbit_running_on(N) || N <- Nodes ],
+    [ rabbit_running_on(N) || N <- Nodes ],
     ok.
 
 %%--------------------------------------------------------------------
