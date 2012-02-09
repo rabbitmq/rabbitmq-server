@@ -744,9 +744,9 @@ timeout(State = #vqstate { index_state = IndexState }) ->
     IndexState1 = rabbit_queue_index:sync(IndexState),
     State1 = State #vqstate { index_state = IndexState1 },
     a(case reduce_memory_use(
-             fun (_Quota, State1) -> {0, State1} end,
-             fun (_Quota, State1) -> State1 end,
-             fun (_Quota, State1) -> {0, State1} end,
+             fun (_Quota, State2) -> {0, State2} end,
+             fun (_Quota, State2) -> State2 end,
+             fun (_Quota, State2) -> {0, State2} end,
              State) of
           {true,  _State} -> reduce_memory_use(State1);
           {false, _State} -> State1
@@ -1266,13 +1266,6 @@ find_persistent_count(LensByStore) ->
 %%----------------------------------------------------------------------------
 %% Internal plumbing for confirms (aka publisher acks)
 %%----------------------------------------------------------------------------
-
-confirm_commit_index(State = #vqstate { index_state = IndexState }) ->
-    case needs_index_sync(State) of
-        true  -> State #vqstate {
-                   index_state = rabbit_queue_index:sync(IndexState) };
-        false -> State
-    end.
 
 record_confirms(MsgIdSet, State = #vqstate { msgs_on_disk        = MOD,
                                              msg_indices_on_disk = MIOD,
