@@ -376,9 +376,8 @@ sync(Ref) ->
 needs_sync(Ref) ->
     with_handles(
       [Ref],
-      fun ([#handle { write_buffer = [_|_] }]) -> true;
-          ([#handle { is_dirty = true      }]) -> true;
-          ([_Handle])                          -> false
+      fun ([#handle { is_dirty = false, write_buffer = [] }]) -> false;
+          ([_Handle])                                         -> true
       end).
 
 position(Ref, NewOffset) ->
