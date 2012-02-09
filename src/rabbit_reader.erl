@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_reader).
@@ -265,10 +265,9 @@ mainloop(Deb, State = #v1{sock = Sock, buf = Buf, buf_len = BufLen}) ->
         {data, Data}    -> recvloop(Deb, State#v1{buf = [Data | Buf],
                                                   buf_len = BufLen + size(Data),
                                                   pending_recv = false});
-        closed          -> if State#v1.connection_state =:= closed ->
-                                   State;
-                              true ->
-                                   throw(connection_closed_abruptly)
+        closed          -> case State#v1.connection_state of
+                               closed -> State;
+                               _      -> throw(connection_closed_abruptly)
                            end;
         {error, Reason} -> throw({inet_error, Reason});
         {other, Other}  -> handle_other(Other, Deb, State)
@@ -500,23 +499,21 @@ handle_frame(Type, Channel, Payload,
     case rabbit_command_assembler:analyze_frame(Type, Payload, Protocol) of
         error         -> throw({unknown_frame, Channel, Type, Payload});
         heartbeat     -> throw({unexpected_heartbeat_frame, Channel});
-        AnalyzedFrame ->
-            case get({channel, Channel}) of
-                {ChPid, AState} ->
-                    NewAState = process_channel_frame(
-                                  AnalyzedFrame, Channel, ChPid, AState),
-                    put({channel, Channel}, {ChPid, NewAState}),
-                    post_process_frame(AnalyzedFrame, ChPid,
-                                       control_throttle(State));
-                undefined ->
-                    case ?IS_RUNNING(State) of
-                        true  -> send_to_new_channel(
-                                   Channel, AnalyzedFrame, State);
-                        false -> throw({channel_frame_while_starting,
-                                        Channel, State#v1.connection_state,
-                                        AnalyzedFrame})
-                    end
-            end
+        AnalyzedFrame -> process_frame(AnalyzedFrame, Channel, State)
+    end.
+
+process_frame(Frame, Channel, State) ->
+    case get({channel, Channel}) of
+        {ChPid, AState} ->
+            NewAState = process_channel_frame(Frame, Channel, ChPid, AState),
+            put({channel, Channel}, {ChPid, NewAState}),
+            post_process_frame(Frame, ChPid, State);
+        undefined when ?IS_RUNNING(State) ->
+            ok = create_channel(Channel, State),
+            process_frame(Frame, Channel, State);
+        undefined ->
+            throw({channel_frame_while_starting,
+                   Channel, State#v1.connection_state, Frame})
     end.
 
 post_process_frame({method, 'channel.close_ok', _}, ChPid, State) ->
@@ -527,11 +524,11 @@ post_process_frame({method, MethodName, _}, _ChPid,
                                  protocol = Protocol}}) ->
     case Protocol:method_has_content(MethodName) of
         true  -> erlang:bump_reductions(2000),
-                 maybe_block(State);
-        false -> State
+                 maybe_block(control_throttle(State));
+        false -> control_throttle(State)
     end;
 post_process_frame(_Frame, _ChPid, State) ->
-    State.
+    control_throttle(State).
 
 handle_input(frame_header, <<Type:8,Channel:16,PayloadSize:32>>, State) ->
     ensure_stats_timer(
@@ -896,7 +893,7 @@ cert_info(F, Sock) ->
 
 %%--------------------------------------------------------------------------
 
-send_to_new_channel(Channel, AnalyzedFrame, State) ->
+create_channel(Channel, State) ->
     #v1{sock = Sock, queue_collector = Collector,
         channel_sup_sup_pid = ChanSupSup,
         connection = #connection{protocol     = Protocol,
@@ -909,10 +906,9 @@ send_to_new_channel(Channel, AnalyzedFrame, State) ->
           ChanSupSup, {tcp, Sock, Channel, FrameMax, self(), Protocol, User,
                        VHost, Capabilities, Collector}),
     MRef = erlang:monitor(process, ChPid),
-    NewAState = process_channel_frame(AnalyzedFrame, Channel, ChPid, AState),
-    put({channel, Channel}, {ChPid, NewAState}),
     put({ch_pid, ChPid}, {Channel, MRef}),
-    State.
+    put({channel, Channel}, {ChPid, AState}),
+    ok.
 
 process_channel_frame(Frame, Channel, ChPid, AState) ->
     case rabbit_command_assembler:process(Frame, AState) of

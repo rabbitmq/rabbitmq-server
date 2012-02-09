@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_writer).
@@ -128,6 +128,9 @@ handle_message({send_command_and_notify, QPid, ChPid, MethodRecord, Content},
                State) ->
     ok = internal_send_command_async(MethodRecord, Content, State),
     rabbit_amqqueue:notify_sent(QPid, ChPid),
+    State;
+handle_message({'DOWN', _MRef, process, QPid, _Reason}, State) ->
+    rabbit_amqqueue:notify_sent_queue_down(QPid),
     State;
 handle_message({inet_reply, _, ok}, State) ->
     State;

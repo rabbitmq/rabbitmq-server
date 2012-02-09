@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_amqqueue).
@@ -25,7 +25,7 @@
 -export([force_event_refresh/0]).
 -export([consumers/1, consumers_all/1, consumer_info_keys/0]).
 -export([basic_get/3, basic_consume/7, basic_cancel/4]).
--export([notify_sent/2, unblock/2, flush_all/2]).
+-export([notify_sent/2, notify_sent_queue_down/1, unblock/2, flush_all/2]).
 -export([notify_down_all/2, limit_all/3]).
 -export([on_node_down/1]).
 -export([store_queue/1]).
@@ -39,6 +39,8 @@
 -include_lib("stdlib/include/qlc.hrl").
 
 -define(INTEGER_ARG_TYPES, [byte, short, signedint, long]).
+
+-define(MORE_CONSUMER_CREDIT_AFTER, 50).
 
 %%----------------------------------------------------------------------------
 
@@ -137,6 +139,7 @@
 -spec(basic_cancel/4 ::
         (rabbit_types:amqqueue(), pid(), rabbit_types:ctag(), any()) -> 'ok').
 -spec(notify_sent/2 :: (pid(), pid()) -> 'ok').
+-spec(notify_sent_queue_down/1 :: (pid()) -> 'ok').
 -spec(unblock/2 :: (pid(), pid()) -> 'ok').
 -spec(flush_all/2 :: (qpids(), pid()) -> 'ok').
 -spec(internal_delete/1 ::
@@ -461,7 +464,21 @@ basic_cancel(#amqqueue{pid = QPid}, ChPid, ConsumerTag, OkMsg) ->
     ok = delegate_call(QPid, {basic_cancel, ChPid, ConsumerTag, OkMsg}).
 
 notify_sent(QPid, ChPid) ->
-    gen_server2:cast(QPid, {notify_sent, ChPid}).
+    Key = {consumer_credit_to, QPid},
+    put(Key, case get(Key) of
+                 1         -> gen_server2:cast(
+                                QPid, {notify_sent, ChPid,
+                                       ?MORE_CONSUMER_CREDIT_AFTER}),
+                              ?MORE_CONSUMER_CREDIT_AFTER;
+                 undefined -> erlang:monitor(process, QPid),
+                              ?MORE_CONSUMER_CREDIT_AFTER - 1;
+                 C         -> C - 1
+             end),
+    ok.
+
+notify_sent_queue_down(QPid) ->
+    erase({consumer_credit_to, QPid}),
+    ok.
 
 unblock(QPid, ChPid) ->
     delegate_cast(QPid, {unblock, ChPid}).

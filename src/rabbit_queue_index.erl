@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_queue_index).
@@ -496,7 +496,7 @@ recover_message(false,     _, no_del,  RelSeq, Segment) ->
 
 queue_name_to_dir_name(Name = #resource { kind = queue }) ->
     <<Num:128>> = erlang:md5(term_to_binary(Name)),
-    lists:flatten(io_lib:format("~.36B", [Num])).
+    rabbit_misc:format("~.36B", [Num]).
 
 queues_dir() ->
     filename:join(rabbit_mnesia:dir(), "queues").

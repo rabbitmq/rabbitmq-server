@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
 
@@ -23,8 +23,8 @@
          empty_ram_only_tables/0, copy_db/1, wait_for_tables/1,
          create_cluster_nodes_config/1, read_cluster_nodes_config/0,
          record_running_nodes/0, read_previously_running_nodes/0,
-         delete_previously_running_nodes/0, running_nodes_filename/0,
-         is_disc_node/0, on_node_down/1, on_node_up/1]).
+         running_nodes_filename/0, is_disc_node/0, on_node_down/1,
+         on_node_up/1]).
 
 -export([table_names/0]).
 
@@ -64,7 +64,6 @@
 -spec(read_cluster_nodes_config/0 :: () ->  [node()]).
 -spec(record_running_nodes/0 :: () ->  'ok').
 -spec(read_previously_running_nodes/0 :: () ->  [node()]).
--spec(delete_previously_running_nodes/0 :: () ->  'ok').
 -spec(running_nodes_filename/0 :: () -> file:filename()).
 -spec(is_disc_node/0 :: () -> boolean()).
 -spec(on_node_up/1 :: (node()) -> 'ok').
@@ -104,6 +103,7 @@ init() ->
     %% Mnesia is up. In fact that's not guaranteed to be the case - let's
     %% make it so.
     ok = global:sync(),
+    ok = delete_previously_running_nodes(),
     ok.
 
 is_db_empty() ->
@@ -622,10 +622,9 @@ move_db() ->
     stop_mnesia(),
     MnesiaDir = filename:dirname(dir() ++ "/"),
     {{Year, Month, Day}, {Hour, Minute, Second}} = erlang:universaltime(),
-    BackupDir = lists:flatten(
-                  io_lib:format("~s_~w~2..0w~2..0w~2..0w~2..0w~2..0w",
-                                [MnesiaDir,
-                                 Year, Month, Day, Hour, Minute, Second])),
+    BackupDir = rabbit_misc:format(
+                  "~s_~w~2..0w~2..0w~2..0w~2..0w~2..0w",
+                  [MnesiaDir, Year, Month, Day, Hour, Minute, Second]),
     case file:rename(MnesiaDir, BackupDir) of
         ok ->
             %% NB: we cannot use rabbit_log here since it may not have
