@@ -285,8 +285,8 @@ ack(SeqIds, State) ->
 
 %% This is only called when there are outstanding confirms and the
 %% queue is idle.
-sync(State) ->
-    sync_if(needs_sync(State), State).
+sync(State = #qistate { unsynced_msg_ids = MsgIds }) ->
+    sync_if(true, State).
 
 sync(SeqIds, State) ->
     %% The SeqIds here contains the SeqId of every publish and ack to
@@ -298,8 +298,10 @@ sync(SeqIds, State) ->
     %% seqids not being in the journal.
     sync_if([] =/= SeqIds, State).
 
-needs_sync(State = #qistate { unsynced_msg_ids = MsgIds }) ->
-    not gb_sets:is_empty(MsgIds).
+needs_sync(#qistate { journal_handle = undefined }) ->
+    false;
+needs_sync(#qistate { journal_handle = JournalHdl }) ->
+    file_handle_cache:needs_sync(JournalHdl).
 
 flush(State = #qistate { dirty_count = 0 }) -> State;
 flush(State)                                -> flush_journal(State).
