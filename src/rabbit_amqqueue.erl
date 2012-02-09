@@ -472,7 +472,7 @@ notify_sent(QPid, ChPid) ->
                               ?MORE_CONSUMER_CREDIT_AFTER;
                  undefined -> erlang:monitor(process, QPid),
                               ?MORE_CONSUMER_CREDIT_AFTER - 1;
-                 C0        -> C0 - 1
+                 C         -> C - 1
              end),
     ok.
 
