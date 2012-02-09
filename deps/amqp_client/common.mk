@@ -32,7 +32,6 @@
 # tarball version. This avoids duplicating make definitions and rules and
 # helps keep the Makefile maintenence well factored.
 
-
 ifndef TMPDIR
 TMPDIR := /tmp
 endif
