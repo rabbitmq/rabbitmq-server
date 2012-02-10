@@ -92,7 +92,7 @@ post-destroot {
 
     xinstall -m 555 ${filespath}/rabbitmq-script-wrapper \
                 ${wrappersbin}/rabbitmq-server
-    reinplace -E "s:MACPORTS_PREFIX/bin:${prefix}/bin:g" \
+    reinplace -E "s:@MACPORTS_PREFIX@:${prefix}:g" \
                 ${wrappersbin}/rabbitmq-server
     reinplace -E "s:/usr/lib/rabbitmq/bin/:${prefix}/lib/rabbitmq/bin/:g" \
                 ${wrappersbin}/rabbitmq-server
