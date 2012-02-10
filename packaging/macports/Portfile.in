@@ -89,18 +89,14 @@ post-destroot {
     xinstall -d -g [existsgroup ${servergroup}] -m 775 ${destroot}${serverhome}
     xinstall -d -g [existsgroup ${servergroup}] -m 775 ${destroot}${mnesiadbdir}
 
-    reinplace -E "s:(/etc/rabbitmq/rabbitmq):${prefix}\\1:g" \
-        ${realsbin}/rabbitmq-env
-    foreach var {CONFIG_FILE LOG_BASE MNESIA_BASE ENABLED_PLUGINS_FILE} {
-        reinplace -E "s:^($var)=/:\\1=${prefix}/:" \
-            ${realsbin}/rabbitmq-server \
-            ${realsbin}/rabbitmqctl \
-            ${realsbin}/rabbitmq-plugins
-    }
+    reinplace -E "s:^SYS_PREFIX=\${RABBITMQ_HOME}$:SYS_PREFIX=${prefix}:" \
+        ${realsbin}/rabbitmq-sys
+    reinplace -E "s:^SYS_PREFIX=$:SYS_PREFIX=${prefix}:" \
+        ${realsbin}/rabbitmq-sys
 
     xinstall -m 555 ${filespath}/rabbitmq-script-wrapper \
                 ${wrappersbin}/rabbitmq-server
-    reinplace -E "s:MACPORTS_PREFIX/bin:${prefix}/bin:g" \
+    reinplace -E "s:@MACPORTS_PREFIX@:${prefix}:g" \
                 ${wrappersbin}/rabbitmq-server
     reinplace -E "s:/usr/lib/rabbitmq/bin/:${prefix}/lib/rabbitmq/bin/:g" \
                 ${wrappersbin}/rabbitmq-server
