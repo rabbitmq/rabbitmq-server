@@ -15,7 +15,8 @@ cd $dir/macports
 svn checkout http://svn.macports.org/repository/macports/trunk/dports/net/rabbitmq-server/ 2>&1 >/dev/null
 
 # Clear out the svn $id tag
-sed -i -e 's|^# \$.*$|# $Id$|' rabbitmq-server/Portfile
+sed -e 's|^# \$.*$|# $Id$|' rabbitmq-server/Portfile >rabbitmq-server/Portfile.tmp \
+    && mv rabbitmq-server/Portfile.tmp rabbitmq-server/Portfile
 
 # Get the files from the rabbitmq.com macports repo
 cd ../rabbitmq
