@@ -15,7 +15,7 @@
 ##  Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 ##
 
-# Determine where this script is really located
+# Determine where this script is really located (if this script is embedded, this is the location of the caller)
 SCRIPT_PATH="$0"
 while [ -h "$SCRIPT_PATH" ] ; do
     FULL_PATH=`readlink -f $SCRIPT_PATH 2>/dev/null`
