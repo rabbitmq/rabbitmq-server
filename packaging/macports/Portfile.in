@@ -87,7 +87,7 @@ post-destroot {
     xinstall -d -g [existsgroup ${servergroup}] -m 775 ${destroot}${serverhome}
     xinstall -d -g [existsgroup ${servergroup}] -m 775 ${destroot}${mnesiadbdir}
 
-    reinplace -E 's:^SYS_PREFIX=\${RABBITMQ_HOME}$:SYS_PREFIX='"${prefix}"':' \
+    reinplace -E "s:^SYS_PREFIX=\${RABBITMQ_HOME}$:SYS_PREFIX=${prefix}:" \
         ${realsbin}/rabbitmq-sys \
 
     xinstall -m 555 ${filespath}/rabbitmq-script-wrapper \
