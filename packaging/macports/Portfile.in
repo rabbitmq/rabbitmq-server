@@ -48,6 +48,7 @@ set serveruser  rabbitmq
 set servergroup rabbitmq
 set serverhome ${prefix}/var/lib/rabbitmq
 set logdir ${prefix}/var/log/rabbitmq
+set enabledpluginsdir ${prefix}/etc/rabbitmq
 set mnesiadbdir ${prefix}/var/lib/rabbitmq/mnesia
 set plistloc ${prefix}/etc/LaunchDaemons/org.macports.rabbitmq-server
 set sbindir ${destroot}${prefix}/lib/rabbitmq/bin
@@ -83,6 +84,7 @@ pre-destroot {
 }
 
 post-destroot {
+    xinstall -d -g [existsgroup ${servergroup}] -m 775 ${destroot}${enabledpluginsdir}
     xinstall -d -g [existsgroup ${servergroup}] -m 775 ${destroot}${logdir}
     xinstall -d -g [existsgroup ${servergroup}] -m 775 ${destroot}${serverhome}
     xinstall -d -g [existsgroup ${servergroup}] -m 775 ${destroot}${mnesiadbdir}
