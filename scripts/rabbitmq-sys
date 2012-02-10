@@ -15,14 +15,17 @@
 ##  Copyright (c) 2012 VMware, Inc.  All rights reserved.
 ##
 
+### next line potentially updated in package install steps, do not alter
+SYS_PREFIX=
+
 ## Set system default values
 SERVER_ERL_ARGS="+K true +A30 +P 1048576 \
 -kernel inet_default_connect_options [{nodelay,true}]"
 
-CONFIG_FILE=/etc/rabbitmq/rabbitmq
-LOG_BASE=/var/log/rabbitmq
-MNESIA_BASE=/var/lib/rabbitmq/mnesia
-ENABLED_PLUGINS_FILE=/etc/rabbitmq/enabled_plugins
+CONFIG_FILE=${SYS_PREFIX}/etc/rabbitmq/rabbitmq
+LOG_BASE=${SYS_PREFIX}/var/log/rabbitmq
+MNESIA_BASE=${SYS_PREFIX}/var/lib/rabbitmq/mnesia
+ENABLED_PLUGINS_FILE=${SYS_PREFIX}/etc/rabbitmq/enabled_plugins
 
 OLD_CONF_ENV_FILE=${CONFIG_FILE}.conf
 CONF_ENV_FILE=${CONFIG_FILE}-env.conf

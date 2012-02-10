@@ -89,6 +89,8 @@ post-destroot {
 
     reinplace -E "s:^SYS_PREFIX=\${RABBITMQ_HOME}$:SYS_PREFIX=${prefix}:" \
         ${realsbin}/rabbitmq-sys \
+    reinplace -E "s:^SYS_PREFIX=$:SYS_PREFIX=${prefix}:" \
+        ${realsbin}/rabbitmq-sys \
 
     xinstall -m 555 ${filespath}/rabbitmq-script-wrapper \
                 ${wrappersbin}/rabbitmq-server
