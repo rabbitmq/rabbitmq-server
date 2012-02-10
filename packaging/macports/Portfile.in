@@ -75,6 +75,7 @@ destroot.destdir \
     MAN_DIR=${destroot}${prefix}/share/man
 
 destroot.keepdirs \
+    ${destroot}${enabledpluginsdir} \
     ${destroot}${logdir} \
     ${destroot}${mnesiadbdir}
 
