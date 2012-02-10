@@ -16,17 +16,19 @@
 ##
 
 ### generic-unix ###
+### next line potentially updated in package install steps, do not alter
+SYS_PREFIX=${RABBITMQ_HOME}
 
 ## Set system default values
 SERVER_ERL_ARGS="+K true +A30 +P 1048576 \
 -kernel inet_default_connect_options [{nodelay,true}]"
 
-CONFIG_FILE=${RABBITMQ_HOME}/rabbitmq
+CONFIG_FILE=${SYS_PREFIX}/etc/rabbitmq/rabbitmq
+LOG_BASE=${SYS_PREFIX}/var/log/rabbitmq
+MNESIA_BASE=${SYS_PREFIX}/var/lib/rabbitmq/mnesia
+ENABLED_PLUGINS_FILE=${SYS_PREFIX}/etc/rabbitmq/enabled_plugins
 
-LOG_BASE=${RABBITMQ_HOME}/log
+OLD_CONF_ENV_FILE=${CONFIG_FILE}.conf
+CONF_ENV_FILE=${CONFIG_FILE}-env.conf
 
-MNESIA_BASE=${RABBITMQ_HOME}/mnesia
-
-PLUGINS_DIR=${RABBITMQ_HOME}/plugins
-
-ENABLED_PLUGINS_FILE=${RABBITMQ_HOME}/enabled_plugins
+PLUGINS_DIR="${RABBITMQ_HOME}/plugins"
