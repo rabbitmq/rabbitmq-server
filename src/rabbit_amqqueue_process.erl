@@ -932,7 +932,7 @@ make_dead_letter_msg(DLX, Reason,
         case DlxRoutingKey of
             undefined -> {RoutingKeys, Headers1};
             _         -> {[DlxRoutingKey],
-                          rabbit_misc:remove_table_value(Headers1, <<"CC">>)}
+                          lists:keydelete(<<"CC">>, 1, Headers1)}
         end,
     Content2 =
         rabbit_binary_generator:clear_encoded_content(
@@ -1283,9 +1283,7 @@ handle_cast({deliver, Delivery = #delivery{sender     = Sender,
             _ ->
                 case already_been_here(Delivery, State) of
                     false -> true;
-                    Qs    -> rabbit_log:warning(
-                               "Message dropped. Dead-letter queues " ++
-                               "cycle detected: ~p~n", [Qs]),
+                    Qs    -> log_cycle_once(Qs),
                              rabbit_misc:confirm_to_sender(Sender,
                                                            [MsgSeqNo]),
                              false
@@ -1465,3 +1463,14 @@ handle_pre_hibernate(State = #q{backing_queue = BQ,
     {hibernate, stop_rate_timer(State1)}.
 
 format_message_queue(Opt, MQ) -> rabbit_misc:format_message_queue(Opt, MQ).
+
+log_cycle_once(Queues) ->
+    Key = {queue_cycle, Queues},
+    case get(Key) of
+        true      -> ok;
+        undefined -> rabbit_log:warning(
+                       "Message dropped. Dead-letter queues cycle detected" ++
+                       ": ~p~nThis cycle will NOT be reported again.~n",
+                       [Queues]),
+                     put(Key, true)
+    end.
