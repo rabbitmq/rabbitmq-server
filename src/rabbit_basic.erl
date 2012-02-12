@@ -19,7 +19,8 @@
 -include("rabbit_framing.hrl").
 
 -export([publish/4, publish/6, publish/1,
-         message/3, message/4, properties/1, delivery/4]).
+         message/3, message/4, properties/1, delivery/4,
+         header_routes/1]).
 -export([build_content/2, from_content/1]).
 
 %%----------------------------------------------------------------------------

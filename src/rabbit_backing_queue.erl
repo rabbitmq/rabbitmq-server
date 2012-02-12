@@ -95,15 +95,19 @@ behaviour_info(callbacks) ->
      {drain_confirmed, 1},
 
      %% Drop messages from the head of the queue while the supplied
-     %% predicate returns true.
-     {dropwhile, 2},
+     %% predicate returns true. A callback function is supplied
+     %% allowing callers access to messages that are about to be
+     %% dropped.
+     {dropwhile, 3},
 
      %% Produce the next message.
      {fetch, 2},
 
      %% Acktags supplied are for messages which can now be forgotten
-     %% about. Must return 1 msg_id per Ack, in the same order as Acks.
-     {ack, 2},
+     %% about. Must return 1 msg_id per Ack, in the same order as
+     %% Acks. A callback function is supplied allowing callers to
+     %% access messages that are being acked.
+     {ack, 3},
 
      %% Reinsert messages into the queue which have already been
      %% delivered and were pending acknowledgement.
