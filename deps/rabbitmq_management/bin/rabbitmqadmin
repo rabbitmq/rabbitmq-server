@@ -190,7 +190,7 @@ parser = OptionParser(usage=make_usage())
 
 def make_parser():
     parser.add_option("-c", "--config", dest="config",
-                      help="configuration file",
+                      help="configuration file [default if node is specified: ~/.rabbitmqadmin.conf]",
                       metavar="CONFIG")
     parser.add_option("-N", "--node", dest="node",
                       help="node described in the configuration file",
@@ -229,7 +229,10 @@ def make_parser():
 def make_configuration():
     make_parser()
     (options, args) = parser.parse_args()
-    if options.config and options.node:
+    if options.node and options.config is None:
+        home = os.getenv('USERPROFILE') or os.getenv('HOME')
+        setattr(options, "config", home + os.sep + ".rabbitmqadmin.conf")
+    if options.node:
         config = ConfigParser()
         config.read(options.config)
         try:
@@ -240,6 +243,10 @@ def make_configuration():
         for (key, val) in new_conf.items():
             new_opts[key] = val
         for (key, val) in new_opts.items():
+            if getattr(options, key) is None:
+                setattr(options, key, val)
+    else:
+        for (key, val) in DefaultOptions.items():
             if getattr(options, key) is None:
                 setattr(options, key, val)
     return (options, args)
