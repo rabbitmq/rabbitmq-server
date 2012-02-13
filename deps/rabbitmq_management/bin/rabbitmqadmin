@@ -15,7 +15,8 @@
 #   The Initial Developer of the Original Code is VMware, Inc.
 #   Copyright (c) 2010-2012 VMware, Inc.  All rights reserved.
 
-from ConfigParser import ConfigParser, NoSectionError
+from ConfigParser import ConfigParser
+from ConfigParser import Error as ConfigParserError
 from optparse import OptionParser
 import sys
 import httplib
@@ -234,11 +235,13 @@ def make_configuration():
         setattr(options, "config", home + os.sep + ".rabbitmqadmin.conf")
     if options.node:
         config = ConfigParser()
-        config.read(options.config)
         try:
+            config.read(options.config)
             new_conf = dict(config.items(options.node))
-        except NoSectionError as error:
-            assert_usage(False, error)
+        except ConfigParserError as error:
+            assert_usage(False, ("Could not read section '%s' in config file"  +
+                         " '%s':\n   %s") %
+                         (options.node, options.config, error))
         new_opts = DefaultOptions.copy()
         for (key, val) in new_conf.items():
             new_opts[key] = val
