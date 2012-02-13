@@ -127,18 +127,19 @@ def subcommands_usage():
     usage += fmt_usage_stanza(DELETABLE,   'delete')
     usage += fmt_usage_stanza(CLOSABLE,    'close')
     usage += fmt_usage_stanza(PURGABLE,    'purge')
+    usage += title("Broker Definitions")
+    usage += """  export <file>
+  import <file>
+"""
     usage += title("Publishing and Consuming")
     usage += fmt_usage_stanza(EXTRA_VERBS, '')
-    usage += """  * If payload is not specified on publish, standard input is used
+    usage += """
+  * If payload is not specified on publish, standard input is used
 
   * If payload_file is not specified on get, the payload will be shown on
     standard output along with the message metadata
 
   * If payload_file is specified on get, count must not be set
-"""
-    usage += title("Broker Definitions")
-    usage += """  export <file>
-  import <file>
 """
     return usage
 
@@ -197,7 +198,7 @@ def fmt_usage_stanza(root, verb):
         verb = " " + verb
     for k in root.keys():
         text += " {0} {1} {2}\n".format(verb, k, fmt_args(root[k]))
-    return text + "\n"
+    return text
 
 default_options = { "hostname"        : "localhost",
                     "port"            : "55672",
