@@ -16,7 +16,7 @@
 ##
 
 ### generic-unix ###
-### next line potentially updated in package install steps, do not alter
+### next line potentially updated in package install steps
 SYS_PREFIX=${RABBITMQ_HOME}
 
 ## Set system default values
