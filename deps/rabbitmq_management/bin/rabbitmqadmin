@@ -17,7 +17,7 @@
 
 from ConfigParser import ConfigParser
 from ConfigParser import Error as ConfigParserError
-from optparse import OptionParser
+from optparse import OptionParser, TitledHelpFormatter
 import sys
 import httplib
 import urllib
@@ -104,45 +104,60 @@ for k in DELETABLE:
     DELETABLE[k]['optional'] = {}
 DELETABLE['binding']['uri'] = URIS['binding_del']
 
-def make_usage():
-    usage = """usage: %prog [options] cmd
-where cmd is one of:
+def short_usage():
+    return "rabbitmqadmin [options] subcommand"
 
-"""
+def title(name):
+    return "\n%s\n%s\n\n" % (name, '=' * len(name))
+
+def subcommands_usage():
+    usage = """Usage
+=====
+  """ + short_usage() + """
+
+  where subcommand is one of:
+""" + title("Display")
+
     for l in LISTABLE:
         usage += "  list {0} [<column>...]\n".format(l)
     for s in SHOWABLE:
         usage += "  show {0} [<column>...]\n".format(s)
+    usage += title("Object Manipulation")
     usage += fmt_usage_stanza(DECLARABLE,  'declare')
     usage += fmt_usage_stanza(DELETABLE,   'delete')
     usage += fmt_usage_stanza(CLOSABLE,    'close')
     usage += fmt_usage_stanza(PURGABLE,    'purge')
+    usage += title("Publishing and Consuming")
     usage += fmt_usage_stanza(EXTRA_VERBS, '')
-    usage += """
-  export <file>
-  import <file>
-
-  * If payload is not specified on publish, standard input is used
+    usage += """  * If payload is not specified on publish, standard input is used
 
   * If payload_file is not specified on get, the payload will be shown on
     standard output along with the message metadata
 
   * If payload_file is specified on get, count must not be set
-  
-  CONFIGURATION FILE
-  
-  It is possible to specify a configuration file from the command line.
+"""
+    usage += title("Broker Definitions")
+    usage += """  export <file>
+  import <file>
+"""
+    return usage
+
+def config_usage():
+    usage = "Usage\n=====\n" + short_usage()
+    usage += "\n" + title("Configuration File")
+    usage += """  It is possible to specify a configuration file from the command line.
   Hosts can be configured easily in a configuration file and called
   from the command line.
-  
-  ### Configuration file example
-  # rabbitmqadmin.conf.example START
+"""
+    usage += title("Example")
+    usage += """  # rabbitmqadmin.conf.example START
+
   [host_normal]
   hostname = localhost
   port = 55672
   username = guest
   password = guest
-  
+
   [host_ssl]
   hostname = otherhost
   port = 55672
@@ -151,13 +166,23 @@ where cmd is one of:
   ssl = True
   ssl_key_file = /path/to/key.pem
   ssl_cert_file = /path/to/cert.pem
+
   # rabbitmqadmin.conf.example END
-  
-  ### to benefit from the configuration file:
-  
-  rabbitmqadmin -c rabbitmqadmin.conf.example -N host_normal ...
-  """
+"""
+    usage += title("Use")
+    usage += """  rabbitmqadmin -c rabbitmqadmin.conf.example -N host_normal ..."""
     return usage
+
+def more_help():
+    return """
+More Help
+=========
+
+For more help use the help subcommand:
+
+  rabbitmqadmin help subcommands  # For a list of available subcommands
+  rabbitmqadmin help config       # For help with the configuration file
+"""
 
 def fmt_usage_stanza(root, verb):
     def fmt_args(args):
@@ -167,12 +192,12 @@ def fmt_usage_stanza(root, verb):
             res += " [{0}]".format(opts)
         return res
 
-    text = "\n"
+    text = ""
     if verb != "":
         verb = " " + verb
     for k in root.keys():
         text += " {0} {1} {2}\n".format(verb, k, fmt_args(root[k]))
-    return text
+    return text + "\n"
 
 default_options = { "hostname"        : "localhost",
                     "port"            : "55672",
@@ -184,7 +209,14 @@ default_options = { "hostname"        : "localhost",
                     "depth"           : 1,
                     "bash_completion" : False }
 
-parser = OptionParser(usage=make_usage())
+
+class MyFormatter(TitledHelpFormatter):
+    def format_epilog(self, epilog):
+        return epilog
+
+parser = OptionParser(usage=short_usage(),
+                      formatter=MyFormatter(),
+                      epilog=more_help())
 
 def make_parser():
     def add(*args, **kwargs):
@@ -352,6 +384,17 @@ class Management:
     def get_arg(self):
         assert_usage(len(self.args) == 1, 'Exactly one argument required')
         return self.args[0]
+
+    def invoke_help(self):
+        help_cmd = self.get_arg()
+        if help_cmd == 'subcommands':
+            usage = subcommands_usage()
+        elif help_cmd == 'config':
+            usage = config_usage()
+        else:
+            assert_usage("help topic must be one of: subcommands config")
+        print usage
+        exit(0)
 
     def invoke_publish(self):
         (uri, upload) = self.parse_args(self.args, EXTRA_VERBS['publish'])
@@ -692,7 +735,7 @@ _rabbitmqadmin()
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
 
-    opts="list show declare delete close purge import export get publish"
+    opts="list show declare delete close purge import export get publish help"
     fargs="--help --host --port --vhost --username --password --format --depth"
 
     case "${prev}" in
@@ -726,6 +769,11 @@ _rabbitmqadmin()
             ;;
 	import)
 	    COMPREPLY=( $(compgen -f ${cur}) )
+            return 0
+            ;;
+	help)
+            opts="subcommands config"
+	    COMPREPLY=( $(compgen -W "${opts}"  -- ${cur}) )
             return 0
             ;;
 	-@(H|-host))
