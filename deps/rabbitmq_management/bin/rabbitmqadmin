@@ -392,7 +392,9 @@ class Management:
         elif help_cmd == 'config':
             usage = config_usage()
         else:
-            assert_usage("help topic must be one of: subcommands config")
+            assert_usage(False, """help topic must be one of:
+  subcommands
+  config""")
         print usage
         exit(0)
 
