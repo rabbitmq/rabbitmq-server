@@ -174,58 +174,62 @@ def fmt_usage_stanza(root, verb):
         text += " {0} {1} {2}\n".format(verb, k, fmt_args(root[k]))
     return text
 
-DefaultOptions = {"hostname" : "localhost",
-                  "port" : "55672",
-                  "vhost" : None,
-                  "username" : "guest",
-                  "password" : "guest",
-                  "ssl" : False,
-                  "ssl_key_file" : None,
-                  "ssl_cert_file" : None,
-                  "verbose" : True,
-                  "format" : "table",
-                  "depth" : 1,
-                  "bash_completion" : False }
+default_options = { "hostname"        : "localhost",
+                    "port"            : "55672",
+                    "username"        : "guest",
+                    "password"        : "guest",
+                    "ssl"             : False,
+                    "verbose"         : True,
+                    "format"          : "table",
+                    "depth"           : 1,
+                    "bash_completion" : False }
 
 parser = OptionParser(usage=make_usage())
 
 def make_parser():
-    parser.add_option("-c", "--config", dest="config",
-                      help="configuration file [default if node is specified: ~/.rabbitmqadmin.conf]",
-                      metavar="CONFIG")
-    parser.add_option("-N", "--node", dest="node",
-                      help="node described in the configuration file",
-                      metavar="NODE")
-    parser.add_option("-H", "--host", dest="hostname",
-                      help="connect to host HOST [default: %default]",
-                      metavar="HOST")
-    parser.add_option("-P", "--port", dest="port",
-                      help="connect to port PORT [default: %default]",
-                      metavar="PORT")
-    parser.add_option("-V", "--vhost", dest="vhost",
-                      help="connect to vhost VHOST [default: all vhosts for list, '/' for declare]",
-                      metavar="VHOST")
-    parser.add_option("-u", "--username", dest="username",
-                      help="connect using username USERNAME [default: %default]",
-                      metavar="USERNAME")
-    parser.add_option("-p", "--password", dest="password",
-                      help="connect using password PASSWORD [default: %default]",
-                      metavar="PASSWORD")
-    parser.add_option("-q", "--quiet", action="store_false", dest="verbose",
-                      help="suppress status messages")
-    parser.add_option("-s", "--ssl", action="store_true", dest="ssl",
-                      help="connect with ssl")
-    parser.add_option("--ssl-key-file", dest="ssl_key_file",
-                      help="PEM format key file for SSL [default: none]")
-    parser.add_option("--ssl-cert-file", dest="ssl_cert_file",
-                      help="PEM format certificate file for SSL [default: none]")
-    parser.add_option("-f", "--format", dest="format",
-                      help="format for listing commands - one of [" + ", ".join(FORMATS.keys())  + "]  [default: %default]")
-    parser.add_option("-d", "--depth", dest="depth",
-                      help="maximum depth to recurse for listing tables [default: %default]")
-    parser.add_option("--bash-completion", action="store_true",
-                      dest="bash_completion",
-                      help="Print bash completion script")
+    def add(*args, **kwargs):
+        key = kwargs['dest']
+        if key in default_options:
+            default = " [default: %s]" % default_options[key]
+            kwargs['help'] = kwargs['help'] + default
+        parser.add_option(*args, **kwargs)
+
+    add("-c", "--config", dest="config",
+        help="configuration file [default: ~/.rabbitmqadmin.conf]",
+        metavar="CONFIG")
+    add("-N", "--node", dest="node",
+        help="node described in the configuration file",
+        metavar="NODE")
+    add("-H", "--host", dest="hostname",
+        help="connect to host HOST" ,
+        metavar="HOST")
+    add("-P", "--port", dest="port",
+        help="connect to port PORT",
+        metavar="PORT")
+    add("-V", "--vhost", dest="vhost",
+        help="connect to vhost VHOST [default: all vhosts for list, '/' for declare]",
+        metavar="VHOST")
+    add("-u", "--username", dest="username",
+        help="connect using username USERNAME",
+        metavar="USERNAME")
+    add("-p", "--password", dest="password",
+        help="connect using password PASSWORD",
+        metavar="PASSWORD")
+    add("-q", "--quiet", action="store_false", dest="verbose",
+        help="suppress status messages")
+    add("-s", "--ssl", action="store_true", dest="ssl",
+        help="connect with ssl")
+    add("--ssl-key-file", dest="ssl_key_file",
+        help="PEM format key file for SSL")
+    add("--ssl-cert-file", dest="ssl_cert_file",
+        help="PEM format certificate file for SSL")
+    add("-f", "--format", dest="format",
+        help="format for listing commands - one of [" + ", ".join(FORMATS.keys())  + "]")
+    add("-d", "--depth", dest="depth",
+        help="maximum depth to recurse for listing tables")
+    add("--bash-completion", action="store_true",
+        dest="bash_completion",
+        help="Print bash completion script")
 
 def make_configuration():
     make_parser()
@@ -242,14 +246,14 @@ def make_configuration():
             assert_usage(False, ("Could not read section '%s' in config file"  +
                          " '%s':\n   %s") %
                          (options.node, options.config, error))
-        new_opts = DefaultOptions.copy()
+        new_opts = default_options.copy()
         for (key, val) in new_conf.items():
             new_opts[key] = val
         for (key, val) in new_opts.items():
             if getattr(options, key) is None:
                 setattr(options, key, val)
     else:
-        for (key, val) in DefaultOptions.items():
+        for (key, val) in default_options.items():
             if getattr(options, key) is None:
                 setattr(options, key, val)
     return (options, args)
