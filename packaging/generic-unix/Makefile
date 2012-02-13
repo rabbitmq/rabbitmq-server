@@ -15,6 +15,8 @@ dist:
 	cp -f rabbitmq-sys $(TARGET_DIR)/sbin
 	chmod 0755 $(TARGET_DIR)/sbin/rabbitmq-sys
 
+	mkdir -p $(TARGET_DIR)/etc/rabbitmq
+
 	tar -zcf $(TARGET_TARBALL).tar.gz $(TARGET_DIR)
 	rm -rf $(SOURCE_DIR) $(TARGET_DIR)
 
