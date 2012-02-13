@@ -15,7 +15,9 @@
 #   The Initial Developer of the Original Code is VMware, Inc.
 #   Copyright (c) 2010-2012 VMware, Inc.  All rights reserved.
 
-from optparse import OptionParser
+from ConfigParser import ConfigParser
+from ConfigParser import Error as ConfigParserError
+from optparse import OptionParser, TitledHelpFormatter
 import sys
 import httplib
 import urllib
@@ -102,31 +104,86 @@ for k in DELETABLE:
     DELETABLE[k]['optional'] = {}
 DELETABLE['binding']['uri'] = URIS['binding_del']
 
-def make_usage():
-    usage = """usage: %prog [options] cmd
-where cmd is one of:
+def short_usage():
+    return "rabbitmqadmin [options] subcommand"
 
-"""
+def title(name):
+    return "\n%s\n%s\n\n" % (name, '=' * len(name))
+
+def subcommands_usage():
+    usage = """Usage
+=====
+  """ + short_usage() + """
+
+  where subcommand is one of:
+""" + title("Display")
+
     for l in LISTABLE:
         usage += "  list {0} [<column>...]\n".format(l)
     for s in SHOWABLE:
         usage += "  show {0} [<column>...]\n".format(s)
+    usage += title("Object Manipulation")
     usage += fmt_usage_stanza(DECLARABLE,  'declare')
     usage += fmt_usage_stanza(DELETABLE,   'delete')
     usage += fmt_usage_stanza(CLOSABLE,    'close')
     usage += fmt_usage_stanza(PURGABLE,    'purge')
+    usage += title("Broker Definitions")
+    usage += """  export <file>
+  import <file>
+"""
+    usage += title("Publishing and Consuming")
     usage += fmt_usage_stanza(EXTRA_VERBS, '')
     usage += """
-  export <file>
-  import <file>
-
   * If payload is not specified on publish, standard input is used
 
   * If payload_file is not specified on get, the payload will be shown on
     standard output along with the message metadata
 
-  * If payload_file is specified on get, count must not be set"""
+  * If payload_file is specified on get, count must not be set
+"""
     return usage
+
+def config_usage():
+    usage = "Usage\n=====\n" + short_usage()
+    usage += "\n" + title("Configuration File")
+    usage += """  It is possible to specify a configuration file from the command line.
+  Hosts can be configured easily in a configuration file and called
+  from the command line.
+"""
+    usage += title("Example")
+    usage += """  # rabbitmqadmin.conf.example START
+
+  [host_normal]
+  hostname = localhost
+  port = 55672
+  username = guest
+  password = guest
+
+  [host_ssl]
+  hostname = otherhost
+  port = 55672
+  username = guest
+  password = guest
+  ssl = True
+  ssl_key_file = /path/to/key.pem
+  ssl_cert_file = /path/to/cert.pem
+
+  # rabbitmqadmin.conf.example END
+"""
+    usage += title("Use")
+    usage += """  rabbitmqadmin -c rabbitmqadmin.conf.example -N host_normal ..."""
+    return usage
+
+def more_help():
+    return """
+More Help
+=========
+
+For more help use the help subcommand:
+
+  rabbitmqadmin help subcommands  # For a list of available subcommands
+  rabbitmqadmin help config       # For help with the configuration file
+"""
 
 def fmt_usage_stanza(root, verb):
     def fmt_args(args):
@@ -136,46 +193,103 @@ def fmt_usage_stanza(root, verb):
             res += " [{0}]".format(opts)
         return res
 
-    text = "\n"
+    text = ""
     if verb != "":
         verb = " " + verb
     for k in root.keys():
         text += " {0} {1} {2}\n".format(verb, k, fmt_args(root[k]))
     return text
 
-parser = OptionParser(usage=make_usage())
+default_options = { "hostname"        : "localhost",
+                    "port"            : "55672",
+                    "username"        : "guest",
+                    "password"        : "guest",
+                    "ssl"             : False,
+                    "verbose"         : True,
+                    "format"          : "table",
+                    "depth"           : 1,
+                    "bash_completion" : False }
+
+
+class MyFormatter(TitledHelpFormatter):
+    def format_epilog(self, epilog):
+        return epilog
+
+parser = OptionParser(usage=short_usage(),
+                      formatter=MyFormatter(),
+                      epilog=more_help())
 
 def make_parser():
-    parser.add_option("-H", "--host", dest="hostname", default="localhost",
-                      help="connect to host HOST [default: %default]",
-                      metavar="HOST")
-    parser.add_option("-P", "--port", dest="port", default="55672",
-                      help="connect to port PORT [default: %default]",
-                      metavar="PORT")
-    parser.add_option("-V", "--vhost", dest="vhost",
-                      help="connect to vhost VHOST [default: all vhosts for list, '/' for declare]",
-                      metavar="VHOST")
-    parser.add_option("-u", "--username", dest="username", default="guest",
-                      help="connect using username USERNAME [default: %default]",
-                      metavar="USERNAME")
-    parser.add_option("-p", "--password", dest="password", default="guest",
-                      help="connect using password PASSWORD [default: %default]",
-                      metavar="PASSWORD")
-    parser.add_option("-q", "--quiet", action="store_false", dest="verbose",
-                      default=True, help="suppress status messages")
-    parser.add_option("-s", "--ssl", action="store_true", dest="ssl",
-                      default=False, help="connect with ssl")
-    parser.add_option("--ssl-key-file", dest="ssl_key_file", default=None,
-                      help="PEM format key file for SSL [default: none]")
-    parser.add_option("--ssl-cert-file", dest="ssl_cert_file", default=None,
-                      help="PEM format certificate file for SSL [default: none]")
-    parser.add_option("-f", "--format", dest="format", default="table",
-                      help="format for listing commands - one of [" + ", ".join(FORMATS.keys())  + "]  [default: %default]")
-    parser.add_option("-d", "--depth", dest="depth", default="1",
-                      help="maximum depth to recurse for listing tables [default: %default]")
-    parser.add_option("--bash-completion", action="store_true",
-                      dest="bash_completion", default=False,
-                      help="Print bash completion script")
+    def add(*args, **kwargs):
+        key = kwargs['dest']
+        if key in default_options:
+            default = " [default: %s]" % default_options[key]
+            kwargs['help'] = kwargs['help'] + default
+        parser.add_option(*args, **kwargs)
+
+    add("-c", "--config", dest="config",
+        help="configuration file [default: ~/.rabbitmqadmin.conf]",
+        metavar="CONFIG")
+    add("-N", "--node", dest="node",
+        help="node described in the configuration file",
+        metavar="NODE")
+    add("-H", "--host", dest="hostname",
+        help="connect to host HOST" ,
+        metavar="HOST")
+    add("-P", "--port", dest="port",
+        help="connect to port PORT",
+        metavar="PORT")
+    add("-V", "--vhost", dest="vhost",
+        help="connect to vhost VHOST [default: all vhosts for list, '/' for declare]",
+        metavar="VHOST")
+    add("-u", "--username", dest="username",
+        help="connect using username USERNAME",
+        metavar="USERNAME")
+    add("-p", "--password", dest="password",
+        help="connect using password PASSWORD",
+        metavar="PASSWORD")
+    add("-q", "--quiet", action="store_false", dest="verbose",
+        help="suppress status messages")
+    add("-s", "--ssl", action="store_true", dest="ssl",
+        help="connect with ssl")
+    add("--ssl-key-file", dest="ssl_key_file",
+        help="PEM format key file for SSL")
+    add("--ssl-cert-file", dest="ssl_cert_file",
+        help="PEM format certificate file for SSL")
+    add("-f", "--format", dest="format",
+        help="format for listing commands - one of [" + ", ".join(FORMATS.keys())  + "]")
+    add("-d", "--depth", dest="depth",
+        help="maximum depth to recurse for listing tables")
+    add("--bash-completion", action="store_true",
+        dest="bash_completion",
+        help="Print bash completion script")
+
+def make_configuration():
+    make_parser()
+    (options, args) = parser.parse_args()
+    if options.node and options.config is None:
+        home = os.getenv('USERPROFILE') or os.getenv('HOME')
+        setattr(options, "config", home + os.sep + ".rabbitmqadmin.conf")
+    if options.node:
+        config = ConfigParser()
+        try:
+            config.read(options.config)
+            new_conf = dict(config.items(options.node))
+        except ConfigParserError as error:
+            assert_usage(False, ("Could not read section '%s' in config file"  +
+                         " '%s':\n   %s") %
+                         (options.node, options.config, error))
+        new_opts = default_options.copy()
+        for (key, val) in new_conf.items():
+            new_opts[key] = val
+        for (key, val) in new_opts.items():
+            if getattr(options, key) is None:
+                setattr(options, key, val)
+    else:
+        for (key, val) in default_options.items():
+            if getattr(options, key) is None:
+                setattr(options, key, val)
+    return (options, args)
 
 def assert_usage(expr, error):
     if not expr:
@@ -190,8 +304,7 @@ def column_sort_key(col):
         return (2, col)
 
 def main():
-    make_parser()
-    (options, args) = parser.parse_args()
+    (options, args) = make_configuration()
     if options.bash_completion:
         print_bash_completion()
         exit(0)
@@ -272,6 +385,19 @@ class Management:
     def get_arg(self):
         assert_usage(len(self.args) == 1, 'Exactly one argument required')
         return self.args[0]
+
+    def invoke_help(self):
+        help_cmd = self.get_arg()
+        if help_cmd == 'subcommands':
+            usage = subcommands_usage()
+        elif help_cmd == 'config':
+            usage = config_usage()
+        else:
+            assert_usage(False, """help topic must be one of:
+  subcommands
+  config""")
+        print usage
+        exit(0)
 
     def invoke_publish(self):
         (uri, upload) = self.parse_args(self.args, EXTRA_VERBS['publish'])
@@ -612,7 +738,7 @@ _rabbitmqadmin()
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
 
-    opts="list show declare delete close purge import export get publish"
+    opts="list show declare delete close purge import export get publish help"
     fargs="--help --host --port --vhost --username --password --format --depth"
 
     case "${prev}" in
@@ -646,6 +772,11 @@ _rabbitmqadmin()
             ;;
 	import)
 	    COMPREPLY=( $(compgen -f ${cur}) )
+            return 0
+            ;;
+	help)
+            opts="subcommands config"
+	    COMPREPLY=( $(compgen -W "${opts}"  -- ${cur}) )
             return 0
             ;;
 	-@(H|-host))
