@@ -236,8 +236,8 @@ parse_routing_information({Type, Name})
 valid_dest_prefixes() -> ?VALID_DEST_PREFIXES.
 
 durable_subscription_queue(Destination, SubscriptionId) ->
-    <<(list_to_binary("stomp.dsub." ++ Destination ++ "."))/binary,
-      (erlang:md5(SubscriptionId))/binary>>.
+    rabbit_guid:binary(erlang:md5(SubscriptionId),
+                       "stomp.dsub." ++ Destination).
 
 %% ---- Destination parsing helpers ----
 
