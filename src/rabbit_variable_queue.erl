@@ -593,8 +593,8 @@ dropwhile(Pred, MsgFun, State) ->
                 {true, _} ->
                     {{_, _, AckTag, _}, State2} =
                         internal_fetch(true, MsgStatus, State1),
-                    State3 = MsgFun(read_msg_callback(MsgStatus), AckTag, State2),
-                    dropwhile(Pred, MsgFun, State3);
+                    dropwhile(Pred, MsgFun, MsgFun(read_msg_callback(MsgStatus),
+                                                   AckTag, State2));
                 {false, _} ->
                     a(in_r(MsgStatus, State1))
             end
@@ -648,11 +648,11 @@ ack(AckTags, undefined, State) ->
                          ack_out_counter  = AckOutCount + length(AckTags) })};
 
 ack(AckTags, MsgFun, State = #vqstate{pending_ack = PA}) ->
-    State2 = lists:foldl(fun(SeqId, State1) ->
-                                 AckEntry = gb_trees:get(SeqId, PA),
-                                 MsgFun(read_msg_callback(AckEntry), SeqId, State1)
-                         end, State, AckTags),
-    {[], State2}.
+    {[], lists:foldl(
+           fun(SeqId, State1) ->
+                   AckEntry = gb_trees:get(SeqId, PA),
+                   MsgFun(read_msg_callback(AckEntry), SeqId, State1)
+           end, State, AckTags)}.
 
 requeue(AckTags, #vqstate { delta = Delta,
                             q3         = Q3,
