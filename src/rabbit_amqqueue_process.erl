@@ -863,6 +863,8 @@ cleanup_after_confirm(State = #q{blocked_op     = Op,
             noreply(State)
     end.
 
+already_been_here(_Delivery, #q{dlx = undefined}) ->
+    false;
 already_been_here(#delivery{message = #basic_message{content = Content}},
                   State) ->
     #content{properties = #'P_basic'{headers = Headers}} =
@@ -1262,37 +1264,23 @@ handle_cast({run_backing_queue, Mod, Fun}, State) ->
     noreply(run_backing_queue(Mod, Fun, State));
 
 handle_cast({deliver, Delivery = #delivery{sender     = Sender,
-                                           msg_seq_no = MsgSeqNo},
-             Flow}, State = #q{dlx = DLX}) ->
+                                           msg_seq_no = MsgSeqNo}, Flow},
+            State) ->
     %% Asynchronous, non-"mandatory", non-"immediate" deliver mode.
-    ShouldDeliver =
-        case DLX of
-            undefined ->
-                true;
-            _ ->
-                case already_been_here(Delivery, State) of
-                    false -> true;
-                    Qs    -> log_cycle_once(Qs),
-                             rabbit_misc:confirm_to_sender(Sender,
-                                                           [MsgSeqNo]),
-                             false
-                end
-        end,
-    case ShouldDeliver of
-        false -> noreply(State);
-        true  -> case Flow of
-                     flow ->
-                         Key = {ch_publisher, Sender},
-                         case get(Key) of
-                             undefined -> put(Key, erlang:monitor(process,
-                                                                  Sender));
-                             _         -> ok
-                         end,
-                         credit_flow:ack(Sender);
-                     noflow ->
-                         ok
-                 end,
-                 noreply(deliver_or_enqueue(Delivery, State))
+    case Flow of
+        flow   -> Key = {ch_publisher, Sender},
+                  case get(Key) of
+                      undefined -> put(Key, erlang:monitor(process, Sender));
+                      _         -> ok
+                  end,
+                  credit_flow:ack(Sender);
+        noflow -> ok
+    end,
+    case already_been_here(Delivery, State) of
+        false -> noreply(deliver_or_enqueue(Delivery, State));
+        Qs    -> log_cycle_once(Qs),
+                 rabbit_misc:confirm_to_sender(Sender, [MsgSeqNo]),
+                 noreply(State)
     end;
 
 handle_cast({ack, AckTags, ChPid}, State) ->
