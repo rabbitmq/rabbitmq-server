@@ -771,18 +771,9 @@ dead_letter_msg(Msg, AckTag, Reason,
         _  -> State3 =
                   lists:foldl(
                     fun(QPid, State0 = #q{unconfirmed_qm = UQM}) ->
-                            case gb_trees:lookup(QPid, UQM) of
-                                {value, MsgSeqNos} ->
-                                    MsgSeqNos1 = gb_sets:insert(MsgSeqNo,
-                                                                MsgSeqNos),
-                                    UQM1 = gb_trees:update(QPid, MsgSeqNos1,
-                                                           UQM),
-                                    State0#q{unconfirmed_qm = UQM1};
-                                none ->
-                                    S = gb_sets:singleton(MsgSeqNo),
-                                    UQM1 = gb_trees:insert(QPid, S, UQM),
-                                    State0#q{unconfirmed_qm = UQM1}
-                            end
+                            UQM1 = rabbit_misc:gb_trees_set_insert(
+                                     QPid, MsgSeqNo, UQM),
+                            State0#q{unconfirmed_qm = UQM1}
                     end, State2, QPids),
               noreply(State3#q{
                         unconfirmed_mq =
@@ -807,18 +798,21 @@ demonitor_queue(QPid, State = #q{queue_monitors = QMons}) ->
     end.
 
 handle_queue_down(QPid, State = #q{queue_monitors = QMons,
-                                   unconfirmed_mq = UMQ}) ->
+                                   unconfirmed_qm = UQM}) ->
     case dict:find(QPid, QMons) of
         error ->
             noreply(State);
         {ok, _} ->
             #resource{name = QName} = qname(State),
             rabbit_log:info("DLQ ~p (for ~p) died~n", [QPid, QName]),
-            MsgSeqNos = [MsgSeqNo ||
-                            {MsgSeqNo, {QPids, _}} <- gb_trees:to_list(UMQ),
-                            gb_sets:is_member(QPid, QPids)],
-            handle_confirm(MsgSeqNos, QPid,
-                           State#q{queue_monitors = dict:erase(QPid, QMons)})
+            case gb_trees:lookup(QPid, UQM) of
+                none ->
+                    noreply(State);
+                {value, MsgSeqNosSet} ->
+                    handle_confirm(gb_sets:to_list(MsgSeqNosSet), QPid,
+                                   State#q{queue_monitors =
+                                               dict:erase(QPid, QMons)})
+            end
     end.
 
 handle_confirm(MsgSeqNos, QPid, State = #q{unconfirmed_mq      = UMQ,
@@ -866,7 +860,7 @@ cleanup_after_confirm(State = #q{blocked_op     = Op,
             end,
             {stop, normal, State1};
         _ ->
-            noreply(State1#q{blocked_op = Op})
+            noreply(State)
     end.
 
 already_been_here(#delivery{message = #basic_message{content = Content}},
