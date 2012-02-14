@@ -860,7 +860,7 @@ cleanup_after_confirm(State = #q{blocked_ops    = Ops,
                  State1 = State#q{blocked_ops = []},
                  case lists:any(fun({Rsn, _}) -> Rsn =:= delete end, Ops) of
                      true  -> {stop, normal, State1};
-                     false -> noreply(State)
+                     false -> noreply(State1)
                  end;
         false -> noreply(State)
     end.
