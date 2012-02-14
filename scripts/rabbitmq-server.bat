@@ -123,7 +123,7 @@ if not "!RABBITMQ_NODE_IP_ADDRESS!"=="" (
    )
 )
 
-start "!RABBITMQ_NODENAME!" "!ERLANG_HOME!\bin\erl.exe" ^
+"!ERLANG_HOME!\bin\erl.exe" ^
 !RABBITMQ_EBIN_PATH! ^
 -noinput ^
 -boot "!RABBITMQ_BOOT_FILE!" ^
@@ -145,46 +145,6 @@ start "!RABBITMQ_NODENAME!" "!ERLANG_HOME!\bin\erl.exe" ^
 -mnesia dir \""!RABBITMQ_MNESIA_DIR:\=/!"\" ^
 !RABBITMQ_SERVER_START_ARGS! ^
 !STAR!
-
-:: pid file ::
-set PID_FILE=%RABBITMQ_BASE%\pid.txt
-echo pidfile is "%PID_FILE%"
-
-if exist "%PID_FILE%" (
-   del /f "%PID_FILE%"
-)
-
-:: check that wmic exists ::
-set WMIC_PATH=%SYSTEMROOT%\System32\Wbem\wmic.exe
-if not exist "%WMIC_PATH%" (
-  echo "%WMIC_PATH%" not found.
-  goto :wmic_end
-)
-
-:: declare node name ::
-set RABBITMQ_NODENAME_CLI=-sname %RABBITMQ_NODENAME%
-
-FOR /F "usebackq tokens=* skip=1" %%P IN (`%%WMIC_PATH%% process where "name='erl.exe' and commandline like '%%%RABBITMQ_NODENAME_CLI%%%'" get processid`) do (
-  SET PID=%%P
-  goto :wmic_writepid
-)
-
-:wmic_writepid
-
-:: check for pid not found ::
-if "%PID%" == "" (
-  echo Could not find erl.exe pid
-  goto :wmic_end
-)
-
-:: show ::
-echo erl.exe pid is %PID%
-
-:: write to file ::
-echo %PID% > "%PID_FILE%"
-
-:: all done ::
-:wmic_end
 
 endlocal
 endlocal
