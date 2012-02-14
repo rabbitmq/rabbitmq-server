@@ -229,24 +229,24 @@ bq_init(BQ, Q, Recover) ->
             end).
 
 process_args(State = #q{q = #amqqueue{arguments = Arguments}}) ->
-    lists:foldl(fun({Arg, Fun}, State1) ->
-                        case rabbit_misc:table_lookup(Arguments, Arg) of
-                            {_Type, Val} -> Fun(Val, State1);
-                            undefined    -> State1
-                        end
-                end, State, [{<<"x-expires">>,     fun init_expires/2},
-                             {<<"x-message-ttl">>, fun init_ttl/2},
-                             {<<"x-dead-letter-exchange">>, fun init_dlx/2},
-                             {<<"x-dead-letter-routing-key">>,
-                              fun init_dlx_routing_key/2}]).
+    lists:foldl(
+      fun({Arg, Fun}, State1) ->
+              case rabbit_misc:table_lookup(Arguments, Arg) of
+                  {_Type, Val} -> Fun(Val, State1);
+                  undefined    -> State1
+              end
+      end, State,
+      [{<<"x-expires">>,                 fun init_expires/2},
+       {<<"x-message-ttl">>,             fun init_ttl/2},
+       {<<"x-dead-letter-exchange">>,    fun init_dlx/2},
+       {<<"x-dead-letter-routing-key">>, fun init_dlx_routing_key/2}]).
 
 init_expires(Expires, State) -> ensure_expiry_timer(State#q{expires = Expires}).
 
 init_ttl(TTL, State) -> drop_expired_messages(State#q{ttl = TTL}).
 
-init_dlx(DLX, State = #q{q = #amqqueue{name = #resource{
-                                         virtual_host = VHostPath}}}) ->
-    State#q{dlx = rabbit_misc:r(VHostPath, exchange, DLX)}.
+init_dlx(DLX, State = #q{q = #amqqueue{name = QName}}) ->
+    State#q{dlx = rabbit_misc:r(QName, exchange, DLX)}.
 
 init_dlx_routing_key(RoutingKey, State) ->
     State#q{dlx_routing_key = RoutingKey}.
@@ -1229,12 +1229,9 @@ handle_call({delete, IfUnused, IfEmpty}, From,
     IsEmpty = BQ:is_empty(BQS),
     IsUnused = is_unused(State),
     if
-        IfEmpty and not(IsEmpty) ->
-            reply({error, not_empty}, State);
-        IfUnused and not(IsUnused) ->
-            reply({error, in_use}, State);
-        true ->
-            dead_letter_deleted_queue(From, State)
+        IfEmpty and not(IsEmpty)   -> reply({error, not_empty}, State);
+        IfUnused and not(IsUnused) -> reply({error, in_use}, State);
+        true                       -> dead_letter_deleted_queue(From, State)
     end;
 
 handle_call(purge, _From, State = #q{backing_queue       = BQ,
@@ -1245,10 +1242,9 @@ handle_call(purge, _From, State = #q{backing_queue       = BQ,
 
 handle_call(purge, From, State = #q{backing_queue       = BQ,
                                     backing_queue_state = BQS}) ->
-    BQS1 = BQ:dropwhile(
-             fun (_) -> true end,
-             mk_dead_letter_fun(queue_purged, State),
-             BQS),
+    BQS1 = BQ:dropwhile(fun (_) -> true end,
+                        mk_dead_letter_fun(queue_purged, State),
+                        BQS),
     case BQ:len(BQS) of
         0 -> reply({ok, 0}, State#q{backing_queue_state = BQS1});
         _ -> noreply(
