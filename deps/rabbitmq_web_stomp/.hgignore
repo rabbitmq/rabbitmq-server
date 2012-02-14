@@ -1,0 +1,6 @@
+~$
+\.beam$
+^build/
+^dist/
+^cover/
+^erl_crash.dump$
