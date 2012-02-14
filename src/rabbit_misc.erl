@@ -734,13 +734,14 @@ gb_trees_foreach(Fun, Tree) ->
 %%     [{"-q",true},{"-p","/"}]}
 get_options(Defs, As) ->
     lists:foldl(fun(Def, {AsIn, RsIn}) ->
-                        {AsOut, Value} = case Def of
-                                             {flag, Key} ->
-                                                 get_flag(Key, AsIn);
-                                             {option, Key, Default} ->
-                                                 get_option(Key, Default, AsIn)
-                                         end,
-                        {AsOut, [{Key, Value} | RsIn]}
+                        {K, {AsOut, V}} =
+                            case Def of
+                                {flag, Key} ->
+                                    {Key, get_flag(Key, AsIn)};
+                                {option, Key, Default} ->
+                                    {Key, get_option(Key, Default, AsIn)}
+                            end,
+                        {AsOut, [{K, V} | RsIn]}
                 end, {As, []}, Defs).
 
 get_option(K, _Default, [K, V | As]) ->
