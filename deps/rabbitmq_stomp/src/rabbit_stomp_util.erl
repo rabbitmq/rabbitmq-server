@@ -236,7 +236,7 @@ parse_routing_information({Type, Name})
 valid_dest_prefixes() -> ?VALID_DEST_PREFIXES.
 
 durable_subscription_queue(Destination, SubscriptionId) ->
-    %% We need a queue name that a) can be derived uniquely from the
+    %% We need a queue name that a) can be derived from the
     %% Destination and SubscriptionId, and b) meets the constraints on
     %% AMQP queue names. It doesn't need to be secure; we use md5 here
     %% simply as a convenient means to bound the length.
