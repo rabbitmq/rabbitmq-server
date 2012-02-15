@@ -686,12 +686,14 @@ ensure_reply_queue(TempQueueId, State = #state{channel       = Channel,
                                   #'queue.declare'{auto_delete = true,
                                                    exclusive   = true}),
 
-            #'basic.consume_ok'{consumer_tag = ConsumerTag} =
+            ConsumerTag = rabbit_stomp_util:consumer_tag(TempQueueId),
+            #'basic.consume_ok'{} =
                 amqp_channel:subscribe(Channel,
                                        #'basic.consume'{
-                                         queue  = Queue,
-                                         no_ack = true,
-                                         nowait = false},
+                                         queue        = Queue,
+                                         consumer_tag = ConsumerTag,
+                                         no_ack       = true,
+                                         nowait       = false},
                                        self()),
 
             Destination = reply_to_destination(Queue),

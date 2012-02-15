@@ -33,6 +33,9 @@
 %% Frame and Header Parsing
 %%--------------------------------------------------------------------
 
+consumer_tag(QueueId)
+  when is_list(QueueId) ->
+    list_to_binary("T_" ++ "subscription_id_" ++ QueueId);
 consumer_tag(Frame) ->
     case rabbit_stomp_frame:header(Frame, ?HEADER_ID) of
         {ok, Str} ->
