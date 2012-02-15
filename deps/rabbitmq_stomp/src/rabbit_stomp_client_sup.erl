@@ -35,7 +35,7 @@ start_processor(SupPid, Configuration, Sock) ->
     supervisor2:start_child(SupPid,
                             {rabbit_stomp_processor,
                              {rabbit_stomp_processor, start_link,
-                                 [Sock,
+                                 [{rabbit_net, Sock},
                                   rabbit_heartbeat:start_heartbeat_fun(SupPid),
                                   Configuration]},
                              intrinsic, ?MAX_WAIT, worker,
