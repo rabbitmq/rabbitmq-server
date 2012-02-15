@@ -58,7 +58,6 @@ flush_and_die(Pid) ->
 %%----------------------------------------------------------------------------
 
 init([Transport, StartHeartbeatFun, Configuration]) ->
-    io:format("~p ~p ~n", [?FILE, ?LINE]),
     process_flag(trap_exit, true),
     {ok,
      #state {
