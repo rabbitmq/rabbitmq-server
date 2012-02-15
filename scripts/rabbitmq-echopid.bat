@@ -11,6 +11,10 @@ if "%1"=="" goto wmic_fail
 :: set the node name ::
 set NODENAME="%1"
 
+:: set timeout vars ::
+set TIMEOUT=10
+set TIMER=1
+
 :: check that wmic exists ::
 set WMIC_PATH=%SYSTEMROOT%\System32\Wbem\wmic.exe
 if not exist "%WMIC_PATH%" (
@@ -21,7 +25,7 @@ if not exist "%WMIC_PATH%" (
 set RABBITMQ_NODENAME_CLI=-sname %1
 
 :wmic_getpid
-for /F "usebackq tokens=* skip=1" %%P IN (`%%WMIC_PATH%% process where "name='erl.exe' and commandline like '%%%RABBITMQ_NODENAME_CLI%%%'" get processid 2^>nul`) do (
+for /f "usebackq tokens=* skip=1" %%P IN (`%%WMIC_PATH%% process where "name='erl.exe' and commandline like '%%%RABBITMQ_NODENAME_CLI%%%'" get processid 2^>nul`) do (
   set PID=%%P
   goto wmic_echopid
 )
@@ -30,6 +34,8 @@ for /F "usebackq tokens=* skip=1" %%P IN (`%%WMIC_PATH%% process where "name='er
 :: check for pid not found ::
 if "%PID%" == "" (
   PING 127.0.0.1 -n 2 > nul
+  set /a TIMER+=1
+  if %TIMEOUT%==%TIMER% goto wmic_fail
   goto wmic_getpid
 )
 
