@@ -1,14 +1,12 @@
 @echo off
 
-REM Usage: rabbitmq-echopid.bat <rabbitmq_nodename> [<wait>]
+REM Usage: rabbitmq-echopid.bat <rabbitmq_nodename>
 REM
 REM <rabbitmq_nodename> sname of the erlang node to connect to (required)
-REM <wait>              if specified, causes the script to wait until a pid is detected
 
 setlocal
 
 if "%1"=="" goto wmic_fail
-if "%2"=="wait" set WAIT=%2
 
 :: set the node name ::
 set NODENAME="%1"
@@ -31,7 +29,6 @@ for /F "usebackq tokens=* skip=1" %%P IN (`%%WMIC_PATH%% process where "name='er
 :wmic_echopid
 :: check for pid not found ::
 if "%PID%" == "" (
-	if not defined WAIT goto wmic_fail
   PING 127.0.0.1 -n 2 > nul
   goto wmic_getpid
 )
