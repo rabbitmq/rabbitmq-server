@@ -20,7 +20,7 @@
 
 -behaviour(gen_server2).
 
--define(UNSENT_MESSAGE_LIMIT,          100).
+-define(UNSENT_MESSAGE_LIMIT,          200).
 -define(SYNC_INTERVAL,                 25). %% milliseconds
 -define(RAM_DURATION_UPDATE_INTERVAL,  5000).
 
@@ -710,15 +710,12 @@ infos(Items, State) ->
                || Item <- (Items1 -- [synchronised_slave_pids])].
 
 slaves_status(#q{q = #amqqueue{name = Name}}) ->
-    {ok, #amqqueue{mirror_nodes = MNodes, slave_pids = SPids}} =
-        rabbit_amqqueue:lookup(Name),
-    case MNodes of
-        undefined ->
+    case rabbit_amqqueue:lookup(Name) of
+        {ok, #amqqueue{mirror_nodes = undefined}} ->
             [{slave_pids, ''}, {synchronised_slave_pids, ''}];
-        _ ->
+        {ok, #amqqueue{slave_pids = SPids}} ->
             {Results, _Bad} =
-                delegate:invoke(
-                  SPids, fun (Pid) -> rabbit_mirror_queue_slave:info(Pid) end),
+                delegate:invoke(SPids, fun rabbit_mirror_queue_slave:info/1),
             {SPids1, SSPids} =
                 lists:foldl(
                   fun ({Pid, Infos}, {SPidsN, SSPidsN}) ->
@@ -762,11 +759,9 @@ i(memory, _) ->
     {memory, M} = process_info(self(), memory),
     M;
 i(slave_pids, #q{q = #amqqueue{name = Name}}) ->
-    {ok, #amqqueue{mirror_nodes = MNodes,
-                   slave_pids = SPids}} = rabbit_amqqueue:lookup(Name),
-    case MNodes of
-        undefined -> [];
-        _         -> SPids
+    case rabbit_amqqueue:lookup(Name) of
+        {ok, #amqqueue{mirror_nodes = undefined}} -> [];
+        {ok, #amqqueue{slave_pids = SPids}}       -> SPids
     end;
 i(backing_queue_status, #q{backing_queue_state = BQS, backing_queue = BQ}) ->
     BQ:status(BQS);
@@ -823,7 +818,7 @@ prioritise_cast(Msg, _State) ->
         {set_maximum_since_use, _Age}        -> 8;
         {ack, _AckTags, _ChPid}              -> 7;
         {reject, _AckTags, _Requeue, _ChPid} -> 7;
-        {notify_sent, _ChPid}                -> 7;
+        {notify_sent, _ChPid, _Credit}       -> 7;
         {unblock, _ChPid}                    -> 7;
         {run_backing_queue, _Mod, _Fun}      -> 6;
         _                                    -> 0
@@ -1057,11 +1052,11 @@ handle_cast({unblock, ChPid}, State) ->
       possibly_unblock(State, ChPid,
                        fun (C) -> C#cr{is_limit_active = false} end));
 
-handle_cast({notify_sent, ChPid}, State) ->
+handle_cast({notify_sent, ChPid, Credit}, State) ->
     noreply(
       possibly_unblock(State, ChPid,
                        fun (C = #cr{unsent_message_count = Count}) ->
-                               C#cr{unsent_message_count = Count - 1}
+                               C#cr{unsent_message_count = Count - Credit}
                        end));
 
 handle_cast({limit, ChPid, Limiter}, State) ->
