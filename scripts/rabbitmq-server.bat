@@ -89,11 +89,16 @@ if "!RABBITMQ_ENABLED_PLUGINS_FILE!"=="" (
 set RABBITMQ_PLUGINS_DIR=!TDP0!..\plugins
 set RABBITMQ_EBIN_ROOT=!TDP0!..\ebin
 
+rem FIXME Find out why "epmd -daemon" doesn't work on Windows
+"!ERLANG_HOME!\bin\erl.exe" ^
+-noinput -hidden ^
+-sname "epmd_!RABBITMQ_NODENAME!" ^
+-s init stop
+
 "!ERLANG_HOME!\bin\erl.exe" ^
 -pa "!RABBITMQ_EBIN_ROOT!" ^
 -noinput -hidden ^
 -s rabbit_prelaunch ^
--sname rabbitmqprelaunch!RANDOM! ^
 -extra "!RABBITMQ_ENABLED_PLUGINS_FILE:\=/!" ^
        "!RABBITMQ_PLUGINS_DIR:\=/!" ^
        "!RABBITMQ_PLUGINS_EXPAND_DIR:\=/!" ^

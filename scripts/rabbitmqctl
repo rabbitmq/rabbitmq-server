@@ -26,12 +26,13 @@
 
 ##--- End of overridden <var_name> variables
 
+epmd -daemon || exit 1
+
 exec erl \
     -pa "${RABBITMQ_HOME}/ebin" \
     -noinput \
     -hidden \
     ${RABBITMQ_CTL_ERL_ARGS} \
-    -sname rabbitmqctl$$ \
     -s rabbit_control \
     -nodename $RABBITMQ_NODENAME \
     -extra "$@"

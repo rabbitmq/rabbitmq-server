@@ -69,6 +69,8 @@ case "$(uname -s)" in
            ;;
 esac
 
+epmd -daemon || exit 1
+
 RABBITMQ_EBIN_ROOT="${RABBITMQ_HOME}/ebin"
 if [ "x" = "x$RABBITMQ_NODE_ONLY" ]; then
     if erl \
@@ -76,7 +78,6 @@ if [ "x" = "x$RABBITMQ_NODE_ONLY" ]; then
 	-noinput \
 	-hidden \
 	-s rabbit_prelaunch \
-	-sname rabbitmqprelaunch$$ \
 	-extra "$RABBITMQ_ENABLED_PLUGINS_FILE" "$RABBITMQ_PLUGINS_DIR" "${RABBITMQ_PLUGINS_EXPAND_DIR}" "${RABBITMQ_NODENAME}"
     then
 	RABBITMQ_BOOT_FILE="${RABBITMQ_PLUGINS_EXPAND_DIR}/rabbit"
