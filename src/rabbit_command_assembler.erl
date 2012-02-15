@@ -106,6 +106,11 @@ process({content_header, HeaderClassId, 0, _BodySize, _PropertiesBin},
     unexpected_frame("expected content header for class ~w, "
                      "got one for class ~w instead",
                      [ClassId, HeaderClassId], Method);
+process({method, MethodName, _FieldsBin},
+        {content_header, Method, ClassId, _Protocol}) ->
+    unexpected_frame("received unexpected method frame for method ~w "
+                     ", content header for class ~w expected",
+                     [MethodName, ClassId], Method);
 process(_Frame, {content_header, Method, ClassId, _Protocol}) ->
     unexpected_frame("expected content header for class ~w, "
                      "got non content header frame instead", [ClassId], Method);
@@ -118,6 +123,10 @@ process({content_body, FragmentBin},
         0  -> {ok, Method, NewContent, {method, Protocol}};
         Sz -> {ok, {content_body, Method, Sz, NewContent, Protocol}}
     end;
+process({method, MethodName, _FieldsBin},
+        {content_body, Method, _RemainingSize, _Content, _Protocol}) ->
+    unexpected_frame("received unexpected method frame for method ~w"
+                     ", content body expected", [MethodName], Method);
 process(_Frame, {content_body, Method, _RemainingSize, _Content, _Protocol}) ->
     unexpected_frame("expected content body, "
                      "got non content body frame instead", [], Method).
