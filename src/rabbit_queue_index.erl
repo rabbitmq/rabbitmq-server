@@ -285,7 +285,7 @@ ack(SeqIds, State) ->
 
 %% This is only called when there are outstanding confirms and the
 %% queue is idle.
-sync(State = #qistate { unsynced_msg_ids = MsgIds }) ->
+sync(State) ->
     sync_if(true, State).
 
 sync(SeqIds, State) ->
