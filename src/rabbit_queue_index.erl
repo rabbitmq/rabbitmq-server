@@ -18,8 +18,8 @@
 
 -export([init/2, shutdown_terms/1, recover/5,
          terminate/2, delete_and_terminate/1,
-         publish/5, deliver/2, ack/2, sync/1, sync/2, flush/1, read/3,
-         next_segment_boundary/1, bounds/1, recover/1]).
+         publish/5, deliver/2, ack/2, sync/1, sync/2, needs_sync/1, flush/1,
+         read/3, next_segment_boundary/1, bounds/1, recover/1]).
 
 -export([add_queue_ttl/0]).
 
@@ -285,8 +285,8 @@ ack(SeqIds, State) ->
 
 %% This is only called when there are outstanding confirms and the
 %% queue is idle.
-sync(State = #qistate { unsynced_msg_ids = MsgIds }) ->
-    sync_if(not gb_sets:is_empty(MsgIds), State).
+sync(State) ->
+    sync_if(true, State).
 
 sync(SeqIds, State) ->
     %% The SeqIds here contains the SeqId of every publish and ack to
@@ -297,6 +297,11 @@ sync(SeqIds, State) ->
     %% syncs, all in one operation, there is no possibility of the
     %% seqids not being in the journal.
     sync_if([] =/= SeqIds, State).
+
+needs_sync(#qistate { journal_handle = undefined }) ->
+    false;
+needs_sync(#qistate { journal_handle = JournalHdl }) ->
+    file_handle_cache:needs_sync(JournalHdl).
 
 flush(State = #qistate { dirty_count = 0 }) -> State;
 flush(State)                                -> flush_journal(State).
