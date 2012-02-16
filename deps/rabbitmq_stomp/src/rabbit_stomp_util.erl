@@ -35,7 +35,7 @@
 
 consumer_tag(QueueId)
   when is_list(QueueId) ->
-    list_to_binary("T_" ++ "subscription_id_" ++ QueueId);
+    rabbit_guid:binary(rabbit_guid:gen(), "T_");
 consumer_tag(Frame) ->
     case rabbit_stomp_frame:header(Frame, ?HEADER_ID) of
         {ok, Str} ->
