@@ -1218,23 +1218,9 @@ handle_call({delete, IfUnused, IfEmpty}, _From,
     end;
 
 handle_call(purge, _From, State = #q{backing_queue       = BQ,
-                                     backing_queue_state = BQS,
-                                     dlx                 = undefined}) ->
+                                     backing_queue_state = BQS}) ->
     {Count, BQS1} = BQ:purge(BQS),
     reply({ok, Count}, State#q{backing_queue_state = BQS1});
-
-handle_call(purge, From, State = #q{backing_queue       = BQ,
-                                    backing_queue_state = BQS,
-                                    blocked_ops         = Ops}) ->
-    BQS1 = BQ:dropwhile(fun (_) -> true end,
-                        mk_dead_letter_fun(queue_purged, State),
-                        BQS),
-    case BQ:len(BQS) of
-        0 -> reply({ok, 0}, State#q{backing_queue_state = BQS1});
-        _ -> noreply(
-               State#q{backing_queue_state = BQS1,
-                       blocked_ops = [{purge, {From, BQ:len(BQS)}} | Ops]})
-    end;
 
 handle_call({requeue, AckTags, ChPid}, From, State) ->
     gen_server2:reply(From, ok),
