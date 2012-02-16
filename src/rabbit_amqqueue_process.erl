@@ -735,36 +735,6 @@ mk_dead_letter_fun(Reason, _State) ->
             BQS1
     end.
 
-dead_letter_deleted_queue_reply(From, State) ->
-    case dead_letter_deleted_queue(From, State) of
-        {stop, State1} -> {stop, normal, State1};
-        {stop, Count, State1} -> {stop, normal, {ok, Count}, State1};
-        {ok, State1} -> noreply(State1)
-    end.
-
-dead_letter_deleted_queue(undefined, State = #q{dlx = undefined}) ->
-    {stop, State};
-dead_letter_deleted_queue(_From, State = #q{dlx                 = undefined,
-                                            backing_queue_state = BQS,
-                                            backing_queue       = BQ}) ->
-    {stop, BQ:len(BQS), State};
-dead_letter_deleted_queue(From, State = #q{backing_queue_state = BQS,
-                                           backing_queue       = BQ,
-                                           blocked_ops         = Ops}) ->
-    case BQ:len(BQS) of
-        0 -> dead_letter_deleted_queue(From, State#q{dlx = undefined});
-        _ -> BQS1 = BQ:dropwhile(fun (_) -> true end,
-                                 mk_dead_letter_fun(queue_deleted, State),
-                                 BQS),
-             Ops1 =
-                 case lists:any(fun({Rsn, _}) -> Rsn =:= delete end, Ops) of
-                     true  -> Ops; %% don't queue more than one delete
-                     false -> [{delete, {From, BQ:len(BQS)}} | Ops]
-                 end,
-             {ok, State#q{blocked_ops         = Ops1,
-                          backing_queue_state = BQS1}}
-    end.
-
 dead_letter_msg(Msg, AckTag, Reason,
                 State = #q{publish_seqno       = MsgSeqNo,
                            unconfirmed_mq      = UMQ,
@@ -1153,7 +1123,7 @@ handle_call({notify_down, ChPid}, _From, State) ->
     %% gen_server2 *before* the reply is sent.
     case handle_ch_down(ChPid, State) of
         {ok, State1}   -> reply(ok, State1);
-        {stop, State1} -> dead_letter_deleted_queue_reply(undefined, State1)
+        {stop, State1} -> {stop, normal, ok, State1}
     end;
 
 handle_call({basic_get, ChPid, NoAck}, _From,
@@ -1228,7 +1198,7 @@ handle_call({basic_cancel, ChPid, ConsumerTag, OkMsg}, _From,
                                              State#q.active_consumers)},
             case should_auto_delete(State1) of
                 false -> reply(ok, ensure_expiry_timer(State1));
-                true  -> dead_letter_deleted_queue_reply(undefined, State1)
+                true  -> {stop, normal, ok, State1}
             end
     end;
 
@@ -1237,15 +1207,14 @@ handle_call(stat, _From, State) ->
         drop_expired_messages(ensure_expiry_timer(State)),
     reply({ok, BQ:len(BQS), active_consumer_count()}, State1);
 
-handle_call({delete, IfUnused, IfEmpty}, From,
+handle_call({delete, IfUnused, IfEmpty}, _From,
             State = #q{backing_queue_state = BQS, backing_queue = BQ}) ->
     IsEmpty = BQ:is_empty(BQS),
     IsUnused = is_unused(State),
     if
         IfEmpty and not(IsEmpty)   -> reply({error, not_empty}, State);
         IfUnused and not(IsUnused) -> reply({error, in_use}, State);
-        true                       -> dead_letter_deleted_queue_reply(From,
-                                                                      State)
+        true                       -> {stop, normal, {ok, BQ:len(BQS)}, State}
     end;
 
 handle_call(purge, _From, State = #q{backing_queue       = BQ,
@@ -1321,7 +1290,7 @@ handle_cast({reject, AckTags, Requeue, ChPid}, State) ->
               end));
 
 handle_cast(delete_immediately, State) ->
-    dead_letter_deleted_queue_reply(undefined, State);
+    {stop, normal, State};
 
 handle_cast({unblock, ChPid}, State) ->
     noreply(
@@ -1382,7 +1351,7 @@ handle_cast({dead_letter, {Msg, AckTag}, Reason}, State) ->
 
 handle_info(maybe_expire, State) ->
     case is_unused(State) of
-        true  -> dead_letter_deleted_queue_reply(undefined, State);
+        true  -> {stop, normal, State};
         false -> noreply(ensure_expiry_timer(State))
     end;
 
@@ -1404,15 +1373,11 @@ handle_info({'DOWN', _MonitorRef, process, DownPid, _Reason},
     %% match what people expect (see bug 21824). However we need this
     %% monitor-and-async- delete in case the connection goes away
     %% unexpectedly.
-    case dead_letter_deleted_queue(undefined, State) of
-        {stop, State1}    -> {stop, normal, State1};
-        {stop, _, State1} -> {stop, normal, State1};
-        {ok, State1}      -> noreply(State1)
-    end;
+    {stop, normal, State};
 handle_info({'DOWN', _MonitorRef, process, DownPid, _Reason}, State) ->
     case handle_ch_down(DownPid, State) of
         {ok, State1}   -> handle_queue_down(DownPid, State1);
-        {stop, State1} -> dead_letter_deleted_queue(undefined, State1)
+        {stop, State1} -> {stop, normal, State1}
     end;
 
 handle_info(update_ram_duration, State = #q{backing_queue = BQ,
