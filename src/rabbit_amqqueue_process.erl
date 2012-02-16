@@ -794,6 +794,8 @@ handle_queue_down(QPid, State = #q{queue_monitors = QMons,
                 none ->
                     noreply(State);
                 {value, MsgSeqNosSet} ->
+                    rabbit_log:warning("Dead queue lost ~p messages~n",
+                                       [gb_sets:size(MsgSeqNosSet)]),
                     handle_confirm(gb_sets:to_list(MsgSeqNosSet), QPid,
                                    State#q{queue_monitors =
                                                dict:erase(QPid, QMons)})
