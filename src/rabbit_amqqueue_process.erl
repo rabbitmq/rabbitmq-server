@@ -53,7 +53,7 @@
             publish_seqno,
             unconfirmed_mq,
             unconfirmed_qm,
-            delayed_delete,
+            delayed_stop,
             queue_monitors,
             dlx,
             dlx_routing_key
@@ -140,7 +140,7 @@ init(Q) ->
                publish_seqno       = 1,
                unconfirmed_mq      = gb_trees:empty(),
                unconfirmed_qm      = gb_trees:empty(),
-               delayed_delete      = undefined,
+               delayed_stop        = undefined,
                queue_monitors      = dict:new(),
                msg_id_to_channel   = gb_trees:empty()},
     {ok, rabbit_event:init_stats_timer(State, #q.stats_timer), hibernate,
@@ -166,7 +166,7 @@ init_with_backing_queue_state(Q = #amqqueue{exclusive_owner = Owner}, BQ, BQS,
                publish_seqno       = 1,
                unconfirmed_mq      = gb_trees:empty(),
                unconfirmed_qm      = gb_trees:empty(),
-               delayed_delete      = undefined,
+               delayed_stop        = undefined,
                queue_monitors      = dict:new(),
                msg_id_to_channel   = MTC},
     State1 = requeue_and_run(AckTags, process_args(
@@ -845,17 +845,17 @@ stop_later(Reason, From, Reply, State = #q{unconfirmed_mq = UMQ}) ->
         {true, _} ->
             {stop, Reason, Reply, State};
         {false, _} ->
-            noreply(State#q{delayed_delete = {Reason, {From, Reply}}})
+            noreply(State#q{delayed_stop = {Reason, {From, Reply}}})
     end.
 
-cleanup_after_confirm(State = #q{delayed_delete = DD,
+cleanup_after_confirm(State = #q{delayed_stop   = DS,
                                  unconfirmed_mq = UMQ}) ->
-    case gb_trees:is_empty(UMQ) andalso DD =/= undefined of
-        true  -> case DD of
+    case gb_trees:is_empty(UMQ) andalso DS =/= undefined of
+        true  -> case DS of
                      {_, noreply}       -> ok;
                      {_, {From, Reply}} -> gen_server2:reply(From, Reply)
                  end,
-                 {Reason, _} = DD,
+                 {Reason, _} = DS,
                  {stop, Reason, State};
         false -> noreply(State)
     end.
@@ -1075,7 +1075,7 @@ prioritise_info(Msg, #q{q = #amqqueue{exclusive_owner = DownPid}}) ->
         _                                    -> 0
     end.
 
-handle_call(_, _, State = #q{delayed_delete = DD}) when DD =/= undefined ->
+handle_call(_, _, State = #q{delayed_stop = DS}) when DS =/= undefined ->
     noreply(State);
 
 handle_call({init, Recover}, From,
@@ -1251,7 +1251,7 @@ handle_call({requeue, AckTags, ChPid}, From, State) ->
 handle_cast({confirm, MsgSeqNos, QPid}, State) ->
     handle_confirm(MsgSeqNos, QPid, State);
 
-handle_cast(_, State = #q{delayed_delete = DD}) when DD =/= undefined ->
+handle_cast(_, State = #q{delayed_stop = DS}) when DS =/= undefined ->
     noreply(State);
 
 handle_cast({run_backing_queue, Mod, Fun}, State) ->
@@ -1358,7 +1358,7 @@ handle_cast(force_event_refresh, State = #q{exclusive_consumer = Exclusive}) ->
 handle_cast({dead_letter, {Msg, AckTag}, Reason}, State) ->
     dead_letter_msg(Msg, AckTag, Reason, State).
 
-handle_info(_, State = #q{delayed_delete = DD}) when DD =/= undefined ->
+handle_info(_, State = #q{delayed_stop = DS}) when DS =/= undefined ->
     noreply(State);
 
 handle_info(maybe_expire, State) ->
