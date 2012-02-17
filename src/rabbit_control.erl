@@ -82,9 +82,8 @@ start() ->
              end,
     PrintInvalidCommandError =
         fun () ->
-                print_error(
-                  "invalid command '~s'",
-                  [string:join([atom_to_list(Command) | Args], " ")])
+                print_error("invalid command '~s'",
+                            [string:join([atom_to_list(Command) | Args], " ")])
         end,
 
     %% The reason we don't use a try/catch here is that rpc:call turns
@@ -140,11 +139,11 @@ print_report0(Node, {Module, InfoFun, KeysFun}, VHostArg) ->
     end,
     io:nl().
 
-print_badrpc_diagnostics(Node) ->
-    rabbit_misc:format_stderr(rabbit_nodes:diagnostics([Node]), []).
-
 print_error(Format, Args) ->
     rabbit_misc:format_stderr("Error: " ++ Format ++ "~n", Args).
+
+print_badrpc_diagnostics(Node) ->
+    rabbit_misc:format_stderr(rabbit_nodes:diagnostics([Node]), []).
 
 stop() ->
     ok.

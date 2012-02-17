@@ -82,6 +82,9 @@ start() ->
 stop() ->
     ok.
 
+print_error(Format, Args) ->
+    rabbit_misc:format_stderr("Error: " ++ Format ++ "~n", Args).
+
 usage() ->
     io:format("~s", [rabbit_plugins_usage:usage()]),
     rabbit_misc:quit(1).
@@ -393,6 +396,3 @@ report_change() ->
         _ ->
              ok
     end.
-
-print_error(Format, Args) ->
-    rabbit_misc:format_stderr("Error: " ++ Format ++ "~n", Args).
