@@ -1159,14 +1159,9 @@ handle_publishing_queue_down(QPid, Reason, State = #ch{unconfirmed_qm = UQM}) ->
     %% the set one by one which which would be inefficient
     State1 = State#ch{unconfirmed_qm = gb_trees:delete_any(QPid, UQM)},
     {Nack, SendFun} =
-        case Reason of
-            Reason when Reason =:= noproc; Reason =:= noconnection;
-                        Reason =:= normal; Reason =:= shutdown ->
-                {false, fun record_confirms/2};
-            {shutdown, _} ->
-                {false, fun record_confirms/2};
-            _ ->
-                {true,  fun send_nacks/2}
+        case rabbit_misc:is_abnormal_termination(Reason) of
+            true -> {true,  fun send_nacks/2};
+            false -> {false, fun record_confirms/2}
         end,
     {MXs, State2} = process_confirms(MsgSeqNos, QPid, Nack, State1),
     SendFun(MXs, State2).

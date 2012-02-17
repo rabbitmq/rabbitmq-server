@@ -727,12 +727,10 @@ ensure_ttl_timer(State) ->
     State.
 
 mk_dead_letter_fun(_Reason, #q{dlx = undefined}) ->
-    fun(_MsgLookupFun, _AckTag, BQS) -> BQS end;
+    undefined;
 mk_dead_letter_fun(Reason, _State) ->
-    fun(MsgLookupFun, AckTag, BQS) ->
-            {Msg, BQS1} = MsgLookupFun(BQS),
-            gen_server2:cast(self(), {dead_letter, {Msg, AckTag}, Reason}),
-            BQS1
+    fun(Msg, AckTag) ->
+            gen_server2:cast(self(), {dead_letter, {Msg, AckTag}, Reason})
     end.
 
 dead_letter_msg(Msg, AckTag, Reason,
@@ -782,8 +780,8 @@ demonitor_queue(QPid, State = #q{queue_monitors = QMons}) ->
         error      -> State
     end.
 
-handle_queue_down(QPid, State = #q{queue_monitors = QMons,
-                                   unconfirmed_qm = UQM}) ->
+handle_queue_down(QPid, Reason, State = #q{queue_monitors = QMons,
+                                           unconfirmed_qm = UQM}) ->
     case dict:find(QPid, QMons) of
         error ->
             noreply(State);
@@ -794,8 +792,12 @@ handle_queue_down(QPid, State = #q{queue_monitors = QMons,
                 none ->
                     noreply(State);
                 {value, MsgSeqNosSet} ->
-                    rabbit_log:warning("Dead queue lost ~p messages~n",
-                                       [gb_sets:size(MsgSeqNosSet)]),
+                    case rabbit_misc:is_abnormal_termination(Reason) of
+                        true  -> rabbit_log:warning(
+                                   "Dead queue lost ~p messages~n",
+                                   [gb_sets:size(MsgSeqNosSet)]);
+                        false -> ok
+                    end,
                     handle_confirm(gb_sets:to_list(MsgSeqNosSet), QPid,
                                    State#q{queue_monitors =
                                                dict:erase(QPid, QMons)})
@@ -1362,9 +1364,9 @@ handle_info({'DOWN', _MonitorRef, process, DownPid, _Reason},
     %% monitor-and-async- delete in case the connection goes away
     %% unexpectedly.
     {stop, normal, State};
-handle_info({'DOWN', _MonitorRef, process, DownPid, _Reason}, State) ->
+handle_info({'DOWN', _MonitorRef, process, DownPid, Reason}, State) ->
     case handle_ch_down(DownPid, State) of
-        {ok, State1}   -> handle_queue_down(DownPid, State1);
+        {ok, State1}   -> handle_queue_down(DownPid, Reason, State1);
         {stop, State1} -> {stop, normal, State1}
     end;
 

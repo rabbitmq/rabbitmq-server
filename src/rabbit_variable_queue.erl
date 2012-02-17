@@ -593,8 +593,9 @@ dropwhile(Pred, MsgFun, State) ->
                 {true, _} ->
                     {{_, _, AckTag, _}, State2} =
                         internal_fetch(true, MsgStatus, State1),
-                    dropwhile(Pred, MsgFun, MsgFun(read_msg_callback(MsgStatus),
-                                                   AckTag, State2));
+                    {MsgStatus, State3} = read_msg(MsgStatus, State2),
+                    MsgFun(MsgStatus#msg_status.msg, AckTag),
+                    dropwhile(Pred, MsgFun, State3);
                 {false, _} ->
                     a(in_r(MsgStatus, State1))
             end
@@ -611,17 +612,6 @@ fetch(AckRequired, State) ->
             {Res, State3} = internal_fetch(AckRequired, MsgStatus1, State2),
             {Res, a(State3)}
     end.
-
-read_msg_callback(#msg_status { msg           = undefined,
-                                msg_id        = MsgId,
-                                is_persistent = IsPersistent }) ->
-    fun(State) -> read_msg_common(MsgId, IsPersistent, State) end;
-
-read_msg_callback(#msg_status{ msg = Msg }) ->
-    fun(State) -> {Msg, State} end;
-
-read_msg_callback({IsPersistent, MsgId, _MsgProps}) ->
-    fun(State) -> read_msg_common(MsgId, IsPersistent, State) end.
 
 ack([], _Fun, State) ->
     {[], State};
@@ -650,8 +640,10 @@ ack(AckTags, undefined, State) ->
 ack(AckTags, MsgFun, State = #vqstate{pending_ack = PA}) ->
     {[], lists:foldl(
            fun(SeqId, State1) ->
-                   AckEntry = gb_trees:get(SeqId, PA),
-                   MsgFun(read_msg_callback(AckEntry), SeqId, State1)
+                   {MsgStatus, State2} =
+                       read_msg(gb_trees:get(SeqId, PA), State1),
+                   MsgFun(MsgStatus#msg_status.msg, SeqId),
+                   State2
            end, State, AckTags)}.
 
 requeue(AckTags, #vqstate { delta = Delta,
@@ -1062,19 +1054,15 @@ queue_out(State = #vqstate { q4 = Q4 }) ->
 read_msg(MsgStatus = #msg_status { msg           = undefined,
                                    msg_id        = MsgId,
                                    is_persistent = IsPersistent },
-         State) ->
-    {Msg, State1} = read_msg_common(MsgId, IsPersistent, State),
-    {MsgStatus #msg_status { msg = Msg }, State1};
-read_msg(MsgStatus, State) ->
-    {MsgStatus, State}.
-
-read_msg_common(MsgId, IsPersistent,
-                State = #vqstate{ ram_msg_count     = RamMsgCount,
-                                  msg_store_clients = MSCState }) ->
+         State = #vqstate{ ram_msg_count     = RamMsgCount,
+                           msg_store_clients = MSCState }) ->
     {{ok, Msg = #basic_message{}}, MSCState1} =
         msg_store_read(MSCState, IsPersistent, MsgId),
-    {Msg, State #vqstate { ram_msg_count     = RamMsgCount + 1,
-                           msg_store_clients = MSCState1 }}.
+    {MsgStatus #msg_status { msg = Msg },
+     State #vqstate { ram_msg_count     = RamMsgCount + 1,
+                      msg_store_clients = MSCState1 }};
+read_msg(MsgStatus, State) ->
+    {MsgStatus, State}.
 
 internal_fetch(AckRequired, MsgStatus = #msg_status {
                               seq_id        = SeqId,

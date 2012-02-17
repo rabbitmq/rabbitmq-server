@@ -2369,7 +2369,7 @@ test_dropwhile(VQ0) ->
 
     VQ4.
 
-dummy_msg_fun() -> fun(_Fun, _Extra, State) -> State end.
+dummy_msg_fun() -> fun(_Msg, _SeqId) -> ok end.
 
 test_dropwhile_varying_ram_duration(VQ0) ->
     VQ1 = variable_queue_publish(false, 1, VQ0),

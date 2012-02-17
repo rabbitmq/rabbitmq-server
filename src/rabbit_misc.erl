@@ -30,6 +30,7 @@
 -export([start_cover/1]).
 -export([confirm_to_sender/2]).
 -export([throw_on_error/2, with_exit_handler/2, filter_exit_map/2]).
+-export([is_abnormal_termination/1]).
 -export([with_user/2, with_user_and_vhost/3]).
 -export([execute_mnesia_transaction/1]).
 -export([execute_mnesia_transaction/2]).
@@ -132,6 +133,7 @@
         (atom(), thunk(rabbit_types:error(any()) | {ok, A} | A)) -> A).
 -spec(with_exit_handler/2 :: (thunk(A), thunk(A)) -> A).
 -spec(filter_exit_map/2 :: (fun ((A) -> B), [A]) -> [B]).
+-spec(is_abnormal_termination/1 :: (any()) -> boolean()).
 -spec(with_user/2 :: (rabbit_types:username(), thunk(A)) -> A).
 -spec(with_user_and_vhost/3 ::
         (rabbit_types:username(), rabbit_types:vhost(), thunk(A))
@@ -401,6 +403,17 @@ filter_exit_map(F, L) ->
                  [with_exit_handler(
                     fun () -> Ref end,
                     fun () -> F(I) end) || I <- L]).
+
+is_abnormal_termination(Reason) ->
+    case Reason of
+        Reason when Reason =:= noproc; Reason =:= noconnection;
+                    Reason =:= normal; Reason =:= shutdown ->
+            false;
+        {shutdown, _} ->
+            false;
+        _ ->
+            true
+    end.
 
 with_user(Username, Thunk) ->
     fun () ->
