@@ -82,7 +82,7 @@ start() ->
              end,
     PrintInvalidCommandError =
         fun () ->
-                rabbit_misc:print_error(
+                print_error(
                   "invalid command '~s'",
                   [string:join([atom_to_list(Command) | Args], " ")])
         end,
@@ -103,24 +103,23 @@ start() ->
             PrintInvalidCommandError(),
             usage();
         {'EXIT', {badarg, _}} ->
-            rabbit_misc:print_error("invalid parameter: ~p", [Args]),
+            print_error("invalid parameter: ~p", [Args]),
             usage();
         {error, Reason} ->
-            rabbit_misc:print_error("~p", [Reason]),
+            print_error("~p", [Reason]),
             rabbit_misc:quit(2);
         {error_string, Reason} ->
-            rabbit_misc:print_error("~s", [Reason]),
+            print_error("~s", [Reason]),
             rabbit_misc:quit(2);
         {badrpc, {'EXIT', Reason}} ->
-            rabbit_misc:print_error("~p", [Reason]),
+            print_error("~p", [Reason]),
             rabbit_misc:quit(2);
         {badrpc, Reason} ->
-            rabbit_misc:print_error("unable to connect to node ~w: ~w",
-                                    [Node, Reason]),
+            print_error("unable to connect to node ~w: ~w", [Node, Reason]),
             print_badrpc_diagnostics(Node),
             rabbit_misc:quit(2);
         Other ->
-            rabbit_misc:print_error("~p", [Other]),
+            print_error("~p", [Other]),
             rabbit_misc:quit(2)
     end.
 
@@ -143,6 +142,9 @@ print_report0(Node, {Module, InfoFun, KeysFun}, VHostArg) ->
 
 print_badrpc_diagnostics(Node) ->
     rabbit_misc:format_stderr(rabbit_nodes:diagnostics([Node]), []).
+
+print_error(Format, Args) ->
+    rabbit_misc:format_stderr("Error: " ++ Format ++ "~n", Args).
 
 stop() ->
     ok.

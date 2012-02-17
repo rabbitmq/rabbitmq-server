@@ -38,8 +38,7 @@
 -export([upmap/2, map_in_order/2]).
 -export([table_filter/3]).
 -export([dirty_read_all/1, dirty_foreach_key/2, dirty_dump_log/1]).
--export([format/2, print_error/2, format_stderr/2, with_local_io/1,
-         local_info_msg/2]).
+-export([format/2, format_stderr/2, with_local_io/1, local_info_msg/2]).
 -export([start_applications/1, stop_applications/1]).
 -export([unfold/2, ceil/1, queue_fold/3]).
 -export([sort_field_table/1]).
@@ -548,9 +547,6 @@ format_stderr(Fmt, Args) ->
             io:format(Fmt, Args)
     end,
     ok.
-
-print_error(Format, Args) ->
-    format_stderr("Error: " ++ Format ++ "~n", Args).
 
 %% Execute Fun using the IO system of the local node (i.e. the node on
 %% which the code is executing).

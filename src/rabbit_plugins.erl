@@ -57,7 +57,7 @@ start() ->
     Command = list_to_atom(Command0),
     PrintInvalidCommandError =
         fun () ->
-                rabbit_misc:print_error(
+                print_error(
                   "invalid command '~s'",
                   [string:join([atom_to_list(Command) | Args], " ")])
         end,
@@ -72,10 +72,10 @@ start() ->
             PrintInvalidCommandError(),
             usage();
         {error, Reason} ->
-            rabbit_misc:print_error("~p", [Reason]),
+            print_error("~p", [Reason]),
             rabbit_misc:quit(2);
         Other ->
-            rabbit_misc:print_error("~p", [Other]),
+            print_error("~p", [Other]),
             rabbit_misc:quit(2)
     end.
 
@@ -394,3 +394,5 @@ report_change() ->
              ok
     end.
 
+print_error(Format, Args) ->
+    rabbit_misc:format_stderr("Error: " ++ Format ++ "~n", Args).
