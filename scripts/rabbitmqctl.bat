@@ -43,7 +43,7 @@ if not exist "!ERLANG_HOME!\bin\erl.exe" (
     exit /B
 )
 
-rem FIXME Find out why "epmd -daemon" doesn't work on Windows
+rem FIXME Find out why "epmd -daemon" doesn't work reliably on Windows
 "!ERLANG_HOME!\bin\erl.exe" ^
 -noinput -hidden ^
 -sname "epmd_!RABBITMQ_NODENAME!" ^
