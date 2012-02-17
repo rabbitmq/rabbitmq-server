@@ -404,16 +404,11 @@ filter_exit_map(F, L) ->
                     fun () -> Ref end,
                     fun () -> F(I) end) || I <- L]).
 
-is_abnormal_termination(Reason) ->
-    case Reason of
-        Reason when Reason =:= noproc; Reason =:= noconnection;
-                    Reason =:= normal; Reason =:= shutdown ->
-            false;
-        {shutdown, _} ->
-            false;
-        _ ->
-            true
-    end.
+is_abnormal_termination(Reason)
+  when Reason =:= noproc; Reason =:= noconnection;
+       Reason =:= normal; Reason =:= shutdown -> false;
+is_abnormal_termination({shutdown, _})        -> false;
+is_abnormal_termination(_)                    -> true.
 
 with_user(Username, Thunk) ->
     fun () ->

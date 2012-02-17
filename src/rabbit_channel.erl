@@ -1160,7 +1160,7 @@ handle_publishing_queue_down(QPid, Reason, State = #ch{unconfirmed_qm = UQM}) ->
     State1 = State#ch{unconfirmed_qm = gb_trees:delete_any(QPid, UQM)},
     {Nack, SendFun} =
         case rabbit_misc:is_abnormal_termination(Reason) of
-            true -> {true,  fun send_nacks/2};
+            true  -> {true,  fun send_nacks/2};
             false -> {false, fun record_confirms/2}
         end,
     {MXs, State2} = process_confirms(MsgSeqNos, QPid, Nack, State1),
