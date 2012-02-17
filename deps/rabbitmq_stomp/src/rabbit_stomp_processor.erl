@@ -30,7 +30,8 @@
 -record(state, {transport, session_id, channel,
                 connection, subscriptions, version,
                 start_heartbeat_fun, pending_receipts,
-                config, dest_queues, reply_queues, frame_transformer}).
+                config, dest_queues, reply_queues, frame_transformer,
+                adapter_info, send_frame}).
 
 -record(subscription, {dest_hdr, channel, multi_ack, description}).
 
@@ -59,6 +60,15 @@ flush_and_die(Pid) ->
 
 init([Transport, StartHeartbeatFun, Configuration]) ->
     process_flag(trap_exit, true),
+
+    SendFrame = fun (Frame) ->
+                        {SockMod, S} = Transport,
+                        %% We ignore certain errors here, as we will be receiving an
+                        %% asynchronous notification of the same (or a related) fault
+                        %% shortly anyway. See bug 21365.
+                        catch SockMod:port_command(S, rabbit_stomp_frame:serialize(Frame))
+                end,
+
     {ok,
      #state {
        transport           = Transport,
@@ -72,7 +82,9 @@ init([Transport, StartHeartbeatFun, Configuration]) ->
        config              = Configuration,
        dest_queues         = sets:new(),
        reply_queues        = dict:new(),
-       frame_transformer   = undefined},
+       frame_transformer   = undefined,
+       adapter_info        = adapter_info(Transport),
+       send_frame          = SendFrame},
      hibernate,
      {backoff, 1000, 1000, 10000}
     }.
@@ -181,10 +193,10 @@ process_connect(Implicit,
                 Frame,
                 State = #state{
                   channel = none,
-                  transport  = Transport,
                   config  = #stomp_configuration{
                     default_login    = DefaultLogin,
-                    default_passcode = DefaultPasscode}}) ->
+                    default_passcode = DefaultPasscode},
+                  adapter_info = AdapterInfo}) ->
     process_request(
       fun(StateN) ->
               case negotiate_version(Frame) of
@@ -207,7 +219,7 @@ process_connect(Implicit,
                                 rabbit_stomp_frame:header(Frame1,
                                                           ?HEADER_HEART_BEAT,
                                                           "0,0"),
-                                adapter_info(Transport, Version),
+                                AdapterInfo#adapter_info{protocol = {'STOMP', Version}},
                                 Version,
                                 StateN#state{frame_transformer = FT}),
                       case {Res, Implicit} of
@@ -466,7 +478,7 @@ do_login(Username0, Password0, VirtualHost0, Heartbeat, AdapterInfo,
             error("Bad CONNECT", "Authentication failure\n", State)
     end.
 
-adapter_info({SockMod, S} = Transport, Version) ->
+adapter_info({SockMod, S} = Transport) ->
     {Addr, Port} = case SockMod:sockname(S) of
                        {ok, Res} -> Res;
                        _         -> {unknown, unknown}
@@ -475,8 +487,7 @@ adapter_info({SockMod, S} = Transport, Version) ->
                                {ok, Res2} -> Res2;
                                _          -> {unknown, unknown}
                            end,
-    #adapter_info{protocol        = {'STOMP', Version},
-                  address         = Addr,
+    #adapter_info{address         = Addr,
                   port            = Port,
                   peer_address    = PeerAddr,
                   peer_port       = PeerPort,
@@ -860,22 +871,20 @@ perform_transaction_action({Method, Props, BodyFragments}, State) ->
 %%--------------------------------------------------------------------
 
 ensure_heartbeats(Heartbeats,
-                  State = #state{transport = {SockMod, S},
-                                 start_heartbeat_fun = SHF}) ->
+                  State = #state{transport           = {SockMod, S},
+                                 start_heartbeat_fun = SHF,
+                                 send_frame          = SendFrame}) ->
     [CX, CY] = [list_to_integer(X) ||
                    X <- re:split(Heartbeats, ",", [{return, list}])],
 
-    SendFun = fun() -> catch SockMod:send(S, <<$\n>>) end,
+    SendFun = fun() -> SendFrame(<<$\n>>) end,
     Pid = self(),
     ReceiveFun = fun() -> gen_server2:cast(Pid, client_timeout) end,
 
     {SendTimeout, ReceiveTimeout} =
         {millis_to_seconds(CY), millis_to_seconds(CX)},
 
-    case SHF of
-        undefined -> ok;
-        _         -> SHF(S, SendTimeout, SendFun, ReceiveTimeout, ReceiveFun)
-    end,
+    SHF(S, SendTimeout, SendFun, ReceiveTimeout, ReceiveFun),
 
     {{SendTimeout * 1000 , ReceiveTimeout * 1000}, State}.
 
@@ -996,11 +1005,8 @@ send_frame(Command, Headers, BodyFragments, State) ->
                             body_iolist = BodyFragments},
                State).
 
-send_frame(Frame, State = #state{transport = {SockMod, S}}) ->
-    %% We ignore certain errors here, as we will be receiving an
-    %% asynchronous notification of the same (or a related) fault
-    %% shortly anyway. See bug 21365.
-    catch SockMod:port_command(S, rabbit_stomp_frame:serialize(Frame)),
+send_frame(Frame, State = #state{send_frame = SendFrame}) ->
+    SendFrame(Frame),
     State.
 
 send_error(Message, Detail, State) ->
