@@ -57,8 +57,9 @@ start() ->
     Command = list_to_atom(Command0),
     PrintInvalidCommandError =
         fun () ->
-                print_error("invalid command '~s'",
-                            [string:join([atom_to_list(Command) | Args], " ")])
+                print_error(
+                  "invalid command '~s'",
+                  [string:join([atom_to_list(Command) | Args], " ")])
         end,
 
     case catch action(Command, Args, Opts, PluginsFile, PluginsDir) of
@@ -80,9 +81,6 @@ start() ->
 
 stop() ->
     ok.
-
-print_error(Format, Args) ->
-    rabbit_misc:format_stderr("Error: " ++ Format ++ "~n", Args).
 
 usage() ->
     io:format("~s", [rabbit_plugins_usage:usage()]),
@@ -396,3 +394,5 @@ report_change() ->
              ok
     end.
 
+print_error(Format, Args) ->
+    rabbit_misc:format_stderr("Error: " ++ Format ++ "~n", Args).
