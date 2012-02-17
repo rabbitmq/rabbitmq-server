@@ -26,20 +26,23 @@ prepare:
 	mkdir -p BUILD SOURCES SPECS SRPMS RPMS tmp
 	cp $(TARBALL_DIR)/$(TARBALL) SOURCES
 	cp rabbitmq-server.spec SPECS
-	sed -i 's|%%VERSION%%|$(VERSION)|;s|%%REQUIRES%%|$(REQUIRES)|' \
-		SPECS/rabbitmq-server.spec
+	sed -e 's|%%VERSION%%|$(VERSION)|;s|%%REQUIRES%%|$(REQUIRES)|' \
+		SPECS/rabbitmq-server.spec >SPECS/rabbitmq-server.spec.tmp \
+		&& mv SPECS/rabbitmq-server.spec.tmp SPECS/rabbitmq-server.spec
 
 	cp ${COMMON_DIR}/* SOURCES/
-	sed -i \
-	    -e 's|^LOCK_FILE=.*$$|LOCK_FILE=/var/lock/subsys/$$NAME|' \
-	    SOURCES/rabbitmq-server.init
+	sed -e 's|^LOCK_FILE=.*$$|LOCK_FILE=/var/lock/subsys/$$NAME|' \
+		SOURCES/rabbitmq-server.init >SOURCES/rabbitmq-server.init.tmp \
+		&& mv SOURCES/rabbitmq-server.init.tmp SOURCES/rabbitmq-server.init
 ifeq "$(RPM_OS)" "fedora"
 # Fedora says that only vital services should have Default-Start
-	sed -i -e '/^# Default-Start:/d;/^# Default-Stop:/d' \
-	    SOURCES/rabbitmq-server.init
+	sed -e '/^# Default-Start:/d;/^# Default-Stop:/d' \
+	    SOURCES/rabbitmq-server.init >SOURCES/rabbitmq-server.init.tmp \
+	    && mv SOURCES/rabbitmq-server.init.tmp SOURCES/rabbitmq-server.init
 endif
-	sed -i -e 's|@SU_RABBITMQ_SH_C@|su rabbitmq -s /bin/sh -c|' \
-	    SOURCES/rabbitmq-script-wrapper
+	sed -e 's|@SU_RABBITMQ_SH_C@|su rabbitmq -s /bin/sh -c|' \
+		SOURCES/rabbitmq-script-wrapper >SOURCES/rabbitmq-script-wrapper.tmp \
+		&& mv SOURCES/rabbitmq-script-wrapper.tmp SOURCES/rabbitmq-script-wrapper
 	cp rabbitmq-server.logrotate SOURCES/rabbitmq-server.logrotate
 
 server: prepare

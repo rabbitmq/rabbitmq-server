@@ -316,7 +316,7 @@ install_bin: all install_dirs
 	cp -r ebin include LICENSE* INSTALL $(TARGET_DIR)
 
 	chmod 0755 scripts/*
-	for script in rabbitmq-env rabbitmq-server rabbitmqctl rabbitmq-plugins; do \
+	for script in rabbitmq-env rabbitmq-server rabbitmqctl rabbitmq-plugins rabbitmq-sys; do \
 		cp scripts/$$script $(TARGET_DIR)/sbin; \
 		[ -e $(SBIN_DIR)/$$script ] || ln -s $(SCRIPTS_REL_PATH)/$$script $(SBIN_DIR)/$$script; \
 	done
@@ -347,7 +347,7 @@ $(foreach XML,$(USAGES_XML),$(eval $(call usage_dep, $(XML))))
 # Note that all targets which depend on clean must have clean in their
 # name.  Also any target that doesn't depend on clean should not have
 # clean in its name, unless you know that you don't need any of the
-# automatic dependency generation for that target (eg cleandb).
+# automatic dependency generation for that target (e.g. cleandb).
 
 # We want to load the dep file if *any* target *doesn't* contain
 # "clean" - i.e. if removing all clean-like targets leaves something
