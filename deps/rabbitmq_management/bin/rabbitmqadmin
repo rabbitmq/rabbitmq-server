@@ -320,7 +320,7 @@ def output(s):
     print maybe_utf8(s, sys.stdout)
 
 def die(s):
-    sys.stderr.write(maybe_utf8("*** {0}".format(s), sys.stderr))
+    sys.stderr.write(maybe_utf8("*** {0}\n".format(s), sys.stderr))
     exit(1)
 
 def maybe_utf8(s, stream):
