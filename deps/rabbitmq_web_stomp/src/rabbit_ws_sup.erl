@@ -1,21 +1,14 @@
 -module(rabbit_ws_sup).
 
--behaviour(supervisor).
+-export([start_link/0, start_processor/1]).
 
--export([start_link/0, start_child/1]).
--export([init/1]).
+-define(SUP_NAME, rabbit_ws_client_top_sup).
 
-%% --------------------------------------------------------------------------
+%%----------------------------------------------------------------------------
 
--spec start_link() -> ignore | {'ok', pid()} | {'error', any()}.
 start_link() ->
-     supervisor:start_link({local, ?MODULE}, ?MODULE, []).
+    rabbit_client_sup:start_link({local, ?SUP_NAME},
+                                 {rabbit_ws_client_sup, start_link, []}).
 
-init([]) ->
-    {ok, {{simple_one_for_one, 10, 10},
-          [{undefined, {rabbit_ws, start_link, []},
-            transient, 5000, worker, [rabbit_ws]}]}}.
-
-start_child(Params) ->
-   supervisor:start_child(?MODULE, [Params]).
-
+start_processor(Params) ->
+    supervisor:start_child(?SUP_NAME, [Params]).
