@@ -26,6 +26,8 @@ BROKER_DEPS=$(BROKER_HEADERS) $(BROKER_SOURCES)
 INFILES=$(shell find . -name '*.app.in')
 INTARGETS=$(patsubst %.in, %, $(INFILES))
 
+WEB_URL=http://www.rabbitmq.com/
+
 include common.mk
 
 run_in_broker: compile $(BROKER_DEPS) $(EBIN_DIR)/$(PACKAGE).app
@@ -103,7 +105,8 @@ $(DIST_DIR)/$(COMMON_PACKAGE_EZ): $(BROKER_DEPS) $(COMMON_PACKAGE).app | $(DIST_
 source_tarball: $(DIST_DIR)/$(COMMON_PACKAGE_EZ) $(EBIN_DIR)/$(PACKAGE).app | $(DIST_DIR)
 	mkdir -p $(DIST_DIR)/$(SOURCE_PACKAGE_DIR)/$(DIST_DIR)
 	$(COPY) $(DIST_DIR)/$(COMMON_PACKAGE_EZ) $(DIST_DIR)/$(SOURCE_PACKAGE_DIR)/$(DIST_DIR)/
-	$(COPY) README $(DIST_DIR)/$(SOURCE_PACKAGE_DIR)/
+	$(COPY) README.in $(DIST_DIR)/$(SOURCE_PACKAGE_DIR)/README
+	elinks -dump -no-references -no-numbering $(WEB_URL)build-erlang-client.html >> $(DIST_DIR)/$(SOURCE_PACKAGE_DIR)/README
 	$(COPY) common.mk $(DIST_DIR)/$(SOURCE_PACKAGE_DIR)/
 	$(COPY) test.mk $(DIST_DIR)/$(SOURCE_PACKAGE_DIR)/
 	sed 's/%%VSN%%/$(VERSION)/' Makefile.in > $(DIST_DIR)/$(SOURCE_PACKAGE_DIR)/Makefile
