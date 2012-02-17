@@ -40,7 +40,7 @@
 %%----------------------------------------------------------------------------
 
 start() ->
-    rabbit_misc:start_net_kernel("rabbitmqprelaunch"),
+    rabbit_nodes:start_net_kernel("rabbitmqprelaunch"),
 
     io:format("Activating RabbitMQ plugins ...~n"),
 

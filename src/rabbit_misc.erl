@@ -41,7 +41,6 @@
 -export([format/2, print_error/2, format_stderr/2, with_local_io/1,
          local_info_msg/2]).
 -export([start_applications/1, stop_applications/1]).
--export([start_net_kernel/1]).
 -export([unfold/2, ceil/1, queue_fold/3]).
 -export([sort_field_table/1]).
 -export([pid_to_string/1, string_to_pid/1]).
@@ -597,28 +596,6 @@ stop_applications(Apps) ->
                         not_started,
                         cannot_stop_application,
                         Apps).
-
-start_net_kernel(NodeNamePrefix) ->
-    {ok, Hostname} = inet:gethostname(),
-    MyNodeName = rabbit_nodes:make({NodeNamePrefix ++ os:getpid(), Hostname}),
-    case net_kernel:start([MyNodeName, shortnames]) of
-        {ok, _} ->
-            ok;
-        {error, Reason = {shutdown, {child, undefined,
-                                     net_sup_dynamic, _, _, _, _, _}}} ->
-            Port = case os:getenv("ERL_EPMD_PORT") of
-                       false -> 4369;
-                       P     -> P
-                   end,
-            print_error("epmd could not be contacted: ~p", [Reason]),
-            format_stderr("Check your network setup (in particular "
-                          "check you can contact port ~w on localhost).~n",
-                          [Port]),
-            quit(1);
-        {error, Reason} ->
-            print_error("Networking failed to start: ~p", [Reason]),
-            quit(1)
-    end.
 
 unfold(Fun, Init) ->
     unfold(Fun, [], Init).

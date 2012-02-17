@@ -17,6 +17,7 @@
 -module(rabbit_nodes).
 
 -export([names/1, diagnostics/1, make/1, parts/1, cookie_hash/0]).
+-export([start_net_kernel/1]).
 
 -define(EPMD_TIMEOUT, 30000).
 
@@ -32,6 +33,7 @@
 -spec(make/1 :: ({string(), string()} | string()) -> node()).
 -spec(parts/1 :: (node() | string()) -> {string(), string()}).
 -spec(cookie_hash/0 :: () -> string()).
+-spec(start_net_kernel/1 :: (string()) -> 'ok' | no_return()).
 
 -endif.
 
@@ -92,3 +94,27 @@ parts(NodeStr) ->
 
 cookie_hash() ->
     base64:encode_to_string(erlang:md5(atom_to_list(erlang:get_cookie()))).
+
+start_net_kernel(NodeNamePrefix) ->
+    {ok, Hostname} = inet:gethostname(),
+    MyNodeName = make({NodeNamePrefix ++ os:getpid(), Hostname}),
+    case net_kernel:start([MyNodeName, shortnames]) of
+        {ok, _} ->
+            ok;
+        {error, Reason = {shutdown, {child, undefined,
+                                     net_sup_dynamic, _, _, _, _, _}}} ->
+            Port = case os:getenv("ERL_EPMD_PORT") of
+                       false -> 4369;
+                       P     -> P
+                   end,
+            rabbit_misc:format_stderr(
+              "Error: epmd could not be contacted: ~p~n", [Reason]),
+            rabbit_misc:format_stderr(
+              "Check your network setup (in particular "
+              "check you can contact port ~w on localhost).~n", [Port]),
+            rabbit_misc:quit(1);
+        {error, Reason} ->
+            rabbit_misc:format_stderr(
+              "Error: Networking failed to start: ~p~n", [Reason]),
+            rabbit_misc:quit(1)
+    end.
