@@ -838,7 +838,8 @@ handle_confirm(MsgSeqNos, QPid, State = #q{unconfirmed_mq      = UMQ,
 stop_later(Reason, State) ->
     stop_later(Reason, undefined, noreply, State).
 
-stop_later(Reason, From, Reply, State = #q{unconfirmed_mq = UMQ}) ->
+stop_later(Reason, From, Reply, State = #q{unconfirmed_mq = UMQ,
+                                           delayed_delete = undefined}) ->
     case {gb_trees:is_empty(UMQ), Reply} of
         {true, noreply} ->
             {stop, Reason, State};
@@ -846,7 +847,11 @@ stop_later(Reason, From, Reply, State = #q{unconfirmed_mq = UMQ}) ->
             {stop, Reason, Reply, State};
         {false, _} ->
             noreply(State#q{delayed_delete = {Reason, {From, Reply}}})
-    end.
+    end;
+stop_later(_, _, _, State) ->
+    %% All subsequent attempts to stop a stopping queue will hang; the
+    %% caller will eventually receive a 'noproc'.
+    noreply(State).
 
 cleanup_after_confirm(State = #q{delayed_delete = DD,
                                  unconfirmed_mq = UMQ}) ->
