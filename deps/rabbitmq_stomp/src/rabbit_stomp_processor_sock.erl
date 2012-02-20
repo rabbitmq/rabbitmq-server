@@ -22,14 +22,21 @@
 %%----------------------------------------------------------------------------
 
 start_processor(SupPid, Configuration, Sock) ->
-    SendFrame = fun (Frame) ->
-                        %% We ignore certain errors here, as we will
-                        %% be receiving an asynchronous notification
-                        %% of the same (or a related) fault shortly
-                        %% anyway. See bug 21365.
-                        catch rabbit_net:port_command(
-                                Sock, rabbit_stomp_frame:serialize(Frame))
-                end,
+    SendFun = fun (Sync, IoData) ->
+                      case Sync of
+                          sync ->
+                              %% no messages emitted
+                              rabbit_net:send(Sock, IoData);
+                          async ->
+                              %% {inet_reply, _, _} will appear soon
+                              %% We ignore certain errors here, as we
+                              %% will be receiving an asynchronous
+                              %% notification of the same (or a
+                              %% related) fault shortly anyway. See
+                              %% bug 21365.
+                              catch rabbit_net:port_command(Sock, IoData)
+                      end
+              end,
 
     StartHeartbeatFun =
         fun (SendTimeout, SendFin, ReceiveTimeout, ReceiveFun) ->
@@ -38,7 +45,7 @@ start_processor(SupPid, Configuration, Sock) ->
         end,
 
     {ok, ProcessorPid} = rabbit_stomp_client_sup:start_processor(
-                           SupPid, SendFrame, adapter_info(Sock),
+                           SupPid, SendFun, adapter_info(Sock),
                            StartHeartbeatFun, Configuration),
     {ok, ProcessorPid}.
 

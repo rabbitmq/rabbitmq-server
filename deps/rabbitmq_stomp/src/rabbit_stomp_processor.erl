@@ -30,7 +30,7 @@
 -record(state, {session_id, channel, connection, subscriptions,
                 version, start_heartbeat_fun, pending_receipts,
                 config, dest_queues, reply_queues, frame_transformer,
-                adapter_info, send_frame}).
+                adapter_info, send_fun}).
 
 -record(subscription, {dest_hdr, channel, multi_ack, description}).
 
@@ -40,8 +40,8 @@
 %%----------------------------------------------------------------------------
 %% Public API
 %%----------------------------------------------------------------------------
-start_link(SendFrame, AdapterInfo, StartHeartbeatFun, Configuration) ->
-    gen_server2:start_link(?MODULE, [SendFrame, AdapterInfo, StartHeartbeatFun,
+start_link(SendFun, AdapterInfo, StartHeartbeatFun, Configuration) ->
+    gen_server2:start_link(?MODULE, [SendFun, AdapterInfo, StartHeartbeatFun,
                                      Configuration],
                                []).
 
@@ -58,7 +58,7 @@ flush_and_die(Pid) ->
 %% Basic gen_server2 callbacks
 %%----------------------------------------------------------------------------
 
-init([SendFrame, AdapterInfo, StartHeartbeatFun, Configuration]) ->
+init([SendFun, AdapterInfo, StartHeartbeatFun, Configuration]) ->
     process_flag(trap_exit, true),
 
     {ok,
@@ -75,7 +75,7 @@ init([SendFrame, AdapterInfo, StartHeartbeatFun, Configuration]) ->
        reply_queues        = dict:new(),
        frame_transformer   = undefined,
        adapter_info        = AdapterInfo,
-       send_frame          = SendFrame},
+       send_fun            = SendFun},
      hibernate,
      {backoff, 1000, 1000, 10000}
     }.
@@ -818,11 +818,11 @@ perform_transaction_action({Method, Props, BodyFragments}, State) ->
 
 ensure_heartbeats(Heartbeats,
                   State = #state{start_heartbeat_fun = SHF,
-                                 send_frame          = SendFrame}) ->
+                                 send_fun            = RawSendFun}) ->
     [CX, CY] = [list_to_integer(X) ||
                    X <- re:split(Heartbeats, ",", [{return, list}])],
 
-    SendFun = fun() -> SendFrame(<<$\n>>) end,
+    SendFun = fun() -> RawSendFun(sync, <<$\n>>) end,
     Pid = self(),
     ReceiveFun = fun() -> gen_server2:cast(Pid, client_timeout) end,
 
@@ -950,8 +950,8 @@ send_frame(Command, Headers, BodyFragments, State) ->
                             body_iolist = BodyFragments},
                State).
 
-send_frame(Frame, State = #state{send_frame = SendFrame}) ->
-    SendFrame(Frame),
+send_frame(Frame, State = #state{send_fun = SendFun}) ->
+    SendFun(async, rabbit_stomp_frame:serialize(Frame)),
     State.
 
 send_error(Message, Detail, State) ->
