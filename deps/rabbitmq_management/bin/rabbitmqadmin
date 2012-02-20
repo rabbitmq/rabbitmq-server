@@ -231,7 +231,8 @@ def make_parser():
         help="configuration file [default: ~/.rabbitmqadmin.conf]",
         metavar="CONFIG")
     add("-N", "--node", dest="node",
-        help="node described in the configuration file",
+        help="node described in the configuration file [default: 'default'" + \
+             " only if configuration file is specified]",
         metavar="NODE")
     add("-H", "--host", dest="hostname",
         help="connect to host HOST" ,
@@ -267,7 +268,9 @@ def make_parser():
 def make_configuration():
     make_parser()
     (options, args) = parser.parse_args()
-    if options.node and options.config is None:
+    if options.node is None and options.config:
+        options.node = "default"
+    elif options.node and options.config is None:
         home = os.getenv('USERPROFILE') or os.getenv('HOME')
         setattr(options, "config", home + os.sep + ".rabbitmqadmin.conf")
     if options.node:
