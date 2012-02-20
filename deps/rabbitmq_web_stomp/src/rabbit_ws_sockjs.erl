@@ -58,6 +58,16 @@ service_stomp(Conn, init, State) ->
     {ok, Processor} = rabbit_ws_sup:start_processor(
                            {StompConfig, Conn}),
 
+    Fun = fun () ->
+                  ok = file_handle_cache:release(),
+                  process_flag(trap_exit, true),
+                  link(Processor),
+                  receive
+                      {'EXIT', Processor, _Reason} ->
+                          sockjs:close(Conn)
+                  end
+          end,
+    spawn(Fun),
     {ok, State#state{processor   = Processor,
                      parse_state = rabbit_stomp_frame:initial_state()}};
 
@@ -69,6 +79,5 @@ service_stomp(_Conn, {recv, Data}, State = #state{processor   = Processor,
 
 
 service_stomp(_Conn, closed, #state{processor = Processor}) ->
-    ok = file_handle_cache:release(),
     rabbit_stomp_processor:flush_and_die(Processor),
     ok.
