@@ -275,7 +275,7 @@ split(Content = [Elem | Rest1], RPart, RParts, Splitter) ->
 
 take_prefix([Char | Prefix], [Char | List]) -> take_prefix(Prefix, List);
 take_prefix([],              List)          -> {ok, List};
-take_prefix(_Prefix,         List)          -> not_found.
+take_prefix(_Prefix,         _List)         -> not_found.
 
 unescape(Str) -> unescape(Str, []).
 
