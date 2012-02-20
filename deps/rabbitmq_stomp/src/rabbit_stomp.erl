@@ -25,7 +25,8 @@
         #stomp_configuration{
           default_login    = undefined,
           default_passcode = undefined,
-          implicit_connect = false}).
+          implicit_connect = false,
+          ssl_cert_login   = false}).
 
 start(normal, []) ->
     Config = parse_configuration(),
@@ -42,9 +43,11 @@ parse_listener_configuration() ->
 
 parse_configuration() ->
     {ok, UserConfig} = application:get_env(default_user),
-    Configuration = parse_default_user(UserConfig, ?DEFAULT_CONFIGURATION),
-    report_configuration(Configuration),
-    Configuration.
+    Conf0 = parse_default_user(UserConfig, ?DEFAULT_CONFIGURATION),
+    {ok, SSLLogin} = application:get_env(ssl_cert_login),
+    Conf = Conf0#stomp_configuration{ssl_cert_login = SSLLogin},
+    report_configuration(Conf),
+    Conf.
 
 parse_default_user([], Configuration) ->
     Configuration;
@@ -64,7 +67,8 @@ parse_default_user([Unknown | Rest], Configuration) ->
 
 report_configuration(#stomp_configuration{
                         default_login    = Login,
-                        implicit_connect = ImplicitConnect}) ->
+                        implicit_connect = ImplicitConnect,
+                        ssl_cert_login   = SSLCertLogin}) ->
     case Login of
         undefined -> ok;
         _         -> rabbit_log:info("rabbit_stomp: default user '~s' "
@@ -73,6 +77,11 @@ report_configuration(#stomp_configuration{
 
     case ImplicitConnect of
         true  -> rabbit_log:info("rabbit_stomp: implicit connect enabled~n");
+        false -> ok
+    end,
+
+    case SSLCertLogin of
+        true  -> error_logger:info_msg("STOMP ssl_cert_login enabled~n");
         false -> ok
     end,
 

@@ -92,9 +92,12 @@ handle_cast({"CONNECT", Frame, noflow}, State) ->
 handle_cast(Request, State = #state{channel = none,
                                      config = #stomp_configuration{
                                       implicit_connect = true}}) ->
-    {noreply, State1, _} =
+    {noreply, State1 = #state{channel = Ch}, _} =
         process_connect(implicit, #stomp_frame{headers = []}, State),
-    handle_cast(Request, State1);
+    case Ch of
+        none -> {stop, normal, State};
+        _    -> handle_cast(Request, State1)
+    end;
 
 handle_cast(_Request, State = #state{channel = none,
                                      config = #stomp_configuration{
@@ -177,39 +180,24 @@ process_request(ProcessFun, SuccessFun, State) ->
             {stop, R, NewState}
     end.
 
-process_connect(Implicit,
-                Frame,
-                State = #state{
-                  channel = none,
-                  socket  = Sock,
-                  config  = #stomp_configuration{
-                    default_login    = DefaultLogin,
-                    default_passcode = DefaultPasscode}}) ->
+process_connect(Implicit, Frame, State = #state{channel = none,
+                                                socket  = Sock,
+                                                config  = Config}) ->
     process_request(
       fun(StateN) ->
               case negotiate_version(Frame) of
                   {ok, Version} ->
                       FT = frame_transformer(Version),
                       Frame1 = FT(Frame),
+                      {Username, Creds} = creds(Sock, Frame1, Config),
                       {ok, DefaultVHost} =
                           application:get_env(rabbit, default_vhost),
                       Res = do_login(
-                                rabbit_stomp_frame:header(Frame1,
-                                                          ?HEADER_LOGIN,
-                                                          DefaultLogin),
-                                rabbit_stomp_frame:header(Frame1,
-                                                          ?HEADER_PASSCODE,
-                                                          DefaultPasscode),
-                                rabbit_stomp_frame:header(Frame1,
-                                                          ?HEADER_HOST,
-                                                          binary_to_list(
-                                                            DefaultVHost)),
-                                rabbit_stomp_frame:header(Frame1,
-                                                          ?HEADER_HEART_BEAT,
-                                                          "0,0"),
-                                adapter_info(Sock, Version),
-                                Version,
-                                StateN#state{frame_transformer = FT}),
+                              Username, Creds,
+                              login_header(Frame1, ?HEADER_HOST, DefaultVHost),
+                              login_header(Frame1, ?HEADER_HEART_BEAT, "0,0"),
+                              adapter_info(Sock, Version), Version,
+                              StateN#state{frame_transformer = FT}),
                       case {Res, Implicit} of
                           {{ok, _, StateN1}, implicit} -> ok(StateN1);
                           _                            -> Res
@@ -223,6 +211,39 @@ process_connect(Implicit,
       end,
       fun(StateM) -> StateM end,
       State).
+
+creds(Sock, Frame, #stomp_configuration{default_login    = DefLogin,
+                                        default_passcode = DefPasscode,
+                                        ssl_cert_login   = SSLCertLogin}) ->
+    PasswordCreds = {login_header(Frame, ?HEADER_LOGIN, DefLogin),
+                      [{password, login_header(
+                                    Frame, ?HEADER_PASSCODE, DefPasscode)}]},
+    case {rabbit_stomp_frame:header(Frame, ?HEADER_LOGIN),
+          ssl_login_name(SSLCertLogin, Sock)} of
+        {not_found, undefined} -> PasswordCreds;
+        {not_found, SSLName}   -> {SSLName, []};
+        _                      -> PasswordCreds
+    end.
+
+login_header(Frame, Key, Default) when is_binary(Default) ->
+    login_header(Frame, Key, binary_to_list(Default));
+login_header(Frame, Key, Default) ->
+    list_to_binary(rabbit_stomp_frame:header(Frame, Key, Default)).
+
+ssl_login_name(false, _Sock) ->
+    undefined;
+ssl_login_name(true, Sock) ->
+    %% TODO Mode is still a bit duplicated?
+    {ok, Mode} = application:get_env(ssl_cert_login_from),
+    case rabbit_net:peercert(Sock) of
+        {ok, C}              -> case rabbit_ssl:peer_cert_auth_name(Mode, C) of
+                                    unsafe    -> undefined;
+                                    not_found -> undefined;
+                                    Name      -> Name
+                                end;
+        {error, no_peercert} -> undefined;
+        nossl                -> undefined
+    end.
 
 %%----------------------------------------------------------------------------
 %% Frame Transformation
@@ -429,13 +450,9 @@ without_headers([], Command, Frame, State, Fun) ->
 
 do_login(undefined, _, _, _, _, _, State) ->
     error("Bad CONNECT", "Missing login or passcode header(s)\n", State);
-
-do_login(Username0, Password0, VirtualHost0, Heartbeat, AdapterInfo,
-         Version, State) ->
-    Username = list_to_binary(Username0),
-    Password = list_to_binary(Password0),
-    VirtualHost = list_to_binary(VirtualHost0),
-    case rabbit_access_control:check_user_pass_login(Username, Password) of
+do_login(Username, Creds, VirtualHost, Heartbeat, AdapterInfo, Version,
+         State) ->
+    case rabbit_access_control:check_user_login(Username, Creds) of
         {ok, _User} ->
             case amqp_connection:start(
                    #amqp_params_direct{username     = Username,
