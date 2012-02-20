@@ -14,7 +14,8 @@ start_link({Configuration, Conn}) ->
                         sockjs:send(Data, Conn),
                         ok
                 end,
-    AdapterInfo = #adapter_info{address         = {1,2,3,4},
+    AdapterInfo = #adapter_info{protocol        = {'WEB-STOMP', 0},
+                                address         = {1,2,3,4},
                                 port            = 1,
                                 peer_address    = {2,3,4,5},
                                 peer_port       = 2,
