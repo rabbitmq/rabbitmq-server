@@ -34,7 +34,7 @@ init(SupPid, Configuration) ->
     receive
         {go, Sock0, SockTransform} ->
             {ok, Sock} = SockTransform(Sock0),
-            {ok, ProcessorPid} = rabbit_stomp_client_sup:start_processor(
+            {ok, ProcessorPid} = rabbit_stomp_processor_sock:start_processor(
                                    SupPid, Configuration, Sock),
             {ok, ConnStr} = rabbit_net:connection_string(Sock, inbound),
             log(info, "accepting STOMP connection ~p (~s)~n",

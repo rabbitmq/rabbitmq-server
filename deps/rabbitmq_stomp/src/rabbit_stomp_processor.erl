@@ -17,7 +17,7 @@
 -module(rabbit_stomp_processor).
 -behaviour(gen_server2).
 
--export([start_link/3, process_frame/2, flush_and_die/1]).
+-export([start_link/4, process_frame/2, flush_and_die/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          code_change/3, terminate/2]).
 
@@ -27,9 +27,8 @@
 -include("rabbit_stomp_prefixes.hrl").
 -include("rabbit_stomp_headers.hrl").
 
--record(state, {transport, session_id, channel,
-                connection, subscriptions, version,
-                start_heartbeat_fun, pending_receipts,
+-record(state, {session_id, channel, connection, subscriptions,
+                version, start_heartbeat_fun, pending_receipts,
                 config, dest_queues, reply_queues, frame_transformer,
                 adapter_info, send_frame}).
 
@@ -41,8 +40,9 @@
 %%----------------------------------------------------------------------------
 %% Public API
 %%----------------------------------------------------------------------------
-start_link(Transport, StartHeartbeatFun, Configuration) ->
-    gen_server2:start_link(?MODULE, [Transport, StartHeartbeatFun, Configuration],
+start_link(SendFrame, AdapterInfo, StartHeartbeatFun, Configuration) ->
+    gen_server2:start_link(?MODULE, [SendFrame, AdapterInfo, StartHeartbeatFun,
+                                     Configuration],
                                []).
 
 process_frame(Pid, Frame = #stomp_frame{command = "SEND"}) ->
@@ -58,20 +58,11 @@ flush_and_die(Pid) ->
 %% Basic gen_server2 callbacks
 %%----------------------------------------------------------------------------
 
-init([Transport, StartHeartbeatFun, Configuration]) ->
+init([SendFrame, AdapterInfo, StartHeartbeatFun, Configuration]) ->
     process_flag(trap_exit, true),
-
-    SendFrame = fun (Frame) ->
-                        {SockMod, S} = Transport,
-                        %% We ignore certain errors here, as we will be receiving an
-                        %% asynchronous notification of the same (or a related) fault
-                        %% shortly anyway. See bug 21365.
-                        catch SockMod:port_command(S, rabbit_stomp_frame:serialize(Frame))
-                end,
 
     {ok,
      #state {
-       transport           = Transport,
        session_id          = none,
        channel             = none,
        connection          = none,
@@ -83,7 +74,7 @@ init([Transport, StartHeartbeatFun, Configuration]) ->
        dest_queues         = sets:new(),
        reply_queues        = dict:new(),
        frame_transformer   = undefined,
-       adapter_info        = adapter_info(Transport),
+       adapter_info        = AdapterInfo,
        send_frame          = SendFrame},
      hibernate,
      {backoff, 1000, 1000, 10000}
@@ -478,51 +469,6 @@ do_login(Username0, Password0, VirtualHost0, Heartbeat, AdapterInfo,
             error("Bad CONNECT", "Authentication failure\n", State)
     end.
 
-adapter_info({SockMod, S} = Transport) ->
-    {Addr, Port} = case SockMod:sockname(S) of
-                       {ok, Res} -> Res;
-                       _         -> {unknown, unknown}
-                   end,
-    {PeerAddr, PeerPort} = case SockMod:peername(S) of
-                               {ok, Res2} -> Res2;
-                               _          -> {unknown, unknown}
-                           end,
-    #adapter_info{address         = Addr,
-                  port            = Port,
-                  peer_address    = PeerAddr,
-                  peer_port       = PeerPort,
-                  additional_info = maybe_ssl_info(Transport)}.
-
-maybe_ssl_info({SockMod, S} = Transport) ->
-    case SockMod:is_ssl(S) of
-        true  -> [{ssl, true}] ++ ssl_info(Transport) ++ ssl_cert_info(Transport);
-        false -> [{ssl, false}]
-    end.
-
-ssl_info({SockMod, S}) ->
-    {Protocol, KeyExchange, Cipher, Hash} =
-        case SockMod:ssl_info(S) of
-            {ok, {P, {K, C, H}}}    -> {P, K, C, H};
-            {ok, {P, {K, C, H, _}}} -> {P, K, C, H};
-            _                       -> {unknown, unknown, unknown, unknown}
-        end,
-    [{ssl_protocol,       Protocol},
-     {ssl_key_exchange,   KeyExchange},
-     {ssl_cipher,         Cipher},
-     {ssl_hash,           Hash}].
-
-ssl_cert_info({SockMod, S}) ->
-    case SockMod:peercert(S) of
-        {ok, Cert} ->
-            [{peer_cert_issuer,   list_to_binary(
-                                    rabbit_ssl:peer_cert_issuer(Cert))},
-             {peer_cert_subject,  list_to_binary(
-                                    rabbit_ssl:peer_cert_subject(Cert))},
-             {peer_cert_validity, list_to_binary(
-                                    rabbit_ssl:peer_cert_validity(Cert))}];
-        _ ->
-            []
-    end.
 
 do_subscribe(Destination, DestHdr, Frame,
              State = #state{subscriptions = Subs,
@@ -871,8 +817,7 @@ perform_transaction_action({Method, Props, BodyFragments}, State) ->
 %%--------------------------------------------------------------------
 
 ensure_heartbeats(Heartbeats,
-                  State = #state{transport           = {SockMod, S},
-                                 start_heartbeat_fun = SHF,
+                  State = #state{start_heartbeat_fun = SHF,
                                  send_frame          = SendFrame}) ->
     [CX, CY] = [list_to_integer(X) ||
                    X <- re:split(Heartbeats, ",", [{return, list}])],
@@ -884,7 +829,7 @@ ensure_heartbeats(Heartbeats,
     {SendTimeout, ReceiveTimeout} =
         {millis_to_seconds(CY), millis_to_seconds(CX)},
 
-    SHF(S, SendTimeout, SendFun, ReceiveTimeout, ReceiveFun),
+    SHF(SendTimeout, SendFun, ReceiveTimeout, ReceiveFun),
 
     {{SendTimeout * 1000 , ReceiveTimeout * 1000}, State}.
 
