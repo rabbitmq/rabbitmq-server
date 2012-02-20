@@ -22,20 +22,16 @@
 %%----------------------------------------------------------------------------
 
 start_processor(SupPid, Configuration, Sock) ->
-    SendFun = fun (Sync, IoData) ->
-                      case Sync of
-                          sync ->
-                              %% no messages emitted
-                              rabbit_net:send(Sock, IoData);
-                          async ->
-                              %% {inet_reply, _, _} will appear soon
-                              %% We ignore certain errors here, as we
-                              %% will be receiving an asynchronous
-                              %% notification of the same (or a
-                              %% related) fault shortly anyway. See
-                              %% bug 21365.
-                              catch rabbit_net:port_command(Sock, IoData)
-                      end
+    SendFun = fun (sync, IoData) ->
+                      %% no messages emitted
+                      rabbit_net:send(Sock, IoData);
+                  (async, IoData) ->
+                      %% {inet_reply, _, _} will appear soon
+                      %% We ignore certain errors here, as we will be
+                      %% receiving an asynchronous notification of the
+                      %% same (or a related) fault shortly anyway. See
+                      %% bug 21365.
+                      catch rabbit_net:port_command(Sock, IoData)
               end,
 
     StartHeartbeatFun =
