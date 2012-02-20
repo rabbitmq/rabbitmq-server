@@ -45,7 +45,9 @@ parse_configuration() ->
     {ok, UserConfig} = application:get_env(default_user),
     Conf0 = parse_default_user(UserConfig, ?DEFAULT_CONFIGURATION),
     {ok, SSLLogin} = application:get_env(ssl_cert_login),
-    Conf = Conf0#stomp_configuration{ssl_cert_login = SSLLogin},
+    {ok, ImplicitConnect} = application:get_env(implicit_connect),
+    Conf = Conf0#stomp_configuration{ssl_cert_login   = SSLLogin,
+                                     implicit_connect = ImplicitConnect},
     report_configuration(Conf),
     Conf.
 
@@ -57,9 +59,6 @@ parse_default_user([{login, Login} | Rest], Configuration) ->
 parse_default_user([{passcode, Passcode} | Rest], Configuration) ->
     parse_default_user(Rest, Configuration#stomp_configuration{
                                default_passcode = Passcode});
-parse_default_user([implicit_connect | Rest], Configuration) ->
-    parse_default_user(Rest, Configuration#stomp_configuration{
-                               implicit_connect = true});
 parse_default_user([Unknown | Rest], Configuration) ->
     rabbit_log:warning("rabbit_stomp: ignoring invalid default_user "
                        "configuration option: ~p~n", [Unknown]),
