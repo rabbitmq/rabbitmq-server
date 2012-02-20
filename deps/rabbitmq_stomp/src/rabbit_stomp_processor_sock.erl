@@ -55,7 +55,8 @@ adapter_info(Sock) ->
                                {ok, Res2} -> Res2;
                                _          -> {unknown, unknown}
                            end,
-    #adapter_info{address         = Addr,
+    #adapter_info{protocol        = {'STOMP', 0},
+                  address         = Addr,
                   port            = Port,
                   peer_address    = PeerAddr,
                   peer_port       = PeerPort,

@@ -196,6 +196,7 @@ process_connect(Implicit,
                       Frame1 = FT(Frame),
                       {ok, DefaultVHost} =
                           application:get_env(rabbit, default_vhost),
+                      {ProtoName, _} = AdapterInfo#adapter_info.protocol,
                       Res = do_login(
                                 rabbit_stomp_frame:header(Frame1,
                                                           ?HEADER_LOGIN,
@@ -210,7 +211,8 @@ process_connect(Implicit,
                                 rabbit_stomp_frame:header(Frame1,
                                                           ?HEADER_HEART_BEAT,
                                                           "0,0"),
-                                AdapterInfo#adapter_info{protocol = {'STOMP', Version}},
+                                AdapterInfo#adapter_info{
+                                  protocol = {ProtoName, Version}},
                                 Version,
                                 StateN#state{frame_transformer = FT}),
                       case {Res, Implicit} of
