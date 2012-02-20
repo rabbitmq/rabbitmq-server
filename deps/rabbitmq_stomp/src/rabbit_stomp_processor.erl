@@ -92,12 +92,9 @@ handle_cast({"CONNECT", Frame, noflow}, State) ->
 handle_cast(Request, State = #state{channel = none,
                                      config = #stomp_configuration{
                                       implicit_connect = true}}) ->
-    {noreply, State1 = #state{channel = Ch}, _} =
+    {noreply, State1, _} =
         process_connect(implicit, #stomp_frame{headers = []}, State),
-    case Ch of
-        none -> {stop, normal, State};
-        _    -> handle_cast(Request, State1)
-    end;
+    handle_cast(Request, State1);
 
 handle_cast(_Request, State = #state{channel = none,
                                      config = #stomp_configuration{
