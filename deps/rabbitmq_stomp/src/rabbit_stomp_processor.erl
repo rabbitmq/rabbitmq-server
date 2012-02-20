@@ -233,10 +233,8 @@ login_header(Frame, Key, Default) ->
 ssl_login_name(false, _Sock) ->
     undefined;
 ssl_login_name(true, Sock) ->
-    %% TODO Mode is still a bit duplicated?
-    {ok, Mode} = application:get_env(ssl_cert_login_from),
     case rabbit_net:peercert(Sock) of
-        {ok, C}              -> case rabbit_ssl:peer_cert_auth_name(Mode, C) of
+        {ok, C}              -> case rabbit_ssl:peer_cert_auth_name(C) of
                                     unsafe    -> undefined;
                                     not_found -> undefined;
                                     Name      -> Name

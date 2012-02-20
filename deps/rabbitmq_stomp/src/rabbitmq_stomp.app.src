@@ -8,7 +8,6 @@
           [{login, "guest"},
            {passcode, "guest"}]},
          {ssl_cert_login, false},
-         {ssl_cert_login_from, distinguished_name},
          {tcp_listeners, [61613]},
          {ssl_listeners, []},
          {tcp_listen_options, [binary,
