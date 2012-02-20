@@ -53,9 +53,10 @@ init(Sock) ->
     {ok, Mode} = application:get_env(rabbitmq_auth_mechanism_ssl, name_from),
     Username = case rabbit_net:peercert(Sock) of
                    {ok, C} ->
-                       case config_sane() of
-                           true  -> extract_name(Mode, C);
-                           false -> {refused, "configuration unsafe", []}
+                       case rabbit_ssl:peer_cert_auth_name(Mode, C) of
+                           unsafe    -> {refused, "configuration unsafe", []};
+                           not_found -> {refused, "no name found", []};
+                           Name      -> Name
                        end;
                    {error, no_peercert} ->
                        {refused, "no peer certificate", []};
@@ -70,31 +71,4 @@ handle_response(_Response, #state{username = Username}) ->
             E;
         _ ->
             rabbit_access_control:check_user_login(Username, [])
-    end.
-
-%%--------------------------------------------------------------------------
-config_sane() ->
-    {ok, Opts} = application:get_env(ssl_options),
-    case {proplists:get_value(fail_if_no_peer_cert, Opts),
-          proplists:get_value(verify, Opts)} of
-        {true, verify_peer} ->
-            true;
-        {F, V} ->
-            rabbit_log:warning("EXTERNAL mechanism disabled, "
-                               "fail_if_no_peer_cert=~p; "
-                               "verify=~p~n", [F, V]),
-            false
-    end.
-
-extract_name(distinguished_name, Cert) ->
-    iolist_to_binary(rabbit_ssl:peer_cert_subject(Cert));
-
-extract_name(common_name, Cert) ->
-    %% If there is more than one CN then we join them with "," in a
-    %% vaguely DN-like way. But this is more just so we do something
-    %% more intelligent than crashing, if you actually want to escape
-    %% things properly etc, use DN mode.
-    case rabbit_ssl:peer_cert_subject_items(Cert, ?'id-at-commonName') of
-        not_found -> {refused, "no CNs found", []};
-        CNs       -> list_to_binary(string:join(CNs, ","))
     end.
