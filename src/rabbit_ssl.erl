@@ -21,7 +21,7 @@
 -include_lib("public_key/include/public_key.hrl").
 
 -export([peer_cert_issuer/1, peer_cert_subject/1, peer_cert_validity/1]).
--export([peer_cert_subject_items/2]).
+-export([peer_cert_subject_items/2, peer_cert_auth_name/2]).
 
 %%--------------------------------------------------------------------------
 
@@ -36,6 +36,10 @@
 -spec(peer_cert_validity/1      :: (certificate()) -> string()).
 -spec(peer_cert_subject_items/2  ::
         (certificate(), tuple()) -> [string()] | 'not_found').
+
+-spec(peer_cert_auth_name/2 ::
+        ('distinguished_name' | 'common_name', certificate()) ->
+                                    binary() | 'not_found' | 'unsafe').
 
 -endif.
 
@@ -75,6 +79,39 @@ peer_cert_validity(Cert) ->
                       rabbit_misc:format("~s - ~s", [format_asn1_value(Start),
                                                      format_asn1_value(End)])
               end, Cert).
+
+%% For a given mode, extract a username from the certificate
+peer_cert_auth_name(distinguished_name, Cert) ->
+    case auth_config_sane() of
+        true  -> iolist_to_binary(peer_cert_subject(Cert));
+        false -> unsafe
+    end;
+
+peer_cert_auth_name(common_name, Cert) ->
+    %% If there is more than one CN then we join them with "," in a
+    %% vaguely DN-like way. But this is more just so we do something
+    %% more intelligent than crashing, if you actually want to escape
+    %% things properly etc, use DN mode.
+    case auth_config_sane() of
+        true  -> case peer_cert_subject_items(Cert, ?'id-at-commonName') of
+                     not_found -> not_found;
+                     CNs       -> list_to_binary(string:join(CNs, ","))
+                 end;
+        false -> unsafe
+    end.
+
+auth_config_sane() ->
+    {ok, Opts} = application:get_env(rabbit, ssl_options),
+    case {proplists:get_value(fail_if_no_peer_cert, Opts),
+          proplists:get_value(verify, Opts)} of
+        {true, verify_peer} ->
+            true;
+        {F, V} ->
+            rabbit_log:warning("SSL certificate authentication disabled, "
+                               "fail_if_no_peer_cert=~p; "
+                               "verify=~p~n", [F, V]),
+            false
+    end.
 
 %%--------------------------------------------------------------------------
 
