@@ -37,3 +37,5 @@
 -define(MESSAGE_ID_SEPARATOR, "@@").
 
 -define(HEADERS_NOT_ON_SEND, [?HEADER_MESSAGE_ID]).
+
+-define(HEADERS_SUBSCRIPTION_PREFIX, "temp-queue-").

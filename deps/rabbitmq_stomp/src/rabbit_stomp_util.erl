@@ -19,7 +19,8 @@
 -export([parse_destination/1, parse_routing_information/1,
          parse_message_id/1, durable_subscription_queue/2]).
 -export([longstr_field/2]).
--export([ack_mode/1, consumer_tag/1, message_headers/4, message_properties/1]).
+-export([ack_mode/1, consumer_tag_reply_to/1, consumer_tag/1, message_headers/4,
+         message_properties/1]).
 -export([negotiate_version/2]).
 -export([trim_headers/1]).
 -export([valid_dest_prefixes/0]).
@@ -33,13 +34,17 @@
 %% Frame and Header Parsing
 %%--------------------------------------------------------------------
 
-consumer_tag(QueueId)
+consumer_tag_reply_to(QueueId)
   when is_list(QueueId) ->
-    list_to_binary("T_" ++ "subscription_id_" ++ QueueId);
+    list_to_binary("T_" ++ ?HEADERS_SUBSCRIPTION_PREFIX ++ QueueId).
+
 consumer_tag(Frame) ->
     case rabbit_stomp_frame:header(Frame, ?HEADER_ID) of
-        {ok, Str} ->
-            {ok, list_to_binary("T_" ++ Str), "id='" ++ Str ++ "'"};
+        {ok, Id} ->
+            case lists:prefix(?HEADERS_SUBSCRIPTION_PREFIX, Id) of
+                false -> {ok, list_to_binary("T_" ++ Id), "id='" ++ Id ++ "'"};
+                true  -> {error, invalid_prefix}
+            end;
         not_found ->
             case rabbit_stomp_frame:header(Frame, ?HEADER_DESTINATION) of
                 {ok, DestHdr} ->

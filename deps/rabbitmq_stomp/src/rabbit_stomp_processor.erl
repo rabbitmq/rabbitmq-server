@@ -327,6 +327,12 @@ ack_action(Command, Frame,
 %% Internal helpers for processing frames callbacks
 %%----------------------------------------------------------------------------
 
+cancel_subscription({error, invalid_prefix}, _Frame, State) ->
+    error("Invalid id",
+          "UNSUBSCRIBE 'id' may not start with ~s~n",
+          [?HEADERS_SUBSCRIPTION_PREFIX],
+          State);
+
 cancel_subscription({error, _}, _Frame, State) ->
     error("Missing destination or id",
           "UNSUBSCRIBE must include a 'destination' or 'id' header\n",
@@ -686,7 +692,7 @@ ensure_reply_queue(TempQueueId, State = #state{channel       = Channel,
                                   #'queue.declare'{auto_delete = true,
                                                    exclusive   = true}),
 
-            ConsumerTag = rabbit_stomp_util:consumer_tag(TempQueueId),
+            ConsumerTag = rabbit_stomp_util:consumer_tag_reply_to(TempQueueId),
             #'basic.consume_ok'{} =
                 amqp_channel:subscribe(Channel,
                                        #'basic.consume'{
