@@ -27,7 +27,7 @@ start_processor(SupPid, Configuration, Sock) ->
                         %% be receiving an asynchronous notification
                         %% of the same (or a related) fault shortly
                         %% anyway. See bug 21365.
-                        catch rabbi_net:port_command(
+                        catch rabbit_net:port_command(
                                 Sock, rabbit_stomp_frame:serialize(Frame))
                 end,
 
