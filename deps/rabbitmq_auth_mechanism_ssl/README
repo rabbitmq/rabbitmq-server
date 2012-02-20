@@ -22,7 +22,7 @@ $ rabbitmqctl list_connections peer_cert_subject
 
 To use the Common Name instead, set:
 
-{rabbitmq_auth_mechanism_ssl, [{name_from, common_name}]}
+{rabbit, [{ssl_cert_login_from, common_name}]}
 
 in your configuration.
 

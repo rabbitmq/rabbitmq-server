@@ -50,10 +50,9 @@ should_offer(Sock) ->
     end.
 
 init(Sock) ->
-    {ok, Mode} = application:get_env(rabbitmq_auth_mechanism_ssl, name_from),
     Username = case rabbit_net:peercert(Sock) of
                    {ok, C} ->
-                       case rabbit_ssl:peer_cert_auth_name(Mode, C) of
+                       case rabbit_ssl:peer_cert_auth_name(C) of
                            unsafe    -> {refused, "configuration unsafe", []};
                            not_found -> {refused, "no name found", []};
                            Name      -> Name
