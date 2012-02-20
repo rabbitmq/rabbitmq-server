@@ -52,6 +52,7 @@ process_received_bytes(Bytes, Processor, ParseState) ->
 
 
 service_stomp(Conn, init, State) ->
+    ok = file_handle_cache:obtain(),
     StompConfig = #stomp_configuration{implicit_connect = false},
 
     {ok, Processor} = rabbit_ws_sup:start_processor(
@@ -68,5 +69,6 @@ service_stomp(_Conn, {recv, Data}, State = #state{processor   = Processor,
 
 
 service_stomp(_Conn, closed, #state{processor = Processor}) ->
+    ok = file_handle_cache:release(),
     rabbit_stomp_processor:flush_and_die(Processor),
     ok.
