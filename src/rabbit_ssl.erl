@@ -21,7 +21,7 @@
 -include_lib("public_key/include/public_key.hrl").
 
 -export([peer_cert_issuer/1, peer_cert_subject/1, peer_cert_validity/1]).
--export([peer_cert_subject_items/2, peer_cert_auth_name/2]).
+-export([peer_cert_subject_items/2, peer_cert_auth_name/1]).
 
 %%--------------------------------------------------------------------------
 
@@ -36,10 +36,8 @@
 -spec(peer_cert_validity/1      :: (certificate()) -> string()).
 -spec(peer_cert_subject_items/2  ::
         (certificate(), tuple()) -> [string()] | 'not_found').
-
--spec(peer_cert_auth_name/2 ::
-        ('distinguished_name' | 'common_name', certificate()) ->
-                                    binary() | 'not_found' | 'unsafe').
+-spec(peer_cert_auth_name/1 ::
+        (certificate()) -> binary() | 'not_found' | 'unsafe').
 
 -endif.
 
@@ -80,7 +78,11 @@ peer_cert_validity(Cert) ->
                                                      format_asn1_value(End)])
               end, Cert).
 
-%% For a given mode, extract a username from the certificate
+%% Extract a username from the certificate
+peer_cert_auth_name(Cert) ->
+    {ok, Mode} = application:get_env(rabbit, ssl_cert_login_from),
+    peer_cert_auth_name(Mode, Cert).
+
 peer_cert_auth_name(distinguished_name, Cert) ->
     case auth_config_sane() of
         true  -> iolist_to_binary(peer_cert_subject(Cert));

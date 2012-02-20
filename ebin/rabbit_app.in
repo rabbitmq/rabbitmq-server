@@ -38,6 +38,7 @@
          {delegate_count, 16},
          {trace_vhosts, []},
          {log_levels, [{connection, info}]},
+         {ssl_cert_login_from, distinguished_name},
          {tcp_listen_options, [binary,
                                {packet,        raw},
                                {reuseaddr,     true},
