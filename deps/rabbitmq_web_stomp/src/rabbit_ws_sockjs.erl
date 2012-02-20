@@ -46,7 +46,7 @@ process_received_bytes(Bytes, Processor, ParseState) ->
             rabbit_stomp_processor:process_frame(Processor, Frame),
             ParseState1 = rabbit_stomp_frame:initial_state(),
             process_received_bytes(Rest, Processor, ParseState1);
-        {more, ParseState1, Length} ->
+        {more, ParseState1, _Length} ->
             ParseState1
     end.
 
@@ -55,7 +55,7 @@ service_stomp(Conn, init, State) ->
     StompConfig = #stomp_configuration{implicit_connect = false},
 
     {ok, Processor} = rabbit_ws_sup:start_processor(
-                           {StompConfig, {rabbit_ws_sockjs_net, Conn}}),
+                           {StompConfig, Conn}),
 
     {ok, State#state{processor   = Processor,
                      parse_state = rabbit_stomp_frame:initial_state()}};

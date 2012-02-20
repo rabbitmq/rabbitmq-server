@@ -4,20 +4,31 @@
 -export([start_link/1]).
 -export([init/1]).
 
--define(MAX_WAIT, 16#ffffffff).
+-include_lib("amqp_client/include/amqp_client.hrl").
 
 %% --------------------------------------------------------------------------
 
 start_link({Configuration, Conn}) ->
     {ok, SupPid} = supervisor2:start_link(?MODULE, []),
+    SendFrame = fun (_Sync, Data) ->
+                        sockjs:send(Data, Conn),
+                        ok
+                end,
+    AdapterInfo = #adapter_info{address         = {1,2,3,4},
+                                port            = 1,
+                                peer_address    = {2,3,4,5},
+                                peer_port       = 2,
+                                additional_info = [{ssl, false}]},
+
     supervisor2:start_child(SupPid,
                             {rabbit_stomp_processor,
                              {rabbit_stomp_processor, start_link,
-                              [{rabbit_ws_sockjs_net, Conn},
-                               fun (_, _, _, _, _) -> ok end,
+                              [SendFrame,
+                               AdapterInfo,
+                               fun (_, _, _, _) -> ok end,
                                Configuration]},
                              intrinsic, ?MAX_WAIT, worker,
                              [rabbit_stomp_processor]}).
 
-init(Any) ->
+init(_Any) ->
     {ok, {{one_for_all, 0, 1}, []}}.
