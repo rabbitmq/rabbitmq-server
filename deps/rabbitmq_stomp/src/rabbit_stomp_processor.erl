@@ -95,7 +95,7 @@ handle_cast(Request, State = #state{channel = none,
     {noreply, State1 = #state{channel = Ch}, _} =
         process_connect(implicit, #stomp_frame{headers = []}, State),
     case Ch of
-        none -> {stop, normal, State};
+        none -> {stop, normal, State1};
         _    -> handle_cast(Request, State1)
     end;
 
