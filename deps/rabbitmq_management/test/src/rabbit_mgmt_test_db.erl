@@ -193,6 +193,9 @@ test_channel_aggregation(Conn, Chan) ->
     X2 = <<"channel-aggregation-exch2">>,
     declare_exchange(Chan, X1),
     declare_exchange(Chan, X2),
+    Q = declare_queue(Chan),
+    bind_queue(Chan, X1, Q),
+    bind_queue(Chan, X2, Q),
     publish(Chan, X1, <<"">>, 10),
     publish(Chan, X2, <<"">>, 100),
 
