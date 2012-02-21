@@ -26,13 +26,11 @@ class TestRabbitMQAdmin(unittest.TestCase):
         self.run_fail(['--host', 'some-host-that-does-not-exist', 'show', 'overview'])
 
     def test_port(self):
-        self.run_success(['show', 'overview'])
         self.run_success(['--port', '55672', 'show', 'overview'])
         self.run_fail(['--port', '55673', 'show', 'overview'])
         self.run_fail(['--port', '5672', 'show', 'overview'])
 
     def test_user(self):
-        self.run_success(['show', 'overview'])
         self.run_success(['--user', 'guest', '--password', 'guest', 'show', 'overview'])
         self.run_fail(['--user', 'no', '--password', 'guest', 'show', 'overview'])
         self.run_fail(['--user', 'guest', '--password', 'no', 'show', 'overview'])
