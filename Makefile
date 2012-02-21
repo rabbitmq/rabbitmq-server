@@ -350,7 +350,7 @@ $(foreach XML,$(USAGES_XML),$(eval $(call usage_dep, $(XML))))
 # automatic dependency generation for that target (e.g. cleandb).
 
 # We want to load the dep file if *any* target *doesn't* contain
-# "clean" - i.e. if removing all clean-like targets leaves something
+# "clean" - i.e. if removing all clean-like targets leaves something.
 
 ifeq "$(MAKECMDGOALS)" ""
 TESTABLEGOALS:=$(.DEFAULT_GOAL)
