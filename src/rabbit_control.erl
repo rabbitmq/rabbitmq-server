@@ -56,6 +56,8 @@
 %%----------------------------------------------------------------------------
 
 start() ->
+    rabbit_nodes:start_net_kernel("rabbitmqctl"),
+
     {ok, [[NodeStr|_]|_]} = init:get_argument(nodename),
     {[Command0 | Args], Opts} =
         case rabbit_misc:get_options([{flag, ?QUIET_OPT},
@@ -120,8 +122,6 @@ start() ->
             rabbit_misc:quit(2)
     end.
 
-fmt_stderr(Format, Args) -> rabbit_misc:format_stderr(Format ++ "~n", Args).
-
 print_report(Node, {Descr, Module, InfoFun, KeysFun}) ->
     io:format("~s:~n", [Descr]),
     print_report0(Node, {Module, InfoFun, KeysFun}, []).
@@ -139,10 +139,11 @@ print_report0(Node, {Module, InfoFun, KeysFun}, VHostArg) ->
     end,
     io:nl().
 
-print_error(Format, Args) -> fmt_stderr("Error: " ++ Format, Args).
+print_error(Format, Args) ->
+    rabbit_misc:format_stderr("Error: " ++ Format ++ "~n", Args).
 
 print_badrpc_diagnostics(Node) ->
-    fmt_stderr(rabbit_nodes:diagnostics([Node]), []).
+    rabbit_misc:format_stderr(rabbit_nodes:diagnostics([Node]), []).
 
 stop() ->
     ok.

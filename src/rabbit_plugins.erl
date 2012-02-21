@@ -395,4 +395,3 @@ report_change() ->
         _ ->
              ok
     end.
-
