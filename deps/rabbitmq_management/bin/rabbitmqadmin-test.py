@@ -7,6 +7,8 @@ import socket
 import subprocess
 import sys
 
+# TODO test: SSL, depth, config file, encodings(?), completion(???)
+
 class TestRabbitMQAdmin(unittest.TestCase):
     def test_no_args(self):
         self.run_fail([])
@@ -35,8 +37,6 @@ class TestRabbitMQAdmin(unittest.TestCase):
         self.run_fail(['--user', 'no', '--password', 'guest', 'show', 'overview'])
         self.run_fail(['--user', 'guest', '--password', 'no', 'show', 'overview'])
 
-    # TODO SSL
-
     def test_fmt_long(self):
         self.assert_output("""
 --------------------------------------------------------------------------------
@@ -52,7 +52,6 @@ tracing: False
         self.assert_output("""name="/" tracing="False"
 """, ['--format', 'kvp', 'list', 'vhosts'])
 
-    # TODO is this actually right?
     def test_fmt_tsv(self):
         self.assert_output("""name	tracing
 /	False
@@ -71,8 +70,6 @@ tracing: False
     def test_fmt_bash(self):
         self.assert_output("""/
 """, ['--format', 'bash', 'list', 'vhosts'])
-
-    # TODO depth
 
     def test_vhosts(self):
         self.assert_list(['/'], l('vhosts'))
