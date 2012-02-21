@@ -158,7 +158,7 @@ tracing: False
         self.assertEqual(expected, [l.split('\t') for l in run(args)[0].splitlines()])
 
 def run(args, stdin=None):
-    path = os.path.normpath(os.path.join(os.getcwd(), sys.argv[0], '../rabbitmqadmin'))
+    path = os.path.normpath(os.path.join(os.getcwd(), sys.argv[0], '../../../bin/rabbitmqadmin'))
     cmdline = [path]
     cmdline.extend(args)
     proc = subprocess.Popen(cmdline, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
