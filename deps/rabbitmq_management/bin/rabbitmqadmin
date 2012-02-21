@@ -517,7 +517,8 @@ class Management:
             assert_usage(m in upload.keys(),
                          'mandatory argument "{0}" required'.format(m))
         upload['arguments'] = {}
-        upload['vhost'] = self.options.vhost or '/'
+        if 'vhost' not in mandatory:
+            upload['vhost'] = self.options.vhost or '/'
         uri_args = {}
         for k in upload:
             v = upload[k]
