@@ -26,7 +26,12 @@
 
 ##--- End of overridden <var_name> variables
 
-epmd -daemon || exit 1
+case "$(uname -s)" in
+  CYGWIN*) erl -noinput -hidden -sname "epmd_${RABBITMQ_NODENAME}" -s init stop
+           ;;
+  *)       epmd -daemon || exit 1
+           ;;
+esac
 
 exec erl \
     -pa "${RABBITMQ_HOME}/ebin" \
