@@ -57,9 +57,8 @@ start() ->
     Command = list_to_atom(Command0),
     PrintInvalidCommandError =
         fun () ->
-                print_error(
-                  "invalid command '~s'",
-                  [string:join([atom_to_list(Command) | Args], " ")])
+                print_error("invalid command '~s'",
+                            [string:join([atom_to_list(Command) | Args], " ")])
         end,
 
     case catch action(Command, Args, Opts, PluginsFile, PluginsDir) of
