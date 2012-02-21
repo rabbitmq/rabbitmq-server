@@ -79,14 +79,14 @@ tracing: False
     def test_users(self):
         self.assert_list(['guest'], l('users'))
         self.run_fail(['declare', 'user', 'name=foo'])
-        self.run_success(['declare', 'user', 'name=foo', 'password=foo', 'tags='])
+        self.run_success(['declare', 'user', 'name=foo', 'password=pass', 'tags='])
         self.assert_list(['foo', 'guest'], l('users'))
         self.run_success(['delete', 'user', 'name=foo'])
         self.assert_list(['guest'], l('users'))
 
     def test_permissions(self):
         self.run_success(['declare', 'vhost', 'name=foo'])
-        self.run_success(['declare', 'user', 'name=bar', 'password=foo', 'tags='])
+        self.run_success(['declare', 'user', 'name=bar', 'password=pass', 'tags='])
         self.assert_table([['guest', '/']], ['list', 'permissions', 'user', 'vhost'])
         self.run_success(['declare', 'permission', 'user=bar', 'vhost=foo', 'configure=.*', 'write=.*', 'read=.*'])
         self.assert_table([['guest', '/'], ['bar', 'foo']], ['list', 'permissions', 'user', 'vhost'])
