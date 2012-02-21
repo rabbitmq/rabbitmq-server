@@ -625,7 +625,7 @@ ack(AckTags, undefined, State) ->
         lists:foldl(
           fun (SeqId, {Acc, State2}) ->
                   {MsgStatus, State3} = remove_pending_ack(SeqId, State2),
-                  {accumulate_ack(MsgStatus, Acc),  State3}
+                  {accumulate_ack(MsgStatus, Acc), State3}
           end, {accumulate_ack_init(), State}, AckTags),
     IndexState1 = rabbit_queue_index:ack(IndexOnDiskSeqIds, IndexState),
     [ok = msg_store_remove(MSCState, IsPersistent, MsgIds)
@@ -646,7 +646,7 @@ ack(AckTags, MsgFun, State = #vqstate{pending_ack = PA}) ->
                    State2
            end, State, AckTags)}.
 
-requeue(AckTags, #vqstate { delta = Delta,
+requeue(AckTags, #vqstate { delta      = Delta,
                             q3         = Q3,
                             q4         = Q4,
                             in_counter = InCounter,
@@ -1054,9 +1054,9 @@ queue_out(State = #vqstate { q4 = Q4 }) ->
 read_msg(MsgStatus = #msg_status { msg           = undefined,
                                    msg_id        = MsgId,
                                    is_persistent = IsPersistent },
-         State = #vqstate{ ram_msg_count     = RamMsgCount,
-                           msg_store_clients = MSCState }) ->
-    {{ok, Msg = #basic_message{}}, MSCState1} =
+         State = #vqstate { ram_msg_count     = RamMsgCount,
+                            msg_store_clients = MSCState}) ->
+    {{ok, Msg = #basic_message {}}, MSCState1} =
         msg_store_read(MSCState, IsPersistent, MsgId),
     {MsgStatus #msg_status { msg = Msg },
      State #vqstate { ram_msg_count     = RamMsgCount + 1,
