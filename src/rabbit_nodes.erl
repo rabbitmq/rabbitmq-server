@@ -108,13 +108,13 @@ start_net_kernel(NodeNamePrefix) ->
                        P     -> P
                    end,
             rabbit_misc:format_stderr(
-              "Error: epmd could not be contacted: ~p~n", [Reason]),
+              "~nError: epmd could not be contacted: ~p~n~n", [Reason]),
             rabbit_misc:format_stderr(
-              "Check your network setup (in particular "
-              "check you can contact port ~w on localhost).~n", [Port]),
+              "*** Check your network setup (in particular "
+              "check you can contact port ~w on~n*** localhost).~n~n", [Port]),
             rabbit_misc:quit(1);
         {error, Reason} ->
             rabbit_misc:format_stderr(
-              "Error: Networking failed to start: ~p~n", [Reason]),
+              "~nError: Networking failed to start: ~p~n", [Reason]),
             rabbit_misc:quit(1)
     end.
