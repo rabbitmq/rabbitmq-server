@@ -18,7 +18,7 @@ HELP = {
       'If yes, the queue will delete itself after at least one consumer has connected, and then all consumers have disconnected.',
 
     'queue-dead-letter-exchange':
-      'Optional name of an exchange to which messages will be republished if the queue is deleted or purged, or the message is rejected or expires.<br/>(Sets the "x-dead-letter-exchange" argument.)',
+      'Optional name of an exchange to which messages will be republished if they are rejected or expire.<br/>(Sets the "x-dead-letter-exchange" argument.)',
 
     'queue-dead-letter-routing-key':
       'Optional replacement routing key to use when a message is dead-lettered. If this is not set, the message\'s original routing key will be used.<br/>(Sets the "x-dead-letter-routing-key" argument.)',
