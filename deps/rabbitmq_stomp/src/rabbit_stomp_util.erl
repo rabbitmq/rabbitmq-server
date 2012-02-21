@@ -30,25 +30,27 @@
 -include("rabbit_stomp_prefixes.hrl").
 -include("rabbit_stomp_headers.hrl").
 
+-define(INTERNAL_TAG_PREFIX, "T_").
+-define(QUEUE_TAG_PREFIX, "Q_").
+
 %%--------------------------------------------------------------------
 %% Frame and Header Parsing
 %%--------------------------------------------------------------------
 
-consumer_tag_reply_to(QueueId)
-  when is_list(QueueId) ->
-    list_to_binary("T_" ++ ?HEADERS_SUBSCRIPTION_PREFIX ++ QueueId).
+consumer_tag_reply_to(QueueId) ->
+    internal_tag(?TEMP_QUEUE_ID_PREFIX ++ QueueId).
 
 consumer_tag(Frame) ->
     case rabbit_stomp_frame:header(Frame, ?HEADER_ID) of
         {ok, Id} ->
-            case lists:prefix(?HEADERS_SUBSCRIPTION_PREFIX, Id) of
-                false -> {ok, list_to_binary("T_" ++ Id), "id='" ++ Id ++ "'"};
+            case lists:prefix(?TEMP_QUEUE_ID_PREFIX, Id) of
+                false -> {ok, internal_tag(Id), "id='" ++ Id ++ "'"};
                 true  -> {error, invalid_prefix}
             end;
         not_found ->
             case rabbit_stomp_frame:header(Frame, ?HEADER_DESTINATION) of
                 {ok, DestHdr} ->
-                    {ok, list_to_binary("Q_" ++ DestHdr),
+                    {ok, queue_tag(DestHdr),
                      "destination='" ++ DestHdr ++ "'"};
                 not_found ->
                     {error, missing_destination_header}
@@ -98,7 +100,7 @@ message_headers(Destination, SessionId,
                   maybe_header(Header, element(Index, Props), Acc)
           end,
           case ConsumerTag of
-              <<"T_", Id/binary>> ->
+              <<?INTERNAL_TAG_PREFIX, Id/binary>> ->
                   [{"subscription", binary_to_list(Id)} | Basic];
               _ ->
                   Basic
@@ -203,6 +205,12 @@ create_message_id(ConsumerTag, SessionId, DeliveryTag) ->
 
 trim_headers(Frame = #stomp_frame{headers = Hdrs}) ->
     Frame#stomp_frame{headers = [{K, string:strip(V, left)} || {K, V} <- Hdrs]}.
+
+internal_tag(Base) ->
+    list_to_binary(?INTERNAL_TAG_PREFIX ++ Base).
+
+queue_tag(Base) ->
+    list_to_binary(?QUEUE_TAG_PREFIX ++ Base).
 
 %%--------------------------------------------------------------------
 %% Destination Parsing

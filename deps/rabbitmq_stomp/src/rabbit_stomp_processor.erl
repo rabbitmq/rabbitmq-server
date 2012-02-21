@@ -330,7 +330,7 @@ ack_action(Command, Frame,
 cancel_subscription({error, invalid_prefix}, _Frame, State) ->
     error("Invalid id",
           "UNSUBSCRIBE 'id' may not start with ~s~n",
-          [?HEADERS_SUBSCRIPTION_PREFIX],
+          [?TEMP_QUEUE_ID_PREFIX],
           State);
 
 cancel_subscription({error, _}, _Frame, State) ->
