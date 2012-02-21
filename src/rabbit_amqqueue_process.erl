@@ -709,7 +709,7 @@ drop_expired_messages(State = #q{backing_queue_state = BQS,
     Now = now_micros(),
     BQS1 = BQ:dropwhile(
              fun (#message_properties{expiry = Expiry}) -> Now > Expiry end,
-             mk_dead_letter_fun(expired, State),
+             dead_letter_fun(expired, State),
              BQS),
     ensure_ttl_timer(State#q{backing_queue_state = BQS1}).
 
@@ -726,9 +726,9 @@ ensure_ttl_timer(State = #q{backing_queue       = BQ,
 ensure_ttl_timer(State) ->
     State.
 
-mk_dead_letter_fun(_Reason, #q{dlx = undefined}) ->
+dead_letter_fun(_Reason, #q{dlx = undefined}) ->
     undefined;
-mk_dead_letter_fun(Reason, _State) ->
+dead_letter_fun(Reason, _State) ->
     fun(Msg, AckTag) ->
             gen_server2:cast(self(), {dead_letter, {Msg, AckTag}, Reason})
     end.
@@ -1294,7 +1294,7 @@ handle_cast({reject, AckTags, Requeue, ChPid}, State) ->
                                backing_queue_state = BQS}) ->
                       case Requeue of
                           true  -> requeue_and_run(AckTags, State1);
-                          false -> Fun = mk_dead_letter_fun(rejected, State),
+                          false -> Fun = dead_letter_fun(rejected, State),
                                    {_Guids, BQS1} =
                                        BQ:ack(AckTags, Fun, BQS),
                                    State1#q{backing_queue_state = BQS1}
