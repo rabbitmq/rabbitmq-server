@@ -617,15 +617,11 @@ class TSVList(Lister):
         self.options = options
 
     def display_list(self, columns, table):
-        head = ""
-        for col in columns:
-            head += col + "\t"
+        head = "\t".join(columns)
         self.verbose(head)
 
         for row in table:
-            line = ""
-            for cell in row:
-                line += cell + "\t"
+            line = "\t".join(row)
             output(line)
 
 class LongList(Lister):
