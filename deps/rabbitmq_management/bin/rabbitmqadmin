@@ -158,8 +158,8 @@ def config_usage():
   port = 55672
   username = guest
   password = guest
-  default_vhost = something_if_it_differs_from_slash
-  vhost = something_if_it_differs_from_default
+  default_vhost = / # Used as default for declare / delete only
+  vhost = /         # Used as default for declare / delete / list
 
   [host_ssl]
   hostname = otherhost
