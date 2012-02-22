@@ -43,7 +43,7 @@
 <% } %>
     <td><%= fmt_rate_bytes(connection, 'recv_oct') %></td>
     <td><%= fmt_rate_bytes(connection, 'send_oct') %></td>
-    <td><% if (connection.timeout != 0) { %><%= connection.timeout %>s<% } %></td>
+    <td><% if (connection.timeout != undefined) { %><%= connection.timeout %>s<% } %></td>
     <td><%= connection.channels %></td>
 <% if (vhosts_interesting) { %>
     <td><%= fmt_string(connection.vhost) %></td>
