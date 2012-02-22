@@ -734,10 +734,18 @@ ram_duration(State = #vqstate {
 needs_timeout(State = #vqstate { index_state = IndexState }) ->
     case needs_index_sync(State) of
         true  -> timed;
-        false -> case rabbit_queue_index:needs_sync(IndexState) of
-                     true  -> idle;
-                     false -> false
-                 end
+        false ->
+            case rabbit_queue_index:needs_sync(IndexState) of
+                true  -> idle;
+                false -> case reduce_memory_use(
+                                fun (_Quota, State1) -> {0, State1} end,
+                                fun (_Quota, State1) -> State1 end,
+                                fun (_Quota, State1) -> {0, State1} end,
+                                State) of
+                             {true,  _State} -> idle;
+                             {false, _State} -> false
+                         end
+            end
     end.
 
 timeout(State = #vqstate { index_state = IndexState }) ->
