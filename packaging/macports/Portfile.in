@@ -87,7 +87,7 @@ post-destroot {
     xinstall -d -g [existsgroup ${servergroup}] -m 775 ${destroot}${serverhome}
     xinstall -d -g [existsgroup ${servergroup}] -m 775 ${destroot}${mnesiadbdir}
 
-    reinplace -E "s:( /etc/rabbitmq/rabbitmq):${prefix}\\1:g" \
+    reinplace -E "s:( /etc/rabbitmq/rabbitmq): ${prefix}\\1:g" \
         ${realsbin}/rabbitmq-env
     foreach var {CONFIG_FILE LOG_BASE MNESIA_BASE ENABLED_PLUGINS_FILE} {
         reinplace -E "s:^($var)=/:\\1=${prefix}/:" \
