@@ -25,7 +25,10 @@ dist:
 	xmlto -o . xhtml-nochunks ../../docs/rabbitmq-service.xml
 	elinks -dump -no-references -no-numbering rabbitmq-service.html \
 		> $(TARGET_DIR)/readme-service.txt
-	todos $(TARGET_DIR)/readme-service.txt || unix2dos $(TARGET_DIR)/readme-service.txt
+	todos $(TARGET_DIR)/readme-service.txt
+	todos $(TARGET_DIR)/INSTALL
+	todos $(TARGET_DIR)/LICENSE*
+	todos $(TARGET_DIR)/plugins/README.txt
 	rm -rf $(TARGET_DIR)/plugins-src
 	zip -q -r $(TARGET_ZIP).zip $(TARGET_DIR)
 	rm -rf $(TARGET_DIR) rabbitmq-service.html
