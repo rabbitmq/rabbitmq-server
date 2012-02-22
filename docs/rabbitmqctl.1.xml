@@ -1011,6 +1011,10 @@
                 <listitem><para>Id of the Erlang process associated with the connection.</para></listitem>
               </varlistentry>
               <varlistentry>
+                <term>name</term>
+                <listitem><para>Readable name for the connection.</para></listitem>
+              </varlistentry>
+              <varlistentry>
                 <term>address</term>
                 <listitem><para>Server IP address.</para></listitem>
               </varlistentry>

@@ -45,8 +45,8 @@
                           send_pend, state, last_blocked_by, last_blocked_age,
                           channels]).
 
--define(CREATION_EVENT_KEYS, [pid, address, port, peer_address, peer_port, ssl,
-                              peer_cert_subject, peer_cert_issuer,
+-define(CREATION_EVENT_KEYS, [pid, name, address, port, peer_address, peer_port,
+                              ssl, peer_cert_subject, peer_cert_issuer,
                               peer_cert_validity, auth_mechanism,
                               ssl_protocol, ssl_key_exchange,
                               ssl_cipher, ssl_hash,
@@ -185,13 +185,13 @@ socket_op(Sock, Fun) ->
                            exit(normal)
     end.
 
+name(Sock) ->
+    socket_op(Sock, fun (S) -> rabbit_net:connection_string(S, inbound) end).
+
 start_connection(Parent, ChannelSupSupPid, Collector, StartHeartbeatFun, Deb,
                  Sock, SockTransform) ->
     process_flag(trap_exit, true),
-    ConnStr = socket_op(Sock, fun (Sock0) ->
-                                      rabbit_net:connection_string(
-                                        Sock0, inbound)
-                              end),
+    ConnStr = name(Sock),
     log(info, "accepting AMQP connection ~p (~s)~n", [self(), ConnStr]),
     ClientSock = socket_op(Sock, SockTransform),
     erlang:send_after(?HANDSHAKE_TIMEOUT * 1000, self(),
@@ -801,6 +801,8 @@ infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
 
 i(pid, #v1{}) ->
     self();
+i(name, #v1{sock = Sock}) ->
+    list_to_binary(name(Sock));
 i(address, #v1{sock = Sock}) ->
     socket_info(fun rabbit_net:sockname/1, fun ({A, _}) -> A end, Sock);
 i(port, #v1{sock = Sock}) ->
