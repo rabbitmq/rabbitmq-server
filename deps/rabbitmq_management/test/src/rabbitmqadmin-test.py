@@ -136,6 +136,15 @@ tracing: False
         os.remove(filename)
         self.run_success(['delete', 'queue', 'name=test'])
 
+    def test_ignore_vhost(self):
+        self.run_success(['--vhost', '/', 'show', 'overview'])
+        self.run_success(['--vhost', '/', 'list', 'users'])
+        self.run_success(['--vhost', '/', 'list', 'vhosts'])
+        self.run_success(['--vhost', '/', 'list', 'nodes'])
+        self.run_success(['--vhost', '/', 'list', 'permissions'])
+        self.run_success(['--vhost', '/', 'declare', 'user', 'name=foo', 'password=pass', 'tags='])
+        self.run_success(['delete', 'user', 'name=foo'])
+
     # ---------------------------------------------------------------------------
 
     def run_success(self, args, **kwargs):

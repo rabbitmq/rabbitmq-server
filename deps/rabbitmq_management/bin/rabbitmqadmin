@@ -26,10 +26,11 @@ import json
 import os
 import socket
 
-LISTABLE = ['connections', 'channels', 'exchanges', 'queues', 'bindings',
-            'users', 'vhosts', 'permissions', 'nodes']
+LISTABLE = {'connections': False, 'channels': False, 'exchanges': True,
+            'queues': True, 'bindings': True, 'users': False,
+            'vhosts': False, 'permissions': False, 'nodes': False}
 
-SHOWABLE = ['overview']
+SHOWABLE = {'overview': False}
 
 PROMOTE_COLUMNS = ['vhost', 'name', 'type',
                    'source', 'destination', 'destination_type', 'routing_key']
@@ -459,8 +460,9 @@ class Management:
         obj_type = self.args[0]
         assert_usage(obj_type in obj_types,
                      "Don't know how to {0} {1}".format(verb, obj_type))
+        vhostable = obj_types[obj_type]
         uri = "/%s" % obj_type
-        if self.options.vhost:
+        if vhostable and self.options.vhost:
             uri += "/%s" % urllib.quote_plus(self.options.vhost)
         if cols != []:
             uri += "?columns=" + ",".join(cols)
