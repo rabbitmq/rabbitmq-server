@@ -158,6 +158,8 @@ def config_usage():
   port = 55672
   username = guest
   password = guest
+  default_vhost = something_if_it_differs_from_slash
+  vhost = something_if_it_differs_from_default
 
   [host_ssl]
   hostname = otherhost
@@ -202,6 +204,7 @@ def fmt_usage_stanza(root, verb):
 
 default_options = { "hostname"        : "localhost",
                     "port"            : "55672",
+                    "default_vhost"   : "/",
                     "username"        : "guest",
                     "password"        : "guest",
                     "ssl"             : False,
@@ -268,6 +271,7 @@ def make_parser():
 def make_configuration():
     make_parser()
     (options, args) = parser.parse_args()
+    setattr(options, "default_vhost", None)
     if options.node is None and options.config:
         options.node = "default"
     elif options.node and options.config is None:
@@ -518,7 +522,7 @@ class Management:
                          'mandatory argument "{0}" required'.format(m))
         upload['arguments'] = {}
         if 'vhost' not in mandatory:
-            upload['vhost'] = self.options.vhost or '/'
+            upload['vhost'] = self.options.vhost or self.options.default_vhost
         uri_args = {}
         for k in upload:
             v = upload[k]
