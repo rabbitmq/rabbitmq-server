@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_node_monitor).
@@ -55,29 +55,32 @@ notify_cluster() ->
         {_, Bad} -> rabbit_log:info("failed to contact nodes ~p~n", [Bad])
     end,
     %% register other active rabbits with this rabbit
-    [ rabbit_node_monitor:rabbit_running_on(N) || N <- Nodes ],
+    [ rabbit_running_on(N) || N <- Nodes ],
     ok.
 
 %%--------------------------------------------------------------------
 
 init([]) ->
-    {ok, no_state}.
+    {ok, ordsets:new()}.
 
 handle_call(_Request, _From, State) ->
     {noreply, State}.
 
-handle_cast({rabbit_running_on, Node}, State) ->
-    rabbit_log:info("rabbit on ~p up~n", [Node]),
-    erlang:monitor(process, {rabbit, Node}),
-    ok = handle_live_rabbit(Node),
-    {noreply, State};
+handle_cast({rabbit_running_on, Node}, Nodes) ->
+    case ordsets:is_element(Node, Nodes) of
+        true  -> {noreply, Nodes};
+        false -> rabbit_log:info("rabbit on node ~p up~n", [Node]),
+                 erlang:monitor(process, {rabbit, Node}),
+                 ok = handle_live_rabbit(Node),
+                 {noreply, ordsets:add_element(Node, Nodes)}
+    end;
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
-handle_info({'DOWN', _MRef, process, {rabbit, Node}, _Reason}, State) ->
-    rabbit_log:info("node ~p lost 'rabbit'~n", [Node]),
+handle_info({'DOWN', _MRef, process, {rabbit, Node}, _Reason}, Nodes) ->
+    rabbit_log:info("rabbit on node ~p down~n", [Node]),
     ok = handle_dead_rabbit(Node),
-    {noreply, State};
+    {noreply, ordsets:del_element(Node, Nodes)};
 handle_info(_Info, State) ->
     {noreply, State}.
 

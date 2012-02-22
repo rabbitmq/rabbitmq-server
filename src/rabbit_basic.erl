@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_basic).
@@ -139,7 +139,7 @@ message(XName, RoutingKey, #content{properties = Props} = DecodedContent) ->
         {ok, #basic_message{
            exchange_name = XName,
            content       = strip_header(DecodedContent, ?DELETED_HEADER),
-           id            = rabbit_guid:guid(),
+           id            = rabbit_guid:gen(),
            is_persistent = is_message_persistent(DecodedContent),
            routing_keys  = [RoutingKey |
                             header_routes(Props#'P_basic'.headers)]}}

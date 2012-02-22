@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_variable_queue).
@@ -434,7 +434,7 @@ init(#amqqueue { name = QueueName, durable = true }, true,
     Terms = rabbit_queue_index:shutdown_terms(QueueName),
     {PRef, Terms1} =
         case proplists:get_value(persistent_ref, Terms) of
-            undefined -> {rabbit_guid:guid(), []};
+            undefined -> {rabbit_guid:gen(), []};
             PRef1     -> {PRef1, Terms}
         end,
     PersistentClient = msg_store_client_init(?PERSISTENT_MSG_STORE, PRef,
@@ -860,7 +860,8 @@ with_immutable_msg_store_state(MSCState, IsPersistent, Fun) ->
     Res.
 
 msg_store_client_init(MsgStore, MsgOnDiskFun, Callback) ->
-    msg_store_client_init(MsgStore, rabbit_guid:guid(), MsgOnDiskFun, Callback).
+    msg_store_client_init(MsgStore, rabbit_guid:gen(), MsgOnDiskFun,
+                          Callback).
 
 msg_store_client_init(MsgStore, Ref, MsgOnDiskFun, Callback) ->
     CloseFDsFun = msg_store_close_fds_fun(MsgStore =:= ?PERSISTENT_MSG_STORE),
@@ -870,17 +871,23 @@ msg_store_client_init(MsgStore, Ref, MsgOnDiskFun, Callback) ->
 msg_store_write(MSCState, IsPersistent, MsgId, Msg) ->
     with_immutable_msg_store_state(
       MSCState, IsPersistent,
-      fun (MSCState1) -> rabbit_msg_store:write(MsgId, Msg, MSCState1) end).
+      fun (MSCState1) ->
+              rabbit_msg_store:write_flow(MsgId, Msg, MSCState1)
+      end).
 
 msg_store_read(MSCState, IsPersistent, MsgId) ->
     with_msg_store_state(
       MSCState, IsPersistent,
-      fun (MSCState1) -> rabbit_msg_store:read(MsgId, MSCState1) end).
+      fun (MSCState1) ->
+              rabbit_msg_store:read(MsgId, MSCState1)
+      end).
 
 msg_store_remove(MSCState, IsPersistent, MsgIds) ->
     with_immutable_msg_store_state(
       MSCState, IsPersistent,
-      fun (MCSState1) -> rabbit_msg_store:remove(MsgIds, MCSState1) end).
+      fun (MCSState1) ->
+              rabbit_msg_store:remove(MsgIds, MCSState1)
+      end).
 
 msg_store_close_fds(MSCState, IsPersistent) ->
     with_msg_store_state(

@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
 
@@ -23,8 +23,8 @@
          empty_ram_only_tables/0, copy_db/1, wait_for_tables/1,
          create_cluster_nodes_config/1, read_cluster_nodes_config/0,
          record_running_nodes/0, read_previously_running_nodes/0,
-         delete_previously_running_nodes/0, running_nodes_filename/0,
-         is_disc_node/0, on_node_down/1, on_node_up/1]).
+         running_nodes_filename/0, is_disc_node/0, on_node_down/1,
+         on_node_up/1]).
 
 -export([table_names/0]).
 
@@ -64,7 +64,6 @@
 -spec(read_cluster_nodes_config/0 :: () ->  [node()]).
 -spec(record_running_nodes/0 :: () ->  'ok').
 -spec(read_previously_running_nodes/0 :: () ->  [node()]).
--spec(delete_previously_running_nodes/0 :: () ->  'ok').
 -spec(running_nodes_filename/0 :: () -> file:filename()).
 -spec(is_disc_node/0 :: () -> boolean()).
 -spec(on_node_up/1 :: (node()) -> 'ok').
@@ -98,12 +97,13 @@ status() ->
 init() ->
     ensure_mnesia_running(),
     ensure_mnesia_dir(),
-    ok = init_db(read_cluster_nodes_config(), true,
-                 fun maybe_upgrade_local_or_record_desired/0),
+    Nodes = read_cluster_nodes_config(),
+    ok = init_db(Nodes, should_be_disc_node(Nodes)),
     %% We intuitively expect the global name server to be synced when
     %% Mnesia is up. In fact that's not guaranteed to be the case - let's
     %% make it so.
     ok = global:sync(),
+    ok = delete_previously_running_nodes(),
     ok.
 
 is_db_empty() ->
@@ -174,8 +174,7 @@ cluster(ClusterNodes, Force) ->
     %% Join the cluster
     start_mnesia(),
     try
-        ok = init_db(ClusterNodes, Force,
-                     fun maybe_upgrade_local_or_record_desired/0),
+        ok = init_db(ClusterNodes, Force),
         ok = create_cluster_nodes_config(ClusterNodes)
     after
         stop_mnesia()
@@ -501,6 +500,18 @@ delete_previously_running_nodes() ->
                                           FileName, Reason}})
     end.
 
+init_db(ClusterNodes, Force) ->
+    init_db(
+      ClusterNodes, Force,
+      fun () ->
+              case rabbit_upgrade:maybe_upgrade_local() of
+                  ok                    -> ok;
+                  %% If we're just starting up a new node we won't have a
+                  %% version
+                  version_not_available -> ok = rabbit_version:record_desired()
+              end
+      end).
+
 %% Take a cluster node config and create the right kind of node - a
 %% standalone disk node, or disk or ram node connected to the
 %% specified cluster nodes.  If Force is false, don't allow
@@ -509,20 +520,12 @@ init_db(ClusterNodes, Force, SecondaryPostMnesiaFun) ->
     UClusterNodes = lists:usort(ClusterNodes),
     ProperClusterNodes = UClusterNodes -- [node()],
     case mnesia:change_config(extra_db_nodes, ProperClusterNodes) of
+        {ok, []} when not Force andalso ProperClusterNodes =/= [] ->
+            throw({error, {failed_to_cluster_with, ProperClusterNodes,
+                           "Mnesia could not connect to any disc nodes."}});
         {ok, Nodes} ->
-            case Force of
-                false -> FailedClusterNodes = ProperClusterNodes -- Nodes,
-                         case FailedClusterNodes of
-                             [] -> ok;
-                             _  -> throw({error, {failed_to_cluster_with,
-                                                  FailedClusterNodes,
-                                                  "Mnesia could not connect "
-                                                  "to some nodes."}})
-                         end;
-                true  -> ok
-            end,
-            WantDiscNode = should_be_disc_node(ClusterNodes),
             WasDiscNode = is_disc_node(),
+            WantDiscNode = should_be_disc_node(ClusterNodes),
             %% We create a new db (on disk, or in ram) in the first
             %% two cases and attempt to upgrade the in the other two
             case {Nodes, WasDiscNode, WantDiscNode} of
@@ -572,14 +575,6 @@ init_db(ClusterNodes, Force, SecondaryPostMnesiaFun) ->
             throw({error, {unable_to_join_cluster, ClusterNodes, Reason}})
     end.
 
-maybe_upgrade_local_or_record_desired() ->
-    case rabbit_upgrade:maybe_upgrade_local() of
-        ok                    -> ok;
-        %% If we're just starting up a new node we won't have a
-        %% version
-        version_not_available -> ok = rabbit_version:record_desired()
-    end.
-
 schema_ok_or_move() ->
     case check_schema_integrity() of
         ok ->
@@ -627,10 +622,9 @@ move_db() ->
     stop_mnesia(),
     MnesiaDir = filename:dirname(dir() ++ "/"),
     {{Year, Month, Day}, {Hour, Minute, Second}} = erlang:universaltime(),
-    BackupDir = lists:flatten(
-                  io_lib:format("~s_~w~2..0w~2..0w~2..0w~2..0w~2..0w",
-                                [MnesiaDir,
-                                 Year, Month, Day, Hour, Minute, Second])),
+    BackupDir = rabbit_misc:format(
+                  "~s_~w~2..0w~2..0w~2..0w~2..0w~2..0w",
+                  [MnesiaDir, Year, Month, Day, Hour, Minute, Second]),
     case file:rename(MnesiaDir, BackupDir) of
         ok ->
             %% NB: we cannot use rabbit_log here since it may not have
@@ -738,16 +732,18 @@ reset(Force) ->
         false -> ok
     end,
     Node = node(),
+    Nodes = all_clustered_nodes() -- [Node],
     case Force of
         true  -> ok;
         false ->
             ensure_mnesia_dir(),
             start_mnesia(),
-            {Nodes, RunningNodes} =
+            RunningNodes =
                 try
-                    ok = init(),
-                    {all_clustered_nodes() -- [Node],
-                     running_clustered_nodes() -- [Node]}
+                    %% Force=true here so that reset still works when clustered
+                    %% with a node which is down
+                    ok = init_db(read_cluster_nodes_config(), true),
+                    running_clustered_nodes() -- [Node]
                 after
                     stop_mnesia()
                 end,
@@ -755,6 +751,10 @@ reset(Force) ->
             rabbit_misc:ensure_ok(mnesia:delete_schema([Node]),
                                   cannot_delete_schema)
     end,
+    %% We need to make sure that we don't end up in a distributed
+    %% Erlang system with nodes while not being in an Mnesia cluster
+    %% with them. We don't handle that well.
+    [erlang:disconnect_node(N) || N <- Nodes],
     ok = delete_cluster_nodes_config(),
     %% remove persisted messages and any other garbage we find
     ok = rabbit_file:recursive_delete(filelib:wildcard(dir() ++ "/*")),

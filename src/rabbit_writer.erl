@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_writer).
@@ -129,6 +129,9 @@ handle_message({send_command_and_notify, QPid, ChPid, MethodRecord, Content},
     ok = internal_send_command_async(MethodRecord, Content, State),
     rabbit_amqqueue:notify_sent(QPid, ChPid),
     State;
+handle_message({'DOWN', _MRef, process, QPid, _Reason}, State) ->
+    rabbit_amqqueue:notify_sent_queue_down(QPid),
+    State;
 handle_message({inet_reply, _, ok}, State) ->
     State;
 handle_message({inet_reply, _, Status}, _State) ->
@@ -169,12 +172,10 @@ call(Pid, Msg) ->
 %%---------------------------------------------------------------------------
 
 assemble_frame(Channel, MethodRecord, Protocol) ->
-    ?LOGMESSAGE(out, Channel, MethodRecord, none),
     rabbit_binary_generator:build_simple_method_frame(
       Channel, MethodRecord, Protocol).
 
 assemble_frames(Channel, MethodRecord, Content, FrameMax, Protocol) ->
-    ?LOGMESSAGE(out, Channel, MethodRecord, Content),
     MethodName = rabbit_misc:method_record_type(MethodRecord),
     true = Protocol:method_has_content(MethodName), % assertion
     MethodFrame = rabbit_binary_generator:build_simple_method_frame(

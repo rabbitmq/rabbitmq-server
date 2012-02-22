@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_exchange_type_topic).
@@ -250,7 +250,7 @@ remove_all(Table, Pattern) ->
                   mnesia:match_object(Table, Pattern, write)).
 
 new_node_id() ->
-    rabbit_guid:guid().
+    rabbit_guid:gen().
 
 split_topic_key(Key) ->
     split_topic_key(Key, [], []).
@@ -263,4 +263,3 @@ split_topic_key(<<$., Rest/binary>>, RevWordAcc, RevResAcc) ->
     split_topic_key(Rest, [], [lists:reverse(RevWordAcc) | RevResAcc]);
 split_topic_key(<<C:8, Rest/binary>>, RevWordAcc, RevResAcc) ->
     split_topic_key(Rest, [C | RevWordAcc], RevResAcc).
-
