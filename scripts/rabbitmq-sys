@@ -28,6 +28,6 @@ MNESIA_BASE=${SYS_PREFIX}/var/lib/rabbitmq/mnesia
 ENABLED_PLUGINS_FILE=${SYS_PREFIX}/etc/rabbitmq/enabled_plugins
 
 OLD_CONF_ENV_FILE=/etc/rabbitmq/rabbitmq.conf
-CONF_ENV_FILE=/etc/rabbitmq/rabbitmq-env.conf
+CONF_ENV_FILE=${SYS_PREFIX}/etc/rabbitmq/rabbitmq-env.conf
 
 PLUGINS_DIR="${RABBITMQ_HOME}/plugins"
