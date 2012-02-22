@@ -505,9 +505,11 @@ handle_frame(Type, Channel, Payload,
 process_frame(Frame, Channel, State) ->
     case get({channel, Channel}) of
         {ChPid, AState} ->
-            NewAState = process_channel_frame(Frame, Channel, ChPid, AState),
-            put({channel, Channel}, {ChPid, NewAState}),
-            post_process_frame(Frame, ChPid, State);
+            case process_channel_frame(Frame,  ChPid, AState) of
+                {ok, NewAState} -> put({channel, Channel}, {ChPid, NewAState}),
+                                   post_process_frame(Frame, ChPid, State);
+                {error, Reason} -> handle_exception(State, Channel, Reason)
+            end;
         undefined when ?IS_RUNNING(State) ->
             ok = create_channel(Channel, State),
             process_frame(Frame, Channel, State);
@@ -910,17 +912,15 @@ create_channel(Channel, State) ->
     put({channel, Channel}, {ChPid, AState}),
     ok.
 
-process_channel_frame(Frame, Channel, ChPid, AState) ->
+process_channel_frame(Frame, ChPid, AState) ->
     case rabbit_command_assembler:process(Frame, AState) of
-        {ok, NewAState}                  -> NewAState;
+        {ok, NewAState}                  -> {ok, NewAState};
         {ok, Method, NewAState}          -> rabbit_channel:do(ChPid, Method),
-                                            NewAState;
+                                            {ok, NewAState};
         {ok, Method, Content, NewAState} -> rabbit_channel:do_flow(
                                               ChPid, Method, Content),
-                                            NewAState;
-        {error, Reason}                  -> self() ! {channel_exit, Channel,
-                                                      Reason},
-                                            AState
+                                            {ok, NewAState};
+        {error, Reason}                  -> {error, Reason}
     end.
 
 handle_exception(State = #v1{connection_state = closed}, _Channel, _Reason) ->
