@@ -743,14 +743,7 @@ needs_timeout(State = #vqstate { index_state = IndexState }) ->
 timeout(State = #vqstate { index_state = IndexState }) ->
     IndexState1 = rabbit_queue_index:sync(IndexState),
     State1 = State #vqstate { index_state = IndexState1 },
-    a(case reduce_memory_use(
-             fun (_Quota, State2) -> {0, State2} end,
-             fun (_Quota, State2) -> State2 end,
-             fun (_Quota, State2) -> {0, State2} end,
-             State) of
-          {true,  _State} -> reduce_memory_use(State1);
-          {false, _State} -> State1
-      end).
+    reduce_memory_use(State1).
 
 handle_pre_hibernate(State = #vqstate { index_state = IndexState }) ->
     State #vqstate { index_state = rabbit_queue_index:flush(IndexState) }.
