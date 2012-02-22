@@ -85,7 +85,7 @@ pre-destroot {
 }
 
 post-destroot {
-    xinstall -d -g [existsgroup ${servergroup}] -m 775 ${destroot}${confdir}
+    xinstall -d -m 775 ${destroot}${confdir}
     xinstall -d -g [existsgroup ${servergroup}] -m 775 ${destroot}${logdir}
     xinstall -d -g [existsgroup ${servergroup}] -m 775 ${destroot}${serverhome}
     xinstall -d -g [existsgroup ${servergroup}] -m 775 ${destroot}${mnesiadbdir}
