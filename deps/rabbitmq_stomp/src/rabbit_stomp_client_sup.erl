@@ -31,12 +31,12 @@ start_link(Configuration) ->
                                 [rabbit_stomp_reader]}),
     {ok, SupPid, ReaderPid}.
 
-start_processor(SupPid, SendFrame, AdapterInfo, StartHeartbeatFun,
+start_processor(SupPid, SendFun, AdapterInfo, StartHeartbeatFun,
                 Configuration) ->
     supervisor2:start_child(SupPid,
                             {rabbit_stomp_processor,
                              {rabbit_stomp_processor, start_link,
-                              [SendFrame,
+                              [SendFun,
                                AdapterInfo,
                                StartHeartbeatFun,
                                Configuration]},
