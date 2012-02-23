@@ -332,12 +332,7 @@ handle_event(Event = #event{type = connection_closed}, State) ->
 
 handle_event(#event{type = channel_created, props = Stats},
              State = #state{tables = Tables}) ->
-    ConnTable = orddict:fetch(connection_stats, Tables),
-    Conn = lookup_element(ConnTable, {id(pget(connection, Stats)), create}),
-    Name = rabbit_mgmt_format:print("~s (~w)",
-                                    [pget(name,   Conn),
-                                     pget(number, Stats)]),
-    handle_created(channel_stats, [{name, Name}|Stats], [], State);
+    handle_created(channel_stats, Stats, [], State);
 
 handle_event(#event{type = channel_stats, props = Stats, timestamp = Timestamp},
              State) ->
