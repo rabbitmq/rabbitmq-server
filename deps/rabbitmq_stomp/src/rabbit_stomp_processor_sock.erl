@@ -40,10 +40,8 @@ start_processor(SupPid, Configuration, Sock) ->
                 SHF(Sock, SendTimeout, SendFin, ReceiveTimeout, ReceiveFun)
         end,
 
-    {ok, ProcessorPid} = rabbit_stomp_client_sup:start_processor(
-                           SupPid, SendFun, adapter_info(Sock),
-                           StartHeartbeatFun, Configuration),
-    {ok, ProcessorPid}.
+    rabbit_stomp_client_sup:start_processor(SupPid, SendFun, adapter_info(Sock),
+                                            StartHeartbeatFun, Configuration).
 
 
 adapter_info(Sock) ->
