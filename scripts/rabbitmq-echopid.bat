@@ -8,9 +8,6 @@ setlocal
 
 if "%1"=="" goto fail
 
-:: set the node name ::
-set NODENAME="%1"
-
 :: set timeout vars ::
 set TIMEOUT=10
 set TIMER=1
