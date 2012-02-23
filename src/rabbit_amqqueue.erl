@@ -341,7 +341,7 @@ check_declare_arguments(QueueName = #resource{virtual_host = VHostPath},
                  {<<"x-message-ttl">>, fun check_integer_argument/3},
                  {<<"x-ha-policy">>,   fun check_ha_policy_argument/3},
                  {<<"x-dead-letter-exchange">>,
-                  fun check_exchange_argument/3},
+                  fun check_dlx_argument/3},
                  {<<"x-dead-letter-routing-key">>,
                   fun check_string_argument/3}]],
     ok.
@@ -363,17 +363,17 @@ check_integer_argument({Type, Val}, _Args, _VHostPath) when Val > 0 ->
 check_integer_argument({_Type, Val}, _Args, _VHostPath) ->
     {error, {value_zero_or_less, Val}}.
 
-check_exchange_argument(undefined, Args, _VHostPath) ->
+check_dlx_argument(undefined, Args, _VHostPath) ->
     case rabbit_misc:table_lookup(Args, <<"x-dead-letter-routing-key">>) of
         undefined -> ok;
         _         -> {error, routing_key_but_no_dlx_defined}
     end;
-check_exchange_argument({longstr, Val}, _Args, VHostPath) ->
+check_dlx_argument({longstr, Val}, _Args, VHostPath) ->
     try rabbit_misc:r(VHostPath, exchange, Val)
     of _Exchange -> ok
     catch _:_ -> {error, {invalid_exchange_name, Val}}
     end;
-check_exchange_argument({Type, _Val}, _Args, _VHostPath) ->
+check_dlx_argument({Type, _Val}, _Args, _VHostPath) ->
     {error, {unacceptable_type, Type}}.
 
 check_ha_policy_argument(undefined, _Args, _VHostPath) ->
