@@ -17,7 +17,7 @@
 -module(rabbit_stomp_processor).
 -behaviour(gen_server2).
 
--export([start_link/4, process_frame/2, flush_and_die/1]).
+-export([start_link/1, process_frame/2, flush_and_die/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          code_change/3, terminate/2]).
 
@@ -30,7 +30,7 @@
 -record(state, {session_id, channel, connection, subscriptions,
                 version, start_heartbeat_fun, pending_receipts,
                 config, dest_queues, reply_queues, frame_transformer,
-                adapter_info, send_fun}).
+                adapter_info, send_fun, ssl_login_name}).
 
 -record(subscription, {dest_hdr, channel, multi_ack, description}).
 
@@ -40,9 +40,8 @@
 %%----------------------------------------------------------------------------
 %% Public API
 %%----------------------------------------------------------------------------
-start_link(SendFun, AdapterInfo, StartHeartbeatFun, Configuration) ->
-    gen_server2:start_link(?MODULE, [SendFun, AdapterInfo, StartHeartbeatFun,
-                                     Configuration], []).
+start_link(Args) ->
+    gen_server2:start_link(?MODULE, Args, []).
 
 process_frame(Pid, Frame = #stomp_frame{command = "SEND"}) ->
     credit_flow:send(Pid),
@@ -57,7 +56,7 @@ flush_and_die(Pid) ->
 %% Basic gen_server2 callbacks
 %%----------------------------------------------------------------------------
 
-init([SendFun, AdapterInfo, StartHeartbeatFun, Configuration]) ->
+init([SendFun, AdapterInfo, StartHeartbeatFun, SSLLoginName, Configuration]) ->
     process_flag(trap_exit, true),
     {ok,
      #state {
@@ -73,7 +72,8 @@ init([SendFun, AdapterInfo, StartHeartbeatFun, Configuration]) ->
        reply_queues        = dict:new(),
        frame_transformer   = undefined,
        adapter_info        = AdapterInfo,
-       send_fun            = SendFun},
+       send_fun            = SendFun,
+       ssl_login_name      = SSLLoginName},
      hibernate,
      {backoff, 1000, 1000, 10000}
     }.
@@ -178,41 +178,28 @@ process_request(ProcessFun, SuccessFun, State) ->
             {stop, R, NewState}
     end.
 
-process_connect(Implicit,
-                Frame,
-                State = #state{
-                  channel = none,
-                  config  = #stomp_configuration{
-                    default_login    = DefaultLogin,
-                    default_passcode = DefaultPasscode},
-                  adapter_info = AdapterInfo}) ->
+process_connect(Implicit, Frame,
+                State = #state{channel        = none,
+                               config         = Config,
+                               ssl_login_name = SSLLoginName,
+                               adapter_info   = AdapterInfo}) ->
     process_request(
       fun(StateN) ->
               case negotiate_version(Frame) of
                   {ok, Version} ->
                       FT = frame_transformer(Version),
                       Frame1 = FT(Frame),
+                      {Username, Creds} = creds(Frame1, SSLLoginName, Config),
                       {ok, DefaultVHost} =
                           application:get_env(rabbit, default_vhost),
                       {ProtoName, _} = AdapterInfo#adapter_info.protocol,
                       Res = do_login(
-                                rabbit_stomp_frame:header(Frame1,
-                                                          ?HEADER_LOGIN,
-                                                          DefaultLogin),
-                                rabbit_stomp_frame:header(Frame1,
-                                                          ?HEADER_PASSCODE,
-                                                          DefaultPasscode),
-                                rabbit_stomp_frame:header(Frame1,
-                                                          ?HEADER_HOST,
-                                                          binary_to_list(
-                                                            DefaultVHost)),
-                                rabbit_stomp_frame:header(Frame1,
-                                                          ?HEADER_HEART_BEAT,
-                                                          "0,0"),
+                              Username, Creds,
+                              login_header(Frame1, ?HEADER_HOST, DefaultVHost),
+                              login_header(Frame1, ?HEADER_HEART_BEAT, "0,0"),
                                 AdapterInfo#adapter_info{
-                                  protocol = {ProtoName, Version}},
-                                Version,
-                                StateN#state{frame_transformer = FT}),
+                                  protocol = {ProtoName, Version}}, Version,
+                              StateN#state{frame_transformer = FT}),
                       case {Res, Implicit} of
                           {{ok, _, StateN1}, implicit} -> ok(StateN1);
                           _                            -> Res
@@ -226,6 +213,23 @@ process_connect(Implicit,
       end,
       fun(StateM) -> StateM end,
       State).
+
+creds(Frame, SSLLoginName,
+      #stomp_configuration{default_login    = DefLogin,
+                           default_passcode = DefPasscode}) ->
+    PasswordCreds = {login_header(Frame, ?HEADER_LOGIN, DefLogin),
+                     [{password, login_header(
+                                   Frame, ?HEADER_PASSCODE, DefPasscode)}]},
+    case {rabbit_stomp_frame:header(Frame, ?HEADER_LOGIN), SSLLoginName} of
+        {not_found, none}    -> PasswordCreds;
+        {not_found, SSLName} -> {SSLName, []};
+        _                    -> PasswordCreds
+    end.
+
+login_header(Frame, Key, Default) when is_binary(Default) ->
+    login_header(Frame, Key, binary_to_list(Default));
+login_header(Frame, Key, Default) ->
+    list_to_binary(rabbit_stomp_frame:header(Frame, Key, Default)).
 
 %%----------------------------------------------------------------------------
 %% Frame Transformation
@@ -438,13 +442,9 @@ without_headers([], Command, Frame, State, Fun) ->
 
 do_login(undefined, _, _, _, _, _, State) ->
     error("Bad CONNECT", "Missing login or passcode header(s)\n", State);
-
-do_login(Username0, Password0, VirtualHost0, Heartbeat, AdapterInfo,
-         Version, State) ->
-    Username = list_to_binary(Username0),
-    Password = list_to_binary(Password0),
-    VirtualHost = list_to_binary(VirtualHost0),
-    case rabbit_access_control:check_user_pass_login(Username, Password) of
+do_login(Username, Creds, VirtualHost, Heartbeat, AdapterInfo, Version,
+         State) ->
+    case rabbit_access_control:check_user_login(Username, Creds) of
         {ok, _User} ->
             case amqp_connection:start(
                    #amqp_params_direct{username     = Username,

@@ -7,6 +7,8 @@
   {env, [{default_user,
           [{login, "guest"},
            {passcode, "guest"}]},
+         {ssl_cert_login, false},
+         {implicit_connect, false},
          {tcp_listeners, [61613]},
          {ssl_listeners, []},
          {tcp_listen_options, [binary,

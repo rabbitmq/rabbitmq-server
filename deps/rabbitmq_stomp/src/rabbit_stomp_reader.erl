@@ -20,6 +20,7 @@
 -export([init/2]).
 -export([conserve_memory/2]).
 
+-include("rabbit_stomp.hrl").
 -include("rabbit_stomp_frame.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
@@ -151,8 +152,9 @@ start_processor(SupPid, Configuration, Sock) ->
                 SHF(Sock, SendTimeout, SendFin, ReceiveTimeout, ReceiveFun)
         end,
 
-    rabbit_stomp_client_sup:start_processor(SupPid, SendFun, adapter_info(Sock),
-                                            StartHeartbeatFun, Configuration).
+    rabbit_stomp_client_sup:start_processor(
+      SupPid, [SendFun, adapter_info(Sock), StartHeartbeatFun,
+               ssl_login_name(Sock, Configuration), Configuration]).
 
 
 adapter_info(Sock) ->
@@ -200,4 +202,17 @@ ssl_cert_info(Sock) ->
                                     rabbit_ssl:peer_cert_validity(Cert))}];
         _ ->
             []
+    end.
+
+ssl_login_name(_Sock, #stomp_configuration{ssl_cert_login = false}) ->
+    none;
+ssl_login_name(Sock, #stomp_configuration{ssl_cert_login = true}) ->
+    case rabbit_net:peercert(Sock) of
+        {ok, C}              -> case rabbit_ssl:peer_cert_auth_name(C) of
+                                    unsafe    -> none;
+                                    not_found -> none;
+                                    Name      -> Name
+                                end;
+        {error, no_peercert} -> none;
+        nossl                -> none
     end.
