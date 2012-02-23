@@ -21,9 +21,12 @@
 -export([conserve_memory/2]).
 
 -include("rabbit_stomp_frame.hrl").
+-include_lib("amqp_client/include/amqp_client.hrl").
 
 -record(reader_state, {socket, parse_state, processor, state, iterations,
                        conserve_memory}).
+
+%%----------------------------------------------------------------------------
 
 start_link(SupPid, Configuration) ->
         {ok, proc_lib:spawn_link(?MODULE, init, [SupPid, Configuration])}.
@@ -34,8 +37,7 @@ init(SupPid, Configuration) ->
     receive
         {go, Sock0, SockTransform} ->
             {ok, Sock} = SockTransform(Sock0),
-            {ok, ProcessorPid} = rabbit_stomp_processor_sock:start_processor(
-                                   SupPid, Configuration, Sock),
+            {ok, ProcessorPid} = start_processor(SupPid, Configuration, Sock),
             {ok, ConnStr} = rabbit_net:connection_string(Sock, inbound),
             log(info, "accepting STOMP connection ~p (~s)~n",
                 [self(), ConnStr]),
@@ -127,3 +129,75 @@ run_socket(#reader_state{state = blocked}, _ByteCount) ->
 run_socket(#reader_state{socket = Sock}, ByteCount) ->
     rabbit_net:async_recv(Sock, ByteCount, infinity),
     ok.
+
+%%----------------------------------------------------------------------------
+
+start_processor(SupPid, Configuration, Sock) ->
+    SendFun = fun (sync, IoData) ->
+                      %% no messages emitted
+                      catch rabbit_net:send(Sock, IoData);
+                  (async, IoData) ->
+                      %% {inet_reply, _, _} will appear soon
+                      %% We ignore certain errors here, as we will be
+                      %% receiving an asynchronous notification of the
+                      %% same (or a related) fault shortly anyway. See
+                      %% bug 21365.
+                      catch rabbit_net:port_command(Sock, IoData)
+              end,
+
+    StartHeartbeatFun =
+        fun (SendTimeout, SendFin, ReceiveTimeout, ReceiveFun) ->
+                SHF = rabbit_heartbeat:start_heartbeat_fun(SupPid),
+                SHF(Sock, SendTimeout, SendFin, ReceiveTimeout, ReceiveFun)
+        end,
+
+    rabbit_stomp_client_sup:start_processor(SupPid, SendFun, adapter_info(Sock),
+                                            StartHeartbeatFun, Configuration).
+
+
+adapter_info(Sock) ->
+    {Addr, Port} = case rabbit_net:sockname(Sock) of
+                       {ok, Res} -> Res;
+                       _         -> {unknown, unknown}
+                   end,
+    {PeerAddr, PeerPort} = case rabbit_net:peername(Sock) of
+                               {ok, Res2} -> Res2;
+                               _          -> {unknown, unknown}
+                           end,
+    #adapter_info{protocol        = {'STOMP', 0},
+                  address         = Addr,
+                  port            = Port,
+                  peer_address    = PeerAddr,
+                  peer_port       = PeerPort,
+                  additional_info = maybe_ssl_info(Sock)}.
+
+maybe_ssl_info(Sock) ->
+    case rabbit_net:is_ssl(Sock) of
+        true  -> [{ssl, true}] ++ ssl_info(Sock) ++ ssl_cert_info(Sock);
+        false -> [{ssl, false}]
+    end.
+
+ssl_info(Sock) ->
+    {Protocol, KeyExchange, Cipher, Hash} =
+        case rabbit_net:ssl_info(Sock) of
+            {ok, {P, {K, C, H}}}    -> {P, K, C, H};
+            {ok, {P, {K, C, H, _}}} -> {P, K, C, H};
+            _                       -> {unknown, unknown, unknown, unknown}
+        end,
+    [{ssl_protocol,       Protocol},
+     {ssl_key_exchange,   KeyExchange},
+     {ssl_cipher,         Cipher},
+     {ssl_hash,           Hash}].
+
+ssl_cert_info(Sock) ->
+    case rabbit_net:peercert(Sock) of
+        {ok, Cert} ->
+            [{peer_cert_issuer,   list_to_binary(
+                                    rabbit_ssl:peer_cert_issuer(Cert))},
+             {peer_cert_subject,  list_to_binary(
+                                    rabbit_ssl:peer_cert_subject(Cert))},
+             {peer_cert_validity, list_to_binary(
+                                    rabbit_ssl:peer_cert_validity(Cert))}];
+        _ ->
+            []
+    end.
