@@ -13,13 +13,15 @@ CAN_RUN_SSL:=$(shell if [ -d $(RABBITMQ_TEST_PATH) ]; then echo "true"; else ech
 TEST_CONFIG_PATH=$(TEST_EBIN_DIR)/test.config
 WITH_BROKER_TEST_CONFIG:=$(TEST_EBIN_DIR)/test
 
+.PHONY: $(TEST_CONFIG_PATH)
+
 ifeq ($(CAN_RUN_SSL),true)
 
 WITH_BROKER_TEST_SCRIPTS += $(PACKAGE_DIR)/test/src/test_ssl.py
 
 $(TEST_CONFIG_PATH): $(CERTS_DIR) $(ABS_PACKAGE_DIR)/test/src/ssl.config
 	sed -e "s|%%CERTS_DIR%%|$(CERTS_DIR)|g" < $(ABS_PACKAGE_DIR)/test/src/ssl.config > $@
-	@echo "Running SSL tests" $(WITH_BROKER_TEST_CONFIG)
+	@echo "\nRunning SSL tests\n"
 
 $(CERTS_DIR):
 	mkdir -p $(CERTS_DIR)
@@ -28,7 +30,7 @@ $(CERTS_DIR):
 else
 $(TEST_CONFIG_PATH): $(ABS_PACKAGE_DIR)/test/src/non_ssl.config
 	cp $(ABS_PACKAGE_DIR)/test/src/non_ssl.config $@
-	@echo "NOT running SSL tests" $(WITH_BROKER_TEST_CONFIG)
+	@echo "\nNOT running SSL tests - looked in " $(RABBITMQ_TEST_PATH) "\n"
 
 endif
 

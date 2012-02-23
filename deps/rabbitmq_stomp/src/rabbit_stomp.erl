@@ -36,24 +36,13 @@ stop(_State) ->
     ok.
 
 parse_listener_configuration() ->
-    case application:get_env(tcp_listeners) of
-        undefined ->
-            throw({error, {stomp_configuration_not_found}});
-        {ok, Listeners} ->
-            case application:get_env(ssl_listeners) of
-                undefined          -> {Listeners, []};
-                {ok, SslListeners} -> {Listeners, SslListeners}
-            end
-    end.
+    {ok, Listeners} = application:get_env(tcp_listeners),
+    {ok, SslListeners} = application:get_env(ssl_listeners),
+    {Listeners, SslListeners}.
 
 parse_configuration() ->
-    Configuration =
-        case application:get_env(default_user) of
-            undefined ->
-                ?DEFAULT_CONFIGURATION;
-            {ok, UserConfig} ->
-                parse_default_user(UserConfig, ?DEFAULT_CONFIGURATION)
-        end,
+    {ok, UserConfig} = application:get_env(default_user),
+    Configuration = parse_default_user(UserConfig, ?DEFAULT_CONFIGURATION),
     report_configuration(Configuration),
     Configuration.
 
@@ -88,5 +77,3 @@ report_configuration(#stomp_configuration{
     end,
 
     ok.
-
-

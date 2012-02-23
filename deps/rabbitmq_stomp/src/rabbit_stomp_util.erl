@@ -19,7 +19,8 @@
 -export([parse_destination/1, parse_routing_information/1,
          parse_message_id/1, durable_subscription_queue/2]).
 -export([longstr_field/2]).
--export([ack_mode/1, consumer_tag/1, message_headers/4, message_properties/1]).
+-export([ack_mode/1, consumer_tag_reply_to/1, consumer_tag/1, message_headers/4,
+         message_properties/1]).
 -export([negotiate_version/2]).
 -export([trim_headers/1]).
 -export([valid_dest_prefixes/0]).
@@ -29,18 +30,27 @@
 -include("rabbit_stomp_prefixes.hrl").
 -include("rabbit_stomp_headers.hrl").
 
+-define(INTERNAL_TAG_PREFIX, "T_").
+-define(QUEUE_TAG_PREFIX, "Q_").
+
 %%--------------------------------------------------------------------
 %% Frame and Header Parsing
 %%--------------------------------------------------------------------
 
+consumer_tag_reply_to(QueueId) ->
+    internal_tag(?TEMP_QUEUE_ID_PREFIX ++ QueueId).
+
 consumer_tag(Frame) ->
     case rabbit_stomp_frame:header(Frame, ?HEADER_ID) of
-        {ok, Str} ->
-            {ok, list_to_binary("T_" ++ Str), "id='" ++ Str ++ "'"};
+        {ok, Id} ->
+            case lists:prefix(?TEMP_QUEUE_ID_PREFIX, Id) of
+                false -> {ok, internal_tag(Id), "id='" ++ Id ++ "'"};
+                true  -> {error, invalid_prefix}
+            end;
         not_found ->
             case rabbit_stomp_frame:header(Frame, ?HEADER_DESTINATION) of
                 {ok, DestHdr} ->
-                    {ok, list_to_binary("Q_" ++ DestHdr),
+                    {ok, queue_tag(DestHdr),
                      "destination='" ++ DestHdr ++ "'"};
                 not_found ->
                     {error, missing_destination_header}
@@ -90,7 +100,7 @@ message_headers(Destination, SessionId,
                   maybe_header(Header, element(Index, Props), Acc)
           end,
           case ConsumerTag of
-              <<"T_", Id/binary>> ->
+              <<?INTERNAL_TAG_PREFIX, Id/binary>> ->
                   [{"subscription", binary_to_list(Id)} | Basic];
               _ ->
                   Basic
@@ -196,6 +206,12 @@ create_message_id(ConsumerTag, SessionId, DeliveryTag) ->
 trim_headers(Frame = #stomp_frame{headers = Hdrs}) ->
     Frame#stomp_frame{headers = [{K, string:strip(V, left)} || {K, V} <- Hdrs]}.
 
+internal_tag(Base) ->
+    list_to_binary(?INTERNAL_TAG_PREFIX ++ Base).
+
+queue_tag(Base) ->
+    list_to_binary(?QUEUE_TAG_PREFIX ++ Base).
+
 %%--------------------------------------------------------------------
 %% Destination Parsing
 %%--------------------------------------------------------------------
@@ -236,8 +252,13 @@ parse_routing_information({Type, Name})
 valid_dest_prefixes() -> ?VALID_DEST_PREFIXES.
 
 durable_subscription_queue(Destination, SubscriptionId) ->
-    <<(list_to_binary("stomp.dsub." ++ Destination ++ "."))/binary,
-      (erlang:md5(SubscriptionId))/binary>>.
+    %% We need a queue name that a) can be derived from the
+    %% Destination and SubscriptionId, and b) meets the constraints on
+    %% AMQP queue names. It doesn't need to be secure; we use md5 here
+    %% simply as a convenient means to bound the length.
+    rabbit_guid:binary(
+      erlang:md5(term_to_binary({Destination, SubscriptionId})),
+      "stomp.dsub").
 
 %% ---- Destination parsing helpers ----
 
@@ -270,7 +291,7 @@ split(Content = [Elem | Rest1], RPart, RParts, Splitter) ->
 
 take_prefix([Char | Prefix], [Char | List]) -> take_prefix(Prefix, List);
 take_prefix([],              List)          -> {ok, List};
-take_prefix(_Prefix,         List)          -> not_found.
+take_prefix(_Prefix,         _List)         -> not_found.
 
 unescape(Str) -> unescape(Str, []).
 
