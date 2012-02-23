@@ -42,8 +42,7 @@
 %%----------------------------------------------------------------------------
 start_link(SendFun, AdapterInfo, StartHeartbeatFun, Configuration) ->
     gen_server2:start_link(?MODULE, [SendFun, AdapterInfo, StartHeartbeatFun,
-                                     Configuration],
-                               []).
+                                     Configuration], []).
 
 process_frame(Pid, Frame = #stomp_frame{command = "SEND"}) ->
     credit_flow:send(Pid),
@@ -60,7 +59,6 @@ flush_and_die(Pid) ->
 
 init([SendFun, AdapterInfo, StartHeartbeatFun, Configuration]) ->
     process_flag(trap_exit, true),
-
     {ok,
      #state {
        session_id          = none,
