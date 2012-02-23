@@ -1191,6 +1191,10 @@
                   to which the channel belongs.</para></listitem>
               </varlistentry>
               <varlistentry>
+                <term>name</term>
+                <listitem><para>Readable name for the channel.</para></listitem>
+              </varlistentry>
+              <varlistentry>
                 <term>number</term>
                 <listitem><para>The number of the channel, which uniquely identifies it within
                   a connection.</para></listitem>

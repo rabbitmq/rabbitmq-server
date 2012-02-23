@@ -32,10 +32,10 @@
 
 -type(start_link_args() ::
         {'tcp', rabbit_net:socket(), rabbit_channel:channel_number(),
-         non_neg_integer(), pid(), rabbit_types:protocol(), rabbit_types:user(),
-         rabbit_types:vhost(), rabbit_framing:amqp_table(),
+         non_neg_integer(), pid(), string(), rabbit_types:protocol(),
+         rabbit_types:user(), rabbit_types:vhost(), rabbit_framing:amqp_table(),
          pid()} |
-        {'direct', rabbit_channel:channel_number(), pid(),
+        {'direct', rabbit_channel:channel_number(), pid(), string(),
          rabbit_types:protocol(), rabbit_types:user(), rabbit_types:vhost(),
          rabbit_framing:amqp_table(), pid()}).
 
@@ -45,8 +45,8 @@
 
 %%----------------------------------------------------------------------------
 
-start_link({tcp, Sock, Channel, FrameMax, ReaderPid, Protocol, User, VHost,
-            Capabilities, Collector}) ->
+start_link({tcp, Sock, Channel, FrameMax, ReaderPid, ConnName, Protocol, User,
+            VHost, Capabilities, Collector}) ->
     {ok, SupPid} = supervisor2:start_link(?MODULE,
                                           {tcp, Sock, Channel, FrameMax,
                                            ReaderPid, Protocol}),
@@ -56,14 +56,14 @@ start_link({tcp, Sock, Channel, FrameMax, ReaderPid, Protocol, User, VHost,
         supervisor2:start_child(
           SupPid,
           {channel, {rabbit_channel, start_link,
-                     [Channel, ReaderPid, WriterPid, ReaderPid, Protocol,
-                      User, VHost, Capabilities, Collector,
+                     [Channel, ReaderPid, WriterPid, ReaderPid, ConnName,
+                      Protocol, User, VHost, Capabilities, Collector,
                       rabbit_limiter:make_token(LimiterPid)]},
            intrinsic, ?MAX_WAIT, worker, [rabbit_channel]}),
     {ok, AState} = rabbit_command_assembler:init(Protocol),
     {ok, SupPid, {ChannelPid, AState}};
-start_link({direct, Channel, ClientChannelPid, ConnPid, Protocol, User, VHost,
-            Capabilities, Collector}) ->
+start_link({direct, Channel, ClientChannelPid, ConnPid, ConnName, Protocol,
+            User, VHost, Capabilities, Collector}) ->
     {ok, SupPid} = supervisor2:start_link(?MODULE, direct),
     [LimiterPid] = supervisor2:find_child(SupPid, limiter),
     {ok, ChannelPid} =
@@ -71,7 +71,7 @@ start_link({direct, Channel, ClientChannelPid, ConnPid, Protocol, User, VHost,
           SupPid,
           {channel, {rabbit_channel, start_link,
                      [Channel, ClientChannelPid, ClientChannelPid, ConnPid,
-                      Protocol, User, VHost, Capabilities, Collector,
+                      ConnName, Protocol, User, VHost, Capabilities, Collector,
                       rabbit_limiter:make_token(LimiterPid)]},
            intrinsic, ?MAX_WAIT, worker, [rabbit_channel]}),
     {ok, SupPid, {ChannelPid, none}}.

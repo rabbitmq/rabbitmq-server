@@ -1079,7 +1079,7 @@ test_server_status() ->
     %% create a few things so there is some useful information to list
     Writer = spawn(fun () -> receive shutdown -> ok end end),
     {ok, Ch} = rabbit_channel:start_link(
-                 1, self(), Writer, self(), rabbit_framing_amqp_0_9_1,
+                 1, self(), Writer, self(), "", rabbit_framing_amqp_0_9_1,
                  user(<<"user">>), <<"/">>, [], self(),
                  rabbit_limiter:make_token(self())),
     [Q, Q2] = [Queue || Name <- [<<"foo">>, <<"bar">>],
@@ -1150,7 +1150,7 @@ test_spawn() ->
     Me = self(),
     Writer = spawn(fun () -> test_writer(Me) end),
     {ok, Ch} = rabbit_channel:start_link(
-                 1, Me, Writer, Me, rabbit_framing_amqp_0_9_1,
+                 1, Me, Writer, Me, "", rabbit_framing_amqp_0_9_1,
                  user(<<"guest">>), <<"/">>, [], Me,
                   rabbit_limiter:make_token(self())),
     ok = rabbit_channel:do(Ch, #'channel.open'{}),

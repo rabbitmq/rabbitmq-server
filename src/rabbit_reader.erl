@@ -907,8 +907,8 @@ create_channel(Channel, State) ->
                                  capabilities = Capabilities}} = State,
     {ok, _ChSupPid, {ChPid, AState}} =
         rabbit_channel_sup_sup:start_channel(
-          ChanSupSup, {tcp, Sock, Channel, FrameMax, self(), Protocol, User,
-                       VHost, Capabilities, Collector}),
+          ChanSupSup, {tcp, Sock, Channel, FrameMax, self(), name(Sock),
+                       Protocol, User, VHost, Capabilities, Collector}),
     MRef = erlang:monitor(process, ChPid),
     put({ch_pid, ChPid}, {Channel, MRef}),
     put({channel, Channel}, {ChPid, AState}),
