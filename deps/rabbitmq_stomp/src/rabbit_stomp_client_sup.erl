@@ -18,7 +18,7 @@
 -behaviour(supervisor2).
 
 -define(MAX_WAIT, 16#ffffffff).
--export([start_link/1, start_processor/3, init/1]).
+-export([start_link/1, start_processor/2, init/1]).
 
 start_link(Configuration) ->
     {ok, SupPid} = supervisor2:start_link(?MODULE, []),
@@ -31,13 +31,10 @@ start_link(Configuration) ->
                                 [rabbit_stomp_reader]}),
     {ok, SupPid, ReaderPid}.
 
-start_processor(SupPid, Configuration, Sock) ->
+start_processor(SupPid, Args) ->
     supervisor2:start_child(SupPid,
                             {rabbit_stomp_processor,
-                             {rabbit_stomp_processor, start_link,
-                                 [Sock,
-                                  rabbit_heartbeat:start_heartbeat_fun(SupPid),
-                                  Configuration]},
+                             {rabbit_stomp_processor, start_link, [Args]},
                              intrinsic, ?MAX_WAIT, worker,
                              [rabbit_stomp_processor]}).
 

@@ -17,7 +17,7 @@
 -module(rabbit_stomp_processor).
 -behaviour(gen_server2).
 
--export([start_link/3, process_frame/2, flush_and_die/1]).
+-export([start_link/1, process_frame/2, flush_and_die/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          code_change/3, terminate/2]).
 
@@ -27,10 +27,10 @@
 -include("rabbit_stomp_prefixes.hrl").
 -include("rabbit_stomp_headers.hrl").
 
--record(state, {socket, session_id, channel,
-                connection, subscriptions, version,
-                start_heartbeat_fun, pending_receipts,
-                config, dest_queues, reply_queues, frame_transformer}).
+-record(state, {session_id, channel, connection, subscriptions,
+                version, start_heartbeat_fun, pending_receipts,
+                config, dest_queues, reply_queues, frame_transformer,
+                adapter_info, send_fun, ssl_login_name}).
 
 -record(subscription, {dest_hdr, channel, multi_ack, description}).
 
@@ -40,9 +40,8 @@
 %%----------------------------------------------------------------------------
 %% Public API
 %%----------------------------------------------------------------------------
-start_link(Sock, StartHeartbeatFun, Configuration) ->
-    gen_server2:start_link(?MODULE, [Sock, StartHeartbeatFun, Configuration],
-                           []).
+start_link(Args) ->
+    gen_server2:start_link(?MODULE, Args, []).
 
 process_frame(Pid, Frame = #stomp_frame{command = "SEND"}) ->
     credit_flow:send(Pid),
@@ -57,11 +56,10 @@ flush_and_die(Pid) ->
 %% Basic gen_server2 callbacks
 %%----------------------------------------------------------------------------
 
-init([Sock, StartHeartbeatFun, Configuration]) ->
+init([SendFun, AdapterInfo, StartHeartbeatFun, SSLLoginName, Configuration]) ->
     process_flag(trap_exit, true),
     {ok,
      #state {
-       socket              = Sock,
        session_id          = none,
        channel             = none,
        connection          = none,
@@ -72,7 +70,10 @@ init([Sock, StartHeartbeatFun, Configuration]) ->
        config              = Configuration,
        dest_queues         = sets:new(),
        reply_queues        = dict:new(),
-       frame_transformer   = undefined},
+       frame_transformer   = undefined,
+       adapter_info        = AdapterInfo,
+       send_fun            = SendFun,
+       ssl_login_name      = SSLLoginName},
      hibernate,
      {backoff, 1000, 1000, 10000}
     }.
@@ -177,23 +178,27 @@ process_request(ProcessFun, SuccessFun, State) ->
             {stop, R, NewState}
     end.
 
-process_connect(Implicit, Frame, State = #state{channel = none,
-                                                socket  = Sock,
-                                                config  = Config}) ->
+process_connect(Implicit, Frame,
+                State = #state{channel        = none,
+                               config         = Config,
+                               ssl_login_name = SSLLoginName,
+                               adapter_info   = AdapterInfo}) ->
     process_request(
       fun(StateN) ->
               case negotiate_version(Frame) of
                   {ok, Version} ->
                       FT = frame_transformer(Version),
                       Frame1 = FT(Frame),
-                      {Username, Creds} = creds(Sock, Frame1, Config),
+                      {Username, Creds} = creds(Frame1, SSLLoginName, Config),
                       {ok, DefaultVHost} =
                           application:get_env(rabbit, default_vhost),
+                      {ProtoName, _} = AdapterInfo#adapter_info.protocol,
                       Res = do_login(
                               Username, Creds,
                               login_header(Frame1, ?HEADER_HOST, DefaultVHost),
                               login_header(Frame1, ?HEADER_HEART_BEAT, "0,0"),
-                              adapter_info(Sock, Version), Version,
+                                AdapterInfo#adapter_info{
+                                  protocol = {ProtoName, Version}}, Version,
                               StateN#state{frame_transformer = FT}),
                       case {Res, Implicit} of
                           {{ok, _, StateN1}, implicit} -> ok(StateN1);
@@ -209,36 +214,22 @@ process_connect(Implicit, Frame, State = #state{channel = none,
       fun(StateM) -> StateM end,
       State).
 
-creds(Sock, Frame, #stomp_configuration{default_login    = DefLogin,
-                                        default_passcode = DefPasscode,
-                                        ssl_cert_login   = SSLCertLogin}) ->
+creds(Frame, SSLLoginName,
+      #stomp_configuration{default_login    = DefLogin,
+                           default_passcode = DefPasscode}) ->
     PasswordCreds = {login_header(Frame, ?HEADER_LOGIN, DefLogin),
-                      [{password, login_header(
-                                    Frame, ?HEADER_PASSCODE, DefPasscode)}]},
-    case {rabbit_stomp_frame:header(Frame, ?HEADER_LOGIN),
-          ssl_login_name(SSLCertLogin, Sock)} of
-        {not_found, undefined} -> PasswordCreds;
-        {not_found, SSLName}   -> {SSLName, []};
-        _                      -> PasswordCreds
+                     [{password, login_header(
+                                   Frame, ?HEADER_PASSCODE, DefPasscode)}]},
+    case {rabbit_stomp_frame:header(Frame, ?HEADER_LOGIN), SSLLoginName} of
+        {not_found, none}    -> PasswordCreds;
+        {not_found, SSLName} -> {SSLName, []};
+        _                    -> PasswordCreds
     end.
 
 login_header(Frame, Key, Default) when is_binary(Default) ->
     login_header(Frame, Key, binary_to_list(Default));
 login_header(Frame, Key, Default) ->
     list_to_binary(rabbit_stomp_frame:header(Frame, Key, Default)).
-
-ssl_login_name(false, _Sock) ->
-    undefined;
-ssl_login_name(true, Sock) ->
-    case rabbit_net:peercert(Sock) of
-        {ok, C}              -> case rabbit_ssl:peer_cert_auth_name(C) of
-                                    unsafe    -> undefined;
-                                    not_found -> undefined;
-                                    Name      -> Name
-                                end;
-        {error, no_peercert} -> undefined;
-        nossl                -> undefined
-    end.
 
 %%----------------------------------------------------------------------------
 %% Frame Transformation
@@ -342,6 +333,12 @@ ack_action(Command, Frame,
 %%----------------------------------------------------------------------------
 %% Internal helpers for processing frames callbacks
 %%----------------------------------------------------------------------------
+
+cancel_subscription({error, invalid_prefix}, _Frame, State) ->
+    error("Invalid id",
+          "UNSUBSCRIBE 'id' may not start with ~s~n",
+          [?TEMP_QUEUE_ID_PREFIX],
+          State);
 
 cancel_subscription({error, _}, _Frame, State) ->
     error("Missing destination or id",
@@ -478,52 +475,6 @@ do_login(Username, Creds, VirtualHost, Heartbeat, AdapterInfo, Version,
             error("Bad CONNECT", "Authentication failure\n", State)
     end.
 
-adapter_info(Sock, Version) ->
-    {Addr, Port} = case rabbit_net:sockname(Sock) of
-                       {ok, Res} -> Res;
-                       _         -> {unknown, unknown}
-                   end,
-    {PeerAddr, PeerPort} = case rabbit_net:peername(Sock) of
-                               {ok, Res2} -> Res2;
-                               _          -> {unknown, unknown}
-                           end,
-    #adapter_info{protocol        = {'STOMP', Version},
-                  address         = Addr,
-                  port            = Port,
-                  peer_address    = PeerAddr,
-                  peer_port       = PeerPort,
-                  additional_info = maybe_ssl_info(Sock)}.
-
-maybe_ssl_info(Sock) ->
-    case rabbit_net:is_ssl(Sock) of
-        true  -> [{ssl, true}] ++ ssl_info(Sock) ++ ssl_cert_info(Sock);
-        false -> [{ssl, false}]
-    end.
-
-ssl_info(Sock) ->
-    {Protocol, KeyExchange, Cipher, Hash} =
-        case rabbit_net:ssl_info(Sock) of
-            {ok, {P, {K, C, H}}}    -> {P, K, C, H};
-            {ok, {P, {K, C, H, _}}} -> {P, K, C, H};
-            _                       -> {unknown, unknown, unknown, unknown}
-        end,
-    [{ssl_protocol,       Protocol},
-     {ssl_key_exchange,   KeyExchange},
-     {ssl_cipher,         Cipher},
-     {ssl_hash,           Hash}].
-
-ssl_cert_info(Sock) ->
-    case rabbit_net:peercert(Sock) of
-        {ok, Cert} ->
-            [{peer_cert_issuer,   list_to_binary(
-                                    rabbit_ssl:peer_cert_issuer(Cert))},
-             {peer_cert_subject,  list_to_binary(
-                                    rabbit_ssl:peer_cert_subject(Cert))},
-             {peer_cert_validity, list_to_binary(
-                                    rabbit_ssl:peer_cert_validity(Cert))}];
-        _ ->
-            []
-    end.
 
 do_subscribe(Destination, DestHdr, Frame,
              State = #state{subscriptions = Subs,
@@ -698,12 +649,14 @@ ensure_reply_queue(TempQueueId, State = #state{channel       = Channel,
                                   #'queue.declare'{auto_delete = true,
                                                    exclusive   = true}),
 
-            #'basic.consume_ok'{consumer_tag = ConsumerTag} =
+            ConsumerTag = rabbit_stomp_util:consumer_tag_reply_to(TempQueueId),
+            #'basic.consume_ok'{} =
                 amqp_channel:subscribe(Channel,
                                        #'basic.consume'{
-                                         queue  = Queue,
-                                         no_ack = true,
-                                         nowait = false},
+                                         queue        = Queue,
+                                         consumer_tag = ConsumerTag,
+                                         no_ack       = true,
+                                         nowait       = false},
                                        self()),
 
             Destination = reply_to_destination(Queue),
@@ -872,18 +825,19 @@ perform_transaction_action({Method, Props, BodyFragments}, State) ->
 %%--------------------------------------------------------------------
 
 ensure_heartbeats(Heartbeats,
-                  State = #state{socket = Sock, start_heartbeat_fun = SHF}) ->
+                  State = #state{start_heartbeat_fun = SHF,
+                                 send_fun            = RawSendFun}) ->
     [CX, CY] = [list_to_integer(X) ||
                    X <- re:split(Heartbeats, ",", [{return, list}])],
 
-    SendFun = fun() -> catch rabbit_net:send(Sock, <<$\n>>) end,
+    SendFun = fun() -> RawSendFun(sync, <<$\n>>) end,
     Pid = self(),
     ReceiveFun = fun() -> gen_server2:cast(Pid, client_timeout) end,
 
     {SendTimeout, ReceiveTimeout} =
         {millis_to_seconds(CY), millis_to_seconds(CX)},
 
-    SHF(Sock, SendTimeout, SendFun, ReceiveTimeout, ReceiveFun),
+    SHF(SendTimeout, SendFun, ReceiveTimeout, ReceiveFun),
 
     {{SendTimeout * 1000 , ReceiveTimeout * 1000}, State}.
 
@@ -1004,11 +958,8 @@ send_frame(Command, Headers, BodyFragments, State) ->
                             body_iolist = BodyFragments},
                State).
 
-send_frame(Frame, State = #state{socket = Sock}) ->
-    %% We ignore certain errors here, as we will be receiving an
-    %% asynchronous notification of the same (or a related) fault
-    %% shortly anyway. See bug 21365.
-    catch rabbit_net:port_command(Sock, rabbit_stomp_frame:serialize(Frame)),
+send_frame(Frame, State = #state{send_fun = SendFun}) ->
+    SendFun(async, rabbit_stomp_frame:serialize(Frame)),
     State.
 
 send_error(Message, Detail, State) ->
