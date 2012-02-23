@@ -24,7 +24,7 @@
 start_processor(SupPid, Configuration, Sock) ->
     SendFun = fun (sync, IoData) ->
                       %% no messages emitted
-                      rabbit_net:send(Sock, IoData);
+                      catch rabbit_net:send(Sock, IoData);
                   (async, IoData) ->
                       %% {inet_reply, _, _} will appear soon
                       %% We ignore certain errors here, as we will be
