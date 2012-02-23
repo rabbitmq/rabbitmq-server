@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2010-2011 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2010-2012 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_mirror_queue_master).
@@ -280,8 +280,10 @@ handle_pre_hibernate(State = #state { backing_queue       = BQ,
                                       backing_queue_state = BQS }) ->
     State #state { backing_queue_state = BQ:handle_pre_hibernate(BQS) }.
 
-status(#state { backing_queue = BQ, backing_queue_state = BQS }) ->
-    BQ:status(BQS).
+status(State = #state { backing_queue = BQ, backing_queue_state = BQS }) ->
+    BQ:status(BQS) ++
+        [ {mirror_seen,    dict:size(State #state.seen_status)},
+          {mirror_senders, sets:size(State #state.known_senders)} ].
 
 invoke(?MODULE, Fun, State) ->
     Fun(?MODULE, State);

@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2011 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2011-2012 VMware, Inc.  All rights reserved.
 %%
 
 -module(mirrored_supervisor_tests).
@@ -36,15 +36,14 @@ all_tests() ->
     passed = test_already_there(),
     passed = test_delete_restart(),
     passed = test_which_children(),
-%% commented out in order to determine whether this is the only test
-%% that is failing - see bug 24362
-%%    passed = test_large_group(),
+    passed = test_large_group(),
     passed = test_childspecs_at_init(),
     passed = test_anonymous_supervisors(),
     passed = test_no_migration_on_shutdown(),
     passed = test_start_idempotence(),
     passed = test_unsupported(),
     passed = test_ignore(),
+    passed = test_startup_failure(),
     passed.
 
 %% Simplest test
@@ -197,6 +196,22 @@ test_ignore() ->
                    {sup, fake_strategy_for_ignore, []}),
     passed.
 
+test_startup_failure() ->
+    [test_startup_failure(F) || F <- [want_error, want_exit]],
+    passed.
+
+test_startup_failure(Fail) ->
+    process_flag(trap_exit, true),
+    ?MS:start_link(get_group(group), ?MODULE,
+                   {sup, one_for_one, [childspec(Fail)]}),
+    receive
+        {'EXIT', _, shutdown} ->
+            ok
+    after 1000 ->
+            exit({did_not_exit, Fail})
+    end,
+    process_flag(trap_exit, false).
+
 %% ---------------------------------------------------------------------------
 
 with_sups(Fun, Sups) ->
@@ -229,6 +244,12 @@ start_sup0(Name, Group, ChildSpecs) ->
 
 childspec(Id) ->
     {Id, {?MODULE, start_gs, [Id]}, transient, 16#ffffffff, worker, [?MODULE]}.
+
+start_gs(want_error) ->
+    {error, foo};
+
+start_gs(want_exit) ->
+    exit(foo);
 
 start_gs(Id) ->
     gen_server:start_link({local, Id}, ?MODULE, server, []).

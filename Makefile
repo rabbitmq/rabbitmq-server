@@ -56,7 +56,7 @@ endif
 #other args: +native +"{hipe,[o3,verbose]}" -Ddebug=true +debug_info +no_strict_record_tests
 ERLC_OPTS=-I $(INCLUDE_DIR) -o $(EBIN_DIR) -Wall -v +debug_info $(call boolean_macro,$(USE_SPECS),use_specs) $(call boolean_macro,$(USE_PROPER_QC),use_proper_qc)
 
-VERSION=0.0.0
+VERSION?=0.0.0
 PLUGINS_SRC_DIR?=$(shell [ -d "plugins-src" ] && echo "plugins-src" || echo )
 PLUGINS_DIR=plugins
 TARBALL_NAME=rabbitmq-server-$(VERSION)
@@ -246,7 +246,8 @@ stop-cover: all
 srcdist: distclean
 	mkdir -p $(TARGET_SRC_DIR)/codegen
 	cp -r ebin src include LICENSE LICENSE-MPL-RabbitMQ INSTALL README $(TARGET_SRC_DIR)
-	sed -i.save 's/%%VSN%%/$(VERSION)/' $(TARGET_SRC_DIR)/ebin/rabbit_app.in && rm -f $(TARGET_SRC_DIR)/ebin/rabbit_app.in.save
+	sed 's/%%VSN%%/$(VERSION)/' $(TARGET_SRC_DIR)/ebin/rabbit_app.in > $(TARGET_SRC_DIR)/ebin/rabbit_app.in.tmp && \
+		mv $(TARGET_SRC_DIR)/ebin/rabbit_app.in.tmp $(TARGET_SRC_DIR)/ebin/rabbit_app.in
 
 	cp -r $(AMQP_CODEGEN_DIR)/* $(TARGET_SRC_DIR)/codegen/
 	cp codegen.py Makefile generate_app generate_deps calculate-relative $(TARGET_SRC_DIR)
@@ -346,10 +347,10 @@ $(foreach XML,$(USAGES_XML),$(eval $(call usage_dep, $(XML))))
 # Note that all targets which depend on clean must have clean in their
 # name.  Also any target that doesn't depend on clean should not have
 # clean in its name, unless you know that you don't need any of the
-# automatic dependency generation for that target (eg cleandb).
+# automatic dependency generation for that target (e.g. cleandb).
 
 # We want to load the dep file if *any* target *doesn't* contain
-# "clean" - i.e. if removing all clean-like targets leaves something
+# "clean" - i.e. if removing all clean-like targets leaves something.
 
 ifeq "$(MAKECMDGOALS)" ""
 TESTABLEGOALS:=$(.DEFAULT_GOAL)

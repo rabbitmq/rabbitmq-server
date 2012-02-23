@@ -11,13 +11,13 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_control).
 -include("rabbit.hrl").
 
--export([start/0, stop/0, action/5, diagnostics/1]).
+-export([start/0, stop/0, action/5]).
 
 -define(RPC_TIMEOUT, infinity).
 -define(EXTERNAL_CHECK_INTERVAL, 1000).
@@ -49,7 +49,6 @@
         (atom(), node(), [string()], [{string(), any()}],
          fun ((string(), [any()]) -> 'ok'))
         -> 'ok').
--spec(diagnostics/1 :: (node()) -> [{string(), [any()]}]).
 -spec(usage/0 :: () -> no_return()).
 
 -endif.
@@ -67,7 +66,7 @@ start() ->
             CmdArgsAndOpts -> CmdArgsAndOpts
         end,
     Opts1 = [case K of
-                 ?NODE_OPT -> {?NODE_OPT, rabbit_misc:makenode(V)};
+                 ?NODE_OPT -> {?NODE_OPT, rabbit_nodes:make(V)};
                  _         -> {K, V}
              end || {K, V} <- Opts],
     Command = list_to_atom(Command0),
@@ -79,6 +78,12 @@ start() ->
                                   io:format(Format ++ " ...~n", Args1)
                           end
              end,
+    PrintInvalidCommandError =
+        fun () ->
+                print_error("invalid command '~s'",
+                            [string:join([atom_to_list(Command) | Args], " ")])
+        end,
+
     %% The reason we don't use a try/catch here is that rpc:call turns
     %% thrown errors into normal return values
     case catch action(Command, Node, Args, Opts, Inform) of
@@ -88,9 +93,11 @@ start() ->
                 false -> io:format("...done.~n")
             end,
             rabbit_misc:quit(0);
-        {'EXIT', {function_clause, [{?MODULE, action, _} | _]}} ->
-            print_error("invalid command '~s'",
-                        [string:join([atom_to_list(Command) | Args], " ")]),
+        {'EXIT', {function_clause, [{?MODULE, action, _}    | _]}} -> %% < R15
+            PrintInvalidCommandError(),
+            usage();
+        {'EXIT', {function_clause, [{?MODULE, action, _, _} | _]}} -> %% >= R15
+            PrintInvalidCommandError(),
             usage();
         {'EXIT', {badarg, _}} ->
             print_error("invalid parameter: ~p", [Args]),
@@ -135,26 +142,7 @@ print_report0(Node, {Module, InfoFun, KeysFun}, VHostArg) ->
 print_error(Format, Args) -> fmt_stderr("Error: " ++ Format, Args).
 
 print_badrpc_diagnostics(Node) ->
-    [fmt_stderr(Fmt, Args) || {Fmt, Args} <- diagnostics(Node)].
-
-diagnostics(Node) ->
-    {_NodeName, NodeHost} = rabbit_misc:nodeparts(Node),
-    [{"diagnostics:", []},
-     case net_adm:names(NodeHost) of
-         {error, EpmdReason} ->
-             {"- unable to connect to epmd on ~s: ~w",
-              [NodeHost, EpmdReason]};
-         {ok, NamePorts} ->
-             {"- nodes and their ports on ~s: ~p",
-              [NodeHost, [{list_to_atom(Name), Port} ||
-                             {Name, Port} <- NamePorts]]}
-     end,
-     {"- current node: ~w", [node()]},
-     case init:get_argument(home) of
-         {ok, [[Home]]} -> {"- current node home dir: ~s", [Home]};
-         Other          -> {"- no current node home dir: ~p", [Other]}
-     end,
-     {"- current node cookie hash: ~s", [rabbit_misc:cookie_hash()]}].
+    fmt_stderr(rabbit_nodes:diagnostics([Node]), []).
 
 stop() ->
     ok.

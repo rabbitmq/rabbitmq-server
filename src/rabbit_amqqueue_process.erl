@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_amqqueue_process).
@@ -20,7 +20,7 @@
 
 -behaviour(gen_server2).
 
--define(UNSENT_MESSAGE_LIMIT,          100).
+-define(UNSENT_MESSAGE_LIMIT,          200).
 -define(SYNC_INTERVAL,                 25). %% milliseconds
 -define(RAM_DURATION_UPDATE_INTERVAL,  5000).
 
@@ -115,7 +115,6 @@ info_keys() -> ?INFO_KEYS.
 %%----------------------------------------------------------------------------
 
 init(Q) ->
-    ?LOGDEBUG("Queue starting - ~p~n", [Q]),
     process_flag(trap_exit, true),
 
     State = #q{q                   = Q#amqqueue{pid = self()},
@@ -135,7 +134,6 @@ init(Q) ->
 
 init_with_backing_queue_state(Q = #amqqueue{exclusive_owner = Owner}, BQ, BQS,
                               RateTRef, AckTags, Deliveries, MTC) ->
-    ?LOGDEBUG("Queue starting - ~p~n", [Q]),
     case Owner of
         none -> ok;
         _    -> erlang:monitor(process, Owner)
@@ -390,34 +388,32 @@ ch_record_state_transition(OldCR, NewCR) ->
         {_, _}        -> ok
     end.
 
-deliver_msgs_to_consumers(Funs = {PredFun, DeliverFun}, FunAcc,
+deliver_msgs_to_consumers(_DeliverFun, true, State) ->
+    {true, State};
+deliver_msgs_to_consumers(DeliverFun, false,
                           State = #q{active_consumers = ActiveConsumers}) ->
-    case PredFun(FunAcc, State) of
-        false -> {FunAcc, State};
-        true  -> case queue:out(ActiveConsumers) of
-                     {empty, _} ->
-                         {FunAcc, State};
-                     {{value, QEntry}, Tail} ->
-                         {FunAcc1, State1} =
-                             deliver_msg_to_consumer(
+    case queue:out(ActiveConsumers) of
+        {empty, _} ->
+            {false, State};
+        {{value, QEntry}, Tail} ->
+            {Stop, State1} = deliver_msg_to_consumer(
                                DeliverFun, QEntry,
-                               FunAcc, State#q{active_consumers = Tail}),
-                         deliver_msgs_to_consumers(Funs, FunAcc1, State1)
-                 end
+                               State#q{active_consumers = Tail}),
+            deliver_msgs_to_consumers(DeliverFun, Stop, State1)
     end.
 
-deliver_msg_to_consumer(DeliverFun, E = {ChPid, Consumer}, FunAcc, State) ->
+deliver_msg_to_consumer(DeliverFun, E = {ChPid, Consumer}, State) ->
     C = ch_record(ChPid),
     case is_ch_blocked(C) of
         true  -> block_consumer(C, E),
-                 {FunAcc, State};
+                 {false, State};
         false -> case rabbit_limiter:can_send(C#cr.limiter, self(),
                                               Consumer#consumer.ack_required) of
                      false -> block_consumer(C#cr{is_limit_active = true}, E),
-                              {FunAcc, State};
+                              {false, State};
                      true  -> AC1 = queue:in(E, State#q.active_consumers),
                               deliver_msg_to_consumer(
-                                DeliverFun, Consumer, C, FunAcc,
+                                DeliverFun, Consumer, C,
                                 State#q{active_consumers = AC1})
                  end
     end.
@@ -428,9 +424,9 @@ deliver_msg_to_consumer(DeliverFun,
                         C = #cr{ch_pid               = ChPid,
                                 acktags              = ChAckTags,
                                 unsent_message_count = Count},
-                        FunAcc, State = #q{q = #amqqueue{name = QName}}) ->
-    {{Message, IsDelivered, AckTag}, FunAcc1, State1} =
-        DeliverFun(AckRequired, FunAcc, State),
+                        State = #q{q = #amqqueue{name = QName}}) ->
+    {{Message, IsDelivered, AckTag}, Stop, State1} =
+        DeliverFun(AckRequired, State),
     rabbit_channel:deliver(ChPid, ConsumerTag, AckRequired,
                            {QName, self(), AckTag, IsDelivered, Message}),
     ChAckTags1 = case AckRequired of
@@ -439,11 +435,9 @@ deliver_msg_to_consumer(DeliverFun,
                  end,
     update_ch_record(C#cr{acktags              = ChAckTags1,
                           unsent_message_count = Count + 1}),
-    {FunAcc1, State1}.
+    {Stop, State1}.
 
-deliver_from_queue_pred(IsEmpty, _State) -> not IsEmpty.
-
-deliver_from_queue_deliver(AckRequired, false, State) ->
+deliver_from_queue_deliver(AckRequired, State) ->
     {{Message, IsDelivered, AckTag, Remaining}, State1} =
         fetch(AckRequired, State),
     {{Message, IsDelivered, AckTag}, 0 == Remaining, State1}.
@@ -487,12 +481,11 @@ maybe_record_confirm_message(_Confirm, State) ->
     State.
 
 run_message_queue(State) ->
-    Funs = {fun deliver_from_queue_pred/2,
-            fun deliver_from_queue_deliver/3},
     State1 = #q{backing_queue = BQ, backing_queue_state = BQS} =
         drop_expired_messages(State),
-    IsEmpty = BQ:is_empty(BQS),
-    {_IsEmpty1, State2} = deliver_msgs_to_consumers(Funs, IsEmpty, State1),
+    {_IsEmpty1, State2} = deliver_msgs_to_consumers(
+                            fun deliver_from_queue_deliver/2,
+                            BQ:is_empty(BQS), State1),
     State2.
 
 attempt_delivery(Delivery = #delivery{sender     = ChPid,
@@ -506,10 +499,8 @@ attempt_delivery(Delivery = #delivery{sender     = ChPid,
     end,
     case BQ:is_duplicate(Message, BQS) of
         {false, BQS1} ->
-            PredFun = fun (IsEmpty, _State) -> not IsEmpty end,
             DeliverFun =
-                fun (AckRequired, false,
-                     State1 = #q{backing_queue_state = BQS2}) ->
+                fun (AckRequired, State1 = #q{backing_queue_state = BQS2}) ->
                         %% we don't need an expiry here because
                         %% messages are not being enqueued, so we use
                         %% an empty message_properties.
@@ -523,7 +514,7 @@ attempt_delivery(Delivery = #delivery{sender     = ChPid,
                          State1#q{backing_queue_state = BQS3}}
                 end,
             {Delivered, State2} =
-                deliver_msgs_to_consumers({ PredFun, DeliverFun }, false,
+                deliver_msgs_to_consumers(DeliverFun, false,
                                           State#q{backing_queue_state = BQS1}),
             {Delivered, Confirm, State2};
         {Duplicate, BQS1} ->
@@ -598,6 +589,12 @@ should_auto_delete(#q{has_had_consumers = false}) -> false;
 should_auto_delete(State) -> is_unused(State).
 
 handle_ch_down(DownPid, State = #q{exclusive_consumer = Holder}) ->
+    case get({ch_publisher, DownPid}) of
+        undefined -> ok;
+        MRef      -> erlang:demonitor(MRef),
+                     erase({ch_publisher, DownPid}),
+                     credit_flow:peer_down(DownPid)
+    end,
     case lookup_ch(DownPid) of
         not_found ->
             {ok, State};
@@ -713,15 +710,12 @@ infos(Items, State) ->
                || Item <- (Items1 -- [synchronised_slave_pids])].
 
 slaves_status(#q{q = #amqqueue{name = Name}}) ->
-    {ok, #amqqueue{mirror_nodes = MNodes, slave_pids = SPids}} =
-        rabbit_amqqueue:lookup(Name),
-    case MNodes of
-        undefined ->
+    case rabbit_amqqueue:lookup(Name) of
+        {ok, #amqqueue{mirror_nodes = undefined}} ->
             [{slave_pids, ''}, {synchronised_slave_pids, ''}];
-        _ ->
+        {ok, #amqqueue{slave_pids = SPids}} ->
             {Results, _Bad} =
-                delegate:invoke(
-                  SPids, fun (Pid) -> rabbit_mirror_queue_slave:info(Pid) end),
+                delegate:invoke(SPids, fun rabbit_mirror_queue_slave:info/1),
             {SPids1, SSPids} =
                 lists:foldl(
                   fun ({Pid, Infos}, {SPidsN, SSPidsN}) ->
@@ -765,11 +759,9 @@ i(memory, _) ->
     {memory, M} = process_info(self(), memory),
     M;
 i(slave_pids, #q{q = #amqqueue{name = Name}}) ->
-    {ok, #amqqueue{mirror_nodes = MNodes,
-                   slave_pids = SPids}} = rabbit_amqqueue:lookup(Name),
-    case MNodes of
-        undefined -> [];
-        _         -> SPids
+    case rabbit_amqqueue:lookup(Name) of
+        {ok, #amqqueue{mirror_nodes = undefined}} -> [];
+        {ok, #amqqueue{slave_pids = SPids}}       -> SPids
     end;
 i(backing_queue_status, #q{backing_queue_state = BQS, backing_queue = BQ}) ->
     BQ:status(BQS);
@@ -826,7 +818,7 @@ prioritise_cast(Msg, _State) ->
         {set_maximum_since_use, _Age}        -> 8;
         {ack, _AckTags, _ChPid}              -> 7;
         {reject, _AckTags, _Requeue, _ChPid} -> 7;
-        {notify_sent, _ChPid}                -> 7;
+        {notify_sent, _ChPid, _Credit}       -> 7;
         {unblock, _ChPid}                    -> 7;
         {run_backing_queue, _Mod, _Fun}      -> 6;
         _                                    -> 0
@@ -877,9 +869,7 @@ handle_call({info, Items}, _From, State) ->
 handle_call(consumers, _From, State) ->
     reply(consumers(State), State);
 
-handle_call({deliver_immediately, Delivery}, _From, State) ->
-    %% Synchronous, "immediate" delivery mode
-    %%
+handle_call({deliver, Delivery = #delivery{immediate = true}}, _From, State) ->
     %% FIXME: Is this correct semantics?
     %%
     %% I'm worried in particular about the case where an exchange has
@@ -897,8 +887,7 @@ handle_call({deliver_immediately, Delivery}, _From, State) ->
                          false -> discard_delivery(Delivery, State1)
                      end);
 
-handle_call({deliver, Delivery}, From, State) ->
-    %% Synchronous, "mandatory" delivery mode. Reply asap.
+handle_call({deliver, Delivery = #delivery{mandatory = true}}, From, State) ->
     gen_server2:reply(From, true),
     noreply(deliver_or_enqueue(Delivery, State));
 
@@ -1021,8 +1010,17 @@ handle_call({requeue, AckTags, ChPid}, From, State) ->
 handle_cast({run_backing_queue, Mod, Fun}, State) ->
     noreply(run_backing_queue(Mod, Fun, State));
 
-handle_cast({deliver, Delivery}, State) ->
+handle_cast({deliver, Delivery = #delivery{sender = Sender}, Flow}, State) ->
     %% Asynchronous, non-"mandatory", non-"immediate" deliver mode.
+    case Flow of
+        flow   -> Key = {ch_publisher, Sender},
+                  case get(Key) of
+                      undefined -> put(Key, erlang:monitor(process, Sender));
+                      _         -> ok
+                  end,
+                  credit_flow:ack(Sender);
+        noflow -> ok
+    end,
     noreply(deliver_or_enqueue(Delivery, State));
 
 handle_cast({ack, AckTags, ChPid}, State) ->
@@ -1054,11 +1052,11 @@ handle_cast({unblock, ChPid}, State) ->
       possibly_unblock(State, ChPid,
                        fun (C) -> C#cr{is_limit_active = false} end));
 
-handle_cast({notify_sent, ChPid}, State) ->
+handle_cast({notify_sent, ChPid, Credit}, State) ->
     noreply(
       possibly_unblock(State, ChPid,
                        fun (C = #cr{unsent_message_count = Count}) ->
-                               C#cr{unsent_message_count = Count - 1}
+                               C#cr{unsent_message_count = Count - Credit}
                        end));
 
 handle_cast({limit, ChPid, Limiter}, State) ->
@@ -1102,8 +1100,7 @@ handle_cast(force_event_refresh, State = #q{exclusive_consumer = Exclusive}) ->
 
 handle_info(maybe_expire, State) ->
     case is_unused(State) of
-        true  -> ?LOGDEBUG("Queue lease expired for ~p~n", [State#q.q]),
-                 {stop, normal, State};
+        true  -> {stop, normal, State};
         false -> noreply(ensure_expiry_timer(State))
     end;
 
@@ -1150,8 +1147,11 @@ handle_info(timeout, State) ->
 handle_info({'EXIT', _Pid, Reason}, State) ->
     {stop, Reason, State};
 
+handle_info({bump_credit, Msg}, State) ->
+    credit_flow:handle_bump_msg(Msg),
+    noreply(State);
+
 handle_info(Info, State) ->
-    ?LOGDEBUG("Info in queue: ~p~n", [Info]),
     {stop, {unhandled_info, Info}, State}.
 
 handle_pre_hibernate(State = #q{backing_queue_state = undefined}) ->

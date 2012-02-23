@@ -14,7 +14,7 @@
 %% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
--module(rabbit_exchange_type_direct).
+-module(rabbit_exchange_type_invalid).
 -include("rabbit.hrl").
 
 -behaviour(rabbit_exchange_type).
@@ -24,22 +24,19 @@
          add_binding/3, remove_bindings/3, assert_args_equivalence/2]).
 -include("rabbit_exchange_type_spec.hrl").
 
--rabbit_boot_step({?MODULE,
-                   [{description, "exchange type direct"},
-                    {mfa,         {rabbit_registry, register,
-                                   [exchange, <<"direct">>, ?MODULE]}},
-                    {requires,    rabbit_registry},
-                    {enables,     kernel_ready}]}).
-
 description() ->
-    [{name, <<"direct">>},
-     {description, <<"AMQP direct exchange, as per the AMQP specification">>}].
+    [{name, <<"invalid">>},
+     {description,
+      <<"Dummy exchange type, to be used when the intended one is not found.">>
+     }].
 
 serialise_events() -> false.
 
-route(#exchange{name = Name},
-      #delivery{message = #basic_message{routing_keys = Routes}}) ->
-    rabbit_router:match_routing_key(Name, Routes).
+route(#exchange{name = Name, type = Type}, _) ->
+    rabbit_misc:protocol_error(
+      precondition_failed,
+      "Cannot route message through ~s: exchange type ~s not found",
+      [rabbit_misc:rs(Name), Type]).
 
 validate(_X) -> ok.
 create(_Tx, _X) -> ok.

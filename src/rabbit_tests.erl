@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_tests).
@@ -59,7 +59,7 @@ all_tests() ->
     passed.
 
 maybe_run_cluster_dependent_tests() ->
-    SecondaryNode = rabbit_misc:makenode("hare"),
+    SecondaryNode = rabbit_nodes:make("hare"),
 
     case net_adm:ping(SecondaryNode) of
         pong -> passed = run_cluster_dependent_tests(SecondaryNode);
@@ -71,10 +71,13 @@ maybe_run_cluster_dependent_tests() ->
 run_cluster_dependent_tests(SecondaryNode) ->
     SecondaryNodeS = atom_to_list(SecondaryNode),
 
+    cover:stop(SecondaryNode),
     ok = control_action(stop_app, []),
     ok = control_action(reset, []),
     ok = control_action(cluster, [SecondaryNodeS]),
     ok = control_action(start_app, []),
+    cover:start(SecondaryNode),
+    ok = control_action(start_app, SecondaryNode, [], []),
 
     io:format("Running cluster dependent tests with node ~p~n", [SecondaryNode]),
     passed = test_delegates_async(SecondaryNode),
@@ -859,7 +862,7 @@ test_cluster_management() ->
                                         "invalid2@invalid"]),
     ok = assert_ram_node(),
 
-    SecondaryNode = rabbit_misc:makenode("hare"),
+    SecondaryNode = rabbit_nodes:make("hare"),
     case net_adm:ping(SecondaryNode) of
         pong -> passed = test_cluster_management2(SecondaryNode);
         pang -> io:format("Skipping clustering tests with node ~p~n",
@@ -889,6 +892,14 @@ test_cluster_management2(SecondaryNode) ->
     ok = control_action(stop_app, []),
     ok = assert_ram_node(),
 
+    %% ram node will not start by itself
+    ok = control_action(stop_app, []),
+    ok = control_action(stop_app, SecondaryNode, [], []),
+    {error, _} = control_action(start_app, []),
+    ok = control_action(start_app, SecondaryNode, [], []),
+    ok = control_action(start_app, []),
+    ok = control_action(stop_app, []),
+
     %% change cluster config while remaining in same cluster
     ok = control_action(force_cluster, ["invalid2@invalid", SecondaryNodeS]),
     ok = control_action(start_app, []),
@@ -897,8 +908,7 @@ test_cluster_management2(SecondaryNode) ->
     %% join non-existing cluster as a ram node
     ok = control_action(force_cluster, ["invalid1@invalid",
                                         "invalid2@invalid"]),
-    ok = control_action(start_app, []),
-    ok = control_action(stop_app, []),
+    {error, _} = control_action(start_app, []),
     ok = assert_ram_node(),
 
     %% join empty cluster as a ram node (converts to disc)
@@ -953,7 +963,9 @@ test_cluster_management2(SecondaryNode) ->
     ok = control_action(cluster, [SecondaryNodeS, NodeS]),
     ok = control_action(start_app, []),
     ok = control_action(stop_app, []),
+    cover:stop(SecondaryNode),
     ok = control_action(reset, []),
+    cover:start(SecondaryNode),
 
     %% attempt to leave cluster when no other node is alive
     ok = control_action(cluster, [SecondaryNodeS, NodeS]),
@@ -970,7 +982,15 @@ test_cluster_management2(SecondaryNode) ->
     %% leave system clustered, with the secondary node as a ram node
     ok = control_action(force_reset, []),
     ok = control_action(start_app, []),
-    ok = control_action(force_reset, SecondaryNode, [], []),
+    %% Yes, this is rather ugly. But since we're a clustered Mnesia
+    %% node and we're telling another clustered node to reset itself,
+    %% we will get disconnected half way through causing a
+    %% badrpc. This never happens in real life since rabbitmqctl is
+    %% not a clustered Mnesia node.
+    cover:stop(SecondaryNode),
+    {badrpc, nodedown} = control_action(force_reset, SecondaryNode, [], []),
+    pong = net_adm:ping(SecondaryNode),
+    cover:start(SecondaryNode),
     ok = control_action(cluster, SecondaryNode, [NodeS], []),
     ok = control_action(start_app, SecondaryNode, [], []),
 
@@ -1779,10 +1799,10 @@ test_msg_store() ->
     restart_msg_store_empty(),
     MsgIds = [msg_id_bin(M) || M <- lists:seq(1,100)],
     {MsgIds1stHalf, MsgIds2ndHalf} = lists:split(length(MsgIds) div 2, MsgIds),
-    Ref = rabbit_guid:guid(),
+    Ref = rabbit_guid:gen(),
     {Cap, MSCState} = msg_store_client_init_capture(
                         ?PERSISTENT_MSG_STORE, Ref),
-    Ref2 = rabbit_guid:guid(),
+    Ref2 = rabbit_guid:gen(),
     {Cap2, MSC2State} = msg_store_client_init_capture(
                           ?PERSISTENT_MSG_STORE, Ref2),
     %% check we don't contain any of the msgs we're about to publish
@@ -1934,7 +1954,7 @@ test_msg_store_confirms(MsgIds, Cap, MSCState) ->
     passed.
 
 test_msg_store_confirm_timer() ->
-    Ref = rabbit_guid:guid(),
+    Ref = rabbit_guid:gen(),
     MsgId  = msg_id_bin(1),
     Self = self(),
     MSCState = rabbit_msg_store:client_init(
@@ -1963,7 +1983,7 @@ msg_store_keep_busy_until_confirm(MsgIds, MSCState) ->
 test_msg_store_client_delete_and_terminate() ->
     restart_msg_store_empty(),
     MsgIds = [msg_id_bin(M) || M <- lists:seq(1, 10)],
-    Ref = rabbit_guid:guid(),
+    Ref = rabbit_guid:gen(),
     MSCState = msg_store_client_init(?PERSISTENT_MSG_STORE, Ref),
     ok = msg_store_write(MsgIds, MSCState),
     %% test the 'dying client' fast path for writes
@@ -1979,7 +1999,7 @@ test_queue() ->
 init_test_queue() ->
     TestQueue = test_queue(),
     Terms = rabbit_queue_index:shutdown_terms(TestQueue),
-    PRef = proplists:get_value(persistent_ref, Terms, rabbit_guid:guid()),
+    PRef = proplists:get_value(persistent_ref, Terms, rabbit_guid:gen()),
     PersistentClient = msg_store_client_init(?PERSISTENT_MSG_STORE, PRef),
     Res = rabbit_queue_index:recover(
             TestQueue, Terms, false,
@@ -2013,7 +2033,7 @@ restart_app() ->
     rabbit:start().
 
 queue_index_publish(SeqIds, Persistent, Qi) ->
-    Ref = rabbit_guid:guid(),
+    Ref = rabbit_guid:gen(),
     MsgStore = case Persistent of
                    true  -> ?PERSISTENT_MSG_STORE;
                    false -> ?TRANSIENT_MSG_STORE
@@ -2022,7 +2042,7 @@ queue_index_publish(SeqIds, Persistent, Qi) ->
     {A, B = [{_SeqId, LastMsgIdWritten} | _]} =
         lists:foldl(
           fun (SeqId, {QiN, SeqIdsMsgIdsAcc}) ->
-                  MsgId = rabbit_guid:guid(),
+                  MsgId = rabbit_guid:gen(),
                   QiM = rabbit_queue_index:publish(
                           MsgId, SeqId, #message_properties{}, Persistent, QiN),
                   ok = rabbit_msg_store:write(MsgId, MsgId, MSCState),
@@ -2045,7 +2065,7 @@ verify_read_with_published(_Delivered, _Persistent, _Read, _Published) ->
 test_queue_index_props() ->
     with_empty_test_queue(
       fun(Qi0) ->
-              MsgId = rabbit_guid:guid(),
+              MsgId = rabbit_guid:gen(),
               Props = #message_properties{expiry=12345},
               Qi1 = rabbit_queue_index:publish(MsgId, 1, Props, true, Qi0),
               {[{MsgId, 1, Props, _, _}], Qi2} =
@@ -2222,17 +2242,29 @@ test_amqqueue(Durable) ->
         #amqqueue { durable = Durable }.
 
 with_fresh_variable_queue(Fun) ->
-    ok = empty_test_queue(),
-    VQ = variable_queue_init(test_amqqueue(true), false),
-    S0 = rabbit_variable_queue:status(VQ),
-    assert_props(S0, [{q1, 0}, {q2, 0},
-                      {delta, {delta, undefined, 0, undefined}},
-                      {q3, 0}, {q4, 0},
-                      {len, 0}]),
-    _ = rabbit_variable_queue:delete_and_terminate(shutdown, Fun(VQ)),
+    Ref = make_ref(),
+    Me = self(),
+    %% Run in a separate process since rabbit_msg_store will send
+    %% bump_credit messages and we want to ignore them
+    spawn_link(fun() ->
+                       ok = empty_test_queue(),
+                       VQ = variable_queue_init(test_amqqueue(true), false),
+                       S0 = rabbit_variable_queue:status(VQ),
+                       assert_props(S0, [{q1, 0}, {q2, 0},
+                                         {delta,
+                                          {delta, undefined, 0, undefined}},
+                                         {q3, 0}, {q4, 0},
+                                         {len, 0}]),
+                       _ = rabbit_variable_queue:delete_and_terminate(
+                        shutdown, Fun(VQ)),
+                       Me ! Ref
+               end),
+    receive
+        Ref -> ok
+    end,
     passed.
 
-publish_and_confirm(QPid, Payload, Count) ->
+publish_and_confirm(Q, Payload, Count) ->
     Seqs = lists:seq(1, Count),
     [begin
          Msg = rabbit_basic:message(rabbit_misc:r(<<>>, exchange, <<>>),
@@ -2240,7 +2272,7 @@ publish_and_confirm(QPid, Payload, Count) ->
                                     Payload),
          Delivery = #delivery{mandatory = false, immediate = false,
                               sender = self(), message = Msg, msg_seq_no = Seq},
-         true = rabbit_amqqueue:deliver(QPid, Delivery)
+         {routed, _} = rabbit_amqqueue:deliver([Q], Delivery)
      end || Seq <- Seqs],
     wait_for_confirms(gb_sets:from_list(Seqs)).
 
@@ -2477,7 +2509,7 @@ test_queue_recover() ->
     Count = 2 * rabbit_queue_index:next_segment_boundary(0),
     {new, #amqqueue { pid = QPid, name = QName } = Q} =
         rabbit_amqqueue:declare(test_queue(), true, false, [], none),
-    publish_and_confirm(QPid, <<>>, Count),
+    publish_and_confirm(Q, <<>>, Count),
 
     exit(QPid, kill),
     MRef = erlang:monitor(process, QPid),
@@ -2507,7 +2539,7 @@ test_variable_queue_delete_msg_store_files_callback() ->
         rabbit_amqqueue:declare(test_queue(), true, false, [], none),
     Payload = <<0:8388608>>, %% 1MB
     Count = 30,
-    publish_and_confirm(QPid, Payload, Count),
+    publish_and_confirm(Q, Payload, Count),
 
     rabbit_amqqueue:set_ram_duration_target(QPid, 0),
 

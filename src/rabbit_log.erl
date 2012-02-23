@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_log).
@@ -23,8 +23,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--export([debug/1, debug/2, message/4, info/1, info/2,
-         warning/1, warning/2, error/1, error/2]).
+-export([log/3, log/4, info/1, info/2, warning/1, warning/2, error/1, error/2]).
 
 -define(SERVER, ?MODULE).
 
@@ -32,9 +31,15 @@
 
 -ifdef(use_specs).
 
+-export_type([level/0]).
+
+-type(category() :: atom()).
+-type(level() :: 'info' | 'warning' | 'error').
+
 -spec(start_link/0 :: () -> rabbit_types:ok_pid_or_error()).
--spec(debug/1 :: (string()) -> 'ok').
--spec(debug/2 :: (string(), [any()]) -> 'ok').
+
+-spec(log/3 :: (category(), level(), string()) -> 'ok').
+-spec(log/4 :: (category(), level(), string(), [any()]) -> 'ok').
 -spec(info/1 :: (string()) -> 'ok').
 -spec(info/2 :: (string(), [any()]) -> 'ok').
 -spec(warning/1 :: (string()) -> 'ok').
@@ -42,84 +47,47 @@
 -spec(error/1 :: (string()) -> 'ok').
 -spec(error/2 :: (string(), [any()]) -> 'ok').
 
--spec(message/4 :: (_,_,_,_) -> 'ok').
-
 -endif.
 
 %%----------------------------------------------------------------------------
-
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
+log(Category, Level, Fmt) -> log(Category, Level, Fmt, []).
 
-debug(Fmt) ->
-    gen_server:cast(?SERVER, {debug, Fmt}).
+log(Category, Level, Fmt, Args) when is_list(Args) ->
+    gen_server:cast(?SERVER, {log, Category, Level, Fmt, Args}).
 
-debug(Fmt, Args) when is_list(Args) ->
-    gen_server:cast(?SERVER, {debug, Fmt, Args}).
-
-message(Direction, Channel, MethodRecord, Content) ->
-    gen_server:cast(?SERVER,
-                    {message, Direction, Channel, MethodRecord, Content}).
-
-info(Fmt) ->
-    gen_server:cast(?SERVER, {info, Fmt}).
-
-info(Fmt, Args) when is_list(Args) ->
-    gen_server:cast(?SERVER, {info, Fmt, Args}).
-
-warning(Fmt) ->
-    gen_server:cast(?SERVER, {warning, Fmt}).
-
-warning(Fmt, Args) when is_list(Args) ->
-    gen_server:cast(?SERVER, {warning, Fmt, Args}).
-
-error(Fmt) ->
-    gen_server:cast(?SERVER, {error, Fmt}).
-
-error(Fmt, Args) when is_list(Args) ->
-    gen_server:cast(?SERVER, {error, Fmt, Args}).
+info(Fmt)          -> log(default, info,    Fmt).
+info(Fmt, Args)    -> log(default, info,    Fmt, Args).
+warning(Fmt)       -> log(default, warning, Fmt).
+warning(Fmt, Args) -> log(default, warning, Fmt, Args).
+error(Fmt)         -> log(default, error,   Fmt).
+error(Fmt, Args)   -> log(default, error,   Fmt, Args).
 
 %%--------------------------------------------------------------------
 
-init([]) -> {ok, none}.
+init([]) ->
+    {ok, CatLevelList} = application:get_env(log_levels),
+    CatLevels = [{Cat, level(Level)} || {Cat, Level} <- CatLevelList],
+    {ok, orddict:from_list(CatLevels)}.
 
 handle_call(_Request, _From, State) ->
     {noreply, State}.
 
-handle_cast({debug, Fmt}, State) ->
-    io:format("debug:: "), io:format(Fmt),
-    error_logger:info_msg("debug:: " ++ Fmt),
-    {noreply, State};
-handle_cast({debug, Fmt, Args}, State) ->
-    io:format("debug:: "), io:format(Fmt, Args),
-    error_logger:info_msg("debug:: " ++ Fmt, Args),
-    {noreply, State};
-handle_cast({message, Direction, Channel, MethodRecord, Content}, State) ->
-    io:format("~s ch~p ~p~n",
-              [case Direction of
-                   in -> "-->";
-                   out -> "<--" end,
-               Channel,
-               {MethodRecord, Content}]),
-    {noreply, State};
-handle_cast({info, Fmt}, State) ->
-    error_logger:info_msg(Fmt),
-    {noreply, State};
-handle_cast({info, Fmt, Args}, State) ->
-    error_logger:info_msg(Fmt, Args),
-    {noreply, State};
-handle_cast({warning, Fmt}, State) ->
-    error_logger:warning_msg(Fmt),
-    {noreply, State};
-handle_cast({warning, Fmt, Args}, State) ->
-    error_logger:warning_msg(Fmt, Args),
-    {noreply, State};
-handle_cast({error, Fmt}, State) ->
-    error_logger:error_msg(Fmt),
-    {noreply, State};
-handle_cast({error, Fmt, Args}, State) ->
-    error_logger:error_msg(Fmt, Args),
-    {noreply, State};
+handle_cast({log, Category, Level, Fmt, Args}, CatLevels) ->
+    CatLevel = case orddict:find(Category, CatLevels) of
+                   {ok, L} -> L;
+                   error   -> level(info)
+               end,
+    case level(Level) =< CatLevel of
+        false -> ok;
+        true  -> (case Level of
+                      info    -> fun error_logger:info_msg/2;
+                      warning -> fun error_logger:warning_msg/2;
+                      error   -> fun error_logger:error_msg/2
+                  end)(Fmt, Args)
+    end,
+    {noreply, CatLevels};
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
@@ -132,3 +100,9 @@ terminate(_Reason, _State) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
+%%--------------------------------------------------------------------
+
+level(info)    -> 3;
+level(warning) -> 2;
+level(error)   -> 1;
+level(none)    -> 0.
