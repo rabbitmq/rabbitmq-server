@@ -69,10 +69,10 @@ tap_trace_out({#resource{name = QName}, _QPid, _QMsgId, Redelivered, Msg},
                 [{<<"redelivered">>, signedint, RedeliveredNum}]).
 
 tap_trace_method_in(Ch, Method, TraceX) ->
-    tap_trace_method(Ch, Method, TraceX, <<"method_in">>).
+    tap_trace_method(Ch, Method, TraceX, <<"method.in">>).
 
 tap_trace_method_out(Ch, Method, TraceX) ->
-    tap_trace_method(Ch, Method, TraceX, <<"method_out">>).
+    tap_trace_method(Ch, Method, TraceX, <<"method.out">>).
 
 tap_trace_method(Ch, Method, TraceX, Prefix) ->
     MethodName = a2b(element(1, Method)),
