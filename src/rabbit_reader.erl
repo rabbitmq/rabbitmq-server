@@ -204,8 +204,7 @@ start_connection(Parent, ChannelSupSupPid, Collector, StartHeartbeatFun, Deb,
                   timeout_sec        = ?HANDSHAKE_TIMEOUT,
                   frame_max          = ?FRAME_MIN_SIZE,
                   vhost              = none,
-                  client_properties  = none,
-                  capabilities       = []},
+                  client_properties  = none},
                 callback            = uninitialized_callback,
                 recv_len            = 0,
                 pending_recv        = false,
@@ -642,18 +641,12 @@ handle_method0(#'connection.start_ok'{mechanism = Mechanism,
                             connection       = Connection,
                             sock             = Sock}) ->
     AuthMechanism = auth_mechanism_to_module(Mechanism, Sock),
-    Capabilities =
-        case rabbit_misc:table_lookup(ClientProperties, <<"capabilities">>) of
-            {table, Capabilities1} -> Capabilities1;
-            _                      -> []
-        end,
     State = State0#v1{auth_mechanism   = AuthMechanism,
                       auth_state       = AuthMechanism:init(Sock),
                       connection_state = securing,
                       connection       =
                           Connection#connection{
-                            client_properties = ClientProperties,
-                            capabilities      = Capabilities}},
+                            client_properties = ClientProperties}},
     auth_phase(Response, State);
 
 handle_method0(#'connection.secure_ok'{response = Response},
@@ -900,15 +893,15 @@ cert_info(F, Sock) ->
 create_channel(Channel, State) ->
     #v1{sock = Sock, queue_collector = Collector,
         channel_sup_sup_pid = ChanSupSup,
-        connection = #connection{protocol     = Protocol,
-                                 frame_max    = FrameMax,
-                                 user         = User,
-                                 vhost        = VHost,
-                                 capabilities = Capabilities}} = State,
+        connection = #connection{protocol          = Protocol,
+                                 frame_max         = FrameMax,
+                                 user              = User,
+                                 vhost             = VHost,
+                                 client_properties = ClientProperties}} = State,
     {ok, _ChSupPid, {ChPid, AState}} =
         rabbit_channel_sup_sup:start_channel(
           ChanSupSup, {tcp, Sock, Channel, FrameMax, self(), name(Sock),
-                       Protocol, User, VHost, Capabilities, Collector}),
+                       Protocol, User, VHost, ClientProperties, Collector}),
     MRef = erlang:monitor(process, ChPid),
     put({ch_pid, ChPid}, {Channel, MRef}),
     put({channel, Channel}, {ChPid, AState}),
