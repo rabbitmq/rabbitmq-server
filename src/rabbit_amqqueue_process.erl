@@ -733,14 +733,29 @@ dead_letter_fun(Reason, _State) ->
             gen_server2:cast(self(), {dead_letter, {Msg, AckTag}, Reason})
     end.
 
-dead_letter_msg(Msg, AckTag, Reason,
-                State = #q{publish_seqno       = MsgSeqNo,
-                           unconfirmed_mq      = UMQ,
-                           dlx                 = DLX,
-                           backing_queue       = BQ,
-                           backing_queue_state = BQS}) ->
-    rabbit_exchange:lookup_or_die(DLX),
+dead_letter_msg(Msg, AckTag, Reason, State = #q{dlx = undefined}) ->
+    %% Dead-lettring already disabled for this queue.
+    noreply(State);
+dead_letter_msg(Msg, AckTag, Reason, State = #q{dlx = DLX}) ->
+    case rabbit_exchange:lookup(DLX) of
+        {error, not_found} ->
+            #resource{name = QName} = qname(State),
+            #resource{name = XName} = DLX,
+            rabbit_log:warning("Dead-letter-exchange ~p for queue ~p does " ++
+                               "not exist.  Disabling DLX for this queue.~n",
+                               [XName, QName]),
+            noreply(State#q{dlx             = undefined,
+                            dlx_routing_key = undefined});
+        _ ->
+            dead_letter_msg_existing_dlx(Msg, AckTag, Reason, State)
+    end.
 
+dead_letter_msg_existing_dlx(Msg, AckTag, Reason,
+                             State = #q{publish_seqno       = MsgSeqNo,
+                                        unconfirmed_mq      = UMQ,
+                                        dlx                 = DLX,
+                                        backing_queue       = BQ,
+                                        backing_queue_state = BQS}) ->
     {ok, _, QPids} =
         rabbit_basic:publish(
           rabbit_basic:delivery(
