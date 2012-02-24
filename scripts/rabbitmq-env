@@ -36,14 +36,8 @@ RABBITMQ_HOME="${SCRIPT_DIR}/.."
 [ "x" = "x$HOSTNAME" ] && HOSTNAME=`env hostname`
 NODENAME=rabbit@${HOSTNAME%%.*}
 
-## Set system defaults
-if [ ! -f ${SCRIPT_DIR}/rabbitmq-sys ]; then
-    echo -n "WARNING: system defaults are not available -- "
-    echo "check the installation completed correctly."
-    exit 1
-fi
-
-. ${SCRIPT_DIR}/rabbitmq-sys
+## Get system default locations
+. ${SCRIPT_DIR}/rabbitmq-locations
 
 ## Get configuration variables from the configure environment file
 if [ -f ${OLD_CONF_ENV_FILE} ] && \

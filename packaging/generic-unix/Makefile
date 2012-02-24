@@ -12,8 +12,8 @@ dist:
 		MAN_DIR=`pwd`/$(TARGET_DIR)/share/man \
 			install
 
-	cp -f rabbitmq-sys $(TARGET_DIR)/sbin
-	chmod 0755 $(TARGET_DIR)/sbin/rabbitmq-sys
+	cp -f rabbitmq-locations $(TARGET_DIR)/sbin
+	chmod 0755 $(TARGET_DIR)/sbin/rabbitmq-locations
 
 	mkdir -p $(TARGET_DIR)/etc/rabbitmq
 
