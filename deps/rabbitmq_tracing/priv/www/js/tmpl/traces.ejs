@@ -39,7 +39,7 @@
                 </td>
                 <td class="r">
                   <%= trace.queue.messages %>
-                  <sub><%= link_to("(queue)", '#/queues/' + esc(trace.vhost) + '/' + esc(trace.queue.name)) %></sub>
+                  <sub><%= link_trace_queue(trace) %></sub>
                 </td>
                 <% } else { %>
                 <td colspan="2" class="status">
@@ -78,7 +78,7 @@
                   var file = files[i];
               %>
                 <tr<%= alt_rows(i)%>>
-                  <td><%= link_to(file.name, "api/trace-files/" + file.name) %></td>
+                  <td><%= link_trace(file.name) %></td>
                   <td class="r"><%= fmt_bytes(file.size) %></td>
                   <td>
                     <form action="#/trace-files" method="delete" class="inline-form">
