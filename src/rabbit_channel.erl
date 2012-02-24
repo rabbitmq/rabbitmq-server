@@ -1498,6 +1498,7 @@ i(user,           #ch{user             = User})    -> User#user.username;
 i(vhost,          #ch{virtual_host     = VHost})   -> VHost;
 i(transactional,  #ch{tx_status        = TE})      -> TE =/= none;
 i(confirm,        #ch{confirm_enabled  = CE})      -> CE;
+i(name,           State)                           -> name(State);
 i(consumer_count, #ch{consumer_mapping = ConsumerMapping}) ->
     dict:size(ConsumerMapping);
 i(messages_unconfirmed, #ch{unconfirmed_mq = UMQ}) ->
@@ -1512,11 +1513,11 @@ i(prefetch_count, #ch{limiter = Limiter}) ->
     rabbit_limiter:get_limit(Limiter);
 i(client_flow_blocked, #ch{limiter = Limiter}) ->
     rabbit_limiter:is_blocked(Limiter);
-i(name, #ch{conn_name = ConnName,
-            channel   = Channel}) ->
-    list_to_binary(rabbit_misc:format("~s (~p)", [ConnName, Channel]));
 i(Item, _) ->
     throw({bad_argument, Item}).
+
+name(#ch{conn_name = ConnName, channel = Channel}) ->
+    list_to_binary(rabbit_misc:format("~s (~p)", [ConnName, Channel])).
 
 maybe_incr_redeliver_stats(true, QPid, State) ->
     maybe_incr_stats([{QPid, 1}], redeliver, State);
