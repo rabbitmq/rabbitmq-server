@@ -56,6 +56,9 @@
                         rabbit_types:ok_or_error2(rabbit_types:message(), any())).
 -spec(properties/1 ::
         (properties_input()) -> rabbit_framing:amqp_property_record()).
+-spec(header_routes/1 ::
+        (undefined | rabbit_framing:amqp_table()) ->
+                              [string()] | rabbit_types:error(any())).
 -spec(build_content/2 :: (rabbit_framing:amqp_property_record(),
                           binary() | [binary()]) -> rabbit_types:content()).
 -spec(from_content/1 :: (rabbit_types:content()) ->
