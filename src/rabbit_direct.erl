@@ -93,12 +93,12 @@ connect(Username, VHost, Protocol, Pid, Infos) ->
     end.
 
 start_channel(Number, ClientChannelPid, ConnPid, ConnName, Protocol, User,
-              VHost, Capabilities, Collector) ->
+              VHost, ClientProperties, Collector) ->
     {ok, _, {ChannelPid, _}} =
         supervisor2:start_child(
           rabbit_direct_client_sup,
           [{direct, Number, ClientChannelPid, ConnPid, ConnName, Protocol,
-            User, VHost, Capabilities, Collector}]),
+            User, VHost, ClientProperties, Collector}]),
     {ok, ChannelPid}.
 
 disconnect(Pid, Infos) ->
