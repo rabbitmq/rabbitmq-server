@@ -714,6 +714,6 @@ config_files() ->
     case init:get_argument(config) of
         {ok, Files} -> [filename:absname(
                           filename:rootname(File, ".config") ++ ".config") ||
-                           File <- Files];
+                           [File] <- Files];
         error       -> []
     end.
