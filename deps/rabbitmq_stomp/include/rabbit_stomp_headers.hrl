@@ -31,6 +31,7 @@
 -define(HEADER_PRIORITY, "priority").
 -define(HEADER_RECEIPT, "receipt").
 -define(HEADER_REPLY_TO, "reply-to").
+-define(HEADER_SERVER, "server").
 -define(HEADER_SESSION, "session").
 -define(HEADER_VERSION, "version").
 
