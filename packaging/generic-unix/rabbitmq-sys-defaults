@@ -15,19 +15,26 @@
 ##  Copyright (c) 2012 VMware, Inc.  All rights reserved.
 ##
 
-### next line potentially updated in package install steps, do not alter
-SYS_PREFIX=
+### generic-unix ###
+### next line potentially updated in package install steps
+SYS_PREFIX=${RABBITMQ_HOME}
+
+check_and_set_rabbitmq_file_location() {
+    # $1 - var name (set), $2 - global location, $3 - optional suffix for check
+    [ -f $2$3 ] && [ ! -f ${SYS_PREFIX}$2$3 ] && \
+        echo "WARNING: $1 default is ${SYS_PREFIX}$2, ignoring $2"
+    eval "$1=${SYS_PREFIX}$2"
+}
 
 ## Set system default values
 SERVER_ERL_ARGS="+K true +A30 +P 1048576 \
 -kernel inet_default_connect_options [{nodelay,true}]"
 
-CONFIG_FILE=${SYS_PREFIX}/etc/rabbitmq/rabbitmq
-LOG_BASE=${SYS_PREFIX}/var/log/rabbitmq
-MNESIA_BASE=${SYS_PREFIX}/var/lib/rabbitmq/mnesia
-ENABLED_PLUGINS_FILE=${SYS_PREFIX}/etc/rabbitmq/enabled_plugins
-
-OLD_CONF_ENV_FILE=/etc/rabbitmq/rabbitmq.conf
-CONF_ENV_FILE=${SYS_PREFIX}/etc/rabbitmq/rabbitmq-env.conf
+check_and_set_rabbitmq_file_location CONF_ENV_FILE        /etc/rabbitmq/rabbitmq-env.conf
+check_and_set_rabbitmq_file_location CONFIG_FILE          /etc/rabbitmq/rabbitmq           .config
+check_and_set_rabbitmq_file_location ENABLED_PLUGINS_FILE /etc/rabbitmq/enabled-plugins
+check_and_set_rabbitmq_file_location LOG_BASE             /var/log/rabbitmq
+check_and_set_rabbitmq_file_location MNESIA_BASE          /var/lib/rabbitmq/mnesia
 
 PLUGINS_DIR="${RABBITMQ_HOME}/plugins"
+
