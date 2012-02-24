@@ -212,14 +212,13 @@
 -type(file_suffix() :: binary()).
 %% this really should be an abstract type
 -type(log_location() :: 'tty' | 'undefined' | file:filename()).
+-type(param() :: atom()).
 
 -spec(maybe_hipe_compile/0 :: () -> 'ok').
 -spec(prepare/0 :: () -> 'ok').
 -spec(start/0 :: () -> 'ok').
 -spec(stop/0 :: () -> 'ok').
 -spec(stop_and_halt/0 :: () -> no_return()).
--spec(rotate_logs/1 :: (file_suffix()) -> rabbit_types:ok_or_error(any())).
--spec(force_event_refresh/0 :: () -> 'ok').
 -spec(status/0 ::
         () -> [{pid, integer()} |
                {running_applications, [{atom(), string(), string()}]} |
@@ -228,12 +227,11 @@
                {memory, any()}]).
 -spec(is_running/0 :: () -> boolean()).
 -spec(is_running/1 :: (node()) -> boolean()).
--spec(environment/0 :: () -> [{atom() | term()}]).
--spec(log_location/1 :: ('sasl' | 'kernel') -> log_location()).
+-spec(environment/0 :: () -> [{param() | term()}]).
+-spec(rotate_logs/1 :: (file_suffix()) -> rabbit_types:ok_or_error(any())).
+-spec(force_event_refresh/0 :: () -> 'ok').
 
--spec(maybe_insert_default_data/0 :: () -> 'ok').
--spec(boot_delegate/0 :: () -> 'ok').
--spec(recover/0 :: () -> 'ok').
+-spec(log_location/1 :: ('sasl' | 'kernel') -> log_location()).
 
 -spec(start/2 :: ('normal',[]) ->
 		      {'error',
@@ -242,6 +240,10 @@
 			{'required',[any(),...]}}} |
 		      {'ok',pid()}).
 -spec(stop/1 :: (_) -> 'ok').
+
+-spec(maybe_insert_default_data/0 :: () -> 'ok').
+-spec(boot_delegate/0 :: () -> 'ok').
+-spec(recover/0 :: () -> 'ok').
 
 -endif.
 
