@@ -80,7 +80,7 @@ report_configuration(#stomp_configuration{
     end,
 
     case SSLCertLogin of
-        true  -> error_logger:info_msg("STOMP ssl_cert_login enabled~n");
+        true  -> rabbit_log:info("rabbit_stomp: ssl_cert_login enabled~n");
         false -> ok
     end,
 
