@@ -764,7 +764,7 @@ dead_letter_msg_existing_dlx(Msg, AckTag, Reason,
     State1 = lists:foldl(fun monitor_queue/2, State, QPids),
     State2 = State1#q{publish_seqno = MsgSeqNo + 1},
     case QPids of
-        [] -> {_, BQS1} = BQ:ack([AckTag], undefined, BQS),
+        [] -> {_, BQS1} = BQ:ack([AckTag], BQS),
               cleanup_after_confirm(State2#q{backing_queue_state = BQS1});
         _  -> State3 =
                   lists:foldl(
@@ -835,7 +835,7 @@ handle_confirm(MsgSeqNos, QPid, State = #q{unconfirmed_mq      = UMQ,
                                            MsgSeqNo, {QPids1, AckTag}, UMQ1)}
                   end
           end, {[], UMQ}, MsgSeqNos),
-    {_Guids, BQS1} = BQ:ack(AckTags1, undefined, BQS),
+    {_Guids, BQS1} = BQ:ack(AckTags1, BQS),
     MsgSeqNos1 = gb_sets:difference(gb_trees:get(QPid, UQM),
                                     gb_sets:from_list(MsgSeqNos)),
     State1 = case gb_sets:is_empty(MsgSeqNos1) of
@@ -1298,7 +1298,7 @@ handle_cast({ack, AckTags, ChPid}, State) ->
               fun (State1 = #q{backing_queue       = BQ,
                                backing_queue_state = BQS}) ->
                       {_Guids, BQS1} =
-                          BQ:ack(AckTags, undefined, BQS),
+                          BQ:ack(AckTags, BQS),
                       State1#q{backing_queue_state = BQS1}
               end));
 
@@ -1310,8 +1310,8 @@ handle_cast({reject, AckTags, Requeue, ChPid}, State) ->
                       case Requeue of
                           true  -> requeue_and_run(AckTags, State1);
                           false -> Fun = dead_letter_fun(rejected, State),
-                                   {_Guids, BQS1} =
-                                       BQ:ack(AckTags, Fun, BQS),
+                                   BQS1 =
+                                       BQ:process_messages(AckTags, Fun, BQS),
                                    State1#q{backing_queue_state = BQS1}
                       end
               end));

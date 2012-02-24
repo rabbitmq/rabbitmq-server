@@ -105,9 +105,13 @@ behaviour_info(callbacks) ->
 
      %% Acktags supplied are for messages which can now be forgotten
      %% about. Must return 1 msg_id per Ack, in the same order as
-     %% Acks. A callback function is supplied allowing callers to
-     %% access messages that are being acked.
-     {ack, 3},
+     %% Acks.
+     {ack, 2},
+
+     %% Acktags supplied are for messages which should be
+     %% processed. The provided callback function is called with each
+     %% message.
+     {process_messages, 3},
 
      %% Reinsert messages into the queue which have already been
      %% delivered and were pending acknowledgement.

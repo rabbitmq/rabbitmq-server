@@ -50,8 +50,8 @@
         -> state()).
 -spec(fetch/2 :: (true,  state()) -> {fetch_result(ack()), state()};
                  (false, state()) -> {fetch_result(undefined), state()}).
--spec(ack/3 :: ([ack()], msg_fun() | 'undefined', state()) ->
-                    {[rabbit_guid:guid()], state()}).
+-spec(ack/2 :: ([ack()], state()) -> {[rabbit_guid:guid()], state()}).
+-spec(process_messages/3 :: ([ack()], msg_fun(), state()) -> state()).
 -spec(requeue/2 :: ([ack()], state())
                    -> {[rabbit_guid:guid()], state()}).
 -spec(len/1 :: (state()) -> non_neg_integer()).

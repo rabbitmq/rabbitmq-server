@@ -18,11 +18,11 @@
 
 -export([init/3, terminate/2, delete_and_terminate/2,
          purge/1, publish/4, publish_delivered/5, drain_confirmed/1,
-         dropwhile/3, fetch/2, ack/3, requeue/2, len/1, is_empty/1,
+         dropwhile/3, fetch/2, ack/2, requeue/2, len/1, is_empty/1,
          set_ram_duration_target/2, ram_duration/1,
          needs_timeout/1, timeout/1, handle_pre_hibernate/1,
          status/1, invoke/3, is_duplicate/2, discard/3,
-         multiple_routing_keys/0]).
+         multiple_routing_keys/0, process_messages/3]).
 
 -export([start/1, stop/0]).
 
@@ -613,10 +613,10 @@ fetch(AckRequired, State) ->
             {Res, a(State3)}
     end.
 
-ack([], _Fun, State) ->
+ack([], State) ->
     {[], State};
 
-ack(AckTags, undefined, State) ->
+ack(AckTags, State) ->
     {{IndexOnDiskSeqIds, MsgIdsByStore, AllMsgIds},
      State1 = #vqstate { index_state       = IndexState,
                          msg_store_clients = MSCState,
@@ -635,16 +635,16 @@ ack(AckTags, undefined, State) ->
     {lists:reverse(AllMsgIds),
      a(State1 #vqstate { index_state      = IndexState1,
                          persistent_count = PCount1,
-                         ack_out_counter  = AckOutCount + length(AckTags) })};
+                         ack_out_counter  = AckOutCount + length(AckTags) })}.
 
-ack(AckTags, MsgFun, State = #vqstate{pending_ack = PA}) ->
-    {[], lists:foldl(
-           fun(SeqId, State1) ->
-                   {MsgStatus, State2} =
-                       read_msg(gb_trees:get(SeqId, PA), State1),
-                   MsgFun(MsgStatus#msg_status.msg, SeqId),
-                   State2
-           end, State, AckTags)}.
+process_messages(AckTags, MsgFun, State = #vqstate{pending_ack = PA}) ->
+    lists:foldl(
+      fun(SeqId, State1) ->
+              {MsgStatus, State2} =
+                  read_msg(gb_trees:get(SeqId, PA), State1),
+              MsgFun(MsgStatus#msg_status.msg, SeqId),
+              State2
+      end, State, AckTags).
 
 requeue(AckTags, #vqstate { delta      = Delta,
                             q3         = Q3,
