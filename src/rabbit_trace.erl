@@ -68,18 +68,16 @@ tap_trace_out({#resource{name = QName}, _QPid, _QMsgId, Redelivered, Msg},
     maybe_trace(TraceX, Msg, <<"deliver.", QName/binary>>,
                 [{<<"redelivered">>, signedint, RedeliveredNum}]).
 
-tap_trace_method_in(ChPid, Method, TraceX) ->
-    tap_trace_method(ChPid, Method, TraceX, <<"method_in">>).
+tap_trace_method_in(Ch, Method, TraceX) ->
+    tap_trace_method(Ch, Method, TraceX, <<"method_in">>).
 
-tap_trace_method_out(ChPid, Method, TraceX) ->
-    tap_trace_method(ChPid, Method, TraceX, <<"method_out">>).
+tap_trace_method_out(Ch, Method, TraceX) ->
+    tap_trace_method(Ch, Method, TraceX, <<"method_out">>).
 
-tap_trace_method(ChPid, Method, TraceX, Prefix) ->
-    %% TODO pid_to_string is probably too slow here!
+tap_trace_method(Ch, Method, TraceX, Prefix) ->
     MethodName = a2b(element(1, Method)),
-    PidStr = list_to_binary(rabbit_misc:pid_to_string(ChPid)),
     maybe_trace(TraceX, Method,
-                <<Prefix/binary, ".", MethodName/binary,".", PidStr/binary>>,
+                <<Prefix/binary, ".", MethodName/binary,".", Ch/binary>>,
                 []).
 
 %%----------------------------------------------------------------------------

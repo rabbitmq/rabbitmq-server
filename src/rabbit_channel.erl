@@ -269,7 +269,7 @@ handle_call(_Request, _From, State) ->
 handle_cast({method, Method, Content, Flow},
             State = #ch{reader_pid  = Reader,
                         trace_state = TraceState}) ->
-    rabbit_trace:tap_trace_method_in(self(), Method, TraceState),
+    rabbit_trace:tap_trace_method_in(name(State), Method, TraceState),
     case Flow of
         flow   -> credit_flow:ack(Reader);
         noflow -> ok
@@ -1474,25 +1474,25 @@ coalesce_and_send(MsgSeqNos, MkMsgFun,
     [ok = write_command(State, MkMsgFun(SeqNo, false)) || SeqNo <- Ss],
     State.
 
-write_command(#ch{writer_pid  = WriterPid,
-                  trace_state = TraceState}, Method) ->
-    rabbit_trace:tap_trace_method_out(self(), Method, TraceState),
+write_command(State = #ch{writer_pid  = WriterPid,
+                          trace_state = TraceState}, Method) ->
+    rabbit_trace:tap_trace_method_out(name(State), Method, TraceState),
     rabbit_writer:send_command(WriterPid, Method).
 
-write_command(#ch{writer_pid  = WriterPid,
-                  trace_state = TraceState}, Method, Content) ->
-    rabbit_trace:tap_trace_method_out(self(), Method, TraceState),
+write_command(State = #ch{writer_pid  = WriterPid,
+                          trace_state = TraceState}, Method, Content) ->
+    rabbit_trace:tap_trace_method_out(name(State), Method, TraceState),
     rabbit_writer:send_command(WriterPid, Method, Content).
 
-write_command_sync(#ch{writer_pid  = WriterPid,
-                       trace_state = TraceState}, Method) ->
-    rabbit_trace:tap_trace_method_out(self(), Method, TraceState),
+write_command_sync(State = #ch{writer_pid  = WriterPid,
+                               trace_state = TraceState}, Method) ->
+    rabbit_trace:tap_trace_method_out(name(State), Method, TraceState),
     rabbit_writer:send_command_sync(WriterPid, Method).
 
-write_command_and_notify(#ch{writer_pid  = WriterPid,
-                             trace_state = TraceState},
+write_command_and_notify(State = #ch{writer_pid  = WriterPid,
+                                     trace_state = TraceState},
                          Q, ChPid, Method, Content) ->
-    rabbit_trace:tap_trace_method_out(self(), Method, TraceState),
+    rabbit_trace:tap_trace_method_out(name(State), Method, TraceState),
     rabbit_writer:send_command_and_notify(WriterPid, Q, ChPid, Method, Content).
 
 maybe_complete_tx(State = #ch{tx_status = in_progress}) ->
