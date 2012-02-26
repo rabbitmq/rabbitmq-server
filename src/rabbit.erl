@@ -19,10 +19,10 @@
 -behaviour(application).
 
 -export([maybe_hipe_compile/0, prepare/0, start/0, stop/0, stop_and_halt/0,
-         status/0, is_running/0, is_running/1, environment/0,
+         change_config/0, status/0, is_running/0, is_running/1, environment/0,
          rotate_logs/1, force_event_refresh/0]).
 
--export([start/2, stop/1]).
+-export([start/2, stop/1, config_change/3]).
 
 -export([log_location/1]). %% for testing
 
@@ -219,6 +219,7 @@
 -spec(start/0 :: () -> 'ok').
 -spec(stop/0 :: () -> 'ok').
 -spec(stop_and_halt/0 :: () -> no_return()).
+-spec(change_config/0 :: () -> rabbit_types:ok_or_error(any())).
 -spec(status/0 ::
         () -> [{pid, integer()} |
                {running_applications, [{atom(), string(), string()}]} |
@@ -240,6 +241,8 @@
 			{'required',[any(),...]}}} |
 		      {'ok',pid()}).
 -spec(stop/1 :: (_) -> 'ok').
+-spec(config_change/3 ::
+      ([{param(), term()}], [{param(), term()}], [param{}]) -> 'ok').
 
 -spec(maybe_insert_default_data/0 :: () -> 'ok').
 -spec(boot_delegate/0 :: () -> 'ok').
@@ -316,6 +319,23 @@ stop_and_halt() ->
     end,
     ok.
 
+change_config() ->
+    EnvBefore = application_controller:prep_config_change(),
+    AppSpecL = [begin
+                    {ok, [AppSpec]} = file:consult(
+                                        code:where_is_file(
+                                          atom_to_list(App) ++ ".app")),
+                    AppSpec
+                end || {App, _,_} <- application:which_applications()],
+    ConfFiles = case init:get_argument(config) of
+                    {ok, Files} -> [File || [File] <- Files];
+                    error       -> []
+                end,
+    case application_controller:change_application_data(AppSpecL, ConfFiles) of
+        ok              -> application_controller:config_change(EnvBefore);
+        {error, Reason} -> {error, Reason}
+    end.
+
 status() ->
     S1 = [{pid,                  list_to_integer(os:getpid())},
           {running_applications, application:which_applications(infinity)},
@@ -387,6 +407,24 @@ stop(_State) ->
              false -> rabbit_mnesia:empty_ram_only_tables()
          end,
     ok.
+
+config_change(Changed, [], []) ->
+    case lists:flatmap(fun ({Param, Val}) -> case change_param(Param, Val) of
+                                                 ok             -> [];
+                                                 {error, Error} -> [Error]
+                                             end
+                       end, Changed) of
+        []     -> ok;
+        Errors -> {error, Errors}
+    end;
+                        
+config_change(Changed, New, Removed) ->
+    {error, [{unexpected_new_or_removed_rabbit_application_parameters,
+              {new, New}, {removed, Removed}} |
+             case config_change(Changed, [], []) of
+                 ok              -> [];
+                 {error, Errors} -> Errors
+             end]}.
 
 %%---------------------------------------------------------------------------
 %% application life cycle
@@ -562,6 +600,13 @@ insert_default_data() ->
                                                       DefaultConfigurePerm,
                                                       DefaultWritePerm,
                                                       DefaultReadPerm),
+    ok.
+
+%%---------------------------------------------------------------------------
+%% config change
+
+change_param(Param, Val) ->
+    io:format("changing param ~p to ~p~n", [Param, Val]),
     ok.
 
 %%---------------------------------------------------------------------------
