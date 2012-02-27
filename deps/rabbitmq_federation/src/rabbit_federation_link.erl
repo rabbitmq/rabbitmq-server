@@ -30,8 +30,6 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--export([add_routing_to_headers/2]).
-
 -define(ROUTING_HEADER, <<"x-received-from">>).
 
 -record(state, {upstream,
@@ -132,7 +130,8 @@ handle_info({#'basic.deliver'{routing_key  = Key,
     case should_forward(Headers0, MaxHops) of
         true  -> {table, Info0} = rabbit_federation_upstream:to_table(Upstream),
                  Info = Info0 ++ [{<<"redelivered">>, bool, Redelivered}],
-                 Headers = add_routing_to_headers(Headers0, Info),
+                 Headers = rabbit_basic:append_table_header(
+                             ?ROUTING_HEADER, Info, Headers0),
                  Seq = amqp_channel:next_publish_seqno(DCh),
                  amqp_channel:cast(DCh, #'basic.publish'{exchange    = XNameBin,
                                                          routing_key = Key},
@@ -499,13 +498,3 @@ extract_headers(#amqp_msg{props = #'P_basic'{headers = Headers}}) ->
 
 update_headers(Headers, Msg = #amqp_msg{props = Props}) ->
     Msg#amqp_msg{props = Props#'P_basic'{headers = Headers}}.
-
-add_routing_to_headers(undefined, Info) ->
-    add_routing_to_headers([], Info);
-add_routing_to_headers(Headers, Info) ->
-    Prior = case rabbit_misc:table_lookup(Headers, ?ROUTING_HEADER) of
-                undefined          -> [];
-                {array, Existing}  -> Existing
-            end,
-    rabbit_misc:set_table_value(
-      Headers, ?ROUTING_HEADER, array, [{table, Info} | Prior]).
