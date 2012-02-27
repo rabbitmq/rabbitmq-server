@@ -52,13 +52,13 @@ process_received_bytes(Bytes, Processor, ParseState) ->
 
 
 service_stomp(Conn, init, State) ->
-    ok = file_handle_cache:obtain(),
     StompConfig = #stomp_configuration{implicit_connect = false},
 
     {ok, Processor} = rabbit_ws_sup:start_processor(
                            {StompConfig, Conn}),
 
     Fun = fun () ->
+                  ok = file_handle_cache:obtain(),
                   process_flag(trap_exit, true),
                   link(Processor),
                   receive
