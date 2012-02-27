@@ -59,11 +59,11 @@ service_stomp(Conn, init, State) ->
                            {StompConfig, Conn}),
 
     Fun = fun () ->
-                  ok = file_handle_cache:release(),
                   process_flag(trap_exit, true),
                   link(Processor),
                   receive
                       {'EXIT', Processor, _Reason} ->
+                          ok = file_handle_cache:release(),
                           sockjs:close(Conn)
                   end
           end,
