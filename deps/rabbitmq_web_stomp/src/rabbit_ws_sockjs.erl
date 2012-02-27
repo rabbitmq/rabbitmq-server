@@ -11,7 +11,7 @@
 
 -spec init() -> ok.
 init() ->
-    Port = get_env(port, 8081),
+    Port = get_env(port, 55674),
     SockjsOpts = get_env(sockjs_opts, []) ++ [{logger, fun logger/3}],
 
     State = #state{},
@@ -29,9 +29,9 @@ init() ->
     ok.
 
 get_env(Key, Default) ->
-    case application:get_env(web_stomp, Key) of
+    case application:get_env(rabbitmq_web_stomp, Key) of
         undefined -> Default;
-        V         -> V
+        {ok, V}   -> V
     end.
 
 
