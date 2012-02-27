@@ -17,7 +17,7 @@ BEAM_TARGETS=$(patsubst $(SOURCE_DIR)/%.erl, $(EBIN_DIR)/%.beam, $(SOURCES))
 TARGETS=$(EBIN_DIR)/rabbit.app $(INCLUDE_DIR)/rabbit_framing.hrl $(BEAM_TARGETS) plugins
 WEB_URL=http://www.rabbitmq.com/
 MANPAGES=$(patsubst %.xml, %.gz, $(wildcard $(DOCS_DIR)/*.[0-9].xml))
-WEB_MANPAGES=$(patsubst %.xml, %.man.xml, $(wildcard $(DOCS_DIR)/*.[0-9].xml) $(DOCS_DIR)/rabbitmq-service.xml)
+WEB_MANPAGES=$(patsubst %.xml, %.man.xml, $(wildcard $(DOCS_DIR)/*.[0-9].xml) $(DOCS_DIR)/rabbitmq-service.xml $(DOCS_DIR)/rabbitmq-echopid.xml)
 USAGES_XML=$(DOCS_DIR)/rabbitmqctl.1.xml $(DOCS_DIR)/rabbitmq-plugins.1.xml
 USAGES_ERL=$(foreach XML, $(USAGES_XML), $(call usage_xml_to_erl, $(XML)))
 QC_MODULES := rabbit_backing_queue_qc
@@ -347,10 +347,10 @@ $(foreach XML,$(USAGES_XML),$(eval $(call usage_dep, $(XML))))
 # Note that all targets which depend on clean must have clean in their
 # name.  Also any target that doesn't depend on clean should not have
 # clean in its name, unless you know that you don't need any of the
-# automatic dependency generation for that target (eg cleandb).
+# automatic dependency generation for that target (e.g. cleandb).
 
 # We want to load the dep file if *any* target *doesn't* contain
-# "clean" - i.e. if removing all clean-like targets leaves something
+# "clean" - i.e. if removing all clean-like targets leaves something.
 
 ifeq "$(MAKECMDGOALS)" ""
 TESTABLEGOALS:=$(.DEFAULT_GOAL)

@@ -71,10 +71,13 @@ maybe_run_cluster_dependent_tests() ->
 run_cluster_dependent_tests(SecondaryNode) ->
     SecondaryNodeS = atom_to_list(SecondaryNode),
 
+    cover:stop(SecondaryNode),
     ok = control_action(stop_app, []),
     ok = control_action(reset, []),
     ok = control_action(cluster, [SecondaryNodeS]),
     ok = control_action(start_app, []),
+    cover:start(SecondaryNode),
+    ok = control_action(start_app, SecondaryNode, [], []),
 
     io:format("Running cluster dependent tests with node ~p~n", [SecondaryNode]),
     passed = test_delegates_async(SecondaryNode),
@@ -960,7 +963,9 @@ test_cluster_management2(SecondaryNode) ->
     ok = control_action(cluster, [SecondaryNodeS, NodeS]),
     ok = control_action(start_app, []),
     ok = control_action(stop_app, []),
+    cover:stop(SecondaryNode),
     ok = control_action(reset, []),
+    cover:start(SecondaryNode),
 
     %% attempt to leave cluster when no other node is alive
     ok = control_action(cluster, [SecondaryNodeS, NodeS]),
@@ -977,7 +982,15 @@ test_cluster_management2(SecondaryNode) ->
     %% leave system clustered, with the secondary node as a ram node
     ok = control_action(force_reset, []),
     ok = control_action(start_app, []),
-    ok = control_action(force_reset, SecondaryNode, [], []),
+    %% Yes, this is rather ugly. But since we're a clustered Mnesia
+    %% node and we're telling another clustered node to reset itself,
+    %% we will get disconnected half way through causing a
+    %% badrpc. This never happens in real life since rabbitmqctl is
+    %% not a clustered Mnesia node.
+    cover:stop(SecondaryNode),
+    {badrpc, nodedown} = control_action(force_reset, SecondaryNode, [], []),
+    pong = net_adm:ping(SecondaryNode),
+    cover:start(SecondaryNode),
     ok = control_action(cluster, SecondaryNode, [NodeS], []),
     ok = control_action(start_app, SecondaryNode, [], []),
 
