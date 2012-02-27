@@ -896,48 +896,27 @@ make_dead_letter_msg(DLX, Reason,
                                           exchange_name = Exchange,
                                           routing_keys  = RoutingKeys},
                      State = #q{dlx_routing_key = DlxRoutingKey}) ->
-    Content1 = #content{
-      properties = Props = #'P_basic'{headers = Headers}} =
-        rabbit_binary_parser:ensure_content_decoded(Content),
-
+    Headers = rabbit_basic:extract_headers(Content),
     #resource{name = QName} = qname(State),
-
     %% The first routing key is the one specified in the
     %% basic.publish; all others are CC or BCC keys.
     RoutingKeys1 = [hd(RoutingKeys) | rabbit_basic:header_routes(Headers)],
-    DeathTable = {table, [{<<"reason">>, longstr,
-                           list_to_binary(atom_to_list(Reason))},
-                          {<<"queue">>, longstr, QName},
-                          {<<"time">>, timestamp,
-                           rabbit_misc:now_ms() div 1000},
-                          {<<"exchange">>, longstr, Exchange#resource.name},
-                          {<<"routing-keys">>, array,
-                           [{longstr, Key} || Key <- RoutingKeys1]}]},
-    Headers1 =
-        case Headers of
-            undefined ->
-                [{<<"x-death">>, array, [DeathTable]}];
-            _ ->
-                case rabbit_misc:table_lookup(Headers, <<"x-death">>) of
-                    {array, Prior} ->
-                        rabbit_misc:set_table_value(
-                          Headers, <<"x-death">>, array,
-                          [DeathTable | Prior]);
-                    _ ->
-                        [{<<"x-death">>, array, [DeathTable]} | Headers]
-                end
-        end,
+    Info = [{<<"reason">>, longstr, list_to_binary(atom_to_list(Reason))},
+            {<<"queue">>, longstr, QName},
+            {<<"time">>, timestamp, rabbit_misc:now_ms() div 1000},
+            {<<"exchange">>, longstr, Exchange#resource.name},
+            {<<"routing-keys">>, array,
+             [{longstr, Key} || Key <- RoutingKeys1]}],
+    Headers1 = rabbit_basic:append_table_header(<<"x-death">>, Info, Headers),
     {DeathRoutingKeys, Headers2} =
         case DlxRoutingKey of
             undefined -> {RoutingKeys, Headers1};
             _         -> {[DlxRoutingKey],
                           lists:keydelete(<<"CC">>, 1, Headers1)}
         end,
-    Content2 =
-        rabbit_binary_generator:clear_encoded_content(
-          Content1#content{properties = Props#'P_basic'{headers = Headers2}}),
+    Content1 = rabbit_basic:replace_headers(Headers2, Content),
     Msg#basic_message{exchange_name = DLX, id = rabbit_guid:gen(),
-                      routing_keys = DeathRoutingKeys, content = Content2}.
+                      routing_keys = DeathRoutingKeys, content = Content1}.
 
 
 now_micros() -> timer:now_diff(now(), {0,0,0}).
