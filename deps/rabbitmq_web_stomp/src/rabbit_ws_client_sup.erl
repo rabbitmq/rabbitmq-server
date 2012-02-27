@@ -10,7 +10,7 @@
 
 start_link({Configuration, Conn}) ->
     {ok, SupPid} = supervisor2:start_link(?MODULE, []),
-    SendFrame = fun (_Sync, Data) ->
+    SendFun = fun (_Sync, Data) ->
                         sockjs:send(Data, Conn),
                         ok
                 end,
@@ -21,13 +21,12 @@ start_link({Configuration, Conn}) ->
                                 peer_port       = 2,
                                 additional_info = [{ssl, false}]},
 
+    Args = [SendFun, AdapterInfo, fun (_, _, _, _) -> ok end,
+            none, Configuration],
+
     supervisor2:start_child(SupPid,
                             {rabbit_stomp_processor,
-                             {rabbit_stomp_processor, start_link,
-                              [SendFrame,
-                               AdapterInfo,
-                               fun (_, _, _, _) -> ok end,
-                               Configuration]},
+                             {rabbit_stomp_processor, start_link, [Args]},
                              intrinsic, ?MAX_WAIT, worker,
                              [rabbit_stomp_processor]}).
 
