@@ -253,7 +253,7 @@ process_messages(AckTags, MsgFun,
                  State = #state { gm                  = GM,
                                   backing_queue       = BQ,
                                   backing_queue_state = BQS}) ->
-    BQS1 = BQ:process_messages(AckTags, BQS),
+    BQS1 = BQ:process_messages(AckTags, MsgFun, BQS),
     ok = gm:broadcast(GM, {process_messages, MsgFun, AckTags}),
     State #state { backing_queue_state = BQS1 }.
 
