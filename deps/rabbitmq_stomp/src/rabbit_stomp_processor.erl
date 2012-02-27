@@ -464,6 +464,7 @@ do_login(Username, Creds, VirtualHost, Heartbeat, AdapterInfo, Version,
                        [{?HEADER_SESSION, SessionId},
                         {?HEADER_HEART_BEAT,
                          io_lib:format("~B,~B", [SendTimeout, ReceiveTimeout])},
+                        {?HEADER_SERVER, server_header()},
                         {?HEADER_VERSION, Version}],
                        "",
                        State1#state{session_id = SessionId,
@@ -478,6 +479,11 @@ do_login(Username, Creds, VirtualHost, Heartbeat, AdapterInfo, Version,
             error("Bad CONNECT", "Authentication failure\n", State)
     end.
 
+server_header() ->
+    Props = rabbit_reader:server_properties(?PROTOCOL),
+    {_, Product} = rabbit_misc:table_lookup(Props, <<"product">>),
+    {_, Version} = rabbit_misc:table_lookup(Props, <<"version">>),
+    rabbit_misc:format("~s/~s", [Product, Version]).
 
 do_subscribe(Destination, DestHdr, Frame,
              State = #state{subscriptions = Subs,

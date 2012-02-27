@@ -19,6 +19,7 @@ def connect(cnames):
     resp = ('CONNECTED\n'
             'session:(.*)\n'
             'heart-beat:0,0\n'
+            'server:RabbitMQ/(.*)\n'
             'version:1.0\n'
             '\n\x00')
     def w(m):

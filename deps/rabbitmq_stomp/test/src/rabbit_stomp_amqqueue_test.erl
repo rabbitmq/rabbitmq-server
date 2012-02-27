@@ -71,8 +71,8 @@ test_subscribe(Channel, Client) ->
                                                  payload = <<"hello">>}),
 
     {#stomp_frame{command     = "MESSAGE",
-                  body_iolist = [<<"hello">>]}, Client2} =
-        rabbit_stomp_client:recv(Client),
+                  body_iolist = [<<"hello">>]}, _Client2} =
+        rabbit_stomp_client:recv(Client1),
     ok.
 
 test_send(Channel, Client) ->
