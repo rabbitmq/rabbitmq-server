@@ -1,0 +1,65 @@
+<!doctype html>
+<html><head>
+  <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.6.2/jquery.min.js">
+  </script>
+  <script src="http://cdn.sockjs.org/sockjs-0.2.min.js">
+  </script>
+  <script src="stomp.js">
+  </script>
+  <style>
+      .box {
+          border: 1px dashed black;
+          border-radius: 4px;
+          -moz-border-radius: 4px;
+          width: 800px;
+          display: block;
+          height: 200px;
+          overflow: auto;
+      }
+  </style>
+</head><body lang="en">
+    <h2>RabbitMQ-Web-Stomp example</h2>
+    <div id="logs" class="box" ></div>
+    <div id="output" class="box" ></div>
+
+    <form id="form">
+      <input id="input" autocomplete="off"
+             value="type something here" />
+    </form>
+    <script>
+      function append(e, m) {
+          e.append($("<code>").text(m));
+          e.append($("<br>"));
+          e.scrollTop(e.scrollTop()+10000);
+      }
+      function log(m) {
+          append($('#logs'), m);
+      }
+      function out(m) {
+          append($('#output'), m);
+      }
+
+      WebSocketStompMock = SockJS;
+
+      var client = Stomp.client('http://localhost:55674/stomp');
+      client.debug = log;
+
+      client.connect('guest', 'guest', function(x) {
+          id = client.subscribe("/topic/test", function(d) {
+               out(JSON.stringify(d.body));
+          });
+      }, function(e){
+         log('error ' + JSON.stringify(e));
+      });
+
+      $('#input').focus();
+      $('#form').submit(function() {
+          var val = $('#input').val();
+          $('#input').val('');
+          var l = ' [ ] sending: ' + JSON.stringify(val);
+          client.send('/topic/test', {}, val);
+          return false;
+      });
+
+    </script>
+</body></html>

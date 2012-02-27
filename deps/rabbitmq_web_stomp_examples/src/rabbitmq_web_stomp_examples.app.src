@@ -1,0 +1,8 @@
+{application, rabbitmq_web_stomp_examples,
+ [{description, "Rabbit WEB-STOMP - examples"},
+  {vsn, "%%VSN%%"},
+  {modules, []},
+  {registered, []},
+  {mod, {rabbit_web_stomp_examples_app, []}},
+  {env, []},
+  {applications, [kernel, stdlib, rabbitmq_web_stomp]}]}.
