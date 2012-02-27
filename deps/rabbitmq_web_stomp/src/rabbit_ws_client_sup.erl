@@ -11,14 +11,18 @@
 start_link({Configuration, Conn}) ->
     {ok, SupPid} = supervisor2:start_link(?MODULE, []),
     SendFun = fun (_Sync, Data) ->
-                        sockjs:send(Data, Conn),
-                        ok
-                end,
+                      sockjs:send(Data, Conn),
+                      ok
+              end,
+    Info = sockjs:info(Conn),
+    {PeerAddr, PeerPort} = proplists:get_value(peername, Info),
+    {SockAddr, SockPort} = proplists:get_value(sockname, Info),
+
     AdapterInfo = #adapter_info{protocol        = {'WEB-STOMP', 0},
-                                address         = {1,2,3,4},
-                                port            = 1,
-                                peer_address    = {2,3,4,5},
-                                peer_port       = 2,
+                                address         = SockAddr,
+                                port            = SockPort,
+                                peer_address    = PeerAddr,
+                                peer_port       = PeerPort,
                                 additional_info = [{ssl, false}]},
 
     Args = [SendFun, AdapterInfo, fun (_, _, _, _) -> ok end,
