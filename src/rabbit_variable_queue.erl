@@ -615,7 +615,6 @@ fetch(AckRequired, State) ->
 
 ack([], State) ->
     {[], State};
-
 ack(AckTags, State) ->
     {{IndexOnDiskSeqIds, MsgIdsByStore, AllMsgIds},
      State1 = #vqstate { index_state       = IndexState,

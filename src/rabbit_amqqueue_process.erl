@@ -1288,8 +1288,7 @@ handle_cast({ack, AckTags, ChPid}, State) ->
               ChPid, AckTags, State,
               fun (State1 = #q{backing_queue       = BQ,
                                backing_queue_state = BQS}) ->
-                      {_Guids, BQS1} =
-                          BQ:ack(AckTags, BQS),
+                      {_Guids, BQS1} = BQ:ack(AckTags, BQS),
                       State1#q{backing_queue_state = BQS1}
               end));
 
