@@ -22,7 +22,7 @@
          set_ram_duration_target/2, ram_duration/1,
          needs_timeout/1, timeout/1, handle_pre_hibernate/1,
          status/1, invoke/3, is_duplicate/2, discard/3,
-         multiple_routing_keys/0, process_messages/3]).
+         multiple_routing_keys/0, fold/3]).
 
 -export([start/1, stop/0]).
 
@@ -636,9 +636,9 @@ ack(AckTags, State) ->
                          persistent_count = PCount1,
                          ack_out_counter  = AckOutCount + length(AckTags) })}.
 
-process_messages(_AckTags, undefined, State) ->
+fold(_AckTags, undefined, State) ->
     State;
-process_messages(AckTags, MsgFun, State = #vqstate{pending_ack = PA}) ->
+fold(AckTags, MsgFun, State = #vqstate{pending_ack = PA}) ->
     lists:foldl(
       fun(SeqId, State1) ->
               {MsgStatus, State2} =

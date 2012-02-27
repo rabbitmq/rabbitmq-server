@@ -111,7 +111,7 @@ behaviour_info(callbacks) ->
      %% Acktags supplied are for messages which should be
      %% processed. The provided callback function is called with each
      %% message.
-     {process_messages, 3},
+     {fold, 3},
 
      %% Reinsert messages into the queue which have already been
      %% delivered and were pending acknowledgement.

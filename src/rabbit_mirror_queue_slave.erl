@@ -843,10 +843,10 @@ process_instruction({ack, MsgIds},
     [] = MsgIds1 -- MsgIds, %% ASSERTION
     {ok, State #state { msg_id_ack          = MA1,
                         backing_queue_state = BQS1 }};
-process_instruction({process_messages, MsgFun, AckTags},
+process_instruction({fold, MsgFun, AckTags},
                     State = #state { backing_queue       = BQ,
                                      backing_queue_state = BQS }) ->
-    BQS1 = BQ:process_messages(AckTags, MsgFun, BQS),
+    BQS1 = BQ:fold(AckTags, MsgFun, BQS),
     {ok, State #state { backing_queue_state = BQS1 }};
 process_instruction({requeue, MsgIds},
                     State = #state { backing_queue       = BQ,
