@@ -56,8 +56,7 @@
             delayed_stop,
             queue_monitors,
             dlx,
-            dlx_routing_key,
-            dlx_failed
+            dlx_routing_key
            }).
 
 -record(consumer, {tag, ack_required}).
@@ -138,7 +137,6 @@ init(Q) ->
                ttl                 = undefined,
                dlx                 = undefined,
                dlx_routing_key     = undefined,
-               dlx_failed          = false,
                publish_seqno       = 1,
                unconfirmed_mq      = gb_trees:empty(),
                unconfirmed_qm      = gb_trees:empty(),
@@ -735,35 +733,12 @@ dead_letter_fun(Reason, _State) ->
             gen_server2:cast(self(), {dead_letter, {Msg, AckTag}, Reason})
     end.
 
-dead_letter_exchange_missing_warn(Status, Status, _DLX, _State) ->
-    ok;
-dead_letter_exchange_missing_warn(_Status, Failed, DLX, State) ->
-    #resource{name = QName} = qname(State),
-    #resource{name = XName} = DLX,
-    case Failed of
-        true ->
-            rabbit_log:warning("Dead-letter-exchange ~p for queue " ++
-                               "~p does not exist.  Disabling DLX " ++
-                               "for this queue.~n", [XName, QName]);
-        false ->
-            rabbit_log:warning("Dead-letter-exchange ~p for queue " ++
-                               "~p is back.  DLX works again " ++
-                               "for this queue.~n", [XName, QName])
-    end.
-
-dead_letter_msg(_Msg, _AckTag, _Reason, State = #q{dlx = undefined}) ->
-    %% Dead-lettring already disabled for this queue.
-    noreply(State);
-dead_letter_msg(Msg, AckTag, Reason, State = #q{dlx        = DLX,
-                                                dlx_failed = Status}) ->
+dead_letter_msg(Msg, AckTag, Reason, State = #q{dlx = DLX}) ->
     case rabbit_exchange:lookup(DLX) of
         {error, not_found} ->
-            dead_letter_exchange_missing_warn(Status, true, DLX, State),
-            noreply(State#q{dlx_failed = true});
+            noreply(State);
         _ ->
-            dead_letter_exchange_missing_warn(Status, false, DLX, State),
-            dead_letter_msg_existing_dlx(Msg, AckTag, Reason,
-                                         State#q{dlx_failed = false})
+            dead_letter_msg_existing_dlx(Msg, AckTag, Reason, State)
     end.
 
 dead_letter_msg_existing_dlx(Msg, AckTag, Reason,
@@ -883,7 +858,7 @@ cleanup_after_confirm(State = #q{delayed_stop   = DS,
                                  unconfirmed_mq = UMQ}) ->
     case gb_trees:is_empty(UMQ) andalso DS =/= undefined of
         true  -> case DS of
-                     {_, noreply}       -> ok;
+                     {_, {_, noreply}}  -> ok;
                      {_, {From, Reply}} -> gen_server2:reply(From, Reply)
                  end,
                  {Reason, _} = DS,
