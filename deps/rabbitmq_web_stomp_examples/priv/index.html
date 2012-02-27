@@ -1,65 +1,90 @@
-<!doctype html>
+<!DOCTYPE html>
 <html><head>
-  <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.6.2/jquery.min.js">
-  </script>
-  <script src="http://cdn.sockjs.org/sockjs-0.2.min.js">
-  </script>
-  <script src="stomp.js">
-  </script>
+  <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.6.2/jquery.min.js"></script>
+  <script src="http://cdn.sockjs.org/sockjs-0.2.min.js"></script>
+  <script src="stomp.js"></script>
   <style>
       .box {
-          border: 1px dashed black;
-          border-radius: 4px;
+          width: 440px;
+          float: left;
+          margin: 0 20px 0 20px;
+      }
+      .box div, .box input {
+          border: 1px solid;
           -moz-border-radius: 4px;
-          width: 800px;
-          display: block;
-          height: 200px;
+          border-radius: 4px;
+          width: 100%;
+          padding: 0px;
+          margin: 5px;
+      }
+      .box div {
+          border-color: grey;
+          height: 300px;
           overflow: auto;
+      }
+      .box input {
+          height: 30px;
+      }
+      h1 {
+          margin-left: 75px;
+      }
+      body {
+          background-color: #F0F0F0;
+          font-family: "Arial";
       }
   </style>
 </head><body lang="en">
     <h2>RabbitMQ-Web-Stomp example</h2>
-    <div id="logs" class="box" ></div>
-    <div id="output" class="box" ></div>
 
-    <form id="form">
-      <input id="input" autocomplete="off"
-             value="type something here" />
-    </form>
+    <div id="first" class="box">
+      <h3>Received:</h3>
+      <div></div>
+      <form><input autocomplete="off" value="Type here..."></input></form>
+    </div>
+
+    <div id="second" class="box">
+      <h3>Logs:</h3>
+      <div></div>
+    </div>
+
     <script>
-      function append(e, m) {
-          e.append($("<code>").text(m));
-          e.append($("<br>"));
-          e.scrollTop(e.scrollTop()+10000);
-      }
-      function log(m) {
-          append($('#logs'), m);
-      }
-      function out(m) {
-          append($('#output'), m);
-      }
+        var pipe = function(el_name, send) {
+            var div  = $(el_name + ' div');
+            var inp  = $(el_name + ' input');
+            var form = $(el_name + ' form');
 
+            var print = function(m, p) {
+                p = (p === undefined) ? '' : JSON.stringify(p);
+                div.append($("<code>").text(m + ' ' + p));
+                div.append($("<br>"));
+                div.scrollTop(div.scrollTop() + 10000);
+            };
+
+            if (send) {
+                form.submit(function() {
+                    send(inp.val());
+                    inp.val('');
+                    return false;
+                });
+            }
+            return print;
+        };
+
+      // Stomp.js boilerplate
       WebSocketStompMock = SockJS;
 
       var client = Stomp.client('http://localhost:55674/stomp');
-      client.debug = log;
+      client.debug = pipe('#second');
 
+      var print_first = pipe('#first', function(data) {
+          client.send('/topic/test', {}, data);
+      });
       client.connect('guest', 'guest', function(x) {
           id = client.subscribe("/topic/test", function(d) {
-               out(JSON.stringify(d.body));
+               print_first(d.body);
           });
-      }, function(e){
-         log('error ' + JSON.stringify(e));
       });
 
-      $('#input').focus();
-      $('#form').submit(function() {
-          var val = $('#input').val();
-          $('#input').val('');
-          var l = ' [ ] sending: ' + JSON.stringify(val);
-          client.send('/topic/test', {}, val);
-          return false;
-      });
-
+      $('#first input').focus();
     </script>
 </body></html>
