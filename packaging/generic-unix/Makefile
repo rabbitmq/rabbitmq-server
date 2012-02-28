@@ -12,8 +12,8 @@ dist:
 		MAN_DIR=`pwd`/$(TARGET_DIR)/share/man \
 			install
 
-	cp -f rabbitmq-sys-defaults $(TARGET_DIR)/sbin
-	chmod 0755 $(TARGET_DIR)/sbin/rabbitmq-sys-defaults
+	cp -f rabbitmq-defaults $(TARGET_DIR)/sbin
+	chmod 0755 $(TARGET_DIR)/sbin/rabbitmq-defaults
 
 	mkdir -p $(TARGET_DIR)/etc/rabbitmq
 

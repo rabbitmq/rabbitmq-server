@@ -26,9 +26,7 @@ check_and_set_rabbitmq_file_location() {
     eval "$1=${SYS_PREFIX}$2"
 }
 
-## Set system default values
-SERVER_ERL_ARGS="+K true +A30 +P 1048576 \
--kernel inet_default_connect_options [{nodelay,true}]"
+## Set default values
 
 check_and_set_rabbitmq_file_location CONF_ENV_FILE        /etc/rabbitmq/rabbitmq-env.conf
 check_and_set_rabbitmq_file_location CONFIG_FILE          /etc/rabbitmq/rabbitmq           .config

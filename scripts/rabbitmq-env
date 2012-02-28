@@ -36,8 +36,12 @@ RABBITMQ_HOME="${SCRIPT_DIR}/.."
 [ "x" = "x$HOSTNAME" ] && HOSTNAME=`env hostname`
 NODENAME=rabbit@${HOSTNAME%%.*}
 
-## Get system defaults
-. ${SCRIPT_DIR}/rabbitmq-sys-defaults
+## Set defaults
+. ${SCRIPT_DIR}/rabbitmq-defaults
+
+## Common defaults
+SERVER_ERL_ARGS="+K true +A30 +P 1048576 \
+  -kernel inet_default_connect_options [{nodelay,true}]"
 
 # warn about old rabbitmq.conf file, if no new one
 if [ -f /etc/rabbitmq/rabbitmq.conf ] && \
