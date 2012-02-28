@@ -22,7 +22,7 @@ SYS_PREFIX=${RABBITMQ_HOME}
 check_and_set_rabbitmq_file_location() {
     # $1 - var name (set), $2 - global location, $3 - optional suffix for check
     [ -f $2$3 ] && [ ! -f ${SYS_PREFIX}$2$3 ] && \
-        echo "WARNING: $1 default is ${SYS_PREFIX}$2, ignoring $2"
+        echo "WARNING: $1 default is \"${SYS_PREFIX}$2\" although \"$2$3\" exists."
     eval "$1=${SYS_PREFIX}$2"
 }
 
