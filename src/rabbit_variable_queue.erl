@@ -636,9 +636,9 @@ ack(AckTags, State) ->
                          persistent_count = PCount1,
                          ack_out_counter  = AckOutCount + length(AckTags) })}.
 
-fold(_AckTags, undefined, State) ->
+fold(undefined, State, _AckTags) ->
     State;
-fold(AckTags, MsgFun, State = #vqstate{pending_ack = PA}) ->
+fold(MsgFun, State = #vqstate{pending_ack = PA}, AckTags) ->
     lists:foldl(
       fun(SeqId, State1) ->
               {MsgStatus, State2} =

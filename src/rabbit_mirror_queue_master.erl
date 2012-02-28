@@ -249,10 +249,10 @@ ack(AckTags, State = #state { gm                  = GM,
     {MsgIds, State #state { backing_queue_state = BQS1,
                             ack_msg_id          = AM1 }}.
 
-fold(AckTags, MsgFun, State = #state { gm                  = GM,
-                                       backing_queue       = BQ,
-                                       backing_queue_state = BQS}) ->
-    BQS1 = BQ:fold(AckTags, MsgFun, BQS),
+fold(MsgFun, State = #state { gm                  = GM,
+                              backing_queue       = BQ,
+                              backing_queue_state = BQS}, AckTags) ->
+    BQS1 = BQ:fold(MsgFun, BQS, AckTags),
     ok = gm:broadcast(GM, {fold, MsgFun, AckTags}),
     State #state { backing_queue_state = BQS1 }.
 
