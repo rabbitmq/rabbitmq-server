@@ -189,7 +189,8 @@ connections_test() ->
     LocalPort = rabbit_mgmt_test_db:local_port(Conn),
     Path = binary_to_list(
              rabbit_mgmt_format:print(
-               "/connections/127.0.0.1%3A~w", [LocalPort])),
+               "/connections/127.0.0.1%3A~w%20->%20127.0.0.1%3A5672",
+               [LocalPort])),
     http_get(Path, ?OK),
     http_delete(Path, ?NO_CONTENT),
     %% TODO rabbit_reader:shutdown/2 returns before the connection is
@@ -484,10 +485,12 @@ get_conn(Username, Password) ->
     LocalPort = rabbit_mgmt_test_db:local_port(Conn),
     ConnPath = binary_to_list(
                  rabbit_mgmt_format:print(
-                   "/connections/127.0.0.1%3A~w", [LocalPort])),
+                   "/connections/127.0.0.1%3A~w%20->%20127.0.0.1%3A5672",
+                   [LocalPort])),
     ChPath = binary_to_list(
                rabbit_mgmt_format:print(
-                 "/channels/127.0.0.1%3A~w%3A1", [LocalPort])),
+                 "/channels/127.0.0.1%3A~w%20->%20127.0.0.1%3A5672%20(1)",
+                 [LocalPort])),
     {Conn, ConnPath, ChPath}.
 
 permissions_connection_channel_test() ->

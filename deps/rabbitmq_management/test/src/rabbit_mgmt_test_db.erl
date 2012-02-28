@@ -269,8 +269,8 @@ find_conn_by_local_port(Port, Items) ->
 get_channel(C, Number) ->
     Port = local_port(C),
     hd(rabbit_mgmt_db:get_channels(
-         [list_to_binary("127.0.0.1:" ++ integer_to_list(Port) ++ ":" ++
-                             integer_to_list(Number))], full)).
+         [rabbit_mgmt_format:print(
+            "127.0.0.1:~w -> 127.0.0.1:5672 (~w)", [Port, Number])], full)).
 
 get_exchange(XName) ->
     X = rabbit_mgmt_wm_exchange:exchange(<<"/">>, XName),

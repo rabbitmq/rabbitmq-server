@@ -23,7 +23,7 @@
 -export([pack_binding_props/2, unpack_binding_props/1, tokenise/1]).
 -export([to_amqp_table/1, listener/1, properties/1, basic_properties/1]).
 -export([record/2, to_basic_properties/1]).
--export([connection/1, addr/1, port/1]).
+-export([addr/1, port/1]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
@@ -236,14 +236,6 @@ type_val(X)                   -> throw({error, {unhandled_type, X}}).
 
 url(Fmt, Vals) ->
     print(Fmt, [mochiweb_util:quote_plus(V) || V <- Vals]).
-
-connection(Props) ->
-    case proplists:get_value(name, Props, unknown) of
-        unknown -> print("~s:~w",
-                         [addr(proplists:get_value(peer_address, Props)),
-                          port(proplists:get_value(peer_port,    Props))]);
-        Name      -> Name
-    end.
 
 exchange(X) ->
     format(X, [{fun resource/1,   [name]},
