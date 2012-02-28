@@ -67,8 +67,7 @@
                            -> rabbit_types:content()).
 
 -spec(header_routes/1 ::
-        (undefined | rabbit_framing:amqp_table()) ->
-                              [string()] | rabbit_types:error(any())).
+        (undefined | rabbit_framing:amqp_table()) -> [string()]).
 -spec(build_content/2 :: (rabbit_framing:amqp_property_record(),
                           binary() | [binary()]) -> rabbit_types:content()).
 -spec(from_content/1 :: (rabbit_types:content()) ->
