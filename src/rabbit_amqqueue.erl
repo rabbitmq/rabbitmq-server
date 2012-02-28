@@ -334,11 +334,22 @@ check_declare_arguments(QueueName, Args) ->
                              precondition_failed,
                              "invalid arg '~s' for ~s: ~255p",
                              [Key, rabbit_misc:rs(QueueName), Error])
-     end || {Key, Fun} <-
+     end ||
+        {Key, Fun} <-
                 [{<<"x-expires">>,     fun check_integer_argument/2},
                  {<<"x-message-ttl">>, fun check_integer_argument/2},
-                 {<<"x-ha-policy">>,   fun check_ha_policy_argument/2}]],
+                 {<<"x-ha-policy">>,   fun check_ha_policy_argument/2},
+                 {<<"x-dead-letter-exchange">>, fun check_string_argument/2},
+                 {<<"x-dead-letter-routing-key">>,
+                  fun check_dlxrk_argument/2}]],
     ok.
+
+check_string_argument(undefined, _Args) ->
+    ok;
+check_string_argument({longstr, _}, _Args) ->
+    ok;
+check_string_argument({Type, _}, _) ->
+    {error, {unacceptable_type, Type}}.
 
 check_integer_argument(undefined, _Args) ->
     ok;
@@ -349,6 +360,16 @@ check_integer_argument({Type, Val}, _Args) when Val > 0 ->
     end;
 check_integer_argument({_Type, Val}, _Args) ->
     {error, {value_zero_or_less, Val}}.
+
+check_dlxrk_argument(undefined, _Args) ->
+    ok;
+check_dlxrk_argument({longstr, _}, Args) ->
+    case rabbit_misc:table_lookup(Args, <<"x-dead-letter-exchange">>) of
+        undefined -> {error, routing_key_but_no_dlx_defined};
+        _         -> ok
+    end;
+check_dlxrk_argument({Type, _}, _Args) ->
+    {error, {unacceptable_type, Type}}.
 
 check_ha_policy_argument(undefined, _Args) ->
     ok;

@@ -19,7 +19,8 @@
 -include("rabbit_framing.hrl").
 
 -export([publish/4, publish/6, publish/1,
-         message/3, message/4, properties/1, delivery/4]).
+         message/3, message/4, properties/1, append_table_header/3,
+         extract_headers/1, replace_headers/2, delivery/4, header_routes/1]).
 -export([build_content/2, from_content/1]).
 
 %%----------------------------------------------------------------------------
@@ -31,6 +32,7 @@
 -type(publish_result() ::
         ({ok, rabbit_amqqueue:routing_result(), [pid()]}
          | rabbit_types:error('not_found'))).
+-type(headers() :: rabbit_framing:amqp_table() | 'undefined').
 
 -type(exchange_input() :: (rabbit_types:exchange() | rabbit_exchange:name())).
 -type(body_input() :: (binary() | [binary()])).
@@ -55,6 +57,17 @@
                         rabbit_types:ok_or_error2(rabbit_types:message(), any())).
 -spec(properties/1 ::
         (properties_input()) -> rabbit_framing:amqp_property_record()).
+
+-spec(append_table_header/3 ::
+        (binary(), rabbit_framing:amqp_table(), headers()) -> headers()).
+
+-spec(extract_headers/1 :: (rabbit_types:content()) -> headers()).
+
+-spec(replace_headers/2 :: (headers(), rabbit_types:content())
+                           -> rabbit_types:content()).
+
+-spec(header_routes/1 ::
+        (undefined | rabbit_framing:amqp_table()) -> [string()]).
 -spec(build_content/2 :: (rabbit_framing:amqp_property_record(),
                           binary() | [binary()]) -> rabbit_types:content()).
 -spec(from_content/1 :: (rabbit_types:content()) ->
@@ -165,6 +178,24 @@ properties(P) when is_list(P) ->
                             N -> setelement(N + 1, Acc, Value)
                         end
                 end, #'P_basic'{}, P).
+
+append_table_header(Name, Info, undefined) ->
+    append_table_header(Name, Info, []);
+append_table_header(Name, Info, Headers) ->
+    Prior = case rabbit_misc:table_lookup(Headers, Name) of
+                undefined          -> [];
+                {array, Existing}  -> Existing
+            end,
+    rabbit_misc:set_table_value(Headers, Name, array, [{table, Info} | Prior]).
+
+extract_headers(Content) ->
+    #content{properties = #'P_basic'{headers = Headers}} =
+        rabbit_binary_parser:ensure_content_decoded(Content),
+    Headers.
+
+replace_headers(Headers, Content = #content{properties = Props}) ->
+    rabbit_binary_generator:clear_encoded_content(
+      Content#content{properties = Props#'P_basic'{headers = Headers}}).
 
 indexof(L, Element) -> indexof(L, Element, 1).
 

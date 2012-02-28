@@ -1428,8 +1428,11 @@
             <variablelist>
               <varlistentry>
                 <term>fraction</term>
-                <listitem><para>The new memory threshhold fraction at which flow control is triggered, as a
-                                floating point number between 0.0 and 1.0 with a mandatory fractional part.</para></listitem>
+                <listitem><para>
+                    The new memory threshold fraction at which flow
+                    control is triggered, as a floating point number
+                    greater than or equal to 0.
+                </para></listitem>
               </varlistentry>
             </variablelist>
           </listitem>

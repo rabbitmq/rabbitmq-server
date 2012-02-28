@@ -28,7 +28,9 @@
 -export([enable_cover/0, report_cover/0]).
 -export([enable_cover/1, report_cover/1]).
 -export([start_cover/1]).
+-export([confirm_to_sender/2]).
 -export([throw_on_error/2, with_exit_handler/2, filter_exit_map/2]).
+-export([is_abnormal_termination/1]).
 -export([with_user/2, with_user_and_vhost/3]).
 -export([execute_mnesia_transaction/1]).
 -export([execute_mnesia_transaction/2]).
@@ -44,7 +46,8 @@
 -export([sort_field_table/1]).
 -export([pid_to_string/1, string_to_pid/1]).
 -export([version_compare/2, version_compare/3]).
--export([dict_cons/3, orddict_cons/3, gb_trees_cons/3]).
+-export([dict_cons/3, orddict_cons/3, gb_trees_cons/3,
+         gb_trees_set_insert/3]).
 -export([gb_trees_fold/3, gb_trees_foreach/2]).
 -export([get_options/2]).
 -export([all_module_attributes/1, build_acyclic_graph/3]).
@@ -108,7 +111,6 @@
         (rabbit_framing:amqp_table(), binary(),
          rabbit_framing:amqp_field_type(), rabbit_framing:amqp_value())
         -> rabbit_framing:amqp_table()).
-
 -spec(r/2 :: (rabbit_types:vhost(), K)
              -> rabbit_types:r3(rabbit_types:vhost(), K, '_')
                     when is_subtype(K, atom())).
@@ -131,6 +133,7 @@
         (atom(), thunk(rabbit_types:error(any()) | {ok, A} | A)) -> A).
 -spec(with_exit_handler/2 :: (thunk(A), thunk(A)) -> A).
 -spec(filter_exit_map/2 :: (fun ((A) -> B), [A]) -> [B]).
+-spec(is_abnormal_termination/1 :: (any()) -> boolean()).
 -spec(with_user/2 :: (rabbit_types:username(), thunk(A)) -> A).
 -spec(with_user_and_vhost/3 ::
         (rabbit_types:username(), rabbit_types:vhost(), thunk(A))
@@ -172,6 +175,7 @@
 -spec(dict_cons/3 :: (any(), any(), dict()) -> dict()).
 -spec(orddict_cons/3 :: (any(), any(), orddict:orddict()) -> orddict:orddict()).
 -spec(gb_trees_cons/3 :: (any(), any(), gb_tree()) -> gb_tree()).
+-spec(gb_trees_set_insert/3 :: (any(), any(), gb_tree()) -> gb_tree()).
 -spec(gb_trees_fold/3 :: (fun ((any(), any(), A) -> A), A, gb_tree()) -> A).
 -spec(gb_trees_foreach/2 ::
         (fun ((any(), any()) -> any()), gb_tree()) -> 'ok').
@@ -372,6 +376,9 @@ report_coverage_percentage(File, Cov, NotCov, Mod) ->
                end,
                Mod]).
 
+confirm_to_sender(Pid, MsgSeqNos) ->
+    gen_server2:cast(Pid, {confirm, MsgSeqNos, self()}).
+
 throw_on_error(E, Thunk) ->
     case Thunk() of
         {error, Reason} -> throw({E, Reason});
@@ -396,6 +403,12 @@ filter_exit_map(F, L) ->
                  [with_exit_handler(
                     fun () -> Ref end,
                     fun () -> F(I) end) || I <- L]).
+
+is_abnormal_termination(Reason)
+  when Reason =:= noproc; Reason =:= noconnection;
+       Reason =:= normal; Reason =:= shutdown -> false;
+is_abnormal_termination({shutdown, _})        -> false;
+is_abnormal_termination(_)                    -> true.
 
 with_user(Username, Thunk) ->
     fun () ->
@@ -699,6 +712,15 @@ gb_trees_cons(Key, Value, Tree) ->
     case gb_trees:lookup(Key, Tree) of
         {value, Values} -> gb_trees:update(Key, [Value | Values], Tree);
         none            -> gb_trees:insert(Key, [Value], Tree)
+    end.
+
+gb_trees_set_insert(Key, Value, Tree) ->
+    case gb_trees:lookup(Key, Tree) of
+        {value, Values} ->
+            Values1 = gb_sets:insert(Value, Values),
+            gb_trees:update(Key, Values1, Tree);
+        none ->
+            gb_trees:insert(Key, gb_sets:singleton(Value), Tree)
     end.
 
 gb_trees_fold(Fun, Acc, Tree) ->

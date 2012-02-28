@@ -21,7 +21,7 @@
 -behaviour(gen_server2).
 
 -export([start_link/11, do/2, do/3, do_flow/3, flush/1, shutdown/1]).
--export([send_command/2, deliver/4, flushed/2, confirm/2]).
+-export([send_command/2, deliver/4, flushed/2]).
 -export([list/0, info_keys/0, info/1, info/2, info_all/0, info_all/1]).
 -export([refresh_config_local/0, ready_for_close/1]).
 -export([force_event_refresh/0]).
@@ -89,7 +89,6 @@
         (pid(), rabbit_types:ctag(), boolean(), rabbit_amqqueue:qmsg())
         -> 'ok').
 -spec(flushed/2 :: (pid(), pid()) -> 'ok').
--spec(confirm/2 ::(pid(), [non_neg_integer()]) -> 'ok').
 -spec(list/0 :: () -> [pid()]).
 -spec(list_local/0 :: () -> [pid()]).
 -spec(info_keys/0 :: () -> rabbit_types:info_keys()).
@@ -135,9 +134,6 @@ deliver(Pid, ConsumerTag, AckRequired, Msg) ->
 
 flushed(Pid, QPid) ->
     gen_server2:cast(Pid, {flushed, QPid}).
-
-confirm(Pid, MsgSeqNos) ->
-    gen_server2:cast(Pid, {confirm, MsgSeqNos, self()}).
 
 list() ->
     rabbit_misc:append_rpc_all_nodes(rabbit_mnesia:running_clustered_nodes(),
@@ -1166,14 +1162,9 @@ handle_publishing_queue_down(QPid, Reason, State = #ch{unconfirmed_qm = UQM}) ->
     %% the set one by one which which would be inefficient
     State1 = State#ch{unconfirmed_qm = gb_trees:delete_any(QPid, UQM)},
     {Nack, SendFun} =
-        case Reason of
-            Reason when Reason =:= noproc; Reason =:= noconnection;
-                        Reason =:= normal; Reason =:= shutdown ->
-                {false, fun record_confirms/2};
-            {shutdown, _} ->
-                {false, fun record_confirms/2};
-            _ ->
-                {true,  fun send_nacks/2}
+        case rabbit_misc:is_abnormal_termination(Reason) of
+            true  -> {true,  fun send_nacks/2};
+            false -> {false, fun record_confirms/2}
         end,
     {MXs, State2} = process_confirms(MsgSeqNos, QPid, Nack, State1),
     SendFun(MXs, State2).

@@ -18,11 +18,11 @@
 
 -export([init/3, terminate/2, delete_and_terminate/2,
          purge/1, publish/4, publish_delivered/5, drain_confirmed/1,
-         dropwhile/2, fetch/2, ack/2, requeue/2, len/1, is_empty/1,
+         dropwhile/3, fetch/2, ack/2, requeue/2, len/1, is_empty/1,
          set_ram_duration_target/2, ram_duration/1,
          needs_timeout/1, timeout/1, handle_pre_hibernate/1,
          status/1, invoke/3, is_duplicate/2, discard/3,
-         multiple_routing_keys/0]).
+         multiple_routing_keys/0, fold/3]).
 
 -export([start/1, stop/0]).
 
@@ -581,15 +581,23 @@ drain_confirmed(State = #vqstate { confirmed = C }) ->
                                         confirmed = gb_sets:new() }}
     end.
 
-dropwhile(Pred, State) ->
+dropwhile(Pred, MsgFun, State) ->
     case queue_out(State) of
         {empty, State1} ->
             a(State1);
         {{value, MsgStatus = #msg_status { msg_props = MsgProps }}, State1} ->
-            case Pred(MsgProps) of
-                true ->  {_, State2} = internal_fetch(false, MsgStatus, State1),
-                         dropwhile(Pred, State2);
-                false -> a(in_r(MsgStatus, State1))
+            case {Pred(MsgProps), MsgFun} of
+                {true, undefined} ->
+                    {_, State2} = internal_fetch(false, MsgStatus, State1),
+                    dropwhile(Pred, MsgFun, State2);
+                {true, _} ->
+                    {{_, _, AckTag, _}, State2} =
+                        internal_fetch(true, MsgStatus, State1),
+                    {MsgStatus, State3} = read_msg(MsgStatus, State2),
+                    MsgFun(MsgStatus#msg_status.msg, AckTag),
+                    dropwhile(Pred, MsgFun, State3);
+                {false, _} ->
+                    a(in_r(MsgStatus, State1))
             end
     end.
 
@@ -628,11 +636,22 @@ ack(AckTags, State) ->
                          persistent_count = PCount1,
                          ack_out_counter  = AckOutCount + length(AckTags) })}.
 
-requeue(AckTags, #vqstate { delta = Delta,
-                                    q3         = Q3,
-                                    q4         = Q4,
-                                    in_counter = InCounter,
-                                    len        = Len } = State) ->
+fold(undefined, State, _AckTags) ->
+    State;
+fold(MsgFun, State = #vqstate{pending_ack = PA}, AckTags) ->
+    lists:foldl(
+      fun(SeqId, State1) ->
+              {MsgStatus, State2} =
+                  read_msg(gb_trees:get(SeqId, PA), State1),
+              MsgFun(MsgStatus#msg_status.msg, SeqId),
+              State2
+      end, State, AckTags).
+
+requeue(AckTags, #vqstate { delta      = Delta,
+                            q3         = Q3,
+                            q4         = Q4,
+                            in_counter = InCounter,
+                            len        = Len } = State) ->
     {SeqIds,  Q4a, MsgIds,  State1} = queue_merge(lists:sort(AckTags), Q4, [],
                                                   beta_limit(Q3),
                                                   fun publish_alpha/2, State),
