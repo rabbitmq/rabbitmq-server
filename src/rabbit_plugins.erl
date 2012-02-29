@@ -73,6 +73,9 @@ start() ->
         {error, Reason} ->
             print_error("~p", [Reason]),
             rabbit_misc:quit(2);
+        {error_string, Reason} ->
+            print_error("~s", [Reason]),
+            rabbit_misc:quit(2);
         Other ->
             print_error("~p", [Other]),
             rabbit_misc:quit(2)
@@ -97,7 +100,7 @@ action(list, [Pat], Opts, PluginsFile, PluginsDir) ->
 
 action(enable, ToEnable0, _Opts, PluginsFile, PluginsDir) ->
     case ToEnable0 of
-        [] -> throw("Not enough arguments for 'enable'");
+        [] -> throw({error_string, "Not enough arguments for 'enable'"});
         _  -> ok
     end,
     AllPlugins = find_plugins(PluginsDir),
@@ -107,8 +110,9 @@ action(enable, ToEnable0, _Opts, PluginsFile, PluginsDir) ->
     Missing = ToEnable -- plugin_names(AllPlugins),
     case Missing of
         [] -> ok;
-        _  -> throw(fmt_list("The following plugins could not be found:",
-                             Missing))
+        _  -> throw({error_string,
+                     fmt_list("The following plugins could not be found:",
+                              Missing)})
     end,
     NewEnabled = lists:usort(Enabled ++ ToEnable),
     write_enabled_plugins(PluginsFile, NewEnabled),
@@ -123,7 +127,7 @@ action(enable, ToEnable0, _Opts, PluginsFile, PluginsDir) ->
 
 action(disable, ToDisable0, _Opts, PluginsFile, PluginsDir) ->
     case ToDisable0 of
-        [] -> throw("Not enough arguments for 'disable'");
+        [] -> throw({error_string, "Not enough arguments for 'disable'"});
         _  -> ok
     end,
     ToDisable = [list_to_atom(Name) || Name <- ToDisable0],
@@ -238,7 +242,8 @@ format_plugins(Pattern, Opts, PluginsFile, PluginsDir) ->
                  {false, false} -> normal;
                  {true,  false} -> verbose;
                  {false, true}  -> minimal;
-                 {true,  true}  -> throw("Cannot specify -m and -v together")
+                 {true,  true}  -> throw({error_string,
+                                          "Cannot specify -m and -v together"})
              end,
     OnlyEnabled = proplists:get_bool(?ENABLED_OPT, Opts),
     OnlyEnabledAll = proplists:get_bool(?ENABLED_ALL_OPT, Opts),
@@ -296,7 +301,7 @@ print_list(Header, Plugins) ->
 
 fmt_list(Header, Plugins) ->
     lists:flatten(
-      [Header, $\n, [io_lib:format("  ~s~n", [P]) || P <- Plugins], $\n]).
+      [Header, $\n, [io_lib:format("  ~s~n", [P]) || P <- Plugins]]).
 
 usort_plugins(Plugins) ->
     lists:usort(fun plugins_cmp/2, Plugins).
