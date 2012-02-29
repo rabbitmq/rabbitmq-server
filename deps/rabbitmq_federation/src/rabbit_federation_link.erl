@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ Federation.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_federation_link).
@@ -29,8 +29,6 @@
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
-
--export([add_routing_to_headers/2]).
 
 -import(rabbit_misc, [pget/2]).
 
@@ -135,7 +133,8 @@ handle_info({#'basic.deliver'{routing_key  = Key,
     case should_forward(Headers0, MaxHops) of
         true  -> {table, Info0} = rabbit_federation_upstream:to_table(Upstream),
                  Info = Info0 ++ [{<<"redelivered">>, bool, Redelivered}],
-                 Headers = add_routing_to_headers(Headers0, Info),
+                 Headers = rabbit_basic:append_table_header(
+                             ?ROUTING_HEADER, Info, Headers0),
                  Seq = amqp_channel:next_publish_seqno(DCh),
                  amqp_channel:cast(DCh, #'basic.publish'{exchange    = XNameBin,
                                                          routing_key = Key},
@@ -375,9 +374,12 @@ consume_from_upstream_queue(
               prefetch_count = Prefetch,
               expires        = Expiry,
               message_ttl    = TTL,
+              ha_policy      = HA,
               params         = #amqp_params_network{virtual_host = VHost}}
         = Upstream,
     Q = upstream_queue_name(XNameBin, VHost, DownXName),
+    %% TODO it would be nice to just pass through args, but let's do that as
+    %% part of bug 23908.
     ExpiryArg = case Expiry of
                     none -> [];
                     _    -> [{<<"x-expires">>, long, Expiry}]
@@ -386,7 +388,11 @@ consume_from_upstream_queue(
                  none -> [];
                  _    -> [{<<"x-message-ttl">>, long, TTL}]
              end,
-    Args = ExpiryArg ++ TTLArg,
+    HAArg = case HA of
+                none -> [];
+                _    -> [{<<"x-ha-policy">>, longstr, list_to_binary(HA)}]
+            end,
+    Args = ExpiryArg ++ TTLArg ++ HAArg,
     amqp_channel:call(Ch, #'queue.declare'{queue     = Q,
                                            durable   = true,
                                            arguments = Args}),
@@ -451,11 +457,11 @@ upstream_exchange_name(XNameBin, VHost, DownXName, Suffix) ->
 local_nodename() ->
     {ok, Explicit} = application:get_env(rabbitmq_federation, local_nodename),
     case Explicit of
-        automatic -> {ID, _} = rabbit_misc:nodeparts(node()),
+        automatic -> {ID, _} = rabbit_nodes:parts(node()),
                      {ok, Host} = inet:gethostname(),
                      {ok, #hostent{h_name = FQDN}} = inet:gethostbyname(Host),
                      list_to_binary(atom_to_list(
-                                      rabbit_misc:makenode({ID, FQDN})));
+                                      rabbit_nodes:make({ID, FQDN})));
         _         -> list_to_binary(Explicit)
     end.
 
@@ -508,15 +514,6 @@ extract_headers(#amqp_msg{props = #'P_basic'{headers = Headers}}) ->
 update_headers(Headers, Msg = #amqp_msg{props = Props}) ->
     Msg#amqp_msg{props = Props#'P_basic'{headers = Headers}}.
 
-add_routing_to_headers(undefined, Info) ->
-    add_routing_to_headers([], Info);
-add_routing_to_headers(Headers, Info) ->
-    Prior = case rabbit_misc:table_lookup(Headers, ?ROUTING_HEADER) of
-                undefined          -> [];
-                {array, Existing}  -> Existing
-            end,
-    rabbit_misc:set_table_value(
-      Headers, ?ROUTING_HEADER, array, [{table, Info} | Prior]).
 
 report_status({Upstream, XName}, Status) ->
     rabbit_federation_status:report(Upstream, XName, Status).

@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ Federation.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_federation_test).
@@ -195,8 +195,8 @@ binding_recovery() ->
     ok.
 
 suffix({Nodename, _}, X) ->
-    {_, NodeHost} = rabbit_misc:nodeparts(node()),
-    Node = rabbit_misc:makenode({Nodename, NodeHost}),
+    {_, NodeHost} = rabbit_nodes:parts(node()),
+    Node = rabbit_nodes:make({Nodename, NodeHost}),
     rpc:call(Node, rabbit_federation_db, get_active_suffix,
              [rabbit_misc:r(<<"/">>, exchange, <<"downstream">>),
               #upstream{connection_name = Nodename,
@@ -367,7 +367,7 @@ delete_queue(Ch, Q) ->
 
 publish(Ch, X, Key, Payload) ->
     %% The trouble is that we transmit bindings upstream asynchronously...
-    timer:sleep(200),
+    timer:sleep(1000),
     amqp_channel:call(Ch, #'basic.publish'{exchange    = X,
                                            routing_key = Key},
                       #amqp_msg{payload = Payload}).

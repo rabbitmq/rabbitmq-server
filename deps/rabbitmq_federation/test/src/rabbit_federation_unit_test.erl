@@ -11,13 +11,10 @@
 %% The Original Code is RabbitMQ Federation.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_federation_unit_test).
-
--define(INFO, [{<<"baz">>, longstr, <<"bam">>}]).
--define(H, <<"x-received-from">>).
 
 -define(US_NAME, <<"upstream">>).
 -define(DS_NAME, <<"downstream">>).
@@ -25,26 +22,6 @@
 -include("rabbit_federation.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
-
-%% Test that we add routing information to message headers sensibly.
-routing_test() ->
-    ?assertEqual([{?H, array, [{table, ?INFO}]}],
-                 add(undefined)),
-
-    ?assertEqual([{?H, array, [{table, ?INFO}]}],
-                 add([])),
-
-    ?assertEqual([{<<"foo">>, longstr, <<"bar">>},
-                  {?H, array, [{table, ?INFO}]}],
-                 add([{<<"foo">>, longstr, <<"bar">>}])),
-
-    ?assertEqual([{?H, array, [{table, ?INFO},
-                               {table, ?INFO}]}],
-                 add([{?H, array, [{table, ?INFO}]}])),
-    ok.
-
-add(Table) ->
-    rabbit_federation_link:add_routing_to_headers(Table, ?INFO).
 
 %% Test that we apply binding changes in the correct order even when
 %% they arrive out of order.

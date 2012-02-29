@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ Federation.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_federation_upstream).
@@ -101,6 +101,7 @@ from_props_connection(Upst, ConnName, Conn, DefaultXNameBin, DefaultVHost) ->
                           max_hops        = pget(max_hops,        Upst, 1),
                           expires         = pget(expires,         Conn, none),
                           message_ttl     = pget(message_ttl,     Conn, none),
+                          ha_policy       = pget(ha_policy,       Conn, none),
                           connection_name = ConnName}
     end.
 

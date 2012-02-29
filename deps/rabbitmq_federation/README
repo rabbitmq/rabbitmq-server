@@ -110,6 +110,7 @@ A verbose static configuration might look like:
                                          {heartbeat,       1},
                                          {queue_expires,   30000},
                                          {message_ttl,     10000},
+                                         {ha_policy,       "all"},
                                          {ssl_options,
                                           [{cacertfile, "/path/to/cacert.pem"},
                                            {certfile,   "/path/to/cert.pem"},
@@ -211,6 +212,11 @@ message_ttl
   - Controls how long to keep upstream messages buffered, in milliseconds
     (i.e. the "x-message-ttl" argument for the upstream queue). Default is
     'none', meaning messages should never expire.
+
+ha_policy
+  - Controls whether the upstream queue should be highly available. (i.e.
+    the "x-ha-policy" argument for the upstream queue). Default is
+    'none', meaning the queue is not HA.
 
 ssl_options
   - Specifies how to make client SSL connections. See the Erlang
