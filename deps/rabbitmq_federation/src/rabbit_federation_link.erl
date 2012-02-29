@@ -68,10 +68,10 @@ list_routing_keys(XN) -> call(XN, list_routing_keys).
 %%----------------------------------------------------------------------------
 
 start_link(Args) ->
-    report_status(Args, starting),
     gen_server2:start_link(?MODULE, Args, [{timeout, infinity}]).
 
-init(Args = {_, XName}) ->
+init(Args = {Upstream, XName}) ->
+    rabbit_federation_status:report(Upstream, XName, starting),
     join(rabbit_federation_exchanges),
     join({rabbit_federation_exchange, XName}),
     gen_server2:cast(self(), maybe_go),
@@ -168,8 +168,8 @@ handle_info({'DOWN', _Ref, process, Ch, Reason},
 handle_info(Msg, State) ->
     {stop, {unexpected_info, Msg}, State}.
 
-terminate(Reason, {not_started, Args}) ->
-    report_status(Args, map_error(Reason)),
+terminate(Reason, {not_started, {Upstream, XName}}) ->
+    rabbit_federation_status:report(Upstream, XName, map_error(Reason)),
     ok;
 
 terminate(Reason, #state{downstream_channel    = DCh,
@@ -178,7 +178,7 @@ terminate(Reason, #state{downstream_channel    = DCh,
                          upstream              = Upstream,
                          connection            = Conn,
                          channel               = Ch}) ->
-    report_status({Upstream, XName}, map_error(Reason)),
+    rabbit_federation_status:report(Upstream, XName, map_error(Reason)),
     ensure_closed(DConn, DCh),
     ensure_closed(Conn, Ch),
     ok.
@@ -342,7 +342,8 @@ go(S0 = {not_started, {Upstream, DownXName =
                                      rabbit_federation_upstream:to_string(
                                        Upstream)]),
                     Name = pget(name, amqp_connection:info(DConn, [name])),
-                    report_status({Upstream, DownXName}, {running, Name}),
+                    rabbit_federation_status:report(
+                      Upstream, DownXName, {running, Name}),
                     {noreply, State};
                 E ->
                     ensure_closed(DConn, DCh),
@@ -513,10 +514,6 @@ extract_headers(#amqp_msg{props = #'P_basic'{headers = Headers}}) ->
 
 update_headers(Headers, Msg = #amqp_msg{props = Props}) ->
     Msg#amqp_msg{props = Props#'P_basic'{headers = Headers}}.
-
-
-report_status({Upstream, XName}, Status) ->
-    rabbit_federation_status:report(Upstream, XName, Status).
 
 map_error({shutdown, {connect_failed, {error, E}}}) -> {stopped, E};
 map_error({shutdown, Reason})                       -> {stopped, Reason};
