@@ -4,14 +4,14 @@
 <h2>Totals</h2>
 <div class="hider updatable">
 <% if (overview.statistics_db_node != 'not_running') { %>
-  <h3>Queued messages <span class="help" id="queued-messages"></h3>
+  <h3>Queued messages <span class="help" id="queued-messages"></span></h3>
   <div class="box">
     <%= queue_length(overview.queue_totals, 'Ready', 'messages_ready') %>
     <%= queue_length(overview.queue_totals, 'Unacknowledged', 'messages_unacknowledged') %>
     <%= queue_length(overview.queue_totals, 'Total', 'messages') %>
   </div>
 <% if (statistics_level == 'fine') { %>
-  <h3>Message rates <span class="help" id="message-rates"></h3>
+  <h3>Message rates <span class="help" id="message-rates"></span></h3>
   <div class="box">
     <%= message_rates(overview.message_stats) %>
   </div>
