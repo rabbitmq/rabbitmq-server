@@ -29,10 +29,6 @@
     <td><%= link_exchange(link.vhost, link.exchange) %></td>
     <td>
       <%= fmt_string(link.connection) %>
-      <sub>
-        <%= fmt_string(link.host) %>:<%= link.port %>
-        <% if (link.ssl) { %>(SSL)<% } %>
-      </sub>
     </td>
 <% if (nodes_interesting) { %>
     <td><%= fmt_string(link.node) %></td>

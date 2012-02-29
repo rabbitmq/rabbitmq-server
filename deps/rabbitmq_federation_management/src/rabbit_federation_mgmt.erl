@@ -95,8 +95,6 @@ format_item({timestamp, {{Y, M, D}, {H, Min, S}}}) ->
                       [Y, M, D, H, Min, S])};
 format_item({connection, C}) ->
     {connection, list_to_binary(C)};
-format_item({host, H}) ->
-    {host, list_to_binary(H)};
 format_item(I) ->
     I.
 
