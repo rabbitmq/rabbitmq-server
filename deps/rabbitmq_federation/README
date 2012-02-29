@@ -257,10 +257,13 @@ ch.exchangeDeclare("my-federated-exchange", "x-federation", true, false, args);
 Link Status Reporting
 =====================
 
-From the broker Erlang prompt, call
-rabbit_federation_status:status(). This will return a list of
-proplists. Each proplist represents a link; that is a combination of a
-federated exchange and an upstream. It contains the following keys:
+Invoke:
+
+$ rabbitmqctl eval 'rabbit_federation_status:status().'
+
+This will return a list of proplists. Each proplist represents a
+link; that is a combination of a federated exchange and an
+upstream. It contains the following keys:
 
 * exchange          - the name of the federated exchange
 * upstream_exchange - the name of the federated exchange
