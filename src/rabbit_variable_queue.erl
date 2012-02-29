@@ -732,7 +732,7 @@ ram_duration(State = #vqstate {
                  ram_ack_count_prev = RamAckCount }}.
 
 needs_timeout(State = #vqstate { index_state = IndexState }) ->
-    case needs_index_sync(State) of
+    case must_sync_index(State) of
         true  -> timed;
         false ->
             case rabbit_queue_index:needs_sync(IndexState) of
@@ -751,7 +751,7 @@ needs_timeout(State = #vqstate { index_state = IndexState }) ->
 timeout(State = #vqstate { index_state = IndexState }) ->
     IndexState1 = rabbit_queue_index:sync(IndexState),
     State1 = State #vqstate { index_state = IndexState1 },
-    reduce_memory_use(State1).
+    a(reduce_memory_use(State1)).
 
 handle_pre_hibernate(State = #vqstate { index_state = IndexState }) ->
     State #vqstate { index_state = rabbit_queue_index:flush(IndexState) }.
@@ -1277,8 +1277,8 @@ record_confirms(MsgIdSet, State = #vqstate { msgs_on_disk        = MOD,
                      unconfirmed         = gb_sets:difference(UC,   MsgIdSet),
                      confirmed           = gb_sets:union     (C,    MsgIdSet) }.
 
-needs_index_sync(#vqstate { msg_indices_on_disk = MIOD,
-                            unconfirmed = UC }) ->
+must_sync_index(#vqstate { msg_indices_on_disk = MIOD,
+                           unconfirmed = UC }) ->
     %% If UC is empty then by definition, MIOD and MOD are also empty
     %% and there's nothing that can be pending a sync.
 

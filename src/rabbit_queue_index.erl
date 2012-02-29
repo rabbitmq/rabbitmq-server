@@ -283,8 +283,8 @@ deliver(SeqIds, State) ->
 ack(SeqIds, State) ->
     deliver_or_ack(ack, SeqIds, State).
 
-%% This is only called when there are outstanding confirms and the
-%% queue is idle.
+%% This is called when there are outstanding confirms or when the
+%% queue is idle and the journal needs syncing (see needs_sync/1).
 sync(State = #qistate { journal_handle = undefined }) ->
     State;
 sync(State = #qistate { journal_handle = JournalHdl }) ->
