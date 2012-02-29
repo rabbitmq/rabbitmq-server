@@ -101,6 +101,7 @@ from_props_connection(Upst, ConnName, Conn, DefaultXNameBin, DefaultVHost) ->
                           max_hops        = pget(max_hops,        Upst, 1),
                           expires         = pget(expires,         Conn, none),
                           message_ttl     = pget(message_ttl,     Conn, none),
+                          ha_policy       = pget(ha_policy,       Conn, none),
                           connection_name = ConnName}
     end.
 

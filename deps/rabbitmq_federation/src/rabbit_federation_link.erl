@@ -366,9 +366,12 @@ consume_from_upstream_queue(
               prefetch_count = Prefetch,
               expires        = Expiry,
               message_ttl    = TTL,
+              ha_policy      = HA,
               params         = #amqp_params_network{virtual_host = VHost}}
         = Upstream,
     Q = upstream_queue_name(XNameBin, VHost, DownXName),
+    %% TODO it would be nice to just pass through args, but let's do that as
+    %% part of bug 23908.
     ExpiryArg = case Expiry of
                     none -> [];
                     _    -> [{<<"x-expires">>, long, Expiry}]
@@ -377,7 +380,11 @@ consume_from_upstream_queue(
                  none -> [];
                  _    -> [{<<"x-message-ttl">>, long, TTL}]
              end,
-    Args = ExpiryArg ++ TTLArg,
+    HAArg = case HA of
+                none -> [];
+                _    -> [{<<"x-ha-policy">>, longstr, list_to_binary(HA)}]
+            end,
+    Args = ExpiryArg ++ TTLArg ++ HAArg,
     amqp_channel:call(Ch, #'queue.declare'{queue     = Q,
                                            durable   = true,
                                            arguments = Args}),

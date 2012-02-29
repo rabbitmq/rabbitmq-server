@@ -21,6 +21,7 @@
                    reconnect_delay,
                    expires,
                    message_ttl,
+                   ha_policy,
                    connection_name}).
 
 -define(SUPERVISOR, rabbit_federation_sup).
