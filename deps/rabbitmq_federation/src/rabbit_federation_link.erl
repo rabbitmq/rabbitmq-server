@@ -155,7 +155,7 @@ handle_info({'DOWN', _Ref, process, Ch, shutdown},
 %% log it and die quietly.
 handle_info({'DOWN', _Ref, process, Ch, {shutdown, Reason}},
             State = #state{channel = Ch}) ->
-    connection_error({upstream_channel_down, Reason}, State);
+    connection_error(remote, {upstream_channel_down, Reason}, State);
 
 handle_info({'DOWN', _Ref, process, Ch, Reason},
             State = #state{channel = Ch}) ->
@@ -347,25 +347,31 @@ go(S0 = {not_started, {Upstream, DownXName =
                     {noreply, State};
                 E ->
                     ensure_closed(DConn, DCh),
-                    connection_error(E, S0)
+                    connection_error(remote, E, S0)
             end;
         E ->
-            connection_error(E, S0)
+            connection_error(local, E, S0)
     end.
 
-connection_error(E, State = {not_started, {U, XName}}) ->
-    rabbit_log:info("Federation ~s failed to establish connection to ~s~n~p~n",
+connection_error(remote, E, State = {not_started, {U, XName}}) ->
+    rabbit_log:warning("Federation ~s did not connect to ~s~n~p~n",
+                       [rabbit_misc:rs(XName),
+                        rabbit_federation_upstream:to_string(U), E]),
+    {stop, {shutdown, {connect_failed, remote, E}}, State};
+
+connection_error(remote, E, State = #state{upstream            = U,
+                                          downstream_exchange = XName}) ->
+    rabbit_log:info("Federation ~s disconnected from ~s~n~p~n",
                     [rabbit_misc:rs(XName),
                      rabbit_federation_upstream:to_string(U), E]),
-    {stop, {shutdown, {connect_failed, E}}, State};
+    {stop, {shutdown, {disconnected, remote, E}}, State};
 
-connection_error(E, State = #state{upstream            = U,
-                                   downstream_exchange = XName}) ->
-    rabbit_log:info("Federation ~s disconnected from ~s:~n~p~n",
-                    [rabbit_misc:rs(XName),
-                     rabbit_federation_upstream:to_string(U), E]),
-    {stop, {shutdown, {disconnected, E}}, State}.
+connection_error(local, E, State = {not_started, {_U, XName}}) ->
+    rabbit_log:warning("Federation ~s did not connect locally~n~p~n",
+                       [rabbit_misc:rs(XName), E]),
+    {stop, {shutdown, {connect_failed, local, E}}, State}.
 
+%% local / disconnected never gets invoked, see handle_info({'DOWN', ...
 
 consume_from_upstream_queue(
   State = #state{upstream            = Upstream,
