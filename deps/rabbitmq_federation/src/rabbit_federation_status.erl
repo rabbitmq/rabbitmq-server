@@ -80,21 +80,12 @@ format(#entry{key       = {#resource{virtual_host = VHost,
                                      kind         = exchange,
                                      name         = XNameBin},
                            #upstream{connection_name = Connection,
-                                     exchange        = UXNameBin,
-                                     params          = Params}},
+                                     exchange        = UXNameBin}},
               status    = Status,
               timestamp = Timestamp}) ->
-    format_params(Params) ++
         [{exchange,          XNameBin},
          {vhost,             VHost},
          {connection,        Connection},
          {upstream_exchange, UXNameBin},
          {status,            Status},
          {timestamp,         Timestamp}].
-
-format_params(#amqp_params_network{host        = Host,
-                                   port        = Port,
-                                   ssl_options = SSLOptions}) ->
-    [{host, Host},
-     {port, Port},
-     {ssl,  SSLOptions =/= none}].
