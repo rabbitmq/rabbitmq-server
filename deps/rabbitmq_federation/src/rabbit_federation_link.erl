@@ -169,7 +169,7 @@ handle_info(Msg, State) ->
     {stop, {unexpected_info, Msg}, State}.
 
 terminate(Reason, {not_started, {Upstream, XName}}) ->
-    rabbit_federation_status:report(Upstream, XName, map_error(Reason)),
+    rabbit_federation_status:report(Upstream, XName, Reason),
     ok;
 
 terminate(Reason, #state{downstream_channel    = DCh,
@@ -178,7 +178,7 @@ terminate(Reason, #state{downstream_channel    = DCh,
                          upstream              = Upstream,
                          connection            = Conn,
                          channel               = Ch}) ->
-    rabbit_federation_status:report(Upstream, XName, map_error(Reason)),
+    rabbit_federation_status:report(Upstream, XName, Reason),
     ensure_closed(DConn, DCh),
     ensure_closed(Conn, Ch),
     ok.
@@ -514,7 +514,3 @@ extract_headers(#amqp_msg{props = #'P_basic'{headers = Headers}}) ->
 
 update_headers(Headers, Msg = #amqp_msg{props = Props}) ->
     Msg#amqp_msg{props = Props#'P_basic'{headers = Headers}}.
-
-map_error({shutdown, {connect_failed, {error, E}}}) -> {stopped, E};
-map_error({shutdown, Reason})                       -> {stopped, Reason};
-map_error(Term)                                     -> Term.
