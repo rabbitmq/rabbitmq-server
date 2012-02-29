@@ -143,9 +143,9 @@
 -behaviour(gen_server2).
 
 -export([register_callback/3]).
--export([open/3, close/1, read/2, append/2, sync/1, position/2, truncate/1,
-         current_virtual_offset/1, current_raw_offset/1, flush/1, copy/3,
-         set_maximum_since_use/1, delete/1, clear/1]).
+-export([open/3, close/1, read/2, append/2, needs_sync/1, sync/1, position/2,
+         truncate/1, current_virtual_offset/1, current_raw_offset/1, flush/1,
+         copy/3, set_maximum_since_use/1, delete/1, clear/1]).
 -export([obtain/0, release/0, transfer/1, set_limit/1, get_limit/0, info_keys/0,
          info/0, info/1]).
 -export([ulimit/0]).
@@ -371,6 +371,13 @@ sync(Ref) ->
                   ok    -> {ok, [Handle #handle { is_dirty = false }]};
                   Error -> {Error, [Handle]}
               end
+      end).
+
+needs_sync(Ref) ->
+    with_handles(
+      [Ref],
+      fun ([#handle { is_dirty = false, write_buffer = [] }]) -> false;
+          ([_Handle])                                         -> true
       end).
 
 position(Ref, NewOffset) ->

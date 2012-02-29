@@ -279,9 +279,9 @@ next_state(State = #q{backing_queue = BQ, backing_queue_state = BQS}) ->
                  confirm_messages(MsgIds, State#q{
                                             backing_queue_state = BQS1}))),
     case BQ:needs_timeout(BQS1) of
-        false -> {stop_sync_timer(State1),   hibernate};
-        idle  -> {stop_sync_timer(State1),   0        };
-        timed -> {ensure_sync_timer(State1), 0        }
+        false -> {stop_sync_timer(State1),   hibernate     };
+        idle  -> {stop_sync_timer(State1),   ?SYNC_INTERVAL};
+        timed -> {ensure_sync_timer(State1), 0             }
     end.
 
 backing_queue_module(#amqqueue{arguments = Args}) ->
