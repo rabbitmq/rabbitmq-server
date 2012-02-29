@@ -208,6 +208,7 @@
 -spec(deliver/2 :: ([seq_id()], qistate()) -> qistate()).
 -spec(ack/2 :: ([seq_id()], qistate()) -> qistate()).
 -spec(sync/1 :: (qistate()) -> qistate()).
+-spec(needs_sync/1 :: (qistate()) -> boolean()).
 -spec(flush/1 :: (qistate()) -> qistate()).
 -spec(read/3 :: (seq_id(), seq_id(), qistate()) ->
                      {[{rabbit_types:msg_id(), seq_id(),
