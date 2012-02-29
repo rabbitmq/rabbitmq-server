@@ -15,7 +15,7 @@
 ##  Copyright (c) 2012 VMware, Inc.  All rights reserved.
 ##
 
-### next line potentially updated in package install steps, do not alter
+### next line potentially updated in package install steps
 SYS_PREFIX=
 
 ## Set default values
