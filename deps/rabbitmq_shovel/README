@@ -264,11 +264,14 @@ specification of delays at a granularity smaller than whole seconds.
 Obtaining shovel statuses
 -------------------------
 
-From the broker Erlang prompt, call
-rabbit_shovel_status:status(). This will return a list, with one row
-for each configured shovel. Each row has three fields: the shovel
-name, the shovel status, and the timestamp (a local calendar time of
-{{YYYY,MM,DD},{HH,MM,SS}}). There are 3 possible statuses:
+Invoke:
+
+$ rabbitmqctl eval 'rabbit_shovel_status:status().'
+
+This will return a list, with one row for each configured shovel. Each
+row has three fields: the shovel name, the shovel status, and the
+timestamp (a local calendar time of {{YYYY,MM,DD},{HH,MM,SS}}). There
+are 3 possible statuses:
 
 'starting': The shovel is starting up, connecting and creating
     resources.
