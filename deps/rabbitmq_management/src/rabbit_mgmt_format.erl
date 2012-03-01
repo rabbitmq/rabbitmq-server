@@ -129,7 +129,7 @@ timestamp(unknown) ->
     unknown;
 timestamp(Timestamp) ->
     {{Y, M, D}, {H, Min, S}} = calendar:now_to_local_time(Timestamp),
-    print("~w-~w-~w ~w:~w:~w", [Y, M, D, H, Min, S]).
+    print("~w-~2.2.0w-~2.2.0w ~w:~2.2.0w:~2.2.0w", [Y, M, D, H, Min, S]).
 
 resource(unknown) -> unknown;
 resource(Res)     -> resource(name, Res).
