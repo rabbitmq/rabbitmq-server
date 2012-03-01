@@ -93,8 +93,6 @@ format_info(Items) ->
 format_item({timestamp, {{Y, M, D}, {H, Min, S}}}) ->
     {timestamp, print("~w-~2.2.0w-~2.2.0w ~w:~2.2.0w:~2.2.0w",
                       [Y, M, D, H, Min, S])};
-format_item({connection, C}) ->
-    {connection, list_to_binary(C)};
 format_item(I) ->
     I.
 
