@@ -1341,16 +1341,6 @@ handle_cast(force_event_refresh, State = #q{exclusive_consumer = Exclusive}) ->
 handle_cast({dead_letter, {Msg, AckTag}, Reason}, State) ->
     dead_letter_msg(Msg, AckTag, Reason, State).
 
-handle_info({'DOWN', _MonitorRef, process, DownPid, _Reason},
-            State = #q{q = #amqqueue{exclusive_owner = DownPid}}) ->
-    %% Exclusively owned queues must disappear with their owner.  In
-    %% the case of clean shutdown we delete the queue synchronously in
-    %% the reader - although not required by the spec this seems to
-    %% match what people expect (see bug 21824). However we need this
-    %% monitor-and-async- delete in case the connection goes away
-    %% unexpectedly.
-    stop_later(normal, State);
-
 handle_info({'DOWN', _MonitorRef, process, DownPid, Reason}, State) ->
     case handle_ch_down(DownPid, State) of
         {ok, State1}   -> handle_queue_down(DownPid, Reason, State1);
@@ -1375,6 +1365,16 @@ handle_info(emit_stats, State) ->
     State1 = rabbit_event:reset_stats_timer(State, #q.stats_timer),
     assert_invariant(State1),
     {noreply, State1, hibernate};
+
+handle_info({'DOWN', _MonitorRef, process, DownPid, _Reason},
+            State = #q{q = #amqqueue{exclusive_owner = DownPid}}) ->
+    %% Exclusively owned queues must disappear with their owner.  In
+    %% the case of clean shutdown we delete the queue synchronously in
+    %% the reader - although not required by the spec this seems to
+    %% match what people expect (see bug 21824). However we need this
+    %% monitor-and-async- delete in case the connection goes away
+    %% unexpectedly.
+    stop_later(normal, State);
 
 handle_info(update_ram_duration, State = #q{backing_queue = BQ,
                                             backing_queue_state = BQS}) ->
