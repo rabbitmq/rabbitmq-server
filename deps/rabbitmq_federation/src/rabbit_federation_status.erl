@@ -85,7 +85,7 @@ format(#entry{key       = {#resource{virtual_host = VHost,
               timestamp = Timestamp}) ->
         [{exchange,          XNameBin},
          {vhost,             VHost},
-         {connection,        Connection},
+         {connection,        list_to_binary(Connection)},
          {upstream_exchange, UXNameBin},
          {status,            Status},
          {timestamp,         Timestamp}].
