@@ -271,7 +271,7 @@ upstream. It contains the following keys:
 * connection        - the name of the connection for this link (from config)
 * status            - status of the link: starting
                                           {running, LocalConnectionName}
-                                          {stopped, Error}
+                                          {shutdown, Error}
 * timestamp         - time the status was last updated
 
 Note On Clustering
