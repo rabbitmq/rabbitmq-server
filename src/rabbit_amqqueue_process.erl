@@ -1341,6 +1341,8 @@ handle_cast(force_event_refresh, State = #q{exclusive_consumer = Exclusive}) ->
 handle_cast({dead_letter, {Msg, AckTag}, Reason}, State) ->
     dead_letter_msg(Msg, AckTag, Reason, State).
 
+%% We need to not ignore this as we need to remove outstanding
+%% confirms due to queue death.
 handle_info({'DOWN', _MonitorRef, process, DownPid, Reason}, State) ->
     case handle_ch_down(DownPid, State) of
         {ok, State1}   -> handle_queue_down(DownPid, Reason, State1);
