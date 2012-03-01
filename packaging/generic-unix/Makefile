@@ -12,6 +12,13 @@ dist:
 		MAN_DIR=`pwd`/$(TARGET_DIR)/share/man \
 			install
 
+	sed -e 's:^SYS_PREFIX=$$:SYS_PREFIX=\$${RABBITMQ_HOME}:' \
+        $(TARGET_DIR)/sbin/rabbitmq-defaults >$(TARGET_DIR)/sbin/rabbitmq-defaults.tmp \
+        && mv $(TARGET_DIR)/sbin/rabbitmq-defaults.tmp $(TARGET_DIR)/sbin/rabbitmq-defaults
+	chmod 0755 $(TARGET_DIR)/sbin/rabbitmq-defaults
+
+	mkdir -p $(TARGET_DIR)/etc/rabbitmq
+
 	tar -zcf $(TARGET_TARBALL).tar.gz $(TARGET_DIR)
 	rm -rf $(SOURCE_DIR) $(TARGET_DIR)
 
