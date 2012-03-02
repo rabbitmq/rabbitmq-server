@@ -1,4 +1,4 @@
-This package, rabbitmq-web-stomp-examples is licensed under the
+This package, the rabbitmq-web-stomp-examples, is licensed under the
 MPL. For the MPL, please see LICENSE-MPL-RabbitMQ.
 
 priv/stomp.js is a part of stomp-websocket project
