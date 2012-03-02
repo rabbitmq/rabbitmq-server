@@ -1146,10 +1146,10 @@ consumer_monitor(ConsumerTag,
     end.
 
 monitor_queue(QPid, State = #ch{queue_monitors = QMons}) ->
-    case not sets:is_element(QPid, QMons) of
-        true  -> erlang:monitor(process, QPid),
+    case sets:is_element(QPid, QMons) of
+        false -> erlang:monitor(process, QPid),
                  State#ch{queue_monitors = sets:add_element(QPid, QMons)};
-        false -> State
+        true  -> State
     end.
 
 handle_publishing_queue_down(QPid, Reason, State = #ch{unconfirmed_qm = UQM}) ->
