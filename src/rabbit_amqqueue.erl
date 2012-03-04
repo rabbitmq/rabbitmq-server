@@ -32,7 +32,7 @@
 
 
 %% internal
--export([internal_declare/2, internal_delete/1, run_backing_queue/3,
+-export([internal_declare/2, internal_delete/2, run_backing_queue/3,
          set_ram_duration_target/2, set_maximum_since_use/2]).
 
 -include("rabbit.hrl").
@@ -142,11 +142,11 @@
 -spec(notify_sent_queue_down/1 :: (pid()) -> 'ok').
 -spec(unblock/2 :: (pid(), pid()) -> 'ok').
 -spec(flush_all/2 :: (qpids(), pid()) -> 'ok').
--spec(internal_delete/1 ::
-        (name()) -> rabbit_types:ok_or_error('not_found') |
-                    rabbit_types:connection_exit() |
-                    fun (() -> rabbit_types:ok_or_error('not_found') |
-                               rabbit_types:connection_exit())).
+-spec(internal_delete/2 ::
+        (name(), pid()) -> rabbit_types:ok_or_error('not_found') |
+                           rabbit_types:connection_exit() |
+                           fun (() -> rabbit_types:ok_or_error('not_found') |
+                                      rabbit_types:connection_exit())).
 -spec(run_backing_queue/3 ::
         (pid(), atom(),
          (fun ((atom(), A) -> {[rabbit_types:msg_id()], A}))) -> 'ok').
@@ -229,7 +229,7 @@ internal_declare(Q = #amqqueue{name = QueueName}, false) ->
                   [ExistingQ = #amqqueue{pid = QPid}] ->
                       case rabbit_misc:is_process_alive(QPid) of
                           true  -> rabbit_misc:const(ExistingQ);
-                          false -> TailFun = internal_delete(QueueName),
+                          false -> TailFun = internal_delete(QueueName, QPid),
                                    fun () -> TailFun(), ExistingQ end
                       end
               end
@@ -515,13 +515,19 @@ internal_delete1(QueueName) ->
     %% after the transaction.
     rabbit_binding:remove_for_destination(QueueName).
 
-internal_delete(QueueName) ->
+internal_delete(QueueName, QPid) ->
     rabbit_misc:execute_mnesia_tx_with_tail(
       fun () ->
               case mnesia:wread({rabbit_queue, QueueName}) of
                   []  -> rabbit_misc:const({error, not_found});
                   [_] -> Deletions = internal_delete1(QueueName),
-                         rabbit_binding:process_deletions(Deletions)
+                         T = rabbit_binding:process_deletions(Deletions),
+                         fun() ->
+                                 ok = T(),
+                                 ok = rabbit_event:notify(queue_deleted,
+                                                          [{pid,  QPid},
+                                                           {name, QueueName}])
+                         end
               end
       end).
 

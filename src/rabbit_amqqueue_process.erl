@@ -183,16 +183,14 @@ terminate({shutdown, _} = R, State = #q{backing_queue = BQ}) ->
 terminate(Reason,            State = #q{q             = #amqqueue{name = QName},
                                         backing_queue = BQ}) ->
     %% FIXME: How do we cancel active subscriptions?
-    terminate_shutdown(fun (BQS) ->
-                               rabbit_event:notify(
-                                 queue_deleted, [{pid,  self()},
-                                                 {name, QName}]),
-                               BQS1 = BQ:delete_and_terminate(Reason, BQS),
-                               %% don't care if the internal delete
-                               %% doesn't return 'ok'.
-                               rabbit_amqqueue:internal_delete(qname(State)),
-                               BQS1
-                       end, State).
+    terminate_shutdown(
+      fun (BQS) ->
+              BQS1 = BQ:delete_and_terminate(Reason, BQS),
+              %% don't care if the internal delete
+              %% doesn't return 'ok'.
+              rabbit_amqqueue:internal_delete(QName, self()),
+              BQS1
+      end, State).
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
