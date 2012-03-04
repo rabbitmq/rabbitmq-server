@@ -542,14 +542,25 @@ set_maximum_since_use(QPid, Age) ->
 
 on_node_down(Node) ->
     rabbit_misc:execute_mnesia_tx_with_tail(
-      fun () -> Dels = qlc:e(qlc:q([delete_queue(QueueName) ||
-                                       #amqqueue{name = QueueName, pid = Pid,
-                                                 slave_pids = []}
-                                           <- mnesia:table(rabbit_queue),
-                                       node(Pid) == Node])),
-                rabbit_binding:process_deletions(
-                  lists:foldl(fun rabbit_binding:combine_deletions/2,
-                              rabbit_binding:new_deletions(), Dels))
+      fun () -> QsDels =
+                    qlc:e(qlc:q([{{QName, Pid}, delete_queue(QName)} ||
+                                    #amqqueue{name = QName, pid = Pid,
+                                              slave_pids = []}
+                                        <- mnesia:table(rabbit_queue),
+                                    node(Pid) == Node])),
+                {Qs, Dels} = lists:unzip(QsDels),
+                T = rabbit_binding:process_deletions(
+                      lists:foldl(fun rabbit_binding:combine_deletions/2,
+                                  rabbit_binding:new_deletions(), Dels)),
+                fun () ->
+                        T(),
+                        lists:foreach(
+                          fun({QName, QPid}) ->
+                                  ok = rabbit_event:notify(queue_deleted,
+                                                           [{pid,  QPid},
+                                                            {name, QName}])
+                          end, Qs)
+                end
       end).
 
 delete_queue(QueueName) ->
