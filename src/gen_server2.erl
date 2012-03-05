@@ -252,7 +252,7 @@
     {stop, Reason :: term(), NewState :: term()}.
 -callback terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
                     State :: term()) ->
-    (ok | term()).
+    ok | term().
 -callback code_change(OldVsn :: (term() | {down, term()}), State :: term(),
                       Extra :: term()) ->
     {ok, NewState :: term()} | {error, Reason :: term()}.
