@@ -26,7 +26,8 @@ ROTATE_SUFFIX=
 INIT_LOG_DIR=/var/log/rabbitmq
 PID_FILE=/var/run/rabbitmq/pid
 
-LOCK_FILE= # This is filled in when building packages
+START_PROG= # Set when building package
+LOCK_FILE= # Set when building package
 
 test -x $DAEMON || exit 0
 test -x $CONTROL || exit 0
@@ -56,10 +57,9 @@ start_rabbitmq () {
         RETVAL=0
         ensure_pid_dir
         set +e
-        RABBITMQ_PID_FILE=$PID_FILE setsid $DAEMON \
-            > "${INIT_LOG_DIR}/startup_log" \
-            2> "${INIT_LOG_DIR}/startup_err" \
-            0<&- &
+        RABBITMQ_PID_FILE=$PID_FILE $START_PROG $DAEMON \
+            > ${INIT_LOG_DIR}/startup_log \
+            2> ${INIT_LOG_DIR}/startup_err 0<&- &
         $CONTROL wait $PID_FILE >/dev/null 2>&1
         RETVAL=$?
         set -e

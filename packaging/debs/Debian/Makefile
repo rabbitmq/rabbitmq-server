@@ -26,6 +26,7 @@ package: clean
 # runlevel 2 should start network services.
 	sed -i \
 	    -e 's|^LOCK_FILE=.*$$|LOCK_FILE=|' \
+	    -e 's|^START_PROG=.*$$|START_PROG="start-stop-daemon -v --chuid rabbitmq --start --exec"|' \
 	    -e 's|^\(# Default-Start:\).*$$|\1 2 3 4 5|' \
 	    -e 's|^\(# Default-Stop:\).*$$|\1 0 1 6|' \
 	    $(UNPACKED_DIR)/debian/rabbitmq-server.init
