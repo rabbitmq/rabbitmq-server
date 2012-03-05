@@ -134,18 +134,17 @@ add_mirror(Queue, MirrorNode) ->
       Queue,
       fun (#amqqueue { name = Name, pid = QPid, slave_pids = SPids } = Q) ->
               case [Pid || Pid <- [QPid | SPids], node(Pid) =:= MirrorNode] of
-                  []  -> Result = rabbit_mirror_queue_slave_sup:start_child(
-                                    MirrorNode, [Q]),
-                         case Result of
+                  []  -> case rabbit_mirror_queue_slave_sup:start_child(
+                                MirrorNode, [Q]) of
                              {ok, undefined} -> %% Already running
                                  ok;
-                             {ok, _Pid} ->
+                             {ok, SPid} ->
                                  rabbit_log:info(
                                    "Adding mirror of ~s on node ~p: ~p~n",
-                                   [rabbit_misc:rs(Name), MirrorNode, Result]),
+                                   [rabbit_misc:rs(Name), MirrorNode, SPid]),
                                  ok;
-                             _ ->
-                                 Result
+                             Other ->
+                                 Other
                          end;
                   [_] -> {error, {queue_already_mirrored_on_node, MirrorNode}}
               end
