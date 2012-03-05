@@ -32,8 +32,6 @@
          vhost_perms_info_keys/0, user_perms_info_keys/0,
          user_vhost_perms_info_keys/0]).
 
--include("rabbit_auth_backend_spec.hrl").
-
 -ifdef(use_specs).
 
 -type(regexp() :: binary()).
