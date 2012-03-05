@@ -42,9 +42,9 @@ BASIC_PLT=basic.plt
 RABBIT_PLT=rabbit.plt
 
 ifndef USE_SPECS
-# our type specs rely on features and bug fixes in dialyzer that are
-# only available in R14B03 upwards (R14B03 is erts 5.8.4)
-USE_SPECS:=$(shell erl -noshell -eval 'io:format([list_to_integer(X) || X <- string:tokens(erlang:system_info(version), ".")] >= [5,8,4]), halt().')
+# our type specs rely on callback specs, which are available in R15B
+# upwards.
+USE_SPECS:=$(shell erl -noshell -eval 'io:format([list_to_integer(X) || X <- string:tokens(erlang:system_info(version), ".")] >= [5,9]), halt().')
 endif
 
 ifndef USE_PROPER_QC
