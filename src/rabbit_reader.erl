@@ -233,12 +233,15 @@ start_connection(Parent, ChannelSupSupPid, Collector, StartHeartbeatFun, Deb,
                   end, "closing AMQP connection ~p (~s):~n~p~n",
                   [self(), ConnStr, Ex])
     after
-        %% We don't close the socket explicitly. The reader is the
-        %% controlling process and hence its termination will close
-        %% the socket. Furthermore, gen_tcp:close/1 waits for pending
-        %% output to be sent, which results in unnecessary delays.
+        %% The reader is the controlling process and hence its
+        %% termination will close the socket. Furthermore,
+        %% gen_tcp:close/1 waits for pending output to be sent, which
+        %% results in unnecessary delays. However, to keep the
+        %% file_handle_cache accounting as accurate as possible it
+        %% would be good to close the socket immediately if we
+        %% can. But we can only do this for non-ssl sockets.
         %%
-        %% gen_tcp:close(ClientSock),
+        rabbit_net:maybe_fast_close(ClientSock),
         rabbit_event:notify(connection_closed, [{pid, self()}])
     end,
     done.
