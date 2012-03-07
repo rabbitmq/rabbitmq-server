@@ -138,7 +138,7 @@ close(Sock)      when ?IS_SSL(Sock) -> ssl:close(Sock#ssl_socket.ssl);
 close(Sock)      when is_port(Sock) -> gen_tcp:close(Sock).
 
 maybe_fast_close(Sock) when ?IS_SSL(Sock) -> ok;
-maybe_fast_close(Sock) when is_port(Sock) -> erlang:port_close(Sock).
+maybe_fast_close(Sock) when is_port(Sock) -> erlang:port_close(Sock), ok.
 
 sockname(Sock)   when ?IS_SSL(Sock) -> ssl:sockname(Sock#ssl_socket.ssl);
 sockname(Sock)   when is_port(Sock) -> inet:sockname(Sock).
