@@ -32,7 +32,7 @@ prepare:
 	cp ${COMMON_DIR}/* SOURCES/
 	sed -i \
 	    -e 's|^LOCK_FILE=.*$$|LOCK_FILE=/var/lock/subsys/$$NAME|' \
-	    -e 's|^START_PROG=.*$$|START_PROG="runuser -s /bin/sh rabbitmq --session-command"|' \
+	    -e 's|^START_PROG=.*$$|START_PROG="runuser rabbitmq --session-command"|' \
 	    SOURCES/rabbitmq-server.init
 ifeq "$(RPM_OS)" "fedora"
 # Fedora says that only vital services should have Default-Start
