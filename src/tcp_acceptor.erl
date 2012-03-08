@@ -69,13 +69,7 @@ handle_info({inet_async, LSock, Ref, {error, closed}},
 
 handle_info({inet_async, LSock, Ref, {error, Reason}},
             State=#state{sock=LSock, ref=Ref}) ->
-    {AddressS, Port} = case inet:sockname(LSock) of
-                           {ok, {A, P}} -> {rabbit_misc:ntoab(A), P};
-                           {error, _}   -> {"unknown", unknown}
-                       end,
-    error_logger:error_msg("failed to accept TCP connection on ~s:~p: ~p~n",
-                           [AddressS, Port, Reason]),
-    accept(State);
+    {stop, {accept_failed, Reason}, State};
 
 handle_info(_Info, State) ->
     {noreply, State}.
