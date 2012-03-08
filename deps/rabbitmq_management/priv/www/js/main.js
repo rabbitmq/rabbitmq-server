@@ -644,6 +644,9 @@ function add_known_arguments(params) {
 
 function check_password(params) {
     if (params['password'] != undefined) {
+        if (params['password'] == '') {
+            throw("Please specify a password.");
+        }
         if (params['password'] != params['password_confirm']) {
             throw("Passwords do not match.");
         }
