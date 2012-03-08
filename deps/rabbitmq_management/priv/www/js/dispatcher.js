@@ -127,9 +127,14 @@ dispatcher_add(function(sammy) {
                     'vhosts': '/vhosts/'}, 'user',
                    '#/users');
         });
-    sammy.put('#/users', function() {
+    sammy.put('#/users-add', function() {
             if (sync_put(this, '/users/:username'))
                 update();
+            return false;
+        });
+    sammy.put('#/users-modify', function() {
+            if (sync_put(this, '/users/:username'))
+                go_to('#/users');
             return false;
         });
     sammy.del('#/users', function() {

@@ -26,6 +26,54 @@
 <%= format('permissions', {'mode': 'user', 'permissions': permissions, 'vhosts': vhosts, 'parent': user}) %>
 
 <div class="section-hidden">
+  <h2>Update this user</h2>
+  <div class="hider">
+    <form action="#/users-modify" method="put">
+      <input type="hidden" name="username" value="<%= fmt_string(user.name) %>"/>
+      <table class="form">
+        <tr>
+          <th>
+            <label>
+              <select name="has-password" class="narrow controls-appearance" controls-divs="password" param-name="password">
+                <option value="true">Password:</option>
+                <option value="false">No password</option>
+              </select>
+            </label>
+          </th>
+          <td>
+            <div id="password-yes">
+              <input type="password" name="password" />
+              <span class="mand">*</span><br/>
+              <input type="password" name="password_confirm" />
+              <span class="mand">*</span>
+              (confirm)
+            </div>
+            <div id="password-no" style="display: none;">
+              User cannot log in using password.
+            </div>
+          </td>
+        </tr>
+        <tr>
+          <th><label>Tags:</label></th>
+          <td>
+            <input type="text" name="tags" id="tags" value="<%= fmt_string(user.tags) %>" />
+            <span class="help" id="user-tags"/>
+            <sub>
+              [<a href="javascript:void($('#tags').val('administrator'));">Admin</a>]
+              [<a href="javascript:void($('#tags').val('monitoring'));">Monitoring</a>]
+              [<a href="javascript:void($('#tags').val('management'));">Management</a>]
+              [<a href="javascript:void($('#tags').val(''));">None</a>]
+            </sub>
+          </td>
+        </tr>
+      </table>
+      <input type="submit" value="Update user"/>
+    </form>
+  </div>
+</div>
+
+
+<div class="section-hidden">
   <h2>Delete this user</h2>
   <div class="hider">
     <form action="#/users" method="delete" class="confirm">
