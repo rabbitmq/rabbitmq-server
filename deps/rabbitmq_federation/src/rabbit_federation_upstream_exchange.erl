@@ -41,13 +41,12 @@ description() ->
 
 serialise_events() -> false.
 
-route(#exchange{name      = Name,
-                arguments = Args},
-      #delivery{message = #basic_message{content = Content}}) ->
+route(X = #exchange{arguments = Args},
+      D = #delivery{message = #basic_message{content = Content}}) ->
     {long, MaxHops} = rabbit_misc:table_lookup(Args, ?MAX_HOPS_ARG),
     Headers = rabbit_basic:extract_headers(Content),
-    case rabbit_federation_util:should_forward(Headers, MaxHops - 1) of
-        true  -> rabbit_router:match_routing_key(Name, ['_']);
+    case rabbit_federation_util:should_forward(Headers, MaxHops) of
+        true  -> rabbit_exchange_type_fanout:route(X, D);
         false -> []
     end.
 
