@@ -30,8 +30,6 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--define(ROUTING_HEADER, <<"x-received-from">>).
-
 -record(state, {upstream,
                 connection,
                 channel,
@@ -127,7 +125,9 @@ handle_info({#'basic.deliver'{routing_key  = Key,
               unacked             = Unacked}) ->
     Headers0 = extract_headers(Msg),
     %% TODO add user information here?
-    case should_forward(Headers0, MaxHops) of
+    %% We need to check should_forward/2 here in case the upstream
+    %% does not have federation and thus is using a fanout exchange.
+    case rabbit_federation_util:should_forward(Headers0, MaxHops) of
         true  -> {table, Info0} = rabbit_federation_upstream:to_table(Upstream),
                  Info = Info0 ++ [{<<"redelivered">>, bool, Redelivered}],
                  Headers = rabbit_basic:append_table_header(
@@ -403,6 +403,7 @@ ensure_upstream_bindings(State = #state{upstream            = Upstream,
                                         downstream_exchange = DownXName,
                                         queue               = Q}, Bindings) ->
     #upstream{exchange = XNameBin,
+              max_hops = MaxHops,
               params   = #amqp_params_network{virtual_host = VHost}} = Upstream,
     OldSuffix = rabbit_federation_db:get_active_suffix(
                   DownXName, Upstream, <<"A">>),
@@ -415,11 +416,11 @@ ensure_upstream_bindings(State = #state{upstream            = Upstream,
     amqp_channel:call(
       Ch, #'exchange.declare'{
         exchange    = IntXNameBin,
-        type        = <<"fanout">>,
+        type        = <<"x-federation-upstream">>,
         durable     = true,
         internal    = true,
         auto_delete = true,
-        arguments   = []}),
+        arguments   = [{?MAX_HOPS_ARG, long, MaxHops}]}),
     amqp_channel:call(Ch, #'queue.bind'{exchange = IntXNameBin, queue = Q}),
     State1 = State#state{internal_exchange = IntXNameBin},
     State2 = lists:foldl(fun add_binding/2, State1, Bindings),
@@ -490,14 +491,6 @@ remove_delivery_tags(Seq, true, Unacked) ->
                      true  -> Unacked;
                      false -> remove_delivery_tags(Seq, true, Unacked1)
                  end
-    end.
-
-should_forward(undefined, _MaxHops) ->
-    true;
-should_forward(Headers, MaxHops) ->
-    case rabbit_misc:table_lookup(Headers, ?ROUTING_HEADER) of
-        undefined  -> true;
-        {array, A} -> length(A) < MaxHops
     end.
 
 extract_headers(#amqp_msg{props = #'P_basic'{headers = Headers}}) ->

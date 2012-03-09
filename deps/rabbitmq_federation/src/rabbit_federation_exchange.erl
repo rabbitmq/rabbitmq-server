@@ -32,8 +32,6 @@
 -export([validate/1, create/2, delete/3,
          add_binding/3, remove_bindings/3, assert_args_equivalence/2]).
 
--export([fail/2]).
-
 %%----------------------------------------------------------------------------
 
 description() ->
@@ -46,8 +44,8 @@ route(X, Delivery) -> with_module(X, fun (M) -> M:route(X, Delivery) end).
 
 validate(#exchange{name      = XName,
                    arguments = Args} = X) ->
-    validate_arg(<<"upstream-set">>, longstr, Args),
-    validate_arg(<<"type">>,         longstr, Args),
+    rabbit_federation_util:validate_arg(<<"upstream-set">>, longstr, Args),
+    rabbit_federation_util:validate_arg(<<"type">>,         longstr, Args),
     {longstr, SetName} = rabbit_misc:table_lookup(Args, <<"upstream-set">>),
     case rabbit_federation_upstream:from_set(SetName, XName) of
         {error, E} -> fail_error(SetName, E);
@@ -55,7 +53,8 @@ validate(#exchange{name      = XName,
     end,
     {longstr, TypeBin} = rabbit_misc:table_lookup(Args, <<"type">>),
     case rabbit_exchange:check_type(TypeBin) of
-        'x-federation' -> fail("Type argument must not be x-federation.", []);
+        'x-federation' -> rabbit_federation_util:fail(
+                            "Type argument must not be x-federation.", []);
         _              -> ok
     end,
     with_module(X, fun (M) -> M:validate(X) end).
@@ -110,18 +109,9 @@ with_module(#exchange{arguments = Args}, Fun) ->
                      exchange, list_to_existing_atom(binary_to_list(Type))),
     Fun(Module).
 
-validate_arg(Name, Type, Args) ->
-    case rabbit_misc:table_lookup(Args, Name) of
-        {Type, _} -> ok;
-        undefined -> fail("Argument ~s missing", [Name]);
-        _         -> fail("Argument ~s must be of type ~s", [Name, Type])
-    end.
-
-fail(Fmt, Args) -> rabbit_misc:protocol_error(precondition_failed, Fmt, Args).
-
 fail_error(SetName, Reason) ->
     {Fmt, Args} = error_text(Reason),
-    fail("upstream-set ~s: " ++ Fmt, [SetName | Args]).
+    rabbit_federation_util:fail("upstream-set ~s: " ++ Fmt, [SetName | Args]).
 
 error_text(set_not_found)         -> {"set not found", []};
 error_text(no_connection_name)    -> {"no connection name", []};

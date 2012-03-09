@@ -19,7 +19,8 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_federation.hrl").
 
--export([local_params/1, pget_bin/2, pget_bin/3]).
+-export([local_params/1, pget_bin/2, pget_bin/3, should_forward/2]).
+-export([validate_arg/3, fail/2]).
 
 -import(rabbit_misc, [pget_or_die/2, pget/3]).
 
@@ -34,3 +35,20 @@ pget_bin(K, T) -> list_to_binary(pget_or_die(K, T)).
 
 pget_bin(K, T, D) when is_binary(D) -> pget_bin(K, T, binary_to_list(D));
 pget_bin(K, T, D) when is_list(D)   -> list_to_binary(pget(K, T, D)).
+
+should_forward(undefined, _MaxHops) ->
+    true;
+should_forward(Headers, MaxHops) ->
+    case rabbit_misc:table_lookup(Headers, ?ROUTING_HEADER) of
+        undefined  -> true;
+        {array, A} -> length(A) < MaxHops
+    end.
+
+validate_arg(Name, Type, Args) ->
+    case rabbit_misc:table_lookup(Args, Name) of
+        {Type, _} -> ok;
+        undefined -> fail("Argument ~s missing", [Name]);
+        _         -> fail("Argument ~s must be of type ~s", [Name, Type])
+    end.
+
+fail(Fmt, Args) -> rabbit_misc:protocol_error(precondition_failed, Fmt, Args).
