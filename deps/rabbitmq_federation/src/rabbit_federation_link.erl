@@ -403,7 +403,6 @@ ensure_upstream_bindings(State = #state{upstream            = Upstream,
                                         downstream_exchange = DownXName,
                                         queue               = Q}, Bindings) ->
     #upstream{exchange = XNameBin,
-              max_hops = MaxHops,
               params   = #amqp_params_network{virtual_host = VHost}} = Upstream,
     OldSuffix = rabbit_federation_db:get_active_suffix(
                   DownXName, Upstream, <<"A">>),
@@ -412,15 +411,7 @@ ensure_upstream_bindings(State = #state{upstream            = Upstream,
                  <<"B">> -> <<"A">>
              end,
     IntXNameBin = upstream_exchange_name(XNameBin, VHost, DownXName, Suffix),
-    delete_upstream_exchange(Conn, IntXNameBin),
-    amqp_channel:call(
-      Ch, #'exchange.declare'{
-        exchange    = IntXNameBin,
-        type        = <<"x-federation-upstream">>,
-        durable     = true,
-        internal    = true,
-        auto_delete = true,
-        arguments   = [{?MAX_HOPS_ARG, long, MaxHops}]}),
+    ensure_upstream_exchange(IntXNameBin, State),
     amqp_channel:call(Ch, #'queue.bind'{exchange = IntXNameBin, queue = Q}),
     State1 = State#state{internal_exchange = IntXNameBin},
     State2 = lists:foldl(fun add_binding/2, State1, Bindings),
@@ -429,6 +420,22 @@ ensure_upstream_bindings(State = #state{upstream            = Upstream,
                        XNameBin, VHost, DownXName, OldSuffix),
     delete_upstream_exchange(Conn, OldIntXNameBin),
     State2.
+
+ensure_upstream_exchange(IntXNameBin,
+                         #state{upstream   = #upstream{max_hops = MaxHops},
+                                connection = Conn,
+                                channel    = Ch}) ->
+    delete_upstream_exchange(Conn, IntXNameBin),
+    Base = #'exchange.declare'{exchange    = IntXNameBin,
+                               durable     = true,
+                               internal    = true,
+                               auto_delete = true},
+    XFU = Base#'exchange.declare'{type      = <<"x-federation-upstream">>,
+                                  arguments = [{?MAX_HOPS_ARG, long, MaxHops}]},
+    Fan = Base#'exchange.declare'{type = <<"fanout">>},
+    disposable_channel_call(Conn, XFU, fun(?NOT_FOUND, _Text) ->
+                                               amqp_channel:call(Ch, Fan)
+                                       end).
 
 upstream_queue_name(XNameBin, VHost, #resource{name         = DownXNameBin,
                                                virtual_host = DownVHost}) ->
@@ -462,13 +469,17 @@ delete_upstream_exchange(Conn, XNameBin) ->
     disposable_channel_call(Conn, #'exchange.delete'{exchange = XNameBin}).
 
 disposable_channel_call(Conn, Method) ->
+    disposable_channel_call(Conn, Method, fun(_, _) -> ok end).
+
+disposable_channel_call(Conn, Method, ErrFun) ->
     {ok, Ch} = amqp_connection:open_channel(Conn),
     try
         amqp_channel:call(Ch, Method)
-    catch exit:{{shutdown, {server_initiated_close, _, _}}, _} ->
-            ok
+    catch exit:{{shutdown, {server_initiated_close, Code, Text}}, _} ->
+            ErrFun(Code, Text)
     end,
     ensure_closed(Ch).
+
 
 ensure_closed(Conn, Ch) ->
     ensure_closed(Ch),
