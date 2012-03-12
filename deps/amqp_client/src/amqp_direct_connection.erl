@@ -141,9 +141,7 @@ ensure_adapter_info(A = #adapter_info{protocol = unknown}) ->
     ensure_adapter_info(A#adapter_info{protocol =
                                            {'Direct', ?PROTOCOL:version()}});
 
-ensure_adapter_info(A = #adapter_info{name         = unknown,
-                                      peer_address = unknown,
-                                      peer_port    = unknown}) ->
+ensure_adapter_info(A = #adapter_info{name = unknown}) ->
     Name = list_to_binary(rabbit_misc:pid_to_string(self())),
     ensure_adapter_info(A#adapter_info{name = Name});
 
