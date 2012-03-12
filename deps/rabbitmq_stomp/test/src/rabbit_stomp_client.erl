@@ -34,8 +34,9 @@ connect() ->
     {#stomp_frame{command = "CONNECTED"}, Client1} = recv(Client0),
     {ok, Client1}.
 
-disconnect(Client) ->
-    send(Client, "DISCONNECT").
+disconnect(Client = {Sock, _}) ->
+    send(Client, "DISCONNECT"),
+    gen_tcp:close(Sock).
 
 send(Client, Command) ->
     send(Client, Command, []).
