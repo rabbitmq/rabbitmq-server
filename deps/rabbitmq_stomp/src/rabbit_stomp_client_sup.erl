@@ -22,12 +22,16 @@
 
 start_link(Configuration) ->
     {ok, SupPid} = supervisor2:start_link(?MODULE, []),
+    %% We want the reader to be transient since when it exits normally
+    %% the processor may have some work still to do (and the reader
+    %% tells the processor to exit). However, if the reader terminates
+    %% abnormally then we want to take everything down.
     {ok, ReaderPid} =
         supervisor2:start_child(SupPid,
                                {rabbit_stomp_reader,
                                 {rabbit_stomp_reader,
                                  start_link, [SupPid, Configuration]},
-                                intrinsic, ?MAX_WAIT, worker,
+                                transient, ?MAX_WAIT, worker,
                                 [rabbit_stomp_reader]}),
     {ok, SupPid, ReaderPid}.
 
