@@ -272,6 +272,25 @@ max_hops() ->
     stop_other_node(?COTTONTAIL),
     ok.
 
+upstream_has_no_federation_test_() ->
+    {timeout, 60, fun upstream_has_no_federation/0}.
+
+upstream_has_no_federation() ->
+    with_ch(
+      fun (Downstream) ->
+              Upstream = start_other_node(
+                           ?HARE, "hare-no-federation", "no_plugins"),
+              declare_exchange(Upstream, x(<<"upstream">>)),
+              declare_exchange(Downstream,
+                               fed(<<"downstream">>, <<"upstream5673">>)),
+              Q = bind_queue(Downstream, <<"downstream">>, <<"routing">>),
+              publish(Upstream, <<"upstream">>, <<"routing">>, <<"HELLO">>),
+              expect(Downstream, Q, [<<"HELLO">>]),
+              delete_exchange(Downstream, <<"downstream">>),
+              delete_exchange(Upstream, <<"upstream">>),
+              stop_other_node(?HARE)
+      end, []).
+
 %%----------------------------------------------------------------------------
 
 with_ch(Fun, Xs) ->
@@ -291,10 +310,15 @@ start_other_node({Name, Port}) ->
     start_other_node({Name, Port}, Name).
 
 start_other_node({Name, Port}, Config) ->
+    start_other_node({Name, Port}, Config,
+                     os:getenv("RABBITMQ_ENABLED_PLUGINS_FILE")).
+
+start_other_node({Name, Port}, Config, PluginsFile) ->
     %% ?assertCmd seems to hang if you background anything. Bah!
     Res = os:cmd("make -C " ++ plugin_dir() ++ " OTHER_NODE=" ++ Name ++
                      " OTHER_PORT=" ++ integer_to_list(Port) ++
                      " OTHER_CONFIG=" ++ Config ++
+                     " OTHER_PLUGINS=" ++ PluginsFile ++
                      " start-other-node ; echo $?"),
     LastLine = hd(lists:reverse(string:tokens(Res, "\n"))),
     ?assertEqual("0", LastLine),
