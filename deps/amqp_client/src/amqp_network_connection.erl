@@ -68,7 +68,9 @@ handle_message({socket_error, _} = SocketError, State) ->
 handle_message({channel_exit, Reason}, State) ->
     {stop, {channel0_died, Reason}, State};
 handle_message(heartbeat_timeout, State) ->
-    {stop, heartbeat_timeout, State}.
+    {stop, heartbeat_timeout, State};
+handle_message({Ref, Reason = {error, _}}, State) when is_reference(Ref)->
+    {stop, {shutdown, Reason}, State}.
 
 closing(_ChannelCloseType, Reason, State) ->
     {ok, State#state{closing_reason = Reason}}.
