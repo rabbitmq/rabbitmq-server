@@ -231,11 +231,17 @@ play_back_commands(State = #state{waiting_cmds = Waiting,
         true  -> State
     end.
 
+open_monitor(Params) ->
+    case open(Params) of
+        {ok, Conn, Ch} -> erlang:monitor(process, Ch),
+                          {ok, Conn, Ch};
+        E              -> E
+    end.
+
 open(Params) ->
     case amqp_connection:start(Params) of
         {ok, Conn} -> case amqp_connection:open_channel(Conn) of
-                          {ok, Ch} -> erlang:monitor(process, Ch),
-                                      {ok, Conn, Ch};
+                          {ok, Ch} -> {ok, Conn, Ch};
                           E        -> catch amqp_connection:close(Conn),
                                       E
                       end;
@@ -300,12 +306,12 @@ go(S0 = {not_started, {Upstream, DownXName =
     %% us to exit. We can therefore only trap exits when past that
     %% point. Bug 24372 may help us do something nicer.
     process_flag(trap_exit, true),
-    case open(rabbit_federation_util:local_params(DownVHost)) of
+    case open_monitor(rabbit_federation_util:local_params(DownVHost)) of
         {ok, DConn, DCh} ->
             #'confirm.select_ok'{} =
                amqp_channel:call(DCh, #'confirm.select'{}),
             amqp_channel:register_confirm_handler(DCh, self()),
-            case open(Upstream#upstream.params) of
+            case open_monitor(Upstream#upstream.params) of
                 {ok, Conn, Ch} ->
                     {Serial, Bindings} =
                         rabbit_misc:execute_mnesia_transaction(
@@ -422,7 +428,8 @@ ensure_upstream_bindings(State = #state{upstream            = Upstream,
     State2.
 
 ensure_upstream_exchange(IntXNameBin,
-                         #state{upstream   = #upstream{max_hops = MaxHops},
+                         #state{upstream   = #upstream{max_hops = MaxHops,
+                                                       params   = Params},
                                 connection = Conn,
                                 channel    = Ch}) ->
     delete_upstream_exchange(Conn, IntXNameBin),
@@ -433,9 +440,9 @@ ensure_upstream_exchange(IntXNameBin,
     XFU = Base#'exchange.declare'{type      = <<"x-federation-upstream">>,
                                   arguments = [{?MAX_HOPS_ARG, long, MaxHops}]},
     Fan = Base#'exchange.declare'{type = <<"fanout">>},
-    disposable_channel_call(Conn, XFU, fun(?NOT_FOUND, _Text) ->
-                                               amqp_channel:call(Ch, Fan)
-                                       end).
+    disposable_connection_call(Params, XFU, fun(?COMMAND_INVALID, _Text) ->
+                                                    amqp_channel:call(Ch, Fan)
+                                            end).
 
 upstream_queue_name(XNameBin, VHost, #resource{name         = DownXNameBin,
                                                virtual_host = DownVHost}) ->
@@ -480,6 +487,19 @@ disposable_channel_call(Conn, Method, ErrFun) ->
     end,
     ensure_closed(Ch).
 
+disposable_connection_call(Params, Method, ErrFun) ->
+    case open(Params) of
+        {ok, Conn, Ch} ->
+            try
+                amqp_channel:call(Ch, Method)
+            catch exit:{{shutdown, {connection_closing,
+                                    {server_initiated_close, Code, Txt}}}, _} ->
+                    ErrFun(Code, Txt)
+            end,
+            ensure_closed(Conn);
+        E ->
+            E
+    end.
 
 ensure_closed(Conn, Ch) ->
     ensure_closed(Ch),
