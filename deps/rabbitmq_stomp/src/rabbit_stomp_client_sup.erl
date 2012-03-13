@@ -26,6 +26,9 @@ start_link(Configuration) ->
     %% the processor may have some work still to do (and the reader
     %% tells the processor to exit). However, if the reader terminates
     %% abnormally then we want to take everything down.
+    %%
+    %% The *processor* however is intrinsic, so when it exits, the
+    %% supervisor goes too.
     {ok, ReaderPid} =
         supervisor2:start_child(SupPid,
                                {rabbit_stomp_reader,
