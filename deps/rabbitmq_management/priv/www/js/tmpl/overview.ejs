@@ -75,7 +75,7 @@
      <td class="status">
        <div class="<%= fmt_color(node.fd_used / node.fd_total,
                                  FD_THRESHOLDS) %>">
-         <%= node.fd_used %> / <%= node.fd_total %>
+         <%= fmt_fd_used(node.fd_used) %> / <%= node.fd_total %>
        </div>
      </td>
      <td class="status">

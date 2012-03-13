@@ -33,6 +33,7 @@ table.list { border-width: 1px; border-bottom: 1px solid #ccc; margin-bottom: 1e
 table.list th, table.list td { border-left: 1px solid #ccc; border-right: 1px solid #ccc; }
 table.list th { text-align: center; border-top: 1px solid #ccc; border-bottom: 1px solid #ccc; }
 table.list td a { display: block; width: 100%; }
+table.list td.status a { display: inline; }
 table.list th a.sort { display: block; width: 100%; cursor: pointer; }
 table.list th a.sort .arrow { color: #888; }
 table.list td p { margin: 0; padding: 1px 0 0 0; }

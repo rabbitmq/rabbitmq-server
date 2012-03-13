@@ -220,6 +220,15 @@ function fmt_download_filename(host) {
         (now.getMonth() + 1) + "-" + now.getDate() + ".json";
 }
 
+function fmt_fd_used(used) {
+    if (used == 'install_handle_from_sysinternals') {
+        return '<a href="http://technet.microsoft.com/en-us/sysinternals/bb896655" title="Install handle.exe from sysinternals to see used file descriptors - click for the download page.">?</a>';
+    }
+    else {
+        return used;
+    }
+}
+
 function fmt_table_short(table) {
     return '<table class="mini">' + fmt_table_body(table, ':') + '</table>';
 }
