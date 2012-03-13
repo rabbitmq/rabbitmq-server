@@ -496,7 +496,7 @@ disposable_connection_call(Params, Method, ErrFun) ->
                                     {server_initiated_close, Code, Txt}}}, _} ->
                     ErrFun(Code, Txt)
             end,
-            ensure_closed(Conn);
+            ensure_closed(Conn, Ch);
         E ->
             E
     end.
