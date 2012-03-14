@@ -424,7 +424,8 @@ info_all(VHostPath, Items) -> map(VHostPath, fun (Q) -> info(Q, Items) end).
 %% We need to account for the idea that queues may be mid-promotion
 %% during force_event_refresh (since it's likely we're doing this in
 %% the first place since a node failed). Therefore we keep poking at
-%% the list of queues until we were able to talk to a live process.
+%% the list of queues until we were able to talk to a live process or
+%% the queue no longer exists.
 force_event_refresh() ->
     force_event_refresh([Q#amqqueue.name || Q <- list()]).
 
