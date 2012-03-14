@@ -421,8 +421,24 @@ info_all(VHostPath) -> map(VHostPath, fun (Q) -> info(Q) end).
 
 info_all(VHostPath, Items) -> map(VHostPath, fun (Q) -> info(Q, Items) end).
 
+%% We need to account for the idea that queues may be mid-promotion
+%% during force_event_refresh (since it's likely we're doing this in
+%% the first place since a node failed). Therefore we keep poking at
+%% the list of queues until we were able to talk to a live process.
 force_event_refresh() ->
-    [gen_server2:cast(Q#amqqueue.pid, force_event_refresh) || Q <- list()],
+    force_event_refresh([Q#amqqueue.name || Q <- list()]).
+
+force_event_refresh([]) ->
+    ok;
+
+force_event_refresh(QNames) ->
+    Qs = [Q || Q <- list(), lists:member(Q#amqqueue.name, QNames)],
+    Results = [catch gen_server2:call(Q#amqqueue.pid, force_event_refresh) ||
+                  Q <- Qs],
+    Failed = [QName || {QName, {'EXIT', _}} <- lists:zip(QNames, Results)],
+    io:format("Failed: ~p~n", [Failed]),
+    timer:sleep(100),
+    force_event_refresh(Failed),
     ok.
 
 consumers(#amqqueue{ pid = QPid }) ->

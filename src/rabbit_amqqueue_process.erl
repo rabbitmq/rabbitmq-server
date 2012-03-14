@@ -1231,7 +1231,18 @@ handle_call({requeue, AckTags, ChPid}, From, State) ->
     gen_server2:reply(From, ok),
     noreply(subtract_acks(
               ChPid, AckTags, State,
-              fun (State1) -> requeue_and_run(AckTags, State1) end)).
+              fun (State1) -> requeue_and_run(AckTags, State1) end));
+
+handle_call(force_event_refresh, _From,
+            State = #q{exclusive_consumer = Exclusive}) ->
+    rabbit_event:notify(queue_created, infos(?CREATION_EVENT_KEYS, State)),
+    case Exclusive of
+        none       -> [emit_consumer_created(Ch, CTag, false, AckRequired) ||
+                          {Ch, CTag, AckRequired} <- consumers(State)];
+        {Ch, CTag} -> [{Ch, CTag, AckRequired}] = consumers(State),
+                      emit_consumer_created(Ch, CTag, true, AckRequired)
+    end,
+    reply(ok, State).
 
 handle_cast({confirm, MsgSeqNos, QPid}, State) ->
     handle_confirm(MsgSeqNos, QPid, State);
@@ -1326,16 +1337,6 @@ handle_cast({set_ram_duration_target, Duration},
 
 handle_cast({set_maximum_since_use, Age}, State) ->
     ok = file_handle_cache:set_maximum_since_use(Age),
-    noreply(State);
-
-handle_cast(force_event_refresh, State = #q{exclusive_consumer = Exclusive}) ->
-    rabbit_event:notify(queue_created, infos(?CREATION_EVENT_KEYS, State)),
-    case Exclusive of
-        none       -> [emit_consumer_created(Ch, CTag, false, AckRequired) ||
-                          {Ch, CTag, AckRequired} <- consumers(State)];
-        {Ch, CTag} -> [{Ch, CTag, AckRequired}] = consumers(State),
-                      emit_consumer_created(Ch, CTag, true, AckRequired)
-    end,
     noreply(State);
 
 handle_cast({dead_letter, {Msg, AckTag}, Reason}, State) ->
