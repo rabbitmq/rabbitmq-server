@@ -428,9 +428,6 @@ info_all(VHostPath, Items) -> map(VHostPath, fun (Q) -> info(Q, Items) end).
 force_event_refresh() ->
     force_event_refresh([Q#amqqueue.name || Q <- list()]).
 
-force_event_refresh([]) ->
-    ok;
-
 force_event_refresh(QNames) ->
     Qs = [Q || Q <- list(), lists:member(Q#amqqueue.name, QNames)],
     {_, Bad} = rabbit_misc:multi_call(
@@ -438,9 +435,11 @@ force_event_refresh(QNames) ->
     FailedPids = [Pid || {Pid, _Reason} <- Bad],
     Failed = [Name || #amqqueue{name = Name, pid = Pid} <- Qs,
                       lists:member(Pid, FailedPids)],
-    timer:sleep(100),
-    force_event_refresh(Failed),
-    ok.
+    case Failed of
+        [] -> ok;
+        _  -> timer:sleep(100),
+              force_event_refresh(Failed)
+    end.
 
 consumers(#amqqueue{ pid = QPid }) ->
     delegate_call(QPid, consumers).
