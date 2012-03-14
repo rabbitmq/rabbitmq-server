@@ -202,7 +202,7 @@
 -spec(format_message_queue/2 :: (any(), priority_queue:q()) -> term()).
 -spec(append_rpc_all_nodes/4 :: ([node()], atom(), atom(), [any()]) -> [any()]).
 -spec(multi_call/2 ::
-        ([pid()], any()) -> [{[{pid(), any()}], [{pid(), any()}]}]).
+        ([pid()], any()) -> {[{pid(), any()}], [{pid(), any()}]}).
 -spec(quit/1 :: (integer() | string()) -> no_return()).
 
 -endif.
@@ -890,7 +890,7 @@ multi_call(Pids, Req) ->
     MonitorPids = [start_multi_call(Pid, Req) || Pid <- Pids],
     receive_multi_call(MonitorPids, [], []).
 
-start_multi_call(Pid, Req) ->
+start_multi_call(Pid, Req) when is_pid(Pid) ->
     Mref = erlang:monitor(process, Pid),
     Pid ! {'$gen_call', {self(), Mref}, Req},
     {Mref, Pid}.
