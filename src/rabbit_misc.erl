@@ -896,7 +896,7 @@ start_multi_call(Pid, Req) when is_pid(Pid) ->
     {Mref, Pid}.
 
 receive_multi_call([], Good, Bad) ->
-    {Good, Bad};
+    {lists:reverse(Good), lists:reverse(Bad)};
 receive_multi_call([{Mref, Pid} | MonitorPids], Good, Bad) ->
     receive
         {Mref, Reply} ->
