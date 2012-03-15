@@ -35,6 +35,7 @@ all_tests() ->
     passed = mirrored_supervisor_tests:all_tests(),
     application:set_env(rabbit, file_handles_high_watermark, 10, infinity),
     ok = file_handle_cache:set_limit(10),
+    passed = test_multi_call(),
     passed = test_file_handle_cache(),
     passed = test_backing_queue(),
     passed = test_priority_queue(),
@@ -105,6 +106,26 @@ run_cluster_dependent_tests(SecondaryNode) ->
             throw(timeout)
     end,
 
+    passed.
+
+test_multi_call() ->
+    Fun = fun() ->
+                  receive
+                      {'$gen_call', {From, Mref}, request} ->
+                          From ! {Mref, response}
+                  end,
+                  receive
+                      never -> ok
+                  end
+          end,
+    Pid1 = spawn(Fun),
+    Pid2 = spawn(Fun),
+    Pid3 = spawn(Fun),
+    exit(Pid2, bang),
+    {[{Pid1, response}, {Pid3, response}], [{Pid2, _Fail}]} =
+        rabbit_misc:multi_call([Pid1, Pid2, Pid3], request),
+    exit(Pid1, bang),
+    exit(Pid3, bang),
     passed.
 
 test_priority_queue() ->

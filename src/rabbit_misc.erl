@@ -58,6 +58,7 @@
 -export([pget/2, pget/3, pget_or_die/2]).
 -export([format_message_queue/2]).
 -export([append_rpc_all_nodes/4]).
+-export([multi_call/2]).
 -export([quit/1]).
 
 %%----------------------------------------------------------------------------
@@ -200,6 +201,8 @@
 -spec(pget_or_die/2 :: (term(), [term()]) -> term() | no_return()).
 -spec(format_message_queue/2 :: (any(), priority_queue:q()) -> term()).
 -spec(append_rpc_all_nodes/4 :: ([node()], atom(), atom(), [any()]) -> [any()]).
+-spec(multi_call/2 ::
+        ([pid()], any()) -> {[{pid(), any()}], [{pid(), any()}]}).
 -spec(quit/1 :: (integer() | string()) -> no_return()).
 
 -endif.
@@ -879,6 +882,31 @@ append_rpc_all_nodes(Nodes, M, F, A) ->
                       {badrpc, _} -> [];
                       _           -> Res
                   end || Res <- ResL]).
+
+%% A simplified version of gen_server:multi_call/2 with a sane
+%% API. This is not in gen_server2 as there is no useful
+%% infrastructure there to share.
+multi_call(Pids, Req) ->
+    MonitorPids = [start_multi_call(Pid, Req) || Pid <- Pids],
+    receive_multi_call(MonitorPids, [], []).
+
+start_multi_call(Pid, Req) when is_pid(Pid) ->
+    Mref = erlang:monitor(process, Pid),
+    Pid ! {'$gen_call', {self(), Mref}, Req},
+    {Mref, Pid}.
+
+receive_multi_call([], Good, Bad) ->
+    {lists:reverse(Good), lists:reverse(Bad)};
+receive_multi_call([{Mref, Pid} | MonitorPids], Good, Bad) ->
+    receive
+        {Mref, Reply} ->
+            erlang:demonitor(Mref, [flush]),
+            receive_multi_call(MonitorPids, [{Pid, Reply} | Good], Bad);
+        {'DOWN', Mref, _, _, noconnection} ->
+            receive_multi_call(MonitorPids, Good, [{Pid, nodedown} | Bad]);
+        {'DOWN', Mref, _, _, Reason} ->
+            receive_multi_call(MonitorPids, Good, [{Pid, Reason} | Bad])
+    end.
 
 %% the slower shutdown on windows required to flush stdout
 quit(Status) ->
