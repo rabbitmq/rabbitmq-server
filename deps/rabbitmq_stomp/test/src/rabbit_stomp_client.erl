@@ -30,7 +30,7 @@
 connect() ->
     {ok, Sock} = gen_tcp:connect(localhost, 61613, [{active, false}, binary]),
     Client0 = recv_state(Sock),
-    send(Client0, "CONNECT"),
+    send(Client0, "CONNECT", [{"login", "guest"}, {"passcode", "guest"}]),
     {#stomp_frame{command = "CONNECTED"}, Client1} = recv(Client0),
     {ok, Client1}.
 

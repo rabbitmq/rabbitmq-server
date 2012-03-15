@@ -1,7 +1,7 @@
 RELEASABLE:=true
 DEPS:=rabbitmq-server rabbitmq-erlang-client
 STANDALONE_TEST_COMMANDS:=eunit:test([rabbit_stomp_test_util,rabbit_stomp_test_frame],[verbose])
-WITH_BROKER_TEST_SCRIPTS:=$(PACKAGE_DIR)/test/src/test.py $(PACKAGE_DIR)/test/src/test_connect_options.py
+WITH_BROKER_TEST_SCRIPTS:=$(PACKAGE_DIR)/test/src/test.py
 WITH_BROKER_TEST_COMMANDS:=rabbit_stomp_test:all_tests() rabbit_stomp_amqqueue_test:all_tests()
 
 RABBITMQ_TEST_PATH=$(PACKAGE_DIR)/../../rabbitmq-test
@@ -28,9 +28,12 @@ $(CERTS_DIR):
 	make -C $(RABBITMQ_TEST_PATH)/certs all PASSWORD=test DIR=$(CERTS_DIR)
 
 else
+
+WITH_BROKER_TEST_SCRIPTS += $(PACKAGE_DIR)/test/src/test_connect_options.py
+
 $(TEST_CONFIG_PATH): $(ABS_PACKAGE_DIR)/test/src/non_ssl.config
 	cp $(ABS_PACKAGE_DIR)/test/src/non_ssl.config $@
-	@echo "\nNOT running SSL tests - looked in " $(RABBITMQ_TEST_PATH) "\n"
+	@echo "\nNOT running SSL tests - looked in $(RABBITMQ_TEST_PATH) \n"
 
 endif
 

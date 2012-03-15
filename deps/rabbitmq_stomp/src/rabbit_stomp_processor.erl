@@ -232,7 +232,11 @@ creds(Frame, SSLLoginName,
 login_header(Frame, Key, Default) when is_binary(Default) ->
     login_header(Frame, Key, binary_to_list(Default));
 login_header(Frame, Key, Default) ->
-    list_to_binary(rabbit_stomp_frame:header(Frame, Key, Default)).
+    case rabbit_stomp_frame:header(Frame, Key, Default) of
+        undefined -> undefined;
+        not_found -> undefined;
+        Hdr       -> list_to_binary(Hdr)
+    end.
 
 %%----------------------------------------------------------------------------
 %% Frame Transformation
