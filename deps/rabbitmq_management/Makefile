@@ -2,24 +2,27 @@ include ../umbrella.mk
 
 RABBITMQCTL=../rabbitmq-server/scripts/rabbitmqctl
 TEST_TMPDIR=/tmp/rabbitmq-test
+OTHER_NODE=undefined
+OTHER_PORT=undefined
 
-
-start-second-node:
-	rm -f $(TEST_TMPDIR)/rabbitmq-hare-pid
-	RABBITMQ_MNESIA_BASE=$(TEST_TMPDIR)/rabbitmq-hare-mnesia \
-	RABBITMQ_PID_FILE=$(TEST_TMPDIR)/rabbitmq-hare-pid \
+start-other-node:
+	rm -f $(TEST_TMPDIR)/rabbitmq-$(OTHER_NODE)-pid
+	RABBITMQ_MNESIA_BASE=$(TEST_TMPDIR)/rabbitmq-$(OTHER_NODE)-mnesia \
+	RABBITMQ_PID_FILE=$(TEST_TMPDIR)/rabbitmq-$(OTHER_NODE)-pid \
 	RABBITMQ_LOG_BASE=$(TEST_TMPDIR)/log \
-	RABBITMQ_NODENAME=hare \
-	RABBITMQ_NODE_PORT=5673 \
-	RABBITMQ_CONFIG_FILE=etc/hare \
+	RABBITMQ_NODENAME=$(OTHER_NODE) \
+	RABBITMQ_NODE_PORT=$(OTHER_PORT) \
+	RABBITMQ_CONFIG_FILE=etc/$(OTHER_NODE) \
 	RABBITMQ_PLUGINS_DIR=$(TEST_TMPDIR)/plugins \
-	RABBITMQ_PLUGINS_EXPAND_DIR=$(TEST_TMPDIR)/hare-plugins-expand \
-	../rabbitmq-server/scripts/rabbitmq-server &
-	$(RABBITMQCTL) -n hare wait $(TEST_TMPDIR)/rabbitmq-hare-pid
-	$(RABBITMQCTL) -n hare stop_app
-	$(RABBITMQCTL) -n hare reset
-	$(RABBITMQCTL) -n hare cluster rabbit-test@`hostname -s`
-	$(RABBITMQCTL) -n hare start_app
+	RABBITMQ_PLUGINS_EXPAND_DIR=$(TEST_TMPDIR)/$(OTHER_NODE)-plugins-expand \
+	../rabbitmq-server/scripts/rabbitmq-server >/tmp/$(OTHER_NODE).out 2>/tmp/$(OTHER_NODE).err &
+	$(RABBITMQCTL) -n $(OTHER_NODE) wait $(TEST_TMPDIR)/rabbitmq-$(OTHER_NODE)-pid
 
-stop-second-node:
-	$(RABBITMQCTL) -n hare stop
+cluster-other-node:
+	$(RABBITMQCTL) -n $(OTHER_NODE) stop_app
+	$(RABBITMQCTL) -n $(OTHER_NODE) reset
+	$(RABBITMQCTL) -n $(OTHER_NODE) cluster rabbit-test@`hostname -s`
+	$(RABBITMQCTL) -n $(OTHER_NODE) start_app
+
+stop-other-node:
+	$(RABBITMQCTL) -n $(OTHER_NODE) stop

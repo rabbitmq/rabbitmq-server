@@ -29,14 +29,26 @@
 
 %%----------------------------------------------------------------------------
 
-start_second_node() ->
+start_second_node() -> start_other_node(hare, 5673),
+                       cluster_other_node(hare).
+stop_second_node()  -> stop_other_node(hare).
+
+start_other_node(Name, Port) ->
     %% ?assertCmd seems to hang if you background anything. Bah!
-    Res = os:cmd("make -C " ++ plugin_dir() ++ " start-second-node ; echo $?"),
+    Res = os:cmd("make -C " ++ plugin_dir() ++ " OTHER_NODE=" ++
+                     atom_to_list(Name) ++
+                     " OTHER_PORT=" ++ integer_to_list(Port) ++
+                     " start-other-node ; echo $?"),
     LastLine = hd(lists:reverse(string:tokens(Res, "\n"))),
     ?assertEqual("0", LastLine).
 
-stop_second_node() ->
-    ?assertCmd("make -C " ++ plugin_dir() ++ " stop-second-node").
+cluster_other_node(Name) ->
+    ?assertCmd("make -C " ++ plugin_dir() ++ " OTHER_NODE=" ++
+                   atom_to_list(Name) ++ " cluster-other-node").
+
+stop_other_node(Name) ->
+    ?assertCmd("make -C " ++ plugin_dir() ++ " OTHER_NODE=" ++
+                   atom_to_list(Name) ++ " stop-other-node").
 
 plugin_dir() ->
     {ok, [[File]]} = init:get_argument(config),
@@ -96,9 +108,17 @@ assert_single_node(Exp, Act) ->
     ?assertEqual(1, length(Act)),
     assert_node(Exp, hd(Act)).
 
+assert_nodes(Exp, Act0) ->
+    Act = [read_node(A) || A <- Act0],
+    ?debugVal({Exp, Act}),
+    ?assertEqual(length(Exp), length(Act)),
+    [?assert(lists:member(E, Act)) || E <- Exp].
+
 assert_node(Exp, Act) ->
-    ?assertEqual(Exp,
-                 list_to_atom(hd(string:tokens(binary_to_list(Act), "@")))).
+    ?assertEqual(Exp, read_node(Act)).
+
+read_node(N) ->
+    list_to_atom(hd(string:tokens(binary_to_list(N), "@"))).
 
 restart_node() ->
     stop_second_node(),
