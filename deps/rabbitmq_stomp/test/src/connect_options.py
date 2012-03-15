@@ -1,12 +1,14 @@
 import unittest
 import stomp
 import base
+import test_util
 
 class TestConnectOptions(base.BaseTest):
 
     def test_implicit_connect(self):
         ''' Implicit connect with receipt on first command '''
         self.conn.disconnect()
+        test_util.enable_implicit_connect()
         listener = base.WaitableListener()
         new_conn = stomp.Connection(user="", passcode="")
         new_conn.set_listener('', listener)
@@ -21,6 +23,7 @@ class TestConnectOptions(base.BaseTest):
             self.assertEquals('implicit', listener.receipts[0]['headers']['receipt-id'])
         finally:
             new_conn.disconnect()
+            test_util.disable_implicit_connect()
 
     def test_default_user(self):
         ''' Default user connection '''

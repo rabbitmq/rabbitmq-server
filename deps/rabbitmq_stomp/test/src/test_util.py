@@ -13,6 +13,19 @@ def ensure_ssl_auth_user():
     rabbitmqctl(['clear_password', user])
     rabbitmqctl(['set_permissions', user, '.*', '.*', '.*'])
 
+def enable_implicit_connect():
+    switch_implicit_connect('true', '[{login, "guest"}, {passcode, "guest"}]')
+
+def disable_implicit_connect():
+    switch_implicit_connect('false', '[]')
+
+def switch_implicit_connect(implicit_connect, default_user):
+    cmd = 'application:set_env(rabbitmq_stomp,implicit_connect,' + implicit_connect + '),'
+    cmd += 'application:set_env(rabbitmq_stomp,default_user,' + default_user + '),'
+    cmd += 'application:stop(rabbitmq_stomp),'
+    cmd += 'application:start(rabbitmq_stomp).'
+    rabbitmqctl(['eval', cmd])
+
 def rabbitmqctl(args):
     ctl = os.path.normpath(os.path.join(os.getcwd(), sys.argv[0], '../../../../rabbitmq-server/scripts/rabbitmqctl'))
     cmdline = [ctl, '-n', 'rabbit-test']
