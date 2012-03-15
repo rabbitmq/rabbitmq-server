@@ -474,11 +474,16 @@ do_login(Username, Creds, VirtualHost, Heartbeat, AdapterInfo, Version,
                                     channel    = Channel,
                                     connection = Connection});
                 {error, auth_failure} ->
+                    rabbit_log:error("STOMP login failed - auth_failure "
+                                     "(user vanished)~n"),
                     error("Bad CONNECT", "Authentication failure\n", State);
                 {error, access_refused} ->
+                    rabbit_log:warning("STOMP login failed - access_refused "
+                                       "(vhost access not allowed)~n"),
                     error("Bad CONNECT", "Authentication failure\n", State)
             end;
-        {refused, _Msg, _Args} ->
+        {refused, Msg, Args} ->
+            rabbit_log:warning("STOMP login failed: " ++ Msg ++ "\n", Args),
             error("Bad CONNECT", "Authentication failure\n", State)
     end.
 

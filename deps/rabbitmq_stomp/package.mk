@@ -28,7 +28,6 @@ $(CERTS_DIR):
 	make -C $(RABBITMQ_TEST_PATH)/certs all PASSWORD=test DIR=$(CERTS_DIR)
 
 else
-
 $(TEST_CONFIG_PATH): $(ABS_PACKAGE_DIR)/test/src/non_ssl.config
 	cp $(ABS_PACKAGE_DIR)/test/src/non_ssl.config $@
 	@echo "\nNOT running SSL tests - looked in $(RABBITMQ_TEST_PATH) \n"
