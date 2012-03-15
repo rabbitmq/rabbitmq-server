@@ -42,6 +42,8 @@
 
 -define(MORE_CONSUMER_CREDIT_AFTER, 50).
 
+-define(FAILOVER_WAIT_MILLIS, 100).
+
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
@@ -438,7 +440,7 @@ force_event_refresh(QNames) ->
                       lists:member(Pid, FailedPids)],
     case Failed of
         [] -> ok;
-        _  -> timer:sleep(100),
+        _  -> timer:sleep(?FAILOVER_WAIT_MILLIS),
               force_event_refresh(Failed)
     end.
 
