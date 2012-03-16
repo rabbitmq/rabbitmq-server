@@ -1,6 +1,5 @@
 Adds information on shovel status to the management plugin. Build it
-like any other plugin. You need branch bug23890 of rabbitmq-mochiweb
-and rabbitmq-management.
+like any other plugin.
 
 If you have a heterogenous cluster (where the nodes have different
 plugins installed), this should be installed on the same nodes as the
