@@ -330,8 +330,7 @@ handle_event(#event{type = connection_stats, props = Stats,
 handle_event(Event = #event{type = connection_closed}, State) ->
     handle_deleted(connection_stats, Event, State);
 
-handle_event(#event{type = channel_created, props = Stats},
-             State = #state{tables = Tables}) ->
+handle_event(#event{type = channel_created, props = Stats}, State) ->
     handle_created(channel_stats, Stats, [], State);
 
 handle_event(#event{type = channel_stats, props = Stats, timestamp = Timestamp},
