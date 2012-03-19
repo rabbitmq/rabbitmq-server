@@ -23,12 +23,15 @@
 %%---------------------------------------------------------------------------
 
 set(AppName, Key, Value) ->
+    Module = lookup_app(AppName),
+    Term = parse(Value),
+    Module:validate(Term),
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
               ok = mnesia:write(
                      rabbit_cluster_config,
                      #cluster_config{key   = {AppName, Key},
-                                     value = parse(Value)},
+                                     value = Term},
                      write)
       end).
 
@@ -46,6 +49,20 @@ list() ->
                                             value = Value} <- All].
 
 info_keys() -> [app_name, key, value].
+
+%%---------------------------------------------------------------------------
+
+lookup_app(AppBin) ->
+    case rabbit_registry:binary_to_type(AppBin) of
+        {error, not_found} ->
+            exit({not_found, AppBin});
+        T ->
+            case rabbit_registry:lookup_module(cluster_config, T) of
+                {error, not_found} -> exit({not_found, T});
+                {ok, Module}       -> Module
+            end
+    end.
+
 
 parse(Bin) ->
     case erl_scan:string(binary_to_list(Bin)) of
