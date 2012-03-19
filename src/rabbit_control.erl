@@ -267,6 +267,19 @@ action(list_user_permissions, Node, Args = [_Username], _Opts, Inform) ->
                                   list_user_permissions, Args}),
                       rabbit_auth_backend_internal:user_perms_info_keys());
 
+action(set_config_item, Node, Args = [AppName, Key, Value], _Opts, Inform) ->
+    Inform("Setting config item ~p for app ~p to ~p", [Key, AppName, Value]),
+    call(Node, {rabbit_cluster_config, set, Args});
+
+action(clear_config_item, Node, Args = [AppName, Key], _Opts, Inform) ->
+    Inform("Clearing config item ~p for app ~p", [Key, AppName]),
+    call(Node, {rabbit_cluster_config, clear, Args});
+
+action(list_config_items, Node, Args = [], _Opts, Inform) ->
+    Inform("Listing config items", []),
+    display_info_list(rpc_call(Node, rabbit_cluster_config, list, Args),
+                      rabbit_cluster_config:info_keys());
+
 action(list_queues, Node, Args, Opts, Inform) ->
     Inform("Listing queues", []),
     VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
