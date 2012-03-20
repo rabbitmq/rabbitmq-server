@@ -119,7 +119,10 @@ remove_backup() ->
     info("upgrades: Mnesia backup removed~n", []).
 
 maybe_upgrade_mnesia() ->
-    AllNodes = rabbit_mnesia:all_clustered_nodes(),
+    %% rabbit_mnesia:all_clustered_nodes/0 will return [] at this point
+    %% if we are a RAM node since Mnesia has not started yet.
+    AllNodes = lists:usort(rabbit_mnesia:all_clustered_nodes() ++
+                               rabbit_mnesia:read_cluster_nodes_config()),
     case rabbit_version:upgrades_required(mnesia) of
         {error, version_not_available} ->
             case AllNodes of
