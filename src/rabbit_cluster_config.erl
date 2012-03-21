@@ -18,7 +18,9 @@
 
 -include("rabbit.hrl").
 
--export([set/3, clear/2, list/0, info_keys/0]).
+-export([set/3, clear/2, list/0, lookup/3, info_keys/0]).
+
+-define(TABLE, rabbit_cluster_config).
 
 %%---------------------------------------------------------------------------
 
@@ -29,11 +31,7 @@ set(AppName, Key, Value) ->
     Module:validate(Key, Term),
     ok = rabbit_misc:execute_mnesia_transaction(
            fun () ->
-                   ok = mnesia:write(
-                          rabbit_cluster_config,
-                          #cluster_config{key   = {AppName, Key},
-                                          value = Term},
-                          write)
+                   ok = mnesia:write(?TABLE, c(AppName, Key, Term), write)
            end),
     Module:notify(Key, Term),
     ok.
@@ -41,15 +39,34 @@ set(AppName, Key, Value) ->
 clear(AppName, Key) ->
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
-              ok = mnesia:delete(rabbit_cluster_config, {AppName, Key}, write)
+              ok = mnesia:delete(?TABLE, {AppName, Key}, write)
       end).
 
 list() ->
-    All = rabbit_misc:dirty_read_all(rabbit_cluster_config),
+    All = rabbit_misc:dirty_read_all(?TABLE),
     [[{app_name, AppName},
       {key,      Key},
       {value,    Value}] || #cluster_config{key = {AppName, Key},
                                             value = Value} <- All].
+
+lookup(AppName, Key, Default) ->
+    case mnesia:dirty_read(?TABLE, {AppName, Key}) of
+        []  -> lookup_missing(AppName, Key, Default);
+        [R] -> R#cluster_config.value
+    end.
+
+lookup_missing(AppName, Key, Default) ->
+    rabbit_misc:execute_mnesia_transaction(
+      fun () ->
+              case mnesia:read(?TABLE, {AppName, Key}) of
+                  []  -> mnesia:write(?TABLE, c(AppName, Key, Default), write),
+                         Default;
+                  [R] -> R#cluster_config.value
+              end
+      end).
+
+c(AppName, Key, Default) -> #cluster_config{key = {AppName, Key},
+                                            value = Default}.
 
 info_keys() -> [app_name, key, value].
 
