@@ -565,6 +565,8 @@ do_restart_delay({RestartType, Delay}, Reason, Child, State) ->
 
 del_child_and_maybe_shutdown(intrinsic, Child, State) ->
     {shutdown, state_del_child(Child, State)};
+del_child_and_maybe_shutdown({intrinsic, _Delay}, Child, State) ->
+    {shutdown, state_del_child(Child, State)};
 del_child_and_maybe_shutdown(_, Child, State) ->
     {ok, state_del_child(Child, State)}.
 
