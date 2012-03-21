@@ -27,14 +27,16 @@ set(AppName, Key, Value) ->
     Term = parse(Value),
     validate(Term),
     Module:validate(Key, Term),
-    rabbit_misc:execute_mnesia_transaction(
-      fun () ->
-              ok = mnesia:write(
-                     rabbit_cluster_config,
-                     #cluster_config{key   = {AppName, Key},
-                                     value = Term},
-                     write)
-      end).
+    ok = rabbit_misc:execute_mnesia_transaction(
+           fun () ->
+                   ok = mnesia:write(
+                          rabbit_cluster_config,
+                          #cluster_config{key   = {AppName, Key},
+                                          value = Term},
+                          write)
+           end),
+    Module:notify(Key, Term),
+    ok.
 
 clear(AppName, Key) ->
     rabbit_misc:execute_mnesia_transaction(
