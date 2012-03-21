@@ -96,7 +96,7 @@ record_desired_for_scope(Scope) ->
 upgrades_required(Scope) ->
     case recorded_for_scope(Scope) of
         {error, enoent} ->
-            case filelib:is_dir(rabbit_mnesia:dir() ++ "/") of
+            case filelib:is_file(rabbit_guid:filename()) of
                 false -> {ok, []}; %% We're blank, no upgrade needed
                 true  -> {error, version_not_available}
             end;
