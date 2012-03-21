@@ -20,12 +20,19 @@
 -rabbit_boot_step({?MODULE,
                    [{description, "federation config"},
                     {mfa, {rabbit_registry, register,
-                           [cluster_config, <<"rabbitmq_federation">>, ?MODULE]}},
+                           [cluster_config, <<"federation">>, ?MODULE]}},
                     {requires, rabbit_registry},
                     {enables, recovery}]}).
 
--export([validate/1]).
+-export([validate/2]).
 
-validate(Term) ->
-    io:format("Validate? ~p~n", [Term]),
-    ok.
+validate(upstream_sets, Term) ->
+    io:format("Validate upstream_sets ~p~n", [Term]),
+    ok;
+
+validate(connections, Term) ->
+    io:format("Validate connections ~p~n", [Term]),
+    ok;
+
+validate(_Key, _Term) ->
+    exit({error, "Key must be one of upstream_sets or connections"}).
