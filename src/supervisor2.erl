@@ -9,15 +9,15 @@
 %%    terminated as per the shutdown component of the child_spec.
 %%
 %% 3) child specifications can contain, as the restart type, a tuple
-%%    {permanent, Delay} | {transient, Delay} where Delay >= 0. The
-%%    delay, in seconds, indicates what should happen if a child, upon
-%%    being restarted, exceeds the MaxT and MaxR parameters. Thus, if
-%%    a child exits, it is restarted as normal. If it exits
-%%    sufficiently quickly and often to exceed the boundaries set by
-%%    the MaxT and MaxR parameters, and a Delay is specified, then
-%%    rather than stopping the supervisor, the supervisor instead
-%%    continues and tries to start up the child again, Delay seconds
-%%    later.
+%%    {permanent, Delay} | {transient, Delay} | {intrinsic, Delay}
+%%    where Delay >= 0 (see point (4) below for intrinsic). The delay,
+%%    in seconds, indicates what should happen if a child, upon being
+%%    restarted, exceeds the MaxT and MaxR parameters. Thus, if a
+%%    child exits, it is restarted as normal. If it exits sufficiently
+%%    quickly and often to exceed the boundaries set by the MaxT and
+%%    MaxR parameters, and a Delay is specified, then rather than
+%%    stopping the supervisor, the supervisor instead continues and
+%%    tries to start up the child again, Delay seconds later.
 %%
 %%    Note that you can never restart more frequently than the MaxT
 %%    and MaxR parameters allow: i.e. you must wait until *both* the
@@ -540,12 +540,13 @@ do_restart(Type, {shutdown, _}, Child, State) ->
     del_child_and_maybe_shutdown(Type, Child, State);
 do_restart(Type, shutdown, Child = #child{child_type = supervisor}, State) ->
     del_child_and_maybe_shutdown(Type, Child, State);
+do_restart({RestartType, Delay}, Reason, Child, State)
+  when RestartType =:= transient orelse RestartType =:= intrinsic ->
+    do_restart_delay({RestartType, Delay}, Reason, Child, State);
 do_restart(Type, Reason, Child, State) when Type =:= transient orelse
                                             Type =:= intrinsic ->
     report_error(child_terminated, Reason, Child, State#state.name),
     restart(Child, State);
-do_restart({transient = RestartType, Delay}, Reason, Child, State) ->
-    do_restart_delay({RestartType, Delay}, Reason, Child, State);
 do_restart(temporary, Reason, Child, State) ->
     report_error(child_terminated, Reason, Child, State#state.name),
     NState = state_del_child(Child, State),
@@ -557,8 +558,8 @@ do_restart_delay({RestartType, Delay}, Reason, Child, State) ->
             {ok, NState};
         {terminate, NState} ->
             _TRef = erlang:send_after(trunc(Delay*1000), self(),
-				      {delayed_restart,
-				       {{RestartType, Delay}, Reason, Child}}),
+                                      {delayed_restart,
+                                       {{RestartType, Delay}, Reason, Child}}),
             {ok, state_del_child(Child, NState)}
     end.
 
@@ -916,7 +917,8 @@ supname(N,_)      -> N.
 %%%       Func is {Mod, Fun, Args} == {atom, atom, list}
 %%%       RestartType is permanent | temporary | transient |
 %%%                      intrinsic | {permanent, Delay} |
-%%%                      {transient, Delay} where Delay >= 0
+%%%                      {transient, Delay} | {intrinsic, Delay}
+%%                       where Delay >= 0
 %%%       Shutdown = integer() | infinity | brutal_kill
 %%%       ChildType = supervisor | worker
 %%%       Modules = [atom()] | dynamic
@@ -967,6 +969,7 @@ validRestartType(temporary)          -> true;
 validRestartType(transient)          -> true;
 validRestartType(intrinsic)          -> true;
 validRestartType({permanent, Delay}) -> validDelay(Delay);
+validRestartType({intrinsic, Delay}) -> validDelay(Delay);
 validRestartType({transient, Delay}) -> validDelay(Delay);
 validRestartType(RestartType)        -> throw({invalid_restart_type,
                                                RestartType}).
