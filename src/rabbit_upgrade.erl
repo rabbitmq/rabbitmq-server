@@ -124,6 +124,8 @@ maybe_upgrade_mnesia() ->
     AllNodes = lists:usort(rabbit_mnesia:all_clustered_nodes() ++
                                rabbit_mnesia:read_cluster_nodes_config()),
     case rabbit_version:upgrades_required(mnesia) of
+        {error, starting_from_scratch} ->
+            ok;
         {error, version_not_available} ->
             case AllNodes of
                 [_] -> ok;
@@ -238,6 +240,7 @@ nodes_running(Nodes) ->
 maybe_upgrade_local() ->
     case rabbit_version:upgrades_required(local) of
         {error, version_not_available} -> version_not_available;
+        {error, starting_from_scratch} -> starting_from_scratch;
         {error, _} = Err               -> throw(Err);
         {ok, []}                       -> ensure_backup_removed(),
                                           ok;
