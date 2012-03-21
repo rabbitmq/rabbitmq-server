@@ -508,7 +508,7 @@ init_db(ClusterNodes, Force) ->
                   ok                    -> ok;
                   %% If we're just starting up a new node we won't have a
                   %% version
-                  version_not_available -> ok = rabbit_version:record_desired()
+                  starting_from_scratch -> ok = rabbit_version:record_desired()
               end
       end).
 
