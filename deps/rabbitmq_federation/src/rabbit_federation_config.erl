@@ -17,14 +17,14 @@
 -module(rabbit_federation_config).
 -behaviour(rabbit_cluster_config_item).
 
+-export([validate/2, notify/2]).
+
 -rabbit_boot_step({?MODULE,
                    [{description, "federation config"},
                     {mfa, {rabbit_registry, register,
                            [cluster_config, <<"federation">>, ?MODULE]}},
                     {requires, rabbit_registry},
                     {enables, recovery}]}).
-
--export([validate/2]).
 
 validate(upstream_sets, Term) ->
     io:format("Validate upstream_sets ~p~n", [Term]),
@@ -36,3 +36,11 @@ validate(connections, Term) ->
 
 validate(_Key, _Term) ->
     exit({error, "Key must be one of upstream_sets or connections"}).
+
+notify(upstream_sets, Term) ->
+    io:format("Notify upstream_sets ~p~n", [Term]),
+    ok;
+
+notify(connections, Term) ->
+    io:format("Notify connections ~p~n", [Term]),
+    ok.
