@@ -34,8 +34,16 @@ validate(connections, Term) ->
     io:format("Validate connections ~p~n", [Term]),
     ok;
 
+validate(local_nodename, Term) ->
+    io:format("Validate local_nodename ~p~n", [Term]),
+    ok;
+
+validate(local_username, Term) ->
+    io:format("Validate local_username ~p~n", [Term]),
+    ok;
+
 validate(_Key, _Term) ->
-    exit({error, "Key must be one of upstream_sets or connections"}).
+    exit({error, key_not_recognised}).
 
 notify(upstream_sets, Term) ->
     io:format("Notify upstream_sets ~p~n", [Term]),
@@ -43,4 +51,12 @@ notify(upstream_sets, Term) ->
 
 notify(connections, Term) ->
     io:format("Notify connections ~p~n", [Term]),
+    ok;
+
+notify(local_nodename, Term) ->
+    io:format("Notify local_nodename ~p~n", [Term]),
+    ok;
+
+notify(local_username, Term) ->
+    io:format("Notify local_username ~p~n", [Term]),
     ok.
