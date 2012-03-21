@@ -25,7 +25,8 @@
 set(AppName, Key, Value) ->
     Module = lookup_app(AppName),
     Term = parse(Value),
-    Module:validate(Term),
+    validate(Term),
+    Module:validate(Key, Term),
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
               ok = mnesia:write(
@@ -52,20 +53,14 @@ info_keys() -> [app_name, key, value].
 
 %%---------------------------------------------------------------------------
 
-lookup_app(AppBin) ->
-    case rabbit_registry:binary_to_type(AppBin) of
-        {error, not_found} ->
-            exit({not_found, AppBin});
-        T ->
-            case rabbit_registry:lookup_module(cluster_config, T) of
-                {error, not_found} -> exit({not_found, T});
-                {ok, Module}       -> Module
-            end
+lookup_app(App) ->
+    case rabbit_registry:lookup_module(cluster_config, App) of
+        {error, not_found} -> exit({application_not_found, App});
+        {ok, Module}       -> Module
     end.
 
-
-parse(Bin) ->
-    case erl_scan:string(binary_to_list(Bin)) of
+parse(Src) ->
+    case erl_scan:string(Src) of
         {ok, Scanned, _} ->
             case erl_parse:parse_term(Scanned) of
                 {ok, Parsed} ->
@@ -79,3 +74,22 @@ parse(Bin) ->
 
 format_parse_error({_Line, Mod, Err}) ->
     lists:flatten(Mod:format_error(Err)).
+
+%%---------------------------------------------------------------------------
+
+%% We will want to be able to biject these to JSON. So we have some
+%% generic restrictions on what we consider acceptable.
+validate(Proplist = [T | _]) when is_tuple(T) -> validate_proplist(Proplist);
+validate(L) when is_list(L)                   -> [validate(I) || I <- L];
+validate(T) when is_tuple(T)                  -> exit({tuple, T});
+validate(true)                                -> ok;
+validate(false)                               -> ok;
+validate(A) when is_atom(A)                   -> exit({non_bool_atom, A});
+validate(N) when is_number(N)                 -> ok;
+validate(B) when is_binary(B)                 -> ok.
+
+validate_proplist([])                              -> ok;
+validate_proplist([{K, V} | Rest]) when is_atom(K) -> validate(V),
+                                                      validate_proplist(Rest);
+validate_proplist([{K, _V} | _Rest])               -> exit({non_atom_key, K});
+validate_proplist([H | _Rest])                     -> exit({not_two_tuple, H}).

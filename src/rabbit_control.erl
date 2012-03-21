@@ -267,13 +267,15 @@ action(list_user_permissions, Node, Args = [_Username], _Opts, Inform) ->
                                   list_user_permissions, Args}),
                       rabbit_auth_backend_internal:user_perms_info_keys());
 
-action(set_config_item, Node, Args = [AppName, Key, Value], _Opts, Inform) ->
+action(set_config_item, Node, [AppName, Key, Value], _Opts, Inform) ->
     Inform("Setting config item ~p for app ~p to ~p", [Key, AppName, Value]),
-    call(Node, {rabbit_cluster_config, set, Args});
+    rpc_call(Node, rabbit_cluster_config, set, [list_to_atom(AppName),
+                                                list_to_atom(Key), Value]);
 
-action(clear_config_item, Node, Args = [AppName, Key], _Opts, Inform) ->
+action(clear_config_item, Node, [AppName, Key], _Opts, Inform) ->
     Inform("Clearing config item ~p for app ~p", [Key, AppName]),
-    call(Node, {rabbit_cluster_config, clear, Args});
+    rpc_call(Node, rabbit_cluster_config, clear, [list_to_atom(AppName),
+                                                  list_to_atom(Key)]);
 
 action(list_config_items, Node, Args = [], _Opts, Inform) ->
     Inform("Listing config items", []),

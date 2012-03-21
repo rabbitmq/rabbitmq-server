@@ -20,7 +20,7 @@
 
 behaviour_info(callbacks) ->
     [
-     {validate, 1}
+     {validate, 2}
     ];
 behaviour_info(_Other) ->
     undefined.
