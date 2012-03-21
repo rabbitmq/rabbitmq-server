@@ -529,16 +529,8 @@ restart_child(Pid, Reason, State) ->
 	    {ok, State}
     end.
 
-do_restart({RestartType, Delay}, Reason, Child, State) ->
-    case restart1(Child, State) of
-        {ok, NState} ->
-            {ok, NState};
-        {terminate, NState} ->
-            _TRef = erlang:send_after(trunc(Delay*1000), self(),
-				      {delayed_restart,
-				       {{RestartType, Delay}, Reason, Child}}),
-            {ok, state_del_child(Child, NState)}
-    end;
+do_restart({permanent = RestartType, Delay}, Reason, Child, State) ->
+    do_restart_delay({RestartType, Delay}, Reason, Child, State);
 do_restart(permanent, Reason, Child, State) ->
     report_error(child_terminated, Reason, Child, State#state.name),
     restart(Child, State);
@@ -552,10 +544,23 @@ do_restart(Type, Reason, Child, State) when Type =:= transient orelse
                                             Type =:= intrinsic ->
     report_error(child_terminated, Reason, Child, State#state.name),
     restart(Child, State);
+do_restart({transient = RestartType, Delay}, Reason, Child, State) ->
+    do_restart_delay({RestartType, Delay}, Reason, Child, State);
 do_restart(temporary, Reason, Child, State) ->
     report_error(child_terminated, Reason, Child, State#state.name),
     NState = state_del_child(Child, State),
     {ok, NState}.
+
+do_restart_delay({RestartType, Delay}, Reason, Child, State) ->
+    case restart1(Child, State) of
+        {ok, NState} ->
+            {ok, NState};
+        {terminate, NState} ->
+            _TRef = erlang:send_after(trunc(Delay*1000), self(),
+				      {delayed_restart,
+				       {{RestartType, Delay}, Reason, Child}}),
+            {ok, state_del_child(Child, NState)}
+    end.
 
 del_child_and_maybe_shutdown(intrinsic, Child, State) ->
     {shutdown, state_del_child(Child, State)};
