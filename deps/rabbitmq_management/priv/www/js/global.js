@@ -66,7 +66,6 @@ var exchange_types;
 // Set up the above vars
 function setup_global_vars() {
     var overview = JSON.parse(sync_get('/overview'));
-    var nodes = JSON.parse(sync_get('/nodes'));
     statistics_level = overview.statistics_level;
     var user = JSON.parse(sync_get('/whoami'));
     replace_content('login', '<p>User: <b>' + user.name + '</b></p>');
@@ -74,14 +73,11 @@ function setup_global_vars() {
     user_administrator = jQuery.inArray("administrator", tags) != -1;
     user_monitor = user_administrator ||
         jQuery.inArray("monitoring", tags) != -1;
-    nodes_interesting = user_monitor && nodes.length > 1;
+    nodes_interesting = user_monitor &&
+        JSON.parse(sync_get('/nodes')).length > 1;
     vhosts_interesting = JSON.parse(sync_get('/vhosts')).length > 1;
     current_vhost = get_pref('vhost');
-    for (var i in nodes) {
-        if (nodes[i].name == overview.node) {
-            exchange_types = nodes[i].exchange_types;
-        }
-    }
+    exchange_types = overview.exchange_types;
 }
 
 ////////////////////////////////////////////////////
