@@ -60,6 +60,7 @@
 -export([append_rpc_all_nodes/4]).
 -export([multi_call/2]).
 -export([quit/1]).
+-export([os_cmd/1]).
 
 %%----------------------------------------------------------------------------
 
@@ -204,6 +205,7 @@
 -spec(multi_call/2 ::
         ([pid()], any()) -> {[{pid(), any()}], [{pid(), any()}]}).
 -spec(quit/1 :: (integer() | string()) -> no_return()).
+-spec(os_cmd/1 :: (string()) -> string()).
 
 -endif.
 
@@ -913,4 +915,11 @@ quit(Status) ->
     case os:type() of
         {unix,  _} -> halt(Status);
         {win32, _} -> init:stop(Status)
+    end.
+
+os_cmd(Command) ->
+    Exec = hd(string:tokens(Command, " ")),
+    case os:find_executable(Exec) of
+        false -> throw({command_not_found, Exec});
+        _     -> os:cmd(Command)
     end.

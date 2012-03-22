@@ -181,10 +181,10 @@ internal_update(State = #state { memory_limit = MemLimit,
     case {Alarmed, NewAlarmed} of
         {false, true} ->
             emit_update_info(set, MemUsed, MemLimit),
-            alarm_handler:set_alarm({{vm_memory_high_watermark, node()}, []});
+            alarm_handler:set_alarm({{resource_limit, memory, node()}, []});
         {true, false} ->
             emit_update_info(clear, MemUsed, MemLimit),
-            alarm_handler:clear_alarm({vm_memory_high_watermark, node()});
+            alarm_handler:clear_alarm({resource_limit, memory, node()});
         _ ->
             ok
     end,
@@ -223,19 +223,13 @@ get_mem_limit(MemFraction, TotalMemory) ->
 %%----------------------------------------------------------------------------
 %% Internal Helpers
 %%----------------------------------------------------------------------------
-cmd(Command) ->
-    Exec = hd(string:tokens(Command, " ")),
-    case os:find_executable(Exec) of
-        false -> throw({command_not_found, Exec});
-        _     -> os:cmd(Command)
-    end.
 
 %% get_total_memory(OS) -> Total
 %% Windows and Freebsd code based on: memsup:get_memory_usage/1
 %% Original code was part of OTP and released under "Erlang Public License".
 
 get_total_memory({unix,darwin}) ->
-    File = cmd("/usr/bin/vm_stat"),
+    File = rabbit_misc:os_cmd("/usr/bin/vm_stat"),
     Lines = string:tokens(File, "\n"),
     Dict = dict:from_list(lists:map(fun parse_line_mach/1, Lines)),
     [PageSize, Inactive, Active, Free, Wired] =
@@ -284,13 +278,13 @@ get_total_memory({unix, linux}) ->
     dict:fetch('MemTotal', Dict);
 
 get_total_memory({unix, sunos}) ->
-    File = cmd("/usr/sbin/prtconf"),
+    File = rabbit_misc:os_cmd("/usr/sbin/prtconf"),
     Lines = string:tokens(File, "\n"),
     Dict = dict:from_list(lists:map(fun parse_line_sunos/1, Lines)),
     dict:fetch('Memory size', Dict);
 
 get_total_memory({unix, aix}) ->
-    File = cmd("/usr/bin/vmstat -v"),
+    File = rabbit_misc:os_cmd("/usr/bin/vmstat -v"),
     Lines = string:tokens(File, "\n"),
     Dict = dict:from_list(lists:map(fun parse_line_aix/1, Lines)),
     dict:fetch('memory pages', Dict) * 4096;
@@ -352,7 +346,7 @@ parse_line_aix(Line) ->
      end}.
 
 sysctl(Def) ->
-    list_to_integer(cmd("/sbin/sysctl -n " ++ Def) -- "\n").
+    list_to_integer(rabbit_misc:os_cmd("/sbin/sysctl -n " ++ Def) -- "\n").
 
 %% file:read_file does not work on files in /proc as it seems to get
 %% the size of the file first and then read that many bytes. But files

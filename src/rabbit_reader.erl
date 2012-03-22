@@ -25,7 +25,7 @@
 
 -export([init/4, mainloop/2]).
 
--export([conserve_memory/2, server_properties/1]).
+-export([conserve_resources/3, server_properties/1]).
 
 -define(HANDSHAKE_TIMEOUT, 10).
 -define(NORMAL_TIMEOUT, 3).
@@ -38,7 +38,7 @@
 -record(v1, {parent, sock, connection, callback, recv_len, pending_recv,
              connection_state, queue_collector, heartbeater, stats_timer,
              channel_sup_sup_pid, start_heartbeat_fun, buf, buf_len,
-             auth_mechanism, auth_state, conserve_memory,
+             auth_mechanism, auth_state, conserve_resources,
              last_blocked_by, last_blocked_at}).
 
 -define(STATISTICS_KEYS, [pid, recv_oct, recv_cnt, send_oct, send_cnt,
@@ -71,7 +71,7 @@
 -spec(info/2 :: (pid(), rabbit_types:info_keys()) -> rabbit_types:infos()).
 -spec(force_event_refresh/1 :: (pid()) -> 'ok').
 -spec(shutdown/2 :: (pid(), string()) -> 'ok').
--spec(conserve_memory/2 :: (pid(), boolean()) -> 'ok').
+-spec(conserve_resources/3 :: (pid(), atom(), boolean()) -> 'ok').
 -spec(server_properties/1 :: (rabbit_types:protocol()) ->
                                   rabbit_framing:amqp_table()).
 
@@ -133,8 +133,8 @@ info(Pid, Items) ->
 force_event_refresh(Pid) ->
     gen_server:cast(Pid, force_event_refresh).
 
-conserve_memory(Pid, Conserve) ->
-    Pid ! {conserve_memory, Conserve},
+conserve_resources(Pid, _Source, Conserve) ->
+    Pid ! {conserve_resources, Conserve},
     ok.
 
 server_properties(Protocol) ->
@@ -218,7 +218,7 @@ start_connection(Parent, ChannelSupSupPid, Collector, StartHeartbeatFun, Deb,
                 buf_len             = 0,
                 auth_mechanism      = none,
                 auth_state          = none,
-                conserve_memory     = false,
+                conserve_resources  = false,
                 last_blocked_by     = none,
                 last_blocked_at     = never},
     try
@@ -276,8 +276,8 @@ mainloop(Deb, State = #v1{sock = Sock, buf = Buf, buf_len = BufLen}) ->
         {other, Other}  -> handle_other(Other, Deb, State)
     end.
 
-handle_other({conserve_memory, Conserve}, Deb, State) ->
-    recvloop(Deb, control_throttle(State#v1{conserve_memory = Conserve}));
+handle_other({conserve_resources, Conserve}, Deb, State) ->
+    recvloop(Deb, control_throttle(State#v1{conserve_resources = Conserve}));
 handle_other({channel_closing, ChPid}, Deb, State) ->
     ok = rabbit_channel:ready_for_close(ChPid),
     channel_cleanup(ChPid),
@@ -358,8 +358,8 @@ terminate(Explanation, State) when ?IS_RUNNING(State) ->
 terminate(_Explanation, State) ->
     {force, State}.
 
-control_throttle(State = #v1{connection_state = CS,
-                             conserve_memory  = Mem}) ->
+control_throttle(State = #v1{connection_state   = CS,
+                             conserve_resources = Mem}) ->
     case {CS, Mem orelse credit_flow:blocked()} of
         {running,   true} -> State#v1{connection_state = blocking};
         {blocking, false} -> State#v1{connection_state = running};
@@ -377,9 +377,9 @@ maybe_block(State = #v1{connection_state = blocking}) ->
 maybe_block(State) ->
     State.
 
-update_last_blocked_by(State = #v1{conserve_memory = true}) ->
-    State#v1{last_blocked_by = mem};
-update_last_blocked_by(State = #v1{conserve_memory = false}) ->
+update_last_blocked_by(State = #v1{conserve_resources = true}) ->
+    State#v1{last_blocked_by = resource};
+update_last_blocked_by(State = #v1{conserve_resources = false}) ->
     State#v1{last_blocked_by = flow}.
 
 close_connection(State = #v1{queue_collector = Collector,
@@ -701,11 +701,11 @@ handle_method0(#'connection.open'{virtual_host = VHostPath},
     ok = rabbit_access_control:check_vhost_access(User, VHostPath),
     NewConnection = Connection#connection{vhost = VHostPath},
     ok = send_on_channel0(Sock, #'connection.open_ok'{}, Protocol),
-    Conserve = rabbit_alarm:register(self(), {?MODULE, conserve_memory, []}),
+    Conserve = rabbit_alarm:register(self(), {?MODULE, conserve_resources, []}),
     State1 = control_throttle(
-               State#v1{connection_state = running,
-                        connection       = NewConnection,
-                        conserve_memory  = Conserve}),
+               State#v1{connection_state   = running,
+                        connection         = NewConnection,
+                        conserve_resources = Conserve}),
     rabbit_event:notify(connection_created,
                         [{type, network} |
                          infos(?CREATION_EVENT_KEYS, State1)]),
