@@ -792,8 +792,8 @@ handle_queue_down(QPid, Reason, State = #q{queue_monitors = QMons,
         error ->
             noreply(State);
         {ok, _} ->
-            #resource{name = QName} = qname(State),
-            rabbit_log:info("DLQ ~p (for ~p) died~n", [QPid, QName]),
+            rabbit_log:info("DLQ ~p (for ~s) died~n",
+                            [QPid, rabbit_misc:rs(qname(State))]),
             State1 = State#q{queue_monitors = dict:erase(QPid, QMons)},
             case gb_trees:lookup(QPid, UQM) of
                 none ->
