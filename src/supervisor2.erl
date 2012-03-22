@@ -31,6 +31,16 @@
 %%    the MaxT and MaxR parameters to permit the child to be
 %%    restarted. This may require waiting for longer than Delay.
 %%
+%%    Sometimes, you may wish for a transient or intrinsic child to
+%%    exit abnormally so that it gets restarted, but still log
+%%    nothing. gen_server will log any exit reason other than
+%%    'normal', 'shutdown' or {'shutdown', _}. Thus the exit reason of
+%%    {'shutdown', 'restart'} is interpreted to mean you wish the
+%%    child to be restarted according to the delay parameters, but
+%%    gen_server will not log the error. Thus from gen_server's
+%%    perspective it's a normal exit, whilst from supervisor's
+%%    perspective, it's an abnormal exit.
+%%
 %% 4) Added an 'intrinsic' restart type. Like the transient type, this
 %%    type means the child should only be restarted if the child exits
 %%    abnormally. Unlike the transient type, if the child exits
@@ -536,6 +546,9 @@ do_restart(permanent, Reason, Child, State) ->
     restart(Child, State);
 do_restart(Type, normal, Child, State) ->
     del_child_and_maybe_shutdown(Type, Child, State);
+do_restart({RestartType, Delay}, {shutdown, restart} = Reason, Child, State)
+  when RestartType =:= transient orelse RestartType =:= intrinsic ->
+    do_restart_delay({RestartType, Delay}, Reason, Child, State);
 do_restart(Type, {shutdown, _}, Child, State) ->
     del_child_and_maybe_shutdown(Type, Child, State);
 do_restart(Type, shutdown, Child = #child{child_type = supervisor}, State) ->
