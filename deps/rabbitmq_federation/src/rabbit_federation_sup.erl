@@ -23,7 +23,7 @@
 -include("rabbit_federation.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
--export([start_link/0, start_child/2, stop_child/1]).
+-export([start_link/0, start_child/2, restart_child/1, stop_child/1]).
 
 -export([init/1]).
 
@@ -44,17 +44,21 @@ start_link() ->
                                    ?SUPERVISOR, ?MODULE, []).
 
 start_child(Id, Args) ->
-    {ok, Pid} = mirrored_supervisor:start_child(
-                  ?SUPERVISOR,
-                  {Id, {rabbit_federation_link_sup, start_link, [Args]},
-                   transient, ?MAX_WAIT, supervisor,
-                   [rabbit_federation_link_sup]}),
-    {ok, Pid}.
+    {ok, _Pid} = mirrored_supervisor:start_child(
+                   ?SUPERVISOR,
+                   {Id, {rabbit_federation_link_sup, start_link, [Args]},
+                    transient, ?MAX_WAIT, supervisor,
+                    [rabbit_federation_link_sup]}).
+
+restart_child(Id) ->
+    %% Could we come up with a nice shutdown protocol for links, (so
+    %% we don't end up redelivering any messages)?
+    ok = mirrored_supervisor:terminate_child(?SUPERVISOR, Id),
+    {ok, _Pid} = mirrored_supervisor:restart_child(?SUPERVISOR, Id).
 
 stop_child(Id) ->
     ok = mirrored_supervisor:terminate_child(?SUPERVISOR, Id),
-    ok = mirrored_supervisor:delete_child(?SUPERVISOR, Id),
-    ok.
+    ok = mirrored_supervisor:delete_child(?SUPERVISOR, Id).
 
 %%----------------------------------------------------------------------------
 

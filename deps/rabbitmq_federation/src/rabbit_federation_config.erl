@@ -17,6 +17,8 @@
 -module(rabbit_federation_config).
 -behaviour(rabbit_cluster_config_item).
 
+-include_lib("rabbit_common/include/rabbit.hrl").
+
 -export([validate/2, notify/2]).
 
 -rabbit_boot_step({?MODULE,
@@ -47,16 +49,32 @@ validate(_Key, _Term) ->
 
 notify(upstream_sets, Term) ->
     io:format("Notify upstream_sets ~p~n", [Term]),
+    restart_everything(),
     ok;
 
 notify(connections, Term) ->
     io:format("Notify connections ~p~n", [Term]),
+    restart_everything(),
     ok;
 
 notify(local_nodename, Term) ->
     io:format("Notify local_nodename ~p~n", [Term]),
+    restart_everything(),
     ok;
 
 notify(local_username, Term) ->
     io:format("Notify local_username ~p~n", [Term]),
+    restart_everything(),
     ok.
+
+%%----------------------------------------------------------------------------
+
+%% TODO (maybe) it's a bit crude to just restart everything whenever
+%% anything changes. Could we be cleaner?
+
+restart_everything() ->
+    Xs = lists:append([rabbit_exchange:list(VHost) ||
+                          VHost <- rabbit_vhost:list()]),
+    [rabbit_federation_sup:restart_child(XName) ||
+        #exchange{name = XName,
+                  type = 'x-federation'} <- Xs].
