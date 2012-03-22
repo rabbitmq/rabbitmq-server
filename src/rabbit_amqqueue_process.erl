@@ -794,9 +794,10 @@ handle_queue_down(QPid, Reason, State = #q{queue_monitors = QMons,
         {ok, _} ->
             #resource{name = QName} = qname(State),
             rabbit_log:info("DLQ ~p (for ~p) died~n", [QPid, QName]),
+            State1 = State#q{queue_monitors = dict:erase(QPid, QMons)},
             case gb_trees:lookup(QPid, UQM) of
                 none ->
-                    noreply(State);
+                    noreply(State1);
                 {value, MsgSeqNosSet} ->
                     case rabbit_misc:is_abnormal_termination(Reason) of
                         true  -> rabbit_log:warning(
@@ -804,9 +805,7 @@ handle_queue_down(QPid, Reason, State = #q{queue_monitors = QMons,
                                    [gb_sets:size(MsgSeqNosSet)]);
                         false -> ok
                     end,
-                    handle_confirm(gb_sets:to_list(MsgSeqNosSet), QPid,
-                                   State#q{queue_monitors =
-                                               dict:erase(QPid, QMons)})
+                    handle_confirm(gb_sets:to_list(MsgSeqNosSet), QPid, State1)
             end
     end.
 
