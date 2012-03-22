@@ -348,14 +348,14 @@ connection_error(E, State = {not_started, {U, XName}}) ->
     rabbit_log:info("Federation ~s failed to establish connection to ~s~n~p~n",
                     [rabbit_misc:rs(XName),
                      rabbit_federation_upstream:to_string(U), E]),
-    {stop, {shutdown, E}, State};
+    {stop, {shutdown, restart}, State};
 
 connection_error(E, State = #state{upstream            = U,
                                    downstream_exchange = XName}) ->
     rabbit_log:info("Federation ~s disconnected from ~s:~n~p~n",
                     [rabbit_misc:rs(XName),
                      rabbit_federation_upstream:to_string(U), E]),
-    {stop, {shutdown, E}, State}.
+    {stop, {shutdown, restart}, State}.
 
 
 consume_from_upstream_queue(
