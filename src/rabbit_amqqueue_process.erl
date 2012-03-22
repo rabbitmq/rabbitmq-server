@@ -755,7 +755,7 @@ dead_letter_msg_existing_dlx(Msg, AckTag, Reason,
     State1 = lists:foldl(fun monitor_queue/2, State, QPids),
     State2 = State1#q{publish_seqno = MsgSeqNo + 1},
     case QPids of
-        [] -> {_, BQS1} = BQ:ack([AckTag], BQS),
+        [] -> {_Guids, BQS1} = BQ:ack([AckTag], BQS),
               cleanup_after_confirm(State2#q{backing_queue_state = BQS1});
         _  -> State3 =
                   lists:foldl(
