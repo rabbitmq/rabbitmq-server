@@ -44,9 +44,11 @@ start_link(Sock, Connection, ChMgr, AState) ->
 %%---------------------------------------------------------------------------
 
 init([Sock, Connection, ChMgr, AState]) ->
-    {ok, _Ref} = rabbit_net:async_recv(Sock, 7, infinity),
-    {ok, #state{sock = Sock, connection = Connection,
-                channels_manager = ChMgr, astate = AState}}.
+    case next(7, #state{sock = Sock, connection = Connection,
+                        channels_manager = ChMgr, astate = AState}) of
+        {noreply, State}       -> {ok, State};
+        {stop, Reason, _State} -> {stop, Reason}
+    end.
 
 terminate(_Reason, _State) ->
     ok.
@@ -62,22 +64,14 @@ handle_cast(Cast, State) ->
 
 handle_info({inet_async, Sock, _, {ok, <<Type:8, Channel:16, Length:32>>}},
             State = #state{sock = Sock, message = none}) ->
-    {ok, _Ref} = rabbit_net:async_recv(Sock, Length + 1, infinity),
-    {noreply, State#state{message = {Type, Channel, Length}}};
+    next(Length + 1, State#state{message = {Type, Channel, Length}});
 handle_info({inet_async, Sock, _, {ok, Data}},
             State = #state{sock = Sock, message = {Type, Channel, L}}) ->
     <<Payload:L/binary, ?FRAME_END>> = Data,
-    State1 = process_frame(Type, Channel, Payload, State),
-    {ok, _Ref} = rabbit_net:async_recv(Sock, 7, infinity),
-    {noreply, State1#state{message = none}};
-handle_info({inet_async, Sock, _, {error, closed}},
-            State = #state{sock = Sock, connection = Conn}) ->
-    Conn ! socket_closed,
-    {noreply, State};
+    next(7, process_frame(Type, Channel, Payload, State#state{message = none}));
 handle_info({inet_async, Sock, _, {error, Reason}},
-            State = #state{sock = Sock, connection = Conn}) ->
-    Conn ! {socket_error, Reason},
-    {stop, {socket_error, Reason}, State}.
+            State = #state{sock = Sock}) ->
+    handle_error(Reason, State).
 
 %%---------------------------------------------------------------------------
 %% Internal plumbing
@@ -104,3 +98,16 @@ process_frame(Type, ChNumber, Payload,
             State#state{astate = amqp_channels_manager:process_channel_frame(
                                    AnalyzedFrame, 0, Connection, AState)}
     end.
+
+next(Length, State = #state{sock = Sock}) ->
+     case rabbit_net:async_recv(Sock, Length, infinity) of
+         {ok, _}         -> {noreply, State};
+         {error, Reason} -> handle_error(Reason, State)
+     end.
+
+handle_error(closed, State = #state{connection = Conn}) ->
+    Conn ! socket_closed,
+    {noreply, State};
+handle_error(Reason, State = #state{connection = Conn}) ->
+    Conn ! {socket_error, Reason},
+    {stop, {socket_error, Reason}, State}.
