@@ -152,8 +152,8 @@ Limitations
 ===========
 
 Currently this plugin is rather chatty with LDAP connections when
-doing authorisation over LDAP.
+doing authorisation over LDAP - every time RabbitMQ needs to do an
+authorisation query it starts a new LDAP connection. However, RabbitMQ
+does have a per-channel authorisation cache, so this is not too awful.
 
 There might need to be more types of queries.
-
-It hasn't received much testing.
