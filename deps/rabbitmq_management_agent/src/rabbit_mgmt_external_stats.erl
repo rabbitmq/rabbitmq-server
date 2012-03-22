@@ -24,6 +24,8 @@
 
 -export([info/1, info/2]).
 
+-export([list_registry_plugins/1]).
+
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 -define(REFRESH_RATIO, 5000).
