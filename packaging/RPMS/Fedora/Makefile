@@ -15,9 +15,11 @@ endif
 ifeq "$(RPM_OS)" "suse"
 REQUIRES=/sbin/chkconfig /sbin/service
 OS_DEFINES=--define '_initrddir /etc/init.d' --define 'dist .suse'
+START_PROG=setsid
 else
 REQUIRES=chkconfig initscripts
 OS_DEFINES=--define '_initrddir /etc/rc.d/init.d'
+START_PROG=runuser rabbitmq --session-command
 endif
 
 rpms:   clean server
@@ -32,7 +34,7 @@ prepare:
 	cp ${COMMON_DIR}/* SOURCES/
 	sed -i \
 	    -e 's|^LOCK_FILE=.*$$|LOCK_FILE=/var/lock/subsys/$$NAME|' \
-	    -e 's|^START_PROG=.*$$|START_PROG="runuser rabbitmq --session-command"|' \
+	    -e 's|^START_PROG=.*$$|START_PROG="$(START_PROG)"|' \
 	    SOURCES/rabbitmq-server.init
 ifeq "$(RPM_OS)" "fedora"
 # Fedora says that only vital services should have Default-Start
