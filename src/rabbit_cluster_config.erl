@@ -46,8 +46,8 @@ list() ->
     All = rabbit_misc:dirty_read_all(?TABLE),
     [[{app_name, AppName},
       {key,      Key},
-      {value,    Value}] || #cluster_config{key = {AppName, Key},
-                                            value = Value} <- All].
+      {value,    format(Value)}] || #cluster_config{key = {AppName, Key},
+                                                    value = Value} <- All].
 
 lookup(AppName, Key, Default) ->
     case mnesia:dirty_read(?TABLE, {AppName, Key}) of
@@ -94,6 +94,9 @@ parse(Src) ->
 format_parse_error({_Line, Mod, Err}) ->
     lists:flatten(Mod:format_error(Err)).
 
+format(Term) ->
+    list_to_binary(rabbit_misc:format("~p", [Term])).
+
 %%---------------------------------------------------------------------------
 
 %% We will want to be able to biject these to JSON. So we have some
@@ -110,5 +113,7 @@ validate(B) when is_binary(B)                 -> ok.
 validate_proplist([])                              -> ok;
 validate_proplist([{K, V} | Rest]) when is_atom(K) -> validate(V),
                                                       validate_proplist(Rest);
-validate_proplist([{K, _V} | _Rest])               -> exit({non_atom_key, K});
+validate_proplist([{K, V} | Rest]) when is_list(K) -> validate(V),
+                                                      validate_proplist(Rest);
+validate_proplist([{K, _V} | _Rest])               -> exit({bad_key, K});
 validate_proplist([H | _Rest])                     -> exit({not_two_tuple, H}).
