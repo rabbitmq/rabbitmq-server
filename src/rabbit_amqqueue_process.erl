@@ -626,7 +626,7 @@ handle_ch_down(DownPid, State = #q{exclusive_consumer = Holder,
                                    senders            = Senders}) ->
     Senders1 = case pmon:is_monitored(DownPid, Senders) of
                    false -> Senders;
-                   true  -> ok = credit_flow:peer_down(DownPid),
+                   true  -> credit_flow:peer_down(DownPid),
                             pmon:demonitor(DownPid, Senders)
                end,
     case lookup_ch(DownPid) of
@@ -1247,7 +1247,7 @@ handle_cast({deliver, Delivery = #delivery{sender     = Sender,
             State = #q{senders = Senders}) ->
     %% Asynchronous, non-"mandatory", non-"immediate" deliver mode.
     Senders1 = case Flow of
-                   flow   -> ok = credit_flow:ack(Sender),
+                   flow   -> credit_flow:ack(Sender),
                              pmon:monitor(Sender, Senders);
                    noflow -> ok
                end,
