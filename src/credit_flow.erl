@@ -96,7 +96,8 @@ peer_down(Peer) ->
     %% credit_deferred and thus send messages into the void...
     unblock(Peer),
     erase({credit_from, Peer}),
-    erase({credit_to, Peer}).
+    erase({credit_to, Peer}),
+    ok.
 
 %% --------------------------------------------------------------------------
 
