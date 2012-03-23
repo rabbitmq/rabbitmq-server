@@ -447,7 +447,8 @@ links(#'exchange.declare'{exchange  = Name,
     {longstr, Set} = rabbit_misc:table_lookup(Args,  <<"upstream-set">>),
     {ok, Upstreams} = rabbit_federation_upstream:from_set(
                         Set, rabbit_misc:r(<<"/">>, exchange, Name)),
-    [{Name, U#upstream.connection_name, U#upstream.exchange} || U <- Upstreams];
+    [{Name, list_to_binary(U#upstream.connection_name), U#upstream.exchange} ||
+        U <- Upstreams];
 
 links(#'exchange.declare'{}) ->
     [].
