@@ -286,7 +286,7 @@ terminate(Reason, #state { q                   = Q,
                            rate_timer_ref      = RateTRef }) ->
     ok = gm:leave(GM),
     QueueState = rabbit_amqqueue_process:init_with_backing_queue_state(
-                   Q, BQ, BQS, RateTRef, [], [], dict:new()),
+                   Q, BQ, BQS, RateTRef, [], [], pmon:new(), dict:new()),
     rabbit_amqqueue_process:terminate(Reason, QueueState);
 terminate([_SPid], _Reason) ->
     %% gm case
@@ -459,12 +459,8 @@ promote_me(From, #state { q                   = Q = #amqqueue { name = QName },
 
     %% Everything that we're monitoring, we need to ensure our new
     %% coordinator is monitoring.
-
-    MonitoringPids = [begin put({ch_publisher, Pid}, MRef),
-                            Pid
-                      end || {Pid, MRef} <- pmon:to_list(KS)],
-    ok = rabbit_mirror_queue_coordinator:ensure_monitoring(
-           CPid, MonitoringPids),
+    MPids = pmon:monitored(KS),
+    ok = rabbit_mirror_queue_coordinator:ensure_monitoring(CPid, MPids),
 
     %% We find all the messages that we've received from channels but
     %% not from gm, and if they're due to be enqueued on promotion
@@ -537,7 +533,7 @@ promote_me(From, #state { q                   = Q = #amqqueue { name = QName },
                    Status =:= published orelse Status =:= confirmed]),
 
     MasterState = rabbit_mirror_queue_master:promote_backing_queue_state(
-                    CPid, BQ, BQS, GM, SS, MonitoringPids),
+                    CPid, BQ, BQS, GM, SS, MPids),
 
     MTC = lists:foldl(fun ({MsgId, {published, ChPid, MsgSeqNo}}, MTC0) ->
                               gb_trees:insert(MsgId, {ChPid, MsgSeqNo}, MTC0);
@@ -550,7 +546,7 @@ promote_me(From, #state { q                   = Q = #amqqueue { name = QName },
                               {Delivery, true} <- queue:to_list(PubQ)],
     QueueState = rabbit_amqqueue_process:init_with_backing_queue_state(
                    Q1, rabbit_mirror_queue_master, MasterState, RateTRef,
-                   AckTags, Deliveries, MTC),
+                   AckTags, Deliveries, KS, MTC),
     {become, rabbit_amqqueue_process, QueueState, hibernate}.
 
 noreply(State) ->

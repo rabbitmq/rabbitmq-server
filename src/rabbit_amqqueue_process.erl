@@ -29,7 +29,7 @@
 
 -export([start_link/1, info_keys/0]).
 
--export([init_with_backing_queue_state/7]).
+-export([init_with_backing_queue_state/8]).
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2, handle_pre_hibernate/1, prioritise_call/3,
@@ -50,6 +50,7 @@
             msg_id_to_channel,
             ttl,
             ttl_timer_ref,
+            senders,
             publish_seqno,
             unconfirmed_mq,
             unconfirmed_qm,
@@ -78,9 +79,9 @@
 -spec(start_link/1 ::
         (rabbit_types:amqqueue()) -> rabbit_types:ok_pid_or_error()).
 -spec(info_keys/0 :: () -> rabbit_types:info_keys()).
--spec(init_with_backing_queue_state/7 ::
+-spec(init_with_backing_queue_state/8 ::
         (rabbit_types:amqqueue(), atom(), tuple(), any(), [any()],
-         [rabbit_types:delivery()], dict()) -> #q{}).
+         [rabbit_types:delivery()], pmon:pmon(), dict()) -> #q{}).
 
 -endif.
 
@@ -135,6 +136,7 @@ init(Q) ->
                rate_timer_ref      = undefined,
                expiry_timer_ref    = undefined,
                ttl                 = undefined,
+               senders             = pmon:new(),
                dlx                 = undefined,
                dlx_routing_key     = undefined,
                publish_seqno       = 1,
@@ -147,7 +149,7 @@ init(Q) ->
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
 init_with_backing_queue_state(Q = #amqqueue{exclusive_owner = Owner}, BQ, BQS,
-                              RateTRef, AckTags, Deliveries, MTC) ->
+                              RateTRef, AckTags, Deliveries, Senders, MTC) ->
     case Owner of
         none -> ok;
         _    -> erlang:monitor(process, Owner)
@@ -163,6 +165,7 @@ init_with_backing_queue_state(Q = #amqqueue{exclusive_owner = Owner}, BQ, BQS,
                rate_timer_ref      = RateTRef,
                expiry_timer_ref    = undefined,
                ttl                 = undefined,
+               senders             = Senders,
                publish_seqno       = 1,
                unconfirmed_mq      = gb_trees:empty(),
                unconfirmed_qm      = gb_trees:empty(),
@@ -619,16 +622,16 @@ should_auto_delete(#q{q = #amqqueue{auto_delete = false}}) -> false;
 should_auto_delete(#q{has_had_consumers = false}) -> false;
 should_auto_delete(State) -> is_unused(State).
 
-handle_ch_down(DownPid, State = #q{exclusive_consumer = Holder}) ->
-    case get({ch_publisher, DownPid}) of
-        undefined -> ok;
-        MRef      -> erlang:demonitor(MRef),
-                     erase({ch_publisher, DownPid}),
-                     credit_flow:peer_down(DownPid)
-    end,
+handle_ch_down(DownPid, State = #q{exclusive_consumer = Holder,
+                                   senders            = Senders}) ->
+    Senders1 = case pmon:is_monitored(DownPid, Senders) of
+                   false -> Senders;
+                   true  -> ok = credit_flow:peer_down(DownPid),
+                            pmon:demonitor(DownPid, Senders)
+               end,
     case lookup_ch(DownPid) of
         not_found ->
-            {ok, State};
+            {ok, State#q{senders = Senders1}};
         C = #cr{ch_pid            = ChPid,
                 acktags           = ChAckTags,
                 blocked_consumers = Blocked} ->
@@ -640,7 +643,8 @@ handle_ch_down(DownPid, State = #q{exclusive_consumer = Holder}) ->
                                                 Other      -> Other
                                             end,
                        active_consumers = remove_consumers(
-                                            ChPid, State#q.active_consumers)},
+                                            ChPid, State#q.active_consumers),
+                       senders          = Senders1},
             case should_auto_delete(State1) of
                 true  -> {stop, State1};
                 false -> {ok, requeue_and_run(sets:to_list(ChAckTags),
@@ -1240,22 +1244,19 @@ handle_cast({run_backing_queue, Mod, Fun}, State) ->
 
 handle_cast({deliver, Delivery = #delivery{sender     = Sender,
                                            msg_seq_no = MsgSeqNo}, Flow},
-            State) ->
+            State = #q{senders = Senders}) ->
     %% Asynchronous, non-"mandatory", non-"immediate" deliver mode.
-    case Flow of
-        flow   -> Key = {ch_publisher, Sender},
-                  case get(Key) of
-                      undefined -> put(Key, erlang:monitor(process, Sender));
-                      _         -> ok
-                  end,
-                  credit_flow:ack(Sender);
-        noflow -> ok
-    end,
-    case already_been_here(Delivery, State) of
-        false -> noreply(deliver_or_enqueue(Delivery, State));
+    Senders1 = case Flow of
+                   flow   -> ok = credit_flow:ack(Sender),
+                             pmon:monitor(Sender, Senders);
+                   noflow -> ok
+               end,
+    State1 = State#q{senders = Senders1},
+    case already_been_here(Delivery, State1) of
+        false -> noreply(deliver_or_enqueue(Delivery, State1));
         Qs    -> log_cycle_once(Qs),
                  rabbit_misc:confirm_to_sender(Sender, [MsgSeqNo]),
-                 noreply(State)
+                 noreply(State1)
     end;
 
 handle_cast({ack, AckTags, ChPid}, State) ->

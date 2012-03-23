@@ -17,7 +17,7 @@
 -module(pmon).
 
 -export([new/0, monitor/2, monitor_all/2, demonitor/2, is_monitored/2, erase/2,
-         monitored/1, to_list/1, is_empty/1]).
+         monitored/1, is_empty/1]).
 
 -ifdef(use_specs).
 
@@ -34,7 +34,6 @@
 -spec(is_monitored/2 :: (pid(), ?MODULE()) -> boolean()).
 -spec(erase/2        :: (pid(), ?MODULE()) -> ?MODULE()).
 -spec(monitored/1    :: (?MODULE()) -> [pid()]).
--spec(to_list/1      :: (?MODULE()) -> [{pid(), reference()}]).
 -spec(is_empty/1     :: (?MODULE()) -> boolean()).
 
 -endif.
@@ -61,7 +60,5 @@ is_monitored(Pid, M) -> dict:is_key(Pid, M).
 erase(Pid, M) -> dict:erase(Pid, M).
 
 monitored(M) -> dict:fetch_keys(M).
-
-to_list(M) -> dict:to_list(M).
 
 is_empty(M) -> dict:size(M) == 0.
