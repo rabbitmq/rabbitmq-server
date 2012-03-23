@@ -23,7 +23,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--record(state, {queues, delete_from}).
+-record(state, {monitors, delete_from}).
 
 -include("rabbit.hrl").
 
@@ -32,7 +32,7 @@
 -ifdef(use_specs).
 
 -spec(start_link/0 :: () -> rabbit_types:ok_pid_or_error()).
--spec(register/2 :: (pid(), rabbit_types:amqqueue()) -> 'ok').
+-spec(register/2 :: (pid(), pid()) -> 'ok').
 -spec(delete_all/1 :: (pid()) -> 'ok').
 
 -endif.
@@ -51,39 +51,37 @@ delete_all(CollectorPid) ->
 %%----------------------------------------------------------------------------
 
 init([]) ->
-    {ok, #state{queues = dict:new(), delete_from = undefined}}.
+    {ok, #state{monitors = pmon:new(), delete_from = undefined}}.
 
 %%--------------------------------------------------------------------------
 
-handle_call({register, Q}, _From,
-            State = #state{queues = Queues, delete_from = Deleting}) ->
-    MonitorRef = erlang:monitor(process, Q#amqqueue.pid),
+handle_call({register, QPid}, _From,
+            State = #state{monitors = QMons, delete_from = Deleting}) ->
     case Deleting of
         undefined -> ok;
-        _         -> rabbit_amqqueue:delete_immediately(Q)
+        _         -> ok = rabbit_amqqueue:delete_immediately(QPid)
     end,
-    {reply, ok, State#state{queues = dict:store(MonitorRef, Q, Queues)}};
+    {reply, ok, State#state{monitors = pmon:monitor(QPid, QMons)}};
 
-handle_call(delete_all, From, State = #state{queues      = Queues,
+handle_call(delete_all, From, State = #state{monitors    = QMons,
                                              delete_from = undefined}) ->
-    case dict:size(Queues) of
-        0 -> {reply, ok, State#state{delete_from = From}};
-        _ -> [rabbit_amqqueue:delete_immediately(Q)
-              || {_MRef, Q} <- dict:to_list(Queues)],
-             {noreply, State#state{delete_from = From}}
+    case pmon:monitored(QMons) of
+        []    -> {reply, ok, State#state{delete_from = From}};
+        QPids -> ok = rabbit_amqqueue:delete_immediately(QPids),
+                 {noreply, State#state{delete_from = From}}
     end.
 
 handle_cast(Msg, State) ->
     {stop, {unhandled_cast, Msg}, State}.
 
-handle_info({'DOWN', MonitorRef, process, _DownPid, _Reason},
-            State = #state{queues = Queues, delete_from = Deleting}) ->
-    Queues1 = dict:erase(MonitorRef, Queues),
-    case Deleting =/= undefined andalso dict:size(Queues1) =:= 0 of
+handle_info({'DOWN', _MRef, process, DownPid, _Reason},
+            State = #state{monitors = QMons, delete_from = Deleting}) ->
+    QMons1 = pmon:erase(DownPid, QMons),
+    case Deleting =/= undefined andalso pmon:is_empty(QMons1) of
         true  -> gen_server:reply(Deleting, ok);
         false -> ok
     end,
-    {noreply, State#state{queues = Queues1}}.
+    {noreply, State#state{monitors = QMons1}}.
 
 terminate(_Reason, _State) ->
     ok.
