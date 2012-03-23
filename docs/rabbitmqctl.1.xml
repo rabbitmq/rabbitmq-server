@@ -1074,8 +1074,8 @@
               <varlistentry>
                 <term>last_blocked_by</term>
                 <listitem><para>The reason for which this connection
-                    was last blocked. One of 'mem' - due to a memory
-                    alarm, 'flow' - due to internal flow control, or
+                    was last blocked. One of 'resource' - due to a memory
+                    or disk alarm, 'flow' - due to internal flow control, or
                     'none' if the connection was never
                     blocked.</para></listitem>
               </varlistentry>
