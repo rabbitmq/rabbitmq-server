@@ -339,24 +339,32 @@ go(S0 = {not_started, {Upstream, DownXName =
                     %% serial we will process. Since it compares larger than
                     %% any number we never process any commands. And we will
                     %% soon get told to stop anyway.
-                    State = ensure_upstream_bindings(
-                              consume_from_upstream_queue(
-                                #state{upstream              = Upstream,
-                                       connection            = Conn,
-                                       channel               = Ch,
-                                       next_serial           = Serial,
-                                       downstream_connection = DConn,
-                                       downstream_channel    = DCh,
+                    try
+                        State = ensure_upstream_bindings(
+                                  consume_from_upstream_queue(
+                                    #state{upstream              = Upstream,
+                                           connection            = Conn,
+                                           channel               = Ch,
+                                           next_serial           = Serial,
+                                           downstream_connection = DConn,
+                                           downstream_channel    = DCh,
                                        downstream_exchange   = DownXName}),
-                              Bindings),
-                    rabbit_log:info("Federation ~s connected to ~s~n",
-                                    [rabbit_misc:rs(DownXName),
-                                     rabbit_federation_upstream:to_string(
-                                       Upstream)]),
-                    Name = pget(name, amqp_connection:info(DConn, [name])),
-                    rabbit_federation_status:report(
-                      Upstream, DownXName, {running, Name}),
-                    {noreply, State};
+                                  Bindings),
+                        rabbit_log:info("Federation ~s connected to ~s~n",
+                                        [rabbit_misc:rs(DownXName),
+                                         rabbit_federation_upstream:to_string(
+                                           Upstream)]),
+                        Name = pget(name, amqp_connection:info(DConn, [name])),
+                        rabbit_federation_status:report(
+                          Upstream, DownXName, {running, Name}),
+                        {noreply, State}
+                    catch exit:E ->
+                            %% terminate/2 will not get this, as we
+                            %% have not put them in our state yet
+                            ensure_closed(DConn, DCh),
+                            ensure_closed(Conn, Ch),
+                            exit(E)
+                    end;
                 E ->
                     ensure_closed(DConn, DCh),
                     connection_error(remote, E, S0)
