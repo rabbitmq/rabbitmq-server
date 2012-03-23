@@ -106,6 +106,7 @@ validate(L) when is_list(L)                   -> [validate(I) || I <- L];
 validate(T) when is_tuple(T)                  -> exit({tuple, T});
 validate(true)                                -> ok;
 validate(false)                               -> ok;
+validate(null)                                -> ok;
 validate(A) when is_atom(A)                   -> exit({non_bool_atom, A});
 validate(N) when is_number(N)                 -> ok;
 validate(B) when is_binary(B)                 -> ok.
