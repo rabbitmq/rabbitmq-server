@@ -25,6 +25,9 @@
    <tr<%= alt_rows(i)%>>
     <td>
       <%= fmt_string(link.connection) %>
+      <% if (link.exchange != link.upstream_exchange) { %>
+      <sub><%= fmt_string(link.upstream_exchange) %></sub>
+      <% } %>
     </td>
 <% if (vhosts_interesting) { %>
     <td><%= fmt_string(link.vhost) %></td>
