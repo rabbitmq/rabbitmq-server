@@ -16,14 +16,14 @@
 
 -module(rabbit_federation_sup).
 
--behaviour(mirrored_supervisor).
+-behaviour(supervisor).
 
 %% Supervises everything. There is just one of these.
 
--include("rabbit_federation.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
+-define(SUPERVISOR, rabbit_federation_sup).
 
--export([start_link/0, start_child/2, stop_child/1]).
+-export([start_link/0]).
 
 -export([init/1]).
 
@@ -40,22 +40,15 @@
 %%----------------------------------------------------------------------------
 
 start_link() ->
-    mirrored_supervisor:start_link({local, ?SUPERVISOR},
-                                   ?SUPERVISOR, ?MODULE, []).
-
-start_child(Id, Args) ->
-    {ok, Pid} = mirrored_supervisor:start_child(
-                  ?SUPERVISOR,
-                  {Id, {rabbit_federation_link_sup, start_link, [Args]},
-                   transient, ?MAX_WAIT, supervisor,
-                   [rabbit_federation_link_sup]}),
-    {ok, Pid}.
-
-stop_child(Id) ->
-    ok = mirrored_supervisor:terminate_child(?SUPERVISOR, Id),
-    ok = mirrored_supervisor:delete_child(?SUPERVISOR, Id),
-    ok.
+    supervisor:start_link({local, ?SUPERVISOR}, ?MODULE, []).
 
 %%----------------------------------------------------------------------------
 
-init([]) -> {ok, {{one_for_one, 3, 10},[]}}.
+init([]) ->
+    Status = {status, {rabbit_federation_status, start_link, []},
+              transient, ?MAX_WAIT, worker,
+              [rabbit_federation_status]},
+    LinkSupSup = {links, {rabbit_federation_link_sup_sup, start_link, []},
+                  transient, ?MAX_WAIT, supervisor,
+                  [rabbit_federation_link_sup_sup]},
+    {ok, {{one_for_one, 3, 10}, [Status, LinkSupSup]}}.

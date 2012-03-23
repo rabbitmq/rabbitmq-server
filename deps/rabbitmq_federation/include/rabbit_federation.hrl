@@ -24,6 +24,5 @@
                    ha_policy,
                    connection_name}).
 
--define(SUPERVISOR, rabbit_federation_sup).
 -define(ROUTING_HEADER, <<"x-received-from">>).
 -define(MAX_HOPS_ARG, <<"x-max-hops">>).
