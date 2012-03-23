@@ -35,6 +35,7 @@
 -record(state, {upstream,
                 connection,
                 channel,
+                consumer_tag,
                 queue,
                 internal_exchange,
                 waiting_cmds = gb_trees:empty(),
@@ -168,6 +169,26 @@ handle_info(Msg, State) ->
 terminate(_Reason, {not_started, _}) ->
     ok;
 
+terminate(shutdown, #state{upstream              = Upstream,
+                           downstream_channel    = DCh,
+                           downstream_connection = DConn,
+                           downstream_exchange   = DownXName,
+                           connection            = Conn,
+                           channel               = Ch,
+                           consumer_tag          = CTag}) ->
+    %% The supervisor is shutting us down; we are probably restarting
+    %% the link because configuration has changed. So try to shut down
+    %% nicely so that we do not cause unacked messages to be
+    %% redelivered.
+    rabbit_log:info("Federation ~s disconnecting from ~s~n",
+                    [rabbit_misc:rs(DownXName),
+                     rabbit_federation_upstream:to_string(Upstream)]),
+    #'basic.cancel_ok'{} =
+        amqp_channel:call(Ch, #'basic.cancel'{consumer_tag = CTag}),
+    ensure_closed(DConn, DCh),
+    ensure_closed(Conn, Ch),
+    ok;
+
 terminate(_Reason, #state{downstream_channel    = DCh,
                           downstream_connection = DConn,
                           connection            = Conn,
@@ -175,6 +196,7 @@ terminate(_Reason, #state{downstream_channel    = DCh,
     ensure_closed(DConn, DCh),
     ensure_closed(Conn, Ch),
     ok.
+
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
@@ -392,10 +414,11 @@ consume_from_upstream_queue(
         none -> ok;
         _    -> amqp_channel:call(Ch, #'basic.qos'{prefetch_count = Prefetch})
     end,
-    #'basic.consume_ok'{} =
+    #'basic.consume_ok'{consumer_tag = CTag} =
         amqp_channel:subscribe(Ch, #'basic.consume'{queue  = Q,
                                                     no_ack = false}, self()),
-    State#state{queue = Q}.
+    State#state{consumer_tag = CTag,
+                queue        = Q}.
 
 ensure_upstream_bindings(State = #state{upstream            = Upstream,
                                         connection          = Conn,
