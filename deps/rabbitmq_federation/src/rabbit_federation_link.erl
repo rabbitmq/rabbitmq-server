@@ -357,19 +357,19 @@ connection_error(remote, E, State = {not_started, {U, XName}}) ->
     rabbit_log:warning("Federation ~s did not connect to ~s~n~p~n",
                        [rabbit_misc:rs(XName),
                         rabbit_federation_upstream:to_string(U), E]),
-    {stop, {shutdown, {connect_failed, remote, E}}, State};
+    {stop, {shutdown, restart}, State};
 
 connection_error(remote, E, State = #state{upstream            = U,
                                           downstream_exchange = XName}) ->
     rabbit_log:info("Federation ~s disconnected from ~s~n~p~n",
                     [rabbit_misc:rs(XName),
                      rabbit_federation_upstream:to_string(U), E]),
-    {stop, {shutdown, {disconnected, remote, E}}, State};
+    {stop, {shutdown, restart}, State};
 
 connection_error(local, E, State = {not_started, {_U, XName}}) ->
     rabbit_log:warning("Federation ~s did not connect locally~n~p~n",
                        [rabbit_misc:rs(XName), E]),
-    {stop, {shutdown, {connect_failed, local, E}}, State}.
+    {stop, {shutdown, restart}, State}.
 
 %% local / disconnected never gets invoked, see handle_info({'DOWN', ...
 
