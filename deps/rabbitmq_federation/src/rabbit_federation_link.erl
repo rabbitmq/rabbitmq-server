@@ -169,6 +169,12 @@ handle_info({'DOWN', _Ref, process, Ch, Reason},
 handle_info(Msg, State) ->
     {stop, {unexpected_info, Msg}, State}.
 
+%% If we terminate due to a gen_server call exploding (almost
+%% certainly due to an amqp_channel:call() exploding) then we do not
+%% want to report the gen_server call in our status.
+terminate({E = {shutdown, _}, _}, State) ->
+    terminate(E, State);
+
 terminate(Reason, {not_started, {Upstream, XName}}) ->
     rabbit_federation_status:report(Upstream, XName, Reason),
     ok;
