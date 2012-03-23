@@ -333,12 +333,10 @@ ensure_expiry_timer(State = #q{expires = undefined}) ->
     State;
 ensure_expiry_timer(State = #q{expires = Expires}) ->
     case is_unused(State) of
-        true ->
-            NewState = stop_expiry_timer(State),
-            TRef = erlang:send_after(Expires, self(), maybe_expire),
-            NewState#q{expiry_timer_ref = TRef};
-        false ->
-            State
+        true  -> NewState = stop_expiry_timer(State),
+                 TRef = erlang:send_after(Expires, self(), maybe_expire),
+                 NewState#q{expiry_timer_ref = TRef};
+        false -> State
     end.
 
 ensure_stats_timer(State) ->
