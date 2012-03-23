@@ -733,10 +733,9 @@ dead_letter_fun(Reason, _State) ->
 
 dead_letter_msg(Msg, AckTag, Reason, State = #q{dlx = DLX}) ->
     case rabbit_exchange:lookup(DLX) of
-        {error, not_found} ->
-            noreply(State);
-        _ ->
-            dead_letter_msg_existing_dlx(Msg, AckTag, Reason, State)
+        {error, not_found} -> noreply(State);
+        _                  -> dead_letter_msg_existing_dlx(Msg, AckTag, Reason,
+                                                           State)
     end.
 
 dead_letter_msg_existing_dlx(Msg, AckTag, Reason,
