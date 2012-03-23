@@ -78,7 +78,11 @@ lookup_app(App) ->
         {ok, Module}       -> Module
     end.
 
-parse(Src) ->
+parse(Src0) ->
+    Src = case lists:reverse(Src0) of
+              [$. |_] -> Src0;
+              _       -> Src0 ++ "."
+          end,
     case erl_scan:string(Src) of
         {ok, Scanned, _} ->
             case erl_parse:parse_term(Scanned) of
