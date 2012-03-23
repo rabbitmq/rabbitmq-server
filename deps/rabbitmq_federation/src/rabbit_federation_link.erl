@@ -193,6 +193,7 @@ terminate(shutdown, #state{downstream_channel    = DCh,
     rabbit_log:info("Federation ~s disconnecting from ~s~n",
                     [rabbit_misc:rs(DownXName),
                      rabbit_federation_upstream:to_string(Upstream)]),
+    %% TODO this completely does not work!
     #'basic.cancel_ok'{} =
         amqp_channel:call(Ch, #'basic.cancel'{consumer_tag = CTag}),
     ensure_closed(DConn, DCh),
@@ -205,7 +206,6 @@ terminate(Reason, #state{downstream_channel    = DCh,
                          upstream              = Upstream,
                          connection            = Conn,
                          channel               = Ch}) ->
-    io:format("B: ~p~n", [Reason]),
     rabbit_federation_status:report(Upstream, XName, Reason),
     ensure_closed(DConn, DCh),
     ensure_closed(Conn, Ch),
