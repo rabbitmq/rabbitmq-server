@@ -23,7 +23,7 @@
 -include("rabbit_federation.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
--export([start_link/0, start_child/2, restart_child/1, stop_child/1]).
+-export([start_link/0, start_child/2, restart_everything/0, stop_child/1]).
 
 -export([init/1]).
 
@@ -49,6 +49,14 @@ start_child(Id, Args) ->
                    {Id, {rabbit_federation_link_sup, start_link, [Args]},
                     transient, ?MAX_WAIT, supervisor,
                     [rabbit_federation_link_sup]}).
+
+%% TODO (maybe) it's a bit crude to just restart everything whenever
+%% anything changes. Could we be cleaner?
+
+restart_everything() ->
+    [restart_child(Id) ||
+        {Id, _, _, _} <- mirrored_supervisor:which_children(?SUPERVISOR)],
+    ok.
 
 restart_child(Id) ->
     %% Could we come up with a nice shutdown protocol for links, (so
