@@ -4,11 +4,11 @@
 <table class="list">
  <thead>
   <tr>
+    <th>Connection</th>
 <% if (vhosts_interesting) { %>
     <th>Virtual Host</th>
 <% } %>
     <th>Exchange</th>
-    <th>Connection</th>
 <% if (nodes_interesting) { %>
     <th>Node</th>
 <% } %>
@@ -23,13 +23,13 @@
     var link = links[i];
 %>
    <tr<%= alt_rows(i)%>>
+    <td>
+      <%= fmt_string(link.connection) %>
+    </td>
 <% if (vhosts_interesting) { %>
     <td><%= fmt_string(link.vhost) %></td>
 <% } %>
     <td><%= link_exchange(link.vhost, link.exchange) %></td>
-    <td>
-      <%= fmt_string(link.connection) %>
-    </td>
 <% if (nodes_interesting) { %>
     <td><%= fmt_string(link.node) %></td>
 <% } %>
