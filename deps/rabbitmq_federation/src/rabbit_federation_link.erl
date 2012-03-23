@@ -447,9 +447,9 @@ upstream_exchange_name(XNameBin, VHost, DownXName, Suffix) ->
     <<Name/binary, " ", Suffix/binary>>.
 
 local_nodename() ->
-    Explicit = rabbit_cluster_config:lookup(federation, local_nodename, auto),
+    Explicit = rabbit_cluster_config:lookup(federation, local_nodename, null),
     case Explicit of
-        auto -> {ID, _} = rabbit_nodes:parts(node()),
+        null -> {ID, _} = rabbit_nodes:parts(node()),
                 {ok, Host} = inet:gethostname(),
                 {ok, #hostent{h_name = FQDN}} = inet:gethostbyname(Host),
                 list_to_binary(atom_to_list(rabbit_nodes:make({ID, FQDN})));
