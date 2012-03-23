@@ -27,8 +27,8 @@
 %%----------------------------------------------------------------------------
 
 local_params(VHost) ->
-    {ok, U} = application:get_env(rabbitmq_federation, local_username),
-    #amqp_params_direct{username     = list_to_binary(U),
+    U = rabbit_cluster_config:lookup(federation, local_username, <<"guest">>),
+    #amqp_params_direct{username     = U,
                         virtual_host = VHost}.
 
 pget_bin(K, T) -> list_to_binary(pget_or_die(K, T)).

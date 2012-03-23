@@ -29,8 +29,8 @@
 -import(rabbit_federation_util, [pget_bin/2, pget_bin/3]).
 
 start(_Type, _StartArgs) ->
-    {ok, Xs} = application:get_env(exchanges),
-    [declare_exchange(X) || X <- Xs],
+    %%{ok, Xs} = application:get_env(exchanges),
+    %%[declare_exchange(X) || X <- Xs],
     rabbit_federation_link:go(),
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
