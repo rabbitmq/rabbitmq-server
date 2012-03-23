@@ -22,7 +22,7 @@
 
 -export([start_link/0]).
 
--export([report/3, remove/1, status/0]).
+-export([report/3, remove/1, remove/2, status/0]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -43,6 +43,9 @@ report(Upstream, XName, Status) ->
 remove(XName) ->
     gen_server:call(?SERVER, {remove, XName}, infinity).
 
+remove(Upstream, XName) ->
+    gen_server:call(?SERVER, {remove, Upstream, XName}, infinity).
+
 status() ->
     gen_server:call(?SERVER, status, infinity).
 
@@ -53,6 +56,12 @@ init([]) ->
 
 handle_call({remove, XName}, _From, State) ->
     true = ets:match_delete(?ETS_NAME, #entry{key       = {XName, '_'},
+                                              status    = '_',
+                                              timestamp = '_'}),
+    {reply, ok, State};
+
+handle_call({remove, Upstream, XName}, _From, State) ->
+    true = ets:match_delete(?ETS_NAME, #entry{key       = {XName, Upstream},
                                               status    = '_',
                                               timestamp = '_'}),
     {reply, ok, State};

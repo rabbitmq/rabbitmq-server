@@ -181,7 +181,7 @@ terminate(Reason, {not_started, {Upstream, XName}}) ->
 
 terminate(shutdown, #state{downstream_channel    = DCh,
                            downstream_connection = DConn,
-                           downstream_exchange   = DownXName,
+                           downstream_exchange   = XName,
                            upstream              = Upstream,
                            connection            = Conn,
                            channel               = Ch,
@@ -191,13 +191,14 @@ terminate(shutdown, #state{downstream_channel    = DCh,
     %% nicely so that we do not cause unacked messages to be
     %% redelivered.
     rabbit_log:info("Federation ~s disconnecting from ~s~n",
-                    [rabbit_misc:rs(DownXName),
+                    [rabbit_misc:rs(XName),
                      rabbit_federation_upstream:to_string(Upstream)]),
     %% TODO this completely does not work!
     #'basic.cancel_ok'{} =
         amqp_channel:call(Ch, #'basic.cancel'{consumer_tag = CTag}),
     ensure_closed(DConn, DCh),
     ensure_closed(Conn, Ch),
+    rabbit_federation_status:remove(Upstream, XName),
     ok;
 
 terminate(Reason, #state{downstream_channel    = DCh,
