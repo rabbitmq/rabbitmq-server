@@ -974,7 +974,7 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
         {error, not_found} ->
             case rabbit_amqqueue:declare(QueueName, Durable, AutoDelete,
                                          Args, Owner) of
-                {new, Q = #amqqueue{}} ->
+                {new, #amqqueue{pid = QPid}} ->
                     %% We need to notify the reader within the channel
                     %% process so that we can be sure there are no
                     %% outstanding exclusive queues being declared as
@@ -982,7 +982,7 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
                     ok = case Owner of
                              none -> ok;
                              _    -> rabbit_queue_collector:register(
-                                       CollectorPid, Q)
+                                       CollectorPid, QPid)
                          end,
                     return_queue_declare_ok(QueueName, NoWait, 0, 0, State);
                 {existing, _Q} ->
