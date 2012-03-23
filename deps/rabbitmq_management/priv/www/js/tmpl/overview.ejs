@@ -44,6 +44,9 @@
     <th>
       Memory
     </th>
+    <th>
+      Disk free
+    </th>
     <th>Uptime</th>
     <th>
       Version
@@ -105,6 +108,23 @@
    <sub><%= fmt_bytes(node.mem_limit) %> high watermark</sub>
 <% } else { %>
        <%= fmt_bytes(node.mem_used) %>
+<% } %>
+     </td>
+     <td class="status">
+<% if (node.disk_free_limit != 'disk_free_monitoring_disabled') { %>
+   <% if (node.disk_free_alarm) { %>
+       <div class="red">
+         <%= fmt_bytes(node.disk_free) %>
+         <span class="help" id="disk-free-alarm"></span>
+       </div>
+   <% } else { %>
+       <div class="green">
+         <%= fmt_bytes(node.disk_free) %>
+       </div>
+   <% } %>
+   <sub><%= fmt_bytes(node.disk_free_limit) %> limit </sub>
+<% } else { %>
+         (not monitored)
 <% } %>
      </td>
      <td class="r">

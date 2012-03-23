@@ -22,7 +22,7 @@ function fmt_bytes(bytes) {
     var num_power = f(bytes, 0);
     var num = num_power[0];
     var power = num_power[1];
-    var powers = ['B', 'kB', 'MB', 'GB', 'TB'];
+    var powers = ['B', 'kB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
     return (power == 0 ? num.toFixed(0) : num.toFixed(1)) + powers[power];
 }
 

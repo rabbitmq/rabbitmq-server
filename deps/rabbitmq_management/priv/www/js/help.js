@@ -70,6 +70,11 @@ HELP = {
       incoming network traffic until the memory usage drops below \
       the watermark.',
 
+    'disk-free-alarm':
+      'The disk free space alarm for this node has gone off. It will block \
+      incoming network traffic until the amount of free space exceeds \
+      the limit.',
+
     'message-get-requeue':
       '<p>Clicking "Get Message(s)" will consume messages from the queue. \
       If requeue is set the message will be re-added to the queue, \
