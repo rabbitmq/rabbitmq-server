@@ -59,7 +59,7 @@ handle_call({register, QPid}, _From,
             State = #state{monitors = QMons, delete_from = Deleting}) ->
     case Deleting of
         undefined -> ok;
-        _         -> rabbit_amqqueue:delete_immediately(QPid)
+        _         -> ok = rabbit_amqqueue:delete_immediately(QPid)
     end,
     {reply, ok, State#state{monitors = pmon:monitor(QPid, QMons)}};
 
@@ -67,7 +67,7 @@ handle_call(delete_all, From, State = #state{monitors    = QMons,
                                              delete_from = undefined}) ->
     case pmon:monitored(QMons) of
         []    -> {reply, ok, State#state{delete_from = From}};
-        QPids -> rabbit_amqqueue:delete_immediately(QPids),
+        QPids -> ok = rabbit_amqqueue:delete_immediately(QPids),
                  {noreply, State#state{delete_from = From}}
     end.
 

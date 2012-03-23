@@ -463,7 +463,8 @@ stat(#amqqueue{pid = QPid}) ->
     delegate_call(QPid, stat).
 
 delete_immediately(QPids) ->
-    [gen_server2:cast(QPid, delete_immediately) || QPid <- QPids].
+    [gen_server2:cast(QPid, delete_immediately) || QPid <- QPids],
+    ok.
 
 delete(#amqqueue{ pid = QPid }, IfUnused, IfEmpty) ->
     delegate_call(QPid, {delete, IfUnused, IfEmpty}).
