@@ -140,7 +140,7 @@ init(#amqqueue { name = QueueName } = Q) ->
                              ack_num             = 0,
 
                              msg_id_status       = dict:new(),
-                             known_senders       = dict:new(),
+                             known_senders       = pmon:new(),
 
                              synchronised        = false
                    },
@@ -462,7 +462,7 @@ promote_me(From, #state { q                   = Q = #amqqueue { name = QName },
 
     MonitoringPids = [begin put({ch_publisher, Pid}, MRef),
                             Pid
-                      end || {Pid, MRef} <- dict:to_list(KS)],
+                      end || {Pid, MRef} <- pmon:to_list(KS)],
     ok = rabbit_mirror_queue_coordinator:ensure_monitoring(
            CPid, MonitoringPids),
 
@@ -605,14 +605,10 @@ stop_rate_timer(State = #state { rate_timer_ref = TRef }) ->
     State #state { rate_timer_ref = undefined }.
 
 ensure_monitoring(ChPid, State = #state { known_senders = KS }) ->
-    case dict:is_key(ChPid, KS) of
-        true  -> State;
-        false -> MRef = erlang:monitor(process, ChPid),
-                 State #state { known_senders = dict:store(ChPid, MRef, KS) }
-    end.
+    State #state { known_senders = pmon:monitor(ChPid, KS) }.
 
 local_sender_death(ChPid, State = #state { known_senders = KS }) ->
-    ok = case dict:is_key(ChPid, KS) of
+    ok = case pmon:is_monitored(ChPid, KS) of
              false -> ok;
              true  -> credit_flow:peer_down(ChPid),
                       confirm_sender_death(ChPid)
@@ -628,7 +624,7 @@ confirm_sender_death(Pid) ->
         fun (?MODULE, State = #state { known_senders = KS,
                                        gm            = GM }) ->
                 %% We're running still as a slave
-                ok = case dict:is_key(Pid, KS) of
+                ok = case pmon:is_monitored(KS) of
                          false -> ok;
                          true  -> gm:broadcast(GM, {ensure_monitoring, [Pid]}),
                                   confirm_sender_death(Pid)
@@ -871,21 +867,18 @@ process_instruction({sender_death, ChPid},
                     State = #state { sender_queues = SQ,
                                      msg_id_status = MS,
                                      known_senders = KS }) ->
-    {ok, case dict:find(ChPid, KS) of
-             error ->
-                 State;
-             {ok, MRef} ->
-                 true = erlang:demonitor(MRef),
-                 MS1 = case dict:find(ChPid, SQ) of
-                           error ->
-                               MS;
-                           {ok, {_MQ, PendingCh}} ->
-                               lists:foldl(fun dict:erase/2, MS,
-                                           sets:to_list(PendingCh))
-                       end,
-                 State #state { sender_queues = dict:erase(ChPid, SQ),
-                                msg_id_status = MS1,
-                                known_senders = dict:erase(ChPid, KS) }
+    {ok, case pmon:is_monitored(ChPid, KS) of
+             false -> State;
+             true  -> MS1 = case dict:find(ChPid, SQ) of
+                                error ->
+                                    MS;
+                                {ok, {_MQ, PendingCh}} ->
+                                    lists:foldl(fun dict:erase/2, MS,
+                                                sets:to_list(PendingCh))
+                            end,
+                      State #state { sender_queues = dict:erase(ChPid, SQ),
+                                     msg_id_status = MS1,
+                                     known_senders = pmon:demonitor(ChPid, KS) }
          end};
 process_instruction({length, Length},
                     State = #state { backing_queue = BQ,
