@@ -40,10 +40,10 @@
 
 -ifdef(use_specs).
 
--spec(start_link/1 :: ({'absolute', integer()} | {'mem_relative', float()})
-                      -> rabbit_types:ok_pid_or_error()).
+-type(disk_free_limit() :: (integer() | {'mem_relative', float()})).
+-spec(start_link/1 :: (disk_free_limit()) -> rabbit_types:ok_pid_or_error()).
 -spec(get_disk_free_limit/0 :: () -> integer()).
--spec(set_disk_free_limit/1 :: (integer()) -> 'ok').
+-spec(set_disk_free_limit/1 :: (disk_free_limit()) -> 'ok').
 -spec(get_check_interval/0 :: () -> integer()).
 -spec(set_check_interval/1 :: (integer()) -> 'ok').
 -spec(get_disk_free/0 :: () -> (integer() | 'unknown')).
@@ -79,19 +79,16 @@ start_link(Args) ->
 init([Limit]) ->
     TRef = start_timer(?DEFAULT_DISK_CHECK_INTERVAL),
     State = #state { dir     = dir(),
-                     limit   = Limit,
                      timeout = ?DEFAULT_DISK_CHECK_INTERVAL,
                      timer   = TRef,
                      alarmed = false},
-    {ok, internal_update(State)}.
+    {ok, set_disk_limits(State, Limit)}.
 
 handle_call(get_disk_free_limit, _From, State) ->
-    {reply, State#state.limit, State};
+    {reply, interpret_limit(State#state.limit), State};
 
 handle_call({set_disk_free_limit, Limit}, _From, State) ->
-    State1 = State#state { limit = Limit },
-    error_logger:info_msg("Disk free limit changed to ~p bytes.~n", [Limit]),
-    {reply, ok, internal_update(State1)};
+    {reply, ok, set_disk_limits(State, Limit)};
 
 handle_call(get_check_interval, _From, State) ->
     {reply, State#state.timeout, State};
@@ -128,17 +125,17 @@ code_change(_OldVsn, State, _Extra) ->
 % the partition / drive containing this directory will be monitored
 dir() -> rabbit_mnesia:dir().
 
+set_disk_limits(State, Limit) ->
+    State1 = State#state { limit = Limit },
+    error_logger:info_msg("Disk free limit set to ~pMB~n",
+                          [trunc(interpret_limit(Limit) / 1048576)]),
+    internal_update(State1).
+
 internal_update(State = #state { limit   = Limit,
                                  dir     = Dir,
                                  alarmed = Alarmed}) ->
     CurrentFreeBytes = get_disk_free(Dir),
-    LimitBytes = case Limit of
-                     {absolute, L}     ->
-                          L;
-                     {mem_relative, R} ->
-                          round(R * vm_memory_monitor:get_total_memory())
-                  end,
-error_logger:info_msg("disk monitor comparing ~p and ~p~n",[CurrentFreeBytes,LimitBytes]),
+    LimitBytes = interpret_limit(Limit),
     NewAlarmed = CurrentFreeBytes < LimitBytes,
     case {Alarmed, NewAlarmed} of
         {false, true} ->
@@ -174,6 +171,11 @@ parse_free_win32(CommandResult) ->
     LastLine = lists:last(string:tokens(CommandResult, "\r\n")),
     [_, _Dir, Free, "bytes", "free"] = string:tokens(LastLine, " "),
     list_to_integer(Free).
+
+interpret_limit({mem_relative, R}) ->
+    round(R * vm_memory_monitor:get_total_memory());
+interpret_limit(L) ->
+    L.
 
 emit_update_info(State, CurrentFree, Limit) ->
     error_logger:info_msg(
