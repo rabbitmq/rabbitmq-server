@@ -30,6 +30,7 @@
 -define(KEYS, [os_pid, mem_ets, mem_binary, mem_proc, mem_proc_used,
                mem_atom, mem_atom_used, mem_code, fd_used, fd_total,
                sockets_used, sockets_total, mem_used, mem_limit, mem_alarm,
+               disk_free_limit, disk_free, disk_free_alarm,
                proc_used, proc_total, statistics_level,
                erlang_version, uptime, run_queue, processors, exchange_types,
                auth_mechanisms, applications]).
@@ -134,11 +135,20 @@ find_files_line(["  File " ++ Rest | _T]) ->
 find_files_line([_H | T]) ->
     find_files_line(T).
 
-get_memory_limit() ->
+-define(SAFE_CALL(Fun, NoProcFailResult),
     try
-        vm_memory_monitor:get_memory_limit()
-    catch exit:{noproc, _} -> memory_monitoring_disabled
-    end.
+        Fun
+    catch exit:{noproc, _} -> NoProcFailResult
+    end).
+
+get_memory_limit() -> ?SAFE_CALL(vm_memory_monitor:get_memory_limit(),
+                                 memory_monitoring_disabled).
+
+get_disk_free_limit() -> ?SAFE_CALL(disk_monitor:get_disk_free_limit(),
+                                    disk_free_monitoring_disabled).
+
+get_disk_free() -> ?SAFE_CALL(disk_monitor:get_disk_free(),
+                              disk_free_monitoring_disabled).
 
 %%--------------------------------------------------------------------
 
@@ -181,8 +191,14 @@ i(auth_mechanisms, _State) ->
 i(applications, _State) ->
     [format_application(A) ||
         A <- lists:keysort(1, application:which_applications(infinity))];
-i(mem_alarm, _State) -> lists:member({{vm_memory_high_watermark, node()}, []},
-                                     alarm_handler:get_alarms()).
+i(mem_alarm, _State) -> resource_alarm_set(mem);
+i(disk_free_limit, _State) -> get_disk_free_limit();
+i(disk_free, _State) -> get_disk_free();
+i(disk_free_alarm, _State) -> resource_alarm_set(disk).
+
+resource_alarm_set(Source) ->
+    lists:member({{resource_limit, Source, node()},[]},
+                 alarm_handler:get_alarms()).
 
 list_registry_plugins(Type) ->
     list_registry_plugins(Type, fun(_) -> true end).
