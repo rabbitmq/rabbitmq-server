@@ -10,7 +10,7 @@
              rabbit_binary_generator,
              rabbit_binary_parser,
              rabbit_channel,
-             rabbit_cluster_config_item,
+             rabbit_runtime_parameter,
              rabbit_command_assembler,
              rabbit_exchange_type,
              rabbit_auth_backend,
