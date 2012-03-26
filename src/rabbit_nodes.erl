@@ -39,15 +39,15 @@
 
 names(Hostname) ->
     Self = self(),
-    process_flag(trap_exit, true),
-    Pid = spawn_link(fun () -> Self ! {names, net_adm:names(Hostname)} end),
+    Ref = make_ref(),
+    {Pid, MRef} = spawn_monitor(
+                    fun () -> Self ! {Ref, net_adm:names(Hostname)} end),
     timer:exit_after(?EPMD_TIMEOUT, Pid, timeout),
-    Res = receive
-              {names, Names}        -> Names;
-              {'EXIT', Pid, Reason} -> {error, Reason}
-          end,
-    process_flag(trap_exit, false),
-    Res.
+    receive
+        {Ref, Names}                         -> erlang:demonitor(MRef, [flush]),
+                                                Names;
+        {'DOWN', MRef, process, Pid, Reason} -> {error, Reason}
+    end.
 
 diagnostics(Nodes) ->
     Hosts = lists:usort([element(2, parts(Node)) || Node <- Nodes]),

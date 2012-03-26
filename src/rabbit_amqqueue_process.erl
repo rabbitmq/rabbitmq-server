@@ -24,9 +24,6 @@
 -define(SYNC_INTERVAL,                 25). %% milliseconds
 -define(RAM_DURATION_UPDATE_INTERVAL,  5000).
 
--define(BASE_MESSAGE_PROPERTIES,
-        #message_properties{expiry = undefined, needs_confirming = false}).
-
 -export([start_link/1, info_keys/0]).
 
 -export([init_with_backing_queue_state/7]).
@@ -183,16 +180,13 @@ terminate({shutdown, _} = R, State = #q{backing_queue = BQ}) ->
 terminate(Reason,            State = #q{q             = #amqqueue{name = QName},
                                         backing_queue = BQ}) ->
     %% FIXME: How do we cancel active subscriptions?
-    terminate_shutdown(fun (BQS) ->
-                               rabbit_event:notify(
-                                 queue_deleted, [{pid,  self()},
-                                                 {name, QName}]),
-                               BQS1 = BQ:delete_and_terminate(Reason, BQS),
-                               %% don't care if the internal delete
-                               %% doesn't return 'ok'.
-                               rabbit_amqqueue:internal_delete(qname(State)),
-                               BQS1
-                       end, State).
+    terminate_shutdown(
+      fun (BQS) ->
+              BQS1 = BQ:delete_and_terminate(Reason, BQS),
+              %% don't care if the internal delete doesn't return 'ok'.
+              rabbit_amqqueue:internal_delete(QName, self()),
+              BQS1
+      end, State).
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
@@ -333,12 +327,10 @@ ensure_expiry_timer(State = #q{expires = undefined}) ->
     State;
 ensure_expiry_timer(State = #q{expires = Expires}) ->
     case is_unused(State) of
-        true ->
-            NewState = stop_expiry_timer(State),
-            TRef = erlang:send_after(Expires, self(), maybe_expire),
-            NewState#q{expiry_timer_ref = TRef};
-        false ->
-            State
+        true  -> NewState = stop_expiry_timer(State),
+                 TRef = erlang:send_after(Expires, self(), maybe_expire),
+                 NewState#q{expiry_timer_ref = TRef};
+        false -> State
     end.
 
 ensure_stats_timer(State) ->
@@ -532,15 +524,10 @@ attempt_delivery(Delivery = #delivery{sender     = SenderPid,
         {false, BQS1} ->
             DeliverFun =
                 fun (AckRequired, State1 = #q{backing_queue_state = BQS2}) ->
-                        %% we don't need an expiry here because
-                        %% messages are not being enqueued, so we use
-                        %% an empty message_properties.
-                        {AckTag, BQS3} =
-                            BQ:publish_delivered(
-                              AckRequired, Message,
-                              (?BASE_MESSAGE_PROPERTIES)#message_properties{
-                                needs_confirming = needs_confirming(Confirm)},
-                              SenderPid, BQS2),
+                        Props = message_properties(Confirm, State1),
+                        {AckTag, BQS3} = BQ:publish_delivered(
+                                           AckRequired, Message, Props,
+                                           SenderPid, BQS2),
                         {{Message, false, AckTag}, true,
                          State1#q{backing_queue_state = BQS3}}
                 end,
@@ -567,8 +554,7 @@ deliver_or_enqueue(Delivery = #delivery{message = Message,
         maybe_record_confirm_message(Confirm, State1),
     case Delivered of
         true  -> State2;
-        false -> Props = (message_properties(State)) #message_properties{
-                           needs_confirming = needs_confirming(Confirm)},
+        false -> Props = message_properties(Confirm, State),
                  BQS1 = BQ:publish(Message, Props, SenderPid, BQS),
                  ensure_ttl_timer(State2#q{backing_queue_state = BQS1})
     end.
@@ -696,8 +682,9 @@ discard_delivery(#delivery{sender = SenderPid,
                             backing_queue_state = BQS}) ->
     State#q{backing_queue_state = BQ:discard(Message, SenderPid, BQS)}.
 
-message_properties(#q{ttl=TTL}) ->
-    #message_properties{expiry = calculate_msg_expiry(TTL)}.
+message_properties(Confirm, #q{ttl = TTL}) ->
+    #message_properties{expiry           = calculate_msg_expiry(TTL),
+                        needs_confirming = needs_confirming(Confirm)}.
 
 calculate_msg_expiry(undefined) -> undefined;
 calculate_msg_expiry(TTL)       -> now_micros() + (TTL * 1000).
@@ -735,10 +722,9 @@ dead_letter_fun(Reason, _State) ->
 
 dead_letter_msg(Msg, AckTag, Reason, State = #q{dlx = DLX}) ->
     case rabbit_exchange:lookup(DLX) of
-        {error, not_found} ->
-            noreply(State);
-        _ ->
-            dead_letter_msg_existing_dlx(Msg, AckTag, Reason, State)
+        {error, not_found} -> noreply(State);
+        _                  -> dead_letter_msg_existing_dlx(Msg, AckTag, Reason,
+                                                           State)
     end.
 
 dead_letter_msg_existing_dlx(Msg, AckTag, Reason,
@@ -755,7 +741,7 @@ dead_letter_msg_existing_dlx(Msg, AckTag, Reason,
     State1 = lists:foldl(fun monitor_queue/2, State, QPids),
     State2 = State1#q{publish_seqno = MsgSeqNo + 1},
     case QPids of
-        [] -> {_, BQS1} = BQ:ack([AckTag], BQS),
+        [] -> {_Guids, BQS1} = BQ:ack([AckTag], BQS),
               cleanup_after_confirm(State2#q{backing_queue_state = BQS1});
         _  -> State3 =
                   lists:foldl(
@@ -792,11 +778,12 @@ handle_queue_down(QPid, Reason, State = #q{queue_monitors = QMons,
         error ->
             noreply(State);
         {ok, _} ->
-            #resource{name = QName} = qname(State),
-            rabbit_log:info("DLQ ~p (for ~p) died~n", [QPid, QName]),
+            rabbit_log:info("DLQ ~p (for ~s) died~n",
+                            [QPid, rabbit_misc:rs(qname(State))]),
+            State1 = State#q{queue_monitors = dict:erase(QPid, QMons)},
             case gb_trees:lookup(QPid, UQM) of
                 none ->
-                    noreply(State);
+                    noreply(State1);
                 {value, MsgSeqNosSet} ->
                     case rabbit_misc:is_abnormal_termination(Reason) of
                         true  -> rabbit_log:warning(
@@ -804,9 +791,7 @@ handle_queue_down(QPid, Reason, State = #q{queue_monitors = QMons,
                                    [gb_sets:size(MsgSeqNosSet)]);
                         false -> ok
                     end,
-                    handle_confirm(gb_sets:to_list(MsgSeqNosSet), QPid,
-                                   State#q{queue_monitors =
-                                               dict:erase(QPid, QMons)})
+                    handle_confirm(gb_sets:to_list(MsgSeqNosSet), QPid, State1)
             end
     end.
 
@@ -1285,14 +1270,14 @@ handle_cast({ack, AckTags, ChPid}, State) ->
 handle_cast({reject, AckTags, Requeue, ChPid}, State) ->
     noreply(subtract_acks(
               ChPid, AckTags, State,
-              fun (State1 = #q{backing_queue       = BQ,
-                               backing_queue_state = BQS}) ->
-                      case Requeue of
-                          true  -> requeue_and_run(AckTags, State1);
-                          false -> Fun = dead_letter_fun(rejected, State),
+              case Requeue of
+                  true  -> fun (State1) -> requeue_and_run(AckTags, State1) end;
+                  false -> Fun = dead_letter_fun(rejected, State),
+                           fun (State1 = #q{backing_queue       = BQ,
+                                            backing_queue_state = BQS}) ->
                                    BQS1 = BQ:fold(Fun, BQS, AckTags),
                                    State1#q{backing_queue_state = BQS1}
-                      end
+                           end
               end));
 
 handle_cast(delete_immediately, State) ->
