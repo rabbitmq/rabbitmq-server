@@ -2551,7 +2551,7 @@ test_queue_recover() ->
               {{_Msg1, true, _AckTag1, CountMinusOne}, VQ2} =
                   rabbit_variable_queue:fetch(true, VQ1),
               _VQ3 = rabbit_variable_queue:delete_and_terminate(shutdown, VQ2),
-              rabbit_amqqueue:internal_delete(QName)
+              rabbit_amqqueue:internal_delete(QName, QPid1)
       end),
     passed.
 
