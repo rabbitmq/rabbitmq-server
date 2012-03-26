@@ -47,11 +47,11 @@ start() ->
     rabbit_sup:start_restartable_child(vm_memory_monitor, [MemoryWatermark]),
 
     {ok, DiskLimit} = application:get_env(disk_free_limit),
-    rabbit_sup:start_restartable_child(disk_monitor, [DiskLimit]),
-    case disk_monitor:get_disk_free() of
+    rabbit_sup:start_restartable_child(rabbit_disk_monitor, [DiskLimit]),
+    case rabbit_disk_monitor:get_disk_free() of
         Number when is_integer(Number) -> ok;
         _ -> error_logger:warning_msg("Disabling disk free space monitoring~n"),
-             ok = rabbit_sup:stop_child(disk_monitor_sup)
+             ok = rabbit_sup:stop_child(rabbit_disk_monitor_sup)
     end,
     ok.
 

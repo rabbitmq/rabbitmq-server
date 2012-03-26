@@ -14,7 +14,7 @@
 %% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
--module(disk_monitor).
+-module(rabbit_disk_monitor).
 
 -behaviour(gen_server).
 
