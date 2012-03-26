@@ -144,10 +144,10 @@ find_files_line([_H | T]) ->
 get_memory_limit() -> ?SAFE_CALL(vm_memory_monitor:get_memory_limit(),
                                  memory_monitoring_disabled).
 
-get_disk_free_limit() -> ?SAFE_CALL(disk_monitor:get_disk_free_limit(),
+get_disk_free_limit() -> ?SAFE_CALL(rabbit_disk_monitor:get_disk_free_limit(),
                                     disk_free_monitoring_disabled).
 
-get_disk_free() -> ?SAFE_CALL(disk_monitor:get_disk_free(),
+get_disk_free() -> ?SAFE_CALL(rabbit_disk_monitor:get_disk_free(),
                               disk_free_monitoring_disabled).
 
 %%--------------------------------------------------------------------
