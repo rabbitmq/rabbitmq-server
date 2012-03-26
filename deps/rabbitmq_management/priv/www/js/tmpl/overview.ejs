@@ -63,13 +63,13 @@
        <%= link_node(node.name) %>
      </td>
 <% if (!node.running) { %>
-     <td class="status" colspan="6">
+     <td class="status" colspan="7">
        <div class="red">
          Node not running
        </div>
      </td>
 <% } else if (node.external_stats_not_running) { %>
-     <td class="status" colspan="6">
+     <td class="status" colspan="7">
        <div class="red">
          Could not contact management agent
        </div>
