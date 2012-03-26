@@ -10,11 +10,11 @@ class TestConnectOptions(base.BaseTest):
         self.conn.disconnect()
         test_util.enable_implicit_connect()
         listener = base.WaitableListener()
-        new_conn = stomp.Connection(user="", passcode="")
+        new_conn = stomp.Connection()
         new_conn.set_listener('', listener)
 
         new_conn.start() # not going to issue connect
-        new_conn.subscribe(destination="/topic/implicit", receipt='implicit')
+        new_conn.subscribe(destination="/topic/implicit", id='sub_implicit', receipt='implicit')
 
         try:
             self.assertTrue(listener.await(5))
@@ -28,10 +28,15 @@ class TestConnectOptions(base.BaseTest):
     def test_default_user(self):
         ''' Default user connection '''
         self.conn.disconnect()
-        new_conn = stomp.Connection(user="", passcode="")
+        test_util.enable_default_user()
+        listener = base.WaitableListener()
+        new_conn = stomp.Connection()
+        new_conn.set_listener('', listener)
         new_conn.start()
         new_conn.connect()
         try:
+            self.assertFalse(listener.await(3)) # no error back
             self.assertTrue(new_conn.is_connected())
         finally:
             new_conn.disconnect()
+            test_util.disable_default_user()
