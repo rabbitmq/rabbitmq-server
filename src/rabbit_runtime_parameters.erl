@@ -18,7 +18,9 @@
 
 -include("rabbit.hrl").
 
--export([set/3, clear/2, list/0, lookup/3, info_keys/0]).
+-export([set/3, clear/2, list/0, list_formatted/0, lookup/3, info_keys/0]).
+
+-import(rabbit_misc, [pget/2, pset/3]).
 
 -define(TABLE, rabbit_runtime_parameters).
 
@@ -46,8 +48,11 @@ list() ->
     All = rabbit_misc:dirty_read_all(?TABLE),
     [[{app_name, AppName},
       {key,      Key},
-      {value,    format(Value)}] || #runtime_parameters{key = {AppName, Key},
-                                                        value = Value} <- All].
+      {value,    Value}] || #runtime_parameters{key = {AppName, Key},
+                                                value = Value} <- All].
+
+list_formatted() ->
+    [pset(value, format(pget(value, P)), P) || P <- list()].
 
 lookup(AppName, Key, Default) ->
     case mnesia:dirty_read(?TABLE, {AppName, Key}) of

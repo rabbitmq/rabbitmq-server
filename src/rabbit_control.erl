@@ -280,8 +280,9 @@ action(clear_parameter, Node, [AppName, Key], _Opts, Inform) ->
 
 action(list_runtime_parameters, Node, Args = [], _Opts, Inform) ->
     Inform("Listing runtime parameters", []),
-    display_info_list(rpc_call(Node, rabbit_runtime_parameters, list, Args),
-                      rabbit_runtime_parameters:info_keys());
+    display_info_list(
+      rpc_call(Node, rabbit_runtime_parameters, list_formatted, Args),
+      rabbit_runtime_parameters:info_keys());
 
 action(list_queues, Node, Args, Opts, Inform) ->
     Inform("Listing queues", []),
