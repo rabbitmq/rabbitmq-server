@@ -28,7 +28,8 @@ import socket
 
 LISTABLE = {'connections': False, 'channels': False, 'exchanges': True,
             'queues': True, 'bindings': True, 'users': False,
-            'vhosts': False, 'permissions': False, 'nodes': False}
+            'vhosts': False, 'permissions': False, 'nodes': False,
+            'parameters': False}
 
 SHOWABLE = {'overview': False}
 

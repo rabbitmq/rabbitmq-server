@@ -17,7 +17,7 @@
 -module(rabbit_mgmt_format).
 
 -export([format/2, print/2, remove/1, ip/1, ipb/1, amqp_table/1, tuple/1]).
--export([timestamp/1, timestamp_ms/1, strip_pids/1]).
+-export([parameter/1, timestamp/1, timestamp_ms/1, strip_pids/1]).
 -export([node_from_pid/1, protocol/1, resource/1, queue/1]).
 -export([exchange/1, user/1, internal_user/1, binding/1, url/2]).
 -export([pack_binding_props/2, unpack_binding_props/1, tokenise/1]).
@@ -101,6 +101,25 @@ utf8_safe(V) ->
             Enc = base64:encode(V),
             <<"Invalid UTF-8, base64 is: ", Enc/binary>>
     end.
+
+parameter(L = [{_, _} | _]) ->
+    {struct, [{K, parameter(V)} || {K, V} <- L]};
+parameter(L) when is_list(L) ->
+    case list_looks_like_string(L) of
+        true  -> list_to_binary(L);
+        false -> [parameter(I) || I <- L]
+    end;
+parameter(B) when is_binary(B) ->
+    B;
+parameter(N) when is_number(N) ->
+    N.
+
+list_looks_like_string([]) ->
+    true; %% TODO hmmmmmmmm
+list_looks_like_string([N | Rest]) when is_integer(N) ->
+    list_looks_like_string(Rest);
+list_looks_like_string(_) ->
+    false.
 
 tuple(unknown)                    -> unknown;
 tuple(Tuple) when is_tuple(Tuple) -> [tuple(E) || E <- tuple_to_list(Tuple)];
