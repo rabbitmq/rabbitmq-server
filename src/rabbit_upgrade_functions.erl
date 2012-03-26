@@ -36,7 +36,7 @@
 -rabbit_upgrade({exchange_scratch,      mnesia, [trace_exchanges]}).
 -rabbit_upgrade({mirrored_supervisor,   mnesia, []}).
 -rabbit_upgrade({topic_trie_node,       mnesia, []}).
--rabbit_upgrade({cluster_config,        mnesia, []}).
+-rabbit_upgrade({runtime_parameters,    mnesia, []}).
 
 %% -------------------------------------------------------------------
 
@@ -57,7 +57,7 @@
 -spec(exchange_scratch/0      :: () -> 'ok').
 -spec(mirrored_supervisor/0   :: () -> 'ok').
 -spec(topic_trie_node/0       :: () -> 'ok').
--spec(cluster_config/0        :: () -> 'ok').
+-spec(runtime_parameters/0    :: () -> 'ok').
 
 -endif.
 
@@ -187,9 +187,9 @@ topic_trie_node() ->
             {attributes, [trie_node, edge_count, binding_count]},
             {type, ordered_set}]).
 
-cluster_config() ->
-    create(rabbit_cluster_config,
-           [{record_name, cluster_config},
+runtime_parameters() ->
+    create(rabbit_runtime_parameters,
+           [{record_name, runtime_parameters},
             {attributes, [key, value]},
             {disc_copies, [node()]}]).
 

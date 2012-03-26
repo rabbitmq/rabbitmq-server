@@ -14,7 +14,7 @@
 %% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
--module(rabbit_cluster_config_item).
+-module(rabbit_runtime_parameter).
 
 -export([behaviour_info/1]).
 

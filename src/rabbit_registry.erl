@@ -95,9 +95,9 @@ sanity_check_module(ClassModule, Module) ->
         true                  -> ok
     end.
 
-class_module(exchange)       -> rabbit_exchange_type;
-class_module(auth_mechanism) -> rabbit_auth_mechanism;
-class_module(cluster_config) -> rabbit_cluster_config_item.
+class_module(exchange)          -> rabbit_exchange_type;
+class_module(auth_mechanism)    -> rabbit_auth_mechanism;
+class_module(runtime_parameter) -> rabbit_runtime_parameter.
 
 %%---------------------------------------------------------------------------
 

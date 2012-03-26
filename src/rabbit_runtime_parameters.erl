@@ -14,13 +14,13 @@
 %% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
--module(rabbit_cluster_config).
+-module(rabbit_runtime_parameters).
 
 -include("rabbit.hrl").
 
 -export([set/3, clear/2, list/0, lookup/3, info_keys/0]).
 
--define(TABLE, rabbit_cluster_config).
+-define(TABLE, rabbit_runtime_parameters).
 
 %%---------------------------------------------------------------------------
 
@@ -46,13 +46,13 @@ list() ->
     All = rabbit_misc:dirty_read_all(?TABLE),
     [[{app_name, AppName},
       {key,      Key},
-      {value,    format(Value)}] || #cluster_config{key = {AppName, Key},
-                                                    value = Value} <- All].
+      {value,    format(Value)}] || #runtime_parameters{key = {AppName, Key},
+                                                        value = Value} <- All].
 
 lookup(AppName, Key, Default) ->
     case mnesia:dirty_read(?TABLE, {AppName, Key}) of
         []  -> lookup_missing(AppName, Key, Default);
-        [R] -> R#cluster_config.value
+        [R] -> R#runtime_parameters.value
     end.
 
 lookup_missing(AppName, Key, Default) ->
@@ -61,19 +61,19 @@ lookup_missing(AppName, Key, Default) ->
               case mnesia:read(?TABLE, {AppName, Key}) of
                   []  -> mnesia:write(?TABLE, c(AppName, Key, Default), write),
                          Default;
-                  [R] -> R#cluster_config.value
+                  [R] -> R#runtime_parameters.value
               end
       end).
 
-c(AppName, Key, Default) -> #cluster_config{key = {AppName, Key},
-                                            value = Default}.
+c(AppName, Key, Default) -> #runtime_parameters{key = {AppName, Key},
+                                                value = Default}.
 
 info_keys() -> [app_name, key, value].
 
 %%---------------------------------------------------------------------------
 
 lookup_app(App) ->
-    case rabbit_registry:lookup_module(cluster_config, App) of
+    case rabbit_registry:lookup_module(runtime_parameter, App) of
         {error, not_found} -> exit({application_not_found, App});
         {ok, Module}       -> Module
     end.
