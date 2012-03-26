@@ -27,7 +27,8 @@
 %%----------------------------------------------------------------------------
 
 local_params(VHost) ->
-    U = rabbit_cluster_config:lookup(federation, local_username, <<"guest">>),
+    U = rabbit_runtime_parameters:lookup(
+          federation, local_username, <<"guest">>),
     #amqp_params_direct{username     = U,
                         virtual_host = VHost}.
 

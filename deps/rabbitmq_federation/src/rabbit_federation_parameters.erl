@@ -14,17 +14,17 @@
 %% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
--module(rabbit_federation_config).
--behaviour(rabbit_cluster_config_item).
+-module(rabbit_federation_parameters).
+-behaviour(rabbit_runtime_parameter).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 -export([validate/2, notify/2]).
 
 -rabbit_boot_step({?MODULE,
-                   [{description, "federation config"},
+                   [{description, "federation parameters"},
                     {mfa, {rabbit_registry, register,
-                           [cluster_config, <<"federation">>, ?MODULE]}},
+                           [runtime_parameter, <<"federation">>, ?MODULE]}},
                     {requires, rabbit_registry},
                     {enables, recovery}]}).
 

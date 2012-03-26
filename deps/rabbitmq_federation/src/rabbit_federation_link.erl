@@ -507,7 +507,8 @@ upstream_exchange_name(XNameBin, VHost, DownXName, Suffix) ->
     <<Name/binary, " ", Suffix/binary>>.
 
 local_nodename() ->
-    Explicit = rabbit_cluster_config:lookup(federation, local_nodename, null),
+    Explicit = rabbit_runtime_parameters:lookup(
+                 federation, local_nodename, null),
     case Explicit of
         null -> {ID, _} = rabbit_nodes:parts(node()),
                 {ok, Host} = inet:gethostname(),
