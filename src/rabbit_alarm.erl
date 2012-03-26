@@ -48,11 +48,14 @@ start() ->
 
     {ok, DiskLimit} = application:get_env(disk_free_limit),
     rabbit_sup:start_restartable_child(rabbit_disk_monitor, [DiskLimit]),
-    case {vm_memory_monitor:get_total_memory(), rabbit_disk_monitor:get_disk_free()} of
-        {N1, N2} when is_integer(N1), is_integer(N2) -> ok;
-        _ -> error_logger:warning_msg("Disabling disk free space monitoring "
-                                      "on unsupported platform~n"),
-             ok = rabbit_sup:stop_child(rabbit_disk_monitor_sup)
+    case {vm_memory_monitor:get_total_memory(),
+          rabbit_disk_monitor:get_disk_free()} of
+        {N1, N2} when is_integer(N1), is_integer(N2) ->
+            ok;
+        _ ->
+            error_logger:warning_msg("Disabling disk free space monitoring "
+                                     "on unsupported platform~n"),
+            ok = rabbit_sup:stop_child(rabbit_disk_monitor_sup)
     end,
     ok.
 
@@ -104,7 +107,7 @@ handle_event({node_up, Node}, State) ->
     {ok, State};
 
 handle_event({node_down, Node}, State) ->
-    {ok, maybe_alert(fun dict_unappend_all/2, Node, [], State)};
+    {ok, maybe_alert(fun dict_unappend_all/3, Node, [], State)};
 
 handle_event({register, Pid, HighMemMFA}, State) ->
     {ok, internal_register(Pid, HighMemMFA, State)};
@@ -127,7 +130,7 @@ code_change(_OldVsn, State, _Extra) ->
 
 %%----------------------------------------------------------------------------
 
-dict_unappend_all(Key, Dict) ->
+dict_unappend_all(Key, _Val, Dict) ->
     dict:erase(Key, Dict).
 
 dict_unappend(Key, Val, Dict) ->
