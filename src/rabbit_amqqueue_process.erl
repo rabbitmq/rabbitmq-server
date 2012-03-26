@@ -186,8 +186,7 @@ terminate(Reason,            State = #q{q             = #amqqueue{name = QName},
     terminate_shutdown(
       fun (BQS) ->
               BQS1 = BQ:delete_and_terminate(Reason, BQS),
-              %% don't care if the internal delete
-              %% doesn't return 'ok'.
+              %% don't care if the internal delete doesn't return 'ok'.
               rabbit_amqqueue:internal_delete(QName, self()),
               BQS1
       end, State).
