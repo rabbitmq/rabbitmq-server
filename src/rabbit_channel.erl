@@ -1411,11 +1411,10 @@ process_routing_result(routed,    QPids, XName,  MsgSeqNo,   _, State) ->
 send_nacks([], State) ->
     State;
 send_nacks(MXs, State = #ch{tx_status = none}) ->
-    MsgSeqNos = [ MsgSeqNo || {MsgSeqNo, _} <- MXs ],
-    coalesce_and_send(MsgSeqNos,
+    coalesce_and_send([MsgSeqNo || {MsgSeqNo, _} <- MXs],
                       fun(MsgSeqNo, Multiple) ->
                               #'basic.nack'{delivery_tag = MsgSeqNo,
-                                            multiple = Multiple}
+                                            multiple     = Multiple}
                       end, State);
 send_nacks(_, State) ->
     maybe_complete_tx(State#ch{tx_status = failed}).

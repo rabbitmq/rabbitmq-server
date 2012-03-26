@@ -96,7 +96,10 @@ record_desired_for_scope(Scope) ->
 upgrades_required(Scope) ->
     case recorded_for_scope(Scope) of
         {error, enoent} ->
-            {error, version_not_available};
+            case filelib:is_file(rabbit_guid:filename()) of
+                false -> {error, starting_from_scratch};
+                true  -> {error, version_not_available}
+            end;
         {ok, CurrentHeads} ->
             with_upgrade_graph(
               fun (G) ->
