@@ -18,7 +18,8 @@
 
 -include("rabbit.hrl").
 
--export([set/3, clear/2, list/0, list_formatted/0, lookup/3, info_keys/0]).
+-export([parse/1, set/3, clear/2, list/0, list_formatted/0, lookup/2, value/3,
+         info_keys/0]).
 
 -import(rabbit_misc, [pget/2, pset/3]).
 
@@ -26,9 +27,8 @@
 
 %%---------------------------------------------------------------------------
 
-set(AppName, Key, Value) ->
+set(AppName, Key, Term) ->
     Module = lookup_app(AppName),
-    Term = parse(Value),
     validate(Term),
     Module:validate(Key, Term),
     ok = rabbit_misc:execute_mnesia_transaction(
@@ -45,19 +45,26 @@ clear(AppName, Key) ->
       end).
 
 list() ->
-    All = rabbit_misc:dirty_read_all(?TABLE),
-    [[{app_name, AppName},
-      {key,      Key},
-      {value,    Value}] || #runtime_parameters{key = {AppName, Key},
-                                                value = Value} <- All].
+    [p(Param) || Param <- rabbit_misc:dirty_read_all(?TABLE)].
 
 list_formatted() ->
     [pset(value, format(pget(value, P)), P) || P <- list()].
 
-lookup(AppName, Key, Default) ->
+lookup(AppName, Key) ->
+    case lookup0(AppName, Key, rabbit_misc:const(not_found)) of
+        not_found -> not_found;
+        Params    -> p(Params)
+    end.
+
+value(AppName, Key, Default) ->
+    Params = lookup0(AppName, Key,
+                     fun () -> lookup_missing(AppName, Key, Default) end),
+    Params#runtime_parameters.value.
+
+lookup0(AppName, Key, DefaultFun) ->
     case mnesia:dirty_read(?TABLE, {AppName, Key}) of
-        []  -> lookup_missing(AppName, Key, Default);
-        [R] -> R#runtime_parameters.value
+        []  -> DefaultFun();
+        [R] -> R
     end.
 
 lookup_missing(AppName, Key, Default) ->
@@ -66,12 +73,17 @@ lookup_missing(AppName, Key, Default) ->
               case mnesia:read(?TABLE, {AppName, Key}) of
                   []  -> mnesia:write(?TABLE, c(AppName, Key, Default), write),
                          Default;
-                  [R] -> R#runtime_parameters.value
+                  [R] -> R
               end
       end).
 
 c(AppName, Key, Default) -> #runtime_parameters{key = {AppName, Key},
                                                 value = Default}.
+
+p(#runtime_parameters{key = {AppName, Key}, value = Value}) ->
+    [{app_name, AppName},
+     {key,      Key},
+     {value,    Value}].
 
 info_keys() -> [app_name, key, value].
 
@@ -120,10 +132,8 @@ validate(A) when is_atom(A)                   -> exit({non_bool_atom, A});
 validate(N) when is_number(N)                 -> ok;
 validate(B) when is_binary(B)                 -> ok.
 
-validate_proplist([])                              -> ok;
-validate_proplist([{K, V} | Rest]) when is_atom(K) -> validate(V),
-                                                      validate_proplist(Rest);
-validate_proplist([{K, V} | Rest]) when is_list(K) -> validate(V),
-                                                      validate_proplist(Rest);
-validate_proplist([{K, _V} | _Rest])               -> exit({bad_key, K});
-validate_proplist([H | _Rest])                     -> exit({not_two_tuple, H}).
+validate_proplist([])                                -> ok;
+validate_proplist([{K, V} | Rest]) when is_binary(K) -> validate(V),
+                                                        validate_proplist(Rest);
+validate_proplist([{K, _V} | _Rest])                 -> exit({bad_key, K});
+validate_proplist([H | _Rest])                       -> exit({not_two_tuple,H}).
