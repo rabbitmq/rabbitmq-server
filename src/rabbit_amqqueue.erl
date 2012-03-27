@@ -330,20 +330,18 @@ assert_args_equivalence(#amqqueue{name = QueueName, arguments = Args},
       [<<"x-expires">>, <<"x-message-ttl">>, <<"x-ha-policy">>]).
 
 check_declare_arguments(QueueName, Args) ->
+    Checks = [{<<"x-expires">>,                 fun check_integer_argument/2},
+              {<<"x-message-ttl">>,             fun check_integer_argument/2},
+              {<<"x-ha-policy">>,               fun check_ha_policy_argument/2},
+              {<<"x-dead-letter-exchange">>,    fun check_string_argument/2},
+              {<<"x-dead-letter-routing-key">>, fun check_dlxrk_argument/2}],
     [case Fun(rabbit_misc:table_lookup(Args, Key), Args) of
          ok             -> ok;
          {error, Error} -> rabbit_misc:protocol_error(
                              precondition_failed,
                              "invalid arg '~s' for ~s: ~255p",
                              [Key, rabbit_misc:rs(QueueName), Error])
-     end ||
-        {Key, Fun} <-
-                [{<<"x-expires">>,     fun check_integer_argument/2},
-                 {<<"x-message-ttl">>, fun check_integer_argument/2},
-                 {<<"x-ha-policy">>,   fun check_ha_policy_argument/2},
-                 {<<"x-dead-letter-exchange">>, fun check_string_argument/2},
-                 {<<"x-dead-letter-routing-key">>,
-                  fun check_dlxrk_argument/2}]],
+     end || {Key, Fun} <- Checks],
     ok.
 
 check_string_argument(undefined, _Args) ->
