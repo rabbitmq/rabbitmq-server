@@ -1,0 +1,129 @@
+<h1>Federation</h1>
+<div class="section-hidden">
+  <h2>Running links</h2>
+  <div class="hider updatable">
+<% if (links.length > 0) { %>
+<table class="list">
+ <thead>
+  <tr>
+    <th>Connection</th>
+<% if (vhosts_interesting) { %>
+    <th>Virtual Host</th>
+<% } %>
+    <th>Exchange</th>
+<% if (nodes_interesting) { %>
+    <th>Node</th>
+<% } %>
+    <th>State</th>
+    <th>Inbound message rate</th>
+    <th>Last changed</th>
+  </tr>
+ </thead>
+ <tbody>
+<%
+ for (var i = 0; i < links.length; i++) {
+    var link = links[i];
+%>
+   <tr<%= alt_rows(i)%>>
+    <td>
+      <%= fmt_string(link.connection) %>
+      <% if (link.exchange != link.upstream_exchange) { %>
+      <sub><%= fmt_string(link.upstream_exchange) %></sub>
+      <% } %>
+    </td>
+<% if (vhosts_interesting) { %>
+    <td><%= fmt_string(link.vhost) %></td>
+<% } %>
+    <td><%= link_exchange(link.vhost, link.exchange) %></td>
+<% if (nodes_interesting) { %>
+    <td><%= fmt_string(link.node) %></td>
+<% } %>
+<% if (link.error) { %>
+    <td class="status">
+       <div class="red"><%= link.status %></div>
+    </td>
+    <td></td>
+    <td><%= link.timestamp %></td>
+  </tr>
+  <tr>
+    <td colspan="7">
+      <pre><%= fmt_string(link.error) %></pre>
+    </td>
+  </tr>
+<% } else { %>
+    <td class="status">
+       <div class="green"><%= link.status %></div>
+    </td>
+    <td class="r">
+      <% if (link.local_channel) { %>
+        <%= fmt_rate(link.local_channel.message_stats, 'confirm') %>
+      <% } %>
+    </td>
+    <td><%= link.timestamp %></td>
+  </tr>
+<% } %>
+  <% } %>
+ </tbody>
+</table>
+<% } else { %>
+  <p>... no links ...</p>
+<% } %>
+</div>
+</div>
+<div class="section">
+  <h2>Connections</h2>
+  <div class="hider">
+    <div class="updatable">
+
+<% if (connections.length > 0) { %>
+<table class="list">
+ <thead>
+  <tr>
+    <th>Name</th>
+    <th>Host</th>
+    <th>Expiry</th>
+  </tr>
+ </thead>
+ <tbody>
+<%
+ for (var i = 0; i < connections.length; i++) {
+    var connection = connections[i];
+%>
+   <tr<%= alt_rows(i)%>>
+     <td><%= link_fed_conn(connection.key) %></td>
+     <td><%= connection.value.host %></td>
+     <td><%= connection.value.expires %></td>
+   </tr>
+<% } %>
+ </tbody>
+</table>
+<% } else { %>
+  <p>... no connections ...</p>
+<% } %>
+    </div>
+    <h3>Add a new connection</h3>
+
+    <form action="#/fed-parameters" method="put">
+      <input type="hidden" name="app_name" value="federation_connection"/>
+      <table class="form">
+        <tr>
+          <th><label>Name:</label></th>
+          <td><input type="text" name="key"/><span class="mand">*</span></td>
+        </tr>
+        <tr>
+          <th><label>Host:</label></th>
+          <td><input type="text" name="host"/><span class="mand">*</span></td>
+        </tr>
+        <tr>
+          <th><label>Expires:</label></th>
+          <td><input type="text" name="expires"/> ms</td>
+        </tr>
+      </table>
+      <input type="submit" value="Add connection"/>
+    </form>
+      <p>
+        TODO: add all connection parameters. I don't want to do that
+        before bug 24695
+      </p>
+  </div>
+</div>
