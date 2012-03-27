@@ -28,7 +28,7 @@
 
 local_params(VHost) ->
     U = rabbit_runtime_parameters:value(
-          federation, <<"local_username">>, <<"guest">>),
+          <<"federation">>, <<"local_username">>, <<"guest">>),
     #amqp_params_direct{username     = U,
                         virtual_host = VHost}.
 

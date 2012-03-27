@@ -57,12 +57,13 @@ to_string(#upstream{params   = #amqp_params_network{host         = H,
 print(Fmt, Args) -> iolist_to_binary(io_lib:format(Fmt, Args)).
 
 from_set(<<"all">>, X) ->
-    Connections = rabbit_runtime_parameters:list(federation_connection),
+    Connections = rabbit_runtime_parameters:list(<<"federation_connection">>),
     Set = [[{<<"connection">>, pget(key, C)}] || C <- Connections],
     from_set_contents(Set, X);
 
 from_set(SetName, X) ->
-    case rabbit_runtime_parameters:value(federation_upstream_set, SetName) of
+    case rabbit_runtime_parameters:value(
+           <<"federation_upstream_set">>, SetName) of
         undefined -> {error, set_not_found};
         Set       -> from_set_contents(Set, X)
     end.
@@ -80,7 +81,7 @@ from_props(Upst, DefaultXNameBin, DefaultVHost) ->
     case bget(connection, Upst) of
         undefined -> {error, no_connection_name};
         ConnName  -> case rabbit_runtime_parameters:value(
-                            federation_connection, ConnName) of
+                            <<"federation_connection">>, ConnName) of
                          not_found  -> {error, {no_connection, ConnName}};
                          Conn       -> from_props_connection(
                                          Upst, ConnName, Conn, DefaultXNameBin,
