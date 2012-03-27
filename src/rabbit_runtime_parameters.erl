@@ -39,10 +39,13 @@ set(AppName, Key, Term) ->
     ok.
 
 clear(AppName, Key) ->
-    rabbit_misc:execute_mnesia_transaction(
-      fun () ->
-              ok = mnesia:delete(?TABLE, {AppName, Key}, write)
-      end).
+    Module = lookup_app(AppName),
+    ok = rabbit_misc:execute_mnesia_transaction(
+           fun () ->
+                   ok = mnesia:delete(?TABLE, {AppName, Key}, write)
+           end),
+    Module:notify_clear(AppName, Key),
+    ok.
 
 list() ->
     [p(P) || P <- rabbit_misc:dirty_read_all(?TABLE)].
@@ -55,7 +58,7 @@ list_formatted() ->
     [pset(value, format(pget(value, P)), P) || P <- list()].
 
 lookup(AppName, Key) ->
-    case value(AppName, Key) of
+    case lookup0(AppName, Key, rabbit_misc:const(not_found)) of
         not_found -> not_found;
         Params    -> p(Params)
     end.
