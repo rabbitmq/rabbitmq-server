@@ -103,7 +103,8 @@ info_keys() -> [app_name, key, value].
 %%---------------------------------------------------------------------------
 
 lookup_app(App) ->
-    case rabbit_registry:lookup_module(runtime_parameter, App) of
+    case rabbit_registry:lookup_module(
+           runtime_parameter, list_to_atom(binary_to_list(App))) of
         {error, not_found} -> exit({application_not_found, App});
         {ok, Module}       -> Module
     end.
