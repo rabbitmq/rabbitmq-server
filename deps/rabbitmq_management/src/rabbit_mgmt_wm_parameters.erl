@@ -45,8 +45,8 @@ is_authorized(ReqData, Context) ->
 %%--------------------------------------------------------------------
 
 parameters(ReqData) ->
-    case rabbit_mgmt_util:id(application, ReqData) of
-        none -> [rabbit_mgmt_format:parameter(P) ||
-                    P <- rabbit_runtime_parameters:list()];
-        _    -> exit(not_yet_implemented)
-    end.
+    [rabbit_mgmt_format:parameter(P) ||
+        P <- case rabbit_mgmt_util:id(application, ReqData) of
+                 none -> rabbit_runtime_parameters:list();
+                 Name -> rabbit_runtime_parameters:list(Name)
+             end].
