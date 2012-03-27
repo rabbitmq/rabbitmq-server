@@ -271,7 +271,7 @@ action(set_parameter, Node, [AppName, Key, Value], _Opts, Inform) ->
     Inform("Setting runtime parameter ~p for app ~p to ~p",
            [Key, AppName, Value]),
     rpc_call(Node, rabbit_runtime_parameters, set,
-             [list_to_atom(AppName), list_to_atom(Key),
+             [list_to_atom(AppName), list_to_binary(Key),
               rabbit_runtime_parameters:parse(Value)]);
 
 action(clear_parameter, Node, [AppName, Key], _Opts, Inform) ->

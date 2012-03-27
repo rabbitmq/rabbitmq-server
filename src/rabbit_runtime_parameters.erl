@@ -18,8 +18,8 @@
 
 -include("rabbit.hrl").
 
--export([parse/1, set/3, clear/2, list/0, list_formatted/0, lookup/2, value/3,
-         info_keys/0]).
+-export([parse/1, set/3, clear/2, list/0, list_formatted/0, lookup/2, value/2,
+         value/3, info_keys/0]).
 
 -import(rabbit_misc, [pget/2, pset/3]).
 
@@ -30,12 +30,12 @@
 set(AppName, Key, Term) ->
     Module = lookup_app(AppName),
     validate(Term),
-    Module:validate(Key, Term),
+    Module:validate(AppName, Key, Term),
     ok = rabbit_misc:execute_mnesia_transaction(
            fun () ->
                    ok = mnesia:write(?TABLE, c(AppName, Key, Term), write)
            end),
-    Module:notify(Key, Term),
+    Module:notify(AppName, Key, Term),
     ok.
 
 clear(AppName, Key) ->
@@ -51,9 +51,15 @@ list_formatted() ->
     [pset(value, format(pget(value, P)), P) || P <- list()].
 
 lookup(AppName, Key) ->
-    case lookup0(AppName, Key, rabbit_misc:const(not_found)) of
+    case value(AppName, Key) of
         not_found -> not_found;
         Params    -> p(Params)
+    end.
+
+value(AppName, Key) ->
+    case lookup0(AppName, Key, rabbit_misc:const(not_found)) of
+        not_found -> not_found;
+        Params    -> Params#runtime_parameters.value
     end.
 
 value(AppName, Key, Default) ->
