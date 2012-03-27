@@ -355,13 +355,12 @@ check_string_argument({Type, _}, _) ->
 
 check_integer_argument(undefined, _Args) ->
     ok;
-check_integer_argument({Type, Val}, _Args) when Val > 0 ->
+check_integer_argument({Type, Val}, _Args) ->
     case lists:member(Type, ?INTEGER_ARG_TYPES) of
-        true  -> ok;
-        false -> {error, {unacceptable_type, Type}}
-    end;
-check_integer_argument({_Type, Val}, _Args) ->
-    {error, {value_zero_or_less, Val}}.
+        false              -> {error, {unacceptable_type, Type}};
+        true when Val =< 0 -> {error, {value_zero_or_less, Val}};
+        true               -> ok
+    end.
 
 check_dlxrk_argument(undefined, _Args) ->
     ok;
