@@ -19,46 +19,54 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
--export([validate/2, notify/2]).
+-export([validate/3, notify/3]).
+-export([register/0]).
 
 -rabbit_boot_step({?MODULE,
                    [{description, "federation parameters"},
+                    {mfa, {rabbit_federation_parameters, register, []}},
                     {mfa, {rabbit_registry, register,
                            [runtime_parameter, <<"federation">>, ?MODULE]}},
                     {requires, rabbit_registry},
                     {enables, recovery}]}).
 
-validate(upstream_sets, Term) ->
-    io:format("Validate upstream_sets ~p~n", [Term]),
+register() ->
+    [rabbit_registry:register(runtime_parameter, Name, ?MODULE) ||
+        Name <- [<<"federation">>,
+                 <<"federation_connection">>,
+                 <<"federation_upstream_set">>]].
+
+validate(federation_upstream_set, Key, Term) ->
+    io:format("Validate upstream_set ~p ~p~n", [Key, Term]),
     ok;
 
-validate(connections, Term) ->
-    io:format("Validate connections ~p~n", [Term]),
+validate(federation_connection, Key, Term) ->
+    io:format("Validate connections ~p ~p~n", [Key, Term]),
     ok;
 
-validate(local_nodename, Term) ->
+validate(federation, <<"local_nodename">>, Term) ->
     io:format("Validate local_nodename ~p~n", [Term]),
     ok;
 
-validate(local_username, Term) ->
+validate(federation, <<"local_username">>, Term) ->
     io:format("Validate local_username ~p~n", [Term]),
     ok;
 
-validate(_Key, _Term) ->
+validate(_AppName, _Key, _Term) ->
     exit({error, key_not_recognised}).
 
-notify(upstream_sets, Term) ->
-    io:format("Notify upstream_sets ~p~n", [Term]),
+notify(federation_upstream_set, Key, Term) ->
+    io:format("Notify upstream_sets ~p ~p~n", [Key, Term]),
     rabbit_federation_link_sup_sup:restart_everything();
 
-notify(connections, Term) ->
-    io:format("Notify connections ~p~n", [Term]),
+notify(federation_connection, Key, Term) ->
+    io:format("Notify connections ~p ~p~n", [Key, Term]),
     rabbit_federation_link_sup_sup:restart_everything();
 
-notify(local_nodename, Term) ->
+notify(federation, <<"local_nodename">>, Term) ->
     io:format("Notify local_nodename ~p~n", [Term]),
     rabbit_federation_link_sup_sup:restart_everything();
 
-notify(local_username, Term) ->
+notify(federation, <<"local_username">>, Term) ->
     io:format("Notify local_username ~p~n", [Term]),
     rabbit_federation_link_sup_sup:restart_everything().

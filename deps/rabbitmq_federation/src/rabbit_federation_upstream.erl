@@ -58,9 +58,7 @@ print(Fmt, Args) -> iolist_to_binary(io_lib:format(Fmt, Args)).
 
 from_set(SetName, #resource{name         = DefaultXNameBin,
                             virtual_host = DefaultVHost}) ->
-    Sets = rabbit_runtime_parameters:value(
-             federation, upstream_sets, [{"upstreams", []}]),
-    case pget(SetName, Sets) of
+    case rabbit_runtime_parameters:value(federation_upstream_set, SetName) of
         undefined -> {error, set_not_found};
         Set       -> Results = [from_props(P, DefaultXNameBin, DefaultVHost) ||
                                    P <- Set],
@@ -71,11 +69,11 @@ from_set(SetName, #resource{name         = DefaultXNameBin,
     end.
 
 from_props(Upst, DefaultXNameBin, DefaultVHost) ->
-    Connections = rabbit_runtime_parameters:value(federation, connections, []),
     case bget(connection, Upst) of
         undefined -> {error, no_connection_name};
-        ConnName  -> case pget(ConnName, Connections) of
-                         undefined  -> {error, {no_connection, ConnName}};
+        ConnName  -> case rabbit_runtime_parameters:value(
+                            federation_connection, ConnName) of
+                         not_found  -> {error, {no_connection, ConnName}};
                          Conn       -> from_props_connection(
                                          Upst, ConnName, Conn, DefaultXNameBin,
                                          DefaultVHost)
