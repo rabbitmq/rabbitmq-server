@@ -25,6 +25,8 @@
 -export([record/2, to_basic_properties/1]).
 -export([addr/1, port/1]).
 
+-import(rabbit_misc, [pget/2, pset/3]).
+
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 
@@ -102,24 +104,12 @@ utf8_safe(V) ->
             <<"Invalid UTF-8, base64 is: ", Enc/binary>>
     end.
 
-parameter(L = [{_, _} | _]) ->
-    {struct, [{K, parameter(V)} || {K, V} <- L]};
-parameter(L) when is_list(L) ->
-    case list_looks_like_string(L) of
-        true  -> list_to_binary(L);
-        false -> [parameter(I) || I <- L]
-    end;
-parameter(B) when is_binary(B) ->
-    B;
-parameter(N) when is_number(N) ->
-    N.
+parameter(P) -> pset(value, param0(pget(value, P)), P).
 
-list_looks_like_string([]) ->
-    true; %% TODO hmmmmmmmm
-list_looks_like_string([N | Rest]) when is_integer(N) ->
-    list_looks_like_string(Rest);
-list_looks_like_string(_) ->
-    false.
+param0(L = [{_, _} | _])    -> {struct, [{K, param0(V)} || {K, V} <- L]};
+param0(L) when is_list(L)   -> [param0(I) || I <- L];
+param0(B) when is_binary(B) -> B;
+param0(N) when is_number(N) -> N.
 
 tuple(unknown)                    -> unknown;
 tuple(Tuple) when is_tuple(Tuple) -> [tuple(E) || E <- tuple_to_list(Tuple)];

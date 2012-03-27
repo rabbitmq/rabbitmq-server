@@ -19,8 +19,6 @@
 -export([init/1, to_json/2, content_types_provided/2, is_authorized/2,
          resource_exists/2]).
 
--import(rabbit_misc, [pget/2, pset/3]).
-
 -include("rabbit_mgmt.hrl").
 -include_lib("webmachine/include/webmachine.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
@@ -48,7 +46,7 @@ is_authorized(ReqData, Context) ->
 
 parameters(ReqData) ->
     case rabbit_mgmt_util:id(application, ReqData) of
-        none -> [pset(value, rabbit_mgmt_format:parameter(pget(value, P)), P) ||
+        none -> [rabbit_mgmt_format:parameter(P) ||
                     P <- rabbit_runtime_parameters:list()];
         _    -> exit(not_yet_implemented)
     end.
