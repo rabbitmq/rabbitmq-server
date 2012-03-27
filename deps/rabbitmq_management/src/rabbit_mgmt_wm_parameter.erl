@@ -72,7 +72,5 @@ is_authorized(ReqData, Context) ->
 parameter(ReqData) ->
     rabbit_runtime_parameters:lookup(app_name(ReqData), key(ReqData)).
 
-app_name(ReqData) -> b2a(rabbit_mgmt_util:id(application, ReqData)).
-key(ReqData)      -> b2a(rabbit_mgmt_util:id(key, ReqData)).
-
-b2a(B) -> list_to_atom(binary_to_list(B)).
+app_name(ReqData) -> rabbit_mgmt_util:id(application, ReqData).
+key(ReqData)      -> rabbit_mgmt_util:id(key, ReqData).
