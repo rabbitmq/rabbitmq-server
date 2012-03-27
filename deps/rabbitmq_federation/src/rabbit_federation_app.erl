@@ -26,7 +26,6 @@
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -import(rabbit_misc, [pget/3]).
--import(rabbit_federation_util, [pget_bin/2, pget_bin/3]).
 
 start(_Type, _StartArgs) ->
     rabbit_federation_link:go(),
