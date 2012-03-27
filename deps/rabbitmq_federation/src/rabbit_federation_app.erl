@@ -29,35 +29,10 @@
 -import(rabbit_federation_util, [pget_bin/2, pget_bin/3]).
 
 start(_Type, _StartArgs) ->
-    %%{ok, Xs} = application:get_env(exchanges),
-    %%[declare_exchange(X) || X <- Xs],
     rabbit_federation_link:go(),
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
 stop(_State) ->
-    ok.
-
-%%----------------------------------------------------------------------------
-
-declare_exchange(Props) ->
-    {ok, DefaultVHost} = application:get_env(rabbit, default_vhost),
-    VHost = pget_bin(virtual_host, Props, DefaultVHost),
-    Params = rabbit_federation_util:local_params(VHost),
-    {ok, Conn} = amqp_connection:start(Params),
-    {ok, Ch} = amqp_connection:open_channel(Conn),
-    XNameBin = pget_bin(exchange, Props),
-    amqp_channel:call(
-      Ch, #'exchange.declare'{
-        exchange    = XNameBin,
-        type        = <<"x-federation">>,
-        durable     = pget(durable,     Props, true),
-        auto_delete = pget(auto_delete, Props, false),
-        internal    = pget(internal,    Props, false),
-        arguments   =
-            [{<<"upstream-set">>, longstr, pget_bin(upstream_set, Props)},
-             {<<"type">>,         longstr, pget_bin(type,         Props)}]}),
-    amqp_channel:close(Ch),
-    amqp_connection:close(Conn),
     ok.
 
 %%----------------------------------------------------------------------------
