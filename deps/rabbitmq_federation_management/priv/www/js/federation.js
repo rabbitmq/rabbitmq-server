@@ -9,11 +9,13 @@ dispatcher_add(function(sammy) {
                 'federation-connection', '#/federation');
         });
     sammy.put('#/fed-parameters', function() {
-            if (this.params.expires == '') {
-                delete this.params.expires;
-            }
-            else {
-                this.params.expires = parseInt(this.params.expires);
+            var num_keys = ['expires', 'max_hops'];
+            for (var i in num_keys) {
+                num_key = num_keys[i];
+                if (this.params[num_key] == '')
+                    delete this.params[num_key];
+                else
+                    this.params[num_key] = parseInt(this.params[num_key]);
             }
             this.params = {"app_name": this.params.app_name,
                            "key":      this.params.key,

@@ -82,6 +82,7 @@
     <th>Name</th>
     <th>Host</th>
     <th>Expiry</th>
+    <th>Max Hops</th>
   </tr>
  </thead>
  <tbody>
@@ -92,7 +93,8 @@
    <tr<%= alt_rows(i)%>>
      <td><%= link_fed_conn(connection.key) %></td>
      <td><%= connection.value.host %></td>
-     <td><%= connection.value.expires %></td>
+     <td class="r"><%= connection.value.expires %></td>
+     <td class="r"><%= connection.value.max_hops %></td>
    </tr>
 <% } %>
  </tbody>
@@ -117,6 +119,10 @@
         <tr>
           <th><label>Expires:</label></th>
           <td><input type="text" name="expires"/> ms</td>
+        </tr>
+        <tr>
+          <th><label>Max hops:</label></th>
+          <td><input type="text" name="max_hops"/></td>
         </tr>
       </table>
       <input type="submit" value="Add connection"/>
