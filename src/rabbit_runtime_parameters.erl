@@ -18,8 +18,8 @@
 
 -include("rabbit.hrl").
 
--export([parse/1, set/3, clear/2, list/0, list_formatted/0, lookup/2, value/2,
-         value/3, info_keys/0]).
+-export([parse/1, set/3, clear/2, list/0, list/1, list_formatted/0, lookup/2,
+         value/2, value/3, info_keys/0]).
 
 -import(rabbit_misc, [pget/2, pset/3]).
 
@@ -45,7 +45,11 @@ clear(AppName, Key) ->
       end).
 
 list() ->
-    [p(Param) || Param <- rabbit_misc:dirty_read_all(?TABLE)].
+    [p(P) || P <- rabbit_misc:dirty_read_all(?TABLE)].
+
+list(Name) ->
+    [p(P) || P <- mnesia:dirty_match_object(
+                    ?TABLE, #runtime_parameters{key = {Name, '_'}, _ = '_'})].
 
 list_formatted() ->
     [pset(value, format(pget(value, P)), P) || P <- list()].
