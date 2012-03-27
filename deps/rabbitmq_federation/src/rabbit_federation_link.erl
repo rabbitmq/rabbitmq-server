@@ -507,14 +507,14 @@ upstream_exchange_name(XNameBin, VHost, DownXName, Suffix) ->
     <<Name/binary, " ", Suffix/binary>>.
 
 local_nodename() ->
-    Explicit = rabbit_runtime_parameters:lookup(
+    Explicit = rabbit_runtime_parameters:value(
                  federation, local_nodename, null),
     case Explicit of
         null -> {ID, _} = rabbit_nodes:parts(node()),
                 {ok, Host} = inet:gethostname(),
                 {ok, #hostent{h_name = FQDN}} = inet:gethostbyname(Host),
                 list_to_binary(atom_to_list(rabbit_nodes:make({ID, FQDN})));
-        _    -> list_to_binary(Explicit)
+        _    -> Explicit
     end.
 
 delete_upstream_exchange(Conn, XNameBin) ->

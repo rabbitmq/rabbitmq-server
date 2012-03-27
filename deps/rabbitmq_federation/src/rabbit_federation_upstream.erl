@@ -59,9 +59,9 @@ print(Fmt, Args) -> iolist_to_binary(io_lib:format(Fmt, Args)).
 
 from_set(SetName, #resource{name         = DefaultXNameBin,
                             virtual_host = DefaultVHost}) ->
-    Sets = rabbit_runtime_parameters:lookup(
+    Sets = rabbit_runtime_parameters:value(
              federation, upstream_sets, [{"upstreams", []}]),
-    case pget(binary_to_list(SetName), Sets) of
+    case pget(SetName, Sets) of
         undefined -> {error, set_not_found};
         Set       -> Results = [from_props(P, DefaultXNameBin, DefaultVHost) ||
                                    P <- Set],
@@ -72,8 +72,8 @@ from_set(SetName, #resource{name         = DefaultXNameBin,
     end.
 
 from_props(Upst, DefaultXNameBin, DefaultVHost) ->
-    Connections = rabbit_runtime_parameters:lookup(federation, connections, []),
-    case pget(connection, Upst) of
+    Connections = rabbit_runtime_parameters:value(federation, connections, []),
+    case bget(connection, Upst) of
         undefined -> {error, no_connection_name};
         ConnName  -> case pget(ConnName, Connections) of
                          undefined  -> {error, {no_connection, ConnName}};
@@ -86,23 +86,23 @@ from_props(Upst, DefaultXNameBin, DefaultVHost) ->
 from_props_connection(Upst, ConnName, Conn, DefaultXNameBin, DefaultVHost) ->
     {ok, DefaultUser} = application:get_env(rabbit, default_user),
     {ok, DefaultPass} = application:get_env(rabbit, default_pass),
-    case pget(host, Conn, none) of
+    case bget(host, Conn, none) of
         none -> {error, {no_host, ConnName}};
         Host -> Params = #amqp_params_network{
-                  host         = Host,
-                  port         = pget    (port,         Conn),
-                  virtual_host = pget_bin(virtual_host, Conn, DefaultVHost),
-                  username     = pget_bin(username,     Conn, DefaultUser),
-                  password     = pget_bin(password,     Conn, DefaultPass)},
-                XNameBin = pget_bin(exchange, Upst, DefaultXNameBin),
+                  host         = binary_to_list(Host),
+                  port         = bget    (port,         Conn),
+                  virtual_host = bget_bin(virtual_host, Conn, DefaultVHost),
+                  username     = bget_bin(username,     Conn, DefaultUser),
+                  password     = bget_bin(password,     Conn, DefaultPass)},
+                XNameBin = bget(exchange, Upst, DefaultXNameBin),
                 #upstream{params          = set_extra_params(Params, Conn),
                           exchange        = XNameBin,
-                          prefetch_count  = pget(prefetch_count,  Conn, none),
-                          reconnect_delay = pget(reconnect_delay, Conn, 1),
-                          max_hops        = pget(max_hops,        Upst, 1),
-                          expires         = pget(expires,         Conn, none),
-                          message_ttl     = pget(message_ttl,     Conn, none),
-                          ha_policy       = pget(ha_policy,       Conn, none),
+                          prefetch_count  = bget(prefetch_count,  Conn, none),
+                          reconnect_delay = bget(reconnect_delay, Conn, 1),
+                          max_hops        = bget(max_hops,        Upst, 1),
+                          expires         = bget(expires,         Conn, none),
+                          message_ttl     = bget(message_ttl,     Conn, none),
+                          ha_policy       = bget(ha_policy,       Conn, none),
                           connection_name = ConnName}
     end.
 
@@ -115,24 +115,30 @@ set_extra_params(Params, Conn) ->
 %%----------------------------------------------------------------------------
 
 set_ssl_options(Params, Conn) ->
-    case pget(protocol, Conn, "amqp") of
+    case bget(protocol, Conn, "amqp") of
         "amqp"  -> Params;
         "amqps" -> Params#amqp_params_network{
-                     ssl_options = pget(ssl_options, Conn)}
+                     ssl_options = bget(ssl_options, Conn)}
     end.
 
 set_heartbeat(Params, Conn) ->
-    case pget(heartbeat, Conn, none) of
+    case bget(heartbeat, Conn, none) of
         none -> Params;
         H    -> Params#amqp_params_network{heartbeat = H}
     end.
 
 %% TODO it would be nice to support arbitrary mechanisms here.
 set_mechanisms(Params, Conn) ->
-    case pget(mechanism, Conn, default) of
+    case bget(mechanism, Conn, default) of
         default    -> Params;
         'EXTERNAL' -> Params#amqp_params_network{
                         auth_mechanisms =
                             [fun amqp_auth_mechanisms:external/3]};
         M          -> exit({unsupported_mechanism, M})
     end.
+
+bget(K, L)        -> pget(a2b(K), L).
+bget(K, L, D)     -> pget(a2b(K), L, D).
+bget_bin(K, L, D) -> pget_bin(a2b(K), L, D).
+
+a2b(A) -> list_to_binary(atom_to_list(A)).
