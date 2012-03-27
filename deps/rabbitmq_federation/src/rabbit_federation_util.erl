@@ -19,7 +19,7 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_federation.hrl").
 
--export([local_params/1, pget_bin/2, pget_bin/3, should_forward/2]).
+-export([local_params/1, should_forward/2]).
 -export([validate_arg/3, fail/2]).
 
 -import(rabbit_misc, [pget_or_die/2, pget/3]).
@@ -31,11 +31,6 @@ local_params(VHost) ->
           federation, local_username, <<"guest">>),
     #amqp_params_direct{username     = U,
                         virtual_host = VHost}.
-
-pget_bin(K, T) -> list_to_binary(pget_or_die(K, T)).
-
-pget_bin(K, T, D) when is_binary(D) -> pget_bin(K, T, binary_to_list(D));
-pget_bin(K, T, D) when is_list(D)   -> list_to_binary(pget(K, T, D)).
 
 should_forward(undefined, _MaxHops) ->
     true;

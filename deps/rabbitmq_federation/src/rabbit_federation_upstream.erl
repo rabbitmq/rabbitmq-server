@@ -22,7 +22,6 @@
 -export([to_table/1, to_string/1, from_set/2]).
 
 -import(rabbit_misc, [pget/2, pget/3]).
--import(rabbit_federation_util, [pget_bin/3]).
 
 %%----------------------------------------------------------------------------
 
@@ -90,10 +89,10 @@ from_props_connection(Upst, ConnName, Conn, DefaultXNameBin, DefaultVHost) ->
         none -> {error, {no_host, ConnName}};
         Host -> Params = #amqp_params_network{
                   host         = binary_to_list(Host),
-                  port         = bget    (port,         Conn),
-                  virtual_host = bget_bin(virtual_host, Conn, DefaultVHost),
-                  username     = bget_bin(username,     Conn, DefaultUser),
-                  password     = bget_bin(password,     Conn, DefaultPass)},
+                  port         = bget(port,         Conn),
+                  virtual_host = bget(virtual_host, Conn, DefaultVHost),
+                  username     = bget(username,     Conn, DefaultUser),
+                  password     = bget(password,     Conn, DefaultPass)},
                 XNameBin = bget(exchange, Upst, DefaultXNameBin),
                 #upstream{params          = set_extra_params(Params, Conn),
                           exchange        = XNameBin,
@@ -139,6 +138,5 @@ set_mechanisms(Params, Conn) ->
 
 bget(K, L)        -> pget(a2b(K), L).
 bget(K, L, D)     -> pget(a2b(K), L, D).
-bget_bin(K, L, D) -> pget_bin(a2b(K), L, D).
 
 a2b(A) -> list_to_binary(atom_to_list(A)).
