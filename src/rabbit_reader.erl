@@ -25,7 +25,7 @@
 
 -export([init/4, mainloop/2]).
 
--export([conserve_resources/3, server_properties/1]).
+-export([conserve_resources/2, server_properties/1]).
 
 -define(HANDSHAKE_TIMEOUT, 10).
 -define(NORMAL_TIMEOUT, 3).
@@ -71,7 +71,7 @@
 -spec(info/2 :: (pid(), rabbit_types:info_keys()) -> rabbit_types:infos()).
 -spec(force_event_refresh/1 :: (pid()) -> 'ok').
 -spec(shutdown/2 :: (pid(), string()) -> 'ok').
--spec(conserve_resources/3 :: (pid(), atom(), boolean()) -> 'ok').
+-spec(conserve_resources/2 :: (pid(), boolean()) -> 'ok').
 -spec(server_properties/1 :: (rabbit_types:protocol()) ->
                                   rabbit_framing:amqp_table()).
 
@@ -133,7 +133,7 @@ info(Pid, Items) ->
 force_event_refresh(Pid) ->
     gen_server:cast(Pid, force_event_refresh).
 
-conserve_resources(Pid, _Source, Conserve) ->
+conserve_resources(Pid, Conserve) ->
     Pid ! {conserve_resources, Conserve},
     ok.
 

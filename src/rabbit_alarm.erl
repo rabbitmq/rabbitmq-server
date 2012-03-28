@@ -157,29 +157,31 @@ maybe_alert(UpdateFun, Node, Source,
     %% If we have changed our alarm state, inform the remotes.
     IsLocal = Node =:= node(),
     if IsLocal andalso BeforeSz < AfterSz ->
-           ok = alert_remote({true,  Alertees, Source});
+           ok = alert_remote(true,  Alertees, Source);
        IsLocal andalso BeforeSz > AfterSz ->
-           ok = alert_remote({false, Alertees, Source});
+           ok = alert_remote(false, Alertees, Source);
        true                               ->
            ok
     end,
     %% If the overall alarm state has changed, inform the locals.
     case {dict:size(AN), dict:size(AN1)} of
-        {0, 1} -> ok = alert_local({true,  Alertees, Source});
-        {1, 0} -> ok = alert_local({false, Alertees, Source});
+        {0, 1} -> ok = alert_local(true,  Alertees, Source);
+        {1, 0} -> ok = alert_local(false, Alertees, Source);
         {_, _} -> ok
     end,
     State#alarms{alarmed_nodes = AN1}.
 
-alert_local(AlertSpec)  -> alert(AlertSpec, fun erlang:'=:='/2).
+alert_local(Alert, Alertees, _Source) ->
+    alert(Alertees, [Alert], fun erlang:'=:='/2).
 
-alert_remote(AlertSpec) -> alert(AlertSpec, fun erlang:'=/='/2).
+alert_remote(Alert, Alertees, Source) ->
+    alert(Alertees, [Source, Alert], fun erlang:'=/='/2).
 
-alert({Alert, Alertees, Source}, NodeComparator) ->
+alert(Alertees, AlertArg, NodeComparator) ->
     Node = node(),
     dict:fold(fun (Pid, {M, F, A}, ok) ->
                       case NodeComparator(Node, node(Pid)) of
-                          true  -> apply(M, F, A ++ [Pid, Source, Alert]);
+                          true  -> apply(M, F, A ++ [Pid] ++ AlertArg);
                           false -> ok
                       end
               end, ok, Alertees).
