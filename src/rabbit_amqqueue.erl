@@ -330,11 +330,11 @@ assert_args_equivalence(#amqqueue{name = QueueName, arguments = Args},
       [<<"x-expires">>, <<"x-message-ttl">>, <<"x-ha-policy">>]).
 
 check_declare_arguments(QueueName, Args) ->
-    Checks = [{<<"x-expires">>,                 fun check_integer_argument/2},
-              {<<"x-message-ttl">>,             fun check_integer_argument/2},
-              {<<"x-ha-policy">>,               fun check_ha_policy_argument/2},
-              {<<"x-dead-letter-exchange">>,    fun check_string_argument/2},
-              {<<"x-dead-letter-routing-key">>, fun check_dlxrk_argument/2}],
+    Checks = [{<<"x-expires">>,                 fun check_positive_int_arg/2},
+              {<<"x-message-ttl">>,             fun check_positive_int_arg/2},
+              {<<"x-ha-policy">>,               fun check_ha_policy_arg/2},
+              {<<"x-dead-letter-exchange">>,    fun check_string_arg/2},
+              {<<"x-dead-letter-routing-key">>, fun check_dlxrk_arg/2}],
     [case Fun(rabbit_misc:table_lookup(Args, Key), Args) of
          ok             -> ok;
          {error, Error} -> rabbit_misc:protocol_error(
@@ -344,37 +344,37 @@ check_declare_arguments(QueueName, Args) ->
      end || {Key, Fun} <- Checks],
     ok.
 
-check_string_argument(undefined, _Args) ->
+check_string_arg(undefined, _Args) ->
     ok;
-check_string_argument({longstr, _}, _Args) ->
+check_string_arg({longstr, _}, _Args) ->
     ok;
-check_string_argument({Type, _}, _) ->
+check_string_arg({Type, _}, _) ->
     {error, {unacceptable_type, Type}}.
 
-check_integer_argument(undefined, _Args) ->
+check_positive_int_arg(undefined, _Args) ->
     ok;
-check_integer_argument({Type, Val}, _Args) ->
+check_positive_int_arg({Type, Val}, _Args) ->
     case lists:member(Type, ?INTEGER_ARG_TYPES) of
         false              -> {error, {unacceptable_type, Type}};
         true when Val =< 0 -> {error, {value_zero_or_less, Val}};
         true               -> ok
     end.
 
-check_dlxrk_argument(undefined, _Args) ->
+check_dlxrk_arg(undefined, _Args) ->
     ok;
-check_dlxrk_argument({longstr, _}, Args) ->
+check_dlxrk_arg({longstr, _}, Args) ->
     case rabbit_misc:table_lookup(Args, <<"x-dead-letter-exchange">>) of
         undefined -> {error, routing_key_but_no_dlx_defined};
         _         -> ok
     end;
-check_dlxrk_argument({Type, _}, _Args) ->
+check_dlxrk_arg({Type, _}, _Args) ->
     {error, {unacceptable_type, Type}}.
 
-check_ha_policy_argument(undefined, _Args) ->
+check_ha_policy_arg(undefined, _Args) ->
     ok;
-check_ha_policy_argument({longstr, <<"all">>}, _Args) ->
+check_ha_policy_arg({longstr, <<"all">>}, _Args) ->
     ok;
-check_ha_policy_argument({longstr, <<"nodes">>}, Args) ->
+check_ha_policy_arg({longstr, <<"nodes">>}, Args) ->
     case rabbit_misc:table_lookup(Args, <<"x-ha-policy-params">>) of
         undefined ->
             {error, {require, 'x-ha-policy-params'}};
@@ -390,9 +390,9 @@ check_ha_policy_argument({longstr, <<"nodes">>}, Args) ->
         {Type, _} ->
             {error, {ha_nodes_policy_params_not_array_of_longstr, Type}}
     end;
-check_ha_policy_argument({longstr, Policy}, _Args) ->
+check_ha_policy_arg({longstr, Policy}, _Args) ->
     {error, {invalid_ha_policy, Policy}};
-check_ha_policy_argument({Type, _}, _Args) ->
+check_ha_policy_arg({Type, _}, _Args) ->
     {error, {unacceptable_type, Type}}.
 
 list() ->
