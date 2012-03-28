@@ -18,14 +18,14 @@
 
 -export([start_link/2]).
 -export([init/2]).
--export([conserve_memory/2]).
+-export([conserve_resources/2]).
 
 -include("rabbit_stomp.hrl").
 -include("rabbit_stomp_frame.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
 -record(reader_state, {socket, parse_state, processor, state, iterations,
-                       conserve_memory}).
+                       conserve_resources}).
 
 %%----------------------------------------------------------------------------
 
@@ -47,13 +47,13 @@ init(SupPid, Configuration) ->
             try
                 mainloop(
                   control_throttle(
-                    register_memory_alarm(
-                      #reader_state{socket          = Sock,
-                                    parse_state     = ParseState,
-                                    processor       = ProcessorPid,
-                                    state           = running,
-                                    iterations      = 0,
-                                    conserve_memory = false})), 0),
+                    register_resource_alarm(
+                      #reader_state{socket             = Sock,
+                                    parse_state        = ParseState,
+                                    processor          = ProcessorPid,
+                                    state              = running,
+                                    iterations         = 0,
+                                    conserve_resources = false})), 0),
                 log(info, "closing STOMP connection ~p (~s)~n",
                     [self(), ConnStr])
             catch
@@ -75,10 +75,10 @@ mainloop(State = #reader_state{socket = Sock}, ByteCount) ->
             ok;
         {inet_async, _Sock, _Ref, {error, Reason}} ->
             throw({inet_error, Reason});
-        {conserve_memory, Conserve} ->
+        {conserve_resources, Conserve} ->
             mainloop(
               control_throttle(
-                State#reader_state{conserve_memory = Conserve}), ByteCount);
+                State#reader_state{conserve_resources = Conserve}), ByteCount);
         {bump_credit, Msg} ->
             credit_flow:handle_bump_msg(Msg),
             mainloop(control_throttle(State), ByteCount)
@@ -104,15 +104,15 @@ process_received_bytes(Bytes,
                                        state       = next_state(S, Frame)}))
     end.
 
-conserve_memory(Pid, Conserve) ->
-    Pid ! {conserve_memory, Conserve},
+conserve_resources(Pid, Conserve) ->
+    Pid ! {conserve_resources, Conserve},
     ok.
 
-register_memory_alarm(State) ->
-    rabbit_alarm:register(self(), {?MODULE, conserve_memory, []}), State.
+register_resource_alarm(State) ->
+    rabbit_alarm:register(self(), {?MODULE, conserve_resources, []}), State.
 
-control_throttle(State = #reader_state{state            = CS,
-                                       conserve_memory  = Mem}) ->
+control_throttle(State = #reader_state{state              = CS,
+                                       conserve_resources = Mem}) ->
     case {CS, Mem orelse credit_flow:blocked()} of
         {running,   true} -> State#reader_state{state = blocking};
         {blocking, false} -> State#reader_state{state = running};
