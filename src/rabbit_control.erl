@@ -324,20 +324,13 @@ action(trace_off, Node, [], Opts, Inform) ->
     rpc_call(Node, rabbit_trace, stop, [list_to_binary(VHost)]);
 
 action(set_vm_memory_high_watermark, Node, [Arg], _Opts, Inform) ->
-    Frac = format_float(Arg),
-    Inform("Setting memory threshold on ~p to ~p", [Node, Frac]),
+    Frac = list_to_float(case string:chr(Arg, $.) of
+                             0 -> Arg ++ ".0";
+                             _ -> Arg
+                         end),
+    Inform("Setting memory threshhold on ~p to ~p", [Node, Frac]),
     rpc_call(Node, vm_memory_monitor, set_vm_memory_high_watermark, [Frac]);
 
-action(set_disk_free_limit, Node, [Arg], _Opts, Inform) ->
-    Bytes = list_to_integer(Arg),
-    Inform("Setting disk free space limit on ~p to ~p bytes", [Node, Bytes]),
-    rpc_call(Node, rabbit_disk_monitor, set_disk_free_limit, [Bytes]);
-
-action(set_disk_free_limit_mem_relative, Node, [Arg], _Opts, Inform) ->
-    Mult = format_float(Arg),
-    Inform("Setting disk free space limit on ~p to ~p times total RAM",
-           [Node, Mult]),
-    rpc_call(Node, rabbit_disk_monitor, set_disk_free_limit, [{mem_relative, Mult}]);
 
 action(set_permissions, Node, [Username, CPerm, WPerm, RPerm], Opts, Inform) ->
     VHost = proplists:get_value(?VHOST_OPT, Opts),
@@ -559,8 +552,3 @@ prettify_typed_amqp_value(array,   Value) -> [prettify_typed_amqp_value(T, V) ||
                                                  {T, V} <- Value];
 prettify_typed_amqp_value(_Type,   Value) -> Value.
 
-format_float(Arg) ->
-    list_to_float(case string:chr(Arg, $.) of
-                      0 -> Arg ++ ".0";
-                      _ -> Arg
-                  end).

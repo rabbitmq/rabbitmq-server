@@ -1439,39 +1439,6 @@
           </listitem>
         </varlistentry>
 
-        <varlistentry>
-          <term><cmdsynopsis><command>set_disk_free_limit</command> <arg choice="req"><replaceable>bytes</replaceable></arg></cmdsynopsis></term>
-          <listitem>
-            <variablelist>
-              <varlistentry>
-                <term>bytes</term>
-                <listitem><para>
-                    The new disk free limit at which flow
-                    control is triggered, for the drive or partition
-                    that the broker data store resides on.
-                </para></listitem>
-              </varlistentry>
-            </variablelist>
-          </listitem>
-        </varlistentry>
-
-        <varlistentry>
-          <term><cmdsynopsis><command>set_disk_free_limit_mem_relative</command> <arg choice="req"><replaceable>multiple</replaceable></arg></cmdsynopsis></term>
-          <listitem>
-            <variablelist>
-              <varlistentry>
-                <term>multiple</term>
-                <listitem><para>
-                    The new disk free limit at which flow
-                    control is triggered, expressed relative to total RAM.
-                    The argument may be a floating point number
-                    and the limit will be calculated as the argument
-                    times the total installed RAM.
-                </para></listitem>
-              </varlistentry>
-            </variablelist>
-          </listitem>
-        </varlistentry>
 
       </variablelist>
     </refsect2>
