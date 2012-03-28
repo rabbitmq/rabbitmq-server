@@ -101,7 +101,15 @@ recover() ->
     [XName || #exchange{name = XName} <- Xs].
 
 callback(#exchange{type = XType}, Fun, Args) ->
-    apply(type_to_module(XType), Fun, Args).
+    callback(type_to_module(XType), Fun, Args);
+
+callback(Module, Fun, Args) ->
+    %% TODO cache this?
+    %% TODO what about serialising events?
+    %% TODO what about sharing the scratch space?
+    Decorators = rabbit_registry:lookup_all(exchange_decorator),
+    [ok = apply(M, Fun, Args) || {_, M} <- Decorators],
+    apply(Module, Fun, Args).
 
 declare(XName, Type, Durable, AutoDelete, Internal, Args) ->
     X = #exchange{name        = XName,
@@ -129,7 +137,7 @@ declare(XName, Type, Durable, AutoDelete, Internal, Args) ->
               end
       end,
       fun ({new, Exchange}, Tx) ->
-              ok = XT:create(map_create_tx(Tx), Exchange),
+              ok = callback(XT, create, [map_create_tx(Tx), Exchange]),
               rabbit_event:notify_if(not Tx, exchange_created, info(Exchange)),
               Exchange;
           ({existing, Exchange}, _Tx) ->
