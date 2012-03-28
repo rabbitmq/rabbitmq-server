@@ -139,10 +139,10 @@ internal_update(State = #state { limit   = Limit,
     NewAlarmed = CurrentFreeBytes < LimitBytes,
     case {Alarmed, NewAlarmed} of
         {false, true} ->
-            emit_update_info(exceeded, CurrentFreeBytes, LimitBytes),
+            emit_update_info("exceeded", CurrentFreeBytes, LimitBytes),
             alarm_handler:set_alarm({{resource_limit, disk, node()}, []});
         {true, false} ->
-            emit_update_info(obeyed, CurrentFreeBytes, LimitBytes),
+            emit_update_info("below limit", CurrentFreeBytes, LimitBytes),
             alarm_handler:clear_alarm({resource_limit, disk, node()});
         _ ->
             ok
@@ -179,7 +179,7 @@ interpret_limit(L) ->
 
 emit_update_info(State, CurrentFree, Limit) ->
     error_logger:info_msg(
-      "Disk free space limit now ~p. Free bytes:~p Limit:~p~n",
+      "Disk free space limit now ~s. Free bytes:~p Limit:~p~n",
       [State, CurrentFree, Limit]).
 
 start_timer(Timeout) ->
