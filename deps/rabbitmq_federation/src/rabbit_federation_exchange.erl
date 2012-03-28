@@ -44,13 +44,13 @@ route(_X, _Delivery) -> ok.
 
 create(transaction, _X) ->
     ok;
-create(none, #exchange{name = XName}) ->
+create(none, X = #exchange{name = XName}) ->
     case federate(XName) of
         true ->
             Set = <<"all">>,
-            {ok, Upstreams} = rabbit_federation_upstream:from_set(Set, XName),
+            {ok, Upstreams} = rabbit_federation_upstream:from_set(Set, X),
             ok = rabbit_federation_db:prune_scratch(XName, Upstreams),
-            {ok, _} = rabbit_federation_link_sup_sup:start_child(XName, {Set, XName}),
+            {ok, _} = rabbit_federation_link_sup_sup:start_child(XName, {Set, X}),
             ok;
         false ->
             ok

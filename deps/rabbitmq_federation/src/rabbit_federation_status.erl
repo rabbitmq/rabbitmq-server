@@ -27,6 +27,8 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
+-import(rabbit_federation_util, [name/1]).
+
 -define(SERVER, ?MODULE).
 -define(ETS_NAME, ?MODULE).
 
@@ -89,12 +91,12 @@ format(#entry{key       = {#resource{virtual_host = VHost,
                                      kind         = exchange,
                                      name         = XNameBin},
                            #upstream{connection_name = Connection,
-                                     exchange        = UXNameBin}},
+                                     exchange        = UX}},
               status    = Status,
               timestamp = Timestamp}) ->
         [{exchange,          XNameBin},
          {vhost,             VHost},
          {connection,        Connection},
-         {upstream_exchange, UXNameBin},
+         {upstream_exchange, name(UX)},
          {status,            Status},
          {timestamp,         Timestamp}].

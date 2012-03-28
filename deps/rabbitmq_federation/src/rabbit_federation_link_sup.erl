@@ -30,18 +30,19 @@ start_link(Args) -> supervisor2:start_link(?MODULE, Args).
 
 %%----------------------------------------------------------------------------
 
-init({UpstreamSet, XName}) ->
+init({UpstreamSet, X}) ->
     %% We can't look this up in fed_exchange or fed_sup since
     %% mirrored_sup may fail us over to a different node with a
     %% different definition of the same upstream-set. This is the
     %% first point at which we know we're not switching nodes.
-    {ok, Upstreams} = rabbit_federation_upstream:from_set(UpstreamSet, XName),
+    %% TODO the above is no longer true - what should change?
+    {ok, Upstreams} = rabbit_federation_upstream:from_set(UpstreamSet, X),
     %% 1, 1 so that the supervisor can give up and get into waiting
     %% for the reconnect_delay quickly.
     {ok, {{one_for_one, 1, 1},
-          [spec(Upstream, XName) || Upstream <- Upstreams]}}.
+          [spec(Upstream, X) || Upstream <- Upstreams]}}.
 
-spec(Upstream = #upstream{reconnect_delay = Delay}, XName) ->
+spec(Upstream = #upstream{reconnect_delay = Delay}, #exchange{name = XName}) ->
     {Upstream, {rabbit_federation_link, start_link, [{Upstream, XName}]},
      {transient, Delay}, ?MAX_WAIT, worker,
      [rabbit_federation_link]}.

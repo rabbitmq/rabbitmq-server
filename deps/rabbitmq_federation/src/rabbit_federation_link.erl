@@ -31,6 +31,7 @@
          terminate/2, code_change/3]).
 
 -import(rabbit_misc, [pget/2]).
+-import(rabbit_federation_util, [name/1]).
 
 -record(state, {upstream,
                 connection,
@@ -286,13 +287,13 @@ open(Params) ->
 
 add_binding(B = #binding{key = Key, args = Args},
             State = #state{channel = Ch, internal_exchange = IntXNameBin,
-                           upstream = #upstream{exchange = XNameBin}}) ->
+                           upstream = #upstream{exchange = X}}) ->
     case check_add_binding(B, State) of
         {true,  State1} -> State1;
         {false, State1} -> amqp_channel:call(
                              Ch, #'exchange.bind'{
                                destination = IntXNameBin,
-                               source      = XNameBin,
+                               source      = name(X),
                                routing_key = Key,
                                arguments   = Args}),
                            State1
@@ -310,13 +311,13 @@ check_add_binding(B = #binding{destination = Dest},
 remove_binding(B = #binding{key = Key, args = Args},
                State = #state{channel = Ch,
                               internal_exchange = IntXNameBin,
-                              upstream = #upstream{exchange = XNameBin}}) ->
+                              upstream = #upstream{exchange = X}}) ->
     case check_remove_binding(B, State) of
         {true,  State1} -> State1;
         {false, State1} -> amqp_channel:call(
                              Ch, #'exchange.unbind'{
                                destination = IntXNameBin,
-                               source      = XNameBin,
+                               source      = name(X),
                                routing_key = Key,
                                arguments   = Args}),
                            State1
@@ -412,14 +413,14 @@ consume_from_upstream_queue(
   State = #state{upstream            = Upstream,
                  channel             = Ch,
                  downstream_exchange = DownXName}) ->
-    #upstream{exchange       = XNameBin,
+    #upstream{exchange       = X,
               prefetch_count = Prefetch,
               expires        = Expiry,
               message_ttl    = TTL,
               ha_policy      = HA,
               params         = #amqp_params_network{virtual_host = VHost}}
         = Upstream,
-    Q = upstream_queue_name(XNameBin, VHost, DownXName),
+    Q = upstream_queue_name(name(X), VHost, DownXName),
     %% TODO it would be nice to just pass through args, but let's do that as
     %% part of bug 23908.
     ExpiryArg = case Expiry of
@@ -453,7 +454,7 @@ ensure_upstream_bindings(State = #state{upstream            = Upstream,
                                         channel             = Ch,
                                         downstream_exchange = DownXName,
                                         queue               = Q}, Bindings) ->
-    #upstream{exchange = XNameBin,
+    #upstream{exchange = X,
               params   = #amqp_params_network{virtual_host = VHost}} = Upstream,
     OldSuffix = rabbit_federation_db:get_active_suffix(
                   DownXName, Upstream, <<"A">>),
@@ -461,18 +462,34 @@ ensure_upstream_bindings(State = #state{upstream            = Upstream,
                  <<"A">> -> <<"B">>;
                  <<"B">> -> <<"A">>
              end,
-    IntXNameBin = upstream_exchange_name(XNameBin, VHost, DownXName, Suffix),
-    ensure_upstream_exchange(IntXNameBin, State),
+    IntXNameBin = upstream_exchange_name(name(X), VHost, DownXName, Suffix),
+    ensure_upstream_exchange(State),
+    ensure_internal_exchange(IntXNameBin, State),
     amqp_channel:call(Ch, #'queue.bind'{exchange = IntXNameBin, queue = Q}),
     State1 = State#state{internal_exchange = IntXNameBin},
     State2 = lists:foldl(fun add_binding/2, State1, Bindings),
     rabbit_federation_db:set_active_suffix(DownXName, Upstream, Suffix),
     OldIntXNameBin = upstream_exchange_name(
-                       XNameBin, VHost, DownXName, OldSuffix),
+                       name(X), VHost, DownXName, OldSuffix),
     delete_upstream_exchange(Conn, OldIntXNameBin),
     State2.
 
-ensure_upstream_exchange(IntXNameBin,
+ensure_upstream_exchange(#state{upstream   = #upstream{exchange = X},
+                                channel    = Ch}) ->
+    #exchange{type        = Type,
+              durable     = Durable,
+              auto_delete = AutoDelete,
+              internal    = Internal,
+              arguments   = Arguments} = X,
+    amqp_channel:call(
+      Ch, #'exchange.declare'{exchange    = name(X),
+                              type        = list_to_binary(atom_to_list(Type)),
+                              durable     = Durable,
+                              auto_delete = AutoDelete,
+                              internal    = Internal,
+                              arguments   = Arguments}).
+
+ensure_internal_exchange(IntXNameBin,
                          #state{upstream   = #upstream{max_hops = MaxHops,
                                                        params   = Params},
                                 connection = Conn,
