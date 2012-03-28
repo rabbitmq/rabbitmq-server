@@ -1,12 +1,21 @@
 dispatcher_add(function(sammy) {
     sammy.get('#/federation', function() {
             render({'links':       '/federation-links',
-                    'connections': '/parameters/federation_connection'},
+                    'connections': '/parameters/federation_connection',
+                    'nodename':    '/parameters/federation/local_nodename',
+                    'username':    '/parameters/federation/local_username'},
                 'federation', '#/federation');
         });
     sammy.get('#/federation-connection/:id', function() {
             render({'connection': '/parameters/federation_connection/' + esc(this.params['id'])},
                 'federation-connection', '#/federation');
+        });
+    sammy.put('#/fed-globals', function() {
+            if (this.params.value == '') this.params.value = null;
+
+            if (sync_put(this, '/parameters/:app_name/:key'))
+                update();
+            return false;
         });
     sammy.put('#/fed-parameters', function() {
             var num_keys = ['expires', 'max_hops'];

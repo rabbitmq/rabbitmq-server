@@ -1,6 +1,35 @@
 <h1>Federation</h1>
+
 <div class="section-hidden">
-  <h2>Running links</h2>
+  <h2>Global Parameters</h2>
+  <div class="hider">
+    <table class="two-col-layout">
+      <tr>
+        <td>
+          Local username:
+          <form action="#/fed-globals" method="put">
+            <input type="hidden" name="app_name" value="federation"/>
+            <input type="hidden" name="key" value="local_username"/>
+            <input type="text" name="value" value="<%= username.value %>" />
+            <input type="submit" value="Update"/>
+          </form>
+        </td>
+        <td>
+          Explicit identity for this cluster / node:
+          <form action="#/fed-globals" method="put">
+            <input type="hidden" name="app_name" value="federation"/>
+            <input type="hidden" name="key" value="local_nodename"/>
+            <input type="text" name="value" value="<%= nodename.value %>" />
+            <input type="submit" value="Update"/>
+          </form>
+        </td>
+      </tr>
+    </table>
+  </div>
+</div>
+
+<div class="section-hidden">
+  <h2>Running Links</h2>
   <div class="hider updatable">
 <% if (links.length > 0) { %>
 <table class="list">
