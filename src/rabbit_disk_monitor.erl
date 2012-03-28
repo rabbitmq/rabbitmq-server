@@ -78,11 +78,20 @@ start_link(Args) ->
 
 init([Limit]) ->
     TRef = start_timer(?DEFAULT_DISK_CHECK_INTERVAL),
-    State = #state { dir     = dir(),
+    Dir = dir(),
+    State = #state { dir     = Dir,
                      timeout = ?DEFAULT_DISK_CHECK_INTERVAL,
                      timer   = TRef,
                      alarmed = false},
-    {ok, set_disk_limits(State, Limit)}.
+    case {get_disk_free(Dir),
+          vm_memory_monitor:get_total_memory()} of
+        {N1, N2} when is_integer(N1), is_integer(N2) ->
+            {ok, set_disk_limits(State, Limit)};
+        _ ->
+            rabbit_log:info("Disabling disk free space monitoring "
+                            "on unsupported platform~n"),
+            {stop, unsupported_platform}
+    end.
 
 handle_call(get_disk_free_limit, _From, State) ->
     {reply, interpret_limit(State#state.limit), State};
@@ -127,8 +136,8 @@ dir() -> rabbit_mnesia:dir().
 
 set_disk_limits(State, Limit) ->
     State1 = State#state { limit = Limit },
-    error_logger:info_msg("Disk free limit set to ~pMB~n",
-                          [trunc(interpret_limit(Limit) / 1048576)]),
+    rabbit_log:info("Disk free limit set to ~pMB~n",
+                    [trunc(interpret_limit(Limit) / 1048576)]),
     internal_update(State1).
 
 internal_update(State = #state { limit   = Limit,
@@ -178,7 +187,7 @@ interpret_limit(L) ->
     L.
 
 emit_update_info(State, CurrentFree, Limit) ->
-    error_logger:info_msg(
+    rabbit_log:info(
       "Disk free space limit now ~s. Free bytes:~p Limit:~p~n",
       [State, CurrentFree, Limit]).
 

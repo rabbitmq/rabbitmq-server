@@ -329,7 +329,9 @@ status() ->
             {vm_memory_limit,          {vm_memory_monitor,
                                         get_memory_limit, []}},
             {disk_free_limit,          {rabbit_disk_monitor,
-                                        get_disk_free_limit, []}}]),
+                                        get_disk_free_limit, []}},
+            {disk_free,                {rabbit_disk_monitor,
+                                        get_disk_free, []}}]),
     S3 = rabbit_misc:with_exit_handler(
            fun () -> [] end,
            fun () -> [{file_descriptors, file_handle_cache:info()}] end),
