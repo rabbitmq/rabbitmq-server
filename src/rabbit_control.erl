@@ -279,7 +279,7 @@ action(clear_parameter, Node, [AppName, Key], _Opts, Inform) ->
     rpc_call(Node, rabbit_runtime_parameters, clear, [list_to_binary(AppName),
                                                       list_to_binary(Key)]);
 
-action(list_runtime_parameters, Node, Args = [], _Opts, Inform) ->
+action(list_parameters, Node, Args = [], _Opts, Inform) ->
     Inform("Listing runtime parameters", []),
     display_info_list(
       rpc_call(Node, rabbit_runtime_parameters, list_formatted, Args),
