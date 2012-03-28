@@ -552,11 +552,14 @@ deliver_or_enqueue(Delivery = #delivery{message = Message,
     {Delivered, Confirm, State1} = attempt_delivery(Delivery, State),
     State2 = #q{backing_queue = BQ, backing_queue_state = BQS} =
         maybe_record_confirm_message(Confirm, State1),
-    case Delivered of
-        true  -> State2;
-        false -> Props = message_properties(Confirm, State),
-                 BQS1 = BQ:publish(Message, Props, SenderPid, BQS),
-                 ensure_ttl_timer(State2#q{backing_queue_state = BQS1})
+    case {Delivered, State2#q.ttl} of
+        {true,  _} -> State2;
+        {false, 0} -> State3 = discard_delivery(Delivery, State2),
+                      %% TODO: handle confirms and dlx
+                      State3;
+        {false, _} -> Props = message_properties(Confirm, State),
+                      BQS1 = BQ:publish(Message, Props, SenderPid, BQS),
+                      ensure_ttl_timer(State2#q{backing_queue_state = BQS1})
     end.
 
 requeue_and_run(AckTags, State = #q{backing_queue = BQ}) ->
