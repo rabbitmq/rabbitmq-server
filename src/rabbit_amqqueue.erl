@@ -335,24 +335,24 @@ check_declare_arguments(QueueName, Args) ->
               {<<"x-ha-policy">>,               fun check_ha_policy_arg/2},
               {<<"x-dead-letter-exchange">>,    fun check_string_arg/2},
               {<<"x-dead-letter-routing-key">>, fun check_dlxrk_arg/2}],
-    [case Fun(rabbit_misc:table_lookup(Args, Key), Args) of
-         ok             -> ok;
-         {error, Error} -> rabbit_misc:protocol_error(
-                             precondition_failed,
-                             "invalid arg '~s' for ~s: ~255p",
-                             [Key, rabbit_misc:rs(QueueName), Error])
+    [case rabbit_misc:table_lookup(Args, Key) of
+         undefined -> ok;
+         TypeVal   -> case Fun(TypeVal, Args) of
+                          ok             -> ok;
+                          {error, Error} -> rabbit_misc:protocol_error(
+                                              precondition_failed,
+                                              "invalid arg '~s' for ~s: ~255p",
+                                              [Key, rabbit_misc:rs(QueueName),
+                                               Error])
+                      end
      end || {Key, Fun} <- Checks],
     ok.
 
-check_string_arg(undefined, _Args) ->
-    ok;
 check_string_arg({longstr, _}, _Args) ->
     ok;
 check_string_arg({Type, _}, _) ->
     {error, {unacceptable_type, Type}}.
 
-check_positive_int_arg(undefined, _Args) ->
-    ok;
 check_positive_int_arg({Type, Val}, _Args) ->
     case lists:member(Type, ?INTEGER_ARG_TYPES) of
         false              -> {error, {unacceptable_type, Type}};
@@ -360,8 +360,6 @@ check_positive_int_arg({Type, Val}, _Args) ->
         true               -> ok
     end.
 
-check_dlxrk_arg(undefined, _Args) ->
-    ok;
 check_dlxrk_arg({longstr, _}, Args) ->
     case rabbit_misc:table_lookup(Args, <<"x-dead-letter-exchange">>) of
         undefined -> {error, routing_key_but_no_dlx_defined};
@@ -370,8 +368,6 @@ check_dlxrk_arg({longstr, _}, Args) ->
 check_dlxrk_arg({Type, _}, _Args) ->
     {error, {unacceptable_type, Type}}.
 
-check_ha_policy_arg(undefined, _Args) ->
-    ok;
 check_ha_policy_arg({longstr, <<"all">>}, _Args) ->
     ok;
 check_ha_policy_arg({longstr, <<"nodes">>}, Args) ->
