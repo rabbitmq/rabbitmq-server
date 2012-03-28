@@ -1,5 +1,12 @@
 <h1>Federation</h1>
-
+<%
+var username = null;
+var nodename = null;
+for (var i in globals) {
+   if (globals[i].key == 'local_username') username = globals[i].value;
+   if (globals[i].key == 'local_nodename') nodename = globals[i].value;
+}
+%>
 <div class="section-hidden">
   <h2>Global Parameters</h2>
   <div class="hider">
@@ -10,7 +17,7 @@
           <form action="#/fed-globals" method="put">
             <input type="hidden" name="app_name" value="federation"/>
             <input type="hidden" name="key" value="local_username"/>
-            <input type="text" name="value" value="<%= username.value %>" />
+            <input type="text" name="value" value="<%= username %>" />
             <input type="submit" value="Update"/>
           </form>
         </td>
@@ -19,7 +26,7 @@
           <form action="#/fed-globals" method="put">
             <input type="hidden" name="app_name" value="federation"/>
             <input type="hidden" name="key" value="local_nodename"/>
-            <input type="text" name="value" value="<%= nodename.value %>" />
+            <input type="text" name="value" value="<%= nodename %>" />
             <input type="submit" value="Update"/>
           </form>
         </td>

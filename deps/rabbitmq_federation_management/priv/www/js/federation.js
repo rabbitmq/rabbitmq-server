@@ -2,8 +2,7 @@ dispatcher_add(function(sammy) {
     sammy.get('#/federation', function() {
             render({'links':       '/federation-links',
                     'connections': '/parameters/federation_connection',
-                    'nodename':    '/parameters/federation/local_nodename',
-                    'username':    '/parameters/federation/local_username'},
+                    'globals':     '/parameters/federation'},
                 'federation', '#/federation');
         });
     sammy.get('#/federation-connection/:id', function() {
