@@ -48,9 +48,6 @@ validate(<<"federation">>, <<"local_nodename">>, _Term) ->
 validate(<<"federation">>, <<"local_username">>, _Term) ->
     ok;
 
-validate(<<"federation">>, <<"declare_upstream">>, _Term) ->
-    ok;
-
 validate(_AppName, _Key, _Term) ->
     exit({error, key_not_recognised}).
 
@@ -64,9 +61,6 @@ notify(<<"federation">>, <<"local_nodename">>, _Term) ->
     rabbit_federation_link_sup_sup:restart_everything();
 
 notify(<<"federation">>, <<"local_username">>, _Term) ->
-    rabbit_federation_link_sup_sup:restart_everything();
-
-notify(<<"federation">>, <<"declare_upstream">>, _Term) ->
     rabbit_federation_link_sup_sup:restart_everything().
 
 notify_clear(<<"federation_upstream_set">>, _Key) ->
@@ -79,7 +73,4 @@ notify_clear(<<"federation">>, <<"local_nodename">>) ->
     rabbit_federation_link_sup_sup:restart_everything();
 
 notify_clear(<<"federation">>, <<"local_username">>) ->
-    rabbit_federation_link_sup_sup:restart_everything();
-
-notify_clear(<<"federation">>, <<"declare_upstream">>) ->
     rabbit_federation_link_sup_sup:restart_everything().

@@ -475,6 +475,7 @@ ensure_upstream_bindings(State = #state{upstream            = Upstream,
     State2.
 
 ensure_upstream_exchange(#state{upstream   = #upstream{exchange = X},
+                                connection = Conn,
                                 channel    = Ch}) ->
     #exchange{type        = Type,
               durable     = Durable,
@@ -487,11 +488,10 @@ ensure_upstream_exchange(#state{upstream   = #upstream{exchange = X},
                                auto_delete = AutoDelete,
                                internal    = Internal,
                                arguments   = Arguments},
-    case rabbit_runtime_parameters:value(
-           <<"federation">>, <<"declare_upstream">>, true) of
-        true  -> amqp_channel:call(Ch, Decl);
-        false -> ok
-    end.
+    disposable_channel_call(Conn, Decl#'exchange.declare'{passive = true},
+                           fun(?NOT_FOUND, _Text) ->
+                                   amqp_channel:call(Ch, Decl)
+                           end).
 
 ensure_internal_exchange(IntXNameBin,
                          #state{upstream   = #upstream{max_hops = MaxHops,
