@@ -46,7 +46,7 @@ start() ->
     {ok, MemoryWatermark} = application:get_env(vm_memory_high_watermark),
     rabbit_sup:start_restartable_child(vm_memory_monitor, [MemoryWatermark]),
 
-    {ok, DiskLimit} = application:get_env(disk_free_limit),
+    {ok, DiskLimit} = application:get_env(disk_free_low_watermark),
     rabbit_sup:start_restartable_child(rabbit_disk_monitor, [DiskLimit]),
     ok.
 

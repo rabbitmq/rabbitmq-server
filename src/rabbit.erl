@@ -328,7 +328,7 @@ status() ->
                                         get_vm_memory_high_watermark, []}},
             {vm_memory_limit,          {vm_memory_monitor,
                                         get_memory_limit, []}},
-            {disk_free_limit,          {rabbit_disk_monitor,
+            {disk_free_low_watermark,  {rabbit_disk_monitor,
                                         get_disk_free_limit, []}},
             {disk_free,                {rabbit_disk_monitor,
                                         get_disk_free, []}}]),
