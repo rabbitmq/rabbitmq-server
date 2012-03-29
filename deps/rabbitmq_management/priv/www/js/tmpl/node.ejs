@@ -71,7 +71,7 @@
     </tr>
     <tr>
       <th>
-        Disk free
+        Disk space
       </th>
       <td class="status">
 <% if (node.disk_free_limit != 'disk_free_monitoring_disabled') { %>
@@ -85,7 +85,7 @@
          <%= fmt_bytes(node.disk_free) %>
        </div>
    <% } %>
-   <sub><%= fmt_bytes(node.disk_free_limit) %> limit </sub>
+   <sub><%= fmt_bytes(node.disk_free_limit) %> low watermark</sub>
 <% } else { %>
          (not monitored)
 <% } %>
