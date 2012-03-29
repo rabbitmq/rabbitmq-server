@@ -31,11 +31,12 @@ content_types_provided(ReqData, Context) ->
 
 to_json(ReqData, Context = #context{user = User = #user{tags = Tags}}) ->
     {ok, StatsLevel} = application:get_env(rabbit, collect_statistics),
-    %% NB: node and stats level duplicate what's in /nodes but we want
-    %% to (a) know which node we're talking to and (b) use the stats
-    %% level to switch features on / off in the UI.
+    %% NB: this duplicates what's in /nodes but we want a global idea
+    %% of this. And /nodes is not accepssible to non-monitor users.
+    ExchangeTypes = rabbit_mgmt_external_stats:list_registry_plugins(exchange),
     Overview0 = [{management_version, version()},
-                 {statistics_level,   StatsLevel}],
+                 {statistics_level,   StatsLevel},
+                 {exchange_types,     ExchangeTypes}],
     Overview =
         case rabbit_mgmt_util:is_monitor(Tags) of
             true ->
