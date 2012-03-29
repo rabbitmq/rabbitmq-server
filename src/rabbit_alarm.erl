@@ -181,8 +181,8 @@ internal_register(Pid, {M, F, A} = HighMemMFA,
                   State = #alarms{alertees = Alertees}) ->
     _MRef = erlang:monitor(process, Pid),
     case dict:find(node(), State#alarms.alarmed_nodes) of
-        {ok, Sources} -> [apply(M, F, A ++ [Pid, true]) || R <- Sources];
-        error         -> ok
+        {ok, _Sources} -> apply(M, F, A ++ [Pid, true]);
+        error          -> ok
     end,
     NewAlertees = dict:store(Pid, HighMemMFA, Alertees),
     State#alarms{alertees = NewAlertees}.
