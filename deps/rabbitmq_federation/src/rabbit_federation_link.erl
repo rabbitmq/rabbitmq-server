@@ -481,13 +481,17 @@ ensure_upstream_exchange(#state{upstream   = #upstream{exchange = X},
               auto_delete = AutoDelete,
               internal    = Internal,
               arguments   = Arguments} = X,
-    amqp_channel:call(
-      Ch, #'exchange.declare'{exchange    = name(X),
-                              type        = list_to_binary(atom_to_list(Type)),
-                              durable     = Durable,
-                              auto_delete = AutoDelete,
-                              internal    = Internal,
-                              arguments   = Arguments}).
+    Decl = #'exchange.declare'{exchange    = name(X),
+                               type        = list_to_binary(atom_to_list(Type)),
+                               durable     = Durable,
+                               auto_delete = AutoDelete,
+                               internal    = Internal,
+                               arguments   = Arguments},
+    case rabbit_runtime_parameters:value(
+           <<"federation">>, <<"declare_upstream">>, true) of
+        true  -> amqp_channel:call(Ch, Decl);
+        false -> ok
+    end.
 
 ensure_internal_exchange(IntXNameBin,
                          #state{upstream   = #upstream{max_hops = MaxHops,
