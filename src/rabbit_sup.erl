@@ -52,22 +52,20 @@ start_child(Mod, Args) ->
     start_child(Mod, Mod, Args).
 
 start_child(ChildId, Mod, Args) ->
-    {ok, _} = supervisor:start_child(?SERVER,
-                                     {ChildId, {Mod, start_link, Args},
-                                      transient, ?MAX_WAIT, worker, [Mod]}),
-    ok.
+    child_reply(supervisor:start_child(?SERVER,
+                                       {ChildId, {Mod, start_link, Args},
+                                        transient, ?MAX_WAIT, worker, [Mod]})).
 
 start_restartable_child(Mod) ->
     start_restartable_child(Mod, []).
 
 start_restartable_child(Mod, Args) ->
     Name = list_to_atom(atom_to_list(Mod) ++ "_sup"),
-    {ok, _} = supervisor:start_child(
-                ?SERVER,
-                {Name, {rabbit_restartable_sup, start_link,
-                        [Name, {Mod, start_link, Args}]},
-                 transient, infinity, supervisor, [rabbit_restartable_sup]}),
-    ok.
+    child_reply(supervisor:start_child(
+                  ?SERVER,
+                  {Name, {rabbit_restartable_sup, start_link,
+                          [Name, {Mod, start_link, Args}]},
+                   transient, infinity, supervisor, [rabbit_restartable_sup]})).
 
 stop_child(ChildId) ->
     case supervisor:terminate_child(?SERVER, ChildId) of
@@ -77,3 +75,9 @@ stop_child(ChildId) ->
 
 init([]) ->
     {ok, {{one_for_all, 0, 1}, []}}.
+
+
+%%----------------------------------------------------------------------------
+
+child_reply({ok, _}) -> ok;
+child_reply(X)       -> X.

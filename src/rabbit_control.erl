@@ -328,7 +328,7 @@ action(set_vm_memory_high_watermark, Node, [Arg], _Opts, Inform) ->
                              0 -> Arg ++ ".0";
                              _ -> Arg
                          end),
-    Inform("Setting memory threshhold on ~p to ~p", [Node, Frac]),
+    Inform("Setting memory threshold on ~p to ~p", [Node, Frac]),
     rpc_call(Node, vm_memory_monitor, set_vm_memory_high_watermark, [Frac]);
 
 action(set_permissions, Node, [Username, CPerm, WPerm, RPerm], Opts, Inform) ->
