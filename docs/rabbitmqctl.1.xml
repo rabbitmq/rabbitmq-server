@@ -1422,7 +1422,6 @@
             </para>
           </listitem>
         </varlistentry>
-
         <varlistentry>
           <term><cmdsynopsis><command>set_vm_memory_high_watermark</command> <arg choice="req"><replaceable>fraction</replaceable></arg></cmdsynopsis></term>
           <listitem>
@@ -1438,8 +1437,6 @@
             </variablelist>
           </listitem>
         </varlistentry>
-
-
       </variablelist>
     </refsect2>
   </refsect1>

@@ -331,7 +331,6 @@ action(set_vm_memory_high_watermark, Node, [Arg], _Opts, Inform) ->
     Inform("Setting memory threshhold on ~p to ~p", [Node, Frac]),
     rpc_call(Node, vm_memory_monitor, set_vm_memory_high_watermark, [Frac]);
 
-
 action(set_permissions, Node, [Username, CPerm, WPerm, RPerm], Opts, Inform) ->
     VHost = proplists:get_value(?VHOST_OPT, Opts),
     Inform("Setting permissions for user ~p in vhost ~p", [Username, VHost]),
@@ -551,4 +550,3 @@ prettify_typed_amqp_value(table,   Value) -> prettify_amqp_table(Value);
 prettify_typed_amqp_value(array,   Value) -> [prettify_typed_amqp_value(T, V) ||
                                                  {T, V} <- Value];
 prettify_typed_amqp_value(_Type,   Value) -> Value.
-
