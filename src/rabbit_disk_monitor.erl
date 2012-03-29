@@ -83,7 +83,7 @@ init([Limit]) ->
                      timeout = ?DEFAULT_DISK_CHECK_INTERVAL,
                      timer   = TRef,
                      alarmed = false},
-    case {get_disk_free(Dir),
+    case {catch get_disk_free(Dir),
           vm_memory_monitor:get_total_memory()} of
         {N1, N2} when is_integer(N1), is_integer(N2) ->
             {ok, set_disk_limits(State, Limit)};
