@@ -153,25 +153,29 @@ infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
 
 i(fd_used,  #state{fd_used  = FdUsed})  -> FdUsed;
 i(fd_total, #state{fd_total = FdTotal}) -> FdTotal;
-i(sockets_used,   _State) ->
+i(sockets_used,    _State) ->
     proplists:get_value(sockets_used, file_handle_cache:info([sockets_used]));
-i(sockets_total,  _State) ->
+i(sockets_total,   _State) ->
     proplists:get_value(sockets_limit, file_handle_cache:info([sockets_limit]));
-i(os_pid,         _State) -> list_to_binary(os:getpid());
-i(mem_ets,        _State) -> erlang:memory(ets);
-i(mem_binary,     _State) -> erlang:memory(binary);
-i(mem_proc,       _State) -> erlang:memory(processes);
-i(mem_proc_used,  _State) -> erlang:memory(processes_used);
-i(mem_atom,       _State) -> erlang:memory(atom);
-i(mem_atom_used,  _State) -> erlang:memory(atom_used);
-i(mem_code,       _State) -> erlang:memory(code);
-i(mem_used,       _State) -> erlang:memory(total);
-i(mem_limit,      _State) -> vm_memory_monitor:get_memory_limit();
-i(proc_used,      _State) -> erlang:system_info(process_count);
-i(proc_total,     _State) -> erlang:system_info(process_limit);
-i(erlang_version, _State) -> list_to_binary(erlang:system_info(otp_release));
-i(run_queue,      _State) -> erlang:statistics(run_queue);
-i(processors,     _State) -> erlang:system_info(logical_processors);
+i(os_pid,          _State) -> list_to_binary(os:getpid());
+i(mem_ets,         _State) -> erlang:memory(ets);
+i(mem_binary,      _State) -> erlang:memory(binary);
+i(mem_proc,        _State) -> erlang:memory(processes);
+i(mem_proc_used,   _State) -> erlang:memory(processes_used);
+i(mem_atom,        _State) -> erlang:memory(atom);
+i(mem_atom_used,   _State) -> erlang:memory(atom_used);
+i(mem_code,        _State) -> erlang:memory(code);
+i(mem_used,        _State) -> erlang:memory(total);
+i(mem_limit,       _State) -> vm_memory_monitor:get_memory_limit();
+i(mem_alarm,       _State) -> resource_alarm_set(mem);
+i(proc_used,       _State) -> erlang:system_info(process_count);
+i(proc_total,      _State) -> erlang:system_info(process_limit);
+i(erlang_version,  _State) -> list_to_binary(erlang:system_info(otp_release));
+i(run_queue,       _State) -> erlang:statistics(run_queue);
+i(processors,      _State) -> erlang:system_info(logical_processors);
+i(disk_free_limit, _State) -> get_disk_free_limit();
+i(disk_free,       _State) -> get_disk_free();
+i(disk_free_alarm, _State) -> resource_alarm_set(disk);
 i(uptime, _State) ->
     {Total, _} = erlang:statistics(wall_clock),
     Total;
@@ -187,11 +191,7 @@ i(auth_mechanisms, _State) ->
       fun (N) -> lists:member(list_to_atom(binary_to_list(N)), Mechanisms) end);
 i(applications, _State) ->
     [format_application(A) ||
-        A <- lists:keysort(1, application:which_applications(infinity))];
-i(mem_alarm, _State) -> resource_alarm_set(mem);
-i(disk_free_limit, _State) -> get_disk_free_limit();
-i(disk_free, _State) -> get_disk_free();
-i(disk_free_alarm, _State) -> resource_alarm_set(disk).
+        A <- lists:keysort(1, application:which_applications(infinity))].
 
 resource_alarm_set(Source) ->
     lists:member({{resource_limit, Source, node()},[]},
