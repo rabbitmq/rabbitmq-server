@@ -167,7 +167,7 @@ i(mem_atom_used,   _State) -> erlang:memory(atom_used);
 i(mem_code,        _State) -> erlang:memory(code);
 i(mem_used,        _State) -> erlang:memory(total);
 i(mem_limit,       _State) -> vm_memory_monitor:get_memory_limit();
-i(mem_alarm,       _State) -> resource_alarm_set(mem);
+i(mem_alarm,       _State) -> resource_alarm_set(memory);
 i(proc_used,       _State) -> erlang:system_info(process_count);
 i(proc_total,      _State) -> erlang:system_info(process_limit);
 i(erlang_version,  _State) -> list_to_binary(erlang:system_info(otp_release));
