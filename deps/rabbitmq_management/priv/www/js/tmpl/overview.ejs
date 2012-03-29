@@ -1,5 +1,42 @@
 <h1>Overview</h1>
+<div class="updatable">
+<%
+var rabbit_version = 'unknown';
+var erlang_version = 'unknown';
+var version_warning = null;
 
+for (var i = 0; i < nodes.length; i++) {
+    var node = nodes[i];
+    var r = fmt_rabbit_version(node.applications);
+    var e = node.erlang_version;
+    if (rabbit_version == 'unknown') {
+        rabbit_version = r;
+        erlang_version = e;
+    } else {
+        if (r != 'unknown' && rabbit_version != r) {
+            version_warning = "Node " + node.name + " runs RabbitMQ version " +
+                              r +  "<br/>Node " + nodes[0].name +
+                              "  runs RabbitMQ version " + rabbit_version;
+            break;
+        }
+        if (e != 'unknown' && erlang_version != e) {
+            version_warning = "Node " + node.name + " runs Erlang version " +
+                              e +  "<br/>Node " + nodes[0].name +
+                              "  runs Erlang version " + erlang_version;
+            break;
+        }
+    }
+}
+if (version_warning != null) {
+%>
+  <p class="warning">
+    Warning: version mismatch<br/><br/>
+    <%= version_warning %><br/>This cluster may behave unpredictably.<br/><br/>
+    You are very strongly recommended to ensure that all nodes in this cluster
+    run the same versions of Erlang and RabbitMQ.
+  </p>
+<% } %>
+</div>
 <div class="section">
 <h2>Totals</h2>
 <div class="hider updatable">
@@ -26,6 +63,14 @@
 <div class="section">
 <h2>Nodes</h2>
 <div class="hider updatable">
+<% if (version_warning == null) { %>
+  <p>
+    <b>RabbitMQ version:</b>
+    <%= rabbit_version %><br/>
+    <b>Erlang version:</b>
+    <%= erlang_version %>
+  </p>
+<% } %>
 <table class="list">
   <tr>
     <th>Name</th>
@@ -48,10 +93,6 @@
       Disk space
     </th>
     <th>Uptime</th>
-    <th>
-      Version
-      <sub>(RabbitMQ / Erlang)</sub>
-    </th>
     <th>Type</th>
   </tr>
 <%
@@ -63,13 +104,13 @@
        <%= link_node(node.name) %>
      </td>
 <% if (!node.running) { %>
-     <td class="status" colspan="7">
+     <td class="status" colspan="6">
        <div class="red">
          Node not running
        </div>
      </td>
 <% } else if (node.external_stats_not_running) { %>
-     <td class="status" colspan="7">
+     <td class="status" colspan="6">
        <div class="red">
          Could not contact management agent
        </div>
@@ -129,9 +170,6 @@
      </td>
      <td class="r">
        <%= fmt_uptime(node.uptime) %>
-     </td>
-     <td class="c">
-       <%= fmt_rabbit_version(node.applications) %> / <%= node.erlang_version %>
      </td>
 <% } %>
      <td class="c">
