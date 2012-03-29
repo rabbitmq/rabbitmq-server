@@ -106,7 +106,7 @@ handle_event({register, Pid, HighMemMFA}, State) ->
 handle_event(_Event, State) ->
     {ok, State}.
 
-handle_info({'DOWN', _MRef, process, Pid, _Source},
+handle_info({'DOWN', _MRef, process, Pid, _Reason},
             State = #alarms{alertees = Alertees}) ->
     {ok, State#alarms{alertees = dict:erase(Pid, Alertees)}};
 
