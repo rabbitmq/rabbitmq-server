@@ -17,7 +17,7 @@
 -module(rabbit_net).
 -include("rabbit.hrl").
 
--export([is_ssl/1, ssl_info/1, controlling_process/2, getstat/2,
+-export([is_ssl/1, ssl_info/1, ssl_opts/1, controlling_process/2, getstat/2,
          recv/1, async_recv/3, port_command/2, setopts/2, send/2, close/1,
          maybe_fast_close/1, sockname/1, peername/1, peercert/1,
          connection_string/2]).
@@ -39,6 +39,7 @@
 -spec(ssl_info/1 :: (socket())
                     -> 'nossl' | ok_val_or_error(
                                    {atom(), {atom(), atom(), atom()}})).
+-spec(ssl_opts/1 :: (rabbit_types:infos()) -> rabbit_types:infos()).
 -spec(controlling_process/2 :: (socket(), pid()) -> ok_or_any_error()).
 -spec(getstat/2 ::
         (socket(), [stat_option()])
@@ -79,6 +80,14 @@ ssl_info(Sock) when ?IS_SSL(Sock) ->
     ssl:connection_info(Sock#ssl_socket.ssl);
 ssl_info(_Sock) ->
     nossl.
+
+ssl_opts(SslOpts0) ->
+    case proplists:lookup(cacertdir, SslOpts0) of
+        {cacertdir, Dir} ->
+            [{cacerts, load_cacerts_dir(Dir)} | SslOpts0];
+        none ->
+            SslOpts0
+    end.
 
 controlling_process(Sock, Pid) when ?IS_SSL(Sock) ->
     ssl:controlling_process(Sock#ssl_socket.ssl, Pid);
@@ -164,3 +173,13 @@ connection_string(Sock, Direction) ->
         {_, {error, _Reason} = Error} ->
             Error
     end.
+
+load_cacerts_dir(Dir) ->
+    filelib:fold_files(
+      Dir, ".*\\.pem", false,
+      fun (F, Certs) ->
+              {ok, PemBin} = file:read_file(F),
+              Ders = [Cert || {'Certificate', Cert, not_encrypted}
+                                  <- public_key:pem_decode(PemBin)],
+              Ders ++ Certs
+      end, []).
