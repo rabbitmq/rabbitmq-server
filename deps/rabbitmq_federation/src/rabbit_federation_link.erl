@@ -440,7 +440,7 @@ consume_from_upstream_queue(
              end,
     HAArg = case HA of
                 none -> [];
-                _    -> [{<<"x-ha-policy">>, longstr, list_to_binary(HA)}]
+                _    -> [{<<"x-ha-policy">>, longstr, HA}]
             end,
     Args = ExpiryArg ++ TTLArg ++ HAArg,
     amqp_channel:call(Ch, #'queue.declare'{queue     = Q,
