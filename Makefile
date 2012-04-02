@@ -216,12 +216,12 @@ start-rabbit-on-node: all
 stop-rabbit-on-node: all
 	echo "rabbit:stop()." | $(ERL_CALL)
 
-set-memory-alarm: all
-	echo "alarm_handler:set_alarm({{vm_memory_high_watermark, node()}, []})." | \
+set-resource-alarm: all
+	echo "alarm_handler:set_alarm({{resource_limit, $(SOURCE), node()}, []})." | \
 	$(ERL_CALL)
 
-clear-memory-alarm: all
-	echo "alarm_handler:clear_alarm({vm_memory_high_watermark, node()})." | \
+clear-resource-alarm: all
+	echo "alarm_handler:clear_alarm({resource_limit, $(SOURCE), node()})." | \
 	$(ERL_CALL)
 
 stop-node:

@@ -25,7 +25,8 @@
 -type(async_callback() :: fun ((atom(), fun ((atom(), state()) -> state())) -> 'ok')).
 -type(duration() :: ('undefined' | 'infinity' | number())).
 
--type(msg_fun() :: fun((rabbit_types:basic_message(), ack()) -> 'ok')).
+-type(msg_fun() :: fun((rabbit_types:basic_message(), ack()) -> 'ok') |
+                   'undefined').
 
 -spec(start/1 :: ([rabbit_amqqueue:name()]) -> 'ok').
 -spec(stop/0 :: () -> 'ok').
@@ -45,8 +46,8 @@
                              -> {undefined, state()}).
 -spec(drain_confirmed/1 :: (state()) -> {[rabbit_guid:guid()], state()}).
 -spec(dropwhile/3 ::
-        (fun ((rabbit_types:message_properties()) -> boolean()),
-             msg_fun() | 'undefined', state())
+        (fun ((rabbit_types:message_properties()) -> boolean()), msg_fun(),
+             state())
         -> state()).
 -spec(fetch/2 :: (true,  state()) -> {fetch_result(ack()), state()};
                  (false, state()) -> {fetch_result(undefined), state()}).

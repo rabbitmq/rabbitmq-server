@@ -28,7 +28,9 @@
 -ifdef(use_specs).
 
 -spec(maybe_upgrade_mnesia/0 :: () -> 'ok').
--spec(maybe_upgrade_local/0 :: () -> 'ok' | 'version_not_available').
+-spec(maybe_upgrade_local/0 :: () -> 'ok' |
+                                     'version_not_available' |
+                                     'starting_from_scratch').
 
 -endif.
 
