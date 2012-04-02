@@ -183,10 +183,6 @@
          multi_call/2, multi_call/3, multi_call/4,
          enter_loop/3, enter_loop/4, enter_loop/5, enter_loop/6, wake_hib/1]).
 
--ifndef(use_specs).
--export([behaviour_info/1]).
--endif.
-
 %% System exports
 -export([system_continue/3,
          system_terminate/4,
@@ -203,11 +199,11 @@
                     timeout_state, queue, debug, prioritise_call,
                     prioritise_cast, prioritise_info}).
 
+-ifdef(use_specs).
+
 %%%=========================================================================
 %%%  Specs. These exist only to shut up dialyzer's warnings
 %%%=========================================================================
-
--ifdef(use_specs).
 
 -type(gs2_state() :: #gs2_state{}).
 
@@ -217,15 +213,11 @@
 -spec(pre_hibernate/1 :: (gs2_state()) -> no_return()).
 -spec(system_terminate/4 :: (_, _, _, gs2_state()) -> no_return()).
 
--endif.
+-type(millis() :: non_neg_integer()).
 
 %%%=========================================================================
 %%%  API
 %%%=========================================================================
-
--ifdef(use_specs).
-
--type(millis() :: non_neg_integer()).
 
 -callback init(Args :: term()) ->
     {ok, State :: term()} |
@@ -262,6 +254,8 @@
 %% in warnings (the same applied for the behaviour_info before).
 
 -else.
+
+-export([behaviour_info/1]).
 
 behaviour_info(callbacks) ->
     [{init,1},{handle_call,3},{handle_cast,2},{handle_info,2},
