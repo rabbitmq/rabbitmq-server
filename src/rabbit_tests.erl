@@ -1245,6 +1245,9 @@ test_confirms() ->
                                           },
                       rabbit_basic:build_content(
                         #'P_basic'{delivery_mode = 2}, <<"">>)),
+    %% We must not kill the queue before the channel has processed the
+    %% 'publish'.
+    ok = rabbit_channel:flush(Ch),
     %% Crash the queue
     QPid1 ! boom,
     %% Wait for a nack
