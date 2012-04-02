@@ -544,19 +544,26 @@ attempt_delivery(Delivery = #delivery{sender     = SenderPid,
             {Delivered, Confirm, State#q{backing_queue_state = BQS1}}
     end.
 
-deliver_or_enqueue(Delivery = #delivery{message = Message,
-                                        sender  = SenderPid}, State) ->
+deliver_or_enqueue(Delivery = #delivery{message    = Message,
+                                        msg_seq_no = MsgSeqNo,
+                                        sender     = SenderPid}, State) ->
     {Delivered, Confirm, State1} = attempt_delivery(Delivery, State),
-    State2 = #q{backing_queue = BQ, backing_queue_state = BQS} =
-        maybe_record_confirm_message(Confirm, State1),
-    case {Delivered, State2#q.ttl} of
-        {true,  _} -> State2;
-        {false, 0} -> State3 = discard_delivery(Delivery, State2),
-                      %% TODO: handle confirms and dlx
-                      State3;
-        {false, _} -> Props = message_properties(Confirm, State),
-                      BQS1 = BQ:publish(Message, Props, SenderPid, BQS),
-                      ensure_ttl_timer(State2#q{backing_queue_state = BQS1})
+    case Delivered of
+        true ->
+            maybe_record_confirm_message(Confirm, State1);
+        %% optimisation
+        false when State1#q.ttl == 0 andalso State1#q.dlx == undefined ->
+            case Confirm of
+                never -> ok;
+                _     -> rabbit_misc:confirm_to_sender(SenderPid, [MsgSeqNo])
+            end,
+            discard_delivery(Delivery, State1);
+        false ->
+            State2 = #q{backing_queue = BQ, backing_queue_state = BQS} =
+                maybe_record_confirm_message(Confirm, State1),
+            Props = message_properties(Confirm, State2),
+            BQS1 = BQ:publish(Message, Props, SenderPid, BQS),
+            ensure_ttl_timer(State2#q{backing_queue_state = BQS1})
     end.
 
 requeue_and_run(AckTags, State = #q{backing_queue = BQ}) ->
