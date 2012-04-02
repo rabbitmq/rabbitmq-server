@@ -57,8 +57,8 @@
 %% you wish to be passed into the callback module's functions. The
 %% joined/2 function will be called when we have joined the group,
 %% with the arguments passed to start_link and a list of the current
-%% members of the group. See the comments in behaviour_info/1 below
-%% for further details of the callback functions.
+%% members of the group. See the callbacks specs and the comments
+%% below for further details of the callback functions.
 %%
 %% leave/1
 %% Provide the Pid. Removes the Pid from the group. The callback
@@ -378,7 +378,9 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3, prioritise_info/2]).
 
+-ifndef(use_specs).
 -export([behaviour_info/1]).
+-endif.
 
 -export([table_definitions/0]).
 
@@ -431,55 +433,62 @@
 -spec(confirmed_broadcast/2 :: (pid(), any()) -> 'ok').
 -spec(group_members/1 :: (pid()) -> [pid()]).
 
--endif.
+%% The joined, members_changed and handle_msg callbacks can all
+%% return any of the following terms:
+%%
+%% 'ok' - the callback function returns normally
+%%
+%% {'stop', Reason} - the callback indicates the member should
+%% stop with reason Reason and should leave the group.
+%%
+%% {'become', Module, Args} - the callback indicates that the
+%% callback module should be changed to Module and that the
+%% callback functions should now be passed the arguments
+%% Args. This allows the callback module to be dynamically
+%% changed.
+
+%% Called when we've successfully joined the group. Supplied with
+%% Args provided in start_link, plus current group members.
+-callback joined(Args :: term(), Members :: [pid()]) ->
+    ok | {stop, Reason :: term()} | {become, Module :: atom(), Args :: any()}.
+
+%% Supplied with Args provided in start_link, the list of new
+%% members and the list of members previously known to us that
+%% have since died. Note that if a member joins and dies very
+%% quickly, it's possible that we will never see that member
+%% appear in either births or deaths. However we are guaranteed
+%% that (1) we will see a member joining either in the births
+%% here, or in the members passed to joined/2 before receiving
+%% any messages from it; and (2) we will not see members die that
+%% we have not seen born (or supplied in the members to
+%% joined/2).
+-callback members_changed(Args :: term(), Births :: [pid()],
+                          Deaths :: [pid()]) ->
+    ok | {stop, Reason :: term()} | {become, Module :: atom(), Args :: any()}.
+
+%% Supplied with Args provided in start_link, the sender, and the
+%% message. This does get called for messages injected by this
+%% member, however, in such cases, there is no special
+%% significance of this invocation: it does not indicate that the
+%% message has made it to any other members, let alone all other
+%% members.
+-callback handle_msg(Args :: term(), From :: pid(), Message :: term()) ->
+    ok | {stop, Reason :: term()} | {become, Module :: atom(), Args :: any()}.
+
+%% Called on gm member termination as per rules in gen_server,
+%% with the Args provided in start_link plus the termination
+%% Reason.
+-callback terminate(Args :: term(), Reason :: term()) ->
+    ok | term().
+
+-else.
 
 behaviour_info(callbacks) ->
-    [
-     %% The joined, members_changed and handle_msg callbacks can all
-     %% return any of the following terms:
-     %%
-     %% 'ok' - the callback function returns normally
-     %%
-     %% {'stop', Reason} - the callback indicates the member should
-     %% stop with reason Reason and should leave the group.
-     %%
-     %% {'become', Module, Args} - the callback indicates that the
-     %% callback module should be changed to Module and that the
-     %% callback functions should now be passed the arguments
-     %% Args. This allows the callback module to be dynamically
-     %% changed.
-
-     %% Called when we've successfully joined the group. Supplied with
-     %% Args provided in start_link, plus current group members.
-     {joined, 2},
-
-     %% Supplied with Args provided in start_link, the list of new
-     %% members and the list of members previously known to us that
-     %% have since died. Note that if a member joins and dies very
-     %% quickly, it's possible that we will never see that member
-     %% appear in either births or deaths. However we are guaranteed
-     %% that (1) we will see a member joining either in the births
-     %% here, or in the members passed to joined/2 before receiving
-     %% any messages from it; and (2) we will not see members die that
-     %% we have not seen born (or supplied in the members to
-     %% joined/2).
-     {members_changed, 3},
-
-     %% Supplied with Args provided in start_link, the sender, and the
-     %% message. This does get called for messages injected by this
-     %% member, however, in such cases, there is no special
-     %% significance of this invocation: it does not indicate that the
-     %% message has made it to any other members, let alone all other
-     %% members.
-     {handle_msg, 3},
-
-     %% Called on gm member termination as per rules in gen_server,
-     %% with the Args provided in start_link plus the termination
-     %% Reason.
-     {terminate, 2}
-    ];
+    [{joined, 2}, {members_changed, 3}, {handle_msg, 3}, {terminate, 2}];
 behaviour_info(_Other) ->
     undefined.
+
+-endif.
 
 create_tables() ->
     create_tables([?TABLE]).
