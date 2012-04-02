@@ -169,17 +169,11 @@ handle_info({'DOWN', _Ref, process, Ch, Reason},
 handle_info(Msg, State) ->
     {stop, {unexpected_info, Msg}, State}.
 
-%% If we terminate due to a gen_server call exploding (almost
-%% certainly due to an amqp_channel:call() exploding) then we do not
-%% want to report the gen_server call in our status.
-terminate({E = {shutdown, _}, _}, State) ->
-    terminate(E, State);
-
-terminate(Reason, {not_started, {Upstream, XName}}) ->
-    rabbit_federation_status:report(Upstream, XName, Reason),
+terminate(_Reason, {not_started, _}) ->
     ok;
 
 terminate(shutdown, #state{downstream_channel    = DCh,
+
                            downstream_connection = DConn,
                            downstream_exchange   = XName,
                            upstream              = Upstream,
@@ -201,13 +195,10 @@ terminate(shutdown, #state{downstream_channel    = DCh,
     rabbit_federation_status:remove(Upstream, XName),
     ok;
 
-terminate(Reason, #state{downstream_channel    = DCh,
-                         downstream_connection = DConn,
-                         downstream_exchange   = XName,
-                         upstream              = Upstream,
-                         connection            = Conn,
-                         channel               = Ch}) ->
-    rabbit_federation_status:report(Upstream, XName, Reason),
+terminate(_Reason, #state{downstream_channel    = DCh,
+                          downstream_connection = DConn,
+                          connection            = Conn,
+                          channel               = Ch}) ->
     ensure_closed(DConn, DCh),
     ensure_closed(Conn, Ch),
     ok.
@@ -362,24 +353,32 @@ go(S0 = {not_started, {Upstream, DownXName =
                     %% serial we will process. Since it compares larger than
                     %% any number we never process any commands. And we will
                     %% soon get told to stop anyway.
-                    State = ensure_upstream_bindings(
-                              consume_from_upstream_queue(
-                                #state{upstream              = Upstream,
-                                       connection            = Conn,
-                                       channel               = Ch,
-                                       next_serial           = Serial,
-                                       downstream_connection = DConn,
-                                       downstream_channel    = DCh,
+                    try
+                        State = ensure_upstream_bindings(
+                                  consume_from_upstream_queue(
+                                    #state{upstream              = Upstream,
+                                           connection            = Conn,
+                                           channel               = Ch,
+                                           next_serial           = Serial,
+                                           downstream_connection = DConn,
+                                           downstream_channel    = DCh,
                                        downstream_exchange   = DownXName}),
-                              Bindings),
-                    rabbit_log:info("Federation ~s connected to ~s~n",
-                                    [rabbit_misc:rs(DownXName),
-                                     rabbit_federation_upstream:to_string(
-                                       Upstream)]),
-                    Name = pget(name, amqp_connection:info(DConn, [name])),
-                    rabbit_federation_status:report(
-                      Upstream, DownXName, {running, Name}),
-                    {noreply, State};
+                                  Bindings),
+                        rabbit_log:info("Federation ~s connected to ~s~n",
+                                        [rabbit_misc:rs(DownXName),
+                                         rabbit_federation_upstream:to_string(
+                                           Upstream)]),
+                        Name = pget(name, amqp_connection:info(DConn, [name])),
+                        rabbit_federation_status:report(
+                          Upstream, DownXName, {running, Name}),
+                        {noreply, State}
+                    catch exit:E ->
+                            %% terminate/2 will not get this, as we
+                            %% have not put them in our state yet
+                            ensure_closed(DConn, DCh),
+                            ensure_closed(Conn, Ch),
+                            connection_error(remote, E, S0)
+                    end;
                 E ->
                     ensure_closed(DConn, DCh),
                     connection_error(remote, E, S0)
@@ -389,22 +388,31 @@ go(S0 = {not_started, {Upstream, DownXName =
     end.
 
 connection_error(remote, E, State = {not_started, {U, XName}}) ->
+    rabbit_federation_status:report(U, XName, clean_reason(E)),
     rabbit_log:warning("Federation ~s did not connect to ~s~n~p~n",
                        [rabbit_misc:rs(XName),
                         rabbit_federation_upstream:to_string(U), E]),
     {stop, {shutdown, restart}, State};
 
 connection_error(remote, E, State = #state{upstream            = U,
-                                          downstream_exchange = XName}) ->
+                                           downstream_exchange = XName}) ->
+    rabbit_federation_status:report(U, XName, clean_reason(E)),
     rabbit_log:info("Federation ~s disconnected from ~s~n~p~n",
                     [rabbit_misc:rs(XName),
                      rabbit_federation_upstream:to_string(U), E]),
     {stop, {shutdown, restart}, State};
 
-connection_error(local, E, State = {not_started, {_U, XName}}) ->
+connection_error(local, E, State = {not_started, {U, XName}}) ->
+    rabbit_federation_status:report(U, XName, clean_reason(E)),
     rabbit_log:warning("Federation ~s did not connect locally~n~p~n",
                        [rabbit_misc:rs(XName), E]),
     {stop, {shutdown, restart}, State}.
+
+%% If we terminate due to a gen_server call exploding (almost
+%% certainly due to an amqp_channel:call() exploding) then we do not
+%% want to report the gen_server call in our status.
+clean_reason({E = {shutdown, _}, _}) -> E;
+clean_reason(E)                      -> E.
 
 %% local / disconnected never gets invoked, see handle_info({'DOWN', ...
 
