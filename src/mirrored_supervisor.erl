@@ -120,8 +120,6 @@
          delete_child/2, terminate_child/2,
          which_children/1, count_children/1, check_childspecs/1]).
 
--export([behaviour_info/1]).
-
 -behaviour(?GEN_SERVER).
 -behaviour(?SUPERVISOR).
 
@@ -141,6 +139,21 @@
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
+
+%%--------------------------------------------------------------------------
+%% Callback behaviour
+%%--------------------------------------------------------------------------
+
+-callback init(Args :: term()) ->
+    {ok, {{RestartStrategy :: supervisor2:strategy(),
+           MaxR :: non_neg_integer(),
+           MaxT :: non_neg_integer()},
+           [ChildSpec :: supervisor2:child_spec()]}}
+    | ignore.
+
+%%--------------------------------------------------------------------------
+%% Specs
+%%--------------------------------------------------------------------------
 
 -type startlink_err() :: {'already_started', pid()} | 'shutdown' | term().
 -type startlink_ret() :: {'ok', pid()} | 'ignore' | {'error', startlink_err()}.
@@ -165,6 +178,13 @@
 
 -spec create_tables() -> Result when
       Result :: 'ok'.
+
+-else.
+
+-export([behaviour_info/1]).
+
+behaviour_info(callbacks) -> [{init,1}];
+behaviour_info(_Other)    -> undefined.
 
 -endif.
 
@@ -204,9 +224,6 @@ terminate_child(Sup, Id)    -> find_call(Sup, Id, {msg, terminate_child, [Id]}).
 which_children(Sup)         -> fold(which_children, Sup, fun lists:append/2).
 count_children(Sup)         -> fold(count_children, Sup, fun add_proplists/2).
 check_childspecs(Specs)     -> ?SUPERVISOR:check_childspecs(Specs).
-
-behaviour_info(callbacks) -> [{init,1}];
-behaviour_info(_Other)    -> undefined.
 
 call(Sup, Msg) ->
     ?GEN_SERVER:call(child(Sup, mirroring), Msg, infinity).
