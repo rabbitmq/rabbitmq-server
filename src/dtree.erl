@@ -14,13 +14,21 @@
 %% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
-%% A dual-index tree. Entries have a primary key and a set of
-%% secondary keys. Most operations require the supply of just the
-%% secondary key. Entries exists while they have a non-empty secondar
-%% key set. The 'take' operations return the entries that got removed,
-%% i.e. that had no remaining secondary keys. take/3 expects entries
-%% to exist with the supplied primary keys and secondary key. take/2
-%% can cope with the supplied secondary key having no entries.
+%% A dual-index tree.
+%%
+%% Conceptually, what we want is a map that has two distinct sets of
+%% keys (referred to here as primary and secondary, although that
+%% shouldn't imply a hierarchy) pointing to one set of
+%% values. However, in practice what we'll always want to do is insert
+%% a value that's pointed at by (one primary, many secondaries) and
+%% remove values that are pointed at by (one secondary, many
+%% primaries) or (one secondary, all primaries). Thus the API.
+%%
+%% Entries exists while they have a non-empty secondary key set. The
+%% 'take' operations return the entries that got removed, i.e. that
+%% had no remaining secondary keys. take/3 expects entries to exist
+%% with the supplied primary keys and secondary key. take/2 can cope
+%% with the supplied secondary key having no entries.
 
 -module(dtree).
 
