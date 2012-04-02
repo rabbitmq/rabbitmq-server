@@ -142,16 +142,6 @@
 
 -ifdef(use_specs).
 
--type child()    :: pid() | 'undefined'.
--type child_id() :: term().
--type modules()  :: [module()] | 'dynamic'.
--type worker()   :: 'worker' | 'supervisor'.
--type sup_name() :: {'local', Name :: atom()} | {'global', Name :: atom()}.
--type sup_ref()  :: (Name :: atom())
-                  | {Name :: atom(), Node :: node()}
-                  | {'global', Name :: atom()}
-                  | pid().
-
 -type startlink_err() :: {'already_started', pid()} | 'shutdown' | term().
 -type startlink_ret() :: {'ok', pid()} | 'ignore' | {'error', startlink_err()}.
 
@@ -163,50 +153,15 @@
       Args :: term().
 
 -spec start_link(SupName, GroupName, Module, Args) -> startlink_ret() when
-      SupName :: sup_name(),
+      SupName :: supervisor2:sup_name(),
       GroupName :: group_name(),
       Module :: module(),
       Args :: term().
 
--spec start_child(SupRef, ChildSpec) -> supervisor:startchild_ret() when
-      SupRef :: sup_ref(),
-      ChildSpec :: supervisor:child_spec() | (List :: [term()]).
-
--spec restart_child(SupRef, Id) -> Result when
-      SupRef :: sup_ref(),
-      Id :: child_id(),
-      Result :: {'ok', Child :: child()}
-              | {'ok', Child :: child(), Info :: term()}
-              | {'error', Error},
-      Error :: 'running' | 'not_found' | 'simple_one_for_one' | term().
-
--spec delete_child(SupRef, Id) -> Result when
-      SupRef :: sup_ref(),
-      Id :: child_id(),
-      Result :: 'ok' | {'error', Error},
-      Error :: 'running' | 'not_found' | 'simple_one_for_one'.
-
--spec terminate_child(SupRef, Id) -> Result when
-      SupRef :: sup_ref(),
-      Id :: pid() | child_id(),
-      Result :: 'ok' | {'error', Error},
-      Error :: 'not_found' | 'simple_one_for_one'.
-
--spec which_children(SupRef) -> [{Id,Child,Type,Modules}] when
-      SupRef :: sup_ref(),
-      Id :: child_id() | 'undefined',
-      Child :: child(),
-      Type :: worker(),
-      Modules :: modules().
-
--spec check_childspecs(ChildSpecs) -> Result when
-      ChildSpecs :: [supervisor:child_spec()],
-      Result :: 'ok' | {'error', Error :: term()}.
-
 -spec start_internal(Group, ChildSpecs) -> Result when
       Group :: group_name(),
-      ChildSpecs :: [supervisor:child_spec()],
-      Result :: startlink_ret().
+      ChildSpecs :: [supervisor2:child_spec()],
+      Result :: supervisor2:startlink_ret().
 
 -spec create_tables() -> Result when
       Result :: 'ok'.
