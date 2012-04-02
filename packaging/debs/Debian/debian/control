@@ -2,6 +2,8 @@ Source: rabbitmq-server
 Section: net
 Priority: extra
 Maintainer: RabbitMQ Team <packaging@rabbitmq.com>
+Uploader: Emile Joubert <emile@rabbitmq.com>
+DM-Upload-Allowed: yes
 Build-Depends: cdbs, debhelper (>= 5), erlang-dev, python-simplejson, xmlto, xsltproc, erlang-nox (>= 1:12.b.3), erlang-src (>= 1:12.b.3), unzip, zip
 Standards-Version: 3.8.0
 

@@ -199,9 +199,9 @@ replace_headers(Headers, Content = #content{properties = Props}) ->
 
 indexof(L, Element) -> indexof(L, Element, 1).
 
-indexof([], _Element, _N)              -> 0;
-indexof([Element | _Rest], Element, N) -> N;
-indexof([_ | Rest], Element, N)        -> indexof(Rest, Element, N + 1).
+indexof([],               _Element, _N) -> 0;
+indexof([Element | _Rest], Element,  N) -> N;
+indexof([_ | Rest],        Element,  N) -> indexof(Rest, Element, N + 1).
 
 is_message_persistent(#content{properties = #'P_basic'{
                                  delivery_mode = Mode}}) ->
