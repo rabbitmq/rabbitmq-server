@@ -48,8 +48,8 @@ needed after closing the list. Hence if you configure RabbitMQ-server
 and the RabbitMQ-shovel, then the configuration file may have a
 structure like this:
 
-[{rabbit,        [configuration-for-RabbitMQ-server]},
- {rabbit-shovel, [configuration-for-RabbitMQ-shovel]}
+[{rabbit,          [configuration-for-RabbitMQ-server]},
+ {rabbitmq_shovel, [configuration-for-RabbitMQ-shovel]}
 ].
 
 A full example of the shovel configuration is:
