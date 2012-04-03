@@ -97,7 +97,7 @@ Copyright (C) 2012 FuseSource, Inc. -- http://fusesource.com
         var data, frame, i, onreceive, view;
         data = (function() {
           var _i, _len;
-          if (evt.data instanceof ArrayBuffer) {
+          if (typeof ArrayBuffer !== 'undefined' && evt.data instanceof ArrayBuffer) {
             view = new Uint8Array(evt.data);
             if (typeof this.debug === "function") {
               this.debug('--- got data length: ' + view.length);
