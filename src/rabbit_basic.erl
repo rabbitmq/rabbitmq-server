@@ -187,11 +187,11 @@ append_table_header(Name, Info, Headers) ->
     rabbit_misc:set_table_value(Headers, Name, array, [{table, Info} | Prior]).
 
 map_headers(F, Content) ->
-    Content = rabbit_binary_parser:ensure_content_decoded(Content),
-    #content{properties = #'P_basic'{headers = Headers} = Props} = Content,
+    Content1 = rabbit_binary_parser:ensure_content_decoded(Content),
+    #content{properties = #'P_basic'{headers = Headers} = Props} = Content1,
     Headers1 = F(Headers),
     rabbit_binary_generator:clear_encoded_content(
-      Content#content{properties = Props#'P_basic'{headers = Headers1}}).
+      Content1#content{properties = Props#'P_basic'{headers = Headers1}}).
 
 indexof(L, Element) -> indexof(L, Element, 1).
 
