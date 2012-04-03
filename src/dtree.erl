@@ -31,7 +31,7 @@
 
 -module(dtree).
 
--export([empty/0, insert/4, take/3, take/2,
+-export([empty/0, insert/4, take/3, take/2, take_all/2,
          is_defined/2, is_empty/1, smallest/1, size/1]).
 
 %%----------------------------------------------------------------------------
@@ -51,6 +51,7 @@
 -spec(insert/4     :: (pk(), [sk()], val(), ?MODULE()) -> ?MODULE()).
 -spec(take/3       :: ([pk()], sk(), ?MODULE()) -> {[kv()], ?MODULE()}).
 -spec(take/2       :: (sk(), ?MODULE()) -> {[kv()], ?MODULE()}).
+-spec(take_all/2   :: (sk(), ?MODULE()) -> {[kv()], ?MODULE()}).
 -spec(is_defined/2 :: (sk(), ?MODULE()) -> boolean()).
 -spec(is_empty/1   :: (?MODULE()) -> boolean()).
 -spec(smallest/1   :: (?MODULE()) -> kv()).
@@ -93,6 +94,13 @@ take(SK, {P, S}) ->
                         {KVs, {P1, gb_trees:delete(SK, S)}}
     end.
 
+take_all(SK, {P, S}) ->
+    case gb_trees:lookup(SK, S) of
+        none         -> {[], {P, S}};
+        {value, PKS} -> {KVs, SKS, P1} = take_all2(PKS, P),
+                        {KVs, {P1, prune(SKS, PKS, S)}}
+    end.
+
 is_defined(SK, {_P, S}) -> gb_trees:is_defined(SK, S).
 
 is_empty({P, _S}) -> gb_trees:is_empty(P).
@@ -114,3 +122,20 @@ take2(PKS, SK, P) ->
                              false -> {KVs,  gb_trees:update(PK, {SKS1, V}, P0)}
                          end
                  end, {[], P}, PKS).
+
+take_all2(PKS, P) ->
+    gb_sets:fold(fun (PK, {KVs, SKS0, P0}) ->
+                         {SKS, V} = gb_trees:get(PK, P0),
+                         {[{PK, V} | KVs], gb_sets:union(SKS, SKS0),
+                          gb_trees:delete(PK, P0)}
+                 end, {[], gb_sets:empty(), P}, PKS).
+
+prune(SKS, PKS, S) ->
+    gb_sets:fold(fun (SK0, S0) ->
+                         PKS1 = gb_trees:get(SK0, S0),
+                         PKS2 = gb_sets:difference(PKS1, PKS),
+                         case gb_sets:is_empty(PKS2) of
+                             true  -> gb_trees:delete(SK0, S0);
+                             false -> gb_trees:update(SK0, PKS2, S0)
+                         end
+                 end, S, SKS).
