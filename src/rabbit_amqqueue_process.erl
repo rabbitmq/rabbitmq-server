@@ -757,15 +757,14 @@ handle_queue_down(QPid, Reason, State = #q{queue_monitors = QMons,
         error ->
             noreply(State);
         {ok, _} ->
-            rabbit_log:info("DLQ ~p (for ~s) died~n",
-                            [QPid, rabbit_misc:rs(qname(State))]),
-            {MsgSeqNoAckTags, UC1} = dtree:take(QPid, UC),
-            case (MsgSeqNoAckTags =/= [] andalso
-                  rabbit_misc:is_abnormal_termination(Reason)) of
-                true -> rabbit_log:warning("Dead queue lost ~p messages~n",
-                                           [length(MsgSeqNoAckTags)]);
+            case rabbit_misc:is_abnormal_termination(Reason) of
+                true  -> {Lost, _UC1} = dtree:take_all(QPid, UC),
+                         rabbit_log:warning(
+                           "DLQ ~p for ~s died with ~p unconfirmed messages~n",
+                           [QPid, rabbit_misc:rs(qname(State)), length(Lost)]);
                 false -> ok
             end,
+            {MsgSeqNoAckTags, UC1} = dtree:take(QPid, UC),
             cleanup_after_confirm(
               [AckTag || {_MsgSeqNo, AckTag} <- MsgSeqNoAckTags],
               State#q{queue_monitors = dict:erase(QPid, QMons),
