@@ -22,23 +22,18 @@
 -export([init/1, handle_call/3, handle_info/2, terminate/2,
          code_change/3, handle_cast/2]).
 
-
--include_lib("rabbitmq_stomp/include/rabbit_stomp.hrl").
-
--record(state, {conn, sup_pid, processor, parse_state}).
-
+-record(state, {conn, processor, parse_state}).
 
 %%----------------------------------------------------------------------------
 
 start_link(Params) ->
     gen_server:start_link(?MODULE, Params, []).
 
-init({SupPid, Conn}) ->
+init({Processor, Conn}) ->
     ok = file_handle_cache:obtain(),
     process_flag(trap_exit, true),
-    self() ! go,
     {ok, #state{conn        = Conn,
-                sup_pid     = SupPid,
+                processor   = Processor,
                 parse_state = rabbit_stomp_frame:initial_state()}}.
 
 handle_cast({sockjs_msg, Data}, State = #state{processor   = Processor,
@@ -46,20 +41,11 @@ handle_cast({sockjs_msg, Data}, State = #state{processor   = Processor,
     ParseState1 = process_received_bytes(Data, Processor, ParseState),
     {noreply, State#state{parse_state = ParseState1}};
 
-handle_cast(sockjs_closed, State = #state{processor = Processor}) ->
+handle_cast(sockjs_closed, State) ->
     {stop, normal, State};
 
 handle_cast(Cast, State) ->
     {stop, {odd_cast, Cast}, State}.
-
-
-handle_info(go, State = #state{sup_pid = SupPid, conn = Conn}) ->
-    StompConfig = #stomp_configuration{implicit_connect = false},
-
-    {ok, Processor} = rabbit_ws_client_sup:start_processor({SupPid,
-                                                            Conn, StompConfig}),
-    %%               link(Processor),
-    {noreply, State#state{processor   = Processor}};
 
 handle_info({bump_credit, {_, _}}, State) ->
     {noreply, State};

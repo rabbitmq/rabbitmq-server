@@ -17,22 +17,22 @@
 -module(rabbit_ws_client_sup).
 -behaviour(supervisor2).
 
--export([start_client/1, start_processor/1]).
+-export([start_client/1]).
 -export([init/1]).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
+-include_lib("rabbitmq_stomp/include/rabbit_stomp.hrl").
 
 %% --------------------------------------------------------------------------
 
 start_client({Conn}) ->
     {ok, SupPid} = supervisor2:start_link(?MODULE, []),
-    supervisor2:start_child(SupPid,
-                            {rabbit_ws_client,
-                             {rabbit_ws_client, start_link, [{SupPid, Conn}]},
-                             intrinsic, ?MAX_WAIT, worker,
-                             [rabbit_ws_client]}).
+    {ok, Processor} = supervisor2:start_child(SupPid, proc_spec(Conn)),
+    supervisor2:start_child(SupPid, client_spec(Processor, Conn)).
 
-start_processor({SupPid, Conn, StompConfig}) ->
+proc_spec(Conn) ->
+    StompConfig = #stomp_configuration{implicit_connect = false},
+
     SendFun = fun (_Sync, Data) ->
                       Conn:send(Data),
                       ok
@@ -48,14 +48,15 @@ start_processor({SupPid, Conn, StompConfig}) ->
                                 peer_port       = PeerPort,
                                 additional_info = [{ssl, false}]},
 
-    Args = [SendFun, AdapterInfo, fun (_, _, _, _) -> ok end,
-            none, StompConfig],
+    {rabbit_stomp_processor,
+     {rabbit_stomp_processor, start_link,
+      [[SendFun, AdapterInfo, fun (_, _, _, _) -> ok end, none, StompConfig]]},
+     intrinsic, ?MAX_WAIT, worker,
+     [rabbit_stomp_processor]}.
 
-    supervisor2:start_child(SupPid,
-                            {rabbit_stomp_processor,
-                             {rabbit_stomp_processor, start_link, [Args]},
-                             intrinsic, ?MAX_WAIT, worker,
-                             [rabbit_stomp_processor]}).
+client_spec(Processor, Conn) ->
+    {rabbit_ws_client, {rabbit_ws_client, start_link, [{Processor, Conn}]},
+     intrinsic, ?MAX_WAIT, worker, [rabbit_ws_client]}.
 
 init(_Any) ->
     {ok, {{one_for_all, 0, 1}, []}}.
