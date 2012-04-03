@@ -745,6 +745,99 @@
     </refsect2>
 
     <refsect2>
+      <title>Parameter Management</title>
+      <para>
+        Certain features of RabbitMQ (such as the federation plugin)
+        are controlled by dynamic,
+        cluster-wide <emphasis>parameters</emphasis>. Each parameter
+        consists of an application name, a key and a value. The
+        application name and key are strings, and the value is an
+        Erlang term. Parameters can be set, cleared and listed. In
+        general you should refer to the documentation for the feature
+        in question to see how to set parameters.
+      </para>
+      <variablelist>
+        <varlistentry>
+          <term><cmdsynopsis><command>set_parameter</command> <arg choice="req"><replaceable>app_name</replaceable></arg> <arg choice="req"><replaceable>key</replaceable></arg> <arg choice="req"><replaceable>value</replaceable></arg></cmdsynopsis></term>
+          <listitem>
+            <para>
+              Sets a parameter.
+            </para>
+            <variablelist>
+              <varlistentry>
+                <term>app_name</term>
+                <listitem><para>
+                    The name of the application for which the
+                    parameter is being set.
+                </para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>key</term>
+                <listitem><para>
+                    The key for which the parameter is being set.
+                </para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>value</term>
+                <listitem><para>
+                    The value for the parameter, as an
+                    Erlang term. In most shells you are very likely to
+                    need to quote this.
+                </para></listitem>
+              </varlistentry>
+            </variablelist>
+            <para role="example-prefix">For example:</para>
+            <screen role="example">rabbitmqctl set_parameter federation local_username '&lt;&lt;"guest">>'</screen>
+            <para role="example">
+              This command sets the parameter <command>local_username</command> for the <command>federation</command> application to the Erlang term <command>&lt;&lt;"guest">></command>.
+            </para>
+          </listitem>
+        </varlistentry>
+        <varlistentry>
+          <term><cmdsynopsis><command>clear_parameter</command> <arg choice="req"><replaceable>app_name</replaceable></arg> <arg choice="req"><replaceable>key</replaceable></arg></cmdsynopsis></term>
+          <listitem>
+            <para>
+              Clears a parameter.
+            </para>
+            <variablelist>
+              <varlistentry>
+                <term>app_name</term>
+                <listitem><para>
+                    The name of the application for which the
+                    parameter is being cleared.
+                </para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>key</term>
+                <listitem><para>
+                    The key for which the parameter is being cleared.
+                </para></listitem>
+              </varlistentry>
+            </variablelist>
+            <para role="example-prefix">For example:</para>
+            <screen role="example">rabbitmqctl clear_parameter federation local_username</screen>
+            <para role="example">
+              This command clears the parameter <command>local_username</command> for the <command>federation</command> application.
+            </para>
+          </listitem>
+        </varlistentry>
+        <varlistentry>
+          <term><cmdsynopsis><command>list_parameters</command></cmdsynopsis></term>
+          <listitem>
+            <para>
+              Lists all parameters.
+            </para>
+            <para role="example-prefix">For example:</para>
+            <screen role="example">rabbitmqctl list_parameters</screen>
+            <para role="example">
+              This command lists all parameters.
+            </para>
+          </listitem>
+        </varlistentry>
+      </variablelist>
+    </refsect2>
+
+    <refsect2>
       <title>Server Status</title>
       <para>
         The server status queries interrogate the server and return a list of
