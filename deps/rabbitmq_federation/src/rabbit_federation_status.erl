@@ -61,7 +61,7 @@ handle_call({remove, XName}, _From, State) ->
     {reply, ok, State};
 
 handle_call({remove, Upstream, XName}, _From, State) ->
-    true = ets:match_delete(?ETS_NAME, #entry{key       = {XName, Upstream},
+    true = ets:match_delete(?ETS_NAME, #entry{key       = key(XName, Upstream),
                                               status    = '_',
                                               timestamp = '_'}),
     {reply, ok, State};
@@ -71,7 +71,7 @@ handle_call(status, _From, State) ->
     {reply, [format(Entry) || Entry <- Entries], State}.
 
 handle_cast({report, Upstream, XName, Status, Timestamp}, State) ->
-    true = ets:insert(?ETS_NAME, #entry{key        = {XName, Upstream},
+    true = ets:insert(?ETS_NAME, #entry{key        = key(XName, Upstream),
                                         status     = Status,
                                         timestamp  = Timestamp}),
     {noreply, State}.
@@ -88,8 +88,7 @@ code_change(_OldVsn, State, _Extra) ->
 format(#entry{key       = {#resource{virtual_host = VHost,
                                      kind         = exchange,
                                      name         = XNameBin},
-                           #upstream{connection_name = Connection,
-                                     exchange        = UXNameBin}},
+                           Connection, UXNameBin},
               status    = Status,
               timestamp = Timestamp}) ->
         [{exchange,          XNameBin},
@@ -98,3 +97,7 @@ format(#entry{key       = {#resource{virtual_host = VHost,
          {upstream_exchange, UXNameBin},
          {status,            Status},
          {timestamp,         Timestamp}].
+
+key(XName, #upstream{connection_name = ConnName, exchange = UXNameBin}) ->
+    %% We don't want to key off the entire upstream, bits of it may change
+    {XName, ConnName, UXNameBin}.
