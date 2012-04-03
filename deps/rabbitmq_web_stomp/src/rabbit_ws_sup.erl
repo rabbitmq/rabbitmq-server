@@ -15,26 +15,22 @@
 %%
 
 -module(rabbit_ws_sup).
--behaviour(supervisor).
+-behaviour(supervisor2).
 
 -export([start_link/0, init/1, start_client/1]).
 
--define(SUP_NAME, rabbit_ws_client_top_sup).
+-define(SUP_NAME, ?MODULE).
 
 %%----------------------------------------------------------------------------
 
 -spec start_link() -> ignore | {'ok', pid()} | {'error', any()}.
 start_link() ->
-    supervisor:start_link({local, ?MODULE}, ?MODULE, []).
+    supervisor2:start_link({local, ?SUP_NAME}, ?MODULE, []).
 
 init([]) ->
-    {ok, {{one_for_all, 10, 10},
-          [{?SUP_NAME,
-            {rabbit_client_sup, start_link,
-             [{local, ?SUP_NAME},
-              {rabbit_ws_client_sup, start_client,[]}]},
-            transient, infinity, supervisor, [rabbit_client_sup]}]}}.
-
+    {ok, {{simple_one_for_one_terminate, 0, 1},
+          [{client, {rabbit_ws_client_sup, start_client, []},
+            temporary, infinity, supervisor, [rabbit_ws_client_sup]}]}}.
 
 start_client(Params) ->
-    supervisor:start_child(?SUP_NAME, [Params]).
+    supervisor2:start_child(?SUP_NAME, [Params]).
