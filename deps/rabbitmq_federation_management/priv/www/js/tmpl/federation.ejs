@@ -88,7 +88,11 @@ for (var i in globals) {
   </tr>
 <% } else { %>
     <td class="status">
-       <div class="green"><%= link.status %></div>
+       <% if (link.status == 'starting') { %>
+         <div class="yellow"><%= link.status %></div>
+       <% } else { %>
+         <div class="green"><%= link.status %></div>
+      <% } %>
     </td>
     <td class="r">
       <% if (link.local_channel) { %>
