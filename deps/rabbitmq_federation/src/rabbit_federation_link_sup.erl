@@ -69,9 +69,17 @@ start(Sup, XName, ConnName) ->
     end.
 
 maybe_stop(Sup, ConnName) ->
-        case child(Sup, ConnName) of
-        {ok, Upstream}     -> stop(Sup, Upstream);
-        {error, not_found} -> ok
+    case child(Sup, ConnName) of
+        {ok, Upstream} ->
+            stop(Sup, Upstream),
+            %% While the link will report its own removal, that only
+            %% works if the link was actually up. If the link was
+            %% broken and failing to come up, the possibility exists
+            %% that there *is* no link process, but we still have a
+            %% report in the status table. So remove it here too.
+            rabbit_federation_status:remove_upstream(Upstream);
+        {error, not_found} ->
+            ok
     end.
 
 stop(Sup, Upstream) ->

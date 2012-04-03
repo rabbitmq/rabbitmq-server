@@ -74,7 +74,7 @@ delete(transaction, X, Bs) ->
 delete(none, X = #exchange{name = XName}, Bs) ->
     rabbit_federation_link:stop(XName),
     ok = rabbit_federation_link_sup_sup:stop_child(XName),
-    rabbit_federation_status:remove(XName),
+    rabbit_federation_status:remove_exchange(XName),
     with_module(X, fun (M) -> M:delete(none, X, Bs) end).
 
 add_binding(transaction, X, B) ->
