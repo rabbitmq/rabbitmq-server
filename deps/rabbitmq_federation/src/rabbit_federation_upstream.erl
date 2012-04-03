@@ -129,10 +129,10 @@ set_extra_params(Params, U, C) ->
 %%----------------------------------------------------------------------------
 
 set_ssl_options(Params, U, C) ->
-    case bget(protocol, U, C, "amqp") of
-        "amqp"  -> Params;
-        "amqps" -> Params#amqp_params_network{
-                     ssl_options = bget(ssl_options, U, C)}
+    case bget(protocol, U, C, <<"amqp">>) of
+        <<"amqp">>  -> Params;
+        <<"amqps">> -> Params#amqp_params_network{
+                         ssl_options = bget(ssl_options, U, C, [])}
     end.
 
 set_heartbeat(Params, U, C) ->
@@ -143,12 +143,12 @@ set_heartbeat(Params, U, C) ->
 
 %% TODO it would be nice to support arbitrary mechanisms here.
 set_mechanisms(Params, U, C) ->
-    case bget(mechanism, U, C, default) of
-        default    -> Params;
-        'EXTERNAL' -> Params#amqp_params_network{
-                        auth_mechanisms =
-                            [fun amqp_auth_mechanisms:external/3]};
-        M          -> exit({unsupported_mechanism, M})
+    case bget(mechanism, U, C, <<"default">>) of
+        <<"default">>  -> Params;
+        <<"EXTERNAL">> -> Params#amqp_params_network{
+                            auth_mechanisms =
+                                [fun amqp_auth_mechanisms:external/3]};
+        M              -> exit({unsupported_mechanism, M})
     end.
 
 bget(K, L1, L2) -> bget(K, L1, L2, undefined).
