@@ -61,6 +61,9 @@ handle_info(go, State = #state{sup_pid = SupPid, conn = Conn}) ->
     %%               link(Processor),
     {noreply, State#state{processor   = Processor}};
 
+handle_info({bump_credit, {_, _}}, State) ->
+    {noreply, State};
+
 handle_info(Info, State) ->
     {stop, {odd_info, Info}, State}.
 
