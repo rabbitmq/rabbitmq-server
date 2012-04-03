@@ -28,22 +28,23 @@
 
 start_link(Args) -> supervisor2:start_link(?MODULE, Args).
 
-adjust(Sup, _XName, everything) ->
-    [restart(Sup, Upstream) ||
+adjust(Sup, XName, everything) ->
+    [stop(Sup, Upstream) ||
         {Upstream, _, _, _} <- supervisor2:which_children(Sup)],
-    ok;
+    case upstream_set(XName) of
+        {ok, UpstreamSet} ->
+            [{ok, _Pid} = supervisor2:start_child(Sup, Spec) ||
+                Spec <- specs(UpstreamSet, XName)];
+        {error, not_found} ->
+            ok
+    end;
 
 adjust(Sup, XName, {connection, ConnName}) ->
-    case child(Sup, ConnName) of
-        {ok, Upstream}     -> restart(Sup, Upstream);
-        {error, not_found} -> start(Sup, XName, ConnName)
-    end;
+    maybe_stop(Sup, ConnName),
+    start(Sup, XName, ConnName);
 
 adjust(Sup, _XName, {clear_connection, ConnName}) ->
-    case child(Sup, ConnName) of
-        {ok, Upstream}     -> stop(Sup, Upstream);
-        {error, not_found} -> ok
-    end;
+    maybe_stop(Sup, ConnName);
 
 %% TODO handle changes of upstream sets properly
 adjust(Sup, XName, {upstream_set, _}) ->
@@ -52,12 +53,10 @@ adjust(Sup, XName, {clear_upstream_set, _}) ->
     adjust(Sup, XName, everything).
 
 start(Sup, XName, ConnName) ->
-    case rabbit_exchange:lookup(XName) of
-        {ok, #exchange{arguments = Args}} ->
-            {longstr, UpstreamSetName} =
-                rabbit_misc:table_lookup(Args, <<"upstream-set">>),
+    case upstream_set(XName) of
+        {ok, UpstreamSet} ->
             case rabbit_federation_upstream:from_set(
-                   UpstreamSetName, XName, ConnName) of
+                   UpstreamSet, XName, ConnName) of
                 {ok, Upstream} ->
                     {ok, _Pid} = supervisor2:start_child(
                                    Sup, spec(Upstream, XName)),
@@ -69,9 +68,11 @@ start(Sup, XName, ConnName) ->
             ok
     end.
 
-restart(Sup, Upstream) ->
-    ok = supervisor2:terminate_child(Sup, Upstream),
-    {ok, _Pid} = supervisor2:restart_child(Sup, Upstream).
+maybe_stop(Sup, ConnName) ->
+        case child(Sup, ConnName) of
+        {ok, Upstream}     -> stop(Sup, Upstream);
+        {error, not_found} -> ok
+    end.
 
 stop(Sup, Upstream) ->
     ok = supervisor2:terminate_child(Sup, Upstream),
@@ -81,18 +82,26 @@ child(Sup, ConnName) ->
     rabbit_federation_util:find_upstream(
       ConnName, [U || {U, _, _, _} <- supervisor2:which_children(Sup)]).
 
+upstream_set(XName) ->
+    case rabbit_exchange:lookup(XName) of
+        {ok, #exchange{arguments = Args}} ->
+            {longstr, UpstreamSet} =
+                rabbit_misc:table_lookup(Args, <<"upstream-set">>),
+            {ok, UpstreamSet};
+        {error, not_found} ->
+            {error, not_found}
+    end.
+
 %%----------------------------------------------------------------------------
 
 init({UpstreamSet, XName}) ->
-    %% We can't look this up in fed_exchange or fed_sup since
-    %% mirrored_sup may fail us over to a different node with a
-    %% different definition of the same upstream-set. This is the
-    %% first point at which we know we're not switching nodes.
-    {ok, Upstreams} = rabbit_federation_upstream:from_set(UpstreamSet, XName),
     %% 1, 1 so that the supervisor can give up and get into waiting
     %% for the reconnect_delay quickly.
-    {ok, {{one_for_one, 1, 1},
-          [spec(Upstream, XName) || Upstream <- Upstreams]}}.
+    {ok, {{one_for_one, 1, 1}, specs(UpstreamSet, XName)}}.
+
+specs(UpstreamSet, XName) ->
+    {ok, Upstreams} = rabbit_federation_upstream:from_set(UpstreamSet, XName),
+    [spec(Upstream, XName) || Upstream <- Upstreams].
 
 spec(Upstream = #upstream{reconnect_delay = Delay}, XName) ->
     {Upstream, {rabbit_federation_link, start_link, [{Upstream, XName}]},
