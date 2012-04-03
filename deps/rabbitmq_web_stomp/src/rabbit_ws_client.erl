@@ -47,7 +47,6 @@ handle_cast({sockjs_msg, Data}, State = #state{processor   = Processor,
     {noreply, State#state{parse_state = ParseState1}};
 
 handle_cast(sockjs_closed, State = #state{processor = Processor}) ->
-    rabbit_stomp_processor:flush_and_die(Processor),
     {stop, normal, State};
 
 handle_cast(Cast, State) ->
@@ -68,14 +67,14 @@ handle_info(Info, State) ->
 handle_call(Request, _From, State) ->
     {stop, {odd_request, Request}, State}.
 
-terminate(Reason, #state{conn = Conn}) ->
+terminate(Reason, #state{conn = Conn, processor = Processor}) ->
     ok = file_handle_cache:release(),
-    case Reason of
-        normal -> % SockJS initiated exit
-            ok;
-        shutdown -> % STOMP died
-            Conn:close()
-    end,
+    _ = case Reason of
+            normal -> % SockJS initiated exit
+                rabbit_stomp_processor:flush_and_die(Processor);
+            shutdown -> % STOMP died
+                Conn:close()
+        end,
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
