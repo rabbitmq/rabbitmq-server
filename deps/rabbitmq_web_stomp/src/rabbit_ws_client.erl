@@ -65,7 +65,7 @@ terminate(Reason, #state{conn = Conn, processor = Processor}) ->
             normal -> % SockJS initiated exit
                 rabbit_stomp_processor:flush_and_die(Processor);
             shutdown -> % STOMP died
-                Conn:close()
+                Conn:close(500, "STOMP died")
         end,
     ok.
 
