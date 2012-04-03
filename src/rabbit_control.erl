@@ -267,24 +267,6 @@ action(list_user_permissions, Node, Args = [_Username], _Opts, Inform) ->
                                   list_user_permissions, Args}),
                       rabbit_auth_backend_internal:user_perms_info_keys());
 
-action(set_parameter, Node, [AppName, Key, Value], _Opts, Inform) ->
-    Inform("Setting runtime parameter ~p for app ~p to ~p",
-           [Key, AppName, Value]),
-    rpc_call(Node, rabbit_runtime_parameters, set,
-             [list_to_binary(AppName), list_to_binary(Key),
-              rabbit_runtime_parameters:parse(Value)]);
-
-action(clear_parameter, Node, [AppName, Key], _Opts, Inform) ->
-    Inform("Clearing runtime parameter ~p for app ~p", [Key, AppName]),
-    rpc_call(Node, rabbit_runtime_parameters, clear, [list_to_binary(AppName),
-                                                      list_to_binary(Key)]);
-
-action(list_parameters, Node, Args = [], _Opts, Inform) ->
-    Inform("Listing runtime parameters", []),
-    display_info_list(
-      rpc_call(Node, rabbit_runtime_parameters, list_formatted, Args),
-      rabbit_runtime_parameters:info_keys());
-
 action(list_queues, Node, Args, Opts, Inform) ->
     Inform("Listing queues", []),
     VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
@@ -367,6 +349,24 @@ action(list_permissions, Node, [], Opts, Inform) ->
     display_info_list(call(Node, {rabbit_auth_backend_internal,
                              list_vhost_permissions, [VHost]}),
                       rabbit_auth_backend_internal:vhost_perms_info_keys());
+
+action(set_parameter, Node, [AppName, Key, Value], _Opts, Inform) ->
+    Inform("Setting runtime parameter ~p for app ~p to ~p",
+           [Key, AppName, Value]),
+    rpc_call(Node, rabbit_runtime_parameters, set,
+             [list_to_binary(AppName), list_to_binary(Key),
+              rabbit_runtime_parameters:parse(Value)]);
+
+action(clear_parameter, Node, [AppName, Key], _Opts, Inform) ->
+    Inform("Clearing runtime parameter ~p for app ~p", [Key, AppName]),
+    rpc_call(Node, rabbit_runtime_parameters, clear, [list_to_binary(AppName),
+                                                      list_to_binary(Key)]);
+
+action(list_parameters, Node, Args = [], _Opts, Inform) ->
+    Inform("Listing runtime parameters", []),
+    display_info_list(
+      rpc_call(Node, rabbit_runtime_parameters, list_formatted, Args),
+      rabbit_runtime_parameters:info_keys());
 
 action(report, Node, _Args, _Opts, Inform) ->
     io:format("Reporting server status on ~p~n~n", [erlang:universaltime()]),
