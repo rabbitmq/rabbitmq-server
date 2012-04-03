@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html><head>
   <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.6.2/jquery.min.js"></script>
-  <script src="http://cdn.sockjs.org/sockjs-0.2.min.js"></script>
+  <script src="http://cdn.sockjs.org/sockjs-0.3.min.js"></script>
   <script src="stomp.js"></script>
   <style>
       .box {
@@ -73,7 +73,7 @@
       // Stomp.js boilerplate
       WebSocketStompMock = SockJS;
 
-      var client = Stomp.client('http://localhost:55674/stomp');
+      var client = Stomp.client('http://' + window.location.hostname + ':55674/stomp');
       client.debug = pipe('#second');
 
       var print_first = pipe('#first', function(data) {

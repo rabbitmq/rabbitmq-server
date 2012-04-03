@@ -1,7 +1,7 @@
 <!doctype html>
 <html><head>
     <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.7.1/jquery.min.js"></script>
-    <script src="http://cdn.sockjs.org/sockjs-0.2.min.js"></script>
+    <script src="http://cdn.sockjs.org/sockjs-0.3.min.js"></script>
     <script src="stomp.js"></script>
 
     <style>
@@ -67,7 +67,7 @@ if (canvas.getContext) {
   };
 
   $(window).resize(do_resize);
-  do_resize();
+  $(do_resize);
 
 
   var pos = $('#cnvs').position();
@@ -80,7 +80,7 @@ if (canvas.getContext) {
               return;
           }
           if (Math.sqrt(Math.pow(prev.x - curr.x, 2) +
-                        Math.pow(prev.y - curr.y, 2)) > 6) {
+                        Math.pow(prev.y - curr.y, 2)) > 8) {
                var p = {x1:prev.x, y1:prev.y, x2:curr.x, y2:curr.y}
                lines.push(p);
                draw(p);
@@ -117,8 +117,6 @@ client.connect('guest', 'guest', function(x) {
     draw(p, true);
   });
 });
-
-
 
 </script>
 </body></html>
