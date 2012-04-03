@@ -47,6 +47,9 @@ handle_cast(sockjs_closed, State) ->
 handle_cast(Cast, State) ->
     {stop, {odd_cast, Cast}, State}.
 
+%% TODO this is a bit rubbish - after the preview release we should
+%% make the credit_flow:send/1 invocation in
+%% rabbit_stomp_processor:process_frame/2 optional.
 handle_info({bump_credit, {_, _}}, State) ->
     {noreply, State};
 
