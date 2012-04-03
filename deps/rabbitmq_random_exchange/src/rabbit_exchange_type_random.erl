@@ -15,31 +15,32 @@
 %%
 
 -module(rabbit_exchange_type_random).
--include_lib("rabbit_common/include/rabbit.hrl").
-
 -behaviour(rabbit_exchange_type).
-
--export([description/0, route/2]).
--export([
-  validate/1, 
-  create/2, 
-  recover/2,
-  delete/3,
-  add_binding/3, 
-  remove_bindings/3, 
-  assert_args_equivalence/2
-]).
+-include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit_common/include/rabbit_exchange_type_spec.hrl").
 
--rabbit_boot_step({?MODULE,
-                   [{description, "exchange type random"},
-                    {mfa,         {rabbit_registry, register, [exchange, <<"x-random">>, ?MODULE]}},
-                    {requires,    rabbit_registry},
-                    {enables,     kernel_ready}]}).
+-rabbit_boot_step({?MODULE, [
+  {description,   "exchange type random"},
+  {mfa,           {rabbit_registry, register, [exchange, <<"x-random">>, ?MODULE]}},
+  {requires,      rabbit_registry},
+  {enables,       kernel_ready}
+]}).
+
+-export([
+  add_binding/3, 
+  assert_args_equivalence/2,
+  create/2, 
+  delete/3, 
+  description/0, 
+  recover/2, 
+  remove_bindings/3,
+  route/2,
+  serialise_events/0,
+  validate/1
+]).
 
 description() ->
-    [{name, <<"x-random">>},
-     {description, <<"AMQP random exchange. Like a direct exchange, but randomly chooses who to route to.">>}].
+    [{name, <<"x-random">>}, {description, <<"AMQP random exchange. Like a direct exchange, but randomly chooses who to route to.">>}].
 
 route(_X=#exchange{name = Name},
       _D=#delivery{message = #basic_message{routing_keys = Routes}}) ->
@@ -54,6 +55,7 @@ route(_X=#exchange{name = Name},
         [lists:nth(Rand, Matches)]
     end.
 
+serialise_events() -> false.
 validate(_X) -> ok.
 create(_Tx, _X) -> ok.
 recover(_X, _Bs) -> ok.
