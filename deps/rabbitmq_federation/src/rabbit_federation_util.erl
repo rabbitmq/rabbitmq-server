@@ -19,7 +19,7 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_federation.hrl").
 
--export([local_params/1, should_forward/2]).
+-export([local_params/1, should_forward/2, find_upstream/2]).
 -export([validate_arg/3, fail/2]).
 
 -import(rabbit_misc, [pget_or_die/2, pget/3]).
@@ -38,6 +38,13 @@ should_forward(Headers, MaxHops) ->
     case rabbit_misc:table_lookup(Headers, ?ROUTING_HEADER) of
         undefined  -> true;
         {array, A} -> length(A) < MaxHops
+    end.
+
+find_upstream(ConnName, Upstreams) ->
+    case [U || U = #upstream{connection_name = ConnName2} <- Upstreams,
+               ConnName =:= ConnName2] of
+        [U] -> {ok, U};
+        []  -> {error, not_found}
     end.
 
 validate_arg(Name, Type, Args) ->

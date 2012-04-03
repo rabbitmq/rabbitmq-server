@@ -51,26 +51,26 @@ validate(<<"federation">>, <<"local_username">>, _Term) ->
 validate(_AppName, _Key, _Term) ->
     exit({error, key_not_recognised}).
 
-notify(<<"federation_upstream_set">>, _Key, _Term) ->
-    rabbit_federation_link_sup_sup:restart_everything();
+notify(<<"federation_upstream_set">>, Key, _Term) ->
+    rabbit_federation_link_sup_sup:adjust({upstream_set, Key});
 
-notify(<<"federation_connection">>, _Key, _Term) ->
-    rabbit_federation_link_sup_sup:restart_everything();
+notify(<<"federation_connection">>, Key, _Term) ->
+    rabbit_federation_link_sup_sup:adjust({connection, Key});
 
 notify(<<"federation">>, <<"local_nodename">>, _Term) ->
-    rabbit_federation_link_sup_sup:restart_everything();
+    rabbit_federation_link_sup_sup:adjust(everything);
 
 notify(<<"federation">>, <<"local_username">>, _Term) ->
-    rabbit_federation_link_sup_sup:restart_everything().
+    rabbit_federation_link_sup_sup:adjust(everything).
 
-notify_clear(<<"federation_upstream_set">>, _Key) ->
-    rabbit_federation_link_sup_sup:restart_everything();
+notify_clear(<<"federation_upstream_set">>, Key) ->
+    rabbit_federation_link_sup_sup:adjust({clear_upstream_set, Key});
 
-notify_clear(<<"federation_connection">>, _Key) ->
-    rabbit_federation_link_sup_sup:restart_everything();
+notify_clear(<<"federation_connection">>, Key) ->
+    rabbit_federation_link_sup_sup:adjust({clear_connection, Key});
 
 notify_clear(<<"federation">>, <<"local_nodename">>) ->
-    rabbit_federation_link_sup_sup:restart_everything();
+    rabbit_federation_link_sup_sup:adjust(everything);
 
 notify_clear(<<"federation">>, <<"local_username">>) ->
-    rabbit_federation_link_sup_sup:restart_everything().
+    rabbit_federation_link_sup_sup:adjust(everything).

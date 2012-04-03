@@ -19,7 +19,7 @@
 -include("rabbit_federation.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
--export([to_table/1, to_string/1, from_set/2]).
+-export([to_table/1, to_string/1, from_set/2, from_set/3]).
 
 -import(rabbit_misc, [pget/2, pget/3]).
 
@@ -55,6 +55,14 @@ to_string(#upstream{params   = #amqp_params_network{host         = H,
     print("~s:~s~s:~s", [H, PortPart, V, XNameBin]).
 
 print(Fmt, Args) -> iolist_to_binary(io_lib:format(Fmt, Args)).
+
+from_set(SetName, X, ConnName) ->
+    case from_set(SetName, X) of
+        {ok, Upstreams} ->
+            rabbit_federation_util:find_upstream(ConnName, Upstreams);
+        {error, _} = E ->
+            E
+    end.
 
 from_set(<<"all">>, X) ->
     Connections = rabbit_runtime_parameters:list(<<"federation_connection">>),

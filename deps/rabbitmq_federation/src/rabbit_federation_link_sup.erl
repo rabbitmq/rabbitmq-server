@@ -23,10 +23,63 @@
 
 %% Supervises the upstream links for an exchange.
 
--export([start_link/1]).
+-export([start_link/1, adjust/3]).
 -export([init/1]).
 
 start_link(Args) -> supervisor2:start_link(?MODULE, Args).
+
+adjust(Sup, _XName, everything) ->
+    [restart(Sup, Upstream) ||
+        {Upstream, _, _, _} <- supervisor2:which_children(Sup)],
+    ok;
+
+adjust(Sup, XName, {connection, ConnName}) ->
+    case child(Sup, ConnName) of
+        {ok, Upstream}     -> restart(Sup, Upstream);
+        {error, not_found} -> start(Sup, XName, ConnName)
+    end;
+
+adjust(Sup, _XName, {clear_connection, ConnName}) ->
+    case child(Sup, ConnName) of
+        {ok, Upstream}     -> stop(Sup, Upstream);
+        {error, not_found} -> ok
+    end;
+
+%% TODO handle changes of upstream sets properly
+adjust(Sup, XName, {upstream_set, _}) ->
+    adjust(Sup, XName, everything);
+adjust(Sup, XName, {clear_upstream_set, _}) ->
+    adjust(Sup, XName, everything).
+
+start(Sup, XName, ConnName) ->
+    case rabbit_exchange:lookup(XName) of
+        {ok, #exchange{arguments = Args}} ->
+            {longstr, UpstreamSetName} =
+                rabbit_misc:table_lookup(Args, <<"upstream-set">>),
+            case rabbit_federation_upstream:from_set(
+                   UpstreamSetName, XName, ConnName) of
+                {ok, Upstream} ->
+                    {ok, _Pid} = supervisor2:start_child(
+                                   Sup, spec(Upstream, XName)),
+                    ok;
+                {error, not_found} ->
+                    ok
+            end;
+        {error, not_found} ->
+            ok
+    end.
+
+restart(Sup, Upstream) ->
+    ok = supervisor2:terminate_child(Sup, Upstream),
+    {ok, _Pid} = supervisor2:restart_child(Sup, Upstream).
+
+stop(Sup, Upstream) ->
+    ok = supervisor2:terminate_child(Sup, Upstream),
+    ok = supervisor2:delete_child(Sup, Upstream).
+
+child(Sup, ConnName) ->
+    rabbit_federation_util:find_upstream(
+      ConnName, [U || {U, _, _, _} <- supervisor2:which_children(Sup)]).
 
 %%----------------------------------------------------------------------------
 
