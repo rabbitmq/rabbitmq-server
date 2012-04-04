@@ -36,17 +36,17 @@ register() ->
                  <<"federation_connection">>,
                  <<"federation_upstream_set">>]].
 
-validate(<<"federation_upstream_set">>, _Key, _Term) ->
-    ok;
+validate(<<"federation_upstream_set">>, _Key, Term) ->
+    assert_connection_or_upstream_set(Term);
 
-validate(<<"federation_connection">>, _Key, _Term) ->
-    ok;
+validate(<<"federation_connection">>, _Key, Term) ->
+    assert_connection_or_upstream_set(Term);
 
-validate(<<"federation">>, <<"local_nodename">>, _Term) ->
-    ok;
+validate(<<"federation">>, <<"local_nodename">>, Term) ->
+    assert_type(<<"local_nodename">>, binary, Term);
 
-validate(<<"federation">>, <<"local_username">>, _Term) ->
-    ok;
+validate(<<"federation">>, <<"local_username">>, Term) ->
+    assert_type(<<"local_username">>, binary, Term);
 
 validate(_AppName, _Key, _Term) ->
     exit({error, key_not_recognised}).
@@ -74,3 +74,62 @@ notify_clear(<<"federation">>, <<"local_nodename">>) ->
 
 notify_clear(<<"federation">>, <<"local_username">>) ->
     rabbit_federation_link_sup_sup:adjust(everything).
+
+%%----------------------------------------------------------------------------
+
+assert_type(Name, {Type, Opts}, Term) ->
+    assert_type(Name, Type, Term),
+    case lists:member(Term, Opts) of
+        true  -> ok;
+        false -> exit({error, rabbit_misc:format(
+                                "~s must be one of ~p", [Name, Opts])})
+    end;
+
+assert_type(_Name, number, Term) when is_number(Term) ->
+    ok;
+
+assert_type(Name, number, Term) ->
+    exit({error, rabbit_misc:format(
+                   "~s should be number, actually was ~p", [Name, Term])});
+
+assert_type(_Name, binary, Term) when is_binary(Term) ->
+    ok;
+
+assert_type(Name, binary, Term) ->
+    exit({error, rabbit_misc:format(
+                   "~s should be binary, actually was ~p", [Name, Term])}).
+
+assert_connection_or_upstream_set(Term) ->
+    assert_contents(
+      [{<<"host">>,            binary, mandatory},
+       {<<"port">>,            number, optional},
+       {<<"protocol">>,        {binary, [<<"amqp">>, <<"amqps">>]}, optional},
+       {<<"virtual_host">>,    binary, optional},
+       {<<"username">>,        binary, optional},
+       {<<"password">>,        binary, optional},
+       {<<"exchange">>,        binary, optional},
+       {<<"prefetch_count">>,  number, optional},
+       {<<"reconnect_delay">>, number, optional},
+       {<<"max_hops">>,        number, optional},
+       {<<"expires">>,         number, optional},
+       {<<"message_ttl">>,     number, optional},
+       {<<"ha_policy">>,       binary, optional}], Term).
+
+assert_contents(Types, Term) ->
+    case lists:foldl(
+           fun ({Name, Type, Needed}, Term0) ->
+                   case {lists:keytake(Name, 1, Term0), Needed} of
+                       {{value, {Name, Value}, Term1}, _} ->
+                           assert_type(Name, Type, Value),
+                           Term1;
+                       {false, mandatory} ->
+                           exit({error, rabbit_misc:format(
+                                          "Key \"~s\" not found", [Name])});
+                       {false, optional} ->
+                           Term0
+                   end
+           end, Term, Types) of
+        []   -> ok;
+        Left -> exit({error, rabbit_misc:format(
+                               "Unrecognised terms ~p", [Left])})
+    end.
