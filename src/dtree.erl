@@ -16,18 +16,19 @@
 
 %% A dual-index tree.
 %%
-%% Conceptually, what we want is a map that has two distinct sets of
-%% keys (referred to here as primary and secondary, although that
-%% shouldn't imply a hierarchy) pointing to one set of
-%% values. However, in practice what we'll always want to do is insert
-%% a value that's pointed at by (one primary, many secondaries) and
-%% remove values that are pointed at by (one secondary, many
-%% primaries) or (one secondary, all primaries). Thus the API.
+%% Rntries have the following shape:
 %%
-%% Entries exists while they have a non-empty secondary key set. The
-%% 'take' operations return the entries that got removed, i.e. that
-%% had no remaining secondary keys. 'take' ignores missing supplied
-%% keys.
+%% +----+--------------------+---+
+%% | PK | SK1, SK2, ..., SKN | V |
+%% +----+--------------------+---+
+%%
+%% i.e. a primary key, set of secondary keys, and a value.
+%%
+%% There can be only one entry per primary key, but secondary keys may
+%% appear in multiple entries.
+%%
+%% The set of secondary keys must be non-empty. Or, to put it another
+%% way, entries only exist while their secondary key set is non-empty.
 
 -module(dtree).
 
@@ -63,6 +64,8 @@
 
 empty() -> {gb_trees:empty(), gb_trees:empty()}.
 
+%% Insert an entry. Fails if there already is an entry with the given
+%% primary key. The list of secondary keys should be non-empty.
 insert(PK, SKs, V, {P, S}) ->
     {gb_trees:insert(PK, {gb_sets:from_list(SKs), V}, P),
      lists:foldl(fun (SK, S0) ->
@@ -74,6 +77,11 @@ insert(PK, SKs, V, {P, S}) ->
                          end
                  end, S, SKs)}.
 
+%% Remove the given secondary key from the entries of the given
+%% primary keys, returning the primary-key/value pairs of any entries
+%% that were dropped as the result (i.e. due to their secondary key
+%% set becoming empty). It is ok for the given primary keys and/or
+%% secondary key to not exist.
 take(PKs, SK, {P, S}) ->
     case gb_trees:lookup(SK, S) of
         none         -> {[], {P, S}};
@@ -87,6 +95,10 @@ take(PKs, SK, {P, S}) ->
                                    end}}
     end.
 
+%% Remove the given secondary key from all entries, returning the
+%% primary-key/value pairs of any entries that were dropped as the
+%% result (i.e. due to their secondary key set becoming empty). It is
+%% ok for the given secondary key to not exist.
 take(SK, {P, S}) ->
     case gb_trees:lookup(SK, S) of
         none         -> {[], {P, S}};
@@ -94,6 +106,9 @@ take(SK, {P, S}) ->
                         {KVs, {P1, gb_trees:delete(SK, S)}}
     end.
 
+%% Drop all entries which contain the given secondary key, returning
+%% the primary-key/value pairs of these entries. It is ok for the
+%% given secondary key to not exist.
 take_all(SK, {P, S}) ->
     case gb_trees:lookup(SK, S) of
         none         -> {[], {P, S}};
