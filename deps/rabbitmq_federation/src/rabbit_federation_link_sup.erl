@@ -40,11 +40,26 @@ adjust(Sup, XName, everything) ->
     end;
 
 adjust(Sup, XName, {connection, ConnName}) ->
-    maybe_stop(Sup, ConnName),
-    start(Sup, XName, ConnName);
+    %% We just created this connection, it must exist
+    {ok, NewUpstream} = upstream(XName, ConnName),
+    case child(Sup, ConnName) of
+        {ok, OldUpstream} ->
+            case OldUpstream =:= NewUpstream of
+                true  -> ok;
+                false -> stop(Sup, OldUpstream),
+                         start(Sup, NewUpstream, XName)
+            end;
+        {error, not_found} ->
+            start(Sup, NewUpstream, XName)
+    end;
 
 adjust(Sup, _XName, {clear_connection, ConnName}) ->
-    maybe_stop(Sup, ConnName);
+    case child(Sup, ConnName) of
+        {ok, Upstream} ->
+            stop(Sup, Upstream);
+        {error, not_found} ->
+            ok
+    end;
 
 %% TODO handle changes of upstream sets properly
 adjust(Sup, XName, {upstream_set, _}) ->
@@ -52,43 +67,31 @@ adjust(Sup, XName, {upstream_set, _}) ->
 adjust(Sup, XName, {clear_upstream_set, _}) ->
     adjust(Sup, XName, everything).
 
-start(Sup, XName, ConnName) ->
-    case upstream_set(XName) of
-        {ok, UpstreamSet} ->
-            case rabbit_federation_upstream:from_set(
-                   UpstreamSet, XName, ConnName) of
-                {ok, Upstream} ->
-                    {ok, _Pid} = supervisor2:start_child(
-                                   Sup, spec(Upstream, XName)),
-                    ok;
-                {error, not_found} ->
-                    ok
-            end;
-        {error, not_found} ->
-            ok
-    end.
-
-maybe_stop(Sup, ConnName) ->
-    case child(Sup, ConnName) of
-        {ok, Upstream} ->
-            stop(Sup, Upstream),
-            %% While the link will report its own removal, that only
-            %% works if the link was actually up. If the link was
-            %% broken and failing to come up, the possibility exists
-            %% that there *is* no link process, but we still have a
-            %% report in the status table. So remove it here too.
-            rabbit_federation_status:remove_upstream(Upstream);
-        {error, not_found} ->
-            ok
-    end.
+start(Sup, Upstream, XName) ->
+    {ok, _Pid} = supervisor2:start_child(Sup, spec(Upstream, XName)),
+    ok.
 
 stop(Sup, Upstream) ->
     ok = supervisor2:terminate_child(Sup, Upstream),
-    ok = supervisor2:delete_child(Sup, Upstream).
+    ok = supervisor2:delete_child(Sup, Upstream),
+    %% While the link will report its own removal, that only works if
+    %% the link was actually up. If the link was broken and failing to
+    %% come up, the possibility exists that there *is* no link
+    %% process, but we still have a report in the status table. So
+    %% remove it here too.
+    rabbit_federation_status:remove_upstream(Upstream).
 
 child(Sup, ConnName) ->
     rabbit_federation_util:find_upstream(
       ConnName, [U || {U, _, _, _} <- supervisor2:which_children(Sup)]).
+
+upstream(XName, ConnName) ->
+    case upstream_set(XName) of
+        {ok, UpstreamSet} ->
+            rabbit_federation_upstream:from_set(UpstreamSet, XName, ConnName);
+        {error, not_found} = E ->
+            E
+    end.
 
 upstream_set(XName) ->
     case rabbit_exchange:lookup(XName) of
