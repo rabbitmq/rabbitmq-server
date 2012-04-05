@@ -20,7 +20,7 @@
 
 -export([publish/4, publish/6, publish/1,
          message/3, message/4, properties/1, append_table_header/3,
-         extract_headers/1, replace_headers/2, delivery/4, header_routes/1]).
+         map_headers/2, delivery/4, header_routes/1]).
 -export([build_content/2, from_content/1]).
 
 %%----------------------------------------------------------------------------
@@ -61,10 +61,8 @@
 -spec(append_table_header/3 ::
         (binary(), rabbit_framing:amqp_table(), headers()) -> headers()).
 
--spec(extract_headers/1 :: (rabbit_types:content()) -> headers()).
-
--spec(replace_headers/2 :: (headers(), rabbit_types:content())
-                           -> rabbit_types:content()).
+-spec(map_headers/2 :: (rabbit_types:content(), fun((headers()) -> headers()))
+                       -> rabbit_types:content()).
 
 -spec(header_routes/1 ::
         (undefined | rabbit_framing:amqp_table()) -> [string()]).
@@ -188,14 +186,12 @@ append_table_header(Name, Info, Headers) ->
             end,
     rabbit_misc:set_table_value(Headers, Name, array, [{table, Info} | Prior]).
 
-extract_headers(Content) ->
-    #content{properties = #'P_basic'{headers = Headers}} =
-        rabbit_binary_parser:ensure_content_decoded(Content),
-    Headers.
-
-replace_headers(Headers, Content = #content{properties = Props}) ->
+map_headers(F, Content) ->
+    Content1 = rabbit_binary_parser:ensure_content_decoded(Content),
+    #content{properties = #'P_basic'{headers = Headers} = Props} = Content1,
+    Headers1 = F(Headers),
     rabbit_binary_generator:clear_encoded_content(
-      Content#content{properties = Props#'P_basic'{headers = Headers}}).
+      Content1#content{properties = Props#'P_basic'{headers = Headers1}}).
 
 indexof(L, Element) -> indexof(L, Element, 1).
 
