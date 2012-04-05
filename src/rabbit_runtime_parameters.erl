@@ -141,8 +141,9 @@ lookup_missing(AppName, Key, Default) ->
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
               case mnesia:read(?TABLE, {AppName, Key}) of
-                  []  -> mnesia:write(?TABLE, c(AppName, Key, Default), write),
-                         Default;
+                  []  -> Record = c(AppName, Key, Default),
+                         mnesia:write(?TABLE, Record, write),
+                         Record;
                   [R] -> R
               end
       end).
