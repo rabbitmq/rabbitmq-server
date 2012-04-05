@@ -31,7 +31,7 @@
 -spec(set/3 :: (binary(), binary(), term()) -> ok_or_error_string()).
 -spec(clear/2 :: (binary(), binary()) -> ok_or_error_string()).
 -spec(list/0 :: () -> [rabbit_types:infos()]).
--spec(list/1 :: (binary()) -> [rabbit_types:infos()]).
+-spec(list/1 :: (binary()) -> [rabbit_types:infos()] | 'not_found').
 -spec(list_formatted/0 :: () -> [rabbit_types:infos()]).
 -spec(lookup/2 :: (binary(), binary()) -> rabbit_types:infos()).
 -spec(value/2 :: (binary(), binary()) -> term()).
@@ -104,9 +104,12 @@ mnesia_clear(AppName, Key) ->
 list() ->
     [p(P) || P <- rabbit_misc:dirty_read_all(?TABLE)].
 
-list(Name) ->
-    [p(P) || P <- mnesia:dirty_match_object(
-                    ?TABLE, #runtime_parameters{key = {Name, '_'}, _ = '_'})].
+list(AppName) ->
+    case lookup_app(AppName) of
+        {ok, _} -> Match = #runtime_parameters{key = {AppName, '_'}, _ = '_'},
+                   [p(P) || P <- mnesia:dirty_match_object(?TABLE, Match)];
+        _       -> not_found
+    end.
 
 list_formatted() ->
     [pset(value, format(pget(value, P)), P) || P <- list()].
