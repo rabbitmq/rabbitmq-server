@@ -53,6 +53,7 @@ all_tests() ->
     passed = test_option_parser(),
     passed = test_cluster_management(),
     passed = test_user_management(),
+    passed = test_runtime_parameters(),
     passed = test_server_status(),
     passed = test_confirms(),
     passed = maybe_run_cluster_dependent_tests(),
@@ -1093,6 +1094,36 @@ test_user_management() ->
     ok = control_action(delete_user, ["foo"]),
     {error, {no_such_user, _}} =
         control_action(delete_user, ["foo"]),
+
+    passed.
+
+test_runtime_parameters() ->
+    rabbit_runtime_parameters_test:register(),
+    Good = fun(L) -> ok                = control_action(set_parameter, L) end,
+    Bad  = fun(L) -> {error_string, _} = control_action(set_parameter, L) end,
+
+    %% Acceptable for bijection
+    Good(["test", "good", "<<\"ignore\">>"]),
+    Good(["test", "good", "123"]),
+    Good(["test", "good", "true"]),
+    Good(["test", "good", "false"]),
+    Good(["test", "good", "null"]),
+    Good(["test", "good", "[{<<\"key\">>, <<\"value\">>}]"]),
+
+    %% Various forms of fail due to non-bijectability
+    Bad(["test", "good", "atom"]),
+    Bad(["test", "good", "{tuple, foo}"]),
+    Bad(["test", "good", "[{<<\"key\">>, <<\"value\">>, 1}]"]),
+    Bad(["test", "good", "[{key, <<\"value\">>}]"]),
+
+    %% Test actual validation hook
+    Good(["test", "maybe", "<<\"good\">>"]),
+    Bad(["test", "maybe", "<<\"bad\">>"]),
+
+    ok = control_action(list_parameters, []),
+
+    ok = control_action(clear_parameter, ["test", "good"]),
+    ok = control_action(clear_parameter, ["test", "maybe"]),
 
     passed.
 
