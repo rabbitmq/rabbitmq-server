@@ -40,7 +40,8 @@
 -export([upmap/2, map_in_order/2]).
 -export([table_filter/3]).
 -export([dirty_read_all/1, dirty_foreach_key/2, dirty_dump_log/1]).
--export([format/2, format_stderr/2, with_local_io/1, local_info_msg/2]).
+-export([format/2, format_many/1, format_stderr/2]).
+-export([with_local_io/1, local_info_msg/2]).
 -export([start_applications/1, stop_applications/1]).
 -export([unfold/2, ceil/1, queue_fold/3]).
 -export([sort_field_table/1]).
@@ -157,6 +158,7 @@
                              -> 'ok' | 'aborted').
 -spec(dirty_dump_log/1 :: (file:filename()) -> ok_or_error()).
 -spec(format/2 :: (string(), [any()]) -> string()).
+-spec(format_many/1 :: ([{string(), [any()]}]) -> string()).
 -spec(format_stderr/2 :: (string(), [any()]) -> 'ok').
 -spec(with_local_io/1 :: (fun (() -> A)) -> A).
 -spec(local_info_msg/2 :: (string(), [any()]) -> 'ok').
@@ -549,6 +551,9 @@ dirty_dump_log1(LH, {K, Terms, BadBytes}) ->
     dirty_dump_log1(LH, disk_log:chunk(LH, K)).
 
 format(Fmt, Args) -> lists:flatten(io_lib:format(Fmt, Args)).
+
+format_many(List) ->
+    lists:flatten([io_lib:format(F ++ "~n", A) || {F, A} <- List]).
 
 format_stderr(Fmt, Args) ->
     case os:type() of

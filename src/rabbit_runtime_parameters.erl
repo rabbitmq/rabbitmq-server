@@ -28,24 +28,45 @@
 %%---------------------------------------------------------------------------
 
 set(AppName, Key, Term) ->
-    Module = lookup_app(AppName),
-    validate(Term),
-    Module:validate(AppName, Key, Term),
+    case set0(AppName, Key, Term) of
+        ok          -> ok;
+        {errors, L} -> {error_string, rabbit_misc:format_many(
+                                        [{"Validation failed~n", []} | L])}
+    end.
+
+set0(AppName, Key, Term) ->
+    case lookup_app(AppName) of
+        {ok, Module} -> case flatten_errors(validate(Term)) of
+                            ok -> case flatten_errors(
+                                         Module:validate(AppName, Key, Term)) of
+                                      ok -> update(AppName, Key, Term),
+                                            Module:notify(AppName, Key, Term),
+                                            ok;
+                                      E  -> E
+                                  end;
+                            E  -> E
+                        end;
+        E            -> E
+    end.
+
+update(AppName, Key, Term) ->
     ok = rabbit_misc:execute_mnesia_transaction(
            fun () ->
                    ok = mnesia:write(?TABLE, c(AppName, Key, Term), write)
-           end),
-    Module:notify(AppName, Key, Term),
-    ok.
+           end).
 
 clear(AppName, Key) ->
-    Module = lookup_app(AppName),
-    ok = rabbit_misc:execute_mnesia_transaction(
-           fun () ->
-                   ok = mnesia:delete(?TABLE, {AppName, Key}, write)
-           end),
-    Module:notify_clear(AppName, Key),
-    ok.
+    case lookup_app(AppName) of
+        {ok, Module} ->
+            ok = rabbit_misc:execute_mnesia_transaction(
+                   fun () ->
+                           ok = mnesia:delete(?TABLE, {AppName, Key}, write)
+                   end),
+            Module:notify_clear(AppName, Key),
+            ok;
+        E ->
+            E
+    end.
 
 list() ->
     [p(P) || P <- rabbit_misc:dirty_read_all(?TABLE)].
@@ -105,8 +126,8 @@ info_keys() -> [app_name, key, value].
 lookup_app(App) ->
     case rabbit_registry:lookup_module(
            runtime_parameter, list_to_atom(binary_to_list(App))) of
-        {error, not_found} -> exit({application_not_found, App});
-        {ok, Module}       -> Module
+        {error, not_found} -> {errors, [{"application ~s not found", [App]}]};
+        {ok, Module}       -> {ok, Module}
     end.
 
 parse(Src0) ->
@@ -137,17 +158,24 @@ format(Term) ->
 %% We will want to be able to biject these to JSON. So we have some
 %% generic restrictions on what we consider acceptable.
 validate(Proplist = [T | _]) when is_tuple(T) -> validate_proplist(Proplist);
-validate(L) when is_list(L)                   -> [validate(I) || I <- L];
-validate(T) when is_tuple(T)                  -> exit({tuple, T});
+validate(L) when is_list(L)                   -> validate_list(L);
+validate(T) when is_tuple(T)                  -> {error, "tuple: ~p", [T]};
 validate(true)                                -> ok;
 validate(false)                               -> ok;
 validate(null)                                -> ok;
-validate(A) when is_atom(A)                   -> exit({non_bool_atom, A});
+validate(A) when is_atom(A)                   -> {error, "atom: ~p", [A]};
 validate(N) when is_number(N)                 -> ok;
 validate(B) when is_binary(B)                 -> ok.
 
-validate_proplist([])                                -> ok;
-validate_proplist([{K, V} | Rest]) when is_binary(K) -> validate(V),
-                                                        validate_proplist(Rest);
-validate_proplist([{K, _V} | _Rest])                 -> exit({bad_key, K});
-validate_proplist([H | _Rest])                       -> exit({not_two_tuple,H}).
+validate_list(L) -> [validate(I) || I <- L].
+validate_proplist(L) -> [vp(I) || I <- L].
+
+vp({K, V}) when is_binary(K) -> validate(V);
+vp({K, _V})                  -> {error, "bad key: ~p", [K]};
+vp(H)                        -> {error, "not two tuple: ~p", [H]}.
+
+flatten_errors(L) ->
+    case [{F, A} || I <- lists:flatten(L), {error, F, A} <- [I]] of
+        [] -> ok;
+        E  -> {errors, E}
+    end.
