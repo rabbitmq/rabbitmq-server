@@ -1216,7 +1216,7 @@ handle_cast({deliver, Delivery = #delivery{sender     = Sender,
         false -> noreply(deliver_or_enqueue(Delivery, State));
         Qs    -> log_cycle_once(Qs),
                  rabbit_misc:confirm_to_sender(Sender, [MsgSeqNo]),
-                 noreply(State)
+                 noreply(discard_delivery(Delivery, State))
     end;
 
 handle_cast({ack, AckTags, ChPid}, State) ->
