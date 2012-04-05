@@ -40,14 +40,6 @@ simple_test() ->
               publish_expect(Ch, <<"upstream">>, <<"key">>, Q, <<"HELLO">>)
       end, ?UPSTREAM_DOWNSTREAM).
 
-%% down-conf is created by configuration, points to up-conf.
-conf_test() ->
-    with_ch(
-      fun (Ch) ->
-              Q = bind_queue(Ch, <<"down-conf">>, <<"key">>),
-              publish_expect(Ch, <<"up-conf">>, <<"key">>, Q, <<"HELLO">>)
-      end, [x(<<"up-conf">>)]).
-
 multiple_upstreams_test() ->
     with_ch(
       fun (Ch) ->
