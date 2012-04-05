@@ -21,6 +21,27 @@
 -export([parse/1, set/3, clear/2, list/0, list/1, list_formatted/0, lookup/2,
          value/2, value/3, info_keys/0]).
 
+%%----------------------------------------------------------------------------
+
+-ifdef(use_specs).
+
+-type(ok_or_error_string() :: 'ok' | {'error_string', string()}).
+
+-spec(parse/1 :: (string()) -> term()).
+-spec(set/3 :: (binary(), binary(), term()) -> ok_or_error_string()).
+-spec(clear/2 :: (binary(), binary()) -> ok_or_error_string()).
+-spec(list/0 :: () -> [rabbit_types:infos()]).
+-spec(list/1 :: (binary()) -> [rabbit_types:infos()]).
+-spec(list_formatted/0 :: () -> [rabbit_types:infos()]).
+-spec(lookup/2 :: (binary(), binary()) -> rabbit_types:infos()).
+-spec(value/2 :: (binary(), binary()) -> term()).
+-spec(value/3 :: (binary(), binary(), term()) -> term()).
+-spec(info_keys/0 :: () -> rabbit_types:info_keys()).
+
+-endif.
+
+%%---------------------------------------------------------------------------
+
 -import(rabbit_misc, [pget/2, pset/3]).
 
 -define(TABLE, rabbit_runtime_parameters).
