@@ -54,10 +54,14 @@ accept_content(ReqData, Context) ->
     rabbit_mgmt_util:with_decode(
       [value], ReqData, Context,
       fun([Value], _) ->
-              ok = rabbit_runtime_parameters:set(
+              case rabbit_runtime_parameters:set(
                      app_name(ReqData), key(ReqData),
-                     rabbit_mgmt_parse:parameter_value(Value)),
-              {true, ReqData, Context}
+                     rabbit_mgmt_parse:parameter_value(Value)) of
+                  ok ->
+                      {true, ReqData, Context};
+                  {error_string, Reason} ->
+                      rabbit_mgmt_util:bad_request(Reason, ReqData, Context)
+              end
       end).
 
 delete_resource(ReqData, Context) ->
