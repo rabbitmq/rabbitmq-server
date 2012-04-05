@@ -65,7 +65,11 @@
 empty() -> {gb_trees:empty(), gb_trees:empty()}.
 
 %% Insert an entry. Fails if there already is an entry with the given
-%% primary key. The list of secondary keys should be non-empty.
+%% primary key.
+insert(PK, [], V, {P, S}) ->
+    %% dummy insert to force error if PK exists
+    gb_trees:insert(PK, {gb_sets:empty(), V}, P),
+    {P, S};
 insert(PK, SKs, V, {P, S}) ->
     {gb_trees:insert(PK, {gb_sets:from_list(SKs), V}, P),
      lists:foldl(fun (SK, S0) ->
