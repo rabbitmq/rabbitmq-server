@@ -175,7 +175,7 @@ vp({K, _V})                  -> {error, "bad key: ~p", [K]};
 vp(H)                        -> {error, "not two tuple: ~p", [H]}.
 
 flatten_errors(L) ->
-    case [{F, A} || I <- lists:flatten(L), {error, F, A} <- [I]] of
+    case [{F, A} || I <- lists:flatten([L]), {error, F, A} <- [I]] of
         [] -> ok;
         E  -> {errors, E}
     end.
