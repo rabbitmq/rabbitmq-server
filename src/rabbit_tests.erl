@@ -1124,6 +1124,8 @@ test_runtime_parameters() ->
 
     ok = control_action(clear_parameter, ["test", "good"]),
     ok = control_action(clear_parameter, ["test", "maybe"]),
+    {error_string, _} =
+        control_action(clear_parameter, ["test", "neverexisted"]),
 
     passed.
 

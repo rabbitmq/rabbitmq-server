@@ -30,43 +30,55 @@
 set(AppName, Key, Term) ->
     case set0(AppName, Key, Term) of
         ok          -> ok;
-        {errors, L} -> {error_string, rabbit_misc:format_many(
-                                        [{"Validation failed~n", []} | L])}
+        {errors, L} -> format_error(L)
     end.
+
+format_error(L) ->
+    {error_string, rabbit_misc:format_many([{"Validation failed~n", []} | L])}.
 
 set0(AppName, Key, Term) ->
     case lookup_app(AppName) of
-        {ok, Module} -> case flatten_errors(validate(Term)) of
-                            ok -> case flatten_errors(
-                                         Module:validate(AppName, Key, Term)) of
-                                      ok -> update(AppName, Key, Term),
-                                            Module:notify(AppName, Key, Term),
-                                            ok;
-                                      E  -> E
-                                  end;
-                            E  -> E
-                        end;
-        E            -> E
+        {ok, Mod} -> case flatten_errors(validate(Term)) of
+                         ok -> case flatten_errors(
+                                      Mod:validate(AppName, Key, Term)) of
+                                   ok -> mnesia_update(AppName, Key, Term),
+                                         Mod:notify(AppName, Key, Term),
+                                         ok;
+                                   E  -> E
+                               end;
+                         E  -> E
+                     end;
+        E         -> E
     end.
 
-update(AppName, Key, Term) ->
+mnesia_update(AppName, Key, Term) ->
     ok = rabbit_misc:execute_mnesia_transaction(
            fun () ->
                    ok = mnesia:write(?TABLE, c(AppName, Key, Term), write)
            end).
 
 clear(AppName, Key) ->
-    case lookup_app(AppName) of
-        {ok, Module} ->
-            ok = rabbit_misc:execute_mnesia_transaction(
-                   fun () ->
-                           ok = mnesia:delete(?TABLE, {AppName, Key}, write)
-                   end),
-            Module:notify_clear(AppName, Key),
-            ok;
-        E ->
-            E
+    case clear0(AppName, Key) of
+        ok          -> ok;
+        {errors, L} -> format_error(L)
     end.
+
+clear0(AppName, Key) ->
+    case lookup_app(AppName) of
+        {ok, Mod} -> case flatten_errors(Mod:validate_clear(AppName, Key)) of
+                         ok -> mnesia_clear(AppName, Key),
+                               Mod:notify_clear(AppName, Key),
+                               ok;
+                         E  -> E
+                     end;
+        E         -> E
+    end.
+
+mnesia_clear(AppName, Key) ->
+    ok = rabbit_misc:execute_mnesia_transaction(
+           fun () ->
+                   ok = mnesia:delete(?TABLE, {AppName, Key}, write)
+           end).
 
 list() ->
     [p(P) || P <- rabbit_misc:dirty_read_all(?TABLE)].

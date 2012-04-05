@@ -21,6 +21,7 @@
 behaviour_info(callbacks) ->
     [
      {validate, 3},
+     {validate_clear, 2},
      {notify, 3},
      {notify_clear, 2}
     ];
