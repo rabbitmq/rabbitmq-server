@@ -53,7 +53,8 @@ adjust(Sup, XName, {connection, ConnName}) ->
             start(Sup, NewUpstream, XName)
     end;
 
-adjust(Sup, _XName, {clear_connection, ConnName}) ->
+adjust(Sup, XName, {clear_connection, ConnName}) ->
+    prune_for_upstream_set(<<"all">>, XName),
     case child(Sup, ConnName) of
         {ok, Upstream} ->
             stop(Sup, Upstream);
@@ -62,7 +63,8 @@ adjust(Sup, _XName, {clear_connection, ConnName}) ->
     end;
 
 %% TODO handle changes of upstream sets properly
-adjust(Sup, XName, {upstream_set, _}) ->
+adjust(Sup, XName, {upstream_set, Set}) ->
+    prune_for_upstream_set(Set, XName),
     adjust(Sup, XName, everything);
 adjust(Sup, XName, {clear_upstream_set, _}) ->
     adjust(Sup, XName, everything).
@@ -101,6 +103,13 @@ upstream_set(XName) ->
             {ok, UpstreamSet};
         {error, not_found} ->
             {error, not_found}
+    end.
+
+prune_for_upstream_set(Set, XName) ->
+    case upstream_set(XName) of
+        {ok, Set} -> {ok, Us} = rabbit_federation_upstream:from_set(Set, XName),
+                     ok = rabbit_federation_db:prune_scratch(XName, Us);
+        _         -> ok
     end.
 
 %%----------------------------------------------------------------------------
