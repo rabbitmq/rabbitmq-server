@@ -16,7 +16,7 @@
 
 %% A dual-index tree.
 %%
-%% Rntries have the following shape:
+%% Entries have the following shape:
 %%
 %% +----+--------------------+---+
 %% | PK | SK1, SK2, ..., SKN | V |
