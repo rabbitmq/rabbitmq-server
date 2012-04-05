@@ -72,7 +72,7 @@ from_set(<<"all">>, X) ->
 from_set(SetName, X) ->
     case rabbit_runtime_parameters:value(
            <<"federation_upstream_set">>, SetName) of
-        undefined -> {error, set_not_found};
+        not_found -> {error, set_not_found};
         Set       -> from_set_contents(Set, X)
     end.
 
