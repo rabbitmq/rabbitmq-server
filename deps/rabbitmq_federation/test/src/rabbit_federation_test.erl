@@ -191,7 +191,7 @@ suffix({Nodename, _}, X) ->
     Node = rabbit_nodes:make({Nodename, NodeHost}),
     rpc:call(Node, rabbit_federation_db, get_active_suffix,
              [rabbit_misc:r(<<"/">>, exchange, <<"downstream">>),
-              #upstream{connection_name = Nodename,
+              #upstream{connection_name = list_to_binary(Nodename),
                         exchange        = list_to_binary(X)}, none]).
 
 %% Downstream: rabbit-test, port 5672
