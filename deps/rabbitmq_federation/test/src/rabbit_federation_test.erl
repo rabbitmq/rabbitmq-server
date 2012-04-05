@@ -250,6 +250,10 @@ max_hops() ->
     Mopsy      = start_other_node(?MOPSY),
     Cottontail = start_other_node(?COTTONTAIL),
 
+    declare_exchange(Flopsy,     fed(<<"ring">>, <<"ring">>)),
+    declare_exchange(Mopsy,      fed(<<"ring">>, <<"ring">>)),
+    declare_exchange(Cottontail, fed(<<"ring">>, <<"ring">>)),
+
     Q1 = bind_queue(Flopsy,     <<"ring">>, <<"key">>),
     Q2 = bind_queue(Mopsy,      <<"ring">>, <<"key">>),
     Q3 = bind_queue(Cottontail, <<"ring">>, <<"key">>),
