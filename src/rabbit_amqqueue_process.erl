@@ -542,18 +542,16 @@ deliver_or_enqueue(Delivery = #delivery{message    = Message,
                                         msg_seq_no = MsgSeqNo,
                                         sender     = SenderPid}, State) ->
     Confirm = should_confirm_message(Delivery, State),
-    {Delivered, State1} = attempt_delivery(Delivery, Confirm, State),
-    case Delivered of
-        true ->
+    case attempt_delivery(Delivery, Confirm, State) of
+        {true, State1} ->
             maybe_record_confirm_message(Confirm, State1);
         %% optimisation
-        false when State1#q.ttl == 0 andalso State1#q.dlx == undefined ->
-            case Confirm of
-                never -> ok;
-                _     -> rabbit_misc:confirm_to_sender(SenderPid, [MsgSeqNo])
-            end,
+        {false, State1 = #q{ttl = 0, dlx = undefined}} when Confirm == never ->
             discard_delivery(Delivery, State1);
-        false ->
+        {false, State1 = #q{ttl = 0, dlx = undefined}} ->
+            rabbit_misc:confirm_to_sender(SenderPid, [MsgSeqNo]),
+            discard_delivery(Delivery, State1);
+        {false, State1} ->
             State2 = #q{backing_queue = BQ, backing_queue_state = BQS} =
                 maybe_record_confirm_message(Confirm, State1),
             Props = message_properties(Confirm, State2),
