@@ -19,7 +19,7 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
--export([validate/3, notify/3, notify_clear/2]).
+-export([validate/3, validate_clear/2, notify/3, notify_clear/2]).
 -export([register/0]).
 
 -rabbit_boot_step({?MODULE,
@@ -49,6 +49,21 @@ validate(<<"federation">>, <<"local_username">>, Term) ->
     assert_type(<<"local_username">>, binary, Term);
 
 validate(_AppName, Key, _Term) ->
+    {error, "key not recognised: ~p", [Key]}.
+
+validate_clear(<<"federation_upstream_set">>, _Key) ->
+    ok;
+
+validate_clear(<<"federation_connection">>, _Key) ->
+    ok;
+
+validate_clear(<<"federation">>, <<"local_nodename">>) ->
+    ok;
+
+validate_clear(<<"federation">>, <<"local_username">>) ->
+    ok;
+
+validate_clear(_AppName, Key) ->
     {error, "key not recognised: ~p", [Key]}.
 
 notify(<<"federation_upstream_set">>, Key, _Term) ->
