@@ -48,8 +48,8 @@ validate(<<"federation">>, <<"local_nodename">>, Term) ->
 validate(<<"federation">>, <<"local_username">>, Term) ->
     assert_type(<<"local_username">>, binary, Term);
 
-validate(_AppName, _Key, _Term) ->
-    exit({error, key_not_recognised}).
+validate(_AppName, Key, _Term) ->
+    {error, "key not recognised: ~p", [Key]}.
 
 notify(<<"federation_upstream_set">>, Key, _Term) ->
     rabbit_federation_link_sup_sup:adjust({upstream_set, Key});
@@ -81,23 +81,20 @@ assert_type(Name, {Type, Opts}, Term) ->
     assert_type(Name, Type, Term),
     case lists:member(Term, Opts) of
         true  -> ok;
-        false -> exit({error, rabbit_misc:format(
-                                "~s must be one of ~p", [Name, Opts])})
+        false -> {error, "~s must be one of ~p", [Name, Opts]}
     end;
 
 assert_type(_Name, number, Term) when is_number(Term) ->
     ok;
 
 assert_type(Name, number, Term) ->
-    exit({error, rabbit_misc:format(
-                   "~s should be number, actually was ~p", [Name, Term])});
+    {error, "~s should be number, actually was ~p", [Name, Term]};
 
 assert_type(_Name, binary, Term) when is_binary(Term) ->
     ok;
 
 assert_type(Name, binary, Term) ->
-    exit({error, rabbit_misc:format(
-                   "~s should be binary, actually was ~p", [Name, Term])}).
+    {error, "~s should be binary, actually was ~p", [Name, Term]}.
 
 assert_connection_or_upstream_set(Term) ->
     assert_contents(
@@ -115,21 +112,22 @@ assert_connection_or_upstream_set(Term) ->
        {<<"message_ttl">>,     number, optional},
        {<<"ha_policy">>,       binary, optional}], Term).
 
-assert_contents(Types, Term) ->
-    case lists:foldl(
-           fun ({Name, Type, Needed}, Term0) ->
-                   case {lists:keytake(Name, 1, Term0), Needed} of
-                       {{value, {Name, Value}, Term1}, _} ->
-                           assert_type(Name, Type, Value),
-                           Term1;
-                       {false, mandatory} ->
-                           exit({error, rabbit_misc:format(
-                                          "Key \"~s\" not found", [Name])});
-                       {false, optional} ->
-                           Term0
-                   end
-           end, Term, Types) of
-        []   -> ok;
-        Left -> exit({error, rabbit_misc:format(
-                               "Unrecognised terms ~p", [Left])})
+assert_contents(Constraints, Term) ->
+    {Results, Remainder}
+        = lists:foldl(
+            fun ({Name, Constraint, Needed}, {Results0, Term0}) ->
+                    case {lists:keytake(Name, 1, Term0), Needed} of
+                        {{value, {Name, Value}, Term1}, _} ->
+                            {[assert_type(Name, Constraint, Value) | Results0],
+                             Term1};
+                        {false, mandatory} ->
+                            {[{error, "Key \"~s\" not found", [Name]} |
+                              Results0], Term0};
+                        {false, optional} ->
+                            {Results0, Term0}
+                    end
+            end, {[], Term}, Constraints),
+    case Remainder of
+        [] -> Results;
+        _  -> [{error, "Unrecognised terms ~p", [Remainder]} | Results]
     end.
