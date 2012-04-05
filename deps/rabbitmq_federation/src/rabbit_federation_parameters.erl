@@ -37,10 +37,14 @@ register() ->
                  <<"federation_upstream_set">>]].
 
 validate(<<"federation_upstream_set">>, _Key, Term) ->
-    assert_connection_or_upstream_set(Term);
+    [assert_contents([{<<"connection">>, binary, mandatory},
+                      {<<"exchange">>,   binary, optional} |
+                      connection_upstream_set_validation()], Upstream)
+     || Upstream <- Term];
 
 validate(<<"federation_connection">>, _Key, Term) ->
-    assert_connection_or_upstream_set(Term);
+    assert_contents([{<<"host">>, binary, mandatory} |
+                     connection_upstream_set_validation()], Term);
 
 validate(<<"federation">>, <<"local_nodename">>, Term) ->
     assert_type(<<"local_nodename">>, binary, Term);
@@ -111,21 +115,19 @@ assert_type(_Name, binary, Term) when is_binary(Term) ->
 assert_type(Name, binary, Term) ->
     {error, "~s should be binary, actually was ~p", [Name, Term]}.
 
-assert_connection_or_upstream_set(Term) ->
-    assert_contents(
-      [{<<"host">>,            binary, mandatory},
-       {<<"port">>,            number, optional},
-       {<<"protocol">>,        {binary, [<<"amqp">>, <<"amqps">>]}, optional},
-       {<<"virtual_host">>,    binary, optional},
-       {<<"username">>,        binary, optional},
-       {<<"password">>,        binary, optional},
-       {<<"exchange">>,        binary, optional},
-       {<<"prefetch_count">>,  number, optional},
-       {<<"reconnect_delay">>, number, optional},
-       {<<"max_hops">>,        number, optional},
-       {<<"expires">>,         number, optional},
-       {<<"message_ttl">>,     number, optional},
-       {<<"ha_policy">>,       binary, optional}], Term).
+connection_upstream_set_validation() ->
+    [{<<"port">>,            number, optional},
+     {<<"protocol">>,        {binary, [<<"amqp">>, <<"amqps">>]}, optional},
+     {<<"virtual_host">>,    binary, optional},
+     {<<"username">>,        binary, optional},
+     {<<"password">>,        binary, optional},
+     {<<"exchange">>,        binary, optional},
+     {<<"prefetch_count">>,  number, optional},
+     {<<"reconnect_delay">>, number, optional},
+     {<<"max_hops">>,        number, optional},
+     {<<"expires">>,         number, optional},
+     {<<"message_ttl">>,     number, optional},
+     {<<"ha_policy">>,       binary, optional}].
 
 assert_contents(Constraints, Term) ->
     {Results, Remainder}
