@@ -35,20 +35,15 @@ case "$1" in
         if [ -d /etc/rabbitmq ]; then
                 rm -r /etc/rabbitmq
         fi
-	remove_plugin_traces
+        remove_plugin_traces
         if getent passwd rabbitmq >/dev/null; then
                 # Stop epmd if run by the rabbitmq user
                 pkill -u rabbitmq epmd || :
-
-                deluser rabbitmq
-        fi
-        if getent group rabbitmq >/dev/null; then
-                delgroup rabbitmq
         fi
     ;;
 
     remove|upgrade)
-	remove_plugin_traces
+        remove_plugin_traces
     ;;
 
     failed-upgrade|abort-install|abort-upgrade|disappear)
