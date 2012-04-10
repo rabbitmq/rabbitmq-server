@@ -84,7 +84,7 @@ ssl_info(_Sock) ->
 ssl_opts(SslOpts0) ->
     case proplists:lookup(cacertdir, SslOpts0) of
         {cacertdir, Dir} ->
-            [{cacerts, load_cacerts_dir(Dir)} | SslOpts0];
+            [{cacertfile, load_cacerts_dir(Dir)} | SslOpts0];
         none ->
             SslOpts0
     end.
@@ -175,11 +175,35 @@ connection_string(Sock, Direction) ->
     end.
 
 load_cacerts_dir(Dir) ->
-    filelib:fold_files(
-      Dir, ".*\\.pem", false,
-      fun (F, Certs) ->
-              {ok, PemBin} = file:read_file(F),
-              Ders = [Cert || {'Certificate', Cert, not_encrypted}
-                                  <- public_key:pem_decode(PemBin)],
-              Ders ++ Certs
-      end, []).
+    LastModified = filelib:last_modified(Dir),
+    Stamp = integer_to_list(
+              calendar:datetime_to_gregorian_seconds(LastModified)),
+    CurrentFilename = filename:join(Dir, Stamp ++ ".ca"),
+    case filelib:is_file(CurrentFilename) of
+        true ->
+            CurrentFilename;
+        false ->
+            NewContents =
+                filelib:fold_files(
+                  Dir, ".*\\.pem", false,
+                  fun (F, Certs) ->
+                          {ok, PemBin} = file:read_file(F),
+                          [PemBin | Certs]
+                  end, []),
+            %% Remove old files
+            filelib:fold_files(
+              Dir, "[0-9]*\\.ca", false,
+              fun (F, _) ->
+                      file:delete(F)
+              end, undefined),
+            %% Create a new file name with the expected mtime of the
+            %% directory once we've written to it. This will
+            %% occasionally miss; this assumes it's not a huge deal to
+            %% re-generate it.
+            NewStamp = integer_to_list(
+                         calendar:datetime_to_gregorian_seconds(
+                           calendar:local_time())),
+            NewFilename = filename:join(Dir, NewStamp ++ ".ca"),
+            file:write_file(NewFilename, NewContents),
+            NewFilename
+    end.
