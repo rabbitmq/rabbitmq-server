@@ -449,7 +449,7 @@ assert_status(Xs) ->
     Links = lists:append([links(X) || X <- Xs]),
     Remaining = lists:foldl(fun assert_link_status/2,
                             rabbit_federation_status:status(), Links),
-    ?assertEqual([], remove_configured_links(Remaining)),
+    ?assertEqual([], Remaining),
     ok.
 
 assert_link_status({DXNameBin, ConnectionName, UXNameBin}, Status) ->
@@ -472,6 +472,3 @@ links(#'exchange.declare'{exchange  = Name,
 
 links(#'exchange.declare'{}) ->
     [].
-
-remove_configured_links(Status) ->
-    [St || St <- Status, pget(exchange, St) =/= <<"down-conf">>].
