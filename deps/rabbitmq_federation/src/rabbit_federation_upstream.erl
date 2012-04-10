@@ -59,7 +59,7 @@ print(Fmt, Args) -> iolist_to_binary(io_lib:format(Fmt, Args)).
 from_set(SetName, X, ConnName) ->
     case from_set(SetName, X) of
         {ok, Upstreams} ->
-            rabbit_federation_util:find_upstream(ConnName, Upstreams);
+            rabbit_federation_util:find_upstreams(ConnName, Upstreams);
         {error, _} = E ->
             E
     end.

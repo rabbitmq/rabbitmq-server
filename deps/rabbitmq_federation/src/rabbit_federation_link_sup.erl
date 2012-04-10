@@ -40,27 +40,23 @@ adjust(Sup, XName, everything) ->
     end;
 
 adjust(Sup, XName, {connection, ConnName}) ->
-    %% We just created this connection, it must exist
-    {ok, NewUpstream} = upstream(XName, ConnName),
-    case child(Sup, ConnName) of
-        {ok, OldUpstream} ->
-            case OldUpstream =:= NewUpstream of
-                true  -> ok;
-                false -> stop(Sup, OldUpstream),
-                         start(Sup, NewUpstream, XName)
-            end;
-        {error, not_found} ->
-            start(Sup, NewUpstream, XName)
-    end;
+    OldUpstreams0 = children(Sup, ConnName),
+    NewUpstreams0 = upstreams(XName, ConnName),
+    %% If any haven't changed, don't restart them
+    {OldUpstreams, NewUpstreams} =
+        lists:foldl(
+          fun (OldU, {OldUs, NewUs}) ->
+                  case lists:member(OldU, NewUs) of
+                      true  -> {OldUs -- [OldU], NewUs -- [OldU]};
+                      false -> {OldUs, NewUs}
+                  end
+          end, {OldUpstreams0, NewUpstreams0}, OldUpstreams0),
+    [stop(Sup, OldUpstream) || OldUpstream <- OldUpstreams],
+    [start(Sup, NewUpstream, XName) || NewUpstream <- NewUpstreams];
 
 adjust(Sup, XName, {clear_connection, ConnName}) ->
     prune_for_upstream_set(<<"all">>, XName),
-    case child(Sup, ConnName) of
-        {ok, Upstream} ->
-            stop(Sup, Upstream);
-        {error, not_found} ->
-            ok
-    end;
+    [stop(Sup, Upstream) || Upstream <- children(Sup, ConnName)];
 
 %% TODO handle changes of upstream sets properly
 adjust(Sup, XName, {upstream_set, Set}) ->
@@ -83,16 +79,16 @@ stop(Sup, Upstream) ->
     %% remove it here too.
     rabbit_federation_status:remove_upstream(Upstream).
 
-child(Sup, ConnName) ->
-    rabbit_federation_util:find_upstream(
+children(Sup, ConnName) ->
+    rabbit_federation_util:find_upstreams(
       ConnName, [U || {U, _, _, _} <- supervisor2:which_children(Sup)]).
 
-upstream(XName, ConnName) ->
+upstreams(XName, ConnName) ->
     case upstream_set(XName) of
         {ok, UpstreamSet} ->
             rabbit_federation_upstream:from_set(UpstreamSet, XName, ConnName);
-        {error, not_found} = E ->
-            E
+        {error, not_found} ->
+            []
     end.
 
 upstream_set(XName) ->
