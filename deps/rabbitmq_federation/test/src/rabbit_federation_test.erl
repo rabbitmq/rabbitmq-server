@@ -289,6 +289,35 @@ upstream_has_no_federation() ->
               stop_other_node(?HARE)
       end, []).
 
+dynamic_reconfiguration_test_() ->
+    {timeout, 60, fun dynamic_reconfiguration/0}.
+
+dynamic_reconfiguration() ->
+    with_ch(
+      fun (Ch) ->
+              Xs = [<<"fed1">>, <<"fed2">>],
+              %% Left from the conf we set up for previous tests
+              assert_connections(Xs, [<<"localhost">>, <<"local5673">>]),
+
+              %% Test this at least does not blow up
+              rabbitmqctl("set_parameter federation local_nodename '<<\"test\">>'"),
+              assert_connections(Xs, [<<"localhost">>, <<"local5673">>]),
+
+              %% Test that clearing connections works
+              rabbitmqctl("clear_parameter federation_connection localhost"),
+              rabbitmqctl("clear_parameter federation_connection local5673"),
+              assert_connections(Xs, []),
+
+              %% Test that readding them and changing them works
+              rabbitmqctl("set_parameter federation_connection localhost '[{<<\"host\">>,<<\"localhost\">>},{<<\"port\">>,5673}]'"),
+              %% Do it twice so we at least hit the no-restart optimisation
+              rabbitmqctl("set_parameter federation_connection localhost '[{<<\"host\">>,<<\"localhost\">>}]'"),
+              rabbitmqctl("set_parameter federation_connection localhost '[{<<\"host\">>,<<\"localhost\">>}]'"),
+              assert_connections(Xs, [<<"localhost">>]),
+              %% And re-add the last - with_ch will test at the end anyway
+              rabbitmqctl("set_parameter federation_connection local5673 '[{<<\"host\">>,<<\"localhost\">>},{<<\"port\">>,5673}]'")
+      end, [fed(<<"fed1">>, <<"all">>), fed(<<"fed2">>, <<"all">>)]).
+
 %%----------------------------------------------------------------------------
 
 with_ch(Fun, Xs) ->
@@ -329,6 +358,11 @@ stop_other_node({Name, _Port}) ->
     ?assertCmd("make -C " ++ plugin_dir() ++ " OTHER_NODE=" ++ Name ++
                    " stop-other-node"),
     timer:sleep(1000).
+
+rabbitmqctl(Args) ->
+    ?assertCmd(
+       plugin_dir() ++ "/../rabbitmq-server/scripts/rabbitmqctl " ++ Args),
+    timer:sleep(100).
 
 plugin_dir() ->
     {ok, [[File]]} = init:get_argument(config),
@@ -453,12 +487,13 @@ assert_status(Xs) ->
     ok.
 
 assert_link_status({DXNameBin, ConnectionName, UXNameBin}, Status) ->
-    {[_], Rest} = lists:partition(
-                    fun(St) ->
-                            pget(connection, St) =:= ConnectionName andalso
-                                pget(exchange, St) =:= DXNameBin andalso
-                                pget(upstream_exchange, St) =:= UXNameBin
-                    end, Status),
+    {This, Rest} = lists:partition(
+                     fun(St) ->
+                             pget(connection, St) =:= ConnectionName andalso
+                                 pget(exchange, St) =:= DXNameBin andalso
+                                 pget(upstream_exchange, St) =:= UXNameBin
+                     end, Status),
+    ?assertMatch([_], This),
     Rest.
 
 links(#'exchange.declare'{exchange  = Name,
@@ -472,3 +507,12 @@ links(#'exchange.declare'{exchange  = Name,
 
 links(#'exchange.declare'{}) ->
     [].
+
+assert_connections(Xs, Conns) ->
+    Links = [{X, C, X} ||
+                X <- Xs,
+                C <- Conns],
+    Remaining = lists:foldl(fun assert_link_status/2,
+                            rabbit_federation_status:status(), Links),
+    ?assertEqual([], Remaining),
+    ok.
