@@ -425,8 +425,6 @@ consume_from_upstream_queue(
               params         = #amqp_params_network{virtual_host = VHost}}
         = Upstream,
     Q = upstream_queue_name(XNameBin, VHost, DownXName),
-    %% TODO it would be nice to just pass through args, but let's do that as
-    %% part of bug 23908.
     ExpiryArg = case Expiry of
                     none -> [];
                     _    -> [{<<"x-expires">>, long, Expiry}]
