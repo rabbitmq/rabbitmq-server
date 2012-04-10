@@ -1,4 +1,4 @@
-#!/bin/sh -e
+#!/bin/sh
 CTL=$1
 
 $CTL set_parameter federation_connection localhost '[{<<"host">>,<<"localhost">>}]'

@@ -17,7 +17,7 @@ start-other-node:
 	RABBITMQ_PID_FILE=$(PID_FILE) \
 	../rabbitmq-server/scripts/rabbitmq-server &
 	../rabbitmq-server/scripts/rabbitmqctl -n $(OTHER_NODE) wait $(PID_FILE)
-	sh etc/$(OTHER_CONFIG).sh "../rabbitmq-server/scripts/rabbitmqctl -n $(OTHER_NODE)"
+	sh -e etc/$(OTHER_CONFIG).sh "../rabbitmq-server/scripts/rabbitmqctl -n $(OTHER_NODE)"
 
 stop-other-node:
 	../rabbitmq-server/scripts/rabbitmqctl -n $(OTHER_NODE) stop 2> /dev/null || true

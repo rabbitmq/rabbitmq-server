@@ -1,2 +1,2 @@
-#!/bin/sh -e
+#!/bin/sh
 true
