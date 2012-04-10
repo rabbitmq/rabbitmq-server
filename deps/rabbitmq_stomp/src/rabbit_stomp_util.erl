@@ -19,7 +19,7 @@
 -export([parse_destination/1, parse_routing_information/1,
          parse_message_id/1, durable_subscription_queue/2]).
 -export([longstr_field/2]).
--export([ack_mode/1, consumer_tag_reply_to/1, consumer_tag/1, message_headers/4,
+-export([ack_mode/1, consumer_tag_reply_to/1, consumer_tag/1, message_headers/3,
          message_properties/1]).
 -export([negotiate_version/2]).
 -export([trim_headers/1]).
@@ -86,11 +86,15 @@ message_properties(Frame = #stomp_frame{headers = Headers}) ->
       headers          = [longstr_field(K, V) ||
                              {K, V} <- Headers, user_header(K)]}.
 
-message_headers(Destination, SessionId,
+message_headers(SessionId,
                 #'basic.deliver'{consumer_tag = ConsumerTag,
-                                 delivery_tag = DeliveryTag},
-                Props = #'P_basic'{headers       = Headers}) ->
-    Basic = [{?HEADER_DESTINATION, Destination},
+                                 delivery_tag = DeliveryTag,
+                                 exchange     = ExchangeBin,
+                                 routing_key  = RoutingKeyBin},
+                Props = #'P_basic'{headers = Headers}) ->
+    Basic = [{?HEADER_DESTINATION,
+              format_destination(binary_to_list(ExchangeBin),
+                                 binary_to_list(RoutingKeyBin))},
              {?HEADER_MESSAGE_ID,
               create_message_id(ConsumerTag, SessionId, DeliveryTag)}],
 
@@ -213,6 +217,19 @@ queue_tag(Base) ->
     list_to_binary(?QUEUE_TAG_PREFIX ++ Base).
 
 %%--------------------------------------------------------------------
+%% Destination Formatting
+%%--------------------------------------------------------------------
+
+format_destination("", RoutingKey) ->
+    ?QUEUE_PREFIX ++ "/" ++ escape(RoutingKey);
+format_destination("amq.topic", RoutingKey) ->
+    ?TOPIC_PREFIX ++ "/" ++ escape(RoutingKey);
+format_destination(Exchange, "") ->
+    ?EXCHANGE_PREFIX ++ "/" ++ escape(Exchange);
+format_destination(Exchange, RoutingKey) ->
+    ?EXCHANGE_PREFIX ++ "/" ++ escape(Exchange) ++ "/" ++ escape(RoutingKey).
+
+%%--------------------------------------------------------------------
 %% Destination Parsing
 %%--------------------------------------------------------------------
 
@@ -298,3 +315,16 @@ unescape(Str) -> unescape(Str, []).
 unescape("%2F" ++ Str, Acc) -> unescape(Str, [$/ | Acc]);
 unescape([C | Str],    Acc) -> unescape(Str, [C | Acc]);
 unescape([],           Acc) -> lists:reverse(Acc).
+
+escape(Str) -> escape(Str, []).
+
+escape([$/ | Str], Acc) -> escape(Str, "F2%" ++ Acc);  %% $/ == '2F'x
+escape([$% | Str], Acc) -> escape(Str, "52%" ++ Acc);  %% $% == '25'x
+escape([X | Str],  Acc) when X < 32 orelse X > 127 ->
+                           escape(Str, revhex(X) ++ "%" ++ Acc);
+escape([C | Str],  Acc) -> escape(Str, [C | Acc]);
+escape([],         Acc) -> lists:reverse(Acc).
+
+revhex(I) -> hexdig(I) ++ hexdig(I bsr 4).
+
+hexdig(I) -> integer_to_list(I band 15, 16).

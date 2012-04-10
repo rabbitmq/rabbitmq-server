@@ -187,7 +187,7 @@ class TestParsing(unittest.TestCase):
         resp=('MESSAGE\n'
             'content-type:text/plain\n'
             'subscription:(.*)\n'
-            'destination:/exchange/amq.topic/da9d4779\n'
+            'destination:/topic/da9d4779\n'
             'message-id:(.*)\n'
             'content-length:8\n'
             '\n'
@@ -218,7 +218,7 @@ class TestParsing(unittest.TestCase):
         resp=('MESSAGE\n'
             'content-type:text/plain\n'
             'subscription:(.*)\n'
-            'destination:/exchange/amq.topic/test_huge_message\n'
+            'destination:/topic/test_huge_message\n'
             'message-id:(.*)\n'
             'content-length:%i\n'
             '\n'
@@ -241,6 +241,7 @@ class TestParsing(unittest.TestCase):
     def test_message_with_embedded_nulls(self):
         ''' Test sending/receiving message with embedded nulls. '''
         dest='destination:/exchange/amq.topic/test_embed_nulls_message\n'
+        resp_dest='destination:/topic/test_embed_nulls_message\n'
         subscribe=( 'SUBSCRIBE\n'
                     'id:xxx\n'
                     +dest+
@@ -266,13 +267,13 @@ class TestParsing(unittest.TestCase):
         headresp=('MESSAGE\n'            # 8
             'content-type:text/plain\n'  # 24
             'subscription:(.*)\n'        # 14 + subscription
-            +dest+                       # 57
+            +resp_dest+                  # 44
             'message-id:(.*)\n'          # 12 + message-id
             'content-length:%i\n'        # 16 + 4==len('1024')
             '\n'                         # 1
             '(.*)$'                      # prefix of body+null (potentially)
              % len(message) )
-        headlen = 8 + 24 + 14 + (3) + 57 + 12 + (48) + 16 + (4) + 1 + (1)
+        headlen = 8 + 24 + 14 + (3) + 44 + 12 + (48) + 16 + (4) + 1 + (1)
 
         headbuf = self.recv_atleast(headlen)
         self.assertFalse(len(headbuf) == 0)
@@ -293,7 +294,9 @@ class TestParsing(unittest.TestCase):
     @connect(['cd'])
     def test_message_in_packets(self):
         ''' Test sending/receiving message in packets. '''
-        dest='destination:/exchange/amq.topic/test_embed_nulls_message\n'
+        base_dest='topic/test_embed_nulls_message\n'
+        dest='destination:/exchange/amq.' + base_dest
+        resp_dest='destination:/'+ base_dest
         subscribe=( 'SUBSCRIBE\n'
                     'id:xxx\n'
                     +dest+
@@ -323,13 +326,13 @@ class TestParsing(unittest.TestCase):
         headresp=('MESSAGE\n'           # 8
             'content-type:text/plain\n' # 24
             'subscription:(.*)\n'       # 14 + subscription
-            +dest+                      # 57
+            +resp_dest+                 # 44
             'message-id:(.*)\n'         # 12 + message-id
             'content-length:%i\n'       # 16 + 4==len('1024')
             '\n'                        # 1
             '(.*)$'                     # prefix of body+null (potentially)
              % len(message) )
-        headlen = 8 + 24 + 14 + (3) + 57 + 12 + (48) + 16 + (4) + 1 + (1)
+        headlen = 8 + 24 + 14 + (3) + 44 + 12 + (48) + 16 + (4) + 1 + (1)
 
         headbuf = self.recv_atleast(headlen)
         self.assertFalse(len(headbuf) == 0)

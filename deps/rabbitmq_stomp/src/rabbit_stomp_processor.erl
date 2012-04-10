@@ -592,11 +592,11 @@ send_delivery(Delivery = #'basic.deliver'{consumer_tag = ConsumerTag},
               State = #state{session_id    = SessionId,
                              subscriptions = Subs}) ->
     case dict:find(ConsumerTag, Subs) of
-        {ok, #subscription{dest_hdr = Destination}} ->
+        {ok, #subscription{}} ->
             send_frame(
               "MESSAGE",
-              rabbit_stomp_util:message_headers(Destination, SessionId,
-                                                Delivery, Properties),
+              rabbit_stomp_util:message_headers(SessionId, Delivery,
+                                                Properties),
               Body,
               State);
         error ->

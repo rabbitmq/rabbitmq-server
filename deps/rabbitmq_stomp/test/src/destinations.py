@@ -37,7 +37,10 @@ class TestExchange(base.BaseTest):
         self.assertFalse(self.conn.is_connected())
 
     def __test_exchange_send_rec(self, exchange, route = None):
-        dest = "/exchange/" + exchange
+        if exchange != "amq.topic":
+            dest = "/exchange/" + exchange
+        else:
+            dest = "/topic"
         if route != None:
             dest += "/" + route
 
