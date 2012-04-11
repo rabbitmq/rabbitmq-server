@@ -58,7 +58,7 @@ adjust(Sup, XName, {clear_connection, ConnName}) ->
     prune_for_upstream_set(<<"all">>, XName),
     [stop(Sup, Upstream) || Upstream <- children(Sup, ConnName)];
 
-%% TODO handle changes of upstream sets properly
+%% TODO handle changes of upstream sets minimally (bug 24853)
 adjust(Sup, XName, {upstream_set, Set}) ->
     prune_for_upstream_set(Set, XName),
     adjust(Sup, XName, everything);
