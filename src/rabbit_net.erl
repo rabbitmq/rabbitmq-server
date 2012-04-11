@@ -174,14 +174,16 @@ connection_string(Sock, Direction) ->
             Error
     end.
 
+ca_tmp_filename(Dir, DateTime) ->
+    SecondsStr = integer_to_list(
+                   calendar:datetime_to_gregorian_seconds(DateTime)),
+    filename:join(Dir, SecondsStr ++ ".tmp").
+
 load_cacerts_dir(Dir) ->
-    LastModified = filelib:last_modified(Dir),
-    Stamp = integer_to_list(
-              calendar:datetime_to_gregorian_seconds(LastModified)),
-    CurrentFilename = filename:join(Dir, Stamp ++ ".ca"),
-    case filelib:is_file(CurrentFilename) of
+    ExpectedFilename = ca_tmp_filename(Dir, filelib:last_modified(Dir)),
+    case filelib:is_file(ExpectedFilename) of
         true ->
-            CurrentFilename;
+            ExpectedFilename;
         false ->
             NewContents =
                 filelib:fold_files(
@@ -192,7 +194,7 @@ load_cacerts_dir(Dir) ->
                   end, []),
             %% Remove old files
             filelib:fold_files(
-              Dir, "[0-9]*\\.ca", false,
+              Dir, "[0-9]*\\.tmp", false,
               fun (F, _) ->
                       file:delete(F)
               end, undefined),
@@ -200,10 +202,7 @@ load_cacerts_dir(Dir) ->
             %% directory once we've written to it. This will
             %% occasionally miss; this assumes it's not a huge deal to
             %% re-generate it.
-            NewStamp = integer_to_list(
-                         calendar:datetime_to_gregorian_seconds(
-                           calendar:local_time())),
-            NewFilename = filename:join(Dir, NewStamp ++ ".ca"),
+            NewFilename = ca_tmp_filename(Dir, calendar:local_time()),
             file:write_file(NewFilename, NewContents),
             NewFilename
     end.
