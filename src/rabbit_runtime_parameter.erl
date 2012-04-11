@@ -16,17 +16,19 @@
 
 -module(rabbit_runtime_parameter).
 
--ifdef(use_specs).
+%% TODO uncomment when bug 24729 is merged.
 
--type(validate_results() ::
-        'ok' | {error, string(), [term()]} | [validate_results()]).
+%% -ifdef(use_specs).
 
--callback validate(binary(), binary(), term()) -> validate_results().
--callback validate_clear(binary(), binary()) -> validate_results().
--callback notify(binary(), binary(), term()) -> 'ok'.
--callback notify_clear(binary(), binary()) -> 'ok'.
+%% -type(validate_results() ::
+%%         'ok' | {error, string(), [term()]} | [validate_results()]).
 
--else.
+%% -callback validate(binary(), binary(), term()) -> validate_results().
+%% -callback validate_clear(binary(), binary()) -> validate_results().
+%% -callback notify(binary(), binary(), term()) -> 'ok'.
+%% -callback notify_clear(binary(), binary()) -> 'ok'.
+
+%% -else.
 
 -export([behaviour_info/1]).
 
@@ -40,4 +42,4 @@ behaviour_info(callbacks) ->
 behaviour_info(_Other) ->
     undefined.
 
--endif.
+%% -endif.
