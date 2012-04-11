@@ -91,7 +91,8 @@ take(PKs, SK, {P, S}) ->
         none         -> {[], {P, S}};
         {value, PKS} -> TakenPKS = gb_sets:from_list(PKs),
                         PKSInter = gb_sets:intersection(PKS, TakenPKS),
-                        PKSDiff  = gb_sets:difference  (PKS, TakenPKS),
+                        PKSDiff =
+                            rabbit_misc:gb_sets_difference(PKS, TakenPKS),
                         {KVs, P1} = take2(PKSInter, SK, P),
                         {KVs, {P1, case gb_sets:is_empty(PKSDiff) of
                                        true  -> gb_trees:delete(SK, S);
@@ -152,7 +153,7 @@ take_all2(PKS, P) ->
 prune(SKS, PKS, S) ->
     gb_sets:fold(fun (SK0, S0) ->
                          PKS1 = gb_trees:get(SK0, S0),
-                         PKS2 = gb_sets:difference(PKS1, PKS),
+                         PKS2 = rabbit_misc:gb_sets_difference(PKS1, PKS),
                          case gb_sets:is_empty(PKS2) of
                              true  -> gb_trees:delete(SK0, S0);
                              false -> gb_trees:update(SK0, PKS2, S0)
