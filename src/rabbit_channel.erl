@@ -1116,11 +1116,12 @@ monitor_queue(QPid, State = #ch{queue_monitors = QMons}) ->
     end.
 
 handle_publishing_queue_down(QPid, Reason, State = #ch{unconfirmed = UC}) ->
-    {MXs, UC1} = dtree:take(QPid, UC),
-    (case rabbit_misc:is_abnormal_termination(Reason) of
-         true  -> fun send_nacks/2;
-         false -> fun record_confirms/2
-     end)(MXs, State#ch{unconfirmed = UC1}).
+    case rabbit_misc:is_abnormal_termination(Reason) of
+        true  -> {MXs, UC1} = dtree:take_all(QPid, UC),
+                 send_nacks(MXs, State#ch{unconfirmed = UC1});
+        false -> {MXs, UC1} = dtree:take(QPid, UC),
+                 record_confirms(MXs, State#ch{unconfirmed = UC1})
+    end.
 
 handle_consuming_queue_down(QPid,
                             State = #ch{consumer_mapping = ConsumerMapping,
