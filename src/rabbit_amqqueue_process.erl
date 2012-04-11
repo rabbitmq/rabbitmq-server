@@ -1204,7 +1204,7 @@ handle_cast({deliver, Delivery = #delivery{sender     = Sender,
     Senders1 = case Flow of
                    flow   -> credit_flow:ack(Sender),
                              pmon:monitor(Sender, Senders);
-                   noflow -> ok
+                   noflow -> Senders
                end,
     State1 = State#q{senders = Senders1},
     case already_been_here(Delivery, State1) of
