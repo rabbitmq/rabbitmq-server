@@ -60,6 +60,7 @@
 -export([multi_call/2]).
 -export([quit/1]).
 -export([os_cmd/1]).
+-export([gb_sets_difference/2]).
 
 %%----------------------------------------------------------------------------
 
@@ -204,6 +205,7 @@
         ([pid()], any()) -> {[{pid(), any()}], [{pid(), any()}]}).
 -spec(quit/1 :: (integer() | string()) -> no_return()).
 -spec(os_cmd/1 :: (string()) -> string()).
+-spec(gb_sets_difference/2 :: (gb_set(), gb_set()) -> gb_set()).
 
 -endif.
 
@@ -912,3 +914,6 @@ os_cmd(Command) ->
         false -> throw({command_not_found, Exec});
         _     -> os:cmd(Command)
     end.
+
+gb_sets_difference(S1, S2) ->
+    lists:foldl(fun gb_sets:delete_any/2, S1, gb_sets:to_list(S2)).

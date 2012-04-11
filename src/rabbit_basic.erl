@@ -20,7 +20,7 @@
 
 -export([publish/4, publish/6, publish/1,
          message/3, message/4, properties/1, append_table_header/3,
-         map_headers/2, delivery/4, header_routes/1]).
+         extract_headers/1, map_headers/2, delivery/4, header_routes/1]).
 -export([build_content/2, from_content/1]).
 
 %%----------------------------------------------------------------------------
@@ -60,6 +60,8 @@
 
 -spec(append_table_header/3 ::
         (binary(), rabbit_framing:amqp_table(), headers()) -> headers()).
+
+-spec(extract_headers/1 :: (rabbit_types:content()) -> headers()).
 
 -spec(map_headers/2 :: (rabbit_types:content(), fun((headers()) -> headers()))
                        -> rabbit_types:content()).
@@ -185,6 +187,11 @@ append_table_header(Name, Info, Headers) ->
                 {array, Existing}  -> Existing
             end,
     rabbit_misc:set_table_value(Headers, Name, array, [{table, Info} | Prior]).
+
+extract_headers(Content) ->
+    #content{properties = #'P_basic'{headers = Headers}} =
+        rabbit_binary_parser:ensure_content_decoded(Content),
+    Headers.
 
 map_headers(F, Content) ->
     Content1 = rabbit_binary_parser:ensure_content_decoded(Content),
