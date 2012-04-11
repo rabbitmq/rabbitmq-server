@@ -245,9 +245,7 @@ info_all(VHostPath, Items) -> map(VHostPath, fun (X) -> info(X, Items) end).
 %% Optimisation
 route(#exchange{name = #resource{name = <<"">>, virtual_host = VHost}},
       #delivery{message = #basic_message{routing_keys = RKs}}) ->
-    QNames = [rabbit_misc:r(VHost, queue, RK) || RK <- RKs],
-    lists:usort([QName || #amqqueue{name = QName}
-                              <- rabbit_amqqueue:lookup(QNames)]);
+    lists:usort([rabbit_misc:r(VHost, queue, RK) || RK <- RKs]);
 
 route(X = #exchange{name = XName}, Delivery) ->
     route1(Delivery, {queue:from_list([X]), XName, []}).
