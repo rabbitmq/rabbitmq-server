@@ -752,21 +752,20 @@ dead_letter_msg_existing_dlx(Msg, AckTag, Reason,
 handle_queue_down(QPid, Reason, State = #q{queue_monitors = QMons,
                                            unconfirmed    = UC}) ->
     case pmon:is_monitored(QPid, QMons) of
-        false ->
-            noreply(State);
-        true ->
-            case rabbit_misc:is_abnormal_termination(Reason) of
-                true  -> {Lost, _UC1} = dtree:take_all(QPid, UC),
-                         rabbit_log:warning(
-                           "DLQ ~p for ~s died with ~p unconfirmed messages~n",
-                           [QPid, rabbit_misc:rs(qname(State)), length(Lost)]);
-                false -> ok
-            end,
-            {MsgSeqNoAckTags, UC1} = dtree:take(QPid, UC),
-            cleanup_after_confirm(
-              [AckTag || {_MsgSeqNo, AckTag} <- MsgSeqNoAckTags],
-              State#q{queue_monitors = pmon:erase(QPid, QMons),
-                      unconfirmed    = UC1})
+        false -> noreply(State);
+        true  -> case rabbit_misc:is_abnormal_termination(Reason) of
+                     true  -> {Lost, _UC1} = dtree:take_all(QPid, UC),
+                              QNameS = rabbit_misc:rs(qname(State)),
+                              rabbit_log:warning("DLQ ~p for ~s died with "
+                                                 "~p unconfirmed messages~n",
+                                                 [QPid, QNameS, length(Lost)]);
+                     false -> ok
+                 end,
+                 {MsgSeqNoAckTags, UC1} = dtree:take(QPid, UC),
+                 cleanup_after_confirm(
+                   [AckTag || {_MsgSeqNo, AckTag} <- MsgSeqNoAckTags],
+                   State#q{queue_monitors = pmon:erase(QPid, QMons),
+                           unconfirmed    = UC1})
     end.
 
 stop_later(Reason, State) ->
