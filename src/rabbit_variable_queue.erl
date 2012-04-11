@@ -1291,13 +1291,11 @@ record_confirms(MsgIdSet, State = #vqstate { msgs_on_disk        = MOD,
                                              msg_indices_on_disk = MIOD,
                                              unconfirmed         = UC,
                                              confirmed           = C }) ->
-    State #vqstate { msgs_on_disk =
-                         rabbit_misc:gb_sets_difference(MOD,  MsgIdSet),
-                     msg_indices_on_disk =
-                         rabbit_misc:gb_sets_difference(MIOD, MsgIdSet),
-                     unconfirmed =
-                         rabbit_misc:gb_sets_difference(UC,   MsgIdSet),
-                     confirmed = gb_sets:union(C,    MsgIdSet) }.
+    State #vqstate {
+      msgs_on_disk        = rabbit_misc:gb_sets_difference(MOD,  MsgIdSet),
+      msg_indices_on_disk = rabbit_misc:gb_sets_difference(MIOD, MsgIdSet),
+      unconfirmed         = rabbit_misc:gb_sets_difference(UC,   MsgIdSet),
+      confirmed           = gb_sets:union(C, MsgIdSet) }.
 
 must_sync_index(#vqstate { msg_indices_on_disk = MIOD,
                            unconfirmed = UC }) ->
