@@ -917,7 +917,7 @@ os_cmd(Command) ->
     end.
 
 gb_sets_difference(S1, S2) ->
-    lists:foldl(fun gb_sets:delete/2, S1, gb_sets:to_list(S2)).
+    lists:foldl(fun gb_sets:delete_any/2, S1, gb_sets:to_list(S2)).
 
 gb_trees_difference(T1, T2) ->
-    lists:foldl(fun gb_trees:delete/2, T1, gb_trees:to_list(T2)).
+    lists:foldl(fun gb_trees:delete_any/2, T1, gb_trees:to_list(T2)).
