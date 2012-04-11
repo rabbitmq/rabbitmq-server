@@ -160,4 +160,4 @@ prune(SKS, PKS, S) ->
                  end, S, SKS).
 
 gb_sets_difference(S1, S2) ->
-    lists:foldl(fun gb_sets:delete_any/2, S1, gb_sets:to_list(S2)).
+    gb_sets:fold(fun gb_sets:delete_any/2, S1, S2).
