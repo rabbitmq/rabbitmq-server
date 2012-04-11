@@ -60,7 +60,7 @@
 -export([multi_call/2]).
 -export([quit/1]).
 -export([os_cmd/1]).
--export([gb_sets_difference/2, gb_trees_difference/2]).
+-export([gb_sets_difference/2]).
 
 %%----------------------------------------------------------------------------
 
@@ -206,7 +206,6 @@
 -spec(quit/1 :: (integer() | string()) -> no_return()).
 -spec(os_cmd/1 :: (string()) -> string()).
 -spec(gb_sets_difference/2 :: (gb_set(), gb_set()) -> gb_set()).
--spec(gb_trees_difference/2 :: (gb_tree(), gb_tree()) -> gb_tree()).
 
 -endif.
 
@@ -918,6 +917,3 @@ os_cmd(Command) ->
 
 gb_sets_difference(S1, S2) ->
     lists:foldl(fun gb_sets:delete_any/2, S1, gb_sets:to_list(S2)).
-
-gb_trees_difference(T1, T2) ->
-    lists:foldl(fun gb_trees:delete_any/2, T1, gb_trees:to_list(T2)).
