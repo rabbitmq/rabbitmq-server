@@ -545,7 +545,7 @@ deliver_or_enqueue(Delivery = #delivery{message    = Message,
     case attempt_delivery(Delivery, Confirm, State) of
         {true, State1} ->
             maybe_record_confirm_message(Confirm, State1);
-        %% optimisation
+        %% the next two are optimisations
         {false, State1 = #q{ttl = 0, dlx = undefined}} when Confirm == never ->
             discard_delivery(Delivery, State1);
         {false, State1 = #q{ttl = 0, dlx = undefined}} ->
