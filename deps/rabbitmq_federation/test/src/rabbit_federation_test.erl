@@ -82,10 +82,6 @@ validation_test() ->
     assert_bad([T(<<"upstream">>), {<<"type">>, longstr, <<"x-federation">>}]),
 
     assert_bad([Type]),
-    assert_bad([T(<<"does-not-exist">>), Type]),
-    assert_bad([T(<<"no-conn">>), Type]),
-    assert_bad([T(<<"bad-conn">>), Type]),
-    assert_bad([T(<<"bad-host">>), Type]),
 
     assert_good([T(<<"upstream">>), Type]).
 
@@ -294,7 +290,7 @@ dynamic_reconfiguration_test_() ->
 
 dynamic_reconfiguration() ->
     with_ch(
-      fun (Ch) ->
+      fun (_Ch) ->
               Xs = [<<"fed1">>, <<"fed2">>],
               %% Left from the conf we set up for previous tests
               assert_connections(Xs, [<<"localhost">>, <<"local5673">>]),
@@ -314,9 +310,33 @@ dynamic_reconfiguration() ->
               rabbitmqctl("set_parameter federation_connection localhost '[{<<\"host\">>,<<\"localhost\">>}]'"),
               rabbitmqctl("set_parameter federation_connection localhost '[{<<\"host\">>,<<\"localhost\">>}]'"),
               assert_connections(Xs, [<<"localhost">>]),
-              %% And re-add the last - with_ch will test at the end anyway
+              %% And re-add the last - for next test
               rabbitmqctl("set_parameter federation_connection local5673 '[{<<\"host\">>,<<\"localhost\">>},{<<\"port\">>,5673}]'")
       end, [fed(<<"fed1">>, <<"all">>), fed(<<"fed2">>, <<"all">>)]).
+
+dynamic_reconfiguration_integrity_test_() ->
+    {timeout, 60, fun dynamic_reconfiguration_integrity/0}.
+
+dynamic_reconfiguration_integrity() ->
+    with_ch(
+      fun (_Ch) ->
+              Xs = [<<"fed1">>, <<"fed2">>],
+
+              %% Declared exchanges with nonexistent set - no links
+              assert_connections(Xs, []),
+
+              %% Create the set - links appear
+              rabbitmqctl("set_parameter federation_upstream_set new-set '[[{<<\"connection\">>,<<\"localhost\">>}]]'"),
+              assert_connections(Xs, [<<"localhost">>]),
+
+              %% Add nonexistent connections to set - nothing breaks
+              rabbitmqctl("set_parameter federation_upstream_set new-set '[[{<<\"connection\">>,<<\"localhost\">>}],[{<<\"connection\">>,<<\"does-not-exist\">>}]]'"),
+              assert_connections(Xs, [<<"localhost">>]),
+
+              %% Change connection in set - links change
+              rabbitmqctl("set_parameter federation_upstream_set new-set '[[{<<\"connection\">>,<<\"local5673\">>}]]'"),
+              assert_connections(Xs, [<<"local5673">>])
+      end, [fed(<<"fed1">>, <<"new-set">>), fed(<<"fed2">>, <<"new-set">>)]).
 
 %%----------------------------------------------------------------------------
 
@@ -499,11 +519,10 @@ assert_link_status({DXNameBin, ConnectionName, UXNameBin}, Status) ->
 links(#'exchange.declare'{exchange  = Name,
                           type      = <<"x-federation">>,
                           arguments = Args}) ->
-    {longstr, Set} = rabbit_misc:table_lookup(Args,  <<"upstream-set">>),
-    {ok, Upstreams} = rabbit_federation_upstream:from_set(
-                        Set, rabbit_misc:r(<<"/">>, exchange, Name)),
+    {longstr, Set} = rabbit_misc:table_lookup(Args, <<"upstream-set">>),
     [{Name, U#upstream.connection_name, U#upstream.exchange} ||
-        U <- Upstreams];
+        U <- rabbit_federation_upstream:from_set(
+               Set, rabbit_misc:r(<<"/">>, exchange, Name))];
 
 links(#'exchange.declare'{}) ->
     [].

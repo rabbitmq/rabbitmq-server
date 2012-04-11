@@ -36,8 +36,6 @@ register() ->
                  <<"federation_connection">>,
                  <<"federation_upstream_set">>]].
 
-%% TODO: don't allow upstream set to be created referencing
-%% connections that do not exist?
 validate(<<"federation_upstream_set">>, _Key, Term) ->
     [assert_contents([{<<"connection">>, binary, mandatory},
                       {<<"exchange">>,   binary, optional} |
@@ -60,7 +58,6 @@ validate(_AppName, Key, _Term) ->
 validate_clear(<<"federation_upstream_set">>, _Key) ->
     ok;
 
-%% TODO: don't allow connection to be removed if upstream sets reference it?
 validate_clear(<<"federation_connection">>, _Key) ->
     ok;
 

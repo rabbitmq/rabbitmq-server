@@ -103,7 +103,7 @@ upstream_set(XName) ->
 
 prune_for_upstream_set(Set, XName) ->
     case upstream_set(XName) of
-        {ok, Set} -> {ok, Us} = rabbit_federation_upstream:from_set(Set, XName),
+        {ok, Set} -> Us = rabbit_federation_upstream:from_set(Set, XName),
                      ok = rabbit_federation_db:prune_scratch(XName, Us);
         _         -> ok
     end.
@@ -116,8 +116,8 @@ init({UpstreamSet, XName}) ->
     {ok, {{one_for_one, 1, 1}, specs(UpstreamSet, XName)}}.
 
 specs(UpstreamSet, XName) ->
-    {ok, Upstreams} = rabbit_federation_upstream:from_set(UpstreamSet, XName),
-    [spec(Upstream, XName) || Upstream <- Upstreams].
+    [spec(Upstream, XName) ||
+        Upstream <- rabbit_federation_upstream:from_set(UpstreamSet, XName)].
 
 spec(Upstream = #upstream{reconnect_delay = Delay}, XName) ->
     {Upstream, {rabbit_federation_link, start_link, [{Upstream, XName}]},

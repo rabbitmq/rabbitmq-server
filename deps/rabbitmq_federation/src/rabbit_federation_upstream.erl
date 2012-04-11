@@ -57,12 +57,7 @@ to_string(#upstream{params   = #amqp_params_network{host         = H,
 print(Fmt, Args) -> iolist_to_binary(io_lib:format(Fmt, Args)).
 
 from_set(SetName, X, ConnName) ->
-    case from_set(SetName, X) of
-        {ok, Upstreams} ->
-            rabbit_federation_util:find_upstreams(ConnName, Upstreams);
-        {error, _} = E ->
-            E
-    end.
+    rabbit_federation_util:find_upstreams(ConnName, from_set(SetName, X)).
 
 from_set(<<"all">>, X) ->
     Connections = rabbit_runtime_parameters:list(<<"federation_connection">>),
@@ -72,7 +67,7 @@ from_set(<<"all">>, X) ->
 from_set(SetName, X) ->
     case rabbit_runtime_parameters:value(
            <<"federation_upstream_set">>, SetName) of
-        not_found -> {error, set_not_found};
+        not_found -> [];
         Set       -> from_set_contents(Set, X)
     end.
 
@@ -80,45 +75,36 @@ from_set_contents(Set, #resource{name         = DefaultXNameBin,
                                  virtual_host = DefaultVHost}) ->
     Results = [from_props(P, DefaultXNameBin, DefaultVHost) ||
                                    P <- Set],
-    case [E || E = {error, _} <- Results] of
-        []      -> {ok, Results};
-        [E | _] -> E
-    end.
+    [R || R <- Results, R =/= not_found].
 
 from_props(Upst, DefaultXNameBin, DefaultVHost) ->
-    case bget(connection, Upst, []) of
-        undefined -> {error, no_connection_name};
-        ConnName  -> case rabbit_runtime_parameters:value(
-                            <<"federation_connection">>, ConnName) of
-                         not_found  -> {error, {no_connection, ConnName}};
-                         Conn       -> from_props_connection(
-                                         Upst, ConnName, Conn, DefaultXNameBin,
-                                         DefaultVHost)
-                     end
+    ConnName = bget(connection, Upst, []),
+    case rabbit_runtime_parameters:value(
+           <<"federation_connection">>, ConnName) of
+        not_found  -> not_found;
+        Conn       -> from_props_connection(
+                        Upst, ConnName, Conn, DefaultXNameBin, DefaultVHost)
     end.
 
 from_props_connection(U, ConnName, C, DefaultXNameBin, DefaultVHost) ->
     {ok, DefaultUser} = application:get_env(rabbit, default_user),
     {ok, DefaultPass} = application:get_env(rabbit, default_pass),
-    case bget(host, U, C, none) of
-        none -> {error, {no_host, ConnName}};
-        Host -> Params = #amqp_params_network{
-                  host         = binary_to_list(Host),
-                  port         = bget(port,         U, C),
-                  virtual_host = bget(virtual_host, U, C, DefaultVHost),
-                  username     = bget(username,     U, C, DefaultUser),
-                  password     = bget(password,     U, C, DefaultPass)},
-                XNameBin = bget(exchange, U, C, DefaultXNameBin),
-                #upstream{params          = set_extra_params(Params, U, C),
-                          exchange        = XNameBin,
-                          prefetch_count  = bget(prefetch_count,  U, C, none),
-                          reconnect_delay = bget(reconnect_delay, U, C, 1),
-                          max_hops        = bget(max_hops,        U, C, 1),
-                          expires         = bget(expires,         U, C, none),
-                          message_ttl     = bget(message_ttl,     U, C, none),
-                          ha_policy       = bget(ha_policy,       U, C, none),
-                          connection_name = ConnName}
-    end.
+    Host = bget(host, U, C, none),
+    Params = #amqp_params_network{
+      host         = binary_to_list(Host),
+      port         = bget(port,         U, C),
+      virtual_host = bget(virtual_host, U, C, DefaultVHost),
+      username     = bget(username,     U, C, DefaultUser),
+      password     = bget(password,     U, C, DefaultPass)},
+    #upstream{params          = set_extra_params(Params, U, C),
+              exchange        = bget(exchange,        U, C, DefaultXNameBin),
+              prefetch_count  = bget(prefetch_count,  U, C, none),
+              reconnect_delay = bget(reconnect_delay, U, C, 1),
+              max_hops        = bget(max_hops,        U, C, 1),
+              expires         = bget(expires,         U, C, none),
+              message_ttl     = bget(message_ttl,     U, C, none),
+              ha_policy       = bget(ha_policy,       U, C, none),
+              connection_name = ConnName}.
 
 set_extra_params(Params, U, C) ->
     lists:foldl(fun (F, ParamsIn) -> F(ParamsIn, U, C) end, Params,

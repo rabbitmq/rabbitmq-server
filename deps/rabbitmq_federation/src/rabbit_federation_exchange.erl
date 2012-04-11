@@ -42,15 +42,9 @@ serialise_events() -> true.
 
 route(X, Delivery) -> with_module(X, fun (M) -> M:route(X, Delivery) end).
 
-validate(#exchange{name      = XName,
-                   arguments = Args} = X) ->
+validate(#exchange{arguments = Args} = X) ->
     rabbit_federation_util:validate_arg(<<"upstream-set">>, longstr, Args),
     rabbit_federation_util:validate_arg(<<"type">>,         longstr, Args),
-    {longstr, SetName} = rabbit_misc:table_lookup(Args, <<"upstream-set">>),
-    case rabbit_federation_upstream:from_set(SetName, XName) of
-        {error, E} -> fail_error(SetName, E);
-        {ok, _}    -> ok
-    end,
     {longstr, TypeBin} = rabbit_misc:table_lookup(Args, <<"type">>),
     case rabbit_exchange:check_type(TypeBin) of
         'x-federation' -> rabbit_federation_util:fail(
@@ -64,7 +58,7 @@ create(transaction, X) ->
 create(none, X = #exchange{name      = XName,
                            arguments = Args}) ->
     {longstr, Set} = rabbit_misc:table_lookup(Args, <<"upstream-set">>),
-    {ok, Upstreams} = rabbit_federation_upstream:from_set(Set, XName),
+    Upstreams = rabbit_federation_upstream:from_set(Set, XName),
     ok = rabbit_federation_db:prune_scratch(XName, Upstreams),
     {ok, _} = rabbit_federation_link_sup_sup:start_child(XName, {Set, XName}),
     with_module(X, fun (M) -> M:create(none, X) end).
@@ -109,12 +103,3 @@ with_module(#exchange{arguments = Args}, Fun) ->
     {ok, Module} = rabbit_registry:lookup_module(
                      exchange, list_to_existing_atom(binary_to_list(Type))),
     Fun(Module).
-
-fail_error(SetName, Reason) ->
-    {Fmt, Args} = error_text(Reason),
-    rabbit_federation_util:fail("upstream-set ~s: " ++ Fmt, [SetName | Args]).
-
-error_text(set_not_found)         -> {"set not found", []};
-error_text(no_connection_name)    -> {"no connection name", []};
-error_text({no_connection, Name}) -> {"connection ~s not found", [Name]};
-error_text({no_host,       Name}) -> {"no host in connection ~s", [Name]}.
