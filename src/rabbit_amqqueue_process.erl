@@ -235,7 +235,19 @@ process_args(State = #q{q = #amqqueue{arguments = Arguments}}) ->
        {<<"x-dead-letter-exchange">>,    fun init_dlx/2},
        {<<"x-dead-letter-routing-key">>, fun init_dlx_routing_key/2}]).
 
-init_expires(Expires, State) -> ensure_expiry_timer(State#q{expires = Expires}).
+init_expires(After, State) when is_integer(After)->
+    ensure_expiry_timer(State#q{expires = {After, true, false}});
+init_expires(ExpireTable, State) ->
+    Lookup = fun (Key, Default) ->
+        case rabbit_misc:table_lookup(ExpireTable, Key) of
+            undefined -> Default;
+            {_Type, Val} -> Val
+        end
+    end,
+    ensure_expiry_timer(State#q{expires = {
+        Lookup(<<"after">>, undefined), % This will always be defined.
+        Lookup(<<"if_unused">>, true),
+        Lookup(<<"if_empty">>, false)}}).
 
 init_ttl(TTL, State) -> drop_expired_messages(State#q{ttl = TTL}).
 
@@ -268,10 +280,11 @@ noreply(NewState) ->
 
 next_state(State = #q{backing_queue = BQ, backing_queue_state = BQS}) ->
     {MsgIds, BQS1} = BQ:drain_confirmed(BQS),
-    State1 = ensure_stats_timer(
-               ensure_rate_timer(
-                 confirm_messages(MsgIds, State#q{
-                                            backing_queue_state = BQS1}))),
+    State1 = ensure_expiry_timer(
+               ensure_stats_timer(
+                 ensure_rate_timer(
+                   confirm_messages(MsgIds, State#q{
+                                              backing_queue_state = BQS1})))),
     case BQ:needs_timeout(BQS1) of
         false -> {stop_sync_timer(State1),   hibernate     };
         idle  -> {stop_sync_timer(State1),   ?SYNC_INTERVAL};
@@ -320,17 +333,19 @@ stop_expiry_timer(State = #q{expiry_timer_ref = TRef}) ->
     erlang:cancel_timer(TRef),
     State#q{expiry_timer_ref = undefined}.
 
-%% We wish to expire only when there are no consumers *and* the expiry
-%% hasn't been refreshed (by queue.declare or basic.get) for the
-%% configured period.
-ensure_expiry_timer(State = #q{expires = undefined}) ->
+ensure_expiry_timer(State = #q{expires          = Expires,
+                               expiry_timer_ref = TRef
+                              }) when Expires ==  undefined orelse
+                                      TRef    =/= undefined ->
     State;
-ensure_expiry_timer(State = #q{expires = Expires}) ->
-    case is_unused(State) of
-        true  -> NewState = stop_expiry_timer(State),
-                 TRef = erlang:send_after(Expires, self(), maybe_expire),
-                 NewState#q{expiry_timer_ref = TRef};
-        false -> State
+ensure_expiry_timer(State = #q{expires          = {After, _IfUnused, _IfEmpty},
+                               expiry_timer_ref = undefined}) ->
+    case should_expire(State) of
+        true ->
+            TRef = erlang:send_after(After, self(), maybe_expire),
+            State#q{expiry_timer_ref = TRef};
+        false ->
+            State
     end.
 
 ensure_stats_timer(State) ->
@@ -608,6 +623,14 @@ should_auto_delete(#q{q = #amqqueue{auto_delete = false}}) -> false;
 should_auto_delete(#q{has_had_consumers = false}) -> false;
 should_auto_delete(State) -> is_unused(State).
 
+% We wish to expire only when the number of After milliseconds have elapsed and
+% the IfAfter and IfUnused conditions allow it.
+should_expire(State = #q{expires             = {_After, IfUnused, IfEmpty},
+                         backing_queue       = BQ,
+                         backing_queue_state = BQS}) ->
+    (not IfUnused orelse is_unused(State)) andalso
+    (not IfEmpty orelse BQ:is_empty(BQS)).
+
 handle_ch_down(DownPid, State = #q{exclusive_consumer = Holder,
                                    senders            = Senders}) ->
     Senders1 = case pmon:is_monitored(DownPid, Senders) of
@@ -634,7 +657,7 @@ handle_ch_down(DownPid, State = #q{exclusive_consumer = Holder,
             case should_auto_delete(State1) of
                 true  -> {stop, State1};
                 false -> {ok, requeue_and_run(sets:to_list(ChAckTags),
-                                              ensure_expiry_timer(State1))}
+                                              stop_expiry_timer(State))}
             end
     end.
 
@@ -1069,7 +1092,7 @@ handle_call({notify_down, ChPid}, From, State) ->
 handle_call({basic_get, ChPid, NoAck}, _From,
             State = #q{q = #amqqueue{name = QName}}) ->
     AckRequired = not NoAck,
-    State1 = ensure_expiry_timer(State),
+    State1 = stop_expiry_timer(State),
     case fetch(AckRequired, drop_expired_messages(State1)) of
         {empty, State2} ->
             reply(empty, State2);
@@ -1137,14 +1160,14 @@ handle_call({basic_cancel, ChPid, ConsumerTag, OkMsg}, From,
                                               ChPid, ConsumerTag,
                                              State#q.active_consumers)},
             case should_auto_delete(State1) of
-                false -> reply(ok, ensure_expiry_timer(State1));
+                false -> reply(ok, stop_expiry_timer(State1));
                 true  -> stop_later(normal, From, ok, State1)
             end
     end;
 
 handle_call(stat, _From, State) ->
     State1 = #q{backing_queue = BQ, backing_queue_state = BQS} =
-        drop_expired_messages(ensure_expiry_timer(State)),
+        drop_expired_messages(stop_expiry_timer(State)),
     reply({ok, BQ:len(BQS), active_consumer_count()}, State1);
 
 handle_call({delete, IfUnused, IfEmpty}, From,
@@ -1292,9 +1315,9 @@ handle_info(_, State = #q{delayed_stop = DS}) when DS =/= undefined ->
     noreply(State);
 
 handle_info(maybe_expire, State) ->
-    case is_unused(State) of
+    case should_expire(State) of
         true  -> stop_later(normal, State);
-        false -> noreply(ensure_expiry_timer(State))
+        false -> noreply(stop_expiry_timer(State))
     end;
 
 handle_info(drop_expired, State) ->

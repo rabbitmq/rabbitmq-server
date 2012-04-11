@@ -330,7 +330,7 @@ assert_args_equivalence(#amqqueue{name = QueueName, arguments = Args},
       [<<"x-expires">>, <<"x-message-ttl">>, <<"x-ha-policy">>]).
 
 check_declare_arguments(QueueName, Args) ->
-    Checks = [{<<"x-expires">>,                 fun check_positive_int_arg/2},
+    Checks = [{<<"x-expires">>,                 fun check_expires_arg/2},
               {<<"x-message-ttl">>,             fun check_non_neg_int_arg/2},
               {<<"x-ha-policy">>,               fun check_ha_policy_arg/2},
               {<<"x-dead-letter-exchange">>,    fun check_string_arg/2},
@@ -347,6 +347,29 @@ check_declare_arguments(QueueName, Args) ->
                       end
      end || {Key, Fun} <- Checks],
     ok.
+
+check_expires_arg({table, ExpireTable}, Args) ->
+    case rabbit_misc:table_lookup(ExpireTable, <<"after">>) of
+        undefined -> {error, {missing_expiry_table_entry, 'after'}};
+        _         -> lists:foldl(
+            fun (Key, ok) ->
+                    case rabbit_misc:table_lookup(ExpireTable, Key) of
+                        undefined -> ok;
+                        KeyVal -> check_bool_arg(KeyVal, Args)
+                    end;
+                (_, Error) ->
+                    Error
+            end, ok, [<<"if_unused">>, <<"if_empty">>]
+        )
+    end;
+
+check_expires_arg(TypeVal, Args) ->
+   check_positive_int_arg(TypeVal, Args).
+
+check_bool_arg({bool, _}, _Args) ->
+    ok;
+check_bool_arg({Type, _}, _Args) ->
+    {error, {unacceptable_type, Type}}.
 
 check_string_arg({longstr, _}, _Args) ->
     ok;
