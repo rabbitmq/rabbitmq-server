@@ -883,6 +883,8 @@ test_cluster_management() ->
                                         "invalid2@invalid"]),
     ok = assert_ram_node(),
 
+    ok = control_action(reset, []),
+
     SecondaryNode = rabbit_nodes:make("hare"),
     case net_adm:ping(SecondaryNode) of
         pong -> passed = test_cluster_management2(SecondaryNode);
@@ -898,7 +900,6 @@ test_cluster_management2(SecondaryNode) ->
     SecondaryNodeS = atom_to_list(SecondaryNode),
 
     %% make a disk node
-    ok = control_action(reset, []),
     ok = control_action(cluster, [NodeS]),
     ok = assert_disc_node(),
     %% make a ram node
@@ -1244,6 +1245,9 @@ test_confirms() ->
                                           },
                       rabbit_basic:build_content(
                         #'P_basic'{delivery_mode = 2}, <<"">>)),
+    %% We must not kill the queue before the channel has processed the
+    %% 'publish'.
+    ok = rabbit_channel:flush(Ch),
     %% Crash the queue
     QPid1 ! boom,
     %% Wait for a nack
@@ -2551,7 +2555,7 @@ test_queue_recover() ->
               {{_Msg1, true, _AckTag1, CountMinusOne}, VQ2} =
                   rabbit_variable_queue:fetch(true, VQ1),
               _VQ3 = rabbit_variable_queue:delete_and_terminate(shutdown, VQ2),
-              rabbit_amqqueue:internal_delete(QName)
+              rabbit_amqqueue:internal_delete(QName, QPid1)
       end),
     passed.
 

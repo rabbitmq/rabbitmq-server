@@ -32,7 +32,7 @@
 
 
 %% internal
--export([internal_declare/2, internal_delete/1, run_backing_queue/3,
+-export([internal_declare/2, internal_delete/2, run_backing_queue/3,
          set_ram_duration_target/2, set_maximum_since_use/2]).
 
 -include("rabbit.hrl").
@@ -144,11 +144,11 @@
 -spec(notify_sent_queue_down/1 :: (pid()) -> 'ok').
 -spec(unblock/2 :: (pid(), pid()) -> 'ok').
 -spec(flush_all/2 :: (qpids(), pid()) -> 'ok').
--spec(internal_delete/1 ::
-        (name()) -> rabbit_types:ok_or_error('not_found') |
-                    rabbit_types:connection_exit() |
-                    fun (() -> rabbit_types:ok_or_error('not_found') |
-                               rabbit_types:connection_exit())).
+-spec(internal_delete/2 ::
+        (name(), pid()) -> rabbit_types:ok_or_error('not_found') |
+                           rabbit_types:connection_exit() |
+                           fun (() -> rabbit_types:ok_or_error('not_found') |
+                                      rabbit_types:connection_exit())).
 -spec(run_backing_queue/3 ::
         (pid(), atom(),
          (fun ((atom(), A) -> {[rabbit_types:msg_id()], A}))) -> 'ok').
@@ -231,7 +231,7 @@ internal_declare(Q = #amqqueue{name = QueueName}, false) ->
                   [ExistingQ = #amqqueue{pid = QPid}] ->
                       case rabbit_misc:is_process_alive(QPid) of
                           true  -> rabbit_misc:const(ExistingQ);
-                          false -> TailFun = internal_delete(QueueName),
+                          false -> TailFun = internal_delete(QueueName, QPid),
                                    fun () -> TailFun(), ExistingQ end
                       end
               end
@@ -330,54 +330,60 @@ assert_args_equivalence(#amqqueue{name = QueueName, arguments = Args},
       [<<"x-expires">>, <<"x-message-ttl">>, <<"x-ha-policy">>]).
 
 check_declare_arguments(QueueName, Args) ->
-    [case Fun(rabbit_misc:table_lookup(Args, Key), Args) of
-         ok             -> ok;
-         {error, Error} -> rabbit_misc:protocol_error(
-                             precondition_failed,
-                             "invalid arg '~s' for ~s: ~255p",
-                             [Key, rabbit_misc:rs(QueueName), Error])
-     end ||
-        {Key, Fun} <-
-                [{<<"x-expires">>,     fun check_integer_argument/2},
-                 {<<"x-message-ttl">>, fun check_integer_argument/2},
-                 {<<"x-ha-policy">>,   fun check_ha_policy_argument/2},
-                 {<<"x-dead-letter-exchange">>, fun check_string_argument/2},
-                 {<<"x-dead-letter-routing-key">>,
-                  fun check_dlxrk_argument/2}]],
+    Checks = [{<<"x-expires">>,                 fun check_positive_int_arg/2},
+              {<<"x-message-ttl">>,             fun check_non_neg_int_arg/2},
+              {<<"x-ha-policy">>,               fun check_ha_policy_arg/2},
+              {<<"x-dead-letter-exchange">>,    fun check_string_arg/2},
+              {<<"x-dead-letter-routing-key">>, fun check_dlxrk_arg/2}],
+    [case rabbit_misc:table_lookup(Args, Key) of
+         undefined -> ok;
+         TypeVal   -> case Fun(TypeVal, Args) of
+                          ok             -> ok;
+                          {error, Error} -> rabbit_misc:protocol_error(
+                                              precondition_failed,
+                                              "invalid arg '~s' for ~s: ~255p",
+                                              [Key, rabbit_misc:rs(QueueName),
+                                               Error])
+                      end
+     end || {Key, Fun} <- Checks],
     ok.
 
-check_string_argument(undefined, _Args) ->
+check_string_arg({longstr, _}, _Args) ->
     ok;
-check_string_argument({longstr, _}, _Args) ->
-    ok;
-check_string_argument({Type, _}, _) ->
+check_string_arg({Type, _}, _) ->
     {error, {unacceptable_type, Type}}.
 
-check_integer_argument(undefined, _Args) ->
-    ok;
-check_integer_argument({Type, Val}, _Args) when Val > 0 ->
+check_int_arg({Type, _}, _) ->
     case lists:member(Type, ?INTEGER_ARG_TYPES) of
         true  -> ok;
         false -> {error, {unacceptable_type, Type}}
-    end;
-check_integer_argument({_Type, Val}, _Args) ->
-    {error, {value_zero_or_less, Val}}.
+    end.
 
-check_dlxrk_argument(undefined, _Args) ->
-    ok;
-check_dlxrk_argument({longstr, _}, Args) ->
+check_positive_int_arg({Type, Val}, Args) ->
+    case check_int_arg({Type, Val}, Args) of
+        ok when Val > 0 -> ok;
+        ok              -> {error, {value_zero_or_less, Val}};
+        Error           -> Error
+    end.
+
+check_non_neg_int_arg({Type, Val}, Args) ->
+    case check_int_arg({Type, Val}, Args) of
+        ok when Val >= 0 -> ok;
+        ok               -> {error, {value_less_than_zero, Val}};
+        Error            -> Error
+    end.
+
+check_dlxrk_arg({longstr, _}, Args) ->
     case rabbit_misc:table_lookup(Args, <<"x-dead-letter-exchange">>) of
         undefined -> {error, routing_key_but_no_dlx_defined};
         _         -> ok
     end;
-check_dlxrk_argument({Type, _}, _Args) ->
+check_dlxrk_arg({Type, _}, _Args) ->
     {error, {unacceptable_type, Type}}.
 
-check_ha_policy_argument(undefined, _Args) ->
+check_ha_policy_arg({longstr, <<"all">>}, _Args) ->
     ok;
-check_ha_policy_argument({longstr, <<"all">>}, _Args) ->
-    ok;
-check_ha_policy_argument({longstr, <<"nodes">>}, Args) ->
+check_ha_policy_arg({longstr, <<"nodes">>}, Args) ->
     case rabbit_misc:table_lookup(Args, <<"x-ha-policy-params">>) of
         undefined ->
             {error, {require, 'x-ha-policy-params'}};
@@ -393,9 +399,9 @@ check_ha_policy_argument({longstr, <<"nodes">>}, Args) ->
         {Type, _} ->
             {error, {ha_nodes_policy_params_not_array_of_longstr, Type}}
     end;
-check_ha_policy_argument({longstr, Policy}, _Args) ->
+check_ha_policy_arg({longstr, Policy}, _Args) ->
     {error, {invalid_ha_policy, Policy}};
-check_ha_policy_argument({Type, _}, _Args) ->
+check_ha_policy_arg({Type, _}, _Args) ->
     {error, {unacceptable_type, Type}}.
 
 list() ->
@@ -535,13 +541,19 @@ internal_delete1(QueueName) ->
     %% after the transaction.
     rabbit_binding:remove_for_destination(QueueName).
 
-internal_delete(QueueName) ->
+internal_delete(QueueName, QPid) ->
     rabbit_misc:execute_mnesia_tx_with_tail(
       fun () ->
               case mnesia:wread({rabbit_queue, QueueName}) of
                   []  -> rabbit_misc:const({error, not_found});
                   [_] -> Deletions = internal_delete1(QueueName),
-                         rabbit_binding:process_deletions(Deletions)
+                         T = rabbit_binding:process_deletions(Deletions),
+                         fun() ->
+                                 ok = T(),
+                                 ok = rabbit_event:notify(queue_deleted,
+                                                          [{pid,  QPid},
+                                                           {name, QueueName}])
+                         end
               end
       end).
 
@@ -556,14 +568,25 @@ set_maximum_since_use(QPid, Age) ->
 
 on_node_down(Node) ->
     rabbit_misc:execute_mnesia_tx_with_tail(
-      fun () -> Dels = qlc:e(qlc:q([delete_queue(QueueName) ||
-                                       #amqqueue{name = QueueName, pid = Pid,
-                                                 slave_pids = []}
-                                           <- mnesia:table(rabbit_queue),
-                                       node(Pid) == Node])),
-                rabbit_binding:process_deletions(
-                  lists:foldl(fun rabbit_binding:combine_deletions/2,
-                              rabbit_binding:new_deletions(), Dels))
+      fun () -> QsDels =
+                    qlc:e(qlc:q([{{QName, Pid}, delete_queue(QName)} ||
+                                    #amqqueue{name = QName, pid = Pid,
+                                              slave_pids = []}
+                                        <- mnesia:table(rabbit_queue),
+                                    node(Pid) == Node])),
+                {Qs, Dels} = lists:unzip(QsDels),
+                T = rabbit_binding:process_deletions(
+                      lists:foldl(fun rabbit_binding:combine_deletions/2,
+                                  rabbit_binding:new_deletions(), Dels)),
+                fun () ->
+                        T(),
+                        lists:foreach(
+                          fun({QName, QPid}) ->
+                                  ok = rabbit_event:notify(queue_deleted,
+                                                           [{pid,  QPid},
+                                                            {name, QName}])
+                          end, Qs)
+                end
       end).
 
 delete_queue(QueueName) ->
