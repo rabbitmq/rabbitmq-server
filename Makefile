@@ -207,7 +207,7 @@ start-background-node: all
 	-rm -f $(RABBITMQ_MNESIA_DIR).pid
 	mkdir -p $(RABBITMQ_MNESIA_DIR)
 	setsid sh -c "$(MAKE) run-background-node > $(RABBITMQ_MNESIA_DIR)/startup_log 2> $(RABBITMQ_MNESIA_DIR)/startup_err" &
-	sleep 5
+	sleep 1
 
 start-rabbit-on-node: all
 	echo "rabbit:start()." | $(ERL_CALL)
