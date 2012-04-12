@@ -23,7 +23,6 @@
 -export([validate/1, create/2, delete/3, add_binding/3,
          remove_bindings/3, assert_args_equivalence/2]).
 -export([init/0]).
--include_lib("rabbit_common/include/rabbit_exchange_type_spec.hrl").
 
 -record(bucket, {source_number, destination, binding}).
 
