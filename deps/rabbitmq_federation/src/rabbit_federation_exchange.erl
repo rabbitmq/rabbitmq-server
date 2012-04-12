@@ -23,7 +23,6 @@
                     {requires, rabbit_registry},
                     {enables, recovery}]}).
 
--include_lib("rabbit_common/include/rabbit_exchange_type_spec.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
 -behaviour(rabbit_exchange_type).
