@@ -2,6 +2,7 @@
  [{description, "RabbitMQ Common Libraries"},
   {vsn, "%%VSN%%"},
   {modules, [
+             pmon,
              gen_server2,
              mirrored_supervisor,
              priority_queue,
