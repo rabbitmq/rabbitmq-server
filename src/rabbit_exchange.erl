@@ -242,6 +242,11 @@ info_all(VHostPath) -> map(VHostPath, fun (X) -> info(X) end).
 
 info_all(VHostPath, Items) -> map(VHostPath, fun (X) -> info(X, Items) end).
 
+%% Optimisation
+route(#exchange{name = #resource{name = <<"">>, virtual_host = VHost}},
+      #delivery{message = #basic_message{routing_keys = RKs}}) ->
+    [rabbit_misc:r(VHost, queue, RK) || RK <- lists:usort(RKs)];
+
 route(X = #exchange{name = XName}, Delivery) ->
     route1(Delivery, {queue:from_list([X]), XName, []}).
 

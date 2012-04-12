@@ -16,23 +16,23 @@
 
 %% A dual-index tree.
 %%
-%% Conceptually, what we want is a map that has two distinct sets of
-%% keys (referred to here as primary and secondary, although that
-%% shouldn't imply a hierarchy) pointing to one set of
-%% values. However, in practice what we'll always want to do is insert
-%% a value that's pointed at by (one primary, many secondaries) and
-%% remove values that are pointed at by (one secondary, many
-%% primaries) or (one secondary, all primaries). Thus the API.
+%% Entries have the following shape:
 %%
-%% Entries exists while they have a non-empty secondary key set. The
-%% 'take' operations return the entries that got removed, i.e. that
-%% had no remaining secondary keys. take/3 expects entries to exist
-%% with the supplied primary keys and secondary key. take/2 can cope
-%% with the supplied secondary key having no entries.
+%% +----+--------------------+---+
+%% | PK | SK1, SK2, ..., SKN | V |
+%% +----+--------------------+---+
+%%
+%% i.e. a primary key, set of secondary keys, and a value.
+%%
+%% There can be only one entry per primary key, but secondary keys may
+%% appear in multiple entries.
+%%
+%% The set of secondary keys must be non-empty. Or, to put it another
+%% way, entries only exist while their secondary key set is non-empty.
 
 -module(dtree).
 
--export([empty/0, insert/4, take/3, take/2,
+-export([empty/0, insert/4, take/3, take/2, take_all/2,
          is_defined/2, is_empty/1, smallest/1, size/1]).
 
 %%----------------------------------------------------------------------------
@@ -52,6 +52,7 @@
 -spec(insert/4     :: (pk(), [sk()], val(), ?MODULE()) -> ?MODULE()).
 -spec(take/3       :: ([pk()], sk(), ?MODULE()) -> {[kv()], ?MODULE()}).
 -spec(take/2       :: (sk(), ?MODULE()) -> {[kv()], ?MODULE()}).
+-spec(take_all/2   :: (sk(), ?MODULE()) -> {[kv()], ?MODULE()}).
 -spec(is_defined/2 :: (sk(), ?MODULE()) -> boolean()).
 -spec(is_empty/1   :: (?MODULE()) -> boolean()).
 -spec(smallest/1   :: (?MODULE()) -> kv()).
@@ -63,6 +64,12 @@
 
 empty() -> {gb_trees:empty(), gb_trees:empty()}.
 
+%% Insert an entry. Fails if there already is an entry with the given
+%% primary key.
+insert(PK, [], V, {P, S}) ->
+    %% dummy insert to force error if PK exists
+    gb_trees:insert(PK, {gb_sets:empty(), V}, P),
+    {P, S};
 insert(PK, SKs, V, {P, S}) ->
     {gb_trees:insert(PK, {gb_sets:from_list(SKs), V}, P),
      lists:foldl(fun (SK, S0) ->
@@ -74,19 +81,43 @@ insert(PK, SKs, V, {P, S}) ->
                          end
                  end, S, SKs)}.
 
+%% Remove the given secondary key from the entries of the given
+%% primary keys, returning the primary-key/value pairs of any entries
+%% that were dropped as the result (i.e. due to their secondary key
+%% set becoming empty). It is ok for the given primary keys and/or
+%% secondary key to not exist.
 take(PKs, SK, {P, S}) ->
-    {KVs, P1} = take2(PKs, SK, P),
-    PKS = gb_sets:difference(gb_trees:get(SK, S), gb_sets:from_list(PKs)),
-    {KVs, {P1, case gb_sets:is_empty(PKS) of
-                   true  -> gb_trees:delete(SK, S);
-                   false -> gb_trees:update(SK, PKS, S)
-               end}}.
+    case gb_trees:lookup(SK, S) of
+        none         -> {[], {P, S}};
+        {value, PKS} -> TakenPKS = gb_sets:from_list(PKs),
+                        PKSInter = gb_sets:intersection(PKS, TakenPKS),
+                        PKSDiff  = gb_sets:difference  (PKS, TakenPKS),
+                        {KVs, P1} = take2(PKSInter, SK, P),
+                        {KVs, {P1, case gb_sets:is_empty(PKSDiff) of
+                                       true  -> gb_trees:delete(SK, S);
+                                       false -> gb_trees:update(SK, PKSDiff, S)
+                                   end}}
+    end.
 
+%% Remove the given secondary key from all entries, returning the
+%% primary-key/value pairs of any entries that were dropped as the
+%% result (i.e. due to their secondary key set becoming empty). It is
+%% ok for the given secondary key to not exist.
 take(SK, {P, S}) ->
     case gb_trees:lookup(SK, S) of
         none         -> {[], {P, S}};
-        {value, PKS} -> {KVs, P1} = take2(gb_sets:to_list(PKS), SK, P),
+        {value, PKS} -> {KVs, P1} = take2(PKS, SK, P),
                         {KVs, {P1, gb_trees:delete(SK, S)}}
+    end.
+
+%% Drop all entries which contain the given secondary key, returning
+%% the primary-key/value pairs of these entries. It is ok for the
+%% given secondary key to not exist.
+take_all(SK, {P, S}) ->
+    case gb_trees:lookup(SK, S) of
+        none         -> {[], {P, S}};
+        {value, PKS} -> {KVs, SKS, P1} = take_all2(PKS, P),
+                        {KVs, {P1, prune(SKS, PKS, S)}}
     end.
 
 is_defined(SK, {_P, S}) -> gb_trees:is_defined(SK, S).
@@ -100,12 +131,30 @@ size({P, _S}) -> gb_trees:size(P).
 
 %%----------------------------------------------------------------------------
 
-take2(PKs, SK, P) ->
-    lists:foldl(fun (PK, {KVs, P0}) ->
-                        {SKS, V} = gb_trees:get(PK, P0),
-                        SKS1 = gb_sets:delete(SK, SKS),
-                        case gb_sets:is_empty(SKS1) of
-                            true  -> {[{PK, V} | KVs], gb_trees:delete(PK, P0)};
-                            false -> {KVs, gb_trees:update(PK, {SKS1, V}, P0)}
-                        end
-                end, {[], P}, PKs).
+take2(PKS, SK, P) ->
+    gb_sets:fold(fun (PK, {KVs, P0}) ->
+                         {SKS, V} = gb_trees:get(PK, P0),
+                         SKS1 = gb_sets:delete(SK, SKS),
+                         case gb_sets:is_empty(SKS1) of
+                             true  -> KVs1 = [{PK, V} | KVs],
+                                      {KVs1, gb_trees:delete(PK, P0)};
+                             false -> {KVs,  gb_trees:update(PK, {SKS1, V}, P0)}
+                         end
+                 end, {[], P}, PKS).
+
+take_all2(PKS, P) ->
+    gb_sets:fold(fun (PK, {KVs, SKS0, P0}) ->
+                         {SKS, V} = gb_trees:get(PK, P0),
+                         {[{PK, V} | KVs], gb_sets:union(SKS, SKS0),
+                          gb_trees:delete(PK, P0)}
+                 end, {[], gb_sets:empty(), P}, PKS).
+
+prune(SKS, PKS, S) ->
+    gb_sets:fold(fun (SK0, S0) ->
+                         PKS1 = gb_trees:get(SK0, S0),
+                         PKS2 = gb_sets:difference(PKS1, PKS),
+                         case gb_sets:is_empty(PKS2) of
+                             true  -> gb_trees:delete(SK0, S0);
+                             false -> gb_trees:update(SK0, PKS2, S0)
+                         end
+                 end, S, SKS).

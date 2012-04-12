@@ -177,11 +177,12 @@ dropwhile(Pred, MsgFun,
                          backing_queue       = BQ,
                          set_delivered       = SetDelivered,
                          backing_queue_state = BQS }) ->
-    Len = BQ:len(BQS),
+    Len  = BQ:len(BQS),
     BQS1 = BQ:dropwhile(Pred, MsgFun, BQS),
-    Dropped = Len - BQ:len(BQS1),
+    Len1 = BQ:len(BQS1),
+    ok = gm:broadcast(GM, {set_length, Len1}),
+    Dropped = Len - Len1,
     SetDelivered1 = lists:max([0, SetDelivered - Dropped]),
-    ok = gm:broadcast(GM, {set_length, BQ:len(BQS1)}),
     State #state { backing_queue_state = BQS1,
                    set_delivered       = SetDelivered1 }.
 
@@ -241,11 +242,11 @@ ack(AckTags, State = #state { gm                  = GM,
                               backing_queue_state = BQS,
                               ack_msg_id          = AM }) ->
     {MsgIds, BQS1} = BQ:ack(AckTags, BQS),
-    AM1 = lists:foldl(fun dict:erase/2, AM, AckTags),
     case MsgIds of
         [] -> ok;
         _  -> ok = gm:broadcast(GM, {ack, MsgIds})
     end,
+    AM1 = lists:foldl(fun dict:erase/2, AM, AckTags),
     {MsgIds, State #state { backing_queue_state = BQS1,
                             ack_msg_id          = AM1 }}.
 

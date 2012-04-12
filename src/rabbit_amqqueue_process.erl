@@ -538,17 +538,25 @@ attempt_delivery(#delivery{sender = SenderPid, message = Message}, Confirm,
              State#q{backing_queue_state = BQS1}}
     end.
 
-deliver_or_enqueue(Delivery = #delivery{message = Message,
-                                        sender  = SenderPid}, State) ->
+deliver_or_enqueue(Delivery = #delivery{message    = Message,
+                                        msg_seq_no = MsgSeqNo,
+                                        sender     = SenderPid}, State) ->
     Confirm = should_confirm_message(Delivery, State),
-    {Delivered, State1} = attempt_delivery(Delivery, Confirm, State),
-    State2 = #q{backing_queue = BQ, backing_queue_state = BQS} =
-        maybe_record_confirm_message(Confirm, State1),
-    case Delivered of
-        true  -> State2;
-        false -> Props = message_properties(Confirm, State),
-                 BQS1 = BQ:publish(Message, Props, SenderPid, BQS),
-                 ensure_ttl_timer(State2#q{backing_queue_state = BQS1})
+    case attempt_delivery(Delivery, Confirm, State) of
+        {true, State1} ->
+            maybe_record_confirm_message(Confirm, State1);
+        %% the next two are optimisations
+        {false, State1 = #q{ttl = 0, dlx = undefined}} when Confirm == never ->
+            discard_delivery(Delivery, State1);
+        {false, State1 = #q{ttl = 0, dlx = undefined}} ->
+            rabbit_misc:confirm_to_sender(SenderPid, [MsgSeqNo]),
+            discard_delivery(Delivery, State1);
+        {false, State1} ->
+            State2 = #q{backing_queue = BQ, backing_queue_state = BQS} =
+                maybe_record_confirm_message(Confirm, State1),
+            Props = message_properties(Confirm, State2),
+            BQS1 = BQ:publish(Message, Props, SenderPid, BQS),
+            ensure_ttl_timer(State2#q{backing_queue_state = BQS1})
     end.
 
 requeue_and_run(AckTags, State = #q{backing_queue = BQ}) ->
@@ -757,15 +765,14 @@ handle_queue_down(QPid, Reason, State = #q{queue_monitors = QMons,
         error ->
             noreply(State);
         {ok, _} ->
-            rabbit_log:info("DLQ ~p (for ~s) died~n",
-                            [QPid, rabbit_misc:rs(qname(State))]),
-            {MsgSeqNoAckTags, UC1} = dtree:take(QPid, UC),
-            case (MsgSeqNoAckTags =/= [] andalso
-                  rabbit_misc:is_abnormal_termination(Reason)) of
-                true -> rabbit_log:warning("Dead queue lost ~p messages~n",
-                                           [length(MsgSeqNoAckTags)]);
+            case rabbit_misc:is_abnormal_termination(Reason) of
+                true  -> {Lost, _UC1} = dtree:take_all(QPid, UC),
+                         rabbit_log:warning(
+                           "DLQ ~p for ~s died with ~p unconfirmed messages~n",
+                           [QPid, rabbit_misc:rs(qname(State)), length(Lost)]);
                 false -> ok
             end,
+            {MsgSeqNoAckTags, UC1} = dtree:take(QPid, UC),
             cleanup_after_confirm(
               [AckTag || {_MsgSeqNo, AckTag} <- MsgSeqNoAckTags],
               State#q{queue_monitors = dict:erase(QPid, QMons),
