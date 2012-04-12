@@ -620,7 +620,7 @@ confirm_sender_death(Pid) ->
         fun (?MODULE, State = #state { known_senders = KS,
                                        gm            = GM }) ->
                 %% We're running still as a slave
-                ok = case pmon:is_monitored(KS) of
+                ok = case pmon:is_monitored(Pid, KS) of
                          false -> ok;
                          true  -> gm:broadcast(GM, {ensure_monitoring, [Pid]}),
                                   confirm_sender_death(Pid)
