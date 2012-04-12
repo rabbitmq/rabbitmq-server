@@ -22,7 +22,6 @@
 -export([description/0, should_offer/1, init/1, handle_response/2]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
--include_lib("rabbit_common/include/rabbit_auth_mechanism_spec.hrl").
 -include_lib("public_key/include/public_key.hrl").
 
 -rabbit_boot_step({?MODULE,
