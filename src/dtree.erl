@@ -91,7 +91,7 @@ take(PKs, SK, {P, S}) ->
         none         -> {[], {P, S}};
         {value, PKS} -> TakenPKS = gb_sets:from_list(PKs),
                         PKSInter = gb_sets:intersection(PKS, TakenPKS),
-                        PKSDiff  = gb_sets_difference(PKS, PKSInter),
+                        PKSDiff  = gb_sets_difference  (PKS, PKSInter),
                         {KVs, P1} = take2(PKSInter, SK, P),
                         {KVs, {P1, case gb_sets:is_empty(PKSDiff) of
                                        true  -> gb_trees:delete(SK, S);
