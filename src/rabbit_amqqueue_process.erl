@@ -1243,7 +1243,8 @@ handle_cast({reject, AckTags, Requeue, ChPid}, State) ->
                   false -> Fun = dead_letter_fun(rejected, State),
                            fun (State1 = #q{backing_queue       = BQ,
                                             backing_queue_state = BQS}) ->
-                                   BQS1 = BQ:fold(Fun, BQS, AckTags),
+                                   BQS1           = BQ:fold(Fun, BQS, AckTags),
+                                   {_Guids, BQS2} = BQ:ack(AckTags, BQS1),
                                    State1#q{backing_queue_state = BQS1}
                            end
               end));
