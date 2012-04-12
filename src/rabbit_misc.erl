@@ -46,8 +46,7 @@
 -export([sort_field_table/1]).
 -export([pid_to_string/1, string_to_pid/1]).
 -export([version_compare/2, version_compare/3]).
--export([dict_cons/3, orddict_cons/3, gb_trees_cons/3,
-         gb_trees_set_insert/3]).
+-export([dict_cons/3, orddict_cons/3, gb_trees_cons/3]).
 -export([gb_trees_fold/3, gb_trees_foreach/2]).
 -export([get_options/2]).
 -export([all_module_attributes/1, build_acyclic_graph/3]).
@@ -177,7 +176,6 @@
 -spec(dict_cons/3 :: (any(), any(), dict()) -> dict()).
 -spec(orddict_cons/3 :: (any(), any(), orddict:orddict()) -> orddict:orddict()).
 -spec(gb_trees_cons/3 :: (any(), any(), gb_tree()) -> gb_tree()).
--spec(gb_trees_set_insert/3 :: (any(), any(), gb_tree()) -> gb_tree()).
 -spec(gb_trees_fold/3 :: (fun ((any(), any(), A) -> A), A, gb_tree()) -> A).
 -spec(gb_trees_foreach/2 ::
         (fun ((any(), any()) -> any()), gb_tree()) -> 'ok').
@@ -717,15 +715,6 @@ gb_trees_cons(Key, Value, Tree) ->
     case gb_trees:lookup(Key, Tree) of
         {value, Values} -> gb_trees:update(Key, [Value | Values], Tree);
         none            -> gb_trees:insert(Key, [Value], Tree)
-    end.
-
-gb_trees_set_insert(Key, Value, Tree) ->
-    case gb_trees:lookup(Key, Tree) of
-        {value, Values} ->
-            Values1 = gb_sets:insert(Value, Values),
-            gb_trees:update(Key, Values1, Tree);
-        none ->
-            gb_trees:insert(Key, gb_sets:singleton(Value), Tree)
     end.
 
 gb_trees_fold(Fun, Acc, Tree) ->

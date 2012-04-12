@@ -846,7 +846,7 @@ process_instruction({ack, MsgIds},
 process_instruction({fold, MsgFun, AckTags},
                     State = #state { backing_queue       = BQ,
                                      backing_queue_state = BQS }) ->
-    BQS1 = BQ:fold(AckTags, MsgFun, BQS),
+    BQS1 = BQ:fold(MsgFun, BQS, AckTags),
     {ok, State #state { backing_queue_state = BQS1 }};
 process_instruction({requeue, MsgIds},
                     State = #state { backing_queue       = BQ,

@@ -48,8 +48,7 @@
             ttl,
             ttl_timer_ref,
             publish_seqno,
-            unconfirmed_mq,
-            unconfirmed_qm,
+            unconfirmed,
             delayed_stop,
             queue_monitors,
             dlx,
@@ -135,8 +134,7 @@ init(Q) ->
                dlx                 = undefined,
                dlx_routing_key     = undefined,
                publish_seqno       = 1,
-               unconfirmed_mq      = gb_trees:empty(),
-               unconfirmed_qm      = gb_trees:empty(),
+               unconfirmed         = dtree:empty(),
                delayed_stop        = undefined,
                queue_monitors      = dict:new(),
                msg_id_to_channel   = gb_trees:empty()},
@@ -161,8 +159,7 @@ init_with_backing_queue_state(Q = #amqqueue{exclusive_owner = Owner}, BQ, BQS,
                expiry_timer_ref    = undefined,
                ttl                 = undefined,
                publish_seqno       = 1,
-               unconfirmed_mq      = gb_trees:empty(),
-               unconfirmed_qm      = gb_trees:empty(),
+               unconfirmed         = dtree:empty(),
                delayed_stop        = undefined,
                queue_monitors      = dict:new(),
                msg_id_to_channel   = MTC},
@@ -490,8 +487,10 @@ should_confirm_message(#delivery{sender     = SenderPid,
                                    id            = MsgId}},
                        #q{q = #amqqueue{durable = true}}) ->
     {eventually, SenderPid, MsgSeqNo, MsgId};
-should_confirm_message(_Delivery, _State) ->
-    immediately.
+should_confirm_message(#delivery{sender     = SenderPid,
+                                 msg_seq_no = MsgSeqNo},
+                       _State) ->
+    {immediately, SenderPid, MsgSeqNo}.
 
 needs_confirming({eventually, _, _, _}) -> true;
 needs_confirming(_)                     -> false.
@@ -500,6 +499,9 @@ maybe_record_confirm_message({eventually, SenderPid, MsgSeqNo, MsgId},
                              State = #q{msg_id_to_channel = MTC}) ->
     State#q{msg_id_to_channel =
                 gb_trees:insert(MsgId, {SenderPid, MsgSeqNo}, MTC)};
+maybe_record_confirm_message({immediately, SenderPid, MsgSeqNo}, State) ->
+    rabbit_misc:confirm_to_sender(SenderPid, [MsgSeqNo]),
+    State;
 maybe_record_confirm_message(_Confirm, State) ->
     State.
 
@@ -511,52 +513,50 @@ run_message_queue(State) ->
                             BQ:is_empty(BQS), State1),
     State2.
 
-attempt_delivery(Delivery = #delivery{sender     = SenderPid,
-                                      message    = Message,
-                                      msg_seq_no = MsgSeqNo},
+attempt_delivery(#delivery{sender = SenderPid, message = Message}, Confirm,
                  State = #q{backing_queue = BQ, backing_queue_state = BQS}) ->
-    Confirm = should_confirm_message(Delivery, State),
-    case Confirm of
-        immediately -> rabbit_misc:confirm_to_sender(SenderPid, [MsgSeqNo]);
-        _           -> ok
-    end,
     case BQ:is_duplicate(Message, BQS) of
         {false, BQS1} ->
-            DeliverFun =
-                fun (AckRequired, State1 = #q{backing_queue_state = BQS2}) ->
-                        Props = message_properties(Confirm, State1),
-                        {AckTag, BQS3} = BQ:publish_delivered(
-                                           AckRequired, Message, Props,
-                                           SenderPid, BQS2),
-                        {{Message, false, AckTag}, true,
-                         State1#q{backing_queue_state = BQS3}}
-                end,
-            {Delivered, State2} =
-                deliver_msgs_to_consumers(DeliverFun, false,
-                                          State#q{backing_queue_state = BQS1}),
-            {Delivered, Confirm, State2};
+            deliver_msgs_to_consumers(
+              fun (AckRequired, State1 = #q{backing_queue_state = BQS2}) ->
+                      Props = message_properties(Confirm, State1),
+                      {AckTag, BQS3} = BQ:publish_delivered(
+                                         AckRequired, Message, Props,
+                                         SenderPid, BQS2),
+                      {{Message, false, AckTag}, true,
+                       State1#q{backing_queue_state = BQS3}}
+              end, false, State#q{backing_queue_state = BQS1});
         {Duplicate, BQS1} ->
             %% if the message has previously been seen by the BQ then
             %% it must have been seen under the same circumstances as
             %% now: i.e. if it is now a deliver_immediately then it
             %% must have been before.
-            Delivered = case Duplicate of
-                            published -> true;
-                            discarded -> false
-                        end,
-            {Delivered, Confirm, State#q{backing_queue_state = BQS1}}
+            {case Duplicate of
+                 published -> true;
+                 discarded -> false
+             end,
+             State#q{backing_queue_state = BQS1}}
     end.
 
-deliver_or_enqueue(Delivery = #delivery{message = Message,
-                                        sender  = SenderPid}, State) ->
-    {Delivered, Confirm, State1} = attempt_delivery(Delivery, State),
-    State2 = #q{backing_queue = BQ, backing_queue_state = BQS} =
-        maybe_record_confirm_message(Confirm, State1),
-    case Delivered of
-        true  -> State2;
-        false -> Props = message_properties(Confirm, State),
-                 BQS1 = BQ:publish(Message, Props, SenderPid, BQS),
-                 ensure_ttl_timer(State2#q{backing_queue_state = BQS1})
+deliver_or_enqueue(Delivery = #delivery{message    = Message,
+                                        msg_seq_no = MsgSeqNo,
+                                        sender     = SenderPid}, State) ->
+    Confirm = should_confirm_message(Delivery, State),
+    case attempt_delivery(Delivery, Confirm, State) of
+        {true, State1} ->
+            maybe_record_confirm_message(Confirm, State1);
+        %% the next two are optimisations
+        {false, State1 = #q{ttl = 0, dlx = undefined}} when Confirm == never ->
+            discard_delivery(Delivery, State1);
+        {false, State1 = #q{ttl = 0, dlx = undefined}} ->
+            rabbit_misc:confirm_to_sender(SenderPid, [MsgSeqNo]),
+            discard_delivery(Delivery, State1);
+        {false, State1} ->
+            State2 = #q{backing_queue = BQ, backing_queue_state = BQS} =
+                maybe_record_confirm_message(Confirm, State1),
+            Props = message_properties(Confirm, State2),
+            BQS1 = BQ:publish(Message, Props, SenderPid, BQS),
+            ensure_ttl_timer(State2#q{backing_queue_state = BQS1})
     end.
 
 requeue_and_run(AckTags, State = #q{backing_queue = BQ}) ->
@@ -728,11 +728,9 @@ dead_letter_msg(Msg, AckTag, Reason, State = #q{dlx = DLX}) ->
     end.
 
 dead_letter_msg_existing_dlx(Msg, AckTag, Reason,
-                             State = #q{publish_seqno       = MsgSeqNo,
-                                        unconfirmed_mq      = UMQ,
-                                        dlx                 = DLX,
-                                        backing_queue       = BQ,
-                                        backing_queue_state = BQS}) ->
+                             State = #q{publish_seqno = MsgSeqNo,
+                                        unconfirmed   = UC,
+                                        dlx           = DLX}) ->
     {ok, _, QPids} =
         rabbit_basic:publish(
           rabbit_basic:delivery(
@@ -741,20 +739,9 @@ dead_letter_msg_existing_dlx(Msg, AckTag, Reason,
     State1 = lists:foldl(fun monitor_queue/2, State, QPids),
     State2 = State1#q{publish_seqno = MsgSeqNo + 1},
     case QPids of
-        [] -> {_Guids, BQS1} = BQ:ack([AckTag], BQS),
-              cleanup_after_confirm(State2#q{backing_queue_state = BQS1});
-        _  -> State3 =
-                  lists:foldl(
-                    fun(QPid, State0 = #q{unconfirmed_qm = UQM}) ->
-                            UQM1 = rabbit_misc:gb_trees_set_insert(
-                                     QPid, MsgSeqNo, UQM),
-                            State0#q{unconfirmed_qm = UQM1}
-                    end, State2, QPids),
-              noreply(State3#q{
-                        unconfirmed_mq =
-                            gb_trees:insert(
-                              MsgSeqNo, {gb_sets:from_list(QPids),
-                                         AckTag}, UMQ)})
+        [] -> cleanup_after_confirm([AckTag], State2);
+        _  -> UC1 = dtree:insert(MsgSeqNo, QPids, AckTag, UC),
+              noreply(State2#q{unconfirmed = UC1})
     end.
 
 monitor_queue(QPid, State = #q{queue_monitors = QMons}) ->
@@ -773,64 +760,30 @@ demonitor_queue(QPid, State = #q{queue_monitors = QMons}) ->
     end.
 
 handle_queue_down(QPid, Reason, State = #q{queue_monitors = QMons,
-                                           unconfirmed_qm = UQM}) ->
+                                           unconfirmed    = UC}) ->
     case dict:find(QPid, QMons) of
         error ->
             noreply(State);
         {ok, _} ->
-            rabbit_log:info("DLQ ~p (for ~s) died~n",
-                            [QPid, rabbit_misc:rs(qname(State))]),
-            State1 = State#q{queue_monitors = dict:erase(QPid, QMons)},
-            case gb_trees:lookup(QPid, UQM) of
-                none ->
-                    noreply(State1);
-                {value, MsgSeqNosSet} ->
-                    case rabbit_misc:is_abnormal_termination(Reason) of
-                        true  -> rabbit_log:warning(
-                                   "Dead queue lost ~p messages~n",
-                                   [gb_sets:size(MsgSeqNosSet)]);
-                        false -> ok
-                    end,
-                    handle_confirm(gb_sets:to_list(MsgSeqNosSet), QPid, State1)
-            end
+            case rabbit_misc:is_abnormal_termination(Reason) of
+                true  -> {Lost, _UC1} = dtree:take_all(QPid, UC),
+                         rabbit_log:warning(
+                           "DLQ ~p for ~s died with ~p unconfirmed messages~n",
+                           [QPid, rabbit_misc:rs(qname(State)), length(Lost)]);
+                false -> ok
+            end,
+            {MsgSeqNoAckTags, UC1} = dtree:take(QPid, UC),
+            cleanup_after_confirm(
+              [AckTag || {_MsgSeqNo, AckTag} <- MsgSeqNoAckTags],
+              State#q{queue_monitors = dict:erase(QPid, QMons),
+                      unconfirmed    = UC1})
     end.
-
-handle_confirm(MsgSeqNos, QPid, State = #q{unconfirmed_mq      = UMQ,
-                                           unconfirmed_qm      = UQM,
-                                           backing_queue       = BQ,
-                                           backing_queue_state = BQS}) ->
-    {AckTags1, UMQ3} =
-        lists:foldl(
-          fun (MsgSeqNo, {AckTags, UMQ1}) ->
-                  {QPids, AckTag} = gb_trees:get(MsgSeqNo, UMQ1),
-                  QPids1 = gb_sets:delete(QPid, QPids),
-                  case gb_sets:is_empty(QPids1) of
-                      true  -> {[AckTag | AckTags],
-                                gb_trees:delete(MsgSeqNo, UMQ1)};
-                      false -> {AckTags, gb_trees:update(
-                                           MsgSeqNo, {QPids1, AckTag}, UMQ1)}
-                  end
-          end, {[], UMQ}, MsgSeqNos),
-    {_Guids, BQS1} = BQ:ack(AckTags1, BQS),
-    MsgSeqNos1 = gb_sets:difference(gb_trees:get(QPid, UQM),
-                                    gb_sets:from_list(MsgSeqNos)),
-    State1 = case gb_sets:is_empty(MsgSeqNos1) of
-                 false -> State#q{
-                            unconfirmed_qm =
-                                gb_trees:update(QPid, MsgSeqNos1, UQM)};
-                 true  -> demonitor_queue(
-                            QPid, State#q{
-                                    unconfirmed_qm =
-                                        gb_trees:delete(QPid, UQM)})
-             end,
-    cleanup_after_confirm(State1#q{unconfirmed_mq      = UMQ3,
-                                   backing_queue_state = BQS1}).
 
 stop_later(Reason, State) ->
     stop_later(Reason, undefined, noreply, State).
 
-stop_later(Reason, From, Reply, State = #q{unconfirmed_mq = UMQ}) ->
-    case {gb_trees:is_empty(UMQ), Reply} of
+stop_later(Reason, From, Reply, State = #q{unconfirmed = UC}) ->
+    case {dtree:is_empty(UC), Reply} of
         {true, noreply} ->
             {stop, Reason, State};
         {true, _} ->
@@ -839,16 +792,20 @@ stop_later(Reason, From, Reply, State = #q{unconfirmed_mq = UMQ}) ->
             noreply(State#q{delayed_stop = {Reason, {From, Reply}}})
     end.
 
-cleanup_after_confirm(State = #q{delayed_stop   = DS,
-                                 unconfirmed_mq = UMQ}) ->
-    case gb_trees:is_empty(UMQ) andalso DS =/= undefined of
+cleanup_after_confirm(AckTags, State = #q{delayed_stop        = DS,
+                                          unconfirmed         = UC,
+                                          backing_queue       = BQ,
+                                          backing_queue_state = BQS}) ->
+    {_Guids, BQS1} = BQ:ack(AckTags, BQS),
+    State1 = State#q{backing_queue_state = BQS1},
+    case dtree:is_empty(UC) andalso DS =/= undefined of
         true  -> case DS of
                      {_, {_, noreply}}  -> ok;
                      {_, {From, Reply}} -> gen_server2:reply(From, Reply)
                  end,
                  {Reason, _} = DS,
-                 {stop, Reason, State};
-        false -> noreply(State)
+                 {stop, Reason, State1};
+        false -> noreply(State1)
     end.
 
 already_been_here(_Delivery, #q{dlx = undefined}) ->
@@ -881,28 +838,32 @@ make_dead_letter_msg(DLX, Reason,
                                           exchange_name = Exchange,
                                           routing_keys  = RoutingKeys},
                      State = #q{dlx_routing_key = DlxRoutingKey}) ->
-    Headers = rabbit_basic:extract_headers(Content),
-    #resource{name = QName} = qname(State),
-    %% The first routing key is the one specified in the
-    %% basic.publish; all others are CC or BCC keys.
-    RoutingKeys1 = [hd(RoutingKeys) | rabbit_basic:header_routes(Headers)],
-    Info = [{<<"reason">>, longstr, list_to_binary(atom_to_list(Reason))},
-            {<<"queue">>, longstr, QName},
-            {<<"time">>, timestamp, rabbit_misc:now_ms() div 1000},
-            {<<"exchange">>, longstr, Exchange#resource.name},
-            {<<"routing-keys">>, array,
-             [{longstr, Key} || Key <- RoutingKeys1]}],
-    Headers1 = rabbit_basic:append_table_header(<<"x-death">>, Info, Headers),
-    {DeathRoutingKeys, Headers2} =
+    {DeathRoutingKeys, HeadersFun1} =
         case DlxRoutingKey of
-            undefined -> {RoutingKeys, Headers1};
+            undefined -> {RoutingKeys, fun (H) -> H end};
             _         -> {[DlxRoutingKey],
-                          lists:keydelete(<<"CC">>, 1, Headers1)}
+                          fun (H) -> lists:keydelete(<<"CC">>, 1, H) end}
         end,
-    Content1 = rabbit_basic:replace_headers(Headers2, Content),
+    #resource{name = QName} = qname(State),
+    HeadersFun2 =
+        fun (Headers) ->
+                %% The first routing key is the one specified in the
+                %% basic.publish; all others are CC or BCC keys.
+                RoutingKeys1 =
+                    [hd(RoutingKeys) | rabbit_basic:header_routes(Headers)],
+                Info = [{<<"reason">>,
+                         longstr, list_to_binary(atom_to_list(Reason))},
+                        {<<"queue">>, longstr, QName},
+                        {<<"time">>, timestamp, rabbit_misc:now_ms() div 1000},
+                        {<<"exchange">>, longstr, Exchange#resource.name},
+                        {<<"routing-keys">>, array,
+                         [{longstr, Key} || Key <- RoutingKeys1]}],
+                HeadersFun1(rabbit_basic:append_table_header(<<"x-death">>,
+                                                             Info, Headers))
+        end,
+    Content1 = rabbit_basic:map_headers(HeadersFun2, Content),
     Msg#basic_message{exchange_name = DLX, id = rabbit_guid:gen(),
                       routing_keys = DeathRoutingKeys, content = Content1}.
-
 
 now_micros() -> timer:now_diff(now(), {0,0,0}).
 
@@ -1094,7 +1055,8 @@ handle_call({deliver, Delivery = #delivery{immediate = true}}, _From, State) ->
     %% just all ready-to-consume queues get the message, with unready
     %% queues discarding the message?
     %%
-    {Delivered, Confirm, State1} = attempt_delivery(Delivery, State),
+    Confirm = should_confirm_message(Delivery, State),
+    {Delivered, State1} = attempt_delivery(Delivery, Confirm, State),
     reply(Delivered, case Delivered of
                          true  -> maybe_record_confirm_message(Confirm, State1);
                          false -> discard_delivery(Delivery, State1)
@@ -1229,8 +1191,14 @@ handle_call(force_event_refresh, _From,
     end,
     reply(ok, State).
 
-handle_cast({confirm, MsgSeqNos, QPid}, State) ->
-    handle_confirm(MsgSeqNos, QPid, State);
+handle_cast({confirm, MsgSeqNos, QPid}, State = #q{unconfirmed = UC}) ->
+    {MsgSeqNoAckTags, UC1} = dtree:take(MsgSeqNos, QPid, UC),
+    State1 = case dtree:is_defined(QPid, UC1) of
+                 false -> demonitor_queue(QPid, State);
+                 true  -> State
+             end,
+    cleanup_after_confirm([AckTag || {_MsgSeqNo, AckTag} <- MsgSeqNoAckTags],
+                          State1#q{unconfirmed = UC1});
 
 handle_cast(_, State = #q{delayed_stop = DS}) when DS =/= undefined ->
     noreply(State);
