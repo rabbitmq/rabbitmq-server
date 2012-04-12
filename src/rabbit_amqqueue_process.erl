@@ -1245,7 +1245,7 @@ handle_cast({reject, AckTags, Requeue, ChPid}, State) ->
                                             backing_queue_state = BQS}) ->
                                    BQS1           = BQ:fold(Fun, BQS, AckTags),
                                    {_Guids, BQS2} = BQ:ack(AckTags, BQS1),
-                                   State1#q{backing_queue_state = BQS1}
+                                   State1#q{backing_queue_state = BQS2}
                            end
               end));
 
