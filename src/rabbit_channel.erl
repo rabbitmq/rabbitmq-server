@@ -758,9 +758,7 @@ handle_method(#'basic.cancel'{consumer_tag = ConsumerTag,
                    fun () -> {error, not_found} end,
                    fun () ->
                            rabbit_amqqueue:basic_cancel(
-                             Q, self(), ConsumerTag,
-                             ok_msg(NoWait, #'basic.cancel_ok'{
-                                      consumer_tag = ConsumerTag}))
+                             Q, self(), ConsumerTag, ok_msg(NoWait, OkMsg))
                    end) of
                 ok ->
                     {noreply, NewState};
