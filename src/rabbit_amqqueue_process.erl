@@ -236,18 +236,17 @@ process_args(State = #q{q = #amqqueue{arguments = Arguments}}) ->
        {<<"x-dead-letter-routing-key">>, fun init_dlx_routing_key/2}]).
 
 init_expires(After, State) when is_integer(After)->
-    ensure_expiry_timer(State#q{expires = {After, true, false}});
+    ensure_expiry_timer(State #q{expires = {After, true, false}});
 init_expires(ExpireTable, State) ->
     Lookup = fun (Key, Default) ->
-        case rabbit_misc:table_lookup(ExpireTable, Key) of
-            undefined -> Default;
-            {_Type, Val} -> Val
-        end
-    end,
-    ensure_expiry_timer(State#q{expires = {
-        Lookup(<<"after">>, undefined), % This will always be defined.
-        Lookup(<<"if_unused">>, true),
-        Lookup(<<"if_empty">>, false)}}).
+                 case rabbit_misc:table_lookup(ExpireTable, Key) of
+                     undefined    -> Default;
+                     {_Type, Val} -> Val
+                 end
+             end,
+    ensure_expiry_timer(State #q{expires = {Lookup(<<"after">>, undefined),
+                                            Lookup(<<"if_unused">>, true),
+                                            Lookup(<<"if_empty">>, false)}}).
 
 init_ttl(TTL, State) -> drop_expired_messages(State#q{ttl = TTL}).
 
@@ -334,18 +333,15 @@ stop_expiry_timer(State = #q{expiry_timer_ref = TRef}) ->
     State#q{expiry_timer_ref = undefined}.
 
 ensure_expiry_timer(State = #q{expires          = Expires,
-                               expiry_timer_ref = TRef
-                              }) when Expires ==  undefined orelse
-                                      TRef    =/= undefined ->
+                               expiry_timer_ref = TRef})
+  when Expires ==  undefined orelse TRef =/= undefined ->
     State;
 ensure_expiry_timer(State = #q{expires          = {After, _IfUnused, _IfEmpty},
                                expiry_timer_ref = undefined}) ->
     case should_expire(State) of
-        true ->
-            TRef = erlang:send_after(After, self(), maybe_expire),
-            State#q{expiry_timer_ref = TRef};
-        false ->
-            State
+        true  -> TRef = erlang:send_after(After, self(), maybe_expire),
+                 State#q{expiry_timer_ref = TRef};
+        false -> State
     end.
 
 ensure_stats_timer(State) ->

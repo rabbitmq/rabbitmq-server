@@ -348,19 +348,18 @@ check_declare_arguments(QueueName, Args) ->
      end || {Key, Fun} <- Checks],
     ok.
 
-check_expires_arg({table, ExpireTable}, Args) ->
-    case rabbit_misc:table_lookup(ExpireTable, <<"after">>) of
+check_expires_arg({table, Expire}, Args) ->
+    case rabbit_misc:table_lookup(Expire, <<"after">>) of
         undefined -> {error, {missing_expiry_table_entry, 'after'}};
         _         -> lists:foldl(
-            fun (Key, ok) ->
-                    case rabbit_misc:table_lookup(ExpireTable, Key) of
-                        undefined -> ok;
-                        KeyVal -> check_bool_arg(KeyVal, Args)
-                    end;
-                (_, Error) ->
-                    Error
-            end, ok, [<<"if_unused">>, <<"if_empty">>]
-        )
+                       fun (Key, ok) ->
+                               case rabbit_misc:table_lookup(Expire, Key) of
+                                   undefined -> ok;
+                                   KeyVal    -> check_bool_arg(KeyVal, Args)
+                               end;
+                           (_, Error) ->
+                               Error
+                       end, ok, [<<"if_unused">>, <<"if_empty">>])
     end;
 
 check_expires_arg(TypeVal, Args) ->
