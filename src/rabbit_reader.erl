@@ -37,7 +37,7 @@
 
 -record(v1, {parent, sock, connection, callback, recv_len, pending_recv,
              connection_state, queue_collector, heartbeater, stats_timer,
-             channel_sup_sup_pid, start_heartbeat_fun, buf, buf_len,
+             channel_sup_sup_pid, start_heartbeat_fun, buf, buf_len, mss_est,
              auth_mechanism, auth_state, conserve_resources,
              last_blocked_by, last_blocked_at}).
 
@@ -276,7 +276,7 @@ mainloop(Deb, State = #v1{connection_state = CState}) ->
     end.
 
 mainloop0(Deb, State = #v1{sock = Sock, buf = Buf, buf_len = BufLen,
-                           recv_len = RecvLen}) ->
+                           recv_len = RecvLen, mss_est = MSSEst}) ->
     %% If we are mainly dealing with small messages we want to request
     %% "as much as you can give us" (which will typically work out to
     %% the Maximum Segment Size) so as to not use too many
@@ -284,13 +284,25 @@ mainloop0(Deb, State = #v1{sock = Sock, buf = Buf, buf_len = BufLen,
     %% request the exact length (which will typically be larger than
     %% the MSS, i.e. gen_tcp:recv will wait) so that we don't have to
     %% reassemble too much.
-    Req = case RecvLen > 1460 of
-              true  -> RecvLen;
-              false -> 0
-          end,
-    case rabbit_net:recv(Sock, Req) of
-        {ok, Data}      -> recvloop(Deb, State#v1{buf = [Data | Buf],
-                                                  buf_len = BufLen + size(Data),
+    %%
+    %% We try to estimate the MSS by keeping track of the largest
+    %% number of bytes we have got back from rabbit_net:recv/2 when
+    %% Count = 0.
+    Count = case RecvLen =< MSSEst of %% true when MSSEst =:= undefined
+                true  -> 0;
+                false -> RecvLen
+            end,
+    case rabbit_net:recv(Sock, Count) of
+        {ok, Data}      -> Size = size(Data),
+                           MSSEst1 =
+                               case {Count, MSSEst} of
+                                   {_, undefined} -> Size;
+                                   {0, _}         -> erlang:max(MSSEst, Size);
+                                   _              -> MSSEst
+                               end,
+                           recvloop(Deb, State#v1{buf = [Data | Buf],
+                                                  buf_len = BufLen + Size,
+                                                  mss_est = MSSEst1,
                                                   pending_recv = false});
         {error, closed} -> case State#v1.connection_state of
                                closed -> State;
