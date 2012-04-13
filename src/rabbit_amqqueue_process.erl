@@ -713,6 +713,14 @@ ensure_ttl_timer(State = #q{backing_queue       = BQ,
 ensure_ttl_timer(State) ->
     State.
 
+ack_nacked_messages(AckTags, State = #q{dlx                 = undefined,
+                                        backing_queue       = BQ,
+                                        backing_queue_state = BQS }) ->
+    {_Guids, BQS1} = BQ:ack(AckTags, BQS),
+    State#q{backing_queue_state = BQS1};
+ack_nacked_messages(_AckTags, State) ->
+    State.
+
 dead_letter_fun(_Reason, #q{dlx = undefined}) ->
     undefined;
 dead_letter_fun(Reason, _State) ->
@@ -1244,16 +1252,10 @@ handle_cast({reject, AckTags, Requeue, ChPid}, State) ->
                   false ->
                       Fun = dead_letter_fun(rejected, State),
                       fun (State1 = #q{backing_queue       = BQ,
-                                       backing_queue_state = BQS,
-                                       dlx                 = DLX}) ->
+                                       backing_queue_state = BQS}) ->
                               BQS1 = BQ:fold(Fun, BQS, AckTags),
-                              BQS2 = case DLX of
-                                         undefined -> {_Guids, BQS3} =
-                                                          BQ:ack(AckTags, BQS1),
-                                                      BQS3;
-                                         _         -> BQS1
-                                     end,
-                              State1#q{backing_queue_state = BQS2}
+                              ack_nacked_messages(
+                                AckTags, State1#q{backing_queue_state = BQS1})
                       end
               end));
 
