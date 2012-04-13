@@ -275,8 +275,20 @@ mainloop(Deb, State = #v1{connection_state = CState}) ->
                    end
     end.
 
-mainloop0(Deb, State = #v1{sock = Sock, buf = Buf, buf_len = BufLen}) ->
-    case rabbit_net:recv(Sock) of
+mainloop0(Deb, State = #v1{sock = Sock, buf = Buf, buf_len = BufLen,
+                           recv_len = RecvLen}) ->
+    %% If we are mainly dealing with small messages we want to request
+    %% "as much as you can give us" (which will typically work out to
+    %% the Maximum Segment Size) so as to not use too many
+    %% syscalls. But if we are dealing with larger messages we want to
+    %% request the exact length (which will typically be larger than
+    %% the MSS, i.e. gen_tcp:recv will wait) so that we don't have to
+    %% reassemble too much.
+    Req = case RecvLen > 1460 of
+              true  -> RecvLen;
+              false -> 0
+          end,
+    case rabbit_net:recv(Sock, Req) of
         {ok, Data}      -> recvloop(Deb, State#v1{buf = [Data | Buf],
                                                   buf_len = BufLen + size(Data),
                                                   pending_recv = false});
