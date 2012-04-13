@@ -191,6 +191,7 @@ name(Sock) ->
 start_connection(Parent, ChannelSupSupPid, Collector, StartHeartbeatFun, Deb,
                  Sock, SockTransform) ->
     process_flag(trap_exit, true),
+    ok = rabbit_net:setopts(Sock, [{active, false}]),
     ConnStr = name(Sock),
     log(info, "accepting AMQP connection ~p (~s)~n", [self(), ConnStr]),
     ClientSock = socket_op(Sock, SockTransform),
@@ -250,9 +251,8 @@ recvloop(Deb, State = #v1{pending_recv = true}) ->
     mainloop(Deb, State);
 recvloop(Deb, State = #v1{connection_state = blocked}) ->
     mainloop(Deb, State);
-recvloop(Deb, State = #v1{sock = Sock, recv_len = RecvLen, buf_len = BufLen})
+recvloop(Deb, State = #v1{recv_len = RecvLen, buf_len = BufLen})
   when BufLen < RecvLen ->
-    ok = rabbit_net:setopts(Sock, [{active, once}]),
     mainloop(Deb, State#v1{pending_recv = true});
 recvloop(Deb, State = #v1{recv_len = RecvLen, buf = Buf, buf_len = BufLen}) ->
     {Data, Rest} = split_binary(case Buf of
@@ -263,17 +263,28 @@ recvloop(Deb, State = #v1{recv_len = RecvLen, buf = Buf, buf_len = BufLen}) ->
                                State#v1{buf = [Rest],
                                         buf_len = BufLen - RecvLen})).
 
-mainloop(Deb, State = #v1{sock = Sock, buf = Buf, buf_len = BufLen}) ->
+mainloop(Deb, State = #v1{connection_state = CState}) ->
+    case CState of
+        blocked -> receive
+                       Msg -> handle_other(Msg, Deb, State)
+                   end;
+        _       -> receive
+                       Msg -> handle_other(Msg, Deb, State)
+                   after 0 ->
+                           mainloop0(Deb, State)
+                   end
+    end.
+
+mainloop0(Deb, State = #v1{sock = Sock, buf = Buf, buf_len = BufLen}) ->
     case rabbit_net:recv(Sock) of
-        {data, Data}    -> recvloop(Deb, State#v1{buf = [Data | Buf],
+        {ok, Data}      -> recvloop(Deb, State#v1{buf = [Data | Buf],
                                                   buf_len = BufLen + size(Data),
                                                   pending_recv = false});
-        closed          -> case State#v1.connection_state of
+        {error, closed} -> case State#v1.connection_state of
                                closed -> State;
                                _      -> throw(connection_closed_abruptly)
                            end;
-        {error, Reason} -> throw({inet_error, Reason});
-        {other, Other}  -> handle_other(Other, Deb, State)
+        {error, Reason} -> throw({inet_error, Reason})
     end.
 
 handle_other({conserve_resources, Conserve}, Deb, State) ->

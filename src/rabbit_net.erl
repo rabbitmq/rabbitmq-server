@@ -90,18 +90,8 @@ getstat(Sock, Stats) when ?IS_SSL(Sock) ->
 getstat(Sock, Stats) when is_port(Sock) ->
     inet:getstat(Sock, Stats).
 
-recv(Sock) when ?IS_SSL(Sock) ->
-    recv(Sock#ssl_socket.ssl, {ssl, ssl_closed, ssl_error});
-recv(Sock) when is_port(Sock) ->
-    recv(Sock, {tcp, tcp_closed, tcp_error}).
-
-recv(S, {DataTag, ClosedTag, ErrorTag}) ->
-    receive
-        {DataTag, S, Data}    -> {data, Data};
-        {ClosedTag, S}        -> closed;
-        {ErrorTag, S, Reason} -> {error, Reason};
-        Other                 -> {other, Other}
-    end.
+recv(Sock) when ?IS_SSL(Sock) -> ssl:recv(Sock#ssl_socket.ssl, 0);
+recv(Sock) when is_port(Sock) -> gen_tcp:recv(Sock, 0).
 
 async_recv(Sock, Length, Timeout) when ?IS_SSL(Sock) ->
     Pid = self(),
