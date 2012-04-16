@@ -97,15 +97,26 @@ recv(Sock, Ref) ->
 
 async_recv(Sock, Length, Timeout) when ?IS_SSL(Sock) ->
     Ref = make_ref(),
-
-    self() ! {inet_async, Sock, Ref,
-              ssl:recv(Sock#ssl_socket.ssl, Length, Timeout)},
-
+    Buddy = case get(ssl_buddy) of
+                undefined -> B = spawn_link(fun ssl_buddy_loop/0),
+                             put(ssl_buddy, B),
+                             B;
+                B         -> B
+            end,
+    Buddy ! {recv, self(), Sock, Ref, Length, Timeout},
     {ok, Ref};
 async_recv(Sock, Length, infinity) when is_port(Sock) ->
     prim_inet:async_recv(Sock, Length, -1);
 async_recv(Sock, Length, Timeout) when is_port(Sock) ->
     prim_inet:async_recv(Sock, Length, Timeout).
+
+ssl_buddy_loop() ->
+    receive
+        {recv, Pid, Sock, Ref, Length, Timeout} ->
+            Pid ! {inet_async, Sock, Ref,
+                   ssl:recv(Sock#ssl_socket.ssl, Length, Timeout)},
+            ssl_buddy_loop()
+    end.
 
 port_command(Sock, Data) when ?IS_SSL(Sock) ->
     case ssl:send(Sock#ssl_socket.ssl, Data) of
