@@ -135,11 +135,11 @@ take2(PKS, SK, P) ->
     gb_sets:fold(fun (PK, {KVs, P0}) ->
                          {SKS, V} = gb_trees:get(PK, P0),
                          SKS1 = gb_sets:delete(SK, SKS),
-                         case gb_sets:is_empty(SKS1) of
-                             true  -> KVs1 = [{PK, V} | KVs],
-                                      {KVs1, gb_trees:delete(PK, P0)};
-                             false -> {KVs,  gb_trees:update(PK, {SKS1, V}, P0)}
-                         end
+                         {[{PK, V} | KVs],
+                          case gb_sets:is_empty(SKS1) of
+                              true  -> gb_trees:delete(PK, P0);
+                              false -> gb_trees:update(PK, {SKS1, V}, P0)
+                          end}
                  end, {[], P}, PKS).
 
 take_all2(PKS, P) ->
