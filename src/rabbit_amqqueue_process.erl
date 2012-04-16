@@ -828,9 +828,8 @@ detect_dead_letter_cycles(#delivery{message = #basic_message{content = Content}}
                                   ordsets:is_element(Queue#resource.name,
                                                      OldQueuesSet)
                           end, Queues),
-                    {NotCycling,
-                     lists:map(
-                       fun (Q) -> [Q#resource.name | OldQueues1] end, Cycling)};
+                    {NotCycling, [[QName | OldQueues1] ||
+                                     #resource{name = QName} <- Cycling]};
                 _ ->
                     NoCycles
             end
