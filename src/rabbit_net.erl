@@ -18,7 +18,7 @@
 -include("rabbit.hrl").
 
 -export([is_ssl/1, ssl_info/1, controlling_process/2, getstat/2,
-         recv/2, async_recv/3, port_command/2, setopts/2, send/2, close/1,
+         recv/2, async_recv/3, port_command/2, send/2, close/1,
          maybe_fast_close/1, sockname/1, peername/1, peercert/1,
          connection_string/2]).
 
@@ -49,9 +49,6 @@
 -spec(async_recv/3 ::
         (socket(), integer(), timeout()) -> rabbit_types:ok(any())).
 -spec(port_command/2 :: (socket(), iolist()) -> 'true').
--spec(setopts/2 :: (socket(), [{atom(), any()} |
-                               {raw, non_neg_integer(), non_neg_integer(),
-                                binary()}]) -> ok_or_any_error()).
 -spec(send/2 :: (socket(), binary() | iolist()) -> ok_or_any_error()).
 -spec(close/1 :: (socket()) -> ok_or_any_error()).
 -spec(maybe_fast_close/1 :: (socket()) -> ok_or_any_error()).
@@ -120,11 +117,6 @@ port_command(Sock, Data) when ?IS_SSL(Sock) ->
     end;
 port_command(Sock, Data) when is_port(Sock) ->
     erlang:port_command(Sock, Data).
-
-setopts(Sock, Options) when ?IS_SSL(Sock) ->
-    ssl:setopts(Sock#ssl_socket.ssl, Options);
-setopts(Sock, Options) when is_port(Sock) ->
-    inet:setopts(Sock, Options).
 
 send(Sock, Data) when ?IS_SSL(Sock) -> ssl:send(Sock#ssl_socket.ssl, Data);
 send(Sock, Data) when is_port(Sock) -> gen_tcp:send(Sock, Data).

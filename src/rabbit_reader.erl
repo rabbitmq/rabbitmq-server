@@ -191,7 +191,6 @@ name(Sock) ->
 start_connection(Parent, ChannelSupSupPid, Collector, StartHeartbeatFun, Deb,
                  Sock, SockTransform) ->
     process_flag(trap_exit, true),
-    ok = rabbit_net:setopts(Sock, [{active, false}]),
     ConnStr = name(Sock),
     log(info, "accepting AMQP connection ~p (~s)~n", [self(), ConnStr]),
     ClientSock = socket_op(Sock, SockTransform),
