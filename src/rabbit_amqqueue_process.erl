@@ -739,10 +739,10 @@ dead_letter_publish(Msg, Reason,
           false, false, make_dead_letter_msg(DLX, Reason, Msg, State),
           MsgSeqNo),
     {ok, X} = rabbit_exchange:lookup(XName),
-    QueueNames = rabbit_exchange:route(X, Delivery),
-    {QueueNames1, Cycles} = detect_dead_letter_cycles(Delivery, QueueNames),
+    Queues = rabbit_exchange:route(X, Delivery),
+    {Queues1, Cycles} = detect_dead_letter_cycles(Delivery, Queues),
     lists:foreach(fun log_cycle_once/1, Cycles),
-    QPids = rabbit_amqqueue:lookup(QueueNames1),
+    QPids = rabbit_amqqueue:lookup(Queues1),
     {_, DeliveredQPids} = rabbit_amqqueue:deliver(QPids, Delivery),
     DeliveredQPids.
 
@@ -808,10 +808,10 @@ cleanup_after_confirm(AckTags, State = #q{delayed_stop        = DS,
     end.
 
 detect_dead_letter_cycles(#delivery{message = #basic_message{content = Content}},
-                          QueueNames) ->
+                          Queues) ->
     #content{properties = #'P_basic'{headers = Headers}} =
         rabbit_binary_parser:ensure_content_decoded(Content),
-    NoCycles = {QueueNames, []},
+    NoCycles = {Queues, []},
     case Headers of
         undefined ->
             NoCycles;
@@ -824,13 +824,15 @@ detect_dead_letter_cycles(#delivery{message = #basic_message{content = Content}}
                     OldQueuesSet = ordsets:from_list(OldQueues1),
                     {Cycling, NotCycling} =
                         lists:partition(
-                          fun(QueueName) ->
-                                  ordsets:is_element(QueueName, OldQueuesSet)
-                          end, QueueNames),
+                          fun(Queue) ->
+                                  ordsets:is_element(Queue#resource.name,
+                                                     OldQueuesSet)
+                          end, Queues),
                     {NotCycling,
-                     lists:map(fun (Q) -> [Q | OldQueues1] end, Cycling)};
+                     lists:map(
+                       fun (Q) -> [Q#resource.name | OldQueues1] end, Cycling)};
                 _ ->
-                    QueueNames
+                    NoCycles
             end
     end.
 
