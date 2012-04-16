@@ -278,29 +278,25 @@ recvloop(Deb, State = #v1{recv_len = RecvLen, buf = Buf, buf_len = BufLen}) ->
 
 mainloop(Deb, State = #v1{sock = Sock, buf = Buf, buf_len = BufLen,
                           recv_ref = Ref, mss_est = MSSEst}) ->
-    receive
-        {inet_async, Sock, Ref, {ok, Data}} ->
-            Size = size(Data),
-            MSSEst1 =
-                case {bytes_wanted(State), MSSEst} of
-                    {_, undefined} -> Size;
-                    {0, _}         -> erlang:max(MSSEst, Size);
-                    _              -> MSSEst
-                end,
-            recvloop(Deb, State#v1{buf = [Data | Buf],
-                                   buf_len = BufLen + Size,
-                                   mss_est = MSSEst1,
-                                   recv_ref = none
-                                  });
-        {inet_async, Sock, Ref, {error, closed}} ->
-            case State#v1.connection_state of
-                closed -> State;
-                _      -> throw(connection_closed_abruptly)
-            end;
-        {inet_async, Sock, Ref, {error, Reason}} ->
-            throw({inet_error, Reason});
-        Msg ->
-            handle_other(Msg, Deb, State)
+    case rabbit_net:recv(Sock, Ref) of
+        {data, Data}    -> Size = size(Data),
+                           MSSEst1 =
+                               case {bytes_wanted(State), MSSEst} of
+                                   {_, undefined} -> Size;
+                                   {0, _}         -> erlang:max(MSSEst, Size);
+                                   _              -> MSSEst
+                               end,
+                           recvloop(Deb, State#v1{buf = [Data | Buf],
+                                                  buf_len = BufLen + Size,
+                                                  mss_est = MSSEst1,
+                                                  recv_ref = none
+                                                 });
+        closed          -> case State#v1.connection_state of
+                               closed -> State;
+                               _      -> throw(connection_closed_abruptly)
+                           end;
+        {error, Reason} -> throw({inet_error, Reason});
+        {other, Other}  -> handle_other(Other, Deb, State)
     end.
 
 bytes_wanted(#v1{recv_len = RecvLen, mss_est = MSSEst}) ->
