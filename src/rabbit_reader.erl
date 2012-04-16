@@ -298,10 +298,10 @@ mainloop(Deb, State = #v1{sock = Sock, buf = Buf, buf_len = BufLen,
         {other, Other}  -> handle_other(Other, Deb, State)
     end.
 
-bytes_wanted(#v1{recv_len = RecvLen, mss_est = MSSEst}) ->
-    case RecvLen =< MSSEst of %% true when MSSEst =:= undefined
+bytes_wanted(#v1{recv_len = RecvLen, buf_len = BufLen, mss_est = MSSEst}) ->
+    case RecvLen - BufLen =< MSSEst of %% true when MSSEst =:= undefined
         true  -> 0;
-        false -> RecvLen
+        false -> RecvLen - BufLen
     end.
 
 handle_other({conserve_resources, Conserve}, Deb, State) ->
