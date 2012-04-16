@@ -96,12 +96,10 @@ recv(Sock, Ref) ->
     end.
 
 async_recv(Sock, Length, Timeout) when ?IS_SSL(Sock) ->
-    Pid = self(),
     Ref = make_ref(),
 
-    spawn(fun () -> Pid ! {inet_async, Sock, Ref,
-                           ssl:recv(Sock#ssl_socket.ssl, Length, Timeout)}
-          end),
+    self() ! {inet_async, Sock, Ref,
+              ssl:recv(Sock#ssl_socket.ssl, Length, Timeout)},
 
     {ok, Ref};
 async_recv(Sock, Length, infinity) when is_port(Sock) ->
