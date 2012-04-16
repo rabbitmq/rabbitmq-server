@@ -35,7 +35,7 @@
 
 %%--------------------------------------------------------------------------
 
--record(v1, {parent, sock, connection, callback, recv_len, pending_recv,
+-record(v1, {parent, sock, connection, callback, recv_len, recv_ref,
              connection_state, queue_collector, heartbeater, stats_timer,
              channel_sup_sup_pid, start_heartbeat_fun, buf, buf_len, mss_est,
              auth_mechanism, auth_state, conserve_resources,
@@ -209,7 +209,7 @@ start_connection(Parent, ChannelSupSupPid, Collector, StartHeartbeatFun, Deb,
                   capabilities       = []},
                 callback            = uninitialized_callback,
                 recv_len            = 0,
-                pending_recv        = false,
+                recv_ref            = none,
                 connection_state    = pre_init,
                 queue_collector     = Collector,
                 heartbeater         = none,
@@ -247,36 +247,12 @@ start_connection(Parent, ChannelSupSupPid, Collector, StartHeartbeatFun, Deb,
     end,
     done.
 
-recvloop(Deb, State = #v1{pending_recv = true}) ->
+recvloop(Deb, State = #v1{recv_ref = Ref}) when Ref =/= none ->
     mainloop(Deb, State);
 recvloop(Deb, State = #v1{connection_state = blocked}) ->
     mainloop(Deb, State);
 recvloop(Deb, State = #v1{recv_len = RecvLen, buf_len = BufLen})
   when BufLen < RecvLen ->
-    mainloop(Deb, State#v1{pending_recv = true});
-recvloop(Deb, State = #v1{recv_len = RecvLen, buf = Buf, buf_len = BufLen}) ->
-    {Data, Rest} = split_binary(case Buf of
-                                    [B] -> B;
-                                    _   -> list_to_binary(lists:reverse(Buf))
-                                end, RecvLen),
-    recvloop(Deb, handle_input(State#v1.callback, Data,
-                               State#v1{buf = [Rest],
-                                        buf_len = BufLen - RecvLen})).
-
-mainloop(Deb, State = #v1{connection_state = CState}) ->
-    case CState of
-        blocked -> receive
-                       Msg -> handle_other(Msg, Deb, State)
-                   end;
-        _       -> receive
-                       Msg -> handle_other(Msg, Deb, State)
-                   after 0 ->
-                           mainloop0(Deb, State)
-                   end
-    end.
-
-mainloop0(Deb, State = #v1{sock = Sock, buf = Buf, buf_len = BufLen,
-                           recv_len = RecvLen, mss_est = MSSEst}) ->
     %% If we are mainly dealing with small messages we want to request
     %% "as much as you can give us" (which will typically work out to
     %% the Maximum Segment Size) so as to not use too many
@@ -286,29 +262,51 @@ mainloop0(Deb, State = #v1{sock = Sock, buf = Buf, buf_len = BufLen,
     %% reassemble too much.
     %%
     %% We try to estimate the MSS by keeping track of the largest
-    %% number of bytes we have got back from rabbit_net:recv/2 when
-    %% Count = 0.
-    Count = case RecvLen =< MSSEst of %% true when MSSEst =:= undefined
-                true  -> 0;
-                false -> RecvLen
-            end,
-    case rabbit_net:recv(Sock, Count) of
-        {ok, Data}      -> Size = size(Data),
-                           MSSEst1 =
-                               case {Count, MSSEst} of
-                                   {_, undefined} -> Size;
-                                   {0, _}         -> erlang:max(MSSEst, Size);
-                                   _              -> MSSEst
-                               end,
-                           recvloop(Deb, State#v1{buf = [Data | Buf],
-                                                  buf_len = BufLen + Size,
-                                                  mss_est = MSSEst1,
-                                                  pending_recv = false});
-        {error, closed} -> case State#v1.connection_state of
-                               closed -> State;
-                               _      -> throw(connection_closed_abruptly)
-                           end;
-        {error, Reason} -> throw({inet_error, Reason})
+    %% number of bytes we have got back when bytes_wanted/1 = 0.
+    Ref = inet_op(fun () ->
+                          rabbit_net:async_recv(
+                            State#v1.sock, bytes_wanted(State), infinity) end),
+    mainloop(Deb, State#v1{recv_ref = Ref});
+recvloop(Deb, State = #v1{recv_len = RecvLen, buf = Buf, buf_len = BufLen}) ->
+    {Data, Rest} = split_binary(case Buf of
+                                    [B] -> B;
+                                    _   -> list_to_binary(lists:reverse(Buf))
+                                end, RecvLen),
+    recvloop(Deb, handle_input(State#v1.callback, Data,
+                               State#v1{buf = [Rest],
+                                        buf_len = BufLen - RecvLen})).
+
+mainloop(Deb, State = #v1{sock = Sock, buf = Buf, buf_len = BufLen,
+                          recv_ref = Ref, mss_est = MSSEst}) ->
+    receive
+        {inet_async, Sock, Ref, {ok, Data}} ->
+            Size = size(Data),
+            MSSEst1 =
+                case {bytes_wanted(State), MSSEst} of
+                    {_, undefined} -> Size;
+                    {0, _}         -> erlang:max(MSSEst, Size);
+                    _              -> MSSEst
+                end,
+            recvloop(Deb, State#v1{buf = [Data | Buf],
+                                   buf_len = BufLen + Size,
+                                   mss_est = MSSEst1,
+                                   recv_ref = none
+                                  });
+        {inet_async, Sock, Ref, {error, closed}} ->
+            case State#v1.connection_state of
+                closed -> State;
+                _      -> throw(connection_closed_abruptly)
+            end;
+        {inet_async, Sock, Ref, {error, Reason}} ->
+            throw({inet_error, Reason});
+        Msg ->
+            handle_other(Msg, Deb, State)
+    end.
+
+bytes_wanted(#v1{recv_len = RecvLen, mss_est = MSSEst}) ->
+    case RecvLen =< MSSEst of %% true when MSSEst =:= undefined
+        true  -> 0;
+        false -> RecvLen
     end.
 
 handle_other({conserve_resources, Conserve}, Deb, State) ->
