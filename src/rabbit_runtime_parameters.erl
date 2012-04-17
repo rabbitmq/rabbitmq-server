@@ -65,24 +65,36 @@ format_error(L) ->
 
 set0(AppName, Key, Term) ->
     case lookup_app(AppName) of
-        {ok, Mod} -> case flatten_errors(validate(Term)) of
-                         ok -> case flatten_errors(
-                                      Mod:validate(AppName, Key, Term)) of
-                                   ok -> mnesia_update(AppName, Key, Term),
-                                         Mod:notify(AppName, Key, Term),
-                                         ok;
-                                   E  -> E
-                               end;
-                         E  -> E
-                     end;
-        E         -> E
+        {ok, Mod} ->
+            case flatten_errors(validate(Term)) of
+                ok ->
+                    case flatten_errors(Mod:validate(AppName, Key, Term)) of
+                        ok ->
+                            case mnesia_update(AppName, Key, Term) of
+                                {old, Term} -> ok;
+                                _           -> Mod:notify(AppName, Key, Term)
+                            end,
+                            ok;
+                        E ->
+                            E
+                    end;
+                E ->
+                    E
+            end;
+        E ->
+            E
     end.
 
 mnesia_update(AppName, Key, Term) ->
-    ok = rabbit_misc:execute_mnesia_transaction(
-           fun () ->
-                   ok = mnesia:write(?TABLE, c(AppName, Key, Term), write)
-           end).
+    rabbit_misc:execute_mnesia_transaction(
+      fun () ->
+              Res = case mnesia:read(?TABLE, {AppName, Key}) of
+                        []       -> new;
+                        [Params] -> {old, Params#runtime_parameters.value}
+                    end,
+              ok = mnesia:write(?TABLE, c(AppName, Key, Term), write),
+              Res
+      end).
 
 clear(AppName, Key) ->
     case clear0(AppName, Key) of
