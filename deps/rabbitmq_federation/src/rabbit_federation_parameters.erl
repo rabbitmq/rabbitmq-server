@@ -25,8 +25,6 @@
 -rabbit_boot_step({?MODULE,
                    [{description, "federation parameters"},
                     {mfa, {rabbit_federation_parameters, register, []}},
-                    {mfa, {rabbit_registry, register,
-                           [runtime_parameter, <<"federation">>, ?MODULE]}},
                     {requires, rabbit_registry},
                     {enables, recovery}]}).
 
