@@ -42,7 +42,10 @@ adjust(Sup, XName, everything) ->
 adjust(Sup, XName, {connection, ConnName}) ->
     OldUpstreams0 = children(Sup, ConnName),
     NewUpstreams0 = upstreams(XName, ConnName),
-    %% If any haven't changed, don't restart them
+    %% If any haven't changed, don't restart them. The broker will
+    %% avoid telling us about connections that have not changed
+    %% syntactically, but even if one has, this X may not have that
+    %% connection in an upstream, so we still need to check here.
     {OldUpstreams, NewUpstreams} =
         lists:foldl(
           fun (OldU, {OldUs, NewUs}) ->
