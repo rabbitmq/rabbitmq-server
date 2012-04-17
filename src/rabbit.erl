@@ -347,10 +347,7 @@ status() ->
 is_running() -> is_running(node()).
 
 is_running(Node) ->
-    case rpc:call(Node, application, which_applications, [infinity]) of
-        {badrpc, _} -> false;
-        Apps        -> proplists:is_defined(rabbit, Apps)
-    end.
+    rabbit_misc:is_running(Node, rabbit).
 
 environment() ->
     lists:keysort(
