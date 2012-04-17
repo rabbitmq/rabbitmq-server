@@ -263,7 +263,7 @@ recvloop(Deb, State = #v1{sock = Sock, recv_len = RecvLen, buf_len = BufLen})
     %% We try to estimate the MSS by keeping track of the largest
     %% number of bytes we have got back when bytes_wanted/1 = 0.
     Len = bytes_wanted(State),
-    Ref = inet_op(fun () -> rabbit_net:async_recv(Sock, Len, infinity) end),
+    Ref = inet_op(fun () -> rabbit_net:async_recv(Sock, Len) end),
     mainloop(Deb, State#v1{recv_ref = Ref});
 recvloop(Deb, State = #v1{recv_len = RecvLen, buf = Buf, buf_len = BufLen}) ->
     {Data, Rest} = split_binary(case Buf of

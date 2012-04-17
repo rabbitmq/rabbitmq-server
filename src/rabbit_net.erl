@@ -18,7 +18,7 @@
 -include("rabbit.hrl").
 
 -export([is_ssl/1, ssl_info/1, controlling_process/2, getstat/2,
-         recv/2, async_recv/3, port_command/2, send/2, close/1,
+         recv/2, async_recv/2, port_command/2, send/2, close/1,
          maybe_fast_close/1, sockname/1, peername/1, peercert/1,
          connection_string/2]).
 
@@ -46,8 +46,7 @@
 -spec(recv/2 :: (socket(), non_neg_integer()) ->
                      {'data', [char()] | binary()} | 'closed' |
                      rabbit_types:error(any()) | {'other', any()}).
--spec(async_recv/3 ::
-        (socket(), integer(), timeout()) -> rabbit_types:ok(any())).
+-spec(async_recv/2 :: (socket(), integer()) -> rabbit_types:ok(any())).
 -spec(port_command/2 :: (socket(), iolist()) -> 'true').
 -spec(send/2 :: (socket(), binary() | iolist()) -> ok_or_any_error()).
 -spec(close/1 :: (socket()) -> ok_or_any_error()).
@@ -87,7 +86,16 @@ getstat(Sock, Stats) when ?IS_SSL(Sock) ->
 getstat(Sock, Stats) when is_port(Sock) ->
     inet:getstat(Sock, Stats).
 
-recv(Sock, Ref) ->
+recv(Sock, ok) when ?IS_SSL(Sock) ->
+    SSL = Sock#ssl_socket.ssl,
+    receive
+        {ssl,        SSL, Data}   -> {data, Data};
+        {ssl_closed, SSL}         -> closed;
+        {ssl_error,  SSL, Reason} -> {error, Reason};
+        Other                     -> {other, Other}
+    end;
+
+recv(Sock, Ref) when is_port(Sock) ->
     receive
         {inet_async, Sock, Ref, {ok, Data}}      -> {data, Data};
         {inet_async, Sock, Ref, {error, closed}} -> closed;
@@ -95,28 +103,10 @@ recv(Sock, Ref) ->
         Other                                    -> {other, Other}
     end.
 
-async_recv(Sock, Length, Timeout) when ?IS_SSL(Sock) ->
-    Ref = make_ref(),
-    Buddy = case get(ssl_buddy) of
-                undefined -> B = spawn_link(fun ssl_buddy_loop/0),
-                             put(ssl_buddy, B),
-                             B;
-                B         -> B
-            end,
-    Buddy ! {recv, self(), Sock, Ref, Length, Timeout},
-    {ok, Ref};
-async_recv(Sock, Length, infinity) when is_port(Sock) ->
-    prim_inet:async_recv(Sock, Length, -1);
-async_recv(Sock, Length, Timeout) when is_port(Sock) ->
-    prim_inet:async_recv(Sock, Length, Timeout).
-
-ssl_buddy_loop() ->
-    receive
-        {recv, Pid, Sock, Ref, Length, Timeout} ->
-            Pid ! {inet_async, Sock, Ref,
-                   ssl:recv(Sock#ssl_socket.ssl, Length, Timeout)},
-            ssl_buddy_loop()
-    end.
+async_recv(Sock, _Count) when ?IS_SSL(Sock) ->
+    ok = ssl:setopts(Sock#ssl_socket.ssl, [{active, once}]);
+async_recv(Sock, Length) when is_port(Sock) ->
+    prim_inet:async_recv(Sock, Length, -1).
 
 port_command(Sock, Data) when ?IS_SSL(Sock) ->
     case ssl:send(Sock#ssl_socket.ssl, Data) of
