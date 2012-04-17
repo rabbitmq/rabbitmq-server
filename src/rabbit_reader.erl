@@ -257,8 +257,8 @@ recvloop(Deb, State = #v1{sock = Sock, recv_len = RecvLen, buf_len = BufLen})
     %% the Maximum Segment Size) so as to not use too many
     %% syscalls. But if we are dealing with larger messages we want to
     %% request the exact length (which will typically be larger than
-    %% the MSS, i.e. gen_tcp:recv will wait) so that we don't have to
-    %% reassemble too much.
+    %% the MSS, i.e. we will wait for more packets to come in) so that
+    %% we don't have to reassemble too much.
     %%
     %% We try to estimate the MSS by keeping track of the largest
     %% number of bytes we have got back when bytes_wanted/1 = 0.
