@@ -327,4 +327,4 @@ escape([],         Acc) -> lists:reverse(Acc).
 
 revhex(I) -> hexdig(I) ++ hexdig(I bsr 4).
 
-hexdig(I) -> integer_to_list(I band 15, 16).
+hexdig(I) -> erlang:integer_to_list(I band 15, 16).
