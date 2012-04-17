@@ -250,7 +250,7 @@ recvloop(Deb, State = #v1{recv_ref = Ref}) when Ref =/= none ->
     mainloop(Deb, State);
 recvloop(Deb, State = #v1{connection_state = blocked}) ->
     mainloop(Deb, State);
-recvloop(Deb, State = #v1{recv_len = RecvLen, buf_len = BufLen})
+recvloop(Deb, State = #v1{sock = Sock, recv_len = RecvLen, buf_len = BufLen})
   when BufLen < RecvLen ->
     %% If we are mainly dealing with small messages we want to request
     %% "as much as you can give us" (which will typically work out to
@@ -262,9 +262,8 @@ recvloop(Deb, State = #v1{recv_len = RecvLen, buf_len = BufLen})
     %%
     %% We try to estimate the MSS by keeping track of the largest
     %% number of bytes we have got back when bytes_wanted/1 = 0.
-    Ref = inet_op(fun () ->
-                          rabbit_net:async_recv(
-                            State#v1.sock, bytes_wanted(State), infinity) end),
+    Len = bytes_wanted(State),
+    Ref = inet_op(fun () -> rabbit_net:async_recv(Sock, Len, infinity) end),
     mainloop(Deb, State#v1{recv_ref = Ref});
 recvloop(Deb, State = #v1{recv_len = RecvLen, buf = Buf, buf_len = BufLen}) ->
     {Data, Rest} = split_binary(case Buf of
