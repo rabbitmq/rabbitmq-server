@@ -16,39 +16,57 @@
 
 -module(rabbit_exchange_type).
 
+-ifdef(use_specs).
+
+-type(tx() :: 'transaction' | 'none').
+-type(serial() :: pos_integer() | tx()).
+
+-callback description() -> [proplist:property()].
+
+%% Should Rabbit ensure that all binding events that are
+%% delivered to an individual exchange can be serialised? (they
+%% might still be delivered out of order, but there'll be a
+%% serial number).
+-callback serialise_events() -> boolean().
+
+%% The no_return is there so that we can have an "invalid" exchange
+%% type (see rabbit_exchange_type_invalid).
+-callback route(rabbit_types:exchange(), rabbit_types:delivery()) ->
+    rabbit_router:match_result().
+
+%% called BEFORE declaration, to check args etc; may exit with #amqp_error{}
+-callback validate(rabbit_types:exchange()) -> 'ok'.
+
+%% called after declaration and recovery
+-callback create(tx(), rabbit_types:exchange()) -> 'ok'.
+
+%% called after exchange (auto)deletion.
+-callback delete(tx(), rabbit_types:exchange(), [rabbit_types:binding()]) ->
+    'ok'.
+
+%% called after a binding has been added or recovered
+-callback add_binding(serial(), rabbit_types:exchange(),
+                      rabbit_types:binding()) -> 'ok'.
+
+%% called after bindings have been deleted.
+-callback remove_bindings(serial(), rabbit_types:exchange(),
+                          [rabbit_types:binding()]) -> 'ok'.
+
+%% called when comparing exchanges for equivalence - should return ok or
+%% exit with #amqp_error{}
+-callback assert_args_equivalence (rabbit_types:exchange(),
+                                   rabbit_framing:amqp_table()) ->
+    'ok' | rabbit_types:connection_exit().
+
+-else.
+
 -export([behaviour_info/1]).
 
 behaviour_info(callbacks) ->
-    [
-     {description, 0},
-
-     %% Should Rabbit ensure that all binding events that are
-     %% delivered to an individual exchange can be serialised? (they
-     %% might still be delivered out of order, but there'll be a
-     %% serial number).
-     {serialise_events, 0},
-
-     {route, 2},
-
-     %% called BEFORE declaration, to check args etc; may exit with #amqp_error{}
-     {validate, 1},
-
-     %% called after declaration and recovery
-     {create, 2},
-
-     %% called after exchange (auto)deletion.
-     {delete, 3},
-
-     %% called after a binding has been added or recovered
-     {add_binding, 3},
-
-     %% called after bindings have been deleted.
-     {remove_bindings, 3},
-
-     %% called when comparing exchanges for equivalence - should return ok or
-     %% exit with #amqp_error{}
-     {assert_args_equivalence, 2}
-
-    ];
+    [{description, 0}, {serialise_events, 0}, {route, 2}, {validate, 1},
+     {create, 2}, {delete, 3}, {add_binding, 3}, {remove_bindings, 3},
+     {assert_args_equivalence, 2}];
 behaviour_info(_Other) ->
     undefined.
+
+-endif.

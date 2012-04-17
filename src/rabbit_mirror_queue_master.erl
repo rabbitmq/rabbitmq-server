@@ -59,10 +59,6 @@
                                  known_senders       :: set()
                                }).
 
--type(ack()   :: non_neg_integer()).
--type(state() :: master_state()).
--include("rabbit_backing_queue_spec.hrl").
-
 -spec(promote_backing_queue_state/6 ::
         (pid(), atom(), any(), pid(), dict(), [pid()]) -> master_state()).
 -spec(sender_death_fun/0 :: () -> death_fun()).
