@@ -7,7 +7,8 @@ main([NodeStr, PidFile]) ->
         {{module, _}, {module, _}} ->
             ok;
         _ ->
-            io:format("Compile with 'make' before running this script~n")
+            io:format("Compile with 'make' before running this script~n"),
+            halt(1)
     end,
     Node = rabbit_nodes:make(NodeStr),
     Pid = rabbit_misc:read_pid_file(PidFile, true),
