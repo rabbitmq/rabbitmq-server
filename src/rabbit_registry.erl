@@ -23,7 +23,8 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3]).
 
--export([register/3, binary_to_type/1, lookup_module/2, lookup_all/1]).
+-export([register/3, unregister/2,
+         binary_to_type/1, lookup_module/2, lookup_all/1]).
 
 -define(SERVER, ?MODULE).
 -define(ETS_NAME, ?MODULE).
@@ -32,6 +33,7 @@
 
 -spec(start_link/0 :: () -> rabbit_types:ok_pid_or_error()).
 -spec(register/3 :: (atom(), binary(), atom()) -> 'ok').
+-spec(unregister/2 :: (atom(), binary()) -> 'ok').
 -spec(binary_to_type/1 ::
         (binary()) -> atom() | rabbit_types:error('not_found')).
 -spec(lookup_module/2 ::
@@ -49,6 +51,9 @@ start_link() ->
 
 register(Class, TypeName, ModuleName) ->
     gen_server:call(?SERVER, {register, Class, TypeName, ModuleName}, infinity).
+
+unregister(Class, TypeName) ->
+    gen_server:call(?SERVER, {unregister, Class, TypeName}, infinity).
 
 %% This is used with user-supplied arguments (e.g., on exchange
 %% declare), so we restrict it to existing atoms only.  This means it
@@ -83,6 +88,10 @@ internal_register(Class, TypeName, ModuleName)
                       {{Class, internal_binary_to_type(TypeName)}, ModuleName}),
     ok.
 
+internal_unregister(Class, TypeName) ->
+    true = ets:delete(?ETS_NAME, {Class, internal_binary_to_type(TypeName)}),
+    ok.
+
 sanity_check_module(ClassModule, Module) ->
     case catch lists:member(ClassModule,
                             lists:flatten(
@@ -107,6 +116,10 @@ init([]) ->
 
 handle_call({register, Class, TypeName, ModuleName}, _From, State) ->
     ok = internal_register(Class, TypeName, ModuleName),
+    {reply, ok, State};
+
+handle_call({unregister, Class, TypeName}, _From, State) ->
+    ok = internal_unregister(Class, TypeName),
     {reply, ok, State};
 
 handle_call(Request, _From, State) ->

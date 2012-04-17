@@ -1126,7 +1126,7 @@ test_runtime_parameters() ->
     ok = control_action(clear_parameter, ["test", "maybe"]),
     {error_string, _} =
         control_action(clear_parameter, ["test", "neverexisted"]),
-
+    rabbit_runtime_parameters_test:unregister(),
     passed.
 
 test_server_status() ->

@@ -18,10 +18,13 @@
 -behaviour(rabbit_runtime_parameter).
 
 -export([validate/3, validate_clear/2, notify/3, notify_clear/2]).
--export([register/0]).
+-export([register/0, unregister/0]).
 
 register() ->
     rabbit_registry:register(runtime_parameter, <<"test">>, ?MODULE).
+
+unregister() ->
+    rabbit_registry:unregister(runtime_parameter, <<"test">>).
 
 validate(<<"test">>, <<"good">>,  _Term)      -> ok;
 validate(<<"test">>, <<"maybe">>, <<"good">>) -> ok;
