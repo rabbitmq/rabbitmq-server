@@ -211,10 +211,10 @@
 -spec(os_cmd/1 :: (string()) -> string()).
 -spec(gb_sets_difference/2 :: (gb_set(), gb_set()) -> gb_set()).
 -spec(is_running/2 :: (node(), atom()) -> boolean()).
--spec(wait_for_application/3 :: (node(), pid(), atom())
+-spec(wait_for_application/3 :: (node(), string(), atom())
                                 -> ok | {error, process_not_running}).
--spec(wait_for_process_death/1 :: (pid()) -> ok).
--spec(read_pid_file/2 :: (file:name(), boolean()) -> pid() | no_return()).
+-spec(wait_for_process_death/1 :: (string()) -> ok).
+-spec(read_pid_file/2 :: (file:name(), boolean()) -> string() | no_return()).
 
 -endif.
 
@@ -1000,6 +1000,3 @@ system(Cmd) ->
 % Escape the quotes in a shell command so that it can be used in "sh -c 'cmd'"
 escape_quotes(Cmd) ->
     lists:flatten(lists:map(fun ($') -> "'\\''"; (Ch) -> Ch end, Cmd)).
-
-format_parse_error({_Line, Mod, Err}) ->
-    lists:flatten(Mod:format_error(Err)).
