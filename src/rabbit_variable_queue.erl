@@ -351,7 +351,7 @@
              durable               :: boolean(),
              transient_threshold   :: non_neg_integer(),
 
-             async_callback        :: async_callback(),
+             async_callback        :: rabbit_backing_queue:async_callback(),
 
              len                   :: non_neg_integer(),
              persistent_count      :: non_neg_integer(),
@@ -369,8 +369,6 @@
              ack_out_counter       :: non_neg_integer(),
              ack_in_counter        :: non_neg_integer(),
              ack_rates             :: rates() }).
-
--include("rabbit_backing_queue_spec.hrl").
 
 -spec(multiple_routing_keys/0 :: () -> 'ok').
 

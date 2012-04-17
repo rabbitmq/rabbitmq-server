@@ -16,6 +16,8 @@
 
 -module(rabbit_msg_store_ets_index).
 
+-include("rabbit_msg_store.hrl").
+
 -behaviour(rabbit_msg_store_index).
 
 -export([new/1, recover/1,
@@ -24,8 +26,6 @@
 
 -define(MSG_LOC_NAME, rabbit_msg_store_ets_index).
 -define(FILENAME, "msg_store_index.ets").
-
--include("rabbit_msg_store_index.hrl").
 
 -record(state, { table, dir }).
 
