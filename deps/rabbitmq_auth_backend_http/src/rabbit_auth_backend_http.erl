@@ -18,7 +18,6 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 -behaviour(rabbit_auth_backend).
--include_lib("rabbit_common/include/rabbit_auth_backend_spec.hrl").
 
 -export([description/0, q/2]).
 -export([check_user_login/2, check_vhost_access/2, check_resource_access/3]).
