@@ -24,7 +24,6 @@
                     {enables, recovery}]}).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
--include_lib("rabbit_common/include/rabbit_exchange_type_spec.hrl").
 -include("rabbit_federation.hrl").
 
 -behaviour(rabbit_exchange_type).
