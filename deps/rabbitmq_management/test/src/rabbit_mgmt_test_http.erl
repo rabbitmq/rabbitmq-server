@@ -912,6 +912,7 @@ parameters_test() ->
 
     0 = length(http_get("/parameters")),
     0 = length(http_get("/parameters/test")),
+    rabbit_runtime_parameters_test:unregister(),
     ok.
 
 %%---------------------------------------------------------------------------
