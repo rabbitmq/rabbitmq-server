@@ -18,8 +18,8 @@
 
 -include("rabbit.hrl").
 
--export([parse/1, set/3, clear/2, list/0, list/1, list_formatted/0, lookup/2,
-         value/2, value/3, info_keys/0]).
+-export([parse_set/3, set/3, clear/2, list/0, list/1, list_formatted/0,
+         lookup/2, value/2, value/3, info_keys/0]).
 
 %%----------------------------------------------------------------------------
 
@@ -27,7 +27,7 @@
 
 -type(ok_or_error_string() :: 'ok' | {'error_string', string()}).
 
--spec(parse/1 :: (string()) -> term()).
+-spec(parse_set/3 :: (binary(), binary(), string()) -> ok_or_error_string()).
 -spec(set/3 :: (binary(), binary(), term()) -> ok_or_error_string()).
 -spec(clear/2 :: (binary(), binary()) -> ok_or_error_string()).
 -spec(list/0 :: () -> [rabbit_types:infos()]).
@@ -47,6 +47,12 @@
 -define(TABLE, rabbit_runtime_parameters).
 
 %%---------------------------------------------------------------------------
+
+parse_set(AppName, Key, String) ->
+    case parse(String) of
+        {ok, Term}  -> set(AppName, Key, Term);
+        {errors, L} -> format_error(L)
+    end.
 
 set(AppName, Key, Term) ->
     case set0(AppName, Key, Term) of
@@ -168,20 +174,22 @@ lookup_app(App) ->
     end.
 
 parse(Src0) ->
-    Src = case lists:reverse(Src0) of
-              [$. |_] -> Src0;
-              _       -> Src0 ++ "."
+    Src1 = string:strip(Src0),
+    Src = case lists:reverse(Src1) of
+              [$. |_] -> Src1;
+              _       -> Src1 ++ "."
           end,
     case erl_scan:string(Src) of
         {ok, Scanned, _} ->
             case erl_parse:parse_term(Scanned) of
                 {ok, Parsed} ->
-                    Parsed;
+                    {ok, Parsed};
                 {error, E} ->
-                    exit({could_not_parse_value, format_parse_error(E)})
+                    {errors,
+                     [{"Could not parse value: ~s", [format_parse_error(E)]}]}
             end;
         {error, E, _} ->
-            exit({could_not_scan_value, format_parse_error(E)})
+            {errors, [{"Could not scan value: ~s", [format_parse_error(E)]}]}
     end.
 
 format_parse_error({_Line, Mod, Err}) ->
@@ -197,12 +205,12 @@ format(Term) ->
 validate(Proplist = [T | _]) when is_tuple(T) -> validate_proplist(Proplist);
 validate(L) when is_list(L)                   -> validate_list(L);
 validate(T) when is_tuple(T)                  -> {error, "tuple: ~p", [T]};
-validate(true)                                -> ok;
-validate(false)                               -> ok;
+validate(B) when is_boolean(B)                -> ok;
 validate(null)                                -> ok;
 validate(A) when is_atom(A)                   -> {error, "atom: ~p", [A]};
 validate(N) when is_number(N)                 -> ok;
-validate(B) when is_binary(B)                 -> ok.
+validate(B) when is_binary(B)                 -> ok;
+validate(B) when is_bitstring(B)              -> {error, "bitstring: ~p", [B]}.
 
 validate_list(L) -> [validate(I) || I <- L].
 validate_proplist(L) -> [vp(I) || I <- L].
