@@ -18,6 +18,7 @@
 -behaviour(gen_server).
 
 -export([start_link/1]).
+-export([sockjs_msg/2, sockjs_closed/1]).
 
 -export([init/1, handle_call/3, handle_info/2, terminate/2,
          code_change/3, handle_cast/2]).
@@ -28,6 +29,14 @@
 
 start_link(Params) ->
     gen_server:start_link(?MODULE, Params, []).
+
+sockjs_msg(Pid, Data) ->
+    gen_server:cast(Pid, {sockjs_msg, Data}).
+
+sockjs_closed(Pid) ->
+    gen_server:cast(Pid, sockjs_closed).
+
+%%----------------------------------------------------------------------------
 
 init({Processor, Conn}) ->
     ok = file_handle_cache:obtain(),

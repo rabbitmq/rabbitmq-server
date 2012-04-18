@@ -58,9 +58,9 @@ service_stomp(Conn, init, _State) ->
     {ok, Pid};
 
 service_stomp(_Conn, {recv, Data}, Pid) ->
-    gen_server:cast(Pid, {sockjs_msg, Data}),
+    rabbit_ws_client:sockjs_msg(Pid, Data),
     {ok, Pid};
 
 service_stomp(_Conn, closed, Pid) ->
-    gen_server:cast(Pid, sockjs_closed),
+    rabbit_ws_client:sockjs_closed(Pid),
     ok.
