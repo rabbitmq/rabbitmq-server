@@ -717,12 +717,12 @@ ensure_ttl_timer(State = #q{backing_queue       = BQ,
 ensure_ttl_timer(State) ->
     State.
 
-ack_nacked_messages(AckTags, State = #q{dlx                 = undefined,
-                                        backing_queue       = BQ,
-                                        backing_queue_state = BQS }) ->
+ack_if_no_dlx(AckTags, State = #q{dlx                 = undefined,
+                                  backing_queue       = BQ,
+                                  backing_queue_state = BQS }) ->
     {_Guids, BQS1} = BQ:ack(AckTags, BQS),
     State#q{backing_queue_state = BQS1};
-ack_nacked_messages(_AckTags, State) ->
+ack_if_no_dlx(_AckTags, State) ->
     State.
 
 dead_letter_fun(_Reason, #q{dlx = undefined}) ->
@@ -1241,7 +1241,7 @@ handle_cast({reject, AckTags, Requeue, ChPid}, State) ->
                       fun (State1 = #q{backing_queue       = BQ,
                                        backing_queue_state = BQS}) ->
                               BQS1 = BQ:fold(Fun, BQS, AckTags),
-                              ack_nacked_messages(
+                              ack_if_no_dlx(
                                 AckTags, State1#q{backing_queue_state = BQS1})
                       end
               end));
