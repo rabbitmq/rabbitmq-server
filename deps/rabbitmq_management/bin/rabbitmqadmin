@@ -524,7 +524,7 @@ class Management:
             (name, value) = arg.split("=", 1)
             assert_usage(name in mandatory or name in optional.keys(),
                          'Argument "{0}" not recognised'.format(name))
-            if name in obj['json']:
+            if 'json' in obj and name in obj['json']:
                 upload[name] = json.loads(value)
             else:
                 upload[name] = value
