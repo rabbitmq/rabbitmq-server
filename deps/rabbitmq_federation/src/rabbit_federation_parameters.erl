@@ -50,7 +50,7 @@ validate(<<"federation">>, <<"local_nodename">>, Term) ->
 validate(<<"federation">>, <<"local_username">>, Term) ->
     assert_type(<<"local_username">>, binary, Term);
 
-validate(_AppName, Key, _Term) ->
+validate(_Component, Key, _Term) ->
     {error, "key not recognised: ~p", [Key]}.
 
 validate_clear(<<"federation_upstream_set">>, _Key) ->
@@ -65,7 +65,7 @@ validate_clear(<<"federation">>, <<"local_nodename">>) ->
 validate_clear(<<"federation">>, <<"local_username">>) ->
     ok;
 
-validate_clear(_AppName, Key) ->
+validate_clear(_Component, Key) ->
     {error, "key not recognised: ~p", [Key]}.
 
 notify(<<"federation_upstream_set">>, Key, _Term) ->
