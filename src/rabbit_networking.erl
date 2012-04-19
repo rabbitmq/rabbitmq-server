@@ -446,16 +446,19 @@ ipv6_status(TestPort) ->
                         {ok, LSock4}            -> gen_tcp:close(LSock4),
                                                    single_stack;
                         %% IPv6-only machine. Welcome to the future.
-                        {error, eafnosupport}   -> ipv6_only;
+                        {error, eafnosupport}   -> ipv6_only; %% Linux
+                        {error, eprotonosupport}-> ipv6_only; %% FreeBSD
                         %% Dual stack machine with something already
                         %% on IPv4.
                         {error, _}              -> ipv6_status(TestPort + 1)
                     end
             end;
-        {error, eafnosupport} ->
-            %% IPv4-only machine. Welcome to the 90s.
+        %% IPv4-only machine. Welcome to the 90s.
+        {error, eafnosupport} -> %% Linux
             ipv4_only;
+        {error, eprotonosupport} -> %% FreeBSD
+            ipv4_only;
+        %% Port in use
         {error, _} ->
-            %% Port in use
             ipv6_status(TestPort + 1)
     end.

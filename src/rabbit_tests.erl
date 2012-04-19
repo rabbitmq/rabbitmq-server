@@ -884,6 +884,8 @@ test_cluster_management() ->
                                         "invalid2@invalid"]),
     ok = assert_ram_node(),
 
+    ok = control_action(reset, []),
+
     SecondaryNode = rabbit_nodes:make("hare"),
     case net_adm:ping(SecondaryNode) of
         pong -> passed = test_cluster_management2(SecondaryNode);
@@ -899,7 +901,6 @@ test_cluster_management2(SecondaryNode) ->
     SecondaryNodeS = atom_to_list(SecondaryNode),
 
     %% make a disk node
-    ok = control_action(reset, []),
     ok = control_action(cluster, [NodeS]),
     ok = assert_disc_node(),
     %% make a ram node
@@ -1277,6 +1278,9 @@ test_confirms() ->
                                           },
                       rabbit_basic:build_content(
                         #'P_basic'{delivery_mode = 2}, <<"">>)),
+    %% We must not kill the queue before the channel has processed the
+    %% 'publish'.
+    ok = rabbit_channel:flush(Ch),
     %% Crash the queue
     QPid1 ! boom,
     %% Wait for a nack
@@ -2335,8 +2339,8 @@ wait_for_confirms(Unconfirmed) ->
         true  -> ok;
         false -> receive {'$gen_cast', {confirm, Confirmed, _}} ->
                          wait_for_confirms(
-                           gb_sets:difference(Unconfirmed,
-                                              gb_sets:from_list(Confirmed)))
+                           rabbit_misc:gb_sets_difference(
+                             Unconfirmed, gb_sets:from_list(Confirmed)))
                  after 5000 -> exit(timeout_waiting_for_confirm)
                  end
     end.
