@@ -698,10 +698,12 @@ drop_expired_messages(State = #q{ttl = undefined}) ->
 drop_expired_messages(State = #q{backing_queue_state = BQS,
                                  backing_queue       = BQ}) ->
     Now = now_micros(),
-    BQS1 = BQ:dropwhile(
-             fun (#message_properties{expiry = Expiry}) -> Now > Expiry end,
-             dead_letter_fun(expired, State),
-             BQS),
+    {Msgs, BQS1} =
+        BQ:dropwhile(
+          fun (#message_properties{expiry = Expiry}) -> Now > Expiry end,
+          true, BQS),
+    DLXFun = dead_letter_fun(expired, State),
+    lists:foreach(fun({Msg, AckTag}) -> DLXFun(Msg, AckTag) end, Msgs),
     ensure_ttl_timer(State#q{backing_queue_state = BQS1}).
 
 ensure_ttl_timer(State = #q{backing_queue       = BQ,
@@ -718,7 +720,9 @@ ensure_ttl_timer(State) ->
     State.
 
 dead_letter_fun(_Reason, #q{dlx = undefined}) ->
-    undefined;
+    fun(_Msg, _AckTag) ->
+            ok
+    end;
 dead_letter_fun(Reason, _State) ->
     fun(Msg, AckTag) ->
             gen_server2:cast(self(), {dead_letter, {Msg, AckTag}, Reason})

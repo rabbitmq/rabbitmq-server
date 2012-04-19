@@ -35,6 +35,7 @@
 
 -type(msg_fun() :: fun((rabbit_types:basic_message(), ack()) -> 'ok') |
                    'undefined').
+-type(msg_pred() :: fun ((rabbit_types:message_properties()) -> boolean())).
 
 %% Called on startup with a list of durable queue names. The queues
 %% aren't being started at this point, but this call allows the
@@ -120,9 +121,10 @@
 %% Drop messages from the head of the queue while the supplied
 %% predicate returns true. A callback function is supplied allowing
 %% callers access to messages that are about to be dropped.
--callback dropwhile(fun ((rabbit_types:message_properties()) -> boolean()), msg_fun(),
-                        state())
-        -> state().
+-callback dropwhile(msg_pred(), true, state())
+                   -> {[{rabbit_types:basic_message(), ack()}], state()};
+                   (msg_pred(), false, state())
+                   -> {undefined, state()}.
 
 %% Produce the next message.
 -callback fetch(true,  state()) -> {fetch_result(ack()), state()};

@@ -2388,10 +2388,10 @@ test_dropwhile(VQ0) ->
             fun (N, Props) -> Props#message_properties{expiry = N} end, VQ0),
 
     %% drop the first 5 messages
-    VQ2 = rabbit_variable_queue:dropwhile(
-            fun(#message_properties { expiry = Expiry }) ->
-                    Expiry =< 5
-            end, undefined, VQ1),
+    {undefined, VQ2} = rabbit_variable_queue:dropwhile(
+                         fun(#message_properties { expiry = Expiry }) ->
+                                 Expiry =< 5
+                         end, false, VQ1),
 
     %% fetch five now
     VQ3 = lists:foldl(fun (_N, VQN) ->
@@ -2408,11 +2408,11 @@ test_dropwhile(VQ0) ->
 test_dropwhile_varying_ram_duration(VQ0) ->
     VQ1 = variable_queue_publish(false, 1, VQ0),
     VQ2 = rabbit_variable_queue:set_ram_duration_target(0, VQ1),
-    VQ3 = rabbit_variable_queue:dropwhile(
-            fun(_) -> false end, undefined, VQ2),
+    {undefined, VQ3} = rabbit_variable_queue:dropwhile(
+                         fun(_) -> false end, false, VQ2),
     VQ4 = rabbit_variable_queue:set_ram_duration_target(infinity, VQ3),
     VQ5 = variable_queue_publish(false, 1, VQ4),
-    rabbit_variable_queue:dropwhile(fun(_) -> false end, undefined, VQ5).
+    rabbit_variable_queue:dropwhile(fun(_) -> false end, false, VQ5).
 
 test_variable_queue_dynamic_duration_change(VQ0) ->
     SegmentSize = rabbit_queue_index:next_segment_boundary(0),
