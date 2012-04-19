@@ -15,7 +15,7 @@ for (var i in globals) {
         <td>
           Local username:
           <form action="#/fed-globals" method="put">
-            <input type="hidden" name="app_name" value="federation"/>
+            <input type="hidden" name="component" value="federation"/>
             <input type="hidden" name="key" value="local_username"/>
             <input type="text" name="value" value="<%= username %>" />
             <input type="submit" value="Update"/>
@@ -24,7 +24,7 @@ for (var i in globals) {
         <td>
           Explicit identity for this cluster / node:
           <form action="#/fed-globals" method="put">
-            <input type="hidden" name="app_name" value="federation"/>
+            <input type="hidden" name="component" value="federation"/>
             <input type="hidden" name="key" value="local_nodename"/>
             <input type="text" name="value" value="<%= nodename %>" />
             <input type="submit" value="Update"/>
@@ -146,7 +146,7 @@ for (var i in globals) {
     <h3>Add a new connection</h3>
 
     <form action="#/fed-parameters" method="put">
-      <input type="hidden" name="app_name" value="federation_connection"/>
+      <input type="hidden" name="component" value="federation_connection"/>
       <table class="form">
         <tr>
           <th><label>Name:</label></th>

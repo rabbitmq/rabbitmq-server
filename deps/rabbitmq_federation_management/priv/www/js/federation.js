@@ -12,7 +12,7 @@ dispatcher_add(function(sammy) {
     sammy.put('#/fed-globals', function() {
             if (this.params.value == '') this.params.value = null;
 
-            if (sync_put(this, '/parameters/:app_name/:key'))
+            if (sync_put(this, '/parameters/:component/:key'))
                 update();
             return false;
         });
@@ -25,17 +25,17 @@ dispatcher_add(function(sammy) {
                 else
                     this.params[num_key] = parseInt(this.params[num_key]);
             }
-            this.params = {"app_name": this.params.app_name,
-                           "key":      this.params.key,
-                           "value":    this.params};
-            delete this.params.value.app_name;
+            this.params = {"component": this.params.component,
+                           "key":       this.params.key,
+                           "value":     this.params};
+            delete this.params.value.component;
             delete this.params.value.key;
-            if (sync_put(this, '/parameters/:app_name/:key'))
+            if (sync_put(this, '/parameters/:component/:key'))
                 update();
             return false;
         });
     sammy.del('#/fed-parameters', function() {
-            if (sync_delete(this, '/parameters/:app_name/:key'))
+            if (sync_delete(this, '/parameters/:component/:key'))
                 go_to('#/federation');
             return false;
         });
