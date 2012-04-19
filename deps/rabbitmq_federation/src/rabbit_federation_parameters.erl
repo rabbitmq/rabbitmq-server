@@ -127,7 +127,7 @@ connection_upstream_set_validation() ->
      {<<"message_ttl">>,     number, optional},
      {<<"ha_policy">>,       binary, optional}].
 
-assert_contents(Constraints, Term) ->
+assert_contents(Constraints, Term) when is_list(Term) ->
     {Results, Remainder}
         = lists:foldl(
             fun ({Name, Constraint, Needed}, {Results0, Term0}) ->
@@ -145,4 +145,7 @@ assert_contents(Constraints, Term) ->
     case Remainder of
         [] -> Results;
         _  -> [{error, "Unrecognised terms ~p", [Remainder]} | Results]
-    end.
+    end;
+
+assert_contents(_Constraints, Term) ->
+    {error, "Not a list ~p", [Term]}.
