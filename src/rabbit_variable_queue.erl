@@ -592,7 +592,7 @@ dropwhile(Pred, MsgFun, State) ->
                     {MsgStatus1, State2} = read_msg(MsgStatus, State1),
                     {{Msg, _, AckTag, _}, State3} =
                          internal_fetch(true, MsgStatus1, State2),
-                    MsgFun(Msg, AckTag),
+                    ok = MsgFun(Msg, AckTag),
                     dropwhile(Pred, MsgFun, State3);
                 {false, _} ->
                     a(in_r(MsgStatus, State1))
