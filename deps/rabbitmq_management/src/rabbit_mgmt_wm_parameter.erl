@@ -55,7 +55,7 @@ accept_content(ReqData, Context) ->
       [value], ReqData, Context,
       fun([Value], _) ->
               case rabbit_runtime_parameters:set(
-                     app_name(ReqData), key(ReqData),
+                     component(ReqData), key(ReqData),
                      rabbit_mgmt_parse:parameter_value(Value)) of
                   ok ->
                       {true, ReqData, Context};
@@ -65,7 +65,7 @@ accept_content(ReqData, Context) ->
       end).
 
 delete_resource(ReqData, Context) ->
-    ok = rabbit_runtime_parameters:clear(app_name(ReqData), key(ReqData)),
+    ok = rabbit_runtime_parameters:clear(component(ReqData), key(ReqData)),
     {true, ReqData, Context}.
 
 is_authorized(ReqData, Context) ->
@@ -74,7 +74,7 @@ is_authorized(ReqData, Context) ->
 %%--------------------------------------------------------------------
 
 parameter(ReqData) ->
-    rabbit_runtime_parameters:lookup(app_name(ReqData), key(ReqData)).
+    rabbit_runtime_parameters:lookup(component(ReqData), key(ReqData)).
 
-app_name(ReqData) -> rabbit_mgmt_util:id(application, ReqData).
-key(ReqData)      -> rabbit_mgmt_util:id(key, ReqData).
+component(ReqData) -> rabbit_mgmt_util:id(component, ReqData).
+key(ReqData)       -> rabbit_mgmt_util:id(key, ReqData).

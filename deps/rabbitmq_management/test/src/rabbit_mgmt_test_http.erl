@@ -891,12 +891,12 @@ parameters_test() ->
     http_put("/parameters/test/maybe", [{value, <<"bad">>}], ?BAD_REQUEST),
     http_put("/parameters/test/bad", [{value, <<"good">>}], ?BAD_REQUEST),
 
-    Good = [{app_name, <<"test">>},
-            {key,      <<"good">>},
-            {value,    <<"ignored">>}],
-    Maybe = [{app_name, <<"test">>},
-             {key,      <<"maybe">>},
-             {value,    <<"good">>}],
+    Good = [{component, <<"test">>},
+            {key,       <<"good">>},
+            {value,     <<"ignored">>}],
+    Maybe = [{component, <<"test">>},
+             {key,       <<"maybe">>},
+             {value,     <<"good">>}],
     List = [Good, Maybe],
 
     assert_list(List, http_get("/parameters")),
