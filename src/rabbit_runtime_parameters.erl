@@ -48,14 +48,14 @@
 
 %%---------------------------------------------------------------------------
 
-parse_set(AppName, Key, String) ->
+parse_set(Component, Key, String) ->
     case parse(String) of
-        {ok, Term}  -> set(AppName, Key, Term);
+        {ok, Term}  -> set(Component, Key, Term);
         {errors, L} -> format_error(L)
     end.
 
-set(AppName, Key, Term) ->
-    case set0(AppName, Key, Term) of
+set(Component, Key, Term) ->
+    case set0(Component, Key, Term) of
         ok          -> ok;
         {errors, L} -> format_error(L)
     end.
@@ -63,16 +63,16 @@ set(AppName, Key, Term) ->
 format_error(L) ->
     {error_string, rabbit_misc:format_many([{"Validation failed~n", []} | L])}.
 
-set0(AppName, Key, Term) ->
-    case lookup_app(AppName) of
+set0(Component, Key, Term) ->
+    case lookup_component(Component) of
         {ok, Mod} ->
             case flatten_errors(validate(Term)) of
                 ok ->
-                    case flatten_errors(Mod:validate(AppName, Key, Term)) of
+                    case flatten_errors(Mod:validate(Component, Key, Term)) of
                         ok ->
-                            case mnesia_update(AppName, Key, Term) of
+                            case mnesia_update(Component, Key, Term) of
                                 {old, Term} -> ok;
-                                _           -> Mod:notify(AppName, Key, Term)
+                                _           -> Mod:notify(Component, Key, Term)
                             end,
                             ok;
                         E ->
@@ -85,46 +85,46 @@ set0(AppName, Key, Term) ->
             E
     end.
 
-mnesia_update(AppName, Key, Term) ->
+mnesia_update(Component, Key, Term) ->
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
-              Res = case mnesia:read(?TABLE, {AppName, Key}) of
+              Res = case mnesia:read(?TABLE, {Component, Key}) of
                         []       -> new;
                         [Params] -> {old, Params#runtime_parameters.value}
                     end,
-              ok = mnesia:write(?TABLE, c(AppName, Key, Term), write),
+              ok = mnesia:write(?TABLE, c(Component, Key, Term), write),
               Res
       end).
 
-clear(AppName, Key) ->
-    case clear0(AppName, Key) of
+clear(Component, Key) ->
+    case clear0(Component, Key) of
         ok          -> ok;
         {errors, L} -> format_error(L)
     end.
 
-clear0(AppName, Key) ->
-    case lookup_app(AppName) of
-        {ok, Mod} -> case flatten_errors(Mod:validate_clear(AppName, Key)) of
-                         ok -> mnesia_clear(AppName, Key),
-                               Mod:notify_clear(AppName, Key),
+clear0(Component, Key) ->
+    case lookup_component(Component) of
+        {ok, Mod} -> case flatten_errors(Mod:validate_clear(Component, Key)) of
+                         ok -> mnesia_clear(Component, Key),
+                               Mod:notify_clear(Component, Key),
                                ok;
                          E  -> E
                      end;
         E         -> E
     end.
 
-mnesia_clear(AppName, Key) ->
+mnesia_clear(Component, Key) ->
     ok = rabbit_misc:execute_mnesia_transaction(
            fun () ->
-                   ok = mnesia:delete(?TABLE, {AppName, Key}, write)
+                   ok = mnesia:delete(?TABLE, {Component, Key}, write)
            end).
 
 list() ->
     [p(P) || P <- rabbit_misc:dirty_read_all(?TABLE)].
 
-list(AppName) ->
-    case lookup_app(AppName) of
-        {ok, _} -> Match = #runtime_parameters{key = {AppName, '_'}, _ = '_'},
+list(Component) ->
+    case lookup_component(Component) of
+        {ok, _} -> Match = #runtime_parameters{key = {Component, '_'}, _ = '_'},
                    [p(P) || P <- mnesia:dirty_match_object(?TABLE, Match)];
         _       -> not_found
     end.
@@ -132,56 +132,57 @@ list(AppName) ->
 list_formatted() ->
     [pset(value, format(pget(value, P)), P) || P <- list()].
 
-lookup(AppName, Key) ->
-    case lookup0(AppName, Key, rabbit_misc:const(not_found)) of
+lookup(Component, Key) ->
+    case lookup0(Component, Key, rabbit_misc:const(not_found)) of
         not_found -> not_found;
         Params    -> p(Params)
     end.
 
-value(AppName, Key) ->
-    case lookup0(AppName, Key, rabbit_misc:const(not_found)) of
+value(Component, Key) ->
+    case lookup0(Component, Key, rabbit_misc:const(not_found)) of
         not_found -> not_found;
         Params    -> Params#runtime_parameters.value
     end.
 
-value(AppName, Key, Default) ->
-    Params = lookup0(AppName, Key,
-                     fun () -> lookup_missing(AppName, Key, Default) end),
+value(Component, Key, Default) ->
+    Params = lookup0(Component, Key,
+                     fun () -> lookup_missing(Component, Key, Default) end),
     Params#runtime_parameters.value.
 
-lookup0(AppName, Key, DefaultFun) ->
-    case mnesia:dirty_read(?TABLE, {AppName, Key}) of
+lookup0(Component, Key, DefaultFun) ->
+    case mnesia:dirty_read(?TABLE, {Component, Key}) of
         []  -> DefaultFun();
         [R] -> R
     end.
 
-lookup_missing(AppName, Key, Default) ->
+lookup_missing(Component, Key, Default) ->
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
-              case mnesia:read(?TABLE, {AppName, Key}) of
-                  []  -> Record = c(AppName, Key, Default),
+              case mnesia:read(?TABLE, {Component, Key}) of
+                  []  -> Record = c(Component, Key, Default),
                          mnesia:write(?TABLE, Record, write),
                          Record;
                   [R] -> R
               end
       end).
 
-c(AppName, Key, Default) -> #runtime_parameters{key = {AppName, Key},
-                                                value = Default}.
+c(Component, Key, Default) -> #runtime_parameters{key = {Component, Key},
+                                                  value = Default}.
 
-p(#runtime_parameters{key = {AppName, Key}, value = Value}) ->
-    [{app_name, AppName},
-     {key,      Key},
-     {value,    Value}].
+p(#runtime_parameters{key = {Component, Key}, value = Value}) ->
+    [{component, Component},
+     {key,       Key},
+     {value,     Value}].
 
-info_keys() -> [app_name, key, value].
+info_keys() -> [component, key, value].
 
 %%---------------------------------------------------------------------------
 
-lookup_app(App) ->
+lookup_component(Component) ->
     case rabbit_registry:lookup_module(
-           runtime_parameter, list_to_atom(binary_to_list(App))) of
-        {error, not_found} -> {errors, [{"application ~s not found", [App]}]};
+           runtime_parameter, list_to_atom(binary_to_list(Component))) of
+        {error, not_found} -> {errors,
+                               [{"component ~s not found", [Component]}]};
         {ok, Module}       -> {ok, Module}
     end.
 

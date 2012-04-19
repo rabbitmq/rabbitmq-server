@@ -350,15 +350,15 @@ action(list_permissions, Node, [], Opts, Inform) ->
                              list_vhost_permissions, [VHost]}),
                       rabbit_auth_backend_internal:vhost_perms_info_keys());
 
-action(set_parameter, Node, [AppName, Key, Value], _Opts, Inform) ->
-    Inform("Setting runtime parameter ~p for app ~p to ~p",
-           [Key, AppName, Value]),
+action(set_parameter, Node, [Component, Key, Value], _Opts, Inform) ->
+    Inform("Setting runtime parameter ~p for component ~p to ~p",
+           [Key, Component, Value]),
     rpc_call(Node, rabbit_runtime_parameters, parse_set,
-             [list_to_binary(AppName), list_to_binary(Key), Value]);
+             [list_to_binary(Component), list_to_binary(Key), Value]);
 
-action(clear_parameter, Node, [AppName, Key], _Opts, Inform) ->
-    Inform("Clearing runtime parameter ~p for app ~p", [Key, AppName]),
-    rpc_call(Node, rabbit_runtime_parameters, clear, [list_to_binary(AppName),
+action(clear_parameter, Node, [Component, Key], _Opts, Inform) ->
+    Inform("Clearing runtime parameter ~p for component ~p", [Key, Component]),
+    rpc_call(Node, rabbit_runtime_parameters, clear, [list_to_binary(Component),
                                                       list_to_binary(Key)]);
 
 action(list_parameters, Node, Args = [], _Opts, Inform) ->
