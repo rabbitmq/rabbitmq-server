@@ -1237,9 +1237,9 @@ handle_cast({reject, AckTags, Requeue, ChPid}, State) ->
                   true ->
                       fun (State1) -> requeue_and_run(AckTags, State1) end;
                   false ->
-                      Fun = dead_letter_fun(rejected, State),
                       fun (State1 = #q{backing_queue       = BQ,
                                        backing_queue_state = BQS}) ->
+                              Fun = dead_letter_fun(rejected, State1),
                               BQS1 = BQ:fold(Fun, BQS, AckTags),
                               ack_if_no_dlx(
                                 AckTags, State1#q{backing_queue_state = BQS1})
