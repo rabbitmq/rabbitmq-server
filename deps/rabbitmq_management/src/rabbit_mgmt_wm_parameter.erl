@@ -60,7 +60,8 @@ accept_content(ReqData, Context) ->
                   ok ->
                       {true, ReqData, Context};
                   {error_string, Reason} ->
-                      rabbit_mgmt_util:bad_request(Reason, ReqData, Context)
+                      rabbit_mgmt_util:bad_request(
+                        list_to_binary(Reason), ReqData, Context)
               end
       end).
 
