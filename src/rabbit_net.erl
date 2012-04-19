@@ -86,7 +86,7 @@ getstat(Sock, Stats) when ?IS_SSL(Sock) ->
 getstat(Sock, Stats) when is_port(Sock) ->
     inet:getstat(Sock, Stats).
 
-recv(Sock, ok) when ?IS_SSL(Sock) ->
+recv(Sock, _Ref) when ?IS_SSL(Sock) ->
     SSL = Sock#ssl_socket.ssl,
     receive
         {ssl,        SSL, Data}   -> {data, Data};
