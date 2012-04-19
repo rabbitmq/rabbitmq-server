@@ -118,9 +118,10 @@
 %% be ignored.
 -callback drain_confirmed(state()) -> {[rabbit_guid:guid()], state()}.
 
-%% Drop messages from the head of the queue while the supplied
-%% predicate returns true. A callback function is supplied allowing
-%% callers access to messages that are about to be dropped.
+%% Drop messages from the head of the queue while the supplied predicate returns
+%% true. Also accepts a boolean parameter that determines whether the messages
+%% are to be acked or not. If they are, the messages and the acktags are
+%% returned.
 -callback dropwhile(msg_pred(), true, state())
                    -> {[{rabbit_types:basic_message(), ack()}], state()};
                    (msg_pred(), false, state())
