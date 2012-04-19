@@ -724,13 +724,6 @@ dead_letter_fun(Reason, _State) ->
             gen_server2:cast(self(), {dead_letter, {Msg, AckTag}, Reason})
     end.
 
-dead_letter_msg(Msg, AckTag, Reason, State = #q{dlx = DLX}) ->
-    case rabbit_exchange:lookup(DLX) of
-        {error, not_found} -> noreply(State);
-        _                  -> dead_letter_msg_existing_dlx(Msg, AckTag, Reason,
-                                                           State)
-    end.
-
 dead_letter_publish(Msg, Reason,
                     State = #q{publish_seqno = MsgSeqNo,
                                dlx           = DLX}) ->
@@ -738,17 +731,20 @@ dead_letter_publish(Msg, Reason,
         rabbit_basic:delivery(
           false, false, make_dead_letter_msg(DLX, Reason, Msg, State),
           MsgSeqNo),
-    {ok, X} = rabbit_exchange:lookup(XName),
-    Queues = rabbit_exchange:route(X, Delivery),
-    {Queues1, Cycles} = detect_dead_letter_cycles(Delivery, Queues),
-    lists:foreach(fun log_cycle_once/1, Cycles),
-    QPids = rabbit_amqqueue:lookup(Queues1),
-    {_, DeliveredQPids} = rabbit_amqqueue:deliver(QPids, Delivery),
-    DeliveredQPids.
+    case rabbit_exchange:lookup(XName) of
+        {ok, X} ->
+            Queues = rabbit_exchange:route(X, Delivery),
+            {Queues1, Cycles} = detect_dead_letter_cycles(Delivery, Queues),
+            lists:foreach(fun log_cycle_once/1, Cycles),
+            QPids = rabbit_amqqueue:lookup(Queues1),
+            {_, DeliveredQPids} = rabbit_amqqueue:deliver(QPids, Delivery),
+            DeliveredQPids;
+        {error, not_found} ->
+            []
+    end.
 
-dead_letter_msg_existing_dlx(Msg, AckTag, Reason,
-                             State = #q{publish_seqno = MsgSeqNo,
-                                        unconfirmed   = UC}) ->
+dead_letter_msg(Msg, AckTag, Reason, State = #q{publish_seqno = MsgSeqNo,
+                                                unconfirmed   = UC}) ->
     QPids = dead_letter_publish(Msg, Reason, State),
     State1 = State#q{queue_monitors = pmon:monitor_all(
                                         QPids, State#q.queue_monitors),
