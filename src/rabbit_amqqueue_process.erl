@@ -1241,16 +1241,15 @@ handle_cast({reject, AckTags, Requeue, ChPid}, State) ->
     noreply(subtract_acks(
               ChPid, AckTags, State,
               case Requeue of
-                  true ->
-                      fun (State1) -> requeue_and_run(AckTags, State1) end;
-                  false ->
-                      fun (State1 = #q{backing_queue       = BQ,
-                                       backing_queue_state = BQS}) ->
-                              Fun = dead_letter_fun(rejected, State1),
-                              BQS1 = BQ:fold(Fun, BQS, AckTags),
-                              ack_if_no_dlx(
-                                AckTags, State1#q{backing_queue_state = BQS1})
-                      end
+                  true  -> fun (State1) -> requeue_and_run(AckTags, State1) end;
+                  false -> fun (State1 = #q{backing_queue       = BQ,
+                                            backing_queue_state = BQS}) ->
+                                   Fun = dead_letter_fun(rejected, State1),
+                                   BQS1 = BQ:fold(Fun, BQS, AckTags),
+                                   ack_if_no_dlx(
+                                     AckTags,
+                                     State1#q{backing_queue_state = BQS1})
+                           end
               end));
 
 handle_cast(delete_immediately, State) ->
