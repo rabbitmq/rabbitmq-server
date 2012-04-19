@@ -21,8 +21,6 @@
 
 -export([description/0, should_offer/1, init/1, handle_response/2]).
 
--include("rabbit_auth_mechanism_spec.hrl").
-
 -rabbit_boot_step({?MODULE,
                    [{description, "auth mechanism amqplain"},
                     {mfa,         {rabbit_registry, register,

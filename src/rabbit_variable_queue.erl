@@ -351,7 +351,7 @@
              durable               :: boolean(),
              transient_threshold   :: non_neg_integer(),
 
-             async_callback        :: async_callback(),
+             async_callback        :: rabbit_backing_queue:async_callback(),
 
              len                   :: non_neg_integer(),
              persistent_count      :: non_neg_integer(),
@@ -369,8 +369,6 @@
              ack_out_counter       :: non_neg_integer(),
              ack_in_counter        :: non_neg_integer(),
              ack_rates             :: rates() }).
-
--include("rabbit_backing_queue_spec.hrl").
 
 -spec(multiple_routing_keys/0 :: () -> 'ok').
 
@@ -591,10 +589,10 @@ dropwhile(Pred, MsgFun, State) ->
                     {_, State2} = internal_fetch(false, MsgStatus, State1),
                     dropwhile(Pred, MsgFun, State2);
                 {true, _} ->
-                    {{_, _, AckTag, _}, State2} =
-                        internal_fetch(true, MsgStatus, State1),
-                    {MsgStatus, State3} = read_msg(MsgStatus, State2),
-                    MsgFun(MsgStatus#msg_status.msg, AckTag),
+                    {MsgStatus1, State2} = read_msg(MsgStatus, State1),
+                    {{Msg, _, AckTag, _}, State3} =
+                         internal_fetch(true, MsgStatus1, State2),
+                    MsgFun(Msg, AckTag),
                     dropwhile(Pred, MsgFun, State3);
                 {false, _} ->
                     a(in_r(MsgStatus, State1))
@@ -1291,10 +1289,11 @@ record_confirms(MsgIdSet, State = #vqstate { msgs_on_disk        = MOD,
                                              msg_indices_on_disk = MIOD,
                                              unconfirmed         = UC,
                                              confirmed           = C }) ->
-    State #vqstate { msgs_on_disk        = gb_sets:difference(MOD,  MsgIdSet),
-                     msg_indices_on_disk = gb_sets:difference(MIOD, MsgIdSet),
-                     unconfirmed         = gb_sets:difference(UC,   MsgIdSet),
-                     confirmed           = gb_sets:union     (C,    MsgIdSet) }.
+    State #vqstate {
+      msgs_on_disk        = rabbit_misc:gb_sets_difference(MOD,  MsgIdSet),
+      msg_indices_on_disk = rabbit_misc:gb_sets_difference(MIOD, MsgIdSet),
+      unconfirmed         = rabbit_misc:gb_sets_difference(UC,   MsgIdSet),
+      confirmed           = gb_sets:union(C, MsgIdSet) }.
 
 must_sync_index(#vqstate { msg_indices_on_disk = MIOD,
                            unconfirmed = UC }) ->

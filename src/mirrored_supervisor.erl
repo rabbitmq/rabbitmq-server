@@ -120,8 +120,6 @@
          delete_child/2, terminate_child/2,
          which_children/1, count_children/1, check_childspecs/1]).
 
--export([behaviour_info/1]).
-
 -behaviour(?GEN_SERVER).
 -behaviour(?SUPERVISOR).
 
@@ -142,15 +140,20 @@
 
 -ifdef(use_specs).
 
--type child()    :: pid() | 'undefined'.
--type child_id() :: term().
--type modules()  :: [module()] | 'dynamic'.
--type worker()   :: 'worker' | 'supervisor'.
--type sup_name() :: {'local', Name :: atom()} | {'global', Name :: atom()}.
--type sup_ref()  :: (Name :: atom())
-                  | {Name :: atom(), Node :: node()}
-                  | {'global', Name :: atom()}
-                  | pid().
+%%--------------------------------------------------------------------------
+%% Callback behaviour
+%%--------------------------------------------------------------------------
+
+-callback init(Args :: term()) ->
+    {ok, {{RestartStrategy :: supervisor2:strategy(),
+           MaxR :: non_neg_integer(),
+           MaxT :: non_neg_integer()},
+           [ChildSpec :: supervisor2:child_spec()]}}
+    | ignore.
+
+%%--------------------------------------------------------------------------
+%% Specs
+%%--------------------------------------------------------------------------
 
 -type startlink_err() :: {'already_started', pid()} | 'shutdown' | term().
 -type startlink_ret() :: {'ok', pid()} | 'ignore' | {'error', startlink_err()}.
@@ -163,53 +166,25 @@
       Args :: term().
 
 -spec start_link(SupName, GroupName, Module, Args) -> startlink_ret() when
-      SupName :: sup_name(),
+      SupName :: supervisor2:sup_name(),
       GroupName :: group_name(),
       Module :: module(),
       Args :: term().
 
--spec start_child(SupRef, ChildSpec) -> supervisor:startchild_ret() when
-      SupRef :: sup_ref(),
-      ChildSpec :: supervisor:child_spec() | (List :: [term()]).
-
--spec restart_child(SupRef, Id) -> Result when
-      SupRef :: sup_ref(),
-      Id :: child_id(),
-      Result :: {'ok', Child :: child()}
-              | {'ok', Child :: child(), Info :: term()}
-              | {'error', Error},
-      Error :: 'running' | 'not_found' | 'simple_one_for_one' | term().
-
--spec delete_child(SupRef, Id) -> Result when
-      SupRef :: sup_ref(),
-      Id :: child_id(),
-      Result :: 'ok' | {'error', Error},
-      Error :: 'running' | 'not_found' | 'simple_one_for_one'.
-
--spec terminate_child(SupRef, Id) -> Result when
-      SupRef :: sup_ref(),
-      Id :: pid() | child_id(),
-      Result :: 'ok' | {'error', Error},
-      Error :: 'not_found' | 'simple_one_for_one'.
-
--spec which_children(SupRef) -> [{Id,Child,Type,Modules}] when
-      SupRef :: sup_ref(),
-      Id :: child_id() | 'undefined',
-      Child :: child(),
-      Type :: worker(),
-      Modules :: modules().
-
--spec check_childspecs(ChildSpecs) -> Result when
-      ChildSpecs :: [supervisor:child_spec()],
-      Result :: 'ok' | {'error', Error :: term()}.
-
 -spec start_internal(Group, ChildSpecs) -> Result when
       Group :: group_name(),
-      ChildSpecs :: [supervisor:child_spec()],
-      Result :: startlink_ret().
+      ChildSpecs :: [supervisor2:child_spec()],
+      Result :: supervisor2:startlink_ret().
 
 -spec create_tables() -> Result when
       Result :: 'ok'.
+
+-else.
+
+-export([behaviour_info/1]).
+
+behaviour_info(callbacks) -> [{init,1}];
+behaviour_info(_Other)    -> undefined.
 
 -endif.
 
@@ -249,9 +224,6 @@ terminate_child(Sup, Id)    -> find_call(Sup, Id, {msg, terminate_child, [Id]}).
 which_children(Sup)         -> fold(which_children, Sup, fun lists:append/2).
 count_children(Sup)         -> fold(count_children, Sup, fun add_proplists/2).
 check_childspecs(Specs)     -> ?SUPERVISOR:check_childspecs(Specs).
-
-behaviour_info(callbacks) -> [{init,1}];
-behaviour_info(_Other)    -> undefined.
 
 call(Sup, Msg) ->
     ?GEN_SERVER:call(child(Sup, mirroring), Msg, infinity).

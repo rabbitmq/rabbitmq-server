@@ -16,42 +16,57 @@
 
 -module(rabbit_auth_backend).
 
+-ifdef(use_specs).
+
+%% A description proplist as with auth mechanisms,
+%% exchanges. Currently unused.
+-callback description() -> [proplist:property()].
+
+%% Check a user can log in, given a username and a proplist of
+%% authentication information (e.g. [{password, Password}]).
+%%
+%% Possible responses:
+%% {ok, User}
+%%     Authentication succeeded, and here's the user record.
+%% {error, Error}
+%%     Something went wrong. Log and die.
+%% {refused, Msg, Args}
+%%     Client failed authentication. Log and die.
+-callback check_user_login(rabbit_types:username(), [term()]) ->
+    {'ok', rabbit_types:user()} |
+    {'refused', string(), [any()]} |
+    {'error', any()}.
+
+%% Given #user and vhost, can a user log in to a vhost?
+%% Possible responses:
+%% true
+%% false
+%% {error, Error}
+%%     Something went wrong. Log and die.
+-callback check_vhost_access(rabbit_types:user(), rabbit_types:vhost()) ->
+    boolean() | {'error', any()}.
+
+
+%% Given #user, resource and permission, can a user access a resource?
+%%
+%% Possible responses:
+%% true
+%% false
+%% {error, Error}
+%%     Something went wrong. Log and die.
+-callback check_resource_access(rabbit_types:user(),
+                                rabbit_types:r(atom()),
+                                rabbit_access_control:permission_atom()) ->
+    boolean() | {'error', any()}.
+
+-else.
+
 -export([behaviour_info/1]).
 
 behaviour_info(callbacks) ->
-    [
-     %% A description proplist as with auth mechanisms,
-     %% exchanges. Currently unused.
-     {description, 0},
-
-     %% Check a user can log in, given a username and a proplist of
-     %% authentication information (e.g. [{password, Password}]).
-     %%
-     %% Possible responses:
-     %% {ok, User}
-     %%     Authentication succeeded, and here's the user record.
-     %% {error, Error}
-     %%     Something went wrong. Log and die.
-     %% {refused, Msg, Args}
-     %%     Client failed authentication. Log and die.
-     {check_user_login, 2},
-
-     %% Given #user and vhost, can a user log in to a vhost?
-     %% Possible responses:
-     %% true
-     %% false
-     %% {error, Error}
-     %%     Something went wrong. Log and die.
-     {check_vhost_access, 2},
-
-     %% Given #user, resource and permission, can a user access a resource?
-     %%
-     %% Possible responses:
-     %% true
-     %% false
-     %% {error, Error}
-     %%     Something went wrong. Log and die.
-     {check_resource_access, 3}
-    ];
+    [{description, 0}, {check_user_login, 2}, {check_vhost_access, 2},
+     {check_resource_access, 3}];
 behaviour_info(_Other) ->
     undefined.
+
+-endif.

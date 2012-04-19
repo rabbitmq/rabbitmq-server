@@ -1240,7 +1240,8 @@ client_confirm(CRef, MsgIds, ActionTaken, State) ->
               case dict:find(CRef, CTM) of
                   {ok, Gs} -> MsgOnDiskFun(gb_sets:intersection(Gs, MsgIds),
                                            ActionTaken),
-                              MsgIds1 = gb_sets:difference(Gs, MsgIds),
+                              MsgIds1 = rabbit_misc:gb_sets_difference(
+                                          Gs, MsgIds),
                               case gb_sets:is_empty(MsgIds1) of
                                   true  -> dict:erase(CRef, CTM);
                                   false -> dict:store(CRef, MsgIds1, CTM)
