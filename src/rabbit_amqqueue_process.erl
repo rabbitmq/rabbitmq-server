@@ -846,20 +846,20 @@ make_dead_letter_msg(Reason,
             _         -> {[DlxRoutingKey],
                           fun (H) -> lists:keydelete(<<"CC">>, 1, H) end}
         end,
+    ReasonBin = list_to_binary(atom_to_list(Reason)),
     #resource{name = QName} = qname(State),
+    TimeSec = rabbit_misc:now_ms() div 1000,
     HeadersFun2 =
         fun (Headers) ->
                 %% The first routing key is the one specified in the
                 %% basic.publish; all others are CC or BCC keys.
-                RoutingKeys1 =
-                    [hd(RoutingKeys) | rabbit_basic:header_routes(Headers)],
-                Info = [{<<"reason">>,
-                         longstr, list_to_binary(atom_to_list(Reason))},
-                        {<<"queue">>, longstr, QName},
-                        {<<"time">>, timestamp, rabbit_misc:now_ms() div 1000},
-                        {<<"exchange">>, longstr, Exchange#resource.name},
-                        {<<"routing-keys">>, array,
-                         [{longstr, Key} || Key <- RoutingKeys1]}],
+                RKs  = [hd(RoutingKeys) | rabbit_basic:header_routes(Headers)],
+                RKs1 = [{longstr, Key} || Key <- RKs],
+                Info = [{<<"reason">>,       longstr,   ReasonBin},
+                        {<<"queue">>,        longstr,   QName},
+                        {<<"time">>,         timestamp, TimeSec},
+                        {<<"exchange">>,     longstr,   Exchange#resource.name},
+                        {<<"routing-keys">>, array,     RKs1}],
                 HeadersFun1(rabbit_basic:append_table_header(<<"x-death">>,
                                                              Info, Headers))
         end,
