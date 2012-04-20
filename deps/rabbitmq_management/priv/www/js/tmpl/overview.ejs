@@ -22,10 +22,10 @@ if (version_warning) {
 %>
   <p class="warning">
     Version mismatch<br/><br/>
-    Some nodes in this cluster are running different versions of
-    RabbitMQ and / or Erlang. This cluster may behave unpredictably.<br/><br/>
+    The nodes in this cluster are running different versions of
+    RabbitMQ and / or Erlang. This cluster may behave unpredictably.
     You are very strongly recommended to ensure that all nodes in this cluster
-    run the same versions of Erlang and RabbitMQ.
+    run the same versions of RabbitMQ and Erlang.
   </p>
   <table class="list">
     <tr>
@@ -72,14 +72,6 @@ if (version_warning) {
 <div class="section">
 <h2>Nodes</h2>
 <div class="hider updatable">
-<% if (!version_warning) { %>
-  <p>
-    <b>RabbitMQ version:</b>
-    <%= rabbit_version %><br/>
-    <b>Erlang version:</b>
-    <%= erlang_version %>
-  </p>
-<% } %>
 <table class="list">
   <tr>
     <th>Name</th>
@@ -197,6 +189,11 @@ if (version_warning) {
    </tr>
 <% } %>
 </table>
+<% if (!version_warning) { %>
+  <p>
+    RabbitMQ <b><%= rabbit_version %></b> on Erlang <b><%= erlang_version %></b>
+  </p>
+<% } %>
 
 <% if (overview.statistics_db_node == 'not_running') { %>
   <p class="status-error">Statistics database could not be contacted. Message rates and queue lengths will not be shown.</p>
