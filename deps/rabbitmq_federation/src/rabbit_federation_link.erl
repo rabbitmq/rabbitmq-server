@@ -187,9 +187,6 @@ terminate(shutdown, #state{downstream_channel    = DCh,
     rabbit_log:info("Federation ~s disconnecting from ~s~n",
                     [rabbit_misc:rs(XName),
                      rabbit_federation_upstream:to_string(Upstream)]),
-    %% TODO this completely does not work!
-    #'basic.cancel_ok'{} =
-        amqp_channel:call(Ch, #'basic.cancel'{consumer_tag = CTag}),
     ensure_closed(DConn, DCh),
     ensure_closed(Conn, Ch),
     rabbit_federation_status:remove(Upstream, XName),
@@ -428,8 +425,6 @@ consume_from_upstream_queue(
               params         = #amqp_params_network{virtual_host = VHost}}
         = Upstream,
     Q = upstream_queue_name(XNameBin, VHost, DownXName),
-    %% TODO it would be nice to just pass through args, but let's do that as
-    %% part of bug 23908.
     ExpiryArg = case Expiry of
                     none -> [];
                     _    -> [{<<"x-expires">>, long, Expiry}]

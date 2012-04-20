@@ -21,7 +21,7 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 -define(SUPERVISOR, rabbit_federation_link_sup_sup).
 
--export([start_link/0, start_child/2, restart_everything/0, stop_child/1]).
+-export([start_link/0, start_child/2, adjust/1, stop_child/1]).
 
 -export([init/1]).
 
@@ -38,19 +38,10 @@ start_child(Id, Args) ->
                     transient, ?MAX_WAIT, supervisor,
                     [rabbit_federation_link_sup]}).
 
-%% TODO (maybe) it's a bit crude to just restart everything whenever
-%% anything changes. Could we be cleaner?
-
-restart_everything() ->
-    [restart_child(Id) ||
-        {Id, _, _, _} <- mirrored_supervisor:which_children(?SUPERVISOR)],
+adjust(Reason) ->
+    [rabbit_federation_link_sup:adjust(Pid, Id, Reason) ||
+        {Id, Pid, _, _} <- mirrored_supervisor:which_children(?SUPERVISOR)],
     ok.
-
-restart_child(Id) ->
-    %% Could we come up with a nice shutdown protocol for links, (so
-    %% we don't end up redelivering any messages)?
-    ok = mirrored_supervisor:terminate_child(?SUPERVISOR, Id),
-    {ok, _Pid} = mirrored_supervisor:restart_child(?SUPERVISOR, Id).
 
 stop_child(Id) ->
     ok = mirrored_supervisor:terminate_child(?SUPERVISOR, Id),

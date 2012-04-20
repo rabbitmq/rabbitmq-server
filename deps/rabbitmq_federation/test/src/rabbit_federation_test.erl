@@ -40,14 +40,6 @@ simple_test() ->
               publish_expect(Ch, <<"upstream">>, <<"key">>, Q, <<"HELLO">>)
       end, ?UPSTREAM_DOWNSTREAM).
 
-%% down-conf is created by configuration, points to up-conf.
-conf_test() ->
-    with_ch(
-      fun (Ch) ->
-              Q = bind_queue(Ch, <<"down-conf">>, <<"key">>),
-              publish_expect(Ch, <<"up-conf">>, <<"key">>, Q, <<"HELLO">>)
-      end, [x(<<"up-conf">>)]).
-
 multiple_upstreams_test() ->
     with_ch(
       fun (Ch) ->
@@ -90,10 +82,6 @@ validation_test() ->
     assert_bad([T(<<"upstream">>), {<<"type">>, longstr, <<"x-federation">>}]),
 
     assert_bad([Type]),
-    assert_bad([T(<<"does-not-exist">>), Type]),
-    assert_bad([T(<<"no-conn">>), Type]),
-    assert_bad([T(<<"bad-conn">>), Type]),
-    assert_bad([T(<<"bad-host">>), Type]),
 
     assert_good([T(<<"upstream">>), Type]).
 
@@ -199,7 +187,7 @@ suffix({Nodename, _}, X) ->
     Node = rabbit_nodes:make({Nodename, NodeHost}),
     rpc:call(Node, rabbit_federation_db, get_active_suffix,
              [rabbit_misc:r(<<"/">>, exchange, <<"downstream">>),
-              #upstream{connection_name = Nodename,
+              #upstream{connection_name = list_to_binary(Nodename),
                         exchange        = list_to_binary(X)}, none]).
 
 %% Downstream: rabbit-test, port 5672
@@ -250,6 +238,10 @@ max_hops() ->
     Mopsy      = start_other_node(?MOPSY),
     Cottontail = start_other_node(?COTTONTAIL),
 
+    declare_exchange(Flopsy,     fed(<<"ring">>, <<"ring">>)),
+    declare_exchange(Mopsy,      fed(<<"ring">>, <<"ring">>)),
+    declare_exchange(Cottontail, fed(<<"ring">>, <<"ring">>)),
+
     Q1 = bind_queue(Flopsy,     <<"ring">>, <<"key">>),
     Q2 = bind_queue(Mopsy,      <<"ring">>, <<"key">>),
     Q3 = bind_queue(Cottontail, <<"ring">>, <<"key">>),
@@ -293,6 +285,59 @@ upstream_has_no_federation() ->
               stop_other_node(?HARE)
       end, []).
 
+dynamic_reconfiguration_test_() ->
+    {timeout, 60, fun dynamic_reconfiguration/0}.
+
+dynamic_reconfiguration() ->
+    with_ch(
+      fun (_Ch) ->
+              Xs = [<<"fed1">>, <<"fed2">>],
+              %% Left from the conf we set up for previous tests
+              assert_connections(Xs, [<<"localhost">>, <<"local5673">>]),
+
+              %% Test this at least does not blow up
+              rabbitmqctl("set_parameter federation local_nodename '<<\"test\">>'"),
+              assert_connections(Xs, [<<"localhost">>, <<"local5673">>]),
+
+              %% Test that clearing connections works
+              rabbitmqctl("clear_parameter federation_connection localhost"),
+              rabbitmqctl("clear_parameter federation_connection local5673"),
+              assert_connections(Xs, []),
+
+              %% Test that readding them and changing them works
+              rabbitmqctl("set_parameter federation_connection localhost '[{<<\"host\">>,<<\"localhost\">>},{<<\"port\">>,5673}]'"),
+              %% Do it twice so we at least hit the no-restart optimisation
+              rabbitmqctl("set_parameter federation_connection localhost '[{<<\"host\">>,<<\"localhost\">>}]'"),
+              rabbitmqctl("set_parameter federation_connection localhost '[{<<\"host\">>,<<\"localhost\">>}]'"),
+              assert_connections(Xs, [<<"localhost">>]),
+              %% And re-add the last - for next test
+              rabbitmqctl("set_parameter federation_connection local5673 '[{<<\"host\">>,<<\"localhost\">>},{<<\"port\">>,5673}]'")
+      end, [fed(<<"fed1">>, <<"all">>), fed(<<"fed2">>, <<"all">>)]).
+
+dynamic_reconfiguration_integrity_test_() ->
+    {timeout, 60, fun dynamic_reconfiguration_integrity/0}.
+
+dynamic_reconfiguration_integrity() ->
+    with_ch(
+      fun (_Ch) ->
+              Xs = [<<"fed1">>, <<"fed2">>],
+
+              %% Declared exchanges with nonexistent set - no links
+              assert_connections(Xs, []),
+
+              %% Create the set - links appear
+              rabbitmqctl("set_parameter federation_upstream_set new-set '[[{<<\"connection\">>,<<\"localhost\">>}]]'"),
+              assert_connections(Xs, [<<"localhost">>]),
+
+              %% Add nonexistent connections to set - nothing breaks
+              rabbitmqctl("set_parameter federation_upstream_set new-set '[[{<<\"connection\">>,<<\"localhost\">>}],[{<<\"connection\">>,<<\"does-not-exist\">>}]]'"),
+              assert_connections(Xs, [<<"localhost">>]),
+
+              %% Change connection in set - links change
+              rabbitmqctl("set_parameter federation_upstream_set new-set '[[{<<\"connection\">>,<<\"local5673\">>}]]'"),
+              assert_connections(Xs, [<<"local5673">>])
+      end, [fed(<<"fed1">>, <<"new-set">>), fed(<<"fed2">>, <<"new-set">>)]).
+
 %%----------------------------------------------------------------------------
 
 with_ch(Fun, Xs) ->
@@ -333,6 +378,11 @@ stop_other_node({Name, _Port}) ->
     ?assertCmd("make -C " ++ plugin_dir() ++ " OTHER_NODE=" ++ Name ++
                    " stop-other-node"),
     timer:sleep(1000).
+
+rabbitmqctl(Args) ->
+    ?assertCmd(
+       plugin_dir() ++ "/../rabbitmq-server/scripts/rabbitmqctl " ++ Args),
+    timer:sleep(100).
 
 plugin_dir() ->
     {ok, [[File]]} = init:get_argument(config),
@@ -453,29 +503,35 @@ assert_status(Xs) ->
     Links = lists:append([links(X) || X <- Xs]),
     Remaining = lists:foldl(fun assert_link_status/2,
                             rabbit_federation_status:status(), Links),
-    ?assertEqual([], remove_configured_links(Remaining)),
+    ?assertEqual([], Remaining),
     ok.
 
 assert_link_status({DXNameBin, ConnectionName, UXNameBin}, Status) ->
-    {[_], Rest} = lists:partition(
-                    fun(St) ->
-                            pget(connection, St) =:= ConnectionName andalso
-                                pget(exchange, St) =:= DXNameBin andalso
-                                pget(upstream_exchange, St) =:= UXNameBin
-                    end, Status),
+    {This, Rest} = lists:partition(
+                     fun(St) ->
+                             pget(connection, St) =:= ConnectionName andalso
+                                 pget(exchange, St) =:= DXNameBin andalso
+                                 pget(upstream_exchange, St) =:= UXNameBin
+                     end, Status),
+    ?assertMatch([_], This),
     Rest.
 
 links(#'exchange.declare'{exchange  = Name,
                           type      = <<"x-federation">>,
                           arguments = Args}) ->
-    {longstr, Set} = rabbit_misc:table_lookup(Args,  <<"upstream-set">>),
-    {ok, Upstreams} = rabbit_federation_upstream:from_set(
-                        Set, rabbit_misc:r(<<"/">>, exchange, Name)),
-    [{Name, list_to_binary(U#upstream.connection_name), U#upstream.exchange} ||
-        U <- Upstreams];
+    {longstr, Set} = rabbit_misc:table_lookup(Args, <<"upstream-set">>),
+    [{Name, U#upstream.connection_name, U#upstream.exchange} ||
+        U <- rabbit_federation_upstream:from_set(
+               Set, rabbit_misc:r(<<"/">>, exchange, Name))];
 
 links(#'exchange.declare'{}) ->
     [].
 
-remove_configured_links(Status) ->
-    [St || St <- Status, pget(exchange, St) =/= <<"down-conf">>].
+assert_connections(Xs, Conns) ->
+    Links = [{X, C, X} ||
+                X <- Xs,
+                C <- Conns],
+    Remaining = lists:foldl(fun assert_link_status/2,
+                            rabbit_federation_status:status(), Links),
+    ?assertEqual([], Remaining),
+    ok.
