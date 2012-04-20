@@ -724,19 +724,16 @@ dead_letter_fun(Reason, _State) ->
             gen_server2:cast(self(), {dead_letter, {Msg, AckTag}, Reason})
     end.
 
-dead_letter_publish(Msg, Reason,
-                    State = #q{publish_seqno = MsgSeqNo,
-                               dlx           = DLX}) ->
-    Delivery = #delivery{message = #basic_message{exchange_name = XName}} =
-        rabbit_basic:delivery(
-          false, false, make_dead_letter_msg(DLX, Reason, Msg, State),
-          MsgSeqNo),
+dead_letter_publish(Msg, Reason, State = #q{publish_seqno = MsgSeqNo}) ->
+    DLMsg = #basic_message{exchange_name = XName} =
+        make_dead_letter_msg(Reason, Msg, State),
     case rabbit_exchange:lookup(XName) of
         {ok, X} ->
-            Queues = rabbit_exchange:route(X, Delivery),
-            {Queues1, Cycles} = detect_dead_letter_cycles(Delivery, Queues),
+            Delivery = rabbit_basic:delivery(false, false, DLMsg, MsgSeqNo),
+            {Queues, Cycles} = detect_dead_letter_cycles(
+                                 DLMsg, rabbit_exchange:route(X, Delivery)),
             lists:foreach(fun log_cycle_once/1, Cycles),
-            QPids = rabbit_amqqueue:lookup(Queues1),
+            QPids = rabbit_amqqueue:lookup(Queues),
             {_, DeliveredQPids} = rabbit_amqqueue:deliver(QPids, Delivery),
             DeliveredQPids;
         {error, not_found} ->
@@ -803,8 +800,7 @@ cleanup_after_confirm(AckTags, State = #q{delayed_stop        = DS,
         false -> noreply(State1)
     end.
 
-detect_dead_letter_cycles(#delivery{message = #basic_message{content = Content}},
-                          Queues) ->
+detect_dead_letter_cycles(#basic_message{content = Content}, Queues) ->
     #content{properties = #'P_basic'{headers = Headers}} =
         rabbit_binary_parser:ensure_content_decoded(Content),
     NoCycles = {Queues, []},
@@ -831,11 +827,11 @@ detect_dead_letter_cycles(#delivery{message = #basic_message{content = Content}}
             end
     end.
 
-make_dead_letter_msg(DLX, Reason,
+make_dead_letter_msg(Reason,
                      Msg = #basic_message{content       = Content,
                                           exchange_name = Exchange,
                                           routing_keys  = RoutingKeys},
-                     State = #q{dlx_routing_key = DlxRoutingKey}) ->
+                     State = #q{dlx = DLX, dlx_routing_key = DlxRoutingKey}) ->
     {DeathRoutingKeys, HeadersFun1} =
         case DlxRoutingKey of
             undefined -> {RoutingKeys, fun (H) -> H end};
