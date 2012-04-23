@@ -109,7 +109,7 @@
 -spec(stat/1 ::
         (rabbit_types:amqqueue())
         -> {'ok', non_neg_integer(), non_neg_integer()}).
--spec(delete_immediately/1 :: (rabbit_types:amqqueue()) -> 'ok').
+-spec(delete_immediately/1 :: (qpids()) -> 'ok').
 -spec(delete/3 ::
         (rabbit_types:amqqueue(), 'false', 'false')
         -> qlen();
@@ -468,8 +468,9 @@ consumers_all(VHostPath) ->
 stat(#amqqueue{pid = QPid}) ->
     delegate_call(QPid, stat).
 
-delete_immediately(#amqqueue{ pid = QPid }) ->
-    gen_server2:cast(QPid, delete_immediately).
+delete_immediately(QPids) ->
+    [gen_server2:cast(QPid, delete_immediately) || QPid <- QPids],
+    ok.
 
 delete(#amqqueue{ pid = QPid }, IfUnused, IfEmpty) ->
     delegate_call(QPid, {delete, IfUnused, IfEmpty}).
