@@ -141,7 +141,7 @@ qc_drain_confirmed(#state{bqstate = BQ}) ->
     {call, ?BQMOD, drain_confirmed, [BQ]}.
 
 qc_dropwhile(#state{bqstate = BQ}) ->
-    {call, ?BQMOD, dropwhile, [fun dropfun/1, BQ]}.
+    {call, ?BQMOD, dropwhile, [fun dropfun/1, fun (_,_) -> ok end, BQ]}.
 
 qc_is_empty(#state{bqstate = BQ}) ->
     {call, ?BQMOD, is_empty, [BQ]}.

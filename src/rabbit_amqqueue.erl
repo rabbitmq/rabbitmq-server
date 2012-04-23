@@ -109,7 +109,7 @@
 -spec(stat/1 ::
         (rabbit_types:amqqueue())
         -> {'ok', non_neg_integer(), non_neg_integer()}).
--spec(delete_immediately/1 :: (rabbit_types:amqqueue()) -> 'ok').
+-spec(delete_immediately/1 :: (qpids()) -> 'ok').
 -spec(delete/3 ::
         (rabbit_types:amqqueue(), 'false', 'false')
         -> qlen();
@@ -331,7 +331,7 @@ assert_args_equivalence(#amqqueue{name = QueueName, arguments = Args},
 
 check_declare_arguments(QueueName, Args) ->
     Checks = [{<<"x-expires">>,                 fun check_positive_int_arg/2},
-              {<<"x-message-ttl">>,             fun check_positive_int_arg/2},
+              {<<"x-message-ttl">>,             fun check_non_neg_int_arg/2},
               {<<"x-ha-policy">>,               fun check_ha_policy_arg/2},
               {<<"x-dead-letter-exchange">>,    fun check_string_arg/2},
               {<<"x-dead-letter-routing-key">>, fun check_dlxrk_arg/2}],
@@ -353,11 +353,24 @@ check_string_arg({longstr, _}, _Args) ->
 check_string_arg({Type, _}, _) ->
     {error, {unacceptable_type, Type}}.
 
-check_positive_int_arg({Type, Val}, _Args) ->
+check_int_arg({Type, _}, _) ->
     case lists:member(Type, ?INTEGER_ARG_TYPES) of
-        false              -> {error, {unacceptable_type, Type}};
-        true when Val =< 0 -> {error, {value_zero_or_less, Val}};
-        true               -> ok
+        true  -> ok;
+        false -> {error, {unacceptable_type, Type}}
+    end.
+
+check_positive_int_arg({Type, Val}, Args) ->
+    case check_int_arg({Type, Val}, Args) of
+        ok when Val > 0 -> ok;
+        ok              -> {error, {value_zero_or_less, Val}};
+        Error           -> Error
+    end.
+
+check_non_neg_int_arg({Type, Val}, Args) ->
+    case check_int_arg({Type, Val}, Args) of
+        ok when Val >= 0 -> ok;
+        ok               -> {error, {value_less_than_zero, Val}};
+        Error            -> Error
     end.
 
 check_dlxrk_arg({longstr, _}, Args) ->
@@ -455,8 +468,9 @@ consumers_all(VHostPath) ->
 stat(#amqqueue{pid = QPid}) ->
     delegate_call(QPid, stat).
 
-delete_immediately(#amqqueue{ pid = QPid }) ->
-    gen_server2:cast(QPid, delete_immediately).
+delete_immediately(QPids) ->
+    [gen_server2:cast(QPid, delete_immediately) || QPid <- QPids],
+    ok.
 
 delete(#amqqueue{ pid = QPid }, IfUnused, IfEmpty) ->
     delegate_call(QPid, {delete, IfUnused, IfEmpty}).

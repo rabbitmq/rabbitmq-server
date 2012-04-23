@@ -2306,8 +2306,8 @@ wait_for_confirms(Unconfirmed) ->
         true  -> ok;
         false -> receive {'$gen_cast', {confirm, Confirmed, _}} ->
                          wait_for_confirms(
-                           gb_sets:difference(Unconfirmed,
-                                              gb_sets:from_list(Confirmed)))
+                           rabbit_misc:gb_sets_difference(
+                             Unconfirmed, gb_sets:from_list(Confirmed)))
                  after 5000 -> exit(timeout_waiting_for_confirm)
                  end
     end.

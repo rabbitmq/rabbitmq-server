@@ -328,7 +328,7 @@ init([#amqqueue { name = QueueName } = Q, GM, DeathFun, LengthFun]) ->
     ensure_gm_heartbeat(),
     {ok, #state { q          = Q,
                   gm         = GM1,
-                  monitors   = dict:new(),
+                  monitors   = pmon:new(),
                   death_fun  = DeathFun,
                   length_fun = LengthFun },
      hibernate,
@@ -353,17 +353,8 @@ handle_cast(request_length, State = #state { length_fun = LengthFun }) ->
     ok = LengthFun(),
     noreply(State);
 
-handle_cast({ensure_monitoring, Pids},
-            State = #state { monitors = Monitors }) ->
-    Monitors1 =
-        lists:foldl(fun (Pid, MonitorsN) ->
-                            case dict:is_key(Pid, MonitorsN) of
-                                true  -> MonitorsN;
-                                false -> MRef = erlang:monitor(process, Pid),
-                                         dict:store(Pid, MRef, MonitorsN)
-                            end
-                    end, Monitors, Pids),
-    noreply(State #state { monitors = Monitors1 }).
+handle_cast({ensure_monitoring, Pids}, State = #state { monitors = Mons }) ->
+    noreply(State #state { monitors = pmon:monitor_all(Pids, Mons) }).
 
 handle_info(send_gm_heartbeat, State = #state{gm = GM}) ->
     gm:broadcast(GM, heartbeat),
@@ -371,12 +362,12 @@ handle_info(send_gm_heartbeat, State = #state{gm = GM}) ->
     noreply(State);
 
 handle_info({'DOWN', _MonitorRef, process, Pid, _Reason},
-            State = #state { monitors  = Monitors,
+            State = #state { monitors  = Mons,
                              death_fun = DeathFun }) ->
-    noreply(case dict:is_key(Pid, Monitors) of
+    noreply(case pmon:is_monitored(Pid, Mons) of
                 false -> State;
                 true  -> ok = DeathFun(Pid),
-                         State #state { monitors = dict:erase(Pid, Monitors) }
+                         State #state { monitors = pmon:erase(Pid, Mons) }
             end);
 
 handle_info(Msg, State) ->
