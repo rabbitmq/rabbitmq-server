@@ -136,7 +136,7 @@ for (var i in globals) {
 %>
    <tr<%= alt_rows(i)%>>
      <td><%= link_fed_conn(connection.key) %></td>
-     <td><%= connection.value.uri %></td>
+     <td><%= fmt_shortened_uri(connection.value.uri) %></td>
      <td class="r"><%= connection.value.expires %></td>
      <td class="r"><%= connection.value.message_ttl %></td>
      <td class="r"><%= connection.value.max_hops %></td>
