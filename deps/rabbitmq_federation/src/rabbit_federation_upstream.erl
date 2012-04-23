@@ -88,7 +88,7 @@ from_props(Upst, DefaultXNameBin, DefaultVHost) ->
 from_props_connection(U, ConnName, C, DefaultXNameBin, _DefaultVHost) ->
     URI = bget(uri, U, C),
     {ok, Params} = amqp_uri:parse(binary_to_list(URI)),
-    #upstream{params          = set_extra_params(Params, U, C),
+    #upstream{params          = Params,
               exchange        = bget(exchange,        U, C, DefaultXNameBin),
               prefetch_count  = bget(prefetch_count,  U, C, none),
               reconnect_delay = bget(reconnect_delay, U, C, 1),
@@ -98,29 +98,7 @@ from_props_connection(U, ConnName, C, DefaultXNameBin, _DefaultVHost) ->
               ha_policy       = bget(ha_policy,       U, C, none),
               connection_name = ConnName}.
 
-set_extra_params(Params, U, C) ->
-    lists:foldl(fun (F, ParamsIn) -> F(ParamsIn, U, C) end, Params,
-                [fun set_ssl_options/3,
-                 fun set_mechanisms/3]).
-
 %%----------------------------------------------------------------------------
-
-set_ssl_options(Params, U, C) ->
-    case bget(protocol, U, C, <<"amqp">>) of
-        <<"amqp">>  -> Params;
-        <<"amqps">> -> Params#amqp_params_network{
-                         ssl_options = bget(ssl_options, U, C, [])}
-    end.
-
-%% TODO it would be nice to support arbitrary mechanisms here.
-set_mechanisms(Params, U, C) ->
-    case bget(mechanism, U, C, <<"default">>) of
-        <<"default">>  -> Params;
-        <<"EXTERNAL">> -> Params#amqp_params_network{
-                            auth_mechanisms =
-                                [fun amqp_auth_mechanisms:external/3]};
-        M              -> exit({unsupported_mechanism, M})
-    end.
 
 bget(K, L1, L2) -> bget(K, L1, L2, undefined).
 
