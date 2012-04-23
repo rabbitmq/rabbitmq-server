@@ -120,8 +120,8 @@
 
 %% Drop messages from the head of the queue while the supplied predicate returns
 %% true. Also accepts a boolean parameter that determines whether the messages
-%% are to be acked or not. If they are, the messages and the acktags are
-%% returned.
+%% necessitate an ack or not. If they do, the function returns a list of
+%% messages with the respective acktags.
 -callback dropwhile(msg_pred(), true, state())
                    -> {[{rabbit_types:basic_message(), ack()}], state()};
                    (msg_pred(), false, state())
