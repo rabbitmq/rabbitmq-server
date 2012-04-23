@@ -19,4 +19,4 @@ install/rabbitmq-server::
 	done
 	sed -e 's|@RABBIT_LIB@|/usr/lib/rabbitmq/lib/rabbitmq_server-$(DEB_UPSTREAM_VERSION)|g' <debian/postrm.in >debian/postrm
 	install -p -D -m 0755 debian/rabbitmq-server.ocf $(DEB_DESTDIR)usr/lib/ocf/resource.d/rabbitmq/rabbitmq-server
-	install -p -D -m 0755 debian/rabbitmq-server.default $(DEB_DESTDIR)etc/default/rabbitmq-server
+	install -p -D -m 0644 debian/rabbitmq-server.default $(DEB_DESTDIR)etc/default/rabbitmq-server
