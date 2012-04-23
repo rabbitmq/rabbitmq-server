@@ -578,8 +578,10 @@ drain_confirmed(State = #vqstate { confirmed = C }) ->
                                         confirmed = gb_sets:new() }}
     end.
 
-dropwhile(Pred, AckRequired, State) ->
-    End = fun(S) when AckRequired -> {[], S};
+dropwhile(Pred, AckRequired, State) -> dropwhile(Pred, AckRequired, State, []).
+
+dropwhile(Pred, AckRequired, State, Msgs) ->
+    End = fun(S) when AckRequired -> {lists:reverse(Msgs), S};
              (S)                  -> {undefined, S}
           end,
     case queue_out(State) of
@@ -591,11 +593,10 @@ dropwhile(Pred, AckRequired, State) ->
                     {MsgStatus1, State2} = read_msg(MsgStatus, State1),
                     {{Msg, _, AckTag, _}, State3} =
                          internal_fetch(true, MsgStatus1, State2),
-                    {L, State4} = dropwhile(Pred, AckRequired, State3),
-                    {[{Msg, AckTag} | L], State4};
+                    dropwhile(Pred, AckRequired, State3, [{Msg, AckTag} | Msgs]);
                 {true, false} ->
                     {_, State2} = internal_fetch(false, MsgStatus, State1),
-                    dropwhile(Pred, AckRequired, State2);
+                    dropwhile(Pred, AckRequired, State2, undefined);
                 {false, _} ->
                     End(a(in_r(MsgStatus, State1)))
             end
