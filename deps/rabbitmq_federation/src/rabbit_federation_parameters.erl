@@ -119,7 +119,6 @@ connection_upstream_set_validation() ->
      {<<"virtual_host">>,    binary, optional},
      {<<"username">>,        binary, optional},
      {<<"password">>,        binary, optional},
-     {<<"exchange">>,        binary, optional},
      {<<"prefetch_count">>,  number, optional},
      {<<"reconnect_delay">>, number, optional},
      {<<"max_hops">>,        number, optional},
