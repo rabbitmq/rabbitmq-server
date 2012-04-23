@@ -102,9 +102,10 @@ build_broker(ParsedUri) ->
                              end
             end,
     UserInfo = proplists:get_value(userinfo, ParsedUri),
-    Ps = #amqp_params_network{host         = unescape_string(Host),
-                              port         = Port,
-                              virtual_host = VHost},
+    Ps = #amqp_params_network{host            = unescape_string(Host),
+                              port            = Port,
+                              virtual_host    = VHost,
+                              auth_mechanisms = mechanisms(ParsedUri)},
     case UserInfo of
         [U, P | _] -> Ps#amqp_params_network{
                         username = list_to_binary(unescape_string(U)),
@@ -187,6 +188,20 @@ find_boolean_parameter(Value) ->
 
 find_atom_parameter(Value) ->
     return(list_to_atom(Value)).
+
+mechanisms(ParsedUri) ->
+    Query = proplists:get_value('query', ParsedUri),
+    Mechanisms0 = proplists:get_all_values("auth_mechanism", Query),
+    Mechanisms1 = [case [list_to_atom(T) || T <- string:tokens(Mech, ":")] of
+                       [F]    -> fun amqp_auth_mechanisms:F/3;
+                       [M, F] -> fun M:F/3;
+                       L      -> throw({not_mechanism, L})
+                   end || Mech <- Mechanisms0],
+    case Mechanisms1 of
+        [] -> [fun amqp_auth_mechanisms:plain/3,
+               fun amqp_auth_mechanisms:amqplain/3];
+        L  -> L
+    end.
 
 %% --=: Plain state monad implementation start :=--
 run_state_monad(FunList, State) ->
