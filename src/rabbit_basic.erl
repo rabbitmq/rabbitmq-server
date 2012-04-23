@@ -63,7 +63,7 @@
 
 -spec(extract_headers/1 :: (rabbit_types:content()) -> headers()).
 
--spec(map_headers/2 :: (rabbit_types:content(), fun((headers()) -> headers()))
+-spec(map_headers/2 :: (fun((headers()) -> headers()), rabbit_types:content())
                        -> rabbit_types:content()).
 
 -spec(header_routes/1 ::
