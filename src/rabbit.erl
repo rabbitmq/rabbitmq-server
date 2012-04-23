@@ -347,7 +347,7 @@ status() ->
 is_running() -> is_running(node()).
 
 is_running(Node) ->
-    rabbit_misc:is_running(Node, rabbit).
+    rabbit_nodes:is_running(Node, rabbit).
 
 environment() ->
     lists:keysort(

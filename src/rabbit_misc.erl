@@ -61,10 +61,6 @@
 -export([quit/1]).
 -export([os_cmd/1]).
 -export([gb_sets_difference/2]).
--export([is_running/2, wait_for_application/3, wait_for_process_death/1,
-         read_pid_file/2]).
-
--define(EXTERNAL_CHECK_INTERVAL, 1000).
 
 %%----------------------------------------------------------------------------
 
@@ -210,11 +206,6 @@
 -spec(quit/1 :: (integer() | string()) -> no_return()).
 -spec(os_cmd/1 :: (string()) -> string()).
 -spec(gb_sets_difference/2 :: (gb_set(), gb_set()) -> gb_set()).
--spec(is_running/2 :: (node(), atom()) -> boolean()).
--spec(wait_for_application/3 :: (node(), string(), atom())
-                                -> ok | {error, process_not_running}).
--spec(wait_for_process_death/1 :: (string()) -> ok).
--spec(read_pid_file/2 :: (file:name(), boolean()) -> string() | no_return()).
 
 -endif.
 
@@ -926,77 +917,3 @@ os_cmd(Command) ->
 
 gb_sets_difference(S1, S2) ->
     gb_sets:fold(fun gb_sets:delete_any/2, S1, S2).
-
-%%----------------------------------------------------------------------------
-
-is_running(Node, Application) ->
-    case rpc:call(Node, application, which_applications, [infinity]) of
-        {badrpc, _} -> false;
-        Apps        -> proplists:is_defined(Application, Apps)
-    end.
-
-wait_for_application(Node, Pid, Application) ->
-    case process_up(Pid) of
-        true  -> case is_running(Node, Application) of
-                     true  -> ok;
-                     false -> timer:sleep(?EXTERNAL_CHECK_INTERVAL),
-                              wait_for_application(Node, Pid, Application)
-                 end;
-        false -> {error, process_not_running}
-    end.
-
-wait_for_process_death(Pid) ->
-    case process_up(Pid) of
-        true  -> timer:sleep(?EXTERNAL_CHECK_INTERVAL),
-                 wait_for_process_death(Pid);
-        false -> ok
-    end.
-
-read_pid_file(PidFile, Wait) ->
-    case {file:read_file(PidFile), Wait} of
-        {{ok, Bin}, _} ->
-            S = string:strip(binary_to_list(Bin), right, $\n),
-            try list_to_integer(S)
-            catch error:badarg ->
-                    exit({error, {garbage_in_pid_file, PidFile}})
-            end,
-            S;
-        {{error, enoent}, true} ->
-            timer:sleep(?EXTERNAL_CHECK_INTERVAL),
-            read_pid_file(PidFile, Wait);
-        {{error, _} = E, _} ->
-            exit({error, {could_not_read_pid, E}})
-    end.
-
-% Test using some OS clunkiness since we shouldn't trust
-% rpc:call(os, getpid, []) at this point
-process_up(Pid) ->
-    with_os([{unix, fun () ->
-                            system("ps -p " ++ Pid
-                                   ++ " >/dev/null 2>&1") =:= 0
-                    end},
-             {win32, fun () ->
-                             Res = os:cmd("tasklist /nh /fi \"pid eq " ++
-                                          Pid ++ "\" 2>&1"),
-                             case re:run(Res, "erl\\.exe", [{capture, none}]) of
-                                 match -> true;
-                                 _     -> false
-                             end
-                     end}]).
-
-with_os(Handlers) ->
-    {OsFamily, _} = os:type(),
-    case proplists:get_value(OsFamily, Handlers) of
-        undefined -> throw({unsupported_os, OsFamily});
-        Handler   -> Handler()
-    end.
-
-% Like system(3)
-system(Cmd) ->
-    ShCmd = "sh -c '" ++ escape_quotes(Cmd) ++ "'",
-    Port = erlang:open_port({spawn, ShCmd}, [exit_status,nouse_stdio]),
-    receive {Port, {exit_status, Status}} -> Status end.
-
-% Escape the quotes in a shell command so that it can be used in "sh -c 'cmd'"
-escape_quotes(Cmd) ->
-    lists:flatten(lists:map(fun ($') -> "'\\''"; (Ch) -> Ch end, Cmd)).

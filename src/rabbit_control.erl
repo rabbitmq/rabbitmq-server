@@ -20,6 +20,7 @@
 -export([start/0, stop/0, action/5]).
 
 -define(RPC_TIMEOUT, infinity).
+-define(EXTERNAL_CHECK_INTERVAL, 1000).
 
 -define(QUIET_OPT, "-q").
 -define(NODE_OPT, "-n").
@@ -156,8 +157,8 @@ action(stop, Node, Args, _Opts, Inform) ->
     Inform("Stopping and halting node ~p", [Node]),
     Res = call(Node, {rabbit, stop_and_halt, []}),
     case {Res, Args} of
-        {ok, [PidFile]} -> rabbit_misc:wait_for_process_death(
-                             rabbit_misc:read_pid_file(PidFile, false));
+        {ok, [PidFile]} -> wait_for_process_death(
+                             read_pid_file(PidFile, false));
         {ok, [_, _| _]} -> exit({badarg, Args});
         _               -> ok
     end,
@@ -191,9 +192,16 @@ action(force_cluster, Node, ClusterNodeSs, _Opts, Inform) ->
            [Node, ClusterNodes]),
     rpc_call(Node, rabbit_mnesia, force_cluster, [ClusterNodes]);
 
-action(wait, Node, [PidFile], _Opts, Inform) ->
+action(wait, Node, Args, _Opts, Inform) ->
+    {PidFile, Application} =
+        case Args of
+            [PidFile0]            -> {PidFile0, rabbit};
+            [PidFile0, AppString] -> {PidFile0, list_to_atom(AppString)}
+        end,
     Inform("Waiting for ~p", [Node]),
-    wait_for_application(Node, PidFile, Inform);
+    Pid = read_pid_file(PidFile, true),
+    Inform("pid is ~s", [Pid]),
+    wait_for_application(Node, Pid, Application);
 
 action(status, Node, [], _Opts, Inform) ->
     Inform("Status of node ~p", [Node]),
@@ -378,10 +386,71 @@ action(eval, Node, [Expr], _Opts, _Inform) ->
 
 %%----------------------------------------------------------------------------
 
-wait_for_application(Node, PidFile, Inform) ->
-    Pid = rabbit_misc:read_pid_file(PidFile, true),
-    Inform("pid is ~s", [Pid]),
-    rabbit_misc:wait_for_application(Node, Pid, rabbit).
+wait_for_application(Node, Pid, Application) ->
+    case process_up(Pid) of
+        true  -> case rabbit_nodes:is_running(Node, Application) of
+                     true  -> ok;
+                     false -> timer:sleep(?EXTERNAL_CHECK_INTERVAL),
+                              wait_for_application(Node, Pid, Application)
+                 end;
+        false -> {error, process_not_running}
+    end.
+
+wait_for_process_death(Pid) ->
+    case process_up(Pid) of
+        true  -> timer:sleep(?EXTERNAL_CHECK_INTERVAL),
+                 wait_for_process_death(Pid);
+        false -> ok
+    end.
+
+read_pid_file(PidFile, Wait) ->
+    case {file:read_file(PidFile), Wait} of
+        {{ok, Bin}, _} ->
+            S = string:strip(binary_to_list(Bin), right, $\n),
+            try list_to_integer(S)
+            catch error:badarg ->
+                    exit({error, {garbage_in_pid_file, PidFile}})
+            end,
+            S;
+        {{error, enoent}, true} ->
+            timer:sleep(?EXTERNAL_CHECK_INTERVAL),
+            read_pid_file(PidFile, Wait);
+        {{error, _} = E, _} ->
+            exit({error, {could_not_read_pid, E}})
+    end.
+
+% Test using some OS clunkiness since we shouldn't trust
+% rpc:call(os, getpid, []) at this point
+process_up(Pid) ->
+    with_os([{unix, fun () ->
+                            system("ps -p " ++ Pid
+                                   ++ " >/dev/null 2>&1") =:= 0
+                    end},
+             {win32, fun () ->
+                             Res = os:cmd("tasklist /nh /fi \"pid eq " ++
+                                          Pid ++ "\" 2>&1"),
+                             case re:run(Res, "erl\\.exe", [{capture, none}]) of
+                                 match -> true;
+                                 _     -> false
+                             end
+                     end}]).
+
+with_os(Handlers) ->
+    {OsFamily, _} = os:type(),
+    case proplists:get_value(OsFamily, Handlers) of
+        undefined -> throw({unsupported_os, OsFamily});
+        Handler   -> Handler()
+    end.
+
+% Like system(3)
+system(Cmd) ->
+    ShCmd = "sh -c '" ++ escape_quotes(Cmd) ++ "'",
+    Port = erlang:open_port({spawn, ShCmd}, [exit_status,nouse_stdio]),
+    receive {Port, {exit_status, Status}} -> Status end.
+
+% Escape the quotes in a shell command so that it can be used in "sh -c 'cmd'"
+escape_quotes(Cmd) ->
+    lists:flatten(lists:map(fun ($') -> "'\\''"; (Ch) -> Ch end, Cmd)).
 
 format_parse_error({_Line, Mod, Err}) ->
     lists:flatten(Mod:format_error(Err)).
