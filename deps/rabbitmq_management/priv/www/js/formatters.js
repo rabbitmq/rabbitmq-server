@@ -396,6 +396,17 @@ function fmt_connection_state(conn) {
     }
 }
 
+function fmt_shortened_uri(uri0) {
+    var uri = fmt_escape_html(uri0);
+    if (uri.indexOf('?') == -1) {
+        return uri;
+    }
+    else {
+        return '<acronym title="' + uri + '">' +
+            uri.substr(0, uri.indexOf('?')) + '?...</acronym>';
+    }
+}
+
 function alt_rows(i) {
     return (i % 2 == 0) ? ' class="alt1"' : ' class="alt2"';
 }
