@@ -793,7 +793,7 @@ process_instruction({discard, ChPid, Msg = #basic_message { id = MsgId }},
     {ok, State1 #state { sender_queues       = SQ1,
                          msg_id_status       = MS1,
                          backing_queue_state = BQS1 }};
-process_instruction({set_length, Length},
+process_instruction({set_length, Length, AckRequired},
                     State = #state { backing_queue       = BQ,
                                      backing_queue_state = BQS }) ->
     QLen = BQ:len(BQS),
@@ -803,7 +803,7 @@ process_instruction({set_length, Length},
                           lists:foldl(
                             fun (const, BQSN) ->
                                     {{_Msg, _IsDelivered, _AckTag, _Remaining},
-                                     BQSN1} = BQ:fetch(false, BQSN),
+                                     BQSN1} = BQ:fetch(AckRequired, BQSN),
                                     BQSN1
                             end, BQS, lists:duplicate(ToDrop, const)),
                       set_synchronised(
