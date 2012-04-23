@@ -168,13 +168,13 @@ publish_delivered(AckRequired, Msg = #basic_message { id = MsgId }, MsgProps,
      ensure_monitoring(ChPid, State #state { backing_queue_state = BQS1,
                                              ack_msg_id          = AM1 })}.
 
-dropwhile(Pred, AckMsgs,
+dropwhile(Pred, AckRequired,
           State = #state{gm                  = GM,
                          backing_queue       = BQ,
                          set_delivered       = SetDelivered,
                          backing_queue_state = BQS }) ->
     Len  = BQ:len(BQS),
-    {Msgs, BQS1} = BQ:dropwhile(Pred, AckMsgs, BQS),
+    {Msgs, BQS1} = BQ:dropwhile(Pred, AckRequired, BQS),
     Len1 = BQ:len(BQS1),
     ok = gm:broadcast(GM, {set_length, Len1}),
     Dropped = Len - Len1,

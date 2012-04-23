@@ -578,24 +578,24 @@ drain_confirmed(State = #vqstate { confirmed = C }) ->
                                         confirmed = gb_sets:new() }}
     end.
 
-dropwhile(Pred, AckMsgs, State) ->
-    End = fun(S) when AckMsgs -> {[], S};
-             (S)              -> {undefined, S}
+dropwhile(Pred, AckRequired, State) ->
+    End = fun(S) when AckRequired -> {[], S};
+             (S)                  -> {undefined, S}
           end,
     case queue_out(State) of
         {empty, State1} ->
             End(a(State1));
         {{value, MsgStatus = #msg_status { msg_props = MsgProps }}, State1} ->
-            case {Pred(MsgProps), AckMsgs} of
+            case {Pred(MsgProps), AckRequired} of
                 {true, true} ->
                     {MsgStatus1, State2} = read_msg(MsgStatus, State1),
                     {{Msg, _, AckTag, _}, State3} =
                          internal_fetch(true, MsgStatus1, State2),
-                    {L, State4} = dropwhile(Pred, AckMsgs, State3),
+                    {L, State4} = dropwhile(Pred, AckRequired, State3),
                     {[{Msg, AckTag} | L], State4};
                 {true, false} ->
                     {_, State2} = internal_fetch(false, MsgStatus, State1),
-                    dropwhile(Pred, AckMsgs, State2);
+                    dropwhile(Pred, AckRequired, State2);
                 {false, _} ->
                     End(a(in_r(MsgStatus, State1)))
             end
