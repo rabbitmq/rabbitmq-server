@@ -28,8 +28,8 @@
 %%----------------------------------------------------------------------------
 
 get_active_suffix(XName, Upstream, Default) ->
-    case rabbit_exchange:lookup(XName) of
-        {ok, #exchange{scratch = Dict}} ->
+    case rabbit_exchange:lookup_scratch(XName) of
+        {ok, Dict} ->
             case ?DICT:find(key(Upstream), Dict) of
                 {ok, Suffix} -> Suffix;
                 error        -> Default
