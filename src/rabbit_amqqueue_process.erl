@@ -696,12 +696,18 @@ calculate_msg_expiry(TTL)       -> now_micros() + (TTL * 1000).
 drop_expired_messages(State = #q{ttl = undefined}) ->
     State;
 drop_expired_messages(State = #q{backing_queue_state = BQS,
-                                 backing_queue       = BQ}) ->
+                                 backing_queue       = BQ }) ->
     Now = now_micros(),
-    BQS1 = BQ:dropwhile(
-             fun (#message_properties{expiry = Expiry}) -> Now > Expiry end,
-             dead_letter_fun(expired, State),
-             BQS),
+    DLXFun = dead_letter_fun(expired, State),
+    ExpirePred = fun (#message_properties{expiry = Expiry}) -> Now > Expiry end,
+    case DLXFun of
+        undefined -> {undefined, BQS1} = BQ:dropwhile(ExpirePred, false, BQS),
+                     BQS1;
+        _         -> {Msgs, BQS1} = BQ:dropwhile(ExpirePred, true, BQS),
+                     lists:foreach(
+                       fun({Msg, AckTag}) -> DLXFun(Msg, AckTag) end, Msgs),
+                     BQS1
+    end,
     ensure_ttl_timer(State#q{backing_queue_state = BQS1}).
 
 ensure_ttl_timer(State = #q{backing_queue       = BQ,
@@ -717,6 +723,14 @@ ensure_ttl_timer(State = #q{backing_queue       = BQ,
 ensure_ttl_timer(State) ->
     State.
 
+ack_if_no_dlx(AckTags, State = #q{dlx                 = undefined,
+                                  backing_queue       = BQ,
+                                  backing_queue_state = BQS }) ->
+    {_Guids, BQS1} = BQ:ack(AckTags, BQS),
+    State#q{backing_queue_state = BQS1};
+ack_if_no_dlx(_AckTags, State) ->
+    State.
+
 dead_letter_fun(_Reason, #q{dlx = undefined}) ->
     undefined;
 dead_letter_fun(Reason, _State) ->
@@ -724,22 +738,25 @@ dead_letter_fun(Reason, _State) ->
             gen_server2:cast(self(), {dead_letter, {Msg, AckTag}, Reason})
     end.
 
-dead_letter_msg(Msg, AckTag, Reason, State = #q{dlx = DLX}) ->
-    case rabbit_exchange:lookup(DLX) of
-        {error, not_found} -> noreply(State);
-        _                  -> dead_letter_msg_existing_dlx(Msg, AckTag, Reason,
-                                                           State)
+dead_letter_publish(Msg, Reason, State = #q{publish_seqno = MsgSeqNo}) ->
+    DLMsg = #basic_message{exchange_name = XName} =
+        make_dead_letter_msg(Reason, Msg, State),
+    case rabbit_exchange:lookup(XName) of
+        {ok, X} ->
+            Delivery = rabbit_basic:delivery(false, false, DLMsg, MsgSeqNo),
+            {Queues, Cycles} = detect_dead_letter_cycles(
+                                 DLMsg, rabbit_exchange:route(X, Delivery)),
+            lists:foreach(fun log_cycle_once/1, Cycles),
+            QPids = rabbit_amqqueue:lookup(Queues),
+            {_, DeliveredQPids} = rabbit_amqqueue:deliver(QPids, Delivery),
+            DeliveredQPids;
+        {error, not_found} ->
+            []
     end.
 
-dead_letter_msg_existing_dlx(Msg, AckTag, Reason,
-                             State = #q{publish_seqno = MsgSeqNo,
-                                        unconfirmed   = UC,
-                                        dlx           = DLX}) ->
-    {ok, _, QPids} =
-        rabbit_basic:publish(
-          rabbit_basic:delivery(
-            false, false, make_dead_letter_msg(DLX, Reason, Msg, State),
-            MsgSeqNo)),
+dead_letter_msg(Msg, AckTag, Reason, State = #q{publish_seqno = MsgSeqNo,
+                                                unconfirmed   = UC}) ->
+    QPids = dead_letter_publish(Msg, Reason, State),
     State1 = State#q{queue_monitors = pmon:monitor_all(
                                         QPids, State#q.queue_monitors),
                      publish_seqno  = MsgSeqNo + 1},
@@ -797,56 +814,58 @@ cleanup_after_confirm(AckTags, State = #q{delayed_stop        = DS,
         false -> noreply(State1)
     end.
 
-already_been_here(_Delivery, #q{dlx = undefined}) ->
-    false;
-already_been_here(#delivery{message = #basic_message{content = Content}},
-                  State) ->
+detect_dead_letter_cycles(#basic_message{content = Content}, Queues) ->
     #content{properties = #'P_basic'{headers = Headers}} =
         rabbit_binary_parser:ensure_content_decoded(Content),
-    #resource{name = QueueName} = qname(State),
+    NoCycles = {Queues, []},
     case Headers of
         undefined ->
-            false;
+            NoCycles;
         _ ->
             case rabbit_misc:table_lookup(Headers, <<"x-death">>) of
                 {array, DeathTables} ->
                     OldQueues = [rabbit_misc:table_lookup(D, <<"queue">>) ||
                                     {table, D} <- DeathTables],
                     OldQueues1 = [QName || {longstr, QName} <- OldQueues],
-                    case lists:member(QueueName, OldQueues1) of
-                        true -> [QueueName | OldQueues1];
-                        _    -> false
-                    end;
+                    OldQueuesSet = ordsets:from_list(OldQueues1),
+                    {Cycling, NotCycling} =
+                        lists:partition(
+                          fun(Queue) ->
+                                  ordsets:is_element(Queue#resource.name,
+                                                     OldQueuesSet)
+                          end, Queues),
+                    {NotCycling, [[QName | OldQueues1] ||
+                                     #resource{name = QName} <- Cycling]};
                 _ ->
-                    false
+                    NoCycles
             end
     end.
 
-make_dead_letter_msg(DLX, Reason,
+make_dead_letter_msg(Reason,
                      Msg = #basic_message{content       = Content,
                                           exchange_name = Exchange,
                                           routing_keys  = RoutingKeys},
-                     State = #q{dlx_routing_key = DlxRoutingKey}) ->
+                     State = #q{dlx = DLX, dlx_routing_key = DlxRoutingKey}) ->
     {DeathRoutingKeys, HeadersFun1} =
         case DlxRoutingKey of
             undefined -> {RoutingKeys, fun (H) -> H end};
             _         -> {[DlxRoutingKey],
                           fun (H) -> lists:keydelete(<<"CC">>, 1, H) end}
         end,
+    ReasonBin = list_to_binary(atom_to_list(Reason)),
     #resource{name = QName} = qname(State),
+    TimeSec = rabbit_misc:now_ms() div 1000,
     HeadersFun2 =
         fun (Headers) ->
                 %% The first routing key is the one specified in the
                 %% basic.publish; all others are CC or BCC keys.
-                RoutingKeys1 =
-                    [hd(RoutingKeys) | rabbit_basic:header_routes(Headers)],
-                Info = [{<<"reason">>,
-                         longstr, list_to_binary(atom_to_list(Reason))},
-                        {<<"queue">>, longstr, QName},
-                        {<<"time">>, timestamp, rabbit_misc:now_ms() div 1000},
-                        {<<"exchange">>, longstr, Exchange#resource.name},
-                        {<<"routing-keys">>, array,
-                         [{longstr, Key} || Key <- RoutingKeys1]}],
+                RKs  = [hd(RoutingKeys) | rabbit_basic:header_routes(Headers)],
+                RKs1 = [{longstr, Key} || Key <- RKs],
+                Info = [{<<"reason">>,       longstr,   ReasonBin},
+                        {<<"queue">>,        longstr,   QName},
+                        {<<"time">>,         timestamp, TimeSec},
+                        {<<"exchange">>,     longstr,   Exchange#resource.name},
+                        {<<"routing-keys">>, array,     RKs1}],
                 HeadersFun1(rabbit_basic:append_table_header(<<"x-death">>,
                                                              Info, Headers))
         end,
@@ -1196,8 +1215,7 @@ handle_cast(_, State = #q{delayed_stop = DS}) when DS =/= undefined ->
 handle_cast({run_backing_queue, Mod, Fun}, State) ->
     noreply(run_backing_queue(Mod, Fun, State));
 
-handle_cast({deliver, Delivery = #delivery{sender     = Sender,
-                                           msg_seq_no = MsgSeqNo}, Flow},
+handle_cast({deliver, Delivery = #delivery{sender = Sender}, Flow},
             State = #q{senders = Senders}) ->
     %% Asynchronous, non-"mandatory", non-"immediate" deliver mode.
     Senders1 = case Flow of
@@ -1206,12 +1224,7 @@ handle_cast({deliver, Delivery = #delivery{sender     = Sender,
                    noflow -> Senders
                end,
     State1 = State#q{senders = Senders1},
-    case already_been_here(Delivery, State1) of
-        false -> noreply(deliver_or_enqueue(Delivery, State1));
-        Qs    -> log_cycle_once(Qs),
-                 rabbit_misc:confirm_to_sender(Sender, [MsgSeqNo]),
-                 noreply(State1)
-    end;
+    noreply(deliver_or_enqueue(Delivery, State1));
 
 handle_cast({ack, AckTags, ChPid}, State) ->
     noreply(subtract_acks(
@@ -1227,11 +1240,13 @@ handle_cast({reject, AckTags, Requeue, ChPid}, State) ->
               ChPid, AckTags, State,
               case Requeue of
                   true  -> fun (State1) -> requeue_and_run(AckTags, State1) end;
-                  false -> Fun = dead_letter_fun(rejected, State),
-                           fun (State1 = #q{backing_queue       = BQ,
+                  false -> fun (State1 = #q{backing_queue       = BQ,
                                             backing_queue_state = BQS}) ->
+                                   Fun = dead_letter_fun(rejected, State1),
                                    BQS1 = BQ:fold(Fun, BQS, AckTags),
-                                   State1#q{backing_queue_state = BQS1}
+                                   ack_if_no_dlx(
+                                     AckTags,
+                                     State1#q{backing_queue_state = BQS1})
                            end
               end));
 

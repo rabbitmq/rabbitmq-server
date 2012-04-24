@@ -36,9 +36,9 @@
              conn_name, limiter, tx_status, next_tag, unacked_message_q,
              uncommitted_message_q, uncommitted_acks, uncommitted_nacks, user,
              virtual_host, most_recently_declared_queue, queue_monitors,
-             consumer_mapping, blocking, queue_consumers, queue_collector_pid,
-             stats_timer, confirm_enabled, publish_seqno, unconfirmed,
-             confirmed, capabilities, trace_state}).
+             consumer_mapping, blocking, queue_consumers, delivering_queues,
+             queue_collector_pid, stats_timer, confirm_enabled, publish_seqno,
+             unconfirmed, confirmed, capabilities, trace_state}).
 
 -define(MAX_PERMISSION_CACHE_SIZE, 12).
 
@@ -198,6 +198,7 @@ init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
                 consumer_mapping        = dict:new(),
                 blocking                = sets:new(),
                 queue_consumers         = dict:new(),
+                delivering_queues       = sets:new(),
                 queue_collector_pid     = CollectorPid,
                 confirm_enabled         = false,
                 publish_seqno           = 1,
@@ -331,10 +332,11 @@ handle_info({'DOWN', _MRef, process, QPid, Reason}, State) ->
     State1 = handle_publishing_queue_down(QPid, Reason, State),
     State2 = queue_blocked(QPid, State1),
     State3 = handle_consuming_queue_down(QPid, State2),
+    State4 = handle_delivering_queue_down(QPid, State3),
     credit_flow:peer_down(QPid),
     erase_queue_stats(QPid),
     noreply(State3#ch{queue_monitors = pmon:erase(
-                                         QPid, State3#ch.queue_monitors)});
+                                         QPid, State4#ch.queue_monitors)});
 
 handle_info({'EXIT', _Pid, Reason}, State) ->
     {stop, Reason, State}.
@@ -657,7 +659,7 @@ handle_method(#'basic.get'{queue = QueueNameBin,
            QueueName, ConnPid,
            fun (Q) -> rabbit_amqqueue:basic_get(Q, self(), NoAck) end) of
         {ok, MessageCount,
-         Msg = {_QName, _QPid, _MsgId, Redelivered,
+         Msg = {_QName, QPid, _MsgId, Redelivered,
                 #basic_message{exchange_name = ExchangeName,
                                routing_keys  = [RoutingKey | _CcRoutes],
                                content       = Content}}} ->
@@ -669,7 +671,8 @@ handle_method(#'basic.get'{queue = QueueNameBin,
                                    routing_key   = RoutingKey,
                                    message_count = MessageCount},
                    Content),
-            {noreply, record_sent(none, not(NoAck), Msg, State)};
+            State1 = monitor_delivering_queue(NoAck, QPid, State),
+            {noreply, record_sent(none, not(NoAck), Msg, State1)};
         empty ->
             {reply, #'basic.get_empty'{}, State}
     end;
@@ -707,10 +710,10 @@ handle_method(#'basic.consume'{queue        = QueueNameBin,
                                        consumer_tag = ActualConsumerTag})),
                             Q}
                    end) of
-                {ok, Q} ->
-                    State1 = State#ch{consumer_mapping =
-                                          dict:store(ActualConsumerTag, Q,
-                                                     ConsumerMapping)},
+                {ok, Q = #amqqueue{pid = QPid}} ->
+                    CM1 = dict:store(ActualConsumerTag, Q, ConsumerMapping),
+                    State1 = monitor_delivering_queue(
+                               NoAck, QPid, State#ch{consumer_mapping = CM1}),
                     {noreply,
                      case NoWait of
                          true  -> consumer_monitor(ActualConsumerTag, State1);
@@ -1108,6 +1111,13 @@ consumer_monitor(ConsumerTag,
             State
     end.
 
+monitor_delivering_queue(true, _QPid, State) ->
+    State;
+monitor_delivering_queue(false, QPid, State = #ch{queue_monitors    = QMons,
+                                                  delivering_queues = DQ}) ->
+    State#ch{queue_monitors    = pmon:monitor(QPid, QMons),
+             delivering_queues = sets:add_element(QPid, DQ)}.
+
 handle_publishing_queue_down(QPid, Reason, State = #ch{unconfirmed = UC}) ->
     case rabbit_misc:is_abnormal_termination(Reason) of
         true  -> {MXs, UC1} = dtree:take_all(QPid, UC),
@@ -1133,6 +1143,9 @@ handle_consuming_queue_down(QPid,
                      end, ConsumerMapping, ConsumerTags),
     State#ch{consumer_mapping = ConsumerMapping1,
              queue_consumers  = dict:erase(QPid, QCons)}.
+
+handle_delivering_queue_down(QPid, State = #ch{delivering_queues = DQ}) ->
+    State#ch{delivering_queues = sets:del_element(QPid, DQ)}.
 
 binding_action(Fun, ExchangeNameBin, DestinationType, DestinationNameBin,
                RoutingKey, Arguments, ReturnMethod, NoWait,
@@ -1269,9 +1282,11 @@ new_tx(State) -> State#ch{uncommitted_message_q = queue:new(),
 
 notify_queues(State = #ch{state = closing}) ->
     {ok, State};
-notify_queues(State = #ch{consumer_mapping = Consumers}) ->
-    {rabbit_amqqueue:notify_down_all(consumer_queues(Consumers), self()),
-     State#ch{state = closing}}.
+notify_queues(State = #ch{consumer_mapping  = Consumers,
+                          delivering_queues = DQ }) ->
+    QPids = sets:to_list(
+              sets:union(sets:from_list(consumer_queues(Consumers)), DQ)),
+    {rabbit_amqqueue:notify_down_all(QPids, self()), State#ch{state = closing}}.
 
 fold_per_queue(_F, Acc, []) ->
     Acc;

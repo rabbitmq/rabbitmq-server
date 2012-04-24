@@ -168,19 +168,19 @@ publish_delivered(AckRequired, Msg = #basic_message { id = MsgId }, MsgProps,
      ensure_monitoring(ChPid, State #state { backing_queue_state = BQS1,
                                              ack_msg_id          = AM1 })}.
 
-dropwhile(Pred, MsgFun,
+dropwhile(Pred, AckRequired,
           State = #state{gm                  = GM,
                          backing_queue       = BQ,
                          set_delivered       = SetDelivered,
                          backing_queue_state = BQS }) ->
     Len  = BQ:len(BQS),
-    BQS1 = BQ:dropwhile(Pred, MsgFun, BQS),
+    {Msgs, BQS1} = BQ:dropwhile(Pred, AckRequired, BQS),
     Len1 = BQ:len(BQS1),
     ok = gm:broadcast(GM, {set_length, Len1}),
     Dropped = Len - Len1,
     SetDelivered1 = lists:max([0, SetDelivered - Dropped]),
-    State #state { backing_queue_state = BQS1,
-                   set_delivered       = SetDelivered1 }.
+    {Msgs, State #state { backing_queue_state = BQS1,
+                          set_delivered       = SetDelivered1 } }.
 
 drain_confirmed(State = #state { backing_queue       = BQ,
                                  backing_queue_state = BQS,
@@ -246,12 +246,9 @@ ack(AckTags, State = #state { gm                  = GM,
     {MsgIds, State #state { backing_queue_state = BQS1,
                             ack_msg_id          = AM1 }}.
 
-fold(MsgFun, State = #state { gm                  = GM,
-                              backing_queue       = BQ,
-                              backing_queue_state = BQS}, AckTags) ->
-    BQS1 = BQ:fold(MsgFun, BQS, AckTags),
-    ok = gm:broadcast(GM, {fold, MsgFun, AckTags}),
-    State #state { backing_queue_state = BQS1 }.
+fold(MsgFun, State = #state { backing_queue       = BQ,
+                              backing_queue_state = BQS }, AckTags) ->
+    State #state { backing_queue_state = BQ:fold(MsgFun, BQS, AckTags) }.
 
 requeue(AckTags, State = #state { gm                  = GM,
                                   backing_queue       = BQ,
