@@ -329,10 +329,17 @@ function fmt_idle_long(obj) {
 }
 
 function fmt_escape_html(txt) {
+    return fmt_escape_html0(txt).replace(/\n/g, '<br/>');
+}
+
+function fmt_escape_html_one_line(txt) {
+    return fmt_escape_html0(txt).replace(/\n/g, '');
+}
+
+function fmt_escape_html0(txt) {
     return txt.replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
-        .replace(/\n/g, '<br/>')
         .replace(/\"/g, '&quot;');
 }
 
