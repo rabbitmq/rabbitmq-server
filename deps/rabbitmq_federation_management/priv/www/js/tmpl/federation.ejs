@@ -137,11 +137,11 @@ for (var i in globals) {
    <tr<%= alt_rows(i)%>>
      <td><%= link_fed_conn(connection.key) %></td>
      <td><%= fmt_shortened_uri(connection.value.uri) %></td>
-     <td class="r"><%= connection.value.expires %></td>
-     <td class="r"><%= connection.value.message_ttl %></td>
+     <td class="r"><%= connection.value.expires %>ms</td>
+     <td class="r"><%= connection.value.message_ttl %>ms</td>
      <td class="r"><%= connection.value.max_hops %></td>
      <td class="r"><%= connection.value.prefetch_count %></td>
-     <td class="r"><%= connection.value.reconnect_delay %></td>
+     <td class="r"><%= connection.value.reconnect_delay %>s</td>
      <td class="r"><%= connection.value.ha_policy %></td>
    </tr>
 <% } %>
@@ -152,7 +152,6 @@ for (var i in globals) {
 <% } %>
     </div>
     <h3>Add a new connection</h3>
-
     <form action="#/fed-parameters" method="put">
       <input type="hidden" name="component" value="federation_connection"/>
       <table class="form">
@@ -168,34 +167,52 @@ for (var i in globals) {
           <th><label>Expires:</label></th>
           <td><input type="text" name="expires"/> ms</td>
         </tr>
-
         <tr>
           <th><label>Message TTL:</label></th>
           <td><input type="text" name="message_ttl"/> ms</td>
         </tr>
-
         <tr>
           <th><label>Max hops:</label></th>
           <td><input type="text" name="max_hops"/></td>
         </tr>
-
         <tr>
           <th><label>Prefetch count:</label></th>
           <td><input type="text" name="prefetch_count"/></td>
         </tr>
-
         <tr>
           <th><label>Reconnect delay:</label></th>
           <td><input type="text" name="reconnect_delay"/></td>
         </tr>
-
         <tr>
           <th><label>HA Policy:</label></th>
           <td><input type="text" name="ha_policy"/></td>
         </tr>
-
       </table>
       <input type="submit" value="Add connection"/>
     </form>
+  </div>
+</div>
+<div class="section-hidden">
+  <h2>URI examples</h2>
+  <div class="hider">
+    <ul>
+      <li>
+        <code>amqp://server-name</code><br/>
+        connect to server-name, without SSL and default credentials
+      </li>
+      <li>
+        <code>amqp://user:password@server-name/my-vhost</code><br/>
+        connect to server-name, with credentials and overridden
+        virtual host
+      </li>
+      <li>
+        <code>amqps://user:password@server-name?cacertfile=/path/to/cacert.pem&certfile=/path/to/cert.pem&keyfile=/path/to/key.pem&verify=verify_peer</code><br/>
+        connect to server-name, with credentials and SSL
+      </li>
+      <li>
+        <code>amqps://server-name?cacertfile=/path/to/cacert.pem&certfile=/path/to/cert.pem&keyfile=/path/to/key.pem&verify=verify_peer&fail_if_no_peer_cert=true&auth_mechanism=external</code><br/>
+        connect to server-name, with SSL and EXTERNAL authentication
+      </li>
+    </ul>
   </div>
 </div>
