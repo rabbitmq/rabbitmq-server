@@ -17,13 +17,15 @@
 -module(rabbit_mgmt_format).
 
 -export([format/2, print/2, remove/1, ip/1, ipb/1, amqp_table/1, tuple/1]).
--export([timestamp/1, timestamp_ms/1, strip_pids/1]).
+-export([parameter/1, timestamp/1, timestamp_ms/1, strip_pids/1]).
 -export([node_from_pid/1, protocol/1, resource/1, queue/1]).
 -export([exchange/1, user/1, internal_user/1, binding/1, url/2]).
 -export([pack_binding_props/2, unpack_binding_props/1, tokenise/1]).
 -export([to_amqp_table/1, listener/1, properties/1, basic_properties/1]).
 -export([record/2, to_basic_properties/1]).
 -export([addr/1, port/1]).
+
+-import(rabbit_misc, [pget/2, pset/3]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
@@ -101,6 +103,17 @@ utf8_safe(V) ->
             Enc = base64:encode(V),
             <<"Invalid UTF-8, base64 is: ", Enc/binary>>
     end.
+
+parameter(P) -> pset(value, param0(pget(value, P)), P).
+
+param0(L = [{_, _} | _])    -> {struct, [{K, param0(V)} || {K, V} <- L]};
+param0(L) when is_list(L)   -> [param0(I) || I <- L];
+param0(B) when is_binary(B) -> B;
+param0(N) when is_number(N) -> N;
+param0(null)                -> null;
+param0(true)                -> true;
+param0(false)               -> false.
+
 
 tuple(unknown)                    -> unknown;
 tuple(Tuple) when is_tuple(Tuple) -> [tuple(E) || E <- tuple_to_list(Tuple)];

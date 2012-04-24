@@ -42,6 +42,9 @@ dispatcher() ->
      {["extensions"],                                              rabbit_mgmt_wm_extensions, []},
      {["all-configuration"],                                       rabbit_mgmt_wm_definitions, []}, %% This was the old name, let's not break things gratuitously.
      {["definitions"],                                             rabbit_mgmt_wm_definitions, []},
+     {["parameters"],                                              rabbit_mgmt_wm_parameters, []},
+     {["parameters", component],                                   rabbit_mgmt_wm_parameters, []},
+     {["parameters", component, key],                              rabbit_mgmt_wm_parameter, []},
      {["connections"],                                             rabbit_mgmt_wm_connections, []},
      {["connections", connection],                                 rabbit_mgmt_wm_connection, []},
      {["connections", connection, "channels"],                     rabbit_mgmt_wm_connection_channels, []},

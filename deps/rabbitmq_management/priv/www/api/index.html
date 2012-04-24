@@ -179,7 +179,7 @@ Content-Length: 0</pre>
         </td>
         <td>
           The server definitions - exchanges, queues, bindings, users,
-          virtual hosts, permissions. Everything apart from
+          virtual hosts, permissions and parameters. Everything apart from
           messages. POST to upload an existing set of definitions. Note
           that:
           <ul>
@@ -500,6 +500,32 @@ or:
         <td>An individual permission of a user and virtual host. To PUT a permission, you will need a body looking something like this:
 <pre>{"configure":".*","write":".*","read":".*"}</pre>
         All keys are mandatory.</td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path"><a href="/api/parameters">/api/parameters</a></td>
+        <td>A list of all parameters.</td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/parameters/<i>component</i></td>
+        <td>A list of all parameters for a given component.</td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td>X</td>
+        <td>X</td>
+        <td></td>
+        <td class="path">/api/parameters/<i>component</i>/<i>key</i></td>
+        <td>An individual parameter. To PUT a parameter, you will need a body looking something like this:
+<pre>{"component":"federation","key":"local_username","value":"guest"}</pre>
+</td>
       </tr>
       <tr>
         <td>X</td>

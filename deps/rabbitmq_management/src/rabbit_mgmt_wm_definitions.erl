@@ -59,7 +59,8 @@ to_json(ReqData, Context) ->
     rabbit_mgmt_util:reply(
       [{rabbit_version, list_to_binary(Vsn)}] ++
       filter(
-        [{users,       rabbit_mgmt_wm_users:users()},
+        [{parameters,  rabbit_mgmt_wm_parameters:basic(ReqData)},
+         {users,       rabbit_mgmt_wm_users:users()},
          {vhosts,      rabbit_mgmt_wm_vhosts:basic()},
          {permissions, rabbit_mgmt_wm_permissions:permissions()},
          {queues,      Qs},
@@ -106,18 +107,18 @@ accept(Body, ReqData, Context) ->
                fun(E) -> rabbit_mgmt_util:bad_request(E, ReqData, Context) end).
 
 apply_defs(Body, SuccessFun, ErrorFun) ->
-    case rabbit_mgmt_util:decode(
-           [users, vhosts, permissions, queues, exchanges, bindings], Body) of
+    case rabbit_mgmt_util:decode([], Body) of
         {error, E} ->
             ErrorFun(E);
-        {ok, [Users, VHosts, Permissions, Queues, Exchanges, Bindings], _} ->
+        {ok, _, All} ->
             try
-                for_all(Users,       fun add_user/1),
-                for_all(VHosts,      fun add_vhost/1),
-                for_all(Permissions, fun add_permission/1),
-                for_all(Queues,      fun add_queue/1),
-                for_all(Exchanges,   fun add_exchange/1),
-                for_all(Bindings,    fun add_binding/1),
+                for_all(parameters,  All, fun add_parameter/1),
+                for_all(users,       All, fun add_user/1),
+                for_all(vhosts,      All, fun add_vhost/1),
+                for_all(permissions, All, fun add_permission/1),
+                for_all(queues,      All, fun add_queue/1),
+                for_all(exchanges,   All, fun add_exchange/1),
+                for_all(bindings,    All, fun add_binding/1),
                 SuccessFun()
             catch {error, E} -> ErrorFun(E);
                   exit:E     -> ErrorFun(E)
@@ -154,7 +155,8 @@ export_name(_Name)                -> true.
 %%--------------------------------------------------------------------
 
 rw_state() ->
-    [{users,       [name, password_hash, tags]},
+    [{parameters,  [component, key, value]},
+     {users,       [name, password_hash, tags]},
      {vhosts,      [name]},
      {permissions, [user, vhost, configure, write, read]},
      {queues,      [name, vhost, durable, auto_delete, arguments]},
@@ -174,17 +176,29 @@ filter_item(Item, Allowed) ->
 
 %%--------------------------------------------------------------------
 
-for_all(List, Fun) ->
-    [Fun([{atomise_name(K), clean_value(V)} || {K, V} <- I]) ||
-        {struct, I} <- List].
+for_all(Name, All, Fun) ->
+    case pget(Name, All) of
+        undefined ->
+            ok;
+        List ->
+            [Fun([{atomise_name(K), V} || {K, V} <- I]) ||
+                {struct, I} <- List]
+    end.
 
 atomise_name(N) ->
     list_to_atom(binary_to_list(N)).
 
-clean_value({struct, L}) -> L;
-clean_value(A)           -> A.
-
 %%--------------------------------------------------------------------
+
+add_parameter(Param) ->
+    Comp = pget(component, Param),
+    Key = pget(key, Param),
+    case rabbit_runtime_parameters:set(
+           Comp, Key, rabbit_mgmt_parse:parameter_value(pget(value, Param))) of
+        ok                -> ok;
+        {error_string, E} -> S = rabbit_misc:format(" (~s/~s)", [Comp, Key]),
+                             exit(list_to_binary(E ++ S))
+    end.
 
 add_user(User) ->
     rabbit_mgmt_wm_user:put_user(User).
