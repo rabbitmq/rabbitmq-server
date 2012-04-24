@@ -192,16 +192,13 @@ action(force_cluster, Node, ClusterNodeSs, _Opts, Inform) ->
            [Node, ClusterNodes]),
     rpc_call(Node, rabbit_mnesia, force_cluster, [ClusterNodes]);
 
-action(wait, Node, Args, _Opts, Inform) ->
-    {PidFile, Application} =
-        case Args of
-            [PidFile0]            -> {PidFile0, rabbit};
-            [PidFile0, AppString] -> {PidFile0, list_to_atom(AppString)}
-        end,
+action(wait, Node, [PidFile], _Opts, Inform) ->
     Inform("Waiting for ~p", [Node]),
-    Pid = read_pid_file(PidFile, true),
-    Inform("pid is ~s", [Pid]),
-    wait_for_application(Node, Pid, Application);
+    wait_for_application(Node, PidFile, rabbit, Inform);
+
+action(wait, Node, [PidFile, App], _Opts, Inform) ->
+    Inform("Waiting for ~p on ~p", [App, Node]),
+    wait_for_application(Node, PidFile, list_to_atom(App), Inform);
 
 action(status, Node, [], _Opts, Inform) ->
     Inform("Status of node ~p", [Node]),
@@ -385,6 +382,11 @@ action(eval, Node, [Expr], _Opts, _Inform) ->
     end.
 
 %%----------------------------------------------------------------------------
+
+wait_for_application(Node, PidFile, Application, Inform) ->
+    Pid = read_pid_file(PidFile, true),
+    Inform("pid is ~s", [Pid]),
+    wait_for_application(Node, Pid, Application).
 
 wait_for_application(Node, Pid, Application) ->
     case process_up(Pid) of
