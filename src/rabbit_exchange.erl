@@ -20,7 +20,7 @@
 
 -export([recover/0, callback/4, declare/6,
          assert_equivalence/6, assert_args_equivalence/2, check_type/1,
-         lookup/1, lookup_or_die/1, list/1, update_scratch/2,
+         lookup/1, lookup_or_die/1, list/1, lookup_scratch/1,  update_scratch/2,
          info_keys/0, info/1, info/2, info_all/1, info_all/2,
          route/2, delete/2]).
 %% these must be run inside a mnesia tx
@@ -60,6 +60,9 @@
         (name()) -> rabbit_types:exchange() |
                     rabbit_types:channel_exit()).
 -spec(list/1 :: (rabbit_types:vhost()) -> [rabbit_types:exchange()]).
+-spec(lookup_scratch/1 :: (name()) ->
+                               rabbit_types:ok(term()) |
+                               rabbit_types:error('not_found')).
 -spec(update_scratch/2 :: (name(), fun((any()) -> any())) -> 'ok').
 -spec(info_keys/0 :: () -> rabbit_types:info_keys()).
 -spec(info/1 :: (rabbit_types:exchange()) -> rabbit_types:infos()).
@@ -233,6 +236,12 @@ list(VHostPath) ->
     mnesia:dirty_match_object(
       rabbit_exchange,
       #exchange{name = rabbit_misc:r(VHostPath, exchange), _ = '_'}).
+
+lookup_scratch(Name) ->
+    case lookup(Name) of
+        {ok, #exchange{scratch = Scratch}} -> {ok, Scratch};
+        {error, not_found}                 -> {error, not_found}
+    end.
 
 update_scratch(Name, Fun) ->
     rabbit_misc:execute_mnesia_transaction(
