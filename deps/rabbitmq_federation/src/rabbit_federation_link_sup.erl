@@ -94,7 +94,7 @@ upstreams(XName, ConnName) ->
             []
     end.
 
-upstream_set(XName) ->
+upstream_set(_XName) ->
     %% TODO ahem
     <<"all">>.
 

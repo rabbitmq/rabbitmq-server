@@ -28,7 +28,7 @@
 
 -behaviour(rabbit_exchange_decorator).
 
--export([description/0, serialise_events/0, route/2]).
+-export([description/0, serialise_events/1, route/2]).
 -export([create/2, delete/3, add_binding/3, remove_bindings/3]).
 
 %%----------------------------------------------------------------------------
@@ -37,7 +37,7 @@ description() ->
     [{name, <<"federation">>},
      {description, <<"Federation exchange decorator">>}].
 
-serialise_events() -> true.
+serialise_events(#exchange{name = XName}) -> federate(XName).
 
 route(_X, _Delivery) -> ok.
 
