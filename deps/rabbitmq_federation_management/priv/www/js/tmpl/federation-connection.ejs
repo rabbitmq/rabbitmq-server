@@ -1,0 +1,24 @@
+<h1>Federation Connection: <b><%= fmt_string(connection.key) %></b></h1>
+
+<div class="section">
+  <h2>Overview</h2>
+  <div class="hider">
+    <table class="facts">
+      <tr>
+        <th>TODO:</th>
+        <td>Show some details here</td>
+      </tr>
+    </table>
+  </div>
+</div>
+
+<div class="section-hidden">
+  <h2>Delete this connection</h2>
+  <div class="hider">
+    <form action="#/fed-parameters" method="delete" class="confirm">
+      <input type="hidden" name="component" value="federation_connection"/>
+      <input type="hidden" name="key" value="<%= fmt_string(connection.key) %>"/>
+      <input type="submit" value="Delete this connection"/>
+    </form>
+  </div>
+</div>
