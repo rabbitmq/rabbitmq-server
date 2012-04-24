@@ -85,9 +85,9 @@ from_props(Upst, DefaultXNameBin, DefaultVHost) ->
                         Upst, ConnName, Conn, DefaultXNameBin, DefaultVHost)
     end.
 
-from_props_connection(U, ConnName, C, DefaultXNameBin, _DefaultVHost) ->
+from_props_connection(U, ConnName, C, DefaultXNameBin, DefaultVHost) ->
     URI = bget(uri, U, C),
-    {ok, Params} = amqp_uri:parse(binary_to_list(URI)),
+    {ok, Params} = amqp_uri:parse(binary_to_list(URI), DefaultVHost),
     #upstream{params          = Params,
               exchange        = bget(exchange,        U, C, DefaultXNameBin),
               prefetch_count  = bget(prefetch_count,  U, C, none),
