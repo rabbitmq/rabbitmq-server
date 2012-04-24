@@ -22,22 +22,20 @@
 -export([to_table/1, to_string/1, from_set/2, from_set/3]).
 
 -import(rabbit_misc, [pget/2, pget/3]).
--import(rabbit_federation_util, [vhost/1]).
+-import(rabbit_federation_util, [name/1, vhost/1]).
 
 %%----------------------------------------------------------------------------
 
 to_table(#upstream{original_uri = URI,
                    params       = Params,
-                   exchange     = XNameBin}) ->
+                   exchange = X}) ->
     {table, [{<<"uri">>,          longstr, URI},
              {<<"virtual_host">>, longstr, vhost(Params)},
-             {<<"exchange">>,     longstr, XNameBin}]}.
+             {<<"exchange">>,     longstr, name(X)}]}.
 
 to_string(#upstream{original_uri = URI,
-                    params       = Params,
-                    exchange     = XNameBin}) ->
-    X = rabbit_misc:rs(rabbit_misc:r(vhost(Params), exchange, XNameBin)),
-    print("~s on ~s", [X, URI]).
+                    exchange     = #exchange{name = XName}}) ->
+    print("~s on ~s", [rabbit_misc:rs(XName), URI]).
 
 print(Fmt, Args) -> iolist_to_binary(io_lib:format(Fmt, Args)).
 
@@ -56,26 +54,26 @@ from_set(SetName, X) ->
         Set       -> from_set_contents(Set, X)
     end.
 
-from_set_contents(Set, #resource{name         = DefaultXNameBin,
-                                 virtual_host = DefaultVHost}) ->
-    Results = [from_props(P, DefaultXNameBin, DefaultVHost) || P <- Set],
+from_set_contents(Set, X) ->
+    Results = [from_props(P, X) || P <- Set],
     [R || R <- Results, R =/= not_found].
 
-from_props(Upst, DefaultXNameBin, DefaultVHost) ->
+from_props(Upst, X) ->
     ConnName = bget(connection, Upst, []),
     case rabbit_runtime_parameters:value(
            <<"federation_connection">>, ConnName) of
         not_found  -> not_found;
         Conn       -> from_props_connection(
-                        Upst, ConnName, Conn, DefaultXNameBin, DefaultVHost)
+                                         Upst, ConnName, Conn, X)
     end.
 
-from_props_connection(U, ConnName, C, DefaultXNameBin, DefaultVHost) ->
+from_props_connection(U, ConnName, C, X) ->
     URI = bget(uri, U, C),
-    {ok, Params} = amqp_uri:parse(binary_to_list(URI), DefaultVHost),
+    {ok, Params} = amqp_uri:parse(binary_to_list(URI), vhost(X)),
+    XNameBin = bget(exchange, U, C, name(X)),
     #upstream{params          = Params,
               original_uri    = URI,
-              exchange        = bget(exchange,        U, C, DefaultXNameBin),
+              exchange        = with_name(XNameBin, vhost(Params), X),
               prefetch_count  = bget(prefetch_count,  U, C, none),
               reconnect_delay = bget(reconnect_delay, U, C, 1),
               max_hops        = bget(max_hops,        U, C, 1),
@@ -96,3 +94,6 @@ bget(K0, L1, L2, D) ->
     end.
 
 a2b(A) -> list_to_binary(atom_to_list(A)).
+
+with_name(XNameBin, VHostBin, X) ->
+    X#exchange{name = rabbit_misc:r(VHostBin, exchange, XNameBin)}.

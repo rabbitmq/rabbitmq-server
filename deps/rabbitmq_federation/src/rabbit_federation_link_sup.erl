@@ -95,14 +95,8 @@ upstreams(XName, ConnName) ->
     end.
 
 upstream_set(XName) ->
-    case rabbit_exchange:lookup(XName) of
-        {ok, #exchange{arguments = Args}} ->
-            {longstr, UpstreamSet} =
-                rabbit_misc:table_lookup(Args, <<"upstream-set">>),
-            {ok, UpstreamSet};
-        {error, not_found} ->
-            {error, not_found}
-    end.
+    %% TODO ahem
+    <<"all">>.
 
 prune_for_upstream_set(Set, XName) ->
     case upstream_set(XName) of
@@ -113,16 +107,16 @@ prune_for_upstream_set(Set, XName) ->
 
 %%----------------------------------------------------------------------------
 
-init({UpstreamSet, XName}) ->
+init({UpstreamSet, X}) ->
     %% 1, 1 so that the supervisor can give up and get into waiting
     %% for the reconnect_delay quickly.
-    {ok, {{one_for_one, 1, 1}, specs(UpstreamSet, XName)}}.
+    {ok, {{one_for_one, 1, 1}, specs(UpstreamSet, X)}}.
 
-specs(UpstreamSet, XName) ->
-    [spec(Upstream, XName) ||
-        Upstream <- rabbit_federation_upstream:from_set(UpstreamSet, XName)].
+specs(UpstreamSet, X) ->
+    [spec(Upstream, X) ||
+        Upstream <- rabbit_federation_upstream:from_set(UpstreamSet, X)].
 
-spec(Upstream = #upstream{reconnect_delay = Delay}, XName) ->
+spec(Upstream = #upstream{reconnect_delay = Delay}, #exchange{name = XName}) ->
     {Upstream, {rabbit_federation_link, start_link, [{Upstream, XName}]},
      {transient, Delay}, ?MAX_WAIT, worker,
      [rabbit_federation_link]}.
