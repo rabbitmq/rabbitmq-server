@@ -324,7 +324,6 @@
 
 -type(timestamp() :: {non_neg_integer(), non_neg_integer(), non_neg_integer()}).
 -type(seq_id()  :: non_neg_integer()).
--type(ack()     :: seq_id()).
 
 -type(rates() :: #rates { egress      :: {timestamp(), non_neg_integer()},
                           ingress     :: {timestamp(), non_neg_integer()},
@@ -336,6 +335,10 @@
                           count        :: non_neg_integer(),
                           end_seq_id   :: non_neg_integer() }).
 
+%% The compiler (rightfully) complains that ack() and state() are unused. The
+%% problem here is that we can't parametrise the BQ behaviour by these two types
+%% as we would like to. We still leave these here for documentation purposes.
+-type(ack() :: seq_id()).
 -type(state() :: #vqstate {
              q1                    :: ?QUEUE:?QUEUE(),
              q2                    :: ?QUEUE:?QUEUE(),
