@@ -33,8 +33,6 @@
        </div>
       </td>
     </tr>
-  </table>
-  <table class="facts">
     <tr>
       <th>
         Erlang processes
@@ -47,6 +45,8 @@
        </div>
      </td>
     </tr>
+  </table>
+  <table class="facts">
     <tr>
       <th>
         Memory
@@ -66,6 +66,28 @@
    <sub><%= fmt_bytes(node.mem_limit) %> high watermark</sub>
 <% } else { %>
        <%= fmt_bytes(node.mem_used) %>
+<% } %>
+      </td>
+    </tr>
+    <tr>
+      <th>
+        Disk space
+      </th>
+      <td class="status">
+<% if (node.disk_free_limit != 'disk_free_monitoring_disabled') { %>
+   <% if (node.disk_free_alarm) { %>
+       <div class="red">
+         <%= fmt_bytes(node.disk_free) %>
+         <span class="help" id="disk-free-alarm"></span>
+       </div>
+   <% } else { %>
+       <div class="green">
+         <%= fmt_bytes(node.disk_free) %>
+       </div>
+   <% } %>
+   <sub><%= fmt_bytes(node.disk_free_limit) %> low watermark</sub>
+<% } else { %>
+         (not monitored)
 <% } %>
       </td>
     </tr>

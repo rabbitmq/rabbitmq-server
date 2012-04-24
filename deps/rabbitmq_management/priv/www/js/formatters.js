@@ -22,7 +22,7 @@ function fmt_bytes(bytes) {
     var num_power = f(bytes, 0);
     var num = num_power[0];
     var power = num_power[1];
-    var powers = ['B', 'kB', 'MB', 'GB', 'TB'];
+    var powers = ['B', 'kB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
     return (power == 0 ? num.toFixed(0) : num.toFixed(1)) + powers[power];
 }
 
@@ -329,10 +329,17 @@ function fmt_idle_long(obj) {
 }
 
 function fmt_escape_html(txt) {
+    return fmt_escape_html0(txt).replace(/\n/g, '<br/>');
+}
+
+function fmt_escape_html_one_line(txt) {
+    return fmt_escape_html0(txt).replace(/\n/g, '');
+}
+
+function fmt_escape_html0(txt) {
     return txt.replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
-        .replace(/\n/g, '<br/>')
         .replace(/\"/g, '&quot;');
 }
 

@@ -11,7 +11,7 @@
       table { border-collapse: collapse; }
       table th, table td { vertical-align: top; border: 1px solid #bbb; padding: 5px; }
       code { background: #ffa; }
-      pre { background: black; color: #0f0; padding: 10px; }
+      pre { background: black; color: #0f0; padding: 10px; word-wrap: break-word;}
       table pre { background: #ffa; color: black; }
     </style>
   </head>
@@ -49,6 +49,10 @@
     nested component of the listed items; it does not allow you to
     sort by more than one field. See the example below.</p>
 
+    <p>You can also restrict what information is returned per item
+    with the <code>columns</code> parameter. This is a comma-separated
+    list of subfields separated by dots. See the example below.</p>
+
     <h2>Examples</h2>
 
     <p>A few quick examples, using the Unix command line
@@ -67,8 +71,9 @@ Content-Length: 5
 [{"name":"/"}]</pre>
       </li>
       <li>
-        Get a list of channels, fast publishers first:
-<pre>$ curl -i -u guest:guest 'http://localhost:55672/api/channels?sort=message_stats.publish_details.rate&amp;sort_reverse=true'
+        Get a list of channels, fast publishers first, restricting the info
+        items we get back:
+<pre>$ curl -i -u guest:guest 'http://localhost:55672/api/channels?sort=message_stats.publish_details.rate&amp;sort_reverse=true&amp;columns=name,message_stats.publish_details.rate,message_stats.deliver_get_details.rate'
 HTTP/1.1 200 OK
 Server: MochiWeb/1.1 WebMachine/1.7 (participate in the frantic)
 Date: Tue, 12 Oct 2010 10:03:21 GMT

@@ -1,5 +1,51 @@
 <h1>Overview</h1>
+<div class="updatable">
+<%
+var rabbit_version = 'unknown';
+var erlang_version = 'unknown';
+var version_warning = false;
 
+for (var i = 0; i < nodes.length; i++) {
+    var node = nodes[i];
+    var r = fmt_rabbit_version(node.applications);
+    var e = node.erlang_version;
+    if (rabbit_version == 'unknown') {
+        rabbit_version = r;
+        erlang_version = e;
+    } else {
+        if (r != 'unknown' && (rabbit_version != r || erlang_version != e)) {
+            version_warning = true;
+        }
+    }
+}
+if (version_warning) {
+%>
+  <p class="warning">
+    Version mismatch<br/><br/>
+    The nodes in this cluster are running different versions of
+    RabbitMQ and / or Erlang. This cluster may behave unpredictably.
+    You are very strongly recommended to ensure that all nodes in this cluster
+    run the same versions of RabbitMQ and Erlang.
+  </p>
+  <table class="list">
+    <tr>
+      <th>Name</th>
+      <th>RabbitMQ version</th>
+      <th>Erlang version</th>
+    </tr>
+<%
+   for (var i = 0; i < nodes.length; i++) {
+     var node = nodes[i];
+%>
+    <tr<%= alt_rows(i)%>>
+      <td><%= fmt_string(node.name) %></td>
+      <td><%= fmt_rabbit_version(node.applications) %></td>
+      <td><%= node.erlang_version %></td>
+    </tr>
+<% } %>
+  </table>
+<% } %>
+</div>
 <div class="section">
 <h2>Totals</h2>
 <div class="hider updatable">
@@ -44,11 +90,10 @@
     <th>
       Memory
     </th>
-    <th>Uptime</th>
     <th>
-      Version
-      <sub>(RabbitMQ / Erlang)</sub>
+      Disk space
     </th>
+    <th>Uptime</th>
     <th>Type</th>
   </tr>
 <%
@@ -107,11 +152,25 @@
        <%= fmt_bytes(node.mem_used) %>
 <% } %>
      </td>
+     <td class="status">
+<% if (node.disk_free_limit != 'disk_free_monitoring_disabled') { %>
+   <% if (node.disk_free_alarm) { %>
+       <div class="red">
+         <%= fmt_bytes(node.disk_free) %>
+         <span class="help" id="disk-free-alarm"></span>
+       </div>
+   <% } else { %>
+       <div class="green">
+         <%= fmt_bytes(node.disk_free) %>
+       </div>
+   <% } %>
+   <sub><%= fmt_bytes(node.disk_free_limit) %> low watermark </sub>
+<% } else { %>
+         (not monitored)
+<% } %>
+     </td>
      <td class="r">
        <%= fmt_uptime(node.uptime) %>
-     </td>
-     <td class="c">
-       <%= fmt_rabbit_version(node.applications) %> / <%= node.erlang_version %>
      </td>
 <% } %>
      <td class="c">
@@ -130,6 +189,11 @@
    </tr>
 <% } %>
 </table>
+<% if (!version_warning) { %>
+  <p>
+    RabbitMQ <b><%= rabbit_version %></b> on Erlang <b><%= erlang_version %></b>
+  </p>
+<% } %>
 
 <% if (overview.statistics_db_node == 'not_running') { %>
   <p class="status-error">Statistics database could not be contacted. Message rates and queue lengths will not be shown.</p>
