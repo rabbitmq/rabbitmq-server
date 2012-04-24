@@ -38,15 +38,10 @@
 <% } %>
 <% if (link.error) { %>
     <td class="status">
-       <div class="red"><%= link.status %></div>
+       <div class="red"><acronym title="<%= fmt_escape_html_one_line(link.error) %>"><%= link.status %></acronym></div>
     </td>
     <td></td>
     <td><%= link.timestamp %></td>
-  </tr>
-  <tr>
-    <td colspan="7">
-      <pre><%= fmt_string(link.error) %></pre>
-    </td>
   </tr>
 <% } else { %>
     <td class="status">
