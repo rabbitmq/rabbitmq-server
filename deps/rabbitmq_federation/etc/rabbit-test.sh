@@ -1,8 +1,8 @@
 #!/bin/sh
 CTL=$1
 
-$CTL set_parameter federation_connection localhost '[{<<"host">>,<<"localhost">>}]'
-$CTL set_parameter federation_connection local5673 '[{<<"host">>,<<"localhost">>},{<<"port">>,5673}]'
+$CTL set_parameter federation_connection localhost '[{<<"uri">>,<<"amqp://">>}]' # Test direct connections
+$CTL set_parameter federation_connection local5673 '[{<<"uri">>,<<"amqp://localhost:5673">>}]'
 
 $CTL set_parameter federation_upstream_set upstream '[[{<<"connection">>,<<"localhost">>},{<<"exchange">>,<<"upstream">>}]]'
 $CTL set_parameter federation_upstream_set upstream12 '[[{<<"connection">>,<<"localhost">>},{<<"exchange">>,<<"upstream">>}],[{<<"connection">>,<<"localhost">>},{<<"exchange">>,<<"upstream2">>}]]'

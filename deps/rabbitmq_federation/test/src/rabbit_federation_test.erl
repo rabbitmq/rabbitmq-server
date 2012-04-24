@@ -305,13 +305,13 @@ dynamic_reconfiguration() ->
               assert_connections(Xs, []),
 
               %% Test that readding them and changing them works
-              rabbitmqctl("set_parameter federation_connection localhost '[{<<\"host\">>,<<\"localhost\">>},{<<\"port\">>,5673}]'"),
+              rabbitmqctl("set_parameter federation_connection localhost '[{<<\"uri\">>,<<\"amqp://localhost\">>}]'"),
               %% Do it twice so we at least hit the no-restart optimisation
-              rabbitmqctl("set_parameter federation_connection localhost '[{<<\"host\">>,<<\"localhost\">>}]'"),
-              rabbitmqctl("set_parameter federation_connection localhost '[{<<\"host\">>,<<\"localhost\">>}]'"),
+              rabbitmqctl("set_parameter federation_connection localhost '[{<<\"uri\">>,<<\"amqp://\">>}]'"),
+              rabbitmqctl("set_parameter federation_connection localhost '[{<<\"uri\">>,<<\"amqp://\">>}]'"),
               assert_connections(Xs, [<<"localhost">>]),
               %% And re-add the last - for next test
-              rabbitmqctl("set_parameter federation_connection local5673 '[{<<\"host\">>,<<\"localhost\">>},{<<\"port\">>,5673}]'")
+              rabbitmqctl("set_parameter federation_connection local5673 '[{<<\"uri\">>,<<\"amqp://localhost:5673\">>}]'")
       end, [fed(<<"fed1">>, <<"all">>), fed(<<"fed2">>, <<"all">>)]).
 
 dynamic_reconfiguration_integrity_test_() ->
