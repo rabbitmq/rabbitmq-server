@@ -31,6 +31,7 @@
          terminate/2, code_change/3]).
 
 -import(rabbit_misc, [pget/2]).
+-import(rabbit_federation_util, [vhost/1]).
 
 -record(state, {upstream,
                 connection,
@@ -422,9 +423,9 @@ consume_from_upstream_queue(
               expires        = Expiry,
               message_ttl    = TTL,
               ha_policy      = HA,
-              params         = #amqp_params_network{virtual_host = VHost}}
+              params         = Params}
         = Upstream,
-    Q = upstream_queue_name(XNameBin, VHost, DownXName),
+    Q = upstream_queue_name(XNameBin, vhost(Params), DownXName),
     ExpiryArg = case Expiry of
                     none -> [];
                     _    -> [{<<"x-expires">>, long, Expiry}]
@@ -457,21 +458,22 @@ ensure_upstream_bindings(State = #state{upstream            = Upstream,
                                         downstream_exchange = DownXName,
                                         queue               = Q}, Bindings) ->
     #upstream{exchange = XNameBin,
-              params   = #amqp_params_network{virtual_host = VHost}} = Upstream,
+              params   = Params} = Upstream,
     OldSuffix = rabbit_federation_db:get_active_suffix(
                   DownXName, Upstream, <<"A">>),
     Suffix = case OldSuffix of
                  <<"A">> -> <<"B">>;
                  <<"B">> -> <<"A">>
              end,
-    IntXNameBin = upstream_exchange_name(XNameBin, VHost, DownXName, Suffix),
+    IntXNameBin = upstream_exchange_name(XNameBin, vhost(Params),
+                                         DownXName, Suffix),
     ensure_upstream_exchange(IntXNameBin, State),
     amqp_channel:call(Ch, #'queue.bind'{exchange = IntXNameBin, queue = Q}),
     State1 = State#state{internal_exchange = IntXNameBin},
     State2 = lists:foldl(fun add_binding/2, State1, Bindings),
     rabbit_federation_db:set_active_suffix(DownXName, Upstream, Suffix),
     OldIntXNameBin = upstream_exchange_name(
-                       XNameBin, VHost, DownXName, OldSuffix),
+                       XNameBin, vhost(Params), DownXName, OldSuffix),
     delete_upstream_exchange(Conn, OldIntXNameBin),
     State2.
 

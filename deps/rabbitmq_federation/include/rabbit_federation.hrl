@@ -15,6 +15,7 @@
 %%
 
 -record(upstream, {params,
+                   original_uri,
                    exchange,
                    prefetch_count,
                    max_hops,

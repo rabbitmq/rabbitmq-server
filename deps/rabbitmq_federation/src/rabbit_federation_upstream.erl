@@ -22,37 +22,22 @@
 -export([to_table/1, to_string/1, from_set/2, from_set/3]).
 
 -import(rabbit_misc, [pget/2, pget/3]).
+-import(rabbit_federation_util, [vhost/1]).
 
 %%----------------------------------------------------------------------------
 
-to_table(#upstream{params   = #amqp_params_network{host         = H,
-                                                   port         = P,
-                                                   ssl_options  = S,
-                                                   virtual_host = V},
-                   exchange = XNameBin}) ->
-    PortPart = case P of
-                   undefined -> [];
-                   _         -> [{<<"port">>, long, P}]
-               end,
-    Protocol = case S of
-                   none -> <<"amqp">>;
-                   _    -> <<"amqps">>
-               end,
-    {table, [{<<"host">>,         longstr, list_to_binary(H)},
-             {<<"virtual_host">>, longstr, V},
-             {<<"exchange">>,     longstr, XNameBin},
-             {<<"protocol">>,     longstr, Protocol}] ++
-         PortPart}.
+to_table(#upstream{original_uri = URI,
+                   params       = Params,
+                   exchange     = XNameBin}) ->
+    {table, [{<<"uri">>,          longstr, URI},
+             {<<"virtual_host">>, longstr, vhost(Params)},
+             {<<"exchange">>,     longstr, XNameBin}]}.
 
-to_string(#upstream{params   = #amqp_params_network{host         = H,
-                                                    port         = P,
-                                                    virtual_host = V},
-                    exchange = XNameBin}) ->
-    PortPart = case P of
-                   undefined -> <<>>;
-                   _         -> print("~w:", [P])
-               end,
-    print("~s:~s~s:~s", [H, PortPart, V, XNameBin]).
+to_string(#upstream{original_uri = URI,
+                    params       = Params,
+                    exchange     = XNameBin}) ->
+    X = rabbit_misc:rs(rabbit_misc:r(vhost(Params), exchange, XNameBin)),
+    print("~s on ~s", [X, URI]).
 
 print(Fmt, Args) -> iolist_to_binary(io_lib:format(Fmt, Args)).
 
@@ -89,6 +74,7 @@ from_props_connection(U, ConnName, C, DefaultXNameBin, DefaultVHost) ->
     URI = bget(uri, U, C),
     {ok, Params} = amqp_uri:parse(binary_to_list(URI), DefaultVHost),
     #upstream{params          = Params,
+              original_uri    = URI,
               exchange        = bget(exchange,        U, C, DefaultXNameBin),
               prefetch_count  = bget(prefetch_count,  U, C, none),
               reconnect_delay = bget(reconnect_delay, U, C, 1),
