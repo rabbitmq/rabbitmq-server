@@ -26,7 +26,7 @@ behaviour_info(callbacks) ->
      %% delivered to an individual exchange can be serialised? (they
      %% might still be delivered out of order, but there'll be a
      %% serial number).
-     {serialise_events, 0},
+     {serialise_events, 1},
 
      {route, 2},
 
