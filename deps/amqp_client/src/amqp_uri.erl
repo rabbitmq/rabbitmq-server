@@ -18,7 +18,7 @@
 
 -include("amqp_client.hrl").
 
--export([parse/1]).
+-export([parse/1, parse/2]).
 
 %%---------------------------------------------------------------------------
 %% AMQP URI Parsing
@@ -42,7 +42,10 @@
 %% specified for an SSL connection are cacertfile, certfile, keyfile,
 %% verify, and fail_if_no_peer_cert.
 parse(Uri) ->
-    try case parse1(Uri) of
+    parse(Uri, <<"/">>).
+
+parse(Uri, DefaultVHost) ->
+    try case parse1(Uri, DefaultVHost) of
             {ok, #amqp_params_network{host         = undefined,
                                       username     = User,
                                       virtual_host = Vhost}} ->
@@ -55,7 +58,7 @@ parse(Uri) ->
           error:Err -> {error, {Err, Uri}}
     end.
 
-parse1(Uri) when is_list(Uri) ->
+parse1(Uri, DefaultVHost) when is_list(Uri) ->
     case uri_parser:parse(Uri, [{host, undefined}, {path, undefined},
                                 {port, undefined}, {'query', []}]) of
         {error, Err} ->
@@ -63,13 +66,13 @@ parse1(Uri) when is_list(Uri) ->
         Parsed ->
             Endpoint =
                 case string:to_lower(proplists:get_value(scheme, Parsed)) of
-                    "amqp"  -> build_broker(Parsed);
-                    "amqps" -> build_ssl_broker(Parsed);
+                    "amqp"  -> build_broker(Parsed, DefaultVHost);
+                    "amqps" -> build_ssl_broker(Parsed, DefaultVHost);
                     Scheme  -> fail({unexpected_uri_scheme, Scheme})
                 end,
             return({ok, broker_add_query(Endpoint, Parsed)})
     end;
-parse1(_) ->
+parse1(_, _DefaultVHost) ->
     fail(expected_string_uri).
 
 unescape_string(Atom) when is_atom(Atom) ->
@@ -87,7 +90,7 @@ unescape_string([$% | Rest]) ->
 unescape_string([C | Rest]) ->
     [C | unescape_string(Rest)].
 
-build_broker(ParsedUri) ->
+build_broker(ParsedUri, DefaultVHost) ->
     [Host, Port, Path] =
         [proplists:get_value(F, ParsedUri) || F <- [host, port, path]],
     case Port =:= undefined orelse (0 < Port andalso Port =< 65535) of
@@ -95,7 +98,7 @@ build_broker(ParsedUri) ->
         false -> fail({port_out_of_range, Port})
     end,
     VHost = case Path of
-                undefined -> <<"/">>;
+                undefined -> DefaultVHost;
                 [$/|Rest] -> case string:chr(Rest, $/) of
                                  0 -> list_to_binary(unescape_string(Rest));
                                  _ -> fail({invalid_vhost, Rest})
@@ -115,8 +118,8 @@ build_broker(ParsedUri) ->
         _          -> Ps
     end.
 
-build_ssl_broker(ParsedUri) ->
-    Params = build_broker(ParsedUri),
+build_ssl_broker(ParsedUri, DefaultVHost) ->
+    Params = build_broker(ParsedUri, DefaultVHost),
     Query = proplists:get_value('query', ParsedUri),
     SSLOptions =
         run_state_monad(
