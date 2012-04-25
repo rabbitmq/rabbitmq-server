@@ -22,7 +22,6 @@ package: clean
 	tar -zxf $(DEBIAN_ORIG_TARBALL)
 	cp -r debian $(UNPACKED_DIR)
 	cp $(COMMON_DIR)/* $(UNPACKED_DIR)/debian/
-	cp rabbitmq-server.init $(UNPACKED_DIR)/debian/rabbitmq-server.init
 	sed -i -e 's|@SU_RABBITMQ_SH_C@|su rabbitmq -s /bin/sh -c|' \
 	    $(UNPACKED_DIR)/debian/rabbitmq-script-wrapper
 	chmod a+x $(UNPACKED_DIR)/debian/rules
