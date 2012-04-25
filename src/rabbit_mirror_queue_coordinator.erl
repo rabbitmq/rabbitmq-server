@@ -356,7 +356,7 @@ handle_cast(request_length, State = #state { length_fun = LengthFun }) ->
 handle_cast({ensure_monitoring, Pids}, State = #state { monitors = Mons }) ->
     noreply(State #state { monitors = pmon:monitor_all(Pids, Mons) }).
 
-handle_info(send_gm_heartbeat, State = #state{gm = GM}) ->
+handle_info(send_gm_heartbeat, State = #state { gm = GM }) ->
     gm:broadcast(GM, heartbeat),
     ensure_gm_heartbeat(),
     noreply(State);
