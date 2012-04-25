@@ -35,6 +35,8 @@ test -x $CONTROL || exit 0
 RETVAL=0
 set -e
 
+[ -f /etc/default/${NAME} ] && . /etc/default/${NAME}
+
 ensure_pid_dir () {
     PID_DIR=`dirname ${PID_FILE}`
     if [ ! -d ${PID_DIR} ] ; then

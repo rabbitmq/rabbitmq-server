@@ -16,7 +16,7 @@
 
 -module(rabbit_nodes).
 
--export([names/1, diagnostics/1, make/1, parts/1, cookie_hash/0]).
+-export([names/1, diagnostics/1, make/1, parts/1, cookie_hash/0, is_running/2]).
 
 -define(EPMD_TIMEOUT, 30000).
 
@@ -32,6 +32,7 @@
 -spec(make/1 :: ({string(), string()} | string()) -> node()).
 -spec(parts/1 :: (node() | string()) -> {string(), string()}).
 -spec(cookie_hash/0 :: () -> string()).
+-spec(is_running/2 :: (node(), atom()) -> boolean()).
 
 -endif.
 
@@ -92,3 +93,9 @@ parts(NodeStr) ->
 
 cookie_hash() ->
     base64:encode_to_string(erlang:md5(atom_to_list(erlang:get_cookie()))).
+
+is_running(Node, Application) ->
+    case rpc:call(Node, application, which_applications, [infinity]) of
+        {badrpc, _} -> false;
+        Apps        -> proplists:is_defined(Application, Apps)
+    end.
