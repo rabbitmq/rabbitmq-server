@@ -20,7 +20,7 @@ PATH=/sbin:/usr/sbin:/bin:/usr/bin
 NAME=rabbitmq-server
 DAEMON=/usr/sbin/${NAME}
 CONTROL=/usr/sbin/rabbitmqctl
-DESC=rabbitmq-server
+DESC="message broker"
 USER=rabbitmq
 ROTATE_SUFFIX=
 INIT_LOG_DIR=/var/log/rabbitmq
@@ -117,8 +117,7 @@ restart_running_rabbitmq () {
     if [ $RETVAL = 0 ] ; then
         restart_rabbitmq
     else
-        log_warning_msg "$DESC not running"
-        RETVAL=0
+        log_warning_msg "${DESC} not running"
     fi
 }
 
@@ -140,7 +139,8 @@ start_stop_end() {
         0)
             log_end_msg 0;;
         3)
-            log_end_msg 1;;
+            log_warning_msg "${DESC} already ${1}"
+            log_end_msg 0;;
         *)
             log_warning_msg "FAILED - check ${INIT_LOG_DIR}/startup_\{log, _err\}"
             log_end_msg 1;;
@@ -149,30 +149,30 @@ start_stop_end() {
 
 case "$1" in
     start)
-        log_daemon_msg "Starting ${DESC}" ${NAME}
+        log_daemon_msg "Starting ${DESC}" $NAME
         start_rabbitmq
-        start_stop_end
+        start_stop_end "started"
         ;;
     stop)
-        log_daemon_msg "Stopping ${DESC}" ${NAME}
+        log_daemon_msg "Stopping ${DESC}" $NAME
         stop_rabbitmq
-        start_stop_end
+        start_stop_end "stopped"
         ;;
     status)
         status_rabbitmq
         ;;
     rotate-logs)
-        log_action_begin_msg "Rotating log files for $DESC: "
+        log_action_begin_msg "Rotating log files for ${DESC} ${NAME}"
         rotate_logs_rabbitmq
-        log_action_end_msg $?
+        log_action_end_msg $RETVAL
         ;;
     force-reload|reload|restart)
-        log_daemon_msg "Restarting $DESC" "$NAME"
+        log_daemon_msg "Restarting ${DESC}" $NAME
         restart_rabbitmq
         restart_end
         ;;
     try-restart)
-        log_daemon_msg "Restarting $DESC" "$NAME"
+        log_daemon_msg "Restarting ${DESC}" $NAME
         restart_running_rabbitmq
         restart_end
         ;;
