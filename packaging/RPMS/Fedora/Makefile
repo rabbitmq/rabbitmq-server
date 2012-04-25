@@ -32,8 +32,8 @@ prepare:
 		SPECS/rabbitmq-server.spec
 
 	cp ${COMMON_DIR}/* SOURCES/
+	cp rabbitmq-server.init SOURCES/rabbitmq-server.init
 	sed -i \
-	    -e 's|^LOCK_FILE=.*$$|LOCK_FILE=/var/lock/subsys/$$NAME|' \
 	    -e 's|^START_PROG=.*$$|START_PROG="$(START_PROG)"|' \
 	    SOURCES/rabbitmq-server.init
 ifeq "$(RPM_OS)" "fedora"
