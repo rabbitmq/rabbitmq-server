@@ -87,9 +87,9 @@ init([Limit]) ->
           vm_memory_monitor:get_total_memory()} of
         {N1, N2} when is_integer(N1), is_integer(N2) ->
             {ok, set_disk_limits(State, Limit)};
-        _ ->
+        Err ->
             rabbit_log:info("Disabling disk free space monitoring "
-                            "on unsupported platform~n"),
+                            "on unsupported platform: ~p~n", [Err]),
             {stop, unsupported_platform}
     end.
 
