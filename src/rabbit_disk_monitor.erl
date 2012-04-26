@@ -87,9 +87,9 @@ init([Limit]) ->
           vm_memory_monitor:get_total_memory()} of
         {N1, N2} when is_integer(N1), is_integer(N2) ->
             {ok, set_disk_limits(State, Limit)};
-        _ ->
+        Err ->
             rabbit_log:info("Disabling disk free space monitoring "
-                            "on unsupported platform~n"),
+                            "on unsupported platform: ~p~n", [Err]),
             {stop, unsupported_platform}
     end.
 
@@ -167,7 +167,7 @@ get_disk_free(Dir, {unix, Sun})
 get_disk_free(Dir, {unix, _}) ->
     parse_free_unix(rabbit_misc:os_cmd("/bin/df -kP " ++ Dir));
 get_disk_free(Dir, {win32, _}) ->
-    parse_free_win32(rabbit_misc:os_cmd("dir /-C /W " ++ Dir));
+    parse_free_win32(os:cmd("dir /-C /W \"" ++ Dir ++ [$"]));
 get_disk_free(_, _) ->
     unknown.
 
