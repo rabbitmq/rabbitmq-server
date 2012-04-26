@@ -37,6 +37,7 @@
 -rabbit_upgrade({mirrored_supervisor,   mnesia, []}).
 -rabbit_upgrade({topic_trie_node,       mnesia, []}).
 -rabbit_upgrade({runtime_parameters,    mnesia, []}).
+-rabbit_upgrade({exchange_scratches,    mnesia, [exchange_scratch]}).
 
 %% -------------------------------------------------------------------
 
@@ -192,6 +193,23 @@ runtime_parameters() ->
            [{record_name, runtime_parameters},
             {attributes, [key, value]},
             {disc_copies, [node()]}]).
+
+exchange_scratches() ->
+    ok = exchange_scratches(rabbit_exchange),
+    ok = exchange_scratches(rabbit_durable_exchange).
+
+exchange_scratches(Table) ->
+    transform(
+      Table,
+      fun ({exchange, Name, Type = <<"x-federation">>, Dur, AutoDel, Int, Args,
+            Scratch}) ->
+              Scratches = orddict:store(federation, Scratch, orddict:new()),
+              {exchange, Name, Type, Dur, AutoDel, Int, Args, Scratches};
+          %% We assert here that nothing else uses the scratch mechanism ATM
+          ({exchange, Name, Type, Dur, AutoDel, Int, Args, undefined}) ->
+              {exchange, Name, Type, Dur, AutoDel, Int, Args, undefined}
+      end,
+      [name, type, durable, auto_delete, internal, arguments, scratches]).
 
 %%--------------------------------------------------------------------
 
