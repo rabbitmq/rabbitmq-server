@@ -268,7 +268,7 @@ inc_group() ->
 get_group(Group) ->
     {Group, get(counter)}.
 
-call(Id, Msg) -> call(Id, Msg, 1000, 100).
+call(Id, Msg) -> call(Id, Msg, 10000, 100).
 
 call(Id, Msg, 0, _Decr) ->
     exit({timeout_waiting_for_server, {Id, Msg}, erlang:get_stacktrace()});
