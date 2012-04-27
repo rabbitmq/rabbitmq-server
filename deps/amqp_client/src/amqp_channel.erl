@@ -467,7 +467,7 @@ terminate(_Reason, State) ->
 
 %% @private
 code_change(_OldVsn, State, _Extra) ->
-    State.
+    {ok, State}.
 
 %%---------------------------------------------------------------------------
 %% RPC mechanism

@@ -130,4 +130,4 @@ terminate(_Reason, #state{channel = Channel}) ->
 
 %% @private
 code_change(_OldVsn, State, _Extra) ->
-    State.
+    {ok, State}.

@@ -220,7 +220,7 @@ terminate(Reason, #state{module = Mod, module_state = MState}) ->
     Mod:terminate(Reason, MState).
 
 code_change(_OldVsn, State, _Extra) ->
-    State.
+    {ok, State}.
 
 %%---------------------------------------------------------------------------
 %% Infos

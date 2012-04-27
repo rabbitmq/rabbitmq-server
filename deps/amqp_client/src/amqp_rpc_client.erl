@@ -168,4 +168,4 @@ handle_info({#'basic.deliver'{delivery_tag = DeliveryTag},
 
 %% @private
 code_change(_OldVsn, State, _Extra) ->
-    State.
+    {ok, State}.
