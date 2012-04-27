@@ -84,7 +84,7 @@ terminate(_Reason, _State) ->
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
-    State.
+    {ok, State}.
 
 handle_call({open_channel, ProposedNumber, Consumer, InfraArgs}, _,
             State = #state{closing = false}) ->
