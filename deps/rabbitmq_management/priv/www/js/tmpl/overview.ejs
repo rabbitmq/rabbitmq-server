@@ -5,16 +5,18 @@ var rabbit_version = 'unknown';
 var erlang_version = 'unknown';
 var version_warning = false;
 
-for (var i = 0; i < nodes.length; i++) {
-    var node = nodes[i];
-    var r = fmt_rabbit_version(node.applications);
-    var e = node.erlang_version;
-    if (rabbit_version == 'unknown') {
-        rabbit_version = r;
-        erlang_version = e;
-    } else {
-        if (r != 'unknown' && (rabbit_version != r || erlang_version != e)) {
-            version_warning = true;
+if (user_monitor) {
+    for (var i = 0; i < nodes.length; i++) {
+        var node = nodes[i];
+        var r = fmt_rabbit_version(node.applications);
+        var e = node.erlang_version;
+        if (rabbit_version == 'unknown') {
+            rabbit_version = r;
+            erlang_version = e;
+        } else {
+            if (r != 'unknown' && (rabbit_version != r || erlang_version != e)) {
+                version_warning = true;
+            }
         }
     }
 }
