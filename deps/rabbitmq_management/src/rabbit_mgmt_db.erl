@@ -18,7 +18,7 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
--behaviour(gen_server).
+-behaviour(gen_server2).
 
 -export([start_link/0]).
 
@@ -28,7 +28,7 @@
          get_overview/1, get_overview/0]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
-         code_change/3]).
+         code_change/3, handle_pre_hibernate/1]).
 
 -import(rabbit_misc, [pget/3]).
 
@@ -208,16 +208,16 @@ init([]) ->
                                Key <- ?TABLES])}}.
 
 handle_call({augment_exchanges, Xs, basic}, _From, State) ->
-    {reply, exchange_stats(Xs, ?FINE_STATS_EXCHANGE_LIST, State), State};
+    reply(exchange_stats(Xs, ?FINE_STATS_EXCHANGE_LIST, State), State);
 
 handle_call({augment_exchanges, Xs, full}, _From, State) ->
-    {reply, exchange_stats(Xs, ?FINE_STATS_EXCHANGE_DETAIL, State), State};
+    reply(exchange_stats(Xs, ?FINE_STATS_EXCHANGE_DETAIL, State), State);
 
 handle_call({augment_queues, Qs, basic}, _From, State) ->
-    {reply, list_queue_stats(Qs, State), State};
+    reply(list_queue_stats(Qs, State), State);
 
 handle_call({augment_queues, Qs, full}, _From, State) ->
-    {reply, detail_queue_stats(Qs, State), State};
+    reply(detail_queue_stats(Qs, State), State);
 
 handle_call({get_channels, Names, Mode}, _From,
             State = #state{tables = Tables}) ->
@@ -226,13 +226,13 @@ handle_call({get_channels, Names, Mode}, _From,
                  basic -> list_channel_stats(Chans, State);
                  full  -> detail_channel_stats(Chans, State)
              end,
-    {reply, lists:map(fun result_or_error/1, Result), State};
+    reply(lists:map(fun result_or_error/1, Result), State);
 
 handle_call({get_connections, Names}, _From,
             State = #state{tables = Tables}) ->
     Conns = created_event(Names, connection_stats, Tables),
     Result = connection_stats(Conns, State),
-    {reply, lists:map(fun result_or_error/1, Result), State};
+    reply(lists:map(fun result_or_error/1, Result), State);
 
 handle_call({get_all_channels, Mode}, _From, State = #state{tables = Tables}) ->
     Chans = created_events(channel_stats, Tables),
@@ -240,11 +240,11 @@ handle_call({get_all_channels, Mode}, _From, State = #state{tables = Tables}) ->
                  basic -> list_channel_stats(Chans, State);
                  full  -> detail_channel_stats(Chans, State)
              end,
-    {reply, Result, State};
+    reply(Result, State);
 
 handle_call(get_all_connections, _From, State = #state{tables = Tables}) ->
     Conns = created_events(connection_stats, Tables),
-    {reply, connection_stats(Conns, State), State};
+    reply(connection_stats(Conns, State), State);
 
 handle_call({get_overview, User}, _From, State = #state{tables = Tables}) ->
     VHosts = case User of
@@ -267,27 +267,34 @@ handle_call({get_overview, User}, _From, State = #state{tables = Tables}) ->
         end,
     Publish = F(channel_exchange_stats, exchange),
     Consume = F(channel_queue_stats, queue_details),
-    {reply, [{message_stats, Publish ++ Consume},
-             {queue_totals, Totals}], State};
+    reply([{message_stats, Publish ++ Consume},
+             {queue_totals, Totals}], State);
 
 handle_call(_Request, _From, State) ->
-    {reply, not_understood, State}.
+    reply(not_understood, State).
 
 handle_cast({event, Event}, State) ->
     handle_event(Event, State),
-    {noreply, State};
+    noreply(State);
 
 handle_cast(_Request, State) ->
-    {noreply, State}.
+    noreply(State).
 
 handle_info(_Info, State) ->
-    {noreply, State}.
+    noreply(State).
 
 terminate(_Arg, _State) ->
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
+
+reply(Reply, NewState) -> {reply, Reply, NewState, hibernate}.
+noreply(NewState) -> {noreply, NewState, hibernate}.
+
+handle_pre_hibernate(State) ->
+    garbage_collect(whereis(rabbit_event)),
+    {hibernate, State}.
 
 %%----------------------------------------------------------------------------
 
