@@ -249,4 +249,4 @@ terminate(Reason, #state{module = ConsumerModule, module_state = MState}) ->
     ConsumerModule:terminate(Reason, MState).
 
 code_change(_OldVsn, State, _Extra) ->
-    State.
+    {ok, State}.

@@ -54,7 +54,7 @@ terminate(_Reason, _State) ->
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
-    State.
+    {ok, State}.
 
 handle_call(Call, From, State) ->
     {stop, {unexpected_call, Call, From}, State}.
