@@ -1,0 +1,170 @@
+<h1>Federation</h1>
+<%
+var username = null;
+var nodename = null;
+for (var i in globals) {
+   if (globals[i].key == 'local_username') username = globals[i].value;
+   if (globals[i].key == 'local_nodename') nodename = globals[i].value;
+}
+%>
+<div class="section-hidden">
+  <h2>Global Parameters</h2>
+  <div class="hider">
+    <table class="two-col-layout">
+      <tr>
+        <td>
+          Local username:
+          <form action="#/fed-globals" method="put">
+            <input type="hidden" name="component" value="federation"/>
+            <input type="hidden" name="key" value="local_username"/>
+            <input type="text" name="value" value="<%= username %>" />
+            <input type="submit" value="Update"/>
+          </form>
+        </td>
+        <td>
+          Explicit identity for this cluster / node:
+          <form action="#/fed-globals" method="put">
+            <input type="hidden" name="component" value="federation"/>
+            <input type="hidden" name="key" value="local_nodename"/>
+            <input type="text" name="value" value="<%= nodename %>" />
+            <input type="submit" value="Update"/>
+          </form>
+        </td>
+      </tr>
+    </table>
+  </div>
+</div>
+
+<div class="section-hidden">
+  <h2>Running Links</h2>
+  <div class="hider updatable">
+<% if (links.length > 0) { %>
+<table class="list">
+ <thead>
+  <tr>
+    <th>Connection</th>
+<% if (vhosts_interesting) { %>
+    <th>Virtual Host</th>
+<% } %>
+    <th>Exchange</th>
+<% if (nodes_interesting) { %>
+    <th>Node</th>
+<% } %>
+    <th>State</th>
+    <th>Inbound message rate</th>
+    <th>Last changed</th>
+  </tr>
+ </thead>
+ <tbody>
+<%
+ for (var i = 0; i < links.length; i++) {
+    var link = links[i];
+%>
+   <tr<%= alt_rows(i)%>>
+    <td>
+      <%= fmt_string(link.connection) %>
+      <% if (link.exchange != link.upstream_exchange) { %>
+      <sub><%= fmt_string(link.upstream_exchange) %></sub>
+      <% } %>
+    </td>
+<% if (vhosts_interesting) { %>
+    <td><%= fmt_string(link.vhost) %></td>
+<% } %>
+    <td><%= link_exchange(link.vhost, link.exchange) %></td>
+<% if (nodes_interesting) { %>
+    <td><%= fmt_string(link.node) %></td>
+<% } %>
+<% if (link.error) { %>
+    <td class="status">
+       <div class="red"><acronym title="<%= fmt_escape_html_one_line(link.error) %>"><%= link.status %></acronym></div>
+    </td>
+    <td></td>
+    <td><%= link.timestamp %></td>
+  </tr>
+<% } else { %>
+    <td class="status">
+       <% if (link.status == 'starting') { %>
+         <div class="yellow"><%= link.status %></div>
+       <% } else { %>
+         <div class="green"><%= link.status %></div>
+      <% } %>
+    </td>
+    <td class="r">
+      <% if (link.local_channel) { %>
+        <%= fmt_rate(link.local_channel.message_stats, 'confirm') %>
+      <% } %>
+    </td>
+    <td><%= link.timestamp %></td>
+  </tr>
+<% } %>
+  <% } %>
+ </tbody>
+</table>
+<% } else { %>
+  <p>... no links ...</p>
+<% } %>
+</div>
+</div>
+<div class="section">
+  <h2>Connections</h2>
+  <div class="hider">
+    <div class="updatable">
+
+<% if (connections.length > 0) { %>
+<table class="list">
+ <thead>
+  <tr>
+    <th>Name</th>
+    <th>Host</th>
+    <th>Expiry</th>
+    <th>Max Hops</th>
+  </tr>
+ </thead>
+ <tbody>
+<%
+ for (var i = 0; i < connections.length; i++) {
+    var connection = connections[i];
+%>
+   <tr<%= alt_rows(i)%>>
+     <td><%= link_fed_conn(connection.key) %></td>
+     <td><%= connection.value.host %></td>
+     <td class="r"><%= connection.value.expires %></td>
+     <td class="r"><%= connection.value.max_hops %></td>
+   </tr>
+<% } %>
+ </tbody>
+</table>
+<% } else { %>
+  <p>... no connections ...</p>
+<% } %>
+    </div>
+    <h3>Add a new connection</h3>
+
+    <form action="#/fed-parameters" method="put">
+      <input type="hidden" name="component" value="federation_connection"/>
+      <table class="form">
+        <tr>
+          <th><label>Name:</label></th>
+          <td><input type="text" name="key"/><span class="mand">*</span></td>
+        </tr>
+        <tr>
+          <th><label>Host:</label></th>
+          <td><input type="text" name="host"/><span class="mand">*</span></td>
+        </tr>
+        <tr>
+          <th><label>Expires:</label></th>
+          <td><input type="text" name="expires"/> ms</td>
+        </tr>
+        <tr>
+          <th><label>Max hops:</label></th>
+          <td><input type="text" name="max_hops"/></td>
+        </tr>
+      </table>
+      <input type="submit" value="Add connection"/>
+    </form>
+      <p>
+        TODO: add all connection parameters. I don't want to do that
+        before bug 24695
+      </p>
+  </div>
+</div>
