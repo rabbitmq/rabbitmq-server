@@ -331,19 +331,23 @@ function update_multifields() {
                     }
                 });
             if (!empty_found) {
-                $(this).append('<p><input type="text" name="' + name + '_' +
-                               (largest_id + 1) +
+                var prefix = name + '_' + (largest_id + 1);
+                var type_part;
+                if ($(this).hasClass('string-only')) {
+                    type_part = '<input type="hidden" name="' + prefix +
+                        '_mftype" value="string"/>';
+                } else {
+                    type_part = '<select name="' + prefix +
+                        '_mftype">' +
+                        '<option value="string">String</option>' +
+                        '<option value="number">Number</option>' +
+                        '<option value="boolean">Boolean</option>' +
+                        '</select>';
+                }
+                $(this).append('<p><input type="text" name="' + prefix +
                                '_mfkey" value=""/> = ' +
-                               '<input type="text" name="' + name + '_' +
-                               (largest_id + 1) +
-                               '_mfvalue" value=""/> ' +
-                               '<select name="' + name + '_' +
-                               (largest_id + 1) +
-                               '_mftype">' +
-                               '<option value="string">String</option>' +
-                               '<option value="number">Number</option>' +
-                               '<option value="boolean">Boolean</option>' +
-                               '</select></p>');
+                               '<input type="text" name="' + prefix +
+                               '_mfvalue" value=""/> ' + type_part + '</p>');
             }
         });
 }
