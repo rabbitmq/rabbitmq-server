@@ -40,10 +40,10 @@
           vhost_perms_info_keys}]).
 
 -define(OPTS_COMMANDS,
-        [{"-p", [set_permissions, clear_permissions, list_permissions,
-                 list_user_permissions, list_queues, list_bindings,
-                 list_connections, list_channels, list_consumers, trace_on,
-                 trace_off]}]).
+        [{?QUIET_OPT, [set_permissions, clear_permissions, list_permissions,
+                       list_user_permissions, list_queues, list_bindings,
+                       list_connections, list_channels, list_consumers,
+                       trace_on, trace_off]}]).
 
 %%----------------------------------------------------------------------------
 
