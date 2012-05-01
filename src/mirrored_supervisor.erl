@@ -308,7 +308,7 @@ handle_call({init, Overall}, _From,
     State1 = State#state{overall = Overall, delegate = Delegate},
     case errors([maybe_start(Group, Delegate, S) || S <- ChildSpecs]) of
         []     -> {reply, ok, State1};
-        Errors -> {stop, {shutdown, Errors}, State1}
+        Errors -> {stop, {shutdown, {init, Errors, ChildSpecs}}, State1}
     end;
 
 handle_call({start_child, ChildSpec}, _From,
@@ -366,15 +366,17 @@ handle_info({'DOWN', _Ref, process, Pid, _Reason},
     %% TODO load balance this
     %% No guarantee pg2 will have received the DOWN before us.
     Self = self(),
-    R = case lists:sort(?PG2:get_members(Group)) -- [Pid] of
-            [Self | _] -> {atomic, ChildSpecs} =
+    {R, Cs, X} =
+        case lists:sort(?PG2:get_members(Group)) -- [Pid] of
+            [Self | _] -> {atomic, {ChildSpecs, Extra}} =
                               mnesia:transaction(fun() -> update_all(Pid) end),
-                          [start(Delegate, ChildSpec) || ChildSpec <- ChildSpecs];
-            _          -> []
+                          {[start(Delegate, ChildSpec) || ChildSpec <- ChildSpecs],
+                           ChildSpecs, Extra};
+            _          -> {[], [], []}
         end,
     case errors(R) of
         []     -> {noreply, State};
-        Errors -> {stop, {shutdown, Errors}, State}
+        Errors -> {stop, {shutdown, {down, Errors, Cs, X}}, State}
     end;
 
 handle_info(Info, State) ->
@@ -458,8 +460,8 @@ update_all(OldPid) ->
                                         key           = '$1',
                                         childspec     = '$2',
                                         _             = '_'},
-    [write(Group, C) ||
-        [{Group, _Id}, C] <- mnesia:select(?TABLE, [{MatchHead, [], ['$$']}])].
+    Matches = mnesia:select(?TABLE, [{MatchHead, [], ['$$']}]),
+    {[write(Group, C) || [{Group, _Id}, C] <- Matches], {OldPid, Matches}}.
 
 delete_all(Group) ->
     MatchHead = #mirrored_sup_childspec{key       = {Group, '_'},
