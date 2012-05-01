@@ -40,7 +40,7 @@
           vhost_perms_info_keys}]).
 
 -define(OPTS_COMMANDS,
-        [{?QUIET_OPT, [set_permissions, clear_permissions, list_permissions,
+        [{?VHOST_OPT, [set_permissions, clear_permissions, list_permissions,
                        list_user_permissions, list_queues, list_bindings,
                        list_connections, list_channels, list_consumers,
                        trace_on, trace_off]}]).
@@ -91,9 +91,12 @@ start() ->
         end,
 
     lists:foreach(fun ({Opt, Commands}) ->
-                          case {proplists:is_defined(Opt, Opts),
+                          %% Using get_bool since is_defined would return always
+                          %% true for flags.
+                          case {proplists:get_bool(Opt, Opts),
                                 lists:member(Command, Commands)} of
                               {true, false} -> PrintInvalidCommandError(),
+                                               io:format("~p ~p~n", [Opt, Opts]),
                                                usage();
                               _             -> ok
                           end
