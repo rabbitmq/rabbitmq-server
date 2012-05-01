@@ -194,7 +194,11 @@ action(force_cluster, Node, ClusterNodeSs, _Opts, Inform) ->
 
 action(wait, Node, [PidFile], _Opts, Inform) ->
     Inform("Waiting for ~p", [Node]),
-    wait_for_application(Node, PidFile, Inform);
+    wait_for_application(Node, PidFile, rabbit, Inform);
+
+action(wait, Node, [PidFile, App], _Opts, Inform) ->
+    Inform("Waiting for ~p on ~p", [App, Node]),
+    wait_for_application(Node, PidFile, list_to_atom(App), Inform);
 
 action(status, Node, [], _Opts, Inform) ->
     Inform("Status of node ~p", [Node]),
@@ -396,17 +400,17 @@ action(eval, Node, [Expr], _Opts, _Inform) ->
 
 %%----------------------------------------------------------------------------
 
-wait_for_application(Node, PidFile, Inform) ->
+wait_for_application(Node, PidFile, Application, Inform) ->
     Pid = read_pid_file(PidFile, true),
     Inform("pid is ~s", [Pid]),
-    wait_for_application(Node, Pid).
+    wait_for_application(Node, Pid, Application).
 
-wait_for_application(Node, Pid) ->
+wait_for_application(Node, Pid, Application) ->
     case process_up(Pid) of
-        true  -> case rabbit:is_running(Node) of
+        true  -> case rabbit_nodes:is_running(Node, Application) of
                      true  -> ok;
                      false -> timer:sleep(?EXTERNAL_CHECK_INTERVAL),
-                              wait_for_application(Node, Pid)
+                              wait_for_application(Node, Pid, Application)
                  end;
         false -> {error, process_not_running}
     end.

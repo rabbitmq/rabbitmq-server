@@ -18,8 +18,8 @@
 -include("rabbit.hrl").
 
 -export([is_ssl/1, ssl_info/1, controlling_process/2, getstat/2,
-         recv/1, async_recv/3, port_command/2, setopts/2, send/2, close/1,
-         maybe_fast_close/1, sockname/1, peername/1, peercert/1,
+         recv/1, async_recv/3, port_command/2, getopts/2, setopts/2, send/2,
+         close/1, maybe_fast_close/1, sockname/1, peername/1, peercert/1,
          connection_string/2]).
 
 %%---------------------------------------------------------------------------
@@ -34,6 +34,8 @@
 -type(ok_val_or_error(A) :: rabbit_types:ok_or_error2(A, any())).
 -type(ok_or_any_error() :: rabbit_types:ok_or_error(any())).
 -type(socket() :: port() | #ssl_socket{}).
+-type(opts() :: [{atom(), any()} |
+                 {raw, non_neg_integer(), non_neg_integer(), binary()}]).
 
 -spec(is_ssl/1 :: (socket()) -> boolean()).
 -spec(ssl_info/1 :: (socket())
@@ -49,9 +51,12 @@
 -spec(async_recv/3 ::
         (socket(), integer(), timeout()) -> rabbit_types:ok(any())).
 -spec(port_command/2 :: (socket(), iolist()) -> 'true').
--spec(setopts/2 :: (socket(), [{atom(), any()} |
-                               {raw, non_neg_integer(), non_neg_integer(),
-                                binary()}]) -> ok_or_any_error()).
+-spec(getopts/2 :: (socket(), [atom() | {raw,
+                                         non_neg_integer(),
+                                         non_neg_integer(),
+                                         non_neg_integer() | binary()}])
+                   -> ok_val_or_error(opts())).
+-spec(setopts/2 :: (socket(), opts()) -> ok_or_any_error()).
 -spec(send/2 :: (socket(), binary() | iolist()) -> ok_or_any_error()).
 -spec(close/1 :: (socket()) -> ok_or_any_error()).
 -spec(maybe_fast_close/1 :: (socket()) -> ok_or_any_error()).
@@ -125,6 +130,11 @@ port_command(Sock, Data) when ?IS_SSL(Sock) ->
     end;
 port_command(Sock, Data) when is_port(Sock) ->
     erlang:port_command(Sock, Data).
+
+getopts(Sock, Options) when ?IS_SSL(Sock) ->
+    ssl:getopts(Sock#ssl_socket.ssl, Options);
+getopts(Sock, Options) when is_port(Sock) ->
+    inet:getopts(Sock, Options).
 
 setopts(Sock, Options) when ?IS_SSL(Sock) ->
     ssl:setopts(Sock#ssl_socket.ssl, Options);

@@ -793,23 +793,27 @@ process_instruction({discard, ChPid, Msg = #basic_message { id = MsgId }},
     {ok, State1 #state { sender_queues       = SQ1,
                          msg_id_status       = MS1,
                          backing_queue_state = BQS1 }};
-process_instruction({set_length, Length},
+process_instruction({set_length, Length, AckRequired},
                     State = #state { backing_queue       = BQ,
                                      backing_queue_state = BQS }) ->
     QLen = BQ:len(BQS),
     ToDrop = QLen - Length,
-    {ok, case ToDrop >= 0 of
-             true  -> BQS1 =
-                          lists:foldl(
-                            fun (const, BQSN) ->
-                                    {{_Msg, _IsDelivered, _AckTag, _Remaining},
-                                     BQSN1} = BQ:fetch(false, BQSN),
-                                    BQSN1
-                            end, BQS, lists:duplicate(ToDrop, const)),
-                      set_synchronised(
-                        true, State #state { backing_queue_state = BQS1 });
-             false -> State
-         end};
+    {ok,
+     case ToDrop >= 0 of
+         true ->
+             State1 =
+                 lists:foldl(
+                   fun (const, StateN = #state {backing_queue_state = BQSN}) ->
+                           {{#basic_message{id = MsgId}, _IsDelivered, AckTag,
+                             _Remaining}, BQSN1} = BQ:fetch(AckRequired, BQSN),
+                           maybe_store_ack(
+                             AckRequired, MsgId, AckTag,
+                             StateN #state { backing_queue_state = BQSN1 })
+                   end, State, lists:duplicate(ToDrop, const)),
+             set_synchronised(true, State1);
+         false ->
+             State
+     end};
 process_instruction({fetch, AckRequired, MsgId, Remaining},
                     State = #state { backing_queue       = BQ,
                                      backing_queue_state = BQS }) ->
@@ -835,11 +839,6 @@ process_instruction({ack, MsgIds},
     [] = MsgIds1 -- MsgIds, %% ASSERTION
     {ok, State #state { msg_id_ack          = MA1,
                         backing_queue_state = BQS1 }};
-process_instruction({fold, MsgFun, AckTags},
-                    State = #state { backing_queue       = BQ,
-                                     backing_queue_state = BQS }) ->
-    BQS1 = BQ:fold(MsgFun, BQS, AckTags),
-    {ok, State #state { backing_queue_state = BQS1 }};
 process_instruction({requeue, MsgIds},
                     State = #state { backing_queue       = BQ,
                                      backing_queue_state = BQS,
