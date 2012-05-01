@@ -336,7 +336,14 @@ function update_multifields() {
                                '_mfkey" value=""/> = ' +
                                '<input type="text" name="' + name + '_' +
                                (largest_id + 1) +
-                               '_mfvalue" value=""/></p>');
+                               '_mfvalue" value=""/> ' +
+                               '<select name="' + name + '_' +
+                               (largest_id + 1) +
+                               '_mftype">' +
+                               '<option value="string">String</option>' +
+                               '<option value="number">Number</option>' +
+                               '<option value="boolean">Boolean</option>' +
+                               '</select></p>');
             }
         });
 }
@@ -613,7 +620,21 @@ function collapse_multifields(params0) {
             if (params0[key] != "") {
                 var k = params0[key];
                 var v = params0[name + '_' + id + '_mfvalue'];
-                params[name][k] = v;
+                var t = params0[name + '_' + id + '_mftype'];
+                if (t == 'boolean') {
+                    if (v != 'true' && v != 'false')
+                        throw(k + ' must be "true" or "false"; got ' + v);
+                    params[name][k] = (v == 'true');
+                }
+                else if (t == 'number') {
+                    var n = parseFloat(v);
+                    if (isNaN(n))
+                        throw(k + ' must be a number; got ' + v);
+                    params[name][k] = n;
+                }
+                else {
+                    params[name][k] = v;
+                }
             }
         }
     }
