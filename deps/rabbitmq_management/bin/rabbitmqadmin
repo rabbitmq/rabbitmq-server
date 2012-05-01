@@ -28,7 +28,8 @@ import socket
 
 LISTABLE = {'connections': False, 'channels': False, 'exchanges': True,
             'queues': True, 'bindings': True, 'users': False,
-            'vhosts': False, 'permissions': False, 'nodes': False}
+            'vhosts': False, 'permissions': False, 'nodes': False,
+            'parameters': False}
 
 SHOWABLE = {'overview': False}
 
@@ -42,7 +43,8 @@ URIS = {
     'binding_del':'/bindings/{vhost}/e/{source}/{destination_char}/{destination}/{properties_key}',
     'vhost':      '/vhosts/{name}',
     'user':       '/users/{name}',
-    'permission': '/permissions/{vhost}/{user}'
+    'permission': '/permissions/{vhost}/{user}',
+    'parameter':  '/parameters/{component}/{key}'
     }
 
 DECLARABLE = {
@@ -60,6 +62,9 @@ DECLARABLE = {
     'user':       {'mandatory': ['name', 'password', 'tags'],
                    'optional':  {}},
     'permission': {'mandatory': ['vhost', 'user', 'configure', 'write', 'read'],
+                   'optional':  {}},
+    'parameter':  {'mandatory': ['component', 'key', 'value'],
+                   'json':      ['value'],
                    'optional':  {}}
     }
 
@@ -70,7 +75,8 @@ DELETABLE = {
                                  'properties_key']},
     'vhost':      {'mandatory': ['name']},
     'user':       {'mandatory': ['name']},
-    'permission': {'mandatory': ['vhost', 'user']}
+    'permission': {'mandatory': ['vhost', 'user']},
+    'parameter':  {'mandatory': ['component', 'key']}
     }
 
 CLOSABLE = {
@@ -518,7 +524,10 @@ class Management:
             (name, value) = arg.split("=", 1)
             assert_usage(name in mandatory or name in optional.keys(),
                          'Argument "{0}" not recognised'.format(name))
-            upload[name] = value
+            if 'json' in obj and name in obj['json']:
+                upload[name] = json.loads(value)
+            else:
+                upload[name] = value
         for m in mandatory:
             assert_usage(m in upload.keys(),
                          'mandatory argument "{0}" required'.format(m))
@@ -528,7 +537,7 @@ class Management:
         uri_args = {}
         for k in upload:
             v = upload[k]
-            if v:
+            if v and isinstance(v, basestring):
                 uri_args[k] = urllib.quote_plus(v)
                 if k == 'destination_type':
                     uri_args['destination_char'] = v[0]
