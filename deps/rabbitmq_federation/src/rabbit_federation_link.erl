@@ -35,6 +35,7 @@
 -record(state, {upstream,
                 connection,
                 channel,
+                consumer_tag,
                 queue,
                 internal_exchange,
                 waiting_cmds = gb_trees:empty(),
@@ -169,6 +170,26 @@ handle_info(Msg, State) ->
     {stop, {unexpected_info, Msg}, State}.
 
 terminate(_Reason, {not_started, _}) ->
+    ok;
+
+terminate(shutdown, #state{downstream_channel    = DCh,
+
+                           downstream_connection = DConn,
+                           downstream_exchange   = XName,
+                           upstream              = Upstream,
+                           connection            = Conn,
+                           channel               = Ch,
+                           consumer_tag          = CTag}) ->
+    %% The supervisor is shutting us down; we are probably restarting
+    %% the link because configuration has changed. So try to shut down
+    %% nicely so that we do not cause unacked messages to be
+    %% redelivered.
+    rabbit_log:info("Federation ~s disconnecting from ~s~n",
+                    [rabbit_misc:rs(XName),
+                     rabbit_federation_upstream:to_string(Upstream)]),
+    ensure_closed(DConn, DCh),
+    ensure_closed(Conn, Ch),
+    rabbit_federation_status:remove(Upstream, XName),
     ok;
 
 terminate(_Reason, #state{downstream_channel    = DCh,
@@ -404,8 +425,6 @@ consume_from_upstream_queue(
               params         = #amqp_params_network{virtual_host = VHost}}
         = Upstream,
     Q = upstream_queue_name(XNameBin, VHost, DownXName),
-    %% TODO it would be nice to just pass through args, but let's do that as
-    %% part of bug 23908.
     ExpiryArg = case Expiry of
                     none -> [];
                     _    -> [{<<"x-expires">>, long, Expiry}]
@@ -426,10 +445,11 @@ consume_from_upstream_queue(
         none -> ok;
         _    -> amqp_channel:call(Ch, #'basic.qos'{prefetch_count = Prefetch})
     end,
-    #'basic.consume_ok'{} =
+    #'basic.consume_ok'{consumer_tag = CTag} =
         amqp_channel:subscribe(Ch, #'basic.consume'{queue  = Q,
                                                     no_ack = false}, self()),
-    State#state{queue = Q}.
+    State#state{consumer_tag = CTag,
+                queue        = Q}.
 
 ensure_upstream_bindings(State = #state{upstream            = Upstream,
                                         connection          = Conn,
@@ -490,14 +510,14 @@ upstream_exchange_name(XNameBin, VHost, DownXName, Suffix) ->
     <<Name/binary, " ", Suffix/binary>>.
 
 local_nodename() ->
-    {ok, Explicit} = application:get_env(rabbitmq_federation, local_nodename),
+    Explicit = rabbit_runtime_parameters:value(
+                 <<"federation">>, <<"local_nodename">>, null),
     case Explicit of
-        automatic -> {ID, _} = rabbit_nodes:parts(node()),
-                     {ok, Host} = inet:gethostname(),
-                     {ok, #hostent{h_name = FQDN}} = inet:gethostbyname(Host),
-                     list_to_binary(atom_to_list(
-                                      rabbit_nodes:make({ID, FQDN})));
-        _         -> list_to_binary(Explicit)
+        null -> {ID, _} = rabbit_nodes:parts(node()),
+                {ok, Host} = inet:gethostname(),
+                {ok, #hostent{h_name = FQDN}} = inet:gethostbyname(Host),
+                list_to_binary(atom_to_list(rabbit_nodes:make({ID, FQDN})));
+        _    -> Explicit
     end.
 
 delete_upstream_exchange(Conn, XNameBin) ->

@@ -19,10 +19,9 @@
 -include("rabbit_federation.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
--export([to_table/1, to_string/1, from_set/2]).
+-export([to_table/1, to_string/1, from_set/2, from_set/3]).
 
 -import(rabbit_misc, [pget/2, pget/3]).
--import(rabbit_federation_util, [pget_bin/3]).
 
 %%----------------------------------------------------------------------------
 
@@ -57,81 +56,94 @@ to_string(#upstream{params   = #amqp_params_network{host         = H,
 
 print(Fmt, Args) -> iolist_to_binary(io_lib:format(Fmt, Args)).
 
-from_set(SetName, #resource{name         = DefaultXNameBin,
-                            virtual_host = DefaultVHost}) ->
-    {ok, Sets} = application:get_env(rabbitmq_federation, upstream_sets),
-    case pget(binary_to_list(SetName), Sets) of
-        undefined -> {error, set_not_found};
-        Set       -> Results = [from_props(P, DefaultXNameBin, DefaultVHost) ||
-                                   P <- Set],
-                     case [E || E = {error, _} <- Results] of
-                         []      -> {ok, Results};
-                         [E | _] -> E
-                     end
+from_set(SetName, X, ConnName) ->
+    rabbit_federation_util:find_upstreams(ConnName, from_set(SetName, X)).
+
+from_set(<<"all">>, X) ->
+    Connections = rabbit_runtime_parameters:list(<<"federation_connection">>),
+    Set = [[{<<"connection">>, pget(key, C)}] || C <- Connections],
+    from_set_contents(Set, X);
+
+from_set(SetName, X) ->
+    case rabbit_runtime_parameters:value(
+           <<"federation_upstream_set">>, SetName) of
+        not_found -> [];
+        Set       -> from_set_contents(Set, X)
     end.
+
+from_set_contents(Set, #resource{name         = DefaultXNameBin,
+                                 virtual_host = DefaultVHost}) ->
+    Results = [from_props(P, DefaultXNameBin, DefaultVHost) ||
+                                   P <- Set],
+    [R || R <- Results, R =/= not_found].
 
 from_props(Upst, DefaultXNameBin, DefaultVHost) ->
-    {ok, Connections} = application:get_env(rabbitmq_federation, connections),
-    case pget(connection, Upst) of
-        undefined -> {error, no_connection_name};
-        ConnName  -> case pget(ConnName, Connections) of
-                         undefined  -> {error, {no_connection, ConnName}};
-                         Conn       -> from_props_connection(
-                                         Upst, ConnName, Conn, DefaultXNameBin,
-                                         DefaultVHost)
-                     end
+    ConnName = bget(connection, Upst, []),
+    case rabbit_runtime_parameters:value(
+           <<"federation_connection">>, ConnName) of
+        not_found  -> not_found;
+        Conn       -> from_props_connection(
+                        Upst, ConnName, Conn, DefaultXNameBin, DefaultVHost)
     end.
 
-from_props_connection(Upst, ConnName, Conn, DefaultXNameBin, DefaultVHost) ->
+from_props_connection(U, ConnName, C, DefaultXNameBin, DefaultVHost) ->
     {ok, DefaultUser} = application:get_env(rabbit, default_user),
     {ok, DefaultPass} = application:get_env(rabbit, default_pass),
-    case pget(host, Conn, none) of
-        none -> {error, {no_host, ConnName}};
-        Host -> Params = #amqp_params_network{
-                  host         = Host,
-                  port         = pget    (port,         Conn),
-                  virtual_host = pget_bin(virtual_host, Conn, DefaultVHost),
-                  username     = pget_bin(username,     Conn, DefaultUser),
-                  password     = pget_bin(password,     Conn, DefaultPass)},
-                XNameBin = pget_bin(exchange, Upst, DefaultXNameBin),
-                #upstream{params          = set_extra_params(Params, Conn),
-                          exchange        = XNameBin,
-                          prefetch_count  = pget(prefetch_count,  Conn, none),
-                          reconnect_delay = pget(reconnect_delay, Conn, 1),
-                          max_hops        = pget(max_hops,        Upst, 1),
-                          expires         = pget(expires,         Conn, none),
-                          message_ttl     = pget(message_ttl,     Conn, none),
-                          ha_policy       = pget(ha_policy,       Conn, none),
-                          connection_name = ConnName}
-    end.
+    Host = bget(host, U, C, none),
+    Params = #amqp_params_network{
+      host         = binary_to_list(Host),
+      port         = bget(port,         U, C),
+      virtual_host = bget(virtual_host, U, C, DefaultVHost),
+      username     = bget(username,     U, C, DefaultUser),
+      password     = bget(password,     U, C, DefaultPass)},
+    #upstream{params          = set_extra_params(Params, U, C),
+              exchange        = bget(exchange,        U, C, DefaultXNameBin),
+              prefetch_count  = bget(prefetch_count,  U, C, none),
+              reconnect_delay = bget(reconnect_delay, U, C, 1),
+              max_hops        = bget(max_hops,        U, C, 1),
+              expires         = bget(expires,         U, C, none),
+              message_ttl     = bget(message_ttl,     U, C, none),
+              ha_policy       = bget(ha_policy,       U, C, none),
+              connection_name = ConnName}.
 
-set_extra_params(Params, Conn) ->
-    lists:foldl(fun (F, ParamsIn) -> F(ParamsIn, Conn) end, Params,
-                [fun set_ssl_options/2,
-                 fun set_heartbeat/2,
-                 fun set_mechanisms/2]).
+set_extra_params(Params, U, C) ->
+    lists:foldl(fun (F, ParamsIn) -> F(ParamsIn, U, C) end, Params,
+                [fun set_ssl_options/3,
+                 fun set_heartbeat/3,
+                 fun set_mechanisms/3]).
 
 %%----------------------------------------------------------------------------
 
-set_ssl_options(Params, Conn) ->
-    case pget(protocol, Conn, "amqp") of
-        "amqp"  -> Params;
-        "amqps" -> Params#amqp_params_network{
-                     ssl_options = pget(ssl_options, Conn)}
+set_ssl_options(Params, U, C) ->
+    case bget(protocol, U, C, <<"amqp">>) of
+        <<"amqp">>  -> Params;
+        <<"amqps">> -> Params#amqp_params_network{
+                         ssl_options = bget(ssl_options, U, C, [])}
     end.
 
-set_heartbeat(Params, Conn) ->
-    case pget(heartbeat, Conn, none) of
+set_heartbeat(Params, U, C) ->
+    case bget(heartbeat, U, C, none) of
         none -> Params;
         H    -> Params#amqp_params_network{heartbeat = H}
     end.
 
 %% TODO it would be nice to support arbitrary mechanisms here.
-set_mechanisms(Params, Conn) ->
-    case pget(mechanism, Conn, default) of
-        default    -> Params;
-        'EXTERNAL' -> Params#amqp_params_network{
-                        auth_mechanisms =
-                            [fun amqp_auth_mechanisms:external/3]};
-        M          -> exit({unsupported_mechanism, M})
+set_mechanisms(Params, U, C) ->
+    case bget(mechanism, U, C, <<"default">>) of
+        <<"default">>  -> Params;
+        <<"EXTERNAL">> -> Params#amqp_params_network{
+                            auth_mechanisms =
+                                [fun amqp_auth_mechanisms:external/3]};
+        M              -> exit({unsupported_mechanism, M})
     end.
+
+bget(K, L1, L2) -> bget(K, L1, L2, undefined).
+
+bget(K0, L1, L2, D) ->
+    K = a2b(K0),
+    case pget(K, L1, undefined) of
+        undefined -> pget(K, L2, D);
+        Result    -> Result
+    end.
+
+a2b(A) -> list_to_binary(atom_to_list(A)).

@@ -21,7 +21,7 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 -define(SUPERVISOR, rabbit_federation_link_sup_sup).
 
--export([start_link/0, start_child/2, stop_child/1]).
+-export([start_link/0, start_child/2, adjust/1, stop_child/1]).
 
 -export([init/1]).
 
@@ -32,17 +32,20 @@ start_link() ->
                                    ?SUPERVISOR, ?MODULE, []).
 
 start_child(Id, Args) ->
-    {ok, Pid} = mirrored_supervisor:start_child(
-                  ?SUPERVISOR,
-                  {Id, {rabbit_federation_link_sup, start_link, [Args]},
-                   transient, ?MAX_WAIT, supervisor,
-                   [rabbit_federation_link_sup]}),
-    {ok, Pid}.
+    {ok, _Pid} = mirrored_supervisor:start_child(
+                   ?SUPERVISOR,
+                   {Id, {rabbit_federation_link_sup, start_link, [Args]},
+                    transient, ?MAX_WAIT, supervisor,
+                    [rabbit_federation_link_sup]}).
+
+adjust(Reason) ->
+    [rabbit_federation_link_sup:adjust(Pid, Id, Reason) ||
+        {Id, Pid, _, _} <- mirrored_supervisor:which_children(?SUPERVISOR)],
+    ok.
 
 stop_child(Id) ->
     ok = mirrored_supervisor:terminate_child(?SUPERVISOR, Id),
-    ok = mirrored_supervisor:delete_child(?SUPERVISOR, Id),
-    ok.
+    ok = mirrored_supervisor:delete_child(?SUPERVISOR, Id).
 
 %%----------------------------------------------------------------------------
 
