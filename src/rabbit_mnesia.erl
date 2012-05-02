@@ -17,14 +17,14 @@
 
 -module(rabbit_mnesia).
 
--export([ensure_mnesia_dir/0, dir/0, status/0, init/0, is_db_empty/0,
-         cluster/2, force_cluster/2, reset/0, force_reset/0, init_db/3,
-         is_clustered/0, running_clustered_nodes/0, all_clustered_nodes/0,
-         empty_ram_only_tables/0, copy_db/1, wait_for_tables/1,
-         create_cluster_nodes_config/1, read_cluster_nodes_config/0,
-         record_running_nodes/0, read_previously_running_nodes/0,
-         running_nodes_filename/0, is_disc_node/0, on_node_down/1,
-         on_node_up/1]).
+-export([ensure_mnesia_dir/0, dir/0, status/0, init/0, is_db_empty/0, cluster/2,
+         force_cluster/2, reset/0, force_reset/0, init_db/3, is_clustered/0,
+         running_clustered_nodes/0, all_clustered_nodes/0,
+         all_clustered_disc_nodes/0, empty_ram_only_tables/0, copy_db/1,
+         wait_for_tables/1, create_cluster_nodes_config/1,
+         read_cluster_nodes_config/0, record_running_nodes/0,
+         read_previously_running_nodes/0, running_nodes_filename/0,
+         is_disc_node/0, on_node_down/1, on_node_up/1]).
 
 -export([table_names/0]).
 
@@ -181,6 +181,9 @@ is_clustered() ->
 all_clustered_nodes() ->
     mnesia:system_info(db_nodes).
 
+all_clustered_disc_nodes() ->
+    nodes_of_type(disc_copies).
+
 running_clustered_nodes() ->
     mnesia:system_info(running_db_nodes).
 
@@ -198,7 +201,7 @@ empty_ram_only_tables() ->
 discover_cluster([])  ->
     {error, cannot_discover_cluster};
 discover_cluster([Node | Nodes]) ->
-    case rpc:call(Node, rabbit_mnesia, all_clustered_nodes, []) of
+    case rpc:call(Node, rabbit_mnesia, all_clustered_disc_nodes, []) of
         {badrpc, _Reason} -> discover_cluster(Nodes);
         Res               -> {ok, Res}
     end.
