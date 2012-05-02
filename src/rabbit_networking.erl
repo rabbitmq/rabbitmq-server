@@ -160,8 +160,9 @@ ensure_ssl() ->
                         | SslOptsConfig]
     end.
 
-ssl_transform_fun(SslOpts) ->
+ssl_transform_fun(SslOpts0) ->
     fun (Sock) ->
+            SslOpts = rabbit_net:ssl_opts(SslOpts0),
             case catch ssl:ssl_accept(Sock, SslOpts, ?SSL_TIMEOUT * 1000) of
                 {ok, SslSock} ->
                     {ok, #ssl_socket{tcp = Sock, ssl = SslSock}};

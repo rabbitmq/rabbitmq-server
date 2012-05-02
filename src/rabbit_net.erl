@@ -17,7 +17,7 @@
 -module(rabbit_net).
 -include("rabbit.hrl").
 
--export([is_ssl/1, ssl_info/1, controlling_process/2, getstat/2,
+-export([is_ssl/1, ssl_info/1, ssl_opts/1, controlling_process/2, getstat/2,
          recv/1, async_recv/3, port_command/2, getopts/2, setopts/2, send/2,
          close/1, maybe_fast_close/1, sockname/1, peername/1, peercert/1,
          connection_string/2]).
@@ -41,6 +41,7 @@
 -spec(ssl_info/1 :: (socket())
                     -> 'nossl' | ok_val_or_error(
                                    {atom(), {atom(), atom(), atom()}})).
+-spec(ssl_opts/1 :: (rabbit_types:infos()) -> rabbit_types:infos()).
 -spec(controlling_process/2 :: (socket(), pid()) -> ok_or_any_error()).
 -spec(getstat/2 ::
         (socket(), [stat_option()])
@@ -84,6 +85,14 @@ ssl_info(Sock) when ?IS_SSL(Sock) ->
     ssl:connection_info(Sock#ssl_socket.ssl);
 ssl_info(_Sock) ->
     nossl.
+
+ssl_opts(SslOpts0) ->
+    case proplists:lookup(cacertdir, SslOpts0) of
+        {cacertdir, Dir} ->
+            [{cacertfile, load_cacerts_dir(Dir)} | SslOpts0];
+        none ->
+            SslOpts0
+    end.
 
 controlling_process(Sock, Pid) when ?IS_SSL(Sock) ->
     ssl:controlling_process(Sock#ssl_socket.ssl, Pid);
@@ -173,4 +182,37 @@ connection_string(Sock, Direction) ->
             Error;
         {_, {error, _Reason} = Error} ->
             Error
+    end.
+
+ca_tmp_filename(Dir, DateTime) ->
+    SecondsStr = integer_to_list(
+                   calendar:datetime_to_gregorian_seconds(DateTime)),
+    filename:join(Dir, SecondsStr ++ ".tmp").
+
+load_cacerts_dir(Dir) ->
+    ExpectedFilename = ca_tmp_filename(Dir, filelib:last_modified(Dir)),
+    case filelib:is_file(ExpectedFilename) of
+        true ->
+            ExpectedFilename;
+        false ->
+            NewContents =
+                filelib:fold_files(
+                  Dir, ".*\\.pem", false,
+                  fun (F, Certs) ->
+                          {ok, PemBin} = file:read_file(F),
+                          [PemBin | Certs]
+                  end, []),
+            %% Remove old files
+            filelib:fold_files(
+              Dir, "[0-9]*\\.tmp", false,
+              fun (F, _) ->
+                      file:delete(F)
+              end, undefined),
+            %% Create a new file name with the expected mtime of the
+            %% directory once we've written to it. This will
+            %% occasionally miss; this assumes it's not a huge deal to
+            %% re-generate it.
+            NewFilename = ca_tmp_filename(Dir, calendar:local_time()),
+            file:write_file(NewFilename, NewContents),
+            NewFilename
     end.
