@@ -153,6 +153,11 @@ cluster(DiscoveryNodes, DiscNode, Force) ->
     after
         stop_mnesia()
     end,
+    
+    case DiscNode of
+        true  -> rabbit_node_monitor:notify_cluster();
+        false -> ok
+    end,
 
     ok.
 
@@ -435,12 +440,12 @@ cluster_nodes_config_filename() ->
 
 create_cluster_nodes_config(ClusterNodes, DiscNode) ->
     FileName = cluster_nodes_config_filename(),
-    case rabbit_file:write_term_file(FileName, [ClusterNodes]) of
+    case rabbit_file:write_term_file(FileName, [ClusterNodes, DiscNode]) of
         ok -> ok;
         {error, Reason} ->
             throw({error, {cannot_create_cluster_nodes_config,
                            FileName, Reason}})
-    end.
+    end.    
 
 read_cluster_nodes_config() ->
     FileName = cluster_nodes_config_filename(),
