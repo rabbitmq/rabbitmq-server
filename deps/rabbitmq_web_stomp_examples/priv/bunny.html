@@ -19,11 +19,12 @@
       }
       body {
           overflow: hidden;
-          margin: 0;
-          padding: 0;
       }
     </style>
+    <title>RabbitMQ Web STOMP Examples: Bunny Drawing</title>
+    <link href="main.css" rel="stylesheet" type="text/css"/>
 </head><body lang="en">
+    <h1><a href="index.html">RabbitMQ Web STOMP Examples</a> > Bunny Drawing</h1>
     <canvas id="cnvs"></canvas>
 <script>
 var send; var draw;
@@ -40,26 +41,32 @@ if (canvas.getContext) {
   img.onload = function() {
     ctx.drawImage(img, 230, 160);
   };
-  img.src = 'bunny.jpg';
+  img.src = 'bunny.png';
 
   draw = function(p) {
     ctx.beginPath();
     ctx.moveTo(p.x1, p.y1);
     ctx.lineTo(p.x2, p.y2);
     ctx.stroke();
+    ctx.drawImage(img, 230, 160);
   };
 
   var do_resize = function() {
     canvas.width  = window.innerWidth;
     canvas.height = window.innerHeight;
 
-    ctx.font = "bold 40px sans-serif";
-    ctx.fillText("Draw bunny wings!", 230, 100);
+    ctx.font = "bold 20px sans-serif";
+    ctx.fillStyle = "#444";
+    ctx.fillText("Draw wings on the bunny!", 260, 100);
+    ctx.font = "normal 16px sans-serif";
+    ctx.fillStyle = "#888";
+    ctx.fillText("(For more fun open a second browser)", 255, 130);
 
     ctx.drawImage(img, 230, 160);
 
-    ctx.font = "normal 16px sans-serif";
-    ctx.fillText("For even more fun open a second browser!", 250, 660);
+    ctx.strokeStyle = "#fa0";
+    ctx.lineWidth = "10";
+    ctx.lineCap = "round";
 
     $.map(lines, function (p) {
       draw(p);
@@ -72,7 +79,9 @@ if (canvas.getContext) {
 
   var pos = $('#cnvs').position();
   var prev = null;
-  $('#cnvs').mousedown(function() {
+  $('#cnvs').mousedown(function(evt) {
+      evt.preventDefault();
+      evt.stopPropagation();
       $('#cnvs').bind('mousemove', function(e) {
           var curr = {x:e.pageX-pos.left, y:e.pageY-pos.top};
           if (!prev) {
@@ -94,7 +103,9 @@ if (canvas.getContext) {
       $('#cnvs').unbind('mousemove');
   });
 }
-
+else {
+  document.write("Sorry - this demo requires a browser with &lt;canvas> support.");
+}
 
 // Stomp.js boilerplate
 WebSocketStompMock = SockJS;
