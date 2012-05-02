@@ -41,7 +41,7 @@ proc_spec(Conn) ->
     {PeerAddr, PeerPort} = proplists:get_value(peername, Info),
     {SockAddr, SockPort} = proplists:get_value(sockname, Info),
 
-    AdapterInfo = #adapter_info{protocol        = {'WEB-STOMP', 0},
+    AdapterInfo = #adapter_info{protocol        = {'Web STOMP', 0},
                                 address         = SockAddr,
                                 port            = SockPort,
                                 peer_address    = PeerAddr,
