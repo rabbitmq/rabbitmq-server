@@ -123,8 +123,9 @@ remove_backup() ->
 maybe_upgrade_mnesia() ->
     %% rabbit_mnesia:all_clustered_nodes/0 will return [] at this point
     %% if we are a RAM node since Mnesia has not started yet.
+    {ClusterNodes, IsDiscNode} = rabbit_mnesia:read_cluster_nodes_config(),
     AllNodes = lists:usort(rabbit_mnesia:all_clustered_nodes() ++
-                               rabbit_mnesia:read_cluster_nodes_config()),
+                               ClusterNodes),
     case rabbit_version:upgrades_required(mnesia) of
         {error, starting_from_scratch} ->
             ok;
@@ -141,17 +142,17 @@ maybe_upgrade_mnesia() ->
             ok;
         {ok, Upgrades} ->
             ensure_backup_taken(),
-            ok = case upgrade_mode(AllNodes) of
+            ok = case upgrade_mode(AllNodes, IsDiscNode) of
                      primary   -> primary_upgrade(Upgrades, AllNodes);
-                     secondary -> secondary_upgrade(AllNodes)
+                     secondary -> secondary_upgrade(AllNodes, IsDiscNode)
                  end
     end.
 
-upgrade_mode(AllNodes) ->
+upgrade_mode(AllNodes, IsDiscNode) ->
     case nodes_running(AllNodes) of
         [] ->
             AfterUs = rabbit_mnesia:read_previously_running_nodes(),
-            case {is_disc_node_legacy(), AfterUs} of
+            case {IsDiscNode, AfterUs} of
                 {true, []}  ->
                     primary;
                 {true, _}  ->
@@ -217,20 +218,13 @@ primary_upgrade(Upgrades, Nodes) ->
 force_tables() ->
     [mnesia:force_load_table(T) || T <- rabbit_mnesia:table_names()].
 
-secondary_upgrade(AllNodes) ->
-    %% must do this before we wipe out schema
-    IsDiscNode = is_disc_node_legacy(),
+secondary_upgrade(AllNodes, IsDiscNode) ->
     rabbit_misc:ensure_ok(mnesia:delete_schema([node()]),
                           cannot_delete_schema),
-    %% Note that we cluster with all nodes, rather than all disc nodes
-    %% (as we can't know all disc nodes at this point). This is safe as
-    %% we're not writing the cluster config, just setting up Mnesia.
-    ClusterNodes = case IsDiscNode of
-                       true  -> AllNodes;
-                       false -> AllNodes -- [node()]
-                   end,
+    ClusterNodes = AllNodes -- [node()],
     rabbit_misc:ensure_ok(mnesia:start(), cannot_start_mnesia),
-    ok = rabbit_mnesia:init_db(ClusterNodes, true, fun () -> ok end),
+    ok = rabbit_mnesia:init_db(ClusterNodes, IsDiscNode, true,
+                               fun () -> ok end),
     ok = rabbit_version:record_desired_for_scope(mnesia),
     ok.
 
@@ -277,14 +271,6 @@ dir() -> rabbit_mnesia:dir().
 lock_filename() -> lock_filename(dir()).
 lock_filename(Dir) -> filename:join(Dir, ?LOCK_FILENAME).
 backup_dir() -> dir() ++ "-upgrade-backup".
-
-is_disc_node_legacy() ->
-    %% This is pretty ugly but we can't start Mnesia and ask it (will
-    %% hang), we can't look at the config file (may not include us
-    %% even if we're a disc node).  We also can't use
-    %% rabbit_mnesia:is_disc_node/0 because that will give false
-    %% postivies on Rabbit up to 2.5.1.
-    filelib:is_regular(filename:join(dir(), "rabbit_durable_exchange.DCD")).
 
 %% NB: we cannot use rabbit_log here since it may not have been
 %% started yet

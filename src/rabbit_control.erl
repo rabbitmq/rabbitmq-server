@@ -25,6 +25,7 @@
 -define(QUIET_OPT, "-q").
 -define(NODE_OPT, "-n").
 -define(VHOST_OPT, "-p").
+-define(RAM_OPT, "--ram").
 
 -define(GLOBAL_QUERIES,
         [{"Connections", rabbit_networking, connection_info_all,
@@ -43,7 +44,8 @@
         [{?VHOST_OPT, [set_permissions, clear_permissions, list_permissions,
                        list_user_permissions, list_queues, list_bindings,
                        list_connections, list_channels, list_consumers,
-                       trace_on, trace_off]}]).
+                       trace_on, trace_off]},
+        {?RAM_OPT, [join_cluster]}]).
 
 %%----------------------------------------------------------------------------
 
@@ -66,7 +68,8 @@ start() ->
     {[Command0 | Args], Opts} =
         case rabbit_misc:get_options([{flag, ?QUIET_OPT},
                                       {option, ?NODE_OPT, NodeStr},
-                                      {option, ?VHOST_OPT, "/"}],
+                                      {option, ?VHOST_OPT, "/"},
+                                      {flag, ?RAM_OPT}],
                                      init:get_plain_arguments()) of
             {[], _Opts}    -> usage();
             CmdArgsAndOpts -> CmdArgsAndOpts
@@ -198,17 +201,23 @@ action(force_reset, Node, [], _Opts, Inform) ->
     Inform("Forcefully resetting node ~p", [Node]),
     call(Node, {rabbit_mnesia, force_reset, []});
 
-action(cluster, Node, ClusterNodeSs, _Opts, Inform) ->
-    ClusterNodes = lists:map(fun list_to_atom/1, ClusterNodeSs),
-    Inform("Clustering node ~p with ~p",
-           [Node, ClusterNodes]),
-    rpc_call(Node, rabbit_mnesia, cluster, [ClusterNodes]);
+action(cluster, Node, ClusterNodeSs, Opts, Inform) ->
+    Inform("Warning: the \"cluster\" command is deprecated, please use "
+           "\"join_cluster\" instead.~n", []),
+    action(join_cluster, Node, ClusterNodeSs, Opts, Inform);
 
-action(force_cluster, Node, ClusterNodeSs, _Opts, Inform) ->
+action(force_cluster, Node, ClusterNodeSs, Opts, Inform) ->
     ClusterNodes = lists:map(fun list_to_atom/1, ClusterNodeSs),
     Inform("Forcefully clustering node ~p with ~p (ignoring offline nodes)",
            [Node, ClusterNodes]),
-    rpc_call(Node, rabbit_mnesia, force_cluster, [ClusterNodes]);
+    DiscNode = not proplists:is_defined(?RAM_OPT, Opts),
+    rpc_call(Node, rabbit_mnesia, force_cluster, [ClusterNodes, DiscNode]);
+
+action(join_cluster, Node, ClusterNodeSs, Opts, Inform) ->
+    ClusterNodes = lists:map(fun list_to_atom/1, ClusterNodeSs),
+    Inform("Clustering node ~p with ~p", [Node, ClusterNodes]),
+    DiscNode = not proplists:is_defined(?RAM_OPT, Opts),
+    rpc_call(Node, rabbit_mnesia, cluster, [ClusterNodes, DiscNode]);
 
 action(wait, Node, [PidFile], _Opts, Inform) ->
     Inform("Waiting for ~p", [Node]),
