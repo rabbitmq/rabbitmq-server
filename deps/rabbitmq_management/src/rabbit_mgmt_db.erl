@@ -88,7 +88,17 @@
 %%----------------------------------------------------------------------------
 
 start_link() ->
-    gen_server:start_link({global, ?MODULE}, ?MODULE, [], []).
+    %% When failing over it is possible that the mirrored_supervisor
+    %% might hear of the death of the old DB, and start a new one,
+    %% before the global name server notices. Therefore rather than
+    %% telling gen_server:start_link/4 to register it for us, we
+    %% invoke global:re_register_name/2 ourselves, and just steal the
+    %% name if it existed before. We therefore rely on
+    %% mirrored_supervisor to maintain the uniqueness of this process.
+    case gen_server:start_link(?MODULE, [], []) of
+        {ok, Pid} -> global:re_register_name(?MODULE, Pid);
+        Else      -> Else
+    end.
 
 augment_exchanges(Xs, Mode) -> safe_call({augment_exchanges, Xs, Mode}, Xs).
 augment_queues(Qs, Mode)    -> safe_call({augment_queues, Qs, Mode}, Qs).
