@@ -285,7 +285,7 @@ kill(Pid, Wait) when is_pid(Wait) -> kill(Pid, [Wait]);
 kill(Pid, Waits) ->
     erlang:monitor(process, Pid),
     [erlang:monitor(process, P) || P <- Waits],
-    exit(Pid, kill),
+    exit(Pid, bang),
     kill_wait(Pid),
     [kill_wait(P) || P <- Waits].
 
