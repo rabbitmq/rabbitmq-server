@@ -32,7 +32,8 @@
 %% other mnesia-using Erlang applications, such as ejabberd
 -export([create_tables/0]).
 
--define(RABBITMQCTL_NODE_NAME, "rabbitmqctl").
+%% The prefix of the module name of nodes spawned by the rabbitmqctl script.
+-define(RABBITMQCTL_PREFIX, "rabbitmqctl").
 
 -include("rabbit.hrl").
 
@@ -762,14 +763,15 @@ reset(Force) ->
     %% We don't want to disconnect rabbitmqctl
     ConnectedNodes =
         lists:filter(
-          fun(Node) -> case rabbit_nodes:parts(Node) of
-                           {Name, _} -> not (Name =:= ?RABBITMQCTL_NODE_NAME)
-                       end
+          fun(Node) ->
+                  case rabbit_nodes:parts(Node) of
+                      {Name, _} -> not lists:prefix(?RABBITMQCTL_PREFIX, Name)
+                  end
           end, nodes()),
     %% We need to make sure that we don't end up in a distributed
     %% Erlang system with nodes while not being in an Mnesia cluster
     %% with them. We don't handle that well.
-    [erlang:disconnect_node(N) || N <- nodes()],
+    [erlang:disconnect_node(N) || N <- ConnectedNodes],
     ok = delete_cluster_nodes_config(),
     %% remove persisted messages and any other garbage we find
     ok = rabbit_file:recursive_delete(filelib:wildcard(dir() ++ "/*")),
