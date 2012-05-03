@@ -621,15 +621,12 @@ log_location(Type) ->
 rotate_logs(File, Suffix, Handler) ->
     rotate_logs(File, Suffix, Handler, Handler).
 
-rotate_logs(File, Suffix, OldHandler, NewHandler) ->
-    case File of
-        undefined -> ok;
-        tty       -> ok;
-        _         -> gen_event:swap_handler(
-                       error_logger,
-                       {OldHandler, swap},
-                       {NewHandler, {File, Suffix}})
-    end.
+rotate_logs(undefined, _Suffix, _OldHandler, _NewHandler) -> ok;
+rotate_logs(tty,       _Suffix, _OldHandler, _NewHandler) -> ok;
+rotate_logs(File,       Suffix,  OldHandler,  NewHandler) ->
+    gen_event:swap_handler(error_logger,
+                           {OldHandler, swap},
+                           {NewHandler, {File, Suffix}}).
 
 log_rotation_result({error, MainLogError}, {error, SaslLogError}) ->
     {error, {{cannot_rotate_main_logs, MainLogError},
