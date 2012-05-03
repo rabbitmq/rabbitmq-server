@@ -736,30 +736,31 @@ reset(Force) ->
         true  -> log_both("no other disc nodes running");
         false -> ok
     end,
-    Node = node(),
-    Nodes = all_clustered_nodes() -- [Node],
     case Force of
-        true  -> ok;
+        true ->
+            ok;
         false ->
             ensure_mnesia_dir(),
             start_mnesia(),
-            RunningNodes =
+            Node = node(),
+            {Nodes, RunningNodes} =
                 try
-                    %% Force=true here so that reset still works when clustered
-                    %% with a node which is down
+                    %% Force=true here so that reset still works when
+                    %% clustered with a node which is down
                     ok = init_db(read_cluster_nodes_config(), true),
-                    running_clustered_nodes() -- [Node]
+                    {all_clustered_nodes() -- [Node],
+                     running_clustered_nodes() -- [Node]}
                 after
                     stop_mnesia()
                 end,
             leave_cluster(Nodes, RunningNodes),
             rabbit_misc:ensure_ok(mnesia:delete_schema([Node]),
-                                  cannot_delete_schema)
+                                  cannot_delete_schema),
+            %% We need to make sure that we don't end up in a distributed
+            %% Erlang system with nodes while not being in an Mnesia cluster
+            %% with them. We don't handle that well.
+            [erlang:disconnect_node(N) || N <- Nodes]
     end,
-    %% We need to make sure that we don't end up in a distributed
-    %% Erlang system with nodes while not being in an Mnesia cluster
-    %% with them. We don't handle that well.
-    [erlang:disconnect_node(N) || N <- Nodes],
     ok = delete_cluster_nodes_config(),
     %% remove persisted messages and any other garbage we find
     ok = rabbit_file:recursive_delete(filelib:wildcard(dir() ++ "/*")),
@@ -773,6 +774,7 @@ leave_cluster(Nodes, RunningNodes) ->
     %% change being propagated to all nodes
     case lists:any(
            fun (Node) ->
+                   io:format("Trying to remove on node ~p~n", [Node]),
                    case rpc:call(Node, mnesia, del_table_copy,
                                  [schema, node()]) of
                        {atomic, ok} -> true;
