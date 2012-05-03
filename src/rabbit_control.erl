@@ -91,12 +91,11 @@ start() ->
         end,
 
     lists:foreach(fun ({Opt, Commands}) ->
-                          %% Using get_bool since is_defined would return always
+                          %% Using get_bool since is_defined would always return
                           %% true for flags.
                           case {proplists:get_bool(Opt, Opts),
                                 lists:member(Command, Commands)} of
                               {true, false} -> PrintInvalidCommandError(),
-                                               io:format("~p ~p~n", [Opt, Opts]),
                                                usage();
                               _             -> ok
                           end
