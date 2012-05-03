@@ -334,11 +334,12 @@
                           count        :: non_neg_integer(),
                           end_seq_id   :: non_neg_integer() }).
 
-%% The compiler (rightfully) complains that ack() and state() are unused. For
-%% this reason I added a -spec with the only intent being to remove
-%% warnings. The problem here is that we can't parametrise the BQ behaviour by
-%% these two types as we would like to. We still leave these here for
-%% documentation purposes.
+%% The compiler (rightfully) complains that ack() and state() are
+%% unused. For this reason we duplicate a -spec from
+%% rabbit_backing_queue with the only intent being to remove
+%% warnings. The problem here is that we can't parameterise the BQ
+%% behaviour by these two types as we would like to. We still leave
+%% these here for documentation purposes.
 -type(ack() :: seq_id()).
 -type(state() :: #vqstate {
              q1                    :: ?QUEUE:?QUEUE(),
@@ -373,7 +374,7 @@
              ack_out_counter       :: non_neg_integer(),
              ack_in_counter        :: non_neg_integer(),
              ack_rates             :: rates() }).
-%% Dummy -spec
+%% Duplicated from rabbit_backing_queue
 -spec(ack/2 :: ([ack()], state()) -> {[rabbit_guid:guid()], state()}).
 
 -spec(multiple_routing_keys/0 :: () -> 'ok').
