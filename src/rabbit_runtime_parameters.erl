@@ -88,7 +88,7 @@ set0(Component, Key, Term) ->
 mnesia_update(Component, Key, Term) ->
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
-              Res = case mnesia:read(?TABLE, {Component, Key}) of
+              Res = case mnesia:read(?TABLE, {Component, Key}, read) of
                         []       -> new;
                         [Params] -> {old, Params#runtime_parameters.value}
                     end,
@@ -158,7 +158,7 @@ lookup0(Component, Key, DefaultFun) ->
 lookup_missing(Component, Key, Default) ->
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
-              case mnesia:read(?TABLE, {Component, Key}) of
+              case mnesia:read(?TABLE, {Component, Key}, read) of
                   []  -> Record = c(Component, Key, Default),
                          mnesia:write(?TABLE, Record, write),
                          Record;

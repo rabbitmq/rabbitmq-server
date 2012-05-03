@@ -224,6 +224,5 @@ header_routes(HeadersTable) ->
            {array, Routes} -> [Route || {longstr, Route} <- Routes];
            undefined       -> [];
            {Type, _Val}    -> throw({error, {unacceptable_type_in_header,
-                                             Type,
-                                             binary_to_list(HeaderKey)}})
+                                             binary_to_list(HeaderKey), Type}})
        end || HeaderKey <- ?ROUTING_HEADERS]).
