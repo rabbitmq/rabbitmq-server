@@ -17,8 +17,7 @@
 -module(rabbit_plugins).
 -include("rabbit.hrl").
 
--export([start/0, stop/0, find_plugins/1, read_enabled_plugins/1,
-         lookup_plugins/2, calculate_required_plugins/2, plugin_names/1]).
+-export([start/0, stop/0, prepare_plugins/3]).
 
 -define(VERBOSE_OPT, "-v").
 -define(MINIMAL_OPT, "-m").
@@ -84,12 +83,32 @@ start() ->
 stop() ->
     ok.
 
-print_error(Format, Args) ->
-    rabbit_misc:format_stderr("Error: " ++ Format ++ "~n", Args).
+prepare_plugins(EnabledPluginsFile, PluginsDistDir, DestDir) ->
+    AllPlugins = rabbit_plugins:find_plugins(PluginsDistDir),
+    Enabled = rabbit_plugins:read_enabled_plugins(EnabledPluginsFile),
+    ToUnpack = rabbit_plugins:calculate_required_plugins(Enabled, AllPlugins),
+    ToUnpackPlugins = lookup_plugins(ToUnpack, AllPlugins),
 
-usage() ->
-    io:format("~s", [rabbit_plugins_usage:usage()]),
-    rabbit_misc:quit(1).
+    Missing = Enabled -- rabbit_plugins:plugin_names(ToUnpackPlugins),
+    case Missing of
+        [] -> ok;
+        _  -> io:format("Warning: the following enabled plugins were "
+                       "not found: ~p~n", [Missing])
+    end,
+
+    %% Eliminate the contents of the destination directory
+    case delete_recursively(DestDir) of
+        ok         -> ok;
+        {error, E} -> rabbit_misc:terminate("Could not delete dir ~s (~p)",
+                                            [DestDir, E])
+    end,
+    case filelib:ensure_dir(DestDir ++ "/") of
+        ok          -> ok;
+        {error, E2} -> rabbit_misc:terminate("Could not create dir ~s (~p)",
+                                             [DestDir, E2])
+    end,
+
+    [prepare_plugin(Plugin, DestDir) || Plugin <- ToUnpackPlugins].
 
 %%----------------------------------------------------------------------------
 
@@ -154,6 +173,27 @@ action(disable, ToDisable0, _Opts, PluginsFile, PluginsDir) ->
     end.
 
 %%----------------------------------------------------------------------------
+
+print_error(Format, Args) ->
+    rabbit_misc:format_stderr("Error: " ++ Format ++ "~n", Args).
+
+usage() ->
+    io:format("~s", [rabbit_plugins_usage:usage()]),
+    rabbit_misc:quit(1).
+
+delete_recursively(Fn) ->
+    case rabbit_file:recursive_delete([Fn]) of
+        ok                 -> ok;
+        {error, {Path, E}} -> {error, {cannot_delete, Path, E}};
+        Error              -> Error
+    end.
+
+prepare_plugin(#plugin{type = ez, location = Location}, PluginDestDir) ->
+    zip:unzip(Location, [{cwd, PluginDestDir}]);
+prepare_plugin(#plugin{type = dir, name = Name, location = Location},
+              PluginsDestDir) ->
+    rabbit_file:recursive_copy(Location,
+                              filename:join([PluginsDestDir, Name])).
 
 %% Get the #plugin{}s ready to be enabled.
 find_plugins(PluginsDir) ->

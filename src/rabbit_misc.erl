@@ -19,7 +19,7 @@
 -include("rabbit_framing.hrl").
 
 -export([method_record_type/1, polite_pause/0, polite_pause/1]).
--export([die/1, frame_error/2, amqp_error/4,
+-export([die/1, frame_error/2, amqp_error/4, terminate/1, terminate/2,
          protocol_error/3, protocol_error/4, protocol_error/1]).
 -export([not_found/1, assert_args_equivalence/4]).
 -export([dirty_read/1]).
@@ -87,6 +87,11 @@
 -spec(polite_pause/1 :: (non_neg_integer()) -> 'done').
 -spec(die/1 ::
         (rabbit_framing:amqp_exception()) -> channel_or_connection_exit()).
+
+%% TODO: figure out what the return types should actually be for these...
+-spec(terminate/1 :: (integer()) -> any()).
+-spec(terminate/2 :: (string(), integer()) -> any()).
+
 -spec(frame_error/2 :: (rabbit_framing:amqp_method_name(), binary())
                        -> rabbit_types:connection_exit()).
 -spec(amqp_error/4 ::
@@ -211,6 +216,8 @@
 -spec(gb_sets_difference/2 :: (gb_set(), gb_set()) -> gb_set()).
 
 -endif.
+
+-define(ERROR_CODE, 1).
 
 %%----------------------------------------------------------------------------
 
@@ -386,6 +393,19 @@ report_coverage_percentage(File, Cov, NotCov, Mod) ->
 
 confirm_to_sender(Pid, MsgSeqNos) ->
     gen_server2:cast(Pid, {confirm, MsgSeqNos, self()}).
+
+terminate(Fmt, Args) ->
+    io:format("ERROR: " ++ Fmt ++ "~n", Args),
+    terminate(?ERROR_CODE).
+
+terminate(Status) ->
+    case os:type() of
+        {unix,  _} -> halt(Status);
+        {win32, _} -> init:stop(Status),
+                      receive
+                      after infinity -> ok
+                      end
+    end.
 
 throw_on_error(E, Thunk) ->
     case Thunk() of

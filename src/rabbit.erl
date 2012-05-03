@@ -18,8 +18,8 @@
 
 -behaviour(application).
 
--export([maybe_hipe_compile/0, prepare/0, start/0, stop/0, stop_and_halt/0,
-         status/0, is_running/0, is_running/1, environment/0,
+-export([maybe_hipe_compile/0, prepare/0, start/0, start_cold/0, stop/0,
+         stop_and_halt/0, status/0, is_running/0, is_running/1, environment/0,
          rotate_logs/1, force_event_refresh/0]).
 
 -export([start/2, stop/1]).
@@ -217,6 +217,7 @@
 -spec(maybe_hipe_compile/0 :: () -> 'ok').
 -spec(prepare/0 :: () -> 'ok').
 -spec(start/0 :: () -> 'ok').
+-spec(start_cold/0 :: () -> 'ok').
 -spec(stop/0 :: () -> 'ok').
 -spec(stop_and_halt/0 :: () -> no_return()).
 -spec(status/0 ::
@@ -284,22 +285,35 @@ split0([],       Ls)       -> Ls;
 split0([I | Is], [L | Ls]) -> split0(Is, Ls ++ [[I | L]]).
 
 prepare() ->
+    %% this ends up looking at the rabbit app's env, so it
+    %% needs to be loaded, but during the tests, it may end up
+    %% getting loaded twice, so guard against that
+    case application:load(rabbit) of
+        ok                                -> ok;
+        {error, {already_loaded, rabbit}} -> ok
+    end,
     ok = ensure_working_log_handlers(),
     ok = rabbit_upgrade:maybe_upgrade_mnesia().
 
 start() ->
+    start_it(fun() ->
+                ok = prepare(),
+                ok = rabbit_misc:start_applications(application_load_order())
+             end).
+
+start_cold() ->
+    start_it(fun() ->
+                ok = prepare(),
+                Plugins = determine_required_plugins(),
+                ToBeLoaded = ?APPS ++ Plugins,
+                StartupApps = application_load_order(ToBeLoaded, ToBeLoaded),
+                ok = rabbit_misc:start_applications(StartupApps)
+             end).
+
+start_it(StartFun) ->
     try
-        %% prepare/1 ends up looking at the rabbit app's env, so it
-        %% needs to be loaded, but during the tests, it may end up
-        %% getting loaded twice, so guard against that
-        case application:load(rabbit) of
-            ok                                -> ok;
-            {error, {already_loaded, rabbit}} -> ok
-        end,
-        ok = prepare(),
-        ok = rabbit_misc:start_applications(application_load_order())
+        StartFun()
     after
-        %%give the error loggers some time to catch up
         timer:sleep(100)
     end.
 
@@ -394,13 +408,17 @@ stop(_State) ->
 
 application_load_order() ->
     ok = load_applications(),
+    LoadedApps = application:loaded_applications(),
+    application_load_order(LoadedApps, ?APPS).
+
+application_load_order(LoadedApps, RootApps) ->
     {ok, G} = rabbit_misc:build_acyclic_graph(
                 fun (App, _Deps) -> [{App, App}] end,
                 fun (App,  Deps) -> [{Dep, App} || Dep <- Deps] end,
-                [{App, app_dependencies(App)} ||
-                    {App, _Desc, _Vsn} <- application:loaded_applications()]),
+                [{App, app_dependencies(App)} || App <- LoadedApps]),
     true = digraph:del_vertices(
-             G, digraph:vertices(G) -- digraph_utils:reachable(?APPS, G)),
+             G, digraph:vertices(G) --
+                    digraph_utils:reachable(RootApps, G)),
     Result = digraph_utils:topsort(G),
     true = digraph:delete(G),
     Result.
@@ -408,6 +426,7 @@ application_load_order() ->
 load_applications() ->
     load_applications(queue:from_list(?APPS), sets:new()).
 
+%% FIXME: should we move this into rabbit_misc?
 load_applications(Worklist, Loaded) ->
     case queue:out(Worklist) of
         {empty, _WorkList} ->
@@ -567,6 +586,28 @@ insert_default_data() ->
 
 %%---------------------------------------------------------------------------
 %% logging
+
+determine_required_plugins() ->
+    {ok, PluginDir} = application:get_env(rabbit, plugins_dir),
+    {ok, ExpandDir} = application:get_env(rabbit, plugins_expand_dir),
+    {ok, EnabledPluginsFile} = application:get_env(rabbit,
+                                                   enabled_plugins_file),
+    rabbit_plugins:prepare_plugins(EnabledPluginsFile, PluginDir, ExpandDir),
+    find_plugins(ExpandDir).
+
+find_plugins(PluginDir) ->
+    [prepare_dir_plugin(PluginName) ||
+        PluginName <- filelib:wildcard(PluginDir ++ "/*/ebin/*.app")].
+
+prepare_dir_plugin(PluginAppDescFn) ->
+    %% Add the plugin ebin directory to the load path
+    PluginEBinDirN = filename:dirname(PluginAppDescFn),
+    code:add_path(PluginEBinDirN),
+
+    %% We want the second-last token
+    NameTokens = string:tokens(PluginAppDescFn,"/."),
+    PluginNameString = lists:nth(length(NameTokens) - 1, NameTokens),
+    list_to_atom(PluginNameString).
 
 ensure_working_log_handlers() ->
     Handlers = gen_event:which_handlers(error_logger),
