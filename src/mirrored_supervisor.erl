@@ -225,11 +225,8 @@ which_children(Sup)         -> fold(which_children, Sup, fun lists:append/2).
 count_children(Sup)         -> fold(count_children, Sup, fun add_proplists/2).
 check_childspecs(Specs)     -> ?SUPERVISOR:check_childspecs(Specs).
 
-call(Sup, Msg) ->
-    ?GEN_SERVER:call(mirroring(Sup), Msg, infinity).
-
-cast(Sup, Msg) ->
-    ?GEN_SERVER:cast(mirroring(Sup), Msg).
+call(Sup, Msg) -> ?GEN_SERVER:call(mirroring(Sup), Msg, infinity).
+cast(Sup, Msg) -> ?GEN_SERVER:cast(mirroring(Sup), Msg).
 
 find_call(Sup, Id, Msg) ->
     Group = call(Sup, group),
@@ -389,8 +386,7 @@ code_change(_OldVsn, State, _Extra) ->
 %%----------------------------------------------------------------------------
 
 tell_all_peers_to_die(Group, Reason) ->
-    [cast(P, {die, Reason}) ||
-        P <- ?PG2:get_members(Group) -- [self()]].
+    [cast(P, {die, Reason}) || P <- ?PG2:get_members(Group) -- [self()]].
 
 maybe_start(Group, Overall, Delegate, ChildSpec) ->
     case mnesia:transaction(
@@ -418,10 +414,8 @@ check_start(Group, Overall, Delegate, ChildSpec) ->
                end
     end.
 
-supervisor(Pid) ->
-    with_exit_handler(
-      fun() -> dead end,
-      fun() -> delegate(Pid) end).
+supervisor(Pid) -> with_exit_handler(fun() -> dead end,
+                                     fun() -> delegate(Pid) end).
 
 write(Group, Overall, ChildSpec) ->
     ok = mnesia:write(
@@ -471,8 +465,7 @@ errors(Results) -> [E || {error, E} <- Results].
 
 %%----------------------------------------------------------------------------
 
-create_tables() ->
-    create_tables([?TABLE_DEF]).
+create_tables() -> create_tables([?TABLE_DEF]).
 
 create_tables([]) ->
     ok;
