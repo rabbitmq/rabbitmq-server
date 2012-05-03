@@ -774,7 +774,6 @@ leave_cluster(Nodes, RunningNodes) ->
     %% change being propagated to all nodes
     case lists:any(
            fun (Node) ->
-                   io:format("Trying to remove on node ~p~n", [Node]),
                    case rpc:call(Node, mnesia, del_table_copy,
                                  [schema, node()]) of
                        {atomic, ok} -> true;
