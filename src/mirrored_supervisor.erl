@@ -261,24 +261,19 @@ start_internal(Group, ChildSpecs) ->
 
 %%----------------------------------------------------------------------------
 
-init({overall, Group, Init}) ->
-    case Init of
-        {ok, {Restart, ChildSpecs}} ->
-            Delegate = {delegate, {?SUPERVISOR, start_link,
-                                   [?MODULE, {delegate, Restart}]},
-                        temporary, 16#ffffffff, supervisor, [?SUPERVISOR]},
-            Mirroring = {mirroring, {?MODULE, start_internal,
-                                     [Group, ChildSpecs]},
-                         permanent, 16#ffffffff, worker, [?MODULE]},
-            %% Important: Delegate MUST start before Mirroring so that
-            %% when we shut down from above it shuts down last, so
-            %% Mirroring does not see it die.
-            %%
-            %% See comment in handle_info('DOWN', ...) below
-            {ok, {{one_for_all, 0, 1}, [Delegate, Mirroring]}};
-        ignore ->
-            ignore
-    end;
+init({overall, _Group, ignore}) -> ignore;
+init({overall,  Group, {ok, {Restart, ChildSpecs}}}) ->
+    %% Important: Delegate MUST start before Mirroring so that when we
+    %% shut down from above it shuts down last, so Mirroring does not
+    %% see it die.
+    %%
+    %% See comment in handle_info('DOWN', ...) below
+    {ok, {{one_for_all, 0, 1},
+          [{delegate, {?SUPERVISOR, start_link, [?MODULE, {delegate, Restart}]},
+            temporary, 16#ffffffff, supervisor, [?SUPERVISOR]},
+           {mirroring, {?MODULE, start_internal, [Group, ChildSpecs]},
+            permanent, 16#ffffffff, worker, [?MODULE]}]}};
+
 
 init({delegate, Restart}) ->
     {ok, {Restart, []}};
@@ -306,9 +301,9 @@ handle_call({init, Overall}, _From,
     Delegate = child(Overall, delegate),
     erlang:monitor(process, Delegate),
     State1 = State#state{overall = Overall, delegate = Delegate},
-    case all_started([maybe_start(Group, Delegate, S) || S <- ChildSpecs]) of
-        true  -> {reply, ok, State1};
-        false -> {stop, shutdown, State1}
+    case errors([maybe_start(Group, Delegate, S) || S <- ChildSpecs]) of
+        []     -> {reply, ok, State1};
+        Errors -> {stop, {shutdown, Errors}, State1}
     end;
 
 handle_call({start_child, ChildSpec}, _From,
@@ -372,9 +367,9 @@ handle_info({'DOWN', _Ref, process, Pid, _Reason},
                           [start(Delegate, ChildSpec) || ChildSpec <- ChildSpecs];
             _          -> []
         end,
-    case all_started(R) of
-        true  -> {noreply, State};
-        false -> {stop, shutdown, State}
+    case errors(R) of
+        []     -> {noreply, State};
+        Errors -> {stop, {shutdown, Errors}, State}
     end;
 
 handle_info(Info, State) ->
@@ -468,7 +463,7 @@ delete_all(Group) ->
     [delete(Group, id(C)) ||
         C <- mnesia:select(?TABLE, [{MatchHead, [], ['$1']}])].
 
-all_started(Results) -> [] =:= [R || R = {error, _} <- Results].
+errors(Results) -> [E || {error, E} <- Results].
 
 %%----------------------------------------------------------------------------
 

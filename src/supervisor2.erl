@@ -411,6 +411,8 @@ handle_call({start_child, EArgs}, _From, State) when ?is_simple(State) ->
     #child{mfa = {M, F, A}} = hd(State#state.children),
     Args = A ++ EArgs,
     case do_start_child_i(M, F, Args) of
+        {ok, undefined} ->
+            {reply, {ok, undefined}, State};
 	{ok, Pid} ->
 	    NState = State#state{dynamics = 
 				 ?DICT:store(Pid, Args, State#state.dynamics)},
@@ -743,6 +745,8 @@ restart(Strategy, Child, State, Restart)
     #child{mfa = {M, F, A}} = Child,
     Dynamics = ?DICT:erase(Child#child.pid, State#state.dynamics),
     case do_start_child_i(M, F, A) of
+        {ok, undefined} ->
+            {ok, State};
 	{ok, Pid} ->
 	    NState = State#state{dynamics = ?DICT:store(Pid, A, Dynamics)},
 	    {ok, NState};
