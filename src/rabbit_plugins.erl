@@ -245,7 +245,7 @@ format_plugins(Pattern, Opts, PluginsFile, PluginsDir) ->
                  {true,  true}  -> throw({error_string,
                                           "Cannot specify -m and -v together"})
              end,
-    OnlyEnabled = proplists:get_bool(?ENABLED_OPT, Opts),
+    OnlyEnabled    = proplists:get_bool(?ENABLED_OPT,     Opts),
     OnlyEnabledAll = proplists:get_bool(?ENABLED_ALL_OPT, Opts),
 
     AvailablePlugins = find_plugins(PluginsDir),
@@ -257,14 +257,10 @@ format_plugins(Pattern, Opts, PluginsFile, PluginsDir) ->
     Plugins = [ Plugin ||
                   Plugin = #plugin{name = Name} <- AvailablePlugins,
                   re:run(atom_to_list(Name), RE, [{capture, none}]) =:= match,
-                  if OnlyEnabled -> lists:member(Name, EnabledExplicitly);
-                     true        -> true
-                  end,
-                  if OnlyEnabledAll ->
-                          lists:member(Name, EnabledImplicitly) or
-                              lists:member(Name, EnabledExplicitly);
-                     true ->
-                          true
+                  if OnlyEnabled    ->  lists:member(Name, EnabledExplicitly);
+                     OnlyEnabledAll -> (lists:member(Name, EnabledExplicitly) or
+                                        lists:member(Name, EnabledImplicitly));
+                     true           -> true
                   end],
     Plugins1 = usort_plugins(Plugins),
     MaxWidth = lists:max([length(atom_to_list(Name)) ||
