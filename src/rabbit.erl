@@ -308,11 +308,9 @@ start_cold() ->
                 Plugins = rabbit_plugins:bootstrap_envinronment(),
                 ToBeLoaded = Plugins ++ ?APPS,
 
-                io:format("~n"
-                          "Activating RabbitMQ plugins ...~n"),
-                io:format("Plugins: ~p~n", [Plugins]),
+                io:format("~nActivating RabbitMQ plugins ...~n"),
 
-                load_applications(queue:from_list(ToBeLoaded), sets:new()),
+                ok = rabbit_misc:load_applications(ToBeLoaded),
                 StartupApps = 
                     rabbit_misc:calculate_app_dependency_ordering(ToBeLoaded),
                 ok = rabbit_misc:start_applications(StartupApps),
@@ -417,37 +415,8 @@ stop(_State) ->
 %% application life cycle
 
 application_load_order() ->
-    ok = load_applications(),
+    ok = rabbit_misc:load_applications(?APPS),
     rabbit_misc:calculate_app_dependency_ordering(?APPS).
-
-load_applications() ->
-    load_applications(queue:from_list(?APPS), sets:new()).
-
-%% FIXME: should we move this into rabbit_misc?
-load_applications(Worklist, Loaded) ->
-    case queue:out(Worklist) of
-        {empty, _WorkList} ->
-            ok;
-        {{value, App}, Worklist1} ->
-            case sets:is_element(App, Loaded) of
-                true  -> load_applications(Worklist1, Loaded);
-                false -> case application:load(App) of
-                             ok                             -> ok;
-                             {error, {already_loaded, App}} -> ok;
-                             Error                          -> throw(Error)
-                         end,
-                         load_applications(
-                           queue:join(Worklist1,
-                                      queue:from_list(app_dependencies(App))),
-                           sets:add_element(App, Loaded))
-            end
-    end.
-
-app_dependencies(App) ->
-    case application:get_key(App, applications) of
-        undefined -> [];
-        {ok, Lst} -> Lst
-    end.
 
 %%---------------------------------------------------------------------------
 %% boot step logic

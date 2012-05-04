@@ -42,7 +42,7 @@
 -export([dirty_read_all/1, dirty_foreach_key/2, dirty_dump_log/1]).
 -export([format/2, format_many/1, format_stderr/2]).
 -export([with_local_io/1, local_info_msg/2]).
--export([calculate_app_dependency_ordering/1, 
+-export([calculate_app_dependency_ordering/1, load_applications/1,
          start_applications/1, stop_applications/1]).
 -export([unfold/2, ceil/1, queue_fold/3]).
 -export([sort_field_table/1]).
@@ -170,6 +170,7 @@
 -spec(with_local_io/1 :: (fun (() -> A)) -> A).
 -spec(local_info_msg/2 :: (string(), [any()]) -> 'ok').
 -spec(start_applications/1 :: ([atom()]) -> 'ok').
+-spec(load_applications/1 :: ([atom()]) -> 'ok').
 -spec(calculate_app_dependency_ordering/1 :: ([atom()]) -> 'ok').
 -spec(stop_applications/1 :: ([atom()]) -> 'ok').
 -spec(unfold/2  :: (fun ((A) -> ({'true', B, A} | 'false')), A) -> {[B], A}).
@@ -623,6 +624,35 @@ manage_applications(Iterate, Do, Undo, SkipError, ErrorTag, Apps) ->
             end, [], Apps),
     ok.
 
+load_applications(Apps) ->
+    load_applications(queue:from_list(Apps), sets:new()),
+    ok.
+
+load_applications(Worklist, Loaded) ->
+    case queue:out(Worklist) of
+        {empty, _WorkList} ->
+            ok;
+        {{value, App}, Worklist1} ->
+            case sets:is_element(App, Loaded) of
+                true  -> load_applications(Worklist1, Loaded);
+                false -> case application:load(App) of
+                             ok                             -> ok;
+                             {error, {already_loaded, App}} -> ok;
+                             Error                          -> throw(Error)
+                         end,
+                         load_applications(
+                           queue:join(Worklist1,
+                                      queue:from_list(app_dependencies(App))),
+                           sets:add_element(App, Loaded))
+            end
+    end.
+
+app_dependencies(App) ->
+    case application:get_key(App, applications) of
+        undefined -> [];
+        {ok, Lst} -> Lst
+    end.
+
 start_applications(Apps) ->
     manage_applications(fun lists:foldl/3,
                         fun application:start/1,
@@ -651,12 +681,6 @@ calculate_app_dependency_ordering(RootApps) ->
         digraph_utils:topsort(G)
     after
         true = digraph:delete(G)
-    end.
-
-app_dependencies(App) ->
-    case application:get_key(App, applications) of
-        undefined -> [];
-        {ok, Lst} -> Lst
     end.
 
 unfold(Fun, Init) ->
