@@ -52,7 +52,8 @@
 -type(family() :: atom()).
 -type(listener_config() :: ip_port() |
                            {hostname(), ip_port()} |
-                           {hostname(), ip_port(), family()}).
+                           {hostname(), ip_port(), family()} |
+                           rabbit_types:infos()). % i.e., a proplist
 -type(address() :: {inet:ip_address(), ip_port(), family()}).
 -type(name_prefix() :: atom()).
 -type(protocol() :: atom()).
@@ -148,16 +149,16 @@ start() ->
 
 ensure_ssl() ->
     ok = rabbit_misc:start_applications([crypto, public_key, ssl]),
-    {ok, SslOptsConfig} = application:get_env(rabbit, ssl_options),
+    {ok, GlobalOpts} = application:get_env(rabbit, ssl_options),
 
     % unknown_ca errors are silently ignored prior to R14B unless we
     % supply this verify_fun - remove when at least R14B is required
-    case proplists:get_value(verify, SslOptsConfig, verify_none) of
-        verify_none -> SslOptsConfig;
+    case proplists:get_value(verify, GlobalOpts, verify_none) of
+        verify_none -> GlobalOpts;
         verify_peer -> [{verify_fun, fun([])    -> true;
                                         ([_|_]) -> false
                                      end}
-                        | SslOptsConfig]
+                        | GlobalOpts]
     end.
 
 ssl_transform_fun(SslOpts) ->
@@ -186,7 +187,23 @@ tcp_listener_addresses({Host, Port, Family0})
         {IPAddress, Family} <- getaddr(Host, Family0)];
 tcp_listener_addresses({_Host, Port, _Family0}) ->
     error_logger:error_msg("invalid port ~p - not 0..65535~n", [Port]),
-    throw({error, {invalid_port, Port}}).
+    throw({error, {invalid_port, Port}});
+tcp_listener_addresses(ListenerOptions) when is_list(ListenerOptions) ->
+    %% listener supplied as a proplist rather than a tuple
+    Opt = fun (Key) -> proplists:lookup(Key, ListenerOptions) end,
+    case {Opt(port), Opt(host), Opt(family)} of
+        {{port, Port}, none, none} ->
+            tcp_listener_addresses(Port);
+        {{port, Port}, {host, Host}, none} ->
+            tcp_listener_addresses({Port, Host});
+        {{port, Port}, {host, Host}, {family, Family}} ->
+            tcp_listener_addresses({Port, Host, Family});
+        Else ->
+            error_logger:error_msg(
+              "Listener must have values for port, port and host," ++
+              "or port and host and address family~n", []),
+            throw({error, {invalid_listener, Else}})
+    end.
 
 tcp_listener_addresses_auto(Port) ->
     lists:append([tcp_listener_addresses(Listener) ||
@@ -206,7 +223,8 @@ start_tcp_listener(Listener) ->
     start_listener(Listener, amqp, "TCP Listener",
                    {?MODULE, start_client, []}).
 
-start_ssl_listener(Listener, SslOpts) ->
+start_ssl_listener(Listener, GlobalSslOpts) ->
+    SslOpts = merge_ssl_options(Listener, GlobalSslOpts),
     start_listener(Listener, 'amqp/ssl', "SSL Listener",
                    {?MODULE, start_ssl_client, [SslOpts]}).
 
@@ -462,3 +480,14 @@ ipv6_status(TestPort) ->
         {error, _} ->
             ipv6_status(TestPort + 1)
     end.
+
+merge_ssl_options(ListenerAsOptions, GlobalOpts)
+  when is_list(ListenerAsOptions) ->
+    case proplists:lookup(ssl_options, ListenerAsOptions) of
+        none ->
+            GlobalOpts;
+        {ssl_options, Opts} ->
+            Opts ++ GlobalOpts % rely on standard proplist 'first mention wins'
+    end;
+merge_ssl_options(_ListenerTuple, GlobalOpts) ->
+    GlobalOpts.
