@@ -298,28 +298,26 @@ prepare() ->
 start() ->
     start_it(fun() ->
                 ok = prepare(),
-                ok = rabbit_misc:start_applications(application_load_order())
+                ok = rabbit_misc:start_applications(application_load_order()),
+                ok = print_plugin_info(rabbit_plugins:active_plugins())
              end).
 
 start_cold() ->
     start_it(fun() ->
                 ok = prepare(),
-                Plugins = determine_required_plugins(),
+                Plugins = rabbit_plugins:bootstrap_envinronment(),
                 ToBeLoaded = Plugins ++ ?APPS,
 
                 io:format("~n"
                           "Activating RabbitMQ plugins ...~n"),
+                io:format("Plugins: ~p~n", [Plugins]),
 
                 load_applications(queue:from_list(ToBeLoaded), sets:new()),
                 StartupApps = 
                     rabbit_misc:calculate_app_dependency_ordering(ToBeLoaded),
                 ok = rabbit_misc:start_applications(StartupApps),
-
-                io:format("~w plugins activated:~n", [length(Plugins)]),
-                [io:format("* ~s-~s~n", [AppName, 
-                        element(2, application:get_key(AppName, vsn))])
-                    || AppName <- Plugins],
-                io:nl()
+                
+                ok = print_plugin_info(Plugins)
              end).
 
 start_it(StartFun) ->
@@ -586,28 +584,6 @@ insert_default_data() ->
 %%---------------------------------------------------------------------------
 %% logging
 
-determine_required_plugins() ->
-    {ok, PluginDir} = application:get_env(rabbit, plugins_dir),
-    {ok, ExpandDir} = application:get_env(rabbit, plugins_expand_dir),
-    {ok, EnabledPluginsFile} = application:get_env(rabbit,
-                                                   enabled_plugins_file),
-    rabbit_plugins:prepare_plugins(EnabledPluginsFile, PluginDir, ExpandDir),
-    find_plugins(ExpandDir).
-
-find_plugins(PluginDir) ->
-    [prepare_dir_plugin(PluginName) ||
-        PluginName <- filelib:wildcard(PluginDir ++ "/*/ebin/*.app")].
-
-prepare_dir_plugin(PluginAppDescFn) ->
-    %% Add the plugin ebin directory to the load path
-    PluginEBinDirN = filename:dirname(PluginAppDescFn),
-    code:add_path(PluginEBinDirN),
-
-    %% We want the second-last token
-    NameTokens = string:tokens(PluginAppDescFn,"/."),
-    PluginNameString = lists:nth(length(NameTokens) - 1, NameTokens),
-    list_to_atom(PluginNameString).
-
 ensure_working_log_handlers() ->
     Handlers = gen_event:which_handlers(error_logger),
     ok = ensure_working_log_handler(error_logger_tty_h,
@@ -689,6 +665,13 @@ force_event_refresh() ->
 
 %%---------------------------------------------------------------------------
 %% misc
+
+print_plugin_info(Plugins) ->
+    io:format("~w plugins activated:~n", [length(Plugins)]),
+    [io:format("* ~s-~s~n", [AppName, 
+            element(2, application:get_key(AppName, vsn))])
+        || AppName <- Plugins],
+    io:nl().
 
 erts_version_check() ->
     FoundVer = erlang:system_info(version),
