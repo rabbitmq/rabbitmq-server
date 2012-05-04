@@ -96,7 +96,7 @@ set RABBITMQ_EBIN_ROOT=!TDP0!..\ebin
 -sname rabbitmqprelaunch!RANDOM! ^
 -extra "!RABBITMQ_NODENAME!"
 
-set RABBITMQ_EBIN_PATH=
+set RABBITMQ_EBIN_PATH="-pa !RABBITMQ_EBIN_ROOT!"
 
 if "!RABBITMQ_CONFIG_FILE!"=="" (
     set RABBITMQ_CONFIG_FILE=!RABBITMQ_BASE!\rabbitmq
@@ -116,9 +116,9 @@ if not "!RABBITMQ_NODE_IP_ADDRESS!"=="" (
 )
 
 "!ERLANG_HOME!\bin\erl.exe" ^
-!RABBITMQ_EBIN_PATH! ^
+-pa "!RABBITMQ_EBIN_ROOT!" ^
 -noinput ^
--boot start_sasl ^ 
+-boot start_sasl ^
 -s rabbit start_cold ^
 !RABBITMQ_CONFIG_ARG! ^
 -sname !RABBITMQ_NODENAME! ^
