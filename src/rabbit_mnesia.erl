@@ -46,7 +46,7 @@
 -spec(dir/0 :: () -> file:filename()).
 -spec(ensure_mnesia_dir/0 :: () -> 'ok').
 -spec(init/0 :: () -> 'ok').
--spec(init_db/2 :: ([node()], boolean()) -> 'ok').
+-spec(init_db/3 :: ([node()], boolean(), boolean()) -> 'ok').
 -spec(is_db_empty/0 :: () -> boolean()).
 -spec(cluster/1 :: ([node()]) -> 'ok').
 -spec(force_cluster/1 :: ([node()]) -> 'ok').
@@ -505,11 +505,13 @@ delete_previously_running_nodes() ->
                                           FileName, Reason}})
     end.
 
+init_db(ClusterNodes, Force) -> init_db(ClusterNodes, Force, true).
+
 %% Take a cluster node config and create the right kind of node - a
 %% standalone disk node, or disk or ram node connected to the
 %% specified cluster nodes.  If Force is false, don't allow
 %% connections to offline nodes.
-init_db(ClusterNodes, Force) ->
+init_db(ClusterNodes, Force, Upgrade) ->
     UClusterNodes = lists:usort(ClusterNodes),
     ProperClusterNodes = UClusterNodes -- [node()],
     case mnesia:change_config(extra_db_nodes, ProperClusterNodes) of
@@ -547,12 +549,18 @@ init_db(ClusterNodes, Force) ->
                     ok = create_local_table_copy(schema, CopyTypeAlt),
                     ok = create_local_table_copies(CopyType),
 
-                    ok = case rabbit_upgrade:maybe_upgrade_local() of
-                             ok -> ok;
-                             %% If we're just starting up a new node we won't
-                             %% have a version
-                             starting_from_scratch ->
-                                 rabbit_version:record_desired()
+                    ok = case Upgrade of
+                             true ->
+                                 case rabbit_upgrade:maybe_upgrade_local() of
+                                     ok ->
+                                         ok;
+                                     %% If we're just starting up a new node we
+                                     %% won't have a version
+                                     starting_from_scratch ->
+                                         rabbit_version:record_desired()
+                                 end;
+                             false ->
+                                 ok
                          end,
 
                     %% We've taken down mnesia, so ram nodes will need

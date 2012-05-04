@@ -66,11 +66,11 @@
 %% into the boot process by prelaunch before the mnesia application is
 %% started. By the time Mnesia is started the upgrades have happened
 %% (on the primary), or Mnesia has been reset (on the secondary) and
-%% rabbit_mnesia:init_db/2 can then make the node rejoin the cluster
+%% rabbit_mnesia:init_db/3 can then make the node rejoin the cluster
 %% in the normal way.
 %%
 %% The non-mnesia upgrades are then triggered by
-%% rabbit_mnesia:init_db/2. Of course, it's possible for a given
+%% rabbit_mnesia:init_db/3. Of course, it's possible for a given
 %% upgrade process to only require Mnesia upgrades, or only require
 %% non-Mnesia upgrades. In the latter case no Mnesia resets and
 %% reclusterings occur.
@@ -230,7 +230,7 @@ secondary_upgrade(AllNodes) ->
                        false -> AllNodes -- [node()]
                    end,
     rabbit_misc:ensure_ok(mnesia:start(), cannot_start_mnesia),
-    ok = rabbit_mnesia:init_db(ClusterNodes, true),
+    ok = rabbit_mnesia:init_db(ClusterNodes, true, false),
     ok = rabbit_version:record_desired_for_scope(mnesia),
     ok.
 
