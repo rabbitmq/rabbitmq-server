@@ -42,8 +42,9 @@
 -export([dirty_read_all/1, dirty_foreach_key/2, dirty_dump_log/1]).
 -export([format/2, format_many/1, format_stderr/2]).
 -export([with_local_io/1, local_info_msg/2]).
--export([calculate_app_dependency_ordering/1, load_applications/1,
-         start_applications/1, stop_applications/1]).
+-export([calculate_app_dependency_ordering/1,
+         calculate_app_dependency_ordering/2]).
+-export([load_applications/1, start_applications/1, stop_applications/1]).
 -export([unfold/2, ceil/1, queue_fold/3]).
 -export([sort_field_table/1]).
 -export([pid_to_string/1, string_to_pid/1]).
@@ -171,7 +172,9 @@
 -spec(local_info_msg/2 :: (string(), [any()]) -> 'ok').
 -spec(start_applications/1 :: ([atom()]) -> 'ok').
 -spec(load_applications/1 :: ([atom()]) -> 'ok').
--spec(calculate_app_dependency_ordering/1 :: ([atom()]) -> 'ok').
+-spec(calculate_app_dependency_ordering/1 :: ([atom()]) -> [digraph:vertex()]).
+-spec(calculate_app_dependency_ordering/2 :: ([atom()], 
+                                              boolean()) -> [digraph:vertex()]).
 -spec(stop_applications/1 :: ([atom()]) -> 'ok').
 -spec(unfold/2  :: (fun ((A) -> ({'true', B, A} | 'false')), A) -> {[B], A}).
 -spec(ceil/1 :: (number()) -> integer()).
@@ -670,14 +673,20 @@ stop_applications(Apps) ->
                         Apps).
 
 calculate_app_dependency_ordering(RootApps) ->
+    calculate_app_dependency_ordering(RootApps, false).
+
+calculate_app_dependency_ordering(RootApps, StripUnreachable) ->
     {ok, G} = build_acyclic_graph(
                 fun (App, _Deps) -> [{App, App}] end,
                 fun (App,  Deps) -> [{Dep, App} || Dep <- Deps] end,
                 [{App, app_dependencies(App)} ||
                     {App, _Desc, _Vsn} <- application:loaded_applications()]),
     try
-        true = digraph:del_vertices(G, digraph:vertices(G) -- 
-                                        digraph_utils:reachable(RootApps, G)),
+        case StripUnreachable of
+            true -> digraph:del_vertices(G, digraph:vertices(G) -- 
+                     digraph_utils:reachable(RootApps, G));
+            false -> ok
+        end,
         digraph_utils:topsort(G)
     after
         true = digraph:delete(G)

@@ -298,7 +298,7 @@ prepare() ->
 start() ->
     start_it(fun() ->
                 ok = prepare(),
-                ok = rabbit_misc:start_applications(application_load_order()),
+                ok = rabbit_misc:start_applications(app_startup_order()),
                 ok = print_plugin_info(rabbit_plugins:active_plugins())
              end).
 
@@ -327,7 +327,7 @@ start_it(StartFun) ->
 
 stop() ->
     rabbit_log:info("Stopping Rabbit~n"),
-    ok = rabbit_misc:stop_applications(application_load_order()).
+    ok = rabbit_misc:stop_applications(app_shutdown_order()).
 
 stop_and_halt() ->
     try
@@ -414,9 +414,13 @@ stop(_State) ->
 %%---------------------------------------------------------------------------
 %% application life cycle
 
-application_load_order() ->
+app_startup_order() ->
     ok = rabbit_misc:load_applications(?APPS),
     rabbit_misc:calculate_app_dependency_ordering(?APPS).
+
+app_shutdown_order() ->
+    Apps = ?APPS ++ rabbit_plugins:active_plugins(),
+    rabbit_misc:calculate_app_dependency_ordering(Apps, true).
 
 %%---------------------------------------------------------------------------
 %% boot step logic
