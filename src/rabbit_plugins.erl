@@ -84,12 +84,12 @@ stop() ->
     ok.
 
 prepare_plugins(EnabledPluginsFile, PluginsDistDir, DestDir) ->
-    AllPlugins = rabbit_plugins:find_plugins(PluginsDistDir),
-    Enabled = rabbit_plugins:read_enabled_plugins(EnabledPluginsFile),
-    ToUnpack = rabbit_plugins:calculate_required_plugins(Enabled, AllPlugins),
+    AllPlugins = find_plugins(PluginsDistDir),
+    Enabled = read_enabled_plugins(EnabledPluginsFile),
+    ToUnpack = calculate_required_plugins(Enabled, AllPlugins),
     ToUnpackPlugins = lookup_plugins(ToUnpack, AllPlugins),
 
-    Missing = Enabled -- rabbit_plugins:plugin_names(ToUnpackPlugins),
+    Missing = Enabled -- plugin_names(ToUnpackPlugins),
     case Missing of
         [] -> ok;
         _  -> io:format("Warning: the following enabled plugins were "

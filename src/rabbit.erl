@@ -305,9 +305,21 @@ start_cold() ->
     start_it(fun() ->
                 ok = prepare(),
                 Plugins = determine_required_plugins(),
-                ToBeLoaded = ?APPS ++ Plugins,
-                StartupApps = application_load_order(ToBeLoaded, ToBeLoaded),
-                ok = rabbit_misc:start_applications(StartupApps)
+                ToBeLoaded = Plugins ++ ?APPS,
+
+                io:format("~n"
+                          "Activating RabbitMQ plugins ...~n"),
+
+                load_applications(queue:from_list(ToBeLoaded), sets:new()),
+                StartupApps = 
+                    rabbit_misc:calculate_app_dependency_ordering(ToBeLoaded),
+                ok = rabbit_misc:start_applications(StartupApps),
+
+                io:format("~w plugins activated:~n", [length(Plugins)]),
+                [io:format("* ~s-~s~n", [AppName, 
+                        element(2, application:get_key(AppName, vsn))])
+                    || AppName <- Plugins],
+                io:nl()
              end).
 
 start_it(StartFun) ->
@@ -408,20 +420,7 @@ stop(_State) ->
 
 application_load_order() ->
     ok = load_applications(),
-    LoadedApps = application:loaded_applications(),
-    application_load_order(LoadedApps, ?APPS).
-
-application_load_order(LoadedApps, RootApps) ->
-    {ok, G} = rabbit_misc:build_acyclic_graph(
-                fun (App, _Deps) -> [{App, App}] end,
-                fun (App,  Deps) -> [{Dep, App} || Dep <- Deps] end,
-                [{App, app_dependencies(App)} || App <- LoadedApps]),
-    true = digraph:del_vertices(
-             G, digraph:vertices(G) --
-                    digraph_utils:reachable(RootApps, G)),
-    Result = digraph_utils:topsort(G),
-    true = digraph:delete(G),
-    Result.
+    rabbit_misc:calculate_app_dependency_ordering(?APPS).
 
 load_applications() ->
     load_applications(queue:from_list(?APPS), sets:new()).
