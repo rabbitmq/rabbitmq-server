@@ -165,7 +165,7 @@ ssl_transform_fun(SslOpts) ->
     fun (Sock) ->
             case catch ssl:ssl_accept(Sock, SslOpts, ?SSL_TIMEOUT * 1000) of
                 {ok, SslSock} ->
-                    {ok, #ssl_socket{tcp = Sock, ssl = SslSock}};
+                    {ok, #ssl_socket{tcp = Sock, ssl = SslSock, opts = SslOpts}};
                 {error, Reason} ->
                     {error, {ssl_upgrade_error, Reason}};
                 {'EXIT', Reason} ->

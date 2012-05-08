@@ -21,7 +21,7 @@
 -include_lib("public_key/include/public_key.hrl").
 
 -export([peer_cert_issuer/1, peer_cert_subject/1, peer_cert_validity/1]).
--export([peer_cert_subject_items/2, peer_cert_auth_name/1]).
+-export([peer_cert_subject_items/2, peer_cert_auth_name/2]).
 
 %%--------------------------------------------------------------------------
 
@@ -36,8 +36,8 @@
 -spec(peer_cert_validity/1      :: (certificate()) -> string()).
 -spec(peer_cert_subject_items/2  ::
         (certificate(), tuple()) -> [string()] | 'not_found').
--spec(peer_cert_auth_name/1 ::
-        (certificate()) -> binary() | 'not_found' | 'unsafe').
+-spec(peer_cert_auth_name/2 ::
+        (certificate(), #ssl_socket{}) -> binary() | 'not_found' | 'unsafe').
 
 -endif.
 
@@ -79,22 +79,22 @@ peer_cert_validity(Cert) ->
               end, Cert).
 
 %% Extract a username from the certificate
-peer_cert_auth_name(Cert) ->
+peer_cert_auth_name(Cert, Sock = #ssl_socket{}) ->
     {ok, Mode} = application:get_env(rabbit, ssl_cert_login_from),
-    peer_cert_auth_name(Mode, Cert).
+    peer_cert_auth_name(Mode, Cert, Sock).
 
-peer_cert_auth_name(distinguished_name, Cert) ->
-    case auth_config_sane() of
+peer_cert_auth_name(distinguished_name, Cert, Sock) ->
+    case auth_config_sane(Sock) of
         true  -> iolist_to_binary(peer_cert_subject(Cert));
         false -> unsafe
     end;
 
-peer_cert_auth_name(common_name, Cert) ->
+peer_cert_auth_name(common_name, Cert, Sock) ->
     %% If there is more than one CN then we join them with "," in a
     %% vaguely DN-like way. But this is more just so we do something
     %% more intelligent than crashing, if you actually want to escape
     %% things properly etc, use DN mode.
-    case auth_config_sane() of
+    case auth_config_sane(Sock) of
         true  -> case peer_cert_subject_items(Cert, ?'id-at-commonName') of
                      not_found -> not_found;
                      CNs       -> list_to_binary(string:join(CNs, ","))
@@ -102,8 +102,7 @@ peer_cert_auth_name(common_name, Cert) ->
         false -> unsafe
     end.
 
-auth_config_sane() ->
-    {ok, Opts} = application:get_env(rabbit, ssl_options),
+auth_config_sane(#ssl_socket{ opts = Opts }) ->
     case {proplists:get_value(fail_if_no_peer_cert, Opts),
           proplists:get_value(verify, Opts)} of
         {true, verify_peer} ->

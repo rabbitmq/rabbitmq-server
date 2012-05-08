@@ -71,7 +71,7 @@
 -record(basic_message, {exchange_name, routing_keys = [], content, id,
                         is_persistent}).
 
--record(ssl_socket, {tcp, ssl}).
+-record(ssl_socket, {tcp, ssl, opts}).
 -record(delivery, {mandatory, immediate, sender, message, msg_seq_no}).
 -record(amqp_error, {name, explanation = "", method = none}).
 
