@@ -322,6 +322,7 @@ start_it(StartFun) ->
     try
         StartFun()
     after
+        %% give the error loggers some time to catch up
         timer:sleep(100)
     end.
 
