@@ -344,7 +344,7 @@ handle_cast(Msg, State) ->
     {stop, {unexpected_cast, Msg}, State}.
 
 handle_info({'DOWN', _Ref, process, Pid, Reason},
-            State = #state{delegate = Pid, group = Group}) ->
+            State = #state{overall = Pid, group = Group}) ->
     %% Since the delegate is temporary, its death won't cause us to
     %% die. Since the overall supervisor kills processes in reverse
     %% order when shutting down "from above" and we started after the
