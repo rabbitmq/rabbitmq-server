@@ -177,7 +177,7 @@ if not "!RABBITMQ_NODE_IP_ADDRESS!"=="" (
 set ERLANG_SERVICE_ARGUMENTS= ^
 -pa "!RABBITMQ_EBIN_ROOT!" ^
 -boot start_sasl ^
--s rabbit start_cold ^
+-s rabbit boot ^
 !RABBITMQ_CONFIG_ARG! ^
 +W w ^
 +A30 ^

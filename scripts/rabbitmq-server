@@ -105,7 +105,7 @@ exec erl \
     ${RABBITMQ_START_RABBIT} \
     -sname ${RABBITMQ_NODENAME} \
     -boot ${RABBITMQ_BOOT_FILE} \
-    -s rabbit start_cold \
+    -s rabbit boot \
     ${RABBITMQ_CONFIG_ARG} \
     +W w \
     ${RABBITMQ_SERVER_ERL_ARGS} \

@@ -119,7 +119,7 @@ if not "!RABBITMQ_NODE_IP_ADDRESS!"=="" (
 -pa "!RABBITMQ_EBIN_ROOT!" ^
 -noinput ^
 -boot start_sasl ^
--s rabbit start_cold ^
+-s rabbit boot ^
 !RABBITMQ_CONFIG_ARG! ^
 -sname !RABBITMQ_NODENAME! ^
 +W w ^

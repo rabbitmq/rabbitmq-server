@@ -18,7 +18,7 @@
 
 -behaviour(application).
 
--export([maybe_hipe_compile/0, prepare/0, start/0, start_cold/0, stop/0,
+-export([maybe_hipe_compile/0, prepare/0, start/0, boot/0, stop/0,
          stop_and_halt/0, status/0, is_running/0, is_running/1, environment/0,
          rotate_logs/1, force_event_refresh/0]).
 
@@ -217,7 +217,7 @@
 -spec(maybe_hipe_compile/0 :: () -> 'ok').
 -spec(prepare/0 :: () -> 'ok').
 -spec(start/0 :: () -> 'ok').
--spec(start_cold/0 :: () -> 'ok').
+-spec(boot/0 :: () -> 'ok').
 -spec(stop/0 :: () -> 'ok').
 -spec(stop_and_halt/0 :: () -> no_return()).
 -spec(status/0 ::
@@ -302,7 +302,7 @@ start() ->
                 ok = print_plugin_info(rabbit_plugins:active_plugins())
              end).
 
-start_cold() ->
+boot() ->
     start_it(fun() ->
                 ok = prepare(),
                 Plugins = rabbit_plugins:bootstrap_envinronment(),
