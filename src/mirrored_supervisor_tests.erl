@@ -295,7 +295,7 @@ kill_registered(Pid, Child) ->
     {registered_name, Name} = erlang:process_info(Child, registered_name),
     exit(Pid, kill),
     kill_wait(Pid),
-    exit(Child, kill),
+    %% exit(Child, kill),
     receive
         {'DOWN', _Ref, process, Child, _Reason} ->
             undefined = whereis(Name),
