@@ -25,3 +25,20 @@ messages that can't be logged are queued.
 The code to serve up the log files over HTTP is pretty dumb, it loads
 the whole log into memory. If you have large log files you may wish
 to transfer them off the server in some other way.
+
+HTTP API
+========
+
+GET            /api/traces
+GET            /api/traces/<vhost>
+GET PUT DELETE /api/traces/<vhost>/<name>
+GET            /api/trace-files
+GET     DELETE /api/trace-files/<name>    (GET returns the file as text/plain,
+                                           not JSON describing it.)
+
+Example for how to create a trace:
+
+$ curl -i -u guest:guest -H "content-type:application/json" -XPUT \
+  http://localhost:55672/api/traces/%2f/my-trace \
+  -d'{"format":"text","pattern":"#"}'
+
