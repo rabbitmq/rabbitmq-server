@@ -91,13 +91,11 @@ start() ->
         end,
 
     lists:foreach(fun ({Opt, Commands}) ->
-                          %% Using get_bool since is_defined would always return
-                          %% true for flags.
-                          case {proplists:get_bool(Opt, Opts),
+                          case {proplists:lookup(Opt, Opts),
                                 lists:member(Command, Commands)} of
-                              {true, false} -> PrintInvalidCommandError(),
-                                               usage();
-                              _             -> ok
+                              {{_, _}, false} -> PrintInvalidCommandError(),
+                                                 usage();
+                              _               -> ok
                           end
                   end, ?OPTS_COMMANDS),
 
