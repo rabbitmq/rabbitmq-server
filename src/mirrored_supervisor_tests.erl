@@ -298,7 +298,7 @@ kill_registered(Pid, Child) ->
     %% exit(Child, kill),
     receive
         {'DOWN', _Ref, process, Child, _Reason} ->
-            undefined = whereis(Name),
+            false = (Child =:= whereis(Name)),
             ok
     end.
 
