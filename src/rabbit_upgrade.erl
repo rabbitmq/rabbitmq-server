@@ -230,7 +230,7 @@ secondary_upgrade(AllNodes) ->
                        false -> AllNodes -- [node()]
                    end,
     rabbit_misc:ensure_ok(mnesia:start(), cannot_start_mnesia),
-    ok = rabbit_mnesia:init_db(ClusterNodes, true, fun () -> ok end),
+    ok = rabbit_mnesia:init_db(ClusterNodes, true, false),
     ok = rabbit_version:record_desired_for_scope(mnesia),
     ok.
 
