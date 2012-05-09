@@ -104,7 +104,7 @@ if (canvas.getContext) {
   });
 }
 else {
-  document.write("Sorry - this demo requires a browser with &lt;canvas> support.");
+  document.write("Sorry - this demo requires a browser with canvas tag support.");
 }
 
 // Stomp.js boilerplate
@@ -125,6 +125,7 @@ send = function(data) {
 client.connect('guest', 'guest', function(x) {
   id = client.subscribe('/topic/bunny', function(d) {
     var p = JSON.parse(d.body);
+    lines.push(p);
     draw(p, true);
   });
 });
