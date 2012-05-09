@@ -28,3 +28,11 @@ dispatcher_add(function(sammy) {
 });
 
 $("#tabs").append('<li class="administrator-only"><a href="#/traces">Tracing</a></li>');
+
+function link_trace(name) {
+    return _link_to(fmt_escape_html(name), 'api/trace-files/' + esc(name));
+}
+
+function link_trace_queue(trace) {
+    return _link_to('(queue)',  '#/queues/' + esc(trace.vhost) + '/' + esc(trace.queue.name));
+}
