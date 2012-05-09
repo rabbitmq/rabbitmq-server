@@ -290,17 +290,10 @@ kill(Pid, Waits) ->
     [kill_wait(P) || P <- Waits].
 
 kill_registered(Pid, Child) ->
-    erlang:monitor(process, Pid),
-    erlang:monitor(process, Child),
     {registered_name, Name} = erlang:process_info(Child, registered_name),
-    exit(Pid, kill),
-    kill_wait(Pid),
-    %% exit(Child, kill),
-    receive
-        {'DOWN', _Ref, process, Child, _Reason} ->
-            false = (Child =:= whereis(Name)),
-            ok
-    end.
+    kill(Pid, Child),
+    false = (Child =:= whereis(Name)),
+    ok.
 
 kill_wait(Pid) ->
     receive
