@@ -441,10 +441,7 @@ consume_from_upstream_queue(
     amqp_channel:call(Ch, #'queue.declare'{queue     = Q,
                                            durable   = true,
                                            arguments = Args}),
-    case Prefetch of
-        none -> ok;
-        _    -> amqp_channel:call(Ch, #'basic.qos'{prefetch_count = Prefetch})
-    end,
+    amqp_channel:call(Ch, #'basic.qos'{prefetch_count = Prefetch}),
     #'basic.consume_ok'{consumer_tag = CTag} =
         amqp_channel:subscribe(Ch, #'basic.consume'{queue  = Q,
                                                     no_ack = false}, self()),
