@@ -120,7 +120,7 @@ do_connect({Addr, Family},
                                              connection_timeout = Timeout,
                                              socket_options     = ExtraOpts},
            SIF, ChMgr, State) ->
-    rabbit_misc:start_applications([crypto, public_key, ssl]),
+    app_utils:start_applications([crypto, public_key, ssl]),
     case gen_tcp:connect(Addr, Port,
                          [Family | ?RABBIT_TCP_OPTS] ++ ExtraOpts,
                          Timeout) of
