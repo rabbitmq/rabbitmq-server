@@ -298,7 +298,7 @@ prepare() ->
 start() ->
     start_it(fun() ->
                 ok = prepare(),
-                ok = rabbit_misc:start_applications(app_startup_order()),
+                ok = app_utils:start_applications(app_startup_order()),
                 ok = print_plugin_info(rabbit_plugins:active_plugins())
              end).
 
@@ -310,10 +310,10 @@ boot() ->
 
                 io:format("~nActivating RabbitMQ plugins ...~n"),
 
-                ok = rabbit_misc:load_applications(ToBeLoaded),
+                ok = app_utils:load_applications(ToBeLoaded),
                 StartupApps = 
-                    rabbit_misc:calculate_app_dependency_ordering(ToBeLoaded),
-                ok = rabbit_misc:start_applications(StartupApps),
+                    app_utils:app_dependency_order(ToBeLoaded, false),
+                ok = app_utils:start_applications(StartupApps),
                 
                 ok = print_plugin_info(Plugins)
              end).
@@ -328,7 +328,7 @@ start_it(StartFun) ->
 
 stop() ->
     rabbit_log:info("Stopping Rabbit~n"),
-    ok = rabbit_misc:stop_applications(app_shutdown_order()).
+    ok = app_utils:stop_applications(app_shutdown_order()).
 
 stop_and_halt() ->
     try
@@ -416,12 +416,12 @@ stop(_State) ->
 %% application life cycle
 
 app_startup_order() ->
-    ok = rabbit_misc:load_applications(?APPS),
-    rabbit_misc:calculate_app_dependency_ordering(?APPS).
+    ok = app_utils:load_applications(?APPS),
+    app_utils:app_dependency_order(?APPS, false).
 
 app_shutdown_order() ->
     Apps = ?APPS ++ rabbit_plugins:active_plugins(),
-    rabbit_misc:calculate_app_dependency_ordering(Apps, true).
+    app_utils:app_dependency_order(Apps, true).
 
 %%---------------------------------------------------------------------------
 %% boot step logic
