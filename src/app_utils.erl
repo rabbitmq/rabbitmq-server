@@ -16,13 +16,15 @@
 -module(app_utils).
 
 -export([load_applications/1, start_applications/1,
-         stop_applications/1, app_dependency_order/2]).
+         stop_applications/1, app_dependency_order/2,
+         wait_for_applications/1]).
 
 -ifdef(use_specs).
 
--spec start_applications([atom()])              -> 'ok'.
 -spec load_applications([atom()])               -> 'ok'.
+-spec start_applications([atom()])              -> 'ok'.
 -spec stop_applications([atom()])               -> 'ok'.
+-spec wait_for_applications([atom()])           -> 'ok'.
 -spec app_dependency_order([atom()], boolean()) -> [digraph:vertex()].
 
 -endif.
@@ -50,6 +52,9 @@ stop_applications(Apps) ->
                         cannot_stop_application,
                         Apps).
 
+wait_for_applications(Apps) ->
+    [wait_for_application(App) || App <- Apps], ok.
+
 app_dependency_order(RootApps, StripUnreachable) ->
     {ok, G} = rabbit_misc:build_acyclic_graph(
                 fun (App, _Deps) -> [{App, App}] end,
@@ -69,6 +74,13 @@ app_dependency_order(RootApps, StripUnreachable) ->
 
 %%---------------------------------------------------------------------------
 %% Private API
+
+wait_for_application(Application) ->
+    case lists:keymember(Application, 1, application:which_applications()) of
+         true  -> ok;
+         false -> timer:sleep(1000),
+                  wait_for_application(Application)
+    end.
 
 load_applications(Worklist, Loaded) ->
     case queue:out(Worklist) of

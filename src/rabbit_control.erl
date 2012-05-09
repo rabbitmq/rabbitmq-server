@@ -407,10 +407,9 @@ wait_for_application(Node, PidFile, Application, Inform) ->
 
 wait_for_application(Node, Pid, Application) ->
     case process_up(Pid) of
-        true  -> case rabbit_nodes:is_running(Node, Application) of
-                     true  -> ok;
-                     false -> timer:sleep(?EXTERNAL_CHECK_INTERVAL),
-                              wait_for_application(Node, Pid, Application)
+        true  -> case rpc:call(Node, rabbit, await_startup, []) of
+                     {badrpc, _} -> {error, node_not_responding};
+                     ok          -> ok
                  end;
         false -> {error, process_not_running}
     end.

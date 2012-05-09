@@ -19,8 +19,8 @@
 -behaviour(application).
 
 -export([maybe_hipe_compile/0, prepare/0, start/0, boot/0, stop/0,
-         stop_and_halt/0, status/0, is_running/0, is_running/1, environment/0,
-         rotate_logs/1, force_event_refresh/0]).
+         stop_and_halt/0, await_startup/0, status/0, is_running/0,
+         is_running/1, environment/0, rotate_logs/1, force_event_refresh/0]).
 
 -export([start/2, stop/1]).
 
@@ -220,6 +220,7 @@
 -spec(boot/0 :: () -> 'ok').
 -spec(stop/0 :: () -> 'ok').
 -spec(stop_and_halt/0 :: () -> no_return()).
+-spec(await_startup/0 :: () -> 'ok').
 -spec(status/0 ::
         () -> [{pid, integer()} |
                {running_applications, [{atom(), string(), string()}]} |
@@ -338,6 +339,9 @@ stop_and_halt() ->
         init:stop()
     end,
     ok.
+
+await_startup() ->
+    app_utils:wait_for_applications(app_startup_order()).
 
 status() ->
     S1 = [{pid,                  list_to_integer(os:getpid())},
