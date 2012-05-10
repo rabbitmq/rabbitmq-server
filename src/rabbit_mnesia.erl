@@ -18,8 +18,8 @@
 -module(rabbit_mnesia).
 
 -export([ensure_mnesia_dir/0, dir/0, status/0, init/0, is_db_empty/0,
-         cluster/1, force_cluster/1, reset/0, force_reset/0, init_db/3,
-         is_clustered/0, running_clustered_nodes/0, all_clustered_nodes/0,
+         cluster/1, reset/0, force_reset/0, init_db/3, is_clustered/0,
+         running_clustered_nodes/0, all_clustered_nodes/0,
          empty_ram_only_tables/0, copy_db/1, wait_for_tables/1,
          create_cluster_nodes_config/1, read_cluster_nodes_config/0,
          record_running_nodes/0, read_previously_running_nodes/0,
@@ -46,11 +46,9 @@
 -spec(dir/0 :: () -> file:filename()).
 -spec(ensure_mnesia_dir/0 :: () -> 'ok').
 -spec(init/0 :: () -> 'ok').
--spec(init_db/3 :: ([node()], boolean(), rabbit_misc:thunk('ok')) -> 'ok').
+-spec(init_db/3 :: ([node()], boolean(), boolean()) -> 'ok').
 -spec(is_db_empty/0 :: () -> boolean()).
 -spec(cluster/1 :: ([node()]) -> 'ok').
--spec(force_cluster/1 :: ([node()]) -> 'ok').
--spec(cluster/2 :: ([node()], boolean()) -> 'ok').
 -spec(reset/0 :: () -> 'ok').
 -spec(force_reset/0 :: () -> 'ok').
 -spec(is_clustered/0 :: () -> boolean()).
@@ -110,26 +108,17 @@ is_db_empty() ->
     lists:all(fun (Tab) -> mnesia:dirty_first(Tab) == '$end_of_table' end,
               table_names()).
 
-cluster(ClusterNodes) ->
-    cluster(ClusterNodes, false).
-force_cluster(ClusterNodes) ->
-    cluster(ClusterNodes, true).
-
 %% Alter which disk nodes this node is clustered with. This can be a
 %% subset of all the disk nodes in the cluster but can (and should)
 %% include the node itself if it is to be a disk rather than a ram
 %% node.  If Force is false, only connections to online nodes are
 %% allowed.
-cluster(ClusterNodes, Force) ->
-    rabbit_misc:local_info_msg("Clustering with ~p~s~n",
-                               [ClusterNodes, if Force -> " forcefully";
-                                                 true  -> ""
-                                              end]),
+cluster(ClusterNodes) ->
+    rabbit_misc:local_info_msg("Clustering with ~p~s~n", [ClusterNodes]),
     ensure_mnesia_not_running(),
     ensure_mnesia_dir(),
 
-    case not Force andalso is_clustered() andalso
-         is_only_disc_node(node(), false) andalso
+    case is_clustered() andalso is_only_disc_node(node(), false) andalso
          not should_be_disc_node(ClusterNodes)
     of
         true -> log_both("last running disc node leaving cluster");
@@ -164,17 +153,12 @@ cluster(ClusterNodes, Force) ->
     %% before we can join it.  But, since we don't know if we're in a
     %% cluster or not, we just pre-emptively leave it before joining.
     ProperClusterNodes = ClusterNodes -- [node()],
-    try
-        ok = leave_cluster(ProperClusterNodes, ProperClusterNodes)
-    catch
-        {error, {no_running_cluster_nodes, _, _}} when Force ->
-            ok
-    end,
+    ok = leave_cluster(ProperClusterNodes, ProperClusterNodes),
 
     %% Join the cluster
     start_mnesia(),
     try
-        ok = init_db(ClusterNodes, Force),
+        ok = init_db(ClusterNodes, false),
         ok = create_cluster_nodes_config(ClusterNodes)
     after
         stop_mnesia()
@@ -505,23 +489,13 @@ delete_previously_running_nodes() ->
                                           FileName, Reason}})
     end.
 
-init_db(ClusterNodes, Force) ->
-    init_db(
-      ClusterNodes, Force,
-      fun () ->
-              case rabbit_upgrade:maybe_upgrade_local() of
-                  ok                    -> ok;
-                  %% If we're just starting up a new node we won't have a
-                  %% version
-                  starting_from_scratch -> ok = rabbit_version:record_desired()
-              end
-      end).
+init_db(ClusterNodes, Force) -> init_db(ClusterNodes, Force, true).
 
 %% Take a cluster node config and create the right kind of node - a
 %% standalone disk node, or disk or ram node connected to the
 %% specified cluster nodes.  If Force is false, don't allow
 %% connections to offline nodes.
-init_db(ClusterNodes, Force, SecondaryPostMnesiaFun) ->
+init_db(ClusterNodes, Force, Upgrade) ->
     UClusterNodes = lists:usort(ClusterNodes),
     ProperClusterNodes = UClusterNodes -- [node()],
     case mnesia:change_config(extra_db_nodes, ProperClusterNodes) of
@@ -559,7 +533,20 @@ init_db(ClusterNodes, Force, SecondaryPostMnesiaFun) ->
                     ok = create_local_table_copy(schema, CopyTypeAlt),
                     ok = create_local_table_copies(CopyType),
 
-                    ok = SecondaryPostMnesiaFun(),
+                    ok = case Upgrade of
+                             true ->
+                                 case rabbit_upgrade:maybe_upgrade_local() of
+                                     ok ->
+                                         ok;
+                                     %% If we're just starting up a new node we
+                                     %% won't have a version
+                                     starting_from_scratch ->
+                                         rabbit_version:record_desired()
+                                 end;
+                             false ->
+                                 ok
+                         end,
+
                     %% We've taken down mnesia, so ram nodes will need
                     %% to re-sync
                     case is_disc_node() of

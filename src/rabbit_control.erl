@@ -201,12 +201,6 @@ action(cluster, Node, ClusterNodeSs, _Opts, Inform) ->
            [Node, ClusterNodes]),
     rpc_call(Node, rabbit_mnesia, cluster, [ClusterNodes]);
 
-action(force_cluster, Node, ClusterNodeSs, _Opts, Inform) ->
-    ClusterNodes = lists:map(fun list_to_atom/1, ClusterNodeSs),
-    Inform("Forcefully clustering node ~p with ~p (ignoring offline nodes)",
-           [Node, ClusterNodes]),
-    rpc_call(Node, rabbit_mnesia, force_cluster, [ClusterNodes]);
-
 action(wait, Node, [PidFile], _Opts, Inform) ->
     Inform("Waiting for ~p", [Node]),
     wait_for_application(Node, PidFile, rabbit, Inform);
@@ -231,33 +225,33 @@ action(rotate_logs, Node, [], _Opts, Inform) ->
     Inform("Reopening logs for node ~p", [Node]),
     call(Node, {rabbit, rotate_logs, [""]});
 action(rotate_logs, Node, Args = [Suffix], _Opts, Inform) ->
-    Inform("Rotating logs to files with suffix ~p", [Suffix]),
+    Inform("Rotating logs to files with suffix \"~s\"", [Suffix]),
     call(Node, {rabbit, rotate_logs, Args});
 
 action(close_connection, Node, [PidStr, Explanation], _Opts, Inform) ->
-    Inform("Closing connection ~s", [PidStr]),
+    Inform("Closing connection \"~s\"", [PidStr]),
     rpc_call(Node, rabbit_networking, close_connection,
              [rabbit_misc:string_to_pid(PidStr), Explanation]);
 
 action(add_user, Node, Args = [Username, _Password], _Opts, Inform) ->
-    Inform("Creating user ~p", [Username]),
+    Inform("Creating user \"~s\"", [Username]),
     call(Node, {rabbit_auth_backend_internal, add_user, Args});
 
 action(delete_user, Node, Args = [_Username], _Opts, Inform) ->
-    Inform("Deleting user ~p", Args),
+    Inform("Deleting user \"~s\"", Args),
     call(Node, {rabbit_auth_backend_internal, delete_user, Args});
 
 action(change_password, Node, Args = [Username, _Newpassword], _Opts, Inform) ->
-    Inform("Changing password for user ~p", [Username]),
+    Inform("Changing password for user \"~s\"", [Username]),
     call(Node, {rabbit_auth_backend_internal, change_password, Args});
 
 action(clear_password, Node, Args = [Username], _Opts, Inform) ->
-    Inform("Clearing password for user ~p", [Username]),
+    Inform("Clearing password for user \"~s\"", [Username]),
     call(Node, {rabbit_auth_backend_internal, clear_password, Args});
 
 action(set_user_tags, Node, [Username | TagsStr], _Opts, Inform) ->
     Tags = [list_to_atom(T) || T <- TagsStr],
-    Inform("Setting tags for user ~p to ~p", [Username, Tags]),
+    Inform("Setting tags for user \"~s\" to ~p", [Username, Tags]),
     rpc_call(Node, rabbit_auth_backend_internal, set_tags,
              [list_to_binary(Username), Tags]);
 
@@ -268,11 +262,11 @@ action(list_users, Node, [], _Opts, Inform) ->
       rabbit_auth_backend_internal:user_info_keys());
 
 action(add_vhost, Node, Args = [_VHostPath], _Opts, Inform) ->
-    Inform("Creating vhost ~p", Args),
+    Inform("Creating vhost \"~s\"", Args),
     call(Node, {rabbit_vhost, add, Args});
 
 action(delete_vhost, Node, Args = [_VHostPath], _Opts, Inform) ->
-    Inform("Deleting vhost ~p", Args),
+    Inform("Deleting vhost \"~s\"", Args),
     call(Node, {rabbit_vhost, delete, Args});
 
 action(list_vhosts, Node, Args, _Opts, Inform) ->
@@ -334,12 +328,12 @@ action(list_consumers, Node, _Args, Opts, Inform) ->
 
 action(trace_on, Node, [], Opts, Inform) ->
     VHost = proplists:get_value(?VHOST_OPT, Opts),
-    Inform("Starting tracing for vhost ~p", [VHost]),
+    Inform("Starting tracing for vhost \"~s\"", [VHost]),
     rpc_call(Node, rabbit_trace, start, [list_to_binary(VHost)]);
 
 action(trace_off, Node, [], Opts, Inform) ->
     VHost = proplists:get_value(?VHOST_OPT, Opts),
-    Inform("Stopping tracing for vhost ~p", [VHost]),
+    Inform("Stopping tracing for vhost \"~s\"", [VHost]),
     rpc_call(Node, rabbit_trace, stop, [list_to_binary(VHost)]);
 
 action(set_vm_memory_high_watermark, Node, [Arg], _Opts, Inform) ->
@@ -352,19 +346,21 @@ action(set_vm_memory_high_watermark, Node, [Arg], _Opts, Inform) ->
 
 action(set_permissions, Node, [Username, CPerm, WPerm, RPerm], Opts, Inform) ->
     VHost = proplists:get_value(?VHOST_OPT, Opts),
-    Inform("Setting permissions for user ~p in vhost ~p", [Username, VHost]),
+    Inform("Setting permissions for user \"~s\" in vhost \"~s\"",
+           [Username, VHost]),
     call(Node, {rabbit_auth_backend_internal, set_permissions,
                 [Username, VHost, CPerm, WPerm, RPerm]});
 
 action(clear_permissions, Node, [Username], Opts, Inform) ->
     VHost = proplists:get_value(?VHOST_OPT, Opts),
-    Inform("Clearing permissions for user ~p in vhost ~p", [Username, VHost]),
+    Inform("Clearing permissions for user \"~s\" in vhost \"~s\"",
+           [Username, VHost]),
     call(Node, {rabbit_auth_backend_internal, clear_permissions,
                 [Username, VHost]});
 
 action(list_permissions, Node, [], Opts, Inform) ->
     VHost = proplists:get_value(?VHOST_OPT, Opts),
-    Inform("Listing permissions in vhost ~p", [VHost]),
+    Inform("Listing permissions in vhost \"~s\"", [VHost]),
     display_info_list(call(Node, {rabbit_auth_backend_internal,
                              list_vhost_permissions, [VHost]}),
                       rabbit_auth_backend_internal:vhost_perms_info_keys());
