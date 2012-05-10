@@ -186,12 +186,6 @@ action(cluster, Node, ClusterNodeSs, _Opts, Inform) ->
            [Node, ClusterNodes]),
     rpc_call(Node, rabbit_mnesia, cluster, [ClusterNodes]);
 
-action(force_cluster, Node, ClusterNodeSs, _Opts, Inform) ->
-    ClusterNodes = lists:map(fun list_to_atom/1, ClusterNodeSs),
-    Inform("Forcefully clustering node ~p with ~p (ignoring offline nodes)",
-           [Node, ClusterNodes]),
-    rpc_call(Node, rabbit_mnesia, force_cluster, [ClusterNodes]);
-
 action(wait, Node, [PidFile], _Opts, Inform) ->
     Inform("Waiting for ~p", [Node]),
     wait_for_application(Node, PidFile, rabbit, Inform);
