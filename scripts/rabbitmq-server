@@ -70,25 +70,20 @@ case "$(uname -s)" in
 esac
 
 RABBITMQ_EBIN_ROOT="${RABBITMQ_HOME}/ebin"
-if [ "x" = "x$RABBITMQ_NODE_ONLY" ]; then
-    if erl \
+if erl \
 	-pa "$RABBITMQ_EBIN_ROOT" \
 	-noinput \
 	-hidden \
 	-s rabbit_prelaunch \
 	-sname rabbitmqprelaunch$$ \
 	-extra "${RABBITMQ_NODENAME}"
-    then
+then
     RABBITMQ_BOOT_FILE=start_sasl
     RABBITMQ_EBIN_PATH="-pa ${RABBITMQ_EBIN_ROOT}"
-    else
-	exit 1
-    fi
 else
-    # TODO: does this branch actually make any sense now???
-    RABBITMQ_BOOT_FILE=start_sasl
-    RABBITMQ_EBIN_PATH="-pa ${RABBITMQ_EBIN_ROOT}"
+	exit 1
 fi
+
 RABBITMQ_CONFIG_ARG=
 [ -f "${RABBITMQ_CONFIG_FILE}.config" ] && RABBITMQ_CONFIG_ARG="-config ${RABBITMQ_CONFIG_FILE}"
 
