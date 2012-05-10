@@ -97,7 +97,6 @@ status() ->
 init() ->
     ensure_mnesia_running(),
     ensure_mnesia_dir(),
-    monitor_schema(),
     Nodes = read_cluster_nodes_config(),
     ok = init_db(Nodes, should_be_disc_node(Nodes)),
     %% We intuitively expect the global name server to be synced when
@@ -831,21 +830,3 @@ start_mnesia() ->
 stop_mnesia() ->
     stopped = mnesia:stop(),
     ensure_mnesia_not_running().
-
-handle_schema_events() ->
-    receive
-        {mnesia_table_event, _Event} ->
-            case is_disc_node() of
-                true  -> ok;
-                false -> mnesia:dump_tables([schema])
-            end,
-            handle_schema_events();
-        _ ->
-            exit(non_event)
-    end.
-
-monitor_schema() ->
-    spawn(fun () -> mnesia:subscribe({table, schema, simple}),
-                    handle_schema_events()
-          end),
-    ok.
