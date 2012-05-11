@@ -13,15 +13,10 @@ html files from there:
 Installation
 ------------
 
+Generic build instructions are at:
+
+ * http://www.rabbitmq.com/plugin-development.html
+
 Instructions on how to install a plugin into RabbitMQ broker:
 
   * http://www.rabbitmq.com/plugins.html#installing-plugins
-
-You'll need few dependencies:
-
- * rabbitmq-web-stomp
- * cowboy_wrapper
- * sockjs_erlang_wrapper
- * rabbitmq_stomp
- * amqp_client
- * rabbitmq_mochiweb
