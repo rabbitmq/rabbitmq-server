@@ -18,13 +18,13 @@
 -module(rabbit_mnesia).
 
 -export([ensure_mnesia_dir/0, dir/0, status/0, init/0, is_db_empty/0,
-         cluster/1, reset/0, force_reset/0, init_db/3, is_clustered/0,
+         join_cluster/1, reset/0, force_reset/0, init_db/3, is_clustered/0,
          running_clustered_nodes/0, all_clustered_nodes/0,
          empty_ram_only_tables/0, copy_db/1, wait_for_tables/1,
          create_cluster_nodes_config/1, read_cluster_nodes_config/0,
          record_running_nodes/0, read_previously_running_nodes/0,
-         running_nodes_filename/0, is_disc_node/0, on_node_down/1,
-         on_node_up/1, should_be_disc_node_legacy/1]).
+         running_nodes_filename/0, is_disc_node/0, on_node_down/1, on_node_up/1,
+         should_be_disc_node_legacy/1]).
 
 -export([table_names/0]).
 
@@ -49,7 +49,7 @@
 -spec(init/0 :: () -> 'ok').
 -spec(init_db/3 :: (node_config(), boolean(), boolean()) -> 'ok').
 -spec(is_db_empty/0 :: () -> boolean()).
--spec(cluster/1 :: ([node()]) -> 'ok').
+-spec(join_cluster/1 :: ([node()]) -> 'ok').
 -spec(reset/0 :: () -> 'ok').
 -spec(force_reset/0 :: () -> 'ok').
 -spec(is_clustered/0 :: () -> boolean()).
@@ -115,7 +115,10 @@ is_db_empty() ->
 %% include the node itself if it is to be a disk rather than a ram
 %% node.  If Force is false, only connections to online nodes are
 %% allowed.
-cluster({DiscoveryNodes, DiscNode}) ->
+join_cluster({DiscoveryNodes, DiscNode}) ->
+    ensure_mnesia_not_running(),
+    ensure_mnesia_dir(),
+
     case is_only_disc_node(node(), false) andalso not DiscNode of
         true -> throw({error,
                        {standalone_ram_node,
@@ -124,47 +127,28 @@ cluster({DiscoveryNodes, DiscNode}) ->
         _    -> ok
     end,
 
-    %% TODO: Emit some warning/error if this node is in DiscoveryNodes
     ProperDiscoveryNodes = DiscoveryNodes -- [node()],
     ClusterNodes = case discover_cluster(ProperDiscoveryNodes) of
                        {ok, ClusterNodes0} -> ClusterNodes0;
                        {error, Reason}     -> throw({error, Reason})
                    end,
-    Config = {ClusterNodes, DiscNode},
-
-    rabbit_misc:local_info_msg("Clustering with ~p~s~n", [ClusterNodes]),
-    ensure_mnesia_not_running(),
-    ensure_mnesia_dir(),
-
-    %% Wipe mnesia if we're changing type from disc to ram
-    case {is_disc_node(), DiscNode} of
-        {true, false} -> rabbit_misc:with_local_io(
-                           fun () -> error_logger:warning_msg(
-                                       "changing node type; wiping "
-                                       "mnesia...~n~n")
-                           end),
-                         rabbit_misc:ensure_ok(mnesia:delete_schema([node()]),
-                                               cannot_delete_schema);
-        _             -> ok
+    
+    case lists:member(node(), ClusterNodes) of
+        true  -> throw({error, {already_clustered,
+                                "You are already clustered with the nodes you "
+                                "have selected."}});
+        false -> ok
     end,
 
-    %% Pre-emptively leave the cluster
-    %%
-    %% We're trying to handle the following two cases:
-    %% 1. We have a two-node cluster, where both nodes are disc nodes.
-    %% One node is re-clustered as a ram node.  When it tries to
-    %% re-join the cluster, but before it has time to update its
-    %% tables definitions, the other node will order it to re-create
-    %% its disc tables.  So, we need to leave the cluster before we
-    %% can join it again.
-    %% 2. We have a two-node cluster, where both nodes are disc nodes.
-    %% One node is forcefully reset (so, the other node thinks its
-    %% still a part of the cluster).  The reset node is re-clustered
-    %% as a ram node.  Same as above, we need to leave the cluster
-    %% before we can join it.  But, since we don't know if we're in a
-    %% cluster or not, we just pre-emptively leave it before joining.
-    ProperClusterNodes = ClusterNodes -- [node()],
-    ok = leave_cluster(ProperClusterNodes, ProperClusterNodes),
+    %% reset the node. this simplifies things and it will be needed in this case
+    %% - we're joining a new cluster with new nodes which are not in synch with
+    %% the current node. I also lifts the burden of reseting the node from the
+    %% user.
+    reset(false),
+
+    rabbit_misc:local_info_msg("Clustering with ~p~s~n", [ClusterNodes]),
+
+    Config = {ClusterNodes, DiscNode},
 
     %% Join the cluster
     start_mnesia(),
@@ -751,20 +735,26 @@ reset(Force) ->
     case not Force andalso is_clustered() andalso
          is_only_disc_node(node(), false)
     of
-        true  -> log_both("no other disc nodes running");
+        true  -> throw({error, {standalone_ram_node,
+                                "You can't reset a node if it's the only disc "
+                                "node in a cluster. Please convert another node"
+                                " of the cluster to a disc node first."}});
         false -> ok
     end,
     Node = node(),
-    Nodes = all_clustered_nodes() -- [Node],
     case Force of
-        true  -> ok;
+        true ->
+            %% mnesia is down, so all_clustered_nodes() will return [node()], so
+            %% it's useless to try to disconnect from cluster.
+            [];
         false ->
             ensure_mnesia_dir(),
             start_mnesia(),
+            Nodes = all_clustered_nodes() -- [Node],
             RunningNodes =
                 try
-                    %% Force=true here so that reset still works when clustered
-                    %% with a node which is down
+                    %% Force=true here so that reset still works when
+                    %% clustered with a node which is down
                     ok = init_db(read_cluster_nodes_config(), true),
                     running_clustered_nodes() -- [Node]
                 after
@@ -772,17 +762,17 @@ reset(Force) ->
                 end,
             leave_cluster(Nodes, RunningNodes),
             rabbit_misc:ensure_ok(mnesia:delete_schema([Node]),
-                                  cannot_delete_schema)
+                                  cannot_delete_schema),
+            %% We need to make sure that we don't end up in a distributed Erlang
+            %% system with nodes while not being in an Mnesia cluster with
+            %% them. We don't handle that well.
+            [erlang:disconnect_node(N) || N <- Nodes],
+            ok = delete_cluster_nodes_config()
     end,
-    %% We need to make sure that we don't end up in a distributed
-    %% Erlang system with nodes while not being in an Mnesia cluster
-    %% with them. We don't handle that well.
-    [erlang:disconnect_node(N) || N <- Nodes],
-    ok = delete_cluster_nodes_config(),
     %% remove persisted messages and any other garbage we find
     ok = rabbit_file:recursive_delete(filelib:wildcard(dir() ++ "/*")),
     ok.
-
+    
 leave_cluster([], _) -> ok;
 leave_cluster(Nodes, RunningNodes) ->
     %% find at least one running cluster node and instruct it to
