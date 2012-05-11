@@ -197,6 +197,9 @@ if_unknown(Val,    _Def) -> Val.
 %%----------------------------------------------------------------------------
 
 init([]) ->
+    %% When Rabbit is overloaded, it's usually especially important
+    %% that the management plugin work.
+    process_flag(priority, high),
     rabbit:force_event_refresh(),
     {ok, Interval} = application:get_env(rabbit, collect_statistics_interval),
     rabbit_log:info("Statistics database started.~n"),
