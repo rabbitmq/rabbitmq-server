@@ -31,34 +31,101 @@
 -define(CLEANUP_QUEUE_NAME, <<"cleanup-queue">>).
 
 all_tests() ->
-    passed = gm_tests:all_tests(),
-    passed = mirrored_supervisor_tests:all_tests(),
-    application:set_env(rabbit, file_handles_high_watermark, 10, infinity),
-    ok = file_handle_cache:set_limit(10),
-    passed = test_multi_call(),
-    passed = test_file_handle_cache(),
-    passed = test_backing_queue(),
-    passed = test_priority_queue(),
-    passed = test_pg_local(),
-    passed = test_unfold(),
-    passed = test_supervisor_delayed_restart(),
-    passed = test_parsing(),
-    passed = test_content_framing(),
-    passed = test_content_transcoding(),
-    passed = test_topic_matching(),
-    passed = test_log_management(),
-    passed = test_app_management(),
-    passed = test_log_management_during_startup(),
-    passed = test_statistics(),
-    passed = test_option_parser(),
-    passed = test_cluster_management(),
-    passed = test_user_management(),
-    passed = test_runtime_parameters(),
-    passed = test_server_status(),
-    passed = test_confirms(),
-    passed = maybe_run_cluster_dependent_tests(),
-    passed = test_configurable_server_properties(),
-    passed.
+    {ok, Fd} = prepare_testlog(),
+    try
+        ExternalTests = [fun gm_tests:all_tests/0,
+                         fun mirrored_supervisor_tests:all_tests/0],
+        ExternalResults = [execute_test(Fd, T) || T <- ExternalTests],
+
+        application:set_env(rabbit, file_handles_high_watermark, 10, infinity),
+        ok = file_handle_cache:set_limit(10),
+
+        InternalResults = [ execute_test(Fd, Spec) ||
+                                Spec <- all_tests_in_module() ],
+
+        OptionalTests = [fun maybe_run_cluster_dependent_tests/0],
+        StateAlteringTests = [fun test_configurable_server_properties/0],
+
+        OptionalResults = [execute_test(Fd, T) || T <- OptionalTests],
+        CleansedOptionalResults = [R || R <- OptionalResults, R =/= ignore],
+        StateAlteringTestResults = [execute_test(Fd, T) ||
+                                        T <- StateAlteringTests],
+        process_results(Fd, ExternalResults ++ InternalResults ++
+                        CleansedOptionalResults ++ StateAlteringTestResults)
+    after
+        file:close(Fd)
+    end.
+
+prepare_testlog() ->
+    filelib:ensure_dir(filename:join("log", "tests")),
+    LogFile = filename:join(["log", "all_tests.log"]),
+    {ok, Fd} = file:open(LogFile, [write]).
+
+process_results(Fd, Results) ->
+    {Passed, Failed, Ignored} = fold_results(Fd, Results),
+    io:fwrite(Fd, "Passed: ~p tests~n", [length(Passed)]),
+    io:fwrite(Fd, "Failed: ~p tests~n", [length(Failed)]),
+    io:fwrite(Fd, "Ignored: ~p tests~n", [length(Ignored)]),
+    case Failed of
+        [] -> passed;
+        _  -> {failed, Failed}
+    end.
+
+fold_results(Fd, Results) ->
+    lists:foldl(fun(E, {Passed, Failed, Ignored}) ->
+                    case E of
+                        {M, F, passed} ->
+                            {[{M, F}|Passed], Failed, Ignored};
+                        {M, F, ignored} ->
+                            {Passed, Failed, [{M, F}|Ignored]};
+                        {M, F, {failed, Reason}} ->
+                            {Passed, [{M, F, Reason}|Failed], Ignored};
+                        {ignored, {invalid_arity, _}} ->
+                            {Passed, Failed, Ignored};
+                        {M, F, {ignored, {invalid_spec, Spec}=R}} ->
+                            io:fwrite(Fd, "Invalid test specification: "
+                                          "in ~p::~p => ~p~n", [M, F, Spec]),
+                            {Passed, [{M, F, R}|Failed], Ignored}
+                    end
+                end, {[], [], []}, Results).
+
+all_tests_in_module() ->
+    Functions = ?MODULE:module_info(functions),
+    [ F || {_, A}=F <- Functions, A == 0].
+
+execute_test(Fd, {TestFun, 0}) when is_atom(TestFun) ->
+    case atom_to_list(TestFun) of
+        ("test_" ++ _)=Name ->
+            FunRef = "fun rabbit_tests:" ++ Name ++ "/0.",
+            {ok, Tokens, _} = erl_scan:string(FunRef),
+            {ok, AST} = erl_parse:parse_exprs(Tokens),
+            case erl_eval:expr(hd(AST), erl_eval:new_bindings()) of
+                {value, Fun, _} when is_function(Fun) ->
+                    execute_test(Fd, Fun);
+                Other ->
+                    {?MODULE, TestFun, {ignored, {invalid_spec, Other}}}
+            end;
+        _ ->
+            {ignored, {invalid_arity, TestFun}}
+    end;
+execute_test(Fd, TestFun) when is_function(TestFun) ->
+    FI = erlang:fun_info(TestFun),
+    TestMod = proplists:get_value(module, FI),
+    TestName = proplists:get_value(name, FI),
+    io:format(Fd, "Running ~p (~p) ... ", [TestMod, TestName]),
+    case catch(TestFun()) of
+        passed ->
+            io:fwrite(Fd, "passed!~n", []),
+            {TestMod, TestFun, passed};
+        ignore ->
+            io:fwrite(Fd, "ignored.~n", []),
+            {TestMod, TestFun, ignored};
+        Other ->
+            io:fwrite(Fd, "failed: ~p~n", [Other]),
+            {TestMod, TestFun, {failed, Other}}
+    end;
+execute_test(Fd, TestSpec) ->
+    {unknown, unknown, {ignored, {invalid_spec, TestSpec}}}.
 
 maybe_run_cluster_dependent_tests() ->
     SecondaryNode = rabbit_nodes:make("hare"),
@@ -66,7 +133,8 @@ maybe_run_cluster_dependent_tests() ->
     case net_adm:ping(SecondaryNode) of
         pong -> passed = run_cluster_dependent_tests(SecondaryNode);
         pang -> io:format("Skipping cluster dependent tests with node ~p~n",
-                          [SecondaryNode])
+                          [SecondaryNode]),
+                ignore
     end,
     passed.
 
