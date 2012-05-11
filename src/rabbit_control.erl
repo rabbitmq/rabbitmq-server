@@ -25,6 +25,7 @@
 -define(QUIET_OPT, "-q").
 -define(NODE_OPT, "-n").
 -define(VHOST_OPT, "-p").
+-define(RAM_OPT, "--ram").
 
 -define(GLOBAL_QUERIES,
         [{"Connections", rabbit_networking, connection_info_all,
@@ -60,7 +61,8 @@ start() ->
     {[Command0 | Args], Opts} =
         case rabbit_misc:get_options([{flag, ?QUIET_OPT},
                                       {option, ?NODE_OPT, NodeStr},
-                                      {option, ?VHOST_OPT, "/"}],
+                                      {option, ?VHOST_OPT, "/"},
+                                      {flag, ?RAM_OPT}],
                                      init:get_plain_arguments()) of
             {[], _Opts}    -> usage();
             CmdArgsAndOpts -> CmdArgsAndOpts
@@ -181,10 +183,18 @@ action(force_reset, Node, [], _Opts, Inform) ->
     call(Node, {rabbit_mnesia, force_reset, []});
 
 action(cluster, Node, ClusterNodeSs, _Opts, Inform) ->
+    io:format("'cluster' is deprecated, please us 'join_cluster'.~n"),
     ClusterNodes = lists:map(fun list_to_atom/1, ClusterNodeSs),
+    DiscNode = rabbit_mnesia:should_be_disc_node_legacy(ClusterNodes),
     Inform("Clustering node ~p with ~p",
            [Node, ClusterNodes]),
-    rpc_call(Node, rabbit_mnesia, cluster, [ClusterNodes]);
+    rpc_call(Node, rabbit_mnesia, cluster, [{ClusterNodes, DiscNode}]);
+
+action(join_cluster, Node, ClusterNodeSs, Opts, Inform) ->
+    ClusterNodes = lists:map(fun list_to_atom/1, ClusterNodeSs),
+    DiscNode = not proplists:get_bool(?RAM_OPT, Opts),
+    Inform("Clustering node ~p with ~p", [Node, ClusterNodes]),
+    rpc_call(Node, rabbit_mnesia, cluster, [{ClusterNodes, DiscNode}]);
 
 action(wait, Node, [PidFile], _Opts, Inform) ->
     Inform("Waiting for ~p", [Node]),
