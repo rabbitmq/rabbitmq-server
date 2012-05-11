@@ -261,24 +261,19 @@ start_internal(Group, ChildSpecs) ->
 
 %%----------------------------------------------------------------------------
 
-init({overall, Group, Init}) ->
-    case Init of
-        {ok, {Restart, ChildSpecs}} ->
-            Delegate = {delegate, {?SUPERVISOR, start_link,
-                                   [?MODULE, {delegate, Restart}]},
-                        temporary, 16#ffffffff, supervisor, [?SUPERVISOR]},
-            Mirroring = {mirroring, {?MODULE, start_internal,
-                                     [Group, ChildSpecs]},
-                         permanent, 16#ffffffff, worker, [?MODULE]},
-            %% Important: Delegate MUST start before Mirroring so that
-            %% when we shut down from above it shuts down last, so
-            %% Mirroring does not see it die.
-            %%
-            %% See comment in handle_info('DOWN', ...) below
-            {ok, {{one_for_all, 0, 1}, [Delegate, Mirroring]}};
-        ignore ->
-            ignore
-    end;
+init({overall, _Group, ignore}) -> ignore;
+init({overall,  Group, {ok, {Restart, ChildSpecs}}}) ->
+    %% Important: Delegate MUST start before Mirroring so that when we
+    %% shut down from above it shuts down last, so Mirroring does not
+    %% see it die.
+    %%
+    %% See comment in handle_info('DOWN', ...) below
+    {ok, {{one_for_all, 0, 1},
+          [{delegate, {?SUPERVISOR, start_link, [?MODULE, {delegate, Restart}]},
+            temporary, 16#ffffffff, supervisor, [?SUPERVISOR]},
+           {mirroring, {?MODULE, start_internal, [Group, ChildSpecs]},
+            permanent, 16#ffffffff, worker, [?MODULE]}]}};
+
 
 init({delegate, Restart}) ->
     {ok, {Restart, []}};
@@ -308,7 +303,7 @@ handle_call({init, Overall}, _From,
     State1 = State#state{overall = Overall, delegate = Delegate},
     case errors([maybe_start(Group, Delegate, S) || S <- ChildSpecs]) of
         []     -> {reply, ok, State1};
-        Errors -> {stop, {shutdown, {init, Errors, ChildSpecs}}, State1}
+        Errors -> {stop, {shutdown, Errors}, State1}
     end;
 
 handle_call({start_child, ChildSpec}, _From,
@@ -366,17 +361,15 @@ handle_info({'DOWN', _Ref, process, Pid, _Reason},
     %% TODO load balance this
     %% No guarantee pg2 will have received the DOWN before us.
     Self = self(),
-    {R, Cs, X} =
-        case lists:sort(?PG2:get_members(Group)) -- [Pid] of
-            [Self | _] -> {atomic, {ChildSpecs, Extra}} =
+    R = case lists:sort(?PG2:get_members(Group)) -- [Pid] of
+            [Self | _] -> {atomic, ChildSpecs} =
                               mnesia:transaction(fun() -> update_all(Pid) end),
-                          {[start(Delegate, ChildSpec) || ChildSpec <- ChildSpecs],
-                           ChildSpecs, Extra};
-            _          -> {[], [], []}
+                          [start(Delegate, ChildSpec) || ChildSpec <- ChildSpecs];
+            _          -> []
         end,
     case errors(R) of
         []     -> {noreply, State};
-        Errors -> {stop, {shutdown, {down, Errors, Cs, X}}, State}
+        Errors -> {stop, {shutdown, Errors}, State}
     end;
 
 handle_info(Info, State) ->
@@ -460,8 +453,8 @@ update_all(OldPid) ->
                                         key           = '$1',
                                         childspec     = '$2',
                                         _             = '_'},
-    Matches = mnesia:select(?TABLE, [{MatchHead, [], ['$$']}]),
-    {[write(Group, C) || [{Group, _Id}, C] <- Matches], {OldPid, Matches}}.
+    [write(Group, C) ||
+        [{Group, _Id}, C] <- mnesia:select(?TABLE, [{MatchHead, [], ['$$']}])].
 
 delete_all(Group) ->
     MatchHead = #mirrored_sup_childspec{key       = {Group, '_'},
