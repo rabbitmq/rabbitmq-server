@@ -39,12 +39,6 @@
          {"Permissions", rabbit_auth_backend_internal, list_vhost_permissions,
           vhost_perms_info_keys}]).
 
--define(OPTS_COMMANDS,
-        [{?VHOST_OPT, [set_permissions, clear_permissions, list_permissions,
-                       list_user_permissions, list_queues, list_bindings,
-                       list_connections, list_channels, list_consumers,
-                       trace_on, trace_off]}]).
-
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
@@ -89,15 +83,6 @@ start() ->
                 print_error("invalid command '~s'",
                             [string:join([atom_to_list(Command) | Args], " ")])
         end,
-
-    lists:foreach(fun ({Opt, Commands}) ->
-                          case {proplists:lookup(Opt, Opts),
-                                lists:member(Command, Commands)} of
-                              {{_, _}, false} -> PrintInvalidCommandError(),
-                                                 usage();
-                              _               -> ok
-                          end
-                  end, ?OPTS_COMMANDS),
 
     %% The reason we don't use a try/catch here is that rpc:call turns
     %% thrown errors into normal return values
