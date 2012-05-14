@@ -91,7 +91,9 @@ fold_results(Fd, Results) ->
 
 all_tests_in_module() ->
     Functions = ?MODULE:module_info(functions),
-    [ F || {_, A}=F <- Functions, A == 0].
+    [F || {Fn, A}=F <- Functions, A == 0 andalso 
+           not lists:member(Fn, [test_spawn,
+                                 test_spawn_remote, test_queue])].
 
 execute_test(Fd, {TestFun, 0}) when is_atom(TestFun) ->
     case atom_to_list(TestFun) of
