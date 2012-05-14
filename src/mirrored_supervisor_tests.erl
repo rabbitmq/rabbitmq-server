@@ -51,7 +51,7 @@ test_migrate() ->
     with_sups(fun([A, _]) ->
                       ?MS:start_child(a, childspec(worker)),
                       Pid1 = pid_of(worker),
-                      kill(A, Pid1),
+                      kill_registered(A, Pid1),
                       Pid2 = pid_of(worker),
                       false = (Pid1 =:= Pid2)
               end, [a, b]).
@@ -61,10 +61,10 @@ test_migrate_twice() ->
     with_sups(fun([A, B]) ->
                       ?MS:start_child(a, childspec(worker)),
                       Pid1 = pid_of(worker),
-                      kill(A, Pid1),
+                      kill_registered(A, Pid1),
                       {ok, C} = start_sup(c),
                       Pid2 = pid_of(worker),
-                      kill(B, Pid2),
+                      kill_registered(B, Pid2),
                       Pid3 = pid_of(worker),
                       false = (Pid1 =:= Pid3),
                       kill(C)
@@ -124,7 +124,7 @@ test_large_group() ->
     with_sups(fun([A, _, _, _]) ->
                       ?MS:start_child(a, childspec(worker)),
                       Pid1 = pid_of(worker),
-                      kill(A, Pid1),
+                      kill_registered(A, Pid1),
                       Pid2 = pid_of(worker),
                       false = (Pid1 =:= Pid2)
               end, [a, b, c, d]).
@@ -134,7 +134,7 @@ test_childspecs_at_init() ->
     S = childspec(worker),
     with_sups(fun([A, _]) ->
                       Pid1 = pid_of(worker),
-                      kill(A, Pid1),
+                      kill_registered(A, Pid1),
                       Pid2 = pid_of(worker),
                       false = (Pid1 =:= Pid2)
               end, [{a, [S]}, {b, [S]}]).
@@ -143,7 +143,7 @@ test_anonymous_supervisors() ->
     with_sups(fun([A, _B]) ->
                       ?MS:start_child(A, childspec(worker)),
                       Pid1 = pid_of(worker),
-                      kill(A, Pid1),
+                      kill_registered(A, Pid1),
                       Pid2 = pid_of(worker),
                       false = (Pid1 =:= Pid2)
               end, [anon, anon]).
@@ -288,6 +288,12 @@ kill(Pid, Waits) ->
     exit(Pid, bang),
     kill_wait(Pid),
     [kill_wait(P) || P <- Waits].
+
+kill_registered(Pid, Child) ->
+    {registered_name, Name} = erlang:process_info(Child, registered_name),
+    kill(Pid, Child),
+    false = (Child =:= whereis(Name)),
+    ok.
 
 kill_wait(Pid) ->
     receive
