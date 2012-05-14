@@ -640,11 +640,14 @@ force_event_refresh() ->
 %% misc
 
 print_plugin_info(Plugins) ->
-    io:format("~w plugins activated:~n", [length(Plugins)]),
-    [io:format("* ~s-~s~n", [AppName, 
-            element(2, application:get_key(AppName, vsn))])
-        || AppName <- Plugins],
-    io:nl().
+    io:format("~n-- plugins running~n"),
+    [print_plugin_info(AppName, element(2, application:get_key(AppName, vsn)))
+     || AppName <- Plugins],
+    ok.
+
+print_plugin_info(Plugin, Vsn) ->
+    Len = 76 - length(Vsn),
+    io:format("~-" ++ integer_to_list(Len) ++ "s ~s~n", [Plugin, Vsn]).
 
 erts_version_check() ->
     FoundVer = erlang:system_info(version),
