@@ -157,7 +157,7 @@ test_no_migration_on_shutdown() ->
     with_sups(fun([Evil, _]) ->
                       ?MS:start_child(Evil, childspec(worker)),
                       try
-                          call(worker, ping),
+                          call(worker, ping, 10000, 100),
                           exit(worker_should_not_have_migrated)
                       catch exit:{timeout_waiting_for_server, _, _} ->
                               ok
