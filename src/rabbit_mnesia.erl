@@ -835,14 +835,14 @@ reset(Force) ->
                         %% Force=true here so that reset still works when
                         %% clustered with a node which is down
                         ok = init_db(read_cluster_nodes_config(), true),
-                        running_clustered_nodes() -- [Node]
+                        running_clustered_nodes()
                     after
                         stop_mnesia()
                     end,
-            leave_cluster(Nodes0, RunningNodes),
-            rabbit_misc:ensure_ok(mnesia:delete_schema([Node]),
-                                  cannot_delete_schema),
-            {ok, Nodes0}
+                leave_cluster(Nodes0, RunningNodes),
+                rabbit_misc:ensure_ok(mnesia:delete_schema([Node]),
+                                      cannot_delete_schema),
+                {ok, Nodes0}
     end,
     case MaybeNodes of
         {ok, Nodes} ->
@@ -859,29 +859,33 @@ reset(Force) ->
     %% remove persisted messages and any other garbage we find
     ok = rabbit_file:recursive_delete(filelib:wildcard(dir() ++ "/*")),
     ok.
-    
+
 leave_cluster([], _) -> ok;
-leave_cluster(Nodes, RunningNodes) ->
-    %% find at least one running cluster node and instruct it to
-    %% remove our schema copy which will in turn result in our node
-    %% being removed as a cluster node from the schema, with that
-    %% change being propagated to all nodes
-    case lists:any(
-           fun (Node) ->
-                   case rpc:call(Node, mnesia, del_table_copy,
-                                 [schema, node()]) of
-                       {atomic, ok} -> true;
-                       {badrpc, nodedown} -> false;
-                       {aborted, {node_not_running, _}} -> false;
-                       {aborted, Reason} ->
-                           throw({error, {failed_to_leave_cluster,
-                                          Nodes, RunningNodes, Reason}})
-                   end
-           end,
-           RunningNodes) of
-        true -> ok;
-        false -> throw({error, {no_running_cluster_nodes,
-                                Nodes, RunningNodes}})
+leave_cluster(Nodes, RunningNodes0) ->
+    case RunningNodes0 -- [node()] of
+        [] -> ok;
+        RunningNodes ->
+            %% find at least one running cluster node and instruct it to remove
+            %% our schema copy which will in turn result in our node being
+            %% removed as a cluster node from the schema, with that change being
+            %% propagated to all nodes
+            case lists:any(
+                   fun (Node) ->
+                           case rpc:call(Node, mnesia, del_table_copy,
+                                         [schema, node()]) of
+                               {atomic, ok} -> true;
+                               {badrpc, nodedown} -> false;
+                               {aborted, {node_not_running, _}} -> false;
+                               {aborted, Reason} ->
+                                   throw({error, {failed_to_leave_cluster,
+                                                  Nodes, RunningNodes, Reason}})
+                           end
+                   end,
+                   RunningNodes) of
+                true -> ok;
+                false -> throw({error, {no_running_cluster_nodes,
+                                        Nodes, RunningNodes}})
+            end
     end.
 
 wait_for(Condition) ->

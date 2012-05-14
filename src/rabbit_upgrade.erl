@@ -122,7 +122,7 @@ remove_backup() ->
 
 maybe_upgrade_mnesia() ->
     {ClusterNodes1, _DiscNode} = rabbit_mnesia:read_cluster_nodes_config(),
-    ClusterNodes2 = case rabbit_mnesia:all_clustered_nodes() of
+    ClusterNodes2 = case rabbit_mnesia:all_clustered_nodes_safe() of
                         {ok, Res}        -> Res;
                         {error, _Reason} -> []
                     end,
