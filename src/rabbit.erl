@@ -308,14 +308,9 @@ boot() ->
                 ok = prepare(),
                 Plugins = rabbit_plugins:bootstrap_envinronment(),
                 ToBeLoaded = Plugins ++ ?APPS,
-
-                io:format("~nActivating RabbitMQ plugins ...~n"),
-
                 ok = app_utils:load_applications(ToBeLoaded),
-                StartupApps = 
-                    app_utils:app_dependency_order(ToBeLoaded, false),
+                StartupApps = app_utils:app_dependency_order(ToBeLoaded, false),
                 ok = app_utils:start_applications(StartupApps),
-                
                 ok = print_plugin_info(Plugins)
              end).
 
