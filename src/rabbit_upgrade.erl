@@ -121,10 +121,12 @@ remove_backup() ->
     info("upgrades: Mnesia backup removed~n", []).
 
 maybe_upgrade_mnesia() ->
-    %% rabbit_mnesia:all_clustered_nodes/0 will return [] at this point
-    %% if we are a RAM node since Mnesia has not started yet.
-    {ClusterNodes, _DiscNode} = rabbit_mnesia:read_cluster_nodes_config(),
-    AllNodes = lists:usort(rabbit_mnesia:all_clustered_nodes() ++ ClusterNodes),
+    {ClusterNodes1, _DiscNode} = rabbit_mnesia:read_cluster_nodes_config(),
+    ClusterNodes2 = case rabbit_mnesia:all_clustered_nodes() of
+                        {ok, Res}        -> Res;
+                        {error, _Reason} -> []
+                    end,
+    AllNodes = lists:usort(ClusterNodes1 ++ ClusterNodes2),
     case rabbit_version:upgrades_required(mnesia) of
         {error, starting_from_scratch} ->
             ok;

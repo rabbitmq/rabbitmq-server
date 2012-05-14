@@ -513,8 +513,7 @@ boot_step_error({error, {timeout_waiting_for_tables, _}}, _Stacktrace) ->
         case rabbit_mnesia:read_previously_running_nodes() of
             [] -> {"Timeout contacting cluster nodes. Since RabbitMQ was"
                    " shut down forcefully~nit cannot determine which nodes"
-                   " are timing out. Details on all nodes will~nfollow.~n",
-                   rabbit_mnesia:all_clustered_nodes() -- [node()]};
+                   " are timing out.~n"};
             Ns -> {rabbit_misc:format(
                      "Timeout contacting cluster nodes: ~p.~n", [Ns]),
                    Ns}
