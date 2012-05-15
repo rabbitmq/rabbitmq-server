@@ -27,3 +27,4 @@
 
 -define(ROUTING_HEADER, <<"x-received-from">>).
 -define(MAX_HOPS_ARG, <<"x-max-hops">>).
+-define(DEFAULT_PREFETCH, 1000).

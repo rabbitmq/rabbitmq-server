@@ -74,7 +74,7 @@ from_props_connection(U, ConnName, C, X) ->
     #upstream{params          = Params,
               original_uri    = URI,
               exchange        = with_name(XNameBin, vhost(Params), X),
-              prefetch_count  = bget(prefetch_count,  U, C, none),
+              prefetch_count  = bget(prefetch_count,  U, C, ?DEFAULT_PREFETCH),
               reconnect_delay = bget(reconnect_delay, U, C, 1),
               max_hops        = bget(max_hops,        U, C, 1),
               expires         = bget(expires,         U, C, none),
