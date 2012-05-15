@@ -21,7 +21,7 @@
 -include_lib("public_key/include/public_key.hrl").
 
 -export([peer_cert_issuer/1, peer_cert_subject/1, peer_cert_validity/1]).
--export([peer_cert_subject_items/2, peer_cert_auth_name/2]).
+-export([peer_cert_subject_items/2, peer_cert_auth_name/1]).
 
 %%--------------------------------------------------------------------------
 
@@ -36,8 +36,8 @@
 -spec(peer_cert_validity/1      :: (certificate()) -> string()).
 -spec(peer_cert_subject_items/2  ::
         (certificate(), tuple()) -> [string()] | 'not_found').
--spec(peer_cert_auth_name/2 ::
-        (certificate(), #ssl_socket{}) -> binary() | 'not_found' | 'unsafe').
+-spec(peer_cert_auth_name/1 ::
+        (rabbit_net:socket()) -> binary() | 'nossl' | 'no_peercert' | 'not_found' | 'unsafe').
 
 -endif.
 
@@ -79,9 +79,18 @@ peer_cert_validity(Cert) ->
               end, Cert).
 
 %% Extract a username from the certificate
-peer_cert_auth_name(Cert, Sock = #ssl_socket{}) ->
-    {ok, Mode} = application:get_env(rabbit, ssl_cert_login_from),
-    peer_cert_auth_name(Mode, Cert, Sock).
+peer_cert_auth_name(Sock = #ssl_socket{}) ->
+    case rabbit_net:peercert(Sock) of
+        {ok, Cert} ->
+            {ok, Mode} = application:get_env(rabbit, ssl_cert_login_from),
+            peer_cert_auth_name(Mode, Cert, Sock);
+        {error, no_peercert} ->
+            no_peercert;
+        nossl ->
+            nossl
+    end;
+peer_cert_auth_name(_Sock) ->
+    nossl.
 
 peer_cert_auth_name(distinguished_name, Cert, Sock) ->
     case auth_config_sane(Sock) of
