@@ -70,18 +70,15 @@ case "$(uname -s)" in
 esac
 
 RABBITMQ_EBIN_ROOT="${RABBITMQ_HOME}/ebin"
-if erl \
-	-pa "$RABBITMQ_EBIN_ROOT" \
-	-noinput \
-	-hidden \
-	-s rabbit_prelaunch \
-	-sname rabbitmqprelaunch$$ \
-	-extra "${RABBITMQ_NODENAME}"
-then
-    RABBITMQ_BOOT_FILE=start_sasl
-    RABBITMQ_EBIN_PATH="-pa ${RABBITMQ_EBIN_ROOT}"
-else
-	exit 1
+if ! `erl \
+        -pa "$RABBITMQ_EBIN_ROOT" \
+	    -noinput \
+	    -hidden \
+	    -s rabbit_prelaunch \
+	    -sname rabbitmqprelaunch$$ \
+	    -extra "${RABBITMQ_NODENAME}"`;
+    then
+        exit 1;
 fi
 
 RABBITMQ_CONFIG_ARG=
@@ -96,10 +93,10 @@ RABBITMQ_LISTEN_ARG=
 set -f
 
 exec erl \
-    ${RABBITMQ_EBIN_PATH} \
+    -pa ${RABBITMQ_EBIN_ROOT} \
     ${RABBITMQ_START_RABBIT} \
     -sname ${RABBITMQ_NODENAME} \
-    -boot ${RABBITMQ_BOOT_FILE} \
+    -boot start_sasl \
     -s rabbit boot \
     ${RABBITMQ_CONFIG_ARG} \
     +W w \
