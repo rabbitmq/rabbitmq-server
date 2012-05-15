@@ -406,13 +406,20 @@ wait_for_application(Node, PidFile, Application, Inform) ->
     wait_for_application(Node, Pid, Application).
 
 wait_for_application(Node, Pid, Application) ->
+    while_process_is_alive(Node, Pid,
+                    fun() -> rabbit_nodes:is_running(Node, Application) end).
+
+wait_for_startup(Node, Pid) ->
+    while_process_is_alive(Node, Pid,
+                    fun() -> rpc:call(Node, rabbit, await_startup, []) end).
+
+while_process_is_alive(Node, Pid, Activity) ->
     case process_up(Pid) of
-        true  -> case rpc:call(Node, rabbit, await_startup, []) of
+        true -> case Activity(Node) of
                      ok          -> ok;
                      Other       -> timer:sleep(?EXTERNAL_CHECK_INTERVAL),
-                                    wait_for_application(Node, Pid,
-                                                         Application)
-                 end;
+                                    while_process_is_alive(Node, Pid, Activity)
+                end;
         false -> {error, process_not_running}
     end.
 
