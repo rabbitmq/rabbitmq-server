@@ -49,7 +49,7 @@ create(none, X = #exchange{name = XName}) ->
             Set = <<"all">>,
             Upstreams = rabbit_federation_upstream:from_set(Set, X),
             ok = rabbit_federation_db:prune_scratch(XName, Upstreams),
-            {ok, _} = rabbit_federation_link_sup_sup:start_child(XName, {Set, X}),
+            {ok, _} = rabbit_federation_link_sup_sup:start_child(X, {Set, X}),
             ok;
         false ->
             ok
@@ -57,11 +57,11 @@ create(none, X = #exchange{name = XName}) ->
 
 delete(transaction, _X, _Bs) ->
     ok;
-delete(none, #exchange{name = XName}, _Bs) ->
+delete(none, X = #exchange{name = XName}, _Bs) ->
     case federate(XName) of
         true ->
             rabbit_federation_link:stop(XName),
-            ok = rabbit_federation_link_sup_sup:stop_child(XName),
+            ok = rabbit_federation_link_sup_sup:stop_child(X),
             rabbit_federation_status:remove_exchange(XName),
             ok;
         false ->
