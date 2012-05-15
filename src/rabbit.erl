@@ -197,7 +197,7 @@
          rabbit_queue_index, gen, dict, ordsets, file_handle_cache,
          rabbit_msg_store, array, rabbit_msg_store_ets_index, rabbit_msg_file,
          rabbit_exchange_type_fanout, rabbit_exchange_type_topic, mnesia,
-         mnesia_lib, rpc, mnesia_tm, qlc, sofs, proplists, credit_flow]).
+         mnesia_lib, rpc, mnesia_tm, qlc, sofs, proplists, credit_flow, pmon]).
 
 %% HiPE compilation uses multiple cores anyway, but some bits are
 %% IO-bound so we can go faster if we parallelise a bit more. In
@@ -347,10 +347,7 @@ status() ->
 is_running() -> is_running(node()).
 
 is_running(Node) ->
-    case rpc:call(Node, application, which_applications, [infinity]) of
-        {badrpc, _} -> false;
-        Apps        -> proplists:is_defined(rabbit, Apps)
-    end.
+    rabbit_nodes:is_running(Node, rabbit).
 
 environment() ->
     lists:keysort(
@@ -624,15 +621,12 @@ log_location(Type) ->
 rotate_logs(File, Suffix, Handler) ->
     rotate_logs(File, Suffix, Handler, Handler).
 
-rotate_logs(File, Suffix, OldHandler, NewHandler) ->
-    case File of
-        undefined -> ok;
-        tty       -> ok;
-        _         -> gen_event:swap_handler(
-                       error_logger,
-                       {OldHandler, swap},
-                       {NewHandler, {File, Suffix}})
-    end.
+rotate_logs(undefined, _Suffix, _OldHandler, _NewHandler) -> ok;
+rotate_logs(tty,       _Suffix, _OldHandler, _NewHandler) -> ok;
+rotate_logs(File,       Suffix,  OldHandler,  NewHandler) ->
+    gen_event:swap_handler(error_logger,
+                           {OldHandler, swap},
+                           {NewHandler, {File, Suffix}}).
 
 log_rotation_result({error, MainLogError}, {error, SaslLogError}) ->
     {error, {{cannot_rotate_main_logs, MainLogError},

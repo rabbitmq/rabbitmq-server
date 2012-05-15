@@ -16,13 +16,12 @@
 
 -module(rabbit_variable_queue).
 
--export([init/3, terminate/2, delete_and_terminate/2,
-         purge/1, publish/4, publish_delivered/5, drain_confirmed/1,
+-export([init/3, terminate/2, delete_and_terminate/2, purge/1,
+         publish/4, publish_delivered/5, drain_confirmed/1,
          dropwhile/3, fetch/2, ack/2, requeue/2, len/1, is_empty/1,
-         set_ram_duration_target/2, ram_duration/1,
-         needs_timeout/1, timeout/1, handle_pre_hibernate/1,
-         status/1, invoke/3, is_duplicate/2, discard/3,
-         multiple_routing_keys/0, fold/3]).
+         set_ram_duration_target/2, ram_duration/1, needs_timeout/1,
+         timeout/1, handle_pre_hibernate/1, status/1, invoke/3,
+         is_duplicate/2, discard/3, multiple_routing_keys/0, fold/3]).
 
 -export([start/1, stop/0]).
 
@@ -324,7 +323,6 @@
 
 -type(timestamp() :: {non_neg_integer(), non_neg_integer(), non_neg_integer()}).
 -type(seq_id()  :: non_neg_integer()).
--type(ack()     :: seq_id()).
 
 -type(rates() :: #rates { egress      :: {timestamp(), non_neg_integer()},
                           ingress     :: {timestamp(), non_neg_integer()},
@@ -336,6 +334,13 @@
                           count        :: non_neg_integer(),
                           end_seq_id   :: non_neg_integer() }).
 
+%% The compiler (rightfully) complains that ack() and state() are
+%% unused. For this reason we duplicate a -spec from
+%% rabbit_backing_queue with the only intent being to remove
+%% warnings. The problem here is that we can't parameterise the BQ
+%% behaviour by these two types as we would like to. We still leave
+%% these here for documentation purposes.
+-type(ack() :: seq_id()).
 -type(state() :: #vqstate {
              q1                    :: ?QUEUE:?QUEUE(),
              q2                    :: ?QUEUE:?QUEUE(),
@@ -369,6 +374,8 @@
              ack_out_counter       :: non_neg_integer(),
              ack_in_counter        :: non_neg_integer(),
              ack_rates             :: rates() }).
+%% Duplicated from rabbit_backing_queue
+-spec(ack/2 :: ([ack()], state()) -> {[rabbit_guid:guid()], state()}).
 
 -spec(multiple_routing_keys/0 :: () -> 'ok').
 
@@ -579,23 +586,27 @@ drain_confirmed(State = #vqstate { confirmed = C }) ->
                                         confirmed = gb_sets:new() }}
     end.
 
-dropwhile(Pred, MsgFun, State) ->
+dropwhile(Pred, AckRequired, State) -> dropwhile(Pred, AckRequired, State, []).
+
+dropwhile(Pred, AckRequired, State, Msgs) ->
+    End = fun(S) when AckRequired -> {lists:reverse(Msgs), S};
+             (S)                  -> {undefined, S}
+          end,
     case queue_out(State) of
         {empty, State1} ->
-            a(State1);
+            End(a(State1));
         {{value, MsgStatus = #msg_status { msg_props = MsgProps }}, State1} ->
-            case {Pred(MsgProps), MsgFun} of
-                {true, undefined} ->
-                    {_, State2} = internal_fetch(false, MsgStatus, State1),
-                    dropwhile(Pred, MsgFun, State2);
-                {true, _} ->
+            case {Pred(MsgProps), AckRequired} of
+                {true, true} ->
                     {MsgStatus1, State2} = read_msg(MsgStatus, State1),
                     {{Msg, _, AckTag, _}, State3} =
                          internal_fetch(true, MsgStatus1, State2),
-                    MsgFun(Msg, AckTag),
-                    dropwhile(Pred, MsgFun, State3);
+                    dropwhile(Pred, AckRequired, State3, [{Msg, AckTag} | Msgs]);
+                {true, false} ->
+                    {_, State2} = internal_fetch(false, MsgStatus, State1),
+                    dropwhile(Pred, AckRequired, State2, undefined);
                 {false, _} ->
-                    a(in_r(MsgStatus, State1))
+                    End(a(in_r(MsgStatus, State1)))
             end
     end.
 

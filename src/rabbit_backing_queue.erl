@@ -26,15 +26,14 @@
         ('empty' |
          %% Message,                  IsDelivered, AckTag, Remaining_Len
          {rabbit_types:basic_message(), boolean(), Ack, non_neg_integer()})).
--type(is_durable() :: boolean()).
 -type(attempt_recovery() :: boolean()).
 -type(purged_msg_count() :: non_neg_integer()).
--type(confirm_required() :: boolean()).
 -type(async_callback() :: fun ((atom(), fun ((atom(), state()) -> state())) -> 'ok')).
 -type(duration() :: ('undefined' | 'infinity' | number())).
 
 -type(msg_fun() :: fun((rabbit_types:basic_message(), ack()) -> 'ok') |
                    'undefined').
+-type(msg_pred() :: fun ((rabbit_types:message_properties()) -> boolean())).
 
 %% Called on startup with a list of durable queue names. The queues
 %% aren't being started at this point, but this call allows the
@@ -117,12 +116,14 @@
 %% be ignored.
 -callback drain_confirmed(state()) -> {[rabbit_guid:guid()], state()}.
 
-%% Drop messages from the head of the queue while the supplied
-%% predicate returns true. A callback function is supplied allowing
-%% callers access to messages that are about to be dropped.
--callback dropwhile(fun ((rabbit_types:message_properties()) -> boolean()), msg_fun(),
-                        state())
-        -> state().
+%% Drop messages from the head of the queue while the supplied predicate returns
+%% true. Also accepts a boolean parameter that determines whether the messages
+%% necessitate an ack or not. If they do, the function returns a list of
+%% messages with the respective acktags.
+-callback dropwhile(msg_pred(), true, state())
+                   -> {[{rabbit_types:basic_message(), ack()}], state()};
+                   (msg_pred(), false, state())
+                   -> {undefined, state()}.
 
 %% Produce the next message.
 -callback fetch(true,  state()) -> {fetch_result(ack()), state()};
