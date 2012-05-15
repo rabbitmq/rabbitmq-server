@@ -18,19 +18,18 @@
 -module(rabbit_mnesia).
 
 -export([ensure_mnesia_dir/0, dir/0, status/0, init/0, is_db_empty/0,
-         join_cluster/1, reset/0, force_reset/0, init_db/3, is_clustered/0,
-         running_clustered_nodes/0, running_clustered_nodes_safe/0,
-         all_clustered_nodes/0, all_clustered_nodes_safe/0,
-         empty_ram_only_tables/0, copy_db/1, wait_for_tables/1,
-         create_cluster_nodes_config/1, read_cluster_nodes_config/0,
-         record_running_nodes/0, read_previously_running_nodes/0,
-         running_nodes_filename/0, is_disc_node/0, on_node_down/1, on_node_up/1,
-         should_be_disc_node_legacy/1]).
+         join_cluster/2, check_cluster_consistency/0, reset/0, force_reset/0,
+         init_db/4, is_clustered/0, running_clustered_nodes/0,
+         all_clustered_nodes/0, empty_ram_only_tables/0, copy_db/1,
+         wait_for_tables/1, initialize_cluster_nodes_status/0,
+         write_cluster_nodes_status/1, read_cluster_nodes_status/0,
+         update_cluster_nodes_status/0, is_disc_node/0, on_node_down/1,
+         on_node_up/1, should_be_disc_node/1]).
 
 -export([table_names/0]).
 
 %% Used internally in rpc calls, see `discover_nodes/1'
--export([all_clustered_and_disc_nodes/0]).
+-export([cluster_status_if_running/0]).
 
 %% create_tables/0 exported for helping embed RabbitMQ in or alongside
 %% other mnesia-using Erlang applications, such as ejabberd
@@ -42,39 +41,35 @@
 
 -ifdef(use_specs).
 
--export_type([node_type/0, node_config/0]).
+-export_type([node_type/0, node_status/0]).
 
 -type(node_type() :: disc_only | disc | ram | unknown).
--type(node_config() :: {[node()], boolean()}).
+-type(node_status() :: {[node()], [node()], [node()]}).
 -spec(status/0 :: () -> [{'nodes', [{node_type(), [node()]}]} |
                          {'running_nodes', [node()]}]).
 -spec(dir/0 :: () -> file:filename()).
 -spec(ensure_mnesia_dir/0 :: () -> 'ok').
 -spec(init/0 :: () -> 'ok').
--spec(init_db/3 :: (node_config(), boolean(), boolean()) -> 'ok').
+-spec(init_db/4 :: ([node()], boolean(), boolean(), boolean()) -> 'ok').
 -spec(is_db_empty/0 :: () -> boolean()).
--spec(join_cluster/1 :: ({[node()], boolean()}) -> 'ok').
+-spec(join_cluster/2 :: ([node()], boolean()) -> 'ok').
 -spec(reset/0 :: () -> 'ok').
 -spec(force_reset/0 :: () -> 'ok').
 -spec(is_clustered/0 :: () -> boolean()).
 -spec(running_clustered_nodes/0 :: () -> [node()]).
 -spec(all_clustered_nodes/0 :: () -> [node()]).
--spec(running_clustered_nodes_safe/0 :: () -> {'ok', [node()]} |
-                                              {'error', any()}).
--spec(all_clustered_nodes_safe/0 :: () -> {'ok', [node()]} | {'error', any()}).
 -spec(empty_ram_only_tables/0 :: () -> 'ok').
 -spec(create_tables/0 :: () -> 'ok').
 -spec(copy_db/1 :: (file:filename()) ->  rabbit_types:ok_or_error(any())).
 -spec(wait_for_tables/1 :: ([atom()]) -> 'ok').
--spec(create_cluster_nodes_config/1 :: (node_config()) ->  'ok').
--spec(read_cluster_nodes_config/0 :: () ->  node_config()).
--spec(record_running_nodes/0 :: () ->  'ok').
--spec(read_previously_running_nodes/0 :: () ->  [node()]).
--spec(running_nodes_filename/0 :: () -> file:filename()).
+-spec(write_cluster_nodes_status/1 :: (node_status()) ->  'ok').
+-spec(read_cluster_nodes_status/0 :: () ->  node_status()).
+-spec(initialize_cluster_nodes_status/0 :: () -> 'ok').
+-spec(update_cluster_nodes_status/0 :: () -> 'ok').
 -spec(is_disc_node/0 :: () -> boolean()).
 -spec(on_node_up/1 :: (node()) -> 'ok').
 -spec(on_node_down/1 :: (node()) -> 'ok').
--spec(should_be_disc_node_legacy/1 :: ([node()]) -> boolean()).
+-spec(should_be_disc_node/1 :: ([node()]) -> boolean()).
 
 -spec(table_names/0 :: () -> [atom()]).
 
@@ -83,10 +78,6 @@
 %%----------------------------------------------------------------------------
 
 status() ->
-    RamNode = {error,
-               {stopped_ram_node,
-                "This is ram node which is not running, and thus "
-                "information about the cluster can't be retrieved."}},
     [{nodes, case mnesia:system_info(is_running) of
                  yes -> [{Key, Nodes} ||
                             {Key, CopyType} <- [{disc_only, disc_only_copies},
@@ -96,39 +87,42 @@ status() ->
                                 Nodes = nodes_of_type(CopyType),
                                 Nodes =/= []
                             end];
-                 no -> case all_clustered_nodes_safe() of
-                           {ok, Nodes}      -> [{unknown, Nodes}];
-                           {error, _Reason} -> exit(RamNode)
-                       end;
+                 no -> [{unknown, all_clustered_nodes()}];
                  Reason when Reason =:= starting; Reason =:= stopping ->
                      exit({rabbit_busy, try_again_later})
              end},
-     %% If we reached this point running_clustered_nodes() is safe
      {running_nodes, running_clustered_nodes()}].
 
 init() ->
     ensure_mnesia_running(),
     ensure_mnesia_dir(),
-    Config = {_, DiscNode} = read_cluster_nodes_config(),
-    ok = init_db(Config, DiscNode),
+    {DiscNodes, WantDiscNode} = read_cluster_nodes_config(),
+    ok = init_db(DiscNodes, WantDiscNode, WantDiscNode),
     %% We intuitively expect the global name server to be synced when
     %% Mnesia is up. In fact that's not guaranteed to be the case - let's
     %% make it so.
     ok = global:sync(),
-    ok = delete_previously_running_nodes(),
     ok.
 
 is_db_empty() ->
     lists:all(fun (Tab) -> mnesia:dirty_first(Tab) == '$end_of_table' end,
               table_names()).
 
-%% Alter which disk nodes this node is clustered with. This can be a
-%% subset of all the disk nodes in the cluster but can (and should)
-%% include the node itself if it is to be a disk rather than a ram
-%% node.  If Force is false, only connections to online nodes are
-%% allowed.
-join_cluster({DiscoveryNodes, DiscNode}) ->
-    case is_disc_and_clustered() andalso is_only_disc_node(node(), false) of
+%% Make the node join a cluster. The node will be reset automatically before we
+%% actually cluster it. The nodes provided will be used to find out about the
+%% nodes in the cluster.
+%% This function will fail if:
+%% 
+%%   * The node is currently the only disc node of its cluster
+%%   * We can't connect to any of the nodes provided
+%%   * The node is currently already clustered with the cluster of the nodes
+%%     provided
+%% 
+%% Note that we make no attempt to verify that the nodes provided are all in the
+%% same cluster, we simply pick the first online node and we cluster to its
+%% cluster.
+join_cluster(DiscoveryNodes, WantDiscNode) ->
+    case is_disc_and_clustered() andalso is_only_disc_node(node()) of
         true -> throw({error,
                        {standalone_ram_node,
                         "You can't cluster a node if it's the only "
@@ -140,10 +134,11 @@ join_cluster({DiscoveryNodes, DiscNode}) ->
     ensure_mnesia_dir(),
 
     ProperDiscoveryNodes = DiscoveryNodes -- [node()],
-    {ClusterNodes, DiscNodes} = case discover_cluster(ProperDiscoveryNodes) of
-                                    {ok, Res}       -> Res;
-                                    {error, Reason} -> throw({error, Reason})
-                                end,
+    {ClusterNodes, DiscNodes, _} =
+        case discover_cluster(ProperDiscoveryNodes) of
+            {ok, Res}       -> Res;
+            {error, Reason} -> throw({error, Reason})
+        end,
     
     case lists:member(node(), ClusterNodes) of
         true  -> throw({error, {already_clustered,
@@ -160,13 +155,10 @@ join_cluster({DiscoveryNodes, DiscNode}) ->
 
     rabbit_misc:local_info_msg("Clustering with ~p~s~n", [ClusterNodes]),
 
-    Config = {DiscNodes, DiscNode},
-
     %% Join the cluster
     start_mnesia(),
     try
-        ok = init_db(Config, false),
-        ok = create_cluster_nodes_config(Config)
+        ok = init_db(DiscNodes, WantDiscNode, false)
     after
         stop_mnesia()
     end,
@@ -179,14 +171,10 @@ join_cluster({DiscoveryNodes, DiscNode}) ->
 reset()       -> reset(false).
 force_reset() -> reset(true).
 
-%% This function will fail if mnesia is not running and the node is a ram node.
 is_clustered() ->
     RunningNodes = running_clustered_nodes(),
     [node()] /= RunningNodes andalso [] /= RunningNodes.
 
-%% This function exists since we often want to check if the node is clustered
-%% only if the node is a disc node as well, and so we can call `is_clustered/0'
-%% safely.
 is_disc_and_clustered() ->
     is_disc_node() andalso is_clustered().
 
@@ -196,67 +184,84 @@ is_disc_and_clustered() ->
 %%   * If we want to get all the nodes or the running nodes, we can do that
 %%     while mnesia is offline *if* the node is a disc node. If the node is ram,
 %%     the result will always be [node()].
-%%     `all_clustered_nodes/0' and `running_clustered_nodes/0' will fail if
-%%     these conditions are not met. `all_clustered_nodes_safe/0' and
-%%     `running_clustered_nodes_safe/0' won't, but can return an error.
-%% 
 %%   * If we want to get the cluster disc nodes (running or not), we need to
-%%     start mnesia in any case. All the functions related to disc nodes are
-%%     "safe", in the sense that they should never crash and return either the
-%%     nodes or an error (much like the _safe function for all the nodes).
+%%     start mnesia in any case.
+%% 
+%% In the following functions we try to get the data from mnesia when we can,
+%% otherwise we fall back to the cluster status file.
 
 check_mnesia_running(Fun) ->
     case mnesia:system_info(is_running) of
         yes -> {ok, Fun()};
-        no  -> {error, {mnesia_not_running, node()}}
+        no  -> error
     end.
 
 check_disc_or_mnesia_running(Fun) ->
     case is_disc_node() of
-        true ->
-            {ok, Fun()};
-        false ->
-            case check_mnesia_running(Fun) of
-                {ok, Res}        -> {ok, Res};
-                {error, _Reason} -> {error,
-                                     {mnesia_not_running,
-                                      "Mnesia is not running and this node is "
-                                      "a ram node", node()}}
-            end
+        true  -> {ok, Fun()};
+        false -> case check_mnesia_running(Fun) of
+                     {ok, Res} -> {ok, Res};
+                     error     -> error
+                 end
     end.
 
-all_clustered_nodes_safe() ->
-    check_disc_or_mnesia_running(fun () -> mnesia:system_info(db_nodes) end).
+check_or_cluster_status(Fun, Check) ->
+    case Check(Fun) of
+        {ok, Res} -> {ok, Res};
+        error     -> {status, read_cluster_nodes_status()}
+    end.
 
 all_clustered_nodes() ->
-    {ok, Nodes} = all_clustered_nodes_safe(),
-    Nodes.
+    case check_or_cluster_status(
+           fun () -> mnesia:system_info(db_nodes) end,
+           fun check_disc_or_mnesia_running/1)
+    of
+        {ok, Nodes}             -> Nodes;
+        {status, {Nodes, _, _}} -> Nodes
+    end.
 
 all_clustered_disc_nodes() ->
-    check_mnesia_running(fun () -> nodes_of_type(disc_copies) end).
-
-running_clustered_nodes_safe() ->    
-    check_disc_or_mnesia_running(
-      fun () -> mnesia:system_info(running_db_nodes) end).
+    case check_or_cluster_status(
+           fun () -> nodes_of_type(disc_copies) end,
+           fun check_mnesia_running/1)
+    of
+        {ok, Nodes}             -> Nodes;
+        {status, {_, Nodes, _}} -> Nodes
+    end.
 
 running_clustered_nodes() ->
-    {ok, Nodes} = running_clustered_nodes_safe(),
-    Nodes.
+    case check_or_cluster_status(
+           fun () -> mnesia:system_info(running_db_nodes) end,
+           fun check_disc_or_mnesia_running/1)
+    of
+        {ok, Nodes}             -> Nodes;
+        {status, {_, _, Nodes}} -> Nodes
+    end.
 
 running_clustered_disc_nodes() ->
-    check_mnesia_running(
-      fun () ->
-              Running    = running_clustered_nodes(),
-              {ok, Disc} = all_clustered_disc_nodes(),
-              sets:to_list(sets:intersection(sets:from_list(Running),
-                                             sets:from_list(Disc)))
-      end).
+    {DiscNodes, RunningNodes} =
+        case check_or_cluster_status(
+               fun () ->
+                       {all_clustered_disc_nodes(), running_clustered_nodes()}
+               end,
+               fun check_mnesia_running/1)
+        of
+            {ok, Nodes} ->
+                Nodes;
+            {status, {_, DiscNodes0, RunningNodes0}} ->
+                {DiscNodes0, RunningNodes0}
+        end,
+    sets:to_list(sets:intersection(sets:from_list(DiscNodes),
+                                   sets:from_list(RunningNodes))).
 
-all_clustered_and_disc_nodes() ->
+%% This function is a bit different, we want it to return correctly only when
+%% the node is actually online. This is because when we discover the nodes we
+%% want online, "working" nodes only.
+cluster_status_if_running() ->
     check_mnesia_running(
       fun () ->
-              {ok, DiscNodes} = all_clustered_disc_nodes(),
-              {all_clustered_nodes(), DiscNodes}
+              {mnesia:system_info(db_nodes), nodes_of_type(disc_copies),
+               mnesia:system_info(running_db_nodes)}
       end).
 
 empty_ram_only_tables() ->
@@ -274,11 +279,37 @@ discover_cluster([])  ->
     {error, {cannot_discover_cluster,
              "The cluster nodes provided are either offline or not running."}};
 discover_cluster([Node | Nodes]) ->
-    case rpc:call(Node, rabbit_mnesia, all_clustered_and_disc_nodes, []) of
+    case rpc:call(Node, rabbit_mnesia, cluster_status_if_running, []) of
         {badrpc, _Reason} -> discover_cluster(Nodes);
-        {error, _Reason}  -> discover_cluster(Nodes);
+        error             -> discover_cluster(Nodes);
         {ok, Res}         -> {ok, Res}
     end.
+
+%% This does not guarantee us much, but it avoids some situations that will
+%% definitely end in disaster (a node starting and trying to merge its schema
+%% to another node which is not clustered with it).
+check_cluster_consistency() ->
+    ThisNode = node(),
+    lists:foreach(
+      fun(Node) ->
+              case rpc:call(Node, rabbit_mnesia, cluster_status_if_running, [])
+              of
+                  {badrpc, _Reason} -> ok;
+                  error -> ok;
+                  {ok, {AllNodes, _, _}}  ->
+                      case lists:member(ThisNode, AllNodes) of
+                          true ->
+                              ok;
+                          false ->
+                              throw({error,
+                                     {inconsistent_cluster,
+                                      rabbit_misc:format(
+                                        "Node ~p thinks it's clustered with "
+                                        "node ~p, but ~p disagrees",
+                                        [ThisNode, Node, Node])}})
+                      end
+              end
+      end, rabbit_mnesia:all_clustered_nodes()).
 
 %%--------------------------------------------------------------------
 
@@ -504,90 +535,86 @@ check_tables(Fun) ->
         Errors -> {error, Errors}
     end.
 
-%% The cluster node config file contains some or all of the disk nodes
-%% that are members of the cluster this node is / should be a part of.
+%% The cluster node status file contains all we need to know about the cluster:
+%% 
+%%   * All the clustered nodes
+%%   * The disc nodes
+%%   * The running nodes.
 %%
-%% If the file is absent, the list is empty, or only contains the
-%% current node, then the current node is a standalone (disk)
-%% node. Otherwise it is a node that is part of a cluster as either a
-%% disk node, if it appears in the cluster node config, or ram node if
-%% it doesn't.
+%% If the current node is a disc node it will be included in the disc nodes
+%% list.
+%% 
+%% We strive to keep the file up to date and we rely on this assumption in
+%% various situations. Obviously when mnesia is offline the information we have
+%% will be outdated, but it can't be otherwise.
 
-cluster_nodes_config_filename() ->
+cluster_nodes_status_filename() ->
     dir() ++ "/cluster_nodes.config".
 
-create_cluster_nodes_config(Config) ->
-    FileName = cluster_nodes_config_filename(),
-    case rabbit_file:write_term_file(FileName, [Config]) of
+%% Creates a status file with the default data (one disc node), only if an
+%% existing cluster does not exist.
+initialize_cluster_nodes_status() ->
+    try read_cluster_nodes_status() of
+        _ -> ok
+    catch
+        throw:{error, {cannot_read_cluster_nodes_status, _, enoent}} ->
+            write_cluster_nodes_status({[node()], [node()], [node()]})
+    end.
+
+write_cluster_nodes_status(Status) ->
+    FileName = cluster_nodes_status_filename(),
+    case rabbit_file:write_term_file(FileName, [Status]) of
         ok -> ok;
         {error, Reason} ->
-            throw({error, {cannot_create_cluster_nodes_config,
+            throw({error, {cannot_write_cluster_nodes_status,
                            FileName, Reason}})
     end.
 
+read_cluster_nodes_status() ->
+    FileName = cluster_nodes_status_filename(),
+    case rabbit_file:read_term_file(FileName) of
+        {ok, [{_, _, _} = Status]} -> Status;
+        {error, Reason} ->
+            throw({error, {cannot_read_cluster_nodes_status, FileName, Reason}})
+    end.
+
+reset_cluster_nodes_status() ->
+    FileName = cluster_nodes_status_filename(),
+    case file:delete(FileName) of
+        ok -> ok;
+        {error, enoent} -> ok;
+        {error, Reason} ->
+            throw({error, {cannot_delete_cluster_nodes_status,
+                           FileName, Reason}})
+    end,
+    write_cluster_nodes_status({[node()], [node()], [node()]}).
+
+%% To update the cluster status when mnesia is running.
+update_cluster_nodes_status() ->
+    {ok, Status} = cluster_status_if_running(),
+    write_cluster_nodes_status(Status).
+
+%% The cluster config contains the nodes that the node should try to contact to
+%% form a cluster, and whether the node should be a disc node. When starting the
+%% database, if the nodes in the cluster status are the initial ones, we try to
+%% read the cluster config.
 read_cluster_nodes_config() ->
-    Convert = fun (Config = {_, _}) -> Config;
-                  (ClusterNodes) ->
-                      log_both("reading legacy node config"),
-                      {ClusterNodes, should_be_disc_node_legacy(ClusterNodes)}
-              end,
-    FileName = cluster_nodes_config_filename(),
-    case rabbit_file:read_term_file(FileName) of
-        {ok, [Config]} -> Convert(Config);
-        {error, enoent} ->
-            {ok, Config} = application:get_env(rabbit, cluster_nodes),
-            Convert(Config);
-        {error, Reason} ->
-            throw({error, {cannot_read_cluster_nodes_config,
-                           FileName, Reason}})
+    {AllNodes, DiscNodes, _} = read_cluster_nodes_status(),
+    Node = node(),
+    case AllNodes of
+        [Node] -> {ok, Config} = application:get_env(rabbit, cluster_nodes),
+                  Config;
+        _      -> {AllNodes, should_be_disc_node(DiscNodes)}
     end.
 
-delete_cluster_nodes_config() ->
-    FileName = cluster_nodes_config_filename(),
-    case file:delete(FileName) of
-        ok -> ok;
-        {error, enoent} -> ok;
-        {error, Reason} ->
-            throw({error, {cannot_delete_cluster_nodes_config,
-                           FileName, Reason}})
-    end.
-
-running_nodes_filename() ->
-    filename:join(dir(), "nodes_running_at_shutdown").
-
-record_running_nodes() ->
-    FileName = running_nodes_filename(),
-    Nodes = running_clustered_nodes() -- [node()],
-    %% Don't check the result: we're shutting down anyway and this is
-    %% a best-effort-basis.
-    rabbit_file:write_term_file(FileName, [Nodes]),
-    ok.
-
-read_previously_running_nodes() ->
-    FileName = running_nodes_filename(),
-    case rabbit_file:read_term_file(FileName) of
-        {ok, [Nodes]}   -> Nodes;
-        {error, enoent} -> [];
-        {error, Reason} -> throw({error, {cannot_read_previous_nodes_file,
-                                          FileName, Reason}})
-    end.
-
-delete_previously_running_nodes() ->
-    FileName = running_nodes_filename(),
-    case file:delete(FileName) of
-        ok              -> ok;
-        {error, enoent} -> ok;
-        {error, Reason} -> throw({error, {cannot_delete_previous_nodes_file,
-                                          FileName, Reason}})
-    end.
-
-init_db(ClusterNodes, Force) -> init_db(ClusterNodes, Force, true).
+init_db(ClusterNodes, WantDiscNode, Force) ->
+    init_db(ClusterNodes, WantDiscNode, Force, true).
 
 %% Take a cluster node config and create the right kind of node - a
 %% standalone disk node, or disk or ram node connected to the
 %% specified cluster nodes.  If Force is false, don't allow
 %% connections to offline nodes.
-init_db({ClusterNodes, WantDiscNode}, Force, Upgrade) ->
+init_db(ClusterNodes, WantDiscNode, Force, Upgrade) ->
     UClusterNodes = lists:usort(ClusterNodes),
     ProperClusterNodes = UClusterNodes -- [node()],
     case mnesia:change_config(extra_db_nodes, ProperClusterNodes) of
@@ -615,14 +642,16 @@ init_db({ClusterNodes, WantDiscNode}, Force, Upgrade) ->
                     %% Subsequent node in cluster, catch up
                     ensure_version_ok(
                       rpc:call(AnotherNode, rabbit_version, recorded, [])),
-                    {CopyType, CopyTypeAlt} =
-                        case WantDiscNode of
-                            true  -> {disc, disc_copies};
-                            false -> {ram, ram_copies}
-                        end,
+                    {CopyType, CopyTypeAlt} = case WantDiscNode of
+                                                  true  -> {disc, disc_copies};
+                                                  false -> {ram, ram_copies}
+                                              end,
                     ok = wait_for_replicated_tables(),
                     ok = create_local_table_copy(schema, CopyTypeAlt),
                     ok = create_local_table_copies(CopyType),
+
+                    %% Write the status now that mnesia is running and clustered
+                    update_cluster_nodes_status(),
 
                     ok = case Upgrade of
                              true ->
@@ -698,11 +727,8 @@ create_schema(Type) ->
 
 is_disc_node() -> mnesia:system_info(use_dir).
 
-%% We're not using this anymore - the config stores whether the node is disc or
-%% not - but we still need it when reading old-style configs and in
-%% `rabbit_control'.
-should_be_disc_node_legacy(ClusterNodes) ->
-    ClusterNodes == [] orelse lists:member(node(), ClusterNodes).
+should_be_disc_node(DiscNodes) ->
+    DiscNodes == [] orelse lists:member(node(), DiscNodes).
 
 move_db() ->
     stop_mnesia(),
@@ -813,7 +839,7 @@ reset(Force) ->
                                 end]),
     ensure_mnesia_not_running(),
     case not Force andalso is_disc_and_clustered() andalso
-         is_only_disc_node(node(), false)
+         is_only_disc_node(node())
     of
         true  -> throw({error, {standalone_ram_node,
                                 "You can't reset a node if it's the only disc "
@@ -822,40 +848,34 @@ reset(Force) ->
         false -> ok
     end,
     Node = node(),
-    MaybeNodes =
-        case Force of
-            true ->
-                all_clustered_nodes_safe();
-            false ->
-                ensure_mnesia_dir(),
-                start_mnesia(),
-                Nodes0 = all_clustered_nodes(),
-                RunningNodes =
-                    try
-                        %% Force=true here so that reset still works when
-                        %% clustered with a node which is down
-                        ok = init_db(read_cluster_nodes_config(), true),
-                        running_clustered_nodes()
-                    after
-                        stop_mnesia()
-                    end,
-                leave_cluster(Nodes0, RunningNodes),
-                rabbit_misc:ensure_ok(mnesia:delete_schema([Node]),
-                                      cannot_delete_schema),
-                {ok, Nodes0}
+    Nodes = all_clustered_nodes(),
+    case Force of
+        true ->
+            ok;
+        false ->
+            ensure_mnesia_dir(),
+            start_mnesia(),
+            %% Reconnecting so that we will get an up to date RunningNodes
+            RunningNodes =
+                try
+                    %% Force=true here so that reset still works when clustered
+                    %% with a node which is down
+                    {_, DiscNodes, _} = read_cluster_nodes_status(),
+                    ok = init_db(DiscNodes, should_be_disc_node(DiscNodes),
+                                 true),
+                    running_clustered_nodes()
+                after
+                    stop_mnesia()
+                end,
+            leave_cluster(Nodes, RunningNodes),
+            rabbit_misc:ensure_ok(mnesia:delete_schema([Node]),
+                                  cannot_delete_schema)
     end,
-    case MaybeNodes of
-        {ok, Nodes} ->
-            %% We need to make sure that we don't end up in a distributed Erlang
-            %% system with nodes while not being in an Mnesia cluster with
-            %% them. We don't handle that well.
-            [erlang:disconnect_node(N) || N <- Nodes],
-            ok = delete_cluster_nodes_config();
-        {error, _Reason} ->
-            log_both("Since this ram node is being force reseted, "
-                     "the node hasn't been disconnected from the "
-                     "cluster correctly, bad things might happen.")
-    end,
+    %% We need to make sure that we don't end up in a distributed Erlang system
+    %% with nodes while not being in an Mnesia cluster with them. We don't
+    %% handle that well.
+    [erlang:disconnect_node(N) || N <- Nodes],
+    ok = reset_cluster_nodes_status(),
     %% remove persisted messages and any other garbage we find
     ok = rabbit_file:recursive_delete(filelib:wildcard(dir() ++ "/*")),
     ok.
@@ -893,30 +913,21 @@ wait_for(Condition) ->
     timer:sleep(1000).
 
 on_node_up(Node) ->
-    case is_only_disc_node(Node, true) of
+    update_cluster_nodes_status(),
+    case is_only_disc_node(Node) of
         true  -> rabbit_log:info("cluster contains disc nodes again~n");
         false -> ok
     end.
 
 on_node_down(Node) ->
-    case is_only_disc_node(Node, true) of
+    case is_only_disc_node(Node) of
         true  -> rabbit_log:info("only running disc node went down~n");
         false -> ok
     end.
 
-is_only_disc_node(Node, _MnesiaRunning = true) ->
-    {ok, Nodes} = running_clustered_disc_nodes(),
-    [Node] =:= Nodes;
-is_only_disc_node(Node, false) ->
-    start_mnesia(),
-    Res = is_only_disc_node(Node, true),
-    stop_mnesia(),
-    Res.
-
-log_both(Warning) ->
-    io:format("Warning: ~s~n", [Warning]),
-    rabbit_misc:with_local_io(
-      fun () -> error_logger:warning_msg("~s~n", [Warning]) end).
+is_only_disc_node(Node) ->
+    Nodes = running_clustered_disc_nodes(),
+    [Node] =:= Nodes.
 
 start_mnesia() ->
     rabbit_misc:ensure_ok(mnesia:start(), cannot_start_mnesia),

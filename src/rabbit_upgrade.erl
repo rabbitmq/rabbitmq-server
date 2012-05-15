@@ -121,12 +121,7 @@ remove_backup() ->
     info("upgrades: Mnesia backup removed~n", []).
 
 maybe_upgrade_mnesia() ->
-    {ClusterNodes1, _DiscNode} = rabbit_mnesia:read_cluster_nodes_config(),
-    ClusterNodes2 = case rabbit_mnesia:all_clustered_nodes_safe() of
-                        {ok, Res}        -> Res;
-                        {error, _Reason} -> []
-                    end,
-    AllNodes = lists:usort(ClusterNodes1 ++ ClusterNodes2),
+    AllNodes = rabbit_mnesia:all_clustered_nodes(),
     case rabbit_version:upgrades_required(mnesia) of
         {error, starting_from_scratch} ->
             ok;
@@ -152,19 +147,16 @@ maybe_upgrade_mnesia() ->
 upgrade_mode(AllNodes) ->
     case nodes_running(AllNodes) of
         [] ->
-            AfterUs = rabbit_mnesia:read_previously_running_nodes(),
-            case {is_disc_node_legacy(), AfterUs} of
+            case {is_disc_node_legacy(), AllNodes} of
                 {true, []}  ->
                     primary;
                 {true, _}  ->
-                    Filename = rabbit_mnesia:running_nodes_filename(),
+                    %% TODO: Here I'm assuming that the various cluster status
+                    %% files are consistent with each other, I think I can
+                    %% provide a solution if they're not...
                     die("Cluster upgrade needed but other disc nodes shut "
                         "down after this one.~nPlease first start the last "
-                        "disc node to shut down.~n~nNote: if several disc "
-                        "nodes were shut down simultaneously they may "
-                        "all~nshow this message. In which case, remove "
-                        "the lock file on one of them and~nstart that node. "
-                        "The lock file on this node is:~n~n ~s ", [Filename]);
+                        "disc node to shut down.~n", []);
                 {false, _} ->
                     die("Cluster upgrade needed but this is a ram node.~n"
                         "Please first start the last disc node to shut down.",
@@ -224,15 +216,8 @@ secondary_upgrade(AllNodes) ->
     IsDiscNode = is_disc_node_legacy(),
     rabbit_misc:ensure_ok(mnesia:delete_schema([node()]),
                           cannot_delete_schema),
-    %% Note that we cluster with all nodes, rather than all disc nodes
-    %% (as we can't know all disc nodes at this point). This is safe as
-    %% we're not writing the cluster config, just setting up Mnesia.
-    ClusterNodes = case IsDiscNode of
-                       true  -> AllNodes;
-                       false -> AllNodes -- [node()]
-                   end,
     rabbit_misc:ensure_ok(mnesia:start(), cannot_start_mnesia),
-    ok = rabbit_mnesia:init_db(ClusterNodes, true, false),
+    ok = rabbit_mnesia:init_db(AllNodes, IsDiscNode, true, false),
     ok = rabbit_version:record_desired_for_scope(mnesia),
     ok.
 

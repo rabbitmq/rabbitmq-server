@@ -185,16 +185,15 @@ action(force_reset, Node, [], _Opts, Inform) ->
 action(cluster, Node, ClusterNodeSs, _Opts, Inform) ->
     io:format("'cluster' is deprecated, please us 'join_cluster'.~n"),
     ClusterNodes = lists:map(fun list_to_atom/1, ClusterNodeSs),
-    DiscNode = rabbit_mnesia:should_be_disc_node_legacy(ClusterNodes),
-    Inform("Clustering node ~p with ~p",
-           [Node, ClusterNodes]),
-    rpc_call(Node, rabbit_mnesia, join_cluster, [{ClusterNodes, DiscNode}]);
+    DiscNode = rabbit_mnesia:should_be_disc_node(ClusterNodes),
+    Inform("Clustering node ~p with ~p", [Node, ClusterNodes]),
+    rpc_call(Node, rabbit_mnesia, join_cluster, [ClusterNodes, DiscNode]);
 
 action(join_cluster, Node, ClusterNodeSs, Opts, Inform) ->
     ClusterNodes = lists:map(fun list_to_atom/1, ClusterNodeSs),
     DiscNode = not proplists:get_bool(?RAM_OPT, Opts),
     Inform("Clustering node ~p with ~p", [Node, ClusterNodes]),
-    rpc_call(Node, rabbit_mnesia, join_cluster, [{ClusterNodes, DiscNode}]);
+    rpc_call(Node, rabbit_mnesia, join_cluster, [ClusterNodes, DiscNode]);
 
 action(wait, Node, [PidFile], _Opts, Inform) ->
     Inform("Waiting for ~p", [Node]),
