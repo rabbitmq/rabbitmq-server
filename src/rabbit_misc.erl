@@ -390,8 +390,11 @@ confirm_to_sender(Pid, MsgSeqNos) ->
 
 terminate(Fmt, Args) ->
     io:format("ERROR: " ++ Fmt ++ "~n", Args),
-    terminate(?ERROR_CODE).
+    terminate(1).
 
+%% like quit/1, uses a slower shutdown on windows
+%% (required to flush stdout), however terminate/1 also blocks
+%% indefinitely until the flush has completed.
 terminate(Status) ->
     case os:type() of
         {unix,  _} -> halt(Status);
