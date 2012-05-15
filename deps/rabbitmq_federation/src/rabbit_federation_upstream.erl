@@ -63,8 +63,7 @@ from_props(Upst, X) ->
     case rabbit_runtime_parameters:value(
            <<"federation_connection">>, ConnName) of
         not_found  -> not_found;
-        Conn       -> from_props_connection(
-                                         Upst, ConnName, Conn, X)
+        Conn       -> from_props_connection(Upst, ConnName, Conn, X)
     end.
 
 from_props_connection(U, ConnName, C, X) ->
