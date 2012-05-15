@@ -96,7 +96,7 @@ upstreams(XName, ConnName) ->
 
 upstream_set(_XName) ->
     %% TODO ahem
-    <<"all">>.
+    {ok, <<"all">>}.
 
 prune_for_upstream_set(Set, XName) ->
     case upstream_set(XName) of
