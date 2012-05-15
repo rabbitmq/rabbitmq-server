@@ -87,7 +87,6 @@
 -spec(die/1 ::
         (rabbit_framing:amqp_exception()) -> channel_or_connection_exit()).
 
-%% TODO: figure out what the return types should actually be for these...
 -spec(terminate/1 :: (integer()) -> any()).
 -spec(terminate/2 :: (string(), integer()) -> any()).
 
@@ -213,8 +212,6 @@
 -spec(gb_sets_difference/2 :: (gb_set(), gb_set()) -> gb_set()).
 
 -endif.
-
--define(ERROR_CODE, 1).
 
 %%----------------------------------------------------------------------------
 
