@@ -39,7 +39,7 @@
 start() ->
     [NodeStr] = init:get_plain_arguments(),
     ok = duplicate_node_check(NodeStr),
-    rabbit_misc:terminate(0),
+    rabbit_misc:quit(0),
     ok.
 
 stop() ->
@@ -61,11 +61,11 @@ duplicate_node_check(NodeStr) ->
                                   "already running on ~p~n",
                                   [NodeName, NodeHost]),
                         io:format(rabbit_nodes:diagnostics([Node]) ++ "~n"),
-                        rabbit_misc:terminate(?ERROR_CODE);
+                        rabbit_misc:quit(?ERROR_CODE);
                 false -> ok
             end;
         {error, EpmdReason} ->
-            rabbit_misc:terminate("epmd error for host ~p: ~p (~s)~n",
+            rabbit_misc:quit("epmd error for host ~p: ~p (~s)~n",
                       [NodeHost, EpmdReason,
                        case EpmdReason of
                            address -> "unable to establish tcp connection";
