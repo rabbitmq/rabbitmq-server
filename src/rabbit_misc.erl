@@ -19,7 +19,7 @@
 -include("rabbit_framing.hrl").
 
 -export([method_record_type/1, polite_pause/0, polite_pause/1]).
--export([die/1, frame_error/2, amqp_error/4, terminate/1, terminate/2,
+-export([die/1, frame_error/2, amqp_error/4, quit/1, quit/2,
          protocol_error/3, protocol_error/4, protocol_error/1]).
 -export([not_found/1, assert_args_equivalence/4]).
 -export([dirty_read/1]).
@@ -58,7 +58,6 @@
 -export([format_message_queue/2]).
 -export([append_rpc_all_nodes/4]).
 -export([multi_call/2]).
--export([quit/1]).
 -export([os_cmd/1]).
 -export([gb_sets_difference/2]).
 
@@ -87,8 +86,8 @@
 -spec(die/1 ::
         (rabbit_framing:amqp_exception()) -> channel_or_connection_exit()).
 
--spec(terminate/1 :: (integer()) -> any()).
--spec(terminate/2 :: (string(), integer()) -> any()).
+-spec(quit/1 :: (integer()) -> any()).
+-spec(quit/2 :: (string(), [term()]) -> any()).
 
 -spec(frame_error/2 :: (rabbit_framing:amqp_method_name(), binary())
                        -> rabbit_types:connection_exit()).
@@ -207,7 +206,6 @@
 -spec(append_rpc_all_nodes/4 :: ([node()], atom(), atom(), [any()]) -> [any()]).
 -spec(multi_call/2 ::
         ([pid()], any()) -> {[{pid(), any()}], [{pid(), any()}]}).
--spec(quit/1 :: (integer() | string()) -> no_return()).
 -spec(os_cmd/1 :: (string()) -> string()).
 -spec(gb_sets_difference/2 :: (gb_set(), gb_set()) -> gb_set()).
 
@@ -388,14 +386,20 @@ report_coverage_percentage(File, Cov, NotCov, Mod) ->
 confirm_to_sender(Pid, MsgSeqNos) ->
     gen_server2:cast(Pid, {confirm, MsgSeqNos, self()}).
 
-terminate(Fmt, Args) ->
+%%
+%% @doc Halts the emulator after printing out an error message io-formatted with
+%% the supplied arguments. The exit status of the beam process will be set to 1.
+%%
+quit(Fmt, Args) ->
     io:format("ERROR: " ++ Fmt ++ "~n", Args),
-    terminate(1).
+    quit(1).
 
-%% like quit/1, uses a slower shutdown on windows
-%% (required to flush stdout), however terminate/1 also blocks
-%% indefinitely until the flush has completed.
-terminate(Status) ->
+%%
+%% @doc Halts the emulator returning the given status code to the os.
+%% On Windows this function will block indefinitely so as to give the io
+%% subsystem time to flush stdout completely.
+%%
+quit(Status) ->
     case os:type() of
         {unix,  _} -> halt(Status);
         {win32, _} -> init:stop(Status),
@@ -896,13 +900,6 @@ receive_multi_call([{Mref, Pid} | MonitorPids], Good, Bad) ->
             receive_multi_call(MonitorPids, Good, [{Pid, nodedown} | Bad]);
         {'DOWN', Mref, _, _, Reason} ->
             receive_multi_call(MonitorPids, Good, [{Pid, Reason} | Bad])
-    end.
-
-%% the slower shutdown on windows required to flush stdout
-quit(Status) ->
-    case os:type() of
-        {unix,  _} -> halt(Status);
-        {win32, _} -> init:stop(Status)
     end.
 
 os_cmd(Command) ->
