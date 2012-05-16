@@ -143,7 +143,8 @@
 
 -rabbit_boot_step({mirror_queue_slave_sup,
                    [{description, "mirror queue slave sup"},
-                    {mfa,         {rabbit_mirror_queue_slave_sup, start, []}},
+                    {mfa,         {rabbit_sup, start_supervisor_child,
+                                   [rabbit_mirror_queue_slave_sup]}},
                     {requires,    recovery},
                     {enables,     routing_ready}]}).
 

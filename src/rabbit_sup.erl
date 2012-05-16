@@ -19,6 +19,8 @@
 -behaviour(supervisor).
 
 -export([start_link/0, start_child/1, start_child/2, start_child/3,
+         start_supervisor_child/1, start_supervisor_child/2,
+         start_supervisor_child/3,
          start_restartable_child/1, start_restartable_child/2, stop_child/1]).
 
 -export([init/1]).
@@ -35,6 +37,9 @@
 -spec(start_child/1 :: (atom()) -> 'ok').
 -spec(start_child/2 :: (atom(), [any()]) -> 'ok').
 -spec(start_child/3 :: (atom(), atom(), [any()]) -> 'ok').
+-spec(start_supervisor_child/1 :: (atom()) -> 'ok').
+-spec(start_supervisor_child/2 :: (atom(), [any()]) -> 'ok').
+-spec(start_supervisor_child/3 :: (atom(), atom(), [any()]) -> 'ok').
 -spec(start_restartable_child/1 :: (atom()) -> 'ok').
 -spec(start_restartable_child/2 :: (atom(), [any()]) -> 'ok').
 -spec(stop_child/1 :: (atom()) -> rabbit_types:ok_or_error(any())).
@@ -54,6 +59,16 @@ start_child(ChildId, Mod, Args) ->
                   ?SERVER,
                   {ChildId, {Mod, start_link, Args},
                    transient, ?MAX_WAIT, worker, [Mod]})).
+
+start_supervisor_child(Mod) -> start_supervisor_child(Mod, []).
+
+start_supervisor_child(Mod, Args) -> start_supervisor_child(Mod, Mod, Args).
+
+start_supervisor_child(ChildId, Mod, Args) ->
+    child_reply(supervisor:start_child(
+                  ?SERVER,
+                  {ChildId, {Mod, start_link, Args},
+                   transient, infinity, supervisor, [Mod]})).
 
 start_restartable_child(Mod) -> start_restartable_child(Mod, []).
 

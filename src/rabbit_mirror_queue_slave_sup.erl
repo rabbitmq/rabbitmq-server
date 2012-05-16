@@ -18,22 +18,13 @@
 
 -behaviour(supervisor2).
 
--export([start/0, start_link/0, start_child/2]).
+-export([start_link/0, start_child/2]).
 
 -export([init/1]).
 
 -include_lib("rabbit.hrl").
 
 -define(SERVER, ?MODULE).
-
-start() ->
-    {ok, _} =
-        supervisor2:start_child(
-          rabbit_sup,
-          {rabbit_mirror_queue_slave_sup,
-           {rabbit_mirror_queue_slave_sup, start_link, []},
-           transient, infinity, supervisor, [rabbit_mirror_queue_slave_sup]}),
-    ok.
 
 start_link() -> supervisor2:start_link({local, ?SERVER}, ?MODULE, []).
 
