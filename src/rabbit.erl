@@ -60,7 +60,8 @@
 
 -rabbit_boot_step({worker_pool,
                    [{description, "worker pool"},
-                    {mfa,         {rabbit_sup, start_child, [worker_pool_sup]}},
+                    {mfa,         {rabbit_sup, start_supervisor_child,
+                                   [worker_pool_sup]}},
                     {requires,    pre_boot},
                     {enables,     external_infrastructure}]}).
 
@@ -539,7 +540,7 @@ boot_error(Format, Args) ->
 
 boot_delegate() ->
     {ok, Count} = application:get_env(rabbit, delegate_count),
-    rabbit_sup:start_child(delegate_sup, [Count]).
+    rabbit_sup:start_supervisor_child(delegate_sup, [Count]).
 
 recover() ->
     rabbit_binding:recover(rabbit_exchange:recover(), rabbit_amqqueue:start()).
