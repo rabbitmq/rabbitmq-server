@@ -43,19 +43,17 @@
 
 %%----------------------------------------------------------------------------
 
-start_link() ->
-    supervisor:start_link({local, ?SERVER}, ?MODULE, []).
+start_link() -> supervisor:start_link({local, ?SERVER}, ?MODULE, []).
 
-start_child(Mod) ->
-    start_child(Mod, []).
+start_child(Mod) -> start_child(Mod, []).
 
-start_child(Mod, Args) ->
-    start_child(Mod, Mod, Args).
+start_child(Mod, Args) -> start_child(Mod, Mod, Args).
 
 start_child(ChildId, Mod, Args) ->
-    child_reply(supervisor:start_child(?SERVER,
-                                       {ChildId, {Mod, start_link, Args},
-                                        transient, ?MAX_WAIT, worker, [Mod]})).
+    child_reply(supervisor:start_child(
+                  ?SERVER,
+                  {ChildId, {Mod, start_link, Args},
+                   transient, ?MAX_WAIT, worker, [Mod]})).
 
 start_restartable_child(Mod) ->
     start_restartable_child(Mod, []).
@@ -74,8 +72,7 @@ stop_child(ChildId) ->
         E  -> E
     end.
 
-init([]) ->
-    {ok, {{one_for_all, 0, 1}, []}}.
+init([]) -> {ok, {{one_for_all, 0, 1}, []}}.
 
 
 %%----------------------------------------------------------------------------
