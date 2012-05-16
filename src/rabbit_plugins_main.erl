@@ -258,14 +258,5 @@ maybe_warn_mochiweb(Enabled) ->
 
 report_change() ->
     io:format("Plugin configuration has changed. "
-              "Restart RabbitMQ for changes to take effect.~n"),
-    case os:type() of
-        {win32, _OsName} ->
-             io:format("If you have RabbitMQ running as a service then you must"
-                       " reinstall by running~n  rabbitmq-service.bat stop~n"
-                       "  rabbitmq-service.bat install~n"
-                       "  rabbitmq-service.bat start~n~n");
-        _ ->
-             ok
-    end.
+              "Restart RabbitMQ for changes to take effect.~n").
 
