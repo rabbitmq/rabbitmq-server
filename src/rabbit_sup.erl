@@ -55,8 +55,7 @@ start_child(ChildId, Mod, Args) ->
                   {ChildId, {Mod, start_link, Args},
                    transient, ?MAX_WAIT, worker, [Mod]})).
 
-start_restartable_child(Mod) ->
-    start_restartable_child(Mod, []).
+start_restartable_child(Mod) -> start_restartable_child(Mod, []).
 
 start_restartable_child(Mod, Args) ->
     Name = list_to_atom(atom_to_list(Mod) ++ "_sup"),

@@ -35,11 +35,9 @@ start() ->
            transient, infinity, supervisor, [rabbit_mirror_queue_slave_sup]}),
     ok.
 
-start_link() ->
-    supervisor2:start_link({local, ?SERVER}, ?MODULE, []).
+start_link() -> supervisor2:start_link({local, ?SERVER}, ?MODULE, []).
 
-start_child(Node, Args) ->
-    supervisor2:start_child({?SERVER, Node}, Args).
+start_child(Node, Args) -> supervisor2:start_child({?SERVER, Node}, Args).
 
 init([]) ->
     {ok, {{simple_one_for_one_terminate, 10, 10},
