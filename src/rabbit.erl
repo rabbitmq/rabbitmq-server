@@ -306,7 +306,7 @@ start() ->
 boot() ->
     start_it(fun() ->
                 ok = prepare(),
-                Plugins = rabbit_plugins:bootstrap_envinronment(),
+                Plugins = rabbit_plugins:prepare_plugins(),
                 ToBeLoaded = Plugins ++ ?APPS,
                 ok = app_utils:load_applications(ToBeLoaded),
                 StartupApps = app_utils:app_dependency_order(ToBeLoaded, false),

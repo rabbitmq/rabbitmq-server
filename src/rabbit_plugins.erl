@@ -17,7 +17,7 @@
 -module(rabbit_plugins).
 -include("rabbit.hrl").
 
--export([start/0, stop/0, bootstrap_envinronment/0, active_plugins/0]).
+-export([start/0, stop/0, prepare_plugins/0, active_plugins/0]).
 
 -define(VERBOSE_OPT, "-v").
 -define(MINIMAL_OPT, "-m").
@@ -30,7 +30,7 @@
 
 -spec(start/0 :: () -> no_return()).
 -spec(stop/0 :: () -> 'ok').
--spec(bootstrap_envinronment/0 :: () -> [atom()]).
+-spec(prepare_plugins/0 :: () -> [atom()]).
 -spec(active_plugins/0 :: () -> [atom()]).
 
 -endif.
@@ -80,13 +80,13 @@ start() ->
 stop() ->
     ok.
 
-bootstrap_envinronment() ->
+prepare_plugins() ->
     {ok, PluginDir} = application:get_env(rabbit, plugins_dir),
     {ok, ExpandDir} = application:get_env(rabbit, plugins_expand_dir),
     {ok, EnabledPluginsFile} = application:get_env(rabbit,
                                                    enabled_plugins_file),
     prepare_plugins(EnabledPluginsFile, PluginDir, ExpandDir),
-    [prepare_dir_plugin(PluginName) || 
+    [prepare_dir_plugin(PluginName) ||
             PluginName <- filelib:wildcard(ExpandDir ++ "/*/ebin/*.app")].
 
 active_plugins() ->
