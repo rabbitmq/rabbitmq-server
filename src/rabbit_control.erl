@@ -26,6 +26,57 @@
 -define(NODE_OPT, "-n").
 -define(VHOST_OPT, "-p").
 
+-define(GLOBAL_OPTS, [?QUIET_OPT, ?NODE_OPT]).
+
+-define(COMMANDS,
+        [stop,
+         stop_app,
+         start_app,
+         wait,
+         reset,
+         force_reset,
+         rotate_logs,
+         
+         cluster,
+         force_cluster,
+         cluster_status,
+         
+         add_user,
+         delete_user,
+         change_password,
+         clear_password,
+         set_user_tags,
+         list_users,
+         
+         add_vhost,
+         delete_vhost,
+         list_vhosts,
+         {set_permissions, [?VHOST_OPT]},
+         {clear_permissions, [?VHOST_OPT]},
+         {list_permissions, [?VHOST_OPT]},
+         {list_user_permissions, [?VHOST_OPT]},
+         
+         set_parameter,
+         clear_parameter,
+         list_parameters,
+         
+         {list_queues, [?VHOST_OPT]},
+         {list_exchanges, [?VHOST_OPT]},
+         {list_bindings, [?VHOST_OPT]},
+         {list_connections, [?VHOST_OPT]},
+         list_channels,
+         {list_consumers, [?VHOST_OPT]},
+         status,
+         environment,
+         report,
+         eval,
+         
+         close_connection,
+         {trace_on, [?VHOST_OPT]},
+         {trace_off, [?VHOST_OPT]},
+         set_vm_memory_high_watermark
+        ]).
+
 -define(GLOBAL_QUERIES,
         [{"Connections", rabbit_networking, connection_info_all,
           connection_info_keys},
@@ -38,12 +89,6 @@
          {"Consumers", rabbit_amqqueue, consumers_all, consumer_info_keys},
          {"Permissions", rabbit_auth_backend_internal, list_vhost_permissions,
           vhost_perms_info_keys}]).
-
--define(OPTS_COMMANDS,
-        [{?VHOST_OPT, [set_permissions, clear_permissions, list_permissions,
-                       list_user_permissions, list_queues, list_bindings,
-                       list_connections, list_channels, list_consumers,
-                       trace_on, trace_off]}]).
 
 %%----------------------------------------------------------------------------
 
@@ -63,19 +108,22 @@
 
 start() ->
     {ok, [[NodeStr|_]|_]} = init:get_argument(nodename),
-    {[Command0 | Args], Opts} =
-        case rabbit_misc:get_options([{flag, ?QUIET_OPT},
-                                      {option, ?NODE_OPT, NodeStr},
-                                      {option, ?VHOST_OPT, "/"}],
-                                     init:get_plain_arguments()) of
-            {[], _Opts}    -> usage();
-            CmdArgsAndOpts -> CmdArgsAndOpts
+    {Command, Opts, Args} =
+        case rabbit_misc:get_options(?COMMANDS,
+                                     ?GLOBAL_OPTS,
+                                     [{?QUIET_OPT, flag},
+                                      {?NODE_OPT, {option, NodeStr}},
+                                      {?VHOST_OPT, {option, "/"}}],
+                                     init:get_plain_arguments())
+        of
+            {ok, Res}      -> Res;
+            {invalid, Err} -> rabbit_misc:handle_invalid_arguments(Err),
+                              usage()
         end,
     Opts1 = [case K of
                  ?NODE_OPT -> {?NODE_OPT, rabbit_nodes:make(V)};
                  _         -> {K, V}
              end || {K, V} <- Opts],
-    Command = list_to_atom(Command0),
     Quiet = proplists:get_bool(?QUIET_OPT, Opts1),
     Node = proplists:get_value(?NODE_OPT, Opts1),
     Inform = case Quiet of
@@ -84,20 +132,6 @@ start() ->
                                   io:format(Format ++ " ...~n", Args1)
                           end
              end,
-    PrintInvalidCommandError =
-        fun () ->
-                print_error("invalid command '~s'",
-                            [string:join([atom_to_list(Command) | Args], " ")])
-        end,
-
-    lists:foreach(fun ({Opt, Commands}) ->
-                          case {proplists:lookup(Opt, Opts),
-                                lists:member(Command, Commands)} of
-                              {{_, _}, false} -> PrintInvalidCommandError(),
-                                                 usage();
-                              _               -> ok
-                          end
-                  end, ?OPTS_COMMANDS),
 
     %% The reason we don't use a try/catch here is that rpc:call turns
     %% thrown errors into normal return values
@@ -108,12 +142,6 @@ start() ->
                 false -> io:format("...done.~n")
             end,
             rabbit_misc:quit(0);
-        {'EXIT', {function_clause, [{?MODULE, action, _}    | _]}} -> %% < R15
-            PrintInvalidCommandError(),
-            usage();
-        {'EXIT', {function_clause, [{?MODULE, action, _, _} | _]}} -> %% >= R15
-            PrintInvalidCommandError(),
-            usage();
         {'EXIT', {badarg, _}} ->
             print_error("invalid parameter: ~p", [Args]),
             usage();
@@ -210,7 +238,6 @@ action(force_cluster, Node, ClusterNodeSs, _Opts, Inform) ->
 action(wait, Node, [PidFile], _Opts, Inform) ->
     Inform("Waiting for ~p", [Node]),
     wait_for_application(Node, PidFile, rabbit, Inform);
-
 action(wait, Node, [PidFile, App], _Opts, Inform) ->
     Inform("Waiting for ~p on ~p", [App, Node]),
     wait_for_application(Node, PidFile, list_to_atom(App), Inform);

@@ -25,6 +25,13 @@
 -define(ENABLED_OPT, "-E").
 -define(ENABLED_ALL_OPT, "-e").
 
+-define(GLOBAL_OPTS, []).
+
+-define(COMMANDS,
+        [{list, [?VERBOSE_OPT, ?MINIMAL_OPT, ?ENABLED_OPT, ?ENABLED_ALL_OPT]},
+         enable,
+         disable]).
+
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
@@ -45,31 +52,23 @@ start() ->
     {ok, [[PluginsFile|_]|_]} =
         init:get_argument(enabled_plugins_file),
     {ok, [[PluginsDir|_]|_]} = init:get_argument(plugins_dist_dir),
-    {[Command0 | Args], Opts} =
-        case rabbit_misc:get_options([{flag, ?VERBOSE_OPT},
-                                      {flag, ?MINIMAL_OPT},
-                                      {flag, ?ENABLED_OPT},
-                                      {flag, ?ENABLED_ALL_OPT}],
-                                     init:get_plain_arguments()) of
-            {[], _Opts}    -> usage();
-            CmdArgsAndOpts -> CmdArgsAndOpts
-        end,
-    Command = list_to_atom(Command0),
-    PrintInvalidCommandError =
-        fun () ->
-                print_error("invalid command '~s'",
-                            [string:join([atom_to_list(Command) | Args], " ")])
+    {Command, Opts, Args} =
+        case rabbit_misc:get_options(?COMMANDS,
+                                     ?GLOBAL_OPTS,
+                                     [{?VERBOSE_OPT, flag},
+                                      {?MINIMAL_OPT, flag},
+                                      {?ENABLED_OPT, flag},
+                                      {?ENABLED_ALL_OPT, flag}],
+                                     init:get_plain_arguments())
+        of
+            {ok, Res}      -> Res;
+            {invalid, Err} -> rabbit_misc:handle_invalid_arguments(Err),
+                              usage()
         end,
 
     case catch action(Command, Args, Opts, PluginsFile, PluginsDir) of
         ok ->
             rabbit_misc:quit(0);
-        {'EXIT', {function_clause, [{?MODULE, action, _} | _]}} ->
-            PrintInvalidCommandError(),
-            usage();
-        {'EXIT', {function_clause, [{?MODULE, action, _, _} | _]}} ->
-            PrintInvalidCommandError(),
-            usage();
         {error, Reason} ->
             print_error("~p", [Reason]),
             rabbit_misc:quit(2);

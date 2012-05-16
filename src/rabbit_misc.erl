@@ -49,7 +49,7 @@
 -export([version_compare/2, version_compare/3]).
 -export([dict_cons/3, orddict_cons/3, gb_trees_cons/3]).
 -export([gb_trees_fold/3, gb_trees_foreach/2]).
--export([get_options/2]).
+-export([get_options/4, handle_invalid_arguments/1]).
 -export([all_module_attributes/1, build_acyclic_graph/3]).
 -export([now_ms/0]).
 -export([const_ok/0, const/1]).
@@ -72,7 +72,9 @@
 -type(ok_or_error() :: rabbit_types:ok_or_error(any())).
 -type(thunk(T) :: fun(() -> T)).
 -type(resource_name() :: binary()).
--type(optdef() :: {flag, string()} | {option, string(), any()}).
+-type(optdef() :: {flag, string()} | {option, string(), string()}).
+-type(invalid_arguments() :: 'command_not_found' |
+                             {'invalid_option', atom(), string()}).
 -type(channel_or_connection_exit()
       :: rabbit_types:channel_exit() | rabbit_types:connection_exit()).
 -type(digraph_label() :: term()).
@@ -182,8 +184,11 @@
 -spec(gb_trees_fold/3 :: (fun ((any(), any(), A) -> A), A, gb_tree()) -> A).
 -spec(gb_trees_foreach/2 ::
         (fun ((any(), any()) -> any()), gb_tree()) -> 'ok').
--spec(get_options/2 :: ([optdef()], [string()])
-                       -> {[string()], [{string(), any()}]}).
+-spec(get_options/4 ::
+        ([{atom(), string()} | atom()], [string()], [optdef()], [string()])
+        -> {'ok', {atom(), [{string(), string()}], [string()]}} |
+           {'invalid', invalid_arguments()}).
+-spec(handle_invalid_arguments/1 :: (invalid_arguments()) -> 'ok').
 -spec(all_module_attributes/1 :: (atom()) -> [{atom(), [term()]}]).
 -spec(build_acyclic_graph/3 ::
         (graph_vertex_fun(), graph_edge_fun(), [{atom(), [term()]}])
@@ -736,23 +741,85 @@ gb_trees_fold1(Fun, Acc, {Key, Val, It}) ->
 gb_trees_foreach(Fun, Tree) ->
     gb_trees_fold(fun (Key, Val, Acc) -> Fun(Key, Val), Acc end, ok, Tree).
 
-%% Separate flags and options from arguments.
-%% get_options([{flag, "-q"}, {option, "-p", "/"}],
-%%             ["set_permissions","-p","/","guest",
-%%              "-q",".*",".*",".*"])
-%% == {["set_permissions","guest",".*",".*",".*"],
-%%     [{"-q",true},{"-p","/"}]}
-get_options(Defs, As) ->
-    lists:foldl(fun(Def, {AsIn, RsIn}) ->
-                        {K, {AsOut, V}} =
-                            case Def of
-                                {flag, Key} ->
-                                    {Key, get_flag(Key, AsIn)};
-                                {option, Key, Default} ->
-                                    {Key, get_option(Key, Default, AsIn)}
-                            end,
-                        {AsOut, [{K, V} | RsIn]}
-                end, {As, []}, Defs).
+%% Takes:
+%%    * A list of [{atom(), [string()]} | atom()], where the atom()s are
+%%      the accepted commands and the optional [string()] is the list of
+%%      accepted options for that command
+%%    * A list [string()] of options valid for all commands
+%%    * A list [optdef()] to determine what is a flag and what is an option
+%%    * The list of arguments given by the user
+%% 
+%% Returns either {ok, {atom(), [{string(), string()}], [string()]} which are
+%% respectively the command, the key-value pairs of the options and the leftover
+%% arguments; or {invalid, Reason} if something went wrong.
+get_options(CommandsOpts0, GlobalOpts, Defs, As0) ->
+    DefsDict = dict:from_list(Defs),
+    CommandsOpts = lists:map(fun ({C, Os}) -> {atom_to_list(C), Os};
+                                 (C)       -> {atom_to_list(C), []}
+                             end, CommandsOpts0),
+    %% For each command, drop all the options/flag that are available in that
+    %% command and see what remains
+    case lists:foldl(fun ({C, Os}, not_found) ->
+                             case drop_opts(DefsDict, GlobalOpts ++ Os, As0) of
+                                 [C | _] -> {found, {C, Os}};
+                                 _       -> not_found
+                             end;
+                         (_, {found, {C, Os}}) ->
+                             {found, {C, Os}}
+                     end, not_found, CommandsOpts)
+    of
+        not_found        -> {invalid, command_not_found};
+        {found, {C, Os}} -> get_options1(C, sets:from_list(GlobalOpts ++ Os),
+                                         Defs, As0 -- [C])
+    end.
+
+drop_opts(Defs0, Opts0, As) ->
+    Opts = sets:from_list(Opts0),
+    Defs = dict:filter(fun (K, _) -> sets:is_element(K, Opts) end, Defs0),
+    drop_opts(Defs, As).
+
+drop_opts(_, [])          -> [];
+drop_opts(Opts, [A | As]) ->
+    case dict:find(A, Opts) of
+        {ok, flag}        -> drop_opts(Opts, As);
+        {ok, {option, _}} -> case As of
+                                 []        -> [];
+                                 [_ | As1] -> drop_opts(Opts, As1)
+                             end;
+        error             -> [A | As]
+    end.
+
+get_options1(Command, Opts, Defs, As) ->
+    %% Check that each flag is OK with this command, and get its value
+    case lists:foldl(fun (_, {invalid_option, Opt}) ->
+                             {invalid_option, Opt};
+                         (Def, {ok, {Accum, As1}}) ->
+                             K = case Def of
+                                     {K0, flag}        -> K0;
+                                     {K0, {option, _}} -> K0
+                                 end,
+                             case {lists:member(K, As1),
+                                   sets:is_element(K, Opts)}
+                             of
+                                 %% We have a flag that shouldn't be there
+                                 {true, false}  -> {invalid_option,
+                                                    list_to_atom(Command), K};
+                                 %% We don't care about this flag
+                                 {false, false} -> {ok, {Accum, As1}};
+                                 %% We need the flag
+                                 {_, true}      -> {As2, V} = get_def(Def, As1),
+                                                   {ok, {[{K, V} | Accum], As2}}
+                             end
+                     end, {ok, {[], As}}, Defs)
+    of
+        {ok, {Ks, Arguments}} ->
+            {ok, {list_to_atom(Command), Ks, Arguments}};
+        {invalid_option, Command, K} ->
+            {invalid, {invalid_option, Command, K}}
+    end.
+    
+get_def({Flag, flag}, As)             -> get_flag(Flag, As);
+get_def({Opt, {option, Default}}, As) -> get_option(Opt, Default, As).
 
 get_option(K, _Default, [K, V | As]) ->
     {As, V};
@@ -769,6 +836,12 @@ get_flag(K, [Nk | As]) ->
     {[Nk | As1], V};
 get_flag(_, []) ->
     {[], false}.
+
+handle_invalid_arguments(command_not_found) ->
+    rabbit_misc:format_stderr("could not recognise command~n", []);
+handle_invalid_arguments({invalid_function, Command, Opt}) ->
+    rabbit_misc:format_stderr("invalid option '~s' for command '~s'~n",
+                              [Opt, Command]).
 
 now_ms() ->
     timer:now_diff(now(), {0,0,0}) div 1000.
