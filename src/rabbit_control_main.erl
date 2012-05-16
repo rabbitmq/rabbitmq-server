@@ -14,7 +14,7 @@
 %% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
--module(rabbit_control).
+-module(rabbit_control_main).
 -include("rabbit.hrl").
 
 -export([start/0, stop/0, action/5]).
