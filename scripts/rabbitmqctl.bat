@@ -34,7 +34,7 @@ if "!RABBITMQ_NODENAME!"=="" (
 if not exist "!ERLANG_HOME!\bin\erl.exe" (
     echo.
     echo ******************************
-    echo ERLANG_HOME not set correctly. 
+    echo ERLANG_HOME not set correctly.
     echo ******************************
     echo.
     echo Please either set ERLANG_HOME to point to your Erlang installation or place the
