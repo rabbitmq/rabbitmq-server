@@ -419,7 +419,7 @@ while_process_is_alive(Node, Pid, Activity) ->
     case process_up(Pid) of
         true -> case Activity() of
                      true        -> ok;
-                     Other       -> timer:sleep(?EXTERNAL_CHECK_INTERVAL),
+                     _Other      -> timer:sleep(?EXTERNAL_CHECK_INTERVAL),
                                     while_process_is_alive(Node, Pid, Activity)
                 end;
         false -> {error, process_not_running}
