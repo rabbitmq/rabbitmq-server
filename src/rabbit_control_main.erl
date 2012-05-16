@@ -405,6 +405,8 @@ wait_for_application(Node, PidFile, Application, Inform) ->
     Inform("pid is ~s", [Pid]),
     wait_for_application(Node, Pid, Application).
 
+wait_for_application(Node, Pid, rabbit) ->
+    wait_for_startup(Node, Pid);
 wait_for_application(Node, Pid, Application) ->
     while_process_is_alive(Node, Pid,
                     fun() -> rabbit_nodes:is_running(Node, Application) end).
@@ -433,7 +435,7 @@ wait_for_process_death(Pid) ->
 read_pid_file(PidFile, Wait) ->
     case {file:read_file(PidFile), Wait} of
         {{ok, Bin}, _} ->
-            S = string:strip(binary_to_list(Bin), right, $\n),
+            S = re:replace(Bin, "\\s", "", [global, {return, list}]),
             try list_to_integer(S)
             catch error:badarg ->
                     exit({error, {garbage_in_pid_file, PidFile}})
