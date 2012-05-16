@@ -60,6 +60,9 @@ DEFAULT_NODE_PORT=5672
 RABBITMQ_START_RABBIT=
 [ "x" = "x$RABBITMQ_ALLOW_INPUT" ] && RABBITMQ_START_RABBIT='-noinput'
 
+RABBITMQ_START_RABBIT=
+[ "x" = "x$RABBITMQ_NODE_ONLY" ] && RABBITMQ_START_RABBIT="$RABBITMQ_START_RABBIT -s rabbit boot"
+
 case "$(uname -s)" in
   CYGWIN*) # we make no attempt to record the cygwin pid; rabbitmqctl wait
            # will not be able to make sense of it anyway
@@ -97,7 +100,6 @@ exec erl \
     ${RABBITMQ_START_RABBIT} \
     -sname ${RABBITMQ_NODENAME} \
     -boot start_sasl \
-    -s rabbit boot \
     ${RABBITMQ_CONFIG_ARG} \
     +W w \
     ${RABBITMQ_SERVER_ERL_ARGS} \
