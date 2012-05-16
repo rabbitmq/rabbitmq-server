@@ -122,12 +122,12 @@ prepare_plugins(EnabledPluginsFile, PluginsDistDir, DestDir) ->
     %% Eliminate the contents of the destination directory
     case delete_recursively(DestDir) of
         ok         -> ok;
-        {error, E} -> rabbit_misc:terminate("Could not delete dir ~s (~p)",
+        {error, E} -> rabbit_misc:quit("Could not delete dir ~s (~p)",
                                             [DestDir, E])
     end,
     case filelib:ensure_dir(DestDir ++ "/") of
         ok          -> ok;
-        {error, E2} -> rabbit_misc:terminate("Could not create dir ~s (~p)",
+        {error, E2} -> rabbit_misc:quit("Could not create dir ~s (~p)",
                                              [DestDir, E2])
     end,
 
