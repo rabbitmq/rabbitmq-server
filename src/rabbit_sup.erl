@@ -33,6 +33,7 @@
 
 -spec(start_link/0 :: () -> rabbit_types:ok_pid_or_error()).
 -spec(start_child/1 :: (atom()) -> 'ok').
+-spec(start_child/2 :: (atom(), [any()]) -> 'ok').
 -spec(start_child/3 :: (atom(), atom(), [any()]) -> 'ok').
 -spec(start_restartable_child/1 :: (atom()) -> 'ok').
 -spec(start_restartable_child/2 :: (atom(), [any()]) -> 'ok').
