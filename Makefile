@@ -197,7 +197,7 @@ run-background-node: all
 		./scripts/rabbitmq-server
 
 run-tests: all
-	OUT=$$(echo "rabbit_tests:test_option_parser()." | $(ERL_CALL)) ; \
+	OUT=$$(echo "rabbit_tests:all_tests()." | $(ERL_CALL)) ; \
 	  echo $$OUT ; echo $$OUT | grep '^{ok, passed}$$' > /dev/null
 
 run-qc: all
