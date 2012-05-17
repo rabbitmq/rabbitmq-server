@@ -802,26 +802,80 @@ test_log_management_during_startup() ->
     passed.
 
 test_option_parser() ->
-    %% command and arguments should just pass through
-    ok = check_get_options({["mock_command", "arg1", "arg2"], []},
-                           [], ["mock_command", "arg1", "arg2"]),
+    Defs1 = [{"-o1", {option, "foo"}},
+             {"-o2", {option, "bar"}},
+             {"-f1", flag},
+             {"-f2", flag}],
+    GlobalOpts1 = ["-f1", "-o1"],
+    Commands1 = [command1, {command2, ["-f2", "-o2"]}],
 
-    %% get flags
-    ok = check_get_options(
-           {["mock_command", "arg1"], [{"-f", true}, {"-f2", false}]},
-           [{flag, "-f"}, {flag, "-f2"}], ["mock_command", "arg1", "-f"]),
+    GetOptions =
+        fun (Args) ->
+                rabbit_misc:get_options(Commands1, GlobalOpts1, Defs1, Args)
+        end,
 
-    %% get options
-    ok = check_get_options(
-           {["mock_command"], [{"-foo", "bar"}, {"-baz", "notbaz"}]},
-           [{option, "-foo", "notfoo"}, {option, "-baz", "notbaz"}],
-           ["mock_command", "-foo", "bar"]),
+    check_get_options({invalid, command_not_found}, GetOptions, []),
+    check_get_options({invalid, command_not_found}, GetOptions, ["foo", "bar"]),
+    check_get_options({ok, {command1, [{"-f1", false}, {"-o1", "foo"}], []}},
+                      GetOptions, ["command1"]),
+    check_get_options({ok, {command1, [{"-f1", false}, {"-o1", "blah"}], []}},
+                      GetOptions, ["command1", "-o1", "blah"]),
+    check_get_options({ok, {command1, [{"-f1", true}, {"-o1", "foo"}], []}},
+                      GetOptions, ["command1", "-f1"]),
+    check_get_options({ok, {command1, [{"-f1", false}, {"-o1", "blah"}], []}},
+                      GetOptions, ["-o1", "blah", "command1"]),
+    check_get_options(
+      {ok, {command1, [{"-f1", false}, {"-o1", "blah"}], ["quux"]}},
+      GetOptions, ["-o1", "blah", "command1", "quux"]),
+    check_get_options(
+      {ok, {command1, [{"-f1", true}, {"-o1", "blah"}], ["quux", "baz"]}},
+      GetOptions, ["command1", "quux", "-f1", "-o1", "blah", "baz"]),
+    %% If the flag "eats" the command, the command won't be recognised
+    check_get_options({invalid, command_not_found}, GetOptions,
+                      ["-o1", "command1", "quux"]),
+    %% If the flag doesn't have an argument, it won't be recognised
+    check_get_options(
+      {ok, {command1, [{"-f1", false}, {"-o1", "foo"}], ["-o1"]}},
+      GetOptions, ["command1", "-o1"]),
+    %% If a flag eats another flag, the eaten flag won't be recognised
+    check_get_options(
+      {ok, {command1, [{"-f1", false}, {"-o1", "-f1"}], []}},
+      GetOptions, ["command1", "-o1", "-f1"]),
 
-    %% shuffled and interleaved arguments and options
-    ok = check_get_options(
-           {["a1", "a2", "a3"], [{"-o1", "hello"}, {"-o2", "noto2"}, {"-f", true}]},
-           [{option, "-o1", "noto1"}, {flag, "-f"}, {option, "-o2", "noto2"}],
-           ["-f", "a1", "-o1", "hello", "a2", "a3"]),
+    %% Now for some command-specific flags...
+    check_get_options(
+      {ok, {command2, [{"-f1", false}, {"-f2", false},
+                       {"-o1", "foo"}, {"-o2", "bar"}], []}},
+      GetOptions, ["command2"]),
+
+    check_get_options(
+      {ok, {command2, [{"-f1", false}, {"-f2", true},
+                       {"-o1", "baz"}, {"-o2", "bar"}], ["quux", "foo"]}},
+      GetOptions, ["-f2", "command2", "quux", "-o1", "baz", "foo"]),
+
+    %% If we pass non-defined flags, we get an error
+    Defs2 = [{"-o1", {option, "foo"}}, {"-f1", flag}],
+    Commands2 = [command1, {command2, ["-f1", "-bogus"]}],
+
+    CheckError =
+        fun (Fun) ->
+                case catch Fun() of
+                    ok ->
+                        exit({got_success_but_expected_failure,
+                              get_options_undefined_option});
+                    {error, undefined_option} ->
+                        ok
+                end
+        end,
+
+    CheckError(
+      fun () ->
+              rabbit_misc:get_options(Commands2, ["-quux"], Defs2, ["command1"])
+      end),
+    CheckError(
+      fun () ->
+              rabbit_misc:get_options(Commands2, ["-o1"], Defs2, ["command2"])
+      end),
 
     passed.
 
@@ -1605,10 +1659,13 @@ expand_options(As, Bs) ->
                         end
                 end, Bs, As).
 
-check_get_options({ExpArgs, ExpOpts}, Defs, Args) ->
-    {ExpArgs, ResOpts} = rabbit_misc:get_options(Defs, Args),
-    true = lists:sort(ExpOpts) == lists:sort(ResOpts), % don't care about the order
-    ok.
+check_get_options(ExpRes, Fun, As) ->
+    SortRes =
+        fun ({invalid, Reason})  -> {invalid, Reason};
+            ({ok, {C, KVs, As}}) -> {ok, {C, lists:sort(KVs), lists:sort(As)}}
+        end,
+
+    true = SortRes(ExpRes) =:= SortRes(Fun(As)).
 
 empty_files(Files) ->
     [case file:read_file_info(File) of

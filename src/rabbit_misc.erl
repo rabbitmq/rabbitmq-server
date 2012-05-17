@@ -771,7 +771,8 @@ get_options(CommandsOpts0, GlobalOpts, Defs, As0) ->
                              {found, {C, Os}}
                      end, not_found, CommandsOpts)
     of
-        not_found        -> {invalid, command_not_found};
+        not_found ->
+            {invalid, command_not_found};
         {found, {C, Os}} ->
             {KVs, Arguments} = get_options(sets:from_list(GlobalOpts ++ Os),
                                            Defs, As0 -- [C]),
@@ -781,6 +782,10 @@ get_options(CommandsOpts0, GlobalOpts, Defs, As0) ->
 drop_opts(Defs0, Opts0, As) ->
     Opts = sets:from_list(Opts0),
     Defs = dict:filter(fun (K, _) -> sets:is_element(K, Opts) end, Defs0),
+    case sets:size(Opts) =:= dict:size(Defs) of
+        true  -> ok;
+        false -> throw({error, undefined_option})
+    end,
     drop_opts(Defs, As).
 
 drop_opts(_, [])          -> [];
