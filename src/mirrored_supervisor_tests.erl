@@ -157,7 +157,7 @@ test_no_migration_on_shutdown() ->
     with_sups(fun([Evil, _]) ->
                       ?MS:start_child(Evil, childspec(worker)),
                       try
-                          call(worker, ping, 10000, 100),
+                          call(worker, ping, 1000, 100),
                           exit(worker_should_not_have_migrated)
                       catch exit:{timeout_waiting_for_server, _, _} ->
                               ok
@@ -268,7 +268,7 @@ inc_group() ->
 get_group(Group) ->
     {Group, get(counter)}.
 
-call(Id, Msg) -> call(Id, Msg, 5*24*60*60*1000, 100).
+call(Id, Msg) -> call(Id, Msg, 10*1000, 100).
 
 call(Id, Msg, 0, _Decr) ->
     exit({timeout_waiting_for_server, {Id, Msg}, erlang:get_stacktrace()});
