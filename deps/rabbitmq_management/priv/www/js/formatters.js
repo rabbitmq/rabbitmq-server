@@ -210,6 +210,10 @@ function fmt_exchange_type(type) {
         '</acronym></div>';
 }
 
+function fmt_policy(policy) {
+    return policy == 'none' ? '' : fmt_escape_html(policy);
+}
+
 function fmt_exchange_url(name) {
     return name == '' ? 'amq.default' : fmt_escape_html(name);
 }
