@@ -29,7 +29,8 @@
 -behaviour(rabbit_exchange_decorator).
 
 -export([description/0, serialise_events/1, route/2]).
--export([create/2, delete/3, add_binding/3, remove_bindings/3]).
+-export([create/2, delete/3, add_binding/3, remove_bindings/3,
+         policy_changed/3]).
 
 %%----------------------------------------------------------------------------
 
@@ -37,16 +38,60 @@ description() ->
     [{name, <<"federation">>},
      {description, <<"Federation exchange decorator">>}].
 
-serialise_events(#exchange{name = XName}) -> federate(XName).
+serialise_events(X) -> federate(X).
 
+%% TODO we should remove this, right?
 route(_X, _Delivery) -> ok.
 
 create(transaction, _X) ->
     ok;
-create(none, X = #exchange{name = XName}) ->
-    case federate(XName) of
+create(none, X) ->
+    maybe_start(X).
+
+delete(transaction, _X, _Bs) ->
+    ok;
+delete(none, X, _Bs) ->
+    maybe_stop(X).
+
+add_binding(transaction, _X, _B) ->
+    ok;
+add_binding(Serial, X = #exchange{name = XName}, B) ->
+    case federate(X) of
+        true  -> rabbit_federation_link:add_binding(Serial, XName, B),
+                 ok;
+        false -> ok
+    end.
+
+remove_bindings(transaction, _X, _Bs) ->
+    ok;
+remove_bindings(Serial, X = #exchange{name = XName}, Bs) ->
+    case federate(X) of
+        true  -> rabbit_federation_link:remove_bindings(Serial, XName, Bs),
+                 ok;
+        false -> ok
+    end.
+
+policy_changed(none, OldX, NewX) ->
+    maybe_stop(OldX),
+    maybe_start(NewX).
+
+%%----------------------------------------------------------------------------
+
+federate(#exchange{type = 'x-federation-upstream'}) ->
+    false;
+
+federate(X) ->
+    case rabbit_federation_upstream:for(X) of
+        {ok, _}    -> true;
+        {error, _} -> false
+    end.
+
+maybe_start(X = #exchange{name = XName})->
+    case federate(X) of
         true ->
-            Set = <<"all">>,
+            %% TODO the extent to which we pass Set around can
+            %% probably be simplified.
+            {ok, Set} = rabbit_federation_upstream:for(X),
             Upstreams = rabbit_federation_upstream:from_set(Set, X),
             ok = rabbit_federation_db:prune_scratch(XName, Upstreams),
             {ok, _} = rabbit_federation_link_sup_sup:start_child(X, {Set, X}),
@@ -55,42 +100,10 @@ create(none, X = #exchange{name = XName}) ->
             ok
     end.
 
-delete(transaction, _X, _Bs) ->
-    ok;
-delete(none, X = #exchange{name = XName}, _Bs) ->
-    case federate(XName) of
-        true ->
-            rabbit_federation_link:stop(XName),
-            ok = rabbit_federation_link_sup_sup:stop_child(X),
-            rabbit_federation_status:remove_exchange(XName),
-            ok;
-        false ->
-            ok
+maybe_stop(X = #exchange{name = XName}) ->
+    case federate(X) of
+        true  -> rabbit_federation_link:stop(XName),
+                 ok = rabbit_federation_link_sup_sup:stop_child(X),
+                 rabbit_federation_status:remove_exchange(XName);
+        false -> ok
     end.
-
-add_binding(transaction, _X, _B) ->
-    ok;
-add_binding(Serial, #exchange{name = XName}, B) ->
-    case federate(XName) of
-        true ->
-            rabbit_federation_link:add_binding(Serial, XName, B),
-            ok;
-        false ->
-            ok
-    end.
-
-remove_bindings(transaction, _X, _Bs) ->
-    ok;
-remove_bindings(Serial, #exchange{name = XName}, Bs) ->
-    case federate(XName) of
-        true ->
-            rabbit_federation_link:remove_bindings(Serial, XName, Bs),
-            ok;
-        false ->
-            ok
-    end.
-
-%%----------------------------------------------------------------------------
-%% TODO this is a bit noddy. OK, a lot noddy.
-federate(#resource{name = <<"fed.", _/binary>>}) -> true;
-federate(_)                                      -> false.

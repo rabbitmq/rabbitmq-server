@@ -31,7 +31,7 @@ start_link(Args) -> supervisor2:start_link(?MODULE, Args).
 adjust(Sup, X, everything) ->
     [stop(Sup, Upstream) ||
         {Upstream, _, _, _} <- supervisor2:which_children(Sup)],
-    case upstream_set(X) of
+    case rabbit_federation_upstream:for(X) of
         {ok, UpstreamSet} ->
             [{ok, _Pid} = supervisor2:start_child(Sup, Spec) ||
                 Spec <- specs(UpstreamSet, X)];
@@ -58,7 +58,7 @@ adjust(Sup, X, {connection, ConnName}) ->
     [start(Sup, NewUpstream, X) || NewUpstream <- NewUpstreams];
 
 adjust(Sup, X, {clear_connection, ConnName}) ->
-    prune_for_upstream_set(<<"all">>, X),
+    prune_for_upstream_set(<<"all">>, X), %% TODO this is broken
     [stop(Sup, Upstream) || Upstream <- children(Sup, ConnName)];
 
 %% TODO handle changes of upstream sets minimally (bug 24853)
@@ -87,19 +87,15 @@ children(Sup, ConnName) ->
       ConnName, [U || {U, _, _, _} <- supervisor2:which_children(Sup)]).
 
 upstreams(X, ConnName) ->
-    case upstream_set(X) of
+    case rabbit_federation_upstream:for(X) of
         {ok, UpstreamSet} ->
             rabbit_federation_upstream:from_set(UpstreamSet, X, ConnName);
         {error, not_found} ->
             []
     end.
 
-upstream_set(_X) ->
-    %% TODO ahem
-    {ok, <<"all">>}.
-
 prune_for_upstream_set(Set, X = #exchange{name = XName}) ->
-    case upstream_set(X) of
+    case rabbit_federation_upstream:for(X) of
         {ok, Set} -> Us = rabbit_federation_upstream:from_set(Set, X),
                      ok = rabbit_federation_db:prune_scratch(XName, Us);
         _         -> ok

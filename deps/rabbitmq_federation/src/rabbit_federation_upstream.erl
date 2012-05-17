@@ -19,12 +19,14 @@
 -include("rabbit_federation.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
--export([to_table/1, to_string/1, from_set/2, from_set/3]).
+-export([for/1, to_table/1, to_string/1, from_set/2, from_set/3]).
 
 -import(rabbit_misc, [pget/2, pget/3]).
 -import(rabbit_federation_util, [name/1, vhost/1]).
 
 %%----------------------------------------------------------------------------
+
+for(X) -> rabbit_policy:get(<<"federation-upstream-set">>, X).
 
 to_table(#upstream{original_uri = URI,
                    params       = Params,
