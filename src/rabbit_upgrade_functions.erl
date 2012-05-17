@@ -38,6 +38,8 @@
 -rabbit_upgrade({topic_trie_node,       mnesia, []}).
 -rabbit_upgrade({runtime_parameters,    mnesia, []}).
 -rabbit_upgrade({exchange_scratches,    mnesia, [exchange_scratch]}).
+-rabbit_upgrade({policy,                mnesia,
+                 [exchange_scratches, ha_mirrors]}).
 
 %% -------------------------------------------------------------------
 
@@ -59,6 +61,7 @@
 -spec(mirrored_supervisor/0   :: () -> 'ok').
 -spec(topic_trie_node/0       :: () -> 'ok').
 -spec(runtime_parameters/0    :: () -> 'ok').
+-spec(policy/0                :: () -> 'ok').
 
 -endif.
 
@@ -210,6 +213,32 @@ exchange_scratches(Table) ->
               {exchange, Name, Type, Dur, AutoDel, Int, Args, undefined}
       end,
       [name, type, durable, auto_delete, internal, arguments, scratches]).
+
+policy() ->
+    ok = exchange_policy(rabbit_exchange),
+    ok = exchange_policy(rabbit_durable_exchange),
+    ok = queue_policy(rabbit_queue),
+    ok = queue_policy(rabbit_durable_queue).
+
+exchange_policy(Table) ->
+    transform(
+      Table,
+      fun ({exchange, Name, Type, Dur, AutoDel, Int, Args, Scratches}) ->
+              {exchange, Name, Type, Dur, AutoDel, Int, Args, Scratches,
+               undefined}
+      end,
+      [name, type, durable, auto_delete, internal, arguments, scratches,
+       policy]).
+
+queue_policy(Table) ->
+    transform(
+      Table,
+      fun ({amqqueue, Name, Dur, AutoDel, Excl, Args, Pid, SPids, MNodes}) ->
+              {amqqueue, Name, Dur, AutoDel, Excl, Args, Pid, SPids, MNodes,
+               undefined}
+      end,
+      [name, durable, auto_delete, exclusive_owner, arguments, pid,
+       slave_pids, mirror_nodes, policy]).
 
 %%--------------------------------------------------------------------
 

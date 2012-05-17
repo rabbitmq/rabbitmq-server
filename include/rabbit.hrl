@@ -43,11 +43,11 @@
 -record(resource, {virtual_host, kind, name}).
 
 -record(exchange, {name, type, durable, auto_delete, internal, arguments,
-                   scratches}).
+                   scratches, policy}).
 -record(exchange_serial, {name, next}).
 
 -record(amqqueue, {name, durable, auto_delete, exclusive_owner = none,
-                   arguments, pid, slave_pids, mirror_nodes}).
+                   arguments, pid, slave_pids, mirror_nodes, policy}).
 
 %% mnesia doesn't like unary records, so we add a dummy 'value' field
 -record(route, {binding, value = const}).

@@ -197,23 +197,41 @@ declare(Recover, From, State = #q{q                   = Q,
                                   backing_queue       = BQ,
                                   backing_queue_state = undefined}) ->
     case rabbit_amqqueue:internal_declare(Q, Recover) of
-        not_found -> {stop, normal, not_found, State};
-        Q         -> gen_server2:reply(From, {new, Q}),
-                     ok = file_handle_cache:register_callback(
-                            rabbit_amqqueue, set_maximum_since_use,
-                            [self()]),
-                     ok = rabbit_memory_monitor:register(
-                            self(), {rabbit_amqqueue,
-                                     set_ram_duration_target, [self()]}),
-                     BQS = bq_init(BQ, Q, Recover),
-                     State1 = process_args(State#q{backing_queue_state = BQS}),
-                     rabbit_event:notify(queue_created,
-                                         infos(?CREATION_EVENT_KEYS, State1)),
-                     rabbit_event:if_enabled(State1, #q.stats_timer,
-                                             fun() -> emit_stats(State1) end),
-                     noreply(State1);
-        Q1        -> {stop, normal, {existing, Q1}, State}
-    end.
+        not_found ->
+            {stop, normal, not_found, State};
+        Q1 ->
+            case matches(Recover, Q, Q1) of
+                true ->
+                    gen_server2:reply(From, {new, Q}),
+                    ok = file_handle_cache:register_callback(
+                           rabbit_amqqueue, set_maximum_since_use, [self()]),
+                    ok = rabbit_memory_monitor:register(
+                           self(), {rabbit_amqqueue,
+                                    set_ram_duration_target, [self()]}),
+                    BQS = bq_init(BQ, Q, Recover),
+                    State1 = process_args(State#q{backing_queue_state = BQS}),
+                    rabbit_event:notify(queue_created,
+                                        infos(?CREATION_EVENT_KEYS, State1)),
+                    rabbit_event:if_enabled(State1, #q.stats_timer,
+                                            fun() -> emit_stats(State1) end),
+                    noreply(State1);
+                false ->
+                    {stop, normal, {existing, Q1}, State}
+            end
+     end.
+
+matches(true, Q, Q) -> true;
+matches(true, Q, Q1) -> false;
+matches(false, Q1, Q2) ->
+    %% i.e. not policy
+    Q1#amqqueue.name =:= Q2#amqqueue.name andalso
+    Q1#amqqueue.durable =:= Q2#amqqueue.durable andalso
+    Q1#amqqueue.auto_delete =:= Q2#amqqueue.auto_delete andalso
+    Q1#amqqueue.exclusive_owner =:= Q2#amqqueue.exclusive_owner andalso
+    Q1#amqqueue.arguments =:= Q2#amqqueue.arguments andalso
+    Q1#amqqueue.pid =:= Q2#amqqueue.pid andalso
+    Q1#amqqueue.slave_pids =:= Q2#amqqueue.slave_pids andalso
+    Q1#amqqueue.mirror_nodes =:= Q2#amqqueue.mirror_nodes.
 
 bq_init(BQ, Q, Recover) ->
     Self = self(),

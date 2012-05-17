@@ -18,13 +18,13 @@
 -include("rabbit.hrl").
 -include("rabbit_framing.hrl").
 
--export([recover/0, callback/4, declare/6,
+-export([recover/0, policy_changed/2, callback/4, declare/6,
          assert_equivalence/6, assert_args_equivalence/2, check_type/1,
          lookup/1, lookup_or_die/1, list/1, lookup_scratch/2, update_scratch/3,
          info_keys/0, info/1, info/2, info_all/1, info_all/2,
          route/2, delete/2]).
 %% these must be run inside a mnesia tx
--export([maybe_auto_delete/1, serial/1, peek_serial/1]).
+-export([maybe_auto_delete/1, serial/1, peek_serial/1, update/2]).
 
 %%----------------------------------------------------------------------------
 
@@ -40,6 +40,8 @@
 -spec(callback/4::
         (rabbit_types:exchange(), fun_name(), non_neg_integer() | atom(),
          [any()]) -> 'ok').
+-spec(policy_changed/2 ::
+        (rabbit_types:exchange(), rabbit_types:exchange()) -> 'ok').
 -spec(declare/6 ::
         (name(), type(), boolean(), boolean(), boolean(),
          rabbit_framing:amqp_table())
@@ -64,6 +66,9 @@
                                rabbit_types:ok(term()) |
                                rabbit_types:error('not_found')).
 -spec(update_scratch/3 :: (name(), atom(), fun((any()) -> any())) -> 'ok').
+-spec(update/2 ::
+        (name(),
+         fun((rabbit_types:exchange()) -> rabbit_types:exchange())) -> 'ok').
 -spec(info_keys/0 :: () -> rabbit_types:info_keys()).
 -spec(info/1 :: (rabbit_types:exchange()) -> rabbit_types:infos()).
 -spec(info/2 ::
@@ -89,7 +94,8 @@
 
 %%----------------------------------------------------------------------------
 
--define(INFO_KEYS, [name, type, durable, auto_delete, internal, arguments]).
+-define(INFO_KEYS, [name, type, durable, auto_delete, internal, arguments,
+                    policy]).
 
 recover() ->
     Xs = rabbit_misc:table_filter(
@@ -119,6 +125,8 @@ callback(X = #exchange{type = XType}, Fun, Serial0, Args) ->
     Module = type_to_module(XType),
     apply(Module, Fun, [Serial(Module:serialise_events()) | Args]).
 
+policy_changed(X1, X2) -> callback(X1, policy_changed, none, [X1, X2]).
+
 serialise_events(X = #exchange{type = Type}) ->
     case [Serialise || M <- decorators(),
                        Serialise <- [M:serialise_events(X)],
@@ -140,12 +148,12 @@ decorators() ->
     [M || {_, M} <- rabbit_registry:lookup_all(exchange_decorator)].
 
 declare(XName, Type, Durable, AutoDelete, Internal, Args) ->
-    X = #exchange{name        = XName,
-                  type        = Type,
-                  durable     = Durable,
-                  auto_delete = AutoDelete,
-                  internal    = Internal,
-                  arguments   = Args},
+    X = rabbit_policy:set(#exchange{name        = XName,
+                                    type        = Type,
+                                    durable     = Durable,
+                                    auto_delete = AutoDelete,
+                                    internal    = Internal,
+                                    arguments   = Args}),
     XT = type_to_module(Type),
     %% We want to upset things if it isn't ok
     ok = XT:validate(X),
@@ -252,28 +260,34 @@ lookup_scratch(Name, App) ->
 update_scratch(Name, App, Fun) ->
     rabbit_misc:execute_mnesia_transaction(
       fun() ->
-              case mnesia:wread({rabbit_exchange, Name}) of
-                  [X = #exchange{durable = Durable, scratches = Scratches0}] ->
-                      Scratches1 = case Scratches0 of
-                                       undefined -> orddict:new();
-                                       _         -> Scratches0
-                                   end,
-                      Scratch = case orddict:find(App, Scratches1) of
-                                    {ok, S} -> S;
-                                    error   -> undefined
-                                end,
-                      Scratches2 = orddict:store(App, Fun(Scratch), Scratches1),
-                      X1 = X#exchange{scratches = Scratches2},
-                      ok = mnesia:write(rabbit_exchange, X1, write),
-                      case Durable of
-                          true -> ok = mnesia:write(rabbit_durable_exchange,
-                                                    X1, write);
-                          _    -> ok
-                      end;
-                  [] ->
-                      ok
-              end
+              update(Name,
+                     fun(X = #exchange{scratches = Scratches0}) ->
+                             Scratches1 = case Scratches0 of
+                                              undefined -> orddict:new();
+                                              _         -> Scratches0
+                                          end,
+                             Scratch = case orddict:find(App, Scratches1) of
+                                           {ok, S} -> S;
+                                           error   -> undefined
+                                       end,
+                             Scratches2 = orddict:store(
+                                            App, Fun(Scratch), Scratches1),
+                             X#exchange{scratches = Scratches2}
+                     end)
       end).
+
+update(Name, Fun) ->
+    case mnesia:wread({rabbit_exchange, Name}) of
+        [X = #exchange{durable = Durable}] ->
+            X1 = Fun(X),
+            ok = mnesia:write(rabbit_exchange, X1, write),
+            case Durable of
+                true -> ok = mnesia:write(rabbit_durable_exchange, X1, write);
+                _    -> ok
+            end;
+        [] ->
+            ok
+    end.
 
 info_keys() -> ?INFO_KEYS.
 
@@ -290,6 +304,7 @@ i(durable,     #exchange{durable     = Durable})    -> Durable;
 i(auto_delete, #exchange{auto_delete = AutoDelete}) -> AutoDelete;
 i(internal,    #exchange{internal    = Internal})   -> Internal;
 i(arguments,   #exchange{arguments   = Arguments})  -> Arguments;
+i(policy,      X)                                   -> rabbit_policy:name(X);
 i(Item, _) -> throw({bad_argument, Item}).
 
 info(X = #exchange{}) -> infos(?INFO_KEYS, X).

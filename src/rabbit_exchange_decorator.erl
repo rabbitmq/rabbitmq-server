@@ -18,6 +18,8 @@
 
 -export([behaviour_info/1]).
 
+%% TODO make this into a modern typed callback
+
 behaviour_info(callbacks) ->
     [
      {description, 0},
@@ -40,7 +42,10 @@ behaviour_info(callbacks) ->
      {add_binding, 3},
 
      %% called after bindings have been deleted.
-     {remove_bindings, 3}
+     {remove_bindings, 3},
+
+     %% called when the policy attached to this exchange changes.
+     {policy_changed, 3}
     ];
 behaviour_info(_Other) ->
     undefined.
