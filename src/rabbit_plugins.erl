@@ -66,9 +66,21 @@ start() ->
                               usage()
         end,
 
+    PrintInvalidCommandError =
+        fun () ->
+                print_error("invalid command '~s'",
+                            [string:join([atom_to_list(Command) | Args], " ")])
+        end,
+                    
     case catch action(Command, Args, Opts, PluginsFile, PluginsDir) of
         ok ->
             rabbit_misc:quit(0);
+        {'EXIT', {function_clause, [{?MODULE, action, _} | _]}} ->
+            PrintInvalidCommandError(),
+            usage();
+        {'EXIT', {function_clause, [{?MODULE, action, _, _} | _]}} ->
+            PrintInvalidCommandError(),
+            usage();
         {error, Reason} ->
             print_error("~p", [Reason]),
             rabbit_misc:quit(2);

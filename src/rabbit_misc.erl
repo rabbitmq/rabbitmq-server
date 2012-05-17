@@ -67,14 +67,13 @@
 
 -ifdef(use_specs).
 
--export_type([resource_name/0, thunk/1]).
+-export_type([resource_name/0, thunk/1, invalid_arguments/0]).
 
 -type(ok_or_error() :: rabbit_types:ok_or_error(any())).
 -type(thunk(T) :: fun(() -> T)).
 -type(resource_name() :: binary()).
--type(optdef() :: {flag, string()} | {option, string(), string()}).
--type(invalid_arguments() :: 'command_not_found' |
-                             {'invalid_option', atom(), string()}).
+-type(optdef() :: flag | {option, string()}).
+-type(invalid_arguments() :: 'command_not_found').
 -type(channel_or_connection_exit()
       :: rabbit_types:channel_exit() | rabbit_types:connection_exit()).
 -type(digraph_label() :: term()).
@@ -185,7 +184,10 @@
 -spec(gb_trees_foreach/2 ::
         (fun ((any(), any()) -> any()), gb_tree()) -> 'ok').
 -spec(get_options/4 ::
-        ([{atom(), string()} | atom()], [string()], [optdef()], [string()])
+        ([{atom(), string()} | atom()],
+         [string()],
+         [{string(), optdef()}],
+         [string()])
         -> {'ok', {atom(), [{string(), string()}], [string()]}} |
            {'invalid', invalid_arguments()}).
 -spec(handle_invalid_arguments/1 :: (invalid_arguments()) -> 'ok').
@@ -746,7 +748,8 @@ gb_trees_foreach(Fun, Tree) ->
 %%      the accepted commands and the optional [string()] is the list of
 %%      accepted options for that command
 %%    * A list [string()] of options valid for all commands
-%%    * A list [optdef()] to determine what is a flag and what is an option
+%%    * A list [{string(), optdef()}] to determine what is a flag and what is
+%%      an option
 %%    * The list of arguments given by the user
 %% 
 %% Returns either {ok, {atom(), [{string(), string()}], [string()]} which are
@@ -769,8 +772,10 @@ get_options(CommandsOpts0, GlobalOpts, Defs, As0) ->
                      end, not_found, CommandsOpts)
     of
         not_found        -> {invalid, command_not_found};
-        {found, {C, Os}} -> get_options1(C, sets:from_list(GlobalOpts ++ Os),
-                                         Defs, As0 -- [C])
+        {found, {C, Os}} ->
+            {KVs, Arguments} = get_options(sets:from_list(GlobalOpts ++ Os),
+                                           Defs, As0 -- [C]),
+            {ok, {list_to_atom(C), KVs, Arguments}}
     end.
 
 drop_opts(Defs0, Opts0, As) ->
@@ -789,34 +794,19 @@ drop_opts(Opts, [A | As]) ->
         error             -> [A | As]
     end.
 
-get_options1(Command, Opts, Defs, As) ->
+get_options(Opts, Defs, As) ->
     %% Check that each flag is OK with this command, and get its value
-    case lists:foldl(fun (_, {invalid_option, Opt}) ->
-                             {invalid_option, Opt};
-                         (Def, {ok, {Accum, As1}}) ->
-                             K = case Def of
-                                     {K0, flag}        -> K0;
-                                     {K0, {option, _}} -> K0
-                                 end,
-                             case {lists:member(K, As1),
-                                   sets:is_element(K, Opts)}
-                             of
-                                 %% We have a flag that shouldn't be there
-                                 {true, false}  -> {invalid_option,
-                                                    list_to_atom(Command), K};
-                                 %% We don't care about this flag
-                                 {false, false} -> {ok, {Accum, As1}};
-                                 %% We need the flag
-                                 {_, true}      -> {As2, V} = get_def(Def, As1),
-                                                   {ok, {[{K, V} | Accum], As2}}
-                             end
-                     end, {ok, {[], As}}, Defs)
-    of
-        {ok, {Ks, Arguments}} ->
-            {ok, {list_to_atom(Command), Ks, Arguments}};
-        {invalid_option, Command, K} ->
-            {invalid, {invalid_option, Command, K}}
-    end.
+    lists:foldl(fun (Def, {Accum, As1}) ->
+                        K = case Def of
+                                {K0, flag}        -> K0;
+                                {K0, {option, _}} -> K0
+                            end,
+                        case sets:is_element(K, Opts) of
+                            false -> {Accum, As1};
+                            true  -> {As2, V} = get_def(Def, As1),
+                                     {[{K, V} | Accum], As2}
+                        end
+                end, {[], As}, Defs).
     
 get_def({Flag, flag}, As)             -> get_flag(Flag, As);
 get_def({Opt, {option, Default}}, As) -> get_option(Opt, Default, As).
