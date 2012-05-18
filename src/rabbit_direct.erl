@@ -47,16 +47,10 @@
 
 %%----------------------------------------------------------------------------
 
-boot() ->
-    {ok, _} =
-        supervisor2:start_child(
-          rabbit_sup,
-          {rabbit_direct_client_sup,
-           {rabbit_client_sup, start_link,
+boot() -> rabbit_sup:start_supervisor_child(
+            rabbit_direct_client_sup, rabbit_client_sup,
             [{local, rabbit_direct_client_sup},
-             {rabbit_channel_sup, start_link, []}]},
-           transient, infinity, supervisor, [rabbit_client_sup]}),
-    ok.
+             {rabbit_channel_sup, start_link, []}]).
 
 force_event_refresh() ->
     [Pid ! force_event_refresh || Pid<- list()],
