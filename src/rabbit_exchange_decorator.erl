@@ -29,11 +29,6 @@
 %% serial number).
 -callback serialise_events(rabbit_types:exchange()) -> boolean().
 
-%% The no_return is there so that we can have an "invalid" exchange
-%% type (see rabbit_exchange_type_invalid).
--callback route(rabbit_types:exchange(), rabbit_types:delivery()) ->
-    rabbit_router:match_result().
-
 %% called after declaration and recovery
 -callback create(tx(), rabbit_types:exchange()) -> 'ok'.
 
@@ -58,9 +53,8 @@
 -export([behaviour_info/1]).
 
 behaviour_info(callbacks) ->
-    [{description, 0}, {serialise_events, 1}, {route, 2},
-     {create, 2}, {delete, 3}, {add_binding, 3}, {remove_bindings, 3},
-     {policy_changed, 3}];
+    [{description, 0}, {serialise_events, 1}, {create, 2}, {delete, 3},
+     {add_binding, 3}, {remove_bindings, 3}, {policy_changed, 3}];
 behaviour_info(_Other) ->
     undefined.
 
