@@ -74,7 +74,15 @@ policy_changed(none, OldX, NewX) ->
 
 %%----------------------------------------------------------------------------
 
-federate(#exchange{type = 'x-federation-upstream'}) ->
+%% Don't federate default exchange, we can't bind to it
+federate(#exchange{name = #resource{name = <<"">>}}) ->
+    false;
+
+%% Don't federate any of our intermediate exchanges. Note that we use
+%% internal=true since older brokers may not declare
+%% x-federation-upstream on us. Also other internal exchanges should
+%% probably not be federated.
+federate(#exchange{internal = true}) ->
     false;
 
 federate(X) ->
