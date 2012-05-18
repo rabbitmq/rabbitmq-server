@@ -978,7 +978,8 @@
               </varlistentry>
               <varlistentry>
                 <term>type</term>
-                <listitem><para>The exchange type (one of [<command>direct</command>,
+                <listitem><para>The exchange type (such as
+                [<command>direct</command>,
                   <command>topic</command>, <command>headers</command>,
                   <command>fanout</command>]).</para></listitem>
               </varlistentry>
