@@ -185,13 +185,7 @@ declare(XName, Type, Durable, AutoDelete, Internal, Args) ->
 map_create_tx(true)  -> transaction;
 map_create_tx(false) -> none.
 
-store(X = #exchange{name = Name}) ->
-    ok = mnesia:write(rabbit_exchange, X, write),
-    case serialise_events(X) of
-        true  -> S = #exchange_serial{name = Name, next = 1},
-                 ok = mnesia:write(rabbit_exchange_serial, S, write);
-        false -> ok
-    end.
+store(X) -> ok = mnesia:write(rabbit_exchange, X, write).
 
 %% Used with binaries sent over the wire; the type may not exist.
 check_type(TypeBin) ->
@@ -415,8 +409,10 @@ unconditional_delete(X = #exchange{name = XName}) ->
     {deleted, X, Bindings, rabbit_binding:remove_for_destination(XName)}.
 
 next_serial(XName) ->
-    [#exchange_serial{next = Serial}] =
-        mnesia:read(rabbit_exchange_serial, XName, write),
+    Serial = case mnesia:read(rabbit_exchange_serial, XName, write) of
+                 [#exchange_serial{next = Next}] -> Next;
+                 []                              -> 1
+             end,
     ok = mnesia:write(rabbit_exchange_serial,
                       #exchange_serial{name = XName, next = Serial + 1}, write),
     Serial.
