@@ -221,7 +221,7 @@ declare(Recover, From, State = #q{q                   = Q,
      end.
 
 matches(true, Q, Q) -> true;
-matches(true, Q, Q1) -> false;
+matches(true, _Q, _Q1) -> false;
 matches(false, Q1, Q2) ->
     %% i.e. not policy
     Q1#amqqueue.name =:= Q2#amqqueue.name andalso
