@@ -60,8 +60,9 @@ get0(Name, List)       -> case pget(<<"policy">>, List) of
 
 %%----------------------------------------------------------------------------
 
-validate(<<"policy">>, _Name, Term) ->
-    assert_contents(policy_validation(), Term).
+validate(<<"policy">>, Name, Term) ->
+    rabbit_parameter_validation:proplist(
+      Name, policy_validation(), Term).
 
 validate_clear(<<"policy">>, _Name) ->
     ok.
@@ -146,57 +147,6 @@ sort_pred(A, B) ->
 %%----------------------------------------------------------------------------
 
 policy_validation() ->
-    [{<<"vhost">>,  binary, optional},
-     {<<"prefix">>, binary, mandatory},
-     {<<"policy">>, list,   mandatory}].
-
-%% TODO this is mostly duplicated from
-%% rabbit_federation_parameters. Sort that out in some way.
-
-assert_type(Name, {Type, Opts}, Term) ->
-    assert_type(Name, Type, Term),
-    case lists:member(Term, Opts) of
-        true  -> ok;
-        false -> {error, "~s must be one of ~p", [Name, Opts]}
-    end;
-
-assert_type(_Name, number, Term) when is_number(Term) ->
-    ok;
-
-assert_type(Name, number, Term) ->
-    {error, "~s should be number, actually was ~p", [Name, Term]};
-
-assert_type(_Name, binary, Term) when is_binary(Term) ->
-    ok;
-
-assert_type(Name, binary, Term) ->
-    {error, "~s should be binary, actually was ~p", [Name, Term]};
-
-assert_type(_Name, list, Term) when is_list(Term) ->
-    ok;
-
-assert_type(Name, list, Term) ->
-    {error, "~s should be list, actually was ~p", [Name, Term]}.
-
-assert_contents(Constraints, Term) when is_list(Term) ->
-    {Results, Remainder}
-        = lists:foldl(
-            fun ({Name, Constraint, Needed}, {Results0, Term0}) ->
-                    case {lists:keytake(Name, 1, Term0), Needed} of
-                        {{value, {Name, Value}, Term1}, _} ->
-                            {[assert_type(Name, Constraint, Value) | Results0],
-                             Term1};
-                        {false, mandatory} ->
-                            {[{error, "Key \"~s\" not found", [Name]} |
-                              Results0], Term0};
-                        {false, optional} ->
-                            {Results0, Term0}
-                    end
-            end, {[], Term}, Constraints),
-    case Remainder of
-        [] -> Results;
-        _  -> [{error, "Unrecognised terms ~p", [Remainder]} | Results]
-    end;
-
-assert_contents(_Constraints, Term) ->
-    {error, "Not a list ~p", [Term]}.
+    [{<<"vhost">>,  fun rabbit_parameter_validation:binary/2, optional},
+     {<<"prefix">>, fun rabbit_parameter_validation:binary/2, mandatory},
+     {<<"policy">>, fun rabbit_parameter_validation:list/2,   mandatory}].
