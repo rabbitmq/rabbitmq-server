@@ -639,6 +639,8 @@ force_event_refresh() ->
 %%---------------------------------------------------------------------------
 %% misc
 
+print_plugin_info([]) ->
+    ok;
 print_plugin_info(Plugins) ->
     io:format("~n-- plugins running~n"),
     [print_plugin_info(AppName, element(2, application:get_key(AppName, vsn)))
