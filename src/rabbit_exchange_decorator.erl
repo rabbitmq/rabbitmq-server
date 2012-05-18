@@ -16,36 +16,52 @@
 
 -module(rabbit_exchange_decorator).
 
+-ifdef(use_specs).
+
+-type(tx() :: 'transaction' | 'none').
+-type(serial() :: pos_integer() | tx()).
+
+-callback description() -> [proplist:property()].
+
+%% Should Rabbit ensure that all binding events that are
+%% delivered to an individual exchange can be serialised? (they
+%% might still be delivered out of order, but there'll be a
+%% serial number).
+-callback serialise_events(rabbit_types:exchange()) -> boolean().
+
+%% The no_return is there so that we can have an "invalid" exchange
+%% type (see rabbit_exchange_type_invalid).
+-callback route(rabbit_types:exchange(), rabbit_types:delivery()) ->
+    rabbit_router:match_result().
+
+%% called after declaration and recovery
+-callback create(tx(), rabbit_types:exchange()) -> 'ok'.
+
+%% called after exchange (auto)deletion.
+-callback delete(tx(), rabbit_types:exchange(), [rabbit_types:binding()]) ->
+    'ok'.
+
+%% called after a binding has been added or recovered
+-callback add_binding(serial(), rabbit_types:exchange(),
+                      rabbit_types:binding()) -> 'ok'.
+
+%% called after bindings have been deleted.
+-callback remove_bindings(serial(), rabbit_types:exchange(),
+                          [rabbit_types:binding()]) -> 'ok'.
+
+%% called when the policy attached to this exchange changes.
+-callback policy_changed (
+            serial(), rabbit_types:exchange(), rabbit_types:exchange()) -> 'ok'.
+
+-else.
+
 -export([behaviour_info/1]).
 
-%% TODO make this into a modern typed callback
-
 behaviour_info(callbacks) ->
-    [
-     {description, 0},
-
-     %% Should Rabbit ensure that all binding events that are
-     %% delivered to an individual exchange can be serialised? (they
-     %% might still be delivered out of order, but there'll be a
-     %% serial number).
-     {serialise_events, 1},
-
-     {route, 2},
-
-     %% called after declaration and recovery
-     {create, 2},
-
-     %% called after exchange (auto)deletion.
-     {delete, 3},
-
-     %% called after a binding has been added or recovered
-     {add_binding, 3},
-
-     %% called after bindings have been deleted.
-     {remove_bindings, 3},
-
-     %% called when the policy attached to this exchange changes.
-     {policy_changed, 3}
-    ];
+    [{description, 0}, {serialise_events, 1}, {route, 2},
+     {create, 2}, {delete, 3}, {add_binding, 3}, {remove_bindings, 3},
+     {policy_changed, 3}];
 behaviour_info(_Other) ->
     undefined.
+
+-endif.
