@@ -57,13 +57,17 @@ adjust(Sup, X, {connection, ConnName}) ->
     [stop(Sup, OldUpstream) || OldUpstream <- OldUpstreams],
     [start(Sup, NewUpstream, X) || NewUpstream <- NewUpstreams];
 
-adjust(Sup, X, {clear_connection, ConnName}) ->
-    prune_for_upstream_set(<<"all">>, X), %% TODO this is broken
+adjust(Sup, X = #exchange{name = XName}, {clear_connection, ConnName}) ->
+    ok = rabbit_federation_db:prune_scratch(XName, upstreams(X)),
     [stop(Sup, Upstream) || Upstream <- children(Sup, ConnName)];
 
 %% TODO handle changes of upstream sets minimally (bug 24853)
-adjust(Sup, X, {upstream_set, Set}) ->
-    prune_for_upstream_set(Set, X),
+adjust(Sup, X = #exchange{name = XName}, {upstream_set, Set}) ->
+    case rabbit_federation_upstream:for(X) of
+        {ok, Set} -> Us = rabbit_federation_upstream:from_set(Set, X),
+                     ok = rabbit_federation_db:prune_scratch(XName, Us);
+        _         -> ok
+    end,
     adjust(Sup, X, everything);
 adjust(Sup, X, {clear_upstream_set, _}) ->
     adjust(Sup, X, everything).
@@ -94,11 +98,12 @@ upstreams(X, ConnName) ->
             []
     end.
 
-prune_for_upstream_set(Set, X = #exchange{name = XName}) ->
+upstreams(X) ->
     case rabbit_federation_upstream:for(X) of
-        {ok, Set} -> Us = rabbit_federation_upstream:from_set(Set, X),
-                     ok = rabbit_federation_db:prune_scratch(XName, Us);
-        _         -> ok
+        {ok, UpstreamSet} ->
+            rabbit_federation_upstream:from_set(UpstreamSet, X);
+        {error, not_found} ->
+            []
     end.
 
 %%----------------------------------------------------------------------------
