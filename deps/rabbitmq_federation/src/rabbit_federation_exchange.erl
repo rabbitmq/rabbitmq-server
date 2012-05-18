@@ -86,23 +86,17 @@ federate(#exchange{internal = true}) ->
     false;
 
 federate(X) ->
-    case rabbit_federation_upstream:for(X) of
+    case rabbit_federation_upstream:set_for(X) of
         {ok, _}    -> true;
         {error, _} -> false
     end.
 
 maybe_start(X = #exchange{name = XName})->
     case federate(X) of
-        true ->
-            %% TODO the extent to which we pass Set around can
-            %% probably be simplified.
-            {ok, Set} = rabbit_federation_upstream:for(X),
-            Upstreams = rabbit_federation_upstream:from_set(Set, X),
-            ok = rabbit_federation_db:prune_scratch(XName, Upstreams),
-            {ok, _} = rabbit_federation_link_sup_sup:start_child(X, {Set, X}),
-            ok;
-        false ->
-            ok
+        true  -> ok = rabbit_federation_db:prune_scratch(X),
+                 {ok, _} = rabbit_federation_link_sup_sup:start_child(X),
+                 ok;
+        false -> ok
     end.
 
 maybe_stop(X = #exchange{name = XName}) ->

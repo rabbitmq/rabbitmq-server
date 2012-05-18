@@ -26,22 +26,16 @@
 -export([start_link/1, adjust/3]).
 -export([init/1]).
 
-start_link(Args) -> supervisor2:start_link(?MODULE, Args).
+start_link(X) -> supervisor2:start_link(?MODULE, X).
 
 adjust(Sup, X, everything) ->
     [stop(Sup, Upstream) ||
         {Upstream, _, _, _} <- supervisor2:which_children(Sup)],
-    case rabbit_federation_upstream:for(X) of
-        {ok, UpstreamSet} ->
-            [{ok, _Pid} = supervisor2:start_child(Sup, Spec) ||
-                Spec <- specs(UpstreamSet, X)];
-        {error, not_found} ->
-            ok
-    end;
+    [{ok, _Pid} = supervisor2:start_child(Sup, Spec) || Spec <- specs(X)];
 
 adjust(Sup, X, {connection, ConnName}) ->
     OldUpstreams0 = children(Sup, ConnName),
-    NewUpstreams0 = upstreams(X, ConnName),
+    NewUpstreams0 = rabbit_federation_upstream:for(X, ConnName),
     %% If any haven't changed, don't restart them. The broker will
     %% avoid telling us about connections that have not changed
     %% syntactically, but even if one has, this X may not have that
@@ -58,14 +52,13 @@ adjust(Sup, X, {connection, ConnName}) ->
     [start(Sup, NewUpstream, X) || NewUpstream <- NewUpstreams];
 
 adjust(Sup, X = #exchange{name = XName}, {clear_connection, ConnName}) ->
-    ok = rabbit_federation_db:prune_scratch(XName, upstreams(X)),
+    ok = rabbit_federation_db:prune_scratch(X),
     [stop(Sup, Upstream) || Upstream <- children(Sup, ConnName)];
 
 %% TODO handle changes of upstream sets minimally (bug 24853)
 adjust(Sup, X = #exchange{name = XName}, {upstream_set, Set}) ->
-    case rabbit_federation_upstream:for(X) of
-        {ok, Set} -> Us = rabbit_federation_upstream:from_set(Set, X),
-                     ok = rabbit_federation_db:prune_scratch(XName, Us);
+    case rabbit_federation_upstream:set_for(X) of
+        {ok, Set} -> ok = rabbit_federation_db:prune_scratch(X);
         _         -> ok
     end,
     adjust(Sup, X, everything);
@@ -90,32 +83,15 @@ children(Sup, ConnName) ->
     rabbit_federation_util:find_upstreams(
       ConnName, [U || {U, _, _, _} <- supervisor2:which_children(Sup)]).
 
-upstreams(X, ConnName) ->
-    case rabbit_federation_upstream:for(X) of
-        {ok, UpstreamSet} ->
-            rabbit_federation_upstream:from_set(UpstreamSet, X, ConnName);
-        {error, not_found} ->
-            []
-    end.
-
-upstreams(X) ->
-    case rabbit_federation_upstream:for(X) of
-        {ok, UpstreamSet} ->
-            rabbit_federation_upstream:from_set(UpstreamSet, X);
-        {error, not_found} ->
-            []
-    end.
-
 %%----------------------------------------------------------------------------
 
-init({UpstreamSet, X}) ->
+init(X) ->
     %% 1, 1 so that the supervisor can give up and get into waiting
     %% for the reconnect_delay quickly.
-    {ok, {{one_for_one, 1, 1}, specs(UpstreamSet, X)}}.
+    {ok, {{one_for_one, 1, 1}, specs(X)}}.
 
-specs(UpstreamSet, X) ->
-    [spec(Upstream, X) ||
-        Upstream <- rabbit_federation_upstream:from_set(UpstreamSet, X)].
+specs(X) ->
+    [spec(Upstream, X) || Upstream <- rabbit_federation_upstream:for(X)].
 
 spec(Upstream = #upstream{reconnect_delay = Delay}, #exchange{name = XName}) ->
     {Upstream, {rabbit_federation_link, start_link, [{Upstream, XName}]},

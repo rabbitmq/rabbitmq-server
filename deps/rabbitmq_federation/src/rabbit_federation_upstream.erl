@@ -19,14 +19,26 @@
 -include("rabbit_federation.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
--export([for/1, to_table/1, to_string/1, from_set/2, from_set/3]).
+-export([set_for/1, for/1, for/2, to_table/1, to_string/1]).
 
 -import(rabbit_misc, [pget/2, pget/3]).
 -import(rabbit_federation_util, [name/1, vhost/1]).
 
 %%----------------------------------------------------------------------------
 
-for(X) -> rabbit_policy:get(<<"federation-upstream-set">>, X).
+set_for(X) -> rabbit_policy:get(<<"federation-upstream-set">>, X).
+
+for(X) ->
+    case set_for(X) of
+        {ok, UpstreamSet}  -> from_set(UpstreamSet, X);
+        {error, not_found} -> []
+    end.
+
+for(X, ConnName) ->
+    case set_for(X) of
+        {ok, UpstreamSet}  -> from_set(UpstreamSet, X, ConnName);
+        {error, not_found} -> []
+    end.
 
 to_table(#upstream{original_uri = URI,
                    params       = Params,

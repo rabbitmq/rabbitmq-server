@@ -23,7 +23,7 @@
 
 -import(rabbit_federation_util, [name/1]).
 
--export([get_active_suffix/3, set_active_suffix/3, prune_scratch/2]).
+-export([get_active_suffix/3, set_active_suffix/3, prune_scratch/1]).
 
 %%----------------------------------------------------------------------------
 
@@ -43,7 +43,8 @@ set_active_suffix(XName, Upstream, Suffix) ->
            XName, federation,
            fun(D) -> ?DICT:store(key(Upstream), Suffix, D) end).
 
-prune_scratch(XName, Upstreams) ->
+prune_scratch(X = #exchange{name = XName}) ->
+    Upstreams = rabbit_federation_upstream:for(X),
     ok = rabbit_exchange:update_scratch(
            XName, federation,
            fun(undefined) -> ?DICT:new();
