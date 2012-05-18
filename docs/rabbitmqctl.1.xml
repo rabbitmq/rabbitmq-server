@@ -887,6 +887,10 @@
                 <listitem><para>Queue arguments.</para></listitem>
               </varlistentry>
               <varlistentry>
+                <term>policy</term>
+                <listitem><para>Policy name applying to the queue.</para></listitem>
+              </varlistentry>
+              <varlistentry>
                 <term>pid</term>
                 <listitem><para>Id of the Erlang process associated with the queue.</para></listitem>
               </varlistentry>
@@ -997,6 +1001,10 @@
               <varlistentry>
                 <term>arguments</term>
                 <listitem><para>Exchange arguments.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>policy</term>
+                <listitem><para>Policy name for applying to the exchange.</para></listitem>
               </varlistentry>
             </variablelist>
             <para>
