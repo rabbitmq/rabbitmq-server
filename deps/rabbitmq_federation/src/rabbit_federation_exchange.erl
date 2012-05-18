@@ -28,7 +28,7 @@
 
 -behaviour(rabbit_exchange_decorator).
 
--export([description/0, serialise_events/1, route/2]).
+-export([description/0, serialise_events/1]).
 -export([create/2, delete/3, add_binding/3, remove_bindings/3,
          policy_changed/3]).
 
@@ -39,9 +39,6 @@ description() ->
      {description, <<"Federation exchange decorator">>}].
 
 serialise_events(X) -> federate(X).
-
-%% TODO we should remove this, right?
-route(_X, _Delivery) -> ok.
 
 create(transaction, _X) ->
     ok;
