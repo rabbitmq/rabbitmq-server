@@ -455,6 +455,10 @@ function link_node(name) {
     return _link_to(fmt_escape_html(name), '#/nodes/' + esc(name))
 }
 
+function link_policy(name) {
+    return _link_to(fmt_escape_html(name), '#/policies/' + esc(name))
+}
+
 function _link_to(name, url) {
     return '<a href="' + url + '">' + name + '</a>';
 }

@@ -1,0 +1,32 @@
+<h1>Policy: <b><%= fmt_string(policy.key) %></b></h1>
+
+<div class="section">
+  <h2>Overview</h2>
+  <div class="hider">
+    <table class="facts">
+      <tr>
+        <th>Virtual Host</th>
+        <td><%= policy.value.vhost %></td>
+      </tr>
+      <tr>
+        <th>Prefix</th>
+        <td><%= policy.value.prefix %></td>
+      </tr>
+      <tr>
+        <th>Policy</th>
+        <td><%= fmt_table_short(policy.value.policy) %></td>
+      </tr>
+    </table>
+  </div>
+</div>
+
+<div class="section-hidden">
+  <h2>Delete this policy</h2>
+  <div class="hider">
+    <form action="#/policies" method="delete" class="confirm">
+      <input type="hidden" name="component" value="policy"/>
+      <input type="hidden" name="key" value="<%= fmt_string(policy.key) %>"/>
+      <input type="submit" value="Delete this policy"/>
+    </form>
+  </div>
+</div>
