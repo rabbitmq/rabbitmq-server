@@ -182,18 +182,23 @@ action(force_reset, Node, [], _Opts, Inform) ->
     Inform("Forcefully resetting node ~p", [Node]),
     call(Node, {rabbit_mnesia, force_reset, []});
 
-action(cluster, Node, ClusterNodeSs, _Opts, Inform) ->
-    io:format("'cluster' is deprecated, please us 'join_cluster'.~n"),
-    ClusterNodes = lists:map(fun list_to_atom/1, ClusterNodeSs),
-    DiscNode = rabbit_mnesia:should_be_disc_node(ClusterNodes),
-    Inform("Clustering node ~p with ~p", [Node, ClusterNodes]),
-    rpc_call(Node, rabbit_mnesia, join_cluster, [ClusterNodes, DiscNode]);
-
-action(join_cluster, Node, ClusterNodeSs, Opts, Inform) ->
-    ClusterNodes = lists:map(fun list_to_atom/1, ClusterNodeSs),
+action(join_cluster, Node, [ClusterNodeS], Opts, Inform) ->
+    ClusterNode = list_to_atom(ClusterNodeS),
     DiscNode = not proplists:get_bool(?RAM_OPT, Opts),
-    Inform("Clustering node ~p with ~p", [Node, ClusterNodes]),
-    rpc_call(Node, rabbit_mnesia, join_cluster, [ClusterNodes, DiscNode]);
+    Inform("Clustering node ~p with ~p", [Node, ClusterNode]),
+    rpc_call(Node, rabbit_mnesia, join_cluster, [ClusterNode, DiscNode]);
+
+action(change_node_type, Node, ["ram"], _Opts, Inform) ->
+    Inform("Turning ~p into a ram node", [Node]),
+    rpc_call(Node, rabbit_mnesia, change_node_type, [ram]);
+action(change_node_type, Node, ["disc"], _Opts, Inform) ->
+    Inform("Turning ~p into a disc node", [Node]),
+    rpc_call(Node, rabbit_mnesia, change_node_type, [disc]);
+
+action(recluster, Node, [ClusterNodeS], _Opts, Inform) ->
+    ClusterNode = list_to_atom(ClusterNodeS),
+    Inform("Re-clustering ~p with ~p", [Node, ClusterNode]),
+    rpc_call(Node, rabbit_mnesia, recluster, [ClusterNode]);
 
 action(wait, Node, [PidFile], _Opts, Inform) ->
     Inform("Waiting for ~p", [Node]),
