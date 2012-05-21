@@ -383,14 +383,8 @@ action(list_parameters, Node, Args = [], _Opts, Inform) ->
 
 action(report, Node, _Args, _Opts, Inform) ->
     io:format("Reporting server status on ~p~n~n", [erlang:universaltime()]),
-    Nodes =
-        case unsafe_rpc(Node, rabbit_mnesia, running_clustered_nodes_safe, [])
-        of
-            {ok, Res}       -> Res;
-            {error, Reason} -> throw({error, Reason})
-        end,
     [begin ok = action(Action, N, [], [], Inform), io:nl() end ||
-        N      <- Nodes,
+        N      <- unsafe_rpc(Node, rabbit_mnesia, running_clustered_nodes, []),
         Action <- [status, cluster_status, environment]],
     VHosts = unsafe_rpc(Node, rabbit_vhost, list, []),
     [print_report(Node, Q)      || Q <- ?GLOBAL_QUERIES],
