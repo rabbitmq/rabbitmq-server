@@ -753,7 +753,10 @@ gb_trees_foreach(Fun, Tree) ->
 %% Returns either {ok, {atom(), [{string(), string()}], [string()]} which are
 %% respectively the command, the key-value pairs of the options and the leftover
 %% arguments; or no_command if no command could be parsed.
-get_options(CommandsOpts, GlobalOpts, Defs, As0) ->
+get_options(CommandsOpts0, GlobalOpts, Defs, As0) ->
+    CommandsOpts = lists:map(fun ({C, Fs}) -> {atom_to_list(C), Fs};
+                                 (C)       -> {atom_to_list(C), []}
+                             end, CommandsOpts0),
     DefsDict = dict:from_list(Defs),
     lists:foldl(fun ({C, Os}, no_command) ->
                         process_opts(C, DefsDict, GlobalOpts ++ Os, As0);
@@ -773,7 +776,7 @@ process_opts(C, Defs0, Opts0, As) ->
     KVs1 = dict:map(fun (_, flag)        -> false;
                         (_, {option, V}) -> V
                     end, Defs),
-    case process_opts1(atom_to_list(C), Defs, KVs1, As) of
+    case process_opts1(C, Defs, KVs1, As) of
         no_command        -> no_command;
         {ok, {KVs2, As1}} -> {ok, {list_to_atom(C), dict:to_list(KVs2), As1}}
     end.
