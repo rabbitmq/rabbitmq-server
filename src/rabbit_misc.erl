@@ -19,7 +19,7 @@
 -include("rabbit_framing.hrl").
 
 -export([method_record_type/1, polite_pause/0, polite_pause/1]).
--export([die/1, frame_error/2, amqp_error/4,
+-export([die/1, frame_error/2, amqp_error/4, quit/1, quit/2,
          protocol_error/3, protocol_error/4, protocol_error/1]).
 -export([not_found/1, assert_args_equivalence/4]).
 -export([dirty_read/1]).
@@ -42,7 +42,6 @@
 -export([dirty_read_all/1, dirty_foreach_key/2, dirty_dump_log/1]).
 -export([format/2, format_many/1, format_stderr/2]).
 -export([with_local_io/1, local_info_msg/2]).
--export([start_applications/1, stop_applications/1]).
 -export([unfold/2, ceil/1, queue_fold/3]).
 -export([sort_field_table/1]).
 -export([pid_to_string/1, string_to_pid/1]).
@@ -59,7 +58,6 @@
 -export([format_message_queue/2]).
 -export([append_rpc_all_nodes/4]).
 -export([multi_call/2]).
--export([quit/1]).
 -export([os_cmd/1]).
 -export([gb_sets_difference/2]).
 
@@ -87,6 +85,10 @@
 -spec(polite_pause/1 :: (non_neg_integer()) -> 'done').
 -spec(die/1 ::
         (rabbit_framing:amqp_exception()) -> channel_or_connection_exit()).
+
+-spec(quit/1 :: (integer()) -> any()).
+-spec(quit/2 :: (string(), [term()]) -> any()).
+
 -spec(frame_error/2 :: (rabbit_framing:amqp_method_name(), binary())
                        -> rabbit_types:connection_exit()).
 -spec(amqp_error/4 ::
@@ -163,8 +165,6 @@
 -spec(format_stderr/2 :: (string(), [any()]) -> 'ok').
 -spec(with_local_io/1 :: (fun (() -> A)) -> A).
 -spec(local_info_msg/2 :: (string(), [any()]) -> 'ok').
--spec(start_applications/1 :: ([atom()]) -> 'ok').
--spec(stop_applications/1 :: ([atom()]) -> 'ok').
 -spec(unfold/2  :: (fun ((A) -> ({'true', B, A} | 'false')), A) -> {[B], A}).
 -spec(ceil/1 :: (number()) -> integer()).
 -spec(queue_fold/3 :: (fun ((any(), B) -> B), B, queue()) -> B).
@@ -206,7 +206,6 @@
 -spec(append_rpc_all_nodes/4 :: ([node()], atom(), atom(), [any()]) -> [any()]).
 -spec(multi_call/2 ::
         ([pid()], any()) -> {[{pid(), any()}], [{pid(), any()}]}).
--spec(quit/1 :: (integer() | string()) -> no_return()).
 -spec(os_cmd/1 :: (string()) -> string()).
 -spec(gb_sets_difference/2 :: (gb_set(), gb_set()) -> gb_set()).
 
@@ -386,6 +385,28 @@ report_coverage_percentage(File, Cov, NotCov, Mod) ->
 
 confirm_to_sender(Pid, MsgSeqNos) ->
     gen_server2:cast(Pid, {confirm, MsgSeqNos, self()}).
+
+%%
+%% @doc Halts the emulator after printing out an error message io-formatted with
+%% the supplied arguments. The exit status of the beam process will be set to 1.
+%%
+quit(Fmt, Args) ->
+    io:format("ERROR: " ++ Fmt ++ "~n", Args),
+    quit(1).
+
+%%
+%% @doc Halts the emulator returning the given status code to the os.
+%% On Windows this function will block indefinitely so as to give the io
+%% subsystem time to flush stdout completely.
+%%
+quit(Status) ->
+    case os:type() of
+        {unix,  _} -> halt(Status);
+        {win32, _} -> init:stop(Status),
+                      receive
+                      after infinity -> ok
+                      end
+    end.
 
 throw_on_error(E, Thunk) ->
     case Thunk() of
@@ -588,34 +609,6 @@ with_local_io(Fun) ->
 %% the local node (e.g. rabbitmqctl calls).
 local_info_msg(Format, Args) ->
     with_local_io(fun () -> error_logger:info_msg(Format, Args) end).
-
-manage_applications(Iterate, Do, Undo, SkipError, ErrorTag, Apps) ->
-    Iterate(fun (App, Acc) ->
-                    case Do(App) of
-                        ok -> [App | Acc];
-                        {error, {SkipError, _}} -> Acc;
-                        {error, Reason} ->
-                            lists:foreach(Undo, Acc),
-                            throw({error, {ErrorTag, App, Reason}})
-                    end
-            end, [], Apps),
-    ok.
-
-start_applications(Apps) ->
-    manage_applications(fun lists:foldl/3,
-                        fun application:start/1,
-                        fun application:stop/1,
-                        already_started,
-                        cannot_start_application,
-                        Apps).
-
-stop_applications(Apps) ->
-    manage_applications(fun lists:foldr/3,
-                        fun application:stop/1,
-                        fun application:start/1,
-                        not_started,
-                        cannot_stop_application,
-                        Apps).
 
 unfold(Fun, Init) ->
     unfold(Fun, [], Init).
@@ -907,13 +900,6 @@ receive_multi_call([{Mref, Pid} | MonitorPids], Good, Bad) ->
             receive_multi_call(MonitorPids, Good, [{Pid, nodedown} | Bad]);
         {'DOWN', Mref, _, _, Reason} ->
             receive_multi_call(MonitorPids, Good, [{Pid, Reason} | Bad])
-    end.
-
-%% the slower shutdown on windows required to flush stdout
-quit(Status) ->
-    case os:type() of
-        {unix,  _} -> halt(Status);
-        {win32, _} -> init:stop(Status)
     end.
 
 os_cmd(Command) ->

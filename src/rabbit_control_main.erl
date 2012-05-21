@@ -14,7 +14,7 @@
 %% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
--module(rabbit_control).
+-module(rabbit_control_main).
 -include("rabbit.hrl").
 
 -export([start/0, stop/0, action/5]).
@@ -407,13 +407,23 @@ wait_for_application(Node, PidFile, Application, Inform) ->
     Inform("pid is ~s", [Pid]),
     wait_for_application(Node, Pid, Application).
 
+wait_for_application(Node, Pid, rabbit) ->
+    wait_for_startup(Node, Pid);
 wait_for_application(Node, Pid, Application) ->
+    while_process_is_alive(Node, Pid,
+                    fun() -> rabbit_nodes:is_running(Node, Application) end).
+
+wait_for_startup(Node, Pid) ->
+    while_process_is_alive(Node, Pid,
+                    fun() -> rpc:call(Node, rabbit, await_startup, []) =:= ok end).
+
+while_process_is_alive(Node, Pid, Activity) ->
     case process_up(Pid) of
-        true  -> case rabbit_nodes:is_running(Node, Application) of
-                     true  -> ok;
-                     false -> timer:sleep(?EXTERNAL_CHECK_INTERVAL),
-                              wait_for_application(Node, Pid, Application)
-                 end;
+        true -> case Activity() of
+                     true        -> ok;
+                     _Other      -> timer:sleep(?EXTERNAL_CHECK_INTERVAL),
+                                    while_process_is_alive(Node, Pid, Activity)
+                end;
         false -> {error, process_not_running}
     end.
 
@@ -427,7 +437,7 @@ wait_for_process_death(Pid) ->
 read_pid_file(PidFile, Wait) ->
     case {file:read_file(PidFile), Wait} of
         {{ok, Bin}, _} ->
-            S = string:strip(binary_to_list(Bin), right, $\n),
+            S = re:replace(Bin, "\\s", "", [global, {return, list}]),
             try list_to_integer(S)
             catch error:badarg ->
                     exit({error, {garbage_in_pid_file, PidFile}})

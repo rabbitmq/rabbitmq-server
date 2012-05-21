@@ -1573,7 +1573,7 @@ control_action(Command, Args, NewOpts) ->
                    expand_options(default_options(), NewOpts)).
 
 control_action(Command, Node, Args, Opts) ->
-    case catch rabbit_control:action(
+    case catch rabbit_control_main:action(
                  Command, Node, Args, Opts,
                  fun (Format, Args1) ->
                          io:format(Format ++ " ...~n", Args1)
