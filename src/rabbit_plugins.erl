@@ -53,13 +53,13 @@ start() ->
         init:get_argument(enabled_plugins_file),
     {ok, [[PluginsDir|_]|_]} = init:get_argument(plugins_dist_dir),
     {Command, Opts, Args} =
-        case rabbit_misc:get_options(?COMMANDS,
-                                     ?GLOBAL_OPTS,
-                                     [{?VERBOSE_OPT, flag},
-                                      {?MINIMAL_OPT, flag},
-                                      {?ENABLED_OPT, flag},
-                                      {?ENABLED_ALL_OPT, flag}],
-                                     init:get_plain_arguments())
+        case rabbit_misc:parse_arguments(?COMMANDS,
+                                         ?GLOBAL_OPTS,
+                                         [{?VERBOSE_OPT, flag},
+                                          {?MINIMAL_OPT, flag},
+                                          {?ENABLED_OPT, flag},
+                                          {?ENABLED_ALL_OPT, flag}],
+                                         init:get_plain_arguments())
         of
             {ok, Res}  -> Res;
             no_command -> print_error("could not recognise command", []),

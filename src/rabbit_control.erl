@@ -109,12 +109,12 @@
 start() ->
     {ok, [[NodeStr|_]|_]} = init:get_argument(nodename),
     {Command, Opts, Args} =
-        case rabbit_misc:get_options(?COMMANDS,
-                                     ?GLOBAL_OPTS,
-                                     [{?QUIET_OPT, flag},
-                                      {?NODE_OPT, {option, NodeStr}},
-                                      {?VHOST_OPT, {option, "/"}}],
-                                     init:get_plain_arguments())
+        case rabbit_misc:parse_arguments(?COMMANDS,
+                                         ?GLOBAL_OPTS,
+                                         [{?QUIET_OPT, flag},
+                                          {?NODE_OPT, {option, NodeStr}},
+                                          {?VHOST_OPT, {option, "/"}}],
+                                         init:get_plain_arguments())
         of
             {ok, Res}  -> Res;
             no_command -> print_error("could not recognise command", []),

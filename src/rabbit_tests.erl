@@ -50,7 +50,7 @@ all_tests() ->
     passed = test_app_management(),
     passed = test_log_management_during_startup(),
     passed = test_statistics(),
-    passed = test_option_parser(),
+    passed = test_arguments_parser(),
     passed = test_cluster_management(),
     passed = test_user_management(),
     passed = test_runtime_parameters(),
@@ -801,7 +801,7 @@ test_log_management_during_startup() ->
     ok = control_action(start_app, []),
     passed.
 
-test_option_parser() ->
+test_arguments_parser() ->
     Defs1 = [{"-o1", {option, "foo"}},
              {"-o2", {option, "bar"}},
              {"-f1", flag},
@@ -811,48 +811,52 @@ test_option_parser() ->
 
     GetOptions =
         fun (Args) ->
-                rabbit_misc:get_options(Commands1, GlobalOpts1, Defs1, Args)
+                rabbit_misc:parse_arguments(Commands1, GlobalOpts1, Defs1, Args)
         end,
 
-    check_get_options(no_command, GetOptions, []),
-    check_get_options(no_command, GetOptions, ["foo", "bar"]),
-    check_get_options({ok, {command1, [{"-f1", false}, {"-o1", "foo"}], []}},
-                      GetOptions, ["command1"]),
-    check_get_options({ok, {command1, [{"-f1", false}, {"-o1", "blah"}], []}},
-                      GetOptions, ["command1", "-o1", "blah"]),
-    check_get_options({ok, {command1, [{"-f1", true}, {"-o1", "foo"}], []}},
-                      GetOptions, ["command1", "-f1"]),
-    check_get_options({ok, {command1, [{"-f1", false}, {"-o1", "blah"}], []}},
-                      GetOptions, ["-o1", "blah", "command1"]),
-    check_get_options(
+    check_parse_arguments(no_command, GetOptions, []),
+    check_parse_arguments(no_command, GetOptions, ["foo", "bar"]),
+    check_parse_arguments(
+      {ok, {command1, [{"-f1", false}, {"-o1", "foo"}], []}},
+      GetOptions, ["command1"]),
+    check_parse_arguments(
+      {ok, {command1, [{"-f1", false}, {"-o1", "blah"}], []}},
+      GetOptions, ["command1", "-o1", "blah"]),
+    check_parse_arguments(
+      {ok, {command1, [{"-f1", true}, {"-o1", "foo"}], []}},
+      GetOptions, ["command1", "-f1"]),
+    check_parse_arguments(
+      {ok, {command1, [{"-f1", false}, {"-o1", "blah"}], []}},
+      GetOptions, ["-o1", "blah", "command1"]),
+    check_parse_arguments(
       {ok, {command1, [{"-f1", false}, {"-o1", "blah"}], ["quux"]}},
       GetOptions, ["-o1", "blah", "command1", "quux"]),
-    check_get_options(
+    check_parse_arguments(
       {ok, {command1, [{"-f1", true}, {"-o1", "blah"}], ["quux", "baz"]}},
       GetOptions, ["command1", "quux", "-f1", "-o1", "blah", "baz"]),
     %% For duplicate flags, the last one counts
-    check_get_options(
+    check_parse_arguments(
       {ok, {command1, [{"-f1", false}, {"-o1", "second"}], []}},
       GetOptions, ["-o1", "first", "command1", "-o1", "second"]),
     %% If the flag "eats" the command, the command won't be recognised
-    check_get_options(no_command, GetOptions,
+    check_parse_arguments(no_command, GetOptions,
                       ["-o1", "command1", "quux"]),
     %% If the flag doesn't have an argument, it won't be recognised
-    check_get_options(
+    check_parse_arguments(
       {ok, {command1, [{"-f1", false}, {"-o1", "foo"}], ["-o1"]}},
       GetOptions, ["command1", "-o1"]),
     %% If a flag eats another flag, the eaten flag won't be recognised
-    check_get_options(
+    check_parse_arguments(
       {ok, {command1, [{"-f1", false}, {"-o1", "-f1"}], []}},
       GetOptions, ["command1", "-o1", "-f1"]),
 
     %% Now for some command-specific flags...
-    check_get_options(
+    check_parse_arguments(
       {ok, {command2, [{"-f1", false}, {"-f2", false},
                        {"-o1", "foo"}, {"-o2", "bar"}], []}},
       GetOptions, ["command2"]),
 
-    check_get_options(
+    check_parse_arguments(
       {ok, {command2, [{"-f1", false}, {"-f2", true},
                        {"-o1", "baz"}, {"-o2", "bar"}], ["quux", "foo"]}},
       GetOptions, ["-f2", "command2", "quux", "-o1", "baz", "foo"]),
@@ -861,25 +865,24 @@ test_option_parser() ->
     Defs2 = [{"-o1", {option, "foo"}}, {"-f1", flag}],
     Commands2 = [command1, {command2, ["-f1", "-bogus"]}],
 
-    CheckError =
-        fun (Fun) ->
-                case catch Fun() of
-                    ok ->
-                        exit({got_success_but_expected_failure,
-                              get_options_undefined_option});
-                    {error, undefined_option} ->
-                        ok
-                end
-        end,
+    CheckError = fun (Fun) ->
+                         case catch Fun() of
+                             ok ->
+                                 exit({got_success_but_expected_failure,
+                                       parse_arguments_undefined_option});
+                             {error, undefined_option} ->
+                                 ok
+                         end
+                 end,
 
-    CheckError(
-      fun () ->
-              rabbit_misc:get_options(Commands2, ["-quux"], Defs2, ["command1"])
-      end),
-    CheckError(
-      fun () ->
-              rabbit_misc:get_options(Commands2, ["-o1"], Defs2, ["command2"])
-      end),
+    CheckError(fun () ->
+                       rabbit_misc:parse_arguments(
+                         Commands2, ["-quux"], Defs2, ["command1"])
+               end),
+    CheckError(fun () ->
+                       rabbit_misc:parse_arguments(
+                         Commands2, ["-o1"], Defs2, ["command2"])
+               end),
 
     passed.
 
@@ -1663,7 +1666,7 @@ expand_options(As, Bs) ->
                         end
                 end, Bs, As).
 
-check_get_options(ExpRes, Fun, As) ->
+check_parse_arguments(ExpRes, Fun, As) ->
     SortRes =
         fun (no_command)         -> no_command;
             ({ok, {C, KVs, As}}) -> {ok, {C, lists:sort(KVs), lists:sort(As)}}

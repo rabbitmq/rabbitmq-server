@@ -49,7 +49,7 @@
 -export([version_compare/2, version_compare/3]).
 -export([dict_cons/3, orddict_cons/3, gb_trees_cons/3]).
 -export([gb_trees_fold/3, gb_trees_foreach/2]).
--export([get_options/4]).
+-export([parse_arguments/4]).
 -export([all_module_attributes/1, build_acyclic_graph/3]).
 -export([now_ms/0]).
 -export([const_ok/0, const/1]).
@@ -182,7 +182,7 @@
 -spec(gb_trees_fold/3 :: (fun ((any(), any(), A) -> A), A, gb_tree()) -> A).
 -spec(gb_trees_foreach/2 ::
         (fun ((any(), any()) -> any()), gb_tree()) -> 'ok').
--spec(get_options/4 ::
+-spec(parse_arguments/4 ::
         ([{atom(), string()} | atom()],
          [string()],
          [{string(), optdef()}],
@@ -753,7 +753,7 @@ gb_trees_foreach(Fun, Tree) ->
 %% Returns either {ok, {atom(), [{string(), string()}], [string()]} which are
 %% respectively the command, the key-value pairs of the options and the leftover
 %% arguments; or no_command if no command could be parsed.
-get_options(CommandsOpts0, GlobalOpts, Defs, As0) ->
+parse_arguments(CommandsOpts0, GlobalOpts, Defs, As0) ->
     CommandsOpts = lists:map(fun ({C, Fs}) -> {atom_to_list(C), Fs};
                                  (C)       -> {atom_to_list(C), []}
                              end, CommandsOpts0),
