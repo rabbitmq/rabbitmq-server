@@ -814,8 +814,8 @@ test_option_parser() ->
                 rabbit_misc:get_options(Commands1, GlobalOpts1, Defs1, Args)
         end,
 
-    check_get_options({invalid, command_not_found}, GetOptions, []),
-    check_get_options({invalid, command_not_found}, GetOptions, ["foo", "bar"]),
+    check_get_options(no_command, GetOptions, []),
+    check_get_options(no_command, GetOptions, ["foo", "bar"]),
     check_get_options({ok, {command1, [{"-f1", false}, {"-o1", "foo"}], []}},
                       GetOptions, ["command1"]),
     check_get_options({ok, {command1, [{"-f1", false}, {"-o1", "blah"}], []}},
@@ -830,8 +830,12 @@ test_option_parser() ->
     check_get_options(
       {ok, {command1, [{"-f1", true}, {"-o1", "blah"}], ["quux", "baz"]}},
       GetOptions, ["command1", "quux", "-f1", "-o1", "blah", "baz"]),
+    %% For duplicate flags, the last one counts
+    check_get_options(
+      {ok, {command1, [{"-f1", false}, {"-o1", "second"}], []}},
+      GetOptions, ["-o1", "first", "command1", "-o1", "second"]),
     %% If the flag "eats" the command, the command won't be recognised
-    check_get_options({invalid, command_not_found}, GetOptions,
+    check_get_options(no_command, GetOptions,
                       ["-o1", "command1", "quux"]),
     %% If the flag doesn't have an argument, it won't be recognised
     check_get_options(
@@ -1661,7 +1665,7 @@ expand_options(As, Bs) ->
 
 check_get_options(ExpRes, Fun, As) ->
     SortRes =
-        fun ({invalid, Reason})  -> {invalid, Reason};
+        fun (no_command)         -> no_command;
             ({ok, {C, KVs, As}}) -> {ok, {C, lists:sort(KVs), lists:sort(As)}}
         end,
 

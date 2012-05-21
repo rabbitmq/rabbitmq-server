@@ -61,9 +61,9 @@ start() ->
                                       {?ENABLED_ALL_OPT, flag}],
                                      init:get_plain_arguments())
         of
-            {ok, Res}      -> Res;
-            {invalid, Err} -> rabbit_misc:handle_invalid_arguments(Err),
-                              usage()
+            {ok, Res}  -> Res;
+            no_command -> print_error("could not recognise command", []),
+                          usage()
         end,
 
     PrintInvalidCommandError =
@@ -71,7 +71,7 @@ start() ->
                 print_error("invalid command '~s'",
                             [string:join([atom_to_list(Command) | Args], " ")])
         end,
-                    
+
     case catch action(Command, Args, Opts, PluginsFile, PluginsDir) of
         ok ->
             rabbit_misc:quit(0);
@@ -407,4 +407,3 @@ report_change() ->
         _ ->
              ok
     end.
-

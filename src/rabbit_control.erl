@@ -36,18 +36,18 @@
          reset,
          force_reset,
          rotate_logs,
-         
+
          cluster,
          force_cluster,
          cluster_status,
-         
+
          add_user,
          delete_user,
          change_password,
          clear_password,
          set_user_tags,
          list_users,
-         
+
          add_vhost,
          delete_vhost,
          list_vhosts,
@@ -55,11 +55,11 @@
          {clear_permissions, [?VHOST_OPT]},
          {list_permissions, [?VHOST_OPT]},
          {list_user_permissions, [?VHOST_OPT]},
-         
+
          set_parameter,
          clear_parameter,
          list_parameters,
-         
+
          {list_queues, [?VHOST_OPT]},
          {list_exchanges, [?VHOST_OPT]},
          {list_bindings, [?VHOST_OPT]},
@@ -70,7 +70,7 @@
          environment,
          report,
          eval,
-         
+
          close_connection,
          {trace_on, [?VHOST_OPT]},
          {trace_off, [?VHOST_OPT]},
@@ -116,9 +116,9 @@ start() ->
                                       {?VHOST_OPT, {option, "/"}}],
                                      init:get_plain_arguments())
         of
-            {ok, Res}      -> Res;
-            {invalid, Err} -> rabbit_misc:handle_invalid_arguments(Err),
-                              usage()
+            {ok, Res}  -> Res;
+            no_command -> print_error("could not recognise command", []),
+                          usage()
         end,
     Opts1 = [case K of
                  ?NODE_OPT -> {?NODE_OPT, rabbit_nodes:make(V)};
@@ -137,7 +137,7 @@ start() ->
                 print_error("invalid command '~s'",
                             [string:join([atom_to_list(Command) | Args], " ")])
         end,
-    
+
     %% The reason we don't use a try/catch here is that rpc:call turns
     %% thrown errors into normal return values
     case catch action(Command, Node, Args, Opts, Inform) of
