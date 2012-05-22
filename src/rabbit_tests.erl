@@ -802,16 +802,12 @@ test_log_management_during_startup() ->
     passed.
 
 test_arguments_parser() ->
-    Defs1 = [{"-o1", {option, "foo"}},
-             {"-o2", {option, "bar"}},
-             {"-f1", flag},
-             {"-f2", flag}],
-    GlobalOpts1 = ["-f1", "-o1"],
-    Commands1 = [command1, {command2, ["-f2", "-o2"]}],
+    GlobalOpts1 = [{"-f1", flag}, {"-o1", {option, "foo"}}],
+    Commands1 = [command1, {command2, [{"-f2", flag}, {"-o2", {option, "bar"}}]}],
 
     GetOptions =
         fun (Args) ->
-                rabbit_misc:parse_arguments(Commands1, GlobalOpts1, Defs1, Args)
+                rabbit_misc:parse_arguments(Commands1, GlobalOpts1, Args)
         end,
 
     check_parse_arguments(no_command, GetOptions, []),
@@ -860,29 +856,6 @@ test_arguments_parser() ->
       {ok, {command2, [{"-f1", false}, {"-f2", true},
                        {"-o1", "baz"}, {"-o2", "bar"}], ["quux", "foo"]}},
       GetOptions, ["-f2", "command2", "quux", "-o1", "baz", "foo"]),
-
-    %% If we pass non-defined flags, we get an error
-    Defs2 = [{"-o1", {option, "foo"}}, {"-f1", flag}],
-    Commands2 = [command1, {command2, ["-f1", "-bogus"]}],
-
-    CheckError = fun (Fun) ->
-                         case catch Fun() of
-                             ok ->
-                                 exit({got_success_but_expected_failure,
-                                       parse_arguments_undefined_option});
-                             {error, undefined_option} ->
-                                 ok
-                         end
-                 end,
-
-    CheckError(fun () ->
-                       rabbit_misc:parse_arguments(
-                         Commands2, ["-quux"], Defs2, ["command1"])
-               end),
-    CheckError(fun () ->
-                       rabbit_misc:parse_arguments(
-                         Commands2, ["-o1"], Defs2, ["command2"])
-               end),
 
     passed.
 
@@ -1668,8 +1641,8 @@ expand_options(As, Bs) ->
 
 check_parse_arguments(ExpRes, Fun, As) ->
     SortRes =
-        fun (no_command)         -> no_command;
-            ({ok, {C, KVs, As}}) -> {ok, {C, lists:sort(KVs), lists:sort(As)}}
+        fun (no_command)          -> no_command;
+            ({ok, {C, KVs, As1}}) -> {ok, {C, lists:sort(KVs), As1}}
         end,
 
     true = SortRes(ExpRes) =:= SortRes(Fun(As)).

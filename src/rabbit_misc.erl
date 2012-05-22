@@ -49,7 +49,7 @@
 -export([version_compare/2, version_compare/3]).
 -export([dict_cons/3, orddict_cons/3, gb_trees_cons/3]).
 -export([gb_trees_fold/3, gb_trees_foreach/2]).
--export([parse_arguments/4]).
+-export([parse_arguments/3]).
 -export([all_module_attributes/1, build_acyclic_graph/3]).
 -export([now_ms/0]).
 -export([const_ok/0, const/1]).
@@ -182,9 +182,8 @@
 -spec(gb_trees_fold/3 :: (fun ((any(), any(), A) -> A), A, gb_tree()) -> A).
 -spec(gb_trees_foreach/2 ::
         (fun ((any(), any()) -> any()), gb_tree()) -> 'ok').
--spec(parse_arguments/4 ::
-        ([{atom(), string()} | atom()],
-         [string()],
+-spec(parse_arguments/3 ::
+        ([{atom(), [{string(), optdef()}]} | atom()],
          [{string(), optdef()}],
          [string()])
         -> {'ok', {atom(), [{string(), string()}], [string()]}} |
@@ -742,87 +741,60 @@ gb_trees_foreach(Fun, Tree) ->
     gb_trees_fold(fun (Key, Val, Acc) -> Fun(Key, Val), Acc end, ok, Tree).
 
 %% Takes:
-%%    * A list of [{atom(), [string()]} | atom()], where the atom()s are
-%%      the accepted commands and the optional [string()] is the list of
+%%    * A list of [{atom(), [{string(), optdef()]} | atom()], where the atom()s
+%%      are the accepted commands and the optional [string()] is the list of
 %%      accepted options for that command
-%%    * A list [string()] of options valid for all commands
-%%    * A list [{string(), optdef()}] to determine what is a flag and what is
-%%      an option
+%%    * A list [{string(), optdef()}] of options valid for all commands
 %%    * The list of arguments given by the user
 %%
 %% Returns either {ok, {atom(), [{string(), string()}], [string()]} which are
 %% respectively the command, the key-value pairs of the options and the leftover
 %% arguments; or no_command if no command could be parsed.
-parse_arguments(CommandsOpts0, GlobalOpts, Defs, As0) ->
-    CommandsOpts = lists:map(fun ({C, Fs}) -> {atom_to_list(C), Fs};
-                                 (C)       -> {atom_to_list(C), []}
-                             end, CommandsOpts0),
-    DefsDict = dict:from_list(Defs),
-    lists:foldl(fun ({C, Os}, no_command) ->
-                        process_opts(C, DefsDict, GlobalOpts ++ Os, As0);
-                    (_, {ok, Res}) ->
-                        {ok, Res}
-                end, no_command, CommandsOpts).
+parse_arguments(Commands, GlobalDefs, As) ->
+    lists:foldl(maybe_process_opts(GlobalDefs, As), no_command, Commands).
 
-process_opts(C, Defs0, Opts0, As) ->
-    Opts = sets:from_list(Opts0),
-    Defs = dict:filter(fun (K, _) -> sets:is_element(K, Opts) end, Defs0),
-    %% Opts0 must be a subset of the keys of Defs0 - we want to make sure that
-    %% all the options are defined.
-    case sets:size(Opts) =:= dict:size(Defs) of
-        true  -> ok;
-        false -> throw({error, undefined_option})
-    end,
-    KVs1 = dict:map(fun (_, flag)        -> false;
+maybe_process_opts(GDefs, As) ->
+    fun({C, Os}, no_command) ->
+            process_opts(atom_to_list(C), dict:from_list(GDefs ++ Os), As);
+       (C, no_command) ->
+            (maybe_process_opts(GDefs, As))({C, []}, no_command);
+       (_, {ok, Res}) ->
+            {ok, Res}
+    end.
+
+process_opts(C, Defs, As0) ->
+    KVs0 = dict:map(fun (_, flag)        -> false;
                         (_, {option, V}) -> V
                     end, Defs),
-    case process_opts1(C, Defs, KVs1, As) of
-        no_command        -> no_command;
-        {ok, {KVs2, As1}} -> {ok, {list_to_atom(C), dict:to_list(KVs2), As1}}
-    end.
+    process_opts(Defs, C, As0, not_found, KVs0, []).
 
 %% Consume flags/options until you find the correct command. If there are no
 %% arguments or the first argument is not the command we're expecting, fail.
-process_opts1(_, _, _, []) ->
+process_opts(_Defs, C, [], found, KVs, Outs) ->
+    {ok, {list_to_atom(C), dict:to_list(KVs), lists:reverse(Outs)}};
+process_opts(_Defs, _C, [], not_found, _, _) ->
     no_command;
-process_opts1(C, Defs, KVs1, [A | As]) ->
-    case case dict:find(A, Defs) of
-             {ok, flag} ->
-                 {opt, {dict:store(A, true, KVs1), As}};
-             {ok, {option, _}} ->
-                 case As of
-                     []        -> bad_argument;
-                     [V | As1] -> {opt, {dict:store(A, V, KVs1), As1}}
-                 end;
-             error when A =:= C ->
-                 {ok, {KVs1, As}};
-             error ->
-                 no_command
-         end
-    of
-        {opt, {KVs2, As2}} -> process_opts1(C, Defs, KVs2, As2);
-        {ok, {KVs2, As2}}  -> {ok, process_opts1(Defs, KVs2, As2)};
-        no_command         -> no_command
+process_opts(Defs, C, [A | As], Found, KVs, Outs) ->
+    OptType = case dict:find(A, Defs) of
+                  error             -> none;
+                  {ok, flag}        -> flag;
+                  {ok, {option, _}} -> option
+              end,
+    case {OptType, C, Found} of
+        {flag, _, _}     -> process_opts(
+                              Defs, C, As, Found, dict:store(A, true, KVs),
+                              Outs);
+        {option, _, _}   -> case As of
+                                []        -> process_opts(Defs, C, [], Found,
+                                                          KVs, [A | Outs]);
+                                [V | As1] -> process_opts(
+                                               Defs, C, As1, Found,
+                                               dict:store(A, V, KVs), Outs)
+                            end;
+        {none, A, _}     -> process_opts(Defs, C, As, found, KVs, Outs);
+        {none, _, found} -> process_opts(Defs, C, As, found, KVs, [A | Outs]);
+        {none, _, _}     -> no_command
     end.
-
-%% Finish consuming the flags/options.
-process_opts1(_, KVs, []) ->
-    {KVs, []};
-process_opts1(Defs, KVs1, [A | As]) ->
-    {KVs2, AsL, AsR1} =
-        case dict:find(A, Defs) of
-            {ok, flag} ->
-                {dict:store(A, true, KVs1), [], As};
-            {ok, {option, _}} ->
-                case As of
-                    []        -> {KVs1, [A], []};
-                    [V | As1] -> {dict:store(A, V, KVs1), [], As1}
-                end;
-            error ->
-                {KVs1, [A], As}
-        end,
-    {KVs3, AsR2} = process_opts1(Defs, KVs2, AsR1),
-    {KVs3, AsL ++ AsR2}.
 
 now_ms() ->
     timer:now_diff(now(), {0,0,0}) div 1000.

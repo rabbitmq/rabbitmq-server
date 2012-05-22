@@ -26,7 +26,11 @@
 -define(NODE_OPT, "-n").
 -define(VHOST_OPT, "-p").
 
--define(GLOBAL_OPTS, [?QUIET_OPT, ?NODE_OPT]).
+-define(QUIET_DEF, {?QUIET_OPT, flag}).
+-define(NODE_DEF(Node), {?NODE_OPT, {option, Node}}).
+-define(VHOST_DEF, {?VHOST_OPT, {option, "/"}}).
+
+-define(GLOBAL_DEFS(Node), [?QUIET_DEF, ?NODE_DEF(Node)]).
 
 -define(COMMANDS,
         [stop,
@@ -51,29 +55,29 @@
          add_vhost,
          delete_vhost,
          list_vhosts,
-         {set_permissions, [?VHOST_OPT]},
-         {clear_permissions, [?VHOST_OPT]},
-         {list_permissions, [?VHOST_OPT]},
-         {list_user_permissions, [?VHOST_OPT]},
+         {set_permissions, [?VHOST_DEF]},
+         {clear_permissions, [?VHOST_DEF]},
+         {list_permissions, [?VHOST_DEF]},
+         {list_user_permissions, [?VHOST_DEF]},
 
          set_parameter,
          clear_parameter,
          list_parameters,
 
-         {list_queues, [?VHOST_OPT]},
-         {list_exchanges, [?VHOST_OPT]},
-         {list_bindings, [?VHOST_OPT]},
-         {list_connections, [?VHOST_OPT]},
+         {list_queues, [?VHOST_DEF]},
+         {list_exchanges, [?VHOST_DEF]},
+         {list_bindings, [?VHOST_DEF]},
+         {list_connections, [?VHOST_DEF]},
          list_channels,
-         {list_consumers, [?VHOST_OPT]},
+         {list_consumers, [?VHOST_DEF]},
          status,
          environment,
          report,
          eval,
 
          close_connection,
-         {trace_on, [?VHOST_OPT]},
-         {trace_off, [?VHOST_OPT]},
+         {trace_on, [?VHOST_DEF]},
+         {trace_off, [?VHOST_DEF]},
          set_vm_memory_high_watermark
         ]).
 
@@ -109,11 +113,7 @@
 start() ->
     {ok, [[NodeStr|_]|_]} = init:get_argument(nodename),
     {Command, Opts, Args} =
-        case rabbit_misc:parse_arguments(?COMMANDS,
-                                         ?GLOBAL_OPTS,
-                                         [{?QUIET_OPT, flag},
-                                          {?NODE_OPT, {option, NodeStr}},
-                                          {?VHOST_OPT, {option, "/"}}],
+        case rabbit_misc:parse_arguments(?COMMANDS, ?GLOBAL_DEFS(NodeStr),
                                          init:get_plain_arguments())
         of
             {ok, Res}  -> Res;

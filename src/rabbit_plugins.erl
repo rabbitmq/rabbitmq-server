@@ -25,10 +25,15 @@
 -define(ENABLED_OPT, "-E").
 -define(ENABLED_ALL_OPT, "-e").
 
--define(GLOBAL_OPTS, []).
+-define(VERBOSE_DEF, {?VERBOSE_OPT, flag}).
+-define(MINIMAL_DEF, {?MINIMAL_OPT, flag}).
+-define(ENABLED_DEF, {?ENABLED_OPT, flag}).
+-define(ENABLED_ALL_DEF, {?ENABLED_ALL_OPT, flag}).
+
+-define(GLOBAL_DEFS, []).
 
 -define(COMMANDS,
-        [{list, [?VERBOSE_OPT, ?MINIMAL_OPT, ?ENABLED_OPT, ?ENABLED_ALL_OPT]},
+        [{list, [?VERBOSE_DEF, ?MINIMAL_DEF, ?ENABLED_DEF, ?ENABLED_ALL_DEF]},
          enable,
          disable]).
 
@@ -53,12 +58,7 @@ start() ->
         init:get_argument(enabled_plugins_file),
     {ok, [[PluginsDir|_]|_]} = init:get_argument(plugins_dist_dir),
     {Command, Opts, Args} =
-        case rabbit_misc:parse_arguments(?COMMANDS,
-                                         ?GLOBAL_OPTS,
-                                         [{?VERBOSE_OPT, flag},
-                                          {?MINIMAL_OPT, flag},
-                                          {?ENABLED_OPT, flag},
-                                          {?ENABLED_ALL_OPT, flag}],
+        case rabbit_misc:parse_arguments(?COMMANDS, ?GLOBAL_DEFS,
                                          init:get_plain_arguments())
         of
             {ok, Res}  -> Res;
