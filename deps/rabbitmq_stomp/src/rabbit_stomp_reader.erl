@@ -127,14 +127,11 @@ next_state(S, _) ->
 
 run_socket(State = #reader_state{state = blocked}, _ByteCount) ->
     State;
-run_socket(State = #reader_state{socket           = Sock,
-                                 recv_outstanding = RO},
-           ByteCount) ->
-    case RO of
-        false -> rabbit_net:async_recv(Sock, ByteCount, infinity),
-                 State#reader_state{recv_outstanding = true};
-        true  -> State
-    end.
+run_socket(State = #reader_state{recv_outstanding = true}, _ByteCount) ->
+    State;
+run_socket(State = #reader_state{socket = Sock}, ByteCount) ->
+    rabbit_net:async_recv(Sock, ByteCount, infinity),
+    State#reader_state{recv_outstanding = true}.
 
 %%----------------------------------------------------------------------------
 
