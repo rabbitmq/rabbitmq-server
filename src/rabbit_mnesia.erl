@@ -322,7 +322,9 @@ running_clustered_disc_nodes() ->
 cluster_status_if_running() ->
     case mnesia:system_info(is_running) of
         no  -> error;
-        yes -> {ok, read_cluster_nodes_status()}
+        yes -> {ok, {mnesia:system_info(db_nodes),
+                     mnesia:table_info(schema, disc_copies),
+                     mnesia:system_info(running_db_nodes)}}
     end.
 
 is_disc_node() -> mnesia:system_info(use_dir).
