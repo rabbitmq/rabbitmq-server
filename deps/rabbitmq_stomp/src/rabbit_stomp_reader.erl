@@ -24,7 +24,7 @@
 -include("rabbit_stomp_frame.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
--record(reader_state, {socket, parse_state, processor, state, iterations,
+-record(reader_state, {socket, parse_state, processor, state,
                        conserve_resources}).
 
 %%----------------------------------------------------------------------------
@@ -52,7 +52,6 @@ init(SupPid, Configuration) ->
                                     parse_state        = ParseState,
                                     processor          = ProcessorPid,
                                     state              = running,
-                                    iterations         = 0,
                                     conserve_resources = false})), 0),
                 log(info, "closing STOMP connection ~p (~s)~n",
                     [self(), ConnStr])
