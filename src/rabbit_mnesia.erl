@@ -272,8 +272,11 @@ recluster(DiscoveryNode) ->
 %%----------------------------------------------------------------------------
 
 status() ->
-    [{nodes,
-      {{disc, all_clustered_disc_nodes()}, {ram, all_clustered_ram_nodes()}}},
+    IfNonEmpty = fun (_, [])       -> [];
+                     (Type, Nodes) -> [{Type, Nodes}]
+                 end,
+    [{nodes, (IfNonEmpty(disc, all_clustered_disc_nodes()) ++
+                  IfNonEmpty(ram, all_clustered_ram_nodes()))},
      {running_nodes, running_clustered_nodes()}].
 
 is_db_empty() ->
