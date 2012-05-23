@@ -25,7 +25,7 @@
          initialize_cluster_nodes_status/0, write_cluster_nodes_status/1,
          read_cluster_nodes_status/0, update_cluster_nodes_status/0,
          is_disc_node/0, on_node_down/1, on_node_up/1, should_be_disc_node/1,
-         change_node_type/1, recluster/1]).
+         change_node_type/1, recluster/1, remove_node/1]).
 
 -export([table_names/0]).
 
@@ -54,6 +54,7 @@
 -spec(force_reset/0 :: () -> 'ok').
 -spec(recluster/1 :: (node()) -> 'ok').
 -spec(change_node_type/1 :: (node_type()) -> 'ok').
+-spec(remove_node/1 :: (node()) -> 'ok').
 
 %% Various queries to get the status of the db
 -spec(status/0 :: () -> [{'nodes', [{node_type(), [node()]}]} |
@@ -265,6 +266,22 @@ recluster(DiscoveryNode) ->
                          "the cluster"}})
     end,
 
+    ok.
+
+remove_node(Node) ->
+    case mnesia:system_info(is_running) of
+        yes -> {atomic, ok} = mnesia:del_table_copy(schema, Node),
+               update_cluster_nodes_status(),
+               {_, []} = rpc:multicall(running_clustered_nodes(), rabbit_mnesia,
+                                       update_cluster_nodes_status, []);
+        no  -> start_mnesia(),
+               try
+                   [mnesia:force_load_table(T) || T <- rabbit_mnesia:table_names()],
+                   remove_node(Node)
+               after
+                   stop_mnesia()
+               end
+    end,
     ok.
 
 %%----------------------------------------------------------------------------
@@ -653,6 +670,7 @@ on_node_up(Node) ->
     end.
 
 on_node_down(Node) ->
+    update_cluster_nodes_status(),
     case is_only_disc_node(Node) of
         true  -> rabbit_log:info("only running disc node went down~n");
         false -> ok

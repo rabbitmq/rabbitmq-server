@@ -200,6 +200,11 @@ action(recluster, Node, [ClusterNodeS], _Opts, Inform) ->
     Inform("Re-clustering ~p with ~p", [Node, ClusterNode]),
     rpc_call(Node, rabbit_mnesia, recluster, [ClusterNode]);
 
+action(remove_node, Node, [ClusterNodeS], _Opts, Inform) ->
+    ClusterNode = list_to_atom(ClusterNodeS),
+    Inform("Removing node ~p from cluster", [ClusterNode]),
+    rpc_call(Node, rabbit_mnesia, remove_node, [ClusterNode]);
+
 action(wait, Node, [PidFile], _Opts, Inform) ->
     Inform("Waiting for ~p", [Node]),
     wait_for_application(Node, PidFile, rabbit, Inform);
