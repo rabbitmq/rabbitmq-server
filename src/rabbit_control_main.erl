@@ -194,7 +194,7 @@ action(force_cluster, Node, ClusterNodeSs, _Opts, Inform) ->
 
 action(wait, Node, [PidFile], _Opts, Inform) ->
     Inform("Waiting for ~p", [Node]),
-    wait_for_application(Node, PidFile, rabbit, Inform);
+    wait_for_application(Node, PidFile, rabbit_and_plugins, Inform);
 
 action(wait, Node, [PidFile, App], _Opts, Inform) ->
     Inform("Waiting for ~p on ~p", [App, Node]),
@@ -407,7 +407,7 @@ wait_for_application(Node, PidFile, Application, Inform) ->
     Inform("pid is ~s", [Pid]),
     wait_for_application(Node, Pid, Application).
 
-wait_for_application(Node, Pid, rabbit) ->
+wait_for_application(Node, Pid, rabbit_and_plugins) ->
     wait_for_startup(Node, Pid);
 wait_for_application(Node, Pid, Application) ->
     while_process_is_alive(
