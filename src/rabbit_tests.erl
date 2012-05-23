@@ -837,10 +837,6 @@ test_arguments_parser() ->
     %% If the flag "eats" the command, the command won't be recognised
     check_parse_arguments(no_command, GetOptions,
                       ["-o1", "command1", "quux"]),
-    %% If the flag doesn't have an argument, it won't be recognised
-    check_parse_arguments(
-      {ok, {command1, [{"-f1", false}, {"-o1", "foo"}], ["-o1"]}},
-      GetOptions, ["command1", "-o1"]),
     %% If a flag eats another flag, the eaten flag won't be recognised
     check_parse_arguments(
       {ok, {command1, [{"-f1", false}, {"-o1", "-f1"}], []}},

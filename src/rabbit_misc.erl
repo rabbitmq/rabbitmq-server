@@ -785,8 +785,7 @@ process_opts(Defs, C, [A | As], Found, KVs, Outs) ->
                               Defs, C, As, Found, dict:store(A, true, KVs),
                               Outs);
         {option, _, _}   -> case As of
-                                []        -> process_opts(Defs, C, [], Found,
-                                                          KVs, [A | Outs]);
+                                []        -> no_command;
                                 [V | As1] -> process_opts(
                                                Defs, C, As1, Found,
                                                dict:store(A, V, KVs), Outs)
