@@ -86,8 +86,8 @@
 -spec(die/1 ::
         (rabbit_framing:amqp_exception()) -> channel_or_connection_exit()).
 
--spec(quit/1 :: (integer()) -> any()).
--spec(quit/2 :: (string(), [term()]) -> any()).
+-spec(quit/1 :: (integer()) -> no_return()).
+-spec(quit/2 :: (string(), [term()]) -> no_return()).
 
 -spec(frame_error/2 :: (rabbit_framing:amqp_method_name(), binary())
                        -> rabbit_types:connection_exit()).

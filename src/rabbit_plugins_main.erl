@@ -42,6 +42,7 @@
 
 -spec(start/0 :: () -> no_return()).
 -spec(stop/0 :: () -> 'ok').
+-spec(usage/0 :: () -> no_return()).
 
 -endif.
 
