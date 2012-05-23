@@ -665,22 +665,21 @@ handle_info({'DOWN', MRef, process, _Pid, _Reason},
         _ ->
             View1 =
                 group_to_view(record_dead_member_in_group(Member, GroupName)),
-            State1 = State #state { view = View1 },
             {Result, State2} =
                 case alive_view_members(View1) of
                     [Self] ->
-                        maybe_erase_aliases(
-                          State1 #state {
+                        {Result1, State1} = maybe_erase_aliases( State ),
+                        {Result1, State1 #state {
                             members_state = blank_member_state(),
-                            confirms      = purge_confirms(Confirms) });
+                            confirms      = purge_confirms(Confirms) }};
                     _ ->
                         %% here we won't be pointing out any deaths:
                         %% the concern is that there maybe births
                         %% which we'd otherwise miss.
                         {callback_view_changed(Args, Module, View, View1),
-                         State1}
+                         check_neighbours(State #state { view = View1 })}
                 end,
-            handle_callback_result({Result, check_neighbours(State2)})
+            handle_callback_result({Result, State2})
     end.
 
 
@@ -795,8 +794,8 @@ handle_msg({activity, Left, Activity},
     State1 = State #state { members_state = MembersState1,
                             confirms      = Confirms1 },
     Activity3 = activity_finalise(Activity1),
+    ok = maybe_send_activity(Activity3, State1),
     {Result, State2} = maybe_erase_aliases(State1),
-    ok = maybe_send_activity(Activity3, State2),
     if_callback_success(
       Result, fun activity_true/3, fun activity_false/3, Activity3, State2);
 
@@ -1111,7 +1110,7 @@ maybe_erase_aliases(State = #state { self          = Self,
         _  -> View1 = group_to_view(
                         erase_members_in_group(Erasable, GroupName)),
               {callback_view_changed(Args, Module, View, View1),
-               State1 #state { view = View1 }}
+               check_neighbours(State1 #state { view = View1 })}
     end.
 
 can_erase_view_member(Self, Self, _LA, _LP) -> false;
