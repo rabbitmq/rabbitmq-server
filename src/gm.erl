@@ -580,8 +580,10 @@ handle_call({add_on_right, NewMember}, _From,
               fun (Group1) ->
                       View1 = group_to_view(Group1),
                       ok = send_right(NewMember, View1,
-                                      {catchup, Self, prepare_members_state(
-                                                        MembersState)})
+                                      {catchup, Self,
+                                       prepare_members_state(
+                                         remove_erased_members(MembersState,
+                                                               View1))})
               end),
     View2 = group_to_view(Group),
     State1 = check_neighbours(State #state { view = View2 }),
@@ -591,6 +593,7 @@ handle_call({add_on_right, NewMember}, _From,
 
 handle_cast({?TAG, ReqVer, Msg},
             State = #state { view          = View,
+                             members_state = MembersState,
                              group_name    = GroupName,
                              module        = Module,
                              callback_args = Args }) ->
@@ -598,8 +601,11 @@ handle_cast({?TAG, ReqVer, Msg},
         case needs_view_update(ReqVer, View) of
             true ->
                 View1 = group_to_view(read_group(GroupName)),
+                MemberState1 = remove_erased_members(MembersState, View1),
                 {callback_view_changed(Args, Module, View, View1),
-                 check_neighbours(State #state { view = View1 })};
+                 check_neighbours(
+                   State #state { view = View1,
+                                  members_state = MemberState1 })};
             false ->
                 {ok, State}
         end,
@@ -1256,6 +1262,12 @@ make_member(GroupName) ->
         #gm_group { version = Version } -> Version;
         {error, not_found}              -> ?VERSION_START
     end, self()}.
+
+remove_erased_members(MembersState, View) ->
+    lists:foldl(fun (Id, MembersState1) ->
+                    store_member(Id, find_member_or_blank(Id, MembersState),
+                                 MembersState1)
+                end, blank_member_state(), all_known_members(View)).
 
 get_pid({_Version, Pid}) -> Pid.
 
