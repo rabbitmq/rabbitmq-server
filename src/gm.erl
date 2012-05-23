@@ -1287,16 +1287,30 @@ send_right(Right, View, Msg) ->
     ok = gen_server2:cast(get_pid(Right), {?TAG, view_version(View), Msg}).
 
 callback(Args, Module, Activity) ->
-    lists:foldl(
-      fun ({Id, Pubs, _Acks}, ok) ->
-              lists:foldl(fun ({_PubNum, Pub}, ok) ->
-                                  Module:handle_msg(Args, get_pid(Id), Pub);
-                              (_, Error) ->
-                                  Error
-                          end, ok, Pubs);
-          (_, Error) ->
-              Error
-      end, ok, Activity).
+    Result =
+      lists:foldl(
+        fun ({Id, Pubs, _Acks}, {Args1, Module1, ok}) ->
+                lists:foldl(fun ({_PubNum, Pub}, Acc = {Args2, Module2, ok}) ->
+                                    case Module2:handle_msg(
+                                           Args2, get_pid(Id), Pub) of
+                                        ok ->
+                                            Acc;
+                                        {become, Module3, Args3} ->
+                                            {Args3, Module3, ok};
+                                        {stop, _Reason} = Error ->
+                                            Error
+                                    end;
+                                (_, Error = {stop, _Reason}) ->
+                                    Error
+                            end, {Args1, Module1, ok}, Pubs);
+            (_, Error = {stop, _Reason}) ->
+                Error
+        end, {Args, Module, ok}, Activity),
+    case Result of
+        {Args, Module, ok}      -> ok;
+        {Args1, Module1, ok}    -> {become, Module1, Args1};
+        {stop, _Reason} = Error -> Error
+    end.
 
 callback_view_changed(Args, Module, OldView, NewView) ->
     OldMembers = all_known_members(OldView),
