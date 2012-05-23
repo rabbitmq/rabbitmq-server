@@ -410,12 +410,12 @@ wait_for_application(Node, PidFile, Application, Inform) ->
 wait_for_application(Node, Pid, rabbit) ->
     wait_for_startup(Node, Pid);
 wait_for_application(Node, Pid, Application) ->
-    while_process_is_alive(Node, Pid,
-                    fun() -> rabbit_nodes:is_running(Node, Application) end).
+    while_process_is_alive(
+      Node, Pid, fun() -> rabbit_nodes:is_running(Node, Application) end).
 
 wait_for_startup(Node, Pid) ->
-    while_process_is_alive(Node, Pid,
-                    fun() -> rpc:call(Node, rabbit, await_startup, []) =:= ok end).
+    while_process_is_alive(
+      Node, Pid, fun() -> rpc:call(Node, rabbit, await_startup, []) =:= ok end).
 
 while_process_is_alive(Node, Pid, Activity) ->
     case process_up(Pid) of
