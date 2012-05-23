@@ -44,7 +44,7 @@
 
 -export_type([node_type/0, node_status/0]).
 
--type(node_type() :: disc_only | disc | ram | unknown).
+-type(node_type() :: disc | ram).
 -type(node_status() :: {[node()], [node()], [node()]}).
 
 %% Main interface
@@ -53,7 +53,7 @@
 -spec(reset/0 :: () -> 'ok').
 -spec(force_reset/0 :: () -> 'ok').
 -spec(recluster/1 :: (node()) -> 'ok').
--spec(change_node_type/1 :: ('ram' | 'disc') -> 'ok').
+-spec(change_node_type/1 :: (node_type()) -> 'ok').
 
 %% Various queries to get the status of the db
 -spec(status/0 :: () -> [{'nodes', [{node_type(), [node()]}]} |
