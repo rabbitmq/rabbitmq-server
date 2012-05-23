@@ -30,7 +30,7 @@
 -export([table_names/0]).
 
 %% Used internally in rpc calls, see `discover_nodes/1'
--export([cluster_status_if_running/0]).
+-export([cluster_status_if_running/0, node_info/0]).
 
 %% create_tables/0 exported for helping embed RabbitMQ in or alongside
 %% other mnesia-using Erlang applications, such as ejabberd
@@ -327,6 +327,10 @@ cluster_status_if_running() ->
                      mnesia:system_info(running_db_nodes)}}
     end.
 
+node_info() ->
+    {erlang:system_info(otp_release), application:get_env(rabbit, vsn),
+     cluster_status_if_running()}.
+
 is_disc_node() -> mnesia:system_info(use_dir).
 
 dir() -> mnesia:system_info(directory).
@@ -524,28 +528,51 @@ should_be_disc_node(DiscNodes) ->
     DiscNodes == [] orelse lists:member(node(), DiscNodes).
 
 %% This does not guarantee us much, but it avoids some situations that will
-%% definitely end in disaster (a node starting and trying to merge its schema
-%% to another node which is not clustered with it).
+%% definitely end up badly
 check_cluster_consistency() ->
-    ThisNode = node(),
+    CheckVsn = fun (This, This, _) ->
+                       ok;
+                   (This, Remote, Name) ->
+                       throw({error,
+                              {inconsistent_cluster,
+                               rabbit_misc:format(
+                                 "~s version mismatch: local node is ~s, "
+                                 "remote node ~s", [Name, This, Remote])}})
+               end,
+    CheckOTP =
+        fun (OTP) -> CheckVsn(erlang:system_info(otp_release), OTP, "OTP") end,
+    CheckRabbit =
+        fun (Rabbit) ->
+                CheckVsn(application:get_env(rabbit, vsn), Rabbit, "Rabbit")
+        end,
+
+    CheckNodes = fun (Node, AllNodes) ->
+                         ThisNode = node(),
+                         case lists:member(ThisNode, AllNodes) of
+                             true ->
+                                 ok;
+                             false ->
+                                 throw({error,
+                                        {inconsistent_cluster,
+                                         rabbit_misc:format(
+                                           "Node ~p thinks it's clustered "
+                                           "with node ~p, but ~p disagrees",
+                                           [ThisNode, Node, Node])}})
+                         end
+                 end,
+
     lists:foreach(
       fun(Node) ->
-              case rpc:call(Node, rabbit_mnesia, cluster_status_if_running, [])
-              of
-                  {badrpc, _Reason} -> ok;
-                  error -> ok;
-                  {ok, {AllNodes, _, _}}  ->
-                      case lists:member(ThisNode, AllNodes) of
-                          true ->
-                              ok;
-                          false ->
-                              throw({error,
-                                     {inconsistent_cluster,
-                                      rabbit_misc:format(
-                                        "Node ~p thinks it's clustered with "
-                                        "node ~p, but ~p disagrees",
-                                        [ThisNode, Node, Node])}})
-                      end
+              case rpc:call(Node, rabbit_mnesia, node_info, []) of
+                  {badrpc, _Reason} ->
+                      ok;
+                  {OTP, Rabbit, error} ->
+                      CheckOTP(OTP),
+                      CheckRabbit(Rabbit);
+                  {OTP, Rabbit, {ok, {AllNodes, _, _}}} ->
+                      CheckOTP(OTP),
+                      CheckRabbit(Rabbit),
+                      CheckNodes(Node, AllNodes)
               end
       end, all_clustered_nodes()).
 
