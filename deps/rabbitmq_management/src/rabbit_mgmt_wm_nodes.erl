@@ -43,13 +43,10 @@ all_nodes() ->
     Nodes = proplists:get_value(nodes, S),
     Types = proplists:get_keys(Nodes),
     Running = proplists:get_value(running_nodes, S),
-    lists:append(
-      [[make_entry(Node, Type, lists:member(Node, Running))
-        || Node <- proplists:get_value(Type, Nodes)] || Type <- Types]).
+    rabbit_mgmt_db:augment_nodes(
+      lists:append(
+        [[make_entry(Node, Type, lists:member(Node, Running))
+          || Node <- proplists:get_value(Type, Nodes)] || Type <- Types])).
 
 make_entry(Node, Type, Running) ->
-    [{name, Node}, {type, Type}, {running, Running}]
-        ++ case Running of
-               true -> rabbit_mgmt_external_stats:info(Node);
-               _    -> []
-           end.
+    [{name, Node}, {type, Type}, {running, Running}].

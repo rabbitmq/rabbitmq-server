@@ -82,13 +82,15 @@ rabbit_mochiweb_contexts() ->
                        Node <- rabbit_mnesia:running_clustered_nodes()]),
       ["description", "port", "node"]).
 
+%% TODO: this must die. Somehow.
 contexts(Node) ->
-    case rpc:call(Node, rabbit_mochiweb_registry, list_all, [], infinity) of
-        {badrpc, {'EXIT', _}} ->
-            [];
-        Contexts ->
-            [[{node, Node} | format_context(C)] || C <- Contexts]
-    end.
+    [].
+    %% case rpc:call(Node, rabbit_mochiweb_registry, list_all, [], infinity) of
+    %%     {badrpc, {'EXIT', _}} ->
+    %%         [];
+    %%     Contexts ->
+    %%         [[{node, Node} | format_context(C)] || C <- Contexts]
+    %% end.
 
 format_context({Path, Description, Rest}) ->
     [{description, list_to_binary(Description)},
