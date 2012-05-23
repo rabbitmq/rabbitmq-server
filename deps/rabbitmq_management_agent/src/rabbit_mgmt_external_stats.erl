@@ -22,14 +22,12 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3]).
 
--export([info/1, info/2]).
-
 -export([list_registry_plugins/1]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 -define(REFRESH_RATIO, 5000).
--define(KEYS, [os_pid, mem_ets, mem_binary, mem_proc, mem_proc_used,
+-define(KEYS, [name, os_pid, mem_ets, mem_binary, mem_proc, mem_proc_used,
                mem_atom, mem_atom_used, mem_code, fd_used, fd_total,
                sockets_used, sockets_total, mem_used, mem_limit, mem_alarm,
                disk_free_limit, disk_free, disk_free_alarm,
@@ -45,14 +43,6 @@
 
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
-
-info(Node) ->
-    info(Node, ?KEYS).
-
-info(Node, Keys) ->
-    rabbit_misc:with_exit_handler(
-      fun() -> [{external_stats_not_running, true}] end,
-      fun() -> gen_server2:call({?MODULE, Node}, {info, Keys}, infinity) end).
 
 %%--------------------------------------------------------------------
 
@@ -153,6 +143,7 @@ get_disk_free() -> ?SAFE_CALL(rabbit_disk_monitor:get_disk_free(),
 
 infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
 
+i(name,            _State) -> node();
 i(fd_used,  #state{fd_used  = FdUsed})  -> FdUsed;
 i(fd_total, #state{fd_total = FdTotal}) -> FdTotal;
 i(sockets_used,    _State) ->
@@ -217,23 +208,17 @@ format_application({Application, Description, Version}) ->
 %%--------------------------------------------------------------------
 
 init([]) ->
-    State = #state{fd_total   = file_handle_cache:ulimit()},
-    {ok, internal_update(State)}.
-
-
-handle_call({info, Items}, _From, State0) ->
-    State = case (rabbit_misc:now_ms() - State0#state.time_ms >
-                      ?REFRESH_RATIO) of
-                true  -> internal_update(State0);
-                false -> State0
-            end,
-    {reply, infos(Items, State), State};
+    State = #state{fd_total = file_handle_cache:ulimit()},
+    {ok, emit_update(State)}.
 
 handle_call(_Req, _From, State) ->
     {reply, unknown_request, State}.
 
 handle_cast(_C, State) ->
     {noreply, State}.
+
+handle_info(emit_update, State) ->
+    {noreply, emit_update(State)};
 
 handle_info(_I, State) ->
     {noreply, State}.
@@ -244,6 +229,10 @@ code_change(_, State, _) -> {ok, State}.
 
 %%--------------------------------------------------------------------
 
-internal_update(State) ->
-    State#state{time_ms   = rabbit_misc:now_ms(),
-                fd_used   = get_used_fd()}.
+emit_update(State0) ->
+    %% TODO update state less often than refresh rate? Or eliminate it.
+    State = State0#state{time_ms = rabbit_misc:now_ms(),
+                         fd_used = get_used_fd()},
+    rabbit_event:notify(node_stats, infos(?KEYS, State)),
+    erlang:send_after(?REFRESH_RATIO, self(), emit_update),
+    State.
