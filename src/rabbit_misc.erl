@@ -770,6 +770,9 @@ process_opts(C, Defs, As0) ->
 
 %% Consume flags/options until you find the correct command. If there are no
 %% arguments or the first argument is not the command we're expecting, fail.
+%% Arguments to this are: definitions, cmd we're looking for, args we
+%% haven't parsed, whether we have found the cmd, options we've found,
+%% plain args we've found.
 process_opts(_Defs, C, [], found, KVs, Outs) ->
     {ok, {list_to_atom(C), dict:to_list(KVs), lists:reverse(Outs)}};
 process_opts(_Defs, _C, [], not_found, _, _) ->
