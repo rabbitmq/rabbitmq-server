@@ -62,6 +62,7 @@
 -export([quit/1]).
 -export([os_cmd/1]).
 -export([gb_sets_difference/2]).
+-export([rabbit_version/0]).
 
 %%----------------------------------------------------------------------------
 
@@ -209,6 +210,7 @@
 -spec(quit/1 :: (integer() | string()) -> no_return()).
 -spec(os_cmd/1 :: (string()) -> string()).
 -spec(gb_sets_difference/2 :: (gb_set(), gb_set()) -> gb_set()).
+-spec(rabbit_version/0 :: () -> string()).
 
 -endif.
 
@@ -925,3 +927,7 @@ os_cmd(Command) ->
 
 gb_sets_difference(S1, S2) ->
     gb_sets:fold(fun gb_sets:delete_any/2, S1, S2).
+
+rabbit_version() ->
+    {ok, VSN} = application:get_key(rabbit, vsn),
+    VSN.

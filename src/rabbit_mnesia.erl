@@ -328,7 +328,7 @@ cluster_status_if_running() ->
     end.
 
 node_info() ->
-    {erlang:system_info(otp_release), application:get_env(rabbit, vsn),
+    {erlang:system_info(otp_release), rabbit_misc:rabbit_version(),
      cluster_status_if_running()}.
 
 is_disc_node() -> mnesia:system_info(use_dir).
@@ -543,7 +543,7 @@ check_cluster_consistency() ->
         fun (OTP) -> CheckVsn(erlang:system_info(otp_release), OTP, "OTP") end,
     CheckRabbit =
         fun (Rabbit) ->
-                CheckVsn(application:get_env(rabbit, vsn), Rabbit, "Rabbit")
+                CheckVsn(rabbit_misc:rabbit_version(), Rabbit, "Rabbit")
         end,
 
     CheckNodes = fun (Node, AllNodes) ->
