@@ -70,7 +70,8 @@ mainloop(State0 = #reader_state{socket = Sock}, ByteCount) ->
     State = run_socket(State0, ByteCount),
     receive
         {inet_async, Sock, _Ref, {ok, Data}} ->
-            process_received_bytes(Data, State#reader_state{recv_outstanding = false});
+            process_received_bytes(
+              Data, State#reader_state{recv_outstanding = false});
         {inet_async, _Sock, _Ref, {error, closed}} ->
             ok;
         {inet_async, _Sock, _Ref, {error, Reason}} ->
