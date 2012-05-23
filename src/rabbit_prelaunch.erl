@@ -45,7 +45,7 @@ start() ->
 stop() ->
     ok.
 
-%%----------------------------------
+%%----------------------------------------------------------------------------
 
 %% Check whether a node with the same name is already running
 duplicate_node_check([]) ->
