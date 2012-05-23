@@ -446,8 +446,6 @@ expect(Payloads) ->
                 true  -> expect(Payloads -- [Payload]);
                 false -> throw({expected, Payloads, actual, Payload})
             end
-    after 500 ->
-            throw({timeout_waiting_for, Payloads})
     end.
 
 publish_expect(Ch, X, Key, Q, Payload) ->
