@@ -58,7 +58,7 @@
          {set_permissions, [?VHOST_DEF]},
          {clear_permissions, [?VHOST_DEF]},
          {list_permissions, [?VHOST_DEF]},
-         {list_user_permissions, [?VHOST_DEF]},
+         list_user_permissions,
 
          set_parameter,
          clear_parameter,
