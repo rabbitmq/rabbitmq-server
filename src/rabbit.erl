@@ -288,8 +288,7 @@ split0([I | Is], [L | Ls]) -> split0(Is, Ls ++ [[I | L]]).
 prepare() ->
     ok = ensure_working_log_handlers(),
     ok = rabbit_mnesia:ensure_mnesia_dir(),
-    ok = rabbit_mnesia:initialize_cluster_nodes_status(),
-    ok = rabbit_mnesia:check_cluster_consistency(),
+    ok = rabbit_mnesia:prepare(),
     ok = rabbit_upgrade:maybe_upgrade_mnesia().
 
 start() ->
@@ -514,7 +513,7 @@ sort_boot_steps(UnsortedSteps) ->
     end.
 
 boot_step_error({error, {timeout_waiting_for_tables, _}}, _Stacktrace) ->
-    {AllNodes, _, _} = rabbit_mnesia:read_cluster_nodes_status(),
+    AllNodes = rabbit_mnesia:all_clustered_nodes(),
     {Err, Nodes} =
         case AllNodes -- [node()] of
             [] -> {"Timeout contacting cluster nodes. Since RabbitMQ was"

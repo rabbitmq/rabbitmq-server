@@ -147,7 +147,8 @@ maybe_upgrade_mnesia() ->
 upgrade_mode(AllNodes) ->
     case nodes_running(AllNodes) of
         [] ->
-            case {is_disc_node_legacy(), AllNodes} of
+            AfterUs = rabbit_mnesia:running_clustered_nodes() -- [node()],
+            case {is_disc_node_legacy(), AfterUs} of
                 {true, []}  ->
                     primary;
                 {true, _}  ->

@@ -21,11 +21,10 @@
          join_cluster/2, check_cluster_consistency/0, reset/0, force_reset/0,
          init_db/4, is_clustered/0, running_clustered_nodes/0,
          all_clustered_nodes/0, all_clustered_disc_nodes/0,
-         empty_ram_only_tables/0, copy_db/1, wait_for_tables/1,
-         initialize_cluster_nodes_status/0, write_cluster_nodes_status/1,
-         read_cluster_nodes_status/0, update_cluster_nodes_status/0,
-         is_disc_node/0, on_node_down/1, on_node_up/1, should_be_disc_node/1,
-         change_node_type/1, recluster/1, remove_node/1]).
+         empty_ram_only_tables/0, copy_db/1, wait_for_tables/1, is_disc_node/0,
+         on_node_down/1, on_node_up/1, should_be_disc_node/1,
+         change_node_type/1, recluster/1, remove_node/1, prepare/0,
+         update_cluster_nodes_status/0]).
 
 -export([table_names/0]).
 
@@ -48,6 +47,7 @@
 -type(node_status() :: {[node()], [node()], [node()]}).
 
 %% Main interface
+-spec(prepare/0 :: () -> 'ok').
 -spec(init/0 :: () -> 'ok').
 -spec(join_cluster/2 :: ([node()], boolean()) -> 'ok').
 -spec(reset/0 :: () -> 'ok').
@@ -81,7 +81,6 @@
 %% Functions to handle the cluster status file
 -spec(write_cluster_nodes_status/1 :: (node_status()) ->  'ok').
 -spec(read_cluster_nodes_status/0 :: () ->  node_status()).
--spec(initialize_cluster_nodes_status/0 :: () -> 'ok').
 -spec(update_cluster_nodes_status/0 :: () -> 'ok').
 
 %% Hooks used in `rabbit_node_monitor'
@@ -94,11 +93,43 @@
 %% Main interface
 %%----------------------------------------------------------------------------
 
+%% Sets up the cluster status file when needed, taking care of the legacy
+%% files
+prepare() ->
+    NotPresent =
+        fun (AllNodes0, WantDiscNode) ->
+            ThisNode = [node()],
+
+            RunningNodes0 = legacy_read_previously_running_nodes(),
+            legacy_delete_previously_running_nodes(),
+
+            RunningNodes = lists:usort(RunningNodes0 ++ ThisNode),
+            AllNodes =
+                lists:usort(AllNodes0 ++ RunningNodes),
+            DiscNodes = case WantDiscNode of
+                            true  -> ThisNode;
+                            false -> []
+                        end,
+
+            ok = write_cluster_nodes_status({AllNodes, DiscNodes, RunningNodes})
+        end,
+    case try_read_cluster_nodes_status() of
+        {ok, _} ->
+            ok;
+        {error, {invalid_term, _, [AllNodes]}} ->
+            NotPresent(AllNodes, should_be_disc_node(AllNodes));
+        {error, {cannot_read_file, _, enoent}} ->
+            {ok, {AllNodes, WantDiscNode}} =
+                application:get_env(rabbit, cluster_nodes),
+            NotPresent(AllNodes, WantDiscNode)
+    end.
+
 init() ->
     ensure_mnesia_running(),
     ensure_mnesia_dir(),
-    {DiscNodes, WantDiscNode} = read_cluster_nodes_config(),
-    ok = init_db(DiscNodes, WantDiscNode, WantDiscNode),
+    {AllNodes, _, DiscNodes} = read_cluster_nodes_status(),
+    WantDiscNode = should_be_disc_node(DiscNodes),
+    ok = init_db(AllNodes, WantDiscNode, WantDiscNode),
     %% We intuitively expect the global name server to be synced when
     %% Mnesia is up. In fact that's not guaranteed to be the case - let's
     %% make it so.
@@ -208,7 +239,7 @@ reset(Force) ->
     [erlang:disconnect_node(N) || N <- Nodes],
     %% remove persisted messages and any other garbage we find
     ok = rabbit_file:recursive_delete(filelib:wildcard(dir() ++ "/*")),
-    ok = initialize_cluster_nodes_status(),
+    ok = write_cluster_nodes_status(initial_cluster_status()),
     ok.
 
 change_node_type(Type) ->
@@ -613,15 +644,8 @@ check_cluster_consistency() ->
 cluster_nodes_status_filename() ->
     dir() ++ "/cluster_nodes.config".
 
-%% Creates a status file with the default data (one disc node), only if an
-%% existing cluster does not exist.
-initialize_cluster_nodes_status() ->
-    try read_cluster_nodes_status() of
-        _ -> ok
-    catch
-        throw:{error, {cannot_read_cluster_nodes_status, _, enoent}} ->
-            write_cluster_nodes_status({[node()], [node()], [node()]})
-    end.
+initial_cluster_status() ->
+    {[node()], [node()], [node()]}.
 
 write_cluster_nodes_status(Status) ->
     FileName = cluster_nodes_status_filename(),
@@ -632,31 +656,29 @@ write_cluster_nodes_status(Status) ->
                            FileName, Reason}})
     end.
 
-read_cluster_nodes_status() ->
+try_read_cluster_nodes_status() ->
     FileName = cluster_nodes_status_filename(),
     case rabbit_file:read_term_file(FileName) of
-        {ok, [{_, _, _} = Status]} -> Status;
+        {ok, [{_, _, _} = Status]} ->
+            {ok, Status};
+        {ok, Term} ->
+            {error, {invalid_term, FileName, Term}};
         {error, Reason} ->
-            throw({error, {cannot_read_cluster_nodes_status, FileName, Reason}})
+            {error, {cannot_read_file, FileName, Reason}}
+    end.
+
+read_cluster_nodes_status() ->
+    case try_read_cluster_nodes_status() of
+        {ok, Status} ->
+            Status;
+        {error, Reason} ->
+            throw({error, {cannot_read_cluster_nodes_status, Reason}})
     end.
 
 %% To update the cluster status when mnesia is running.
 update_cluster_nodes_status() ->
     {ok, Status} = cluster_status_if_running(),
     write_cluster_nodes_status(Status).
-
-%% The cluster config contains the nodes that the node should try to contact to
-%% form a cluster, and whether the node should be a disc node. When starting the
-%% database, if the nodes in the cluster status are the initial ones, we try to
-%% read the cluster config.
-read_cluster_nodes_config() ->
-    {AllNodes, DiscNodes, _} = read_cluster_nodes_status(),
-    Node = node(),
-    case AllNodes of
-        [Node] -> {ok, Config} = application:get_env(rabbit, cluster_nodes),
-                  Config;
-        _      -> {AllNodes, should_be_disc_node(DiscNodes)}
-    end.
 
 %%--------------------------------------------------------------------
 %% Hooks for `rabbit_node_monitor'
@@ -1018,3 +1040,28 @@ start_and_init_db(ClusterNodes, WantDiscNode, Force) ->
         mnesia:stop()
     end,
     ok.
+
+%%--------------------------------------------------------------------
+%% Legacy functions related to the "running nodes" file
+%%--------------------------------------------------------------------
+
+legacy_running_nodes_filename() ->
+    filename:join(dir(), "nodes_running_at_shutdown").
+
+legacy_read_previously_running_nodes() ->
+    FileName = legacy_running_nodes_filename(),
+    case rabbit_file:read_term_file(FileName) of
+        {ok, [Nodes]}   -> Nodes;
+        {error, enoent} -> [];
+        {error, Reason} -> throw({error, {cannot_read_previous_nodes_file,
+                                          FileName, Reason}})
+    end.
+
+legacy_delete_previously_running_nodes() ->
+    FileName = legacy_running_nodes_filename(),
+    case file:delete(FileName) of
+        ok              -> ok;
+        {error, enoent} -> ok;
+        {error, Reason} -> throw({error, {cannot_delete_previous_nodes_file,
+                                          FileName, Reason}})
+    end.
