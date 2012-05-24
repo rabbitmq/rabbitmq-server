@@ -18,6 +18,8 @@
 
 -export([init/1, to_json/2, content_types_provided/2, is_authorized/2]).
 
+-import(rabbit_misc, [pget/3]).
+
 -include("rabbit_mgmt.hrl").
 -include_lib("webmachine/include/webmachine.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
@@ -78,31 +80,6 @@ listeners() ->
 
 rabbit_mochiweb_contexts() ->
     rabbit_mgmt_util:sort_list(
-      lists:append([contexts(Node) ||
-                       Node <- rabbit_mnesia:running_clustered_nodes()]),
+      lists:append(
+        [pget(contexts, N, []) || N <- rabbit_mgmt_wm_nodes:all_nodes()]),
       ["description", "port", "node"]).
-
-%% TODO: this must die. Somehow.
-contexts(Node) ->
-    [].
-    %% case rpc:call(Node, rabbit_mochiweb_registry, list_all, [], infinity) of
-    %%     {badrpc, {'EXIT', _}} ->
-    %%         [];
-    %%     Contexts ->
-    %%         [[{node, Node} | format_context(C)] || C <- Contexts]
-    %% end.
-
-format_context({Path, Description, Rest}) ->
-    [{description, list_to_binary(Description)},
-     {path,        list_to_binary("/" ++ Path)} |
-     format_mochiweb_option_list(Rest)].
-
-format_mochiweb_option_list(C) ->
-    [{K, format_mochiweb_option(K, V)} || {K, V} <- C].
-
-format_mochiweb_option(ssl_opts, V) ->
-    format_mochiweb_option_list(V);
-format_mochiweb_option(_K, V) when is_list(V) ->
-    list_to_binary(V);
-format_mochiweb_option(_K, V) ->
-    V.
