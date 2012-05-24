@@ -33,7 +33,7 @@
                disk_free_limit, disk_free, disk_free_alarm,
                proc_used, proc_total, statistics_level,
                erlang_version, uptime, run_queue, processors, exchange_types,
-               auth_mechanisms, applications]).
+               auth_mechanisms, applications, contexts]).
 
 %%--------------------------------------------------------------------
 
@@ -169,6 +169,7 @@ i(processors,      _State) -> erlang:system_info(logical_processors);
 i(disk_free_limit, _State) -> get_disk_free_limit();
 i(disk_free,       _State) -> get_disk_free();
 i(disk_free_alarm, _State) -> resource_alarm_set(disk);
+i(contexts,        _State) -> rabbit_mochiweb_contexts();
 i(uptime, _State) ->
     {Total, _} = erlang:statistics(wall_clock),
     Total;
@@ -204,6 +205,38 @@ format_application({Application, Description, Version}) ->
     [{name, Application},
      {description, list_to_binary(Description)},
      {version, list_to_binary(Version)}].
+
+%%--------------------------------------------------------------------
+
+%% This is slightly icky in that we introduce knowledge of
+%% rabbit_mochiweb, which is not a dependency. But the last thing I
+%% want to do is create a rabbitmq_mochiweb_management_agent plugin.
+rabbit_mochiweb_contexts() ->
+    [format_context(C) || C <- rabbit_mochiweb_registry_list_all()].
+
+rabbit_mochiweb_registry_list_all() ->
+    case code:is_loaded(rabbit_mochiweb_registry) of
+        false -> [];
+        _     -> apply0(rabbit_mochiweb_registry, list_all, [])
+    end.
+
+%% Fool xref. Simply using apply(M, F, A) with constants is not enough.
+apply0(M, F, A) -> apply(M, F, A).
+
+format_context({Path, Description, Rest}) ->
+    [{description, list_to_binary(Description)},
+     {path,        list_to_binary("/" ++ Path)} |
+     format_mochiweb_option_list(Rest)].
+
+format_mochiweb_option_list(C) ->
+    [{K, format_mochiweb_option(K, V)} || {K, V} <- C].
+
+format_mochiweb_option(ssl_opts, V) ->
+    format_mochiweb_option_list(V);
+format_mochiweb_option(_K, V) when is_list(V) ->
+    list_to_binary(V);
+format_mochiweb_option(_K, V) ->
+    V.
 
 %%--------------------------------------------------------------------
 
