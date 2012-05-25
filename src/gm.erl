@@ -576,22 +576,23 @@ handle_call({add_on_right, NewMember}, _From,
                              module        = Module,
                              callback_args = Args }) ->
 
-    %% The fun below will run in a mnesia transactiond that may retry, causing
-    %% multiple catchup messages to be sent as a side-effect. Catchup messages
-    %% with an old view version will be ignored in handle_msg({catchup, ...}).
+    %% The fun below will run in a mnesia transaction that may retry,
+    %% causing multiple catchup messages to be sent as a
+    %% side-effect. Catchup messages with an old view version will be
+    %% ignored in handle_msg({catchup, ...}).
     %%
-    %% Joining members must receive a catchup before any other activity updates,
-    %% to bring their members_state up-to-date with their left neighbour and
-    %% allow them to take over all the responsibilities of their left neighbour.
+    %% Joining members must receive a catchup before any other
+    %% activity updates, to bring their members_state up-to-date with
+    %% their left neighbour and allow them to take over all the
+    %% responsibilities of their left neighbour.
     %%
     %% TODO: It is still possible for the transaction in
-    %%       record_new_member_in_group to commit before
-    %%       the catchup message is sent if the node fails
-    %%       in a particular way. This must be prevented
-    %%       or accomodated, as the GM protocol currently
-    %%       assumes that the transaction will not commit
-    %%       without a catchup message being received by
-    %%       the joining member.
+    %%       record_new_member_in_group to commit before the catchup
+    %%       message is sent if the node fails in a particular
+    %%       way. This must be prevented or accommodated, as the GM
+    %%       protocol currently assumes that the transaction will not
+    %%       commit without a catchup message being received by the
+    %%       joining member.
 
     {MembersState1, Group} =
       record_new_member_in_group(
