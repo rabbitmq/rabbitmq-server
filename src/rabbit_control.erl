@@ -26,6 +26,61 @@
 -define(NODE_OPT, "-n").
 -define(VHOST_OPT, "-p").
 
+-define(QUIET_DEF, {?QUIET_OPT, flag}).
+-define(NODE_DEF(Node), {?NODE_OPT, {option, Node}}).
+-define(VHOST_DEF, {?VHOST_OPT, {option, "/"}}).
+
+-define(GLOBAL_DEFS(Node), [?QUIET_DEF, ?NODE_DEF(Node)]).
+
+-define(COMMANDS,
+        [stop,
+         stop_app,
+         start_app,
+         wait,
+         reset,
+         force_reset,
+         rotate_logs,
+
+         cluster,
+         force_cluster,
+         cluster_status,
+
+         add_user,
+         delete_user,
+         change_password,
+         clear_password,
+         set_user_tags,
+         list_users,
+
+         add_vhost,
+         delete_vhost,
+         list_vhosts,
+         {set_permissions, [?VHOST_DEF]},
+         {clear_permissions, [?VHOST_DEF]},
+         {list_permissions, [?VHOST_DEF]},
+         list_user_permissions,
+
+         set_parameter,
+         clear_parameter,
+         list_parameters,
+
+         {list_queues, [?VHOST_DEF]},
+         {list_exchanges, [?VHOST_DEF]},
+         {list_bindings, [?VHOST_DEF]},
+         {list_connections, [?VHOST_DEF]},
+         list_channels,
+         {list_consumers, [?VHOST_DEF]},
+         status,
+         environment,
+         report,
+         eval,
+
+         close_connection,
+         {trace_on, [?VHOST_DEF]},
+         {trace_off, [?VHOST_DEF]},
+         set_vm_memory_high_watermark
+        ]).
+
 -define(GLOBAL_QUERIES,
         [{"Connections", rabbit_networking, connection_info_all,
           connection_info_keys},
@@ -57,19 +112,18 @@
 
 start() ->
     {ok, [[NodeStr|_]|_]} = init:get_argument(nodename),
-    {[Command0 | Args], Opts} =
-        case rabbit_misc:get_options([{flag, ?QUIET_OPT},
-                                      {option, ?NODE_OPT, NodeStr},
-                                      {option, ?VHOST_OPT, "/"}],
-                                     init:get_plain_arguments()) of
-            {[], _Opts}    -> usage();
-            CmdArgsAndOpts -> CmdArgsAndOpts
+    {Command, Opts, Args} =
+        case rabbit_misc:parse_arguments(?COMMANDS, ?GLOBAL_DEFS(NodeStr),
+                                         init:get_plain_arguments())
+        of
+            {ok, Res}  -> Res;
+            no_command -> print_error("could not recognise command", []),
+                          usage()
         end,
     Opts1 = [case K of
                  ?NODE_OPT -> {?NODE_OPT, rabbit_nodes:make(V)};
                  _         -> {K, V}
              end || {K, V} <- Opts],
-    Command = list_to_atom(Command0),
     Quiet = proplists:get_bool(?QUIET_OPT, Opts1),
     Node = proplists:get_value(?NODE_OPT, Opts1),
     Inform = case Quiet of
@@ -195,7 +249,6 @@ action(force_cluster, Node, ClusterNodeSs, _Opts, Inform) ->
 action(wait, Node, [PidFile], _Opts, Inform) ->
     Inform("Waiting for ~p", [Node]),
     wait_for_application(Node, PidFile, rabbit, Inform);
-
 action(wait, Node, [PidFile, App], _Opts, Inform) ->
     Inform("Waiting for ~p on ~p", [App, Node]),
     wait_for_application(Node, PidFile, list_to_atom(App), Inform);
