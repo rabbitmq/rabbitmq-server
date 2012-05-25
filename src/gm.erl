@@ -576,17 +576,16 @@ handle_call({add_on_right, NewMember}, _From,
                              module        = Module,
                              callback_args = Args }) ->
     {MembersState1, Group} =
-      record_new_member_in_group(GroupName, Self, NewMember,
-                                 fun (Group1) ->
-                                         View1 = group_to_view(Group1),
-                                         MembersState1 = remove_erased_members(
-                                                           MembersState, View1),
-                                         ok = send_right(NewMember, View1,
-                                                         {catchup, Self,
-                                                          prepare_members_state(
-                                                            MembersState1)}),
-                                         MembersState1
-                                 end),
+      record_new_member_in_group(
+        GroupName, Self, NewMember,
+        fun (Group1) ->
+                View1 = group_to_view(Group1),
+                MembersState1 = remove_erased_members(MembersState, View1),
+                ok = send_right(NewMember, View1,
+                                {catchup, Self,
+                                 prepare_members_state(MembersState1)}),
+                MembersState1
+        end),
     View2 = group_to_view(Group),
     State1 = check_neighbours(State #state { view          = View2,
                                              members_state = MembersState1 }),
@@ -602,15 +601,13 @@ handle_cast({?TAG, ReqVer, Msg},
                              callback_args = Args }) ->
     {Result, State1} =
         case needs_view_update(ReqVer, View) of
-            true ->
-                View1 = group_to_view(read_group(GroupName)),
-                MemberState1 = remove_erased_members(MembersState, View1),
-                {callback_view_changed(Args, Module, View, View1),
-                 check_neighbours(
-                   State #state { view = View1,
-                                  members_state = MemberState1 })};
-            false ->
-                {ok, State}
+            true  -> View1 = group_to_view(read_group(GroupName)),
+                     MemberState1 = remove_erased_members(MembersState, View1),
+                     {callback_view_changed(Args, Module, View, View1),
+                      check_neighbours(
+                        State #state { view          = View1,
+                                       members_state = MemberState1 })};
+            false -> {ok, State}
         end,
     handle_callback_result(
       if_callback_success(
