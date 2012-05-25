@@ -49,7 +49,7 @@
 -export([version_compare/2, version_compare/3]).
 -export([dict_cons/3, orddict_cons/3, gb_trees_cons/3]).
 -export([gb_trees_fold/3, gb_trees_foreach/2]).
--export([get_options/2]).
+-export([parse_arguments/3]).
 -export([all_module_attributes/1, build_acyclic_graph/3]).
 -export([now_ms/0]).
 -export([const_ok/0, const/1]).
@@ -72,7 +72,7 @@
 -type(ok_or_error() :: rabbit_types:ok_or_error(any())).
 -type(thunk(T) :: fun(() -> T)).
 -type(resource_name() :: binary()).
--type(optdef() :: {flag, string()} | {option, string(), any()}).
+-type(optdef() :: flag | {option, string()}).
 -type(channel_or_connection_exit()
       :: rabbit_types:channel_exit() | rabbit_types:connection_exit()).
 -type(digraph_label() :: term()).
@@ -182,8 +182,12 @@
 -spec(gb_trees_fold/3 :: (fun ((any(), any(), A) -> A), A, gb_tree()) -> A).
 -spec(gb_trees_foreach/2 ::
         (fun ((any(), any()) -> any()), gb_tree()) -> 'ok').
--spec(get_options/2 :: ([optdef()], [string()])
-                       -> {[string()], [{string(), any()}]}).
+-spec(parse_arguments/3 ::
+        ([{atom(), [{string(), optdef()}]} | atom()],
+         [{string(), optdef()}],
+         [string()])
+        -> {'ok', {atom(), [{string(), string()}], [string()]}} |
+           'no_command').
 -spec(all_module_attributes/1 :: (atom()) -> [{atom(), [term()]}]).
 -spec(build_acyclic_graph/3 ::
         (graph_vertex_fun(), graph_edge_fun(), [{atom(), [term()]}])
@@ -736,39 +740,63 @@ gb_trees_fold1(Fun, Acc, {Key, Val, It}) ->
 gb_trees_foreach(Fun, Tree) ->
     gb_trees_fold(fun (Key, Val, Acc) -> Fun(Key, Val), Acc end, ok, Tree).
 
-%% Separate flags and options from arguments.
-%% get_options([{flag, "-q"}, {option, "-p", "/"}],
-%%             ["set_permissions","-p","/","guest",
-%%              "-q",".*",".*",".*"])
-%% == {["set_permissions","guest",".*",".*",".*"],
-%%     [{"-q",true},{"-p","/"}]}
-get_options(Defs, As) ->
-    lists:foldl(fun(Def, {AsIn, RsIn}) ->
-                        {K, {AsOut, V}} =
-                            case Def of
-                                {flag, Key} ->
-                                    {Key, get_flag(Key, AsIn)};
-                                {option, Key, Default} ->
-                                    {Key, get_option(Key, Default, AsIn)}
-                            end,
-                        {AsOut, [{K, V} | RsIn]}
-                end, {As, []}, Defs).
+%% Takes:
+%%    * A list of [{atom(), [{string(), optdef()]} | atom()], where the atom()s
+%%      are the accepted commands and the optional [string()] is the list of
+%%      accepted options for that command
+%%    * A list [{string(), optdef()}] of options valid for all commands
+%%    * The list of arguments given by the user
+%%
+%% Returns either {ok, {atom(), [{string(), string()}], [string()]} which are
+%% respectively the command, the key-value pairs of the options and the leftover
+%% arguments; or no_command if no command could be parsed.
+parse_arguments(Commands, GlobalDefs, As) ->
+    lists:foldl(maybe_process_opts(GlobalDefs, As), no_command, Commands).
 
-get_option(K, _Default, [K, V | As]) ->
-    {As, V};
-get_option(K, Default, [Nk | As]) ->
-    {As1, V} = get_option(K, Default, As),
-    {[Nk | As1], V};
-get_option(_, Default, As) ->
-    {As, Default}.
+maybe_process_opts(GDefs, As) ->
+    fun({C, Os}, no_command) ->
+            process_opts(atom_to_list(C), dict:from_list(GDefs ++ Os), As);
+       (C, no_command) ->
+            (maybe_process_opts(GDefs, As))({C, []}, no_command);
+       (_, {ok, Res}) ->
+            {ok, Res}
+    end.
 
-get_flag(K, [K | As]) ->
-    {As, true};
-get_flag(K, [Nk | As]) ->
-    {As1, V} = get_flag(K, As),
-    {[Nk | As1], V};
-get_flag(_, []) ->
-    {[], false}.
+process_opts(C, Defs, As0) ->
+    KVs0 = dict:map(fun (_, flag)        -> false;
+                        (_, {option, V}) -> V
+                    end, Defs),
+    process_opts(Defs, C, As0, not_found, KVs0, []).
+
+%% Consume flags/options until you find the correct command. If there are no
+%% arguments or the first argument is not the command we're expecting, fail.
+%% Arguments to this are: definitions, cmd we're looking for, args we
+%% haven't parsed, whether we have found the cmd, options we've found,
+%% plain args we've found.
+process_opts(_Defs, C, [], found, KVs, Outs) ->
+    {ok, {list_to_atom(C), dict:to_list(KVs), lists:reverse(Outs)}};
+process_opts(_Defs, _C, [], not_found, _, _) ->
+    no_command;
+process_opts(Defs, C, [A | As], Found, KVs, Outs) ->
+    OptType = case dict:find(A, Defs) of
+                  error             -> none;
+                  {ok, flag}        -> flag;
+                  {ok, {option, _}} -> option
+              end,
+    case {OptType, C, Found} of
+        {flag, _, _}     -> process_opts(
+                              Defs, C, As, Found, dict:store(A, true, KVs),
+                              Outs);
+        {option, _, _}   -> case As of
+                                []        -> no_command;
+                                [V | As1] -> process_opts(
+                                               Defs, C, As1, Found,
+                                               dict:store(A, V, KVs), Outs)
+                            end;
+        {none, A, _}     -> process_opts(Defs, C, As, found, KVs, Outs);
+        {none, _, found} -> process_opts(Defs, C, As, found, KVs, [A | Outs]);
+        {none, _, _}     -> no_command
+    end.
 
 now_ms() ->
     timer:now_diff(now(), {0,0,0}) div 1000.

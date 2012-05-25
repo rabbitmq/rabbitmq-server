@@ -693,9 +693,13 @@ terminate(Reason, State = #state { module        = Module,
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
-prioritise_info(flush,                                   _State) -> 1;
-prioritise_info({'DOWN', _MRef, process, _Pid, _Reason}, _State) -> 1;
-prioritise_info(_                                      , _State) -> 0.
+prioritise_info(flush, _State) ->
+    1;
+prioritise_info({'DOWN', _MRef, process, _Pid, _Reason},
+                #state { members_state = MS }) when MS /= undefined ->
+    1;
+prioritise_info(_, _State) ->
+    0.
 
 
 handle_msg(check_neighbours, State) ->
@@ -853,7 +857,7 @@ flush_broadcast_buffer(State = #state { self             = Self,
                                         members_state    = MembersState,
                                         broadcast_buffer = Buffer,
                                         pub_count        = PubCount }) ->
-    [{PubCount, _Msg}|_] = Buffer,
+    [{PubCount, _Msg}|_] = Buffer, %% ASSERTION match on PubCount
     Pubs = lists:reverse(Buffer),
     Activity = activity_cons(Self, Pubs, [], activity_nil()),
     ok = maybe_send_activity(activity_finalise(Activity), State),

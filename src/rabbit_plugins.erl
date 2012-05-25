@@ -25,6 +25,18 @@
 -define(ENABLED_OPT, "-E").
 -define(ENABLED_ALL_OPT, "-e").
 
+-define(VERBOSE_DEF, {?VERBOSE_OPT, flag}).
+-define(MINIMAL_DEF, {?MINIMAL_OPT, flag}).
+-define(ENABLED_DEF, {?ENABLED_OPT, flag}).
+-define(ENABLED_ALL_DEF, {?ENABLED_ALL_OPT, flag}).
+
+-define(GLOBAL_DEFS, []).
+
+-define(COMMANDS,
+        [{list, [?VERBOSE_DEF, ?MINIMAL_DEF, ?ENABLED_DEF, ?ENABLED_ALL_DEF]},
+         enable,
+         disable]).
+
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
@@ -45,16 +57,15 @@ start() ->
     {ok, [[PluginsFile|_]|_]} =
         init:get_argument(enabled_plugins_file),
     {ok, [[PluginsDir|_]|_]} = init:get_argument(plugins_dist_dir),
-    {[Command0 | Args], Opts} =
-        case rabbit_misc:get_options([{flag, ?VERBOSE_OPT},
-                                      {flag, ?MINIMAL_OPT},
-                                      {flag, ?ENABLED_OPT},
-                                      {flag, ?ENABLED_ALL_OPT}],
-                                     init:get_plain_arguments()) of
-            {[], _Opts}    -> usage();
-            CmdArgsAndOpts -> CmdArgsAndOpts
+    {Command, Opts, Args} =
+        case rabbit_misc:parse_arguments(?COMMANDS, ?GLOBAL_DEFS,
+                                         init:get_plain_arguments())
+        of
+            {ok, Res}  -> Res;
+            no_command -> print_error("could not recognise command", []),
+                          usage()
         end,
-    Command = list_to_atom(Command0),
+
     PrintInvalidCommandError =
         fun () ->
                 print_error("invalid command '~s'",
@@ -396,4 +407,3 @@ report_change() ->
         _ ->
              ok
     end.
-
