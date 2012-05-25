@@ -566,27 +566,24 @@ handle_call({add_on_right, NewMember}, _From,
                              members_state = MembersState,
                              module        = Module,
                              callback_args = Args }) ->
-    %% Note: the fun below executes in an Mnesia transaction and has
-    %% side effects.  This is unfortunately necessary, but means that
-    %% it's possible for spurious catchup messages to be generated.
-    %%
-    %% It's necessary because of the following scenario:
-    %%
-    %% If we have A -> B -> C, B publishes a message which starts
-    %% making its way around. Now B' joins, adding itself to mnesia
-    %% leading to A -> B -> B' -> C. At this point, B dies, _before_
-    %% it sends to B' the catchup message. According to mnesia, B' is
-    %% responsible for B's msgs, but B' will actually receive the
-    %% catchup from A, thus having the least of all information about
-    %% the messages from B - in particular, it'll crash when it
-    %% receives the msg B sent before dying as it's not a msg it's
-    %% seen before (which should be impossible).
-    %%
-    %% So we have to send the catchup message in the tx. If we die
-    %% after sending the catchup but before the tx commits, the
-    %% catchup will be ignored as coming from the wrong Left. But txs
-    %% can retry, so we have to deal with spurious catchup
-    %% messages. See comment in handle_msg({catchup, ...}).
+
+%% The fun below will run in a mnesia transactiond that may retry, causing
+%% multiple catchup messages to be sent as a side-effect. Catchup messages
+%% with an old view version will be ignored in handle_msg({catchup, ...}).
+%%
+%% Joining members must receive a catchup before any other activity updates,
+%% to bring their members_state up-to-date with their left neighbour and allow
+%% them to take over all the responsibilities of their left neighbour.
+%%
+%% TODO: It is still possible for the transaction in
+%%       record_new_member_in_group to commit before
+%%       the catchup message is sent if the node fails
+%%       in a particular way. This must be prevented
+%%       or accomodated, as the GM protocol currently
+%%       assumes that the transaction will not commit
+%%       without a catchup message being received by
+%%       the joining member.
+
     Group = record_new_member_in_group(
               GroupName, Self, NewMember,
               fun (Group1) ->
