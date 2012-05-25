@@ -115,6 +115,7 @@ prepare() ->
         end,
     case try_read_cluster_nodes_status() of
         {ok, _} ->
+            check_cluster_consistency(),
             ok;
         {error, {invalid_term, _, [AllNodes]}} ->
             NotPresent(AllNodes, should_be_disc_node(AllNodes));
