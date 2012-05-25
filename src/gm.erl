@@ -1058,7 +1058,7 @@ record_dead_member_in_group(Member, GroupName) ->
     Group.
 
 record_new_member_in_group(GroupName, Left, NewMember, Fun) ->
-    {atomic, {MembersState, Group}} =
+    {atomic, {Result, Group}} =
         mnesia:sync_transaction(
           fun () ->
                   [#gm_group { members = Members, version = Ver } = Group1] =
