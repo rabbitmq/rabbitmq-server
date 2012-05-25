@@ -575,6 +575,25 @@ handle_call({add_on_right, NewMember}, _From,
                              members_state = MembersState,
                              module        = Module,
                              callback_args = Args }) ->
+
+    %% The fun below will run in a mnesia transaction that may retry,
+    %% causing multiple catchup messages to be sent as a
+    %% side-effect. Catchup messages with an old view version will be
+    %% ignored in handle_msg({catchup, ...}).
+    %%
+    %% Joining members must receive a catchup before any other
+    %% activity updates, to bring their members_state up-to-date with
+    %% their left neighbour and allow them to take over all the
+    %% responsibilities of their left neighbour.
+    %%
+    %% TODO: It is still possible for the transaction in
+    %%       record_new_member_in_group to commit before the catchup
+    %%       message is sent if the node fails in a particular
+    %%       way. This must be prevented or accommodated, as the GM
+    %%       protocol currently assumes that the transaction will not
+    %%       commit without a catchup message being received by the
+    %%       joining member.
+
     {MembersState1, Group} =
       record_new_member_in_group(
         GroupName, Self, NewMember,
@@ -582,7 +601,7 @@ handle_call({add_on_right, NewMember}, _From,
                 View1 = group_to_view(Group1),
                 MembersState1 = remove_erased_members(MembersState, View1),
                 ok = send_right(NewMember, View1,
-                                {catchup, Self,
+                                {catchup, Self, view_version(View1),
                                  prepare_members_state(MembersState1)}),
                 MembersState1
         end),
@@ -711,17 +730,27 @@ handle_msg(check_neighbours, State) ->
     %% no-op - it's already been done by the calling handle_cast
     {ok, State};
 
-handle_msg({catchup, Left, MembersStateLeft},
+handle_msg({catchup, Left, Ver, MembersStateLeft},
            State = #state { self          = Self,
                             left          = {Left, _MRefL},
                             right         = {Right, _MRefR},
                             view          = View,
                             members_state = undefined }) ->
-    ok = send_right(Right, View, {catchup, Self, MembersStateLeft}),
-    MembersStateLeft1 = build_members_state(MembersStateLeft),
-    {ok, State #state { members_state = MembersStateLeft1 }};
+    case view_version(View) of
+        Ver   -> ok = send_right(Right, View,
+                                 {catchup, Self, Ver, MembersStateLeft}),
+                 MembersStateLeft1 = build_members_state(MembersStateLeft),
+                 {ok, State #state { members_state = MembersStateLeft1 }};
+        MyVer -> %% ignore catchup with out-of-date view, see
+                 %% handle_call({add_on_right, ...). In this case we
+                 %% *know* that there will be another catchup message
+                 %% along in a minute (this one was a side effect of a
+                 %% retried tx).
+                 true = MyVer > Ver, %% ASSERTION
+                 {ok, State}
+    end;
 
-handle_msg({catchup, Left, MembersStateLeft},
+handle_msg({catchup, Left, _Ver, MembersStateLeft},
            State = #state { self = Self,
                             left = {Left, _MRefL},
                             view = View,
@@ -757,7 +786,7 @@ handle_msg({catchup, Left, MembersStateLeft},
     handle_msg({activity, Left, activity_finalise(Activity)},
                State #state { members_state = MembersState1 });
 
-handle_msg({catchup, _NotLeft, _MembersState}, State) ->
+handle_msg({catchup, _NotLeft, _Ver, _MembersState}, State) ->
     {ok, State};
 
 handle_msg({activity, Left, Activity},
@@ -1190,7 +1219,8 @@ maybe_send_catchup(_Right, #state { self          = Self,
                                     view          = View,
                                     members_state = MembersState }) ->
     send_right(Right, View,
-               {catchup, Self, prepare_members_state(MembersState)}).
+               {catchup, Self, view_version(View),
+                prepare_members_state(MembersState)}).
 
 
 %% ---------------------------------------------------------------------------
