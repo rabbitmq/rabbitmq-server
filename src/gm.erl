@@ -737,15 +737,17 @@ handle_msg({catchup, Left, Ver, MembersStateLeft},
                             view          = View,
                             members_state = undefined }) ->
     case view_version(View) of
-        Ver -> ok = send_right(Right, View,
-                               {catchup, Self, Ver, MembersStateLeft}),
-               MembersStateLeft1 = build_members_state(MembersStateLeft),
-               {ok, State #state { members_state = MembersStateLeft1 }};
-        %% ignore catchup with out-of-date view, see
-        %% handle_call({add_on_right, ...). In this case we *know*
-        %% that there will be another catchup message along in a
-        %% minute (this one was a side effect of a retried tx).
-        _   -> {ok, State}
+        Ver   -> ok = send_right(Right, View,
+                                 {catchup, Self, Ver, MembersStateLeft}),
+                 MembersStateLeft1 = build_members_state(MembersStateLeft),
+                 {ok, State #state { members_state = MembersStateLeft1 }};
+        MyVer -> %% ignore catchup with out-of-date view, see
+                 %% handle_call({add_on_right, ...). In this case we
+                 %% *know* that there will be another catchup message
+                 %% along in a minute (this one was a side effect of a
+                 %% retried tx).
+                 true = MyVer > Ver, %% ASSERTION
+                 {ok, State}
     end;
 
 handle_msg({catchup, Left, _Ver, MembersStateLeft},
