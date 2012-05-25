@@ -533,7 +533,7 @@ init([GroupName, Module, Args]) ->
                   group_name       = GroupName,
                   module           = Module,
                   view             = undefined,
-                  pub_count        = 0,
+                  pub_count        = -1,
                   members_state    = undefined,
                   callback_args    = Args,
                   confirms         = queue:new(),
@@ -699,9 +699,13 @@ terminate(Reason, State = #state { module        = Module,
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
-prioritise_info(flush,                                   _State) -> 1;
-prioritise_info({'DOWN', _MRef, process, _Pid, _Reason}, _State) -> 1;
-prioritise_info(_                                      , _State) -> 0.
+prioritise_info(flush, _State) ->
+    1;
+prioritise_info({'DOWN', _MRef, process, _Pid, _Reason},
+                #state { members_state = MS }) when MS /= undefined ->
+    1;
+prioritise_info(_, _State) ->
+    0.
 
 
 handle_msg(check_neighbours, State) ->
@@ -835,13 +839,14 @@ internal_broadcast(Msg, From, State = #state { self             = Self,
                                                confirms         = Confirms,
                                                callback_args    = Args,
                                                broadcast_buffer = Buffer }) ->
+    PubCount1 = PubCount + 1,
     Result = Module:handle_msg(Args, get_pid(Self), Msg),
-    Buffer1 = [{PubCount, Msg} | Buffer],
+    Buffer1 = [{PubCount1, Msg} | Buffer],
     Confirms1 = case From of
                     none -> Confirms;
-                    _    -> queue:in({PubCount, From}, Confirms)
+                    _    -> queue:in({PubCount1, From}, Confirms)
                 end,
-    State1 = State #state { pub_count        = PubCount + 1,
+    State1 = State #state { pub_count        = PubCount1,
                             confirms         = Confirms1,
                             broadcast_buffer = Buffer1 },
     case From =/= none of
@@ -856,14 +861,17 @@ flush_broadcast_buffer(State = #state { broadcast_buffer = [] }) ->
     State;
 flush_broadcast_buffer(State = #state { self             = Self,
                                         members_state    = MembersState,
-                                        broadcast_buffer = Buffer }) ->
+                                        broadcast_buffer = Buffer,
+                                        pub_count        = PubCount }) ->
+    [{PubCount, _Msg}|_] = Buffer, %% ASSERTION match on PubCount
     Pubs = lists:reverse(Buffer),
     Activity = activity_cons(Self, Pubs, [], activity_nil()),
     ok = maybe_send_activity(activity_finalise(Activity), State),
     MembersState1 = with_member(
                       fun (Member = #member { pending_ack = PA }) ->
                               PA1 = queue:join(PA, queue:from_list(Pubs)),
-                              Member #member { pending_ack = PA1 }
+                              Member #member { pending_ack = PA1,
+                                               last_pub = PubCount }
                       end, Self, MembersState),
     State #state { members_state    = MembersState1,
                    broadcast_buffer = [] }.
@@ -1299,16 +1307,30 @@ send_right(Right, View, Msg) ->
     ok = gen_server2:cast(get_pid(Right), {?TAG, view_version(View), Msg}).
 
 callback(Args, Module, Activity) ->
-    lists:foldl(
-      fun ({Id, Pubs, _Acks}, ok) ->
-              lists:foldl(fun ({_PubNum, Pub}, ok) ->
-                                  Module:handle_msg(Args, get_pid(Id), Pub);
-                              (_, Error) ->
-                                  Error
-                          end, ok, Pubs);
-          (_, Error) ->
-              Error
-      end, ok, Activity).
+    Result =
+      lists:foldl(
+        fun ({Id, Pubs, _Acks}, {Args1, Module1, ok}) ->
+                lists:foldl(fun ({_PubNum, Pub}, Acc = {Args2, Module2, ok}) ->
+                                    case Module2:handle_msg(
+                                           Args2, get_pid(Id), Pub) of
+                                        ok ->
+                                            Acc;
+                                        {become, Module3, Args3} ->
+                                            {Args3, Module3, ok};
+                                        {stop, _Reason} = Error ->
+                                            Error
+                                    end;
+                                (_, Error = {stop, _Reason}) ->
+                                    Error
+                            end, {Args1, Module1, ok}, Pubs);
+            (_, Error = {stop, _Reason}) ->
+                Error
+        end, {Args, Module, ok}, Activity),
+    case Result of
+        {Args, Module, ok}      -> ok;
+        {Args1, Module1, ok}    -> {become, Module1, Args1};
+        {stop, _Reason} = Error -> Error
+    end.
 
 callback_view_changed(Args, Module, OldView, NewView) ->
     OldMembers = all_known_members(OldView),
