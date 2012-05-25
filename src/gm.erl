@@ -668,7 +668,7 @@ handle_info({'DOWN', MRef, process, _Pid, _Reason},
             {Result, State2} =
                 case alive_view_members(View1) of
                     [Self] ->
-                        {Result1, State1} = maybe_erase_aliases( State, View1 ),
+                        {Result1, State1} = maybe_erase_aliases(State, View1),
                         {Result1, State1 #state {
                             members_state = blank_member_state(),
                             confirms      = purge_confirms(Confirms) }};
