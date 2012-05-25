@@ -115,9 +115,14 @@ prepare() ->
         end,
     case try_read_cluster_nodes_status() of
         {ok, _} ->
+            %% We check the consistency only when the cluster status exists,
+            %% since when it doesn't exist it means that we just started a fresh
+            %% node, and when we have a legacy node with an old
+            %% "cluster_nodes.config" we can't check the consistency anyway
             check_cluster_consistency(),
             ok;
         {error, {invalid_term, _, [AllNodes]}} ->
+            %% Legacy file
             NotPresent(AllNodes, should_be_disc_node(AllNodes));
         {error, {cannot_read_file, _, enoent}} ->
             {ok, {AllNodes, WantDiscNode}} =
