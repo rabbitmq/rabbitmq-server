@@ -1068,11 +1068,11 @@ record_new_member_in_group(GroupName, Left, NewMember, Fun) ->
                   Members1 = Prefix ++ [Left, NewMember | Suffix],
                   Group2 = Group1 #gm_group { members = Members1,
                                               version = Ver + 1 },
-                  MembersState = Fun(Group2),
+                  Result = Fun(Group2),
                   mnesia:write(Group2),
-                  {MembersState, Group2}
+                  {Result, Group2}
           end),
-    {MembersState, Group}.
+    {Result, Group}.
 
 erase_members_in_group(Members, GroupName) ->
     DeadMembers = [{dead, Id} || Id <- Members],
