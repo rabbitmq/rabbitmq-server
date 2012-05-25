@@ -9,15 +9,15 @@
 %%    terminated as per the shutdown component of the child_spec.
 %%
 %% 3) child specifications can contain, as the restart type, a tuple
-%%    {permanent, Delay} | {transient, Delay} where Delay >= 0. The
-%%    delay, in seconds, indicates what should happen if a child, upon
-%%    being restarted, exceeds the MaxT and MaxR parameters. Thus, if
-%%    a child exits, it is restarted as normal. If it exits
-%%    sufficiently quickly and often to exceed the boundaries set by
-%%    the MaxT and MaxR parameters, and a Delay is specified, then
-%%    rather than stopping the supervisor, the supervisor instead
-%%    continues and tries to start up the child again, Delay seconds
-%%    later.
+%%    {permanent, Delay} | {transient, Delay} | {intrinsic, Delay}
+%%    where Delay >= 0 (see point (4) below for intrinsic). The delay,
+%%    in seconds, indicates what should happen if a child, upon being
+%%    restarted, exceeds the MaxT and MaxR parameters. Thus, if a
+%%    child exits, it is restarted as normal. If it exits sufficiently
+%%    quickly and often to exceed the boundaries set by the MaxT and
+%%    MaxR parameters, and a Delay is specified, then rather than
+%%    stopping the supervisor, the supervisor instead continues and
+%%    tries to start up the child again, Delay seconds later.
 %%
 %%    Note that you can never restart more frequently than the MaxT
 %%    and MaxR parameters allow: i.e. you must wait until *both* the
@@ -31,6 +31,16 @@
 %%    the MaxT and MaxR parameters to permit the child to be
 %%    restarted. This may require waiting for longer than Delay.
 %%
+%%    Sometimes, you may wish for a transient or intrinsic child to
+%%    exit abnormally so that it gets restarted, but still log
+%%    nothing. gen_server will log any exit reason other than
+%%    'normal', 'shutdown' or {'shutdown', _}. Thus the exit reason of
+%%    {'shutdown', 'restart'} is interpreted to mean you wish the
+%%    child to be restarted according to the delay parameters, but
+%%    gen_server will not log the error. Thus from gen_server's
+%%    perspective it's a normal exit, whilst from supervisor's
+%%    perspective, it's an abnormal exit.
+%%
 %% 4) Added an 'intrinsic' restart type. Like the transient type, this
 %%    type means the child should only be restarted if the child exits
 %%    abnormally. Unlike the transient type, if the child exits
@@ -41,7 +51,7 @@
 %% 5) normal, and {shutdown, _} exit reasons are all treated the same
 %%    (i.e. are regarded as normal exits)
 %%
-%% All modifications are (C) 2010-2011 VMware, Inc.
+%% All modifications are (C) 2010-2012 VMware, Inc.
 %%
 %% %CopyrightBegin%
 %%
@@ -70,8 +80,6 @@
 	 delete_child/2, terminate_child/2,
 	 which_children/1, find_child/2,
 	 check_childspecs/1]).
-
--export([behaviour_info/1]).
 
 %% Internal exports
 -export([init/1, handle_call/3, handle_info/2, terminate/2, code_change/3]).
@@ -102,10 +110,143 @@
 -define(is_terminate_simple(State),
         State#state.strategy =:= simple_one_for_one_terminate).
 
+-ifdef(use_specs).
+
+%%--------------------------------------------------------------------------
+%% Types
+%%--------------------------------------------------------------------------
+
+-export_type([child_spec/0, startchild_ret/0, strategy/0, sup_name/0]).
+
+-type child() :: 'undefined' | pid().
+-type child_id() :: term().
+-type mfargs() :: {M :: module(), F :: atom(), A :: [term()] | undefined}.
+-type modules() :: [module()] | 'dynamic'.
+-type delay() :: non_neg_integer().
+-type restart() :: 'permanent' | 'transient' | 'temporary' | 'intrinsic'
+                 | {'permanent', delay()} | {'transient', delay()}
+                 | {'intrinsic', delay()}.
+-type shutdown() :: 'brutal_kill' | timeout().
+-type worker() :: 'worker' | 'supervisor'.
+-type sup_name() :: {'local', Name :: atom()} | {'global', Name :: atom()}.
+-type sup_ref() :: (Name :: atom())
+                  | {Name :: atom(), Node :: node()}
+                  | {'global', Name :: atom()}
+                  | pid().
+-type child_spec() :: {Id :: child_id(),
+                       StartFunc :: mfargs(),
+                       Restart :: restart(),
+                       Shutdown :: shutdown(),
+                       Type :: worker(),
+                       Modules :: modules()}.
+
+
+-type strategy() :: 'one_for_all' | 'one_for_one'
+                  | 'rest_for_one' | 'simple_one_for_one'
+                  | 'simple_one_for_one_terminate'.
+
+-type child_rec() :: #child{pid :: child() | {restarting,pid()} | [pid()],
+                            name :: child_id(),
+                            mfa :: mfargs(),
+                            restart_type :: restart(),
+                            shutdown :: shutdown(),
+                            child_type :: worker(),
+                            modules :: modules()}.
+
+-type state() :: #state{strategy :: strategy(),
+                        children :: [child_rec()],
+                        dynamics :: ?DICT(),
+                        intensity :: non_neg_integer(),
+                        period :: pos_integer()}.
+
+%%--------------------------------------------------------------------------
+%% Callback behaviour
+%%--------------------------------------------------------------------------
+
+-callback init(Args :: term()) ->
+    {ok, {{RestartStrategy :: strategy(),
+           MaxR :: non_neg_integer(),
+           MaxT :: non_neg_integer()},
+           [ChildSpec :: child_spec()]}}
+    | ignore.
+
+%%--------------------------------------------------------------------------
+%% Specs
+%%--------------------------------------------------------------------------
+
+-type startchild_err() :: 'already_present'
+			| {'already_started', Child :: child()} | term().
+-type startchild_ret() :: {'ok', Child :: child()}
+                        | {'ok', Child :: child(), Info :: term()}
+			| {'error', startchild_err()}.
+
+-spec start_child(SupRef, ChildSpec) -> startchild_ret() when
+      SupRef :: sup_ref(),
+      ChildSpec :: child_spec() | (List :: [term()]).
+
+-spec restart_child(SupRef, Id) -> Result when
+      SupRef :: sup_ref(),
+      Id :: child_id(),
+      Result :: {'ok', Child :: child()}
+              | {'ok', Child :: child(), Info :: term()}
+              | {'error', Error},
+      Error :: 'running' | 'not_found' | 'simple_one_for_one' | term().
+
+-spec delete_child(SupRef, Id) -> Result when
+      SupRef :: sup_ref(),
+      Id :: child_id(),
+      Result :: 'ok' | {'error', Error},
+      Error :: 'running' | 'not_found' | 'simple_one_for_one'.
+
+-spec terminate_child(SupRef, Id) -> Result when
+      SupRef :: sup_ref(),
+      Id :: pid() | child_id(),
+      Result :: 'ok' | {'error', Error},
+      Error :: 'not_found' | 'simple_one_for_one'.
+
+-spec which_children(SupRef) -> [{Id,Child,Type,Modules}] when
+      SupRef :: sup_ref(),
+      Id :: child_id() | 'undefined',
+      Child :: child(),
+      Type :: worker(),
+      Modules :: modules().
+
+-spec check_childspecs(ChildSpecs) -> Result when
+      ChildSpecs :: [child_spec()],
+      Result :: 'ok' | {'error', Error :: term()}.
+
+-type init_sup_name() :: sup_name() | 'self'.
+
+-type stop_rsn() :: 'shutdown' | {'bad_return', {module(),'init', term()}}
+                  | {'bad_start_spec', term()} | {'start_spec', term()}
+                  | {'supervisor_data', term()}.
+
+-spec init({init_sup_name(), module(), [term()]}) ->
+        {'ok', state()} | 'ignore' | {'stop', stop_rsn()}.
+
+-type call() :: 'which_children'.
+-spec handle_call(call(), term(), state()) -> {'reply', term(), state()}.
+
+-spec handle_cast('null', state()) -> {'noreply', state()}.
+
+-spec handle_info(term(), state()) ->
+        {'noreply', state()} | {'stop', 'shutdown', state()}.
+
+-spec terminate(term(), state()) -> 'ok'.
+
+-spec code_change(term(), state(), term()) ->
+        {'ok', state()} | {'error', term()}.
+
+-else.
+
+-export([behaviour_info/1]).
+
 behaviour_info(callbacks) ->
     [{init,1}];
 behaviour_info(_Other) ->
     undefined.
+
+-endif.
 
 %%% ---------------------------------------------------
 %%% This is a general process supervisor built upon gen_server.erl.
@@ -270,6 +411,8 @@ handle_call({start_child, EArgs}, _From, State) when ?is_simple(State) ->
     #child{mfa = {M, F, A}} = hd(State#state.children),
     Args = A ++ EArgs,
     case do_start_child_i(M, F, Args) of
+        {ok, undefined} ->
+            {reply, {ok, undefined}, State};
 	{ok, Pid} ->
 	    NState = State#state{dynamics = 
 				 ?DICT:store(Pid, Args, State#state.dynamics)},
@@ -529,25 +672,23 @@ restart_child(Pid, Reason, State) ->
 	    {ok, State}
     end.
 
-do_restart({RestartType, Delay}, Reason, Child, State) ->
-    case restart1(Child, State) of
-        {ok, NState} ->
-            {ok, NState};
-        {terminate, NState} ->
-            _TRef = erlang:send_after(trunc(Delay*1000), self(),
-				      {delayed_restart,
-				       {{RestartType, Delay}, Reason, Child}}),
-            {ok, state_del_child(Child, NState)}
-    end;
+do_restart({permanent = RestartType, Delay}, Reason, Child, State) ->
+    do_restart_delay({RestartType, Delay}, Reason, Child, State);
 do_restart(permanent, Reason, Child, State) ->
     report_error(child_terminated, Reason, Child, State#state.name),
     restart(Child, State);
 do_restart(Type, normal, Child, State) ->
     del_child_and_maybe_shutdown(Type, Child, State);
+do_restart({RestartType, Delay}, {shutdown, restart} = Reason, Child, State)
+  when RestartType =:= transient orelse RestartType =:= intrinsic ->
+    do_restart_delay({RestartType, Delay}, Reason, Child, State);
 do_restart(Type, {shutdown, _}, Child, State) ->
     del_child_and_maybe_shutdown(Type, Child, State);
 do_restart(Type, shutdown, Child = #child{child_type = supervisor}, State) ->
     del_child_and_maybe_shutdown(Type, Child, State);
+do_restart({RestartType, Delay}, Reason, Child, State)
+  when RestartType =:= transient orelse RestartType =:= intrinsic ->
+    do_restart_delay({RestartType, Delay}, Reason, Child, State);
 do_restart(Type, Reason, Child, State) when Type =:= transient orelse
                                             Type =:= intrinsic ->
     report_error(child_terminated, Reason, Child, State#state.name),
@@ -557,7 +698,20 @@ do_restart(temporary, Reason, Child, State) ->
     NState = state_del_child(Child, State),
     {ok, NState}.
 
+do_restart_delay({RestartType, Delay}, Reason, Child, State) ->
+    case restart1(Child, State) of
+        {ok, NState} ->
+            {ok, NState};
+        {terminate, NState} ->
+            _TRef = erlang:send_after(trunc(Delay*1000), self(),
+                                      {delayed_restart,
+                                       {{RestartType, Delay}, Reason, Child}}),
+            {ok, state_del_child(Child, NState)}
+    end.
+
 del_child_and_maybe_shutdown(intrinsic, Child, State) ->
+    {shutdown, state_del_child(Child, State)};
+del_child_and_maybe_shutdown({intrinsic, _Delay}, Child, State) ->
     {shutdown, state_del_child(Child, State)};
 del_child_and_maybe_shutdown(_, Child, State) ->
     {ok, state_del_child(Child, State)}.
@@ -591,6 +745,8 @@ restart(Strategy, Child, State, Restart)
     #child{mfa = {M, F, A}} = Child,
     Dynamics = ?DICT:erase(Child#child.pid, State#state.dynamics),
     case do_start_child_i(M, F, A) of
+        {ok, undefined} ->
+            {ok, State};
 	{ok, Pid} ->
 	    NState = State#state{dynamics = ?DICT:store(Pid, A, Dynamics)},
 	    {ok, NState};
@@ -717,8 +873,8 @@ do_terminate(Child, SupName) when Child#child.pid =/= undefined ->
             ok;
         {error, normal} ->
             case Child#child.restart_type of
-                permanent           -> ReportError(normal);
-                {permanent, _Delay} -> ReportError(normal);
+                permanent           -> ReportError(normal, Child);
+                {permanent, _Delay} -> ReportError(normal, Child);
                 _                   -> ok
             end;
         {error, OtherReason} ->
@@ -911,7 +1067,8 @@ supname(N,_)      -> N.
 %%%       Func is {Mod, Fun, Args} == {atom, atom, list}
 %%%       RestartType is permanent | temporary | transient |
 %%%                      intrinsic | {permanent, Delay} |
-%%%                      {transient, Delay} where Delay >= 0
+%%%                      {transient, Delay} | {intrinsic, Delay}
+%%                       where Delay >= 0
 %%%       Shutdown = integer() | infinity | brutal_kill
 %%%       ChildType = supervisor | worker
 %%%       Modules = [atom()] | dynamic
@@ -962,6 +1119,7 @@ validRestartType(temporary)          -> true;
 validRestartType(transient)          -> true;
 validRestartType(intrinsic)          -> true;
 validRestartType({permanent, Delay}) -> validDelay(Delay);
+validRestartType({intrinsic, Delay}) -> validDelay(Delay);
 validRestartType({transient, Delay}) -> validDelay(Delay);
 validRestartType(RestartType)        -> throw({invalid_restart_type,
                                                RestartType}).

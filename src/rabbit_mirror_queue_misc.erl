@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2010-2011 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2010-2012 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_mirror_queue_misc).
@@ -134,14 +134,17 @@ add_mirror(Queue, MirrorNode) ->
       Queue,
       fun (#amqqueue { name = Name, pid = QPid, slave_pids = SPids } = Q) ->
               case [Pid || Pid <- [QPid | SPids], node(Pid) =:= MirrorNode] of
-                  []  -> Result = rabbit_mirror_queue_slave_sup:start_child(
-                                    MirrorNode, [Q]),
-                         rabbit_log:info(
-                           "Adding mirror of queue ~s on node ~p: ~p~n",
-                           [rabbit_misc:rs(Name), MirrorNode, Result]),
-                         case Result of
-                             {ok, _Pid} -> ok;
-                             _          -> Result
+                  []  -> case rabbit_mirror_queue_slave_sup:start_child(
+                                MirrorNode, [Q]) of
+                             {ok, undefined} -> %% Already running
+                                 ok;
+                             {ok, SPid} ->
+                                 rabbit_log:info(
+                                   "Adding mirror of ~s on node ~p: ~p~n",
+                                   [rabbit_misc:rs(Name), MirrorNode, SPid]),
+                                 ok;
+                             Other ->
+                                 Other
                          end;
                   [_] -> {error, {queue_already_mirrored_on_node, MirrorNode}}
               end

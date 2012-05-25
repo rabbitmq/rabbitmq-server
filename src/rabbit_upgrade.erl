@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_upgrade).
@@ -28,7 +28,9 @@
 -ifdef(use_specs).
 
 -spec(maybe_upgrade_mnesia/0 :: () -> 'ok').
--spec(maybe_upgrade_local/0 :: () -> 'ok' | 'version_not_available').
+-spec(maybe_upgrade_local/0 :: () -> 'ok' |
+                                     'version_not_available' |
+                                     'starting_from_scratch').
 
 -endif.
 
@@ -119,8 +121,13 @@ remove_backup() ->
     info("upgrades: Mnesia backup removed~n", []).
 
 maybe_upgrade_mnesia() ->
-    AllNodes = rabbit_mnesia:all_clustered_nodes(),
+    %% rabbit_mnesia:all_clustered_nodes/0 will return [] at this point
+    %% if we are a RAM node since Mnesia has not started yet.
+    AllNodes = lists:usort(rabbit_mnesia:all_clustered_nodes() ++
+                               rabbit_mnesia:read_cluster_nodes_config()),
     case rabbit_version:upgrades_required(mnesia) of
+        {error, starting_from_scratch} ->
+            ok;
         {error, version_not_available} ->
             case AllNodes of
                 [_] -> ok;
@@ -235,6 +242,7 @@ nodes_running(Nodes) ->
 maybe_upgrade_local() ->
     case rabbit_version:upgrades_required(local) of
         {error, version_not_available} -> version_not_available;
+        {error, starting_from_scratch} -> starting_from_scratch;
         {error, _} = Err               -> throw(Err);
         {ok, []}                       -> ensure_backup_removed(),
                                           ok;

@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_limiter).
@@ -192,7 +192,7 @@ terminate(_, _) ->
     ok.
 
 code_change(_, State, _) ->
-    State.
+    {ok, State}.
 
 %%----------------------------------------------------------------------------
 %% Internal plumbing

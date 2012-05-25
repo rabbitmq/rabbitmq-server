@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_auth_mechanism_cr_demo).
@@ -20,8 +20,6 @@
 -behaviour(rabbit_auth_mechanism).
 
 -export([description/0, should_offer/1, init/1, handle_response/2]).
-
--include("rabbit_auth_mechanism_spec.hrl").
 
 -rabbit_boot_step({?MODULE,
                    [{description, "auth mechanism cr-demo"},

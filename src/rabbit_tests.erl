@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_tests).
@@ -35,6 +35,7 @@ all_tests() ->
     passed = mirrored_supervisor_tests:all_tests(),
     application:set_env(rabbit, file_handles_high_watermark, 10, infinity),
     ok = file_handle_cache:set_limit(10),
+    passed = test_multi_call(),
     passed = test_file_handle_cache(),
     passed = test_backing_queue(),
     passed = test_priority_queue(),
@@ -49,9 +50,10 @@ all_tests() ->
     passed = test_app_management(),
     passed = test_log_management_during_startup(),
     passed = test_statistics(),
-    passed = test_option_parser(),
+    passed = test_arguments_parser(),
     passed = test_cluster_management(),
     passed = test_user_management(),
+    passed = test_runtime_parameters(),
     passed = test_server_status(),
     passed = test_confirms(),
     passed = maybe_run_cluster_dependent_tests(),
@@ -59,7 +61,7 @@ all_tests() ->
     passed.
 
 maybe_run_cluster_dependent_tests() ->
-    SecondaryNode = rabbit_misc:makenode("hare"),
+    SecondaryNode = rabbit_nodes:make("hare"),
 
     case net_adm:ping(SecondaryNode) of
         pong -> passed = run_cluster_dependent_tests(SecondaryNode);
@@ -71,10 +73,13 @@ maybe_run_cluster_dependent_tests() ->
 run_cluster_dependent_tests(SecondaryNode) ->
     SecondaryNodeS = atom_to_list(SecondaryNode),
 
+    cover:stop(SecondaryNode),
     ok = control_action(stop_app, []),
     ok = control_action(reset, []),
     ok = control_action(cluster, [SecondaryNodeS]),
     ok = control_action(start_app, []),
+    cover:start(SecondaryNode),
+    ok = control_action(start_app, SecondaryNode, [], []),
 
     io:format("Running cluster dependent tests with node ~p~n", [SecondaryNode]),
     passed = test_delegates_async(SecondaryNode),
@@ -102,6 +107,26 @@ run_cluster_dependent_tests(SecondaryNode) ->
             throw(timeout)
     end,
 
+    passed.
+
+test_multi_call() ->
+    Fun = fun() ->
+                  receive
+                      {'$gen_call', {From, Mref}, request} ->
+                          From ! {Mref, response}
+                  end,
+                  receive
+                      never -> ok
+                  end
+          end,
+    Pid1 = spawn(Fun),
+    Pid2 = spawn(Fun),
+    Pid3 = spawn(Fun),
+    exit(Pid2, bang),
+    {[{Pid1, response}, {Pid3, response}], [{Pid2, _Fail}]} =
+        rabbit_misc:multi_call([Pid1, Pid2, Pid3], request),
+    exit(Pid1, bang),
+    exit(Pid3, bang),
     passed.
 
 test_priority_queue() ->
@@ -776,27 +801,57 @@ test_log_management_during_startup() ->
     ok = control_action(start_app, []),
     passed.
 
-test_option_parser() ->
-    %% command and arguments should just pass through
-    ok = check_get_options({["mock_command", "arg1", "arg2"], []},
-                           [], ["mock_command", "arg1", "arg2"]),
+test_arguments_parser() ->
+    GlobalOpts1 = [{"-f1", flag}, {"-o1", {option, "foo"}}],
+    Commands1 = [command1, {command2, [{"-f2", flag}, {"-o2", {option, "bar"}}]}],
 
-    %% get flags
-    ok = check_get_options(
-           {["mock_command", "arg1"], [{"-f", true}, {"-f2", false}]},
-           [{flag, "-f"}, {flag, "-f2"}], ["mock_command", "arg1", "-f"]),
+    GetOptions =
+        fun (Args) ->
+                rabbit_misc:parse_arguments(Commands1, GlobalOpts1, Args)
+        end,
 
-    %% get options
-    ok = check_get_options(
-           {["mock_command"], [{"-foo", "bar"}, {"-baz", "notbaz"}]},
-           [{option, "-foo", "notfoo"}, {option, "-baz", "notbaz"}],
-           ["mock_command", "-foo", "bar"]),
+    check_parse_arguments(no_command, GetOptions, []),
+    check_parse_arguments(no_command, GetOptions, ["foo", "bar"]),
+    check_parse_arguments(
+      {ok, {command1, [{"-f1", false}, {"-o1", "foo"}], []}},
+      GetOptions, ["command1"]),
+    check_parse_arguments(
+      {ok, {command1, [{"-f1", false}, {"-o1", "blah"}], []}},
+      GetOptions, ["command1", "-o1", "blah"]),
+    check_parse_arguments(
+      {ok, {command1, [{"-f1", true}, {"-o1", "foo"}], []}},
+      GetOptions, ["command1", "-f1"]),
+    check_parse_arguments(
+      {ok, {command1, [{"-f1", false}, {"-o1", "blah"}], []}},
+      GetOptions, ["-o1", "blah", "command1"]),
+    check_parse_arguments(
+      {ok, {command1, [{"-f1", false}, {"-o1", "blah"}], ["quux"]}},
+      GetOptions, ["-o1", "blah", "command1", "quux"]),
+    check_parse_arguments(
+      {ok, {command1, [{"-f1", true}, {"-o1", "blah"}], ["quux", "baz"]}},
+      GetOptions, ["command1", "quux", "-f1", "-o1", "blah", "baz"]),
+    %% For duplicate flags, the last one counts
+    check_parse_arguments(
+      {ok, {command1, [{"-f1", false}, {"-o1", "second"}], []}},
+      GetOptions, ["-o1", "first", "command1", "-o1", "second"]),
+    %% If the flag "eats" the command, the command won't be recognised
+    check_parse_arguments(no_command, GetOptions,
+                      ["-o1", "command1", "quux"]),
+    %% If a flag eats another flag, the eaten flag won't be recognised
+    check_parse_arguments(
+      {ok, {command1, [{"-f1", false}, {"-o1", "-f1"}], []}},
+      GetOptions, ["command1", "-o1", "-f1"]),
 
-    %% shuffled and interleaved arguments and options
-    ok = check_get_options(
-           {["a1", "a2", "a3"], [{"-o1", "hello"}, {"-o2", "noto2"}, {"-f", true}]},
-           [{option, "-o1", "noto1"}, {flag, "-f"}, {option, "-o2", "noto2"}],
-           ["-f", "a1", "-o1", "hello", "a2", "a3"]),
+    %% Now for some command-specific flags...
+    check_parse_arguments(
+      {ok, {command2, [{"-f1", false}, {"-f2", false},
+                       {"-o1", "foo"}, {"-o2", "bar"}], []}},
+      GetOptions, ["command2"]),
+
+    check_parse_arguments(
+      {ok, {command2, [{"-f1", false}, {"-f2", true},
+                       {"-o1", "baz"}, {"-o2", "bar"}], ["quux", "foo"]}},
+      GetOptions, ["-f2", "command2", "quux", "-o1", "baz", "foo"]),
 
     passed.
 
@@ -859,7 +914,9 @@ test_cluster_management() ->
                                         "invalid2@invalid"]),
     ok = assert_ram_node(),
 
-    SecondaryNode = rabbit_misc:makenode("hare"),
+    ok = control_action(reset, []),
+
+    SecondaryNode = rabbit_nodes:make("hare"),
     case net_adm:ping(SecondaryNode) of
         pong -> passed = test_cluster_management2(SecondaryNode);
         pang -> io:format("Skipping clustering tests with node ~p~n",
@@ -874,7 +931,6 @@ test_cluster_management2(SecondaryNode) ->
     SecondaryNodeS = atom_to_list(SecondaryNode),
 
     %% make a disk node
-    ok = control_action(reset, []),
     ok = control_action(cluster, [NodeS]),
     ok = assert_disc_node(),
     %% make a ram node
@@ -889,6 +945,14 @@ test_cluster_management2(SecondaryNode) ->
     ok = control_action(stop_app, []),
     ok = assert_ram_node(),
 
+    %% ram node will not start by itself
+    ok = control_action(stop_app, []),
+    ok = control_action(stop_app, SecondaryNode, [], []),
+    {error, _} = control_action(start_app, []),
+    ok = control_action(start_app, SecondaryNode, [], []),
+    ok = control_action(start_app, []),
+    ok = control_action(stop_app, []),
+
     %% change cluster config while remaining in same cluster
     ok = control_action(force_cluster, ["invalid2@invalid", SecondaryNodeS]),
     ok = control_action(start_app, []),
@@ -897,8 +961,7 @@ test_cluster_management2(SecondaryNode) ->
     %% join non-existing cluster as a ram node
     ok = control_action(force_cluster, ["invalid1@invalid",
                                         "invalid2@invalid"]),
-    ok = control_action(start_app, []),
-    ok = control_action(stop_app, []),
+    {error, _} = control_action(start_app, []),
     ok = assert_ram_node(),
 
     %% join empty cluster as a ram node (converts to disc)
@@ -953,7 +1016,9 @@ test_cluster_management2(SecondaryNode) ->
     ok = control_action(cluster, [SecondaryNodeS, NodeS]),
     ok = control_action(start_app, []),
     ok = control_action(stop_app, []),
+    cover:stop(SecondaryNode),
     ok = control_action(reset, []),
+    cover:start(SecondaryNode),
 
     %% attempt to leave cluster when no other node is alive
     ok = control_action(cluster, [SecondaryNodeS, NodeS]),
@@ -970,7 +1035,15 @@ test_cluster_management2(SecondaryNode) ->
     %% leave system clustered, with the secondary node as a ram node
     ok = control_action(force_reset, []),
     ok = control_action(start_app, []),
-    ok = control_action(force_reset, SecondaryNode, [], []),
+    %% Yes, this is rather ugly. But since we're a clustered Mnesia
+    %% node and we're telling another clustered node to reset itself,
+    %% we will get disconnected half way through causing a
+    %% badrpc. This never happens in real life since rabbitmqctl is
+    %% not a clustered Mnesia node.
+    cover:stop(SecondaryNode),
+    {badrpc, nodedown} = control_action(force_reset, SecondaryNode, [], []),
+    pong = net_adm:ping(SecondaryNode),
+    cover:start(SecondaryNode),
     ok = control_action(cluster, SecondaryNode, [NodeS], []),
     ok = control_action(start_app, SecondaryNode, [], []),
 
@@ -1055,11 +1128,43 @@ test_user_management() ->
 
     passed.
 
+test_runtime_parameters() ->
+    rabbit_runtime_parameters_test:register(),
+    Good = fun(L) -> ok                = control_action(set_parameter, L) end,
+    Bad  = fun(L) -> {error_string, _} = control_action(set_parameter, L) end,
+
+    %% Acceptable for bijection
+    Good(["test", "good", "<<\"ignore\">>"]),
+    Good(["test", "good", "123"]),
+    Good(["test", "good", "true"]),
+    Good(["test", "good", "false"]),
+    Good(["test", "good", "null"]),
+    Good(["test", "good", "[{<<\"key\">>, <<\"value\">>}]"]),
+
+    %% Various forms of fail due to non-bijectability
+    Bad(["test", "good", "atom"]),
+    Bad(["test", "good", "{tuple, foo}"]),
+    Bad(["test", "good", "[{<<\"key\">>, <<\"value\">>, 1}]"]),
+    Bad(["test", "good", "[{key, <<\"value\">>}]"]),
+
+    %% Test actual validation hook
+    Good(["test", "maybe", "<<\"good\">>"]),
+    Bad(["test", "maybe", "<<\"bad\">>"]),
+
+    ok = control_action(list_parameters, []),
+
+    ok = control_action(clear_parameter, ["test", "good"]),
+    ok = control_action(clear_parameter, ["test", "maybe"]),
+    {error_string, _} =
+        control_action(clear_parameter, ["test", "neverexisted"]),
+    rabbit_runtime_parameters_test:unregister(),
+    passed.
+
 test_server_status() ->
     %% create a few things so there is some useful information to list
     Writer = spawn(fun () -> receive shutdown -> ok end end),
     {ok, Ch} = rabbit_channel:start_link(
-                 1, self(), Writer, self(), rabbit_framing_amqp_0_9_1,
+                 1, self(), Writer, self(), "", rabbit_framing_amqp_0_9_1,
                  user(<<"user">>), <<"/">>, [], self(),
                  rabbit_limiter:make_token(self())),
     [Q, Q2] = [Queue || Name <- [<<"foo">>, <<"bar">>],
@@ -1130,7 +1235,7 @@ test_spawn() ->
     Me = self(),
     Writer = spawn(fun () -> test_writer(Me) end),
     {ok, Ch} = rabbit_channel:start_link(
-                 1, Me, Writer, Me, rabbit_framing_amqp_0_9_1,
+                 1, Me, Writer, Me, "", rabbit_framing_amqp_0_9_1,
                  user(<<"guest">>), <<"/">>, [], Me,
                   rabbit_limiter:make_token(self())),
     ok = rabbit_channel:do(Ch, #'channel.open'{}),
@@ -1203,6 +1308,9 @@ test_confirms() ->
                                           },
                       rabbit_basic:build_content(
                         #'P_basic'{delivery_mode = 2}, <<"">>)),
+    %% We must not kill the queue before the channel has processed the
+    %% 'publish'.
+    ok = rabbit_channel:flush(Ch),
     %% Crash the queue
     QPid1 ! boom,
     %% Wait for a nack
@@ -1527,10 +1635,13 @@ expand_options(As, Bs) ->
                         end
                 end, Bs, As).
 
-check_get_options({ExpArgs, ExpOpts}, Defs, Args) ->
-    {ExpArgs, ResOpts} = rabbit_misc:get_options(Defs, Args),
-    true = lists:sort(ExpOpts) == lists:sort(ResOpts), % don't care about the order
-    ok.
+check_parse_arguments(ExpRes, Fun, As) ->
+    SortRes =
+        fun (no_command)          -> no_command;
+            ({ok, {C, KVs, As1}}) -> {ok, {C, lists:sort(KVs), As1}}
+        end,
+
+    true = SortRes(ExpRes) =:= SortRes(Fun(As)).
 
 empty_files(Files) ->
     [case file:read_file_info(File) of
@@ -1779,10 +1890,10 @@ test_msg_store() ->
     restart_msg_store_empty(),
     MsgIds = [msg_id_bin(M) || M <- lists:seq(1,100)],
     {MsgIds1stHalf, MsgIds2ndHalf} = lists:split(length(MsgIds) div 2, MsgIds),
-    Ref = rabbit_guid:guid(),
+    Ref = rabbit_guid:gen(),
     {Cap, MSCState} = msg_store_client_init_capture(
                         ?PERSISTENT_MSG_STORE, Ref),
-    Ref2 = rabbit_guid:guid(),
+    Ref2 = rabbit_guid:gen(),
     {Cap2, MSC2State} = msg_store_client_init_capture(
                           ?PERSISTENT_MSG_STORE, Ref2),
     %% check we don't contain any of the msgs we're about to publish
@@ -1934,7 +2045,7 @@ test_msg_store_confirms(MsgIds, Cap, MSCState) ->
     passed.
 
 test_msg_store_confirm_timer() ->
-    Ref = rabbit_guid:guid(),
+    Ref = rabbit_guid:gen(),
     MsgId  = msg_id_bin(1),
     Self = self(),
     MSCState = rabbit_msg_store:client_init(
@@ -1963,7 +2074,7 @@ msg_store_keep_busy_until_confirm(MsgIds, MSCState) ->
 test_msg_store_client_delete_and_terminate() ->
     restart_msg_store_empty(),
     MsgIds = [msg_id_bin(M) || M <- lists:seq(1, 10)],
-    Ref = rabbit_guid:guid(),
+    Ref = rabbit_guid:gen(),
     MSCState = msg_store_client_init(?PERSISTENT_MSG_STORE, Ref),
     ok = msg_store_write(MsgIds, MSCState),
     %% test the 'dying client' fast path for writes
@@ -1979,7 +2090,7 @@ test_queue() ->
 init_test_queue() ->
     TestQueue = test_queue(),
     Terms = rabbit_queue_index:shutdown_terms(TestQueue),
-    PRef = proplists:get_value(persistent_ref, Terms, rabbit_guid:guid()),
+    PRef = proplists:get_value(persistent_ref, Terms, rabbit_guid:gen()),
     PersistentClient = msg_store_client_init(?PERSISTENT_MSG_STORE, PRef),
     Res = rabbit_queue_index:recover(
             TestQueue, Terms, false,
@@ -2013,7 +2124,7 @@ restart_app() ->
     rabbit:start().
 
 queue_index_publish(SeqIds, Persistent, Qi) ->
-    Ref = rabbit_guid:guid(),
+    Ref = rabbit_guid:gen(),
     MsgStore = case Persistent of
                    true  -> ?PERSISTENT_MSG_STORE;
                    false -> ?TRANSIENT_MSG_STORE
@@ -2022,7 +2133,7 @@ queue_index_publish(SeqIds, Persistent, Qi) ->
     {A, B = [{_SeqId, LastMsgIdWritten} | _]} =
         lists:foldl(
           fun (SeqId, {QiN, SeqIdsMsgIdsAcc}) ->
-                  MsgId = rabbit_guid:guid(),
+                  MsgId = rabbit_guid:gen(),
                   QiM = rabbit_queue_index:publish(
                           MsgId, SeqId, #message_properties{}, Persistent, QiN),
                   ok = rabbit_msg_store:write(MsgId, MsgId, MSCState),
@@ -2045,7 +2156,7 @@ verify_read_with_published(_Delivered, _Persistent, _Read, _Published) ->
 test_queue_index_props() ->
     with_empty_test_queue(
       fun(Qi0) ->
-              MsgId = rabbit_guid:guid(),
+              MsgId = rabbit_guid:gen(),
               Props = #message_properties{expiry=12345},
               Qi1 = rabbit_queue_index:publish(MsgId, 1, Props, true, Qi0),
               {[{MsgId, 1, Props, _, _}], Qi2} =
@@ -2222,17 +2333,29 @@ test_amqqueue(Durable) ->
         #amqqueue { durable = Durable }.
 
 with_fresh_variable_queue(Fun) ->
-    ok = empty_test_queue(),
-    VQ = variable_queue_init(test_amqqueue(true), false),
-    S0 = rabbit_variable_queue:status(VQ),
-    assert_props(S0, [{q1, 0}, {q2, 0},
-                      {delta, {delta, undefined, 0, undefined}},
-                      {q3, 0}, {q4, 0},
-                      {len, 0}]),
-    _ = rabbit_variable_queue:delete_and_terminate(shutdown, Fun(VQ)),
+    Ref = make_ref(),
+    Me = self(),
+    %% Run in a separate process since rabbit_msg_store will send
+    %% bump_credit messages and we want to ignore them
+    spawn_link(fun() ->
+                       ok = empty_test_queue(),
+                       VQ = variable_queue_init(test_amqqueue(true), false),
+                       S0 = rabbit_variable_queue:status(VQ),
+                       assert_props(S0, [{q1, 0}, {q2, 0},
+                                         {delta,
+                                          {delta, undefined, 0, undefined}},
+                                         {q3, 0}, {q4, 0},
+                                         {len, 0}]),
+                       _ = rabbit_variable_queue:delete_and_terminate(
+                        shutdown, Fun(VQ)),
+                       Me ! Ref
+               end),
+    receive
+        Ref -> ok
+    end,
     passed.
 
-publish_and_confirm(QPid, Payload, Count) ->
+publish_and_confirm(Q, Payload, Count) ->
     Seqs = lists:seq(1, Count),
     [begin
          Msg = rabbit_basic:message(rabbit_misc:r(<<>>, exchange, <<>>),
@@ -2240,7 +2363,7 @@ publish_and_confirm(QPid, Payload, Count) ->
                                     Payload),
          Delivery = #delivery{mandatory = false, immediate = false,
                               sender = self(), message = Msg, msg_seq_no = Seq},
-         true = rabbit_amqqueue:deliver(QPid, Delivery)
+         {routed, _} = rabbit_amqqueue:deliver([Q], Delivery)
      end || Seq <- Seqs],
     wait_for_confirms(gb_sets:from_list(Seqs)).
 
@@ -2249,8 +2372,8 @@ wait_for_confirms(Unconfirmed) ->
         true  -> ok;
         false -> receive {'$gen_cast', {confirm, Confirmed, _}} ->
                          wait_for_confirms(
-                           gb_sets:difference(Unconfirmed,
-                                              gb_sets:from_list(Confirmed)))
+                           rabbit_misc:gb_sets_difference(
+                             Unconfirmed, gb_sets:from_list(Confirmed)))
                  after 5000 -> exit(timeout_waiting_for_confirm)
                  end
     end.
@@ -2331,10 +2454,10 @@ test_dropwhile(VQ0) ->
             fun (N, Props) -> Props#message_properties{expiry = N} end, VQ0),
 
     %% drop the first 5 messages
-    VQ2 = rabbit_variable_queue:dropwhile(
-            fun(#message_properties { expiry = Expiry }) ->
-                    Expiry =< 5
-            end, VQ1),
+    {undefined, VQ2} = rabbit_variable_queue:dropwhile(
+                         fun(#message_properties { expiry = Expiry }) ->
+                                 Expiry =< 5
+                         end, false, VQ1),
 
     %% fetch five now
     VQ3 = lists:foldl(fun (_N, VQN) ->
@@ -2351,10 +2474,13 @@ test_dropwhile(VQ0) ->
 test_dropwhile_varying_ram_duration(VQ0) ->
     VQ1 = variable_queue_publish(false, 1, VQ0),
     VQ2 = rabbit_variable_queue:set_ram_duration_target(0, VQ1),
-    VQ3 = rabbit_variable_queue:dropwhile(fun(_) -> false end, VQ2),
+    {undefined, VQ3} = rabbit_variable_queue:dropwhile(
+                         fun(_) -> false end, false, VQ2),
     VQ4 = rabbit_variable_queue:set_ram_duration_target(infinity, VQ3),
     VQ5 = variable_queue_publish(false, 1, VQ4),
-    rabbit_variable_queue:dropwhile(fun(_) -> false end, VQ5).
+    {undefined, VQ6} =
+        rabbit_variable_queue:dropwhile(fun(_) -> false end, false, VQ5),
+    VQ6.
 
 test_variable_queue_dynamic_duration_change(VQ0) ->
     SegmentSize = rabbit_queue_index:next_segment_boundary(0),
@@ -2477,7 +2603,7 @@ test_queue_recover() ->
     Count = 2 * rabbit_queue_index:next_segment_boundary(0),
     {new, #amqqueue { pid = QPid, name = QName } = Q} =
         rabbit_amqqueue:declare(test_queue(), true, false, [], none),
-    publish_and_confirm(QPid, <<>>, Count),
+    publish_and_confirm(Q, <<>>, Count),
 
     exit(QPid, kill),
     MRef = erlang:monitor(process, QPid),
@@ -2497,7 +2623,7 @@ test_queue_recover() ->
               {{_Msg1, true, _AckTag1, CountMinusOne}, VQ2} =
                   rabbit_variable_queue:fetch(true, VQ1),
               _VQ3 = rabbit_variable_queue:delete_and_terminate(shutdown, VQ2),
-              rabbit_amqqueue:internal_delete(QName)
+              rabbit_amqqueue:internal_delete(QName, QPid1)
       end),
     passed.
 
@@ -2507,7 +2633,7 @@ test_variable_queue_delete_msg_store_files_callback() ->
         rabbit_amqqueue:declare(test_queue(), true, false, [], none),
     Payload = <<0:8388608>>, %% 1MB
     Count = 30,
-    publish_and_confirm(QPid, Payload, Count),
+    publish_and_confirm(Q, Payload, Count),
 
     rabbit_amqqueue:set_ram_duration_target(QPid, 0),
 

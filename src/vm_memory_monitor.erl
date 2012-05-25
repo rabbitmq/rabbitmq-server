@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
 %% In practice Erlang shouldn't be allowed to grow to more than a half
@@ -181,10 +181,10 @@ internal_update(State = #state { memory_limit = MemLimit,
     case {Alarmed, NewAlarmed} of
         {false, true} ->
             emit_update_info(set, MemUsed, MemLimit),
-            alarm_handler:set_alarm({{vm_memory_high_watermark, node()}, []});
+            alarm_handler:set_alarm({{resource_limit, memory, node()}, []});
         {true, false} ->
             emit_update_info(clear, MemUsed, MemLimit),
-            alarm_handler:clear_alarm({vm_memory_high_watermark, node()});
+            alarm_handler:clear_alarm({resource_limit, memory, node()});
         _ ->
             ok
     end,

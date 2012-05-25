@@ -11,36 +11,46 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_auth_mechanism).
 
+-ifdef(use_specs).
+
+%% A description.
+-callback description() -> [proplist:property()].
+
+%% If this mechanism is enabled, should it be offered for a given socket?
+%% (primarily so EXTERNAL can be SSL-only)
+-callback should_offer(rabbit_net:socket()) -> boolean().
+
+%% Called before authentication starts. Should create a state
+%% object to be passed through all the stages of authentication.
+-callback init(rabbit_net:socket()) -> any().
+
+%% Handle a stage of authentication. Possible responses:
+%% {ok, User}
+%%     Authentication succeeded, and here's the user record.
+%% {challenge, Challenge, NextState}
+%%     Another round is needed. Here's the state I want next time.
+%% {protocol_error, Msg, Args}
+%%     Client got the protocol wrong. Log and die.
+%% {refused, Msg, Args}
+%%     Client failed authentication. Log and die.
+-callback handle_response(binary(), any()) ->
+    {'ok', rabbit_types:user()} |
+    {'challenge', binary(), any()} |
+    {'protocol_error', string(), [any()]} |
+    {'refused', string(), [any()]}.
+
+-else.
+
 -export([behaviour_info/1]).
 
 behaviour_info(callbacks) ->
-    [
-     %% A description.
-     {description, 0},
-
-     %% If this mechanism is enabled, should it be offered for a given socket?
-     %% (primarily so EXTERNAL can be SSL-only)
-     {should_offer, 1},
-
-     %% Called before authentication starts. Should create a state
-     %% object to be passed through all the stages of authentication.
-     {init, 1},
-
-     %% Handle a stage of authentication. Possible responses:
-     %% {ok, User}
-     %%     Authentication succeeded, and here's the user record.
-     %% {challenge, Challenge, NextState}
-     %%     Another round is needed. Here's the state I want next time.
-     %% {protocol_error, Msg, Args}
-     %%     Client got the protocol wrong. Log and die.
-     %% {refused, Msg, Args}
-     %%     Client failed authentication. Log and die.
-     {handle_response, 2}
-    ];
+    [{description, 0}, {should_offer, 1}, {init, 1}, {handle_response, 2}];
 behaviour_info(_Other) ->
     undefined.
+
+-endif.

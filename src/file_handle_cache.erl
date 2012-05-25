@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
 -module(file_handle_cache).
@@ -125,8 +125,7 @@
 %% requesting process is considered to 'own' one more
 %% descriptor. release/0 is the inverse operation and releases a
 %% previously obtained descriptor. transfer/1 transfers ownership of a
-%% file descriptor between processes. It is non-blocking. Obtain is
-%% used to obtain permission to accept file descriptors. Obtain has a
+%% file descriptor between processes. It is non-blocking. Obtain has a
 %% lower limit, set by the ?OBTAIN_LIMIT/1 macro. File handles can use
 %% the entire limit, but will be evicted by obtain calls up to the
 %% point at which no more obtain calls can be satisfied by the obtains
@@ -144,9 +143,9 @@
 -behaviour(gen_server2).
 
 -export([register_callback/3]).
--export([open/3, close/1, read/2, append/2, sync/1, position/2, truncate/1,
-         current_virtual_offset/1, current_raw_offset/1, flush/1, copy/3,
-         set_maximum_since_use/1, delete/1, clear/1]).
+-export([open/3, close/1, read/2, append/2, needs_sync/1, sync/1, position/2,
+         truncate/1, current_virtual_offset/1, current_raw_offset/1, flush/1,
+         copy/3, set_maximum_since_use/1, delete/1, clear/1]).
 -export([obtain/0, release/0, transfer/1, set_limit/1, get_limit/0, info_keys/0,
          info/0, info/1]).
 -export([ulimit/0]).
@@ -262,7 +261,7 @@
 -endif.
 
 %%----------------------------------------------------------------------------
--define(INFO_KEYS, [obtain_count, obtain_limit]).
+-define(INFO_KEYS, [total_limit, total_used, sockets_limit, sockets_used]).
 
 %%----------------------------------------------------------------------------
 %% Public API
@@ -372,6 +371,13 @@ sync(Ref) ->
                   ok    -> {ok, [Handle #handle { is_dirty = false }]};
                   Error -> {Error, [Handle]}
               end
+      end).
+
+needs_sync(Ref) ->
+    with_handles(
+      [Ref],
+      fun ([#handle { is_dirty = false, write_buffer = [] }]) -> false;
+          ([_Handle])                                         -> true
       end).
 
 position(Ref, NewOffset) ->
@@ -790,8 +796,10 @@ write_buffer(Handle = #handle { hdl = Hdl, offset = Offset,
 
 infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
 
-i(obtain_count, #fhc_state{obtain_count = Count}) -> Count;
-i(obtain_limit, #fhc_state{obtain_limit = Limit}) -> Limit;
+i(total_limit,   #fhc_state{limit        = Limit})               -> Limit;
+i(total_used,    #fhc_state{open_count = C1, obtain_count = C2}) -> C1 + C2;
+i(sockets_limit, #fhc_state{obtain_limit = Limit})               -> Limit;
+i(sockets_used,  #fhc_state{obtain_count = Count})               -> Count;
 i(Item, _) -> throw({bad_argument, Item}).
 
 %%----------------------------------------------------------------------------

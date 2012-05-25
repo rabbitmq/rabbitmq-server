@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
 
@@ -178,11 +178,8 @@ code_change(_OldVsn, State, _Extra) ->
 %% Internal functions
 %%----------------------------------------------------------------------------
 
-zero_clamp(Sum) ->
-    case Sum < ?EPSILON of
-        true -> 0.0;
-        false -> Sum
-    end.
+zero_clamp(Sum) when Sum < ?EPSILON -> 0.0;
+zero_clamp(Sum)                     -> Sum.
 
 internal_deregister(Pid, Demonitor,
                     State = #state { queue_duration_sum = Sum,
@@ -240,26 +237,21 @@ internal_update(State = #state { queue_durations = Durations,
                   fun (Proc = #process { reported = QueueDuration,
                                          sent = PrevSendDuration,
                                          callback = {M, F, A} }, true) ->
-                          case (case {QueueDuration, PrevSendDuration} of
-                                    {infinity, infinity} ->
-                                        true;
-                                    {infinity, D} ->
-                                        DesiredDurationAvg1 < D;
-                                    {D, infinity} ->
-                                        DesiredDurationAvg1 < D;
-                                    {D1, D2} ->
-                                        DesiredDurationAvg1 <
-                                            lists:min([D1,D2])
-                                end) of
-                              true ->
-                                  ok = erlang:apply(
-                                         M, F, A ++ [DesiredDurationAvg1]),
-                                  ets:insert(
-                                    Durations,
-                                    Proc #process {sent = DesiredDurationAvg1});
-                              false ->
-                                  true
+                          case should_send(QueueDuration, PrevSendDuration,
+                                           DesiredDurationAvg1) of
+                              true  -> ok = erlang:apply(
+                                              M, F, A ++ [DesiredDurationAvg1]),
+                                       ets:insert(
+                                         Durations,
+                                         Proc #process {
+                                           sent = DesiredDurationAvg1});
+                              false -> true
                           end
                   end, true, Durations)
     end,
     State1.
+
+should_send(infinity, infinity,  _) -> true;
+should_send(infinity,        D, DD) -> DD < D;
+should_send(D,        infinity, DD) -> DD < D;
+should_send(D1,             D2, DD) -> DD < lists:min([D1, D2]).

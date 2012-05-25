@@ -11,13 +11,13 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_direct).
 
 -export([boot/0, force_event_refresh/0, list/0, connect/5,
-         start_channel/8, disconnect/2]).
+         start_channel/9, disconnect/2]).
 %% Internal
 -export([list_local/0]).
 
@@ -36,10 +36,10 @@
                     rabbit_event:event_props()) ->
                         {'ok', {rabbit_types:user(),
                                 rabbit_framing:amqp_table()}}).
--spec(start_channel/8 ::
-        (rabbit_channel:channel_number(), pid(), pid(), rabbit_types:protocol(),
-         rabbit_types:user(), rabbit_types:vhost(), rabbit_framing:amqp_table(),
-         pid()) -> {'ok', pid()}).
+-spec(start_channel/9 ::
+        (rabbit_channel:channel_number(), pid(), pid(), string(),
+         rabbit_types:protocol(), rabbit_types:user(), rabbit_types:vhost(),
+         rabbit_framing:amqp_table(), pid()) -> {'ok', pid()}).
 
 -spec(disconnect/2 :: (pid(), rabbit_event:event_props()) -> 'ok').
 
@@ -47,16 +47,10 @@
 
 %%----------------------------------------------------------------------------
 
-boot() ->
-    {ok, _} =
-        supervisor2:start_child(
-          rabbit_sup,
-          {rabbit_direct_client_sup,
-           {rabbit_client_sup, start_link,
+boot() -> rabbit_sup:start_supervisor_child(
+            rabbit_direct_client_sup, rabbit_client_sup,
             [{local, rabbit_direct_client_sup},
-             {rabbit_channel_sup, start_link, []}]},
-           transient, infinity, supervisor, [rabbit_client_sup]}),
-    ok.
+             {rabbit_channel_sup, start_link, []}]).
 
 force_event_refresh() ->
     [Pid ! force_event_refresh || Pid<- list()],
@@ -92,13 +86,13 @@ connect(Username, VHost, Protocol, Pid, Infos) ->
             {error, broker_not_found_on_node}
     end.
 
-start_channel(Number, ClientChannelPid, ConnPid, Protocol, User, VHost,
-              Capabilities, Collector) ->
+start_channel(Number, ClientChannelPid, ConnPid, ConnName, Protocol, User,
+              VHost, Capabilities, Collector) ->
     {ok, _, {ChannelPid, _}} =
         supervisor2:start_child(
           rabbit_direct_client_sup,
-          [{direct, Number, ClientChannelPid, ConnPid, Protocol, User, VHost,
-            Capabilities, Collector}]),
+          [{direct, Number, ClientChannelPid, ConnPid, ConnName, Protocol,
+            User, VHost, Capabilities, Collector}]),
     {ok, ChannelPid}.
 
 disconnect(Pid, Infos) ->

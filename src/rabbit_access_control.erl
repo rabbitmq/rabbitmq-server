@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_access_control).
@@ -66,7 +66,6 @@ check_user_login(Username, AuthProps) ->
 
 check_vhost_access(User = #user{ username     = Username,
                                  auth_backend = Module }, VHostPath) ->
-    ?LOGDEBUG("Checking VHost access for ~p to ~p~n", [Username, VHostPath]),
     check_access(
       fun() ->
               rabbit_vhost:exists(VHostPath) andalso

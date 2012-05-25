@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_exchange_type_direct).
@@ -22,7 +22,6 @@
 -export([description/0, serialise_events/0, route/2]).
 -export([validate/1, create/2, delete/3,
          add_binding/3, remove_bindings/3, assert_args_equivalence/2]).
--include("rabbit_exchange_type_spec.hrl").
 
 -rabbit_boot_step({?MODULE,
                    [{description, "exchange type direct"},

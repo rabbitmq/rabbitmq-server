@@ -11,13 +11,13 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_control).
 -include("rabbit.hrl").
 
--export([start/0, stop/0, action/5, diagnostics/1]).
+-export([start/0, stop/0, action/5]).
 
 -define(RPC_TIMEOUT, infinity).
 -define(EXTERNAL_CHECK_INTERVAL, 1000).
@@ -25,6 +25,61 @@
 -define(QUIET_OPT, "-q").
 -define(NODE_OPT, "-n").
 -define(VHOST_OPT, "-p").
+
+-define(QUIET_DEF, {?QUIET_OPT, flag}).
+-define(NODE_DEF(Node), {?NODE_OPT, {option, Node}}).
+-define(VHOST_DEF, {?VHOST_OPT, {option, "/"}}).
+
+-define(GLOBAL_DEFS(Node), [?QUIET_DEF, ?NODE_DEF(Node)]).
+
+-define(COMMANDS,
+        [stop,
+         stop_app,
+         start_app,
+         wait,
+         reset,
+         force_reset,
+         rotate_logs,
+
+         cluster,
+         force_cluster,
+         cluster_status,
+
+         add_user,
+         delete_user,
+         change_password,
+         clear_password,
+         set_user_tags,
+         list_users,
+
+         add_vhost,
+         delete_vhost,
+         list_vhosts,
+         {set_permissions, [?VHOST_DEF]},
+         {clear_permissions, [?VHOST_DEF]},
+         {list_permissions, [?VHOST_DEF]},
+         list_user_permissions,
+
+         set_parameter,
+         clear_parameter,
+         list_parameters,
+
+         {list_queues, [?VHOST_DEF]},
+         {list_exchanges, [?VHOST_DEF]},
+         {list_bindings, [?VHOST_DEF]},
+         {list_connections, [?VHOST_DEF]},
+         list_channels,
+         {list_consumers, [?VHOST_DEF]},
+         status,
+         environment,
+         report,
+         eval,
+
+         close_connection,
+         {trace_on, [?VHOST_DEF]},
+         {trace_off, [?VHOST_DEF]},
+         set_vm_memory_high_watermark
+        ]).
 
 -define(GLOBAL_QUERIES,
         [{"Connections", rabbit_networking, connection_info_all,
@@ -49,7 +104,6 @@
         (atom(), node(), [string()], [{string(), any()}],
          fun ((string(), [any()]) -> 'ok'))
         -> 'ok').
--spec(diagnostics/1 :: (node()) -> [{string(), [any()]}]).
 -spec(usage/0 :: () -> no_return()).
 
 -endif.
@@ -58,19 +112,18 @@
 
 start() ->
     {ok, [[NodeStr|_]|_]} = init:get_argument(nodename),
-    {[Command0 | Args], Opts} =
-        case rabbit_misc:get_options([{flag, ?QUIET_OPT},
-                                      {option, ?NODE_OPT, NodeStr},
-                                      {option, ?VHOST_OPT, "/"}],
-                                     init:get_plain_arguments()) of
-            {[], _Opts}    -> usage();
-            CmdArgsAndOpts -> CmdArgsAndOpts
+    {Command, Opts, Args} =
+        case rabbit_misc:parse_arguments(?COMMANDS, ?GLOBAL_DEFS(NodeStr),
+                                         init:get_plain_arguments())
+        of
+            {ok, Res}  -> Res;
+            no_command -> print_error("could not recognise command", []),
+                          usage()
         end,
     Opts1 = [case K of
-                 ?NODE_OPT -> {?NODE_OPT, rabbit_misc:makenode(V)};
+                 ?NODE_OPT -> {?NODE_OPT, rabbit_nodes:make(V)};
                  _         -> {K, V}
              end || {K, V} <- Opts],
-    Command = list_to_atom(Command0),
     Quiet = proplists:get_bool(?QUIET_OPT, Opts1),
     Node = proplists:get_value(?NODE_OPT, Opts1),
     Inform = case Quiet of
@@ -79,6 +132,12 @@ start() ->
                                   io:format(Format ++ " ...~n", Args1)
                           end
              end,
+    PrintInvalidCommandError =
+        fun () ->
+                print_error("invalid command '~s'",
+                            [string:join([atom_to_list(Command) | Args], " ")])
+        end,
+
     %% The reason we don't use a try/catch here is that rpc:call turns
     %% thrown errors into normal return values
     case catch action(Command, Node, Args, Opts, Inform) of
@@ -88,9 +147,11 @@ start() ->
                 false -> io:format("...done.~n")
             end,
             rabbit_misc:quit(0);
-        {'EXIT', {function_clause, [{?MODULE, action, _} | _]}} ->
-            print_error("invalid command '~s'",
-                        [string:join([atom_to_list(Command) | Args], " ")]),
+        {'EXIT', {function_clause, [{?MODULE, action, _}    | _]}} -> %% < R15
+            PrintInvalidCommandError(),
+            usage();
+        {'EXIT', {function_clause, [{?MODULE, action, _, _} | _]}} -> %% >= R15
+            PrintInvalidCommandError(),
             usage();
         {'EXIT', {badarg, _}} ->
             print_error("invalid parameter: ~p", [Args]),
@@ -135,26 +196,7 @@ print_report0(Node, {Module, InfoFun, KeysFun}, VHostArg) ->
 print_error(Format, Args) -> fmt_stderr("Error: " ++ Format, Args).
 
 print_badrpc_diagnostics(Node) ->
-    [fmt_stderr(Fmt, Args) || {Fmt, Args} <- diagnostics(Node)].
-
-diagnostics(Node) ->
-    {_NodeName, NodeHost} = rabbit_misc:nodeparts(Node),
-    [{"diagnostics:", []},
-     case net_adm:names(NodeHost) of
-         {error, EpmdReason} ->
-             {"- unable to connect to epmd on ~s: ~w",
-              [NodeHost, EpmdReason]};
-         {ok, NamePorts} ->
-             {"- nodes and their ports on ~s: ~p",
-              [NodeHost, [{list_to_atom(Name), Port} ||
-                             {Name, Port} <- NamePorts]]}
-     end,
-     {"- current node: ~w", [node()]},
-     case init:get_argument(home) of
-         {ok, [[Home]]} -> {"- current node home dir: ~s", [Home]};
-         Other          -> {"- no current node home dir: ~p", [Other]}
-     end,
-     {"- current node cookie hash: ~s", [rabbit_misc:cookie_hash()]}].
+    fmt_stderr(rabbit_nodes:diagnostics([Node]), []).
 
 stop() ->
     ok.
@@ -206,7 +248,10 @@ action(force_cluster, Node, ClusterNodeSs, _Opts, Inform) ->
 
 action(wait, Node, [PidFile], _Opts, Inform) ->
     Inform("Waiting for ~p", [Node]),
-    wait_for_application(Node, PidFile, Inform);
+    wait_for_application(Node, PidFile, rabbit, Inform);
+action(wait, Node, [PidFile, App], _Opts, Inform) ->
+    Inform("Waiting for ~p on ~p", [App, Node]),
+    wait_for_application(Node, PidFile, list_to_atom(App), Inform);
 
 action(status, Node, [], _Opts, Inform) ->
     Inform("Status of node ~p", [Node]),
@@ -224,33 +269,33 @@ action(rotate_logs, Node, [], _Opts, Inform) ->
     Inform("Reopening logs for node ~p", [Node]),
     call(Node, {rabbit, rotate_logs, [""]});
 action(rotate_logs, Node, Args = [Suffix], _Opts, Inform) ->
-    Inform("Rotating logs to files with suffix ~p", [Suffix]),
+    Inform("Rotating logs to files with suffix \"~s\"", [Suffix]),
     call(Node, {rabbit, rotate_logs, Args});
 
 action(close_connection, Node, [PidStr, Explanation], _Opts, Inform) ->
-    Inform("Closing connection ~s", [PidStr]),
+    Inform("Closing connection \"~s\"", [PidStr]),
     rpc_call(Node, rabbit_networking, close_connection,
              [rabbit_misc:string_to_pid(PidStr), Explanation]);
 
 action(add_user, Node, Args = [Username, _Password], _Opts, Inform) ->
-    Inform("Creating user ~p", [Username]),
+    Inform("Creating user \"~s\"", [Username]),
     call(Node, {rabbit_auth_backend_internal, add_user, Args});
 
 action(delete_user, Node, Args = [_Username], _Opts, Inform) ->
-    Inform("Deleting user ~p", Args),
+    Inform("Deleting user \"~s\"", Args),
     call(Node, {rabbit_auth_backend_internal, delete_user, Args});
 
 action(change_password, Node, Args = [Username, _Newpassword], _Opts, Inform) ->
-    Inform("Changing password for user ~p", [Username]),
+    Inform("Changing password for user \"~s\"", [Username]),
     call(Node, {rabbit_auth_backend_internal, change_password, Args});
 
 action(clear_password, Node, Args = [Username], _Opts, Inform) ->
-    Inform("Clearing password for user ~p", [Username]),
+    Inform("Clearing password for user \"~s\"", [Username]),
     call(Node, {rabbit_auth_backend_internal, clear_password, Args});
 
 action(set_user_tags, Node, [Username | TagsStr], _Opts, Inform) ->
     Tags = [list_to_atom(T) || T <- TagsStr],
-    Inform("Setting tags for user ~p to ~p", [Username, Tags]),
+    Inform("Setting tags for user \"~s\" to ~p", [Username, Tags]),
     rpc_call(Node, rabbit_auth_backend_internal, set_tags,
              [list_to_binary(Username), Tags]);
 
@@ -261,11 +306,11 @@ action(list_users, Node, [], _Opts, Inform) ->
       rabbit_auth_backend_internal:user_info_keys());
 
 action(add_vhost, Node, Args = [_VHostPath], _Opts, Inform) ->
-    Inform("Creating vhost ~p", Args),
+    Inform("Creating vhost \"~s\"", Args),
     call(Node, {rabbit_vhost, add, Args});
 
 action(delete_vhost, Node, Args = [_VHostPath], _Opts, Inform) ->
-    Inform("Deleting vhost ~p", Args),
+    Inform("Deleting vhost \"~s\"", Args),
     call(Node, {rabbit_vhost, delete, Args});
 
 action(list_vhosts, Node, Args, _Opts, Inform) ->
@@ -327,12 +372,12 @@ action(list_consumers, Node, _Args, Opts, Inform) ->
 
 action(trace_on, Node, [], Opts, Inform) ->
     VHost = proplists:get_value(?VHOST_OPT, Opts),
-    Inform("Starting tracing for vhost ~p", [VHost]),
+    Inform("Starting tracing for vhost \"~s\"", [VHost]),
     rpc_call(Node, rabbit_trace, start, [list_to_binary(VHost)]);
 
 action(trace_off, Node, [], Opts, Inform) ->
     VHost = proplists:get_value(?VHOST_OPT, Opts),
-    Inform("Stopping tracing for vhost ~p", [VHost]),
+    Inform("Stopping tracing for vhost \"~s\"", [VHost]),
     rpc_call(Node, rabbit_trace, stop, [list_to_binary(VHost)]);
 
 action(set_vm_memory_high_watermark, Node, [Arg], _Opts, Inform) ->
@@ -340,27 +385,46 @@ action(set_vm_memory_high_watermark, Node, [Arg], _Opts, Inform) ->
                              0 -> Arg ++ ".0";
                              _ -> Arg
                          end),
-    Inform("Setting memory threshhold on ~p to ~p", [Node, Frac]),
+    Inform("Setting memory threshold on ~p to ~p", [Node, Frac]),
     rpc_call(Node, vm_memory_monitor, set_vm_memory_high_watermark, [Frac]);
 
 action(set_permissions, Node, [Username, CPerm, WPerm, RPerm], Opts, Inform) ->
     VHost = proplists:get_value(?VHOST_OPT, Opts),
-    Inform("Setting permissions for user ~p in vhost ~p", [Username, VHost]),
+    Inform("Setting permissions for user \"~s\" in vhost \"~s\"",
+           [Username, VHost]),
     call(Node, {rabbit_auth_backend_internal, set_permissions,
                 [Username, VHost, CPerm, WPerm, RPerm]});
 
 action(clear_permissions, Node, [Username], Opts, Inform) ->
     VHost = proplists:get_value(?VHOST_OPT, Opts),
-    Inform("Clearing permissions for user ~p in vhost ~p", [Username, VHost]),
+    Inform("Clearing permissions for user \"~s\" in vhost \"~s\"",
+           [Username, VHost]),
     call(Node, {rabbit_auth_backend_internal, clear_permissions,
                 [Username, VHost]});
 
 action(list_permissions, Node, [], Opts, Inform) ->
     VHost = proplists:get_value(?VHOST_OPT, Opts),
-    Inform("Listing permissions in vhost ~p", [VHost]),
+    Inform("Listing permissions in vhost \"~s\"", [VHost]),
     display_info_list(call(Node, {rabbit_auth_backend_internal,
                              list_vhost_permissions, [VHost]}),
                       rabbit_auth_backend_internal:vhost_perms_info_keys());
+
+action(set_parameter, Node, [Component, Key, Value], _Opts, Inform) ->
+    Inform("Setting runtime parameter ~p for component ~p to ~p",
+           [Key, Component, Value]),
+    rpc_call(Node, rabbit_runtime_parameters, parse_set,
+             [list_to_binary(Component), list_to_binary(Key), Value]);
+
+action(clear_parameter, Node, [Component, Key], _Opts, Inform) ->
+    Inform("Clearing runtime parameter ~p for component ~p", [Key, Component]),
+    rpc_call(Node, rabbit_runtime_parameters, clear, [list_to_binary(Component),
+                                                      list_to_binary(Key)]);
+
+action(list_parameters, Node, Args = [], _Opts, Inform) ->
+    Inform("Listing runtime parameters", []),
+    display_info_list(
+      rpc_call(Node, rabbit_runtime_parameters, list_formatted, Args),
+      rabbit_runtime_parameters:info_keys());
 
 action(report, Node, _Args, _Opts, Inform) ->
     io:format("Reporting server status on ~p~n~n", [erlang:universaltime()]),
@@ -391,17 +455,17 @@ action(eval, Node, [Expr], _Opts, _Inform) ->
 
 %%----------------------------------------------------------------------------
 
-wait_for_application(Node, PidFile, Inform) ->
+wait_for_application(Node, PidFile, Application, Inform) ->
     Pid = read_pid_file(PidFile, true),
     Inform("pid is ~s", [Pid]),
-    wait_for_application(Node, Pid).
+    wait_for_application(Node, Pid, Application).
 
-wait_for_application(Node, Pid) ->
+wait_for_application(Node, Pid, Application) ->
     case process_up(Pid) of
-        true  -> case rabbit:is_running(Node) of
+        true  -> case rabbit_nodes:is_running(Node, Application) of
                      true  -> ok;
                      false -> timer:sleep(?EXTERNAL_CHECK_INTERVAL),
-                              wait_for_application(Node, Pid)
+                              wait_for_application(Node, Pid, Application)
                  end;
         false -> {error, process_not_running}
     end.

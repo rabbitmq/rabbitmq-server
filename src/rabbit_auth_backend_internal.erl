@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_auth_backend_internal).
@@ -31,8 +31,6 @@
          list_user_vhost_permissions/2, perms_info_keys/0,
          vhost_perms_info_keys/0, user_perms_info_keys/0,
          user_vhost_perms_info_keys/0]).
-
--include("rabbit_auth_backend_spec.hrl").
 
 -ifdef(use_specs).
 

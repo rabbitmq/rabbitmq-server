@@ -11,17 +11,17 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2010-2011 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2010-2012 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_mirror_queue_master).
 
 -export([init/3, terminate/2, delete_and_terminate/2,
          purge/1, publish/4, publish_delivered/5, fetch/2, ack/2,
-         requeue/2, len/1, is_empty/1, drain_confirmed/1, dropwhile/2,
+         requeue/2, len/1, is_empty/1, drain_confirmed/1, dropwhile/3,
          set_ram_duration_target/2, ram_duration/1,
          needs_timeout/1, timeout/1, handle_pre_hibernate/1,
-         status/1, invoke/3, is_duplicate/2, discard/3]).
+         status/1, invoke/3, is_duplicate/2, discard/3, fold/3]).
 
 -export([start/1, stop/0]).
 
@@ -58,10 +58,6 @@
                                  ack_msg_id          :: dict(),
                                  known_senders       :: set()
                                }).
-
--type(ack()   :: non_neg_integer()).
--type(state() :: master_state()).
--include("rabbit_backing_queue_spec.hrl").
 
 -spec(promote_backing_queue_state/6 ::
         (pid(), atom(), any(), pid(), dict(), [pid()]) -> master_state()).
@@ -138,7 +134,7 @@ delete_and_terminate(Reason, State = #state { gm                  = GM,
 purge(State = #state { gm                  = GM,
                        backing_queue       = BQ,
                        backing_queue_state = BQS }) ->
-    ok = gm:broadcast(GM, {set_length, 0}),
+    ok = gm:broadcast(GM, {set_length, 0, false}),
     {Count, BQS1} = BQ:purge(BQS),
     {Count, State #state { backing_queue_state = BQS1,
                            set_delivered       = 0 }}.
@@ -172,17 +168,19 @@ publish_delivered(AckRequired, Msg = #basic_message { id = MsgId }, MsgProps,
      ensure_monitoring(ChPid, State #state { backing_queue_state = BQS1,
                                              ack_msg_id          = AM1 })}.
 
-dropwhile(Fun, State = #state { gm                  = GM,
-                                backing_queue       = BQ,
-                                backing_queue_state = BQS,
-                                set_delivered       = SetDelivered }) ->
-    Len = BQ:len(BQS),
-    BQS1 = BQ:dropwhile(Fun, BQS),
-    Dropped = Len - BQ:len(BQS1),
+dropwhile(Pred, AckRequired,
+          State = #state{gm                  = GM,
+                         backing_queue       = BQ,
+                         set_delivered       = SetDelivered,
+                         backing_queue_state = BQS }) ->
+    Len  = BQ:len(BQS),
+    {Msgs, BQS1} = BQ:dropwhile(Pred, AckRequired, BQS),
+    Len1 = BQ:len(BQS1),
+    ok = gm:broadcast(GM, {set_length, Len1, AckRequired}),
+    Dropped = Len - Len1,
     SetDelivered1 = lists:max([0, SetDelivered - Dropped]),
-    ok = gm:broadcast(GM, {set_length, BQ:len(BQS1)}),
-    State #state { backing_queue_state = BQS1,
-                   set_delivered       = SetDelivered1 }.
+    {Msgs, State #state { backing_queue_state = BQS1,
+                          set_delivered       = SetDelivered1 } }.
 
 drain_confirmed(State = #state { backing_queue       = BQ,
                                  backing_queue_state = BQS,
@@ -240,13 +238,17 @@ ack(AckTags, State = #state { gm                  = GM,
                               backing_queue_state = BQS,
                               ack_msg_id          = AM }) ->
     {MsgIds, BQS1} = BQ:ack(AckTags, BQS),
-    AM1 = lists:foldl(fun dict:erase/2, AM, AckTags),
     case MsgIds of
         [] -> ok;
         _  -> ok = gm:broadcast(GM, {ack, MsgIds})
     end,
+    AM1 = lists:foldl(fun dict:erase/2, AM, AckTags),
     {MsgIds, State #state { backing_queue_state = BQS1,
                             ack_msg_id          = AM1 }}.
+
+fold(MsgFun, State = #state { backing_queue       = BQ,
+                              backing_queue_state = BQS }, AckTags) ->
+    State #state { backing_queue_state = BQ:fold(MsgFun, BQS, AckTags) }.
 
 requeue(AckTags, State = #state { gm                  = GM,
                                   backing_queue       = BQ,
@@ -280,8 +282,10 @@ handle_pre_hibernate(State = #state { backing_queue       = BQ,
                                       backing_queue_state = BQS }) ->
     State #state { backing_queue_state = BQ:handle_pre_hibernate(BQS) }.
 
-status(#state { backing_queue = BQ, backing_queue_state = BQS }) ->
-    BQ:status(BQS).
+status(State = #state { backing_queue = BQ, backing_queue_state = BQS }) ->
+    BQ:status(BQS) ++
+        [ {mirror_seen,    dict:size(State #state.seen_status)},
+          {mirror_senders, sets:size(State #state.known_senders)} ].
 
 invoke(?MODULE, Fun, State) ->
     Fun(?MODULE, State);

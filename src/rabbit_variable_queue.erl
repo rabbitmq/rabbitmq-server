@@ -11,18 +11,17 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_variable_queue).
 
--export([init/3, terminate/2, delete_and_terminate/2,
-         purge/1, publish/4, publish_delivered/5, drain_confirmed/1,
-         dropwhile/2, fetch/2, ack/2, requeue/2, len/1, is_empty/1,
-         set_ram_duration_target/2, ram_duration/1,
-         needs_timeout/1, timeout/1, handle_pre_hibernate/1,
-         status/1, invoke/3, is_duplicate/2, discard/3,
-         multiple_routing_keys/0]).
+-export([init/3, terminate/2, delete_and_terminate/2, purge/1,
+         publish/4, publish_delivered/5, drain_confirmed/1,
+         dropwhile/3, fetch/2, ack/2, requeue/2, len/1, is_empty/1,
+         set_ram_duration_target/2, ram_duration/1, needs_timeout/1,
+         timeout/1, handle_pre_hibernate/1, status/1, invoke/3,
+         is_duplicate/2, discard/3, multiple_routing_keys/0, fold/3]).
 
 -export([start/1, stop/0]).
 
@@ -324,7 +323,6 @@
 
 -type(timestamp() :: {non_neg_integer(), non_neg_integer(), non_neg_integer()}).
 -type(seq_id()  :: non_neg_integer()).
--type(ack()     :: seq_id()).
 
 -type(rates() :: #rates { egress      :: {timestamp(), non_neg_integer()},
                           ingress     :: {timestamp(), non_neg_integer()},
@@ -336,6 +334,13 @@
                           count        :: non_neg_integer(),
                           end_seq_id   :: non_neg_integer() }).
 
+%% The compiler (rightfully) complains that ack() and state() are
+%% unused. For this reason we duplicate a -spec from
+%% rabbit_backing_queue with the only intent being to remove
+%% warnings. The problem here is that we can't parameterise the BQ
+%% behaviour by these two types as we would like to. We still leave
+%% these here for documentation purposes.
+-type(ack() :: seq_id()).
 -type(state() :: #vqstate {
              q1                    :: ?QUEUE:?QUEUE(),
              q2                    :: ?QUEUE:?QUEUE(),
@@ -351,7 +356,7 @@
              durable               :: boolean(),
              transient_threshold   :: non_neg_integer(),
 
-             async_callback        :: async_callback(),
+             async_callback        :: rabbit_backing_queue:async_callback(),
 
              len                   :: non_neg_integer(),
              persistent_count      :: non_neg_integer(),
@@ -369,8 +374,8 @@
              ack_out_counter       :: non_neg_integer(),
              ack_in_counter        :: non_neg_integer(),
              ack_rates             :: rates() }).
-
--include("rabbit_backing_queue_spec.hrl").
+%% Duplicated from rabbit_backing_queue
+-spec(ack/2 :: ([ack()], state()) -> {[rabbit_guid:guid()], state()}).
 
 -spec(multiple_routing_keys/0 :: () -> 'ok').
 
@@ -434,7 +439,7 @@ init(#amqqueue { name = QueueName, durable = true }, true,
     Terms = rabbit_queue_index:shutdown_terms(QueueName),
     {PRef, Terms1} =
         case proplists:get_value(persistent_ref, Terms) of
-            undefined -> {rabbit_guid:guid(), []};
+            undefined -> {rabbit_guid:gen(), []};
             PRef1     -> {PRef1, Terms}
         end,
     PersistentClient = msg_store_client_init(?PERSISTENT_MSG_STORE, PRef,
@@ -581,15 +586,27 @@ drain_confirmed(State = #vqstate { confirmed = C }) ->
                                         confirmed = gb_sets:new() }}
     end.
 
-dropwhile(Pred, State) ->
+dropwhile(Pred, AckRequired, State) -> dropwhile(Pred, AckRequired, State, []).
+
+dropwhile(Pred, AckRequired, State, Msgs) ->
+    End = fun(S) when AckRequired -> {lists:reverse(Msgs), S};
+             (S)                  -> {undefined, S}
+          end,
     case queue_out(State) of
         {empty, State1} ->
-            a(State1);
+            End(a(State1));
         {{value, MsgStatus = #msg_status { msg_props = MsgProps }}, State1} ->
-            case Pred(MsgProps) of
-                true ->  {_, State2} = internal_fetch(false, MsgStatus, State1),
-                         dropwhile(Pred, State2);
-                false -> a(in_r(MsgStatus, State1))
+            case {Pred(MsgProps), AckRequired} of
+                {true, true} ->
+                    {MsgStatus1, State2} = read_msg(MsgStatus, State1),
+                    {{Msg, _, AckTag, _}, State3} =
+                         internal_fetch(true, MsgStatus1, State2),
+                    dropwhile(Pred, AckRequired, State3, [{Msg, AckTag} | Msgs]);
+                {true, false} ->
+                    {_, State2} = internal_fetch(false, MsgStatus, State1),
+                    dropwhile(Pred, AckRequired, State2, undefined);
+                {false, _} ->
+                    End(a(in_r(MsgStatus, State1)))
             end
     end.
 
@@ -628,11 +645,22 @@ ack(AckTags, State) ->
                          persistent_count = PCount1,
                          ack_out_counter  = AckOutCount + length(AckTags) })}.
 
-requeue(AckTags, #vqstate { delta = Delta,
-                                    q3         = Q3,
-                                    q4         = Q4,
-                                    in_counter = InCounter,
-                                    len        = Len } = State) ->
+fold(undefined, State, _AckTags) ->
+    State;
+fold(MsgFun, State = #vqstate{pending_ack = PA}, AckTags) ->
+    lists:foldl(
+      fun(SeqId, State1) ->
+              {MsgStatus, State2} =
+                  read_msg(gb_trees:get(SeqId, PA), State1),
+              MsgFun(MsgStatus#msg_status.msg, SeqId),
+              State2
+      end, State, AckTags).
+
+requeue(AckTags, #vqstate { delta      = Delta,
+                            q3         = Q3,
+                            q4         = Q4,
+                            in_counter = InCounter,
+                            len        = Len } = State) ->
     {SeqIds,  Q4a, MsgIds,  State1} = queue_merge(lists:sort(AckTags), Q4, [],
                                                   beta_limit(Q3),
                                                   fun publish_alpha/2, State),
@@ -731,21 +759,27 @@ ram_duration(State = #vqstate {
                  ram_msg_count_prev = RamMsgCount,
                  ram_ack_count_prev = RamAckCount }}.
 
-needs_timeout(State) ->
-    case needs_index_sync(State) of
-        false -> case reduce_memory_use(
-                        fun (_Quota, State1) -> {0, State1} end,
-                        fun (_Quota, State1) -> State1 end,
-                        fun (_Quota, State1) -> {0, State1} end,
-                        State) of
-                     {true,  _State} -> idle;
-                     {false, _State} -> false
-                 end;
-        true  -> timed
+needs_timeout(State = #vqstate { index_state = IndexState }) ->
+    case must_sync_index(State) of
+        true  -> timed;
+        false ->
+            case rabbit_queue_index:needs_sync(IndexState) of
+                true  -> idle;
+                false -> case reduce_memory_use(
+                                fun (_Quota, State1) -> {0, State1} end,
+                                fun (_Quota, State1) -> State1 end,
+                                fun (_Quota, State1) -> {0, State1} end,
+                                State) of
+                             {true,  _State} -> idle;
+                             {false, _State} -> false
+                         end
+            end
     end.
 
-timeout(State) ->
-    a(reduce_memory_use(confirm_commit_index(State))).
+timeout(State = #vqstate { index_state = IndexState }) ->
+    IndexState1 = rabbit_queue_index:sync(IndexState),
+    State1 = State #vqstate { index_state = IndexState1 },
+    a(reduce_memory_use(State1)).
 
 handle_pre_hibernate(State = #vqstate { index_state = IndexState }) ->
     State #vqstate { index_state = rabbit_queue_index:flush(IndexState) }.
@@ -860,7 +894,8 @@ with_immutable_msg_store_state(MSCState, IsPersistent, Fun) ->
     Res.
 
 msg_store_client_init(MsgStore, MsgOnDiskFun, Callback) ->
-    msg_store_client_init(MsgStore, rabbit_guid:guid(), MsgOnDiskFun, Callback).
+    msg_store_client_init(MsgStore, rabbit_guid:gen(), MsgOnDiskFun,
+                          Callback).
 
 msg_store_client_init(MsgStore, Ref, MsgOnDiskFun, Callback) ->
     CloseFDsFun = msg_store_close_fds_fun(MsgStore =:= ?PERSISTENT_MSG_STORE),
@@ -870,17 +905,23 @@ msg_store_client_init(MsgStore, Ref, MsgOnDiskFun, Callback) ->
 msg_store_write(MSCState, IsPersistent, MsgId, Msg) ->
     with_immutable_msg_store_state(
       MSCState, IsPersistent,
-      fun (MSCState1) -> rabbit_msg_store:write(MsgId, Msg, MSCState1) end).
+      fun (MSCState1) ->
+              rabbit_msg_store:write_flow(MsgId, Msg, MSCState1)
+      end).
 
 msg_store_read(MSCState, IsPersistent, MsgId) ->
     with_msg_store_state(
       MSCState, IsPersistent,
-      fun (MSCState1) -> rabbit_msg_store:read(MsgId, MSCState1) end).
+      fun (MSCState1) ->
+              rabbit_msg_store:read(MsgId, MSCState1)
+      end).
 
 msg_store_remove(MSCState, IsPersistent, MsgIds) ->
     with_immutable_msg_store_state(
       MSCState, IsPersistent,
-      fun (MCSState1) -> rabbit_msg_store:remove(MsgIds, MCSState1) end).
+      fun (MCSState1) ->
+              rabbit_msg_store:remove(MsgIds, MCSState1)
+      end).
 
 msg_store_close_fds(MSCState, IsPersistent) ->
     with_msg_store_state(
@@ -1255,24 +1296,18 @@ find_persistent_count(LensByStore) ->
 %% Internal plumbing for confirms (aka publisher acks)
 %%----------------------------------------------------------------------------
 
-confirm_commit_index(State = #vqstate { index_state = IndexState }) ->
-    case needs_index_sync(State) of
-        true  -> State #vqstate {
-                   index_state = rabbit_queue_index:sync(IndexState) };
-        false -> State
-    end.
-
 record_confirms(MsgIdSet, State = #vqstate { msgs_on_disk        = MOD,
                                              msg_indices_on_disk = MIOD,
                                              unconfirmed         = UC,
                                              confirmed           = C }) ->
-    State #vqstate { msgs_on_disk        = gb_sets:difference(MOD,  MsgIdSet),
-                     msg_indices_on_disk = gb_sets:difference(MIOD, MsgIdSet),
-                     unconfirmed         = gb_sets:difference(UC,   MsgIdSet),
-                     confirmed           = gb_sets:union     (C,    MsgIdSet) }.
+    State #vqstate {
+      msgs_on_disk        = rabbit_misc:gb_sets_difference(MOD,  MsgIdSet),
+      msg_indices_on_disk = rabbit_misc:gb_sets_difference(MIOD, MsgIdSet),
+      unconfirmed         = rabbit_misc:gb_sets_difference(UC,   MsgIdSet),
+      confirmed           = gb_sets:union(C, MsgIdSet) }.
 
-needs_index_sync(#vqstate { msg_indices_on_disk = MIOD,
-                            unconfirmed = UC }) ->
+must_sync_index(#vqstate { msg_indices_on_disk = MIOD,
+                           unconfirmed = UC }) ->
     %% If UC is empty then by definition, MIOD and MOD are also empty
     %% and there's nothing that can be pending a sync.
 

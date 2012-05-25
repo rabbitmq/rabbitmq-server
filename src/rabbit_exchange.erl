@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_exchange).
@@ -242,6 +242,11 @@ info_all(VHostPath) -> map(VHostPath, fun (X) -> info(X) end).
 
 info_all(VHostPath, Items) -> map(VHostPath, fun (X) -> info(X, Items) end).
 
+%% Optimisation
+route(#exchange{name = #resource{name = <<"">>, virtual_host = VHost}},
+      #delivery{message = #basic_message{routing_keys = RKs}}) ->
+    [rabbit_misc:r(VHost, queue, RK) || RK <- lists:usort(RKs)];
+
 route(X = #exchange{name = XName}, Delivery) ->
     route1(Delivery, {queue:from_list([X]), XName, []}).
 
@@ -355,11 +360,21 @@ peek_serial(XName) ->
         _                                  -> undefined
     end.
 
+invalid_module(T) ->
+    rabbit_log:warning(
+      "Could not find exchange type ~s.~n", [T]),
+    put({xtype_to_module, T}, rabbit_exchange_type_invalid),
+    rabbit_exchange_type_invalid.
+
 %% Used with atoms from records; e.g., the type is expected to exist.
 type_to_module(T) ->
     case get({xtype_to_module, T}) of
-        undefined -> {ok, Module} = rabbit_registry:lookup_module(exchange, T),
-                     put({xtype_to_module, T}, Module),
-                     Module;
-        Module    -> Module
+        undefined ->
+            case rabbit_registry:lookup_module(exchange, T) of
+                {ok, Module}       -> put({xtype_to_module, T}, Module),
+                                      Module;
+                {error, not_found} -> invalid_module(T)
+            end;
+        Module ->
+            Module
     end.

@@ -8,10 +8,7 @@ dist:
 	$(MAKE) -C $(SOURCE_DIR)
 
 	mkdir $(SOURCE_DIR)/sbin
-	mv $(SOURCE_DIR)/scripts/rabbitmq-server.bat $(SOURCE_DIR)/sbin
-	mv $(SOURCE_DIR)/scripts/rabbitmq-service.bat $(SOURCE_DIR)/sbin
-	mv $(SOURCE_DIR)/scripts/rabbitmq-plugins.bat $(SOURCE_DIR)/sbin
-	mv $(SOURCE_DIR)/scripts/rabbitmqctl.bat $(SOURCE_DIR)/sbin
+	mv $(SOURCE_DIR)/scripts/*.bat $(SOURCE_DIR)/sbin
 	rm -rf $(SOURCE_DIR)/scripts
 	rm -rf $(SOURCE_DIR)/codegen* $(SOURCE_DIR)/Makefile $(SOURCE_DIR)/*mk
 	rm -f $(SOURCE_DIR)/README
@@ -26,6 +23,9 @@ dist:
 	elinks -dump -no-references -no-numbering rabbitmq-service.html \
 		> $(TARGET_DIR)/readme-service.txt
 	todos $(TARGET_DIR)/readme-service.txt
+	todos $(TARGET_DIR)/INSTALL
+	todos $(TARGET_DIR)/LICENSE*
+	todos $(TARGET_DIR)/plugins/README.txt
 	rm -rf $(TARGET_DIR)/plugins-src
 	zip -q -r $(TARGET_ZIP).zip $(TARGET_DIR)
 	rm -rf $(TARGET_DIR) rabbitmq-service.html

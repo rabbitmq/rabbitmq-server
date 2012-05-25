@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_msg_store).
@@ -21,7 +21,7 @@
 -export([start_link/4, successfully_recovered_state/1,
          client_init/4, client_terminate/1, client_delete_and_terminate/1,
          client_ref/1, close_all_indicated/1,
-         write/3, read/2, contains/2, remove/2]).
+         write/3, write_flow/3, read/2, contains/2, remove/2]).
 
 -export([set_maximum_since_use/2, has_readers/2, combine_files/3,
          delete_file/2]). %% internal
@@ -152,6 +152,7 @@
 -spec(close_all_indicated/1 ::
         (client_msstate()) -> rabbit_types:ok(client_msstate())).
 -spec(write/3 :: (rabbit_types:msg_id(), msg(), client_msstate()) -> 'ok').
+-spec(write_flow/3 :: (rabbit_types:msg_id(), msg(), client_msstate()) -> 'ok').
 -spec(read/2 :: (rabbit_types:msg_id(), client_msstate()) ->
                      {rabbit_types:ok(msg()) | 'not_found', client_msstate()}).
 -spec(contains/2 :: (rabbit_types:msg_id(), client_msstate()) -> boolean()).
@@ -436,7 +437,8 @@ client_init(Server, Ref, MsgOnDiskFun, CloseFDsFun) ->
     {IState, IModule, Dir, GCPid,
      FileHandlesEts, FileSummaryEts, CurFileCacheEts, FlyingEts} =
         gen_server2:call(
-          Server, {new_client_state, Ref, MsgOnDiskFun, CloseFDsFun}, infinity),
+          Server, {new_client_state, Ref, self(), MsgOnDiskFun, CloseFDsFun},
+          infinity),
     #client_msstate { server             = Server,
                       client_ref         = Ref,
                       file_handle_cache  = dict:new(),
@@ -460,12 +462,11 @@ client_delete_and_terminate(CState = #client_msstate { client_ref = Ref }) ->
 
 client_ref(#client_msstate { client_ref = Ref }) -> Ref.
 
-write(MsgId, Msg,
-      CState = #client_msstate { cur_file_cache_ets = CurFileCacheEts,
-                                 client_ref         = CRef }) ->
-    ok = client_update_flying(+1, MsgId, CState),
-    ok = update_msg_cache(CurFileCacheEts, MsgId, Msg),
-    ok = server_cast(CState, {write, CRef, MsgId}).
+write_flow(MsgId, Msg, CState = #client_msstate { server = Server }) ->
+    credit_flow:send(whereis(Server), ?CREDIT_DISC_BOUND),
+    client_write(MsgId, Msg, flow, CState).
+
+write(MsgId, Msg, CState) -> client_write(MsgId, Msg, noflow, CState).
 
 read(MsgId,
      CState = #client_msstate { cur_file_cache_ets = CurFileCacheEts }) ->
@@ -499,6 +500,13 @@ server_call(#client_msstate { server = Server }, Msg) ->
 
 server_cast(#client_msstate { server = Server }, Msg) ->
     gen_server2:cast(Server, Msg).
+
+client_write(MsgId, Msg, Flow,
+             CState = #client_msstate { cur_file_cache_ets = CurFileCacheEts,
+                                        client_ref         = CRef }) ->
+    ok = client_update_flying(+1, MsgId, CState),
+    ok = update_msg_cache(CurFileCacheEts, MsgId, Msg),
+    ok = server_cast(CState, {write, CRef, MsgId, Flow}).
 
 client_read1(#msg_location { msg_id = MsgId, file = File } = MsgLocation, Defer,
              CState = #client_msstate { file_summary_ets = FileSummaryEts }) ->
@@ -666,7 +674,8 @@ init([Server, BaseDir, ClientRefs, StartupFunState]) ->
         recover_index_and_client_refs(IndexModule, FileSummaryRecovered,
                                       ClientRefs, Dir, Server),
     Clients = dict:from_list(
-                [{CRef, {undefined, undefined}} || CRef <- ClientRefs1]),
+                [{CRef, {undefined, undefined, undefined}} ||
+                    CRef <- ClientRefs1]),
     %% CleanShutdown => msg location index and file_summary both
     %% recovered correctly.
     true = case {FileSummaryRecovered, CleanShutdown} of
@@ -731,10 +740,10 @@ init([Server, BaseDir, ClientRefs, StartupFunState]) ->
 
 prioritise_call(Msg, _From, _State) ->
     case Msg of
-        successfully_recovered_state                  -> 7;
-        {new_client_state, _Ref, _MODC, _CloseFDsFun} -> 7;
-        {read, _MsgId}                                -> 2;
-        _                                             -> 0
+        successfully_recovered_state                        -> 7;
+        {new_client_state, _Ref, _Pid, _MODC, _CloseFDsFun} -> 7;
+        {read, _MsgId}                                      -> 2;
+        _                                                   -> 0
     end.
 
 prioritise_cast(Msg, _State) ->
@@ -755,7 +764,7 @@ prioritise_info(Msg, _State) ->
 handle_call(successfully_recovered_state, _From, State) ->
     reply(State #msstate.successfully_recovered, State);
 
-handle_call({new_client_state, CRef, MsgOnDiskFun, CloseFDsFun}, _From,
+handle_call({new_client_state, CRef, CPid, MsgOnDiskFun, CloseFDsFun}, _From,
             State = #msstate { dir                = Dir,
                                index_state        = IndexState,
                                index_module       = IndexModule,
@@ -765,7 +774,7 @@ handle_call({new_client_state, CRef, MsgOnDiskFun, CloseFDsFun}, _From,
                                flying_ets         = FlyingEts,
                                clients            = Clients,
                                gc_pid             = GCPid }) ->
-    Clients1 = dict:store(CRef, {MsgOnDiskFun, CloseFDsFun}, Clients),
+    Clients1 = dict:store(CRef, {CPid, MsgOnDiskFun, CloseFDsFun}, Clients),
     reply({IndexState, IndexModule, Dir, GCPid, FileHandlesEts, FileSummaryEts,
            CurFileCacheEts, FlyingEts},
           State #msstate { clients = Clients1 });
@@ -789,11 +798,19 @@ handle_cast({client_dying, CRef},
 
 handle_cast({client_delete, CRef},
             State = #msstate { clients = Clients }) ->
+    {CPid, _, _} = dict:fetch(CRef, Clients),
+    credit_flow:peer_down(CPid),
     State1 = State #msstate { clients = dict:erase(CRef, Clients) },
     noreply(remove_message(CRef, CRef, clear_client(CRef, State1)));
 
-handle_cast({write, CRef, MsgId},
-            State = #msstate { cur_file_cache_ets = CurFileCacheEts }) ->
+handle_cast({write, CRef, MsgId, Flow},
+            State = #msstate { cur_file_cache_ets = CurFileCacheEts,
+                               clients            = Clients }) ->
+    case Flow of
+        flow   -> {CPid, _, _} = dict:fetch(CRef, Clients),
+                  credit_flow:ack(CPid, ?CREDIT_DISC_BOUND);
+        noflow -> ok
+    end,
     true = 0 =< ets:update_counter(CurFileCacheEts, MsgId, {3, -1}),
     case update_flying(-1, MsgId, CRef, State) of
         process ->
@@ -1204,10 +1221,10 @@ update_pending_confirms(Fun, CRef,
                         State = #msstate { clients         = Clients,
                                            cref_to_msg_ids = CTM }) ->
     case dict:fetch(CRef, Clients) of
-        {undefined,    _CloseFDsFun} -> State;
-        {MsgOnDiskFun, _CloseFDsFun} -> CTM1 = Fun(MsgOnDiskFun, CTM),
-                                        State #msstate {
-                                          cref_to_msg_ids = CTM1 }
+        {_CPid, undefined,    _CloseFDsFun} -> State;
+        {_CPid, MsgOnDiskFun, _CloseFDsFun} -> CTM1 = Fun(MsgOnDiskFun, CTM),
+                                               State #msstate {
+                                                 cref_to_msg_ids = CTM1 }
     end.
 
 record_pending_confirm(CRef, MsgId, State) ->
@@ -1223,7 +1240,8 @@ client_confirm(CRef, MsgIds, ActionTaken, State) ->
               case dict:find(CRef, CTM) of
                   {ok, Gs} -> MsgOnDiskFun(gb_sets:intersection(Gs, MsgIds),
                                            ActionTaken),
-                              MsgIds1 = gb_sets:difference(Gs, MsgIds),
+                              MsgIds1 = rabbit_misc:gb_sets_difference(
+                                          Gs, MsgIds),
                               case gb_sets:is_empty(MsgIds1) of
                                   true  -> dict:erase(CRef, CTM);
                                   false -> dict:store(CRef, MsgIds1, CTM)
@@ -1294,8 +1312,10 @@ mark_handle_to_close(ClientRefs, FileHandlesEts, File, Invoke) ->
           case (ets:update_element(FileHandlesEts, Key, {2, close})
                 andalso Invoke) of
               true  -> case dict:fetch(Ref, ClientRefs) of
-                           {_MsgOnDiskFun, undefined}   -> ok;
-                           {_MsgOnDiskFun, CloseFDsFun} -> ok = CloseFDsFun()
+                           {_CPid, _MsgOnDiskFun, undefined} ->
+                               ok;
+                           {_CPid, _MsgOnDiskFun, CloseFDsFun} ->
+                               ok = CloseFDsFun()
                        end;
               false -> ok
           end

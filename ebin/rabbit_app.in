@@ -19,6 +19,7 @@
          {ssl_listeners, []},
          {ssl_options, []},
          {vm_memory_high_watermark, 0.4},
+         {disk_free_limit, {mem_relative, 1.0}},
          {msg_store_index_module, rabbit_msg_store_ets_index},
          {backing_queue_module, rabbit_variable_queue},
          {frame_max, 131072},
@@ -37,10 +38,13 @@
          {auth_backends, [rabbit_auth_backend_internal]},
          {delegate_count, 16},
          {trace_vhosts, []},
+         {log_levels, [{connection, info}]},
+         {ssl_cert_login_from, distinguished_name},
          {tcp_listen_options, [binary,
                                {packet,        raw},
                                {reuseaddr,     true},
                                {backlog,       128},
                                {nodelay,       true},
+                               {linger,        {true, 0}},
                                {exit_on_close, false}]}
          ]}]}.

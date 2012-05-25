@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2011 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2011-2012 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_plugins).
@@ -24,6 +24,18 @@
 -define(MINIMAL_OPT, "-m").
 -define(ENABLED_OPT, "-E").
 -define(ENABLED_ALL_OPT, "-e").
+
+-define(VERBOSE_DEF, {?VERBOSE_OPT, flag}).
+-define(MINIMAL_DEF, {?MINIMAL_OPT, flag}).
+-define(ENABLED_DEF, {?ENABLED_OPT, flag}).
+-define(ENABLED_ALL_DEF, {?ENABLED_ALL_OPT, flag}).
+
+-define(GLOBAL_DEFS, []).
+
+-define(COMMANDS,
+        [{list, [?VERBOSE_DEF, ?MINIMAL_DEF, ?ENABLED_DEF, ?ENABLED_ALL_DEF]},
+         enable,
+         disable]).
 
 %%----------------------------------------------------------------------------
 
@@ -45,26 +57,35 @@ start() ->
     {ok, [[PluginsFile|_]|_]} =
         init:get_argument(enabled_plugins_file),
     {ok, [[PluginsDir|_]|_]} = init:get_argument(plugins_dist_dir),
-    {[Command0 | Args], Opts} =
-        case rabbit_misc:get_options([{flag, ?VERBOSE_OPT},
-                                      {flag, ?MINIMAL_OPT},
-                                      {flag, ?ENABLED_OPT},
-                                      {flag, ?ENABLED_ALL_OPT}],
-                                     init:get_plain_arguments()) of
-            {[], _Opts}    -> usage();
-            CmdArgsAndOpts -> CmdArgsAndOpts
+    {Command, Opts, Args} =
+        case rabbit_misc:parse_arguments(?COMMANDS, ?GLOBAL_DEFS,
+                                         init:get_plain_arguments())
+        of
+            {ok, Res}  -> Res;
+            no_command -> print_error("could not recognise command", []),
+                          usage()
         end,
-    Command = list_to_atom(Command0),
+
+    PrintInvalidCommandError =
+        fun () ->
+                print_error("invalid command '~s'",
+                            [string:join([atom_to_list(Command) | Args], " ")])
+        end,
 
     case catch action(Command, Args, Opts, PluginsFile, PluginsDir) of
         ok ->
             rabbit_misc:quit(0);
         {'EXIT', {function_clause, [{?MODULE, action, _} | _]}} ->
-            print_error("invalid command '~s'",
-                        [string:join([atom_to_list(Command) | Args], " ")]),
+            PrintInvalidCommandError(),
+            usage();
+        {'EXIT', {function_clause, [{?MODULE, action, _, _} | _]}} ->
+            PrintInvalidCommandError(),
             usage();
         {error, Reason} ->
             print_error("~p", [Reason]),
+            rabbit_misc:quit(2);
+        {error_string, Reason} ->
+            print_error("~s", [Reason]),
             rabbit_misc:quit(2);
         Other ->
             print_error("~p", [Other]),
@@ -90,7 +111,7 @@ action(list, [Pat], Opts, PluginsFile, PluginsDir) ->
 
 action(enable, ToEnable0, _Opts, PluginsFile, PluginsDir) ->
     case ToEnable0 of
-        [] -> throw("Not enough arguments for 'enable'");
+        [] -> throw({error_string, "Not enough arguments for 'enable'"});
         _  -> ok
     end,
     AllPlugins = find_plugins(PluginsDir),
@@ -100,8 +121,9 @@ action(enable, ToEnable0, _Opts, PluginsFile, PluginsDir) ->
     Missing = ToEnable -- plugin_names(AllPlugins),
     case Missing of
         [] -> ok;
-        _  -> throw(fmt_list("The following plugins could not be found:",
-                             Missing))
+        _  -> throw({error_string,
+                     fmt_list("The following plugins could not be found:",
+                              Missing)})
     end,
     NewEnabled = lists:usort(Enabled ++ ToEnable),
     write_enabled_plugins(PluginsFile, NewEnabled),
@@ -116,7 +138,7 @@ action(enable, ToEnable0, _Opts, PluginsFile, PluginsDir) ->
 
 action(disable, ToDisable0, _Opts, PluginsFile, PluginsDir) ->
     case ToDisable0 of
-        [] -> throw("Not enough arguments for 'disable'");
+        [] -> throw({error_string, "Not enough arguments for 'disable'"});
         _  -> ok
     end,
     ToDisable = [list_to_atom(Name) || Name <- ToDisable0],
@@ -231,9 +253,10 @@ format_plugins(Pattern, Opts, PluginsFile, PluginsDir) ->
                  {false, false} -> normal;
                  {true,  false} -> verbose;
                  {false, true}  -> minimal;
-                 {true,  true}  -> throw("Cannot specify -m and -v together")
+                 {true,  true}  -> throw({error_string,
+                                          "Cannot specify -m and -v together"})
              end,
-    OnlyEnabled = proplists:get_bool(?ENABLED_OPT, Opts),
+    OnlyEnabled    = proplists:get_bool(?ENABLED_OPT,     Opts),
     OnlyEnabledAll = proplists:get_bool(?ENABLED_ALL_OPT, Opts),
 
     AvailablePlugins = find_plugins(PluginsDir),
@@ -245,14 +268,10 @@ format_plugins(Pattern, Opts, PluginsFile, PluginsDir) ->
     Plugins = [ Plugin ||
                   Plugin = #plugin{name = Name} <- AvailablePlugins,
                   re:run(atom_to_list(Name), RE, [{capture, none}]) =:= match,
-                  if OnlyEnabled -> lists:member(Name, EnabledExplicitly);
-                     true        -> true
-                  end,
-                  if OnlyEnabledAll ->
-                          lists:member(Name, EnabledImplicitly) or
-                              lists:member(Name, EnabledExplicitly);
-                     true ->
-                          true
+                  if OnlyEnabled    ->  lists:member(Name, EnabledExplicitly);
+                     OnlyEnabledAll -> (lists:member(Name, EnabledExplicitly) or
+                                        lists:member(Name, EnabledImplicitly));
+                     true           -> true
                   end],
     Plugins1 = usort_plugins(Plugins),
     MaxWidth = lists:max([length(atom_to_list(Name)) ||
@@ -289,7 +308,7 @@ print_list(Header, Plugins) ->
 
 fmt_list(Header, Plugins) ->
     lists:flatten(
-      [Header, $\n, [io_lib:format("  ~s~n", [P]) || P <- Plugins], $\n]).
+      [Header, $\n, [io_lib:format("  ~s~n", [P]) || P <- Plugins]]).
 
 usort_plugins(Plugins) ->
     lists:usort(fun plugins_cmp/2, Plugins).
@@ -325,6 +344,9 @@ lookup_plugins(Names, AllPlugins) ->
 read_enabled_plugins(PluginsFile) ->
     case rabbit_file:read_term_file(PluginsFile) of
         {ok, [Plugins]} -> Plugins;
+        {ok, []}        -> [];
+        {ok, [_|_]}     -> throw({error, {malformed_enabled_plugins_file,
+                                          PluginsFile}});
         {error, enoent} -> [];
         {error, Reason} -> throw({error, {cannot_read_enabled_plugins_file,
                                           PluginsFile, Reason}})
@@ -385,4 +407,3 @@ report_change() ->
         _ ->
              ok
     end.
-

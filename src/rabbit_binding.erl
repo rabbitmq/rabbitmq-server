@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_binding).
@@ -354,8 +354,8 @@ continue({[], Continuation}) -> continue(mnesia:select(Continuation)).
 
 %% For bulk operations we lock the tables we are operating on in order
 %% to reduce the time complexity. Without the table locks we end up
-%% with num_tables*num_bulk_bindings row-level locks. Takiing each
-%% lock takes time proportional to the number of existing locks, thus
+%% with num_tables*num_bulk_bindings row-level locks. Taking each lock
+%% takes time proportional to the number of existing locks, thus
 %% resulting in O(num_bulk_bindings^2) complexity.
 %%
 %% The locks need to be write locks since ultimately we end up

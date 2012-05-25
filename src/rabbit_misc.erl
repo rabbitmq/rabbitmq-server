@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_misc).
@@ -28,17 +28,20 @@
 -export([enable_cover/0, report_cover/0]).
 -export([enable_cover/1, report_cover/1]).
 -export([start_cover/1]).
+-export([confirm_to_sender/2]).
 -export([throw_on_error/2, with_exit_handler/2, filter_exit_map/2]).
+-export([is_abnormal_termination/1]).
 -export([with_user/2, with_user_and_vhost/3]).
 -export([execute_mnesia_transaction/1]).
 -export([execute_mnesia_transaction/2]).
 -export([execute_mnesia_tx_with_tail/1]).
 -export([ensure_ok/2]).
--export([makenode/1, nodeparts/1, cookie_hash/0, tcp_name/3]).
+-export([tcp_name/3]).
 -export([upmap/2, map_in_order/2]).
 -export([table_filter/3]).
 -export([dirty_read_all/1, dirty_foreach_key/2, dirty_dump_log/1]).
--export([format_stderr/2, with_local_io/1, local_info_msg/2]).
+-export([format/2, format_many/1, format_stderr/2]).
+-export([with_local_io/1, local_info_msg/2]).
 -export([start_applications/1, stop_applications/1]).
 -export([unfold/2, ceil/1, queue_fold/3]).
 -export([sort_field_table/1]).
@@ -46,16 +49,19 @@
 -export([version_compare/2, version_compare/3]).
 -export([dict_cons/3, orddict_cons/3, gb_trees_cons/3]).
 -export([gb_trees_fold/3, gb_trees_foreach/2]).
--export([get_options/2]).
+-export([parse_arguments/3]).
 -export([all_module_attributes/1, build_acyclic_graph/3]).
 -export([now_ms/0]).
 -export([const_ok/0, const/1]).
 -export([ntoa/1, ntoab/1]).
 -export([is_process_alive/1]).
--export([pget/2, pget/3, pget_or_die/2]).
+-export([pget/2, pget/3, pget_or_die/2, pset/3]).
 -export([format_message_queue/2]).
 -export([append_rpc_all_nodes/4]).
+-export([multi_call/2]).
 -export([quit/1]).
+-export([os_cmd/1]).
+-export([gb_sets_difference/2]).
 
 %%----------------------------------------------------------------------------
 
@@ -66,7 +72,7 @@
 -type(ok_or_error() :: rabbit_types:ok_or_error(any())).
 -type(thunk(T) :: fun(() -> T)).
 -type(resource_name() :: binary()).
--type(optdef() :: {flag, string()} | {option, string(), any()}).
+-type(optdef() :: flag | {option, string()}).
 -type(channel_or_connection_exit()
       :: rabbit_types:channel_exit() | rabbit_types:connection_exit()).
 -type(digraph_label() :: term()).
@@ -108,7 +114,6 @@
         (rabbit_framing:amqp_table(), binary(),
          rabbit_framing:amqp_field_type(), rabbit_framing:amqp_value())
         -> rabbit_framing:amqp_table()).
-
 -spec(r/2 :: (rabbit_types:vhost(), K)
              -> rabbit_types:r3(rabbit_types:vhost(), K, '_')
                     when is_subtype(K, atom())).
@@ -131,6 +136,7 @@
         (atom(), thunk(rabbit_types:error(any()) | {ok, A} | A)) -> A).
 -spec(with_exit_handler/2 :: (thunk(A), thunk(A)) -> A).
 -spec(filter_exit_map/2 :: (fun ((A) -> B), [A]) -> [B]).
+-spec(is_abnormal_termination/1 :: (any()) -> boolean()).
 -spec(with_user/2 :: (rabbit_types:username(), thunk(A)) -> A).
 -spec(with_user_and_vhost/3 ::
         (rabbit_types:username(), rabbit_types:vhost(), thunk(A))
@@ -141,9 +147,6 @@
 -spec(execute_mnesia_tx_with_tail/1 ::
         (thunk(fun ((boolean()) -> B))) -> B | (fun ((boolean()) -> B))).
 -spec(ensure_ok/2 :: (ok_or_error(), atom()) -> 'ok').
--spec(makenode/1 :: ({string(), string()} | string()) -> node()).
--spec(nodeparts/1 :: (node() | string()) -> {string(), string()}).
--spec(cookie_hash/0 :: () -> string()).
 -spec(tcp_name/3 ::
         (atom(), inet:ip_address(), rabbit_networking:ip_port())
         -> atom()).
@@ -155,6 +158,8 @@
 -spec(dirty_foreach_key/2 :: (fun ((any()) -> any()), atom())
                              -> 'ok' | 'aborted').
 -spec(dirty_dump_log/1 :: (file:filename()) -> ok_or_error()).
+-spec(format/2 :: (string(), [any()]) -> string()).
+-spec(format_many/1 :: ([{string(), [any()]}]) -> string()).
 -spec(format_stderr/2 :: (string(), [any()]) -> 'ok').
 -spec(with_local_io/1 :: (fun (() -> A)) -> A).
 -spec(local_info_msg/2 :: (string(), [any()]) -> 'ok').
@@ -177,8 +182,12 @@
 -spec(gb_trees_fold/3 :: (fun ((any(), any(), A) -> A), A, gb_tree()) -> A).
 -spec(gb_trees_foreach/2 ::
         (fun ((any(), any()) -> any()), gb_tree()) -> 'ok').
--spec(get_options/2 :: ([optdef()], [string()])
-                       -> {[string()], [{string(), any()}]}).
+-spec(parse_arguments/3 ::
+        ([{atom(), [{string(), optdef()}]} | atom()],
+         [{string(), optdef()}],
+         [string()])
+        -> {'ok', {atom(), [{string(), string()}], [string()]}} |
+           'no_command').
 -spec(all_module_attributes/1 :: (atom()) -> [{atom(), [term()]}]).
 -spec(build_acyclic_graph/3 ::
         (graph_vertex_fun(), graph_edge_fun(), [{atom(), [term()]}])
@@ -196,9 +205,14 @@
 -spec(pget/2 :: (term(), [term()]) -> term()).
 -spec(pget/3 :: (term(), [term()], term()) -> term()).
 -spec(pget_or_die/2 :: (term(), [term()]) -> term() | no_return()).
+-spec(pset/3 :: (term(), term(), [term()]) -> term()).
 -spec(format_message_queue/2 :: (any(), priority_queue:q()) -> term()).
 -spec(append_rpc_all_nodes/4 :: ([node()], atom(), atom(), [any()]) -> [any()]).
+-spec(multi_call/2 ::
+        ([pid()], any()) -> {[{pid(), any()}], [{pid(), any()}]}).
 -spec(quit/1 :: (integer() | string()) -> no_return()).
+-spec(os_cmd/1 :: (string()) -> string()).
+-spec(gb_sets_difference/2 :: (gb_set(), gb_set()) -> gb_set()).
 
 -endif.
 
@@ -222,7 +236,7 @@ frame_error(MethodName, BinaryFields) ->
     protocol_error(frame_error, "cannot decode ~w", [BinaryFields], MethodName).
 
 amqp_error(Name, ExplanationFormat, Params, Method) ->
-    Explanation = lists:flatten(io_lib:format(ExplanationFormat, Params)),
+    Explanation = format(ExplanationFormat, Params),
     #amqp_error{name = Name, explanation = Explanation, method = Method}.
 
 protocol_error(Name, ExplanationFormat, Params) ->
@@ -276,8 +290,7 @@ val({Type, Value}) ->
                  true  -> "~s";
                  false -> "~w"
              end,
-    lists:flatten(io_lib:format("the value '" ++ ValFmt ++ "' of type '~s'",
-                                [Value, Type])).
+    format("the value '" ++ ValFmt ++ "' of type '~s'", [Value, Type]).
 
 %% Normally we'd call mnesia:dirty_read/1 here, but that is quite
 %% expensive due to general mnesia overheads (figuring out table types
@@ -320,8 +333,7 @@ r_arg(VHostPath, Kind, Table, Key) ->
     end.
 
 rs(#resource{virtual_host = VHostPath, kind = Kind, name = Name}) ->
-    lists:flatten(io_lib:format("~s '~s' in vhost '~s'",
-                                [Kind, Name, VHostPath])).
+    format("~s '~s' in vhost '~s'", [Kind, Name, VHostPath]).
 
 enable_cover() -> enable_cover(["."]).
 
@@ -337,7 +349,7 @@ enable_cover(Dirs) ->
                 end, ok, Dirs).
 
 start_cover(NodesS) ->
-    {ok, _} = cover:start([makenode(N) || N <- NodesS]),
+    {ok, _} = cover:start([rabbit_nodes:make(N) || N <- NodesS]),
     ok.
 
 report_cover() -> report_cover(["."]).
@@ -376,6 +388,9 @@ report_coverage_percentage(File, Cov, NotCov, Mod) ->
                end,
                Mod]).
 
+confirm_to_sender(Pid, MsgSeqNos) ->
+    gen_server2:cast(Pid, {confirm, MsgSeqNos, self()}).
+
 throw_on_error(E, Thunk) ->
     case Thunk() of
         {error, Reason} -> throw({E, Reason});
@@ -401,6 +416,12 @@ filter_exit_map(F, L) ->
                     fun () -> Ref end,
                     fun () -> F(I) end) || I <- L]).
 
+is_abnormal_termination(Reason)
+  when Reason =:= noproc; Reason =:= noconnection;
+       Reason =:= normal; Reason =:= shutdown -> false;
+is_abnormal_termination({shutdown, _})        -> false;
+is_abnormal_termination(_)                    -> true.
+
 with_user(Username, Thunk) ->
     fun () ->
             case mnesia:read({rabbit_user, Username}) of
@@ -418,11 +439,24 @@ execute_mnesia_transaction(TxFun) ->
     %% Making this a sync_transaction allows us to use dirty_read
     %% elsewhere and get a consistent result even when that read
     %% executes on a different node.
-    case worker_pool:submit({mnesia, sync_transaction, [TxFun]}) of
-        {atomic,  Result} -> Result;
-        {aborted, Reason} -> throw({error, Reason})
+    case worker_pool:submit(
+           fun () ->
+                   case mnesia:is_transaction() of
+                       false -> DiskLogBefore = mnesia_dumper:get_log_writes(),
+                                Res = mnesia:sync_transaction(TxFun),
+                                DiskLogAfter  = mnesia_dumper:get_log_writes(),
+                                case DiskLogAfter == DiskLogBefore of
+                                    true  -> Res;
+                                    false -> {sync, Res}
+                                end;
+                       true  -> mnesia:sync_transaction(TxFun)
+                   end
+           end) of
+        {sync, {atomic,  Result}} -> mnesia_sync:sync(), Result;
+        {sync, {aborted, Reason}} -> throw({error, Reason});
+        {atomic,  Result}         -> Result;
+        {aborted, Reason}         -> throw({error, Reason})
     end.
-
 
 %% Like execute_mnesia_transaction/1 with additional Pre- and Post-
 %% commit function
@@ -450,29 +484,10 @@ execute_mnesia_tx_with_tail(TxFun) ->
 ensure_ok(ok, _) -> ok;
 ensure_ok({error, Reason}, ErrorTag) -> throw({error, {ErrorTag, Reason}}).
 
-makenode({Prefix, Suffix}) ->
-    list_to_atom(lists:append([Prefix, "@", Suffix]));
-makenode(NodeStr) ->
-    makenode(nodeparts(NodeStr)).
-
-nodeparts(Node) when is_atom(Node) ->
-    nodeparts(atom_to_list(Node));
-nodeparts(NodeStr) ->
-    case lists:splitwith(fun (E) -> E =/= $@ end, NodeStr) of
-        {Prefix, []}     -> {_, Suffix} = nodeparts(node()),
-                            {Prefix, Suffix};
-        {Prefix, Suffix} -> {Prefix, tl(Suffix)}
-    end.
-
-cookie_hash() ->
-    base64:encode_to_string(erlang:md5(atom_to_list(erlang:get_cookie()))).
-
 tcp_name(Prefix, IPAddress, Port)
   when is_atom(Prefix) andalso is_number(Port) ->
     list_to_atom(
-      lists:flatten(
-        io_lib:format("~w_~s:~w",
-                      [Prefix, inet_parse:ntoa(IPAddress), Port]))).
+      format("~w_~s:~w", [Prefix, inet_parse:ntoa(IPAddress), Port])).
 
 %% This is a modified version of Luke Gorrie's pmap -
 %% http://lukego.livejournal.com/6753.html - that doesn't care about
@@ -540,6 +555,11 @@ dirty_dump_log1(LH, {K, Terms}) ->
 dirty_dump_log1(LH, {K, Terms, BadBytes}) ->
     io:format("Bad Chunk, ~p: ~p~n", [BadBytes, Terms]),
     dirty_dump_log1(LH, disk_log:chunk(LH, K)).
+
+format(Fmt, Args) -> lists:flatten(io_lib:format(Fmt, Args)).
+
+format_many(List) ->
+    lists:flatten([io_lib:format(F ++ "~n", A) || {F, A} <- List]).
 
 format_stderr(Fmt, Args) ->
     case os:type() of
@@ -636,7 +656,7 @@ pid_to_string(Pid) when is_pid(Pid) ->
     <<131,103,100,NodeLen:16,NodeBin:NodeLen/binary,Id:32,Ser:32,Cre:8>>
         = term_to_binary(Pid),
     Node = binary_to_term(<<131,100,NodeLen:16,NodeBin:NodeLen/binary>>),
-    lists:flatten(io_lib:format("<~w.~B.~B.~B>", [Node, Cre, Id, Ser])).
+    format("<~w.~B.~B.~B>", [Node, Cre, Id, Ser]).
 
 %% inverse of above
 string_to_pid(Str) ->
@@ -720,38 +740,63 @@ gb_trees_fold1(Fun, Acc, {Key, Val, It}) ->
 gb_trees_foreach(Fun, Tree) ->
     gb_trees_fold(fun (Key, Val, Acc) -> Fun(Key, Val), Acc end, ok, Tree).
 
-%% Separate flags and options from arguments.
-%% get_options([{flag, "-q"}, {option, "-p", "/"}],
-%%             ["set_permissions","-p","/","guest",
-%%              "-q",".*",".*",".*"])
-%% == {["set_permissions","guest",".*",".*",".*"],
-%%     [{"-q",true},{"-p","/"}]}
-get_options(Defs, As) ->
-    lists:foldl(fun(Def, {AsIn, RsIn}) ->
-                        {AsOut, Value} = case Def of
-                                             {flag, Key} ->
-                                                 get_flag(Key, AsIn);
-                                             {option, Key, Default} ->
-                                                 get_option(Key, Default, AsIn)
-                                         end,
-                        {AsOut, [{Key, Value} | RsIn]}
-                end, {As, []}, Defs).
+%% Takes:
+%%    * A list of [{atom(), [{string(), optdef()]} | atom()], where the atom()s
+%%      are the accepted commands and the optional [string()] is the list of
+%%      accepted options for that command
+%%    * A list [{string(), optdef()}] of options valid for all commands
+%%    * The list of arguments given by the user
+%%
+%% Returns either {ok, {atom(), [{string(), string()}], [string()]} which are
+%% respectively the command, the key-value pairs of the options and the leftover
+%% arguments; or no_command if no command could be parsed.
+parse_arguments(Commands, GlobalDefs, As) ->
+    lists:foldl(maybe_process_opts(GlobalDefs, As), no_command, Commands).
 
-get_option(K, _Default, [K, V | As]) ->
-    {As, V};
-get_option(K, Default, [Nk | As]) ->
-    {As1, V} = get_option(K, Default, As),
-    {[Nk | As1], V};
-get_option(_, Default, As) ->
-    {As, Default}.
+maybe_process_opts(GDefs, As) ->
+    fun({C, Os}, no_command) ->
+            process_opts(atom_to_list(C), dict:from_list(GDefs ++ Os), As);
+       (C, no_command) ->
+            (maybe_process_opts(GDefs, As))({C, []}, no_command);
+       (_, {ok, Res}) ->
+            {ok, Res}
+    end.
 
-get_flag(K, [K | As]) ->
-    {As, true};
-get_flag(K, [Nk | As]) ->
-    {As1, V} = get_flag(K, As),
-    {[Nk | As1], V};
-get_flag(_, []) ->
-    {[], false}.
+process_opts(C, Defs, As0) ->
+    KVs0 = dict:map(fun (_, flag)        -> false;
+                        (_, {option, V}) -> V
+                    end, Defs),
+    process_opts(Defs, C, As0, not_found, KVs0, []).
+
+%% Consume flags/options until you find the correct command. If there are no
+%% arguments or the first argument is not the command we're expecting, fail.
+%% Arguments to this are: definitions, cmd we're looking for, args we
+%% haven't parsed, whether we have found the cmd, options we've found,
+%% plain args we've found.
+process_opts(_Defs, C, [], found, KVs, Outs) ->
+    {ok, {list_to_atom(C), dict:to_list(KVs), lists:reverse(Outs)}};
+process_opts(_Defs, _C, [], not_found, _, _) ->
+    no_command;
+process_opts(Defs, C, [A | As], Found, KVs, Outs) ->
+    OptType = case dict:find(A, Defs) of
+                  error             -> none;
+                  {ok, flag}        -> flag;
+                  {ok, {option, _}} -> option
+              end,
+    case {OptType, C, Found} of
+        {flag, _, _}     -> process_opts(
+                              Defs, C, As, Found, dict:store(A, true, KVs),
+                              Outs);
+        {option, _, _}   -> case As of
+                                []        -> no_command;
+                                [V | As1] -> process_opts(
+                                               Defs, C, As1, Found,
+                                               dict:store(A, V, KVs), Outs)
+                            end;
+        {none, A, _}     -> process_opts(Defs, C, As, found, KVs, Outs);
+        {none, _, found} -> process_opts(Defs, C, As, found, KVs, [A | Outs]);
+        {none, _, _}     -> no_command
+    end.
 
 now_ms() ->
     timer:now_diff(now(), {0,0,0}) div 1000.
@@ -837,6 +882,8 @@ pget_or_die(K, P) ->
         V         -> V
     end.
 
+pset(Key, Value, List) -> [{Key, Value} | proplists:delete(Key, List)].
+
 format_message_queue(_Opt, MQ) ->
     Len = priority_queue:len(MQ),
     {Len,
@@ -865,9 +912,44 @@ append_rpc_all_nodes(Nodes, M, F, A) ->
                       _           -> Res
                   end || Res <- ResL]).
 
+%% A simplified version of gen_server:multi_call/2 with a sane
+%% API. This is not in gen_server2 as there is no useful
+%% infrastructure there to share.
+multi_call(Pids, Req) ->
+    MonitorPids = [start_multi_call(Pid, Req) || Pid <- Pids],
+    receive_multi_call(MonitorPids, [], []).
+
+start_multi_call(Pid, Req) when is_pid(Pid) ->
+    Mref = erlang:monitor(process, Pid),
+    Pid ! {'$gen_call', {self(), Mref}, Req},
+    {Mref, Pid}.
+
+receive_multi_call([], Good, Bad) ->
+    {lists:reverse(Good), lists:reverse(Bad)};
+receive_multi_call([{Mref, Pid} | MonitorPids], Good, Bad) ->
+    receive
+        {Mref, Reply} ->
+            erlang:demonitor(Mref, [flush]),
+            receive_multi_call(MonitorPids, [{Pid, Reply} | Good], Bad);
+        {'DOWN', Mref, _, _, noconnection} ->
+            receive_multi_call(MonitorPids, Good, [{Pid, nodedown} | Bad]);
+        {'DOWN', Mref, _, _, Reason} ->
+            receive_multi_call(MonitorPids, Good, [{Pid, Reason} | Bad])
+    end.
+
 %% the slower shutdown on windows required to flush stdout
 quit(Status) ->
     case os:type() of
         {unix,  _} -> halt(Status);
         {win32, _} -> init:stop(Status)
     end.
+
+os_cmd(Command) ->
+    Exec = hd(string:tokens(Command, " ")),
+    case os:find_executable(Exec) of
+        false -> throw({command_not_found, Exec});
+        _     -> os:cmd(Command)
+    end.
+
+gb_sets_difference(S1, S2) ->
+    gb_sets:fold(fun gb_sets:delete_any/2, S1, S2).

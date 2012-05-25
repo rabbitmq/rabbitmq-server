@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit).
@@ -45,6 +45,12 @@
                     {requires,    file_handle_cache},
                     {enables,     external_infrastructure}]}).
 
+-rabbit_boot_step({database_sync,
+                   [{description, "database sync"},
+                    {mfa,         {rabbit_sup, start_child, [mnesia_sync]}},
+                    {requires,    database},
+                    {enables,     external_infrastructure}]}).
+
 -rabbit_boot_step({file_handle_cache,
                    [{description, "file handle cache server"},
                     {mfa,         {rabbit_sup, start_restartable_child,
@@ -54,7 +60,8 @@
 
 -rabbit_boot_step({worker_pool,
                    [{description, "worker pool"},
-                    {mfa,         {rabbit_sup, start_child, [worker_pool_sup]}},
+                    {mfa,         {rabbit_sup, start_supervisor_child,
+                                   [worker_pool_sup]}},
                     {requires,    pre_boot},
                     {enables,     external_infrastructure}]}).
 
@@ -132,12 +139,13 @@
 -rabbit_boot_step({recovery,
                    [{description, "exchange, queue and binding recovery"},
                     {mfa,         {rabbit, recover, []}},
-                    {requires,    empty_db_check},
+                    {requires,    core_initialized},
                     {enables,     routing_ready}]}).
 
 -rabbit_boot_step({mirror_queue_slave_sup,
                    [{description, "mirror queue slave sup"},
-                    {mfa,         {rabbit_mirror_queue_slave_sup, start, []}},
+                    {mfa,         {rabbit_sup, start_supervisor_child,
+                                   [rabbit_mirror_queue_slave_sup]}},
                     {requires,    recovery},
                     {enables,     routing_ready}]}).
 
@@ -158,8 +166,9 @@
                     {enables,     networking}]}).
 
 -rabbit_boot_step({direct_client,
-                   [{mfa,        {rabbit_direct, boot, []}},
-                    {requires,   log_relay}]}).
+                   [{description, "direct client"},
+                    {mfa,         {rabbit_direct, boot, []}},
+                    {requires,    log_relay}]}).
 
 -rabbit_boot_step({networking,
                    [{mfa,         {rabbit_networking, boot, []}},
@@ -190,7 +199,7 @@
          rabbit_queue_index, gen, dict, ordsets, file_handle_cache,
          rabbit_msg_store, array, rabbit_msg_store_ets_index, rabbit_msg_file,
          rabbit_exchange_type_fanout, rabbit_exchange_type_topic, mnesia,
-         mnesia_lib, rpc, mnesia_tm, qlc, sofs, proplists]).
+         mnesia_lib, rpc, mnesia_tm, qlc, sofs, proplists, credit_flow, pmon]).
 
 %% HiPE compilation uses multiple cores anyway, but some bits are
 %% IO-bound so we can go faster if we parallelise a bit more. In
@@ -205,14 +214,13 @@
 -type(file_suffix() :: binary()).
 %% this really should be an abstract type
 -type(log_location() :: 'tty' | 'undefined' | file:filename()).
+-type(param() :: atom()).
 
 -spec(maybe_hipe_compile/0 :: () -> 'ok').
 -spec(prepare/0 :: () -> 'ok').
 -spec(start/0 :: () -> 'ok').
 -spec(stop/0 :: () -> 'ok').
 -spec(stop_and_halt/0 :: () -> no_return()).
--spec(rotate_logs/1 :: (file_suffix()) -> rabbit_types:ok_or_error(any())).
--spec(force_event_refresh/0 :: () -> 'ok').
 -spec(status/0 ::
         () -> [{pid, integer()} |
                {running_applications, [{atom(), string(), string()}]} |
@@ -221,12 +229,11 @@
                {memory, any()}]).
 -spec(is_running/0 :: () -> boolean()).
 -spec(is_running/1 :: (node()) -> boolean()).
--spec(environment/0 :: () -> [{atom() | term()}]).
--spec(log_location/1 :: ('sasl' | 'kernel') -> log_location()).
+-spec(environment/0 :: () -> [{param() | term()}]).
+-spec(rotate_logs/1 :: (file_suffix()) -> rabbit_types:ok_or_error(any())).
+-spec(force_event_refresh/0 :: () -> 'ok').
 
--spec(maybe_insert_default_data/0 :: () -> 'ok').
--spec(boot_delegate/0 :: () -> 'ok').
--spec(recover/0 :: () -> 'ok').
+-spec(log_location/1 :: ('sasl' | 'kernel') -> log_location()).
 
 -spec(start/2 :: ('normal',[]) ->
 		      {'error',
@@ -235,6 +242,10 @@
 			{'required',[any(),...]}}} |
 		      {'ok',pid()}).
 -spec(stop/1 :: (_) -> 'ok').
+
+-spec(maybe_insert_default_data/0 :: () -> 'ok').
+-spec(boot_delegate/0 :: () -> 'ok').
+-spec(recover/0 :: () -> 'ok').
 
 -endif.
 
@@ -308,25 +319,37 @@ stop_and_halt() ->
     ok.
 
 status() ->
-    [{pid, list_to_integer(os:getpid())},
-     {running_applications, application:which_applications(infinity)},
-     {os, os:type()},
-     {erlang_version, erlang:system_info(system_version)},
-     {memory, erlang:memory()}] ++
-    rabbit_misc:filter_exit_map(
-        fun ({Key, {M, F, A}}) -> {Key, erlang:apply(M, F, A)} end,
-        [{vm_memory_high_watermark, {vm_memory_monitor,
-                                     get_vm_memory_high_watermark, []}},
-         {vm_memory_limit,          {vm_memory_monitor,
-                                     get_memory_limit, []}}]).
+    S1 = [{pid,                  list_to_integer(os:getpid())},
+          {running_applications, application:which_applications(infinity)},
+          {os,                   os:type()},
+          {erlang_version,       erlang:system_info(system_version)},
+          {memory,               erlang:memory()}],
+    S2 = rabbit_misc:filter_exit_map(
+           fun ({Key, {M, F, A}}) -> {Key, erlang:apply(M, F, A)} end,
+           [{vm_memory_high_watermark, {vm_memory_monitor,
+                                        get_vm_memory_high_watermark, []}},
+            {vm_memory_limit,          {vm_memory_monitor,
+                                        get_memory_limit, []}},
+            {disk_free_limit,          {rabbit_disk_monitor,
+                                        get_disk_free_limit, []}},
+            {disk_free,                {rabbit_disk_monitor,
+                                        get_disk_free, []}}]),
+    S3 = rabbit_misc:with_exit_handler(
+           fun () -> [] end,
+           fun () -> [{file_descriptors, file_handle_cache:info()}] end),
+    S4 = [{processes,        [{limit, erlang:system_info(process_limit)},
+                              {used, erlang:system_info(process_count)}]},
+          {run_queue,        erlang:statistics(run_queue)},
+          {uptime,           begin
+                                 {T,_} = erlang:statistics(wall_clock),
+                                 T div 1000
+                             end}],
+    S1 ++ S2 ++ S3 ++ S4.
 
 is_running() -> is_running(node()).
 
 is_running(Node) ->
-    case rpc:call(Node, application, which_applications, [infinity]) of
-        {badrpc, _} -> false;
-        Apps        -> proplists:is_defined(rabbit, Apps)
-    end.
+    rabbit_nodes:is_running(Node, rabbit).
 
 environment() ->
     lists:keysort(
@@ -348,10 +371,8 @@ rotate_logs(BinarySuffix) ->
 start(normal, []) ->
     case erts_version_check() of
         ok ->
-            ok = rabbit_mnesia:delete_previously_running_nodes(),
             {ok, SupPid} = rabbit_sup:start_link(),
             true = register(rabbit, self()),
-
             print_banner(),
             [ok = run_boot_step(Step) || Step <- boot_steps()],
             io:format("~nbroker running~n"),
@@ -430,8 +451,7 @@ run_boot_step({StepName, Attributes}) ->
             [try
                  apply(M,F,A)
              catch
-                 _:Reason -> boot_error("FAILED~nReason: ~p~nStacktrace: ~p~n",
-                                        [Reason, erlang:get_stacktrace()])
+                 _:Reason -> boot_step_error(Reason, erlang:get_stacktrace())
              end || {M,F,A} <- MFAs],
             io:format("done~n"),
             ok
@@ -490,8 +510,27 @@ sort_boot_steps(UnsortedSteps) ->
                end])
     end.
 
+boot_step_error({error, {timeout_waiting_for_tables, _}}, _Stacktrace) ->
+    {Err, Nodes} =
+        case rabbit_mnesia:read_previously_running_nodes() of
+            [] -> {"Timeout contacting cluster nodes. Since RabbitMQ was"
+                   " shut down forcefully~nit cannot determine which nodes"
+                   " are timing out. Details on all nodes will~nfollow.~n",
+                   rabbit_mnesia:all_clustered_nodes() -- [node()]};
+            Ns -> {rabbit_misc:format(
+                     "Timeout contacting cluster nodes: ~p.~n", [Ns]),
+                   Ns}
+        end,
+    boot_error(Err ++ rabbit_nodes:diagnostics(Nodes) ++ "~n~n", []);
+
+boot_step_error(Reason, Stacktrace) ->
+    boot_error("Error description:~n   ~p~n~n"
+               "Log files (may contain more information):~n   ~s~n   ~s~n~n"
+               "Stack trace:~n   ~p~n~n",
+               [Reason, log_location(kernel), log_location(sasl), Stacktrace]).
+
 boot_error(Format, Args) ->
-    io:format("BOOT ERROR: " ++ Format, Args),
+    io:format("~n~nBOOT FAILED~n===========~n~n" ++ Format, Args),
     error_logger:error_msg(Format, Args),
     timer:sleep(1000),
     exit({?MODULE, failure_during_boot}).
@@ -501,7 +540,7 @@ boot_error(Format, Args) ->
 
 boot_delegate() ->
     {ok, Count} = application:get_env(rabbit, delegate_count),
-    rabbit_sup:start_child(delegate_sup, [Count]).
+    rabbit_sup:start_supervisor_child(delegate_sup, [Count]).
 
 recover() ->
     rabbit_binding:recover(rabbit_exchange:recover(), rabbit_amqqueue:start()).
@@ -584,15 +623,12 @@ log_location(Type) ->
 rotate_logs(File, Suffix, Handler) ->
     rotate_logs(File, Suffix, Handler, Handler).
 
-rotate_logs(File, Suffix, OldHandler, NewHandler) ->
-    case File of
-        undefined -> ok;
-        tty       -> ok;
-        _         -> gen_event:swap_handler(
-                       error_logger,
-                       {OldHandler, swap},
-                       {NewHandler, {File, Suffix}})
-    end.
+rotate_logs(undefined, _Suffix, _OldHandler, _NewHandler) -> ok;
+rotate_logs(tty,       _Suffix, _OldHandler, _NewHandler) -> ok;
+rotate_logs(File,       Suffix,  OldHandler,  NewHandler) ->
+    gen_event:swap_handler(error_logger,
+                           {OldHandler, swap},
+                           {NewHandler, {File, Suffix}}).
 
 log_rotation_result({error, MainLogError}, {error, SaslLogError}) ->
     {error, {{cannot_rotate_main_logs, MainLogError},
@@ -645,7 +681,7 @@ print_banner() ->
                 {"app descriptor", app_location()},
                 {"home dir",       home_dir()},
                 {"config file(s)", config_files()},
-                {"cookie hash",    rabbit_misc:cookie_hash()},
+                {"cookie hash",    rabbit_nodes:cookie_hash()},
                 {"log",            log_location(kernel)},
                 {"sasl log",       log_location(sasl)},
                 {"database dir",   rabbit_mnesia:dir()},
@@ -678,6 +714,6 @@ config_files() ->
     case init:get_argument(config) of
         {ok, Files} -> [filename:absname(
                           filename:rootname(File, ".config") ++ ".config") ||
-                           File <- Files];
+                           [File] <- Files];
         error       -> []
     end.

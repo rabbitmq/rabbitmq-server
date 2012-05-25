@@ -11,10 +11,12 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2011 VMware, Inc.  All rights reserved.
+%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
 -module(rabbit_msg_store_ets_index).
+
+-include("rabbit_msg_store.hrl").
 
 -behaviour(rabbit_msg_store_index).
 
@@ -24,8 +26,6 @@
 
 -define(MSG_LOC_NAME, rabbit_msg_store_ets_index).
 -define(FILENAME, "msg_store_index.ets").
-
--include("rabbit_msg_store_index.hrl").
 
 -record(state, { table, dir }).
 
