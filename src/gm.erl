@@ -575,18 +575,21 @@ handle_call({add_on_right, NewMember}, _From,
                              members_state = MembersState,
                              module        = Module,
                              callback_args = Args }) ->
-    Group = record_new_member_in_group(
-              GroupName, Self, NewMember,
-              fun (Group1) ->
-                      View1 = group_to_view(Group1),
-                      ok = send_right(NewMember, View1,
-                                      {catchup, Self,
-                                       prepare_members_state(
-                                         remove_erased_members(MembersState,
-                                                               View1))})
-              end),
+    {MembersState1, Group} =
+      record_new_member_in_group(GroupName, Self, NewMember,
+                                 fun (Group1) ->
+                                         View1 = group_to_view(Group1),
+                                         MembersState1 = remove_erased_members(
+                                                           MembersState, View1),
+                                         ok = send_right(NewMember, View1,
+                                                         {catchup, Self,
+                                                          prepare_members_state(
+                                                            MembersState1)}),
+                                         MembersState1
+                                 end),
     View2 = group_to_view(Group),
-    State1 = check_neighbours(State #state { view = View2 }),
+    State1 = check_neighbours(State #state { view          = View2,
+                                             members_state = MembersState1 }),
     Result = callback_view_changed(Args, Module, View, View2),
     handle_callback_result({Result, {ok, Group}, State1}).
 
@@ -1058,7 +1061,7 @@ record_dead_member_in_group(Member, GroupName) ->
     Group.
 
 record_new_member_in_group(GroupName, Left, NewMember, Fun) ->
-    {atomic, Group} =
+    {atomic, {MembersState, Group}} =
         mnesia:sync_transaction(
           fun () ->
                   [#gm_group { members = Members, version = Ver } = Group1] =
@@ -1068,11 +1071,11 @@ record_new_member_in_group(GroupName, Left, NewMember, Fun) ->
                   Members1 = Prefix ++ [Left, NewMember | Suffix],
                   Group2 = Group1 #gm_group { members = Members1,
                                               version = Ver + 1 },
-                  ok = Fun(Group2),
+                  MembersState = Fun(Group2),
                   mnesia:write(Group2),
-                  Group2
+                  {MembersState, Group2}
           end),
-    Group.
+    {MembersState, Group}.
 
 erase_members_in_group(Members, GroupName) ->
     DeadMembers = [{dead, Id} || Id <- Members],
