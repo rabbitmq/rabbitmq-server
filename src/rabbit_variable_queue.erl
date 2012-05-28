@@ -1466,16 +1466,14 @@ reduce_memory_use(AlphaBetaFun, BetaDeltaFun, AckFun,
             %% determined based on which is growing faster. Whichever
             %% comes second may very well get a quota of 0 if the
             %% first manages to push out the max number of messages.
-            S1 -> {_, State2} =
-                      lists:foldl(fun (ReduceFun, {QuotaN, StateN}) ->
-                                          ReduceFun(QuotaN, StateN)
-                                  end,
-                                  {S1, State},
-                                  case (AvgAckIngress - AvgAckEgress) >
-                                      (AvgIngress - AvgEgress) of
-                                      true  -> [AckFun, AlphaBetaFun];
-                                      false -> [AlphaBetaFun, AckFun]
-                                  end),
+            S1 -> Funs = case ((AvgAckIngress - AvgAckEgress) >
+                                   (AvgIngress - AvgEgress)) of
+                             true  -> [AckFun, AlphaBetaFun];
+                             false -> [AlphaBetaFun, AckFun]
+                         end,
+                  {_, State2} = lists:foldl(fun (ReduceFun, {QuotaN, StateN}) ->
+                                                    ReduceFun(QuotaN, StateN)
+                                            end, {S1, State}, Funs),
                   {true, State2}
         end,
 
