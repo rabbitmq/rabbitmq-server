@@ -575,33 +575,39 @@ handle_call({add_on_right, NewMember}, _From,
                              members_state = MembersState,
                              module        = Module,
                              callback_args = Args }) ->
-    Group = record_new_member_in_group(
-              GroupName, Self, NewMember,
-              fun (Group1) ->
-                      View1 = group_to_view(Group1),
-                      ok = send_right(NewMember, View1,
-                                      {catchup, Self, prepare_members_state(
-                                                        MembersState)})
-              end),
+    {MembersState1, Group} =
+      record_new_member_in_group(
+        GroupName, Self, NewMember,
+        fun (Group1) ->
+                View1 = group_to_view(Group1),
+                MembersState1 = remove_erased_members(MembersState, View1),
+                ok = send_right(NewMember, View1,
+                                {catchup, Self,
+                                 prepare_members_state(MembersState1)}),
+                MembersState1
+        end),
     View2 = group_to_view(Group),
-    State1 = check_neighbours(State #state { view = View2 }),
+    State1 = check_neighbours(State #state { view          = View2,
+                                             members_state = MembersState1 }),
     Result = callback_view_changed(Args, Module, View, View2),
     handle_callback_result({Result, {ok, Group}, State1}).
 
 
 handle_cast({?TAG, ReqVer, Msg},
             State = #state { view          = View,
+                             members_state = MembersState,
                              group_name    = GroupName,
                              module        = Module,
                              callback_args = Args }) ->
     {Result, State1} =
         case needs_view_update(ReqVer, View) of
-            true ->
-                View1 = group_to_view(read_group(GroupName)),
-                {callback_view_changed(Args, Module, View, View1),
-                 check_neighbours(State #state { view = View1 })};
-            false ->
-                {ok, State}
+            true  -> View1 = group_to_view(read_group(GroupName)),
+                     MemberState1 = remove_erased_members(MembersState, View1),
+                     {callback_view_changed(Args, Module, View, View1),
+                      check_neighbours(
+                        State #state { view          = View1,
+                                       members_state = MemberState1 })};
+            false -> {ok, State}
         end,
     handle_callback_result(
       if_callback_success(
@@ -1056,7 +1062,7 @@ record_dead_member_in_group(Member, GroupName) ->
     Group.
 
 record_new_member_in_group(GroupName, Left, NewMember, Fun) ->
-    {atomic, Group} =
+    {atomic, {Result, Group}} =
         mnesia:sync_transaction(
           fun () ->
                   [#gm_group { members = Members, version = Ver } = Group1] =
@@ -1066,11 +1072,11 @@ record_new_member_in_group(GroupName, Left, NewMember, Fun) ->
                   Members1 = Prefix ++ [Left, NewMember | Suffix],
                   Group2 = Group1 #gm_group { members = Members1,
                                               version = Ver + 1 },
-                  ok = Fun(Group2),
+                  Result = Fun(Group2),
                   mnesia:write(Group2),
-                  Group2
+                  {Result, Group2}
           end),
-    Group.
+    {Result, Group}.
 
 erase_members_in_group(Members, GroupName) ->
     DeadMembers = [{dead, Id} || Id <- Members],
@@ -1260,6 +1266,12 @@ make_member(GroupName) ->
         #gm_group { version = Version } -> Version;
         {error, not_found}              -> ?VERSION_START
     end, self()}.
+
+remove_erased_members(MembersState, View) ->
+    lists:foldl(fun (Id, MembersState1) ->
+                    store_member(Id, find_member_or_blank(Id, MembersState),
+                                 MembersState1)
+                end, blank_member_state(), all_known_members(View)).
 
 get_pid({_Version, Pid}) -> Pid.
 
