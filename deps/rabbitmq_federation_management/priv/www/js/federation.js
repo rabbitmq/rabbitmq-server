@@ -17,13 +17,16 @@ dispatcher_add(function(sammy) {
             return false;
         });
     sammy.put('#/fed-parameters', function() {
-            var num_keys = ['expires', 'max_hops'];
-            for (var i in num_keys) {
-                num_key = num_keys[i];
-                if (this.params[num_key] == '')
-                    delete this.params[num_key];
-                else
-                    this.params[num_key] = parseInt(this.params[num_key]);
+            var num_keys = ['expires', 'message_ttl', 'max_hops',
+                            'prefetch_count', 'reconnect_delay'];
+            for (var i in this.params) {
+                if (i === 'length' || !this.params.hasOwnProperty(i)) continue;
+                if (this.params[i] == '') {
+                    delete this.params[i];
+                }
+                else if (num_keys.indexOf(i) != -1) {
+                    this.params[i] = parseInt(this.params[i]);
+                }
             }
             this.params = {"component": this.params.component,
                            "key":       this.params.key,

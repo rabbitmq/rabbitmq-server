@@ -5,8 +5,32 @@
   <div class="hider">
     <table class="facts">
       <tr>
-        <th>TODO:</th>
-        <td>Show some details here</td>
+        <th>URI</th>
+        <td><%= connection.value.uri %></td>
+      </tr>
+      <tr>
+        <th>Expires</th>
+        <td><%= connection.value.expires %>ms</td>
+      </tr>
+      <tr>
+        <th>Message TTL</th>
+        <td><%= connection.value.message_ttl %>ms</td>
+      </tr>
+      <tr>
+        <th>Max Hops</th>
+        <td><%= connection.value.max_hops %></td>
+      </tr>
+      <tr>
+        <th>Prefetch Count</th>
+        <td><%= connection.value.prefetch_count %></td>
+      </tr>
+      <tr>
+        <th>Reconnect Delay</th>
+        <td><%= connection.value.reconnect_delay %>s</td>
+      </tr>
+      <tr>
+        <th>HA Policy</th>
+        <td><%= connection.value.ha_policy %></td>
       </tr>
     </table>
   </div>
