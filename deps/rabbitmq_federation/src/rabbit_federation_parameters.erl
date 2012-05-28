@@ -123,8 +123,7 @@ assert_type(Name, uri, Term) ->
     end.
 
 connection_upstream_set_validation() ->
-    [{<<"exchange">>,        binary, optional},
-     {<<"prefetch_count">>,  number, optional},
+    [{<<"prefetch_count">>,  number, optional},
      {<<"reconnect_delay">>, number, optional},
      {<<"max_hops">>,        number, optional},
      {<<"expires">>,         number, optional},
