@@ -28,16 +28,10 @@
          binary_header/2, binary_header/3]).
 -export([serialize/1]).
 
-initial_state() ->
-    none.
+initial_state() -> none.
 
-parse(Content, State) ->
-    case State of
-        {resume, Fun} ->
-            Fun(Content);
-        none  ->
-            parse_command(Content, [])
-    end.
+parse(Content, {resume, Fun}) -> Fun(Content);
+parse(Content, none)          -> parse_command(Content, []).
 
 parse_command(<<$\n,  Rest/binary>>, []) ->
     parse_command(Rest, []);
@@ -95,11 +89,9 @@ parse_header_value_escape(<<>>, Frame, HeaderAcc, KeyAcc, ValAcc) ->
 parse_header_value_escape(<<Ch:8,  Rest/binary>>, Frame,
                           HeaderAcc, KeyAcc, ValAcc) ->
     case unescape(Ch) of
-        {ok, EscCh} ->
-            parse_header_value(Rest, Frame, HeaderAcc, KeyAcc,
-                               [EscCh | ValAcc]);
-        error ->
-            {error, {bad_escape, Ch}}
+        {ok, EscCh} -> parse_header_value(Rest, Frame, HeaderAcc, KeyAcc,
+                                          [EscCh | ValAcc]);
+        error       -> {error, {bad_escape, Ch}}
     end.
 
 parse_body(Content, Frame, Chunks, unknown) ->
@@ -118,37 +110,28 @@ parse_body(Content, Frame, Chunks, unknown) ->
 parse_body(Content, Frame, Chunks, Remaining) ->
     Size = byte_size(Content),
     case Remaining >= Size of
-        true ->
-            Left = Remaining - Size,
-            more(fun(Rest) ->
-                         parse_body(Rest, Frame,
-                                    finalize_chunk(Content, Chunks),
-                                    Left)
-                 end, Left+1);  %% expect a trailing null, too
-        false ->
-            <<Chunk:Remaining/binary, 0, Remainder/binary>> = Content,
-            {ok,
-             Frame#stomp_frame{
-               body_iolist = lists:reverse(finalize_chunk(Chunk, Chunks))},
-             Remainder}
+        true  -> Left = Remaining - Size,
+                 more(fun(Rest) ->
+                              parse_body(Rest, Frame,
+                                         finalize_chunk(Content, Chunks),
+                                         Left)
+                      end, Left+1);  %% expect a trailing null, too
+        false -> <<Chunk:Remaining/binary, 0, Remainder/binary>> = Content,
+                 {ok,
+                  Frame#stomp_frame{
+                    body_iolist = lists:reverse(finalize_chunk(Chunk, Chunks))},
+                  Remainder}
     end.
 
-finalize_chunk(Chunk, Chunks) ->
-    case Chunk of
-        <<>> -> Chunks;
-        _    -> [Chunk | Chunks]
-    end.
+finalize_chunk(<<>>,  Chunks) -> Chunks;
+finalize_chunk(Chunk, Chunks) -> [Chunk | Chunks].
 
-more(Continuation) ->
-    more(Continuation, 0).
+more(Continuation) -> more(Continuation, 0).
 
-more(Continuation, Length) ->
-    {more, {resume, Continuation}, Length}.
+more(Continuation, Length) -> {more, {resume, Continuation}, Length}.
 
-default_value({ok, Value}, _DefaultValue) ->
-    Value;
-default_value(not_found, DefaultValue) ->
-    DefaultValue.
+default_value({ok, Value}, _DefaultValue) -> Value;
+default_value(not_found,    DefaultValue) -> DefaultValue.
 
 header(#stomp_frame{headers = Headers}, Key) ->
     case lists:keysearch(Key, 1, Headers) of
@@ -166,8 +149,7 @@ boolean_header(#stomp_frame{headers = Headers}, Key) ->
         _                     -> not_found
     end.
 
-boolean_header(H, Key, D) ->
-    default_value(boolean_header(H, Key), D).
+boolean_header(H, Key, D) -> default_value(boolean_header(H, Key), D).
 
 internal_integer_header(Headers, Key) ->
     case lists:keysearch(Key, 1, Headers) of
@@ -178,8 +160,7 @@ internal_integer_header(Headers, Key) ->
 integer_header(#stomp_frame{headers = Headers}, Key) ->
     internal_integer_header(Headers, Key).
 
-integer_header(H, Key, D) ->
-    default_value(integer_header(H, Key), D).
+integer_header(H, Key, D) -> default_value(integer_header(H, Key), D).
 
 binary_header(F, K) ->
     case header(F, K) of
@@ -187,8 +168,7 @@ binary_header(F, K) ->
         not_found -> not_found
     end.
 
-binary_header(F, K, V) ->
-    default_value(binary_header(F, K), V).
+binary_header(F, K, V) -> default_value(binary_header(F, K), V).
 
 serialize(#stomp_frame{command = Command,
                        headers = Headers,
@@ -201,14 +181,10 @@ serialize(#stomp_frame{command = Command,
          Len > 0 -> ["content-length:", integer_to_list(Len), $\n];
          true    -> []
      end,
-     $\n,
-     BodyFragments,
-     0].
+     $\n, BodyFragments, 0].
 
-serialize_header({K, V}) when is_integer(V) ->
-    [K, $:, integer_to_list(V), $\n];
-serialize_header({K, V}) when is_list(V) ->
-    [K, $:, [escape(C) || C <- V], $\n].
+serialize_header({K, V}) when is_integer(V) -> [K, $:, integer_to_list(V), $\n];
+serialize_header({K, V}) when is_list(V) -> [K, $:, [escape(C) || C <- V], $\n].
 
 unescape($n)  -> {ok, $\n};
 unescape($\\) -> {ok, $\\};
