@@ -51,7 +51,6 @@ all_tests() ->
     passed = test_log_management_during_startup(),
     passed = test_statistics(),
     passed = test_arguments_parser(),
-    passed = test_cluster_management(),
     passed = test_user_management(),
     passed = test_runtime_parameters(),
     passed = test_server_status(),
@@ -73,12 +72,9 @@ maybe_run_cluster_dependent_tests() ->
 run_cluster_dependent_tests(SecondaryNode) ->
     SecondaryNodeS = atom_to_list(SecondaryNode),
 
-    cover:stop(SecondaryNode),
     ok = control_action(stop_app, []),
-    ok = control_action(reset, []),
-    ok = control_action(cluster, [SecondaryNodeS]),
+    ok = control_action(join_cluster, [SecondaryNodeS]),
     ok = control_action(start_app, []),
-    cover:start(SecondaryNode),
     ok = control_action(start_app, SecondaryNode, [], []),
 
     io:format("Running cluster dependent tests with node ~p~n", [SecondaryNode]),
@@ -852,200 +848,6 @@ test_arguments_parser() ->
       {ok, {command2, [{"-f1", false}, {"-f2", true},
                        {"-o1", "baz"}, {"-o2", "bar"}], ["quux", "foo"]}},
       GetOptions, ["-f2", "command2", "quux", "-o1", "baz", "foo"]),
-
-    passed.
-
-test_cluster_management() ->
-    %% 'cluster' and 'reset' should only work if the app is stopped
-    {error, _} = control_action(cluster, []),
-    {error, _} = control_action(reset, []),
-    {error, _} = control_action(force_reset, []),
-
-    ok = control_action(stop_app, []),
-
-    %% various ways of creating a standalone node
-    NodeS = atom_to_list(node()),
-    ClusteringSequence = [[],
-                          [NodeS],
-                          ["invalid@invalid", NodeS],
-                          [NodeS, "invalid@invalid"]],
-
-    ok = control_action(reset, []),
-    lists:foreach(fun (Arg) ->
-                          ok = control_action(force_cluster, Arg),
-                          ok
-                  end,
-                  ClusteringSequence),
-    lists:foreach(fun (Arg) ->
-                          ok = control_action(reset, []),
-                          ok = control_action(force_cluster, Arg),
-                          ok
-                  end,
-                  ClusteringSequence),
-    ok = control_action(reset, []),
-    lists:foreach(fun (Arg) ->
-                          ok = control_action(force_cluster, Arg),
-                          ok = control_action(start_app, []),
-                          ok = control_action(stop_app, []),
-                          ok
-                  end,
-                  ClusteringSequence),
-    lists:foreach(fun (Arg) ->
-                          ok = control_action(reset, []),
-                          ok = control_action(force_cluster, Arg),
-                          ok = control_action(start_app, []),
-                          ok = control_action(stop_app, []),
-                          ok
-                  end,
-                  ClusteringSequence),
-
-    %% convert a disk node into a ram node
-    ok = control_action(reset, []),
-    ok = control_action(start_app, []),
-    ok = control_action(stop_app, []),
-    ok = assert_disc_node(),
-    ok = control_action(force_cluster, ["invalid1@invalid",
-                                        "invalid2@invalid"]),
-    ok = assert_ram_node(),
-
-    %% join a non-existing cluster as a ram node
-    ok = control_action(reset, []),
-    ok = control_action(force_cluster, ["invalid1@invalid",
-                                        "invalid2@invalid"]),
-    ok = assert_ram_node(),
-
-    ok = control_action(reset, []),
-
-    SecondaryNode = rabbit_nodes:make("hare"),
-    case net_adm:ping(SecondaryNode) of
-        pong -> passed = test_cluster_management2(SecondaryNode);
-        pang -> io:format("Skipping clustering tests with node ~p~n",
-                          [SecondaryNode])
-    end,
-
-    ok = control_action(start_app, []),
-    passed.
-
-test_cluster_management2(SecondaryNode) ->
-    NodeS = atom_to_list(node()),
-    SecondaryNodeS = atom_to_list(SecondaryNode),
-
-    %% make a disk node
-    ok = control_action(cluster, [NodeS]),
-    ok = assert_disc_node(),
-    %% make a ram node
-    ok = control_action(reset, []),
-    ok = control_action(cluster, [SecondaryNodeS]),
-    ok = assert_ram_node(),
-
-    %% join cluster as a ram node
-    ok = control_action(reset, []),
-    ok = control_action(force_cluster, [SecondaryNodeS, "invalid1@invalid"]),
-    ok = control_action(start_app, []),
-    ok = control_action(stop_app, []),
-    ok = assert_ram_node(),
-
-    %% ram node will not start by itself
-    ok = control_action(stop_app, []),
-    ok = control_action(stop_app, SecondaryNode, [], []),
-    {error, _} = control_action(start_app, []),
-    ok = control_action(start_app, SecondaryNode, [], []),
-    ok = control_action(start_app, []),
-    ok = control_action(stop_app, []),
-
-    %% change cluster config while remaining in same cluster
-    ok = control_action(force_cluster, ["invalid2@invalid", SecondaryNodeS]),
-    ok = control_action(start_app, []),
-    ok = control_action(stop_app, []),
-
-    %% join non-existing cluster as a ram node
-    ok = control_action(force_cluster, ["invalid1@invalid",
-                                        "invalid2@invalid"]),
-    {error, _} = control_action(start_app, []),
-    ok = assert_ram_node(),
-
-    %% join empty cluster as a ram node (converts to disc)
-    ok = control_action(cluster, []),
-    ok = control_action(start_app, []),
-    ok = control_action(stop_app, []),
-    ok = assert_disc_node(),
-
-    %% make a new ram node
-    ok = control_action(reset, []),
-    ok = control_action(force_cluster, [SecondaryNodeS]),
-    ok = control_action(start_app, []),
-    ok = control_action(stop_app, []),
-    ok = assert_ram_node(),
-
-    %% turn ram node into disk node
-    ok = control_action(cluster, [SecondaryNodeS, NodeS]),
-    ok = control_action(start_app, []),
-    ok = control_action(stop_app, []),
-    ok = assert_disc_node(),
-
-    %% convert a disk node into a ram node
-    ok = assert_disc_node(),
-    ok = control_action(force_cluster, ["invalid1@invalid",
-                                        "invalid2@invalid"]),
-    ok = assert_ram_node(),
-
-    %% make a new disk node
-    ok = control_action(force_reset, []),
-    ok = control_action(start_app, []),
-    ok = control_action(stop_app, []),
-    ok = assert_disc_node(),
-
-    %% turn a disk node into a ram node
-    ok = control_action(reset, []),
-    ok = control_action(cluster, [SecondaryNodeS]),
-    ok = control_action(start_app, []),
-    ok = control_action(stop_app, []),
-    ok = assert_ram_node(),
-
-    %% NB: this will log an inconsistent_database error, which is harmless
-    %% Turning cover on / off is OK even if we're not in general using cover,
-    %% it just turns the engine on / off, doesn't actually log anything.
-    cover:stop([SecondaryNode]),
-    true = disconnect_node(SecondaryNode),
-    pong = net_adm:ping(SecondaryNode),
-    cover:start([SecondaryNode]),
-
-    %% leaving a cluster as a ram node
-    ok = control_action(reset, []),
-    %% ...and as a disk node
-    ok = control_action(cluster, [SecondaryNodeS, NodeS]),
-    ok = control_action(start_app, []),
-    ok = control_action(stop_app, []),
-    cover:stop(SecondaryNode),
-    ok = control_action(reset, []),
-    cover:start(SecondaryNode),
-
-    %% attempt to leave cluster when no other node is alive
-    ok = control_action(cluster, [SecondaryNodeS, NodeS]),
-    ok = control_action(start_app, []),
-    ok = control_action(stop_app, SecondaryNode, [], []),
-    ok = control_action(stop_app, []),
-    {error, {no_running_cluster_nodes, _, _}} =
-        control_action(reset, []),
-
-    %% attempt to change type when no other node is alive
-    {error, {no_running_cluster_nodes, _, _}} =
-        control_action(cluster, [SecondaryNodeS]),
-
-    %% leave system clustered, with the secondary node as a ram node
-    ok = control_action(force_reset, []),
-    ok = control_action(start_app, []),
-    %% Yes, this is rather ugly. But since we're a clustered Mnesia
-    %% node and we're telling another clustered node to reset itself,
-    %% we will get disconnected half way through causing a
-    %% badrpc. This never happens in real life since rabbitmqctl is
-    %% not a clustered Mnesia node.
-    cover:stop(SecondaryNode),
-    {badrpc, nodedown} = control_action(force_reset, SecondaryNode, [], []),
-    pong = net_adm:ping(SecondaryNode),
-    cover:start(SecondaryNode),
-    ok = control_action(cluster, SecondaryNode, [NodeS], []),
-    ok = control_action(start_app, SecondaryNode, [], []),
 
     passed.
 
