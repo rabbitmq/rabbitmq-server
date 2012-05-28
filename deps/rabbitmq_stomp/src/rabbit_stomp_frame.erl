@@ -96,11 +96,8 @@ parse_header_value_escape(<<Ch:8,  Rest/binary>>, Frame,
 
 parse_body(Content, Frame, Chunks, unknown) ->
     case firstnull(Content) of
-        -1  -> more(fun(Rest) ->
-                            parse_body(Rest, Frame,
-                                       finalize_chunk(Content, Chunks),
-                                       unknown)
-                    end);
+        -1  -> Chunks1 = finalize_chunk(Content, Chunks),
+               more(fun(Rest) -> parse_body(Rest, Frame, Chunks1, unknown) end);
         Pos -> <<Chunk:Pos/binary, 0, Rest/binary>> = Content,
                Body = lists:reverse(finalize_chunk(Chunk, Chunks)),
                {ok, Frame#stomp_frame{body_iolist = Body}, Rest}
@@ -108,12 +105,10 @@ parse_body(Content, Frame, Chunks, unknown) ->
 parse_body(Content, Frame, Chunks, Remaining) ->
     Size = byte_size(Content),
     case Remaining >= Size of
-        true  -> Left = Remaining - Size,
-                 more(fun(Rest) ->
-                              parse_body(Rest, Frame,
-                                         finalize_chunk(Content, Chunks),
-                                         Left)
-                      end, Left+1);  %% expect a trailing null, too
+        true  -> Chunks1 = finalize_chunk(Content, Chunks),
+                 Left = Remaining - Size,
+                 more(fun(Rest) -> parse_body(Rest, Frame, Chunks1, Left) end,
+                      Left+1);  %% expect a trailing null, too
         false -> <<Chunk:Remaining/binary, 0, Remainder/binary>> = Content,
                  Body = lists:reverse(finalize_chunk(Chunk, Chunks)),
                  {ok, Frame#stomp_frame{body_iolist = Body}, Remainder}
