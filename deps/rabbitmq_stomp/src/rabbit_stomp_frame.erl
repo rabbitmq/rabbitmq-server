@@ -95,23 +95,24 @@ parse_header_value_escape(<<Ch:8,  Rest/binary>>, Frame,
     end.
 
 parse_body(Content, Frame, Chunks, unknown) ->
-    case firstnull(Content) of
-        -1  -> Chunks1 = finalize_chunk(Content, Chunks),
-               more(fun(Rest) -> parse_body(Rest, Frame, Chunks1, unknown) end);
-        Pos -> <<Chunk:Pos/binary, 0, Rest/binary>> = Content,
-               Body = lists:reverse(finalize_chunk(Chunk, Chunks)),
-               {ok, Frame#stomp_frame{body_iolist = Body}, Rest}
-    end;
+    parse_body2(Content, Frame, Chunks, case firstnull(Content) of
+                                            -1  -> {more, unknown};
+                                            Pos -> {done, Pos}
+                                        end);
 parse_body(Content, Frame, Chunks, Remaining) ->
     Size = byte_size(Content),
-    case Remaining >= Size of
-        true  -> Chunks1 = finalize_chunk(Content, Chunks),
-                 Left = Remaining - Size,
-                 more(fun(Rest) -> parse_body(Rest, Frame, Chunks1, Left) end);
-        false -> <<Chunk:Remaining/binary, 0, Remainder/binary>> = Content,
-                 Body = lists:reverse(finalize_chunk(Chunk, Chunks)),
-                 {ok, Frame#stomp_frame{body_iolist = Body}, Remainder}
-    end.
+    parse_body2(Content, Frame, Chunks, case Remaining >= Size of
+                                            true  -> {more, Remaining - Size};
+                                            false -> {done, Remaining}
+                                        end).
+
+parse_body2(Content, Frame, Chunks, {more, Left}) ->
+    Chunks1 = finalize_chunk(Content, Chunks),
+    more(fun(Rest) -> parse_body(Rest, Frame, Chunks1, Left) end);
+parse_body2(Content, Frame, Chunks, {done, Pos}) ->
+    <<Chunk:Pos/binary, 0, Rest/binary>> = Content,
+    Body = lists:reverse(finalize_chunk(Chunk, Chunks)),
+    {ok, Frame#stomp_frame{body_iolist = Body}, Rest}.
 
 finalize_chunk(<<>>,  Chunks) -> Chunks;
 finalize_chunk(Chunk, Chunks) -> [Chunk | Chunks].
