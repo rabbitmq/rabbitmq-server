@@ -45,6 +45,8 @@ init(SupPid, Configuration) ->
 
             ParseState = rabbit_stomp_frame:initial_state(),
             try
+                rabbit_misc:throw_on_error(
+                  inet_error, fun () -> rabbit_net:tune_buffer_size(Sock) end),
                 mainloop(
                   control_throttle(
                     register_resource_alarm(
