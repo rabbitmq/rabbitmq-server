@@ -53,7 +53,7 @@ init(SupPid, Configuration) ->
                                     processor          = ProcessorPid,
                                     state              = running,
                                     conserve_resources = false,
-                                    recv_outstanding   = false})), 0),
+                                    recv_outstanding   = false}))),
                 log(info, "closing STOMP connection ~p (~s)~n",
                     [self(), ConnStr])
             catch
@@ -66,8 +66,8 @@ init(SupPid, Configuration) ->
             done
     end.
 
-mainloop(State0 = #reader_state{socket = Sock}, ByteCount) ->
-    State = run_socket(State0, ByteCount),
+mainloop(State0 = #reader_state{socket = Sock}) ->
+    State = run_socket(State0),
     receive
         {inet_async, Sock, _Ref, {ok, Data}} ->
             process_received_bytes(
@@ -77,24 +77,23 @@ mainloop(State0 = #reader_state{socket = Sock}, ByteCount) ->
         {inet_async, _Sock, _Ref, {error, Reason}} ->
             throw({inet_error, Reason});
         {conserve_resources, Conserve} ->
-            mainloop(
-              control_throttle(
-                State#reader_state{conserve_resources = Conserve}), ByteCount);
+            mainloop(control_throttle(
+                       State#reader_state{conserve_resources = Conserve}));
         {bump_credit, Msg} ->
             credit_flow:handle_bump_msg(Msg),
-            mainloop(control_throttle(State), ByteCount)
+            mainloop(control_throttle(State))
     end.
 
 process_received_bytes([], State) ->
-    mainloop(State, 0);
+    mainloop(State);
 process_received_bytes(Bytes,
                        State = #reader_state{
                          processor   = Processor,
                          parse_state = ParseState,
                          state       = S}) ->
     case rabbit_stomp_frame:parse(Bytes, ParseState) of
-        {more, ParseState1, Length} ->
-            mainloop(State#reader_state{parse_state = ParseState1}, Length);
+        {more, ParseState1} ->
+            mainloop(State#reader_state{parse_state = ParseState1});
         {ok, Frame, Rest} ->
             rabbit_stomp_processor:process_frame(Processor, Frame),
             PS = rabbit_stomp_frame:initial_state(),
@@ -126,12 +125,12 @@ next_state(blocking, #stomp_frame{command = "SEND"}) ->
 next_state(S, _) ->
     S.
 
-run_socket(State = #reader_state{state = blocked}, _ByteCount) ->
+run_socket(State = #reader_state{state = blocked}) ->
     State;
-run_socket(State = #reader_state{recv_outstanding = true}, _ByteCount) ->
+run_socket(State = #reader_state{recv_outstanding = true}) ->
     State;
-run_socket(State = #reader_state{socket = Sock}, ByteCount) ->
-    rabbit_net:async_recv(Sock, ByteCount, infinity),
+run_socket(State = #reader_state{socket = Sock}) ->
+    rabbit_net:async_recv(Sock, 0, infinity),
     State#reader_state{recv_outstanding = true}.
 
 %%----------------------------------------------------------------------------

@@ -113,7 +113,7 @@ parse_body(Content, Frame, Chunks, Remaining) ->
                               parse_body(Rest, Frame,
                                          finalize_chunk(Content, Chunks),
                                          Left)
-                      end, Left+1);  %% expect a trailing null, too
+                      end);
         false -> <<Chunk:Remaining/binary, 0, Remainder/binary>> = Content,
                  Body = lists:reverse(finalize_chunk(Chunk, Chunks)),
                  {ok, Frame#stomp_frame{body_iolist = Body}, Remainder}
@@ -122,9 +122,7 @@ parse_body(Content, Frame, Chunks, Remaining) ->
 finalize_chunk(<<>>,  Chunks) -> Chunks;
 finalize_chunk(Chunk, Chunks) -> [Chunk | Chunks].
 
-more(Continuation) -> more(Continuation, 0).
-
-more(Continuation, Length) -> {more, {resume, Continuation}, Length}.
+more(Continuation) -> {more, {resume, Continuation}}.
 
 default_value({ok, Value}, _DefaultValue) -> Value;
 default_value(not_found,    DefaultValue) -> DefaultValue.
