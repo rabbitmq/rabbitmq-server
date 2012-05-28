@@ -115,6 +115,7 @@ table.form select { width: 200px; }
 table.form select.narrow { width: 110px; }
 table.form .multifield { margin: 0; padding: 0; }
 table.form .multifield p { margin: 0; padding: 0; }
+table.form .multifield p select { width: 70px; }
 table.form label { margin-top: 5px; display: block; }
 
 table.two-col-layout { width: 100%; }
@@ -147,6 +148,8 @@ acronym { background: #add; color: #222; padding: 2px 4px; border-radius: 2px; -
 acronym.warning { background: #daa; }
 
 .status acronym, small acronym { background: none; color: inherit; padding: 0; border-bottom: 1px dotted; cursor: default; }
+
+acronym.type { background: none; color: inherit; padding: 0; border-bottom: 1px dotted #ddd; cursor: default; }
 
 table.bindings { margin-bottom: 1em; }
 td.binding-endpoint span.object { border: 1px solid #bbb; padding: 10px; border-radius: 10px; -moz-border-radius: 10px; }
