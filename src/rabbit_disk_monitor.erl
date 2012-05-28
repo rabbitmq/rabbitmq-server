@@ -178,9 +178,8 @@ parse_free_unix(CommandResult) ->
 
 parse_free_win32(CommandResult) ->
     LastLine = lists:last(string:tokens(CommandResult, "\r\n")),
-    {ok, Digits} = re:compile("([0-9]+)"),
-    {match,[Free]} =
-      re:run(lists:reverse(LastLine), Digits, [{capture, all_but_first, list}]),
+    {match, [Free]} = re:run(lists:reverse(LastLine), "(\\d+)",
+                             [{capture, all_but_first, list}]),
     list_to_integer(lists:reverse(Free)).
 
 interpret_limit({mem_relative, R}) ->
