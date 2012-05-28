@@ -104,7 +104,8 @@ action(enable, ToEnable0, _Opts, PluginsFile, PluginsDir) ->
     end,
     AllPlugins = rabbit_plugins:list(PluginsDir),
     Enabled = rabbit_plugins:read_enabled(PluginsFile),
-    ImplicitlyEnabled = rabbit_plugins:dependencies(false, Enabled, AllPlugins),
+    ImplicitlyEnabled = rabbit_plugins:dependencies(false,
+                                                    Enabled, AllPlugins),
     ToEnable = [list_to_atom(Name) || Name <- ToEnable0],
     Missing = ToEnable -- plugin_names(AllPlugins),
     case Missing of
@@ -115,7 +116,8 @@ action(enable, ToEnable0, _Opts, PluginsFile, PluginsDir) ->
     end,
     NewEnabled = lists:usort(Enabled ++ ToEnable),
     write_enabled_plugins(PluginsFile, NewEnabled),
-    NewImplicitlyEnabled = rabbit_plugins:dependencies(false, NewEnabled, AllPlugins),
+    NewImplicitlyEnabled = rabbit_plugins:dependencies(false,
+                                                       NewEnabled, AllPlugins),
     maybe_warn_mochiweb(NewImplicitlyEnabled),
     case NewEnabled -- ImplicitlyEnabled of
         [] -> io:format("Plugin configuration unchanged.~n");
@@ -145,7 +147,8 @@ action(disable, ToDisable0, _Opts, PluginsFile, PluginsDir) ->
         false -> ImplicitlyEnabled =
                      rabbit_plugins:dependencies(false, Enabled, AllPlugins),
                  NewImplicitlyEnabled =
-                     rabbit_plugins:dependencies(false, NewEnabled, AllPlugins),
+                     rabbit_plugins:dependencies(false,
+                                                 NewEnabled, AllPlugins),
                  print_list("The following plugins have been disabled:",
                             ImplicitlyEnabled -- NewImplicitlyEnabled),
                  write_enabled_plugins(PluginsFile, NewEnabled),
@@ -178,14 +181,15 @@ format_plugins(Pattern, Opts, PluginsFile, PluginsDir) ->
     AvailablePlugins = rabbit_plugins:list(PluginsDir),
     EnabledExplicitly = rabbit_plugins:read_enabled(PluginsFile),
     EnabledImplicitly =
-        rabbit_plugins:dependencies(false, EnabledExplicitly, AvailablePlugins) --
-        EnabledExplicitly,
+        rabbit_plugins:dependencies(false, EnabledExplicitly,
+                                    AvailablePlugins) -- EnabledExplicitly,
     {ok, RE} = re:compile(Pattern),
     Plugins = [ Plugin ||
                   Plugin = #plugin{name = Name} <- AvailablePlugins,
                   re:run(atom_to_list(Name), RE, [{capture, none}]) =:= match,
                   if OnlyEnabled    ->  lists:member(Name, EnabledExplicitly);
-                     OnlyEnabledAll -> (lists:member(Name, EnabledExplicitly) or
+                     OnlyEnabledAll -> (lists:member(Name,
+                                                     EnabledExplicitly) or
                                         lists:member(Name, EnabledImplicitly));
                      true           -> true
                   end],

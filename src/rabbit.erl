@@ -311,7 +311,8 @@ boot() ->
                 Plugins = rabbit_plugins:setup(),
                 ToBeLoaded = Plugins ++ ?APPS,
                 ok = app_utils:load_applications(ToBeLoaded),
-                StartupApps = app_utils:app_dependency_order(ToBeLoaded, false),
+                StartupApps = app_utils:app_dependency_order(ToBeLoaded,
+                                                             false),
                 ok = app_utils:start_applications(StartupApps),
                 ok = print_plugin_info(Plugins)
              end).
@@ -468,7 +469,8 @@ sort_boot_steps(UnsortedSteps) ->
             %% there is one, otherwise fail).
             SortedSteps = lists:reverse(
                             [begin
-                                 {StepName, Step} = digraph:vertex(G, StepName),
+                                 {StepName, Step} = digraph:vertex(G,
+                                                                   StepName),
                                  Step
                              end || StepName <- digraph_utils:topsort(G)]),
             digraph:delete(G),
@@ -550,7 +552,8 @@ insert_default_data() ->
     ok = rabbit_vhost:add(DefaultVHost),
     ok = rabbit_auth_backend_internal:add_user(DefaultUser, DefaultPass),
     ok = rabbit_auth_backend_internal:set_tags(DefaultUser, DefaultTags),
-    ok = rabbit_auth_backend_internal:set_permissions(DefaultUser, DefaultVHost,
+    ok = rabbit_auth_backend_internal:set_permissions(DefaultUser,
+                                                      DefaultVHost,
                                                       DefaultConfigurePerm,
                                                       DefaultWritePerm,
                                                       DefaultReadPerm),
