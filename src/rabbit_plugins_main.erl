@@ -102,9 +102,9 @@ action(enable, ToEnable0, _Opts, PluginsFile, PluginsDir) ->
         [] -> throw({error_string, "Not enough arguments for 'enable'"});
         _  -> ok
     end,
-    AllPlugins = rabbit_plugins:find_plugins(PluginsDir),
-    Enabled = rabbit_plugins:read_enabled_plugins(PluginsFile),
-    ImplicitlyEnabled = rabbit_plugins:calculate_plugin_dependencies(false, Enabled, AllPlugins),
+    AllPlugins = rabbit_plugins:list(PluginsDir),
+    Enabled = rabbit_plugins:read_enabled(PluginsFile),
+    ImplicitlyEnabled = rabbit_plugins:dependencies(false, Enabled, AllPlugins),
     ToEnable = [list_to_atom(Name) || Name <- ToEnable0],
     Missing = ToEnable -- plugin_names(AllPlugins),
     case Missing of
@@ -115,7 +115,7 @@ action(enable, ToEnable0, _Opts, PluginsFile, PluginsDir) ->
     end,
     NewEnabled = lists:usort(Enabled ++ ToEnable),
     write_enabled_plugins(PluginsFile, NewEnabled),
-    NewImplicitlyEnabled = rabbit_plugins:calculate_plugin_dependencies(false, NewEnabled, AllPlugins),
+    NewImplicitlyEnabled = rabbit_plugins:dependencies(false, NewEnabled, AllPlugins),
     maybe_warn_mochiweb(NewImplicitlyEnabled),
     case NewEnabled -- ImplicitlyEnabled of
         [] -> io:format("Plugin configuration unchanged.~n");
@@ -130,22 +130,22 @@ action(disable, ToDisable0, _Opts, PluginsFile, PluginsDir) ->
         _  -> ok
     end,
     ToDisable = [list_to_atom(Name) || Name <- ToDisable0],
-    Enabled = rabbit_plugins:read_enabled_plugins(PluginsFile),
-    AllPlugins = rabbit_plugins:find_plugins(PluginsDir),
+    Enabled = rabbit_plugins:read_enabled(PluginsFile),
+    AllPlugins = rabbit_plugins:list(PluginsDir),
     Missing = ToDisable -- plugin_names(AllPlugins),
     case Missing of
         [] -> ok;
         _  -> print_list("Warning: the following plugins could not be found:",
                          Missing)
     end,
-    ToDisableDeps = rabbit_plugins:calculate_plugin_dependencies(true, ToDisable, AllPlugins),
+    ToDisableDeps = rabbit_plugins:dependencies(true, ToDisable, AllPlugins),
     NewEnabled = Enabled -- ToDisableDeps,
     case length(Enabled) =:= length(NewEnabled) of
         true  -> io:format("Plugin configuration unchanged.~n");
         false -> ImplicitlyEnabled =
-                     rabbit_plugins:calculate_plugin_dependencies(false, Enabled, AllPlugins),
+                     rabbit_plugins:dependencies(false, Enabled, AllPlugins),
                  NewImplicitlyEnabled =
-                     rabbit_plugins:calculate_plugin_dependencies(false, NewEnabled, AllPlugins),
+                     rabbit_plugins:dependencies(false, NewEnabled, AllPlugins),
                  print_list("The following plugins have been disabled:",
                             ImplicitlyEnabled -- NewImplicitlyEnabled),
                  write_enabled_plugins(PluginsFile, NewEnabled),
@@ -175,10 +175,10 @@ format_plugins(Pattern, Opts, PluginsFile, PluginsDir) ->
     OnlyEnabled    = proplists:get_bool(?ENABLED_OPT,     Opts),
     OnlyEnabledAll = proplists:get_bool(?ENABLED_ALL_OPT, Opts),
 
-    AvailablePlugins = rabbit_plugins:find_plugins(PluginsDir),
-    EnabledExplicitly = rabbit_plugins:read_enabled_plugins(PluginsFile),
+    AvailablePlugins = rabbit_plugins:list(PluginsDir),
+    EnabledExplicitly = rabbit_plugins:read_enabled(PluginsFile),
     EnabledImplicitly =
-        rabbit_plugins:calculate_plugin_dependencies(false, EnabledExplicitly, AvailablePlugins) --
+        rabbit_plugins:dependencies(false, EnabledExplicitly, AvailablePlugins) --
         EnabledExplicitly,
     {ok, RE} = re:compile(Pattern),
     Plugins = [ Plugin ||

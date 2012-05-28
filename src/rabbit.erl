@@ -302,13 +302,13 @@ start() ->
     start_it(fun() ->
                 ok = prepare(),
                 ok = app_utils:start_applications(app_startup_order()),
-                ok = print_plugin_info(rabbit_plugins:active_plugins())
+                ok = print_plugin_info(rabbit_plugins:active())
              end).
 
 boot() ->
     start_it(fun() ->
                 ok = prepare(),
-                Plugins = rabbit_plugins:prepare_plugins(),
+                Plugins = rabbit_plugins:setup(),
                 ToBeLoaded = Plugins ++ ?APPS,
                 ok = app_utils:load_applications(ToBeLoaded),
                 StartupApps = app_utils:app_dependency_order(ToBeLoaded, false),
@@ -421,7 +421,7 @@ app_startup_order() ->
     app_utils:app_dependency_order(?APPS, false).
 
 app_shutdown_order() ->
-    Apps = ?APPS ++ rabbit_plugins:active_plugins(),
+    Apps = ?APPS ++ rabbit_plugins:active(),
     app_utils:app_dependency_order(Apps, true).
 
 %%---------------------------------------------------------------------------

@@ -17,8 +17,8 @@
 -module(rabbit_plugins).
 -include("rabbit.hrl").
 
--export([prepare_plugins/0, active_plugins/0, read_enabled_plugins/1,
-         find_plugins/1, calculate_plugin_dependencies/3]).
+-export([setup/0, active/0, read_enabled/1,
+         list/1, dependencies/3]).
 
 -define(VERBOSE_DEF, {?VERBOSE_OPT, flag}).
 -define(MINIMAL_DEF, {?MINIMAL_OPT, flag}).
@@ -36,11 +36,11 @@
 
 -ifdef(use_specs).
 
--spec(prepare_plugins/0 :: () -> [atom()]).
--spec(active_plugins/0 :: () -> [atom()]).
--spec(find_plugins/1 :: (string()) -> [#plugin{}]).
--spec(read_enabled_plugins/1 :: (file:filename()) -> [atom()]).
--spec(calculate_plugin_dependencies/3 ::
+-spec(setup/0 :: () -> [atom()]).
+-spec(active/0 :: () -> [atom()]).
+-spec(list/1 :: (string()) -> [#plugin{}]).
+-spec(read_enabled/1 :: (file:filename()) -> [atom()]).
+-spec(dependencies/3 ::
             (boolean(), [atom()], [#plugin{}]) -> [atom()]).
 
 -endif.
@@ -50,7 +50,7 @@
 %%
 %% @doc Prepares the file system and installs all enabled plugins.
 %%
-prepare_plugins() ->
+setup() ->
     {ok, PluginDir} = application:get_env(rabbit, plugins_dir),
     {ok, ExpandDir} = application:get_env(rabbit, plugins_expand_dir),
     {ok, EnabledPluginsFile} = application:get_env(rabbit,
@@ -60,14 +60,14 @@ prepare_plugins() ->
             PluginName <- filelib:wildcard(ExpandDir ++ "/*/ebin/*.app")].
 
 %% @doc Lists the plugins which are currently running.
-active_plugins() ->
+active() ->
     {ok, ExpandDir} = application:get_env(rabbit, plugins_expand_dir),
-    InstalledPlugins = [ P#plugin.name || P <- find_plugins(ExpandDir) ],
+    InstalledPlugins = [ P#plugin.name || P <- list(ExpandDir) ],
     [App || {App, _, _} <- application:which_applications(),
             lists:member(App, InstalledPlugins)].
 
 %% @doc Get the list of plugins which are ready to be enabled.
-find_plugins(PluginsDir) ->
+list(PluginsDir) ->
     EZs = [{ez, EZ} || EZ <- filelib:wildcard("*.ez", PluginsDir)],
     FreeApps = [{app, App} ||
                    App <- filelib:wildcard("*/ebin/*.app", PluginsDir)],
@@ -87,7 +87,7 @@ find_plugins(PluginsDir) ->
     Plugins.
 
 %% @doc Read the list of enabled plugins from the supplied term file.
-read_enabled_plugins(PluginsFile) ->
+read_enabled(PluginsFile) ->
     case rabbit_file:read_term_file(PluginsFile) of
         {ok, [Plugins]} -> Plugins;
         {ok, []}        -> [];
@@ -103,7 +103,7 @@ read_enabled_plugins(PluginsFile) ->
 %% When Reverse =:= true the bottom/leaf level applications are returned in
 %% the resulting list, otherwise they're skipped.
 %%
-calculate_plugin_dependencies(Reverse, Sources, AllPlugins) ->
+dependencies(Reverse, Sources, AllPlugins) ->
     {ok, G} = rabbit_misc:build_acyclic_graph(
                 fun (App, _Deps) -> [{App, App}] end,
                 fun (App,  Deps) -> [{App, Dep} || Dep <- Deps] end,
@@ -119,9 +119,9 @@ calculate_plugin_dependencies(Reverse, Sources, AllPlugins) ->
 %%----------------------------------------------------------------------------
 
 prepare_plugins(EnabledPluginsFile, PluginsDistDir, DestDir) ->
-    AllPlugins = find_plugins(PluginsDistDir),
-    Enabled = read_enabled_plugins(EnabledPluginsFile),
-    ToUnpack = calculate_plugin_dependencies(false, Enabled, AllPlugins),
+    AllPlugins = list(PluginsDistDir),
+    Enabled = read_enabled(EnabledPluginsFile),
+    ToUnpack = dependencies(false, Enabled, AllPlugins),
     ToUnpackPlugins = lookup_plugins(ToUnpack, AllPlugins),
 
     Missing = Enabled -- plugin_names(ToUnpackPlugins),
