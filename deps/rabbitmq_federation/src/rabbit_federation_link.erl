@@ -179,8 +179,7 @@ terminate(shutdown, #state{downstream_channel    = DCh,
                            downstream_exchange   = XName,
                            upstream              = Upstream,
                            connection            = Conn,
-                           channel               = Ch,
-                           consumer_tag          = CTag}) ->
+                           channel               = Ch}) ->
     %% The supervisor is shutting us down; we are probably restarting
     %% the link because configuration has changed. So try to shut down
     %% nicely so that we do not cause unacked messages to be
