@@ -222,14 +222,7 @@ start_connection(Parent, ChannelSupSupPid, Collector, StartHeartbeatFun, Deb,
                 last_blocked_by     = none,
                 last_blocked_at     = never},
     try
-        BufSizes = inet_op(fun () ->
-                                   rabbit_net:getopts(
-                                     ClientSock, [sndbuf, recbuf, buffer])
-                           end),
-        BufSz = lists:max([Sz || {_Opt, Sz} <- BufSizes]),
-        ok = inet_op(fun () ->
-                             rabbit_net:setopts(ClientSock, [{buffer, BufSz}])
-                     end),
+        ok = inet_op(fun () -> rabbit_net:tune_buffer_size(ClientSock) end),
         recvloop(Deb, switch_callback(rabbit_event:init_stats_timer(
                                        State, #v1.stats_timer),
                                       handshake, 8)),
