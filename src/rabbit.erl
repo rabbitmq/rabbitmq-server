@@ -644,10 +644,16 @@ force_event_refresh() ->
 print_plugin_info([]) ->
     ok;
 print_plugin_info(Plugins) ->
-    io:format("~n-- plugins running~n"),
-    [print_plugin_info(AppName, element(2, application:get_key(AppName, vsn)))
-     || AppName <- Plugins],
-    ok.
+    %% This gets invoked by rabbitmqctl start_app, outside the context
+    %% of the rabbit application
+    rabbit_misc:with_local_io(
+      fun() ->
+              io:format("~n-- plugins running~n"),
+              [print_plugin_info(
+                 AppName, element(2, application:get_key(AppName, vsn)))
+               || AppName <- Plugins],
+              ok
+      end).
 
 print_plugin_info(Plugin, Vsn) ->
     Len = 76 - length(Vsn),
