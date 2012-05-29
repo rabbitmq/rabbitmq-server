@@ -323,7 +323,6 @@
 
 -type(timestamp() :: {non_neg_integer(), non_neg_integer(), non_neg_integer()}).
 -type(seq_id()  :: non_neg_integer()).
--type(ack()     :: seq_id()).
 
 -type(rates() :: #rates { egress      :: {timestamp(), non_neg_integer()},
                           ingress     :: {timestamp(), non_neg_integer()},
@@ -335,6 +334,13 @@
                           count        :: non_neg_integer(),
                           end_seq_id   :: non_neg_integer() }).
 
+%% The compiler (rightfully) complains that ack() and state() are
+%% unused. For this reason we duplicate a -spec from
+%% rabbit_backing_queue with the only intent being to remove
+%% warnings. The problem here is that we can't parameterise the BQ
+%% behaviour by these two types as we would like to. We still leave
+%% these here for documentation purposes.
+-type(ack() :: seq_id()).
 -type(state() :: #vqstate {
              q1                    :: ?QUEUE:?QUEUE(),
              q2                    :: ?QUEUE:?QUEUE(),
@@ -368,6 +374,8 @@
              ack_out_counter       :: non_neg_integer(),
              ack_in_counter        :: non_neg_integer(),
              ack_rates             :: rates() }).
+%% Duplicated from rabbit_backing_queue
+-spec(ack/2 :: ([ack()], state()) -> {[rabbit_guid:guid()], state()}).
 
 -spec(multiple_routing_keys/0 :: () -> 'ok').
 
@@ -1458,16 +1466,14 @@ reduce_memory_use(AlphaBetaFun, BetaDeltaFun, AckFun,
             %% determined based on which is growing faster. Whichever
             %% comes second may very well get a quota of 0 if the
             %% first manages to push out the max number of messages.
-            S1 -> {_, State2} =
-                      lists:foldl(fun (ReduceFun, {QuotaN, StateN}) ->
-                                          ReduceFun(QuotaN, StateN)
-                                  end,
-                                  {S1, State},
-                                  case (AvgAckIngress - AvgAckEgress) >
-                                      (AvgIngress - AvgEgress) of
-                                      true  -> [AckFun, AlphaBetaFun];
-                                      false -> [AlphaBetaFun, AckFun]
-                                  end),
+            S1 -> Funs = case ((AvgAckIngress - AvgAckEgress) >
+                                   (AvgIngress - AvgEgress)) of
+                             true  -> [AckFun, AlphaBetaFun];
+                             false -> [AlphaBetaFun, AckFun]
+                         end,
+                  {_, State2} = lists:foldl(fun (ReduceFun, {QuotaN, StateN}) ->
+                                                    ReduceFun(QuotaN, StateN)
+                                            end, {S1, State}, Funs),
                   {true, State2}
         end,
 

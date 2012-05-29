@@ -50,9 +50,10 @@ all_tests() ->
     passed = test_app_management(),
     passed = test_log_management_during_startup(),
     passed = test_statistics(),
-    passed = test_option_parser(),
+    passed = test_arguments_parser(),
     passed = test_cluster_management(),
     passed = test_user_management(),
+    passed = test_runtime_parameters(),
     passed = test_server_status(),
     passed = test_confirms(),
     passed = maybe_run_cluster_dependent_tests(),
@@ -800,27 +801,57 @@ test_log_management_during_startup() ->
     ok = control_action(start_app, []),
     passed.
 
-test_option_parser() ->
-    %% command and arguments should just pass through
-    ok = check_get_options({["mock_command", "arg1", "arg2"], []},
-                           [], ["mock_command", "arg1", "arg2"]),
+test_arguments_parser() ->
+    GlobalOpts1 = [{"-f1", flag}, {"-o1", {option, "foo"}}],
+    Commands1 = [command1, {command2, [{"-f2", flag}, {"-o2", {option, "bar"}}]}],
 
-    %% get flags
-    ok = check_get_options(
-           {["mock_command", "arg1"], [{"-f", true}, {"-f2", false}]},
-           [{flag, "-f"}, {flag, "-f2"}], ["mock_command", "arg1", "-f"]),
+    GetOptions =
+        fun (Args) ->
+                rabbit_misc:parse_arguments(Commands1, GlobalOpts1, Args)
+        end,
 
-    %% get options
-    ok = check_get_options(
-           {["mock_command"], [{"-foo", "bar"}, {"-baz", "notbaz"}]},
-           [{option, "-foo", "notfoo"}, {option, "-baz", "notbaz"}],
-           ["mock_command", "-foo", "bar"]),
+    check_parse_arguments(no_command, GetOptions, []),
+    check_parse_arguments(no_command, GetOptions, ["foo", "bar"]),
+    check_parse_arguments(
+      {ok, {command1, [{"-f1", false}, {"-o1", "foo"}], []}},
+      GetOptions, ["command1"]),
+    check_parse_arguments(
+      {ok, {command1, [{"-f1", false}, {"-o1", "blah"}], []}},
+      GetOptions, ["command1", "-o1", "blah"]),
+    check_parse_arguments(
+      {ok, {command1, [{"-f1", true}, {"-o1", "foo"}], []}},
+      GetOptions, ["command1", "-f1"]),
+    check_parse_arguments(
+      {ok, {command1, [{"-f1", false}, {"-o1", "blah"}], []}},
+      GetOptions, ["-o1", "blah", "command1"]),
+    check_parse_arguments(
+      {ok, {command1, [{"-f1", false}, {"-o1", "blah"}], ["quux"]}},
+      GetOptions, ["-o1", "blah", "command1", "quux"]),
+    check_parse_arguments(
+      {ok, {command1, [{"-f1", true}, {"-o1", "blah"}], ["quux", "baz"]}},
+      GetOptions, ["command1", "quux", "-f1", "-o1", "blah", "baz"]),
+    %% For duplicate flags, the last one counts
+    check_parse_arguments(
+      {ok, {command1, [{"-f1", false}, {"-o1", "second"}], []}},
+      GetOptions, ["-o1", "first", "command1", "-o1", "second"]),
+    %% If the flag "eats" the command, the command won't be recognised
+    check_parse_arguments(no_command, GetOptions,
+                      ["-o1", "command1", "quux"]),
+    %% If a flag eats another flag, the eaten flag won't be recognised
+    check_parse_arguments(
+      {ok, {command1, [{"-f1", false}, {"-o1", "-f1"}], []}},
+      GetOptions, ["command1", "-o1", "-f1"]),
 
-    %% shuffled and interleaved arguments and options
-    ok = check_get_options(
-           {["a1", "a2", "a3"], [{"-o1", "hello"}, {"-o2", "noto2"}, {"-f", true}]},
-           [{option, "-o1", "noto1"}, {flag, "-f"}, {option, "-o2", "noto2"}],
-           ["-f", "a1", "-o1", "hello", "a2", "a3"]),
+    %% Now for some command-specific flags...
+    check_parse_arguments(
+      {ok, {command2, [{"-f1", false}, {"-f2", false},
+                       {"-o1", "foo"}, {"-o2", "bar"}], []}},
+      GetOptions, ["command2"]),
+
+    check_parse_arguments(
+      {ok, {command2, [{"-f1", false}, {"-f2", true},
+                       {"-o1", "baz"}, {"-o2", "bar"}], ["quux", "foo"]}},
+      GetOptions, ["-f2", "command2", "quux", "-o1", "baz", "foo"]),
 
     passed.
 
@@ -1095,6 +1126,38 @@ test_user_management() ->
     {error, {no_such_user, _}} =
         control_action(delete_user, ["foo"]),
 
+    passed.
+
+test_runtime_parameters() ->
+    rabbit_runtime_parameters_test:register(),
+    Good = fun(L) -> ok                = control_action(set_parameter, L) end,
+    Bad  = fun(L) -> {error_string, _} = control_action(set_parameter, L) end,
+
+    %% Acceptable for bijection
+    Good(["test", "good", "<<\"ignore\">>"]),
+    Good(["test", "good", "123"]),
+    Good(["test", "good", "true"]),
+    Good(["test", "good", "false"]),
+    Good(["test", "good", "null"]),
+    Good(["test", "good", "[{<<\"key\">>, <<\"value\">>}]"]),
+
+    %% Various forms of fail due to non-bijectability
+    Bad(["test", "good", "atom"]),
+    Bad(["test", "good", "{tuple, foo}"]),
+    Bad(["test", "good", "[{<<\"key\">>, <<\"value\">>, 1}]"]),
+    Bad(["test", "good", "[{key, <<\"value\">>}]"]),
+
+    %% Test actual validation hook
+    Good(["test", "maybe", "<<\"good\">>"]),
+    Bad(["test", "maybe", "<<\"bad\">>"]),
+
+    ok = control_action(list_parameters, []),
+
+    ok = control_action(clear_parameter, ["test", "good"]),
+    ok = control_action(clear_parameter, ["test", "maybe"]),
+    {error_string, _} =
+        control_action(clear_parameter, ["test", "neverexisted"]),
+    rabbit_runtime_parameters_test:unregister(),
     passed.
 
 test_server_status() ->
@@ -1540,7 +1603,7 @@ control_action(Command, Args, NewOpts) ->
                    expand_options(default_options(), NewOpts)).
 
 control_action(Command, Node, Args, Opts) ->
-    case catch rabbit_control:action(
+    case catch rabbit_control_main:action(
                  Command, Node, Args, Opts,
                  fun (Format, Args1) ->
                          io:format(Format ++ " ...~n", Args1)
@@ -1572,10 +1635,13 @@ expand_options(As, Bs) ->
                         end
                 end, Bs, As).
 
-check_get_options({ExpArgs, ExpOpts}, Defs, Args) ->
-    {ExpArgs, ResOpts} = rabbit_misc:get_options(Defs, Args),
-    true = lists:sort(ExpOpts) == lists:sort(ResOpts), % don't care about the order
-    ok.
+check_parse_arguments(ExpRes, Fun, As) ->
+    SortRes =
+        fun (no_command)          -> no_command;
+            ({ok, {C, KVs, As1}}) -> {ok, {C, lists:sort(KVs), As1}}
+        end,
+
+    true = SortRes(ExpRes) =:= SortRes(Fun(As)).
 
 empty_files(Files) ->
     [case file:read_file_info(File) of

@@ -66,6 +66,8 @@
 
 -record(listener, {node, protocol, host, ip_address, port}).
 
+-record(runtime_parameters, {key, value}).
+
 -record(basic_message, {exchange_name, routing_keys = [], content, id,
                         is_persistent}).
 

@@ -57,8 +57,7 @@ diagnostics(Nodes) ->
                   "hosts, their running nodes and ports:", [Nodes]}] ++
         [diagnostics_host(Host) || Host <- Hosts] ++
         diagnostics0(),
-    lists:flatten([io_lib:format(F ++ "~n", A) || NodeDiag <- NodeDiags,
-                                                  {F, A}   <- [NodeDiag]]).
+    rabbit_misc:format_many(lists:flatten(NodeDiags)).
 
 diagnostics0() ->
     [{"~ncurrent node details:~n- node name: ~w", [node()]},

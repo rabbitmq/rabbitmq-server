@@ -20,7 +20,7 @@
 -export([is_ssl/1, ssl_info/1, controlling_process/2, getstat/2,
          recv/1, async_recv/3, port_command/2, getopts/2, setopts/2, send/2,
          close/1, maybe_fast_close/1, sockname/1, peername/1, peercert/1,
-         connection_string/2]).
+         tune_buffer_size/1, connection_string/2]).
 
 %%---------------------------------------------------------------------------
 
@@ -69,6 +69,7 @@
 -spec(peercert/1 ::
         (socket())
         -> 'nossl' | ok_val_or_error(rabbit_ssl:certificate())).
+-spec(tune_buffer_size/1 :: (socket()) -> ok_or_any_error()).
 -spec(connection_string/2 ::
         (socket(), 'inbound' | 'outbound') -> ok_val_or_error(string())).
 
@@ -158,6 +159,13 @@ peername(Sock)   when is_port(Sock) -> inet:peername(Sock).
 
 peercert(Sock)   when ?IS_SSL(Sock) -> ssl:peercert(Sock#ssl_socket.ssl);
 peercert(Sock)   when is_port(Sock) -> nossl.
+
+tune_buffer_size(Sock) ->
+    case getopts(Sock, [sndbuf, recbuf, buffer]) of
+        {ok, BufSizes} -> BufSz = lists:max([Sz || {_Opt, Sz} <- BufSizes]),
+                          setopts(Sock, [{buffer, BufSz}]);
+        Err            -> Err
+    end.
 
 connection_string(Sock, Direction) ->
     {From, To} = case Direction of
