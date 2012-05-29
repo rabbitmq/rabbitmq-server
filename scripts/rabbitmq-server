@@ -71,13 +71,12 @@ case "$(uname -s)" in
 esac
 
 RABBITMQ_EBIN_ROOT="${RABBITMQ_HOME}/ebin"
-if ! `erl \
-        -pa "$RABBITMQ_EBIN_ROOT" \
+if ! erl -pa "$RABBITMQ_EBIN_ROOT" \
 	    -noinput \
 	    -hidden \
 	    -s rabbit_prelaunch \
 	    -sname rabbitmqprelaunch$$ \
-	    -extra "${RABBITMQ_NODENAME}"`;
+	    -extra "${RABBITMQ_NODENAME}";
     then
         exit 1;
 fi
