@@ -142,7 +142,7 @@ start() -> rabbit_sup:start_supervisor_child(
               {rabbit_connection_sup,start_link,[]}]).
 
 ensure_ssl() ->
-    ok = rabbit_misc:start_applications([crypto, public_key, ssl]),
+    ok = app_utils:start_applications([crypto, public_key, ssl]),
     {ok, SslOptsConfig} = application:get_env(rabbit, ssl_options),
 
     % unknown_ca errors are silently ignored prior to R14B unless we
