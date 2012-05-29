@@ -253,7 +253,7 @@ recvloop(Deb, State = #v1{connection_state = blocked}) ->
     mainloop(Deb, State);
 recvloop(Deb, State = #v1{sock = Sock, recv_len = RecvLen, buf_len = BufLen})
   when BufLen < RecvLen ->
-    ok = rabbit_net:setopts(Sock, [{active, once}]),
+    rabbit_net:async_recv(Sock, 0, infinity),
     mainloop(Deb, State#v1{pending_recv = true});
 recvloop(Deb, State = #v1{recv_len = RecvLen, buf = Buf, buf_len = BufLen}) ->
     {Data, Rest} = split_binary(case Buf of
@@ -265,16 +265,20 @@ recvloop(Deb, State = #v1{recv_len = RecvLen, buf = Buf, buf_len = BufLen}) ->
                                         buf_len = BufLen - RecvLen})).
 
 mainloop(Deb, State = #v1{sock = Sock, buf = Buf, buf_len = BufLen}) ->
-    case rabbit_net:recv(Sock) of
-        {data, Data}    -> recvloop(Deb, State#v1{buf = [Data | Buf],
-                                                  buf_len = BufLen + size(Data),
-                                                  pending_recv = false});
-        closed          -> case State#v1.connection_state of
-                               closed -> State;
-                               _      -> throw(connection_closed_abruptly)
-                           end;
-        {error, Reason} -> throw({inet_error, Reason});
-        {other, Other}  -> handle_other(Other, Deb, State)
+    receive
+        {inet_async, Sock, _Ref, {ok, Data}} ->
+            recvloop(Deb, State#v1{buf = [Data | Buf],
+                                   buf_len = BufLen + size(Data),
+                                   pending_recv = false});
+        {inet_async, _Sock, _Ref, {error, closed}} ->
+            case State#v1.connection_state of
+                closed -> State;
+                _      -> throw(connection_closed_abruptly)
+            end;
+        {inet_async, _Sock, _Ref, {error, Reason}} ->
+            throw({inet_error, Reason});
+        Other ->
+            handle_other(Other, Deb, State)
     end.
 
 handle_other({conserve_resources, Conserve}, Deb, State) ->
