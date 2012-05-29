@@ -192,17 +192,15 @@ find_atom_parameter(Value) -> return(list_to_atom(Value)).
 
 mechanisms(ParsedUri) ->
     Query = proplists:get_value('query', ParsedUri),
-    Mechanisms0 = proplists:get_all_values("auth_mechanism", Query),
-    Mechanisms1 = [case [list_to_atom(T) || T <- string:tokens(Mech, ":")] of
-                       [F]    -> fun amqp_auth_mechanisms:F/3;
-                       [M, F] -> fun M:F/3;
-                       L      -> throw({not_mechanism, L})
-                   end || Mech <- Mechanisms0],
-    case Mechanisms1 of
-        [] -> [fun amqp_auth_mechanisms:plain/3,
-               fun amqp_auth_mechanisms:amqplain/3];
-        L  -> L
-    end.
+    Mechanisms = case proplists:get_all_values("auth_mechanism", Query) of
+                     []    -> ["plain", "amqplain"];
+                     Mechs -> Mechs
+                 end,
+    [case [list_to_atom(T) || T <- string:tokens(Mech, ":")] of
+         [F]    -> fun (R, P, S) -> amqp_auth_mechanisms:F(R, P, S) end;
+         [M, F] -> fun (R, P, S) -> M:F(R, P, S) end;
+         L      -> throw({not_mechanism, L})
+     end || Mech <- Mechanisms].
 
 %% --=: Plain state monad implementation start :=--
 run_state_monad(FunList, State) ->
