@@ -178,8 +178,9 @@ parse_free_unix(CommandResult) ->
 
 parse_free_win32(CommandResult) ->
     LastLine = lists:last(string:tokens(CommandResult, "\r\n")),
-    [_, _Dir, Free, "bytes", "free"] = string:tokens(LastLine, " "),
-    list_to_integer(Free).
+    {match, [Free]} = re:run(lists:reverse(LastLine), "(\\d+)",
+                             [{capture, all_but_first, list}]),
+    list_to_integer(lists:reverse(Free)).
 
 interpret_limit({mem_relative, R}) ->
     round(R * vm_memory_monitor:get_total_memory());
