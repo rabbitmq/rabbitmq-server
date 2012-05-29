@@ -300,21 +300,21 @@ prepare() ->
 
 start() ->
     start_it(fun() ->
-                ok = prepare(),
-                ok = app_utils:start_applications(app_startup_order()),
-                ok = print_plugin_info(rabbit_plugins:active())
+                     ok = prepare(),
+                     ok = app_utils:start_applications(app_startup_order()),
+                     ok = print_plugin_info(rabbit_plugins:active())
              end).
 
 boot() ->
     start_it(fun() ->
-                ok = prepare(),
-                Plugins = rabbit_plugins:setup(),
-                ToBeLoaded = Plugins ++ ?APPS,
-                ok = app_utils:load_applications(ToBeLoaded),
-                StartupApps = app_utils:app_dependency_order(ToBeLoaded,
-                                                             false),
-                ok = app_utils:start_applications(StartupApps),
-                ok = print_plugin_info(Plugins)
+                     ok = prepare(),
+                     Plugins = rabbit_plugins:setup(),
+                     ToBeLoaded = Plugins ++ ?APPS,
+                     ok = app_utils:load_applications(ToBeLoaded),
+                     StartupApps = app_utils:app_dependency_order(ToBeLoaded,
+                                                                  false),
+                     ok = app_utils:start_applications(StartupApps),
+                     ok = print_plugin_info(Plugins)
              end).
 
 start_it(StartFun) ->
