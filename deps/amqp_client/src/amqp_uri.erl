@@ -41,8 +41,7 @@
 %% frame_max, and heartbeat.  The extra parameters that may be
 %% specified for an SSL connection are cacertfile, certfile, keyfile,
 %% verify, and fail_if_no_peer_cert.
-parse(Uri) ->
-    parse(Uri, <<"/">>).
+parse(Uri) -> parse(Uri, <<"/">>).
 
 parse(Uri, DefaultVHost) ->
     try case parse1(Uri, DefaultVHost) of
@@ -189,8 +188,7 @@ find_boolean_parameter(Value) ->
         false -> fail({require_boolean, Bool})
     end.
 
-find_atom_parameter(Value) ->
-    return(list_to_atom(Value)).
+find_atom_parameter(Value) -> return(list_to_atom(Value)).
 
 mechanisms(ParsedUri) ->
     Query = proplists:get_value('query', ParsedUri),
