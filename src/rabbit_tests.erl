@@ -31,6 +31,7 @@
 -define(CLEANUP_QUEUE_NAME, <<"cleanup-queue">>).
 
 all_tests() ->
+    ok = setup_cluster(),
     passed = gm_tests:all_tests(),
     passed = mirrored_supervisor_tests:all_tests(),
     application:set_env(rabbit, file_handles_high_watermark, 10, infinity),
@@ -55,28 +56,47 @@ all_tests() ->
     passed = test_runtime_parameters(),
     passed = test_server_status(),
     passed = test_confirms(),
-    passed = maybe_run_cluster_dependent_tests(),
+    passed =
+        do_if_secondary_node(
+          fun run_cluster_dependent_tests/1,
+          fun (SecondaryNode) ->
+                  io:format("Skipping cluster dependent tests with node ~p~n",
+                            [SecondaryNode]),
+                  passed
+          end),
     passed = test_configurable_server_properties(),
     passed.
 
-maybe_run_cluster_dependent_tests() ->
+do_if_secondary_node(Up, Down) ->
     SecondaryNode = rabbit_nodes:make("hare"),
 
     case net_adm:ping(SecondaryNode) of
-        pong -> passed = run_cluster_dependent_tests(SecondaryNode);
-        pang -> io:format("Skipping cluster dependent tests with node ~p~n",
-                          [SecondaryNode])
-    end,
-    passed.
+        pong -> Up(SecondaryNode);
+        pang -> Down(SecondaryNode)
+    end.
+
+setup_cluster() ->
+    do_if_secondary_node(
+      fun (SecondaryNode) ->
+              ok = control_action(stop_app, []),
+              ok = control_action(join_cluster,
+                                  [atom_to_list(SecondaryNode)]),
+              ok = control_action(start_app, []),
+              ok = control_action(start_app, SecondaryNode, [], [])
+      end,
+      fun (_) -> ok end).
+
+maybe_run_cluster_dependent_tests() ->
+    do_if_secondary_node(
+      fun (SecondaryNode) ->
+              passed = run_cluster_dependent_tests(SecondaryNode)
+      end,
+      fun (SecondaryNode) ->
+              io:format("Skipping cluster dependent tests with node ~p~n",
+                        [SecondaryNode])
+      end).
 
 run_cluster_dependent_tests(SecondaryNode) ->
-    SecondaryNodeS = atom_to_list(SecondaryNode),
-
-    ok = control_action(stop_app, []),
-    ok = control_action(join_cluster, [SecondaryNodeS]),
-    ok = control_action(start_app, []),
-    ok = control_action(start_app, SecondaryNode, [], []),
-
     io:format("Running cluster dependent tests with node ~p~n", [SecondaryNode]),
     passed = test_delegates_async(SecondaryNode),
     passed = test_delegates_sync(SecondaryNode),
