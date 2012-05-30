@@ -33,62 +33,65 @@ initial_state() -> none.
 parse(Content, {resume, Fun}) -> Fun(Content);
 parse(Content, none)          -> parse_command(Content, []).
 
-parse_command(<<$\n, Rest/binary>>, []) ->
-    parse_command(Rest, []);
-parse_command(<<0, Rest/binary>>, []) ->
-    parse_command(Rest, []);
-parse_command(<<$\n, Rest/binary>>, Acc) ->
-    parse_headers(Rest, #stomp_frame{command = lists:reverse(Acc)}, [], []);
-parse_command(<<Ch:8, Rest/binary>>, Acc) ->
-    parse_command(Rest, [Ch | Acc]);
 parse_command(<<>>, Acc) ->
-    more(fun(Rest) -> parse_command(Rest, Acc) end).
+    more(fun(Rest) -> parse_command(Rest, Acc) end);
+parse_command(<<$\n, Rest/binary>>, []) ->  % inter-frame newline
+    parse_command(Rest, []);
+parse_command(<<0, Rest/binary>>, []) ->    % empty frame
+    parse_command(Rest, []);
+parse_command(<<$\n, Rest/binary>>, Acc) -> % end command
+    parse_headers(Rest, lists:reverse(Acc));
+parse_command(<<Ch:8, Rest/binary>>, Acc) ->
+    parse_command(Rest, [Ch | Acc]).
+
+parse_headers(Rest, Command) ->
+    parse_headers(Rest, #stomp_frame{command = Command}, [], []).
 
 parse_headers(<<>>, Frame, HeaderAcc, KeyAcc) ->
     more(fun(Rest) -> parse_headers(Rest, Frame, HeaderAcc, KeyAcc) end);
 parse_headers(<<$\r, Rest/binary>>, Frame, HeaderAcc, KeyAcc) ->
     parse_headers(Rest, Frame, HeaderAcc, KeyAcc);
-parse_headers(<<$\n, Rest/binary>>, Frame, HeaderAcc, _KeyAcc) ->
-    Remaining = case internal_integer_header(HeaderAcc, "content-length") of
-                    {ok, ByteCount} -> ByteCount;
-                    not_found       -> unknown
-                end,
-    parse_body(Rest, Frame#stomp_frame{headers = HeaderAcc}, [], Remaining);
-parse_headers(<<$:, Rest/binary>>, Frame, HeaderAcc, KeyAcc) ->
-    parse_header_value(Rest, Frame, HeaderAcc, KeyAcc, []);
+parse_headers(<<$\n, Rest/binary>>, Frame, HeaderAcc, _KeyAcc) -> % end headers
+    parse_body(Rest, Frame#stomp_frame{headers = HeaderAcc});
+parse_headers(<<$:, Rest/binary>>, Frame, HeaderAcc, KeyAcc) ->   % end key
+    parse_header_value(Rest, Frame, HeaderAcc, lists:reverse(KeyAcc));
 parse_headers(<<Ch:8, Rest/binary>>, Frame, HeaderAcc, KeyAcc) ->
     parse_headers(Rest, Frame, HeaderAcc, [Ch | KeyAcc]).
 
-parse_header_value(<<>>, Frame, HeaderAcc, KeyAcc, ValAcc) ->
-    more(fun(Rest) ->
-                     parse_header_value(Rest, Frame, HeaderAcc, KeyAcc, ValAcc)
-             end);
-parse_header_value(<<$\r, Rest/binary>>, Frame, HeaderAcc, KeyAcc, ValAcc) ->
-    parse_header_value(Rest, Frame, HeaderAcc, KeyAcc, ValAcc);
-parse_header_value(<<$\n, Rest/binary>>, Frame, HeaderAcc, KeyAcc, ValAcc) ->
-    NewKey = lists:reverse(KeyAcc),
-    NewHeaders = case lists:keysearch(NewKey, 1, HeaderAcc) of
-                     {value, _} -> HeaderAcc;
-                     false      -> [{NewKey, lists:reverse(ValAcc)} |
-                                    HeaderAcc]
-                 end,
-    parse_headers(Rest, Frame, NewHeaders, []);
-parse_header_value(<<$\\, Rest/binary>>, Frame, HeaderAcc, KeyAcc, ValAcc) ->
-    parse_header_value_escape(Rest, Frame, HeaderAcc, KeyAcc, ValAcc);
-parse_header_value(<<Ch:8, Rest/binary>>, Frame, HeaderAcc, KeyAcc, ValAcc) ->
-    parse_header_value(Rest, Frame, HeaderAcc, KeyAcc, [Ch | ValAcc]).
+parse_header_value(<<>>, Frame, HeaderAcc, Key, ValAcc) ->
+    more(fun(Rest) -> parse_header_value(Rest, Frame, HeaderAcc, Key, ValAcc)
+         end);
+parse_header_value(<<$\n, Rest/binary>>, Frame, HeaderAcc, Key, ValAcc) ->
+                                                                  % end value
+    parse_headers(Rest, Frame,
+                  insert_header(HeaderAcc, Key, lists:reverse(ValAcc)),
+                  []);
+parse_header_value(<<$\\, Rest/binary>>, Frame, HeaderAcc, Key, ValAcc) ->
+    parse_header_value_escape(Rest, Frame, HeaderAcc, Key, ValAcc);
+parse_header_value(<<Ch:8, Rest/binary>>, Frame, HeaderAcc, Key, ValAcc) ->
+    parse_header_value(Rest, Frame, HeaderAcc, Key, [Ch | ValAcc]).
 
-parse_header_value_escape(<<>>, Frame, HeaderAcc, KeyAcc, ValAcc) ->
+parse_header_value_escape(<<>>, Frame, HeaderAcc, Key, ValAcc) ->
     more(fun(Rest) ->
-           parse_header_value_escape(Rest, Frame, HeaderAcc, KeyAcc, ValAcc)
+           parse_header_value_escape(Rest, Frame, HeaderAcc, Key, ValAcc)
          end);
 parse_header_value_escape(<<Ch:8,  Rest/binary>>, Frame,
-                          HeaderAcc, KeyAcc, ValAcc) ->
+                          HeaderAcc, Key, ValAcc) ->
     case unescape(Ch) of
-        {ok, EscCh} -> parse_header_value(Rest, Frame, HeaderAcc, KeyAcc,
+        {ok, EscCh} -> parse_header_value(Rest, Frame, HeaderAcc, Key,
                                           [EscCh | ValAcc]);
         error       -> {error, {bad_escape, Ch}}
     end.
+
+insert_header(Headers, Key, Value) ->
+    case lists:keysearch(Key, 1, Headers) of
+        {value, _} -> Headers; % first header only
+        false      -> [{Key, Value} | Headers]
+    end.
+
+parse_body(Content, Frame) ->
+    parse_body(Content, Frame, [],
+               integer_header(Frame, "content-length", unknown)).
 
 parse_body(Content, Frame, Chunks, unknown) ->
     parse_body2(Content, Frame, Chunks, case firstnull(Content) of
