@@ -65,26 +65,24 @@ ack_mode(Frame) ->
     end.
 
 message_properties(Frame = #stomp_frame{headers = Headers}) ->
-    BinH = fun(K, V) -> rabbit_stomp_frame:binary_header(Frame, K, V) end,
-    IntH = fun(K, V) -> rabbit_stomp_frame:integer_header(Frame, K, V) end,
+    BinH = fun(K) -> rabbit_stomp_frame:binary_header(Frame, K, undefined) end,
+    IntH = fun(K) -> rabbit_stomp_frame:integer_header(Frame, K, undefined) end,
 
-    DeliveryMode =
-        case rabbit_stomp_frame:boolean_header
-                                (Frame, ?HEADER_PERSISTENT, false) of
-            true  -> 2;
-            false -> undefined
-        end,
+    DeliveryMode = case rabbit_stomp_frame:boolean_header(
+                          Frame, ?HEADER_PERSISTENT, false) of
+                       true  -> 2;
+                       false -> undefined
+                   end,
 
-    #'P_basic'{
-      content_type     = BinH(?HEADER_CONTENT_TYPE,     undefined),
-      content_encoding = BinH(?HEADER_CONTENT_ENCODING, undefined),
-      delivery_mode    = DeliveryMode,
-      priority         = IntH(?HEADER_PRIORITY,         undefined),
-      correlation_id   = BinH(?HEADER_CORRELATION_ID,   undefined),
-      reply_to         = BinH(?HEADER_REPLY_TO,         undefined),
-      message_id       = BinH(?HEADER_AMQP_MESSAGE_ID,  undefined),
-      headers          = [longstr_field(K, V) ||
-                             {K, V} <- Headers, user_header(K)]}.
+    #'P_basic'{ content_type     = BinH(?HEADER_CONTENT_TYPE),
+                content_encoding = BinH(?HEADER_CONTENT_ENCODING),
+                delivery_mode    = DeliveryMode,
+                priority         = IntH(?HEADER_PRIORITY),
+                correlation_id   = BinH(?HEADER_CORRELATION_ID),
+                reply_to         = BinH(?HEADER_REPLY_TO),
+                message_id       = BinH(?HEADER_AMQP_MESSAGE_ID),
+                headers          = [longstr_field(K, V) ||
+                                       {K, V} <- Headers, user_header(K)] }.
 
 message_headers(SessionId,
                 #'basic.deliver'{consumer_tag = ConsumerTag,
