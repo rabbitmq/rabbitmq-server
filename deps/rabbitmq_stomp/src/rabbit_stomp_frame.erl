@@ -126,8 +126,7 @@ header(#stomp_frame{headers = Headers}, Key) ->
         _                 -> not_found
     end.
 
-header(Frame, Key, DefaultValue) ->
-    default_value(header(Frame, Key), DefaultValue).
+header(F, K, D) -> default_value(header(F, K), D).
 
 boolean_header(#stomp_frame{headers = Headers}, Key) ->
     case lists:keysearch(Key, 1, Headers) of
@@ -136,7 +135,7 @@ boolean_header(#stomp_frame{headers = Headers}, Key) ->
         _                     -> not_found
     end.
 
-boolean_header(H, Key, D) -> default_value(boolean_header(H, Key), D).
+boolean_header(F, K, D) -> default_value(boolean_header(F, K), D).
 
 internal_integer_header(Headers, Key) ->
     case lists:keysearch(Key, 1, Headers) of
@@ -147,7 +146,7 @@ internal_integer_header(Headers, Key) ->
 integer_header(#stomp_frame{headers = Headers}, Key) ->
     internal_integer_header(Headers, Key).
 
-integer_header(H, Key, D) -> default_value(integer_header(H, Key), D).
+integer_header(F, K, D) -> default_value(integer_header(F, K), D).
 
 binary_header(F, K) ->
     case header(F, K) of
@@ -155,7 +154,7 @@ binary_header(F, K) ->
         not_found -> not_found
     end.
 
-binary_header(F, K, V) -> default_value(binary_header(F, K), V).
+binary_header(F, K, D) -> default_value(binary_header(F, K), D).
 
 serialize(#stomp_frame{command = Command,
                        headers = Headers,
