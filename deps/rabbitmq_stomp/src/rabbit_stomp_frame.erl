@@ -44,7 +44,7 @@ parse_command(<<$\n, Rest/binary>>, Acc) -> % end command
 parse_command(<<Ch:8, Rest/binary>>, Acc) ->
     parse_command(Rest, [Ch | Acc]).
 
-parse_headers(Rest, Command) ->
+parse_headers(Rest, Command) -> % begin headers
     parse_headers(Rest, #stomp_frame{command = Command}, [], []).
 
 parse_headers(<<>>, Frame, HeaderAcc, KeyAcc) ->
@@ -55,6 +55,9 @@ parse_headers(<<$:, Rest/binary>>, Frame, HeaderAcc, KeyAcc) ->   % end key
     parse_header_value(Rest, Frame, HeaderAcc, lists:reverse(KeyAcc));
 parse_headers(<<Ch:8, Rest/binary>>, Frame, HeaderAcc, KeyAcc) ->
     parse_headers(Rest, Frame, HeaderAcc, [Ch | KeyAcc]).
+
+parse_header_value(Rest, Frame, HeaderAcc, Key) -> % begin header value
+    parse_header_value(Rest, Frame, HeaderAcc, Key, []).
 
 parse_header_value(<<>>, Frame, HeaderAcc, Key, ValAcc) ->
     more(fun(Rest) -> parse_header_value(Rest, Frame, HeaderAcc, Key, ValAcc)
