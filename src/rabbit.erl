@@ -18,7 +18,7 @@
 
 -behaviour(application).
 
--export([maybe_hipe_compile/0, prepare/0, start/0, boot/0, stop/0,
+-export([start/0, boot/0, stop/0,
          stop_and_halt/0, await_startup/0, status/0, is_running/0,
          is_running/1, environment/0, rotate_logs/1, force_event_refresh/0]).
 
@@ -216,8 +216,6 @@
 -type(log_location() :: 'tty' | 'undefined' | file:filename()).
 -type(param() :: atom()).
 
--spec(maybe_hipe_compile/0 :: () -> 'ok').
--spec(prepare/0 :: () -> 'ok').
 -spec(start/0 :: () -> 'ok').
 -spec(boot/0 :: () -> 'ok').
 -spec(stop/0 :: () -> 'ok').
@@ -287,27 +285,31 @@ split(L, N) -> split0(L, [[] || _ <- lists:seq(1, N)]).
 split0([],       Ls)       -> Ls;
 split0([I | Is], [L | Ls]) -> split0(Is, Ls ++ [[I | L]]).
 
-prepare() ->
-    %% this ends up looking at the rabbit app's env, so it
-    %% needs to be loaded, but during the tests, it may end up
-    %% getting loaded twice, so guard against that
+ensure_application_loaded() ->
+    %% We end up looking at the rabbit app's env for HiPE and log
+    %% handling, so it needs to be loaded. But during the tests, it
+    %% may end up getting loaded twice, so guard against that.
     case application:load(rabbit) of
         ok                                -> ok;
         {error, {already_loaded, rabbit}} -> ok
-    end,
-    ok = ensure_working_log_handlers(),
-    ok = rabbit_upgrade:maybe_upgrade_mnesia().
+    end.
 
 start() ->
     start_it(fun() ->
-                     ok = prepare(),
+                     %% We do not want to HiPE compile or upgrade
+                     %% mnesia after just restarting the app
+                     ok = ensure_application_loaded(),
+                     ok = ensure_working_log_handlers(),
                      ok = app_utils:start_applications(app_startup_order()),
                      ok = print_plugin_info(rabbit_plugins:active())
              end).
 
 boot() ->
     start_it(fun() ->
-                     ok = prepare(),
+                     ok = ensure_application_loaded(),
+                     maybe_hipe_compile(),
+                     ok = ensure_working_log_handlers(),
+                     ok = rabbit_upgrade:maybe_upgrade_mnesia(),
                      Plugins = rabbit_plugins:setup(),
                      ToBeLoaded = Plugins ++ ?APPS,
                      ok = app_utils:load_applications(ToBeLoaded),
