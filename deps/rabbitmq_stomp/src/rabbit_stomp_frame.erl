@@ -35,8 +35,6 @@ parse(Content, none)          -> parse_command(Content, []).
 
 parse_command(<<$\n, Rest/binary>>, []) ->
     parse_command(Rest, []);
-parse_command(<<$\r, Rest/binary>>, Acc) ->
-    parse_command(Rest, Acc);
 parse_command(<<0, Rest/binary>>, []) ->
     parse_command(Rest, []);
 parse_command(<<$\n, Rest/binary>>, Acc) ->
