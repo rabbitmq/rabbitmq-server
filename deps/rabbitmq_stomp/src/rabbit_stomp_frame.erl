@@ -33,11 +33,11 @@ initial_state() -> none.
 parse(Content, {resume, Fun}) -> Fun(Content);
 parse(Content, none)          -> parse_command(Content, []).
 
-parse_command(<<$\n,  Rest/binary>>, []) ->
+parse_command(<<$\n, Rest/binary>>, []) ->
     parse_command(Rest, []);
 parse_command(<<$\r, Rest/binary>>, Acc) ->
     parse_command(Rest, Acc);
-parse_command(<<0,  Rest/binary>>, []) ->
+parse_command(<<0, Rest/binary>>, []) ->
     parse_command(Rest, []);
 parse_command(<<$\n, Rest/binary>>, Acc) ->
     parse_headers(Rest, #stomp_frame{command = lists:reverse(Acc)}, [], []);
@@ -75,11 +75,9 @@ parse_header_value(<<$\n, Rest/binary>>, Frame, HeaderAcc, KeyAcc, ValAcc) ->
                                     HeaderAcc]
                  end,
     parse_headers(Rest, Frame, NewHeaders, []);
-parse_header_value(<<$\\, Rest/binary>>, Frame,
-                   HeaderAcc, KeyAcc, ValAcc) ->
+parse_header_value(<<$\\, Rest/binary>>, Frame, HeaderAcc, KeyAcc, ValAcc) ->
     parse_header_value_escape(Rest, Frame, HeaderAcc, KeyAcc, ValAcc);
-parse_header_value(<<Ch:8, Rest/binary>>, Frame, HeaderAcc, KeyAcc,
-                   ValAcc) ->
+parse_header_value(<<Ch:8, Rest/binary>>, Frame, HeaderAcc, KeyAcc, ValAcc) ->
     parse_header_value(Rest, Frame, HeaderAcc, KeyAcc, [Ch | ValAcc]).
 
 parse_header_value_escape(<<>>, Frame, HeaderAcc, KeyAcc, ValAcc) ->
