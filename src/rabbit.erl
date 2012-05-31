@@ -409,7 +409,6 @@ start(normal, []) ->
     end.
 
 stop(_State) ->
-    ok = rabbit_mnesia:update_cluster_nodes_status(),
     terminated_ok = error_logger:delete_report_handler(rabbit_error_logger),
     ok = rabbit_alarm:stop(),
     ok = case rabbit_mnesia:is_clustered() of

@@ -17,20 +17,40 @@
 
 -module(rabbit_mnesia).
 
--export([ensure_mnesia_dir/0, dir/0, status/0, init/0, is_db_empty/0,
-         join_cluster/2, check_cluster_consistency/0, reset/0, force_reset/0,
-         init_db/4, is_clustered/0, running_clustered_nodes/0,
-         all_clustered_nodes/0, all_clustered_disc_nodes/0,
-         empty_ram_only_tables/0, copy_db/1, wait_for_tables/1, is_disc_node/0,
-         on_node_down/1, on_node_up/1, should_be_disc_node/1,
-         change_node_type/1, recluster/1, remove_node/1, prepare/0,
-         update_cluster_nodes_status/0]).
+-export([prepare/0,
+         init/0,
+         join_cluster/2,
+         reset/0,
+         force_reset/0,
+         recluster/1,
+         change_node_type/1,
+         remove_node/1,
 
--export([table_names/0]).
+         status/0,
+         is_db_empty/0,
+         is_clustered/0,
+         all_clustered_nodes/0,
+         all_clustered_disc_nodes/0,
+         running_clustered_nodes/0,
+         is_disc_node/0,
+         dir/0,
+         table_names/0,
+         wait_for_tables/1,
+
+         init_db/4,
+         empty_ram_only_tables/0,
+         copy_db/1,
+         wait_for_tables/0,
+
+         on_node_up/1,
+         on_node_down/1
+        ]).
 
 %% Used internally in rpc calls
--export([cluster_status_if_running/0, node_info/0,
-         remove_node_if_mnesia_running/1]).
+-export([cluster_status_if_running/0,
+         node_info/0,
+         remove_node_if_mnesia_running/1
+        ]).
 
 %% create_tables/0 exported for helping embed RabbitMQ in or alongside
 %% other mnesia-using Erlang applications, such as ejabberd
@@ -42,7 +62,7 @@
 
 -ifdef(use_specs).
 
--export_type([node_type/0, node_status/0]).
+-export_type([node_type/0]).
 
 -type(node_type() :: disc | ram).
 -type(node_status() :: {[node()], [node()], [node()]}).
@@ -62,31 +82,30 @@
                          {'running_nodes', [node()]}]).
 -spec(is_db_empty/0 :: () -> boolean()).
 -spec(is_clustered/0 :: () -> boolean()).
--spec(running_clustered_nodes/0 :: () -> [node()]).
 -spec(all_clustered_nodes/0 :: () -> [node()]).
+-spec(all_clustered_disc_nodes/0 :: () -> [node()]).
+-spec(running_clustered_nodes/0 :: () -> [node()]).
 -spec(is_disc_node/0 :: () -> boolean()).
 -spec(dir/0 :: () -> file:filename()).
 -spec(table_names/0 :: () -> [atom()]).
--spec(cluster_status_if_running/0 :: () -> 'error' | node_status()).
 
 %% Operations on the db and utils, mainly used in `rabbit_upgrade' and `rabbit'
 -spec(init_db/4 :: ([node()], boolean(), boolean(), boolean()) -> 'ok').
--spec(ensure_mnesia_dir/0 :: () -> 'ok').
 -spec(empty_ram_only_tables/0 :: () -> 'ok').
 -spec(create_tables/0 :: () -> 'ok').
 -spec(copy_db/1 :: (file:filename()) ->  rabbit_types:ok_or_error(any())).
 -spec(wait_for_tables/1 :: ([atom()]) -> 'ok').
--spec(should_be_disc_node/1 :: ([node()]) -> boolean()).
--spec(check_cluster_consistency/0 :: () -> 'ok' | no_return()).
-
-%% Functions to handle the cluster status file
--spec(write_cluster_nodes_status/1 :: (node_status()) ->  'ok').
--spec(read_cluster_nodes_status/0 :: () ->  node_status()).
--spec(update_cluster_nodes_status/0 :: () -> 'ok').
 
 %% Hooks used in `rabbit_node_monitor'
 -spec(on_node_up/1 :: (node()) -> 'ok').
 -spec(on_node_down/1 :: (node()) -> 'ok').
+
+%% Functions used in internal rpc calls
+-spec(cluster_status_if_running/0 :: () -> {'ok', node_status()} | 'error').
+-spec(node_info/0 :: () -> {string(), string(),
+                            ({'ok', node_status()} | 'error')}).
+-spec(remove_node_if_mnesia_running/1 :: (node()) -> 'ok' |
+                                                     {'error', term()}).
 
 -endif.
 
