@@ -28,8 +28,9 @@
 
 -export([table_names/0]).
 
-%% Used internally in rpc calls, see `discover_nodes/1'
--export([cluster_status_if_running/0, node_info/0]).
+%% Used internally in rpc calls
+-export([cluster_status_if_running/0, node_info/0,
+         remove_node_if_mnesia_running/1]).
 
 %% create_tables/0 exported for helping embed RabbitMQ in or alongside
 %% other mnesia-using Erlang applications, such as ejabberd
@@ -134,7 +135,7 @@ prepare() ->
 init() ->
     ensure_mnesia_running(),
     ensure_mnesia_dir(),
-    {AllNodes, _, DiscNodes} = read_cluster_nodes_status(),
+    {AllNodes, DiscNodes, _} = read_cluster_nodes_status(),
     WantDiscNode = should_be_disc_node(DiscNodes),
     ok = init_db(AllNodes, WantDiscNode, WantDiscNode),
     %% We intuitively expect the global name server to be synced when
@@ -217,33 +218,30 @@ reset(Force) ->
         false -> ok
     end,
     Node = node(),
-    Nodes = all_clustered_nodes(),
     case Force of
         true ->
             ok;
         false ->
             ensure_mnesia_dir(),
             start_mnesia(),
-            %% Reconnecting so that we will get an up to date RunningNodes
-            RunningNodes =
-                try
-                    %% Force=true here so that reset still works when clustered
-                    %% with a node which is down
-                    {_, DiscNodes, _} = read_cluster_nodes_status(),
-                    ok = init_db(DiscNodes, should_be_disc_node(DiscNodes),
-                                 true),
-                    running_clustered_nodes()
-                after
-                    stop_mnesia()
-                end,
-            leave_cluster(Nodes, RunningNodes),
+            %% Reconnecting so that we will get an up to date nodes
+            try
+                {_, DiscNodes, _} = read_cluster_nodes_status(),
+                %% Force=true here so that reset still works when
+                %% clustered with a node which is down
+                ok = init_db(DiscNodes, should_be_disc_node(DiscNodes),
+                             true)
+            after
+                stop_mnesia()
+            end,
+            leave_cluster(),
             rabbit_misc:ensure_ok(mnesia:delete_schema([Node]),
                                   cannot_delete_schema)
     end,
     %% We need to make sure that we don't end up in a distributed Erlang system
     %% with nodes while not being in an Mnesia cluster with them. We don't
     %% handle that well.
-    [erlang:disconnect_node(N) || N <- Nodes],
+    [erlang:disconnect_node(N) || N <- all_clustered_nodes()],
     %% remove persisted messages and any other garbage we find
     ok = rabbit_file:recursive_delete(filelib:wildcard(dir() ++ "/*")),
     ok = write_cluster_nodes_status(initial_cluster_status()),
@@ -258,7 +256,6 @@ change_node_type(Type) ->
         true  -> ok
     end,
 
-    check_cluster_consistency(),
     DiscoveryNodes = all_clustered_nodes(),
     ClusterNodes =
         case discover_cluster(DiscoveryNodes) of
@@ -306,21 +303,40 @@ recluster(DiscoveryNode) ->
 
     ok.
 
+%% We proceed like this: try to remove the node locally. If mnesia is offline
+%% then we try to remove it remotely on some other node. If there are no other
+%% nodes running, then *if the current node is a disk node* we force-load mnesia
+%% and remove the node.
 remove_node(Node) ->
-    case mnesia:system_info(is_running) of
-        yes -> {atomic, ok} = mnesia:del_table_copy(schema, Node),
-               update_cluster_nodes_status(),
-               {_, []} = rpc:multicall(running_clustered_nodes(), rabbit_mnesia,
-                                       update_cluster_nodes_status, []);
-        no  -> start_mnesia(),
-               try
-                   [mnesia:force_load_table(T) || T <- rabbit_mnesia:table_names()],
-                   remove_node(Node)
-               after
-                   stop_mnesia()
-               end
-    end,
-    ok.
+    case remove_node_if_mnesia_running(Node) of
+        ok ->
+            ok;
+        {error, mnesia_not_running} ->
+            case remove_node_remotely(Node) of
+                ok ->
+                    ok;
+                {error, no_running_cluster_nodes} ->
+                    case is_disc_node() of
+                        false ->
+                            throw({error,
+                                   {removing_node_from_ram_node,
+                                    "There are no nodes running and this is a "
+                                    "RAM node"}});
+                        true ->
+                            start_mnesia(),
+                            try
+                                [mnesia:force_load_table(T) ||
+                                    T <- rabbit_mnesia:table_names()],
+                                remove_node(Node),
+                                ensure_mnesia_running()
+                            after
+                                stop_mnesia()
+                            end
+                    end
+            end;
+        {error, Reason} ->
+            throw({error, Reason})
+    end.
 
 %%----------------------------------------------------------------------------
 %% Queries
@@ -699,11 +715,11 @@ on_node_up(Node) ->
     end.
 
 on_node_down(Node) ->
-    update_cluster_nodes_status(),
     case is_only_disc_node(Node) of
         true  -> rabbit_log:info("only running disc node went down~n");
         false -> ok
-    end.
+    end,
+    update_cluster_nodes_status().
 
 %%--------------------------------------------------------------------
 %% Internal helpers
@@ -995,31 +1011,52 @@ create_local_table_copy(Tab, Type) ->
         end,
     ok.
 
-leave_cluster([], _) -> ok;
-leave_cluster(Nodes, RunningNodes0) ->
-    case RunningNodes0 -- [node()] of
-        [] -> ok;
+remove_node_if_mnesia_running(Node) ->
+    case mnesia:system_info(is_running) of
+        yes -> %% Deleting the the schema copy of the node will result in the
+               %% node being removed from the cluster, with that change being
+               %% propagated to all nodes
+               case mnesia:del_table_copy(schema, Node) of
+                   {atomic, ok} ->
+                       update_cluster_nodes_status(),
+                       {_, []} = rpc:multicall(running_clustered_nodes(),
+                                               rabbit_mnesia,
+                                               update_cluster_nodes_status, []),
+                       ok;
+                   {aborted, Reason} ->
+                       {error, {failed_to_remove_node, Node, Reason}}
+               end;
+        no  -> {error, mnesia_not_running}
+    end.
+
+leave_cluster() ->
+    remove_node_remotely(node()).
+
+remove_node_remotely(Removee) ->
+    case running_clustered_nodes() -- [Removee] of
+        [] ->
+            ok;
         RunningNodes ->
-            %% find at least one running cluster node and instruct it to remove
-            %% our schema copy which will in turn result in our node being
-            %% removed as a cluster node from the schema, with that change being
-            %% propagated to all nodes
             case lists:any(
                    fun (Node) ->
-                           case rpc:call(Node, mnesia, del_table_copy,
-                                         [schema, node()]) of
-                               {atomic, ok} -> true;
-                               {badrpc, nodedown} -> false;
-                               {aborted, {node_not_running, _}} -> false;
-                               {aborted, Reason} ->
-                                   throw({error, {failed_to_leave_cluster,
-                                                  Nodes, RunningNodes, Reason}})
+                           case rpc:call(Node, rabbit_mnesia,
+                                         remove_node_if_mnesia_running,
+                                         [Removee])
+                           of
+                               ok ->
+                                   true;
+                               {error, mnesia_not_running} ->
+                                   false;
+                               {error, Reason} ->
+                                   throw({error, Reason});
+                               {badrpc, nodedown} ->
+                                   false
                            end
                    end,
-                   RunningNodes) of
-                true -> ok;
-                false -> throw({error, {no_running_cluster_nodes,
-                                        Nodes, RunningNodes}})
+                   RunningNodes)
+            of
+                true  -> ok;
+                false -> {error, no_running_cluster_nodes}
             end
     end.
 
@@ -1032,6 +1069,7 @@ is_only_disc_node(Node) ->
     [Node] =:= Nodes.
 
 start_mnesia() ->
+    check_cluster_consistency(),
     rabbit_misc:ensure_ok(mnesia:start(), cannot_start_mnesia),
     ensure_mnesia_running().
 
@@ -1040,7 +1078,7 @@ stop_mnesia() ->
     ensure_mnesia_not_running().
 
 start_and_init_db(ClusterNodes, WantDiscNode, Force) ->
-    mnesia:start(),
+    start_mnesia(),
     try
         ok = init_db(ClusterNodes, WantDiscNode, Force)
     after
