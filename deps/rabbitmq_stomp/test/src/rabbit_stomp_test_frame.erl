@@ -62,6 +62,18 @@ parse_large_content_frame_with_nulls_test() ->
 parse_command_only_test() ->
     {ok, #stomp_frame{command = "COMMAND"}, _Rest} = parse("COMMAND\n\n\0").
 
+parse_ignore_empty_frames_test() ->
+    {ok, #stomp_frame{command = "COMMAND"}, _Rest} = parse("\0\0COMMAND\n\n\0").
+
+parse_heartbeat_interframe_test() ->
+    {ok, #stomp_frame{command = "COMMAND"}, _Rest} = parse("\nCOMMAND\n\n\0").
+
+parse_carriage_return_interframe_test() ->
+    {ok, #stomp_frame{command = "COMMAND"}, _Rest} = parse("\rCOMMAND\n\n\0").
+
+parse_carriage_return_mid_command_test() ->
+    {ok, #stomp_frame{command = "COMMAND"}, _Rest} = parse("COMM\rAND\n\n\0").
+
 parse_resume_mid_command_test() ->
     First = "COMM",
     Second = "AND\n\n\0",
