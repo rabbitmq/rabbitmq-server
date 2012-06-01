@@ -263,7 +263,7 @@ maybe_hipe_compile() ->
 
 hipe_compile() ->
     Count = length(?HIPE_WORTHY),
-    io:format("HiPE compiling:  |~s|~n                 |",
+    io:format("~nHiPE compiling:  |~s|~n                 |",
               [string:copies("-", Count)]),
     T1 = erlang:now(),
     PidMRefs = [spawn_monitor(fun () -> [begin
