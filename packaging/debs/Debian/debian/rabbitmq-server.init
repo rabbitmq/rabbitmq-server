@@ -137,24 +137,28 @@ restart_end() {
 start_stop_end() {
     case "$RETVAL" in
         0)
-            log_end_msg 0;;
+            [ -x /sbin/initctl ] && /sbin/initctl emit --no-wait "${NAME}-${1}"
+            log_end_msg 0
+            ;;
         3)
             log_warning_msg "${DESC} already ${1}"
-            log_end_msg 0;;
+            log_end_msg 0
+            ;;
         *)
             log_warning_msg "FAILED - check ${INIT_LOG_DIR}/startup_\{log, _err\}"
-            log_end_msg 1;;
+            log_end_msg 1
+            ;;
     esac
 }
 
 case "$1" in
     start)
-        log_daemon_msg "Starting ${DESC}" $NAME
+        log_daemon_msg "Starting ${DESC}:" $NAME
         start_rabbitmq
-        start_stop_end "started"
+        start_stop_end "running"
         ;;
     stop)
-        log_daemon_msg "Stopping ${DESC}" $NAME
+        log_daemon_msg "Stopping ${DESC}:" $NAME
         stop_rabbitmq
         start_stop_end "stopped"
         ;;
@@ -162,17 +166,17 @@ case "$1" in
         status_rabbitmq
         ;;
     rotate-logs)
-        log_action_begin_msg "Rotating log files for ${DESC} ${NAME}"
+        log_action_begin_msg "Rotating log files for ${DESC}: ${NAME}"
         rotate_logs_rabbitmq
         log_action_end_msg $RETVAL
         ;;
     force-reload|reload|restart)
-        log_daemon_msg "Restarting ${DESC}" $NAME
+        log_daemon_msg "Restarting ${DESC}:" $NAME
         restart_rabbitmq
         restart_end
         ;;
     try-restart)
-        log_daemon_msg "Restarting ${DESC}" $NAME
+        log_daemon_msg "Restarting ${DESC}:" $NAME
         restart_running_rabbitmq
         restart_end
         ;;
