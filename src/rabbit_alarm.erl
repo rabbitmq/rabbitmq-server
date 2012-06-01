@@ -162,17 +162,17 @@ maybe_alert(UpdateFun, Node, Source,
     end,
     State#alarms{alarmed_nodes = AN1}.
 
-alert_local(Alert, Alertees, _Source) ->
-    alert(Alertees, [Alert], fun erlang:'=:='/2).
+alert_local(Alert, Alertees, Source) ->
+    alert(Alertees, Source, Alert, fun erlang:'=:='/2).
 
 alert_remote(Alert, Alertees, Source) ->
-    alert(Alertees, [Source, Alert], fun erlang:'=/='/2).
+    alert(Alertees, Source, Alert, fun erlang:'=/='/2).
 
-alert(Alertees, AlertArg, NodeComparator) ->
+alert(Alertees, Source, Alert, NodeComparator) ->
     Node = node(),
     dict:fold(fun (Pid, {M, F, A}, ok) ->
                       case NodeComparator(Node, node(Pid)) of
-                          true  -> apply(M, F, A ++ [Pid] ++ AlertArg);
+                          true  -> apply(M, F, A ++ [Pid, Source, Alert]);
                           false -> ok
                       end
               end, ok, Alertees).
@@ -181,7 +181,7 @@ internal_register(Pid, {M, F, A} = HighMemMFA,
                   State = #alarms{alertees = Alertees}) ->
     _MRef = erlang:monitor(process, Pid),
     case dict:find(node(), State#alarms.alarmed_nodes) of
-        {ok, _Sources} -> apply(M, F, A ++ [Pid, true]);
+        {ok, Sources} -> [apply(M, F, A ++ [Pid, R, true]) || R <- Sources];
         error          -> ok
     end,
     NewAlertees = dict:store(Pid, HighMemMFA, Alertees),

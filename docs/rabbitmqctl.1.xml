@@ -720,7 +720,7 @@
         </varlistentry>
 
         <varlistentry>
-          <term><cmdsynopsis><command>list_user_permissions</command> <arg choice="opt">-p <replaceable>vhostpath</replaceable></arg> <arg choice="req"><replaceable>username</replaceable></arg></cmdsynopsis></term>
+          <term><cmdsynopsis><command>list_user_permissions</command> <arg choice="req"><replaceable>username</replaceable></arg></cmdsynopsis></term>
           <listitem>
             <variablelist>
               <varlistentry>
@@ -978,7 +978,8 @@
               </varlistentry>
               <varlistentry>
                 <term>type</term>
-                <listitem><para>The exchange type (one of [<command>direct</command>,
+                <listitem><para>The exchange type (such as
+                [<command>direct</command>,
                   <command>topic</command>, <command>headers</command>,
                   <command>fanout</command>]).</para></listitem>
               </varlistentry>

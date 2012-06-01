@@ -984,8 +984,6 @@ prioritise_call(Msg, _From, _State) ->
         info                                 -> 9;
         {info, _Items}                       -> 9;
         consumers                            -> 9;
-        {basic_consume, _, _, _, _, _, _}    -> 7;
-        {basic_cancel, _, _, _}              -> 7;
         stat                                 -> 7;
         _                                    -> 0
     end.
@@ -995,10 +993,6 @@ prioritise_cast(Msg, _State) ->
         delete_immediately                   -> 8;
         {set_ram_duration_target, _Duration} -> 8;
         {set_maximum_since_use, _Age}        -> 8;
-        {ack, _AckTags, _ChPid}              -> 7;
-        {reject, _AckTags, _Requeue, _ChPid} -> 7;
-        {notify_sent, _ChPid, _Credit}       -> 7;
-        {unblock, _ChPid}                    -> 7;
         {run_backing_queue, _Mod, _Fun}      -> 6;
         _                                    -> 0
     end.

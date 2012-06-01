@@ -93,21 +93,17 @@ if "!RABBITMQ_PLUGINS_DIR!"=="" (
 set RABBITMQ_EBIN_ROOT=!TDP0!..\ebin
 
 "!ERLANG_HOME!\bin\erl.exe" ^
--pa "!RABBITMQ_EBIN_ROOT!" ^
--noinput -hidden ^
--s rabbit_prelaunch ^
--sname rabbitmqprelaunch!RANDOM! ^
--extra "!RABBITMQ_ENABLED_PLUGINS_FILE:\=/!" ^
-       "!RABBITMQ_PLUGINS_DIR:\=/!" ^
-       "!RABBITMQ_PLUGINS_EXPAND_DIR:\=/!" ^
-       "!RABBITMQ_NODENAME!"
+        -pa "!RABBITMQ_EBIN_ROOT!" ^
+        -noinput -hidden ^
+        -s rabbit_prelaunch ^
+        -sname rabbitmqprelaunch!RANDOM! ^
+        -extra "!RABBITMQ_NODENAME!"
 
-set RABBITMQ_BOOT_FILE=!RABBITMQ_PLUGINS_EXPAND_DIR!\rabbit
 if ERRORLEVEL 1 (
     exit /B 1
 )
 
-set RABBITMQ_EBIN_PATH=
+set RABBITMQ_EBIN_PATH="-pa !RABBITMQ_EBIN_ROOT!"
 
 if "!RABBITMQ_CONFIG_FILE!"=="" (
     set RABBITMQ_CONFIG_FILE=!RABBITMQ_BASE!\rabbitmq
@@ -127,9 +123,10 @@ if not "!RABBITMQ_NODE_IP_ADDRESS!"=="" (
 )
 
 "!ERLANG_HOME!\bin\erl.exe" ^
-!RABBITMQ_EBIN_PATH! ^
+-pa "!RABBITMQ_EBIN_ROOT!" ^
 -noinput ^
--boot "!RABBITMQ_BOOT_FILE!" ^
+-boot start_sasl ^
+-s rabbit boot ^
 !RABBITMQ_CONFIG_ARG! ^
 -sname !RABBITMQ_NODENAME! ^
 +W w ^
@@ -142,6 +139,9 @@ if not "!RABBITMQ_NODE_IP_ADDRESS!"=="" (
 -sasl sasl_error_logger false ^
 -rabbit error_logger {file,\""!LOGS:\=/!"\"} ^
 -rabbit sasl_error_logger {file,\""!SASL_LOGS:\=/!"\"} ^
+-rabbit enabled_plugins_file \""!RABBITMQ_ENABLED_PLUGINS_FILE:\=/!"\" ^
+-rabbit plugins_dir \""!RABBITMQ_PLUGINS_DIR:\=/!"\" ^
+-rabbit plugins_expand_dir \""!RABBITMQ_PLUGINS_EXPAND_DIR:\=/!"\" ^
 -os_mon start_cpu_sup false ^
 -os_mon start_disksup false ^
 -os_mon start_memsup false ^
