@@ -68,11 +68,11 @@ parse_ignore_empty_frames_test() ->
 parse_heartbeat_interframe_test() ->
     {ok, #stomp_frame{command = "COMMAND"}, _Rest} = parse("\nCOMMAND\n\n\0").
 
-parse_carriage_return_interframe_test() ->
-    {ok, #stomp_frame{command = "COMMAND"}, _Rest} = parse("\rCOMMAND\n\n\0").
+parse_carriage_return_not_ignored_interframe_test() ->
+    {ok, #stomp_frame{command = "\rCOMMAND"}, _Rest} = parse("\rCOMMAND\n\n\0").
 
 parse_carriage_return_mid_command_test() ->
-    {ok, #stomp_frame{command = "COMMAND"}, _Rest} = parse("COMM\rAND\n\n\0").
+    {ok, #stomp_frame{command = "COMM\rAND"}, _Rest} = parse("COMM\rAND\n\n\0").
 
 parse_resume_mid_command_test() ->
     First = "COMM",
