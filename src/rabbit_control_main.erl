@@ -490,8 +490,12 @@ wait_for_process_death(Pid) ->
 read_pid_file(PidFile, Wait) ->
     case {file:read_file(PidFile), Wait} of
         {{ok, Bin}, _} ->
-            S = re:replace(Bin, "\\s", "", [global, {return, list}]),
-            try list_to_integer(S)
+            S = binary_to_list(Bin),
+            Spid = case string:words(S) > 1 of
+                       true  -> string:sub_word(S, 1);
+                       false -> string:strip(binary_to_list(Bin), right, $\n)
+                   end,
+            try list_to_integer(Spid)
             catch error:badarg ->
                     exit({error, {garbage_in_pid_file, PidFile}})
             end,
