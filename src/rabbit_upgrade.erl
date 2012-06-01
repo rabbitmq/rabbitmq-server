@@ -218,7 +218,7 @@ secondary_upgrade(AllNodes) ->
     rabbit_misc:ensure_ok(mnesia:delete_schema([node()]),
                           cannot_delete_schema),
     rabbit_misc:ensure_ok(mnesia:start(), cannot_start_mnesia),
-    ok = rabbit_mnesia:init_db(AllNodes, IsDiscNode, true, false),
+    ok = rabbit_mnesia:init_db(AllNodes, IsDiscNode, true),
     ok = rabbit_version:record_desired_for_scope(mnesia),
     ok.
 
