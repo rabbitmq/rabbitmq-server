@@ -210,6 +210,7 @@ join_cluster(DiscoveryNode, WantDiscNode) ->
 
     %% Join the cluster
     ok = init_db_and_upgrade(DiscNodes, WantDiscNode, false),
+    stop_mnesia(),
 
     ok.
 
@@ -289,6 +290,7 @@ change_node_type(Type) ->
                    end,
 
     ok = init_db_and_upgrade(ClusterNodes, WantDiscNode, false),
+    stop_mnesia(),
 
     ok.
 
@@ -313,6 +315,7 @@ recluster(DiscoveryNode) ->
                          "The nodes provided do not have this node as part of "
                          "the cluster"}})
     end,
+    stop_mnesia(),
 
     ok.
 
@@ -1007,6 +1010,7 @@ remove_node_if_mnesia_running(Node) ->
                case mnesia:del_table_copy(schema, Node) of
                    {atomic, ok} ->
                        update_cluster_nodes_status(),
+                       io:format("nodes: ~p~n", [running_clustered_disc_nodes()]),
                        {_, []} = rpc:multicall(running_clustered_nodes(),
                                                rabbit_mnesia,
                                                update_cluster_nodes_status, []),
