@@ -511,8 +511,7 @@ read_pid_file(PidFile, Wait) ->
 % rpc:call(os, getpid, []) at this point
 process_up(Pid) ->
     with_os([{unix, fun () ->
-                            system("ps -p " ++ Pid
-                                   ++ " >/dev/null 2>&1") =:= 0
+                            system("ps -p " ++ Pid) =:= 0
                     end},
              {win32, fun () ->
                              Res = os:cmd("tasklist /nh /fi \"pid eq " ++
@@ -532,13 +531,16 @@ with_os(Handlers) ->
 
 % Like system(3)
 system(Cmd) ->
-    ShCmd = "sh -c '" ++ escape_quotes(Cmd) ++ "'",
-    Port = erlang:open_port({spawn, ShCmd}, [exit_status,nouse_stdio]),
-    receive {Port, {exit_status, Status}} -> Status end.
+    Port = erlang:open_port({spawn, Cmd},
+                            [exit_status,{line, 16384},
+                             use_stdio, stderr_to_stdout]),
+    exit_loop(Port).
 
-% Escape the quotes in a shell command so that it can be used in "sh -c 'cmd'"
-escape_quotes(Cmd) ->
-    lists:flatten(lists:map(fun ($') -> "'\\''"; (Ch) -> Ch end, Cmd)).
+exit_loop(Port) ->
+    receive
+        {Port, {exit_status, Rc}} -> Rc;
+        {Port, _}                 -> exit_loop(Port)
+    end.
 
 format_parse_error({_Line, Mod, Err}) ->
     lists:flatten(Mod:format_error(Err)).
