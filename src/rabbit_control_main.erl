@@ -511,7 +511,7 @@ read_pid_file(PidFile, Wait) ->
 % rpc:call(os, getpid, []) at this point
 process_up(Pid) ->
     with_os([{unix, fun () ->
-                            system("ps -p " ++ Pid) =:= 0
+                            run_ps(Pid) =:= 0
                     end},
              {win32, fun () ->
                              Res = os:cmd("tasklist /nh /fi \"pid eq " ++
@@ -529,9 +529,8 @@ with_os(Handlers) ->
         Handler   -> Handler()
     end.
 
-% Like system(3)
-system(Cmd) ->
-    Port = erlang:open_port({spawn, Cmd},
+run_ps(Pid) ->
+    Port = erlang:open_port({spawn, "ps -p " ++ Pid},
                             [exit_status,{line, 16384},
                              use_stdio, stderr_to_stdout]),
     exit_loop(Port).
