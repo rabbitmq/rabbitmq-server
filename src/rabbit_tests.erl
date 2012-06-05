@@ -1821,7 +1821,7 @@ on_disk_capture(OnDisk, Awaiting, Pid) ->
                             Pid);
         stop ->
             done
-    after (case Awaiting of [] -> 200; _ -> 1000 end) ->
+    after (case Awaiting of [] -> 200; _ -> 5000 end) ->
             case Awaiting of
                 [] -> Pid ! {self(), arrived}, on_disk_capture();
                 _  -> Pid ! {self(), timeout}
