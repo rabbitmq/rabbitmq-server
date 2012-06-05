@@ -493,13 +493,13 @@ read_pid_file(PidFile, Wait) ->
             S = binary_to_list(Bin),
             Spid = case string:words(S) > 1 of
                        true  -> string:sub_word(S, 1);
-                       false -> string:strip(binary_to_list(Bin), right, $\n)
+                       false -> string:strip(S, right, $\n)
                    end,
             try list_to_integer(Spid)
             catch error:badarg ->
                     exit({error, {garbage_in_pid_file, PidFile}})
             end,
-            S;
+            Spid;
         {{error, enoent}, true} ->
             timer:sleep(?EXTERNAL_CHECK_INTERVAL),
             read_pid_file(PidFile, Wait);
