@@ -531,7 +531,7 @@ with_os(Handlers) ->
 
 run_ps(Pid) ->
     Port = erlang:open_port({spawn, "ps -p " ++ Pid},
-                            [exit_status,{line, 16384},
+                            [exit_status, {line, 16384},
                              use_stdio, stderr_to_stdout]),
     exit_loop(Port).
 
