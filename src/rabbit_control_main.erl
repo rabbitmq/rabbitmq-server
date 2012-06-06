@@ -491,10 +491,8 @@ read_pid_file(PidFile, Wait) ->
     case {file:read_file(PidFile), Wait} of
         {{ok, Bin}, _} ->
             S = binary_to_list(Bin),
-            PidS = case string:words(S) > 1 of
-                       true  -> string:sub_word(S, 1);
-                       false -> string:strip(S, right, $\n)
-                   end,
+            {match, [PidS]} = re:run(S, "[^\\s]+",
+                                     [{capture, all, list}]),
             try list_to_integer(PidS)
             catch error:badarg ->
                     exit({error, {garbage_in_pid_file, PidFile}})
