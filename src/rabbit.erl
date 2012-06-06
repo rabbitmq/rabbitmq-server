@@ -644,12 +644,19 @@ force_event_refresh() ->
 %% misc
 
 log_broker_started([]) ->
-    error_logger:info_msg("Server startup complete~n", []),
-    io:format("~nBroker running~n");
+    rabbit_misc:with_local_io(
+      fun() ->
+              error_logger:info_msg("Server startup complete~n", []),
+              io:format("~nBroker running~n")
+      end);
 log_broker_started(Plugins) ->
-    error_logger:info_msg("Server startup complete; plugins are:~n~n~p~n",
-                          [Plugins]),
-    io:format("~nBroker running with ~p plugins.~n", [length(Plugins)]).
+    rabbit_misc:with_local_io(
+      fun() ->
+              error_logger:info_msg(
+                "Server startup complete; plugins are:~n~n~p~n", [Plugins]),
+              io:format("~nBroker running with ~p plugins.~n",
+                        [length(Plugins)])
+      end).
 
 erts_version_check() ->
     FoundVer = erlang:system_info(version),
