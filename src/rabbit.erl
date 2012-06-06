@@ -678,7 +678,6 @@ log_banner() ->
     {ok, Product} = application:get_key(id),
     {ok, Version} = application:get_key(vsn),
     Settings = [{"node",           node()},
-                {"app descriptor", app_location()},
                 {"home dir",       home_dir()},
                 {"config file(s)", config_files()},
                 {"cookie hash",    rabbit_nodes:cookie_hash()},
@@ -705,10 +704,6 @@ log_banner() ->
                             Format(K, V)
                     end || S <- Settings]),
     error_logger:info_msg("~s~n", [Banner]).
-
-app_location() ->
-    {ok, Application} = application:get_application(),
-    filename:absname(code:where_is_file(atom_to_list(Application) ++ ".app")).
 
 home_dir() ->
     case init:get_argument(home) of
