@@ -252,6 +252,9 @@
 
 %%----------------------------------------------------------------------------
 
+%% HiPE compilation happens before we have log handlers - so we have
+%% to io:format/2, it's all we can do.
+
 maybe_hipe_compile() ->
     {ok, Want} = application:get_env(rabbit, hipe_compile),
     Can = code:which(hipe) =/= non_existing,
@@ -302,7 +305,7 @@ start() ->
                      ok = ensure_application_loaded(),
                      ok = ensure_working_log_handlers(),
                      ok = app_utils:start_applications(app_startup_order()),
-                     ok = print_plugin_info(rabbit_plugins:active())
+                     ok = log_broker_started(rabbit_plugins:active())
              end).
 
 boot() ->
@@ -317,7 +320,7 @@ boot() ->
                      StartupApps = app_utils:app_dependency_order(ToBeLoaded,
                                                                   false),
                      ok = app_utils:start_applications(StartupApps),
-                     ok = print_plugin_info(Plugins)
+                     ok = log_broker_started(Plugins)
              end).
 
 start_it(StartFun) ->
@@ -402,8 +405,8 @@ start(normal, []) ->
             {ok, SupPid} = rabbit_sup:start_link(),
             true = register(rabbit, self()),
             print_banner(),
+            log_banner(),
             [ok = run_boot_step(Step) || Step <- boot_steps()],
-            io:format("~nbroker running~n"),
             {ok, SupPid};
         Error ->
             Error
@@ -433,22 +436,16 @@ app_shutdown_order() ->
 %%---------------------------------------------------------------------------
 %% boot step logic
 
-run_boot_step({StepName, Attributes}) ->
-    Description = case lists:keysearch(description, 1, Attributes) of
-                      {value, {_, D}} -> D;
-                      false           -> StepName
-                  end,
+run_boot_step({_StepName, Attributes}) ->
     case [MFA || {mfa, MFA} <- Attributes] of
         [] ->
-            io:format("-- ~s~n", [Description]);
+            ok;
         MFAs ->
-            io:format("starting ~-60s ...", [Description]),
             [try
                  apply(M,F,A)
              catch
                  _:Reason -> boot_step_error(Reason, erlang:get_stacktrace())
              end || {M,F,A} <- MFAs],
-            io:format("done~n"),
             ok
     end.
 
@@ -646,23 +643,13 @@ force_event_refresh() ->
 %%---------------------------------------------------------------------------
 %% misc
 
-print_plugin_info([]) ->
-    ok;
-print_plugin_info(Plugins) ->
-    %% This gets invoked by rabbitmqctl start_app, outside the context
-    %% of the rabbit application
-    rabbit_misc:with_local_io(
-      fun() ->
-              io:format("~n-- plugins running~n"),
-              [print_plugin_info(
-                 AppName, element(2, application:get_key(AppName, vsn)))
-               || AppName <- Plugins],
-              ok
-      end).
-
-print_plugin_info(Plugin, Vsn) ->
-    Len = 76 - length(Vsn),
-    io:format("~-" ++ integer_to_list(Len) ++ "s ~s~n", [Plugin, Vsn]).
+log_broker_started([]) ->
+    error_logger:info_msg("Server startup complete~n", []),
+    io:format("~nBroker running~n");
+log_broker_started(Plugins) ->
+    error_logger:info_msg("Server startup complete; plugins are:~n~n~p~n",
+                          [Plugins]),
+    io:format("~nBroker running with ~p plugins.~n", [length(Plugins)]).
 
 erts_version_check() ->
     FoundVer = erlang:system_info(version),
@@ -675,23 +662,14 @@ erts_version_check() ->
 print_banner() ->
     {ok, Product} = application:get_key(id),
     {ok, Version} = application:get_key(vsn),
-    ProductLen = string:len(Product),
-    io:format("~n"
-              "+---+   +---+~n"
-              "|   |   |   |~n"
-              "|   |   |   |~n"
-              "|   |   |   |~n"
-              "|   +---+   +-------+~n"
-              "|                   |~n"
-              "| ~s  +---+   |~n"
-              "|           |   |   |~n"
-              "| ~s  +---+   |~n"
-              "|                   |~n"
-              "+-------------------+~n"
-              "~s~n~s~n~s~n~n",
-              [Product, string:right([$v|Version], ProductLen),
-               ?PROTOCOL_VERSION,
-               ?COPYRIGHT_MESSAGE, ?INFORMATION_MESSAGE]),
+    io:format("~n~s ~s. ~s~n~s~n~n",
+              [Product, Version, ?COPYRIGHT_MESSAGE, ?INFORMATION_MESSAGE]),
+    io:format("Logs: ~s~n      ~s~n", [log_location(kernel),
+                                       log_location(sasl)]).
+
+log_banner() ->
+    {ok, Product} = application:get_key(id),
+    {ok, Version} = application:get_key(vsn),
     Settings = [{"node",           node()},
                 {"app descriptor", app_location()},
                 {"home dir",       home_dir()},
@@ -700,20 +678,26 @@ print_banner() ->
                 {"log",            log_location(kernel)},
                 {"sasl log",       log_location(sasl)},
                 {"database dir",   rabbit_mnesia:dir()},
-                {"erlang version", erlang:system_info(version)}],
+                {"erlang version", erlang:system_info(otp_release)}],
     DescrLen = 1 + lists:max([length(K) || {K, _V} <- Settings]),
     Format = fun (K, V) ->
-                     io:format("~-" ++ integer_to_list(DescrLen) ++ "s: ~s~n",
-                               [K, V])
+                     rabbit_misc:format(
+                       "~-" ++ integer_to_list(DescrLen) ++ "s: ~s~n", [K, V])
              end,
-    lists:foreach(fun ({"config file(s)" = K, []}) ->
-                          Format(K, "(none)");
-                      ({"config file(s)" = K, [V0 | Vs]}) ->
-                          Format(K, V0), [Format("", V) || V <- Vs];
-                      ({K, V}) ->
-                          Format(K, V)
-                  end, Settings),
-    io:nl().
+    Banner = iolist_to_binary(
+               rabbit_misc:format(
+                 "~s ~s~n~s~n~s~n~s~n",
+                 [Product, Version, ?PROTOCOL_VERSION, ?COPYRIGHT_MESSAGE,
+                  ?INFORMATION_MESSAGE]) ++
+                   [case S of
+                        {"config file(s)" = K, []} ->
+                            Format(K, "(none)");
+                        {"config file(s)" = K, [V0 | Vs]} ->
+                            Format(K, V0), [Format("", V) || V <- Vs];
+                        {K, V} ->
+                            Format(K, V)
+                    end || S <- Settings]),
+    error_logger:info_msg("~s~n", [Banner]).
 
 app_location() ->
     {ok, Application} = application:get_application(),
