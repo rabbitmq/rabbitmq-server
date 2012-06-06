@@ -199,7 +199,8 @@
          rabbit_queue_index, gen, dict, ordsets, file_handle_cache,
          rabbit_msg_store, array, rabbit_msg_store_ets_index, rabbit_msg_file,
          rabbit_exchange_type_fanout, rabbit_exchange_type_topic, mnesia,
-         mnesia_lib, rpc, mnesia_tm, qlc, sofs, proplists, credit_flow, pmon]).
+         mnesia_lib, rpc, mnesia_tm, qlc, sofs, proplists, credit_flow, pmon,
+         ssl_connection, ssl_record, gen_fsm, ssl]).
 
 %% HiPE compilation uses multiple cores anyway, but some bits are
 %% IO-bound so we can go faster if we parallelise a bit more. In
@@ -263,7 +264,7 @@ maybe_hipe_compile() ->
 
 hipe_compile() ->
     Count = length(?HIPE_WORTHY),
-    io:format("HiPE compiling:  |~s|~n                 |",
+    io:format("~nHiPE compiling:  |~s|~n                 |",
               [string:copies("-", Count)]),
     T1 = erlang:now(),
     PidMRefs = [spawn_monitor(fun () -> [begin
@@ -409,6 +410,7 @@ start(normal, []) ->
     end.
 
 stop(_State) ->
+    ok = rabbit_mnesia:update_cluster_nodes_status(),
     terminated_ok = error_logger:delete_report_handler(rabbit_error_logger),
     ok = rabbit_alarm:stop(),
     ok = case rabbit_mnesia:is_clustered() of

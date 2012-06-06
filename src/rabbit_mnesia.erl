@@ -41,8 +41,9 @@
          empty_ram_only_tables/0,
          copy_db/1,
          wait_for_tables/0,
+         update_cluster_nodes_status/0,
 
-         on_node_up/1,
+         on_node_up/2,
          on_node_down/1
         ]).
 
@@ -65,7 +66,8 @@
 -export_type([node_type/0]).
 
 -type(node_type() :: disc | ram).
--type(node_status() :: {[node()], [node()], [node()]}).
+-type(node_status() :: {[ordsets:ordset(node())], [ordsets:ordset(node())],
+                        [ordsets:ordset(node())]}).
 
 %% Main interface
 -spec(prepare/0 :: () -> 'ok').
@@ -95,9 +97,10 @@
 -spec(create_tables/0 :: () -> 'ok').
 -spec(copy_db/1 :: (file:filename()) ->  rabbit_types:ok_or_error(any())).
 -spec(wait_for_tables/1 :: ([atom()]) -> 'ok').
+-spec(update_cluster_nodes_status/0 :: () -> 'ok').
 
 %% Hooks used in `rabbit_node_monitor'
--spec(on_node_up/1 :: (node()) -> 'ok').
+-spec(on_node_up/2 :: (node(), boolean()) -> 'ok').
 -spec(on_node_down/1 :: (node()) -> 'ok').
 
 %% Functions used in internal rpc calls
@@ -409,9 +412,9 @@ running_clustered_disc_nodes() ->
 cluster_status_if_running() ->
     case mnesia:system_info(is_running) of
         no  -> error;
-        yes -> {ok, {mnesia:system_info(db_nodes),
-                     mnesia:table_info(schema, disc_copies),
-                     mnesia:system_info(running_db_nodes)}}
+        yes -> {ok, {ordsets:from_list(mnesia:system_info(db_nodes)),
+                     ordsets:from_list(mnesia:table_info(schema, disc_copies)),
+                     ordsets:from_list(mnesia:system_info(running_db_nodes))}}
     end.
 
 node_info() ->
@@ -703,8 +706,16 @@ update_cluster_nodes_status() ->
 %% Hooks for `rabbit_node_monitor'
 %%--------------------------------------------------------------------
 
-on_node_up(Node) ->
-    update_cluster_nodes_status(),
+on_node_up(Node, IsDiscNode) ->
+    {ok, _} = rabbit_file:map_term_file(
+                fun ([{AllNodes, DiscNodes, RunningNodes}]) ->
+                        [{ordsets:add_element(Node, AllNodes),
+                          case IsDiscNode of
+                              true  -> ordsets:add_element(Node, DiscNodes);
+                              false -> DiscNodes
+                          end,
+                          ordsets:add_element(Node, RunningNodes)}]
+                end, cluster_nodes_status_filename()),
     case is_only_disc_node(Node) of
         true  -> rabbit_log:info("cluster contains disc nodes again~n");
         false -> ok
@@ -715,7 +726,13 @@ on_node_down(Node) ->
         true  -> rabbit_log:info("only running disc node went down~n");
         false -> ok
     end,
-    update_cluster_nodes_status().
+    {ok, _} = rabbit_file:map_term_file(
+                fun ([{AllNodes, DiscNodes, RunningNodes}]) ->
+                        [{ordsets:del_element(Node, AllNodes),
+                          ordsets:del_element(Node, DiscNodes),
+                          ordsets:del_element(Node, RunningNodes)}]
+                end, cluster_nodes_status_filename()),
+    ok.
 
 %%--------------------------------------------------------------------
 %% Internal helpers
@@ -1009,11 +1026,9 @@ remove_node_if_mnesia_running(Node) ->
                %% propagated to all nodes
                case mnesia:del_table_copy(schema, Node) of
                    {atomic, ok} ->
-                       update_cluster_nodes_status(),
-                       io:format("nodes: ~p~n", [running_clustered_disc_nodes()]),
+                       on_node_down(Node),
                        {_, []} = rpc:multicall(running_clustered_nodes(),
-                                               rabbit_mnesia,
-                                               update_cluster_nodes_status, []),
+                                               rabbit_mnesia, on_node_down, [Node]),
                        ok;
                    {aborted, Reason} ->
                        {error, {failed_to_remove_node, Node, Reason}}

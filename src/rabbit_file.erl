@@ -19,7 +19,8 @@
 -include_lib("kernel/include/file.hrl").
 
 -export([is_file/1, is_dir/1, file_size/1, ensure_dir/1, wildcard/2, list_dir/1]).
--export([read_term_file/1, write_term_file/2, write_file/2, write_file/3]).
+-export([read_term_file/1, write_term_file/2, map_term_file/2, write_file/2,
+         write_file/3]).
 -export([append_file/2, ensure_parent_dirs_exist/1]).
 -export([rename/2, delete/1, recursive_delete/1, recursive_copy/2]).
 -export([lock_file/1]).
@@ -40,6 +41,9 @@
 -spec(read_term_file/1 ::
         (file:filename()) -> {'ok', [any()]} | rabbit_types:error(any())).
 -spec(write_term_file/2 :: (file:filename(), [any()]) -> ok_or_error()).
+-spec(map_term_file/2 ::
+        (fun(([any()]) -> [any()]), file:filename())
+        -> {'ok', [any()]} | rabbit_types:error(any())).
 -spec(write_file/2 :: (file:filename(), iodata()) -> ok_or_error()).
 -spec(write_file/3 :: (file:filename(), iodata(), [any()]) -> ok_or_error()).
 -spec(append_file/2 :: (file:filename(), string()) -> ok_or_error()).
@@ -107,18 +111,13 @@ with_fhc_handle(Fun) ->
     after ok = file_handle_cache:release()
     end.
 
-read_term_file(File) ->
-    try
-        {ok, Data} = with_fhc_handle(fun () -> prim_file:read_file(File) end),
-        {ok, Tokens, _} = erl_scan:string(binary_to_list(Data)),
-        TokenGroups = group_tokens(Tokens),
-        {ok, [begin
-                  {ok, Term} = erl_parse:parse_term(Tokens1),
-                  Term
-              end || Tokens1 <- TokenGroups]}
-    catch
-        error:{badmatch, Error} -> Error
-    end.
+binary_to_terms(Data) ->
+    {ok, Tokens, _} = erl_scan:string(binary_to_list(Data)),
+    TokenGroups = group_tokens(Tokens),
+    [begin
+         {ok, Term} = erl_parse:parse_term(Tokens1),
+         Term
+     end || Tokens1 <- TokenGroups].
 
 group_tokens(Ts) -> [lists:reverse(G) || G <- group_tokens([], Ts)].
 
@@ -127,9 +126,27 @@ group_tokens(Cur, [])                   -> [Cur];
 group_tokens(Cur, [T = {dot, _} | Ts])  -> [[T | Cur] | group_tokens([], Ts)];
 group_tokens(Cur, [T | Ts])             -> group_tokens([T | Cur], Ts).
 
+read_term_file(File) ->
+    try
+        {ok, Data} = with_fhc_handle(fun () -> prim_file:read_file(File) end),
+        {ok, binary_to_terms(Data)}
+    catch
+        error:{badmatch, Error} -> Error
+    end.
+
 write_term_file(File, Terms) ->
     write_file(File, list_to_binary([io_lib:format("~w.~n", [Term]) ||
                                         Term <- Terms])).
+
+map_term_file(Fun, File) ->
+    try
+        with_fhc_handle(fun () ->
+                                {ok, Data} = prim_file:read_file(File),
+                                {ok, Fun(binary_to_terms(Data))}
+                        end)
+    catch
+        error:{badmatch, Error} -> Error
+    end.
 
 write_file(Path, Data) -> write_file(Path, Data, []).
 
