@@ -91,7 +91,7 @@ federate(X) ->
         {error, _} -> false
     end.
 
-maybe_start(X = #exchange{name = XName})->
+maybe_start(X)->
     case federate(X) of
         true  -> ok = rabbit_federation_db:prune_scratch(X),
                  {ok, _} = rabbit_federation_link_sup_sup:start_child(X),
