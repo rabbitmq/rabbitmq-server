@@ -14,7 +14,7 @@
 %% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
--module(rabbit_exchange_type).
+-module(rabbit_exchange_decorator).
 
 -ifdef(use_specs).
 
@@ -27,15 +27,7 @@
 %% delivered to an individual exchange can be serialised? (they
 %% might still be delivered out of order, but there'll be a
 %% serial number).
--callback serialise_events() -> boolean().
-
-%% The no_return is there so that we can have an "invalid" exchange
-%% type (see rabbit_exchange_type_invalid).
--callback route(rabbit_types:exchange(), rabbit_types:delivery()) ->
-    rabbit_router:match_result().
-
-%% called BEFORE declaration, to check args etc; may exit with #amqp_error{}
--callback validate(rabbit_types:exchange()) -> 'ok'.
+-callback serialise_events(rabbit_types:exchange()) -> boolean().
 
 %% called after declaration and recovery
 -callback create(tx(), rabbit_types:exchange()) -> 'ok'.
@@ -52,12 +44,6 @@
 -callback remove_bindings(serial(), rabbit_types:exchange(),
                           [rabbit_types:binding()]) -> 'ok'.
 
-%% called when comparing exchanges for equivalence - should return ok or
-%% exit with #amqp_error{}
--callback assert_args_equivalence (rabbit_types:exchange(),
-                                   rabbit_framing:amqp_table()) ->
-    'ok' | rabbit_types:connection_exit().
-
 %% called when the policy attached to this exchange changes.
 -callback policy_changed (
             serial(), rabbit_types:exchange(), rabbit_types:exchange()) -> 'ok'.
@@ -67,9 +53,8 @@
 -export([behaviour_info/1]).
 
 behaviour_info(callbacks) ->
-    [{description, 0}, {serialise_events, 0}, {route, 2}, {validate, 1},
-     {create, 2}, {delete, 3}, {add_binding, 3}, {remove_bindings, 3},
-     {assert_args_equivalence, 2}, {policy_changed, 3}];
+    [{description, 0}, {serialise_events, 1}, {create, 2}, {delete, 3},
+     {add_binding, 3}, {remove_bindings, 3}, {policy_changed, 3}];
 behaviour_info(_Other) ->
     undefined.
 
