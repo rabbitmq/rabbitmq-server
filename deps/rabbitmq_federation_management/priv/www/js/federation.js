@@ -19,7 +19,7 @@ dispatcher_add(function(sammy) {
     sammy.put('#/fed-parameters', function() {
             var num_keys = ['expires', 'message_ttl', 'max_hops',
                             'prefetch_count', 'reconnect_delay'];
-            put_parameter(this, num_keys);
+            put_parameter(this, [], num_keys);
             return false;
         });
     sammy.del('#/fed-parameters', function() {
