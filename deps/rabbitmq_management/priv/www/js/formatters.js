@@ -210,6 +210,10 @@ function fmt_exchange_type(type) {
         '</acronym></div>';
 }
 
+function fmt_policy(policy) {
+    return policy == 'none' ? '' : fmt_escape_html(policy);
+}
+
 function fmt_exchange_url(name) {
     return name == '' ? 'amq.default' : fmt_escape_html(name);
 }
@@ -453,6 +457,10 @@ function link_user(name) {
 
 function link_node(name) {
     return _link_to(fmt_escape_html(name), '#/nodes/' + esc(name))
+}
+
+function link_policy(name) {
+    return _link_to(fmt_escape_html(name), '#/policies/' + esc(name))
 }
 
 function _link_to(name, url) {

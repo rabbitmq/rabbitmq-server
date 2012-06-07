@@ -153,6 +153,21 @@ dispatcher_add(function(sammy) {
                 update();
             return false;
         });
+    path('#/policies', {'policies': '/parameters/policy'}, 'policies');
+    sammy.get('#/policies/:id', function() {
+            render({'policy': '/parameters/policy/' + esc(this.params['id'])},
+                'policy', '#/policies');
+        });
+    sammy.put('#/policies', function() {
+            put_parameter(this, ['prefix'], []);
+            return false;
+        });
+    sammy.del('#/policies', function() {
+            if (sync_delete(this, '/parameters/:component/:key'))
+                go_to('#/policies');
+            return false;
+        });
+
     sammy.get('#/import-succeeded', function() {
             render({}, 'import-succeeded', '#/overview');
         });

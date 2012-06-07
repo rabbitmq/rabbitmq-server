@@ -12,6 +12,10 @@
         <th>Parameters</th>
         <td><%= fmt_parameters(exchange) %></td>
       </tr>
+      <tr>
+        <th>Policy</th>
+        <td><%= fmt_policy(exchange.policy) %></td>
+      </tr>
 <% if (vhosts_interesting) { %>
       <tr>
         <th>Virtual host</th>
