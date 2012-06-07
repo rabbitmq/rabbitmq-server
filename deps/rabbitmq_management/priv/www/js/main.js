@@ -609,7 +609,8 @@ function collapse_multifields(params0) {
     for (key in params0) {
         var match = key.match(/([a-z]*)_([0-9]*)_mfkey/);
         var match2 = key.match(/[a-z]*_[0-9]*_mfvalue/);
-        if (match == null && match2 == null) {
+        var match3 = key.match(/[a-z]*_[0-9]*_mftype/);
+        if (match == null && match2 == null && match3 == null) {
             params[key] = params0[key];
         }
         else if (match == null) {
