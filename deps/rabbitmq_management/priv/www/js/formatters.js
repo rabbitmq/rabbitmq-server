@@ -260,10 +260,14 @@ function fmt_amqp_value(val) {
         return val2.join("<br/>");
     } else if (val instanceof Object) {
         return fmt_table_short(val);
-    } else if (typeof(val) == 'string') {
-        return fmt_escape_html(val);
     } else {
-        return val;
+        var t = typeof(val);
+        if (t == 'string') {
+            return '<acronym class="type" title="string">' +
+                fmt_escape_html(val) + '</acronym>';
+        } else {
+            return '<acronym class="type" title="' + t + '">' + val + '</acronym>';
+        }
     }
 }
 

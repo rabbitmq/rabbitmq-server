@@ -240,12 +240,15 @@ to_amqp_table_row(K, V) ->
 to_amqp_array(L) ->
     [type_val(I) || I <- L].
 
-type_val({struct, M})         -> {table,   to_amqp_table(M)};
-type_val(L) when is_list(L)   -> {array,   to_amqp_array(L)};
-type_val(X) when is_binary(X) -> {longstr, X};
-type_val(X) when is_number(X) -> {long,    X};
-type_val(null)                -> throw({error, null_not_allowed});
-type_val(X)                   -> throw({error, {unhandled_type, X}}).
+type_val({struct, M})          -> {table,   to_amqp_table(M)};
+type_val(L) when is_list(L)    -> {array,   to_amqp_array(L)};
+type_val(X) when is_binary(X)  -> {longstr, X};
+type_val(X) when is_integer(X) -> {long,    X};
+type_val(X) when is_number(X)  -> {double,  X};
+type_val(true)                 -> {bool, true};
+type_val(false)                -> {bool, false};
+type_val(null)                 -> throw({error, null_not_allowed});
+type_val(X)                    -> throw({error, {unhandled_type, X}}).
 
 url(Fmt, Vals) ->
     print(Fmt, [mochiweb_util:quote_plus(V) || V <- Vals]).

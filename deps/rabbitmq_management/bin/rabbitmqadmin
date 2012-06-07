@@ -15,10 +15,14 @@
 #   The Initial Developer of the Original Code is VMware, Inc.
 #   Copyright (c) 2010-2012 VMware, Inc.  All rights reserved.
 
+import sys
+if sys.version_info[0] < 2 or sys.version_info[1] < 6:
+    print "Sorry, rabbitmqadmin requires at least Python 2.6."
+    sys.exit(1)
+
 from ConfigParser import ConfigParser
 from ConfigParser import Error as ConfigParserError
 from optparse import OptionParser, TitledHelpFormatter
-import sys
 import httplib
 import urllib
 import base64
@@ -289,7 +293,7 @@ def make_configuration():
         try:
             config.read(options.config)
             new_conf = dict(config.items(options.node))
-        except ConfigParserError as error:
+        except ConfigParserError, error:
             assert_usage(False, ("Could not read section '%s' in config file"  +
                          " '%s':\n   %s") %
                          (options.node, options.config, error))
@@ -378,7 +382,7 @@ class Management:
             headers["Content-Type"] = "application/json"
         try:
             conn.request(method, "/api%s" % path, body, headers)
-        except socket.error as e:
+        except socket.error, e:
             die("Could not connect: {0}".format(e))
         resp = conn.getresponse()
         if resp.status == 400:
@@ -443,15 +447,17 @@ class Management:
     def invoke_export(self):
         path = self.get_arg()
         definitions = self.get("/definitions")
-        with open(path, 'w') as f:
-            f.write(definitions)
+        f = open(path, 'w')
+        f.write(definitions)
+        f.close()
         self.verbose("Exported definitions for %s to \"%s\""
                      % (self.options.hostname, path))
 
     def invoke_import(self):
         path = self.get_arg()
-        with open(path, 'r') as f:
-            definitions = f.read()
+        f = open(path, 'r')
+        definitions = f.read()
+        f.close()
         self.post("/definitions", definitions)
         self.verbose("Imported definitions for %s from \"%s\""
                      % (self.options.hostname, path))
@@ -735,12 +741,13 @@ def write_payload_file(payload_file, json_list):
     result = json.loads(json_list)[0]
     payload = result['payload']
     payload_encoding = result['payload_encoding']
-    with open(payload_file, 'w') as f:
-        if payload_encoding == 'base64':
-            data = base64.b64decode(payload)
-        else:
-            data = payload
-        f.write(data)
+    f = open(payload_file, 'w')
+    if payload_encoding == 'base64':
+        data = base64.b64decode(payload)
+    else:
+        data = payload
+    f.write(data)
+    f.close()
 
 def print_bash_completion():
     script = """# This is a bash completion script for rabbitmqadmin.
