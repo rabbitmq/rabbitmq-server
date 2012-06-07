@@ -148,10 +148,7 @@ no_loop_test() ->
       end, [fed(<<"one">>, <<"two">>),
             fed(<<"two">>, <<"one">>)]).
 
-binding_recovery_test_() ->
-    {timeout, 60, fun binding_recovery/0}.
-
-binding_recovery() ->
+binding_recovery_test() ->
     Q = <<"durable-Q">>,
 
     Ch = start_other_node(?HARE, "hare-two-upstreams"),
@@ -193,10 +190,7 @@ suffix({Nodename, _}, X) ->
 %% Downstream: rabbit-test, port 5672
 %% Upstream:   hare,        port 5673
 
-restart_upstream_test_() ->
-    {timeout, 60, fun restart_upstream/0}.
-
-restart_upstream() ->
+restart_upstream_test() ->
     with_ch(
       fun (Downstream) ->
               Upstream = start_other_node(?HARE),
@@ -230,10 +224,7 @@ restart_upstream() ->
 %% flopsy, mopsy and cottontail, connected in a ring with max_hops = 2
 %% for each connection. We should not see any duplicates.
 
-max_hops_test_() ->
-    {timeout, 60, fun max_hops/0}.
-
-max_hops() ->
+max_hops_test() ->
     Flopsy     = start_other_node(?FLOPSY),
     Mopsy      = start_other_node(?MOPSY),
     Cottontail = start_other_node(?COTTONTAIL),
@@ -266,10 +257,7 @@ max_hops() ->
     stop_other_node(?COTTONTAIL),
     ok.
 
-upstream_has_no_federation_test_() ->
-    {timeout, 60, fun upstream_has_no_federation/0}.
-
-upstream_has_no_federation() ->
+upstream_has_no_federation_test() ->
     with_ch(
       fun (Downstream) ->
               Upstream = start_other_node(
@@ -285,10 +273,7 @@ upstream_has_no_federation() ->
               stop_other_node(?HARE)
       end, []).
 
-dynamic_reconfiguration_test_() ->
-    {timeout, 60, fun dynamic_reconfiguration/0}.
-
-dynamic_reconfiguration() ->
+dynamic_reconfiguration_test() ->
     with_ch(
       fun (_Ch) ->
               Xs = [<<"fed1">>, <<"fed2">>],
@@ -314,10 +299,7 @@ dynamic_reconfiguration() ->
               rabbitmqctl("set_parameter federation_connection local5673 '[{<<\"uri\">>,<<\"amqp://localhost:5673\">>}]'")
       end, [fed(<<"fed1">>, <<"all">>), fed(<<"fed2">>, <<"all">>)]).
 
-dynamic_reconfiguration_integrity_test_() ->
-    {timeout, 60, fun dynamic_reconfiguration_integrity/0}.
-
-dynamic_reconfiguration_integrity() ->
+dynamic_reconfiguration_integrity_test() ->
     with_ch(
       fun (_Ch) ->
               Xs = [<<"fed1">>, <<"fed2">>],
@@ -464,8 +446,6 @@ expect(Payloads) ->
                 true  -> expect(Payloads -- [Payload]);
                 false -> throw({expected, Payloads, actual, Payload})
             end
-    after 500 ->
-            throw({timeout_waiting_for, Payloads})
     end.
 
 publish_expect(Ch, X, Key, Q, Payload) ->
