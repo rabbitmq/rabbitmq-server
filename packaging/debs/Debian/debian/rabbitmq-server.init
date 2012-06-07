@@ -61,9 +61,10 @@ start_rabbitmq () {
         RABBITMQ_PID_FILE=$PID_FILE start-stop-daemon --quiet \
             --chuid rabbitmq --start --exec $DAEMON \
             --pidfile "$RABBITMQ_PID_FILE" \
+            --background \
             > "${INIT_LOG_DIR}/startup_log" \
             2> "${INIT_LOG_DIR}/startup_err" \
-            0<&- &
+            0<&-
         $CONTROL wait $PID_FILE >/dev/null 2>&1
         RETVAL=$?
         set -e
