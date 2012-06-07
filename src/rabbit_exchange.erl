@@ -113,7 +113,6 @@ recover() ->
     [XName || #exchange{name = XName} <- Xs].
 
 callback(X = #exchange{type = XType}, Fun, Serial0, Args) ->
-    %% TODO cache this?
     Serial = fun (Bool) ->
                      case Serial0 of
                          _ when is_atom(Serial0) -> Serial0;
