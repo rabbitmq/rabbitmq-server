@@ -16,6 +16,8 @@
 
 -module(rabbit_policy).
 
+%% TODO specs
+
 -behaviour(rabbit_runtime_parameter).
 
 -include("rabbit.hrl").
@@ -47,7 +49,9 @@ set(X = #exchange{name = Name}) -> X#exchange{policy = set0(Name)}.
 set0(Name) -> match(Name, list()).
 
 get(Name, #amqqueue{policy = Policy}) -> get0(Name, Policy);
-get(Name, #exchange{policy = Policy}) -> get0(Name, Policy).
+get(Name, #exchange{policy = Policy}) -> get0(Name, Policy);
+%% Caution - SLOW.
+get(Name, EntityName = #resource{})   -> get0(Name, match(EntityName, list())).
 
 get0(_Name, undefined) -> {error, not_found};
 get0(Name, List)       -> case pget(<<"policy">>, List) of
