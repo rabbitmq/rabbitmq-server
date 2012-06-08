@@ -408,13 +408,15 @@ unconditional_delete(X = #exchange{name = XName}) ->
     {deleted, X, Bindings, rabbit_binding:remove_for_destination(XName)}.
 
 next_serial(XName) ->
-    Serial = peek_serial(XName),
+    Serial = peek_serial(XName, write),
     ok = mnesia:write(rabbit_exchange_serial,
                       #exchange_serial{name = XName, next = Serial + 1}, write),
     Serial.
 
-peek_serial(XName) ->
-    case mnesia:read(rabbit_exchange_serial, XName, write) of
+peek_serial(XName) -> peek_serial(XName, read).
+
+peek_serial(XName, LockType) ->
+    case mnesia:read(rabbit_exchange_serial, XName, LockType) of
         [#exchange_serial{next = Serial}]  -> Serial;
         _                                  -> 1
     end.
