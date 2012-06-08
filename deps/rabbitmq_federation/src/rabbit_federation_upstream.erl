@@ -20,6 +20,8 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 
 -export([set_for/1, for/1, for/2, to_table/1, to_string/1]).
+%% For testing
+-export([from_set/2]).
 
 -import(rabbit_misc, [pget/2, pget/3]).
 -import(rabbit_federation_util, [name/1, vhost/1]).

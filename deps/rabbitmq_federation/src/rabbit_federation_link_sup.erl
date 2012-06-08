@@ -51,14 +51,16 @@ adjust(Sup, X, {connection, ConnName}) ->
     [stop(Sup, OldUpstream) || OldUpstream <- OldUpstreams],
     [start(Sup, NewUpstream, X) || NewUpstream <- NewUpstreams];
 
-adjust(Sup, X, {clear_connection, ConnName}) ->
-    ok = rabbit_federation_db:prune_scratch(X),
+adjust(Sup, X = #exchange{name = XName}, {clear_connection, ConnName}) ->
+    ok = rabbit_federation_db:prune_scratch(
+           XName, rabbit_federation_upstream:for(X)),
     [stop(Sup, Upstream) || Upstream <- children(Sup, ConnName)];
 
 %% TODO handle changes of upstream sets minimally (bug 24853)
-adjust(Sup, X, {upstream_set, Set}) ->
+adjust(Sup, X = #exchange{name = XName}, {upstream_set, Set}) ->
     case rabbit_federation_upstream:set_for(X) of
-        {ok, Set} -> ok = rabbit_federation_db:prune_scratch(X);
+        {ok, Set} -> ok = rabbit_federation_db:prune_scratch(
+                            XName, rabbit_federation_upstream:for(X));
         _         -> ok
     end,
     adjust(Sup, X, everything);

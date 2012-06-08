@@ -17,7 +17,7 @@
 -module(rabbit_federation_unit_test).
 
 -define(US_NAME, <<"upstream">>).
--define(DS_NAME, <<"downstream">>).
+-define(DS_NAME, <<"fed.downstream">>).
 
 -include("rabbit_federation.hrl").
 -include_lib("eunit/include/eunit.hrl").
@@ -34,22 +34,18 @@ serialisation_test() ->
               add_binding(1, X, B1),
               add_binding(2, X, B2),
               add_binding(3, X, B3),
-
               %% List of lists because one for each link
               Keys = rabbit_federation_link:list_routing_keys(X#exchange.name),
               ?assertEqual([[<<"1">>, <<"2">>]], Keys)
       end).
 
 with_exchanges(Fun) ->
-    rabbit_exchange:declare(r(?US_NAME), fanout,
-                            false, false, false, []),
-    X = #exchange{arguments = Args} = x(),
-    rabbit_exchange:declare(r(?DS_NAME), 'x-federation',
-                            false, false, false, Args),
-
+    rabbit_exchange:declare(r(?US_NAME), fanout, false, false, false, []),
+    X = rabbit_exchange:declare(r(?DS_NAME), fanout, false, false, false, []),
     Fun(X),
-    rabbit_exchange:delete(r(?US_NAME), false),
+    %% Delete downstream first or it will recreate the upstream
     rabbit_exchange:delete(r(?DS_NAME), false),
+    rabbit_exchange:delete(r(?US_NAME), false),
     ok.
 
 add_binding(Ser, X, B) ->
@@ -60,15 +56,13 @@ remove_bindings(Ser, X, Bs) ->
     rabbit_federation_exchange:remove_bindings(transaction, X, Bs),
     rabbit_federation_exchange:remove_bindings(Ser, X, Bs).
 
-x() ->
-    Args = [{<<"upstream-set">>, longstr, <<"upstream">>},
-            {<<"type">>,         longstr, <<"fanout">>}],
-    #exchange{name        = r(?DS_NAME),
-              type        = 'x-federation',
+x(Name) ->
+    #exchange{name        = Name,
+              type        = fanout,
               durable     = false,
               auto_delete = false,
               internal    = false,
-              arguments   = Args}.
+              arguments   = []}.
 
 r(Name) -> rabbit_misc:r(<<"/">>, exchange, Name).
 
@@ -94,4 +88,4 @@ scratch_space_test() ->
 
 upstream(ConnName) ->
     #upstream{connection_name = atom_to_list(ConnName),
-              exchange        = <<"upstream">>}.
+              exchange        = x(r(<<"upstream">>))}.

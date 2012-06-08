@@ -344,6 +344,7 @@ go(S0 = {not_started, {Upstream, DownXName =
                                   {rabbit_exchange:peek_serial(DownXName),
                                    rabbit_binding:list_for_source(DownXName)}
                           end),
+                    true = is_integer(Serial),
                     %% If we are very short lived, Serial can be undefined at
                     %% this point (since the deletion of the X could have
                     %% overtaken the creation of this process). However, this
