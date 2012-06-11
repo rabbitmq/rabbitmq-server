@@ -311,6 +311,23 @@ dynamic_reconfiguration_integrity_test() ->
               assert_connections(Xs, [<<"local5673">>])
       end, [x(<<"new.fed1">>), x(<<"new.fed2">>)]).
 
+federate_unfederate_test() ->
+    with_ch(
+      fun (_Ch) ->
+              Xs = [<<"dyn.exch1">>, <<"dyn.exch2">>],
+
+              %% Declared non-federated exchanges - no links
+              assert_connections(Xs, []),
+
+              %% Federate them - links appear
+              rabbitmqctl("set_parameter policy dyn '[{<<\"prefix\">>, <<\"dyn.\">>}, {<<\"policy\">>, [{<<\"federation-upstream-set\">>, <<\"all\">>}]}].'"),
+              assert_connections(Xs, [<<"localhost">>, <<"local5673">>]),
+
+              %% Unfederate them - links disappear
+              rabbitmqctl("clear_parameter policy dyn"),
+              assert_connections(Xs, [])
+      end, [x(<<"dyn.exch1">>), x(<<"dyn.exch2">>)]).
+
 %%----------------------------------------------------------------------------
 
 with_ch(Fun, Xs) ->
