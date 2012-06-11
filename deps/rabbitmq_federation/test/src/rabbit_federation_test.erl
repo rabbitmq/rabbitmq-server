@@ -272,22 +272,27 @@ dynamic_reconfiguration_test() ->
               assert_connections(Xs, [<<"localhost">>, <<"local5673">>]),
 
               %% Test this at least does not blow up
-              rabbitmqctl("set_parameter federation local_nodename '<<\"test\">>'"),
+              set_param("federation", "local_nodename", <<"test">>),
               assert_connections(Xs, [<<"localhost">>, <<"local5673">>]),
 
               %% Test that clearing connections works
-              rabbitmqctl("clear_parameter federation_connection localhost"),
-              rabbitmqctl("clear_parameter federation_connection local5673"),
+              clear_param("federation_connection", "localhost"),
+              clear_param("federation_connection", "local5673"),
               assert_connections(Xs, []),
 
               %% Test that readding them and changing them works
-              rabbitmqctl("set_parameter federation_connection localhost '[{<<\"uri\">>,<<\"amqp://localhost\">>}]'"),
+              set_param("federation_connection", "localhost",
+                        [{<<"uri">>, <<"amqp://localhost">>}]),
               %% Do it twice so we at least hit the no-restart optimisation
-              rabbitmqctl("set_parameter federation_connection localhost '[{<<\"uri\">>,<<\"amqp://\">>}]'"),
-              rabbitmqctl("set_parameter federation_connection localhost '[{<<\"uri\">>,<<\"amqp://\">>}]'"),
+              set_param("federation_connection", "localhost",
+                        [{<<"uri">>, <<"amqp://">>}]),
+              set_param("federation_connection", "localhost",
+                        [{<<"uri">>, <<"amqp://">>}]),
               assert_connections(Xs, [<<"localhost">>]),
+
               %% And re-add the last - for next test
-              rabbitmqctl("set_parameter federation_connection local5673 '[{<<\"uri\">>,<<\"amqp://localhost:5673\">>}]'")
+              set_param("federation_connection", "local5673",
+                        [{<<"uri">>, <<"amqp://localhost:5673">>}])
       end, [x(<<"all.fed1">>), x(<<"all.fed2">>)]).
 
 dynamic_reconfiguration_integrity_test() ->
@@ -299,15 +304,19 @@ dynamic_reconfiguration_integrity_test() ->
               assert_connections(Xs, []),
 
               %% Create the set - links appear
-              rabbitmqctl("set_parameter federation_upstream_set new-set '[[{<<\"connection\">>,<<\"localhost\">>}]]'"),
+              set_param("federation_upstream_set", "new-set",
+                        [[{<<"connection">>, <<"localhost">>}]]),
               assert_connections(Xs, [<<"localhost">>]),
 
               %% Add nonexistent connections to set - nothing breaks
-              rabbitmqctl("set_parameter federation_upstream_set new-set '[[{<<\"connection\">>,<<\"localhost\">>}],[{<<\"connection\">>,<<\"does-not-exist\">>}]]'"),
+              set_param("federation_upstream_set", "new-set",
+                        [[{<<"connection">>, <<"localhost">>}],
+                         [{<<"connection">>, <<"does-not-exist">>}]]),
               assert_connections(Xs, [<<"localhost">>]),
 
               %% Change connection in set - links change
-              rabbitmqctl("set_parameter federation_upstream_set new-set '[[{<<\"connection\">>,<<\"local5673\">>}]]'"),
+              set_param("federation_upstream_set", "new-set",
+                        [[{<<"connection">>, <<"local5673">>}]]),
               assert_connections(Xs, [<<"local5673">>])
       end, [x(<<"new.fed1">>), x(<<"new.fed2">>)]).
 
@@ -320,11 +329,11 @@ federate_unfederate_test() ->
               assert_connections(Xs, []),
 
               %% Federate them - links appear
-              rabbitmqctl("set_parameter policy dyn '[{<<\"prefix\">>, <<\"dyn.\">>}, {<<\"policy\">>, [{<<\"federation-upstream-set\">>, <<\"all\">>}]}].'"),
+              set_param("policy", "dyn", policy(<<"dyn.">>, <<"all">>)),
               assert_connections(Xs, [<<"localhost">>, <<"local5673">>]),
 
               %% Unfederate them - links disappear
-              rabbitmqctl("clear_parameter policy dyn"),
+              clear_param("policy", "dyn"),
               assert_connections(Xs, [])
       end, [x(<<"dyn.exch1">>), x(<<"dyn.exch2">>)]).
 
@@ -369,10 +378,23 @@ stop_other_node({Name, _Port}) ->
                    " stop-other-node"),
     timer:sleep(1000).
 
+set_param(Component, Key, Value) ->
+    rabbitmqctl(fmt("set_parameter ~s ~s '~p'", [Component, Key, Value])).
+
+clear_param(Component, Key) ->
+    rabbitmqctl(fmt("clear_parameter ~s ~s", [Component, Key])).
+
+fmt(Fmt, Args) ->
+    string:join(string:tokens(rabbit_misc:format(Fmt, Args), [$\n]), " ").
+
 rabbitmqctl(Args) ->
     ?assertCmd(
        plugin_dir() ++ "/../rabbitmq-server/scripts/rabbitmqctl " ++ Args),
     timer:sleep(100).
+
+policy(Prefix, UpstreamSet) ->
+    [{<<"prefix">>, Prefix},
+     {<<"policy">>, [{<<"federation-upstream-set">>, UpstreamSet}]}].
 
 plugin_dir() ->
     {ok, [[File]]} = init:get_argument(config),
