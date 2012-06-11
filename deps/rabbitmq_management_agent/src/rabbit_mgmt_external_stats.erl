@@ -214,10 +214,17 @@ format_application({Application, Description, Version}) ->
 rabbit_mochiweb_contexts() ->
     [format_context(C) || C <- rabbit_mochiweb_registry_list_all()].
 
+%% For similar reasons we don't declare a dependency on
+%% rabbitmq_mochiweb - so at startup there's no guarantee it will be
+%% running. So we have to catch this noproc.
 rabbit_mochiweb_registry_list_all() ->
     case code:is_loaded(rabbit_mochiweb_registry) of
         false -> [];
-        _     -> apply0(rabbit_mochiweb_registry, list_all, [])
+        _     -> try
+                     apply0(rabbit_mochiweb_registry, list_all, [])
+                 catch exit:{noproc, _} ->
+                         []
+                 end
     end.
 
 %% Fool xref. Simply using apply(M, F, A) with constants is not enough.
