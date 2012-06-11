@@ -143,6 +143,7 @@ start_stop_end() {
         3)
             log_warning_msg "${DESC} already ${1}"
             log_end_msg 0
+            RETVAL=0
             ;;
         *)
             log_warning_msg "FAILED - check ${INIT_LOG_DIR}/startup_\{log, _err\}"
