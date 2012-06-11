@@ -323,8 +323,6 @@ boot() ->
 start_it(StartFun) ->
     try
         StartFun()
-    catch _:Reason ->
-            boot_error("Error description:~n~n~p~n~n", [Reason])
     after
         %% give the error loggers some time to catch up
         timer:sleep(100)
