@@ -14,6 +14,7 @@ for (var i in globals) {
       <tr>
         <td>
           Local username:
+          <span class="help" id="federation-local-username"></span>
           <form action="#/fed-globals" method="put">
             <input type="hidden" name="component" value="federation"/>
             <input type="hidden" name="key" value="local_username"/>
@@ -23,6 +24,7 @@ for (var i in globals) {
         </td>
         <td>
           Explicit identity for this cluster / node:
+          <span class="help" id="federation-explicit-identity"></span>
           <form action="#/fed-globals" method="put">
             <input type="hidden" name="component" value="federation"/>
             <input type="hidden" name="key" value="local_nodename"/>
@@ -159,27 +161,57 @@ for (var i in globals) {
           <td><input type="text" name="uri"/><span class="mand">*</span></td>
         </tr>
         <tr>
-          <th><label>Expires:</label></th>
+          <th>
+            <label>
+              Expires:
+              <span class="help" id="federation-expires"></span>
+            </label>
+          </th>
           <td><input type="text" name="expires"/> ms</td>
         </tr>
         <tr>
-          <th><label>Message TTL:</label></th>
+          <th>
+            <label>
+              Message TTL:
+              <span class="help" id="federation-ttl"></span>
+            </label>
+          </th>
           <td><input type="text" name="message_ttl"/> ms</td>
         </tr>
         <tr>
-          <th><label>Max hops:</label></th>
+          <th>
+            <label>
+              Max hops:
+              <span class="help" id="federation-max-hops"></span>
+            </label>
+          </th>
           <td><input type="text" name="max_hops"/></td>
         </tr>
         <tr>
-          <th><label>Prefetch count:</label></th>
+          <th>
+            <label>
+              Prefetch count:
+              <span class="help" id="federation-prefetch"></span>
+            </label>
+          </th>
           <td><input type="text" name="prefetch_count"/></td>
         </tr>
         <tr>
-          <th><label>Reconnect delay:</label></th>
-          <td><input type="text" name="reconnect_delay"/></td>
+          <th>
+            <label>
+              Reconnect delay:
+              <span class="help" id="federation-reconnect"></span>
+            </label>
+          </th>
+          <td><input type="text" name="reconnect_delay"/> s</td>
         </tr>
         <tr>
-          <th><label>HA Policy:</label></th>
+          <th>
+            <label>
+              HA Policy:
+              <span class="help" id="federation-ha-policy"></span>
+            </label>
+          </th>
           <td><input type="text" name="ha_policy"/></td>
         </tr>
       </table>
