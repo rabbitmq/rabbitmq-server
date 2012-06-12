@@ -876,11 +876,9 @@ flush_broadcast_buffer(State = #state { self             = Self,
 %% View construction and inspection
 %% ---------------------------------------------------------------------------
 
-needs_view_update(ReqVer, {Ver, _View}) ->
-    Ver < ReqVer.
+needs_view_update(ReqVer, {Ver, _View}) -> Ver < ReqVer.
 
-view_version({Ver, _View}) ->
-    Ver.
+view_version({Ver, _View}) -> Ver.
 
 is_member_alive({dead, _Member}) -> false;
 is_member_alive(_)               -> true.
@@ -899,17 +897,13 @@ store_view_member(VMember = #view_member { id = Id }, {Ver, View}) ->
 with_view_member(Fun, View, Id) ->
     store_view_member(Fun(fetch_view_member(Id, View)), View).
 
-fetch_view_member(Id, {_Ver, View}) ->
-    ?DICT:fetch(Id, View).
+fetch_view_member(Id, {_Ver, View}) -> ?DICT:fetch(Id, View).
 
-find_view_member(Id, {_Ver, View}) ->
-    ?DICT:find(Id, View).
+find_view_member(Id, {_Ver, View}) -> ?DICT:find(Id, View).
 
-blank_view(Ver) ->
-    {Ver, ?DICT:new()}.
+blank_view(Ver) -> {Ver, ?DICT:new()}.
 
-alive_view_members({_Ver, View}) ->
-    ?DICT:fetch_keys(View).
+alive_view_members({_Ver, View}) -> ?DICT:fetch_keys(View).
 
 all_known_members({_Ver, View}) ->
     ?DICT:fold(
@@ -1150,10 +1144,8 @@ ensure_neighbour(Ver, Self, {RealNeighbour, MRef}, Neighbour) ->
          end,
     {Neighbour, maybe_monitor(Neighbour, Self)}.
 
-maybe_monitor(Self, Self) ->
-    undefined;
-maybe_monitor(Other, _Self) ->
-    erlang:monitor(process, get_pid(Other)).
+maybe_monitor( Self,  Self) -> undefined;
+maybe_monitor(Other, _Self) -> erlang:monitor(process, get_pid(Other)).
 
 check_neighbours(State = #state { self             = Self,
                                   left             = Left,
@@ -1242,23 +1234,19 @@ find_member_or_blank(Id, MembersState) ->
         error        -> blank_member()
     end.
 
-erase_member(Id, MembersState) ->
-    ?DICT:erase(Id, MembersState).
+erase_member(Id, MembersState) -> ?DICT:erase(Id, MembersState).
 
 blank_member() ->
     #member { pending_ack = queue:new(), last_pub = -1, last_ack = -1 }.
 
-blank_member_state() ->
-    ?DICT:new().
+blank_member_state() -> ?DICT:new().
 
 store_member(Id, MemberState, MembersState) ->
     ?DICT:store(Id, MemberState, MembersState).
 
-prepare_members_state(MembersState) ->
-    ?DICT:to_list(MembersState).
+prepare_members_state(MembersState) -> ?DICT:to_list(MembersState).
 
-build_members_state(MembersStateList) ->
-    ?DICT:from_list(MembersStateList).
+build_members_state(MembersStateList) -> ?DICT:from_list(MembersStateList).
 
 make_member(GroupName) ->
    {case read_group(GroupName) of
@@ -1280,16 +1268,12 @@ get_pids(Ids) -> [Pid || {_Version, Pid} <- Ids].
 %% Activity assembly
 %% ---------------------------------------------------------------------------
 
-activity_nil() ->
-    queue:new().
+activity_nil() -> queue:new().
 
-activity_cons(_Id, [], [], Tail) ->
-    Tail;
-activity_cons(Sender, Pubs, Acks, Tail) ->
-    queue:in({Sender, Pubs, Acks}, Tail).
+activity_cons(   _Id,   [],   [], Tail) -> Tail;
+activity_cons(Sender, Pubs, Acks, Tail) -> queue:in({Sender, Pubs, Acks}, Tail).
 
-activity_finalise(Activity) ->
-    queue:to_list(Activity).
+activity_finalise(Activity) -> queue:to_list(Activity).
 
 maybe_send_activity([], _State) ->
     ok;
@@ -1393,34 +1377,25 @@ purge_confirms(Confirms) ->
 %% Msg transformation
 %% ---------------------------------------------------------------------------
 
-acks_from_queue(Q) ->
-    [PubNum || {PubNum, _Msg} <- queue:to_list(Q)].
+acks_from_queue(Q) -> [PubNum || {PubNum, _Msg} <- queue:to_list(Q)].
 
-pubs_from_queue(Q) ->
-    queue:to_list(Q).
+pubs_from_queue(Q) -> queue:to_list(Q).
 
-queue_from_pubs(Pubs) ->
-    queue:from_list(Pubs).
+queue_from_pubs(Pubs) -> queue:from_list(Pubs).
 
-apply_acks([], Pubs) ->
-    Pubs;
-apply_acks(List, Pubs) ->
-    {_, Pubs1} = queue:split(length(List), Pubs),
-    Pubs1.
+apply_acks(  [], Pubs) -> Pubs;
+apply_acks(List, Pubs) -> {_, Pubs1} = queue:split(length(List), Pubs),
+                          Pubs1.
 
 join_pubs(Q, [])   -> Q;
 join_pubs(Q, Pubs) -> queue:join(Q, queue_from_pubs(Pubs)).
 
-last_ack([], LA) ->
-    LA;
-last_ack(List, LA) ->
-    LA1 = lists:last(List),
-    true = LA1 > LA, %% ASSERTION
-    LA1.
+last_ack(  [], LA) -> LA;
+last_ack(List, LA) -> LA1 = lists:last(List),
+                      true = LA1 > LA, %% ASSERTION
+                      LA1.
 
-last_pub([], LP) ->
-    LP;
-last_pub(List, LP) ->
-    {PubNum, _Msg} = lists:last(List),
-    true = PubNum > LP, %% ASSERTION
-    PubNum.
+last_pub(  [], LP) -> LP;
+last_pub(List, LP) -> {PubNum, _Msg} = lists:last(List),
+                      true = PubNum > LP, %% ASSERTION
+                      PubNum.
