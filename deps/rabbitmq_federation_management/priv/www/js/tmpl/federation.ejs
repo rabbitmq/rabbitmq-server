@@ -134,11 +134,11 @@ for (var i in globals) {
    <tr<%= alt_rows(i)%>>
      <td><%= link_fed_conn(connection.key) %></td>
      <td><%= fmt_shortened_uri(connection.value.uri) %></td>
-     <td class="r"><%= connection.value.expires %>ms</td>
-     <td class="r"><%= connection.value.message_ttl %>ms</td>
+     <td class="r"><%= fmt_time(connection.value.expires, 'ms') %></td>
+     <td class="r"><%= fmt_time(connection.value.message_ttl, 'ms') %></td>
      <td class="r"><%= connection.value.max_hops %></td>
      <td class="r"><%= connection.value.prefetch_count %></td>
-     <td class="r"><%= connection.value.reconnect_delay %>s</td>
+     <td class="r"><%= fmt_time(connection.value.reconnect_delay, 's') %></td>
      <td class="r"><%= connection.value.ha_policy %></td>
    </tr>
 <% } %>
