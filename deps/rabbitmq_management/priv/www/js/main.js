@@ -132,6 +132,7 @@ function render(reqs, template, highlight) {
 function update() {
     clearInterval(timer);
     with_update(function(html) {
+            update_navigation();
             replace_content('main', html);
             postprocess();
             postprocess_partial();
@@ -162,6 +163,85 @@ function partial_update() {
             postprocess_partial();
         });
     }
+}
+
+function update_navigation() {
+    var l1 = '';
+    var l2 = '';
+    var descend = null;
+
+    for (var k in NAVIGATION) {
+        var val = NAVIGATION[k];
+        var path = val;
+        while (!leaf(path)) {
+            path = path[keys(path)[0]];
+        }
+        var selected = false;
+        if (contains_current_highlight(val)) {
+            selected = true;
+            if (!leaf(val)) {
+                descend = nav(val);
+            }
+        }
+        if (show(path)) {
+            l1 += '<li><a href="' + nav(path) + '"' +
+                (selected ? ' class="selected"' : '') + '>' + k + '</a></li>';
+        }
+    }
+
+    if (descend) {
+        l2 = obj_to_ul(descend);
+        $('#main').addClass('with-rhs');
+    }
+    else {
+        $('#main').removeClass('with-rhs');
+    }
+
+    replace_content('tabs', l1);
+    replace_content('rhs', l2);
+}
+
+function nav(pair) {
+    return pair[0];
+}
+
+function show(pair) {
+    return !pair[1] || user_administrator;
+}
+
+function leaf(pair) {
+    return typeof(nav(pair)) == 'string';
+}
+
+function contains_current_highlight(val) {
+    if (leaf(val)) {
+        return current_highlight == nav(val);
+    }
+    else {
+        var b = false;
+        for (var k in val) {
+            b |= contains_current_highlight(val[k]);
+        }
+        return b;
+    }
+}
+
+function obj_to_ul(val) {
+    var res = '<ul>';
+    for (var k in val) {
+        res += '<li>';
+        var obj = val[k];
+        if (leaf(obj) && show(obj)) {
+            res += '<a href="' + nav(obj) + '"' +
+                (current_highlight == nav(obj) ? ' class="selected"' : '') +
+                '>' + k + '</a>';
+        }
+        else {
+            res += obj_to_ul(nav(obj));
+        }
+        res += '</li>';
+    }
+    return res + '</ul>';
 }
 
 function full_refresh() {
@@ -241,8 +321,6 @@ function show_popup(type, text) {
 }
 
 function postprocess() {
-    $('a').removeClass('selected');
-    $('a[href="' + current_highlight + '"]').addClass('selected');
     $('form.confirm').submit(function() {
             return confirm("Are you sure? This object cannot be recovered " +
                            "after deletion.");
