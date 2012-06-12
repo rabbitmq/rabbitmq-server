@@ -35,7 +35,7 @@
 -rabbit_boot_step({codec_correctness_check,
                    [{description, "codec correctness check"},
                     {mfa,         {rabbit_binary_generator,
-                                   check_empty_content_body_frame_size,
+                                   check_empty_frame_size,
                                    []}},
                     {requires,    pre_boot},
                     {enables,     external_infrastructure}]}).
