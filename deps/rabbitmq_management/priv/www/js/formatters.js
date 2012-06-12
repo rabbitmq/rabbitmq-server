@@ -42,6 +42,11 @@ function fmt_date(d) {
         ":" + f(d.getSeconds());
 }
 
+function fmt_time(t, suffix) {
+    if (t == undefined || t == 0) return '';
+    return t + suffix;
+}
+
 function fmt_parameters(obj) {
     return fmt_table_short(args_to_params(obj));
 }
