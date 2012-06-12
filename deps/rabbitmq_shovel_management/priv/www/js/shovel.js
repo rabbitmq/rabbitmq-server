@@ -5,7 +5,7 @@ dispatcher_add(function(sammy) {
             });
 });
 
-NAVIGATION['Admin'][0]['Shovels'] = ['#/shovels', true];
+NAVIGATION['Admin'][0]['Shovel Status'] = ['#/shovels', true];
 
 function fmt_shovel_endpoint(point) {
     if (point == undefined) return '';
