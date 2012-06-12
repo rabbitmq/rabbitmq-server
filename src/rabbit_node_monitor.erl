@@ -22,7 +22,7 @@
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
--export([notify_cluster/0, rabbit_running_on/2]).
+-export([notify_cluster/0, rabbit_running_on/1]).
 
 -define(SERVER, ?MODULE).
 -define(RABBIT_UP_RPC_TIMEOUT, 2000).
@@ -32,7 +32,7 @@
 -ifdef(use_specs).
 
 -spec(start_link/0 :: () -> rabbit_types:ok_pid_or_error()).
--spec(rabbit_running_on/2 :: (node(), boolean()) -> 'ok').
+-spec(rabbit_running_on/1 :: (node()) -> 'ok').
 -spec(notify_cluster/0 :: () -> 'ok').
 
 -endif.
@@ -42,23 +42,20 @@
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
-rabbit_running_on(Node, IsDiscNode) ->
-    gen_server:cast(rabbit_node_monitor, {rabbit_running_on, Node, IsDiscNode}).
+rabbit_running_on(Node) ->
+    gen_server:cast(rabbit_node_monitor, {rabbit_running_on, Node}).
 
 notify_cluster() ->
     Node = node(),
-    IsDiscNode = rabbit_mnesia:is_disc_node(),
-    RunningNodes = rabbit_mnesia:running_clustered_nodes() -- [Node],
-    DiscNodes = rabbit_mnesia:all_clustered_disc_nodes(),
+    Nodes = rabbit_mnesia:running_clustered_nodes() -- [Node],
     %% notify other rabbits of this rabbit
-    case rpc:multicall(RunningNodes, rabbit_node_monitor, rabbit_running_on,
-                       [Node, IsDiscNode], ?RABBIT_UP_RPC_TIMEOUT) of
+    case rpc:multicall(Nodes, rabbit_node_monitor, rabbit_running_on,
+                       [Node], ?RABBIT_UP_RPC_TIMEOUT) of
         {_, [] } -> ok;
         {_, Bad} -> rabbit_log:info("failed to contact nodes ~p~n", [Bad])
     end,
     %% register other active rabbits with this rabbit
-    [rabbit_running_on(N, ordsets:is_element(N, DiscNodes)) ||
-        N <- RunningNodes],
+    [ rabbit_running_on(N) || N <- Nodes ],
     ok.
 
 %%--------------------------------------------------------------------
@@ -69,12 +66,12 @@ init([]) ->
 handle_call(_Request, _From, State) ->
     {noreply, State}.
 
-handle_cast({rabbit_running_on, Node, IsDiscNode}, Nodes) ->
+handle_cast({rabbit_running_on, Node}, Nodes) ->
     case ordsets:is_element(Node, Nodes) of
         true  -> {noreply, Nodes};
         false -> rabbit_log:info("rabbit on node ~p up~n", [Node]),
                  erlang:monitor(process, {rabbit, Node}),
-                 ok = handle_live_rabbit(Node, IsDiscNode),
+                 ok = handle_live_rabbit(Node),
                  {noreply, ordsets:add_element(Node, Nodes)}
     end;
 handle_cast(_Msg, State) ->
@@ -104,6 +101,6 @@ handle_dead_rabbit(Node) ->
     ok = rabbit_alarm:on_node_down(Node),
     ok = rabbit_mnesia:on_node_down(Node).
 
-handle_live_rabbit(Node, IsDiscNode) ->
+handle_live_rabbit(Node) ->
     ok = rabbit_alarm:on_node_up(Node),
-    ok = rabbit_mnesia:on_node_up(Node, IsDiscNode).
+    ok = rabbit_mnesia:on_node_up(Node).
