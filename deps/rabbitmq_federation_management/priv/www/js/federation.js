@@ -44,7 +44,7 @@ dispatcher_add(function(sammy) {
         });
 });
 
-$("#tabs").append('<li class="administrator-only"><a href="#/federation">Federation</a></li>');
+NAVIGATION['Admin'][0]['Federation'] = ['#/federation', true];
 
 VHOST_QUERIES["/federation-links"] = "";
 SORT_QUERIES["/federation-links"] = "";
