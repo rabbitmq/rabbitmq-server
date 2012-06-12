@@ -2,6 +2,8 @@
  [{description, "RabbitMQ Common Libraries"},
   {vsn, "%%VSN%%"},
   {modules, [
+             app_utils,
+             pmon,
              gen_server2,
              mirrored_supervisor,
              priority_queue,
@@ -10,6 +12,7 @@
              rabbit_binary_generator,
              rabbit_binary_parser,
              rabbit_channel,
+             rabbit_runtime_parameter,
              rabbit_command_assembler,
              rabbit_exchange_type,
              rabbit_auth_backend,
