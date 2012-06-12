@@ -1,43 +1,5 @@
-<h1>Federation</h1>
-<%
-var username = null;
-var nodename = null;
-for (var i in globals) {
-   if (globals[i].key == 'local_username') username = globals[i].value;
-   if (globals[i].key == 'local_nodename') nodename = globals[i].value;
-}
-%>
-<div class="section-hidden">
-  <h2>Global Parameters</h2>
-  <div class="hider">
-    <table class="two-col-layout">
-      <tr>
-        <td>
-          Local username:
-          <span class="help" id="federation-local-username"></span>
-          <form action="#/fed-globals" method="put">
-            <input type="hidden" name="component" value="federation"/>
-            <input type="hidden" name="key" value="local_username"/>
-            <input type="text" name="value" value="<%= username %>" />
-            <input type="submit" value="Update"/>
-          </form>
-        </td>
-        <td>
-          Explicit identity for this cluster / node:
-          <span class="help" id="federation-explicit-identity"></span>
-          <form action="#/fed-globals" method="put">
-            <input type="hidden" name="component" value="federation"/>
-            <input type="hidden" name="key" value="local_nodename"/>
-            <input type="text" name="value" value="<%= nodename %>" />
-            <input type="submit" value="Update"/>
-          </form>
-        </td>
-      </tr>
-    </table>
-  </div>
-</div>
-
-<div class="section-hidden">
+<h1>Federation Status</h1>
+<div class="section">
   <h2>Running Links</h2>
   <div class="hider updatable">
 <% if (links.length > 0) { %>
@@ -107,139 +69,40 @@ for (var i in globals) {
 <% } %>
 </div>
 </div>
-<div class="section">
-  <h2>Connections</h2>
-  <div class="hider">
-    <div class="updatable">
-
-<% if (connections.length > 0) { %>
-<table class="list">
- <thead>
-  <tr>
-    <th>Name</th>
-    <th>URI</th>
-    <th>Expiry</th>
-    <th>Message TTL</th>
-    <th>Max Hops</th>
-    <th>Prefetch Count</th>
-    <th>Reconnect Delay</th>
-    <th>HA Policy</th>
-  </tr>
- </thead>
- <tbody>
 <%
- for (var i = 0; i < connections.length; i++) {
-    var connection = connections[i];
+var username = null;
+var nodename = null;
+for (var i in globals) {
+   if (globals[i].key == 'local_username') username = globals[i].value;
+   if (globals[i].key == 'local_nodename') nodename = globals[i].value;
+}
 %>
-   <tr<%= alt_rows(i)%>>
-     <td><%= link_fed_conn(connection.key) %></td>
-     <td><%= fmt_shortened_uri(connection.value.uri) %></td>
-     <td class="r"><%= fmt_time(connection.value.expires, 'ms') %></td>
-     <td class="r"><%= fmt_time(connection.value.message_ttl, 'ms') %></td>
-     <td class="r"><%= connection.value.max_hops %></td>
-     <td class="r"><%= connection.value.prefetch_count %></td>
-     <td class="r"><%= fmt_time(connection.value.reconnect_delay, 's') %></td>
-     <td class="r"><%= connection.value.ha_policy %></td>
-   </tr>
-<% } %>
- </tbody>
-</table>
-<% } else { %>
-  <p>... no connections ...</p>
-<% } %>
-    </div>
-    <h3>Add a new connection</h3>
-    <form action="#/fed-parameters" method="put">
-      <input type="hidden" name="component" value="federation_connection"/>
-      <table class="form">
-        <tr>
-          <th><label>Name:</label></th>
-          <td><input type="text" name="key"/><span class="mand">*</span></td>
-        </tr>
-        <tr>
-          <th><label>URI:</label></th>
-          <td><input type="text" name="uri"/><span class="mand">*</span></td>
-        </tr>
-        <tr>
-          <th>
-            <label>
-              Expires:
-              <span class="help" id="federation-expires"></span>
-            </label>
-          </th>
-          <td><input type="text" name="expires"/> ms</td>
-        </tr>
-        <tr>
-          <th>
-            <label>
-              Message TTL:
-              <span class="help" id="federation-ttl"></span>
-            </label>
-          </th>
-          <td><input type="text" name="message_ttl"/> ms</td>
-        </tr>
-        <tr>
-          <th>
-            <label>
-              Max hops:
-              <span class="help" id="federation-max-hops"></span>
-            </label>
-          </th>
-          <td><input type="text" name="max_hops"/></td>
-        </tr>
-        <tr>
-          <th>
-            <label>
-              Prefetch count:
-              <span class="help" id="federation-prefetch"></span>
-            </label>
-          </th>
-          <td><input type="text" name="prefetch_count"/></td>
-        </tr>
-        <tr>
-          <th>
-            <label>
-              Reconnect delay:
-              <span class="help" id="federation-reconnect"></span>
-            </label>
-          </th>
-          <td><input type="text" name="reconnect_delay"/> s</td>
-        </tr>
-        <tr>
-          <th>
-            <label>
-              HA Policy:
-              <span class="help" id="federation-ha-policy"></span>
-            </label>
-          </th>
-          <td><input type="text" name="ha_policy"/></td>
-        </tr>
-      </table>
-      <input type="submit" value="Add connection"/>
-    </form>
-  </div>
-</div>
 <div class="section-hidden">
-  <h2>URI examples</h2>
+  <h2>Global Parameters</h2>
   <div class="hider">
-    <ul>
-      <li>
-        <code>amqp://server-name</code><br/>
-        connect to server-name, without SSL and default credentials
-      </li>
-      <li>
-        <code>amqp://user:password@server-name/my-vhost</code><br/>
-        connect to server-name, with credentials and overridden
-        virtual host
-      </li>
-      <li>
-        <code>amqps://user:password@server-name?cacertfile=/path/to/cacert.pem&certfile=/path/to/cert.pem&keyfile=/path/to/key.pem&verify=verify_peer</code><br/>
-        connect to server-name, with credentials and SSL
-      </li>
-      <li>
-        <code>amqps://server-name?cacertfile=/path/to/cacert.pem&certfile=/path/to/cert.pem&keyfile=/path/to/key.pem&verify=verify_peer&fail_if_no_peer_cert=true&auth_mechanism=external</code><br/>
-        connect to server-name, with SSL and EXTERNAL authentication
-      </li>
-    </ul>
+    <table class="two-col-layout">
+      <tr>
+        <td>
+          Local username:
+          <span class="help" id="federation-local-username"></span>
+          <form action="#/fed-globals" method="put">
+            <input type="hidden" name="component" value="federation"/>
+            <input type="hidden" name="key" value="local_username"/>
+            <input type="text" name="value" value="<%= username %>" />
+            <input type="submit" value="Update"/>
+          </form>
+        </td>
+        <td>
+          Explicit identity for this cluster / node:
+          <span class="help" id="federation-explicit-identity"></span>
+          <form action="#/fed-globals" method="put">
+            <input type="hidden" name="component" value="federation"/>
+            <input type="hidden" name="key" value="local_nodename"/>
+            <input type="text" name="value" value="<%= nodename %>" />
+            <input type="submit" value="Update"/>
+          </form>
+        </td>
+      </tr>
+    </table>
   </div>
 </div>
