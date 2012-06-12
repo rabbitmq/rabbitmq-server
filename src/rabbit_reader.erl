@@ -736,8 +736,6 @@ handle_method0(_Method, #v1{connection_state = S}) ->
     rabbit_misc:protocol_error(
       channel_error, "unexpected method in connection state ~w", [S]).
 
-%% Compute frame_max for this instance. Could simply use 0, but breaks
-%% QPid Java client.
 server_frame_max() ->
     {ok, FrameMax} = application:get_env(rabbit, frame_max),
     FrameMax.
