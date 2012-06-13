@@ -44,9 +44,5 @@ all_nodes() ->
     Types = proplists:get_keys(Nodes),
     Running = proplists:get_value(running_nodes, S),
     rabbit_mgmt_db:augment_nodes(
-      lists:append(
-        [[make_entry(Node, Type, lists:member(Node, Running))
-          || Node <- proplists:get_value(Type, Nodes)] || Type <- Types])).
-
-make_entry(Node, Type, Running) ->
-    [{name, Node}, {type, Type}, {running, Running}].
+      [[{name, Node}, {type, Type}, {running, lists:member(Node, Running)}] ||
+          Type <- Types, Node <- proplists:get_value(Type, Nodes)]).
