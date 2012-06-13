@@ -68,7 +68,17 @@ handle_message({socket_error, _} = SocketError, State) ->
 handle_message({channel_exit, Reason}, State) ->
     {stop, {channel0_died, Reason}, State};
 handle_message(heartbeat_timeout, State) ->
-    {stop, heartbeat_timeout, State}.
+    {stop, heartbeat_timeout, State};
+%% see http://erlang.org/pipermail/erlang-bugs/2012-June/002933.html
+handle_message({Ref, {error, Reason}},
+               State = #state{waiting_socket_close = Waiting,
+                              closing_reason       = CloseReason})
+  when is_reference(Ref) ->
+    {stop, case {Reason, Waiting} of
+               {closed,  true} -> {shutdown, CloseReason};
+               {closed, false} -> socket_closed_unexpectedly;
+               {_,          _} -> {socket_error, Reason}
+           end, State}.
 
 closing(_ChannelCloseType, Reason, State) ->
     {ok, State#state{closing_reason = Reason}}.
