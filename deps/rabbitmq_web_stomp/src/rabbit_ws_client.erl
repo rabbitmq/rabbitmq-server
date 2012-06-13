@@ -90,7 +90,7 @@ process_received_bytes(Bytes, Processor, ParseState) ->
             rabbit_stomp_processor:process_frame(Processor, Frame),
             ParseState1 = rabbit_stomp_frame:initial_state(),
             process_received_bytes(Rest, Processor, ParseState1);
-        {more, ParseState1, _Length} ->
+        {more, ParseState1} ->
             ParseState1
     end.
 
