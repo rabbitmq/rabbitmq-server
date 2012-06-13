@@ -673,7 +673,7 @@ handle_info({'DOWN', MRef, process, _Pid, _Reason},
                         {Result1, State1} = maybe_erase_aliases(State, View1),
                         {Result1, State1 #state {
                             members_state = blank_member_state(),
-                            confirms      = purge_confirms(Confirms) }};
+                            confirms      = purge_confirms(Confirms, ok) }};
                     _ ->
                         %% here we won't be pointing out any deaths:
                         %% the concern is that there maybe births
@@ -686,8 +686,11 @@ handle_info({'DOWN', MRef, process, _Pid, _Reason},
 
 
 terminate(Reason, State = #state { module        = Module,
-                                   callback_args = Args }) ->
+                                   callback_args = Args,
+                                   confirms      = Confirms }) ->
     flush_broadcast_buffer(State),
+    %% Probably better to badmatch than hang
+    purge_confirms(Confirms, terminated),
     Module:terminate(Args, Reason).
 
 
@@ -1368,8 +1371,9 @@ maybe_confirm(Self, Self, Confirms, [PubNum | PubNums]) ->
 maybe_confirm(_Self, _Id, Confirms, _PubNums) ->
     Confirms.
 
-purge_confirms(Confirms) ->
-    [gen_server2:reply(From, ok) || {_PubNum, From} <- queue:to_list(Confirms)],
+purge_confirms(Confirms, Reply) ->
+    [gen_server2:reply(From, Reply) ||
+        {_PubNum, From} <- queue:to_list(Confirms)],
     queue:new().
 
 
