@@ -130,25 +130,48 @@ add_mirror(VHostPath, QueueName, MirrorNode) ->
     add_mirror(rabbit_misc:r(VHostPath, queue, QueueName), MirrorNode).
 
 add_mirror(Queue, MirrorNode) ->
-    if_mirrored_queue(
-      Queue,
-      fun (#amqqueue { name = Name, pid = QPid, slave_pids = SPids } = Q) ->
-              case [Pid || Pid <- [QPid | SPids], node(Pid) =:= MirrorNode] of
-                  []  -> case rabbit_mirror_queue_slave_sup:start_child(
-                                MirrorNode, [Q]) of
-                             {ok, undefined} -> %% Already running
-                                 ok;
-                             {ok, SPid} ->
-                                 rabbit_log:info(
-                                   "Adding mirror of ~s on node ~p: ~p~n",
-                                   [rabbit_misc:rs(Name), MirrorNode, SPid]),
-                                 ok;
-                             Other ->
-                                 Other
-                         end;
-                  [_] -> {error, {queue_already_mirrored_on_node, MirrorNode}}
-              end
-      end).
+    if_mirrored_queue(Queue,
+        fun (#amqqueue { name = Name, pid = QPid, slave_pids = SPids } = Q) ->
+            case [Pid || Pid <- [QPid | SPids], node(Pid) =:= MirrorNode] of
+                [] ->
+                    start_child(Name, MirrorNode, Q);
+                [SPid] ->
+                    case rabbit_misc:is_process_alive(SPid) of
+                        true ->
+                            %% TODO: this condition is silently ignored - should
+                            %% we really be arriving at this state at all?
+                            {error,{queue_already_mirrored_on_node,MirrorNode}};
+                        false ->
+                            %% BUG-24942: we need to strip out this dead pid
+                            %% now, so we do so directly - perhaps we ought
+                            %% to start the txn sooner in order to get a more
+                            %% coarse grained lock though....
+                            %%
+                            %% BUG-24942: QUESTION - do we need to report that
+                            %% something has changed (either via gm or via
+                            %% the rabbit_event mechanisms) here?
+                            Q1 = Q#amqqueue{ slave_pids = (SPids -- [SPid]) },
+                            rabbit_misc:execute_mnesia_transaction(
+                                fun() ->
+                                    ok = rabbit_amqqueue:store_queue(Q1)
+                                end),
+                            start_child(Name, MirrorNode, Q1)
+                    end
+            end
+        end).
+
+start_child(Name, MirrorNode, Q) ->
+    case rabbit_mirror_queue_slave_sup:start_child(MirrorNode, [Q]) of
+        {ok, undefined} -> %% Already running
+                           ok;
+        {ok, SPid}      -> rabbit_log:info(
+                                "Adding mirror of ~s on node ~p: ~p~n",
+                                [rabbit_misc:rs(Name), MirrorNode, SPid]),
+                           ok;
+        Other           -> %% BUG-24942: should this not be checked for
+                           %% error conditions or something?
+                           Other
+    end.
 
 if_mirrored_queue(Queue, Fun) ->
     rabbit_amqqueue:with(

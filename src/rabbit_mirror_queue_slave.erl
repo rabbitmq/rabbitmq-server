@@ -106,15 +106,83 @@ init(#amqqueue { name = QueueName } = Q) ->
                    [Q1 = #amqqueue { pid = QPid, slave_pids = MPids }] =
                        mnesia:read({rabbit_queue, QueueName}),
                    case [Pid || Pid <- [QPid | MPids], node(Pid) =:= Node] of
-                       []     -> MPids1 = MPids ++ [Self],
-                                 ok = rabbit_amqqueue:store_queue(
+                       [] ->
+                           MPids1 = MPids ++ [Self],
+                           ok = rabbit_amqqueue:store_queue(
                                         Q1 #amqqueue { slave_pids = MPids1 }),
-                                 {new, QPid};
-                       [SPid] -> true = rabbit_misc:is_process_alive(SPid),
-                                 existing
+                           {new, QPid};
+                       [MPid] when MPid =:= QPid ->
+                           case rabbit_misc:is_process_alive(MPid) of
+                               true ->
+                                   %% Well damn, this shouldn't really happen -
+                                   %% what this appears to mean is that this
+                                   %% node is attempting to start a slave, but
+                                   %% a pid already exists for this node and
+                                   %% it is *already* the master! This state
+                                   %% probably requires a bit more thought.
+                                   existing;
+                               false ->
+                                   %% We were the master, died, came back
+                                   %% online (but not after 3 days!) and
+                                   %% our death hasn't been registered by the
+                                   %% rest of our unbelieving flock yet!
+                                   %%
+                                   %% Actually, this is worse than it seems,
+                                   %% because the master is now down but the
+                                   %% pid in mnesia is from an old incarnation
+                                   %% of this node, so messages to it will be
+                                   %% silently dropped by Erlang (with some
+                                   %% helpful noise in the logs).
+                                   %%
+                                   %% I'm not sure how we're supposed to
+                                   %% recover from this. Won't messages get
+                                   %% lost, or at least lose their ordering
+                                   %% in this situation? Because a slave that
+                                   %% comes back online doesn't contain any
+                                   %% state (a slave will start off empty as
+                                   %% if they have no mirrored content at all)
+                                   %% then don't we fine ourselves in a slightly
+                                   %% inconsistent position here?
+                                   %%
+                                   %% In this scenario, I wonder whether we
+                                   %% should call init_with_backing_queue_state
+                                   %% to try and recover?
+                                   {stale, MPid}
+                           end;
+                       [SPid] ->
+                           case rabbit_misc:is_process_alive(SPid) of
+                               true ->
+                                    existing;
+                               false ->
+                                    %% we need to replace this pid as it
+                                    %% is stale, from an old incarnation 
+                                    %% of this node.
+                                    %%
+                                    %% NB: I *do* think we should completely
+                                    %% initialise this process before exiting
+                                    %% the mnesia txn in this case - once
+                                    %% we're *comitted* then I'd expect this
+                                    %% slave to become subject to any and all
+                                    %% invariants that members of the
+                                    %% slave_pids list should enforce, and
+                                    %% I'm *not* convinced this is possible
+                                    %% immediately after the txn commits
+                                    %% as the remaining initialisation code
+                                    %% could take arbitrary time to complete.
+
+                                    MPids1 = (MPids -- [SPid]) ++ [Self],
+                                    ok = rabbit_amqqueue:store_queue(
+                                            Q1#amqqueue{slave_pids=MPids1}),
+                                    {new, QPid}
+                           end
                    end
            end) of
         {new, MPid} ->
+            %% BUG-24942: *should* we move the whole initialisation process (bar
+            %% obviously the trap_exit and erlang:monitor/2 calls) into the
+            %% mnesia transaction? We could optionally return {ready, State}
+            %% from it, and in that case immediately return....
+
             process_flag(trap_exit, true), %% amqqueue_process traps exits too.
             {ok, GM} = gm:start_link(QueueName, ?MODULE, [self()]),
             receive {joined, GM} ->
@@ -150,6 +218,10 @@ init(#amqqueue { name = QueueName } = Q) ->
             {ok, State, hibernate,
              {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN,
               ?DESIRED_HIBERNATE}};
+        {stale, OldPid} ->
+            %% NB: placeholder for doing something actually useful here...
+            %% such as {error, {stale_master_pid, OldPid}}
+            ignore;
         existing ->
             ignore
     end.

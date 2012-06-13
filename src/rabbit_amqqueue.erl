@@ -439,6 +439,7 @@ force_event_refresh() ->
 
 force_event_refresh(QNames) ->
     Qs = [Q || Q <- list(), lists:member(Q#amqqueue.name, QNames)],
+    %% BUG-24942/3: could one of these pids could be stale!?
     {_, Bad} = rabbit_misc:multi_call(
                  [Q#amqqueue.pid || Q <- Qs], force_event_refresh),
     FailedPids = [Pid || {Pid, _Reason} <- Bad],
@@ -569,6 +570,7 @@ set_maximum_since_use(QPid, Age) ->
 on_node_down(Node) ->
     rabbit_misc:execute_mnesia_tx_with_tail(
       fun () -> QsDels =
+                    %% BUG-24942/3: could one of these pids could be stale!?
                     qlc:e(qlc:q([{{QName, Pid}, delete_queue(QName)} ||
                                     #amqqueue{name = QName, pid = Pid,
                                               slave_pids = []}
