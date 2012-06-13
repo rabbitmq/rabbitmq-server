@@ -37,7 +37,7 @@
 
 %%--------------------------------------------------------------------
 
--record(state, {time_ms, fd_used, fd_total}).
+-record(state, {fd_used, fd_total}).
 
 %%--------------------------------------------------------------------
 
@@ -271,8 +271,7 @@ code_change(_, State, _) -> {ok, State}.
 
 emit_update(State0) ->
     %% TODO update state less often than refresh rate? Or eliminate it.
-    State = State0#state{time_ms = rabbit_misc:now_ms(),
-                         fd_used = get_used_fd()},
+    State = State0#state{fd_used = get_used_fd()},
     rabbit_event:notify(node_stats, infos(?KEYS, State)),
     erlang:send_after(?REFRESH_RATIO, self(), emit_update),
     State.
