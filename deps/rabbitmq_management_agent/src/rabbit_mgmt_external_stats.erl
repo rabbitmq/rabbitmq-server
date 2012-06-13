@@ -37,7 +37,7 @@
 
 %%--------------------------------------------------------------------
 
--record(state, {fd_used, fd_total}).
+-record(state, {fd_total}).
 
 %%--------------------------------------------------------------------
 
@@ -144,7 +144,7 @@ get_disk_free() -> ?SAFE_CALL(rabbit_disk_monitor:get_disk_free(),
 infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
 
 i(name,            _State) -> node();
-i(fd_used,  #state{fd_used  = FdUsed})  -> FdUsed;
+i(fd_used,         _State) -> get_used_fd();
 i(fd_total, #state{fd_total = FdTotal}) -> FdTotal;
 i(sockets_used,    _State) ->
     proplists:get_value(sockets_used, file_handle_cache:info([sockets_used]));
@@ -269,9 +269,7 @@ code_change(_, State, _) -> {ok, State}.
 
 %%--------------------------------------------------------------------
 
-emit_update(State0) ->
-    %% TODO update state less often than refresh rate? Or eliminate it.
-    State = State0#state{fd_used = get_used_fd()},
+emit_update(State) ->
     rabbit_event:notify(node_stats, infos(?KEYS, State)),
     erlang:send_after(?REFRESH_RATIO, self(), emit_update),
     State.
