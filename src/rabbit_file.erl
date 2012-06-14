@@ -22,7 +22,7 @@
 -export([read_term_file/1, write_term_file/2, write_file/2, write_file/3]).
 -export([append_file/2, ensure_parent_dirs_exist/1]).
 -export([rename/2, delete/1, recursive_delete/1, recursive_copy/2]).
--export([lock_file/1]).
+-export([copy_file/2, lock_file/1]).
 
 %%----------------------------------------------------------------------------
 
@@ -53,6 +53,8 @@
 -spec(recursive_copy/2 ::
         (file:filename(), file:filename())
         -> rabbit_types:ok_or_error({file:filename(), file:filename(), any()})).
+-spec(copy_file/2 ::
+        (file:filename(), file:filename()) -> ok_or_error()).
 -spec(lock_file/1 :: (file:filename()) -> rabbit_types:ok_or_error('eexist')).
 
 -endif.
@@ -102,9 +104,12 @@ read_file_info(File) ->
     with_fhc_handle(fun () -> prim_file:read_file_info(File) end).
 
 with_fhc_handle(Fun) ->
-    ok = file_handle_cache:obtain(),
+    with_fhc_handle(1, Fun).
+
+with_fhc_handle(N, Fun) ->
+    [ ok = file_handle_cache:obtain() || _ <- lists:seq(1, N)],
     try Fun()
-    after ok = file_handle_cache:release()
+    after [ ok = file_handle_cache:release() || _ <- lists:seq(1, N)]
     end.
 
 read_term_file(File) ->
@@ -240,6 +245,10 @@ is_symlink_no_handle(File) ->
         {ok, _} -> true;
         _       -> false
     end.
+
+copy_file(File1, File2) ->
+    with_fhc_handle(2, fun () -> file:copy(File1, File2)
+                       end).
 
 recursive_copy(Src, Dest) ->
     %% Note that this uses the 'file' module and, hence, shouldn't be

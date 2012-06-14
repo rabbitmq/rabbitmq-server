@@ -33,7 +33,7 @@
 
 %% Used only when swapping handlers in log rotation
 init({{File, Suffix}, []}) ->
-    case rabbit_file:append_file(File, Suffix) of
+    case rabbit_file:copy_file(File, {[File, Suffix], [append]}) of
         ok -> file:delete(File),
               ok;
         {error, Error} ->
