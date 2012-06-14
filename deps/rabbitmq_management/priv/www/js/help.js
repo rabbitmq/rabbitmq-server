@@ -175,6 +175,8 @@ HELP = {
         <dd>Rate at which basic.return is sent to publishers for undeliverable  messages published with the \'immediate\' flag set.</dd>\
       </dl>',
 
+    'disk-monitoring-no-watermark' : 'There is no disk space low watermark set. RabbitMQ will not take any action to avoid running out of disk space.',
+
     'foo': 'foo' // No comma.
 };
 

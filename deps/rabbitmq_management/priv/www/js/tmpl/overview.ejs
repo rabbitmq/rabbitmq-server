@@ -166,9 +166,14 @@ if (version_warning) {
          <%= fmt_bytes(node.disk_free) %>
        </div>
    <% } %>
-   <sub><%= fmt_bytes(node.disk_free_limit) %> low watermark </sub>
+   <% if (node.disk_free_limit == 0) { %>
+     <sub>No low watermark <span class="help" id="disk-monitoring-no-watermark"></span></sub>
+   <% } else { %>
+     <sub><%= fmt_bytes(node.disk_free_limit) %> low watermark </sub>
+   <% } %>
+
 <% } else { %>
-         (not monitored)
+         (not available)
 <% } %>
      </td>
      <td class="r">
