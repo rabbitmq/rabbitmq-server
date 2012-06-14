@@ -20,9 +20,9 @@
 
 -export([is_file/1, is_dir/1, file_size/1, ensure_dir/1, wildcard/2, list_dir/1]).
 -export([read_term_file/1, write_term_file/2, write_file/2, write_file/3]).
--export([append_file/2, ensure_parent_dirs_exist/1]).
+-export([append_file_using_copy/2, append_file/2, ensure_parent_dirs_exist/1]).
 -export([rename/2, delete/1, recursive_delete/1, recursive_copy/2]).
--export([copy_file/2, lock_file/1]).
+-export([lock_file/1]).
 
 %%----------------------------------------------------------------------------
 
@@ -42,6 +42,7 @@
 -spec(write_term_file/2 :: (file:filename(), [any()]) -> ok_or_error()).
 -spec(write_file/2 :: (file:filename(), iodata()) -> ok_or_error()).
 -spec(write_file/3 :: (file:filename(), iodata(), [any()]) -> ok_or_error()).
+-spec(append_file_using_copy/2 :: (file:filename(), string()) -> ok_or_error()).
 -spec(append_file/2 :: (file:filename(), string()) -> ok_or_error()).
 -spec(ensure_parent_dirs_exist/1 :: (string()) -> 'ok').
 -spec(rename/2 ::
@@ -53,8 +54,6 @@
 -spec(recursive_copy/2 ::
         (file:filename(), file:filename())
         -> rabbit_types:ok_or_error({file:filename(), file:filename(), any()})).
--spec(copy_file/2 ::
-        (file:filename(), file:filename()) -> ok_or_error()).
 -spec(lock_file/1 :: (file:filename()) -> rabbit_types:ok_or_error('eexist')).
 
 -endif.
@@ -170,6 +169,14 @@ make_binary(List) ->
             {error, Reason}
     end.
 
+%% this version will not read the entire file into memory first
+append_file_using_copy(File, Suffix) ->
+    case with_fhc_handle(2, fun () ->
+                                file:copy(File, {[File, Suffix], [append]})
+                            end) of
+        {ok, _BytesCopied} -> ok;
+        Error              -> Error
+    end.
 
 append_file(File, Suffix) ->
     case read_file_info(File) of
@@ -246,9 +253,6 @@ is_symlink_no_handle(File) ->
         _       -> false
     end.
 
-copy_file(File1, File2) ->
-    with_fhc_handle(2, fun () -> file:copy(File1, File2)
-                       end).
 
 recursive_copy(Src, Dest) ->
     %% Note that this uses the 'file' module and, hence, shouldn't be
