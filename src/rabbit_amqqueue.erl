@@ -576,7 +576,8 @@ on_node_down(Node) ->
                                     #amqqueue{name = QName, pid = Pid,
                                               slave_pids = []}
                                         <- mnesia:table(rabbit_queue),
-                                    node(Pid) == Node])),
+                                    node(Pid) == Node andalso
+                                        not is_process_alive(Pid)])),
                 {Qs, Dels} = lists:unzip(QsDels),
                 T = rabbit_binding:process_deletions(
                       lists:foldl(fun rabbit_binding:combine_deletions/2,
