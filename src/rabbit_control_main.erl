@@ -490,12 +490,14 @@ wait_for_process_death(Pid) ->
 read_pid_file(PidFile, Wait) ->
     case {file:read_file(PidFile), Wait} of
         {{ok, Bin}, _} ->
-            S = re:replace(Bin, "\\s", "", [global, {return, list}]),
-            try list_to_integer(S)
+            S = binary_to_list(Bin),
+            {match, [PidS]} = re:run(S, "[^\\s]+",
+                                     [{capture, all, list}]),
+            try list_to_integer(PidS)
             catch error:badarg ->
                     exit({error, {garbage_in_pid_file, PidFile}})
             end,
-            S;
+            PidS;
         {{error, enoent}, true} ->
             timer:sleep(?EXTERNAL_CHECK_INTERVAL),
             read_pid_file(PidFile, Wait);
@@ -507,8 +509,7 @@ read_pid_file(PidFile, Wait) ->
 % rpc:call(os, getpid, []) at this point
 process_up(Pid) ->
     with_os([{unix, fun () ->
-                            system("ps -p " ++ Pid
-                                   ++ " >/dev/null 2>&1") =:= 0
+                            run_ps(Pid) =:= 0
                     end},
              {win32, fun () ->
                              Res = os:cmd("tasklist /nh /fi \"pid eq " ++
@@ -526,15 +527,17 @@ with_os(Handlers) ->
         Handler   -> Handler()
     end.
 
-% Like system(3)
-system(Cmd) ->
-    ShCmd = "sh -c '" ++ escape_quotes(Cmd) ++ "'",
-    Port = erlang:open_port({spawn, ShCmd}, [exit_status,nouse_stdio]),
-    receive {Port, {exit_status, Status}} -> Status end.
+run_ps(Pid) ->
+    Port = erlang:open_port({spawn, "ps -p " ++ Pid},
+                            [exit_status, {line, 16384},
+                             use_stdio, stderr_to_stdout]),
+    exit_loop(Port).
 
-% Escape the quotes in a shell command so that it can be used in "sh -c 'cmd'"
-escape_quotes(Cmd) ->
-    lists:flatten(lists:map(fun ($') -> "'\\''"; (Ch) -> Ch end, Cmd)).
+exit_loop(Port) ->
+    receive
+        {Port, {exit_status, Rc}} -> Rc;
+        {Port, _}                 -> exit_loop(Port)
+    end.
 
 format_parse_error({_Line, Mod, Err}) ->
     lists:flatten(Mod:format_error(Err)).
