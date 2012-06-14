@@ -331,12 +331,23 @@ function update_multifields() {
                     }
                 });
             if (!empty_found) {
-                $(this).append('<p><input type="text" name="' + name + '_' +
-                               (largest_id + 1) +
+                var prefix = name + '_' + (largest_id + 1);
+                var type_part;
+                if ($(this).hasClass('string-only')) {
+                    type_part = '<input type="hidden" name="' + prefix +
+                        '_mftype" value="string"/>';
+                } else {
+                    type_part = '<select name="' + prefix +
+                        '_mftype">' +
+                        '<option value="string">String</option>' +
+                        '<option value="number">Number</option>' +
+                        '<option value="boolean">Boolean</option>' +
+                        '</select>';
+                }
+                $(this).append('<p><input type="text" name="' + prefix +
                                '_mfkey" value=""/> = ' +
-                               '<input type="text" name="' + name + '_' +
-                               (largest_id + 1) +
-                               '_mfvalue" value=""/></p>');
+                               '<input type="text" name="' + prefix +
+                               '_mfvalue" value=""/> ' + type_part + '</p>');
             }
         });
 }
@@ -598,7 +609,8 @@ function collapse_multifields(params0) {
     for (key in params0) {
         var match = key.match(/([a-z]*)_([0-9]*)_mfkey/);
         var match2 = key.match(/[a-z]*_[0-9]*_mfvalue/);
-        if (match == null && match2 == null) {
+        var match3 = key.match(/[a-z]*_[0-9]*_mftype/);
+        if (match == null && match2 == null && match3 == null) {
             params[key] = params0[key];
         }
         else if (match == null) {
@@ -613,7 +625,21 @@ function collapse_multifields(params0) {
             if (params0[key] != "") {
                 var k = params0[key];
                 var v = params0[name + '_' + id + '_mfvalue'];
-                params[name][k] = v;
+                var t = params0[name + '_' + id + '_mftype'];
+                if (t == 'boolean') {
+                    if (v != 'true' && v != 'false')
+                        throw(k + ' must be "true" or "false"; got ' + v);
+                    params[name][k] = (v == 'true');
+                }
+                else if (t == 'number') {
+                    var n = parseFloat(v);
+                    if (isNaN(n))
+                        throw(k + ' must be a number; got ' + v);
+                    params[name][k] = n;
+                }
+                else {
+                    params[name][k] = v;
+                }
             }
         }
     }

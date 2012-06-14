@@ -42,6 +42,11 @@ function fmt_date(d) {
         ":" + f(d.getSeconds());
 }
 
+function fmt_time(t, suffix) {
+    if (t == undefined || t == 0) return '';
+    return t + suffix;
+}
+
 function fmt_parameters(obj) {
     return fmt_table_short(args_to_params(obj));
 }
@@ -256,10 +261,14 @@ function fmt_amqp_value(val) {
         return val2.join("<br/>");
     } else if (val instanceof Object) {
         return fmt_table_short(val);
-    } else if (typeof(val) == 'string') {
-        return fmt_escape_html(val);
     } else {
-        return val;
+        var t = typeof(val);
+        if (t == 'string') {
+            return '<acronym class="type" title="string">' +
+                fmt_escape_html(val) + '</acronym>';
+        } else {
+            return '<acronym class="type" title="' + t + '">' + val + '</acronym>';
+        }
     }
 }
 
@@ -400,6 +409,17 @@ function fmt_connection_state(conn) {
     }
     else {
         return '<div class="' + colour + '">' + text + '</div>';
+    }
+}
+
+function fmt_shortened_uri(uri0) {
+    var uri = fmt_escape_html(uri0);
+    if (uri.indexOf('?') == -1) {
+        return uri;
+    }
+    else {
+        return '<acronym title="' + uri + '">' +
+            uri.substr(0, uri.indexOf('?')) + '?...</acronym>';
     }
 }
 
