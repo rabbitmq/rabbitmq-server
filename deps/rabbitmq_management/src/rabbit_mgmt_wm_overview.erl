@@ -18,7 +18,7 @@
 
 -export([init/1, to_json/2, content_types_provided/2, is_authorized/2]).
 
--import(rabbit_misc, [pget/3]).
+-import(rabbit_misc, [pget/2, pget/3]).
 
 -include("rabbit_mgmt.hrl").
 -include_lib("webmachine/include/webmachine.hrl").
@@ -81,5 +81,8 @@ listeners() ->
 rabbit_mochiweb_contexts() ->
     rabbit_mgmt_util:sort_list(
       lists:append(
-        [pget(contexts, N, []) || N <- rabbit_mgmt_wm_nodes:all_nodes()]),
+        [rabbit_mochiweb_contexts(N) || N <- rabbit_mgmt_wm_nodes:all_nodes()]),
       ["description", "port", "node"]).
+
+rabbit_mochiweb_contexts(N) ->
+    [[{node, pget(name, N)} | C] || C <- pget(contexts, N, [])].
