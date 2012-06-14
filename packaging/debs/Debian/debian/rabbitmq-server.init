@@ -140,6 +140,7 @@ start_stop_end() {
         3)
             log_warning_msg "${DESC} already ${1}"
             log_end_msg 0
+            RETVAL=0
             ;;
         *)
             log_warning_msg "FAILED - check ${INIT_LOG_DIR}/startup_\{log, _err\}"
@@ -150,12 +151,12 @@ start_stop_end() {
 
 case "$1" in
     start)
-        log_daemon_msg "Starting ${DESC}:" $NAME
+        log_daemon_msg "Starting ${DESC}" $NAME
         start_rabbitmq
         start_stop_end "running"
         ;;
     stop)
-        log_daemon_msg "Stopping ${DESC}:" $NAME
+        log_daemon_msg "Stopping ${DESC}" $NAME
         stop_rabbitmq
         start_stop_end "stopped"
         ;;
@@ -168,12 +169,12 @@ case "$1" in
         log_action_end_msg $RETVAL
         ;;
     force-reload|reload|restart)
-        log_daemon_msg "Restarting ${DESC}:" $NAME
+        log_daemon_msg "Restarting ${DESC}" $NAME
         restart_rabbitmq
         restart_end
         ;;
     try-restart)
-        log_daemon_msg "Restarting ${DESC}:" $NAME
+        log_daemon_msg "Restarting ${DESC}" $NAME
         restart_running_rabbitmq
         restart_end
         ;;
