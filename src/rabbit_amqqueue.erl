@@ -166,7 +166,9 @@
         [queue_name, channel_pid, consumer_tag, ack_required]).
 
 start() ->
-    on_node_down(node()), %% clear out remnants of old incarnation
+    %% Clear out remnants of old incarnation, in case we restarted
+    %% faster than other nodes handled DOWN messages from us.
+    on_node_down(node()),
     DurableQueues = find_durable_queues(),
     {ok, BQ} = application:get_env(rabbit, backing_queue_module),
     ok = BQ:start([QName || #amqqueue{name = QName} <- DurableQueues]),
