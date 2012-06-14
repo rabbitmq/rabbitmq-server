@@ -300,6 +300,7 @@ start() ->
                      %% We do not want to HiPE compile or upgrade
                      %% mnesia after just restarting the app
                      ok = ensure_application_loaded(),
+                     ok = rabbit_mnesia:prepare(),
                      ok = ensure_working_log_handlers(),
                      ok = app_utils:start_applications(app_startup_order()),
                      ok = print_plugin_info(rabbit_plugins:active())
@@ -308,6 +309,7 @@ start() ->
 boot() ->
     start_it(fun() ->
                      ok = ensure_application_loaded(),
+                     ok = rabbit_mnesia:prepare(),
                      maybe_hipe_compile(),
                      ok = ensure_working_log_handlers(),
                      ok = rabbit_upgrade:maybe_upgrade_mnesia(),
@@ -408,7 +410,6 @@ start(normal, []) ->
     end.
 
 stop(_State) ->
-    ok = rabbit_mnesia:record_running_nodes(),
     terminated_ok = error_logger:delete_report_handler(rabbit_error_logger),
     ok = rabbit_alarm:stop(),
     ok = case rabbit_mnesia:is_clustered() of
@@ -505,12 +506,12 @@ sort_boot_steps(UnsortedSteps) ->
     end.
 
 boot_step_error({error, {timeout_waiting_for_tables, _}}, _Stacktrace) ->
+    AllNodes = rabbit_mnesia:all_clustered_nodes(),
     {Err, Nodes} =
-        case rabbit_mnesia:read_previously_running_nodes() of
+        case AllNodes -- [node()] of
             [] -> {"Timeout contacting cluster nodes. Since RabbitMQ was"
                    " shut down forcefully~nit cannot determine which nodes"
-                   " are timing out. Details on all nodes will~nfollow.~n",
-                   rabbit_mnesia:all_clustered_nodes() -- [node()]};
+                   " are timing out.~n", []};
             Ns -> {rabbit_misc:format(
                      "Timeout contacting cluster nodes: ~p.~n", [Ns]),
                    Ns}

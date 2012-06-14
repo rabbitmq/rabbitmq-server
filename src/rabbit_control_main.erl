@@ -25,10 +25,12 @@
 -define(QUIET_OPT, "-q").
 -define(NODE_OPT, "-n").
 -define(VHOST_OPT, "-p").
+-define(RAM_OPT, "--ram").
 
 -define(QUIET_DEF, {?QUIET_OPT, flag}).
 -define(NODE_DEF(Node), {?NODE_OPT, {option, Node}}).
 -define(VHOST_DEF, {?VHOST_OPT, {option, "/"}}).
+-define(RAM_DEF, {?RAM_OPT, flag}).
 
 -define(GLOBAL_DEFS(Node), [?QUIET_DEF, ?NODE_DEF(Node)]).
 
@@ -41,8 +43,10 @@
          force_reset,
          rotate_logs,
 
-         cluster,
-         force_cluster,
+         {join_cluster, [?RAM_DEF]},
+         change_node_type,
+         recluster,
+         remove_node,
          cluster_status,
 
          add_user,
@@ -234,17 +238,28 @@ action(force_reset, Node, [], _Opts, Inform) ->
     Inform("Forcefully resetting node ~p", [Node]),
     call(Node, {rabbit_mnesia, force_reset, []});
 
-action(cluster, Node, ClusterNodeSs, _Opts, Inform) ->
-    ClusterNodes = lists:map(fun list_to_atom/1, ClusterNodeSs),
-    Inform("Clustering node ~p with ~p",
-           [Node, ClusterNodes]),
-    rpc_call(Node, rabbit_mnesia, cluster, [ClusterNodes]);
+action(join_cluster, Node, [ClusterNodeS], Opts, Inform) ->
+    ClusterNode = list_to_atom(ClusterNodeS),
+    DiscNode = not proplists:get_bool(?RAM_OPT, Opts),
+    Inform("Clustering node ~p with ~p", [Node, ClusterNode]),
+    rpc_call(Node, rabbit_mnesia, join_cluster, [ClusterNode, DiscNode]);
 
-action(force_cluster, Node, ClusterNodeSs, _Opts, Inform) ->
-    ClusterNodes = lists:map(fun list_to_atom/1, ClusterNodeSs),
-    Inform("Forcefully clustering node ~p with ~p (ignoring offline nodes)",
-           [Node, ClusterNodes]),
-    rpc_call(Node, rabbit_mnesia, force_cluster, [ClusterNodes]);
+action(change_node_type, Node, ["ram"], _Opts, Inform) ->
+    Inform("Turning ~p into a ram node", [Node]),
+    rpc_call(Node, rabbit_mnesia, change_node_type, [ram]);
+action(change_node_type, Node, ["disc"], _Opts, Inform) ->
+    Inform("Turning ~p into a disc node", [Node]),
+    rpc_call(Node, rabbit_mnesia, change_node_type, [disc]);
+
+action(recluster, Node, [ClusterNodeS], _Opts, Inform) ->
+    ClusterNode = list_to_atom(ClusterNodeS),
+    Inform("Re-clustering ~p with ~p", [Node, ClusterNode]),
+    rpc_call(Node, rabbit_mnesia, recluster, [ClusterNode]);
+
+action(remove_node, Node, [ClusterNodeS], _Opts, Inform) ->
+    ClusterNode = list_to_atom(ClusterNodeS),
+    Inform("Removing node ~p from cluster", [ClusterNode]),
+    rpc_call(Node, rabbit_mnesia, remove_node, [ClusterNode]);
 
 action(wait, Node, [PidFile], _Opts, Inform) ->
     Inform("Waiting for ~p", [Node]),
