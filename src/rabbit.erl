@@ -537,6 +537,7 @@ boot_delegate() ->
     rabbit_sup:start_supervisor_child(delegate_sup, [Count]).
 
 recover() ->
+    rabbit_networking:on_node_down(node()),
     rabbit_binding:recover(rabbit_exchange:recover(), rabbit_amqqueue:start()).
 
 maybe_insert_default_data() ->
