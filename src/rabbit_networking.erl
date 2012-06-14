@@ -117,9 +117,6 @@
 %%----------------------------------------------------------------------------
 
 boot() ->
-    %% Clear out remnants of old incarnation, in case we restarted
-    %% faster than other nodes handled DOWN messages from us.
-    on_node_down(node()),
     ok = start(),
     ok = boot_tcp(),
     ok = boot_ssl().
