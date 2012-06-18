@@ -229,7 +229,6 @@ is_symlink_no_handle(File) ->
         _       -> false
     end.
 
-
 recursive_copy(Src, Dest) ->
     %% Note that this uses the 'file' module and, hence, shouldn't be
     %% run on many processes at once.
