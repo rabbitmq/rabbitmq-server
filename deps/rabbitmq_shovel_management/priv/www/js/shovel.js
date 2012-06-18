@@ -5,7 +5,7 @@ dispatcher_add(function(sammy) {
             });
 });
 
-$("#tabs").append('<li class="administrator-only"><a href="#/shovels">Shovels</a></li>');
+NAVIGATION['Admin'][0]['Shovel Status'] = ['#/shovels', true];
 
 function fmt_shovel_endpoint(point) {
     if (point == undefined) return '';
