@@ -229,7 +229,6 @@ start_connection(Parent, ChannelSupSupPid, Collector, StartHeartbeatFun, Deb,
         log(info, "closing AMQP connection ~p (~s)~n", [self(), ConnStr])
     catch
         Ex -> log(case Ex of
-                      {heartbeat_timeout, _}     -> warning;
                       connection_closed_abruptly -> warning;
                       _                          -> error
                   end, "closing AMQP connection ~p (~s):~n~p~n",
