@@ -20,7 +20,7 @@
 
 -export([is_file/1, is_dir/1, file_size/1, ensure_dir/1, wildcard/2, list_dir/1]).
 -export([read_term_file/1, write_term_file/2, write_file/2, write_file/3]).
--export([append_file_using_copy/2, append_file/2, ensure_parent_dirs_exist/1]).
+-export([append_file/2, ensure_parent_dirs_exist/1]).
 -export([rename/2, delete/1, recursive_delete/1, recursive_copy/2]).
 -export([lock_file/1]).
 
@@ -42,7 +42,6 @@
 -spec(write_term_file/2 :: (file:filename(), [any()]) -> ok_or_error()).
 -spec(write_file/2 :: (file:filename(), iodata()) -> ok_or_error()).
 -spec(write_file/3 :: (file:filename(), iodata(), [any()]) -> ok_or_error()).
--spec(append_file_using_copy/2 :: (file:filename(), string()) -> ok_or_error()).
 -spec(append_file/2 :: (file:filename(), string()) -> ok_or_error()).
 -spec(ensure_parent_dirs_exist/1 :: (string()) -> 'ok').
 -spec(rename/2 ::
@@ -169,35 +168,12 @@ make_binary(List) ->
             {error, Reason}
     end.
 
-%% this version will not read the entire file into memory first
-append_file_using_copy(File, Suffix) ->
+append_file(File, Suffix) ->
     case with_fhc_handle(2, fun () ->
                                 file:copy(File, {[File, Suffix], [append]})
                             end) of
         {ok, _BytesCopied} -> ok;
         Error              -> Error
-    end.
-
-append_file(File, Suffix) ->
-    case read_file_info(File) of
-        {ok, FInfo}     -> append_file(File, FInfo#file_info.size, Suffix);
-        {error, enoent} -> append_file(File, 0, Suffix);
-        Error           -> Error
-    end.
-
-append_file(_, _, "") ->
-    ok;
-append_file(File, 0, Suffix) ->
-    with_fhc_handle(fun () ->
-                            case prim_file:open([File, Suffix], [append]) of
-                                {ok, Fd} -> prim_file:close(Fd);
-                                Error    -> Error
-                            end
-                    end);
-append_file(File, _, Suffix) ->
-    case with_fhc_handle(fun () -> prim_file:read_file(File) end) of
-        {ok, Data} -> write_file([File, Suffix], Data, [append]);
-        Error      -> Error
     end.
 
 ensure_parent_dirs_exist(Filename) ->
