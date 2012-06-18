@@ -229,8 +229,8 @@ start_connection(Parent, ChannelSupSupPid, Collector, StartHeartbeatFun, Deb,
         log(info, "closing AMQP connection ~p (~s)~n", [self(), ConnStr])
     catch
         Ex -> log(case Ex of
+                      {heartbeat_timeout, _}     -> warning;
                       connection_closed_abruptly -> warning;
-                      {timeout, _CState}         -> amqp_heartbeat_timeout;
                       _                          -> error
                   end, "closing AMQP connection ~p (~s):~n~p~n",
                   [self(), ConnStr, Ex])
@@ -314,8 +314,8 @@ handle_other(handshake_timeout, _Deb, State) ->
     throw({handshake_timeout, State#v1.callback});
 handle_other(timeout, Deb, State = #v1{connection_state = closed}) ->
     mainloop(Deb, State);
-handle_other(timeout, _Deb, #v1{connection_state = S}) ->
-    throw({timeout, S});
+handle_other(heartbeat_timeout, _Deb, #v1{connection_state = S}) ->
+    throw({heartbeat_timeout, S});
 handle_other({'$gen_call', From, {shutdown, Explanation}}, Deb, State) ->
     {ForceTermination, NewState} = terminate(Explanation, State),
     gen_server:reply(From, ok),
@@ -684,7 +684,7 @@ handle_method0(#'connection.tune_ok'{frame_max = FrameMax,
             Frame = rabbit_binary_generator:build_heartbeat_frame(),
             SendFun = fun() -> catch rabbit_net:send(Sock, Frame) end,
             Parent = self(),
-            ReceiveFun = fun() -> Parent ! timeout end,
+            ReceiveFun = fun() -> Parent ! heartbeat_timeout end,
             Heartbeater = SHF(Sock, ClientHeartbeat, SendFun,
                               ClientHeartbeat, ReceiveFun),
             State#v1{connection_state = opening,
