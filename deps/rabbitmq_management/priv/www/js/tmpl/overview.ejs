@@ -112,10 +112,11 @@ if (version_warning) {
          Node not running
        </div>
      </td>
-<% } else if (node.external_stats_not_running) { %>
+<% } else if (node.os_pid == undefined) { %>
      <td class="status" colspan="6">
-       <div class="red">
-         Could not contact management agent
+       <div class="yellow">
+         <acronym title="The rabbitmq_management_agent plugin should be enabled on this node. If it is not, various statistics will be inaccurate.">
+           Node statistics not available</acronym>
        </div>
      </td>
 <% } else { %>
