@@ -13,4 +13,3 @@ and log in with AMQP credentials (guest/guest by default).
 Documentation for the HTTP API can be found at
 
 http://<server>:55672/api/
-
