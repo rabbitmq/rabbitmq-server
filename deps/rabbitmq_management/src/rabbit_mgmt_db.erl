@@ -22,7 +22,7 @@
 
 -export([start_link/0]).
 
--export([augment_exchanges/2, augment_queues/2,
+-export([augment_exchanges/2, augment_queues/2, augment_nodes/1,
          get_channels/2, get_connections/1,
          get_all_channels/1, get_all_connections/0,
          get_overview/1, get_overview/0]).
@@ -35,7 +35,8 @@
 -record(state, {tables, interval}).
 -define(FINE_STATS_TYPES, [channel_queue_stats, channel_exchange_stats,
                            channel_queue_exchange_stats]).
--define(TABLES, [queue_stats, connection_stats, channel_stats, consumers] ++
+-define(TABLES, [queue_stats, connection_stats, channel_stats,
+                 consumers, node_stats] ++
             ?FINE_STATS_TYPES).
 
 -define(DELIVER_GET, [deliver, deliver_no_ack, get, get_no_ack]).
@@ -92,6 +93,7 @@ start_link() ->
 
 augment_exchanges(Xs, Mode) -> safe_call({augment_exchanges, Xs, Mode}, Xs).
 augment_queues(Qs, Mode)    -> safe_call({augment_queues, Qs, Mode}, Qs).
+augment_nodes(Nodes)        -> safe_call({augment_nodes, Nodes}, Nodes).
 
 get_channels(Cs, Mode)      -> safe_call({get_channels, Cs, Mode}, Cs).
 get_connections(Cs)         -> safe_call({get_connections, Cs}, Cs).
@@ -197,6 +199,9 @@ if_unknown(Val,    _Def) -> Val.
 %%----------------------------------------------------------------------------
 
 init([]) ->
+    %% When Rabbit is overloaded, it's usually especially important
+    %% that the management plugin work.
+    process_flag(priority, high),
     rabbit:force_event_refresh(),
     {ok, Interval} = application:get_env(rabbit, collect_statistics_interval),
     rabbit_log:info("Statistics database started.~n"),
@@ -216,6 +221,9 @@ handle_call({augment_queues, Qs, basic}, _From, State) ->
 
 handle_call({augment_queues, Qs, full}, _From, State) ->
     {reply, detail_queue_stats(Qs, State), State};
+
+handle_call({augment_nodes, Nodes}, _From, State) ->
+    {reply, node_stats(Nodes, State), State};
 
 handle_call({get_channels, Names, Mode}, _From,
             State = #state{tables = Tables}) ->
@@ -371,6 +379,15 @@ handle_event(#event{type = queue_mirror_deaths, props = Props},
     prune_slaves(ets:match(Table, {{'$1', stats}, '$2', '$3'}, 100),
                  Dead, Table),
     prune_synchronised_slaves(false, pget(name, Props), Dead, State);
+
+%% TODO: we don't clear up after dead nodes here - this is a very tiny
+%% leak every time a node is permanently removed from the cluster. Do
+%% we care?
+handle_event(#event{type = node_stats, props = Stats, timestamp = Timestamp},
+             State = #state{tables = Tables}) ->
+    Table = orddict:fetch(node_stats, Tables),
+    ets:insert(Table, {{pget(name, Stats), stats}, Stats, Timestamp}),
+    {ok, State};
 
 handle_event(_Event, State) ->
     {ok, State}.
@@ -535,11 +552,11 @@ merge_stats(Objs, Funs) ->
     [lists:foldl(fun (Fun, Props) -> Fun(Props) ++ Props end, Obj, Funs)
      || Obj <- Objs].
 
-basic_stats_fun(Type, State = #state{tables = Tables}) ->
+basic_stats_fun(Type, IdProperty, State = #state{tables = Tables}) ->
     Table = orddict:fetch(Type, Tables),
     fun (Props) ->
-            zero_old_rates(lookup_element(Table, {pget(pid, Props), stats}),
-                           State)
+            zero_old_rates(
+              lookup_element(Table, {pget(IdProperty, Props), stats}), State)
     end.
 
 fine_stats_fun(FineSpecs, State) ->
@@ -683,7 +700,7 @@ detail_queue_stats(Objs, State) ->
                       queue_funs(State))).
 
 queue_funs(State) ->
-    [basic_stats_fun(queue_stats, State), augment_msg_stats_fun(State),
+    [basic_stats_fun(queue_stats, pid, State), augment_msg_stats_fun(State),
      synchronised_slaves_fun(State)].
 
 exchange_stats(Objs, FineSpecs, State) ->
@@ -691,20 +708,23 @@ exchange_stats(Objs, FineSpecs, State) ->
                        augment_msg_stats_fun(State)]).
 
 connection_stats(Objs, State) ->
-    merge_stats(Objs, [basic_stats_fun(connection_stats, State),
+    merge_stats(Objs, [basic_stats_fun(connection_stats, pid, State),
                        augment_msg_stats_fun(State)]).
 
 list_channel_stats(Objs, State) ->
-    merge_stats(Objs, [basic_stats_fun(channel_stats, State),
+    merge_stats(Objs, [basic_stats_fun(channel_stats, pid, State),
                        fine_stats_fun(?FINE_STATS_CHANNEL_LIST, State),
                        augment_msg_stats_fun(State)]).
 
 detail_channel_stats(Objs, State) ->
-    merge_stats(Objs, [basic_stats_fun(channel_stats, State),
+    merge_stats(Objs, [basic_stats_fun(channel_stats, pid, State),
                        consumer_details_fun(
                          fun (Props) -> {'_', pget(pid, Props)} end, State),
                        fine_stats_fun(?FINE_STATS_CHANNEL_DETAIL, State),
                        augment_msg_stats_fun(State)]).
+
+node_stats(Objs, State) ->
+    merge_stats(Objs, [basic_stats_fun(node_stats, name, State)]).
 
 %%----------------------------------------------------------------------------
 

@@ -5,8 +5,8 @@
 <div class="hider updatable">
 <% if (!node.running) { %>
 <p class="warning">Node not running</p>
-<% } else if (node.external_stats_not_running) { %>
-<p class="warning">Could not contact management agent</p>
+<% } else if (node.os_pid == undefined) { %>
+<p class="warning">Node statistics not available</p>
 <% } else { %>
   <table class="facts">
     <tr>
@@ -131,8 +131,8 @@
 <div class="hider updatable">
 <% if (!node.running) { %>
 <p class="warning">Node not running</p>
-<% } else if (node.external_stats_not_running) { %>
-<p class="warning">Could not contact management agent</p>
+<% } else if (node.os_pid == undefined) { %>
+<p class="warning">Node statistics not available</p>
 <% } else { %>
 <table class="list">
     <tr>
@@ -161,8 +161,8 @@
 <div class="hider updatable">
 <% if (!node.running) { %>
 <p class="warning">Node not running</p>
-<% } else if (node.external_stats_not_running) { %>
-<p class="warning">Could not contact management agent</p>
+<% } else if (node.os_pid == undefined) { %>
+<p class="warning">Node statistics not available</p>
 <% } else { %>
 <h3>Exchange types</h3>
 <%= format('registry', {'list': node.exchange_types, 'node': node, 'show_enabled': false} ) %>
@@ -177,8 +177,8 @@
 <div class="hider updatable">
 <% if (!node.running) { %>
 <p class="warning">Node not running</p>
-<% } else if (node.external_stats_not_running) { %>
-<p class="warning">Could not contact management agent</p>
+<% } else if (node.os_pid == undefined) { %>
+<p class="warning">Node statistics not available</p>
 <% } else { %>
   <div class="box">
   <h3>Memory</h3>

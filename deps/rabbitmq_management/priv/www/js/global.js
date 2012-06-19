@@ -38,6 +38,14 @@ var ALL_ARGS = {};
 for (var k in KNOWN_ARGS)    ALL_ARGS[k] = KNOWN_ARGS[k];
 for (var k in IMPLICIT_ARGS) ALL_ARGS[k] = IMPLICIT_ARGS[k];
 
+var NAVIGATION = {'Overview':    ['#/',                          false],
+                  'Connections': ['#/connections',               false],
+                  'Channels':    ['#/channels',                  false],
+                  'Exchanges':   ['#/exchanges',                 false],
+                  'Queues':      ['#/queues',                    false],
+                  'Admin':       [{'Users':         ['#/users',  true],
+                                   'Virtual Hosts': ['#/vhosts', true]}, true]
+                 };
 
 ///////////////////////////////////////////////////////////////////////////
 //                                                                       //
