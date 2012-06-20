@@ -89,7 +89,7 @@
 %%----------------------------------------------------------------------------
 
 start_link() ->
-    gen_server:start_link({global, ?MODULE}, ?MODULE, [], []).
+    gen_server2:start_link({global, ?MODULE}, ?MODULE, [], []).
 
 augment_exchanges(Xs, Mode) -> safe_call({augment_exchanges, Xs, Mode}, Xs).
 augment_queues(Qs, Mode)    -> safe_call({augment_queues, Qs, Mode}, Qs).
@@ -108,7 +108,7 @@ safe_call(Term) -> safe_call(Term, []).
 
 safe_call(Term, Item) ->
     try
-        gen_server:call({global, ?MODULE}, Term, infinity)
+        gen_server2:call({global, ?MODULE}, Term, infinity)
     catch exit:{noproc, _} -> Item
     end.
 
@@ -208,7 +208,8 @@ init([]) ->
     {ok, #state{interval = Interval,
                 tables = orddict:from_list(
                            [{Key, ets:new(anon, [private, ordered_set])} ||
-                               Key <- ?TABLES])}}.
+                               Key <- ?TABLES])}, hibernate,
+     {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
 handle_call({augment_exchanges, Xs, basic}, _From, State) ->
     reply(exchange_stats(Xs, ?FINE_STATS_EXCHANGE_LIST, State), State);
