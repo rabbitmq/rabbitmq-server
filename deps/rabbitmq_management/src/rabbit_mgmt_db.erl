@@ -300,6 +300,11 @@ reply(Reply, NewState) -> {reply, Reply, NewState, hibernate}.
 noreply(NewState) -> {noreply, NewState, hibernate}.
 
 handle_pre_hibernate(State) ->
+    %% rabbit_event can end up holding on to some memory after a busy
+    %% workout, but it's not a gen_server so we can't make it
+    %% hibernate. The best we can do is forcibly GC it here (if
+    %% rabbit_mgmt_db is hibernating the odds are rabbit_event is
+    %% quiescing in some way too).
     rabbit_misc:append_rpc_all_nodes(
       rabbit_mnesia:running_clustered_nodes(), rabbit_mgmt_db_handler, gc, []),
     {hibernate, State}.
