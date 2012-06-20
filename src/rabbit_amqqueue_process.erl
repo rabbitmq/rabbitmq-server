@@ -23,6 +23,7 @@
 -define(UNSENT_MESSAGE_LIMIT,          200).
 -define(SYNC_INTERVAL,                 25). %% milliseconds
 -define(RAM_DURATION_UPDATE_INTERVAL,  5000).
+-define(EXPIRED_MESSAGE_DROP_INTERVAL, 5000).
 
 -export([start_link/1, info_keys/0]).
 
@@ -717,7 +718,7 @@ ensure_ttl_timer(State = #q{backing_queue       = BQ,
   when TTL =/= undefined ->
     case BQ:is_empty(BQS) of
         true  -> State;
-        false -> TRef = erlang:send_after(TTL, self(), drop_expired),
+        false -> TRef = erlang:send_after(?EXPIRED_MESSAGE_DROP_INTERVAL, self(), drop_expired),
                  State#q{ttl_timer_ref = TRef}
     end;
 ensure_ttl_timer(State) ->
