@@ -300,7 +300,8 @@ reply(Reply, NewState) -> {reply, Reply, NewState, hibernate}.
 noreply(NewState) -> {noreply, NewState, hibernate}.
 
 handle_pre_hibernate(State) ->
-    garbage_collect(whereis(rabbit_event)),
+    rabbit_misc:append_rpc_all_nodes(
+      rabbit_mnesia:running_clustered_nodes(), rabbit_mgmt_db_handler, gc, []),
     {hibernate, State}.
 
 %%----------------------------------------------------------------------------
