@@ -111,9 +111,17 @@ plugins:
 	PLUGINS_SRC_DIR="" $(MAKE) -C "$(PLUGINS_SRC_DIR)" plugins-dist PLUGINS_DIST_DIR="$(CURDIR)/$(PLUGINS_DIR)" VERSION=$(VERSION)
 	echo "Put your EZs here and use rabbitmq-plugins to enable them." > $(PLUGINS_DIR)/README
 	rm -f $(PLUGINS_DIR)/rabbit_common*.ez
+
+# add -q to remove printout of warnings....
+check-xref: $(BEAM_TARGETS) $(PLUGINS_DIR)
+	rm -rf lib  # just in case!
+	./check_xref $(PLUGINS_DIR)
+
 else
 plugins:
 # Not building plugins
+check-xref:
+# No xref checks enabled
 endif
 
 $(DEPS_FILE): $(SOURCES) $(INCLUDES)
