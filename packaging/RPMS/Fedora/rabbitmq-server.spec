@@ -121,6 +121,9 @@ done
 rm -rf %{buildroot}
 
 %changelog
+* Thu Jun 21 2012 simon@rabbitmq.com 2.8.3-1
+- New Upstream Release
+
 * Fri Dec 16 2011 steve@rabbitmq.com 2.7.1-1
 - New Upstream Release
 

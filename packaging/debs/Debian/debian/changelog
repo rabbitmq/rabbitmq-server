@@ -1,3 +1,9 @@
+rabbitmq-server (2.8.3-1) unstable; urgency=low
+
+  * New Upstream Release
+
+ -- Simon MacMullen <simon@rabbitmq.com>  Thu, 21 Jun 2012 12:03:10 +0100
+
 rabbitmq-server (2.7.1-1) natty; urgency=low
 
   * New Upstream Release
