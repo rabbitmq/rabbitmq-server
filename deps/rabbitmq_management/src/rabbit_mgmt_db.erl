@@ -305,7 +305,7 @@ handle_pre_hibernate(State) ->
     %% hibernate. The best we can do is forcibly GC it here (if
     %% rabbit_mgmt_db is hibernating the odds are rabbit_event is
     %% quiescing in some way too).
-    rabbit_misc:append_rpc_all_nodes(
+    rpc:multicall(
       rabbit_mnesia:running_clustered_nodes(), rabbit_mgmt_db_handler, gc, []),
     {hibernate, State}.
 
