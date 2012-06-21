@@ -102,7 +102,7 @@ check(Cwd, PluginsDir, LibDir, Checks) ->
 %%
 
 perform_analysis({Query, Description, Severity}) ->
-    perform_analysis({Query, Description, Severity, fun(_) -> return end});
+    perform_analysis({Query, Description, Severity, fun(_) -> false end});
 perform_analysis({Query, Description, Severity, Filter}) ->
     report_progress("Checking whether any code ~s "
                     "(~s)~n", [Description, Query]),
