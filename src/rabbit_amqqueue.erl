@@ -511,7 +511,7 @@ basic_consume(#amqqueue{pid = QPid}, NoAck, ChPid, Limiter,
                          Limiter, ConsumerTag, ExclusiveConsume, OkMsg}).
 
 basic_cancel(#amqqueue{pid = QPid}, ChPid, ConsumerTag, OkMsg) ->
-    ok = delegate_call(QPid, {basic_cancel, ChPid, ConsumerTag, OkMsg}).
+    delegate_call(QPid, {basic_cancel, ChPid, ConsumerTag, OkMsg}).
 
 notify_sent(QPid, ChPid) ->
     Key = {consumer_credit_to, QPid},
