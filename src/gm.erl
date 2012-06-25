@@ -647,7 +647,7 @@ handle_info(flush, State) ->
     noreply(
       flush_broadcast_buffer(State #state { broadcast_timer = undefined }));
 
-handle_info({'DOWN', MRef, process, _Pid, _Reason},
+handle_info({'DOWN', MRef, process, _Pid, Reason},
             State = #state { self          = Self,
                              left          = Left,
                              right         = Right,
@@ -661,8 +661,10 @@ handle_info({'DOWN', MRef, process, _Pid, _Reason},
                  {_, {Member1, MRef}} -> Member1;
                  _                    -> undefined
              end,
-    case Member of
-        undefined ->
+    case {Member, Reason} of
+        {undefined, _} ->
+            noreply(State);
+        {_, normal} ->
             noreply(State);
         _ ->
             View1 =
