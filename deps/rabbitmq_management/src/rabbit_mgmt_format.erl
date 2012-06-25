@@ -265,14 +265,16 @@ queue(#amqqueue{name            = Name,
                 auto_delete     = AutoDelete,
                 exclusive_owner = ExclusiveOwner,
                 arguments       = Arguments,
-                pid             = Pid }) ->
+                pid             = Pid,
+                policy          = Policy} = Q) ->
     format(
       [{name,        Name},
        {durable,     Durable},
        {auto_delete, AutoDelete},
        {owner_pid,   ExclusiveOwner},
        {arguments,   Arguments},
-       {pid,         Pid}],
+       {pid,         Pid},
+       {policy,      rabbit_policy:name(Q)}],
       [{fun resource/1,     [name]},
        {fun amqp_table/1,   [arguments]}]).
 
