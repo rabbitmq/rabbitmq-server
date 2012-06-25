@@ -358,18 +358,10 @@ handle_msg([SPid], _From, Msg) ->
     ok = gen_server2:cast(SPid, {gm, Msg}).
 
 inform_deaths(SPid, Deaths) ->
-    %% TODO can we get rid of this with_exit_handler use? See bug
-    %% 24988 comment 13.
-    rabbit_misc:with_exit_handler(
-      fun () -> {stop, normal} end,
-      fun () ->
-              case gen_server2:call(SPid, {gm_deaths, Deaths}, infinity) of
-                  ok ->
-                      ok;
-                  {promote, CPid} ->
-                      {become, rabbit_mirror_queue_coordinator, [CPid]}
-              end
-      end).
+    case gen_server2:call(SPid, {gm_deaths, Deaths}, infinity) of
+        ok              -> ok;
+        {promote, CPid} -> {become, rabbit_mirror_queue_coordinator, [CPid]}
+    end.
 
 %% ---------------------------------------------------------------------------
 %% Others
