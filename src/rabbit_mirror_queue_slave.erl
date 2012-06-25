@@ -351,9 +351,9 @@ handle_msg([_SPid], _From, {ensure_monitoring, _Pid}) ->
     ok;
 handle_msg([SPid], _From, {process_death, Pid}) ->
     inform_deaths(SPid, [Pid]);
-handle_msg([CPid], _From, {delete_and_terminate, Reason} = Msg) ->
+handle_msg([CPid], _From, {delete_and_terminate, _Reason} = Msg) ->
     ok = gen_server2:cast(CPid, {gm, Msg}),
-    {stop, Reason};
+    {stop, shutdown};
 handle_msg([SPid], _From, Msg) ->
     ok = gen_server2:cast(SPid, {gm, Msg}).
 
