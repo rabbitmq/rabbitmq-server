@@ -16,6 +16,16 @@
 
 -module(rabbit_exchange_decorator).
 
+%% This is like an exchange type except that:
+%%
+%% 1) It applies to all exchanges as soon as it is installed, therefore
+%% 2) It is not allowed to affect validation, so no validate/1 or
+%%    assert_args_equivalence/2
+%% 3) It also can't affect routing
+%%
+%% It's possible in the future we might relax 3), or even make these
+%% able to manipulate messages as they are published.
+
 -ifdef(use_specs).
 
 -type(tx() :: 'transaction' | 'none').
