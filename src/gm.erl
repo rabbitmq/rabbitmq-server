@@ -558,7 +558,7 @@ handle_call(group_members, _From,
     reply(not_joined, State);
 
 handle_call(group_members, _From, State = #state { view = View }) ->
-    reply(alive_view_members(View), State);
+    reply(get_pids(alive_view_members(View)), State);
 
 handle_call({add_on_right, _NewMember}, _From,
             State = #state { members_state = undefined }) ->
