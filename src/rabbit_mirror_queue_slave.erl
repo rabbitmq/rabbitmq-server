@@ -351,10 +351,15 @@ handle_msg([_SPid], _From, {ensure_monitoring, _Pid}) ->
     ok;
 handle_msg([SPid], _From, {process_death, Pid}) ->
     inform_deaths(SPid, [Pid]);
+handle_msg([CPid], _From, {delete_and_terminate, Reason} = Msg) ->
+    ok = gen_server2:cast(CPid, {gm, Msg}),
+    {stop, Reason};
 handle_msg([SPid], _From, Msg) ->
     ok = gen_server2:cast(SPid, {gm, Msg}).
 
 inform_deaths(SPid, Deaths) ->
+    %% TODO can we get rid of this with_exit_handler use? See bug
+    %% 24988 comment 13.
     rabbit_misc:with_exit_handler(
       fun () -> {stop, normal} end,
       fun () ->
