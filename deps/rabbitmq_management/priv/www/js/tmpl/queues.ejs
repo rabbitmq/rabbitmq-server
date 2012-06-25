@@ -64,7 +64,7 @@
      <% } %>
    </td>
    <td class="c"><%= fmt_parameters_short(queue) %></td>
-   <td class="c"><%= fmt_policy(queue.policy) %></td>
+   <td class="c"><%= fmt_string(queue.policy, '') %></td>
    <td class="c"><%= fmt_idle(queue) %></td>
    <td class="r"><%= fmt_string(queue.messages_ready) %></td>
    <td class="r"><%= fmt_string(queue.messages_unacknowledged) %></td>

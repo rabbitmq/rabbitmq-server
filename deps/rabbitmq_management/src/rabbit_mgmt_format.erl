@@ -152,6 +152,9 @@ resource(_, unknown) ->
 resource(NameAs, #resource{name = Name, virtual_host = VHost}) ->
     [{NameAs, Name}, {vhost, VHost}].
 
+policy(none)   -> [];
+policy(Policy) -> [{policy, Policy}].
+
 internal_user(User) ->
     [{name,          User#internal_user.username},
      {password_hash, base64:encode(User#internal_user.password_hash)},
@@ -255,7 +258,8 @@ url(Fmt, Vals) ->
 
 exchange(X) ->
     format(X, [{fun resource/1,   [name]},
-               {fun amqp_table/1, [arguments]}]).
+               {fun amqp_table/1, [arguments]},
+               {fun policy/1,     [policy]}]).
 
 %% We get queues using rabbit_amqqueue:list/1 rather than :info_all/1 since
 %% the latter wakes up each queue. Therefore we have a record rather than a
@@ -275,8 +279,9 @@ queue(#amqqueue{name            = Name,
        {arguments,   Arguments},
        {pid,         Pid},
        {policy,      rabbit_policy:name(Q)}],
-      [{fun resource/1,     [name]},
-       {fun amqp_table/1,   [arguments]}]).
+      [{fun resource/1,   [name]},
+       {fun amqp_table/1, [arguments]},
+       {fun policy/1,     [policy]}]).
 
 %% We get bindings using rabbit_binding:list_*/1 rather than :info_all/1 since
 %% there are no per-exchange / queue / etc variants for the latter. Therefore

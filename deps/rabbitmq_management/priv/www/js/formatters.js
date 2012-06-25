@@ -6,8 +6,9 @@ SOCKETS_THRESHOLDS=[[1.0, 'red'],
 PROCESS_THRESHOLDS=[[0.75, 'red'],
                     [0.5, 'yellow']];
 
-function fmt_string(str) {
-    if (str == undefined) return UNKNOWN_REPR;
+function fmt_string(str, unknown) {
+    if (unknown == undefined) unkown = UNKNOWN_REPR;
+    if (str == undefined) return unknown;
     return fmt_escape_html("" + str);
 }
 
@@ -213,10 +214,6 @@ function fmt_exchange_type(type) {
     return '<div class="red"><acronym title="Exchange type not found. ' +
         'Publishing to this exchange will fail.">' + fmt_escape_html(type) +
         '</acronym></div>';
-}
-
-function fmt_policy(policy) {
-    return policy == 'none' ? '' : fmt_escape_html(policy);
 }
 
 function fmt_exchange_url(name) {
