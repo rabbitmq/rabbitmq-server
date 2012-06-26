@@ -44,6 +44,7 @@
 
          on_node_up/2,
          on_node_down/1,
+         on_node_join/2,
          on_node_leave/1
         ]).
 
@@ -209,11 +210,13 @@ join_cluster(DiscoveryNode, WantDiscNode) ->
     %% user.
     reset(false),
 
-    rabbit_misc:local_info_msg("Clustering with ~p~s~n", [ClusterNodes]),
+    rabbit_misc:local_info_msg("Clustering with ~p~n", [ClusterNodes]),
 
     %% Join the cluster
     ok = init_db_and_upgrade(DiscNodes, WantDiscNode, false),
     stop_mnesia(),
+
+    rabbit_node_monitor:notify_join_cluster(),
 
     ok.
 
@@ -728,6 +731,16 @@ on_node_down(Node) ->
     {AllNodes, DiscNodes, RunningNodes} = read_cluster_nodes_status(),
     write_cluster_nodes_status({AllNodes, DiscNodes,
                                 ordsets:del_element(Node, RunningNodes)}).
+
+on_node_join(Node, IsDiscNode) ->
+    {AllNodes, DiscNodes, RunningNodes} = read_cluster_nodes_status(),
+    write_cluster_nodes_status({ordsets:add_element(Node, AllNodes),
+                                case IsDiscNode of
+                                    true  -> ordsets:add_element(Node,
+                                                                 DiscNodes);
+                                    false -> DiscNodes
+                                end,
+                                RunningNodes}).
 
 on_node_leave(Node) ->
     {AllNodes, DiscNodes, RunningNodes} = read_cluster_nodes_status(),

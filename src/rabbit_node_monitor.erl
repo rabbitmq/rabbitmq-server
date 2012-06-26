@@ -20,10 +20,10 @@
 
 -export([start_link/0]).
 
--export([init/1, handle_call/3, handle_cast/2, handle_info/2,
-         terminate/2, code_change/3]).
--export([rabbit_running_on/2, rabbit_left_cluster/1, notify_cluster/0,
-         notify_leave_cluster/1]).
+-export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
+         code_change/3]).
+-export([rabbit_running_on/2, rabbit_left_cluster/1, rabbit_joined_cluster/2,
+         notify_cluster/0, notify_join_cluster/0, notify_leave_cluster/1]).
 
 -define(SERVER, ?MODULE).
 -define(RABBIT_UP_RPC_TIMEOUT, 2000).
@@ -55,28 +55,36 @@ rabbit_running_on(Node) ->
 rabbit_left_cluster(Node) ->
     gen_server:cast(rabbit_node_monitor, {rabbit_left_cluster, Node}).
 
-notify_cluster() ->
+rabbit_joined_cluster(Node, IsDiscNode) ->
+    gen_server:cast(rabbit_node_monitor,
+                    {rabbit_joined_cluster, Node, IsDiscNode}).
+
+cluster_multicall(Fun, Args) ->
     Node = node(),
     Nodes = rabbit_mnesia:running_clustered_nodes() -- [Node],
     %% notify other rabbits of this rabbit
-    case rpc:multicall(Nodes, rabbit_node_monitor, rabbit_running_on,
-                       [Node, rabbit_mnesia:is_disc_node()],
+    case rpc:multicall(Nodes, rabbit_node_monitor, Fun, Args,
                        ?RABBIT_UP_RPC_TIMEOUT) of
         {_, [] } -> ok;
         {_, Bad} -> rabbit_log:info("failed to contact nodes ~p~n", [Bad])
     end,
+    Nodes.
+
+notify_cluster() ->
+    Nodes = cluster_multicall(rabbit_running_on,
+                              [node(), rabbit_mnesia:is_disc_node()]),
     %% register other active rabbits with this rabbit
     [ rabbit_running_on(N) || N <- Nodes ],
     ok.
 
+notify_join_cluster() ->
+    cluster_multicall(rabbit_joined_cluster,
+                      [node(), rabbit_mnesia:is_disc_node()]),
+    ok.
+
 notify_leave_cluster(Node) ->
-    Nodes = rabbit_mnesia:running_clustered_nodes() -- [node()],
     rabbit_left_cluster(Node),
-    case rpc:multicall(Nodes, rabbit_node_monitor, rabbit_left_cluster, [Node],
-                       ?RABBIT_UP_RPC_TIMEOUT) of
-        {_, [] } -> ok;
-        {_, Bad} -> rabbit_log:info("failed to contact nodes ~p~n", [Bad])
-    end,
+    cluster_multicall(rabbit_left_cluster, [Node]),
     ok.
 
 %%--------------------------------------------------------------------
@@ -95,6 +103,9 @@ handle_cast({rabbit_running_on, Node, IsDiscNode}, Nodes) ->
                  ok = handle_live_rabbit(Node, IsDiscNode),
                  {noreply, ordsets:add_element(Node, Nodes)}
     end;
+handle_cast({rabbit_joined_cluster, Node, IsDiscNode}, Nodes) ->
+    ok = rabbit_mnesia:on_node_join(Node, IsDiscNode),
+    {noreply, Nodes};
 handle_cast({rabbit_left_cluster, Node}, Nodes) ->
     ok = rabbit_mnesia:on_node_leave(Node),
     {noreply, Nodes};
