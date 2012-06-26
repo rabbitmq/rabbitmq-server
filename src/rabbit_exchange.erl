@@ -38,8 +38,9 @@
 
 -spec(recover/0 :: () -> [name()]).
 -spec(callback/4::
-        (rabbit_types:exchange(), fun_name(), non_neg_integer() | atom(),
-         [any()]) -> 'ok').
+        (rabbit_types:exchange(), fun_name(),
+         fun((boolean()) -> non_neg_integer()) | atom(),
+            [any()]) -> 'ok').
 -spec(policy_changed/2 ::
         (rabbit_types:exchange(), rabbit_types:exchange()) -> 'ok').
 -spec(declare/6 ::
@@ -87,7 +88,7 @@
         (rabbit_types:exchange())
         -> 'not_deleted' | {'deleted', rabbit_binding:deletions()}).
 -spec(serial/1 :: (rabbit_types:exchange()) ->
-                       fun(() -> 'none' | pos_integer())).
+                       fun((boolean()) -> 'none' | pos_integer())).
 -spec(peek_serial/1 :: (name()) -> pos_integer() | 'undefined').
 
 -endif.
