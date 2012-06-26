@@ -332,6 +332,11 @@ recluster(DiscoveryNode) ->
 %% nodes running, then *if the current node is a disk node* we force-load mnesia
 %% and remove the node.
 remove_node(Node) ->
+    case ordsets:is_element(Node, all_clustered_nodes()) of
+        true  -> ok;
+        false -> throw({error, {not_a_cluster_node,
+                                "The node selected is not in the cluster."}})
+    end,
     case remove_node_if_mnesia_running(Node) of
         ok ->
             ok;
