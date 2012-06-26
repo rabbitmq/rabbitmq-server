@@ -158,7 +158,9 @@ prepare() ->
 init() ->
     ensure_mnesia_running(),
     ensure_mnesia_dir(),
-    ok = reinit_db(should_be_disc_node(all_clustered_disc_nodes())),
+    {AllNodes, DiscNodes, _} = read_cluster_nodes_status(),
+    DiscNode = should_be_disc_node(DiscNodes),
+    init_db_and_upgrade(AllNodes, DiscNode, DiscNode),
     %% We intuitively expect the global name server to be synced when
     %% Mnesia is up. In fact that's not guaranteed to be the case - let's
     %% make it so.
@@ -213,8 +215,7 @@ join_cluster(DiscoveryNode, WantDiscNode) ->
     rabbit_misc:local_info_msg("Clustering with ~p~n", [ClusterNodes]),
 
     %% Join the cluster
-    ok = init_db_and_upgrade(DiscNodes, WantDiscNode, false),
-    stop_mnesia(),
+    ok = init_db_with_mnesia(DiscNodes, WantDiscNode, false),
 
     rabbit_node_monitor:notify_join_cluster(),
 
@@ -250,7 +251,10 @@ reset(Force) ->
             try
                 %% Force=true here so that reset still works when
                 %% clustered with a node which is down
-                ok = reinit_db(true)
+                start_mnesia(),
+                {AllNodes, DiscNodes, _} = read_cluster_nodes_status(),
+                init_db_and_upgrade(
+                  AllNodes, should_be_disc_node(DiscNodes), true)
             after
                 stop_mnesia()
             end,
@@ -295,8 +299,7 @@ change_node_type(Type) ->
                        disc -> true
                    end,
 
-    ok = init_db_and_upgrade(ClusterNodes, WantDiscNode, false),
-    stop_mnesia(),
+    ok = init_db_with_mnesia(ClusterNodes, WantDiscNode, false),
 
     ok.
 
@@ -315,13 +318,12 @@ recluster(DiscoveryNode) ->
         end,
 
     case lists:member(node(), ClusterNodes) of
-        true  -> init_db_and_upgrade(ClusterNodes, is_disc_node(), false);
+        true  -> init_db_with_mnesia(ClusterNodes, is_disc_node(), false);
         false -> throw({error,
                         {inconsistent_cluster,
                          "The nodes provided do not have this node as part of "
                          "the cluster"}})
     end,
-    stop_mnesia(),
 
     ok.
 
@@ -435,14 +437,10 @@ table_names() ->
 %% Operations on the db
 %%----------------------------------------------------------------------------
 
-%% Starts mnesia if necessary, adds the provided nodes to the mnesia cluster,
-%% creating a new schema if there is the need to and catching up if there are
-%% other nodes in the cluster already. It also updates the cluster status file.
+%% Adds the provided nodes to the mnesia cluster, creating a new schema if there
+%% is the need to and catching up if there are other nodes in the cluster
+%% already. It also updates the cluster status file.
 init_db(ClusterNodes, WantDiscNode, Force) ->
-    case mnesia:system_info(is_running) of
-        yes -> ok;
-        no  -> start_mnesia()
-    end,
     case change_extra_db_nodes(ClusterNodes, Force) of
         {error, Reason} ->
             throw({error, Reason});
@@ -497,9 +495,16 @@ init_db_and_upgrade(ClusterNodes, WantDiscNode, Force) ->
     end,
     ok.
 
-reinit_db(Force) ->
-    {AllNodes, DiscNodes, _} = read_cluster_nodes_status(),
-    init_db_and_upgrade(AllNodes, should_be_disc_node(DiscNodes), Force).
+init_db_with_mnesia(ClusterNodes, WantDiscNode, Force) ->
+    start_mnesia(),
+    try
+        init_db_and_upgrade(ClusterNodes, WantDiscNode, Force)
+    after
+        stop_mnesia()
+    end,
+    {AllNodes, DiscNodes, RunningNodes} = read_cluster_nodes_status(),
+    write_cluster_nodes_status(
+      {AllNodes, DiscNodes, ordsets:del_element(node(), RunningNodes)}).
 
 ensure_mnesia_dir() ->
     MnesiaDir = dir() ++ "/",
