@@ -664,7 +664,7 @@ handle_info({'DOWN', MRef, process, _Pid, Reason},
     case {Member, Reason} of
         {undefined, _} ->
             noreply(State);
-        {_, {shutdown, do_not_heal}} ->
+        {_, {shutdown, ring_shutdown}} ->
             noreply(State);
         _ ->
             View1 =
