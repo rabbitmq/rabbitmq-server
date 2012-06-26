@@ -1,0 +1,2 @@
+# RabbitMQ MQTT adapter
+
