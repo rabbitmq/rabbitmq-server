@@ -18,7 +18,7 @@
 
 -behaviour(gen_event).
 
--export([add_handler/0]).
+-export([add_handler/0, gc/0]).
 
 -export([init/1, handle_call/2, handle_event/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -28,6 +28,9 @@
 add_handler() ->
     ensure_statistics_enabled(),
     gen_event:add_sup_handler(rabbit_event, ?MODULE, []).
+
+gc() ->
+    erlang:garbage_collect(whereis(rabbit_event)).
 
 %%----------------------------------------------------------------------------
 
