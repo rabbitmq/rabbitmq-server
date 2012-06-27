@@ -105,7 +105,8 @@
 -spec(on_node_leave/1 :: (node()) -> 'ok').
 
 %% Functions used in internal rpc calls
--spec(cluster_status_if_running/0 :: () -> {'ok', node_status()} | 'error').
+-spec(cluster_status_if_running/0 :: () -> {'ok', node_status()} |
+                                            {'error', 'node_not_running'}).
 -spec(node_info/0 :: () -> {string(), string(),
                             ({'ok', node_status()} | 'error')}).
 -spec(remove_node_if_mnesia_running/1 :: (node()) -> 'ok' |
@@ -421,15 +422,19 @@ running_clustered_disc_nodes() ->
 %% want online, "working" nodes only.
 cluster_status_if_running() ->
     case mnesia:system_info(is_running) of
-        no  -> error;
+        no  -> {error, node_not_running};
         yes -> {ok, {ordsets:from_list(mnesia:system_info(db_nodes)),
                      ordsets:from_list(mnesia:table_info(schema, disc_copies)),
                      ordsets:from_list(mnesia:system_info(running_db_nodes))}}
     end.
 
+cluster_status() ->
+    {ok, Status} = cluster_status_if_running(),
+    Status.
+
 node_info() ->
     {erlang:system_info(otp_release), rabbit_misc:rabbit_version(),
-     cluster_status_if_running()}.
+     cluster_status()}.
 
 is_disc_node() -> mnesia:system_info(use_dir).
 
@@ -712,8 +717,7 @@ read_cluster_nodes_status() ->
 
 %% To update the cluster status when mnesia is running.
 update_cluster_nodes_status() ->
-    {ok, Status} = cluster_status_if_running(),
-    write_cluster_nodes_status(Status).
+    write_cluster_nodes_status(cluster_status()).
 
 %%--------------------------------------------------------------------
 %% Hooks for `rabbit_node_monitor'
@@ -776,9 +780,9 @@ discover_cluster(Node) ->
                      "You provided the current node as node to cluster with"}};
         false ->
             case rpc:call(Node, rabbit_mnesia, cluster_status_if_running, []) of
-                {badrpc, _Reason} -> discover_cluster([]);
-                error             -> discover_cluster([]);
-                {ok, Res}         -> {ok, Res}
+                {badrpc, _Reason}         -> discover_cluster([]);
+                {error, node_not_running} -> discover_cluster([]);
+                {ok, Res}                 -> {ok, Res}
             end
     end.
 
