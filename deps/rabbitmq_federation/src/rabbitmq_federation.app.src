@@ -4,9 +4,5 @@
   {modules, []},
   {registered, []},
   {mod, {rabbit_federation_app, []}},
-  {env, [{exchanges,      []},
-         {upstream_sets,  []},
-         {connections,    []},
-         {local_username, "guest"},
-         {local_nodename, automatic}]},
+  {env, []},
   {applications, [kernel, stdlib, rabbit, amqp_client]}]}.
