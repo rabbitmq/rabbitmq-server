@@ -16,10 +16,11 @@
 
 -module(rabbit_federation_util).
 
+-include_lib("kernel/include/inet.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_federation.hrl").
 
--export([local_params/1, should_forward/2, find_upstreams/2]).
+-export([local_params/1, local_nodename/0, should_forward/2, find_upstreams/2]).
 -export([validate_arg/3, fail/2, vhost/1]).
 
 -import(rabbit_misc, [pget_or_die/2, pget/3]).
@@ -31,6 +32,16 @@ local_params(VHost) ->
           <<"federation">>, <<"local_username">>, <<"guest">>),
     #amqp_params_direct{username     = U,
                         virtual_host = VHost}.
+
+local_nodename() ->
+    rabbit_runtime_parameters:value(
+      <<"federation">>, <<"local_nodename">>, local_nodename_implicit()).
+
+local_nodename_implicit() ->
+    {ID, _} = rabbit_nodes:parts(node()),
+    {ok, Host} = inet:gethostname(),
+    {ok, #hostent{h_name = FQDN}} = inet:gethostbyname(Host),
+    list_to_binary(atom_to_list(rabbit_nodes:make({ID, FQDN}))).
 
 should_forward(undefined, _MaxHops) ->
     true;

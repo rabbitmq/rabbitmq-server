@@ -28,11 +28,18 @@
 -import(rabbit_misc, [pget/3]).
 
 start(_Type, _StartArgs) ->
+    ensure_global_parameters(),
     rabbit_federation_link:go(),
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
 stop(_State) ->
     ok.
+%%----------------------------------------------------------------------------
+
+ensure_global_parameters() ->
+    %% So that these are always visible in UI and rabbitmqctl list_parameters
+    rabbit_federation_util:local_nodename(),
+    rabbit_federation_util:local_params(<<"dummy">>).
 
 %%----------------------------------------------------------------------------
 

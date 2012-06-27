@@ -16,7 +16,6 @@
 
 -module(rabbit_federation_link).
 
--include_lib("kernel/include/inet.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_federation.hrl").
 
@@ -492,7 +491,7 @@ ensure_upstream_exchange(IntXNameBin,
 
 upstream_queue_name(XNameBin, VHost, #resource{name         = DownXNameBin,
                                                virtual_host = DownVHost}) ->
-    Node = local_nodename(),
+    Node = rabbit_federation_util:local_nodename(),
     DownPart = case DownVHost of
                    VHost -> case DownXNameBin of
                                 XNameBin -> <<"">>;
@@ -506,17 +505,6 @@ upstream_queue_name(XNameBin, VHost, #resource{name         = DownXNameBin,
 upstream_exchange_name(XNameBin, VHost, DownXName, Suffix) ->
     Name = upstream_queue_name(XNameBin, VHost, DownXName),
     <<Name/binary, " ", Suffix/binary>>.
-
-local_nodename() ->
-    Explicit = rabbit_runtime_parameters:value(
-                 <<"federation">>, <<"local_nodename">>, null),
-    case Explicit of
-        null -> {ID, _} = rabbit_nodes:parts(node()),
-                {ok, Host} = inet:gethostname(),
-                {ok, #hostent{h_name = FQDN}} = inet:gethostbyname(Host),
-                list_to_binary(atom_to_list(rabbit_nodes:make({ID, FQDN})));
-        _    -> Explicit
-    end.
 
 delete_upstream_exchange(Conn, XNameBin) ->
     disposable_channel_call(Conn, #'exchange.delete'{exchange = XNameBin}).
