@@ -728,13 +728,13 @@ on_node_up(Node, IsDiscNode) ->
                                     false -> DiscNodes
                                 end,
                                 ordsets:add_element(Node, RunningNodes)}),
-    case is_only_disc_node(Node) of
+    case is_only_running_disc_node(Node) of
         true  -> rabbit_log:info("cluster contains disc nodes again~n");
         false -> ok
     end.
 
 on_node_down(Node) ->
-    case is_only_disc_node(Node) of
+    case is_only_running_disc_node(Node) of
         true  -> rabbit_log:info("only running disc node went down~n");
         false -> ok
     end,
@@ -1094,8 +1094,10 @@ wait_for(Condition) ->
     timer:sleep(1000).
 
 is_only_disc_node(Node) ->
-    Nodes = running_clustered_disc_nodes(),
-    [Node] =:= Nodes.
+    [Node] =:= all_clustered_disc_nodes().
+
+is_only_running_disc_node(Node) ->
+    [Node] =:= running_clustered_disc_nodes().
 
 start_mnesia() ->
     check_cluster_consistency(),
