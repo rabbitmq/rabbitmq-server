@@ -176,7 +176,7 @@
 
 -rabbit_boot_step({notify_cluster,
                    [{description, "notify cluster nodes"},
-                    {mfa,         {rabbit_node_monitor, notify_cluster, []}},
+                    {mfa,         {rabbit_node_monitor, notify_node_up, []}},
                     {requires,    networking}]}).
 
 %%---------------------------------------------------------------------------
@@ -332,7 +332,8 @@ start_it(StartFun) ->
 
 stop() ->
     rabbit_log:info("Stopping Rabbit~n"),
-    ok = app_utils:stop_applications(app_shutdown_order()).
+    ok = app_utils:stop_applications(app_shutdown_order()),
+    rabbit_node_monitor:this_node_down().
 
 stop_and_halt() ->
     try
