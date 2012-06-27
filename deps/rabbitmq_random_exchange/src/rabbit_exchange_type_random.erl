@@ -30,6 +30,7 @@
   assert_args_equivalence/2,
   create/2, 
   delete/3, 
+  policy_changed/3,
   description/0, 
   recover/2, 
   remove_bindings/3,
@@ -59,6 +60,7 @@ validate(_X) -> ok.
 create(_Tx, _X) -> ok.
 recover(_X, _Bs) -> ok.
 delete(_Tx, _X, _Bs) -> ok.
+policy_changed(_Tx, _X1, _X2) -> ok.
 add_binding(_Tx, _X, _B) -> ok.
 remove_bindings(_Tx, _X, _Bs) -> ok.
 assert_args_equivalence(X, Args) ->
