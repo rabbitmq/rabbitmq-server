@@ -27,7 +27,7 @@
          set_check_interval/1, get_disk_free/0]).
 
 -define(SERVER, ?MODULE).
--define(DEFAULT_DISK_CHECK_INTERVAL, 60000).
+-define(DEFAULT_DISK_CHECK_INTERVAL, 10000).
 
 -record(state, {dir,
                 limit,
@@ -168,8 +168,8 @@ get_disk_free(Dir, {unix, _}) ->
     parse_free_unix(rabbit_misc:os_cmd("/bin/df -kP " ++ Dir));
 get_disk_free(Dir, {win32, _}) ->
     parse_free_win32(os:cmd("dir /-C /W \"" ++ Dir ++ [$"]));
-get_disk_free(_, _) ->
-    unknown.
+get_disk_free(_, Platform) ->
+    {unknown, Platform}.
 
 parse_free_unix(CommandResult) ->
     [_, Stats | _] = string:tokens(CommandResult, "\n"),
@@ -178,8 +178,9 @@ parse_free_unix(CommandResult) ->
 
 parse_free_win32(CommandResult) ->
     LastLine = lists:last(string:tokens(CommandResult, "\r\n")),
-    [_, _Dir, Free, "bytes", "free"] = string:tokens(LastLine, " "),
-    list_to_integer(Free).
+    {match, [Free]} = re:run(lists:reverse(LastLine), "(\\d+)",
+                             [{capture, all_but_first, list}]),
+    list_to_integer(lists:reverse(Free)).
 
 interpret_limit({mem_relative, R}) ->
     round(R * vm_memory_monitor:get_total_memory());

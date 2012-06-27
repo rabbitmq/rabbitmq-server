@@ -29,6 +29,7 @@
 -define(PERSISTENT_MSG_STORE, msg_store_persistent).
 -define(TRANSIENT_MSG_STORE,  msg_store_transient).
 -define(CLEANUP_QUEUE_NAME, <<"cleanup-queue">>).
+-define(TIMEOUT, 5000).
 
 all_tests() ->
     passed = gm_tests:all_tests(),
@@ -1240,7 +1241,7 @@ test_spawn() ->
                   rabbit_limiter:make_token(self())),
     ok = rabbit_channel:do(Ch, #'channel.open'{}),
     receive #'channel.open_ok'{} -> ok
-    after 1000 -> throw(failed_to_receive_channel_open_ok)
+    after ?TIMEOUT -> throw(failed_to_receive_channel_open_ok)
     end,
     {Writer, Ch}.
 
@@ -1261,7 +1262,7 @@ test_spawn_remote() ->
                   end
           end),
     receive Res -> Res
-    after 1000  -> throw(failed_to_receive_result)
+    after ?TIMEOUT  -> throw(failed_to_receive_result)
     end.
 
 user(Username) ->
@@ -1281,13 +1282,10 @@ test_confirms() ->
                                             queue = Q0,
                                             exchange = <<"amq.direct">>,
                                             routing_key = "magic" }),
-                        receive #'queue.bind_ok'{} ->
-                                Q0
-                        after 1000 ->
-                                throw(failed_to_bind_queue)
+                        receive #'queue.bind_ok'{} -> Q0
+                        after ?TIMEOUT -> throw(failed_to_bind_queue)
                         end
-                after 1000 ->
-                        throw(failed_to_declare_queue)
+                after ?TIMEOUT -> throw(failed_to_declare_queue)
                 end
         end,
     %% Declare and bind two queues
@@ -1300,7 +1298,7 @@ test_confirms() ->
     rabbit_channel:do(Ch, #'confirm.select'{}),
     receive
         #'confirm.select_ok'{} -> ok
-    after 1000 -> throw(failed_to_enable_confirms)
+    after ?TIMEOUT -> throw(failed_to_enable_confirms)
     end,
     %% Publish a message
     rabbit_channel:do(Ch, #'basic.publish'{exchange = <<"amq.direct">>,
@@ -1317,7 +1315,7 @@ test_confirms() ->
     receive
         #'basic.nack'{} -> ok;
         #'basic.ack'{}  -> throw(received_ack_instead_of_nack)
-    after 2000 -> throw(did_not_receive_nack)
+    after ?TIMEOUT-> throw(did_not_receive_nack)
     end,
     receive
         #'basic.ack'{} -> throw(received_ack_when_none_expected)
@@ -1327,7 +1325,7 @@ test_confirms() ->
     rabbit_channel:do(Ch, #'queue.delete'{queue = QName2}),
     receive
         #'queue.delete_ok'{} -> ok
-    after 1000 -> throw(failed_to_cleanup_queue)
+    after ?TIMEOUT -> throw(failed_to_cleanup_queue)
     end,
     unlink(Ch),
     ok = rabbit_channel:shutdown(Ch),
@@ -1350,7 +1348,7 @@ test_statistics_receive_event1(Ch, Matcher) ->
                 true -> Props;
                 _    -> test_statistics_receive_event1(Ch, Matcher)
             end
-    after 1000 -> throw(failed_to_receive_event)
+    after ?TIMEOUT -> throw(failed_to_receive_event)
     end.
 
 test_statistics() ->
@@ -1362,9 +1360,8 @@ test_statistics() ->
     %% Set up a channel and queue
     {_Writer, Ch} = test_spawn(),
     rabbit_channel:do(Ch, #'queue.declare'{}),
-    QName = receive #'queue.declare_ok'{queue = Q0} ->
-                    Q0
-            after 1000 -> throw(failed_to_receive_queue_declare_ok)
+    QName = receive #'queue.declare_ok'{queue = Q0} -> Q0
+            after ?TIMEOUT -> throw(failed_to_receive_queue_declare_ok)
             end,
     {ok, Q} = rabbit_amqqueue:lookup(rabbit_misc:r(<<"/">>, queue, QName)),
     QPid = Q#amqqueue.pid,
@@ -1444,7 +1441,7 @@ expect_event(Pid, Type) ->
                 Pid -> ok;
                 _   -> expect_event(Pid, Type)
             end
-    after 1000 -> throw({failed_to_receive_event, Type})
+    after ?TIMEOUT -> throw({failed_to_receive_event, Type})
     end.
 
 test_delegates_async(SecondaryNode) ->
@@ -1468,7 +1465,7 @@ make_responder(FMsg) -> make_responder(FMsg, timeout).
 make_responder(FMsg, Throw) ->
     fun () ->
             receive Msg -> FMsg(Msg)
-            after 1000 -> throw(Throw)
+            after ?TIMEOUT -> throw(Throw)
             end
     end.
 
@@ -1481,9 +1478,7 @@ await_response(Count) ->
     receive
         response -> ok,
                     await_response(Count - 1)
-    after 1000 ->
-            io:format("Async reply not received~n"),
-            throw(timeout)
+    after ?TIMEOUT -> throw(timeout)
     end.
 
 must_exit(Fun) ->
@@ -1550,7 +1545,7 @@ test_queue_cleanup(_SecondaryNode) ->
     rabbit_channel:do(Ch, #'queue.declare'{ queue = ?CLEANUP_QUEUE_NAME }),
     receive #'queue.declare_ok'{queue = ?CLEANUP_QUEUE_NAME} ->
             ok
-    after 1000 -> throw(failed_to_receive_queue_declare_ok)
+    after ?TIMEOUT -> throw(failed_to_receive_queue_declare_ok)
     end,
     rabbit_channel:shutdown(Ch),
     rabbit:stop(),
@@ -1561,8 +1556,7 @@ test_queue_cleanup(_SecondaryNode) ->
     receive
         #'channel.close'{reply_code = ?NOT_FOUND} ->
             ok
-    after 2000 ->
-            throw(failed_to_receive_channel_exit)
+    after ?TIMEOUT -> throw(failed_to_receive_channel_exit)
     end,
     rabbit_channel:shutdown(Ch2),
     passed.
@@ -1589,8 +1583,7 @@ test_declare_on_dead_queue(SecondaryNode) ->
             true = rabbit_misc:is_process_alive(Q#amqqueue.pid),
             {ok, 0} = rabbit_amqqueue:delete(Q, false, false),
             passed
-    after 2000 ->
-            throw(failed_to_create_and_kill_queue)
+    after ?TIMEOUT -> throw(failed_to_create_and_kill_queue)
     end.
 
 %%---------------------------------------------------------------------
@@ -1603,7 +1596,7 @@ control_action(Command, Args, NewOpts) ->
                    expand_options(default_options(), NewOpts)).
 
 control_action(Command, Node, Args, Opts) ->
-    case catch rabbit_control:action(
+    case catch rabbit_control_main:action(
                  Command, Node, Args, Opts,
                  fun (Format, Args1) ->
                          io:format(Format ++ " ...~n", Args1)
@@ -1821,7 +1814,7 @@ on_disk_capture(OnDisk, Awaiting, Pid) ->
                             Pid);
         stop ->
             done
-    after (case Awaiting of [] -> 200; _ -> 1000 end) ->
+    after (case Awaiting of [] -> 200; _ -> ?TIMEOUT end) ->
             case Awaiting of
                 [] -> Pid ! {self(), arrived}, on_disk_capture();
                 _  -> Pid ! {self(), timeout}
@@ -2374,7 +2367,7 @@ wait_for_confirms(Unconfirmed) ->
                          wait_for_confirms(
                            rabbit_misc:gb_sets_difference(
                              Unconfirmed, gb_sets:from_list(Confirmed)))
-                 after 5000 -> exit(timeout_waiting_for_confirm)
+                 after ?TIMEOUT -> exit(timeout_waiting_for_confirm)
                  end
     end.
 

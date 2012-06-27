@@ -25,7 +25,7 @@
 
 -export([init/4, mainloop/2]).
 
--export([conserve_resources/2, server_properties/1]).
+-export([conserve_resources/3, server_properties/1]).
 
 -define(HANDSHAKE_TIMEOUT, 10).
 -define(NORMAL_TIMEOUT, 3).
@@ -71,7 +71,7 @@
 -spec(info/2 :: (pid(), rabbit_types:info_keys()) -> rabbit_types:infos()).
 -spec(force_event_refresh/1 :: (pid()) -> 'ok').
 -spec(shutdown/2 :: (pid(), string()) -> 'ok').
--spec(conserve_resources/2 :: (pid(), boolean()) -> 'ok').
+-spec(conserve_resources/3 :: (pid(), atom(), boolean()) -> 'ok').
 -spec(server_properties/1 :: (rabbit_types:protocol()) ->
                                   rabbit_framing:amqp_table()).
 
@@ -133,7 +133,7 @@ info(Pid, Items) ->
 force_event_refresh(Pid) ->
     gen_server:cast(Pid, force_event_refresh).
 
-conserve_resources(Pid, Conserve) ->
+conserve_resources(Pid, _Source, Conserve) ->
     Pid ! {conserve_resources, Conserve},
     ok.
 
@@ -222,14 +222,7 @@ start_connection(Parent, ChannelSupSupPid, Collector, StartHeartbeatFun, Deb,
                 last_blocked_by     = none,
                 last_blocked_at     = never},
     try
-        BufSizes = inet_op(fun () ->
-                                   rabbit_net:getopts(
-                                     ClientSock, [sndbuf, recbuf, buffer])
-                           end),
-        BufSz = lists:max([Sz || {_Opt, Sz} <- BufSizes]),
-        ok = inet_op(fun () ->
-                             rabbit_net:setopts(ClientSock, [{buffer, BufSz}])
-                     end),
+        ok = inet_op(fun () -> rabbit_net:tune_buffer_size(ClientSock) end),
         recvloop(Deb, switch_callback(rabbit_event:init_stats_timer(
                                        State, #v1.stats_timer),
                                       handshake, 8)),
@@ -320,8 +313,8 @@ handle_other(handshake_timeout, _Deb, State) ->
     throw({handshake_timeout, State#v1.callback});
 handle_other(timeout, Deb, State = #v1{connection_state = closed}) ->
     mainloop(Deb, State);
-handle_other(timeout, _Deb, #v1{connection_state = S}) ->
-    throw({timeout, S});
+handle_other(heartbeat_timeout, _Deb, #v1{connection_state = S}) ->
+    throw({heartbeat_timeout, S});
 handle_other({'$gen_call', From, {shutdown, Explanation}}, Deb, State) ->
     {ForceTermination, NewState} = terminate(Explanation, State),
     gen_server:reply(From, ok),
@@ -690,7 +683,7 @@ handle_method0(#'connection.tune_ok'{frame_max = FrameMax,
             Frame = rabbit_binary_generator:build_heartbeat_frame(),
             SendFun = fun() -> catch rabbit_net:send(Sock, Frame) end,
             Parent = self(),
-            ReceiveFun = fun() -> Parent ! timeout end,
+            ReceiveFun = fun() -> Parent ! heartbeat_timeout end,
             Heartbeater = SHF(Sock, ClientHeartbeat, SendFun,
                               ClientHeartbeat, ReceiveFun),
             State#v1{connection_state = opening,
@@ -743,8 +736,6 @@ handle_method0(_Method, #v1{connection_state = S}) ->
     rabbit_misc:protocol_error(
       channel_error, "unexpected method in connection state ~w", [S]).
 
-%% Compute frame_max for this instance. Could simply use 0, but breaks
-%% QPid Java client.
 server_frame_max() ->
     {ok, FrameMax} = application:get_env(rabbit, frame_max),
     FrameMax.

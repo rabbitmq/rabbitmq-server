@@ -58,7 +58,8 @@ DEFAULT_NODE_PORT=5672
 ##--- End of overridden <var_name> variables
 
 RABBITMQ_START_RABBIT=
-[ "x" = "x$RABBITMQ_ALLOW_INPUT" ] && RABBITMQ_START_RABBIT='-noinput'
+[ "x" = "x$RABBITMQ_ALLOW_INPUT" ] && RABBITMQ_START_RABBIT=" -noinput"
+[ "x" = "x$RABBITMQ_NODE_ONLY" ] && RABBITMQ_START_RABBIT="$RABBITMQ_START_RABBIT -s rabbit boot "
 
 case "$(uname -s)" in
   CYGWIN*) # we make no attempt to record the cygwin pid; rabbitmqctl wait
@@ -70,24 +71,16 @@ case "$(uname -s)" in
 esac
 
 RABBITMQ_EBIN_ROOT="${RABBITMQ_HOME}/ebin"
-if [ "x" = "x$RABBITMQ_NODE_ONLY" ]; then
-    if erl \
-	-pa "$RABBITMQ_EBIN_ROOT" \
-	-noinput \
-	-hidden \
-	-s rabbit_prelaunch \
-	-sname rabbitmqprelaunch$$ \
-	-extra "$RABBITMQ_ENABLED_PLUGINS_FILE" "$RABBITMQ_PLUGINS_DIR" "${RABBITMQ_PLUGINS_EXPAND_DIR}" "${RABBITMQ_NODENAME}"
+if ! erl -pa "$RABBITMQ_EBIN_ROOT" \
+	    -noinput \
+	    -hidden \
+	    -s rabbit_prelaunch \
+	    -sname rabbitmqprelaunch$$ \
+	    -extra "${RABBITMQ_NODENAME}";
     then
-	RABBITMQ_BOOT_FILE="${RABBITMQ_PLUGINS_EXPAND_DIR}/rabbit"
-	RABBITMQ_EBIN_PATH=""
-    else
-	exit 1
-    fi
-else
-    RABBITMQ_BOOT_FILE=start_sasl
-    RABBITMQ_EBIN_PATH="-pa ${RABBITMQ_EBIN_ROOT}"
+        exit 1;
 fi
+
 RABBITMQ_CONFIG_ARG=
 [ -f "${RABBITMQ_CONFIG_FILE}.config" ] && RABBITMQ_CONFIG_ARG="-config ${RABBITMQ_CONFIG_FILE}"
 
@@ -100,10 +93,10 @@ RABBITMQ_LISTEN_ARG=
 set -f
 
 exec erl \
-    ${RABBITMQ_EBIN_PATH} \
+    -pa ${RABBITMQ_EBIN_ROOT} \
     ${RABBITMQ_START_RABBIT} \
     -sname ${RABBITMQ_NODENAME} \
-    -boot ${RABBITMQ_BOOT_FILE} \
+    -boot start_sasl \
     ${RABBITMQ_CONFIG_ARG} \
     +W w \
     ${RABBITMQ_SERVER_ERL_ARGS} \
@@ -112,6 +105,9 @@ exec erl \
     -sasl sasl_error_logger false \
     -rabbit error_logger '{file,"'${RABBITMQ_LOGS}'"}' \
     -rabbit sasl_error_logger '{file,"'${RABBITMQ_SASL_LOGS}'"}' \
+    -rabbit enabled_plugins_file "\"$RABBITMQ_ENABLED_PLUGINS_FILE\"" \
+    -rabbit plugins_dir "\"$RABBITMQ_PLUGINS_DIR\"" \
+    -rabbit plugins_expand_dir "\"$RABBITMQ_PLUGINS_EXPAND_DIR\"" \
     -os_mon start_cpu_sup false \
     -os_mon start_disksup false \
     -os_mon start_memsup false \

@@ -14,7 +14,7 @@
 %% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
--module(rabbit_control).
+-module(rabbit_control_main).
 -include("rabbit.hrl").
 
 -export([start/0, stop/0, action/5]).
@@ -58,7 +58,7 @@
          {set_permissions, [?VHOST_DEF]},
          {clear_permissions, [?VHOST_DEF]},
          {list_permissions, [?VHOST_DEF]},
-         {list_user_permissions, [?VHOST_DEF]},
+         list_user_permissions,
 
          set_parameter,
          clear_parameter,
@@ -253,7 +253,7 @@ action(force_cluster, Node, ClusterNodeSs, _Opts, Inform) ->
 
 action(wait, Node, [PidFile], _Opts, Inform) ->
     Inform("Waiting for ~p", [Node]),
-    wait_for_application(Node, PidFile, rabbit, Inform);
+    wait_for_application(Node, PidFile, rabbit_and_plugins, Inform);
 action(wait, Node, [PidFile, App], _Opts, Inform) ->
     Inform("Waiting for ~p on ~p", [App, Node]),
     wait_for_application(Node, PidFile, list_to_atom(App), Inform);
@@ -465,12 +465,22 @@ wait_for_application(Node, PidFile, Application, Inform) ->
     Inform("pid is ~s", [Pid]),
     wait_for_application(Node, Pid, Application).
 
+wait_for_application(Node, Pid, rabbit_and_plugins) ->
+    wait_for_startup(Node, Pid);
 wait_for_application(Node, Pid, Application) ->
+    while_process_is_alive(
+      Node, Pid, fun() -> rabbit_nodes:is_running(Node, Application) end).
+
+wait_for_startup(Node, Pid) ->
+    while_process_is_alive(
+      Node, Pid, fun() -> rpc:call(Node, rabbit, await_startup, []) =:= ok end).
+
+while_process_is_alive(Node, Pid, Activity) ->
     case process_up(Pid) of
-        true  -> case rabbit_nodes:is_running(Node, Application) of
+        true  -> case Activity() of
                      true  -> ok;
                      false -> timer:sleep(?EXTERNAL_CHECK_INTERVAL),
-                              wait_for_application(Node, Pid, Application)
+                              while_process_is_alive(Node, Pid, Activity)
                  end;
         false -> {error, process_not_running}
     end.
@@ -485,12 +495,14 @@ wait_for_process_death(Pid) ->
 read_pid_file(PidFile, Wait) ->
     case {file:read_file(PidFile), Wait} of
         {{ok, Bin}, _} ->
-            S = string:strip(binary_to_list(Bin), right, $\n),
-            try list_to_integer(S)
+            S = binary_to_list(Bin),
+            {match, [PidS]} = re:run(S, "[^\\s]+",
+                                     [{capture, all, list}]),
+            try list_to_integer(PidS)
             catch error:badarg ->
                     exit({error, {garbage_in_pid_file, PidFile}})
             end,
-            S;
+            PidS;
         {{error, enoent}, true} ->
             timer:sleep(?EXTERNAL_CHECK_INTERVAL),
             read_pid_file(PidFile, Wait);
@@ -502,8 +514,7 @@ read_pid_file(PidFile, Wait) ->
 % rpc:call(os, getpid, []) at this point
 process_up(Pid) ->
     with_os([{unix, fun () ->
-                            system("ps -p " ++ Pid
-                                   ++ " >/dev/null 2>&1") =:= 0
+                            run_ps(Pid) =:= 0
                     end},
              {win32, fun () ->
                              Res = os:cmd("tasklist /nh /fi \"pid eq " ++
@@ -521,15 +532,17 @@ with_os(Handlers) ->
         Handler   -> Handler()
     end.
 
-% Like system(3)
-system(Cmd) ->
-    ShCmd = "sh -c '" ++ escape_quotes(Cmd) ++ "'",
-    Port = erlang:open_port({spawn, ShCmd}, [exit_status,nouse_stdio]),
-    receive {Port, {exit_status, Status}} -> Status end.
+run_ps(Pid) ->
+    Port = erlang:open_port({spawn, "ps -p " ++ Pid},
+                            [exit_status, {line, 16384},
+                             use_stdio, stderr_to_stdout]),
+    exit_loop(Port).
 
-% Escape the quotes in a shell command so that it can be used in "sh -c 'cmd'"
-escape_quotes(Cmd) ->
-    lists:flatten(lists:map(fun ($') -> "'\\''"; (Ch) -> Ch end, Cmd)).
+exit_loop(Port) ->
+    receive
+        {Port, {exit_status, Rc}} -> Rc;
+        {Port, _}                 -> exit_loop(Port)
+    end.
 
 format_parse_error({_Line, Mod, Err}) ->
     lists:flatten(Mod:format_error(Err)).
