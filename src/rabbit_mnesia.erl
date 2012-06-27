@@ -137,9 +137,9 @@ prepare() ->
                             false -> []
                         end,
 
-            ok = write_cluster_nodes_status({AllNodes, DiscNodes, RunningNodes})
+            ok = write_cluster_status_file({AllNodes, DiscNodes, RunningNodes})
         end,
-    case try_read_cluster_nodes_status() of
+    case try_read_cluster_status_file() of
         {ok, _} ->
             %% We check the consistency only when the cluster status exists,
             %% since when it doesn't exist it means that we just started a fresh
@@ -159,7 +159,7 @@ prepare() ->
 init() ->
     ensure_mnesia_running(),
     ensure_mnesia_dir(),
-    {AllNodes, DiscNodes, _} = read_cluster_nodes_status(),
+    {AllNodes, DiscNodes, _} = read_cluster_status_file(),
     DiscNode = should_be_disc_node(DiscNodes),
     init_db_and_upgrade(AllNodes, DiscNode, DiscNode),
     %% We intuitively expect the global name server to be synced when
@@ -253,7 +253,7 @@ reset(Force) ->
                 %% Force=true here so that reset still works when
                 %% clustered with a node which is down
                 start_mnesia(),
-                {AllNodes, DiscNodes, _} = read_cluster_nodes_status(),
+                {AllNodes, DiscNodes, _} = read_cluster_status_file(),
                 init_db_and_upgrade(
                   AllNodes, should_be_disc_node(DiscNodes), true)
             after
@@ -269,7 +269,7 @@ reset(Force) ->
     [erlang:disconnect_node(N) || N <- all_clustered_nodes()],
     %% remove persisted messages and any other garbage we find
     ok = rabbit_file:recursive_delete(filelib:wildcard(dir() ++ "/*")),
-    ok = write_cluster_nodes_status(initial_cluster_status()),
+    ok = write_cluster_status_file(initial_cluster_status()),
     ok.
 
 change_node_type(Type) ->
@@ -391,35 +391,31 @@ is_clustered() ->
 is_disc_and_clustered() ->
     is_disc_node() andalso is_clustered().
 
-%% Functions that retrieve the nodes in the cluster completely rely on the
-%% cluster status file. For obvious reason, if rabbit is down, they might return
-%% out of date information.
+%% Functions that retrieve the nodes in the cluster completely will rely on the
+%% status file if offline.
 
 all_clustered_nodes() ->
-    {AllNodes, _, _} = read_cluster_nodes_status(),
+    {AllNodes, _, _} = cluster_status(),
     AllNodes.
 
 all_clustered_disc_nodes() ->
-    {_, DiscNodes, _} = read_cluster_nodes_status(),
+    {_, DiscNodes, _} = cluster_status(),
     DiscNodes.
 
 all_clustered_ram_nodes() ->
-    {AllNodes, DiscNodes, _} = read_cluster_nodes_status(),
-    sets:to_list(sets:subtract(sets:from_list(AllNodes),
-                               sets:from_list(DiscNodes))).
+    {AllNodes, DiscNodes, _} = cluster_status(),
+    ordsets:subtract(AllNodes, DiscNodes).
 
 running_clustered_nodes() ->
-    {_, _, RunningNodes} = read_cluster_nodes_status(),
+    {_, _, RunningNodes} = cluster_status(),
     RunningNodes.
 
 running_clustered_disc_nodes() ->
-    {_, DiscNodes, RunningNodes} = read_cluster_nodes_status(),
-    sets:to_list(sets:intersection(sets:from_list(DiscNodes),
-                                   sets:from_list(RunningNodes))).
+    {_, DiscNodes, RunningNodes} = cluster_status(),
+    ordsets:intersection(DiscNodes, RunningNodes).
 
-%% This function is a bit different, we want it to return correctly only when
-%% the node is actually online. This is because when we discover the nodes we
-%% want online, "working" nodes only.
+%% This function is the actual source of information, since it gets the data
+%% from mnesia. Obviously it'll work only when mnesia is running.
 cluster_status_if_running() ->
     case mnesia:system_info(is_running) of
         no  -> {error, node_not_running};
@@ -429,12 +425,14 @@ cluster_status_if_running() ->
     end.
 
 cluster_status() ->
-    {ok, Status} = cluster_status_if_running(),
-    Status.
+    case cluster_status_if_running() of
+        {ok, Status}              -> Status;
+        {error, node_not_running} -> read_cluster_status_file()
+    end.
 
 node_info() ->
     {erlang:system_info(otp_release), rabbit_misc:rabbit_version(),
-     cluster_status()}.
+     cluster_status_if_running()}.
 
 is_disc_node() -> mnesia:system_info(use_dir).
 
@@ -484,7 +482,7 @@ init_db(ClusterNodes, WantDiscNode, Force) ->
                     end
             end,
             ensure_schema_integrity(),
-            update_cluster_nodes_status(),
+            update_cluster_status_file(),
             ok
     end.
 
@@ -512,8 +510,8 @@ init_db_with_mnesia(ClusterNodes, WantDiscNode, Force) ->
     after
         stop_mnesia()
     end,
-    {AllNodes, DiscNodes, RunningNodes} = read_cluster_nodes_status(),
-    write_cluster_nodes_status(
+    {AllNodes, DiscNodes, RunningNodes} = read_cluster_status_file(),
+    write_cluster_status_file(
       {AllNodes, DiscNodes, ordsets:del_element(node(), RunningNodes)}).
 
 ensure_mnesia_dir() ->
@@ -654,7 +652,7 @@ check_cluster_consistency() ->
               case rpc:call(Node, rabbit_mnesia, node_info, []) of
                   {badrpc, _Reason} ->
                       ok;
-                  {OTP, Rabbit, error} ->
+                  {OTP, Rabbit, {error, node_not_running}} ->
                       CheckOTP(OTP),
                       CheckRabbit(Rabbit);
                   {OTP, Rabbit, {ok, {AllNodes, _, _}}} ->
@@ -681,23 +679,23 @@ check_cluster_consistency() ->
 %% various situations. Obviously when mnesia is offline the information we have
 %% will be outdated, but it can't be otherwise.
 
-cluster_nodes_status_filename() ->
+cluster_status_file_filename() ->
     dir() ++ "/cluster_nodes.config".
 
 initial_cluster_status() ->
     {[node()], [node()], [node()]}.
 
-write_cluster_nodes_status(Status) ->
-    FileName = cluster_nodes_status_filename(),
+write_cluster_status_file(Status) ->
+    FileName = cluster_status_file_filename(),
     case rabbit_file:write_term_file(FileName, [Status]) of
         ok -> ok;
         {error, Reason} ->
-            throw({error, {cannot_write_cluster_nodes_status,
+            throw({error, {cannot_write_cluster_status_file,
                            FileName, Reason}})
     end.
 
-try_read_cluster_nodes_status() ->
-    FileName = cluster_nodes_status_filename(),
+try_read_cluster_status_file() ->
+    FileName = cluster_status_file_filename(),
     case rabbit_file:read_term_file(FileName) of
         {ok, [{_, _, _} = Status]} ->
             {ok, Status};
@@ -707,25 +705,26 @@ try_read_cluster_nodes_status() ->
             {error, {cannot_read_file, FileName, Reason}}
     end.
 
-read_cluster_nodes_status() ->
-    case try_read_cluster_nodes_status() of
+read_cluster_status_file() ->
+    case try_read_cluster_status_file() of
         {ok, Status} ->
             Status;
         {error, Reason} ->
-            throw({error, {cannot_read_cluster_nodes_status, Reason}})
+            throw({error, {cannot_read_cluster_status_file, Reason}})
     end.
 
 %% To update the cluster status when mnesia is running.
-update_cluster_nodes_status() ->
-    write_cluster_nodes_status(cluster_status()).
+update_cluster_status_file() ->
+    {ok, Status} = cluster_status_if_running(),
+    write_cluster_status_file(Status).
 
 %%--------------------------------------------------------------------
 %% Hooks for `rabbit_node_monitor'
 %%--------------------------------------------------------------------
 
 on_node_up(Node, IsDiscNode) ->
-    {AllNodes, DiscNodes, RunningNodes} = read_cluster_nodes_status(),
-    write_cluster_nodes_status({ordsets:add_element(Node, AllNodes),
+    {AllNodes, DiscNodes, RunningNodes} = read_cluster_status_file(),
+    write_cluster_status_file({ordsets:add_element(Node, AllNodes),
                                 case IsDiscNode of
                                     true  -> ordsets:add_element(Node,
                                                                  DiscNodes);
@@ -742,25 +741,25 @@ on_node_down(Node) ->
         true  -> rabbit_log:info("only running disc node went down~n");
         false -> ok
     end,
-    {AllNodes, DiscNodes, RunningNodes} = read_cluster_nodes_status(),
-    write_cluster_nodes_status({AllNodes, DiscNodes,
-                                ordsets:del_element(Node, RunningNodes)}).
+    {AllNodes, DiscNodes, RunningNodes} = read_cluster_status_file(),
+    write_cluster_status_file({AllNodes, DiscNodes,
+                               ordsets:del_element(Node, RunningNodes)}).
 
 on_node_join(Node, IsDiscNode) ->
-    {AllNodes, DiscNodes, RunningNodes} = read_cluster_nodes_status(),
-    write_cluster_nodes_status({ordsets:add_element(Node, AllNodes),
-                                case IsDiscNode of
-                                    true  -> ordsets:add_element(Node,
-                                                                 DiscNodes);
-                                    false -> DiscNodes
-                                end,
-                                RunningNodes}).
+    {AllNodes, DiscNodes, RunningNodes} = read_cluster_status_file(),
+    write_cluster_status_file({ordsets:add_element(Node, AllNodes),
+                               case IsDiscNode of
+                                   true  -> ordsets:add_element(Node,
+                                                                DiscNodes);
+                                   false -> DiscNodes
+                               end,
+                               RunningNodes}).
 
 on_node_leave(Node) ->
-    {AllNodes, DiscNodes, RunningNodes} = read_cluster_nodes_status(),
-    write_cluster_nodes_status({ordsets:del_element(Node, AllNodes),
-                                ordsets:del_element(Node, DiscNodes),
-                                ordsets:del_element(Node, RunningNodes)}).
+    {AllNodes, DiscNodes, RunningNodes} = read_cluster_status_file(),
+    write_cluster_status_file({ordsets:del_element(Node, AllNodes),
+                               ordsets:del_element(Node, DiscNodes),
+                               ordsets:del_element(Node, RunningNodes)}).
 
 %%--------------------------------------------------------------------
 %% Internal helpers
