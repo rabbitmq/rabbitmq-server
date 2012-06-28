@@ -49,7 +49,8 @@
 
 %% Used internally in rpc calls
 -export([node_info/0,
-         remove_node_if_mnesia_running/1
+         remove_node_if_mnesia_running/1,
+         is_running_remote/0
         ]).
 
 %% create_tables/0 exported for helping embed RabbitMQ in or alongside
@@ -388,10 +389,11 @@ cluster_status_from_mnesia() ->
             end,
     case mnesia:system_info(is_running) of
         no  -> {error, mnesia_not_running};
-        yes -> {ok, {ordsets:from_list(mnesia:system_info(db_nodes)),
+        yes -> AllNodes = ordsets:from_list(mnesia:system_info(db_nodes)),
+               {ok, {AllNodes,
                      Check(ordsets:from_list(
                              mnesia:table_info(schema, disc_copies))),
-                     ordsets:from_list(mnesia:system_info(running_db_nodes))}}
+                     running_nodes(AllNodes)}}
     end.
 
 cluster_status() ->
@@ -1013,3 +1015,15 @@ change_extra_db_nodes(ClusterNodes0, Force) ->
         {ok, Nodes} ->
             {ok, Nodes}
     end.
+
+%% What we really want is nodes running rabbit, not running mnesia. Using
+%% `rabbit_mnesia:system_info(running_db_nodes)' will return false positives
+%% when we are actually just doing cluster operations (e.g. joining the
+%% cluster).
+running_nodes(Nodes) ->
+    {Replies, _BadNodes} =
+        rpc:multicall(Nodes, rabbit_mnesia, is_running_remote, []),
+    [Node || {Running, Node} <- Replies, Running].
+
+is_running_remote() ->
+    {proplists:is_defined(rabbit, application:which_applications()), node()}.
