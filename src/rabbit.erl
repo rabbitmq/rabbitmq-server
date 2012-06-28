@@ -332,8 +332,7 @@ start_it(StartFun) ->
 
 stop() ->
     rabbit_log:info("Stopping Rabbit~n"),
-    ok = app_utils:stop_applications(app_shutdown_order()),
-    rabbit_node_monitor:this_node_down().
+    ok = app_utils:stop_applications(app_shutdown_order()).
 
 stop_and_halt() ->
     try

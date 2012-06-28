@@ -29,7 +29,6 @@
          notify_left_cluster/1,
          node_up/2,
          notify_node_up/0,
-         this_node_down/0,
 
          start_link/0,
          init/1,
@@ -58,7 +57,6 @@
 -spec(notify_left_cluster/1 :: (node()) -> 'ok').
 -spec(node_up/2 :: (node(), boolean()) -> 'ok').
 -spec(notify_node_up/0 :: () -> 'ok').
--spec(this_node_down/0 :: () -> 'ok').
 
 -endif.
 
@@ -176,16 +174,6 @@ notify_node_up() ->
     [ node_up(N, ordsets:is_element(N, rabbit_mnesia:clustered_disc_nodes())) ||
         N <- Nodes ],
     ok.
-
-this_node_down() ->
-    case mnesia:system_info(is_running) of
-        yes -> throw({error, node_running});
-        no  -> {AllNodes, DiscNodes, RunningNodes} =
-                   read_cluster_status_file(),
-               write_cluster_status_file(
-                 {AllNodes, DiscNodes,
-                  ordsets:del_element(node(), RunningNodes)})
-    end.
 
 %%----------------------------------------------------------------------------
 %% gen_server callbacks

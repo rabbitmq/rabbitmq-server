@@ -398,8 +398,13 @@ cluster_status() ->
     case cluster_status_from_mnesia() of
         {ok, Status} ->
             Status;
-        {error, mnesia_not_running} ->
-            rabbit_node_monitor:read_cluster_status_file()
+        {error, _Reason} ->
+            {AllNodes, DiscNodes, RunningNodes} =
+                rabbit_node_monitor:read_cluster_status_file(),
+            %% The cluster status file records the status when the node is
+            %% online, but we know for sure that the node is offline now, so we
+            %% can remove it from the list of running nodes.
+            {AllNodes, DiscNodes, ordsets:del_element(node(), RunningNodes)}
     end.
 
 node_info() ->
@@ -489,7 +494,7 @@ init_db_with_mnesia(ClusterNodes, WantDiscNode, Force) ->
     after
         stop_mnesia()
     end,
-    rabbit_node_monitor:this_node_down().
+    ensure_mnesia_not_running().
 
 ensure_mnesia_dir() ->
     MnesiaDir = dir() ++ "/",
