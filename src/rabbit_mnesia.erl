@@ -125,12 +125,8 @@ prepare() ->
 init() ->
     ensure_mnesia_running(),
     ensure_mnesia_dir(),
-    %% Here we want the cluster status *file*, not the status from mnesia,
-    %% because in the case of RAM nodes the status from mnesia doesn't matter.
-    Status = {AllNodes, _, _} =
-        rabbit_node_monitor:read_cluster_status_file(),
-    DiscNode = is_disc_node(Status),
-    init_db_and_upgrade(AllNodes, DiscNode, DiscNode),
+    DiscNode = is_disc_node(),
+    init_db_and_upgrade(all_clustered_nodes(), DiscNode, DiscNode),
     %% We intuitively expect the global name server to be synced when
     %% Mnesia is up. In fact that's not guaranteed to be the case - let's
     %% make it so.
@@ -217,11 +213,11 @@ reset(Force) ->
         true ->
             all_clustered_nodes();
         false ->
-            AllNodes0 = all_clustered_nodes(),
+            AllNodes = all_clustered_nodes(),
             %% Reconnecting so that we will get an up to date nodes
             %% Force=true here so that reset still works when
             %% clustered with a node which is down
-            init_db_with_mnesia(AllNodes0, is_disc_node(), true),
+            init_db_with_mnesia(AllNodes, is_disc_node(), true),
             leave_cluster(),
             rabbit_misc:ensure_ok(mnesia:delete_schema([Node]),
                                   cannot_delete_schema),
@@ -381,19 +377,34 @@ running_clustered_disc_nodes() ->
 %% This function is the actual source of information, since it gets the data
 %% from mnesia. Obviously it'll work only when mnesia is running.
 cluster_status_from_mnesia() ->
-    Check = fun (Nodes) ->
-                    case mnesia:system_info(use_dir) of
-                        true  -> ordsets:add_element(node(), Nodes);
-                        false -> Nodes
-                    end
-            end,
     case mnesia:system_info(is_running) of
         no  -> {error, mnesia_not_running};
-        yes -> AllNodes = ordsets:from_list(mnesia:system_info(db_nodes)),
-               {ok, {AllNodes,
-                     Check(ordsets:from_list(
-                             mnesia:table_info(schema, disc_copies))),
-                     running_nodes(AllNodes)}}
+        yes -> %% If the tables are not present, it means that `init_db/3' hasn't
+               %% been run yet. In other words, either we are a virgin node or a
+               %% restarted RAM node. In both cases we're not interested in what
+               %% mnesia has to say.
+               IsDiscNode = mnesia:system_info(use_dir),
+               Tables = mnesia:system_info(tables),
+               {Table, _} = case table_definitions(case IsDiscNode of
+                                                       true  -> disc;
+                                                       false -> ram
+                                                   end) of [T|_] -> T end,
+               case lists:member(Table, Tables) of
+                   true ->
+                       AllNodes =
+                           ordsets:from_list(mnesia:system_info(db_nodes)),
+                       DiscCopies = ordsets:from_list(
+                                      mnesia:table_info(schema, disc_copies)),
+                       DiscNodes =
+                           case IsDiscNode of
+                               true  -> ordsets:add_element(node(), DiscCopies);
+                               false -> DiscCopies
+                           end,
+                       RunningNodes = running_nodes(AllNodes),
+                       {ok, {AllNodes, DiscNodes, RunningNodes}};
+                   false ->
+                       {error, tables_not_present}
+               end
     end.
 
 cluster_status() ->
