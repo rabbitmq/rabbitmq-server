@@ -51,12 +51,27 @@ class BaseTest(unittest.TestCase):
 
    def assertListener(self, errMsg, numMsgs=0, numErrs=0, numRcts=0, timeout=1):
         if numMsgs + numErrs + numRcts > 0:
-            self.assertTrue(self.listener.await(timeout), errMsg + " (#awaiting)")
+            self._assertTrue(self.listener.await(timeout), errMsg + " (#awaiting)")
         else:
-            self.assertFalse(self.listener.await(timeout), errMsg + " (#awaiting)")
-        self.assertEquals(numMsgs, len(self.listener.messages), errMsg + " (#messages)")
-        self.assertEquals(numErrs, len(self.listener.errors), errMsg + " (#errors)")
-        self.assertEquals(numRcts, len(self.listener.receipts), errMsg + " (#receipts)")
+            self._assertFalse(self.listener.await(timeout), errMsg + " (#awaiting)")
+        self._assertEquals(numMsgs, len(self.listener.messages), errMsg + " (#messages)")
+        self._assertEquals(numErrs, len(self.listener.errors), errMsg + " (#errors)")
+        self._assertEquals(numRcts, len(self.listener.receipts), errMsg + " (#receipts)")
+
+   def _assertTrue(self, bool, msg):
+       if not bool:
+           self.listener.print_state(msg, True)
+           self.assertTrue(bool, msg)
+
+   def _assertFalse(self, bool, msg):
+       if bool:
+           self.listener.print_state(msg, True)
+           self.assertFalse(bool, msg)
+
+   def _assertEquals(self, expected, actual, msg):
+       if expected != actual:
+           self.listener.print_state(msg, True)
+           self.assertEquals(expected, actual, msg)
 
    def assertListenerAfter(self, verb, errMsg="", numMsgs=0, numErrs=0, numRcts=0, timeout=1):
         num = numMsgs + numErrs + numRcts
@@ -106,12 +121,16 @@ class WaitableListener(object):
     def await(self, timeout=10):
         return self.latch.await(timeout)
 
-    def print_state(self, hdr=""):
+    def print_state(self, hdr="", full=False):
         print hdr,
         print '#messages:', len(self.messages),
         print '#errors:', len(self.errors),
         print '#receipts:', len(self.receipts),
         print 'Remaining count:', self.latch.get_count()
+        if full:
+            if len(self.messages) != 0: print 'Messages:', self.messages
+            if len(self.errors) != 0: print 'Messages:', self.errors
+            if len(self.receipts) != 0: print 'Messages:', self.receipts
 
 class Latch(object):
 
