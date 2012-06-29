@@ -26,22 +26,16 @@
 -export([start_link/1, adjust/3]).
 -export([init/1]).
 
-start_link(Args) -> supervisor2:start_link(?MODULE, Args).
+start_link(X) -> supervisor2:start_link(?MODULE, X).
 
-adjust(Sup, XName, everything) ->
+adjust(Sup, X, everything) ->
     [stop(Sup, Upstream) ||
         {Upstream, _, _, _} <- supervisor2:which_children(Sup)],
-    case upstream_set(XName) of
-        {ok, UpstreamSet} ->
-            [{ok, _Pid} = supervisor2:start_child(Sup, Spec) ||
-                Spec <- specs(UpstreamSet, XName)];
-        {error, not_found} ->
-            ok
-    end;
+    [{ok, _Pid} = supervisor2:start_child(Sup, Spec) || Spec <- specs(X)];
 
-adjust(Sup, XName, {connection, ConnName}) ->
+adjust(Sup, X, {connection, ConnName}) ->
     OldUpstreams0 = children(Sup, ConnName),
-    NewUpstreams0 = upstreams(XName, ConnName),
+    NewUpstreams0 = rabbit_federation_upstream:for(X, ConnName),
     %% If any haven't changed, don't restart them. The broker will
     %% avoid telling us about connections that have not changed
     %% syntactically, but even if one has, this X may not have that
@@ -55,21 +49,26 @@ adjust(Sup, XName, {connection, ConnName}) ->
                   end
           end, {OldUpstreams0, NewUpstreams0}, OldUpstreams0),
     [stop(Sup, OldUpstream) || OldUpstream <- OldUpstreams],
-    [start(Sup, NewUpstream, XName) || NewUpstream <- NewUpstreams];
+    [start(Sup, NewUpstream, X) || NewUpstream <- NewUpstreams];
 
-adjust(Sup, XName, {clear_connection, ConnName}) ->
-    prune_for_upstream_set(<<"all">>, XName),
+adjust(Sup, X = #exchange{name = XName}, {clear_connection, ConnName}) ->
+    ok = rabbit_federation_db:prune_scratch(
+           XName, rabbit_federation_upstream:for(X)),
     [stop(Sup, Upstream) || Upstream <- children(Sup, ConnName)];
 
 %% TODO handle changes of upstream sets minimally (bug 24853)
-adjust(Sup, XName, {upstream_set, Set}) ->
-    prune_for_upstream_set(Set, XName),
-    adjust(Sup, XName, everything);
-adjust(Sup, XName, {clear_upstream_set, _}) ->
-    adjust(Sup, XName, everything).
+adjust(Sup, X = #exchange{name = XName}, {upstream_set, Set}) ->
+    case rabbit_federation_upstream:set_for(X) of
+        {ok, Set} -> ok = rabbit_federation_db:prune_scratch(
+                            XName, rabbit_federation_upstream:for(X));
+        _         -> ok
+    end,
+    adjust(Sup, X, everything);
+adjust(Sup, X, {clear_upstream_set, _}) ->
+    adjust(Sup, X, everything).
 
-start(Sup, Upstream, XName) ->
-    {ok, _Pid} = supervisor2:start_child(Sup, spec(Upstream, XName)),
+start(Sup, Upstream, X) ->
+    {ok, _Pid} = supervisor2:start_child(Sup, spec(Upstream, X)),
     ok.
 
 stop(Sup, Upstream) ->
@@ -86,43 +85,17 @@ children(Sup, ConnName) ->
     rabbit_federation_util:find_upstreams(
       ConnName, [U || {U, _, _, _} <- supervisor2:which_children(Sup)]).
 
-upstreams(XName, ConnName) ->
-    case upstream_set(XName) of
-        {ok, UpstreamSet} ->
-            rabbit_federation_upstream:from_set(UpstreamSet, XName, ConnName);
-        {error, not_found} ->
-            []
-    end.
-
-upstream_set(XName) ->
-    case rabbit_exchange:lookup(XName) of
-        {ok, #exchange{arguments = Args}} ->
-            {longstr, UpstreamSet} =
-                rabbit_misc:table_lookup(Args, <<"upstream-set">>),
-            {ok, UpstreamSet};
-        {error, not_found} ->
-            {error, not_found}
-    end.
-
-prune_for_upstream_set(Set, XName) ->
-    case upstream_set(XName) of
-        {ok, Set} -> Us = rabbit_federation_upstream:from_set(Set, XName),
-                     ok = rabbit_federation_db:prune_scratch(XName, Us);
-        _         -> ok
-    end.
-
 %%----------------------------------------------------------------------------
 
-init({UpstreamSet, XName}) ->
+init(X) ->
     %% 1, 1 so that the supervisor can give up and get into waiting
     %% for the reconnect_delay quickly.
-    {ok, {{one_for_one, 1, 1}, specs(UpstreamSet, XName)}}.
+    {ok, {{one_for_one, 1, 1}, specs(X)}}.
 
-specs(UpstreamSet, XName) ->
-    [spec(Upstream, XName) ||
-        Upstream <- rabbit_federation_upstream:from_set(UpstreamSet, XName)].
+specs(X) ->
+    [spec(Upstream, X) || Upstream <- rabbit_federation_upstream:for(X)].
 
-spec(Upstream = #upstream{reconnect_delay = Delay}, XName) ->
+spec(Upstream = #upstream{reconnect_delay = Delay}, #exchange{name = XName}) ->
     {Upstream, {rabbit_federation_link, start_link, [{Upstream, XName}]},
      {transient, Delay}, ?MAX_WAIT, worker,
      [rabbit_federation_link]}.

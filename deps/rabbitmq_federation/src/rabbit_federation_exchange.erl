@@ -14,91 +14,96 @@
 %% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
+%% TODO rename this
 -module(rabbit_federation_exchange).
 
 -rabbit_boot_step({?MODULE,
-                   [{description, "federation exchange type"},
+                   [{description, "federation exchange decorator"},
                     {mfa, {rabbit_registry, register,
-                           [exchange, <<"x-federation">>, ?MODULE]}},
+                           [exchange_decorator, <<"federation">>, ?MODULE]}},
                     {requires, rabbit_registry},
                     {enables, recovery}]}).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 
--behaviour(rabbit_exchange_type).
+-behaviour(rabbit_exchange_decorator).
 
--export([description/0, serialise_events/0, route/2]).
--export([validate/1, create/2, delete/3,
-         add_binding/3, remove_bindings/3, assert_args_equivalence/2]).
+-export([description/0, serialise_events/1]).
+-export([create/2, delete/3, add_binding/3, remove_bindings/3,
+         policy_changed/3]).
 
 %%----------------------------------------------------------------------------
 
 description() ->
-    [{name, <<"x-federation">>},
-     {description, <<"Federation exchange">>}].
+    [{name, <<"federation">>},
+     {description, <<"Federation exchange decorator">>}].
 
-serialise_events() -> true.
+serialise_events(X) -> federate(X).
 
-route(X, Delivery) -> with_module(X, fun (M) -> M:route(X, Delivery) end).
+create(transaction, _X) ->
+    ok;
+create(none, X) ->
+    maybe_start(X).
 
-validate(#exchange{arguments = Args} = X) ->
-    rabbit_federation_util:validate_arg(<<"upstream-set">>, longstr, Args),
-    rabbit_federation_util:validate_arg(<<"type">>,         longstr, Args),
-    {longstr, TypeBin} = rabbit_misc:table_lookup(Args, <<"type">>),
-    case rabbit_exchange:check_type(TypeBin) of
-        'x-federation' -> rabbit_federation_util:fail(
-                            "Type argument must not be x-federation.", []);
-        _              -> ok
-    end,
-    with_module(X, fun (M) -> M:validate(X) end).
+delete(transaction, _X, _Bs) ->
+    ok;
+delete(none, X, _Bs) ->
+    maybe_stop(X).
 
-create(transaction, X) ->
-    with_module(X, fun (M) -> M:create(transaction, X) end);
-create(none, X = #exchange{name      = XName,
-                           arguments = Args}) ->
-    {longstr, Set} = rabbit_misc:table_lookup(Args, <<"upstream-set">>),
-    Upstreams = rabbit_federation_upstream:from_set(Set, XName),
-    ok = rabbit_federation_db:prune_scratch(XName, Upstreams),
-    {ok, _} = rabbit_federation_link_sup_sup:start_child(XName, {Set, XName}),
-    with_module(X, fun (M) -> M:create(none, X) end).
-
-delete(transaction, X, Bs) ->
-    with_module(X, fun (M) -> M:delete(transaction, X, Bs) end);
-delete(none, X = #exchange{name = XName}, Bs) ->
-    rabbit_federation_link:stop(XName),
-    ok = rabbit_federation_link_sup_sup:stop_child(XName),
-    rabbit_federation_status:remove_exchange(XName),
-    with_module(X, fun (M) -> M:delete(none, X, Bs) end).
-
-add_binding(transaction, X, B) ->
-    with_module(X, fun (M) -> M:add_binding(transaction, X, B) end);
+add_binding(transaction, _X, _B) ->
+    ok;
 add_binding(Serial, X = #exchange{name = XName}, B) ->
-    rabbit_federation_link:add_binding(Serial, XName, B),
-    with_module(X, fun (M) -> M:add_binding(serial(Serial, X), X, B) end).
+    case federate(X) of
+        true  -> rabbit_federation_link:add_binding(Serial, XName, B),
+                 ok;
+        false -> ok
+    end.
 
-remove_bindings(transaction, X, Bs) ->
-    with_module(X, fun (M) -> M:remove_bindings(transaction, X, Bs) end);
+remove_bindings(transaction, _X, _Bs) ->
+    ok;
 remove_bindings(Serial, X = #exchange{name = XName}, Bs) ->
-    rabbit_federation_link:remove_bindings(Serial, XName, Bs),
-    with_module(X, fun (M) -> M:remove_bindings(serial(Serial, X), X, Bs) end).
+    case federate(X) of
+        true  -> rabbit_federation_link:remove_bindings(Serial, XName, Bs),
+                 ok;
+        false -> ok
+    end.
 
-assert_args_equivalence(X = #exchange{name = XName, arguments = Args},
-                        NewArgs) ->
-    rabbit_misc:assert_args_equivalence(Args, NewArgs, XName,
-                                        [<<"upstream">>, <<"type">>]),
-    with_module(X, fun (M) -> M:assert_args_equivalence(X, Args) end).
+policy_changed(none, OldX, NewX) ->
+    maybe_stop(OldX),
+    maybe_start(NewX).
 
 %%----------------------------------------------------------------------------
 
-serial(Serial, X) ->
-    case with_module(X, fun (M) -> M:serialise_events() end) of
-        true  -> Serial;
-        false -> none
+%% Don't federate default exchange, we can't bind to it
+federate(#exchange{name = #resource{name = <<"">>}}) ->
+    false;
+
+%% Don't federate any of our intermediate exchanges. Note that we use
+%% internal=true since older brokers may not declare
+%% x-federation-upstream on us. Also other internal exchanges should
+%% probably not be federated.
+federate(#exchange{internal = true}) ->
+    false;
+
+federate(X) ->
+    case rabbit_federation_upstream:set_for(X) of
+        {ok, _}    -> true;
+        {error, _} -> false
     end.
 
-with_module(#exchange{arguments = Args}, Fun) ->
-    %% TODO should this be cached? It's on the publish path.
-    {longstr, Type} = rabbit_misc:table_lookup(Args, <<"type">>),
-    {ok, Module} = rabbit_registry:lookup_module(
-                     exchange, list_to_existing_atom(binary_to_list(Type))),
-    Fun(Module).
+maybe_start(X = #exchange{name = XName})->
+    case federate(X) of
+        true  -> ok = rabbit_federation_db:prune_scratch(
+                        XName, rabbit_federation_upstream:for(X)),
+                 {ok, _} = rabbit_federation_link_sup_sup:start_child(X),
+                 ok;
+        false -> ok
+    end.
+
+maybe_stop(X = #exchange{name = XName}) ->
+    case federate(X) of
+        true  -> rabbit_federation_link:stop(XName),
+                 ok = rabbit_federation_link_sup_sup:stop_child(X),
+                 rabbit_federation_status:remove_exchange(XName);
+        false -> ok
+    end.
