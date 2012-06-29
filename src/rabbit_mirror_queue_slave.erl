@@ -351,20 +351,17 @@ handle_msg([_SPid], _From, {ensure_monitoring, _Pid}) ->
     ok;
 handle_msg([SPid], _From, {process_death, Pid}) ->
     inform_deaths(SPid, [Pid]);
+handle_msg([CPid], _From, {delete_and_terminate, _Reason} = Msg) ->
+    ok = gen_server2:cast(CPid, {gm, Msg}),
+    {stop, {shutdown, ring_shutdown}};
 handle_msg([SPid], _From, Msg) ->
     ok = gen_server2:cast(SPid, {gm, Msg}).
 
 inform_deaths(SPid, Deaths) ->
-    rabbit_misc:with_exit_handler(
-      fun () -> {stop, normal} end,
-      fun () ->
-              case gen_server2:call(SPid, {gm_deaths, Deaths}, infinity) of
-                  ok ->
-                      ok;
-                  {promote, CPid} ->
-                      {become, rabbit_mirror_queue_coordinator, [CPid]}
-              end
-      end).
+    case gen_server2:call(SPid, {gm_deaths, Deaths}, infinity) of
+        ok              -> ok;
+        {promote, CPid} -> {become, rabbit_mirror_queue_coordinator, [CPid]}
+    end.
 
 %% ---------------------------------------------------------------------------
 %% Others
