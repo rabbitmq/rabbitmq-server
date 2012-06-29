@@ -6,8 +6,9 @@ SOCKETS_THRESHOLDS=[[1.0, 'red'],
 PROCESS_THRESHOLDS=[[0.75, 'red'],
                     [0.5, 'yellow']];
 
-function fmt_string(str) {
-    if (str == undefined) return UNKNOWN_REPR;
+function fmt_string(str, unknown) {
+    if (unknown == undefined) unkown = UNKNOWN_REPR;
+    if (str == undefined) return unknown;
     return fmt_escape_html("" + str);
 }
 
@@ -458,6 +459,10 @@ function link_user(name) {
 
 function link_node(name) {
     return _link_to(fmt_escape_html(name), '#/nodes/' + esc(name))
+}
+
+function link_policy(name) {
+    return _link_to(fmt_escape_html(name), '#/policies/' + esc(name))
 }
 
 function _link_to(name, url) {

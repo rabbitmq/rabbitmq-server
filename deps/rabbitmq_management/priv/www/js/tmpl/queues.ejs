@@ -10,7 +10,7 @@
 <table class="list">
  <thead>
   <tr>
-    <th colspan="<% if (nodes_interesting && vhosts_interesting) { %>6<% } else if (nodes_interesting || vhosts_interesting) { %>5<% } else { %>4<% } %>">Overview</th>
+    <th colspan="<% if (nodes_interesting && vhosts_interesting) { %>7<% } else if (nodes_interesting || vhosts_interesting) { %>6<% } else { %>5<% } %>">Overview</th>
     <th colspan="3">Messages</th>
 <% if (statistics_level == 'fine') { %>
     <th colspan="3">Message rates</th>
@@ -26,6 +26,7 @@
 <% } %>
     <th><%= fmt_sort('Exclusive',    'owner_pid_details.name') %></th>
     <th>Parameters</th>
+    <th><%= fmt_sort('Policy',       'policy') %></th>
     <th><%= fmt_sort('Status',       'idle_since') %></th>
     <th><%= fmt_sort('Ready',        'messages_ready') %></th>
     <th><%= fmt_sort('Unacked',      'messages_unacknowledged') %></th>
@@ -62,9 +63,8 @@
      <%= link_conn(queue.owner_pid_details.name) %>
      <% } %>
    </td>
-   <td class="c">
-     <%= fmt_parameters_short(queue) %>
-   </td>
+   <td class="c"><%= fmt_parameters_short(queue) %></td>
+   <td class="c"><%= fmt_string(queue.policy, '') %></td>
    <td class="c"><%= fmt_idle(queue) %></td>
    <td class="r"><%= fmt_string(queue.messages_ready) %></td>
    <td class="r"><%= fmt_string(queue.messages_unacknowledged) %></td>

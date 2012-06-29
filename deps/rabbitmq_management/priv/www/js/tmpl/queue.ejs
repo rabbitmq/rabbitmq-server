@@ -17,6 +17,10 @@
         <td><%= fmt_parameters(queue) %></td>
       </tr>
       <tr>
+        <th>Policy</th>
+        <td><%= fmt_string(queue.policy, '') %></td>
+      </tr>
+      <tr>
         <th>Exclusive owner</th>
         <td>
           <% if (queue.owner_pid_details == undefined) { %>
@@ -26,13 +30,13 @@
           <% } %>
         </td>
       </tr>
+    </table>
+
+    <table class="facts">
       <tr>
         <th>Status</th>
         <td><%= fmt_idle_long(queue) %></td>
       </tr>
-    </table>
-
-    <table class="facts">
       <tr>
         <th>Consumers</th>
         <td><%= fmt_string(queue.consumers) %></td>

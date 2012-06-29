@@ -11,6 +11,7 @@
 <% } %>
    <th><%= fmt_sort('Name',         'name') %></th>
    <th><%= fmt_sort('Type',         'type') %></th>
+   <th><%= fmt_sort('Policy',       'policy') %></th>
    <th>Parameters</th>
 <% if (statistics_level == 'fine') { %>
    <th><%= fmt_sort('Message rate',   'message_stats_in.publish_details.rate') %></th>
@@ -28,6 +29,7 @@
 <% } %>
    <td><%= link_exchange(exchange.vhost, exchange.name) %></td>
    <td class="status c"><%= fmt_exchange_type(exchange.type) %></td>
+   <td class="c"><%= fmt_string(exchange.policy, '') %></td>
    <td class="c"><%= fmt_parameters_short(exchange) %></td>
    <td class="r"><%= fmt_rate(exchange.message_stats_in, 'publish', false) %></td>
   </tr>

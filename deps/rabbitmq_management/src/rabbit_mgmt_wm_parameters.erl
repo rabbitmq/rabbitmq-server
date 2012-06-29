@@ -47,7 +47,7 @@ is_authorized(ReqData, Context) ->
 basic(ReqData) ->
     Raw = case rabbit_mgmt_util:id(component, ReqData) of
               none -> rabbit_runtime_parameters:list();
-              Name -> rabbit_runtime_parameters:list(Name)
+              Name -> rabbit_runtime_parameters:list_strict(Name)
           end,
     case Raw of
         not_found -> not_found;

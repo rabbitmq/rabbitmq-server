@@ -1,0 +1,62 @@
+<h1>Policies</h1>
+<div class="section">
+  <h2>All policies</h2>
+  <div class="hider updatable">
+<% if (policies.length > 0) { %>
+<table class="list">
+ <thead>
+  <tr>
+    <th>Name</th>
+    <th>Virtual Host</th>
+    <th>Prefix</th>
+    <th>Policy</th>
+  </tr>
+ </thead>
+ <tbody>
+<%
+ for (var i = 0; i < policies.length; i++) {
+    var policy = policies[i];
+%>
+   <tr<%= alt_rows(i)%>>
+     <td><%= link_policy(policy.key) %></td>
+     <td><%= policy.value['vhost'] %></td>
+     <td><%= policy.value['prefix'] %></td>
+     <td><%= fmt_table_short(policy.value['policy']) %></td>
+   </tr>
+<% } %>
+ </tbody>
+</table>
+<% } else { %>
+  <p>... no policies ...</p>
+<% } %>
+  </div>
+</div>
+
+<div class="section-hidden">
+  <h2>Add / update a policy</h2>
+  <div class="hider">
+    <h3>
+    <form action="#/policies" method="put">
+      <input type="hidden" name="component" value="policy"/>
+      <table class="form">
+        <tr>
+          <th><label>Name:</label></th>
+          <td><input type="text" name="key"/><span class="mand">*</span></td>
+        </tr>
+        <tr>
+          <th><label>Prefix:</label></th>
+          <td><input type="text" name="prefix"/></td>
+        </tr>
+        <tr>
+          <th><label>Virtual host:</label></th>
+          <td><input type="text" name="vhost"/></td>
+        </tr>
+        <tr>
+          <th><label>Policy:</label></th>
+          <td><span class="multifield" id="policy"></span></td>
+        </tr>
+      </table>
+      <input type="submit" value="Add policy"/>
+    </form>
+  </div>
+</div>
