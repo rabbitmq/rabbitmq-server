@@ -15,6 +15,7 @@
              rabbit_runtime_parameter,
              rabbit_command_assembler,
              rabbit_exchange_type,
+             rabbit_exchange_decorator,
              rabbit_auth_backend,
              rabbit_auth_mechanism,
              rabbit_framing_amqp_0_8,
