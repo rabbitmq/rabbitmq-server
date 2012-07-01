@@ -720,7 +720,7 @@
         </varlistentry>
 
         <varlistentry>
-          <term><cmdsynopsis><command>list_user_permissions</command> <arg choice="opt">-p <replaceable>vhostpath</replaceable></arg> <arg choice="req"><replaceable>username</replaceable></arg></cmdsynopsis></term>
+          <term><cmdsynopsis><command>list_user_permissions</command> <arg choice="req"><replaceable>username</replaceable></arg></cmdsynopsis></term>
           <listitem>
             <variablelist>
               <varlistentry>
@@ -738,6 +738,99 @@
               virtual hosts to which the user named <command>tonyg</command>
               has been granted access, and the permissions the user has
               for operations on resources in these virtual hosts.
+            </para>
+          </listitem>
+        </varlistentry>
+      </variablelist>
+    </refsect2>
+
+    <refsect2>
+      <title>Parameter Management</title>
+      <para>
+        Certain features of RabbitMQ (such as the federation plugin)
+        are controlled by dynamic,
+        cluster-wide <emphasis>parameters</emphasis>. Each parameter
+        consists of a component name, a key and a value. The
+        component name and key are strings, and the value is an
+        Erlang term. Parameters can be set, cleared and listed. In
+        general you should refer to the documentation for the feature
+        in question to see how to set parameters.
+      </para>
+      <variablelist>
+        <varlistentry>
+          <term><cmdsynopsis><command>set_parameter</command> <arg choice="req"><replaceable>component_name</replaceable></arg> <arg choice="req"><replaceable>key</replaceable></arg> <arg choice="req"><replaceable>value</replaceable></arg></cmdsynopsis></term>
+          <listitem>
+            <para>
+              Sets a parameter.
+            </para>
+            <variablelist>
+              <varlistentry>
+                <term>component_name</term>
+                <listitem><para>
+                    The name of the component for which the
+                    parameter is being set.
+                </para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>key</term>
+                <listitem><para>
+                    The key for which the parameter is being set.
+                </para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>value</term>
+                <listitem><para>
+                    The value for the parameter, as an
+                    Erlang term. In most shells you are very likely to
+                    need to quote this.
+                </para></listitem>
+              </varlistentry>
+            </variablelist>
+            <para role="example-prefix">For example:</para>
+            <screen role="example">rabbitmqctl set_parameter federation local_username '&lt;&lt;"guest">>'</screen>
+            <para role="example">
+              This command sets the parameter <command>local_username</command> for the <command>federation</command> component to the Erlang term <command>&lt;&lt;"guest">></command>.
+            </para>
+          </listitem>
+        </varlistentry>
+        <varlistentry>
+          <term><cmdsynopsis><command>clear_parameter</command> <arg choice="req"><replaceable>component_name</replaceable></arg> <arg choice="req"><replaceable>key</replaceable></arg></cmdsynopsis></term>
+          <listitem>
+            <para>
+              Clears a parameter.
+            </para>
+            <variablelist>
+              <varlistentry>
+                <term>component_name</term>
+                <listitem><para>
+                    The name of the component for which the
+                    parameter is being cleared.
+                </para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>key</term>
+                <listitem><para>
+                    The key for which the parameter is being cleared.
+                </para></listitem>
+              </varlistentry>
+            </variablelist>
+            <para role="example-prefix">For example:</para>
+            <screen role="example">rabbitmqctl clear_parameter federation local_username</screen>
+            <para role="example">
+              This command clears the parameter <command>local_username</command> for the <command>federation</command> component.
+            </para>
+          </listitem>
+        </varlistentry>
+        <varlistentry>
+          <term><cmdsynopsis><command>list_parameters</command></cmdsynopsis></term>
+          <listitem>
+            <para>
+              Lists all parameters.
+            </para>
+            <para role="example-prefix">For example:</para>
+            <screen role="example">rabbitmqctl list_parameters</screen>
+            <para role="example">
+              This command lists all parameters.
             </para>
           </listitem>
         </varlistentry>
@@ -792,6 +885,10 @@
               <varlistentry>
                 <term>arguments</term>
                 <listitem><para>Queue arguments.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>policy</term>
+                <listitem><para>Policy name applying to the queue.</para></listitem>
               </varlistentry>
               <varlistentry>
                 <term>pid</term>
@@ -885,7 +982,8 @@
               </varlistentry>
               <varlistentry>
                 <term>type</term>
-                <listitem><para>The exchange type (one of [<command>direct</command>,
+                <listitem><para>The exchange type (such as
+                [<command>direct</command>,
                   <command>topic</command>, <command>headers</command>,
                   <command>fanout</command>]).</para></listitem>
               </varlistentry>
@@ -904,6 +1002,10 @@
               <varlistentry>
                 <term>arguments</term>
                 <listitem><para>Exchange arguments.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>policy</term>
+                <listitem><para>Policy name for applying to the exchange.</para></listitem>
               </varlistentry>
             </variablelist>
             <para>

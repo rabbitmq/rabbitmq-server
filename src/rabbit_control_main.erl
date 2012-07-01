@@ -14,7 +14,7 @@
 %% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
--module(rabbit_control).
+-module(rabbit_control_main).
 -include("rabbit.hrl").
 
 -export([start/0, stop/0, action/5]).
@@ -25,6 +25,61 @@
 -define(QUIET_OPT, "-q").
 -define(NODE_OPT, "-n").
 -define(VHOST_OPT, "-p").
+
+-define(QUIET_DEF, {?QUIET_OPT, flag}).
+-define(NODE_DEF(Node), {?NODE_OPT, {option, Node}}).
+-define(VHOST_DEF, {?VHOST_OPT, {option, "/"}}).
+
+-define(GLOBAL_DEFS(Node), [?QUIET_DEF, ?NODE_DEF(Node)]).
+
+-define(COMMANDS,
+        [stop,
+         stop_app,
+         start_app,
+         wait,
+         reset,
+         force_reset,
+         rotate_logs,
+
+         cluster,
+         force_cluster,
+         cluster_status,
+
+         add_user,
+         delete_user,
+         change_password,
+         clear_password,
+         set_user_tags,
+         list_users,
+
+         add_vhost,
+         delete_vhost,
+         list_vhosts,
+         {set_permissions, [?VHOST_DEF]},
+         {clear_permissions, [?VHOST_DEF]},
+         {list_permissions, [?VHOST_DEF]},
+         list_user_permissions,
+
+         set_parameter,
+         clear_parameter,
+         list_parameters,
+
+         {list_queues, [?VHOST_DEF]},
+         {list_exchanges, [?VHOST_DEF]},
+         {list_bindings, [?VHOST_DEF]},
+         {list_connections, [?VHOST_DEF]},
+         list_channels,
+         {list_consumers, [?VHOST_DEF]},
+         status,
+         environment,
+         report,
+         eval,
+
+         close_connection,
+         {trace_on, [?VHOST_DEF]},
+         {trace_off, [?VHOST_DEF]},
+         set_vm_memory_high_watermark
+        ]).
 
 -define(GLOBAL_QUERIES,
         [{"Connections", rabbit_networking, connection_info_all,
@@ -57,19 +112,18 @@
 
 start() ->
     {ok, [[NodeStr|_]|_]} = init:get_argument(nodename),
-    {[Command0 | Args], Opts} =
-        case rabbit_misc:get_options([{flag, ?QUIET_OPT},
-                                      {option, ?NODE_OPT, NodeStr},
-                                      {option, ?VHOST_OPT, "/"}],
-                                     init:get_plain_arguments()) of
-            {[], _Opts}    -> usage();
-            CmdArgsAndOpts -> CmdArgsAndOpts
+    {Command, Opts, Args} =
+        case rabbit_misc:parse_arguments(?COMMANDS, ?GLOBAL_DEFS(NodeStr),
+                                         init:get_plain_arguments())
+        of
+            {ok, Res}  -> Res;
+            no_command -> print_error("could not recognise command", []),
+                          usage()
         end,
     Opts1 = [case K of
                  ?NODE_OPT -> {?NODE_OPT, rabbit_nodes:make(V)};
                  _         -> {K, V}
              end || {K, V} <- Opts],
-    Command = list_to_atom(Command0),
     Quiet = proplists:get_bool(?QUIET_OPT, Opts1),
     Node = proplists:get_value(?NODE_OPT, Opts1),
     Inform = case Quiet of
@@ -102,6 +156,11 @@ start() ->
         {'EXIT', {badarg, _}} ->
             print_error("invalid parameter: ~p", [Args]),
             usage();
+        {error, {Problem, Reason}} when is_atom(Problem); is_binary(Reason) ->
+            %% We handle this common case specially to avoid ~p since
+            %% that has i18n issues
+            print_error("~s: ~s", [Problem, Reason]),
+            rabbit_misc:quit(2);
         {error, Reason} ->
             print_error("~p", [Reason]),
             rabbit_misc:quit(2);
@@ -194,8 +253,7 @@ action(force_cluster, Node, ClusterNodeSs, _Opts, Inform) ->
 
 action(wait, Node, [PidFile], _Opts, Inform) ->
     Inform("Waiting for ~p", [Node]),
-    wait_for_application(Node, PidFile, rabbit, Inform);
-
+    wait_for_application(Node, PidFile, rabbit_and_plugins, Inform);
 action(wait, Node, [PidFile, App], _Opts, Inform) ->
     Inform("Waiting for ~p on ~p", [App, Node]),
     wait_for_application(Node, PidFile, list_to_atom(App), Inform);
@@ -216,33 +274,33 @@ action(rotate_logs, Node, [], _Opts, Inform) ->
     Inform("Reopening logs for node ~p", [Node]),
     call(Node, {rabbit, rotate_logs, [""]});
 action(rotate_logs, Node, Args = [Suffix], _Opts, Inform) ->
-    Inform("Rotating logs to files with suffix ~p", [Suffix]),
+    Inform("Rotating logs to files with suffix \"~s\"", [Suffix]),
     call(Node, {rabbit, rotate_logs, Args});
 
 action(close_connection, Node, [PidStr, Explanation], _Opts, Inform) ->
-    Inform("Closing connection ~s", [PidStr]),
+    Inform("Closing connection \"~s\"", [PidStr]),
     rpc_call(Node, rabbit_networking, close_connection,
              [rabbit_misc:string_to_pid(PidStr), Explanation]);
 
 action(add_user, Node, Args = [Username, _Password], _Opts, Inform) ->
-    Inform("Creating user ~p", [Username]),
+    Inform("Creating user \"~s\"", [Username]),
     call(Node, {rabbit_auth_backend_internal, add_user, Args});
 
 action(delete_user, Node, Args = [_Username], _Opts, Inform) ->
-    Inform("Deleting user ~p", Args),
+    Inform("Deleting user \"~s\"", Args),
     call(Node, {rabbit_auth_backend_internal, delete_user, Args});
 
 action(change_password, Node, Args = [Username, _Newpassword], _Opts, Inform) ->
-    Inform("Changing password for user ~p", [Username]),
+    Inform("Changing password for user \"~s\"", [Username]),
     call(Node, {rabbit_auth_backend_internal, change_password, Args});
 
 action(clear_password, Node, Args = [Username], _Opts, Inform) ->
-    Inform("Clearing password for user ~p", [Username]),
+    Inform("Clearing password for user \"~s\"", [Username]),
     call(Node, {rabbit_auth_backend_internal, clear_password, Args});
 
 action(set_user_tags, Node, [Username | TagsStr], _Opts, Inform) ->
     Tags = [list_to_atom(T) || T <- TagsStr],
-    Inform("Setting tags for user ~p to ~p", [Username, Tags]),
+    Inform("Setting tags for user \"~s\" to ~p", [Username, Tags]),
     rpc_call(Node, rabbit_auth_backend_internal, set_tags,
              [list_to_binary(Username), Tags]);
 
@@ -253,11 +311,11 @@ action(list_users, Node, [], _Opts, Inform) ->
       rabbit_auth_backend_internal:user_info_keys());
 
 action(add_vhost, Node, Args = [_VHostPath], _Opts, Inform) ->
-    Inform("Creating vhost ~p", Args),
+    Inform("Creating vhost \"~s\"", Args),
     call(Node, {rabbit_vhost, add, Args});
 
 action(delete_vhost, Node, Args = [_VHostPath], _Opts, Inform) ->
-    Inform("Deleting vhost ~p", Args),
+    Inform("Deleting vhost \"~s\"", Args),
     call(Node, {rabbit_vhost, delete, Args});
 
 action(list_vhosts, Node, Args, _Opts, Inform) ->
@@ -319,12 +377,12 @@ action(list_consumers, Node, _Args, Opts, Inform) ->
 
 action(trace_on, Node, [], Opts, Inform) ->
     VHost = proplists:get_value(?VHOST_OPT, Opts),
-    Inform("Starting tracing for vhost ~p", [VHost]),
+    Inform("Starting tracing for vhost \"~s\"", [VHost]),
     rpc_call(Node, rabbit_trace, start, [list_to_binary(VHost)]);
 
 action(trace_off, Node, [], Opts, Inform) ->
     VHost = proplists:get_value(?VHOST_OPT, Opts),
-    Inform("Stopping tracing for vhost ~p", [VHost]),
+    Inform("Stopping tracing for vhost \"~s\"", [VHost]),
     rpc_call(Node, rabbit_trace, stop, [list_to_binary(VHost)]);
 
 action(set_vm_memory_high_watermark, Node, [Arg], _Opts, Inform) ->
@@ -337,22 +395,41 @@ action(set_vm_memory_high_watermark, Node, [Arg], _Opts, Inform) ->
 
 action(set_permissions, Node, [Username, CPerm, WPerm, RPerm], Opts, Inform) ->
     VHost = proplists:get_value(?VHOST_OPT, Opts),
-    Inform("Setting permissions for user ~p in vhost ~p", [Username, VHost]),
+    Inform("Setting permissions for user \"~s\" in vhost \"~s\"",
+           [Username, VHost]),
     call(Node, {rabbit_auth_backend_internal, set_permissions,
                 [Username, VHost, CPerm, WPerm, RPerm]});
 
 action(clear_permissions, Node, [Username], Opts, Inform) ->
     VHost = proplists:get_value(?VHOST_OPT, Opts),
-    Inform("Clearing permissions for user ~p in vhost ~p", [Username, VHost]),
+    Inform("Clearing permissions for user \"~s\" in vhost \"~s\"",
+           [Username, VHost]),
     call(Node, {rabbit_auth_backend_internal, clear_permissions,
                 [Username, VHost]});
 
 action(list_permissions, Node, [], Opts, Inform) ->
     VHost = proplists:get_value(?VHOST_OPT, Opts),
-    Inform("Listing permissions in vhost ~p", [VHost]),
+    Inform("Listing permissions in vhost \"~s\"", [VHost]),
     display_info_list(call(Node, {rabbit_auth_backend_internal,
                              list_vhost_permissions, [VHost]}),
                       rabbit_auth_backend_internal:vhost_perms_info_keys());
+
+action(set_parameter, Node, [Component, Key, Value], _Opts, Inform) ->
+    Inform("Setting runtime parameter ~p for component ~p to ~p",
+           [Key, Component, Value]),
+    rpc_call(Node, rabbit_runtime_parameters, parse_set,
+             [list_to_binary(Component), list_to_binary(Key), Value]);
+
+action(clear_parameter, Node, [Component, Key], _Opts, Inform) ->
+    Inform("Clearing runtime parameter ~p for component ~p", [Key, Component]),
+    rpc_call(Node, rabbit_runtime_parameters, clear, [list_to_binary(Component),
+                                                      list_to_binary(Key)]);
+
+action(list_parameters, Node, Args = [], _Opts, Inform) ->
+    Inform("Listing runtime parameters", []),
+    display_info_list(
+      rpc_call(Node, rabbit_runtime_parameters, list_formatted, Args),
+      rabbit_runtime_parameters:info_keys());
 
 action(report, Node, _Args, _Opts, Inform) ->
     io:format("Reporting server status on ~p~n~n", [erlang:universaltime()]),
@@ -388,12 +465,22 @@ wait_for_application(Node, PidFile, Application, Inform) ->
     Inform("pid is ~s", [Pid]),
     wait_for_application(Node, Pid, Application).
 
+wait_for_application(Node, Pid, rabbit_and_plugins) ->
+    wait_for_startup(Node, Pid);
 wait_for_application(Node, Pid, Application) ->
+    while_process_is_alive(
+      Node, Pid, fun() -> rabbit_nodes:is_running(Node, Application) end).
+
+wait_for_startup(Node, Pid) ->
+    while_process_is_alive(
+      Node, Pid, fun() -> rpc:call(Node, rabbit, await_startup, []) =:= ok end).
+
+while_process_is_alive(Node, Pid, Activity) ->
     case process_up(Pid) of
-        true  -> case rabbit_nodes:is_running(Node, Application) of
+        true  -> case Activity() of
                      true  -> ok;
                      false -> timer:sleep(?EXTERNAL_CHECK_INTERVAL),
-                              wait_for_application(Node, Pid, Application)
+                              while_process_is_alive(Node, Pid, Activity)
                  end;
         false -> {error, process_not_running}
     end.
@@ -408,12 +495,14 @@ wait_for_process_death(Pid) ->
 read_pid_file(PidFile, Wait) ->
     case {file:read_file(PidFile), Wait} of
         {{ok, Bin}, _} ->
-            S = string:strip(binary_to_list(Bin), right, $\n),
-            try list_to_integer(S)
+            S = binary_to_list(Bin),
+            {match, [PidS]} = re:run(S, "[^\\s]+",
+                                     [{capture, all, list}]),
+            try list_to_integer(PidS)
             catch error:badarg ->
                     exit({error, {garbage_in_pid_file, PidFile}})
             end,
-            S;
+            PidS;
         {{error, enoent}, true} ->
             timer:sleep(?EXTERNAL_CHECK_INTERVAL),
             read_pid_file(PidFile, Wait);
@@ -425,8 +514,7 @@ read_pid_file(PidFile, Wait) ->
 % rpc:call(os, getpid, []) at this point
 process_up(Pid) ->
     with_os([{unix, fun () ->
-                            system("ps -p " ++ Pid
-                                   ++ " >/dev/null 2>&1") =:= 0
+                            run_ps(Pid) =:= 0
                     end},
              {win32, fun () ->
                              Res = os:cmd("tasklist /nh /fi \"pid eq " ++
@@ -444,15 +532,17 @@ with_os(Handlers) ->
         Handler   -> Handler()
     end.
 
-% Like system(3)
-system(Cmd) ->
-    ShCmd = "sh -c '" ++ escape_quotes(Cmd) ++ "'",
-    Port = erlang:open_port({spawn, ShCmd}, [exit_status,nouse_stdio]),
-    receive {Port, {exit_status, Status}} -> Status end.
+run_ps(Pid) ->
+    Port = erlang:open_port({spawn, "ps -p " ++ Pid},
+                            [exit_status, {line, 16384},
+                             use_stdio, stderr_to_stdout]),
+    exit_loop(Port).
 
-% Escape the quotes in a shell command so that it can be used in "sh -c 'cmd'"
-escape_quotes(Cmd) ->
-    lists:flatten(lists:map(fun ($') -> "'\\''"; (Ch) -> Ch end, Cmd)).
+exit_loop(Port) ->
+    receive
+        {Port, {exit_status, Rc}} -> Rc;
+        {Port, _}                 -> exit_loop(Port)
+    end.
 
 format_parse_error({_Line, Mod, Err}) ->
     lists:flatten(Mod:format_error(Err)).

@@ -136,18 +136,13 @@ boot_ssl() ->
             ok
     end.
 
-start() ->
-    {ok,_} = supervisor2:start_child(
-               rabbit_sup,
-               {rabbit_tcp_client_sup,
-                {rabbit_client_sup, start_link,
-                 [{local, rabbit_tcp_client_sup},
-                  {rabbit_connection_sup,start_link,[]}]},
-                transient, infinity, supervisor, [rabbit_client_sup]}),
-    ok.
+start() -> rabbit_sup:start_supervisor_child(
+             rabbit_tcp_client_sup, rabbit_client_sup,
+             [{local, rabbit_tcp_client_sup},
+              {rabbit_connection_sup,start_link,[]}]).
 
 ensure_ssl() ->
-    ok = rabbit_misc:start_applications([crypto, public_key, ssl]),
+    ok = app_utils:start_applications([crypto, public_key, ssl]),
     {ok, SslOptsConfig} = application:get_env(rabbit, ssl_options),
 
     % unknown_ca errors are silently ignored prior to R14B unless we

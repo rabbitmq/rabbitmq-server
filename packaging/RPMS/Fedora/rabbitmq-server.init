@@ -27,7 +27,7 @@ INIT_LOG_DIR=/var/log/rabbitmq
 PID_FILE=/var/run/rabbitmq/pid
 
 START_PROG= # Set when building package
-LOCK_FILE= # Set when building package
+LOCK_FILE=/var/lock/subsys/$NAME
 
 test -x $DAEMON || exit 0
 test -x $CONTROL || exit 0

@@ -31,7 +31,7 @@ exec erl \
     -noinput \
     -hidden \
     -sname rabbitmq-plugins$$ \
-    -s rabbit_plugins \
+    -s rabbit_plugins_main \
     -enabled_plugins_file "$RABBITMQ_ENABLED_PLUGINS_FILE" \
     -plugins_dist_dir "$RABBITMQ_PLUGINS_DIR" \
     -extra "$@"

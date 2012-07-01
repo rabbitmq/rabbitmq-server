@@ -26,10 +26,8 @@
         ('empty' |
          %% Message,                  IsDelivered, AckTag, Remaining_Len
          {rabbit_types:basic_message(), boolean(), Ack, non_neg_integer()})).
--type(is_durable() :: boolean()).
 -type(attempt_recovery() :: boolean()).
 -type(purged_msg_count() :: non_neg_integer()).
--type(confirm_required() :: boolean()).
 -type(async_callback() :: fun ((atom(), fun ((atom(), state()) -> state())) -> 'ok')).
 -type(duration() :: ('undefined' | 'infinity' | number())).
 

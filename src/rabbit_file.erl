@@ -102,9 +102,12 @@ read_file_info(File) ->
     with_fhc_handle(fun () -> prim_file:read_file_info(File) end).
 
 with_fhc_handle(Fun) ->
-    ok = file_handle_cache:obtain(),
+    with_fhc_handle(1, Fun).
+
+with_fhc_handle(N, Fun) ->
+    [ ok = file_handle_cache:obtain() || _ <- lists:seq(1, N)],
     try Fun()
-    after ok = file_handle_cache:release()
+    after [ ok = file_handle_cache:release() || _ <- lists:seq(1, N)]
     end.
 
 read_term_file(File) ->
@@ -165,7 +168,7 @@ make_binary(List) ->
             {error, Reason}
     end.
 
-
+%% TODO the semantics of this function are rather odd. But see bug 25021.
 append_file(File, Suffix) ->
     case read_file_info(File) of
         {ok, FInfo}     -> append_file(File, FInfo#file_info.size, Suffix);
@@ -183,9 +186,11 @@ append_file(File, 0, Suffix) ->
                             end
                     end);
 append_file(File, _, Suffix) ->
-    case with_fhc_handle(fun () -> prim_file:read_file(File) end) of
-        {ok, Data} -> write_file([File, Suffix], Data, [append]);
-        Error      -> Error
+    case with_fhc_handle(2, fun () ->
+                                file:copy(File, {[File, Suffix], [append]})
+                            end) of
+        {ok, _BytesCopied} -> ok;
+        Error              -> Error
     end.
 
 ensure_parent_dirs_exist(Filename) ->

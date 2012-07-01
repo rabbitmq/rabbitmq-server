@@ -32,8 +32,8 @@ prepare:
 		SPECS/rabbitmq-server.spec
 
 	cp ${COMMON_DIR}/* SOURCES/
+	cp rabbitmq-server.init SOURCES/rabbitmq-server.init
 	sed -i \
-	    -e 's|^LOCK_FILE=.*$$|LOCK_FILE=/var/lock/subsys/$$NAME|' \
 	    -e 's|^START_PROG=.*$$|START_PROG="$(START_PROG)"|' \
 	    SOURCES/rabbitmq-server.init
 ifeq "$(RPM_OS)" "fedora"
@@ -42,6 +42,7 @@ ifeq "$(RPM_OS)" "fedora"
 	    SOURCES/rabbitmq-server.init
 endif
 	sed -i -e 's|@SU_RABBITMQ_SH_C@|su rabbitmq -s /bin/sh -c|' \
+	       -e 's|@STDOUT_STDERR_REDIRECTION@||' \
 	    SOURCES/rabbitmq-script-wrapper
 	cp rabbitmq-server.logrotate SOURCES/rabbitmq-server.logrotate
 
