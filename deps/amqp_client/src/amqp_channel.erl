@@ -62,7 +62,7 @@
 %% See type definitions below.
 -module(amqp_channel).
 
--include("amqp_client.hrl").
+-include("amqp_client_internal.hrl").
 
 -behaviour(gen_server).
 

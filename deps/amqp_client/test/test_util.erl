@@ -17,7 +17,7 @@
 -module(test_util).
 
 -include_lib("eunit/include/eunit.hrl").
--include("amqp_client.hrl").
+-include("amqp_client_internal.hrl").
 
 -compile([export_all]).
 

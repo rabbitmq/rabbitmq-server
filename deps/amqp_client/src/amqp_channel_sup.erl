@@ -17,7 +17,7 @@
 %% @private
 -module(amqp_channel_sup).
 
--include("amqp_client.hrl").
+-include("amqp_client_internal.hrl").
 
 -behaviour(supervisor2).
 

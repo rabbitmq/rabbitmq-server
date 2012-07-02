@@ -17,7 +17,7 @@
 %% @private
 -module(amqp_channels_manager).
 
--include("amqp_client.hrl").
+-include("amqp_client_internal.hrl").
 
 -behaviour(gen_server).
 

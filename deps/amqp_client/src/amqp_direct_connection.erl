@@ -17,7 +17,7 @@
 %% @private
 -module(amqp_direct_connection).
 
--include("amqp_client.hrl").
+-include("amqp_client_internal.hrl").
 
 -behaviour(amqp_gen_connection).
 

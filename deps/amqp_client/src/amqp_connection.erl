@@ -67,12 +67,16 @@
 %% See type definitions below.
 -module(amqp_connection).
 
--include("amqp_client.hrl").
+-include("amqp_client_internal.hrl").
 
 -export([open_channel/1, open_channel/2, open_channel/3]).
 -export([start/1]).
 -export([close/1, close/3]).
 -export([info/2, info_keys/1, info_keys/0]).
+
+-define(DEFAULT_CONSUMER, {amqp_selective_consumer, []}).
+
+-define(PROTOCOL_SSL_PORT, (?PROTOCOL_PORT - 1)).
 
 %%---------------------------------------------------------------------------
 %% Type Definitions
@@ -163,9 +167,10 @@ start(AmqpParams) ->
 %% Commands
 %%---------------------------------------------------------------------------
 
-%% @doc Invokes open_channel(ConnectionPid, none, ?DEFAULT_CONSUMER).
-%% Opens a channel without having to specify a channel number. This uses the
-%% default consumer implementation.
+%% @doc Invokes open_channel(ConnectionPid, none,
+%% {amqp_selective_consumer, []}).  Opens a channel without having to
+%% specify a channel number. This uses the default consumer
+%% implementation.
 open_channel(ConnectionPid) ->
     open_channel(ConnectionPid, none, ?DEFAULT_CONSUMER).
 
@@ -174,8 +179,9 @@ open_channel(ConnectionPid) ->
 open_channel(ConnectionPid, {_, _} = Consumer) ->
     open_channel(ConnectionPid, none, Consumer);
 
-%% @doc Invokes open_channel(ConnectionPid, ChannelNumber, ?DEFAULT_CONSUMER).
-%% Opens a channel, using the default consumer implementation.
+%% @doc Invokes open_channel(ConnectionPid, ChannelNumber,
+%% {amqp_selective_consumer, []}).  Opens a channel, using the default
+%% consumer implementation.
 open_channel(ConnectionPid, ChannelNumber)
         when is_number(ChannelNumber) orelse ChannelNumber =:= none ->
     open_channel(ConnectionPid, ChannelNumber, ?DEFAULT_CONSUMER).
@@ -196,9 +202,9 @@ open_channel(ConnectionPid, ChannelNumber)
 %% is passed as parameter to ConsumerModule:init/1.<br/>
 %% This function assumes that an AMQP connection (networked or direct)
 %% has already been successfully established.<br/>
-%% ChannelNumber must be less than or equal to the negotiated max_channel value,
-%% or less than or equal to ?MAX_CHANNEL_NUMBER if the negotiated max_channel
-%% value is 0.<br/>
+%% ChannelNumber must be less than or equal to the negotiated
+%% max_channel value, or less than or equal to ?MAX_CHANNEL_NUMBER
+%% (65535) if the negotiated max_channel value is 0.<br/>
 %% In the direct connection, max_channel is always 0.
 open_channel(ConnectionPid, ChannelNumber,
              {_ConsumerModule, _ConsumerArgs} = Consumer) ->
