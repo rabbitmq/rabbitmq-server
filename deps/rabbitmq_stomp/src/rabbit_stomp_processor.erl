@@ -488,9 +488,8 @@ do_login(Username, Creds, VirtualHost, Heartbeat, AdapterInfo, Version,
     end.
 
 server_header() ->
-    Props = rabbit_reader:server_properties(?PROTOCOL),
-    {_, Product} = rabbit_misc:table_lookup(Props, <<"product">>),
-    {_, Version} = rabbit_misc:table_lookup(Props, <<"version">>),
+    {ok, Product} = application:get_key(rabbit, id),
+    {ok, Version} = application:get_key(rabbit, vsn),
     rabbit_misc:format("~s/~s", [Product, Version]).
 
 do_subscribe(Destination, DestHdr, Frame,
@@ -938,6 +937,9 @@ ok(Command, Headers, BodyFragments, State) ->
     {ok, #stomp_frame{command     = Command,
                       headers     = Headers,
                       body_iolist = BodyFragments}, State}.
+
+%% TODO: this should come from the connection
+-define(PROTOCOL,rabbit_framing_amqp_0_9_1).
 
 amqp_death(ReplyCode, Explanation, State) ->
     ErrorName = ?PROTOCOL:amqp_exception(ReplyCode),
