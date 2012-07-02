@@ -1,32 +1,23 @@
-%%   The contents of this file are subject to the Mozilla Public License
-%%   Version 1.1 (the "License"); you may not use this file except in
-%%   compliance with the License. You may obtain a copy of the License at
-%%   http://www.mozilla.org/MPL/
+%% The contents of this file are subject to the Mozilla Public License
+%% Version 1.1 (the "License"); you may not use this file except in
+%% compliance with the License. You may obtain a copy of the License at
+%% http://www.mozilla.org/MPL/
 %%
-%%   Software distributed under the License is distributed on an "AS IS"
-%%   basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
-%%   License for the specific language governing rights and limitations
-%%   under the License.
+%% Software distributed under the License is distributed on an "AS IS"
+%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
+%% License for the specific language governing rights and limitations
+%% under the License.
 %%
-%%   The Original Code is the RabbitMQ Erlang Client.
+%% The Original Code is RabbitMQ.
 %%
-%%   The Initial Developers of the Original Code are LShift Ltd.,
-%%   Cohesive Financial Technologies LLC., and Rabbit Technologies Ltd.
-%%
-%%   Portions created by LShift Ltd., Cohesive Financial
-%%   Technologies LLC., and Rabbit Technologies Ltd. are Copyright (C)
-%%   2007 LShift Ltd., Cohesive Financial Technologies LLC., and Rabbit
-%%   Technologies Ltd.;
-%%
-%%   All Rights Reserved.
-%%
-%%   Contributor(s): Ben Hood <0x6e6562@gmail.com>.
+%% The Initial Developer of the Original Code is VMware, Inc.
+%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
-%% @doc This module allows the simple execution of an asynchronous RPC over 
+%% @doc This module allows the simple execution of an asynchronous RPC over
 %% AMQP. It frees a client programmer of the necessary having to AMQP
 %% plumbing. Note that the this module does not handle any data encoding,
-%% so it is up to the caller to marshall and unmarshall message payloads 
+%% so it is up to the caller to marshall and unmarshall message payloads
 %% accordingly.
 -module(amqp_rpc_client).
 
@@ -39,12 +30,12 @@
 -export([init/1, terminate/2, code_change/3, handle_call/3,
          handle_cast/2, handle_info/2]).
 
--record(rpc_c_state, {channel,
-                      reply_queue,
-                      exchange,
-                      routing_key,
-                      continuations = dict:new(),
-                      correlation_id = 0}).
+-record(state, {channel,
+                reply_queue,
+                exchange,
+                routing_key,
+                continuations = dict:new(),
+                correlation_id = 0}).
 
 %%--------------------------------------------------------------------------
 %% API
@@ -83,26 +74,25 @@ call(RpcClient, Payload) ->
 %%--------------------------------------------------------------------------
 
 %% Sets up a reply queue for this client to listen on
-setup_reply_queue(State = #rpc_c_state{channel = Channel}) ->
+setup_reply_queue(State = #state{channel = Channel}) ->
     #'queue.declare_ok'{queue = Q} =
         amqp_channel:call(Channel, #'queue.declare'{}),
-    State#rpc_c_state{reply_queue = Q}.
+    State#state{reply_queue = Q}.
 
 %% Registers this RPC client instance as a consumer to handle rpc responses
-setup_consumer(#rpc_c_state{channel = Channel,
-                            reply_queue = Q}) ->
-    amqp_channel:subscribe(Channel, #'basic.consume'{queue = Q}, self()).
+setup_consumer(#state{channel = Channel, reply_queue = Q}) ->
+    amqp_channel:call(Channel, #'basic.consume'{queue = Q}).
 
 %% Publishes to the broker, stores the From address against
 %% the correlation id and increments the correlationid for
 %% the next request
 publish(Payload, From,
-        State = #rpc_c_state{channel = Channel,
-                             reply_queue = Q,
-                             exchange = X,
-                             routing_key = RoutingKey,
-                             correlation_id = CorrelationId,
-                             continuations = Continuations}) ->
+        State = #state{channel = Channel,
+                       reply_queue = Q,
+                       exchange = X,
+                       routing_key = RoutingKey,
+                       correlation_id = CorrelationId,
+                       continuations = Continuations}) ->
     Props = #'P_basic'{correlation_id = <<CorrelationId:64>>,
                        content_type = <<"application/octet-stream">>,
                        reply_to = Q},
@@ -111,9 +101,8 @@ publish(Payload, From,
                                mandatory = true},
     amqp_channel:call(Channel, Publish, #amqp_msg{props = Props,
                                                   payload = Payload}),
-    State#rpc_c_state{correlation_id = CorrelationId + 1,
-                      continuations =
-                          dict:store(CorrelationId, From, Continuations)}.
+    State#state{correlation_id = CorrelationId + 1,
+                continuations = dict:store(CorrelationId, From, Continuations)}.
 
 %%--------------------------------------------------------------------------
 %% gen_server callbacks
@@ -122,17 +111,18 @@ publish(Payload, From,
 %% Sets up a reply queue and consumer within an existing channel
 %% @private
 init([Connection, RoutingKey]) ->
-    Channel = amqp_connection:open_channel(Connection),
-    InitialState = #rpc_c_state{channel = Channel,
-                                exchange = <<>>,
-                                routing_key = RoutingKey},
+    {ok, Channel} = amqp_connection:open_channel(
+                        Connection, {amqp_direct_consumer, [self()]}),
+    InitialState = #state{channel     = Channel,
+                          exchange    = <<>>,
+                          routing_key = RoutingKey},
     State = setup_reply_queue(InitialState),
     setup_consumer(State),
     {ok, State}.
 
 %% Closes the channel this gen_server instance started
 %% @private
-terminate(_Reason, #rpc_c_state{channel = Channel}) ->
+terminate(_Reason, #state{channel = Channel}) ->
     amqp_channel:close(Channel),
     ok.
 
@@ -151,7 +141,15 @@ handle_cast(_Msg, State) ->
     {noreply, State}.
 
 %% @private
+handle_info({#'basic.consume'{}, _Pid}, State) ->
+    {noreply, State};
+
+%% @private
 handle_info(#'basic.consume_ok'{}, State) ->
+    {noreply, State};
+
+%% @private
+handle_info(#'basic.cancel'{}, State) ->
     {noreply, State};
 
 %% @private
@@ -162,12 +160,12 @@ handle_info(#'basic.cancel_ok'{}, State) ->
 handle_info({#'basic.deliver'{delivery_tag = DeliveryTag},
              #amqp_msg{props = #'P_basic'{correlation_id = <<Id:64>>},
                        payload = Payload}},
-            State = #rpc_c_state{continuations = Conts, channel = Channel}) ->
+            State = #state{continuations = Conts, channel = Channel}) ->
     From = dict:fetch(Id, Conts),
     gen_server:reply(From, Payload),
     amqp_channel:call(Channel, #'basic.ack'{delivery_tag = DeliveryTag}),
-    {noreply, State#rpc_c_state{continuations = dict:erase(Id, Conts) }}.
+    {noreply, State#state{continuations = dict:erase(Id, Conts) }}.
 
 %% @private
 code_change(_OldVsn, State, _Extra) ->
-    State.
+    {ok, State}.
