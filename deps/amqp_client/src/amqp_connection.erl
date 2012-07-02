@@ -67,7 +67,7 @@
 %% See type definitions below.
 -module(amqp_connection).
 
--include("amqp_client_internal.hrl").
+-include("amqp_client.hrl").
 
 -export([open_channel/1, open_channel/2, open_channel/3]).
 -export([start/1]).

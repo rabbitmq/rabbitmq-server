@@ -44,4 +44,12 @@
                              adapter_info      = none,
                              client_properties = []}).
 
+-record(adapter_info, {address         = unknown,
+                       port            = unknown,
+                       peer_address    = unknown,
+                       peer_port       = unknown,
+                       name            = unknown,
+                       protocol        = unknown,
+                       additional_info = []}).
+
 -endif.

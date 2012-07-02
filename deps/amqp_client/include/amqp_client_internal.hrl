@@ -23,14 +23,6 @@
 
 -define(MAX_CHANNEL_NUMBER, 65535).
 
--record(adapter_info, {address         = unknown,
-                       port            = unknown,
-                       peer_address    = unknown,
-                       peer_port       = unknown,
-                       name            = unknown,
-                       protocol        = unknown,
-                       additional_info = []}).
-
 -define(LOG_DEBUG(Format), error_logger:info_msg(Format)).
 -define(LOG_INFO(Format, Args), error_logger:info_msg(Format, Args)).
 -define(LOG_WARN(Format, Args), error_logger:warning_msg(Format, Args)).
