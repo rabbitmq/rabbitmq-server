@@ -1215,7 +1215,7 @@
               </varlistentry>
               <varlistentry>
                 <term>timeout</term>
-                <listitem><para>Connection timeout.</para></listitem>
+                <listitem><para>Connection timeout / negotiated heartbeat interval, in seconds.</para></listitem>
               </varlistentry>
               <varlistentry>
                 <term>frame_max</term>
