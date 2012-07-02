@@ -938,11 +938,8 @@ ok(Command, Headers, BodyFragments, State) ->
                       headers     = Headers,
                       body_iolist = BodyFragments}, State}.
 
-%% TODO: this should come from the connection
--define(PROTOCOL,rabbit_framing_amqp_0_9_1).
-
 amqp_death(ReplyCode, Explanation, State) ->
-    ErrorName = ?PROTOCOL:amqp_exception(ReplyCode),
+    ErrorName = amqp_connection:error_atom(ReplyCode),
     ErrorDesc = rabbit_misc:format("~s~n", [Explanation]),
     log_error(ErrorName, ErrorDesc, none),
     {stop, normal, send_error(atom_to_list(ErrorName), ErrorDesc, State)}.
