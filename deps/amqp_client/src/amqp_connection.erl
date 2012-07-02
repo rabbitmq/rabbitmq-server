@@ -91,7 +91,7 @@
 %% <li>virtual_host :: binary() - The name of a virtual host in the broker,
 %%     defaults to &lt;&lt;"/"&gt;&gt;</li>
 %% <li>node :: atom() - The node the broker runs on (direct only)</li>
-%% <li>adapter_info :: amqp_adapter_info() - Extra management information for if
+%% <li>adapter_info :: adapter_info() - Extra management information for if
 %%     this connection represents a non-AMQP network connection.</li>
 %% <li>client_properties :: [{binary(), atom(), binary()}] - A list of extra
 %%     client properties to be sent to the server, defaults to []</li>
