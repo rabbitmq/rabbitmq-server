@@ -195,13 +195,13 @@ process_connect(Implicit, Frame,
                       {Username, Creds} = creds(Frame1, SSLLoginName, Config),
                       {ok, DefaultVHost} =
                           application:get_env(rabbit, default_vhost),
-                      {ProtoName, _} = AdapterInfo#adapter_info.protocol,
+                      {ProtoName, _} = AdapterInfo#amqp_adapter_info.protocol,
                       Res = do_login(
                               Username, Creds,
                               login_header(Frame1, ?HEADER_HOST, DefaultVHost),
                               login_header(Frame1, ?HEADER_HEART_BEAT, "0,0"),
-                                AdapterInfo#adapter_info{
-                                  protocol = {ProtoName, Version}}, Version,
+                              AdapterInfo#amqp_adapter_info{
+                                protocol = {ProtoName, Version}}, Version,
                               StateN#state{frame_transformer = FT}),
                       case {Res, Implicit} of
                           {{ok, _, StateN1}, implicit} -> ok(StateN1);
