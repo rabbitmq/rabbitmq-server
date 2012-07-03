@@ -19,6 +19,7 @@
 -behaviour(gen_server).
 
 -export([prepare_cluster_status_file/0,
+         write_cluster_status_file/1,
          read_cluster_status_file/0,
          update_cluster_status_file/0,
          reset_cluster_status_file/0,
@@ -47,6 +48,8 @@
 -ifdef(use_specs).
 
 -spec(prepare_cluster_status_file/0 :: () -> 'ok').
+-spec(write_cluster_status_file/1 :: (rabbit_mnesia:cluster_status())
+                                  -> 'ok').
 -spec(read_cluster_status_file/0 :: () -> rabbit_mnesia:cluster_status()).
 -spec(update_cluster_status_file/0 :: () -> 'ok').
 -spec(reset_cluster_status_file/0 :: () -> 'ok').

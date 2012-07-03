@@ -61,6 +61,7 @@
 -export([os_cmd/1]).
 -export([gb_sets_difference/2]).
 -export([rabbit_version/0]).
+-export([sequence_error/1]).
 
 %%----------------------------------------------------------------------------
 
@@ -214,6 +215,8 @@
 -spec(os_cmd/1 :: (string()) -> string()).
 -spec(gb_sets_difference/2 :: (gb_set(), gb_set()) -> gb_set()).
 -spec(rabbit_version/0 :: () -> string()).
+-spec(sequence_error/1 :: ([({'error', any()} | any())])
+                       -> {'error', any()} | any()).
 
 -endif.
 
@@ -945,3 +948,7 @@ gb_sets_difference(S1, S2) ->
 rabbit_version() ->
     {ok, VSN} = application:get_key(rabbit, vsn),
     VSN.
+
+sequence_error([T])                      -> T;
+sequence_error([{error, _} = Error | _]) -> Error;
+sequence_error([_ | Rest])               -> sequence_error(Rest).
