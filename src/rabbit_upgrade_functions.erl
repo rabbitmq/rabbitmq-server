@@ -37,6 +37,9 @@
 -rabbit_upgrade({mirrored_supervisor,   mnesia, []}).
 -rabbit_upgrade({topic_trie_node,       mnesia, []}).
 -rabbit_upgrade({runtime_parameters,    mnesia, []}).
+-rabbit_upgrade({exchange_scratches,    mnesia, [exchange_scratch]}).
+-rabbit_upgrade({policy,                mnesia,
+                 [exchange_scratches, ha_mirrors]}).
 
 %% -------------------------------------------------------------------
 
@@ -58,6 +61,7 @@
 -spec(mirrored_supervisor/0   :: () -> 'ok').
 -spec(topic_trie_node/0       :: () -> 'ok').
 -spec(runtime_parameters/0    :: () -> 'ok').
+-spec(policy/0                :: () -> 'ok').
 
 -endif.
 
@@ -192,6 +196,49 @@ runtime_parameters() ->
            [{record_name, runtime_parameters},
             {attributes, [key, value]},
             {disc_copies, [node()]}]).
+
+exchange_scratches() ->
+    ok = exchange_scratches(rabbit_exchange),
+    ok = exchange_scratches(rabbit_durable_exchange).
+
+exchange_scratches(Table) ->
+    transform(
+      Table,
+      fun ({exchange, Name, Type = <<"x-federation">>, Dur, AutoDel, Int, Args,
+            Scratch}) ->
+              Scratches = orddict:store(federation, Scratch, orddict:new()),
+              {exchange, Name, Type, Dur, AutoDel, Int, Args, Scratches};
+          %% We assert here that nothing else uses the scratch mechanism ATM
+          ({exchange, Name, Type, Dur, AutoDel, Int, Args, undefined}) ->
+              {exchange, Name, Type, Dur, AutoDel, Int, Args, undefined}
+      end,
+      [name, type, durable, auto_delete, internal, arguments, scratches]).
+
+policy() ->
+    ok = exchange_policy(rabbit_exchange),
+    ok = exchange_policy(rabbit_durable_exchange),
+    ok = queue_policy(rabbit_queue),
+    ok = queue_policy(rabbit_durable_queue).
+
+exchange_policy(Table) ->
+    transform(
+      Table,
+      fun ({exchange, Name, Type, Dur, AutoDel, Int, Args, Scratches}) ->
+              {exchange, Name, Type, Dur, AutoDel, Int, Args, Scratches,
+               undefined}
+      end,
+      [name, type, durable, auto_delete, internal, arguments, scratches,
+       policy]).
+
+queue_policy(Table) ->
+    transform(
+      Table,
+      fun ({amqqueue, Name, Dur, AutoDel, Excl, Args, Pid, SPids, MNodes}) ->
+              {amqqueue, Name, Dur, AutoDel, Excl, Args, Pid, SPids, MNodes,
+               undefined}
+      end,
+      [name, durable, auto_delete, exclusive_owner, arguments, pid,
+       slave_pids, mirror_nodes, policy]).
 
 %%--------------------------------------------------------------------
 

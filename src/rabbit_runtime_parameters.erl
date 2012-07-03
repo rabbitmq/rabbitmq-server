@@ -18,8 +18,8 @@
 
 -include("rabbit.hrl").
 
--export([parse_set/3, set/3, clear/2, list/0, list/1, list_formatted/0,
-         lookup/2, value/2, value/3, info_keys/0]).
+-export([parse_set/3, set/3, clear/2, list/0, list/1, list_strict/1,
+         list_formatted/0, lookup/2, value/2, value/3, info_keys/0]).
 
 %%----------------------------------------------------------------------------
 
@@ -31,7 +31,8 @@
 -spec(set/3 :: (binary(), binary(), term()) -> ok_or_error_string()).
 -spec(clear/2 :: (binary(), binary()) -> ok_or_error_string()).
 -spec(list/0 :: () -> [rabbit_types:infos()]).
--spec(list/1 :: (binary()) -> [rabbit_types:infos()] | 'not_found').
+-spec(list/1 :: (binary()) -> [rabbit_types:infos()]).
+-spec(list_strict/1 :: (binary()) -> [rabbit_types:infos()] | 'not_found').
 -spec(list_formatted/0 :: () -> [rabbit_types:infos()]).
 -spec(lookup/2 :: (binary(), binary()) -> rabbit_types:infos()).
 -spec(value/2 :: (binary(), binary()) -> term()).
@@ -122,11 +123,14 @@ mnesia_clear(Component, Key) ->
 list() ->
     [p(P) || P <- rabbit_misc:dirty_read_all(?TABLE)].
 
-list(Component) ->
+list(Component)        -> list(Component, []).
+list_strict(Component) -> list(Component, not_found).
+
+list(Component, Default) ->
     case lookup_component(Component) of
         {ok, _} -> Match = #runtime_parameters{key = {Component, '_'}, _ = '_'},
                    [p(P) || P <- mnesia:dirty_match_object(?TABLE, Match)];
-        _       -> not_found
+        _       -> Default
     end.
 
 list_formatted() ->
