@@ -5,3 +5,4 @@
 ^cover/
 ^erl_crash.dump$
 ^ebin/rabbitmq_mqtt\.app$
+^tags$

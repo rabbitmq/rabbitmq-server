@@ -33,10 +33,10 @@ log(Level, Fmt, Args) -> rabbit_log:log(connection, Level, Fmt, Args).
 
 init(SupPid, Configuration) ->
     receive
-        {go, Sock0, SockTransform} ->
-            {ok, Sock} = SockTransform(Sock0),
+        {go, Sock} ->
             {ok, ProcessorPid} = start_processor(SupPid, Configuration, Sock),
             {ok, ConnStr} = rabbit_net:connection_string(Sock, inbound),
+
             log(info, "accepting MQTT connection ~p (~s)~n",
                 [self(), ConnStr]),
 
@@ -56,7 +56,7 @@ init(SupPid, Configuration) ->
                 log(info, "closing MQTT connection ~p (~s)~n",
                     [self(), ConnStr])
             catch
-                Ex -> log(error, "closing MQTT connection ~p (~s):~n~p~n",
+                _:Ex -> log(error, "closing MQTT connection ~p (~s):~n~p~n",
                           [self(), ConnStr, Ex])
             after
                 rabbit_mqtt_processor:flush_and_die(ProcessorPid)
@@ -100,7 +100,10 @@ process_received_bytes(Bytes,
                                    control_throttle(
                                      State#reader_state{
                                        parse_state = PS,
-                                       state       = next_state(S, Frame)}))
+                                       state       = next_state(S, Frame)}));
+        {error, Error} ->
+            rabbit_log:error("MQTT parse error ~p~n", [error]),
+            throw(Error)
     end.
 
 conserve_resources(Pid, Conserve) ->
@@ -169,6 +172,4 @@ adapter_info(Sock) ->
                   address         = Addr,
                   port            = Port,
                   peer_address    = PeerAddr,
-                  peer_port       = PeerPort,
-                  additional_info = [{ssl, false}]}.
-
+                  peer_port       = PeerPort}.

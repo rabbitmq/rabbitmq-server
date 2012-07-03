@@ -47,17 +47,14 @@ tcp_listener_spec([Address, SocketOpts, Configuration]) ->
       mqtt, "MQTT TCP Listener",
       {?MODULE, start_client, [Configuration]}).
 
-start_client(Configuration, Sock, SockTransform) ->
+start_client(Configuration, Sock) ->
     {ok, _Child, Reader} = supervisor:start_child(rabbit_mqtt_client_sup_sup,
                                                   [Configuration]),
     ok = rabbit_net:controlling_process(Sock, Reader),
-    Reader ! {go, Sock, SockTransform},
+    Reader ! {go, Sock},
 
     %% see comment in rabbit_networking:start_client/2
     gen_event:which_handlers(error_logger),
 
     Reader.
-
-start_client(Configuration, Sock) ->
-    start_client(Configuration, Sock, fun (S) -> {ok, S} end).
 
