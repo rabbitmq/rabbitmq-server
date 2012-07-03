@@ -20,6 +20,7 @@
 -export([init/2]).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
+-include("include/rabbit_mqtt_frame.hrl").
 
 -record(reader_state, {socket, parse_state, processor, state,
                        conserve_resources, recv_outstanding}).
@@ -167,7 +168,7 @@ adapter_info(Sock) ->
                {ok, Res3} -> Res3;
                _          -> unknown
            end,
-    #adapter_info{protocol        = {'MQTT', 0},
+    #adapter_info{protocol        = {'MQTT', {?MQTT_PROTO_MAJOR, ?MQTT_PROTO_MINOR}},
                   name            = list_to_binary(Name),
                   address         = Addr,
                   port            = Port,

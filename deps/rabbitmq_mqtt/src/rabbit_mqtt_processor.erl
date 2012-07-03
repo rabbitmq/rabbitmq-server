@@ -24,7 +24,8 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("include/rabbit_mqtt_frame.hrl").
 
--record(state, {session_id,
+-record(state, {
+                client_id,
                 channel,
                 connection,
                 adapter_info,
@@ -57,7 +58,7 @@ init([SendFun, AdapterInfo, Configuration]) ->
     process_flag(trap_exit, true),
     {ok,
      #state {
-       session_id          = none,
+       client_id           = none,
        channel             = none,
        connection          = none,
        adapter_info        = AdapterInfo,
@@ -80,12 +81,12 @@ handle_cast({_Type, Frame, _FlowPid}, State = #state{channel = none}) ->
     rabbit_log:error("Ignoring invalid MQTT frame prior to login: ~p~n", [Frame]),
     {noreply, State, hibernate};
 
-handle_cast({Command, Frame, FlowPid}, State) ->
+handle_cast({Type, Frame, FlowPid}, State) ->
     case FlowPid of
         noflow -> ok;
         _      -> credit_flow:ack(FlowPid)
     end,
-    State;
+    process_request(Type, Frame, State);
 
 handle_cast(client_timeout, State) ->
     {stop, client_timeout, State}.
@@ -105,15 +106,90 @@ handle_info({bump_credit, Msg}, State) ->
 handle_info({inet_reply, _, Status}, State) ->
     {stop, Status, State}.
 
-process_connect(#mqtt_frame{} = Frame,
-                State = #state{channel        = none}) ->
-    {ok, VHost} = application:get_env(rabbitmq_mqtt, vhost),
+process_connect(#mqtt_frame{
+                    variable = #mqtt_frame_connect { username  = Username,
+                                                     password  = Password,
+                                                     proto_ver = ProtoVersion,
+                                                     client_id = ClientId }},
+                State = #state{channel      = none,
+                               adapter_info = AdapterInfo}) ->
+    {ReturnCode, State1} =
+        case {ProtoVersion =:= ?MQTT_PROTO_MAJOR, valid_client_id(ClientId)} of
+            {false, _} ->
+                {?CONNACK_PROTO_VER, State};
+            {_, false} ->
+                {?CONNACK_INVALID_ID, State};
+            _ ->
+                {UserBin, Creds} = creds(Username, Password),
+                case rabbit_access_control:check_user_login(UserBin, Creds) of
+                     {ok, _User} ->
+                         {ok, VHost} = application:get_env(rabbitmq_mqtt, vhost),
+                         case amqp_connection:start(
+                                #amqp_params_direct{username = UserBin,
+                                                    virtual_host = VHost,
+                                                    adapter_info = AdapterInfo}) of
+                             {ok, Connection} ->
+                                 link(Connection),
+                                 {ok, Channel} =
+                                     amqp_connection:open_channel(Connection),
+                                 ok = ensure_unique_client_id(ClientId),
+                                 {?CONNACK_ACCEPT,
+                                     State#state{connection = Connection,
+                                                 channel    = Channel,
+                                                 client_id  = ClientId}};
+                             {error, auth_failure} ->
+                                 rabbit_log:error("MQTT login failed - " ++
+                                                  "auth_failure " ++
+                                                  "(user vanished)~n"),
+                                 {?CONNACK_CREDENTIALS, State};
+                             {error, access_refused} ->
+                                 rabbit_log:warning("MQTT login failed - " ++
+                                                    "access_refused " ++
+                                                    "(vhost access not allowed)~n"),
+                                 {?CONNACK_AUTH, State}
+                          end;
+                     {refused, Msg, Args} ->
+                         rabbit_log:warning("MQTT login failed: " ++ Msg ++
+                                            "\n", Args),
+                         {?CONNACK_CREDENTIALS, State}
+                end
+        end,
+    send_frame(#mqtt_frame{ fixed = #mqtt_frame_fixed {type = ?CONNACK},
+                            variable = #mqtt_frame_connack { return_code = ReturnCode }}, State),
+    {noreply, State1, hibernate}.
+
+process_request(?PUBLISH, #mqtt_frame { variable = #mqtt_frame_publish { topic_name = TopicName,
+                                                                         message_id = MessageId },
+                                        payload = Payload }, #state { channel = Channel } = State) ->
+
+    Method = #'basic.publish'{ exchange    = list_to_binary(TopicName),
+                               routing_key = list_to_binary(TopicName)},
+    amqp_channel:cast(Channel, Method, #amqp_msg{payload = Payload}),
+    {noreply, State, hibernate}.
+
+valid_client_id(ClientId) ->
+    ClientIdLen = length(ClientId),
+    1 =< ClientIdLen andalso ClientIdLen =< 23.
+
+ensure_unique_client_id(ClientId) ->
+    %% todo spec section 3.1:
+    %% If a client with the same Client ID is already connected to the server,
+    %% the "older" client must be disconnected by the server before completing
+    %% the CONNECT flow of the new client.
+    ok.
+
+creds(Username, Password) ->
     {ok, DefaultUser} = application:get_env(rabbitmq_mqtt, default_user),
     {ok, DefaultPass} = application:get_env(rabbitmq_mqtt, default_pass),
-    send_frame(#mqtt_frame{ fixed = #mqtt_frame_fixed {type = ?CONNACK},
-                            variable = #mqtt_frame_connack { return_code = ?CONNACK_ACCEPT }},
-               State),
-    {noreply, State, hibernate}.
+    U = case Username of
+            undefined -> DefaultUser;
+            _         -> list_to_binary(Username)
+        end,
+    P = case Password of
+            undefined -> DefaultPass;
+            _         -> list_to_binary(Password)
+        end,
+    {U, [{password, P}]}.
 
 send_frame(Frame, State = #state{send_fun = SendFun}) ->
     SendFun(async, rabbit_mqtt_frame:serialise(Frame)),

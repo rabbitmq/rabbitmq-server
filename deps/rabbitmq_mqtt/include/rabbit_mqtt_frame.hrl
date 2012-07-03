@@ -14,6 +14,9 @@
 %% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
+-define(MQTT_PROTO_MAJOR, 3).
+-define(MQTT_PROTO_MINOR, 1).
+
 %% frame types
 
 -define(CONNECT,     1).
