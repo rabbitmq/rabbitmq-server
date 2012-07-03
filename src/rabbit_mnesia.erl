@@ -617,40 +617,33 @@ check_cluster_consistency() ->
                                  "~s version mismatch: local node is ~s, "
                                  "remote node ~s", [Name, This, Remote])}})
                end,
-    CheckOTP =
-        fun (OTP) -> CheckVsn(erlang:system_info(otp_release), OTP, "OTP") end,
-    CheckRabbit =
-        fun (Rabbit) ->
-                CheckVsn(rabbit_misc:rabbit_version(), Rabbit, "Rabbit")
-        end,
-
-    CheckNodes = fun (Node, AllNodes) ->
-                         ThisNode = node(),
-                         case lists:member(ThisNode, AllNodes) of
-                             true ->
-                                 ok;
-                             false ->
-                                 throw({error,
-                                        {inconsistent_cluster,
-                                         rabbit_misc:format(
-                                           "Node ~p thinks it's clustered "
-                                           "with node ~p, but ~p disagrees",
-                                           [ThisNode, Node, Node])}})
-                         end
-                 end,
 
     lists:foreach(
       fun(Node) ->
               case rpc:call(Node, rabbit_mnesia, node_info, []) of
                   {badrpc, _Reason} ->
                       ok;
-                  {OTP, Rabbit, {error, mnesia_not_running}} ->
-                      CheckOTP(OTP),
-                      CheckRabbit(Rabbit);
-                  {OTP, Rabbit, {ok, {AllNodes, _, _}}} ->
-                      CheckOTP(OTP),
-                      CheckRabbit(Rabbit),
-                      CheckNodes(Node, AllNodes)
+                  {OTP, Rabbit, Res} ->
+                      CheckVsn(erlang:system_info(otp_release), OTP, "OTP"),
+                      CheckVsn(rabbit_misc:rabbit_version(), Rabbit, "Rabbit"),
+                      case Res of
+                          {ok, {AllNodes, _, _}} ->
+                              ThisNode = node(),
+                              case lists:member(ThisNode, AllNodes) of
+                                  true ->
+                                      ok;
+                                  false ->
+                                      throw(
+                                        {error,
+                                         {inconsistent_cluster,
+                                          rabbit_misc:format(
+                                            "Node ~p thinks it's clustered "
+                                            "with node ~p, but ~p disagrees",
+                                            [ThisNode, Node, Node])}})
+                              end;
+                          {error, _Reason} ->
+                              ok
+                      end
               end
       end, all_clustered_nodes()).
 
