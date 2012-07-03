@@ -34,21 +34,24 @@ register() ->
                  <<"federation_connection">>,
                  <<"federation_upstream_set">>]].
 
-validate(<<"federation_upstream_set">>, _Key, Term) ->
-    [assert_contents([{<<"connection">>, binary, mandatory},
-                      {<<"exchange">>,   binary, optional} |
-                      connection_upstream_set_validation()], Upstream)
+validate(<<"federation_upstream_set">>, Key, Term) ->
+    [rabbit_parameter_validation:proplist(
+       Key,
+       [{<<"connection">>, fun rabbit_parameter_validation:binary/2, mandatory},
+        {<<"exchange">>,   fun rabbit_parameter_validation:binary/2, optional} |
+        connection_upstream_set_validation()], Upstream)
      || Upstream <- Term];
 
-validate(<<"federation_connection">>, _Key, Term) ->
-    assert_contents([{<<"uri">>, uri, mandatory} |
-                     connection_upstream_set_validation()], Term);
+validate(<<"federation_connection">>, Key, Term) ->
+    rabbit_parameter_validation:proplist(
+      Key, [{<<"uri">>, fun validate_uri/2, mandatory} |
+            connection_upstream_set_validation()], Term);
 
 validate(<<"federation">>, <<"local_nodename">>, Term) ->
-    assert_type(<<"local_nodename">>, binary, Term);
+    rabbit_parameter_validation:binary(<<"local_nodename">>, Term);
 
 validate(<<"federation">>, <<"local_username">>, Term) ->
-    assert_type(<<"local_username">>, binary, Term);
+    rabbit_parameter_validation:binary(<<"local_username">>, Term);
 
 validate(_Component, Key, _Term) ->
     {error, "key not recognised: ~p", [Key]}.
@@ -94,61 +97,20 @@ notify_clear(<<"federation">>, <<"local_username">>) ->
 
 %%----------------------------------------------------------------------------
 
-assert_type(Name, {Type, Opts}, Term) ->
-    assert_type(Name, Type, Term),
-    case lists:member(Term, Opts) of
-        true  -> ok;
-        false -> {error, "~s must be one of ~p", [Name, Opts]}
-    end;
+connection_upstream_set_validation() ->
+    [{<<"exchange">>,       fun rabbit_parameter_validation:binary/2, optional},
+     {<<"prefetch_count">>, fun rabbit_parameter_validation:number/2, optional},
+     {<<"reconnect_delay">>,fun rabbit_parameter_validation:number/2, optional},
+     {<<"max_hops">>,       fun rabbit_parameter_validation:number/2, optional},
+     {<<"expires">>,        fun rabbit_parameter_validation:number/2, optional},
+     {<<"message_ttl">>,    fun rabbit_parameter_validation:number/2, optional},
+     {<<"ha_policy">>,      fun rabbit_parameter_validation:binary/2, optional}].
 
-assert_type(_Name, number, Term) when is_number(Term) ->
-    ok;
-
-assert_type(Name, number, Term) ->
-    {error, "~s should be number, actually was ~p", [Name, Term]};
-
-assert_type(_Name, binary, Term) when is_binary(Term) ->
-    ok;
-
-assert_type(Name, binary, Term) ->
-    {error, "~s should be binary, actually was ~p", [Name, Term]};
-
-assert_type(Name, uri, Term) ->
-    case assert_type(Name, binary, Term) of
+validate_uri(Name, Term) ->
+    case rabbit_parameter_validation:binary(Name, Term) of
         ok -> case amqp_uri:parse(binary_to_list(Term)) of
                   {ok, _}    -> ok;
                   {error, E} -> {error, "\"~s\" not a valid URI: ~p", [Term, E]}
               end;
         E  -> E
     end.
-
-connection_upstream_set_validation() ->
-    [{<<"prefetch_count">>,  number, optional},
-     {<<"reconnect_delay">>, number, optional},
-     {<<"max_hops">>,        number, optional},
-     {<<"expires">>,         number, optional},
-     {<<"message_ttl">>,     number, optional},
-     {<<"ha_policy">>,       binary, optional}].
-
-assert_contents(Constraints, Term) when is_list(Term) ->
-    {Results, Remainder}
-        = lists:foldl(
-            fun ({Name, Constraint, Needed}, {Results0, Term0}) ->
-                    case {lists:keytake(Name, 1, Term0), Needed} of
-                        {{value, {Name, Value}, Term1}, _} ->
-                            {[assert_type(Name, Constraint, Value) | Results0],
-                             Term1};
-                        {false, mandatory} ->
-                            {[{error, "Key \"~s\" not found", [Name]} |
-                              Results0], Term0};
-                        {false, optional} ->
-                            {Results0, Term0}
-                    end
-            end, {[], Term}, Constraints),
-    case Remainder of
-        [] -> Results;
-        _  -> [{error, "Unrecognised terms ~p", [Remainder]} | Results]
-    end;
-
-assert_contents(_Constraints, Term) ->
-    {error, "Not a list ~p", [Term]}.

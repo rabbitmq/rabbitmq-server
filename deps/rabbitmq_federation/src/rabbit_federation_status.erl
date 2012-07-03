@@ -27,6 +27,8 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
+-import(rabbit_federation_util, [name/1]).
+
 -define(SERVER, ?MODULE).
 -define(ETS_NAME, ?MODULE).
 
@@ -97,22 +99,22 @@ code_change(_OldVsn, State, _Extra) ->
 format(#entry{key       = {#resource{virtual_host = VHost,
                                      kind         = exchange,
                                      name         = XNameBin},
-                           Connection, UXNameBin},
+                           Connection, UX},
               status    = Status,
               timestamp = Timestamp}) ->
         [{exchange,          XNameBin},
          {vhost,             VHost},
          {connection,        Connection},
-         {upstream_exchange, UXNameBin},
+         {upstream_exchange, name(UX)},
          {status,            Status},
          {timestamp,         Timestamp}].
 
 %% We don't want to key off the entire upstream, bits of it may change
-key(XName, #upstream{connection_name = ConnName, exchange = UXNameBin}) ->
-    {XName, ConnName, UXNameBin}.
+key(XName, #upstream{connection_name = ConnName, exchange = UX}) ->
+    {XName, ConnName, UX}.
 
 xkey(XName) ->
     {XName, '_', '_'}.
 
-ukey(#upstream{connection_name = ConnName, exchange = UXNameBin}) ->
-    {'_', ConnName, UXNameBin}.
+ukey(#upstream{connection_name = ConnName, exchange = UX}) ->
+    {'_', ConnName, UX}.
