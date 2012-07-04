@@ -32,7 +32,7 @@ main([PluginsDir|Argv]) ->
     LibDir = filename:join(Cwd, "lib"),
     case filelib:is_dir(LibDir) of
         false -> ok;
-        true  -> _ = os:cmd("rm -rf " ++ LibDir)
+        true  -> os:cmd("rm -rf " ++ LibDir)
     end,
 
     try
@@ -40,7 +40,7 @@ main([PluginsDir|Argv]) ->
     after
         %% TODO: bootstrap file_handle_cache and use
         %% rabbit_file:recursive_delete instead of this...
-        _ = os:cmd("rm -rf " ++ LibDir)
+        os:cmd("rm -rf " ++ LibDir)
     end.
 
 check(Cwd, PluginsDir, LibDir, Checks) ->
