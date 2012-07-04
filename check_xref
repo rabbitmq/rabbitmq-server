@@ -70,14 +70,13 @@ check(Cwd, PluginsDir, LibDir, Checks) ->
         ok = file:rename(UnpackDir, AppN),
 
         code:add_patha(filename:join(AppN, "ebin")),
-        if IsExternal =:= true ->
-            App = list_to_atom(hd(string:tokens(filename:basename(AppN),
-                                                "-"))),
-            report(info, "loading ~p~n", [App]),
-            application:load(App),
-            store_third_party(App);
-           true ->
-               ok
+        case IsExternal of
+            true -> App = list_to_atom(hd(string:tokens(filename:basename(AppN),
+                                                        "-"))),
+                    report(info, "loading ~p~n", [App]),
+                    application:load(App),
+                    store_third_party(App);
+            _    -> ok
         end
      end || Plugin <- Plugins,
             lists:suffix(".ez", Plugin)],
@@ -220,8 +219,9 @@ report(Results) ->
     {Errors, Warnings} = partition(Results),
     report(info, "Completed: ~p errors, ~p warnings~n",
                  [length(Errors), length(Warnings)]),
-    if length(Errors) > 0 -> halt(1);
-       true               -> halt(0)
+    case length(Errors) > 0 of
+        true  -> halt(1);
+        false -> halt(0)
     end.
 
 report_failures({analysis_error, {Mod, Reason}}) ->
