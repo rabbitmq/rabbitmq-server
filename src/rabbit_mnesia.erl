@@ -340,8 +340,11 @@ status() ->
                      (Type, Nodes) -> [{Type, Nodes}]
                  end,
     [{nodes, (IfNonEmpty(disc, clustered_disc_nodes()) ++
-                  IfNonEmpty(ram, clustered_ram_nodes()))},
-     {running_nodes, running_clustered_nodes()}].
+                  IfNonEmpty(ram, clustered_ram_nodes()))}] ++
+        case mnesia:system_info(is_running) of
+            yes -> [{running_nodes, running_clustered_nodes()}];
+            no  -> []
+        end.
 
 is_db_empty() ->
     lists:all(fun (Tab) -> mnesia:dirty_first(Tab) == '$end_of_table' end,
