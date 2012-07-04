@@ -91,7 +91,7 @@
 -spec(dir/0 :: () -> file:filename()).
 -spec(table_names/0 :: () -> [atom()]).
 -spec(cluster_status_from_mnesia/0 :: () -> {'ok', cluster_status()} |
-                                             {'error', 'mnesia_not_running'}).
+                                             {'error', any()}).
 
 %% Operations on the db and utils, mainly used in `rabbit_upgrade' and `rabbit'
 -spec(init_db/3 :: ([node()], boolean(), boolean()) -> 'ok').
@@ -351,32 +351,33 @@ is_clustered() ->
 is_disc_and_clustered() ->
     is_disc_node() andalso is_clustered().
 
-%% Functions that retrieve the nodes in the cluster completely will rely on the
-%% status file if offline.
+%% Functions that retrieve the nodes in the cluster will rely on the status file
+%% if offline.
 
 all_clustered_nodes() ->
-    {AllNodes, _, _} = cluster_status(),
+    {ok, AllNodes} = cluster_status(all),
     AllNodes.
 
 clustered_disc_nodes() ->
-    {_, DiscNodes, _} = cluster_status(),
+    {ok, DiscNodes} =cluster_status(disc),
     DiscNodes.
 
 clustered_ram_nodes() ->
-    {AllNodes, DiscNodes, _} = cluster_status(),
+    {ok, AllNodes} = cluster_status(all),
+    {ok, DiscNodes} = cluster_status(disc),
     ordsets:subtract(AllNodes, DiscNodes).
 
 running_clustered_nodes() ->
-    {_, _, RunningNodes} = cluster_status(),
+    {ok, RunningNodes} = cluster_status(running),
     RunningNodes.
 
 running_clustered_disc_nodes() ->
-    {_, DiscNodes, RunningNodes} = cluster_status(),
+    {ok, {_, DiscNodes, RunningNodes}} = cluster_status(),
     ordsets:intersection(DiscNodes, RunningNodes).
 
 %% This function is the actual source of information, since it gets the data
 %% from mnesia. Obviously it'll work only when mnesia is running.
-cluster_status_from_mnesia() ->
+mnesia_nodes() ->
     case mnesia:system_info(is_running) of
         no  -> {error, mnesia_not_running};
         yes -> %% If the tables are not present, it means that `init_db/3' hasn't
@@ -400,34 +401,57 @@ cluster_status_from_mnesia() ->
                                true  -> ordsets:add_element(node(), DiscCopies);
                                false -> DiscCopies
                            end,
-                       RunningNodes = running_nodes(AllNodes),
-                       {ok, {AllNodes, DiscNodes, RunningNodes}};
+                       {ok, {AllNodes, DiscNodes}};
                    false ->
                        {error, tables_not_present}
                end
     end.
 
-cluster_status() ->
-    case cluster_status_from_mnesia() of
-        {ok, Status} ->
-            Status;
-        {error, _Reason} ->
-            {AllNodes, DiscNodes, RunningNodes} =
-                rabbit_node_monitor:read_cluster_status_file(),
-            %% The cluster status file records the status when the node is
-            %% online, but we know for sure that the node is offline now, so we
-            %% can remove it from the list of running nodes.
-            {AllNodes, DiscNodes, ordsets:del_element(node(), RunningNodes)}
+cluster_status(WhichNodes, ForceMnesia) ->
+    %% I don't want to call `running_nodes/1' unless if necessary, since it can
+    %% deadlock when stopping applications.
+    case case mnesia_nodes() of
+             {ok, {AllNodes, DiscNodes}} ->
+                 {ok, {AllNodes, DiscNodes,
+                       fun() -> running_nodes(AllNodes) end}};
+             {error, _Reason} when not ForceMnesia ->
+                 {AllNodes, DiscNodes, RunningNodes} =
+                     rabbit_node_monitor:read_cluster_status_file(),
+                 %% The cluster status file records the status when the node is
+                 %% online, but we know for sure that the node is offline now, so
+                 %% we can remove it from the list of running nodes.
+                 {ok, {AllNodes, DiscNodes,
+                       fun() -> ordsets:del_element(node(), RunningNodes) end}};
+             Err = {error, _} ->
+                 Err
+         end
+    of
+        {ok, {AllNodes1, DiscNodes1, RunningNodesThunk}} ->
+            {ok, case WhichNodes of
+                     status  -> {AllNodes1, DiscNodes1, RunningNodesThunk()};
+                     all     -> AllNodes1;
+                     disc    -> DiscNodes1;
+                     running -> RunningNodesThunk()
+                 end};
+        Err1 = {error, _} ->
+            Err1
     end.
+
+cluster_status(WhichNodes) ->
+    cluster_status(WhichNodes, false).
+
+cluster_status() ->
+    cluster_status(status).
+
+cluster_status_from_mnesia() ->
+    cluster_status(status, true).
 
 node_info() ->
     {erlang:system_info(otp_release), rabbit_misc:rabbit_version(),
      cluster_status_from_mnesia()}.
 
 is_disc_node() ->
-    is_disc_node(cluster_status()).
-
-is_disc_node({_, DiscNodes, _}) ->
+    DiscNodes = clustered_disc_nodes(),
     DiscNodes =:= [] orelse ordsets:is_element(node(), DiscNodes).
 
 dir() -> mnesia:system_info(directory).
@@ -1037,7 +1061,8 @@ running_nodes(Nodes) ->
     [Node || {Running, Node} <- Replies, Running].
 
 is_running_remote() ->
-    {proplists:is_defined(rabbit, application:which_applications()), node()}.
+    {proplists:is_defined(rabbit, application:which_applications(infinity)),
+     node()}.
 
 check_nodes_consistency(Node, RemoteStatus = {RemoteAllNodes, _, _}) ->
     ThisNode = node(),
