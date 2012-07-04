@@ -21,7 +21,7 @@ dispatcher_add(function(sammy) {
             return false;
         });
     sammy.put('#/fed-parameters', function() {
-            var num_keys = ['expires', 'message_ttl', 'max-hops',
+            var num_keys = ['expires', 'message-ttl', 'max-hops',
                             'prefetch-count', 'reconnect-delay'];
             put_parameter(this, [], num_keys);
             return false;
