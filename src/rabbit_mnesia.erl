@@ -199,15 +199,6 @@ reset(Force) ->
                                    true  -> ""
                                 end]),
     ensure_mnesia_not_running(),
-    case not Force andalso is_disc_and_clustered() andalso
-         is_only_disc_node(node())
-    of
-        true  -> throw({error, {standalone_ram_node,
-                                "You can't reset a node if it's the only disc "
-                                "node in a cluster. Please convert another node"
-                                " of the cluster to a disc node first."}});
-        false -> ok
-    end,
     Node = node(),
     case Force of
         true ->
@@ -219,6 +210,14 @@ reset(Force) ->
             %% Force=true here so that reset still works when clustered with a
             %% node which is down.
             init_db_with_mnesia(AllNodes, is_disc_node(), false, true),
+            case is_disc_and_clustered() andalso is_only_disc_node(node()) of
+                true  -> throw({error, {standalone_ram_node,
+                                        "You can't reset a node if it's the "
+                                        "only disc node in a cluster. Please "
+                                        "convert another node of the cluster "
+                                        "to a disc node first."}});
+                false -> ok
+            end,
             leave_cluster(),
             rabbit_misc:ensure_ok(mnesia:delete_schema([Node]),
                                   cannot_delete_schema),
@@ -642,7 +641,7 @@ check_cluster_consistency() ->
         lists:foldl(
           fun(Node, {error, Error}) ->
                   case rpc:call(Node, rabbit_mnesia, node_info, []) of
-                      {badrpc, Reason} ->
+                      {badrpc, _Reason} ->
                           {error, Error};
                       {OTP, Rabbit, Res} ->
                           rabbit_misc:sequence_error(
