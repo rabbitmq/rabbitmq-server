@@ -103,7 +103,7 @@ endif
 
 all: $(TARGETS)
 
-.PHONY: plugins
+.PHONY: plugins check-xref
 ifneq "$(PLUGINS_SRC_DIR)" ""
 plugins:
 	[ -d "$(PLUGINS_SRC_DIR)/rabbitmq-server" ] || ln -s "$(CURDIR)" "$(PLUGINS_SRC_DIR)/rabbitmq-server"
@@ -114,14 +114,16 @@ plugins:
 
 # add -q to remove printout of warnings....
 check-xref: $(BEAM_TARGETS) $(PLUGINS_DIR)
-	rm -rf lib  # just in case!
-	./check_xref $(PLUGINS_DIR)
+	rm -rf lib
+	./check_xref $(PLUGINS_DIR) -q
 
 else
 plugins:
 # Not building plugins
+
 check-xref:
-# No xref checks enabled
+	$(info xref checks are disabled)
+
 endif
 
 $(DEPS_FILE): $(SOURCES) $(INCLUDES)

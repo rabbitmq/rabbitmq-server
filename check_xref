@@ -28,16 +28,20 @@ main([PluginsDir|Argv]) ->
     if Quiet == true -> put({?MODULE, quiet}, true);
        true          -> ok
     end,
-    
+
     DisableFilters = lists:member("-X", Argv),
     if DisableFilters == true -> put({?MODULE, no_filters}, true);
        true                   -> ok
     end,
-    
+
     {ok, Cwd}   = file:get_cwd(),
     code:add_pathz(filename:join(Cwd, "ebin")),
     LibDir = filename:join(Cwd, "lib"),
-    
+    case filelib:is_dir(LibDir) of
+        false -> ok;
+        true  -> _ = os:cmd("rm -rf " ++ LibDir)
+    end,
+
     try
         check(Cwd, PluginsDir, LibDir, checks())
     after
@@ -58,7 +62,7 @@ check(Cwd, PluginsDir, LibDir, Checks) ->
                      false -> filename:join(LibDir,
                                             filename:basename(Plugin, ".ez"))
                  end,
-        
+
         report(info, "mkdir -p ~s~n", [Target]),
         filelib:ensure_dir(Target),
 
@@ -74,7 +78,8 @@ check(Cwd, PluginsDir, LibDir, Checks) ->
 
         code:add_patha(filename:join(AppN, "ebin")),
         if IsExternal =:= true ->
-            App = list_to_atom(hd(string:tokens(filename:basename(AppN), "-"))),
+            App = list_to_atom(hd(string:tokens(filename:basename(AppN),
+                                                "-"))),
             report(info, "loading ~p~n", [App]),
             application:load(App),
             store_third_party(App);
@@ -83,7 +88,7 @@ check(Cwd, PluginsDir, LibDir, Checks) ->
         end
      end || Plugin <- Plugins,
             lists:suffix(".ez", Plugin)],
-     
+
      RabbitAppEbin = filename:join([LibDir, "rabbit", "ebin"]),
      filelib:ensure_dir(filename:join(RabbitAppEbin, "foo")),
      {ok, Beams} = file:list_dir("ebin"),
@@ -244,7 +249,8 @@ report_progress(Fmt, Args) ->
 
 report(Level, Fmt, Args) ->
     case get({?MODULE, quiet}) of
-        true  -> if Level=:=error -> do_report(lookup_prefix(Level), Fmt, Args);
+        true  -> if Level=:=error -> do_report(lookup_prefix(Level),
+                                               Fmt, Args);
                     true          -> ok
                  end;
         _     -> do_report(lookup_prefix(Level), Fmt, Args)
