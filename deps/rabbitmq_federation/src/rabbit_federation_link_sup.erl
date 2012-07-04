@@ -33,9 +33,9 @@ adjust(Sup, X, everything) ->
         {Upstream, _, _, _} <- supervisor2:which_children(Sup)],
     [{ok, _Pid} = supervisor2:start_child(Sup, Spec) || Spec <- specs(X)];
 
-adjust(Sup, X, {connection, ConnName}) ->
-    OldUpstreams0 = children(Sup, ConnName),
-    NewUpstreams0 = rabbit_federation_upstream:for(X, ConnName),
+adjust(Sup, X, {upstream, UpstreamName}) ->
+    OldUpstreams0 = children(Sup, UpstreamName),
+    NewUpstreams0 = rabbit_federation_upstream:for(X, UpstreamName),
     %% If any haven't changed, don't restart them. The broker will
     %% avoid telling us about connections that have not changed
     %% syntactically, but even if one has, this X may not have that
@@ -51,10 +51,10 @@ adjust(Sup, X, {connection, ConnName}) ->
     [stop(Sup, OldUpstream) || OldUpstream <- OldUpstreams],
     [start(Sup, NewUpstream, X) || NewUpstream <- NewUpstreams];
 
-adjust(Sup, X = #exchange{name = XName}, {clear_connection, ConnName}) ->
+adjust(Sup, X = #exchange{name = XName}, {clear_upstream, UpstreamName}) ->
     ok = rabbit_federation_db:prune_scratch(
            XName, rabbit_federation_upstream:for(X)),
-    [stop(Sup, Upstream) || Upstream <- children(Sup, ConnName)];
+    [stop(Sup, Upstream) || Upstream <- children(Sup, UpstreamName)];
 
 %% TODO handle changes of upstream sets minimally (bug 24853)
 adjust(Sup, X = #exchange{name = XName}, {upstream_set, Set}) ->
@@ -81,9 +81,9 @@ stop(Sup, Upstream) ->
     %% remove it here too.
     rabbit_federation_status:remove_upstream(Upstream).
 
-children(Sup, ConnName) ->
+children(Sup, UpstreamName) ->
     rabbit_federation_util:find_upstreams(
-      ConnName, [U || {U, _, _, _} <- supervisor2:which_children(Sup)]).
+      UpstreamName, [U || {U, _, _, _} <- supervisor2:which_children(Sup)]).
 
 %%----------------------------------------------------------------------------
 

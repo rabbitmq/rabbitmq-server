@@ -51,9 +51,9 @@ should_forward(Headers, MaxHops) ->
         {array, A} -> length(A) < MaxHops
     end.
 
-find_upstreams(ConnName, Upstreams) ->
-    [U || U = #upstream{connection_name = ConnName2} <- Upstreams,
-          ConnName =:= ConnName2].
+find_upstreams(Name, Upstreams) ->
+    [U || U = #upstream{name = Name2} <- Upstreams,
+          Name =:= Name2].
 
 validate_arg(Name, Type, Args) ->
     case rabbit_misc:table_lookup(Args, Name) of

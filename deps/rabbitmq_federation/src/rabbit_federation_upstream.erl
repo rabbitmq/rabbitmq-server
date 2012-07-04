@@ -36,9 +36,9 @@ for(X) ->
         {error, not_found} -> []
     end.
 
-for(X, ConnName) ->
+for(X, UpstreamName) ->
     case set_for(X) of
-        {ok, UpstreamSet}  -> from_set(UpstreamSet, X, ConnName);
+        {ok, UpstreamSet}  -> from_set(UpstreamSet, X, UpstreamName);
         {error, not_found} -> []
     end.
 
@@ -55,47 +55,46 @@ to_string(#upstream{original_uri = URI,
 
 print(Fmt, Args) -> iolist_to_binary(io_lib:format(Fmt, Args)).
 
-from_set(SetName, X, ConnName) ->
-    rabbit_federation_util:find_upstreams(ConnName, from_set(SetName, X)).
+from_set(SetName, X, UpstName) ->
+    rabbit_federation_util:find_upstreams(UpstName, from_set(SetName, X)).
 
 from_set(<<"all">>, X) ->
-    Connections = rabbit_runtime_parameters:list(<<"federation_connection">>),
-    Set = [[{<<"connection">>, pget(key, C)}] || C <- Connections],
+    Connections = rabbit_runtime_parameters:list(<<"federation-upstream">>),
+    Set = [[{<<"upstream">>, pget(key, C)}] || C <- Connections],
     from_set_contents(Set, X);
 
 from_set(SetName, X) ->
     case rabbit_runtime_parameters:value(
-           <<"federation_upstream_set">>, SetName) of
+           <<"federation-upstream-set">>, SetName) of
         not_found -> [];
         Set       -> from_set_contents(Set, X)
     end.
 
 from_set_contents(Set, X) ->
-    Results = [from_props(P, X) || P <- Set],
+    Results = [from_set_element(P, X) || P <- Set],
     [R || R <- Results, R =/= not_found].
 
-from_props(Upst, X) ->
-    ConnName = bget(connection, Upst, []),
-    case rabbit_runtime_parameters:value(
-           <<"federation_connection">>, ConnName) of
+from_set_element(UpstreamSetElem, X) ->
+    Name = bget(upstream, UpstreamSetElem, []),
+    case rabbit_runtime_parameters:value(<<"federation-upstream">>, Name) of
         not_found  -> not_found;
-        Conn       -> from_props_connection(Upst, ConnName, Conn, X)
+        Upstream   -> from_props_connection(UpstreamSetElem, Name, Upstream, X)
     end.
 
-from_props_connection(U, ConnName, C, X) ->
+from_props_connection(U, Name, C, X) ->
     URI = bget(uri, U, C),
     {ok, Params} = amqp_uri:parse(binary_to_list(URI), vhost(X)),
     XNameBin = bget(exchange, U, C, name(X)),
     #upstream{params          = Params,
               original_uri    = URI,
               exchange        = with_name(XNameBin, vhost(Params), X),
-              prefetch_count  = bget(prefetch_count,  U, C, ?DEFAULT_PREFETCH),
-              reconnect_delay = bget(reconnect_delay, U, C, 1),
-              max_hops        = bget(max_hops,        U, C, 1),
-              expires         = bget(expires,         U, C, none),
-              message_ttl     = bget(message_ttl,     U, C, none),
-              ha_policy       = bget(ha_policy,       U, C, none),
-              connection_name = ConnName}.
+              prefetch_count  = bget('prefetch-count',  U, C, ?DEFAULT_PREFETCH),
+              reconnect_delay = bget('reconnect-delay', U, C, 1),
+              max_hops        = bget('max-hops',        U, C, 1),
+              expires         = bget(expires,           U, C, none),
+              message_ttl     = bget('message-ttl',     U, C, none),
+              ha_policy       = bget('ha-policy',       U, C, none),
+              name            = Name}.
 
 %%----------------------------------------------------------------------------
 

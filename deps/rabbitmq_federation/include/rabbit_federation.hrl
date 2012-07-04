@@ -23,7 +23,7 @@
                    expires,
                    message_ttl,
                    ha_policy,
-                   connection_name}).
+                   name}).
 
 -define(ROUTING_HEADER, <<"x-received-from">>).
 -define(MAX_HOPS_ARG, <<"x-max-hops">>).

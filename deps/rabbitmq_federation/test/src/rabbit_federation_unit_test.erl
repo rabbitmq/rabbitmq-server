@@ -86,6 +86,6 @@ scratch_space_test() ->
               ?assertEqual(A,    DB:get_active_suffix(N, upstream(z), none))
       end).
 
-upstream(ConnName) ->
-    #upstream{connection_name = atom_to_list(ConnName),
-              exchange        = x(r(<<"upstream">>))}.
+upstream(UpstreamName) ->
+    #upstream{name     = atom_to_list(UpstreamName),
+              exchange = x(r(<<"upstream">>))}.

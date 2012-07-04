@@ -52,5 +52,5 @@ prune_scratch(XName, Upstreams) ->
                                 fun(K, _V) -> lists:member(K, Keys) end, D)
            end).
 
-key(#upstream{connection_name = ConnName, exchange = X}) ->
-    {ConnName, name(X)}.
+key(#upstream{name = UpstreamName, exchange = X}) ->
+    {UpstreamName, name(X)}.

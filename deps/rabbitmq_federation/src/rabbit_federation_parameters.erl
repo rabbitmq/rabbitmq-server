@@ -31,80 +31,80 @@
 register() ->
     [rabbit_registry:register(runtime_parameter, Name, ?MODULE) ||
         Name <- [<<"federation">>,
-                 <<"federation_connection">>,
-                 <<"federation_upstream_set">>]].
+                 <<"federation-upstream">>,
+                 <<"federation-upstream-set">>]].
 
-validate(<<"federation_upstream_set">>, Key, Term) ->
+validate(<<"federation-upstream-set">>, Key, Term) ->
     [rabbit_parameter_validation:proplist(
        Key,
-       [{<<"connection">>, fun rabbit_parameter_validation:binary/2, mandatory},
-        {<<"exchange">>,   fun rabbit_parameter_validation:binary/2, optional} |
-        connection_upstream_set_validation()], Upstream)
+       [{<<"upstream">>, fun rabbit_parameter_validation:binary/2, mandatory},
+        {<<"exchange">>, fun rabbit_parameter_validation:binary/2, optional} |
+        shared_validation()], Upstream)
      || Upstream <- Term];
 
-validate(<<"federation_connection">>, Key, Term) ->
+validate(<<"federation-upstream">>, Key, Term) ->
     rabbit_parameter_validation:proplist(
       Key, [{<<"uri">>, fun validate_uri/2, mandatory} |
-            connection_upstream_set_validation()], Term);
+            shared_validation()], Term);
 
-validate(<<"federation">>, <<"local_nodename">>, Term) ->
-    rabbit_parameter_validation:binary(<<"local_nodename">>, Term);
+validate(<<"federation">>, <<"local-nodename">>, Term) ->
+    rabbit_parameter_validation:binary(<<"local-nodename">>, Term);
 
-validate(<<"federation">>, <<"local_username">>, Term) ->
-    rabbit_parameter_validation:binary(<<"local_username">>, Term);
+validate(<<"federation">>, <<"local-username">>, Term) ->
+    rabbit_parameter_validation:binary(<<"local-username">>, Term);
 
 validate(_Component, Key, _Term) ->
     {error, "key not recognised: ~p", [Key]}.
 
-validate_clear(<<"federation_upstream_set">>, _Key) ->
+validate_clear(<<"federation-upstream-set">>, _Key) ->
     ok;
 
-validate_clear(<<"federation_connection">>, _Key) ->
+validate_clear(<<"federation-upstream">>, _Key) ->
     ok;
 
-validate_clear(<<"federation">>, <<"local_nodename">>) ->
+validate_clear(<<"federation">>, <<"local-nodename">>) ->
     ok;
 
-validate_clear(<<"federation">>, <<"local_username">>) ->
+validate_clear(<<"federation">>, <<"local-username">>) ->
     ok;
 
 validate_clear(_Component, Key) ->
     {error, "key not recognised: ~p", [Key]}.
 
-notify(<<"federation_upstream_set">>, Key, _Term) ->
+notify(<<"federation-upstream-set">>, Key, _Term) ->
     rabbit_federation_link_sup_sup:adjust({upstream_set, Key});
 
-notify(<<"federation_connection">>, Key, _Term) ->
-    rabbit_federation_link_sup_sup:adjust({connection, Key});
+notify(<<"federation-upstream">>, Key, _Term) ->
+    rabbit_federation_link_sup_sup:adjust({upstream, Key});
 
-notify(<<"federation">>, <<"local_nodename">>, _Term) ->
+notify(<<"federation">>, <<"local-nodename">>, _Term) ->
     rabbit_federation_link_sup_sup:adjust(everything);
 
-notify(<<"federation">>, <<"local_username">>, _Term) ->
+notify(<<"federation">>, <<"local-username">>, _Term) ->
     rabbit_federation_link_sup_sup:adjust(everything).
 
-notify_clear(<<"federation_upstream_set">>, Key) ->
+notify_clear(<<"federation-upstream-set">>, Key) ->
     rabbit_federation_link_sup_sup:adjust({clear_upstream_set, Key});
 
-notify_clear(<<"federation_connection">>, Key) ->
-    rabbit_federation_link_sup_sup:adjust({clear_connection, Key});
+notify_clear(<<"federation-upstream">>, Key) ->
+    rabbit_federation_link_sup_sup:adjust({clear_upstream, Key});
 
-notify_clear(<<"federation">>, <<"local_nodename">>) ->
+notify_clear(<<"federation">>, <<"local-nodename">>) ->
     rabbit_federation_link_sup_sup:adjust(everything);
 
-notify_clear(<<"federation">>, <<"local_username">>) ->
+notify_clear(<<"federation">>, <<"local-username">>) ->
     rabbit_federation_link_sup_sup:adjust(everything).
 
 %%----------------------------------------------------------------------------
 
-connection_upstream_set_validation() ->
+shared_validation() ->
     [{<<"exchange">>,       fun rabbit_parameter_validation:binary/2, optional},
-     {<<"prefetch_count">>, fun rabbit_parameter_validation:number/2, optional},
-     {<<"reconnect_delay">>,fun rabbit_parameter_validation:number/2, optional},
-     {<<"max_hops">>,       fun rabbit_parameter_validation:number/2, optional},
+     {<<"prefetch-count">>, fun rabbit_parameter_validation:number/2, optional},
+     {<<"reconnect-delay">>,fun rabbit_parameter_validation:number/2, optional},
+     {<<"max-hops">>,       fun rabbit_parameter_validation:number/2, optional},
      {<<"expires">>,        fun rabbit_parameter_validation:number/2, optional},
-     {<<"message_ttl">>,    fun rabbit_parameter_validation:number/2, optional},
-     {<<"ha_policy">>,      fun rabbit_parameter_validation:binary/2, optional}].
+     {<<"message-ttl">>,    fun rabbit_parameter_validation:number/2, optional},
+     {<<"ha-policy">>,      fun rabbit_parameter_validation:binary/2, optional}].
 
 validate_uri(Name, Term) ->
     case rabbit_parameter_validation:binary(Name, Term) of

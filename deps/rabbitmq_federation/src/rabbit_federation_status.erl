@@ -110,11 +110,11 @@ format(#entry{key       = {#resource{virtual_host = VHost,
          {timestamp,         Timestamp}].
 
 %% We don't want to key off the entire upstream, bits of it may change
-key(XName, #upstream{connection_name = ConnName, exchange = UX}) ->
-    {XName, ConnName, UX}.
+key(XName, #upstream{name = UpstreamName, exchange = UX}) ->
+    {XName, UpstreamName, UX}.
 
 xkey(XName) ->
     {XName, '_', '_'}.
 
-ukey(#upstream{connection_name = ConnName, exchange = UX}) ->
-    {'_', ConnName, UX}.
+ukey(#upstream{name = UpstreamName, exchange = UX}) ->
+    {'_', UpstreamName, UX}.

@@ -173,8 +173,8 @@ suffix({Nodename, _}, XName) ->
     X = #exchange{name = r(list_to_binary(XName))},
     rpc:call(Node, rabbit_federation_db, get_active_suffix,
              [r(<<"fed.downstream">>),
-              #upstream{connection_name = list_to_binary(Nodename),
-                        exchange        = X}, none]).
+              #upstream{name     = list_to_binary(Nodename),
+                        exchange = X}, none]).
 
 %% Downstream: rabbit-test, port 5672
 %% Upstream:   hare,        port 5673
@@ -272,26 +272,26 @@ dynamic_reconfiguration_test() ->
               assert_connections(Xs, [<<"localhost">>, <<"local5673">>]),
 
               %% Test this at least does not blow up
-              set_param("federation", "local_nodename", <<"test">>),
+              set_param("federation", "local-nodename", <<"test">>),
               assert_connections(Xs, [<<"localhost">>, <<"local5673">>]),
 
               %% Test that clearing connections works
-              clear_param("federation_connection", "localhost"),
-              clear_param("federation_connection", "local5673"),
+              clear_param("federation-upstream", "localhost"),
+              clear_param("federation-upstream", "local5673"),
               assert_connections(Xs, []),
 
               %% Test that readding them and changing them works
-              set_param("federation_connection", "localhost",
+              set_param("federation-upstream", "localhost",
                         [{<<"uri">>, <<"amqp://localhost">>}]),
               %% Do it twice so we at least hit the no-restart optimisation
-              set_param("federation_connection", "localhost",
+              set_param("federation-upstream", "localhost",
                         [{<<"uri">>, <<"amqp://">>}]),
-              set_param("federation_connection", "localhost",
+              set_param("federation-upstream", "localhost",
                         [{<<"uri">>, <<"amqp://">>}]),
               assert_connections(Xs, [<<"localhost">>]),
 
               %% And re-add the last - for next test
-              set_param("federation_connection", "local5673",
+              set_param("federation-upstream", "local5673",
                         [{<<"uri">>, <<"amqp://localhost:5673">>}])
       end, [x(<<"all.fed1">>), x(<<"all.fed2">>)]).
 
@@ -304,19 +304,19 @@ dynamic_reconfiguration_integrity_test() ->
               assert_connections(Xs, []),
 
               %% Create the set - links appear
-              set_param("federation_upstream_set", "new-set",
-                        [[{<<"connection">>, <<"localhost">>}]]),
+              set_param("federation-upstream-set", "new-set",
+                        [[{<<"upstream">>, <<"localhost">>}]]),
               assert_connections(Xs, [<<"localhost">>]),
 
               %% Add nonexistent connections to set - nothing breaks
-              set_param("federation_upstream_set", "new-set",
-                        [[{<<"connection">>, <<"localhost">>}],
-                         [{<<"connection">>, <<"does-not-exist">>}]]),
+              set_param("federation-upstream-set", "new-set",
+                        [[{<<"upstream">>, <<"localhost">>}],
+                         [{<<"upstream">>, <<"does-not-exist">>}]]),
               assert_connections(Xs, [<<"localhost">>]),
 
               %% Change connection in set - links change
-              set_param("federation_upstream_set", "new-set",
-                        [[{<<"connection">>, <<"local5673">>}]]),
+              set_param("federation-upstream-set", "new-set",
+                        [[{<<"upstream">>, <<"local5673">>}]]),
               assert_connections(Xs, [<<"local5673">>])
       end, [x(<<"new.fed1">>), x(<<"new.fed2">>)]).
 
@@ -501,7 +501,7 @@ links(#'exchange.declare'{exchange = Name}) ->
     case rabbit_policy:get(<<"federation-upstream-set">>, r(Name)) of
         {ok, Set} ->
             X = #exchange{name = r(Name)},
-            [{Name, U#upstream.connection_name, name(U#upstream.exchange)} ||
+            [{Name, U#upstream.name, name(U#upstream.exchange)} ||
                 U <- rabbit_federation_upstream:from_set(Set, X)];
         {error, not_found} ->
             []
