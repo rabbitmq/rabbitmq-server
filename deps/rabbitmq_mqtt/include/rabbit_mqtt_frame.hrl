@@ -43,6 +43,12 @@
 -define(CONNACK_CREDENTIALS, 4). %% bad user name or password
 -define(CONNACK_AUTH,        5). %% not authorized
 
+%% qos levels
+
+-define(QOS_0, 0).
+-define(QOS_1, 1).
+-define(QOS_2, 2).
+
 -record(mqtt_frame, {fixed,
                      variable,
                      payload}).
@@ -73,7 +79,7 @@
                               topic_table}).
 
 -record(mqtt_frame_suback,{message_id,
-                           qos_table}).
+                           qos_table = []}).
 
 -record(mqtt_topic, {name, qos}).
 

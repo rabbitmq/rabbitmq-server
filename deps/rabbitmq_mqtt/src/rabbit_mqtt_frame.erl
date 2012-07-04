@@ -19,8 +19,6 @@
 -export([parse/2, initial_state/0]).
 -export([serialise/1]).
 
--compile(export_all).
-
 -include("include/rabbit_mqtt_frame.hrl").
 
 -define(RESERVED, 0).
@@ -102,14 +100,15 @@ parse_frame(Bin, #mqtt_frame_fixed{ type = Type,
             wrap(Fixed, #mqtt_frame_publish { topic_name = TopicName,
                                               message_id = MessageId},
                  Payload, Rest);
-        {?SUBSCRIBE, <<FrameBin:Length/binary, Rest/binary>>} ->
+        {Subs, <<FrameBin:Length/binary, Rest/binary>>}
+          when Subs =:= ?SUBSCRIBE orelse Subs =:= ?UNSUBSCRIBE ->
             case QoS of
                 1 -> <<MessageId:16/big, Rest1/binary>> = FrameBin,
-                     Topics = parse_topics(Rest1, []),
+                     Topics = parse_topics(Subs, Rest1, []),
                      wrap(Fixed, #mqtt_frame_subscribe { message_id = MessageId,
                                                          topic_table = Topics },
                           Rest);
-                N -> {error, {subscribe_frame_with_unexpected_qos, N}}
+                N -> {error, {subscription_frame_with_unexpected_qos, Subs, N}}
             end;
         {?PINGREQ, Rest} ->
             Length = 0,
@@ -120,11 +119,14 @@ parse_frame(Bin, #mqtt_frame_fixed{ type = Type,
                    end}
      end.
 
-parse_topics(<<>>, Topics) ->
+parse_topics(_, <<>>, Topics) ->
     Topics;
-parse_topics(Bin, Topics) ->
+parse_topics(?SUBSCRIBE = Sub, Bin, Topics) ->
     {Name, <<_:6, QoS:2, Rest/binary>>} = parse_utf(Bin),
-    parse_topics(Rest, [#mqtt_topic { name = Name, qos = QoS } | Topics]).
+    parse_topics(Sub, Rest, [#mqtt_topic { name = Name, qos = QoS } | Topics]);
+parse_topics(?UNSUBSCRIBE = Sub, Bin, Topics) ->
+    {Name, <<Rest/binary>>} = parse_utf(Bin),
+    parse_topics(Sub, Rest, [#mqtt_topic { name = Name } | Topics]).
 
 wrap(Fixed, Variable, Payload, Rest) ->
     {ok, #mqtt_frame { variable = Variable, fixed = Fixed, payload = Payload }, Rest}.
@@ -156,13 +158,16 @@ serialise_variable(#mqtt_frame_fixed   { type        = ?CONNACK } = Fixed,
                    <<>> = PayloadBin) ->
     VariableBin = <<?RESERVED:8, ReturnCode:8>>,
     serialise_fixed(Fixed, VariableBin, PayloadBin);
-serialise_variable(#mqtt_frame_fixed  { type       = ?SUBACK } = Fixed,
+
+serialise_variable(#mqtt_frame_fixed  { type       = SubAck } = Fixed,
                    #mqtt_frame_suback { message_id = MessageId,
                                         qos_table  = Qos },
-                   <<>> = _PayloadBin) ->
+                   <<>> = _PayloadBin)
+  when SubAck =:= ?SUBACK orelse SubAck =:= ?UNSUBACK ->
     VariableBin = <<MessageId:16/big>>,
     QosBin = << <<?RESERVED:6, Q:2>> || Q <- Qos >>,
     serialise_fixed(Fixed, VariableBin, QosBin);
+
 serialise_variable(#mqtt_frame_fixed   { type       = ?PUBLISH,
                                          qos        = Qos } = Fixed,
                    #mqtt_frame_publish { topic_name = TopicName,
@@ -174,6 +179,7 @@ serialise_variable(#mqtt_frame_fixed   { type       = ?PUBLISH,
                        1 -> <<MessageId:16/big>>
                    end,
     serialise_fixed(Fixed, <<TopicBin/binary, MessageIdBin/binary>>, PayloadBin);
+
 serialise_variable(#mqtt_frame_fixed {} = Fixed,
                    undefined,
                    <<>> = _PayloadBin) ->

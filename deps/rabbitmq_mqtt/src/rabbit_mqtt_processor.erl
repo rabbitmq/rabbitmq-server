@@ -55,7 +55,7 @@ flush_and_die(Pid) ->
 %% Basic gen_server2 callbacks
 %%----------------------------------------------------------------------------
 
-init([SendFun, AdapterInfo, Configuration]) ->
+init([SendFun, AdapterInfo, _Configuration]) ->
     process_flag(trap_exit, true),
     {ok,
      #state {
@@ -99,10 +99,12 @@ handle_info({#'basic.deliver'{delivery_tag = Tag,
              #amqp_msg{ payload = Payload }},
             #state { channel = Channel,
                      message_id = _MessageId } = State ) ->
-    send_frame(#mqtt_frame{ fixed = #mqtt_frame_fixed {type = ?PUBLISH},
-                            variable = #mqtt_frame_publish { topic_name = RoutingKey },
-                            payload = Payload},
-               State),
+    send_frame(
+      #mqtt_frame{ fixed = #mqtt_frame_fixed {type = ?PUBLISH},
+                   variable = #mqtt_frame_publish {
+                                topic_name = untranslate_topic( RoutingKey) },
+                   payload = Payload},
+      State),
     amqp_channel:cast(Channel, #'basic.ack'{delivery_tag = Tag}),
     {noreply, State, hibernate};
 handle_info(#'basic.consume_ok'{}, State) ->
@@ -176,7 +178,7 @@ process_connect(#mqtt_frame{
 process_request(?PUBLISH,
                 #mqtt_frame {
                   variable = #mqtt_frame_publish { topic_name = TopicName,
-                                                   message_id = MessageId },
+                                                   message_id = _MessageId },
                   payload = Payload }, #state { channel = Channel } = State) ->
     Method = #'basic.publish'{ exchange    = <<"amq.topic">>,
                                routing_key = translate_topic(TopicName)},
@@ -186,49 +188,74 @@ process_request(?PUBLISH,
 process_request(?SUBSCRIBE,
                 #mqtt_frame {
                   variable = #mqtt_frame_subscribe { message_id = MessageId,
-                                                     topic_table = Topics }= Frame,
+                                                     topic_table = Topics },
                   payload = undefined }, #state { channel = Channel,
                                                   client_id = ClientId} = State) ->
-    Queue = list_to_binary("MQTT_subscription_" ++ ClientId),
+    Queue = subcription_queue_name(ClientId),
     #'queue.declare_ok'{} =
         amqp_channel:call(Channel, #'queue.declare'{ queue = Queue,
                                                      exclusive = false,
                                                      auto_delete = false}),
-    [begin
-        Binding = #'queue.bind'{queue       = Queue,
-                                exchange    = <<"amq.topic">>,
-                                routing_key = translate_topic(TopicName)},
-        #'queue.bind_ok'{} = amqp_channel:call(Channel, Binding)
-     end || #mqtt_topic { name = TopicName } <- Topics ],
+    QosResponse =
+        [begin
+            Binding = #'queue.bind'{queue       = Queue,
+                                    exchange    = <<"amq.topic">>,
+                                    routing_key = translate_topic(TopicName)},
+            #'queue.bind_ok'{} = amqp_channel:call(Channel, Binding),
+            ?QOS_0
+         end || #mqtt_topic { name = TopicName } <- Topics ],
     Method = #'basic.consume'{queue = Queue},
-    #'basic.consume_ok'{consumer_tag = Tag} = amqp_channel:call(Channel, Method),
+    #'basic.consume_ok'{consumer_tag = _Tag} = amqp_channel:call(Channel, Method),
     send_frame(#mqtt_frame{ fixed = #mqtt_frame_fixed {type = ?SUBACK},
                             variable = #mqtt_frame_suback {
                                          message_id = MessageId,
-                                         qos_table = [0] }}, State),
+                                         qos_table = QosResponse }}, State),
+    {noreply, State, hibernate};
+
+process_request(?UNSUBSCRIBE,
+                #mqtt_frame {
+                  variable = #mqtt_frame_subscribe { message_id = MessageId,
+                                                     topic_table = Topics },
+                  payload = undefined }, #state { channel = Channel,
+                                                  client_id = ClientId} = State) ->
+    Queue = subcription_queue_name(ClientId),
+    [begin
+        Binding = #'queue.unbind'{queue       = Queue,
+                                  exchange    = <<"amq.topic">>,
+                                  routing_key = translate_topic(TopicName)},
+        #'queue.unbind_ok'{} = amqp_channel:call(Channel, Binding)
+     end || #mqtt_topic { name = TopicName } <- Topics ],
+    send_frame(#mqtt_frame{ fixed    = #mqtt_frame_fixed  {type = ?UNSUBACK},
+                            variable = #mqtt_frame_suback {
+                                         message_id = MessageId }}, State),
     {noreply, State, hibernate};
 
 process_request(?PINGREQ, _, State) ->
     send_frame(#mqtt_frame{ fixed = #mqtt_frame_fixed {type = ?PINGRESP}}, State),
     {noreply, State, hibernate}.
 
+subcription_queue_name(ClientId) ->
+    list_to_binary("MQTT_subscription_" ++ ClientId).
 
 %% amqp mqtt descr
 %% *    +    match one topic level
 %% #    #    match multiple topic levels
 %% .    /    topic level separator
-translate_topic([$/ | Topic]) ->
-    translate_topic(Topic);
 translate_topic(Topic) ->
     erlang:iolist_to_binary(
       re:replace(re:replace(Topic, "/", ".", [global]),
                  "[\+]", "*", [global])).
 
+untranslate_topic(Topic) ->
+    erlang:iolist_to_binary(
+      re:replace(re:replace(Topic, "[\*]", "+", [global]),
+                 "[\.]", "/", [global])).
+
 valid_client_id(ClientId) ->
     ClientIdLen = length(ClientId),
     1 =< ClientIdLen andalso ClientIdLen =< 23.
 
-ensure_unique_client_id(ClientId) ->
+ensure_unique_client_id(_ClientId) ->
     %% todo spec section 3.1:
     %% If a client with the same Client ID is already connected to the server,
     %% the "older" client must be disconnected by the server before completing
