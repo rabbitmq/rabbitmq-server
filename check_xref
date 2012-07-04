@@ -24,15 +24,8 @@ main(["-h"]) ->
               "      -q - quiet mode (only prints errors)~n"
               "      -X - disables all filters~n");
 main([PluginsDir|Argv]) ->
-    Quiet = lists:member("-q", Argv),
-    if Quiet == true -> put({?MODULE, quiet}, true);
-       true          -> ok
-    end,
-
-    DisableFilters = lists:member("-X", Argv),
-    if DisableFilters == true -> put({?MODULE, no_filters}, true);
-       true                   -> ok
-    end,
+    put({?MODULE, quiet}, lists:member("-q", Argv)),
+    put({?MODULE, no_filters}, lists:member("-X", Argv)),
 
     {ok, Cwd}   = file:get_cwd(),
     code:add_pathz(filename:join(Cwd, "ebin")),
@@ -248,12 +241,10 @@ report_progress(Fmt, Args) ->
     report(info, Fmt, Args).
 
 report(Level, Fmt, Args) ->
-    case get({?MODULE, quiet}) of
-        true  -> if Level=:=error -> do_report(lookup_prefix(Level),
-                                               Fmt, Args);
-                    true          -> ok
-                 end;
-        _     -> do_report(lookup_prefix(Level), Fmt, Args)
+    case {get({?MODULE, quiet}), Level} of
+        {true,  error} -> do_report(lookup_prefix(Level), Fmt, Args);
+        {false, _}     -> do_report(lookup_prefix(Level), Fmt, Args);
+        _              -> ok
     end.
 
 do_report(Prefix, Fmt, Args) ->
