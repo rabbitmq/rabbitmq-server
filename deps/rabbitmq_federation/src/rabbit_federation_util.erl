@@ -29,13 +29,13 @@
 
 local_params(VHost) ->
     U = rabbit_runtime_parameters:value(
-          <<"federation">>, <<"local_username">>, <<"guest">>),
+          <<"federation">>, <<"local-username">>, <<"guest">>),
     #amqp_params_direct{username     = U,
                         virtual_host = VHost}.
 
 local_nodename() ->
     rabbit_runtime_parameters:value(
-      <<"federation">>, <<"local_nodename">>, local_nodename_implicit()).
+      <<"federation">>, <<"local-nodename">>, local_nodename_implicit()).
 
 local_nodename_implicit() ->
     {ID, _} = rabbit_nodes:parts(node()),
