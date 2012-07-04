@@ -214,10 +214,11 @@ reset(Force) ->
             all_clustered_nodes();
         false ->
             AllNodes = all_clustered_nodes(),
-            %% Reconnecting so that we will get an up to date nodes
-            %% Force=true here so that reset still works when
-            %% clustered with a node which is down
-            init_db_with_mnesia(AllNodes, is_disc_node(), true),
+            %% Reconnecting so that we will get an up to date nodes.
+            %% We don't need to check for consistency because we are resetting.
+            %% Force=true here so that reset still works when clustered with a
+            %% node which is down.
+            init_db_with_mnesia(AllNodes, is_disc_node(), false, true),
             leave_cluster(),
             rabbit_misc:ensure_ok(mnesia:delete_schema([Node]),
                                   cannot_delete_schema),
@@ -524,14 +525,17 @@ init_db_and_upgrade(ClusterNodes, WantDiscNode, Force) ->
     end,
     ok.
 
-init_db_with_mnesia(ClusterNodes, WantDiscNode, Force) ->
-    start_mnesia(),
+init_db_with_mnesia(ClusterNodes, WantDiscNode, CheckConsistency, Force) ->
+    start_mnesia(CheckConsistency),
     try
         init_db_and_upgrade(ClusterNodes, WantDiscNode, Force)
     after
         stop_mnesia()
     end,
     ensure_mnesia_not_running().
+
+init_db_with_mnesia(ClusterNodes, WantDiscNode, Force) ->
+    init_db_with_mnesia(ClusterNodes, WantDiscNode, true, Force).
 
 ensure_mnesia_dir() ->
     MnesiaDir = dir() ++ "/",
@@ -632,13 +636,13 @@ wait_for_tables(TableNames) ->
 %% This does not guarantee us much, but it avoids some situations that will
 %% definitely end up badly
 check_cluster_consistency() ->
-    AllNodes = all_clustered_nodes(),
+    AllNodes = ordsets:del_element(node(), all_clustered_nodes()),
     %% We want to find 0 or 1 consistent nodes.
     case
         lists:foldl(
           fun(Node, {error, Error}) ->
                   case rpc:call(Node, rabbit_mnesia, node_info, []) of
-                      {badrpc, _Reason} ->
+                      {badrpc, Reason} ->
                           {error, Error};
                       {OTP, Rabbit, Res} ->
                           rabbit_misc:sequence_error(
@@ -1032,10 +1036,16 @@ wait_for(Condition) ->
 is_only_disc_node(Node) ->
     [Node] =:= clustered_disc_nodes().
 
-start_mnesia() ->
-    check_cluster_consistency(),
+start_mnesia(CheckConsistency) ->
+    case CheckConsistency of
+        true  -> check_cluster_consistency();
+        false -> ok
+    end,
     rabbit_misc:ensure_ok(mnesia:start(), cannot_start_mnesia),
     ensure_mnesia_running().
+
+start_mnesia() ->
+    start_mnesia(true).
 
 stop_mnesia() ->
     stopped = mnesia:stop(),
