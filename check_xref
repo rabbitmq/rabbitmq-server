@@ -27,7 +27,7 @@ main([PluginsDir|Argv]) ->
     put({?MODULE, quiet}, lists:member("-q", Argv)),
     put({?MODULE, no_filters}, lists:member("-X", Argv)),
 
-    {ok, Cwd}   = file:get_cwd(),
+    {ok, Cwd} = file:get_cwd(),
     code:add_pathz(filename:join(Cwd, "ebin")),
     LibDir = filename:join(Cwd, "lib"),
     case filelib:is_dir(LibDir) of
@@ -50,11 +50,11 @@ check(Cwd, PluginsDir, LibDir, Checks) ->
         Source = filename:join(PluginsDir, Plugin),
         Target = filename:join(LibDir, Plugin),
         IsExternal = external_dependency(Plugin),
-        AppN   = case IsExternal of
-                     true  -> filename:join(LibDir, unmangle_name(Plugin));
-                     false -> filename:join(LibDir,
-                                            filename:basename(Plugin, ".ez"))
-                 end,
+        AppN = case IsExternal of
+                   true  -> filename:join(LibDir, unmangle_name(Plugin));
+                   false -> filename:join(
+                              LibDir, filename:basename(Plugin, ".ez"))
+               end,
 
         report(info, "mkdir -p ~s~n", [Target]),
         filelib:ensure_dir(Target),
@@ -86,13 +86,13 @@ check(Cwd, PluginsDir, LibDir, Checks) ->
     filelib:ensure_dir(filename:join(RabbitAppEbin, "foo")),
     {ok, Beams} = file:list_dir("ebin"),
     [{ok, _} = file:copy(filename:join("ebin", Beam),
-                   filename:join(RabbitAppEbin, Beam)) || Beam <- Beams],
+                         filename:join(RabbitAppEbin, Beam)) || Beam <- Beams],
     xref:start(?MODULE),
     xref:set_default(?MODULE, [{verbose, false}, {warnings, false}]),
     xref:set_library_path(?MODULE, code:get_path()),
     xref:add_release(?MODULE, Cwd, {name, rabbit}),
     store_unresolved_calls(),
-    Results     = lists:flatten([perform_analysis(Q) || Q <- Checks]),
+    Results = lists:flatten([perform_analysis(Q) || Q <- Checks]),
     report(Results).
 
 %%
@@ -205,7 +205,7 @@ is_callback(_) ->
 
 acc_behaviours(B, {M, CB}=Acc) ->
     case catch(B:behaviour_info(callbacks)) of
-        [{_,_}|_]=Callbacks ->
+        [{_,_} | _] = Callbacks ->
             {M, CB ++ [{M, F, A} || {F,A} <- Callbacks]};
         _ ->
             Acc
@@ -250,9 +250,9 @@ report(Level, Fmt, Args) ->
 do_report(Prefix, Fmt, Args) ->
     io:format(Prefix ++ Fmt, Args).
 
-lookup_prefix(error)    -> "ERROR: ";
-lookup_prefix(warning)  -> "WARNING: ";
-lookup_prefix(info)     -> "INFO: ".
+lookup_prefix(error)   -> "ERROR: ";
+lookup_prefix(warning) -> "WARNING: ";
+lookup_prefix(info)    -> "INFO: ".
 
 source_file(M) ->
     proplists:get_value(source, M:module_info(compile)).
@@ -278,10 +278,10 @@ external_dependency(Path) ->
               ["mochiweb", "webmachine", "rfc4627", "eldap"]).
 
 unmangle_name(Path) ->
-    [Name, Vsn|_] = re:split(Path, "-", [{return, list}]),
+    [Name, Vsn | _] = re:split(Path, "-", [{return, list}]),
     string:join([Name, Vsn], "-").
 
 store_unresolved_calls() ->
     {ok, UCFull} = analyse("UC"),
-    UC = [MFA || {_, {_,_,_}=MFA} <- UCFull],
+    UC = [MFA || {_, {_,_,_} = MFA} <- UCFull],
     put({?MODULE, unresolved_calls}, sets:from_list(UC)).
