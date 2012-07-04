@@ -87,7 +87,7 @@ for (var i in globals) {
           <span class="help" id="federation-local-username"></span>
           <form action="#/fed-globals" method="put">
             <input type="hidden" name="component" value="federation"/>
-            <input type="hidden" name="key" value="local_username"/>
+            <input type="hidden" name="key" value="local-username"/>
             <input type="text" name="value" value="<%= username %>" />
             <input type="submit" value="Update"/>
           </form>
@@ -97,7 +97,7 @@ for (var i in globals) {
           <span class="help" id="federation-explicit-identity"></span>
           <form action="#/fed-globals" method="put">
             <input type="hidden" name="component" value="federation"/>
-            <input type="hidden" name="key" value="local_nodename"/>
+            <input type="hidden" name="key" value="local-nodename"/>
             <input type="text" name="value" value="<%= nodename %>" />
             <input type="submit" value="Update"/>
           </form>

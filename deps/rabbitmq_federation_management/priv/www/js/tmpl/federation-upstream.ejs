@@ -1,0 +1,48 @@
+<h1>Federation Upstream: <b><%= fmt_string(upstream.key) %></b></h1>
+
+<div class="section">
+  <h2>Overview</h2>
+  <div class="hider">
+    <table class="facts">
+      <tr>
+        <th>URI</th>
+        <td><%= upstream.value.uri %></td>
+      </tr>
+      <tr>
+        <th>Expires</th>
+        <td><%= upstream.value.expires %>ms</td>
+      </tr>
+      <tr>
+        <th>Message TTL</th>
+        <td><%= upstream.value.message_ttl %>ms</td>
+      </tr>
+      <tr>
+        <th>Max Hops</th>
+        <td><%= upstream.value.max_hops %></td>
+      </tr>
+      <tr>
+        <th>Prefetch Count</th>
+        <td><%= upstream.value.prefetch_count %></td>
+      </tr>
+      <tr>
+        <th>Reconnect Delay</th>
+        <td><%= upstream.value.reconnect_delay %>s</td>
+      </tr>
+      <tr>
+        <th>HA Policy</th>
+        <td><%= upstream.value.ha_policy %></td>
+      </tr>
+    </table>
+  </div>
+</div>
+
+<div class="section-hidden">
+  <h2>Delete this upstream</h2>
+  <div class="hider">
+    <form action="#/fed-parameters" method="delete" class="confirm">
+      <input type="hidden" name="component" value="federation-upstream"/>
+      <input type="hidden" name="key" value="<%= fmt_string(upstream.key) %>"/>
+      <input type="submit" value="Delete this upstream"/>
+    </form>
+  </div>
+</div>

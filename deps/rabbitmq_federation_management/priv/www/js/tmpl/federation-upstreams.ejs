@@ -1,8 +1,8 @@
-<h1>Federation Connections</h1>
+<h1>Federation Upstreams</h1>
 <div class="section">
-  <h2>Connections</h2>
+  <h2>Upstreams</h2>
   <div class="hider updatable">
-<% if (connections.length > 0) { %>
+<% if (upstreams.length > 0) { %>
 <table class="list">
  <thead>
   <tr>
@@ -18,33 +18,33 @@
  </thead>
  <tbody>
 <%
- for (var i = 0; i < connections.length; i++) {
-    var connection = connections[i];
+ for (var i = 0; i < upstreams.length; i++) {
+    var upstream = upstreams[i];
 %>
    <tr<%= alt_rows(i)%>>
-     <td><%= link_fed_conn(connection.key) %></td>
-     <td><%= fmt_shortened_uri(connection.value.uri) %></td>
-     <td class="r"><%= fmt_time(connection.value.expires, 'ms') %></td>
-     <td class="r"><%= fmt_time(connection.value.message_ttl, 'ms') %></td>
-     <td class="r"><%= connection.value.max_hops %></td>
-     <td class="r"><%= connection.value.prefetch_count %></td>
-     <td class="r"><%= fmt_time(connection.value.reconnect_delay, 's') %></td>
-     <td class="r"><%= connection.value.ha_policy %></td>
+     <td><%= link_fed_conn(upstream.key) %></td>
+     <td><%= fmt_shortened_uri(upstream.value.uri) %></td>
+     <td class="r"><%= fmt_time(upstream.value.expires, 'ms') %></td>
+     <td class="r"><%= fmt_time(upstream.value['message-ttl'], 'ms') %></td>
+     <td class="r"><%= upstream.value['max-hops'] %></td>
+     <td class="r"><%= upstream.value['prefetch-count'] %></td>
+     <td class="r"><%= fmt_time(upstream.value['reconnect-delay'], 's') %></td>
+     <td class="r"><%= upstream.value['ha-policy'] %></td>
    </tr>
 <% } %>
  </tbody>
 </table>
 <% } else { %>
-  <p>... no connections ...</p>
+  <p>... no upstreams ...</p>
 <% } %>
   </div>
 </div>
 
 <div class="section-hidden">
-  <h2>Add a new connection</h2>
+  <h2>Add a new upstream</h2>
   <div class="hider">
     <form action="#/fed-parameters" method="put">
-      <input type="hidden" name="component" value="federation_connection"/>
+      <input type="hidden" name="component" value="federation-upstream"/>
       <table class="form">
         <tr>
           <th><label>Name:</label></th>
@@ -70,7 +70,7 @@
               <span class="help" id="federation-ttl"></span>
             </label>
           </th>
-          <td><input type="text" name="message_ttl"/> ms</td>
+          <td><input type="text" name="message-ttl"/> ms</td>
         </tr>
         <tr>
           <th>
@@ -79,7 +79,7 @@
               <span class="help" id="federation-max-hops"></span>
             </label>
           </th>
-          <td><input type="text" name="max_hops"/></td>
+          <td><input type="text" name="max-hops"/></td>
         </tr>
         <tr>
           <th>
@@ -88,7 +88,7 @@
               <span class="help" id="federation-prefetch"></span>
             </label>
           </th>
-          <td><input type="text" name="prefetch_count"/></td>
+          <td><input type="text" name="prefetch-count"/></td>
         </tr>
         <tr>
           <th>
@@ -97,7 +97,7 @@
               <span class="help" id="federation-reconnect"></span>
             </label>
           </th>
-          <td><input type="text" name="reconnect_delay"/> s</td>
+          <td><input type="text" name="reconnect-delay"/> s</td>
         </tr>
         <tr>
           <th>
@@ -106,10 +106,10 @@
               <span class="help" id="federation-ha-policy"></span>
             </label>
           </th>
-          <td><input type="text" name="ha_policy"/></td>
+          <td><input type="text" name="ha-policy"/></td>
         </tr>
       </table>
-      <input type="submit" value="Add connection"/>
+      <input type="submit" value="Add upstream"/>
     </form>
   </div>
 </div>
