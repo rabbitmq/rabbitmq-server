@@ -240,12 +240,11 @@ change_node_type(Type) ->
                                 "Non-clustered nodes can only be disc nodes"}});
         true  -> ok
     end,
-
     DiscoveryNodes = all_clustered_nodes(),
-    ClusterNodes =
+    {AllNodes, DiscNodes, _} =
         case discover_cluster(DiscoveryNodes) of
-            {ok, {ClusterNodes0, _, _}} ->
-                ClusterNodes0;
+            {ok, Status} ->
+                Status;
             {error, _Reason} ->
                 throw({error,
                        {cannot_connect_to_cluster,
@@ -254,15 +253,19 @@ change_node_type(Type) ->
                         "you can use the \"recluster\" command to point to the "
                         "new cluster nodes"}})
     end,
-
     WantDiscNode = case Type of
                        ram  -> false;
                        disc -> true
                    end,
-
-    ok = init_db_with_mnesia(ClusterNodes, WantDiscNode, false),
-
-    ok.
+    case not WantDiscNode andalso is_only_disc_node(node(), DiscNodes) of
+        true  -> throw({error,
+                        {standalone_ram_node,
+                         "You can't change the node type to ram if the node is "
+                         "the only disc node in its cluster. Please add more "
+                         "disc nodes to the cluster first."}});
+        false -> ok
+    end,
+    ok = init_db_with_mnesia(AllNodes, WantDiscNode, false).
 
 recluster(DiscoveryNode) ->
     ensure_mnesia_not_running(),
@@ -1032,8 +1035,11 @@ wait_for(Condition) ->
     error_logger:info_msg("Waiting for ~p...~n", [Condition]),
     timer:sleep(1000).
 
+is_only_disc_node(Node, DiscNodes) ->
+    [Node] =:= DiscNodes.
+
 is_only_disc_node(Node) ->
-    [Node] =:= clustered_disc_nodes().
+    is_only_disc_node(Node, clustered_disc_nodes()).
 
 start_mnesia(CheckConsistency) ->
     case CheckConsistency of
