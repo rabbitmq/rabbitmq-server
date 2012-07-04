@@ -337,7 +337,7 @@ status() ->
                      (Type, Nodes) -> [{Type, Nodes}]
                  end,
     [{nodes, (IfNonEmpty(disc, clustered_disc_nodes()) ++
-                  IfNonEmpty(ram, all_clustered_ram_nodes()))},
+                  IfNonEmpty(ram, clustered_ram_nodes()))},
      {running_nodes, running_clustered_nodes()}].
 
 is_db_empty() ->
@@ -362,7 +362,7 @@ clustered_disc_nodes() ->
     {_, DiscNodes, _} = cluster_status(),
     DiscNodes.
 
-all_clustered_ram_nodes() ->
+clustered_ram_nodes() ->
     {AllNodes, DiscNodes, _} = cluster_status(),
     ordsets:subtract(AllNodes, DiscNodes).
 
