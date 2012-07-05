@@ -73,8 +73,8 @@
 var username = null;
 var nodename = null;
 for (var i in globals) {
-   if (globals[i].key == 'local_username') username = globals[i].value;
-   if (globals[i].key == 'local_nodename') nodename = globals[i].value;
+   if (globals[i].key == 'local-username') username = globals[i].value;
+   if (globals[i].key == 'local-nodename') nodename = globals[i].value;
 }
 %>
 <div class="section-hidden">
@@ -87,7 +87,7 @@ for (var i in globals) {
           <span class="help" id="federation-local-username"></span>
           <form action="#/fed-globals" method="put">
             <input type="hidden" name="component" value="federation"/>
-            <input type="hidden" name="key" value="local_username"/>
+            <input type="hidden" name="key" value="local-username"/>
             <input type="text" name="value" value="<%= username %>" />
             <input type="submit" value="Update"/>
           </form>
@@ -97,7 +97,7 @@ for (var i in globals) {
           <span class="help" id="federation-explicit-identity"></span>
           <form action="#/fed-globals" method="put">
             <input type="hidden" name="component" value="federation"/>
-            <input type="hidden" name="key" value="local_nodename"/>
+            <input type="hidden" name="key" value="local-nodename"/>
             <input type="text" name="value" value="<%= nodename %>" />
             <input type="submit" value="Update"/>
           </form>

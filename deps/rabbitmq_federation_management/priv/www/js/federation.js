@@ -1,17 +1,17 @@
 dispatcher_add(function(sammy) {
     sammy.get('#/federation', function() {
-            render({'links':       '/federation-links',
-                    'connections': '/parameters/federation_connection',
-                    'globals':     '/parameters/federation'},
+            render({'links':     '/federation-links',
+                    'upstreams': '/parameters/federation-upstream',
+                    'globals':   '/parameters/federation'},
                 'federation', '#/federation');
         });
-    sammy.get('#/federation-connections', function() {
-            render({'connections': '/parameters/federation_connection'},
-                'federation-connections', '#/federation-connections');
+    sammy.get('#/federation-upstreams', function() {
+            render({'upstreams': '/parameters/federation-upstream'},
+                   'federation-upstreams', '#/federation-upstreams');
         });
-    sammy.get('#/federation-connections/:id', function() {
-            render({'connection': '/parameters/federation_connection/' + esc(this.params['id'])},
-                'federation-connection', '#/federation');
+    sammy.get('#/federation-upstreams/:id', function() {
+            render({'upstream': '/parameters/federation-upstream/' + esc(this.params['id'])},
+                   'federation-upstream', '#/federation');
         });
     sammy.put('#/fed-globals', function() {
             if (this.params.value == '') this.params.value = null;
@@ -21,8 +21,8 @@ dispatcher_add(function(sammy) {
             return false;
         });
     sammy.put('#/fed-parameters', function() {
-            var num_keys = ['expires', 'message_ttl', 'max_hops',
-                            'prefetch_count', 'reconnect_delay'];
+            var num_keys = ['expires', 'message-ttl', 'max-hops',
+                            'prefetch-count', 'reconnect-delay'];
             put_parameter(this, [], num_keys);
             return false;
         });
@@ -34,7 +34,7 @@ dispatcher_add(function(sammy) {
 });
 
 NAVIGATION['Admin'][0]['Federation Status'] = ['#/federation', true];
-NAVIGATION['Admin'][0]['Federation Connections'] = ['#/federation-connections', true];
+NAVIGATION['Admin'][0]['Federation Upstreams'] = ['#/federation-upstreams', true];
 
 VHOST_QUERIES["/federation-links"] = "";
 SORT_QUERIES["/federation-links"] = "";
@@ -64,5 +64,5 @@ HELP['federation-ha-policy'] =
     'Federation declares a queue at the upstream node to buffer messages waiting to be sent. Use this to set the x-ha-policy argument for this queue.';
 
 function link_fed_conn(name) {
-    return _link_to(fmt_escape_html(name), '#/federation-connections/' + esc(name))
+    return _link_to(fmt_escape_html(name), '#/federation-upstreams/' + esc(name))
 }
