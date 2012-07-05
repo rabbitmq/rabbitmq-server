@@ -26,11 +26,13 @@
 -define(NODE_OPT, "-n").
 -define(VHOST_OPT, "-p").
 -define(RAM_OPT, "--ram").
+-define(OFFLINE_OPT, "--offline").
 
 -define(QUIET_DEF, {?QUIET_OPT, flag}).
 -define(NODE_DEF(Node), {?NODE_OPT, {option, Node}}).
 -define(VHOST_DEF, {?VHOST_OPT, {option, "/"}}).
 -define(RAM_DEF, {?RAM_OPT, flag}).
+-define(OFFLINE_DEF, {?OFFLINE_OPT, flag}).
 
 -define(GLOBAL_DEFS(Node), [?QUIET_DEF, ?NODE_DEF(Node)]).
 
@@ -46,7 +48,7 @@
          {join_cluster, [?RAM_DEF]},
          change_node_type,
          recluster,
-         remove_node,
+         {remove_node, [?OFFLINE_OPT]},
          cluster_status,
 
          add_user,
@@ -256,10 +258,12 @@ action(recluster, Node, [ClusterNodeS], _Opts, Inform) ->
     Inform("Re-clustering ~p with ~p", [Node, ClusterNode]),
     rpc_call(Node, rabbit_mnesia, recluster, [ClusterNode]);
 
-action(remove_node, Node, [ClusterNodeS], _Opts, Inform) ->
+action(remove_node, Node, [ClusterNodeS], Opts, Inform) ->
     ClusterNode = list_to_atom(ClusterNodeS),
+    RemoveWhenOffline = proplists:get_bool(?OFFLINE_OPT, Opts),
     Inform("Removing node ~p from cluster", [ClusterNode]),
-    rpc_call(Node, rabbit_mnesia, remove_node, [ClusterNode]);
+    rpc_call(Node, rabbit_mnesia, remove_node,
+             [ClusterNode, RemoveWhenOffline]);
 
 action(wait, Node, [PidFile], _Opts, Inform) ->
     Inform("Waiting for ~p", [Node]),
