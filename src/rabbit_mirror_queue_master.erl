@@ -82,17 +82,13 @@ stop() ->
     %% Same as start/1.
     exit({not_valid_for_generic_backing_queue, ?MODULE}).
 
-init(#amqqueue { name = QName, mirror_nodes = MNodes } = Q, Recover,
+init(#amqqueue { name = QName } = Q, Recover,
      AsyncCallback) ->
     {ok, CPid} = rabbit_mirror_queue_coordinator:start_link(
                    Q, undefined, sender_death_fun(), length_fun()),
     GM = rabbit_mirror_queue_coordinator:get_gm(CPid),
-    MNodes1 =
-        (case MNodes of
-             all       -> rabbit_mnesia:all_clustered_nodes();
-             undefined -> [];
-             _         -> MNodes
-         end) -- [node()],
+    {_MNode, MNodes} = rabbit_mirror_queue_misc:determine_queue_nodes(Q),
+    MNodes1 = MNodes -- [node()],
     [rabbit_mirror_queue_misc:add_mirror(QName, Node) || Node <- MNodes1],
     {ok, BQ} = application:get_env(backing_queue_module),
     BQS = BQ:init(Q, Recover, AsyncCallback),

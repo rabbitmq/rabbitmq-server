@@ -20,6 +20,10 @@
          drop_mirror/2, drop_mirror/3, add_mirror/2, add_mirror/3,
          report_deaths/4]).
 
+%% temp
+-export([determine_queue_nodes/1, is_mirrored/1, slave_pids/1]).
+
+
 -include("rabbit.hrl").
 
 %%----------------------------------------------------------------------------
@@ -85,24 +89,19 @@ remove_from_queue(QueueName, DeadPids) ->
       end).
 
 on_node_up() ->
-    Qs =
+    QNames =
         rabbit_misc:execute_mnesia_transaction(
           fun () ->
                   mnesia:foldl(
-                    fun (#amqqueue { mirror_nodes = undefined }, QsN) ->
-                            QsN;
-                        (#amqqueue { name         = QName,
-                                     mirror_nodes = all }, QsN) ->
-                            [QName | QsN];
-                        (#amqqueue { name         = QName,
-                                     mirror_nodes = MNodes }, QsN) ->
+                    fun (Q = #amqqueue{name = QName}, QNames0) ->
+                            {_MNode, MNodes} = determine_queue_nodes(Q),
                             case lists:member(node(), MNodes) of
-                                true  -> [QName | QsN];
-                                false -> QsN
+                                true  -> [QName | QNames0];
+                                false -> QNames0
                             end
                     end, [], rabbit_queue)
           end),
-    [add_mirror(Q, node()) || Q <- Qs],
+    [add_mirror(QName, node()) || QName <- QNames],
     ok.
 
 drop_mirror(VHostPath, QueueName, MirrorNode) ->
@@ -150,14 +149,13 @@ add_mirror(Queue, MirrorNode) ->
               end
       end).
 
-if_mirrored_queue(Queue, Fun) ->
-    rabbit_amqqueue:with(
-      Queue, fun (#amqqueue { arguments = Args } = Q) ->
-                     case rabbit_misc:table_lookup(Args, <<"x-ha-policy">>) of
-                         undefined -> ok;
-                         _         -> Fun(Q)
-                     end
-             end).
+if_mirrored_queue(QName, Fun) ->
+    rabbit_amqqueue:with(QName, fun (Q) ->
+                                        case is_mirrored(Q) of
+                                            false -> ok;
+                                            true  -> Fun(Q)
+                                        end
+                                end).
 
 report_deaths(_MirrorPid, _IsMaster, _QueueName, []) ->
     ok;
@@ -172,3 +170,36 @@ report_deaths(MirrorPid, IsMaster, QueueName, DeadPids) ->
                      end,
                      rabbit_misc:pid_to_string(MirrorPid),
                      [[rabbit_misc:pid_to_string(P), $ ] || P <- DeadPids]]).
+
+%%----------------------------------------------------------------------------
+
+determine_queue_nodes(Q) ->
+    case [rabbit_policy:get(P, Q) || P <- [<<"ha-mode">>, <<"ha-params">>]] of
+        [{ok, <<"all">>}, _] ->
+            {node(), rabbit_mnesia:all_clustered_nodes()};
+        [{ok, <<"nodes">>}, {ok, Nodes}] ->
+            case [list_to_atom(binary_to_list(Node)) || Node <- Nodes] of
+                [Node]         -> {Node,   []};
+                [First | Rest] -> {First,  [First | Rest]}
+            end;
+        [{ok, <<"at-least">>}, {ok, Count}] ->
+            {node(), lists:sublist(rabbit_mnesia:all_clustered_nodes(), Count)};
+        _ ->
+            {node(), []}
+    end.
+
+is_mirrored(Q) ->
+    case rabbit_policy:get(<<"ha-mode">>, Q) of
+        {ok, <<"all">>}      -> true;
+        {ok, <<"nodes">>}    -> true;
+        {ok, <<"at-least">>} -> true;
+        _                    -> false
+    end.
+
+slave_pids(Q = #amqqueue{name = Name}) ->
+    case is_mirrored(Q) of
+        false -> not_mirrored;
+        true  -> {ok, #amqqueue{slave_pids = SPids}} =
+                     rabbit_amqqueue:lookup(Name),
+                 SPids
+    end.

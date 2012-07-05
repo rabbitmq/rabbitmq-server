@@ -230,8 +230,7 @@ matches(false, Q1, Q2) ->
     Q1#amqqueue.exclusive_owner =:= Q2#amqqueue.exclusive_owner andalso
     Q1#amqqueue.arguments =:= Q2#amqqueue.arguments andalso
     Q1#amqqueue.pid =:= Q2#amqqueue.pid andalso
-    Q1#amqqueue.slave_pids =:= Q2#amqqueue.slave_pids andalso
-    Q1#amqqueue.mirror_nodes =:= Q2#amqqueue.mirror_nodes.
+    Q1#amqqueue.slave_pids =:= Q2#amqqueue.slave_pids.
 
 bq_init(BQ, Q, Recover) ->
     Self = self(),
@@ -296,11 +295,11 @@ next_state(State = #q{backing_queue = BQ, backing_queue_state = BQS}) ->
         timed -> {ensure_sync_timer(State1), 0             }
     end.
 
-backing_queue_module(#amqqueue{arguments = Args}) ->
-    case rabbit_misc:table_lookup(Args, <<"x-ha-policy">>) of
-        undefined -> {ok, BQM} = application:get_env(backing_queue_module),
-                     BQM;
-        _Policy   -> rabbit_mirror_queue_master
+backing_queue_module(Q) ->
+    case rabbit_mirror_queue_misc:is_mirrored(Q) of
+        false -> {ok, BQM} = application:get_env(backing_queue_module),
+                 BQM;
+        true  -> rabbit_mirror_queue_master
     end.
 
 ensure_sync_timer(State = #q{sync_timer_ref = undefined}) ->
@@ -906,11 +905,11 @@ infos(Items, State) ->
     Prefix ++ [{Item, i(Item, State)}
                || Item <- (Items1 -- [synchronised_slave_pids])].
 
-slaves_status(#q{q = #amqqueue{name = Name}}) ->
-    case rabbit_amqqueue:lookup(Name) of
-        {ok, #amqqueue{mirror_nodes = undefined}} ->
+slaves_status(#q{q = Q}) ->
+    case rabbit_mirror_queue_misc:slave_pids(Q) of
+        not_mirrored -> %% TODO do we need this branch?
             [{slave_pids, ''}, {synchronised_slave_pids, ''}];
-        {ok, #amqqueue{slave_pids = SPids}} ->
+        SPids ->
             {Results, _Bad} =
                 delegate:invoke(SPids, fun rabbit_mirror_queue_slave:info/1),
             {SPids1, SSPids} =
@@ -955,10 +954,10 @@ i(consumers, _) ->
 i(memory, _) ->
     {memory, M} = process_info(self(), memory),
     M;
-i(slave_pids, #q{q = #amqqueue{name = Name}}) ->
-    case rabbit_amqqueue:lookup(Name) of
-        {ok, #amqqueue{mirror_nodes = undefined}} -> [];
-        {ok, #amqqueue{slave_pids = SPids}}       -> SPids
+i(slave_pids, #q{q = Q}) ->
+    case rabbit_mirror_queue_misc:slave_pids(Q) of
+        not_mirrored -> [];
+        SPids        -> SPids
     end;
 i(backing_queue_status, #q{backing_queue_state = BQS, backing_queue = BQ}) ->
     BQ:status(BQS);

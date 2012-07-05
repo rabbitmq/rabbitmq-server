@@ -118,8 +118,7 @@
                   exclusive_owner :: rabbit_types:maybe(pid()),
                   arguments       :: rabbit_framing:amqp_table(),
                   pid             :: rabbit_types:maybe(pid()),
-                  slave_pids      :: [pid()],
-                  mirror_nodes    :: [node()] | 'undefined' | 'all'}).
+                  slave_pids      :: [pid()]}).
 
 -type(exchange() ::
         #exchange{name        :: rabbit_exchange:name(),
