@@ -271,18 +271,21 @@ recluster(DiscoveryNode) ->
     ensure_mnesia_not_running(),
     ensure_mnesia_dir(),
 
-    ClusterNodes =
+    Status = {AllNodes, _, _} =
         case discover_cluster(DiscoveryNode) of
-            {ok, {ClusterNodes0, _, _}} ->
-                ClusterNodes0;
+            {ok, Status0} ->
+                Status0;
             {error, _Reason} ->
                 throw({error,
                        {cannot_connect_to_node,
                         "Could not connect to the cluster node provided"}})
         end,
-
-    case lists:member(node(), ClusterNodes) of
-        true  -> init_db_with_mnesia(ClusterNodes, is_disc_node(), false);
+    case ordsets:is_element(node(), AllNodes) of
+        true  -> %% As in `check_consistency/0', we can safely delete the schema
+                 %% here, since it'll be replicated from the other nodes
+                 mnesia:delete_schema([node()]),
+                 rabbit_node_monitor:write_cluster_status_file(Status),
+                 init_db_with_mnesia(AllNodes, is_disc_node(), false);
         false -> throw({error,
                         {inconsistent_cluster,
                          "The nodes provided do not have this node as part of "
@@ -293,7 +296,7 @@ recluster(DiscoveryNode) ->
 
 %% We proceed like this: try to remove the node locally. If mnesia is offline
 %% then we try to remove it remotely on some other node. If there are no other
-%% nodes running, then *if the current node is a disk node* we force-load mnesia
+%% nodes running, then *if the current node is a disc node* we force-load mnesia
 %% and remove the node.
 remove_node(Node) ->
     case ordsets:is_element(Node, all_clustered_nodes()) of
