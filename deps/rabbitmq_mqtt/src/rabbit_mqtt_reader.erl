@@ -56,6 +56,7 @@ init(SupPid, Configuration) ->
                                     recv_outstanding   = false}))),
                 log(info, "closing MQTT connection ~p (~s)~n",
                     [self(), ConnStr])
+
             catch
                 _:Ex -> log(error, "closing MQTT connection ~p (~s):~n~p~n",
                           [self(), ConnStr, Ex])

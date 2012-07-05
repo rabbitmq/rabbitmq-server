@@ -33,6 +33,7 @@
                 send_fun
                }).
 
+-define(DEFAULT_EXCHANGE, <<"amq.topic">>).
 -define(MQTT_PROTOCOL_VERSION, 3).
 -define(FLUSH_TIMEOUT, 60000).
 
@@ -180,7 +181,7 @@ process_request(?PUBLISH,
                   variable = #mqtt_frame_publish { topic_name = TopicName,
                                                    message_id = _MessageId },
                   payload = Payload }, #state { channel = Channel } = State) ->
-    Method = #'basic.publish'{ exchange    = <<"amq.topic">>,
+    Method = #'basic.publish'{ exchange    = ?DEFAULT_EXCHANGE,
                                routing_key = translate_topic(TopicName)},
     amqp_channel:cast(Channel, Method, #amqp_msg{payload = Payload}),
     {noreply, State, hibernate};
@@ -199,7 +200,7 @@ process_request(?SUBSCRIBE,
     QosResponse =
         [begin
             Binding = #'queue.bind'{queue       = Queue,
-                                    exchange    = <<"amq.topic">>,
+                                    exchange    = ?DEFAULT_EXCHANGE,
                                     routing_key = translate_topic(TopicName)},
             #'queue.bind_ok'{} = amqp_channel:call(Channel, Binding),
             ?QOS_0
@@ -221,7 +222,7 @@ process_request(?UNSUBSCRIBE,
     Queue = subcription_queue_name(ClientId),
     [begin
         Binding = #'queue.unbind'{queue       = Queue,
-                                  exchange    = <<"amq.topic">>,
+                                  exchange    = ?DEFAULT_EXCHANGE,
                                   routing_key = translate_topic(TopicName)},
         #'queue.unbind_ok'{} = amqp_channel:call(Channel, Binding)
      end || #mqtt_topic { name = TopicName } <- Topics ],
@@ -232,7 +233,10 @@ process_request(?UNSUBSCRIBE,
 
 process_request(?PINGREQ, _, State) ->
     send_frame(#mqtt_frame{ fixed = #mqtt_frame_fixed {type = ?PINGRESP}}, State),
-    {noreply, State, hibernate}.
+    {noreply, State, hibernate};
+
+process_request(?DISCONNECT, _, State) ->
+    {stop, normal, close_connection(State)}.
 
 subcription_queue_name(ClientId) ->
     list_to_binary("MQTT_subscription_" ++ ClientId).

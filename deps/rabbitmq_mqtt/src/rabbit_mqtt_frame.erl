@@ -110,12 +110,14 @@ parse_frame(Bin, #mqtt_frame_fixed{ type = Type,
                           Rest);
                 N -> {error, {subscription_frame_with_unexpected_qos, Subs, N}}
             end;
-        {?PINGREQ, Rest} ->
+        {Minimal, Rest}
+          when Minimal =:= ?DISCONNECT orelse Minimal =:= ?PINGREQ ->
             Length = 0,
             wrap(Fixed, Rest);
-        TooShortBin ->
+        {_, TooShortBin} ->
             {more, fun(BinMore) ->
-                           parse_frame(<<TooShortBin, BinMore>>, Fixed, Length)
+                           parse_frame(<<TooShortBin/binary, BinMore/binary>>,
+                                       Fixed, Length)
                    end}
      end.
 
