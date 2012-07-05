@@ -206,7 +206,7 @@ run-qc: all
 start-background-node: all
 	-rm -f $(RABBITMQ_MNESIA_DIR).pid
 	mkdir -p $(RABBITMQ_MNESIA_DIR)
-	setsid sh -c "$(MAKE) run-background-node > $(RABBITMQ_MNESIA_DIR)/startup_log 2> $(RABBITMQ_MNESIA_DIR)/startup_err" &
+	nohup sh -c "$(MAKE) run-background-node > $(RABBITMQ_MNESIA_DIR)/startup_log 2> $(RABBITMQ_MNESIA_DIR)/startup_err" > /dev/null &
 	./scripts/rabbitmqctl -n $(RABBITMQ_NODENAME) wait $(RABBITMQ_MNESIA_DIR).pid kernel
 
 start-rabbit-on-node: all
