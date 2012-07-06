@@ -59,7 +59,7 @@ init(SupPid, Configuration) ->
                 log(info, "closing STOMP connection ~p (~s)~n",
                     [self(), ConnStr])
             catch
-                Ex -> log(error, "closing STOMP connection ~p (~s):~n~p~n",
+                _:Ex -> log(error, "closing STOMP connection ~p (~s):~n~p~n",
                           [self(), ConnStr, Ex])
             after
                 rabbit_stomp_processor:flush_and_die(ProcessorPid)
