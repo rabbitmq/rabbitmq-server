@@ -21,7 +21,7 @@
          report_deaths/4]).
 
 %% temp
--export([determine_queue_nodes/1, is_mirrored/1, slave_pids/1]).
+-export([queue_nodes/1, is_mirrored/1, slave_pids/1]).
 
 
 -include("rabbit.hrl").
@@ -94,7 +94,7 @@ on_node_up() ->
           fun () ->
                   mnesia:foldl(
                     fun (Q = #amqqueue{name = QName}, QNames0) ->
-                            {_MNode, MNodes} = determine_queue_nodes(Q),
+                            {_MNode, MNodes} = queue_nodes(Q),
                             case lists:member(node(), MNodes) of
                                 true  -> [QName | QNames0];
                                 false -> QNames0
@@ -173,7 +173,7 @@ report_deaths(MirrorPid, IsMaster, QueueName, DeadPids) ->
 
 %%----------------------------------------------------------------------------
 
-determine_queue_nodes(Q) ->
+queue_nodes(Q) ->
     case [rabbit_policy:get(P, Q) || P <- [<<"ha-mode">>, <<"ha-params">>]] of
         [{ok, <<"all">>}, _] ->
             {node(), rabbit_mnesia:all_clustered_nodes()};

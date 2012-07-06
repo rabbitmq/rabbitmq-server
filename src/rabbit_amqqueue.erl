@@ -207,18 +207,18 @@ recover_durable_queues(DurableQueues) ->
 
 declare(QueueName, Durable, AutoDelete, Args, Owner) ->
     ok = check_declare_arguments(QueueName, Args),
-    Node = node(), %% TODO utter rubbish
-    Q = start_queue_process(
-          Node, rabbit_policy:set(#amqqueue{name            = QueueName,
-                                            durable         = Durable,
-                                            auto_delete     = AutoDelete,
-                                            arguments       = Args,
-                                            exclusive_owner = Owner,
-                                            pid             = none,
-                                            slave_pids      = []})),
-    case gen_server2:call(Q#amqqueue.pid, {init, false}, infinity) of
+    Q0 = rabbit_policy:set(#amqqueue{name            = QueueName,
+                                     durable         = Durable,
+                                     auto_delete     = AutoDelete,
+                                     arguments       = Args,
+                                     exclusive_owner = Owner,
+                                     pid             = none,
+                                     slave_pids      = []}),
+    {Node, _MNodes} = rabbit_mirror_queue_misc:queue_nodes(Q0),
+    Q1 = start_queue_process(Node, Q0),
+    case gen_server2:call(Q1#amqqueue.pid, {init, false}, infinity) of
         not_found -> rabbit_misc:not_found(QueueName);
-        Q1        -> Q1
+        Q2        -> Q2
     end.
 
 internal_declare(Q, true) ->
