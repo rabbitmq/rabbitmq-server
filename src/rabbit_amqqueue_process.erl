@@ -93,6 +93,7 @@
          consumers,
          memory,
          slave_pids,
+         synchronised_slave_pids,
          backing_queue_status
         ]).
 
@@ -102,9 +103,7 @@
          durable,
          auto_delete,
          arguments,
-         owner_pid,
-         slave_pids,
-         synchronised_slave_pids
+         owner_pid
         ]).
 
 -define(INFO_KEYS,
@@ -893,37 +892,7 @@ make_dead_letter_msg(Reason,
 
 now_micros() -> timer:now_diff(now(), {0,0,0}).
 
-infos(Items, State) ->
-    {Prefix, Items1} =
-        case lists:member(synchronised_slave_pids, Items) of
-            true  -> Prefix1 = slaves_status(State),
-                     case lists:member(slave_pids, Items) of
-                         true  -> {Prefix1, Items -- [slave_pids]};
-                         false -> {proplists:delete(slave_pids, Prefix1), Items}
-                     end;
-            false -> {[], Items}
-        end,
-    Prefix ++ [{Item, i(Item, State)}
-               || Item <- (Items1 -- [synchronised_slave_pids])].
-
-slaves_status(#q{q = #amqqueue{name = Name}}) ->
-    case rabbit_amqqueue:lookup(Name) of
-        {ok, #amqqueue{mirror_nodes = undefined}} ->
-            [{slave_pids, ''}, {synchronised_slave_pids, ''}];
-        {ok, #amqqueue{slave_pids = SPids}} ->
-            {Results, _Bad} =
-                delegate:invoke(SPids, fun rabbit_mirror_queue_slave:info/1),
-            {SPids1, SSPids} =
-                lists:foldl(
-                  fun ({Pid, Infos}, {SPidsN, SSPidsN}) ->
-                          {[Pid | SPidsN],
-                           case proplists:get_bool(is_synchronised, Infos) of
-                               true  -> [Pid | SSPidsN];
-                               false -> SSPidsN
-                           end}
-                  end, {[], []}, Results),
-            [{slave_pids, SPids1}, {synchronised_slave_pids, SSPids}]
-    end.
+infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
 
 i(name,        #q{q = #amqqueue{name        = Name}})       -> Name;
 i(durable,     #q{q = #amqqueue{durable     = Durable}})    -> Durable;
@@ -957,8 +926,13 @@ i(memory, _) ->
     M;
 i(slave_pids, #q{q = #amqqueue{name = Name}}) ->
     case rabbit_amqqueue:lookup(Name) of
-        {ok, #amqqueue{mirror_nodes = undefined}} -> [];
+        {ok, #amqqueue{mirror_nodes = undefined}} -> '';
         {ok, #amqqueue{slave_pids = SPids}}       -> SPids
+    end;
+i(synchronised_slave_pids, #q{q = #amqqueue{name = Name}}) ->
+    case rabbit_amqqueue:lookup(Name) of
+        {ok, #amqqueue{mirror_nodes = undefined}} -> '';
+        {ok, #amqqueue{sync_slave_pids = SSPids}} -> SSPids
     end;
 i(backing_queue_status, #q{backing_queue_state = BQS, backing_queue = BQ}) ->
     BQ:status(BQS);

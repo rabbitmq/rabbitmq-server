@@ -442,8 +442,6 @@ promote_me(From, #state { q                   = Q = #amqqueue { name = QName },
                           msg_id_ack          = MA,
                           msg_id_status       = MS,
                           known_senders       = KS }) ->
-    rabbit_event:notify(queue_slave_promoted, [{pid,  self()},
-                                               {name, QName}]),
     rabbit_log:info("Mirrored-queue (~s): Promoting slave ~s to master~n",
                     [rabbit_misc:rs(QName), rabbit_misc:pid_to_string(self())]),
     Q1 = Q #amqqueue { pid = self() },
@@ -906,10 +904,20 @@ maybe_store_ack(true, MsgId, AckTag, State = #state { msg_id_ack = MA,
 
 %% We intentionally leave out the head where a slave becomes
 %% unsynchronised: we assert that can never happen.
-set_synchronised(true, State = #state { q = #amqqueue { name = QName },
+set_synchronised(true, State = #state { q = Q = #amqqueue { name = QName },
                                         synchronised = false }) ->
-    rabbit_event:notify(queue_slave_synchronised, [{pid,  self()},
-                                                   {name, QName}]),
+    Self = self(),
+    rabbit_misc:execute_mnesia_transaction(
+      fun () ->
+              case mnesia:read({rabbit_queue, QName}) of
+                  [] ->
+                      ok;
+                  [Q1 = #amqqueue{sync_slave_pids = SSPids}] ->
+                      Q2 = Q1#amqqueue{sync_slave_pids = [Self | SSPids]},
+                      ok = rabbit_amqqueue:store_queue(Q2)
+              end
+      end),
+    rabbit_amqqueue:info(Q, [name]), %% Wake it up TODO this doesn't work
     State #state { synchronised = true };
 set_synchronised(true, State) ->
     State;

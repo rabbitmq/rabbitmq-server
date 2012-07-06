@@ -215,6 +215,7 @@ declare(QueueName, Durable, AutoDelete, Args, Owner) ->
                                             exclusive_owner = Owner,
                                             pid             = none,
                                             slave_pids      = [],
+                                            sync_slave_pids = [],
                                             mirror_nodes    = MNodes}),
     case gen_server2:call(Q#amqqueue.pid, {init, false}, infinity) of
         not_found -> rabbit_misc:not_found(QueueName);
