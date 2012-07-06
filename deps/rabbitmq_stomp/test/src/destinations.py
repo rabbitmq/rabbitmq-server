@@ -337,22 +337,26 @@ class TestDurableSubscription(base.BaseTest):
                                     'receipt': 1,
                                     'id': id})
 
-    def __assert_receipt(self, listener=None):
+    def __assert_receipt(self, listener=None, pos=None):
         if not listener:
             listener = self.listener
 
         self.assertTrue(listener.await(5))
         self.assertEquals(1, len(self.listener.receipts))
+        if pos:
+            self.assertEquals(pos, self.listener.receipts[0]['msg_no'])
 
-    def __assert_message(self, msg, listener=None):
+    def __assert_message(self, msg, listener=None, pos=None):
         if not listener:
             listener = self.listener
 
         self.assertTrue(listener.await(5))
         self.assertEquals(1, len(listener.messages))
         self.assertEquals(msg, listener.messages[0]['message'])
+        if pos:
+            self.assertEquals(pos, self.listener.messages[0]['msg_no'])
 
-    def test_durability(self):
+    def test_durable_subscription(self):
         d = '/topic/durable'
 
         self.__subscribe(d)
@@ -367,12 +371,14 @@ class TestDurableSubscription(base.BaseTest):
         self.conn.unsubscribe(id=TestDurableSubscription.ID)
 
         # send again
-        self.listener.reset(1)
+        self.listener.reset(2)
         self.conn.send("second", destination=d)
 
-        # resubscribe and expect message
+        # resubscribe and expect receipt
         self.__subscribe(d)
-        self.__assert_message("second")
+        self.__assert_receipt(pos=1)
+        # and message
+        self.__assert_message("second", pos=2)
 
         # now unsubscribe (cancel)
         self.conn.unsubscribe(id=TestDurableSubscription.ID,
