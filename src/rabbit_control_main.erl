@@ -48,7 +48,7 @@
          {join_cluster, [?RAM_DEF]},
          change_node_type,
          recluster,
-         {remove_node, [?OFFLINE_OPT]},
+         {remove_node, [?OFFLINE_DEF]},
          cluster_status,
 
          add_user,
