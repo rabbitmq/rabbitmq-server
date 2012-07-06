@@ -30,6 +30,8 @@
 -export([on_node_down/1]).
 -export([update/2, store_queue/1, policy_changed/2]).
 
+%% temp
+-export([start_mirroring/1, stop_mirroring/1]).
 
 %% internal
 -export([internal_declare/2, internal_delete/2, run_backing_queue/3,
@@ -214,7 +216,7 @@ declare(QueueName, Durable, AutoDelete, Args, Owner) ->
                                      exclusive_owner = Owner,
                                      pid             = none,
                                      slave_pids      = []}),
-    {Node, _MNodes} = rabbit_mirror_queue_misc:queue_nodes(Q0),
+    {Node, _MNodes} = rabbit_mirror_queue_misc:suggested_queue_nodes(Q0),
     Q1 = start_queue_process(Node, Q0),
     case gen_server2:call(Q1#amqqueue.pid, {init, false}, infinity) of
         not_found -> rabbit_misc:not_found(QueueName);
@@ -267,8 +269,8 @@ store_queue(Q = #amqqueue{durable = false}) ->
     ok = mnesia:write(rabbit_queue, Q, write),
     ok.
 
-policy_changed(_Q1, _Q2) ->
-    ok.
+policy_changed(Q1, Q2) ->
+    rabbit_mirror_queue_misc:update_mirrors(Q1, Q2).
 
 start_queue_process(Node, Q) ->
     {ok, Pid} = rabbit_amqqueue_sup:start_child(Node, [Q]),
@@ -549,6 +551,9 @@ set_ram_duration_target(QPid, Duration) ->
 
 set_maximum_since_use(QPid, Age) ->
     gen_server2:cast(QPid, {set_maximum_since_use, Age}).
+
+start_mirroring(QPid) -> ok = delegate_call(QPid, start_mirroring).
+stop_mirroring(QPid) -> ok = delegate_call(QPid, stop_mirroring).
 
 on_node_down(Node) ->
     rabbit_misc:execute_mnesia_tx_with_tail(

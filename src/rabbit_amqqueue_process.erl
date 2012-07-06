@@ -1199,6 +1199,31 @@ handle_call({requeue, AckTags, ChPid}, From, State) ->
               ChPid, AckTags, State,
               fun (State1) -> requeue_and_run(AckTags, State1) end));
 
+handle_call(start_mirroring, _From, State = #q{backing_queue       = BQ,
+                                               backing_queue_state = BQS}) ->
+    %% lookup again to get policy for init_with_existing_bq
+    {ok, Q} = rabbit_amqqueue:lookup(qname(State)),
+    true = BQ =/= rabbit_mirror_queue_master, %% assertion
+    BQ1 = rabbit_mirror_queue_master,
+    BQS1 = BQ1:init_with_existing_bq(Q, BQ, BQS),
+    reply(ok, State#q{backing_queue       = BQ1,
+                      backing_queue_state = BQS1});
+
+handle_call(stop_mirroring, _From, State = #q{backing_queue       = BQ,
+                                              backing_queue_state = BQS}) ->
+    BQ = rabbit_mirror_queue_master, %% assertion
+    {BQ1, BQS1} = BQ:stop_mirroring(BQS),
+    rabbit_misc:execute_mnesia_transaction(
+      fun () ->
+              case mnesia:read({rabbit_queue, qname(State)}) of
+                  []  -> ok;
+                  [Q] -> rabbit_amqqueue:store_queue(
+                           Q#amqqueue{slave_pids = undefined})
+              end
+      end),
+    reply(ok, State#q{backing_queue       = BQ1,
+                      backing_queue_state = BQS1});
+
 handle_call(force_event_refresh, _From,
             State = #q{exclusive_consumer = Exclusive}) ->
     rabbit_event:notify(queue_created, infos(?CREATION_EVENT_KEYS, State)),
