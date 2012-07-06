@@ -309,8 +309,8 @@ start() ->
 boot() ->
     start_it(fun() ->
                      ok = ensure_application_loaded(),
-                     ok = rabbit_mnesia:prepare(),
                      maybe_hipe_compile(),
+                     ok = rabbit_mnesia:prepare(),
                      ok = ensure_working_log_handlers(),
                      ok = rabbit_upgrade:maybe_upgrade_mnesia(),
                      Plugins = rabbit_plugins:setup(),
