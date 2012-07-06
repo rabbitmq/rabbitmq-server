@@ -258,11 +258,12 @@ code_change(_OldVsn, State, _Extra) ->
 handle_dead_rabbit(Node) ->
     ok = rabbit_networking:on_node_down(Node),
     ok = rabbit_amqqueue:on_node_down(Node),
-    ok = rabbit_alarm:on_node_down(Node).
+    ok = rabbit_alarm:on_node_down(Node),
+    ok = rabbit_mnesia:on_node_down(Node).
 
 handle_live_rabbit(Node) ->
     ok = rabbit_alarm:on_node_up(Node),
-    ok = rabbit_mnesia:on_node_down(Node).
+    ok = rabbit_mnesia:on_node_up(Node).
 
 %%--------------------------------------------------------------------
 %% Internal utils
