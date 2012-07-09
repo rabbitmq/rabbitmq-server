@@ -197,8 +197,7 @@ handle_cast({node_up, Node, IsDiscNode}, State) ->
     case is_already_monitored({rabbit, Node}) of
         true  -> {noreply, State};
         false -> rabbit_log:info("rabbit on node ~p up~n", [Node]),
-                 {ok, {AllNodes, DiscNodes, RunningNodes}} =
-                     rabbit_mnesia:cluster_status_from_mnesia(),
+                 {AllNodes, DiscNodes, RunningNodes} = read_cluster_status_file(),
                  write_cluster_status_file(
                    {ordsets:add_element(Node, AllNodes),
                     case IsDiscNode of
@@ -211,8 +210,7 @@ handle_cast({node_up, Node, IsDiscNode}, State) ->
                  {noreply, State}
     end;
 handle_cast({joined_cluster, Node, IsDiscNode}, State) ->
-    {ok, {AllNodes, DiscNodes, RunningNodes}} =
-        rabbit_mnesia:cluster_status_from_mnesia(),
+    {AllNodes, DiscNodes, RunningNodes} = read_cluster_status_file(),
     write_cluster_status_file({ordsets:add_element(Node, AllNodes),
                                case IsDiscNode of
                                     true  -> ordsets:add_element(Node,
@@ -222,8 +220,7 @@ handle_cast({joined_cluster, Node, IsDiscNode}, State) ->
                                RunningNodes}),
     {noreply, State};
 handle_cast({left_cluster, Node}, State) ->
-    {ok, {AllNodes, DiscNodes, RunningNodes}} =
-        rabbit_mnesia:cluster_status_from_mnesia(),
+    {AllNodes, DiscNodes, RunningNodes} = read_cluster_status_file(),
     write_cluster_status_file({ordsets:del_element(Node, AllNodes),
                                ordsets:del_element(Node, DiscNodes),
                                ordsets:del_element(Node, RunningNodes)}),
@@ -233,8 +230,7 @@ handle_cast(_Msg, State) ->
 
 handle_info({'DOWN', _MRef, process, {rabbit, Node}, _Reason}, State) ->
     rabbit_log:info("rabbit on node ~p down~n", [Node]),
-    {ok, {AllNodes, DiscNodes, RunningNodes}} =
-        rabbit_mnesia:cluster_status_from_mnesia(),
+    {AllNodes, DiscNodes, RunningNodes} = read_cluster_status_file(),
     write_cluster_status_file({AllNodes, DiscNodes,
                                ordsets:del_element(Node, RunningNodes)}),
     ok = handle_dead_rabbit(Node),
