@@ -577,8 +577,7 @@ init_db_with_mnesia(ClusterNodes, WantDiscNode, CheckConsistency, Force) ->
         init_db_and_upgrade(ClusterNodes, WantDiscNode, Force)
     after
         stop_mnesia()
-    end,
-    ensure_mnesia_not_running().
+    end.
 
 init_db_with_mnesia(ClusterNodes, WantDiscNode, Force) ->
     init_db_with_mnesia(ClusterNodes, WantDiscNode, true, Force).
