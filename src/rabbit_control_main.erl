@@ -46,9 +46,9 @@
          rotate_logs,
 
          {join_cluster, [?RAM_DEF]},
-         change_node_type,
+         change_cluster_node_type,
          recluster,
-         {remove_node, [?OFFLINE_DEF]},
+         {remove_cluster_node, [?OFFLINE_DEF]},
          cluster_status,
 
          add_user,
@@ -251,23 +251,23 @@ action(join_cluster, Node, [ClusterNodeS], Opts, Inform) ->
     Inform("Clustering node ~p with ~p", [Node, ClusterNode]),
     rpc_call(Node, rabbit_mnesia, join_cluster, [ClusterNode, DiscNode]);
 
-action(change_node_type, Node, ["ram"], _Opts, Inform) ->
+action(change_cluster_node_type, Node, ["ram"], _Opts, Inform) ->
     Inform("Turning ~p into a ram node", [Node]),
-    rpc_call(Node, rabbit_mnesia, change_node_type, [ram]);
-action(change_node_type, Node, ["disc"], _Opts, Inform) ->
+    rpc_call(Node, rabbit_mnesia, change_cluster_node_type, [ram]);
+action(change_cluster_node_type, Node, ["disc"], _Opts, Inform) ->
     Inform("Turning ~p into a disc node", [Node]),
-    rpc_call(Node, rabbit_mnesia, change_node_type, [disc]);
+    rpc_call(Node, rabbit_mnesia, change_cluster_node_type, [disc]);
 
 action(recluster, Node, [ClusterNodeS], _Opts, Inform) ->
     ClusterNode = list_to_atom(ClusterNodeS),
     Inform("Re-clustering ~p with ~p", [Node, ClusterNode]),
     rpc_call(Node, rabbit_mnesia, recluster, [ClusterNode]);
 
-action(remove_node, Node, [ClusterNodeS], Opts, Inform) ->
+action(remove_cluster_node, Node, [ClusterNodeS], Opts, Inform) ->
     ClusterNode = list_to_atom(ClusterNodeS),
     RemoveWhenOffline = proplists:get_bool(?OFFLINE_OPT, Opts),
     Inform("Removing node ~p from cluster", [ClusterNode]),
-    rpc_call(Node, rabbit_mnesia, remove_node,
+    rpc_call(Node, rabbit_mnesia, remove_cluster_node,
              [ClusterNode, RemoveWhenOffline]);
 
 action(wait, Node, [PidFile], _Opts, Inform) ->

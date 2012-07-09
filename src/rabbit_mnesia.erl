@@ -23,8 +23,8 @@
          reset/0,
          force_reset/0,
          recluster/1,
-         change_node_type/1,
-         remove_node/2,
+         change_cluster_node_type/1,
+         remove_cluster_node/2,
 
          status/0,
          is_db_empty/0,
@@ -76,8 +76,8 @@
 -spec(reset/0 :: () -> 'ok').
 -spec(force_reset/0 :: () -> 'ok').
 -spec(recluster/1 :: (node()) -> 'ok').
--spec(change_node_type/1 :: (node_type()) -> 'ok').
--spec(remove_node/2 :: (node(), boolean()) -> 'ok').
+-spec(change_cluster_node_type/1 :: (node_type()) -> 'ok').
+-spec(remove_cluster_node/2 :: (node(), boolean()) -> 'ok').
 
 %% Various queries to get the status of the db
 -spec(status/0 :: () -> [{'nodes', [{node_type(), [node()]}]} |
@@ -234,7 +234,7 @@ reset(Force) ->
     ok = rabbit_node_monitor:reset_cluster_status_file(),
     ok.
 
-change_node_type(Type) ->
+change_cluster_node_type(Type) ->
     ensure_mnesia_dir(),
     ensure_mnesia_not_running(),
     case is_clustered() of
@@ -302,7 +302,7 @@ recluster(DiscoveryNode) ->
 %%   * All other nodes are offline
 %%   * This node was, at the best of our knowledge (see comment below) the last
 %%     or second to last after the node we're removing to go down
-remove_node(Node, RemoveWhenOffline) ->
+remove_cluster_node(Node, RemoveWhenOffline) ->
     case ordsets:is_element(Node, all_clustered_nodes()) of
         true  -> ok;
         false -> throw({error, {not_a_cluster_node,
@@ -354,7 +354,7 @@ remove_node_offline_node(Node) ->
                       try
                           [mnesia:force_load_table(T) ||
                               T <- rabbit_mnesia:table_names()],
-                          remove_node(Node, false),
+                          remove_cluster_node(Node, false),
                           ensure_mnesia_running()
                       after
                           stop_mnesia()
