@@ -202,7 +202,7 @@ reset(Force) ->
     Node = node(),
     case Force of
         true ->
-            all_clustered_nodes();
+            ok;
         false ->
             AllNodes = all_clustered_nodes(),
             %% Reconnecting so that we will get an up to date nodes.
@@ -221,7 +221,7 @@ reset(Force) ->
             leave_cluster(),
             rabbit_misc:ensure_ok(mnesia:delete_schema([Node]),
                                   cannot_delete_schema),
-            all_clustered_nodes()
+            ok
     end,
     %% We need to make sure that we don't end up in a distributed Erlang system
     %% with nodes while not being in an Mnesia cluster with them. We don't
