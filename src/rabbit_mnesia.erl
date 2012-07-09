@@ -514,45 +514,41 @@ table_names() ->
 %% is the need to and catching up if there are other nodes in the cluster
 %% already. It also updates the cluster status file.
 init_db(ClusterNodes, WantDiscNode, Force) ->
-    case change_extra_db_nodes(ClusterNodes, Force) of
-        {error, Reason} ->
-            throw({error, Reason});
-        {ok, Nodes} ->
-            %% Note that we use `system_info' here and not the cluster status
-            %% since when we start rabbit for the first time the cluster status
-            %% will say we are a disc node but the tables won't be present yet.
-            WasDiscNode = mnesia:system_info(use_dir),
-            case {Nodes, WasDiscNode, WantDiscNode} of
-                {[], _, false} ->
-                    %% Standalone ram node, we don't want that
-                    throw({error, cannot_create_standalone_ram_node});
-                {[], false, true} ->
-                    %% RAM -> disc, starting from scratch
-                    ok = create_schema();
-                {[], true, true} ->
-                    %% First disc node up
-                    ok;
-                {[AnotherNode | _], _, _} ->
-                    %% Subsequent node in cluster, catch up
-                    ensure_version_ok(
-                      rpc:call(AnotherNode, rabbit_version, recorded, [])),
-                    ok = wait_for_replicated_tables(),
-                    %% The sequence in which we delete the schema and then the
-                    %% other tables is important: if we delete the schema first
-                    %% when moving to RAM mnesia will loudly complain since it
-                    %% doesn't make much sense to do that. But when moving to
-                    %% disc, we need to move the schema first.
-                    case WantDiscNode of
-                        true  -> create_local_table_copy(schema, disc_copies),
-                                 create_local_table_copies(disc);
-                        false -> create_local_table_copies(ram),
-                                 create_local_table_copy(schema, ram_copies)
-                    end
-            end,
-            ensure_schema_integrity(),
-            rabbit_node_monitor:update_cluster_status_file(),
-            ok
-    end.
+    Nodes = change_extra_db_nodes(ClusterNodes, Force),
+    %% Note that we use `system_info' here and not the cluster status since when
+    %% we start rabbit for the first time the cluster status will say we are a
+    %% disc node but the tables won't be present yet.
+    WasDiscNode = mnesia:system_info(use_dir),
+    case {Nodes, WasDiscNode, WantDiscNode} of
+        {[], _, false} ->
+            %% Standalone ram node, we don't want that
+            throw({error, cannot_create_standalone_ram_node});
+        {[], false, true} ->
+            %% RAM -> disc, starting from scratch
+            ok = create_schema();
+        {[], true, true} ->
+            %% First disc node up
+            ok;
+        {[AnotherNode | _], _, _} ->
+            %% Subsequent node in cluster, catch up
+            ensure_version_ok(
+              rpc:call(AnotherNode, rabbit_version, recorded, [])),
+            ok = wait_for_replicated_tables(),
+            %% The sequence in which we delete the schema and then the other
+            %% tables is important: if we delete the schema first when moving to
+            %% RAM mnesia will loudly complain since it doesn't make much sense
+            %% to do that. But when moving to disc, we need to move the schema
+            %% first.
+            case WantDiscNode of
+                true  -> create_local_table_copy(schema, disc_copies),
+                         create_local_table_copies(disc);
+                false -> create_local_table_copies(ram),
+                         create_local_table_copy(schema, ram_copies)
+            end
+    end,
+    ensure_schema_integrity(),
+    rabbit_node_monitor:update_cluster_status_file(),
+    ok.
 
 init_db_and_upgrade(ClusterNodes, WantDiscNode, Force) ->
     ok = init_db(ClusterNodes, WantDiscNode, Force),
@@ -565,7 +561,7 @@ init_db_and_upgrade(ClusterNodes, WantDiscNode, Force) ->
     %% cluster
     case WantDiscNode of
         false -> start_mnesia(),
-                 {ok, _} = change_extra_db_nodes(ClusterNodes, true),
+                 change_extra_db_nodes(ClusterNodes, true),
                  wait_for_replicated_tables();
         true  -> ok
     end,
@@ -1105,10 +1101,10 @@ change_extra_db_nodes(ClusterNodes0, Force) ->
     ClusterNodes = lists:usort(ClusterNodes0) -- [node()],
     case mnesia:change_config(extra_db_nodes, ClusterNodes) of
         {ok, []} when not Force andalso ClusterNodes =/= [] ->
-            {error, {failed_to_cluster_with, ClusterNodes,
-                     "Mnesia could not connect to any disc nodes."}};
+            throw({error, {failed_to_cluster_with, ClusterNodes,
+                           "Mnesia could not connect to any disc nodes."}});
         {ok, Nodes} ->
-            {ok, Nodes}
+            Nodes
     end.
 
 %% What we really want is nodes running rabbit, not running mnesia. Using
