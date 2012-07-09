@@ -917,7 +917,7 @@ set_synchronised(true, State = #state { q = Q = #amqqueue { name = QName },
                       ok = rabbit_amqqueue:store_queue(Q2)
               end
       end),
-    rabbit_amqqueue:info(Q, [name]), %% Wake it up TODO this doesn't work
+    rabbit_amqqueue:info(Q, [name]), %% Wake it up
     State #state { synchronised = true };
 set_synchronised(true, State) ->
     State;

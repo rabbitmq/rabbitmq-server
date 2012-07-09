@@ -77,6 +77,7 @@ remove_from_queue(QueueName, DeadPids) ->
                                                  slave_pids      = SPids1,
                                                  sync_slave_pids = SSPids1},
                               ok = rabbit_amqqueue:store_queue(Q1),
+                              rabbit_amqqueue:info(Q1, [name]), %% Wake it up
                               {ok, QPid1, [QPid | SPids] -- Alive};
                           _ ->
                               %% Master has changed, and we're not it,
