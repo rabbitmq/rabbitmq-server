@@ -154,14 +154,14 @@ reset_cluster_status_file() ->
 %%----------------------------------------------------------------------------
 
 joined_cluster(Node, IsDiscNode) ->
-    gen_server:cast(rabbit_node_monitor, {rabbit_join, Node, IsDiscNode}).
+    gen_server:cast(?SERVER, {rabbit_join, Node, IsDiscNode}).
 
 notify_joined_cluster() ->
     cluster_multicall(joined_cluster, [node(), rabbit_mnesia:is_disc_node()]),
     ok.
 
 left_cluster(Node) ->
-    gen_server:cast(rabbit_node_monitor, {left_cluster, Node}).
+    gen_server:cast(?SERVER, {left_cluster, Node}).
 
 notify_left_cluster(Node) ->
     left_cluster(Node),
@@ -169,7 +169,7 @@ notify_left_cluster(Node) ->
     ok.
 
 node_up(Node, IsDiscNode) ->
-     gen_server:cast(rabbit_node_monitor, {node_up, Node, IsDiscNode}).
+     gen_server:cast(?SERVER, {node_up, Node, IsDiscNode}).
 
 notify_node_up() ->
     Nodes = cluster_multicall(node_up, [node(), rabbit_mnesia:is_disc_node()]),
