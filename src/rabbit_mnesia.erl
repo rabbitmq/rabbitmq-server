@@ -461,22 +461,23 @@ mnesia_nodes() ->
 cluster_status(WhichNodes, ForceMnesia) ->
     %% I don't want to call `running_nodes/1' unless if necessary, since it can
     %% deadlock when stopping applications.
-    case case mnesia_nodes() of
-             {ok, {AllNodes, DiscNodes}} ->
-                 {ok, {AllNodes, DiscNodes,
-                       fun() -> running_nodes(AllNodes) end}};
-             {error, _Reason} when not ForceMnesia ->
-                 {AllNodes, DiscNodes, RunningNodes} =
-                     rabbit_node_monitor:read_cluster_status_file(),
-                 %% The cluster status file records the status when the node is
-                 %% online, but we know for sure that the node is offline now, so
-                 %% we can remove it from the list of running nodes.
-                 {ok, {AllNodes, DiscNodes,
-                       fun() -> ordsets:del_element(node(), RunningNodes) end}};
-             Err = {error, _} ->
-                 Err
-         end
-    of
+    Nodes = case mnesia_nodes() of
+                {ok, {AllNodes, DiscNodes}} ->
+                    {ok, {AllNodes, DiscNodes,
+                          fun() -> running_nodes(AllNodes) end}};
+                {error, _Reason} when not ForceMnesia ->
+                    {AllNodes, DiscNodes, RunningNodes} =
+                        rabbit_node_monitor:read_cluster_status_file(),
+                    %% The cluster status file records the status when the node
+                    %% is online, but we know for sure that the node is offline
+                    %% now, so we can remove it from the list of running nodes.
+                    {ok,
+                     {AllNodes, DiscNodes,
+                      fun() -> ordsets:del_element(node(), RunningNodes) end}};
+                Err = {error, _} ->
+                    Err
+            end,
+    case Nodes of
         {ok, {AllNodes1, DiscNodes1, RunningNodesThunk}} ->
             {ok, case WhichNodes of
                      status  -> {AllNodes1, DiscNodes1, RunningNodesThunk()};
