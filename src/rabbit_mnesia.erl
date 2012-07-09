@@ -318,59 +318,61 @@ remove_node(Node, RemoveWhenOffline) ->
         ok ->
             ok;
         {error, mnesia_not_running} ->
-            case {ordsets:del_element(Node,
-                                      running_nodes(all_clustered_nodes())),
-                  is_disc_node(), RemoveWhenOffline}
-            of
-                {[], true, true} ->
-                    %% Note that while we check if the nodes was the last to go
-                    %% down, apart from the node we're removing from, this is
-                    %% still unsafe.
-                    %% Consider the situation in which A and B are clustered. A
-                    %% goes down, and records B as the running node. Then B gets
-                    %% clustered with C, C goes down and B goes down. In this
-                    %% case, C is the second-to-last, but we don't know that and
-                    %% we'll remove B from A anyway, even if that will lead to
-                    %% bad things.
-                    case ordsets:subtract(running_clustered_nodes(),
-                                          ordsets:from_list([node(), Node]))
-                    of
-                        [] ->
-                            start_mnesia(),
-                            try
-                                [mnesia:force_load_table(T) ||
-                                    T <- rabbit_mnesia:table_names()],
-                                remove_node(Node, false),
-                                ensure_mnesia_running()
-                            after
-                                stop_mnesia()
-                            end;
-                        _  ->
-                            throw({error,
-                                   {not_last_node_to_go_down,
-                                    "The node you're trying to remove was not "
-                                    "the last to go down (excluding the node "
-                                    "you are removing). Please use the the "
-                                    "last node to go down to remove nodes when "
-                                    "the cluster is offline."}})
-                    end;
-                {_, _, false} ->
-                    throw({error,
-                           {offline_node_no_offline_flag,
-                            "You are trying to remove a node from an offline "
-                            "node. That's dangerous, but can be done with the "
-                            "--offline flag. Please consult the manual for "
-                            "rabbitmqctl for more informations."}});
-                {_, _, _} ->
-                    throw({error,
-                           {removing_node_from_offline_node,
-                            "To remove a node remotely from an offline node, "
-                            "the node you're removing from must be a disc node "
-                            "and all the other nodes must be offline."}})
+            case RemoveWhenOffline of
+                true  -> remove_node_offline_node(Node);
+                false -> throw({error,
+                                {offline_node_no_offline_flag,
+                                 "You are trying to remove a node from an "
+                                 "offline node. That's dangerous, but can be "
+                                 "done with the --offline flag. Please consult "
+                                 "the manual for rabbitmqctl for more "
+                                 "informations."}})
             end;
         Err = {error, _} ->
             throw(Err)
     end.
+
+remove_node_offline_node(Node) ->
+    case {ordsets:del_element(Node,
+                              running_nodes(all_clustered_nodes())),
+          is_disc_node()}
+    of
+        {[], true} ->
+            %% Note that while we check if the nodes was the last to go down,
+            %% apart from the node we're removing from, this is still unsafe.
+            %% Consider the situation in which A and B are clustered. A goes
+            %% down, and records B as the running node. Then B gets clustered
+            %% with C, C goes down and B goes down. In this case, C is the
+            %% second-to-last, but we don't know that and we'll remove B from A
+            %% anyway, even if that will lead to bad things.
+            case ordsets:subtract(running_clustered_nodes(),
+                                  ordsets:from_list([node(), Node]))
+            of
+                [] -> start_mnesia(),
+                      try
+                          [mnesia:force_load_table(T) ||
+                              T <- rabbit_mnesia:table_names()],
+                          remove_node(Node, false),
+                          ensure_mnesia_running()
+                      after
+                          stop_mnesia()
+                      end;
+                _  -> throw({error,
+                             {not_last_node_to_go_down,
+                              "The node you're trying to remove from was not "
+                              "the last to go down (excluding the node you are "
+                              "removing). Please use the the last node to go "
+                              "down to remove nodes when the cluster is "
+                              "offline."}})
+            end;
+        {_, _} ->
+            throw({error,
+                   {removing_node_from_offline_node,
+                    "To remove a node remotely from an offline node, the node "
+                    "you're removing from must be a disc node and all the "
+                    "other nodes must be offline."}})
+    end.
+
 
 %%----------------------------------------------------------------------------
 %% Queries
