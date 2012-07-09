@@ -27,6 +27,9 @@
 
 -export([promote_backing_queue_state/6, sender_death_fun/0, length_fun/0]).
 
+%% temp
+-export([init_with_existing_bq/3, stop_mirroring/1]).
+
 -behaviour(rabbit_backing_queue).
 
 -include("rabbit.hrl").
@@ -82,20 +85,17 @@ stop() ->
     %% Same as start/1.
     exit({not_valid_for_generic_backing_queue, ?MODULE}).
 
-init(#amqqueue { name = QName, mirror_nodes = MNodes } = Q, Recover,
-     AsyncCallback) ->
+init(Q, Recover, AsyncCallback) ->
+    {ok, BQ} = application:get_env(backing_queue_module),
+    BQS = BQ:init(Q, Recover, AsyncCallback),
+    init_with_existing_bq(Q, BQ, BQS).
+
+init_with_existing_bq(#amqqueue { name = QName } = Q, BQ, BQS) ->
     {ok, CPid} = rabbit_mirror_queue_coordinator:start_link(
                    Q, undefined, sender_death_fun(), length_fun()),
     GM = rabbit_mirror_queue_coordinator:get_gm(CPid),
-    MNodes1 =
-        (case MNodes of
-             all       -> rabbit_mnesia:all_clustered_nodes();
-             undefined -> [];
-             _         -> MNodes
-         end) -- [node()],
-    [rabbit_mirror_queue_misc:add_mirror(QName, Node) || Node <- MNodes1],
-    {ok, BQ} = application:get_env(backing_queue_module),
-    BQS = BQ:init(Q, Recover, AsyncCallback),
+    {_MNode, SNodes} = rabbit_mirror_queue_misc:suggested_queue_nodes(Q),
+    [rabbit_mirror_queue_misc:add_mirror(QName, Node) || Node <- SNodes],
     ok = gm:broadcast(GM, {length, BQ:len(BQS)}),
     #state { gm                  = GM,
              coordinator         = CPid,
@@ -107,14 +107,24 @@ init(#amqqueue { name = QName, mirror_nodes = MNodes } = Q, Recover,
              ack_msg_id          = dict:new(),
              known_senders       = sets:new() }.
 
+stop_mirroring(State = #state { coordinator         = CPid,
+                                backing_queue       = BQ,
+                                backing_queue_state = BQS }) ->
+    unlink(CPid),
+    stop_all_slaves(unmirroring, State),
+    {BQ, BQS}.
+
 terminate({shutdown, dropped} = Reason,
-          State = #state { backing_queue = BQ, backing_queue_state = BQS }) ->
+          State = #state { gm                  = GM,
+                           backing_queue       = BQ,
+                           backing_queue_state = BQS }) ->
     %% Backing queue termination - this node has been explicitly
     %% dropped. Normally, non-durable queues would be tidied up on
     %% startup, but there's a possibility that we will be added back
     %% in without this node being restarted. Thus we must do the full
     %% blown delete_and_terminate now, but only locally: we do not
     %% broadcast delete_and_terminate.
+    ok = gm:leave(GM), %% TODO presumably we need this?
     State #state { backing_queue_state = BQ:delete_and_terminate(Reason, BQS),
                    set_delivered       = 0 };
 terminate(Reason,
@@ -124,15 +134,17 @@ terminate(Reason,
     %% node. Thus just let some other slave take over.
     State #state { backing_queue_state = BQ:terminate(Reason, BQS) }.
 
-delete_and_terminate(Reason, State = #state { gm                  = GM,
-                                              backing_queue       = BQ,
+delete_and_terminate(Reason, State = #state { backing_queue       = BQ,
                                               backing_queue_state = BQS }) ->
+    stop_all_slaves(Reason, State),
+    State #state { backing_queue_state = BQ:delete_and_terminate(Reason, BQS),
+                   set_delivered       = 0 }.
+
+stop_all_slaves(Reason, #state{gm = GM}) ->
     Slaves = [Pid || Pid <- gm:group_members(GM), node(Pid) =/= node()],
     MRefs = [erlang:monitor(process, S) || S <- Slaves],
     ok = gm:broadcast(GM, {delete_and_terminate, Reason}),
-    monitor_wait(MRefs),
-    State #state { backing_queue_state = BQ:delete_and_terminate(Reason, BQS),
-                   set_delivered       = 0 }.
+    monitor_wait(MRefs).
 
 monitor_wait([]) ->
     ok;

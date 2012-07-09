@@ -41,6 +41,7 @@
 -rabbit_upgrade({policy,                mnesia,
                  [exchange_scratches, ha_mirrors]}).
 -rabbit_upgrade({sync_slave_pids,       mnesia, [policy]}).
+-rabbit_upgrade({no_mirror_nodes,       mnesia, [sync_slave_pids]}).
 
 %% -------------------------------------------------------------------
 
@@ -64,6 +65,7 @@
 -spec(runtime_parameters/0    :: () -> 'ok').
 -spec(policy/0                :: () -> 'ok').
 -spec(sync_slave_pids/0       :: () -> 'ok').
+-spec(no_mirror_nodes/0       :: () -> 'ok').
 -endif.
 
 %%--------------------------------------------------------------------
@@ -250,6 +252,18 @@ sync_slave_pids() ->
     [ok = transform(T, AddSyncSlavesFun,
                     [name, durable, auto_delete, exclusive_owner, arguments,
                      pid, slave_pids, sync_slave_pids, mirror_nodes, policy])
+     || T <- Tables],
+    ok.
+
+no_mirror_nodes() ->
+    Tables = [rabbit_queue, rabbit_durable_queue],
+    RemoveMirrorNodesFun =
+        fun ({amqqueue, N, D, AD, O, A, Pid, SPids, SSPids, _MNodes, Pol}) ->
+                {amqqueue, N, D, AD, O, A, Pid, SPids, SSPids, Pol}
+        end,
+    [ok = transform(T, RemoveMirrorNodesFun,
+                    [name, durable, auto_delete, exclusive_owner, arguments,
+                     pid, slave_pids, sync_slave_pids, policy])
      || T <- Tables],
     ok.
 
