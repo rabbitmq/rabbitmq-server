@@ -343,7 +343,7 @@ class TestDurableSubscription(base.BaseTest):
 
         self.assertTrue(listener.await(5))
         self.assertEquals(1, len(self.listener.receipts))
-        if pos:
+        if pos is not None:
             self.assertEquals(pos, self.listener.receipts[0]['msg_no'])
 
     def __assert_message(self, msg, listener=None, pos=None):
@@ -353,7 +353,7 @@ class TestDurableSubscription(base.BaseTest):
         self.assertTrue(listener.await(5))
         self.assertEquals(1, len(listener.messages))
         self.assertEquals(msg, listener.messages[0]['message'])
-        if pos:
+        if pos is not None:
             self.assertEquals(pos, self.listener.messages[0]['msg_no'])
 
     def test_durable_subscription(self):
