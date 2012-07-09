@@ -147,7 +147,7 @@ init() ->
 %% same cluster, we simply pick the first online node and we cluster to its
 %% cluster.
 join_cluster(DiscoveryNode, WantDiscNode) ->
-    case is_disc_and_clustered() andalso is_only_disc_node(node()) of
+    case is_disc_and_clustered() andalso [node()] =:= clustered_disc_nodes() of
         true -> throw({error,
                        {standalone_ram_node,
                         "You can't cluster a node if it's the only "
@@ -210,7 +210,9 @@ reset(Force) ->
             %% Force=true here so that reset still works when clustered with a
             %% node which is down.
             init_db_with_mnesia(AllNodes, is_disc_node(), false, true),
-            case is_disc_and_clustered() andalso is_only_disc_node(node()) of
+            case is_disc_and_clustered() andalso
+                 [node()] =:= clustered_disc_nodes()
+            of
                 true  -> throw({error, {standalone_ram_node,
                                         "You can't reset a node if it's the "
                                         "only disc node in a cluster. Please "
@@ -257,7 +259,7 @@ change_node_type(Type) ->
                        ram  -> false;
                        disc -> true
                    end,
-    case not WantDiscNode andalso is_only_disc_node(node(), DiscNodes) of
+    case not WantDiscNode andalso [node()] =:= DiscNodes of
         true  -> throw({error,
                         {standalone_ram_node,
                          "You can't change the node type to ram if the node is "
@@ -1077,12 +1079,6 @@ leave_cluster() ->
 wait_for(Condition) ->
     error_logger:info_msg("Waiting for ~p...~n", [Condition]),
     timer:sleep(1000).
-
-is_only_disc_node(Node, DiscNodes) ->
-    [Node] =:= DiscNodes.
-
-is_only_disc_node(Node) ->
-    is_only_disc_node(Node, clustered_disc_nodes()).
 
 start_mnesia(CheckConsistency) ->
     case CheckConsistency of
