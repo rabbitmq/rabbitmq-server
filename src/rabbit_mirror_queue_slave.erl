@@ -275,9 +275,11 @@ terminate(_Reason, #state { backing_queue_state = undefined }) ->
     %% We've received a delete_and_terminate from gm, thus nothing to
     %% do here.
     ok;
-terminate({shutdown, dropped} = R, #state { backing_queue       = BQ,
+terminate({shutdown, dropped} = R, #state { gm                  = GM,
+                                            backing_queue       = BQ,
                                             backing_queue_state = BQS }) ->
     %% See rabbit_mirror_queue_master:terminate/2
+    ok = gm:leave(GM), %% TODO presumably we need this?
     BQ:delete_and_terminate(R, BQS);
 terminate(Reason, #state { q                   = Q,
                            gm                  = GM,
@@ -904,7 +906,7 @@ maybe_store_ack(true, MsgId, AckTag, State = #state { msg_id_ack = MA,
 
 %% We intentionally leave out the head where a slave becomes
 %% unsynchronised: we assert that can never happen.
-set_synchronised(true, State = #state { q = Q = #amqqueue { name = QName },
+set_synchronised(true, State = #state { q = #amqqueue { name = QName },
                                         synchronised = false }) ->
     Self = self(),
     rabbit_misc:execute_mnesia_transaction(
@@ -912,9 +914,9 @@ set_synchronised(true, State = #state { q = Q = #amqqueue { name = QName },
               case mnesia:read({rabbit_queue, QName}) of
                   [] ->
                       ok;
-                  [Q1 = #amqqueue{sync_slave_pids = SSPids}] ->
-                      Q2 = Q1#amqqueue{sync_slave_pids = [Self | SSPids]},
-                      rabbit_mirror_queue_misc:store_updated_slaves(Q2)
+                  [Q = #amqqueue{sync_slave_pids = SSPids}] ->
+                      Q1 = Q#amqqueue{sync_slave_pids = [Self | SSPids]},
+                      rabbit_mirror_queue_misc:store_updated_slaves(Q1)
               end
       end),
     State #state { synchronised = true };

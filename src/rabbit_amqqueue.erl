@@ -30,6 +30,8 @@
 -export([on_node_down/1]).
 -export([update/2, store_queue/1, policy_changed/2]).
 
+%% temp
+-export([start_mirroring/1, stop_mirroring/1]).
 
 %% internal
 -export([internal_declare/2, internal_delete/2, run_backing_queue/3,
@@ -208,19 +210,19 @@ recover_durable_queues(DurableQueues) ->
 
 declare(QueueName, Durable, AutoDelete, Args, Owner) ->
     ok = check_declare_arguments(QueueName, Args),
-    {Node, MNodes} = determine_queue_nodes(Args),
-    Q = start_queue_process(Node, #amqqueue{name            = QueueName,
-                                            durable         = Durable,
-                                            auto_delete     = AutoDelete,
-                                            arguments       = Args,
-                                            exclusive_owner = Owner,
-                                            pid             = none,
-                                            slave_pids      = [],
-                                            sync_slave_pids = [],
-                                            mirror_nodes    = MNodes}),
-    case gen_server2:call(Q#amqqueue.pid, {init, false}, infinity) of
+    Q0 = rabbit_policy:set(#amqqueue{name            = QueueName,
+                                     durable         = Durable,
+                                     auto_delete     = AutoDelete,
+                                     arguments       = Args,
+                                     exclusive_owner = Owner,
+                                     pid             = none,
+                                     slave_pids      = [],
+                                     sync_slave_pids = []}),
+    {Node, _MNodes} = rabbit_mirror_queue_misc:suggested_queue_nodes(Q0),
+    Q1 = start_queue_process(Node, Q0),
+    case gen_server2:call(Q1#amqqueue.pid, {init, false}, infinity) of
         not_found -> rabbit_misc:not_found(QueueName);
-        Q1        -> Q1
+        Q2        -> Q2
     end.
 
 internal_declare(Q, true) ->
@@ -269,24 +271,8 @@ store_queue(Q = #amqqueue{durable = false}) ->
     ok = mnesia:write(rabbit_queue, Q, write),
     ok.
 
-policy_changed(_Q1, _Q2) ->
-    ok.
-
-determine_queue_nodes(Args) ->
-    Policy = rabbit_misc:table_lookup(Args, <<"x-ha-policy">>),
-    PolicyParams = rabbit_misc:table_lookup(Args, <<"x-ha-policy-params">>),
-    case {Policy, PolicyParams} of
-        {{_Type, <<"nodes">>}, {array, Nodes}} ->
-            case [list_to_atom(binary_to_list(Node)) ||
-                     {longstr, Node} <- Nodes] of
-                [Node]         -> {Node,   undefined};
-                [First | Rest] -> {First,  [First | Rest]}
-            end;
-        {{_Type, <<"all">>}, _} ->
-            {node(), all};
-        _ ->
-            {node(), undefined}
-    end.
+policy_changed(Q1, Q2) ->
+    rabbit_mirror_queue_misc:update_mirrors(Q1, Q2).
 
 start_queue_process(Node, Q) ->
     {ok, Pid} = rabbit_amqqueue_sup:start_child(Node, [Q]),
@@ -353,13 +339,11 @@ with_exclusive_access_or_die(Name, ReaderPid, F) ->
 assert_args_equivalence(#amqqueue{name = QueueName, arguments = Args},
                         RequiredArgs) ->
     rabbit_misc:assert_args_equivalence(
-      Args, RequiredArgs, QueueName,
-      [<<"x-expires">>, <<"x-message-ttl">>, <<"x-ha-policy">>]).
+      Args, RequiredArgs, QueueName, [<<"x-expires">>, <<"x-message-ttl">>]).
 
 check_declare_arguments(QueueName, Args) ->
     Checks = [{<<"x-expires">>,                 fun check_positive_int_arg/2},
               {<<"x-message-ttl">>,             fun check_non_neg_int_arg/2},
-              {<<"x-ha-policy">>,               fun check_ha_policy_arg/2},
               {<<"x-dead-letter-exchange">>,    fun check_string_arg/2},
               {<<"x-dead-letter-routing-key">>, fun check_dlxrk_arg/2}],
     [case rabbit_misc:table_lookup(Args, Key) of
@@ -406,29 +390,6 @@ check_dlxrk_arg({longstr, _}, Args) ->
         _         -> ok
     end;
 check_dlxrk_arg({Type, _}, _Args) ->
-    {error, {unacceptable_type, Type}}.
-
-check_ha_policy_arg({longstr, <<"all">>}, _Args) ->
-    ok;
-check_ha_policy_arg({longstr, <<"nodes">>}, Args) ->
-    case rabbit_misc:table_lookup(Args, <<"x-ha-policy-params">>) of
-        undefined ->
-            {error, {require, 'x-ha-policy-params'}};
-        {array, []} ->
-            {error, {require_non_empty_list_of_nodes_for_ha}};
-        {array, Ary} ->
-            case lists:all(fun ({longstr, _Node}) -> true;
-                               (_               ) -> false
-                           end, Ary) of
-                true  -> ok;
-                false -> {error, {require_node_list_as_longstrs_for_ha, Ary}}
-            end;
-        {Type, _} ->
-            {error, {ha_nodes_policy_params_not_array_of_longstr, Type}}
-    end;
-check_ha_policy_arg({longstr, Policy}, _Args) ->
-    {error, {invalid_ha_policy, Policy}};
-check_ha_policy_arg({Type, _}, _Args) ->
     {error, {unacceptable_type, Type}}.
 
 list() ->
@@ -595,6 +556,9 @@ set_ram_duration_target(QPid, Duration) ->
 set_maximum_since_use(QPid, Age) ->
     gen_server2:cast(QPid, {set_maximum_since_use, Age}).
 
+start_mirroring(QPid) -> ok = delegate_call(QPid, start_mirroring).
+stop_mirroring(QPid) -> ok = delegate_call(QPid, stop_mirroring).
+
 on_node_down(Node) ->
     rabbit_misc:execute_mnesia_tx_with_tail(
       fun () -> QsDels =
@@ -629,8 +593,7 @@ pseudo_queue(QueueName, Pid) ->
               auto_delete  = false,
               arguments    = [],
               pid          = Pid,
-              slave_pids   = [],
-              mirror_nodes = undefined}.
+              slave_pids   = []}.
 
 deliver([], #delivery{mandatory = false, immediate = false}, _Flow) ->
     %% /dev/null optimisation
