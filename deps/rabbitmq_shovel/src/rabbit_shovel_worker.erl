@@ -17,8 +17,6 @@
 -module(rabbit_shovel_worker).
 -behaviour(gen_server2).
 
--compile({parse_transform, cut}).
-
 -export([start_link/2]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3]).
@@ -126,13 +124,17 @@ handle_info(#'channel.flow'{active = false},
 
 handle_info(#'basic.ack'{delivery_tag = Seq, multiple = Multiple},
             State = #state{config = #shovel{ack_mode = on_confirm}}) ->
-    {noreply, confirm_to_inbound(#'basic.ack'{delivery_tag = _, multiple = _},
-                                 Seq, Multiple, State)};
+    {noreply, confirm_to_inbound(
+                fun (DTag, Multiple) ->
+                        #'basic.ack'{delivery_tag = DTag, multiple = Multiple}
+                end, Seq, Multiple, State)};
 
 handle_info(#'basic.nack'{delivery_tag = Seq, multiple = Multiple},
             State = #state{config = #shovel{ack_mode = on_confirm}}) ->
-    {noreply, confirm_to_inbound(#'basic.nack'{delivery_tag = _, multiple = _},
-                                 Seq, Multiple, State)};
+    {noreply, confirm_to_inbound(
+                fun (DTag, Multiple) ->
+                        #'basic.nack'{delivery_tag = DTag, multiple = Multiple}
+                end, Seq, Multiple, State)};
 
 handle_info({'EXIT', InboundConn, Reason},
             State = #state{inbound_conn = InboundConn}) ->
