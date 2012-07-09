@@ -301,7 +301,7 @@ recluster(DiscoveryNode) ->
 %%   * This node was, at the best of our knowledge (see comment below) the last
 %%     or second to last after the node we're removing to go down
 remove_node(Node, RemoveWhenOffline) ->
-    case is_clustered() of
+    case ordsets:is_element(Node, all_clustered_nodes()) of
         true  -> ok;
         false -> throw({error, {not_a_cluster_node,
                                 "The node selected is not in the cluster."}})
