@@ -242,16 +242,16 @@ queue_policy(Table) ->
        slave_pids, mirror_nodes, policy]).
 
 sync_slave_pids() ->
-    [ok = sync_slave_pids(T) || T <- [rabbit_queue, rabbit_durable_queue]].
-
-sync_slave_pids(Table) ->
-    transform(
-      Table,
-      fun ({amqqueue, N, D, AD, Excl, Args, Pid, SPids, MNodes, Pol}) ->
-              {amqqueue, N, D, AD, Excl, Args, Pid, SPids, [], MNodes, Pol}
-      end,
-      [name, durable, auto_delete, exclusive_owner, arguments, pid,
-       slave_pids, sync_slave_pids, mirror_nodes, policy]).
+    Tables = [rabbit_queue, rabbit_durable_queue],
+    AddSyncSlavesFun =
+        fun ({amqqueue, N, D, AD, Excl, Args, Pid, SPids, MNodes, Pol}) ->
+                {amqqueue, N, D, AD, Excl, Args, Pid, SPids, [], MNodes, Pol}
+        end,
+    [ok = transform(T, AddSyncSlavesFun,
+                    [name, durable, auto_delete, exclusive_owner, arguments,
+                     pid, slave_pids, sync_slave_pids, mirror_nodes, policy])
+     || T <- Tables],
+    ok.
 
 
 %%--------------------------------------------------------------------
