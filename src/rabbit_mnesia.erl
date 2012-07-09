@@ -406,24 +406,19 @@ is_disc_and_clustered() ->
 %% if offline.
 
 all_clustered_nodes() ->
-    {ok, AllNodes} = cluster_status(all),
-    AllNodes.
+    cluster_status(all).
 
 clustered_disc_nodes() ->
-    {ok, DiscNodes} =cluster_status(disc),
-    DiscNodes.
+    cluster_status(disc).
 
 clustered_ram_nodes() ->
-    {ok, AllNodes} = cluster_status(all),
-    {ok, DiscNodes} = cluster_status(disc),
-    ordsets:subtract(AllNodes, DiscNodes).
+    ordsets:subtract(cluster_status(all), cluster_status(disc)).
 
 running_clustered_nodes() ->
-    {ok, RunningNodes} = cluster_status(running),
-    RunningNodes.
+    cluster_status(running).
 
 running_clustered_disc_nodes() ->
-    {ok, {_, DiscNodes, RunningNodes}} = cluster_status(),
+    {_, DiscNodes, RunningNodes} = cluster_status(),
     ordsets:intersection(DiscNodes, RunningNodes).
 
 %% This function is the actual source of information, since it gets the data
@@ -490,7 +485,8 @@ cluster_status(WhichNodes, ForceMnesia) ->
     end.
 
 cluster_status(WhichNodes) ->
-    cluster_status(WhichNodes, false).
+    {ok, Status} = cluster_status(WhichNodes, false),
+    Status.
 
 cluster_status() ->
     cluster_status(status).
