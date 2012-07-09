@@ -1281,7 +1281,10 @@ handle_cast({set_maximum_since_use, Age}, State) ->
     noreply(State);
 
 handle_cast({dead_letter, {Msg, AckTag}, Reason}, State) ->
-    dead_letter_msg(Msg, AckTag, Reason, State).
+    dead_letter_msg(Msg, AckTag, Reason, State);
+
+handle_cast(wake_up, State) ->
+    noreply(State).
 
 %% We need to not ignore this as we need to remove outstanding
 %% confirms due to queue death.

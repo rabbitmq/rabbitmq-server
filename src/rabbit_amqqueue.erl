@@ -22,7 +22,7 @@
          check_exclusive_access/2, with_exclusive_access_or_die/3,
          stat/1, deliver/2, deliver_flow/2, requeue/3, ack/3, reject/4]).
 -export([list/0, list/1, info_keys/0, info/1, info/2, info_all/1, info_all/2]).
--export([force_event_refresh/0]).
+-export([force_event_refresh/0, wake_up/1]).
 -export([consumers/1, consumers_all/1, consumer_info_keys/0]).
 -export([basic_get/3, basic_consume/7, basic_cancel/4]).
 -export([notify_sent/2, notify_sent_queue_down/1, unblock/2, flush_all/2]).
@@ -102,6 +102,7 @@
 -spec(info_all/2 :: (rabbit_types:vhost(), rabbit_types:info_keys())
                     -> [rabbit_types:infos()]).
 -spec(force_event_refresh/0 :: () -> 'ok').
+-spec(wake_up/1 :: (rabbit_types:amqqueue()) -> 'ok').
 -spec(consumers/1 ::
         (rabbit_types:amqqueue())
         -> [{pid(), rabbit_types:ctag(), boolean()}]).
@@ -475,6 +476,8 @@ force_event_refresh(QNames) ->
         _  -> timer:sleep(?FAILOVER_WAIT_MILLIS),
               force_event_refresh(Failed)
     end.
+
+wake_up(#amqqueue{pid = QPid}) -> gen_server2:cast(QPid, wake_up).
 
 consumers(#amqqueue{ pid = QPid }) ->
     delegate_call(QPid, consumers).

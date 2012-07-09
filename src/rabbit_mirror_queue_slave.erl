@@ -107,8 +107,8 @@ init(#amqqueue { name = QueueName } = Q) ->
                        mnesia:read({rabbit_queue, QueueName}),
                    case [Pid || Pid <- [QPid | MPids], node(Pid) =:= Node] of
                        []     -> MPids1 = MPids ++ [Self],
-                                 ok = rabbit_amqqueue:store_queue(
-                                        Q1 #amqqueue { slave_pids = MPids1 }),
+                                 rabbit_mirror_queue_misc:store_updated_slaves(
+                                   Q1 #amqqueue { slave_pids = MPids1 }),
                                  {new, QPid};
                        [SPid] -> true = rabbit_misc:is_process_alive(SPid),
                                  existing
@@ -914,10 +914,9 @@ set_synchronised(true, State = #state { q = Q = #amqqueue { name = QName },
                       ok;
                   [Q1 = #amqqueue{sync_slave_pids = SSPids}] ->
                       Q2 = Q1#amqqueue{sync_slave_pids = [Self | SSPids]},
-                      ok = rabbit_amqqueue:store_queue(Q2)
+                      rabbit_mirror_queue_misc:store_updated_slaves(Q2)
               end
       end),
-    rabbit_amqqueue:info(Q, [name]), %% Wake it up
     State #state { synchronised = true };
 set_synchronised(true, State) ->
     State;
