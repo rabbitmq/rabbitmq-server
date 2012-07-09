@@ -748,18 +748,20 @@ discover_cluster(Nodes) when is_list(Nodes) ->
     lists:foldl(fun (_, {ok, Res})     -> {ok, Res};
                     (Node, {error, _}) -> discover_cluster(Node)
                 end,
-                {error, {cannot_discover_cluster,
-                         "The nodes provided is either offline or not running"}},
+                {error, no_nodes_provided},
                 Nodes);
 discover_cluster(Node) ->
+    OfflineError =
+        {error, {cannot_discover_cluster,
+                 "The nodes provided is either offline or not running"}},
     case Node =:= node() of
         true ->
             {error, {cannot_discover_cluster,
                      "You provided the current node as node to cluster with"}};
         false ->
             case rpc:call(Node, rabbit_mnesia, cluster_status_from_mnesia, []) of
-                {badrpc, _Reason}           -> discover_cluster([]);
-                {error, mnesia_not_running} -> discover_cluster([]);
+                {badrpc, _Reason}           -> OfflineError;
+                {error, mnesia_not_running} -> OfflineError;
                 {ok, Res}                   -> {ok, Res}
             end
     end.
