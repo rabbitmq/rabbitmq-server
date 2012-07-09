@@ -923,19 +923,19 @@ i(consumers, _) ->
 i(memory, _) ->
     {memory, M} = process_info(self(), memory),
     M;
-i(slave_pids, #q{q = Q = #amqqueue{name = Name}}) ->
+i(slave_pids, #q{q = #amqqueue{name = Name}}) ->
+    {ok, Q = #amqqueue{slave_pids = SPids}} =
+        rabbit_amqqueue:lookup(Name),
     case rabbit_mirror_queue_misc:is_mirrored(Q) of
         false -> '';
-        true  -> {ok, #amqqueue{slave_pids = SPids}} =
-                     rabbit_amqqueue:lookup(Name),
-                 SPids
+        true  -> SPids
     end;
-i(synchronised_slave_pids, #q{q = Q = #amqqueue{name = Name}}) ->
+i(synchronised_slave_pids, #q{q = #amqqueue{name = Name}}) ->
+    {ok, Q = #amqqueue{sync_slave_pids = SSPids}} =
+        rabbit_amqqueue:lookup(Name),
     case rabbit_mirror_queue_misc:is_mirrored(Q) of
         false -> '';
-        true  -> {ok, #amqqueue{sync_slave_pids = SSPids}} =
-                     rabbit_amqqueue:lookup(Name),
-                 SSPids
+        true  -> SSPids
     end;
 i(backing_queue_status, #q{backing_queue_state = BQS, backing_queue = BQ}) ->
     BQ:status(BQS);
@@ -1191,14 +1191,6 @@ handle_call(stop_mirroring, _From, State = #q{backing_queue       = BQ,
                                               backing_queue_state = BQS}) ->
     BQ = rabbit_mirror_queue_master, %% assertion
     {BQ1, BQS1} = BQ:stop_mirroring(BQS),
-    rabbit_misc:execute_mnesia_transaction(
-      fun () ->
-              case mnesia:read({rabbit_queue, qname(State)}) of
-                  []  -> ok;
-                  [Q] -> rabbit_amqqueue:store_queue(
-                           Q#amqqueue{slave_pids = undefined})
-              end
-      end),
     reply(ok, State#q{backing_queue       = BQ1,
                       backing_queue_state = BQS1});
 

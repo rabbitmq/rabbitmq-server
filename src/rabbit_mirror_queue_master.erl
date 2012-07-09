@@ -111,7 +111,7 @@ stop_mirroring(State = #state { coordinator         = CPid,
                                 backing_queue       = BQ,
                                 backing_queue_state = BQS }) ->
     unlink(CPid),
-    stop_all_slaves(unmirroring, State),
+    stop_all_slaves(shutdown, State),
     {BQ, BQS}.
 
 terminate({shutdown, dropped} = Reason,
