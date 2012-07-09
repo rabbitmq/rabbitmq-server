@@ -498,7 +498,7 @@ cluster_status_from_mnesia() ->
     cluster_status(status, true).
 
 node_info() ->
-    {erlang:system_info(otp_release), rabbit_misc:rabbit_version(),
+    {erlang:system_info(otp_release), rabbit_misc:version(),
      cluster_status_from_mnesia()}.
 
 is_disc_node() ->
@@ -694,7 +694,7 @@ check_cluster_consistency() ->
                             [check_version_consistency(
                                erlang:system_info(otp_release), OTP, "OTP"),
                              check_version_consistency(
-                               rabbit_misc:rabbit_version(), Rabbit, "Rabbit"),
+                               rabbit_misc:version(), Rabbit, "Rabbit"),
                              case Res of
                                  {ok, Status} ->
                                      check_nodes_consistency(Node, Status);
