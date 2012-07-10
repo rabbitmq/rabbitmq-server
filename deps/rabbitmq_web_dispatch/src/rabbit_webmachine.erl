@@ -49,9 +49,10 @@ makeloop(Dispatch) ->
                        "" -> "/"; %% webmachine requires a leading "/"
                        P  -> P    %% implicit "/"
                    end,
-            %% webmachine_mochiweb:loop/1 uses dispatch/3 here;
+            {ReqData, _} = Req:get_reqdata(),
+            %% webmachine_mochiweb:loop/1 uses dispatch/4 here;
             %% however, we don't need to dispatch by the host name.
-            case webmachine_dispatcher:dispatch(Path, Dispatch) of
+            case webmachine_dispatcher:dispatch(Path, Dispatch, ReqData) of
                 {no_dispatch_match, _Host, _PathElements} ->
                     {ErrorHTML, ReqState1} =
                         webmachine_error_handler:render_error(
