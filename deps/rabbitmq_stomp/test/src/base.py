@@ -73,7 +73,7 @@ class BaseTest(unittest.TestCase):
            self.listener.print_state(msg, True)
            self.assertEquals(expected, actual, msg)
 
-   def assertListenerAfter(self, verb, errMsg="", numMsgs=0, numErrs=0, numRcts=0, timeout=1):
+   def assertListenerAfter(self, verb, errMsg="", numMsgs=0, numErrs=0, numRcts=0, timeout=2):
         num = numMsgs + numErrs + numRcts
         self.listener.reset(num if num>0 else 1)
         verb()
@@ -89,24 +89,31 @@ class WaitableListener(object):
         self.errors = []
         self.receipts = []
         self.latch = Latch(1)
+        self.msg_no = 0
+
+    def _next_msg_no(self):
+        self.msg_no += 1
+        return self.msg_no
+
+    def _append(self, array, msg, hdrs):
+        mno = self._next_msg_no()
+        array.append({'message' : msg, 'headers' : hdrs, 'msg_no' : mno})
+        self.latch.countdown()
 
     def on_receipt(self, headers, message):
         if self.debug:
             print '(on_receipt) message:', message, 'headers:', headers
-        self.receipts.append({'message' : message, 'headers' : headers})
-        self.latch.countdown()
+        self._append(self.receipts, message, headers)
 
     def on_error(self, headers, message):
         if self.debug:
             print '(on_error) message:', message, 'headers:', headers
-        self.errors.append({'message' : message, 'headers' : headers})
-        self.latch.countdown()
+        self._append(self.errors, message, headers)
 
     def on_message(self, headers, message):
         if self.debug:
             print '(on_message) message:', message, 'headers:', headers
-        self.messages.append({'message' : message, 'headers' : headers})
-        self.latch.countdown()
+        self._append(self.messages, message, headers)
 
     def reset(self, count=1):
         if self.debug:
@@ -115,6 +122,7 @@ class WaitableListener(object):
         self.errors = []
         self.receipts = []
         self.latch = Latch(count)
+        self.msg_no = 0
         if self.debug:
             self.print_state('(reset listener--new state)')
 
@@ -161,7 +169,7 @@ class Latch(object):
 
    def get_count(self):
       try:
-          self.cond.acquire()
-          return self.count
+         self.cond.acquire()
+         return self.count
       finally:
-          self.cond.release()
+         self.cond.release()
