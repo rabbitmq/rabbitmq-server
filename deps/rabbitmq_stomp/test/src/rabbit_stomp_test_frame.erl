@@ -145,12 +145,13 @@ parse_complete(Content) ->
     {Command, Frame, State}.
 
 frame_string(Command, Headers, BodyContent) ->
+    frame_string_gen(Command, Headers, BodyContent, "\n").
+
+frame_string_gen(Command, Headers, BodyContent, Term) ->
     HeaderString =
-        lists:flatten([Key ++ ":" ++ Value ++ "\n" || {Key, Value} <- Headers]),
-    Command ++ "\n" ++ HeaderString ++ "\n" ++ BodyContent ++ "\0".
+        lists:flatten([Key ++ ":" ++ Value ++ Term || {Key, Value} <- Headers]),
+    Command ++ Term ++ HeaderString ++ Term ++ BodyContent ++ "\0".
 
 frame_crlf_string(Command, Headers, BodyContent) ->
-    HeaderString =
-        lists:flatten([Key ++ ":" ++ Value ++ "\r\n" || {Key, Value} <- Headers]),
-    Command ++ "\r\n" ++ HeaderString ++ "\r\n" ++ BodyContent ++ "\0".
+    frame_string_gen(Command, Headers, BodyContent, "\r\n").
 
