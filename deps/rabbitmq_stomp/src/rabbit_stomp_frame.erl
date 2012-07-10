@@ -41,8 +41,19 @@ parse_command(<<0, Rest/binary>>, []) ->    % empty frame
     parse_command(Rest, []);
 parse_command(<<$\n, Rest/binary>>, Acc) -> % end command
     parse_headers(Rest, lists:reverse(Acc));
+parse_command(<<$\r, Rest/binary>>, Acc) -> % look-ahead for end command
+    parse_command_cr(Rest, Acc);
 parse_command(<<Ch:8, Rest/binary>>, Acc) ->
     parse_command(Rest, [Ch | Acc]).
+
+parse_command_cr(<<>>, Acc) ->
+    more(fun(Rest) -> parse_command_cr(Rest, Acc) end);
+parse_command_cr(<<$\n, Rest/binary>>, []) ->   % inter-frame crlf
+    parse_command(Rest, []);
+parse_command_cr(<<$\n, Rest/binary>>, Acc) ->  % end command
+    parse_headers(Rest, lists:reverse(Acc));
+parse_command_cr(<<Ch:8, Rest/binary>>, Acc) -> % treat CR as char
+    parse_command(<<Ch, Rest/binary>>, [$\r | Acc]). % re-parse Ch
 
 parse_headers(Rest, Command) -> % begin headers
     parse_headers(Rest, #stomp_frame{command = Command}, [], []).
@@ -53,8 +64,20 @@ parse_headers(<<$\n, Rest/binary>>, Frame, HeaderAcc, _KeyAcc) -> % end headers
     parse_body(Rest, Frame#stomp_frame{headers = HeaderAcc});
 parse_headers(<<$:, Rest/binary>>, Frame, HeaderAcc, KeyAcc) ->   % end key
     parse_header_value(Rest, Frame, HeaderAcc, lists:reverse(KeyAcc));
+parse_headers(<<$\r, Rest/binary>>, Frame, HeaderAcc, KeyAcc) ->
+                                            % look-ahead for end headers
+    parse_headers_cr(Rest, Frame, HeaderAcc, KeyAcc);
 parse_headers(<<Ch:8, Rest/binary>>, Frame, HeaderAcc, KeyAcc) ->
     parse_headers(Rest, Frame, HeaderAcc, [Ch | KeyAcc]).
+
+parse_headers_cr(<<>>, Frame, HeaderAcc, KeyAcc) ->
+    more(fun(Rest) -> parse_headers_cr(Rest, Frame, HeaderAcc, KeyAcc) end);
+parse_headers_cr(<<$\n, Rest/binary>>, Frame, HeaderAcc, _KeyAcc) ->
+                                                           % end headers
+    parse_body(Rest, Frame#stomp_frame{headers = HeaderAcc});
+parse_headers_cr(<<Ch:8, Rest/binary>>, Frame, HeaderAcc, KeyAcc) ->
+                                      % treat CR as char and re-parse Ch
+    parse_headers(<<Ch, Rest/binary>>, Frame, HeaderAcc, [$\r | KeyAcc]).
 
 parse_header_value(Rest, Frame, HeaderAcc, Key) -> % begin header value
     parse_header_value(Rest, Frame, HeaderAcc, Key, []).
@@ -69,8 +92,21 @@ parse_header_value(<<$\n, Rest/binary>>, Frame, HeaderAcc, Key, ValAcc) ->
                   []);
 parse_header_value(<<$\\, Rest/binary>>, Frame, HeaderAcc, Key, ValAcc) ->
     parse_header_value_escape(Rest, Frame, HeaderAcc, Key, ValAcc);
+parse_header_value(<<$\r, Rest/binary>>, Frame, HeaderAcc, Key, ValAcc) ->
+    parse_header_value_cr(Rest, Frame, HeaderAcc, Key, ValAcc);
 parse_header_value(<<Ch:8, Rest/binary>>, Frame, HeaderAcc, Key, ValAcc) ->
     parse_header_value(Rest, Frame, HeaderAcc, Key, [Ch | ValAcc]).
+
+parse_header_value_cr(<<>>, Frame, HeaderAcc, Key, ValAcc) ->
+    more(fun(Rest) -> parse_header_value_cr(Rest, Frame, HeaderAcc, Key, ValAcc) end);
+parse_header_value_cr(<<$\n, Rest/binary>>, Frame, HeaderAcc, Key, ValAcc) ->
+    % end value
+    parse_headers(Rest, Frame,
+                  insert_header(HeaderAcc, Key, lists:reverse(ValAcc)),
+                  []);
+parse_header_value_cr(<<Ch:8, Rest/binary>>, Frame, HeaderAcc, Key, ValAcc) ->
+    % treat CR as char and re-parse Ch
+    parse_header_value(<<Ch, Rest/binary>>, Frame, HeaderAcc, Key, [$\r | ValAcc]).
 
 parse_header_value_escape(<<>>, Frame, HeaderAcc, Key, ValAcc) ->
     more(fun(Rest) ->
