@@ -36,8 +36,6 @@
                  length_fun
                }).
 
--define(ONE_SECOND, 1000).
-
 -ifdef(use_specs).
 
 -spec(start_link/4 :: (rabbit_types:amqqueue(), pid() | 'undefined',
@@ -325,7 +323,6 @@ init([#amqqueue { name = QueueName } = Q, GM, DeathFun, LengthFun]) ->
                   true = link(GM),
                   GM
           end,
-    ensure_gm_heartbeat(),
     {ok, #state { q          = Q,
                   gm         = GM1,
                   monitors   = pmon:new(),
@@ -358,11 +355,6 @@ handle_cast({ensure_monitoring, Pids}, State = #state { monitors = Mons }) ->
 
 handle_cast({delete_and_terminate, Reason}, State) ->
     {stop, Reason, State}.
-
-handle_info(send_gm_heartbeat, State = #state { gm = GM }) ->
-    gm:broadcast(GM, heartbeat),
-    ensure_gm_heartbeat(),
-    noreply(State);
 
 handle_info({'DOWN', _MonitorRef, process, Pid, _Reason},
             State = #state { monitors  = Mons,
@@ -420,6 +412,3 @@ noreply(State) ->
 
 reply(Reply, State) ->
     {reply, Reply, State, hibernate}.
-
-ensure_gm_heartbeat() ->
-    erlang:send_after(?ONE_SECOND, self(), send_gm_heartbeat).
