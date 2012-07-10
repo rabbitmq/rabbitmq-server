@@ -566,7 +566,7 @@ definitions_test() ->
     http_delete("/bindings/%2f/e/amq.direct/e/amq.fanout/routing", ?NO_CONTENT),
     http_delete("/queues/%2f/my-queue", ?NO_CONTENT),
     http_delete("/exchanges/%2f/my-exchange", ?NO_CONTENT),
-    http_post("/definitions", Definitions, ?NO_CONTENT),
+    http_post("/definitions", Definitions, ?CREATED),
     http_delete("/bindings/%2f/e/my-exchange/q/my-queue/routing", ?NO_CONTENT),
     http_delete("/bindings/%2f/e/amq.direct/q/my-queue/routing", ?NO_CONTENT),
     http_delete("/bindings/%2f/e/amq.direct/e/amq.fanout/routing", ?NO_CONTENT),
@@ -597,7 +597,7 @@ definitions_test() ->
                          {arguments,   []}
                         ]]},
          {bindings,    []}],
-    http_post("/definitions", ExtraConfig, ?NO_CONTENT),
+    http_post("/definitions", ExtraConfig, ?CREATED),
     http_post("/definitions", BrokenConfig, ?BAD_REQUEST),
     http_delete("/queues/%2f/another-queue", ?NO_CONTENT),
     ok.
@@ -628,7 +628,7 @@ definitions_server_named_queue_test() ->
     Definitions = http_get("/definitions", ?OK),
     http_delete(Path, ?NO_CONTENT),
     http_get(Path, ?NOT_FOUND),
-    http_post("/definitions", Definitions, ?NO_CONTENT),
+    http_post("/definitions", Definitions, ?CREATED),
     http_get(Path, ?OK),
     http_delete(Path, ?NO_CONTENT),
     ok.
@@ -652,7 +652,7 @@ arguments_test() ->
     Definitions = http_get("/definitions", ?OK),
     http_delete("/exchanges/%2f/myexchange", ?NO_CONTENT),
     http_delete("/queues/%2f/myqueue", ?NO_CONTENT),
-    http_post("/definitions", Definitions, ?NO_CONTENT),
+    http_post("/definitions", Definitions, ?CREATED),
     [{'alternate-exchange', <<"amq.direct">>}] =
         pget(arguments, http_get("/exchanges/%2f/myexchange", ?OK)),
     [{'x-expires', 1800000}] =
@@ -673,7 +673,7 @@ arguments_table_test() ->
     http_put("/exchanges/%2f/myexchange", XArgs, ?NO_CONTENT),
     Definitions = http_get("/definitions", ?OK),
     http_delete("/exchanges/%2f/myexchange", ?NO_CONTENT),
-    http_post("/definitions", Definitions, ?NO_CONTENT),
+    http_post("/definitions", Definitions, ?CREATED),
     Args = pget(arguments, http_get("/exchanges/%2f/myexchange", ?OK)),
     http_delete("/exchanges/%2f/myexchange", ?NO_CONTENT),
     ok.
