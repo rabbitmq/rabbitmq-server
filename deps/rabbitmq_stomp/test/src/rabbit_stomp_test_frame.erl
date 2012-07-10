@@ -21,16 +21,10 @@
 -include("rabbit_stomp_frame.hrl").
 
 parse_simple_frame_test() ->
-    parse_simple_frame_gen(fun frame_string/3).
-    
-parse_simple_frame_crlf_test() ->
-    parse_simple_frame_gen(fun frame_crlf_string/3).
-    
-parse_simple_frame_gen(FrameStringFun) ->
     Headers = [{"header1", "value1"}, {"header2", "value2"}],
-    Content = FrameStringFun("COMMAND",
-                             Headers,
-                             "Body Content"),
+    Content = frame_string("COMMAND",
+                           Headers,
+                           "Body Content"),
     {"COMMAND", Frame, _State} = parse_complete(Content),
     [?assertEqual({ok, Value},
                   rabbit_stomp_frame:header(Frame, Key)) ||
@@ -73,9 +67,6 @@ parse_ignore_empty_frames_test() ->
 
 parse_heartbeat_interframe_test() ->
     {ok, #stomp_frame{command = "COMMAND"}, _Rest} = parse("\nCOMMAND\n\n\0").
-
-parse_crlf_interframe_test() ->
-    {ok, #stomp_frame{command = "COMMAND"}, _Rest} = parse("\r\nCOMMAND\n\n\0").
 
 parse_carriage_return_not_ignored_interframe_test() ->
     {ok, #stomp_frame{command = "\rCOMMAND"}, _Rest} = parse("\rCOMMAND\n\n\0").
@@ -148,9 +139,4 @@ frame_string(Command, Headers, BodyContent) ->
     HeaderString =
         lists:flatten([Key ++ ":" ++ Value ++ "\n" || {Key, Value} <- Headers]),
     Command ++ "\n" ++ HeaderString ++ "\n" ++ BodyContent ++ "\0".
-
-frame_crlf_string(Command, Headers, BodyContent) ->
-    HeaderString =
-        lists:flatten([Key ++ ":" ++ Value ++ "\r\n" || {Key, Value} <- Headers]),
-    Command ++ "\r\n" ++ HeaderString ++ "\r\n" ++ BodyContent ++ "\0".
 
