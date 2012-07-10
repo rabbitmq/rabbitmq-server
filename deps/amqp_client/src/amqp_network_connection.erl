@@ -55,33 +55,31 @@ do2(Method, #state{writer0 = Writer}) ->
     %% Catching because it expects the {channel_exit, _} message on error
     catch rabbit_writer:send_command_sync(Writer, Method).
 
-handle_message(Message, State) ->
-    release(),
-    {stop, handle_message1(Message, State), State}.
 
-handle_message1(socket_closing_timeout, #state{closing_reason = Reason}) ->
-    {socket_closing_timeout, Reason};
-handle_message1(socket_closed, #state{waiting_socket_close = true,
-                                      closing_reason = Reason}) ->
-    {shutdown, Reason};
-handle_message1(socket_closed, #state{waiting_socket_close = false}) ->
-    socket_closed_unexpectedly;
-handle_message1({socket_error, _} = SocketError, _State) ->
-    SocketError;
-handle_message1({channel_exit, Reason}, _State) ->
-    {channel0_died, Reason};
-handle_message1(heartbeat_timeout, _State) ->
-    heartbeat_timeout;
+handle_message(socket_closing_timeout,
+               State = #state{closing_reason = Reason}) ->
+    {stop, {socket_closing_timeout, Reason}, State};
+handle_message(socket_closed, State = #state{waiting_socket_close = true,
+                                             closing_reason = Reason}) ->
+    {stop, {shutdown, Reason}, State};
+handle_message(socket_closed, State = #state{waiting_socket_close = false}) ->
+    {stop, socket_closed_unexpectedly, State};
+handle_message({socket_error, _} = SocketError, State) ->
+    {stop, SocketError, State};
+handle_message({channel_exit, Reason}, State) ->
+    {stop, {channel0_died, Reason}, State};
+handle_message(heartbeat_timeout, State) ->
+    {stop, heartbeat_timeout, State};
 %% see http://erlang.org/pipermail/erlang-bugs/2012-June/002933.html
-handle_message1({Ref, {error, Reason}},
-                #state{waiting_socket_close = Waiting,
-                       closing_reason       = CloseReason})
+handle_message({Ref, {error, Reason}},
+               State = #state{waiting_socket_close = Waiting,
+                              closing_reason = CloseReason})
   when is_reference(Ref) ->
-    case {Reason, Waiting} of
-        {closed,  true} -> {shutdown, CloseReason};
-        {closed, false} -> socket_closed_unexpectedly;
-        {_,          _} -> {socket_error, Reason}
-    end.
+    {stop, case {Reason, Waiting} of
+               {closed, true} -> {shutdown, CloseReason};
+               {closed, false} -> socket_closed_unexpectedly;
+               {_, _} -> {socket_error, Reason}
+           end, State}.
 
 closing(_ChannelCloseType, Reason, State) ->
     {ok, State#state{closing_reason = Reason}}.
@@ -126,8 +124,7 @@ do_connect({Addr, Family},
                          Timeout) of
         {ok, Sock}     -> try_handshake(AmqpParams, SIF, ChMgr,
                                         State#state{sock = Sock});
-        {error, _} = E -> release(),
-                          E
+        {error, _} = E -> E
     end;
 do_connect({Addr, Family},
            AmqpParams = #amqp_params_network{ssl_options        = SslOpts,
@@ -147,7 +144,6 @@ do_connect({Addr, Family},
                     try_handshake(AmqpParams, SIF, ChMgr,
                                   State#state{sock = RabbitSslSock});
                 {error, _} = E ->
-                    release(),
                     E
             end;
         {error, _} = E ->
@@ -314,14 +310,8 @@ handshake_recv(Expecting) ->
         end
     end.
 
-run_if_rabbit_loaded(Fun) ->
+obtain() ->
     case proplists:is_defined(rabbit, application:loaded_applications()) of
-        true  -> Fun();
+        true  -> file_handle_cache:obtain();
         false -> ok
     end.
-
-obtain() ->
-    run_if_rabbit_loaded(fun file_handle_cache:obtain/0).
-
-release() ->
-    run_if_rabbit_loaded(fun file_handle_cache:release/0).
