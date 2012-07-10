@@ -59,24 +59,23 @@ handle_message(Message, State) ->
     release(),
     {stop, handle_message1(Message, State), State}.
 
-handle_message1(socket_closing_timeout,
-                State = #state{closing_reason = Reason}) ->
+handle_message1(socket_closing_timeout, #state{closing_reason = Reason}) ->
     {socket_closing_timeout, Reason};
-handle_message1(socket_closed, State = #state{waiting_socket_close = true,
-                                              closing_reason = Reason}) ->
+handle_message1(socket_closed, #state{waiting_socket_close = true,
+                                      closing_reason = Reason}) ->
     {shutdown, Reason};
-handle_message1(socket_closed, State = #state{waiting_socket_close = false}) ->
+handle_message1(socket_closed, #state{waiting_socket_close = false}) ->
     socket_closed_unexpectedly;
-handle_message1({socket_error, _} = SocketError, State) ->
+handle_message1({socket_error, _} = SocketError, _State) ->
     SocketError;
-handle_message1({channel_exit, Reason}, State) ->
+handle_message1({channel_exit, Reason}, _State) ->
     {channel0_died, Reason};
-handle_message1(heartbeat_timeout, State) ->
+handle_message1(heartbeat_timeout, _State) ->
     heartbeat_timeout;
 %% see http://erlang.org/pipermail/erlang-bugs/2012-June/002933.html
 handle_message1({Ref, {error, Reason}},
-                State = #state{waiting_socket_close = Waiting,
-                               closing_reason       = CloseReason})
+                #state{waiting_socket_close = Waiting,
+                       closing_reason       = CloseReason})
   when is_reference(Ref) ->
     case {Reason, Waiting} of
         {closed,  true} -> {shutdown, CloseReason};
