@@ -93,10 +93,16 @@
                    [{description, "kernel ready"},
                     {requires,    external_infrastructure}]}).
 
+-rabbit_boot_step({rabbit_alarm_handler,
+                   [{description, "stock alarm handler replacement"},
+                    {mfa,         {rabbit_alarm_handler, start, []}},
+                    {requires,    kernel_ready},
+                    {enables,     core_initialized}]}).
+
 -rabbit_boot_step({rabbit_alarm,
                    [{description, "alarm handler"},
                     {mfa,         {rabbit_alarm, start, []}},
-                    {requires,    kernel_ready},
+                    {requires,    rabbit_alarm_handler},
                     {enables,     core_initialized}]}).
 
 -rabbit_boot_step({rabbit_memory_monitor,
