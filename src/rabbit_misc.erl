@@ -29,7 +29,8 @@
 -export([enable_cover/1, report_cover/1]).
 -export([start_cover/1]).
 -export([confirm_to_sender/2]).
--export([throw_on_error/2, with_exit_handler/2, filter_exit_map/2]).
+-export([throw_on_error/2, is_benign_exit/1, with_exit_handler/2,
+         filter_exit_map/2]).
 -export([is_abnormal_termination/1]).
 -export([with_user/2, with_user_and_vhost/3]).
 -export([execute_mnesia_transaction/1]).
@@ -136,6 +137,7 @@
 -spec(report_cover/1 :: ([file:filename() | atom()]) -> 'ok').
 -spec(throw_on_error/2 ::
         (atom(), thunk(rabbit_types:error(any()) | {ok, A} | A)) -> A).
+-spec(is_benign_exit/1 :: (any()) -> boolean()).
 -spec(with_exit_handler/2 :: (thunk(A), thunk(A)) -> A).
 -spec(filter_exit_map/2 :: (fun ((A) -> B), [A]) -> [B]).
 -spec(is_abnormal_termination/1 :: (any()) -> boolean()).
@@ -418,6 +420,14 @@ throw_on_error(E, Thunk) ->
         {ok, Res}       -> Res;
         Res             -> Res
     end.
+
+is_benign_exit({R, _}) when R =:= noproc; R =:= nodedown; R =:= normal;
+                            R =:= shutdown ->
+    true;
+is_benign_exit({{R, _}, _}) when R =:= nodedown; R =:= shutdown ->
+    true;
+is_benign_exit(_) ->
+    false.
 
 with_exit_handler(Handler, Thunk) ->
     try
