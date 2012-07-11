@@ -21,16 +21,17 @@
 -include("rabbit_stomp_frame.hrl").
 
 parse_simple_frame_test() ->
-    parse_simple_frame_gen(fun frame_string/3).
+    parse_simple_frame_gen("\n").
     
 parse_simple_frame_crlf_test() ->
-    parse_simple_frame_gen(fun frame_crlf_string/3).
+    parse_simple_frame_gen("\r\n").
     
-parse_simple_frame_gen(FrameStringFun) ->
+parse_simple_frame_gen(Term) ->
     Headers = [{"header1", "value1"}, {"header2", "value2"}],
-    Content = FrameStringFun("COMMAND",
-                             Headers,
-                             "Body Content"),
+    Content = frame_string("COMMAND",
+                           Headers,
+                           "Body Content",
+                           Term),
     {"COMMAND", Frame, _State} = parse_complete(Content),
     [?assertEqual({ok, Value},
                   rabbit_stomp_frame:header(Frame, Key)) ||
@@ -145,13 +146,10 @@ parse_complete(Content) ->
     {Command, Frame, State}.
 
 frame_string(Command, Headers, BodyContent) ->
-    frame_string_gen(Command, Headers, BodyContent, "\n").
+    frame_string(Command, Headers, BodyContent, "\n").
 
-frame_string_gen(Command, Headers, BodyContent, Term) ->
+frame_string(Command, Headers, BodyContent, Term) ->
     HeaderString =
         lists:flatten([Key ++ ":" ++ Value ++ Term || {Key, Value} <- Headers]),
     Command ++ Term ++ HeaderString ++ Term ++ BodyContent ++ "\0".
-
-frame_crlf_string(Command, Headers, BodyContent) ->
-    frame_string_gen(Command, Headers, BodyContent, "\r\n").
 
