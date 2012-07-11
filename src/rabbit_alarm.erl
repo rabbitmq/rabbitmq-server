@@ -18,12 +18,15 @@
 
 -behaviour(gen_event).
 
--export([start/0, stop/0, register/2, on_node_up/1, on_node_down/1]).
+-export([start_link/0, start/0, stop/0, register/2, set_alarm/1,
+         clear_alarm/1, on_node_up/1, on_node_down/1]).
 
 -export([init/1, handle_call/2, handle_event/2, handle_info/2,
          terminate/2, code_change/3]).
 
 -export([remote_conserve_resources/3]). %% Internal use only
+
+-define(SERVER, ?MODULE).
 
 -record(alarms, {alertees, alarmed_nodes}).
 
@@ -31,6 +34,7 @@
 
 -ifdef(use_specs).
 
+-spec(start_link/0 :: () -> rabbit_types:ok_pid_or_error()).
 -spec(start/0 :: () -> 'ok').
 -spec(stop/0 :: () -> 'ok').
 -spec(register/2 :: (pid(), rabbit_types:mfargs()) -> boolean()).
@@ -41,35 +45,42 @@
 
 %%----------------------------------------------------------------------------
 
+start_link() ->
+    gen_event:start_link({local, ?SERVER}).
+
 start() ->
-    ok = alarm_handler:add_alarm_handler(?MODULE, []),
+    ok = rabbit_sup:start_restartable_child(?MODULE),
+    ok = gen_event:add_handler(?SERVER, ?MODULE, []),
     {ok, MemoryWatermark} = application:get_env(vm_memory_high_watermark),
     rabbit_sup:start_restartable_child(vm_memory_monitor, [MemoryWatermark]),
-
     {ok, DiskLimit} = application:get_env(disk_free_limit),
     rabbit_sup:start_restartable_child(rabbit_disk_monitor, [DiskLimit]),
     ok.
 
 stop() ->
-    ok = alarm_handler:delete_alarm_handler(?MODULE).
+    ok.
 
 register(Pid, HighMemMFA) ->
-    gen_event:call(alarm_handler, ?MODULE,
-                   {register, Pid, HighMemMFA},
+    gen_event:call(?SERVER, ?MODULE, {register, Pid, HighMemMFA},
                    infinity).
 
-on_node_up(Node) -> gen_event:notify(alarm_handler, {node_up, Node}).
+set_alarm(Alarm) ->
+    gen_event:notify(?SERVER, {set_alarm, Alarm}).
 
-on_node_down(Node) -> gen_event:notify(alarm_handler, {node_down, Node}).
+clear_alarm(Alarm) ->
+    gen_event:notify(?SERVER, {clear_alarm, Alarm}).
 
-%% Can't use alarm_handler:{set,clear}_alarm because that doesn't
-%% permit notifying a remote node.
+on_node_up(Node) -> gen_event:notify(?SERVER, {node_up, Node}).
+
+on_node_down(Node) -> gen_event:notify(?SERVER, {node_down, Node}).
+
 remote_conserve_resources(Pid, Source, true) ->
-    gen_event:notify({alarm_handler, node(Pid)},
+    gen_event:notify({?SERVER, node(Pid)},
                      {set_alarm, {{resource_limit, Source, node()}, []}});
 remote_conserve_resources(Pid, Source, false) ->
-    gen_event:notify({alarm_handler, node(Pid)},
+    gen_event:notify({?SERVER, node(Pid)},
                      {clear_alarm, {resource_limit, Source, node()}}).
+
 
 %%----------------------------------------------------------------------------
 
@@ -85,15 +96,17 @@ handle_call(_Request, State) ->
     {ok, not_understood, State}.
 
 handle_event({set_alarm, {{resource_limit, Source, Node}, []}}, State) ->
+    %% TODO: Do some logging
     {ok, maybe_alert(fun dict:append/3, Node, Source, State)};
 
 handle_event({clear_alarm, {resource_limit, Source, Node}}, State) ->
+    %% TODO: Do some logging
     {ok, maybe_alert(fun dict_unappend/3, Node, Source, State)};
 
 handle_event({node_up, Node}, State) ->
     %% Must do this via notify and not call to avoid possible deadlock.
     ok = gen_event:notify(
-           {alarm_handler, Node},
+           {?SERVER, Node},
            {register, self(), {?MODULE, remote_conserve_resources, []}}),
     {ok, State};
 
