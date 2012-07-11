@@ -28,11 +28,14 @@
 -define(HEADER_MESSAGE_ID, "message-id").
 -define(HEADER_PASSCODE, "passcode").
 -define(HEADER_PERSISTENT, "persistent").
+-define(HEADER_PREFETCH_COUNT, "prefetch-count").
 -define(HEADER_PRIORITY, "priority").
 -define(HEADER_RECEIPT, "receipt").
 -define(HEADER_REPLY_TO, "reply-to").
 -define(HEADER_SERVER, "server").
 -define(HEADER_SESSION, "session").
+-define(HEADER_SUBSCRIPTION, "subscription").
+-define(HEADER_TRANSACTION, "transaction").
 -define(HEADER_VERSION, "version").
 
 -define(MESSAGE_ID_SEPARATOR, "@@").
