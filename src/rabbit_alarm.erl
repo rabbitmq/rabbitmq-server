@@ -96,11 +96,13 @@ handle_call(_Request, State) ->
     {ok, not_understood, State}.
 
 handle_event({set_alarm, {{resource_limit, Source, Node}, []}}, State) ->
-    %% TODO: Do some logging
+    rabbit_log:warning("'~p' resource limit alarm set on node ~p",
+                       [Source, Node]),
     {ok, maybe_alert(fun dict:append/3, Node, Source, State)};
 
 handle_event({clear_alarm, {resource_limit, Source, Node}}, State) ->
-    %% TODO: Do some logging
+    rabbit_log:warning("'~p' resource limit alarm cleared on node ~p",
+                       [Source, Node]),
     {ok, maybe_alert(fun dict_unappend/3, Node, Source, State)};
 
 handle_event({node_up, Node}, State) ->
