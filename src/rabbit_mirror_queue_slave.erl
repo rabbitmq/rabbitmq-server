@@ -199,7 +199,7 @@ handle_call({gm_deaths, Deaths}, From,
                     %% master has changed to not us.
                     gen_server2:reply(From, ok),
                     erlang:monitor(process, Pid),
-                    ok = gm:broadcast(GM, heartbeat),
+                    ok = gm:broadcast(GM, master_changed),
                     noreply(State #state { master_pid = Pid })
             end
     end;
@@ -341,7 +341,7 @@ members_changed([_SPid], _Births, []) ->
 members_changed([SPid], _Births, Deaths) ->
     inform_deaths(SPid, Deaths).
 
-handle_msg([_SPid], _From, heartbeat) ->
+handle_msg([_SPid], _From, master_changed) ->
     ok;
 handle_msg([_SPid], _From, request_length) ->
     %% This is only of value to the master
@@ -452,7 +452,7 @@ promote_me(From, #state { q                   = Q = #amqqueue { name = QName },
                    rabbit_mirror_queue_master:length_fun()),
     true = unlink(GM),
     gen_server2:reply(From, {promote, CPid}),
-    ok = gm:confirmed_broadcast(GM, heartbeat),
+    ok = gm:confirmed_broadcast(GM, master_changed),
 
     %% Everything that we're monitoring, we need to ensure our new
     %% coordinator is monitoring.
