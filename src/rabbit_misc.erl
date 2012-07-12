@@ -61,6 +61,11 @@
 -export([os_cmd/1]).
 -export([gb_sets_difference/2]).
 
+%% Horrible macro to use in guards
+-define(BENIGN_TERMINATION(R),
+        R =:= noproc; R =:= noconnection; R =:= nodedown; R =:= normal;
+            R =:= shutdown).
+
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
@@ -423,23 +428,13 @@ with_exit_handler(Handler, Thunk) ->
     try
         Thunk()
     catch
-        exit:{R, _} when R =:= noproc; R =:= noconnection; R =:= nodedown;
-                         R =:= normal; R =:= shutdown ->
-            Handler();
-        exit:{{R, _}, _} when R =:= nodedown; R =:= shutdown ->
-            Handler()
+        exit:{R, _}      when ?BENIGN_TERMINATION(R) -> Handler();
+        exit:{{R, _}, _} when ?BENIGN_TERMINATION(R) -> Handler()
     end.
 
-%% Note the code duplication between this and `with_exit_handler/2' above - we
-%% can't use arbitrary functions in guards, and we can't re-throw runtime
-%% errors.
-is_abnormal_termination(R) when R =:= noproc; R =:= noconnection;
-                                R =:= nodedown; R =:= normal; R =:= shutdown ->
-    false;
-is_abnormal_termination({R, _}) when R =:= nodedown; R =:= shutdown ->
-    false;
-is_abnormal_termination(_) ->
-    true.
+is_abnormal_termination(R)      when ?BENIGN_TERMINATION(R) -> false;
+is_abnormal_termination({R, _}) when ?BENIGN_TERMINATION(R) -> false;
+is_abnormal_termination(_)                                  -> true.
 
 filter_exit_map(F, L) ->
     Ref = make_ref(),
