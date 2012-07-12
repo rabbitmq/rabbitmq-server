@@ -29,9 +29,8 @@
 -export([enable_cover/1, report_cover/1]).
 -export([start_cover/1]).
 -export([confirm_to_sender/2]).
--export([throw_on_error/2, is_benign_exit/1, with_exit_handler/2,
+-export([throw_on_error/2, with_exit_handler/2, is_abnormal_termination/1,
          filter_exit_map/2]).
--export([is_abnormal_termination/1]).
 -export([with_user/2, with_user_and_vhost/3]).
 -export([execute_mnesia_transaction/1]).
 -export([execute_mnesia_transaction/2]).
@@ -137,10 +136,9 @@
 -spec(report_cover/1 :: ([file:filename() | atom()]) -> 'ok').
 -spec(throw_on_error/2 ::
         (atom(), thunk(rabbit_types:error(any()) | {ok, A} | A)) -> A).
--spec(is_benign_exit/1 :: (any()) -> boolean()).
 -spec(with_exit_handler/2 :: (thunk(A), thunk(A)) -> A).
--spec(filter_exit_map/2 :: (fun ((A) -> B), [A]) -> [B]).
 -spec(is_abnormal_termination/1 :: (any()) -> boolean()).
+-spec(filter_exit_map/2 :: (fun ((A) -> B), [A]) -> [B]).
 -spec(with_user/2 :: (rabbit_types:username(), thunk(A)) -> A).
 -spec(with_user_and_vhost/3 ::
         (rabbit_types:username(), rabbit_types:vhost(), thunk(A))
@@ -421,27 +419,27 @@ throw_on_error(E, Thunk) ->
         Res             -> Res
     end.
 
-%% Note the code duplication between this and `with_exit_handler/2' below - we
-%% can't use arbitrary functions in guards, and we can't re-throw runtime
-%% errors.
-is_benign_exit({R, _}) when R =:= noproc; R =:= nodedown; R =:= normal;
-                            R =:= shutdown ->
-    true;
-is_benign_exit({{R, _}, _}) when R =:= nodedown; R =:= shutdown ->
-    true;
-is_benign_exit(_) ->
-    false.
-
 with_exit_handler(Handler, Thunk) ->
     try
         Thunk()
     catch
-        exit:{R, _} when R =:= noproc; R =:= nodedown;
+        exit:{R, _} when R =:= noproc; R =:= noconnection; R =:= nodedown;
                          R =:= normal; R =:= shutdown ->
             Handler();
         exit:{{R, _}, _} when R =:= nodedown; R =:= shutdown ->
             Handler()
     end.
+
+%% Note the code duplication between this and `with_exit_handler/2' above - we
+%% can't use arbitrary functions in guards, and we can't re-throw runtime
+%% errors.
+is_abnormal_termination(R) when R =:= noproc; R =:= noconnection;
+                                R =:= nodedown; R =:= normal; R =:= shutdown ->
+    false;
+is_abnormal_termination({R, _}) when R =:= nodedown; R =:= shutdown ->
+    false;
+is_abnormal_termination(_) ->
+    true.
 
 filter_exit_map(F, L) ->
     Ref = make_ref(),
@@ -450,11 +448,6 @@ filter_exit_map(F, L) ->
                     fun () -> Ref end,
                     fun () -> F(I) end) || I <- L]).
 
-is_abnormal_termination(Reason)
-  when Reason =:= noproc; Reason =:= noconnection;
-       Reason =:= normal; Reason =:= shutdown -> false;
-is_abnormal_termination({shutdown, _})        -> false;
-is_abnormal_termination(_)                    -> true.
 
 with_user(Username, Thunk) ->
     fun () ->
