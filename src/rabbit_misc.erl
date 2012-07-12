@@ -421,6 +421,9 @@ throw_on_error(E, Thunk) ->
         Res             -> Res
     end.
 
+%% Note the code duplication between this and `with_exit_handler/2' below - we
+%% can't use arbitrary functions in guards, and we can't re-throw runtime
+%% errors.
 is_benign_exit({R, _}) when R =:= noproc; R =:= nodedown; R =:= normal;
                             R =:= shutdown ->
     true;
