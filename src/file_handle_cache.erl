@@ -375,8 +375,7 @@ sync(Ref) ->
 
 needs_sync(Ref) ->
     %% This needs *not* to use with_handles/2; see bug 25052
-    Handle = get({Ref, fhc_handle}),
-    case Handle of
+    case get({Ref, fhc_handle}) of
         #handle { is_dirty = false, write_buffer = [] } -> false;
         _                                               -> true
     end.
