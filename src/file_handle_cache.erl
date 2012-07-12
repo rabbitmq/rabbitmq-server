@@ -1028,8 +1028,8 @@ obtain_limit_reached(#fhc_state { obtain_limit = Limit,
 
 adjust_alarm(OldState, NewState) ->
     case {obtain_limit_reached(OldState), obtain_limit_reached(NewState)} of
-        {false, true} -> rabbit_alarm:set_alarm({file_descriptor_limit, []});
-        {true, false} -> rabbit_alarm:clear_alarm(file_descriptor_limit);
+        {false, true} -> alarm_handler:set_alarm({file_descriptor_limit, []});
+        {true, false} -> alarm_handler:clear_alarm(file_descriptor_limit);
         _             -> ok
     end,
     NewState.

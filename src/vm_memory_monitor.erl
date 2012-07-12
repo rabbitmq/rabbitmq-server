@@ -181,10 +181,10 @@ internal_update(State = #state { memory_limit = MemLimit,
     case {Alarmed, NewAlarmed} of
         {false, true} ->
             emit_update_info(set, MemUsed, MemLimit),
-            rabbit_alarm:set_alarm({{resource_limit, memory, node()}, []});
+            alarm_handler:set_alarm({{resource_limit, memory, node()}, []});
         {true, false} ->
             emit_update_info(clear, MemUsed, MemLimit),
-            rabbit_alarm:clear_alarm({resource_limit, memory, node()});
+            alarm_handler:clear_alarm({resource_limit, memory, node()});
         _ ->
             ok
     end,

@@ -217,11 +217,11 @@ stop-rabbit-on-node: all
 	echo "rabbit:stop()." | $(ERL_CALL)
 
 set-resource-alarm: all
-	echo "rabbit_alarm:set_alarm({{resource_limit, $(SOURCE), node()}, []})." | \
+	echo "alarm_handler:set_alarm({{resource_limit, $(SOURCE), node()}, []})." | \
 	$(ERL_CALL)
 
 clear-resource-alarm: all
-	echo "rabbit_alarm:clear_alarm({resource_limit, $(SOURCE), node()})." | \
+	echo "alarm_handler:clear_alarm({resource_limit, $(SOURCE), node()})." | \
 	$(ERL_CALL)
 
 stop-node:
