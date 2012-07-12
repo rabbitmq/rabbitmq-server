@@ -374,11 +374,12 @@ sync(Ref) ->
       end).
 
 needs_sync(Ref) ->
-    with_handles(
-      [Ref],
-      fun ([#handle { is_dirty = false, write_buffer = [] }]) -> false;
-          ([_Handle])                                         -> true
-      end).
+    %% This needs *not* to use with_handles/2; see bug 25052
+    Handle = get({Ref, fhc_handle}),
+    case Handle of
+        #handle { is_dirty = false, write_buffer = [] } -> false;
+        _                                               -> true
+    end.
 
 position(Ref, NewOffset) ->
     with_flushed_handles(
