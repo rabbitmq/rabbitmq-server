@@ -1328,11 +1328,11 @@ handle_info(drop_expired, State) ->
     noreply(drop_expired_messages(State#q{ttl_timer_ref = undefined}));
 
 handle_info(emit_stats, State) ->
-    %% Do not invoke noreply as it would see no timer and create a new one.
     emit_stats(State),
-    State1 = rabbit_event:reset_stats_timer(State, #q.stats_timer),
-    assert_invariant(State1),
-    {noreply, State1, hibernate};
+    {noreply, State1, Timeout} = noreply(State),
+    %% Need to reset *after* we've been through noreply/1 so we do not
+    %% just create another timer always and therefore never hibernate
+    {noreply, rabbit_event:reset_stats_timer(State1, #q.stats_timer), Timeout};
 
 handle_info({'DOWN', _MonitorRef, process, DownPid, _Reason},
             State = #q{q = #amqqueue{exclusive_owner = DownPid}}) ->
