@@ -210,6 +210,9 @@ handle_set_alarm({{resource_limit, Source, Node}, []}, State) ->
     {ok, maybe_alert(fun dict:append/3, Node, Source, State)};
 handle_set_alarm({file_descriptor_limit, []}, State) ->
     rabbit_log:warning("file descriptor limit alarm set"),
+    {ok, State};
+handle_set_alarm(Alarm, State) ->
+    rabbit_log:warning("alarm '~p' set", [Alarm]),
     {ok, State}.
 
 handle_clear_alarm({resource_limit, Source, Node}, State) ->
@@ -218,4 +221,7 @@ handle_clear_alarm({resource_limit, Source, Node}, State) ->
     {ok, maybe_alert(fun dict_unappend/3, Node, Source, State)};
 handle_clear_alarm(file_descriptor_limit, State) ->
     rabbit_log:warning("file descriptor limit alarm cleared"),
+    {ok, State};
+handle_clear_alarm(Alarm, State) ->
+    rabbit_log:warning("alarm '~p' cleared", [Alarm]),
     {ok, State}.
