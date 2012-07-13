@@ -457,6 +457,8 @@ promote_me(From, #state { q                   = Q = #amqqueue { name = QName },
                    rabbit_mirror_queue_master:length_fun()),
     true = unlink(GM),
     gen_server2:reply(From, {promote, CPid}),
+    %% TODO this has been in here since the beginning, but it's not
+    %% obvious if it is needed. Investigate...
     ok = gm:confirmed_broadcast(GM, master_changed),
 
     %% Everything that we're monitoring, we need to ensure our new
