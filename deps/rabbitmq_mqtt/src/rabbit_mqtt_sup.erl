@@ -28,10 +28,10 @@ start_link(Listeners, Configuration) ->
 init([Listeners, Configuration]) ->
     {ok, SocketOpts} = application:get_env(rabbitmq_mqtt, tcp_listen_options),
     {ok, {{one_for_all, 10, 10},
-          [{rabbit_mqtt_client_sup_sup,
+          [{rabbit_mqtt_client_sup,
             {rabbit_client_sup, start_link,
-             [{local, rabbit_mqtt_client_sup_sup},
-              {rabbit_mqtt_client_sup, start_link,[]}]},
+             [{local, rabbit_mqtt_client_sup},
+              {rabbit_mqtt_reader, start_link,[]}]},
             transient, infinity, supervisor, [rabbit_client_sup]} |
            listener_specs(fun tcp_listener_spec/1,
                           [SocketOpts, Configuration], Listeners)]}}.
@@ -48,10 +48,10 @@ tcp_listener_spec([Address, SocketOpts, Configuration]) ->
       {?MODULE, start_client, [Configuration]}).
 
 start_client(Configuration, Sock) ->
-    {ok, _Child, Reader} = supervisor:start_child(rabbit_mqtt_client_sup_sup,
-                                                  [Configuration]),
+    {ok, Reader} = supervisor:start_child(rabbit_mqtt_client_sup,
+                                          [Configuration]),
+    ok = gen_server2:call(Reader, {go, Sock}),
     ok = rabbit_net:controlling_process(Sock, Reader),
-    Reader ! {go, Sock},
 
     %% see comment in rabbit_networking:start_client/2
     gen_event:which_handlers(error_logger),

@@ -1,0 +1,43 @@
+%% The contents of this file are subject to the Mozilla Public License
+%% Version 1.1 (the "License"); you may not use this file except in
+%% compliance with the License. You may obtain a copy of the License
+%% at http://www.mozilla.org/MPL/
+%%
+%% Software distributed under the License is distributed on an "AS IS"
+%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
+%% the License for the specific language governing rights and
+%% limitations under the License.
+%%
+%% The Original Code is RabbitMQ.
+%%
+%% The Initial Developer of the Original Code is VMware, Inc.
+%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
+%%
+
+-module(rabbit_mqtt_util).
+
+-include("include/rabbit_mqtt.hrl").
+
+-compile(export_all).
+
+subcription_queue_name(ClientId) ->
+    list_to_binary("MQTT_subscription_" ++ ClientId).
+
+%% amqp mqtt descr
+%% *    +    match one topic level
+%% #    #    match multiple topic levels
+%% .    /    topic level separator
+translate_topic(Topic) ->
+    erlang:iolist_to_binary(
+      re:replace(re:replace(Topic, "/", ".", [global]),
+                 "[\+]", "*", [global])).
+
+untranslate_topic(Topic) ->
+    erlang:iolist_to_binary(
+      re:replace(re:replace(Topic, "[\*]", "+", [global]),
+                 "[\.]", "/", [global])).
+
+valid_client_id(ClientId) ->
+    ClientIdLen = length(ClientId),
+    1 =< ClientIdLen andalso ClientIdLen =< ?CLIENT_ID_MAXLEN.
+

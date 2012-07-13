@@ -15,146 +15,128 @@
 %%
 
 -module(rabbit_mqtt_reader).
+-behaviour(gen_server2).
 
--export([start_link/2]).
--export([init/2]).
+-export([start_link/1]).
+-export([init/1, handle_call/3, handle_cast/2, handle_info/2,
+         code_change/3, terminate/2]).
+
+-export([send_frame/2]).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("include/rabbit_mqtt_frame.hrl").
-
--record(reader_state, {socket, parse_state, processor, state,
-                       conserve_resources, recv_outstanding}).
+-include("include/rabbit_mqtt.hrl").
 
 %%----------------------------------------------------------------------------
 
-start_link(SupPid, Configuration) ->
-        {ok, proc_lib:spawn_link(?MODULE, init, [SupPid, Configuration])}.
+start_link(_Configuration) ->
+    gen_server2:start_link(?MODULE, [], []).
 
 log(Level, Fmt, Args) -> rabbit_log:log(connection, Level, Fmt, Args).
 
-init(SupPid, Configuration) ->
-    receive
-        {go, Sock} ->
-            {ok, ProcessorPid} = start_processor(SupPid, Configuration, Sock),
-            {ok, ConnStr} = rabbit_net:connection_string(Sock, inbound),
+init([]) ->
+    {ok, #state {},
+     hibernate,
+     {backoff, 1000, 1000, 10000}}.
 
-            log(info, "accepting MQTT connection ~p (~s)~n",
-                [self(), ConnStr]),
+handle_call({go, Sock}, _From, #state { socket = undefined } ) ->
+    {ok, ConnStr} = rabbit_net:connection_string(Sock, inbound),
+    log(info, "accepting MQTT connection ~p (~s)~n", [self(), ConnStr]),
+    ParseState = rabbit_mqtt_frame:initial_state(),
+    {ok, _Ref} = rabbit_net:async_recv(Sock, 0, infinity),
+    {reply, ok, #state { socket       = Sock,
+                         conn_name    = ConnStr,
+                         parse_state  = ParseState,
+                         adapter_info = adapter_info(Sock) }};
 
-            ParseState = rabbit_mqtt_frame:initial_state(),
-            try
-                rabbit_misc:throw_on_error(
-                  inet_error, fun () -> rabbit_net:tune_buffer_size(Sock) end),
-                mainloop(
-                  control_throttle(
-                    register_resource_alarm(
-                      #reader_state{socket             = Sock,
-                                    parse_state        = ParseState,
-                                    processor          = ProcessorPid,
-                                    state              = running,
-                                    conserve_resources = false,
-                                    recv_outstanding   = false}))),
-                log(info, "closing MQTT connection ~p (~s)~n",
-                    [self(), ConnStr])
+handle_call(Msg, From, State) ->
+    stop({mqtt_unexpected_call, Msg, From}, State).
 
-            catch
-                _:Ex -> log(error, "closing MQTT connection ~p (~s):~n~p~n",
-                          [self(), ConnStr, Ex])
-            after
-                rabbit_mqtt_processor:flush_and_die(ProcessorPid)
-            end,
+handle_cast(Msg, State) ->
+    stop({mqtt_unexpected_cast, Msg}, State).
 
-            done
-    end.
+handle_info({#'basic.deliver'{delivery_tag = Tag,
+                              routing_key = RoutingKey },
+             #amqp_msg{ payload = Payload }},
+            #state { channel    = Channel,
+                     socket     = Sock } = State ) ->
+    send_frame(
+      Sock,
+      #mqtt_frame{ fixed    = #mqtt_frame_fixed {type = ?PUBLISH},
+                   variable = #mqtt_frame_publish {
+                                topic_name = rabbit_mqtt_util:untranslate_topic(
+                                               RoutingKey) },
+                   payload = Payload}),
+    amqp_channel:cast(Channel, #'basic.ack'{delivery_tag = Tag}),
+    {noreply, State, hibernate};
 
-mainloop(State0 = #reader_state{socket = Sock}) ->
-    State = run_socket(State0),
-    receive
-        {inet_async, Sock, _Ref, {ok, Data}} ->
-            process_received_bytes(
-              Data, State#reader_state{recv_outstanding = false});
-        {inet_async, _Sock, _Ref, {error, closed}} ->
-            ok;
-        {inet_async, _Sock, _Ref, {error, Reason}} ->
-            throw({inet_error, Reason});
-        {conserve_resources, Conserve} ->
-            mainloop(control_throttle(
-                       State#reader_state{conserve_resources = Conserve}));
-        {bump_credit, Msg} ->
-            credit_flow:handle_bump_msg(Msg),
-            mainloop(control_throttle(State))
-    end.
+handle_info(#'basic.consume_ok'{}, State) ->
+    {noreply, State, hibernate};
 
-process_received_bytes([], State) ->
-    mainloop(State);
-process_received_bytes(Bytes,
-                       State = #reader_state{
-                         processor   = Processor,
-                         parse_state = ParseState,
-                         state       = S}) ->
-    case rabbit_mqtt_frame:parse(Bytes, ParseState) of
-        {more, ParseState1} ->
-            mainloop(State#reader_state{parse_state = ParseState1});
-        {ok, Frame, Rest} ->
-            rabbit_mqtt_processor:process_frame(Processor, Frame),
-            PS = rabbit_mqtt_frame:initial_state(),
-            process_received_bytes(Rest,
-                                   control_throttle(
-                                     State#reader_state{
-                                       parse_state = PS,
-                                       state       = next_state(S, Frame)}));
-        {error, Error} ->
-            rabbit_log:error("MQTT parse error ~p~n", [error]),
-            throw(Error)
-    end.
+handle_info(#'basic.cancel_ok'{}, State) ->
+    {noreply, State, hibernate};
 
-conserve_resources(Pid, Conserve) ->
-    Pid ! {conserve_resources, Conserve},
-    ok.
+handle_info({'EXIT', Conn, Reason}, State = #state{ connection = Conn }) ->
+    stop({conn_died, Reason}, State);
 
-register_resource_alarm(State) ->
-    rabbit_alarm:register(self(), {?MODULE, conserve_resources, []}), State.
+handle_info({inet_reply, _Ref, ok}, State) ->
+    {noreply, State, hibernate};
 
-control_throttle(State = #reader_state{state              = CS,
-                                       conserve_resources = Mem}) ->
-    case {CS, Mem orelse credit_flow:blocked()} of
-        {running,   true} -> State#reader_state{state = blocking};
-        {blocking, false} -> State#reader_state{state = running};
-        {blocked,  false} -> State#reader_state{state = running};
-        {_,            _} -> State
-    end.
-
-next_state(blocking, {frame, publish}) ->
-    blocked;
-next_state(S, _) ->
-    S.
-
-run_socket(State = #reader_state{state = blocked}) ->
-    State;
-run_socket(State = #reader_state{recv_outstanding = true}) ->
-    State;
-run_socket(State = #reader_state{socket = Sock}) ->
+handle_info({inet_async, Sock, _Ref, {ok, Data}},
+            State = #state { socket = Sock }) ->
     rabbit_net:async_recv(Sock, 0, infinity),
-    State#reader_state{recv_outstanding = true}.
+    process_received_bytes(Data, State);
+
+handle_info({inet_async, _Sock, _Ref, {error, closed}}, State) ->
+    stop({shutdown, conn_closed}, close_connection(State));
+
+handle_info(Msg, State) ->
+    stop({mqtt_unexpected_msg, Msg}, State).
+
+terminate(Reason, State) ->
+    stop(Reason, State).
+
+process_received_bytes(<<>>, State) ->
+    {noreply, State};
+process_received_bytes(Bytes,
+                       State = #state { parse_state = ParseState }) ->
+    case
+        rabbit_mqtt_frame:parse(Bytes, ParseState) of
+            {more, ParseState1} ->
+                {noreply, State #state{ parse_state = ParseState1 }};
+            {ok, Frame, Rest} ->
+                case rabbit_mqtt_processor:process_frame(Frame, State) of
+                    {ok, State1} ->
+                        PS = rabbit_mqtt_frame:initial_state(),
+                        process_received_bytes(Rest,
+                                               State1#state{ parse_state = PS });
+                    {stop, Reason, State1} ->
+                        stop(Reason, State1)
+                end;
+            {error, Error} ->
+                rabbit_log:error("MQTT framing error ~p~n", [Error]),
+                stop({shutdown, Error}, State)
+    end.
+
 
 %%----------------------------------------------------------------------------
 
-start_processor(SupPid, Configuration, Sock) ->
-    SendFun = fun (sync, IoData) ->
-                      %% no messages emitted
-                      catch rabbit_net:send(Sock, IoData);
-                  (async, IoData) ->
-                      %% {inet_reply, _, _} will appear soon
-                      %% We ignore certain errors here, as we will be
-                      %% receiving an asynchronous notification of the
-                      %% same (or a related) fault shortly anyway. See
-                      %% bug 21365.
-                      catch rabbit_net:port_command(Sock, IoData)
-              end,
+stop(Reason, State = #state { conn_name = ConnStr }) ->
+    log(info, "closing MQTT connection ~p (~s)~n", [self(), ConnStr]),
+    {stop, Reason, close_connection(State)}.
 
-    rabbit_mqtt_client_sup:start_processor(
-      SupPid, [SendFun, adapter_info(Sock), Configuration]).
+%% Closing the connection will close the channel and subchannels
+close_connection(State = #state{connection = Connection})
+  when Connection =/= undefined ->
+    %% ignore noproc or other exceptions to avoid debris
+    catch amqp_connection:close(Connection),
+    State#state{channel = undefined, connection = undefined};
+close_connection(State) ->
+    State.
 
+send_frame(Sock, Frame) ->
+    %rabbit_log:error("sending frame ~p ~n", [Frame]),
+    rabbit_net:port_command(Sock, rabbit_mqtt_frame:serialise(Frame)).
 
 adapter_info(Sock) ->
     {Addr, Port} = case rabbit_net:sockname(Sock) of
@@ -169,9 +151,12 @@ adapter_info(Sock) ->
                {ok, Res3} -> Res3;
                _          -> unknown
            end,
-    #adapter_info{protocol        = {'MQTT', {?MQTT_PROTO_MAJOR, ?MQTT_PROTO_MINOR}},
-                  name            = list_to_binary(Name),
-                  address         = Addr,
-                  port            = Port,
-                  peer_address    = PeerAddr,
-                  peer_port       = PeerPort}.
+    #adapter_info{protocol     = {'MQTT', {?MQTT_PROTO_MAJOR, ?MQTT_PROTO_MINOR}},
+                  name         = list_to_binary(Name),
+                  address      = Addr,
+                  port         = Port,
+                  peer_address = PeerAddr,
+                  peer_port    = PeerPort}.
+
+code_change(_OldVsn, State, _Extra) ->
+    {ok, State}.
