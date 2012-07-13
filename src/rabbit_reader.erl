@@ -536,6 +536,11 @@ post_process_frame({method, MethodName, _}, _ChPid,
 post_process_frame(_Frame, _ChPid, State) ->
     control_throttle(State).
 
+handle_input(frame_header, <<Type:8,Channel:16,PayloadSize:32>>,
+             #v1{connection = #connection{frame_max = FrameMax}})
+  when FrameMax /= 0 andalso PayloadSize > FrameMax - ?EMPTY_FRAME_SIZE ->
+    throw({frame_too_large, Type, Channel, PayloadSize,
+           FrameMax - ?EMPTY_FRAME_SIZE});
 handle_input(frame_header, <<Type:8,Channel:16,PayloadSize:32>>, State) ->
     ensure_stats_timer(
       switch_callback(State, {frame_payload, Type, Channel, PayloadSize},
