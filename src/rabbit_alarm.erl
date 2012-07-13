@@ -19,7 +19,7 @@
 -behaviour(gen_event).
 
 -export([start_link/0, start/0, stop/0, register/2, set_alarm/1,
-         clear_alarm/1, on_node_up/1, on_node_down/1]).
+         clear_alarm/1, get_alarms/0, on_node_up/1, on_node_down/1]).
 
 -export([init/1, handle_call/2, handle_event/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -28,7 +28,7 @@
 
 -define(SERVER, ?MODULE).
 
--record(alarms, {alertees, alarmed_nodes}).
+-record(alarms, {alertees, alarmed_nodes, alarms}).
 
 %%----------------------------------------------------------------------------
 
@@ -74,6 +74,9 @@ set_alarm(Alarm) ->
 clear_alarm(Alarm) ->
     gen_event:notify(?SERVER, {clear_alarm, Alarm}).
 
+get_alarms() ->
+    gen_event:call(?SERVER, ?MODULE, get_alarms, infinity).
+
 on_node_up(Node) -> gen_event:notify(?SERVER, {node_up, Node}).
 
 on_node_down(Node) -> gen_event:notify(?SERVER, {node_down, Node}).
@@ -90,32 +93,25 @@ remote_conserve_resources(Pid, Source, false) ->
 
 init([]) ->
     {ok, #alarms{alertees      = dict:new(),
-                 alarmed_nodes = dict:new()}}.
+                 alarmed_nodes = dict:new(),
+                 alarms        = []}}.
 
 handle_call({register, Pid, HighMemMFA}, State) ->
     {ok, 0 < dict:size(State#alarms.alarmed_nodes),
      internal_register(Pid, HighMemMFA, State)};
 
+handle_call(get_alarms, State = #alarms{alarms = Alarms}) ->
+    {ok, Alarms, State};
+
 handle_call(_Request, State) ->
     {ok, not_understood, State}.
 
-handle_event({set_alarm, {{resource_limit, Source, Node}, []}}, State) ->
-    rabbit_log:warning("'~p' resource limit alarm set on node ~p",
-                       [Source, Node]),
-    {ok, maybe_alert(fun dict:append/3, Node, Source, State)};
+handle_event({set_alarm, Alarm}, State = #alarms{alarms = Alarms}) ->
+    handle_set_alarm(Alarm, State#alarms{alarms = [Alarm|Alarms]});
 
-handle_event({clear_alarm, {resource_limit, Source, Node}}, State) ->
-    rabbit_log:warning("'~p' resource limit alarm cleared on node ~p",
-                       [Source, Node]),
-    {ok, maybe_alert(fun dict_unappend/3, Node, Source, State)};
-
-handle_event({set_alarm, {file_descriptor_limit, []}}, State) ->
-    rabbit_log:warning("file descriptor limit alarm set"),
-    {ok, State};
-
-handle_event({clear_alarm, file_descriptor_limit}, State) ->
-    rabbit_log:warning("file descriptor limit alarm cleared"),
-    {ok, State};
+handle_event({clear_alarm, Alarm}, State = #alarms{alarms = Alarms}) ->
+    handle_clear_alarm(Alarm, State#alarms{alarms = lists:keydelete(Alarm, 1,
+                                                                    Alarms)});
 
 handle_event({node_up, Node}, State) ->
     %% Must do this via notify and not call to avoid possible deadlock.
@@ -213,3 +209,19 @@ internal_register(Pid, {M, F, A} = HighMemMFA,
     end,
     NewAlertees = dict:store(Pid, HighMemMFA, Alertees),
     State#alarms{alertees = NewAlertees}.
+
+handle_set_alarm({{resource_limit, Source, Node}, []}, State) ->
+    rabbit_log:warning("'~p' resource limit alarm set on node ~p",
+                       [Source, Node]),
+    {ok, maybe_alert(fun dict:append/3, Node, Source, State)};
+handle_set_alarm({file_descriptor_limit, []}, State) ->
+    rabbit_log:warning("file descriptor limit alarm set"),
+    {ok, State}.
+
+handle_clear_alarm({resource_limit, Source, Node}, State) ->
+    rabbit_log:warning("'~p' resource limit alarm cleared on node ~p",
+                       [Source, Node]),
+    {ok, maybe_alert(fun dict_unappend/3, Node, Source, State)};
+handle_clear_alarm(file_descriptor_limit, State) ->
+    rabbit_log:warning("file descriptor limit alarm cleared"),
+    {ok, State}.
