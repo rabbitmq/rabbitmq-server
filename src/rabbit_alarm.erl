@@ -61,21 +61,17 @@ start() ->
     rabbit_sup:start_restartable_child(rabbit_disk_monitor, [DiskLimit]),
     ok.
 
-stop() ->
-    ok.
+stop() -> ok.
 
 register(Pid, HighMemMFA) ->
     gen_event:call(?SERVER, ?MODULE, {register, Pid, HighMemMFA},
                    infinity).
 
-set_alarm(Alarm) ->
-    gen_event:notify(?SERVER, {set_alarm, Alarm}).
+set_alarm(Alarm) -> gen_event:notify(?SERVER, {set_alarm, Alarm}).
 
-clear_alarm(Alarm) ->
-    gen_event:notify(?SERVER, {clear_alarm, Alarm}).
+clear_alarm(Alarm) -> gen_event:notify(?SERVER, {clear_alarm, Alarm}).
 
-get_alarms() ->
-    gen_event:call(?SERVER, ?MODULE, get_alarms, infinity).
+get_alarms() -> gen_event:call(?SERVER, ?MODULE, get_alarms, infinity).
 
 on_node_up(Node) -> gen_event:notify(?SERVER, {node_up, Node}).
 
