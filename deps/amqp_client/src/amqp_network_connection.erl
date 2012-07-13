@@ -55,7 +55,6 @@ do2(Method, #state{writer0 = Writer}) ->
     %% Catching because it expects the {channel_exit, _} message on error
     catch rabbit_writer:send_command_sync(Writer, Method).
 
-
 handle_message(socket_closing_timeout,
                State = #state{closing_reason = Reason}) ->
     {stop, {socket_closing_timeout, Reason}, State};
@@ -73,12 +72,12 @@ handle_message(heartbeat_timeout, State) ->
 %% see http://erlang.org/pipermail/erlang-bugs/2012-June/002933.html
 handle_message({Ref, {error, Reason}},
                State = #state{waiting_socket_close = Waiting,
-                              closing_reason = CloseReason})
+                              closing_reason       = CloseReason})
   when is_reference(Ref) ->
     {stop, case {Reason, Waiting} of
-               {closed, true} -> {shutdown, CloseReason};
+               {closed,  true} -> {shutdown, CloseReason};
                {closed, false} -> socket_closed_unexpectedly;
-               {_, _} -> {socket_error, Reason}
+               {_,          _} -> {socket_error, Reason}
            end, State}.
 
 closing(_ChannelCloseType, Reason, State) ->
