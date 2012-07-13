@@ -189,7 +189,7 @@ i(applications, _State) ->
 
 resource_alarm_set(Source) ->
     lists:member({{resource_limit, Source, node()},[]},
-                 alarm_handler:get_alarms()).
+                 rabbit_alarm:get_alarms()).
 
 list_registry_plugins(Type) ->
     list_registry_plugins(Type, fun(_) -> true end).
