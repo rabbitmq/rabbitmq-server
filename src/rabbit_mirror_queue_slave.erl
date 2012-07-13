@@ -199,6 +199,11 @@ handle_call({gm_deaths, Deaths}, From,
                     %% master has changed to not us.
                     gen_server2:reply(From, ok),
                     erlang:monitor(process, Pid),
+                    %% GM is lazy. So we know of the death of the
+                    %% slave since it is a neighbour of ours, but
+                    %% until a message is sent, not all members will
+                    %% know. That might include the new master. So
+                    %% broadcast a no-op message to wake everyone up.
                     ok = gm:broadcast(GM, master_changed),
                     noreply(State #state { master_pid = Pid })
             end
