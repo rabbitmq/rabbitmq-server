@@ -541,8 +541,8 @@ handle_input(frame_header, <<Type:8,Channel:16,PayloadSize:32>>, State) ->
       switch_callback(State, {frame_payload, Type, Channel, PayloadSize},
                       PayloadSize + 1));
 
-handle_input({frame_payload, Type, Channel, PayloadSize},
-             PayloadAndMarker, State) ->
+handle_input({frame_payload, Type, Channel, PayloadSize}, PayloadAndMarker,
+             State) ->
     case PayloadAndMarker of
         <<Payload:PayloadSize/binary, ?FRAME_END>> ->
             switch_callback(handle_frame(Type, Channel, Payload, State),
