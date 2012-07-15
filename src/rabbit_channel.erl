@@ -421,7 +421,7 @@ handle_exception(Reason, State = #ch{protocol   = Protocol,
 precondition_failed(Format) -> precondition_failed(Format, []).
 
 precondition_failed(Format, Params) ->
-    rabbit_misc:amqp_error(precondition_failed, Format, Params).
+    rabbit_misc:protocol_error(precondition_failed, Format, Params).
 
 return_queue_declare_ok(#resource{name = ActualName},
                         NoWait, MessageCount, ConsumerCount, State) ->
