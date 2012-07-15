@@ -405,6 +405,10 @@ handle_exception(Reason, State = #ch{protocol   = Protocol,
                                      writer_pid = WriterPid,
                                      reader_pid = ReaderPid,
                                      conn_pid   = ConnPid}) ->
+    {CloseChannel, CloseMethod} =
+        rabbit_binary_generator:map_exception(Channel, Reason, Protocol),
+    rabbit_log:error("connection ~p, channel ~p - error:~n~p~n",
+                     [ConnPid, Channel, Reason]),
     %% something bad's happened: notify_queues may not be 'ok'
     {_Result, State1} = notify_queues(State),
     case CloseChannel of
