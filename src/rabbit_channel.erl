@@ -267,7 +267,7 @@ handle_cast({method, Method, Content, Flow},
     catch
         exit:Reason = #amqp_error{} ->
             MethodName = rabbit_misc:method_record_type(Method),
-            send_exception(Reason#amqp_error{method = MethodName}, State);
+            handle_exception(Reason#amqp_error{method = MethodName}, State);
         _:Reason ->
             {stop, {Reason, erlang:get_stacktrace()}, State}
     end;
@@ -400,15 +400,11 @@ return_ok(State, false, Msg)  -> {reply, Msg, State}.
 ok_msg(true, _Msg) -> undefined;
 ok_msg(false, Msg) -> Msg.
 
-send_exception(Reason, State = #ch{protocol   = Protocol,
-                                   channel    = Channel,
-                                   writer_pid = WriterPid,
-                                   reader_pid = ReaderPid,
-                                   conn_pid   = ConnPid}) ->
-    {CloseChannel, CloseMethod} =
-        rabbit_binary_generator:map_exception(Channel, Reason, Protocol),
-    rabbit_log:error("connection ~p, channel ~p - error:~n~p~n",
-                     [ConnPid, Channel, Reason]),
+handle_exception(Reason, State = #ch{protocol   = Protocol,
+                                     channel    = Channel,
+                                     writer_pid = WriterPid,
+                                     reader_pid = ReaderPid,
+                                     conn_pid   = ConnPid}) ->
     %% something bad's happened: notify_queues may not be 'ok'
     {_Result, State1} = notify_queues(State),
     case CloseChannel of
@@ -1423,7 +1419,7 @@ complete_tx(State = #ch{tx_status = committing}) ->
     ok = rabbit_writer:send_command(State#ch.writer_pid, #'tx.commit_ok'{}),
     State#ch{tx_status = in_progress};
 complete_tx(State = #ch{tx_status = failed}) ->
-    {noreply, State1} = send_exception(
+    {noreply, State1} = handle_exception(
                           rabbit_misc:amqp_error(
                             precondition_failed, "partial tx completion", [],
                             'tx.commit'),
