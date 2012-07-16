@@ -33,9 +33,9 @@ parse(<<>>, none) ->
     {more, fun(Bin) -> parse(Bin, none) end};
 parse(<<MessageType:4, Dup:1, QoS:2, Retain:1, Rest/binary>>, none) ->
     parse_remaining_len(Rest, #mqtt_frame_fixed{type   = MessageType,
-                                                dup    = Dup,
+                                                dup    = bool(Dup),
                                                 qos    = QoS,
-                                                retain = Retain});
+                                                retain = bool(Retain)});
 parse(Bin, Cont) -> Cont(Bin).
 
 parse_remaining_len(<<>>, Fixed) ->
@@ -219,4 +219,6 @@ serialise_len(N) ->
     <<1:1, (N rem ?HIGHBIT):7, (serialise_len(N div ?HIGHBIT))/binary>>.
 
 opt(undefined)            -> ?RESERVED;
+opt(false)                -> 0;
+opt(true)                 -> 1;
 opt(X) when is_integer(X) -> X.

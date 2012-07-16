@@ -46,7 +46,7 @@ handle_call({go, Sock}, _From, #state { socket = undefined } ) ->
     {ok, _Ref} = rabbit_net:async_recv(Sock, 0, infinity),
     {reply, ok, #state { socket       = Sock,
                          conn_name    = ConnStr,
-                         unacked_pubs = queue:new(),
+                         unacked_pubs = gb_trees:empty(),
                          confirms     = false,
                          parse_state  = ParseState,
                          adapter_info = adapter_info(Sock) }};
@@ -57,20 +57,31 @@ handle_call(Msg, From, State) ->
 handle_cast(Msg, State) ->
     stop({mqtt_unexpected_cast, Msg}, State).
 
-handle_info({#'basic.deliver'{delivery_tag = Tag,
-                              routing_key = RoutingKey },
-             #amqp_msg{ payload = Payload }},
-            #state { channel    = Channel,
-                     socket     = Sock } = State ) ->
-    send_frame(
-      Sock,
-      #mqtt_frame{ fixed    = #mqtt_frame_fixed {type = ?PUBLISH },
-                   variable = #mqtt_frame_publish {
-                                topic_name = rabbit_mqtt_util:untranslate_topic(
-                                               RoutingKey) },
-                   payload = Payload}),
-    amqp_channel:cast(Channel, #'basic.ack'{delivery_tag = Tag}),
-    {noreply, State, hibernate};
+handle_info({#'basic.deliver'{ delivery_tag = Tag,
+                               routing_key  = RoutingKey },
+             #amqp_msg{ payload = Payload }} = Delivery,
+            #state{ channel = Channel,
+                    socket  = Sock } = State) ->
+    case {dup(Delivery), qos_from_tag(Tag, State)} of
+        {true, ?QOS_0} ->
+            % avoid delivering a qos0 msg more than once
+            {noreply, State, hibernate};
+        {Dup, Qos}     ->
+            send_frame(
+              Sock,
+              #mqtt_frame{ fixed = #mqtt_frame_fixed{
+                                     type = ?PUBLISH,
+                                     dup  = Dup },
+                           variable = #mqtt_frame_publish {
+                                        topic_name =
+                                          rabbit_mqtt_util:untranslate_topic(
+                                            RoutingKey) },
+                           payload = Payload}),
+                           % todo: defer qos1 subscription acks
+                           amqp_channel:cast(
+                             Channel, #'basic.ack'{ delivery_tag = Tag }),
+                           {noreply, State, hibernate}
+    end;
 
 handle_info(#'basic.consume_ok'{}, State) ->
     {noreply, State, hibernate};
@@ -81,19 +92,20 @@ handle_info(#'basic.cancel_ok'{}, State) ->
 handle_info(#'basic.ack'{ multiple = Multiple, delivery_tag = Tag } = Ack,
             State = #state { socket = Sock,
                              unacked_pubs = UnackedPubs }) ->
-    case queue:out(UnackedPubs) of
-        {{value, {SeqNo, MsgId}}, UnackedPubs1} ->
+    case gb_trees:lookup(Tag, UnackedPubs) of
+        {value, MsgId} ->
             send_frame(
               Sock,
               #mqtt_frame{ fixed = #mqtt_frame_fixed{ type = ?PUBACK },
                            variable = #mqtt_frame_publish{ message_id =
                                                              MsgId }}),
-            State1 = State #state { unacked_pubs = UnackedPubs1 },
+            State1 = State #state { unacked_pubs =
+                                      gb_trees:delete(Tag, UnackedPubs) },
             case Multiple of
                 true -> handle_info(Ack, State1);
                 false -> {noreply, State1, hibernate}
             end;
-        {empty, _} ->
+        none ->
             {noreply, State, hibernate}
     end;
 
@@ -185,6 +197,19 @@ adapter_info(Sock) ->
                   port         = Port,
                   peer_address = PeerAddr,
                   peer_port    = PeerPort}.
+
+dup({#'basic.deliver'{ redelivered = Redelivered },
+     #amqp_msg{ props = #'P_basic'{ headers = undefined }}}) ->
+    Redelivered;
+dup({#'basic.deliver'{ redelivered = Redelivered },
+     #amqp_msg{ props = #'P_basic'{ headers = Headers }}}) ->
+    case rabbit_misc:table_lookup(Headers, 'x-mqtt-dup') of
+        undefined   -> Redelivered;
+        {bool, Dup} -> Redelivered orelse Dup
+    end.
+
+% todo: support qos1 subscriptions
+qos_from_tag(_Tag, _State) -> ?QOS_0.
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.

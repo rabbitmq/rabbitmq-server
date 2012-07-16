@@ -91,11 +91,17 @@ process_request(?PUBLISH,
     Method = #'basic.publish'{ exchange    = ?DEFAULT_EXCHANGE,
                                routing_key =
                                    rabbit_mqtt_util:translate_topic(TopicName)},
-    amqp_channel:cast(Channel, Method, #amqp_msg{payload = Payload}),
+    Props = case Dup of
+                true  -> #'P_basic'{headers = [{'x-mqtt-dup', bool, true}]};
+                false -> #'P_basic'{}
+            end,
+    Msg = #amqp_msg{ props   = Props,
+                     payload = Payload },
+    amqp_channel:cast(Channel, Method, Msg),
     {ok, State1 #state { unacked_pubs =
                            case Qos of
                                0 -> UnackedPubs;
-                               1 -> queue:in({SeqNo, MessageId}, UnackedPubs)
+                               1 -> gb_trees:enter(SeqNo, MessageId, UnackedPubs)
                            end }};
 
 process_request(?SUBSCRIBE,
@@ -170,7 +176,7 @@ maybe_clean_sess(true, Conn, ClientId) ->
                                                        queue = Queue }),
                                  ok = amqp_channel:close(Channel)
     catch
-        exit:Reason -> ok
+        exit:_Error -> ok
     end.
 
 ensure_unique_client_id(_ClientId) ->
