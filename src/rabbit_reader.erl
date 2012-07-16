@@ -617,15 +617,13 @@ handle_input(frame_header, <<Type:8,Channel:16,PayloadSize:32>>, State) ->
       switch_callback(State, {frame_payload, Type, Channel, PayloadSize},
                       PayloadSize + 1));
 
-handle_input({frame_payload, Type, Channel, PayloadSize}, PayloadAndMarker,
-             State) ->
-    case PayloadAndMarker of
-        <<Payload:PayloadSize/binary, ?FRAME_END>> ->
-            switch_callback(handle_frame(Type, Channel, Payload, State),
-                            frame_header, 7);
-        <<Payload:PayloadSize/binary, EndMarker>> ->
-            frame_error({invalid_frame_end_marker, EndMarker},
-                        Type, Channel, Payload, State)
+handle_input({frame_payload, Type, Channel, PayloadSize}, Data, State) ->
+    <<Payload:PayloadSize/binary, EndMarker>> = Data,
+    case EndMarker of
+        ?FRAME_END -> State1 = handle_frame(Type, Channel, Payload, State),
+                      switch_callback(State1, frame_header, 7);
+        _          -> frame_error({invalid_frame_end_marker, EndMarker},
+                                  Type, Channel, Payload, State)
     end;
 
 %% The two rules pertaining to version negotiation:
