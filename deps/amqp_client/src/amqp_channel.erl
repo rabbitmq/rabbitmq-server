@@ -68,8 +68,9 @@
 
 -export([call/2, call/3, cast/2, cast/3, cast_flow/3]).
 -export([close/1, close/3]).
--export([register_return_handler/2, register_flow_handler/2,
-         register_confirm_handler/2]).
+-export([register_return_handler/2, unregister_return_handler/1,
+         register_flow_handler/2, unregister_flow_handler/1,
+         register_confirm_handler/2, unregister_confirm_handler/1]).
 -export([call_consumer/2, subscribe/3]).
 -export([next_publish_seqno/1, wait_for_confirms/1, wait_for_confirms/2,
          wait_for_confirms_or_die/1, wait_for_confirms_or_die/2]).
@@ -263,6 +264,14 @@ wait_for_confirms_or_die(Channel, Timeout) ->
 register_return_handler(Channel, ReturnHandler) ->
     gen_server:cast(Channel, {register_return_handler, ReturnHandler} ).
 
+%% @spec (Channel) -> ok
+%% where
+%%      Channel = pid()
+%% @doc Removes the return handler, if it exists. Does nothing if there is no
+%% such handler.
+unregister_return_handler(Channel) ->
+    gen_server:cast(Channel, unregister_return_handler).
+
 %% @spec (Channel, ConfirmHandler) -> ok
 %% where
 %%      Channel = pid()
@@ -274,6 +283,14 @@ register_return_handler(Channel, ReturnHandler) ->
 register_confirm_handler(Channel, ConfirmHandler) ->
     gen_server:cast(Channel, {register_confirm_handler, ConfirmHandler} ).
 
+%% @spec (Channel) -> ok
+%% where
+%%      Channel = pid()
+%% @doc Removes the confirm handler, if it exists. Does nothing if there is no
+%% such handler.
+unregister_confirm_handler(Channel) ->
+    gen_server:cast(Channel, unregister_confirm_handler).
+
 %% @spec (Channel, FlowHandler) -> ok
 %% where
 %%      Channel = pid()
@@ -282,6 +299,14 @@ register_confirm_handler(Channel, ConfirmHandler) ->
 %% The registered process will receive #channel.flow{} records.
 register_flow_handler(Channel, FlowHandler) ->
     gen_server:cast(Channel, {register_flow_handler, FlowHandler} ).
+
+%% @spec (Channel) -> ok
+%% where
+%%      Channel = pid()
+%% @doc Removes the flow handler, if it exists. Does nothing if there is no
+%% such handler.
+unregister_flow_handler(Channel) ->
+    gen_server:cast(Channel, unregister_flow_handler).
 
 %% @spec (Channel, Msg) -> ok
 %% where
@@ -379,13 +404,31 @@ handle_cast({register_return_handler, ReturnHandler}, State) ->
     erlang:monitor(process, ReturnHandler),
     {noreply, State#state{return_handler_pid = ReturnHandler}};
 %% @private
+handle_cast(unregister_return_handler,
+            State = #state{return_handler_pid = ReturnHandler}) ->
+    ?LOG_INFO("Channel (~p): Unregistering return handler ~p.", []),
+    erlang:disconnect_node(ReturnHandler),
+    {noreply, State#state{return_handler_pid = none}};
+%% @private
 handle_cast({register_confirm_handler, ConfirmHandler}, State) ->
     erlang:monitor(process, ConfirmHandler),
     {noreply, State#state{confirm_handler_pid = ConfirmHandler}};
 %% @private
+handle_cast(unregister_confirm_handler,
+            State = #state{confirm_handler_pid = ConfirmHandler}) ->
+    ?LOG_INFO("Channel (~p): Unregistering confirm handler ~p.", []),
+    erlang:disconnect_node(ConfirmHandler),
+    {noreply, State#state{confirm_handler_pid = none}};
+%% @private
 handle_cast({register_flow_handler, FlowHandler}, State) ->
     erlang:monitor(process, FlowHandler),
     {noreply, State#state{flow_handler_pid = FlowHandler}};
+%% @private
+handle_cast(unregister_flow_handler,
+            State = #state{flow_handler_pid = FlowHandler}) ->
+    ?LOG_INFO("Channel (~p): Unregistering flow handler ~p.", []),
+    erlang:disconnect_node(FlowHandler),
+    {noreply, State#state{flow_handler_pid = none}};
 %% Received from channels manager
 %% @private
 handle_cast({method, Method, Content, noflow}, State) ->

@@ -368,11 +368,23 @@ basic_return_test() ->
             ?assertMatch(?NO_ROUTE, ReplyCode),
             #amqp_msg{payload = Payload2} = Content,
             ?assertMatch(Payload, Payload2);
-        WhatsThis ->
-            exit({bad_message, WhatsThis})
+        WhatsThis1 ->
+            exit({bad_message, WhatsThis1})
     after 2000 ->
         exit(no_return_received)
     end,
+    amqp_channel:unregister_return_handler(Channel),
+    Publish = #'basic.publish'{exchange = X, routing_key = Key,
+                               mandatory = true},
+    amqp_channel:call(Channel, Publish, #amqp_msg{payload = Payload}),
+    ok = receive
+             {_BasicReturn = #'basic.return'{}, _Content} ->
+                 unexpected_return;
+             WhatsThis2 ->
+                 exit({bad_message, WhatsThis2})
+         after 2000 ->
+                 ok
+         end,
     teardown(Connection, Channel).
 
 channel_repeat_open_close_test() ->
