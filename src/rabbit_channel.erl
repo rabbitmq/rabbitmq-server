@@ -409,7 +409,7 @@ handle_exception(Reason, State = #ch{protocol   = Protocol,
     {_Result, State1} = notify_queues(State),
     case rabbit_binary_generator:map_exception(Channel, Reason, Protocol) of
         {Channel, CloseMethod} ->
-            rabbit_log:error("connection ~p, channel ~p - error:~n~p~n",
+            rabbit_log:error("connection ~p, channel ~p - soft error:~n~p~n",
                              [ConnPid, Channel, Reason]),
             ok = rabbit_writer:send_command(WriterPid, CloseMethod),
             {noreply, State1};
