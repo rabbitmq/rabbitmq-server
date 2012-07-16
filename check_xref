@@ -34,14 +34,18 @@ main([PluginsDir|Argv]) ->
         false -> ok;
         true  -> os:cmd("rm -rf " ++ LibDir)
     end,
+    Rc = try
+             check(Cwd, PluginsDir, LibDir, checks())
+         catch
+             _:Err ->
+                 io:format(user, "failed: ~p~n", [Err]),
+                 1
+         end,
+    shutdown(Rc, LibDir).
 
-    try
-        check(Cwd, PluginsDir, LibDir, checks())
-    after
-        %% TODO: bootstrap file_handle_cache and use
-        %% rabbit_file:recursive_delete instead of this...
-        os:cmd("rm -rf " ++ LibDir)
-    end.
+shutdown(Rc, LibDir) ->
+    os:cmd("rm -rf " ++ LibDir),
+    erlang:halt(Rc).
 
 check(Cwd, PluginsDir, LibDir, Checks) ->
     {ok, Plugins} = file:list_dir(PluginsDir),
@@ -220,8 +224,8 @@ report(Results) ->
     report(info, "Completed: ~p errors, ~p warnings~n",
                  [length(Errors), length(Warnings)]),
     case length(Errors) > 0 of
-        true  -> halt(1);
-        false -> halt(0)
+        true  -> 1;
+        false -> 0
     end.
 
 report_failures({analysis_error, {Mod, Reason}}) ->
