@@ -49,7 +49,7 @@ class BaseTest(unittest.TestCase):
         self.assertEquals("foo", msg['message'])
         self.assertEquals(dest, msg['headers']['destination'])
 
-   def assertListener(self, errMsg, numMsgs=0, numErrs=0, numRcts=0, timeout=1):
+   def assertListener(self, errMsg, numMsgs=0, numErrs=0, numRcts=0, timeout=10):
         if numMsgs + numErrs + numRcts > 0:
             self._assertTrue(self.listener.await(timeout), errMsg + " (#awaiting)")
         else:
