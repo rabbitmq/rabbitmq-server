@@ -712,25 +712,19 @@ handle_connection_closing(CloseType, Reason,
             handle_shutdown({connection_closing, Reason}, NewState)
     end.
 
-handle_channel_exit(Reason, State = #state{connection = Connection}) ->
-    case Reason of
-        %% Sent by rabbit_channel in the direct case
-        #amqp_error{name = ErrorName, explanation = Expl} ->
-            ?LOG_WARN("Channel (~p) closing: server sent error ~p~n",
-                      [self(), Reason]),
-            {IsHard, Code, _} = ?PROTOCOL:lookup_amqp_exception(ErrorName),
-            ReportedReason = {server_initiated_close, Code, Expl},
-            handle_shutdown(
-                if IsHard ->
-                             amqp_gen_connection:hard_error_in_channel(
-                                 Connection, self(), ReportedReason),
-                             {connection_closing, ReportedReason};
-                   true   -> ReportedReason
-                end, State);
-        %% Unexpected death of a channel infrastructure process
-        _ ->
-            {stop, {infrastructure_died, Reason}, State}
-    end.
+handle_channel_exit(Reason = #amqp_error{name = ErrorName, explanation = Expl},
+                    State = #state{connection = Connection, number = Number}) ->
+    %% Sent by rabbit_channel for hard errors in the direct case
+    ?LOG_ERR("connection ~p, channel ~p - error:~n~p~n",
+             [Connection, Number, Reason]),
+    {true, Code, _} = ?PROTOCOL:lookup_amqp_exception(ErrorName),
+    ReportedReason = {server_initiated_close, Code, Expl},
+    amqp_gen_connection:hard_error_in_channel(
+      Connection, self(), ReportedReason),
+    handle_shutdown({connection_closing, ReportedReason}, State);
+handle_channel_exit(Reason, State) ->
+    %% Unexpected death of a channel infrastructure process
+    {stop, {infrastructure_died, Reason}, State}.
 
 handle_shutdown({_, 200, _}, State) ->
     {stop, normal, State};
