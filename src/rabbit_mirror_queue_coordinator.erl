@@ -36,8 +36,6 @@
                  length_fun
                }).
 
--define(ONE_SECOND, 1000).
-
 -ifdef(use_specs).
 
 -spec(start_link/4 :: (rabbit_types:amqqueue(), pid() | 'undefined',
@@ -325,7 +323,6 @@ init([#amqqueue { name = QueueName } = Q, GM, DeathFun, LengthFun]) ->
                   true = link(GM),
                   GM
           end,
-    ensure_gm_heartbeat(),
     {ok, #state { q          = Q,
                   gm         = GM1,
                   monitors   = pmon:new(),
@@ -358,11 +355,6 @@ handle_cast({ensure_monitoring, Pids}, State = #state { monitors = Mons }) ->
 
 handle_cast({delete_and_terminate, Reason}, State) ->
     {stop, Reason, State}.
-
-handle_info(send_gm_heartbeat, State = #state { gm = GM }) ->
-    gm:broadcast(GM, heartbeat),
-    ensure_gm_heartbeat(),
-    noreply(State);
 
 handle_info({'DOWN', _MonitorRef, process, Pid, _Reason},
             State = #state { monitors  = Mons,
@@ -399,15 +391,15 @@ members_changed([_CPid], _Births, []) ->
 members_changed([CPid], _Births, Deaths) ->
     ok = gen_server2:cast(CPid, {gm_deaths, Deaths}).
 
-handle_msg([_CPid], _From, heartbeat) ->
+handle_msg([_CPid], _From, master_changed) ->
     ok;
 handle_msg([CPid], _From, request_length = Msg) ->
     ok = gen_server2:cast(CPid, Msg);
 handle_msg([CPid], _From, {ensure_monitoring, _Pids} = Msg) ->
     ok = gen_server2:cast(CPid, Msg);
-handle_msg([CPid], _From, {delete_and_terminate, Reason} = Msg) ->
+handle_msg([CPid], _From, {delete_and_terminate, _Reason} = Msg) ->
     ok = gen_server2:cast(CPid, Msg),
-    {stop, Reason};
+    {stop, {shutdown, ring_shutdown}};
 handle_msg([_CPid], _From, _Msg) ->
     ok.
 
@@ -420,6 +412,3 @@ noreply(State) ->
 
 reply(Reply, State) ->
     {reply, Reply, State, hibernate}.
-
-ensure_gm_heartbeat() ->
-    erlang:send_after(?ONE_SECOND, self(), send_gm_heartbeat).

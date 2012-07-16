@@ -23,6 +23,7 @@ package: clean
 	cp -r debian $(UNPACKED_DIR)
 	cp $(COMMON_DIR)/* $(UNPACKED_DIR)/debian/
 	sed -i -e 's|@SU_RABBITMQ_SH_C@|su rabbitmq -s /bin/sh -c|' \
+	       -e 's|@STDOUT_STDERR_REDIRECTION@| > "/var/log/rabbitmq/startup_log" 2> "/var/log/rabbitmq/startup_err"|' \
 	    $(UNPACKED_DIR)/debian/rabbitmq-script-wrapper
 	chmod a+x $(UNPACKED_DIR)/debian/rules
 	echo "This package was debianized by Tony Garnock-Jones <tonyg@rabbitmq.com> on\nWed,  3 Jan 2007 15:43:44 +0000.\n\nIt was downloaded from http://www.rabbitmq.com/\n\n" > $(UNPACKED_DIR)/debian/copyright

@@ -28,7 +28,7 @@
 -export([notify_sent/2, notify_sent_queue_down/1, unblock/2, flush_all/2]).
 -export([notify_down_all/2, limit_all/3]).
 -export([on_node_down/1]).
--export([store_queue/1]).
+-export([update/2, store_queue/1, policy_changed/2]).
 
 
 %% internal
@@ -71,6 +71,9 @@
 -spec(internal_declare/2 ::
         (rabbit_types:amqqueue(), boolean())
         -> queue_or_not_found() | rabbit_misc:thunk(queue_or_not_found())).
+-spec(update/2 ::
+        (name(),
+         fun((rabbit_types:amqqueue()) -> rabbit_types:amqqueue())) -> 'ok').
 -spec(lookup/1 ::
         (name()) -> rabbit_types:ok(rabbit_types:amqqueue()) |
                     rabbit_types:error('not_found');
@@ -157,6 +160,8 @@
 -spec(on_node_down/1 :: (node()) -> 'ok').
 -spec(pseudo_queue/2 :: (name(), pid()) -> rabbit_types:amqqueue()).
 -spec(store_queue/1 :: (rabbit_types:amqqueue()) -> 'ok').
+-spec(policy_changed/2 ::
+        (rabbit_types:amqqueue(), rabbit_types:amqqueue()) -> 'ok').
 
 -endif.
 
@@ -166,6 +171,9 @@
         [queue_name, channel_pid, consumer_tag, ack_required]).
 
 start() ->
+    %% Clear out remnants of old incarnation, in case we restarted
+    %% faster than other nodes handled DOWN messages from us.
+    on_node_down(node()),
     DurableQueues = find_durable_queues(),
     {ok, BQ} = application:get_env(rabbit, backing_queue_module),
     ok = BQ:start([QName || #amqqueue{name = QName} <- DurableQueues]),
@@ -222,9 +230,10 @@ internal_declare(Q = #amqqueue{name = QueueName}, false) ->
               case mnesia:wread({rabbit_queue, QueueName}) of
                   [] ->
                       case mnesia:read({rabbit_durable_queue, QueueName}) of
-                          []  -> ok = store_queue(Q),
-                                 B = add_default_binding(Q),
-                                 fun () -> B(), Q end;
+                          []  -> Q1 = rabbit_policy:set(Q),
+                                 ok = store_queue(Q1),
+                                 B = add_default_binding(Q1),
+                                 fun () -> B(), Q1 end;
                           %% Q exists on stopped node
                           [_] -> rabbit_misc:const(not_found)
                       end;
@@ -237,12 +246,28 @@ internal_declare(Q = #amqqueue{name = QueueName}, false) ->
               end
       end).
 
+update(Name, Fun) ->
+    case mnesia:wread({rabbit_queue, Name}) of
+        [Q = #amqqueue{durable = Durable}] ->
+            Q1 = Fun(Q),
+            ok = mnesia:write(rabbit_queue, Q1, write),
+            case Durable of
+                true -> ok = mnesia:write(rabbit_durable_queue, Q1, write);
+                _    -> ok
+            end;
+        [] ->
+            ok
+    end.
+
 store_queue(Q = #amqqueue{durable = true}) ->
     ok = mnesia:write(rabbit_durable_queue, Q#amqqueue{slave_pids = []}, write),
     ok = mnesia:write(rabbit_queue, Q, write),
     ok;
 store_queue(Q = #amqqueue{durable = false}) ->
     ok = mnesia:write(rabbit_queue, Q, write),
+    ok.
+
+policy_changed(_Q1, _Q2) ->
     ok.
 
 determine_queue_nodes(Args) ->
@@ -508,7 +533,7 @@ basic_consume(#amqqueue{pid = QPid}, NoAck, ChPid, Limiter,
                          Limiter, ConsumerTag, ExclusiveConsume, OkMsg}).
 
 basic_cancel(#amqqueue{pid = QPid}, ChPid, ConsumerTag, OkMsg) ->
-    ok = delegate_call(QPid, {basic_cancel, ChPid, ConsumerTag, OkMsg}).
+    delegate_call(QPid, {basic_cancel, ChPid, ConsumerTag, OkMsg}).
 
 notify_sent(QPid, ChPid) ->
     Key = {consumer_credit_to, QPid},
@@ -573,7 +598,8 @@ on_node_down(Node) ->
                                     #amqqueue{name = QName, pid = Pid,
                                               slave_pids = []}
                                         <- mnesia:table(rabbit_queue),
-                                    node(Pid) == Node])),
+                                    node(Pid) == Node andalso
+                                        not is_process_alive(Pid)])),
                 {Qs, Dels} = lists:unzip(QsDels),
                 T = rabbit_binding:process_deletions(
                       lists:foldl(fun rabbit_binding:combine_deletions/2,

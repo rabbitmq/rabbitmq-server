@@ -27,7 +27,7 @@
          set_check_interval/1, get_disk_free/0]).
 
 -define(SERVER, ?MODULE).
--define(DEFAULT_DISK_CHECK_INTERVAL, 60000).
+-define(DEFAULT_DISK_CHECK_INTERVAL, 10000).
 
 -record(state, {dir,
                 limit,

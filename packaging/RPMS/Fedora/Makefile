@@ -42,6 +42,7 @@ ifeq "$(RPM_OS)" "fedora"
 	    SOURCES/rabbitmq-server.init
 endif
 	sed -i -e 's|@SU_RABBITMQ_SH_C@|su rabbitmq -s /bin/sh -c|' \
+	       -e 's|@STDOUT_STDERR_REDIRECTION@||' \
 	    SOURCES/rabbitmq-script-wrapper
 	cp rabbitmq-server.logrotate SOURCES/rabbitmq-server.logrotate
 

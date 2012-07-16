@@ -173,13 +173,11 @@ add(Src, Dst, B) ->
           mnesia:read({rabbit_durable_route, B}) =:= []) of
         true  -> ok = sync_route(#route{binding = B}, SrcDurable, DstDurable,
                                  fun mnesia:write/3),
-                 ok = rabbit_exchange:callback(
-                        Src, add_binding, [transaction, Src, B]),
+                 x_callback(transaction, Src, add_binding, B),
                  Serial = rabbit_exchange:serial(Src),
                  fun () ->
-                     ok = rabbit_exchange:callback(
-                            Src, add_binding, [Serial, Src, B]),
-                     ok = rabbit_event:notify(binding_created, info(B))
+                         x_callback(Serial, Src, add_binding, B),
+                         ok = rabbit_event:notify(binding_created, info(B))
                  end;
         false -> rabbit_misc:const({error, binding_not_found})
     end.
@@ -487,4 +485,5 @@ process_deletions(Deletions) ->
 
 del_notify(Bs) -> [rabbit_event:notify(binding_deleted, info(B)) || B <- Bs].
 
-x_callback(Arg, X, F, Bs) -> ok = rabbit_exchange:callback(X, F, [Arg, X, Bs]).
+x_callback(Serial, X, F, Bs) ->
+    ok = rabbit_exchange:callback(X, F, Serial, [X, Bs]).

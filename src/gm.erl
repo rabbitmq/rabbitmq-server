@@ -558,7 +558,7 @@ handle_call(group_members, _From,
     reply(not_joined, State);
 
 handle_call(group_members, _From, State = #state { view = View }) ->
-    reply(alive_view_members(View), State);
+    reply(get_pids(alive_view_members(View)), State);
 
 handle_call({add_on_right, _NewMember}, _From,
             State = #state { members_state = undefined }) ->
@@ -647,7 +647,7 @@ handle_info(flush, State) ->
     noreply(
       flush_broadcast_buffer(State #state { broadcast_timer = undefined }));
 
-handle_info({'DOWN', MRef, process, _Pid, _Reason},
+handle_info({'DOWN', MRef, process, _Pid, Reason},
             State = #state { self          = Self,
                              left          = Left,
                              right         = Right,
@@ -661,8 +661,10 @@ handle_info({'DOWN', MRef, process, _Pid, _Reason},
                  {_, {Member1, MRef}} -> Member1;
                  _                    -> undefined
              end,
-    case Member of
-        undefined ->
+    case {Member, Reason} of
+        {undefined, _} ->
+            noreply(State);
+        {_, {shutdown, ring_shutdown}} ->
             noreply(State);
         _ ->
             View1 =
