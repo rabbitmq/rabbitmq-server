@@ -87,8 +87,8 @@
                 driver,
                 rpc_requests       = queue:new(),
                 closing            = false, %% false |
-                                             %%   {just_channel, Reason} |
-                                             %%   {connection, Reason}
+                                            %%   {just_channel, Reason} |
+                                            %%   {connection, Reason}
                 writer,
                 return_handler     = none,
                 confirm_handler    = none,
