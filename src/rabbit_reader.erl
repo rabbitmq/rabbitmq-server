@@ -887,8 +887,8 @@ i(SockStat, #v1{sock = Sock}) when SockStat =:= recv_oct;
                                    SockStat =:= send_oct;
                                    SockStat =:= send_cnt;
                                    SockStat =:= send_pend ->
-    socket_info(fun () -> rabbit_net:getstat(Sock, [SockStat]) end,
-                fun ([{_, I}]) -> I end);
+    socket_info(fun (S) -> rabbit_net:getstat(S, [SockStat]) end,
+                fun ([{_, I}]) -> I end, Sock);
 i(state, #v1{connection_state = S}) ->
     S;
 i(last_blocked_by, #v1{last_blocked_by = By}) ->
@@ -924,10 +924,7 @@ i(Item, #v1{}) ->
     throw({bad_argument, Item}).
 
 socket_info(Get, Select, Sock) ->
-    socket_info(fun() -> Get(Sock) end, Select).
-
-socket_info(Get, Select) ->
-    case Get() of
+    case Get(Sock) of
         {ok,    T} -> Select(T);
         {error, _} -> ''
     end.
