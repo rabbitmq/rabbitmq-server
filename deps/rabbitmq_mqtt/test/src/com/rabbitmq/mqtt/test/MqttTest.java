@@ -26,20 +26,25 @@ import java.util.List;
 public class MqttTest extends TestCase implements MqttCallback {
 
 	private final String brokerUrl = "tcp://localhost:1883";
-    private final String clientId = getClass().getSimpleName();
+    private String clientId;
+    private String clientId2;
     private MqttClient client;
+    private MqttClient client2;
 	private MqttConnectOptions conOpt;
     private ArrayList<MqttMessage> receivedMessages;
 
     private final byte[] payload = "payload".getBytes();
     private final String topic = "test-topic";
+    private int testDelay = 100;
 
+    @Override
     public void setUp() throws MqttException {
+        clientId = getClass().getSimpleName() + ((int) (10000*Math.random()));
+        clientId2 = clientId + "-2";
         client = new MqttClient(brokerUrl, clientId);
+        client2 = new MqttClient(brokerUrl, clientId2);
         conOpt = new MqttConnectOptions();
-        conOpt.setUserName("guest");
-        conOpt.setPassword("guest".toCharArray());
-        conOpt.setKeepAliveInterval(10);
+        setConOpts(conOpt);
         receivedMessages = new ArrayList();
     }
 
@@ -54,6 +59,7 @@ public class MqttTest extends TestCase implements MqttCallback {
     }
 
     public void testInvalidPassword() throws MqttException {
+        conOpt.setUserName("invalid-user");
         conOpt.setPassword("invalid-password".toCharArray());
         try {
             client.connect(conOpt);
@@ -68,12 +74,12 @@ public class MqttTest extends TestCase implements MqttCallback {
         client.setCallback(this);
         client.subscribe(topic);
         publish(client, topic, 0, payload);
-        Thread.sleep(1000);
+        Thread.sleep(testDelay);
         Assert.assertEquals(1, receivedMessages.size());
         Assert.assertEquals(true, Arrays.equals(receivedMessages.get(0).getPayload(), payload));
         client.unsubscribe(topic);
         publish(client, topic, 0, payload);
-        Thread.sleep(1000);
+        Thread.sleep(testDelay);
         Assert.assertEquals(1, receivedMessages.size());
         client.disconnect();
     }
@@ -87,11 +93,53 @@ public class MqttTest extends TestCase implements MqttCallback {
         for(String example : cases){
             publish(client, example, 0, example.getBytes());
         }
-        Thread.sleep(1000);
+        Thread.sleep(testDelay);
         Assert.assertEquals(expected.size(), receivedMessages.size());
         for (MqttMessage m : receivedMessages){
             expected.contains(new String(m.getPayload()));
         }
+        client.disconnect();
+    }
+
+    public void testNoncleanSession() throws MqttException, InterruptedException {
+        conOpt.setCleanSession(false);
+        client.connect(conOpt);
+        client.subscribe(topic, 1);
+        client.disconnect();
+
+        client2.connect(conOpt);
+        publish(client2, topic, 1, payload);
+        client2.disconnect();
+
+        client.connect(conOpt);
+        client.setCallback(this);
+        client.subscribe(topic, 1);
+
+        Thread.sleep(testDelay);
+        Assert.assertEquals(1, receivedMessages.size());
+        Assert.assertEquals(true, Arrays.equals(receivedMessages.get(0).getPayload(), payload));
+        client.unsubscribe(topic);
+        client.disconnect();
+    }
+
+    public void testCleanSession() throws MqttException, InterruptedException {
+        conOpt.setCleanSession(false);
+        client.connect(conOpt);
+        client.subscribe(topic, 1);
+        client.disconnect();
+
+        client2.connect(conOpt);
+        publish(client2, topic, 1, payload);
+        client2.disconnect();
+
+        conOpt.setCleanSession(true);
+        client.connect(conOpt);
+        client.setCallback(this);
+        client.subscribe(topic, 1);
+
+        Thread.sleep(testDelay);
+        Assert.assertEquals(0, receivedMessages.size());
+        client.unsubscribe(topic);
         client.disconnect();
     }
 
@@ -101,6 +149,12 @@ public class MqttTest extends TestCase implements MqttCallback {
     	message.setQos(qos);
     	MqttDeliveryToken token = topic.publish(message);
     	token.waitForCompletion();
+    }
+
+    private void setConOpts(MqttConnectOptions conOpts) {
+        conOpts.setUserName("guest");
+        conOpts.setPassword("guest".toCharArray());
+        conOpts.setKeepAliveInterval(10);
     }
 
     public void connectionLost(Throwable cause) {

@@ -29,12 +29,12 @@
 
 %%----------------------------------------------------------------------------
 
-start_link(_Configuration) ->
-    gen_server2:start_link(?MODULE, [], []).
+start_link(Configuration) ->
+    gen_server2:start_link(?MODULE, Configuration, []).
 
 log(Level, Fmt, Args) -> rabbit_log:log(connection, Level, Fmt, Args).
 
-init([]) ->
+init(Configuration) ->
     {ok, #state {},
      hibernate,
      {backoff, 1000, 1000, 10000}}.
@@ -46,6 +46,8 @@ handle_call({go, Sock}, _From, #state { socket = undefined } ) ->
     {ok, _Ref} = rabbit_net:async_recv(Sock, 0, infinity),
     {reply, ok, #state { socket       = Sock,
                          conn_name    = ConnStr,
+                         unacked_pubs = queue:new(),
+                         confirms     = false,
                          parse_state  = ParseState,
                          adapter_info = adapter_info(Sock) }};
 
@@ -62,7 +64,7 @@ handle_info({#'basic.deliver'{delivery_tag = Tag,
                      socket     = Sock } = State ) ->
     send_frame(
       Sock,
-      #mqtt_frame{ fixed    = #mqtt_frame_fixed {type = ?PUBLISH},
+      #mqtt_frame{ fixed    = #mqtt_frame_fixed {type = ?PUBLISH },
                    variable = #mqtt_frame_publish {
                                 topic_name = rabbit_mqtt_util:untranslate_topic(
                                                RoutingKey) },
@@ -75,6 +77,30 @@ handle_info(#'basic.consume_ok'{}, State) ->
 
 handle_info(#'basic.cancel_ok'{}, State) ->
     {noreply, State, hibernate};
+
+handle_info(#'basic.ack'{ multiple = Multiple, delivery_tag = Tag } = Ack,
+            State = #state { socket = Sock,
+                             unacked_pubs = UnackedPubs }) ->
+    case queue:out(UnackedPubs) of
+        {{value, {SeqNo, MsgId}}, UnackedPubs1} ->
+            send_frame(
+              Sock,
+              #mqtt_frame{ fixed = #mqtt_frame_fixed{ type = ?PUBACK },
+                           variable = #mqtt_frame_publish{ message_id =
+                                                             MsgId }}),
+            State1 = State #state { unacked_pubs = UnackedPubs1 },
+            case Multiple of
+                true -> handle_info(Ack, State1);
+                false -> {noreply, State1, hibernate}
+            end;
+        {empty, _} ->
+            {noreply, State, hibernate}
+    end;
+
+handle_info(#'basic.nack'{}, State = #state { unacked_pubs = UnackedPubs }) ->
+    % todo: republish message
+    log(error, "MQTT received nack for msg id ~p~n", [queue:get(UnackedPubs)]),
+    {stop, nack, State};
 
 handle_info({'EXIT', Conn, Reason}, State = #state{ connection = Conn }) ->
     stop({conn_died, Reason}, State);
@@ -122,6 +148,8 @@ process_received_bytes(Bytes,
 %%----------------------------------------------------------------------------
 
 stop(Reason, State = #state { conn_name = ConnStr }) ->
+    % todo: maybe clean session
+    % todo: execute last will
     log(info, "closing MQTT connection ~p (~s)~n", [self(), ConnStr]),
     {stop, Reason, close_connection(State)}.
 

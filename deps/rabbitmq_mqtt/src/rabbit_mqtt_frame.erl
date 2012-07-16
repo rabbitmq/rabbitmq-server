@@ -77,10 +77,10 @@ parse_frame(Bin, #mqtt_frame_fixed{ type = Type,
                 true ->
                     wrap(Fixed,
                          #mqtt_frame_connect{proto_ver   = ProtoVersion,
-                                             will_retain = WillRetain,
+                                             will_retain = bool(WillRetain),
                                              will_qos    = WillQos,
-                                             will_flag   = WillMsg,
-                                             clean_sess  = CleanSession,
+                                             will_flag   = bool(WillFlag),
+                                             clean_sess  = bool(CleanSession),
                                              keep_alive  = KeepAlive,
                                              client_id   = ClientId,
                                              will_topic  = WillTopic,
@@ -95,7 +95,7 @@ parse_frame(Bin, #mqtt_frame_fixed{ type = Type,
             {MessageId, Payload} = case QoS of
                                        0 -> {undefined, Rest1};
                                        _ -> <<M:16/big, R/binary>> = Rest1,
-                                            {<<M>>, <<R>>}
+                                            {M, R}
                                    end,
             wrap(Fixed, #mqtt_frame_publish { topic_name = TopicName,
                                               message_id = MessageId},
@@ -145,6 +145,9 @@ parse_utf(Bin, _) ->
 parse_utf(<<Len:16/big, Str:Len/binary, Rest/binary>>) ->
     {binary_to_list(Str), Rest}.
 
+bool(0) -> false;
+bool(1) -> true.
+
 %% serialisation
 
 serialise(#mqtt_frame{ fixed    = Fixed,
@@ -181,6 +184,12 @@ serialise_variable(#mqtt_frame_fixed   { type       = ?PUBLISH,
                        1 -> <<MessageId:16/big>>
                    end,
     serialise_fixed(Fixed, <<TopicBin/binary, MessageIdBin/binary>>, PayloadBin);
+
+serialise_variable(#mqtt_frame_fixed   { type       = ?PUBACK } = Fixed,
+                   #mqtt_frame_publish { message_id = MessageId },
+                   PayloadBin) ->
+    MessageIdBin = <<MessageId:16/big>>,
+    serialise_fixed(Fixed, MessageIdBin, PayloadBin);
 
 serialise_variable(#mqtt_frame_fixed {} = Fixed,
                    undefined,

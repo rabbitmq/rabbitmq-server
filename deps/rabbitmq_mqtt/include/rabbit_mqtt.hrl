@@ -21,8 +21,11 @@
 -record(state, { socket,
                  conn_name,
                  parse_state,
+                 clean_sess,
                  client_id,
-                 message_id,
+                 consumer_tag,
+                 unacked_pubs,
+                 confirms,
                  channel,
                  connection,
                  adapter_info }).

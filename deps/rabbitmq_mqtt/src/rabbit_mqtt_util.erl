@@ -41,3 +41,8 @@ valid_client_id(ClientId) ->
     ClientIdLen = length(ClientId),
     1 =< ClientIdLen andalso ClientIdLen =< ?CLIENT_ID_MAXLEN.
 
+env(Key) ->
+    case application:get_env(rabbitmq_mqtt, Key) of
+        {ok, Val} -> Val;
+        undefined -> undefined
+    end.
