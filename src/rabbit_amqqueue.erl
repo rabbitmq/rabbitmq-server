@@ -678,7 +678,7 @@ safe_delegate_call_ok(F, Pids) ->
                                                 fun () -> F(Pid) end)
                                       end),
     case lists:filter(fun ({_Pid, {exit, {R, _}, _}}) ->
-                              rabbit_misc:is_abnormal_termination(R);
+                              rabbit_misc:is_abnormal_exit(R);
                           ({_Pid, _}) ->
                               false
                       end, Bads) of

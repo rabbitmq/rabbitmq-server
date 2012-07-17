@@ -29,7 +29,7 @@
 -export([enable_cover/1, report_cover/1]).
 -export([start_cover/1]).
 -export([confirm_to_sender/2]).
--export([throw_on_error/2, with_exit_handler/2, is_abnormal_termination/1,
+-export([throw_on_error/2, with_exit_handler/2, is_abnormal_exit/1,
          filter_exit_map/2]).
 -export([with_user/2, with_user_and_vhost/3]).
 -export([execute_mnesia_transaction/1]).
@@ -62,7 +62,7 @@
 -export([gb_sets_difference/2]).
 
 %% Horrible macro to use in guards
--define(BENIGN_TERMINATION(R),
+-define(IS_BENIGN_EXIT(R),
         R =:= noproc; R =:= noconnection; R =:= nodedown; R =:= normal;
             R =:= shutdown).
 
@@ -142,7 +142,7 @@
 -spec(throw_on_error/2 ::
         (atom(), thunk(rabbit_types:error(any()) | {ok, A} | A)) -> A).
 -spec(with_exit_handler/2 :: (thunk(A), thunk(A)) -> A).
--spec(is_abnormal_termination/1 :: (any()) -> boolean()).
+-spec(is_abnormal_exit/1 :: (any()) -> boolean()).
 -spec(filter_exit_map/2 :: (fun ((A) -> B), [A]) -> [B]).
 -spec(with_user/2 :: (rabbit_types:username(), thunk(A)) -> A).
 -spec(with_user_and_vhost/3 ::
@@ -428,13 +428,13 @@ with_exit_handler(Handler, Thunk) ->
     try
         Thunk()
     catch
-        exit:{R, _}      when ?BENIGN_TERMINATION(R) -> Handler();
-        exit:{{R, _}, _} when ?BENIGN_TERMINATION(R) -> Handler()
+        exit:{R, _}      when ?IS_BENIGN_EXIT(R) -> Handler();
+        exit:{{R, _}, _} when ?IS_BENIGN_EXIT(R) -> Handler()
     end.
 
-is_abnormal_termination(R)      when ?BENIGN_TERMINATION(R) -> false;
-is_abnormal_termination({R, _}) when ?BENIGN_TERMINATION(R) -> false;
-is_abnormal_termination(_)                                  -> true.
+is_abnormal_exit(R)      when ?IS_BENIGN_EXIT(R) -> false;
+is_abnormal_exit({R, _}) when ?IS_BENIGN_EXIT(R) -> false;
+is_abnormal_exit(_)                              -> true.
 
 filter_exit_map(F, L) ->
     Ref = make_ref(),
