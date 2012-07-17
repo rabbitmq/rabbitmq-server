@@ -73,7 +73,7 @@ class BaseTest(unittest.TestCase):
            self.listener.print_state(msg, True)
            self.assertEquals(expected, actual, msg)
 
-   def assertListenerAfter(self, verb, errMsg="", numMsgs=0, numErrs=0, numRcts=0, timeout=2):
+   def assertListenerAfter(self, verb, errMsg="", numMsgs=0, numErrs=0, numRcts=0, timeout=5):
         num = numMsgs + numErrs + numRcts
         self.listener.reset(num if num>0 else 1)
         verb()
