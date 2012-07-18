@@ -71,95 +71,69 @@ initial_state() -> none.
 %% eol must be CR LF.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+%% explicit frame characters
+-define(NUL,   0).
+-define(CR,    $\r).
+-define(LF,    $\n).
+-define(BSL,   $\\).
+-define(COLON, $:).
+
+%% header escape codes
+-define(LF_ESC,    $n).
+-define(BSL_ESC,   $\\).
+-define(COLON_ESC, $c).
+
 parse(Content, {resume, Fun}) -> Fun(Content);
-parse(Content, none)          -> parse_command(Content, []).
+parse(Content, none         ) -> parse_noise(Content).
 
-parse_command(<<>>, Acc) ->
-    more(fun(Rest) -> parse_command(Rest, Acc) end);
-parse_command(<<$\n, Rest/binary>>, []) ->  % inter-frame newline
-    parse_command(Rest, []);
-parse_command(<<0, Rest/binary>>, []) ->    % empty frame
-    parse_command(Rest, []);
-parse_command(<<$\n, Rest/binary>>, Acc) -> % end command
-    parse_headers(Rest, lists:reverse(Acc));
-parse_command(<<$\r, Rest/binary>>, Acc) -> % look-ahead for end command
-    parse_command_cr(Rest, Acc);
-parse_command(<<Ch:8, Rest/binary>>, Acc) ->
-    parse_command(Rest, [Ch | Acc]).
+parse_noise(<<>>                 ) -> more(fun(Rest) -> parse_noise(Rest) end);
+parse_noise(<<?NUL, Rest/binary>>) -> parse_noise(Rest);
+parse_noise(<<?LF,  Rest/binary>>) -> parse_noise(Rest);
+parse_noise(<<?CR,  Rest/binary>>) -> parse_noise_cr(Rest);
+parse_noise(<<Ch:8, Rest/binary>>) -> parse_command(Rest, [Ch]).
 
-parse_command_cr(<<>>, Acc) ->
-    more(fun(Rest) -> parse_command_cr(Rest, Acc) end);
-parse_command_cr(<<$\n, Rest/binary>>, []) ->   % inter-frame crlf
-    parse_command(Rest, []);
-parse_command_cr(<<$\n, Rest/binary>>, Acc) ->  % end command
-    parse_headers(Rest, lists:reverse(Acc));
-parse_command_cr(<<Ch:8, Rest/binary>>, Acc) -> % treat CR as char
-    parse_command(<<Ch, Rest/binary>>, [$\r | Acc]). % re-parse Ch
+parse_noise_cr(<<>>                 ) -> more(fun(Rest) -> parse_noise_cr(Rest) end);
+parse_noise_cr(<<?LF,  Rest/binary>>) -> parse_noise(Rest);
+parse_noise_cr(<<Ch:8, Rest/binary>>) -> parse_command(<<Ch, Rest/binary>>, [?CR]).
 
-parse_headers(Rest, Command) -> % begin headers
-    parse_headers(Rest, #stomp_frame{command = Command}, [], []).
+parse_command(<<>>,                  Acc) -> more(fun(Rest) -> parse_command(Rest, Acc) end);
+parse_command(<<?LF,  Rest/binary>>, Acc) -> parse_headers(Rest, lists:reverse(Acc));
+parse_command(<<?CR,  Rest/binary>>, Acc) -> parse_command_cr(Rest, Acc);
+parse_command(<<Ch:8, Rest/binary>>, Acc) -> parse_command(Rest, [Ch | Acc]).
 
-parse_headers(<<>>, Frame, HeaderAcc, KeyAcc) ->
-    more(fun(Rest) -> parse_headers(Rest, Frame, HeaderAcc, KeyAcc) end);
-parse_headers(<<$\n, Rest/binary>>, Frame, HeaderAcc, _KeyAcc) -> % end headers
-    parse_body(Rest, Frame#stomp_frame{headers = HeaderAcc});
-parse_headers(<<$:, Rest/binary>>, Frame, HeaderAcc, KeyAcc) ->   % end key
-    parse_header_value(Rest, Frame, HeaderAcc, lists:reverse(KeyAcc));
-parse_headers(<<$\r, Rest/binary>>, Frame, HeaderAcc, KeyAcc) ->
-                                            % look-ahead for end headers
-    parse_headers_cr(Rest, Frame, HeaderAcc, KeyAcc);
-parse_headers(<<Ch:8, Rest/binary>>, Frame, HeaderAcc, KeyAcc) ->
-    parse_headers(Rest, Frame, HeaderAcc, [Ch | KeyAcc]).
+parse_command_cr(<<>>,                  Acc) -> more(fun(Rest) -> parse_command_cr(Rest, Acc) end);
+parse_command_cr(<<?LF,  Rest/binary>>, Acc) -> parse_headers(Rest, lists:reverse(Acc));
+parse_command_cr(<<Ch:8, Rest/binary>>, Acc) -> parse_command(<<Ch, Rest/binary>>, [?CR | Acc]).
 
-parse_headers_cr(<<>>, Frame, HeaderAcc, KeyAcc) ->
-    more(fun(Rest) -> parse_headers_cr(Rest, Frame, HeaderAcc, KeyAcc) end);
-parse_headers_cr(<<$\n, Rest/binary>>, Frame, HeaderAcc, _KeyAcc) ->
-                                                           % end headers
-    parse_body(Rest, Frame#stomp_frame{headers = HeaderAcc});
-parse_headers_cr(<<Ch:8, Rest/binary>>, Frame, HeaderAcc, KeyAcc) ->
-                                      % treat CR as char and re-parse Ch
-    parse_headers(<<Ch, Rest/binary>>, Frame, HeaderAcc, [$\r | KeyAcc]).
+parse_headers(Rest, Command) -> parse_headers(Rest, #stomp_frame{command = Command}, [], []).
 
-parse_header_value(Rest, Frame, HeaderAcc, Key) -> % begin header value
-    parse_header_value(Rest, Frame, HeaderAcc, Key, []).
+parse_headers(<<>>,                    Frame, HeaderAcc, KeyAcc ) -> more(fun(Rest) -> parse_headers(Rest, Frame, HeaderAcc, KeyAcc) end);
+parse_headers(<<?LF,    Rest/binary>>, Frame, HeaderAcc, _KeyAcc) -> parse_body(Rest, Frame#stomp_frame{headers = HeaderAcc});
+parse_headers(<<?COLON, Rest/binary>>, Frame, HeaderAcc, KeyAcc ) -> parse_header_value(Rest, Frame, HeaderAcc, lists:reverse(KeyAcc));
+parse_headers(<<?CR,    Rest/binary>>, Frame, HeaderAcc, KeyAcc ) -> parse_headers_cr(Rest, Frame, HeaderAcc, KeyAcc);
+parse_headers(<<Ch:8,   Rest/binary>>, Frame, HeaderAcc, KeyAcc ) -> parse_headers(Rest, Frame, HeaderAcc, [Ch | KeyAcc]).
 
-parse_header_value(<<>>, Frame, HeaderAcc, Key, ValAcc) ->
-    more(fun(Rest) -> parse_header_value(Rest, Frame, HeaderAcc, Key, ValAcc)
-         end);
-parse_header_value(<<$\n, Rest/binary>>, Frame, HeaderAcc, Key, ValAcc) ->
-                                                                  % end value
-    parse_headers(Rest, Frame,
-                  insert_header(HeaderAcc, Key, lists:reverse(ValAcc)),
-                  []);
-parse_header_value(<<$\\, Rest/binary>>, Frame, HeaderAcc, Key, ValAcc) ->
-    parse_header_value_escape(Rest, Frame, HeaderAcc, Key, ValAcc);
-parse_header_value(<<$\r, Rest/binary>>, Frame, HeaderAcc, Key, ValAcc) ->
-    parse_header_value_cr(Rest, Frame, HeaderAcc, Key, ValAcc);
-parse_header_value(<<Ch:8, Rest/binary>>, Frame, HeaderAcc, Key, ValAcc) ->
-    parse_header_value(Rest, Frame, HeaderAcc, Key, [Ch | ValAcc]).
+parse_headers_cr(<<>>,                  Frame, HeaderAcc, KeyAcc ) -> more(fun(Rest) -> parse_headers_cr(Rest, Frame, HeaderAcc, KeyAcc) end);
+parse_headers_cr(<<?LF,  Rest/binary>>, Frame, HeaderAcc, _KeyAcc) -> parse_body(Rest, Frame#stomp_frame{headers = HeaderAcc});
+parse_headers_cr(<<Ch:8, Rest/binary>>, Frame, HeaderAcc, KeyAcc ) -> parse_headers(<<Ch, Rest/binary>>, Frame, HeaderAcc, [?CR | KeyAcc]).
 
-parse_header_value_cr(<<>>, Frame, HeaderAcc, Key, ValAcc) ->
-    more(fun(Rest) -> parse_header_value_cr(Rest, Frame, HeaderAcc, Key, ValAcc) end);
-parse_header_value_cr(<<$\n, Rest/binary>>, Frame, HeaderAcc, Key, ValAcc) ->
-    % end value
-    parse_headers(Rest, Frame,
-                  insert_header(HeaderAcc, Key, lists:reverse(ValAcc)),
-                  []);
-parse_header_value_cr(<<Ch:8, Rest/binary>>, Frame, HeaderAcc, Key, ValAcc) ->
-    % treat CR as char and re-parse Ch
-    parse_header_value(<<Ch, Rest/binary>>, Frame, HeaderAcc, Key, [$\r | ValAcc]).
+parse_header_value(Rest, Frame, HeaderAcc, Key) -> parse_header_value(Rest, Frame, HeaderAcc, Key, []).
 
-parse_header_value_escape(<<>>, Frame, HeaderAcc, Key, ValAcc) ->
-    more(fun(Rest) ->
-           parse_header_value_escape(Rest, Frame, HeaderAcc, Key, ValAcc)
-         end);
-parse_header_value_escape(<<Ch:8,  Rest/binary>>, Frame,
-                          HeaderAcc, Key, ValAcc) ->
-    case unescape(Ch) of
-        {ok, EscCh} -> parse_header_value(Rest, Frame, HeaderAcc, Key,
-                                          [EscCh | ValAcc]);
-        error       -> {error, {bad_escape, Ch}}
-    end.
+parse_header_value(<<>>,                  Frame, HeaderAcc, Key, ValAcc) -> more(fun(Rest) -> parse_header_value(Rest, Frame, HeaderAcc, Key, ValAcc) end);
+parse_header_value(<<?LF,  Rest/binary>>, Frame, HeaderAcc, Key, ValAcc) -> parse_headers(Rest, Frame, insert_header(HeaderAcc, Key, lists:reverse(ValAcc)), []);
+parse_header_value(<<?BSL, Rest/binary>>, Frame, HeaderAcc, Key, ValAcc) -> parse_header_value_escape(Rest, Frame, HeaderAcc, Key, ValAcc);
+parse_header_value(<<?CR,  Rest/binary>>, Frame, HeaderAcc, Key, ValAcc) -> parse_header_value_cr(Rest, Frame, HeaderAcc, Key, ValAcc);
+parse_header_value(<<Ch:8, Rest/binary>>, Frame, HeaderAcc, Key, ValAcc) -> parse_header_value(Rest, Frame, HeaderAcc, Key, [Ch | ValAcc]).
+
+parse_header_value_cr(<<>>,                  Frame, HeaderAcc, Key, ValAcc) -> more(fun(Rest) -> parse_header_value_cr(Rest, Frame, HeaderAcc, Key, ValAcc) end);
+parse_header_value_cr(<<?LF,  Rest/binary>>, Frame, HeaderAcc, Key, ValAcc) -> parse_headers(Rest, Frame, insert_header(HeaderAcc, Key, lists:reverse(ValAcc)), []);
+parse_header_value_cr(<<Ch:8, Rest/binary>>, Frame, HeaderAcc, Key, ValAcc) -> parse_header_value(<<Ch, Rest/binary>>, Frame, HeaderAcc, Key, [?CR | ValAcc]).
+
+parse_header_value_escape(<<>>,                        Frame, HeaderAcc, Key, ValAcc) -> more(fun(Rest) -> parse_header_value_escape(Rest, Frame, HeaderAcc, Key, ValAcc) end);
+parse_header_value_escape(<<?LF_ESC,    Rest/binary>>, Frame, HeaderAcc, Key, ValAcc) -> parse_header_value(Rest, Frame, HeaderAcc, Key, [?LF    | ValAcc]);
+parse_header_value_escape(<<?BSL_ESC,   Rest/binary>>, Frame, HeaderAcc, Key, ValAcc) -> parse_header_value(Rest, Frame, HeaderAcc, Key, [?BSL   | ValAcc]);
+parse_header_value_escape(<<?COLON_ESC, Rest/binary>>, Frame, HeaderAcc, Key, ValAcc) -> parse_header_value(Rest, Frame, HeaderAcc, Key, [?COLON | ValAcc]);
+parse_header_value_escape(<<Ch:8,       Rest/binary>>, Frame, HeaderAcc, Key, ValAcc) -> {error, {bad_escape, Ch}}.
 
 insert_header(Headers, Key, Value) ->
     case lists:keysearch(Key, 1, Headers) of
@@ -239,27 +213,22 @@ serialize(#stomp_frame{command = Command,
                        headers = Headers,
                        body_iolist = BodyFragments}) ->
     Len = iolist_size(BodyFragments),
-    [Command, $\n,
+    [Command, ?LF,
      lists:map(fun serialize_header/1,
                lists:keydelete(?HEADER_CONTENT_LENGTH, 1, Headers)),
      if
-         Len > 0 -> [?HEADER_CONTENT_LENGTH ++ ":", integer_to_list(Len), $\n];
+         Len > 0 -> [?HEADER_CONTENT_LENGTH ++ ":", integer_to_list(Len), ?LF];
          true    -> []
      end,
-     $\n, BodyFragments, 0].
+     ?LF, BodyFragments, 0].
 
-serialize_header({K, V}) when is_integer(V) -> [K, $:, integer_to_list(V), $\n];
-serialize_header({K, V}) when is_list(V) -> [K, $:, [escape(C) || C <- V], $\n].
+serialize_header({K, V}) when is_integer(V) -> [K, ?COLON, integer_to_list(V), ?LF];
+serialize_header({K, V}) when is_list(V) -> [K, ?COLON, [escape(C) || C <- V], ?LF].
 
-unescape($n)  -> {ok, $\n};
-unescape($\\) -> {ok, $\\};
-unescape($c)  -> {ok, $:};
-unescape(_)   -> error.
-
-escape($:)  -> "\\c";
-escape($\\) -> "\\\\";
-escape($\n) -> "\\n";
-escape(C)   -> C.
+escape(?COLON) -> [?BSL, ?COLON_ESC];
+escape(?BSL)   -> [?BSL, ?BSL_ESC];
+escape(?LF)    -> [?BSL, ?LF_ESC];
+escape(C)      -> C.
 
 firstnull(Content) -> firstnull(Content, 0).
 
