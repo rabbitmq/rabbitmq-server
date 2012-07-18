@@ -104,15 +104,13 @@ get_memory_limit() ->
 %%----------------------------------------------------------------------------
 
 start_link(MemFraction) ->
-    gen_server:start_link({local, ?SERVER}, ?MODULE, [MemFraction], []).
+    start_link(MemFraction,
+               fun alarm_handler:set_alarm/1, fun alarm_handler:clear_alarm/1).
 
 start_link(MemFraction, AlarmSet, AlarmClear) ->
     gen_server:start_link({local, ?SERVER}, ?MODULE,
                           [MemFraction, AlarmSet, AlarmClear], []).
 
-init([MemFraction]) ->
-    init([MemFraction, fun alarm_handler:set_alarm/1,
-          fun alarm_handler:clear_alarm/1]);
 init([MemFraction, AlarmSet, AlarmClear]) ->
     TRef = start_timer(?DEFAULT_MEMORY_CHECK_INTERVAL),
     State = #state { timeout = ?DEFAULT_MEMORY_CHECK_INTERVAL,

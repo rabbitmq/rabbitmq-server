@@ -270,7 +270,7 @@
 %%----------------------------------------------------------------------------
 
 start_link() ->
-    gen_server2:start_link({local, ?SERVER}, ?MODULE, [], [{timeout, infinity}]).
+    start_link(fun alarm_handler:set_alarm/1, fun alarm_handler:clear_alarm/1).
 
 start_link(AlarmSet, AlarmClear) ->
     gen_server2:start_link({local, ?SERVER}, ?MODULE, [AlarmSet, AlarmClear],
@@ -812,8 +812,6 @@ i(Item, _) -> throw({bad_argument, Item}).
 %% gen_server2 callbacks
 %%----------------------------------------------------------------------------
 
-init([]) ->
-    init([fun alarm_handler:set_alarm/1, fun alarm_handler:clear_alarm/1]);
 init([AlarmSet, AlarmClear]) ->
     Limit = case application:get_env(file_handles_high_watermark) of
                 {ok, Watermark} when (is_integer(Watermark) andalso
