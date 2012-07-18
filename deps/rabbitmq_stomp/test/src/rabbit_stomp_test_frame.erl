@@ -130,9 +130,9 @@ parse_multiple_headers_test() ->
     ?assertEqual("correct", Val).
 
 headers_escaping_roundtrip_test() ->
-    Content = "COMMAND\nheader:\\c\\n\\\\\n\n\0",
+    Content = "COMMAND\nhead\\c\\ner:\\c\\n\\\\\n\n\0",
     {ok, Frame, _} = parse(Content),
-    {ok, Val} = rabbit_stomp_frame:header(Frame, "header"),
+    {ok, Val} = rabbit_stomp_frame:header(Frame, "head:\ner"),
     ?assertEqual(":\n\\", Val),
     Serialized = lists:flatten(rabbit_stomp_frame:serialize(Frame)),
     ?assertEqual(Content, rabbit_misc:format("~s", [Serialized])).
