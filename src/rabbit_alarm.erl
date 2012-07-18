@@ -205,23 +205,23 @@ internal_register(Pid, {M, F, A} = HighMemMFA,
     State#alarms{alertees = NewAlertees}.
 
 handle_set_alarm({{resource_limit, Source, Node}, []}, State) ->
-    rabbit_log:warning("'~p' resource limit alarm set on node ~p",
+    rabbit_log:warning("'~p' resource limit alarm set on node ~p~n",
                        [Source, Node]),
     {ok, maybe_alert(fun dict:append/3, Node, Source, State)};
 handle_set_alarm({file_descriptor_limit, []}, State) ->
-    rabbit_log:warning("file descriptor limit alarm set"),
+    rabbit_log:warning("file descriptor limit alarm set~n"),
     {ok, State};
 handle_set_alarm(Alarm, State) ->
-    rabbit_log:warning("alarm '~p' set", [Alarm]),
+    rabbit_log:warning("alarm '~p' set~n", [Alarm]),
     {ok, State}.
 
 handle_clear_alarm({resource_limit, Source, Node}, State) ->
-    rabbit_log:warning("'~p' resource limit alarm cleared on node ~p",
+    rabbit_log:warning("'~p' resource limit alarm cleared on node ~p~n",
                        [Source, Node]),
     {ok, maybe_alert(fun dict_unappend/3, Node, Source, State)};
 handle_clear_alarm(file_descriptor_limit, State) ->
-    rabbit_log:warning("file descriptor limit alarm cleared"),
+    rabbit_log:warning("file descriptor limit alarm cleared~n"),
     {ok, State};
 handle_clear_alarm(Alarm, State) ->
-    rabbit_log:warning("alarm '~p' cleared", [Alarm]),
+    rabbit_log:warning("alarm '~p' cleared~n", [Alarm]),
     {ok, State}.
