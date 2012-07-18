@@ -617,11 +617,11 @@ post_process_frame(_Frame, _ChPid, State) ->
 -define(FRAME_SIZE_FUDGE, ?EMPTY_FRAME_SIZE).
 
 handle_input(frame_header, <<Type:8,Channel:16,PayloadSize:32>>,
-             #v1{connection = #connection{frame_max = FrameMax}})
+             State = #v1{connection = #connection{frame_max = FrameMax}})
   when FrameMax /= 0 andalso
        PayloadSize > FrameMax - ?EMPTY_FRAME_SIZE + ?FRAME_SIZE_FUDGE ->
-    throw({frame_too_large, Type, Channel, PayloadSize,
-           FrameMax - ?EMPTY_FRAME_SIZE});
+    frame_error({frame_too_large, PayloadSize, FrameMax - ?EMPTY_FRAME_SIZE},
+                Type, Channel, <<>>, State);
 handle_input(frame_header, <<Type:8,Channel:16,PayloadSize:32>>, State) ->
     ensure_stats_timer(
       switch_callback(State, {frame_payload, Type, Channel, PayloadSize},
