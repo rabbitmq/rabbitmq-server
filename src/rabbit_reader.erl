@@ -313,7 +313,7 @@ handle_other(handshake_timeout, Deb, State)
     mainloop(Deb, State);
 handle_other(handshake_timeout, _Deb, State) ->
     throw({handshake_timeout, State#v1.callback});
-handle_other(timeout, Deb, State = #v1{connection_state = closed}) ->
+handle_other(heartbeat_timeout, Deb, State = #v1{connection_state = closed}) ->
     mainloop(Deb, State);
 handle_other(heartbeat_timeout, _Deb, #v1{connection_state = S}) ->
     throw({heartbeat_timeout, S});
