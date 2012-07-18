@@ -19,6 +19,7 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_stomp_frame.hrl").
+-include("rabbit_stomp_headers.hrl").
 
 parse_simple_frame_test() ->
     parse_simple_frame_gen("\n").
@@ -41,7 +42,7 @@ parse_simple_frame_gen(Term) ->
 
 parse_simple_frame_with_null_test() ->
     Headers = [{"header1", "value1"}, {"header2", "value2"},
-               {"content-length", "12"}],
+               {?HEADER_CONTENT_LENGTH, "12"}],
     Content = frame_string("COMMAND",
                            Headers,
                            "Body\0Content"),
@@ -55,7 +56,7 @@ parse_simple_frame_with_null_test() ->
 parse_large_content_frame_with_nulls_test() ->
     BodyContent = string:copies("012345678\0", 1024),
     Headers = [{"header1", "value1"}, {"header2", "value2"},
-               {"content-length", integer_to_list(string:len(BodyContent))}],
+               {?HEADER_CONTENT_LENGTH, integer_to_list(string:len(BodyContent))}],
     Content = frame_string("COMMAND",
                            Headers,
                            BodyContent),
