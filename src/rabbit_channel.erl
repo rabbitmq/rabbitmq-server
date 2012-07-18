@@ -405,17 +405,17 @@ handle_exception(Reason, State = #ch{protocol   = Protocol,
                                      writer_pid = WriterPid,
                                      reader_pid = ReaderPid,
                                      conn_pid   = ConnPid}) ->
-    {CloseChannel, CloseMethod} =
-        rabbit_binary_generator:map_exception(Channel, Reason, Protocol),
-    rabbit_log:error("connection ~p, channel ~p - error:~n~p~n",
-                     [ConnPid, Channel, Reason]),
     %% something bad's happened: notify_queues may not be 'ok'
     {_Result, State1} = notify_queues(State),
-    case CloseChannel of
-        Channel -> ok = rabbit_writer:send_command(WriterPid, CloseMethod),
-                   {noreply, State1};
-        _       -> ReaderPid ! {channel_exit, Channel, Reason},
-                   {stop, normal, State1}
+    case rabbit_binary_generator:map_exception(Channel, Reason, Protocol) of
+        {Channel, CloseMethod} ->
+            rabbit_log:error("connection ~p, channel ~p - soft error:~n~p~n",
+                             [ConnPid, Channel, Reason]),
+            ok = rabbit_writer:send_command(WriterPid, CloseMethod),
+            {noreply, State1};
+        {0, _} ->
+            ReaderPid ! {channel_exit, Channel, Reason},
+            {stop, normal, State1}
     end.
 
 precondition_failed(Format) -> precondition_failed(Format, []).
