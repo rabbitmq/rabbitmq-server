@@ -20,6 +20,7 @@
 -module(rabbit_stomp_frame).
 
 -include("rabbit_stomp_frame.hrl").
+-include("rabbit_stomp_headers.hrl").
 
 -export([parse/2, initial_state/0]).
 -export([header/2, header/3,
@@ -168,7 +169,7 @@ insert_header(Headers, Key, Value) ->
 
 parse_body(Content, Frame) ->
     parse_body(Content, Frame, [],
-               integer_header(Frame, "content-length", unknown)).
+               integer_header(Frame, ?HEADER_CONTENT_LENGTH, unknown)).
 
 parse_body(Content, Frame, Chunks, unknown) ->
     parse_body2(Content, Frame, Chunks, case firstnull(Content) of
@@ -240,9 +241,9 @@ serialize(#stomp_frame{command = Command,
     Len = iolist_size(BodyFragments),
     [Command, $\n,
      lists:map(fun serialize_header/1,
-               lists:keydelete("content-length", 1, Headers)),
+               lists:keydelete(?HEADER_CONTENT_LENGTH, 1, Headers)),
      if
-         Len > 0 -> ["content-length:", integer_to_list(Len), $\n];
+         Len > 0 -> [?HEADER_CONTENT_LENGTH ++ ":", integer_to_list(Len), $\n];
          true    -> []
      end,
      $\n, BodyFragments, 0].

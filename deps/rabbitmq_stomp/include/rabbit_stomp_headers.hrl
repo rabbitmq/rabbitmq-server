@@ -18,6 +18,7 @@
 -define(HEADER_ACK, "ack").
 -define(HEADER_AMQP_MESSAGE_ID, "amqp-message-id").
 -define(HEADER_CONTENT_ENCODING, "content-encoding").
+-define(HEADER_CONTENT_LENGTH, "content-length").
 -define(HEADER_CONTENT_TYPE, "content-type").
 -define(HEADER_CORRELATION_ID, "correlation-id").
 -define(HEADER_DESTINATION, "destination").
