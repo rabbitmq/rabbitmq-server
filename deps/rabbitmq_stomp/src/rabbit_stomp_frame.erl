@@ -66,9 +66,9 @@ initial_state() -> none.
 %%  COLON       ::= ':'
 %%  HDROCT      ::= OCTET - (COLON | LF | BACKSLASH) % octets allowed in a header
 %%
-%% NB: CR at end of hdrvalue or cmd will be assumed part of the eol if
-%% followed by LF. To get a CR at the end of hdrvalue or cmd the following
-%% eol must be CR LF.
+%% NB: CR is a valid character for cmd and esc_char.  A CR at the end of hdrvalue
+%%     or cmd will be assumed part of the eol if followed by LF. To get a CR at
+%%     the end of hdrvalue or cmd the following eol must be CR LF.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 %% explicit frame characters
@@ -107,30 +107,30 @@ parse_headers(<<?LF,      Rest/binary>>, Frame, HeaderAcc) -> parse_body(Rest, F
 parse_headers(<<?CR, ?LF, Rest/binary>>, Frame, HeaderAcc) -> parse_body(Rest, Frame#stomp_frame{headers = HeaderAcc});
 parse_headers(<<Ch:8,     Rest/binary>>, Frame, HeaderAcc) -> parse_header_name(Rest, Frame, HeaderAcc, [Ch]).
 
-parse_header_name(<<>>,                               Frame,  HeaderAcc,  KeyAcc) -> more(fun(Rest) -> parse_header_name(Rest, Frame, HeaderAcc, KeyAcc) end);
-parse_header_name(<<?CR>>,                            Frame,  HeaderAcc,  KeyAcc) -> more(fun(Rest) -> parse_header_name(<<?CR, Rest/binary>>, Frame, HeaderAcc, KeyAcc) end);
-parse_header_name(<<?BSL>>,                           Frame,  HeaderAcc,  KeyAcc) -> more(fun(Rest) -> parse_header_name(<<?BSL, Rest/binary>>, Frame, HeaderAcc, KeyAcc) end);
-parse_header_name(<<?COLON,           Rest/binary>>,  Frame,  HeaderAcc,  KeyAcc) -> parse_header_value(Rest, Frame, HeaderAcc, lists:reverse(KeyAcc));
-parse_header_name(<<?LF,              Rest/binary>>,  Frame,  HeaderAcc, _KeyAcc) -> parse_headers(Rest, Frame, HeaderAcc);  % ignore header name
-parse_header_name(<<?CR,  ?LF,        Rest/binary>>,  Frame,  HeaderAcc, _KeyAcc) -> parse_headers(Rest, Frame, HeaderAcc);  % ignore header name
-parse_header_name(<<?BSL, ?LF_ESC,    Rest/binary>>,  Frame,  HeaderAcc,  KeyAcc) -> parse_header_name(Rest, Frame, HeaderAcc, [?LF    | KeyAcc]);
-parse_header_name(<<?BSL, ?BSL_ESC,   Rest/binary>>,  Frame,  HeaderAcc,  KeyAcc) -> parse_header_name(Rest, Frame, HeaderAcc, [?BSL   | KeyAcc]);
-parse_header_name(<<?BSL, ?COLON_ESC, Rest/binary>>,  Frame,  HeaderAcc,  KeyAcc) -> parse_header_name(Rest, Frame, HeaderAcc, [?COLON | KeyAcc]);
-parse_header_name(<<?BSL, Ch:8,      _Rest/binary>>, _Frame, _HeaderAcc, _KeyAcc) -> {error, {bad_escape, Ch}};
-parse_header_name(<<Ch:8,             Rest/binary>>,  Frame,  HeaderAcc,  KeyAcc) -> parse_header_name(Rest, Frame, HeaderAcc, [Ch | KeyAcc]).
+parse_header_name(<<>>,                        Frame, HeaderAcc,  KeyAcc) -> more(fun(Rest) -> parse_header_name(Rest, Frame, HeaderAcc, KeyAcc) end);
+parse_header_name(<<?CR>>,                     Frame, HeaderAcc,  KeyAcc) -> more(fun(Rest) -> parse_header_name(<<?CR, Rest/binary>>, Frame, HeaderAcc, KeyAcc) end);
+parse_header_name(<<?BSL>>,                    Frame, HeaderAcc,  KeyAcc) -> more(fun(Rest) -> parse_header_name(<<?BSL, Rest/binary>>, Frame, HeaderAcc, KeyAcc) end);
+parse_header_name(<<?COLON,     Rest/binary>>, Frame, HeaderAcc,  KeyAcc) -> parse_header_value(Rest, Frame, HeaderAcc, lists:reverse(KeyAcc));
+parse_header_name(<<?LF,        Rest/binary>>, Frame, HeaderAcc, _KeyAcc) -> parse_headers(Rest, Frame, HeaderAcc);  % ignore header name
+parse_header_name(<<?CR,  ?LF,  Rest/binary>>, Frame, HeaderAcc, _KeyAcc) -> parse_headers(Rest, Frame, HeaderAcc);  % ignore header name
+parse_header_name(<<?BSL, Ch:8, Rest/binary>>, Frame, HeaderAcc,  KeyAcc) -> unescape(Ch, fun(Ech) -> parse_header_name(Rest, Frame, HeaderAcc, [Ech | KeyAcc]) end);
+parse_header_name(<<Ch:8,       Rest/binary>>, Frame, HeaderAcc,  KeyAcc) -> parse_header_name(Rest, Frame, HeaderAcc, [Ch | KeyAcc]).
 
 parse_header_value(Rest, Frame, HeaderAcc, Key) -> parse_header_value(Rest, Frame, HeaderAcc, Key, []).
 
-parse_header_value(<<>>,                               Frame,  HeaderAcc,  Key,  ValAcc) -> more(fun(Rest) -> parse_header_value(Rest, Frame, HeaderAcc, Key, ValAcc) end);
-parse_header_value(<<?CR>>,                            Frame,  HeaderAcc,  Key,  ValAcc) -> more(fun(Rest) -> parse_header_value(<<?CR, Rest/binary>>, Frame, HeaderAcc, Key, ValAcc) end);
-parse_header_value(<<?BSL>>,                           Frame,  HeaderAcc,  Key,  ValAcc) -> more(fun(Rest) -> parse_header_value(<<?BSL, Rest/binary>>, Frame, HeaderAcc, Key, ValAcc) end);
-parse_header_value(<<?LF,              Rest/binary>>,  Frame,  HeaderAcc,  Key,  ValAcc) -> parse_headers(Rest, Frame, insert_header(HeaderAcc, Key, lists:reverse(ValAcc)));
-parse_header_value(<<?CR,  ?LF,        Rest/binary>>,  Frame,  HeaderAcc,  Key,  ValAcc) -> parse_headers(Rest, Frame, insert_header(HeaderAcc, Key, lists:reverse(ValAcc)));
-parse_header_value(<<?BSL, ?LF_ESC,    Rest/binary>>,  Frame,  HeaderAcc,  Key,  ValAcc) -> parse_header_value(Rest, Frame, HeaderAcc, Key, [?LF    | ValAcc]);
-parse_header_value(<<?BSL, ?BSL_ESC,   Rest/binary>>,  Frame,  HeaderAcc,  Key,  ValAcc) -> parse_header_value(Rest, Frame, HeaderAcc, Key, [?BSL   | ValAcc]);
-parse_header_value(<<?BSL, ?COLON_ESC, Rest/binary>>,  Frame,  HeaderAcc,  Key,  ValAcc) -> parse_header_value(Rest, Frame, HeaderAcc, Key, [?COLON | ValAcc]);
-parse_header_value(<<?BSL, Ch:8,      _Rest/binary>>, _Frame, _HeaderAcc, _Key, _ValAcc) -> {error, {bad_escape, Ch}};
-parse_header_value(<<Ch:8,             Rest/binary>>,  Frame,  HeaderAcc,  Key,  ValAcc) -> parse_header_value(Rest, Frame, HeaderAcc, Key, [Ch | ValAcc]).
+parse_header_value(<<>>,                         Frame,  HeaderAcc,  Key,  ValAcc) -> more(fun(Rest) -> parse_header_value(Rest, Frame, HeaderAcc, Key, ValAcc) end);
+parse_header_value(<<?CR>>,                      Frame,  HeaderAcc,  Key,  ValAcc) -> more(fun(Rest) -> parse_header_value(<<?CR, Rest/binary>>, Frame, HeaderAcc, Key, ValAcc) end);
+parse_header_value(<<?BSL>>,                     Frame,  HeaderAcc,  Key,  ValAcc) -> more(fun(Rest) -> parse_header_value(<<?BSL, Rest/binary>>, Frame, HeaderAcc, Key, ValAcc) end);
+parse_header_value(<<?COLON,    _Rest/binary>>, _Frame, _HeaderAcc, _Key, _ValAcc) -> {error, {unexpected_colon_in_header}};
+parse_header_value(<<?LF,        Rest/binary>>,  Frame,  HeaderAcc,  Key,  ValAcc) -> parse_headers(Rest, Frame, insert_header(HeaderAcc, Key, lists:reverse(ValAcc)));
+parse_header_value(<<?CR,  ?LF,  Rest/binary>>,  Frame,  HeaderAcc,  Key,  ValAcc) -> parse_headers(Rest, Frame, insert_header(HeaderAcc, Key, lists:reverse(ValAcc)));
+parse_header_value(<<?BSL, Ch:8, Rest/binary>>,  Frame,  HeaderAcc,  Key,  ValAcc) -> unescape(Ch, fun(Ech) -> parse_header_value(Rest, Frame, HeaderAcc, Key, [Ech | ValAcc]) end);
+parse_header_value(<<Ch:8,       Rest/binary>>,  Frame,  HeaderAcc,  Key,  ValAcc) -> parse_header_value(Rest, Frame, HeaderAcc, Key, [Ch | ValAcc]).
+
+unescape(?LF_ESC,    Fun) -> Fun(?LF);
+unescape(?BSL_ESC,   Fun) -> Fun(?BSL);
+unescape(?COLON_ESC, Fun) -> Fun(?COLON);
+unescape(Ch,        _Fun) -> {error, {bad_escape, Ch}}.
 
 insert_header(Headers, Key, Value) ->
     case lists:keymember(Key, 1, Headers) of
