@@ -86,54 +86,40 @@ initial_state() -> none.
 parse(Content, {resume, Fun}) -> Fun(Content);
 parse(Content, none         ) -> parse_noise(Content).
 
-parse_noise(<<>>                 ) -> more(fun(Rest) -> parse_noise(Rest) end);
-parse_noise(<<?NUL, Rest/binary>>) -> parse_noise(Rest);
-parse_noise(<<?LF,  Rest/binary>>) -> parse_noise(Rest);
-parse_noise(<<?CR,  Rest/binary>>) -> parse_noise_cr(Rest);
-parse_noise(<<Ch:8, Rest/binary>>) -> parse_command(Rest, [Ch]).
+parse_noise(<<>>                     ) -> more(fun(Rest) -> parse_noise(Rest) end);
+parse_noise(<<?CR>>                  ) -> more(fun(Rest) -> parse_noise(<<?CR, Rest/binary>>) end);
+parse_noise(<<?NUL,     Rest/binary>>) -> parse_noise(Rest);
+parse_noise(<<?LF,      Rest/binary>>) -> parse_noise(Rest);
+parse_noise(<<?CR, ?LF, Rest/binary>>) -> parse_noise(Rest);
+parse_noise(<<Ch:8,     Rest/binary>>) -> parse_command(Rest, [Ch]).
 
-parse_noise_cr(<<>>                 ) -> more(fun(Rest) -> parse_noise_cr(Rest) end);
-parse_noise_cr(<<?LF,  Rest/binary>>) -> parse_noise(Rest);
-parse_noise_cr(<<Ch:8, Rest/binary>>) -> parse_command(<<Ch, Rest/binary>>, [?CR]).
-
-parse_command(<<>>,                  Acc) -> more(fun(Rest) -> parse_command(Rest, Acc) end);
-parse_command(<<?LF,  Rest/binary>>, Acc) -> parse_headers(Rest, lists:reverse(Acc));
-parse_command(<<?CR,  Rest/binary>>, Acc) -> parse_command_cr(Rest, Acc);
-parse_command(<<Ch:8, Rest/binary>>, Acc) -> parse_command(Rest, [Ch | Acc]).
-
-parse_command_cr(<<>>,                  Acc) -> more(fun(Rest) -> parse_command_cr(Rest, Acc) end);
-parse_command_cr(<<?LF,  Rest/binary>>, Acc) -> parse_headers(Rest, lists:reverse(Acc));
-parse_command_cr(<<Ch:8, Rest/binary>>, Acc) -> parse_command(<<Ch, Rest/binary>>, [?CR | Acc]).
+parse_command(<<>>,                      Acc) -> more(fun(Rest) -> parse_command(Rest, Acc) end);
+parse_command(<<?CR>>,                   Acc) -> more(fun(Rest) -> parse_command(<<?CR, Rest/binary>>, Acc) end);
+parse_command(<<?LF,      Rest/binary>>, Acc) -> parse_headers(Rest, lists:reverse(Acc));
+parse_command(<<?CR, ?LF, Rest/binary>>, Acc) -> parse_headers(Rest, lists:reverse(Acc));
+parse_command(<<Ch:8,     Rest/binary>>, Acc) -> parse_command(Rest, [Ch | Acc]).
 
 parse_headers(Rest, Command) -> parse_headers(Rest, #stomp_frame{command = Command}, [], []).
 
-parse_headers(<<>>,                    Frame, HeaderAcc, KeyAcc ) -> more(fun(Rest) -> parse_headers(Rest, Frame, HeaderAcc, KeyAcc) end);
-parse_headers(<<?LF,    Rest/binary>>, Frame, HeaderAcc, _KeyAcc) -> parse_body(Rest, Frame#stomp_frame{headers = HeaderAcc});
-parse_headers(<<?COLON, Rest/binary>>, Frame, HeaderAcc, KeyAcc ) -> parse_header_value(Rest, Frame, HeaderAcc, lists:reverse(KeyAcc));
-parse_headers(<<?CR,    Rest/binary>>, Frame, HeaderAcc, KeyAcc ) -> parse_headers_cr(Rest, Frame, HeaderAcc, KeyAcc);
-parse_headers(<<Ch:8,   Rest/binary>>, Frame, HeaderAcc, KeyAcc ) -> parse_headers(Rest, Frame, HeaderAcc, [Ch | KeyAcc]).
-
-parse_headers_cr(<<>>,                  Frame, HeaderAcc, KeyAcc ) -> more(fun(Rest) -> parse_headers_cr(Rest, Frame, HeaderAcc, KeyAcc) end);
-parse_headers_cr(<<?LF,  Rest/binary>>, Frame, HeaderAcc, _KeyAcc) -> parse_body(Rest, Frame#stomp_frame{headers = HeaderAcc});
-parse_headers_cr(<<Ch:8, Rest/binary>>, Frame, HeaderAcc, KeyAcc ) -> parse_headers(<<Ch, Rest/binary>>, Frame, HeaderAcc, [?CR | KeyAcc]).
+parse_headers(<<>>,                      Frame, HeaderAcc,  KeyAcc) -> more(fun(Rest) -> parse_headers(Rest, Frame, HeaderAcc, KeyAcc) end);
+parse_headers(<<?CR>>,                   Frame, HeaderAcc,  KeyAcc) -> more(fun(Rest) -> parse_headers(<<?CR, Rest/binary>>, Frame, HeaderAcc, KeyAcc) end);
+parse_headers(<<?LF,      Rest/binary>>, Frame, HeaderAcc, _KeyAcc) -> parse_body(Rest, Frame#stomp_frame{headers = HeaderAcc});
+parse_headers(<<?CR, ?LF, Rest/binary>>, Frame, HeaderAcc, _KeyAcc) -> parse_body(Rest, Frame#stomp_frame{headers = HeaderAcc});
+parse_headers(<<?COLON,   Rest/binary>>, Frame, HeaderAcc,  KeyAcc) -> parse_header_value(Rest, Frame, HeaderAcc, lists:reverse(KeyAcc));
+parse_headers(<<Ch:8,     Rest/binary>>, Frame, HeaderAcc,  KeyAcc) -> parse_headers(Rest, Frame, HeaderAcc, [Ch | KeyAcc]).
 
 parse_header_value(Rest, Frame, HeaderAcc, Key) -> parse_header_value(Rest, Frame, HeaderAcc, Key, []).
 
-parse_header_value(<<>>,                  Frame, HeaderAcc, Key, ValAcc) -> more(fun(Rest) -> parse_header_value(Rest, Frame, HeaderAcc, Key, ValAcc) end);
-parse_header_value(<<?LF,  Rest/binary>>, Frame, HeaderAcc, Key, ValAcc) -> parse_headers(Rest, Frame, insert_header(HeaderAcc, Key, lists:reverse(ValAcc)), []);
-parse_header_value(<<?BSL, Rest/binary>>, Frame, HeaderAcc, Key, ValAcc) -> parse_header_value_escape(Rest, Frame, HeaderAcc, Key, ValAcc);
-parse_header_value(<<?CR,  Rest/binary>>, Frame, HeaderAcc, Key, ValAcc) -> parse_header_value_cr(Rest, Frame, HeaderAcc, Key, ValAcc);
-parse_header_value(<<Ch:8, Rest/binary>>, Frame, HeaderAcc, Key, ValAcc) -> parse_header_value(Rest, Frame, HeaderAcc, Key, [Ch | ValAcc]).
-
-parse_header_value_cr(<<>>,                  Frame, HeaderAcc, Key, ValAcc) -> more(fun(Rest) -> parse_header_value_cr(Rest, Frame, HeaderAcc, Key, ValAcc) end);
-parse_header_value_cr(<<?LF,  Rest/binary>>, Frame, HeaderAcc, Key, ValAcc) -> parse_headers(Rest, Frame, insert_header(HeaderAcc, Key, lists:reverse(ValAcc)), []);
-parse_header_value_cr(<<Ch:8, Rest/binary>>, Frame, HeaderAcc, Key, ValAcc) -> parse_header_value(<<Ch, Rest/binary>>, Frame, HeaderAcc, Key, [?CR | ValAcc]).
-
-parse_header_value_escape(<<>>,                        Frame, HeaderAcc, Key, ValAcc) -> more(fun(Rest) -> parse_header_value_escape(Rest, Frame, HeaderAcc, Key, ValAcc) end);
-parse_header_value_escape(<<?LF_ESC,    Rest/binary>>, Frame, HeaderAcc, Key, ValAcc) -> parse_header_value(Rest, Frame, HeaderAcc, Key, [?LF    | ValAcc]);
-parse_header_value_escape(<<?BSL_ESC,   Rest/binary>>, Frame, HeaderAcc, Key, ValAcc) -> parse_header_value(Rest, Frame, HeaderAcc, Key, [?BSL   | ValAcc]);
-parse_header_value_escape(<<?COLON_ESC, Rest/binary>>, Frame, HeaderAcc, Key, ValAcc) -> parse_header_value(Rest, Frame, HeaderAcc, Key, [?COLON | ValAcc]);
-parse_header_value_escape(<<Ch:8,       Rest/binary>>, Frame, HeaderAcc, Key, ValAcc) -> {error, {bad_escape, Ch}}.
+parse_header_value(<<>>,                               Frame,  HeaderAcc,  Key,  ValAcc) -> more(fun(Rest) -> parse_header_value(Rest, Frame, HeaderAcc, Key, ValAcc) end);
+parse_header_value(<<?CR>>,                            Frame,  HeaderAcc,  Key,  ValAcc) -> more(fun(Rest) -> parse_header_value(<<?CR, Rest/binary>>, Frame, HeaderAcc, Key, ValAcc) end);
+parse_header_value(<<?BSL>>,                           Frame,  HeaderAcc,  Key,  ValAcc) -> more(fun(Rest) -> parse_header_value(<<?BSL, Rest/binary>>, Frame, HeaderAcc, Key, ValAcc) end);
+parse_header_value(<<?LF,              Rest/binary>>,  Frame,  HeaderAcc,  Key,  ValAcc) -> parse_headers(Rest, Frame, insert_header(HeaderAcc, Key, lists:reverse(ValAcc)), []);
+parse_header_value(<<?CR,  ?LF,        Rest/binary>>,  Frame,  HeaderAcc,  Key,  ValAcc) -> parse_headers(Rest, Frame, insert_header(HeaderAcc, Key, lists:reverse(ValAcc)), []);
+parse_header_value(<<?BSL, ?LF_ESC,    Rest/binary>>,  Frame,  HeaderAcc,  Key,  ValAcc) -> parse_header_value(Rest, Frame, HeaderAcc, Key, [?LF    | ValAcc]);
+parse_header_value(<<?BSL, ?BSL_ESC,   Rest/binary>>,  Frame,  HeaderAcc,  Key,  ValAcc) -> parse_header_value(Rest, Frame, HeaderAcc, Key, [?BSL   | ValAcc]);
+parse_header_value(<<?BSL, ?COLON_ESC, Rest/binary>>,  Frame,  HeaderAcc,  Key,  ValAcc) -> parse_header_value(Rest, Frame, HeaderAcc, Key, [?COLON | ValAcc]);
+parse_header_value(<<?BSL, Ch:8,      _Rest/binary>>, _Frame, _HeaderAcc, _Key, _ValAcc) -> {error, {bad_escape, Ch}};
+parse_header_value(<<Ch:8,             Rest/binary>>,  Frame,  HeaderAcc,  Key,  ValAcc) -> parse_header_value(Rest, Frame, HeaderAcc, Key, [Ch | ValAcc]).
 
 insert_header(Headers, Key, Value) ->
     case lists:keysearch(Key, 1, Headers) of
