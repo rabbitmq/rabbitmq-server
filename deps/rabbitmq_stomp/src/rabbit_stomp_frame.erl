@@ -30,6 +30,46 @@
 
 initial_state() -> none.
 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% STOMP 1.1 frames basic syntax
+%%  Rabbit modifications:
+%%  o   CR LF is equivalent to LF in all element terminators (eol). A CR
+%%      followed by any-octet-except-LF is taken as a CR. Parsing recommences
+%%      with the octet following CR.
+%%  o   header names and values may be any octet sequence, with the specified
+%%      escapes for colon, backslash and line feed, and are not limited to
+%%      UTF-8 strings.
+%%
+%%  frame_seq   ::= (noise frame)*
+%%  noise       ::= (NUL | eol)*
+%%  eol         ::= LF | CR LF
+%%  frame       ::= cmd hdrs body NUL
+%%  body        ::= OCTET*
+%%  cmd         ::= NOTLF*1 eol
+%%  hdrs        ::= hdr* eol
+%%  hdr         ::= hdrname COLON hdrvalue eol
+%%  hdrname     ::= esc_char*1
+%%  hdrvalue    ::= esc_char*
+%%  esc_char    ::= HDROCT | BACKSLASH ESCCODE
+%%
+%% Terms in CAPS all represent sets (alternatives) of single octets.
+%% They are defined here using a small extension of BNF.
+%%
+%%  OCTET       ::= '00'x..'FF'x            % any octet
+%%  NUL         ::= '00'x                   % the zero octet
+%%  LF          ::= '\n'                    % '0a'x newline or linefeed
+%%  CR          ::= '\r'                    % '0d'x carriage return
+%%  NOTLF       ::= OCTET - LF              % any octet except LF
+%%  BACKSLASH   ::= '\\'                    % '5c'x
+%%  ESCCODE     ::= 'c' | 'n' | BACKSLASH
+%%  COLON       ::= ':'
+%%  HDROCT      ::= OCTET - (COLON | LF | BACKSLASH) % octets allowed in a header
+%%
+%% NB: CR at end of hdrvalue or cmd will be assumed part of the eol if
+%% followed by LF. To get a CR at the end of hdrvalue or cmd the following
+%% eol must be CR LF.
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
 parse(Content, {resume, Fun}) -> Fun(Content);
 parse(Content, none)          -> parse_command(Content, []).
 
