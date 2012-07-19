@@ -740,6 +740,10 @@ server_frame_max() ->
     {ok, FrameMax} = application:get_env(rabbit, frame_max),
     FrameMax.
 
+server_heartbeat() ->
+    {ok, Heartbeat} = application:get_env(rabbit, heartbeat),
+    Heartbeat.
+
 send_on_channel0(Sock, Method, Protocol) ->
     ok = rabbit_writer:internal_send_command(Sock, 0, Method, Protocol).
 
@@ -791,7 +795,7 @@ auth_phase(Response,
         {ok, User} ->
             Tune = #'connection.tune'{channel_max = 0,
                                       frame_max = server_frame_max(),
-                                      heartbeat = 0},
+                                      heartbeat = server_heartbeat()},
             ok = send_on_channel0(Sock, Tune, Protocol),
             State#v1{connection_state = tuning,
                      connection = Connection#connection{user = User}}
