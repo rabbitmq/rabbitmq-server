@@ -85,6 +85,9 @@ parse_carriage_return_not_ignored_interframe_test() ->
 parse_carriage_return_mid_command_test() ->
     {ok, #stomp_frame{command = "COMM\rAND"}, _Rest} = parse("COMM\rAND\n\n\0").
 
+parse_carriage_return_end_command_test() -> % eol must be \r\n after \r
+    {ok, #stomp_frame{command = "COMMAND\r"}, _Rest} = parse("COMMAND\r\r\n\n\0").
+
 parse_resume_mid_command_test() ->
     First = "COMM",
     Second = "AND\n\n\0",
@@ -128,6 +131,14 @@ parse_multiple_headers_test() ->
     {ok, Frame, _} = parse(Content),
     {ok, Val} = rabbit_stomp_frame:header(Frame, "header"),
     ?assertEqual("correct", Val).
+
+header_ending_with_cr_test() ->
+    Content = "COMMAND\nheader:val\r\r\n\n\0",
+    {ok, Frame, _} = parse(Content),
+    {ok, Val} = rabbit_stomp_frame:header(Frame, "header"),
+    ?assertEqual("val\r", Val),
+    Serialized = lists:flatten(rabbit_stomp_frame:serialize(Frame)),
+    ?assertEqual(Content, rabbit_misc:format("~s", [Serialized])).
 
 headers_escaping_roundtrip_test() ->
     Content = "COMMAND\nhead\\c\\ner:\\c\\n\\\\\n\n\0",

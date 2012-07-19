@@ -219,10 +219,19 @@ serialize(#stomp_frame{command = Command,
      end,
      ?LF, BodyFragments, 0].
 
-serialize_header({K, V}) when is_integer(V) -> [escape_list(K), ?COLON, integer_to_list(V), ?LF];
-serialize_header({K, V}) when is_list(V)    -> [escape_list(K), ?COLON, escape_list(V),     ?LF].
+serialize_header({K, V}) when is_integer(V) -> [escape_header_name(K), ?COLON, integer_to_list(V),     ?LF];
+serialize_header({K, V}) when is_list(V)    -> [escape_header_name(K), ?COLON, escape_header_value(V), ?LF].
 
-escape_list(Str) -> [escape(C) || C <- Str].
+escape_header_value(Str) -> escape_header_part(Str, [], true).
+
+escape_header_name(Str)  -> escape_header_part(Str, [], false).
+
+%% NON-STANDARD BEHAVIOUR
+%% header value trailing ?CR must be followed by ?CR, ?LF end-of-line delimiter
+%% assumes serialized frame uses ?LF eol delimiters
+escape_header_part([],         Acc, _Trail) -> lists:reverse(Acc);
+escape_header_part([?CR],      Acc,  true ) -> lists:reverse([[?CR, ?CR] | Acc]); % add trailing ?CR
+escape_header_part([Ch | Str], Acc,  Trail) -> escape_header_part(Str, [escape(Ch) | Acc], Trail).
 
 escape(?COLON) -> [?BSL, ?COLON_ESC];
 escape(?BSL)   -> [?BSL, ?BSL_ESC];
