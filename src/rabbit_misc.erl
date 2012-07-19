@@ -36,7 +36,7 @@
 -export([execute_mnesia_transaction/2]).
 -export([execute_mnesia_tx_with_tail/1]).
 -export([ensure_ok/2]).
--export([tcp_name/3]).
+-export([tcp_name/3, format_inet_error/1]).
 -export([upmap/2, map_in_order/2]).
 -export([table_filter/3]).
 -export([dirty_read_all/1, dirty_foreach_key/2, dirty_dump_log/1]).
@@ -157,6 +157,7 @@
 -spec(tcp_name/3 ::
         (atom(), inet:ip_address(), rabbit_networking:ip_port())
         -> atom()).
+-spec(format_inet_error/1 :: (atom()) -> string()).
 -spec(upmap/2 :: (fun ((A) -> B), [A]) -> [B]).
 -spec(map_in_order/2 :: (fun ((A) -> B), [A]) -> [B]).
 -spec(table_filter/3:: (fun ((A) -> boolean()), fun ((A, boolean()) -> 'ok'),
@@ -510,6 +511,10 @@ tcp_name(Prefix, IPAddress, Port)
   when is_atom(Prefix) andalso is_number(Port) ->
     list_to_atom(
       format("~w_~s:~w", [Prefix, inet_parse:ntoa(IPAddress), Port])).
+
+format_inet_error(address) -> "cannot connect to host/port";
+format_inet_error(timeout) -> "timed out";
+format_inet_error(Error)   -> inet:format_error(Error).
 
 %% This is a modified version of Luke Gorrie's pmap -
 %% http://lukego.livejournal.com/6753.html - that doesn't care about

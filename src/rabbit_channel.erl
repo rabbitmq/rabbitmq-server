@@ -267,7 +267,7 @@ handle_cast({method, Method, Content, Flow},
     catch
         exit:Reason = #amqp_error{} ->
             MethodName = rabbit_misc:method_record_type(Method),
-            send_exception(Reason#amqp_error{method = MethodName}, State);
+            handle_exception(Reason#amqp_error{method = MethodName}, State);
         _:Reason ->
             {stop, {Reason, erlang:get_stacktrace()}, State}
     end;
@@ -400,23 +400,28 @@ return_ok(State, false, Msg)  -> {reply, Msg, State}.
 ok_msg(true, _Msg) -> undefined;
 ok_msg(false, Msg) -> Msg.
 
-send_exception(Reason, State = #ch{protocol   = Protocol,
-                                   channel    = Channel,
-                                   writer_pid = WriterPid,
-                                   reader_pid = ReaderPid,
-                                   conn_pid   = ConnPid}) ->
-    {CloseChannel, CloseMethod} =
-        rabbit_binary_generator:map_exception(Channel, Reason, Protocol),
-    rabbit_log:error("connection ~p, channel ~p - error:~n~p~n",
-                     [ConnPid, Channel, Reason]),
+handle_exception(Reason, State = #ch{protocol   = Protocol,
+                                     channel    = Channel,
+                                     writer_pid = WriterPid,
+                                     reader_pid = ReaderPid,
+                                     conn_pid   = ConnPid}) ->
     %% something bad's happened: notify_queues may not be 'ok'
     {_Result, State1} = notify_queues(State),
-    case CloseChannel of
-        Channel -> ok = rabbit_writer:send_command(WriterPid, CloseMethod),
-                   {noreply, State1};
-        _       -> ReaderPid ! {channel_exit, Channel, Reason},
-                   {stop, normal, State1}
+    case rabbit_binary_generator:map_exception(Channel, Reason, Protocol) of
+        {Channel, CloseMethod} ->
+            rabbit_log:error("connection ~p, channel ~p - soft error:~n~p~n",
+                             [ConnPid, Channel, Reason]),
+            ok = rabbit_writer:send_command(WriterPid, CloseMethod),
+            {noreply, State1};
+        {0, _} ->
+            ReaderPid ! {channel_exit, Channel, Reason},
+            {stop, normal, State1}
     end.
+
+precondition_failed(Format) -> precondition_failed(Format, []).
+
+precondition_failed(Format, Params) ->
+    rabbit_misc:protocol_error(precondition_failed, Format, Params).
 
 return_queue_declare_ok(#resource{name = ActualName},
                         NoWait, MessageCount, ConsumerCount, State) ->
@@ -461,9 +466,9 @@ check_user_id_header(#'P_basic'{user_id = Username},
     ok;
 check_user_id_header(#'P_basic'{user_id = Claimed},
                      #ch{user = #user{username = Actual}}) ->
-    rabbit_misc:protocol_error(
-      precondition_failed, "user_id property set to '~s' but "
-      "authenticated user was '~s'", [Claimed, Actual]).
+    precondition_failed(
+      "user_id property set to '~s' but authenticated user was '~s'",
+      [Claimed, Actual]).
 
 check_internal_exchange(#exchange{name = Name, internal = true}) ->
     rabbit_misc:protocol_error(access_refused,
@@ -625,8 +630,7 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
                                 State1#ch{uncommitted_message_q = NewTMQ}
              end};
         {error, Reason} ->
-            rabbit_misc:protocol_error(precondition_failed,
-                                       "invalid message: ~p", [Reason])
+            precondition_failed("invalid message: ~p", [Reason])
     end;
 
 handle_method(#'basic.nack'{delivery_tag = DeliveryTag,
@@ -881,8 +885,7 @@ handle_method(#'exchange.delete'{exchange = ExchangeNameBin,
         {error, not_found} ->
             rabbit_misc:not_found(ExchangeName);
         {error, in_use} ->
-            rabbit_misc:protocol_error(
-              precondition_failed, "~s in use", [rabbit_misc:rs(ExchangeName)]);
+            precondition_failed("~s in use", [rabbit_misc:rs(ExchangeName)]);
         ok ->
             return_ok(State, NoWait,  #'exchange.delete_ok'{})
     end;
@@ -980,11 +983,9 @@ handle_method(#'queue.delete'{queue = QueueNameBin,
            QueueName, ConnPid,
            fun (Q) -> rabbit_amqqueue:delete(Q, IfUnused, IfEmpty) end) of
         {error, in_use} ->
-            rabbit_misc:protocol_error(
-              precondition_failed, "~s in use", [rabbit_misc:rs(QueueName)]);
+            precondition_failed("~s in use", [rabbit_misc:rs(QueueName)]);
         {error, not_empty} ->
-            rabbit_misc:protocol_error(
-              precondition_failed, "~s not empty", [rabbit_misc:rs(QueueName)]);
+            precondition_failed("~s not empty", [rabbit_misc:rs(QueueName)]);
         {ok, PurgedMessageCount} ->
             return_ok(State, NoWait,
                       #'queue.delete_ok'{message_count = PurgedMessageCount})
@@ -1019,15 +1020,13 @@ handle_method(#'queue.purge'{queue = QueueNameBin,
               #'queue.purge_ok'{message_count = PurgedMessageCount});
 
 handle_method(#'tx.select'{}, _, #ch{confirm_enabled = true}) ->
-    rabbit_misc:protocol_error(
-      precondition_failed, "cannot switch from confirm to tx mode", []);
+    precondition_failed("cannot switch from confirm to tx mode");
 
 handle_method(#'tx.select'{}, _, State) ->
     {reply, #'tx.select_ok'{}, State#ch{tx_status = in_progress}};
 
 handle_method(#'tx.commit'{}, _, #ch{tx_status = none}) ->
-    rabbit_misc:protocol_error(
-      precondition_failed, "channel is not transactional", []);
+    precondition_failed("channel is not transactional");
 
 handle_method(#'tx.commit'{}, _,
               State = #ch{uncommitted_message_q = TMQ,
@@ -1041,8 +1040,7 @@ handle_method(#'tx.commit'{}, _,
     {noreply, maybe_complete_tx(new_tx(State1#ch{tx_status = committing}))};
 
 handle_method(#'tx.rollback'{}, _, #ch{tx_status = none}) ->
-    rabbit_misc:protocol_error(
-      precondition_failed, "channel is not transactional", []);
+    precondition_failed("channel is not transactional");
 
 handle_method(#'tx.rollback'{}, _, State = #ch{unacked_message_q = UAMQ,
                                                uncommitted_acks  = TAL,
@@ -1052,8 +1050,7 @@ handle_method(#'tx.rollback'{}, _, State = #ch{unacked_message_q = UAMQ,
     {reply, #'tx.rollback_ok'{}, new_tx(State#ch{unacked_message_q = UAMQ1})};
 
 handle_method(#'confirm.select'{}, _, #ch{tx_status = in_progress}) ->
-    rabbit_misc:protocol_error(
-      precondition_failed, "cannot switch from tx to confirm mode", []);
+    precondition_failed("cannot switch from tx to confirm mode");
 
 handle_method(#'confirm.select'{nowait = NoWait}, _, State) ->
     return_ok(State#ch{confirm_enabled = true},
@@ -1263,8 +1260,7 @@ collect_acks(ToAcc, PrefixAcc, Q, DeliveryTag, Multiple) ->
                                  QTail, DeliveryTag, Multiple)
             end;
         {empty, _} ->
-            rabbit_misc:protocol_error(
-              precondition_failed, "unknown delivery tag ~w", [DeliveryTag])
+            precondition_failed("unknown delivery tag ~w", [DeliveryTag])
     end.
 
 ack(Acked, State) ->
@@ -1423,7 +1419,7 @@ complete_tx(State = #ch{tx_status = committing}) ->
     ok = rabbit_writer:send_command(State#ch.writer_pid, #'tx.commit_ok'{}),
     State#ch{tx_status = in_progress};
 complete_tx(State = #ch{tx_status = failed}) ->
-    {noreply, State1} = send_exception(
+    {noreply, State1} = handle_exception(
                           rabbit_misc:amqp_error(
                             precondition_failed, "partial tx completion", [],
                             'tx.commit'),

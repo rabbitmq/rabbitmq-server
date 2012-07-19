@@ -27,7 +27,7 @@
 
 -behaviour(gen_server).
 
--export([start_link/1]).
+-export([start_link/1, start_link/3]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -51,7 +51,9 @@
                 memory_limit,
                 timeout,
                 timer,
-                alarmed
+                alarmed,
+                alarm_set,
+                alarm_clear
                }).
 
 %%----------------------------------------------------------------------------
@@ -59,6 +61,8 @@
 -ifdef(use_specs).
 
 -spec(start_link/1 :: (float()) -> rabbit_types:ok_pid_or_error()).
+-spec(start_link/3 :: (float(), fun ((any()) -> 'ok'),
+                       fun ((any()) -> 'ok')) -> rabbit_types:ok_pid_or_error()).
 -spec(get_total_memory/0 :: () -> (non_neg_integer() | 'unknown')).
 -spec(get_vm_limit/0 :: () -> non_neg_integer()).
 -spec(get_check_interval/0 :: () -> non_neg_integer()).
@@ -99,14 +103,21 @@ get_memory_limit() ->
 %% gen_server callbacks
 %%----------------------------------------------------------------------------
 
-start_link(Args) ->
-    gen_server:start_link({local, ?SERVER}, ?MODULE, [Args], []).
+start_link(MemFraction) ->
+    start_link(MemFraction,
+               fun alarm_handler:set_alarm/1, fun alarm_handler:clear_alarm/1).
 
-init([MemFraction]) ->
+start_link(MemFraction, AlarmSet, AlarmClear) ->
+    gen_server:start_link({local, ?SERVER}, ?MODULE,
+                          [MemFraction, AlarmSet, AlarmClear], []).
+
+init([MemFraction, AlarmSet, AlarmClear]) ->
     TRef = start_timer(?DEFAULT_MEMORY_CHECK_INTERVAL),
     State = #state { timeout = ?DEFAULT_MEMORY_CHECK_INTERVAL,
                      timer = TRef,
-                     alarmed = false},
+                     alarmed = false,
+                     alarm_set = AlarmSet,
+                     alarm_clear = AlarmClear },
     {ok, set_mem_limits(State, MemFraction)}.
 
 handle_call(get_vm_memory_high_watermark, _From, State) ->
@@ -175,16 +186,18 @@ set_mem_limits(State, MemFraction) ->
                                    memory_limit = MemLim }).
 
 internal_update(State = #state { memory_limit = MemLimit,
-                                 alarmed = Alarmed}) ->
+                                 alarmed = Alarmed,
+                                 alarm_set = AlarmSet,
+                                 alarm_clear = AlarmClear }) ->
     MemUsed = erlang:memory(total),
     NewAlarmed = MemUsed > MemLimit,
     case {Alarmed, NewAlarmed} of
         {false, true} ->
             emit_update_info(set, MemUsed, MemLimit),
-            alarm_handler:set_alarm({{resource_limit, memory, node()}, []});
+            AlarmSet({{resource_limit, memory, node()}, []});
         {true, false} ->
             emit_update_info(clear, MemUsed, MemLimit),
-            alarm_handler:clear_alarm({resource_limit, memory, node()});
+            AlarmClear({resource_limit, memory, node()});
         _ ->
             ok
     end,
