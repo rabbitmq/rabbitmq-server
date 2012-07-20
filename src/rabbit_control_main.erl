@@ -190,11 +190,11 @@ print_report(Node, {Descr, Module, InfoFun, KeysFun}, VHostArg) ->
     print_report0(Node, {Module, InfoFun, KeysFun}, VHostArg).
 
 print_report0(Node, {Module, InfoFun, KeysFun}, VHostArg) ->
-    case Results = rpc_call(Node, Module, InfoFun, VHostArg) of
-        [_|_] -> InfoItems = rpc_call(Node, Module, KeysFun, []),
-                 display_row([atom_to_list(I) || I <- InfoItems]),
-                 display_info_list(Results, InfoItems);
-        _     -> ok
+    case rpc_call(Node, Module, InfoFun, VHostArg) of
+        [_|_] = Results -> InfoItems = rpc_call(Node, Module, KeysFun, []),
+                           display_row([atom_to_list(I) || I <- InfoItems]),
+                           display_info_list(Results, InfoItems);
+        _               -> ok
     end,
     io:nl().
 
