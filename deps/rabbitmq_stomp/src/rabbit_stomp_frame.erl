@@ -69,6 +69,9 @@ initial_state() -> none.
 %% NB: CR is a valid character for cmd and esc_char.  A CR at the end of hdrvalue
 %%     or cmd will be assumed part of the eol if followed by LF. To get a CR at
 %%     the end of hdrvalue or cmd the following eol must be CR LF.
+%% NB: Generated frames (serialize) will use LF as eol delimiters except in the
+%%     case of a trailing CR in hdrvalue, when CR LF is used for that hdr instead.
+%% NB: A trailing CR in cmd does NOT alter the eol for the cmd in serialize/1.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 %% explicit frame characters
@@ -210,7 +213,7 @@ serialize(#stomp_frame{command = Command,
                        headers = Headers,
                        body_iolist = BodyFragments}) ->
     Len = iolist_size(BodyFragments),
-    [Command, ?LF,
+    [serialize_command(Command), ?LF,
      lists:map(fun serialize_header/1,
                lists:keydelete(?HEADER_CONTENT_LENGTH, 1, Headers)),
      if
@@ -219,19 +222,22 @@ serialize(#stomp_frame{command = Command,
      end,
      ?LF, BodyFragments, 0].
 
+serialize_command(Cmd) when is_list(Cmd) -> scan_part(Cmd, [], true, fun(C) -> C end);
+serialize_command(Cmd) -> serialize_command(binary_to_list(Cmd)).
+
 serialize_header({K, V}) when is_integer(V) -> [escape_header_name(K), ?COLON, integer_to_list(V),     ?LF];
 serialize_header({K, V}) when is_list(V)    -> [escape_header_name(K), ?COLON, escape_header_value(V), ?LF].
 
-escape_header_value(Str) -> escape_header_part(Str, [], true).
+escape_header_value(Str) -> scan_part(Str, [], true, fun escape/1).
 
-escape_header_name(Str)  -> escape_header_part(Str, [], false).
+escape_header_name(Str)  -> scan_part(Str, [], false, fun escape/1).
 
-%% NON-STANDARD BEHAVIOUR
-%% header value trailing ?CR must be followed by ?CR, ?LF end-of-line delimiter
-%% assumes serialized frame uses ?LF eol delimiters
-escape_header_part([],         Acc, _Trail) -> lists:reverse(Acc);
-escape_header_part([?CR],      Acc,  true ) -> lists:reverse([[?CR, ?CR] | Acc]); % add trailing ?CR
-escape_header_part([Ch | Str], Acc,  Trail) -> escape_header_part(Str, [escape(Ch) | Acc], Trail).
+%% NON-STANDARD BEHAVIOUR:
+%% header value trailing ?CR must be followed by ?CR, ?LF eol delimiter;
+%% assumes serialized frame uses ?LF eol delimiters by default.
+scan_part([],         Acc, _Trail, Transform) -> lists:reverse(Acc);
+scan_part([?CR],      Acc,  true , Transform) -> lists:reverse([[?CR, ?CR] | Acc]); % add trailing ?CR
+scan_part([Ch | Str], Acc,  Trail, Transform) -> scan_part(Str, [Transform(Ch) | Acc], Trail, Transform).
 
 escape(?COLON) -> [?BSL, ?COLON_ESC];
 escape(?BSL)   -> [?BSL, ?BSL_ESC];
