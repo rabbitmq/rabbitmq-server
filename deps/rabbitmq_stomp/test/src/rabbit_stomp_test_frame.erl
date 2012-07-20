@@ -80,13 +80,13 @@ parse_crlf_interframe_test() ->
     {ok, #stomp_frame{command = "COMMAND"}, _Rest} = parse("\r\nCOMMAND\n\n\0").
 
 parse_carriage_return_not_ignored_interframe_test() ->
-    {ok, #stomp_frame{command = "\rCOMMAND"}, _Rest} = parse("\rCOMMAND\n\n\0").
+    {error, {unexpected_chars_between_frames, "\rC"}} = parse("\rCOMMAND\n\n\0").
 
 parse_carriage_return_mid_command_test() ->
-    {ok, #stomp_frame{command = "COMM\rAND"}, _Rest} = parse("COMM\rAND\n\n\0").
+    {error, {unexpected_chars_in_command, "\rA"}} = parse("COMM\rAND\n\n\0").
 
 parse_carriage_return_end_command_test() -> % eol must be \r\n after \r
-    {ok, #stomp_frame{command = "COMMAND\r"}, _Rest} = parse("COMMAND\r\r\n\n\0").
+    {error, {unexpected_chars_in_command, "\r\r"}} = parse("COMMAND\r\r\n\n\0").
 
 parse_resume_mid_command_test() ->
     First = "COMM",
@@ -134,17 +134,13 @@ parse_multiple_headers_test() ->
 
 header_ending_with_cr_test() ->
     Content = "COMMAND\nheader:val\r\r\n\n\0",
-    {ok, Frame, _} = parse(Content),
-    {ok, Val} = rabbit_stomp_frame:header(Frame, "header"),
-    ?assertEqual("val\r", Val),
-    Serialized = lists:flatten(rabbit_stomp_frame:serialize(Frame)),
-    ?assertEqual(Content, rabbit_misc:format("~s", [Serialized])).
+    {error, {unexpected_chars_in_header, "\r\r"}} = parse(Content).
 
 headers_escaping_roundtrip_test() ->
-    Content = "COMMAND\nhead\\c\\ner:\\c\\n\\\\\n\n\0",
+    Content = "COMMAND\nhead\\r\\c\\ner:\\c\\n\\r\\\\\n\n\0",
     {ok, Frame, _} = parse(Content),
-    {ok, Val} = rabbit_stomp_frame:header(Frame, "head:\ner"),
-    ?assertEqual(":\n\\", Val),
+    {ok, Val} = rabbit_stomp_frame:header(Frame, "head\r:\ner"),
+    ?assertEqual(":\n\r\\", Val),
     Serialized = lists:flatten(rabbit_stomp_frame:serialize(Frame)),
     ?assertEqual(Content, rabbit_misc:format("~s", [Serialized])).
 
