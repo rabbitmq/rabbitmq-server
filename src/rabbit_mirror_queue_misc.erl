@@ -130,25 +130,45 @@ add_mirror(VHostPath, QueueName, MirrorNode) ->
     add_mirror(rabbit_misc:r(VHostPath, queue, QueueName), MirrorNode).
 
 add_mirror(Queue, MirrorNode) ->
-    if_mirrored_queue(
-      Queue,
-      fun (#amqqueue { name = Name, pid = QPid, slave_pids = SPids } = Q) ->
-              case [Pid || Pid <- [QPid | SPids], node(Pid) =:= MirrorNode] of
-                  []  -> case rabbit_mirror_queue_slave_sup:start_child(
-                                MirrorNode, [Q]) of
-                             {ok, undefined} -> %% Already running
-                                 ok;
-                             {ok, SPid} ->
-                                 rabbit_log:info(
-                                   "Adding mirror of ~s on node ~p: ~p~n",
-                                   [rabbit_misc:rs(Name), MirrorNode, SPid]),
-                                 ok;
-                             Other ->
-                                 Other
-                         end;
-                  [_] -> {error, {queue_already_mirrored_on_node, MirrorNode}}
-              end
-      end).
+    if_mirrored_queue(Queue,
+        fun (#amqqueue { name = Name, pid = QPid, slave_pids = SPids } = Q) ->
+            case [Pid || Pid <- [QPid | SPids], node(Pid) =:= MirrorNode] of
+                [] ->
+                    start_child(Name, MirrorNode, Q);
+                [SPid] ->
+                    case rabbit_misc:is_process_alive(SPid) of
+                        true ->
+                            {error,{queue_already_mirrored_on_node,MirrorNode}};
+                        false ->
+                            %% See BUG-24942: we have a stale pid from an old
+                            %% incarnation of this node, because we've come
+                            %% back online faster than the node_down handling
+                            %% logic was able to deal with a death signal. We
+                            %% shall replace the stale pid, and the slave start
+                            %% logic handles this explicitly
+                            start_child(Name, MirrorNode, Q)
+                    end
+            end
+        end).
+
+start_child(Name, MirrorNode, Q) ->
+    case rabbit_mirror_queue_slave_sup:start_child(MirrorNode, [Q]) of
+        {ok, undefined} ->
+            %% NB: this means the mirror process was
+            %% already running on the given node.
+            ok;
+        {ok, SPid} ->
+            rabbit_log:info("Adding mirror of ~s on node ~p: ~p~n",
+                            [rabbit_misc:rs(Name), MirrorNode, SPid]),
+            ok;
+        {error, {stale_master_pid, StalePid}} ->
+            rabbit_log:warning("Detected stale HA master while adding "
+                               "mirror of ~s on node ~p: ~p~n",
+                               [rabbit_misc:rs(Name), MirrorNode, StalePid]),
+            ok;
+        Other ->
+            Other
+    end.
 
 if_mirrored_queue(Queue, Fun) ->
     rabbit_amqqueue:with(
