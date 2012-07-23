@@ -322,24 +322,12 @@ handle_pre_hibernate(State) ->
 
 %%----------------------------------------------------------------------------
 
-handle_event(#event{type = queue_created, props = Props}, State) ->
-    QName = pget(name, Props),
-    case pget(synchronised_slave_pids, Props) of
-        SSPids when is_list(SSPids) ->
-            [handle_slave_synchronised(QName, SSPid, State) || SSPid <- SSPids];
-        _ ->
-            ok
-    end,
-    {ok, State};
-
 handle_event(#event{type = queue_stats, props = Stats, timestamp = Timestamp},
              State) ->
     handle_stats(queue_stats, Stats, Timestamp,
                  [{fun rabbit_mgmt_format:properties/1,[backing_queue_status]},
                   {fun rabbit_mgmt_format:timestamp/1, [idle_since]}],
-                 [messages, messages_ready, messages_unacknowledged], State),
-    prune_synchronised_slaves(
-      true, pget(name, Stats), pget(slave_pids, Stats), State);
+                 [messages, messages_ready, messages_unacknowledged], State);
 
 handle_event(Event = #event{type = queue_deleted}, State) ->
     handle_deleted(queue_stats, Event, State);
@@ -388,22 +376,13 @@ handle_event(#event{type = consumer_deleted, props = Props}, State) ->
     handle_consumer(fun(Table, Id, _P) -> ets:delete(Table, Id) end,
                     Props, State);
 
-handle_event(#event{type = queue_slave_synchronised, props = Props}, State) ->
-    handle_slave_synchronised(pget(name, Props), pget(pid, Props), State);
-
-handle_event(#event{type = queue_slave_promoted, props = Props}, State) ->
-    handle_slave_promoted(pget(name, Props), pget(pid, Props), State);
-
 handle_event(#event{type = queue_mirror_deaths, props = Props},
              State = #state{tables = Tables}) ->
     Dead = pget(pids, Props),
     Table = orddict:fetch(queue_stats, Tables),
-    %% This is of course slow. It would be faster if the queue stats
-    %% were keyed off queue name as well. But that's a big change, and
-    %% this doesn't happen very often.
-    prune_slaves(ets:match(Table, {{'$1', stats}, '$2', '$3'}, 100),
-                 Dead, Table),
-    prune_synchronised_slaves(false, pget(name, Props), Dead, State);
+    %% Only the master can be in the DB, but it's easier just to
+    %% delete all of them
+    [ets:delete(Table, {Pid, stats}) || Pid <- Dead];
 
 %% TODO: we don't clear up after dead nodes here - this is a very tiny
 %% leak every time a node is permanently removed from the cluster. Do
@@ -455,51 +434,6 @@ handle_consumer(Fun, Props,
     Table = orddict:fetch(consumers, Tables),
     Fun(Table, {pget(queue, P), pget(channel, P)}, P),
     {ok, State}.
-
-handle_slave_synchronised(QName, SSPid, State) ->
-    SSNode = node(SSPid),
-    update_synchronised_slaves(
-      fun (SSNodes) -> case lists:member(SSNode, SSNodes) of
-                           true  -> SSNodes;
-                           false -> [SSNode | SSNodes]
-                       end
-      end, QName, State).
-
-handle_slave_promoted(QName, NewMPid, State) ->
-    update_synchronised_slaves(
-      fun (SSNodes) -> SSNodes -- [node(NewMPid)] end, QName, State).
-
-prune_synchronised_slaves(Member, QName, SPids, State) ->
-    SNodes = [node(SPid) || SPid <- SPids],
-    update_synchronised_slaves(
-      fun (SSNodes) ->
-              lists:filter(fun (S) -> lists:member(S, SNodes) =:= Member end,
-                           SSNodes)
-      end, QName, State).
-
-update_synchronised_slaves(Fun, QName, State = #state{tables = Tables}) ->
-    Table = orddict:fetch(queue_stats, Tables),
-    New = case ets:lookup(Table, {QName, synchronised_slaves}) of
-              []             -> Fun([]);
-              [{_, SSNodes}] -> Fun(SSNodes)
-          end,
-    ets:insert(Table, {{QName, synchronised_slaves}, New}),
-    {ok, State}.
-
-prune_slaves('$end_of_table', _Dead, _Table) -> ok;
-
-prune_slaves({Matches, Continuation}, Dead, Table) ->
-    [prune_slaves0(M, Dead, Table) || M <- Matches],
-    prune_slaves(ets:match(Continuation), Dead, Table).
-
-prune_slaves0([Pid, Stats, Timestamp], Dead, Table) ->
-    Old = pget(slave_pids, Stats),
-    New = Old -- Dead,
-    case New of
-        Old -> ok;
-        _   -> NewStats = pset(slave_pids, New, Stats),
-               ets:insert(Table, {{Pid, stats}, NewStats, Timestamp})
-    end.
 
 handle_fine_stats(Type, Props, Timestamp, State = #state{tables = Tables}) ->
     case pget(Type, Props) of
