@@ -101,52 +101,10 @@ info(QPid) ->
 init(#amqqueue { name = QueueName } = Q) ->
     Self = self(),
     Node = node(),
-    case rabbit_misc:execute_mnesia_transaction(
-        fun () ->
-            [Q1 = #amqqueue { pid = QPid, slave_pids = MPids }] =
-                mnesia:read({rabbit_queue, QueueName}),
-            case [Pid || Pid <- [QPid | MPids], node(Pid) =:= Node] of
-                [] ->
-                    MPids1 = MPids ++ [Self],
-                    ok = rabbit_amqqueue:store_queue(
-                                Q1 #amqqueue { slave_pids = MPids1 }),
-                    {new, QPid};
-                [MPid] when MPid =:= QPid ->
-                    case rabbit_misc:is_process_alive(MPid) of
-                        true ->
-                            %% What this appears to mean is that this
-                            %% node is attempting to start a slave, but
-                            %% a pid already exists for this node and
-                            %% it is *already* the master!
-                            %% This should never happen, so we fail noisily
-                            throw({invariant_failed,
-                                        {duplicate_live_master, Node}});
-                        false ->
-                            %% See bug24942: we have detected a stale
-                            %% master pid (from a previous incarnation
-                            %% of this node) which hasn't been detected
-                            %% via nodedown recovery. We cannot recover
-                            %% it here, so we bail and log the error.
-                            %% This does mean that this node is not a
-                            %% well behaving member of the HA configuration
-                            %% for this cluster and we have opened bug25074
-                            %% to address this situation explicitly.
-                            {stale, MPid}
-                    end;
-                [SPid] ->
-                    case rabbit_misc:is_process_alive(SPid) of
-                        true  -> existing;
-                        false -> %% See bug24942: we have detected a stale
-                                 %% slave pid (from a previous incarnation
-                                 %% of this node) which hasn't been detected
-                                 %% via nodedown recovery.
-                                 MPids1 = (MPids -- [SPid]) ++ [Self],
-                                 ok = rabbit_amqqueue:store_queue(
-                                            Q1#amqqueue{slave_pids=MPids1}),
-                                 {new, QPid}
-                    end
-            end
-        end) of
+    case rabbit_misc:execute_mnesia_transaction(fun() ->
+                                                    init_it(Self, Node,
+                                                            QueueName)
+                                                end) of
         {new, MPid} ->
             process_flag(trap_exit, true), %% amqqueue_process traps exits too.
             {ok, GM} = gm:start_link(QueueName, ?MODULE, [self()]),
@@ -184,11 +142,34 @@ init(#amqqueue { name = QueueName } = Q) ->
              {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN,
               ?DESIRED_HIBERNATE}};
         {stale, StalePid} ->
-            %% we cannot proceed if the master is stale, therefore we
-            %% fail to start and allow the error to be logged
             {stop, {stale_master_pid, StalePid}};
+        duplicate_master ->
+            {stop, {duplicate_live_master, Node}};
         existing ->
             ignore
+    end.
+
+init_it(Self, Node, QueueName) ->
+    [Q1 = #amqqueue { pid = QPid, slave_pids = MPids }] =
+                mnesia:read({rabbit_queue, QueueName}),
+    case [Pid || Pid <- [QPid | MPids], node(Pid) =:= Node] of
+        [] ->
+            MPids1 = MPids ++ [Self],
+            ok = rabbit_amqqueue:store_queue(Q1#amqqueue{slave_pids=MPids1}),
+            {new, QPid};
+        [MPid] when MPid =:= QPid ->
+            case rabbit_misc:is_process_alive(MPid) of
+                true  -> duplicate_master;
+                false -> {stale, MPid}
+            end;
+        [SPid] ->
+            case rabbit_misc:is_process_alive(SPid) of
+                true  -> existing;
+                false -> MPids1 = (MPids -- [SPid]) ++ [Self],
+                         ok = rabbit_amqqueue:store_queue(
+                                        Q1#amqqueue{ slave_pids = MPids1 }),
+                         {new, QPid}
+            end
     end.
 
 handle_call({deliver, Delivery = #delivery { immediate = true }},

@@ -464,7 +464,6 @@ force_event_refresh() ->
 
 force_event_refresh(QNames) ->
     Qs = [Q || Q <- list(), lists:member(Q#amqqueue.name, QNames)],
-    %% BUG-24942/3: could one of these pids could be stale!?
     {_, Bad} = rabbit_misc:multi_call(
                  [Q#amqqueue.pid || Q <- Qs], force_event_refresh),
     FailedPids = [Pid || {Pid, _Reason} <- Bad],
