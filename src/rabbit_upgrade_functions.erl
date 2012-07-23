@@ -64,6 +64,7 @@
 -spec(runtime_parameters/0    :: () -> 'ok').
 -spec(policy/0                :: () -> 'ok').
 -spec(sync_slave_pids/0       :: () -> 'ok').
+
 -endif.
 
 %%--------------------------------------------------------------------

@@ -60,7 +60,7 @@ remove_from_queue(QueueName, DeadPids) ->
               case mnesia:read({rabbit_queue, QueueName}) of
                   [] -> {error, not_found};
                   [Q = #amqqueue { pid        = QPid,
-                                   slave_pids = SPids}] ->
+                                   slave_pids = SPids }] ->
                       [QPid1 | SPids1] = Alive =
                           [Pid || Pid <- [QPid | SPids],
                                   not lists:member(node(Pid), DeadNodes)],
