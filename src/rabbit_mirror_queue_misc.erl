@@ -138,39 +138,36 @@ add_mirror(Queue, MirrorNode) ->
                 [SPid] ->
                     case rabbit_misc:is_process_alive(SPid) of
                         true ->
-                            %% TODO: this condition is silently ignored - should
-                            %% we really be arriving at this state at all?
                             {error,{queue_already_mirrored_on_node,MirrorNode}};
                         false ->
-                            %% BUG-24942: we need to strip out this dead pid
-                            %% now, so we do so directly - perhaps we ought
-                            %% to start the txn sooner in order to get a more
-                            %% coarse grained lock though....
-                            %%
-                            %% BUG-24942: QUESTION - do we need to report that
-                            %% something has changed (either via gm or via
-                            %% the rabbit_event mechanisms) here?
-                            Q1 = Q#amqqueue{ slave_pids = (SPids -- [SPid]) },
-                            rabbit_misc:execute_mnesia_transaction(
-                                fun() ->
-                                    ok = rabbit_amqqueue:store_queue(Q1)
-                                end),
-                            start_child(Name, MirrorNode, Q1)
+                            %% See BUG-24942: we have a stale pid from an old
+                            %% incarnation of this node, because we've come
+                            %% back online faster than the node_down handling
+                            %% logic was able to deal with a death signal. We
+                            %% shall replace the stale pid, and the slave start
+                            %% logic handles this explicitly
+                            start_child(Name, MirrorNode, Q)
                     end
             end
         end).
 
 start_child(Name, MirrorNode, Q) ->
     case rabbit_mirror_queue_slave_sup:start_child(MirrorNode, [Q]) of
-        {ok, undefined} -> %% Already running
-                           ok;
-        {ok, SPid}      -> rabbit_log:info(
-                                "Adding mirror of ~s on node ~p: ~p~n",
-                                [rabbit_misc:rs(Name), MirrorNode, SPid]),
-                           ok;
-        Other           -> %% BUG-24942: should this not be checked for
-                           %% error conditions or something?
-                           Other
+        {ok, undefined} ->
+            %% NB: this means the mirror process was
+            %% already running on the given node.
+            ok;
+        {ok, SPid} ->
+            rabbit_log:info("Adding mirror of ~s on node ~p: ~p~n",
+                            [rabbit_misc:rs(Name), MirrorNode, SPid]),
+            ok;
+        {error, {stale_master_pid, StalePid}} ->
+            rabbit_log:warning("Detected stale HA master while adding "
+                               "mirror of ~s on node ~p: ~p~n",
+                               [rabbit_misc:rs(Name), MirrorNode, StalePid]),
+            ok;
+        Other ->
+            Other
     end.
 
 if_mirrored_queue(Queue, Fun) ->
