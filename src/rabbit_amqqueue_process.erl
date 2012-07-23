@@ -788,7 +788,7 @@ handle_queue_down(QPid, Reason, State = #q{queue_monitors = QMons,
                                            unconfirmed    = UC}) ->
     case pmon:is_monitored(QPid, QMons) of
         false -> noreply(State);
-        true  -> case rabbit_misc:is_abnormal_termination(Reason) of
+        true  -> case rabbit_misc:is_abnormal_exit(Reason) of
                      true  -> {Lost, _UC1} = dtree:take_all(QPid, UC),
                               QNameS = rabbit_misc:rs(qname(State)),
                               rabbit_log:warning("DLQ ~p for ~s died with "
