@@ -85,7 +85,7 @@ parse_carriage_return_not_ignored_interframe_test() ->
 parse_carriage_return_mid_command_test() ->
     {error, {unexpected_chars_in_command, "\rA"}} = parse("COMM\rAND\n\n\0").
 
-parse_carriage_return_end_command_test() -> % eol must be \r\n after \r
+parse_carriage_return_end_command_test() ->
     {error, {unexpected_chars_in_command, "\r\r"}} = parse("COMMAND\r\r\n\n\0").
 
 parse_resume_mid_command_test() ->
@@ -132,9 +132,36 @@ parse_multiple_headers_test() ->
     {ok, Val} = rabbit_stomp_frame:header(Frame, "header"),
     ?assertEqual("correct", Val).
 
-header_ending_with_cr_test() ->
-    Content = "COMMAND\nheader:val\r\r\n\n\0",
-    {error, {unexpected_chars_in_header, "\r\r"}} = parse(Content).
+skip_header_no_colon_test() ->
+    Content = "COMMAND\n"
+              "hdr1:val1\n"
+              "hdrskipped\n"
+              "hdr2:val2\n"
+              "\n\0",
+    {ok, Frame, _} = parse(Content),
+    ?assertEqual(Frame,
+                 #stomp_frame{command = "COMMAND",
+                              headers = [{"hdr2", "val2"},
+                                         {"hdr1", "val1"}],
+                              body_iolist = []}).
+
+no_nested_escapes_test() ->
+    Content = "COM\\\\rAND\n"      % no escapes
+              "hdr\\\\rname:"      % one escape
+              "hdr\\\\rval\n\n\0", % one escape
+    {ok, Frame, _} = parse(Content),
+    ?assertEqual(Frame,
+                 #stomp_frame{command = "COM\\\\rAND",
+                              headers = [{"hdr\\rname", "hdr\\rval"}],
+                              body_iolist = []}).
+
+header_name_with_cr_test() ->
+    Content = "COMMAND\nhead\rer:val\n\n\0",
+    {error, {unexpected_chars_in_header, "\re"}} = parse(Content).
+
+header_value_with_cr_test() ->
+    Content = "COMMAND\nheader:val\rue\n\n\0",
+    {error, {unexpected_chars_in_header, "\ru"}} = parse(Content).
 
 headers_escaping_roundtrip_test() ->
     Content = "COMMAND\nhead\\r\\c\\ner:\\c\\n\\r\\\\\n\n\0",

@@ -79,65 +79,71 @@ initial_state() -> none.
 -define(COLON_ESC, $c).
 -define(CR_ESC,    $r).
 
-parse(Content, {resume, Fun}) -> Fun(Content);
-parse(Content, none         ) -> parse_noise(Content).
+%% parser state
+-record(state, {acc, cmd, hdrs, hdrname}).
 
-parse_noise(<<>>                       ) -> more(fun(Rest) -> parse_noise(Rest) end);
-parse_noise(<<?CR>>                    ) -> more(fun(Rest) -> parse_noise(<<?CR, Rest/binary>>) end);
-parse_noise(<<?NUL,       Rest/binary>>) -> parse_noise(Rest);
-parse_noise(<<?LF,        Rest/binary>>) -> parse_noise(Rest);
-parse_noise(<<?CR, ?LF,   Rest/binary>>) -> parse_noise(Rest);
-parse_noise(<<?CR, Ch:8, _Rest/binary>>) -> {error, {unexpected_chars_between_frames, [?CR, Ch]}};
-parse_noise(<<Ch:8,       Rest/binary>>) -> parse_command(Rest, [Ch]).
+parse(Content, {resume, Continuation}) -> Continuation(Content);
+parse(Content, none                  ) -> parser(Content, noframe, #state{}).
 
-parse_command(<<>>,                         Acc) -> more(fun(Rest) -> parse_command(Rest, Acc) end);
-parse_command(<<?CR>>,                      Acc) -> more(fun(Rest) -> parse_command(<<?CR, Rest/binary>>, Acc) end);
-parse_command(<<?LF,        Rest/binary>>,  Acc) -> parse_headers(Rest, lists:reverse(Acc));
-parse_command(<<?CR, ?LF,   Rest/binary>>,  Acc) -> parse_headers(Rest, lists:reverse(Acc));
-parse_command(<<?CR, Ch:8, _Rest/binary>>, _Acc) -> {error, {unexpected_chars_in_command, [?CR, Ch]}};
-parse_command(<<Ch:8,       Rest/binary>>,  Acc) -> parse_command(Rest, [Ch | Acc]).
+more(Continuation) -> {more, {resume, Continuation}}.
 
-parse_headers(Rest, Command) -> parse_headers(Rest, #stomp_frame{command = Command}, []).
+%% Single-function parser: Term :: noframe | command | headers | hdrname | hdrvalue
+%% general more and line-end detection
+parser(<<>>,                        Term    ,  State) -> more(fun(Rest) -> parser(Rest, Term, State) end);
+parser(<<?CR>>,                     Term    ,  State) -> more(fun(Rest) -> parser(<<?CR, Rest/binary>>, Term, State) end);
+parser(<<?CR, ?LF,   Rest/binary>>, Term    ,  State) -> parser(<<?LF, Rest/binary>>, Term, State);
+parser(<<?CR, Ch:8, _Rest/binary>>, Term    , _State) -> {error, {unexpected_chars(Term), [?CR, Ch]}};
+%% escape processing (only in hdrname and hdrvalue terms)
+parser(<<?BSL>>,                    Term    ,  State) -> more(fun(Rest) -> parser(<<?BSL, Rest/binary>>, Term, State) end);
+parser(<<?BSL, Ch:8, Rest/binary>>, Term    ,  State) 
+                               when Term == hdrname;
+                                    Term == hdrvalue  -> unescape(Ch, fun(Ech) -> parser(Rest, Term, accum(Ech, State)) end);
+%% inter-frame noise
+parser(<<?NUL,       Rest/binary>>, noframe ,  State) -> parser(Rest, noframe, State);
+parser(<<?LF,        Rest/binary>>, noframe ,  State) -> parser(Rest, noframe, State);
+%% detect transitions
+parser(              Rest,          noframe ,  State) -> goto(noframe,  command,  Rest, State);
+parser(<<?LF,        Rest/binary>>, command ,  State) -> goto(command,  headers,  Rest, State);
+parser(<<?LF,        Rest/binary>>, headers ,  State) -> goto(headers,  body,     Rest, State);
+parser(              Rest,          headers ,  State) -> goto(headers,  hdrname,  Rest, State);
+parser(<<?COLON,     Rest/binary>>, hdrname ,  State) -> goto(hdrname,  hdrvalue, Rest, State);
+parser(<<?LF,        Rest/binary>>, hdrname ,  State) -> goto(hdrname,  headers,  Rest, State);
+parser(<<?LF,        Rest/binary>>, hdrvalue,  State) -> goto(hdrvalue, headers,  Rest, State);
+%% accumulate
+parser(<<Ch:8,       Rest/binary>>, Term    ,  State) -> parser(Rest, Term, accum(Ch, State)).
 
-parse_headers(<<>>,                         Frame,  HeaderAcc) -> more(fun(Rest) -> parse_headers(Rest, Frame, HeaderAcc) end);
-parse_headers(<<?CR>>,                      Frame,  HeaderAcc) -> more(fun(Rest) -> parse_headers(<<?CR, Rest/binary>>, Frame, HeaderAcc) end);
-parse_headers(<<?LF,        Rest/binary>>,  Frame,  HeaderAcc) -> parse_body(Rest, Frame#stomp_frame{headers = HeaderAcc});
-parse_headers(<<?CR, ?LF,   Rest/binary>>,  Frame,  HeaderAcc) -> parse_body(Rest, Frame#stomp_frame{headers = HeaderAcc});
-parse_headers(<<?CR, Ch:8, _Rest/binary>>, _Frame, _HeaderAcc) -> {error, {unexpected_chars_in_header, [?CR, Ch]}};
-parse_headers(<<Ch:8,       Rest/binary>>,  Frame,  HeaderAcc) -> parse_header_name(Rest, Frame, HeaderAcc, [Ch]).
+%% state transitions
+goto(noframe,  command,  Rest, State                                 ) -> parser(Rest, command, State#state{acc = []});
+goto(command,  headers,  Rest, State = #state{acc = Acc}             ) -> parser(Rest, headers, State#state{cmd = lists:reverse(Acc)});
+goto(headers,  body,     Rest,         #state{cmd = Cmd, hdrs = Hdrs}) -> parse_body(Rest, #stomp_frame{command = Cmd, headers = Hdrs});
+goto(headers,  hdrname,  Rest, State                                 ) -> parser(Rest, hdrname, State#state{acc = []});
+goto(hdrname,  hdrvalue, Rest, State = #state{acc = Acc}             ) -> parser(Rest, hdrvalue, State#state{acc = [], hdrname = lists:reverse(Acc)});
+goto(hdrname,  headers,  Rest, State                                 ) -> parser(Rest, headers, State);  % ignore hdrname
+goto(hdrvalue, headers,  Rest, State = #state{acc = Acc, hdrs = Headers, hdrname = HdrName}) -> 
+    parser(Rest, headers, State#state{hdrs = insert_header(Headers, HdrName, lists:reverse(Acc))}).
 
-parse_header_name(<<>>,                           Frame,  HeaderAcc,  KeyAcc) -> more(fun(Rest) -> parse_header_name(Rest, Frame, HeaderAcc, KeyAcc) end);
-parse_header_name(<<?CR>>,                        Frame,  HeaderAcc,  KeyAcc) -> more(fun(Rest) -> parse_header_name(<<?CR, Rest/binary>>, Frame, HeaderAcc, KeyAcc) end);
-parse_header_name(<<?BSL>>,                       Frame,  HeaderAcc,  KeyAcc) -> more(fun(Rest) -> parse_header_name(<<?BSL, Rest/binary>>, Frame, HeaderAcc, KeyAcc) end);
-parse_header_name(<<?COLON,       Rest/binary>>,  Frame,  HeaderAcc,  KeyAcc) -> parse_header_value(Rest, Frame, HeaderAcc, lists:reverse(KeyAcc));
-parse_header_name(<<?LF,          Rest/binary>>,  Frame,  HeaderAcc, _KeyAcc) -> parse_headers(Rest, Frame, HeaderAcc);  % ignore header name
-parse_header_name(<<?CR,  ?LF,    Rest/binary>>,  Frame,  HeaderAcc, _KeyAcc) -> parse_headers(Rest, Frame, HeaderAcc);  % ignore header name
-parse_header_name(<<?CR,  Ch:8,  _Rest/binary>>, _Frame, _HeaderAcc, _KeyAcc) -> {error, {unexpected_chars_in_header, [?CR, Ch]}};
-parse_header_name(<<?BSL, Ch:8,   Rest/binary>>,  Frame,  HeaderAcc,  KeyAcc) -> unescape(Ch, fun(Ech) -> parse_header_name(Rest, Frame, HeaderAcc, [Ech | KeyAcc]) end);
-parse_header_name(<<Ch:8,         Rest/binary>>,  Frame,  HeaderAcc,  KeyAcc) -> parse_header_name(Rest, Frame, HeaderAcc, [Ch | KeyAcc]).
+%% error atom
+unexpected_chars(noframe)  -> unexpected_chars_between_frames;
+unexpected_chars(command)  -> unexpected_chars_in_command;
+unexpected_chars(hdrname)  -> unexpected_chars_in_header;
+unexpected_chars(hdrvalue) -> unexpected_chars_in_header;
+unexpected_chars(_Term)    -> unexpected_chars.
 
-parse_header_value(Rest, Frame, HeaderAcc, Key) -> parse_header_value(Rest, Frame, HeaderAcc, Key, []).
+%% general accumulation
+accum(Ch, State = #state{acc = Acc}) -> State#state{acc = [Ch | Acc]}.
 
-parse_header_value(<<>>,                           Frame,  HeaderAcc,  Key,  ValAcc) -> more(fun(Rest) -> parse_header_value(Rest, Frame, HeaderAcc, Key, ValAcc) end);
-parse_header_value(<<?CR>>,                        Frame,  HeaderAcc,  Key,  ValAcc) -> more(fun(Rest) -> parse_header_value(<<?CR, Rest/binary>>, Frame, HeaderAcc, Key, ValAcc) end);
-parse_header_value(<<?BSL>>,                       Frame,  HeaderAcc,  Key,  ValAcc) -> more(fun(Rest) -> parse_header_value(<<?BSL, Rest/binary>>, Frame, HeaderAcc, Key, ValAcc) end);
-parse_header_value(<<?COLON,      _Rest/binary>>, _Frame, _HeaderAcc, _Key, _ValAcc) -> {error, {unexpected_colon_in_header}};
-parse_header_value(<<?LF,          Rest/binary>>,  Frame,  HeaderAcc,  Key,  ValAcc) -> parse_headers(Rest, Frame, insert_header(HeaderAcc, Key, lists:reverse(ValAcc)));
-parse_header_value(<<?CR,  ?LF,    Rest/binary>>,  Frame,  HeaderAcc,  Key,  ValAcc) -> parse_headers(Rest, Frame, insert_header(HeaderAcc, Key, lists:reverse(ValAcc)));
-parse_header_value(<<?CR,  Ch:8,  _Rest/binary>>, _Frame, _HeaderAcc, _Key, _ValAcc) -> {error, {unexpected_chars_in_header, [?CR, Ch]}};
-parse_header_value(<<?BSL, Ch:8,   Rest/binary>>,  Frame,  HeaderAcc,  Key,  ValAcc) -> unescape(Ch, fun(Ech) -> parse_header_value(Rest, Frame, HeaderAcc, Key, [Ech | ValAcc]) end);
-parse_header_value(<<Ch:8,         Rest/binary>>,  Frame,  HeaderAcc,  Key,  ValAcc) -> parse_header_value(Rest, Frame, HeaderAcc, Key, [Ch | ValAcc]).
-
+%% resolve escapes (with error processing)
 unescape(?LF_ESC,    Fun) -> Fun(?LF);
 unescape(?BSL_ESC,   Fun) -> Fun(?BSL);
 unescape(?COLON_ESC, Fun) -> Fun(?COLON);
 unescape(?CR_ESC,    Fun) -> Fun(?CR);
-unescape(Ch,        _Fun) -> {error, {bad_escape, Ch}}.
+unescape(Ch,        _Fun) -> {error, {bad_escape, [?BSL, Ch]}}.
 
-insert_header(Headers, Key, Value) ->
-    case lists:keymember(Key, 1, Headers) of
+%% insert header unless aleady seen
+insert_header(Headers, Name, Value) ->
+    case lists:keymember(Name, 1, Headers) of
         true  -> Headers; % first header only
-        false -> [{Key, Value} | Headers]
+        false -> [{Name, Value} | Headers]
     end.
 
 parse_body(Content, Frame) ->
@@ -166,8 +172,6 @@ parse_body2(Content, Frame, Chunks, {done, Pos}) ->
 
 finalize_chunk(<<>>,  Chunks) -> Chunks;
 finalize_chunk(Chunk, Chunks) -> [Chunk | Chunks].
-
-more(Continuation) -> {more, {resume, Continuation}}.
 
 default_value({ok, Value}, _DefaultValue) -> Value;
 default_value(not_found,    DefaultValue) -> DefaultValue.
