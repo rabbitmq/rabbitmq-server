@@ -20,7 +20,8 @@
 
 -export([start/0, boot/0, stop/0,
          stop_and_halt/0, await_startup/0, status/0, is_running/0,
-         is_running/1, environment/0, rotate_logs/1, force_event_refresh/0]).
+         is_running/1, environment/0, rotate_logs/1, force_event_refresh/0,
+         start_fhc/0]).
 
 -export([start/2, stop/1]).
 
@@ -53,8 +54,7 @@
 
 -rabbit_boot_step({file_handle_cache,
                    [{description, "file handle cache server"},
-                    {mfa,         {rabbit_sup, start_restartable_child,
-                                   [file_handle_cache]}},
+                    {mfa,         {rabbit, start_fhc, []}},
                     {requires,    pre_boot},
                     {enables,     worker_pool}]}).
 
@@ -730,3 +730,10 @@ config_files() ->
                            [File] <- Files];
         error       -> []
     end.
+
+%% We don't want this in fhc since it references rabbit stuff. And we can't put
+%% this in the bootstep directly.
+start_fhc() ->
+    rabbit_sup:start_restartable_child(
+      file_handle_cache,
+      [fun rabbit_alarm:set_alarm/1, fun rabbit_alarm:clear_alarm/1]).

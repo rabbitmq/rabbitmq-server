@@ -67,9 +67,5 @@ duplicate_node_check(NodeStr) ->
         {error, EpmdReason} ->
             rabbit_misc:quit("epmd error for host ~p: ~p (~s)~n",
                       [NodeHost, EpmdReason,
-                       case EpmdReason of
-                           address -> "unable to establish tcp connection";
-                           timeout -> "timed out establishing tcp connection";
-                           _       -> inet:format_error(EpmdReason)
-                       end])
+                       rabbit_misc:format_inet_error(EpmdReason)])
     end.

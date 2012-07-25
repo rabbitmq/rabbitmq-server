@@ -29,14 +29,14 @@
 -export([enable_cover/1, report_cover/1]).
 -export([start_cover/1]).
 -export([confirm_to_sender/2]).
--export([throw_on_error/2, with_exit_handler/2, filter_exit_map/2]).
--export([is_abnormal_termination/1]).
+-export([throw_on_error/2, with_exit_handler/2, is_abnormal_exit/1,
+         filter_exit_map/2]).
 -export([with_user/2, with_user_and_vhost/3]).
 -export([execute_mnesia_transaction/1]).
 -export([execute_mnesia_transaction/2]).
 -export([execute_mnesia_tx_with_tail/1]).
 -export([ensure_ok/2]).
--export([tcp_name/3]).
+-export([tcp_name/3, format_inet_error/1]).
 -export([upmap/2, map_in_order/2]).
 -export([table_filter/3]).
 -export([dirty_read_all/1, dirty_foreach_key/2, dirty_dump_log/1]).
@@ -60,6 +60,11 @@
 -export([multi_call/2]).
 -export([os_cmd/1]).
 -export([gb_sets_difference/2]).
+
+%% Horrible macro to use in guards
+-define(IS_BENIGN_EXIT(R),
+        R =:= noproc; R =:= noconnection; R =:= nodedown; R =:= normal;
+            R =:= shutdown).
 
 %%----------------------------------------------------------------------------
 
@@ -137,8 +142,8 @@
 -spec(throw_on_error/2 ::
         (atom(), thunk(rabbit_types:error(any()) | {ok, A} | A)) -> A).
 -spec(with_exit_handler/2 :: (thunk(A), thunk(A)) -> A).
+-spec(is_abnormal_exit/1 :: (any()) -> boolean()).
 -spec(filter_exit_map/2 :: (fun ((A) -> B), [A]) -> [B]).
--spec(is_abnormal_termination/1 :: (any()) -> boolean()).
 -spec(with_user/2 :: (rabbit_types:username(), thunk(A)) -> A).
 -spec(with_user_and_vhost/3 ::
         (rabbit_types:username(), rabbit_types:vhost(), thunk(A))
@@ -152,6 +157,7 @@
 -spec(tcp_name/3 ::
         (atom(), inet:ip_address(), rabbit_networking:ip_port())
         -> atom()).
+-spec(format_inet_error/1 :: (atom()) -> string()).
 -spec(upmap/2 :: (fun ((A) -> B), [A]) -> [B]).
 -spec(map_in_order/2 :: (fun ((A) -> B), [A]) -> [B]).
 -spec(table_filter/3:: (fun ((A) -> boolean()), fun ((A, boolean()) -> 'ok'),
@@ -423,12 +429,13 @@ with_exit_handler(Handler, Thunk) ->
     try
         Thunk()
     catch
-        exit:{R, _} when R =:= noproc; R =:= nodedown;
-                         R =:= normal; R =:= shutdown ->
-            Handler();
-        exit:{{R, _}, _} when R =:= nodedown; R =:= shutdown ->
-            Handler()
+        exit:{R, _}      when ?IS_BENIGN_EXIT(R) -> Handler();
+        exit:{{R, _}, _} when ?IS_BENIGN_EXIT(R) -> Handler()
     end.
+
+is_abnormal_exit(R)      when ?IS_BENIGN_EXIT(R) -> false;
+is_abnormal_exit({R, _}) when ?IS_BENIGN_EXIT(R) -> false;
+is_abnormal_exit(_)                              -> true.
 
 filter_exit_map(F, L) ->
     Ref = make_ref(),
@@ -437,11 +444,6 @@ filter_exit_map(F, L) ->
                     fun () -> Ref end,
                     fun () -> F(I) end) || I <- L]).
 
-is_abnormal_termination(Reason)
-  when Reason =:= noproc; Reason =:= noconnection;
-       Reason =:= normal; Reason =:= shutdown -> false;
-is_abnormal_termination({shutdown, _})        -> false;
-is_abnormal_termination(_)                    -> true.
 
 with_user(Username, Thunk) ->
     fun () ->
@@ -509,6 +511,10 @@ tcp_name(Prefix, IPAddress, Port)
   when is_atom(Prefix) andalso is_number(Port) ->
     list_to_atom(
       format("~w_~s:~w", [Prefix, inet_parse:ntoa(IPAddress), Port])).
+
+format_inet_error(address) -> "cannot connect to host/port";
+format_inet_error(timeout) -> "timed out";
+format_inet_error(Error)   -> inet:format_error(Error).
 
 %% This is a modified version of Luke Gorrie's pmap -
 %% http://lukego.livejournal.com/6753.html - that doesn't care about

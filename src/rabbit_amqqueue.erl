@@ -599,7 +599,7 @@ on_node_down(Node) ->
                                               slave_pids = []}
                                         <- mnesia:table(rabbit_queue),
                                     node(Pid) == Node andalso
-                                        not is_process_alive(Pid)])),
+                                    not rabbit_misc:is_process_alive(Pid)])),
                 {Qs, Dels} = lists:unzip(QsDels),
                 T = rabbit_binding:process_deletions(
                       lists:foldl(fun rabbit_binding:combine_deletions/2,
@@ -672,13 +672,18 @@ qpids(Qs) -> lists:append([[QPid | SPids] ||
                               #amqqueue{pid = QPid, slave_pids = SPids} <- Qs]).
 
 safe_delegate_call_ok(F, Pids) ->
-    case delegate:invoke(Pids, fun (Pid) ->
-                                       rabbit_misc:with_exit_handler(
-                                         fun () -> ok end,
-                                         fun () -> F(Pid) end)
-                               end) of
-        {_,  []} -> ok;
-        {_, Bad} -> {error, Bad}
+    {_, Bads} = delegate:invoke(Pids, fun (Pid) ->
+                                              rabbit_misc:with_exit_handler(
+                                                fun () -> ok end,
+                                                fun () -> F(Pid) end)
+                                      end),
+    case lists:filter(fun ({_Pid, {exit, {R, _}, _}}) ->
+                              rabbit_misc:is_abnormal_exit(R);
+                          ({_Pid, _}) ->
+                              false
+                      end, Bads) of
+        []    -> ok;
+        Bads1 -> {error, Bads1}
     end.
 
 delegate_call(Pid, Msg) ->

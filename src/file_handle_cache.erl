@@ -150,8 +150,8 @@
          info/0, info/1]).
 -export([ulimit/0]).
 
--export([start_link/0, init/1, handle_call/3, handle_cast/2, handle_info/2,
-         terminate/2, code_change/3, prioritise_cast/2]).
+-export([start_link/0, start_link/2, init/1, handle_call/3, handle_cast/2,
+         handle_info/2, terminate/2, code_change/3, prioritise_cast/2]).
 
 -define(SERVER, ?MODULE).
 -define(RESERVED_FOR_OTHERS, 100).
@@ -195,7 +195,9 @@
           obtain_count,
           obtain_pending,
           clients,
-          timer_ref
+          timer_ref,
+          alarm_set,
+          alarm_clear
         }).
 
 -record(cstate,
@@ -268,7 +270,11 @@
 %%----------------------------------------------------------------------------
 
 start_link() ->
-    gen_server2:start_link({local, ?SERVER}, ?MODULE, [], [{timeout, infinity}]).
+    start_link(fun alarm_handler:set_alarm/1, fun alarm_handler:clear_alarm/1).
+
+start_link(AlarmSet, AlarmClear) ->
+    gen_server2:start_link({local, ?SERVER}, ?MODULE, [AlarmSet, AlarmClear],
+                           [{timeout, infinity}]).
 
 register_callback(M, F, A)
   when is_atom(M) andalso is_atom(F) andalso is_list(A) ->
@@ -806,7 +812,7 @@ i(Item, _) -> throw({bad_argument, Item}).
 %% gen_server2 callbacks
 %%----------------------------------------------------------------------------
 
-init([]) ->
+init([AlarmSet, AlarmClear]) ->
     Limit = case application:get_env(file_handles_high_watermark) of
                 {ok, Watermark} when (is_integer(Watermark) andalso
                                       Watermark > 0) ->
@@ -830,7 +836,9 @@ init([]) ->
                       obtain_count   = 0,
                       obtain_pending = pending_new(),
                       clients        = Clients,
-                      timer_ref      = undefined }}.
+                      timer_ref      = undefined,
+                      alarm_set      = AlarmSet,
+                      alarm_clear    = AlarmClear }}.
 
 prioritise_cast(Msg, _State) ->
     case Msg of
@@ -1026,10 +1034,11 @@ obtain_limit_reached(#fhc_state { obtain_limit = Limit,
                                   obtain_count = Count}) ->
     Limit =/= infinity andalso Count >= Limit.
 
-adjust_alarm(OldState, NewState) ->
+adjust_alarm(OldState = #fhc_state { alarm_set   = AlarmSet,
+                                     alarm_clear = AlarmClear }, NewState) ->
     case {obtain_limit_reached(OldState), obtain_limit_reached(NewState)} of
-        {false, true} -> alarm_handler:set_alarm({file_descriptor_limit, []});
-        {true, false} -> alarm_handler:clear_alarm(file_descriptor_limit);
+        {false, true} -> AlarmSet({file_descriptor_limit, []});
+        {true, false} -> AlarmClear(file_descriptor_limit);
         _             -> ok
     end,
     NewState.
