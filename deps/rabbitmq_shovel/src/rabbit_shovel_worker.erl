@@ -134,6 +134,10 @@ handle_info(#'basic.nack'{delivery_tag = Seq, multiple = Multiple},
     {noreply, confirm_to_inbound(#'basic.nack'{delivery_tag = _, multiple = _},
                                  Seq, Multiple, State)};
 
+handle_info(#'basic.cancel'{}, State) ->
+    rabbit_log:warning("received 'basic.cancel' from the broker, exiting"),
+    {stop, basic_cancel, State};
+
 handle_info({'EXIT', InboundConn, Reason},
             State = #state{inbound_conn = InboundConn}) ->
     {stop, {inbound_conn_died, Reason}, State};
