@@ -254,7 +254,8 @@ action(join_cluster, Node, [ClusterNodeS], Opts, Inform) ->
 action(change_cluster_node_type, Node, ["ram"], _Opts, Inform) ->
     Inform("Turning ~p into a ram node", [Node]),
     rpc_call(Node, rabbit_mnesia, change_cluster_node_type, [ram]);
-action(change_cluster_node_type, Node, ["disc"], _Opts, Inform) ->
+action(change_cluster_node_type, Node, [Type], _Opts, Inform)
+  when Type =:= "disc" orelse Type =:= "disk" ->
     Inform("Turning ~p into a disc node", [Node]),
     rpc_call(Node, rabbit_mnesia, change_cluster_node_type, [disc]);
 
