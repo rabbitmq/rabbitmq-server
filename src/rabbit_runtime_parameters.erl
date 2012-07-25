@@ -200,7 +200,7 @@ parse(Src0) ->
         {ok, Scanned, _} ->
             case erl_parse:parse_term(Scanned) of
                 {ok, Parsed} ->
-                    {ok, Parsed};
+                    {ok, convert_atoms(Parsed)};
                 {error, E} ->
                     {errors,
                      [{"Could not parse value: ~s", [format_parse_error(E)]}]}
@@ -208,6 +208,14 @@ parse(Src0) ->
         {error, E, _} ->
             {errors, [{"Could not scan value: ~s", [format_parse_error(E)]}]}
     end.
+
+
+%% Convert atom keys to binary for easier insertion. `latin1' is used as
+%% encoding given that the binary literals will use that.
+convert_atoms(L) when is_list(L)      -> [convert_atoms(T) || T <- L];
+convert_atoms({K, V}) when is_atom(K) -> {atom_to_binary(K, latin1),
+                                          convert_atoms(V)};
+convert_atoms(T)                      -> T.
 
 format_parse_error({_Line, Mod, Err}) ->
     lists:flatten(Mod:format_error(Err)).
