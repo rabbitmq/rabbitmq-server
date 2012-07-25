@@ -163,6 +163,10 @@ header_value_with_cr_test() ->
     Content = "COMMAND\nheader:val\rue\n\n\0",
     {error, {unexpected_chars_in_header, "\ru"}} = parse(Content).
 
+header_value_with_colon_test() ->
+    Content = "COMMAND\nheader:val:ue\n\n\0",
+    {error, {unexpected_char_in_header_value, ":"}} = parse(Content).
+
 headers_escaping_roundtrip_test() ->
     Content = "COMMAND\nhead\\r\\c\\ner:\\c\\n\\r\\\\\n\n\0",
     {ok, Frame, _} = parse(Content),

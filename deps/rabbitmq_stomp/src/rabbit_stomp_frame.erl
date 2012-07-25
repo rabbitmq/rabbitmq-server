@@ -109,6 +109,8 @@ parser(              Rest,          headers ,  State) -> goto(headers,  hdrname,
 parser(<<?COLON,     Rest/binary>>, hdrname ,  State) -> goto(hdrname,  hdrvalue, Rest, State);
 parser(<<?LF,        Rest/binary>>, hdrname ,  State) -> goto(hdrname,  headers,  Rest, State);
 parser(<<?LF,        Rest/binary>>, hdrvalue,  State) -> goto(hdrvalue, headers,  Rest, State);
+%% trap invalid colons
+parser(<<?COLON,     Rest/binary>>, hdrvalue,  State) -> {error, {unexpected_char_in_header_value, [?COLON]}};
 %% accumulate
 parser(<<Ch:8,       Rest/binary>>, Term    ,  State) -> parser(Rest, Term, accum(Ch, State)).
 
@@ -236,7 +238,7 @@ escape1(?COLON) -> [?BSL, ?COLON_ESC];
 escape1(?BSL)   -> [?BSL, ?BSL_ESC];
 escape1(?LF)    -> [?BSL, ?LF_ESC];
 escape1(?CR)    -> [?BSL, ?CR_ESC];
-escape1(C)      -> C.
+escape1(Ch)     -> Ch.
 
 firstnull(Content) -> firstnull(Content, 0).
 
