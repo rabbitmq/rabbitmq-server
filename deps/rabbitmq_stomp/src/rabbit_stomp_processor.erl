@@ -138,8 +138,6 @@ handle_info(#'basic.ack'{delivery_tag = Tag, multiple = IsMulti}, State) ->
 handle_info({Delivery = #'basic.deliver'{},
              #amqp_msg{props = Props, payload = Payload}}, State) ->
     {noreply, send_delivery(Delivery, Props, Payload, State), hibernate};
-handle_info(#'basic.cancel'{consumer_tag = Ctag}, State) ->
-    {noreply, server_cancel_consumer(Ctag, State), hibernate};
 handle_info({'EXIT', Conn,
              {shutdown, {server_initiated_close, Code, Explanation}}},
             State = #state{connection = Conn}) ->
@@ -341,24 +339,6 @@ ack_action(Command, Frame,
 %% Internal helpers for processing frames callbacks
 %%----------------------------------------------------------------------------
 
-server_cancel_consumer(ConsumerTag, State = #state{subscriptions = Subs}) ->
-    case dict:find(ConsumerTag, Subs) of
-        error ->
-            error("Server cancelled unknown subscription",
-                  "Consumer tag ~p is not associated with a subscription.\n",
-                  [ConsumerTag],
-                  State);
-        {ok, Subscription = #subscription{description = Description}} ->
-            send_error_frame("Server cancelled subscription",
-                             [{?HEADER_SUBSCRIPTION, ConsumerTag}],
-                             "The server has cancelled a subscription.\n"
-                             "No more messages will be delivered for ~p.\n",
-                             [Description],
-                             State),
-            cancel_found_subscription(ConsumerTag, Subscription,
-                                      #stomp_frame{}, State)
-    end.
-
 cancel_subscription({error, invalid_prefix}, _Frame, State) ->
     error("Invalid id",
           "UNSUBSCRIBE 'id' may not start with ~s~n",
@@ -371,7 +351,8 @@ cancel_subscription({error, _}, _Frame, State) ->
           State);
 
 cancel_subscription({ok, ConsumerTag, Description}, Frame,
-                    State = #state{subscriptions = Subs}) ->
+                    State = #state{channel       = MainChannel,
+                                   subscriptions = Subs}) ->
     case dict:find(ConsumerTag, Subs) of
         error ->
             error("No subscription found",
@@ -379,49 +360,42 @@ cancel_subscription({ok, ConsumerTag, Description}, Frame,
                   "Subscription to ~p not found.\n",
                   [Description],
                   State);
-        {ok, Subscription} ->
-            cancel_found_subscription(ConsumerTag, Subscription, Frame, State)
+        {ok, #subscription{dest_hdr = DestHdr, channel = SubChannel}} ->
+            case amqp_channel:call(SubChannel,
+                                   #'basic.cancel'{
+                                     consumer_tag = ConsumerTag}) of
+                #'basic.cancel_ok'{consumer_tag = ConsumerTag} ->
+                    ok = ensure_subchannel_closed(SubChannel, MainChannel),
+                    NewSubs = dict:erase(ConsumerTag, Subs),
+                    maybe_delete_durable_sub(DestHdr, Frame,
+                                             State#state{
+                                               subscriptions = NewSubs});
+                _ ->
+                    error("Failed to cancel subscription",
+                          "UNSUBSCRIBE to ~p failed.\n",
+                          [Description],
+                          State)
+            end
     end.
 
-cancel_found_subscription(ConsumerTag,
-                          #subscription{dest_hdr = DestHdr,
-                                        channel = SubChannel,
-                                        description = Description},
-                          Frame,
-                          State = #state{channel = MainChannel,
-                                         subscriptions = Subs}) ->
-    case amqp_channel:call(SubChannel,
-                           #'basic.cancel'{
-                             consumer_tag = ConsumerTag}) of
-        #'basic.cancel_ok'{consumer_tag = ConsumerTag} ->
-            ok = ensure_subchannel_closed(SubChannel, MainChannel),
-            NewSubs = dict:erase(ConsumerTag, Subs),
-            {ok, Dest} =
-                rabbit_stomp_util:parse_destination(DestHdr),
-            maybe_delete_durable_sub(Dest, Frame,
-                State#state{subscriptions = NewSubs});
+maybe_delete_durable_sub(DestHdr, Frame, State = #state{channel = Channel}) ->
+    case rabbit_stomp_util:parse_destination(DestHdr) of
+        {ok, {topic, Name}} ->
+            case rabbit_stomp_frame:boolean_header(Frame,
+                                                   ?HEADER_PERSISTENT, false) of
+                true ->
+                    {ok, Id} = rabbit_stomp_frame:header(Frame, ?HEADER_ID),
+                    QName =
+                        rabbit_stomp_util:durable_subscription_queue(Name, Id),
+                    amqp_channel:call(Channel, #'queue.delete'{queue  = QName,
+                                                               nowait = false}),
+                    ok(State);
+                false ->
+                    ok(State)
+            end;
         _ ->
-            error("Failed to cancel subscription",
-                  "UNSUBSCRIBE to ~p failed.\n",
-                  [Description],
-                  State)
-    end.
-
-maybe_delete_durable_sub({topic, Name}, Frame,
-                         State = #state{channel = Channel}) ->
-    case rabbit_stomp_frame:boolean_header(Frame,
-                                           ?HEADER_PERSISTENT, false) of
-        true ->
-            {ok, Id} = rabbit_stomp_frame:header(Frame, ?HEADER_ID),
-            QName = rabbit_stomp_util:durable_subscription_queue(Name, Id),
-            amqp_channel:call(Channel, #'queue.delete'{queue  = QName,
-                                                       nowait = false}),
-            ok(State);
-        false ->
             ok(State)
-    end;
-maybe_delete_durable_sub(_Destination, _Frame, State) ->
-    ok(State).
+    end.
 
 ensure_subchannel_closed(SubChannel, MainChannel)
   when SubChannel == MainChannel ->
@@ -1002,19 +976,12 @@ send_frame(Frame, State = #state{send_fun = SendFun}) ->
     SendFun(async, rabbit_stomp_frame:serialize(Frame)),
     State.
 
-send_error_frame(Message, ExtraHeaders, Format, Args, State) ->
-    send_error_frame(Message, ExtraHeaders, rabbit_misc:format(Format, Args), State).
-
-send_error_frame(Message, ExtraHeaders, Detail, State) ->
+send_error(Message, Detail, State) ->
     send_frame("ERROR", [{"message", Message},
                          {"content-type", "text/plain"},
-                         {"version", string:join(?SUPPORTED_VERSIONS, ",")}]
-                        ++ ExtraHeaders,
-                        Detail, State).
+                         {"version", string:join(?SUPPORTED_VERSIONS, ",")}],
+                         Detail, State).
 
-send_error(Message, Detail, State) ->
-    send_error_frame(Message, [], Detail, State).
-    
 send_error(Message, Format, Args, State) ->
     send_error(Message, rabbit_misc:format(Format, Args), State).
 
