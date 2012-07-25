@@ -152,7 +152,7 @@ add_mirror(Queue, MirrorNode) ->
 start_child(Name, MirrorNode, Q) ->
     case rabbit_mirror_queue_slave_sup:start_child(MirrorNode, [Q]) of
         {ok, undefined} ->
-            %% NB: this means the mirror process was
+            %% this means the mirror process was
             %% already running on the given node.
             ok;
         {ok, SPid} ->
