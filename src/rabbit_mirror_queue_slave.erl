@@ -143,7 +143,7 @@ init(#amqqueue { name = QueueName } = Q) ->
               ?DESIRED_HIBERNATE}};
         {stale, StalePid} ->
             {stop, {stale_master_pid, StalePid}};
-        duplicate_master ->
+        duplicate_live_master ->
             {stop, {duplicate_live_master, Node}};
         existing ->
             ignore
@@ -157,10 +157,10 @@ init_it(Self, Node, QueueName) ->
             MPids1 = MPids ++ [Self],
             ok = rabbit_amqqueue:store_queue(Q1#amqqueue{slave_pids=MPids1}),
             {new, QPid};
-        [MPid] when MPid =:= QPid ->
-            case rabbit_misc:is_process_alive(MPid) of
-                true  -> duplicate_master;
-                false -> {stale, MPid}
+        [QPid] ->
+            case rabbit_misc:is_process_alive(QPid) of
+                true  -> duplicate_live_master;
+                false -> {stale, QPid}
             end;
         [SPid] ->
             case rabbit_misc:is_process_alive(SPid) of
