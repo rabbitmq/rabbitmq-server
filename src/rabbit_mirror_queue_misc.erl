@@ -159,12 +159,12 @@ start_child(Name, MirrorNode, Q) ->
             rabbit_log:info("Adding mirror of ~s on node ~p: ~p~n",
                             [rabbit_misc:rs(Name), MirrorNode, SPid]),
             ok;
-        {error, {stale_master_pid, StalePid}} ->
+        {error, {{stale_master_pid, StalePid}, _}} ->
             rabbit_log:warning("Detected stale HA master while adding "
                                "mirror of ~s on node ~p: ~p~n",
                                [rabbit_misc:rs(Name), MirrorNode, StalePid]),
             ok;
-        {error, {duplicate_live_master, _}=Err} ->
+        {error, {{duplicate_live_master, _}=Err, _}} ->
             throw(Err);
         Other ->
             Other
