@@ -37,7 +37,8 @@
 -spec(add_mirror/3 ::
         (rabbit_types:vhost(), binary(), atom())
         -> rabbit_types:ok_or_error(any())).
--spec(store_updated_slaves/1 :: (rabbit_types:amqqueue()) -> 'ok').
+-spec(store_updated_slaves/1 :: (rabbit_types:amqqueue()) ->
+                                     rabbit_types:amqqueue()).
 
 -endif.
 
