@@ -217,7 +217,12 @@ handle_call({gm_deaths, Deaths}, From,
                     %% master has changed to not us.
                     gen_server2:reply(From, ok),
                     erlang:monitor(process, Pid),
-                    ok = gm:broadcast(GM, heartbeat),
+                    %% GM is lazy. So we know of the death of the
+                    %% slave since it is a neighbour of ours, but
+                    %% until a message is sent, not all members will
+                    %% know. That might include the new master. So
+                    %% broadcast a no-op message to wake everyone up.
+                    ok = gm:broadcast(GM, master_changed),
                     noreply(State #state { master_pid = Pid })
             end
     end;
@@ -359,7 +364,7 @@ members_changed([_SPid], _Births, []) ->
 members_changed([SPid], _Births, Deaths) ->
     inform_deaths(SPid, Deaths).
 
-handle_msg([_SPid], _From, heartbeat) ->
+handle_msg([_SPid], _From, master_changed) ->
     ok;
 handle_msg([_SPid], _From, request_length) ->
     %% This is only of value to the master
@@ -470,7 +475,9 @@ promote_me(From, #state { q                   = Q = #amqqueue { name = QName },
                    rabbit_mirror_queue_master:length_fun()),
     true = unlink(GM),
     gen_server2:reply(From, {promote, CPid}),
-    ok = gm:confirmed_broadcast(GM, heartbeat),
+    %% TODO this has been in here since the beginning, but it's not
+    %% obvious if it is needed. Investigate...
+    ok = gm:confirmed_broadcast(GM, master_changed),
 
     %% Everything that we're monitoring, we need to ensure our new
     %% coordinator is monitoring.
