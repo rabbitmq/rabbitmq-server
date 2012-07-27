@@ -1119,7 +1119,7 @@ monitor_delivering_queue(false, QPid, State = #ch{queue_monitors    = QMons,
              delivering_queues = sets:add_element(QPid, DQ)}.
 
 handle_publishing_queue_down(QPid, Reason, State = #ch{unconfirmed = UC}) ->
-    case rabbit_misc:is_abnormal_termination(Reason) of
+    case rabbit_misc:is_abnormal_exit(Reason) of
         true  -> {MXs, UC1} = dtree:take_all(QPid, UC),
                  send_nacks(MXs, State#ch{unconfirmed = UC1});
         false -> {MXs, UC1} = dtree:take(QPid, UC),
