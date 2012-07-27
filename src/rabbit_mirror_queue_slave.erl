@@ -911,7 +911,7 @@ maybe_store_ack(true, MsgId, AckTag, State = #state { msg_id_ack = MA,
 
 %% We intentionally leave out the head where a slave becomes
 %% unsynchronised: we assert that can never happen.
-set_synchronised(true, State = #state { q = Q = #amqqueue { name = QName },
+set_synchronised(true, State = #state { q = #amqqueue { name = QName },
                                         synchronised = false }) ->
     Self = self(),
     rabbit_misc:execute_mnesia_transaction(
