@@ -127,9 +127,20 @@ terminate(Reason,
 delete_and_terminate(Reason, State = #state { gm                  = GM,
                                               backing_queue       = BQ,
                                               backing_queue_state = BQS }) ->
+    Slaves = [Pid || Pid <- gm:group_members(GM), node(Pid) =/= node()],
+    MRefs = [erlang:monitor(process, S) || S <- Slaves],
     ok = gm:broadcast(GM, {delete_and_terminate, Reason}),
+    monitor_wait(MRefs),
     State #state { backing_queue_state = BQ:delete_and_terminate(Reason, BQS),
                    set_delivered       = 0 }.
+
+monitor_wait([]) ->
+    ok;
+monitor_wait([MRef | MRefs]) ->
+    receive({'DOWN', MRef, process, _Pid, _Info}) ->
+            ok
+    end,
+    monitor_wait(MRefs).
 
 purge(State = #state { gm                  = GM,
                        backing_queue       = BQ,
