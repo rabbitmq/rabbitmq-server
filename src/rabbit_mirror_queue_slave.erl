@@ -101,19 +101,10 @@ info(QPid) ->
 init(#amqqueue { name = QueueName } = Q) ->
     Self = self(),
     Node = node(),
-    case rabbit_misc:execute_mnesia_transaction(
-           fun () ->
-                   [Q1 = #amqqueue { pid = QPid, slave_pids = MPids }] =
-                       mnesia:read({rabbit_queue, QueueName}),
-                   case [Pid || Pid <- [QPid | MPids], node(Pid) =:= Node] of
-                       []     -> MPids1 = MPids ++ [Self],
-                                 ok = rabbit_amqqueue:store_queue(
-                                        Q1 #amqqueue { slave_pids = MPids1 }),
-                                 {new, QPid};
-                       [SPid] -> true = rabbit_misc:is_process_alive(SPid),
-                                 existing
-                   end
-           end) of
+    case rabbit_misc:execute_mnesia_transaction(fun() ->
+                                                    init_it(Self, Node,
+                                                            QueueName)
+                                                end) of
         {new, MPid} ->
             process_flag(trap_exit, true), %% amqqueue_process traps exits too.
             {ok, GM} = gm:start_link(QueueName, ?MODULE, [self()]),
@@ -150,8 +141,35 @@ init(#amqqueue { name = QueueName } = Q) ->
             {ok, State, hibernate,
              {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN,
               ?DESIRED_HIBERNATE}};
+        {stale, StalePid} ->
+            {stop, {stale_master_pid, StalePid}};
+        duplicate_live_master ->
+            {stop, {duplicate_live_master, Node}};
         existing ->
             ignore
+    end.
+
+init_it(Self, Node, QueueName) ->
+    [Q1 = #amqqueue { pid = QPid, slave_pids = MPids }] =
+                mnesia:read({rabbit_queue, QueueName}),
+    case [Pid || Pid <- [QPid | MPids], node(Pid) =:= Node] of
+        [] ->
+            MPids1 = MPids ++ [Self],
+            ok = rabbit_amqqueue:store_queue(Q1#amqqueue{slave_pids=MPids1}),
+            {new, QPid};
+        [QPid] ->
+            case rabbit_misc:is_process_alive(QPid) of
+                true  -> duplicate_live_master;
+                false -> {stale, QPid}
+            end;
+        [SPid] ->
+            case rabbit_misc:is_process_alive(SPid) of
+                true  -> existing;
+                false -> MPids1 = (MPids -- [SPid]) ++ [Self],
+                         ok = rabbit_amqqueue:store_queue(
+                                        Q1#amqqueue{ slave_pids = MPids1 }),
+                         {new, QPid}
+            end
     end.
 
 handle_call({deliver, Delivery = #delivery { immediate = true }},
