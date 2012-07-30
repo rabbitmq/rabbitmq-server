@@ -40,7 +40,6 @@
         (rabbit_channel:channel_number(), pid(), pid(), string(),
          rabbit_types:protocol(), rabbit_types:user(), rabbit_types:vhost(),
          rabbit_framing:amqp_table(), pid()) -> {'ok', pid()}).
-
 -spec(disconnect/2 :: (pid(), rabbit_event:event_props()) -> 'ok').
 
 -endif.
