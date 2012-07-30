@@ -18,7 +18,7 @@
 
 -export([remove_from_queue/2, on_node_up/0,
          drop_mirror/2, drop_mirror/3, add_mirror/2, add_mirror/3,
-         report_deaths/4]).
+         report_deaths/4, store_updated_slaves/1]).
 
 -include("rabbit.hrl").
 
@@ -37,6 +37,8 @@
 -spec(add_mirror/3 ::
         (rabbit_types:vhost(), binary(), atom())
         -> rabbit_types:ok_or_error(any())).
+-spec(store_updated_slaves/1 :: (rabbit_types:amqqueue()) ->
+                                     rabbit_types:amqqueue()).
 
 -endif.
 
@@ -58,8 +60,8 @@ remove_from_queue(QueueName, DeadPids) ->
               %% get here.
               case mnesia:read({rabbit_queue, QueueName}) of
                   [] -> {error, not_found};
-                  [Q = #amqqueue { pid          = QPid,
-                                   slave_pids   = SPids }] ->
+                  [Q = #amqqueue { pid        = QPid,
+                                   slave_pids = SPids }] ->
                       [QPid1 | SPids1] = Alive =
                           [Pid || Pid <- [QPid | SPids],
                                   not lists:member(node(Pid),
@@ -72,9 +74,9 @@ remove_from_queue(QueueName, DeadPids) ->
                               %% Either master hasn't changed, so
                               %% we're ok to update mnesia; or we have
                               %% become the master.
-                              Q1 = Q #amqqueue { pid        = QPid1,
-                                                 slave_pids = SPids1 },
-                              ok = rabbit_amqqueue:store_queue(Q1),
+                              store_updated_slaves(
+                                Q #amqqueue { pid        = QPid1,
+                                              slave_pids = SPids1 }),
                               {ok, QPid1, [QPid | SPids] -- Alive};
                           _ ->
                               %% Master has changed, and we're not it,
@@ -192,3 +194,12 @@ report_deaths(MirrorPid, IsMaster, QueueName, DeadPids) ->
                      end,
                      rabbit_misc:pid_to_string(MirrorPid),
                      [[rabbit_misc:pid_to_string(P), $ ] || P <- DeadPids]]).
+
+store_updated_slaves(Q = #amqqueue{slave_pids      = SPids,
+                                   sync_slave_pids = SSPids}) ->
+    SSPids1 = [SSPid || SSPid <- SSPids, lists:member(SSPid, SPids)],
+    Q1 = Q#amqqueue{sync_slave_pids = SSPids1},
+    ok = rabbit_amqqueue:store_queue(Q1),
+    %% Wake it up so that we emit a stats event
+    rabbit_amqqueue:wake_up(Q1),
+    Q1.

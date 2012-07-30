@@ -40,6 +40,7 @@
 -rabbit_upgrade({exchange_scratches,    mnesia, [exchange_scratch]}).
 -rabbit_upgrade({policy,                mnesia,
                  [exchange_scratches, ha_mirrors]}).
+-rabbit_upgrade({sync_slave_pids,       mnesia, [policy]}).
 
 %% -------------------------------------------------------------------
 
@@ -62,6 +63,7 @@
 -spec(topic_trie_node/0       :: () -> 'ok').
 -spec(runtime_parameters/0    :: () -> 'ok').
 -spec(policy/0                :: () -> 'ok').
+-spec(sync_slave_pids/0       :: () -> 'ok').
 
 -endif.
 
@@ -239,6 +241,19 @@ queue_policy(Table) ->
       end,
       [name, durable, auto_delete, exclusive_owner, arguments, pid,
        slave_pids, mirror_nodes, policy]).
+
+sync_slave_pids() ->
+    Tables = [rabbit_queue, rabbit_durable_queue],
+    AddSyncSlavesFun =
+        fun ({amqqueue, N, D, AD, Excl, Args, Pid, SPids, MNodes, Pol}) ->
+                {amqqueue, N, D, AD, Excl, Args, Pid, SPids, [], MNodes, Pol}
+        end,
+    [ok = transform(T, AddSyncSlavesFun,
+                    [name, durable, auto_delete, exclusive_owner, arguments,
+                     pid, slave_pids, sync_slave_pids, mirror_nodes, policy])
+     || T <- Tables],
+    ok.
+
 
 %%--------------------------------------------------------------------
 
