@@ -431,19 +431,10 @@ consume_from_upstream_queue(
               params         = Params}
         = Upstream,
     Q = upstream_queue_name(name(X), vhost(Params), DownXName),
-    ExpiryArg = case Expiry of
-                    none -> [];
-                    _    -> [{<<"x-expires">>, long, Expiry}]
-                end,
-    TTLArg = case TTL of
-                 none -> [];
-                 _    -> [{<<"x-message-ttl">>, long, TTL}]
-             end,
-    HAArg = case HA of
-                none -> [];
-                _    -> [{<<"x-ha-policy">>, longstr, HA}]
-            end,
-    Args = ExpiryArg ++ TTLArg ++ HAArg,
+    Args = [Arg || {_K, _T, V} = Arg <- [{<<"x-expires">>,     long,    Expiry},
+                                         {<<"x-message-ttl">>, long,    TTL},
+                                         {<<"x-ha-policy">>,   longstr, HA}],
+                   V =/= none],
     amqp_channel:call(Ch, #'queue.declare'{queue     = Q,
                                            durable   = true,
                                            arguments = Args}),
