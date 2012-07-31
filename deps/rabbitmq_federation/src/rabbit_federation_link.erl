@@ -149,7 +149,7 @@ handle_info({#'basic.deliver'{routing_key  = Key,
 
 handle_info(#'basic.cancel'{}, State) ->
     rabbit_log:warning("federation: received 'basic.cancel' from the broker, "
-                       "reconnecting"),
+                       "reconnecting~n"),
     {stop, {shutdown, restart}, State};
 
 %% If the downstream channel shuts down cleanly, we can just ignore it
