@@ -450,8 +450,7 @@ ensure_upstream_bindings(State = #state{upstream            = Upstream,
                                         channel             = Ch,
                                         downstream_exchange = DownXName,
                                         queue               = Q}, Bindings) ->
-    #upstream{exchange = X,
-              params   = Params} = Upstream,
+    #upstream{exchange = X, params = Params} = Upstream,
     OldSuffix = rabbit_federation_db:get_active_suffix(
                   DownXName, Upstream, <<"A">>),
     Suffix = case OldSuffix of
