@@ -406,7 +406,7 @@ connection_error(remote, E, State = #state{upstream            = U,
 connection_error(local, basic_cancel,
                  State = #state{upstream            = U,
                                 downstream_exchange = XName}) ->
-    rabbit_federation_status:report(U, XName, basic_cancel),
+    rabbit_federation_status:report(U, XName, {error, basic_cancel}),
     rabbit_log:info("Federation ~s received 'basic.cancel'~n",
                     [rabbit_misc:rs(XName)]),
     {stop, {shutdown, restart}, State};
