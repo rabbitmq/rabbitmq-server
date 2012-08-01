@@ -24,10 +24,9 @@ class TestExchange(base.BaseTest):
 
     def test_invalid_exchange(self):
         ''' Test invalid exchange error '''
-        self.listener.reset()
+        self.listener.reset(1)
         self.conn.subscribe(destination="/exchange/does.not.exist")
-        self.listener.await()
-        self.assertEquals(1, len(self.listener.errors))
+        self.assertListener("Expecting an error", numErrs=1)
         err = self.listener.errors[0]
         self.assertEquals("not_found", err['headers']['message'])
         self.assertEquals(
@@ -146,10 +145,9 @@ class TestQueue(base.BaseTest):
         self.conn.send('second', destination=d)
         self.conn.send('third', destination=d, receipt='b')
 
-        self.assertTrue(self.listener.await(3))
+        self.assertListener("Missing messages/receipts", numMsgs=3, numRcts=2, timeout=3)
 
         self.assertEquals(set(['a','b']), self.__gather_receipts())
-        self.assertEquals(3, len(self.listener.messages))
 
     def test_interleaved_receipt_no_receipt_tx(self):
         ''' Test i-leaved receipt/no receipt, no-r bracketed by r+xactions '''
@@ -168,13 +166,12 @@ class TestQueue(base.BaseTest):
         self.conn.send('third', destination=d, receipt='b', transaction=tx)
         self.conn.commit(transaction=tx)
 
-        self.assertTrue(self.listener.await(40), "Missing messages/confirms")
+        self.assertListener("Missing messages/receipts", numMsgs=3, numRcts=2, timeout=40)
 
         expected = set(['a', 'b'])
         missing = expected.difference(self.__gather_receipts())
 
         self.assertEquals(set(), missing, "Missing receipts: " + str(missing))
-        self.assertEquals(3, len(self.listener.messages))
 
     def test_interleaved_receipt_no_receipt_inverse(self):
         ''' Test i-leaved receipt/no receipt, r bracketed by no-rs '''
@@ -188,10 +185,9 @@ class TestQueue(base.BaseTest):
         self.conn.send('second', destination=d, receipt='a')
         self.conn.send('third', destination=d)
 
-        self.assertTrue(self.listener.await(3))
+        self.assertListener("Missing messages/receipt", numMsgs=3, numRcts=1, timeout=3)
 
         self.assertEquals(set(['a']), self.__gather_receipts())
-        self.assertEquals(3, len(self.listener.messages))
 
     def __test_send_receipt(self, destination, before, after, headers = {}):
         count = 50

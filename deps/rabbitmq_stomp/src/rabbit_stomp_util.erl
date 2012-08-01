@@ -103,7 +103,7 @@ message_headers(SessionId,
           end,
           case ConsumerTag of
               <<?INTERNAL_TAG_PREFIX, Id/binary>> ->
-                  [{"subscription", binary_to_list(Id)} | Basic];
+                  [{?HEADER_SUBSCRIPTION, binary_to_list(Id)} | Basic];
               _ ->
                   Basic
           end,

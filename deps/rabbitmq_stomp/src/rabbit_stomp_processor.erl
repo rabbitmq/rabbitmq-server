@@ -150,7 +150,6 @@ handle_info({inet_reply, _, ok}, State) ->
 handle_info({bump_credit, Msg}, State) ->
     credit_flow:handle_bump_msg(Msg),
     {noreply, State, hibernate};
-
 handle_info({inet_reply, _, Status}, State) ->
     {stop, Status, State}.
 
@@ -499,8 +498,8 @@ do_subscribe(Destination, DestHdr, Frame,
                             connection    = Connection,
                             channel       = MainChannel}) ->
     Prefetch =
-        rabbit_stomp_frame:integer_header(Frame, "prefetch-count", undefined),
-
+        rabbit_stomp_frame:integer_header(Frame, ?HEADER_PREFETCH_COUNT,
+                                          undefined),
     Channel = case Prefetch of
                   undefined ->
                       MainChannel;
@@ -767,7 +766,7 @@ accumulate_receipts1(DeliveryTag, {_Key, Value, PR}, Acc) ->
 %%----------------------------------------------------------------------------
 
 transactional(Frame) ->
-    case rabbit_stomp_frame:header(Frame, "transaction") of
+    case rabbit_stomp_frame:header(Frame, ?HEADER_TRANSACTION) of
         {ok, Transaction} -> {yes, Transaction};
         not_found         -> no
     end.
@@ -889,7 +888,7 @@ ensure_queue(_, {queue, Name}, _Frame, Channel, DestQs) ->
               end,
     {ok, Queue, DestQs1};
 ensure_queue(subscribe, {topic, Name}, Frame, Channel, DestQs) ->
-    %% Create queue for SUBSCRIBE on /topic destinations Queues are
+    %% Create queue for SUBSCRIBE on /topic destinations. Queues are
     %% anonymous, auto_delete and exclusive for transient
     %% subscriptions. Durable subscriptions get shared, named, durable
     %% queues.
@@ -903,9 +902,7 @@ ensure_queue(subscribe, {topic, Name}, Frame, Channel, DestQs) ->
             false ->
                 #'queue.declare'{auto_delete = true, exclusive = true}
         end,
-
-    #'queue.declare_ok'{queue = Queue} =
-        amqp_channel:call(Channel, Method),
+    #'queue.declare_ok'{queue = Queue} = amqp_channel:call(Channel, Method),
     {ok, Queue, DestQs};
 ensure_queue(send, {topic, _}, _Frame, _Channel, DestQs) ->
     %% Don't create queues on SEND for /topic destinations
