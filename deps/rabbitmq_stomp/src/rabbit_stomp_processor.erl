@@ -348,14 +348,18 @@ server_cancel_consumer(ConsumerTag, State = #state{subscriptions = Subs}) ->
                   [ConsumerTag],
                   State);
         {ok, Subscription = #subscription{description = Description}} ->
+            Id = case rabbit_stomp_util:tag_to_id(ConsumerTag) of
+                     {ok,    {_, Id1}} -> Id1;
+                     {error, {_, Id1}} -> "Unknown[" ++ Id1 ++ "]"
+                 end,
             send_error_frame("Server cancelled subscription",
-                             [{?HEADER_SUBSCRIPTION, ConsumerTag}],
-                             "The server has cancelled a subscription.\n"
+                             [{?HEADER_SUBSCRIPTION, Id}],
+                             "The server has canceled a subscription.\n"
                              "No more messages will be delivered for ~p.\n",
                              [Description],
                              State),
-            cancel_found_subscription(ConsumerTag, Subscription,
-                                      #stomp_frame{}, State)
+            tidy_canceled_subscription(ConsumerTag, Subscription,
+                                       #stomp_frame{}, State)
     end.
 
 cancel_subscription({error, invalid_prefix}, _Frame, State) ->
@@ -378,33 +382,31 @@ cancel_subscription({ok, ConsumerTag, Description}, Frame,
                   "Subscription to ~p not found.\n",
                   [Description],
                   State);
-        {ok, Subscription} ->
-            cancel_found_subscription(ConsumerTag, Subscription, Frame, State)
+        {ok, Subscription = #subscription{channel = SubChannel,
+                                          description = Descr}} ->
+            case amqp_channel:call(SubChannel,
+                                   #'basic.cancel'{
+                                     consumer_tag = ConsumerTag}) of
+                #'basic.cancel_ok'{consumer_tag = ConsumerTag} ->
+                    tidy_canceled_subscription(ConsumerTag, Subscription,
+                                               Frame, State);
+                _ ->
+                    error("Failed to cancel subscription",
+                          "UNSUBSCRIBE to ~p failed.\n",
+                          [Descr],
+                          State)
+            end
     end.
 
-cancel_found_subscription(ConsumerTag,
-                          #subscription{dest_hdr = DestHdr,
-                                        channel = SubChannel,
-                                        description = Description},
-                          Frame,
-                          State = #state{channel = MainChannel,
-                                         subscriptions = Subs}) ->
-    case amqp_channel:call(SubChannel,
-                           #'basic.cancel'{
-                             consumer_tag = ConsumerTag}) of
-        #'basic.cancel_ok'{consumer_tag = ConsumerTag} ->
-            ok = ensure_subchannel_closed(SubChannel, MainChannel),
-            NewSubs = dict:erase(ConsumerTag, Subs),
-            {ok, Dest} =
-                rabbit_stomp_util:parse_destination(DestHdr),
-            maybe_delete_durable_sub(Dest, Frame,
-                State#state{subscriptions = NewSubs});
-        _ ->
-            error("Failed to cancel subscription",
-                  "UNSUBSCRIBE to ~p failed.\n",
-                  [Description],
-                  State)
-    end.
+tidy_canceled_subscription(ConsumerTag, #subscription{dest_hdr = DestHdr,
+                                                      channel = SubChannel},
+                           Frame, State = #state{channel = MainChannel,
+                                                 subscriptions = Subs}
+                           ) ->
+    ok = ensure_subchannel_closed(SubChannel, MainChannel),
+    Subs1 = dict:erase(ConsumerTag, Subs),
+    {ok, Dest} = rabbit_stomp_util:parse_destination(DestHdr),
+    maybe_delete_durable_sub(Dest, Frame, State#state{subscriptions = Subs1}).
 
 maybe_delete_durable_sub({topic, Name}, Frame,
                          State = #state{channel = Channel}) ->

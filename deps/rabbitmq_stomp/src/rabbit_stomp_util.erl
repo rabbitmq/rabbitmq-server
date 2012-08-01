@@ -20,7 +20,7 @@
          parse_message_id/1, durable_subscription_queue/2]).
 -export([longstr_field/2]).
 -export([ack_mode/1, consumer_tag_reply_to/1, consumer_tag/1, message_headers/3,
-         message_properties/1]).
+         message_properties/1, tag_to_id/1]).
 -export([negotiate_version/2]).
 -export([trim_headers/1]).
 -export([valid_dest_prefixes/0]).
@@ -101,11 +101,9 @@ message_headers(SessionId,
           fun({Header, Index}, Acc) ->
                   maybe_header(Header, element(Index, Props), Acc)
           end,
-          case ConsumerTag of
-              <<?INTERNAL_TAG_PREFIX, Id/binary>> ->
-                  [{?HEADER_SUBSCRIPTION, binary_to_list(Id)} | Basic];
-              _ ->
-                  Basic
+          case tag_to_id(ConsumerTag) of
+              {ok, {internal, Id}} -> [{?HEADER_SUBSCRIPTION, Id} | Basic];
+              _                    -> Basic
           end,
           [{?HEADER_CONTENT_TYPE,     #'P_basic'.content_type},
            {?HEADER_CONTENT_ENCODING, #'P_basic'.content_encoding},
@@ -116,6 +114,10 @@ message_headers(SessionId,
            {?HEADER_AMQP_MESSAGE_ID,  #'P_basic'.message_id}]),
 
     adhoc_convert_headers(Headers, Standard).
+
+tag_to_id(<<?INTERNAL_TAG_PREFIX, Id/binary>>) -> {ok, {internal, binary_to_list(Id)}};
+tag_to_id(<<?QUEUE_TAG_PREFIX,    Id/binary>>) -> {ok, {queue, binary_to_list(Id)}};
+tag_to_id(Other        ) when is_binary(Other) -> {error, {unknown, binary_to_list(Other)}}.
 
 user_header(Hdr)
   when Hdr =:= ?HEADER_CONTENT_TYPE orelse
