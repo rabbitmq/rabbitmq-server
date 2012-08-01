@@ -1,3 +1,9 @@
+rabbitmq-server (2.8.5-1) unstable; urgency=low
+
+  * New Upstream Release
+
+ -- Tim Watson <tim@rabbitmq.com>  Wed, 01 Aug 2012 04:33:36 -0400
+
 rabbitmq-server (2.8.3-1) unstable; urgency=low
 
   * New Upstream Release
