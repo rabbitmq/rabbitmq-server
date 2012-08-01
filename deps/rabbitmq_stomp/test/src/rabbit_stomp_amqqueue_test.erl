@@ -101,12 +101,12 @@ test_delete_queue_subscribe(Channel, Client) ->
     #'queue.delete_ok'{} =
         amqp_channel:call(Channel, #'queue.delete'{queue = ?QUEUE}),
 
-    {ok, Client2, Headers, _} = stomp_receive(Client1, "ERROR"),
+    {ok, _Client2, Headers, _} = stomp_receive(Client1, "ERROR"),
 
     ?DESTINATION = proplists:get_value("subscription", Headers),
 
-    % still working?
-    test_send(Channel, Client2).
+    % server closes connection
+    ok.
 
 stomp_receive(Client, Command) ->
     {#stomp_frame{command     = Command,
