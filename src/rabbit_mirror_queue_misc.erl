@@ -18,7 +18,7 @@
 
 -export([remove_from_queue/2, on_node_up/0,
          drop_mirror/2, drop_mirror/3, add_mirror/2, add_mirror/3,
-         report_deaths/4]).
+         report_deaths/4, store_updated_slaves/1]).
 
 -include("rabbit.hrl").
 
@@ -37,6 +37,8 @@
 -spec(add_mirror/3 ::
         (rabbit_types:vhost(), binary(), atom())
         -> rabbit_types:ok_or_error(any())).
+-spec(store_updated_slaves/1 :: (rabbit_types:amqqueue()) ->
+                                     rabbit_types:amqqueue()).
 
 -endif.
 
@@ -58,11 +60,13 @@ remove_from_queue(QueueName, DeadPids) ->
               %% get here.
               case mnesia:read({rabbit_queue, QueueName}) of
                   [] -> {error, not_found};
-                  [Q = #amqqueue { pid          = QPid,
-                                   slave_pids   = SPids }] ->
+                  [Q = #amqqueue { pid        = QPid,
+                                   slave_pids = SPids }] ->
                       [QPid1 | SPids1] = Alive =
                           [Pid || Pid <- [QPid | SPids],
-                                  not lists:member(node(Pid), DeadNodes)],
+                                  not lists:member(node(Pid),
+                                                   DeadNodes) orelse
+                                  rabbit_misc:is_process_alive(Pid)],
                       case {{QPid, SPids}, {QPid1, SPids1}} of
                           {Same, Same} ->
                               {ok, QPid1, []};
@@ -70,9 +74,9 @@ remove_from_queue(QueueName, DeadPids) ->
                               %% Either master hasn't changed, so
                               %% we're ok to update mnesia; or we have
                               %% become the master.
-                              Q1 = Q #amqqueue { pid        = QPid1,
-                                                 slave_pids = SPids1 },
-                              ok = rabbit_amqqueue:store_queue(Q1),
+                              store_updated_slaves(
+                                Q #amqqueue { pid        = QPid1,
+                                              slave_pids = SPids1 }),
                               {ok, QPid1, [QPid | SPids] -- Alive};
                           _ ->
                               %% Master has changed, and we're not it,
@@ -134,21 +138,39 @@ add_mirror(Queue, MirrorNode) ->
       Queue,
       fun (#amqqueue { name = Name, pid = QPid, slave_pids = SPids } = Q) ->
               case [Pid || Pid <- [QPid | SPids], node(Pid) =:= MirrorNode] of
-                  []  -> case rabbit_mirror_queue_slave_sup:start_child(
-                                MirrorNode, [Q]) of
-                             {ok, undefined} -> %% Already running
-                                 ok;
-                             {ok, SPid} ->
-                                 rabbit_log:info(
-                                   "Adding mirror of ~s on node ~p: ~p~n",
-                                   [rabbit_misc:rs(Name), MirrorNode, SPid]),
-                                 ok;
-                             Other ->
-                                 Other
-                         end;
-                  [_] -> {error, {queue_already_mirrored_on_node, MirrorNode}}
+                  [] ->
+                      start_child(Name, MirrorNode, Q);
+                  [SPid] ->
+                      case rabbit_misc:is_process_alive(SPid) of
+                          true ->
+                              {error,{queue_already_mirrored_on_node,
+                                      MirrorNode}};
+                          false ->
+                              start_child(Name, MirrorNode, Q)
+                      end
               end
       end).
+
+start_child(Name, MirrorNode, Q) ->
+    case rabbit_mirror_queue_slave_sup:start_child(MirrorNode, [Q]) of
+        {ok, undefined} ->
+            %% this means the mirror process was
+            %% already running on the given node.
+            ok;
+        {ok, SPid} ->
+            rabbit_log:info("Adding mirror of ~s on node ~p: ~p~n",
+                            [rabbit_misc:rs(Name), MirrorNode, SPid]),
+            ok;
+        {error, {{stale_master_pid, StalePid}, _}} ->
+            rabbit_log:warning("Detected stale HA master while adding "
+                               "mirror of ~s on node ~p: ~p~n",
+                               [rabbit_misc:rs(Name), MirrorNode, StalePid]),
+            ok;
+        {error, {{duplicate_live_master, _}=Err, _}} ->
+            throw(Err);
+        Other ->
+            Other
+    end.
 
 if_mirrored_queue(Queue, Fun) ->
     rabbit_amqqueue:with(
@@ -172,3 +194,12 @@ report_deaths(MirrorPid, IsMaster, QueueName, DeadPids) ->
                      end,
                      rabbit_misc:pid_to_string(MirrorPid),
                      [[rabbit_misc:pid_to_string(P), $ ] || P <- DeadPids]]).
+
+store_updated_slaves(Q = #amqqueue{slave_pids      = SPids,
+                                   sync_slave_pids = SSPids}) ->
+    SSPids1 = [SSPid || SSPid <- SSPids, lists:member(SSPid, SPids)],
+    Q1 = Q#amqqueue{sync_slave_pids = SSPids1},
+    ok = rabbit_amqqueue:store_queue(Q1),
+    %% Wake it up so that we emit a stats event
+    rabbit_amqqueue:wake_up(Q1),
+    Q1.

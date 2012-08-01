@@ -196,11 +196,11 @@ print_report(Node, {Descr, Module, InfoFun, KeysFun}, VHostArg) ->
     print_report0(Node, {Module, InfoFun, KeysFun}, VHostArg).
 
 print_report0(Node, {Module, InfoFun, KeysFun}, VHostArg) ->
-    case Results = rpc_call(Node, Module, InfoFun, VHostArg) of
-        [_|_] -> InfoItems = rpc_call(Node, Module, KeysFun, []),
-                 display_row([atom_to_list(I) || I <- InfoItems]),
-                 display_info_list(Results, InfoItems);
-        _     -> ok
+    case rpc_call(Node, Module, InfoFun, VHostArg) of
+        [_|_] = Results -> InfoItems = rpc_call(Node, Module, KeysFun, []),
+                           display_row([atom_to_list(I) || I <- InfoItems]),
+                           display_info_list(Results, InfoItems);
+        _               -> ok
     end,
     io:nl().
 
@@ -452,14 +452,13 @@ action(list_parameters, Node, Args = [], _Opts, Inform) ->
       rabbit_runtime_parameters:info_keys());
 
 action(report, Node, _Args, _Opts, Inform) ->
-    io:format("Reporting server status on ~p~n~n", [erlang:universaltime()]),
+    Inform("Reporting server status on ~p~n~n", [erlang:universaltime()]),
     [begin ok = action(Action, N, [], [], Inform), io:nl() end ||
         N      <- unsafe_rpc(Node, rabbit_mnesia, running_clustered_nodes, []),
         Action <- [status, cluster_status, environment]],
     VHosts = unsafe_rpc(Node, rabbit_vhost, list, []),
     [print_report(Node, Q)      || Q <- ?GLOBAL_QUERIES],
     [print_report(Node, Q, [V]) || Q <- ?VHOST_QUERIES, V <- VHosts],
-    io:format("End of server status report~n"),
     ok;
 
 action(eval, Node, [Expr], _Opts, _Inform) ->

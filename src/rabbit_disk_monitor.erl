@@ -149,10 +149,10 @@ internal_update(State = #state { limit   = Limit,
     case {Alarmed, NewAlarmed} of
         {false, true} ->
             emit_update_info("exceeded", CurrentFreeBytes, LimitBytes),
-            alarm_handler:set_alarm({{resource_limit, disk, node()}, []});
+            rabbit_alarm:set_alarm({{resource_limit, disk, node()}, []});
         {true, false} ->
             emit_update_info("below limit", CurrentFreeBytes, LimitBytes),
-            alarm_handler:clear_alarm({resource_limit, disk, node()});
+            rabbit_alarm:clear_alarm({resource_limit, disk, node()});
         _ ->
             ok
     end,

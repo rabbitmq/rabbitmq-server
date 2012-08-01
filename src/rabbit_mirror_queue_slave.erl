@@ -101,19 +101,10 @@ info(QPid) ->
 init(#amqqueue { name = QueueName } = Q) ->
     Self = self(),
     Node = node(),
-    case rabbit_misc:execute_mnesia_transaction(
-           fun () ->
-                   [Q1 = #amqqueue { pid = QPid, slave_pids = MPids }] =
-                       mnesia:read({rabbit_queue, QueueName}),
-                   case [Pid || Pid <- [QPid | MPids], node(Pid) =:= Node] of
-                       []     -> MPids1 = MPids ++ [Self],
-                                 ok = rabbit_amqqueue:store_queue(
-                                        Q1 #amqqueue { slave_pids = MPids1 }),
-                                 {new, QPid};
-                       [SPid] -> true = rabbit_misc:is_process_alive(SPid),
-                                 existing
-                   end
-           end) of
+    case rabbit_misc:execute_mnesia_transaction(fun() ->
+                                                    init_it(Self, Node,
+                                                            QueueName)
+                                                end) of
         {new, MPid} ->
             process_flag(trap_exit, true), %% amqqueue_process traps exits too.
             {ok, GM} = gm:start_link(QueueName, ?MODULE, [self()]),
@@ -150,8 +141,36 @@ init(#amqqueue { name = QueueName } = Q) ->
             {ok, State, hibernate,
              {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN,
               ?DESIRED_HIBERNATE}};
+        {stale, StalePid} ->
+            {stop, {stale_master_pid, StalePid}};
+        duplicate_live_master ->
+            {stop, {duplicate_live_master, Node}};
         existing ->
             ignore
+    end.
+
+init_it(Self, Node, QueueName) ->
+    [Q1 = #amqqueue { pid = QPid, slave_pids = MPids }] =
+                mnesia:read({rabbit_queue, QueueName}),
+    case [Pid || Pid <- [QPid | MPids], node(Pid) =:= Node] of
+        [] ->
+            MPids1 = MPids ++ [Self],
+            rabbit_mirror_queue_misc:store_updated_slaves(
+              Q1#amqqueue{slave_pids = MPids1}),
+            {new, QPid};
+        [QPid] ->
+            case rabbit_misc:is_process_alive(QPid) of
+                true  -> duplicate_live_master;
+                false -> {stale, QPid}
+            end;
+        [SPid] ->
+            case rabbit_misc:is_process_alive(SPid) of
+                true  -> existing;
+                false -> MPids1 = (MPids -- [SPid]) ++ [Self],
+                         rabbit_mirror_queue_misc:store_updated_slaves(
+                           Q1#amqqueue{slave_pids = MPids1}),
+                         {new, QPid}
+            end
     end.
 
 handle_call({deliver, Delivery = #delivery { immediate = true }},
@@ -447,8 +466,6 @@ promote_me(From, #state { q                   = Q = #amqqueue { name = QName },
                           msg_id_ack          = MA,
                           msg_id_status       = MS,
                           known_senders       = KS }) ->
-    rabbit_event:notify(queue_slave_promoted, [{pid,  self()},
-                                               {name, QName}]),
     rabbit_log:info("Mirrored-queue (~s): Promoting slave ~s to master~n",
                     [rabbit_misc:rs(QName), rabbit_misc:pid_to_string(self())]),
     Q1 = Q #amqqueue { pid = self() },
@@ -915,8 +932,17 @@ maybe_store_ack(true, MsgId, AckTag, State = #state { msg_id_ack = MA,
 %% unsynchronised: we assert that can never happen.
 set_synchronised(true, State = #state { q = #amqqueue { name = QName },
                                         synchronised = false }) ->
-    rabbit_event:notify(queue_slave_synchronised, [{pid,  self()},
-                                                   {name, QName}]),
+    Self = self(),
+    rabbit_misc:execute_mnesia_transaction(
+      fun () ->
+              case mnesia:read({rabbit_queue, QName}) of
+                  [] ->
+                      ok;
+                  [Q1 = #amqqueue{sync_slave_pids = SSPids}] ->
+                      Q2 = Q1#amqqueue{sync_slave_pids = [Self | SSPids]},
+                      rabbit_mirror_queue_misc:store_updated_slaves(Q2)
+              end
+      end),
     State #state { synchronised = true };
 set_synchronised(true, State) ->
     State;
