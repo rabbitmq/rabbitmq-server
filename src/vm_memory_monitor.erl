@@ -77,11 +77,9 @@
 %% Public API
 %%----------------------------------------------------------------------------
 
-get_total_memory() ->
-    get_total_memory(os:type()).
+get_total_memory() -> get_total_memory(os:type()).
 
-get_vm_limit() ->
-    get_vm_limit(os:type()).
+get_vm_limit() -> get_vm_limit(os:type()).
 
 get_check_interval() ->
     gen_server:call(?MODULE, get_check_interval, infinity).
@@ -189,21 +187,18 @@ internal_update(State = #state { memory_limit = MemLimit,
     MemUsed = erlang:memory(total),
     NewAlarmed = MemUsed > MemLimit,
     case {Alarmed, NewAlarmed} of
-        {false, true} ->
-            emit_update_info(set, MemUsed, MemLimit),
-            AlarmSet({{resource_limit, memory, node()}, []});
-        {true, false} ->
-            emit_update_info(clear, MemUsed, MemLimit),
-            AlarmClear({resource_limit, memory, node()});
-        _ ->
-            ok
+        {false, true} -> emit_update_info(set, MemUsed, MemLimit),
+                         AlarmSet({{resource_limit, memory, node()}, []});
+        {true, false} -> emit_update_info(clear, MemUsed, MemLimit),
+                         AlarmClear({resource_limit, memory, node()});
+        _             -> ok
     end,
     State #state {alarmed = NewAlarmed}.
 
-emit_update_info(State, MemUsed, MemLimit) ->
+emit_update_info(AlarmState, MemUsed, MemLimit) ->
     error_logger:info_msg(
       "vm_memory_high_watermark ~p. Memory used:~p allowed:~p~n",
-      [State, MemUsed, MemLimit]).
+      [AlarmState, MemUsed, MemLimit]).
 
 start_timer(Timeout) ->
     {ok, TRef} = timer:send_interval(Timeout, update),
