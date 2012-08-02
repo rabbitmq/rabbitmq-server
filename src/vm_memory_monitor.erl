@@ -212,7 +212,7 @@ get_vm_limit({win32,_OSname}) ->
         8 -> 8*1024*1024*1024*1024      %% 8 TB for 64 bits  2^42
     end;
 
-%% On a 32-bit machine, if you're using more than 2 gigs of RAM you're
+%% On a 32-bit machine, if you're using more than 4 gigs of RAM you're
 %% in big trouble anyway.
 get_vm_limit(_OsType) ->
     case erlang:system_info(wordsize) of
