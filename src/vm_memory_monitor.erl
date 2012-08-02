@@ -179,7 +179,7 @@ set_mem_limits(State, MemFraction) ->
                 ?MEMORY_SIZE_FOR_UNKNOWN_OS;
             M -> M
         end,
-    MemLim = get_mem_limit(MemFraction, TotalMemory),
+    MemLim = trunc(MemFraction * lists:min([TotalMemory, get_vm_limit()])),
     error_logger:info_msg("Memory limit set to ~pMB of ~pMB total.~n",
                           [trunc(MemLim/?ONE_MB), trunc(TotalMemory/?ONE_MB)]),
     internal_update(State #state { total_memory = TotalMemory,
@@ -228,10 +228,6 @@ get_vm_limit(_OsType) ->
         8 -> 256*1024*1024*1024*1024    %% 256 TB for 64 bits 2^48
              %%http://en.wikipedia.org/wiki/X86-64#Virtual_address_space_details
     end.
-
-get_mem_limit(MemFraction, TotalMemory) ->
-    AvMem = lists:min([TotalMemory, get_vm_limit()]),
-    trunc(AvMem * MemFraction).
 
 %%----------------------------------------------------------------------------
 %% Internal Helpers
