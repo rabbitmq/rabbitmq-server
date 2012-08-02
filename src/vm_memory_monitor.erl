@@ -124,10 +124,7 @@ handle_call(get_vm_memory_high_watermark, _From, State) ->
     {reply, State#state.memory_limit / State#state.total_memory, State};
 
 handle_call({set_vm_memory_high_watermark, MemFraction}, _From, State) ->
-    State1 = set_mem_limits(State, MemFraction),
-    error_logger:info_msg("Memory alarm changed to ~p, ~p bytes.~n",
-                          [MemFraction, State1#state.memory_limit]),
-    {reply, ok, State1};
+    {reply, ok, set_mem_limits(State, MemFraction)};
 
 handle_call(get_check_interval, _From, State) ->
     {reply, State#state.timeout, State};
