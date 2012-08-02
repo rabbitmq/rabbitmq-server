@@ -52,8 +52,7 @@
                 timeout,
                 timer,
                 alarmed,
-                alarm_set,
-                alarm_clear
+                alarm_funs
                }).
 
 %%----------------------------------------------------------------------------
@@ -107,15 +106,14 @@ start_link(MemFraction) ->
 
 start_link(MemFraction, AlarmSet, AlarmClear) ->
     gen_server:start_link({local, ?SERVER}, ?MODULE,
-                          [MemFraction, AlarmSet, AlarmClear], []).
+                          [MemFraction, {AlarmSet, AlarmClear}], []).
 
-init([MemFraction, AlarmSet, AlarmClear]) ->
+init([MemFraction, AlarmFuns]) ->
     TRef = start_timer(?DEFAULT_MEMORY_CHECK_INTERVAL),
-    State = #state { timeout = ?DEFAULT_MEMORY_CHECK_INTERVAL,
-                     timer = TRef,
-                     alarmed = false,
-                     alarm_set = AlarmSet,
-                     alarm_clear = AlarmClear },
+    State = #state { timeout    = ?DEFAULT_MEMORY_CHECK_INTERVAL,
+                     timer      = TRef,
+                     alarmed    = false,
+                     alarm_funs = AlarmFuns },
     {ok, set_mem_limits(State, MemFraction)}.
 
 handle_call(get_vm_memory_high_watermark, _From, State) ->
@@ -181,9 +179,8 @@ set_mem_limits(State, MemFraction) ->
                                    memory_limit = MemLim }).
 
 internal_update(State = #state { memory_limit = MemLimit,
-                                 alarmed = Alarmed,
-                                 alarm_set = AlarmSet,
-                                 alarm_clear = AlarmClear }) ->
+                                 alarmed      = Alarmed,
+                                 alarm_funs   = {AlarmSet, AlarmClear} }) ->
     MemUsed = erlang:memory(total),
     NewAlarmed = MemUsed > MemLimit,
     case {Alarmed, NewAlarmed} of
