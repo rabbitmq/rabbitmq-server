@@ -19,15 +19,15 @@
 
 %% frame types
 
--define(CONNECT,     1).
--define(CONNACK,     2).
--define(PUBLISH,     3).
--define(PUBACK,      4).
--define(PUBREC,      5).
--define(PUBREL,      6).
--define(PUBCOMP,     7).
--define(SUBSCRIBE,   8).
--define(SUBACK,      9).
+-define(CONNECT,      1).
+-define(CONNACK,      2).
+-define(PUBLISH,      3).
+-define(PUBACK,       4).
+-define(PUBREC,       5).
+-define(PUBREL,       6).
+-define(PUBCOMP,      7).
+-define(SUBSCRIBE,    8).
+-define(SUBACK,       9).
 -define(UNSUBSCRIBE, 10).
 -define(UNSUBACK,    11).
 -define(PINGREQ,     12).
@@ -53,35 +53,42 @@
                      variable,
                      payload}).
 
--record(mqtt_frame_fixed,   {type   = 0,
-                             dup    = 0,
-                             qos    = 0,
-                             retain = 0}).
+-record(mqtt_frame_fixed,    {type   = 0,
+                              dup    = 0,
+                              qos    = 0,
+                              retain = 0}).
 
--record(mqtt_frame_connect, {proto_ver,
-                             will_retain,
-                             will_qos,
-                             will_flag,
-                             clean_sess,
-                             keep_alive,
-                             client_id,
-                             will_topic,
-                             will_msg,
-                             username,
-                             password}).
+-record(mqtt_frame_connect,  {proto_ver,
+                              will_retain,
+                              will_qos,
+                              will_flag,
+                              clean_sess,
+                              keep_alive,
+                              client_id,
+                              will_topic,
+                              will_msg,
+                              username,
+                              password}).
 
--record(mqtt_frame_connack, {return_code}).
+-record(mqtt_frame_connack,  {return_code}).
 
--record(mqtt_frame_publish, {topic_name,
-                             message_id}).
+-record(mqtt_frame_publish,  {topic_name,
+                              message_id}).
 
 -record(mqtt_frame_subscribe,{message_id,
                               topic_table}).
 
--record(mqtt_frame_suback,{message_id,
-                           qos_table = []}).
+-record(mqtt_frame_suback,   {message_id,
+                              qos_table = []}).
 
--record(mqtt_topic, {name, qos}).
+-record(mqtt_topic,          {name,
+                              qos}).
 
--record(mqtt_frame_other,   {other}).
+-record(mqtt_frame_other,    {other}).
 
+-record(mqtt_msg,            {retain,
+                              qos,
+                              topic,
+                              dup,
+                              message_id,
+                              payload}).

@@ -20,12 +20,9 @@
 -export([start/2, stop/1]).
 
 start(normal, []) ->
-    Listeners = parse_listener_configuration(),
-    rabbit_mqtt_sup:start_link(Listeners, []).
+    {ok, Listeners} = application:get_env(tcp_listeners),
+    {ok, SslListeners} = application:get_env(ssl_listeners),
+    rabbit_mqtt_sup:start_link({Listeners, SslListeners}, []).
 
 stop(_State) ->
     ok.
-
-parse_listener_configuration() ->
-    {ok, Listeners} = application:get_env(tcp_listeners),
-    Listeners.

@@ -21,7 +21,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          code_change/3, terminate/2]).
 
--export([send_frame/2]).
+-export([conserve_resources/3]).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("include/rabbit_mqtt_frame.hrl").
@@ -34,22 +34,42 @@ start_link(Configuration) ->
 
 log(Level, Fmt, Args) -> rabbit_log:log(connection, Level, Fmt, Args).
 
-init(Configuration) ->
+init(_Configuration) ->
+    process_flag(trap_exit, true),
     {ok, #state {},
      hibernate,
      {backoff, 1000, 1000, 10000}}.
 
-handle_call({go, Sock}, _From, #state { socket = undefined } ) ->
+handle_call({go, Sock0, SockTransform}, _From, #state{ socket = undefined }) ->
+    {ok, Sock} = SockTransform(Sock0),
+    ok = rabbit_misc:throw_on_error(
+           inet_error, fun () -> rabbit_net:tune_buffer_size(Sock) end),
     {ok, ConnStr} = rabbit_net:connection_string(Sock, inbound),
-    log(info, "accepting MQTT connection ~p (~s)~n", [self(), ConnStr]),
-    ParseState = rabbit_mqtt_frame:initial_state(),
-    {ok, _Ref} = rabbit_net:async_recv(Sock, 0, infinity),
-    {reply, ok, #state { socket       = Sock,
-                         conn_name    = ConnStr,
-                         unacked_pubs = gb_trees:empty(),
-                         confirms     = false,
-                         parse_state  = ParseState,
-                         adapter_info = adapter_info(Sock) }};
+    log(info, "accepting MQTT connection (~s)~n", [ConnStr]),
+    rabbit_alarm:register(self(), {?MODULE, conserve_resources, []}),
+    {reply, ok,
+     control_throttle(
+       #state{ socket        = Sock,
+               conn_name     = ConnStr,
+               await_recv    = false,
+               credit_flow   = running,
+               conserve      = false,
+               unacked_pubs  = gb_trees:empty(),
+               awaiting_ack  = gb_trees:empty(),
+               message_id    = 1,
+               subscriptions = dict:new(),
+               consumer_tags = {undefined, undefined},
+               channels      = {undefined, undefined},
+               exchange      = rabbit_mqtt_util:env(exchange),
+               parse_state   = rabbit_mqtt_frame:initial_state(),
+               adapter_info  = adapter_info(Sock) })};
+
+handle_call(duplicate_id, _From,
+            State = #state{ client_id = ClientId,
+                            conn_name = ConnName }) ->
+    log(warning, "MQTT disconnecting duplicate client id ~p (~p)~n",
+                 [ClientId, ConnName]),
+    stop({shutdown, duplicate_id}, State);
 
 handle_call(Msg, From, State) ->
     stop({mqtt_unexpected_call, Msg, From}, State).
@@ -57,82 +77,63 @@ handle_call(Msg, From, State) ->
 handle_cast(Msg, State) ->
     stop({mqtt_unexpected_cast, Msg}, State).
 
-handle_info({#'basic.deliver'{ delivery_tag = Tag,
-                               routing_key  = RoutingKey },
-             #amqp_msg{ payload = Payload }} = Delivery,
-            #state{ channel = Channel,
-                    socket  = Sock } = State) ->
-    case {dup(Delivery), qos_from_tag(Tag, State)} of
-        {true, ?QOS_0} ->
-            % avoid delivering a qos0 msg more than once
-            {noreply, State, hibernate};
-        {Dup, Qos}     ->
-            send_frame(
-              Sock,
-              #mqtt_frame{ fixed = #mqtt_frame_fixed{
-                                     type = ?PUBLISH,
-                                     dup  = Dup },
-                           variable = #mqtt_frame_publish {
-                                        topic_name =
-                                          rabbit_mqtt_util:untranslate_topic(
-                                            RoutingKey) },
-                           payload = Payload}),
-                           % todo: defer qos1 subscription acks
-                           amqp_channel:cast(
-                             Channel, #'basic.ack'{ delivery_tag = Tag }),
-                           {noreply, State, hibernate}
-    end;
+handle_info({#'basic.deliver'{}, #amqp_msg{}} = Delivery, State) ->
+    rabbit_mqtt_processor:amqp_callback(Delivery, State);
+
+handle_info(#'basic.ack'{} = Ack, State) ->
+    rabbit_mqtt_processor:amqp_callback(Ack, State);
+
+handle_info(#'basic.nack'{ delivery_tag = Tag },
+            State = #state { client_id = ClientId,
+                             unacked_pubs = UnackedPubs }) ->
+    % todo: store and republish message
+    MsgId = gb_trees:get(Tag, UnackedPubs),
+    log(error, "MQTT received nack for client id ~p, msg id ~p~n",
+               [ClientId, MsgId]),
+    {stop, {nack_received, MsgId}, State};
 
 handle_info(#'basic.consume_ok'{}, State) ->
     {noreply, State, hibernate};
 
-handle_info(#'basic.cancel_ok'{}, State) ->
-    {noreply, State, hibernate};
-
-handle_info(#'basic.ack'{ multiple = Multiple, delivery_tag = Tag } = Ack,
-            State = #state { socket = Sock,
-                             unacked_pubs = UnackedPubs }) ->
-    case gb_trees:lookup(Tag, UnackedPubs) of
-        {value, MsgId} ->
-            send_frame(
-              Sock,
-              #mqtt_frame{ fixed = #mqtt_frame_fixed{ type = ?PUBACK },
-                           variable = #mqtt_frame_publish{ message_id =
-                                                             MsgId }}),
-            State1 = State #state { unacked_pubs =
-                                      gb_trees:delete(Tag, UnackedPubs) },
-            case Multiple of
-                true -> handle_info(Ack, State1);
-                false -> {noreply, State1, hibernate}
-            end;
-        none ->
-            {noreply, State, hibernate}
-    end;
-
-handle_info(#'basic.nack'{}, State = #state { unacked_pubs = UnackedPubs }) ->
-    % todo: republish message
-    log(error, "MQTT received nack for msg id ~p~n", [queue:get(UnackedPubs)]),
-    {stop, nack, State};
+handle_info(#'basic.cancel'{}, State) ->
+    stop({shutdown, subscription_cancelled}, State);
 
 handle_info({'EXIT', Conn, Reason}, State = #state{ connection = Conn }) ->
-    stop({conn_died, Reason}, State);
+    stop({amqp_conn_died, Reason}, State);
 
 handle_info({inet_reply, _Ref, ok}, State) ->
     {noreply, State, hibernate};
 
-handle_info({inet_async, Sock, _Ref, {ok, Data}},
-            State = #state { socket = Sock }) ->
-    rabbit_net:async_recv(Sock, 0, infinity),
-    process_received_bytes(Data, State);
+handle_info({inet_async, Sock, _Ref, {ok, Data}}, State = #state { socket = Sock }) ->
+    process_received_bytes(
+      Data, control_throttle(State #state{ await_recv = false }));
 
-handle_info({inet_async, _Sock, _Ref, {error, closed}}, State) ->
-    stop({shutdown, conn_closed}, close_connection(State));
+handle_info({Inet, _Sock, _Ref, {error, closed}},
+            State = #state { client_id = ClientId,
+                             will_msg  = WillMsg })
+  when Inet =:= inet_async orelse Inet =:= inet_reply ->
+    log(info, "MQTT detected network error for ~p~n", [ClientId]),
+    rabbit_mqtt_processor:amqp_pub(WillMsg, State),
+    % todo: flush channel after publish
+    stop({shutdown, conn_closed}, State);
+
+handle_info({conserve_resources, Conserve}, State) ->
+    {noreply, control_throttle(State #state{ conserve = Conserve }), hibernate};
+
+handle_info({bump_credit, Msg}, State) ->
+    credit_flow:handle_bump_msg(Msg),
+    {noreply, control_throttle(State), hibernate};
 
 handle_info(Msg, State) ->
     stop({mqtt_unexpected_msg, Msg}, State).
 
-terminate(Reason, State) ->
-    stop(Reason, State).
+terminate(_Reason, _State) ->
+    ok.
+
+code_change(_OldVsn, State, _Extra) ->
+    {ok, State}.
+
+%%----------------------------------------------------------------------------
 
 process_received_bytes(<<>>, State) ->
     {noreply, State};
@@ -141,7 +142,8 @@ process_received_bytes(Bytes,
     case
         rabbit_mqtt_frame:parse(Bytes, ParseState) of
             {more, ParseState1} ->
-                {noreply, State #state{ parse_state = ParseState1 }};
+                {noreply, control_throttle(
+                            State #state{ parse_state = ParseState1 })};
             {ok, Frame, Rest} ->
                 case rabbit_mqtt_processor:process_frame(Frame, State) of
                     {ok, State1} ->
@@ -152,31 +154,24 @@ process_received_bytes(Bytes,
                         stop(Reason, State1)
                 end;
             {error, Error} ->
-                rabbit_log:error("MQTT framing error ~p~n", [Error]),
+                log(error, "MQTT detected framing error ~p~n", [Error]),
                 stop({shutdown, Error}, State)
     end.
 
-
 %%----------------------------------------------------------------------------
 
-stop(Reason, State = #state { conn_name = ConnStr }) ->
+stop(Reason, State = #state { client_id = ClientId }) ->
     % todo: maybe clean session
-    % todo: execute last will
-    log(info, "closing MQTT connection ~p (~s)~n", [self(), ConnStr]),
+    rabbit_mqtt_collector:unregister(ClientId),
     {stop, Reason, close_connection(State)}.
 
-%% Closing the connection will close the channel and subchannels
-close_connection(State = #state{connection = Connection})
-  when Connection =/= undefined ->
+close_connection(State = #state{ connection = undefined }) ->
+    State;
+close_connection(State = #state{ connection = Connection }) ->
     %% ignore noproc or other exceptions to avoid debris
     catch amqp_connection:close(Connection),
-    State#state{channel = undefined, connection = undefined};
-close_connection(State) ->
-    State.
-
-send_frame(Sock, Frame) ->
-    %rabbit_log:error("sending frame ~p ~n", [Frame]),
-    rabbit_net:port_command(Sock, rabbit_mqtt_frame:serialise(Frame)).
+    State #state{ channels   = {undefined, undefined},
+                  connection = undefined }.
 
 adapter_info(Sock) ->
     {Addr, Port} = case rabbit_net:sockname(Sock) of
@@ -191,25 +186,31 @@ adapter_info(Sock) ->
                {ok, Res3} -> Res3;
                _          -> unknown
            end,
-    #adapter_info{protocol     = {'MQTT', {?MQTT_PROTO_MAJOR, ?MQTT_PROTO_MINOR}},
-                  name         = list_to_binary(Name),
-                  address      = Addr,
-                  port         = Port,
-                  peer_address = PeerAddr,
-                  peer_port    = PeerPort}.
+    #adapter_info{ protocol     = {'MQTT', {?MQTT_PROTO_MAJOR,
+                                            ?MQTT_PROTO_MINOR}},
+                   name         = list_to_binary(Name),
+                   address      = Addr,
+                   port         = Port,
+                   peer_address = PeerAddr,
+                   peer_port    = PeerPort}.
 
-dup({#'basic.deliver'{ redelivered = Redelivered },
-     #amqp_msg{ props = #'P_basic'{ headers = undefined }}}) ->
-    Redelivered;
-dup({#'basic.deliver'{ redelivered = Redelivered },
-     #amqp_msg{ props = #'P_basic'{ headers = Headers }}}) ->
-    case rabbit_misc:table_lookup(Headers, 'x-mqtt-dup') of
-        undefined   -> Redelivered;
-        {bool, Dup} -> Redelivered orelse Dup
+run_socket(State = #state{ credit_flow = blocked }) ->
+    State;
+run_socket(State = #state{ await_recv = true }) ->
+    State;
+run_socket(State = #state{ socket = Sock }) ->
+    rabbit_net:async_recv(Sock, 0, infinity),
+    State#state{ await_recv = true }.
+
+conserve_resources(Pid, _, Conserve) ->
+    Pid ! {conserve_resources, Conserve},
+    ok.
+
+control_throttle(State = #state{ credit_flow = Flow,
+                                 conserve    = Conserve }) ->
+    case {Flow, Conserve orelse credit_flow:blocked()} of
+        {running,   true} -> State #state{ credit_flow = blocking };
+        {blocking, false} -> run_socket(State #state{ credit_flow = running });
+        {blocked,  false} -> run_socket(State #state{ credit_flow = running });
+        {_,            _} -> run_socket(State)
     end.
-
-% todo: support qos1 subscriptions
-qos_from_tag(_Tag, _State) -> ?QOS_0.
-
-code_change(_OldVsn, State, _Extra) ->
-    {ok, State}.

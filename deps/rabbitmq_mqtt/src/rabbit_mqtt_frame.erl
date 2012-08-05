@@ -32,10 +32,10 @@ initial_state() -> none.
 parse(<<>>, none) ->
     {more, fun(Bin) -> parse(Bin, none) end};
 parse(<<MessageType:4, Dup:1, QoS:2, Retain:1, Rest/binary>>, none) ->
-    parse_remaining_len(Rest, #mqtt_frame_fixed{type   = MessageType,
-                                                dup    = bool(Dup),
-                                                qos    = QoS,
-                                                retain = bool(Retain)});
+    parse_remaining_len(Rest, #mqtt_frame_fixed{ type   = MessageType,
+                                                 dup    = bool(Dup),
+                                                 qos    = QoS,
+                                                 retain = bool(Retain) });
 parse(Bin, Cont) -> Cont(Bin).
 
 parse_remaining_len(<<>>, Fixed) ->
@@ -54,7 +54,7 @@ parse_remaining_len(<<0:1, Len:7, Rest/binary>>, Fixed,  Multiplier, Value) ->
     parse_frame(Rest, Fixed, Value + Len * Multiplier).
 
 parse_frame(Bin, #mqtt_frame_fixed{ type = Type,
-                                    qos  = QoS } = Fixed, Length) ->
+                                    qos  = Qos } = Fixed, Length) ->
     case {Type, Bin} of
         {?CONNECT, <<FrameBin:Length/binary, Rest/binary>>} ->
             {ProtocolMagic, Rest1} = parse_utf(FrameBin),
@@ -70,46 +70,47 @@ parse_frame(Bin, #mqtt_frame_fixed{ type = Type,
               Rest3/binary>>   = Rest2,
             {ClientId,  Rest4} = parse_utf(Rest3),
             {WillTopic, Rest5} = parse_utf(Rest4, WillFlag),
-            {WillMsg,   Rest6} = parse_utf(Rest5, WillFlag),
+            {WillMsg,   Rest6} = parse_msg(Rest5, WillFlag),
             {UserName,  Rest7} = parse_utf(Rest6, UsernameFlag),
             {PasssWord, <<>>}  = parse_utf(Rest7, PasswordFlag),
             case ProtocolMagic == ?PROTOCOL_MAGIC of
                 true ->
                     wrap(Fixed,
-                         #mqtt_frame_connect{proto_ver   = ProtoVersion,
-                                             will_retain = bool(WillRetain),
-                                             will_qos    = WillQos,
-                                             will_flag   = bool(WillFlag),
-                                             clean_sess  = bool(CleanSession),
-                                             keep_alive  = KeepAlive,
-                                             client_id   = ClientId,
-                                             will_topic  = WillTopic,
-                                             will_msg    = WillMsg,
-                                             username    = UserName,
-                                             password    = PasssWord}, Rest);
+                         #mqtt_frame_connect{
+                           proto_ver   = ProtoVersion,
+                           will_retain = bool(WillRetain),
+                           will_qos    = WillQos,
+                           will_flag   = bool(WillFlag),
+                           clean_sess  = bool(CleanSession),
+                           keep_alive  = KeepAlive,
+                           client_id   = ClientId,
+                           will_topic  = WillTopic,
+                           will_msg    = WillMsg,
+                           username    = UserName,
+                           password    = PasssWord}, Rest);
                false ->
                     {error, protocol_header_corrupt}
             end;
         {?PUBLISH, <<FrameBin:Length/binary, Rest/binary>>} ->
             {TopicName, Rest1} = parse_utf(FrameBin),
-            {MessageId, Payload} = case QoS of
+            {MessageId, Payload} = case Qos of
                                        0 -> {undefined, Rest1};
                                        _ -> <<M:16/big, R/binary>> = Rest1,
                                             {M, R}
                                    end,
             wrap(Fixed, #mqtt_frame_publish { topic_name = TopicName,
-                                              message_id = MessageId},
+                                              message_id = MessageId },
                  Payload, Rest);
+        {?PUBACK, <<FrameBin:Length/binary, Rest/binary>>} ->
+            <<MessageId:16/big>> = FrameBin,
+            wrap(Fixed, #mqtt_frame_publish { message_id = MessageId }, Rest);
         {Subs, <<FrameBin:Length/binary, Rest/binary>>}
           when Subs =:= ?SUBSCRIBE orelse Subs =:= ?UNSUBSCRIBE ->
-            case QoS of
-                1 -> <<MessageId:16/big, Rest1/binary>> = FrameBin,
-                     Topics = parse_topics(Subs, Rest1, []),
-                     wrap(Fixed, #mqtt_frame_subscribe { message_id = MessageId,
-                                                         topic_table = Topics },
-                          Rest);
-                N -> {error, {subscription_frame_with_unexpected_qos, Subs, N}}
-            end;
+            1 = Qos,
+            <<MessageId:16/big, Rest1/binary>> = FrameBin,
+            Topics = parse_topics(Subs, Rest1, []),
+            wrap(Fixed, #mqtt_frame_subscribe { message_id  = MessageId,
+                                                topic_table = Topics }, Rest);
         {Minimal, Rest}
           when Minimal =:= ?DISCONNECT orelse Minimal =:= ?PINGREQ ->
             Length = 0,
@@ -144,6 +145,11 @@ parse_utf(Bin, _) ->
 
 parse_utf(<<Len:16/big, Str:Len/binary, Rest/binary>>) ->
     {binary_to_list(Str), Rest}.
+
+parse_msg(Bin, 0) ->
+    {undefined, Bin};
+parse_msg(<<Len:16/big, Msg:Len/binary, Rest/binary>>, _) ->
+    {Msg, Rest}.
 
 bool(0) -> false;
 bool(1) -> true.

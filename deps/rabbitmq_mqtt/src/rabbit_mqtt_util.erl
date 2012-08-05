@@ -21,7 +21,8 @@
 -compile(export_all).
 
 subcription_queue_name(ClientId) ->
-    list_to_binary("MQTT_subscription_" ++ ClientId).
+    Base = "mqtt-subscription-" ++ ClientId ++ "qos",
+    {list_to_binary(Base ++ "0"), list_to_binary(Base ++ "1")}.
 
 %% amqp mqtt descr
 %% *    +    match one topic level

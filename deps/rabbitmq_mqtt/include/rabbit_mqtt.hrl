@@ -14,18 +14,24 @@
 %% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
--define(DEFAULT_EXCHANGE,      <<"amq.topic">>).
--define(MQTT_PROTOCOL_VERSION, 3).
--define(CLIENT_ID_MAXLEN,      23).
+-define(CLIENT_ID_MAXLEN, 23).
 
 -record(state, { socket,
                  conn_name,
+                 await_recv,
+                 credit_flow,
+                 conserve,
                  parse_state,
                  clean_sess,
                  client_id,
-                 consumer_tag,
+                 subscriptions,
+                 consumer_tags,
                  unacked_pubs,
-                 confirms,
-                 channel,
+                 awaiting_ack,
+                 awaiting_seqno,
+                 will_msg,
+                 message_id,
+                 exchange,
+                 channels,
                  connection,
                  adapter_info }).
