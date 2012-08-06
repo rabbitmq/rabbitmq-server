@@ -49,6 +49,7 @@
 
 -record(state, {total_memory,
                 memory_limit,
+                memory_fraction,
                 timeout,
                 timer,
                 alarmed,
@@ -117,7 +118,7 @@ init([MemFraction, AlarmFuns]) ->
     {ok, set_mem_limits(State, MemFraction)}.
 
 handle_call(get_vm_memory_high_watermark, _From, State) ->
-    {reply, State#state.memory_limit / State#state.total_memory, State};
+    {reply, State#state.memory_fraction, State};
 
 handle_call({set_vm_memory_high_watermark, MemFraction}, _From, State) ->
     {reply, ok, set_mem_limits(State, MemFraction)};
@@ -185,8 +186,9 @@ set_mem_limits(State, MemFraction) ->
     MemLim = trunc(MemFraction * UsableMemory),
     error_logger:info_msg("Memory limit set to ~pMB of ~pMB total.~n",
                           [trunc(MemLim/?ONE_MB), trunc(TotalMemory/?ONE_MB)]),
-    internal_update(State #state { total_memory = TotalMemory,
-                                   memory_limit = MemLim }).
+    internal_update(State #state { total_memory    = TotalMemory,
+                                   memory_limit    = MemLim,
+                                   memory_fraction = MemFraction}).
 
 internal_update(State = #state { memory_limit = MemLimit,
                                  alarmed      = Alarmed,
