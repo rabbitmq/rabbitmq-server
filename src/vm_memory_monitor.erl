@@ -172,7 +172,17 @@ set_mem_limits(State, MemFraction) ->
                 ?MEMORY_SIZE_FOR_UNKNOWN_OS;
             M -> M
         end,
-    MemLim = trunc(MemFraction * lists:min([TotalMemory, get_vm_limit()])),
+    UsableMemory = case get_vm_limit() of
+                       Limit when Limit < TotalMemory ->
+                           error_logger:warning_msg(
+                             "Only ~pMB of ~pMB memory usable due to "
+                             "limited address space.~n",
+                             [trunc(V/?ONE_MB) || V <- [Limit, TotalMemory]]),
+                           Limit;
+                       _ ->
+                           TotalMemory
+                   end,
+    MemLim = trunc(MemFraction * UsableMemory),
     error_logger:info_msg("Memory limit set to ~pMB of ~pMB total.~n",
                           [trunc(MemLim/?ONE_MB), trunc(TotalMemory/?ONE_MB)]),
     internal_update(State #state { total_memory = TotalMemory,
