@@ -47,9 +47,7 @@
 
 %%----------------------------------------------------------------------------
 
-%%
 %% @doc Prepares the file system and installs all enabled plugins.
-%%
 setup() ->
     {ok, PluginDir} = application:get_env(rabbit, plugins_dir),
     {ok, ExpandDir} = application:get_env(rabbit, plugins_expand_dir),
@@ -98,11 +96,9 @@ read_enabled(PluginsFile) ->
                                           PluginsFile, Reason}})
     end.
 
-%%
 %% @doc Calculate the dependency graph from <i>Sources</i>.
 %% When Reverse =:= true the bottom/leaf level applications are returned in
 %% the resulting list, otherwise they're skipped.
-%%
 dependencies(Reverse, Sources, AllPlugins) ->
     {ok, G} = rabbit_misc:build_acyclic_graph(
                 fun (App, _Deps) -> [{App, App}] end,
