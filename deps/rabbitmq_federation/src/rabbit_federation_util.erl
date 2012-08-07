@@ -20,7 +20,7 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_federation.hrl").
 
--export([local_params/1, local_nodename/0, should_forward/2, find_upstreams/2]).
+-export([local_params/1, local_nodename/1, should_forward/2, find_upstreams/2]).
 -export([validate_arg/3, fail/2, name/1, vhost/1]).
 
 -import(rabbit_misc, [pget_or_die/2, pget/3]).
@@ -29,13 +29,13 @@
 
 local_params(VHost) ->
     U = rabbit_runtime_parameters:value(
-          <<"federation">>, <<"local-username">>, <<"guest">>),
+          VHost, <<"federation">>, <<"local-username">>, <<"guest">>),
     #amqp_params_direct{username     = U,
                         virtual_host = VHost}.
 
-local_nodename() ->
+local_nodename(VHost) ->
     rabbit_runtime_parameters:value(
-      <<"federation">>, <<"local-nodename">>, local_nodename_implicit()).
+      VHost, <<"federation">>, <<"local-nodename">>, local_nodename_implicit()).
 
 local_nodename_implicit() ->
     {ID, _} = rabbit_nodes:parts(node()),
