@@ -28,7 +28,7 @@ dispatcher_add(function(sammy) {
         });
     sammy.del('#/fed-parameters', function() {
             if (sync_delete(this, '/parameters/:component/:key'))
-                go_to('#/federation');
+                go_to('#/federation-upstreams');
             return false;
         });
 });
