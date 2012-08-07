@@ -37,7 +37,7 @@ dispatcher_add(function(sammy) {
 NAVIGATION['Admin'][0]['Federation Status'] = ['#/federation', true];
 NAVIGATION['Admin'][0]['Federation Upstreams'] = ['#/federation-upstreams', true];
 
-VHOST_QUERIES["/federation-links"] = "";
+VHOST_QUERIES.push(new RegExp("/federation-links"));
 SORT_QUERIES["/federation-links"] = "";
 
 HELP['federation-explicit-identity'] =
