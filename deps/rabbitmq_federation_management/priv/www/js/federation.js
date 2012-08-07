@@ -6,11 +6,12 @@ dispatcher_add(function(sammy) {
                 'federation', '#/federation');
         });
     sammy.get('#/federation-upstreams', function() {
-            render({'upstreams': '/parameters/federation-upstream'},
+            render({'upstreams': '/parameters/federation-upstream',
+                    'vhosts': '/vhosts'},
                    'federation-upstreams', '#/federation-upstreams');
         });
-    sammy.get('#/federation-upstreams/:id', function() {
-            render({'upstream': '/parameters/federation-upstream/' + esc(this.params['id'])},
+    sammy.get('#/federation-upstreams/:vhost/:id', function() {
+            render({'upstream': '/parameters/federation-upstream/' + esc(this.params['vhost']) + '/' + esc(this.params['id'])},
                    'federation-upstream', '#/federation');
         });
     sammy.put('#/fed-globals', function() {
@@ -27,7 +28,7 @@ dispatcher_add(function(sammy) {
             return false;
         });
     sammy.del('#/fed-parameters', function() {
-            if (sync_delete(this, '/parameters/:component/:key'))
+            if (sync_delete(this, '/parameters/:component/:vhost/:key'))
                 go_to('#/federation-upstreams');
             return false;
         });
@@ -63,6 +64,6 @@ HELP['federation-reconnect'] =
 HELP['federation-ha-policy'] =
     'Federation declares a queue at the upstream node to buffer messages waiting to be sent. Use this to set the x-ha-policy argument for this queue.';
 
-function link_fed_conn(name) {
-    return _link_to(fmt_escape_html(name), '#/federation-upstreams/' + esc(name))
+function link_fed_conn(vhost, name) {
+    return _link_to(fmt_escape_html(name), '#/federation-upstreams/' + esc(vhost) + '/' + esc(name));
 }

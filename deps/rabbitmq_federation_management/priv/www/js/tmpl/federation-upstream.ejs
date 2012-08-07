@@ -5,6 +5,10 @@
   <div class="hider">
     <table class="facts">
       <tr>
+        <th>Virtual Host</th>
+        <td><%= fmt_string(upstream.vhost) %></td>
+      </tr>
+      <tr>
         <th>URI</th>
         <td><%= fmt_string(upstream.value.uri) %></td>
       </tr>
@@ -41,6 +45,7 @@
   <div class="hider">
     <form action="#/fed-parameters" method="delete" class="confirm">
       <input type="hidden" name="component" value="federation-upstream"/>
+      <input type="hidden" name="vhost" value="<%= fmt_string(upstream.vhost) %>"/>
       <input type="hidden" name="key" value="<%= fmt_string(upstream.key) %>"/>
       <input type="submit" value="Delete this upstream"/>
     </form>

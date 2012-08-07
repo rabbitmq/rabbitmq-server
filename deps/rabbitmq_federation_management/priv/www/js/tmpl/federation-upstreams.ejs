@@ -6,6 +6,9 @@
 <table class="list">
  <thead>
   <tr>
+<% if (vhosts_interesting) { %>
+    <th>Virtual Host</th>
+<% } %>
     <th>Name</th>
     <th>URI</th>
     <th>Expiry</th>
@@ -22,7 +25,10 @@
     var upstream = upstreams[i];
 %>
    <tr<%= alt_rows(i)%>>
-     <td><%= link_fed_conn(upstream.key) %></td>
+<% if (vhosts_interesting) { %>
+     <td><%= fmt_string(upstream.vhost) %></td>
+<% } %>
+     <td><%= link_fed_conn(upstream.vhost, upstream.key) %></td>
      <td><%= fmt_shortened_uri(upstream.value.uri) %></td>
      <td class="r"><%= fmt_time(upstream.value.expires, 'ms') %></td>
      <td class="r"><%= fmt_time(upstream.value['message-ttl'], 'ms') %></td>
@@ -46,6 +52,20 @@
     <form action="#/fed-parameters" method="put">
       <input type="hidden" name="component" value="federation-upstream"/>
       <table class="form">
+<% if (vhosts_interesting) { %>
+        <tr>
+          <th><label>Virtual host:</label></th>
+          <td>
+            <select name="vhost">
+              <% for (var i = 0; i < vhosts.length; i++) { %>
+              <option value="<%= fmt_string(vhosts[i].name) %>"><%= fmt_string(vhosts[i].name) %></option>
+              <% } %>
+            </select>
+          </td>
+        </tr>
+<% } else { %>
+        <tr><td><input type="hidden" name="vhost" value="<%= fmt_string(vhosts[0].name) %>"/></td></tr>
+<% } %>
         <tr>
           <th><label>Name:</label></th>
           <td><input type="text" name="key"/><span class="mand">*</span></td>
