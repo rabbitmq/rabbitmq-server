@@ -51,22 +51,29 @@ to_json(ReqData, Context) ->
                            ReqData, Context).
 
 accept_content(ReqData, Context) ->
-    rabbit_mgmt_util:with_decode(
-      [value], ReqData, Context,
-      fun([Value], _) ->
-              case rabbit_runtime_parameters:set(
-                     component(ReqData), key(ReqData),
-                     rabbit_mgmt_parse:parameter_value(Value)) of
-                  ok ->
-                      {true, ReqData, Context};
-                  {error_string, Reason} ->
-                      rabbit_mgmt_util:bad_request(
-                        list_to_binary(Reason), ReqData, Context)
-              end
-      end).
+    case rabbit_mgmt_util:vhost(ReqData) of
+        not_found ->
+            rabbit_mgmt_util:not_found(vhost_not_found, ReqData, Context);
+        VHost ->
+            rabbit_mgmt_util:with_decode(
+              [value], ReqData, Context,
+              fun([Value], _) ->
+                      case rabbit_runtime_parameters:set(
+                             rabbit_mgmt_util:vhost(ReqData),
+                             component(ReqData), key(ReqData),
+                             rabbit_mgmt_parse:parameter_value(Value)) of
+                          ok ->
+                              {true, ReqData, Context};
+                          {error_string, Reason} ->
+                              rabbit_mgmt_util:bad_request(
+                                list_to_binary(Reason), ReqData, Context)
+                      end
+              end)
+    end.
 
 delete_resource(ReqData, Context) ->
-    ok = rabbit_runtime_parameters:clear(component(ReqData), key(ReqData)),
+    ok = rabbit_runtime_parameters:clear(
+           rabbit_mgmt_util:vhost(ReqData), component(ReqData), key(ReqData)),
     {true, ReqData, Context}.
 
 is_authorized(ReqData, Context) ->
@@ -75,7 +82,8 @@ is_authorized(ReqData, Context) ->
 %%--------------------------------------------------------------------
 
 parameter(ReqData) ->
-    rabbit_runtime_parameters:lookup(component(ReqData), key(ReqData)).
+    rabbit_runtime_parameters:lookup(
+      rabbit_mgmt_util:vhost(ReqData), component(ReqData), key(ReqData)).
 
 component(ReqData) -> rabbit_mgmt_util:id(component, ReqData).
 key(ReqData)       -> rabbit_mgmt_util:id(key, ReqData).

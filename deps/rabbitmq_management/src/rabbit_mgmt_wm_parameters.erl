@@ -47,7 +47,13 @@ is_authorized(ReqData, Context) ->
 basic(ReqData) ->
     Raw = case rabbit_mgmt_util:id(component, ReqData) of
               none -> rabbit_runtime_parameters:list();
-              Name -> rabbit_runtime_parameters:list_strict(Name)
+              Name -> case rabbit_mgmt_util:vhost(ReqData) of
+                          none      -> rabbit_runtime_parameters:list_strict(
+                                         Name);
+                          not_found -> not_found;
+                          VHost     -> rabbit_runtime_parameters:list_strict(
+                                         VHost, Name)
+                      end
           end,
     case Raw of
         not_found -> not_found;

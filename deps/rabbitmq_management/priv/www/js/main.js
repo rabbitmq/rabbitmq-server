@@ -288,7 +288,7 @@ function apply_state(reqs) {
     for (k in reqs) {
         var req = reqs[k];
         var req2;
-        if (req in VHOST_QUERIES && current_vhost != '') {
+        if (vhost_query(req) && current_vhost != '') {
             req2 = req + '/' + esc(current_vhost);
         }
         else {
@@ -304,6 +304,14 @@ function apply_state(reqs) {
         reqs2[k] = req2 + qs;
     }
     return reqs2;
+}
+
+function vhost_query(req) {
+    for (i in VHOST_QUERIES) {
+        var query = VHOST_QUERIES[i];
+        if (req.match(query)) return true;
+    }
+    return false;
 }
 
 function show_popup(type, text) {
@@ -781,12 +789,14 @@ function put_parameter(sammy, mandatory_keys, num_keys) {
         }
     }
     var params = {"component": sammy.params.component,
+                  "vhost":     sammy.params.vhost,
                   "key":       sammy.params.key,
                   "value":     params_magic(sammy.params)};
+    delete params.value.vhost;
     delete params.value.component;
     delete params.value.key;
     sammy.params = params;
-    if (sync_put(sammy, '/parameters/:component/:key')) update();
+    if (sync_put(sammy, '/parameters/:component/:vhost/:key')) update();
 }
 
 
