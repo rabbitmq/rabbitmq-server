@@ -68,11 +68,11 @@ remove_from_queue(QueueName, DeadPids) ->
                   [] -> {error, not_found};
                   [Q = #amqqueue { pid        = QPid,
                                    slave_pids = SPids }] ->
-                      [QPid1 | SPids1] = Alive =
-                          [Pid || Pid <- [QPid | SPids],
-                                  not lists:member(node(Pid),
-                                                   DeadNodes) orelse
-                                  rabbit_misc:is_process_alive(Pid)],
+                      Alive = [Pid || Pid <- [QPid | SPids],
+                                      not lists:member(node(Pid),
+                                                       DeadNodes) orelse
+                                          rabbit_misc:is_process_alive(Pid)],
+                      {QPid1, SPids1} = promote_slave(Alive),
                       case {{QPid, SPids}, {QPid1, SPids1}} of
                           {Same, Same} ->
                               {ok, QPid1, []};
@@ -206,6 +206,11 @@ store_updated_slaves(Q = #amqqueue{slave_pids      = SPids,
 
 %%----------------------------------------------------------------------------
 
+promote_slave([SPid | SPids]) ->
+    %% The slave pids are maintained in descending order of age, so
+    %% the one to promote is the oldest.
+    {SPid, SPids}.
+
 suggested_queue_nodes(Q) ->
     {MNode0, SNodes} = actual_queue_nodes(Q),
     MNode = case MNode0 of
@@ -227,7 +232,7 @@ suggested_queue_nodes(<<"nodes">>, Nodes0, {MNode, _SNodes}, _All) ->
     Nodes = [list_to_atom(binary_to_list(Node)) || Node <- Nodes0],
     case lists:member(MNode, Nodes) of
         true  -> {MNode, Nodes -- [MNode]};
-        false -> {hd(Nodes), tl(Nodes)}
+        false -> promote_slave(Nodes)
     end;
 suggested_queue_nodes(<<"at-least">>, Count, {MNode, SNodes}, All) ->
     SCount = Count - 1,

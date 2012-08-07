@@ -154,6 +154,8 @@ init_it(Self, Node, QueueName) ->
                 mnesia:read({rabbit_queue, QueueName}),
     case [Pid || Pid <- [QPid | MPids], node(Pid) =:= Node] of
         [] ->
+            %% Add to the end, so they are in descending order of age, see
+            %% rabbit_mirror_queue_misc:promote_slave/1
             MPids1 = MPids ++ [Self],
             rabbit_mirror_queue_misc:store_updated_slaves(
               Q1#amqqueue{slave_pids = MPids1}),
