@@ -115,9 +115,12 @@ message_headers(SessionId,
 
     adhoc_convert_headers(Headers, Standard).
 
-tag_to_id(<<?INTERNAL_TAG_PREFIX, Id/binary>>) -> {ok, {internal, binary_to_list(Id)}};
-tag_to_id(<<?QUEUE_TAG_PREFIX,    Id/binary>>) -> {ok, {queue, binary_to_list(Id)}};
-tag_to_id(Other        ) when is_binary(Other) -> {error, {unknown, binary_to_list(Other)}}.
+tag_to_id(<<?INTERNAL_TAG_PREFIX, Id/binary>>) ->
+    {ok, {internal, binary_to_list(Id)}};
+tag_to_id(<<?QUEUE_TAG_PREFIX,    Id/binary>>) ->
+    {ok, {queue, binary_to_list(Id)}};
+tag_to_id(Other) when is_binary(Other) ->
+    {error, {unknown, binary_to_list(Other)}}.
 
 user_header(Hdr)
   when Hdr =:= ?HEADER_CONTENT_TYPE orelse

@@ -111,7 +111,7 @@ test_delete_queue_subscribe(Channel, Client) ->
 stomp_receive(Client, Command) ->
     {#stomp_frame{command     = Command,
                   headers     = Hdrs,
-                  body_iolist = Body},   Client1}
-    = rabbit_stomp_client:recv(Client),
+                  body_iolist = Body},   Client1} =
+    rabbit_stomp_client:recv(Client),
     {ok, Client1, Hdrs, Body}.
 

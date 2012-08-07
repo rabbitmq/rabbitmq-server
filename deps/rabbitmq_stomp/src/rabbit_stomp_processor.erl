@@ -401,8 +401,7 @@ cancel_subscription({ok, ConsumerTag, Description}, Frame,
 tidy_canceled_subscription(ConsumerTag, #subscription{dest_hdr = DestHdr,
                                                       channel = SubChannel},
                            Frame, State = #state{channel = MainChannel,
-                                                 subscriptions = Subs}
-                           ) ->
+                                                 subscriptions = Subs}) ->
     ok = ensure_subchannel_closed(SubChannel, MainChannel),
     Subs1 = dict:erase(ConsumerTag, Subs),
     {ok, Dest} = rabbit_stomp_util:parse_destination(DestHdr),
@@ -1004,18 +1003,19 @@ send_frame(Frame, State = #state{send_fun = SendFun}) ->
     State.
 
 send_error_frame(Message, ExtraHeaders, Format, Args, State) ->
-    send_error_frame(Message, ExtraHeaders, rabbit_misc:format(Format, Args), State).
+    send_error_frame(Message, ExtraHeaders, rabbit_misc:format(Format, Args),
+                     State).
 
 send_error_frame(Message, ExtraHeaders, Detail, State) ->
     send_frame("ERROR", [{"message", Message},
                          {"content-type", "text/plain"},
-                         {"version", string:join(?SUPPORTED_VERSIONS, ",")}]
-                        ++ ExtraHeaders,
+                         {"version", string:join(?SUPPORTED_VERSIONS, ",")}] ++
+                        ExtraHeaders,
                         Detail, State).
 
 send_error(Message, Detail, State) ->
     send_error_frame(Message, [], Detail, State).
-    
+
 send_error(Message, Format, Args, State) ->
     send_error(Message, rabbit_misc:format(Format, Args), State).
 
