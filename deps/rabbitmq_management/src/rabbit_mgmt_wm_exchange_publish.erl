@@ -47,6 +47,10 @@ do_it(ReqData, Context) ->
     rabbit_mgmt_util:with_decode(
       [routing_key, properties, payload, payload_encoding], ReqData, Context,
       fun([RoutingKey, Props0, Payload0, Enc], _) ->
+              case Payload0 of
+                  P when is_binary(P) -> ok;
+                  _                   -> throw({error, payload_not_string})
+              end,
               rabbit_mgmt_util:with_channel(
                 VHost, ReqData, Context,
                 fun (Ch) ->

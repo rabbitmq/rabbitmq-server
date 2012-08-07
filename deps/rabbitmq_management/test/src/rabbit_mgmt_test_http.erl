@@ -860,6 +860,12 @@ publish_fail_test() ->
             {payload,          <<"Hello world">>},
             {payload_encoding, <<"string">>}],
     http_post("/exchanges/%2f/amq.default/publish", Msg2, ?BAD_REQUEST),
+    Msg3 = [{exchange,         <<"">>},
+            {routing_key,      <<"myqueue">>},
+            {properties,       []},
+            {payload,          [<<"not a string">>]},
+            {payload_encoding, <<"string">>}],
+    http_post("/exchanges/%2f/amq.default/publish", Msg3, ?BAD_REQUEST),
     http_delete("/users/myuser", ?NO_CONTENT),
     ok.
 
