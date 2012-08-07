@@ -17,8 +17,7 @@
 -module(rabbit_plugins).
 -include("rabbit.hrl").
 
--export([setup/0, active/0, read_enabled/1,
-         list/1, dependencies/3]).
+-export([setup/0, active/0, read_enabled/1, list/1, dependencies/3]).
 
 -define(VERBOSE_DEF, {?VERBOSE_OPT, flag}).
 -define(MINIMAL_DEF, {?MINIMAL_OPT, flag}).
@@ -40,8 +39,7 @@
 -spec(active/0 :: () -> [atom()]).
 -spec(list/1 :: (string()) -> [#plugin{}]).
 -spec(read_enabled/1 :: (file:filename()) -> [atom()]).
--spec(dependencies/3 ::
-            (boolean(), [atom()], [#plugin{}]) -> [atom()]).
+-spec(dependencies/3 :: (boolean(), [atom()], [#plugin{}]) -> [atom()]).
 
 -endif.
 
@@ -167,14 +165,12 @@ prepare_plugin(#plugin{type = dir, name = Name, location = Location},
     rabbit_file:recursive_copy(Location,
                               filename:join([PluginsDestDir, Name])).
 
-%% Get the #plugin{} from an .ez.
 get_plugin_info(Base, {ez, EZ0}) ->
     EZ = filename:join([Base, EZ0]),
     case read_app_file(EZ) of
         {application, Name, Props} -> mkplugin(Name, Props, ez, EZ);
         {error, Reason}            -> {error, EZ, Reason}
     end;
-%% Get the #plugin{} from an .app.
 get_plugin_info(Base, {app, App0}) ->
     App = filename:join([Base, App0]),
     case rabbit_file:read_term_file(App) of
@@ -194,7 +190,6 @@ mkplugin(Name, Props, Type, Location) ->
     #plugin{name = Name, version = Version, description = Description,
             dependencies = Dependencies, location = Location, type = Type}.
 
-%% Read the .app file from an ez.
 read_app_file(EZ) ->
     case zip:list_dir(EZ) of
         {ok, [_|ZippedFiles]} ->
@@ -210,13 +205,11 @@ read_app_file(EZ) ->
             {error, {invalid_ez, Reason}}
     end.
 
-%% Return the path of the .app files in ebin/.
 find_app_files(ZippedFiles) ->
     {ok, RE} = re:compile("^.*/ebin/.*.app$"),
     [Path || {zip_file, Path, _, _, _, _} <- ZippedFiles,
              re:run(Path, RE, [{capture, none}]) =:= match].
 
-%% Parse a binary into a term.
 parse_binary(Bin) ->
     try
         {ok, Ts, _} = erl_scan:string(binary_to_list(Bin)),
@@ -226,13 +219,10 @@ parse_binary(Bin) ->
         Err -> {error, {invalid_app, Err}}
     end.
 
-%% Filter out applications that can be loaded *right now*.
 filter_applications(Applications) ->
     [Application || Application <- Applications,
                     not is_available_app(Application)].
 
-%% Return whether is application is already available (and hence
-%% doesn't need enabling).
 is_available_app(Application) ->
     case application:load(Application) of
         {error, {already_loaded, _}} -> true;
@@ -241,10 +231,8 @@ is_available_app(Application) ->
         _                            -> false
     end.
 
-%% Return the names of the given plugins.
 plugin_names(Plugins) ->
     [Name || #plugin{name = Name} <- Plugins].
 
-%% Find plugins by name in a list of plugins.
 lookup_plugins(Names, AllPlugins) ->
     [P || P = #plugin{name = Name} <- AllPlugins, lists:member(Name, Names)].
