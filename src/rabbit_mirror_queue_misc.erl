@@ -259,14 +259,11 @@ update_mirrors(OldQ = #amqqueue{name = QName, pid = QPid},
         {false, false} -> ok;
         {true,  false} -> rabbit_amqqueue:stop_mirroring(QPid);
         {false, true}  -> rabbit_amqqueue:start_mirroring(QPid);
-        {true, true}   -> {OldMNode, OldSNodes} = actual_queue_nodes(OldQ),
-                          {NewMNode, NewSNodes} = suggested_queue_nodes(NewQ),
-                          case OldMNode of
-                              NewMNode -> ok;
-                              _        -> io:format("TODO: master needs to change for ~p~n", [NewQ])
-                          end,
-                          Add = NewSNodes -- OldSNodes,
-                          Remove = OldSNodes -- NewSNodes,
-                          [ok = drop_mirror(QName, SNode) || SNode <- Remove],
-                          [ok = add_mirror(QName, SNode) || SNode <- Add]
+        {true, true}   -> All = fun ({A,B}) -> [A|B] end,
+                          OldNodes = All(actual_queue_nodes(OldQ)),
+                          NewNodes = All(suggested_queue_nodes(NewQ)),
+                          Add = NewNodes -- OldNodes,
+                          Remove = OldNodes -- NewNodes,
+                          [ok = drop_mirror(QName, Node) || Node <- Remove],
+                          [ok = add_mirror(QName, Node) || Node <- Add]
     end.
