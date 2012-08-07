@@ -60,9 +60,9 @@
          {list_permissions, [?VHOST_DEF]},
          list_user_permissions,
 
-         set_parameter,
-         clear_parameter,
-         list_parameters,
+         {set_parameter, [?VHOST_DEF]},
+         {clear_parameter, [?VHOST_DEF]},
+         {list_parameters, [?VHOST_DEF]},
 
          {list_queues, [?VHOST_DEF]},
          {list_exchanges, [?VHOST_DEF]},
@@ -414,21 +414,25 @@ action(list_permissions, Node, [], Opts, Inform) ->
                              list_vhost_permissions, [VHost]}),
                       rabbit_auth_backend_internal:vhost_perms_info_keys());
 
-action(set_parameter, Node, [Component, Key, Value], _Opts, Inform) ->
+action(set_parameter, Node, [Component, Key, Value], Opts, Inform) ->
+    VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
     Inform("Setting runtime parameter ~p for component ~p to ~p",
            [Key, Component, Value]),
     rpc_call(Node, rabbit_runtime_parameters, parse_set,
-             [list_to_binary(Component), list_to_binary(Key), Value]);
+             [VHostArg, list_to_binary(Component), list_to_binary(Key), Value]);
 
-action(clear_parameter, Node, [Component, Key], _Opts, Inform) ->
+action(clear_parameter, Node, [Component, Key], Opts, Inform) ->
+    VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
     Inform("Clearing runtime parameter ~p for component ~p", [Key, Component]),
-    rpc_call(Node, rabbit_runtime_parameters, clear, [list_to_binary(Component),
+    rpc_call(Node, rabbit_runtime_parameters, clear, [VHostArg,
+                                                      list_to_binary(Component),
                                                       list_to_binary(Key)]);
 
-action(list_parameters, Node, Args = [], _Opts, Inform) ->
+action(list_parameters, Node, [], Opts, Inform) ->
+    VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
     Inform("Listing runtime parameters", []),
     display_info_list(
-      rpc_call(Node, rabbit_runtime_parameters, list_formatted, Args),
+      rpc_call(Node, rabbit_runtime_parameters, list_formatted, [VHostArg]),
       rabbit_runtime_parameters:info_keys());
 
 action(report, Node, _Args, _Opts, Inform) ->
