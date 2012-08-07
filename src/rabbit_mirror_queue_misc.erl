@@ -22,6 +22,8 @@
 
 %% temp
 -export([suggested_queue_nodes/1, is_mirrored/1, update_mirrors/2]).
+%% for testing
+-export([suggested_queue_nodes/4]).
 
 
 -include("rabbit.hrl").
@@ -204,41 +206,51 @@ store_updated_slaves(Q = #amqqueue{slave_pids      = SPids,
 
 %%----------------------------------------------------------------------------
 
-%% TODO this should take account of current nodes so we don't throw
-%% away mirrors or change the master needlessly
 suggested_queue_nodes(Q) ->
-    case [rabbit_policy:get(P, Q) || P <- [<<"ha-mode">>, <<"ha-params">>]] of
-        [{ok, <<"all">>}, _] ->
-            {node(), rabbit_mnesia:all_clustered_nodes() -- [node()]};
-        [{ok, <<"nodes">>}, {ok, Nodes}] ->
-            case [list_to_atom(binary_to_list(Node)) || Node <- Nodes] of
-                [Node]         -> {Node,   []};
-                [First | Rest] -> {First,  Rest}
-            end;
-        [{ok, <<"at-least">>}, {ok, Count}] ->
-            {node(), lists:sublist(
-                       rabbit_mnesia:all_clustered_nodes(), Count) -- [node()]};
-        _ ->
-            {node(), []}
+    {MNode0, SNodes} = actual_queue_nodes(Q),
+    MNode = case MNode0 of
+                none -> node();
+                _    -> MNode0
+            end,
+    suggested_queue_nodes(policy(<<"ha-mode">>, Q), policy(<<"ha-params">>, Q),
+                          {MNode, SNodes}, rabbit_mnesia:all_clustered_nodes()).
+
+policy(Policy, Q) ->
+    case rabbit_policy:get(Policy, Q) of
+        {ok, P} -> P;
+        _       -> none
     end.
 
+suggested_queue_nodes(<<"all">>, _Params, {MNode, _SNodes}, All) ->
+    {MNode, All -- [MNode]};
+suggested_queue_nodes(<<"nodes">>, Nodes0, {MNode, _SNodes}, _All) ->
+    Nodes = [list_to_atom(binary_to_list(Node)) || Node <- Nodes0],
+    case lists:member(MNode, Nodes) of
+        true  -> {MNode, Nodes -- [MNode]};
+        false -> {hd(Nodes), tl(Nodes)}
+    end;
+suggested_queue_nodes(<<"at-least">>, Count, {MNode, SNodes}, All) ->
+    SCount = Count - 1,
+    {MNode, case SCount > length(SNodes) of
+                true  -> Cand = (All -- [MNode]) -- SNodes,
+                         SNodes ++ lists:sublist(Cand, SCount - length(SNodes));
+                false -> lists:sublist(SNodes, SCount)
+            end};
+suggested_queue_nodes(_, _, {MNode, _}, _) ->
+    {MNode, []}.
+
 actual_queue_nodes(#amqqueue{pid = MPid, slave_pids = SPids}) ->
-    MNode = case MPid of
-                undefined -> undefined;
-                _         -> node(MPid)
-            end,
-    SNodes = case SPids of
-                 undefined -> undefined;
-                 _         -> [node(Pid) || Pid <- SPids]
-             end,
-    {MNode, SNodes}.
+    {case MPid of
+         none -> none;
+         _    -> node(MPid)
+     end, [node(Pid) || Pid <- SPids]}.
 
 is_mirrored(Q) ->
-    case rabbit_policy:get(<<"ha-mode">>, Q) of
-        {ok, <<"all">>}      -> true;
-        {ok, <<"nodes">>}    -> true;
-        {ok, <<"at-least">>} -> true;
-        _                    -> false
+    case policy(<<"ha-mode">>, Q) of
+        <<"all">>      -> true;
+        <<"nodes">>    -> true;
+        <<"at-least">> -> true;
+        _              -> false
     end.
 
 update_mirrors(OldQ = #amqqueue{name = QName, pid = QPid},
