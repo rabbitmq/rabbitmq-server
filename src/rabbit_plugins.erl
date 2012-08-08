@@ -52,7 +52,7 @@ setup() ->
     {ok, EnabledFile} = application:get_env(rabbit, enabled_plugins_file),
     prepare_plugins(EnabledFile, PluginDir, ExpandDir),
     [prepare_dir_plugin(PluginName) ||
-        PluginName <- filelib:wildcard("*/ebin/*.app", ExpandDir)].
+        PluginName <- filelib:wildcard(ExpandDir ++ "/*/ebin/*.app")].
 
 %% @doc Lists the plugins which are currently running.
 active() ->
