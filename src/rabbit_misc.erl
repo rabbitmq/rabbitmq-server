@@ -396,10 +396,16 @@ report_coverage_percentage(File, Cov, NotCov, Mod) ->
 confirm_to_sender(Pid, MsgSeqNos) ->
     gen_server2:cast(Pid, {confirm, MsgSeqNos, self()}).
 
+%% @doc Halts the emulator after printing out an error message
+%% io-formatted with the supplied arguments. The exit status of the
+%% beam process will be set to 1.
 quit(Fmt, Args) ->
     io:format("ERROR: " ++ Fmt ++ "~n", Args),
     quit(1).
 
+%% @doc Halts the emulator returning the given status code to the os.
+%% On Windows this function will block indefinitely so as to give the io
+%% subsystem time to flush stdout completely.
 quit(Status) ->
     case os:type() of
         {unix,  _} -> halt(Status);
