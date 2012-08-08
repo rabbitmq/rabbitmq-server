@@ -126,13 +126,13 @@ prepare_plugins(EnabledFile, PluginsDistDir, ExpandDir) ->
     %% Eliminate the contents of the destination directory
     case delete_recursively(ExpandDir) of
         ok         -> ok;
-        {error, E} -> rabbit_misc:quit("Could not delete dir ~s (~p)",
-                                            [ExpandDir, E])
+        {error, E} -> throw({error, {cannot_delete_plugins_expand_dir,
+                                     [ExpandDir, E]}})
     end,
     case filelib:ensure_dir(ExpandDir ++ "/") of
-        ok          -> ok;
-        {error, E2} -> rabbit_misc:quit("Could not create dir ~s (~p)",
-                                             [ExpandDir, E2])
+        ok         -> ok;
+        {error, E} -> throw({error, {cannot_create_plugins_expand_dir,
+                                     [ExpandDir, E]}})
     end,
 
     [prepare_plugin(Plugin, ExpandDir) || Plugin <- ToUnpackPlugins].
