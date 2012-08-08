@@ -130,9 +130,9 @@ prepare_plugins(EnabledFile, PluginsDistDir, ExpandDir) ->
                                      [ExpandDir, E]}})
     end,
     case filelib:ensure_dir(ExpandDir ++ "/") of
-        ok         -> ok;
-        {error, E} -> throw({error, {cannot_create_plugins_expand_dir,
-                                     [ExpandDir, E]}})
+        ok          -> ok;
+        {error, E2} -> throw({error, {cannot_create_plugins_expand_dir,
+                                      [ExpandDir, E2]}})
     end,
 
     [prepare_plugin(Plugin, ExpandDir) || Plugin <- ToUnpackPlugins].
