@@ -40,18 +40,20 @@
 
 -spec(log/3 :: (category(), level(), string()) -> 'ok').
 -spec(log/4 :: (category(), level(), string(), [any()]) -> 'ok').
--spec(info/1 :: (string()) -> 'ok').
--spec(info/2 :: (string(), [any()]) -> 'ok').
+
+-spec(info/1    :: (string()) -> 'ok').
+-spec(info/2    :: (string(), [any()]) -> 'ok').
 -spec(warning/1 :: (string()) -> 'ok').
 -spec(warning/2 :: (string(), [any()]) -> 'ok').
--spec(error/1 :: (string()) -> 'ok').
--spec(error/2 :: (string(), [any()]) -> 'ok').
+-spec(error/1   :: (string()) -> 'ok').
+-spec(error/2   :: (string(), [any()]) -> 'ok').
 
 -endif.
 
 %%----------------------------------------------------------------------------
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
+
 log(Category, Level, Fmt) -> log(Category, Level, Fmt, []).
 
 log(Category, Level, Fmt, Args) when is_list(Args) ->

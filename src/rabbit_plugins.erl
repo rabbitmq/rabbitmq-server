@@ -47,13 +47,12 @@
 
 %% @doc Prepares the file system and installs all enabled plugins.
 setup() ->
-    {ok, PluginDir} = application:get_env(rabbit, plugins_dir),
-    {ok, ExpandDir} = application:get_env(rabbit, plugins_expand_dir),
-    {ok, EnabledPluginsFile} = application:get_env(rabbit,
-                                                   enabled_plugins_file),
-    prepare_plugins(EnabledPluginsFile, PluginDir, ExpandDir),
+    {ok, PluginDir}   = application:get_env(rabbit, plugins_dir),
+    {ok, ExpandDir}   = application:get_env(rabbit, plugins_expand_dir),
+    {ok, EnabledFile} = application:get_env(rabbit, enabled_plugins_file),
+    prepare_plugins(EnabledFile, PluginDir, ExpandDir),
     [prepare_dir_plugin(PluginName) ||
-            PluginName <- filelib:wildcard(ExpandDir ++ "/*/ebin/*.app")].
+        PluginName <- filelib:wildcard("*/ebin/*.app", ExpandDir)].
 
 %% @doc Lists the plugins which are currently running.
 active() ->
@@ -123,32 +122,31 @@ dependencies(Reverse, Sources, AllPlugins) ->
 
 %%----------------------------------------------------------------------------
 
-prepare_plugins(EnabledPluginsFile, PluginsDistDir, DestDir) ->
+prepare_plugins(EnabledFile, PluginsDistDir, ExpandDir) ->
     AllPlugins = list(PluginsDistDir),
-    Enabled = read_enabled(EnabledPluginsFile),
+    Enabled = read_enabled(EnabledFile),
     ToUnpack = dependencies(false, Enabled, AllPlugins),
     ToUnpackPlugins = lookup_plugins(ToUnpack, AllPlugins),
 
-    Missing = Enabled -- plugin_names(ToUnpackPlugins),
-    case Missing of
-        [] -> ok;
-        _  -> io:format("Warning: the following enabled plugins were "
-                       "not found: ~p~n", [Missing])
+    case Enabled -- plugin_names(ToUnpackPlugins) of
+        []      -> ok;
+        Missing -> io:format("Warning: the following enabled plugins were "
+                             "not found: ~p~n", [Missing])
     end,
 
     %% Eliminate the contents of the destination directory
-    case delete_recursively(DestDir) of
+    case delete_recursively(ExpandDir) of
         ok         -> ok;
-        {error, E} -> rabbit_misc:quit("Could not delete dir ~s (~p)",
-                                            [DestDir, E])
+        {error, E} -> throw({error, {cannot_delete_plugins_expand_dir,
+                                     [ExpandDir, E]}})
     end,
-    case filelib:ensure_dir(DestDir ++ "/") of
-        ok          -> ok;
-        {error, E2} -> rabbit_misc:quit("Could not create dir ~s (~p)",
-                                             [DestDir, E2])
+    case filelib:ensure_dir(ExpandDir ++ "/") of
+        ok         -> ok;
+        {error, E} -> throw({error, {cannot_create_plugins_expand_dir,
+                                     [ExpandDir, E]}})
     end,
 
-    [prepare_plugin(Plugin, DestDir) || Plugin <- ToUnpackPlugins].
+    [prepare_plugin(Plugin, ExpandDir) || Plugin <- ToUnpackPlugins].
 
 prepare_dir_plugin(PluginAppDescFn) ->
     %% Add the plugin ebin directory to the load path
@@ -169,12 +167,11 @@ delete_recursively(Fn) ->
         Error              -> Error
     end.
 
-prepare_plugin(#plugin{type = ez, location = Location}, PluginDestDir) ->
-    zip:unzip(Location, [{cwd, PluginDestDir}]);
+prepare_plugin(#plugin{type = ez, location = Location}, ExpandDir) ->
+    zip:unzip(Location, [{cwd, ExpandDir}]);
 prepare_plugin(#plugin{type = dir, name = Name, location = Location},
-              PluginsDestDir) ->
-    rabbit_file:recursive_copy(Location,
-                              filename:join([PluginsDestDir, Name])).
+               ExpandDir) ->
+    rabbit_file:recursive_copy(Location, filename:join([ExpandDir, Name])).
 
 get_plugin_info(Base, {ez, EZ0}) ->
     EZ = filename:join([Base, EZ0]),
