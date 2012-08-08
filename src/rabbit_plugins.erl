@@ -35,11 +35,14 @@
 
 -ifdef(use_specs).
 
--spec(setup/0 :: () -> [atom()]).
--spec(active/0 :: () -> [atom()]).
+-type(plugin_name() :: atom()).
+
+-spec(setup/0 :: () -> [plugin_name()]).
+-spec(active/0 :: () -> [plugin_name()]).
 -spec(list/1 :: (string()) -> [#plugin{}]).
--spec(read_enabled/1 :: (file:filename()) -> [atom()]).
--spec(dependencies/3 :: (boolean(), [atom()], [#plugin{}]) -> [atom()]).
+-spec(read_enabled/1 :: (file:filename()) -> [plugin_name()]).
+-spec(dependencies/3 :: (boolean(), [plugin_name()], [#plugin{}]) ->
+                             [plugin_name()]).
 
 -endif.
 
@@ -50,9 +53,7 @@ setup() ->
     {ok, PluginDir}   = application:get_env(rabbit, plugins_dir),
     {ok, ExpandDir}   = application:get_env(rabbit, plugins_expand_dir),
     {ok, EnabledFile} = application:get_env(rabbit, enabled_plugins_file),
-    prepare_plugins(EnabledFile, PluginDir, ExpandDir),
-    [prepare_dir_plugin(PluginAppDescPath) ||
-        PluginAppDescPath <- filelib:wildcard(ExpandDir ++ "/*/ebin/*.app")].
+    prepare_plugins(EnabledFile, PluginDir, ExpandDir).
 
 %% @doc Lists the plugins which are currently running.
 active() ->
@@ -72,8 +73,7 @@ list(PluginsDir) ->
                         (Plugin = #plugin{}, {Plugins1, Problems1}) ->
                             {[Plugin|Plugins1], Problems1}
                     end, {[], []},
-                    [get_plugin_info(PluginsDir, Plug) ||
-                        Plug <- EZs ++ FreeApps]),
+                    [plugin_info(PluginsDir, Plug) || Plug <- EZs ++ FreeApps]),
     case Problems of
         [] -> ok;
         _  -> io:format("Warning: Problem reading some plugins: ~p~n",
@@ -125,9 +125,9 @@ prepare_plugins(EnabledFile, PluginsDistDir, ExpandDir) ->
 
     %% Eliminate the contents of the destination directory
     case delete_recursively(ExpandDir) of
-        ok         -> ok;
-        {error, E} -> throw({error, {cannot_delete_plugins_expand_dir,
-                                     [ExpandDir, E]}})
+        ok          -> ok;
+        {error, E1} -> throw({error, {cannot_delete_plugins_expand_dir,
+                                      [ExpandDir, E1]}})
     end,
     case filelib:ensure_dir(ExpandDir ++ "/") of
         ok          -> ok;
@@ -135,11 +135,13 @@ prepare_plugins(EnabledFile, PluginsDistDir, ExpandDir) ->
                                       [ExpandDir, E2]}})
     end,
 
-    [prepare_plugin(Plugin, ExpandDir) || Plugin <- ToUnpackPlugins].
+    [prepare_plugin(Plugin, ExpandDir) || Plugin <- ToUnpackPlugins],
+
+    [prepare_dir_plugin(PluginAppDescPath) ||
+        PluginAppDescPath <- filelib:wildcard(ExpandDir ++ "/*/ebin/*.app")].
 
 prepare_dir_plugin(PluginAppDescPath) ->
-    PluginEBinDir = filename:dirname(PluginAppDescPath),
-    code:add_path(PluginEBinDir),
+    code:add_path(filename:dirname(PluginAppDescPath)),
     NameTokens = string:tokens(PluginAppDescPath, "/."),
     list_to_atom(lists:nth(length(NameTokens) - 1, NameTokens)).
 
@@ -158,13 +160,13 @@ prepare_plugin(#plugin{type = dir, name = Name, location = Location},
                ExpandDir) ->
     rabbit_file:recursive_copy(Location, filename:join([ExpandDir, Name])).
 
-get_plugin_info(Base, {ez, EZ0}) ->
+plugin_info(Base, {ez, EZ0}) ->
     EZ = filename:join([Base, EZ0]),
     case read_app_file(EZ) of
         {application, Name, Props} -> mkplugin(Name, Props, ez, EZ);
         {error, Reason}            -> {error, EZ, Reason}
     end;
-get_plugin_info(Base, {app, App0}) ->
+plugin_info(Base, {app, App0}) ->
     App = filename:join([Base, App0]),
     case rabbit_file:read_term_file(App) of
         {ok, [{application, Name, Props}]} ->
