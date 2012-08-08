@@ -47,13 +47,12 @@
 
 %% @doc Prepares the file system and installs all enabled plugins.
 setup() ->
-    {ok, PluginDir} = application:get_env(rabbit, plugins_dir),
-    {ok, ExpandDir} = application:get_env(rabbit, plugins_expand_dir),
-    {ok, EnabledPluginsFile} = application:get_env(rabbit,
-                                                   enabled_plugins_file),
-    prepare_plugins(EnabledPluginsFile, PluginDir, ExpandDir),
+    {ok, PluginDir}   = application:get_env(rabbit, plugins_dir),
+    {ok, ExpandDir}   = application:get_env(rabbit, plugins_expand_dir),
+    {ok, EnabledFile} = application:get_env(rabbit, enabled_plugins_file),
+    prepare_plugins(EnabledFile, PluginDir, ExpandDir),
     [prepare_dir_plugin(PluginName) ||
-            PluginName <- filelib:wildcard(ExpandDir ++ "/*/ebin/*.app")].
+        PluginName <- filelib:wildcard("*/ebin/*.app", ExpandDir)].
 
 %% @doc Lists the plugins which are currently running.
 active() ->
@@ -112,17 +111,16 @@ dependencies(Reverse, Sources, AllPlugins) ->
 
 %%----------------------------------------------------------------------------
 
-prepare_plugins(EnabledPluginsFile, PluginsDistDir, DestDir) ->
+prepare_plugins(EnabledFile, PluginsDistDir, DestDir) ->
     AllPlugins = list(PluginsDistDir),
-    Enabled = read_enabled(EnabledPluginsFile),
+    Enabled = read_enabled(EnabledFile),
     ToUnpack = dependencies(false, Enabled, AllPlugins),
     ToUnpackPlugins = lookup_plugins(ToUnpack, AllPlugins),
 
-    Missing = Enabled -- plugin_names(ToUnpackPlugins),
-    case Missing of
-        [] -> ok;
-        _  -> io:format("Warning: the following enabled plugins were "
-                       "not found: ~p~n", [Missing])
+    case Enabled -- plugin_names(ToUnpackPlugins) of
+        []      -> ok;
+        Missing -> io:format("Warning: the following enabled plugins were "
+                             "not found: ~p~n", [Missing])
     end,
 
     %% Eliminate the contents of the destination directory
