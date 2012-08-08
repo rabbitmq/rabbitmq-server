@@ -156,6 +156,9 @@ process_received_bytes(Bytes,
 
 %%----------------------------------------------------------------------------
 
+stop(Reason, State = #state { client_id = undefined }) ->
+    {stop, Reason, close_connection(State)};
+
 stop(Reason, State = #state { client_id = ClientId }) ->
     % todo: maybe clean session
     rabbit_mqtt_collector:unregister(ClientId),

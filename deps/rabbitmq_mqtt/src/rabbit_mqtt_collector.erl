@@ -53,8 +53,6 @@ handle_call({register, ClientId, Pid}, _From,
         end,
     {reply, Reply, State#state{ client_ids = Ids1 }};
 
-handle_call({unregister, undefined}, _From, State) ->
-    {reply, ok, State};
 handle_call({unregister, ClientId}, {From, _},
             State = #state{client_ids = Ids}) ->
     {Reply, Ids1} =
