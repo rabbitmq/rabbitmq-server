@@ -518,12 +518,20 @@ or:
       </tr>
       <tr>
         <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/parameters/<i>component</i>/<i>vhost</i></td>
+        <td>A list of all parameters for a given component and virtual host.</td>
+      </tr>
+      <tr>
+        <td>X</td>
         <td>X</td>
         <td>X</td>
         <td></td>
-        <td class="path">/api/parameters/<i>component</i>/<i>key</i></td>
+        <td class="path">/api/parameters/<i>component</i>/<i>vhost</i>/<i>key</i></td>
         <td>An individual parameter. To PUT a parameter, you will need a body looking something like this:
-<pre>{"component":"federation","key":"local_username","value":"guest"}</pre>
+<pre>{"vhost": "/","component":"federation","key":"local_username","value":"guest"}</pre>
 </td>
       </tr>
       <tr>
