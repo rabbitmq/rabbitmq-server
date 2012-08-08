@@ -142,8 +142,7 @@ prepare_plugins(EnabledFile, PluginsDistDir, ExpandDir) ->
 
 prepare_dir_plugin(PluginAppDescPath) ->
     code:add_path(filename:dirname(PluginAppDescPath)),
-    NameTokens = string:tokens(PluginAppDescPath, "/."),
-    list_to_atom(lists:nth(length(NameTokens) - 1, NameTokens)).
+    list_to_atom(filename:basename(PluginAppDescPath, ".app")).
 
 %%----------------------------------------------------------------------------
 
