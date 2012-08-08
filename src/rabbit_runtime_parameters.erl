@@ -19,7 +19,7 @@
 -include("rabbit.hrl").
 
 -export([parse_set/4, set/4, clear/3,
-         list/0, list_strict/1, list/2, list_strict/2, list_formatted/1,
+         list/0, list/1, list_strict/1, list/2, list_strict/2, list_formatted/1,
          lookup/3, value/3, value/4, info_keys/0]).
 
 %%----------------------------------------------------------------------------
@@ -35,6 +35,7 @@
 -spec(clear/3 :: (rabbit_types:vhost(), binary(), binary())
                  -> ok_or_error_string()).
 -spec(list/0 :: () -> [rabbit_types:infos()]).
+-spec(list/1 :: (rabbit_types:vhost()) -> [rabbit_types:infos()]).
 -spec(list_strict/1 :: (binary()) -> [rabbit_types:infos()] | 'not_found').
 -spec(list/2 :: (rabbit_types:vhost(), binary()) -> [rabbit_types:infos()]).
 -spec(list_strict/2 :: (rabbit_types:vhost(), binary())
