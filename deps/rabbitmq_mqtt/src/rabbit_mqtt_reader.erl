@@ -29,25 +29,20 @@
 
 %%----------------------------------------------------------------------------
 
-start_link(Configuration) ->
-    gen_server2:start_link(?MODULE, Configuration, []).
+start_link(Params) ->
+    gen_server2:start_link(?MODULE, Params, []).
 
 log(Level, Fmt, Args) -> rabbit_log:log(connection, Level, Fmt, Args).
 
-init(_Configuration) ->
+init({Sock0, SockTransform}) ->
     process_flag(trap_exit, true),
-    {ok, #state {},
-     hibernate,
-     {backoff, 1000, 1000, 10000}}.
-
-handle_call({go, Sock0, SockTransform}, _From, #state{ socket = undefined }) ->
     {ok, Sock} = SockTransform(Sock0),
     ok = rabbit_misc:throw_on_error(
            inet_error, fun () -> rabbit_net:tune_buffer_size(Sock) end),
     {ok, ConnStr} = rabbit_net:connection_string(Sock, inbound),
     log(info, "accepting MQTT connection (~s)~n", [ConnStr]),
     rabbit_alarm:register(self(), {?MODULE, conserve_resources, []}),
-    {reply, ok,
+    {ok,
      control_throttle(
        #state{ socket        = Sock,
                conn_name     = ConnStr,
@@ -62,7 +57,8 @@ handle_call({go, Sock0, SockTransform}, _From, #state{ socket = undefined }) ->
                channels      = {undefined, undefined},
                exchange      = rabbit_mqtt_util:env(exchange),
                parse_state   = rabbit_mqtt_frame:initial_state(),
-               adapter_info  = adapter_info(Sock) })};
+               adapter_info  = adapter_info(Sock) }),
+     hibernate, {backoff, 1000, 1000, 10000}}.
 
 handle_call(duplicate_id, _From,
             State = #state{ client_id = ClientId,

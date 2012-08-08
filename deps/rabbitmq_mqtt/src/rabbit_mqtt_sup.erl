@@ -68,11 +68,10 @@ ssl_listener_spec([Address, SocketOpts, SslOpts, Configuration]) ->
       'mqtt/ssl', "MQTT SSL Listener",
       {?MODULE, start_ssl_client, [Configuration, SslOpts]}).
 
-start_client(Configuration, Sock, SockTransform) ->
+start_client(_Configuration, Sock, SockTransform) ->
     {ok, Reader} = supervisor:start_child(rabbit_mqtt_client_sup,
-                                          [Configuration]),
+                                          [{Sock, SockTransform}]),
     ok = rabbit_net:controlling_process(Sock, Reader),
-    ok = gen_server2:call(Reader, {go, Sock, SockTransform}),
 
     %% see comment in rabbit_networking:start_client/2
     gen_event:which_handlers(error_logger),
