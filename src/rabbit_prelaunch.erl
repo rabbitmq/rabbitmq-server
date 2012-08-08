@@ -57,7 +57,7 @@ duplicate_node_check(NodeStr) ->
     case rabbit_nodes:names(NodeHost) of
         {ok, NamePorts}  ->
             case proplists:is_defined(NodeName, NamePorts) of
-                true -> io:format("node with name ~p "
+                true -> io:format("ERROR: node with name ~p "
                                   "already running on ~p~n",
                                   [NodeName, NodeHost]),
                         io:format(rabbit_nodes:diagnostics([Node]) ++ "~n"),
@@ -65,7 +65,8 @@ duplicate_node_check(NodeStr) ->
                 false -> ok
             end;
         {error, EpmdReason} ->
-            rabbit_misc:quit("epmd error for host ~p: ~p (~s)~n",
+            io:format("ERROR: epmd error for host ~p: ~p (~s)~n",
                       [NodeHost, EpmdReason,
-                       rabbit_misc:format_inet_error(EpmdReason)])
+                       rabbit_misc:format_inet_error(EpmdReason)]),
+            rabbit_misc:quit(?ERROR_CODE)
     end.
