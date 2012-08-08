@@ -45,27 +45,23 @@ init([]) ->
 
 handle_call({register, ClientId, Pid}, _From,
             State = #state{client_ids = Ids}) ->
-    {Reply, Ids1} =
-        case dict:is_key(ClientId, Ids) of
-            true  -> {already_registered, Ids};
-            false -> {ok, dict:store(
-                            ClientId, {Pid, erlang:monitor(process, Pid)}, Ids)}
-        end,
-    {reply, Reply, State#state{ client_ids = Ids1 }};
+    Ids1 = case dict:find(ClientId, Ids) of
+               {ok, {OldPid, MRef}} when Pid =/= OldPid ->
+                   catch gen_server2:call(OldPid, duplicate_id),
+                   erlang:demonitor(MRef),
+                   dict:erase(ClientId, Ids);
+               error ->
+                   Ids
+           end,
+    Ids2 = dict:store(ClientId, {Pid, erlang:monitor(process, Pid)}, Ids1),
+    {reply, ok, State#state{client_ids = Ids2}};
 
-handle_call({unregister, ClientId}, {From, _},
-            State = #state{client_ids = Ids}) ->
-    {Reply, Ids1} =
-        case dict:find(ClientId, Ids) of
-            {ok, {Pid, MRef}} when From =/= Pid ->
-                catch gen_server2:call(Pid, duplicate_id),
-                erlang:demonitor(MRef),
-                {ok, dict:erase(ClientId, Ids)};
-            {ok, {_Pid, _MRef}} ->
-                {ok, dict:erase(ClientId, Ids)};
-            error ->
-                {not_registered, Ids}
-        end,
+handle_call({unregister, ClientId}, _From, State = #state{client_ids = Ids}) ->
+    {Reply, Ids1} = case dict:find(ClientId, Ids) of
+                        {ok, {_Pid, MRef}} -> erlang:demonitor(MRef),
+                                              {ok, dict:erase(ClientId, Ids)};
+                        error              -> {not_registered, Ids}
+                    end,
     {reply, Reply, State#state{ client_ids = Ids1 }};
 
 handle_call(Msg, _From, State) ->

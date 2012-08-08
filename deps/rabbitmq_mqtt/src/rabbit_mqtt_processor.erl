@@ -61,7 +61,8 @@ process_request(?CONNECT,
                                 link(Conn),
                                 maybe_clean_sess(CleanSess, Conn, ClientId),
                                 {ok, Ch} = amqp_connection:open_channel(Conn),
-                                ok = ensure_unique_client_id(ClientId),
+                                ok = rabbit_mqtt_collector:register(
+                                  ClientId, self()),
                                 {?CONNACK_ACCEPT,
                                  State #state{ will_msg   = make_will_msg(Var),
                                                clean_sess = CleanSess,
@@ -292,10 +293,6 @@ make_will_msg(#mqtt_frame_connect{ will_retain = Retain,
                topic   = Topic,
                dup     = false,
                payload = Msg }.
-
-ensure_unique_client_id(ClientId) ->
-    rabbit_mqtt_collector:unregister(ClientId),
-    rabbit_mqtt_collector:register(ClientId, self()).
 
 process_login(UserBin, Creds, #state{ channels     = {undefined, undefined},
                                       adapter_info = AdapterInfo }) ->
