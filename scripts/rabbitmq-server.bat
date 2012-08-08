@@ -96,7 +96,7 @@ set RABBITMQ_EBIN_ROOT=!TDP0!..\ebin
         -pa "!RABBITMQ_EBIN_ROOT!" ^
         -noinput -hidden ^
         -s rabbit_prelaunch ^
-        -sname rabbitmqprelaunch!RANDOM! ^
+        -sname rabbitmqprelaunch!RANDOM!!TIME:~9! ^
         -extra "!RABBITMQ_NODENAME!"
 
 if ERRORLEVEL 1 (
