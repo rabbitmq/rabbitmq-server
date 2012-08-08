@@ -155,7 +155,7 @@ export_name(_Name)                -> true.
 %%--------------------------------------------------------------------
 
 rw_state() ->
-    [{parameters,  [component, key, value]},
+    [{parameters,  [vhost, component, key, value]},
      {users,       [name, password_hash, tags]},
      {vhosts,      [name]},
      {permissions, [user, vhost, configure, write, read]},
@@ -191,12 +191,15 @@ atomise_name(N) ->
 %%--------------------------------------------------------------------
 
 add_parameter(Param) ->
+    VHost = pget(vhost, Param),
     Comp = pget(component, Param),
     Key = pget(key, Param),
     case rabbit_runtime_parameters:set(
-           Comp, Key, rabbit_mgmt_parse:parameter_value(pget(value, Param))) of
+           VHost, Comp, Key,
+           rabbit_mgmt_parse:parameter_value(pget(value, Param))) of
         ok                -> ok;
-        {error_string, E} -> S = rabbit_misc:format(" (~s/~s)", [Comp, Key]),
+        {error_string, E} -> S = rabbit_misc:format(" (~s/~s/~s)",
+                                                    [VHost, Comp, Key]),
                              exit(list_to_binary(E ++ S))
     end.
 

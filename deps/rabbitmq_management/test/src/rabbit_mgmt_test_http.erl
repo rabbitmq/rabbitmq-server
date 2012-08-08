@@ -576,12 +576,18 @@ definitions_test() ->
         [{users,       []},
          {vhosts,      []},
          {permissions, []},
-         {queues,       [[{name,        <<"another-queue">>},
-                          {vhost,       <<"/">>},
-                          {durable,     true},
-                          {auto_delete, false},
-                          {arguments,   []}
-                         ]]},
+         {parameters,  [[{value,    [{<<"prefix">>, <<"">>},
+                                     {<<"policy">>, [{<<"a">>, <<"b">>}]}
+                                    ]},
+                         {vhost,    <<"/">>},
+                         {component,<<"policy">>},
+                         {key,      <<"test">>}]]},
+         {queues,      [[{name,        <<"another-queue">>},
+                         {vhost,       <<"/">>},
+                         {durable,     true},
+                         {auto_delete, false},
+                         {arguments,   []}
+                        ]]},
          {exchanges,   []},
          {bindings,    []}],
     BrokenConfig =
@@ -600,6 +606,7 @@ definitions_test() ->
     http_post("/definitions", ExtraConfig, ?CREATED),
     http_post("/definitions", BrokenConfig, ?BAD_REQUEST),
     http_delete("/queues/%2f/another-queue", ?NO_CONTENT),
+    http_delete("/parameters/policy/%2f/test", ?NO_CONTENT),
     ok.
 
 definitions_remove_things_test() ->

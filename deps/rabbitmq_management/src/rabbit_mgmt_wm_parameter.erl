@@ -59,8 +59,7 @@ accept_content(ReqData, Context) ->
               [value], ReqData, Context,
               fun([Value], _) ->
                       case rabbit_runtime_parameters:set(
-                             rabbit_mgmt_util:vhost(ReqData),
-                             component(ReqData), key(ReqData),
+                             VHost, component(ReqData), key(ReqData),
                              rabbit_mgmt_parse:parameter_value(Value)) of
                           ok ->
                               {true, ReqData, Context};
