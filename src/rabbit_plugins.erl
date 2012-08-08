@@ -51,8 +51,8 @@ setup() ->
     {ok, ExpandDir}   = application:get_env(rabbit, plugins_expand_dir),
     {ok, EnabledFile} = application:get_env(rabbit, enabled_plugins_file),
     prepare_plugins(EnabledFile, PluginDir, ExpandDir),
-    [prepare_dir_plugin(PluginName) ||
-        PluginName <- filelib:wildcard("*/ebin/*.app", ExpandDir)].
+    [prepare_dir_plugin(PluginAppDescPath) ||
+        PluginAppDescPath <- filelib:wildcard(ExpandDir ++ "/*/ebin/*.app")].
 
 %% @doc Lists the plugins which are currently running.
 active() ->
@@ -137,15 +137,11 @@ prepare_plugins(EnabledFile, PluginsDistDir, ExpandDir) ->
 
     [prepare_plugin(Plugin, ExpandDir) || Plugin <- ToUnpackPlugins].
 
-prepare_dir_plugin(PluginAppDescFn) ->
-    %% Add the plugin ebin directory to the load path
-    PluginEBinDirN = filename:dirname(PluginAppDescFn),
-    code:add_path(PluginEBinDirN),
-
-    %% We want the second-last token
-    NameTokens = string:tokens(PluginAppDescFn,"/."),
-    PluginNameString = lists:nth(length(NameTokens) - 1, NameTokens),
-    list_to_atom(PluginNameString).
+prepare_dir_plugin(PluginAppDescPath) ->
+    PluginEBinDir = filename:dirname(PluginAppDescPath),
+    code:add_path(PluginEBinDir),
+    NameTokens = string:tokens(PluginAppDescPath, "/."),
+    list_to_atom(lists:nth(length(NameTokens) - 1, NameTokens)).
 
 %%----------------------------------------------------------------------------
 
