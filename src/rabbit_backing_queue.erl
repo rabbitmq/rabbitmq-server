@@ -30,7 +30,8 @@
          {rabbit_types:basic_message(), boolean(), Ack, non_neg_integer()})).
 -type(attempt_recovery() :: boolean()).
 -type(purged_msg_count() :: non_neg_integer()).
--type(async_callback() :: fun ((atom(), fun ((atom(), state()) -> state())) -> 'ok')).
+-type(async_callback() ::
+        fun ((atom(), fun ((atom(), state()) -> state())) -> 'ok')).
 -type(duration() :: ('undefined' | 'infinity' | number())).
 
 -type(msg_fun() :: fun((rabbit_types:basic_message(), ack()) -> 'ok') |
