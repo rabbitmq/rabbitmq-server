@@ -6,3 +6,5 @@
 ^erl_crash.dump$
 ^ebin/rabbitmq_mqtt\.app$
 ^tags$
+^test/test_client
+^test/src.*\.class$
