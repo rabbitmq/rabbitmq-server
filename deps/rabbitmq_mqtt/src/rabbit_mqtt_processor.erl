@@ -63,6 +63,9 @@ process_request(?CONNECT,
                                 {ok, Ch} = amqp_connection:open_channel(Conn),
                                 ok = rabbit_mqtt_collector:register(
                                   ClientId, self()),
+                                Prefetch = rabbit_mqtt_util:env(prefetch),
+                                #'basic.qos_ok'{} = amqp_channel:call(
+                                  Ch, #'basic.qos'{prefetch_count = Prefetch}),
                                 {?CONNACK_ACCEPT,
                                  State #state{ will_msg   = make_will_msg(Var),
                                                clean_sess = CleanSess,
@@ -298,7 +301,7 @@ process_login(UserBin, Creds, #state{ channels     = {undefined, undefined},
                                       adapter_info = AdapterInfo }) ->
     case rabbit_access_control:check_user_login(UserBin, Creds) of
          {ok, _User} ->
-             {ok, VHost} = application:get_env(rabbitmq_mqtt, vhost),
+             VHost = rabbit_mqtt_util:env(vhost),
              case amqp_connection:start(
                     #amqp_params_direct{username     = UserBin,
                                         virtual_host = VHost,
