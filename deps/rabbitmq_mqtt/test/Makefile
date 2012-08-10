@@ -14,8 +14,6 @@ ALL_CLASSES:=$(foreach f,$(shell find src -name '*.class'),'$(f)')
 TEST_CLASSES:=$(TEST_SRCS:.java=.class)
 CP:=$(PAHO_JAR):$(JUNIT_JAR):$(TEST_SRC)
 
-TARGETS=$(TEST_CLASSES)
-
 define class_from_path
 $(subst .class,,$(subst src.,,$(subst /,.,$(1))))
 endef
@@ -37,13 +35,6 @@ $(CHECKOUT_DIR):
 $(PAHO_JAR): $(CHECKOUT_DIR)
 	ant -buildfile $</org.eclipse.paho.client.mqttv3/build.xml \
 	-Dship.folder=. -Dmqttv3-client-jar=$(PAHO_JAR_NAME) full
-
-
-
-#.SUFFIXES: .java .class
-
-#.java.class: $(PAHO_JAR) $(JUNIT_JAR)
-#	$(JC) $(JFLAGS) $*.java
 
 %.class: %.java $(PAHO_JAR) $(JUNIT_JAR)
 	$(JC) -cp $(CP) $<
