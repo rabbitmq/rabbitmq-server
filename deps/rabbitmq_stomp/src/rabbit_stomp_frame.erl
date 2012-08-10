@@ -39,20 +39,24 @@ initial_state() -> none.
 %%      and CR is not allowed.
 %%  o   Header names and values are not limited to UTF-8 strings.
 %%
-%%  frame_seq   ::= (noise frame)*
-%%  noise       ::= (NUL | eol)*
+%%  frame_seq   ::= *(noise frame)
+%%  noise       ::= *(NUL | eol)
 %%  eol         ::= LF | CR LF
 %%  frame       ::= cmd hdrs body NUL
-%%  body        ::= OCTET*
-%%  cmd         ::= NOTEOL*1 eol
-%%  hdrs        ::= hdr* eol
+%%  body        ::= *OCTET
+%%  cmd         ::= 1*NOTEOL eol
+%%  hdrs        ::= *hdr eol
 %%  hdr         ::= hdrname COLON hdrvalue eol
-%%  hdrname     ::= esc_char*1
-%%  hdrvalue    ::= esc_char*
+%%  hdrname     ::= 1*esc_char
+%%  hdrvalue    ::= *esc_char
 %%  esc_char    ::= HDROCT | BACKSLASH ESCCODE
 %%
 %% Terms in CAPS all represent sets (alternatives) of single octets.
-%% They are defined here using a small extension of BNF.
+%% They are defined here using a small extension of BNF, minus (-):
+%%
+%%    term1 - term2         denotes any of the possibilities in term1
+%%                          excluding those in term2.
+%% In this grammar minus is only used for sets of single octets.
 %%
 %%  OCTET       ::= '00'x..'FF'x            % any octet
 %%  NUL         ::= '00'x                   % the zero octet
@@ -62,7 +66,7 @@ initial_state() -> none.
 %%  BACKSLASH   ::= '\\'                    % '5c'x
 %%  ESCCODE     ::= 'c' | 'n' | 'r' | BACKSLASH
 %%  COLON       ::= ':'
-%%  HDROCT      ::= OCTET - (COLON | CR | LF | BACKSLASH)
+%%  HDROCT      ::= NOTEOL - (COLON | BACKSLASH)
 %%                                          % octets allowed in a header
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
