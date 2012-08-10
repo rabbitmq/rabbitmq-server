@@ -726,9 +726,10 @@ wait_for_tables(TableNames) ->
     end.
 
 reset(Force) ->
-    rabbit_misc:local_info_msg("Resetting Rabbit~s~n", [if Force -> " forcefully";
-                                                           true  -> ""
-                                                        end]),
+    rabbit_misc:local_info_msg("Resetting Rabbit~s~n",
+                               [if Force -> " forcefully";
+                                   true  -> ""
+                                end]),
     ensure_mnesia_not_running(),
     case not Force andalso is_clustered() andalso
          is_only_disc_node(node(), false)
