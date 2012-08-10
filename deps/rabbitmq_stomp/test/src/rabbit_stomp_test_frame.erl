@@ -132,13 +132,18 @@ parse_multiple_headers_test() ->
     {ok, Val} = rabbit_stomp_frame:header(Frame, "header"),
     ?assertEqual("correct", Val).
 
-header_no_colon_test() ->
+skip_header_no_colon_test() ->
     Content = "COMMAND\n"
               "hdr1:val1\n"
-              "hdrerror\n"
+              "hdrskipped\n"
               "hdr2:val2\n"
               "\n\0",
-    ?assertEqual(parse(Content), {error, {header_no_value, "hdrerror"}}).
+    {ok, Frame, _} = parse(Content),
+    ?assertEqual(Frame,
+                 #stomp_frame{command = "COMMAND",
+                              headers = [{"hdr2", "val2"},
+                                         {"hdr1", "val1"}],
+                              body_iolist = []}).
 
 no_nested_escapes_test() ->
     Content = "COM\\\\rAND\n"      % no escapes
