@@ -738,33 +738,41 @@ reset(Force) ->
         false -> ok
     end,
     Node = node(),
-    Nodes = all_clustered_nodes() -- [Node],
+    ConfigNodes = read_cluster_nodes_config(),
     case Force of
-        true  -> ok;
+        true ->
+            %% If Node is a ram node, all_clustered_nodes() returns
+            %% just that when mnesia isn't running. So we also include
+            %% the the next best thing - the nodes from the config.
+            disconnect_nodes(
+              lists:usort(all_clustered_nodes() ++ ConfigNodes) -- [Node]);
         false ->
             ensure_mnesia_dir(),
             start_mnesia(),
-            RunningNodes =
+            {Nodes, RunningNodes} =
                 try
                     %% Force=true here so that reset still works when clustered
                     %% with a node which is down
-                    ok = init_db(read_cluster_nodes_config(), true),
-                    running_clustered_nodes() -- [Node]
+                    ok = init_db(ConfigNodes, true),
+                    {all_clustered_nodes()     -- [Node],
+                     running_clustered_nodes() -- [Node]}
                 after
                     stop_mnesia()
                 end,
             leave_cluster(Nodes, RunningNodes),
             rabbit_misc:ensure_ok(mnesia:delete_schema([Node]),
-                                  cannot_delete_schema)
+                                  cannot_delete_schema),
+            disconnect_nodes(Nodes)
     end,
-    %% We need to make sure that we don't end up in a distributed
-    %% Erlang system with nodes while not being in an Mnesia cluster
-    %% with them. We don't handle that well.
-    [erlang:disconnect_node(N) || N <- Nodes],
     ok = delete_cluster_nodes_config(),
     %% remove persisted messages and any other garbage we find
     ok = rabbit_file:recursive_delete(filelib:wildcard(dir() ++ "/*")),
     ok.
+
+%% We need to make sure that we don't end up in a distributed Erlang
+%% system with nodes while not being in an Mnesia cluster with
+%% them. We don't handle that well.
+disconnect_nodes(Nodes) -> [erlang:disconnect_node(N) || N <- Nodes].
 
 leave_cluster([], _) -> ok;
 leave_cluster(Nodes, RunningNodes) ->
