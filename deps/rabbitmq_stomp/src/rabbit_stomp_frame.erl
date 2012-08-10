@@ -95,7 +95,7 @@ parser(<<?CR, ?LF,   Rest/binary>>, Term    ,  State) -> parser(<<?LF, Rest/bina
 parser(<<?CR, Ch:8, _Rest/binary>>, Term    , _State) -> {error, {unexpected_chars(Term), [?CR, Ch]}};
 %% escape processing (only in hdrname and hdrvalue terms)
 parser(<<?BSL>>,                    Term    ,  State) -> more(fun(Rest) -> parser(<<?BSL, Rest/binary>>, Term, State) end);
-parser(<<?BSL, Ch:8, Rest/binary>>, Term    ,  State) 
+parser(<<?BSL, Ch:8, Rest/binary>>, Term    ,  State)
                                when Term == hdrname;
                                     Term == hdrvalue  -> unescape(Ch, fun(Ech) -> parser(Rest, Term, accum(Ech, State)) end);
 %% inter-frame noise
@@ -121,7 +121,7 @@ goto(headers,  body,     Rest,         #state{cmd = Cmd, hdrs = Hdrs}) -> parse_
 goto(headers,  hdrname,  Rest, State                                 ) -> parser(Rest, hdrname, State#state{acc = []});
 goto(hdrname,  hdrvalue, Rest, State = #state{acc = Acc}             ) -> parser(Rest, hdrvalue, State#state{acc = [], hdrname = lists:reverse(Acc)});
 goto(hdrname,  headers, _Rest,         #state{acc = Acc}             ) -> {error, {header_no_value, lists:reverse(Acc)}};  % badly formed header -- fatal error
-goto(hdrvalue, headers,  Rest, State = #state{acc = Acc, hdrs = Headers, hdrname = HdrName}) -> 
+goto(hdrvalue, headers,  Rest, State = #state{acc = Acc, hdrs = Headers, hdrname = HdrName}) ->
     parser(Rest, headers, State#state{hdrs = insert_header(Headers, HdrName, lists:reverse(Acc))}).
 
 %% error atom
