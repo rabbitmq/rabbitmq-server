@@ -1216,7 +1216,10 @@ test_server_status() ->
     ok = control_action(list_consumers, []),
 
     %% set vm memory high watermark
+    HWM = vm_memory_monitor:get_vm_memory_high_watermark(),
+    ok = control_action(set_vm_memory_high_watermark, ["1"]),
     ok = control_action(set_vm_memory_high_watermark, ["1.0"]),
+    ok = control_action(set_vm_memory_high_watermark, [float_to_list(HWM)]),
 
     %% cleanup
     [{ok, _} = rabbit_amqqueue:delete(QR, false, false) || QR <- [Q, Q2]],
