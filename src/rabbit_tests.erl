@@ -1221,6 +1221,11 @@ test_server_status() ->
     ok = control_action(set_vm_memory_high_watermark, ["1.0"]),
     ok = control_action(set_vm_memory_high_watermark, [float_to_list(HWM)]),
 
+    %% eval
+    {error, {parse_error, _}} = control_action(eval, ["\""]),
+    {error, {parse_error, _}} = control_action(eval, ["a("]),
+    ok = control_action(eval, ["a."]),
+
     %% cleanup
     [{ok, _} = rabbit_amqqueue:delete(QR, false, false) || QR <- [Q, Q2]],
 
