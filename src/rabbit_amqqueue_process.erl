@@ -731,7 +731,7 @@ drop_expired_messages(State = #q{backing_queue_state = BQS,
         end,
     ensure_ttl_timer(case Props of
                          undefined                          -> undefined;
-                         #message_properties{expiry = Next} -> Next
+                         #message_properties{expiry = Exp}  -> Exp
                      end, State#q{backing_queue_state = BQS1}).
 
 ensure_ttl_timer(Expiry, State = #q{backing_queue       = BQ,
