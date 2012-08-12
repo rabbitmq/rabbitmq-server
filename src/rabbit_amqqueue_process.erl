@@ -717,14 +717,16 @@ drop_expired_messages(State = #q{backing_queue_state = BQS,
     Now = now_micros(),
     DLXFun = dead_letter_fun(expired, State),
     ExpirePred = fun (#message_properties{expiry = Expiry}) -> Now > Expiry end,
-    case DLXFun of
-        undefined -> {undefined, BQS1} = BQ:dropwhile(ExpirePred, false, BQS),
-                     BQS1;
-        _         -> {Msgs, BQS1} = BQ:dropwhile(ExpirePred, true, BQS),
-                     lists:foreach(
-                       fun({Msg, AckTag}) -> DLXFun(Msg, AckTag) end, Msgs),
-                     BQS1
-    end,
+    BQS1 = case DLXFun of
+               undefined -> {undefined, BQS2} =
+                                BQ:dropwhile(ExpirePred, false, BQS),
+                            BQS2;
+               _         -> {Msgs, BQS2} = BQ:dropwhile(ExpirePred, true, BQS),
+                            lists:foreach(
+                              fun({Msg, AckTag}) -> DLXFun(Msg, AckTag) end,
+                              Msgs),
+                            BQS2
+           end,
     ensure_ttl_timer(State#q{backing_queue_state = BQS1}).
 
 ensure_ttl_timer(State = #q{backing_queue       = BQ,
