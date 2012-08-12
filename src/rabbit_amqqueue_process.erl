@@ -717,7 +717,7 @@ drop_expired_messages(State = #q{backing_queue_state = BQS,
                                  backing_queue       = BQ }) ->
     Now = now_micros(),
     DLXFun = dead_letter_fun(expired, State),
-    ExpirePred = fun (#message_properties{expiry = Expiry}) -> Now > Expiry end,
+    ExpirePred = fun (#message_properties{expiry = Exp}) -> Now >= Exp end,
     {Props, BQS1} =
         case DLXFun of
             undefined ->
@@ -741,8 +741,11 @@ ensure_ttl_timer(Expiry, State = #q{backing_queue       = BQ,
   when TTL =/= undefined ->
     case BQ:is_empty(BQS) of
         true  -> State;
-        false -> TRef = erlang:send_after((Expiry - now_micros()) div 1000,
-                                          self(), drop_expired),
+        false -> After = (case Expiry - now_micros() of
+                              V when V > 0 -> V + 999; %% always fire later
+                              _            -> 0
+                          end) div 1000,
+                 TRef = erlang:send_after(After, self(), drop_expired),
                  State#q{ttl_timer_ref = TRef}
     end;
 ensure_ttl_timer(_Expiry, State) ->
