@@ -475,15 +475,17 @@ do_login(Username, Creds, VirtualHost, Heartbeat, AdapterInfo, Version,
                 {error, auth_failure} ->
                     rabbit_log:error("STOMP login failed - auth_failure "
                                      "(user vanished)~n"),
-                    error("Bad CONNECT", "Authentication failure\n", State);
+                    error("Bad CONNECT", "User failure after authentication\n", State);
                 {error, access_refused} ->
                     rabbit_log:warning("STOMP login failed - access_refused "
                                        "(vhost access not allowed)~n"),
-                    error("Bad CONNECT", "Authentication failure\n", State)
+                    error("Bad CONNECT", "Virtual host '" ++
+                                         binary_to_list(VirtualHost) ++
+                                         "' access denied\n", State)
             end;
         {refused, Msg, Args} ->
             rabbit_log:warning("STOMP login failed: " ++ Msg ++ "\n", Args),
-            error("Bad CONNECT", "Authentication failure\n", State)
+            error("Bad CONNECT", "Access refused: " ++ Msg ++ "\n", Args, State)
     end.
 
 server_header() ->

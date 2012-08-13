@@ -80,20 +80,20 @@ class TestLifecycle(base.BaseTest):
         ''' Test bad username'''
         self.bad_connect(stomp.Connection(user="gust",
                                           passcode="guest"),
-                         "Authentication failure\n")
+                         "Access refused: user 'gust' - invalid credentials\n")
 
     def test_bad_password(self):
         ''' Test bad password'''
         self.bad_connect(stomp.Connection(user="guest",
                                           passcode="gust"),
-                         "Authentication failure\n")
+                         "Access refused: user 'guest' - invalid credentials\n")
 
     def test_bad_vhost(self):
         ''' Test bad virtual host'''
         self.bad_connect(stomp.Connection(user="guest",
                                           passcode="guest",
                                           virtual_host="//"),
-                         "Authentication failure\n")
+                         "Virtual host '//' access denied\n")
 
     def bad_connect(self, new_conn, expected):
         self.conn.disconnect()
