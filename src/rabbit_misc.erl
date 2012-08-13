@@ -60,6 +60,8 @@
 -export([multi_call/2]).
 -export([os_cmd/1]).
 -export([gb_sets_difference/2]).
+-export([version/0]).
+-export([sequence_error/1]).
 
 %% Horrible macro to use in guards
 -define(IS_BENIGN_EXIT(R),
@@ -217,6 +219,9 @@
         ([pid()], any()) -> {[{pid(), any()}], [{pid(), any()}]}).
 -spec(os_cmd/1 :: (string()) -> string()).
 -spec(gb_sets_difference/2 :: (gb_set(), gb_set()) -> gb_set()).
+-spec(version/0 :: () -> string()).
+-spec(sequence_error/1 :: ([({'error', any()} | any())])
+                       -> {'error', any()} | any()).
 
 -endif.
 
@@ -934,3 +939,11 @@ os_cmd(Command) ->
 
 gb_sets_difference(S1, S2) ->
     gb_sets:fold(fun gb_sets:delete_any/2, S1, S2).
+
+version() ->
+    {ok, VSN} = application:get_key(rabbit, vsn),
+    VSN.
+
+sequence_error([T])                      -> T;
+sequence_error([{error, _} = Error | _]) -> Error;
+sequence_error([_ | Rest])               -> sequence_error(Rest).
