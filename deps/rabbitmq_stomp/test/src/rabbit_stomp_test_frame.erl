@@ -23,10 +23,10 @@
 
 parse_simple_frame_test() ->
     parse_simple_frame_gen("\n").
-    
+
 parse_simple_frame_crlf_test() ->
     parse_simple_frame_gen("\r\n").
-    
+
 parse_simple_frame_gen(Term) ->
     Headers = [{"header1", "value1"}, {"header2", "value2"}],
     Content = frame_string("COMMAND",
