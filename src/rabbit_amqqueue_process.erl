@@ -748,7 +748,7 @@ ensure_ttl_timer(Expiry, State = #q{ttl_timer_ref = undefined}) ->
     State#q{ttl_timer_ref = TRef, ttl_timer_expiry = Expiry};
 ensure_ttl_timer(Expiry, State = #q{ttl_timer_ref    = TRef,
                                     ttl_timer_expiry = TExpiry})
-  when Expiry < TExpiry ->
+  when Expiry + 1000 < TExpiry ->
     case erlang:cancel_timer(TRef) of
         false -> State;
         _     -> ensure_ttl_timer(Expiry, State#q{ttl_timer_ref = undefined})
