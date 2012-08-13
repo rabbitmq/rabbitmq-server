@@ -406,8 +406,6 @@ handle_cast({register_return_handler, ReturnHandler}, State) ->
 %% @private
 handle_cast(unregister_return_handler,
             State = #state{return_handler = {ReturnHandler, Ref}}) ->
-    ?LOG_INFO("Channel (~p): Unregistering return handler ~p.",
-              [self(), ReturnHandler]),
     erlang:demonitor(Ref),
     {noreply, State#state{return_handler = none}};
 %% @private
@@ -417,8 +415,6 @@ handle_cast({register_confirm_handler, ConfirmHandler}, State) ->
 %% @private
 handle_cast(unregister_confirm_handler,
             State = #state{confirm_handler = {ConfirmHandler, Ref}}) ->
-    ?LOG_INFO("Channel (~p): Unregistering confirm handler ~p.",
-              [self(), ConfirmHandler]),
     erlang:demonitor(Ref),
     {noreply, State#state{confirm_handler = none}};
 %% @private
@@ -428,8 +424,6 @@ handle_cast({register_flow_handler, FlowHandler}, State) ->
 %% @private
 handle_cast(unregister_flow_handler,
             State = #state{flow_handler = {FlowHandler, Ref}}) ->
-    ?LOG_INFO("Channel (~p): Unregistering flow handler ~p.",
-              [self(), FlowHandler]),
     erlang:demonitor(Ref),
     {noreply, State#state{flow_handler = none}};
 %% Received from channels manager
