@@ -117,6 +117,7 @@ do_connect({Addr, Family},
                                              connection_timeout = Timeout,
                                              socket_options     = ExtraOpts},
            SIF, ChMgr, State) ->
+    obtain(),
     case gen_tcp:connect(Addr, Port,
                          [Family | ?RABBIT_TCP_OPTS] ++ ExtraOpts,
                          Timeout) of
@@ -131,6 +132,7 @@ do_connect({Addr, Family},
                                              socket_options     = ExtraOpts},
            SIF, ChMgr, State) ->
     app_utils:start_applications([crypto, public_key, ssl]),
+    obtain(),
     case gen_tcp:connect(Addr, Port,
                          [Family | ?RABBIT_TCP_OPTS] ++ ExtraOpts,
                          Timeout) of
@@ -305,4 +307,10 @@ handshake_recv(Expecting) ->
             _ ->
                 exit(handshake_receive_timed_out)
         end
+    end.
+
+obtain() ->
+    case proplists:is_defined(rabbit, application:loaded_applications()) of
+        true  -> file_handle_cache:obtain();
+        false -> ok
     end.
