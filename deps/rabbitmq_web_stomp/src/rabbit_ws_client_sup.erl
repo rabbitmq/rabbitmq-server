@@ -41,12 +41,12 @@ proc_spec(Conn) ->
     {PeerAddr, PeerPort} = proplists:get_value(peername, Info),
     {SockAddr, SockPort} = proplists:get_value(sockname, Info),
 
-    AdapterInfo = #adapter_info{protocol        = {'Web STOMP', 0},
-                                address         = SockAddr,
-                                port            = SockPort,
-                                peer_address    = PeerAddr,
-                                peer_port       = PeerPort,
-                                additional_info = [{ssl, false}]},
+    AdapterInfo = #amqp_adapter_info{protocol        = {'Web STOMP', 0},
+                                     address         = SockAddr,
+                                     port            = SockPort,
+                                     peer_address    = PeerAddr,
+                                     peer_port       = PeerPort,
+                                     additional_info = [{ssl, false}]},
 
     {rabbit_stomp_processor,
      {rabbit_stomp_processor, start_link,
