@@ -20,6 +20,13 @@ usual STOMP protocol over it. For example, a page using Jeff Mesnil's
         Stomp.WebSocketClass = SockJS;
 
         var client = Stomp.client('http://127.0.0.1:55674/stomp');
+        var on_connect = function() {
+            console.log('connected');
+        };
+        var on_error =  function() {
+           console.log('error');
+        };
+        client.connect('guest', 'guest', on_connect, on_error, '/');
         [...]
 
 See the "RabbitMQ-Web-Stomp-examples" plugin for more details.
