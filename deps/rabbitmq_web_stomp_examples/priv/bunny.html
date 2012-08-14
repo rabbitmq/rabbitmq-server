@@ -108,7 +108,7 @@ else {
 }
 
 // Stomp.js boilerplate
-WebSocketStompMock = SockJS;
+Stomp.WebSocketClass = SockJS;
 
 var client = Stomp.client('http://' + window.location.hostname + ':55674/stomp');
 
@@ -122,13 +122,17 @@ send = function(data) {
   client.send('/topic/bunny', {}, data);
 };
 
-client.connect('guest', 'guest', function(x) {
+var on_connect = function(x) {
   id = client.subscribe('/topic/bunny', function(d) {
     var p = JSON.parse(d.body);
     lines.push(p);
     draw(p, true);
   });
-});
+};
+var on_error = function() {
+  console.log('error');
+};
+client.connect('guest', 'guest', on_connect, on_error, '/');
 
 </script>
 </body></html>

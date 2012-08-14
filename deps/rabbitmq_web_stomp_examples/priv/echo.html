@@ -80,19 +80,24 @@
         };
 
       // Stomp.js boilerplate
-      WebSocketStompMock = SockJS;
+      Stomp.WebSocketClass = SockJS;
 
       var client = Stomp.client('http://' + window.location.hostname + ':55674/stomp');
+
       client.debug = pipe('#second');
 
       var print_first = pipe('#first', function(data) {
           client.send('/topic/test', {}, data);
       });
-      client.connect('guest', 'guest', function(x) {
+      var on_connect = function(x) {
           id = client.subscribe("/topic/test", function(d) {
                print_first(d.body);
           });
-      });
+      };
+      var on_error =  function() {
+        console.log('error');
+      };
+      client.connect('guest', 'guest', on_connect, on_error, '/');
 
       $('#first input').focus(function() {
           if (!has_had_focus) {
