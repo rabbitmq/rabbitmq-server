@@ -134,9 +134,9 @@ handle_info(#'basic.nack'{delivery_tag = Seq, multiple = Multiple},
     {noreply, confirm_to_inbound(#'basic.nack'{delivery_tag = _, multiple = _},
                                  Seq, Multiple, State)};
 
-handle_info(#'basic.cancel'{}, State) ->
-    rabbit_log:warning("shovel: received 'basic.cancel' from the broker, "
-                       "reconnecting~n"),
+handle_info(#'basic.cancel'{}, State = #state{name = Name}) ->
+    rabbit_log:warning("Shovel ~p received 'basic.cancel' from the broker~n",
+                       [Name]),
     {stop, {shutdown, restart}, State};
 
 handle_info({'EXIT', InboundConn, Reason},
