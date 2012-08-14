@@ -135,7 +135,7 @@ handle_info(#'basic.nack'{delivery_tag = Seq, multiple = Multiple},
                                  Seq, Multiple, State)};
 
 handle_info(#'basic.cancel'{}, State = #state{name = Name}) ->
-    rabbit_log:warning("Shovel ~p received 'basic.cancel' from the broker",
+    rabbit_log:warning("Shovel ~p received 'basic.cancel' from the broker~n",
                        [Name]),
     {stop, {shutdown, restart}, State};
 
