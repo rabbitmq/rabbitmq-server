@@ -148,9 +148,7 @@ handle_info({#'basic.deliver'{routing_key  = Key,
     end;
 
 handle_info(#'basic.cancel'{}, State) ->
-    rabbit_log:warning("federation: received 'basic.cancel' from the broker, "
-                       "reconnecting~n"),
-    {stop, {shutdown, restart}, State};
+    connection_error(local, basic_cancel, State);
 
 %% If the downstream channel shuts down cleanly, we can just ignore it
 %% - we're the same node, we're presumably about to go down too.
@@ -403,6 +401,14 @@ connection_error(remote, E, State = #state{upstream            = U,
     rabbit_log:info("Federation ~s disconnected from ~s~n~p~n",
                     [rabbit_misc:rs(XName),
                      rabbit_federation_upstream:to_string(U), E]),
+    {stop, {shutdown, restart}, State};
+
+connection_error(local, basic_cancel,
+                 State = #state{upstream            = U,
+                                downstream_exchange = XName}) ->
+    rabbit_federation_status:report(U, XName, {error, basic_cancel}),
+    rabbit_log:info("Federation ~s received 'basic.cancel'~n",
+                    [rabbit_misc:rs(XName)]),
     {stop, {shutdown, restart}, State};
 
 connection_error(local, E, State = {not_started, {U, XName}}) ->
