@@ -310,7 +310,7 @@ handshake_recv(Expecting) ->
     end.
 
 obtain() ->
-    case proplists:is_defined(rabbit, application:loaded_applications()) of
-        true  -> file_handle_cache:obtain();
-        false -> ok
+    case code:is_loaded(file_handle_cache) of
+        false -> ok;
+        _     -> file_handle_cache:obtain()
     end.
