@@ -108,7 +108,7 @@
         ]).
 
 -define(INFO_KEYS,
-        ?CREATION_EVENT_KEYS ++ ?STATISTICS_KEYS -- [pid, slave_pids]).
+        ?CREATION_EVENT_KEYS ++ ?STATISTICS_KEYS -- [pid]).
 
 %%----------------------------------------------------------------------------
 
