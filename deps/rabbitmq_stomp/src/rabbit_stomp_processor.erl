@@ -105,7 +105,7 @@ handle_cast(_Request, State = #state{channel = none,
                                       implicit_connect = false}}) ->
     {noreply,
      send_error("Illegal command",
-                "You must log in using CONNECT first\n",
+                "You must log in using CONNECT first",
                 State),
      hibernate};
 
@@ -162,7 +162,7 @@ process_request(ProcessFun, SuccessFun, State) ->
                  {server_initiated_close, ReplyCode, Explanation}}, _}} ->
                   amqp_death(ReplyCode, Explanation, State);
               {'EXIT', Reason} ->
-                  priv_error("Processing error", "Processing error\n",
+                  priv_error("Processing error", "Processing error",
                               Reason, State);
               Result ->
                   Result
@@ -210,7 +210,7 @@ process_connect(Implicit, Frame,
                       end;
                   {error, no_common_version} ->
                       error("Version mismatch",
-                            "Supported versions are ~s\n",
+                            "Supported versions are ~s~n",
                             [string:join(?SUPPORTED_VERSIONS, ",")],
                             StateN)
               end
@@ -298,7 +298,7 @@ handle_frame("ABORT", Frame, State) ->
 
 handle_frame(Command, _Frame, State) ->
     error("Bad command",
-          "Could not interpret command ~p\n",
+          "Could not interpret command ~p~n",
           [Command],
           State).
 
@@ -326,13 +326,13 @@ ack_action(Command, Frame,
                     end;
                 _ ->
                    error("Invalid message-id",
-                         "~p must include a valid 'message-id' header\n",
+                         "~p must include a valid 'message-id' header~n",
                          [Command],
                          State)
             end;
         not_found ->
             error("Missing message-id",
-                  "~p must include a 'message-id' header\n",
+                  "~p must include a 'message-id' header~n",
                   [Command],
                   State)
     end.
@@ -344,7 +344,7 @@ server_cancel_consumer(ConsumerTag, State = #state{subscriptions = Subs}) ->
     case dict:find(ConsumerTag, Subs) of
         error ->
             error("Server cancelled unknown subscription",
-                  "Consumer tag ~p is not associated with a subscription.\n",
+                  "Consumer tag ~p is not associated with a subscription.~n",
                   [ConsumerTag],
                   State);
         {ok, Subscription = #subscription{description = Description}} ->
@@ -354,8 +354,8 @@ server_cancel_consumer(ConsumerTag, State = #state{subscriptions = Subs}) ->
                  end,
             send_error_frame("Server cancelled subscription",
                              [{?HEADER_SUBSCRIPTION, Id}],
-                             "The server has canceled a subscription.\n"
-                             "No more messages will be delivered for ~p.\n",
+                             "The server has canceled a subscription.~n"
+                             "No more messages will be delivered for ~p.~n",
                              [Description],
                              State),
             tidy_canceled_subscription(ConsumerTag, Subscription,
@@ -370,7 +370,7 @@ cancel_subscription({error, invalid_prefix}, _Frame, State) ->
 
 cancel_subscription({error, _}, _Frame, State) ->
     error("Missing destination or id",
-          "UNSUBSCRIBE must include a 'destination' or 'id' header\n",
+          "UNSUBSCRIBE must include a 'destination' or 'id' header",
           State);
 
 cancel_subscription({ok, ConsumerTag, Description}, Frame,
@@ -378,8 +378,8 @@ cancel_subscription({ok, ConsumerTag, Description}, Frame,
     case dict:find(ConsumerTag, Subs) of
         error ->
             error("No subscription found",
-                  "UNSUBSCRIBE must refer to an existing subscription.\n"
-                  "Subscription to ~p not found.\n",
+                  "UNSUBSCRIBE must refer to an existing subscription.~n"
+                  "Subscription to ~p not found.~n",
                   [Description],
                   State);
         {ok, Subscription = #subscription{channel = SubChannel,
@@ -392,7 +392,7 @@ cancel_subscription({ok, ConsumerTag, Description}, Frame,
                                                Frame, State);
                 _ ->
                     error("Failed to cancel subscription",
-                          "UNSUBSCRIBE to ~p failed.\n",
+                          "UNSUBSCRIBE to ~p failed.~n",
                           [Descr],
                           State)
             end
@@ -439,21 +439,20 @@ with_destination(Command, Frame, State, Fun) ->
                     Fun(Destination, DestHdr, Frame, State);
                 {error, {invalid_destination, Type, Content}} ->
                     error("Invalid destination",
-                          "'~s' is not a valid ~p destination\n",
+                          "'~s' is not a valid ~p destination~n",
                           [Content, Type],
                           State);
                 {error, {unknown_destination, Content}} ->
                     error("Unknown destination",
-                          "'~s' is not a valid destination.\n" ++
-                              "Valid destination types are: " ++
-                   string:join(rabbit_stomp_util:valid_dest_prefixes(),", ") ++
-                              ".\n",
-                          [Content],
-                          State)
+                          "'~s' is not a valid destination.~n"
+                          "Valid destination types are: ~s.~n",
+                          [Content,
+                           string:join(rabbit_stomp_util:valid_dest_prefixes(),
+                                       ", ")], State)
             end;
         not_found ->
             error("Missing destination",
-                  "~p must include a 'destination' header\n",
+                  "~p must include a 'destination' header~n",
                   [Command],
                   State)
     end.
@@ -462,7 +461,7 @@ without_headers([Hdr | Hdrs], Command, Frame, State, Fun) ->
     case rabbit_stomp_frame:header(Frame, Hdr) of
         {ok, _} ->
             error("Invalid header",
-                  "'~s' is not allowed on '~s'.\n",
+                  "'~s' is not allowed on '~s'.~n",
                   [Hdr, Command],
                   State);
         not_found ->
@@ -472,7 +471,7 @@ without_headers([], Command, Frame, State, Fun) ->
     Fun(Command, Frame, State).
 
 do_login(undefined, _, _, _, _, _, State) ->
-    error("Bad CONNECT", "Missing login or passcode header(s)\n", State);
+    error("Bad CONNECT", "Missing login or passcode header(s)", State);
 do_login(Username, Creds, VirtualHost, Heartbeat, AdapterInfo, Version,
          State) ->
     case rabbit_access_control:check_user_login(Username, Creds) of
@@ -501,15 +500,15 @@ do_login(Username, Creds, VirtualHost, Heartbeat, AdapterInfo, Version,
                 {error, auth_failure} ->
                     rabbit_log:error("STOMP login failed - auth_failure "
                                      "(user vanished)~n"),
-                    error("Bad CONNECT", "Authentication failure\n", State);
+                    error("Bad CONNECT", "Authentication failure", State);
                 {error, access_refused} ->
                     rabbit_log:warning("STOMP login failed - access_refused "
                                        "(vhost access not allowed)~n"),
-                    error("Bad CONNECT", "Authentication failure\n", State)
+                    error("Bad CONNECT", "Authentication failure", State)
             end;
         {refused, Msg, Args} ->
-            rabbit_log:warning("STOMP login failed: " ++ Msg ++ "\n", Args),
-            error("Bad CONNECT", "Authentication failure\n", State)
+            rabbit_log:warning("STOMP login failed: " ++ Msg ++ "~n", Args),
+            error("Bad CONNECT", "Authentication failure", State)
     end.
 
 server_header() ->
@@ -803,7 +802,7 @@ transactional_action(Frame, Name, Fun, State) ->
             Fun(Transaction, State);
         no ->
             error("Missing transaction",
-                  "~p must include a 'transaction' header\n",
+                  "~p must include a 'transaction' header~n",
                   [Name],
                   State)
     end.
@@ -812,7 +811,7 @@ with_transaction(Transaction, State, Fun) ->
     case get({transaction, Transaction}) of
         undefined ->
             error("Bad transaction",
-                  "Invalid transaction identifier: ~p\n",
+                  "Invalid transaction identifier: ~p~n",
                   [Transaction],
                   State);
         Actions ->
