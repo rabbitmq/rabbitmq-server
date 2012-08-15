@@ -92,6 +92,8 @@
 <%
        for (var i = 0; i < vhosts.length; i++) {
          var vhost = vhosts[i];
+         if (current_vhost != '' && current_vhost != vhost.name) continue;
+
          var username = null;
          var nodename = null;
 
