@@ -174,13 +174,13 @@ adapter_info(Sock) ->
                {ok, Res3} -> Res3;
                _          -> unknown
            end,
-    #adapter_info{protocol        = {'STOMP', 0},
-                  name            = list_to_binary(Name),
-                  address         = Addr,
-                  port            = Port,
-                  peer_address    = PeerAddr,
-                  peer_port       = PeerPort,
-                  additional_info = maybe_ssl_info(Sock)}.
+    #amqp_adapter_info{protocol        = {'STOMP', 0},
+                       name            = list_to_binary(Name),
+                       address         = Addr,
+                       port            = Port,
+                       peer_address    = PeerAddr,
+                       peer_port       = PeerPort,
+                       additional_info = maybe_ssl_info(Sock)}.
 
 maybe_ssl_info(Sock) ->
     case rabbit_net:is_ssl(Sock) of

@@ -33,7 +33,7 @@ test_messages_not_dropped_on_disconnect() ->
        [integer_to_list(Count)]) || Count <- lists:seq(1, 1000)],
     rabbit_stomp_client:disconnect(Client),
     QName = rabbit_misc:r(<<"/">>, queue, <<"bulk-test">>),
-    timer:sleep(1000),
+    timer:sleep(3000),
     rabbit_amqqueue:with(
       QName, fun(Q) ->
                      1000 = pget(messages, rabbit_amqqueue:info(Q, [messages]))

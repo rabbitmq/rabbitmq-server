@@ -20,6 +20,7 @@
 -module(rabbit_stomp_frame).
 
 -include("rabbit_stomp_frame.hrl").
+-include("rabbit_stomp_headers.hrl").
 
 -export([parse/2, initial_state/0]).
 -export([header/2, header/3,
@@ -30,69 +31,130 @@
 
 initial_state() -> none.
 
-parse(Content, {resume, Fun}) -> Fun(Content);
-parse(Content, none)          -> parse_command(Content, []).
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% STOMP 1.1 frames basic syntax
+%%  Rabbit modifications:
+%%  o   CR LF is equivalent to LF in all element terminators (eol).
+%%  o   Escape codes for header names and values include \r for CR
+%%      and CR is not allowed.
+%%  o   Header names and values are not limited to UTF-8 strings.
+%%
+%%  frame_seq   ::= *(noise frame)
+%%  noise       ::= *(NUL | eol)
+%%  eol         ::= LF | CR LF
+%%  frame       ::= cmd hdrs body NUL
+%%  body        ::= *OCTET
+%%  cmd         ::= 1*NOTEOL eol
+%%  hdrs        ::= *hdr eol
+%%  hdr         ::= hdrname COLON hdrvalue eol
+%%  hdrname     ::= 1*esc_char
+%%  hdrvalue    ::= *esc_char
+%%  esc_char    ::= HDROCT | BACKSLASH ESCCODE
+%%
+%% Terms in CAPS all represent sets (alternatives) of single octets.
+%% They are defined here using a small extension of BNF, minus (-):
+%%
+%%    term1 - term2         denotes any of the possibilities in term1
+%%                          excluding those in term2.
+%% In this grammar minus is only used for sets of single octets.
+%%
+%%  OCTET       ::= '00'x..'FF'x            % any octet
+%%  NUL         ::= '00'x                   % the zero octet
+%%  LF          ::= '\n'                    % '0a'x newline or linefeed
+%%  CR          ::= '\r'                    % '0d'x carriage return
+%%  NOTEOL      ::= OCTET - (CR | LF)       % any octet except CR or LF
+%%  BACKSLASH   ::= '\\'                    % '5c'x
+%%  ESCCODE     ::= 'c' | 'n' | 'r' | BACKSLASH
+%%  COLON       ::= ':'
+%%  HDROCT      ::= NOTEOL - (COLON | BACKSLASH)
+%%                                          % octets allowed in a header
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-parse_command(<<>>, Acc) ->
-    more(fun(Rest) -> parse_command(Rest, Acc) end);
-parse_command(<<$\n, Rest/binary>>, []) ->  % inter-frame newline
-    parse_command(Rest, []);
-parse_command(<<0, Rest/binary>>, []) ->    % empty frame
-    parse_command(Rest, []);
-parse_command(<<$\n, Rest/binary>>, Acc) -> % end command
-    parse_headers(Rest, lists:reverse(Acc));
-parse_command(<<Ch:8, Rest/binary>>, Acc) ->
-    parse_command(Rest, [Ch | Acc]).
+%% explicit frame characters
+-define(NUL,   0).
+-define(CR,    $\r).
+-define(LF,    $\n).
+-define(BSL,   $\\).
+-define(COLON, $:).
 
-parse_headers(Rest, Command) -> % begin headers
-    parse_headers(Rest, #stomp_frame{command = Command}, [], []).
+%% header escape codes
+-define(LF_ESC,    $n).
+-define(BSL_ESC,   $\\).
+-define(COLON_ESC, $c).
+-define(CR_ESC,    $r).
 
-parse_headers(<<>>, Frame, HeaderAcc, KeyAcc) ->
-    more(fun(Rest) -> parse_headers(Rest, Frame, HeaderAcc, KeyAcc) end);
-parse_headers(<<$\n, Rest/binary>>, Frame, HeaderAcc, _KeyAcc) -> % end headers
-    parse_body(Rest, Frame#stomp_frame{headers = HeaderAcc});
-parse_headers(<<$:, Rest/binary>>, Frame, HeaderAcc, KeyAcc) ->   % end key
-    parse_header_value(Rest, Frame, HeaderAcc, lists:reverse(KeyAcc));
-parse_headers(<<Ch:8, Rest/binary>>, Frame, HeaderAcc, KeyAcc) ->
-    parse_headers(Rest, Frame, HeaderAcc, [Ch | KeyAcc]).
+%% parser state
+-record(state, {acc, cmd, hdrs, hdrname}).
 
-parse_header_value(Rest, Frame, HeaderAcc, Key) -> % begin header value
-    parse_header_value(Rest, Frame, HeaderAcc, Key, []).
+parse(Content, {resume, Continuation}) -> Continuation(Content);
+parse(Content, none                  ) -> parser(Content, noframe, #state{}).
 
-parse_header_value(<<>>, Frame, HeaderAcc, Key, ValAcc) ->
-    more(fun(Rest) -> parse_header_value(Rest, Frame, HeaderAcc, Key, ValAcc)
-         end);
-parse_header_value(<<$\n, Rest/binary>>, Frame, HeaderAcc, Key, ValAcc) ->
-                                                                  % end value
-    parse_headers(Rest, Frame,
-                  insert_header(HeaderAcc, Key, lists:reverse(ValAcc)),
-                  []);
-parse_header_value(<<$\\, Rest/binary>>, Frame, HeaderAcc, Key, ValAcc) ->
-    parse_header_value_escape(Rest, Frame, HeaderAcc, Key, ValAcc);
-parse_header_value(<<Ch:8, Rest/binary>>, Frame, HeaderAcc, Key, ValAcc) ->
-    parse_header_value(Rest, Frame, HeaderAcc, Key, [Ch | ValAcc]).
+more(Continuation) -> {more, {resume, Continuation}}.
 
-parse_header_value_escape(<<>>, Frame, HeaderAcc, Key, ValAcc) ->
-    more(fun(Rest) ->
-           parse_header_value_escape(Rest, Frame, HeaderAcc, Key, ValAcc)
-         end);
-parse_header_value_escape(<<Ch:8,  Rest/binary>>, Frame,
-                          HeaderAcc, Key, ValAcc) ->
-    case unescape(Ch) of
-        {ok, EscCh} -> parse_header_value(Rest, Frame, HeaderAcc, Key,
-                                          [EscCh | ValAcc]);
-        error       -> {error, {bad_escape, Ch}}
-    end.
+%% Single-function parser: Term :: noframe | command | headers | hdrname | hdrvalue
+%% general more and line-end detection
+parser(<<>>,                        Term    ,  State) -> more(fun(Rest) -> parser(Rest, Term, State) end);
+parser(<<?CR>>,                     Term    ,  State) -> more(fun(Rest) -> parser(<<?CR, Rest/binary>>, Term, State) end);
+parser(<<?CR, ?LF,   Rest/binary>>, Term    ,  State) -> parser(<<?LF, Rest/binary>>, Term, State);
+parser(<<?CR, Ch:8, _Rest/binary>>, Term    , _State) -> {error, {unexpected_chars(Term), [?CR, Ch]}};
+%% escape processing (only in hdrname and hdrvalue terms)
+parser(<<?BSL>>,                    Term    ,  State) -> more(fun(Rest) -> parser(<<?BSL, Rest/binary>>, Term, State) end);
+parser(<<?BSL, Ch:8, Rest/binary>>, Term    ,  State)
+                               when Term == hdrname;
+                                    Term == hdrvalue  -> unescape(Ch, fun(Ech) -> parser(Rest, Term, accum(Ech, State)) end);
+%% inter-frame noise
+parser(<<?NUL,       Rest/binary>>, noframe ,  State) -> parser(Rest, noframe, State);
+parser(<<?LF,        Rest/binary>>, noframe ,  State) -> parser(Rest, noframe, State);
+%% detect transitions
+parser(              Rest,          noframe ,  State) -> goto(noframe,  command,  Rest, State);
+parser(<<?LF,        Rest/binary>>, command ,  State) -> goto(command,  headers,  Rest, State);
+parser(<<?LF,        Rest/binary>>, headers ,  State) -> goto(headers,  body,     Rest, State);
+parser(              Rest,          headers ,  State) -> goto(headers,  hdrname,  Rest, State);
+parser(<<?COLON,     Rest/binary>>, hdrname ,  State) -> goto(hdrname,  hdrvalue, Rest, State);
+parser(<<?LF,        Rest/binary>>, hdrname ,  State) -> goto(hdrname,  headers,  Rest, State);
+parser(<<?LF,        Rest/binary>>, hdrvalue,  State) -> goto(hdrvalue, headers,  Rest, State);
+%% trap invalid colons
+parser(<<?COLON,     Rest/binary>>, hdrvalue,  State) -> {error, {unexpected_char_in_header_value, [?COLON]}};
+%% accumulate
+parser(<<Ch:8,       Rest/binary>>, Term    ,  State) -> parser(Rest, Term, accum(Ch, State)).
 
-insert_header(Headers, Key, Value) ->
-    case lists:keysearch(Key, 1, Headers) of
-        {value, _} -> Headers; % first header only
-        false      -> [{Key, Value} | Headers]
+%% state transitions
+goto(noframe,  command,  Rest, State                                 ) -> parser(Rest, command, State#state{acc = []});
+goto(command,  headers,  Rest, State = #state{acc = Acc}             ) -> parser(Rest, headers, State#state{cmd = lists:reverse(Acc), hdrs = []});
+goto(headers,  body,     Rest,         #state{cmd = Cmd, hdrs = Hdrs}) -> parse_body(Rest, #stomp_frame{command = Cmd, headers = Hdrs});
+goto(headers,  hdrname,  Rest, State                                 ) -> parser(Rest, hdrname, State#state{acc = []});
+goto(hdrname,  hdrvalue, Rest, State = #state{acc = Acc}             ) -> parser(Rest, hdrvalue, State#state{acc = [], hdrname = lists:reverse(Acc)});
+goto(hdrname,  headers, _Rest,         #state{acc = Acc}             ) -> {error, {header_no_value, lists:reverse(Acc)}};  % badly formed header -- fatal error
+goto(hdrvalue, headers,  Rest, State = #state{acc = Acc, hdrs = Headers, hdrname = HdrName}) ->
+    parser(Rest, headers, State#state{hdrs = insert_header(Headers, HdrName, lists:reverse(Acc))}).
+
+%% error atom
+unexpected_chars(noframe)  -> unexpected_chars_between_frames;
+unexpected_chars(command)  -> unexpected_chars_in_command;
+unexpected_chars(hdrname)  -> unexpected_chars_in_header;
+unexpected_chars(hdrvalue) -> unexpected_chars_in_header;
+unexpected_chars(_Term)    -> unexpected_chars.
+
+%% general accumulation
+accum(Ch, State = #state{acc = Acc}) -> State#state{acc = [Ch | Acc]}.
+
+%% resolve escapes (with error processing)
+unescape(?LF_ESC,    Fun) -> Fun(?LF);
+unescape(?BSL_ESC,   Fun) -> Fun(?BSL);
+unescape(?COLON_ESC, Fun) -> Fun(?COLON);
+unescape(?CR_ESC,    Fun) -> Fun(?CR);
+unescape(Ch,        _Fun) -> {error, {bad_escape, [?BSL, Ch]}}.
+
+%% insert header unless aleady seen
+insert_header(Headers, Name, Value) ->
+    case lists:keymember(Name, 1, Headers) of
+        true  -> Headers; % first header only
+        false -> [{Name, Value} | Headers]
     end.
 
 parse_body(Content, Frame) ->
     parse_body(Content, Frame, [],
-               integer_header(Frame, "content-length", unknown)).
+               integer_header(Frame, ?HEADER_CONTENT_LENGTH, unknown)).
 
 parse_body(Content, Frame, Chunks, unknown) ->
     parse_body2(Content, Frame, Chunks, case firstnull(Content) of
@@ -116,8 +178,6 @@ parse_body2(Content, Frame, Chunks, {done, Pos}) ->
 
 finalize_chunk(<<>>,  Chunks) -> Chunks;
 finalize_chunk(Chunk, Chunks) -> [Chunk | Chunks].
-
-more(Continuation) -> {more, {resume, Continuation}}.
 
 default_value({ok, Value}, _DefaultValue) -> Value;
 default_value(not_found,    DefaultValue) -> DefaultValue.
@@ -162,27 +222,27 @@ serialize(#stomp_frame{command = Command,
                        headers = Headers,
                        body_iolist = BodyFragments}) ->
     Len = iolist_size(BodyFragments),
-    [Command, $\n,
+    [Command, ?LF,
      lists:map(fun serialize_header/1,
-               lists:keydelete("content-length", 1, Headers)),
+               lists:keydelete(?HEADER_CONTENT_LENGTH, 1, Headers)),
      if
-         Len > 0 -> ["content-length:", integer_to_list(Len), $\n];
+         Len > 0 -> [?HEADER_CONTENT_LENGTH ++ ":", integer_to_list(Len), ?LF];
          true    -> []
      end,
-     $\n, BodyFragments, 0].
+     ?LF, BodyFragments, 0].
 
-serialize_header({K, V}) when is_integer(V) -> [K, $:, integer_to_list(V), $\n];
-serialize_header({K, V}) when is_list(V) -> [K, $:, [escape(C) || C <- V], $\n].
+serialize_header({K, V}) when is_integer(V) -> hdr(escape(K), integer_to_list(V));
+serialize_header({K, V}) when is_list(V)    -> hdr(escape(K), escape(V)).
 
-unescape($n)  -> {ok, $\n};
-unescape($\\) -> {ok, $\\};
-unescape($c)  -> {ok, $:};
-unescape(_)   -> error.
+hdr(K, V) -> [K, ?COLON, V, ?LF].
 
-escape($:)  -> "\\c";
-escape($\\) -> "\\\\";
-escape($\n) -> "\\n";
-escape(C)   -> C.
+escape(Str) -> [escape1(Ch) || Ch <- Str].
+
+escape1(?COLON) -> [?BSL, ?COLON_ESC];
+escape1(?BSL)   -> [?BSL, ?BSL_ESC];
+escape1(?LF)    -> [?BSL, ?LF_ESC];
+escape1(?CR)    -> [?BSL, ?CR_ESC];
+escape1(Ch)     -> Ch.
 
 firstnull(Content) -> firstnull(Content, 0).
 
