@@ -1,6 +1,7 @@
 dispatcher_add(function(sammy) {
     sammy.get('#/federation', function() {
             render({'links':     '/federation-links',
+                    'vhosts':    '/vhosts',
                     'upstreams': '/parameters/federation-upstream',
                     'globals':   '/parameters/federation'},
                 'federation', '#/federation');
@@ -17,7 +18,7 @@ dispatcher_add(function(sammy) {
     sammy.put('#/fed-globals', function() {
             if (this.params.value == '') this.params.value = null;
 
-            if (sync_put(this, '/parameters/:component/:key'))
+            if (sync_put(this, '/parameters/:component/:vhost/:key'))
                 update();
             return false;
         });

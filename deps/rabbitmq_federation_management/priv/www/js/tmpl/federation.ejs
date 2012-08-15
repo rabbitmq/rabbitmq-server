@@ -69,40 +69,64 @@
 <% } %>
 </div>
 </div>
-<%
-var username = null;
-var nodename = null;
-for (var i in globals) {
-   if (globals[i].key == 'local-username') username = globals[i].value;
-   if (globals[i].key == 'local-nodename') nodename = globals[i].value;
-}
-%>
 <div class="section-hidden">
-  <h2>Global Parameters</h2>
+  <h2>Parameters</h2>
   <div class="hider">
-    <table class="two-col-layout">
-      <tr>
-        <td>
-          Local username:
-          <span class="help" id="federation-local-username"></span>
-          <form action="#/fed-globals" method="put">
-            <input type="hidden" name="component" value="federation"/>
-            <input type="hidden" name="key" value="local-username"/>
-            <input type="text" name="value" value="<%= username %>" />
-            <input type="submit" value="Update"/>
-          </form>
-        </td>
-        <td>
-          Explicit identity for this cluster / node:
-          <span class="help" id="federation-explicit-identity"></span>
-          <form action="#/fed-globals" method="put">
-            <input type="hidden" name="component" value="federation"/>
-            <input type="hidden" name="key" value="local-nodename"/>
-            <input type="text" name="value" value="<%= nodename %>" />
-            <input type="submit" value="Update"/>
-          </form>
-        </td>
-      </tr>
+    <table class="list">
+      <thead>
+        <tr>
+<% if (vhosts_interesting) { %>
+          <th>Virtual Host</th>
+<% } %>
+          <th>
+            Local username
+            <span class="help" id="federation-local-username"></span>
+          </th>
+          <th>
+            Explicit identity for this cluster / node
+            <span class="help" id="federation-explicit-identity"></span>
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+<%
+       for (var i = 0; i < vhosts.length; i++) {
+         var vhost = vhosts[i];
+         var username = null;
+         var nodename = null;
+
+         for (var j in globals) {
+           if (globals[j].vhost == vhost.name) {
+             if (globals[j].key == 'local-username') username = globals[j].value;
+             if (globals[j].key == 'local-nodename') nodename = globals[j].value;
+           }
+         }
+%>
+        <tr<%= alt_rows(i)%>>
+<% if (vhosts_interesting) { %>
+          <td><%= fmt_string(vhost.name) %></td>
+<% } %>
+          <td>
+            <form action="#/fed-globals" method="put">
+              <input type="hidden" name="component" value="federation"/>
+              <input type="hidden" name="vhost" value="<%= fmt_string(vhost.name) %>"/>
+              <input type="hidden" name="key" value="local-username"/>
+              <input type="text" name="value" value="<%= username %>" />
+              <input type="submit" value="Update"/>
+            </form>
+          </td>
+          <td>
+            <form action="#/fed-globals" method="put">
+              <input type="hidden" name="component" value="federation"/>
+              <input type="hidden" name="vhost" value="<%= fmt_string(vhost.name) %>"/>
+              <input type="hidden" name="key" value="local-nodename"/>
+              <input type="text" name="value" value="<%= nodename %>" />
+              <input type="submit" value="Update"/>
+            </form>
+          </td>
+        </tr>
+<% } %>
+      </tbody>
     </table>
   </div>
 </div>
