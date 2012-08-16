@@ -298,14 +298,14 @@ make_will_msg(#mqtt_frame_connect{ will_retain = Retain,
                payload = Msg }.
 
 process_login(UserBin, Creds, #state{ channels     = {undefined, undefined},
-                                      adapter_info = AdapterInfo }) ->
+                                      socket       = Sock }) ->
     case rabbit_access_control:check_user_login(UserBin, Creds) of
          {ok, _User} ->
              VHost = rabbit_mqtt_util:env(vhost),
              case amqp_connection:start(
                     #amqp_params_direct{username     = UserBin,
                                         virtual_host = VHost,
-                                        adapter_info = AdapterInfo}) of
+                                        adapter_info = adapter_info(Sock)}) of
                  {ok, Connection} ->
                      {?CONNACK_ACCEPT, Connection};
                  {error, auth_failure} ->
@@ -448,6 +448,27 @@ next_flow_state(blocking) ->
     blocked;
 next_flow_state(S) ->
     S.
+
+adapter_info(Sock) ->
+    {Addr, Port} = case rabbit_net:sockname(Sock) of
+                       {ok, Res} -> Res;
+                       _         -> {unknown, unknown}
+                   end,
+    {PeerAddr, PeerPort} = case rabbit_net:peername(Sock) of
+                               {ok, Res2} -> Res2;
+                               _          -> {unknown, unknown}
+                           end,
+    Name = case rabbit_net:connection_string(Sock, inbound) of
+               {ok, Res3} -> Res3;
+               _          -> unknown
+           end,
+    #adapter_info{ protocol     = {'MQTT', {?MQTT_PROTO_MAJOR,
+                                            ?MQTT_PROTO_MINOR}},
+                   name         = list_to_binary(Name),
+                   address      = Addr,
+                   port         = Port,
+                   peer_address = PeerAddr,
+                   peer_port    = PeerPort}.
 
 send_client(Frame, #state{ socket = Sock }) ->
     %rabbit_log:info("MQTT sending frame ~p ~n", [Frame]),

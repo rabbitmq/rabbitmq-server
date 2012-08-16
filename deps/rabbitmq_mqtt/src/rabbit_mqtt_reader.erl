@@ -56,8 +56,7 @@ init({Sock0, SockTransform}) ->
                consumer_tags = {undefined, undefined},
                channels      = {undefined, undefined},
                exchange      = rabbit_mqtt_util:env(exchange),
-               parse_state   = rabbit_mqtt_frame:initial_state(),
-               adapter_info  = adapter_info(Sock) }),
+               parse_state   = rabbit_mqtt_frame:initial_state() }),
      hibernate, {backoff, 1000, 1000, 10000}}.
 
 handle_call(duplicate_id, _From,
@@ -171,27 +170,6 @@ close_connection(State = #state{ connection = Connection }) ->
     catch amqp_connection:close(Connection),
     State #state{ channels   = {undefined, undefined},
                   connection = undefined }.
-
-adapter_info(Sock) ->
-    {Addr, Port} = case rabbit_net:sockname(Sock) of
-                       {ok, Res} -> Res;
-                       _         -> {unknown, unknown}
-                   end,
-    {PeerAddr, PeerPort} = case rabbit_net:peername(Sock) of
-                               {ok, Res2} -> Res2;
-                               _          -> {unknown, unknown}
-                           end,
-    Name = case rabbit_net:connection_string(Sock, inbound) of
-               {ok, Res3} -> Res3;
-               _          -> unknown
-           end,
-    #adapter_info{ protocol     = {'MQTT', {?MQTT_PROTO_MAJOR,
-                                            ?MQTT_PROTO_MINOR}},
-                   name         = list_to_binary(Name),
-                   address      = Addr,
-                   port         = Port,
-                   peer_address = PeerAddr,
-                   peer_port    = PeerPort}.
 
 run_socket(State = #state{ credit_flow = blocked }) ->
     State;

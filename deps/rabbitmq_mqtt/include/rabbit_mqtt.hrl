@@ -33,5 +33,4 @@
                  message_id,
                  exchange,
                  channels,
-                 connection,
-                 adapter_info }).
+                 connection }).
