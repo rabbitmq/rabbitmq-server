@@ -405,7 +405,7 @@ handle_cast({register_return_handler, ReturnHandler}, State) ->
     {noreply, State#state{return_handler = {ReturnHandler, Ref}}};
 %% @private
 handle_cast(unregister_return_handler,
-            State = #state{return_handler = {ReturnHandler, Ref}}) ->
+            State = #state{return_handler = {_ReturnHandler, Ref}}) ->
     erlang:demonitor(Ref),
     {noreply, State#state{return_handler = none}};
 %% @private
@@ -414,7 +414,7 @@ handle_cast({register_confirm_handler, ConfirmHandler}, State) ->
     {noreply, State#state{confirm_handler = {ConfirmHandler, Ref}}};
 %% @private
 handle_cast(unregister_confirm_handler,
-            State = #state{confirm_handler = {ConfirmHandler, Ref}}) ->
+            State = #state{confirm_handler = {_ConfirmHandler, Ref}}) ->
     erlang:demonitor(Ref),
     {noreply, State#state{confirm_handler = none}};
 %% @private
@@ -423,7 +423,7 @@ handle_cast({register_flow_handler, FlowHandler}, State) ->
     {noreply, State#state{flow_handler = {FlowHandler, Ref}}};
 %% @private
 handle_cast(unregister_flow_handler,
-            State = #state{flow_handler = {FlowHandler, Ref}}) ->
+            State = #state{flow_handler = {_FlowHandler, Ref}}) ->
     erlang:demonitor(Ref),
     {noreply, State#state{flow_handler = none}};
 %% Received from channels manager
