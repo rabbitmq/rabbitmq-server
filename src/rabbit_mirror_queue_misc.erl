@@ -20,6 +20,8 @@
          drop_mirror/2, drop_mirror/3, add_mirror/2, add_mirror/3,
          report_deaths/4, store_updated_slaves/1]).
 
+-export([is_really_alive0/1]). %% For RPC
+
 -include("rabbit.hrl").
 
 %%----------------------------------------------------------------------------
@@ -64,9 +66,8 @@ remove_from_queue(QueueName, DeadPids) ->
                                    slave_pids = SPids }] ->
                       [QPid1 | SPids1] = Alive =
                           [Pid || Pid <- [QPid | SPids],
-                                  not lists:member(node(Pid),
-                                                   DeadNodes) orelse
-                                  rabbit_misc:is_process_alive(Pid)],
+                                  not lists:member(node(Pid), DeadNodes) orelse
+                                      is_really_alive(Pid)],
                       case {{QPid, SPids}, {QPid1, SPids1}} of
                           {Same, Same} ->
                               {ok, QPid1, []};
@@ -87,6 +88,30 @@ remove_from_queue(QueueName, DeadPids) ->
                       end
               end
       end).
+
+%% We want to find out if the pid is alive in case a node restarted
+%% quickly and we didn't notice until later (in which case we should
+%% do nothing). But if we are dealing with a queue going down because
+%% it's in a broker which is shutting down cleanly, its process could
+%% still be alive momentarily (since we heard about the death of the
+%% *GM* process) so ask the application controller whether rabbit is
+%% running - in the above case by the time the controller responds the
+%% process will have terminated.
+%%
+%% See bug 25104.
+
+is_really_alive(Pid) ->
+    %% Don't bother optimising the local case since we will only ever
+    %% call for a remote node
+    case rpc:call(node(Pid),
+                  rabbit_mirror_queue_misc, is_process_alive0, [Pid]) of
+        true -> true;
+        _    -> false
+    end.
+
+is_really_alive0(Pid) ->
+    lists:keymember(rabbit, 1, application:which_applications())
+        andalso is_process_alive(Pid).
 
 on_node_up() ->
     Qs =
