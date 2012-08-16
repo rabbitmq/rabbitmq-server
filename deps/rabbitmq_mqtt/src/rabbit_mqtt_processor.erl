@@ -126,7 +126,7 @@ process_request(?SUBSCRIBE,
                        Binding = #'queue.bind'{
                                    queue       = Queue,
                                    exchange    = Exchange,
-                                   routing_key = rabbit_mqtt_util:translate_topic(
+                                   routing_key = rabbit_mqtt_util:mqtt2amqp(
                                                    TopicName)},
                        #'queue.bind_ok'{} = amqp_channel:call(Channel, Binding),
                        {[SupportedQos | QosList],
@@ -163,7 +163,7 @@ process_request(?UNSUBSCRIBE,
                               queue       = Queue,
                               exchange    = Exchange,
                               routing_key =
-                                  rabbit_mqtt_util:translate_topic(TopicName)},
+                                  rabbit_mqtt_util:mqtt2amqp(TopicName)},
                   #'queue.unbind_ok'{} = amqp_channel:call(Channel, Binding)
           end, QosSubs),
         dict:erase(TopicName, Subs)
@@ -208,7 +208,7 @@ amqp_callback({#'basic.deliver'{ consumer_tag = ConsumerTag,
                                               ?QOS_1 -> MsgId
                                           end,
                                         topic_name =
-                                          rabbit_mqtt_util:untranslate_topic(
+                                          rabbit_mqtt_util:amqp2mqtt(
                                             RoutingKey) },
                            payload = Payload}, State),
               case Qos of
@@ -429,7 +429,7 @@ amqp_pub(#mqtt_msg{ retain     = Retain,
     end,
     Method = #'basic.publish'{ exchange    = Exchange,
                                routing_key =
-                                   rabbit_mqtt_util:translate_topic(Topic)},
+                                   rabbit_mqtt_util:mqtt2amqp(Topic)},
     Headers = [{'x-mqtt-publish-qos', byte, Qos}, {'x-mqtt-dup', bool, Dup}],
     Msg = #amqp_msg{ props   = #'P_basic'{ headers = Headers },
                      payload = Payload },

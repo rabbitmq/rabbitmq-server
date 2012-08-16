@@ -28,12 +28,12 @@ subcription_queue_name(ClientId) ->
 %% *    +    match one topic level
 %% #    #    match multiple topic levels
 %% .    /    topic level separator
-translate_topic(Topic) ->
+mqtt2amqp(Topic) ->
     erlang:iolist_to_binary(
       re:replace(re:replace(Topic, "/", ".", [global]),
                  "[\+]", "*", [global])).
 
-untranslate_topic(Topic) ->
+amqp2mqtt(Topic) ->
     erlang:iolist_to_binary(
       re:replace(re:replace(Topic, "[\*]", "+", [global]),
                  "[\.]", "/", [global])).
