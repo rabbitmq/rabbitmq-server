@@ -192,8 +192,11 @@ amqp_callback({#'basic.deliver'{ consumer_tag = ConsumerTag,
                       awaiting_ack  = Awaiting,
                       message_id    = MsgId } = State) ->
     case {delivery_dup(Delivery), delivery_qos(ConsumerTag, Headers, State)} of
-        {true, {?QOS_0, _}} ->
-            %% don't redeliver qos0 message
+        {true, {?QOS_0, QOS_1}} ->
+            amqp_channel:cast(
+              Channel, #'basic.ack'{ delivery_tag = DeliveryTag }),
+            {noreply, State, hibernate};
+        {true, {?QOS_0, QOS_0}} ->
             {noreply, State, hibernate};
         {Dup, {DeliveryQos, _SubQos} = Qos}     ->
             send_client(
@@ -219,10 +222,11 @@ amqp_callback({#'basic.deliver'{ consumer_tag = ConsumerTag,
                        next_msg_id(
                          State #state {
                            awaiting_ack =
-                             gb_trees:insert(MsgId, DeliveryTag, Awaiting)})};
+                             gb_trees:insert(MsgId, DeliveryTag, Awaiting)}),
+                       hibernate};
                   {?QOS_0, ?QOS_1} ->
                       amqp_channel:cast(
-                          Channel, #'basic.ack'{ delivery_tag = DeliveryTag }),
+                        Channel, #'basic.ack'{ delivery_tag = DeliveryTag }),
                       {noreply, State, hibernate}
               end
     end;
