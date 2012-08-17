@@ -59,7 +59,7 @@ set mandest ${destroot}${prefix}/share/man
 
 use_configure   no
 
-use_parallel_build yes
+use_parallel_build no
 
 build.env-append HOME=${workpath}
 
