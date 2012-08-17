@@ -153,9 +153,11 @@ dispatcher_add(function(sammy) {
                 update();
             return false;
         });
-    path('#/policies', {'policies': '/parameters/policy'}, 'policies');
-    sammy.get('#/policies/:id', function() {
-            render({'policy': '/parameters/policy/' + esc(this.params['id'])},
+    path('#/policies', {'policies': '/parameters/policy',
+                        'vhosts':   '/vhosts'}, 'policies');
+    sammy.get('#/policies/:vhost/:id', function() {
+            render({'policy': '/parameters/policy/' + esc(this.params['vhost'])
+                        + '/' + esc(this.params['id'])},
                 'policy', '#/policies');
         });
     sammy.put('#/policies', function() {
@@ -163,7 +165,7 @@ dispatcher_add(function(sammy) {
             return false;
         });
     sammy.del('#/policies', function() {
-            if (sync_delete(this, '/parameters/:component/:key'))
+            if (sync_delete(this, '/parameters/:component/:vhost/:key'))
                 go_to('#/policies');
             return false;
         });

@@ -576,12 +576,18 @@ definitions_test() ->
         [{users,       []},
          {vhosts,      []},
          {permissions, []},
-         {queues,       [[{name,        <<"another-queue">>},
-                          {vhost,       <<"/">>},
-                          {durable,     true},
-                          {auto_delete, false},
-                          {arguments,   []}
-                         ]]},
+         {parameters,  [[{value,    [{<<"prefix">>, <<"">>},
+                                     {<<"policy">>, [{<<"a">>, <<"b">>}]}
+                                    ]},
+                         {vhost,    <<"/">>},
+                         {component,<<"policy">>},
+                         {key,      <<"test">>}]]},
+         {queues,      [[{name,        <<"another-queue">>},
+                         {vhost,       <<"/">>},
+                         {durable,     true},
+                         {auto_delete, false},
+                         {arguments,   []}
+                        ]]},
          {exchanges,   []},
          {bindings,    []}],
     BrokenConfig =
@@ -600,6 +606,7 @@ definitions_test() ->
     http_post("/definitions", ExtraConfig, ?CREATED),
     http_post("/definitions", BrokenConfig, ?BAD_REQUEST),
     http_delete("/queues/%2f/another-queue", ?NO_CONTENT),
+    http_delete("/parameters/policy/%2f/test", ?NO_CONTENT),
     ok.
 
 definitions_remove_things_test() ->
@@ -892,32 +899,38 @@ publish_unrouted_test() ->
 parameters_test() ->
     rabbit_runtime_parameters_test:register(),
 
-    http_put("/parameters/test/good", [{value, <<"ignored">>}], ?NO_CONTENT),
-    http_put("/parameters/test/maybe", [{value, <<"good">>}], ?NO_CONTENT),
-    http_put("/parameters/test/maybe", [{value, <<"bad">>}], ?BAD_REQUEST),
-    http_put("/parameters/test/bad", [{value, <<"good">>}], ?BAD_REQUEST),
+    http_put("/parameters/test/%2f/good", [{value, <<"ignore">>}], ?NO_CONTENT),
+    http_put("/parameters/test/%2f/maybe", [{value, <<"good">>}], ?NO_CONTENT),
+    http_put("/parameters/test/%2f/maybe", [{value, <<"bad">>}], ?BAD_REQUEST),
+    http_put("/parameters/test/%2f/bad", [{value, <<"good">>}], ?BAD_REQUEST),
+    http_put("/parameters/test/um/good", [{value, <<"ignore">>}], ?NOT_FOUND),
 
-    Good = [{component, <<"test">>},
+    Good = [{vhost,     <<"/">>},
+            {component, <<"test">>},
             {key,       <<"good">>},
-            {value,     <<"ignored">>}],
-    Maybe = [{component, <<"test">>},
+            {value,     <<"ignore">>}],
+    Maybe = [{vhost,     <<"/">>},
+             {component, <<"test">>},
              {key,       <<"maybe">>},
              {value,     <<"good">>}],
     List = [Good, Maybe],
 
     assert_list(List, http_get("/parameters")),
     assert_list(List, http_get("/parameters/test")),
+    assert_list(List, http_get("/parameters/test/%2f")),
     http_get("/parameters/oops", ?NOT_FOUND),
+    http_get("/parameters/test/oops", ?NOT_FOUND),
 
-    assert_item(Good,  http_get("/parameters/test/good", ?OK)),
-    assert_item(Maybe, http_get("/parameters/test/maybe", ?OK)),
+    assert_item(Good,  http_get("/parameters/test/%2f/good", ?OK)),
+    assert_item(Maybe, http_get("/parameters/test/%2f/maybe", ?OK)),
 
-    http_delete("/parameters/test/good", ?NO_CONTENT),
-    http_delete("/parameters/test/maybe", ?NO_CONTENT),
-    http_delete("/parameters/test/bad", ?NOT_FOUND),
+    http_delete("/parameters/test/%2f/good", ?NO_CONTENT),
+    http_delete("/parameters/test/%2f/maybe", ?NO_CONTENT),
+    http_delete("/parameters/test/%2f/bad", ?NOT_FOUND),
 
     0 = length(http_get("/parameters")),
     0 = length(http_get("/parameters/test")),
+    0 = length(http_get("/parameters/test/%2f")),
     rabbit_runtime_parameters_test:unregister(),
     ok.
 
