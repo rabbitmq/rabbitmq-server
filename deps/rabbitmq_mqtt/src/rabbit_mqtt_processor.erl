@@ -192,11 +192,11 @@ amqp_callback({#'basic.deliver'{ consumer_tag = ConsumerTag,
                       awaiting_ack  = Awaiting,
                       message_id    = MsgId } = State) ->
     case {delivery_dup(Delivery), delivery_qos(ConsumerTag, Headers, State)} of
-        {true, {?QOS_0, QOS_1}} ->
+        {true, {?QOS_0, ?QOS_1}} ->
             amqp_channel:cast(
               Channel, #'basic.ack'{ delivery_tag = DeliveryTag }),
             {noreply, State, hibernate};
-        {true, {?QOS_0, QOS_0}} ->
+        {true, {?QOS_0, ?QOS_0}} ->
             {noreply, State, hibernate};
         {Dup, {DeliveryQos, _SubQos} = Qos}     ->
             send_client(
@@ -414,23 +414,16 @@ amqp_pub(Msg   = #mqtt_msg{ qos = ?QOS_1 },
     amqp_pub(Msg, State #state{ channels       = {ChQos0, Channel},
                                 awaiting_seqno = 1 });
 
-amqp_pub(#mqtt_msg{ retain     = Retain,
-                    qos        = Qos,
+amqp_pub(#mqtt_msg{ qos        = Qos,
                     topic      = Topic,
                     dup        = Dup,
                     message_id = MessageId,
                     payload    = Payload },
          State = #state { channels       = {ChQos0, ChQos1},
                           credit_flow    = Flow,
-                          client_id      = ClientId,
                           exchange       = Exchange,
                           unacked_pubs   = UnackedPubs,
                           awaiting_seqno = SeqNo }) ->
-    case Retain of
-        true  -> rabbit_log:info("MQTT ignoring retained flag from ~p~n",
-                                 [ClientId]);
-        false -> ok
-    end,
     Method = #'basic.publish'{ exchange    = Exchange,
                                routing_key =
                                    rabbit_mqtt_util:mqtt2amqp(Topic)},
@@ -466,13 +459,13 @@ adapter_info(Sock) ->
                {ok, Res3} -> Res3;
                _          -> unknown
            end,
-    #adapter_info{ protocol     = {'MQTT', {?MQTT_PROTO_MAJOR,
-                                            ?MQTT_PROTO_MINOR}},
-                   name         = list_to_binary(Name),
-                   address      = Addr,
-                   port         = Port,
-                   peer_address = PeerAddr,
-                   peer_port    = PeerPort}.
+    #amqp_adapter_info{ protocol     = {'MQTT', {?MQTT_PROTO_MAJOR,
+                                                 ?MQTT_PROTO_MINOR}},
+                        name         = list_to_binary(Name),
+                        address      = Addr,
+                        port         = Port,
+                        peer_address = PeerAddr,
+                        peer_port    = PeerPort}.
 
 send_client(Frame, #state{ socket = Sock }) ->
     %rabbit_log:info("MQTT sending frame ~p ~n", [Frame]),
