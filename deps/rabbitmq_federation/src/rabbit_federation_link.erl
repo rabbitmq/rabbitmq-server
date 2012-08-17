@@ -514,7 +514,7 @@ ensure_internal_exchange(IntXNameBin,
 
 upstream_queue_name(XNameBin, VHost, #resource{name         = DownXNameBin,
                                                virtual_host = DownVHost}) ->
-    Node = rabbit_federation_util:local_nodename(),
+    Node = rabbit_federation_util:local_nodename(VHost),
     DownPart = case DownVHost of
                    VHost -> case DownXNameBin of
                                 XNameBin -> <<"">>;

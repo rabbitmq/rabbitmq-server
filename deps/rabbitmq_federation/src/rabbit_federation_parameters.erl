@@ -19,7 +19,7 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
--export([validate/3, validate_clear/2, notify/3, notify_clear/2]).
+-export([validate/4, validate_clear/3, notify/4, notify_clear/3]).
 -export([register/0]).
 
 -rabbit_boot_step({?MODULE,
@@ -34,7 +34,7 @@ register() ->
                  <<"federation-upstream">>,
                  <<"federation-upstream-set">>]].
 
-validate(<<"federation-upstream-set">>, Key, Term) ->
+validate(_VHost, <<"federation-upstream-set">>, Key, Term) ->
     [rabbit_parameter_validation:proplist(
        Key,
        [{<<"upstream">>, fun rabbit_parameter_validation:binary/2, mandatory},
@@ -42,57 +42,57 @@ validate(<<"federation-upstream-set">>, Key, Term) ->
         shared_validation()], Upstream)
      || Upstream <- Term];
 
-validate(<<"federation-upstream">>, Key, Term) ->
+validate(_VHost, <<"federation-upstream">>, Key, Term) ->
     rabbit_parameter_validation:proplist(
       Key, [{<<"uri">>, fun validate_uri/2, mandatory} |
             shared_validation()], Term);
 
-validate(<<"federation">>, <<"local-nodename">>, Term) ->
+validate(_VHost, <<"federation">>, <<"local-nodename">>, Term) ->
     rabbit_parameter_validation:binary(<<"local-nodename">>, Term);
 
-validate(<<"federation">>, <<"local-username">>, Term) ->
+validate(_VHost, <<"federation">>, <<"local-username">>, Term) ->
     rabbit_parameter_validation:binary(<<"local-username">>, Term);
 
-validate(_Component, Key, _Term) ->
+validate(_VHost, _Component, Key, _Term) ->
     {error, "key not recognised: ~p", [Key]}.
 
-validate_clear(<<"federation-upstream-set">>, _Key) ->
+validate_clear(_VHost, <<"federation-upstream-set">>, _Key) ->
     ok;
 
-validate_clear(<<"federation-upstream">>, _Key) ->
+validate_clear(_VHost, <<"federation-upstream">>, _Key) ->
     ok;
 
-validate_clear(<<"federation">>, <<"local-nodename">>) ->
+validate_clear(_VHost, <<"federation">>, <<"local-nodename">>) ->
     ok;
 
-validate_clear(<<"federation">>, <<"local-username">>) ->
+validate_clear(_VHost, <<"federation">>, <<"local-username">>) ->
     ok;
 
-validate_clear(_Component, Key) ->
+validate_clear(_VHost, _Component, Key) ->
     {error, "key not recognised: ~p", [Key]}.
 
-notify(<<"federation-upstream-set">>, Key, _Term) ->
+notify(_VHost, <<"federation-upstream-set">>, Key, _Term) ->
     rabbit_federation_link_sup_sup:adjust({upstream_set, Key});
 
-notify(<<"federation-upstream">>, Key, _Term) ->
+notify(_VHost, <<"federation-upstream">>, Key, _Term) ->
     rabbit_federation_link_sup_sup:adjust({upstream, Key});
 
-notify(<<"federation">>, <<"local-nodename">>, _Term) ->
+notify(_VHost, <<"federation">>, <<"local-nodename">>, _Term) ->
     rabbit_federation_link_sup_sup:adjust(everything);
 
-notify(<<"federation">>, <<"local-username">>, _Term) ->
+notify(_VHost, <<"federation">>, <<"local-username">>, _Term) ->
     rabbit_federation_link_sup_sup:adjust(everything).
 
-notify_clear(<<"federation-upstream-set">>, Key) ->
+notify_clear(_VHost, <<"federation-upstream-set">>, Key) ->
     rabbit_federation_link_sup_sup:adjust({clear_upstream_set, Key});
 
-notify_clear(<<"federation-upstream">>, Key) ->
+notify_clear(_VHost, <<"federation-upstream">>, Key) ->
     rabbit_federation_link_sup_sup:adjust({clear_upstream, Key});
 
-notify_clear(<<"federation">>, <<"local-nodename">>) ->
+notify_clear(_VHost, <<"federation">>, <<"local-nodename">>) ->
     rabbit_federation_link_sup_sup:adjust(everything);
 
-notify_clear(<<"federation">>, <<"local-username">>) ->
+notify_clear(_VHost, <<"federation">>, <<"local-username">>) ->
     rabbit_federation_link_sup_sup:adjust(everything).
 
 %%----------------------------------------------------------------------------

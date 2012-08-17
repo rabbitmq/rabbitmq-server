@@ -41,16 +41,18 @@ get_active_suffix(XName, Upstream, Default) ->
 set_active_suffix(XName, Upstream, Suffix) ->
     ok = rabbit_exchange:update_scratch(
            XName, federation,
-           fun(D) -> ?DICT:store(key(Upstream), Suffix, D) end).
+           fun(D) -> ?DICT:store(key(Upstream), Suffix, ensure(D)) end).
 
 prune_scratch(XName, Upstreams) ->
     ok = rabbit_exchange:update_scratch(
            XName, federation,
-           fun(undefined) -> ?DICT:new();
-              (D)         -> Keys = [key(U) || U <- Upstreams],
-                             ?DICT:filter(
-                                fun(K, _V) -> lists:member(K, Keys) end, D)
+           fun(D) -> Keys = [key(U) || U <- Upstreams],
+                     ?DICT:filter(
+                        fun(K, _V) -> lists:member(K, Keys) end, ensure(D))
            end).
 
 key(#upstream{name = UpstreamName, exchange = X}) ->
     {UpstreamName, name(X)}.
+
+ensure(undefined) -> ?DICT:new();
+ensure(D)         -> D.
