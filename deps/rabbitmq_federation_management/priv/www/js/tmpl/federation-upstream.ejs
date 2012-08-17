@@ -14,11 +14,11 @@
       </tr>
       <tr>
         <th>Expires</th>
-        <td><%= fmt_string(upstream.value.expires) %>ms</td>
+        <td><%= fmt_time(upstream.value.expires, 'ms') %></td>
       </tr>
       <tr>
         <th>Message TTL</th>
-        <td><%= fmt_string(upstream.value.message_ttl) %>ms</td>
+        <td><%= fmt_time(upstream.value.message_ttl, 'ms') %></td>
       </tr>
       <tr>
         <th>Max Hops</th>
@@ -30,7 +30,7 @@
       </tr>
       <tr>
         <th>Reconnect Delay</th>
-        <td><%= fmt_string(upstream.value.reconnect_delay) %>s</td>
+        <td><%= fmt_time(upstream.value.reconnect_delay, 's') %></td>
       </tr>
       <tr>
         <th>HA Policy</th>
