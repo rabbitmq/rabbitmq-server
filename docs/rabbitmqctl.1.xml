@@ -581,7 +581,7 @@
             </para>
             <para>
               Deleting a virtual host deletes all its exchanges,
-              queues, user mappings and associated permissions.
+              queues, bindings, user permissions and parameters.
             </para>
             <para role="example-prefix">For example:</para>
             <screen role="example">rabbitmqctl delete_vhost test</screen>
