@@ -110,8 +110,8 @@ is_really_alive(Pid) ->
     end.
 
 is_really_alive0(Pid) ->
-    lists:keymember(rabbit, 1, application:which_applications(infinity))
-        andalso is_process_alive(Pid).
+    is_process_alive(Pid) andalso
+        lists:keymember(rabbit, 1, application:which_applications(infinity)).
 
 on_node_up() ->
     Qs =
