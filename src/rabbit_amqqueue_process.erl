@@ -47,6 +47,7 @@
             msg_id_to_channel,
             ttl,
             ttl_timer_ref,
+            ttl_timer_expiry,
             senders,
             publish_seqno,
             unconfirmed,
@@ -107,7 +108,7 @@
         ]).
 
 -define(INFO_KEYS,
-        ?CREATION_EVENT_KEYS ++ ?STATISTICS_KEYS -- [pid, slave_pids]).
+        ?CREATION_EVENT_KEYS ++ ?STATISTICS_KEYS -- [pid]).
 
 %%----------------------------------------------------------------------------
 
@@ -576,7 +577,8 @@ deliver_or_enqueue(Delivery = #delivery{message    = Message,
                 maybe_record_confirm_message(Confirm, State1),
             Props = message_properties(Confirm, State2),
             BQS1 = BQ:publish(Message, Props, SenderPid, BQS),
-            ensure_ttl_timer(State2#q{backing_queue_state = BQS1})
+            ensure_ttl_timer(Props#message_properties.expiry,
+                             State2#q{backing_queue_state = BQS1})
     end.
 
 requeue_and_run(AckTags, State = #q{backing_queue = BQ}) ->
@@ -716,28 +718,42 @@ drop_expired_messages(State = #q{backing_queue_state = BQS,
                                  backing_queue       = BQ }) ->
     Now = now_micros(),
     DLXFun = dead_letter_fun(expired, State),
-    ExpirePred = fun (#message_properties{expiry = Expiry}) -> Now > Expiry end,
-    case DLXFun of
-        undefined -> {undefined, BQS1} = BQ:dropwhile(ExpirePred, false, BQS),
-                     BQS1;
-        _         -> {Msgs, BQS1} = BQ:dropwhile(ExpirePred, true, BQS),
-                     lists:foreach(
-                       fun({Msg, AckTag}) -> DLXFun(Msg, AckTag) end, Msgs),
-                     BQS1
-    end,
-    ensure_ttl_timer(State#q{backing_queue_state = BQS1}).
+    ExpirePred = fun (#message_properties{expiry = Exp}) -> Now >= Exp end,
+    {Props, BQS1} =
+        case DLXFun of
+            undefined ->
+                {Next, undefined, BQS2} = BQ:dropwhile(ExpirePred, false, BQS),
+                {Next, BQS2};
+            _  ->
+                {Next, Msgs,      BQS2} = BQ:dropwhile(ExpirePred, true,  BQS),
+                lists:foreach(fun({Msg, AckTag}) -> DLXFun(Msg, AckTag) end,
+                              Msgs),
+                {Next, BQS2}
+        end,
+    ensure_ttl_timer(case Props of
+                         undefined                          -> undefined;
+                         #message_properties{expiry = Exp}  -> Exp
+                     end, State#q{backing_queue_state = BQS1}).
 
-ensure_ttl_timer(State = #q{backing_queue       = BQ,
-                            backing_queue_state = BQS,
-                            ttl                 = TTL,
-                            ttl_timer_ref       = undefined})
-  when TTL =/= undefined ->
-    case BQ:is_empty(BQS) of
-        true  -> State;
-        false -> TRef = erlang:send_after(TTL, self(), drop_expired),
-                 State#q{ttl_timer_ref = TRef}
+ensure_ttl_timer(undefined, State) ->
+    State;
+ensure_ttl_timer(_Expiry, State = #q{ttl = undefined}) ->
+    State;
+ensure_ttl_timer(Expiry, State = #q{ttl_timer_ref = undefined}) ->
+    After = (case Expiry - now_micros() of
+                 V when V > 0 -> V + 999; %% always fire later
+                 _            -> 0
+             end) div 1000,
+    TRef = erlang:send_after(After, self(), drop_expired),
+    State#q{ttl_timer_ref = TRef, ttl_timer_expiry = Expiry};
+ensure_ttl_timer(Expiry, State = #q{ttl_timer_ref    = TRef,
+                                    ttl_timer_expiry = TExpiry})
+  when Expiry + 1000 < TExpiry ->
+    case erlang:cancel_timer(TRef) of
+        false -> State;
+        _     -> ensure_ttl_timer(Expiry, State#q{ttl_timer_ref = undefined})
     end;
-ensure_ttl_timer(State) ->
+ensure_ttl_timer(_Expiry, State) ->
     State.
 
 ack_if_no_dlx(AckTags, State = #q{dlx                 = undefined,

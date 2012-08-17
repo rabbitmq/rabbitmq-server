@@ -185,13 +185,13 @@ dropwhile(Pred, AckRequired,
                          set_delivered       = SetDelivered,
                          backing_queue_state = BQS }) ->
     Len  = BQ:len(BQS),
-    {Msgs, BQS1} = BQ:dropwhile(Pred, AckRequired, BQS),
+    {Next, Msgs, BQS1} = BQ:dropwhile(Pred, AckRequired, BQS),
     Len1 = BQ:len(BQS1),
     ok = gm:broadcast(GM, {set_length, Len1, AckRequired}),
     Dropped = Len - Len1,
     SetDelivered1 = lists:max([0, SetDelivered - Dropped]),
-    {Msgs, State #state { backing_queue_state = BQS1,
-                          set_delivered       = SetDelivered1 } }.
+    {Next, Msgs, State #state { backing_queue_state = BQS1,
+                                set_delivered       = SetDelivered1 } }.
 
 drain_confirmed(State = #state { backing_queue       = BQ,
                                  backing_queue_state = BQS,

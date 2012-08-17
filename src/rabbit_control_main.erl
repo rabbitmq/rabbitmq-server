@@ -164,8 +164,8 @@ start() ->
         {error, Reason} ->
             print_error("~p", [Reason]),
             rabbit_misc:quit(2);
-        {error_string, Reason} ->
-            print_error("~s", [Reason]),
+        {parse_error, {_Line, Mod, Err}} ->
+            print_error("~s", [lists:flatten(Mod:format_error(Err))]),
             rabbit_misc:quit(2);
         {badrpc, {'EXIT', Reason}} ->
             print_error("~p", [Reason]),
@@ -449,16 +449,15 @@ action(eval, Node, [Expr], _Opts, _Inform) ->
     case erl_scan:string(Expr) of
         {ok, Scanned, _} ->
             case erl_parse:parse_exprs(Scanned) of
-                {ok, Parsed} ->
-                    {value, Value, _} = unsafe_rpc(
-                                          Node, erl_eval, exprs, [Parsed, []]),
-                    io:format("~p~n", [Value]),
-                    ok;
-                {error, E} ->
-                    {error_string, format_parse_error(E)}
+                {ok, Parsed} -> {value, Value, _} =
+                                    unsafe_rpc(
+                                      Node, erl_eval, exprs, [Parsed, []]),
+                                io:format("~p~n", [Value]),
+                                ok;
+                {error, E}   -> {parse_error, E}
             end;
         {error, E, _} ->
-            {error_string, format_parse_error(E)}
+            {parse_error, E}
     end.
 
 %%----------------------------------------------------------------------------
@@ -546,9 +545,6 @@ exit_loop(Port) ->
         {Port, {exit_status, Rc}} -> Rc;
         {Port, _}                 -> exit_loop(Port)
     end.
-
-format_parse_error({_Line, Mod, Err}) ->
-    lists:flatten(Mod:format_error(Err)).
 
 %%----------------------------------------------------------------------------
 

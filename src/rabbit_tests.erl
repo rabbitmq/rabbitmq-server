@@ -74,12 +74,10 @@ maybe_run_cluster_dependent_tests() ->
 run_cluster_dependent_tests(SecondaryNode) ->
     SecondaryNodeS = atom_to_list(SecondaryNode),
 
-    cover:stop(SecondaryNode),
     ok = control_action(stop_app, []),
-    ok = control_action(reset, []),
+    ok = safe_reset(),
     ok = control_action(cluster, [SecondaryNodeS]),
     ok = control_action(start_app, []),
-    cover:start(SecondaryNode),
     ok = control_action(start_app, SecondaryNode, [], []),
 
     io:format("Running cluster dependent tests with node ~p~n", [SecondaryNode]),
@@ -940,7 +938,7 @@ test_cluster_management2(SecondaryNode) ->
     ok = assert_ram_node(),
 
     %% join cluster as a ram node
-    ok = control_action(reset, []),
+    ok = safe_reset(),
     ok = control_action(force_cluster, [SecondaryNodeS, "invalid1@invalid"]),
     ok = control_action(start_app, []),
     ok = control_action(stop_app, []),
@@ -997,29 +995,30 @@ test_cluster_management2(SecondaryNode) ->
     ok = assert_disc_node(),
 
     %% turn a disk node into a ram node
-    ok = control_action(reset, []),
+    %%
+    %% can't use safe_reset here since for some reason nodes()==[] and
+    %% yet w/o stopping coverage things break
+    with_suspended_cover(
+      [SecondaryNode], fun () -> ok = control_action(reset, []) end),
     ok = control_action(cluster, [SecondaryNodeS]),
     ok = control_action(start_app, []),
     ok = control_action(stop_app, []),
     ok = assert_ram_node(),
 
     %% NB: this will log an inconsistent_database error, which is harmless
-    %% Turning cover on / off is OK even if we're not in general using cover,
-    %% it just turns the engine on / off, doesn't actually log anything.
-    cover:stop([SecondaryNode]),
-    true = disconnect_node(SecondaryNode),
-    pong = net_adm:ping(SecondaryNode),
-    cover:start([SecondaryNode]),
+    with_suspended_cover(
+      [SecondaryNode], fun () ->
+                               true = disconnect_node(SecondaryNode),
+                               pong = net_adm:ping(SecondaryNode)
+                       end),
 
     %% leaving a cluster as a ram node
-    ok = control_action(reset, []),
+    ok = safe_reset(),
     %% ...and as a disk node
     ok = control_action(cluster, [SecondaryNodeS, NodeS]),
     ok = control_action(start_app, []),
     ok = control_action(stop_app, []),
-    cover:stop(SecondaryNode),
-    ok = control_action(reset, []),
-    cover:start(SecondaryNode),
+    ok = safe_reset(),
 
     %% attempt to leave cluster when no other node is alive
     ok = control_action(cluster, [SecondaryNodeS, NodeS]),
@@ -1034,21 +1033,38 @@ test_cluster_management2(SecondaryNode) ->
         control_action(cluster, [SecondaryNodeS]),
 
     %% leave system clustered, with the secondary node as a ram node
-    ok = control_action(force_reset, []),
+    with_suspended_cover(
+      [SecondaryNode], fun () -> ok = control_action(force_reset, []) end),
     ok = control_action(start_app, []),
     %% Yes, this is rather ugly. But since we're a clustered Mnesia
     %% node and we're telling another clustered node to reset itself,
     %% we will get disconnected half way through causing a
     %% badrpc. This never happens in real life since rabbitmqctl is
-    %% not a clustered Mnesia node.
-    cover:stop(SecondaryNode),
-    {badrpc, nodedown} = control_action(force_reset, SecondaryNode, [], []),
-    pong = net_adm:ping(SecondaryNode),
-    cover:start(SecondaryNode),
+    %% not a clustered Mnesia node and is a hidden node.
+    with_suspended_cover(
+      [SecondaryNode],
+      fun () ->
+              {badrpc, nodedown} =
+                  control_action(force_reset, SecondaryNode, [], []),
+              pong = net_adm:ping(SecondaryNode)
+      end),
     ok = control_action(cluster, SecondaryNode, [NodeS], []),
     ok = control_action(start_app, SecondaryNode, [], []),
 
     passed.
+
+%% 'cover' does not cope at all well with nodes disconnecting, which
+%% happens as part of reset. So we turn it off temporarily. That is ok
+%% even if we're not in general using cover, it just turns the engine
+%% on / off and doesn't log anything.
+safe_reset() -> with_suspended_cover(
+                  nodes(), fun () -> control_action(reset, []) end).
+
+with_suspended_cover(Nodes, Fun) ->
+    cover:stop(Nodes),
+    Res = Fun(),
+    cover:start(Nodes),
+    Res.
 
 test_user_management() ->
 
@@ -1216,7 +1232,15 @@ test_server_status() ->
     ok = control_action(list_consumers, []),
 
     %% set vm memory high watermark
+    HWM = vm_memory_monitor:get_vm_memory_high_watermark(),
+    ok = control_action(set_vm_memory_high_watermark, ["1"]),
     ok = control_action(set_vm_memory_high_watermark, ["1.0"]),
+    ok = control_action(set_vm_memory_high_watermark, [float_to_list(HWM)]),
+
+    %% eval
+    {parse_error, _} = control_action(eval, ["\""]),
+    {parse_error, _} = control_action(eval, ["a("]),
+    ok = control_action(eval, ["a."]),
 
     %% cleanup
     [{ok, _} = rabbit_amqqueue:delete(QR, false, false) || QR <- [Q, Q2]],
@@ -2447,10 +2471,10 @@ test_dropwhile(VQ0) ->
             fun (N, Props) -> Props#message_properties{expiry = N} end, VQ0),
 
     %% drop the first 5 messages
-    {undefined, VQ2} = rabbit_variable_queue:dropwhile(
-                         fun(#message_properties { expiry = Expiry }) ->
-                                 Expiry =< 5
-                         end, false, VQ1),
+    {_, undefined, VQ2} = rabbit_variable_queue:dropwhile(
+                            fun(#message_properties { expiry = Expiry }) ->
+                                    Expiry =< 5
+                            end, false, VQ1),
 
     %% fetch five now
     VQ3 = lists:foldl(fun (_N, VQN) ->
@@ -2467,11 +2491,11 @@ test_dropwhile(VQ0) ->
 test_dropwhile_varying_ram_duration(VQ0) ->
     VQ1 = variable_queue_publish(false, 1, VQ0),
     VQ2 = rabbit_variable_queue:set_ram_duration_target(0, VQ1),
-    {undefined, VQ3} = rabbit_variable_queue:dropwhile(
-                         fun(_) -> false end, false, VQ2),
+    {_, undefined, VQ3} = rabbit_variable_queue:dropwhile(
+                            fun(_) -> false end, false, VQ2),
     VQ4 = rabbit_variable_queue:set_ram_duration_target(infinity, VQ3),
     VQ5 = variable_queue_publish(false, 1, VQ4),
-    {undefined, VQ6} =
+    {_, undefined, VQ6} =
         rabbit_variable_queue:dropwhile(fun(_) -> false end, false, VQ5),
     VQ6.
 

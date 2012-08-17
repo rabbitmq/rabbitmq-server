@@ -19,7 +19,7 @@
 -include("rabbit_framing.hrl").
 
 -export([method_record_type/1, polite_pause/0, polite_pause/1]).
--export([die/1, frame_error/2, amqp_error/4, quit/1, quit/2,
+-export([die/1, frame_error/2, amqp_error/4, quit/1,
          protocol_error/3, protocol_error/4, protocol_error/1]).
 -export([not_found/1, assert_args_equivalence/4]).
 -export([dirty_read/1]).
@@ -92,7 +92,6 @@
         (rabbit_framing:amqp_exception()) -> channel_or_connection_exit()).
 
 -spec(quit/1 :: (integer()) -> no_return()).
--spec(quit/2 :: (string(), [term()]) -> no_return()).
 
 -spec(frame_error/2 :: (rabbit_framing:amqp_method_name(), binary())
                        -> rabbit_types:connection_exit()).
@@ -396,19 +395,9 @@ report_coverage_percentage(File, Cov, NotCov, Mod) ->
 confirm_to_sender(Pid, MsgSeqNos) ->
     gen_server2:cast(Pid, {confirm, MsgSeqNos, self()}).
 
-%%
-%% @doc Halts the emulator after printing out an error message io-formatted with
-%% the supplied arguments. The exit status of the beam process will be set to 1.
-%%
-quit(Fmt, Args) ->
-    io:format("ERROR: " ++ Fmt ++ "~n", Args),
-    quit(1).
-
-%%
 %% @doc Halts the emulator returning the given status code to the os.
 %% On Windows this function will block indefinitely so as to give the io
 %% subsystem time to flush stdout completely.
-%%
 quit(Status) ->
     case os:type() of
         {unix,  _} -> halt(Status);
