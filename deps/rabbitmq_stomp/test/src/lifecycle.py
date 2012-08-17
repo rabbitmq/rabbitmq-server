@@ -93,7 +93,7 @@ class TestLifecycle(base.BaseTest):
         self.bad_connect(stomp.Connection(user="guest",
                                           passcode="guest",
                                           virtual_host="//"),
-                         "Virtual host '//' access denied\n")
+                         "Virtual host '//' access denied")
 
     def bad_connect(self, new_conn, expected):
         self.conn.disconnect()

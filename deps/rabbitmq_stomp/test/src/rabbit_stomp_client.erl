@@ -27,6 +27,8 @@
 
 -include("rabbit_stomp_frame.hrl").
 
+-define(TIMEOUT, 1000). % milliseconds
+
 connect() ->
     {ok, Sock} = gen_tcp:connect(localhost, 61613, [{active, false}, binary]),
     Client0 = recv_state(Sock),
@@ -60,7 +62,7 @@ recv({Sock, [Frame | Frames]}) ->
     {Frame, {Sock, Frames}}.
 
 recv(Client = {Sock, _}, FrameState, Length) ->
-    {ok, Payload} = gen_tcp:recv(Sock, Length),
+    {ok, Payload} = gen_tcp:recv(Sock, Length, ?TIMEOUT),
     parse(Payload, Client, FrameState, Length).
 
 parse(Payload, Client = {Sock, FramesRev}, FrameState, Length) ->

@@ -17,6 +17,7 @@
 -module(rabbit_stomp_amqqueue_test).
 -export([all_tests/0]).
 
+-include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_stomp_frame.hrl").
 
@@ -26,7 +27,8 @@
 all_tests() ->
     [ok = run_test(TestFun) || TestFun <- [fun test_subscribe_error/2,
                                            fun test_subscribe/2,
-                                           fun test_send/2]],
+                                           fun test_send/2,
+                                           fun test_delete_queue_subscribe/2]],
     ok.
 
 run_test(TestFun) ->
@@ -45,8 +47,7 @@ test_subscribe_error(_Channel, Client) ->
     %% SUBSCRIBE to missing queue
     rabbit_stomp_client:send(
       Client, "SUBSCRIBE", [{"destination", ?DESTINATION}]),
-    {#stomp_frame{command = "ERROR",
-                  headers = Hdrs}, _} = rabbit_stomp_client:recv(Client),
+    {ok, _Client1, Hdrs, _} = stomp_receive(Client, "ERROR"),
     "not_found" = proplists:get_value("message", Hdrs),
     ok.
 
@@ -56,23 +57,17 @@ test_subscribe(Channel, Client) ->
                                                     auto_delete = true}),
 
     %% subscribe and wait for receipt
-    rabbit_stomp_client:send(Client, "SUBSCRIBE",
-                             [{"destination", ?DESTINATION},
-                              {"receipt", "foo"}]),
-    {#stomp_frame{command = "RECEIPT"}, Client1} =
-        rabbit_stomp_client:recv(Client),
+    rabbit_stomp_client:send(
+      Client, "SUBSCRIBE", [{"destination", ?DESTINATION}, {"receipt", "foo"}]),
+    {ok, Client1, _, _} = stomp_receive(Client, "RECEIPT"),
 
     %% send from amqp
-    Method = #'basic.publish'{
-      exchange    = <<"">>,
-      routing_key = ?QUEUE},
+    Method = #'basic.publish'{exchange = <<"">>, routing_key = ?QUEUE},
 
     amqp_channel:call(Channel, Method, #amqp_msg{props = #'P_basic'{},
                                                  payload = <<"hello">>}),
 
-    {#stomp_frame{command     = "MESSAGE",
-                  body_iolist = [<<"hello">>]}, _Client2} =
-        rabbit_stomp_client:recv(Client1),
+    {ok, _Client2, _, [<<"hello">>]} = stomp_receive(Client1, "MESSAGE"),
     ok.
 
 test_send(Channel, Client) ->
@@ -83,14 +78,40 @@ test_send(Channel, Client) ->
     %% subscribe and wait for receipt
     rabbit_stomp_client:send(
       Client, "SUBSCRIBE", [{"destination", ?DESTINATION}, {"receipt", "foo"}]),
-    {#stomp_frame{command = "RECEIPT"}, Client1} =
-        rabbit_stomp_client:recv(Client),
+    {ok, Client1, _, _} = stomp_receive(Client, "RECEIPT"),
 
     %% send from stomp
     rabbit_stomp_client:send(
       Client1, "SEND", [{"destination", ?DESTINATION}], ["hello"]),
 
-    {#stomp_frame{command     = "MESSAGE",
-                  body_iolist = [<<"hello">>]}, _Client2} =
-        rabbit_stomp_client:recv(Client1),
+    {ok, _Client2, _, [<<"hello">>]} = stomp_receive(Client1, "MESSAGE"),
     ok.
+
+test_delete_queue_subscribe(Channel, Client) ->
+    #'queue.declare_ok'{} =
+        amqp_channel:call(Channel, #'queue.declare'{queue       = ?QUEUE,
+                                                    auto_delete = true}),
+
+    %% subscribe and wait for receipt
+    rabbit_stomp_client:send(
+      Client, "SUBSCRIBE", [{"destination", ?DESTINATION}, {"receipt", "bah"}]),
+    {ok, Client1, _, _} = stomp_receive(Client, "RECEIPT"),
+
+    %% delete queue while subscribed
+    #'queue.delete_ok'{} =
+        amqp_channel:call(Channel, #'queue.delete'{queue = ?QUEUE}),
+
+    {ok, _Client2, Headers, _} = stomp_receive(Client1, "ERROR"),
+
+    ?DESTINATION = proplists:get_value("subscription", Headers),
+
+    % server closes connection
+    ok.
+
+stomp_receive(Client, Command) ->
+    {#stomp_frame{command     = Command,
+                  headers     = Hdrs,
+                  body_iolist = Body},   Client1} =
+    rabbit_stomp_client:recv(Client),
+    {ok, Client1, Hdrs, Body}.
+
