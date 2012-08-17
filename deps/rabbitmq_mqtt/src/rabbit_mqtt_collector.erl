@@ -25,10 +25,12 @@
 
 -record(state, {client_ids}).
 
+-define(SERVER, ?MODULE).
+
 %%----------------------------------------------------------------------------
 
 start_link() ->
-    gen_server:start_link(?MODULE, [], []).
+    gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
 register(ClientId, Pid) ->
     gen_server:call(rabbit_mqtt_collector, {register, ClientId, Pid}, infinity).

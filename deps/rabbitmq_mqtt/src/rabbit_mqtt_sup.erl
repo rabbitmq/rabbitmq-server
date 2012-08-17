@@ -31,7 +31,6 @@ start_link(Listeners, Configuration) ->
           SupPid,
           {collector, {rabbit_mqtt_collector, start_link, []},
           transient, ?MAX_WAIT, worker, [rabbit_mqtt_collector]}),
-    erlang:register(rabbit_mqtt_collector, Collector),
     {ok, SupPid}.
 
 init([{Listeners, SslListeners}, Configuration]) ->
