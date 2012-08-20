@@ -97,5 +97,5 @@ specs(X) ->
 
 spec(Upstream = #upstream{reconnect_delay = Delay}, #exchange{name = XName}) ->
     {Upstream, {rabbit_federation_link, start_link, [{Upstream, XName}]},
-     {transient, Delay}, ?MAX_WAIT, worker,
+     {permanent, Delay}, ?MAX_WAIT, worker,
      [rabbit_federation_link]}.
