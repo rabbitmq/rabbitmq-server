@@ -24,7 +24,6 @@
 -export([conserve_resources/3]).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
--include("include/rabbit_mqtt_frame.hrl").
 -include("include/rabbit_mqtt.hrl").
 
 %%----------------------------------------------------------------------------
@@ -49,21 +48,15 @@ init({Sock0, SockTransform}) ->
                await_recv    = false,
                credit_flow   = running,
                conserve      = false,
-               unacked_pubs  = gb_trees:empty(),
-               awaiting_ack  = gb_trees:empty(),
-               message_id    = 1,
-               subscriptions = dict:new(),
-               consumer_tags = {undefined, undefined},
-               channels      = {undefined, undefined},
-               exchange      = rabbit_mqtt_util:env(exchange),
-               parse_state   = rabbit_mqtt_frame:initial_state() }),
+               parse_state   = rabbit_mqtt_frame:initial_state(),
+               proc_state    = rabbit_mqtt_processor:initial_state(Sock) }),
      hibernate, {backoff, 1000, 1000, 10000}}.
 
 handle_call(duplicate_id, _From,
-            State = #state{ client_id = ClientId,
-                            conn_name = ConnName }) ->
+            State = #state{ proc_state = PState,
+                            conn_name  = ConnName }) ->
     log(warning, "MQTT disconnecting duplicate client id ~p (~p)~n",
-                 [ClientId, ConnName]),
+                 [rabbit_mqtt_processor:info(client_id, PState), ConnName]),
     stop({shutdown, duplicate_id}, State);
 
 handle_call(Msg, From, State) ->
@@ -72,20 +65,12 @@ handle_call(Msg, From, State) ->
 handle_cast(Msg, State) ->
     stop({mqtt_unexpected_cast, Msg}, State).
 
-handle_info({#'basic.deliver'{}, #amqp_msg{}} = Delivery, State) ->
-    rabbit_mqtt_processor:amqp_callback(Delivery, State);
+handle_info({#'basic.deliver'{}, #amqp_msg{}} = Delivery,
+            State = #state{ proc_state = ProcState }) ->
+    callback_reply(State, rabbit_mqtt_processor:amqp_callback(Delivery, ProcState));
 
-handle_info(#'basic.ack'{} = Ack, State) ->
-    rabbit_mqtt_processor:amqp_callback(Ack, State);
-
-handle_info(#'basic.nack'{ delivery_tag = Tag },
-            State = #state { client_id = ClientId,
-                             unacked_pubs = UnackedPubs }) ->
-    % todo: store and republish message
-    MsgId = gb_trees:get(Tag, UnackedPubs),
-    log(error, "MQTT received nack for client id ~p, msg id ~p~n",
-               [ClientId, MsgId]),
-    {stop, {nack_received, MsgId}, State};
+handle_info(#'basic.ack'{} = Ack, State = #state{ proc_state = ProcState }) ->
+    callback_reply(State, rabbit_mqtt_processor:amqp_callback(Ack, ProcState));
 
 handle_info(#'basic.consume_ok'{}, State) ->
     {noreply, State, hibernate};
@@ -93,24 +78,22 @@ handle_info(#'basic.consume_ok'{}, State) ->
 handle_info(#'basic.cancel'{}, State) ->
     stop({shutdown, subscription_cancelled}, State);
 
-handle_info({'EXIT', Conn, Reason}, State = #state{ connection = Conn }) ->
-    stop({amqp_conn_died, Reason}, State);
+handle_info({'EXIT', _Conn, Reason}, State) ->
+    stop({connection_died, Reason}, State);
 
 handle_info({inet_reply, _Ref, ok}, State) ->
     {noreply, State, hibernate};
 
-handle_info({inet_async, Sock, _Ref, {ok, Data}}, State = #state { socket = Sock }) ->
+handle_info({inet_async, Sock, _Ref, {ok, Data}},
+            State = #state{ socket = Sock }) ->
     process_received_bytes(
       Data, control_throttle(State #state{ await_recv = false }));
 
-handle_info({Inet, _Sock, _Ref, {error, closed}},
-            State = #state { client_id = ClientId,
-                             will_msg  = WillMsg })
-  when Inet =:= inet_async orelse Inet =:= inet_reply ->
-    log(info, "MQTT detected network error for ~p~n", [ClientId]),
-    rabbit_mqtt_processor:amqp_pub(WillMsg, State),
-    % todo: flush channel after publish
-    stop({shutdown, conn_closed}, State);
+handle_info({inet_async, _Sock, _Ref, {error, Reason}}, State = #state {}) ->
+    network_error(Reason, State);
+
+handle_info({inet_reply, _Sock, {error, Reason}}, State = #state {}) ->
+    network_error(Reason, State);
 
 handle_info({conserve_resources, Conserve}, State) ->
     {noreply, control_throttle(State #state{ conserve = Conserve }), hibernate};
@@ -133,43 +116,65 @@ code_change(_OldVsn, State, _Extra) ->
 process_received_bytes(<<>>, State) ->
     {noreply, State};
 process_received_bytes(Bytes,
-                       State = #state { parse_state = ParseState }) ->
+                       State = #state{ parse_state = ParseState,
+                                       proc_state  = ProcState,
+                                       conn_name   = ConnStr }) ->
     case
         rabbit_mqtt_frame:parse(Bytes, ParseState) of
             {more, ParseState1} ->
-                {noreply, control_throttle(
-                            State #state{ parse_state = ParseState1 })};
+                {noreply,
+                 control_throttle( State #state{ parse_state = ParseState1 }),
+                 hibernate};
             {ok, Frame, Rest} ->
-                case rabbit_mqtt_processor:process_frame(Frame, State) of
-                    {ok, State1} ->
+                case rabbit_mqtt_processor:process_frame(Frame, ProcState) of
+                    {ok, ProcState1} ->
                         PS = rabbit_mqtt_frame:initial_state(),
-                        process_received_bytes(Rest,
-                                               State1#state{ parse_state = PS });
-                    {stop, Reason, State1} ->
-                        stop(Reason, State1)
+                        process_received_bytes(
+                          Rest,
+                          State #state{ parse_state = PS,
+                                        proc_state = ProcState1 });
+                    {err, Reason, ProcState1} ->
+                        log:info("MQTT protocol error ~p for connection ~p~n",
+                                 [Reason, ConnStr]),
+                        stop({shutdown, Reason}, pstate(State, ProcState1));
+                    {stop, ProcState1} ->
+                        stop(normal, pstate(State, ProcState1))
                 end;
             {error, Error} ->
-                log(error, "MQTT detected framing error ~p~n", [Error]),
+                log(error, "MQTT detected framing error ~p for connection ~p~n",
+                           [ConnStr, Error]),
                 stop({shutdown, Error}, State)
     end.
 
+callback_reply(State, {ok, ProcState}) ->
+    {noreply, pstate(State, ProcState), hibernate};
+callback_reply(State, {err, Reason, ProcState}) ->
+    {stop, Reason, pstate(State, ProcState)}.
+
+pstate(State = #state {}, PState = #proc_state{}) ->
+    State #state{ proc_state = PState }.
+
 %%----------------------------------------------------------------------------
 
-stop(Reason, State = #state { client_id = undefined }) ->
+network_error(Reason,
+              State = #state{ conn_name  = ConnStr,
+                              proc_state = PState }) ->
+    log(info, "MQTT detected network error for ~p~n", [ConnStr]),
+    rabbit_mqtt_processor:send_will(PState),
+    % todo: flush channel after publish
+    stop({shutdown, conn_closed}, State).
+
+stop(Reason, State = #state{}) ->
     {stop, Reason, close_connection(State)};
 
-stop(Reason, State = #state { client_id = ClientId }) ->
+stop(Reason, State = #state{ proc_state = PState }) ->
     % todo: maybe clean session
-    ok = rabbit_mqtt_collector:unregister(ClientId),
+    ok = rabbit_mqtt_collector:unregister(
+           rabbit_mqtt_processor:info(client_info, PState)),
     {stop, Reason, close_connection(State)}.
 
-close_connection(State = #state{ connection = undefined }) ->
-    State;
-close_connection(State = #state{ connection = Connection }) ->
-    %% ignore noproc or other exceptions to avoid debris
-    catch amqp_connection:close(Connection),
-    State #state{ channels   = {undefined, undefined},
-                  connection = undefined }.
+close_connection(State = #state{ proc_state = ProcState} ) ->
+    pstate(State, rabbit_mqtt_processor:close_connection(ProcState)).
 
 run_socket(State = #state{ credit_flow = blocked }) ->
     State;
@@ -186,8 +191,7 @@ conserve_resources(Pid, _, Conserve) ->
 control_throttle(State = #state{ credit_flow = Flow,
                                  conserve    = Conserve }) ->
     case {Flow, Conserve orelse credit_flow:blocked()} of
-        {running,   true} -> State #state{ credit_flow = blocking };
-        {blocking, false} -> run_socket(State #state{ credit_flow = running });
+        {running,   true} -> State #state{ credit_flow = blocked };
         {blocked,  false} -> run_socket(State #state{ credit_flow = running });
         {_,            _} -> run_socket(State)
     end.

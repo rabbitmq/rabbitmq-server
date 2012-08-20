@@ -16,21 +16,24 @@
 
 -define(CLIENT_ID_MAXLEN, 23).
 
--record(state, { socket,
-                 conn_name,
-                 await_recv,
-                 credit_flow,
-                 conserve,
-                 parse_state,
-                 clean_sess,
-                 client_id,
-                 subscriptions,
-                 consumer_tags,
-                 unacked_pubs,
-                 awaiting_ack,
-                 awaiting_seqno,
-                 will_msg,
-                 message_id,
-                 exchange,
-                 channels,
-                 connection }).
+-record(state,      { socket,
+                      conn_name,
+                      await_recv,
+                      credit_flow,
+                      conserve,
+                      parse_state,
+                      proc_state }).
+
+-record(proc_state, { socket,
+                      subscriptions,
+                      consumer_tags,
+                      unacked_pubs,
+                      awaiting_ack,
+                      awaiting_seqno,
+                      message_id,
+                      client_id,
+                      clean_sess,
+                      will_msg,
+                      channels,
+                      connection,
+                      exchange }).
