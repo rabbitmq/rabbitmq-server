@@ -176,13 +176,20 @@ handle_info(Msg, State) ->
 terminate(_Reason, {not_started, _}) ->
     ok;
 
-terminate(shutdown, #state{downstream_channel    = DCh,
+terminate(Reason, State = #state{downstream_channel    = DCh,
+                                 downstream_connection = DConn,
+                                 connection            = Conn,
+                                 channel               = Ch}) ->
+    ensure_closed(DConn, DCh),
+    ensure_closed(Conn, Ch),
+    log_terminate(Reason, State),
+    ok.
 
-                           downstream_connection = DConn,
-                           downstream_exchange   = XName,
-                           upstream              = Upstream,
-                           connection            = Conn,
-                           channel               = Ch}) ->
+log_terminate({shutdown, restart}, _State) ->
+    %% We've already logged this before munging the reason
+    ok;
+log_terminate(shutdown, #state{downstream_exchange = XName,
+                               upstream            = Upstream}) ->
     %% The supervisor is shutting us down; we are probably restarting
     %% the link because configuration has changed. So try to shut down
     %% nicely so that we do not cause unacked messages to be
@@ -190,18 +197,13 @@ terminate(shutdown, #state{downstream_channel    = DCh,
     rabbit_log:info("Federation ~s disconnecting from ~s~n",
                     [rabbit_misc:rs(XName),
                      rabbit_federation_upstream:to_string(Upstream)]),
-    ensure_closed(DConn, DCh),
-    ensure_closed(Conn, Ch),
-    rabbit_federation_status:remove(Upstream, XName),
-    ok;
+    rabbit_federation_status:remove(Upstream, XName);
 
-terminate(_Reason, #state{downstream_channel    = DCh,
-                          downstream_connection = DConn,
-                          connection            = Conn,
-                          channel               = Ch}) ->
-    ensure_closed(DConn, DCh),
-    ensure_closed(Conn, Ch),
-    ok.
+log_terminate(Reason, #state{downstream_exchange = XName,
+                             upstream            = Upstream}) ->
+    %% Unexpected death. sasl will log it, but we should update
+    %% rabbit_federation_status.
+    rabbit_federation_status:report(Upstream, XName, clean_reason(Reason)).
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
