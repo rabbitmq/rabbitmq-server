@@ -80,12 +80,7 @@ remove_from_queue0(QueueName, DeadGMPids) ->
                                    pid        = QPid,
                                    slave_pids = SPids }] ->
                       Alive = [Pid || Pid <- [QPid | SPids],
-                                      not lists:member(node(Pid),
-                                                       DeadNodes) orelse
-                                          %% TODO when bug 25104 hits default do whatever it does.
-                                          false],
-                                          %% rabbit_misc:is_process_alive(Pid)],
-                      {QPid1, SPids1} = promote_slave(Alive),
+                                  not lists:member(node(Pid), DeadNodes)],
                       case {{QPid, SPids}, {QPid1, SPids1}} of
                           {Same, Same} ->
                               {ok, QPid1, [], []};
