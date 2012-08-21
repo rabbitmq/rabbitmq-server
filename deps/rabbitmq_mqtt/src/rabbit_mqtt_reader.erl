@@ -46,13 +46,13 @@ handle_call({go, Sock0, SockTransform}, _From, undefined) ->
     rabbit_alarm:register(self(), {?MODULE, conserve_resources, []}),
     {reply, ok,
      control_throttle(
-       #state{ socket        = Sock,
-               conn_name     = ConnStr,
-               await_recv    = false,
-               credit_flow   = running,
-               conserve      = false,
-               parse_state   = rabbit_mqtt_frame:initial_state(),
-               proc_state    = rabbit_mqtt_processor:initial_state(Sock) })};
+       #state{ socket           = Sock,
+               conn_name        = ConnStr,
+               await_recv       = false,
+               connection_state = running,
+               conserve         = false,
+               parse_state      = rabbit_mqtt_frame:initial_state(),
+               proc_state       = rabbit_mqtt_processor:initial_state(Sock) })};
 
 handle_call(duplicate_id, _From,
             State = #state{ proc_state = PState,
@@ -178,7 +178,7 @@ stop(Reason, State = #state{ proc_state = PState }) ->
 close_connection(State = #state{ proc_state = ProcState} ) ->
     pstate(State, rabbit_mqtt_processor:close_connection(ProcState)).
 
-run_socket(State = #state{ credit_flow = blocked }) ->
+run_socket(State = #state{ connection_state = blocked }) ->
     State;
 run_socket(State = #state{ await_recv = true }) ->
     State;
@@ -190,10 +190,11 @@ conserve_resources(Pid, _, Conserve) ->
     Pid ! {conserve_resources, Conserve},
     ok.
 
-control_throttle(State = #state{ credit_flow = Flow,
-                                 conserve    = Conserve }) ->
+control_throttle(State = #state{ connection_state = Flow,
+                                 conserve         = Conserve }) ->
     case {Flow, Conserve orelse credit_flow:blocked()} of
-        {running,   true} -> State #state{ credit_flow = blocked };
-        {blocked,  false} -> run_socket(State #state{ credit_flow = running });
+        {running,   true} -> State #state{ connection_state = blocked };
+        {blocked,  false} -> run_socket(State #state{
+                                                connection_state = running });
         {_,            _} -> run_socket(State)
     end.

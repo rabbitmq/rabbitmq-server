@@ -19,7 +19,7 @@
 -record(state,      { socket,
                       conn_name,
                       await_recv,
-                      credit_flow,
+                      connection_state,
                       conserve,
                       parse_state,
                       proc_state }).
