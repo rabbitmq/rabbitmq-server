@@ -32,7 +32,7 @@
                sockets_used, sockets_total, mem_used, mem_limit, mem_alarm,
                disk_free_limit, disk_free, disk_free_alarm,
                proc_used, proc_total, statistics_level,
-               erlang_version, uptime, run_queue, processors, exchange_types,
+               uptime, run_queue, processors, exchange_types,
                auth_mechanisms, applications, contexts]).
 
 %%--------------------------------------------------------------------
@@ -163,7 +163,6 @@ i(mem_limit,       _State) -> vm_memory_monitor:get_memory_limit();
 i(mem_alarm,       _State) -> resource_alarm_set(memory);
 i(proc_used,       _State) -> erlang:system_info(process_count);
 i(proc_total,      _State) -> erlang:system_info(process_limit);
-i(erlang_version,  _State) -> list_to_binary(erlang:system_info(otp_release));
 i(run_queue,       _State) -> erlang:statistics(run_queue);
 i(processors,      _State) -> erlang:system_info(logical_processors);
 i(disk_free_limit, _State) -> get_disk_free_limit();
