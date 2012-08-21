@@ -48,7 +48,7 @@
          {join_cluster, [?RAM_DEF]},
          change_cluster_node_type,
          update_cluster_nodes,
-         {remove_cluster_node, [?OFFLINE_DEF]},
+         {forget_cluster_node, [?OFFLINE_DEF]},
          cluster_status,
 
          add_user,
@@ -264,11 +264,11 @@ action(update_cluster_nodes, Node, [ClusterNodeS], _Opts, Inform) ->
     Inform("Re-clustering ~p with ~p", [Node, ClusterNode]),
     rpc_call(Node, rabbit_mnesia, update_cluster_nodes, [ClusterNode]);
 
-action(remove_cluster_node, Node, [ClusterNodeS], Opts, Inform) ->
+action(forget_cluster_node, Node, [ClusterNodeS], Opts, Inform) ->
     ClusterNode = list_to_atom(ClusterNodeS),
     RemoveWhenOffline = proplists:get_bool(?OFFLINE_OPT, Opts),
     Inform("Removing node ~p from cluster", [ClusterNode]),
-    rpc_call(Node, rabbit_mnesia, remove_cluster_node,
+    rpc_call(Node, rabbit_mnesia, forget_cluster_node,
              [ClusterNode, RemoveWhenOffline]);
 
 action(wait, Node, [PidFile], _Opts, Inform) ->

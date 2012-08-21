@@ -336,7 +336,7 @@
             <para>
               To leave a cluster, <command>reset</command> the node. You can
               also remove nodes remotely with the
-              <command>remove_cluster_node</command> command.
+              <command>forget_cluster_node</command> command.
             </para>
             <para>
               For more details see the <ulink
@@ -394,7 +394,7 @@
         <varlistentry>
           <term>
             <cmdsynopsis>
-              <command>remove_cluster_node</command>
+              <command>forget_cluster_node</command>
               <arg choice="opt">--offline</arg>
             </cmdsynopsis>
           </term>
@@ -420,7 +420,7 @@
               online, except when using the <command>--offline</command> flag.
             </para>
             <para role="example-prefix">For example:</para>
-            <screen role="example">rabbitmqctl -n hare@mcnulty remove_cluster_node rabbit@stringer</screen>
+            <screen role="example">rabbitmqctl -n hare@mcnulty forget_cluster_node rabbit@stringer</screen>
             <para role="example">
               This command will remove the node
               <command>rabbit@stringer</command> from the node
