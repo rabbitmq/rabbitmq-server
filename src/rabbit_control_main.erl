@@ -47,7 +47,7 @@
 
          {join_cluster, [?RAM_DEF]},
          change_cluster_node_type,
-         recluster,
+         update_cluster_nodes,
          {remove_cluster_node, [?OFFLINE_DEF]},
          cluster_status,
 
@@ -259,10 +259,10 @@ action(change_cluster_node_type, Node, [Type], _Opts, Inform)
     Inform("Turning ~p into a disc node", [Node]),
     rpc_call(Node, rabbit_mnesia, change_cluster_node_type, [disc]);
 
-action(recluster, Node, [ClusterNodeS], _Opts, Inform) ->
+action(update_cluster_nodes, Node, [ClusterNodeS], _Opts, Inform) ->
     ClusterNode = list_to_atom(ClusterNodeS),
     Inform("Re-clustering ~p with ~p", [Node, ClusterNode]),
-    rpc_call(Node, rabbit_mnesia, recluster, [ClusterNode]);
+    rpc_call(Node, rabbit_mnesia, update_cluster_nodes, [ClusterNode]);
 
 action(remove_cluster_node, Node, [ClusterNodeS], Opts, Inform) ->
     ClusterNode = list_to_atom(ClusterNodeS),

@@ -22,7 +22,7 @@
          join_cluster/2,
          reset/0,
          force_reset/0,
-         recluster/1,
+         update_cluster_nodes/1,
          change_cluster_node_type/1,
          remove_cluster_node/2,
 
@@ -75,7 +75,7 @@
 -spec(join_cluster/2 :: ([node()], boolean()) -> 'ok').
 -spec(reset/0 :: () -> 'ok').
 -spec(force_reset/0 :: () -> 'ok').
--spec(recluster/1 :: (node()) -> 'ok').
+-spec(update_cluster_nodes/1 :: (node()) -> 'ok').
 -spec(change_cluster_node_type/1 :: (node_type()) -> 'ok').
 -spec(remove_cluster_node/2 :: (node(), boolean()) -> 'ok').
 
@@ -152,8 +152,8 @@ join_cluster(DiscoveryNode, WantDiscNode) ->
                        {standalone_ram_node,
                         "You can't cluster a node if it's the only "
                         "disc node in its existing cluster. If new nodes "
-                        "joined while this node was offline, use \"recluster\" "
-                        "to add them manually"}});
+                        "joined while this node was offline, use "
+                        "\"update_cluster_nodes\" to add them manually"}});
         _    -> ok
     end,
 
@@ -254,8 +254,8 @@ change_cluster_node_type(Type) ->
                        {cannot_connect_to_cluster,
                         "Could not connect to the cluster nodes present in "
                         "this node status file. If the cluster has changed, "
-                        "you can use the \"recluster\" command to point to the "
-                        "new cluster nodes"}})
+                        "you can use the \"update_cluster_nodes\" command to "
+                        "point to the new cluster nodes"}})
     end,
     WantDiscNode = case Type of
                        ram  -> false;
@@ -271,7 +271,7 @@ change_cluster_node_type(Type) ->
     end,
     ok = init_db_with_mnesia(AllNodes, WantDiscNode, false).
 
-recluster(DiscoveryNode) ->
+update_cluster_nodes(DiscoveryNode) ->
     ensure_mnesia_not_running(),
     ensure_mnesia_dir(),
 
