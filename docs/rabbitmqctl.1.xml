@@ -318,7 +318,10 @@
               the event of node failure and recovery from global events such as
               power failure across all nodes. Ram nodes replicate data in ram
               only and are mainly used for scalability. A cluster must always
-              have at least one disk node.
+              have at least one disk node. Note that the queue data will always
+              be on disc, including on ram nodes. This makes ram nodes more
+              performant only when managing resources (e.g. adding/removing
+              queues, exhanges, or bindings).
             </para>
             <para>
               The node will be a disk node by default. If you wish to wish to
@@ -331,8 +334,8 @@
               node went down.
             </para>
             <para>
-              To leave a cluster, you can simply <command>reset</command> the
-              node. You can also remove nodes remotely with the
+              To leave a cluster, <command>reset</command> the node. You can
+              also remove nodes remotely with the
               <command>remove_cluster_node</command> command.
             </para>
             <para>
@@ -341,7 +344,7 @@
               guide</ulink>.
             </para>
             <para role="example-prefix">For example:</para>
-            <screen role="example">rabbitmqctl cluster hare@elena --ram</screen>
+            <screen role="example">rabbitmqctl join_cluster hare@elena --ram</screen>
             <para role="example">
               This command instructs the RabbitMQ node to join the cluster that
               <command>hare@elena</command> is part of, as a ram node.
@@ -382,8 +385,8 @@
             <para role="example-prefix">For example:</para>
             <screen role="example">rabbitmqctl change_cluster_node_type disk</screen>
             <para role="example">
-              This command displays will turn a ram node into a disk node
-              (provided that other disk nodes exist in the cluster).
+              This command will turn a ram node into a disk node (provided that
+              other disk nodes exist in the cluster).
             </para>
           </listitem>
         </varlistentry>
@@ -414,7 +417,7 @@
             </variablelist>
             <para>
               Removes a cluster node remotely. The node that is being removed
-              must be online, while the node we are removing from must be
+              must be offline, while the node we are removing from must be
               online, except when using the <command>--offline</command> flag.
             </para>
             <para role="example-prefix">For example:</para>
