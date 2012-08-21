@@ -321,7 +321,7 @@
               have at least one disk node. Note that the queue data will always
               be on disc, including on ram nodes. This makes ram nodes more
               performant only when managing resources (e.g. adding/removing
-              queues, exhanges, or bindings).
+              queues, exchanges, or bindings).
             </para>
             <para>
               The node will be a disk node by default. If you wish to wish to
@@ -444,7 +444,7 @@
                 <term>clusternode</term>
                 <listitem>
                   <para>
-                    The node to update_cluster_nodes with.
+                    The node to consult for up to date information.
                   </para>
                 </listitem>
               </varlistentry>
@@ -462,8 +462,8 @@
               which node A and B are clustered. A goes down, C clusters with C,
               and then B leaves the cluster. When A wakes up, it'll try to
               contact B, but this will fail since B is not in the cluster
-              anymore. <command>update_cluster_nodes -n A C</command> will solve this
-              situation.
+              anymore. <command>update_cluster_nodes -n A C</command> will solve
+              this situation.
             </para>
           </listitem>
         </varlistentry>
