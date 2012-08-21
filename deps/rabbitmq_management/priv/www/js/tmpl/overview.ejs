@@ -148,10 +148,6 @@
    </tr>
 <% } %>
 </table>
-<p>
-  RabbitMQ <b><%= fmt_rabbit_version(nodes[0].applications) %></b>
-  on Erlang <b><%= nodes[0].erlang_version %></b>
-</p>
 
 <% if (overview.statistics_db_node == 'not_running') { %>
   <p class="status-error">Statistics database could not be contacted. Message rates and queue lengths will not be shown.</p>
@@ -277,5 +273,4 @@
 </div>
 </div>
 <% } %>
-
 <% } %>

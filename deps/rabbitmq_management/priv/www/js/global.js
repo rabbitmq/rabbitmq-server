@@ -79,7 +79,10 @@ function setup_global_vars() {
     var overview = JSON.parse(sync_get('/overview'));
     statistics_level = overview.statistics_level;
     var user = JSON.parse(sync_get('/whoami'));
-    replace_content('login', '<p>User: <b>' + user.name + '</b></p>');
+    replace_content('login-version',
+                    '<p>User: <b>' + user.name + '</b></p>' +
+                    '<p>RabbitMQ ' + overview.rabbitmq_version +
+                    ', Erlang ' + overview.erlang_version + '</p>');
     var tags = user.tags.split(",");
     user_administrator = jQuery.inArray("administrator", tags) != -1;
     user_monitor = user_administrator ||

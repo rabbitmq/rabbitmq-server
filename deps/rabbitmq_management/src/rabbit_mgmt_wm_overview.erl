@@ -42,12 +42,17 @@ to_json(ReqData, Context = #context{user = User = #user{tags = Tags}}) ->
     Overview =
         case rabbit_mgmt_util:is_monitor(Tags) of
             true ->
+                {_, _, VRabbit} =
+                    lists:keyfind(rabbit, 1, application:which_applications()),
+                VErlang = erlang:system_info(otp_release),
                 Overview0 ++
                     rabbit_mgmt_db:get_overview() ++
                     [{node,               node()},
                      {statistics_db_node, stats_db_node()},
                      {listeners,          listeners()},
-                     {contexts,           rabbit_mochiweb_contexts()}];
+                     {contexts,           rabbit_mochiweb_contexts()},
+                     {rabbitmq_version,   list_to_binary(VRabbit)},
+                     {erlang_version,     list_to_binary(VErlang)}];
             _ ->
                 Overview0 ++
                     rabbit_mgmt_db:get_overview(User)

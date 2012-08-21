@@ -103,14 +103,6 @@
       <td><%= fmt_uptime(node.uptime) %></td>
     </tr>
     <tr>
-      <th>RabbitMQ version</th>
-      <td><%= fmt_rabbit_version(node.applications) %></td>
-    </tr>
-    <tr>
-      <th>Erlang version</th>
-      <td><%= node.erlang_version %></td>
-    </tr>
-    <tr>
       <th>Type</th>
       <td>
        <% if (node.type == 'disc') { %>
