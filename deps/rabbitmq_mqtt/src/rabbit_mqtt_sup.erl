@@ -21,11 +21,11 @@
 
 -export([start_link/2, init/1]).
 
--export([start_client/2, start_ssl_client/3]).
+-export([start_client/1, start_ssl_client/2]).
 
-start_link(Listeners, Configuration) ->
+start_link(Listeners, []) ->
     {ok, SupPid} = supervisor:start_link({local, ?MODULE}, ?MODULE,
-                                         [Listeners, Configuration]),
+                                         [Listeners]),
     {ok, Collector} =
         supervisor2:start_child(
           SupPid,
@@ -33,7 +33,7 @@ start_link(Listeners, Configuration) ->
           transient, ?MAX_WAIT, worker, [rabbit_mqtt_collector]}),
     {ok, SupPid}.
 
-init([{Listeners, SslListeners}, Configuration]) ->
+init([{Listeners, SslListeners}]) ->
     {ok, SocketOpts} = application:get_env(rabbitmq_mqtt, tcp_listen_options),
     SslOpts = case SslListeners of
                   [] -> none;
@@ -46,28 +46,28 @@ init([{Listeners, SslListeners}, Configuration]) ->
               {rabbit_mqtt_reader, start_link, []}]},
             transient, infinity, supervisor, [rabbit_client_sup]} |
            listener_specs(fun tcp_listener_spec/1,
-                          [SocketOpts, Configuration], Listeners) ++
+                          [SocketOpts], Listeners) ++
            listener_specs(fun ssl_listener_spec/1,
-                          [SocketOpts, SslOpts, Configuration], SslListeners)]}}.
+                          [SocketOpts, SslOpts], SslListeners)]}}.
 
 listener_specs(Fun, Args, Listeners) ->
     [Fun([Address | Args]) ||
         Listener <- Listeners,
         Address  <- rabbit_networking:tcp_listener_addresses(Listener)].
 
-tcp_listener_spec([Address, SocketOpts, Configuration]) ->
+tcp_listener_spec([Address, SocketOpts]) ->
     rabbit_networking:tcp_listener_spec(
       rabbit_mqtt_listener_sup, Address, SocketOpts,
       mqtt, "MQTT TCP Listener",
-      {?MODULE, start_client, [Configuration]}).
+      {?MODULE, start_client, []}).
 
-ssl_listener_spec([Address, SocketOpts, SslOpts, Configuration]) ->
+ssl_listener_spec([Address, SocketOpts, SslOpts]) ->
     rabbit_networking:tcp_listener_spec(
       rabbit_stomp_listener_sup, Address, SocketOpts,
       'mqtt/ssl', "MQTT SSL Listener",
-      {?MODULE, start_ssl_client, [Configuration, SslOpts]}).
+      {?MODULE, start_ssl_client, [SslOpts]}).
 
-start_client(_Configuration, Sock, SockTransform) ->
+start_client(Sock, SockTransform) ->
     {ok, Reader} = supervisor:start_child(rabbit_mqtt_client_sup,
                                           [{Sock, SockTransform}]),
     ok = rabbit_net:controlling_process(Sock, Reader),
@@ -76,10 +76,10 @@ start_client(_Configuration, Sock, SockTransform) ->
     gen_event:which_handlers(error_logger),
     Reader.
 
-start_client(Configuration, Sock) ->
-    start_client(Configuration, Sock, fun (S) -> {ok, S} end).
+start_client(Sock) ->
+    start_client(Sock, fun (S) -> {ok, S} end).
 
-start_ssl_client(Configuration, SslOpts, Sock) ->
+start_ssl_client(SslOpts, Sock) ->
     Transform = rabbit_networking:ssl_transform_fun(SslOpts),
-    start_client(Configuration, Sock, Transform).
+    start_client(Sock, Transform).
 
