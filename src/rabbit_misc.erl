@@ -60,6 +60,7 @@
 -export([multi_call/2]).
 -export([os_cmd/1]).
 -export([gb_sets_difference/2]).
+-export([json_decode/1, json_encode/1]).
 
 %% Horrible macro to use in guards
 -define(IS_BENIGN_EXIT(R),
@@ -934,3 +935,23 @@ os_cmd(Command) ->
 
 gb_sets_difference(S1, S2) ->
     gb_sets:fold(fun gb_sets:delete_any/2, S1, S2).
+
+json_to_term({struct, Obj}) ->
+    lists:map(fun ({K, V}) -> {K, json_to_term(V)} end, Obj);
+json_to_term(Array) when is_list(Array) ->
+    lists:map(fun json_to_term/1, Array);
+json_to_term(Value) ->
+    Value.
+
+json_decode(Body) ->
+    json_to_term(mochijson2:decode(Body)).
+
+term_to_json([{_, _}|_] = Obj) ->
+    {struct, lists:map(fun ({K, V}) -> {K, term_to_json(V)} end, Obj)};
+term_to_json(Array) when is_list(Array) ->
+    lists:map(fun term_to_json/1, Array);
+term_to_json(Value) ->
+    Value.
+
+json_encode(Term) ->
+    mochijson2:encode(term_to_json(Term)).
