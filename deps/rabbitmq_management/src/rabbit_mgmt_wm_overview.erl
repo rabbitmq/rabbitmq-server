@@ -34,25 +34,25 @@ content_types_provided(ReqData, Context) ->
 to_json(ReqData, Context = #context{user = User = #user{tags = Tags}}) ->
     {ok, StatsLevel} = application:get_env(rabbit, collect_statistics),
     %% NB: this duplicates what's in /nodes but we want a global idea
-    %% of this. And /nodes is not accepssible to non-monitor users.
+    %% of this. And /nodes is not accessible to non-monitor users.
     ExchangeTypes = rabbit_mgmt_external_stats:list_registry_plugins(exchange),
+    {_, _, VRabbit} =
+        lists:keyfind(rabbit, 1, application:which_applications()),
+    VErlang = erlang:system_info(otp_release),
     Overview0 = [{management_version, version()},
                  {statistics_level,   StatsLevel},
-                 {exchange_types,     ExchangeTypes}],
+                 {exchange_types,     ExchangeTypes},
+                 {rabbitmq_version,   list_to_binary(VRabbit)},
+                 {erlang_version,     list_to_binary(VErlang)}],
     Overview =
         case rabbit_mgmt_util:is_monitor(Tags) of
             true ->
-                {_, _, VRabbit} =
-                    lists:keyfind(rabbit, 1, application:which_applications()),
-                VErlang = erlang:system_info(otp_release),
                 Overview0 ++
                     rabbit_mgmt_db:get_overview() ++
                     [{node,               node()},
                      {statistics_db_node, stats_db_node()},
                      {listeners,          listeners()},
-                     {contexts,           rabbit_mochiweb_contexts()},
-                     {rabbitmq_version,   list_to_binary(VRabbit)},
-                     {erlang_version,     list_to_binary(VErlang)}];
+                     {contexts,           rabbit_mochiweb_contexts()}];
             _ ->
                 Overview0 ++
                     rabbit_mgmt_db:get_overview(User)
