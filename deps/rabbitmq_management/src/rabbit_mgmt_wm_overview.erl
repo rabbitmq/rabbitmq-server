@@ -36,14 +36,12 @@ to_json(ReqData, Context = #context{user = User = #user{tags = Tags}}) ->
     %% NB: this duplicates what's in /nodes but we want a global idea
     %% of this. And /nodes is not accessible to non-monitor users.
     ExchangeTypes = rabbit_mgmt_external_stats:list_registry_plugins(exchange),
-    {_, _, VRabbit} =
-        lists:keyfind(rabbit, 1, application:which_applications()),
-    VErlang = erlang:system_info(otp_release),
-    Overview0 = [{management_version, version()},
+    Overview0 = [{management_version, version(rabbitmq_management)},
                  {statistics_level,   StatsLevel},
                  {exchange_types,     ExchangeTypes},
-                 {rabbitmq_version,   list_to_binary(VRabbit)},
-                 {erlang_version,     list_to_binary(VErlang)}],
+                 {rabbitmq_version,   version(rabbit)},
+                 {erlang_version,     list_to_binary(
+                                        erlang:system_info(otp_release))}],
     Overview =
         case rabbit_mgmt_util:is_monitor(Tags) of
             true ->
@@ -70,10 +68,9 @@ stats_db_node() ->
         Pid       -> node(Pid)
     end.
 
-version() ->
-    [Vsn] = [V || {A, _D, V} <- application:loaded_applications(),
-            A =:= rabbitmq_management],
-    list_to_binary(Vsn).
+version(App) ->
+    {_, _, V} = lists:keyfind(App, 1, application:which_applications()),
+    list_to_binary(V).
 
 listeners() ->
     rabbit_mgmt_util:sort_list(
