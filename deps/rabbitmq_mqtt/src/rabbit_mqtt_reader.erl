@@ -17,7 +17,7 @@
 -module(rabbit_mqtt_reader).
 -behaviour(gen_server2).
 
--export([start_link/1]).
+-export([start_link/0]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          code_change/3, terminate/2]).
 
@@ -28,12 +28,15 @@
 
 %%----------------------------------------------------------------------------
 
-start_link(Params) ->
-    gen_server2:start_link(?MODULE, Params, []).
+start_link() ->
+    gen_server2:start_link(?MODULE, [], []).
 
 log(Level, Fmt, Args) -> rabbit_log:log(connection, Level, Fmt, Args).
 
-init({Sock0, SockTransform}) ->
+init([]) ->
+    {ok, undefined, hibernate, {backoff, 1000, 1000, 10000}}.
+
+handle_call({go, Sock0, SockTransform}, _From, undefined) ->
     process_flag(trap_exit, true),
     {ok, Sock} = SockTransform(Sock0),
     ok = rabbit_misc:throw_on_error(
@@ -41,7 +44,7 @@ init({Sock0, SockTransform}) ->
     {ok, ConnStr} = rabbit_net:connection_string(Sock, inbound),
     log(info, "accepting MQTT connection (~s)~n", [ConnStr]),
     rabbit_alarm:register(self(), {?MODULE, conserve_resources, []}),
-    {ok,
+    {reply, ok,
      control_throttle(
        #state{ socket        = Sock,
                conn_name     = ConnStr,
@@ -49,8 +52,7 @@ init({Sock0, SockTransform}) ->
                credit_flow   = running,
                conserve      = false,
                parse_state   = rabbit_mqtt_frame:initial_state(),
-               proc_state    = rabbit_mqtt_processor:initial_state(Sock) }),
-     hibernate, {backoff, 1000, 1000, 10000}}.
+               proc_state    = rabbit_mqtt_processor:initial_state(Sock) })};
 
 handle_call(duplicate_id, _From,
             State = #state{ proc_state = PState,
