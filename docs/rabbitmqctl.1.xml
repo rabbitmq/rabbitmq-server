@@ -465,12 +465,6 @@
               anymore. <command>recluster -n A C</command> will solve this
               situation.
             </para>
-            <para role="example-prefix">For example:</para>
-            <screen role="example">rabbitmqctl change_cluster_node_type disk</screen>
-            <para role="example">
-              This command displays will turn a ram node into a disk node
-              (provided that other disk nodes exist in the cluster).
-            </para>
           </listitem>
         </varlistentry>
       </variablelist>
