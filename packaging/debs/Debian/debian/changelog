@@ -1,3 +1,9 @@
+rabbitmq-server (2.8.6-1) unstable; urgency=low
+
+  * New Upstream Release
+
+ -- Emile Joubert <emile@rabbitmq.com>  Wed, 22 Aug 2012 11:30:58 +0100
+
 rabbitmq-server (2.8.5-1) unstable; urgency=low
 
   * New Upstream Release
