@@ -98,6 +98,7 @@ start_link() ->
     %% mirrored_supervisor to maintain the uniqueness of this process.
     case gen_server2:start_link(?MODULE, [], []) of
         {ok, Pid} -> yes = global:re_register_name(?MODULE, Pid),
+                     rabbit:force_event_refresh(),
                      {ok, Pid};
         Else      -> Else
     end.
@@ -213,7 +214,6 @@ init([]) ->
     %% When Rabbit is overloaded, it's usually especially important
     %% that the management plugin work.
     process_flag(priority, high),
-    rabbit:force_event_refresh(),
     {ok, Interval} = application:get_env(rabbit, collect_statistics_interval),
     rabbit_log:info("Statistics database started.~n"),
     {ok, #state{interval = Interval,
