@@ -93,7 +93,7 @@ remove_from_queue0(QueueName, DeadGMPids) ->
                                                    slave_pids = SPids1 }),
                               %% Sometimes a slave dying means we need
                               %% to start more on other nodes -
-                              %% "at-least" mode can cause this to
+                              %% "exactly" mode can cause this to
                               %% happen.
                               {_, OldNodes} = actual_queue_nodes(Q1),
                               {_, NewNodes} = suggested_queue_nodes(Q1),
@@ -249,7 +249,7 @@ suggested_queue_nodes(<<"nodes">>, Nodes0, {MNode, _SNodes}, _All) ->
         true  -> {MNode, Nodes -- [MNode]};
         false -> promote_slave(Nodes)
     end;
-suggested_queue_nodes(<<"at-least">>, Count, {MNode, SNodes}, All) ->
+suggested_queue_nodes(<<"exactly">>, Count, {MNode, SNodes}, All) ->
     SCount = Count - 1,
     {MNode, case SCount > length(SNodes) of
                 true  -> Cand = (All -- [MNode]) -- SNodes,
@@ -267,10 +267,10 @@ actual_queue_nodes(#amqqueue{pid = MPid, slave_pids = SPids}) ->
 
 is_mirrored(Q) ->
     case policy(<<"ha-mode">>, Q) of
-        <<"all">>      -> true;
-        <<"nodes">>    -> true;
-        <<"at-least">> -> true;
-        _              -> false
+        <<"all">>     -> true;
+        <<"nodes">>   -> true;
+        <<"exactly">> -> true;
+        _             -> false
     end.
 
 update_mirrors(OldQ = #amqqueue{name = QName, pid = QPid},

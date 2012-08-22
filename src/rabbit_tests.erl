@@ -874,12 +874,12 @@ test_dynamic_mirroring() ->
     Test({b,[a,c]},<<"nodes">>,[<<"a">>,<<"b">>,<<"c">>],{b,[a]},[a,b,c,d]),
     Test({a,[b,c]},<<"nodes">>,[<<"a">>,<<"b">>,<<"c">>],{d,[a]},[a,b,c,d]),
 
-    Test({a,[b]},  <<"at-least">>,2,{a,[]},   [a,b,c,d]),
-    Test({a,[b,c]},<<"at-least">>,3,{a,[]},   [a,b,c,d]),
-    Test({a,[c]},  <<"at-least">>,2,{a,[c]},  [a,b,c,d]),
-    Test({a,[b,c]},<<"at-least">>,3,{a,[c]},  [a,b,c,d]),
-    Test({a,[c]},  <<"at-least">>,2,{a,[c,d]},[a,b,c,d]),
-    Test({a,[c,d]},<<"at-least">>,3,{a,[c,d]},[a,b,c,d]),
+    Test({a,[b]},  <<"exactly">>,2,{a,[]},   [a,b,c,d]),
+    Test({a,[b,c]},<<"exactly">>,3,{a,[]},   [a,b,c,d]),
+    Test({a,[c]},  <<"exactly">>,2,{a,[c]},  [a,b,c,d]),
+    Test({a,[b,c]},<<"exactly">>,3,{a,[c]},  [a,b,c,d]),
+    Test({a,[c]},  <<"exactly">>,2,{a,[c,d]},[a,b,c,d]),
+    Test({a,[c,d]},<<"exactly">>,3,{a,[c,d]},[a,b,c,d]),
 
     passed.
 
