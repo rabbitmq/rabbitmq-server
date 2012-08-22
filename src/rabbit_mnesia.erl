@@ -1002,13 +1002,6 @@ create_local_table_copies(Type) ->
                               HasDiscOnlyCopies -> disc_only_copies;
                               true              -> ram_copies
                           end;
-%%% unused code - commented out to keep dialyzer happy
-%%%                      Type =:= disc_only ->
-%%%                          if
-%%%                              HasDiscCopies or HasDiscOnlyCopies ->
-%%%                                  disc_only_copies;
-%%%                              true -> ram_copies
-%%%                          end;
                       Type =:= ram ->
                           ram_copies
                   end,
