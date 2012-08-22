@@ -125,13 +125,36 @@ prepare() ->
 init() ->
     ensure_mnesia_running(),
     ensure_mnesia_dir(),
-    DiscNode = is_disc_node(),
-    init_db_and_upgrade(all_clustered_nodes(), DiscNode, DiscNode),
+    case is_virgin_node() of
+        true  -> init_from_config();
+        false -> normal_init(is_disc_node(), all_clustered_nodes())
+    end,
     %% We intuitively expect the global name server to be synced when
     %% Mnesia is up. In fact that's not guaranteed to be the case - let's
     %% make it so.
     ok = global:sync(),
     ok.
+
+normal_init(DiscNode, AllNodes) ->
+    DiscNode = is_disc_node(),
+    init_db_and_upgrade(AllNodes, DiscNode, DiscNode).
+
+init_from_config() ->
+    {ok, {TryNodes, DiscNode}} =
+        application:get_env(rabbit, cluster_nodes),
+    case find_good_node(TryNodes -- [node()]) of
+        {ok, Node} ->
+            rabbit_log:info("Node '~p' selected for clustering from "
+                            "configuration~n", [Node]),
+            {ok, {_, DiscNodes, _}} = discover_cluster(Node),
+            init_db_and_upgrade(DiscNodes, DiscNode, false),
+            rabbit_node_monitor:notify_joined_cluster();
+        none ->
+            rabbit_log:warning("Could not find any suitable node amongst the "
+                               "ones provided in the configuration: ~p~n",
+                               [TryNodes]),
+            normal_init(DiscNode, [node()])
+    end.
 
 %% Make the node join a cluster. The node will be reset automatically before we
 %% actually cluster it. The nodes provided will be used to find out about the
@@ -428,10 +451,10 @@ running_clustered_disc_nodes() ->
 mnesia_nodes() ->
     case mnesia:system_info(is_running) of
         no  -> {error, mnesia_not_running};
-        yes -> %% If the tables are not present, it means that `init_db/3' hasn't
-               %% been run yet. In other words, either we are a virgin node or a
-               %% restarted RAM node. In both cases we're not interested in what
-               %% mnesia has to say.
+        yes -> %% If the tables are not present, it means that `init_db/3'
+               %% hasn't been run yet. In other words, either we are a virgin
+               %% node or a restarted RAM node. In both cases we're not
+               %% interested in what mnesia has to say.
                IsDiscNode = mnesia:system_info(use_dir),
                Tables = mnesia:system_info(tables),
                {Table, _} = case table_definitions(case IsDiscNode of
@@ -690,10 +713,8 @@ check_cluster_consistency() ->
                           {error, Error};
                       {OTP, Rabbit, Res} ->
                           rabbit_misc:sequence_error(
-                            [check_version_consistency(
-                               erlang:system_info(otp_release), OTP, "OTP"),
-                             check_version_consistency(
-                               rabbit_misc:version(), Rabbit, "Rabbit"),
+                            [check_otp_consistency(OTP),
+                             check_rabbit_consistency(Rabbit),
                              case Res of
                                  {ok, Status} ->
                                      check_nodes_consistency(Node, Status);
@@ -701,8 +722,7 @@ check_cluster_consistency() ->
                                      {error, Error}
                              end])
                   end;
-             (_Node, {ok, Status}) ->
-                  {ok, Status}
+             (_Node, {ok, Status})  -> {ok, Status}
           end, {error, no_nodes}, AllNodes)
     of
         {ok, Status = {RemoteAllNodes, _, _}} ->
@@ -1130,3 +1150,39 @@ check_version_consistency(This, Remote, Name) ->
     {error, {inconsistent_cluster,
              rabbit_misc:format("~s version mismatch: local node is ~s, "
                                 "remote node ~s", [Name, This, Remote])}}.
+
+check_otp_consistency(Remote) ->
+    check_version_consistency(erlang:system_info(otp_release), Remote, "OTP").
+
+check_rabbit_consistency(Remote) ->
+    check_version_consistency(rabbit_misc:version(), Remote, "Rabbit").
+
+%% This is fairly tricky.  We want to know if the node is in the state that a
+%% `reset' would leave it in.  We cannot simply check if the mnesia tables
+%% aren't there because restarted RAM nodes won't have tables while still being
+%% non-virgin.  What we do instead is to check if the mnesia directory is non
+%% existant or empty, with the exception of the cluster status file, which will
+%% be there thanks to `rabbit_node_monitor:prepare_cluster_status_file/0'.
+is_virgin_node() ->
+    case rabbit_file:list_dir(dir()) of
+        {error, enoent} -> true;
+        {ok, []}        -> true;
+        {ok, [File]}    -> (dir() ++ "/" ++ File) =:=
+                               rabbit_node_monitor:cluster_status_file_name();
+        {ok, Files}     -> false
+    end.
+
+find_good_node([]) ->
+    none;
+find_good_node([Node | Nodes]) ->
+    case rpc:call(Node, rabbit_mnesia, node_info, []) of
+        {badrpc, _Reason} ->
+            find_good_node(Nodes);
+        {OTP, Rabbit, _} ->
+            case rabbit_misc:sequence_error([check_otp_consistency(OTP),
+                                             check_rabbit_consistency(Rabbit)])
+            of
+                {error, _} -> find_good_node(Nodes);
+                ok         -> {ok, Node}
+            end
+    end.

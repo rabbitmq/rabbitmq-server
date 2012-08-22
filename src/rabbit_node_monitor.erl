@@ -18,7 +18,8 @@
 
 -behaviour(gen_server).
 
--export([prepare_cluster_status_file/0,
+-export([cluster_status_file_name/0,
+         prepare_cluster_status_file/0,
          write_cluster_status_file/1,
          read_cluster_status_file/0,
          update_cluster_status_file/0,
@@ -80,26 +81,27 @@
 %% various situations. Obviously when mnesia is offline the information we have
 %% will be outdated, but it can't be otherwise.
 
-cluster_status_file_filename() ->
+cluster_status_file_name() ->
     rabbit_mnesia:dir() ++ "/cluster_nodes.config".
 
 prepare_cluster_status_file() ->
     NotPresent =
         fun (AllNodes0, WantDiscNode) ->
-            ThisNode = [node()],
+                ThisNode = [node()],
 
-            RunningNodes0 = legacy_read_previously_running_nodes(),
-            legacy_delete_previously_running_nodes(),
+                RunningNodes0 = legacy_read_previously_running_nodes(),
+                legacy_delete_previously_running_nodes(),
 
-            RunningNodes = lists:usort(RunningNodes0 ++ ThisNode),
-            AllNodes =
-                lists:usort(AllNodes0 ++ RunningNodes),
-            DiscNodes = case WantDiscNode of
-                            true  -> ThisNode;
-                            false -> []
-                        end,
+                RunningNodes = lists:usort(RunningNodes0 ++ ThisNode),
+                AllNodes =
+                    lists:usort(AllNodes0 ++ RunningNodes),
+                DiscNodes = case WantDiscNode of
+                                true  -> ThisNode;
+                                false -> []
+                            end,
 
-            ok = write_cluster_status_file({AllNodes, DiscNodes, RunningNodes})
+                ok = write_cluster_status_file({AllNodes, DiscNodes,
+                                                RunningNodes})
         end,
     case try_read_cluster_status_file() of
         {ok, _} ->
@@ -108,14 +110,12 @@ prepare_cluster_status_file() ->
             %% Legacy file
             NotPresent(AllNodes, legacy_should_be_disc_node(AllNodes));
         {error, {cannot_read_file, _, enoent}} ->
-            {ok, {AllNodes, WantDiscNode}} =
-                application:get_env(rabbit, cluster_nodes),
-            NotPresent(AllNodes, WantDiscNode)
+            NotPresent([], true)
     end.
 
 
 write_cluster_status_file(Status) ->
-    FileName = cluster_status_file_filename(),
+    FileName = cluster_status_file_name(),
     case rabbit_file:write_term_file(FileName, [Status]) of
         ok -> ok;
         {error, Reason} ->
@@ -124,7 +124,7 @@ write_cluster_status_file(Status) ->
     end.
 
 try_read_cluster_status_file() ->
-    FileName = cluster_status_file_filename(),
+    FileName = cluster_status_file_name(),
     case rabbit_file:read_term_file(FileName) of
         {ok, [{_, _, _} = Status]} ->
             {ok, Status};
