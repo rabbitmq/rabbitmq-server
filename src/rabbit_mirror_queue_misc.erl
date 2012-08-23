@@ -233,7 +233,8 @@ suggested_queue_nodes(Q) ->
                 _    -> MNode0
             end,
     suggested_queue_nodes(policy(<<"ha-mode">>, Q), policy(<<"ha-params">>, Q),
-                          {MNode, SNodes}, rabbit_mnesia:all_clustered_nodes()).
+                          {MNode, SNodes},
+                          rabbit_mnesia:running_clustered_nodes()).
 
 policy(Policy, Q) ->
     case rabbit_policy:get(Policy, Q) of
