@@ -136,7 +136,6 @@ init() ->
     ok.
 
 normal_init(DiscNode, AllNodes) ->
-    DiscNode = is_disc_node(),
     init_db_and_upgrade(AllNodes, DiscNode, DiscNode).
 
 init_from_config() ->
@@ -153,7 +152,7 @@ init_from_config() ->
             rabbit_log:warning("Could not find any suitable node amongst the "
                                "ones provided in the configuration: ~p~n",
                                [TryNodes]),
-            normal_init(DiscNode, [node()])
+            normal_init(true, [node()])
     end.
 
 %% Make the node join a cluster. The node will be reset automatically before we
@@ -1169,7 +1168,7 @@ is_virgin_node() ->
         {ok, []}        -> true;
         {ok, [File]}    -> (dir() ++ "/" ++ File) =:=
                                rabbit_node_monitor:cluster_status_file_name();
-        {ok, Files}     -> false
+        {ok, _}         -> false
     end.
 
 find_good_node([]) ->
