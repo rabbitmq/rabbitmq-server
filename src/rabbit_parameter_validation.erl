@@ -16,7 +16,7 @@
 
 -module(rabbit_parameter_validation).
 
--export([number/2, binary/2, list/2, proplist/3]).
+-export([number/2, binary/2, list/2, regex/2, proplist/3]).
 
 number(_Name, Term) when is_number(Term) ->
     ok;
@@ -35,6 +35,13 @@ list(_Name, Term) when is_list(Term) ->
 
 list(Name, Term) ->
     {error, "~s should be list, actually was ~p", [Name, Term]}.
+
+regex(Name, Term) ->
+    case re:compile(Term) of
+        {ok, _}         -> ok;
+        {error, Reason} -> {error, "~s should be regular expression "
+                                   "but is invalid: ~p", [Name, Reason]}
+    end.
 
 proplist(Name, Constraints, Term) when is_list(Term) ->
     {Results, Remainder}

@@ -129,14 +129,19 @@ match(Name, Policies) ->
     end.
 
 matches(#resource{name = Name}, Policy) ->
-    lists:prefix(binary_to_list(pget(<<"prefix">>, Policy)),
-                 binary_to_list(Name)).
+    case re:run(binary_to_list(Name),
+                binary_to_list(pget(<<"pattern">>, Policy)),
+                [{capture, none}]) of
+        nomatch -> false;
+        match   -> true
+    end.
 
 sort_pred(A, B) ->
-    size(pget(<<"prefix">>, A)) >= size(pget(<<"prefix">>, B)).
+    pget(<<"priority">>, A) >= pget(<<"priority">>, B).
 
 %%----------------------------------------------------------------------------
 
 policy_validation() ->
-    [{<<"prefix">>, fun rabbit_parameter_validation:binary/2, mandatory},
+    [{<<"priority">>, fun rabbit_parameter_validation:number/2, mandatory},
+     {<<"pattern">>, fun rabbit_parameter_validation:regex/2, mandatory},
      {<<"policy">>, fun rabbit_parameter_validation:list/2,   mandatory}].
