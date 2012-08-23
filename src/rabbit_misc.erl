@@ -60,7 +60,7 @@
 -export([multi_call/2]).
 -export([os_cmd/1]).
 -export([gb_sets_difference/2]).
--export([json_encode/1, json_decode/1]).
+-export([json_encode/1, json_decode/1, json_to_term/1, term_to_json/1]).
 
 %% Horrible macro to use in guards
 -define(IS_BENIGN_EXIT(R),
@@ -220,6 +220,8 @@
 -spec(gb_sets_difference/2 :: (gb_set(), gb_set()) -> gb_set()).
 -spec(json_encode/1 :: (any()) -> {'ok', string()} | {'error', any()}).
 -spec(json_decode/1 :: (string()) -> {'ok', any()} | 'error').
+-spec(json_to_term/1 :: (any()) -> any()).
+-spec(term_to_json/1 :: (any()) -> any()).
 
 -endif.
 
@@ -954,3 +956,21 @@ json_decode(Term) ->
         %% decoding errors...
         error:_ -> error
     end.
+
+json_to_term({struct, L}) ->
+    [{K, json_to_term(V)} || {K, V} <- L];
+json_to_term(L) when is_list(L) ->
+    [json_to_term(I) || I <- L];
+json_to_term(V) when is_binary(V) orelse is_number(V) orelse V =:= null orelse
+                     V =:= true orelse V =:= false ->
+    V.
+
+%% This has the flaw that empty lists will never be JSON objects, so use with
+%% care.
+term_to_json([{_, _}|_] = L) ->
+    {struct, [{K, term_to_json(V)} || {K, V} <- L]};
+term_to_json(L) when is_list(L) ->
+    [term_to_json(I) || I <- L];
+term_to_json(V) when is_binary(V) orelse is_number(V) orelse V =:= null orelse
+                     V =:= true orelse V =:= false ->
+    V.
