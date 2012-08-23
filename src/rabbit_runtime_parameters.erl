@@ -58,9 +58,9 @@
 %%---------------------------------------------------------------------------
 
 parse_set(VHost, Component, Key, String) ->
-    case parse(String) of
-        {ok, Term}  -> set(VHost, Component, Key, Term);
-        {errors, L} -> format_error(L)
+    case rabbit_misc:json_decode(String) of
+        {ok, JSON} -> set(VHost, Component, Key, rabbit_misc:json_to_term(JSON));
+        error      -> {error_string, "JSON decoding error"}
     end.
 
 set(VHost, Component, Key, Term) ->
@@ -75,20 +75,13 @@ format_error(L) ->
 set0(VHost, Component, Key, Term) ->
     case lookup_component(Component) of
         {ok, Mod} ->
-            case flatten_errors(validate(Term)) of
+            case flatten_errors(Mod:validate(VHost, Component, Key, Term)) of
                 ok ->
-                    case flatten_errors(
-                           Mod:validate(VHost, Component, Key, Term)) of
-                        ok ->
-                            case mnesia_update(VHost, Component, Key, Term) of
-                                {old, Term} -> ok;
-                                _           -> Mod:notify(
-                                                 VHost, Component, Key, Term)
-                            end,
-                            ok;
-                        E ->
-                            E
-                    end;
+                    case mnesia_update(VHost, Component, Key, Term) of
+                        {old, Term} -> ok;
+                        _           -> Mod:notify(VHost, Component, Key, Term)
+                    end,
+                    ok;
                 E ->
                     E
             end;
@@ -214,51 +207,8 @@ lookup_component(Component) ->
         {ok, Module}       -> {ok, Module}
     end.
 
-parse(Src0) ->
-    Src1 = string:strip(Src0),
-    Src = case lists:reverse(Src1) of
-              [$. |_] -> Src1;
-              _       -> Src1 ++ "."
-          end,
-    case erl_scan:string(Src) of
-        {ok, Scanned, _} ->
-            case erl_parse:parse_term(Scanned) of
-                {ok, Parsed} ->
-                    {ok, Parsed};
-                {error, E} ->
-                    {errors,
-                     [{"Could not parse value: ~s", [format_parse_error(E)]}]}
-            end;
-        {error, E, _} ->
-            {errors, [{"Could not scan value: ~s", [format_parse_error(E)]}]}
-    end.
-
-format_parse_error({_Line, Mod, Err}) ->
-    lists:flatten(Mod:format_error(Err)).
-
 format(Term) ->
-    list_to_binary(rabbit_misc:format("~p", [Term])).
-
-%%---------------------------------------------------------------------------
-
-%% We will want to be able to biject these to JSON. So we have some
-%% generic restrictions on what we consider acceptable.
-validate(Proplist = [T | _]) when is_tuple(T) -> validate_proplist(Proplist);
-validate(L) when is_list(L)                   -> validate_list(L);
-validate(T) when is_tuple(T)                  -> {error, "tuple: ~p", [T]};
-validate(B) when is_boolean(B)                -> ok;
-validate(null)                                -> ok;
-validate(A) when is_atom(A)                   -> {error, "atom: ~p", [A]};
-validate(N) when is_number(N)                 -> ok;
-validate(B) when is_binary(B)                 -> ok;
-validate(B) when is_bitstring(B)              -> {error, "bitstring: ~p", [B]}.
-
-validate_list(L) -> [validate(I) || I <- L].
-validate_proplist(L) -> [vp(I) || I <- L].
-
-vp({K, V}) when is_binary(K) -> validate(V);
-vp({K, _V})                  -> {error, "bad key: ~p", [K]};
-vp(H)                        -> {error, "not two tuple: ~p", [H]}.
+    list_to_binary(rabbit_misc:json_encode(rabbit_misc:term_to_json(Term))).
 
 flatten_errors(L) ->
     case [{F, A} || I <- lists:flatten([L]), {error, F, A} <- [I]] of
