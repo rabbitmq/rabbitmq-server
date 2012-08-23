@@ -461,8 +461,8 @@ function link_node(name) {
     return _link_to(fmt_escape_html(name), '#/nodes/' + esc(name))
 }
 
-function link_policy(name) {
-    return _link_to(fmt_escape_html(name), '#/policies/' + esc(name))
+function link_policy(vhost, name) {
+    return _link_to(fmt_escape_html(name), '#/policies/' + esc(vhost) + '/' + esc(name))
 }
 
 function _link_to(name, url) {

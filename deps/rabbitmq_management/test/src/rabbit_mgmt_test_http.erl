@@ -566,7 +566,7 @@ definitions_test() ->
     http_delete("/bindings/%2f/e/amq.direct/e/amq.fanout/routing", ?NO_CONTENT),
     http_delete("/queues/%2f/my-queue", ?NO_CONTENT),
     http_delete("/exchanges/%2f/my-exchange", ?NO_CONTENT),
-    http_post("/definitions", Definitions, ?NO_CONTENT),
+    http_post("/definitions", Definitions, ?CREATED),
     http_delete("/bindings/%2f/e/my-exchange/q/my-queue/routing", ?NO_CONTENT),
     http_delete("/bindings/%2f/e/amq.direct/q/my-queue/routing", ?NO_CONTENT),
     http_delete("/bindings/%2f/e/amq.direct/e/amq.fanout/routing", ?NO_CONTENT),
@@ -576,12 +576,18 @@ definitions_test() ->
         [{users,       []},
          {vhosts,      []},
          {permissions, []},
-         {queues,       [[{name,        <<"another-queue">>},
-                          {vhost,       <<"/">>},
-                          {durable,     true},
-                          {auto_delete, false},
-                          {arguments,   []}
-                         ]]},
+         {parameters,  [[{value,    [{<<"prefix">>, <<"">>},
+                                     {<<"policy">>, [{<<"a">>, <<"b">>}]}
+                                    ]},
+                         {vhost,    <<"/">>},
+                         {component,<<"policy">>},
+                         {key,      <<"test">>}]]},
+         {queues,      [[{name,        <<"another-queue">>},
+                         {vhost,       <<"/">>},
+                         {durable,     true},
+                         {auto_delete, false},
+                         {arguments,   []}
+                        ]]},
          {exchanges,   []},
          {bindings,    []}],
     BrokenConfig =
@@ -597,9 +603,10 @@ definitions_test() ->
                          {arguments,   []}
                         ]]},
          {bindings,    []}],
-    http_post("/definitions", ExtraConfig, ?NO_CONTENT),
+    http_post("/definitions", ExtraConfig, ?CREATED),
     http_post("/definitions", BrokenConfig, ?BAD_REQUEST),
     http_delete("/queues/%2f/another-queue", ?NO_CONTENT),
+    http_delete("/parameters/policy/%2f/test", ?NO_CONTENT),
     ok.
 
 definitions_remove_things_test() ->
@@ -628,7 +635,7 @@ definitions_server_named_queue_test() ->
     Definitions = http_get("/definitions", ?OK),
     http_delete(Path, ?NO_CONTENT),
     http_get(Path, ?NOT_FOUND),
-    http_post("/definitions", Definitions, ?NO_CONTENT),
+    http_post("/definitions", Definitions, ?CREATED),
     http_get(Path, ?OK),
     http_delete(Path, ?NO_CONTENT),
     ok.
@@ -652,7 +659,7 @@ arguments_test() ->
     Definitions = http_get("/definitions", ?OK),
     http_delete("/exchanges/%2f/myexchange", ?NO_CONTENT),
     http_delete("/queues/%2f/myqueue", ?NO_CONTENT),
-    http_post("/definitions", Definitions, ?NO_CONTENT),
+    http_post("/definitions", Definitions, ?CREATED),
     [{'alternate-exchange', <<"amq.direct">>}] =
         pget(arguments, http_get("/exchanges/%2f/myexchange", ?OK)),
     [{'x-expires', 1800000}] =
@@ -673,7 +680,7 @@ arguments_table_test() ->
     http_put("/exchanges/%2f/myexchange", XArgs, ?NO_CONTENT),
     Definitions = http_get("/definitions", ?OK),
     http_delete("/exchanges/%2f/myexchange", ?NO_CONTENT),
-    http_post("/definitions", Definitions, ?NO_CONTENT),
+    http_post("/definitions", Definitions, ?CREATED),
     Args = pget(arguments, http_get("/exchanges/%2f/myexchange", ?OK)),
     http_delete("/exchanges/%2f/myexchange", ?NO_CONTENT),
     ok.
@@ -860,6 +867,12 @@ publish_fail_test() ->
             {payload,          <<"Hello world">>},
             {payload_encoding, <<"string">>}],
     http_post("/exchanges/%2f/amq.default/publish", Msg2, ?BAD_REQUEST),
+    Msg3 = [{exchange,         <<"">>},
+            {routing_key,      <<"myqueue">>},
+            {properties,       []},
+            {payload,          [<<"not a string">>]},
+            {payload_encoding, <<"string">>}],
+    http_post("/exchanges/%2f/amq.default/publish", Msg3, ?BAD_REQUEST),
     http_delete("/users/myuser", ?NO_CONTENT),
     ok.
 
@@ -886,32 +899,38 @@ publish_unrouted_test() ->
 parameters_test() ->
     rabbit_runtime_parameters_test:register(),
 
-    http_put("/parameters/test/good", [{value, <<"ignored">>}], ?NO_CONTENT),
-    http_put("/parameters/test/maybe", [{value, <<"good">>}], ?NO_CONTENT),
-    http_put("/parameters/test/maybe", [{value, <<"bad">>}], ?BAD_REQUEST),
-    http_put("/parameters/test/bad", [{value, <<"good">>}], ?BAD_REQUEST),
+    http_put("/parameters/test/%2f/good", [{value, <<"ignore">>}], ?NO_CONTENT),
+    http_put("/parameters/test/%2f/maybe", [{value, <<"good">>}], ?NO_CONTENT),
+    http_put("/parameters/test/%2f/maybe", [{value, <<"bad">>}], ?BAD_REQUEST),
+    http_put("/parameters/test/%2f/bad", [{value, <<"good">>}], ?BAD_REQUEST),
+    http_put("/parameters/test/um/good", [{value, <<"ignore">>}], ?NOT_FOUND),
 
-    Good = [{component, <<"test">>},
+    Good = [{vhost,     <<"/">>},
+            {component, <<"test">>},
             {key,       <<"good">>},
-            {value,     <<"ignored">>}],
-    Maybe = [{component, <<"test">>},
+            {value,     <<"ignore">>}],
+    Maybe = [{vhost,     <<"/">>},
+             {component, <<"test">>},
              {key,       <<"maybe">>},
              {value,     <<"good">>}],
     List = [Good, Maybe],
 
     assert_list(List, http_get("/parameters")),
     assert_list(List, http_get("/parameters/test")),
+    assert_list(List, http_get("/parameters/test/%2f")),
     http_get("/parameters/oops", ?NOT_FOUND),
+    http_get("/parameters/test/oops", ?NOT_FOUND),
 
-    assert_item(Good,  http_get("/parameters/test/good", ?OK)),
-    assert_item(Maybe, http_get("/parameters/test/maybe", ?OK)),
+    assert_item(Good,  http_get("/parameters/test/%2f/good", ?OK)),
+    assert_item(Maybe, http_get("/parameters/test/%2f/maybe", ?OK)),
 
-    http_delete("/parameters/test/good", ?NO_CONTENT),
-    http_delete("/parameters/test/maybe", ?NO_CONTENT),
-    http_delete("/parameters/test/bad", ?NOT_FOUND),
+    http_delete("/parameters/test/%2f/good", ?NO_CONTENT),
+    http_delete("/parameters/test/%2f/maybe", ?NO_CONTENT),
+    http_delete("/parameters/test/%2f/bad", ?NOT_FOUND),
 
     0 = length(http_get("/parameters")),
     0 = length(http_get("/parameters/test")),
+    0 = length(http_get("/parameters/test/%2f")),
     rabbit_runtime_parameters_test:unregister(),
     ok.
 

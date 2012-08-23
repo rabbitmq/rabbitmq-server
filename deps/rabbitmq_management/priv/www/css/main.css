@@ -128,6 +128,7 @@ table.two-col-layout { width: 100%; }
 table.two-col-layout > tbody > tr > td { width: 50%; vertical-align: top; }
 
 input[type=submit], button { padding: 8px; border-radius: 5px; -moz-border-radius: 5px; color: black !important; text-decoration: none; cursor: pointer; font-weight: normal; }
+table.list input[type=submit], table.list button { padding: 4px; }
 
 input[type=submit], button {
     background: #ddf;

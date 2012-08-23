@@ -6,11 +6,11 @@
     <table class="facts">
       <tr>
         <th>Virtual Host</th>
-        <td><%= policy.value.vhost %></td>
+        <td><%= fmt_string(policy.vhost) %></td>
       </tr>
       <tr>
         <th>Prefix</th>
-        <td><%= policy.value.prefix %></td>
+        <td><%= fmt_string(policy.value.prefix) %></td>
       </tr>
       <tr>
         <th>Policy</th>
@@ -25,6 +25,7 @@
   <div class="hider">
     <form action="#/policies" method="delete" class="confirm">
       <input type="hidden" name="component" value="policy"/>
+      <input type="hidden" name="vhost" value="<%= fmt_string(policy.vhost) %>"/>
       <input type="hidden" name="key" value="<%= fmt_string(policy.key) %>"/>
       <input type="submit" value="Delete this policy"/>
     </form>
