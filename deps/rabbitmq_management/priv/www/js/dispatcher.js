@@ -161,7 +161,7 @@ dispatcher_add(function(sammy) {
                 'policy', '#/policies');
         });
     sammy.put('#/policies', function() {
-            put_parameter(this, ['prefix'], []);
+            put_parameter(this, ['pattern', 'priority'], ['priority']);
             return false;
         });
     sammy.del('#/policies', function() {

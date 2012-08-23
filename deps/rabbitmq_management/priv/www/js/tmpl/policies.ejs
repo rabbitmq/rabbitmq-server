@@ -10,7 +10,8 @@
     <th>Virtual Host</th>
 <% } %>
     <th>Name</th>
-    <th>Prefix</th>
+    <th>Pattern</th>
+    <th>Priority</th>
     <th>Policy</th>
   </tr>
  </thead>
@@ -24,7 +25,8 @@
      <td><%= fmt_string(policy.vhost) %></td>
 <% } %>
      <td><%= link_policy(policy.vhost, policy.key) %></td>
-     <td><%= fmt_string(policy.value['prefix']) %></td>
+     <td><%= fmt_string(policy.value['pattern']) %></td>
+     <td><%= fmt_string(policy.value['priority']) %></td>
      <td><%= fmt_table_short(policy.value['policy']) %></td>
    </tr>
 <% } %>
@@ -62,8 +64,12 @@
           <td><input type="text" name="key"/><span class="mand">*</span></td>
         </tr>
         <tr>
-          <th><label>Prefix:</label></th>
-          <td><input type="text" name="prefix"/></td>
+          <th><label>Pattern:</label></th>
+          <td><input type="text" name="pattern"/></td>
+        </tr>
+        <tr>
+          <th><label>Priority:</label></th>
+          <td><input type="text" name="priority"/></td>
         </tr>
         <tr>
           <th><label>Policy:</label></th>
