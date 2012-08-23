@@ -218,8 +218,8 @@
         ([pid()], any()) -> {[{pid(), any()}], [{pid(), any()}]}).
 -spec(os_cmd/1 :: (string()) -> string()).
 -spec(gb_sets_difference/2 :: (gb_set(), gb_set()) -> gb_set()).
--spec(json_encode/1 :: (any()) -> string() | {'error', any()}).
--spec(json_decode/1 :: (string()) -> any() | 'error').
+-spec(json_encode/1 :: (any()) -> {'ok', string()} | {'error', any()}).
+-spec(json_decode/1 :: (string()) -> {'ok', any()} | 'error').
 
 -endif.
 
@@ -940,7 +940,7 @@ gb_sets_difference(S1, S2) ->
 
 json_encode(Term) ->
     try
-        mochijson2:encode(Term)
+        {ok, mochijson2:encode(Term)}
     catch
         exit:{json_encode, E} ->
             {error, E}
@@ -948,7 +948,7 @@ json_encode(Term) ->
 
 json_decode(Term) ->
     try
-        mochijson2:decode(Term)
+        {ok, mochijson2:decode(Term)}
     catch
         %% Sadly `mochijson2:decode/1' does not offer a nice way to catch
         %% decoding errors...
