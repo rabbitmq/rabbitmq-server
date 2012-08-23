@@ -76,11 +76,11 @@ remove_from_queue0(QueueName, DeadGMPids) ->
               %% get here.
               case mnesia:read({rabbit_queue, QueueName}) of
                   [] -> {error, not_found};
-                  [Q = #amqqueue { name       = QName,
-                                   pid        = QPid,
+                  [Q = #amqqueue { pid        = QPid,
                                    slave_pids = SPids }] ->
                       Alive = [Pid || Pid <- [QPid | SPids],
                                   not lists:member(node(Pid), DeadNodes)],
+                      {QPid1, SPids1} = promote_slave(Alive),
                       case {{QPid, SPids}, {QPid1, SPids1}} of
                           {Same, Same} ->
                               {ok, QPid1, [], []};
