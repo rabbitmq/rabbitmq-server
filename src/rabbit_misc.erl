@@ -60,6 +60,7 @@
 -export([multi_call/2]).
 -export([os_cmd/1]).
 -export([gb_sets_difference/2]).
+-export([json_encode/1, json_decode/1]).
 
 %% Horrible macro to use in guards
 -define(IS_BENIGN_EXIT(R),
@@ -217,6 +218,8 @@
         ([pid()], any()) -> {[{pid(), any()}], [{pid(), any()}]}).
 -spec(os_cmd/1 :: (string()) -> string()).
 -spec(gb_sets_difference/2 :: (gb_set(), gb_set()) -> gb_set()).
+-spec(json_encode/1 :: (any()) -> string() | {'error', any()}).
+-spec(json_decode/1 :: (string()) -> any() | 'error').
 
 -endif.
 
@@ -934,3 +937,20 @@ os_cmd(Command) ->
 
 gb_sets_difference(S1, S2) ->
     gb_sets:fold(fun gb_sets:delete_any/2, S1, S2).
+
+json_encode(Term) ->
+    try
+        mochijson2:encode(Term)
+    catch
+        exit:{json_encode, E} ->
+            {error, E}
+    end.
+
+json_decode(Term) ->
+    try
+        mochijson2:decode(Term)
+    catch
+        %% Sadly `mochijson2:decode/1' does not offer a nice way to catch
+        %% decoding errors...
+        error:_ -> error
+    end.
