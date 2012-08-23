@@ -62,9 +62,6 @@ HELP['federation-prefetch'] =
 HELP['federation-reconnect'] =
     'Time in seconds to wait after a network link goes down before attempting reconnection. Defaults to 1 if not set.';
 
-HELP['federation-ha-policy'] =
-    'Federation declares a queue at the upstream node to buffer messages waiting to be sent. Use this to set the x-ha-policy argument for this queue.';
-
 function link_fed_conn(vhost, name) {
     return _link_to(fmt_escape_html(name), '#/federation-upstreams/' + esc(vhost) + '/' + esc(name));
 }

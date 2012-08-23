@@ -16,7 +16,6 @@
     <th>Max Hops</th>
     <th>Prefetch Count</th>
     <th>Reconnect Delay</th>
-    <th>HA Policy</th>
   </tr>
  </thead>
  <tbody>
@@ -35,7 +34,6 @@
      <td class="r"><%= upstream.value['max-hops'] %></td>
      <td class="r"><%= upstream.value['prefetch-count'] %></td>
      <td class="r"><%= fmt_time(upstream.value['reconnect-delay'], 's') %></td>
-     <td class="r"><%= upstream.value['ha-policy'] %></td>
    </tr>
 <% } %>
  </tbody>
@@ -118,15 +116,6 @@
             </label>
           </th>
           <td><input type="text" name="reconnect-delay"/> s</td>
-        </tr>
-        <tr>
-          <th>
-            <label>
-              HA Policy:
-              <span class="help" id="federation-ha-policy"></span>
-            </label>
-          </th>
-          <td><input type="text" name="ha-policy"/></td>
         </tr>
       </table>
       <input type="submit" value="Add upstream"/>
