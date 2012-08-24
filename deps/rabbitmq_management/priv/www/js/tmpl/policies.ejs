@@ -17,8 +17,9 @@
  </thead>
  <tbody>
 <%
- for (var i = 0; i < policies.length; i++) {
-    var policy = policies[i];
+ var sorted_policies = policies.sort(function(a,b) {return b.value['priority'] - a.value['priority']} );
+ for (var i = 0; i < sorted_policies.length; i++) {
+    var policy = sorted_policies[i];
 %>
    <tr<%= alt_rows(i)%>>
 <% if (vhosts_interesting) { %>
