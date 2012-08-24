@@ -154,6 +154,10 @@ callback(Function, Params, State = #state{module = Mod,
 %%---------------------------------------------------------------------------
 
 init([Mod, Sup, AmqpParams, SIF, SChMF, ExtraParams]) ->
+    %% Trapping exits since we need to make sure that the `terminate/2' is
+    %% called in the case of direct connection (it does not matter for a network
+    %% connection).  See bug25116.
+    process_flag(trap_exit, true),
     {ok, MState} = Mod:init(ExtraParams),
     {ok, #state{module = Mod,
                 module_state = MState,
