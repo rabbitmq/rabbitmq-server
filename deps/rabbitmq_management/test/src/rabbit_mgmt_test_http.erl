@@ -576,7 +576,8 @@ definitions_test() ->
         [{users,       []},
          {vhosts,      []},
          {permissions, []},
-         {parameters,  [[{value,    [{<<"prefix">>, <<"">>},
+         {parameters,  [[{value,    [{<<"pattern">>, <<".*">>},
+                                     {<<"priority">>, 1},
                                      {<<"policy">>, [{<<"a">>, <<"b">>}]}
                                     ]},
                          {vhost,    <<"/">>},
