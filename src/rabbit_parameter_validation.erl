@@ -36,6 +36,8 @@ list(_Name, Term) when is_list(Term) ->
 list(Name, Term) ->
     {error, "~s should be list, actually was ~p", [Name, Term]}.
 
+regex(Name, Empty) when Empty == <<>> orelse Empty == [] ->
+    {error, "~s should be a regular expression but was empty.", [Name]};
 regex(Name, Term) ->
     case re:compile(Term) of
         {ok, _}         -> ok;
