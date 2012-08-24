@@ -19,7 +19,7 @@
 
 -export([is_ssl/1, ssl_info/1, controlling_process/2, getstat/2,
          recv/1, async_recv/3, port_command/2, getopts/2, setopts/2, send/2,
-         close/1, maybe_fast_close/1, sockname/1, peername/1, peercert/1,
+         close/1, fast_close/1, sockname/1, peername/1, peercert/1,
          tune_buffer_size/1, connection_string/2]).
 
 %%---------------------------------------------------------------------------
@@ -59,7 +59,7 @@
 -spec(setopts/2 :: (socket(), opts()) -> ok_or_any_error()).
 -spec(send/2 :: (socket(), binary() | iolist()) -> ok_or_any_error()).
 -spec(close/1 :: (socket()) -> ok_or_any_error()).
--spec(maybe_fast_close/1 :: (socket()) -> ok_or_any_error()).
+-spec(fast_close/1 :: (socket()) -> ok_or_any_error()).
 -spec(sockname/1 ::
         (socket())
         -> ok_val_or_error({inet:ip_address(), rabbit_networking:ip_port()})).
@@ -148,8 +148,8 @@ send(Sock, Data) when is_port(Sock) -> gen_tcp:send(Sock, Data).
 close(Sock)      when ?IS_SSL(Sock) -> ssl:close(Sock#ssl_socket.ssl);
 close(Sock)      when is_port(Sock) -> gen_tcp:close(Sock).
 
-maybe_fast_close(Sock) when ?IS_SSL(Sock) -> ok;
-maybe_fast_close(Sock) when is_port(Sock) -> erlang:port_close(Sock), ok.
+fast_close(Sock) when ?IS_SSL(Sock) -> ok;
+fast_close(Sock) when is_port(Sock) -> erlang:port_close(Sock), ok.
 
 sockname(Sock)   when ?IS_SSL(Sock) -> ssl:sockname(Sock#ssl_socket.ssl);
 sockname(Sock)   when is_port(Sock) -> inet:sockname(Sock).
