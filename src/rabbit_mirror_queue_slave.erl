@@ -19,17 +19,8 @@
 %% For general documentation of HA design, see
 %% rabbit_mirror_queue_coordinator
 %%
-%% We join the GM group before we add ourselves to the amqqueue
-%% record. As a result:
-%% 1. We can receive msgs from GM that correspond to messages we will
-%% never receive from publishers.
-%% 2. When we receive a message from publishers, we must receive a
-%% message from the GM group for it.
-%% 3. However, that instruction from the GM group can arrive either
-%% before or after the actual message. We need to be able to
-%% distinguish between GM instructions arriving early, and case (1)
-%% above.
-%%
+%% We receive messages from GM and from publishers, and the gm
+%% messages can arrive either before or after the 'actual' message.
 %% All instructions from the GM group must be processed in the order
 %% in which they're received.
 
@@ -99,14 +90,25 @@ info(QPid) ->
     gen_server2:call(QPid, info, infinity).
 
 init(#amqqueue { name = QueueName } = Q) ->
+    %% We join the GM group before we add ourselves to the amqqueue
+    %% record. As a result:
+    %% 1. We can receive msgs from GM that correspond to messages we will
+    %% never receive from publishers.
+    %% 2. When we receive a message from publishers, we must receive a
+    %% message from the GM group for it.
+    %% 3. However, that instruction from the GM group can arrive either
+    %% before or after the actual message. We need to be able to
+    %% distinguish between GM instructions arriving early, and case (1)
+    %% above.
+    %%
+    process_flag(trap_exit, true), %% amqqueue_process traps exits too.
+    {ok, GM} = gm:start_link(QueueName, ?MODULE, [self()]),
+    receive {joined, GM} -> ok end,
     Self = self(),
     Node = node(),
     case rabbit_misc:execute_mnesia_transaction(
            fun() -> init_it(Self, Node, QueueName) end) of
         {new, MPid} ->
-            process_flag(trap_exit, true), %% amqqueue_process traps exits too.
-            {ok, GM} = gm:start_link(QueueName, ?MODULE, [self()]),
-            receive {joined, GM} -> ok end,
             erlang:monitor(process, MPid),
             ok = file_handle_cache:register_callback(
                    rabbit_amqqueue, set_maximum_since_use, [Self]),
