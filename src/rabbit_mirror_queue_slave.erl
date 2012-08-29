@@ -105,7 +105,7 @@ init(#amqqueue { name = QueueName } = Q) ->
     {ok, GM} = gm:start_link(QueueName, ?MODULE, [self()]),
     receive {joined, GM} -> ok end,
     Self = self(),
-    Node = node(),    
+    Node = node(),
     case rabbit_misc:execute_mnesia_transaction(
            fun() -> init_it(Self, Node, QueueName) end) of
         {new, MPid} ->
