@@ -291,6 +291,15 @@ change_cluster_node_type(Type) ->
                          "disc nodes to the cluster first."}});
         false -> ok
     end,
+    %% This is an horrible hack due to
+    %% <http://erlang.org/pipermail/erlang-questions/2012-August/068696.html>.
+    %% This is safe if the cluster situation remains the same between the
+    %% cluster discovery and joining the cluster, but if for example the other
+    %% cluster nodes disappear in that timeframe we are in trouble.
+    ok = case is_disc_node() andalso not WantDiscNode of
+             true  -> reset(false);
+             false -> ok
+         end,
     ok = init_db_with_mnesia(AllNodes, WantDiscNode, false).
 
 update_cluster_nodes(DiscoveryNode) ->
