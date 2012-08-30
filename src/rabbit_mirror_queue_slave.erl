@@ -817,26 +817,24 @@ process_instruction({set_length, Length, Dropped, AckRequired},
     QLen = BQ:len(BQS),
     ToDrop = QLen - Length,
     {ok,
-     set_synchronised(
-       Length,
-       case ToDrop >= 0 of
-           true ->
-               State1 =
-                   lists:foldl(
-                     fun (const, StateN = #state{backing_queue_state = BQSN}) ->
-                             {{#basic_message{id = MsgId}, _, AckTag, _},
-                              BQSN1} = BQ:fetch(AckRequired, BQSN),
-                             maybe_store_ack(
-                               AckRequired, MsgId, AckTag,
-                               StateN #state { backing_queue_state = BQSN1 })
-                     end, State, lists:duplicate(ToDrop, const)),
-               case AckRequired of
-                   true  -> set_synchronised(ToDrop, Dropped, Length, State1);
-                   false -> State1
-               end;
-           false ->
-               State
-       end)};
+     case ToDrop >= 0 of
+         true ->
+             State1 =
+                 lists:foldl(
+                   fun (const, StateN = #state{backing_queue_state = BQSN}) ->
+                           {{#basic_message{id = MsgId}, _, AckTag, _}, BQSN1} =
+                               BQ:fetch(AckRequired, BQSN),
+                           maybe_store_ack(
+                             AckRequired, MsgId, AckTag,
+                             StateN #state { backing_queue_state = BQSN1 })
+                   end, State, lists:duplicate(ToDrop, const)),
+             case AckRequired of
+                 true  -> set_synchronised(ToDrop, Dropped, Length, State1);
+                 false -> set_synchronised(Length, State1)
+             end;
+         false ->
+             set_synchronised(Length, State)
+       end};
 process_instruction({fetch, AckRequired, MsgId, Remaining},
                     State = #state { backing_queue       = BQ,
                                      backing_queue_state = BQS,
