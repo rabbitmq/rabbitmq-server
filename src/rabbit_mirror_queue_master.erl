@@ -145,7 +145,7 @@ monitor_wait([MRef | MRefs]) ->
 purge(State = #state { gm                  = GM,
                        backing_queue       = BQ,
                        backing_queue_state = BQS }) ->
-    ok = gm:broadcast(GM, {set_length, 0, false}),
+    ok = gm:broadcast(GM, {set_length, 0, BQ:len(BQS), false}),
     {Count, BQS1} = BQ:purge(BQS),
     {Count, State #state { backing_queue_state = BQS1,
                            set_delivered       = 0 }}.
@@ -187,8 +187,8 @@ dropwhile(Pred, AckRequired,
     Len  = BQ:len(BQS),
     {Next, Msgs, BQS1} = BQ:dropwhile(Pred, AckRequired, BQS),
     Len1 = BQ:len(BQS1),
-    ok = gm:broadcast(GM, {set_length, Len1, AckRequired}),
     Dropped = Len - Len1,
+    ok = gm:broadcast(GM, {set_length, Len1, Dropped, AckRequired}),
     SetDelivered1 = lists:max([0, SetDelivered - Dropped]),
     {Next, Msgs, State #state { backing_queue_state = BQS1,
                                 set_delivered       = SetDelivered1 } }.
@@ -251,7 +251,7 @@ ack(AckTags, State = #state { gm                  = GM,
     {MsgIds, BQS1} = BQ:ack(AckTags, BQS),
     case MsgIds of
         [] -> ok;
-        _  -> ok = gm:broadcast(GM, {ack, MsgIds})
+        _  -> ok = gm:broadcast(GM, {ack, MsgIds, BQ:len(BQS1)})
     end,
     AM1 = lists:foldl(fun dict:erase/2, AM, AckTags),
     {MsgIds, State #state { backing_queue_state = BQS1,
@@ -265,7 +265,7 @@ requeue(AckTags, State = #state { gm                  = GM,
                                   backing_queue       = BQ,
                                   backing_queue_state = BQS }) ->
     {MsgIds, BQS1} = BQ:requeue(AckTags, BQS),
-    ok = gm:broadcast(GM, {requeue, MsgIds}),
+    ok = gm:broadcast(GM, {requeue, MsgIds, BQ:len(BQS1)}),
     {MsgIds, State #state { backing_queue_state = BQS1 }}.
 
 len(#state { backing_queue = BQ, backing_queue_state = BQS }) ->
