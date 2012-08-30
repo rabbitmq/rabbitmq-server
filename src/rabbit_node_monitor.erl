@@ -48,6 +48,7 @@
 
 -ifdef(use_specs).
 
+-spec(cluster_status_file_name/0 :: () -> string()).
 -spec(prepare_cluster_status_file/0 :: () -> 'ok').
 -spec(write_cluster_status_file/1 :: (rabbit_mnesia:cluster_status())
                                   -> 'ok').
