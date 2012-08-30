@@ -816,29 +816,37 @@ terminate_simple_children(Child, Dynamics, SupName) ->
     {Replies, Timedout} =
         lists:foldl(
           fun (_Pid, {Replies, Timedout}) ->
-                  {Reply, Timedout1} =
+                  {Pid, Reply, Timedout1} =
                       receive
                           TimeoutMsg ->
                               Remaining = Pids -- [P || {P, _} <- Replies],
                               [exit(P, kill) || P <- Remaining],
                               receive {'DOWN', _MRef, process, Pid, Reason} ->
-                                      {{error, Reason}, true}
+                                      Res = child_res(Child, Reason, Timedout),
+                                      {Pid, Res, true}
                               end;
                           {'DOWN', _MRef, process, Pid, Reason} ->
-                              {child_res(Child, Reason, Timedout), Timedout};
-                          {'EXIT', Pid, Reason} ->
-                              receive {'DOWN', _MRef, process, Pid, _} ->
-                                      {{error, Reason}, Timedout}
-                              end
+                              Res = child_res(Child, Reason, Timedout),
+                              {Pid, Res, Timedout}
                       end,
                   {[{Pid, Reply} | Replies], Timedout1}
           end, {[], false}, Pids),
     timeout_stop(Child, TRef, TimeoutMsg, Timedout),
     ReportError = shutdown_error_reporter(SupName),
-    [case Reply of
-         {_Pid, ok}         -> ok;
-         {Pid,  {error, R}} -> ReportError(R, Child#child{pid = Pid})
-     end || Reply <- Replies],
+    Report = fun(_, ok)           -> ok;
+                (Pid, {error, R}) -> ReportError(R, Child#child{pid = Pid})
+             end,
+    [begin
+         receive
+             {'EXIT', Pid, Reason} ->
+                 case Reply of
+                     {error, noproc} -> Report(Pid, Reason);
+                     _               -> Report(Pid, Reply)
+                 end
+         after
+             0 -> Report(Pid, Reply)
+         end
+     end || {Pid, Reply} <- Replies],
     ok.
 
 child_exit_reason(#child{shutdown = brutal_kill}) -> kill;
