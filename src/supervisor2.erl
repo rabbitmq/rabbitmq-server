@@ -816,36 +816,30 @@ terminate_simple_children(Child, Dynamics, SupName) ->
     {Replies, Timedout} =
         lists:foldl(
           fun (_Pid, {Replies, Timedout}) ->
-                  {Pid, Reply, Timedout1} =
+                  {Pid1, Reason1, Timedout1} =
                       receive
                           TimeoutMsg ->
                               Remaining = Pids -- [P || {P, _} <- Replies],
                               [exit(P, kill) || P <- Remaining],
-                              receive {'DOWN', _MRef, process, Pid, Reason} ->
-                                      Res = child_res(Child, Reason, Timedout),
-                                      {Pid, Res, true}
+                              receive
+                                  {'DOWN', _MRef, process, Pid, Reason} ->
+                                      {Pid, Reason, true}
                               end;
                           {'DOWN', _MRef, process, Pid, Reason} ->
-                              Res = child_res(Child, Reason, Timedout),
-                              {Pid, Res, Timedout}
+                              {Pid, Reason, Timedout}
                       end,
-                  {[{Pid, Reply} | Replies], Timedout1}
+                  {[{Pid1, child_res(Child, Reason1, Timedout1)} | Replies],
+                   Timedout1}
           end, {[], false}, Pids),
     timeout_stop(Child, TRef, TimeoutMsg, Timedout),
     ReportError = shutdown_error_reporter(SupName),
     Report = fun(_, ok)           -> ok;
                 (Pid, {error, R}) -> ReportError(R, Child#child{pid = Pid})
              end,
-    [begin
-         receive
-             {'EXIT', Pid, Reason} ->
-                 case Reply of
-                     {error, noproc} -> Report(Pid, Reason);
-                     _               -> Report(Pid, Reply)
-                 end
-         after
-             0 -> Report(Pid, Reply)
-         end
+    [receive
+         {'EXIT', Pid, Reason} -> Report(Pid, Reason)
+     after
+         0 -> Report(Pid, Reply)
      end || {Pid, Reply} <- Replies],
     ok.
 
