@@ -920,29 +920,30 @@ set_synchronised(_, _, State = #state { unknown_pending = undefined }) ->
 set_synchronised(PendingDelta, Length,
                  State = #state { backing_queue       = BQ,
                                   backing_queue_state = BQS,
-                                  unknown_pending     = ExtPending }) ->
+                                  unknown_pending     = ExtPending,
+                                  synchronised        = Sync}) ->
     ExtPending1 = ExtPending + PendingDelta,
     true = ExtPending1 >= 0,
-    set_synchronised1(ExtPending1 =:= 0 andalso Length =:= BQ:len(BQS),
-                      State #state { unknown_pending = ExtPending1 }).
-
-%% We intentionally leave out the head where a slave becomes
-%% unsynchronised: we assert that can never happen.
-set_synchronised1(true, State = #state { q = #amqqueue { name = QName },
-                                        synchronised = false }) ->
-    Self = self(),
-    rabbit_misc:execute_mnesia_transaction(
-      fun () ->
-              case mnesia:read({rabbit_queue, QName}) of
-                  [] ->
-                      ok;
-                  [Q1 = #amqqueue{sync_slave_pids = SSPids}] ->
-                      Q2 = Q1#amqqueue{sync_slave_pids = [Self | SSPids]},
-                      rabbit_mirror_queue_misc:store_updated_slaves(Q2)
-              end
-      end),
-    State #state { synchronised = true };
-set_synchronised1(true, State) ->
-    State;
-set_synchronised1(false, State = #state { synchronised = false }) ->
-    State.
+    State1 = State #state { unknown_pending = ExtPending1 },
+    %% We intentionally leave out the head where a slave becomes
+    %% unsynchronised: we assert that can never happen.
+    case {Sync, ExtPending1 =:= 0 andalso Length =:= BQ:len(BQS)} of
+        {true,   true} ->
+            State1;
+        {false, false} ->
+            State1;
+        {false,  true} ->
+            Self = self(),
+            #state{ q = #amqqueue { name = QName } } = State1,
+            rabbit_misc:execute_mnesia_transaction(
+              fun () ->
+                      case mnesia:read({rabbit_queue, QName}) of
+                          [] ->
+                              ok;
+                          [Q1 = #amqqueue{sync_slave_pids = SSPids}] ->
+                              rabbit_mirror_queue_misc:store_updated_slaves(
+                                Q1#amqqueue{sync_slave_pids = [Self | SSPids]})
+                      end
+              end),
+            State1 #state { synchronised = true }
+    end.
