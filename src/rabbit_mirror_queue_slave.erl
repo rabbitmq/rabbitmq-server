@@ -913,6 +913,8 @@ maybe_store_ack(true, MsgId, AckTag, State = #state { msg_id_ack = MA,
     State #state { msg_id_ack = dict:store(MsgId, {Num, AckTag}, MA),
                    ack_num    = Num + 1 }.
 
+set_synchronised(Length, State) -> set_synchronised(0, Length, State).
+
 set_synchronised(_, _, State = #state { unknown_pending = undefined }) ->
     State;
 set_synchronised(PendingDelta, Length,
@@ -923,9 +925,6 @@ set_synchronised(PendingDelta, Length,
     true = ExtPending1 >= 0,
     set_synchronised1(ExtPending1 =:= 0 andalso Length =:= BQ:len(BQS),
                       State #state { unknown_pending = ExtPending1 }).
-
-set_synchronised(Length, State) ->
-    set_synchronised(0, Length, State).
 
 %% We intentionally leave out the head where a slave becomes
 %% unsynchronised: we assert that can never happen.
