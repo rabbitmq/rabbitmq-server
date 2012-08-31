@@ -833,8 +833,7 @@ process_instruction({set_length, Length, Dropped, AckRequired},
          end};
 process_instruction({fetch, AckRequired, MsgId, Remaining},
                     State = #state { backing_queue       = BQ,
-                                     backing_queue_state = BQS,
-                                     external_pending    = ExtPending }) ->
+                                     backing_queue_state = BQS }) ->
     QLen = BQ:len(BQS),
     {ok, case {QLen - 1, AckRequired} of
              {Remaining, _} ->
@@ -845,10 +844,7 @@ process_instruction({fetch, AckRequired, MsgId, Remaining},
              {_, false} when QLen =< Remaining ->
                  set_synchronised(Remaining, State);
              {_, true} when QLen =< Remaining ->
-                 State #state { external_pending = case ExtPending of
-                                                       undefined -> undefined;
-                                                       _ -> ExtPending + 1
-                                                   end }
+                 set_synchronised(1, Remaining, State)
          end};
 process_instruction({ack, MsgIds, Length},
                     State = #state { backing_queue       = BQ,
