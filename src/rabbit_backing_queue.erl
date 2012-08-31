@@ -152,6 +152,9 @@
 %% Is my queue empty?
 -callback is_empty(state()) -> boolean().
 
+%% How many pending acks do we have?
+-callback pending_ack(state()) -> non_neg_integer().
+
 %% For the next three functions, the assumption is that you're
 %% monitoring something like the ingress and egress rates of the
 %% queue. The RAM duration is thus the length of time represented by
@@ -212,9 +215,10 @@ behaviour_info(callbacks) ->
      {delete_and_terminate, 2}, {purge, 1}, {publish, 4},
      {publish_delivered, 5}, {drain_confirmed, 1}, {dropwhile, 3},
      {fetch, 2}, {ack, 2}, {fold, 3}, {requeue, 2}, {len, 1},
-     {is_empty, 1}, {set_ram_duration_target, 2}, {ram_duration, 1},
-     {needs_timeout, 1}, {timeout, 1}, {handle_pre_hibernate, 1},
-     {status, 1}, {invoke, 3}, {is_duplicate, 2}, {discard, 3}];
+     {is_empty, 1}, {pending_ack, 1}, {set_ram_duration_target, 2},
+     {ram_duration, 1}, {needs_timeout, 1}, {timeout, 1},
+     {handle_pre_hibernate, 1}, {status, 1}, {invoke, 3}, {is_duplicate, 2},
+     {discard, 3}];
 behaviour_info(_Other) ->
     undefined.
 
