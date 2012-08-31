@@ -920,11 +920,9 @@ set_synchronised(PendingDelta, Length,
                                   backing_queue_state = BQS,
                                   unknown_pending     = ExtPending }) ->
     ExtPending1 = ExtPending + PendingDelta,
-    State1 = State #state { unknown_pending = ExtPending1 },
-    case ExtPending1 =:= 0 andalso Length =:= BQ:len(BQS) of
-        true                        -> set_synchronised1(true, State1);
-        false when ExtPending1 >= 0 -> set_synchronised1(false, State1)
-    end.
+    true = ExtPending1 >= 0,
+    set_synchronised1(ExtPending1 =:= 0 andalso Length =:= BQ:len(BQS),
+                      State #state { unknown_pending = ExtPending1 }).
 
 set_synchronised(Length, State) ->
     set_synchronised(0, Length, State).
