@@ -4,10 +4,7 @@
 
 @version %%VERSION%%
 
-@reference <a href="http://www.amqp.org/confluence/download/attachments/720900/amqp0-9-1.pdf?version=1">AMQP Specification</a>, the 0-9-1 version of the AMQP specification
-
-@reference <a
-href="http://www.amqp.org/confluence/download/attachments/720900/amqp-xml-doc0-9-1.pdf?version=1">AMQP Protocol Documentation</a>, the documentation of the commands in the 0-9-1 version of the protocol
+@reference <a href="http://www.rabbitmq.com/protocol.html" target="_top">AMQP documentation</a> on the RabbitMQ website.
 
 @doc
 
