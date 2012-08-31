@@ -133,7 +133,7 @@ init(#amqqueue { name = QueueName } = Q) ->
                              known_senders       = pmon:new(),
 
                              synchronised        = false,
-                             external_pending    = 0
+                             external_pending    = undefined
                    },
             rabbit_event:notify(queue_slave_created,
                                 infos(?CREATION_EVENT_KEYS, State)),
