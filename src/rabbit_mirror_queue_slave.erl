@@ -815,26 +815,22 @@ process_instruction({set_length, Length, Dropped, AckRequired},
                     State = #state { backing_queue       = BQ,
                                      backing_queue_state = BQS }) ->
     QLen = BQ:len(BQS),
-    ToDrop = QLen - Length,
-    {ok,
-     case ToDrop >= 0 of
-         true ->
-             State1 =
-                 lists:foldl(
-                   fun (const, StateN = #state{backing_queue_state = BQSN}) ->
-                           {{#basic_message{id = MsgId}, _, AckTag, _}, BQSN1} =
-                               BQ:fetch(AckRequired, BQSN),
-                           maybe_store_ack(
-                             AckRequired, MsgId, AckTag,
-                             StateN #state { backing_queue_state = BQSN1 })
-                   end, State, lists:duplicate(ToDrop, const)),
-             case AckRequired of
-                 true  -> set_synchronised(Dropped - ToDrop, Length, State1);
-                 false -> set_synchronised(Length, State1)
-             end;
-         false ->
-             set_synchronised(Length, State)
-       end};
+    ToDrop = case QLen - Length of
+                 N when N > 0 -> N;
+                 _            -> 0
+             end,
+    State1 = lists:foldl(
+               fun (const, StateN = #state{backing_queue_state = BQSN}) ->
+                       {{#basic_message{id = MsgId}, _, AckTag, _}, BQSN1} =
+                           BQ:fetch(AckRequired, BQSN),
+                       maybe_store_ack(
+                         AckRequired, MsgId, AckTag,
+                         StateN #state { backing_queue_state = BQSN1 })
+               end, State, lists:duplicate(ToDrop, const)),
+    {ok, case AckRequired of
+             true  -> set_synchronised(Dropped - ToDrop, Length, State1);
+             false -> set_synchronised(Length, State1)
+         end};
 process_instruction({fetch, AckRequired, MsgId, Remaining},
                     State = #state { backing_queue       = BQ,
                                      backing_queue_state = BQS,
