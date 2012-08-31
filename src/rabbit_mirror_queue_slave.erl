@@ -887,8 +887,9 @@ process_instruction({sender_death, ChPid},
                                      msg_id_status = MS1,
                                      known_senders = pmon:demonitor(ChPid, KS) }
          end};
-process_instruction({length, Length}, State) ->
-    {ok, set_synchronised(Length, State)};
+process_instruction({length, Length, ExtPending}, State) ->
+    {ok, set_synchronised(Length,
+                          State #state { external_pending = ExtPending })};
 process_instruction({delete_and_terminate, Reason},
                     State = #state { backing_queue       = BQ,
                                      backing_queue_state = BQS }) ->

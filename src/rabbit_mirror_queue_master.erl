@@ -96,7 +96,7 @@ init(#amqqueue { name = QName, mirror_nodes = MNodes } = Q, Recover,
     [rabbit_mirror_queue_misc:add_mirror(QName, Node) || Node <- MNodes1],
     {ok, BQ} = application:get_env(backing_queue_module),
     BQS = BQ:init(Q, Recover, AsyncCallback),
-    ok = gm:broadcast(GM, {length, BQ:len(BQS)}),
+    ok = gm:broadcast(GM, {length, BQ:len(BQS), BQ:pending_ack(BQS)}),
     #state { gm                  = GM,
              coordinator         = CPid,
              backing_queue       = BQ,
@@ -375,7 +375,7 @@ discard(Msg = #basic_message { id = MsgId }, ChPid,
 
 promote_backing_queue_state(CPid, BQ, BQS, GM, SeenStatus, KS) ->
     Len = BQ:len(BQS),
-    ok = gm:broadcast(GM, {length, Len}),
+    ok = gm:broadcast(GM, {length, Len, BQ:pending_ack(BQS)}),
     #state { gm                  = GM,
              coordinator         = CPid,
              backing_queue       = BQ,
@@ -406,7 +406,8 @@ length_fun() ->
               fun (?MODULE, State = #state { gm                  = GM,
                                              backing_queue       = BQ,
                                              backing_queue_state = BQS }) ->
-                      ok = gm:broadcast(GM, {length, BQ:len(BQS)}),
+                      ok = gm:broadcast(
+                             GM, {length, BQ:len(BQS), BQ:pending_ack(BQS)}),
                       State
               end)
     end.
