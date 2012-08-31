@@ -133,7 +133,7 @@ init(#amqqueue { name = QueueName } = Q) ->
                              known_senders       = pmon:new(),
 
                              synchronised        = false,
-                             external_pending    = 0
+                             external_pending    = undefined
                    },
             rabbit_event:notify(queue_slave_created,
                                 infos(?CREATION_EVENT_KEYS, State)),
@@ -849,7 +849,10 @@ process_instruction({fetch, AckRequired, MsgId, Remaining},
              {_, false} when QLen =< Remaining ->
                  set_synchronised(Remaining, State);
              {_, true} when QLen =< Remaining ->
-                 State #state { external_pending = ExtPending + 1}
+                 State #state { external_pending = case ExtPending of
+                                                       undefined -> undefined;
+                                                       _ -> ExtPending + 1
+                                                   end }
          end};
 process_instruction({ack, MsgIds, Length},
                     State = #state { backing_queue       = BQ,
@@ -915,6 +918,8 @@ maybe_store_ack(true, MsgId, AckTag, State = #state { msg_id_ack = MA,
     State #state { msg_id_ack = dict:store(MsgId, {Num, AckTag}, MA),
                    ack_num    = Num + 1 }.
 
+set_synchronised(_, _, _, State = #state { external_pending = undefined }) ->
+    State;
 set_synchronised(LocalPending, RemotePending, Length,
                  State = #state { backing_queue       = BQ,
                                   backing_queue_state = BQS,
