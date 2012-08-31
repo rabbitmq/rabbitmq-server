@@ -885,9 +885,8 @@ process_instruction({sender_death, ChPid},
                                      msg_id_status = MS1,
                                      known_senders = pmon:demonitor(ChPid, KS) }
          end};
-process_instruction({length, Length, ExtPending}, State) ->
-    {ok, set_synchronised(Length,
-                          State #state { unknown_pending = ExtPending })};
+process_instruction({length, Length, Pend}, State) ->
+    {ok, set_synchronised(Length, State #state { unknown_pending = Pend })};
 process_instruction({delete_and_terminate, Reason},
                     State = #state { backing_queue       = BQ,
                                      backing_queue_state = BQS }) ->
@@ -920,14 +919,14 @@ set_synchronised(_, _, State = #state { unknown_pending = undefined }) ->
 set_synchronised(PendingDelta, Length,
                  State = #state { backing_queue       = BQ,
                                   backing_queue_state = BQS,
-                                  unknown_pending     = ExtPending,
+                                  unknown_pending     = Pend,
                                   synchronised        = Sync}) ->
-    ExtPending1 = ExtPending + PendingDelta,
-    true = ExtPending1 >= 0,
-    State1 = State #state { unknown_pending = ExtPending1 },
+    Pend1 = Pend + PendingDelta,
+    true = Pend1 >= 0,
+    State1 = State #state { unknown_pending = Pend1 },
     %% We intentionally leave out the head where a slave becomes
     %% unsynchronised: we assert that can never happen.
-    case {Sync, ExtPending1 =:= 0 andalso Length =:= BQ:len(BQS)} of
+    case {Sync, Pend1 =:= 0 andalso Length =:= BQ:len(BQS)} of
         {true,   true} ->
             State1;
         {false, false} ->
