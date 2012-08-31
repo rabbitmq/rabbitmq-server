@@ -145,7 +145,7 @@ monitor_wait([MRef | MRefs]) ->
 purge(State = #state { gm                  = GM,
                        backing_queue       = BQ,
                        backing_queue_state = BQS }) ->
-    ok = gm:broadcast(GM, {set_length, 0, BQ:len(BQS), false}),
+    ok = gm:broadcast(GM, {drop, 0, BQ:len(BQS), false}),
     {Count, BQS1} = BQ:purge(BQS),
     {Count, State #state { backing_queue_state = BQS1,
                            set_delivered       = 0 }}.
@@ -188,7 +188,7 @@ dropwhile(Pred, AckRequired,
     {Next, Msgs, BQS1} = BQ:dropwhile(Pred, AckRequired, BQS),
     Len1 = BQ:len(BQS1),
     Dropped = Len - Len1,
-    ok = gm:broadcast(GM, {set_length, Len1, Dropped, AckRequired}),
+    ok = gm:broadcast(GM, {drop, Len1, Dropped, AckRequired}),
     SetDelivered1 = lists:max([0, SetDelivered - Dropped]),
     {Next, Msgs, State #state { backing_queue_state = BQS1,
                                 set_delivered       = SetDelivered1 } }.
