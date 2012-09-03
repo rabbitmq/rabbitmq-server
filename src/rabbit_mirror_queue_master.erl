@@ -96,7 +96,7 @@ init(#amqqueue { name = QName, mirror_nodes = MNodes } = Q, Recover,
     [rabbit_mirror_queue_misc:add_mirror(QName, Node) || Node <- MNodes1],
     {ok, BQ} = application:get_env(backing_queue_module),
     BQS = BQ:init(Q, Recover, AsyncCallback),
-    ok = gm:broadcast(GM, {length, BQ:len(BQS), BQ:pending_ack(BQS)}),
+    ok = gm:broadcast(GM, {depth, depth(BQ, BQS)}),
     #state { gm                  = GM,
              coordinator         = CPid,
              backing_queue       = BQ,
@@ -251,7 +251,7 @@ ack(AckTags, State = #state { gm                  = GM,
     {MsgIds, BQS1} = BQ:ack(AckTags, BQS),
     case MsgIds of
         [] -> ok;
-        _  -> ok = gm:broadcast(GM, {ack, MsgIds, BQ:len(BQS1)})
+        _  -> ok = gm:broadcast(GM, {ack, MsgIds})
     end,
     AM1 = lists:foldl(fun dict:erase/2, AM, AckTags),
     {MsgIds, State #state { backing_queue_state = BQS1,
@@ -265,7 +265,7 @@ requeue(AckTags, State = #state { gm                  = GM,
                                   backing_queue       = BQ,
                                   backing_queue_state = BQS }) ->
     {MsgIds, BQS1} = BQ:requeue(AckTags, BQS),
-    ok = gm:broadcast(GM, {requeue, MsgIds, BQ:len(BQS1)}),
+    ok = gm:broadcast(GM, {requeue, MsgIds}),
     {MsgIds, State #state { backing_queue_state = BQS1 }}.
 
 len(#state { backing_queue = BQ, backing_queue_state = BQS }) ->
@@ -375,7 +375,7 @@ discard(Msg = #basic_message { id = MsgId }, ChPid,
 
 promote_backing_queue_state(CPid, BQ, BQS, GM, SeenStatus, KS) ->
     Len = BQ:len(BQS),
-    ok = gm:broadcast(GM, {length, Len, BQ:pending_ack(BQS)}),
+    ok = gm:broadcast(GM, {depth, depth(BQ, BQS)}),
     #state { gm                  = GM,
              coordinator         = CPid,
              backing_queue       = BQ,
@@ -407,7 +407,7 @@ length_fun() ->
                                              backing_queue       = BQ,
                                              backing_queue_state = BQS }) ->
                       ok = gm:broadcast(
-                             GM, {length, BQ:len(BQS), BQ:pending_ack(BQS)}),
+                             GM, {depth, depth(BQ, BQS)}),
                       State
               end)
     end.
@@ -425,3 +425,10 @@ ensure_monitoring(ChPid, State = #state { coordinator = CPid,
                         CPid, [ChPid]),
                  State #state { known_senders = sets:add_element(ChPid, KS) }
     end.
+
+%% ---------------------------------------------------------------------------
+%% Internal exports
+%% ---------------------------------------------------------------------------
+
+depth(BQ, BQS) ->
+    BQ:len(BQS) + BQ:pending_ack(BQS).
