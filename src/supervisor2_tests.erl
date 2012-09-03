@@ -36,14 +36,7 @@ terminate_simple_children_without_deadlock_test_() ->
               {with, [fun ensure_children_are_alive/1,
                       fun shutdown_and_verify_all_children_died/1]}},
              {setup, fun init_supervisor/0,
-              {with, [fun shutdown_whilst_interleaving_exits_occur/1]}},
-             {setup,
-              fun() -> erlang:system_flag(multi_scheduling, block),
-                       ?MODULE:init_supervisor()
-              end,
-              fun(_) -> erlang:system_flag(multi_scheduling, unblock) end,
-              {with,
-               [fun shutdown_with_exits_attempting_to_overtake_downs/1]}}])).
+              {with, [fun shutdown_whilst_interleaving_exits_occur/1]}}])).
 
 %%
 %% Public (test facing) API
@@ -90,40 +83,6 @@ shutdown_and_verify_all_children_died({Parent, ChildPids}=State) ->
                erlang:is_process_alive(P)]),
     ?assertEqual(false, erlang:is_process_alive(TestSup)).
 
-shutdown_with_exits_attempting_to_overtake_downs({Parent, ChildPids}=State) ->
-    erlang:process_flag(priority, high),
-    ensure_children_are_alive(State),
-    TestPid = self(),
-    TestSup = erlang:whereis(?MODULE),
-    Ref = erlang:make_ref(),
-
-    ?debugFmt("Suspending process ~p~n",
-          [TestSup]),
-    true = erlang:suspend_process(TestSup),
-
-    spawn(fun() ->
-          ?debugFmt("supervisor2:terminate_child/2 call in progress~n",
-                []),
-          TestPid ! {Ref, supervisor2:terminate_child(Parent, test_sup)}
-          end),
-    erlang:yield(),
-
-    ?debugFmt("Killing ~p child pids~n", [length(ChildPids)]),
-    [P ! stop || P <- ChildPids],
-
-    ?debugFmt("Resuming process ~p~n", [TestSup]),
-    erlang:resume_process(TestSup),
-
-    erlang:yield(),
-    ?debugVal(erlang:is_process_alive(TestSup)),
-    ?debugFmt("Awaiting response from kill coordinator~n", []),
-    receive {Ref, Res} ->
-        ?assertEqual(ok, Res)
-    end,
-    ?assertMatch([], [P || P <- ChildPids,
-               erlang:is_process_alive(P)]),
-    ok.
-
 shutdown_whilst_interleaving_exits_occur({Parent, ChildPids}=State) ->
     ensure_children_are_alive(State),
     TestPid = self(),
@@ -131,7 +90,7 @@ shutdown_whilst_interleaving_exits_occur({Parent, ChildPids}=State) ->
     spawn(fun() ->
           TestPid ! {Ref, supervisor2:terminate_child(Parent, test_sup)}
       end),
-    [exit(P, kill) || P <- ChildPids],
+    [P ! stop || P <- ChildPids],
     receive {Ref, Res} ->
         ?assertEqual(ok, Res)
     end.
@@ -142,6 +101,6 @@ init_supervisor() ->
 
 loop_infinity() ->
     receive
-    stop -> ok
+        stop -> ok
     end.
 
