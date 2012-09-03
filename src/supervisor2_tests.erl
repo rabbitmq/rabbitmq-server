@@ -26,24 +26,57 @@
 
 -include_lib("eunit/include/eunit.hrl").
 
+test_me() ->
+    erlang:system_flag(multi_scheduling, block),
+    P = self(),
+    F = fun() -> [P ! {self(), hi} || _ <- lists:seq(1, 100)] end,
+    erlang:process_flag(priority, high),
+    Launcher = fun() ->
+                       Pid = spawn(F),
+                       erlang:suspend_process(Pid),
+                       P ! {suspendee, Pid}
+               end,
+    Test =
+        fun() ->
+                Launcher(),
+                [P ! {self(), ho} || _ <- lists:seq(1, 100)]
+        end,
+    ReceiveAndResume =
+    fun() ->
+        receive {suspendee, X} ->
+            erlang:resume_process(X)
+        end
+    end,
+    Test(),
+    ReceiveAndResume(),
+    drain_q().
+
+drain_q() ->
+    receive
+    X ->
+        ?debugFmt("Received ~p~n", [X])
+    after 0 ->
+        ok
+    end.
+
 test_all() ->
     eunit:test(supervisor2, [verbose]).
 
 terminate_simple_children_without_deadlock_test_() ->
     lists:flatten(
       lists:duplicate(
-	100,[{setup, fun init_supervisor/0,
-	      {with, [fun ensure_children_are_alive/1,
-		      fun shutdown_and_verify_all_children_died/1]}},
-	     {setup, fun init_supervisor/0,
-	      {with, [fun shutdown_whilst_interleaving_exits_occur/1]}},
-	     {setup,
-	      fun() -> erlang:system_flag(multi_scheduling, block),
-		       ?MODULE:init_supervisor()
-	      end,
-	      fun(_) -> erlang:system_flag(multi_scheduling, unblock) end,
-	      {with,
-	       [fun shutdown_with_exits_attempting_to_overtake_downs/1]}}])).
+        100,[{setup, fun init_supervisor/0,
+              {with, [fun ensure_children_are_alive/1,
+                      fun shutdown_and_verify_all_children_died/1]}},
+             {setup, fun init_supervisor/0,
+              {with, [fun shutdown_whilst_interleaving_exits_occur/1]}},
+             {setup,
+              fun() -> erlang:system_flag(multi_scheduling, block),
+                       ?MODULE:init_supervisor()
+              end,
+              fun(_) -> erlang:system_flag(multi_scheduling, unblock) end,
+              {with,
+               [fun shutdown_with_exits_attempting_to_overtake_downs/1]}}])).
 
 %%
 %% Public (test facing) API
@@ -66,8 +99,8 @@ start_child() ->
 
 init([parent]) ->
     {ok, {{one_for_one, 0, 1},
-	  [{test_sup, {?MODULE, start_sup, []},
-	    transient, 5000, supervisor, [?MODULE]}]}};
+      [{test_sup, {?MODULE, start_sup, []},
+        transient, 5000, supervisor, [?MODULE]}]}};
 init([]) ->
     {ok, {{simple_one_for_one_terminate, 0, 1},
           [{test_worker, {?MODULE, start_link, []},
@@ -79,7 +112,7 @@ init([]) ->
 
 ensure_children_are_alive({_, ChildPids}) ->
     ?assertEqual(true,
-		 lists:all(fun erlang:is_process_alive/1, ChildPids)).
+         lists:all(fun erlang:is_process_alive/1, ChildPids)).
 
 shutdown_and_verify_all_children_died({Parent, ChildPids}=State) ->
     ensure_children_are_alive(State),
@@ -87,7 +120,7 @@ shutdown_and_verify_all_children_died({Parent, ChildPids}=State) ->
     ?assertEqual(true, erlang:is_process_alive(TestSup)),
     ?assertMatch(ok, supervisor2:terminate_child(Parent, test_sup)),
     ?assertMatch([], [P || P <- ChildPids,
-			   erlang:is_process_alive(P)]),
+               erlang:is_process_alive(P)]),
     ?assertEqual(false, erlang:is_process_alive(TestSup)).
 
 shutdown_with_exits_attempting_to_overtake_downs({Parent, ChildPids}=State) ->
@@ -98,14 +131,14 @@ shutdown_with_exits_attempting_to_overtake_downs({Parent, ChildPids}=State) ->
     Ref = erlang:make_ref(),
 
     ?debugFmt("Suspending process ~p~n",
-	      [TestSup]),
+          [TestSup]),
     true = erlang:suspend_process(TestSup),
 
     spawn(fun() ->
-		  ?debugFmt("supervisor2:terminate_child/2 call in progress~n",
-			    []),
-		  TestPid ! {Ref, supervisor2:terminate_child(Parent, test_sup)}
-	  end),
+          ?debugFmt("supervisor2:terminate_child/2 call in progress~n",
+                []),
+          TestPid ! {Ref, supervisor2:terminate_child(Parent, test_sup)}
+          end),
     erlang:yield(),
 
     ?debugFmt("Killing ~p child pids~n", [length(ChildPids)]),
@@ -118,10 +151,10 @@ shutdown_with_exits_attempting_to_overtake_downs({Parent, ChildPids}=State) ->
     ?debugVal(erlang:is_process_alive(TestSup)),
     ?debugFmt("Awaiting response from kill coordinator~n", []),
     receive {Ref, Res} ->
-	    ?assertEqual(ok, Res)
+        ?assertEqual(ok, Res)
     end,
     ?assertMatch([], [P || P <- ChildPids,
-			   erlang:is_process_alive(P)]),
+               erlang:is_process_alive(P)]),
     ok.
 
 shutdown_whilst_interleaving_exits_occur({Parent, ChildPids}=State) ->
@@ -129,11 +162,11 @@ shutdown_whilst_interleaving_exits_occur({Parent, ChildPids}=State) ->
     TestPid = self(),
     Ref = erlang:make_ref(),
     spawn(fun() ->
-	      TestPid ! {Ref, supervisor2:terminate_child(Parent, test_sup)}
-	  end),
+          TestPid ! {Ref, supervisor2:terminate_child(Parent, test_sup)}
+      end),
     [exit(P, kill) || P <- ChildPids],
     receive {Ref, Res} ->
-	    ?assertEqual(ok, Res)
+        ?assertEqual(ok, Res)
     end.
 
 init_supervisor() ->
@@ -142,6 +175,6 @@ init_supervisor() ->
 
 loop_infinity() ->
     receive
-	stop -> ok
+    stop -> ok
     end.
 
