@@ -837,7 +837,8 @@ terminate_simple_children(Child, Dynamics, SupName) ->
                 (Pid, {error, R}) -> ReportError(R, Child#child{pid = Pid})
              end,
     [receive
-         {'EXIT', Pid, Reason} -> Report(Pid, Reason)
+         {'EXIT', Pid, Reason} ->
+	     Report(Pid, child_res(Child, Reason, Timedout))
      after
          0 -> Report(Pid, Reply)
      end || {Pid, Reply} <- Replies],
