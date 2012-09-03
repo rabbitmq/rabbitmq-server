@@ -154,9 +154,14 @@ fast_close(Sock) when ?IS_SSL(Sock) ->
     %% We cannot simply port_close the underlying tcp socket since the
     %% TLS protocol is quite insistent that a proper closing handshake
     %% should take place (see RFC 5245 s7.2.1). So we call ssl:close
-    %% instead, but that can block for a very long time if the socket
-    %% is in a funny state. Since there is no timeout variant of
-    %% ssl:close, we construct our own.
+    %% instead, but that can block for a very long time, e.g. when
+    %% there is lots of pending output and there is tcp backpressure,
+    %% or the ssl_connection process has entered the the
+    %% workaround_transport_delivery_problems function during
+    %% termination, which, inexplicably, does a gen_tcp:recv(Socket,
+    %% 0), which may never return if the client doesn't send a FIN or
+    %% that gets swallowed by the network. Since there is no timeout
+    %% variant of ssl:close, we construct our own.
     {Pid, MRef} = spawn_monitor(fun () -> ssl:close(Sock#ssl_socket.ssl) end),
     erlang:send_after(?SSL_CLOSE_TIMEOUT, self(), {Pid, ssl_close_timeout}),
     receive

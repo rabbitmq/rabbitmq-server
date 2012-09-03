@@ -184,6 +184,7 @@ socket_op(Sock, Fun) ->
         {ok, Res}       -> Res;
         {error, Reason} -> log(error, "error on AMQP connection ~p: ~p~n",
                                [self(), Reason]),
+                           %% NB: this is tcp socket, even in case of ssl
                            rabbit_net:fast_close(Sock),
                            exit(normal)
     end.
