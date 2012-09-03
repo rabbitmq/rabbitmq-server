@@ -32,11 +32,11 @@ test_all() ->
 terminate_simple_children_without_deadlock_test_() ->
     lists:flatten(
       lists:duplicate(
-        100,[{setup, fun init_supervisor/0,
-              {with, [fun ensure_children_are_alive/1,
-                      fun shutdown_and_verify_all_children_died/1]}},
-             {setup, fun init_supervisor/0,
-              {with, [fun shutdown_whilst_interleaving_exits_occur/1]}}])).
+        100, [{setup, fun init_supervisor/0,
+               {with, [fun ensure_children_are_alive/1,
+                       fun shutdown_and_verify_all_children_died/1]}},
+              {setup, fun init_supervisor/0,
+               {with, [fun shutdown_whilst_interleaving_exits_occur/1]}}])).
 
 %%
 %% Public (test facing) API
