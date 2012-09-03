@@ -936,7 +936,6 @@ set_synchronised(Delta, MasterDelta, AddAnyway,
                                   q            = #amqqueue { name = QName }}) ->
     Depth1       = Depth + Delta,
     MasterDepth1 = MasterDepth + MasterDelta,
-    io:format("depths: local depths ~p ~p master depth ~p ~p~n", [Depth, Depth1, MasterDepth, MasterDepth1]),
     %% We intentionally leave out the head where a slave becomes
     %% unsynchronised: we assert that can never happen.
     %% The `AddAnyway' param is there since in the `depth' instruction we
