@@ -26,39 +26,6 @@
 
 -include_lib("eunit/include/eunit.hrl").
 
-test_me() ->
-    erlang:system_flag(multi_scheduling, block),
-    P = self(),
-    F = fun() -> [P ! {self(), hi} || _ <- lists:seq(1, 100)] end,
-    erlang:process_flag(priority, high),
-    Launcher = fun() ->
-                       Pid = spawn(F),
-                       erlang:suspend_process(Pid),
-                       P ! {suspendee, Pid}
-               end,
-    Test =
-        fun() ->
-                Launcher(),
-                [P ! {self(), ho} || _ <- lists:seq(1, 100)]
-        end,
-    ReceiveAndResume =
-    fun() ->
-        receive {suspendee, X} ->
-            erlang:resume_process(X)
-        end
-    end,
-    Test(),
-    ReceiveAndResume(),
-    drain_q().
-
-drain_q() ->
-    receive
-    X ->
-        ?debugFmt("Received ~p~n", [X])
-    after 0 ->
-        ok
-    end.
-
 test_all() ->
     eunit:test(supervisor2, [verbose]).
 
