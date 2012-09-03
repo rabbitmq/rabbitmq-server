@@ -266,9 +266,8 @@ change_cluster_node_type(Type) ->
                                 "Non-clustered nodes can only be disc nodes"}});
         true  -> ok
     end,
-    DiscoveryNodes = all_clustered_nodes(),
-    {AllNodes, DiscNodes, _} =
-        case discover_cluster(DiscoveryNodes) of
+    {_, _, RunningNodes} =
+        case discover_cluster(all_clustered_nodes()) of
             {ok, Status} ->
                 Status;
             {error, _Reason} ->
@@ -279,19 +278,21 @@ change_cluster_node_type(Type) ->
                         "you can use the \"update_cluster_nodes\" command to "
                         "point to the new cluster nodes"}})
     end,
-    WantDiscNode = case Type of
-                       ram  -> false;
-                       disc -> true
-                   end,
-    case not WantDiscNode andalso [node()] =:= DiscNodes of
-        true  -> throw({error,
-                        {standalone_ram_node,
-                         "You can't change the node type to ram if the node is "
-                         "the only disc node in its cluster. Please add more "
-                         "disc nodes to the cluster first."}});
-        false -> ok
-    end,
-    ok = init_db_with_mnesia(AllNodes, WantDiscNode, false).
+    Node = case RunningNodes of
+               [] ->
+                   throw({error,
+                          {no_online_cluster_nodes,
+                           "Could not find any online cluster nodes. If the "
+                           "cluster has changed, you can use the 'recluster' "
+                           "command."}});
+               [Node0|_] ->
+                   Node0
+           end,
+    ok = reset(false),
+    ok = join_cluster(Node, case Type of
+                                ram  -> false;
+                                disc -> true
+                            end).
 
 update_cluster_nodes(DiscoveryNode) ->
     ensure_mnesia_not_running(),
