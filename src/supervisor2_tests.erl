@@ -59,8 +59,8 @@ start_child() ->
 
 init([parent]) ->
     {ok, {{one_for_one, 0, 1},
-      [{test_sup, {?MODULE, start_sup, []},
-        transient, 5000, supervisor, [?MODULE]}]}};
+          [{test_sup, {?MODULE, start_sup, []},
+            transient, 5000, supervisor, [?MODULE]}]}};
 init([]) ->
     {ok, {{simple_one_for_one_terminate, 0, 1},
           [{test_worker, {?MODULE, start_link, []},
@@ -72,7 +72,7 @@ init([]) ->
 
 ensure_children_are_alive({_, ChildPids}) ->
     ?assertEqual(true,
-         lists:all(fun erlang:is_process_alive/1, ChildPids)).
+                 lists:all(fun erlang:is_process_alive/1, ChildPids)).
 
 shutdown_and_verify_all_children_died({Parent, ChildPids}=State) ->
     ensure_children_are_alive(State),
@@ -80,7 +80,7 @@ shutdown_and_verify_all_children_died({Parent, ChildPids}=State) ->
     ?assertEqual(true, erlang:is_process_alive(TestSup)),
     ?assertMatch(ok, supervisor2:terminate_child(Parent, test_sup)),
     ?assertMatch([], [P || P <- ChildPids,
-               erlang:is_process_alive(P)]),
+                           erlang:is_process_alive(P)]),
     ?assertEqual(false, erlang:is_process_alive(TestSup)).
 
 shutdown_whilst_interleaving_exits_occur({Parent, ChildPids}=State) ->
@@ -88,11 +88,11 @@ shutdown_whilst_interleaving_exits_occur({Parent, ChildPids}=State) ->
     TestPid = self(),
     Ref = erlang:make_ref(),
     spawn(fun() ->
-          TestPid ! {Ref, supervisor2:terminate_child(Parent, test_sup)}
-      end),
+                  TestPid ! {Ref, supervisor2:terminate_child(Parent, test_sup)}
+          end),
     [P ! stop || P <- ChildPids],
     receive {Ref, Res} ->
-        ?assertEqual(ok, Res)
+            ?assertEqual(ok, Res)
     end.
 
 init_supervisor() ->
