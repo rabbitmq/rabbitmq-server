@@ -74,7 +74,7 @@ ensure_children_are_alive({_, ChildPids}) ->
     ?assertEqual(true,
                  lists:all(fun erlang:is_process_alive/1, ChildPids)).
 
-shutdown_and_verify_all_children_died({Parent, ChildPids}=State) ->
+shutdown_and_verify_all_children_died({Parent, ChildPids} = State) ->
     ensure_children_are_alive(State),
     TestSup = erlang:whereis(?MODULE),
     ?assertEqual(true, erlang:is_process_alive(TestSup)),
@@ -83,7 +83,7 @@ shutdown_and_verify_all_children_died({Parent, ChildPids}=State) ->
                            erlang:is_process_alive(P)]),
     ?assertEqual(false, erlang:is_process_alive(TestSup)).
 
-shutdown_whilst_interleaving_exits_occur({Parent, ChildPids}=State) ->
+shutdown_whilst_interleaving_exits_occur({Parent, ChildPids} = State) ->
     ensure_children_are_alive(State),
     TestPid = self(),
     Ref = erlang:make_ref(),
