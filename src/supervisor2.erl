@@ -834,7 +834,8 @@ terminate_simple_children(Child, Dynamics, SupName) ->
     timeout_stop(Child, TRef, TimeoutMsg, Timedout),
     ReportError = shutdown_error_reporter(SupName),
     Report = fun(_, ok)           -> ok;
-                (Pid, {error, R}) -> ReportError(R, Child#child{pid = Pid})
+                (Pid, {error, R}) -> ReportError(R, Child#child{pid = Pid});
+		(Pid, Other)      -> ReportError(Other, Child#child{pid = Pid})
              end,
     [receive
          {'EXIT', Pid, Reason} -> Report(Pid, Reason)
