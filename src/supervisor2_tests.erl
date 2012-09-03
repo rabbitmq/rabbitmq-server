@@ -22,7 +22,7 @@
 
 -define(NUM_CHILDREN, 1000).
 
--compile(export_all).
+-export([test_all/0]).
 
 -include_lib("eunit/include/eunit.hrl").
 
@@ -103,4 +103,3 @@ loop_infinity() ->
     receive
         stop -> ok
     end.
-
