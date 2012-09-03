@@ -838,7 +838,7 @@ terminate_simple_children(Child, Dynamics, SupName) ->
              end,
     [receive
          {'EXIT', Pid, Reason} ->
-	     Report(Pid, child_res(Child, Reason, Timedout))
+             Report(Pid, child_res(Child, Reason, Timedout))
      after
          0 -> Report(Pid, Reply)
      end || {Pid, Reply} <- Replies],
