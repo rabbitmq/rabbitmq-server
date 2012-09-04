@@ -768,7 +768,7 @@ process_instruction(
              {AckTag, BQS1} = BQ:publish_delivered(AckRequired, Msg, MsgProps,
                                                    ChPid, BQS),
              maybe_store_ack(AckRequired, MsgId, AckTag,
-                             State2 #state {backing_queue_state = BQS1})
+                             State2 #state { backing_queue_state = BQS1 })
      end};
 process_instruction({discard, ChPid, Msg = #basic_message { id = MsgId }},
                     State = #state { sender_queues       = SQ,
