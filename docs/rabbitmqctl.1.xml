@@ -657,7 +657,7 @@
             </para>
             <para>
               Deleting a virtual host deletes all its exchanges,
-              queues, user mappings and associated permissions.
+              queues, bindings, user permissions and parameters.
             </para>
             <para role="example-prefix">For example:</para>
             <screen role="example">rabbitmqctl delete_vhost test</screen>
@@ -826,15 +826,16 @@
         Certain features of RabbitMQ (such as the federation plugin)
         are controlled by dynamic,
         cluster-wide <emphasis>parameters</emphasis>. Each parameter
-        consists of a component name, a key and a value. The
-        component name and key are strings, and the value is an
-        Erlang term. Parameters can be set, cleared and listed. In
-        general you should refer to the documentation for the feature
-        in question to see how to set parameters.
+        consists of a component name, a key and a value, and is
+        associated with a virtual host. The component name and key are
+        strings, and the value is an Erlang term. Parameters can be
+        set, cleared and listed. In general you should refer to the
+        documentation for the feature in question to see how to set
+        parameters.
       </para>
       <variablelist>
         <varlistentry>
-          <term><cmdsynopsis><command>set_parameter</command> <arg choice="req"><replaceable>component_name</replaceable></arg> <arg choice="req"><replaceable>key</replaceable></arg> <arg choice="req"><replaceable>value</replaceable></arg></cmdsynopsis></term>
+          <term><cmdsynopsis><command>set_parameter</command> <arg choice="opt">-p <replaceable>vhostpath</replaceable></arg> <arg choice="req"><replaceable>component_name</replaceable></arg> <arg choice="req"><replaceable>key</replaceable></arg> <arg choice="req"><replaceable>value</replaceable></arg></cmdsynopsis></term>
           <listitem>
             <para>
               Sets a parameter.
@@ -865,12 +866,12 @@
             <para role="example-prefix">For example:</para>
             <screen role="example">rabbitmqctl set_parameter federation local_username '&lt;&lt;"guest">>'</screen>
             <para role="example">
-              This command sets the parameter <command>local_username</command> for the <command>federation</command> component to the Erlang term <command>&lt;&lt;"guest">></command>.
+              This command sets the parameter <command>local_username</command> for the <command>federation</command> component in the default virtual host to the Erlang term <command>&lt;&lt;"guest">></command>.
             </para>
           </listitem>
         </varlistentry>
         <varlistentry>
-          <term><cmdsynopsis><command>clear_parameter</command> <arg choice="req"><replaceable>component_name</replaceable></arg> <arg choice="req"><replaceable>key</replaceable></arg></cmdsynopsis></term>
+          <term><cmdsynopsis><command>clear_parameter</command> <arg choice="opt">-p <replaceable>vhostpath</replaceable></arg> <arg choice="req"><replaceable>component_name</replaceable></arg> <arg choice="req"><replaceable>key</replaceable></arg></cmdsynopsis></term>
           <listitem>
             <para>
               Clears a parameter.
@@ -893,20 +894,20 @@
             <para role="example-prefix">For example:</para>
             <screen role="example">rabbitmqctl clear_parameter federation local_username</screen>
             <para role="example">
-              This command clears the parameter <command>local_username</command> for the <command>federation</command> component.
+              This command clears the parameter <command>local_username</command> for the <command>federation</command> component in the default virtual host.
             </para>
           </listitem>
         </varlistentry>
         <varlistentry>
-          <term><cmdsynopsis><command>list_parameters</command></cmdsynopsis></term>
+          <term><cmdsynopsis><command>list_parameters</command> <arg choice="opt">-p <replaceable>vhostpath</replaceable></arg></cmdsynopsis></term>
           <listitem>
             <para>
-              Lists all parameters.
+              Lists all parameters for a virtual host.
             </para>
             <para role="example-prefix">For example:</para>
             <screen role="example">rabbitmqctl list_parameters</screen>
             <para role="example">
-              This command lists all parameters.
+              This command lists all parameters in the default virtual host.
             </para>
           </listitem>
         </varlistentry>

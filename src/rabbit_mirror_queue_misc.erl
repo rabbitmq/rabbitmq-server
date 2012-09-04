@@ -64,9 +64,7 @@ remove_from_queue(QueueName, DeadPids) ->
                                    slave_pids = SPids }] ->
                       [QPid1 | SPids1] = Alive =
                           [Pid || Pid <- [QPid | SPids],
-                                  not lists:member(node(Pid),
-                                                   DeadNodes) orelse
-                                  rabbit_misc:is_process_alive(Pid)],
+                                  not lists:member(node(Pid), DeadNodes)],
                       case {{QPid, SPids}, {QPid1, SPids1}} of
                           {Same, Same} ->
                               {ok, QPid1, []};

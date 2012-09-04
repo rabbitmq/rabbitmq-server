@@ -124,9 +124,11 @@
 %% necessitate an ack or not. If they do, the function returns a list of
 %% messages with the respective acktags.
 -callback dropwhile(msg_pred(), true, state())
-                   -> {[{rabbit_types:basic_message(), ack()}], state()};
+                   -> {rabbit_types:message_properties() | undefined,
+                       [{rabbit_types:basic_message(), ack()}], state()};
                    (msg_pred(), false, state())
-                   -> {undefined, state()}.
+                   -> {rabbit_types:message_properties() | undefined,
+                       undefined, state()}.
 
 %% Produce the next message.
 -callback fetch(true,  state()) -> {fetch_result(ack()), state()};
