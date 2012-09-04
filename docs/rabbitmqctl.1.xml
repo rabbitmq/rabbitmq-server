@@ -300,32 +300,33 @@
                 <term><cmdsynopsis><arg choice="opt">--ram</arg></cmdsynopsis></term>
                 <listitem>
                   <para>
-                    If provided, the node will join the cluster as a ram node.
+                    If provided, the node will join the cluster as a RAM node.
                   </para>
                 </listitem>
               </varlistentry>
             </variablelist>
             <para>
-              Instruct the node to become member of the cluster that the
+              Instruct the node to become a member of the cluster that the
               specified node is in. Before clustering, the node is reset, so be
               careful when using this command. For this command to succeed the
               RabbitMQ application must have been stopped, e.g. with <link
               linkend="stop_app"><command>stop_app</command></link>.
             </para>
             <para>
-              Cluster nodes can be of two types: disk or ram. Disk nodes
-              replicate data in ram and on disk, thus providing redundancy in
-              the event of node failure and recovery from global events such as
-              power failure across all nodes. Ram nodes replicate data in ram
-              only and are mainly used for scalability. A cluster must always
-              have at least one disk node. Note that the queue data will always
-              be on disc, including on ram nodes. This makes ram nodes more
+              Cluster nodes can be of two types: disk or RAM. Disk nodes
+              replicate data in RAM and on disk, thus providing redundancy in
+              the event of node failure and recovery from global events such
+              as power failure across all nodes. RAM nodes replicate data in
+              RAM only (with the exception of queue contents, which can reside
+              on disc if the queue is persistent or too big to fit in memory)
+              and are mainly used for scalability. RAM nodes are more
               performant only when managing resources (e.g. adding/removing
-              queues, exchanges, or bindings).
+              queues, exchanges, or bindings). A cluster must always have at
+              least one disk node, and usually should have more than one.
             </para>
             <para>
               The node will be a disk node by default. If you wish to wish to
-              create a ram node, provide the <command>--ram</command> flag.
+              create a RAM node, provide the <command>--ram</command> flag.
             </para>
             <para>
               After executing the <command>cluster</command> command, whenever
@@ -379,13 +380,13 @@
           <listitem>
             <para>
               Changes the type of the cluster node. The node must be stopped for
-              this operation to succeed, and when turning a node into a ram node
+              this operation to succeed, and when turning a node into a RAM node
               the node must not be the only disk node in the cluster.
             </para>
             <para role="example-prefix">For example:</para>
             <screen role="example">rabbitmqctl change_cluster_node_type disk</screen>
             <para role="example">
-              This command will turn a ram node into a disk node.
+              This command will turn a RAM node into a disk node.
             </para>
           </listitem>
         </varlistentry>
