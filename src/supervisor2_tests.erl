@@ -17,89 +17,66 @@
 -module(supervisor2_tests).
 -behaviour(supervisor2).
 
--export([test_all/0, start_sup/0, start_link/0, start_child/0]).
+-export([test_all/0, start_link/0]).
 -export([init/1]).
-
--define(NUM_CHILDREN, 1000).
-
--export([test_all/0]).
 
 -include_lib("eunit/include/eunit.hrl").
 
+-define(TEST_RUNS, 2000).
+-define(SLOW_TEST_RUNS, 45).
+-define(CHILDREN, 100).
+
 test_all() ->
-    eunit:test(supervisor2, [verbose]).
+    eunit:test(?MODULE, [verbose]).
 
-terminate_simple_children_without_deadlock_test_() ->
-    lists:flatten(
-      lists:duplicate(
-        100, [{setup, fun init_supervisor/0,
-               {with, [fun ensure_children_are_alive/1,
-                       fun shutdown_and_verify_all_children_died/1]}},
-              {setup, fun init_supervisor/0,
-               {with, [fun shutdown_whilst_interleaving_exits_occur/1]}}])).
+simple_child_shutdown_without_deadlock_test_() ->
+    lists:duplicate(?TEST_RUNS,
+                    [{timeout, 60, fun test_clean_stop/0}]).
 
-%%
-%% Public (test facing) API
-%%
+simple_child_shutdown_with_timeout_test_() ->
+    lists:duplicate(?SLOW_TEST_RUNS,
+                    [{timeout, 120, fun test_timeout/0}]).
 
-start_sup() ->
-    supervisor2:start_link({local, ?MODULE}, ?MODULE, []).
+test_clean_stop() ->
+    test_it(stop).
+
+test_timeout() ->
+    test_it(ignored).
+
+test_it(SigStop) ->
+    {ok, Pid} = supervisor2:start_link(?MODULE, [?CHILDREN]),
+    start_and_terminate_children(SigStop, Pid, ?CHILDREN),
+    unlink(Pid),
+    exit(Pid, shutdown).
 
 start_link() ->
-    Pid = spawn_link(fun loop_infinity/0),
+    Pid = spawn_link(fun () ->
+                             process_flag(trap_exit, true),
+                             receive stop -> ok end
+                     end),
     {ok, Pid}.
 
-start_child() ->
-    {ok, Pid} = supervisor2:start_child(?MODULE, []),
-    Pid.
-
-%%
-%% supervisor2 callbacks
-%%
-
-init([parent]) ->
+init([N]) ->
     {ok, {{one_for_one, 0, 1},
-          [{test_sup, {?MODULE, start_sup, []},
-            transient, 5000, supervisor, [?MODULE]}]}};
+          [{test_sup, {supervisor2, start_link,
+                       [{local, ?MODULE}, ?MODULE, []]},
+            transient, N * 100, supervisor, [?MODULE]}]}};
 init([]) ->
     {ok, {{simple_one_for_one_terminate, 0, 1},
           [{test_worker, {?MODULE, start_link, []},
-            temporary, 1000, worker, []}]}}.
+            temporary, 1000, worker, [?MODULE]}]}}.
 
-%%
-%% Private API
-%%
-
-ensure_children_are_alive({_, ChildPids}) ->
-    ?assertEqual(true,
-                 lists:all(fun erlang:is_process_alive/1, ChildPids)).
-
-shutdown_and_verify_all_children_died({Parent, ChildPids} = State) ->
-    ensure_children_are_alive(State),
-    TestSup = erlang:whereis(?MODULE),
-    ?assertEqual(true, erlang:is_process_alive(TestSup)),
-    ?assertMatch(ok, supervisor2:terminate_child(Parent, test_sup)),
-    ?assertMatch([], [P || P <- ChildPids,
-                           erlang:is_process_alive(P)]),
-    ?assertEqual(false, erlang:is_process_alive(TestSup)).
-
-shutdown_whilst_interleaving_exits_occur({Parent, ChildPids} = State) ->
-    ensure_children_are_alive(State),
-    TestPid = self(),
-    Ref = erlang:make_ref(),
-    spawn(fun() ->
-                  TestPid ! {Ref, supervisor2:terminate_child(Parent, test_sup)}
-          end),
-    [P ! stop || P <- ChildPids],
-    receive {Ref, Res} ->
-            ?assertEqual(ok, Res)
-    end.
-
-init_supervisor() ->
-    {ok, Pid} = supervisor2:start_link(?MODULE, [parent]),
-    {Pid, [start_child() || _ <- lists:seq(1, ?NUM_CHILDREN)]}.
-
-loop_infinity() ->
+start_and_terminate_children(SigStop, Sup, N) ->
+    TestSupPid = whereis(?MODULE),
+    ChildPids = [begin
+                     {ok, ChildPid} = supervisor2:start_child(TestSupPid, []),
+                     ChildPid
+                 end || _ <- lists:seq(1, N)],
+    erlang:monitor(process, TestSupPid),
+    [P ! SigStop || P <- ChildPids],
+    ?assertEqual(ok, supervisor2:terminate_child(Sup, test_sup)),
+    ?assertMatch({ok,_}, supervisor2:restart_child(Sup, test_sup)),
     receive
-        stop -> ok
+        {'DOWN', _MRef, process, TestSupPid, Reason} ->
+                ?assertMatch(shutdown, Reason)
     end.
