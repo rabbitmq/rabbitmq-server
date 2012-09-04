@@ -18,7 +18,7 @@
 
 -export([init/3, terminate/2, delete_and_terminate/2,
          purge/1, publish/4, publish_delivered/5, fetch/2, ack/2,
-         requeue/2, len/1, is_empty/1, pending_ack/1, drain_confirmed/1,
+         requeue/2, len/1, is_empty/1, depth/1, drain_confirmed/1,
          dropwhile/3, set_ram_duration_target/2, ram_duration/1,
          needs_timeout/1, timeout/1, handle_pre_hibernate/1,
          status/1, invoke/3, is_duplicate/2, discard/3, fold/3]).
@@ -96,7 +96,7 @@ init(#amqqueue { name = QName, mirror_nodes = MNodes } = Q, Recover,
     [rabbit_mirror_queue_misc:add_mirror(QName, Node) || Node <- MNodes1],
     {ok, BQ} = application:get_env(backing_queue_module),
     BQS = BQ:init(Q, Recover, AsyncCallback),
-    ok = gm:broadcast(GM, {depth, depth(BQ, BQS)}),
+    ok = gm:broadcast(GM, {depth, BQ:depth(BQS)}),
     #state { gm                  = GM,
              coordinator         = CPid,
              backing_queue       = BQ,
@@ -274,8 +274,8 @@ len(#state { backing_queue = BQ, backing_queue_state = BQS }) ->
 is_empty(#state { backing_queue = BQ, backing_queue_state = BQS }) ->
     BQ:is_empty(BQS).
 
-pending_ack(#state { backing_queue = BQ, backing_queue_state = BQS }) ->
-    BQ:pending_ack(BQS).
+depth(#state { backing_queue = BQ, backing_queue_state = BQS }) ->
+    BQ:depth(BQS).
 
 set_ram_duration_target(Target, State = #state { backing_queue       = BQ,
                                                  backing_queue_state = BQS }) ->
@@ -375,7 +375,7 @@ discard(Msg = #basic_message { id = MsgId }, ChPid,
 
 promote_backing_queue_state(CPid, BQ, BQS, GM, SeenStatus, KS) ->
     Len = BQ:len(BQS),
-    ok = gm:broadcast(GM, {depth, depth(BQ, BQS)}),
+    ok = gm:broadcast(GM, {depth, BQ:depth(BQS)}),
     #state { gm                  = GM,
              coordinator         = CPid,
              backing_queue       = BQ,
@@ -407,7 +407,7 @@ length_fun() ->
                                              backing_queue       = BQ,
                                              backing_queue_state = BQS }) ->
                       ok = gm:broadcast(
-                             GM, {depth, depth(BQ, BQS)}),
+                             GM, {depth, BQ:depth(BQS)}),
                       State
               end)
     end.
@@ -425,10 +425,3 @@ ensure_monitoring(ChPid, State = #state { coordinator = CPid,
                         CPid, [ChPid]),
                  State #state { known_senders = sets:add_element(ChPid, KS) }
     end.
-
-%% ---------------------------------------------------------------------------
-%% Internal exports
-%% ---------------------------------------------------------------------------
-
-depth(BQ, BQS) ->
-    BQ:len(BQS) + BQ:pending_ack(BQS).
