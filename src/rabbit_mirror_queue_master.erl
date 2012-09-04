@@ -406,8 +406,7 @@ length_fun() ->
               fun (?MODULE, State = #state { gm                  = GM,
                                              backing_queue       = BQ,
                                              backing_queue_state = BQS }) ->
-                      ok = gm:broadcast(
-                             GM, {depth, BQ:depth(BQS)}),
+                      ok = gm:broadcast(GM, {depth, BQ:depth(BQS)}),
                       State
               end)
     end.

@@ -875,13 +875,11 @@ process_instruction({sender_death, ChPid},
                                      msg_id_status = MS1,
                                      known_senders = pmon:demonitor(ChPid, KS) }
          end};
-
 process_instruction({depth, Depth},
                     State = #state { backing_queue       = BQ,
                                      backing_queue_state = BQS }) ->
     {ok, set_synchronised(
            0, true, State #state { depth_delta = Depth - BQ:depth(BQS) })};
-
 process_instruction({delete_and_terminate, Reason},
                     State = #state { backing_queue       = BQ,
                                      backing_queue_state = BQS }) ->
