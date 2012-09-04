@@ -47,7 +47,7 @@ make_child_specs(Configurations) ->
                 {rabbit_shovel_worker, start_link, [ShovelName, ShovelConfig]},
                 case ShovelConfig#shovel.reconnect_delay of
                     0 -> temporary;
-                    N -> {transient, N}
+                    N -> {permanent, N}
                 end,
                 16#ffffffff,
                 worker,
