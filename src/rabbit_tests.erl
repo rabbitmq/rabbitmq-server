@@ -53,6 +53,7 @@ all_tests() ->
     passed = test_log_management_during_startup(),
     passed = test_statistics(),
     passed = test_arguments_parser(),
+    passed = test_dynamic_mirroring(),
     passed = test_cluster_management(),
     passed = test_user_management(),
     passed = test_runtime_parameters(),
@@ -852,6 +853,34 @@ test_arguments_parser() ->
       {ok, {command2, [{"-f1", false}, {"-f2", true},
                        {"-o1", "baz"}, {"-o2", "bar"}], ["quux", "foo"]}},
       GetOptions, ["-f2", "command2", "quux", "-o1", "baz", "foo"]),
+
+    passed.
+
+test_dynamic_mirroring() ->
+    %% Just unit tests of the node selection logic, see multi node
+    %% tests for the rest...
+    Test = fun ({NewM, NewSs}, Policy, Params, {OldM, OldSs}, All) ->
+                   {NewM, NewSs0} =
+                       rabbit_mirror_queue_misc:suggested_queue_nodes(
+                         Policy, Params, {OldM, OldSs}, All),
+                   NewSs = lists:sort(NewSs0)
+           end,
+
+    Test({a,[b,c]},<<"all">>,'_',{a,[]},   [a,b,c]),
+    Test({a,[b,c]},<<"all">>,'_',{a,[b,c]},[a,b,c]),
+    Test({a,[b,c]},<<"all">>,'_',{a,[d]},  [a,b,c]),
+
+    Test({a,[b,c]},<<"nodes">>,[<<"a">>,<<"b">>,<<"c">>],{a,[d]},[a,b,c,d]),
+    Test({a,[b,c]},<<"nodes">>,[<<"a">>,<<"b">>,<<"c">>],{a,[b]},[a,b,c,d]),
+    Test({b,[a,c]},<<"nodes">>,[<<"a">>,<<"b">>,<<"c">>],{b,[a]},[a,b,c,d]),
+    Test({a,[b,c]},<<"nodes">>,[<<"a">>,<<"b">>,<<"c">>],{d,[a]},[a,b,c,d]),
+
+    Test({a,[b]},  <<"exactly">>,2,{a,[]},   [a,b,c,d]),
+    Test({a,[b,c]},<<"exactly">>,3,{a,[]},   [a,b,c,d]),
+    Test({a,[c]},  <<"exactly">>,2,{a,[c]},  [a,b,c,d]),
+    Test({a,[b,c]},<<"exactly">>,3,{a,[c]},  [a,b,c,d]),
+    Test({a,[c]},  <<"exactly">>,2,{a,[c,d]},[a,b,c,d]),
+    Test({a,[c,d]},<<"exactly">>,3,{a,[c,d]},[a,b,c,d]),
 
     passed.
 

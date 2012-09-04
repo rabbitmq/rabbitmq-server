@@ -230,8 +230,7 @@ matches(false, Q1, Q2) ->
     Q1#amqqueue.exclusive_owner =:= Q2#amqqueue.exclusive_owner andalso
     Q1#amqqueue.arguments =:= Q2#amqqueue.arguments andalso
     Q1#amqqueue.pid =:= Q2#amqqueue.pid andalso
-    Q1#amqqueue.slave_pids =:= Q2#amqqueue.slave_pids andalso
-    Q1#amqqueue.mirror_nodes =:= Q2#amqqueue.mirror_nodes.
+    Q1#amqqueue.slave_pids =:= Q2#amqqueue.slave_pids.
 
 bq_init(BQ, Q, Recover) ->
     Self = self(),
@@ -296,11 +295,11 @@ next_state(State = #q{backing_queue = BQ, backing_queue_state = BQS}) ->
         timed -> {ensure_sync_timer(State1), 0             }
     end.
 
-backing_queue_module(#amqqueue{arguments = Args}) ->
-    case rabbit_misc:table_lookup(Args, <<"x-ha-policy">>) of
-        undefined -> {ok, BQM} = application:get_env(backing_queue_module),
-                     BQM;
-        _Policy   -> rabbit_mirror_queue_master
+backing_queue_module(Q) ->
+    case rabbit_mirror_queue_misc:is_mirrored(Q) of
+        false -> {ok, BQM} = application:get_env(backing_queue_module),
+                 BQM;
+        true  -> rabbit_mirror_queue_master
     end.
 
 ensure_sync_timer(State = #q{sync_timer_ref = undefined}) ->
@@ -941,14 +940,18 @@ i(memory, _) ->
     {memory, M} = process_info(self(), memory),
     M;
 i(slave_pids, #q{q = #amqqueue{name = Name}}) ->
-    case rabbit_amqqueue:lookup(Name) of
-        {ok, #amqqueue{mirror_nodes = undefined}} -> '';
-        {ok, #amqqueue{slave_pids = SPids}}       -> SPids
+    {ok, Q = #amqqueue{slave_pids = SPids}} =
+        rabbit_amqqueue:lookup(Name),
+    case rabbit_mirror_queue_misc:is_mirrored(Q) of
+        false -> '';
+        true  -> SPids
     end;
 i(synchronised_slave_pids, #q{q = #amqqueue{name = Name}}) ->
-    case rabbit_amqqueue:lookup(Name) of
-        {ok, #amqqueue{mirror_nodes = undefined}} -> '';
-        {ok, #amqqueue{sync_slave_pids = SSPids}} -> SSPids
+    {ok, Q = #amqqueue{sync_slave_pids = SSPids}} =
+        rabbit_amqqueue:lookup(Name),
+    case rabbit_mirror_queue_misc:is_mirrored(Q) of
+        false -> '';
+        true  -> SSPids
     end;
 i(backing_queue_status, #q{backing_queue_state = BQS, backing_queue = BQ}) ->
     BQ:status(BQS);
@@ -1189,6 +1192,23 @@ handle_call({requeue, AckTags, ChPid}, From, State) ->
     noreply(subtract_acks(
               ChPid, AckTags, State,
               fun (State1) -> requeue_and_run(AckTags, State1) end));
+
+handle_call(start_mirroring, _From, State = #q{backing_queue       = BQ,
+                                               backing_queue_state = BQS}) ->
+    %% lookup again to get policy for init_with_existing_bq
+    {ok, Q} = rabbit_amqqueue:lookup(qname(State)),
+    true = BQ =/= rabbit_mirror_queue_master, %% assertion
+    BQ1 = rabbit_mirror_queue_master,
+    BQS1 = BQ1:init_with_existing_bq(Q, BQ, BQS),
+    reply(ok, State#q{backing_queue       = BQ1,
+                      backing_queue_state = BQS1});
+
+handle_call(stop_mirroring, _From, State = #q{backing_queue       = BQ,
+                                              backing_queue_state = BQS}) ->
+    BQ = rabbit_mirror_queue_master, %% assertion
+    {BQ1, BQS1} = BQ:stop_mirroring(BQS),
+    reply(ok, State#q{backing_queue       = BQ1,
+                      backing_queue_state = BQS1});
 
 handle_call(force_event_refresh, _From,
             State = #q{exclusive_consumer = Exclusive}) ->
