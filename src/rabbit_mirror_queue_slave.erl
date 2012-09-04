@@ -153,28 +153,23 @@ init_it(Self, Node, QueueName) ->
     [Q1 = #amqqueue { pid = QPid, slave_pids = MPids }] =
                 mnesia:read({rabbit_queue, QueueName}),
     case [Pid || Pid <- [QPid | MPids], node(Pid) =:= Node] of
-        [] ->
-            rabbit_mirror_queue_misc:store_updated_slaves(
-              Q1#amqqueue{slave_pids = add_slave(Self, MPids)}),
-            {new, QPid};
-        [QPid] ->
-            case rabbit_misc:is_process_alive(QPid) of
-                true  -> duplicate_live_master;
-                false -> {stale, QPid}
-            end;
-        [SPid] ->
-            case rabbit_misc:is_process_alive(SPid) of
-                true  -> existing;
-                false -> MPids1 = add_slave(Self, MPids -- [SPid]),
-                         rabbit_mirror_queue_misc:store_updated_slaves(
-                           Q1#amqqueue{slave_pids = MPids1}),
-                         {new, QPid}
-            end
+        []     -> add_slave(Q1, Self, MPids),
+                  {new, QPid};
+        [QPid] -> case rabbit_misc:is_process_alive(QPid) of
+                      true  -> duplicate_live_master;
+                      false -> {stale, QPid}
+                  end;
+        [SPid] -> case rabbit_misc:is_process_alive(SPid) of
+                      true  -> existing;
+                      false -> add_slave(Q1, Self, MPids -- [SPid]),
+                               {new, QPid}
+                  end
     end.
 
 %% Add to the end, so they are in descending order of age, see
 %% rabbit_mirror_queue_misc:promote_slave/1
-add_slave(New, MPids) -> MPids ++ [New].
+add_slave(Q, New, MPids) -> rabbit_mirror_queue_misc:store_updated_slaves(
+                              Q#amqqueue{slave_pids = MPids ++ [New]}).
 
 handle_call({deliver, Delivery = #delivery { immediate = true }},
             From, State) ->
