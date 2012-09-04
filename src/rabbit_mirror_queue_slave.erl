@@ -936,7 +936,7 @@ set_synchronised(Delta, AddAnyway,
                                 Q1#amqqueue{sync_slave_pids = [Self | SSPids1]})
                       end
               end);
-        _ when DepthDelta1 > 0->
+        _ when DepthDelta1 > 0 ->
             ok
     end,
     State #state { depth_delta = DepthDelta1 }.
