@@ -75,8 +75,8 @@ start_and_terminate_children(SigStop, Sup, N) ->
     erlang:monitor(process, TestSupPid),
     [P ! SigStop || P <- ChildPids],
     ?assertEqual(ok, supervisor2:terminate_child(Sup, test_sup)),
-    ?assertMatch({ok,_}, supervisor2:restart_child(Sup, test_sup)),
+    ?assertMatch({ok, _}, supervisor2:restart_child(Sup, test_sup)),
     receive
         {'DOWN', _MRef, process, TestSupPid, Reason} ->
-                ?assertMatch(shutdown, Reason)
+            ?assertMatch(shutdown, Reason)
     end.
