@@ -30,24 +30,35 @@ test_all() ->
     eunit:test(?MODULE, [verbose]).
 
 simple_child_shutdown_without_deadlock_test_() ->
-    lists:duplicate(?TEST_RUNS,
-                    [{timeout, 60, fun test_clean_stop/0}]).
+    [{timeout, ?TEST_RUNS * 10,
+      check_shutdown_handling(stop, ?TEST_RUNS, ?CHILDREN)}].
 
 simple_child_shutdown_with_timeout_test_() ->
-    lists:duplicate(?SLOW_TEST_RUNS,
-                    [{timeout, 120, fun test_timeout/0}]).
+    [{timeout, ?SLOW_TEST_RUNS * 10,
+      check_shutdown_handling(ignored, ?SLOW_TEST_RUNS, ?CHILDREN)}].
 
-test_clean_stop() ->
-    test_it(stop).
-
-test_timeout() ->
-    test_it(ignored).
-
-test_it(SigStop) ->
-    {ok, Pid} = supervisor2:start_link(?MODULE, [?CHILDREN]),
-    start_and_terminate_children(SigStop, Pid, ?CHILDREN),
-    unlink(Pid),
-    exit(Pid, shutdown).
+check_shutdown_handling(SigStop, Iterations, ChildCount) ->
+    fun() ->
+            {ok, Sup} = supervisor2:start_link(?MODULE, [?CHILDREN]),
+            [begin
+                 TestSupPid = erlang:whereis(?MODULE),
+                 ChildPids = [begin
+                                  {ok, ChildPid} =
+                                      supervisor2:start_child(TestSupPid, []),
+                                  ChildPid
+                              end || _ <- lists:seq(1, ChildCount)],
+                 erlang:monitor(process, TestSupPid),
+                 [P ! SigStop || P <- ChildPids],
+                 ?assertEqual(ok, supervisor2:terminate_child(Sup, test_sup)),
+                 {ok, _} = supervisor2:restart_child(Sup, test_sup),
+                 receive
+                     {'DOWN', _MRef, process, TestSupPid, Reason} ->
+                         ?assertEqual(shutdown, Reason)
+                 end
+             end || _ <- lists:seq(1, Iterations)],
+            unlink(Sup),
+            exit(Sup, shutdown)
+    end.
 
 start_link() ->
     Pid = spawn_link(fun () ->
@@ -66,17 +77,3 @@ init([]) ->
           [{test_worker, {?MODULE, start_link, []},
             temporary, 1000, worker, [?MODULE]}]}}.
 
-start_and_terminate_children(SigStop, Sup, N) ->
-    TestSupPid = whereis(?MODULE),
-    ChildPids = [begin
-                     {ok, ChildPid} = supervisor2:start_child(TestSupPid, []),
-                     ChildPid
-                 end || _ <- lists:seq(1, N)],
-    erlang:monitor(process, TestSupPid),
-    [P ! SigStop || P <- ChildPids],
-    ?assertEqual(ok, supervisor2:terminate_child(Sup, test_sup)),
-    ?assertMatch({ok, _}, supervisor2:restart_child(Sup, test_sup)),
-    receive
-        {'DOWN', _MRef, process, TestSupPid, Reason} ->
-            ?assertMatch(shutdown, Reason)
-    end.
