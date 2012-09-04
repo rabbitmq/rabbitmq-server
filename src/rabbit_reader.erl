@@ -184,6 +184,8 @@ socket_op(Sock, Fun) ->
         {ok, Res}       -> Res;
         {error, Reason} -> log(error, "error on AMQP connection ~p: ~p~n",
                                [self(), Reason]),
+                           %% NB: this is tcp socket, even in case of ssl
+                           rabbit_net:fast_close(Sock),
                            exit(normal)
     end.
 
@@ -242,8 +244,7 @@ start_connection(Parent, ChannelSupSupPid, Collector, StartHeartbeatFun, Deb,
         %% controlling process and hence its termination will close
         %% the socket. However, to keep the file_handle_cache
         %% accounting as accurate as possible we ought to close the
-        %% socket w/o delay before termination. fast_close does that,
-        %% though only for non-ssl sockets.
+        %% socket w/o delay before termination.
         rabbit_net:fast_close(ClientSock),
         rabbit_event:notify(connection_closed, [{pid, self()}])
     end,
