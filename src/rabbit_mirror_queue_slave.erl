@@ -782,7 +782,7 @@ process_instruction(
                                  State2 #state {backing_queue_state = BQS1}),
                  case AckRequired of
                      true  -> 1;
-                     false -> 1
+                     false -> 0
                  end}
         end,
     {ok, set_synchronised(Delta, Delta, State3)};
