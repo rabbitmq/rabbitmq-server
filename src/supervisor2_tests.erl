@@ -20,45 +20,37 @@
 -export([test_all/0, start_link/0]).
 -export([init/1]).
 
--include_lib("eunit/include/eunit.hrl").
-
--define(TEST_RUNS, 2000).
--define(SLOW_TEST_RUNS, 45).
--define(CHILDREN, 100).
-
 test_all() ->
-    eunit:test(?MODULE, [verbose]).
+    ok = check_shutdown(stop,    200, 200, 2000),
+    ok = check_shutdown(ignored,   1,   2, 2000).
 
-simple_child_shutdown_without_deadlock_test_() ->
-    [{timeout, ?TEST_RUNS * 10,
-      check_shutdown_handling(stop, ?TEST_RUNS, ?CHILDREN)}].
-
-simple_child_shutdown_with_timeout_test_() ->
-    [{timeout, ?SLOW_TEST_RUNS * 10,
-      check_shutdown_handling(ignored, ?SLOW_TEST_RUNS, ?CHILDREN)}].
-
-check_shutdown_handling(SigStop, Iterations, ChildCount) ->
-    fun() ->
-            {ok, Sup} = supervisor2:start_link(?MODULE, [?CHILDREN]),
-            [begin
-                 TestSupPid = erlang:whereis(?MODULE),
-                 ChildPids = [begin
-                                  {ok, ChildPid} =
-                                      supervisor2:start_child(TestSupPid, []),
-                                  ChildPid
-                              end || _ <- lists:seq(1, ChildCount)],
-                 erlang:monitor(process, TestSupPid),
-                 [P ! SigStop || P <- ChildPids],
-                 ?assertEqual(ok, supervisor2:terminate_child(Sup, test_sup)),
-                 {ok, _} = supervisor2:restart_child(Sup, test_sup),
-                 receive
-                     {'DOWN', _MRef, process, TestSupPid, Reason} ->
-                         ?assertEqual(shutdown, Reason)
-                 end
-             end || _ <- lists:seq(1, Iterations)],
-            unlink(Sup),
-            exit(Sup, shutdown)
-    end.
+check_shutdown(SigStop, Iterations, ChildCount, SupTimeout) ->
+    {ok, Sup} = supervisor2:start_link(?MODULE, [SupTimeout]),
+    Res = lists:foldl(
+            fun (I, ok) ->
+                    TestSupPid = erlang:whereis(?MODULE),
+                    ChildPids =
+                        [begin
+                             {ok, ChildPid} =
+                                 supervisor2:start_child(TestSupPid, []),
+                             ChildPid
+                         end || _ <- lists:seq(1, ChildCount)],
+                    MRef = erlang:monitor(process, TestSupPid),
+                    [P ! SigStop || P <- ChildPids],
+                    ok = supervisor2:terminate_child(Sup, test_sup),
+                    {ok, _} = supervisor2:restart_child(Sup, test_sup),
+                    receive
+                        {'DOWN', MRef, process, TestSupPid, shutdown} ->
+                            ok;
+                        {'DOWN', MRef, process, TestSupPid, Reason} ->
+                            {error, {I, Reason}}
+                    end;
+                (_, R) ->
+                    R
+            end, ok, lists:seq(1, Iterations)),
+    unlink(Sup),
+    exit(Sup, shutdown),
+    Res.
 
 start_link() ->
     Pid = spawn_link(fun () ->
@@ -67,13 +59,12 @@ start_link() ->
                      end),
     {ok, Pid}.
 
-init([N]) ->
+init([Timeout]) ->
     {ok, {{one_for_one, 0, 1},
           [{test_sup, {supervisor2, start_link,
                        [{local, ?MODULE}, ?MODULE, []]},
-            transient, N * 100, supervisor, [?MODULE]}]}};
+            transient, Timeout, supervisor, [?MODULE]}]}};
 init([]) ->
     {ok, {{simple_one_for_one_terminate, 0, 1},
           [{test_worker, {?MODULE, start_link, []},
             temporary, 1000, worker, [?MODULE]}]}}.
-
