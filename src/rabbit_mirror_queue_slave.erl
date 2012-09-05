@@ -927,9 +927,9 @@ set_synchronised(true, State = #state { q = #amqqueue { name = QName },
               case mnesia:read({rabbit_queue, QName}) of
                   [] ->
                       ok;
-                  [Q = #amqqueue{sync_slave_pids = SSPids}] ->
-                      Q1 = Q#amqqueue{sync_slave_pids = [Self | SSPids]},
-                      rabbit_mirror_queue_misc:store_updated_slaves(Q1)
+                  [Q1 = #amqqueue{sync_slave_pids = SSPids}] ->
+                      Q2 = Q1#amqqueue{sync_slave_pids = [Self | SSPids]},
+                      rabbit_mirror_queue_misc:store_updated_slaves(Q2)
               end
       end),
     State #state { synchronised = true };
