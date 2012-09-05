@@ -459,7 +459,7 @@
             <para>
               The need for this command is motivated by the fact that clusters
               can change while a node is offline. Consider the situation in
-              which node A and B are clustered. A goes down, C clusters with C,
+              which node A and B are clustered. A goes down, C clusters with B,
               and then B leaves the cluster. When A wakes up, it'll try to
               contact B, but this will fail since B is not in the cluster
               anymore. <command>update_cluster_nodes -n A C</command> will solve
