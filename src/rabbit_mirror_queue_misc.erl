@@ -101,7 +101,7 @@ remove_from_queue0(QueueName, DeadGMPids) ->
                               {_, OldNodes} = actual_queue_nodes(Q1),
                               {_, NewNodes} = suggested_queue_nodes(Q1),
                               {ok, QPid1, [QPid | SPids] -- Alive,
-                               NewNodes -- OldNodes};
+                               (NewNodes -- OldNodes) -- DeadNodes};
                           _ ->
                               %% Master has changed, and we're not it,
                               %% so leave alone to allow the promoted
