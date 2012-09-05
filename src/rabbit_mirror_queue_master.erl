@@ -117,8 +117,7 @@ stop_mirroring(State = #state { coordinator         = CPid,
     {BQ, BQS}.
 
 terminate({shutdown, dropped} = Reason,
-          State = #state { gm                  = GM,
-                           backing_queue       = BQ,
+          State = #state { backing_queue       = BQ,
                            backing_queue_state = BQS }) ->
     %% Backing queue termination - this node has been explicitly
     %% dropped. Normally, non-durable queues would be tidied up on

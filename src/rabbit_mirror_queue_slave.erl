@@ -293,8 +293,7 @@ terminate(_Reason, #state { backing_queue_state = undefined }) ->
     %% We've received a delete_and_terminate from gm, thus nothing to
     %% do here.
     ok;
-terminate({shutdown, dropped} = R, #state { gm                  = GM,
-                                            backing_queue       = BQ,
+terminate({shutdown, dropped} = R, #state { backing_queue       = BQ,
                                             backing_queue_state = BQS }) ->
     %% See rabbit_mirror_queue_master:terminate/2
     BQ:delete_and_terminate(R, BQS);
