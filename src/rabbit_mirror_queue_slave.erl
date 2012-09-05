@@ -297,7 +297,6 @@ terminate({shutdown, dropped} = R, #state { gm                  = GM,
                                             backing_queue       = BQ,
                                             backing_queue_state = BQS }) ->
     %% See rabbit_mirror_queue_master:terminate/2
-    ok = gm:leave(GM), %% TODO presumably we need this?
     BQ:delete_and_terminate(R, BQS);
 terminate(Reason, #state { q                   = Q,
                            gm                  = GM,

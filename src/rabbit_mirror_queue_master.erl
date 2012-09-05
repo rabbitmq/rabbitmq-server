@@ -126,7 +126,6 @@ terminate({shutdown, dropped} = Reason,
     %% in without this node being restarted. Thus we must do the full
     %% blown delete_and_terminate now, but only locally: we do not
     %% broadcast delete_and_terminate.
-    ok = gm:leave(GM), %% TODO presumably we need this?
     State #state { backing_queue_state = BQ:delete_and_terminate(Reason, BQS),
                    set_delivered       = 0 };
 terminate(Reason,
