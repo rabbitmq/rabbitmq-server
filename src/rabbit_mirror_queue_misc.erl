@@ -288,7 +288,17 @@ update_mirrors(OldQ = #amqqueue{name = QName, pid = QPid},
                           NewNodes = All(suggested_queue_nodes(NewQ)),
                           Add = NewNodes -- OldNodes,
                           Remove = OldNodes -- NewNodes,
-                          [ok = drop_mirror(QName, Node) || Node <- Remove],
+                          %% When a mirror dies, remove_from_queue/2
+                          %% might have to add new slaves (in
+                          %% "exactly" mode). It will check mnesia to
+                          %% see which slaves there currently are. If
+                          %% drop_mirror/2 is invoked first then when
+                          %% we end up in remove_from_queue/2 it will
+                          %% not see the slaves that add_mirror/2 will
+                          %% add, and also want to add them (even
+                          %% though we are not responding to the death
+                          %% of a mirror). Breakage ensues.
                           [ok = add_mirror(QName, Node) || Node <- Add],
+                          [ok = drop_mirror(QName, Node) || Node <- Remove],
                           ok
     end.
