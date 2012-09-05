@@ -27,7 +27,6 @@
 
 -export([promote_backing_queue_state/6, sender_death_fun/0, length_fun/0]).
 
-%% temp
 -export([init_with_existing_bq/3, stop_mirroring/1]).
 
 -behaviour(rabbit_backing_queue).
@@ -66,6 +65,9 @@
         (pid(), atom(), any(), pid(), dict(), [pid()]) -> master_state()).
 -spec(sender_death_fun/0 :: () -> death_fun()).
 -spec(length_fun/0 :: () -> length_fun()).
+-spec(init_with_existing_bq/3 :: (rabbit_types:amqqueue(), atom(), any()) ->
+                                      master_state()).
+-spec(stop_mirroring/1 :: (master_state()) -> {atom(), any()}).
 
 -endif.
 

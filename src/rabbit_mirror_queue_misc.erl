@@ -18,13 +18,11 @@
 
 -export([remove_from_queue/2, on_node_up/0,
          drop_mirror/2, drop_mirror/3, add_mirror/2, add_mirror/3,
-         report_deaths/4, store_updated_slaves/1]).
+         report_deaths/4, store_updated_slaves/1, suggested_queue_nodes/1,
+         is_mirrored/1, update_mirrors/2]).
 
-%% temp
--export([suggested_queue_nodes/1, is_mirrored/1, update_mirrors/2]).
-%% for testing
+%% for testing only
 -export([suggested_queue_nodes/4]).
-
 
 -include("rabbit.hrl").
 
@@ -45,6 +43,11 @@
         -> rabbit_types:ok_or_error(any())).
 -spec(store_updated_slaves/1 :: (rabbit_types:amqqueue()) ->
                                      rabbit_types:amqqueue()).
+-spec(suggested_queue_nodes/1 :: (rabbit_types:amqqueue()) ->
+                                      {node(), [node()]}).
+-spec(is_mirrored/1 :: (rabbit_types:amqqueue()) -> boolean()).
+-spec(update_mirrors/2 ::
+        (rabbit_types:amqqueue(), rabbit_types:amqqueue()) -> 'ok').
 
 -endif.
 
@@ -286,5 +289,6 @@ update_mirrors(OldQ = #amqqueue{name = QName, pid = QPid},
                           Add = NewNodes -- OldNodes,
                           Remove = OldNodes -- NewNodes,
                           [ok = drop_mirror(QName, Node) || Node <- Remove],
-                          [ok = add_mirror(QName, Node) || Node <- Add]
+                          [ok = add_mirror(QName, Node) || Node <- Add],
+                          ok
     end.

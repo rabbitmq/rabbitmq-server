@@ -29,8 +29,6 @@
 -export([notify_down_all/2, limit_all/3]).
 -export([on_node_down/1]).
 -export([update/2, store_queue/1, policy_changed/2]).
-
-%% temp
 -export([start_mirroring/1, stop_mirroring/1]).
 
 %% internal
@@ -165,6 +163,8 @@
 -spec(store_queue/1 :: (rabbit_types:amqqueue()) -> 'ok').
 -spec(policy_changed/2 ::
         (rabbit_types:amqqueue(), rabbit_types:amqqueue()) -> 'ok').
+-spec(start_mirroring/1 :: (pid()) -> 'ok').
+-spec(stop_mirroring/1 :: (pid()) -> 'ok').
 
 -endif.
 
