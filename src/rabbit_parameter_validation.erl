@@ -36,12 +36,14 @@ list(_Name, Term) when is_list(Term) ->
 list(Name, Term) ->
     {error, "~s should be list, actually was ~p", [Name, Term]}.
 
-regex(Name, Term) ->
+regex(Name, Term) when is_binary(Term) ->
     case re:compile(Term) of
         {ok, _}         -> ok;
         {error, Reason} -> {error, "~s should be regular expression "
                                    "but is invalid: ~p", [Name, Reason]}
-    end.
+    end;
+regex(Name, Term) ->
+    {error, "~s should be a binary but was ~p", [Name, Term]}.
 
 proplist(Name, Constraints, Term) when is_list(Term) ->
     {Results, Remainder}
