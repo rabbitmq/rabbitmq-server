@@ -826,7 +826,7 @@ process_instruction({fetch, AckRequired, MsgId, Remaining},
                                      backing_queue_state = BQS }) ->
     QLen = BQ:len(BQS),
     {State1, Delta} =
-        case {QLen - 1} of
+        case QLen - 1 of
             Remaining ->
                 {{#basic_message{id = MsgId}, _IsDelivered,
                   AckTag, Remaining}, BQS1} = BQ:fetch(AckRequired, BQS),
@@ -936,7 +936,7 @@ set_synchronised(Delta, AddAnyway,
                                 Q1#amqqueue{sync_slave_pids = [Self | SSPids1]})
                       end
               end);
-        _ when DepthDelta1 > 0 ->
+        _ when DepthDelta1 >= 0 ->
             ok
     end,
     State #state { depth_delta = DepthDelta1 }.
