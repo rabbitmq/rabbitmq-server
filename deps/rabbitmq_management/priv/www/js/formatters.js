@@ -424,6 +424,22 @@ function fmt_shortened_uri(uri0) {
     }
 }
 
+function fmt_client_name(properties) {
+    var res = [];
+    if (properties.product != undefined) {
+        res.push(properties.product);
+    }
+    if (properties.platform != undefined) {
+        res.push(properties.platform);
+    }
+    res = res.join(" / ");
+
+    if (properties.version != undefined) {
+        res += '<sub>' + properties.version + '</sub>';
+    }
+    return res;
+}
+
 function alt_rows(i) {
     return (i % 2 == 0) ? ' class="alt1"' : ' class="alt2"';
 }
