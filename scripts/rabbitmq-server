@@ -74,7 +74,7 @@ case "$(uname -s)" in
                fi
            done
            if [ $detached ]; then
-               echo "Starting detached process, the pid file won't be written" 1>&2
+               echo "Warning: PID file not written; -detached was passed." 1>&2
            else
                mkdir -p $(dirname ${RABBITMQ_PID_FILE});
                echo $$ > ${RABBITMQ_PID_FILE}
