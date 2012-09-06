@@ -55,6 +55,8 @@ proplist(Name, Constraints, Term) when is_list(Term) ->
                             {[{error, "Key \"~s\" not found in ~s",
                                [Key, Name]} | Results0], Term0};
                         {false, optional} ->
+                            {Results0, Term0};
+                        {false, {optional, _Default}} ->
                             {Results0, Term0}
                     end
             end, {[], Term}, Constraints),
