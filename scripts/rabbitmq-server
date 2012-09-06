@@ -73,7 +73,9 @@ case "$(uname -s)" in
                    detached="true"
                fi
            done
-           if [ ! $detached ]; then
+           if [ $detached ]; then
+               echo "Starting detached process, the pid file won't be written" 1>&2
+           else
                mkdir -p $(dirname ${RABBITMQ_PID_FILE});
                echo $$ > ${RABBITMQ_PID_FILE}
            fi
