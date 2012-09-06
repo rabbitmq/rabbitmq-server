@@ -10,7 +10,7 @@
     <th>Virtual Host</th>
 <% } %>
     <th>Name</th>
-    <th>Pattern</th>
+    <th>Regexp</th>
     <th>Priority</th>
     <th>Policy</th>
   </tr>
@@ -62,10 +62,10 @@
 <% } %>
         <tr>
           <th><label>Name:</label></th>
-          <td><input type="text" name="key"/></td>
+          <td><input type="text" name="key"/><span class="mand">*</span></td>
         </tr>
         <tr>
-          <th><label>Pattern:</label></th>
+          <th><label>Regexp:</label><span class="mand">*</span></th>
           <td><input type="text" name="pattern"/></td>
         </tr>
         <tr>
@@ -73,7 +73,7 @@
           <td><input type="text" name="priority"/></td>
         </tr>
         <tr>
-          <th><label>Policy:</label></th>
+          <th><label>Policy:</label><span class="mand">*</span></th>
           <td><span class="multifield" id="policy"></span></td>
         </tr>
       </table>
