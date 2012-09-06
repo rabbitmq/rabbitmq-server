@@ -52,15 +52,7 @@ if (version_warning) {
 <h2>Totals</h2>
 <div class="hider updatable">
 <% if (overview.statistics_db_node != 'not_running') { %>
-  <p class="mini-stats">
-    <span>Connections: <b><%= overview.object_totals.connections %></b></span>
-    <span>Channels: <b><%= overview.object_totals.channels %></b></span>
-    <span>Exchanges: <b><%= overview.object_totals.exchanges %></b></span>
-    <span>Queues: <b><%= overview.object_totals.queues %></b></span>
-<% if (overview.object_totals['consumers'] != undefined) { %>
-    <span>Consumers: <b><%= overview.object_totals.consumers %></b></span>
-<% } %>
-  </p>
+  <div class="left">
   <h3>Queued messages <span class="help" id="queued-messages"></span></h3>
   <div class="box">
     <%= queue_length(overview.queue_totals, 'Ready', 'messages_ready') %>
@@ -76,6 +68,39 @@ if (version_warning) {
 <% } else { %>
     Totals not available
 <% } %>
+  </div>
+
+  <div class="right">
+    <h3>Global counts <span class="help" id="resource-counts"></span></h3>
+    <table class="list">
+      <tr>
+        <th></th>
+        <th>Count</th>
+      </tr>
+      <tr class="alt1">
+        <td class="r">Connections</td>
+        <td class="c"><%= overview.object_totals.connections %></td>
+      </tr>
+      <tr class="alt2">
+        <td class="r">Channels</td>
+        <td class="c"><%= overview.object_totals.channels %></td>
+      </tr>
+      <tr class="alt1">
+        <td class="r">Exchanges</td>
+        <td class="c"><%= overview.object_totals.exchanges %></td>
+      </tr>
+      <tr class="alt2">
+        <td class="r">Queues</td>
+        <td class="c"><%= overview.object_totals.queues %></td>
+      </tr>
+<% if (overview.object_totals['consumers'] != undefined) { %>    <tr>
+      <tr class="alt1">
+        <td class="r">Consumers</td>
+        <td class="c"><%= overview.object_totals.consumers %></td>
+      </tr>
+<% } %>
+    </table>
+  </div>
 </div>
 </div>
 
