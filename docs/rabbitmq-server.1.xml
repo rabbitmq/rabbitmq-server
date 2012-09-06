@@ -110,9 +110,7 @@ Defaults to 5672.
           <listitem>
             <para>
               Start the server process in the background. Note that this will
-              cause the pid not to be written to the pid file, since the shell
-              will start a detached process and thus the wrong one would be
-              recorded.
+              cause the pid not to be written to the pid file.
             </para>
             <para role="example-prefix">For example:</para>
             <screen role="example">rabbitmq-server -detached</screen>
