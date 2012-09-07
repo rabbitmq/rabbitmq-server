@@ -459,11 +459,15 @@ check_write_permitted(Resource, #ch{user = User}) ->
 check_read_permitted(Resource, #ch{user = User}) ->
     check_resource_access(User, Resource, read).
 
-check_user_id_header(#'P_basic'{user_id = undefined}, _) ->
-    ok;
-check_user_id_header(#'P_basic'{user_id = Username},
+check_user_id_header(Props = #'P_basic'{user_id = undefined}, _) ->
+    Props;
+%% We rely on the fact that the codec can't express this. So we must
+%% be talking to the direct client, which can do anything anyway.
+check_user_id_header(Props = #'P_basic'{user_id = {trust, Username}}, _) ->
+    Props#'P_basic'{user_id = Username};
+check_user_id_header(Props = #'P_basic'{user_id = Username},
                      #ch{user = #user{username = Username}}) ->
-    ok;
+    Props;
 check_user_id_header(#'P_basic'{user_id = Claimed},
                      #ch{user = #user{username = Actual}}) ->
     precondition_failed(
@@ -608,8 +612,11 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
     check_internal_exchange(Exchange),
     %% We decode the content's properties here because we're almost
     %% certain to want to look at delivery-mode and priority.
-    DecodedContent = rabbit_binary_parser:ensure_content_decoded(Content),
-    check_user_id_header(DecodedContent#content.properties, State),
+    DecodedContent0 = rabbit_binary_parser:ensure_content_decoded(Content),
+    DecodedContent =
+        DecodedContent0#content{
+          properties = check_user_id_header(
+                         DecodedContent0#content.properties, State)},
     {MsgSeqNo, State1} =
         case {TxStatus, ConfirmEnabled} of
             {none, false} -> {undefined, State};
