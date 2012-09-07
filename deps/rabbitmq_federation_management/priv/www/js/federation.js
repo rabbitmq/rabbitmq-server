@@ -25,7 +25,8 @@ dispatcher_add(function(sammy) {
     sammy.put('#/fed-parameters', function() {
             var num_keys = ['expires', 'message-ttl', 'max-hops',
                             'prefetch-count', 'reconnect-delay'];
-            put_parameter(this, [], num_keys);
+            var bool_keys = ['trust-user-id'];
+            put_parameter(this, [], num_keys, bool_keys);
             return false;
         });
     sammy.del('#/fed-parameters', function() {
@@ -61,6 +62,9 @@ HELP['federation-prefetch'] =
 
 HELP['federation-reconnect'] =
     'Time in seconds to wait after a network link goes down before attempting reconnection. Defaults to 1 if not set.';
+
+HELP['federation-trust-user-id'] =
+    'Set "Yes" to preserve the "user-id" field across a federation link, even if the user-id does not match that used to republish the message. Set to "No" to clear the "user-id" field when messages are federated. Only set this to "Yes" if you trust the upstream broker not to forge user-ids.';
 
 HELP['federation-ha-policy'] =
     'Federation declares a queue at the upstream node to buffer messages waiting to be sent. Use this to set the x-ha-policy argument for this queue.';

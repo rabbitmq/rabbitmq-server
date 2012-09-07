@@ -16,6 +16,7 @@
     <th>Max Hops</th>
     <th>Prefetch Count</th>
     <th>Reconnect Delay</th>
+    <th>Trust User-ID</th>
     <th>HA Policy</th>
   </tr>
  </thead>
@@ -35,6 +36,7 @@
      <td class="r"><%= upstream.value['max-hops'] %></td>
      <td class="r"><%= upstream.value['prefetch-count'] %></td>
      <td class="r"><%= fmt_time(upstream.value['reconnect-delay'], 's') %></td>
+     <td class="c"><%= fmt_boolean(upstream.value['trust-user-id']) %></td>
      <td class="r"><%= upstream.value['ha-policy'] %></td>
    </tr>
 <% } %>
@@ -118,6 +120,20 @@
             </label>
           </th>
           <td><input type="text" name="reconnect-delay"/> s</td>
+        </tr>
+        <tr>
+          <th>
+            <label>
+              Trust User-ID:
+              <span class="help" id="federation-trust-user-id"></span>
+            </label>
+          </th>
+          <td>
+            <select name="trust-user-id">
+              <option value="false">No</option>
+              <option value="true">Yes</option>
+            </select>
+          </td>
         </tr>
         <tr>
           <th>
