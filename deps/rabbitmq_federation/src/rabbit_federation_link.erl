@@ -124,7 +124,8 @@ handle_info({#'basic.deliver'{routing_key  = Key,
                               delivery_tag = DTag,
                               redelivered  = Redelivered}, Msg},
             State = #state{
-              upstream            = #upstream{max_hops = MaxHops} = Upstream,
+              upstream            = #upstream{max_hops      = MaxHops,
+                                              trust_user_id = Trust} = Upstream,
               downstream_exchange = #resource{name = XNameBin},
               downstream_channel  = DCh,
               unacked             = Unacked}) ->
@@ -140,7 +141,8 @@ handle_info({#'basic.deliver'{routing_key  = Key,
                  Seq = amqp_channel:next_publish_seqno(DCh),
                  amqp_channel:cast(DCh, #'basic.publish'{exchange    = XNameBin,
                                                          routing_key = Key},
-                                   update_headers(Headers, Msg)),
+                                   maybe_clear_user_id(
+                                     Trust, update_headers(Headers, Msg))),
                  {noreply, State#state{unacked = gb_trees:insert(Seq, DTag,
                                                                  Unacked)}};
         false -> ack(DTag, false, State), %% Drop it, but acknowledge it!
@@ -585,6 +587,12 @@ remove_delivery_tags(Seq, true, Unacked) ->
 
 extract_headers(#amqp_msg{props = #'P_basic'{headers = Headers}}) ->
     Headers.
+
+maybe_clear_user_id(false, Msg = #amqp_msg{props = Props}) ->
+    Msg#amqp_msg{props = Props#'P_basic'{user_id = undefined}};
+maybe_clear_user_id(true, Msg = #amqp_msg{props = Props}) ->
+    #'P_basic'{user_id = UserId} = Props,
+    Msg#amqp_msg{props = Props#'P_basic'{user_id = {trust, UserId}}}.
 
 update_headers(Headers, Msg = #amqp_msg{props = Props}) ->
     Msg#amqp_msg{props = Props#'P_basic'{headers = Headers}}.
