@@ -81,12 +81,11 @@ notify_clear(VHost, <<"policy">>, _Name) ->
 %%----------------------------------------------------------------------------
 
 list(VHost) ->
-    lists:sort(fun sort_pred/2,
-               [[{<<"name">>, pget(key, P)} | defaults(pget(value, P))]
-                || P <- rabbit_runtime_parameters:list(VHost, <<"policy">>)]).
+    [[{<<"name">>, pget(key, P)} | defaults(pget(value, P))]
+     || P <- rabbit_runtime_parameters:list(VHost, <<"policy">>)].
 
 update_policies(VHost) ->
-    Policies = add_compile(list(VHost)),
+    Policies = list(VHost),
     {Xs, Qs} = rabbit_misc:execute_mnesia_transaction(
                  fun() ->
                          {[update_exchange(X, Policies) ||
@@ -99,7 +98,7 @@ update_policies(VHost) ->
     ok.
 
 update_exchange(X = #exchange{name = XName, policy = OldPolicy}, Policies) ->
-    NewPolicy = strip_compile(match(XName, Policies)),
+    NewPolicy = match(XName, Policies),
     case NewPolicy of
         OldPolicy -> no_change;
         _         -> rabbit_exchange:update(
@@ -108,7 +107,7 @@ update_exchange(X = #exchange{name = XName, policy = OldPolicy}, Policies) ->
     end.
 
 update_queue(Q = #amqqueue{name = QName, policy = OldPolicy}, Policies) ->
-    NewPolicy = strip_compile(match(QName, Policies)),
+    NewPolicy = match(QName, Policies),
     case NewPolicy of
         OldPolicy -> no_change;
         _         -> rabbit_amqqueue:update(
@@ -124,32 +123,17 @@ notify({Q1 = #amqqueue{}, Q2 = #amqqueue{}}) ->
     rabbit_amqqueue:policy_changed(Q1, Q2).
 
 match(Name, Policies) ->
-    case lists:filter(fun (P) -> matches(Name, P) end, Policies) of
+    case lists:sort(fun sort_pred/2, [P || P <- Policies, matches(Name, P)]) of
         []               -> undefined;
         [Policy | _Rest] -> Policy
     end.
 
 matches(#resource{name = Name}, Policy) ->
     case re:run(binary_to_list(Name),
-                pattern_pref(Policy),
+                binary_to_list(pget(<<"pattern">>, Policy)),
                 [{capture, none}]) of
         nomatch -> false;
         match   -> true
-    end.
-
-add_compile(Policies) ->
-    [ begin
-        {ok, MP} = re:compile(binary_to_list(pget(<<"pattern">>, Policy))),
-        [{<<"compiled">>, MP} | Policy]
-      end || Policy <- Policies ].
-
-strip_compile(undefined) -> undefined;
-strip_compile(Policy)    -> proplists:delete(<<"compiled">>, Policy).
-
-pattern_pref(Policy) ->
-    case pget(<<"compiled">>, Policy) of
-        undefined -> binary_to_list(pget(<<"pattern">>, Policy));
-        Compiled  -> Compiled
     end.
 
 sort_pred(A, B) ->
