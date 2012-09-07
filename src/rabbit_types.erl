@@ -64,7 +64,7 @@
         #basic_message{exchange_name  :: rabbit_exchange:name(),
                        routing_keys   :: [rabbit_router:routing_key()],
                        content        :: content(),
-                     id             :: msg_id(),
+                       id             :: msg_id(),
                        is_persistent  :: boolean()}).
 -type(message() :: basic_message()).
 -type(delivery() ::
