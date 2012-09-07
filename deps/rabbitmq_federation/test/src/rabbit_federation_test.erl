@@ -329,7 +329,7 @@ federate_unfederate_test() ->
               assert_connections(Xs, []),
 
               %% Federate them - links appear
-              set_param("policy", "dyn", policy(<<"dyn.">>, 1, <<"all">>)),
+              set_param("policy", "dyn", policy(<<"^dyn.">>, <<"all">>)),
               assert_connections(Xs, [<<"localhost">>, <<"local5673">>]),
 
               %% Unfederate them - links disappear
@@ -392,9 +392,8 @@ rabbitmqctl(Args) ->
        plugin_dir() ++ "/../rabbitmq-server/scripts/rabbitmqctl " ++ Args),
     timer:sleep(100).
 
-policy(Pattern, Priority, UpstreamSet) ->
+policy(Pattern, UpstreamSet) ->
     [{<<"pattern">>, Pattern},
-     {<<"priority">>, Priority},
      {<<"policy">>, [{<<"federation-upstream-set">>, UpstreamSet}]}].
 
 plugin_dir() ->
