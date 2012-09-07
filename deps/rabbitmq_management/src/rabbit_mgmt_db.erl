@@ -98,6 +98,7 @@ start_link() ->
     %% mirrored_supervisor to maintain the uniqueness of this process.
     case gen_server2:start_link(?MODULE, [], []) of
         {ok, Pid} -> yes = global:re_register_name(?MODULE, Pid),
+                     rabbit:force_event_refresh(),
                      {ok, Pid};
         Else      -> Else
     end.
@@ -213,7 +214,6 @@ init([]) ->
     %% When Rabbit is overloaded, it's usually especially important
     %% that the management plugin work.
     process_flag(priority, high),
-    rabbit:force_event_refresh(),
     {ok, Interval} = application:get_env(rabbit, collect_statistics_interval),
     rabbit_log:info("Statistics database started.~n"),
     {ok, #state{interval = Interval,
@@ -445,7 +445,6 @@ handle_deleted(TName, #event{props = Props}, State = #state{tables = Tables}) ->
     Name = pget(name, Props),
     ets:delete(Table, {id(Pid), create}),
     ets:delete(Table, {id(Pid), stats}),
-    ets:delete(Table, {Name, synchronised_slaves}),
     {ok, State}.
 
 handle_consumer(Fun, Props,
@@ -580,18 +579,6 @@ consumer_details_fun(PatternFun, State = #state{tables = Tables}) ->
                                   ets:match(Table, {Pattern, '$1'}))]}]
     end.
 
-synchronised_slaves_fun(#state{tables = Tables}) ->
-    Table = orddict:fetch(queue_stats, Tables),
-
-    fun (Props) -> QName = rabbit_misc:r(pget(vhost, Props), queue,
-                                         pget(name, Props)),
-                   Key = {QName, synchronised_slaves},
-                   case ets:lookup(Table, Key) of
-                       []       -> [];
-                       [{_, N}] -> [{synchronised_slave_nodes, N}]
-                   end
-    end.
-
 zero_old_rates(Stats, State) -> [maybe_zero_rate(S, State) || S <- Stats].
 
 maybe_zero_rate({Key, Val}, #state{interval = Interval}) ->
@@ -679,8 +666,7 @@ detail_queue_stats(Objs, State) ->
                       queue_funs(State))).
 
 queue_funs(State) ->
-    [basic_stats_fun(queue_stats, pid, State), augment_msg_stats_fun(State),
-     synchronised_slaves_fun(State)].
+    [basic_stats_fun(queue_stats, pid, State), augment_msg_stats_fun(State)].
 
 exchange_stats(Objs, FineSpecs, State) ->
     merge_stats(Objs, [fine_stats_fun(FineSpecs, State),
