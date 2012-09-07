@@ -325,7 +325,7 @@
               least one disk node, and usually should have more than one.
             </para>
             <para>
-              The node will be a disk node by default. If you wish to wish to
+              The node will be a disk node by default. If you wish to
               create a RAM node, provide the <command>--ram</command> flag.
             </para>
             <para>
@@ -408,8 +408,8 @@
                     Enables node removal from an offline node. This is only
                     useful in the situation where all the nodes are offline and
                     the last node to go down cannot be brought online, thus
-                    preventing the whole cluster to start. It should not be used
-                    in any other circumstances since it can lead to
+                    preventing the whole cluster from starting. It should not be
+                    used in any other circumstances since it can lead to
                     inconsistencies.
                   </para>
                 </listitem>

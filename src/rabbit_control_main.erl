@@ -261,7 +261,7 @@ action(change_cluster_node_type, Node, [Type], _Opts, Inform)
 
 action(update_cluster_nodes, Node, [ClusterNodeS], _Opts, Inform) ->
     ClusterNode = list_to_atom(ClusterNodeS),
-    Inform("Re-clustering ~p with ~p", [Node, ClusterNode]),
+    Inform("Updating cluster nodes for ~p from ~p", [Node, ClusterNode]),
     rpc_call(Node, rabbit_mnesia, update_cluster_nodes, [ClusterNode]);
 
 action(forget_cluster_node, Node, [ClusterNodeS], Opts, Inform) ->

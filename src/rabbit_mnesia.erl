@@ -321,7 +321,7 @@ update_cluster_nodes(DiscoveryNode) ->
 
     ok.
 
-%% We proceed like this: try to remove the node locally. If the node if offline,
+%% We proceed like this: try to remove the node locally. If the node is offline,
 %% we remove the node if:
 %%   * This node is a disc node
 %%   * All other nodes are offline
@@ -353,7 +353,7 @@ forget_cluster_node(Node, RemoveWhenOffline) ->
                                  "offline node. That's dangerous, but can be "
                                  "done with the --offline flag. Please consult "
                                  "the manual for rabbitmqctl for more "
-                                 "informations."}})
+                                 "information."}})
             end;
         Err = {error, _} ->
             throw(Err)
