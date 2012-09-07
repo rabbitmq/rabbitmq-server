@@ -713,7 +713,7 @@ calculate_msg_expiry(#basic_message{content = Content}, TTL) ->
     #content{properties = #'P_basic'{expiration = Expiration}} =
         rabbit_binary_parser:ensure_content_decoded(Content),
     ParseError =
-        fun () -> rabbit_log:warning("could not parse expiration '~s'~n.",
+        fun () -> rabbit_log:warning("could not parse expiration '~p'~n.",
                                      [Expiration])
         end,
     Milli = case Expiration of
