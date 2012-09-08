@@ -237,6 +237,6 @@ parse_expiration(#'P_basic'{expiration = Expiration}) ->
         B         -> case string:to_integer(binary_to_list(B)) of
                          {error, no_integer} = E -> E;
                          {N, ""}                 -> {ok, N};
-                         {_, _ }                 -> {error, leftover_string}
+                         {_, S }                 -> {error, {leftover_string, S}}
                      end
     end.
