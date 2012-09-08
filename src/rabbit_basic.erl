@@ -236,7 +236,9 @@ parse_expiration(#'P_basic'{expiration = Expiration}) ->
         undefined -> {ok, undefined};
         B         -> case string:to_integer(binary_to_list(B)) of
                          {error, no_integer} = E -> E;
-                         {N, ""}                 -> {ok, N};
-                         {_, S }                 -> {error, {leftover_string, S}}
+                         {N, ""} when N > ?MAX_EXPIRY_TIMER ->
+                             {error, {value_too_big, N}};
+                         {N, ""} -> {ok, N};
+                         {_, S } -> {error, {leftover_string, S}}
                      end
     end.

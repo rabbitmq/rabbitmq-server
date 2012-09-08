@@ -397,16 +397,18 @@ check_int_arg({Type, _}, _) ->
 
 check_positive_int_arg({Type, Val}, Args) ->
     case check_int_arg({Type, Val}, Args) of
-        ok when Val > 0 -> ok;
-        ok              -> {error, {value_zero_or_less, Val}};
-        Error           -> Error
+        ok when Val > ?MAX_EXPIRY_TIMER -> {error, {value_too_big, Val}};
+        ok when Val > 0                 -> ok;
+        ok                              -> {error, {value_zero_or_less, Val}};
+        Error                           -> Error
     end.
 
 check_non_neg_int_arg({Type, Val}, Args) ->
     case check_int_arg({Type, Val}, Args) of
-        ok when Val >= 0 -> ok;
-        ok               -> {error, {value_less_than_zero, Val}};
-        Error            -> Error
+        ok when Val > ?MAX_EXPIRY_TIMER -> {error, {value_too_big, Val}};
+        ok when Val > 0                 -> ok;
+        ok                              -> {error, {value_zero_or_less, Val}};
+        Error                           -> Error
     end.
 
 check_dlxrk_arg({longstr, _}, Args) ->

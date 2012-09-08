@@ -70,7 +70,7 @@
 -record(runtime_parameters, {key, value}).
 
 -record(basic_message, {exchange_name, routing_keys = [], content, id,
-                        is_persistent}).
+                        is_persistent, ttl}).
 
 -record(ssl_socket, {tcp, ssl}).
 -record(delivery, {mandatory, immediate, sender, message, msg_seq_no}).
@@ -102,3 +102,6 @@
 
 -define(ROUTING_HEADERS, [<<"CC">>, <<"BCC">>]).
 -define(DELETED_HEADER, <<"BCC">>).
+
+%% The maximum timer for ttl - limitation dictated by `erlang:send_after/3'.
+-define(MAX_EXPIRY_TIMER, 4294967295).
