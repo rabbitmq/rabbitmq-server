@@ -710,19 +710,12 @@ message_properties(Message, Confirm, #q{ttl = TTL}) ->
                         needs_confirming = needs_confirming(Confirm)}.
 
 calculate_msg_expiry(#basic_message{content = Content}, TTL) ->
-    #content{properties = #'P_basic'{expiration = Expiration}} =
+    #content{properties = Props} =
         rabbit_binary_parser:ensure_content_decoded(Content),
-    ParseError =
-        fun () -> rabbit_log:warning("could not parse expiration '~p'~n.",
-                                     [Expiration])
-        end,
-    Milli = case Expiration of
-                undefined -> TTL;
-                B         -> case string:to_integer(binary_to_list(B)) of
-                                 {error, no_integer} -> ParseError(), TTL;
-                                 {N, ""}             -> N;
-                                 {_, _ }             -> ParseError(), TTL
-                             end
+    %% We assert that the expiration must be valid - we check in che channel.
+    Milli = case rabbit_basic:parse_expiration(Props) of
+                {ok, undefined} -> TTL;
+                {ok, N        } -> N
             end,
     case Milli of
         undefined -> undefined;
