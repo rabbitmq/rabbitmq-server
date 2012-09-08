@@ -238,7 +238,8 @@ parse_expiration(#'P_basic'{expiration = Expiration}) ->
                          {error, no_integer} = E -> E;
                          {N, ""} when N > ?MAX_EXPIRY_TIMER ->
                              {error, {value_too_big, N}};
-                         {N, ""} -> {ok, N};
+                         {N, ""} when N > 0 -> {ok, N};
+                         {N, ""} -> {error, value_zero_or_less};
                          {_, S } -> {error, {leftover_string, S}}
                      end
     end.
