@@ -459,27 +459,27 @@ check_write_permitted(Resource, #ch{user = User}) ->
 check_read_permitted(Resource, #ch{user = User}) ->
     check_resource_access(User, Resource, read).
 
-check_user_id_header(Props = #'P_basic'{user_id = undefined}, _) ->
-    Props;
-%% We rely on the fact that the codec can't express this. So we must
-%% be talking to the direct client, which can do anything anyway.
-check_user_id_header(Props = #'P_basic'{user_id = {trust, Username}}, _) ->
-    Props#'P_basic'{user_id = Username};
-check_user_id_header(Props = #'P_basic'{user_id = Username},
-                     #ch{user = #user{username = Username}}) ->
-    Props;
-check_user_id_header(#'P_basic'{user_id = Claimed},
-                     #ch{user = #user{username = Actual}}) ->
-    precondition_failed(
-      "user_id property set to '~s' but authenticated user was '~s'",
-      [Claimed, Actual]).
-
 check_internal_exchange(#exchange{name = Name, internal = true}) ->
     rabbit_misc:protocol_error(access_refused,
                                "cannot publish to internal ~s",
                                [rabbit_misc:rs(Name)]);
 check_internal_exchange(_) ->
     ok.
+
+ensure_user_id_header(Props = #'P_basic'{user_id = undefined}, _) ->
+    Props;
+%% We rely on the fact that the codec can't express this. So we must
+%% be talking to the direct client, which can do anything anyway.
+ensure_user_id_header(Props = #'P_basic'{user_id = {trust, Username}}, _) ->
+    Props#'P_basic'{user_id = Username};
+ensure_user_id_header(Props = #'P_basic'{user_id = Username},
+                      #ch{user = #user{username = Username}}) ->
+    Props;
+ensure_user_id_header(#'P_basic'{user_id = Claimed},
+                      #ch{user = #user{username = Actual}}) ->
+    precondition_failed(
+      "user_id property set to '~s' but authenticated user was '~s'",
+      [Claimed, Actual]).
 
 expand_queue_name_shortcut(<<>>, #ch{most_recently_declared_queue = <<>>}) ->
     rabbit_misc:protocol_error(
@@ -615,7 +615,7 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
     DecodedContent0 = rabbit_binary_parser:ensure_content_decoded(Content),
     DecodedContent =
         DecodedContent0#content{
-          properties = check_user_id_header(
+          properties = ensure_user_id_header(
                          DecodedContent0#content.properties, State)},
     {MsgSeqNo, State1} =
         case {TxStatus, ConfirmEnabled} of
