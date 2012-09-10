@@ -129,12 +129,7 @@ match(Name, Policies) ->
     end.
 
 matches(#resource{name = Name}, Policy) ->
-    case re:run(binary_to_list(Name),
-                binary_to_list(pget(<<"pattern">>, Policy)),
-                [{capture, none}]) of
-        nomatch -> false;
-        match   -> true
-    end.
+    match =:= re:run(Name, pget(<<"pattern">>, Policy), [{capture, none}]).
 
 sort_pred(A, B) ->
     pget(<<"priority">>, A, 0) >= pget(<<"priority">>, B, 0).
