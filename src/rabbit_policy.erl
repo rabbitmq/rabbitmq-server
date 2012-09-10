@@ -22,7 +22,7 @@
 
 -include("rabbit.hrl").
 
--import(rabbit_misc, [pget/2]).
+-import(rabbit_misc, [pget/2, pget/3]).
 
 -export([register/0]).
 -export([name/1, get/2, set/1]).
@@ -137,11 +137,11 @@ matches(#resource{name = Name}, Policy) ->
     end.
 
 sort_pred(A, B) ->
-    pget(<<"priority">>, A) >= pget(<<"priority">>, B).
+    pget(<<"priority">>, A, 0) >= pget(<<"priority">>, B, 0).
 
 %%----------------------------------------------------------------------------
 
 policy_validation() ->
-    [{<<"priority">>, fun rabbit_parameter_validation:number/2, mandatory},
+    [{<<"priority">>, fun rabbit_parameter_validation:number/2, optional},
      {<<"pattern">>, fun rabbit_parameter_validation:regex/2, mandatory},
      {<<"policy">>, fun rabbit_parameter_validation:list/2, mandatory}].
