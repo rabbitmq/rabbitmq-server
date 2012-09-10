@@ -725,7 +725,7 @@ check_cluster_consistency() ->
                          mnesia:delete_schema([node()])
             end,
             rabbit_node_monitor:write_cluster_status_file(Status);
-        ignore ->
+        not_found ->
             ok
     end.
 
