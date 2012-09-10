@@ -81,7 +81,7 @@ notify_clear(VHost, <<"policy">>, _Name) ->
 %%----------------------------------------------------------------------------
 
 list(VHost) ->
-    [[{<<"name">>, pget(key, P)} | defaults(pget(value, P))]
+    [[{<<"name">>, pget(key, P)} | pget(value, P)]
      || P <- rabbit_runtime_parameters:list(VHost, <<"policy">>)].
 
 update_policies(VHost) ->
@@ -141,16 +141,7 @@ sort_pred(A, B) ->
 
 %%----------------------------------------------------------------------------
 
-defaults(Props) ->
-    Def = [{Key, Def} || {Key, _Fun, {optional, Def}} <- policy_validation()],
-    lists:foldl(fun ({Key, Default}, Props1) ->
-                        case pget(Key, Props1) of
-                            undefined -> [{Key, Default} | Props1];
-                            _         -> Props1
-                        end
-                end, Props, Def).
-
 policy_validation() ->
-    [{<<"priority">>, fun rabbit_parameter_validation:number/2, {optional, 0}},
+    [{<<"priority">>, fun rabbit_parameter_validation:number/2, mandatory},
      {<<"pattern">>, fun rabbit_parameter_validation:regex/2, mandatory},
      {<<"policy">>, fun rabbit_parameter_validation:list/2, mandatory}].
