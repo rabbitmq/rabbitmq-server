@@ -397,7 +397,7 @@ handle_event(#event{type = consumer_deleted, props = Props}, State) ->
                     Props, State);
 
 handle_event(#event{type = queue_mirror_deaths, props = Props},
-             State = #state{tables = Tables}) ->
+             #state{tables = Tables}) ->
     Dead = pget(pids, Props),
     Table = orddict:fetch(queue_stats, Tables),
     %% Only the master can be in the DB, but it's easier just to
@@ -442,7 +442,6 @@ handle_stats(TName, Stats0, Timestamp, Funs,
 handle_deleted(TName, #event{props = Props}, State = #state{tables = Tables}) ->
     Table = orddict:fetch(TName, Tables),
     Pid = pget(pid, Props),
-    Name = pget(name, Props),
     ets:delete(Table, {id(Pid), create}),
     ets:delete(Table, {id(Pid), stats}),
     {ok, State}.
