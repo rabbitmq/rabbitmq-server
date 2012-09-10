@@ -141,7 +141,7 @@ handle_info({#'basic.deliver'{routing_key  = Key,
                  Seq = amqp_channel:next_publish_seqno(DCh),
                  amqp_channel:cast(DCh, #'basic.publish'{exchange    = XNameBin,
                                                          routing_key = Key},
-                                   maybe_clear_user_id(
+                                   clear_or_trust_user_id(
                                      Trust, update_headers(Headers, Msg))),
                  {noreply, State#state{unacked = gb_trees:insert(Seq, DTag,
                                                                  Unacked)}};
@@ -588,9 +588,9 @@ remove_delivery_tags(Seq, true, Unacked) ->
 extract_headers(#amqp_msg{props = #'P_basic'{headers = Headers}}) ->
     Headers.
 
-maybe_clear_user_id(false, Msg = #amqp_msg{props = Props}) ->
+clear_or_trust_user_id(false, Msg = #amqp_msg{props = Props}) ->
     Msg#amqp_msg{props = Props#'P_basic'{user_id = undefined}};
-maybe_clear_user_id(true, Msg = #amqp_msg{props = Props}) ->
+clear_or_trust_user_id(true, Msg = #amqp_msg{props = Props}) ->
     #'P_basic'{user_id = UserId} = Props,
     Msg#amqp_msg{props = Props#'P_basic'{user_id = {trust, UserId}}}.
 
