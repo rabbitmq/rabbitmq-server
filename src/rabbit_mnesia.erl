@@ -703,47 +703,43 @@ wait_for_tables(TableNames) ->
 %% This does not guarantee us much, but it avoids some situations that will
 %% definitely end up badly
 check_cluster_consistency() ->
-    AllNodes = ordsets:del_element(node(), all_clustered_nodes()),
     %% We want to find 0 or 1 consistent nodes.
-    case
-        lists:foldl(
-          fun(Node, {error, Error}) ->
-                  case rpc:call(Node, rabbit_mnesia, node_info, []) of
-                      {badrpc, _Reason} ->
-                          {error, Error};
-                      {OTP, Rabbit, Res} ->
-                          rabbit_misc:sequence_error(
-                            [check_otp_consistency(OTP),
-                             check_rabbit_consistency(Rabbit),
-                             case Res of
-                                 {ok, Status} ->
-                                     check_nodes_consistency(Node, Status);
-                                 {error, _Reason} ->
-                                     {error, Error}
-                             end])
-                  end;
-             (_Node, {ok, Status})  -> {ok, Status}
-          end, {error, no_nodes}, AllNodes)
+    case lists:foldl(
+           fun (Node,  not_found)     -> check_cluster_consistency(Node);
+               (_Node, {ok, Status})  -> {ok, Status}
+           end, not_found, ordsets:del_element(node(), all_clustered_nodes()))
     of
         {ok, Status = {RemoteAllNodes, _, _}} ->
             case ordsets:is_subset(all_clustered_nodes(), RemoteAllNodes) of
                 true  -> ok;
-                false -> %% We delete the schema here since we have more nodes
-                         %% than the actually clustered ones, and there is no
-                         %% way to remove those nodes from our schema
-                         %% otherwise. On the other hand, we are sure that there
-                         %% is another online node that we can use to sync the
-                         %% tables with. There is a race here: if between this
-                         %% check and the `init_db' invocation the cluster gets
-                         %% disbanded, we're left with a node with no mnesia
-                         %% data that will try to connect to offline nodes.
+                false -> %% We delete the schema here since we think we are
+                         %% clustered with nodes that are no longer in the
+                         %% cluster and there is no other way to remove them
+                         %% from our schema. On the other hand, we are sure
+                         %% that there is another online node that we can use
+                         %% to sync the tables with. There is a race here: if
+                         %% between this check and the `init_db' invocation the
+                         %% cluster gets disbanded, we're left with a node with
+                         %% no mnesia data that will try to connect to offline
+                         %% nodes.
                          mnesia:delete_schema([node()])
             end,
             rabbit_node_monitor:write_cluster_status_file(Status);
-        {error, no_nodes} ->
-            ok;
-        {error, Error} ->
-            throw({error, Error})
+        ignore ->
+            ok
+    end.
+
+check_cluster_consistency(Node) ->
+    case rpc:call(Node, rabbit_mnesia, node_info, []) of
+        {badrpc, _Reason} ->
+            not_found;
+        {_OTP, _Rabbit, {error, _}} ->
+            not_found;
+        {OTP, Rabbit, {ok, Status}} ->
+            case check_consistency(OTP, Rabbit, Node, Status) of
+                {error, Error} -> throw({error, Error});
+                {ok, Res}      -> {ok, Res}
+            end
     end.
 
 %%--------------------------------------------------------------------
@@ -1132,6 +1128,16 @@ is_running_remote() ->
     {proplists:is_defined(rabbit, application:which_applications(infinity)),
      node()}.
 
+check_consistency(OTP, Rabbit) ->
+    rabbit_misc:sequence_error(
+      [check_otp_consistency(OTP), check_rabbit_consistency(Rabbit)]).
+
+check_consistency(OTP, Rabbit, Node, Status) ->
+    rabbit_misc:sequence_error(
+      [check_otp_consistency(OTP),
+       check_rabbit_consistency(Rabbit),
+       check_nodes_consistency(Node, Status)]).
+
 check_nodes_consistency(Node, RemoteStatus = {RemoteAllNodes, _, _}) ->
     ThisNode = node(),
     case ordsets:is_element(ThisNode, RemoteAllNodes) of
@@ -1179,9 +1185,7 @@ find_good_node([Node | Nodes]) ->
         {badrpc, _Reason} ->
             find_good_node(Nodes);
         {OTP, Rabbit, _} ->
-            case rabbit_misc:sequence_error([check_otp_consistency(OTP),
-                                             check_rabbit_consistency(Rabbit)])
-            of
+            case check_consistency(OTP, Rabbit) of
                 {error, _} -> find_good_node(Nodes);
                 ok         -> {ok, Node}
             end
