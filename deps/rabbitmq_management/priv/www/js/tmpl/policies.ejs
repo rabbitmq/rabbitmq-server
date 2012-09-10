@@ -17,7 +17,7 @@
  </thead>
  <tbody>
 <%
- var sorted_policies = policies.sort(function(a,b) {return b.value['priority'] - a.value['priority']} );
+ var sorted_policies = policies.sort(function(a,b) {return b.value['priority'] || 0 - a.value['priority'] || 0} );
  for (var i = 0; i < sorted_policies.length; i++) {
     var policy = sorted_policies[i];
 %>
