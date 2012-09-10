@@ -160,7 +160,19 @@ ssl_transform_fun(SslOpts) ->
             case catch ssl:ssl_accept(Sock, SslOpts, ?SSL_TIMEOUT * 1000) of
                 {ok, SslSock} ->
                     {ok, #ssl_socket{tcp = Sock, ssl = SslSock}};
+                {error, timeout} ->
+                    {error, {ssl_upgrade_error, timeout}};
                 {error, Reason} ->
+                    %% We have no idea what state the ssl_connection
+                    %% process is in - it could still be happily
+                    %% going, it might be stuck, or it could be just
+                    %% about to fail. There is little that our caller
+                    %% can do but close the TCP socket, but this could
+                    %% cause ssl alerts to get dropped (which is bad
+                    %% form, according to the TLS spec). So we give
+                    %% the ssl_connection a little bit of time to send
+                    %% such alerts.
+                    timer:sleep(?SSL_TIMEOUT * 1000),
                     {error, {ssl_upgrade_error, Reason}};
                 {'EXIT', Reason} ->
                     {error, {ssl_upgrade_failure, Reason}}
