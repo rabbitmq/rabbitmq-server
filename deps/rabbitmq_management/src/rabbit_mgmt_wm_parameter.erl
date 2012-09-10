@@ -56,7 +56,7 @@ accept_content(ReqData, Context) ->
       fun([Value], _) ->
               case rabbit_runtime_parameters:set(
                      component(ReqData), key(ReqData),
-                     rabbit_mgmt_parse:parameter_value(Value)) of
+                     rabbit_misc:json_to_term(Value)) of
                   ok ->
                       {true, ReqData, Context};
                   {error_string, Reason} ->
