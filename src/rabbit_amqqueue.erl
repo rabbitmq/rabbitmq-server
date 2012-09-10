@@ -40,6 +40,8 @@
 
 -define(INTEGER_ARG_TYPES, [byte, short, signedint, long]).
 
+-define(MAX_EXPIRY_TIMER, 4294967295).
+
 -define(MORE_CONSUMER_CREDIT_AFTER, 50).
 
 -define(FAILOVER_WAIT_MILLIS, 100).
@@ -397,16 +399,18 @@ check_int_arg({Type, _}, _) ->
 
 check_positive_int_arg({Type, Val}, Args) ->
     case check_int_arg({Type, Val}, Args) of
-        ok when Val > 0 -> ok;
-        ok              -> {error, {value_zero_or_less, Val}};
-        Error           -> Error
+        ok when Val > ?MAX_EXPIRY_TIMER -> {error, {value_too_big, Val}};
+        ok when Val > 0                 -> ok;
+        ok                              -> {error, {value_zero_or_less, Val}};
+        Error                           -> Error
     end.
 
 check_non_neg_int_arg({Type, Val}, Args) ->
     case check_int_arg({Type, Val}, Args) of
-        ok when Val >= 0 -> ok;
-        ok               -> {error, {value_less_than_zero, Val}};
-        Error            -> Error
+        ok when Val > ?MAX_EXPIRY_TIMER -> {error, {value_too_big, Val}};
+        ok when Val >= 0                -> ok;
+        ok                              -> {error, {value_less_than_zero, Val}};
+        Error                           -> Error
     end.
 
 check_dlxrk_arg({longstr, _}, Args) ->
