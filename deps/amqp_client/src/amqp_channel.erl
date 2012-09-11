@@ -888,16 +888,15 @@ handle_wait_for_confirms(From, Timeout,
                          State = #state{unconfirmed_set = USet,
                                         waiting_set     = WSet}) ->
     case gb_sets:is_empty(USet) of
-        true ->
-            {reply, true, State};
-        false ->
-            TRef = case Timeout of
-                       infinity -> undefined;
-                       _        -> erlang:send_after(Timeout * 1000, self(),
-                                                     {confirm_timeout, From})
-                   end,
-            {noreply,
-             State#state{waiting_set = gb_trees:insert(From, TRef, WSet)}}
+        true  -> {reply, true, State};
+        false -> TRef = case Timeout of
+                            infinity -> undefined;
+                            _        -> erlang:send_after(
+                                          Timeout * 1000, self(),
+                                          {confirm_timeout, From})
+                        end,
+                 {noreply,
+                  State#state{waiting_set = gb_trees:insert(From, TRef, WSet)}}
     end.
 
 call_to_consumer(Method, Args, #state{consumer = Consumer}) ->
