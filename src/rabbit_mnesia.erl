@@ -119,7 +119,7 @@
 
 prepare() ->
     ensure_mnesia_dir(),
-    rabbit_node_monitor:prepare_cluster_status_file(),
+    rabbit_node_monitor:prepare_cluster_status_files(),
     check_cluster_consistency().
 
 init() ->
@@ -250,7 +250,7 @@ reset(Force) ->
     end,
     %% remove persisted messages and any other garbage we find
     ok = rabbit_file:recursive_delete(filelib:wildcard(dir() ++ "/*")),
-    ok = rabbit_node_monitor:reset_cluster_status_file(),
+    ok = rabbit_node_monitor:reset_cluster_status(),
     ok.
 
 %% We need to make sure that we don't end up in a distributed Erlang system with
@@ -311,7 +311,7 @@ update_cluster_nodes(DiscoveryNode) ->
         true  -> %% As in `check_consistency/0', we can safely delete the schema
                  %% here, since it'll be replicated from the other nodes
                  mnesia:delete_schema([node()]),
-                 rabbit_node_monitor:write_cluster_status_file(Status),
+                 rabbit_node_monitor:write_cluster_status(Status),
                  init_db_with_mnesia(AllNodes, is_disc_node(), false);
         false -> throw({error,
                         {inconsistent_cluster,
@@ -487,7 +487,7 @@ cluster_status(WhichNodes, ForceMnesia) ->
                           fun() -> running_nodes(AllNodes) end}};
                 {error, _Reason} when not ForceMnesia ->
                     {AllNodes, DiscNodes, RunningNodes} =
-                        rabbit_node_monitor:read_cluster_status_file(),
+                        rabbit_node_monitor:read_cluster_status(),
                     %% The cluster status file records the status when the node
                     %% is online, but we know for sure that the node is offline
                     %% now, so we can remove it from the list of running nodes.
@@ -573,7 +573,7 @@ init_db(ClusterNodes, WantDiscNode, Force) ->
             end
     end,
     ensure_schema_integrity(),
-    rabbit_node_monitor:update_cluster_status_file(),
+    rabbit_node_monitor:update_cluster_status(),
     ok.
 
 init_db_and_upgrade(ClusterNodes, WantDiscNode, Force) ->
@@ -724,7 +724,7 @@ check_cluster_consistency() ->
                          %% nodes.
                          mnesia:delete_schema([node()])
             end,
-            rabbit_node_monitor:write_cluster_status_file(Status);
+            rabbit_node_monitor:write_cluster_status(Status);
         not_found ->
             ok
     end.
@@ -1174,7 +1174,8 @@ is_virgin_node() ->
         {error, enoent} -> true;
         {ok, []}        -> true;
         {ok, [File]}    -> (dir() ++ "/" ++ File) =:=
-                               rabbit_node_monitor:cluster_status_file_name();
+                               [rabbit_node_monitor:cluster_status_file_name(),
+                                rabbit_node_monitor:running_nodes_file_name()];
         {ok, _}         -> false
     end.
 
