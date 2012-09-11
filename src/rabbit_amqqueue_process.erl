@@ -1284,13 +1284,13 @@ handle_cast({dead_letter, Msgs, Reason}, State = #q{dlx = XName}) ->
     case rabbit_exchange:lookup(XName) of
         {ok, X} ->
             noreply(lists:foldl(
-                      fun({Msg, AckTag}, State1 = #q{publish_seqno = SeqNo,
-                                                     unconfirmed   = UC}) ->
+                      fun({Msg, AckTag}, State1 = #q{publish_seqno  = SeqNo,
+                                                     unconfirmed    = UC,
+                                                     queue_monitors = QMon}) ->
                               QPids = dead_letter_publish(Msg, Reason, X,
                                                           State1),
                               UC1   = dtree:insert(SeqNo, QPids, AckTag, UC),
-                              QMons = pmon:monitor_all(QPids,
-                                                       State1#q.queue_monitors),
+                              QMons = pmon:monitor_all(QPids, QMon),
                               State1#q{queue_monitors = QMons,
                                        publish_seqno  = SeqNo + 1,
                                        unconfirmed    = UC1}
