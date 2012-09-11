@@ -1296,9 +1296,7 @@ handle_cast({dead_letter, Msgs, Reason}, State = #q{dlx = XName}) ->
                                        unconfirmed    = UC1}
                       end, State, Msgs));
         {error, not_found} ->
-            cleanup_after_confirm(
-              [AckTag || {_, AckTag} <- Msgs],
-              State#q{publish_seqno = State#q.publish_seqno + length(Msgs)})
+            cleanup_after_confirm([AckTag || {_, AckTag} <- Msgs], State)
     end;
 
 handle_cast(wake_up, State) ->
