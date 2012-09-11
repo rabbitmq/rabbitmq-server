@@ -705,9 +705,10 @@ wait_for_tables(TableNames) ->
 check_cluster_consistency() ->
     %% We want to find 0 or 1 consistent nodes.
     case lists:foldl(
-           fun (Node,  not_found)     -> check_cluster_consistency(Node);
+           fun (Node,  {error, _})    -> check_cluster_consistency(Node);
                (_Node, {ok, Status})  -> {ok, Status}
-           end, not_found, ordsets:del_element(node(), all_clustered_nodes()))
+           end, {error, not_found},
+           ordsets:del_element(node(), all_clustered_nodes()))
     of
         {ok, Status = {RemoteAllNodes, _, _}} ->
             case ordsets:is_subset(all_clustered_nodes(), RemoteAllNodes) of
@@ -725,19 +726,21 @@ check_cluster_consistency() ->
                          mnesia:delete_schema([node()])
             end,
             rabbit_node_monitor:write_cluster_status(Status);
-        not_found ->
-            ok
+        {error, not_found} ->
+            ok;
+        E = {error, _} ->
+            throw(E)
     end.
 
 check_cluster_consistency(Node) ->
     case rpc:call(Node, rabbit_mnesia, node_info, []) of
         {badrpc, _Reason} ->
-            not_found;
+            {error, not_found};
         {_OTP, _Rabbit, {error, _}} ->
-            not_found;
+            {error, not_found};
         {OTP, Rabbit, {ok, Status}} ->
             case check_consistency(OTP, Rabbit, Node, Status) of
-                {error, Error} -> throw({error, Error});
+                E = {error, _} -> E;
                 {ok, Res}      -> {ok, Res}
             end
     end.
