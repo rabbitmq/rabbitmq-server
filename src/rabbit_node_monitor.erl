@@ -96,8 +96,8 @@ prepare_cluster_status_files() ->
                     end,
     {AllNodes1, WantDiscNode} =
         case try_read_file(cluster_status_file_name()) of
-            {ok, [{_, _}]} ->
-                ok;
+            {ok, [{AllNodes, DiscNodes0}]} ->
+                {AllNodes, lists:member(node(), DiscNodes0)};
             {ok, [AllNodes0]} when is_list(AllNodes0) ->
                 {AllNodes0, legacy_should_be_disc_node(AllNodes0)};
             non_existant ->
