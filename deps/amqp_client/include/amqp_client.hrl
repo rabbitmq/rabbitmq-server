@@ -52,5 +52,4 @@
                             protocol        = unknown,
                             additional_info = []}).
 
--define(LOG_ERR(Format, Args),  error_logger:error_msg(Format, Args)).
 -endif.
