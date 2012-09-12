@@ -1,3 +1,4 @@
+RELEASABLE:=true
 DEPS:=rabbitmq-erlang-client
 
 RABBITMQ_TEST_PATH=$(PACKAGE_DIR)/../../rabbitmq-test

@@ -16,7 +16,7 @@
 
 -module(rabbit_mqtt_util).
 
--include("include/rabbit_mqtt.hrl").
+-include("rabbit_mqtt.hrl").
 
 -compile(export_all).
 

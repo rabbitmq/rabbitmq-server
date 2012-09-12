@@ -19,7 +19,7 @@
 -export([parse/2, initial_state/0]).
 -export([serialise/1]).
 
--include("include/rabbit_mqtt_frame.hrl").
+-include("rabbit_mqtt_frame.hrl").
 
 -define(RESERVED, 0).
 -define(PROTOCOL_MAGIC, "MQIsdp").

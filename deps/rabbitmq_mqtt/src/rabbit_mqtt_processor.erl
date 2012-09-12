@@ -21,8 +21,8 @@
          close_connection/1]).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
--include("include/rabbit_mqtt_frame.hrl").
--include("include/rabbit_mqtt.hrl").
+-include("rabbit_mqtt_frame.hrl").
+-include("rabbit_mqtt.hrl").
 
 -define(FRAME_TYPE(Frame, Type),
         Frame = #mqtt_frame{ fixed = #mqtt_frame_fixed{ type = Type }}).
@@ -283,7 +283,7 @@ delivery_qos(Tag, _Headers, #proc_state{ consumer_tags = {Tag, _} }) ->
     {?QOS_0, ?QOS_0};
 delivery_qos(Tag, Headers, #proc_state{ consumer_tags = {_, Tag} }) ->
     {byte, Qos} = rabbit_misc:table_lookup(Headers, 'x-mqtt-publish-qos'),
-    {min(Qos, ?QOS_1), ?QOS_1}.
+    {lists:min([Qos, ?QOS_1]), ?QOS_1}.
 
 maybe_clean_sess(false, _Conn, _ClientId) ->
     % todo: establish subscription to deliver old unacknowledged messages

@@ -24,7 +24,7 @@
 -export([conserve_resources/3]).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
--include("include/rabbit_mqtt.hrl").
+-include("rabbit_mqtt.hrl").
 
 %%----------------------------------------------------------------------------
 
