@@ -90,8 +90,10 @@ running_nodes_file_name() ->
     filename:join(rabbit_mnesia:dir(), "nodes_running_at_shutdown").
 
 prepare_cluster_status_files() ->
+    CorruptFiles = fun () -> throw({error, corrupt_cluster_status_files}) end,
     RunningNodes1 = case try_read_file(running_nodes_file_name()) of
                         {ok, [Nodes]} when is_list(Nodes) -> Nodes;
+                        {ok, _      }                     -> CorruptFiles();
                         non_existant                      -> []
                     end,
     {AllNodes1, WantDiscNode} =
@@ -100,6 +102,8 @@ prepare_cluster_status_files() ->
                 {AllNodes, lists:member(node(), DiscNodes0)};
             {ok, [AllNodes0]} when is_list(AllNodes0) ->
                 {AllNodes0, legacy_should_be_disc_node(AllNodes0)};
+            {ok, _} ->
+                CorruptFiles();
             non_existant ->
                 {[], true}
         end,

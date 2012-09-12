@@ -152,12 +152,14 @@ upgrade_mode(AllNodes) ->
                 {true, []}  ->
                     primary;
                 {true, _}  ->
-                    %% TODO: Here I'm assuming that the various cluster status
-                    %% files are consistent with each other, I think I can
-                    %% provide a solution if they're not...
+                    Filename = rabbit_node_monitor:running_nodes_filename(),
                     die("Cluster upgrade needed but other disc nodes shut "
                         "down after this one.~nPlease first start the last "
-                        "disc node to shut down.~n", []);
+                        "disc node to shut down.~n~nNote: if several disc "
+                        "nodes were shut down simultaneously they may "
+                        "all~nshow this message. In which case, remove "
+                        "the lock file on one of them and~nstart that node. "
+                        "The lock file on this node is:~n~n ~s ", [Filename]);
                 {false, _} ->
                     die("Cluster upgrade needed but this is a ram node.~n"
                         "Please first start the last disc node to shut down.",
