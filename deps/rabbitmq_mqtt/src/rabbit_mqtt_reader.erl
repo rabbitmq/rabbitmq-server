@@ -136,8 +136,8 @@ process_received_bytes(Bytes,
                           State #state{ parse_state = PS,
                                         proc_state = ProcState1 });
                     {err, Reason, ProcState1} ->
-                        log:info("MQTT protocol error ~p for connection ~p~n",
-                                 [Reason, ConnStr]),
+                        log(info, "MQTT protocol error ~p for connection ~p~n",
+                                  [Reason, ConnStr]),
                         stop({shutdown, Reason}, pstate(State, ProcState1));
                     {stop, ProcState1} ->
                         stop(normal, pstate(State, ProcState1))
