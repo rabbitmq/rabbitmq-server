@@ -33,7 +33,7 @@ and the MQTT adapter, then the configuration file may have a
 structure like this:
 
     [{rabbit,        [configuration-for-RabbitMQ-server]},
-     {rabbitmq_mqtt, [configuration-for-RabbitMQ-shovel]}
+     {rabbitmq_mqtt, [configuration-for-RabbitMQ-mqtt-adapter]}
     ].
 
 Here is a sample configuration that sets every MQTT option:
