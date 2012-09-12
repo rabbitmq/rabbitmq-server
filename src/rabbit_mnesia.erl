@@ -182,10 +182,10 @@ join_cluster(DiscoveryNode, WantDiscNode) ->
     ensure_mnesia_not_running(),
     ensure_mnesia_dir(),
 
-    {ClusterNodes, DiscNodes, _} = case discover_cluster(DiscoveryNode) of
-                                       {ok, Res}       -> Res;
-                                       {error, Reason} -> throw({error, Reason})
-                                   end,
+    {ClusterNodes, _, _} = case discover_cluster(DiscoveryNode) of
+                               {ok, Res}      -> Res;
+                               E = {error, _} -> throw(E)
+                           end,
 
     case lists:member(node(), ClusterNodes) of
         true  -> throw({error, {already_clustered,
@@ -203,7 +203,7 @@ join_cluster(DiscoveryNode, WantDiscNode) ->
     rabbit_misc:local_info_msg("Clustering with ~p~n", [ClusterNodes]),
 
     %% Join the cluster
-    ok = init_db_with_mnesia(DiscNodes, WantDiscNode, false),
+    ok = init_db_with_mnesia(ClusterNodes, WantDiscNode, false),
 
     rabbit_node_monitor:notify_joined_cluster(),
 
@@ -1113,7 +1113,7 @@ change_extra_db_nodes(ClusterNodes0, Force) ->
     case mnesia:change_config(extra_db_nodes, ClusterNodes) of
         {ok, []} when not Force andalso ClusterNodes =/= [] ->
             throw({error, {failed_to_cluster_with, ClusterNodes,
-                           "Mnesia could not connect to any disc nodes."}});
+                           "Mnesia could not connect to any nodes."}});
         {ok, Nodes} ->
             Nodes
     end.
