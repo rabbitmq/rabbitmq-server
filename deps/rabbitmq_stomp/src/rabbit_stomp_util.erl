@@ -76,13 +76,18 @@ message_properties(Frame = #stomp_frame{headers = Headers}) ->
 
     #'P_basic'{ content_type     = BinH(?HEADER_CONTENT_TYPE),
                 content_encoding = BinH(?HEADER_CONTENT_ENCODING),
+                headers          = [longstr_field(K, V) ||
+                                       {K, V} <- Headers, user_header(K)],
                 delivery_mode    = DeliveryMode,
                 priority         = IntH(?HEADER_PRIORITY),
                 correlation_id   = BinH(?HEADER_CORRELATION_ID),
                 reply_to         = BinH(?HEADER_REPLY_TO),
+                expiration       = BinH(?HEADER_EXPIRATION),
                 message_id       = BinH(?HEADER_AMQP_MESSAGE_ID),
-                headers          = [longstr_field(K, V) ||
-                                       {K, V} <- Headers, user_header(K)] }.
+                timestamp        = IntH(?HEADER_TIMESTAMP),
+                type             = BinH(?HEADER_TYPE),
+                user_id          = BinH(?HEADER_USER_ID),
+                app_id           = BinH(?HEADER_APP_ID) }.
 
 message_headers(SessionId,
                 #'basic.deliver'{consumer_tag = ConsumerTag,
@@ -111,8 +116,12 @@ message_headers(SessionId,
            {?HEADER_PRIORITY,         #'P_basic'.priority},
            {?HEADER_CORRELATION_ID,   #'P_basic'.correlation_id},
            {?HEADER_REPLY_TO,         #'P_basic'.reply_to},
-           {?HEADER_AMQP_MESSAGE_ID,  #'P_basic'.message_id}]),
-
+           {?HEADER_EXPIRATION,       #'P_basic'.expiration},
+           {?HEADER_AMQP_MESSAGE_ID,  #'P_basic'.message_id},
+           {?HEADER_TIMESTAMP,        #'P_basic'.timestamp},
+           {?HEADER_TYPE,             #'P_basic'.type},
+           {?HEADER_USER_ID,          #'P_basic'.user_id},
+           {?HEADER_APP_ID,           #'P_basic'.app_id}]),
     adhoc_convert_headers(Headers, Standard).
 
 tag_to_id(<<?INTERNAL_TAG_PREFIX, Id/binary>>) ->
@@ -129,7 +138,12 @@ user_header(Hdr)
        Hdr =:= ?HEADER_PRIORITY orelse
        Hdr =:= ?HEADER_CORRELATION_ID orelse
        Hdr =:= ?HEADER_REPLY_TO orelse
+       Hdr =:= ?HEADER_EXPIRATION orelse
        Hdr =:= ?HEADER_AMQP_MESSAGE_ID orelse
+       Hdr =:= ?HEADER_TIMESTAMP orelse
+       Hdr =:= ?HEADER_TYPE orelse
+       Hdr =:= ?HEADER_USER_ID orelse
+       Hdr =:= ?HEADER_APP_ID orelse
        Hdr =:= ?HEADER_DESTINATION ->
     false;
 user_header(_) ->

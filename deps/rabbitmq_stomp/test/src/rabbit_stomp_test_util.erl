@@ -36,23 +36,32 @@ message_properties_test() ->
                 {"priority", "1"},
                 {"correlation-id", "123"},
                 {"reply-to", "something"},
+                {"expiration", "my-expiration"},
                 {"amqp-message-id", "M123"},
+                {"timestamp", "123456"},
+                {"type", "freshly-squeezed"},
+                {"user-id", "joe"},
+                {"app-id", "joe's app"},
                 {"str", "foo"},
                 {"int", "123"}
               ],
 
     #'P_basic'{
-                content_type = <<"text/plain">>,
+                content_type     = <<"text/plain">>,
                 content_encoding = <<"UTF-8">>,
-                delivery_mode = 2,
-                priority = 1,
-                correlation_id = <<"123">>,
-                reply_to = <<"something">>,
-                message_id = <<"M123">>,
-                headers = [
-                           {<<"str">>, longstr, <<"foo">>},
-                           {<<"int">>, longstr, <<"123">>}]
-                } =
+                delivery_mode    = 2,
+                priority         = 1,
+                correlation_id   = <<"123">>,
+                reply_to         = <<"something">>,
+                expiration       = <<"my-expiration">>,
+                message_id       = <<"M123">>,
+                timestamp        = 123456,
+                type             = <<"freshly-squeezed">>,
+                user_id          = <<"joe">>,
+                app_id           = <<"joe's app">>,
+                headers          = [{<<"str">>, longstr, <<"foo">>},
+                                    {<<"int">>, longstr, <<"123">>}]
+              } =
         rabbit_stomp_util:message_properties(#stomp_frame{headers = Headers}).
 
 message_headers_test() ->
@@ -74,7 +83,11 @@ message_headers_test() ->
       priority         = 1,
       correlation_id   = 123,
       reply_to         = <<"something">>,
-      message_id       = <<"M123">>},
+      message_id       = <<"M123">>,
+      timestamp        = 123456,
+      type             = <<"freshly-squeezed">>,
+      user_id          = <<"joe">>,
+      app_id           = <<"joe's app">>},
 
     Headers = rabbit_stomp_util:message_headers(SessionId, Delivery,
                                                 Properties),
@@ -88,7 +101,12 @@ message_headers_test() ->
                 {"priority", "1"},
                 {"correlation-id", "123"},
                 {"reply-to", "something"},
+                {"expiration", "my-expiration"},
                 {"amqp-message-id", "M123"},
+                {"timestamp", "123456"},
+                {"type", "freshly-squeezed"},
+                {"user-id", "joe"},
+                {"app-id", "joe's app"},
                 {"str", "foo"},
                 {"int", "123"}
                ],

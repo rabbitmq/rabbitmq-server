@@ -17,11 +17,13 @@
 -define(HEADER_ACCEPT_VERSION, "accept-version").
 -define(HEADER_ACK, "ack").
 -define(HEADER_AMQP_MESSAGE_ID, "amqp-message-id").
+-define(HEADER_APP_ID, "app-id").
 -define(HEADER_CONTENT_ENCODING, "content-encoding").
 -define(HEADER_CONTENT_LENGTH, "content-length").
 -define(HEADER_CONTENT_TYPE, "content-type").
 -define(HEADER_CORRELATION_ID, "correlation-id").
 -define(HEADER_DESTINATION, "destination").
+-define(HEADER_EXPIRATION, "expiration").
 -define(HEADER_HEART_BEAT, "heart-beat").
 -define(HEADER_HOST, "host").
 -define(HEADER_ID, "id").
@@ -36,10 +38,12 @@
 -define(HEADER_SERVER, "server").
 -define(HEADER_SESSION, "session").
 -define(HEADER_SUBSCRIPTION, "subscription").
+-define(HEADER_TIMESTAMP, "timestamp").
 -define(HEADER_TRANSACTION, "transaction").
+-define(HEADER_TYPE, "type").
+-define(HEADER_USER_ID, "user-id").
 -define(HEADER_VERSION, "version").
 
 -define(MESSAGE_ID_SEPARATOR, "@@").
 
 -define(HEADERS_NOT_ON_SEND, [?HEADER_MESSAGE_ID]).
-
