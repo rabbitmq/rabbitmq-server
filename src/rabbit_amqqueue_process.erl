@@ -713,9 +713,11 @@ calculate_msg_expiry(#basic_message{content = Content}, TTL) ->
     #content{properties = Props} =
         rabbit_binary_parser:ensure_content_decoded(Content),
     %% We assert that the expiration must be valid - we check in che channel.
-    Milli = case rabbit_basic:parse_expiration(Props) of
-                {ok, undefined} -> TTL;
-                {ok, N        } -> N
+    Milli = case {rabbit_basic:parse_expiration(Props), TTL} of
+                {{ok, undefined}, _        }            -> TTL;
+                {{ok, N        }, undefined}            -> N;
+                {{ok, N        }, M        } when N < M -> N;
+                {{ok, N        }, M        } when M < N -> M
             end,
     case Milli of
         undefined -> undefined;
