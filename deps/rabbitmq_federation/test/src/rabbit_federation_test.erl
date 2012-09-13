@@ -103,6 +103,49 @@ unbind_on_unbind_test() ->
               delete_queue(Ch, Q2)
       end, ?UPSTREAM_DOWNSTREAM).
 
+user_id_test() ->
+    with_ch(
+      fun (Ch) ->
+              start_other_node(?HARE),
+              {ok, Conn2} = amqp_connection:start(
+                              #amqp_params_network{username = <<"hare-user">>,
+                                                   password = <<"hare-user">>,
+                                                   port     = 5673}),
+              {ok, Ch2} = amqp_connection:open_channel(Conn2),
+              declare_exchange(Ch2, x(<<"upstream">>)),
+              declare_exchange(Ch, x(<<"hare.downstream">>)),
+              Q = bind_queue(Ch, <<"hare.downstream">>, <<"key">>),
+
+              Msg = #amqp_msg{props   = #'P_basic'{user_id = <<"hare-user">>},
+                              payload = <<"HELLO">>},
+              ExpectUser =
+                  fun (ExpUser) ->
+                          fun () ->
+                                  receive
+                                      {#'basic.deliver'{},
+                                       #amqp_msg{props   = Props,
+                                                 payload = Payload}} ->
+                                          #'P_basic'{user_id = ActUser} = Props,
+                                          ?assertEqual(<<"HELLO">>, Payload),
+                                          ?assertEqual(ExpUser, ActUser)
+                                  end
+                          end
+                  end,
+
+              publish(Ch2, <<"upstream">>, <<"key">>, Msg),
+              expect(Ch, Q, ExpectUser(undefined)),
+
+              set_param("federation-upstream", "local5673",
+                        [{<<"uri">>,           <<"amqp://localhost:5673">>},
+                         {<<"trust-user-id">>, true}]),
+
+              publish(Ch2, <<"upstream">>, <<"key">>, Msg),
+              expect(Ch, Q, ExpectUser(<<"hare-user">>)),
+
+              delete_exchange(Ch, <<"hare.downstream">>),
+              delete_exchange(Ch2, <<"upstream">>)
+      end, []).
+
 %% In order to test that unbinds get sent we deliberately set up a
 %% broken config - with topic upstream and fanout downstream. You
 %% shouldn't really do this, but it lets us see "extra" messages that
@@ -443,21 +486,27 @@ delete_exchange(Ch, X) ->
 delete_queue(Ch, Q) ->
     amqp_channel:call(Ch, #'queue.delete'{queue = Q}).
 
-publish(Ch, X, Key, Payload) ->
+publish(Ch, X, Key, Payload) when is_binary(Payload) ->
+    publish(Ch, X, Key, #amqp_msg{payload = Payload});
+
+publish(Ch, X, Key, Msg = #amqp_msg{}) ->
     %% The trouble is that we transmit bindings upstream asynchronously...
     timer:sleep(1000),
     amqp_channel:call(Ch, #'basic.publish'{exchange    = X,
-                                           routing_key = Key},
-                      #amqp_msg{payload = Payload}).
+                                           routing_key = Key}, Msg).
 
-expect(Ch, Q, Payloads) ->
+
+expect(Ch, Q, Fun) when is_function(Fun) ->
     amqp_channel:subscribe(Ch, #'basic.consume'{queue  = Q,
                                                 no_ack = true}, self()),
     receive
         #'basic.consume_ok'{consumer_tag = CTag} -> ok
     end,
-    expect(Payloads),
-    amqp_channel:call(Ch, #'basic.cancel'{consumer_tag = CTag}).
+    Fun(),
+    amqp_channel:call(Ch, #'basic.cancel'{consumer_tag = CTag});
+
+expect(Ch, Q, Payloads) ->
+    expect(Ch, Q, fun() -> expect(Payloads) end).
 
 expect([]) ->
     ok;
