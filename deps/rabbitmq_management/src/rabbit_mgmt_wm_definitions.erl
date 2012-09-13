@@ -195,8 +195,7 @@ add_parameter(Param) ->
     Comp = pget(component, Param),
     Key = pget(key, Param),
     case rabbit_runtime_parameters:set(
-           VHost, Comp, Key,
-           rabbit_mgmt_parse:parameter_value(pget(value, Param))) of
+           VHost, Comp, Key, rabbit_misc:json_to_term(pget(value, Param))) of
         ok                -> ok;
         {error_string, E} -> S = rabbit_misc:format(" (~s/~s/~s)",
                                                     [VHost, Comp, Key]),

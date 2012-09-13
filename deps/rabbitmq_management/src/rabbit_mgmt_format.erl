@@ -104,16 +104,7 @@ utf8_safe(V) ->
             <<"Invalid UTF-8, base64 is: ", Enc/binary>>
     end.
 
-parameter(P) -> pset(value, param0(pget(value, P)), P).
-
-param0(L = [{_, _} | _])    -> {struct, [{K, param0(V)} || {K, V} <- L]};
-param0(L) when is_list(L)   -> [param0(I) || I <- L];
-param0(B) when is_binary(B) -> B;
-param0(N) when is_number(N) -> N;
-param0(null)                -> null;
-param0(true)                -> true;
-param0(false)               -> false.
-
+parameter(P) -> pset(value, rabbit_misc:term_to_json(pget(value, P)), P).
 
 tuple(unknown)                    -> unknown;
 tuple(Tuple) when is_tuple(Tuple) -> [tuple(E) || E <- tuple_to_list(Tuple)];
