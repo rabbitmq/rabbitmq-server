@@ -102,11 +102,12 @@ prepare_cluster_status_files() ->
             {ok, [{AllNodes, DiscNodes0}]} ->
                 {AllNodes, lists:member(node(), DiscNodes0)};
             {ok, [AllNodes0]} when is_list(AllNodes0) ->
-                {AllNodes0, legacy_should_be_disc_node(AllNodes0)};
+                {legacy_cluster_nodes(AllNodes0),
+                 legacy_should_be_disc_node(AllNodes0)};
             {ok, _} ->
                 CorruptFiles();
             non_existant ->
-                {[], true}
+                {legacy_cluster_nodes([]), true}
         end,
 
     ThisNode = [node()],
@@ -290,6 +291,11 @@ is_already_monitored(Item) ->
     lists:any(fun ({_, Item1}) when Item =:= Item1 -> true;
                   (_)                              -> false
               end, Monitors).
+
+legacy_cluster_nodes(Nodes) ->
+    %% We get all the info that we can, including the nodes from mnesia, which
+    %% will be there if the node is a disc node (empty list otherwise)
+    lists:usort(Nodes ++ mnesia:system_info(db_nodes)).
 
 legacy_should_be_disc_node(DiscNodes) ->
     DiscNodes == [] orelse lists:member(node(), DiscNodes).
