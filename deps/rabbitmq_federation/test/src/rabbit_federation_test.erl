@@ -272,7 +272,7 @@ dynamic_reconfiguration_test() ->
               assert_connections(Xs, [<<"localhost">>, <<"local5673">>]),
 
               %% Test this at least does not blow up
-              set_param("federation", "local-nodename", <<"test">>),
+              set_param("federation", "local-nodename", "\"test\""),
               assert_connections(Xs, [<<"localhost">>, <<"local5673">>]),
 
               %% Test that clearing connections works
@@ -282,17 +282,17 @@ dynamic_reconfiguration_test() ->
 
               %% Test that readding them and changing them works
               set_param("federation-upstream", "localhost",
-                        [{<<"uri">>, <<"amqp://localhost">>}]),
+                        "{\"uri\": \"amqp://localhost\"}"),
               %% Do it twice so we at least hit the no-restart optimisation
               set_param("federation-upstream", "localhost",
-                        [{<<"uri">>, <<"amqp://">>}]),
+                        "{\"uri\": \"amqp://\"}"),
               set_param("federation-upstream", "localhost",
-                        [{<<"uri">>, <<"amqp://">>}]),
+                        "{\"uri\": \"amqp://\"}"),
               assert_connections(Xs, [<<"localhost">>]),
 
               %% And re-add the last - for next test
               set_param("federation-upstream", "local5673",
-                        [{<<"uri">>, <<"amqp://localhost:5673">>}])
+                        "{\"uri\": \"amqp://localhost:5673\"}")
       end, [x(<<"all.fed1">>), x(<<"all.fed2">>)]).
 
 dynamic_reconfiguration_integrity_test() ->
@@ -305,18 +305,18 @@ dynamic_reconfiguration_integrity_test() ->
 
               %% Create the set - links appear
               set_param("federation-upstream-set", "new-set",
-                        [[{<<"upstream">>, <<"localhost">>}]]),
+                        "[{\"upstream\": \"localhost\"}]"),
               assert_connections(Xs, [<<"localhost">>]),
 
               %% Add nonexistent connections to set - nothing breaks
               set_param("federation-upstream-set", "new-set",
-                        [[{<<"upstream">>, <<"localhost">>}],
-                         [{<<"upstream">>, <<"does-not-exist">>}]]),
+                        "[{\"upstream\": \"localhost\"},"
+                        " {\"upstream\": \"does-not-exist\"}]"),
               assert_connections(Xs, [<<"localhost">>]),
 
               %% Change connection in set - links change
               set_param("federation-upstream-set", "new-set",
-                        [[{<<"upstream">>, <<"local5673">>}]]),
+                        "[{\"upstream\": \"local5673\"}]"),
               assert_connections(Xs, [<<"local5673">>])
       end, [x(<<"new.fed1">>), x(<<"new.fed2">>)]).
 
@@ -329,7 +329,7 @@ federate_unfederate_test() ->
               assert_connections(Xs, []),
 
               %% Federate them - links appear
-              set_param("policy", "dyn", policy(<<"^dyn.">>, <<"all">>)),
+              set_param("policy", "dyn", policy("^dyn.", "all")),
               assert_connections(Xs, [<<"localhost">>, <<"local5673">>]),
 
               %% Unfederate them - links disappear
@@ -379,7 +379,7 @@ stop_other_node({Name, _Port}) ->
     timer:sleep(1000).
 
 set_param(Component, Key, Value) ->
-    rabbitmqctl(fmt("set_parameter ~s ~s '~p'", [Component, Key, Value])).
+    rabbitmqctl(fmt("set_parameter ~s ~s '~s'", [Component, Key, Value])).
 
 clear_param(Component, Key) ->
     rabbitmqctl(fmt("clear_parameter ~s ~s", [Component, Key])).
@@ -393,8 +393,9 @@ rabbitmqctl(Args) ->
     timer:sleep(100).
 
 policy(Pattern, UpstreamSet) ->
-    [{<<"pattern">>, Pattern},
-     {<<"policy">>, [{<<"federation-upstream-set">>, UpstreamSet}]}].
+    rabbit_misc:format("{\"pattern\": \"~s\","
+                       " \"policy\":  {\"federation-upstream-set\": \"~s\"}}",
+                       [Pattern, UpstreamSet]).
 
 plugin_dir() ->
     {ok, [[File]]} = init:get_argument(config),
