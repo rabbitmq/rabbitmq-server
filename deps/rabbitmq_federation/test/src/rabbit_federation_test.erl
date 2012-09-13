@@ -445,7 +445,7 @@ delete_queue(Ch, Q) ->
 
 publish(Ch, X, Key, Payload) ->
     %% The trouble is that we transmit bindings upstream asynchronously...
-    timer:sleep(1000),
+    timer:sleep(5000),
     amqp_channel:call(Ch, #'basic.publish'{exchange    = X,
                                            routing_key = Key},
                       #amqp_msg{payload = Payload}).
