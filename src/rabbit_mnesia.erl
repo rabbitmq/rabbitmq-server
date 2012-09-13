@@ -17,8 +17,7 @@
 
 -module(rabbit_mnesia).
 
--export([prepare/0,
-         init/0,
+-export([init/0,
          join_cluster/2,
          reset/0,
          force_reset/0,
@@ -42,6 +41,8 @@
          empty_ram_only_tables/0,
          copy_db/1,
          wait_for_tables/0,
+         check_cluster_consistency/0,
+         ensure_mnesia_dir/0,
 
          on_node_up/1,
          on_node_down/1
@@ -70,7 +71,6 @@
                            ordsets:ordset(node())}).
 
 %% Main interface
--spec(prepare/0 :: () -> 'ok').
 -spec(init/0 :: () -> 'ok').
 -spec(join_cluster/2 :: ([node()], boolean()) -> 'ok').
 -spec(reset/0 :: () -> 'ok').
@@ -100,6 +100,7 @@
 -spec(copy_db/1 :: (file:filename()) ->  rabbit_types:ok_or_error(any())).
 -spec(wait_for_tables/1 :: ([atom()]) -> 'ok').
 -spec(check_cluster_consistency/0 :: () -> 'ok').
+-spec(ensure_mnesia_dir/0 :: () -> 'ok').
 
 %% Hooks used in `rabbit_node_monitor'
 -spec(on_node_up/1 :: (node()) -> 'ok').
@@ -116,11 +117,6 @@
 %%----------------------------------------------------------------------------
 %% Main interface
 %%----------------------------------------------------------------------------
-
-prepare() ->
-    ensure_mnesia_dir(),
-    rabbit_node_monitor:prepare_cluster_status_files(),
-    check_cluster_consistency().
 
 init() ->
     ensure_mnesia_running(),
