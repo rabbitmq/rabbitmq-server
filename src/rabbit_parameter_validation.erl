@@ -16,7 +16,7 @@
 
 -module(rabbit_parameter_validation).
 
--export([number/2, binary/2, list/2, regex/2, proplist/3]).
+-export([number/2, binary/2, boolean/2, list/2, regex/2, proplist/3]).
 
 number(_Name, Term) when is_number(Term) ->
     ok;
@@ -29,6 +29,11 @@ binary(_Name, Term) when is_binary(Term) ->
 
 binary(Name, Term) ->
     {error, "~s should be binary, actually was ~p", [Name, Term]}.
+
+boolean(_Name, Term) when is_boolean(Term) ->
+    ok;
+boolean(Name, Term) ->
+    {error, "~s should be boolean, actually was ~p", [Name, Term]}.
 
 list(_Name, Term) when is_list(Term) ->
     ok;
