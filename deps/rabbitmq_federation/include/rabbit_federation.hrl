@@ -22,6 +22,7 @@
                    reconnect_delay,
                    expires,
                    message_ttl,
+                   trust_user_id,
                    ha_policy,
                    name}).
 
