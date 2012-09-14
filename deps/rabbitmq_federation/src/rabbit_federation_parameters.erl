@@ -104,6 +104,7 @@ shared_validation() ->
      {<<"max-hops">>,       fun rabbit_parameter_validation:number/2, optional},
      {<<"expires">>,        fun rabbit_parameter_validation:number/2, optional},
      {<<"message-ttl">>,    fun rabbit_parameter_validation:number/2, optional},
+     {<<"trust-user-id">>,  fun rabbit_parameter_validation:boolean/2, optional},
      {<<"ha-policy">>,      fun rabbit_parameter_validation:binary/2, optional}].
 
 validate_uri(Name, Term) ->

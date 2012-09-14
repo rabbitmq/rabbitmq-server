@@ -95,6 +95,7 @@ from_props_connection(U, Name, C, X) ->
               max_hops        = bget('max-hops',        U, C, 1),
               expires         = bget(expires,           U, C, none),
               message_ttl     = bget('message-ttl',     U, C, none),
+              trust_user_id   = bget('trust-user-id',   U, C, false),
               ha_policy       = bget('ha-policy',       U, C, none),
               name            = Name}.
 
