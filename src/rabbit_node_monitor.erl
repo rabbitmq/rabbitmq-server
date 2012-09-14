@@ -70,16 +70,12 @@
 %% Cluster file operations
 %%----------------------------------------------------------------------------
 
-%% The cluster node status file contains all we need to know about the cluster:
+%% The cluster file information is kept in two files.  The "cluster status file"
+%% contains all the clustered nodes and the disc nodes.  The "running nodes
+%% file" contains the currently running nodes or the running nodes at shutdown
+%% when the node is down.
 %%
-%%   * All the clustered nodes
-%%   * The disc nodes
-%%   * The running nodes.
-%%
-%% If the current node is a disc node it will be included in the disc nodes
-%% list.
-%%
-%% We strive to keep the file up to date and we rely on this assumption in
+%% We strive to keep the files up to date and we rely on this assumption in
 %% various situations. Obviously when mnesia is offline the information we have
 %% will be outdated, but it can't be otherwise.
 
@@ -95,7 +91,7 @@ prepare_cluster_status_files() ->
     RunningNodes1 = case try_read_file(running_nodes_file_name()) of
                         {ok, [Nodes]} when is_list(Nodes) -> Nodes;
                         {ok, _      }                     -> CorruptFiles();
-                        non_existant                      -> []
+                        {error, enoent}                   -> []
                     end,
     {AllNodes1, WantDiscNode} =
         case try_read_file(cluster_status_file_name()) of
@@ -106,7 +102,7 @@ prepare_cluster_status_files() ->
                  legacy_should_be_disc_node(AllNodes0)};
             {ok, _} ->
                 CorruptFiles();
-            non_existant ->
+            {error, enoent} ->
                 {legacy_cluster_nodes([]), true}
         end,
 
@@ -139,7 +135,7 @@ write_cluster_status({All, Disc, Running}) ->
 try_read_file(FileName) ->
     case rabbit_file:read_term_file(FileName) of
         {ok, Term}      -> {ok, Term};
-        {error, enoent} -> non_existant;
+        {error, enoent} -> {error, enoent};
         {error, E}      -> throw({error, {cannot_read_file, FileName, E}})
     end.
 
