@@ -21,7 +21,7 @@ start-other-node:
 cluster-other-node:
 	$(RABBITMQCTL) -n $(OTHER_NODE) stop_app
 	$(RABBITMQCTL) -n $(OTHER_NODE) reset
-	$(RABBITMQCTL) -n $(OTHER_NODE) cluster rabbit-test@`hostname -s`
+	$(RABBITMQCTL) -n $(OTHER_NODE) join_cluster rabbit-test@`hostname -s`
 	$(RABBITMQCTL) -n $(OTHER_NODE) start_app
 
 stop-other-node:
