@@ -136,8 +136,8 @@ user_id_test() ->
               expect(Ch, Q, ExpectUser(undefined)),
 
               set_param("federation-upstream", "local5673",
-                        [{<<"uri">>,           <<"amqp://localhost:5673">>},
-                         {<<"trust-user-id">>, true}]),
+                        "{\"uri\": \"amqp://localhost:5673\"," ++
+                        " \"trust-user-id\": true}"),
 
               publish(Ch2, <<"upstream">>, <<"key">>, Msg),
               expect(Ch, Q, ExpectUser(<<"hare-user">>)),
