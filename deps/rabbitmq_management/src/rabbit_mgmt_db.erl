@@ -98,6 +98,7 @@ start_link() ->
     %% mirrored_supervisor to maintain the uniqueness of this process.
     case gen_server2:start_link(?MODULE, [], []) of
         {ok, Pid} -> yes = global:re_register_name(?MODULE, Pid),
+                     rabbit:force_event_refresh(),
                      {ok, Pid};
         Else      -> Else
     end.
@@ -213,7 +214,6 @@ init([]) ->
     %% When Rabbit is overloaded, it's usually especially important
     %% that the management plugin work.
     process_flag(priority, high),
-    rabbit:force_event_refresh(),
     {ok, Interval} = application:get_env(rabbit, collect_statistics_interval),
     rabbit_log:info("Statistics database started.~n"),
     {ok, #state{interval = Interval,
@@ -272,7 +272,8 @@ handle_call({get_overview, User}, _From, State = #state{tables = Tables}) ->
     Qs0 = [rabbit_mgmt_format:queue(Q) || V <- VHosts,
                                           Q <- rabbit_amqqueue:list(V)],
     Qs1 = basic_queue_stats(Qs0, State),
-    Totals = sum(Qs1, ?OVERVIEW_QUEUE_STATS),
+    QueueTotals = sum(Qs1, ?OVERVIEW_QUEUE_STATS),
+
     Filter = fun(Id, Name) ->
                      lists:member(pget(vhost, pget(Name, Id)), VHosts)
              end,
@@ -285,8 +286,27 @@ handle_call({get_overview, User}, _From, State = #state{tables = Tables}) ->
         end,
     Publish = F(channel_exchange_stats, exchange),
     Consume = F(channel_queue_stats, queue_details),
+
+    F2 = case User of
+             all -> fun (L) -> length(L) end;
+             _   -> fun (L) -> length(rabbit_mgmt_util:filter_user(L, User)) end
+         end,
+    %% Filtering out the user's consumers would be rather expensive so let's
+    %% just not show it
+    Consumers = case User of
+                    all -> [{consumers,
+                             ets:info(orddict:fetch(consumers, Tables), size)}];
+                    _   -> []
+                end,
+    ObjectTotals = Consumers ++
+        [{queues,      length(Qs0)},
+         {exchanges,   length([X || V <- VHosts,
+                                    X <- rabbit_exchange:list(V)])},
+         {connections, F2(created_events(connection_stats, Tables))},
+         {channels,    F2(created_events(channel_stats, Tables))}],
     reply([{message_stats, Publish ++ Consume},
-             {queue_totals, Totals}], State);
+           {queue_totals,  QueueTotals},
+           {object_totals, ObjectTotals}], State);
 
 handle_call(_Request, _From, State) ->
     reply(not_understood, State).
@@ -377,7 +397,7 @@ handle_event(#event{type = consumer_deleted, props = Props}, State) ->
                     Props, State);
 
 handle_event(#event{type = queue_mirror_deaths, props = Props},
-             State = #state{tables = Tables}) ->
+             #state{tables = Tables}) ->
     Dead = pget(pids, Props),
     Table = orddict:fetch(queue_stats, Tables),
     %% Only the master can be in the DB, but it's easier just to
@@ -422,10 +442,8 @@ handle_stats(TName, Stats0, Timestamp, Funs,
 handle_deleted(TName, #event{props = Props}, State = #state{tables = Tables}) ->
     Table = orddict:fetch(TName, Tables),
     Pid = pget(pid, Props),
-    Name = pget(name, Props),
     ets:delete(Table, {id(Pid), create}),
     ets:delete(Table, {id(Pid), stats}),
-    ets:delete(Table, {Name, synchronised_slaves}),
     {ok, State}.
 
 handle_consumer(Fun, Props,
@@ -560,18 +578,6 @@ consumer_details_fun(PatternFun, State = #state{tables = Tables}) ->
                                   ets:match(Table, {Pattern, '$1'}))]}]
     end.
 
-synchronised_slaves_fun(#state{tables = Tables}) ->
-    Table = orddict:fetch(queue_stats, Tables),
-
-    fun (Props) -> QName = rabbit_misc:r(pget(vhost, Props), queue,
-                                         pget(name, Props)),
-                   Key = {QName, synchronised_slaves},
-                   case ets:lookup(Table, Key) of
-                       []       -> [];
-                       [{_, N}] -> [{synchronised_slave_nodes, N}]
-                   end
-    end.
-
 zero_old_rates(Stats, State) -> [maybe_zero_rate(S, State) || S <- Stats].
 
 maybe_zero_rate({Key, Val}, #state{interval = Interval}) ->
@@ -659,8 +665,7 @@ detail_queue_stats(Objs, State) ->
                       queue_funs(State))).
 
 queue_funs(State) ->
-    [basic_stats_fun(queue_stats, pid, State), augment_msg_stats_fun(State),
-     synchronised_slaves_fun(State)].
+    [basic_stats_fun(queue_stats, pid, State), augment_msg_stats_fun(State)].
 
 exchange_stats(Objs, FineSpecs, State) ->
     merge_stats(Objs, [fine_stats_fun(FineSpecs, State),

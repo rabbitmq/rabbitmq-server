@@ -10,21 +10,24 @@
     <th>Virtual Host</th>
 <% } %>
     <th>Name</th>
-    <th>Prefix</th>
+    <th>Regexp</th>
+    <th>Priority</th>
     <th>Policy</th>
   </tr>
  </thead>
  <tbody>
 <%
- for (var i = 0; i < policies.length; i++) {
-    var policy = policies[i];
+ var sorted_policies = policies.sort(function(a,b) {return b.value['priority'] || 0 - a.value['priority'] || 0} );
+ for (var i = 0; i < sorted_policies.length; i++) {
+    var policy = sorted_policies[i];
 %>
    <tr<%= alt_rows(i)%>>
 <% if (vhosts_interesting) { %>
      <td><%= fmt_string(policy.vhost) %></td>
 <% } %>
      <td><%= link_policy(policy.vhost, policy.key) %></td>
-     <td><%= fmt_string(policy.value['prefix']) %></td>
+     <td><%= fmt_string(policy.value['pattern']) %></td>
+     <td><%= fmt_string(policy.value['priority']) %></td>
      <td><%= fmt_table_short(policy.value['policy']) %></td>
    </tr>
 <% } %>
@@ -62,12 +65,17 @@
           <td><input type="text" name="key"/><span class="mand">*</span></td>
         </tr>
         <tr>
-          <th><label>Prefix:</label></th>
-          <td><input type="text" name="prefix"/></td>
+          <th><label>Regexp:</label></th>
+          <td><input type="text" name="pattern"/><span class="mand">*</span></td>
+        </tr>
+        <tr>
+          <th><label>Priority:</label></th>
+          <td><input type="text" name="priority"/></td>
         </tr>
         <tr>
           <th><label>Policy:</label></th>
-          <td><span class="multifield" id="policy"></span></td>
+          <td><span class="multifield mand" id="policy"></span></td>
+          <td><span class="mand">*</span></td>
         </tr>
       </table>
       <input type="submit" value="Add policy"/>

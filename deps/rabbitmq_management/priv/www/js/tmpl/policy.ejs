@@ -9,8 +9,12 @@
         <td><%= fmt_string(policy.vhost) %></td>
       </tr>
       <tr>
-        <th>Prefix</th>
-        <td><%= fmt_string(policy.value.prefix) %></td>
+        <th>Regexp</th>
+        <td><%= fmt_string(policy.value.pattern) %></td>
+      </tr>
+      <tr>
+        <th>Priority</th>
+        <td><%= fmt_string(policy.value.priority) %></td>
       </tr>
       <tr>
         <th>Policy</th>

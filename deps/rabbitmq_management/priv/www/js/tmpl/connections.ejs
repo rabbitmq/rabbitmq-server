@@ -5,12 +5,13 @@
 <table class="list">
  <thead>
   <tr>
-   <th colspan="<% if (nodes_interesting) { %>6<% } else { %>5<% } %>">Network</th>
+   <th colspan="<% if (nodes_interesting) { %>7<% } else { %>6<% } %>">Network</th>
    <th colspan="<% if (vhosts_interesting) { %>5<% } else { %>4<% } %>">Overview</th>
   </tr>
   <tr>
-    <th><%= fmt_sort('Protocol',     'protocol') %></th>
     <th><%= fmt_sort('Name',         'name') %></th>
+    <th><%= fmt_sort('Protocol',     'protocol') %></th>
+    <th><%= fmt_sort('Client',       'properties') %></th>
 <% if (nodes_interesting) { %>
     <th><%= fmt_sort('Node',         'node') %></th>
 <% } %>
@@ -31,13 +32,14 @@
     var connection = connections[i];
 %>
   <tr<%= alt_rows(i)%>>
+    <td><%= link_conn(connection.name) %></td>
     <td>
       <%= connection.protocol %>
       <% if (connection.ssl) { %>
         <sub>SSL</sub>
       <% } %>
     </td>
-    <td><%= link_conn(connection.name) %></td>
+    <td><%= fmt_client_name(connection.client_properties) %></td>
 <% if (nodes_interesting) { %>
     <td><%= connection.node %></td>
 <% } %>

@@ -1,5 +1,5 @@
 body { font: 12px Verdana,sans-serif; color: #484848; padding: 8px 35px; }
-#logo { width: 204px; height: 37px; margin-bottom: 20px; background: url(../img/rabbitmqlogo.png); }
+#logo { margin-bottom: 20px; }
 #login-version { float: right; color: #444; }
 #login-version p { padding: 0 0 0.2em 0; margin: 0; text-align: right; }
 #login-version b { color: black; font-weight: normal; }
@@ -26,6 +26,9 @@ h1 { font-size: 2em; font-weight: normal; padding: 0; }
 b, dt { color: black; font-weight: normal; }
 dd { margin-bottom: 5px; }
 div.box, div.section, div.section-hidden { overflow: auto; width: 100%; }
+
+.left { float: left; }
+.right { float: right; }
 
 .help { color: #888; cursor: pointer; }
 .help:hover { color: #444; }

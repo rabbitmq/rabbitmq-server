@@ -135,7 +135,11 @@ HELP = {
           User can do everything monitoring can do, manage users, \
           vhosts and permissions, and close other user\'s connections. \
         </dd> \
-      </dl>',
+      </dl> \
+      <p> \
+        Note that you can set any tag here; the links for the above three \
+        tags are just for convenience. \
+      </p>',
 
     'queued-messages':
     'Total messages in all queues:\
@@ -176,6 +180,8 @@ HELP = {
       </dl>',
 
     'disk-monitoring-no-watermark' : 'There is no disk space low watermark set. RabbitMQ will not take any action to avoid running out of disk space.',
+
+    'resource-counts' : 'Shows total number of objects for all virtual hosts the current user has access to.',
 
     'foo': 'foo' // No comma.
 };
