@@ -56,7 +56,9 @@ ensure_listener({Listener, Spec}) ->
              transient, 5000, worker, dynamic},
     case supervisor:start_child(?SUP, Child) of
         {ok,                      Pid}  -> {ok, Pid};
-        {error, {already_started, Pid}} -> {ok, Pid}
+        {error, {already_started, Pid}} -> {ok, Pid};
+        {error, {E, _}}                 -> exit({could_not_start_http_listener,
+                                                 Spec, E})
     end.
 
 stop_listener({Listener, _Spec}) ->
