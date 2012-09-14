@@ -301,7 +301,8 @@ start() ->
                      %% mnesia after just restarting the app
                      ok = ensure_application_loaded(),
                      ok = ensure_working_log_handlers(),
-                     ok = app_utils:start_applications(app_startup_order()),
+                     ok = app_utils:start_applications(
+                            app_startup_order(), fun handle_app_error/2),
                      ok = print_plugin_info(rabbit_plugins:active())
              end).
 
@@ -316,9 +317,16 @@ boot() ->
                      ok = app_utils:load_applications(ToBeLoaded),
                      StartupApps = app_utils:app_dependency_order(ToBeLoaded,
                                                                   false),
-                     ok = app_utils:start_applications(StartupApps),
+                     ok = app_utils:start_applications(
+                            StartupApps, fun handle_app_error/2),
                      ok = print_plugin_info(Plugins)
              end).
+
+handle_app_error(App, {bad_return, {_MFA, {'EXIT', {Reason, _}}}}) ->
+    boot_error({could_not_start, App, Reason}, not_available);
+
+handle_app_error(App, Reason) ->
+    boot_error({could_not_start, App, Reason}, not_available).
 
 start_it(StartFun) ->
     try
@@ -444,7 +452,7 @@ run_boot_step({StepName, Attributes}) ->
             [try
                  apply(M,F,A)
              catch
-                 _:Reason -> boot_step_error(Reason, erlang:get_stacktrace())
+                 _:Reason -> boot_error(Reason, erlang:get_stacktrace())
              end || {M,F,A} <- MFAs],
             io:format("done~n"),
             ok
@@ -483,14 +491,14 @@ sort_boot_steps(UnsortedSteps) ->
                      {mfa, {M,F,A}}         <- Attributes,
                      not erlang:function_exported(M, F, length(A))] of
                 []               -> SortedSteps;
-                MissingFunctions -> boot_error(
+                MissingFunctions -> basic_boot_error(
                                       "Boot step functions not exported: ~p~n",
                                       [MissingFunctions])
             end;
         {error, {vertex, duplicate, StepName}} ->
-            boot_error("Duplicate boot step name: ~w~n", [StepName]);
+            basic_boot_error("Duplicate boot step name: ~w~n", [StepName]);
         {error, {edge, Reason, From, To}} ->
-            boot_error(
+            basic_boot_error(
               "Could not add boot step dependency of ~w on ~w:~n~s",
               [To, From,
                case Reason of
@@ -504,7 +512,7 @@ sort_boot_steps(UnsortedSteps) ->
                end])
     end.
 
-boot_step_error({error, {timeout_waiting_for_tables, _}}, _Stacktrace) ->
+boot_error({error, {timeout_waiting_for_tables, _}}, _Stacktrace) ->
     {Err, Nodes} =
         case rabbit_mnesia:read_previously_running_nodes() of
             [] -> {"Timeout contacting cluster nodes. Since RabbitMQ was"
@@ -515,15 +523,19 @@ boot_step_error({error, {timeout_waiting_for_tables, _}}, _Stacktrace) ->
                      "Timeout contacting cluster nodes: ~p.~n", [Ns]),
                    Ns}
         end,
-    boot_error(Err ++ rabbit_nodes:diagnostics(Nodes) ++ "~n~n", []);
+    basic_boot_error(Err ++ rabbit_nodes:diagnostics(Nodes) ++ "~n~n", []);
 
-boot_step_error(Reason, Stacktrace) ->
-    boot_error("Error description:~n   ~p~n~n"
-               "Log files (may contain more information):~n   ~s~n   ~s~n~n"
-               "Stack trace:~n   ~p~n~n",
-               [Reason, log_location(kernel), log_location(sasl), Stacktrace]).
+boot_error(Reason, Stacktrace) ->
+    Fmt = "Error description:~n   ~p~n~n"
+        "Log files (may contain more information):~n   ~s~n   ~s~n~n",
+    Args = [Reason, log_location(kernel), log_location(sasl)],
+    case Stacktrace of
+        not_available -> basic_boot_error(Fmt, Args);
+        _             -> basic_boot_error(Fmt ++ "Stack trace:~n   ~p~n~n",
+                                          Args ++ [Stacktrace])
+    end.
 
-boot_error(Format, Args) ->
+basic_boot_error(Format, Args) ->
     io:format("~n~nBOOT FAILED~n===========~n~n" ++ Format, Args),
     error_logger:error_msg(Format, Args),
     timer:sleep(1000),
