@@ -1152,22 +1152,21 @@ test_runtime_parameters() ->
     Bad  = fun(L) -> {error_string, _} = control_action(set_parameter, L) end,
 
     %% Acceptable for bijection
-    Good(["test", "good", "<<\"ignore\">>"]),
+    Good(["test", "good", "\"ignore\""]),
     Good(["test", "good", "123"]),
     Good(["test", "good", "true"]),
     Good(["test", "good", "false"]),
     Good(["test", "good", "null"]),
-    Good(["test", "good", "[{<<\"key\">>, <<\"value\">>}]"]),
+    Good(["test", "good", "{\"key\": \"value\"}"]),
 
-    %% Various forms of fail due to non-bijectability
+    %% Invalid json
     Bad(["test", "good", "atom"]),
-    Bad(["test", "good", "{tuple, foo}"]),
-    Bad(["test", "good", "[{<<\"key\">>, <<\"value\">>, 1}]"]),
-    Bad(["test", "good", "[{key, <<\"value\">>}]"]),
+    Bad(["test", "good", "{\"foo\": \"bar\""]),
+    Bad(["test", "good", "{foo: \"bar\"}"]),
 
     %% Test actual validation hook
-    Good(["test", "maybe", "<<\"good\">>"]),
-    Bad(["test", "maybe", "<<\"bad\">>"]),
+    Good(["test", "maybe", "\"good\""]),
+    Bad(["test", "maybe", "\"bad\""]),
 
     ok = control_action(list_parameters, []),
 
