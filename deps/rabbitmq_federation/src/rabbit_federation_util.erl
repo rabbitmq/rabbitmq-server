@@ -28,8 +28,9 @@
 %%----------------------------------------------------------------------------
 
 local_params(VHost) ->
+    {ok, DefaultUser} = application:get_env(rabbit, default_user),
     U = rabbit_runtime_parameters:value(
-          VHost, <<"federation">>, <<"local-username">>, <<"guest">>),
+          VHost, <<"federation">>, <<"local-username">>, DefaultUser),
     #amqp_params_direct{username     = U,
                         virtual_host = VHost}.
 
