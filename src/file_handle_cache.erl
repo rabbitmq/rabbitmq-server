@@ -120,11 +120,11 @@
 %% do not need to worry about their handles being closed by the server
 %% - reopening them when necessary is handled transparently.
 %%
-%% The server also supports obtain, release and transfer. obtain
+%% The server also supports obtain, release and transfer. obtain/{0,1}
 %% blocks until a file descriptor is available, at which point the
 %% requesting process is considered to 'own' more descriptor(s).
-%% release is the inverse operation and releases previously obtained
-%% descriptor(s). transfer transfers ownership of file descriptor(s)
+%% release/{0,1} is the inverse operation and releases previously obtained
+%% descriptor(s). transfer/{1,2} transfers ownership of file descriptor(s)
 %% between processes. It is non-blocking. Obtain has a
 %% lower limit, set by the ?OBTAIN_LIMIT/1 macro. File handles can use
 %% the entire limit, but will be evicted by obtain calls up to the
