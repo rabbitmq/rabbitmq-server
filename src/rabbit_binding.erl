@@ -277,21 +277,21 @@ has_for_source(SrcName) ->
 remove_for_source(SrcName) ->
     lock_route_tables(),
     Match = #route{binding = #binding{source = SrcName, _ = '_'}},
-    Routes = lists:usort(
-               mnesia:match_object(rabbit_route, Match, write) ++
-                   mnesia:match_object(rabbit_durable_route, Match, write)),
-    [begin
-         sync_route(Route, fun delete_object/3),
-         Route#route.binding
-     end || Route <- Routes].
+    remove_routes(
+      lists:usort(mnesia:match_object(rabbit_route, Match, write) ++
+                      mnesia:match_object(rabbit_durable_route, Match, write))).
 
-remove_for_destination(Dst) ->
-    remove_for_destination(
-      Dst, fun (R) -> sync_route(R, fun delete_object/3) end).
+remove_for_destination(DstName) ->
+    remove_for_destination(DstName, fun remove_routes/1).
 
-remove_transient_for_destination(Dst) ->
+remove_transient_for_destination(DstName) ->
     remove_for_destination(
-      Dst, fun (R) -> sync_transient_route(R, fun delete_object/3) end).
+      DstName, fun (Routes) ->
+                       [begin
+                            ok = sync_transient_route(R, fun delete_object/3),
+                            R#route.binding
+                        end || R <- Routes]
+               end).
 
 %%----------------------------------------------------------------------------
 
@@ -378,16 +378,26 @@ lock_route_tables() ->
                                              rabbit_semi_durable_route,
                                              rabbit_durable_route]].
 
-remove_for_destination(DstName, DeleteFun) ->
+remove_routes(Routes) ->
+    %% This partitioning allows us to suppress unnecessary delete
+    %% operations on disk tables, which require an fsync.
+    {TransientRoutes, DurableRoutes} =
+        lists:partition(fun (R) -> mnesia:match_object(
+                                     rabbit_durable_route, R, write) == [] end,
+                        Routes),
+    [ok = sync_transient_route(R, fun mnesia:delete_object/3) ||
+        R <- TransientRoutes],
+    [ok = sync_route(R, fun mnesia:delete_object/3) ||
+        R <- DurableRoutes],
+    [R#route.binding || R <- Routes].
+
+remove_for_destination(DstName, Fun) ->
     lock_route_tables(),
     Match = reverse_route(
               #route{binding = #binding{destination = DstName, _ = '_'}}),
-    ReverseRoutes = mnesia:match_object(rabbit_reverse_route, Match, write),
-    Bindings = [begin
-                    Route = reverse_route(ReverseRoute),
-                    ok = DeleteFun(Route),
-                    Route#route.binding
-                end || ReverseRoute <- ReverseRoutes],
+    Routes = [reverse_route(R) || R <- mnesia:match_object(
+                                         rabbit_reverse_route, Match, write)],
+    Bindings = Fun(Routes),
     group_bindings_fold(fun maybe_auto_delete/3, new_deletions(),
                         lists:keysort(#binding.source, Bindings)).
 
