@@ -281,17 +281,17 @@ remove_for_source(SrcName) ->
                mnesia:match_object(rabbit_route, Match, write) ++
                    mnesia:match_object(rabbit_durable_route, Match, write)),
     [begin
-         sync_route(Route, fun mnesia:delete_object/3),
+         sync_route(Route, fun delete_object/3),
          Route#route.binding
      end || Route <- Routes].
 
 remove_for_destination(Dst) ->
     remove_for_destination(
-      Dst, fun (R) -> sync_route(R, fun mnesia:delete_object/3) end).
+      Dst, fun (R) -> sync_route(R, fun delete_object/3) end).
 
 remove_transient_for_destination(Dst) ->
     remove_for_destination(
-      Dst, fun (R) -> sync_transient_route(R, fun mnesia:delete_object/3) end).
+      Dst, fun (R) -> sync_transient_route(R, fun delete_object/3) end).
 
 %%----------------------------------------------------------------------------
 
@@ -307,6 +307,14 @@ binding_action(Binding = #binding{source      = SrcName,
               SortedArgs = rabbit_misc:sort_field_table(Arguments),
               Fun(Src, Dst, Binding#binding{args = SortedArgs})
       end).
+
+delete_object(Tab, Record, LockKind) ->
+    %% this 'guarded' delete prevents unnecessary writes to the mnesia
+    %% disk log
+    case mnesia:match_object(Tab, Record, LockKind) of
+        []  -> ok;
+        [_] -> mnesia:delete_object(Tab, Record, LockKind)
+    end.
 
 sync_route(R, Fun) -> sync_route(R, true, true, Fun).
 
