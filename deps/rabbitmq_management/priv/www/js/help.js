@@ -9,19 +9,19 @@ HELP = {
       'If messages to this exchange cannot otherwise be routed, send them to the alternate exchange named here.<br/>(Sets the "alternate-exchange" argument.)',
 
     'queue-message-ttl':
-    'How long a message published to a queue can live before it is discarded (milliseconds).<br/>(Sets the "x-message-ttl" argument.)',
+    'How long a message published to a queue can live before it is discarded (milliseconds).<br/>(Sets the "x-message-ttl" argument, see <a href="http://rabbitmq.com/ttl.html#per-queue-message-ttl">the website</a> for more info.)',
 
     'queue-expires':
-      'How long a queue can be unused for before it is automatically deleted (milliseconds).<br/>(Sets the "x-expires" argument.)',
+      'How long a queue can be unused for before it is automatically deleted (milliseconds).<br/>(Sets the "x-expires" argument, see <a href="http://rabbitmq.com/ttl.html#queue-ttl">the website</a> for more info.)',
 
     'queue-auto-delete':
       'If yes, the queue will delete itself after at least one consumer has connected, and then all consumers have disconnected.',
 
     'queue-dead-letter-exchange':
-      'Optional name of an exchange to which messages will be republished if they are rejected or expire.<br/>(Sets the "x-dead-letter-exchange" argument.)',
+      'Optional name of an exchange to which messages will be republished if they are rejected or expire.<br/>(Sets the "x-dead-letter-exchange" argument, see <a href="http://rabbitmq.com/dlx.html">the website</a> for more info.)',
 
     'queue-dead-letter-routing-key':
-      'Optional replacement routing key to use when a message is dead-lettered. If this is not set, the message\'s original routing key will be used.<br/>(Sets the "x-dead-letter-routing-key" argument.)',
+      'Optional replacement routing key to use when a message is dead-lettered. If this is not set, the message\'s original routing key will be used.<br/>(Sets the "x-dead-letter-routing-key" argument, see <a href="http://rabbitmq.com/dlx.html">the website</a> for more info.)',
 
     'internal-users-only':
       'Only users within the internal RabbitMQ database are shown here. Other users (e.g. those authenticated over LDAP) will not appear.',
@@ -41,9 +41,9 @@ HELP = {
     'channel-mode':
       'Channel guarantee mode. Can be one of the following, or neither:<br/> \
       <dl> \
-        <dt><acronym title="Confirm">C</acronym> &ndash; confirm</dt> \
+        <dt><acronym title="Confirm">C</acronym> &ndash; <a href="http://www.rabbitmq.com/confirms.html">confirm</a></dt> \
         <dd>Channel will send streaming publish confirmations.</dd> \
-        <dt><acronym title="Transactional">T</acronym> &ndash; transactional</dt> \
+        <dt><acronym title="Transactional">T</acronym> &ndash; <a href="http://www.rabbitmq.com/amqp-0-9-1-reference.html#class.tx">transactional</a></dt> \
         <dd>Channel is transactional.</dd> \
       <dl>',
 
@@ -68,12 +68,12 @@ HELP = {
     'memory-alarm':
       'The memory alarm for this node has gone off. It will block \
       incoming network traffic until the memory usage drops below \
-      the watermark.',
+      the watermark.<br/>See <a href="http://www.rabbitmq.com/memory.html#memsup">the website</a> for more information.',
 
     'disk-free-alarm':
       'The disk free space alarm for this node has gone off. It will block \
       incoming network traffic until the amount of free space exceeds \
-      the limit.',
+      the limit.<br/>See <a href="http://www.rabbitmq.com/memory.html#diskfreesup">the website</a> for more information.',
 
     'message-get-requeue':
       '<p>Clicking "Get Message(s)" will consume messages from the queue. \
@@ -138,7 +138,7 @@ HELP = {
       </dl> \
       <p> \
         Note that you can set any tag here; the links for the above three \
-        tags are just for convenience. \
+        tags are just for convenience. See <a href="http://www.rabbitmq.com/management.html#permissions>the website</a> for more information about tags."\
       </p>',
 
     'queued-messages':
@@ -179,7 +179,7 @@ HELP = {
         <dd>Rate at which basic.return is sent to publishers for undeliverable  messages published with the \'immediate\' flag set.</dd>\
       </dl>',
 
-    'disk-monitoring-no-watermark' : 'There is no disk space low watermark set. RabbitMQ will not take any action to avoid running out of disk space.',
+    'disk-monitoring-no-watermark' : 'There is no disk space low watermark set. RabbitMQ will not take any action to avoid running out of disk space.<br/>See <a href="http://www.rabbitmq.com/memory.html#diskfreesup">the website</a> for more information.',
 
     'resource-counts' : 'Shows total number of objects for all virtual hosts the current user has access to.',
 
