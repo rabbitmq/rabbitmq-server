@@ -167,12 +167,7 @@ init_from_config() ->
 %% we cluster to its cluster.
 join_cluster(DiscoveryNode, WantDiscNode) ->
     case is_disc_and_clustered() andalso [node()] =:= clustered_disc_nodes() of
-        true -> throw({error,
-                       {standalone_ram_node,
-                        "You can't cluster a node if it's the only "
-                        "disc node in its existing cluster. If new nodes "
-                        "joined while this node was offline, use "
-                        "\"update_cluster_nodes\" to add them manually"}});
+        true -> e(clustering_only_disc_node);
         _    -> ok
     end,
 
@@ -185,9 +180,7 @@ join_cluster(DiscoveryNode, WantDiscNode) ->
                            end,
 
     case lists:member(node(), ClusterNodes) of
-        true  -> throw({error, {already_clustered,
-                                "You are already clustered with the nodes you "
-                                "have selected"}});
+        true  -> e(already_clustered);
         false -> ok
     end,
 
@@ -232,11 +225,7 @@ reset(Force) ->
             case is_disc_and_clustered() andalso
                  [node()] =:= clustered_disc_nodes()
             of
-                true  -> throw({error, {standalone_ram_node,
-                                        "You can't reset a node if it's the "
-                                        "only disc node in a cluster. Please "
-                                        "convert another node of the cluster "
-                                        "to a disc node first."}});
+                true  -> e(resetting_only_disc_node);
                 false -> ok
             end,
             leave_cluster(),
@@ -259,31 +248,17 @@ change_cluster_node_type(Type) ->
     ensure_mnesia_dir(),
     ensure_mnesia_not_running(),
     case is_clustered() of
-        false -> throw({error, {not_clustered,
-                                "Non-clustered nodes can only be disc nodes"}});
+        false -> e(not_clustered);
         true  -> ok
     end,
     {_, _, RunningNodes} =
         case discover_cluster(all_clustered_nodes()) of
-            {ok, Status} ->
-                Status;
-            {error, _Reason} ->
-                throw({error,
-                       {cannot_connect_to_cluster,
-                        "Could not connect to the cluster nodes present in "
-                        "this node status file. If the cluster has changed, "
-                        "you can use the \"update_cluster_nodes\" command to "
-                        "point to the new cluster nodes"}})
-    end,
+            {ok, Status}     -> Status;
+            {error, _Reason} -> e(cannot_connect_to_cluster)
+        end,
     Node = case RunningNodes of
-               [] ->
-                   throw({error,
-                          {no_online_cluster_nodes,
-                           "Could not find any online cluster nodes. If the "
-                           "cluster has changed, you can use the 'recluster' "
-                           "command."}});
-               [Node0|_] ->
-                   Node0
+               []        -> e(no_online_cluster_nodes);
+               [Node0|_] -> Node0
            end,
     ok = reset(false),
     ok = join_cluster(Node, case Type of
@@ -297,12 +272,8 @@ update_cluster_nodes(DiscoveryNode) ->
 
     Status = {AllNodes, _, _} =
         case discover_cluster(DiscoveryNode) of
-            {ok, Status0} ->
-                Status0;
-            {error, _Reason} ->
-                throw({error,
-                       {cannot_connect_to_node,
-                        "Could not connect to the cluster node provided"}})
+            {ok, Status0}    -> Status0;
+            {error, _Reason} -> e(cannot_connect_to_node)
         end,
     case ordsets:is_element(node(), AllNodes) of
         true ->
@@ -313,10 +284,7 @@ update_cluster_nodes(DiscoveryNode) ->
             rabbit_node_monitor:write_cluster_status(Status),
             init_db_with_mnesia(AllNodes, is_disc_node(), false);
         false ->
-            throw({error,
-                   {inconsistent_cluster,
-                    "The nodes provided do not have this node as part of "
-                    "the cluster"}})
+            e(inconsistent_cluster)
     end,
     ok.
 
@@ -330,31 +298,19 @@ update_cluster_nodes(DiscoveryNode) ->
 forget_cluster_node(Node, RemoveWhenOffline) ->
     case ordsets:is_element(Node, all_clustered_nodes()) of
         true  -> ok;
-        false -> throw({error, {not_a_cluster_node,
-                                "The node selected is not in the cluster."}})
+        false -> e(not_a_cluster_node)
     end,
     case {mnesia:system_info(is_running), RemoveWhenOffline} of
-        {yes, true} -> throw({error, {online_node_offline_flag,
-                                      "You set the --offline flag, which is "
-                                      "used to remove nodes remotely from "
-                                      "offline nodes, but this node is "
-                                      "online. "}});
+        {yes, true} -> e(online_node_offline_flag);
         _           -> ok
     end,
     case remove_node_if_mnesia_running(Node) of
         ok ->
             ok;
+        {error, mnesia_not_running} when RemoveWhenOffline ->
+            remove_node_offline_node(Node);
         {error, mnesia_not_running} ->
-            case RemoveWhenOffline of
-                true  -> remove_node_offline_node(Node);
-                false -> throw({error,
-                                {offline_node_no_offline_flag,
-                                 "You are trying to remove a node from an "
-                                 "offline node. That's dangerous, but can be "
-                                 "done with the --offline flag. Please consult "
-                                 "the manual for rabbitmqctl for more "
-                                 "information."}})
-            end;
+            e(offline_node_no_offline_flag);
         Err = {error, _} ->
             throw(Err)
     end.
@@ -382,20 +338,10 @@ remove_node_offline_node(Node) ->
                       after
                           stop_mnesia()
                       end;
-                _  -> throw({error,
-                             {not_last_node_to_go_down,
-                              "The node you're trying to remove from was not "
-                              "the last to go down (excluding the node you are "
-                              "removing). Please use the the last node to go "
-                              "down to remove nodes when the cluster is "
-                              "offline."}})
+                _  -> e(not_last_node_to_go_down)
             end;
         {_, _} ->
-            throw({error,
-                   {removing_node_from_offline_node,
-                    "To remove a node remotely from an offline node, the node "
-                    "you're removing from must be a disc node and all the "
-                    "other nodes must be offline."}})
+            e(removing_node_from_offline_node)
     end.
 
 
@@ -424,8 +370,8 @@ is_clustered() ->
 
 is_disc_and_clustered() -> is_disc_node() andalso is_clustered().
 
-%% Functions that retrieve the nodes in the cluster will rely on the status file
-%% if offline.
+%% Functions that retrieve the nodes in the cluster will rely on the
+%% status file if offline.
 
 all_clustered_nodes() -> cluster_status(all).
 
@@ -440,8 +386,9 @@ running_clustered_disc_nodes() ->
     {_, DiscNodes, RunningNodes} = cluster_status(),
     ordsets:intersection(DiscNodes, RunningNodes).
 
-%% This function is the actual source of information, since it gets the data
-%% from mnesia. Obviously it'll work only when mnesia is running.
+%% This function is the actual source of information, since it gets
+%% the data from mnesia. Obviously it'll work only when mnesia is
+%% running.
 mnesia_nodes() ->
     case mnesia:system_info(is_running) of
         no ->
@@ -777,7 +724,8 @@ discover_cluster(Node) ->
             {error, {cannot_discover_cluster,
                      "You provided the current node as node to cluster with"}};
         false ->
-            case rpc:call(Node, rabbit_mnesia, cluster_status_from_mnesia, []) of
+            case rpc:call(Node,
+                          rabbit_mnesia, cluster_status_from_mnesia, []) of
                 {badrpc, _Reason}           -> OfflineError;
                 {error, mnesia_not_running} -> OfflineError;
                 {ok, Res}                   -> {ok, Res}
@@ -1060,16 +1008,11 @@ leave_cluster() ->
     case {is_clustered(),
           running_nodes(ordsets:del_element(node(), all_clustered_nodes()))}
     of
-        {false, []} ->
-            ok;
-        {_, AllNodes} ->
-            case lists:any(fun leave_cluster/1, AllNodes) of
-                true  -> ok;
-                false -> throw({error,
-                                {no_running_cluster_nodes,
-                                 "You cannot leave a cluster if no online "
-                                 "nodes are present"}})
-            end
+        {false, []}   -> ok;
+        {_, AllNodes} -> case lists:any(fun leave_cluster/1, AllNodes) of
+                             true  -> ok;
+                             false -> e(no_running_cluster_nodes)
+                         end
     end.
 
 leave_cluster(Node) ->
@@ -1185,3 +1128,46 @@ find_good_node([Node | Nodes]) ->
                                  ok         -> {ok, Node}
                              end
     end.
+
+e(Tag) -> throw({error, {Tag, error_description(Tag)}}).
+
+error_description(clustering_only_disc_node) ->
+    "You cannot cluster a node if it is the only disc node in its existing "
+        " cluster. If new nodes joined while this node was offline, use "
+        "\"update_cluster_nodes\" to add them manually.";
+error_description(resetting_only_disc_node) ->
+    "You cannot reset a node when it is the only disc node in a cluster. "
+        "Please convert another node of the cluster to a disc node first.";
+error_description(already_clustered) ->
+    "You are already clustered with the nodes you have selected.";
+error_description(not_clustered) ->
+    "Non-clustered nodes can only be disc nodes.";
+error_description(cannot_connect_to_cluster) ->
+    "Could not connect to the cluster nodes present in this node's "
+        "status file. If the cluster has changed, you can use the "
+        "\"update_cluster_nodes\" command to point to the new cluster nodes.";
+error_description(no_online_cluster_nodes) ->
+    "Could not find any online cluster nodes. If the cluster has changed, "
+        "you can use the 'recluster' command.";
+error_description(cannot_connect_to_node) ->
+    "Could not connect to the cluster node provided.";
+error_description(inconsistent_cluster) ->
+    "The nodes provided do not have this node as part of the cluster.";
+error_description(not_a_cluster_node) ->
+    "The node selected is not in the cluster.";
+error_description(online_node_offline_flag) ->
+    "You set the --offline flag, which is used to remove nodes remotely from "
+        "offline nodes, but this node is online.";
+error_description(offline_node_no_offline_flag) ->
+    "You are trying to remove a node from an offline node. That is dangerous, "
+        "but can be done with the --offline flag. Please consult the manual "
+        "for rabbitmqctl for more information.";
+error_description(not_last_node_to_go_down) ->
+    "The node you're trying to remove from was not the last to go down "
+        "(excluding the node you are removing). Please use the the last node "
+        "to go down to remove nodes when the cluster is offline.";
+error_description(removing_node_from_offline_node) ->
+    "To remove a node remotely from an offline node, the node you're removing "
+        "from must be a disc node and all the other nodes must be offline.";
+error_description(no_running_cluster_nodes) ->
+    "You cannot leave a cluster if no online nodes are present.".
