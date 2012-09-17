@@ -18,8 +18,8 @@
 
 -behaviour(gen_server).
 
--export([cluster_status_file_name/0,
-         running_nodes_file_name/0,
+-export([running_nodes_filename/0,
+         cluster_status_filename/0,
          prepare_cluster_status_files/0,
          write_cluster_status/1,
          read_cluster_status/0,
@@ -49,10 +49,10 @@
 
 -ifdef(use_specs).
 
--spec(cluster_status_file_name/0 :: () -> string()).
+-spec(running_nodes_filename/0 :: () -> string()).
+-spec(cluster_status_filename/0 :: () -> string()).
 -spec(prepare_cluster_status_files/0 :: () -> 'ok').
--spec(write_cluster_status/1 :: (rabbit_mnesia:cluster_status())
-                                -> 'ok').
+-spec(write_cluster_status/1 :: (rabbit_mnesia:cluster_status()) -> 'ok').
 -spec(read_cluster_status/0 :: () -> rabbit_mnesia:cluster_status()).
 -spec(update_cluster_status/0 :: () -> 'ok').
 -spec(reset_cluster_status/0 :: () -> 'ok').
@@ -79,22 +79,22 @@
 %% various situations. Obviously when mnesia is offline the information we have
 %% will be outdated, but it can't be otherwise.
 
-cluster_status_file_name() ->
-    rabbit_mnesia:dir() ++ "/cluster_nodes.config".
-
-running_nodes_file_name() ->
+running_nodes_filename() ->
     filename:join(rabbit_mnesia:dir(), "nodes_running_at_shutdown").
+
+cluster_status_filename() ->
+    rabbit_mnesia:dir() ++ "/cluster_nodes.config".
 
 prepare_cluster_status_files() ->
     rabbit_mnesia:ensure_mnesia_dir(),
     CorruptFiles = fun () -> throw({error, corrupt_cluster_status_files}) end,
-    RunningNodes1 = case try_read_file(running_nodes_file_name()) of
+    RunningNodes1 = case try_read_file(running_nodes_filename()) of
                         {ok, [Nodes]} when is_list(Nodes) -> Nodes;
                         {ok, _      }                     -> CorruptFiles();
                         {error, enoent}                   -> []
                     end,
     {AllNodes1, WantDiscNode} =
-        case try_read_file(cluster_status_file_name()) of
+        case try_read_file(cluster_status_filename()) of
             {ok, [{AllNodes, DiscNodes0}]} ->
                 {AllNodes, lists:member(node(), DiscNodes0)};
             {ok, [AllNodes0]} when is_list(AllNodes0) ->
@@ -118,10 +118,10 @@ prepare_cluster_status_files() ->
     ok = write_cluster_status({AllNodes2, DiscNodes, RunningNodes2}).
 
 write_cluster_status({All, Disc, Running}) ->
-    ClusterStatusFN = cluster_status_file_name(),
+    ClusterStatusFN = cluster_status_filename(),
     Res = case rabbit_file:write_term_file(ClusterStatusFN, [{All, Disc}]) of
               ok ->
-                  RunningNodesFN = running_nodes_file_name(),
+                  RunningNodesFN = running_nodes_filename(),
                   {RunningNodesFN,
                    rabbit_file:write_term_file(RunningNodesFN, [Running])};
               E1 = {error, _} ->
@@ -140,8 +140,8 @@ try_read_file(FileName) ->
     end.
 
 read_cluster_status() ->
-    case {try_read_file(cluster_status_file_name()),
-          try_read_file(running_nodes_file_name())} of
+    case {try_read_file(cluster_status_filename()),
+          try_read_file(running_nodes_filename())} of
         {{ok, [{All, Disc}]}, {ok, [Running]}} when is_list(Running) ->
             {All, Disc, Running};
         {_, _} ->

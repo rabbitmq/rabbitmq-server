@@ -1173,8 +1173,8 @@ is_virgin_node() ->
         {error, enoent} -> true;
         {ok, []}        -> true;
         {ok, [File]}    -> (dir() ++ "/" ++ File) =:=
-                               [rabbit_node_monitor:cluster_status_file_name(),
-                                rabbit_node_monitor:running_nodes_file_name()];
+                               [rabbit_node_monitor:cluster_status_filename(),
+                                rabbit_node_monitor:running_nodes_filename()];
         {ok, _}         -> false
     end.
 
