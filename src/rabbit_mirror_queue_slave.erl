@@ -70,7 +70,7 @@
                  sync_timer_ref,
                  rate_timer_ref,
 
-                 sender_queues, %% :: Pid -> {Q {Msg, Bool}, Set MsgId}
+                 sender_queues, %% :: Pid -> {Q Msg, Set MsgId}
                  msg_id_ack,    %% :: MsgId -> AckTag
                  ack_num,
 
@@ -167,27 +167,10 @@ init_it(Self, Node, QueueName) ->
                   end
     end.
 
-handle_call({deliver, Delivery = #delivery { immediate = true }},
-            From, State) ->
-    %% It is safe to reply 'false' here even if a) we've not seen the
-    %% msg via gm, or b) the master dies before we receive the msg via
-    %% gm. In the case of (a), we will eventually receive the msg via
-    %% gm, and it's only the master's result to the channel that is
-    %% important. In the case of (b), if the master does die and we do
-    %% get promoted then at that point we have no consumers, thus
-    %% 'false' is precisely the correct answer. However, we must be
-    %% careful to _not_ enqueue the message in this case.
-
-    %% Note this is distinct from the case where we receive the msg
-    %% via gm first, then we're promoted to master, and only then do
-    %% we receive the msg from the channel.
-    gen_server2:reply(From, false), %% master may deliver it, not us
-    noreply(maybe_enqueue_message(Delivery, false, State));
-
-handle_call({deliver, Delivery = #delivery { mandatory = true }},
-            From, State) ->
-    gen_server2:reply(From, true), %% amqqueue throws away the result anyway
-    noreply(maybe_enqueue_message(Delivery, true, State));
+handle_call({deliver, Delivery}, From, State) ->
+    %% Synchronous, "mandatory" deliver mode.
+    gen_server2:reply(From, ok),
+    noreply(maybe_enqueue_message(Delivery, State));
 
 handle_call({gm_deaths, Deaths}, From,
             State = #state { q          = #amqqueue { name = QueueName },
@@ -232,12 +215,12 @@ handle_cast({gm, Instruction}, State) ->
     handle_process_result(process_instruction(Instruction, State));
 
 handle_cast({deliver, Delivery = #delivery{sender = Sender}, Flow}, State) ->
-    %% Asynchronous, non-"mandatory", non-"immediate" deliver mode.
+    %% Asynchronous, non-"mandatory", deliver mode.
     case Flow of
         flow   -> credit_flow:ack(Sender);
         noflow -> ok
     end,
-    noreply(maybe_enqueue_message(Delivery, true, State));
+    noreply(maybe_enqueue_message(Delivery, State));
 
 handle_cast({set_maximum_since_use, Age}, State) ->
     ok = file_handle_cache:set_maximum_since_use(Age),
@@ -554,7 +537,7 @@ promote_me(From, #state { q                   = Q = #amqqueue { name = QName },
     NumAckTags = [NumAckTag || {_MsgId, NumAckTag} <- dict:to_list(MA)],
     AckTags = [AckTag || {_Num, AckTag} <- lists:sort(NumAckTags)],
     Deliveries = [Delivery || {_ChPid, {PubQ, _PendCh}} <- dict:to_list(SQ),
-                              {Delivery, true} <- queue:to_list(PubQ)],
+                              Delivery <- queue:to_list(PubQ)],
     QueueState = rabbit_amqqueue_process:init_with_backing_queue_state(
                    Q1, rabbit_mirror_queue_master, MasterState, RateTRef,
                    AckTags, Deliveries, KS, MTC),
@@ -655,14 +638,13 @@ maybe_enqueue_message(
   Delivery = #delivery { message    = #basic_message { id = MsgId },
                          msg_seq_no = MsgSeqNo,
                          sender     = ChPid },
-  EnqueueOnPromotion,
   State = #state { sender_queues = SQ, msg_id_status = MS }) ->
     State1 = ensure_monitoring(ChPid, State),
     %% We will never see {published, ChPid, MsgSeqNo} here.
     case dict:find(MsgId, MS) of
         error ->
             {MQ, PendingCh} = get_sender_queue(ChPid, SQ),
-            MQ1 = queue:in({Delivery, EnqueueOnPromotion}, MQ),
+            MQ1 = queue:in(Delivery, MQ),
             SQ1 = dict:store(ChPid, {MQ1, PendingCh}, SQ),
             State1 #state { sender_queues = SQ1 };
         {ok, {confirmed, ChPid}} ->
@@ -732,10 +714,9 @@ process_instruction(
             {empty, _MQ2} ->
                 {MQ, sets:add_element(MsgId, PendingCh),
                  dict:store(MsgId, {published, ChPid}, MS)};
-            {{value, {Delivery = #delivery {
-                        msg_seq_no = MsgSeqNo,
-                        message    = #basic_message { id = MsgId } },
-                      _EnqueueOnPromotion}}, MQ2} ->
+            {{value, Delivery = #delivery {
+                       msg_seq_no = MsgSeqNo,
+                       message    = #basic_message { id = MsgId } }}, MQ2} ->
                 {MQ2, PendingCh,
                  %% We received the msg from the channel first. Thus
                  %% we need to deal with confirms here.
@@ -747,7 +728,7 @@ process_instruction(
                                            ChPid, [MsgSeqNo]),
                                     MS
                  end};
-            {{value, {#delivery {}, _EnqueueOnPromotion}}, _MQ2} ->
+            {{value, #delivery {}}, _MQ2} ->
                 %% The instruction was sent to us before we were
                 %% within the slave_pids within the #amqqueue{}
                 %% record. We'll never receive the message directly
@@ -784,12 +765,12 @@ process_instruction({discard, ChPid, Msg = #basic_message { id = MsgId }},
             {empty, _MQ} ->
                 {MQ, sets:add_element(MsgId, PendingCh),
                  dict:store(MsgId, discarded, MS)};
-            {{value, {#delivery { message = #basic_message { id = MsgId } },
-                      _EnqueueOnPromotion}}, MQ2} ->
+            {{value, #delivery { message = #basic_message { id = MsgId } }},
+             MQ2} ->
                 %% We've already seen it from the channel, we're not
                 %% going to see this again, so don't add it to MS
                 {MQ2, PendingCh, MS};
-            {{value, {#delivery {}, _EnqueueOnPromotion}}, _MQ2} ->
+            {{value, #delivery {}}, _MQ2} ->
                 %% The instruction was sent to us before we were
                 %% within the slave_pids within the #amqqueue{}
                 %% record. We'll never receive the message directly
