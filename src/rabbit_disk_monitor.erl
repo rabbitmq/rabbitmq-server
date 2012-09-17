@@ -137,7 +137,7 @@ dir() -> rabbit_mnesia:dir().
 set_disk_limits(State, Limit) ->
     State1 = State#state { limit = Limit },
     rabbit_log:info("Disk free limit set to ~pMB~n",
-                    [trunc(interpret_limit(Limit) / 1048576)]),
+                    [trunc(interpret_limit(Limit) / 1000000)]),
     internal_update(State1).
 
 internal_update(State = #state { limit   = Limit,
