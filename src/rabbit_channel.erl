@@ -470,6 +470,14 @@ check_user_id_header(#'P_basic'{user_id = Claimed},
       "user_id property set to '~s' but authenticated user was '~s'",
       [Claimed, Actual]).
 
+check_expiration_header(Props) ->
+    case rabbit_basic:parse_expiration(Props) of
+        {ok, _}    -> ok;
+        {error, E} -> rabbit_misc:protocol_error(
+                        invalid_expiration, "cannot parse expiration '~p': ~p",
+                        [Props#'P_basic'.expiration, E])
+    end.
+
 check_internal_exchange(#exchange{name = Name, internal = true}) ->
     rabbit_misc:protocol_error(access_refused,
                                "cannot publish to internal ~s",
@@ -611,12 +619,7 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
     DecodedContent = #content {properties = Props} =
         rabbit_binary_parser:ensure_content_decoded(Content),
     check_user_id_header(Props, State),
-    case rabbit_basic:parse_expiration(Props) of
-        {ok, _}    -> ok;
-        {error, E} -> rabbit_misc:protocol_error(
-                        invalid_expiration, "cannot parse expiration '~p': ~p",
-                        [Props#'P_basic'.expiration, E])
-    end,
+    check_expiration_header(Props),
     {MsgSeqNo, State1} =
         case {TxStatus, ConfirmEnabled} of
             {none, false} -> {undefined, State};
