@@ -285,13 +285,7 @@ remove_for_destination(DstName) ->
     remove_for_destination(DstName, fun remove_routes/1).
 
 remove_transient_for_destination(DstName) ->
-    remove_for_destination(
-      DstName, fun (Routes) ->
-                       [begin
-                            ok = sync_transient_route(R, fun delete_object/3),
-                            R#route.binding
-                        end || R <- Routes]
-               end).
+    remove_for_destination(DstName, fun remove_transient_routes/1).
 
 %%----------------------------------------------------------------------------
 
@@ -390,6 +384,12 @@ remove_routes(Routes) ->
     [ok = sync_route(R, fun mnesia:delete_object/3) ||
         R <- DurableRoutes],
     [R#route.binding || R <- Routes].
+
+remove_transient_routes(Routes) ->
+    [begin
+         ok = sync_transient_route(R, fun delete_object/3),
+         R#route.binding
+     end || R <- Routes].
 
 remove_for_destination(DstName, Fun) ->
     lock_route_tables(),
