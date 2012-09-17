@@ -148,10 +148,10 @@ internal_update(State = #state { limit   = Limit,
     NewAlarmed = CurrentFreeBytes < LimitBytes,
     case {Alarmed, NewAlarmed} of
         {false, true} ->
-            emit_update_info("exceeded", CurrentFreeBytes, LimitBytes),
+            emit_update_info("insufficient", CurrentFreeBytes, LimitBytes),
             rabbit_alarm:set_alarm({{resource_limit, disk, node()}, []});
         {true, false} ->
-            emit_update_info("below limit", CurrentFreeBytes, LimitBytes),
+            emit_update_info("sufficient", CurrentFreeBytes, LimitBytes),
             rabbit_alarm:clear_alarm({resource_limit, disk, node()});
         _ ->
             ok
@@ -187,10 +187,10 @@ interpret_limit({mem_relative, R}) ->
 interpret_limit(L) ->
     L.
 
-emit_update_info(State, CurrentFree, Limit) ->
+emit_update_info(StateStr, CurrentFree, Limit) ->
     rabbit_log:info(
-      "Disk free space limit now ~s. Free bytes:~p Limit:~p~n",
-      [State, CurrentFree, Limit]).
+      "Disk free space ~s. Free bytes:~p Limit:~p~n",
+      [StateStr, CurrentFree, Limit]).
 
 start_timer(Timeout) ->
     {ok, TRef} = timer:send_interval(Timeout, update),
