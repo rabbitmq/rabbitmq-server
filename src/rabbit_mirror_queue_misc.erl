@@ -242,11 +242,7 @@ clusterable_nodes() ->
     %% We may end up here via on_node_up/0, in which case we are still
     %% booting - rabbit_mnesia:running_clustered_nodes/0 will report
     %% us as not running.
-    Nodes = rabbit_mnesia:running_clustered_nodes(),
-    case lists:member(node(), Nodes) of
-        true  -> Nodes;
-        false -> [node() | Nodes]
-    end.
+    lists:usort([node() | rabbit_mnesia:running_clustered_nodes()]).
 
 policy(Policy, Q) ->
     case rabbit_policy:get(Policy, Q) of
