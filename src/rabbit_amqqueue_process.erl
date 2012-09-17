@@ -712,7 +712,7 @@ message_properties(Message, Confirm, #q{ttl = TTL}) ->
 calculate_msg_expiry(#basic_message{content = Content}, TTL) ->
     #content{properties = Props} =
         rabbit_binary_parser:ensure_content_decoded(Content),
-    %% We assert that the expiration must be valid - we check in che channel.
+    %% We assert that the expiration must be valid - we check in the channel.
     {ok, MsgTTL} = rabbit_basic:parse_expiration(Props),
     case lists:min([TTL, MsgTTL]) of
         undefined -> undefined;
