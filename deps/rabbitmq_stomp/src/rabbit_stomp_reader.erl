@@ -18,7 +18,7 @@
 
 -export([start_link/2]).
 -export([init/2]).
--export([conserve_resources/2]).
+-export([conserve_resources/3]).
 
 -include("rabbit_stomp.hrl").
 -include("rabbit_stomp_frame.hrl").
@@ -106,7 +106,7 @@ process_received_bytes(Bytes,
                                        state       = next_state(S, Frame)}))
     end.
 
-conserve_resources(Pid, Conserve) ->
+conserve_resources(Pid, _Source, Conserve) ->
     Pid ! {conserve_resources, Conserve},
     ok.
 
