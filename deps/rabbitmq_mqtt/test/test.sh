@@ -1,2 +1,2 @@
 #!/bin/sh
-make -C test
+make -C `dirname $0`

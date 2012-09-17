@@ -117,10 +117,12 @@ public class MqttTest extends TestCase implements MqttCallback {
         NetworkModule networkModule = new TCPNetworkModule(Trace.getTrace(""), SocketFactory.getDefault(), host, port);
         networkModule.start();
         MqttOutputStream mqttOut = new MqttOutputStream(networkModule.getOutputStream());
-        mqttOut.write(publish);
-        Thread.sleep(testDelay);
         try {
-            mqttOut.write(publish);
+            for (int i=1; i<1000; i++) {
+                mqttOut.write(publish);
+                mqttOut.flush();
+            }
+            Thread.sleep(testDelay);
             fail("Error expected if CONNECT is not first packet");
         } catch (IOException _) {}
     }
