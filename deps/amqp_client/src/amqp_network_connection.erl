@@ -20,7 +20,6 @@
 -include("amqp_client_internal.hrl").
 
 -behaviour(amqp_gen_connection).
-
 -export([init/1, terminate/2, connect/4, do/2, open_channel_args/1, i/2,
          info_keys/0, handle_message/2, closing/3, channels_terminated/1]).
 
@@ -151,7 +150,7 @@ do_connect({Addr, Family},
 
 gethostaddr(Host) ->
     Lookups = [{Family, inet:getaddr(Host, Family)}
-               || Family <- [inet, inet6]],
+               || Family <- [inet6, inet]],
     [{IP, Family} || {Family, {ok, IP}} <- Lookups].
 
 try_handshake(AmqpParams, SIF, ChMgr, State) ->
