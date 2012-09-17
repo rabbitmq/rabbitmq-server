@@ -1111,7 +1111,7 @@ change_extra_db_nodes(ClusterNodes0, Force) ->
     end.
 
 %% What we really want is nodes running rabbit, not running
-%% mnesia. Using `rabbit_mnesia:system_info(running_db_nodes)' will
+%% mnesia. Using `mnesia:system_info(running_db_nodes)' will
 %% return false positives when we are actually just doing cluster
 %% operations (e.g. joining the cluster).
 running_nodes(Nodes) ->
