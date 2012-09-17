@@ -1,4 +1,4 @@
-UPSTREAM_GIT=git://git.eclipse.org/gitroot/paho/org.eclipse.paho.mqtt.java.git
+UPSTREAM_GIT=https://git.eclipse.org/gitroot/paho/org.eclipse.paho.mqtt.java.git
 BRANCH=master
 
 JC=javac
