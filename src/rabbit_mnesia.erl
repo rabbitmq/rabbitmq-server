@@ -193,7 +193,7 @@ join_cluster(DiscoveryNode, NodeType) ->
     rabbit_misc:local_info_msg("Clustering with ~p~n", [ClusterNodes]),
 
     %% Join the cluster
-    ok = init_db_with_mnesia(ClusterNodes, NodeType),
+    ok = init_db_with_mnesia(ClusterNodes, NodeType, true, true),
 
     rabbit_node_monitor:notify_joined_cluster(),
 
@@ -278,7 +278,7 @@ update_cluster_nodes(DiscoveryNode) ->
             %% nodes
             mnesia:delete_schema([node()]),
             rabbit_node_monitor:write_cluster_status(Status),
-            init_db_with_mnesia(AllNodes, node_type());
+            init_db_with_mnesia(AllNodes, node_type(), true, true);
         false ->
             e(inconsistent_cluster)
     end,
@@ -540,10 +540,6 @@ init_db_and_upgrade(ClusterNodes, NodeType, CheckOtherNodes) ->
         disc -> ok
     end,
     ok.
-
-
-init_db_with_mnesia(ClusterNodes, NodeType) ->
-    init_db_with_mnesia(ClusterNodes, NodeType, true, true).
 
 init_db_with_mnesia(ClusterNodes, NodeType,
                     CheckOtherNodes, CheckConsistency) ->
