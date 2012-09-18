@@ -174,7 +174,7 @@
 -spec start_internal(Group, ChildSpecs) -> Result when
       Group :: group_name(),
       ChildSpecs :: [supervisor2:child_spec()],
-      Result :: supervisor2:startlink_ret().
+      Result :: {'ok', pid()} | {'error', term()}.
 
 -spec create_tables() -> Result when
       Result :: 'ok'.

@@ -19,8 +19,8 @@
 -export([init/3, terminate/2, delete_and_terminate/2, purge/1,
          publish/4, publish_delivered/5, drain_confirmed/1,
          dropwhile/3, fetch/2, ack/2, requeue/2, len/1, is_empty/1,
-         set_ram_duration_target/2, ram_duration/1, needs_timeout/1,
-         timeout/1, handle_pre_hibernate/1, status/1, invoke/3,
+         depth/1, set_ram_duration_target/2, ram_duration/1,
+         needs_timeout/1, timeout/1, handle_pre_hibernate/1, status/1, invoke/3,
          is_duplicate/2, discard/3, multiple_routing_keys/0, fold/3]).
 
 -export([start/1, stop/0]).
@@ -589,12 +589,12 @@ drain_confirmed(State = #vqstate { confirmed = C }) ->
 dropwhile(Pred, AckRequired, State) -> dropwhile(Pred, AckRequired, State, []).
 
 dropwhile(Pred, AckRequired, State, Msgs) ->
-    End = fun(S) when AckRequired -> {lists:reverse(Msgs), S};
-             (S)                  -> {undefined, S}
+    End = fun(Next, S) when AckRequired -> {Next, lists:reverse(Msgs), S};
+             (Next, S)                  -> {Next, undefined, S}
           end,
     case queue_out(State) of
         {empty, State1} ->
-            End(a(State1));
+            End(undefined, a(State1));
         {{value, MsgStatus = #msg_status { msg_props = MsgProps }}, State1} ->
             case {Pred(MsgProps), AckRequired} of
                 {true, true} ->
@@ -606,7 +606,7 @@ dropwhile(Pred, AckRequired, State, Msgs) ->
                     {_, State2} = internal_fetch(false, MsgStatus, State1),
                     dropwhile(Pred, AckRequired, State2, undefined);
                 {false, _} ->
-                    End(a(in_r(MsgStatus, State1)))
+                    End(MsgProps, a(in_r(MsgStatus, State1)))
             end
     end.
 
@@ -680,6 +680,9 @@ requeue(AckTags, #vqstate { delta      = Delta,
 len(#vqstate { len = Len }) -> Len.
 
 is_empty(State) -> 0 == len(State).
+
+depth(State = #vqstate { pending_ack = Ack }) ->
+    len(State) + gb_trees:size(Ack).
 
 set_ram_duration_target(
   DurationTarget, State = #vqstate {

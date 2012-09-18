@@ -465,10 +465,14 @@ check_user_id_header(#'P_basic'{user_id = Username},
                      #ch{user = #user{username = Username}}) ->
     ok;
 check_user_id_header(#'P_basic'{user_id = Claimed},
-                     #ch{user = #user{username = Actual}}) ->
-    precondition_failed(
-      "user_id property set to '~s' but authenticated user was '~s'",
-      [Claimed, Actual]).
+                     #ch{user = #user{username = Actual,
+                                      tags     = Tags}}) ->
+    case lists:member(impersonator, Tags) of
+        true  -> ok;
+        false -> precondition_failed(
+                   "user_id property set to '~s' but authenticated user was "
+                   "'~s'", [Claimed, Actual])
+    end.
 
 check_internal_exchange(#exchange{name = Name, internal = true}) ->
     rabbit_misc:protocol_error(access_refused,

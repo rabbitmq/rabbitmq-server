@@ -21,10 +21,12 @@
 -type(validate_results() ::
         'ok' | {error, string(), [term()]} | [validate_results()]).
 
--callback validate(binary(), binary(), term()) -> validate_results().
--callback validate_clear(binary(), binary()) -> validate_results().
--callback notify(binary(), binary(), term()) -> 'ok'.
--callback notify_clear(binary(), binary()) -> 'ok'.
+-callback validate(rabbit_types:vhost(), binary(), binary(),
+                   term()) -> validate_results().
+-callback validate_clear(rabbit_types:vhost(), binary(),
+                         binary()) -> validate_results().
+-callback notify(rabbit_types:vhost(), binary(), binary(), term()) -> 'ok'.
+-callback notify_clear(rabbit_types:vhost(), binary(), binary()) -> 'ok'.
 
 -else.
 
@@ -32,10 +34,10 @@
 
 behaviour_info(callbacks) ->
     [
-     {validate, 3},
-     {validate_clear, 2},
-     {notify, 3},
-     {notify_clear, 2}
+     {validate, 4},
+     {validate_clear, 3},
+     {notify, 4},
+     {notify_clear, 3}
     ];
 behaviour_info(_Other) ->
     undefined.

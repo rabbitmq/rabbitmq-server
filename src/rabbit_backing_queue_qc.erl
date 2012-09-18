@@ -268,7 +268,7 @@ next_state(S, Res, {call, ?BQMOD, drain_confirmed, _Args}) ->
     S#state{bqstate = BQ1};
 
 next_state(S, Res, {call, ?BQMOD, dropwhile, _Args}) ->
-    BQ = {call, erlang, element, [2, Res]},
+    BQ = {call, erlang, element, [3, Res]},
     #state{messages = Messages} = S,
     Msgs1 = drop_messages(Messages),
     S#state{bqstate = BQ, len = gb_trees:size(Msgs1), messages = Msgs1};

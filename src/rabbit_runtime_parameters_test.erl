@@ -17,7 +17,7 @@
 -module(rabbit_runtime_parameters_test).
 -behaviour(rabbit_runtime_parameter).
 
--export([validate/3, validate_clear/2, notify/3, notify_clear/2]).
+-export([validate/4, validate_clear/3, notify/4, notify_clear/3]).
 -export([register/0, unregister/0]).
 
 register() ->
@@ -26,13 +26,13 @@ register() ->
 unregister() ->
     rabbit_registry:unregister(runtime_parameter, <<"test">>).
 
-validate(<<"test">>, <<"good">>,  _Term)      -> ok;
-validate(<<"test">>, <<"maybe">>, <<"good">>) -> ok;
-validate(<<"test">>, _, _)                    -> {error, "meh", []}.
+validate(_, <<"test">>, <<"good">>,  _Term)      -> ok;
+validate(_, <<"test">>, <<"maybe">>, <<"good">>) -> ok;
+validate(_, <<"test">>, _, _)                    -> {error, "meh", []}.
 
-validate_clear(<<"test">>, <<"good">>)  -> ok;
-validate_clear(<<"test">>, <<"maybe">>) -> ok;
-validate_clear(<<"test">>, _)           -> {error, "meh", []}.
+validate_clear(_, <<"test">>, <<"good">>)  -> ok;
+validate_clear(_, <<"test">>, <<"maybe">>) -> ok;
+validate_clear(_, <<"test">>, _)           -> {error, "meh", []}.
 
-notify(_, _, _) -> ok.
-notify_clear(_, _) -> ok.
+notify(_, _, _, _) -> ok.
+notify_clear(_, _, _) -> ok.

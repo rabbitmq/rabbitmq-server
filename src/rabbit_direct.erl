@@ -31,8 +31,8 @@
 -spec(force_event_refresh/0 :: () -> 'ok').
 -spec(list/0 :: () -> [pid()]).
 -spec(list_local/0 :: () -> [pid()]).
--spec(connect/5 :: (rabbit_types:username(), rabbit_types:vhost(),
-                    rabbit_types:protocol(), pid(),
+-spec(connect/5 :: ((rabbit_types:username() | rabbit_types:user()),
+                    rabbit_types:vhost(), rabbit_types:protocol(), pid(),
                     rabbit_event:event_props()) ->
                         {'ok', {rabbit_types:user(),
                                 rabbit_framing:amqp_table()}}).
@@ -64,22 +64,22 @@ list() ->
 
 %%----------------------------------------------------------------------------
 
+connect(User = #user{}, VHost, Protocol, Pid, Infos) ->
+    try rabbit_access_control:check_vhost_access(User, VHost) of
+        ok -> ok = pg_local:join(rabbit_direct, Pid),
+              rabbit_event:notify(connection_created, Infos),
+              {ok, {User, rabbit_reader:server_properties(Protocol)}}
+    catch
+        exit:#amqp_error{name = access_refused} ->
+            {error, access_refused}
+    end;
+
 connect(Username, VHost, Protocol, Pid, Infos) ->
     case rabbit:is_running() of
         true  ->
             case rabbit_access_control:check_user_login(Username, []) of
-                {ok, User} ->
-                    try rabbit_access_control:check_vhost_access(User, VHost) of
-                        ok -> ok = pg_local:join(rabbit_direct, Pid),
-                              rabbit_event:notify(connection_created, Infos),
-                              {ok, {User,
-                                    rabbit_reader:server_properties(Protocol)}}
-                    catch
-                        exit:#amqp_error{name = access_refused} ->
-                            {error, access_refused}
-                    end;
-                {refused, _Msg, _Args} ->
-                    {error, auth_failure}
+                {ok, User}        -> connect(User, VHost, Protocol, Pid, Infos);
+                {refused, _M, _A} -> {error, auth_failure}
             end;
         false ->
             {error, broker_not_found_on_node}

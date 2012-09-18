@@ -40,6 +40,8 @@
 
 -define(INTEGER_ARG_TYPES, [byte, short, signedint, long]).
 
+-define(MAX_EXPIRY_TIMER, 4294967295).
+
 -define(MORE_CONSUMER_CREDIT_AFTER, 50).
 
 -define(FAILOVER_WAIT_MILLIS, 100).
@@ -311,8 +313,17 @@ with(Name, F, E) ->
     case lookup(Name) of
         {ok, Q = #amqqueue{slave_pids = []}} ->
             rabbit_misc:with_exit_handler(E, fun () -> F(Q) end);
-        {ok, Q} ->
-            E1 = fun () -> timer:sleep(25), with(Name, F, E) end,
+        {ok, Q = #amqqueue{pid = QPid}} ->
+            %% We check is_process_alive(QPid) in case we receive a
+            %% nodedown (for example) in F() that has nothing to do
+            %% with the QPid.
+            E1 = fun () ->
+                         case rabbit_misc:is_process_alive(QPid) of
+                             true  -> E();
+                             false -> timer:sleep(25),
+                                      with(Name, F, E)
+                         end
+                 end,
             rabbit_misc:with_exit_handler(E1, fun () -> F(Q) end);
         {error, not_found} ->
             E()
@@ -388,16 +399,18 @@ check_int_arg({Type, _}, _) ->
 
 check_positive_int_arg({Type, Val}, Args) ->
     case check_int_arg({Type, Val}, Args) of
-        ok when Val > 0 -> ok;
-        ok              -> {error, {value_zero_or_less, Val}};
-        Error           -> Error
+        ok when Val > ?MAX_EXPIRY_TIMER -> {error, {value_too_big, Val}};
+        ok when Val > 0                 -> ok;
+        ok                              -> {error, {value_zero_or_less, Val}};
+        Error                           -> Error
     end.
 
 check_non_neg_int_arg({Type, Val}, Args) ->
     case check_int_arg({Type, Val}, Args) of
-        ok when Val >= 0 -> ok;
-        ok               -> {error, {value_less_than_zero, Val}};
-        Error            -> Error
+        ok when Val > ?MAX_EXPIRY_TIMER -> {error, {value_too_big, Val}};
+        ok when Val >= 0                -> ok;
+        ok                              -> {error, {value_less_than_zero, Val}};
+        Error                           -> Error
     end.
 
 check_dlxrk_arg({longstr, _}, Args) ->
@@ -565,7 +578,12 @@ flush_all(QPids, ChPid) ->
 
 internal_delete1(QueueName) ->
     ok = mnesia:delete({rabbit_queue, QueueName}),
-    ok = mnesia:delete({rabbit_durable_queue, QueueName}),
+    %% this 'guarded' delete prevents unnecessary writes to the mnesia
+    %% disk log
+    case mnesia:wread({rabbit_durable_queue, QueueName}) of
+        []  -> ok;
+        [_] -> ok = mnesia:delete({rabbit_durable_queue, QueueName})
+    end,
     %% we want to execute some things, as decided by rabbit_exchange,
     %% after the transaction.
     rabbit_binding:remove_for_destination(QueueName).
@@ -681,11 +699,10 @@ safe_delegate_call_ok(F, Pids) ->
                                                 fun () -> ok end,
                                                 fun () -> F(Pid) end)
                                       end),
-    case lists:filter(fun ({_Pid, {exit, {R, _}, _}}) ->
-                              rabbit_misc:is_abnormal_exit(R);
-                          ({_Pid, _}) ->
-                              false
-                      end, Bads) of
+    case lists:filter(
+           fun ({_Pid, {exit, {R, _}, _}}) -> rabbit_misc:is_abnormal_exit(R);
+               ({_Pid, _})                 -> false
+           end, Bads) of
         []    -> ok;
         Bads1 -> {error, Bads1}
     end.

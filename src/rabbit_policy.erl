@@ -22,11 +22,11 @@
 
 -include("rabbit.hrl").
 
--import(rabbit_misc, [pget/2]).
+-import(rabbit_misc, [pget/2, pget/3]).
 
 -export([register/0]).
 -export([name/1, get/2, set/1]).
--export([validate/3, validate_clear/2, notify/3, notify_clear/2]).
+-export([validate/4, validate_clear/3, notify/4, notify_clear/3]).
 
 -rabbit_boot_step({?MODULE,
                    [{description, "policy parameters"},
@@ -46,12 +46,13 @@ name0(Policy)    -> pget(<<"name">>, Policy).
 set(Q = #amqqueue{name = Name}) -> Q#amqqueue{policy = set0(Name)};
 set(X = #exchange{name = Name}) -> X#exchange{policy = set0(Name)}.
 
-set0(Name) -> match(Name, list()).
+set0(Name = #resource{virtual_host = VHost}) -> match(Name, list(VHost)).
 
 get(Name, #amqqueue{policy = Policy}) -> get0(Name, Policy);
 get(Name, #exchange{policy = Policy}) -> get0(Name, Policy);
 %% Caution - SLOW.
-get(Name, EntityName = #resource{})   -> get0(Name, match(EntityName, list())).
+get(Name, EntityName = #resource{virtual_host = VHost}) ->
+    get0(Name, match(EntityName, list(VHost))).
 
 get0(_Name, undefined) -> {error, not_found};
 get0(Name, List)       -> case pget(<<"policy">>, List) of
@@ -64,35 +65,33 @@ get0(Name, List)       -> case pget(<<"policy">>, List) of
 
 %%----------------------------------------------------------------------------
 
-validate(<<"policy">>, Name, Term) ->
+validate(_VHost, <<"policy">>, Name, Term) ->
     rabbit_parameter_validation:proplist(
       Name, policy_validation(), Term).
 
-validate_clear(<<"policy">>, _Name) ->
+validate_clear(_VHost, <<"policy">>, _Name) ->
     ok.
 
-notify(<<"policy">>, _Name, _Term) ->
-    update_policies().
+notify(VHost, <<"policy">>, _Name, _Term) ->
+    update_policies(VHost).
 
-notify_clear(<<"policy">>, _Name) ->
-    update_policies().
+notify_clear(VHost, <<"policy">>, _Name) ->
+    update_policies(VHost).
 
 %%----------------------------------------------------------------------------
 
-list() ->
+list(VHost) ->
     [[{<<"name">>, pget(key, P)} | pget(value, P)]
-     || P <- rabbit_runtime_parameters:list(<<"policy">>)].
+     || P <- rabbit_runtime_parameters:list(VHost, <<"policy">>)].
 
-update_policies() ->
-    Policies = list(),
+update_policies(VHost) ->
+    Policies = list(VHost),
     {Xs, Qs} = rabbit_misc:execute_mnesia_transaction(
                  fun() ->
                          {[update_exchange(X, Policies) ||
-                              VHost <- rabbit_vhost:list(),
-                              X     <- rabbit_exchange:list(VHost)],
+                              X <- rabbit_exchange:list(VHost)],
                           [update_queue(Q, Policies) ||
-                              VHost <- rabbit_vhost:list(),
-                              Q     <- rabbit_amqqueue:list(VHost)]}
+                              Q <- rabbit_amqqueue:list(VHost)]}
                  end),
     [notify(X) || X <- Xs],
     [notify(Q) || Q <- Qs],
@@ -129,28 +128,15 @@ match(Name, Policies) ->
         [Policy | _Rest] -> Policy
     end.
 
-matches(#resource{name = Name, virtual_host = VHost}, Policy) ->
-    Prefix = pget(<<"prefix">>, Policy),
-    case pget(<<"vhost">>, Policy) of
-        undefined -> prefix(Prefix, Name);
-        VHost     -> prefix(Prefix, Name);
-        _         -> false
-    end.
-
-prefix(A, B) -> lists:prefix(binary_to_list(A), binary_to_list(B)).
+matches(#resource{name = Name}, Policy) ->
+    match =:= re:run(Name, pget(<<"pattern">>, Policy), [{capture, none}]).
 
 sort_pred(A, B) ->
-    R = size(pget(<<"prefix">>, A)) >= size(pget(<<"prefix">>, B)),
-    case {pget(<<"vhost">>, A), pget(<<"vhost">>, B)} of
-        {undefined, undefined} -> R;
-        {undefined, _}         -> true;
-        {_, undefined}         -> false;
-        _                      -> R
-    end.
+    pget(<<"priority">>, A, 0) >= pget(<<"priority">>, B, 0).
 
 %%----------------------------------------------------------------------------
 
 policy_validation() ->
-    [{<<"vhost">>,  fun rabbit_parameter_validation:binary/2, optional},
-     {<<"prefix">>, fun rabbit_parameter_validation:binary/2, mandatory},
-     {<<"policy">>, fun rabbit_parameter_validation:list/2,   mandatory}].
+    [{<<"priority">>, fun rabbit_parameter_validation:number/2, optional},
+     {<<"pattern">>, fun rabbit_parameter_validation:regex/2, mandatory},
+     {<<"policy">>, fun rabbit_parameter_validation:list/2, mandatory}].
