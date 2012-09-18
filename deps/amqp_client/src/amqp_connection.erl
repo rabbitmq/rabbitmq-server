@@ -88,6 +88,7 @@
 %% <ul>
 %% <li>username :: binary() - The name of a user registered with the broker,
 %%     defaults to &lt;&lt;guest"&gt;&gt;</li>
+%% <li>password :: binary() - The password of user, defaults to 'none'</li>
 %% <li>virtual_host :: binary() - The name of a virtual host in the broker,
 %%     defaults to &lt;&lt;"/"&gt;&gt;</li>
 %% <li>node :: atom() - The node the broker runs on (direct only)</li>

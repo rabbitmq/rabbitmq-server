@@ -112,6 +112,7 @@ connection_info(State = #state{adapter_info = I}) ->
     infos(?CREATION_EVENT_KEYS, State) ++ I#amqp_adapter_info.additional_info.
 
 connect(Params = #amqp_params_direct{username     = Username,
+                                     password     = Password,
                                      node         = Node,
                                      adapter_info = Info,
                                      virtual_host = VHost},
@@ -120,8 +121,12 @@ connect(Params = #amqp_params_direct{username     = Username,
                          vhost        = VHost,
                          params       = Params,
                          adapter_info = ensure_adapter_info(Info)},
+    AuthToken = case Password of
+                    none -> Username;
+                    _    -> {Username, Password}
+                end,
     case rpc:call(Node, rabbit_direct, connect,
-                  [Username, VHost, ?PROTOCOL, self(),
+                  [AuthToken, VHost, ?PROTOCOL, self(),
                    connection_info(State1)]) of
         {ok, {User, ServerProperties}} ->
             {ok, Collector} = SIF(),
