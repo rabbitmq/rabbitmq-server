@@ -27,9 +27,8 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 -define(REFRESH_RATIO, 5000).
--define(KEYS, [name, os_pid, mem_ets, mem_binary, mem_proc, mem_proc_used,
-               mem_atom, mem_atom_used, mem_code, fd_used, fd_total,
-               sockets_used, sockets_total, mem_used, mem_limit, mem_alarm,
+-define(KEYS, [name, os_pid, memory, fd_used, fd_total,
+               sockets_used, sockets_total, mem_limit, mem_alarm,
                disk_free_limit, disk_free, disk_free_alarm,
                proc_used, proc_total, statistics_level,
                uptime, run_queue, processors, exchange_types,
@@ -151,14 +150,7 @@ i(sockets_used,    _State) ->
 i(sockets_total,   _State) ->
     proplists:get_value(sockets_limit, file_handle_cache:info([sockets_limit]));
 i(os_pid,          _State) -> list_to_binary(os:getpid());
-i(mem_ets,         _State) -> erlang:memory(ets);
-i(mem_binary,      _State) -> erlang:memory(binary);
-i(mem_proc,        _State) -> erlang:memory(processes);
-i(mem_proc_used,   _State) -> erlang:memory(processes_used);
-i(mem_atom,        _State) -> erlang:memory(atom);
-i(mem_atom_used,   _State) -> erlang:memory(atom_used);
-i(mem_code,        _State) -> erlang:memory(code);
-i(mem_used,        _State) -> erlang:memory(total);
+i(memory,          _State) -> rabbit:memory();
 i(mem_limit,       _State) -> vm_memory_monitor:get_memory_limit();
 i(mem_alarm,       _State) -> resource_alarm_set(memory);
 i(proc_used,       _State) -> erlang:system_info(process_count);
