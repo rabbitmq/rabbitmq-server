@@ -534,10 +534,10 @@ init_db_and_upgrade(ClusterNodes, NodeType, CheckOtherNodes) ->
     %% `maybe_upgrade_local' restarts mnesia, so ram nodes will forget
     %% about the cluster
     case NodeType of
-        disc -> start_mnesia(),
+        ram  -> start_mnesia(),
                 change_extra_db_nodes(ClusterNodes, false),
                 wait_for_replicated_tables();
-        ram  -> ok
+        disc -> ok
     end,
     ok.
 
