@@ -247,9 +247,12 @@ action(force_reset, Node, [], _Opts, Inform) ->
 
 action(join_cluster, Node, [ClusterNodeS], Opts, Inform) ->
     ClusterNode = list_to_atom(ClusterNodeS),
-    DiscNode = not proplists:get_bool(?RAM_OPT, Opts),
+    NodeType = case proplists:get_bool(?RAM_OPT, Opts) of
+                   true  -> ram;
+                   false -> disc
+               end,
     Inform("Clustering node ~p with ~p", [Node, ClusterNode]),
-    rpc_call(Node, rabbit_mnesia, join_cluster, [ClusterNode, DiscNode]);
+    rpc_call(Node, rabbit_mnesia, join_cluster, [ClusterNode, NodeType]);
 
 action(change_cluster_node_type, Node, ["ram"], _Opts, Inform) ->
     Inform("Turning ~p into a ram node", [Node]),

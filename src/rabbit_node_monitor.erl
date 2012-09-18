@@ -163,7 +163,7 @@ joined_cluster(Node, IsDiscNode) ->
     gen_server:cast(?SERVER, {rabbit_join, Node, IsDiscNode}).
 
 notify_joined_cluster() ->
-    cluster_multicall(joined_cluster, [node(), rabbit_mnesia:is_disc_node()]),
+    cluster_multicall(joined_cluster, [node(), rabbit_mnesia:node_type()]),
     ok.
 
 left_cluster(Node) ->
@@ -178,7 +178,7 @@ node_up(Node, IsDiscNode) ->
      gen_server:cast(?SERVER, {node_up, Node, IsDiscNode}).
 
 notify_node_up() ->
-    Nodes = cluster_multicall(node_up, [node(), rabbit_mnesia:is_disc_node()]),
+    Nodes = cluster_multicall(node_up, [node(), rabbit_mnesia:node_type()]),
     %% register other active rabbits with this rabbit
     [ node_up(N, ordsets:is_element(N, rabbit_mnesia:clustered_disc_nodes())) ||
         N <- Nodes ],
@@ -199,29 +199,28 @@ handle_call(_Request, _From, State) ->
 
 %% Note: when updating the status file, we can't simply write the mnesia
 %% information since the message can (and will) overtake the mnesia propagation.
-handle_cast({node_up, Node, IsDiscNode}, State) ->
+handle_cast({node_up, Node, NodeType}, State) ->
     case is_already_monitored({rabbit, Node}) of
         true  -> {noreply, State};
         false -> rabbit_log:info("rabbit on node ~p up~n", [Node]),
                  {AllNodes, DiscNodes, RunningNodes} = read_cluster_status(),
                  write_cluster_status({ordsets:add_element(Node, AllNodes),
-                                       case IsDiscNode of
-                                           true  -> ordsets:add_element(
-                                                      Node, DiscNodes);
-                                           false -> DiscNodes
+                                       case NodeType of
+                                           disc -> ordsets:add_element(
+                                                     Node, DiscNodes);
+                                           ram  -> DiscNodes
                                        end,
                                        ordsets:add_element(Node, RunningNodes)}),
                  erlang:monitor(process, {rabbit, Node}),
                  ok = handle_live_rabbit(Node),
                  {noreply, State}
     end;
-handle_cast({joined_cluster, Node, IsDiscNode}, State) ->
+handle_cast({joined_cluster, Node, NodeType}, State) ->
     {AllNodes, DiscNodes, RunningNodes} = read_cluster_status(),
     write_cluster_status({ordsets:add_element(Node, AllNodes),
-                          case IsDiscNode of
-                              true  -> ordsets:add_element(Node,
-                                                           DiscNodes);
-                              false -> DiscNodes
+                          case NodeType of
+                              disc -> ordsets:add_element(Node, DiscNodes);
+                              ram  -> DiscNodes
                           end,
                           RunningNodes}),
     {noreply, State};
