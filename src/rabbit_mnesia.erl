@@ -1077,6 +1077,8 @@ nodes_incl_me(Nodes) -> ordsets:add_element(node(), Nodes).
 
 nodes_excl_me(Nodes) -> ordsets:del_element(node(), Nodes).
 
+empty_set(Set) -> ordsets:size(Set) =:= 0.
+
 check_consistency(OTP, Rabbit) ->
     rabbit_misc:sequence_error(
       [check_otp_consistency(OTP), check_rabbit_consistency(Rabbit)]).
@@ -1139,9 +1141,6 @@ find_good_node([Node | Nodes]) ->
                                  ok         -> {ok, Node}
                              end
     end.
-
-empty_set(Set) ->
-    ordsets:size(Set) =:= 0.
 
 e(Tag) -> throw({error, {Tag, error_description(Tag)}}).
 
