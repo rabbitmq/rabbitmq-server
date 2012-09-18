@@ -719,11 +719,11 @@ discover_cluster(Node) ->
     OfflineError =
         {error, {cannot_discover_cluster,
                  "The nodes provided is either offline or not running"}},
-    case Node =:= node() of
-        true ->
+    case node() of
+        Node->
             {error, {cannot_discover_cluster,
                      "You provided the current node as node to cluster with"}};
-        false ->
+        _ ->
             case rpc:call(Node,
                           rabbit_mnesia, cluster_status_from_mnesia, []) of
                 {badrpc, _Reason}           -> OfflineError;
