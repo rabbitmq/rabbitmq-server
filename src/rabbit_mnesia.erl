@@ -37,7 +37,7 @@
          wait_for_tables/1,
          cluster_status_from_mnesia/0,
 
-         init_db/3,
+         init_db_unchecked/2,
          empty_ram_only_tables/0,
          copy_db/1,
          wait_for_tables/0,
@@ -94,7 +94,7 @@
                                              {'error', any()}).
 
 %% Operations on the db and utils, mainly used in `rabbit_upgrade' and `rabbit'
--spec(init_db/3 :: (node_set(), node_type(), boolean()) -> 'ok').
+-spec(init_db_unchecked/2 :: (node_set(), node_type()) -> 'ok').
 -spec(empty_ram_only_tables/0 :: () -> 'ok').
 -spec(create_tables/0 :: () -> 'ok').
 -spec(copy_db/1 :: (file:filename()) ->  rabbit_types:ok_or_error(any())).
@@ -132,7 +132,7 @@ init() ->
     ok.
 
 init(NodeType, AllNodes) ->
-    init_db_and_upgrade(AllNodes, NodeType, NodeType =:= disc).
+    init_db_and_upgrade(AllNodes, NodeType, NodeType =:= ram).
 
 init_from_config() ->
     {ok, {TryNodes, NodeType}} =
@@ -142,7 +142,7 @@ init_from_config() ->
             rabbit_log:info("Node '~p' selected for clustering from "
                             "configuration~n", [Node]),
             {ok, {_, DiscNodes, _}} = discover_cluster(Node),
-            init_db_and_upgrade(DiscNodes, NodeType, false),
+            init_db_and_upgrade(DiscNodes, NodeType, true),
             rabbit_node_monitor:notify_joined_cluster();
         none ->
             rabbit_log:warning("Could not find any suitable node amongst the "
@@ -193,7 +193,7 @@ join_cluster(DiscoveryNode, NodeType) ->
     rabbit_misc:local_info_msg("Clustering with ~p~n", [ClusterNodes]),
 
     %% Join the cluster
-    ok = init_db_with_mnesia(ClusterNodes, NodeType, false),
+    ok = init_db_with_mnesia(ClusterNodes, NodeType),
 
     rabbit_node_monitor:notify_joined_cluster(),
 
@@ -221,7 +221,7 @@ reset(Force) ->
             %% We don't need to check for consistency because we are
             %% resetting.  Force=true here so that reset still works
             %% when clustered with a node which is down.
-            init_db_with_mnesia(AllNodes, node_type(), false, true),
+            init_db_with_mnesia(AllNodes, node_type(), false, false),
             case is_disc_and_clustered() andalso is_only_disc_node()
             of
                 true  -> e(resetting_only_disc_node);
@@ -278,7 +278,7 @@ update_cluster_nodes(DiscoveryNode) ->
             %% nodes
             mnesia:delete_schema([node()]),
             rabbit_node_monitor:write_cluster_status(Status),
-            init_db_with_mnesia(AllNodes, node_type(), false);
+            init_db_with_mnesia(AllNodes, node_type());
         false ->
             e(inconsistent_cluster)
     end,
@@ -483,8 +483,8 @@ table_names() -> [Tab || {Tab, _} <- table_definitions()].
 %% schema if there is the need to and catching up if there are other
 %% nodes in the cluster already. It also updates the cluster status
 %% file.
-init_db(ClusterNodes, NodeType, Force) ->
-    Nodes = change_extra_db_nodes(ClusterNodes, Force),
+init_db(ClusterNodes, NodeType, CheckOtherNodes) ->
+    Nodes = change_extra_db_nodes(ClusterNodes, CheckOtherNodes),
     %% Note that we use `system_info' here and not the cluster status
     %% since when we start rabbit for the first time the cluster
     %% status will say we are a disc node but the tables won't be
@@ -521,8 +521,11 @@ init_db(ClusterNodes, NodeType, Force) ->
     rabbit_node_monitor:update_cluster_status(),
     ok.
 
-init_db_and_upgrade(ClusterNodes, NodeType, Force) ->
-    ok = init_db(ClusterNodes, NodeType, Force),
+init_db_unchecked(ClusterNodes, NodeType) ->
+    init_db(ClusterNodes, NodeType, false).
+
+init_db_and_upgrade(ClusterNodes, NodeType, CheckOtherNodes) ->
+    ok = init_db(ClusterNodes, NodeType, CheckOtherNodes),
     ok = case rabbit_upgrade:maybe_upgrade_local() of
              ok                    -> ok;
              starting_from_scratch -> rabbit_version:record_desired();
@@ -532,22 +535,24 @@ init_db_and_upgrade(ClusterNodes, NodeType, Force) ->
     %% about the cluster
     case NodeType of
         disc -> start_mnesia(),
-                change_extra_db_nodes(ClusterNodes, true),
+                change_extra_db_nodes(ClusterNodes, false),
                 wait_for_replicated_tables();
         ram  -> ok
     end,
     ok.
 
-init_db_with_mnesia(ClusterNodes, NodeType, CheckConsistency, Force) ->
+
+init_db_with_mnesia(ClusterNodes, NodeType) ->
+    init_db_with_mnesia(ClusterNodes, NodeType, true, true).
+
+init_db_with_mnesia(ClusterNodes, NodeType,
+                    CheckOtherNodes, CheckConsistency) ->
     start_mnesia(CheckConsistency),
     try
-        init_db_and_upgrade(ClusterNodes, NodeType, Force)
+        init_db_and_upgrade(ClusterNodes, NodeType, CheckOtherNodes)
     after
         stop_mnesia()
     end.
-
-init_db_with_mnesia(ClusterNodes, NodeType, Force) ->
-    init_db_with_mnesia(ClusterNodes, NodeType, true, Force).
 
 ensure_mnesia_dir() ->
     MnesiaDir = dir() ++ "/",
@@ -1042,10 +1047,10 @@ stop_mnesia() ->
     stopped = mnesia:stop(),
     ensure_mnesia_not_running().
 
-change_extra_db_nodes(ClusterNodes0, Force) ->
+change_extra_db_nodes(ClusterNodes0, CheckOtherNodes) ->
     ClusterNodes = ordsets:to_list(nodes_excl_me(ClusterNodes0)),
     case {mnesia:change_config(extra_db_nodes, ClusterNodes), ClusterNodes} of
-        {{ok, []}, [_|_]} when not Force ->
+        {{ok, []}, [_|_]} when CheckOtherNodes ->
             throw({error, {failed_to_cluster_with, ClusterNodes,
                            "Mnesia could not connect to any nodes."}});
         {{ok, Nodes}, _} ->
