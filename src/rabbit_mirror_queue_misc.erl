@@ -73,6 +73,7 @@ remove_from_queue(QueueName, DeadGMPids) ->
 
 remove_from_queue0(QueueName, DeadGMPids) ->
     DeadNodes = [node(DeadGMPid) || DeadGMPid <- DeadGMPids],
+    ClusterNodes = clusterable_nodes() -- DeadNodes,
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
               %% Someone else could have deleted the queue before we
@@ -99,9 +100,10 @@ remove_from_queue0(QueueName, DeadGMPids) ->
                               %% "exactly" mode can cause this to
                               %% happen.
                               {_, OldNodes} = actual_queue_nodes(Q1),
-                              {_, NewNodes} = suggested_queue_nodes(Q1),
+                              {_, NewNodes} = suggested_queue_nodes(
+                                                Q1, ClusterNodes),
                               {ok, QPid1, [QPid | SPids] -- Alive,
-                               (NewNodes -- OldNodes) -- DeadNodes};
+                               NewNodes -- OldNodes};
                           _ ->
                               %% Master has changed, and we're not it,
                               %% so leave alone to allow the promoted
@@ -113,12 +115,14 @@ remove_from_queue0(QueueName, DeadGMPids) ->
       end).
 
 on_node_up() ->
+    ClusterNodes = clusterable_nodes(),
     QNames =
         rabbit_misc:execute_mnesia_transaction(
           fun () ->
                   mnesia:foldl(
                     fun (Q = #amqqueue{name = QName}, QNames0) ->
-                            {_MNode, SNodes} = suggested_queue_nodes(Q),
+                            {_MNode, SNodes} = suggested_queue_nodes(
+                                                 Q, ClusterNodes),
                             case lists:member(node(), SNodes) of
                                 true  -> [QName | QNames0];
                                 false -> QNames0
@@ -229,15 +233,21 @@ promote_slave([SPid | SPids]) ->
     %% the one to promote is the oldest.
     {SPid, SPids}.
 
-suggested_queue_nodes(Q) ->
+suggested_queue_nodes(Q) -> suggested_queue_nodes(Q, clusterable_nodes()).
+
+%% This variant exists so we can pull a call to clusterable_nodes()
+%% out of a loop or transaction or both.
+suggested_queue_nodes(Q, ClusterNodes) ->
     {MNode0, SNodes} = actual_queue_nodes(Q),
     MNode = case MNode0 of
                 none -> node();
                 _    -> MNode0
             end,
     suggested_queue_nodes(policy(<<"ha-mode">>, Q), policy(<<"ha-params">>, Q),
-                          {MNode, SNodes}, clusterable_nodes()).
+                          {MNode, SNodes}, ClusterNodes).
 
+%% TODO we should probably just redefine
+%% rabbit_mnesia:running_clustered_nodes/0? Waiting on Francesco.
 clusterable_nodes() ->
     %% We may end up here via on_node_up/0, in which case we are still
     %% booting - rabbit_mnesia:running_clustered_nodes/0 will report
