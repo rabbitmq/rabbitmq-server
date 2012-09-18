@@ -1065,20 +1065,6 @@ is_running_remote() ->
     {proplists:is_defined(rabbit, application:which_applications(infinity)),
      node()}.
 
-is_only_node(Node, Nodes) -> ordsets:to_list(Nodes) == [Node].
-
-is_only_node(Nodes) -> is_only_node(node(), Nodes).
-
-is_only_disc_node() -> is_only_node(clustered_disc_nodes()).
-
-me_in_nodes(Nodes) -> ordsets:is_element(node(), Nodes).
-
-nodes_incl_me(Nodes) -> ordsets:add_element(node(), Nodes).
-
-nodes_excl_me(Nodes) -> ordsets:del_element(node(), Nodes).
-
-empty_set(Set) -> ordsets:size(Set) =:= 0.
-
 check_consistency(OTP, Rabbit) ->
     rabbit_misc:sequence_error(
       [check_otp_consistency(OTP), check_rabbit_consistency(Rabbit)]).
@@ -1090,15 +1076,14 @@ check_consistency(OTP, Rabbit, Node, Status) ->
        check_nodes_consistency(Node, Status)]).
 
 check_nodes_consistency(Node, RemoteStatus = {RemoteAllNodes, _, _}) ->
-    ThisNode = node(),
-    case ordsets:is_element(ThisNode, RemoteAllNodes) of
+    case me_in_nodes(RemoteAllNodes) of
         true ->
             {ok, RemoteStatus};
         false ->
             {error, {inconsistent_cluster,
                      rabbit_misc:format("Node ~p thinks it's clustered "
                                         "with node ~p, but ~p disagrees",
-                                        [ThisNode, Node, Node])}}
+                                        [node(), Node, Node])}}
     end.
 
 check_version_consistency(This, Remote, _) when This =:= Remote ->
@@ -1141,6 +1126,20 @@ find_good_node([Node | Nodes]) ->
                                  ok         -> {ok, Node}
                              end
     end.
+
+is_only_node(Node, Nodes) -> ordsets:to_list(Nodes) == [Node].
+
+is_only_node(Nodes) -> is_only_node(node(), Nodes).
+
+is_only_disc_node() -> is_only_node(clustered_disc_nodes()).
+
+me_in_nodes(Nodes) -> ordsets:is_element(node(), Nodes).
+
+nodes_incl_me(Nodes) -> ordsets:add_element(node(), Nodes).
+
+nodes_excl_me(Nodes) -> ordsets:del_element(node(), Nodes).
+
+empty_set(Set) -> ordsets:size(Set) =:= 0.
 
 e(Tag) -> throw({error, {Tag, error_description(Tag)}}).
 
