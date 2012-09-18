@@ -54,6 +54,21 @@ table.list tr.total th { border: none; border-top: 1px solid #bbb; text-align: r
 
 div.section table.list, div.section-hidden table.list { margin-bottom: 0; }
 
+div.memory-bar { margin: 10px; border-radius: 5px; }
+div.memory-section { float: left; height: 30px; }
+div.memory-key { float: left; width: 10px; height: 10px; margin: 3px 5px 0 0;}
+
+div.memory_connection_procs { background: #f88; }
+div.memory_channel_procs    { background: #fbb; }
+div.memory_queue_procs      { background: #dd8; }
+div.memory_other_procs      { background: #ffb; }
+div.memory_mnesia           { background: #44f; }
+div.memory_msg_index        { background: #99f; }
+div.memory_other_ets        { background: #ccf; }
+div.memory_binary           { background: #666; }
+div.memory_code             { background: #aaa; }
+div.memory_other_system     { background: #ddd; }
+
 sub { display: block; font-size: 0.8em; color: #888; }
 small { font-size: 0.8em; color: #888; }
 #main sub a { color: #888; }

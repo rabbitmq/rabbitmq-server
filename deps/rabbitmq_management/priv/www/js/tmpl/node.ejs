@@ -125,54 +125,72 @@
 <% } else if (node.os_pid == undefined) { %>
 <p class="warning">Node statistics not available</p>
 <% } else { %>
+  <div class="memory-bar box" style="width: 600px;">
+<%
+   var sections = {'connection_procs': 'Connections',
+                   'channel_procs': 'Channels',
+                   'queue_procs': 'Queues',
+                   'other_procs': 'Other processes',
+                   'mnesia': 'Mnesia',
+                   'msg_index': 'Message store index',
+                   'other_ets': 'Other ETS tables',
+                   'binary': 'Binaries',
+                   'code': 'Code',
+                   'other_system': 'Other system'};
+   for (var section in sections) {
+     var width = 600 * node.memory[section] / node.memory.total;
+%>
+    <div class="memory-section memory_<%= section %>"
+         style="width: <%= width %>px;"
+         title="<%= sections[section] %>">
+    </div>
+<% } %>
+  </div>
+
   <table class="facts">
     <tr>
       <th>Connections</th>
-      <td><%= fmt_bytes(node.memory.connection_procs) %></td>
+      <td><%= fmt_memory(node.memory, 'connection_procs') %></td>
     </tr>
     <tr>
       <th>Channels</th>
-      <td><%= fmt_bytes(node.memory.channel_procs) %></td>
+      <td><%= fmt_memory(node.memory, 'channel_procs') %></td>
     </tr>
     <tr>
       <th>Queues</th>
-      <td><%= fmt_bytes(node.memory.queue_procs) %></td>
+      <td><%= fmt_memory(node.memory, 'queue_procs') %></td>
     </tr>
     <tr>
       <th>Other processes</th>
-      <td><%= fmt_bytes(node.memory.other_procs) %></td>
+      <td><%= fmt_memory(node.memory, 'other_procs') %></td>
     </tr>
   </table>
   <table class="facts">
     <tr>
       <th>Mnesia</th>
-      <td><%= fmt_bytes(node.memory.mnesia) %></td>
+      <td><%= fmt_memory(node.memory, 'mnesia') %></td>
     </tr>
     <tr>
       <th>Message store index</th>
-      <td><%= fmt_bytes(node.memory.msg_index) %></td>
+      <td><%= fmt_memory(node.memory, 'msg_index') %></td>
     </tr>
     <tr>
       <th>Other ETS tables</th>
-      <td><%= fmt_bytes(node.memory.other_ets) %></td>
+      <td><%= fmt_memory(node.memory, 'other_ets') %></td>
     </tr>
   </table>
   <table class="facts">
     <tr>
       <th>Binaries</th>
-      <td><%= fmt_bytes(node.memory.binary) %></td>
-    </tr>
-    <tr>
-      <th>Atoms</th>
-      <td><%= fmt_bytes(node.memory.atom) %></td>
+      <td><%= fmt_memory(node.memory, 'binary') %></td>
     </tr>
     <tr>
       <th>Code</th>
-      <td><%= fmt_bytes(node.memory.code) %></td>
+      <td><%= fmt_memory(node.memory, 'code') %></td>
     </tr>
     <tr>
       <th>Other system</th>
-      <td><%= fmt_bytes(node.memory.other_system) %></td>
+      <td><%= fmt_memory(node.memory, 'other_system') %></td>
     </tr>
   </table>
 <% } %>
