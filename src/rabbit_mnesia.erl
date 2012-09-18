@@ -179,7 +179,7 @@ join_cluster(DiscoveryNode, NodeType) ->
                                E = {error, _} -> throw(E)
                            end,
 
-    case ordsets:is_element(node(), ClusterNodes) of
+    case me_in_nodes(ClusterNodes) of
         true  -> e(already_clustered);
         false -> ok
     end,
@@ -271,7 +271,7 @@ update_cluster_nodes(DiscoveryNode) ->
             {ok, Status0}    -> Status0;
             {error, _Reason} -> e(cannot_connect_to_node)
         end,
-    case ordsets:is_element(node(), AllNodes) of
+    case me_in_nodes(AllNodes) of
         true ->
             %% As in `check_consistency/0', we can safely delete the
             %% schema here, since it'll be replicated from the other
@@ -412,7 +412,7 @@ mnesia_nodes() ->
                                    mnesia:table_info(schema, disc_copies)),
                     DiscNodes =
                         case NodeType of
-                            disc -> ordsets:add_element(node(), DiscCopies);
+                            disc -> nodes_incl_me(DiscCopies);
                             ram  -> DiscCopies
                         end,
                     {ok, {AllNodes, DiscNodes}};
@@ -435,9 +435,8 @@ cluster_status(WhichNodes, ForceMnesia) ->
                     %% the node is online, but we know for sure that
                     %% the node is offline now, so we can remove it
                     %% from the list of running nodes.
-                    {ok,
-                     {AllNodes, DiscNodes,
-                      fun() -> ordsets:del_element(node(), RunningNodes) end}};
+                    {ok, {AllNodes, DiscNodes,
+                          fun() -> nodes_excl_me(RunningNodes) end}};
                 Err = {error, _} ->
                     Err
             end,
@@ -467,7 +466,7 @@ node_info() ->
 
 node_type() ->
     DiscNodes = clustered_disc_nodes(),
-    case empty_set(DiscNodes) orelse ordsets:is_element(node(), DiscNodes) of
+    case empty_set(DiscNodes) orelse me_in_nodes(DiscNodes) of
         true  -> disc;
         false -> ram
     end.
@@ -653,8 +652,7 @@ check_cluster_consistency() ->
     case lists:foldl(
            fun (Node,  {error, _})    -> check_cluster_consistency(Node);
                (_Node, {ok, Status})  -> {ok, Status}
-           end, {error, not_found},
-           ordsets:del_element(node(), all_clustered_nodes()))
+           end, {error, not_found}, nodes_excl_me(all_clustered_nodes()))
     of
         {ok, Status = {RemoteAllNodes, _, _}} ->
             case ordsets:is_subset(all_clustered_nodes(), RemoteAllNodes) of
@@ -1004,8 +1002,7 @@ remove_node_if_mnesia_running(Node) ->
     end.
 
 leave_cluster() ->
-    RunningNodes =
-        running_nodes(ordsets:del_element(node(), all_clustered_nodes())),
+    RunningNodes = running_nodes(nodes_excl_me(all_clustered_nodes())),
     case not is_clustered() andalso empty_set(RunningNodes) of
         true ->
             ok;
@@ -1046,7 +1043,7 @@ stop_mnesia() ->
     ensure_mnesia_not_running().
 
 change_extra_db_nodes(ClusterNodes0, Force) ->
-    ClusterNodes = ordsets:to_list(ordsets:del_element(node(), ClusterNodes0)),
+    ClusterNodes = ordsets:to_list(nodes_excl_me(ClusterNodes0)),
     case {mnesia:change_config(extra_db_nodes, ClusterNodes), ClusterNodes} of
         {{ok, []}, [_|_]} when not Force ->
             throw({error, {failed_to_cluster_with, ClusterNodes,
@@ -1064,18 +1061,21 @@ running_nodes(Nodes) ->
                                          is_running_remote, []),
     ordsets:from_list([Node || {Running, Node} <- Replies, Running]).
 
-is_only_node(Node, Nodes) ->
-    ordsets:is_element(Node, Nodes) andalso ordsets:size(Nodes) =:= 1.
-
-is_only_node(Nodes) ->
-    is_only_node(node(), Nodes).
-
-is_only_disc_node() ->
-    is_only_node(clustered_disc_nodes()).
-
 is_running_remote() ->
     {proplists:is_defined(rabbit, application:which_applications(infinity)),
      node()}.
+
+is_only_node(Node, Nodes) -> ordsets:to_list(Nodes) == [Node].
+
+is_only_node(Nodes) -> is_only_node(node(), Nodes).
+
+is_only_disc_node() -> is_only_node(clustered_disc_nodes()).
+
+me_in_nodes(Nodes) -> ordsets:is_element(node(), Nodes).
+
+nodes_incl_me(Nodes) -> ordsets:add_element(node(), Nodes).
+
+nodes_excl_me(Nodes) -> ordsets:del_element(node(), Nodes).
 
 check_consistency(OTP, Rabbit) ->
     rabbit_misc:sequence_error(
