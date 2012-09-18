@@ -21,7 +21,7 @@
 -export([start/0, boot/0, stop/0,
          stop_and_halt/0, await_startup/0, status/0, is_running/0,
          is_running/1, environment/0, rotate_logs/1, force_event_refresh/0,
-         start_fhc/0]).
+         start_fhc/0, memory/0]).
 
 -export([start/2, stop/1]).
 
@@ -247,6 +247,7 @@
 -spec(maybe_insert_default_data/0 :: () -> 'ok').
 -spec(boot_delegate/0 :: () -> 'ok').
 -spec(recover/0 :: () -> 'ok').
+-spec(memory/0 :: () -> rabbit_types:infos()).
 
 -endif.
 
@@ -356,8 +357,7 @@ status() ->
           {running_applications, application:which_applications(infinity)},
           {os,                   os:type()},
           {erlang_version,       erlang:system_info(system_version)},
-          {memory_used,          erlang:memory(total)},
-          {memory_details,       rabbit_misc:memory()}],
+          {memory,               memory()}],
     S2 = rabbit_misc:filter_exit_map(
            fun ({Key, {M, F, A}}) -> {Key, erlang:apply(M, F, A)} end,
            [{vm_memory_high_watermark, {vm_memory_monitor,
@@ -744,3 +744,55 @@ start_fhc() ->
     rabbit_sup:start_restartable_child(
       file_handle_cache,
       [fun rabbit_alarm:set_alarm/1, fun rabbit_alarm:clear_alarm/1]).
+
+%% Like erlang:memory(), but with awareness of rabbit-y things
+memory() ->
+    QPids = lists:append([pids(Q) || Q <- rabbit_amqqueue:list()]),
+    Conns = sum_proc_memory(rabbit_networking:connections_local()),
+    Chs = sum_proc_memory(rabbit_channel:list_local()),
+    Qs = sum_proc_memory(QPids),
+    Mnesia = mnesia_memory(),
+    MsgIndex = ets_memory(rabbit_msg_store_ets_index),
+    [{total,     Total},
+     {processes, Processes},
+     {ets,       ETS},
+     {atom,      Atom},
+     {binary,    Bin},
+     {code,      Code},
+     {system,    System}] =
+        erlang:memory([total, processes, ets, atom, binary, code, system]),
+    [{total,            Total},
+     {connection_procs, Conns},
+     {channel_procs,    Chs},
+     {queue_procs,      Qs},
+     {other_procs,      Processes - Conns - Chs - Qs},
+     {mnesia,           Mnesia},
+     {msg_index,        MsgIndex},
+     {other_ets,        ETS - Mnesia - MsgIndex},
+     {binary,           Bin},
+     {atom,             Atom},
+     {code,             Code},
+     {other_system,     System - ETS - Atom - Bin - Code}].
+
+sum_proc_memory(Pids) ->
+    lists:foldl(
+      fun (Pid, Mem) -> Mem + element(2, process_info(Pid, memory)) end,
+      0, Pids).
+
+pids(#amqqueue{pid = Pid, slave_pids = undefined}) ->
+    local_pids([Pid]);
+pids(#amqqueue{pid = Pid, slave_pids = SPids}) ->
+    local_pids([Pid | SPids]).
+
+local_pids(Pids) -> [Pid || Pid <- Pids, node(Pid) =:= node()].
+
+mnesia_memory() ->
+    lists:sum([bytes(mnesia:table_info(Tab, memory)) ||
+                  Tab <- mnesia:system_info(tables)]).
+
+ets_memory(Name) ->
+    lists:sum([bytes(ets:info(T, memory)) || T <- ets:all(),
+                                             N <- [ets:info(T, name)],
+                                             N =:= Name]).
+
+bytes(Words) ->  Words * erlang:system_info(wordsize).

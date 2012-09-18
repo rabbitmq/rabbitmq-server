@@ -63,7 +63,6 @@
 -export([version/0]).
 -export([sequence_error/1]).
 -export([json_encode/1, json_decode/1, json_to_term/1, term_to_json/1]).
--export([memory/0]).
 
 %% Horrible macro to use in guards
 -define(IS_BENIGN_EXIT(R),
@@ -988,50 +987,3 @@ term_to_json(L) when is_list(L) ->
 term_to_json(V) when is_binary(V) orelse is_number(V) orelse V =:= null orelse
                      V =:= true orelse V =:= false ->
     V.
-
-%% Like erlang:memory(), but with awareness of rabbit-y things
-memory() ->
-    QPids = lists:append([pids(Q) || Q <- rabbit_amqqueue:list()]),
-    Conns = sum_proc_memory(rabbit_networking:connections_local()),
-    Chs = sum_proc_memory(rabbit_channel:list_local()),
-    Qs = sum_proc_memory(QPids),
-    Mnesia = mnesia_memory(),
-    MsgIndex = ets_memory(rabbit_msg_store_ets_index),
-    ETS = erlang:memory(ets),
-    Atom = erlang:memory(atom),
-    Bin = erlang:memory(binary),
-    Code = erlang:memory(code),
-    [{connection_procs, Conns},
-     {channel_procs,    Chs},
-     {queue_procs,      Qs},
-     {other_procs,      erlang:memory(processes) - Conns - Chs - Qs},
-     {mnesia,           Mnesia},
-     {msg_index,        MsgIndex},
-     {other_ets,        ETS - Mnesia - MsgIndex},
-     {binary,           Bin},
-     {atom,             Atom},
-     {code,             Code},
-     {other_system,     erlang:memory(system) - ETS - Atom - Bin - Code}].
-
-sum_proc_memory(Pids) ->
-    lists:foldl(
-      fun (Pid, Mem) -> Mem + element(2, process_info(Pid, memory)) end,
-      0, Pids).
-
-pids(#amqqueue{pid = Pid, slave_pids = undefined}) ->
-    local_pids([Pid]);
-pids(#amqqueue{pid = Pid, slave_pids = SPids}) ->
-    local_pids([Pid | SPids]).
-
-local_pids(Pids) -> [Pid || Pid <- Pids, node(Pid) =:= node()].
-
-mnesia_memory() ->
-    lists:sum([bytes(mnesia:table_info(Tab, memory)) ||
-                  Tab <- mnesia:system_info(tables)]).
-
-ets_memory(Name) ->
-    lists:sum([bytes(ets:info(T, memory)) || T <- ets:all(),
-                                             N <- [ets:info(T, name)],
-                                             N =:= Name]).
-
-bytes(Words) ->  Words * erlang:system_info(wordsize).
