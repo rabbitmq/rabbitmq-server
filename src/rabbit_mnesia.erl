@@ -1010,10 +1010,11 @@ leave_cluster() ->
         true ->
             ok;
         false ->
-            case lists:any(fun leave_cluster/1, ordsets:to_list(RunningNodes))
-                 of  true  -> ok;
-                     false -> e(no_running_cluster_nodes)
-                 end
+            case lists:any(fun leave_cluster/1,
+                           ordsets:to_list(RunningNodes)) of
+                true  -> ok;
+                false -> e(no_running_cluster_nodes)
+            end
     end.
 
 leave_cluster(Node) ->
