@@ -1009,9 +1009,9 @@ memory() ->
      {msg_index,        MsgIndex},
      {other_ets,        ETS - Mnesia - MsgIndex},
      {binary,           Bin},
-     {real_system,      erlang:memory(system) - ETS - Atom - Bin - Code},
      {atom,             Atom},
-     {code,             Code}].
+     {code,             Code},
+     {other_system,     erlang:memory(system) - ETS - Atom - Bin - Code}].
 
 sum_proc_memory(Pids) ->
     lists:foldl(
