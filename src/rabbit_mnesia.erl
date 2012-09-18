@@ -179,7 +179,7 @@ join_cluster(DiscoveryNode, NodeType) ->
                                E = {error, _} -> throw(E)
                            end,
 
-    case lists:member(node(), ClusterNodes) of
+    case ordsets:is_element(node(), ClusterNodes) of
         true  -> e(already_clustered);
         false -> ok
     end,
