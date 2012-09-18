@@ -60,6 +60,9 @@
 
 -include("rabbit.hrl").
 
+%% This is safe because ordsets are lists.
+-define(empty_set(Set), (Set =:= [])).
+
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
@@ -67,12 +70,12 @@
 -export_type([node_type/0, cluster_status/0]).
 
 -type(node_type() :: disc | ram).
--type(cluster_status() :: {ordsets:ordset(node()), ordsets:ordset(node()),
-                           ordsets:ordset(node())}).
+-type(node_set() :: ordsets:ordset(node())).
+-type(cluster_status() :: {node_set(), node_set(), node_set()}).
 
 %% Main interface
 -spec(init/0 :: () -> 'ok').
--spec(join_cluster/2 :: ([node()], node_type()) -> 'ok').
+-spec(join_cluster/2 :: (node(), node_type()) -> 'ok').
 -spec(reset/0 :: () -> 'ok').
 -spec(force_reset/0 :: () -> 'ok').
 -spec(update_cluster_nodes/1 :: (node()) -> 'ok').
@@ -80,13 +83,13 @@
 -spec(forget_cluster_node/2 :: (node(), boolean()) -> 'ok').
 
 %% Various queries to get the status of the db
--spec(status/0 :: () -> [{'nodes', [{node_type(), [node()]}]} |
-                         {'running_nodes', [node()]}]).
+-spec(status/0 :: () -> [{'nodes', [{node_type(), node_set()}]} |
+                         {'running_nodes', node_set()}]).
 -spec(is_db_empty/0 :: () -> boolean()).
 -spec(is_clustered/0 :: () -> boolean()).
--spec(all_clustered_nodes/0 :: () -> [node()]).
--spec(clustered_disc_nodes/0 :: () -> [node()]).
--spec(running_clustered_nodes/0 :: () -> [node()]).
+-spec(all_clustered_nodes/0 :: () -> node_set()).
+-spec(clustered_disc_nodes/0 :: () -> node_set()).
+-spec(running_clustered_nodes/0 :: () -> node_set()).
 -spec(node_type/0 :: () -> node_type()).
 -spec(dir/0 :: () -> file:filename()).
 -spec(table_names/0 :: () -> [atom()]).
@@ -94,7 +97,7 @@
                                              {'error', any()}).
 
 %% Operations on the db and utils, mainly used in `rabbit_upgrade' and `rabbit'
--spec(init_db/3 :: ([node()], node_type(), boolean()) -> 'ok').
+-spec(init_db/3 :: (node_set(), node_type(), boolean()) -> 'ok').
 -spec(empty_ram_only_tables/0 :: () -> 'ok').
 -spec(create_tables/0 :: () -> 'ok').
 -spec(copy_db/1 :: (file:filename()) ->  rabbit_types:ok_or_error(any())).
@@ -148,7 +151,7 @@ init_from_config() ->
             rabbit_log:warning("Could not find any suitable node amongst the "
                                "ones provided in the configuration: ~p~n",
                                [TryNodes]),
-            init(true, [node()])
+            init(true, ordsets:from_list([node()]))
     end.
 
 %% Make the node join a cluster. The node will be reset automatically
@@ -166,7 +169,7 @@ init_from_config() ->
 %% all in the same cluster, we simply pick the first online node and
 %% we cluster to its cluster.
 join_cluster(DiscoveryNode, NodeType) ->
-    case is_disc_and_clustered() andalso [node()] =:= clustered_disc_nodes() of
+    case is_disc_and_clustered() andalso is_only_disc_node() of
         true -> e(clustering_only_disc_node);
         _    -> ok
     end,
@@ -222,8 +225,7 @@ reset(Force) ->
             %% resetting.  Force=true here so that reset still works
             %% when clustered with a node which is down.
             init_db_with_mnesia(AllNodes, node_type(), false, true),
-            case is_disc_and_clustered() andalso
-                 [node()] =:= clustered_disc_nodes()
+            case is_disc_and_clustered() andalso is_only_disc_node()
             of
                 true  -> e(resetting_only_disc_node);
                 false -> ok
@@ -256,7 +258,7 @@ change_cluster_node_type(Type) ->
             {ok, Status}     -> Status;
             {error, _Reason} -> e(cannot_connect_to_cluster)
         end,
-    Node = case RunningNodes of
+    Node = case ordsets:to_list(RunningNodes) of
                []        -> e(no_online_cluster_nodes);
                [Node0|_] -> Node0
            end,
@@ -315,7 +317,7 @@ forget_cluster_node(Node, RemoveWhenOffline) ->
 remove_node_offline_node(Node) ->
     case {ordsets:del_element(Node, running_nodes(all_clustered_nodes())),
           node_type()} of
-        {[], disc} ->
+        {Nodes, disc} when ?empty_set(Nodes) ->
             %% Note that while we check if the nodes was the last to
             %% go down, apart from the node we're removing from, this
             %% is still unsafe.  Consider the situation in which A and
@@ -324,18 +326,18 @@ remove_node_offline_node(Node) ->
             %% and B goes down. In this case, C is the second-to-last,
             %% but we don't know that and we'll remove B from A
             %% anyway, even if that will lead to bad things.
-            case ordsets:subtract(running_clustered_nodes(),
-                                  ordsets:from_list([node(), Node])) of
-                [] -> start_mnesia(),
-                      try
-                          [mnesia:force_load_table(T) ||
-                              T <- rabbit_mnesia:table_names()],
-                          forget_cluster_node(Node, false),
-                          ensure_mnesia_running()
-                      after
-                          stop_mnesia()
-                      end;
-                _  -> e(not_last_node_to_go_down)
+            case ?empty_set(ordsets:subtract(running_clustered_nodes(),
+                                             ordsets:from_list([node(), Node])))
+            of true -> start_mnesia(),
+                       try
+                           [mnesia:force_load_table(T) ||
+                               T <- rabbit_mnesia:table_names()],
+                           forget_cluster_node(Node, false),
+                           ensure_mnesia_running()
+                       after
+                           stop_mnesia()
+                       end;
+                false -> e(not_last_node_to_go_down)
             end;
         {_, _} ->
             e(removing_node_from_offline_node)
@@ -347,8 +349,8 @@ remove_node_offline_node(Node) ->
 %%----------------------------------------------------------------------------
 
 status() ->
-    IfNonEmpty = fun (_, [])       -> [];
-                     (Type, Nodes) -> [{Type, Nodes}]
+    IfNonEmpty = fun (_,    Nodes) when ?empty_set(Nodes) -> [];
+                     (Type, Nodes) -> [{Type, ordsets:to_list(Nodes)}]
                  end,
     [{nodes, (IfNonEmpty(disc, clustered_disc_nodes()) ++
                   IfNonEmpty(ram, clustered_ram_nodes()))}] ++
@@ -362,8 +364,8 @@ is_db_empty() ->
               table_names()).
 
 is_clustered() ->
-    Nodes = all_clustered_nodes(),
-    [node()] =/= Nodes andalso [] =/= Nodes.
+    AllNodes = all_clustered_nodes(),
+    not is_only_node(AllNodes) andalso not ?empty_set(AllNodes).
 
 is_disc_and_clustered() -> node_type() =:= disc andalso is_clustered().
 
@@ -464,7 +466,7 @@ node_info() ->
 
 node_type() ->
     DiscNodes = clustered_disc_nodes(),
-    case DiscNodes =:= [] orelse ordsets:is_element(node(), DiscNodes) of
+    case ?empty_set(DiscNodes) orelse ordsets:is_element(node(), DiscNodes) of
         true  -> disc;
         false -> ram
     end.
@@ -696,13 +698,13 @@ check_cluster_consistency(Node) ->
 %%--------------------------------------------------------------------
 
 on_node_up(Node) ->
-    case running_clustered_disc_nodes() =:= [Node] of
+    case is_only_node(Node, running_clustered_disc_nodes()) of
         true  -> rabbit_log:info("cluster contains disc nodes again~n");
         false -> ok
     end.
 
 on_node_down(_Node) ->
-    case running_clustered_disc_nodes() =:= [] of
+    case ?empty_set(running_clustered_disc_nodes()) of
         true  -> rabbit_log:info("only running disc node went down~n");
         false -> ok
     end.
@@ -1004,11 +1006,13 @@ leave_cluster() ->
     case {is_clustered(),
           running_nodes(ordsets:del_element(node(), all_clustered_nodes()))}
     of
-        {false, []}   -> ok;
-        {_, AllNodes} -> case lists:any(fun leave_cluster/1, AllNodes) of
-                             true  -> ok;
-                             false -> e(no_running_cluster_nodes)
-                         end
+        {false, Nodes} when ?empty_set(Nodes) ->
+            ok;
+        {_, AllNodes} ->
+            case lists:any(fun leave_cluster/1, AllNodes) of
+                true  -> ok;
+                false -> e(no_running_cluster_nodes)
+            end
     end.
 
 leave_cluster(Node) ->
@@ -1040,9 +1044,9 @@ stop_mnesia() ->
     ensure_mnesia_not_running().
 
 change_extra_db_nodes(ClusterNodes0, Force) ->
-    ClusterNodes = lists:usort(ClusterNodes0) -- [node()],
-    case mnesia:change_config(extra_db_nodes, ClusterNodes) of
-        {ok, []} when not Force andalso ClusterNodes =/= [] ->
+    ClusterNodes = ordsets:del_element(node(), ClusterNodes0),
+    case mnesia:change_config(extra_db_nodes, ordsets:to_list(ClusterNodes)) of
+        {ok, []} when not Force andalso not ?empty_set(ClusterNodes) ->
             throw({error, {failed_to_cluster_with, ClusterNodes,
                            "Mnesia could not connect to any nodes."}});
         {ok, Nodes} ->
@@ -1167,3 +1171,12 @@ error_description(removing_node_from_offline_node) ->
         "from must be a disc node and all the other nodes must be offline.";
 error_description(no_running_cluster_nodes) ->
     "You cannot leave a cluster if no online nodes are present.".
+
+is_only_node(Node, Nodes) ->
+    ordsets:is_element(Node, Nodes) andalso ordsets:size(Nodes) =:= 1.
+
+is_only_node(Nodes) ->
+    is_only_node(node(), Nodes).
+
+is_only_disc_node() ->
+    is_only_node(clustered_disc_nodes()).
