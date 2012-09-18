@@ -256,7 +256,7 @@
 -spec(release/0 :: () -> 'ok').
 -spec(release/1 :: (non_neg_integer()) -> 'ok').
 -spec(transfer/1 :: (pid()) -> 'ok').
--spec(transfer/2 :: (non_neg_integer(), pid()) -> 'ok').
+-spec(transfer/2 :: (pid(), non_neg_integer()) -> 'ok').
 -spec(set_limit/1 :: (non_neg_integer()) -> 'ok').
 -spec(get_limit/0 :: () -> non_neg_integer()).
 -spec(info_keys/0 :: () -> rabbit_types:info_keys()).
@@ -491,7 +491,7 @@ set_maximum_since_use(MaximumAge) ->
 
 obtain()      -> obtain(1).
 release()     -> release(1).
-transfer(Pid) -> transfer(1, Pid).
+transfer(Pid) -> transfer(Pid, 1).
 
 obtain(Count) when Count > 0 ->
     %% If the FHC isn't running, obtains succeed immediately.
@@ -503,7 +503,7 @@ obtain(Count) when Count > 0 ->
 release(Count) when Count > 0 ->
     gen_server2:cast(?SERVER, {release, Count, self()}).
 
-transfer(Count, Pid) when Count > 0 ->
+transfer(Pid, Count) when Count > 0 ->
     gen_server2:cast(?SERVER, {transfer, Count, self(), Pid}).
 
 set_limit(Limit) ->
