@@ -1009,7 +1009,7 @@ leave_cluster() ->
         {false, Nodes} when ?empty_set(Nodes) ->
             ok;
         {_, AllNodes} ->
-            case lists:any(fun leave_cluster/1, AllNodes) of
+            case lists:any(fun leave_cluster/1, ordsets:to_list(AllNodes)) of
                 true  -> ok;
                 false -> e(no_running_cluster_nodes)
             end
