@@ -997,18 +997,21 @@ memory() ->
     Qs = sum_proc_memory(QPids),
     Mnesia = mnesia_memory(),
     MsgIndex = ets_memory(rabbit_msg_store_ets_index),
-    [{total,            erlang:memory(total)},
-     {connection_procs, Conns},
+    ETS = erlang:memory(ets),
+    Atom = erlang:memory(atom),
+    Bin = erlang:memory(binary),
+    Code = erlang:memory(code),
+    [{connection_procs, Conns},
      {channel_procs,    Chs},
      {queue_procs,      Qs},
      {other_procs,      erlang:memory(processes) - Conns - Chs - Qs},
      {mnesia,           Mnesia},
      {msg_index,        MsgIndex},
-     {other_ets,        erlang:memory(ets) - Mnesia - MsgIndex},
-     {binary,           erlang:memory(binary)},
-     {system,           erlang:memory(system)},
-     {atom,             erlang:memory(atom)},
-     {code,             erlang:memory(code)}].
+     {other_ets,        ETS - Mnesia - MsgIndex},
+     {binary,           Bin},
+     {real_system,      erlang:memory(system) - ETS - Atom - Bin - Code},
+     {atom,             Atom},
+     {code,             Code}].
 
 sum_proc_memory(Pids) ->
     lists:foldl(
