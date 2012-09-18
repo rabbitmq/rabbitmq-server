@@ -1058,9 +1058,9 @@ change_extra_db_nodes(ClusterNodes0, Force) ->
 %% return false positives when we are actually just doing cluster
 %% operations (e.g. joining the cluster).
 running_nodes(Nodes) ->
-    {Replies, _BadNodes} =
-        rpc:multicall(Nodes, rabbit_mnesia, is_running_remote, []),
-    [Node || {Running, Node} <- Replies, Running].
+    {Replies, _BadNodes} = rpc:multicall(ordsets:to_list(Nodes), rabbit_mnesia,
+                                         is_running_remote, []),
+    ordsets:from_list([Node || {Running, Node} <- Replies, Running]).
 
 is_running_remote() ->
     {proplists:is_defined(rabbit, application:which_applications(infinity)),
