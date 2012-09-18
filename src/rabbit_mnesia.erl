@@ -1063,6 +1063,15 @@ running_nodes(Nodes) ->
                                          is_running_remote, []),
     ordsets:from_list([Node || {Running, Node} <- Replies, Running]).
 
+is_only_node(Node, Nodes) ->
+    ordsets:is_element(Node, Nodes) andalso ordsets:size(Nodes) =:= 1.
+
+is_only_node(Nodes) ->
+    is_only_node(node(), Nodes).
+
+is_only_disc_node() ->
+    is_only_node(clustered_disc_nodes()).
+
 is_running_remote() ->
     {proplists:is_defined(rabbit, application:which_applications(infinity)),
      node()}.
@@ -1130,6 +1139,9 @@ find_good_node([Node | Nodes]) ->
                              end
     end.
 
+empty_set(Set) ->
+    ordsets:size(Set) =:= 0.
+
 e(Tag) -> throw({error, {Tag, error_description(Tag)}}).
 
 error_description(clustering_only_disc_node) ->
@@ -1172,15 +1184,3 @@ error_description(removing_node_from_offline_node) ->
         "from must be a disc node and all the other nodes must be offline.";
 error_description(no_running_cluster_nodes) ->
     "You cannot leave a cluster if no online nodes are present.".
-
-is_only_node(Node, Nodes) ->
-    ordsets:is_element(Node, Nodes) andalso ordsets:size(Nodes) =:= 1.
-
-is_only_node(Nodes) ->
-    is_only_node(node(), Nodes).
-
-is_only_disc_node() ->
-    is_only_node(clustered_disc_nodes()).
-
-empty_set(Set) ->
-    ordsets:size(Set) =:= 0.
