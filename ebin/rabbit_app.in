@@ -33,7 +33,7 @@
          {default_user_tags, [administrator]},
          {default_vhost, <<"/">>},
          {default_permissions, [<<".*">>, <<".*">>, <<".*">>]},
-         {cluster_nodes, {[], true}},
+         {cluster_nodes, {[], disc}},
          {server_properties, []},
          {collect_statistics, none},
          {collect_statistics_interval, 5000},
