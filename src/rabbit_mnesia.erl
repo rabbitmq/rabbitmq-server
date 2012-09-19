@@ -90,8 +90,8 @@
 -spec(node_type/0 :: () -> node_type()).
 -spec(dir/0 :: () -> file:filename()).
 -spec(table_names/0 :: () -> [atom()]).
--spec(cluster_status_from_mnesia/0 :: () -> {'ok', cluster_status()} |
-                                             {'error', any()}).
+-spec(cluster_status_from_mnesia/0 :: () -> rabbit_types:ok_or_error2(
+                                              cluster_status(), any())).
 
 %% Operations on the db and utils, mainly used in `rabbit_upgrade' and `rabbit'
 -spec(init_db_unchecked/2 :: (node_set(), node_type()) -> 'ok').
@@ -109,8 +109,8 @@
 %% Functions used in internal rpc calls
 -spec(node_info/0 :: () -> {string(), string(),
                             ({'ok', cluster_status()} | 'error')}).
--spec(remove_node_if_mnesia_running/1 :: (node()) -> 'ok' |
-                                                     {'error', term()}).
+-spec(remove_node_if_mnesia_running/1 ::
+        (node()) -> rabbit_types:ok_or_error(term())).
 
 -endif.
 
