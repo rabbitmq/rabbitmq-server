@@ -73,7 +73,7 @@ remove_from_queue(QueueName, DeadGMPids) ->
 
 remove_from_queue0(QueueName, DeadGMPids) ->
     DeadNodes = [node(DeadGMPid) || DeadGMPid <- DeadGMPids],
-    ClusterNodes = clusterable_nodes() -- DeadNodes,
+    ClusterNodes = rabbit_mnesia:running_clustered_nodes() -- DeadNodes,
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
               %% Someone else could have deleted the queue before we
@@ -115,7 +115,7 @@ remove_from_queue0(QueueName, DeadGMPids) ->
       end).
 
 on_node_up() ->
-    ClusterNodes = clusterable_nodes(),
+    ClusterNodes = rabbit_mnesia:running_clustered_nodes(),
     QNames =
         rabbit_misc:execute_mnesia_transaction(
           fun () ->
@@ -233,10 +233,12 @@ promote_slave([SPid | SPids]) ->
     %% the one to promote is the oldest.
     {SPid, SPids}.
 
-suggested_queue_nodes(Q) -> suggested_queue_nodes(Q, clusterable_nodes()).
+suggested_queue_nodes(Q) ->
+    suggested_queue_nodes(Q, rabbit_mnesia:running_clustered_nodes()).
 
-%% This variant exists so we can pull a call to clusterable_nodes()
-%% out of a loop or transaction or both.
+%% This variant exists so we can pull a call to
+%% rabbit_mnesia:running_clustered_nodes() out of a loop or
+%% transaction or both.
 suggested_queue_nodes(Q, ClusterNodes) ->
     {MNode0, SNodes} = actual_queue_nodes(Q),
     MNode = case MNode0 of
@@ -245,14 +247,6 @@ suggested_queue_nodes(Q, ClusterNodes) ->
             end,
     suggested_queue_nodes(policy(<<"ha-mode">>, Q), policy(<<"ha-params">>, Q),
                           {MNode, SNodes}, ClusterNodes).
-
-%% TODO we should probably just redefine
-%% rabbit_mnesia:running_clustered_nodes/0? Waiting on Francesco.
-clusterable_nodes() ->
-    %% We may end up here via on_node_up/0, in which case we are still
-    %% booting - rabbit_mnesia:running_clustered_nodes/0 will report
-    %% us as not running.
-    lists:usort([node() | rabbit_mnesia:running_clustered_nodes()]).
 
 policy(Policy, Q) ->
     case rabbit_policy:get(Policy, Q) of
