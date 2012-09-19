@@ -136,6 +136,7 @@
                    'other_ets': 'Other ETS tables',
                    'binary': 'Binaries',
                    'code': 'Code',
+                   'atom': 'Atoms',
                    'other_system': 'Other system'};
    for (var section in sections) {
      var width = 600 * node.memory[section] / node.memory.total;
@@ -187,6 +188,10 @@
     <tr>
       <th>Code</th>
       <td><%= fmt_memory(node.memory, 'code') %></td>
+    </tr>
+    <tr>
+      <th>Atoms</th>
+      <td><%= fmt_memory(node.memory, 'atom') %></td>
     </tr>
     <tr>
       <th>Other system</th>

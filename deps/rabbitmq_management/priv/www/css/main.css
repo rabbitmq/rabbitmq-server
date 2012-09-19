@@ -54,7 +54,7 @@ table.list tr.total th { border: none; border-top: 1px solid #bbb; text-align: r
 
 div.section table.list, div.section-hidden table.list { margin-bottom: 0; }
 
-div.memory-bar { margin: 10px; border-radius: 5px; }
+div.memory-bar { margin: 10px; border-radius: 5px; border: 1px solid black;}
 div.memory-section { float: left; height: 30px; }
 div.memory-key { float: left; width: 10px; height: 10px; margin: 3px 5px 0 0;}
 
@@ -66,7 +66,8 @@ div.memory_mnesia           { background: #44f; }
 div.memory_msg_index        { background: #99f; }
 div.memory_other_ets        { background: #ccf; }
 div.memory_binary           { background: #666; }
-div.memory_code             { background: #aaa; }
+div.memory_code             { background: #999; }
+div.memory_atom             { background: #bbb; }
 div.memory_other_system     { background: #ddd; }
 
 sub { display: block; font-size: 0.8em; color: #888; }
