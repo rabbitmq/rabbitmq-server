@@ -176,7 +176,7 @@ join_cluster(DiscoveryNode, NodeType) ->
 
     {ClusterNodes, _, _} = case discover_cluster(DiscoveryNode) of
                                {ok, Res}      -> Res;
-                               E = {error, _} -> throw(E)
+                               {error, _} = E -> throw(E)
                            end,
 
     case me_in_nodes(ClusterNodes) of
@@ -307,7 +307,7 @@ forget_cluster_node(Node, RemoveWhenOffline) ->
             remove_node_offline_node(Node);
         {error, mnesia_not_running} ->
             e(offline_node_no_offline_flag);
-        Err = {error, _} ->
+        {error, _} = Err ->
             throw(Err)
     end.
 
@@ -437,7 +437,7 @@ cluster_status(WhichNodes, ForceMnesia) ->
                     %% from the list of running nodes.
                     {ok, {AllNodes, DiscNodes,
                           fun() -> nodes_excl_me(RunningNodes) end}};
-                Err = {error, _} ->
+                {error, _} = Err ->
                     Err
             end,
     case Nodes of
@@ -448,7 +448,7 @@ cluster_status(WhichNodes, ForceMnesia) ->
                      disc    -> DiscNodes1;
                      running -> RunningNodesThunk()
                  end};
-        Err1 = {error, _} ->
+        {error, _} = Err1 ->
             Err1
     end.
 
@@ -674,7 +674,7 @@ check_cluster_consistency() ->
             rabbit_node_monitor:write_cluster_status(Status);
         {error, not_found} ->
             ok;
-        E = {error, _} ->
+        {error, _} = E ->
             throw(E)
     end.
 
@@ -686,7 +686,7 @@ check_cluster_consistency(Node) ->
             {error, not_found};
         {OTP, Rabbit, {ok, Status}} ->
             case check_consistency(OTP, Rabbit, Node, Status) of
-                E = {error, _} -> E;
+                {error, _} = E -> E;
                 {ok, Res}      -> {ok, Res}
             end
     end.
