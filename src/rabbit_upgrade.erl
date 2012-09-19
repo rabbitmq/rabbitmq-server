@@ -126,11 +126,11 @@ maybe_upgrade_mnesia() ->
         {error, starting_from_scratch} ->
             ok;
         {error, version_not_available} ->
-            case AllNodes of
-                [_] -> ok;
-                _   -> die("Cluster upgrade needed but upgrading from "
+            case ordsets:size(AllNodes) of
+                0   -> die("Cluster upgrade needed but upgrading from "
                            "< 2.1.1.~nUnfortunately you will need to "
-                           "rebuild the cluster.", [])
+                           "rebuild the cluster.", []);
+                _   -> ok
             end;
         {error, _} = Err ->
             throw(Err);
@@ -145,7 +145,7 @@ maybe_upgrade_mnesia() ->
     end.
 
 upgrade_mode(AllNodes) ->
-    case nodes_running(AllNodes) of
+    case nodes_running(ordsets:to_list(AllNodes)) of
         [] ->
             AfterUs = rabbit_mnesia:running_clustered_nodes() -- [node()],
             case {node_type_legacy(), AfterUs} of
@@ -196,7 +196,7 @@ die(Msg, Args) ->
     halt(1).
 
 primary_upgrade(Upgrades, Nodes) ->
-    Others = Nodes -- [node()],
+    Others = ordsets:del_element(node(), Nodes),
     ok = apply_upgrades(
            mnesia,
            Upgrades,
@@ -206,7 +206,7 @@ primary_upgrade(Upgrades, Nodes) ->
                        [] -> ok;
                        _  -> info("mnesia upgrades: Breaking cluster~n", []),
                              [{atomic, ok} = mnesia:del_table_copy(schema, Node)
-                              || Node <- Others]
+                              || Node <- ordsets:to_list(Others)]
                    end
            end),
     ok.
