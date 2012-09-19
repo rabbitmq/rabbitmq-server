@@ -539,7 +539,12 @@ flush_all(QPids, ChPid) ->
 
 internal_delete1(QueueName) ->
     ok = mnesia:delete({rabbit_queue, QueueName}),
-    ok = mnesia:delete({rabbit_durable_queue, QueueName}),
+    %% this 'guarded' delete prevents unnecessary writes to the mnesia
+    %% disk log
+    case mnesia:wread({rabbit_durable_queue, QueueName}) of
+        []  -> ok;
+        [_] -> ok = mnesia:delete({rabbit_durable_queue, QueueName})
+    end,
     %% we want to execute some things, as decided by rabbit_exchange,
     %% after the transaction.
     rabbit_binding:remove_for_destination(QueueName).

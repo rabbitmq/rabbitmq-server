@@ -366,16 +366,8 @@
             </para>
           </listitem>
         </varlistentry>
-      </variablelist>
-      <variablelist>
         <varlistentry>
-          <term>
-            <cmdsynopsis>
-              <command>change_cluster_node_type</command>
-              <arg choice="req">
-                disk | ram
-              </arg>
-            </cmdsynopsis>
+          <term><cmdsynopsis><command>change_cluster_node_type</command> <arg choice="req">disk | ram</arg></cmdsynopsis>
           </term>
           <listitem>
             <para>
@@ -390,15 +382,8 @@
             </para>
           </listitem>
         </varlistentry>
-      </variablelist>
-      <variablelist>
         <varlistentry>
-          <term>
-            <cmdsynopsis>
-              <command>forget_cluster_node</command>
-              <arg choice="opt">--offline</arg>
-            </cmdsynopsis>
-          </term>
+          <term><cmdsynopsis><command>forget_cluster_node</command> <arg choice="opt">--offline</arg></cmdsynopsis></term>
           <listitem>
             <variablelist>
               <varlistentry>
@@ -429,14 +414,8 @@
             </para>
           </listitem>
         </varlistentry>
-      </variablelist>
-      <variablelist>
         <varlistentry>
-          <term>
-            <cmdsynopsis>
-              <command>update_cluster_nodes</command>
-              <arg choice="req">clusternode</arg>
-            </cmdsynopsis>
+          <term><cmdsynopsis><command>update_cluster_nodes</command> <arg choice="req">clusternode</arg></cmdsynopsis>
           </term>
           <listitem>
             <variablelist>
