@@ -1106,16 +1106,17 @@ check_rabbit_consistency(Remote) ->
 %% mnesia tables aren't there because restarted RAM nodes won't have
 %% tables while still being non-virgin.  What we do instead is to
 %% check if the mnesia directory is non existant or empty, with the
-%% exception of the cluster status file, which will be there thanks to
+%% exception of the cluster status files, which will be there thanks to
 %% `rabbit_node_monitor:prepare_cluster_status_file/0'.
 is_virgin_node() ->
     case rabbit_file:list_dir(dir()) of
         {error, enoent} -> true;
-        {ok, []}        -> true;
-        {ok, [File]}    -> (dir() ++ "/" ++ File) =:=
-                               [rabbit_node_monitor:cluster_status_filename(),
-                                rabbit_node_monitor:running_nodes_filename()];
-        {ok, _}         -> false
+        {ok, []} -> true;
+        {ok, [File1, File2]} ->
+            lists:usort([dir() ++ "/" ++ File1, dir() ++ "/" ++ File2]) =:=
+                lists:usort([rabbit_node_monitor:cluster_status_filename(),
+                             rabbit_node_monitor:running_nodes_filename()]);
+        {ok, _} -> false
     end.
 
 find_good_node([]) ->
