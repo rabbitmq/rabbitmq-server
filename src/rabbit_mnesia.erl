@@ -403,7 +403,7 @@ mnesia_nodes() ->
                            false -> ram
                        end,
             Tables = mnesia:system_info(tables),
-            {Table, _} = case table_definitions(NodeType) of [T|_] -> T end,
+            [{Table, _} | _] = table_definitions(NodeType),
             case lists:member(Table, Tables) of
                 true ->
                     AllNodes =
