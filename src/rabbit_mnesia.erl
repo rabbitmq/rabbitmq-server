@@ -148,7 +148,7 @@ init_from_config() ->
             rabbit_log:warning("Could not find any suitable node amongst the "
                                "ones provided in the configuration: ~p~n",
                                [TryNodes]),
-            init(true, ordsets:from_list([node()]))
+            init(disc, ordsets:from_list([node()]))
     end.
 
 %% Make the node join a cluster. The node will be reset automatically
