@@ -67,8 +67,8 @@ process_request(?CONNECT,
                     nocreds ->
                         rabbit_log:error("MQTT login failed - no credentials~n"),
                         {?CONNACK_CREDENTIALS, PState};
-                    {UserBin, Creds} ->
-                        case process_login(UserBin, Creds, PState) of
+                    {UserBin, PassBin} ->
+                        case process_login(UserBin, PassBin, PState) of
                             {?CONNACK_ACCEPT, Conn} ->
                                 link(Conn),
                                 maybe_clean_sess(CleanSess, Conn, ClientId),
@@ -311,34 +311,25 @@ make_will_msg(#mqtt_frame_connect{ will_retain = Retain,
                dup     = false,
                payload = Msg }.
 
-process_login(UserBin, Creds, #proc_state{ channels  = {undefined, undefined},
-                                           socket    = Sock }) ->
-    case rabbit_access_control:check_user_login(UserBin, Creds) of
-         {ok, _User} ->
-             VHost = rabbit_mqtt_util:env(vhost),
-             case amqp_connection:start(
-                    #amqp_params_direct{
-                      username     = UserBin,
-                      virtual_host = VHost,
-                      adapter_info = adapter_info(Sock)}) of
-                 {ok, Connection} ->
-                     {?CONNACK_ACCEPT, Connection};
-                 {error, auth_failure} ->
-                     rabbit_log:error("MQTT login failed - " ++
-                                      "auth_failure " ++
-                                      "(user vanished)~n"),
-                     ?CONNACK_CREDENTIALS;
-                 {error, access_refused} ->
-                     rabbit_log:warning("MQTT login failed - " ++
-                                        "access_refused " ++
-                                        "(vhost access not allowed)~n"),
-                     ?CONNACK_AUTH
-              end;
-         {refused, Msg, Args} ->
-             rabbit_log:warning("MQTT login failed: " ++ Msg ++
-                                "\n", Args),
-             ?CONNACK_CREDENTIALS
-    end.
+process_login(UserBin, PassBin, #proc_state{ channels  = {undefined, undefined},
+                                             socket    = Sock }) ->
+     VHost = rabbit_mqtt_util:env(vhost),
+     case amqp_connection:start(#amqp_params_direct{
+                                  username     = UserBin,
+                                  password     = PassBin,
+                                  virtual_host = VHost,
+                                  adapter_info = adapter_info(Sock)}) of
+         {ok, Connection}        -> {?CONNACK_ACCEPT, Connection};
+         {error, auth_failure}   -> rabbit_log:error(
+                                      "MQTT login failed for ~p auth_failure~n",
+                                      [binary_to_list(UserBin)]),
+                                    ?CONNACK_CREDENTIALS;
+         {error, access_refused} -> rabbit_log:warning(
+                                      "MQTT login failed for ~p access_refused "
+                                      "(vhost access not allowed)~n",
+                                      [binary_to_list(UserBin)]),
+                                    ?CONNACK_AUTH
+      end.
 
 creds(User, Pass) ->
     DefaultUser = rabbit_mqtt_util:env(default_user),
@@ -354,9 +345,9 @@ creds(User, Pass) ->
             nocreds;
         _ ->
             case {Pass =/= undefined, is_binary(DefaultPass), Anon =:= true} of
-                 {true,  _,    _   } -> {U, [{password, list_to_binary(Pass)}]};
-                 {false, true, true} -> {U, [{password, DefaultPass}]};
-                 _                   -> {U, []}
+                 {true,  _,    _   } -> {U, list_to_binary(Pass)};
+                 {false, true, true} -> {U, DefaultPass};
+                 _                   -> {U, none}
             end
     end.
 
