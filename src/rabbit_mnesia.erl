@@ -421,42 +421,35 @@ mnesia_nodes() ->
             end
     end.
 
-cluster_status(WhichNodes, ForceMnesia) ->
+cluster_status(WhichNodes) ->
     %% I don't want to call `running_nodes/1' unless if necessary,
     %% since it can deadlock when stopping applications.
-    Nodes = case mnesia_nodes() of
-                {ok, {AllNodes, DiscNodes}} ->
-                    {ok, {AllNodes, DiscNodes,
-                          fun() -> running_nodes(AllNodes) end}};
-                {error, _Reason} when not ForceMnesia ->
-                    {AllNodes, DiscNodes, RunningNodes} =
-                        rabbit_node_monitor:read_cluster_status(),
-                    %% The cluster status file records the status when
-                    %% the node is online, but we know for sure that
-                    %% the node is offline now, so we can remove it
-                    %% from the list of running nodes.
-                    {ok, {AllNodes, DiscNodes,
-                          fun() -> nodes_excl_me(RunningNodes) end}};
-                {error, _} = Err ->
-                    Err
-            end,
-    case Nodes of
-        {ok, {AllNodes1, DiscNodes1, RunningNodesThunk}} ->
-            {ok, case WhichNodes of
-                     status  -> {AllNodes1, DiscNodes1, RunningNodesThunk()};
-                     all     -> AllNodes1;
-                     disc    -> DiscNodes1;
-                     running -> RunningNodesThunk()
-                 end};
-        {error, _} = Err1 ->
-            Err1
+    {AllNodes1, DiscNodes1, RunningNodesThunk} =
+        case mnesia_nodes() of
+            {ok, {AllNodes, DiscNodes}} ->
+                {AllNodes, DiscNodes, fun() -> running_nodes(AllNodes) end};
+            {error, _Reason} ->
+                {AllNodes, DiscNodes, RunningNodes} =
+                    rabbit_node_monitor:read_cluster_status(),
+                %% The cluster status file records the status when the
+                %% node is online, but we know for sure that the node
+                %% is offline now, so we can remove it from the list
+                %% of running nodes.
+                {AllNodes, DiscNodes, fun() -> nodes_excl_me(RunningNodes) end}
+        end,
+    case WhichNodes of
+        status  -> {AllNodes1, DiscNodes1, RunningNodesThunk()};
+        all     -> AllNodes1;
+        disc    -> DiscNodes1;
+        running -> RunningNodesThunk()
     end.
 
-cluster_status(WhichNodes) ->
-    {ok, Status} = cluster_status(WhichNodes, false),
-    Status.
-
-cluster_status_from_mnesia() -> cluster_status(status, true).
+cluster_status_from_mnesia() ->
+    case mnesia_nodes() of
+        {ok, {AllNodes, DiscNodes}} -> {ok, {AllNodes, DiscNodes,
+                                             running_nodes(AllNodes)}};
+        {error, _} = Err            -> Err
+    end.
 
 node_info() ->
     {erlang:system_info(otp_release), rabbit_misc:version(),
