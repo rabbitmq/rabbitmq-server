@@ -422,8 +422,8 @@ mnesia_nodes() ->
     end.
 
 cluster_status(WhichNodes, ForceMnesia) ->
-    %% I don't want to call `running_nodes/1' unless if necessary,
-    %% since it can deadlock when stopping applications.
+    %% I don't want to call `running_nodes/1' unless if necessary, since it's
+    %% pretty expensive.
     Nodes = case mnesia_nodes() of
                 {ok, {AllNodes, DiscNodes}} ->
                     {ok, {AllNodes, DiscNodes,
@@ -431,10 +431,9 @@ cluster_status(WhichNodes, ForceMnesia) ->
                 {error, _Reason} when not ForceMnesia ->
                     {AllNodes, DiscNodes, RunningNodes} =
                         rabbit_node_monitor:read_cluster_status(),
-                    %% The cluster status file records the status when
-                    %% the node is online, but we know for sure that
-                    %% the node is offline now, so we can remove it
-                    %% from the list of running nodes.
+                    %% The cluster status file records the status when the node
+                    %% is online, but we know for sure that the node is offline
+                    %% now, so we can remove it from the list of running nodes.
                     {ok,
                      {AllNodes, DiscNodes,
                       fun() -> ordsets:del_element(node(), RunningNodes) end}};
@@ -1053,18 +1052,15 @@ change_extra_db_nodes(ClusterNodes0, Force) ->
             Nodes
     end.
 
-%% What we really want is nodes running rabbit, not running
-%% mnesia. Using `mnesia:system_info(running_db_nodes)' will
-%% return false positives when we are actually just doing cluster
-%% operations (e.g. joining the cluster).
+%% We're not using `mnesia:system_info(running_db_nodes)' directly because if
+%% the node is a RAM node it won't know about other nodes when mnesia is stopped
 running_nodes(Nodes) ->
     {Replies, _BadNodes} =
         rpc:multicall(Nodes, rabbit_mnesia, is_running_remote, []),
     [Node || {Running, Node} <- Replies, Running].
 
 is_running_remote() ->
-    {proplists:is_defined(rabbit, application:which_applications(infinity)),
-     node()}.
+    {mnesia:system_info(is_running) =:= yes, node()}.
 
 check_consistency(OTP, Rabbit) ->
     rabbit_misc:sequence_error(
