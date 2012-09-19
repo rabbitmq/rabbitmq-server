@@ -770,7 +770,8 @@ memory() ->
      {msg_index,        MsgIndex},
      {other_ets,        ETS - Mnesia - MsgIndex},
      {binary,           Bin},
-     {code,             Code + Atom},
+     {code,             Code},
+     {atom,             Atom},
      {other_system,     System - ETS - Atom - Bin - Code}].
 
 sum_proc_memory(Pids) ->
