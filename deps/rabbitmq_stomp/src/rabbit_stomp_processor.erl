@@ -193,12 +193,12 @@ process_connect(Implicit, Frame,
                   {ok, Version} ->
                       FT = frame_transformer(Version),
                       Frame1 = FT(Frame),
-                      {Username, Creds} = creds(Frame1, SSLLoginName, Config),
+                      {Username, Passwd} = creds(Frame1, SSLLoginName, Config),
                       {ok, DefaultVHost} =
                           application:get_env(rabbit, default_vhost),
                       {ProtoName, _} = AdapterInfo#amqp_adapter_info.protocol,
                       Res = do_login(
-                              Username, Creds,
+                              Username, Passwd,
                               login_header(Frame1, ?HEADER_HOST, DefaultVHost),
                               login_header(Frame1, ?HEADER_HEART_BEAT, "0,0"),
                               AdapterInfo#amqp_adapter_info{
@@ -221,12 +221,11 @@ process_connect(Implicit, Frame,
 creds(Frame, SSLLoginName,
       #stomp_configuration{default_login    = DefLogin,
                            default_passcode = DefPasscode}) ->
-    PasswordCreds = {login_header(Frame, ?HEADER_LOGIN, DefLogin),
-                     [{password, login_header(
-                                   Frame, ?HEADER_PASSCODE, DefPasscode)}]},
+    PasswordCreds = {login_header(Frame, ?HEADER_LOGIN,    DefLogin),
+                     login_header(Frame, ?HEADER_PASSCODE, DefPasscode)},
     case {rabbit_stomp_frame:header(Frame, ?HEADER_LOGIN), SSLLoginName} of
         {not_found, none}    -> PasswordCreds;
-        {not_found, SSLName} -> {SSLName, []};
+        {not_found, SSLName} -> {SSLName, none};
         _                    -> PasswordCreds
     end.
 
@@ -472,45 +471,40 @@ without_headers([], Command, Frame, State, Fun) ->
 
 do_login(undefined, _, _, _, _, _, State) ->
     error("Bad CONNECT", "Missing login or passcode header(s)", State);
-do_login(Username, Creds, VirtualHost, Heartbeat, AdapterInfo, Version,
+do_login(Username, Passwd, VirtualHost, Heartbeat, AdapterInfo, Version,
          State) ->
-    case rabbit_access_control:check_user_login(Username, Creds) of
-        {ok, _User} ->
-            case amqp_connection:start(
-                   #amqp_params_direct{username     = Username,
-                                       virtual_host = VirtualHost,
-                                       adapter_info = AdapterInfo}) of
-                {ok, Connection} ->
-                    link(Connection),
-                    {ok, Channel} = amqp_connection:open_channel(Connection),
-                    SessionId =
-                        rabbit_guid:string(rabbit_guid:gen_secure(), "session"),
-                    {{SendTimeout, ReceiveTimeout}, State1} =
-                        ensure_heartbeats(Heartbeat, State),
-                    ok("CONNECTED",
-                       [{?HEADER_SESSION, SessionId},
-                        {?HEADER_HEART_BEAT,
-                         io_lib:format("~B,~B", [SendTimeout, ReceiveTimeout])},
-                        {?HEADER_SERVER, server_header()},
-                        {?HEADER_VERSION, Version}],
-                       "",
-                       State1#state{session_id = SessionId,
-                                    channel    = Channel,
-                                    connection = Connection});
-                {error, auth_failure} ->
-                    rabbit_log:error("STOMP login failed - auth_failure "
-                                     "(user vanished)~n"),
-                    error("Bad CONNECT", "User failure after authentication", State);
-                {error, access_refused} ->
-                    rabbit_log:warning("STOMP login failed - access_refused "
-                                       "(vhost access not allowed)~n"),
-                    error("Bad CONNECT", "Virtual host '" ++
-                                         binary_to_list(VirtualHost) ++
-                                         "' access denied", State)
-            end;
-        {refused, Msg, Args} ->
-            rabbit_log:warning("STOMP login failed: " ++ Msg ++ "~n", Args),
-            error("Bad CONNECT", "Access refused: " ++ Msg ++ "~n", Args, State)
+    case amqp_connection:start(
+           #amqp_params_direct{username     = Username,
+                               password     = Passwd,
+                               virtual_host = VirtualHost,
+                               adapter_info = AdapterInfo}) of
+        {ok, Connection} ->
+            link(Connection),
+            {ok, Channel} = amqp_connection:open_channel(Connection),
+            SessionId = rabbit_guid:string(rabbit_guid:gen_secure(), "session"),
+            {{SendTimeout, ReceiveTimeout}, State1} =
+                ensure_heartbeats(Heartbeat, State),
+            ok("CONNECTED",
+               [{?HEADER_SESSION, SessionId},
+                {?HEADER_HEART_BEAT,
+                 io_lib:format("~B,~B", [SendTimeout, ReceiveTimeout])},
+                {?HEADER_SERVER, server_header()},
+                {?HEADER_VERSION, Version}],
+               "",
+               State1#state{session_id = SessionId,
+                            channel    = Channel,
+                            connection = Connection});
+        {error, auth_failure} ->
+            rabbit_log:warning("STOMP login failed for user ~p~n",
+                               [binary_to_list(Username)]),
+            error("Bad CONNECT", "Access refused for user '" ++
+                  binary_to_list(Username) ++ "'~n", [], State);
+        {error, access_refused} ->
+            rabbit_log:warning("STOMP login failed - access_refused "
+                               "(vhost access not allowed)~n"),
+            error("Bad CONNECT", "Virtual host '" ++
+                                 binary_to_list(VirtualHost) ++
+                                 "' access denied", State)
     end.
 
 server_header() ->
