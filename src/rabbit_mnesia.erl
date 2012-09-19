@@ -1060,10 +1060,7 @@ running_nodes(Nodes) ->
     [Node || {Running, Node} <- Replies, Running].
 
 is_running_remote() ->
-    {case mnesia:system_info(is_running) of
-         yes -> true;
-         no  -> false
-     end, node()}.
+    {mnesia:system_info(is_running) =:= yes, node()}.
 
 check_consistency(OTP, Rabbit) ->
     rabbit_misc:sequence_error(
