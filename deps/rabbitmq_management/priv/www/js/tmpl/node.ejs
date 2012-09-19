@@ -124,8 +124,10 @@
 <p class="warning">Node not running</p>
 <% } else if (node.os_pid == undefined) { %>
 <p class="warning">Node statistics not available</p>
-<% } else { %>
-  <div class="memory-bar box" style="width: 600px;">
+<% } else {
+  var width = 800;
+%>
+  <div class="memory-bar box" style="width: <%= width %>px;">
 <%
    var sections = {'connection_procs': 'Connections',
                    'channel_procs': 'Channels',
@@ -138,14 +140,25 @@
                    'code': 'Code',
                    'atom': 'Atoms',
                    'other_system': 'Other system'};
+   var total = 0;
    for (var section in sections) {
-     var width = 600 * node.memory[section] / node.memory.total;
+     var section_width = width * node.memory[section] / node.mem_limit;
+     total += section_width;
 %>
     <div class="memory-section memory_<%= section %>"
-         style="width: <%= width %>px;"
+         style="width: <%= section_width %>px;"
          title="<%= sections[section] %>">
     </div>
 <% } %>
+  </div>
+  <div class="box" style="width: <%= width %>px;">
+    <div class="memory-total"
+         style="width: <%= total %>px;">
+      <%= fmt_bytes(node.memory.total) %> used
+    </div>
+    <div class="memory-hwm">
+      <%= fmt_bytes(node.mem_limit) %> high watermark
+    </div>
   </div>
 
   <table class="facts">
