@@ -774,9 +774,7 @@ memory() ->
      {other_system,     System - ETS - Atom - Bin - Code}].
 
 sum_proc_memory(Pids) ->
-    lists:foldl(
-      fun (Pid, Mem) -> Mem + element(2, process_info(Pid, memory)) end,
-      0, Pids).
+    lists:sum([Mem || P <- Pids, {memory, Mem} <- [process_info(P, memory)]]).
 
 pids(#amqqueue{pid = Pid, slave_pids = undefined}) ->
     local_pids([Pid]);
