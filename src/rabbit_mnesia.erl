@@ -383,7 +383,7 @@ clustered_ram_nodes() -> ordsets:subtract(cluster_status(all),
 running_clustered_nodes() -> cluster_status(running).
 
 running_clustered_disc_nodes() ->
-    {_, DiscNodes, RunningNodes} = cluster_status(),
+    {_AllNodes, DiscNodes, RunningNodes} = cluster_status(status),
     ordsets:intersection(DiscNodes, RunningNodes).
 
 %% This function is the actual source of information, since it gets
@@ -455,8 +455,6 @@ cluster_status(WhichNodes, ForceMnesia) ->
 cluster_status(WhichNodes) ->
     {ok, Status} = cluster_status(WhichNodes, false),
     Status.
-
-cluster_status() -> cluster_status(status).
 
 cluster_status_from_mnesia() -> cluster_status(status, true).
 
