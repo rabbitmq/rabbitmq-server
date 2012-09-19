@@ -93,10 +93,14 @@ prepare_cluster_status_files() ->
                         {ok, _      }                     -> CorruptFiles();
                         {error, enoent}                   -> []
                     end,
+    ThisNode = [node()],
+    %% The running nodes file might contain a set or a list, in case of the
+    %% legacy file
+    RunningNodes2 = ordsets:from_list(ThisNode ++ RunningNodes1),
     {AllNodes1, WantDiscNode} =
         case try_read_file(cluster_status_filename()) of
             {ok, [{AllNodes, DiscNodes0}]} ->
-                {AllNodes, lists:member(node(), DiscNodes0)};
+                {AllNodes, ordsets:is_element(node(), DiscNodes0)};
             {ok, [AllNodes0]} when is_list(AllNodes0) ->
                 {legacy_cluster_nodes(AllNodes0),
                  legacy_should_be_disc_node(AllNodes0)};
@@ -105,16 +109,11 @@ prepare_cluster_status_files() ->
             {error, enoent} ->
                 {legacy_cluster_nodes([]), true}
         end,
-
-    ThisNode = [node()],
-
-    RunningNodes2 = lists:usort(RunningNodes1 ++ ThisNode),
-    AllNodes2 = lists:usort(AllNodes1 ++ RunningNodes2),
+    AllNodes2 = ordsets:union(AllNodes1, RunningNodes2),
     DiscNodes = case WantDiscNode of
                     true  -> ThisNode;
                     false -> []
                 end,
-
     ok = write_cluster_status({AllNodes2, DiscNodes, RunningNodes2}).
 
 write_cluster_status({All, Disc, Running}) ->
@@ -290,7 +289,7 @@ is_already_monitored(Item) ->
 legacy_cluster_nodes(Nodes) ->
     %% We get all the info that we can, including the nodes from mnesia, which
     %% will be there if the node is a disc node (empty list otherwise)
-    lists:usort(Nodes ++ mnesia:system_info(db_nodes)).
+    ordsets:from_list(Nodes ++ mnesia:system_info(db_nodes)).
 
 legacy_should_be_disc_node(DiscNodes) ->
     DiscNodes == [] orelse lists:member(node(), DiscNodes).
