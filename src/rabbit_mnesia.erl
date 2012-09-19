@@ -316,7 +316,7 @@ forget_cluster_node(Node, RemoveWhenOffline) ->
     end.
 
 remove_node_offline_node(Node) ->
-    case {ordsets:del_element(Node, running_nodes(all_clustered_nodes())),
+    case {mnesia:system_info(running_db_nodes) -- [Node],
           is_disc_node()} of
         {[], true} ->
             %% Note that while we check if the nodes was the last to
@@ -415,19 +415,17 @@ mnesia_nodes() ->
                             true  -> ordsets:add_element(node(), DiscCopies);
                             false -> DiscCopies
                         end,
-                    {ok, {AllNodes, DiscNodes}};
+                    RunningNodes = mnesia:system_info(running_db_nodes),
+                    {ok, {AllNodes, DiscNodes, RunningNodes}};
                 false ->
                     {error, tables_not_present}
             end
     end.
 
 cluster_status(WhichNodes, ForceMnesia) ->
-    %% I don't want to call `running_nodes/1' unless if necessary,
-    %% since it can deadlock when stopping applications.
     Nodes = case mnesia_nodes() of
-                {ok, {AllNodes, DiscNodes}} ->
-                    {ok, {AllNodes, DiscNodes,
-                          fun() -> running_nodes(AllNodes) end}};
+                {ok, Status} ->
+                    {ok, Status};
                 {error, _Reason} when not ForceMnesia ->
                     {AllNodes, DiscNodes, RunningNodes} =
                         rabbit_node_monitor:read_cluster_status(),
@@ -435,19 +433,18 @@ cluster_status(WhichNodes, ForceMnesia) ->
                     %% the node is online, but we know for sure that
                     %% the node is offline now, so we can remove it
                     %% from the list of running nodes.
-                    {ok,
-                     {AllNodes, DiscNodes,
-                      fun() -> ordsets:del_element(node(), RunningNodes) end}};
+                    {ok, {AllNodes, DiscNodes,
+                          ordsets:del_element(node(), RunningNodes)}};
                 Err = {error, _} ->
                     Err
             end,
     case Nodes of
-        {ok, {AllNodes1, DiscNodes1, RunningNodesThunk}} ->
+        {ok, {AllNodes1, DiscNodes1, RunningNodes1}} ->
             {ok, case WhichNodes of
-                     status  -> {AllNodes1, DiscNodes1, RunningNodesThunk()};
+                     status  -> {AllNodes1, DiscNodes1, RunningNodes1};
                      all     -> AllNodes1;
                      disc    -> DiscNodes1;
-                     running -> RunningNodesThunk()
+                     running -> RunningNodes1
                  end};
         Err1 = {error, _} ->
             Err1
@@ -1005,9 +1002,7 @@ remove_node_if_mnesia_running(Node) ->
     end.
 
 leave_cluster() ->
-    case {is_clustered(),
-          running_nodes(ordsets:del_element(node(), all_clustered_nodes()))}
-    of
+    case {is_clustered(), mnesia:system_info(running_db_nodes) -- [node()]} of
         {false, []}   -> ok;
         {_, AllNodes} -> case lists:any(fun leave_cluster/1, AllNodes) of
                              true  -> ok;
@@ -1052,15 +1047,6 @@ change_extra_db_nodes(ClusterNodes0, Force) ->
         {ok, Nodes} ->
             Nodes
     end.
-
-%% What we really want is nodes running rabbit, not running
-%% mnesia. Using `mnesia:system_info(running_db_nodes)' will
-%% return false positives when we are actually just doing cluster
-%% operations (e.g. joining the cluster).
-running_nodes(Nodes) ->
-    {Replies, _BadNodes} =
-        rpc:multicall(Nodes, rabbit_mnesia, is_running_remote, []),
-    [Node || {Running, Node} <- Replies, Running].
 
 is_running_remote() ->
     {proplists:is_defined(rabbit, application:which_applications(infinity)),
