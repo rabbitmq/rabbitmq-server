@@ -97,7 +97,7 @@ init_with_existing_bq(#amqqueue { name = QName } = Q, BQ, BQS) ->
                    Q, undefined, sender_death_fun(), length_fun()),
     GM = rabbit_mirror_queue_coordinator:get_gm(CPid),
     {_MNode, SNodes} = rabbit_mirror_queue_misc:suggested_queue_nodes(Q),
-    [rabbit_mirror_queue_misc:add_mirror(QName, Node) || Node <- SNodes],
+    rabbit_mirror_queue_misc:add_mirrors(QName, SNodes),
     ok = gm:broadcast(GM, {depth, BQ:depth(BQS)}),
     #state { gm                  = GM,
              coordinator         = CPid,

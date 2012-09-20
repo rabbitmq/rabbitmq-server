@@ -16,8 +16,7 @@
 
 -module(rabbit_mirror_queue_misc).
 
--export([remove_from_queue/2, on_node_up/0,
-         drop_mirror/2, drop_mirror/3, add_mirror/2, add_mirror/3,
+-export([remove_from_queue/2, on_node_up/0, add_mirrors/2, add_mirror/2,
          report_deaths/4, store_updated_slaves/1, suggested_queue_nodes/1,
          is_mirrored/1, update_mirrors/2]).
 
@@ -32,15 +31,11 @@
 
 -spec(remove_from_queue/2 ::
         (rabbit_amqqueue:name(), [pid()])
-        -> {'ok', pid(), [pid()]} | {'error', 'not_found'}).
+        -> {'ok', pid(), [pid()], [node()]} | {'error', 'not_found'}).
 -spec(on_node_up/0 :: () -> 'ok').
--spec(drop_mirror/2 ::
-        (rabbit_amqqueue:name(), node()) -> rabbit_types:ok_or_error(any())).
+-spec(add_mirrors/2 :: (rabbit_amqqueue:name(), [node()]) -> 'ok').
 -spec(add_mirror/2 ::
         (rabbit_amqqueue:name(), node()) -> rabbit_types:ok_or_error(any())).
--spec(add_mirror/3 ::
-        (rabbit_types:vhost(), binary(), atom())
-        -> rabbit_types:ok_or_error(any())).
 -spec(store_updated_slaves/1 :: (rabbit_types:amqqueue()) ->
                                      rabbit_types:amqqueue()).
 -spec(suggested_queue_nodes/1 :: (rabbit_types:amqqueue()) ->
@@ -63,15 +58,6 @@
 %% Returns {ok, NewMPid, DeadPids}
 
 remove_from_queue(QueueName, DeadGMPids) ->
-    case remove_from_queue0(QueueName, DeadGMPids) of
-        {ok, NewMPid, DeadQPids, ExtraNodes} ->
-            [ok = add_mirror(QueueName, Node) || Node <- ExtraNodes],
-            {ok, NewMPid, DeadQPids};
-        Other ->
-            Other
-    end.
-
-remove_from_queue0(QueueName, DeadGMPids) ->
     DeadNodes = [node(DeadGMPid) || DeadGMPid <- DeadGMPids],
     ClusterNodes = rabbit_mnesia:running_clustered_nodes() -- DeadNodes,
     rabbit_misc:execute_mnesia_transaction(
@@ -132,8 +118,9 @@ on_node_up() ->
     [add_mirror(QName, node()) || QName <- QNames],
     ok.
 
-drop_mirror(VHostPath, QueueName, MirrorNode) ->
-    drop_mirror(rabbit_misc:r(VHostPath, queue, QueueName), MirrorNode).
+drop_mirrors(QName, Nodes) ->
+    [ok = drop_mirror(QName, Node)  || Node <- Nodes],
+    ok.
 
 drop_mirror(QName, MirrorNode) ->
     if_mirrored_queue(
@@ -153,8 +140,9 @@ drop_mirror(QName, MirrorNode) ->
               end
       end).
 
-add_mirror(VHostPath, QueueName, MirrorNode) ->
-    add_mirror(rabbit_misc:r(VHostPath, queue, QueueName), MirrorNode).
+add_mirrors(QName, Nodes) ->
+    [ok = add_mirror(QName, Node)  || Node <- Nodes],
+    ok.
 
 add_mirror(QName, MirrorNode) ->
     if_mirrored_queue(
@@ -307,6 +295,6 @@ update_mirrors0(OldQ = #amqqueue{name = QName},
     %% slaves that add_mirror/2 will add, and also want to add them
     %% (even though we are not responding to the death of a
     %% mirror). Breakage ensues.
-    [ok = add_mirror(QName, Node)  || Node <- NewNodes -- OldNodes],
-    [ok = drop_mirror(QName, Node) || Node <- OldNodes -- NewNodes],
+    add_mirrors(QName, NewNodes -- OldNodes),
+    drop_mirrors(QName, OldNodes -- NewNodes),
     ok.
