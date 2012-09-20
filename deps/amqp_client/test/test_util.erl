@@ -166,8 +166,8 @@ lifecycle_test() ->
     teardown(Connection, Channel),
     ok.
 
-auth_test() ->
-    {ok, Connection} = new_connection(just_direct, [{password, <<"guest">>}]),
+direct_no_password_test() ->
+    {ok, Connection} = new_connection(just_direct, [{password, none}]),
     amqp_connection:close(Connection),
     wait_for_death(Connection).
 
@@ -1007,6 +1007,6 @@ make_direct_params(Props) ->
                   proplists:get_value(Key, Props, Default)
           end,
     #amqp_params_direct{username     = Pgv(username, <<"guest">>),
-                        password     = Pgv(password, none),
+                        password     = Pgv(password, <<"guest">>),
                         virtual_host = Pgv(virtual_host, <<"/">>),
                         node         = Pgv(node, node())}.
