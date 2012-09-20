@@ -281,12 +281,19 @@ is_mirrored(Q) ->
         _             -> false
     end.
 
+
+%% [1] - rabbit_amqqueue:start_mirroring/1 will turn unmirrored to
+%% master and start any needed slaves. However, if node(QPid) is not
+%% in the nodes for the policy, it won't switch it. So this is for the
+%% case where we kill the existing queue and restart elsewhere. TODO:
+%% is this TRTTD? All alternatives seem ugly.
 update_mirrors(OldQ = #amqqueue{pid = QPid},
                NewQ = #amqqueue{pid = QPid}) ->
     case {is_mirrored(OldQ), is_mirrored(NewQ)} of
         {false, false} -> ok;
         {true,  false} -> rabbit_amqqueue:stop_mirroring(QPid);
-        {false, true}  -> rabbit_amqqueue:start_mirroring(QPid);
+        {false, true}  -> rabbit_amqqueue:start_mirroring(QPid),
+                          update_mirrors0(OldQ, NewQ); %% [1]
         {true, true}   -> update_mirrors0(OldQ, NewQ)
     end.
 
