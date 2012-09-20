@@ -898,10 +898,17 @@ test_dynamic_mirroring() ->
     Test({a,[b,c]},<<"all">>,'_',{a,[b,c]},[a,b,c]),
     Test({a,[b,c]},<<"all">>,'_',{a,[d]},  [a,b,c]),
 
-    Test({a,[b,c]},<<"nodes">>,[<<"a">>,<<"b">>,<<"c">>],{a,[d]},[a,b,c,d]),
+    %% Add a node
     Test({a,[b,c]},<<"nodes">>,[<<"a">>,<<"b">>,<<"c">>],{a,[b]},[a,b,c,d]),
     Test({b,[a,c]},<<"nodes">>,[<<"a">>,<<"b">>,<<"c">>],{b,[a]},[a,b,c,d]),
+    %% Add two nodes and drop one
+    Test({a,[b,c]},<<"nodes">>,[<<"a">>,<<"b">>,<<"c">>],{a,[d]},[a,b,c,d]),
+    %% Promote slave to master by policy
     Test({a,[b,c]},<<"nodes">>,[<<"a">>,<<"b">>,<<"c">>],{d,[a]},[a,b,c,d]),
+    %% Don't try to include nodes that are not running
+    Test({a,[b]},  <<"nodes">>,[<<"a">>,<<"b">>,<<"f">>],{a,[b]},[a,b,c,d]),
+    %% If we can't find any of the nodes listed then just keep the master
+    Test({a,[]},   <<"nodes">>,[<<"f">>,<<"g">>,<<"h">>],{a,[b]},[a,b,c,d]),
 
     Test({a,[b]},  <<"exactly">>,2,{a,[]},   [a,b,c,d]),
     Test({a,[b,c]},<<"exactly">>,3,{a,[]},   [a,b,c,d]),

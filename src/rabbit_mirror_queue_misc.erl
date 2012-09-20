@@ -244,11 +244,18 @@ policy(Policy, Q) ->
 
 suggested_queue_nodes(<<"all">>, _Params, {MNode, _SNodes}, All) ->
     {MNode, All -- [MNode]};
-suggested_queue_nodes(<<"nodes">>, Nodes0, {MNode, _SNodes}, _All) ->
+suggested_queue_nodes(<<"nodes">>, Nodes0, {MNode, _SNodes}, All) ->
     Nodes = [list_to_atom(binary_to_list(Node)) || Node <- Nodes0],
-    case lists:member(MNode, Nodes) of
-        true  -> {MNode, Nodes -- [MNode]};
-        false -> promote_slave(Nodes)
+    Unavailable = Nodes -- All,
+    Available = Nodes -- Unavailable,
+    case Available of
+        [] -> %% We have never heard of anything? Not much we can do but
+              %% keep the master alive.
+              {MNode, []};
+        _  -> case lists:member(MNode, Available) of
+                  true  -> {MNode, Available -- [MNode]};
+                  false -> promote_slave(Available)
+              end
     end;
 suggested_queue_nodes(<<"exactly">>, Count, {MNode, SNodes}, All) ->
     SCount = Count - 1,
