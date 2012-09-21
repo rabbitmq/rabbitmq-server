@@ -142,12 +142,22 @@ TODO improve and explain this
                               "ou=${vhost},ou=vhosts,dc=example,dc=com"}},
      {resource_access_query,
       {for, [{resource, exchange,
-              {for, [{permission, configure,
-                      { in_group, "cn=wheel,ou=groups,dc=example,dc=com" }
+              {for, [
+                     %% Only allow "wheel" group to create exchanges
+                     {permission, configure,
+                      {in_group, "cn=wheel,ou=groups,dc=example,dc=com"}
                      },
-                     {permission, write, {constant, true}},
+
+                     %% Only allow publishing for people with surnames beginning
+                     %% with "Mac"
+                     {permission, write,
+                      {match, {attribute, "${user_dn}", "sn"}, {string, "^Mac.*"}}
+                     },
+
+                     %% Anyone can bind to exchanges
                      {permission, read,  {constant, true}}
                     ]}},
+             %% Anyone can do anything with queues
              {resource, queue, {constant, true}} ]}},
      {tag_queries,           [{administrator, {constant, false}}]},
      {use_ssl,               false},
