@@ -148,9 +148,15 @@ do_connect({Addr, Family},
             E
     end.
 
+inet_address_preference() ->
+    case application:get_env(amqp_client, prefer_ipv6_addresses) of
+        {ok, true}  -> [inet6, inet];
+        {ok, false} -> [inet, inet6]
+    end.
+
 gethostaddr(Host) ->
     Lookups = [{Family, inet:getaddr(Host, Family)}
-               || Family <- [inet6, inet]],
+               || Family <- inet_address_preference()],
     [{IP, Family} || {Family, {ok, IP}} <- Lookups].
 
 try_handshake(AmqpParams, SIF, ChMgr, State) ->
