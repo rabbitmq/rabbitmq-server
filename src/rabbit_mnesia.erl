@@ -431,9 +431,8 @@ cluster_status(WhichNodes, ForceMnesia) ->
                     %% The cluster status file records the status when the node
                     %% is online, but we know for sure that the node is offline
                     %% now, so we can remove it from the list of running nodes.
-                    {ok,
-                     {AllNodes, DiscNodes,
-                      fun() -> ordsets:del_element(node(), RunningNodes) end}};
+                    {ok, {AllNodes, DiscNodes,
+                          ordsets:del_element(node(), RunningNodes)}};
                 Err = {error, _} ->
                     Err
             end,
