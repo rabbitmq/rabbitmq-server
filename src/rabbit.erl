@@ -766,7 +766,7 @@ memory() ->
      {connection_procs, Conns},
      {channel_procs,    Chs},
      {queue_procs,      Qs},
-     {other_procs,      Processes - Conns - Chs - Qs},
+     {other_proc,       Processes - Conns - Chs - Qs},
      {mnesia,           Mnesia},
      {mgmt_db,          MgmtDB},
      {msg_index,        MsgIndex},
