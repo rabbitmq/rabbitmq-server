@@ -246,10 +246,10 @@ do_login(Username, Password, LDAP,
                                       password = Password}},
 
     TagRes = [begin
-                  ?L1("CHECK: ~s has tag ~s", [Username, Tag]),
+                  ?L1("CHECK: does ~s have tag ~s?", [Username, Tag]),
                   R = evaluate(Q, [{username, Username},
                                    {user_dn,  UserDN}], User, LDAP, State),
-                  ?L1("DECISION: ~s has tag ~s: ~p", [Username, Tag, R]),
+                  ?L1("DECISION: does ~s have tag ~s? ~p", [Username, Tag, R]),
                   {Tag, R}
               end || {Tag, Q} <- TagQueries],
     case [E || {_, E = {error, _}} <- TagRes] of

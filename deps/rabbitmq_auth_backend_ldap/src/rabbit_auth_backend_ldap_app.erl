@@ -25,7 +25,7 @@ start(_Type, _StartArgs) ->
         true  -> ok;
         false -> rabbit_log:warning(
                    "LDAP plugin loaded, but rabbit_auth_backend_ldap is not "
-                   "in the list of auth_backends. LDAP will not work.~n")
+                   "in the list of auth_backends. LDAP auth will not work.~n")
     end,
     rabbit_auth_backend_ldap_sup:start_link().
 
