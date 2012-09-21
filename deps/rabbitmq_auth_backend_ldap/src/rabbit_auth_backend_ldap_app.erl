@@ -20,6 +20,13 @@
 -export([start/2, stop/1]).
 
 start(_Type, _StartArgs) ->
+    {ok, Backends} = application:get_env(rabbit, auth_backends),
+    case lists:member(rabbit_auth_backend_ldap, Backends) of
+        true  -> ok;
+        false -> rabbit_log:warning(
+                   "LDAP plugin loaded, but rabbit_auth_backend_ldap is not "
+                   "in the list of auth_backends. LDAP will not work.~n")
+    end,
     rabbit_auth_backend_ldap_sup:start_link().
 
 stop(_State) ->
