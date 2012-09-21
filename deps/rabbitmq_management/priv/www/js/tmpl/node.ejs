@@ -135,6 +135,7 @@
                    'other_procs': 'Other processes',
                    'mnesia': 'Mnesia',
                    'msg_index': 'Message store index',
+                   'mgmt_db': 'Management database',
                    'other_ets': 'Other ETS tables',
                    'binary': 'Binaries',
                    'code': 'Code',
@@ -187,6 +188,10 @@
     <tr>
       <th>Message store index</th>
       <td><%= fmt_memory(node.memory, 'msg_index') %></td>
+    </tr>
+    <tr>
+      <th>Management database</th>
+      <td><%= fmt_memory(node.memory, 'mgmt_db') %></td>
     </tr>
     <tr>
       <th>Other ETS tables</th>
