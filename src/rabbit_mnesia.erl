@@ -438,12 +438,12 @@ cluster_status(WhichNodes, ForceMnesia) ->
                     Err
             end,
     case Nodes of
-        {ok, {AllNodes1, DiscNodes1, RunningNodesThunk}} ->
+        {ok, {AllNodes1, DiscNodes1, RunningNodes1}} ->
             {ok, case WhichNodes of
-                     status  -> {AllNodes1, DiscNodes1, RunningNodesThunk()};
+                     status  -> {AllNodes1, DiscNodes1, RunningNodes1};
                      all     -> AllNodes1;
                      disc    -> DiscNodes1;
-                     running -> RunningNodesThunk()
+                     running -> RunningNodes1
                  end};
         Err1 = {error, _} ->
             Err1
