@@ -131,9 +131,12 @@ log
 
 Default: false
 
-Set to true to cause LDAP traffic to be written to the RabbitMQ
-log. You probably only want to use this for debugging, since it will
-usually cause passwords to be written to the logs, and is rather verbose.
+Select 'true' for logging of decisions made by the LDAP plugin. This
+is typically useful for debugging.
+
+Select 'network' to *additionally* cause LDAP network traffic to be
+logged at a somewhat lower level. This will usually cause passwords to
+be written to the logs.
 
 Example configuration file
 ==========================
