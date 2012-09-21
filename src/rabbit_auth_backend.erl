@@ -20,7 +20,7 @@
 
 %% A description proplist as with auth mechanisms,
 %% exchanges. Currently unused.
--callback description() -> [proplist:property()].
+-callback description() -> [proplists:property()].
 
 %% Check a user can log in, given a username and a proplist of
 %% authentication information (e.g. [{password, Password}]).

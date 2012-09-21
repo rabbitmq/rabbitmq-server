@@ -19,7 +19,7 @@
 -ifdef(use_specs).
 
 %% A description.
--callback description() -> [proplist:property()].
+-callback description() -> [proplists:property()].
 
 %% If this mechanism is enabled, should it be offered for a given socket?
 %% (primarily so EXTERNAL can be SSL-only)
