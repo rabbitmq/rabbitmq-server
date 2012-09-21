@@ -132,7 +132,7 @@
    var sections = {'connection_procs': 'Connections',
                    'channel_procs': 'Channels',
                    'queue_procs': 'Queues',
-                   'other_procs': 'Other processes',
+                   'other_procs': 'Other process memory',
                    'mnesia': 'Mnesia',
                    'msg_index': 'Message store index',
                    'mgmt_db': 'Management database',
@@ -176,7 +176,7 @@
       <td><%= fmt_memory(node.memory, 'queue_procs') %></td>
     </tr>
     <tr>
-      <th>Other processes</th>
+      <th>Other process memory</th>
       <td><%= fmt_memory(node.memory, 'other_procs') %></td>
     </tr>
   </table>
