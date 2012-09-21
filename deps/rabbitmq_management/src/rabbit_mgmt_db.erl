@@ -218,7 +218,7 @@ init([]) ->
     rabbit_log:info("Statistics database started.~n"),
     {ok, #state{interval = Interval,
                 tables = orddict:from_list(
-                           [{Key, ets:new(anon, [private, ordered_set])} ||
+                           [{Key, ets:new(rabbit_mgmt_db, [ordered_set])} ||
                                Key <- ?TABLES])}, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
