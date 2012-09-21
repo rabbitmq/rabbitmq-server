@@ -55,7 +55,7 @@ table.list tr.total th { border: none; border-top: 1px solid #bbb; text-align: r
 div.section table.list, div.section-hidden table.list { margin-bottom: 0; }
 
 div.memory-bar { margin: 10px 0 5px 0; border-radius: 5px; border: 1px solid #ddd;}
-div.memory-total { text-align: center; float: left; margin: 0 0 10px 0; }
+div.memory-total { text-align: center; float: left; margin: 0 0 10px 0; border-top: 1px solid #ddd;}
 div.memory-hwm { text-align: right; float: right; margin: 0 0 10px 0; }
 div.memory-section { float: left; height: 30px; }
 div.memory-key { float: left; width: 10px; height: 10px; margin: 3px 5px 0 0;}

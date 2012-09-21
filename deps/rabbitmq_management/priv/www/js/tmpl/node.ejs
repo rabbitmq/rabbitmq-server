@@ -143,7 +143,7 @@
                    'other_system': 'Other system'};
    var total = 0;
    for (var section in sections) {
-     var section_width = width * node.memory[section] / node.mem_limit;
+     var section_width = Math.round(width * node.memory[section] / node.mem_limit);
      total += section_width;
 %>
     <div class="memory-section memory_<%= section %>"
@@ -154,7 +154,7 @@
   </div>
   <div class="box" style="width: <%= width %>px;">
     <div class="memory-total"
-         style="width: <%= total %>px;">
+         style="width: <%= total + 1 %>px;">
       <%= fmt_bytes(node.memory.total) %> used
     </div>
     <div class="memory-hwm">
