@@ -121,7 +121,7 @@ remove_backup() ->
     info("upgrades: Mnesia backup removed~n", []).
 
 maybe_upgrade_mnesia() ->
-    AllNodes = rabbit_mnesia:all_clustered_nodes(),
+    AllNodes = rabbit_mnesia:cluster_nodes(all),
     case rabbit_version:upgrades_required(mnesia) of
         {error, starting_from_scratch} ->
             ok;
@@ -147,7 +147,7 @@ maybe_upgrade_mnesia() ->
 upgrade_mode(AllNodes) ->
     case nodes_running(AllNodes) of
         [] ->
-            AfterUs = rabbit_mnesia:running_clustered_nodes() -- [node()],
+            AfterUs = rabbit_mnesia:cluster_nodes(running) -- [node()],
             case {node_type_legacy(), AfterUs} of
                 {disc, []}  ->
                     primary;

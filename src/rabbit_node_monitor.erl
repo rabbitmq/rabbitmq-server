@@ -179,7 +179,7 @@ node_up(Node, IsDiscNode) ->
 notify_node_up() ->
     Nodes = cluster_multicall(node_up, [node(), rabbit_mnesia:node_type()]),
     %% register other active rabbits with this rabbit
-    [ node_up(N, lists:member(N, rabbit_mnesia:clustered_disc_nodes())) ||
+    [ node_up(N, lists:member(N, rabbit_mnesia:cluster_nodes(disc))) ||
         N <- Nodes ],
     ok.
 
@@ -268,7 +268,7 @@ handle_live_rabbit(Node) ->
 
 cluster_multicall(Fun, Args) ->
     Node = node(),
-    Nodes = rabbit_mnesia:running_clustered_nodes() -- [Node],
+    Nodes = rabbit_mnesia:cluster_nodes(running) -- [Node],
     %% notify other rabbits of this cluster
     case rpc:multicall(Nodes, rabbit_node_monitor, Fun, Args,
                        ?RABBIT_UP_RPC_TIMEOUT) of

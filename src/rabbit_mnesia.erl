@@ -28,9 +28,7 @@
          status/0,
          is_db_empty/0,
          is_clustered/0,
-         all_clustered_nodes/0,
-         clustered_disc_nodes/0,
-         running_clustered_nodes/0,
+         cluster_nodes/1,
          node_type/0,
          dir/0,
          table_names/0,
@@ -83,9 +81,7 @@
                          {'running_nodes', [node()]}]).
 -spec(is_db_empty/0 :: () -> boolean()).
 -spec(is_clustered/0 :: () -> boolean()).
--spec(all_clustered_nodes/0 :: () -> [node()]).
--spec(clustered_disc_nodes/0 :: () -> [node()]).
--spec(running_clustered_nodes/0 :: () -> [node()]).
+-spec(cluster_nodes/1 :: ('all' | 'disc' | 'running') -> [node()]).
 -spec(node_type/0 :: () -> node_type()).
 -spec(dir/0 :: () -> file:filename()).
 -spec(table_names/0 :: () -> [atom()]).
@@ -122,7 +118,7 @@ init() ->
     ensure_mnesia_dir(),
     case is_virgin_node() of
         true  -> init_from_config();
-        false -> init(node_type(), all_clustered_nodes())
+        false -> init(node_type(), cluster_nodes(all))
     end,
     %% We intuitively expect the global name server to be synced when
     %% Mnesia is up. In fact that's not guaranteed to be the case -
@@ -215,7 +211,7 @@ reset(Force) ->
         true ->
             disconnect_nodes(nodes());
         false ->
-            AllNodes = all_clustered_nodes(),
+            AllNodes = cluster_nodes(all),
             %% Reconnecting so that we will get an up to date nodes.
             %% We don't need to check for consistency because we are
             %% resetting.  Force=true here so that reset still works
@@ -229,7 +225,7 @@ reset(Force) ->
             leave_cluster(),
             rabbit_misc:ensure_ok(mnesia:delete_schema([Node]),
                                   cannot_delete_schema),
-            disconnect_nodes(all_clustered_nodes()),
+            disconnect_nodes(cluster_nodes(all)),
             ok
     end,
     %% remove persisted messages and any other garbage we find
@@ -250,7 +246,7 @@ change_cluster_node_type(Type) ->
         true  -> ok
     end,
     {_, _, RunningNodes} =
-        case discover_cluster(all_clustered_nodes()) of
+        case discover_cluster(cluster_nodes(all)) of
             {ok, Status}     -> Status;
             {error, _Reason} -> e(cannot_connect_to_cluster)
         end,
@@ -291,7 +287,7 @@ update_cluster_nodes(DiscoveryNode) ->
 %%     the last or second to last after the node we're removing to go
 %%     down
 forget_cluster_node(Node, RemoveWhenOffline) ->
-    case lists:member(Node, all_clustered_nodes()) of
+    case lists:member(Node, cluster_nodes(all)) of
         true  -> ok;
         false -> e(not_a_cluster_node)
     end,
@@ -311,7 +307,7 @@ forget_cluster_node(Node, RemoveWhenOffline) ->
     end.
 
 remove_node_offline_node(Node) ->
-    case {running_nodes(all_clustered_nodes()) -- [Node], node_type()} of
+    case {running_nodes(cluster_nodes(all)) -- [Node], node_type()} of
         {[], disc} ->
             %% Note that while we check if the nodes was the last to
             %% go down, apart from the node we're removing from, this
@@ -321,7 +317,7 @@ remove_node_offline_node(Node) ->
             %% and B goes down. In this case, C is the second-to-last,
             %% but we don't know that and we'll remove B from A
             %% anyway, even if that will lead to bad things.
-            case running_clustered_nodes() -- [node(), Node] of
+            case cluster_nodes(running) -- [node(), Node] of
                 [] -> start_mnesia(),
                       try
                           [mnesia:force_load_table(T) ||
@@ -346,10 +342,10 @@ status() ->
     IfNonEmpty = fun (_,    [])    -> [];
                      (Type, Nodes) -> [{Type, Nodes}]
                  end,
-    [{nodes, (IfNonEmpty(disc, clustered_disc_nodes()) ++
-                  IfNonEmpty(ram, clustered_ram_nodes()))}] ++
+    [{nodes, (IfNonEmpty(disc, cluster_nodes(disc)) ++
+                  IfNonEmpty(ram, cluster_ram_nodes()))}] ++
         case mnesia:system_info(is_running) of
-            yes -> [{running_nodes, running_clustered_nodes()}];
+            yes -> [{running_nodes, cluster_nodes(running)}];
             no  -> []
         end.
 
@@ -358,7 +354,7 @@ is_db_empty() ->
               table_names()).
 
 is_clustered() ->
-    AllNodes = all_clustered_nodes(),
+    AllNodes = cluster_nodes(all),
     not is_only_node(AllNodes) andalso AllNodes =/= [].
 
 is_disc_and_clustered() -> node_type() =:= disc andalso is_clustered().
@@ -366,16 +362,10 @@ is_disc_and_clustered() -> node_type() =:= disc andalso is_clustered().
 %% Functions that retrieve the nodes in the cluster will rely on the
 %% status file if offline.
 
-all_clustered_nodes() -> cluster_status(all).
+cluster_ram_nodes() -> cluster_nodes(all) -- cluster_nodes(disc).
 
-clustered_disc_nodes() -> cluster_status(disc).
-
-clustered_ram_nodes() -> cluster_status(all) -- cluster_status(disc).
-
-running_clustered_nodes() -> cluster_status(running).
-
-running_clustered_disc_nodes() ->
-    {_AllNodes, DiscNodes, RunningNodes} = cluster_status(status),
+cluster_running_disc_nodes() ->
+    {_AllNodes, DiscNodes, RunningNodes} = cluster_status(),
     ordsets:intersection(ordsets:from_list(DiscNodes),
                          ordsets:from_list(RunningNodes)).
 
@@ -434,6 +424,12 @@ cluster_status(WhichNodes) ->
         running -> RunningNodesThunk()
     end.
 
+cluster_status() -> cluster_status(status).
+
+cluster_nodes(WhichNodes) when WhichNodes =:= all orelse WhichNodes =:= disc
+                               orelse WhichNodes =:= running ->
+    cluster_status(WhichNodes).
+
 cluster_status_from_mnesia() ->
     case mnesia_nodes() of
         {ok, {AllNodes, DiscNodes}} -> {ok, {AllNodes, DiscNodes,
@@ -446,7 +442,7 @@ node_info() ->
      cluster_status_from_mnesia()}.
 
 node_type() ->
-    DiscNodes = clustered_disc_nodes(),
+    DiscNodes = cluster_nodes(disc),
     case DiscNodes =:= [] orelse me_in_nodes(DiscNodes) of
         true  -> disc;
         false -> ram
@@ -634,10 +630,10 @@ check_cluster_consistency() ->
     case lists:foldl(
            fun (Node,  {error, _})    -> check_cluster_consistency(Node);
                (_Node, {ok, Status})  -> {ok, Status}
-           end, {error, not_found}, nodes_excl_me(all_clustered_nodes()))
+           end, {error, not_found}, nodes_excl_me(cluster_nodes(all)))
     of
         {ok, Status = {RemoteAllNodes, _, _}} ->
-            case ordsets:is_subset(ordsets:from_list(all_clustered_nodes()),
+            case ordsets:is_subset(ordsets:from_list(cluster_nodes(all)),
                                    ordsets:from_list(RemoteAllNodes)) of
                 true  ->
                     ok;
@@ -680,13 +676,13 @@ check_cluster_consistency(Node) ->
 %%--------------------------------------------------------------------
 
 on_node_up(Node) ->
-    case is_only_node(Node, running_clustered_disc_nodes()) of
+    case is_only_node(Node, cluster_running_disc_nodes()) of
         true  -> rabbit_log:info("cluster contains disc nodes again~n");
         false -> ok
     end.
 
 on_node_down(_Node) ->
-    case running_clustered_disc_nodes() of
+    case cluster_running_disc_nodes() of
         [] -> rabbit_log:info("only running disc node went down~n");
         _  -> ok
     end.
@@ -985,7 +981,7 @@ remove_node_if_mnesia_running(Node) ->
     end.
 
 leave_cluster() ->
-    RunningNodes = running_nodes(nodes_excl_me(all_clustered_nodes())),
+    RunningNodes = running_nodes(nodes_excl_me(cluster_nodes(all))),
     case not is_clustered() andalso RunningNodes =:= [] of
         true  -> ok;
         false -> case lists:any(fun leave_cluster/1, RunningNodes) of
@@ -1111,7 +1107,7 @@ is_only_node(Node, Nodes) -> Nodes =:= [Node].
 
 is_only_node(Nodes) -> is_only_node(node(), Nodes).
 
-is_only_disc_node() -> is_only_node(clustered_disc_nodes()).
+is_only_disc_node() -> is_only_node(cluster_nodes(disc)).
 
 me_in_nodes(Nodes) -> lists:member(node(), Nodes).
 

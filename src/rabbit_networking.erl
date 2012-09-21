@@ -295,7 +295,7 @@ start_ssl_client(SslOpts, Sock) ->
     start_client(Sock, ssl_transform_fun(SslOpts)).
 
 connections() ->
-    rabbit_misc:append_rpc_all_nodes(rabbit_mnesia:running_clustered_nodes(),
+    rabbit_misc:append_rpc_all_nodes(rabbit_mnesia:cluster_nodes(running),
                                      rabbit_networking, connections_local, []).
 
 connections_local() ->
