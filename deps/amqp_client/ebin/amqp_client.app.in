@@ -3,6 +3,6 @@
   {vsn, "%%VSN%%"},
   {modules, []},
   {registered, [amqp_sup]},
-  {env, [{prefer_ipv6_addresses, true}]},
+  {env, [{prefer_ipv6, true}]},
   {mod, {amqp_client, []}},
   {applications, [kernel, stdlib]}]}.

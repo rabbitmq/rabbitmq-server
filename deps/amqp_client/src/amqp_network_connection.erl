@@ -149,7 +149,7 @@ do_connect({Addr, Family},
     end.
 
 inet_address_preference() ->
-    case application:get_env(amqp_client, prefer_ipv6_addresses) of
+    case application:get_env(amqp_client, prefer_ipv6) of
         {ok, true}  -> [inet6, inet];
         {ok, false} -> [inet, inet6]
     end.
