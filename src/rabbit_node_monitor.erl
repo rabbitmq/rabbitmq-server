@@ -96,11 +96,11 @@ prepare_cluster_status_files() ->
     ThisNode = [node()],
     %% The running nodes file might contain a set or a list, in case of the
     %% legacy file
-    RunningNodes2 = ordsets:from_list(ThisNode ++ RunningNodes1),
+    RunningNodes2 = lists:usort(ThisNode ++ RunningNodes1),
     {AllNodes1, WantDiscNode} =
         case try_read_file(cluster_status_filename()) of
             {ok, [{AllNodes, DiscNodes0}]} ->
-                {AllNodes, ordsets:is_element(node(), DiscNodes0)};
+                {AllNodes, lists:member(node(), DiscNodes0)};
             {ok, [AllNodes0]} when is_list(AllNodes0) ->
                 {legacy_cluster_nodes(AllNodes0),
                  legacy_should_be_disc_node(AllNodes0)};
@@ -109,7 +109,7 @@ prepare_cluster_status_files() ->
             {error, enoent} ->
                 {legacy_cluster_nodes([]), true}
         end,
-    AllNodes2 = ordsets:union(AllNodes1, RunningNodes2),
+    AllNodes2 = lists:usort(AllNodes1 ++ RunningNodes2),
     DiscNodes = case WantDiscNode of
                     true  -> ThisNode;
                     false -> []
@@ -179,7 +179,7 @@ node_up(Node, IsDiscNode) ->
 notify_node_up() ->
     Nodes = cluster_multicall(node_up, [node(), rabbit_mnesia:node_type()]),
     %% register other active rabbits with this rabbit
-    [ node_up(N, ordsets:is_element(N, rabbit_mnesia:clustered_disc_nodes())) ||
+    [ node_up(N, lists:member(N, rabbit_mnesia:clustered_disc_nodes())) ||
         N <- Nodes ],
     ok.
 
@@ -203,31 +203,29 @@ handle_cast({node_up, Node, NodeType}, State) ->
         true  -> {noreply, State};
         false -> rabbit_log:info("rabbit on node ~p up~n", [Node]),
                  {AllNodes, DiscNodes, RunningNodes} = read_cluster_status(),
-                 write_cluster_status({ordsets:add_element(Node, AllNodes),
+                 write_cluster_status({add_node(Node, AllNodes),
                                        case NodeType of
-                                           disc -> ordsets:add_element(
-                                                     Node, DiscNodes);
+                                           disc -> add_node(Node, DiscNodes);
                                            ram  -> DiscNodes
                                        end,
-                                       ordsets:add_element(Node, RunningNodes)}),
+                                       add_node(Node, RunningNodes)}),
                  erlang:monitor(process, {rabbit, Node}),
                  ok = handle_live_rabbit(Node),
                  {noreply, State}
     end;
 handle_cast({joined_cluster, Node, NodeType}, State) ->
     {AllNodes, DiscNodes, RunningNodes} = read_cluster_status(),
-    write_cluster_status({ordsets:add_element(Node, AllNodes),
+    write_cluster_status({add_node(Node, AllNodes),
                           case NodeType of
-                              disc -> ordsets:add_element(Node, DiscNodes);
+                              disc -> add_node(Node, DiscNodes);
                               ram  -> DiscNodes
                           end,
                           RunningNodes}),
     {noreply, State};
 handle_cast({left_cluster, Node}, State) ->
     {AllNodes, DiscNodes, RunningNodes} = read_cluster_status(),
-    write_cluster_status({ordsets:del_element(Node, AllNodes),
-                          ordsets:del_element(Node, DiscNodes),
-                          ordsets:del_element(Node, RunningNodes)}),
+    write_cluster_status({del_node(Node, AllNodes), del_node(Node, DiscNodes),
+                          del_node(Node, RunningNodes)}),
     {noreply, State};
 handle_cast(_Msg, State) ->
     {noreply, State}.
@@ -235,8 +233,7 @@ handle_cast(_Msg, State) ->
 handle_info({'DOWN', _MRef, process, {rabbit, Node}, _Reason}, State) ->
     rabbit_log:info("rabbit on node ~p down~n", [Node]),
     {AllNodes, DiscNodes, RunningNodes} = read_cluster_status(),
-    write_cluster_status({AllNodes, DiscNodes,
-                          ordsets:del_element(Node, RunningNodes)}),
+    write_cluster_status({AllNodes, DiscNodes, del_node(Node, RunningNodes)}),
     ok = handle_dead_rabbit(Node),
     {noreply, State};
 handle_info(_Info, State) ->
@@ -289,7 +286,13 @@ is_already_monitored(Item) ->
 legacy_cluster_nodes(Nodes) ->
     %% We get all the info that we can, including the nodes from mnesia, which
     %% will be there if the node is a disc node (empty list otherwise)
-    ordsets:from_list(Nodes ++ mnesia:system_info(db_nodes)).
+    lists:usort(Nodes ++ mnesia:system_info(db_nodes)).
 
 legacy_should_be_disc_node(DiscNodes) ->
     DiscNodes == [] orelse lists:member(node(), DiscNodes).
+
+add_node(Node, Nodes) ->
+    lists:usort([Node|Nodes]).
+
+del_node(Node, Nodes) ->
+    Nodes -- [Node].
