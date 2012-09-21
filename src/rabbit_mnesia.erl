@@ -256,7 +256,9 @@ change_cluster_node_type(Type) ->
             {ok, Status}     -> Status;
             {error, _Reason} -> e(cannot_connect_to_cluster)
         end,
-    Node = case RunningNodes of
+    %% We might still be marked as running by a remote node since the
+    %% information of us going down might not have propagated yet.
+    Node = case RunningNodes -- [node()] of
                []        -> e(no_online_cluster_nodes);
                [Node0|_] -> Node0
            end,
