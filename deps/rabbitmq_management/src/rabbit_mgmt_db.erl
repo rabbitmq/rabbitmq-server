@@ -337,7 +337,7 @@ handle_pre_hibernate(State) ->
     %% rabbit_mgmt_db is hibernating the odds are rabbit_event is
     %% quiescing in some way too).
     rpc:multicall(
-      rabbit_mnesia:running_clustered_nodes(), rabbit_mgmt_db_handler, gc, []),
+      rabbit_mnesia:cluster_nodes(running), rabbit_mgmt_db_handler, gc, []),
     {hibernate, State}.
 
 %%----------------------------------------------------------------------------
