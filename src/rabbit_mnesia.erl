@@ -402,8 +402,8 @@ mnesia_nodes() ->
     end.
 
 cluster_status(WhichNodes) ->
-    %% I don't want to call `running_nodes/1' unless if necessary,
-    %% since it can deadlock when stopping applications.
+    %% I don't want to call `running_nodes/1' unless if necessary, since it's
+    %% pretty expensive.
     {AllNodes1, DiscNodes1, RunningNodesThunk} =
         case mnesia_nodes() of
             {ok, {AllNodes, DiscNodes}} ->
@@ -411,10 +411,9 @@ cluster_status(WhichNodes) ->
             {error, _Reason} ->
                 {AllNodes, DiscNodes, RunningNodes} =
                     rabbit_node_monitor:read_cluster_status(),
-                %% The cluster status file records the status when the
-                %% node is online, but we know for sure that the node
-                %% is offline now, so we can remove it from the list
-                %% of running nodes.
+                %% The cluster status file records the status when the node is
+                %% online, but we know for sure that the node is offline now, so
+                %% we can remove it from the list of running nodes.
                 {AllNodes, DiscNodes, fun() -> nodes_excl_me(RunningNodes) end}
         end,
     case WhichNodes of
@@ -1028,18 +1027,15 @@ change_extra_db_nodes(ClusterNodes0, CheckOtherNodes) ->
             Nodes
     end.
 
-%% What we really want is nodes running rabbit, not running
-%% mnesia. Using `mnesia:system_info(running_db_nodes)' will
-%% return false positives when we are actually just doing cluster
-%% operations (e.g. joining the cluster).
+%% We're not using `mnesia:system_info(running_db_nodes)' directly because if
+%% the node is a RAM node it won't know about other nodes when mnesia is stopped
 running_nodes(Nodes) ->
     {Replies, _BadNodes} =
         rpc:multicall(Nodes, rabbit_mnesia, is_running_remote, []),
     [Node || {Running, Node} <- Replies, Running].
 
 is_running_remote() ->
-    {proplists:is_defined(rabbit, application:which_applications(infinity)),
-     node()}.
+    {mnesia:system_info(is_running) =:= yes, node()}.
 
 check_consistency(OTP, Rabbit) ->
     rabbit_misc:sequence_error(
@@ -1080,16 +1076,17 @@ check_rabbit_consistency(Remote) ->
 %% mnesia tables aren't there because restarted RAM nodes won't have
 %% tables while still being non-virgin.  What we do instead is to
 %% check if the mnesia directory is non existant or empty, with the
-%% exception of the cluster status file, which will be there thanks to
+%% exception of the cluster status files, which will be there thanks to
 %% `rabbit_node_monitor:prepare_cluster_status_file/0'.
 is_virgin_node() ->
     case rabbit_file:list_dir(dir()) of
         {error, enoent} -> true;
-        {ok, []}        -> true;
-        {ok, [File]}    -> (dir() ++ "/" ++ File) =:=
-                               [rabbit_node_monitor:cluster_status_filename(),
-                                rabbit_node_monitor:running_nodes_filename()];
-        {ok, _}         -> false
+        {ok, []} -> true;
+        {ok, [File1, File2]} ->
+            lists:usort([dir() ++ "/" ++ File1, dir() ++ "/" ++ File2]) =:=
+                lists:usort([rabbit_node_monitor:cluster_status_filename(),
+                             rabbit_node_monitor:running_nodes_filename()]);
+        {ok, _} -> false
     end.
 
 find_good_node([]) ->
