@@ -747,13 +747,15 @@ start_fhc() ->
 
 %% Like erlang:memory(), but with awareness of rabbit-y things
 memory() ->
-    QPids = lists:append([pids(Q) || Q <- rabbit_amqqueue:list()]),
-    Conns = sum_proc_memory(rabbit_networking:connections_local()),
-    Chs = sum_proc_memory(rabbit_channel:list_local()),
-    Qs = sum_proc_memory(QPids),
+    ConnChs = sup_memory(rabbit_tcp_client_sup),
+    Qs = sup_memory(rabbit_amqqueue_sup) +
+        sup_memory(rabbit_mirror_queue_slave_sup),
     Mnesia = mnesia_memory(),
-    MsgIndex = ets_memory(rabbit_msg_store_ets_index),
-    MgmtDB = ets_memory(rabbit_mgmt_db),
+    MsgIndexETS = ets_memory(rabbit_msg_store_ets_index),
+    MsgIndexProc = pid_memory(msg_store_transient) +
+        pid_memory(msg_store_persistent),
+    MgmtDbETS = ets_memory(rabbit_mgmt_db),
+    MgmtDbProc = sup_memory(rabbit_mgmt_sup),
     [{total,     Total},
      {processes, Processes},
      {ets,       ETS},
@@ -762,29 +764,37 @@ memory() ->
      {code,      Code},
      {system,    System}] =
         erlang:memory([total, processes, ets, atom, binary, code, system]),
-    [{total,            Total},
-     {connection_procs, Conns},
-     {channel_procs,    Chs},
-     {queue_procs,      Qs},
-     {other_proc,       Processes - Conns - Chs - Qs},
-     {mnesia,           Mnesia},
-     {mgmt_db,          MgmtDB},
-     {msg_index,        MsgIndex},
-     {other_ets,        ETS - Mnesia - MsgIndex - MgmtDB},
-     {binary,           Bin},
-     {code,             Code},
-     {atom,             Atom},
-     {other_system,     System - ETS - Atom - Bin - Code}].
+    [{total,                    Total},
+     {connection_channel_procs, ConnChs},
+     {queue_procs,              Qs},
+     {other_proc,               Processes - ConnChs - Qs - MsgIndexProc -
+          MgmtDbProc},
+     {mnesia,                   Mnesia},
+     {mgmt_db,                  MgmtDbETS + MgmtDbProc},
+     {msg_index,                MsgIndexETS + MsgIndexProc},
+     {other_ets,                ETS - Mnesia - MsgIndexETS - MgmtDbETS},
+     {binary,                   Bin},
+     {code,                     Code},
+     {atom,                     Atom},
+     {other_system,             System - ETS - Atom - Bin - Code}].
 
-sum_proc_memory(Pids) ->
-    lists:sum([Mem || P <- Pids, {memory, Mem} <- [process_info(P, memory)]]).
+sup_memory(Sup) ->
+    lists:sum([child_memory(P, T) || {_, P, T, _} <- sup_children(Sup)]) +
+        pid_memory(Sup).
 
-pids(#amqqueue{pid = Pid, slave_pids = undefined}) ->
-    local_pids([Pid]);
-pids(#amqqueue{pid = Pid, slave_pids = SPids}) ->
-    local_pids([Pid | SPids]).
+sup_children(Sup) ->
+    rabbit_misc:with_exit_handler(
+      rabbit_misc:const([]), fun () -> supervisor:which_children(Sup) end).
 
-local_pids(Pids) -> [Pid || Pid <- Pids, node(Pid) =:= node()].
+pid_memory(Pid)  when is_pid(Pid)   -> element(2, process_info(Pid, memory));
+pid_memory(Name) when is_atom(Name) -> case whereis(Name) of
+                                           P when is_pid(P) -> pid_memory(P);
+                                           _                -> 0
+                                       end.
+
+child_memory(Pid, worker)     when is_pid (Pid) -> pid_memory(Pid);
+child_memory(Pid, supervisor) when is_pid (Pid) -> sup_memory(Pid);
+child_memory(_, _)                              -> 0.
 
 mnesia_memory() ->
     lists:sum([bytes(mnesia:table_info(Tab, memory)) ||
