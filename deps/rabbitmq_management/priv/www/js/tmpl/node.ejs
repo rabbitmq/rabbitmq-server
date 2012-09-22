@@ -129,8 +129,7 @@
 %>
   <div class="memory-bar box" style="width: <%= width %>px;">
 <%
-   var sections = {'connection_procs': 'Connections',
-                   'channel_procs': 'Channels',
+   var sections = {'connection_channel_procs': 'Connections / Channels',
                    'queue_procs': 'Queues',
                    'other_proc': 'Other process memory',
                    'mnesia': 'Mnesia',
@@ -164,12 +163,8 @@
 
   <table class="facts">
     <tr>
-      <th>Connections</th>
-      <td><%= fmt_memory(node.memory, 'connection_procs') %></td>
-    </tr>
-    <tr>
-      <th>Channels</th>
-      <td><%= fmt_memory(node.memory, 'channel_procs') %></td>
+      <th>Connections / Channels</th>
+      <td><%= fmt_memory(node.memory, 'connection_channel_procs') %></td>
     </tr>
     <tr>
       <th>Queues</th>
