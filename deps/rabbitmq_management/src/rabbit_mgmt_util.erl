@@ -88,7 +88,8 @@ is_authorized(ReqData, Context, Fun) ->
     {ok, User = #user{tags = Tags}} =
         rabbit_access_control:check_user_pass_login(Username, Password),
     case is_mgmt_user(Tags) andalso Fun(User) of
-        true  -> {true, ReqData, Context#context{user = User}};
+        true  -> {true, ReqData, Context#context{user     = User,
+                                                 password = Password}};
         false -> {?AUTH_REALM, ReqData, Context}
     end.
 
@@ -332,13 +333,13 @@ with_channel(VHost, ReqData, Context, Fun) ->
     with_channel(VHost, ReqData, Context, node(), Fun).
 
 with_channel(VHost, ReqData,
-             Context = #context{user = #user {username = Username}},
+             Context = #context{user     = #user {username = Username},
+                                password = Password},
              Node, Fun) ->
     Params = #amqp_params_direct{username     = Username,
+                                 password     = Password,
                                  node         = Node,
                                  virtual_host = VHost},
-    %% We don't need to check the password here, we already did in
-    %% is_authorized/3.
     case amqp_connection:start(Params) of
         {ok, Conn} ->
             {ok, Ch} = amqp_connection:open_channel(Conn),

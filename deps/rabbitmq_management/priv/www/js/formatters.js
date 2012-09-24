@@ -378,13 +378,13 @@ function fmt_connection_state(conn) {
     var text = conn.state;
     var explanation;
 
-    if (conn.last_blocked_by == 'mem' && conn.state == 'blocked') {
+    if (conn.last_blocked_by == 'resource' && conn.state == 'blocked') {
         colour = 'red';
-        explanation = 'Memory alarm: Connection blocked.';
+        explanation = 'Resource alarm: Connection blocked.';
     }
     else if (conn.state == 'blocking') {
         colour = 'yellow';
-        explanation = 'Memory alarm: Connection will block on publish.';
+        explanation = 'Resource alarm: Connection will block on publish.';
     }
     else if (conn.last_blocked_by == 'flow') {
         var age = conn.last_blocked_age.toFixed();
@@ -485,8 +485,7 @@ function message_rates(stats) {
                      ['Acknowledge', 'ack'],
                      ['Get', 'get'], ['Deliver (noack)', 'deliver_no_ack'],
                      ['Get (noack)', 'get_no_ack'],
-                     ['Return (mandatory)', 'return_unroutable'],
-                     ['Return (immediate)', 'return_not_delivered']];
+                     ['Return', 'return_unroutable']];
         for (var i in items) {
             var name = items[i][0];
             var key = items[i][1] + '_details';
