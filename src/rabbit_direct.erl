@@ -59,7 +59,7 @@ list_local() ->
     pg_local:get_members(rabbit_direct).
 
 list() ->
-    rabbit_misc:append_rpc_all_nodes(rabbit_mnesia:running_clustered_nodes(),
+    rabbit_misc:append_rpc_all_nodes(rabbit_mnesia:cluster_nodes(running),
                                      rabbit_direct, list_local, []).
 
 %%----------------------------------------------------------------------------
