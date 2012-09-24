@@ -342,6 +342,8 @@ is_db_empty() ->
 is_clustered() -> AllNodes = cluster_nodes(all),
                   AllNodes =/= [] andalso AllNodes =/= [node()].
 
+cluster_nodes(WhichNodes) -> cluster_status(WhichNodes).
+
 %% This function is the actual source of information, since it gets
 %% the data from mnesia. Obviously it'll work only when mnesia is
 %% running.
@@ -372,7 +374,7 @@ mnesia_nodes() ->
             end
     end.
 
-cluster_nodes(WhichNodes) ->
+cluster_status(WhichNodes) ->
     %% I don't want to call `running_nodes/1' unless if necessary, since it's
     %% pretty expensive.
     {AllNodes1, DiscNodes1, RunningNodesThunk} =
@@ -653,7 +655,7 @@ on_node_down(_Node) ->
     end.
 
 running_disc_nodes() ->
-    {_AllNodes, DiscNodes, RunningNodes} = cluster_nodes(status),
+    {_AllNodes, DiscNodes, RunningNodes} = cluster_status(status),
     ordsets:to_list(ordsets:intersection(ordsets:from_list(DiscNodes),
                                          ordsets:from_list(RunningNodes))).
 
