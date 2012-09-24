@@ -43,7 +43,6 @@ memory() ->
     MgmtDbETS = ets_memory(rabbit_mgmt_db),
     MgmtDbProc = sup_memory(rabbit_mgmt_sup),
     Plugins = plugins_memory() - MgmtDbProc,
-    OtherProc = Processes - ConnChs - Qs - MsgIndexProc - MgmtDbProc - Plugins,
     [{total,     Total},
      {processes, Processes},
      {ets,       ETS},
@@ -52,6 +51,7 @@ memory() ->
      {code,      Code},
      {system,    System}] =
         erlang:memory([total, processes, ets, atom, binary, code, system]),
+    OtherProc = Processes - ConnChs - Qs - MsgIndexProc - MgmtDbProc - Plugins,
     [{total,                    Total},
      {connection_channel_procs, ConnChs},
      {queue_procs,              Qs},
