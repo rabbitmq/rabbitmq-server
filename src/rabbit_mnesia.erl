@@ -339,9 +339,8 @@ is_db_empty() ->
     lists:all(fun (Tab) -> mnesia:dirty_first(Tab) == '$end_of_table' end,
               table_names()).
 
-is_clustered() ->
-    AllNodes = cluster_nodes(all),
-    AllNodes =/= [] andalso not is_only_node(AllNodes).
+is_clustered() -> AllNodes = cluster_nodes(all),
+                  AllNodes =/= [] andalso AllNodes =/= [node()].
 
 %% This function is the actual source of information, since it gets
 %% the data from mnesia. Obviously it'll work only when mnesia is
@@ -642,7 +641,7 @@ check_cluster_consistency(Node) ->
 %%--------------------------------------------------------------------
 
 on_node_up(Node) ->
-    case is_only_node(Node, running_disc_nodes()) of
+    case running_disc_nodes() =:= [Node] of
         true  -> rabbit_log:info("cluster contains disc nodes again~n");
         false -> ok
     end.
@@ -1077,11 +1076,7 @@ find_good_node([Node | Nodes]) ->
 
 is_only_clustered_disc_node() ->
     node_type() =:= disc andalso is_clustered() andalso
-        is_only_node(cluster_nodes(disc)).
-
-is_only_node(Node, Nodes) -> Nodes =:= [Node].
-
-is_only_node(Nodes) -> is_only_node(node(), Nodes).
+        cluster_nodes(disc) =:= [node()].
 
 me_in_nodes(Nodes) -> lists:member(node(), Nodes).
 
