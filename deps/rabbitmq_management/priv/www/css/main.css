@@ -60,14 +60,14 @@ div.memory-hwm { text-align: right; float: right; margin: 0 0 10px 0; }
 div.memory-section { float: left; height: 30px; }
 div.memory-key { float: left; width: 10px; height: 10px; margin: 3px 5px 0 0;}
 
-div.memory_connection_channel_procs { background: #f88; }
-div.memory_queue_procs              { background: #faa; }
-div.memory_plugins                  { background: #dd8; }
-div.memory_other_proc               { background: #ffb; }
-div.memory_mnesia                   { background: #00f; }
-div.memory_msg_index                { background: #44f; }
-div.memory_mgmt_db                  { background: #99f; }
-div.memory_other_ets                { background: #ccf; }
+div.memory_connection_channel_procs { background: #ff8e00; }
+div.memory_queue_procs              { background: #ffb355; }
+div.memory_plugins                  { background: #ffdaac; }
+div.memory_other_proc               { background: #fff4e7; }
+div.memory_mnesia                   { background: #00a2ff; }
+div.memory_msg_index                { background: #59c2ff; }
+div.memory_mgmt_db                  { background: #aae0ff; }
+div.memory_other_ets                { background: #ecf8ff; }
 div.memory_binary                   { background: #666; }
 div.memory_code                     { background: #999; }
 div.memory_atom                     { background: #bbb; }
