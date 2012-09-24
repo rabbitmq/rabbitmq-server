@@ -69,10 +69,12 @@ In Group Query
 --------------
 
 {in_group, Pattern}
+{in_group, Pattern, AttributeName}
 
 Like the Exists Query, substitutes arguments into a pattern to look
 for an object. However, this query returns true if the logged in user
-is a member.
+is a member; checking either against the "member" attribute, or any
+named attribute.
 
 Match Query
 -----------

@@ -121,9 +121,12 @@ evaluate0({exists, DNPattern}, Args, _User, LDAP, State) ->
     ?L1("evaluated exists for \"~s\": ~p", [DN, R]),
     R;
 
-evaluate0({in_group, DNPattern}, Args, #user{impl = #impl{user_dn = UserDN}},
-         LDAP, State) ->
-    Filter = eldap:equalityMatch("member", UserDN),
+evaluate0({in_group, DNPattern}, Args, User, LDAP, State) ->
+    evaluate({in_group, DNPattern, "member"}, Args, User, LDAP, State);
+
+evaluate0({in_group, DNPattern, Desc}, Args,
+          #user{impl = #impl{user_dn = UserDN}}, LDAP, State) ->
+    Filter = eldap:equalityMatch(Desc, UserDN),
     DN = fill(DNPattern, Args, State),
     R = object_exists(DN, Filter, LDAP),
     ?L1("evaluated in_group for \"~s\": ~p", [DN, R]),
