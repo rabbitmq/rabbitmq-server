@@ -187,14 +187,15 @@ join_cluster(DiscoveryNode, NodeType) ->
 %% return node to its virgin state, where it is not member of any
 %% cluster, has no cluster configuration, no local database, and no
 %% persisted messages
-reset()       -> reset(false).
-force_reset() -> reset(true).
+reset() ->
+    rabbit_misc:local_info_msg("Resetting Rabbit~n", []),
+    reset(false).
+
+force_reset() ->
+    rabbit_misc:local_info_msg("Resetting Rabbit forcefully~n", []),
+    reset(true).
 
 reset(Force) ->
-    rabbit_misc:local_info_msg("Resetting Rabbit~s~n",
-                               [if Force -> " forcefully";
-                                   true  -> ""
-                                end]),
     ensure_mnesia_not_running(),
     Node = node(),
     case Force of
@@ -229,8 +230,8 @@ reset(Force) ->
 disconnect_nodes(Nodes) -> [erlang:disconnect_node(N) || N <- Nodes].
 
 change_cluster_node_type(Type) ->
-    ensure_mnesia_dir(),
     ensure_mnesia_not_running(),
+    ensure_mnesia_dir(),
     case is_clustered() of
         false -> e(not_clustered);
         true  -> ok
@@ -243,7 +244,7 @@ change_cluster_node_type(Type) ->
                []        -> e(no_online_cluster_nodes);
                [Node0|_] -> Node0
            end,
-    ok = reset(false),
+    ok = reset(),
     ok = join_cluster(Node, Type).
 
 update_cluster_nodes(DiscoveryNode) ->
@@ -261,6 +262,8 @@ update_cluster_nodes(DiscoveryNode) ->
             %% nodes
             mnesia:delete_schema([node()]),
             rabbit_node_monitor:write_cluster_status(Status),
+            rabbit_misc:local_info_msg("Updating cluster nodes from ~p~n",
+                                       [DiscoveryNode]),
             init_db_with_mnesia(AllNodes, node_type(), true, true);
         false ->
             e(inconsistent_cluster)
