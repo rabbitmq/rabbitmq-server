@@ -31,6 +31,7 @@
 -define(CLEANUP_QUEUE_NAME, <<"cleanup-queue">>).
 
 all_tests() ->
+    ok = supervisor2_tests:test_all(),
     passed = gm_tests:all_tests(),
     passed = mirrored_supervisor_tests:all_tests(),
     application:set_env(rabbit, file_handles_high_watermark, 10, infinity),
