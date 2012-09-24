@@ -287,8 +287,17 @@ with(Name, F, E) ->
     case lookup(Name) of
         {ok, Q = #amqqueue{slave_pids = []}} ->
             rabbit_misc:with_exit_handler(E, fun () -> F(Q) end);
-        {ok, Q} ->
-            E1 = fun () -> timer:sleep(25), with(Name, F, E) end,
+        {ok, Q = #amqqueue{pid = QPid}} ->
+            %% We check is_process_alive(QPid) in case we receive a
+            %% nodedown (for example) in F() that has nothing to do
+            %% with the QPid.
+            E1 = fun () ->
+                         case rabbit_misc:is_process_alive(QPid) of
+                             true  -> E();
+                             false -> timer:sleep(25),
+                                      with(Name, F, E)
+                         end
+                 end,
             rabbit_misc:with_exit_handler(E1, fun () -> F(Q) end);
         {error, not_found} ->
             E()
