@@ -30,7 +30,8 @@
 
 %% Like erlang:memory(), but with awareness of rabbit-y things
 memory() ->
-    ConnChs = sup_memory(rabbit_tcp_client_sup),
+    ConnChs = sup_memory(rabbit_tcp_client_sup) +
+        sup_memory(ssl_connection_sup) + sup_memory(amqp_sup),
     Qs = sup_memory(rabbit_amqqueue_sup) +
         sup_memory(rabbit_mirror_queue_slave_sup),
     Mnesia = mnesia_memory(),
