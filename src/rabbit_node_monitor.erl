@@ -18,29 +18,19 @@
 
 -behaviour(gen_server).
 
+-export([start_link/0]).
 -export([running_nodes_filename/0,
-         cluster_status_filename/0,
-         prepare_cluster_status_files/0,
-         write_cluster_status/1,
-         read_cluster_status/0,
-         update_cluster_status/0,
-         reset_cluster_status/0,
+         cluster_status_filename/0, prepare_cluster_status_files/0,
+         write_cluster_status/1, read_cluster_status/0,
+         update_cluster_status/0, reset_cluster_status/0]).
+-export([notify_joined_cluster/0, notify_left_cluster/1, notify_node_up/0]).
 
-         joined_cluster/2,
-         notify_joined_cluster/0,
-         left_cluster/1,
-         notify_left_cluster/1,
-         node_up/2,
-         notify_node_up/0,
+%% internal
+-export([joined_cluster/2, left_cluster/1, node_up/2]).
 
-         start_link/0,
-         init/1,
-         handle_call/3,
-         handle_cast/2,
-         handle_info/2,
-         terminate/2,
-         code_change/3
-        ]).
+%% gen_server callbacks
+-export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
+         code_change/3]).
 
 -define(SERVER, ?MODULE).
 -define(RABBIT_UP_RPC_TIMEOUT, 2000).
@@ -48,6 +38,8 @@
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
+
+-spec(start_link/0 :: () -> rabbit_types:ok_pid_or_error()).
 
 -spec(running_nodes_filename/0 :: () -> string()).
 -spec(cluster_status_filename/0 :: () -> string()).
@@ -57,14 +49,17 @@
 -spec(update_cluster_status/0 :: () -> 'ok').
 -spec(reset_cluster_status/0 :: () -> 'ok').
 
--spec(joined_cluster/2 :: (node(), boolean()) -> 'ok').
 -spec(notify_joined_cluster/0 :: () -> 'ok').
--spec(left_cluster/1 :: (node()) -> 'ok').
 -spec(notify_left_cluster/1 :: (node()) -> 'ok').
--spec(node_up/2 :: (node(), boolean()) -> 'ok').
 -spec(notify_node_up/0 :: () -> 'ok').
 
 -endif.
+
+%%----------------------------------------------------------------------------
+%% Start
+%%----------------------------------------------------------------------------
+
+start_link() -> gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
 %%----------------------------------------------------------------------------
 %% Cluster file operations
@@ -131,13 +126,6 @@ write_cluster_status({All, Disc, Running}) ->
         {FN, {error, E2}} -> throw({error, {could_not_write_file, FN, E2}})
     end.
 
-try_read_file(FileName) ->
-    case rabbit_file:read_term_file(FileName) of
-        {ok, Term}      -> {ok, Term};
-        {error, enoent} -> {error, enoent};
-        {error, E}      -> throw({error, {cannot_read_file, FileName, E}})
-    end.
-
 read_cluster_status() ->
     case {try_read_file(cluster_status_filename()),
           try_read_file(running_nodes_filename())} of
@@ -187,11 +175,7 @@ notify_node_up() ->
 %% gen_server callbacks
 %%----------------------------------------------------------------------------
 
-start_link() ->
-    gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
-
-init([]) ->
-    {ok, no_state}.
+init([]) -> {ok, no_state}.
 
 handle_call(_Request, _From, State) ->
     {noreply, State}.
@@ -265,6 +249,13 @@ handle_live_rabbit(Node) ->
 %%--------------------------------------------------------------------
 %% Internal utils
 %%--------------------------------------------------------------------
+
+try_read_file(FileName) ->
+    case rabbit_file:read_term_file(FileName) of
+        {ok, Term}      -> {ok, Term};
+        {error, enoent} -> {error, enoent};
+        {error, E}      -> throw({error, {cannot_read_file, FileName, E}})
+    end.
 
 cluster_multicall(Fun, Args) ->
     Node = node(),
