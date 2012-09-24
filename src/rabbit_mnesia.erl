@@ -362,16 +362,14 @@ mnesia_nodes() ->
             Tables = mnesia:system_info(tables),
             [{Table, _} | _] = table_definitions(NodeType),
             case lists:member(Table, Tables) of
-                true ->
-                    AllNodes = mnesia:system_info(db_nodes),
-                    DiscCopies = mnesia:table_info(schema, disc_copies),
-                    DiscNodes = case NodeType of
-                                    disc -> nodes_incl_me(DiscCopies);
-                                    ram  -> DiscCopies
-                                end,
-                    {ok, {AllNodes, DiscNodes}};
-                false ->
-                    {error, tables_not_present}
+                true  -> AllNodes = mnesia:system_info(db_nodes),
+                         DiscCopies = mnesia:table_info(schema, disc_copies),
+                         DiscNodes = case NodeType of
+                                         disc -> nodes_incl_me(DiscCopies);
+                                         ram  -> DiscCopies
+                                     end,
+                         {ok, {AllNodes, DiscNodes}};
+                false -> {error, tables_not_present}
             end
     end.
 
