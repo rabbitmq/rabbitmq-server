@@ -539,7 +539,7 @@ check_schema_integrity() ->
                                   true  -> check_table_attributes(Tab, TabDef)
                               end
                       end) of
-        ok     -> ok = wait_for_tables(),
+        ok     -> ok = wait_for_tables(table_names()),
                   check_tables(fun check_table_content/2);
         Other  -> Other
     end.
@@ -574,9 +574,9 @@ copy_db(Destination) ->
     ok = ensure_mnesia_not_running(),
     rabbit_file:recursive_copy(dir(), Destination).
 
-wait_for_replicated_tables() -> wait_for_tables(replicated_table_names()).
-
-wait_for_tables() -> wait_for_tables(table_names()).
+wait_for_replicated_tables() ->
+    wait_for_tables([Tab || {Tab, TabDef} <- table_definitions(),
+                            not lists:member({local_content, true}, TabDef)]).
 
 wait_for_tables(TableNames) ->
     case mnesia:wait_for_tables(TableNames, 30000) of
@@ -800,11 +800,6 @@ queue_name_match() ->
     resource_match(queue).
 resource_match(Kind) ->
     #resource{kind = Kind, _='_'}.
-
-replicated_table_names() ->
-    [Tab || {Tab, TabDef} <- table_definitions(),
-            not lists:member({local_content, true}, TabDef)
-    ].
 
 check_table_attributes(Tab, TabDef) ->
     {_, ExpAttrs} = proplists:lookup(attributes, TabDef),
