@@ -291,8 +291,6 @@ legacy_cluster_nodes(Nodes) ->
 legacy_should_be_disc_node(DiscNodes) ->
     DiscNodes == [] orelse lists:member(node(), DiscNodes).
 
-add_node(Node, Nodes) ->
-    lists:usort([Node|Nodes]).
+add_node(Node, Nodes) -> lists:usort([Node | Nodes]).
 
-del_node(Node, Nodes) ->
-    Nodes -- [Node].
+del_node(Node, Nodes) -> Nodes -- [Node].

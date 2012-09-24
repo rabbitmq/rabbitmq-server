@@ -643,9 +643,9 @@ check_cluster_consistency(Node) ->
 %%--------------------------------------------------------------------
 
 on_node_up(Node) ->
-    case running_disc_nodes() =:= [Node] of
-        true  -> rabbit_log:info("cluster contains disc nodes again~n");
-        false -> ok
+    case running_disc_nodes() of
+        [Node] -> rabbit_log:info("cluster contains disc nodes again~n");
+        _      -> ok
     end.
 
 on_node_down(_Node) ->
@@ -670,18 +670,16 @@ discover_cluster(Nodes) when is_list(Nodes) ->
 discover_cluster(Node) ->
     OfflineError =
         {error, {cannot_discover_cluster,
-                 "The nodes provided is either offline or not running"}},
+                 "The nodes provided are either offline or not running"}},
     case node() of
-        Node->
-            {error, {cannot_discover_cluster,
-                     "You provided the current node as node to cluster with"}};
-        _ ->
-            case rpc:call(Node,
-                          rabbit_mnesia, cluster_status_from_mnesia, []) of
-                {badrpc, _Reason}           -> OfflineError;
-                {error, mnesia_not_running} -> OfflineError;
-                {ok, Res}                   -> {ok, Res}
-            end
+        Node -> {error, {cannot_discover_cluster,
+                         "Cannot cluster node with itself"}};
+        _    -> case rpc:call(Node,
+                              rabbit_mnesia, cluster_status_from_mnesia, []) of
+                    {badrpc, _Reason}           -> OfflineError;
+                    {error, mnesia_not_running} -> OfflineError;
+                    {ok, Res}                   -> {ok, Res}
+                end
     end.
 
 %% The tables aren't supposed to be on disk on a ram node
