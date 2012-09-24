@@ -21,7 +21,7 @@
 -export([start/0, boot/0, stop/0,
          stop_and_halt/0, await_startup/0, status/0, is_running/0,
          is_running/1, environment/0, rotate_logs/1, force_event_refresh/0,
-         start_fhc/0, memory/0]).
+         start_fhc/0]).
 
 -export([start/2, stop/1]).
 
@@ -247,7 +247,6 @@
 -spec(maybe_insert_default_data/0 :: () -> 'ok').
 -spec(boot_delegate/0 :: () -> 'ok').
 -spec(recover/0 :: () -> 'ok').
--spec(memory/0 :: () -> rabbit_types:infos()).
 
 -endif.
 
@@ -357,7 +356,7 @@ status() ->
           {running_applications, application:which_applications(infinity)},
           {os,                   os:type()},
           {erlang_version,       erlang:system_info(system_version)},
-          {memory,               memory()}],
+          {memory,               rabbit_vm:memory()}],
     S2 = rabbit_misc:filter_exit_map(
            fun ({Key, {M, F, A}}) -> {Key, erlang:apply(M, F, A)} end,
            [{vm_memory_high_watermark, {vm_memory_monitor,
@@ -744,65 +743,3 @@ start_fhc() ->
     rabbit_sup:start_restartable_child(
       file_handle_cache,
       [fun rabbit_alarm:set_alarm/1, fun rabbit_alarm:clear_alarm/1]).
-
-%% Like erlang:memory(), but with awareness of rabbit-y things
-memory() ->
-    ConnChs = sup_memory(rabbit_tcp_client_sup),
-    Qs = sup_memory(rabbit_amqqueue_sup) +
-        sup_memory(rabbit_mirror_queue_slave_sup),
-    Mnesia = mnesia_memory(),
-    MsgIndexETS = ets_memory(rabbit_msg_store_ets_index),
-    MsgIndexProc = pid_memory(msg_store_transient) +
-        pid_memory(msg_store_persistent),
-    MgmtDbETS = ets_memory(rabbit_mgmt_db),
-    MgmtDbProc = sup_memory(rabbit_mgmt_sup),
-    [{total,     Total},
-     {processes, Processes},
-     {ets,       ETS},
-     {atom,      Atom},
-     {binary,    Bin},
-     {code,      Code},
-     {system,    System}] =
-        erlang:memory([total, processes, ets, atom, binary, code, system]),
-    [{total,                    Total},
-     {connection_channel_procs, ConnChs},
-     {queue_procs,              Qs},
-     {other_proc,               Processes - ConnChs - Qs - MsgIndexProc -
-          MgmtDbProc},
-     {mnesia,                   Mnesia},
-     {mgmt_db,                  MgmtDbETS + MgmtDbProc},
-     {msg_index,                MsgIndexETS + MsgIndexProc},
-     {other_ets,                ETS - Mnesia - MsgIndexETS - MgmtDbETS},
-     {binary,                   Bin},
-     {code,                     Code},
-     {atom,                     Atom},
-     {other_system,             System - ETS - Atom - Bin - Code}].
-
-sup_memory(Sup) ->
-    lists:sum([child_memory(P, T) || {_, P, T, _} <- sup_children(Sup)]) +
-        pid_memory(Sup).
-
-sup_children(Sup) ->
-    rabbit_misc:with_exit_handler(
-      rabbit_misc:const([]), fun () -> supervisor:which_children(Sup) end).
-
-pid_memory(Pid)  when is_pid(Pid)   -> element(2, process_info(Pid, memory));
-pid_memory(Name) when is_atom(Name) -> case whereis(Name) of
-                                           P when is_pid(P) -> pid_memory(P);
-                                           _                -> 0
-                                       end.
-
-child_memory(Pid, worker)     when is_pid (Pid) -> pid_memory(Pid);
-child_memory(Pid, supervisor) when is_pid (Pid) -> sup_memory(Pid);
-child_memory(_, _)                              -> 0.
-
-mnesia_memory() ->
-    lists:sum([bytes(mnesia:table_info(Tab, memory)) ||
-                  Tab <- mnesia:system_info(tables)]).
-
-ets_memory(Name) ->
-    lists:sum([bytes(ets:info(T, memory)) || T <- ets:all(),
-                                             N <- [ets:info(T, name)],
-                                             N =:= Name]).
-
-bytes(Words) ->  Words * erlang:system_info(wordsize).
