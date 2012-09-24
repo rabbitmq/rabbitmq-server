@@ -71,7 +71,10 @@ sup_children(Sup) ->
     rabbit_misc:with_exit_handler(
       rabbit_misc:const([]), fun () -> supervisor:which_children(Sup) end).
 
-pid_memory(Pid)  when is_pid(Pid)   -> element(2, process_info(Pid, memory));
+pid_memory(Pid)  when is_pid(Pid)   -> case process_info(Pid, memory) of
+                                           {memory, M} -> M;
+                                           _           -> 0
+                                       end;
 pid_memory(Name) when is_atom(Name) -> case whereis(Name) of
                                            P when is_pid(P) -> pid_memory(P);
                                            _                -> 0
