@@ -132,7 +132,7 @@ init(NodeType, AllNodes) ->
 init_from_config() ->
     {ok, {TryNodes, NodeType}} =
         application:get_env(rabbit, cluster_nodes),
-    case find_good_node(TryNodes -- [node()]) of
+    case find_good_node(nodes_excl_me(TryNodes)) of
         {ok, Node} ->
             rabbit_log:info("Node '~p' selected for clustering from "
                             "configuration~n", [Node]),
@@ -173,7 +173,6 @@ join_cluster(DiscoveryNode, NodeType) ->
                                {ok, Res}      -> Res;
                                {error, _} = E -> throw(E)
                            end,
-
     case me_in_nodes(ClusterNodes) of
         true  -> e(already_clustered);
         false -> ok
@@ -185,11 +184,10 @@ join_cluster(DiscoveryNode, NodeType) ->
     %% of reseting the node from the user.
     reset(false),
 
-    rabbit_misc:local_info_msg("Clustering with ~p~n", [ClusterNodes]),
-
     %% Join the cluster
+    rabbit_misc:local_info_msg("Clustering with ~p as ~p node~n",
+                               [ClusterNodes, NodeType]),
     ok = init_db_with_mnesia(ClusterNodes, NodeType, true, true),
-
     rabbit_node_monitor:notify_joined_cluster(),
 
     ok.
@@ -245,11 +243,10 @@ change_cluster_node_type(Type) ->
         false -> e(not_clustered);
         true  -> ok
     end,
-    {_, _, RunningNodes} =
-        case discover_cluster(cluster_nodes(all)) of
-            {ok, Status}     -> Status;
-            {error, _Reason} -> e(cannot_connect_to_cluster)
-        end,
+    {_, _, RunningNodes} = case discover_cluster(cluster_nodes(all)) of
+                               {ok, Status}     -> Status;
+                               {error, _Reason} -> e(cannot_connect_to_cluster)
+                           end,
     Node = case RunningNodes of
                []        -> e(no_online_cluster_nodes);
                [Node0|_] -> Node0
@@ -260,7 +257,6 @@ change_cluster_node_type(Type) ->
 update_cluster_nodes(DiscoveryNode) ->
     ensure_mnesia_not_running(),
     ensure_mnesia_dir(),
-
     Status = {AllNodes, _, _} =
         case discover_cluster(DiscoveryNode) of
             {ok, Status0}    -> Status0;
@@ -320,12 +316,11 @@ remove_node_offline_node(Node) ->
             case cluster_nodes(running) -- [node(), Node] of
                 [] -> start_mnesia(),
                       try
-                          [mnesia:force_load_table(T) ||
-                              T <- rabbit_mnesia:table_names()],
+                          [mnesia:force_load_table(T) || T <- table_names()],
                           forget_cluster_node(Node, false),
                           ensure_mnesia_running()
                       after
-                           stop_mnesia()
+                          stop_mnesia()
                       end;
                 _  -> e(not_last_node_to_go_down)
             end;
@@ -339,7 +334,7 @@ remove_node_offline_node(Node) ->
 %%----------------------------------------------------------------------------
 
 status() ->
-    IfNonEmpty = fun (_,    [])    -> [];
+    IfNonEmpty = fun (_,       []) -> [];
                      (Type, Nodes) -> [{Type, Nodes}]
                  end,
     [{nodes, (IfNonEmpty(disc, cluster_nodes(disc)) ++
@@ -1034,8 +1029,7 @@ running_nodes(Nodes) ->
         rpc:multicall(Nodes, rabbit_mnesia, is_running_remote, []),
     [Node || {Running, Node} <- Replies, Running].
 
-is_running_remote() ->
-    {mnesia:system_info(is_running) =:= yes, node()}.
+is_running_remote() -> {mnesia:system_info(is_running) =:= yes, node()}.
 
 check_consistency(OTP, Rabbit) ->
     rabbit_misc:sequence_error(
@@ -1080,13 +1074,16 @@ check_rabbit_consistency(Remote) ->
 %% `rabbit_node_monitor:prepare_cluster_status_file/0'.
 is_virgin_node() ->
     case rabbit_file:list_dir(dir()) of
-        {error, enoent} -> true;
-        {ok, []} -> true;
+        {error, enoent} ->
+            true;
+        {ok, []} ->
+            true;
         {ok, [File1, File2]} ->
             lists:usort([dir() ++ "/" ++ File1, dir() ++ "/" ++ File2]) =:=
                 lists:usort([rabbit_node_monitor:cluster_status_filename(),
                              rabbit_node_monitor:running_nodes_filename()]);
-        {ok, _} -> false
+        {ok, _} ->
+            false
     end.
 
 find_good_node([]) ->
