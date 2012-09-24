@@ -61,7 +61,8 @@ div.memory-section { float: left; height: 30px; }
 div.memory-key { float: left; width: 10px; height: 10px; margin: 3px 5px 0 0;}
 
 div.memory_connection_channel_procs { background: #f88; }
-div.memory_queue_procs              { background: #dd8; }
+div.memory_queue_procs              { background: #faa; }
+div.memory_plugins                  { background: #dd8; }
 div.memory_other_proc               { background: #ffb; }
 div.memory_mnesia                   { background: #00f; }
 div.memory_msg_index                { background: #44f; }

@@ -131,6 +131,7 @@
 <%
    var sections = {'connection_channel_procs': 'Connections / Channels',
                    'queue_procs': 'Queues',
+                   'plugins': 'Plugins',
                    'other_proc': 'Other process memory',
                    'mnesia': 'Mnesia',
                    'msg_index': 'Message store index',
@@ -169,6 +170,10 @@
     <tr>
       <th>Queues</th>
       <td><%= fmt_memory(node.memory, 'queue_procs') %></td>
+    </tr>
+    <tr>
+      <th>Plugins</th>
+      <td><%= fmt_memory(node.memory, 'plugins') %></td>
     </tr>
     <tr>
       <th>Other process memory</th>
