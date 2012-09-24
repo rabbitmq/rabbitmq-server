@@ -32,13 +32,12 @@
          node_type/0,
          dir/0,
          table_names/0,
-         wait_for_tables/1,
          cluster_status_from_mnesia/0,
 
          init_db_unchecked/2,
          empty_ram_only_tables/0,
          copy_db/1,
-         wait_for_tables/0,
+         wait_for_tables/1,
          check_cluster_consistency/0,
          ensure_mnesia_dir/0,
 
@@ -100,12 +99,6 @@
 %% Hooks used in `rabbit_node_monitor'
 -spec(on_node_up/1 :: (node()) -> 'ok').
 -spec(on_node_down/1 :: (node()) -> 'ok').
-
-%% Functions used in internal rpc calls
--spec(node_info/0 :: () -> {string(), string(),
-                            ({'ok', cluster_status()} | 'error')}).
--spec(remove_node_if_mnesia_running/1 ::
-        (node()) -> rabbit_types:ok_or_error(term())).
 
 -endif.
 
