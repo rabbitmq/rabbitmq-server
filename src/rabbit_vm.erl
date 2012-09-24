@@ -18,6 +18,8 @@
 
 -export([memory/0]).
 
+-define(MAGIC_PLUGINS, [mochiweb, webmachine, cowboy, sockjs, rfc4627_jsonrpc]).
+
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
@@ -40,6 +42,7 @@ memory() ->
         pid_memory(msg_store_persistent),
     MgmtDbETS = ets_memory(rabbit_mgmt_db),
     MgmtDbProc = sup_memory(rabbit_mgmt_sup),
+    Plugins = plugins_memory() - MgmtDbProc,
     [{total,     Total},
      {processes, Processes},
      {ets,       ETS},
@@ -51,8 +54,9 @@ memory() ->
     [{total,                    Total},
      {connection_channel_procs, ConnChs},
      {queue_procs,              Qs},
+     {plugins,                  Plugins},
      {other_proc,               Processes - ConnChs - Qs - MsgIndexProc -
-          MgmtDbProc},
+          MgmtDbProc - Plugins},
      {mnesia,                   Mnesia},
      {mgmt_db,                  MgmtDbETS + MgmtDbProc},
      {msg_index,                MsgIndexETS + MsgIndexProc},
@@ -95,3 +99,19 @@ ets_memory(Name) ->
                                              N =:= Name]).
 
 bytes(Words) ->  Words * erlang:system_info(wordsize).
+
+plugins_memory() ->
+    lists:sum([plugin_memory(App) ||
+                  {App, _, _} <- application:which_applications(),
+                  is_plugin(App)]).
+
+plugin_memory(App) ->
+    case catch application_master:get_child(
+                 application_controller:get_master(App)) of
+        {Pid, _} -> sup_memory(Pid);
+        _        -> 0
+    end.
+
+is_plugin(App) ->
+    lists:member(App, ?MAGIC_PLUGINS) orelse
+        string:left(atom_to_list(App), 9) =:= "rabbitmq_".
