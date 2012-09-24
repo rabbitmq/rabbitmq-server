@@ -70,7 +70,7 @@ start_infrastructure_fun(Sup, direct) ->
                   Sup,
                   {connection_type_sup, {amqp_connection_type_sup,
                                          start_link_direct, []},
-                   transient, infinity, supervisor,
+                   intrinsic, infinity, supervisor,
                    [amqp_connection_type_sup]}),
             {ok, Collector}
     end.
