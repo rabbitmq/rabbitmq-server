@@ -132,25 +132,31 @@
 %% gm should be processed as normal, but fetches which are for
 %% messages the slave has never seen should be ignored. Similarly,
 %% acks for messages the slave never fetched should be
-%% ignored. Eventually, as the master is consumed from, the messages
-%% at the head of the queue which were there before the slave joined
-%% will disappear, and the slave will become fully synced with the
-%% state of the master. The detection of the sync-status of a slave is
-%% done entirely based on length: if the slave and the master both
-%% agree on the length of the queue after the fetch of the head of the
-%% queue (or a 'set_length' results in a slave having to drop some
-%% messages from the head of its queue), then the queues must be in
-%% sync. The only other possibility is that the slave's queue is
-%% shorter, and thus the fetch should be ignored. In case slaves are
-%% joined to an empty queue which only goes on to receive publishes,
-%% they start by asking the master to broadcast its length. This is
-%% enough for slaves to always be able to work out when their head
-%% does not differ from the master (and is much simpler and cheaper
-%% than getting the master to hang on to the guid of the msg at the
-%% head of its queue). When a slave is promoted to a master, it
-%% unilaterally broadcasts its length, in order to solve the problem
-%% of length requests from new slaves being unanswered by a dead
-%% master.
+%% ignored. Similarly, we don't republish rejected messages that we
+%% haven't seen. Eventually, as the master is consumed from, the
+%% messages at the head of the queue which were there before the slave
+%% joined will disappear, and the slave will become fully synced with
+%% the state of the master.
+%%
+%% The detection of the sync-status is based on the depth of the BQs,
+%% where the depth is defined as the sum of the length of the BQ (as
+%% per BQ:len) and the messages pending an acknowledgement. When the
+%% depth of the slave is equal to the master's, then the slave is
+%% synchronised. We only store the difference between the two for
+%% simplicity. Comparing the length is not enough since we need to
+%% take into account rejected messages which will make it back into
+%% the master queue but can't go back in the slave, since we don't
+%% want "holes" in the slave queue. Note that the depth, and the
+%% length likewise, must always be shorter on the slave - we assert
+%% that in various places. In case slaves are joined to an empty queue
+%% which only goes on to receive publishes, they start by asking the
+%% master to broadcast its depth. This is enough for slaves to always
+%% be able to work out when their head does not differ from the master
+%% (and is much simpler and cheaper than getting the master to hang on
+%% to the guid of the msg at the head of its queue). When a slave is
+%% promoted to a master, it unilaterally broadcasts its length, in
+%% order to solve the problem of length requests from new slaves being
+%% unanswered by a dead master.
 %%
 %% Obviously, due to the async nature of communication across gm, the
 %% slaves can fall behind. This does not matter from a sync pov: if

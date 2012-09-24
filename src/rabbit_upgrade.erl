@@ -121,10 +121,7 @@ remove_backup() ->
     info("upgrades: Mnesia backup removed~n", []).
 
 maybe_upgrade_mnesia() ->
-    %% rabbit_mnesia:all_clustered_nodes/0 will return [] at this point
-    %% if we are a RAM node since Mnesia has not started yet.
-    AllNodes = lists:usort(rabbit_mnesia:all_clustered_nodes() ++
-                               rabbit_mnesia:read_cluster_nodes_config()),
+    AllNodes = rabbit_mnesia:all_clustered_nodes(),
     case rabbit_version:upgrades_required(mnesia) of
         {error, starting_from_scratch} ->
             ok;
@@ -150,12 +147,12 @@ maybe_upgrade_mnesia() ->
 upgrade_mode(AllNodes) ->
     case nodes_running(AllNodes) of
         [] ->
-            AfterUs = rabbit_mnesia:read_previously_running_nodes(),
+            AfterUs = rabbit_mnesia:running_clustered_nodes() -- [node()],
             case {is_disc_node_legacy(), AfterUs} of
                 {true, []}  ->
                     primary;
                 {true, _}  ->
-                    Filename = rabbit_mnesia:running_nodes_filename(),
+                    Filename = rabbit_node_monitor:running_nodes_filename(),
                     die("Cluster upgrade needed but other disc nodes shut "
                         "down after this one.~nPlease first start the last "
                         "disc node to shut down.~n~nNote: if several disc "
@@ -222,15 +219,8 @@ secondary_upgrade(AllNodes) ->
     IsDiscNode = is_disc_node_legacy(),
     rabbit_misc:ensure_ok(mnesia:delete_schema([node()]),
                           cannot_delete_schema),
-    %% Note that we cluster with all nodes, rather than all disc nodes
-    %% (as we can't know all disc nodes at this point). This is safe as
-    %% we're not writing the cluster config, just setting up Mnesia.
-    ClusterNodes = case IsDiscNode of
-                       true  -> AllNodes;
-                       false -> AllNodes -- [node()]
-                   end,
     rabbit_misc:ensure_ok(mnesia:start(), cannot_start_mnesia),
-    ok = rabbit_mnesia:init_db(ClusterNodes, true, fun () -> ok end),
+    ok = rabbit_mnesia:init_db(AllNodes, IsDiscNode, true),
     ok = rabbit_version:record_desired_for_scope(mnesia),
     ok.
 

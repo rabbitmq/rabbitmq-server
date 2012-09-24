@@ -176,7 +176,7 @@
 
 -rabbit_boot_step({notify_cluster,
                    [{description, "notify cluster nodes"},
-                    {mfa,         {rabbit_node_monitor, notify_cluster, []}},
+                    {mfa,         {rabbit_node_monitor, notify_node_up, []}},
                     {requires,    networking}]}).
 
 %%---------------------------------------------------------------------------
@@ -300,6 +300,8 @@ start() ->
                      %% We do not want to HiPE compile or upgrade
                      %% mnesia after just restarting the app
                      ok = ensure_application_loaded(),
+                     ok = rabbit_node_monitor:prepare_cluster_status_files(),
+                     ok = rabbit_mnesia:check_cluster_consistency(),
                      ok = ensure_working_log_handlers(),
                      ok = app_utils:start_applications(
                             app_startup_order(), fun handle_app_error/2),
@@ -310,8 +312,13 @@ boot() ->
     start_it(fun() ->
                      ok = ensure_application_loaded(),
                      maybe_hipe_compile(),
+                     ok = rabbit_node_monitor:prepare_cluster_status_files(),
                      ok = ensure_working_log_handlers(),
                      ok = rabbit_upgrade:maybe_upgrade_mnesia(),
+                     %% It's important that the consistency check happens after
+                     %% the upgrade, since if we are a secondary node the
+                     %% primary node will have forgotten us
+                     ok = rabbit_mnesia:check_cluster_consistency(),
                      Plugins = rabbit_plugins:setup(),
                      ToBeLoaded = Plugins ++ ?APPS,
                      ok = app_utils:load_applications(ToBeLoaded),
@@ -416,7 +423,6 @@ start(normal, []) ->
     end.
 
 stop(_State) ->
-    ok = rabbit_mnesia:record_running_nodes(),
     terminated_ok = error_logger:delete_report_handler(rabbit_error_logger),
     ok = rabbit_alarm:stop(),
     ok = case rabbit_mnesia:is_clustered() of
@@ -513,12 +519,12 @@ sort_boot_steps(UnsortedSteps) ->
     end.
 
 boot_error({error, {timeout_waiting_for_tables, _}}, _Stacktrace) ->
+    AllNodes = rabbit_mnesia:all_clustered_nodes(),
     {Err, Nodes} =
-        case rabbit_mnesia:read_previously_running_nodes() of
+        case AllNodes -- [node()] of
             [] -> {"Timeout contacting cluster nodes. Since RabbitMQ was"
                    " shut down forcefully~nit cannot determine which nodes"
-                   " are timing out. Details on all nodes will~nfollow.~n",
-                   rabbit_mnesia:all_clustered_nodes() -- [node()]};
+                   " are timing out.~n", []};
             Ns -> {rabbit_misc:format(
                      "Timeout contacting cluster nodes: ~p.~n", [Ns]),
                    Ns}

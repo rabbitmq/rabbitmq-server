@@ -288,91 +288,67 @@
       <title>Cluster management</title>
 
       <variablelist>
-        <varlistentry id="cluster">
-          <term><cmdsynopsis><command>cluster</command> <arg choice="req" role="usage-option-list"><replaceable>clusternode</replaceable> ...</arg></cmdsynopsis></term>
+        <varlistentry id="join_cluster">
+          <term><cmdsynopsis><command>join_cluster</command> <arg choice="req"><replaceable>clusternode</replaceable></arg><arg choice="opt"><replaceable>--ram</replaceable></arg></cmdsynopsis></term>
           <listitem>
             <variablelist>
               <varlistentry>
                 <term>clusternode</term>
-                <listitem><para>Subset of the nodes of the cluster to which this node should be connected.</para></listitem>
+                <listitem><para>Node to cluster with.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term><cmdsynopsis><arg choice="opt">--ram</arg></cmdsynopsis></term>
+                <listitem>
+                  <para>
+                    If provided, the node will join the cluster as a RAM node.
+                  </para>
+                </listitem>
               </varlistentry>
             </variablelist>
             <para>
-              Instruct the node to become member of a cluster with the
-              specified nodes.  To cluster with currently offline nodes,
-              use <link linkend="force_cluster"><command>force_cluster</command></link>.
+              Instruct the node to become a member of the cluster that the
+              specified node is in. Before clustering, the node is reset, so be
+              careful when using this command. For this command to succeed the
+              RabbitMQ application must have been stopped, e.g. with <link
+              linkend="stop_app"><command>stop_app</command></link>.
             </para>
             <para>
-              Cluster nodes can be of two types: disk or ram. Disk nodes
-              replicate data in ram and on disk, thus providing
-              redundancy in the event of node failure and recovery from
-              global events such as power failure across all nodes. Ram
-              nodes replicate data in ram only and are mainly used for
-              scalability. A cluster must always have at least one disk node.
+              Cluster nodes can be of two types: disk or RAM. Disk nodes
+              replicate data in RAM and on disk, thus providing redundancy in
+              the event of node failure and recovery from global events such
+              as power failure across all nodes. RAM nodes replicate data in
+              RAM only (with the exception of queue contents, which can reside
+              on disc if the queue is persistent or too big to fit in memory)
+              and are mainly used for scalability. RAM nodes are more
+              performant only when managing resources (e.g. adding/removing
+              queues, exchanges, or bindings). A cluster must always have at
+              least one disk node, and usually should have more than one.
             </para>
             <para>
-              If the current node is to become a disk node it needs to
-              appear in the cluster node list. Otherwise it becomes a
-              ram node. If the node list is empty or only contains the
-              current node then the node becomes a standalone,
-              i.e. non-clustered, (disk) node.
+              The node will be a disk node by default. If you wish to
+              create a RAM node, provide the <command>--ram</command> flag.
             </para>
             <para>
               After executing the <command>cluster</command> command, whenever
-              the RabbitMQ application is started on the current node it
-              will attempt to connect to the specified nodes, thus
-              becoming an active node in the cluster comprising those
-              nodes (and possibly others).
+              the RabbitMQ application is started on the current node it will
+              attempt to connect to the nodes that were in the cluster when the
+              node went down.
             </para>
             <para>
-              The list of nodes does not have to contain all the
-              cluster's nodes; a subset is sufficient. Also, clustering
-              generally succeeds as long as at least one of the
-              specified nodes is active. Hence adjustments to the list
-              are only necessary if the cluster configuration is to be
-              altered radically.
+              To leave a cluster, <command>reset</command> the node. You can
+              also remove nodes remotely with the
+              <command>forget_cluster_node</command> command.
             </para>
             <para>
-              For this command to succeed the RabbitMQ application must
-              have been stopped, e.g. with <link linkend="stop_app"><command>stop_app</command></link>. Furthermore,
-              turning a standalone node into a clustered node requires
-              the node be <link linkend="reset"><command>reset</command></link> first,
-              in order to avoid accidental destruction of data with the
-              <command>cluster</command> command.
-            </para>
-            <para>
-              For more details see the <ulink url="http://www.rabbitmq.com/clustering.html">clustering guide</ulink>.
+              For more details see the <ulink
+              url="http://www.rabbitmq.com/clustering.html">clustering
+              guide</ulink>.
             </para>
             <para role="example-prefix">For example:</para>
-            <screen role="example">rabbitmqctl cluster rabbit@tanto hare@elena</screen>
+            <screen role="example">rabbitmqctl join_cluster hare@elena --ram</screen>
             <para role="example">
-              This command instructs the RabbitMQ node to join the
-              cluster with nodes <command>rabbit@tanto</command> and
-              <command>hare@elena</command>. If the node is one of these then
-              it becomes a disk node, otherwise a ram node.
-            </para>
-          </listitem>
-        </varlistentry>
-        <varlistentry id="force_cluster">
-          <term><cmdsynopsis><command>force_cluster</command> <arg choice="req" role="usage-option-list"><replaceable>clusternode</replaceable> ...</arg></cmdsynopsis></term>
-          <listitem>
-            <variablelist>
-              <varlistentry>
-                <term>clusternode</term>
-                <listitem><para>Subset of the nodes of the cluster to which this node should be connected.</para></listitem>
-              </varlistentry>
-            </variablelist>
-            <para>
-              Instruct the node to become member of a cluster with the
-              specified nodes.  This will succeed even if the specified nodes
-              are offline.  For a more detailed description, see
-              <link linkend="cluster"><command>cluster</command>.</link>
-            </para>
-            <para>
-              Note that this variant of the cluster command just
-              ignores the current status of the specified nodes.
-              Clustering may still fail for a variety of other
-              reasons.
+              This command instructs the RabbitMQ node to join the cluster that
+              <command>hare@elena</command> is part of, as a ram node.
             </para>
           </listitem>
         </varlistentry>
@@ -387,6 +363,86 @@
             <screen role="example">rabbitmqctl cluster_status</screen>
             <para role="example">
               This command displays the nodes in the cluster.
+            </para>
+          </listitem>
+        </varlistentry>
+        <varlistentry>
+          <term><cmdsynopsis><command>change_cluster_node_type</command> <arg choice="req">disk | ram</arg></cmdsynopsis>
+          </term>
+          <listitem>
+            <para>
+              Changes the type of the cluster node. The node must be stopped for
+              this operation to succeed, and when turning a node into a RAM node
+              the node must not be the only disk node in the cluster.
+            </para>
+            <para role="example-prefix">For example:</para>
+            <screen role="example">rabbitmqctl change_cluster_node_type disk</screen>
+            <para role="example">
+              This command will turn a RAM node into a disk node.
+            </para>
+          </listitem>
+        </varlistentry>
+        <varlistentry>
+          <term><cmdsynopsis><command>forget_cluster_node</command> <arg choice="opt">--offline</arg></cmdsynopsis></term>
+          <listitem>
+            <variablelist>
+              <varlistentry>
+                <term><cmdsynopsis><arg choice="opt">--offline</arg></cmdsynopsis></term>
+                <listitem>
+                  <para>
+                    Enables node removal from an offline node. This is only
+                    useful in the situation where all the nodes are offline and
+                    the last node to go down cannot be brought online, thus
+                    preventing the whole cluster from starting. It should not be
+                    used in any other circumstances since it can lead to
+                    inconsistencies.
+                  </para>
+                </listitem>
+              </varlistentry>
+            </variablelist>
+            <para>
+              Removes a cluster node remotely. The node that is being removed
+              must be offline, while the node we are removing from must be
+              online, except when using the <command>--offline</command> flag.
+            </para>
+            <para role="example-prefix">For example:</para>
+            <screen role="example">rabbitmqctl -n hare@mcnulty forget_cluster_node rabbit@stringer</screen>
+            <para role="example">
+              This command will remove the node
+              <command>rabbit@stringer</command> from the node
+              <command>hare@mcnulty</command>.
+            </para>
+          </listitem>
+        </varlistentry>
+        <varlistentry>
+          <term><cmdsynopsis><command>update_cluster_nodes</command> <arg choice="req">clusternode</arg></cmdsynopsis>
+          </term>
+          <listitem>
+            <variablelist>
+              <varlistentry>
+                <term>clusternode</term>
+                <listitem>
+                  <para>
+                    The node to consult for up to date information.
+                  </para>
+                </listitem>
+              </varlistentry>
+            </variablelist>
+            <para>
+              Instructs an already clustered node to contact
+              <command>clusternode</command> to cluster when waking up. This is
+              different from <command>join_cluster</command> since it does not
+              join any cluster - it checks that the node is already in a cluster
+              with <command>clusternode</command>.
+            </para>
+            <para>
+              The need for this command is motivated by the fact that clusters
+              can change while a node is offline. Consider the situation in
+              which node A and B are clustered. A goes down, C clusters with B,
+              and then B leaves the cluster. When A wakes up, it'll try to
+              contact B, but this will fail since B is not in the cluster
+              anymore. <command>update_cluster_nodes -n A C</command> will solve
+              this situation.
             </para>
           </listitem>
         </varlistentry>

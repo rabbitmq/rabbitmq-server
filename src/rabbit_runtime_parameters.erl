@@ -208,7 +208,8 @@ lookup_component(Component) ->
     end.
 
 format(Term) ->
-    list_to_binary(rabbit_misc:json_encode(rabbit_misc:term_to_json(Term))).
+    {ok, JSON} = rabbit_misc:json_encode(rabbit_misc:term_to_json(Term)),
+    list_to_binary(JSON).
 
 flatten_errors(L) ->
     case [{F, A} || I <- lists:flatten([L]), {error, F, A} <- [I]] of
