@@ -258,12 +258,12 @@ sync_slave_pids() ->
 %%--------------------------------------------------------------------
 
 transform(TableName, Fun, FieldList) ->
-    rabbit_mnesia:wait_for_tables([TableName]),
+    rabbit_table:wait([TableName]),
     {atomic, ok} = mnesia:transform_table(TableName, Fun, FieldList),
     ok.
 
 transform(TableName, Fun, FieldList, NewRecordName) ->
-    rabbit_mnesia:wait_for_tables([TableName]),
+    rabbit_table:wait([TableName]),
     {atomic, ok} = mnesia:transform_table(TableName, Fun, FieldList,
                                           NewRecordName),
     ok.
