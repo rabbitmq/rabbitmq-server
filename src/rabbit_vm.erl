@@ -43,6 +43,7 @@ memory() ->
     MgmtDbETS = ets_memory(rabbit_mgmt_db),
     MgmtDbProc = sup_memory(rabbit_mgmt_sup),
     Plugins = plugins_memory() - MgmtDbProc,
+    OtherProc = Processes - ConnChs - Qs - MsgIndexProc - MgmtDbProc - Plugins,
     [{total,     Total},
      {processes, Processes},
      {ets,       ETS},
@@ -55,8 +56,7 @@ memory() ->
      {connection_channel_procs, ConnChs},
      {queue_procs,              Qs},
      {plugins,                  Plugins},
-     {other_proc,               Processes - ConnChs - Qs - MsgIndexProc -
-          MgmtDbProc - Plugins},
+     {other_proc,               erlang:max(0, OtherProc)}, %% [1]
      {mnesia,                   Mnesia},
      {mgmt_db,                  MgmtDbETS + MgmtDbProc},
      {msg_index,                MsgIndexETS + MsgIndexProc},
@@ -65,6 +65,11 @@ memory() ->
      {code,                     Code},
      {atom,                     Atom},
      {other_system,             System - ETS - Atom - Bin - Code}].
+
+%% [1] - erlang:memory(processes) can be less than the sum of its
+%% parts. Rather than display something nonsensical, just silence any
+%% claims about negative memory. See
+%% http://erlang.org/pipermail/erlang-questions/2012-September/069320.html
 
 %%----------------------------------------------------------------------------
 
