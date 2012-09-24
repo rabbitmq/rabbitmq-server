@@ -1022,11 +1022,12 @@ change_extra_db_nodes(ClusterNodes0, CheckOtherNodes) ->
             Nodes
     end.
 
-%% We're not using `mnesia:system_info(running_db_nodes)' directly because if
-%% the node is a RAM node it won't know about other nodes when mnesia is stopped
+%% We're not using `mnesia:system_info(running_db_nodes)' directly
+%% because if the node is a RAM node it won't know about other nodes
+%% when mnesia is stopped
 running_nodes(Nodes) ->
-    {Replies, _BadNodes} =
-        rpc:multicall(Nodes, rabbit_mnesia, is_running_remote, []),
+    {Replies, _BadNodes} = rpc:multicall(Nodes,
+                                         rabbit_mnesia, is_running_remote, []),
     [Node || {Running, Node} <- Replies, Running].
 
 is_running_remote() -> {mnesia:system_info(is_running) =:= yes, node()}.
