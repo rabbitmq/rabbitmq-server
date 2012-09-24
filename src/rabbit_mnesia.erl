@@ -644,18 +644,18 @@ check_cluster_consistency(Node) ->
 %%--------------------------------------------------------------------
 
 on_node_up(Node) ->
-    case is_only_node(Node, cluster_running_disc_nodes()) of
+    case is_only_node(Node, running_disc_nodes()) of
         true  -> rabbit_log:info("cluster contains disc nodes again~n");
         false -> ok
     end.
 
 on_node_down(_Node) ->
-    case cluster_running_disc_nodes() of
+    case running_disc_nodes() of
         [] -> rabbit_log:info("only running disc node went down~n");
         _  -> ok
     end.
 
-cluster_running_disc_nodes() ->
+running_disc_nodes() ->
     {_AllNodes, DiscNodes, RunningNodes} = cluster_nodes(status),
     ordsets:to_list(ordsets:intersection(ordsets:from_list(DiscNodes),
                                          ordsets:from_list(RunningNodes))).
