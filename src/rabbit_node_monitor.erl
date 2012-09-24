@@ -158,8 +158,11 @@ notify_left_cluster(Node) ->
 notify_node_up() ->
     Nodes = cluster_multicall(node_up, [node(), rabbit_mnesia:node_type()]),
     %% register other active rabbits with this rabbit
-    [ node_up(N, lists:member(N, rabbit_mnesia:cluster_nodes(disc))) ||
-        N <- Nodes ],
+    DiskNodes = rabbit_mnesia:cluster_nodes(disc),
+    [node_up(N, case lists:member(N, DiskNodes) of
+                    true  -> disk;
+                    false -> ram
+                end) || N <- Nodes],
     ok.
 
 joined_cluster(Node, NodeType) ->
@@ -168,8 +171,8 @@ joined_cluster(Node, NodeType) ->
 left_cluster(Node) ->
     gen_server:cast(?SERVER, {left_cluster, Node}).
 
-node_up(Node, IsDiscNode) ->
-     gen_server:cast(?SERVER, {node_up, Node, IsDiscNode}).
+node_up(Node, NodeType) ->
+    gen_server:cast(?SERVER, {node_up, Node, NodeType}).
 
 %%----------------------------------------------------------------------------
 %% gen_server callbacks
