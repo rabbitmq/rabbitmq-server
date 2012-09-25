@@ -136,7 +136,7 @@ flushed(Pid, QPid) ->
     gen_server2:cast(Pid, {flushed, QPid}).
 
 list() ->
-    rabbit_misc:append_rpc_all_nodes(rabbit_mnesia:running_clustered_nodes(),
+    rabbit_misc:append_rpc_all_nodes(rabbit_mnesia:cluster_nodes(running),
                                      rabbit_channel, list_local, []).
 
 list_local() ->

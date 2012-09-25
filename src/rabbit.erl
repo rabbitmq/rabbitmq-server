@@ -519,7 +519,7 @@ sort_boot_steps(UnsortedSteps) ->
     end.
 
 boot_error({error, {timeout_waiting_for_tables, _}}, _Stacktrace) ->
-    AllNodes = rabbit_mnesia:all_clustered_nodes(),
+    AllNodes = rabbit_mnesia:cluster_nodes(all),
     {Err, Nodes} =
         case AllNodes -- [node()] of
             [] -> {"Timeout contacting cluster nodes. Since RabbitMQ was"
