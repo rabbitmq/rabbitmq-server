@@ -171,7 +171,7 @@ notify_left_cluster(Node) ->
 %% gen_server callbacks
 %%----------------------------------------------------------------------------
 
-init([]) -> {ok, no_state}.
+init([]) -> {ok, pmon:new()}.
 
 handle_call(_Request, _From, State) ->
     {noreply, State}.
@@ -179,9 +179,9 @@ handle_call(_Request, _From, State) ->
 %% Note: when updating the status file, we can't simply write the
 %% mnesia information since the message can (and will) overtake the
 %% mnesia propagation.
-handle_cast({node_up, Node, NodeType}, State) ->
-    case is_already_monitored({rabbit, Node}) of
-        true  -> {noreply, State};
+handle_cast({node_up, Node, NodeType}, Monitors) ->
+    case pmon:is_monitored({rabbit, Node}, Monitors) of
+        true  -> {noreply, Monitors};
         false -> rabbit_log:info("rabbit on node ~p up~n", [Node]),
                  {AllNodes, DiscNodes, RunningNodes} = read_cluster_status(),
                  write_cluster_status({add_node(Node, AllNodes),
@@ -190,9 +190,8 @@ handle_cast({node_up, Node, NodeType}, State) ->
                                            ram  -> DiscNodes
                                        end,
                                        add_node(Node, RunningNodes)}),
-                 erlang:monitor(process, {rabbit, Node}),
                  ok = handle_live_rabbit(Node),
-                 {noreply, State}
+                 {noreply, pmon:monitor({rabbit, Node}, Monitors)}
     end;
 handle_cast({joined_cluster, Node, NodeType}, State) ->
     {AllNodes, DiscNodes, RunningNodes} = read_cluster_status(),
@@ -211,12 +210,12 @@ handle_cast({left_cluster, Node}, State) ->
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
-handle_info({'DOWN', _MRef, process, {rabbit, Node}, _Reason}, State) ->
+handle_info({'DOWN', _MRef, process, {rabbit, Node}, _Reason}, Monitors) ->
     rabbit_log:info("rabbit on node ~p down~n", [Node]),
     {AllNodes, DiscNodes, RunningNodes} = read_cluster_status(),
     write_cluster_status({AllNodes, DiscNodes, del_node(Node, RunningNodes)}),
     ok = handle_dead_rabbit(Node),
-    {noreply, State};
+    {noreply, pmon:erase({rabbit, Node}, Monitors)};
 handle_info(_Info, State) ->
     {noreply, State}.
 
@@ -253,12 +252,6 @@ try_read_file(FileName) ->
         {error, enoent} -> {error, enoent};
         {error, E}      -> throw({error, {cannot_read_file, FileName, E}})
     end.
-
-is_already_monitored(Item) ->
-    {monitors, Monitors} = process_info(self(), monitors),
-    lists:any(fun ({_, Item1}) when Item =:= Item1 -> true;
-                  (_)                              -> false
-              end, Monitors).
 
 legacy_cluster_nodes(Nodes) ->
     %% We get all the info that we can, including the nodes from
