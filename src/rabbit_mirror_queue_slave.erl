@@ -882,24 +882,22 @@ maybe_store_ack(true, MsgId, AckTag, State = #state { msg_id_ack = MA,
     State #state { msg_id_ack = dict:store(MsgId, {Num, AckTag}, MA),
                    ack_num    = Num + 1 }.
 
+set_delta(0,        State = #state { depth_delta = undefined }) ->
+    ok = record_synchronised(State#state.q),
+    State #state { depth_delta = 0 };
 set_delta(NewDelta, State = #state { depth_delta = undefined }) ->
-    case NewDelta of
-        0            -> ok = record_synchronised(State#state.q),
-                        State #state { depth_delta = 0 };
-        D when D > 0 -> State #state { depth_delta = D }
-    end;
-set_delta(NewDelta, State = #state { depth_delta = Delta }) ->
+    true = NewDelta > 0, %% assertion
+    State #state { depth_delta = NewDelta };
+set_delta(NewDelta, State = #state { depth_delta = Delta     }) ->
     update_delta(NewDelta - Delta, State).
 
 update_delta(_DeltaChange, State = #state { depth_delta = undefined }) ->
     State;
-update_delta(DeltaChange,  State = #state { depth_delta = Delta }) ->
-    NewDelta = Delta + DeltaChange,
-    case Delta of
-        0 -> 0 = NewDelta, %% assertion: we cannot become unsync'ed
-             State;
-        _ -> set_delta(NewDelta, State #state { depth_delta = undefined })
-    end.
+update_delta( DeltaChange, State = #state { depth_delta = 0         }) ->
+    0 = DeltaChange, %% assertion: we cannot become unsync'ed
+    State;
+update_delta( DeltaChange, State = #state { depth_delta = Delta     }) ->
+    set_delta(Delta + DeltaChange, State #state { depth_delta = undefined }).
 
 record_synchronised(#amqqueue { name = QName }) ->
     Self = self(),
