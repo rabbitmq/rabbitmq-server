@@ -894,10 +894,9 @@ update_delta_from_master(NewDelta, State = #state { depth_delta = Delta }) ->
 update_delta(_DeltaChange, State = #state { depth_delta = undefined }) ->
     State;
 update_delta(DeltaChange,  State = #state { depth_delta = Delta }) ->
-    %% We intentionally leave out the head where a slave becomes
-    %% unsynchronised: we assert that can never happen.
     case {Delta, Delta + DeltaChange} of
-        {0, 0}            -> State;
+        {0, N}            -> 0 = N, %% assertion: we cannot become unsync'ed
+                             State;
         {_, 0}            -> ok = record_synchronised(State#state.q),
                              State #state { depth_delta = 0 };
         {_, N} when N > 0 -> State #state { depth_delta = N }
