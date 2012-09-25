@@ -857,8 +857,8 @@ process_instruction({depth, Depth},
                                      backing_queue       = BQ,
                                      backing_queue_state = BQS }) ->
     D1 = case D of
-             undefinded -> 1; %% anything but 0 will do here
-             _          -> D
+             undefined -> 1; %% anything but 0 will do here
+             _         -> D
          end,
     {ok, set_synchronised(Depth - BQ:depth(BQS) - D1,
                           State #state { depth_delta = D1 })};
