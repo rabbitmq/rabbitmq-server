@@ -160,7 +160,7 @@ notify_node_up() ->
     %% register other active rabbits with this rabbit
     DiskNodes = rabbit_mnesia:cluster_nodes(disc),
     [node_up(N, case lists:member(N, DiskNodes) of
-                    true  -> disk;
+                    true  -> disc;
                     false -> ram
                 end) || N <- Nodes],
     ok.
