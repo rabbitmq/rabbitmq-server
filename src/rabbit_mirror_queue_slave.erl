@@ -888,8 +888,8 @@ update_delta_from_master(NewDelta, State = #state{depth_delta = undefined}) ->
                         State #state { depth_delta = 0 };
         N when N > 0 -> State #state { depth_delta = N }
     end;
-update_delta_from_master(DeltaChange, State) ->
-    update_delta(DeltaChange, State).
+update_delta_from_master(NewDelta, State = #state { depth_delta = Delta }) ->
+    update_delta(NewDelta - Delta, State).
 
 update_delta(_DeltaChange, State = #state { depth_delta = undefined }) ->
     State;
