@@ -25,9 +25,6 @@
          update_cluster_status/0, reset_cluster_status/0]).
 -export([notify_joined_cluster/0, notify_left_cluster/1, notify_node_up/0]).
 
-%% internal
--export([joined_cluster/2, left_cluster/1, node_up/2]).
-
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3]).
@@ -147,32 +144,27 @@ reset_cluster_status() ->
 %%----------------------------------------------------------------------------
 
 notify_joined_cluster() ->
-    cluster_multicall(joined_cluster, [node(), rabbit_mnesia:node_type()]),
+    Nodes = rabbit_mnesia:cluster_nodes(running) -- [node()],
+    gen_server:abcast(Nodes, ?SERVER,
+                      {joined_cluster, node(), rabbit_mnesia:node_type()}),
     ok.
 
 notify_left_cluster(Node) ->
-    left_cluster(Node),
-    cluster_multicall(left_cluster, [Node]),
+    Nodes = rabbit_mnesia:cluster_nodes(running),
+    gen_server:abcast(Nodes, ?SERVER, {left_cluster, Node}),
     ok.
 
 notify_node_up() ->
-    Nodes = cluster_multicall(node_up, [node(), rabbit_mnesia:node_type()]),
+    Nodes = rabbit_mnesia:cluster_nodes(running) -- [node()],
+    gen_server:abcast(Nodes, ?SERVER,
+                      {node_up, node(), rabbit_mnesia:node_type()}),
     %% register other active rabbits with this rabbit
     DiskNodes = rabbit_mnesia:cluster_nodes(disc),
-    [node_up(N, case lists:member(N, DiskNodes) of
-                    true  -> disc;
-                    false -> ram
-                end) || N <- Nodes],
+    [gen_server:cast(?SERVER, {node_up, N, case lists:member(N, DiskNodes) of
+                                               true  -> disc;
+                                               false -> ram
+                                           end}) || N <- Nodes],
     ok.
-
-joined_cluster(Node, NodeType) ->
-    gen_server:cast(?SERVER, {joined_cluster, Node, NodeType}).
-
-left_cluster(Node) ->
-    gen_server:cast(?SERVER, {left_cluster, Node}).
-
-node_up(Node, NodeType) ->
-    gen_server:cast(?SERVER, {node_up, Node, NodeType}).
 
 %%----------------------------------------------------------------------------
 %% gen_server callbacks
@@ -259,17 +251,6 @@ try_read_file(FileName) ->
         {error, enoent} -> {error, enoent};
         {error, E}      -> throw({error, {cannot_read_file, FileName, E}})
     end.
-
-cluster_multicall(Fun, Args) ->
-    Node = node(),
-    Nodes = rabbit_mnesia:cluster_nodes(running) -- [Node],
-    %% notify other rabbits of this cluster
-    case rpc:multicall(Nodes, rabbit_node_monitor, Fun, Args,
-                       ?RABBIT_UP_RPC_TIMEOUT) of
-        {_, [] } -> ok;
-        {_, Bad} -> rabbit_log:info("failed to contact nodes ~p~n", [Bad])
-    end,
-    Nodes.
 
 is_already_monitored(Item) ->
     {monitors, Monitors} = process_info(self(), monitors),
