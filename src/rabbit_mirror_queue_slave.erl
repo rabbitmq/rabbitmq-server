@@ -894,12 +894,11 @@ set_delta(NewDelta, State = #state { depth_delta = Delta }) ->
 update_delta(_DeltaChange, State = #state { depth_delta = undefined }) ->
     State;
 update_delta(DeltaChange,  State = #state { depth_delta = Delta }) ->
-    case {Delta, Delta + DeltaChange} of
-        {0, D}            -> 0 = D, %% assertion: we cannot become unsync'ed
-                             State;
-        {_, 0}            -> ok = record_synchronised(State#state.q),
-                             State #state { depth_delta = 0 };
-        {_, D} when D > 0 -> State #state { depth_delta = D }
+    NewDelta = Delta + DeltaChange,
+    case Delta of
+        0 -> 0 = NewDelta, %% assertion: we cannot become unsync'ed
+             State;
+        _ -> set_delta(NewDelta, State #state { depth_delta = undefined })
     end.
 
 record_synchronised(#amqqueue { name = QName }) ->
