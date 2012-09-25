@@ -897,6 +897,7 @@ update_delta( DeltaChange, State = #state { depth_delta = 0         }) ->
     0 = DeltaChange, %% assertion: we cannot become unsync'ed
     State;
 update_delta( DeltaChange, State = #state { depth_delta = Delta     }) ->
+    true = DeltaChange =< 0, %% assertion: we cannot become 'less' sync'ed
     set_delta(Delta + DeltaChange, State #state { depth_delta = undefined }).
 
 record_synchronised(#amqqueue { name = QName }) ->
