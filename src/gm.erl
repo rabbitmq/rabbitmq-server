@@ -77,9 +77,13 @@
 %% confirmed_broadcast/2 directly from the callback module otherwise
 %% you will deadlock the entire group.
 %%
-%% group_members/1
-%% Provide the Pid. Returns a list of the current group members.
+%% info/1
+%% Provide the Pid. Returns a proplist with various facts, including
+%% the group name and the current group members.
 %%
+%% forget_group/1
+%% Provide the group name. Removes its mnesia record. Makes no attempt
+%% to ensure the group is empty.
 %%
 %% Implementation Overview
 %% -----------------------
@@ -373,7 +377,7 @@
 -behaviour(gen_server2).
 
 -export([create_tables/0, start_link/3, leave/1, broadcast/2,
-         confirmed_broadcast/2, group_members/1]).
+         confirmed_broadcast/2, info/1, forget_group/1]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3, prioritise_info/2]).
@@ -431,7 +435,8 @@
 -spec(leave/1 :: (pid()) -> 'ok').
 -spec(broadcast/2 :: (pid(), any()) -> 'ok').
 -spec(confirmed_broadcast/2 :: (pid(), any()) -> 'ok').
--spec(group_members/1 :: (pid()) -> [pid()]).
+-spec(info/1 :: (pid()) -> rabbit_types:infos()).
+-spec(forget_group/1 :: (group_name()) -> 'ok').
 
 %% The joined, members_changed and handle_msg callbacks can all
 %% return any of the following terms:
@@ -518,9 +523,15 @@ broadcast(Server, Msg) ->
 confirmed_broadcast(Server, Msg) ->
     gen_server2:call(Server, {confirmed_broadcast, Msg}, infinity).
 
-group_members(Server) ->
-    gen_server2:call(Server, group_members, infinity).
+info(Server) ->
+    gen_server2:call(Server, info, infinity).
 
+forget_group(GroupName) ->
+    {atomic, ok} = mnesia:sync_transaction(
+                     fun () ->
+                             mnesia:delete({?GROUP_TABLE, GroupName})
+                     end),
+    ok.
 
 init([GroupName, Module, Args]) ->
     {MegaSecs, Secs, MicroSecs} = now(),
@@ -557,12 +568,16 @@ handle_call({confirmed_broadcast, Msg}, _From,
 handle_call({confirmed_broadcast, Msg}, From, State) ->
     internal_broadcast(Msg, From, State);
 
-handle_call(group_members, _From,
+handle_call(info, _From,
             State = #state { members_state = undefined }) ->
     reply(not_joined, State);
 
-handle_call(group_members, _From, State = #state { view = View }) ->
-    reply(get_pids(alive_view_members(View)), State);
+handle_call(info, _From, State = #state { group_name = GroupName,
+                                          module     = Module,
+                                          view       = View }) ->
+    reply([{group_name,    GroupName},
+           {module,        Module},
+           {group_members, get_pids(alive_view_members(View))}], State);
 
 handle_call({add_on_right, _NewMember}, _From,
             State = #state { members_state = undefined }) ->

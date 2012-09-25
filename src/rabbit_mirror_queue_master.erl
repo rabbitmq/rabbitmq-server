@@ -127,10 +127,13 @@ terminate(Reason,
 delete_and_terminate(Reason, State = #state { gm                  = GM,
                                               backing_queue       = BQ,
                                               backing_queue_state = BQS }) ->
-    Slaves = [Pid || Pid <- gm:group_members(GM), node(Pid) =/= node()],
+    Info = gm:info(GM),
+    Slaves = [Pid || Pid <- proplists:get_value(group_members, Info),
+                     node(Pid) =/= node()],
     MRefs = [erlang:monitor(process, S) || S <- Slaves],
     ok = gm:broadcast(GM, {delete_and_terminate, Reason}),
     monitor_wait(MRefs),
+    ok = gm:forget_group(proplists:get_value(group_name, Info)),
     State #state { backing_queue_state = BQ:delete_and_terminate(Reason, BQS),
                    set_delivered       = 0 }.
 
