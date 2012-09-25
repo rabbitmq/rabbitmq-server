@@ -855,7 +855,7 @@ process_instruction({sender_death, ChPid},
 process_instruction({depth, Depth},
                     State = #state { backing_queue       = BQ,
                                      backing_queue_state = BQS }) ->
-    {ok, update_delta_from_master(Depth - BQ:depth(BQS), State)};
+    {ok, set_delta(Depth - BQ:depth(BQS), State)};
 
 process_instruction({delete_and_terminate, Reason},
                     State = #state { backing_queue       = BQ,
@@ -882,24 +882,24 @@ maybe_store_ack(true, MsgId, AckTag, State = #state { msg_id_ack = MA,
     State #state { msg_id_ack = dict:store(MsgId, {Num, AckTag}, MA),
                    ack_num    = Num + 1 }.
 
-update_delta_from_master(NewDelta, State = #state{depth_delta = undefined}) ->
+set_delta(NewDelta, State = #state { depth_delta = undefined }) ->
     case NewDelta of
         0            -> ok = record_synchronised(State#state.q),
                         State #state { depth_delta = 0 };
-        N when N > 0 -> State #state { depth_delta = N }
+        D when D > 0 -> State #state { depth_delta = D }
     end;
-update_delta_from_master(NewDelta, State = #state { depth_delta = Delta }) ->
+set_delta(NewDelta, State = #state { depth_delta = Delta }) ->
     update_delta(NewDelta - Delta, State).
 
 update_delta(_DeltaChange, State = #state { depth_delta = undefined }) ->
     State;
 update_delta(DeltaChange,  State = #state { depth_delta = Delta }) ->
     case {Delta, Delta + DeltaChange} of
-        {0, N}            -> 0 = N, %% assertion: we cannot become unsync'ed
+        {0, D}            -> 0 = D, %% assertion: we cannot become unsync'ed
                              State;
         {_, 0}            -> ok = record_synchronised(State#state.q),
                              State #state { depth_delta = 0 };
-        {_, N} when N > 0 -> State #state { depth_delta = N }
+        {_, D} when D > 0 -> State #state { depth_delta = D }
     end.
 
 record_synchronised(#amqqueue { name = QName }) ->
