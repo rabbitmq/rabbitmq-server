@@ -31,7 +31,8 @@
 -spec(force_event_refresh/0 :: () -> 'ok').
 -spec(list/0 :: () -> [pid()]).
 -spec(list_local/0 :: () -> [pid()]).
--spec(connect/5 :: ((rabbit_types:username() | rabbit_types:user()),
+-spec(connect/5 :: ((rabbit_types:username() | rabbit_types:user() |
+                     {rabbit_types:username(), rabbit_types:password()}),
                     rabbit_types:vhost(), rabbit_types:protocol(), pid(),
                     rabbit_event:event_props()) ->
                         {'ok', {rabbit_types:user(),
@@ -74,16 +75,24 @@ connect(User = #user{}, VHost, Protocol, Pid, Infos) ->
             {error, access_refused}
     end;
 
+connect({Username, Password}, VHost, Protocol, Pid, Infos) ->
+    connect0(check_user_pass_login, Username, Password, VHost, Protocol, Pid,
+             Infos);
+
 connect(Username, VHost, Protocol, Pid, Infos) ->
+    connect0(check_user_login, Username, [], VHost, Protocol, Pid, Infos).
+
+connect0(FunctionName, U, P, VHost, Protocol, Pid, Infos) ->
     case rabbit:is_running() of
         true  ->
-            case rabbit_access_control:check_user_login(Username, []) of
+            case rabbit_access_control:FunctionName(U, P) of
                 {ok, User}        -> connect(User, VHost, Protocol, Pid, Infos);
                 {refused, _M, _A} -> {error, auth_failure}
             end;
         false ->
             {error, broker_not_found_on_node}
     end.
+
 
 start_channel(Number, ClientChannelPid, ConnPid, ConnName, Protocol, User,
               VHost, Capabilities, Collector) ->

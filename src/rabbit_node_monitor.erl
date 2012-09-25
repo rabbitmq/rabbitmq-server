@@ -166,7 +166,7 @@ notify_node_up() ->
     ok.
 
 joined_cluster(Node, NodeType) ->
-    gen_server:cast(?SERVER, {rabbit_join, Node, NodeType}).
+    gen_server:cast(?SERVER, {joined_cluster, Node, NodeType}).
 
 left_cluster(Node) ->
     gen_server:cast(?SERVER, {left_cluster, Node}).

@@ -598,10 +598,12 @@ handle_method(_Method, _, #ch{tx_status = TxStatus})
 handle_method(#'access.request'{},_, State) ->
     {reply, #'access.request_ok'{ticket = 1}, State};
 
+handle_method(#'basic.publish'{immediate = true}, _Content, _State) ->
+    rabbit_misc:protocol_error(not_implemented, "immediate=true", []);
+
 handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
                                routing_key = RoutingKey,
-                               mandatory   = Mandatory,
-                               immediate   = Immediate},
+                               mandatory   = Mandatory},
               Content, State = #ch{virtual_host    = VHostPath,
                                    tx_status       = TxStatus,
                                    confirm_enabled = ConfirmEnabled,
@@ -623,8 +625,7 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
     case rabbit_basic:message(ExchangeName, RoutingKey, DecodedContent) of
         {ok, Message} ->
             rabbit_trace:tap_trace_in(Message, TraceState),
-            Delivery = rabbit_basic:delivery(Mandatory, Immediate, Message,
-                                             MsgSeqNo),
+            Delivery = rabbit_basic:delivery(Mandatory, Message, MsgSeqNo),
             QNames = rabbit_exchange:route(Exchange, Delivery),
             {noreply,
              case TxStatus of
@@ -1342,20 +1343,16 @@ deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{
                           QPid <- DeliveredQPids]], publish, State2),
     State2.
 
-process_routing_result(unroutable,    _, XName,  MsgSeqNo, Msg, State) ->
+process_routing_result(unroutable, _, XName,  MsgSeqNo, Msg, State) ->
     ok = basic_return(Msg, State, no_route),
     maybe_incr_stats([{Msg#basic_message.exchange_name, 1}],
                      return_unroutable, State),
     record_confirm(MsgSeqNo, XName, State);
-process_routing_result(not_delivered, _, XName,  MsgSeqNo, Msg, State) ->
-    ok = basic_return(Msg, State, no_consumers),
-    maybe_incr_stats([{XName, 1}], return_not_delivered, State),
+process_routing_result(routed,    [], XName,  MsgSeqNo,   _, State) ->
     record_confirm(MsgSeqNo, XName, State);
-process_routing_result(routed,       [], XName,  MsgSeqNo,   _, State) ->
-    record_confirm(MsgSeqNo, XName, State);
-process_routing_result(routed,        _,     _, undefined,   _, State) ->
+process_routing_result(routed,     _,     _, undefined,   _, State) ->
     State;
-process_routing_result(routed,    QPids, XName,  MsgSeqNo,   _, State) ->
+process_routing_result(routed, QPids, XName,  MsgSeqNo,   _, State) ->
     State#ch{unconfirmed = dtree:insert(MsgSeqNo, QPids, XName,
                                         State#ch.unconfirmed)}.
 

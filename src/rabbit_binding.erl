@@ -169,9 +169,9 @@ add(Binding, InnerFun) ->
 
 add(Src, Dst, B) ->
     [SrcDurable, DstDurable] = [durable(E) || E <- [Src, Dst]],
-    case (not (SrcDurable andalso DstDurable) orelse
-          mnesia:read({rabbit_durable_route, B}) =:= []) of
-        true  -> ok = sync_route(#route{binding = B}, SrcDurable, DstDurable,
+    case (SrcDurable andalso DstDurable andalso
+          mnesia:read({rabbit_durable_route, B}) =/= []) of
+        false -> ok = sync_route(#route{binding = B}, SrcDurable, DstDurable,
                                  fun mnesia:write/3),
                  x_callback(transaction, Src, add_binding, B),
                  Serial = rabbit_exchange:serial(Src),
@@ -179,7 +179,7 @@ add(Src, Dst, B) ->
                          x_callback(Serial, Src, add_binding, B),
                          ok = rabbit_event:notify(binding_created, info(B))
                  end;
-        false -> rabbit_misc:const({error, binding_not_found})
+        true  -> rabbit_misc:const({error, binding_not_found})
     end.
 
 remove(Binding) -> remove(Binding, fun (_Src, _Dst) -> ok end).

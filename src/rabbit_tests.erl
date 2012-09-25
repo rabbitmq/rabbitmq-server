@@ -656,7 +656,6 @@ test_topic_expect_match(X, List) ->
                                              #'P_basic'{}, <<>>),
               Res = rabbit_exchange_type_topic:route(
                       X, #delivery{mandatory = false,
-                                   immediate = false,
                                    sender    = self(),
                                    message   = Message}),
               ExpectedRes = lists:map(
@@ -2194,8 +2193,8 @@ publish_and_confirm(Q, Payload, Count) ->
          Msg = rabbit_basic:message(rabbit_misc:r(<<>>, exchange, <<>>),
                                     <<>>, #'P_basic'{delivery_mode = 2},
                                     Payload),
-         Delivery = #delivery{mandatory = false, immediate = false,
-                              sender = self(), message = Msg, msg_seq_no = Seq},
+         Delivery = #delivery{mandatory = false, sender = self(),
+                              message = Msg, msg_seq_no = Seq},
          {routed, _} = rabbit_amqqueue:deliver([Q], Delivery)
      end || Seq <- Seqs],
     wait_for_confirms(gb_sets:from_list(Seqs)).

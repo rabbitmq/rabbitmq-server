@@ -69,7 +69,6 @@
 -type(message() :: basic_message()).
 -type(delivery() ::
         #delivery{mandatory :: boolean(),
-                  immediate :: boolean(),
                   sender    :: pid(),
                   message   :: message()}).
 -type(message_properties() ::
