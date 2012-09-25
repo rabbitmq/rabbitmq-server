@@ -160,7 +160,7 @@ reset_cluster_status() ->
 %%----------------------------------------------------------------------------
 
 joined_cluster(Node, IsDiscNode) ->
-    gen_server:cast(?SERVER, {rabbit_join, Node, IsDiscNode}).
+    gen_server:cast(?SERVER, {joined_cluster, Node, IsDiscNode}).
 
 notify_joined_cluster() ->
     cluster_multicall(joined_cluster, [node(), rabbit_mnesia:is_disc_node()]),
