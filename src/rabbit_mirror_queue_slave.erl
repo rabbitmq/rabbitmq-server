@@ -800,7 +800,7 @@ process_instruction({drop, Length, Dropped, AckRequired},
                end, State, lists:duplicate(ToDrop, const)),
     {ok, case AckRequired of
              true  -> State1;
-             false -> set_synchronised(ToDrop - Dropped, State1)
+             false -> update_delta(ToDrop - Dropped, State1)
          end};
 process_instruction({fetch, AckRequired, MsgId, Remaining},
                     State = #state { backing_queue       = BQ,
@@ -815,7 +815,7 @@ process_instruction({fetch, AckRequired, MsgId, Remaining},
              _ when QLen =< Remaining andalso AckRequired ->
                  State;
              _ when QLen =< Remaining ->
-                 set_synchronised(-1, State)
+                 update_delta(-1, State)
          end};
 process_instruction({ack, MsgIds},
                     State = #state { backing_queue       = BQ,
@@ -824,9 +824,9 @@ process_instruction({ack, MsgIds},
     {AckTags, MA1} = msg_ids_to_acktags(MsgIds, MA),
     {MsgIds1, BQS1} = BQ:ack(AckTags, BQS),
     [] = MsgIds1 -- MsgIds, %% ASSERTION
-    {ok, set_synchronised(length(MsgIds1) - length(MsgIds),
-                          State #state { msg_id_ack          = MA1,
-                                         backing_queue_state = BQS1 })};
+    {ok, update_delta(length(MsgIds1) - length(MsgIds),
+                      State #state { msg_id_ack          = MA1,
+                                     backing_queue_state = BQS1 })};
 process_instruction({requeue, MsgIds},
                     State = #state { backing_queue       = BQ,
                                      backing_queue_state = BQS,
@@ -853,15 +853,10 @@ process_instruction({sender_death, ChPid},
                                      known_senders = pmon:demonitor(ChPid, KS) }
          end};
 process_instruction({depth, Depth},
-                    State = #state { depth_delta         = D,
-                                     backing_queue       = BQ,
+                    State = #state { backing_queue       = BQ,
                                      backing_queue_state = BQS }) ->
-    D1 = case D of
-             undefined -> 1; %% anything but 0 will do here
-             _         -> D
-         end,
-    {ok, set_synchronised(Depth - BQ:depth(BQS) - D1,
-                          State #state { depth_delta = D1 })};
+    {ok, update_delta_from_master(Depth - BQ:depth(BQS), State)};
+
 process_instruction({delete_and_terminate, Reason},
                     State = #state { backing_queue       = BQ,
                                      backing_queue_state = BQS }) ->
@@ -887,9 +882,18 @@ maybe_store_ack(true, MsgId, AckTag, State = #state { msg_id_ack = MA,
     State #state { msg_id_ack = dict:store(MsgId, {Num, AckTag}, MA),
                    ack_num    = Num + 1 }.
 
-set_synchronised(_DeltaChange, State = #state { depth_delta = undefined }) ->
+update_delta_from_master(NewDelta, State = #state{depth_delta = undefined}) ->
+    case NewDelta of
+        0            -> ok = record_synchronised(State#state.q),
+                        State #state { depth_delta = 0 };
+        N when N > 0 -> State #state { depth_delta = N }
+    end;
+update_delta_from_master(DeltaChange, State) ->
+    update_delta(DeltaChange, State).
+
+update_delta(_DeltaChange, State = #state { depth_delta = undefined }) ->
     State;
-set_synchronised(DeltaChange,  State = #state { depth_delta = Delta }) ->
+update_delta(DeltaChange,  State = #state { depth_delta = Delta }) ->
     %% We intentionally leave out the head where a slave becomes
     %% unsynchronised: we assert that can never happen.
     case {Delta, Delta + DeltaChange} of
