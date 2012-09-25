@@ -23,7 +23,7 @@
          cluster_status_filename/0, prepare_cluster_status_files/0,
          write_cluster_status/1, read_cluster_status/0,
          update_cluster_status/0, reset_cluster_status/0]).
--export([notify_joined_cluster/0, notify_left_cluster/1, notify_node_up/0]).
+-export([notify_node_up/0, notify_joined_cluster/0, notify_left_cluster/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
@@ -46,9 +46,9 @@
 -spec(update_cluster_status/0 :: () -> 'ok').
 -spec(reset_cluster_status/0 :: () -> 'ok').
 
+-spec(notify_node_up/0 :: () -> 'ok').
 -spec(notify_joined_cluster/0 :: () -> 'ok').
 -spec(notify_left_cluster/1 :: (node()) -> 'ok').
--spec(notify_node_up/0 :: () -> 'ok').
 
 -endif.
 
@@ -62,14 +62,15 @@ start_link() -> gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 %% Cluster file operations
 %%----------------------------------------------------------------------------
 
-%% The cluster file information is kept in two files.  The "cluster status file"
-%% contains all the clustered nodes and the disc nodes.  The "running nodes
-%% file" contains the currently running nodes or the running nodes at shutdown
-%% when the node is down.
+%% The cluster file information is kept in two files.  The "cluster
+%% status file" contains all the clustered nodes and the disc nodes.
+%% The "running nodes file" contains the currently running nodes or
+%% the running nodes at shutdown when the node is down.
 %%
-%% We strive to keep the files up to date and we rely on this assumption in
-%% various situations. Obviously when mnesia is offline the information we have
-%% will be outdated, but it can't be otherwise.
+%% We strive to keep the files up to date and we rely on this
+%% assumption in various situations. Obviously when mnesia is offline
+%% the information we have will be outdated, but it cannot be
+%% otherwise.
 
 running_nodes_filename() ->
     filename:join(rabbit_mnesia:dir(), "nodes_running_at_shutdown").
@@ -86,8 +87,8 @@ prepare_cluster_status_files() ->
                         {error, enoent}                   -> []
                     end,
     ThisNode = [node()],
-    %% The running nodes file might contain a set or a list, in case of the
-    %% legacy file
+    %% The running nodes file might contain a set or a list, in case
+    %% of the legacy file
     RunningNodes2 = lists:usort(ThisNode ++ RunningNodes1),
     {AllNodes1, WantDiscNode} =
         case try_read_file(cluster_status_filename()) of
@@ -143,17 +144,6 @@ reset_cluster_status() ->
 %% Cluster notifications
 %%----------------------------------------------------------------------------
 
-notify_joined_cluster() ->
-    Nodes = rabbit_mnesia:cluster_nodes(running) -- [node()],
-    gen_server:abcast(Nodes, ?SERVER,
-                      {joined_cluster, node(), rabbit_mnesia:node_type()}),
-    ok.
-
-notify_left_cluster(Node) ->
-    Nodes = rabbit_mnesia:cluster_nodes(running),
-    gen_server:abcast(Nodes, ?SERVER, {left_cluster, Node}),
-    ok.
-
 notify_node_up() ->
     Nodes = rabbit_mnesia:cluster_nodes(running) -- [node()],
     gen_server:abcast(Nodes, ?SERVER,
@@ -166,6 +156,17 @@ notify_node_up() ->
                                            end}) || N <- Nodes],
     ok.
 
+notify_joined_cluster() ->
+    Nodes = rabbit_mnesia:cluster_nodes(running) -- [node()],
+    gen_server:abcast(Nodes, ?SERVER,
+                      {joined_cluster, node(), rabbit_mnesia:node_type()}),
+    ok.
+
+notify_left_cluster(Node) ->
+    Nodes = rabbit_mnesia:cluster_nodes(running),
+    gen_server:abcast(Nodes, ?SERVER, {left_cluster, Node}),
+    ok.
+
 %%----------------------------------------------------------------------------
 %% gen_server callbacks
 %%----------------------------------------------------------------------------
@@ -175,8 +176,9 @@ init([]) -> {ok, no_state}.
 handle_call(_Request, _From, State) ->
     {noreply, State}.
 
-%% Note: when updating the status file, we can't simply write the mnesia
-%% information since the message can (and will) overtake the mnesia propagation.
+%% Note: when updating the status file, we can't simply write the
+%% mnesia information since the message can (and will) overtake the
+%% mnesia propagation.
 handle_cast({node_up, Node, NodeType}, State) ->
     case is_already_monitored({rabbit, Node}) of
         true  -> {noreply, State};
@@ -259,8 +261,9 @@ is_already_monitored(Item) ->
               end, Monitors).
 
 legacy_cluster_nodes(Nodes) ->
-    %% We get all the info that we can, including the nodes from mnesia, which
-    %% will be there if the node is a disc node (empty list otherwise)
+    %% We get all the info that we can, including the nodes from
+    %% mnesia, which will be there if the node is a disc node (empty
+    %% list otherwise)
     lists:usort(Nodes ++ mnesia:system_info(db_nodes)).
 
 legacy_should_be_disc_node(DiscNodes) ->
