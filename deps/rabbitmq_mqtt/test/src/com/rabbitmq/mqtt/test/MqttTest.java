@@ -58,7 +58,7 @@ public class MqttTest extends TestCase implements MqttCallback {
 
     private final byte[] payload = "payload".getBytes();
     private final String topic = "test-topic";
-    private int testDelay = 100;
+    private int testDelay = 1000;
     private long lastReceipt;
     private boolean expectConnectionFailure;
 
