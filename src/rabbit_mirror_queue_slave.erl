@@ -887,14 +887,16 @@ maybe_store_ack(true, MsgId, AckTag, State = #state { msg_id_ack = MA,
     State #state { msg_id_ack = dict:store(MsgId, {Num, AckTag}, MA),
                    ack_num    = Num + 1 }.
 
-set_synchronised(_Delta, State = #state { depth_delta = undefined }) ->
+set_synchronised(_DeltaChange, State = #state { depth_delta = undefined }) ->
     State;
-set_synchronised(Delta,  State = #state { depth_delta = D }) ->
-    case D + Delta of
-        0 when D ==  0               -> State;
-        0 when D =/= 0               -> ok = record_synchronised(State#state.q),
-                                        State #state { depth_delta = 0 };
-        N when D =/= 0 andalso N > 0 -> State #state { depth_delta = N }
+set_synchronised(DeltaChange,  State = #state { depth_delta = Delta }) ->
+    %% We intentionally leave out the head where a slave becomes
+    %% unsynchronised: we assert that can never happen.
+    case {Delta, Delta + DeltaChange} of
+        {0, 0}            -> State;
+        {_, 0}            -> ok = record_synchronised(State#state.q),
+                             State #state { depth_delta = 0 };
+        {_, N} when N > 0 -> State #state { depth_delta = N }
     end.
 
 record_synchronised(#amqqueue { name = QName }) ->
