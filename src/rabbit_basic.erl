@@ -18,9 +18,9 @@
 -include("rabbit.hrl").
 -include("rabbit_framing.hrl").
 
--export([publish/4, publish/6, publish/1,
+-export([publish/4, publish/5, publish/1,
          message/3, message/4, properties/1, append_table_header/3,
-         extract_headers/1, map_headers/2, delivery/4, header_routes/1]).
+         extract_headers/1, map_headers/2, delivery/3, header_routes/1]).
 -export([build_content/2, from_content/1]).
 
 %%----------------------------------------------------------------------------
@@ -40,13 +40,13 @@
 -spec(publish/4 ::
         (exchange_input(), rabbit_router:routing_key(), properties_input(),
          body_input()) -> publish_result()).
--spec(publish/6 ::
-        (exchange_input(), rabbit_router:routing_key(), boolean(), boolean(),
+-spec(publish/5 ::
+        (exchange_input(), rabbit_router:routing_key(), boolean(),
          properties_input(), body_input()) -> publish_result()).
 -spec(publish/1 ::
         (rabbit_types:delivery()) -> publish_result()).
--spec(delivery/4 ::
-        (boolean(), boolean(), rabbit_types:message(), undefined | integer()) ->
+-spec(delivery/3 ::
+        (boolean(), rabbit_types:message(), undefined | integer()) ->
                          rabbit_types:delivery()).
 -spec(message/4 ::
         (rabbit_exchange:name(), rabbit_router:routing_key(),
@@ -80,18 +80,16 @@
 %% Convenience function, for avoiding round-trips in calls across the
 %% erlang distributed network.
 publish(Exchange, RoutingKeyBin, Properties, Body) ->
-    publish(Exchange, RoutingKeyBin, false, false, Properties, Body).
+    publish(Exchange, RoutingKeyBin, false, Properties, Body).
 
 %% Convenience function, for avoiding round-trips in calls across the
 %% erlang distributed network.
-publish(X = #exchange{name = XName}, RKey, Mandatory, Immediate, Props, Body) ->
-    publish(X, delivery(Mandatory, Immediate,
-                        message(XName, RKey, properties(Props), Body),
-                        undefined));
-publish(XName, RKey, Mandatory, Immediate, Props, Body) ->
-    publish(delivery(Mandatory, Immediate,
-                     message(XName, RKey, properties(Props), Body),
-                     undefined)).
+publish(X = #exchange{name = XName}, RKey, Mandatory, Props, Body) ->
+    Message = message(XName, RKey, properties(Props), Body),
+    publish(X, delivery(Mandatory, Message, undefined));
+publish(XName, RKey, Mandatory, Props, Body) ->
+    Message = message(XName, RKey, properties(Props), Body),
+    publish(delivery(Mandatory, Message, undefined)).
 
 publish(Delivery = #delivery{
           message = #basic_message{exchange_name = XName}}) ->
@@ -105,8 +103,8 @@ publish(X, Delivery) ->
     {RoutingRes, DeliveredQPids} = rabbit_amqqueue:deliver(Qs, Delivery),
     {ok, RoutingRes, DeliveredQPids}.
 
-delivery(Mandatory, Immediate, Message, MsgSeqNo) ->
-    #delivery{mandatory = Mandatory, immediate = Immediate, sender = self(),
+delivery(Mandatory, Message, MsgSeqNo) ->
+    #delivery{mandatory = Mandatory, sender = self(),
               message = Message, msg_seq_no = MsgSeqNo}.
 
 build_content(Properties, BodyBin) when is_binary(BodyBin) ->

@@ -263,20 +263,16 @@ forget_cluster_node(Node, RemoveWhenOffline) ->
         true  -> ok;
         false -> e(not_a_cluster_node)
     end,
-    case mnesia:system_info(is_running) of
-        no  when RemoveWhenOffline ->
-            remove_node_offline_node(Node);
-        yes when RemoveWhenOffline ->
-            e(online_node_offline_flag);
-        no  ->
-            e(offline_node_no_offline_flag);
-        yes ->
-            rabbit_misc:local_info_msg("Removing node ~p from cluster~n",
-                                       [Node]),
-            case remove_node_if_mnesia_running(Node) of
-                ok               -> ok;
-                {error, _} = Err -> throw(Err)
-            end
+    case {RemoveWhenOffline, mnesia:system_info(is_running)} of
+        {true,   no} -> remove_node_offline_node(Node);
+        {true,  yes} -> e(online_node_offline_flag);
+        {false,  no} -> e(offline_node_no_offline_flag);
+        {false, yes} -> rabbit_misc:local_info_msg(
+                          "Removing node ~p from cluster~n", [Node]),
+                        case remove_node_if_mnesia_running(Node) of
+                            ok               -> ok;
+                            {error, _} = Err -> throw(Err)
+                        end
     end.
 
 remove_node_offline_node(Node) ->
@@ -324,6 +320,8 @@ status() ->
 is_clustered() -> AllNodes = cluster_nodes(all),
                   AllNodes =/= [] andalso AllNodes =/= [node()].
 
+cluster_nodes(WhichNodes) -> cluster_status(WhichNodes).
+
 %% This function is the actual source of information, since it gets
 %% the data from mnesia. Obviously it'll work only when mnesia is
 %% running.
@@ -352,7 +350,7 @@ mnesia_nodes() ->
             end
     end.
 
-cluster_nodes(WhichNodes) ->
+cluster_status(WhichNodes) ->
     %% I don't want to call `running_nodes/1' unless if necessary, since it's
     %% pretty expensive.
     {AllNodes1, DiscNodes1, RunningNodesThunk} =
@@ -556,9 +554,9 @@ check_cluster_consistency(Node) ->
 %%--------------------------------------------------------------------
 
 on_node_up(Node) ->
-    case running_disc_nodes() =:= [Node] of
-        true  -> rabbit_log:info("cluster contains disc nodes again~n");
-        false -> ok
+    case running_disc_nodes() of
+        [Node] -> rabbit_log:info("cluster contains disc nodes again~n");
+        _      -> ok
     end.
 
 on_node_down(_Node) ->
@@ -568,7 +566,7 @@ on_node_down(_Node) ->
     end.
 
 running_disc_nodes() ->
-    {_AllNodes, DiscNodes, RunningNodes} = cluster_nodes(status),
+    {_AllNodes, DiscNodes, RunningNodes} = cluster_status(status),
     ordsets:to_list(ordsets:intersection(ordsets:from_list(DiscNodes),
                                          ordsets:from_list(RunningNodes))).
 
@@ -583,18 +581,16 @@ discover_cluster(Nodes) when is_list(Nodes) ->
 discover_cluster(Node) ->
     OfflineError =
         {error, {cannot_discover_cluster,
-                 "The nodes provided is either offline or not running"}},
+                 "The nodes provided are either offline or not running"}},
     case node() of
-        Node->
-            {error, {cannot_discover_cluster,
-                     "You provided the current node as node to cluster with"}};
-        _ ->
-            case rpc:call(Node,
-                          rabbit_mnesia, cluster_status_from_mnesia, []) of
-                {badrpc, _Reason}           -> OfflineError;
-                {error, mnesia_not_running} -> OfflineError;
-                {ok, Res}                   -> {ok, Res}
-            end
+        Node -> {error, {cannot_discover_cluster,
+                         "Cannot cluster node with itself"}};
+        _    -> case rpc:call(Node,
+                              rabbit_mnesia, cluster_status_from_mnesia, []) of
+                    {badrpc, _Reason}           -> OfflineError;
+                    {error, mnesia_not_running} -> OfflineError;
+                    {ok, Res}                   -> {ok, Res}
+                end
     end.
 
 schema_ok_or_move() ->

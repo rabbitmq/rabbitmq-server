@@ -767,7 +767,7 @@ dead_letter_fun(Reason, _State) ->
 
 dead_letter_publish(Msg, Reason, X, State = #q{publish_seqno = MsgSeqNo}) ->
     DLMsg = make_dead_letter_msg(Reason, Msg, State),
-    Delivery = rabbit_basic:delivery(false, false, DLMsg, MsgSeqNo),
+    Delivery = rabbit_basic:delivery(false, DLMsg, MsgSeqNo),
     {Queues, Cycles} = detect_dead_letter_cycles(
                          DLMsg, rabbit_exchange:route(X, Delivery)),
     lists:foreach(fun log_cycle_once/1, Cycles),
@@ -1029,27 +1029,9 @@ handle_call({info, Items}, _From, State) ->
 handle_call(consumers, _From, State) ->
     reply(consumers(State), State);
 
-handle_call({deliver, Delivery = #delivery{immediate = true}}, _From, State) ->
-    %% FIXME: Is this correct semantics?
-    %%
-    %% I'm worried in particular about the case where an exchange has
-    %% two queues against a particular routing key, and a message is
-    %% sent in immediate mode through the binding. In non-immediate
-    %% mode, both queues get the message, saving it for later if
-    %% there's noone ready to receive it just now. In immediate mode,
-    %% should both queues still get the message, somehow, or should
-    %% just all ready-to-consume queues get the message, with unready
-    %% queues discarding the message?
-    %%
-    Confirm = should_confirm_message(Delivery, State),
-    {Delivered, State1} = attempt_delivery(Delivery, Confirm, State),
-    reply(Delivered, case Delivered of
-                         true  -> maybe_record_confirm_message(Confirm, State1);
-                         false -> discard_delivery(Delivery, State1)
-                     end);
-
-handle_call({deliver, Delivery = #delivery{mandatory = true}}, From, State) ->
-    gen_server2:reply(From, true),
+handle_call({deliver, Delivery}, From, State) ->
+    %% Synchronous, "mandatory" deliver mode.
+    gen_server2:reply(From, ok),
     noreply(deliver_or_enqueue(Delivery, State));
 
 handle_call({notify_down, ChPid}, From, State) ->
@@ -1195,7 +1177,7 @@ handle_cast({run_backing_queue, Mod, Fun}, State) ->
 
 handle_cast({deliver, Delivery = #delivery{sender = Sender}, Flow},
             State = #q{senders = Senders}) ->
-    %% Asynchronous, non-"mandatory", non-"immediate" deliver mode.
+    %% Asynchronous, non-"mandatory" deliver mode.
     Senders1 = case Flow of
                    flow   -> credit_flow:ack(Sender),
                              pmon:monitor(Sender, Senders);
