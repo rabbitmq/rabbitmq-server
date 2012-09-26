@@ -2142,7 +2142,7 @@ variable_queue_publish(IsPersistent, Count, PropFun, VQ) ->
                                                        true  -> 2;
                                                        false -> 1
                                                    end}, <<>>),
-                PropFun(N, #message_properties{}), self(), VQN)
+                PropFun(N, #message_properties{}), self(), false, VQN)
       end, VQ, lists:seq(1, Count)).
 
 variable_queue_fetch(Count, IsPersistent, IsDelivered, Len, VQ) ->
