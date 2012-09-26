@@ -87,12 +87,11 @@ init(#amqqueue { name = QName, mirror_nodes = MNodes } = Q, Recover,
     {ok, CPid} = rabbit_mirror_queue_coordinator:start_link(
                    Q, undefined, sender_death_fun(), length_fun()),
     GM = rabbit_mirror_queue_coordinator:get_gm(CPid),
-    MNodes1 =
-        (case MNodes of
-             all       -> rabbit_mnesia:all_clustered_nodes();
-             undefined -> [];
-             _         -> MNodes
-         end) -- [node()],
+    MNodes1 = (case MNodes of
+                   all       -> rabbit_mnesia:cluster_nodes(all);
+                   undefined -> [];
+                   _         -> MNodes
+               end) -- [node()],
     [rabbit_mirror_queue_misc:add_mirror(QName, Node) || Node <- MNodes1],
     {ok, BQ} = application:get_env(backing_queue_module),
     BQS = BQ:init(Q, Recover, AsyncCallback),

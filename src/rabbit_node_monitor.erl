@@ -18,29 +18,16 @@
 
 -behaviour(gen_server).
 
+-export([start_link/0]).
 -export([running_nodes_filename/0,
-         cluster_status_filename/0,
-         prepare_cluster_status_files/0,
-         write_cluster_status/1,
-         read_cluster_status/0,
-         update_cluster_status/0,
-         reset_cluster_status/0,
+         cluster_status_filename/0, prepare_cluster_status_files/0,
+         write_cluster_status/1, read_cluster_status/0,
+         update_cluster_status/0, reset_cluster_status/0]).
+-export([notify_node_up/0, notify_joined_cluster/0, notify_left_cluster/1]).
 
-         joined_cluster/2,
-         notify_joined_cluster/0,
-         left_cluster/1,
-         notify_left_cluster/1,
-         node_up/2,
-         notify_node_up/0,
-
-         start_link/0,
-         init/1,
-         handle_call/3,
-         handle_cast/2,
-         handle_info/2,
-         terminate/2,
-         code_change/3
-        ]).
+%% gen_server callbacks
+-export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
+         code_change/3]).
 
 -define(SERVER, ?MODULE).
 -define(RABBIT_UP_RPC_TIMEOUT, 2000).
@@ -48,6 +35,8 @@
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
+
+-spec(start_link/0 :: () -> rabbit_types:ok_pid_or_error()).
 
 -spec(running_nodes_filename/0 :: () -> string()).
 -spec(cluster_status_filename/0 :: () -> string()).
@@ -57,27 +46,31 @@
 -spec(update_cluster_status/0 :: () -> 'ok').
 -spec(reset_cluster_status/0 :: () -> 'ok').
 
--spec(joined_cluster/2 :: (node(), boolean()) -> 'ok').
--spec(notify_joined_cluster/0 :: () -> 'ok').
--spec(left_cluster/1 :: (node()) -> 'ok').
--spec(notify_left_cluster/1 :: (node()) -> 'ok').
--spec(node_up/2 :: (node(), boolean()) -> 'ok').
 -spec(notify_node_up/0 :: () -> 'ok').
+-spec(notify_joined_cluster/0 :: () -> 'ok').
+-spec(notify_left_cluster/1 :: (node()) -> 'ok').
 
 -endif.
+
+%%----------------------------------------------------------------------------
+%% Start
+%%----------------------------------------------------------------------------
+
+start_link() -> gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
 %%----------------------------------------------------------------------------
 %% Cluster file operations
 %%----------------------------------------------------------------------------
 
-%% The cluster file information is kept in two files.  The "cluster status file"
-%% contains all the clustered nodes and the disc nodes.  The "running nodes
-%% file" contains the currently running nodes or the running nodes at shutdown
-%% when the node is down.
+%% The cluster file information is kept in two files.  The "cluster
+%% status file" contains all the clustered nodes and the disc nodes.
+%% The "running nodes file" contains the currently running nodes or
+%% the running nodes at shutdown when the node is down.
 %%
-%% We strive to keep the files up to date and we rely on this assumption in
-%% various situations. Obviously when mnesia is offline the information we have
-%% will be outdated, but it can't be otherwise.
+%% We strive to keep the files up to date and we rely on this
+%% assumption in various situations. Obviously when mnesia is offline
+%% the information we have will be outdated, but it cannot be
+%% otherwise.
 
 running_nodes_filename() ->
     filename:join(rabbit_mnesia:dir(), "nodes_running_at_shutdown").
@@ -93,6 +86,10 @@ prepare_cluster_status_files() ->
                         {ok, _      }                     -> CorruptFiles();
                         {error, enoent}                   -> []
                     end,
+    ThisNode = [node()],
+    %% The running nodes file might contain a set or a list, in case
+    %% of the legacy file
+    RunningNodes2 = lists:usort(ThisNode ++ RunningNodes1),
     {AllNodes1, WantDiscNode} =
         case try_read_file(cluster_status_filename()) of
             {ok, [{AllNodes, DiscNodes0}]} ->
@@ -105,16 +102,11 @@ prepare_cluster_status_files() ->
             {error, enoent} ->
                 {legacy_cluster_nodes([]), true}
         end,
-
-    ThisNode = [node()],
-
-    RunningNodes2 = lists:usort(RunningNodes1 ++ ThisNode),
     AllNodes2 = lists:usort(AllNodes1 ++ RunningNodes2),
     DiscNodes = case WantDiscNode of
                     true  -> ThisNode;
                     false -> []
                 end,
-
     ok = write_cluster_status({AllNodes2, DiscNodes, RunningNodes2}).
 
 write_cluster_status({All, Disc, Running}) ->
@@ -130,13 +122,6 @@ write_cluster_status({All, Disc, Running}) ->
     case Res of
         {_, ok}           -> ok;
         {FN, {error, E2}} -> throw({error, {could_not_write_file, FN, E2}})
-    end.
-
-try_read_file(FileName) ->
-    case rabbit_file:read_term_file(FileName) of
-        {ok, Term}      -> {ok, Term};
-        {error, enoent} -> {error, enoent};
-        {error, E}      -> throw({error, {cannot_read_file, FileName, E}})
     end.
 
 read_cluster_status() ->
@@ -159,88 +144,78 @@ reset_cluster_status() ->
 %% Cluster notifications
 %%----------------------------------------------------------------------------
 
-joined_cluster(Node, IsDiscNode) ->
-    gen_server:cast(?SERVER, {joined_cluster, Node, IsDiscNode}).
+notify_node_up() ->
+    Nodes = rabbit_mnesia:cluster_nodes(running) -- [node()],
+    gen_server:abcast(Nodes, ?SERVER,
+                      {node_up, node(), rabbit_mnesia:node_type()}),
+    %% register other active rabbits with this rabbit
+    DiskNodes = rabbit_mnesia:cluster_nodes(disc),
+    [gen_server:cast(?SERVER, {node_up, N, case lists:member(N, DiskNodes) of
+                                               true  -> disc;
+                                               false -> ram
+                                           end}) || N <- Nodes],
+    ok.
 
 notify_joined_cluster() ->
-    cluster_multicall(joined_cluster, [node(), rabbit_mnesia:is_disc_node()]),
+    Nodes = rabbit_mnesia:cluster_nodes(running) -- [node()],
+    gen_server:abcast(Nodes, ?SERVER,
+                      {joined_cluster, node(), rabbit_mnesia:node_type()}),
     ok.
-
-left_cluster(Node) ->
-    gen_server:cast(?SERVER, {left_cluster, Node}).
 
 notify_left_cluster(Node) ->
-    left_cluster(Node),
-    cluster_multicall(left_cluster, [Node]),
-    ok.
-
-node_up(Node, IsDiscNode) ->
-     gen_server:cast(?SERVER, {node_up, Node, IsDiscNode}).
-
-notify_node_up() ->
-    Nodes = cluster_multicall(node_up, [node(), rabbit_mnesia:is_disc_node()]),
-    %% register other active rabbits with this rabbit
-    [ node_up(N, ordsets:is_element(N, rabbit_mnesia:clustered_disc_nodes())) ||
-        N <- Nodes ],
+    Nodes = rabbit_mnesia:cluster_nodes(running),
+    gen_server:abcast(Nodes, ?SERVER, {left_cluster, Node}),
     ok.
 
 %%----------------------------------------------------------------------------
 %% gen_server callbacks
 %%----------------------------------------------------------------------------
 
-start_link() ->
-    gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
-
-init([]) ->
-    {ok, no_state}.
+init([]) -> {ok, pmon:new()}.
 
 handle_call(_Request, _From, State) ->
     {noreply, State}.
 
-%% Note: when updating the status file, we can't simply write the mnesia
-%% information since the message can (and will) overtake the mnesia propagation.
-handle_cast({node_up, Node, IsDiscNode}, State) ->
-    case is_already_monitored({rabbit, Node}) of
-        true  -> {noreply, State};
+%% Note: when updating the status file, we can't simply write the
+%% mnesia information since the message can (and will) overtake the
+%% mnesia propagation.
+handle_cast({node_up, Node, NodeType}, Monitors) ->
+    case pmon:is_monitored({rabbit, Node}, Monitors) of
+        true  -> {noreply, Monitors};
         false -> rabbit_log:info("rabbit on node ~p up~n", [Node]),
                  {AllNodes, DiscNodes, RunningNodes} = read_cluster_status(),
-                 write_cluster_status({ordsets:add_element(Node, AllNodes),
-                                       case IsDiscNode of
-                                           true  -> ordsets:add_element(
-                                                      Node, DiscNodes);
-                                           false -> DiscNodes
+                 write_cluster_status({add_node(Node, AllNodes),
+                                       case NodeType of
+                                           disc -> add_node(Node, DiscNodes);
+                                           ram  -> DiscNodes
                                        end,
-                                       ordsets:add_element(Node, RunningNodes)}),
-                 erlang:monitor(process, {rabbit, Node}),
+                                       add_node(Node, RunningNodes)}),
                  ok = handle_live_rabbit(Node),
-                 {noreply, State}
+                 {noreply, pmon:monitor({rabbit, Node}, Monitors)}
     end;
-handle_cast({joined_cluster, Node, IsDiscNode}, State) ->
+handle_cast({joined_cluster, Node, NodeType}, State) ->
     {AllNodes, DiscNodes, RunningNodes} = read_cluster_status(),
-    write_cluster_status({ordsets:add_element(Node, AllNodes),
-                          case IsDiscNode of
-                              true  -> ordsets:add_element(Node,
-                                                           DiscNodes);
-                              false -> DiscNodes
+    write_cluster_status({add_node(Node, AllNodes),
+                          case NodeType of
+                              disc -> add_node(Node, DiscNodes);
+                              ram  -> DiscNodes
                           end,
                           RunningNodes}),
     {noreply, State};
 handle_cast({left_cluster, Node}, State) ->
     {AllNodes, DiscNodes, RunningNodes} = read_cluster_status(),
-    write_cluster_status({ordsets:del_element(Node, AllNodes),
-                          ordsets:del_element(Node, DiscNodes),
-                          ordsets:del_element(Node, RunningNodes)}),
+    write_cluster_status({del_node(Node, AllNodes), del_node(Node, DiscNodes),
+                          del_node(Node, RunningNodes)}),
     {noreply, State};
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
-handle_info({'DOWN', _MRef, process, {rabbit, Node}, _Reason}, State) ->
+handle_info({'DOWN', _MRef, process, {rabbit, Node}, _Reason}, Monitors) ->
     rabbit_log:info("rabbit on node ~p down~n", [Node]),
     {AllNodes, DiscNodes, RunningNodes} = read_cluster_status(),
-    write_cluster_status({AllNodes, DiscNodes,
-                          ordsets:del_element(Node, RunningNodes)}),
+    write_cluster_status({AllNodes, DiscNodes, del_node(Node, RunningNodes)}),
     ok = handle_dead_rabbit(Node),
-    {noreply, State};
+    {noreply, pmon:erase({rabbit, Node}, Monitors)};
 handle_info(_Info, State) ->
     {noreply, State}.
 
@@ -271,27 +246,22 @@ handle_live_rabbit(Node) ->
 %% Internal utils
 %%--------------------------------------------------------------------
 
-cluster_multicall(Fun, Args) ->
-    Node = node(),
-    Nodes = rabbit_mnesia:running_clustered_nodes() -- [Node],
-    %% notify other rabbits of this cluster
-    case rpc:multicall(Nodes, rabbit_node_monitor, Fun, Args,
-                       ?RABBIT_UP_RPC_TIMEOUT) of
-        {_, [] } -> ok;
-        {_, Bad} -> rabbit_log:info("failed to contact nodes ~p~n", [Bad])
-    end,
-    Nodes.
-
-is_already_monitored(Item) ->
-    {monitors, Monitors} = process_info(self(), monitors),
-    lists:any(fun ({_, Item1}) when Item =:= Item1 -> true;
-                  (_)                              -> false
-              end, Monitors).
+try_read_file(FileName) ->
+    case rabbit_file:read_term_file(FileName) of
+        {ok, Term}      -> {ok, Term};
+        {error, enoent} -> {error, enoent};
+        {error, E}      -> throw({error, {cannot_read_file, FileName, E}})
+    end.
 
 legacy_cluster_nodes(Nodes) ->
-    %% We get all the info that we can, including the nodes from mnesia, which
-    %% will be there if the node is a disc node (empty list otherwise)
+    %% We get all the info that we can, including the nodes from
+    %% mnesia, which will be there if the node is a disc node (empty
+    %% list otherwise)
     lists:usort(Nodes ++ mnesia:system_info(db_nodes)).
 
 legacy_should_be_disc_node(DiscNodes) ->
     DiscNodes == [] orelse lists:member(node(), DiscNodes).
+
+add_node(Node, Nodes) -> lists:usort([Node | Nodes]).
+
+del_node(Node, Nodes) -> Nodes -- [Node].
