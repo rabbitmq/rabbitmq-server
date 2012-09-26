@@ -277,20 +277,16 @@ forget_cluster_node(Node, RemoveWhenOffline) ->
         true  -> ok;
         false -> e(not_a_cluster_node)
     end,
-    case mnesia:system_info(is_running) of
-        no  when RemoveWhenOffline ->
-            remove_node_offline_node(Node);
-        yes when RemoveWhenOffline ->
-            e(online_node_offline_flag);
-        no  ->
-            e(offline_node_no_offline_flag);
-        yes ->
-            rabbit_misc:local_info_msg("Removing node ~p from cluster~n",
-                                       [Node]),
-            case remove_node_if_mnesia_running(Node) of
-                ok               -> ok;
-                {error, _} = Err -> throw(Err)
-            end
+    case {RemoveWhenOffline, mnesia:system_info(is_running)} of
+        {true,   no} -> remove_node_offline_node(Node);
+        {true,  yes} -> e(online_node_offline_flag);
+        {false,  no} -> e(offline_node_no_offline_flag);
+        {false, yes} -> rabbit_misc:local_info_msg(
+                          "Removing node ~p from cluster~n", [Node]),
+                        case remove_node_if_mnesia_running(Node) of
+                            ok               -> ok;
+                            {error, _} = Err -> throw(Err)
+                        end
     end.
 
 remove_node_offline_node(Node) ->
