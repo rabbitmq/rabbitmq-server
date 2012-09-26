@@ -545,7 +545,7 @@ attempt_delivery(#delivery{sender = SenderPid, message = Message}, Props,
                       {AckTag, BQS3} = BQ:publish_delivered(
                                          AckRequired, Message, Props,
                                          SenderPid, BQS2),
-                      {{Message, Props#message_properties.redelivered, AckTag},
+                      {{Message, Props#message_properties.delivered, AckTag},
                        true, State1#q{backing_queue_state = BQS3}}
               end, false, State#q{backing_queue_state = BQS1});
         {Duplicate, BQS1} ->
@@ -561,10 +561,10 @@ attempt_delivery(#delivery{sender = SenderPid, message = Message}, Props,
     end.
 
 deliver_or_enqueue(Delivery = #delivery{message    = Message,
-                                        sender     = SenderPid}, Redelivered,
+                                        sender     = SenderPid}, Delivered,
                    State) ->
     Confirm = should_confirm_message(Delivery, State),
-    Props = message_properties(Confirm, Redelivered, State),
+    Props = message_properties(Confirm, Delivered, State),
     case attempt_delivery(Delivery, Props, State) of
         {true, State1} ->
             maybe_record_confirm_message(Confirm, State1);
@@ -704,10 +704,10 @@ discard_delivery(#delivery{sender = SenderPid,
                             backing_queue_state = BQS}) ->
     State#q{backing_queue_state = BQ:discard(Message, SenderPid, BQS)}.
 
-message_properties(Confirm, Redelivered, #q{ttl = TTL}) ->
+message_properties(Confirm, Delivered, #q{ttl = TTL}) ->
     #message_properties{expiry           = calculate_msg_expiry(TTL),
                         needs_confirming = needs_confirming(Confirm),
-                        redelivered      = Redelivered}.
+                        delivered        = Delivered}.
 
 calculate_msg_expiry(undefined) -> undefined;
 calculate_msg_expiry(TTL)       -> now_micros() + (TTL * 1000).
