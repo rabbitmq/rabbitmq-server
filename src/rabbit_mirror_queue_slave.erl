@@ -457,8 +457,7 @@ promote_me(From, #state { q                   = Q = #amqqueue { name = QName },
     ok = rabbit_mirror_queue_coordinator:ensure_monitoring(CPid, MPids),
 
     %% We find all the messages that we've received from channels but
-    %% not from gm, and if they're due to be enqueued on promotion
-    %% then we pass them to the
+    %% not from gm, and pass them to the
     %% queue_process:init_with_backing_queue_state to be enqueued.
     %%
     %% We also have to requeue messages which are pending acks: the
