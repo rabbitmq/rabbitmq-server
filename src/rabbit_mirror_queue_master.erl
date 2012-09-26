@@ -170,10 +170,7 @@ publish_delivered(AckRequired, Msg = #basic_message { id = MsgId }, MsgProps,
                                           backing_queue_state = BQS,
                                           ack_msg_id          = AM }) ->
     false = dict:is_key(MsgId, SS), %% ASSERTION
-    %% Must use confirmed_broadcast here in order to guarantee that
-    %% all slaves are forced to interpret this publish_delivered at
-    %% the same point, especially if we die and a slave is promoted.
-    ok = gm:confirmed_broadcast(
+    ok = gm:broadcast(
            GM, {publish, {true, AckRequired}, ChPid, MsgProps, Msg, false}),
     {AckTag, BQS1} =
         BQ:publish_delivered(AckRequired, Msg, MsgProps, ChPid, BQS),
