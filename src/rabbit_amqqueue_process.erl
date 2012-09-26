@@ -536,19 +536,17 @@ run_message_queue(State) ->
                             BQ:is_empty(BQS), State1),
     State2.
 
-attempt_delivery(#delivery{sender = SenderPid, message = Message}, Confirm,
-                 Redelivered,
+attempt_delivery(#delivery{sender = SenderPid, message = Message}, Props,
                  State = #q{backing_queue = BQ, backing_queue_state = BQS}) ->
     case BQ:is_duplicate(Message, BQS) of
         {false, BQS1} ->
             deliver_msgs_to_consumers(
               fun (AckRequired, State1 = #q{backing_queue_state = BQS2}) ->
-                      Props = message_properties(Confirm, State1),
                       {AckTag, BQS3} = BQ:publish_delivered(
                                          AckRequired, Message, Props,
                                          SenderPid, BQS2),
-                      {{Message, Redelivered, AckTag}, true,
-                       State1#q{backing_queue_state = BQS3}}
+                      {{Message, Props#message_properties.redelivered, AckTag},
+                       true, State1#q{backing_queue_state = BQS3}}
               end, false, State#q{backing_queue_state = BQS1});
         {Duplicate, BQS1} ->
             %% if the message has previously been seen by the BQ then
@@ -566,7 +564,8 @@ deliver_or_enqueue(Delivery = #delivery{message    = Message,
                                         sender     = SenderPid}, Redelivered,
                    State) ->
     Confirm = should_confirm_message(Delivery, State),
-    case attempt_delivery(Delivery, Confirm, Redelivered, State) of
+    Props = message_properties(Confirm, Redelivered, State),
+    case attempt_delivery(Delivery, Props, State) of
         {true, State1} ->
             maybe_record_confirm_message(Confirm, State1);
         %% the next one is an optimisations
@@ -576,8 +575,7 @@ deliver_or_enqueue(Delivery = #delivery{message    = Message,
         {false, State1} ->
             State2 = #q{backing_queue = BQ, backing_queue_state = BQS} =
                 maybe_record_confirm_message(Confirm, State1),
-            Props = message_properties(Confirm, State2),
-            BQS1 = BQ:publish(Message, Props, SenderPid, Redelivered, BQS),
+            BQS1 = BQ:publish(Message, Props, SenderPid, BQS),
             ensure_ttl_timer(Props#message_properties.expiry,
                              State2#q{backing_queue_state = BQS1})
     end.
@@ -706,9 +704,10 @@ discard_delivery(#delivery{sender = SenderPid,
                             backing_queue_state = BQS}) ->
     State#q{backing_queue_state = BQ:discard(Message, SenderPid, BQS)}.
 
-message_properties(Confirm, #q{ttl = TTL}) ->
+message_properties(Confirm, Redelivered, #q{ttl = TTL}) ->
     #message_properties{expiry           = calculate_msg_expiry(TTL),
-                        needs_confirming = needs_confirming(Confirm)}.
+                        needs_confirming = needs_confirming(Confirm),
+                        redelivered      = Redelivered}.
 
 calculate_msg_expiry(undefined) -> undefined;
 calculate_msg_expiry(TTL)       -> now_micros() + (TTL * 1000).

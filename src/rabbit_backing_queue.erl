@@ -77,8 +77,7 @@
 
 %% Publish a message.
 -callback publish(rabbit_types:basic_message(),
-                  rabbit_types:message_properties(), pid(), boolean(),
-                  state()) ->
+                  rabbit_types:message_properties(), pid(), state()) ->
     state().
 
 %% Called for messages which have already been passed straight
@@ -213,7 +212,7 @@
 
 behaviour_info(callbacks) ->
     [{start, 1}, {stop, 0}, {init, 3}, {terminate, 2},
-     {delete_and_terminate, 2}, {purge, 1}, {publish, 5},
+     {delete_and_terminate, 2}, {purge, 1}, {publish, 4},
      {publish_delivered, 5}, {drain_confirmed, 1}, {dropwhile, 3},
      {fetch, 2}, {ack, 2}, {fold, 3}, {requeue, 2}, {len, 1},
      {is_empty, 1}, {depth, 1}, {set_ram_duration_target, 2},
