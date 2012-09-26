@@ -77,7 +77,8 @@
                  msg_id_status,
                  known_senders,
 
-                 synchronised
+                 %% Master depth - local depth
+                 depth_delta
                }).
 
 start_link(Q) ->
@@ -133,7 +134,7 @@ init(#amqqueue { name = QueueName } = Q) ->
                              msg_id_status       = dict:new(),
                              known_senders       = pmon:new(),
 
-                             synchronised        = false
+                             depth_delta         = undefined
                    },
             rabbit_event:notify(queue_slave_created,
                                 infos(?CREATION_EVENT_KEYS, State)),
@@ -395,7 +396,7 @@ infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
 i(pid,             _State)                                   -> self();
 i(name,            #state { q = #amqqueue { name = Name } }) -> Name;
 i(master_pid,      #state { master_pid = MPid })             -> MPid;
-i(is_synchronised, #state { synchronised = Synchronised })   -> Synchronised;
+i(is_synchronised, #state { depth_delta = DD })              -> DD =:= 0;
 i(Item,            _State) -> throw({bad_argument, Item}).
 
 bq_init(BQ, Q, Recover) ->
@@ -815,27 +816,26 @@ process_instruction({discard, ChPid, Msg = #basic_message { id = MsgId }},
     {ok, State1 #state { sender_queues       = SQ1,
                          msg_id_status       = MS1,
                          backing_queue_state = BQS1 }};
-process_instruction({set_length, Length, AckRequired},
+process_instruction({drop, Length, Dropped, AckRequired},
                     State = #state { backing_queue       = BQ,
                                      backing_queue_state = BQS }) ->
     QLen = BQ:len(BQS),
-    ToDrop = QLen - Length,
-    {ok,
-     case ToDrop >= 0 of
-         true ->
-             State1 =
-                 lists:foldl(
-                   fun (const, StateN = #state {backing_queue_state = BQSN}) ->
-                           {{#basic_message{id = MsgId}, _IsDelivered, AckTag,
-                             _Remaining}, BQSN1} = BQ:fetch(AckRequired, BQSN),
-                           maybe_store_ack(
-                             AckRequired, MsgId, AckTag,
-                             StateN #state { backing_queue_state = BQSN1 })
-                   end, State, lists:duplicate(ToDrop, const)),
-             set_synchronised(true, State1);
-         false ->
-             State
-     end};
+    ToDrop = case QLen - Length of
+                 N when N > 0 -> N;
+                 _            -> 0
+             end,
+    State1 = lists:foldl(
+               fun (const, StateN = #state{backing_queue_state = BQSN}) ->
+                       {{#basic_message{id = MsgId}, _, AckTag, _}, BQSN1} =
+                           BQ:fetch(AckRequired, BQSN),
+                       maybe_store_ack(
+                         AckRequired, MsgId, AckTag,
+                         StateN #state { backing_queue_state = BQSN1 })
+               end, State, lists:duplicate(ToDrop, const)),
+    {ok, case AckRequired of
+             true  -> State1;
+             false -> update_delta(ToDrop - Dropped, State1)
+         end};
 process_instruction({fetch, AckRequired, MsgId, Remaining},
                     State = #state { backing_queue       = BQ,
                                      backing_queue_state = BQS }) ->
@@ -846,11 +846,10 @@ process_instruction({fetch, AckRequired, MsgId, Remaining},
                    AckTag, Remaining}, BQS1} = BQ:fetch(AckRequired, BQS),
                  maybe_store_ack(AckRequired, MsgId, AckTag,
                                  State #state { backing_queue_state = BQS1 });
-             Other when Other + 1 =:= Remaining ->
-                 set_synchronised(true, State);
-             Other when Other < Remaining ->
-                 %% we must be shorter than the master
-                 State
+             _ when QLen =< Remaining andalso AckRequired ->
+                 State;
+             _ when QLen =< Remaining ->
+                 update_delta(-1, State)
          end};
 process_instruction({ack, MsgIds},
                     State = #state { backing_queue       = BQ,
@@ -859,27 +858,17 @@ process_instruction({ack, MsgIds},
     {AckTags, MA1} = msg_ids_to_acktags(MsgIds, MA),
     {MsgIds1, BQS1} = BQ:ack(AckTags, BQS),
     [] = MsgIds1 -- MsgIds, %% ASSERTION
-    {ok, State #state { msg_id_ack          = MA1,
-                        backing_queue_state = BQS1 }};
+    {ok, update_delta(length(MsgIds1) - length(MsgIds),
+                      State #state { msg_id_ack          = MA1,
+                                     backing_queue_state = BQS1 })};
 process_instruction({requeue, MsgIds},
                     State = #state { backing_queue       = BQ,
                                      backing_queue_state = BQS,
                                      msg_id_ack          = MA }) ->
     {AckTags, MA1} = msg_ids_to_acktags(MsgIds, MA),
-    {ok, case length(AckTags) =:= length(MsgIds) of
-             true ->
-                 {MsgIds, BQS1} = BQ:requeue(AckTags, BQS),
-                 State #state { msg_id_ack          = MA1,
-                                backing_queue_state = BQS1 };
-             false ->
-                 %% The only thing we can safely do is nuke out our BQ
-                 %% and MA. The interaction between this and confirms
-                 %% doesn't really bear thinking about...
-                 {_Count, BQS1} = BQ:purge(BQS),
-                 {_MsgIds, BQS2} = ack_all(BQ, MA, BQS1),
-                 State #state { msg_id_ack          = dict:new(),
-                                backing_queue_state = BQS2 }
-         end};
+    {_MsgIds, BQS1} = BQ:requeue(AckTags, BQS),
+    {ok, State #state { msg_id_ack          = MA1,
+                        backing_queue_state = BQS1 }};
 process_instruction({sender_death, ChPid},
                     State = #state { sender_queues = SQ,
                                      msg_id_status = MS,
@@ -897,10 +886,11 @@ process_instruction({sender_death, ChPid},
                                      msg_id_status = MS1,
                                      known_senders = pmon:demonitor(ChPid, KS) }
          end};
-process_instruction({length, Length},
-                    State = #state { backing_queue = BQ,
+process_instruction({depth, Depth},
+                    State = #state { backing_queue       = BQ,
                                      backing_queue_state = BQS }) ->
-    {ok, set_synchronised(Length =:= BQ:len(BQS), State)};
+    {ok, set_delta(Depth - BQ:depth(BQS), State)};
+
 process_instruction({delete_and_terminate, Reason},
                     State = #state { backing_queue       = BQ,
                                      backing_queue_state = BQS }) ->
@@ -919,9 +909,6 @@ msg_ids_to_acktags(MsgIds, MA) ->
           end, {[], MA}, MsgIds),
     {lists:reverse(AckTags), MA1}.
 
-ack_all(BQ, MA, BQS) ->
-    BQ:ack([AckTag || {_MsgId, {_Num, AckTag}} <- dict:to_list(MA)], BQS).
-
 maybe_store_ack(false, _MsgId, _AckTag, State) ->
     State;
 maybe_store_ack(true, MsgId, AckTag, State = #state { msg_id_ack = MA,
@@ -929,14 +916,24 @@ maybe_store_ack(true, MsgId, AckTag, State = #state { msg_id_ack = MA,
     State #state { msg_id_ack = dict:store(MsgId, {Num, AckTag}, MA),
                    ack_num    = Num + 1 }.
 
-%% We intentionally leave out the head where a slave becomes
-%% unsynchronised: we assert that can never happen.
-set_synchronised(true, State = #state { q = #amqqueue { name = QName },
-                                        synchronised = false }) ->
-    rabbit_event:notify(queue_slave_synchronised, [{pid,  self()},
-                                                   {name, QName}]),
-    State #state { synchronised = true };
-set_synchronised(true, State) ->
+set_delta(0,        State = #state { depth_delta = undefined }) ->
+    ok = record_synchronised(State#state.q),
+    State #state { depth_delta = 0 };
+set_delta(NewDelta, State = #state { depth_delta = undefined }) ->
+    true = NewDelta > 0, %% assertion
+    State #state { depth_delta = NewDelta };
+set_delta(NewDelta, State = #state { depth_delta = Delta     }) ->
+    update_delta(NewDelta - Delta, State).
+
+update_delta(_DeltaChange, State = #state { depth_delta = undefined }) ->
     State;
-set_synchronised(false, State = #state { synchronised = false }) ->
-    State.
+update_delta( DeltaChange, State = #state { depth_delta = 0         }) ->
+    0 = DeltaChange, %% assertion: we cannot become unsync'ed
+    State;
+update_delta( DeltaChange, State = #state { depth_delta = Delta     }) ->
+    true = DeltaChange =< 0, %% assertion: we cannot become 'less' sync'ed
+    set_delta(Delta + DeltaChange, State #state { depth_delta = undefined }).
+
+record_synchronised(#amqqueue { name = QName }) ->
+    rabbit_event:notify(queue_slave_synchronised, [{pid,  self()},
+                                                   {name, QName}]).
