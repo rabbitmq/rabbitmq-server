@@ -17,7 +17,7 @@
 -module(rabbit_mirror_queue_master).
 
 -export([init/3, terminate/2, delete_and_terminate/2,
-         purge/1, publish/4, publish_delivered/5, fetch/2, ack/2,
+         purge/1, publish/5, publish_delivered/5, fetch/2, ack/2,
          requeue/2, len/1, is_empty/1, depth/1, drain_confirmed/1,
          dropwhile/3, set_ram_duration_target/2, ram_duration/1,
          needs_timeout/1, timeout/1, handle_pre_hibernate/1,
@@ -153,14 +153,14 @@ purge(State = #state { gm                  = GM,
     {Count, State #state { backing_queue_state = BQS1,
                            set_delivered       = 0 }}.
 
-publish(Msg = #basic_message { id = MsgId }, MsgProps, ChPid,
+publish(Msg = #basic_message { id = MsgId }, MsgProps, ChPid, Redelivered,
         State = #state { gm                  = GM,
                          seen_status         = SS,
                          backing_queue       = BQ,
                          backing_queue_state = BQS }) ->
     false = dict:is_key(MsgId, SS), %% ASSERTION
-    ok = gm:broadcast(GM, {publish, false, ChPid, MsgProps, Msg}),
-    BQS1 = BQ:publish(Msg, MsgProps, ChPid, BQS),
+    ok = gm:broadcast(GM, {publish, false, ChPid, MsgProps, Msg, Redelivered}),
+    BQS1 = BQ:publish(Msg, MsgProps, ChPid, Redelivered, BQS),
     ensure_monitoring(ChPid, State #state { backing_queue_state = BQS1 }).
 
 publish_delivered(AckRequired, Msg = #basic_message { id = MsgId }, MsgProps,
@@ -174,7 +174,7 @@ publish_delivered(AckRequired, Msg = #basic_message { id = MsgId }, MsgProps,
     %% all slaves are forced to interpret this publish_delivered at
     %% the same point, especially if we die and a slave is promoted.
     ok = gm:confirmed_broadcast(
-           GM, {publish, {true, AckRequired}, ChPid, MsgProps, Msg}),
+           GM, {publish, {true, AckRequired}, ChPid, MsgProps, Msg, false}),
     {AckTag, BQS1} =
         BQ:publish_delivered(AckRequired, Msg, MsgProps, ChPid, BQS),
     AM1 = maybe_store_acktag(AckTag, MsgId, AM),

@@ -536,8 +536,10 @@ promote_me(From, #state { q                   = Q = #amqqueue { name = QName },
                       end, gb_trees:empty(), MSList),
     NumAckTags = [NumAckTag || {_MsgId, NumAckTag} <- dict:to_list(MA)],
     AckTags = [AckTag || {_Num, AckTag} <- lists:sort(NumAckTags)],
-    Deliveries = [Delivery || {_ChPid, {PubQ, _PendCh}} <- dict:to_list(SQ),
+    Deliveries = [{Delivery, true} ||
+                     {_ChPid, {PubQ, _PendCh}} <- dict:to_list(SQ),
                               Delivery <- queue:to_list(PubQ)],
+    rabbit_log:warning("Promotion deliveries: ~p~n", [Deliveries]),
     QueueState = rabbit_amqqueue_process:init_with_backing_queue_state(
                    Q1, rabbit_mirror_queue_master, MasterState, RateTRef,
                    AckTags, Deliveries, KS, MTC),
@@ -693,7 +695,8 @@ remove_from_pending_ch(MsgId, ChPid, SQ) ->
     end.
 
 process_instruction(
-  {publish, Deliver, ChPid, MsgProps, Msg = #basic_message { id = MsgId }},
+  {publish, Deliver, ChPid, MsgProps, Msg = #basic_message { id = MsgId },
+   Redelivered},
   State = #state { sender_queues       = SQ,
                    backing_queue       = BQ,
                    backing_queue_state = BQS,
@@ -743,9 +746,10 @@ process_instruction(
     {ok,
      case Deliver of
          false ->
-             BQS1 = BQ:publish(Msg, MsgProps, ChPid, BQS),
+             BQS1 = BQ:publish(Msg, MsgProps, ChPid, Redelivered, BQS),
              State2 #state { backing_queue_state = BQS1 };
          {true, AckRequired} ->
+             false = Redelivered, %% master:publish_delivered/5 only sends this
              {AckTag, BQS1} = BQ:publish_delivered(AckRequired, Msg, MsgProps,
                                                    ChPid, BQS),
              maybe_store_ack(AckRequired, MsgId, AckTag,

@@ -78,7 +78,7 @@
 -spec(info_keys/0 :: () -> rabbit_types:info_keys()).
 -spec(init_with_backing_queue_state/8 ::
         (rabbit_types:amqqueue(), atom(), tuple(), any(), [any()],
-         [rabbit_types:delivery()], pmon:pmon(), dict()) -> #q{}).
+         [{rabbit_types:delivery(), boolean()}], pmon:pmon(), dict()) -> #q{}).
 
 -endif.
 
@@ -170,7 +170,9 @@ init_with_backing_queue_state(Q = #amqqueue{exclusive_owner = Owner}, BQ, BQS,
                                         rabbit_event:init_stats_timer(
                                           State, #q.stats_timer))),
     lists:foldl(
-      fun (Delivery, StateN) -> deliver_or_enqueue(Delivery, StateN) end,
+      fun ({Delivery, Redelivered}, StateN) ->
+              deliver_or_enqueue(Delivery, Redelivered, StateN)
+      end,
       State1, Deliveries).
 
 terminate(shutdown = R,      State = #q{backing_queue = BQ}) ->
@@ -535,6 +537,7 @@ run_message_queue(State) ->
     State2.
 
 attempt_delivery(#delivery{sender = SenderPid, message = Message}, Confirm,
+                 Redelivered,
                  State = #q{backing_queue = BQ, backing_queue_state = BQS}) ->
     case BQ:is_duplicate(Message, BQS) of
         {false, BQS1} ->
@@ -544,7 +547,7 @@ attempt_delivery(#delivery{sender = SenderPid, message = Message}, Confirm,
                       {AckTag, BQS3} = BQ:publish_delivered(
                                          AckRequired, Message, Props,
                                          SenderPid, BQS2),
-                      {{Message, false, AckTag}, true,
+                      {{Message, Redelivered, AckTag}, true,
                        State1#q{backing_queue_state = BQS3}}
               end, false, State#q{backing_queue_state = BQS1});
         {Duplicate, BQS1} ->
@@ -560,9 +563,10 @@ attempt_delivery(#delivery{sender = SenderPid, message = Message}, Confirm,
     end.
 
 deliver_or_enqueue(Delivery = #delivery{message    = Message,
-                                        sender     = SenderPid}, State) ->
+                                        sender     = SenderPid}, Redelivered,
+                   State) ->
     Confirm = should_confirm_message(Delivery, State),
-    case attempt_delivery(Delivery, Confirm, State) of
+    case attempt_delivery(Delivery, Confirm, Redelivered, State) of
         {true, State1} ->
             maybe_record_confirm_message(Confirm, State1);
         %% the next one is an optimisations
@@ -573,7 +577,7 @@ deliver_or_enqueue(Delivery = #delivery{message    = Message,
             State2 = #q{backing_queue = BQ, backing_queue_state = BQS} =
                 maybe_record_confirm_message(Confirm, State1),
             Props = message_properties(Confirm, State2),
-            BQS1 = BQ:publish(Message, Props, SenderPid, BQS),
+            BQS1 = BQ:publish(Message, Props, SenderPid, Redelivered, BQS),
             ensure_ttl_timer(Props#message_properties.expiry,
                              State2#q{backing_queue_state = BQS1})
     end.
@@ -1032,7 +1036,7 @@ handle_call(consumers, _From, State) ->
 handle_call({deliver, Delivery}, From, State) ->
     %% Synchronous, "mandatory" deliver mode.
     gen_server2:reply(From, ok),
-    noreply(deliver_or_enqueue(Delivery, State));
+    noreply(deliver_or_enqueue(Delivery, false, State));
 
 handle_call({notify_down, ChPid}, From, State) ->
     %% we want to do this synchronously, so that auto_deleted queues
@@ -1184,7 +1188,7 @@ handle_cast({deliver, Delivery = #delivery{sender = Sender}, Flow},
                    noflow -> Senders
                end,
     State1 = State#q{senders = Senders1},
-    noreply(deliver_or_enqueue(Delivery, State1));
+    noreply(deliver_or_enqueue(Delivery, false, State1));
 
 handle_cast({ack, AckTags, ChPid}, State) ->
     noreply(subtract_acks(
