@@ -1511,15 +1511,15 @@ clean_logs(Files, Suffix) ->
     ok.
 
 assert_ram_node() ->
-    case rabbit_mnesia:is_disc_node() of
-        true  -> exit('not_ram_node');
-        false -> ok
+    case rabbit_mnesia:node_type() of
+        disc -> exit('not_ram_node');
+        ram  -> ok
     end.
 
 assert_disc_node() ->
-    case rabbit_mnesia:is_disc_node() of
-        true  -> ok;
-        false -> exit('not_disc_node')
+    case rabbit_mnesia:node_type() of
+        disc -> ok;
+        ram  -> exit('not_disc_node')
     end.
 
 delete_file(File) ->

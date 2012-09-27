@@ -17,7 +17,7 @@
 -module(rabbit_mirror_queue_master).
 
 -export([init/3, terminate/2, delete_and_terminate/2,
-         purge/1, publish/5, publish_delivered/5, fetch/2, ack/2,
+         purge/1, publish/4, publish_delivered/5, fetch/2, ack/2,
          requeue/2, len/1, is_empty/1, depth/1, drain_confirmed/1,
          dropwhile/3, set_ram_duration_target/2, ram_duration/1,
          needs_timeout/1, timeout/1, handle_pre_hibernate/1,
@@ -87,12 +87,11 @@ init(#amqqueue { name = QName, mirror_nodes = MNodes } = Q, Recover,
     {ok, CPid} = rabbit_mirror_queue_coordinator:start_link(
                    Q, undefined, sender_death_fun(), length_fun()),
     GM = rabbit_mirror_queue_coordinator:get_gm(CPid),
-    MNodes1 =
-        (case MNodes of
-             all       -> rabbit_mnesia:all_clustered_nodes();
-             undefined -> [];
-             _         -> MNodes
-         end) -- [node()],
+    MNodes1 = (case MNodes of
+                   all       -> rabbit_mnesia:cluster_nodes(all);
+                   undefined -> [];
+                   _         -> MNodes
+               end) -- [node()],
     [rabbit_mirror_queue_misc:add_mirror(QName, Node) || Node <- MNodes1],
     {ok, BQ} = application:get_env(backing_queue_module),
     BQS = BQ:init(Q, Recover, AsyncCallback),
@@ -153,14 +152,14 @@ purge(State = #state { gm                  = GM,
     {Count, State #state { backing_queue_state = BQS1,
                            set_delivered       = 0 }}.
 
-publish(Msg = #basic_message { id = MsgId }, MsgProps, ChPid, Redelivered,
+publish(Msg = #basic_message { id = MsgId }, MsgProps, ChPid,
         State = #state { gm                  = GM,
                          seen_status         = SS,
                          backing_queue       = BQ,
                          backing_queue_state = BQS }) ->
     false = dict:is_key(MsgId, SS), %% ASSERTION
-    ok = gm:broadcast(GM, {publish, false, ChPid, MsgProps, Msg, Redelivered}),
-    BQS1 = BQ:publish(Msg, MsgProps, ChPid, Redelivered, BQS),
+    ok = gm:broadcast(GM, {publish, false, ChPid, MsgProps, Msg}),
+    BQS1 = BQ:publish(Msg, MsgProps, ChPid, BQS),
     ensure_monitoring(ChPid, State #state { backing_queue_state = BQS1 }).
 
 publish_delivered(AckRequired, Msg = #basic_message { id = MsgId }, MsgProps,
@@ -171,7 +170,7 @@ publish_delivered(AckRequired, Msg = #basic_message { id = MsgId }, MsgProps,
                                           ack_msg_id          = AM }) ->
     false = dict:is_key(MsgId, SS), %% ASSERTION
     ok = gm:broadcast(
-           GM, {publish, {true, AckRequired}, ChPid, MsgProps, Msg, false}),
+           GM, {publish, {true, AckRequired}, ChPid, MsgProps, Msg}),
     {AckTag, BQS1} =
         BQ:publish_delivered(AckRequired, Msg, MsgProps, ChPid, BQS),
     AM1 = maybe_store_acktag(AckTag, MsgId, AM),

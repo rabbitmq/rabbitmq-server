@@ -247,9 +247,12 @@ action(force_reset, Node, [], _Opts, Inform) ->
 
 action(join_cluster, Node, [ClusterNodeS], Opts, Inform) ->
     ClusterNode = list_to_atom(ClusterNodeS),
-    DiscNode = not proplists:get_bool(?RAM_OPT, Opts),
+    NodeType = case proplists:get_bool(?RAM_OPT, Opts) of
+                   true  -> ram;
+                   false -> disc
+               end,
     Inform("Clustering node ~p with ~p", [Node, ClusterNode]),
-    rpc_call(Node, rabbit_mnesia, join_cluster, [ClusterNode, DiscNode]);
+    rpc_call(Node, rabbit_mnesia, join_cluster, [ClusterNode, NodeType]);
 
 action(change_cluster_node_type, Node, ["ram"], _Opts, Inform) ->
     Inform("Turning ~p into a ram node", [Node]),
@@ -458,7 +461,7 @@ action(list_parameters, Node, [], Opts, Inform) ->
 action(report, Node, _Args, _Opts, Inform) ->
     Inform("Reporting server status on ~p~n~n", [erlang:universaltime()]),
     [begin ok = action(Action, N, [], [], Inform), io:nl() end ||
-        N      <- unsafe_rpc(Node, rabbit_mnesia, running_clustered_nodes, []),
+        N      <- unsafe_rpc(Node, rabbit_mnesia, cluster_nodes, [running]),
         Action <- [status, cluster_status, environment]],
     VHosts = unsafe_rpc(Node, rabbit_vhost, list, []),
     [print_report(Node, Q)      || Q <- ?GLOBAL_QUERIES],
