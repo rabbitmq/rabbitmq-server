@@ -169,11 +169,9 @@ init_with_backing_queue_state(Q = #amqqueue{exclusive_owner = Owner}, BQ, BQS,
     State1 = requeue_and_run(AckTags, process_args(
                                         rabbit_event:init_stats_timer(
                                           State, #q.stats_timer))),
-    lists:foldl(
-      fun (Delivery, StateN) ->
-              deliver_or_enqueue(Delivery, true, StateN)
-      end,
-      State1, Deliveries).
+    lists:foldl(fun (Delivery, StateN) ->
+                        deliver_or_enqueue(Delivery, true, StateN)
+                end, State1, Deliveries).
 
 terminate(shutdown = R,      State = #q{backing_queue = BQ}) ->
     terminate_shutdown(fun (BQS) -> BQ:terminate(R, BQS) end, State);
