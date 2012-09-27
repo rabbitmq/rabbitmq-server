@@ -28,7 +28,7 @@
 
 -define(REFRESH_RATIO, 5000).
 -define(KEYS, [name, os_pid, memory, fd_used, fd_total,
-               sockets_used, sockets_total, mem_limit, mem_alarm,
+               sockets_used, sockets_total, mem_used, mem_limit, mem_alarm,
                disk_free_limit, disk_free, disk_free_alarm,
                proc_used, proc_total, statistics_level,
                uptime, run_queue, processors, exchange_types,
@@ -150,7 +150,9 @@ i(sockets_used,    _State) ->
 i(sockets_total,   _State) ->
     proplists:get_value(sockets_limit, file_handle_cache:info([sockets_limit]));
 i(os_pid,          _State) -> list_to_binary(os:getpid());
-i(memory,          _State) -> rabbit_vm:memory();
+i(memory,          _State) -> [{total, _} | Rest] = rabbit_vm:memory(),
+                              Rest;
+i(mem_used,        _State) -> erlang:memory(total);
 i(mem_limit,       _State) -> vm_memory_monitor:get_memory_limit();
 i(mem_alarm,       _State) -> resource_alarm_set(memory);
 i(proc_used,       _State) -> erlang:system_info(process_count);
