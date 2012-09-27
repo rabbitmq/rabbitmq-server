@@ -546,8 +546,9 @@ disposable_channel_call(Conn, Method, ErrFun) ->
         amqp_channel:call(Ch, Method)
     catch exit:{{shutdown, {server_initiated_close, Code, Text}}, _} ->
             ErrFun(Code, Text)
-    end,
-    ensure_closed(Ch).
+    after
+        ensure_closed(Ch)
+    end.
 
 disposable_connection_call(Params, Method, ErrFun) ->
     case open(Params) of
@@ -557,8 +558,9 @@ disposable_connection_call(Params, Method, ErrFun) ->
             catch exit:{{shutdown, {connection_closing,
                                     {server_initiated_close, Code, Txt}}}, _} ->
                     ErrFun(Code, Txt)
-            end,
-            ensure_closed(Conn, Ch);
+            after
+                ensure_closed(Conn, Ch)
+            end;
         E ->
             E
     end.
