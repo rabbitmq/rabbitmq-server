@@ -536,7 +536,7 @@ promote_me(From, #state { q                   = Q = #amqqueue { name = QName },
                       end, gb_trees:empty(), MSList),
     NumAckTags = [NumAckTag || {_MsgId, NumAckTag} <- dict:to_list(MA)],
     AckTags = [AckTag || {_Num, AckTag} <- lists:sort(NumAckTags)],
-    Deliveries = [{Delivery, true} ||
+    Deliveries = [Delivery ||
                      {_ChPid, {PubQ, _PendCh}} <- dict:to_list(SQ),
                               Delivery <- queue:to_list(PubQ)],
     QueueState = rabbit_amqqueue_process:init_with_backing_queue_state(

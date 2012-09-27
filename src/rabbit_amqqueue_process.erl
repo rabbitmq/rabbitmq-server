@@ -78,7 +78,7 @@
 -spec(info_keys/0 :: () -> rabbit_types:info_keys()).
 -spec(init_with_backing_queue_state/8 ::
         (rabbit_types:amqqueue(), atom(), tuple(), any(), [any()],
-         [{rabbit_types:delivery(), boolean()}], pmon:pmon(), dict()) -> #q{}).
+         [rabbit_types:delivery()], pmon:pmon(), dict()) -> #q{}).
 
 -endif.
 
@@ -170,8 +170,8 @@ init_with_backing_queue_state(Q = #amqqueue{exclusive_owner = Owner}, BQ, BQS,
                                         rabbit_event:init_stats_timer(
                                           State, #q.stats_timer))),
     lists:foldl(
-      fun ({Delivery, Redelivered}, StateN) ->
-              deliver_or_enqueue(Delivery, Redelivered, StateN)
+      fun (Delivery, StateN) ->
+              deliver_or_enqueue(Delivery, true, StateN)
       end,
       State1, Deliveries).
 
