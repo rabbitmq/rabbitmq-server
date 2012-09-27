@@ -16,7 +16,7 @@
 
 -module(rabbit_vm).
 
--export([memory/0]).
+-export([memory/0, interval_operation/3]).
 
 -define(MAGIC_PLUGINS, [mochiweb, webmachine, cowboy, sockjs, rfc4627_jsonrpc]).
 
@@ -25,7 +25,9 @@
 -ifdef(use_specs).
 
 -spec(memory/0 :: () -> rabbit_types:infos()).
-
+-spec(interval_operation/3 ::
+        (fun (() -> any()), non_neg_integer(), non_neg_integer())
+                     -> {any(), non_neg_integer()}).
 -endif.
 
 %%----------------------------------------------------------------------------
@@ -70,6 +72,17 @@ memory() ->
 %% parts. Rather than display something nonsensical, just silence any
 %% claims about negative memory. See
 %% http://erlang.org/pipermail/erlang-questions/2012-September/069320.html
+
+
+%% Ideally, you'd want Fun to run every IdealInterval. but you don't
+%% want it to take more than MaxTime per IdealInterval. So if it takes
+%% more then you want to run it less often. So we time how long it
+%% takes to run, and then suggest how long you should wait before
+%% running it again. Times are in millis.
+interval_operation(Fun, MaxTime, IdealInterval) ->
+    {Micros, Res} = timer:tc(Fun),
+    Ratio = lists:max([1, Micros / MaxTime / 1000]),
+    {Res, round(IdealInterval * Ratio)}.
 
 %%----------------------------------------------------------------------------
 
