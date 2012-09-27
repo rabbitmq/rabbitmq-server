@@ -56,7 +56,7 @@ memory() ->
      {connection_channel_procs, ConnChs},
      {queue_procs,              Qs},
      {plugins,                  Plugins},
-     {other_proc,               erlang:max(0, OtherProc)}, %% [1]
+     {other_proc,               lists:max([0, OtherProc])}, %% [1]
      {mnesia,                   Mnesia},
      {mgmt_db,                  MgmtDbETS + MgmtDbProc},
      {msg_index,                MsgIndexETS + MsgIndexProc},
