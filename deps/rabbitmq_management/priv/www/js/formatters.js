@@ -53,6 +53,10 @@ function fmt_time(t, suffix) {
     return t + suffix;
 }
 
+function fmt_micros(micros) {
+    return Math.round(micros / 1000000) + "s";
+}
+
 function fmt_parameters(obj) {
     return fmt_table_short(args_to_params(obj));
 }

@@ -219,7 +219,12 @@
   </table>
   </div>
 
-  <p>All measurements are approximate. (<a target="_blank" href="http://www.rabbitmq.com/memory-use.html">Read more</a> on memory use.)</p>
+  <p>
+    All measurements are approximate. Memory details are
+    <%= fmt_micros(node.memory_age) %> behind. <a target="_blank"
+    href="http://www.rabbitmq.com/memory-use.html">Read more</a> on
+    memory use.
+  </p>
 <% } %>
 </div>
 </div>
