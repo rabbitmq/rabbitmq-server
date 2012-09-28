@@ -115,7 +115,7 @@ on_node_up() ->
                             end
                     end, [], rabbit_queue)
           end),
-    [add_mirror(QName, node()) || QName <- QNames],
+    [ok = add_mirror(QName, node()) || QName <- QNames],
     ok.
 
 drop_mirrors(QName, Nodes) ->
