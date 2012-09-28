@@ -16,6 +16,8 @@
 # Short-Description: Enable AMQP service provided by RabbitMQ broker
 ### END INIT INFO
 
+@FUNCTION_LIBRARY@
+
 PATH=/sbin:/usr/sbin:/bin:/usr/bin
 NAME=rabbitmq-server
 DAEMON=/usr/sbin/${NAME}

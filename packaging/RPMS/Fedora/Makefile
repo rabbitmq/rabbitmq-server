@@ -13,13 +13,15 @@ RPM_OS=fedora
 endif
 
 ifeq "$(RPM_OS)" "suse"
+FUNCTION_LIBRARY=
 REQUIRES=/sbin/chkconfig /sbin/service
 OS_DEFINES=--define '_initrddir /etc/init.d' --define 'dist .suse'
-START_PROG=setsid
+START_PROG=startproc
 else
+FUNCTION_LIBRARY=\# Source function library.\n. /etc/init.d/functions
 REQUIRES=chkconfig initscripts
 OS_DEFINES=--define '_initrddir /etc/rc.d/init.d'
-START_PROG=runuser rabbitmq --session-command
+START_PROG=daemon
 endif
 
 rpms:   clean server
@@ -35,6 +37,7 @@ prepare:
 	cp rabbitmq-server.init SOURCES/rabbitmq-server.init
 	sed -i \
 	    -e 's|^START_PROG=.*$$|START_PROG="$(START_PROG)"|' \
+	    -e 's|^@FUNCTION_LIBRARY@|$(FUNCTION_LIBRARY)|' \
 	    SOURCES/rabbitmq-server.init
 ifeq "$(RPM_OS)" "fedora"
 # Fedora says that only vital services should have Default-Start
