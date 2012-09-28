@@ -186,7 +186,7 @@ start_child(Name, MirrorNode, Q) ->
                                [rabbit_misc:rs(Name), MirrorNode, StalePid]),
             ok;
         {error, {{duplicate_live_master, _}=Err, _}} ->
-            throw(Err);
+            Err;
         Other ->
             Other
     end.
