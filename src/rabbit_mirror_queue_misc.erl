@@ -163,7 +163,7 @@ add_mirror(QName, MirrorNode) ->
       end).
 
 start_child(Name, MirrorNode, Q) ->
-    case rabbit_mirror_queue_slave_sup:start_child(MirrorNode, [Q]) of
+    case catch rabbit_mirror_queue_slave_sup:start_child(MirrorNode, [Q]) of
         {ok, undefined} ->
             %% this means the mirror process was
             %% already running on the given node.
