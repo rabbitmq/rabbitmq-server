@@ -163,10 +163,18 @@ add_mirror(QName, MirrorNode) ->
       end).
 
 start_child(Name, MirrorNode, Q) ->
-    case catch rabbit_mirror_queue_slave_sup:start_child(MirrorNode, [Q]) of
+    case rabbit_misc:with_exit_handler(
+           rabbit_misc:const({ok, down}),
+           fun () ->
+                   rabbit_mirror_queue_slave_sup:start_child(MirrorNode, [Q])
+           end) of
         {ok, undefined} ->
             %% this means the mirror process was
             %% already running on the given node.
+            ok;
+        {ok, down} ->
+            %% Node went down between us deciding to start a mirror
+            %% and actually starting it. Which is fine.
             ok;
         {ok, SPid} ->
             rabbit_log:info("Adding mirror of ~s on node ~p: ~p~n",
