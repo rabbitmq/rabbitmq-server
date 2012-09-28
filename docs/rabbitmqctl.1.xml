@@ -986,6 +986,14 @@
                 <listitem><para>Number of consumers.</para></listitem>
               </varlistentry>
               <varlistentry>
+                <term>active_consumers</term>
+                <listitem><para>Number of active consumers. An active
+                consumer is one which could immediately receive any
+                messages sent to the queue. At least one of
+                messages_ready and active_consumers must always be
+                zero.</para></listitem>
+              </varlistentry>
+              <varlistentry>
                 <term>memory</term>
                 <listitem><para>Bytes of memory consumed by the Erlang process associated with the
                   queue, including stack, heap and internal structures.</para></listitem>

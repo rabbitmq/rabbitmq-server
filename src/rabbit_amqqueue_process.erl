@@ -92,6 +92,7 @@
          messages_unacknowledged,
          messages,
          consumers,
+         active_consumers,
          memory,
          slave_pids,
          synchronised_slave_pids,
@@ -914,6 +915,8 @@ i(messages, State) ->
                                           messages_unacknowledged]]);
 i(consumers, _) ->
     consumer_count();
+i(active_consumers, _) ->
+    active_consumer_count();
 i(memory, _) ->
     {memory, M} = process_info(self(), memory),
     M;
