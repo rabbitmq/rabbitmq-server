@@ -987,11 +987,23 @@
               </varlistentry>
               <varlistentry>
                 <term>active_consumers</term>
-                <listitem><para>Number of active consumers. An active
-                consumer is one which could immediately receive any
-                messages sent to the queue. At least one of
-                messages_ready and active_consumers must always be
-                zero.</para></listitem>
+                <listitem>
+                  <para>
+                    Number of active consumers. An active consumer is
+                    one which could immediately receive any messages
+                    sent to the queue - i.e. it is not limited by its
+                    prefetch count or TCP congestion. At least one of
+                    messages_ready and active_consumers must always be
+                    zero.
+                  </para>
+                  <para>
+                    Note that this value is an instantaneous snapshot
+                    - when consumers are restricted by their prefetch
+                    count they may only appear to be active for small
+                    fractions of a second until more messages are sent
+                    out.
+                  </para>
+                </listitem>
               </varlistentry>
               <varlistentry>
                 <term>memory</term>
