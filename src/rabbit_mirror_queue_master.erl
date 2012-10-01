@@ -131,8 +131,7 @@ delete_and_terminate(Reason, State = #state { gm                  = GM,
                      node(Pid) =/= node()],
     MRefs = [erlang:monitor(process, S) || S <- Slaves],
     ok = gm:broadcast(GM, {delete_and_terminate, Reason}),
-    [receive {'DOWN', MRef, process, _Pid, _Info} -> ok end ||
-        MRef <- MRefs],
+    [receive {'DOWN', MRef, process, _Pid, _Info} -> ok end || MRef <- MRefs],
     ok = gm:forget_group(proplists:get_value(group_name, Info)),
     State #state { backing_queue_state = BQ:delete_and_terminate(Reason, BQS),
                    set_delivered       = 0 }.
