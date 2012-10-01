@@ -874,7 +874,7 @@ gb_sets_maybe_insert(false, _Val, Set) -> Set;
 gb_sets_maybe_insert(true,  Val,  Set) -> gb_sets:add(Val, Set).
 
 msg_status(IsPersistent, SeqId, Msg = #basic_message { id = MsgId },
-           MsgProps = #message_properties{delivered = Delivered}) ->
+           MsgProps = #message_properties { delivered = Delivered }) ->
     %% TODO would it make sense to remove #msg_status.is_delivered?
     #msg_status { seq_id = SeqId, msg_id = MsgId, msg = Msg,
                   is_persistent = IsPersistent, is_delivered = Delivered,
