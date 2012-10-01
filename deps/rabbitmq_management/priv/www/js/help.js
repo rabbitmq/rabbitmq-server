@@ -184,6 +184,8 @@ HELP = {
 
     'resource-counts' : 'Shows total number of objects for all virtual hosts the current user has access to.',
 
+    'active-consumers' : 'An active consumer is one which could immediately receive any messages sent to the queue. Therefore at least one of Ready Messages and Active Consumers must always be zero.',
+
     'foo': 'foo' // No comma.
 };
 
