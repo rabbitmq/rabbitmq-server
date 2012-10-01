@@ -287,7 +287,7 @@ terminate(Reason, #state { q                   = Q,
                            rate_timer_ref      = RateTRef }) ->
     ok = gm:leave(GM),
     QueueState = rabbit_amqqueue_process:init_with_backing_queue_state(
-                   Q, BQ, BQS, RateTRef, [], [], pmon:new(), dict:new()),
+                   Q, BQ, BQS, RateTRef, [], pmon:new(), dict:new()),
     rabbit_amqqueue_process:terminate(Reason, QueueState);
 terminate([_SPid], _Reason) ->
     %% gm case
@@ -520,22 +520,21 @@ promote_me(From, #state { q                   = Q = #amqqueue { name = QName },
                [{MsgId, Status}
                 || {MsgId, {Status, _ChPid}} <- MSList,
                    Status =:= published orelse Status =:= confirmed]),
+    AckTags = [AckTag || {_MsgId, {_Num, AckTag}} <- dict:to_list(MA)],
 
     MasterState = rabbit_mirror_queue_master:promote_backing_queue_state(
-                    CPid, BQ, BQS, GM, SS, MPids),
+                    CPid, BQ, BQS, GM, AckTags, SS, MPids),
 
     MTC = lists:foldl(fun ({MsgId, {published, ChPid, MsgSeqNo}}, MTC0) ->
                               gb_trees:insert(MsgId, {ChPid, MsgSeqNo}, MTC0);
                           (_, MTC0) ->
                               MTC0
                       end, gb_trees:empty(), MSList),
-    NumAckTags = [NumAckTag || {_MsgId, NumAckTag} <- dict:to_list(MA)],
-    AckTags = [AckTag || {_Num, AckTag} <- lists:sort(NumAckTags)],
     Deliveries = [Delivery || {_ChPid, {PubQ, _PendCh}} <- dict:to_list(SQ),
                               Delivery <- queue:to_list(PubQ)],
     QueueState = rabbit_amqqueue_process:init_with_backing_queue_state(
                    Q1, rabbit_mirror_queue_master, MasterState, RateTRef,
-                   AckTags, Deliveries, KS, MTC),
+                   Deliveries, KS, MTC),
     {become, rabbit_amqqueue_process, QueueState, hibernate}.
 
 noreply(State) ->
