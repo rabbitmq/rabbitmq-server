@@ -513,10 +513,6 @@ promote_me(From, #state { q                   = Q = #amqqueue { name = QName },
     %% those messages are then requeued. However, as discussed above,
     %% this does not affect MS, nor which bits go through to SS in
     %% Master, or MTC in queue_process.
-    %%
-    %% Everything that's in MA gets requeued. Consequently the new
-    %% master should start with a fresh AM as there are no messages
-    %% pending acks.
 
     MSList = dict:to_list(MS),
     SS = dict:from_list(
