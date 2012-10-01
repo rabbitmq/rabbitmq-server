@@ -39,11 +39,11 @@
              connection_state, queue_collector, heartbeater, stats_timer,
              channel_sup_sup_pid, start_heartbeat_fun, buf, buf_len,
              auth_mechanism, auth_state, conserve_resources,
-             last_blocked_by, last_blocked_at}).
+             last_blocked_by, last_blocked_at, peer_host}).
 
 -define(STATISTICS_KEYS, [pid, recv_oct, recv_cnt, send_oct, send_cnt,
                           send_pend, state, last_blocked_by, last_blocked_age,
-                          channels]).
+                          channels, peer_host]).
 
 -define(CREATION_EVENT_KEYS, [pid, name, address, port, peer_address, peer_port,
                               ssl, peer_cert_subject, peer_cert_issuer,
@@ -224,7 +224,13 @@ start_connection(Parent, ChannelSupSupPid, Collector, StartHeartbeatFun, Deb,
                 auth_state          = none,
                 conserve_resources  = false,
                 last_blocked_by     = none,
-                last_blocked_at     = never},
+                last_blocked_at     = never,
+                peer_host           = unknown},
+    Self = self(),
+    spawn(fun() ->
+                  Res = rabbit_networking:tcp_host(i(peer_address, State)),
+                  Self ! {rdns, Res}
+          end),
     try
         ok = inet_op(fun () -> rabbit_net:tune_buffer_size(ClientSock) end),
         recvloop(Deb, switch_callback(rabbit_event:init_stats_timer(
@@ -348,6 +354,8 @@ handle_other({system, From, Request}, Deb, State = #v1{parent = Parent}) ->
 handle_other({bump_credit, Msg}, Deb, State) ->
     credit_flow:handle_bump_msg(Msg),
     recvloop(Deb, control_throttle(State));
+handle_other({rdns, Host}, Deb, State) ->
+    mainloop(Deb, State#v1{peer_host = list_to_binary(Host)});
 handle_other(Other, _Deb, _State) ->
     %% internal error -> something worth dying for
     exit({unexpected_message, Other}).
@@ -875,6 +883,8 @@ i(pid, #v1{}) ->
     self();
 i(name, #v1{sock = Sock}) ->
     list_to_binary(name(Sock));
+i(peer_host, #v1{peer_host = Host}) ->
+    Host;
 i(address, #v1{sock = Sock}) ->
     socket_info(fun rabbit_net:sockname/1, fun ({A, _}) -> A end, Sock);
 i(port, #v1{sock = Sock}) ->
