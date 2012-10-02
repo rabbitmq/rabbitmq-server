@@ -666,10 +666,10 @@ remove_node_if_mnesia_running(Node) ->
     end.
 
 leave_cluster() ->
-    RunningNodes = running_nodes(nodes_excl_me(cluster_nodes(all))),
-    case not is_clustered() andalso RunningNodes =:= [] of
-        true  -> ok;
-        false -> case lists:any(fun leave_cluster/1, RunningNodes) of
+    AllNodes = nodes_excl_me(cluster_nodes(all)),
+    case AllNodes of
+        []    -> ok;
+        _     -> case lists:any(fun leave_cluster/1, AllNodes) of
                      true  -> ok;
                      false -> e(no_running_cluster_nodes)
                  end
