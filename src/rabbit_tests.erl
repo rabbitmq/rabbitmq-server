@@ -56,6 +56,7 @@ all_tests() ->
     passed = test_arguments_parser(),
     passed = test_user_management(),
     passed = test_runtime_parameters(),
+    passed = test_policy_validation(),
     passed = test_server_status(),
     passed = test_confirms(),
     passed =
@@ -991,6 +992,22 @@ test_runtime_parameters() ->
         control_action(clear_parameter, ["test", "neverexisted"]),
     rabbit_runtime_parameters_test:unregister(),
     passed.
+
+test_policy_validation() ->
+    rabbit_runtime_parameters_test:register_policy_validator(),
+    SetPol = fun (Pol, Val) ->
+                 control_action(
+                   set_policy,
+                   ["name", lists:flatten(
+                              io_lib:format("{\"pattern\":\"pat\", \"policy\":"
+                                            "{\"~s\":~p}}", [Pol, Val]))])
+             end,
+    ok                 = SetPol("testpolicy", []),
+    ok                 = SetPol("testpolicy", [1, 2]),
+    ok                 = SetPol("testpolicy", [1, 2, 3, 4]),
+    {error_string, _}  = SetPol("testpolicy", [1, 2, 3]),
+    {error_string, _}  = SetPol("not_registered", []),
+    rabbit_runtime_parameters_test:unregister_policy_validator().
 
 test_server_status() ->
     %% create a few things so there is some useful information to list

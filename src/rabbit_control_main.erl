@@ -70,6 +70,10 @@
          {clear_parameter, [?VHOST_DEF]},
          {list_parameters, [?VHOST_DEF]},
 
+         {set_policy, [?VHOST_DEF]},
+         {clear_policy, [?VHOST_DEF]},
+         {list_policies, [?VHOST_DEF]},
+
          {list_queues, [?VHOST_DEF]},
          {list_exchanges, [?VHOST_DEF]},
          {list_bindings, [?VHOST_DEF]},
@@ -457,6 +461,26 @@ action(list_parameters, Node, [], Opts, Inform) ->
     display_info_list(
       rpc_call(Node, rabbit_runtime_parameters, list_formatted, [VHostArg]),
       rabbit_runtime_parameters:info_keys());
+
+action(set_policy, Node, [Key, Value], Opts, Inform) ->
+    VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
+    Inform("Setting policy ~p to ~p", [Key, Value]),
+    rpc_call(Node, rabbit_runtime_parameters, parse_set,
+             [VHostArg, <<"policy">>, list_to_binary(Key), Value]);
+
+action(clear_policy, Node, [Key], Opts, Inform) ->
+    VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
+    Inform("Clearing policy ~p", [Key]),
+    rpc_call(Node, rabbit_runtime_parameters, clear, [VHostArg,
+                                                      <<"policy">>,
+                                                      list_to_binary(Key)]);
+
+action(list_policies, Node, [], Opts, Inform) ->
+    VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
+    Inform("Listing policies", []),
+    display_info_list(
+      rpc_call(Node, rabbit_runtime_parameters, list_formatted_policies, [VHostArg]),
+      rabbit_runtime_parameters:info_keys() -- [component]);
 
 action(report, Node, _Args, _Opts, Inform) ->
     Inform("Reporting server status on ~p~n~n", [erlang:universaltime()]),
