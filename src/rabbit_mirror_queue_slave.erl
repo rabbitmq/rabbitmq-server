@@ -72,7 +72,6 @@
 
                  sender_queues, %% :: Pid -> {Q Msg, Set MsgId}
                  msg_id_ack,    %% :: MsgId -> AckTag
-                 ack_num,
 
                  msg_id_status,
                  known_senders,
@@ -125,7 +124,6 @@ init(#amqqueue { name = QueueName } = Q) ->
 
                              sender_queues       = dict:new(),
                              msg_id_ack          = dict:new(),
-                             ack_num             = 0,
 
                              msg_id_status       = dict:new(),
                              known_senders       = pmon:new(),
@@ -520,7 +518,7 @@ promote_me(From, #state { q                   = Q = #amqqueue { name = QName },
                [{MsgId, Status}
                 || {MsgId, {Status, _ChPid}} <- MSList,
                    Status =:= published orelse Status =:= confirmed]),
-    AckTags = [AckTag || {_MsgId, {_Num, AckTag}} <- dict:to_list(MA)],
+    AckTags = [AckTag || {_MsgId, AckTag} <- dict:to_list(MA)],
 
     MasterState = rabbit_mirror_queue_master:promote_backing_queue_state(
                     CPid, BQ, BQS, GM, AckTags, SS, MPids),
@@ -862,19 +860,16 @@ msg_ids_to_acktags(MsgIds, MA) ->
         lists:foldl(
           fun (MsgId, {Acc, MAN}) ->
                   case dict:find(MsgId, MA) of
-                      error                -> {Acc, MAN};
-                      {ok, {_Num, AckTag}} -> {[AckTag | Acc],
-                                               dict:erase(MsgId, MAN)}
+                      error        -> {Acc, MAN};
+                      {ok, AckTag} -> {[AckTag | Acc], dict:erase(MsgId, MAN)}
                   end
           end, {[], MA}, MsgIds),
     {lists:reverse(AckTags), MA1}.
 
 maybe_store_ack(false, _MsgId, _AckTag, State) ->
     State;
-maybe_store_ack(true, MsgId, AckTag, State = #state { msg_id_ack = MA,
-                                                      ack_num    = Num }) ->
-    State #state { msg_id_ack = dict:store(MsgId, {Num, AckTag}, MA),
-                   ack_num    = Num + 1 }.
+maybe_store_ack(true, MsgId, AckTag, State = #state { msg_id_ack = MA }) ->
+    State #state { msg_id_ack = dict:store(MsgId, AckTag, MA) }.
 
 set_delta(0,        State = #state { depth_delta = undefined }) ->
     ok = record_synchronised(State#state.q),
