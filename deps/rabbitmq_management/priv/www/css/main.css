@@ -92,12 +92,14 @@ table.mini td { border: none; padding: 0 2px 2px 2px; }
 tr.alt1>td { background: #eee; }
 tr.alt2>td { background: #fff; }
 
-td.status { text-align: center; }
-td.status div { padding: 5px; text-align: center; border-radius: 5px; -moz-border-radius: 5px; }
-td.status div.red { background: #F62817; color:white; }
-td.status div.red * { color:white; }
-td.status div.yellow { background: yellow; }
-td.status div.green { background: lightgreen; }
+div.status-bar { text-align: center; }
+div.status-bar-main { border-radius: 5px; -moz-border-radius: 5px; padding: 5px; }
+div.status-bar sub { white-space: nowrap; }
+
+div.status-bar .red { background: #F62817; color: white; }
+div.status-bar .red * { color:white; }
+div.status-bar .yellow { background: yellow; }
+div.status-bar .green { background: lightgreen; }
 
 td.l { text-align: left !important; }
 td.c { text-align: center !important; }

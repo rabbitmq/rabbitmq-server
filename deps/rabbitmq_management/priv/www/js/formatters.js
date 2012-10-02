@@ -413,6 +413,31 @@ function fmt_connection_state(conn) {
     }
 }
 
+function fmt_resource_bar(used_label, limit_label, ratio, colour, help) {
+    var width = 140;
+
+    var res = '';
+    var inverted = false;
+    if (ratio > 1) {
+        ratio = 1 / ratio;
+        inverted = true;
+    }
+    var offset = Math.round(width * (1 - ratio));
+
+    res += '<div class="status-bar' + (inverted ? ' status-bar-inverted' : '') + '" style="width: ' + width + 'px;">';
+    res += '<div class="status-bar-main ' + colour + '" style="background-image: url(img/bg-green-dark.png); background-position: -' + offset + 'px 0px; background-repeat: no-repeat;">';
+    res += used_label;
+    if (help != null) {
+        res += ' <span class="help" id="' + help + '"></span>';
+    }
+    res += '</div>'; // status-bar-main
+    if (limit_label != null) {
+        res += '<sub>' + limit_label + '</sub>';
+    }
+    res += '</div>'; // status-bar
+    return res;
+}
+
 function fmt_shortened_uri(uri0) {
     var uri = fmt_escape_html(uri0);
     if (uri.indexOf('?') == -1) {
