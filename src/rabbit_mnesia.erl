@@ -666,13 +666,12 @@ remove_node_if_mnesia_running(Node) ->
     end.
 
 leave_cluster() ->
-    AllNodes = nodes_excl_me(cluster_nodes(all)),
-    case AllNodes of
-        []    -> ok;
-        _     -> case lists:any(fun leave_cluster/1, AllNodes) of
-                     true  -> ok;
-                     false -> e(no_running_cluster_nodes)
-                 end
+    case nodes_excl_me(cluster_nodes(all)) of
+        []       -> ok;
+        AllNodes -> case lists:any(fun leave_cluster/1, AllNodes) of
+                        true  -> ok;
+                        false -> e(no_running_cluster_nodes)
+                    end
     end.
 
 leave_cluster(Node) ->
