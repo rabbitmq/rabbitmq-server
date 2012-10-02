@@ -144,7 +144,8 @@ infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
 
 i(fd_total,   #state{fd_total = FdTotal})       -> FdTotal;
 i(memory,     #state{memory_stats = Stats})     -> Stats;
-i(memory_age, #state{memory_last_updated = LU}) -> timer:now_diff(now(), LU);
+i(memory_age, #state{memory_last_updated = LU}) -> timer:now_diff(
+                                                     now(), LU) / 1000;
 
 i(name,            _State) -> node();
 i(fd_used,         _State) -> get_used_fd();
@@ -273,7 +274,8 @@ emit_update(State) ->
 
 update_memory_stats(State) ->
     {[{total, _} | Stats], Interval} =
-        rabbit_vm:interval_operation(fun rabbit_vm:memory/0, 50, ?REFRESH_RATE),
+        rabbit_misc:interval_operation(
+          fun rabbit_vm:memory/0, 0.01, ?REFRESH_RATE),
     State1 = State#state{memory_stats        = Stats,
                          memory_last_updated = now()},
     erlang:send_after(Interval, self(), update_memory_stats),
