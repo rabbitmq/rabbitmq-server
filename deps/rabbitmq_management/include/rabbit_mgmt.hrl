@@ -14,6 +14,6 @@
 %%   Copyright (c) 2010-2012 VMware, Inc.  All rights reserved.
 %%
 
--record(context, {user}).
+-record(context, {user, password = none}).
 
 -define(AUTH_REALM, "Basic realm=\"RabbitMQ Management\"").

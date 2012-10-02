@@ -41,7 +41,7 @@
 
 -define(DELIVER_GET, [deliver, deliver_no_ack, get, get_no_ack]).
 -define(FINE_STATS, [publish, ack, deliver_get, confirm,
-                     return_unroutable, return_not_delivered, redeliver] ++
+                     return_unroutable, redeliver] ++
             ?DELIVER_GET).
 
 -define(
@@ -338,7 +338,7 @@ handle_pre_hibernate(State) ->
     %% rabbit_mgmt_db is hibernating the odds are rabbit_event is
     %% quiescing in some way too).
     rpc:multicall(
-      rabbit_mnesia:running_clustered_nodes(), rabbit_mgmt_db_handler, gc, []),
+      rabbit_mnesia:cluster_nodes(running), rabbit_mgmt_db_handler, gc, []),
     {hibernate, State}.
 
 %%----------------------------------------------------------------------------
