@@ -129,7 +129,7 @@
 %>
   <div class="memory-bar box" style="width: <%= width %>px;">
 <%
-   var sections = {'connection_channel_procs': 'Connections / Channels',
+   var sections = {'connection_procs': 'Connections',
                    'queue_procs': 'Queues',
                    'plugins': 'Plugins',
                    'other_proc': 'Other process memory',
@@ -165,8 +165,8 @@
   <div class="box">
   <table class="facts">
     <tr>
-      <th>Connections / Channels</th>
-      <td><%= fmt_memory(node.memory, 'connection_channel_procs') %></td>
+      <th>Connections</th>
+      <td><%= fmt_memory(node.memory, 'connection_procs') %></td>
     </tr>
     <tr>
       <th>Queues</th>
@@ -221,7 +221,7 @@
 
   <p>
     All measurements are approximate. Memory details are
-    <%= fmt_micros(node.memory_age) %> behind. <a target="_blank"
+    <%= fmt_millis(node.memory_age) %> behind. <a target="_blank"
     href="http://www.rabbitmq.com/memory-use.html">Read more</a> on
     memory use.
   </p>
