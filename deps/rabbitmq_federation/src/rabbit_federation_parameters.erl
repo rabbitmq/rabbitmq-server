@@ -16,11 +16,12 @@
 
 -module(rabbit_federation_parameters).
 -behaviour(rabbit_runtime_parameter).
+-behaviour(rabbit_policy_validator).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 -export([validate/4, validate_clear/3, notify/4, notify_clear/3]).
--export([register/0]).
+-export([register/0, validate_policy/2]).
 
 -rabbit_boot_step({?MODULE,
                    [{description, "federation parameters"},
@@ -29,10 +30,11 @@
                     {enables, recovery}]}).
 
 register() ->
-    [rabbit_registry:register(runtime_parameter, Name, ?MODULE) ||
-        Name <- [<<"federation">>,
-                 <<"federation-upstream">>,
-                 <<"federation-upstream-set">>]].
+    [rabbit_registry:register(Class, Name, ?MODULE) ||
+        {Class, Name} <- [{runtime_parameter, <<"federation">>},
+                          {runtime_parameter, <<"federation-upstream">>},
+                          {runtime_parameter, <<"federation-upstream-set">>},
+                          {policy_validator,  <<"federation-upstream-set">>}]].
 
 validate(_VHost, <<"federation-upstream-set">>, Key, Term) ->
     [rabbit_parameter_validation:proplist(
@@ -115,3 +117,11 @@ validate_uri(Name, Term) ->
               end;
         E  -> E
     end.
+
+%%----------------------------------------------------------------------------
+
+validate_policy(<<"federation-upstream-set">>, Value) when is_binary(Value) ->
+    ok;
+validate_policy(<<"federation-upstream-set">>, Value) ->
+    {error, "~p is not a valid federation upstream set name", [Value]}.
+
