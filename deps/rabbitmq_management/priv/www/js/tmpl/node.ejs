@@ -127,7 +127,7 @@
 <% } else {
   var width = 800;
 %>
-  <div class="memory-bar box" style="width: <%= width %>px;">
+  <div class="memory-bar">
 <%
    var sections = {'connection_procs': 'Connections',
                    'queue_procs': 'Queues',
@@ -143,23 +143,18 @@
                    'other_system': 'Other system'};
    var total = 0;
    for (var section in sections) {
-     var section_width = Math.round(width * node.memory[section] / node.mem_limit);
+     var section_width = Math.round(width * node.memory[section] / node.mem_used);
      total += section_width;
 %>
     <div class="memory-section memory_<%= section %>"
          style="width: <%= section_width %>px;"
-         title="<%= sections[section] %>">
+         title="<%= sections[section] %> <%= fmt_bytes(node.memory[section]) %>">
     </div>
 <% } %>
   </div>
-  <div class="box" style="width: <%= width %>px;">
-    <div class="memory-total"
-         style="width: <%= total + 1 %>px;">
-      <%= fmt_bytes(node.mem_used) %> used
-    </div>
-    <div class="memory-hwm">
-      <%= fmt_bytes(node.mem_limit) %> high watermark
-    </div>
+  <span class="clear"></span>
+  <div class="memory-total" style="width: <%= width %>px;">
+    <%= fmt_bytes(node.mem_used) %> used
   </div>
 
   <div class="box">
