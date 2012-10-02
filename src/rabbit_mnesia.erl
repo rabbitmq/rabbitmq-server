@@ -276,6 +276,9 @@ forget_cluster_node(Node, RemoveWhenOffline) ->
     end.
 
 remove_node_offline_node(Node) ->
+    %% We want the running nodes *now*, so we don't call
+    %% `cluster_nodes(running)' which will just get what's in the cluster status
+    %% file.
     case {running_nodes(cluster_nodes(all)) -- [Node], node_type()} of
         {[], disc} ->
             %% Note that while we check if the nodes was the last to
@@ -289,9 +292,13 @@ remove_node_offline_node(Node) ->
             case cluster_nodes(running) -- [node(), Node] of
                 [] -> start_mnesia(),
                       try
+                          %% What we want to do here is replace the last node to
+                          %% go down with the current node.  The way we do this
+                          %% is by force loading the table, and making sure that
+                          %% they are loaded.
                           rabbit_table:force_load(),
-                          forget_cluster_node(Node, false),
-                          rabbit_table:wait_for_replicated()
+                          rabbit_table:wait_for_replicated(),
+                          forget_cluster_node(Node, false)
                       after
                           stop_mnesia()
                       end;
