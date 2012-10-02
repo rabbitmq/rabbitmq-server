@@ -72,7 +72,6 @@
 
                  sender_queues, %% :: Pid -> {Q Msg, Set MsgId}
                  msg_id_ack,    %% :: MsgId -> AckTag
-                 ack_num,
 
                  msg_id_status,
                  known_senders,
@@ -125,7 +124,6 @@ init(#amqqueue { name = QueueName } = Q) ->
 
                              sender_queues       = dict:new(),
                              msg_id_ack          = dict:new(),
-                             ack_num             = 0,
 
                              msg_id_status       = dict:new(),
                              known_senders       = pmon:new(),
@@ -295,7 +293,7 @@ terminate(Reason, #state { q                   = Q,
                            rate_timer_ref      = RateTRef }) ->
     ok = gm:leave(GM),
     QueueState = rabbit_amqqueue_process:init_with_backing_queue_state(
-                   Q, BQ, BQS, RateTRef, [], [], pmon:new(), dict:new()),
+                   Q, BQ, BQS, RateTRef, [], pmon:new(), dict:new()),
     rabbit_amqqueue_process:terminate(Reason, QueueState);
 terminate([_SPid], _Reason) ->
     %% gm case
@@ -528,22 +526,21 @@ promote_me(From, #state { q                   = Q = #amqqueue { name = QName },
                [{MsgId, Status}
                 || {MsgId, {Status, _ChPid}} <- MSList,
                    Status =:= published orelse Status =:= confirmed]),
+    AckTags = [AckTag || {_MsgId, AckTag} <- dict:to_list(MA)],
 
     MasterState = rabbit_mirror_queue_master:promote_backing_queue_state(
-                    CPid, BQ, BQS, GM, SS, MPids),
+                    CPid, BQ, BQS, GM, AckTags, SS, MPids),
 
     MTC = lists:foldl(fun ({MsgId, {published, ChPid, MsgSeqNo}}, MTC0) ->
                               gb_trees:insert(MsgId, {ChPid, MsgSeqNo}, MTC0);
                           (_, MTC0) ->
                               MTC0
                       end, gb_trees:empty(), MSList),
-    NumAckTags = [NumAckTag || {_MsgId, NumAckTag} <- dict:to_list(MA)],
-    AckTags = [AckTag || {_Num, AckTag} <- lists:sort(NumAckTags)],
     Deliveries = [Delivery || {_ChPid, {PubQ, _PendCh}} <- dict:to_list(SQ),
                               Delivery <- queue:to_list(PubQ)],
     rabbit_amqqueue_process:init_with_backing_queue_state(
-      Q1, rabbit_mirror_queue_master, MasterState, RateTRef, AckTags,
-      Deliveries, KS, MTC).
+      Q1, rabbit_mirror_queue_master, MasterState, RateTRef, Deliveries, KS,
+      MTC).
 
 noreply(State) ->
     {NewState, Timeout} = next_state(State),
@@ -870,19 +867,16 @@ msg_ids_to_acktags(MsgIds, MA) ->
         lists:foldl(
           fun (MsgId, {Acc, MAN}) ->
                   case dict:find(MsgId, MA) of
-                      error                -> {Acc, MAN};
-                      {ok, {_Num, AckTag}} -> {[AckTag | Acc],
-                                               dict:erase(MsgId, MAN)}
+                      error        -> {Acc, MAN};
+                      {ok, AckTag} -> {[AckTag | Acc], dict:erase(MsgId, MAN)}
                   end
           end, {[], MA}, MsgIds),
     {lists:reverse(AckTags), MA1}.
 
 maybe_store_ack(false, _MsgId, _AckTag, State) ->
     State;
-maybe_store_ack(true, MsgId, AckTag, State = #state { msg_id_ack = MA,
-                                                      ack_num    = Num }) ->
-    State #state { msg_id_ack = dict:store(MsgId, {Num, AckTag}, MA),
-                   ack_num    = Num + 1 }.
+maybe_store_ack(true, MsgId, AckTag, State = #state { msg_id_ack = MA }) ->
+    State #state { msg_id_ack = dict:store(MsgId, AckTag, MA) }.
 
 set_delta(0,        State = #state { depth_delta = undefined }) ->
     ok = record_synchronised(State#state.q),

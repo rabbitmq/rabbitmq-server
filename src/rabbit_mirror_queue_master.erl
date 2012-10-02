@@ -25,7 +25,7 @@
 
 -export([start/1, stop/0]).
 
--export([promote_backing_queue_state/6, sender_death_fun/0, length_fun/0]).
+-export([promote_backing_queue_state/7, sender_death_fun/0, length_fun/0]).
 
 -export([init_with_existing_bq/3, stop_mirroring/1]).
 
@@ -61,8 +61,9 @@
                                  known_senders       :: set()
                                }).
 
--spec(promote_backing_queue_state/6 ::
-        (pid(), atom(), any(), pid(), dict(), [pid()]) -> master_state()).
+-spec(promote_backing_queue_state/7 ::
+        (pid(), atom(), any(), pid(), [any()], dict(), [pid()]) ->
+                                            master_state()).
 -spec(sender_death_fun/0 :: () -> death_fun()).
 -spec(length_fun/0 :: () -> length_fun()).
 -spec(init_with_existing_bq/3 :: (rabbit_types:amqqueue(), atom(), any()) ->
@@ -377,13 +378,16 @@ discard(Msg = #basic_message { id = MsgId }, ChPid,
 %% Other exported functions
 %% ---------------------------------------------------------------------------
 
-promote_backing_queue_state(CPid, BQ, BQS, GM, SeenStatus, KS) ->
-    Len = BQ:len(BQS),
-    ok = gm:broadcast(GM, {depth, BQ:depth(BQS)}),
+promote_backing_queue_state(CPid, BQ, BQS, GM, AckTags, SeenStatus, KS) ->
+    {_MsgIds, BQS1} = BQ:requeue(AckTags, BQS),
+    Len   = BQ:len(BQS1),
+    Depth = BQ:depth(BQS1),
+    true = Len == Depth, %% ASSERTION: everything must have been requeued
+    ok = gm:broadcast(GM, {depth, Depth}),
     #state { gm                  = GM,
              coordinator         = CPid,
              backing_queue       = BQ,
-             backing_queue_state = BQS,
+             backing_queue_state = BQS1,
              set_delivered       = Len,
              seen_status         = SeenStatus,
              confirmed           = [],

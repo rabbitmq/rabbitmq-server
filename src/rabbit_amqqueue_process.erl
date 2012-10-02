@@ -26,7 +26,7 @@
 
 -export([start_link/1, info_keys/0]).
 
--export([init_with_backing_queue_state/8]).
+-export([init_with_backing_queue_state/7]).
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2, handle_pre_hibernate/1, prioritise_call/3,
@@ -76,8 +76,8 @@
 -spec(start_link/1 ::
         (rabbit_types:amqqueue()) -> rabbit_types:ok_pid_or_error()).
 -spec(info_keys/0 :: () -> rabbit_types:info_keys()).
--spec(init_with_backing_queue_state/8 ::
-        (rabbit_types:amqqueue(), atom(), tuple(), any(), [any()],
+-spec(init_with_backing_queue_state/7 ::
+        (rabbit_types:amqqueue(), atom(), tuple(), any(),
          [rabbit_types:delivery()], pmon:pmon(), dict()) -> #q{}).
 
 -endif.
@@ -144,7 +144,7 @@ init(Q) ->
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
 init_with_backing_queue_state(Q = #amqqueue{exclusive_owner = Owner}, BQ, BQS,
-                              RateTRef, AckTags, Deliveries, Senders, MTC) ->
+                              RateTRef, Deliveries, Senders, MTC) ->
     case Owner of
         none -> ok;
         _    -> erlang:monitor(process, Owner)
@@ -166,9 +166,7 @@ init_with_backing_queue_state(Q = #amqqueue{exclusive_owner = Owner}, BQ, BQS,
                delayed_stop        = undefined,
                queue_monitors      = pmon:new(),
                msg_id_to_channel   = MTC},
-    State1 = requeue_and_run(AckTags, process_args(
-                                        rabbit_event:init_stats_timer(
-                                          State, #q.stats_timer))),
+    State1 = process_args(rabbit_event:init_stats_timer(State, #q.stats_timer)),
     lists:foldl(fun (Delivery, StateN) ->
                         deliver_or_enqueue(Delivery, true, StateN)
                 end, State1, Deliveries).
