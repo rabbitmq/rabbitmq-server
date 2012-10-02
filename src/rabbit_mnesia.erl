@@ -291,7 +291,7 @@ remove_node_offline_node(Node) ->
                       try
                           rabbit_table:force_load(),
                           forget_cluster_node(Node, false),
-                          ensure_mnesia_running()
+                          rabbit_table:wait_for_replicated()
                       after
                           stop_mnesia()
                       end;
