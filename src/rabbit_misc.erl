@@ -63,6 +63,7 @@
 -export([version/0]).
 -export([sequence_error/1]).
 -export([json_encode/1, json_decode/1, json_to_term/1, term_to_json/1]).
+-export([interval_operation/3]).
 
 %% Horrible macro to use in guards
 -define(IS_BENIGN_EXIT(R),
@@ -227,6 +228,9 @@
 -spec(json_decode/1 :: (string()) -> {'ok', any()} | 'error').
 -spec(json_to_term/1 :: (any()) -> any()).
 -spec(term_to_json/1 :: (any()) -> any()).
+-spec(interval_operation/3 ::
+        (fun (() -> any()), non_neg_integer(), non_neg_integer())
+                     -> {any(), non_neg_integer()}).
 
 -endif.
 
@@ -987,3 +991,13 @@ term_to_json(L) when is_list(L) ->
 term_to_json(V) when is_binary(V) orelse is_number(V) orelse V =:= null orelse
                      V =:= true orelse V =:= false ->
     V.
+
+%% Ideally, you'd want Fun to run every IdealInterval. but you don't
+%% want it to take more than MaxRatio of IdealInterval. So if it takes
+%% more then you want to run it less often. So we time how long it
+%% takes to run, and then suggest how long you should wait before
+%% running it again. Times are in millis.
+interval_operation(Fun, MaxRatio, IdealInterval) ->
+    {Micros, Res} = timer:tc(Fun),
+    Ratio = lists:max([1, Micros / (MaxRatio * IdealInterval) / 1000]),
+    {Res, round(IdealInterval * Ratio)}.

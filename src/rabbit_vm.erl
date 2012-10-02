@@ -16,25 +16,24 @@
 
 -module(rabbit_vm).
 
--export([memory/0, interval_operation/3]).
+-export([memory/0]).
 
--define(MAGIC_PLUGINS, [mochiweb, webmachine, cowboy, sockjs, rfc4627_jsonrpc]).
+-define(MAGIC_PLUGINS, ["mochiweb", "webmachine", "cowboy", "sockjs",
+                        "rfc4627_jsonrpc"]).
 
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
 
 -spec(memory/0 :: () -> rabbit_types:infos()).
--spec(interval_operation/3 ::
-        (fun (() -> any()), non_neg_integer(), non_neg_integer())
-                     -> {any(), non_neg_integer()}).
+
 -endif.
 
 %%----------------------------------------------------------------------------
 
 %% Like erlang:memory(), but with awareness of rabbit-y things
 memory() ->
-    ConnChs = sup_memory(rabbit_tcp_client_sup) +
+    Conns = sup_memory(rabbit_tcp_client_sup) +
         sup_memory(ssl_connection_sup) + sup_memory(amqp_sup),
     Qs = sup_memory(rabbit_amqqueue_sup) +
         sup_memory(rabbit_mirror_queue_slave_sup),
@@ -53,36 +52,25 @@ memory() ->
      {code,      Code},
      {system,    System}] =
         erlang:memory([total, processes, ets, atom, binary, code, system]),
-    OtherProc = Processes - ConnChs - Qs - MsgIndexProc - MgmtDbProc - Plugins,
-    [{total,                    Total},
-     {connection_channel_procs, ConnChs},
-     {queue_procs,              Qs},
-     {plugins,                  Plugins},
-     {other_proc,               lists:max([0, OtherProc])}, %% [1]
-     {mnesia,                   Mnesia},
-     {mgmt_db,                  MgmtDbETS + MgmtDbProc},
-     {msg_index,                MsgIndexETS + MsgIndexProc},
-     {other_ets,                ETS - Mnesia - MsgIndexETS - MgmtDbETS},
-     {binary,                   Bin},
-     {code,                     Code},
-     {atom,                     Atom},
-     {other_system,             System - ETS - Atom - Bin - Code}].
+    OtherProc = Processes - Conns - Qs - MsgIndexProc - MgmtDbProc - Plugins,
+    [{total,            Total},
+     {connection_procs, Conns},
+     {queue_procs,      Qs},
+     {plugins,          Plugins},
+     {other_proc,       lists:max([0, OtherProc])}, %% [1]
+     {mnesia,           Mnesia},
+     {mgmt_db,          MgmtDbETS + MgmtDbProc},
+     {msg_index,        MsgIndexETS + MsgIndexProc},
+     {other_ets,        ETS - Mnesia - MsgIndexETS - MgmtDbETS},
+     {binary,           Bin},
+     {code,             Code},
+     {atom,             Atom},
+     {other_system,     System - ETS - Atom - Bin - Code}].
 
 %% [1] - erlang:memory(processes) can be less than the sum of its
 %% parts. Rather than display something nonsensical, just silence any
 %% claims about negative memory. See
 %% http://erlang.org/pipermail/erlang-questions/2012-September/069320.html
-
-
-%% Ideally, you'd want Fun to run every IdealInterval. but you don't
-%% want it to take more than MaxTime per IdealInterval. So if it takes
-%% more then you want to run it less often. So we time how long it
-%% takes to run, and then suggest how long you should wait before
-%% running it again. Times are in millis.
-interval_operation(Fun, MaxTime, IdealInterval) ->
-    {Micros, Res} = timer:tc(Fun),
-    Ratio = lists:max([1, Micros / MaxTime / 1000]),
-    {Res, round(IdealInterval * Ratio)}.
 
 %%----------------------------------------------------------------------------
 
@@ -121,7 +109,7 @@ bytes(Words) ->  Words * erlang:system_info(wordsize).
 plugins_memory() ->
     lists:sum([plugin_memory(App) ||
                   {App, _, _} <- application:which_applications(),
-                  is_plugin(App)]).
+                  is_plugin(atom_to_list(App))]).
 
 plugin_memory(App) ->
     case catch application_master:get_child(
@@ -130,6 +118,5 @@ plugin_memory(App) ->
         _        -> 0
     end.
 
-is_plugin(App) ->
-    lists:member(App, ?MAGIC_PLUGINS) orelse
-        string:left(atom_to_list(App), 9) =:= "rabbitmq_".
+is_plugin("rabbitmq_" ++ _) -> true;
+is_plugin(App)              -> lists:member(App, ?MAGIC_PLUGINS).
