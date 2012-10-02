@@ -27,6 +27,8 @@
 
 -export([promote_backing_queue_state/6, sender_death_fun/0, length_fun/0]).
 
+-export([init_with_existing_bq/3, stop_mirroring/1]).
+
 -behaviour(rabbit_backing_queue).
 
 -include("rabbit.hrl").
@@ -63,6 +65,9 @@
         (pid(), atom(), any(), pid(), dict(), [pid()]) -> master_state()).
 -spec(sender_death_fun/0 :: () -> death_fun()).
 -spec(length_fun/0 :: () -> length_fun()).
+-spec(init_with_existing_bq/3 :: (rabbit_types:amqqueue(), atom(), any()) ->
+                                      master_state()).
+-spec(stop_mirroring/1 :: (master_state()) -> {atom(), any()}).
 
 -endif.
 
@@ -82,19 +87,17 @@ stop() ->
     %% Same as start/1.
     exit({not_valid_for_generic_backing_queue, ?MODULE}).
 
-init(#amqqueue { name = QName, mirror_nodes = MNodes } = Q, Recover,
-     AsyncCallback) ->
+init(Q, Recover, AsyncCallback) ->
+    {ok, BQ} = application:get_env(backing_queue_module),
+    BQS = BQ:init(Q, Recover, AsyncCallback),
+    init_with_existing_bq(Q, BQ, BQS).
+
+init_with_existing_bq(#amqqueue { name = QName } = Q, BQ, BQS) ->
     {ok, CPid} = rabbit_mirror_queue_coordinator:start_link(
                    Q, undefined, sender_death_fun(), length_fun()),
     GM = rabbit_mirror_queue_coordinator:get_gm(CPid),
-    MNodes1 = (case MNodes of
-                   all       -> rabbit_mnesia:cluster_nodes(all);
-                   undefined -> [];
-                   _         -> MNodes
-               end) -- [node()],
-    [rabbit_mirror_queue_misc:add_mirror(QName, Node) || Node <- MNodes1],
-    {ok, BQ} = application:get_env(backing_queue_module),
-    BQS = BQ:init(Q, Recover, AsyncCallback),
+    {_MNode, SNodes} = rabbit_mirror_queue_misc:suggested_queue_nodes(Q),
+    rabbit_mirror_queue_misc:add_mirrors(QName, SNodes),
     ok = gm:broadcast(GM, {depth, BQ:depth(BQS)}),
     #state { gm                  = GM,
              coordinator         = CPid,
@@ -106,8 +109,16 @@ init(#amqqueue { name = QName, mirror_nodes = MNodes } = Q, Recover,
              ack_msg_id          = dict:new(),
              known_senders       = sets:new() }.
 
+stop_mirroring(State = #state { coordinator         = CPid,
+                                backing_queue       = BQ,
+                                backing_queue_state = BQS }) ->
+    unlink(CPid),
+    stop_all_slaves(shutdown, State),
+    {BQ, BQS}.
+
 terminate({shutdown, dropped} = Reason,
-          State = #state { backing_queue = BQ, backing_queue_state = BQS }) ->
+          State = #state { backing_queue       = BQ,
+                           backing_queue_state = BQS }) ->
     %% Backing queue termination - this node has been explicitly
     %% dropped. Normally, non-durable queues would be tidied up on
     %% startup, but there's a possibility that we will be added back
@@ -123,18 +134,20 @@ terminate(Reason,
     %% node. Thus just let some other slave take over.
     State #state { backing_queue_state = BQ:terminate(Reason, BQS) }.
 
-delete_and_terminate(Reason, State = #state { gm                  = GM,
-                                              backing_queue       = BQ,
+delete_and_terminate(Reason, State = #state { backing_queue       = BQ,
                                               backing_queue_state = BQS }) ->
+    stop_all_slaves(Reason, State),
+    State #state { backing_queue_state = BQ:delete_and_terminate(Reason, BQS),
+                   set_delivered       = 0 }.
+
+stop_all_slaves(Reason, #state{gm = GM}) ->
     Info = gm:info(GM),
     Slaves = [Pid || Pid <- proplists:get_value(group_members, Info),
                      node(Pid) =/= node()],
     MRefs = [erlang:monitor(process, S) || S <- Slaves],
     ok = gm:broadcast(GM, {delete_and_terminate, Reason}),
     [receive {'DOWN', MRef, process, _Pid, _Info} -> ok end || MRef <- MRefs],
-    ok = gm:forget_group(proplists:get_value(group_name, Info)),
-    State #state { backing_queue_state = BQ:delete_and_terminate(Reason, BQS),
-                   set_delivered       = 0 }.
+    ok = gm:forget_group(proplists:get_value(group_name, Info)).
 
 purge(State = #state { gm                  = GM,
                        backing_queue       = BQ,
