@@ -96,10 +96,12 @@ div.status-bar { text-align: center; }
 div.status-bar-main { border-radius: 5px; -moz-border-radius: 5px; padding: 5px; }
 div.status-bar sub { white-space: nowrap; }
 
-div.status-bar .red { background: #F62817; color: white; }
-div.status-bar .red * { color:white; }
-div.status-bar .yellow { background: yellow; }
-div.status-bar .green { background: lightgreen; }
+div.status-bar .red { background: #ff7a7a; color: white; }
+div.status-bar .yellow { background: #ffff7b; }
+div.status-bar .green { background: #7bff7b; }
+div.status-bar .red-dark { background: #e24545; color: white; }
+/* yellow-dark and green-dark can never happen */
+div.status-bar .red *, div.status-bar .red-dark * { color: white; }
 
 td.l { text-align: left !important; }
 td.c { text-align: center !important; }

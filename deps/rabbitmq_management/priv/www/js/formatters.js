@@ -414,18 +414,22 @@ function fmt_connection_state(conn) {
 }
 
 function fmt_resource_bar(used_label, limit_label, ratio, colour, help) {
-    var width = 140;
+    var width = 120;
 
     var res = '';
-    var inverted = false;
+    var other_colour = colour;
     if (ratio > 1) {
         ratio = 1 / ratio;
         inverted = true;
+        colour += '-dark';
+    }
+    else {
+        other_colour += '-dark';
     }
     var offset = Math.round(width * (1 - ratio));
 
-    res += '<div class="status-bar' + (inverted ? ' status-bar-inverted' : '') + '" style="width: ' + width + 'px;">';
-    res += '<div class="status-bar-main ' + colour + '" style="background-image: url(img/bg-green-dark.png); background-position: -' + offset + 'px 0px; background-repeat: no-repeat;">';
+    res += '<div class="status-bar" style="width: ' + width + 'px;">';
+    res += '<div class="status-bar-main ' + colour + '" style="background-image: url(img/bg-' + other_colour + '.png); background-position: -' + offset + 'px 0px; background-repeat: no-repeat;">';
     res += used_label;
     if (help != null) {
         res += ' <span class="help" id="' + help + '"></span>';
