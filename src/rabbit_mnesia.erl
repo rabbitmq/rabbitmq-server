@@ -110,6 +110,15 @@ init() ->
 init_from_config() ->
     {ok, {TryNodes, NodeType}} =
         application:get_env(rabbit, cluster_nodes),
+    {TryNodes, NodeType} =
+        case application:get_env(rabbit, cluster_nodes) of
+            {ok, {TryNodes, disc} = C} when is_list(TryNodes) ->
+                C;
+            {ok, {TryNodes, ram } = C} when is_list(TryNodes) ->
+                C;
+            _ ->
+                e(invalid_cluster_config)
+    end,
     case find_good_node(nodes_excl_me(TryNodes)) of
         {ok, Node} ->
             rabbit_log:info("Node '~p' selected for clustering from "
@@ -840,4 +849,7 @@ error_description(removing_node_from_offline_node) ->
     "To remove a node remotely from an offline node, the node you're removing "
         "from must be a disc node and all the other nodes must be offline.";
 error_description(no_running_cluster_nodes) ->
-    "You cannot leave a cluster if no online nodes are present.".
+    "You cannot leave a cluster if no online nodes are present.";
+error_description(invalid_cluster_config) ->
+    "Invalid or missing cluster configuration. Check the 'cluster_nodes' field "
+        "in your config file.".
