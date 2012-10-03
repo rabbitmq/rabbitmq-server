@@ -179,7 +179,7 @@ acronym { background: #add; color: #222; padding: 2px 4px; border-radius: 2px; -
 
 acronym.warning { background: #daa; }
 
-.status acronym, small acronym { background: none; color: inherit; padding: 0; border-bottom: 1px dotted; cursor: default; }
+.status-red acronym, .status-yellow acronym, .status-green acronym, small acronym { background: none; color: inherit; padding: 0; border-bottom: 1px dotted; cursor: default; }
 
 acronym.type { background: none; color: inherit; padding: 0; border-bottom: 1px dotted #ddd; cursor: default; }
 
