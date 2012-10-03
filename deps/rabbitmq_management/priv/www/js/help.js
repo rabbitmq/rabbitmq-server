@@ -184,6 +184,8 @@ HELP = {
 
     'resource-counts' : 'Shows total number of objects for all virtual hosts the current user has access to.',
 
+    'memory-use' : '<p>Note that the memory details shown here may lag behind the memory use shown under "Overview"; if the details become expensive to calculate, RabbitMQ will calculate them less frequently.</p><p><a target="_blank" href="http://www.rabbitmq.com/memory-use.html">Read more</a> on memory use.</p>',
+
     'foo': 'foo' // No comma.
 };
 
