@@ -1030,10 +1030,10 @@ handle_call({info, Items}, _From, State) ->
 handle_call(consumers, _From, State) ->
     reply(consumers(State), State);
 
-handle_call({deliver, Delivery}, From, State) ->
+handle_call({deliver, Delivery, Delivered}, From, State) ->
     %% Synchronous, "mandatory" deliver mode.
     gen_server2:reply(From, ok),
-    noreply(deliver_or_enqueue(Delivery, false, State));
+    noreply(deliver_or_enqueue(Delivery, Delivered, State));
 
 handle_call({notify_down, ChPid}, From, State) ->
     %% we want to do this synchronously, so that auto_deleted queues
@@ -1193,7 +1193,7 @@ handle_cast(_, State = #q{delayed_stop = DS}) when DS =/= undefined ->
 handle_cast({run_backing_queue, Mod, Fun}, State) ->
     noreply(run_backing_queue(Mod, Fun, State));
 
-handle_cast({deliver, Delivery = #delivery{sender = Sender}, Flow},
+handle_cast({deliver, Delivery = #delivery{sender = Sender}, Delivered, Flow},
             State = #q{senders = Senders}) ->
     %% Asynchronous, non-"mandatory" deliver mode.
     Senders1 = case Flow of
@@ -1202,7 +1202,7 @@ handle_cast({deliver, Delivery = #delivery{sender = Sender}, Flow},
                    noflow -> Senders
                end,
     State1 = State#q{senders = Senders1},
-    noreply(deliver_or_enqueue(Delivery, false, State1));
+    noreply(deliver_or_enqueue(Delivery, Delivered, State1));
 
 handle_cast({ack, AckTags, ChPid}, State) ->
     noreply(subtract_acks(

@@ -166,7 +166,7 @@ init_it(Self, Node, QueueName) ->
 add_slave(Q, New, MPids) -> rabbit_mirror_queue_misc:store_updated_slaves(
                               Q#amqqueue{slave_pids = MPids ++ [New]}).
 
-handle_call({deliver, Delivery}, From, State) ->
+handle_call({deliver, Delivery, true}, From, State) ->
     %% Synchronous, "mandatory" deliver mode.
     gen_server2:reply(From, ok),
     noreply(maybe_enqueue_message(Delivery, State));
@@ -220,7 +220,8 @@ handle_cast({run_backing_queue, Mod, Fun}, State) ->
 handle_cast({gm, Instruction}, State) ->
     handle_process_result(process_instruction(Instruction, State));
 
-handle_cast({deliver, Delivery = #delivery{sender = Sender}, Flow}, State) ->
+handle_cast({deliver, Delivery = #delivery{sender = Sender}, true, Flow},
+            State) ->
     %% Asynchronous, non-"mandatory", deliver mode.
     case Flow of
         flow   -> credit_flow:ack(Sender);

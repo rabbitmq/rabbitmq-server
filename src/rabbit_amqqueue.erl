@@ -622,29 +622,43 @@ deliver(Qs, Delivery = #delivery{mandatory = false}, Flow) ->
     %% returned. It is therefore safe to use a fire-and-forget cast
     %% here and return the QPids - the semantics is preserved. This
     %% scales much better than the case below.
-    QPids = qpids(Qs),
+    {MPids, SPids} = qpids(Qs),
+    QPids = MPids ++ SPids,
     case Flow of
         flow   -> [credit_flow:send(QPid) || QPid <- QPids];
         noflow -> ok
     end,
-    delegate:invoke_no_result(
-      QPids, fun (QPid) ->
-                     gen_server2:cast(QPid, {deliver, Delivery, Flow})
-             end),
+    MMsg = {deliver, Delivery, false, Flow},
+    SMsg = {deliver, Delivery, true,  Flow},
+    delegate:invoke_no_result(MPids,
+                              fun (QPid) -> gen_server2:cast(QPid, MMsg) end),
+    delegate:invoke_no_result(SPids,
+                              fun (QPid) -> gen_server2:cast(QPid, SMsg) end),
     {routed, QPids};
 
 deliver(Qs, Delivery, _Flow) ->
-    case delegate:invoke(
-           qpids(Qs), fun (QPid) ->
-                              ok = gen_server2:call(QPid, {deliver, Delivery},
-                                                    infinity)
-                      end) of
-        {[], _} -> {unroutable, []};
-        {R , _} -> {routed,     [QPid || {QPid, ok} <- R]}
+    {MPids, SPids} = qpids(Qs),
+    MMsg = {deliver, Delivery, false},
+    SMsg = {deliver, Delivery, true},
+    {MRouted, _} = delegate:invoke(
+                     MPids, fun (QPid) ->
+                                    ok = gen_server2:call(QPid, MMsg, infinity)
+                            end),
+    {SRouted, _} = delegate:invoke(
+                     SPids, fun (QPid) ->
+                                    ok = gen_server2:call(QPid, SMsg, infinity)
+                            end),
+    case MRouted ++ SRouted of
+        [] -> {unroutable, []};
+        R  -> {routed,     [QPid || {QPid, ok} <- R]}
     end.
 
-qpids(Qs) -> lists:append([[QPid | SPids] ||
-                              #amqqueue{pid = QPid, slave_pids = SPids} <- Qs]).
+qpids(Qs) ->
+    {MPids, SPids} = lists:foldl(fun (#amqqueue{pid = QPid, slave_pids = SPids},
+                                      {MPidAcc, SPidAcc}) ->
+                                         {[QPid | MPidAcc], [SPids | SPidAcc]}
+                                 end, {[], []}, Qs),
+    {MPids, lists:append(SPids)}.
 
 safe_delegate_call_ok(F, Pids) ->
     {_, Bads} = delegate:invoke(Pids, fun (Pid) ->
