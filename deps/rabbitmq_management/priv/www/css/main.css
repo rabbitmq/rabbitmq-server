@@ -92,16 +92,16 @@ table.mini td { border: none; padding: 0 2px 2px 2px; }
 tr.alt1>td { background: #eee; }
 tr.alt2>td { background: #fff; }
 
-div.status-bar { text-align: center; }
-div.status-bar-main { border-radius: 5px; -moz-border-radius: 5px; padding: 5px; }
+div.status-bar, div.status-red, div.status-yellow, div.status-green { text-align: center; }
+div.status-bar-main, div.status-red, div.status-yellow, div.status-green { border-radius: 5px; -moz-border-radius: 5px; padding: 5px; }
 div.status-bar sub { white-space: nowrap; }
 
-div.status-bar .red { background: #ff7a7a; color: white; }
-div.status-bar .yellow { background: #ffff7b; }
-div.status-bar .green { background: #7bff7b; }
+div.status-bar .red, div.status-red { background: #ff7a7a; color: white; }
+div.status-bar .yellow, div.status-yellow { background: #ffff7b; }
+div.status-bar .green, div.status-green { background: #7bff7b; }
 div.status-bar .red-dark { background: #e24545; color: white; }
 /* yellow-dark and green-dark can never happen */
-div.status-bar .red *, div.status-bar .red-dark * { color: white; }
+div.status-bar .red *, div.status-bar .red-dark *, div.status-red * { color: white; }
 
 td.l { text-align: left !important; }
 td.c { text-align: center !important; }

@@ -405,11 +405,11 @@ function fmt_connection_state(conn) {
     }
 
     if (explanation) {
-        return '<div class="' + colour + '"><acronym title="' + explanation +
-            '">' + text + '</acronym></div>';
+        return '<div class="status-' + colour + '"><acronym title="' +
+            explanation + '">' + text + '</acronym></div>';
     }
     else {
-        return '<div class="' + colour + '">' + text + '</div>';
+        return '<div class="status-' + colour + '">' + text + '</div>';
     }
 }
 

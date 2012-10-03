@@ -89,14 +89,14 @@
        <%= link_node(node.name) %>
      </td>
 <% if (!node.running) { %>
-     <td class="status" colspan="6">
-       <div class="red">
+     <td colspan="6">
+       <div class="status-red">
          Node not running
        </div>
      </td>
 <% } else if (node.os_pid == undefined) { %>
-     <td class="status" colspan="6">
-       <div class="yellow">
+     <td colspan="6">
+       <div class="status-yellow">
          <acronym title="The rabbitmq_management_agent plugin should be enabled on this node. If it is not, various statistics will be inaccurate.">
            Node statistics not available</acronym>
        </div>
