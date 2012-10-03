@@ -33,14 +33,14 @@
                  gm,
                  monitors,
                  death_fun,
-                 length_fun
+                 depth_fun
                }).
 
 -ifdef(use_specs).
 
 -spec(start_link/4 :: (rabbit_types:amqqueue(), pid() | 'undefined',
                        rabbit_mirror_queue_master:death_fun(),
-                       rabbit_mirror_queue_master:length_fun()) ->
+                       rabbit_mirror_queue_master:depth_fun()) ->
                            rabbit_types:ok_pid_or_error()).
 -spec(get_gm/1 :: (pid()) -> pid()).
 -spec(ensure_monitoring/2 :: (pid(), [pid()]) -> 'ok').
@@ -154,8 +154,8 @@
 %% be able to work out when their head does not differ from the master
 %% (and is much simpler and cheaper than getting the master to hang on
 %% to the guid of the msg at the head of its queue). When a slave is
-%% promoted to a master, it unilaterally broadcasts its length, in
-%% order to solve the problem of length requests from new slaves being
+%% promoted to a master, it unilaterally broadcasts its depth, in
+%% order to solve the problem of depth requests from new slaves being
 %% unanswered by a dead master.
 %%
 %% Obviously, due to the async nature of communication across gm, the
@@ -297,15 +297,15 @@
 %% if they have no mirrored content at all. This is not surprising: to
 %% achieve anything more sophisticated would require the master and
 %% recovering slave to be able to check to see whether they agree on
-%% the last seen state of the queue: checking length alone is not
+%% the last seen state of the queue: checking depth alone is not
 %% sufficient in this case.
 %%
 %% For more documentation see the comments in bug 23554.
 %%
 %%----------------------------------------------------------------------------
 
-start_link(Queue, GM, DeathFun, LengthFun) ->
-    gen_server2:start_link(?MODULE, [Queue, GM, DeathFun, LengthFun], []).
+start_link(Queue, GM, DeathFun, DepthFun) ->
+    gen_server2:start_link(?MODULE, [Queue, GM, DeathFun, DepthFun], []).
 
 get_gm(CPid) ->
     gen_server2:call(CPid, get_gm, infinity).
@@ -317,7 +317,7 @@ ensure_monitoring(CPid, Pids) ->
 %% gen_server
 %% ---------------------------------------------------------------------------
 
-init([#amqqueue { name = QueueName } = Q, GM, DeathFun, LengthFun]) ->
+init([#amqqueue { name = QueueName } = Q, GM, DeathFun, DepthFun]) ->
     GM1 = case GM of
               undefined ->
                   {ok, GM2} = gm:start_link(QueueName, ?MODULE, [self()]),
@@ -333,7 +333,7 @@ init([#amqqueue { name = QueueName } = Q, GM, DeathFun, LengthFun]) ->
                   gm         = GM1,
                   monitors   = pmon:new(),
                   death_fun  = DeathFun,
-                  length_fun = LengthFun },
+                  depth_fun  = DepthFun },
      hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
@@ -353,8 +353,8 @@ handle_cast({gm_deaths, Deaths},
             {stop, normal, State}
     end;
 
-handle_cast(request_length, State = #state { length_fun = LengthFun }) ->
-    ok = LengthFun(),
+handle_cast(request_depth, State = #state { depth_fun = DepthFun }) ->
+    ok = DepthFun(),
     noreply(State);
 
 handle_cast({ensure_monitoring, Pids}, State = #state { monitors = Mons }) ->
@@ -400,7 +400,7 @@ members_changed([CPid], _Births, Deaths) ->
 
 handle_msg([_CPid], _From, master_changed) ->
     ok;
-handle_msg([CPid], _From, request_length = Msg) ->
+handle_msg([CPid], _From, request_depth = Msg) ->
     ok = gen_server2:cast(CPid, Msg);
 handle_msg([CPid], _From, {ensure_monitoring, _Pids} = Msg) ->
     ok = gen_server2:cast(CPid, Msg);

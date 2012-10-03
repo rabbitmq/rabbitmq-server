@@ -132,7 +132,7 @@ init(#amqqueue { name = QueueName } = Q) ->
                    },
             rabbit_event:notify(queue_slave_created,
                                 infos(?CREATION_EVENT_KEYS, State)),
-            ok = gm:broadcast(GM, request_length),
+            ok = gm:broadcast(GM, request_depth),
             {ok, State, hibernate,
              {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN,
               ?DESIRED_HIBERNATE}};
@@ -347,7 +347,7 @@ members_changed([ SPid], _Births, Deaths) -> inform_deaths(SPid, Deaths).
 
 handle_msg([_SPid], _From, master_changed) ->
     ok;
-handle_msg([_SPid], _From, request_length) ->
+handle_msg([_SPid], _From, request_depth) ->
     %% This is only of value to the master
     ok;
 handle_msg([_SPid], _From, {ensure_monitoring, _Pid}) ->
@@ -451,7 +451,7 @@ promote_me(From, #state { q                   = Q = #amqqueue { name = QName },
     Q1 = Q #amqqueue { pid = self() },
     {ok, CPid} = rabbit_mirror_queue_coordinator:start_link(
                    Q1, GM, rabbit_mirror_queue_master:sender_death_fun(),
-                   rabbit_mirror_queue_master:length_fun()),
+                   rabbit_mirror_queue_master:depth_fun()),
     true = unlink(GM),
     gen_server2:reply(From, {promote, CPid}),
     %% TODO this has been in here since the beginning, but it's not

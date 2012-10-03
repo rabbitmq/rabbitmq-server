@@ -25,7 +25,7 @@
 
 -export([start/1, stop/0]).
 
--export([promote_backing_queue_state/7, sender_death_fun/0, length_fun/0]).
+-export([promote_backing_queue_state/7, sender_death_fun/0, depth_fun/0]).
 
 -export([init_with_existing_bq/3, stop_mirroring/1]).
 
@@ -46,10 +46,10 @@
 
 -ifdef(use_specs).
 
--export_type([death_fun/0, length_fun/0]).
+-export_type([death_fun/0, depth_fun/0]).
 
 -type(death_fun() :: fun ((pid()) -> 'ok')).
--type(length_fun() :: fun (() -> 'ok')).
+-type(depth_fun() :: fun (() -> 'ok')).
 -type(master_state() :: #state { gm                  :: pid(),
                                  coordinator         :: pid(),
                                  backing_queue       :: atom(),
@@ -65,7 +65,7 @@
         (pid(), atom(), any(), pid(), [any()], dict(), [pid()]) ->
                                             master_state()).
 -spec(sender_death_fun/0 :: () -> death_fun()).
--spec(length_fun/0 :: () -> length_fun()).
+-spec(depth_fun/0 :: () -> depth_fun()).
 -spec(init_with_existing_bq/3 :: (rabbit_types:amqqueue(), atom(), any()) ->
                                       master_state()).
 -spec(stop_mirroring/1 :: (master_state()) -> {atom(), any()}).
@@ -95,7 +95,7 @@ init(Q, Recover, AsyncCallback) ->
 
 init_with_existing_bq(#amqqueue { name = QName } = Q, BQ, BQS) ->
     {ok, CPid} = rabbit_mirror_queue_coordinator:start_link(
-                   Q, undefined, sender_death_fun(), length_fun()),
+                   Q, undefined, sender_death_fun(), depth_fun()),
     GM = rabbit_mirror_queue_coordinator:get_gm(CPid),
     {_MNode, SNodes} = rabbit_mirror_queue_misc:suggested_queue_nodes(Q),
     rabbit_mirror_queue_misc:add_mirrors(QName, SNodes),
@@ -406,7 +406,7 @@ sender_death_fun() ->
               end)
     end.
 
-length_fun() ->
+depth_fun() ->
     Self = self(),
     fun () ->
             rabbit_amqqueue:run_backing_queue(
