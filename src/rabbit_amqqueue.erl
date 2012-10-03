@@ -219,7 +219,8 @@ declare(QueueName, Durable, AutoDelete, Args, Owner) ->
                                      exclusive_owner = Owner,
                                      pid             = none,
                                      slave_pids      = [],
-                                     sync_slave_pids = []}),
+                                     sync_slave_pids = [],
+                                     gm_pids         = []}),
     {Node, _MNodes} = rabbit_mirror_queue_misc:suggested_queue_nodes(Q0),
     Q1 = start_queue_process(Node, Q0),
     case gen_server2:call(Q1#amqqueue.pid, {init, false}, infinity) of

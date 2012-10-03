@@ -58,8 +58,8 @@
 %% Returns {ok, NewMPid, DeadPids}
 
 remove_from_queue(QueueName, DeadGMPids) ->
-    DeadNodes = [node(DeadGMPid) || DeadGMPid <- DeadGMPids],
-    ClusterNodes = rabbit_mnesia:cluster_nodes(running) -- DeadNodes,
+    ClusterNodes = rabbit_mnesia:cluster_nodes(running) --
+        [node(DeadGMPid) || DeadGMPid <- DeadGMPids],
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
               %% Someone else could have deleted the queue before we
@@ -67,10 +67,20 @@ remove_from_queue(QueueName, DeadGMPids) ->
               case mnesia:read({rabbit_queue, QueueName}) of
                   [] -> {error, not_found};
                   [Q = #amqqueue { pid        = QPid,
-                                   slave_pids = SPids }] ->
-                      Alive = [Pid || Pid <- [QPid | SPids],
-                                  not lists:member(node(Pid), DeadNodes)],
+                                   slave_pids = SPids,
+                                   gm_pids    = GMPids }] ->
+
+                      {Dead, GMPids1} = lists:partition(
+                                          fun ({GM, _}) ->
+                                                  lists:member(GM, DeadGMPids)
+                                          end, GMPids),
+                      DeadPids = [Pid || {_GM, Pid} <- Dead, Pid =/= existing],
+                      {_, Alive} = lists:partition(
+                                     fun (Pid) ->
+                                             lists:member(Pid, DeadPids)
+                                     end, [QPid | SPids]),
                       {QPid1, SPids1} = promote_slave(Alive),
+
                       case {{QPid, SPids}, {QPid1, SPids1}} of
                           {Same, Same} ->
                               {ok, QPid1, [], []};
@@ -80,7 +90,8 @@ remove_from_queue(QueueName, DeadGMPids) ->
                               %% become the master.
                               Q1 = store_updated_slaves(
                                      Q #amqqueue { pid        = QPid1,
-                                                   slave_pids = SPids1 }),
+                                                   slave_pids = SPids1,
+                                                   gm_pids    = GMPids1 }),
                               %% Sometimes a slave dying means we need
                               %% to start more on other nodes -
                               %% "exactly" mode can cause this to
