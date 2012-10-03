@@ -628,6 +628,12 @@ deliver(Qs, Delivery = #delivery{mandatory = false}, Flow) ->
         flow   -> [credit_flow:send(QPid) || QPid <- QPids];
         noflow -> ok
     end,
+
+    %% We let slaves know that they were being addressed as slaves at
+    %% the time - if they receive such a message from the channel
+    %% after they have become master they should mark the message as
+    %% redelivered since they do not know what the master may have
+    %% done with it.
     MMsg = {deliver, Delivery, false, Flow},
     SMsg = {deliver, Delivery, true,  Flow},
     delegate:invoke_no_result(MPids,
