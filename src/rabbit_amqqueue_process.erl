@@ -575,14 +575,13 @@ deliver_or_enqueue(Delivery = #delivery{message    = Message,
                              State2#q{backing_queue_state = BQS1})
     end.
 
-requeue_and_run(AckTags, State = #q{backing_queue = BQ}) ->
-    run_backing_queue(BQ, fun (M, BQS) ->
-                                  {_MsgIds, BQS1} = M:requeue(AckTags, BQS),
-                                  BQS1
-                          end, State).
+requeue_and_run(AckTags, State = #q{backing_queue       = BQ,
+                                    backing_queue_state = BQS}) ->
+    {_MsgIds, BQS1} = BQ:requeue(AckTags, BQS),
+    run_message_queue(State#q{backing_queue_state = BQS1}).
 
-fetch(AckRequired, State = #q{backing_queue_state = BQS,
-                              backing_queue       = BQ}) ->
+fetch(AckRequired, State = #q{backing_queue       = BQ,
+                              backing_queue_state = BQS}) ->
     {Result, BQS1} = BQ:fetch(AckRequired, BQS),
     {Result, State#q{backing_queue_state = BQS1}}.
 
@@ -676,12 +675,9 @@ maybe_send_reply(ChPid, Msg) -> ok = rabbit_channel:send_command(ChPid, Msg).
 
 qname(#q{q = #amqqueue{name = QName}}) -> QName.
 
-backing_queue_timeout(State = #q{backing_queue = BQ}) ->
-    run_backing_queue(BQ, fun (M, BQS) -> M:timeout(BQS) end, State).
-
-run_backing_queue(Mod, Fun, State = #q{backing_queue = BQ,
-                                       backing_queue_state = BQS}) ->
-    run_message_queue(State#q{backing_queue_state = BQ:invoke(Mod, Fun, BQS)}).
+backing_queue_timeout(State = #q{backing_queue       = BQ,
+                                 backing_queue_state = BQS}) ->
+    State#q{backing_queue_state = BQ:timeout(BQS)}.
 
 subtract_acks(ChPid, AckTags, State, Fun) ->
     case lookup_ch(ChPid) of
@@ -1193,8 +1189,10 @@ handle_cast({confirm, MsgSeqNos, QPid}, State = #q{unconfirmed = UC}) ->
 handle_cast(_, State = #q{delayed_stop = DS}) when DS =/= undefined ->
     noreply(State);
 
-handle_cast({run_backing_queue, Mod, Fun}, State) ->
-    noreply(run_backing_queue(Mod, Fun, State));
+handle_cast({run_backing_queue, Mod, Fun},
+            State = #q{backing_queue = BQ, backing_queue_state = BQS}) ->
+    noreply(run_message_queue(
+              State#q{backing_queue_state = BQ:invoke(Mod, Fun, BQS)}));
 
 handle_cast({deliver, Delivery = #delivery{sender = Sender}, Flow},
             State = #q{senders = Senders}) ->
