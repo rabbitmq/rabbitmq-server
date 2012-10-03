@@ -273,7 +273,7 @@ emit_update(State) ->
     State.
 
 update_memory_stats(State) ->
-    {[{total, _} | Stats], Interval} =
+    {Stats, Interval} =
         rabbit_misc:interval_operation(
           fun rabbit_vm:memory/0, 0.01, ?REFRESH_RATE),
     State1 = State#state{memory_stats        = Stats,
