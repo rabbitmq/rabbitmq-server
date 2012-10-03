@@ -632,7 +632,7 @@ deliver(Qs, Delivery = #delivery{mandatory = false}, Flow) ->
     %% We let slaves know that they were being addressed as slaves at
     %% the time - if they receive such a message from the channel
     %% after they have become master they should mark the message as
-    %% redelivered since they do not know what the master may have
+    %% 'delivered' since they do not know what the master may have
     %% done with it.
     MMsg = {deliver, Delivery, false, Flow},
     SMsg = {deliver, Delivery, true,  Flow},
@@ -644,6 +644,7 @@ deliver(Qs, Delivery = #delivery{mandatory = false}, Flow) ->
 
 deliver(Qs, Delivery, _Flow) ->
     {MPids, SPids} = qpids(Qs),
+    %% see comment above
     MMsg = {deliver, Delivery, false},
     SMsg = {deliver, Delivery, true},
     {MRouted, _} = delegate:invoke(
