@@ -137,6 +137,34 @@ minimal_message_headers_with_no_custom_test() ->
 
     [] = lists:subtract(Headers, Expected).
 
+headers_post_process_test() ->
+    Headers  = [{"header1", "1"},
+                {"header2", "12"},
+                {"reply-to", "something"}],
+    Expected = [{"header1", "1"},
+                {"header2", "12"},
+                {"reply-to", "/reply-queue/something"}],
+    [] = lists:subtract(
+           rabbit_stomp_util:headers_post_process(Headers), Expected).
+
+headers_post_process_noop1_test() ->
+    Headers  = [{"reply-to", "/reply-queue/something"},
+                {"header1", "1"},
+                {"header2", "12"}],
+    Expected = [{"reply-to", "/reply-queue/something"},
+                {"header1", "1"},
+                {"header2", "12"}],
+    [] = lists:subtract(
+           rabbit_stomp_util:headers_post_process(Headers), Expected).
+
+headers_post_process_noop2_test() ->
+    Headers  = [{"header1", "1"},
+                {"header2", "12"}],
+    Expected = [{"header1", "1"},
+                {"header2", "12"}],
+    [] = lists:subtract(
+           rabbit_stomp_util:headers_post_process(Headers), Expected).
+
 negotiate_version_both_empty_test() ->
     {error, no_common_version} = rabbit_stomp_util:negotiate_version([],[]).
 

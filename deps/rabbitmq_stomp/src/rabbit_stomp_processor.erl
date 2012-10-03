@@ -614,8 +614,9 @@ send_delivery(Delivery = #'basic.deliver'{consumer_tag = ConsumerTag},
         {ok, #subscription{}} ->
             send_frame(
               "MESSAGE",
-              rabbit_stomp_util:message_headers(SessionId, Delivery,
-                                                Properties),
+              rabbit_stomp_util:headers_post_process(
+                rabbit_stomp_util:message_headers(SessionId, Delivery,
+                                                  Properties)),
               Body,
               State);
         error ->
@@ -678,7 +679,7 @@ ensure_reply_queue(TempQueueId, State = #state{channel       = Channel,
                                                subscriptions = Subs}) ->
     case dict:find(TempQueueId, RQS) of
         {ok, RQ} ->
-            {reply_to_destination(RQ), State};
+            {binary_to_list(RQ), State};
         error ->
             #'queue.declare_ok'{queue = Queue} =
                 amqp_channel:call(Channel,
@@ -695,7 +696,7 @@ ensure_reply_queue(TempQueueId, State = #state{channel       = Channel,
                                          nowait       = false},
                                        self()),
 
-            Destination = reply_to_destination(Queue),
+            Destination = binary_to_list(Queue),
 
             %% synthesise a subscription to the reply queue destination
             Subs1 = dict:store(ConsumerTag,
@@ -708,9 +709,6 @@ ensure_reply_queue(TempQueueId, State = #state{channel       = Channel,
                             reply_queues  = dict:store(TempQueueId, Queue, RQS),
                             subscriptions = Subs1}}
     end.
-
-reply_to_destination(Queue) ->
-    ?REPLY_QUEUE_PREFIX ++ binary_to_list(Queue).
 
 %%----------------------------------------------------------------------------
 %% Receipt Handling

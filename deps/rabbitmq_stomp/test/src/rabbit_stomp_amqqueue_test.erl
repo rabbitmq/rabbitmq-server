@@ -28,7 +28,8 @@ all_tests() ->
     [ok = run_test(TestFun) || TestFun <- [fun test_subscribe_error/2,
                                            fun test_subscribe/2,
                                            fun test_send/2,
-                                           fun test_delete_queue_subscribe/2]],
+                                           fun test_delete_queue_subscribe/2,
+                                           fun test_temp_destination_queue/2]],
     ok.
 
 run_test(TestFun) ->
@@ -106,6 +107,25 @@ test_delete_queue_subscribe(Channel, Client) ->
     ?DESTINATION = proplists:get_value("subscription", Headers),
 
     % server closes connection
+    ok.
+
+test_temp_destination_queue(Channel, Client) ->
+    #'queue.declare_ok'{} =
+        amqp_channel:call(Channel, #'queue.declare'{queue       = ?QUEUE,
+                                                    auto_delete = true}),
+    rabbit_stomp_client:send( Client, "SEND", [{"destination", ?DESTINATION},
+                                               {"reply-to", "/temp-queue/foo"}],
+                                              ["ping"]),
+    amqp_channel:call(Channel,#'basic.consume'{queue  = ?QUEUE, no_ack = true}),
+    receive #'basic.consume_ok'{consumer_tag = Tag} -> ok end,
+    receive {#'basic.deliver'{delivery_tag = DTag},
+             #'amqp_msg'{payload = <<"ping">>,
+                         props   = #'P_basic'{reply_to = ReplyTo}}} -> ok
+    end,
+    ok = amqp_channel:call(Channel,
+                           #'basic.publish'{routing_key = ReplyTo},
+                           #amqp_msg{payload = <<"pong">>}),
+    {ok, _Client1, _, [<<"pong">>]} = stomp_receive(Client, "MESSAGE"),
     ok.
 
 stomp_receive(Client, Command) ->
