@@ -93,12 +93,14 @@ div.form-popup-warn, div.form-popup-info, div.form-popup-help { margin: 20px; pa
 
 p.status-error, p.warning { margin: 20px; padding: 15px; border-radius: 10px; -moz-border-radius: 10px; text-align: center; font-weight: bold; }
 
-.highlight, .highlight-right { min-width: 120px; font-size: 120%; text-align:center; padding:10px; background-color: #ddd; margin: 0 20px 0 0; color: #888; border-radius: 10px; -moz-border-radius: 10px; }
-.highlight strong, .highlight-right strong { font-size: 2em; display: block; color: #444; font-weight: normal; }
-.highlight { float: left; }
-.highlight-right { float: right; }
+.highlight { min-width: 120px; font-size: 120%; text-align:center; padding:10px; background-color: #ddd; margin: 0 20px 0 0; color: #888; border-radius: 10px; -moz-border-radius: 10px; }
+.highlight strong { font-size: 2em; display: block; color: #444; font-weight: normal; }
+.highlight, .micro-highlight { float: left; }
 
 .mini-highlight { font-size: 150%; padding:10px; background-color: #ddd; color: #888; border-radius: 10px; -moz-border-radius: 10px; line-height: 300%; }
+
+.micro-highlight { min-width: 120px; font-size: 100%; text-align:center; padding:10px; background-color: #ddd; margin: 0 20px 0 0; color: #888; border-radius: 10px; -moz-border-radius: 10px; }
+.micro-highlight strong { font-size: 120%; color: #444; font-weight: normal; }
 
 div.section, div.section-hidden { margin: 0 0 1em 0; }
 div.section-invisible div.hider { display: none; }
@@ -188,7 +190,7 @@ tr.alt2>td {
     background: -webkit-gradient(linear, left top, left bottom, color-stop(0, #f8f8f8),color-stop(1, #ffffff));
 }
 
-.highlight, .mini-highlight {
+.highlight, .mini-highlight, .micro-highlight {
     background: -moz-linear-gradient(center top, #f0f0f0 0%,#e0e0e0 100%);
     background: -webkit-gradient(linear, left top, left bottom, color-stop(0, #f0f0f0),color-stop(1, #e0e0e0));
     border: 1px solid #e0e0e0;

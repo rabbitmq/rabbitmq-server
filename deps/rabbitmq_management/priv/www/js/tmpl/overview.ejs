@@ -3,7 +3,6 @@
 <h2>Totals</h2>
 <div class="hider updatable">
 <% if (overview.statistics_db_node != 'not_running') { %>
-  <div class="left">
   <h3>Queued messages <span class="help" id="queued-messages"></span></h3>
   <div class="box">
     <%= queue_length(overview.queue_totals, 'Ready', 'messages_ready') %>
@@ -19,39 +18,29 @@
 <% } else { %>
     Totals not available
 <% } %>
+
+  <h3>Global counts <span class="help" id="resource-counts"></span></h3>
+
+  <div class="box">
+    <div class="micro-highlight">
+      Connections: <strong><%= overview.object_totals.connections %></strong>
+    </div>
+    <div class="micro-highlight">
+      Channels: <strong><%= overview.object_totals.channels %></strong>
+    </div>
+    <div class="micro-highlight">
+      Exchanges: <strong><%= overview.object_totals.exchanges %></strong>
+    </div>
+    <div class="micro-highlight">
+      Queues: <strong><%= overview.object_totals.queues %></strong>
+    </div>
+<% if (overview.object_totals['consumers'] != undefined) { %>    <tr>
+    <div class="micro-highlight">
+      Consumers: <strong><%= overview.object_totals.consumers %></strong>
+    </div>
+<% } %>
   </div>
 
-  <div class="right">
-    <h3>Global counts <span class="help" id="resource-counts"></span></h3>
-    <table class="list">
-      <tr>
-        <th></th>
-        <th>Count</th>
-      </tr>
-      <tr class="alt1">
-        <td class="r">Connections</td>
-        <td class="c"><%= overview.object_totals.connections %></td>
-      </tr>
-      <tr class="alt2">
-        <td class="r">Channels</td>
-        <td class="c"><%= overview.object_totals.channels %></td>
-      </tr>
-      <tr class="alt1">
-        <td class="r">Exchanges</td>
-        <td class="c"><%= overview.object_totals.exchanges %></td>
-      </tr>
-      <tr class="alt2">
-        <td class="r">Queues</td>
-        <td class="c"><%= overview.object_totals.queues %></td>
-      </tr>
-<% if (overview.object_totals['consumers'] != undefined) { %>    <tr>
-      <tr class="alt1">
-        <td class="r">Consumers</td>
-        <td class="c"><%= overview.object_totals.consumers %></td>
-      </tr>
-<% } %>
-    </table>
-  </div>
 </div>
 </div>
 
