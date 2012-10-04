@@ -106,6 +106,7 @@ unbind_on_unbind_test() ->
 user_id_test() ->
     with_ch(
       fun (Ch) ->
+              stop_other_node(?HARE),
               start_other_node(?HARE),
               {ok, Conn2} = amqp_connection:start(
                               #amqp_params_network{username = <<"hare-user">>,
@@ -182,6 +183,7 @@ no_loop_test() ->
 binding_recovery_test() ->
     Q = <<"durable-Q">>,
 
+    stop_other_node(?HARE),
     Ch = start_other_node(?HARE, "hare-two-upstreams"),
 
     declare_all(Ch, [x(<<"upstream2">>) | ?UPSTREAM_DOWNSTREAM]),
@@ -206,8 +208,6 @@ binding_recovery_test() ->
     ?assertEqual(none, suffix(?HARE, "upstream2")),
     delete_all(Ch2, [x(<<"upstream2">>) | ?UPSTREAM_DOWNSTREAM]),
     delete_queue(Ch2, Q),
-
-    stop_other_node(?HARE),
     ok.
 
 suffix({Nodename, _}, XName) ->
@@ -225,6 +225,7 @@ suffix({Nodename, _}, XName) ->
 restart_upstream_test() ->
     with_ch(
       fun (Downstream) ->
+              stop_other_node(?HARE),
               Upstream = start_other_node(?HARE),
 
               declare_exchange(Upstream, x(<<"upstream">>)),
@@ -251,9 +252,7 @@ restart_upstream_test() ->
               expect_empty(Downstream, Qgoes),
 
               delete_exchange(Downstream, <<"hare.downstream">>),
-              delete_exchange(Upstream1, <<"upstream">>),
-
-              stop_other_node(?HARE)
+              delete_exchange(Upstream1, <<"upstream">>)
       end, []).
 
 %% flopsy, mopsy and cottontail, connected in a ring with max_hops = 2
@@ -295,6 +294,7 @@ max_hops_test() ->
 upstream_has_no_federation_test() ->
     with_ch(
       fun (Downstream) ->
+              stop_other_node(?HARE),
               Upstream = start_other_node(
                            ?HARE, "hare-no-federation", "no_plugins"),
               declare_exchange(Upstream, x(<<"upstream">>)),
@@ -418,7 +418,7 @@ start_other_node({Name, Port}, Config, PluginsFile) ->
 
 stop_other_node({Name, _Port}) ->
     ?assertCmd("make -C " ++ plugin_dir() ++ " OTHER_NODE=" ++ Name ++
-                   " stop-other-node"),
+                      " stop-other-node"),
     timer:sleep(1000).
 
 set_param(Component, Key, Value) ->
