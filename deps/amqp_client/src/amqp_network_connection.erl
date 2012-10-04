@@ -68,8 +68,7 @@ handle_message({channel_exit, Reason}, State) ->
     {stop, {channel0_died, Reason}, State};
 handle_message(heartbeat_timeout, State) ->
     {stop, heartbeat_timeout, State};
-handle_message(closing_timeout, State = #state{closing_reason = Reason,
-                                               sock           = Sock}) ->
+handle_message(closing_timeout, State = #state{closing_reason = Reason}) ->
     {stop, {closing_timeout, Reason}, State};
 %% see http://erlang.org/pipermail/erlang-bugs/2012-June/002933.html
 handle_message({Ref, {error, Reason}},
