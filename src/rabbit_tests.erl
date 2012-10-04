@@ -886,37 +886,48 @@ test_arguments_parser() ->
 test_dynamic_mirroring() ->
     %% Just unit tests of the node selection logic, see multi node
     %% tests for the rest...
-    Test = fun ({NewM, NewSs}, Policy, Params, {OldM, OldSs}, All) ->
+    Test = fun ({NewM, NewSs, ExtraSs}, Policy, Params, {OldM, OldSs}, All) ->
                    {NewM, NewSs0} =
                        rabbit_mirror_queue_misc:suggested_queue_nodes(
                          Policy, Params, {OldM, OldSs}, All),
-                   NewSs = lists:sort(NewSs0)
+                   NewSs1 = lists:sort(NewSs0),
+                   case dm_list_match(NewSs, NewSs1, ExtraSs) of
+                       ok    -> ok;
+                       error -> exit({no_match, NewSs, NewSs1, ExtraSs})
+                   end
            end,
 
-    Test({a,[b,c]},<<"all">>,'_',{a,[]},   [a,b,c]),
-    Test({a,[b,c]},<<"all">>,'_',{a,[b,c]},[a,b,c]),
-    Test({a,[b,c]},<<"all">>,'_',{a,[d]},  [a,b,c]),
+    Test({a,[b,c],0},<<"all">>,'_',{a,[]},   [a,b,c]),
+    Test({a,[b,c],0},<<"all">>,'_',{a,[b,c]},[a,b,c]),
+    Test({a,[b,c],0},<<"all">>,'_',{a,[d]},  [a,b,c]),
 
     %% Add a node
-    Test({a,[b,c]},<<"nodes">>,[<<"a">>,<<"b">>,<<"c">>],{a,[b]},[a,b,c,d]),
-    Test({b,[a,c]},<<"nodes">>,[<<"a">>,<<"b">>,<<"c">>],{b,[a]},[a,b,c,d]),
+    Test({a,[b,c],0},<<"nodes">>,[<<"a">>,<<"b">>,<<"c">>],{a,[b]},[a,b,c,d]),
+    Test({b,[a,c],0},<<"nodes">>,[<<"a">>,<<"b">>,<<"c">>],{b,[a]},[a,b,c,d]),
     %% Add two nodes and drop one
-    Test({a,[b,c]},<<"nodes">>,[<<"a">>,<<"b">>,<<"c">>],{a,[d]},[a,b,c,d]),
+    Test({a,[b,c],0},<<"nodes">>,[<<"a">>,<<"b">>,<<"c">>],{a,[d]},[a,b,c,d]),
     %% Promote slave to master by policy
-    Test({a,[b,c]},<<"nodes">>,[<<"a">>,<<"b">>,<<"c">>],{d,[a]},[a,b,c,d]),
+    Test({a,[b,c],0},<<"nodes">>,[<<"a">>,<<"b">>,<<"c">>],{d,[a]},[a,b,c,d]),
     %% Don't try to include nodes that are not running
-    Test({a,[b]},  <<"nodes">>,[<<"a">>,<<"b">>,<<"f">>],{a,[b]},[a,b,c,d]),
+    Test({a,[b],  0},<<"nodes">>,[<<"a">>,<<"b">>,<<"f">>],{a,[b]},[a,b,c,d]),
     %% If we can't find any of the nodes listed then just keep the master
-    Test({a,[]},   <<"nodes">>,[<<"f">>,<<"g">>,<<"h">>],{a,[b]},[a,b,c,d]),
+    Test({a,[],   0},<<"nodes">>,[<<"f">>,<<"g">>,<<"h">>],{a,[b]},[a,b,c,d]),
 
-    Test({a,[b]},  <<"exactly">>,2,{a,[]},   [a,b,c,d]),
-    Test({a,[b,c]},<<"exactly">>,3,{a,[]},   [a,b,c,d]),
-    Test({a,[c]},  <<"exactly">>,2,{a,[c]},  [a,b,c,d]),
-    Test({a,[b,c]},<<"exactly">>,3,{a,[c]},  [a,b,c,d]),
-    Test({a,[c]},  <<"exactly">>,2,{a,[c,d]},[a,b,c,d]),
-    Test({a,[c,d]},<<"exactly">>,3,{a,[c,d]},[a,b,c,d]),
+    Test({a,[],   1},<<"exactly">>,2,{a,[]},   [a,b,c,d]),
+    Test({a,[],   2},<<"exactly">>,3,{a,[]},   [a,b,c,d]),
+    Test({a,[c],  0},<<"exactly">>,2,{a,[c]},  [a,b,c,d]),
+    Test({a,[c],  1},<<"exactly">>,3,{a,[c]},  [a,b,c,d]),
+    Test({a,[c],  0},<<"exactly">>,2,{a,[c,d]},[a,b,c,d]),
+    Test({a,[c,d],0},<<"exactly">>,3,{a,[c,d]},[a,b,c,d]),
 
     passed.
+
+%% Does the first list match the second where the second is required
+%% to have exactly Extra superfluous items?
+dm_list_match([],     [],      0)     -> ok;
+dm_list_match(_,      [],     _Extra) -> error;
+dm_list_match([H|T1], [H |T2], Extra) -> dm_list_match(T1, T2, Extra);
+dm_list_match(L1,     [H2|T2], Extra) -> dm_list_match(L1, T2, Extra - 1).
 
 test_user_management() ->
 
