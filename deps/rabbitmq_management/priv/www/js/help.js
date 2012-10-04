@@ -186,6 +186,8 @@ HELP = {
 
     'active-consumers' : '<p>An active consumer is one which could immediately receive any messages sent to the queue - i.e. it is not limited by its prefetch count, TCP congestion, flow control, or because it has issued channel.flow. Therefore at least one of Ready Messages and Active Consumers must always be zero.</p><p>Note that this value is an instantaneous snapshot - when consumers are restricted by their prefetch count they may only appear to be active for small fractions of a second until more messages are sent out.</p>',
 
+    'memory-use' : '<p>Note that the memory details shown here may lag behind the memory use shown under "Overview"; if the details become expensive to calculate, RabbitMQ will calculate them less frequently.</p><p><a target="_blank" href="http://www.rabbitmq.com/memory-use.html">Read more</a> on memory use.</p>',
+
     'foo': 'foo' // No comma.
 };
 

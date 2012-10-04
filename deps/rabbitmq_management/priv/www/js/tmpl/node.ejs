@@ -12,37 +12,36 @@
     <tr>
       <th>
         File descriptors <span class="help" id="file-descriptors"></span>
-        <sub>(used / available)</sub>
       </th>
-      <td class="status">
-        <div class="<%= fmt_color(node.fd_used / node.fd_total,
-                                  FD_THRESHOLDS) %>">
-          <%= fmt_fd_used(node.fd_used) %> / <%= node.fd_total %>
-       </div>
+      <td>
+<%= fmt_resource_bar(node.fd_used,
+                     node.fd_total + ' available',
+                     node.fd_used / node.fd_total,
+                     fmt_color(node.fd_used / node.fd_total, FD_THRESHOLDS)) %>
       </td>
     </tr>
     <tr>
       <th>
         Socket descriptors <span class="help" id="socket-descriptors"></span>
-        <sub>(used / available)</sub>
       </th>
-      <td class="status">
-        <div class="<%= fmt_color(node.sockets_used / node.sockets_total,
-                                  SOCKETS_THRESHOLDS) %>">
-          <%= node.sockets_used %> / <%= node.sockets_total %>
-       </div>
+      <td>
+<%= fmt_resource_bar(node.sockets_used,
+                     node.sockets_total + ' available',
+                     node.sockets_used / node.sockets_total,
+                     fmt_color(node.sockets_used / node.sockets_total,
+                               FD_THRESHOLDS)) %>
       </td>
     </tr>
     <tr>
       <th>
         Erlang processes
-        <sub>(used / available)</sub>
       </th>
-     <td class="status">
-       <div class="<%= fmt_color(node.proc_used / node.proc_total,
-                                 PROCESS_THRESHOLDS) %>">
-         <%= node.proc_used %> / <%= node.proc_total %>
-       </div>
+     <td>
+<%= fmt_resource_bar(node.proc_used,
+                     node.proc_total + ' available',
+                     node.proc_used / node.proc_total,
+                     fmt_color(node.proc_used / node.proc_total,
+                               PROCESS_THRESHOLDS)) %>
      </td>
     </tr>
   </table>
@@ -51,21 +50,15 @@
       <th>
         Memory
       </th>
-      <td class="status">
+      <td>
 <% if (node.mem_limit != 'memory_monitoring_disabled') { %>
-   <% if (node.mem_alarm) { %>
-       <div class="red">
-         <%= fmt_bytes(node.mem_used) %>
-         <span class="help" id="memory-alarm"></span>
-       </div>
-   <% } else { %>
-       <div class="green">
-         <%= fmt_bytes(node.mem_used) %>
-       </div>
-   <% } %>
-   <sub><%= fmt_bytes(node.mem_limit) %> high watermark</sub>
+   <%= fmt_resource_bar(fmt_bytes(node.mem_used),
+                        fmt_bytes(node.mem_limit) + ' high watermark',
+                        node.mem_used / node.mem_limit,
+                        node.mem_alarm ? 'red' : 'green',
+                        node.mem_alarm ? 'memory-alarm' : null) %>
 <% } else { %>
-       <%= fmt_bytes(node.mem_used) %>
+   <%= fmt_bytes(node.mem_used) %>
 <% } %>
       </td>
     </tr>
@@ -73,23 +66,13 @@
       <th>
         Disk space
       </th>
-      <td class="status">
+      <td>
 <% if (node.disk_free_limit != 'disk_free_monitoring_disabled') { %>
-   <% if (node.disk_free_alarm) { %>
-       <div class="red">
-         <%= fmt_bytes(node.disk_free) %>
-         <span class="help" id="disk-free-alarm"></span>
-       </div>
-   <% } else { %>
-       <div class="green">
-         <%= fmt_bytes(node.disk_free) %>
-       </div>
-   <% } %>
-   <% if (node.disk_free_limit == 0) { %>
-     <sub>No low watermark <span class="help" id="disk-monitoring-no-watermark"></span></sub>
-   <% } else { %>
-     <sub><%= fmt_bytes(node.disk_free_limit) %> low watermark </sub>
-   <% } %>
+   <%= fmt_resource_bar(fmt_bytes(node.disk_free),
+                        fmt_bytes(node.disk_free_limit) + ' low watermark',
+                        node.disk_free_limit / node.disk_free,
+                        node.disk_free_alarm ? 'red' : 'green',
+                        node.disk_free_alarm ? 'disk_free-alarm' : null) %>
 <% } else { %>
          (not available)
 <% } %>
@@ -117,6 +100,107 @@
 </div>
 </div>
 
+<div class="section">
+<h2>Memory details</h2>
+<div class="hider updatable">
+<% if (!node.running) { %>
+<p class="warning">Node not running</p>
+<% } else if (node.os_pid == undefined) { %>
+<p class="warning">Node statistics not available</p>
+<% } else {
+  var width = 800;
+%>
+  <div class="memory-bar">
+<%
+   var sections = {'connection_procs': 'Connections',
+                   'queue_procs': 'Queues',
+                   'plugins': 'Plugins',
+                   'other_proc': 'Other process memory',
+                   'mnesia': 'Mnesia',
+                   'msg_index': 'Message store index',
+                   'mgmt_db': 'Management database',
+                   'other_ets': 'Other ETS tables',
+                   'binary': 'Binaries',
+                   'code': 'Code',
+                   'atom': 'Atoms',
+                   'other_system': 'Other system'};
+   for (var section in sections) {
+     var section_width = Math.round(width * node.memory[section] / node.memory.total);
+%>
+    <div class="memory-section memory_<%= section %>"
+         style="width: <%= section_width %>px;"
+         title="<%= sections[section] %> <%= fmt_bytes(node.memory[section]) %>">
+    </div>
+<% } %>
+  </div>
+  <span class="clear"></span>
+  <div class="memory-total" style="width: <%= width %>px;">
+    <%= fmt_bytes(node.memory.total) %> used <span class="help" id="memory-use"></span>
+  </div>
+
+  <div class="box">
+  <table class="facts">
+    <tr>
+      <th>Connections</th>
+      <td><%= fmt_memory(node.memory, 'connection_procs') %></td>
+    </tr>
+    <tr>
+      <th>Queues</th>
+      <td><%= fmt_memory(node.memory, 'queue_procs') %></td>
+    </tr>
+    <tr>
+      <th>Plugins</th>
+      <td><%= fmt_memory(node.memory, 'plugins') %></td>
+    </tr>
+    <tr>
+      <th>Other process memory</th>
+      <td><%= fmt_memory(node.memory, 'other_proc') %></td>
+    </tr>
+  </table>
+  <table class="facts">
+    <tr>
+      <th>Mnesia</th>
+      <td><%= fmt_memory(node.memory, 'mnesia') %></td>
+    </tr>
+    <tr>
+      <th>Message store index</th>
+      <td><%= fmt_memory(node.memory, 'msg_index') %></td>
+    </tr>
+    <tr>
+      <th>Management database</th>
+      <td><%= fmt_memory(node.memory, 'mgmt_db') %></td>
+    </tr>
+    <tr>
+      <th>Other ETS tables</th>
+      <td><%= fmt_memory(node.memory, 'other_ets') %></td>
+    </tr>
+  </table>
+  <table class="facts">
+    <tr>
+      <th>Binaries</th>
+      <td><%= fmt_memory(node.memory, 'binary') %></td>
+    </tr>
+    <tr>
+      <th>Code</th>
+      <td><%= fmt_memory(node.memory, 'code') %></td>
+    </tr>
+    <tr>
+      <th>Atoms</th>
+      <td><%= fmt_memory(node.memory, 'atom') %></td>
+    </tr>
+    <tr>
+      <th>Other system</th>
+      <td><%= fmt_memory(node.memory, 'other_system') %></td>
+    </tr>
+  </table>
+  </div>
+
+  <p>
+    Memory details are <%= fmt_millis(node.memory_age) %> behind.
+  </p>
+<% } %>
+</div>
+</div>
 
 <div class="section-hidden">
 <h2>Applications</h2>
@@ -173,43 +257,6 @@
 <p class="warning">Node statistics not available</p>
 <% } else { %>
   <div class="box">
-  <h3>Memory</h3>
-  <table class="facts">
-    <tr>
-      <th>Processes</th>
-      <td>
-        <%= fmt_bytes(node.mem_proc) %>
-        <sub><%= fmt_bytes(node.mem_proc_used) %> used</sub>
-      </td>
-    </tr>
-    <tr>
-      <th>Binaries</th>
-      <td><%= fmt_bytes(node.mem_binary) %></td>
-    </tr>
-  </table>
-
-  <table class="facts">
-    <tr>
-      <th>ETS</th>
-      <td><%= fmt_bytes(node.mem_ets) %></td>
-    </tr>
-    <tr>
-      <th>Code</th>
-      <td><%= fmt_bytes(node.mem_code) %></td>
-    </tr>
-  </table>
-
-  <table class="facts">
-    <tr>
-      <th>Atoms</th>
-      <td>
-        <%= fmt_bytes(node.mem_atom) %>
-        <sub><%= fmt_bytes(node.mem_atom_used) %> used</sub>
-      </td>
-    </tr>
-  </table>
-  </div>
-
   <h3>VM</h3>
   <table class="facts">
     <tr>

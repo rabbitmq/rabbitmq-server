@@ -64,15 +64,12 @@
     <th>Name</th>
     <th>
       File descriptors <span class="help" id="file-descriptors"></span>
-      <sub>(used / available)</sub>
     </th>
     <th>
       Socket descriptors <span class="help" id="socket-descriptors"></span>
-      <sub>(used / available)</sub>
     </th>
     <th>
       Erlang processes
-      <sub>(used / available)</sub>
     </th>
     <th>
       Memory
@@ -92,72 +89,57 @@
        <%= link_node(node.name) %>
      </td>
 <% if (!node.running) { %>
-     <td class="status" colspan="6">
-       <div class="red">
+     <td colspan="6">
+       <div class="status-red">
          Node not running
        </div>
      </td>
 <% } else if (node.os_pid == undefined) { %>
-     <td class="status" colspan="6">
-       <div class="yellow">
+     <td colspan="6">
+       <div class="status-yellow">
          <acronym title="The rabbitmq_management_agent plugin should be enabled on this node. If it is not, various statistics will be inaccurate.">
            Node statistics not available</acronym>
        </div>
      </td>
 <% } else { %>
-     <td class="status">
-       <div class="<%= fmt_color(node.fd_used / node.fd_total,
-                                 FD_THRESHOLDS) %>">
-         <%= fmt_fd_used(node.fd_used) %> / <%= node.fd_total %>
-       </div>
+     <td>
+<%= fmt_resource_bar(node.fd_used,
+                     node.fd_total + ' available',
+                     node.fd_used / node.fd_total,
+                     fmt_color(node.fd_used / node.fd_total, FD_THRESHOLDS)) %>
      </td>
-     <td class="status">
-       <div class="<%= fmt_color(node.sockets_used / node.sockets_total,
-                                 SOCKETS_THRESHOLDS) %>">
-         <%= node.sockets_used %> / <%= node.sockets_total %>
-       </div>
+     <td>
+<%= fmt_resource_bar(node.sockets_used,
+                     node.sockets_total + ' available',
+                     node.sockets_used / node.sockets_total,
+                     fmt_color(node.sockets_used / node.sockets_total,
+                               FD_THRESHOLDS)) %>
      </td>
-     <td class="status">
-       <div class="<%= fmt_color(node.proc_used / node.proc_total,
-                                 PROCESS_THRESHOLDS) %>">
-         <%= node.proc_used %> / <%= node.proc_total %>
-       </div>
+     <td>
+<%= fmt_resource_bar(node.proc_used,
+                     node.proc_total + ' available',
+                     node.proc_used / node.proc_total,
+                     fmt_color(node.proc_used / node.proc_total,
+                               PROCESS_THRESHOLDS)) %>
      </td>
-     <td class="status">
+     <td>
 <% if (node.mem_limit != 'memory_monitoring_disabled') { %>
-   <% if (node.mem_alarm) { %>
-       <div class="red">
-         <%= fmt_bytes(node.mem_used) %>
-         <span class="help" id="memory-alarm"></span>
-       </div>
-   <% } else { %>
-       <div class="green">
-         <%= fmt_bytes(node.mem_used) %>
-       </div>
-   <% } %>
-   <sub><%= fmt_bytes(node.mem_limit) %> high watermark</sub>
+   <%= fmt_resource_bar(fmt_bytes(node.mem_used),
+                        fmt_bytes(node.mem_limit) + ' high watermark',
+                        node.mem_used / node.mem_limit,
+                        node.mem_alarm ? 'red' : 'green',
+                        node.mem_alarm ? 'memory-alarm' : null) %>
 <% } else { %>
        <%= fmt_bytes(node.mem_used) %>
 <% } %>
      </td>
-     <td class="status">
+     <td>
 <% if (node.disk_free_limit != 'disk_free_monitoring_disabled') { %>
-   <% if (node.disk_free_alarm) { %>
-       <div class="red">
-         <%= fmt_bytes(node.disk_free) %>
-         <span class="help" id="disk-free-alarm"></span>
-       </div>
-   <% } else { %>
-       <div class="green">
-         <%= fmt_bytes(node.disk_free) %>
-       </div>
-   <% } %>
-   <% if (node.disk_free_limit == 0) { %>
-     <sub>No low watermark <span class="help" id="disk-monitoring-no-watermark"></span></sub>
-   <% } else { %>
-     <sub><%= fmt_bytes(node.disk_free_limit) %> low watermark </sub>
-   <% } %>
-
+   <%= fmt_resource_bar(fmt_bytes(node.disk_free),
+                        fmt_bytes(node.disk_free_limit) + ' low watermark',
+                        node.disk_free_limit / node.disk_free,
+                        node.disk_free_alarm ? 'red' : 'green',
+                        node.disk_free_alarm ? 'disk_free-alarm' : null) %>
 <% } else { %>
          (not available)
 <% } %>
