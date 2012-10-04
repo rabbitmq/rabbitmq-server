@@ -86,6 +86,7 @@
 
 -define(STATISTICS_KEYS,
         [pid,
+         policy,
          exclusive_consumer_pid,
          exclusive_consumer_tag,
          messages_ready,
@@ -890,6 +891,12 @@ i(owner_pid, #q{q = #amqqueue{exclusive_owner = none}}) ->
     '';
 i(owner_pid, #q{q = #amqqueue{exclusive_owner = ExclusiveOwner}}) ->
     ExclusiveOwner;
+i(policy,    #q{q = #amqqueue{name = Name}}) ->
+    {ok, Q} = rabbit_amqqueue:lookup(Name),
+    case rabbit_policy:name(Q) of
+        none   -> '';
+        Policy -> Policy
+    end;
 i(exclusive_consumer_pid, #q{exclusive_consumer = none}) ->
     '';
 i(exclusive_consumer_pid, #q{exclusive_consumer = {ChPid, _ConsumerTag}}) ->
