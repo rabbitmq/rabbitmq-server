@@ -121,7 +121,7 @@ HELP = {
 
     'user-tags':
       'Comma-separated list of tags to apply to the user. Currently \
-       <a target="_blank" href="http://www.rabbitmq.com/management.html#permissions>supported \
+       <a target="_blank" href="http://www.rabbitmq.com/management.html#permissions">supported \
        by the management plugin</a>: \
       <dl> \
         <dt>management</dt> \
