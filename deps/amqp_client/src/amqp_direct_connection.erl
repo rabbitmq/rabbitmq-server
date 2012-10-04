@@ -69,7 +69,8 @@ handle_message(force_event_refresh, State = #state{node = Node}) ->
     rpc:call(Node, rabbit_event, notify,
              [connection_created, connection_info(State)]),
     {ok, State};
-
+handle_message(closing_timeout, State = #state{closing_reason = Reason}) ->
+    {stop, {closing_timeout, Reason}, State};
 handle_message(Msg, State) ->
     {stop, {unexpected_msg, Msg}, State}.
 

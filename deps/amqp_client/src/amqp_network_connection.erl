@@ -68,6 +68,10 @@ handle_message({channel_exit, Reason}, State) ->
     {stop, {channel0_died, Reason}, State};
 handle_message(heartbeat_timeout, State) ->
     {stop, heartbeat_timeout, State};
+handle_message(closing_timeout, State = #state{closing_reason = Reason,
+                                               sock           = Sock}) ->
+    rabbit_net:fast_close(Sock),
+    {stop, {closing_timeout, Reason}, State};
 %% see http://erlang.org/pipermail/erlang-bugs/2012-June/002933.html
 handle_message({Ref, {error, Reason}},
                State = #state{waiting_socket_close = Waiting,
@@ -79,6 +83,14 @@ handle_message({Ref, {error, Reason}},
                {_,          _} -> {socket_error, Reason}
            end, State}.
 
+closing(abrupt, {Reason, Code, Text}, State) ->
+    Close = #'connection.close'{reply_text = Text,
+                                reply_code = Code,
+                                class_id   = 0,
+                                method_id  = 0},
+    do2(Close, State),
+    rabbit_net:fast_close(State#state.sock),
+    {stop, Reason, State};
 closing(_ChannelCloseType, Reason, State) ->
     {ok, State#state{closing_reason = Reason}}.
 

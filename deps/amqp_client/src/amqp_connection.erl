@@ -70,7 +70,7 @@
 -include("amqp_client_internal.hrl").
 
 -export([open_channel/1, open_channel/2, open_channel/3]).
--export([start/1, close/1, close/3]).
+-export([start/1, close/1, close/2, close/3]).
 -export([error_atom/1]).
 -export([info/2, info_keys/1, info_keys/0]).
 
@@ -219,6 +219,14 @@ open_channel(ConnectionPid, ChannelNumber,
 close(ConnectionPid) ->
     close(ConnectionPid, 200, <<"Goodbye">>).
 
+%% @spec (ConnectionPid, Timeout) -> ok | Error
+%% where
+%%      ConnectionPid = pid()
+%%      Timeout = integer()
+%% @doc Closes the channel, using the supplied Timeout value.
+close(ConnectionPid, Timeout) ->
+    close(ConnectionPid, 200, <<"Goodbye">>, Timeout).
+
 %% @spec (ConnectionPid, Code, Text) -> ok | closing
 %% where
 %%      ConnectionPid = pid()
@@ -227,11 +235,36 @@ close(ConnectionPid) ->
 %% @doc Closes the AMQP connection, allowing the caller to set the reply
 %% code and text.
 close(ConnectionPid, Code, Text) ->
-    Close = #'connection.close'{reply_text =  Text,
+    close(ConnectionPid, Code, Text, infinity).
+
+%% @spec (ConnectionPid, Code, Text, Timeout) -> ok | closing
+%% where
+%%      ConnectionPid = pid()
+%%      Code = integer()
+%%      Text = binary()
+%%      Timeout = integer()
+%% @doc Closes the AMQP connection, allowing the caller to set the reply
+%% code and text, as well as a timeout for the operation, after which the
+%% connection will be abruptly terminated.
+close(ConnectionPid, Code, Text, Timeout) ->
+    Close = #'connection.close'{reply_text = Text,
                                 reply_code = Code,
                                 class_id   = 0,
                                 method_id  = 0},
-    amqp_gen_connection:close(ConnectionPid, Close).
+    case Timeout of
+        infinity -> amqp_gen_connection:close(ConnectionPid, Close);
+        _Value   -> amqp_gen_connection:close(ConnectionPid, Close, Timeout)
+    end.
+
+fast_close(ConnectionPid) ->
+    fast_close(ConnectionPid, 200, <<"Goodbye">>).
+
+fast_close(ConnectionPid, Code, Text) ->
+    Close = #'connection.close'{reply_text = Text,
+                                reply_code = Code,
+                                class_id   = 0,
+                                method_id  = 0},
+    amqp_gen_connection:fast_close(ConnectionPid, Close).
 
 %%---------------------------------------------------------------------------
 %% Other functions
