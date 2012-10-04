@@ -80,6 +80,7 @@ notify_clear(VHost, <<"policy">>, _Name) ->
 
 %%----------------------------------------------------------------------------
 
+
 list(VHost) ->
     [[{<<"name">>, pget(key, P)} | pget(value, P)]
      || P <- rabbit_runtime_parameters:list(VHost, <<"policy">>)].
@@ -136,4 +137,23 @@ sort_pred(A, B) -> pget(<<"priority">>, A, 0) >= pget(<<"priority">>, B, 0).
 policy_validation() ->
     [{<<"priority">>, fun rabbit_parameter_validation:number/2, optional},
      {<<"pattern">>,  fun rabbit_parameter_validation:regex/2,  mandatory},
-     {<<"policy">>,   fun rabbit_parameter_validation:list/2,   mandatory}].
+     {<<"policy">>,   fun validation/2,                         mandatory}].
+
+validation(_Name, Terms) when is_list(Terms) ->
+    [validation0(T) || T <- Terms ];
+validation(Name, Term) ->
+    {error, "~s should be list, actually was ~p", [Name, Term]}.
+
+validation0({Key, Value}) when is_binary(Key) ->
+    case rabbit_registry:lookup_module(policy_validator,
+                                       list_to_atom(binary_to_list(Key))) of
+             {ok, Mod} ->
+                 Mod:validate_policy(Key, Value);
+             {error, not_found} ->
+                 {error, "~p is not a recognised policy option", [Key]};
+             Error ->
+                 Error
+    end;
+validation0(Term) ->
+    {error, "parse error while reading policy: ~p", [Term]}.
+

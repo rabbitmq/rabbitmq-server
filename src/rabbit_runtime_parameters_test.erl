@@ -16,9 +16,14 @@
 
 -module(rabbit_runtime_parameters_test).
 -behaviour(rabbit_runtime_parameter).
+-behaviour(rabbit_policy_validator).
 
 -export([validate/4, validate_clear/3, notify/4, notify_clear/3]).
 -export([register/0, unregister/0]).
+-export([validate_policy/2]).
+-export([register_policy_validator/0, unregister_policy_validator/0]).
+
+%----------------------------------------------------------------------------
 
 register() ->
     rabbit_registry:register(runtime_parameter, <<"test">>, ?MODULE).
@@ -36,3 +41,20 @@ validate_clear(_, <<"test">>, _)           -> {error, "meh", []}.
 
 notify(_, _, _, _) -> ok.
 notify_clear(_, _, _) -> ok.
+
+%----------------------------------------------------------------------------
+
+register_policy_validator() ->
+    rabbit_registry:register(policy_validator, <<"testpolicy">>, ?MODULE).
+
+unregister_policy_validator() ->
+    rabbit_registry:unregister(policy_validator, <<"testpolicy">>).
+
+validate_policy(<<"testpolicy">>, Terms) when is_list(Terms) ->
+    rabbit_log:info("pol val ~p~n", [Terms]),
+    case length(Terms) rem 2 =:= 0 of
+        true  -> ok;
+        false -> {error, "meh", []}
+    end;
+validate_policy(<<"testpolicy">>, _) ->
+    {error, "meh", []}.

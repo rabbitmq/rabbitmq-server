@@ -20,7 +20,7 @@
 
 -export([parse_set/4, set/4, clear/3,
          list/0, list/1, list_strict/1, list/2, list_strict/2, list_formatted/1,
-         lookup/3, value/3, value/4, info_keys/0]).
+         list_formatted_policies/1, lookup/3, value/3, value/4, info_keys/0]).
 
 %%----------------------------------------------------------------------------
 
@@ -41,6 +41,8 @@
 -spec(list_strict/2 :: (rabbit_types:vhost(), binary())
                        -> [rabbit_types:infos()] | 'not_found').
 -spec(list_formatted/1 :: (rabbit_types:vhost()) -> [rabbit_types:infos()]).
+-spec(list_formatted_policies/1 :: (rabbit_types:vhost()) ->
+                                    [rabbit_types:infos()]).
 -spec(lookup/3 :: (rabbit_types:vhost(), binary(), binary())
                   -> rabbit_types:infos()).
 -spec(value/3 :: (rabbit_types:vhost(), binary(), binary()) -> term()).
@@ -141,7 +143,12 @@ list(VHost, Component, Default) ->
     end.
 
 list_formatted(VHost) ->
-    [pset(value, format(pget(value, P)), P) || P <- list(VHost)].
+    [pset(value, format(pget(value, P)), P)
+     || P <- list(VHost), pget(component, P) /= <<"policy">>].
+
+list_formatted_policies(VHost) ->
+    [proplists:delete(component, pset(value, format(pget(value, P)), P))
+     || P <- list(VHost), pget(component, P) == <<"policy">>].
 
 lookup(VHost, Component, Key) ->
     case lookup0(VHost, Component, Key, rabbit_misc:const(not_found)) of
