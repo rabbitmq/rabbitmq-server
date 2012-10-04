@@ -280,6 +280,7 @@ suggested_queue_nodes(_, _, {MNode, _}, _) ->
     {MNode, []}.
 
 shuffle(L) ->
+    random:seed(now()),
     {_, L1} = lists:unzip(lists:keysort(1, [{random:uniform(), N} || N <- L])),
     L1.
 
