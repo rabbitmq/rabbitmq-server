@@ -33,17 +33,19 @@
 
 %% Like erlang:memory(), but with awareness of rabbit-y things
 memory() ->
-    Conns = sup_memory(rabbit_tcp_client_sup) +
-        sup_memory(ssl_connection_sup) + sup_memory(amqp_sup),
-    Qs = sup_memory(rabbit_amqqueue_sup) +
-        sup_memory(rabbit_mirror_queue_slave_sup),
-    Mnesia = mnesia_memory(),
-    MsgIndexETS = ets_memory(rabbit_msg_store_ets_index),
-    MsgIndexProc = pid_memory(msg_store_transient) +
-        pid_memory(msg_store_persistent),
-    MgmtDbETS = ets_memory(rabbit_mgmt_db),
-    MgmtDbProc = sup_memory(rabbit_mgmt_sup),
-    Plugins = plugins_memory() - MgmtDbProc,
+    Conns        = (sup_memory(rabbit_tcp_client_sup) +
+                        sup_memory(ssl_connection_sup) +
+                        sup_memory(amqp_sup)),
+    Qs           = (sup_memory(rabbit_amqqueue_sup) +
+                        sup_memory(rabbit_mirror_queue_slave_sup)),
+    Mnesia       = mnesia_memory(),
+    MsgIndexETS  = ets_memory(rabbit_msg_store_ets_index),
+    MsgIndexProc = (pid_memory(msg_store_transient) +
+                        pid_memory(msg_store_persistent)),
+    MgmtDbETS    = ets_memory(rabbit_mgmt_db),
+    MgmtDbProc   = sup_memory(rabbit_mgmt_sup),
+    Plugins      = plugins_memory() - MgmtDbProc,
+
     [{total,     Total},
      {processes, Processes},
      {ets,       ETS},
@@ -52,7 +54,9 @@ memory() ->
      {code,      Code},
      {system,    System}] =
         erlang:memory([total, processes, ets, atom, binary, code, system]),
+
     OtherProc = Processes - Conns - Qs - MsgIndexProc - MgmtDbProc - Plugins,
+
     [{total,            Total},
      {connection_procs, Conns},
      {queue_procs,      Qs},
