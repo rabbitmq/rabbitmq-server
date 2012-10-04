@@ -267,8 +267,8 @@ suggested_queue_nodes(<<"nodes">>, Nodes0, {MNode, _SNodes}, All) ->
     end;
 %% When we need to add nodes, we randomise our candidate list as a
 %% crude form of load-balancing. TODO it would also be nice to
-%% randomise when we have too many - but that would fail to take
-%% account of synchronisation...
+%% randomise the list of ones to remove when we have too many - but
+%% that would fail to take account of synchronisation...
 suggested_queue_nodes(<<"exactly">>, Count, {MNode, SNodes}, All) ->
     SCount = Count - 1,
     {MNode, case SCount > length(SNodes) of
