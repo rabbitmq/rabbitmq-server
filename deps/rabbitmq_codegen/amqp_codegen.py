@@ -119,7 +119,7 @@ mergers = {
 }
 
 def merge_load_specs(filenames, ignore_conflicts):
-    handles = [file(filename) for filename in filenames]
+    handles = [open(filename) for filename in filenames]
     docs = [json.load(handle) for handle in handles]
     spec = {}
     for doc in docs:
