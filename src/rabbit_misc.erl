@@ -229,8 +229,7 @@
 -spec(json_to_term/1 :: (any()) -> any()).
 -spec(term_to_json/1 :: (any()) -> any()).
 -spec(interval_operation/3 ::
-        (fun (() -> any()), non_neg_integer(), non_neg_integer())
-                     -> {any(), non_neg_integer()}).
+        (thunk(A), float(), non_neg_integer()) -> {A, non_neg_integer()}).
 
 -endif.
 
