@@ -24,6 +24,8 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_shovel.hrl").
 
+-define(MAX_CONNECTION_CLOSE_TIMEOUT, 30000).
+
 -record(state, {inbound_conn, inbound_ch, outbound_conn, outbound_ch,
                 name, config, blocked, msg_buf, inbound_params,
                 outbound_params, unacked}).
@@ -155,10 +157,12 @@ terminate(Reason, #state{inbound_conn = undefined, inbound_ch = undefined,
     rabbit_shovel_status:report(Name, {terminated, Reason}),
     ok;
 terminate(Reason, State) ->
-    catch amqp_channel:close(State#state.inbound_ch),
-    catch amqp_connection:close(State#state.inbound_conn),
-    catch amqp_channel:close(State#state.outbound_ch),
-    catch amqp_connection:close(State#state.outbound_conn),
+    % catch amqp_channel:close(State#state.inbound_ch),
+    catch amqp_connection:close(State#state.inbound_conn,
+                                ?MAX_CONNECTION_CLOSE_TIMEOUT),
+    % catch amqp_channel:close(State#state.outbound_ch),
+    catch amqp_connection:close(State#state.outbound_conn,
+                                ?MAX_CONNECTION_CLOSE_TIMEOUT),
     rabbit_shovel_status:report(State#state.name, {terminated, Reason}),
     ok.
 
