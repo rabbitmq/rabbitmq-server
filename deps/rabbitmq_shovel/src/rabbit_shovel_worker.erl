@@ -157,10 +157,8 @@ terminate(Reason, #state{inbound_conn = undefined, inbound_ch = undefined,
     rabbit_shovel_status:report(Name, {terminated, Reason}),
     ok;
 terminate(Reason, State) ->
-    % catch amqp_channel:close(State#state.inbound_ch),
     catch amqp_connection:close(State#state.inbound_conn,
                                 ?MAX_CONNECTION_CLOSE_TIMEOUT),
-    % catch amqp_channel:close(State#state.outbound_ch),
     catch amqp_connection:close(State#state.outbound_conn,
                                 ?MAX_CONNECTION_CLOSE_TIMEOUT),
     rabbit_shovel_status:report(State#state.name, {terminated, Reason}),
