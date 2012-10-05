@@ -300,11 +300,11 @@ start() ->
                      %% We do not want to HiPE compile or upgrade
                      %% mnesia after just restarting the app
                      ok = ensure_application_loaded(),
+                     ok = ensure_working_log_handlers(),
                      apply_post_boot_step(
                        fun rabbit_node_monitor:prepare_cluster_status_files/0),
                      apply_post_boot_step(
                        fun rabbit_mnesia:check_cluster_consistency/0),
-                     ok = ensure_working_log_handlers(),
                      ok = app_utils:start_applications(
                             app_startup_order(), fun handle_app_error/2),
                      ok = print_plugin_info(rabbit_plugins:active())
@@ -314,9 +314,9 @@ boot() ->
     start_it(fun() ->
                      ok = ensure_application_loaded(),
                      maybe_hipe_compile(),
+                     ok = ensure_working_log_handlers(),
                      apply_post_boot_step(
                        fun rabbit_node_monitor:prepare_cluster_status_files/0),
-                     ok = ensure_working_log_handlers(),
                      ok = rabbit_upgrade:maybe_upgrade_mnesia(),
                      %% It's important that the consistency check happens after
                      %% the upgrade, since if we are a secondary node the
