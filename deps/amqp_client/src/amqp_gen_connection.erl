@@ -295,7 +295,7 @@ app_initiated_close(Close, From, State) ->
                                       from = From}, State).
 
 app_initiated_fast_close(Close, From, State) ->
-    set_closing_state(abrupt, #closing{reason = app_initiated_close,
+    set_closing_state(immediate, #closing{reason = app_initiated_close,
                                        close = Close,
                                        from = From}, State).
 
@@ -328,10 +328,16 @@ set_closing_state(ChannelCloseType, NewClosing,
             true  -> NewClosing;
             false -> CurClosing
         end,
-    ClosingReason = closing_to_reason(ResClosing),
-    amqp_channels_manager:signal_connection_closing(ChMgr, ChannelCloseType,
+    Reason = closing_to_reason(ResClosing),
+    {ClosingReason, ActualCloseType} = case ChannelCloseType of
+                                           immediate ->
+                                               {{immediate, Reason}, abrupt};
+                                           _ ->
+                                               {ChannelCloseType, Reason}
+                                       end,
+    amqp_channels_manager:signal_connection_closing(ChMgr, ActualCloseType,
                                                     ClosingReason),
-    callback(closing, [ChannelCloseType, ClosingReason],
+    callback(closing, [ActualCloseType, ClosingReason],
              State#state{closing = ResClosing}).
 
 closing_priority(false)                                     -> 99;

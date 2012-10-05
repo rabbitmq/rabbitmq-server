@@ -81,7 +81,7 @@ handle_message({Ref, {error, Reason}},
                {_,          _} -> {socket_error, Reason}
            end, State}.
 
-closing(abrupt, {Reason, Code, Text}, State) ->
+closing(abrupt, {immediate, {Reason, Code, Text}}, State) ->
     Close = #'connection.close'{reply_text = Text,
                                 reply_code = Code,
                                 class_id   = 0,
