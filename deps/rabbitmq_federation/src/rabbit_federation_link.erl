@@ -47,7 +47,7 @@
                 downstream_exchange,
                 unacked = gb_trees:empty()}).
 
--define(MAX_CONNECTION_CLOSE_TIMEOUT, 30000).
+-define(MAX_CONNECTION_CLOSE_TIMEOUT, 10000).
 
 %%----------------------------------------------------------------------------
 
@@ -180,7 +180,7 @@ handle_info(Msg, State) ->
 terminate(_Reason, {not_started, _}) ->
     ok;
 
-terminate(Reason, State = #state{downstream_channel = DCh,
+terminate(Reason, State = #state{downstream_channel    = DCh,
                                  downstream_connection = DConn,
                                  connection            = Conn}) ->
     ensure_closed(DConn, DCh),
