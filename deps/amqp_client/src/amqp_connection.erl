@@ -70,7 +70,7 @@
 -include("amqp_client_internal.hrl").
 
 -export([open_channel/1, open_channel/2, open_channel/3]).
--export([start/1, close/1, close/2, close/3]).
+-export([start/1, close/1, close/2, close/3, fast_close/1, fast_close/3]).
 -export([error_atom/1]).
 -export([info/2, info_keys/1, info_keys/0]).
 

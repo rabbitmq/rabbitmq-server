@@ -86,6 +86,8 @@ closing(abrupt, {immediate, {Reason, Code, Text}}, State) ->
                                 reply_code = Code,
                                 class_id   = 0,
                                 method_id  = 0},
+    ?LOG_INFO("Connection (~p) initiating fast_close: ~p~n",
+              [self(), Reason]),
     do2(Close, State),
     rabbit_net:fast_close(State#state.sock),
     {stop, Reason, State};
