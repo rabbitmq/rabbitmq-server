@@ -47,6 +47,8 @@
                 downstream_exchange,
                 unacked = gb_trees:empty()}).
 
+-define(MAX_CONNECTION_CLOSE_TIMEOUT, 30000).
+
 %%----------------------------------------------------------------------------
 
 %% We start off in a state where we do not connect, since we can first
@@ -178,12 +180,10 @@ handle_info(Msg, State) ->
 terminate(_Reason, {not_started, _}) ->
     ok;
 
-terminate(Reason, State = #state{downstream_channel    = DCh,
-                                 downstream_connection = DConn,
-                                 connection            = Conn,
-                                 channel               = Ch}) ->
-    enforce_closed(DConn, DCh),
-    enforce_closed(Conn, Ch),
+terminate(Reason, State = #state{downstream_connection = DConn,
+                                 connection            = Conn}) ->
+    enforce_closed(DConn),
+    enforce_closed(Conn),
     log_terminate(Reason, State),
     ok.
 
@@ -572,11 +572,8 @@ ensure_closed(Conn, Ch) ->
 ensure_closed(Ch) ->
     catch amqp_channel:close(Ch).
 
-enforce_closed(Conn, Ch) ->
-    %% when we're terminating we want to close the connection as fast
-    %% as possible, not hang around waiting for the other end to return
-    %% X.close_ok - so we ignore the channels and fast_close the connection
-    catch amqp_connection:fast_close(Conn).
+enforce_closed(Conn) ->
+    catch amqp_connection:close(Conn, ?MAX_CONNECTION_CLOSE_TIMEOUT).
 
 ack(Tag, Multiple, #state{channel = Ch}) ->
     amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = Tag,
