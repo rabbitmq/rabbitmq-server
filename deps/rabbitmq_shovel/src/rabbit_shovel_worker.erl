@@ -24,7 +24,7 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_shovel.hrl").
 
--define(MAX_CONNECTION_CLOSE_TIMEOUT, 30000).
+-define(MAX_CONNECTION_CLOSE_TIMEOUT, 10000).
 
 -record(state, {inbound_conn, inbound_ch, outbound_conn, outbound_ch,
                 name, config, blocked, msg_buf, inbound_params,
