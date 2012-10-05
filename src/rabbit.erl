@@ -300,8 +300,10 @@ start() ->
                      %% We do not want to HiPE compile or upgrade
                      %% mnesia after just restarting the app
                      ok = ensure_application_loaded(),
-                     ok = rabbit_node_monitor:prepare_cluster_status_files(),
-                     run_cluster_consistency_check(),
+                     apply_post_boot_step(
+                       fun rabbit_node_monitor:prepare_cluster_status_files/0),
+                     apply_post_boot_step(
+                       fun rabbit_mnesia:check_cluster_consistency/0),
                      ok = ensure_working_log_handlers(),
                      ok = app_utils:start_applications(
                             app_startup_order(), fun handle_app_error/2),
@@ -312,13 +314,15 @@ boot() ->
     start_it(fun() ->
                      ok = ensure_application_loaded(),
                      maybe_hipe_compile(),
-                     ok = rabbit_node_monitor:prepare_cluster_status_files(),
+                     apply_post_boot_step(
+                       fun rabbit_node_monitor:prepare_cluster_status_files/0),
                      ok = ensure_working_log_handlers(),
                      ok = rabbit_upgrade:maybe_upgrade_mnesia(),
                      %% It's important that the consistency check happens after
                      %% the upgrade, since if we are a secondary node the
                      %% primary node will have forgotten us
-                     run_cluster_consistency_check(),
+                     apply_post_boot_step(
+                       fun rabbit_mnesia:check_cluster_consistency/0),
                      Plugins = rabbit_plugins:setup(),
                      ToBeLoaded = Plugins ++ ?APPS,
                      ok = app_utils:load_applications(ToBeLoaded),
@@ -329,9 +333,9 @@ boot() ->
                      ok = print_plugin_info(Plugins)
              end).
 
-run_cluster_consistency_check() ->
+apply_post_boot_step(Step) ->
     try
-        ok = rabbit_mnesia:check_cluster_consistency()
+        ok = Step()
     catch
          _:Reason -> boot_error(Reason, erlang:get_stacktrace())
     end.
