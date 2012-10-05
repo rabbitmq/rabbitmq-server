@@ -538,18 +538,19 @@ boot_error({error, {timeout_waiting_for_tables, _}}, _Stacktrace) ->
         end,
     basic_boot_error(Err ++ rabbit_nodes:diagnostics(Nodes) ++ "~n~n", []);
 
-boot_error({Tag, [H|_]=Message}=Reason, Stacktrace) when is_atom(Tag) andalso
+boot_error({Tag, [H|_]=Message}, Stacktrace) when is_atom(Tag) andalso
                                                          is_integer(H) ->
-    ErrorFmt = "~s: ~s",
-    boot_error(ErrorFmt, Reason, Stacktrace);
+    Fmt = "Error description:~n   ~s: ~s~n~n" ++
+        "Log files (may contain more information):~n   ~s~n   ~s~n~n",
+    Args = [Tag, Message, log_location(kernel), log_location(sasl)],
+    boot_error(Fmt, Args, Stacktrace);
 boot_error(Reason, Stacktrace) ->
-    ErrorFmt = "~p",
-    boot_error(ErrorFmt, Reason, Stacktrace).
-
-boot_error(ErrorFmt, Reason, Stacktrace) ->
-    Fmt = "Error description:~n   " ++ ErrorFmt ++ "~n~n" ++
+    Fmt = "Error description:~n   ~p~n~n" ++
         "Log files (may contain more information):~n   ~s~n   ~s~n~n",
     Args = [Reason, log_location(kernel), log_location(sasl)],
+    boot_error(Fmt, Args, Stacktrace).
+
+boot_error(Fmt, Args, Stacktrace) ->
     case Stacktrace of
         not_available -> basic_boot_error(Fmt, Args);
         _             -> basic_boot_error(Fmt ++ "Stack trace:~n   ~p~n~n",
