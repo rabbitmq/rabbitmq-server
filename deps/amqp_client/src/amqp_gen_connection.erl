@@ -333,7 +333,7 @@ set_closing_state(ChannelCloseType, NewClosing,
                                            immediate ->
                                                {{immediate, Reason}, abrupt};
                                            _ ->
-                                               {ChannelCloseType, Reason}
+                                               {Reason, ChannelCloseType}
                                        end,
     amqp_channels_manager:signal_connection_closing(ChMgr, ActualCloseType,
                                                     ClosingReason),
