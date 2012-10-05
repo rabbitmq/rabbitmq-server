@@ -21,7 +21,7 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 -export([validate/4, validate_clear/3, notify/4, notify_clear/3]).
--export([register/0, validate_policy/2]).
+-export([register/0, validate_policy/1]).
 
 -rabbit_boot_step({?MODULE,
                    [{description, "federation parameters"},
@@ -120,8 +120,11 @@ validate_uri(Name, Term) ->
 
 %%----------------------------------------------------------------------------
 
-validate_policy(<<"federation-upstream-set">>, Value) when is_binary(Value) ->
+validate_policy([{<<"federation-upstream-set">>, Value}])
+  when is_binary(Value) ->
     ok;
-validate_policy(<<"federation-upstream-set">>, Value) ->
-    {error, "~p is not a valid federation upstream set name", [Value]}.
+validate_policy([{<<"federation-upstream-set">>, Value}]) ->
+    {error, "~p is not a valid federation upstream set name", [Value]};
+validate_policy([_, _|_] = Multiple) ->
+    {error, "~p only one federation upstream set name is allowed", [Multiple]}.
 

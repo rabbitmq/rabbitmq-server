@@ -372,11 +372,11 @@ federate_unfederate_test() ->
               assert_connections(Xs, []),
 
               %% Federate them - links appear
-              set_param("policy", "dyn", policy("^dyn.", "all")),
+              set_pol("dyn", policy("^dyn.", "all")),
               assert_connections(Xs, [<<"localhost">>, <<"local5673">>]),
 
               %% Unfederate them - links disappear
-              clear_param("policy", "dyn"),
+              clear_pol("dyn"),
               assert_connections(Xs, [])
       end, [x(<<"dyn.exch1">>), x(<<"dyn.exch2">>)]).
 
@@ -426,6 +426,12 @@ set_param(Component, Key, Value) ->
 
 clear_param(Component, Key) ->
     rabbitmqctl(fmt("clear_parameter ~s ~s", [Component, Key])).
+
+set_pol(Key, Value) ->
+    rabbitmqctl(fmt("set_policy ~s '~s'", [Key, Value])).
+
+clear_pol(Key) ->
+    rabbitmqctl(fmt("clear_policy ~s ", [Key])).
 
 fmt(Fmt, Args) ->
     string:join(string:tokens(rabbit_misc:format(Fmt, Args), [$\n]), " ").
