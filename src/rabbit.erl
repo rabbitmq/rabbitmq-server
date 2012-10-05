@@ -301,7 +301,7 @@ start() ->
                      %% mnesia after just restarting the app
                      ok = ensure_application_loaded(),
                      ok = rabbit_node_monitor:prepare_cluster_status_files(),
-                     ok = rabbit_mnesia:check_cluster_consistency(),
+                     run_cluster_consistency_check(),
                      ok = ensure_working_log_handlers(),
                      ok = app_utils:start_applications(
                             app_startup_order(), fun handle_app_error/2),
@@ -318,7 +318,7 @@ boot() ->
                      %% It's important that the consistency check happens after
                      %% the upgrade, since if we are a secondary node the
                      %% primary node will have forgotten us
-                     ok = rabbit_mnesia:check_cluster_consistency(),
+                     run_cluster_consistency_check(),
                      Plugins = rabbit_plugins:setup(),
                      ToBeLoaded = Plugins ++ ?APPS,
                      ok = app_utils:load_applications(ToBeLoaded),
@@ -328,6 +328,13 @@ boot() ->
                             StartupApps, fun handle_app_error/2),
                      ok = print_plugin_info(Plugins)
              end).
+
+run_cluster_consistency_check() ->
+    try
+        ok = rabbit_mnesia:check_cluster_consistency()
+    catch
+         _:Reason -> boot_error(Reason, erlang:get_stacktrace())
+    end.
 
 handle_app_error(App, {bad_return, {_MFA, {'EXIT', {Reason, _}}}}) ->
     boot_error({could_not_start, App, Reason}, not_available);
@@ -531,8 +538,16 @@ boot_error({error, {timeout_waiting_for_tables, _}}, _Stacktrace) ->
         end,
     basic_boot_error(Err ++ rabbit_nodes:diagnostics(Nodes) ++ "~n~n", []);
 
+boot_error({Tag, [H|_]=Message}=Reason, Stacktrace) when is_atom(Tag) andalso
+                                                         is_integer(H) ->
+    ErrorFmt = "~s: ~s",
+    boot_error(ErrorFmt, Reason, Stacktrace);
 boot_error(Reason, Stacktrace) ->
-    Fmt = "Error description:~n   ~p~n~n"
+    ErrorFmt = "~p",
+    boot_error(ErrorFmt, Reason, Stacktrace).
+
+boot_error(ErrorFmt, Reason, Stacktrace) ->
+    Fmt = "Error description:~n   " ++ ErrorFmt ++ "~n~n" ++
         "Log files (may contain more information):~n   ~s~n   ~s~n~n",
     Args = [Reason, log_location(kernel), log_location(sasl)],
     case Stacktrace of
