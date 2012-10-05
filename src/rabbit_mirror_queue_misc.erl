@@ -115,7 +115,7 @@ on_node_up() ->
                             end
                     end, [], rabbit_queue)
           end),
-    [ok = add_mirror(QName, node()) || QName <- QNames],
+    [{ok, _} = add_mirror(QName, node()) || QName <- QNames],
     ok.
 
 drop_mirrors(QName, Nodes) ->
@@ -141,7 +141,7 @@ drop_mirror(QName, MirrorNode) ->
       end).
 
 add_mirrors(QName, Nodes) ->
-    [ok = add_mirror(QName, Node)  || Node <- Nodes],
+    [{ok, _} = add_mirror(QName, Node)  || Node <- Nodes],
     ok.
 
 add_mirror(QName, MirrorNode) ->
@@ -154,8 +154,7 @@ add_mirror(QName, MirrorNode) ->
                   [SPid] ->
                       case rabbit_misc:is_process_alive(SPid) of
                           true ->
-                              {error,{queue_already_mirrored_on_node,
-                                      MirrorNode}};
+                              {ok, already_mirrored};
                           false ->
                               start_child(Name, MirrorNode, Q)
                       end
@@ -171,20 +170,20 @@ start_child(Name, MirrorNode, Q) ->
         {ok, undefined} ->
             %% this means the mirror process was
             %% already running on the given node.
-            ok;
+            {ok, already_mirrored};
         {ok, down} ->
             %% Node went down between us deciding to start a mirror
             %% and actually starting it. Which is fine.
-            ok;
+            {ok, node_down};
         {ok, SPid} ->
             rabbit_log:info("Adding mirror of ~s on node ~p: ~p~n",
                             [rabbit_misc:rs(Name), MirrorNode, SPid]),
-            ok;
+            {ok, started};
         {error, {{stale_master_pid, StalePid}, _}} ->
             rabbit_log:warning("Detected stale HA master while adding "
                                "mirror of ~s on node ~p: ~p~n",
                                [rabbit_misc:rs(Name), MirrorNode, StalePid]),
-            ok;
+            {ok, stale_master};
         {error, {{duplicate_live_master, _}=Err, _}} ->
             Err;
         Other ->
