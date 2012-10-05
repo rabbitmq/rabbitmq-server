@@ -15,15 +15,25 @@
 %%
 
 -module(rabbit_mirror_queue_misc).
+-behaviour(rabbit_policy_validator).
 
 -export([remove_from_queue/2, on_node_up/0, add_mirrors/2, add_mirror/2,
          report_deaths/4, store_updated_slaves/1, suggested_queue_nodes/1,
-         is_mirrored/1, update_mirrors/2]).
+         is_mirrored/1, update_mirrors/2, validate_policy/1]).
 
 %% for testing only
 -export([suggested_queue_nodes/4]).
 
 -include("rabbit.hrl").
+
+-rabbit_boot_step({?MODULE,
+                   [{description, "HA policy validator hook"},
+                    {mfa, {rabbit_registry, register,
+                           [policy_validator, <<"ha-mode">>, ?MODULE]}},
+                    {mfa, {rabbit_registry, register,
+                           [policy_validator, <<"ha-params">>, ?MODULE]}},
+                    {requires, rabbit_registry},
+                    {enables, recovery}]}).
 
 %%----------------------------------------------------------------------------
 
@@ -320,3 +330,37 @@ update_mirrors0(OldQ = #amqqueue{name = QName},
     add_mirrors(QName, NewNodes -- OldNodes),
     drop_mirrors(QName, OldNodes -- NewNodes),
     ok.
+
+%%----------------------------------------------------------------------------
+
+validate_policy(TagList) ->
+    Mode   = proplists:get_all_values(<<"ha-mode">>, TagList),
+    Params = proplists:get_all_values(<<"ha-params">>, TagList),
+    case Mode of
+        [<<"all">>] ->
+            ok;
+        [<<"nodes">>] ->
+            validate_params(fun erlang:is_binary/1, lists:append(Params),
+                            "~p has invalid node names when ha-mode=nodes");
+        [<<"exactly">>] ->
+            case Params of
+                [_] -> validate_params(
+                         fun (N) -> is_integer(N) andalso N >= 0 end,
+                         Params, "~p must be a positive integer");
+                X   -> {error, "ha-params must be supplied with one number "
+                               "when ha-mode=exactly. found ~p arguments",
+                               [length(X)]}
+            end;
+        [_, _|_] ->
+            {error, "ha-mode may appear once at most", []};
+        [Other] ->
+            {error, "~p is not a valid ha-mode value", [Other]}
+    end.
+
+validate_params(FilterFun, Params, Msg) when is_list(Params) ->
+    case lists:filter(fun (P) -> not FilterFun(P) end, Params) of
+        [] -> ok;
+        X  -> {error, Msg, [X]}
+    end;
+validate_params(_, Params, _) ->
+    {error, "~p was expected to be a list", [Params]}.

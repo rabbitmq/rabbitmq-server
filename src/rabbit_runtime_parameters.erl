@@ -18,9 +18,10 @@
 
 -include("rabbit.hrl").
 
--export([parse_set/4, set/4, clear/3,
-         list/0, list/1, list_strict/1, list/2, list_strict/2, list_formatted/1,
-         list_formatted_policies/1, lookup/3, value/3, value/4, info_keys/0]).
+-export([parse_set/4, parse_set_policy/3, set/4, set_policy/3, clear/3,
+         clear_policy/2, list/0, list/1, list_strict/1, list/2, list_strict/2,
+         list_formatted/1, list_formatted_policies/1, lookup/3, value/3,
+         value/4, info_keys/0]).
 
 %%----------------------------------------------------------------------------
 
@@ -30,10 +31,16 @@
 
 -spec(parse_set/4 :: (rabbit_types:vhost(), binary(), binary(), string())
                      -> ok_or_error_string()).
+-spec(parse_set_policy/3 :: (rabbit_types:vhost(), binary(), string())
+                            -> ok_or_error_string()).
 -spec(set/4 :: (rabbit_types:vhost(), binary(), binary(), term())
                -> ok_or_error_string()).
+-spec(set_policy/3 :: (rabbit_types:vhost(), binary(), term())
+                     -> ok_or_error_string()).
 -spec(clear/3 :: (rabbit_types:vhost(), binary(), binary())
                  -> ok_or_error_string()).
+-spec(clear_policy/2 :: (rabbit_types:vhost(), binary())
+                        -> ok_or_error_string()).
 -spec(list/0 :: () -> [rabbit_types:infos()]).
 -spec(list/1 :: (rabbit_types:vhost()) -> [rabbit_types:infos()]).
 -spec(list_strict/1 :: (binary()) -> [rabbit_types:infos()] | 'not_found').
@@ -59,14 +66,32 @@
 
 %%---------------------------------------------------------------------------
 
+parse_set(_, <<"policy">>, _, _) ->
+    {error_string, "policies may not be set using this method"};
 parse_set(VHost, Component, Key, String) ->
     case rabbit_misc:json_decode(String) of
         {ok, JSON} -> set(VHost, Component, Key, rabbit_misc:json_to_term(JSON));
         error      -> {error_string, "JSON decoding error"}
     end.
 
+parse_set_policy(VHost, Key, String) ->
+    case rabbit_misc:json_decode(String) of
+        {ok, JSON} ->
+            set_policy(VHost, Key, rabbit_misc:json_to_term(JSON));
+        error      ->
+            {error_string, "JSON decoding error"}
+    end.
+
+set(_, <<"policy">>, _, _) ->
+    {error_string, "policies may not be set using this method"};
 set(VHost, Component, Key, Term) ->
     case set0(VHost, Component, Key, Term) of
+        ok          -> ok;
+        {errors, L} -> format_error(L)
+    end.
+
+set_policy(VHost, Key, Term) ->
+    case set0(VHost, <<"policy">>, Key, Term) of
         ok          -> ok;
         {errors, L} -> format_error(L)
     end.
@@ -102,8 +127,16 @@ mnesia_update(VHost, Component, Key, Term) ->
               Res
       end).
 
+clear(_, <<"policy">> , _) ->
+    {error_string, "policies may not be cleared using this method"};
 clear(VHost, Component, Key) ->
     case clear0(VHost, Component, Key) of
+        ok          -> ok;
+        {errors, L} -> format_error(L)
+    end.
+
+clear_policy(VHost, Key) ->
+    case clear0(VHost, <<"policy">>, Key) of
         ok          -> ok;
         {errors, L} -> format_error(L)
     end.

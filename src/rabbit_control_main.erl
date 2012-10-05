@@ -465,15 +465,14 @@ action(list_parameters, Node, [], Opts, Inform) ->
 action(set_policy, Node, [Key, Value], Opts, Inform) ->
     VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
     Inform("Setting policy ~p to ~p", [Key, Value]),
-    rpc_call(Node, rabbit_runtime_parameters, parse_set,
-             [VHostArg, <<"policy">>, list_to_binary(Key), Value]);
+    rpc_call(Node, rabbit_runtime_parameters, parse_set_policy,
+             [VHostArg, list_to_binary(Key), Value]);
 
 action(clear_policy, Node, [Key], Opts, Inform) ->
     VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
     Inform("Clearing policy ~p", [Key]),
-    rpc_call(Node, rabbit_runtime_parameters, clear, [VHostArg,
-                                                      <<"policy">>,
-                                                      list_to_binary(Key)]);
+    rpc_call(Node, rabbit_runtime_parameters, clear_policy,
+             [VHostArg, list_to_binary(Key)]);
 
 action(list_policies, Node, [], Opts, Inform) ->
     VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),

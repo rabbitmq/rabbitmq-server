@@ -1031,18 +1031,31 @@ test_runtime_parameters() ->
 
 test_policy_validation() ->
     rabbit_runtime_parameters_test:register_policy_validator(),
-    SetPol = fun (Pol, Val) ->
-                 control_action(
-                   set_policy,
-                   ["name", lists:flatten(
-                              io_lib:format("{\"pattern\":\"pat\", \"policy\":"
-                                            "{\"~s\":~p}}", [Pol, Val]))])
-             end,
-    ok                 = SetPol("testpolicy", []),
-    ok                 = SetPol("testpolicy", [1, 2]),
-    ok                 = SetPol("testpolicy", [1, 2, 3, 4]),
-    {error_string, _}  = SetPol("testpolicy", [1, 2, 3]),
-    {error_string, _}  = SetPol("not_registered", []),
+    SetPol =
+        fun (TagValList) ->
+                Frag = lists:foldl(
+                         fun ({Pol, Val}, Acc) ->
+                               [rabbit_misc:format("\"~s\":~p", [Pol, Val]) |
+                                Acc]
+                         end, "", TagValList),
+                control_action(
+                  set_policy,
+                  ["name", rabbit_misc:format("{\"pattern\":\".*\", \"policy\":"
+                                            "{~s}}", [string:join(Frag, ",")])])
+        end,
+
+    ok                 = SetPol([{"testeven", []}]),
+    ok                 = SetPol([{"testeven", [1, 2]}]),
+    ok                 = SetPol([{"testeven", [1, 2, 3, 4]}]),
+    ok                 = SetPol([{"testpos",  [2, 3, 5, 562]}]),
+
+    {error_string, _}  = SetPol([{"testpos",  [-1, 0, 1]}]),
+    {error_string, _}  = SetPol([{"testeven", [ 1, 2, 3]}]),
+
+    ok                 = SetPol([{"testpos",  [2, 16]},     {"testeven", [12, 24]}]),
+    {error_string, _}  = SetPol([{"testpos",  [2, 16, 32]}, {"testeven", [12, 24]}]),
+    {error_string, _}  = SetPol([{"testpos",  [2, 16]},     {"testeven", [12, -2]}]),
+    {error_string, _}  = SetPol([{"not_registered", []}]),
     rabbit_runtime_parameters_test:unregister_policy_validator().
 
 test_server_status() ->
@@ -1481,6 +1494,7 @@ test_declare_on_dead_queue(SecondaryNode) ->
 %%---------------------------------------------------------------------
 
 control_action(Command, Args) ->
+rabbit_log:info("control args ~p~n", [Args]),
     control_action(Command, node(), Args, default_options()).
 
 control_action(Command, Args, NewOpts) ->

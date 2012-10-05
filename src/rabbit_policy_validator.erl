@@ -21,7 +21,7 @@
 -type(validate_results() ::
         'ok' | {error, string(), [term()]} | [validate_results()]).
 
--callback validate_policy(binary(), term()) -> validate_results().
+-callback validate_policy([{binary(), term()}]) -> validate_results().
 
 -else.
 
@@ -29,7 +29,7 @@
 
 behaviour_info(callbacks) ->
     [
-     {validate_policy, 2},
+     {validate_policy, 1},
     ];
 behaviour_info(_Other) ->
     undefined.

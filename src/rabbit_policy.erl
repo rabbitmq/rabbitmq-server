@@ -139,21 +139,35 @@ policy_validation() ->
      {<<"pattern">>,  fun rabbit_parameter_validation:regex/2,  mandatory},
      {<<"policy">>,   fun validation/2,                         mandatory}].
 
+validation(_Name, []) ->
+    ok;
 validation(_Name, Terms) when is_list(Terms) ->
-    [validation0(T) || T <- Terms ];
-validation(Name, Term) ->
-    {error, "~s should be list, actually was ~p", [Name, Term]}.
-
-validation0({Key, Value}) when is_binary(Key) ->
-    case rabbit_registry:lookup_module(policy_validator,
-                                       list_to_atom(binary_to_list(Key))) of
-             {ok, Mod} ->
-                 Mod:validate_policy(Key, Value);
-             {error, not_found} ->
-                 {error, "~p is not a recognised policy option", [Key]};
-             Error ->
-                 Error
+    {Tags, Modules} = lists:unzip(
+                            rabbit_registry:lookup_all(policy_validator)),
+    case lists:usort(Tags -- lists:usort(Tags)) of
+        []  -> ok;
+        Dup -> rabbit_log:warning("Duplicate policy validators: ~p~n", [Dup])
+    end,
+    Validators = lists:zipwith(fun (M, T) ->  {M, a2b(T)} end, Modules, Tags),
+    case lists:foldl(
+           fun (_, {Error, _} = Acc) when Error /= ok ->
+                   Acc;
+               (Mod, {ok, TermsLeft}) ->
+                   ModTags = proplists:get_all_values(Mod, Validators),
+                   case [T || {Tag, _} = T <- TermsLeft,
+                              lists:member(Tag, ModTags)] of
+                       []    -> {ok, TermsLeft};
+                       Scope -> {Mod:validate_policy(Scope), TermsLeft -- Scope}
+                   end
+           end, {ok, Terms}, proplists:get_keys(Validators)) of
+         {ok, []} ->
+             ok;
+         {ok, Unvalidated} ->
+             {error, "~p are not recognised policy settings", Unvalidated};
+         {Error, _} ->
+             Error
     end;
-validation0(Term) ->
+validation(_Name, Term) ->
     {error, "parse error while reading policy: ~p", [Term]}.
 
+a2b(A) -> list_to_binary(atom_to_list(A)).
