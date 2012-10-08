@@ -82,10 +82,7 @@ is_authorized(ReqData, Context) ->
 %%--------------------------------------------------------------------
 
 policy(ReqData) ->
-    Result =
     rabbit_runtime_parameters:lookup(
-      rabbit_mgmt_util:vhost(ReqData), <<"policy">>, key(ReqData)),
-    rabbit_log:info("policy existence check: ~p~n", [Result]),
-    Result.
+      rabbit_mgmt_util:vhost(ReqData), <<"policy">>, key(ReqData)).
 
 key(ReqData)       -> rabbit_mgmt_util:id(key, ReqData).
