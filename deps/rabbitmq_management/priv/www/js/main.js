@@ -802,6 +802,27 @@ function put_parameter(sammy, mandatory_keys, num_keys, bool_keys) {
     if (sync_put(sammy, '/parameters/:component/:vhost/:key')) update();
 }
 
+function put_policy(sammy, mandatory_keys, num_keys, bool_keys) {
+    for (var i in sammy.params) {
+        if (i === 'length' || !sammy.params.hasOwnProperty(i)) continue;
+        if (sammy.params[i] == '' && mandatory_keys.indexOf(i) == -1) {
+            delete sammy.params[i];
+        }
+        else if (num_keys.indexOf(i) != -1) {
+            sammy.params[i] = parseInt(sammy.params[i]);
+        }
+        else if (bool_keys.indexOf(i) != -1) {
+            sammy.params[i] = sammy.params[i] == 'true';
+        }
+    }
+    var params = {"vhost":     sammy.params.vhost,
+                  "key":       sammy.params.key,
+                  "value":     params_magic(sammy.params)};
+    delete params.value.vhost;
+    delete params.value.key;
+    sammy.params = params;
+    if (sync_put(sammy, '/policies/:vhost/:key')) update();
+}
 
 function debug(str) {
     $('<p>' + str + '</p>').appendTo('#debug');
