@@ -301,10 +301,8 @@ start() ->
                      %% mnesia after just restarting the app
                      ok = ensure_application_loaded(),
                      ok = ensure_working_log_handlers(),
-                     apply_post_boot_step(
-                       fun rabbit_node_monitor:prepare_cluster_status_files/0),
-                     apply_post_boot_step(
-                       fun rabbit_mnesia:check_cluster_consistency/0),
+                     rabbit_node_monitor:prepare_cluster_status_files(),
+                     rabbit_mnesia:check_cluster_consistency(),
                      ok = app_utils:start_applications(
                             app_startup_order(), fun handle_app_error/2),
                      ok = print_plugin_info(rabbit_plugins:active())
@@ -315,14 +313,12 @@ boot() ->
                      ok = ensure_application_loaded(),
                      maybe_hipe_compile(),
                      ok = ensure_working_log_handlers(),
-                     apply_post_boot_step(
-                       fun rabbit_node_monitor:prepare_cluster_status_files/0),
+                     rabbit_node_monitor:prepare_cluster_status_files(),
                      ok = rabbit_upgrade:maybe_upgrade_mnesia(),
                      %% It's important that the consistency check happens after
                      %% the upgrade, since if we are a secondary node the
                      %% primary node will have forgotten us
-                     apply_post_boot_step(
-                       fun rabbit_mnesia:check_cluster_consistency/0),
+                     rabbit_mnesia:check_cluster_consistency(),
                      Plugins = rabbit_plugins:setup(),
                      ToBeLoaded = Plugins ++ ?APPS,
                      ok = app_utils:load_applications(ToBeLoaded),
@@ -333,22 +329,20 @@ boot() ->
                      ok = print_plugin_info(Plugins)
              end).
 
-apply_post_boot_step(Step) ->
-    try
-        ok = Step()
-    catch
-         _:Reason -> boot_error(Reason, erlang:get_stacktrace())
-    end.
-
 handle_app_error(App, {bad_return, {_MFA, {'EXIT', {Reason, _}}}}) ->
-    boot_error({could_not_start, App, Reason}, not_available);
+    throw({could_not_start, App, Reason});
 
 handle_app_error(App, Reason) ->
-    boot_error({could_not_start, App, Reason}, not_available).
+    throw({could_not_start, App, Reason}).
 
 start_it(StartFun) ->
     try
         StartFun()
+    catch
+        throw:{could_not_start, _App, _Reason}=Err ->
+            boot_error(Err, not_available);
+         _:Reason ->
+            boot_error(Reason, erlang:get_stacktrace())
     after
         %% give the error loggers some time to catch up
         timer:sleep(100)
