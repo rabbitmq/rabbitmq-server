@@ -242,11 +242,8 @@ suggested_queue_nodes(Q, PossibleNodes) ->
                 none -> node();
                 _    -> MNode0
             end,
-    R = suggested_queue_nodes(policy(<<"ha-mode">>, Q), policy(<<"ha-params">>, Q),
-                          {MNode, SNodes}, PossibleNodes),
-    io:format("SQN: ~p~n", [{policy(<<"ha-mode">>, Q), policy(<<"ha-params">>, Q),
-                             {MNode, SNodes}, PossibleNodes, R}]),
-    R.
+    suggested_queue_nodes(policy(<<"ha-mode">>, Q), policy(<<"ha-params">>, Q),
+                          {MNode, SNodes}, PossibleNodes).
 
 policy(Policy, Q) ->
     case rabbit_policy:get(Policy, Q) of
