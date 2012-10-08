@@ -352,7 +352,7 @@ validate_policy(TagList) ->
                                [length(X)]}
             end;
         [_, _|_] ->
-            {error, "ha-mode may appear once at most", []};
+            {error, "ha-mode may appear at most once", []};
         [Other] ->
             {error, "~p is not a valid ha-mode value", [Other]}
     end.

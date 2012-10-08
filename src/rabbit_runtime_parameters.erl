@@ -20,8 +20,8 @@
 
 -export([parse_set/4, parse_set_policy/3, set/4, set_policy/3, clear/3,
          clear_policy/2, list/0, list/1, list_strict/1, list/2, list_strict/2,
-         list_formatted/1, list_formatted_policies/1, lookup/3, value/3,
-         value/4, info_keys/0]).
+         list_policies/0, list_policies/1, list_formatted/1,
+         list_formatted_policies/1, lookup/3, value/3, value/4, info_keys/0]).
 
 %%----------------------------------------------------------------------------
 
@@ -160,13 +160,16 @@ mnesia_clear(VHost, Component, Key) ->
            end).
 
 list() ->
-    [p(P) || P <- rabbit_misc:dirty_read_all(?TABLE)].
+    [p(P) || #runtime_parameters{ key = {_VHost, Comp, _Key}} = P <-
+             rabbit_misc:dirty_read_all(?TABLE), Comp /= <<"policy">>].
 
 list(VHost)                   -> list(VHost, '_', []).
 list_strict(Component)        -> list('_',   Component, not_found).
 list(VHost, Component)        -> list(VHost, Component, []).
 list_strict(VHost, Component) -> list(VHost, Component, not_found).
 
+list(_VHost, <<"policy">>, _Default) ->
+    {error, "policies may not be listed using this method"};
 list(VHost, Component, Default) ->
     case component_good(Component) of
         true -> Match = #runtime_parameters{key = {VHost, Component, '_'},
@@ -175,13 +178,19 @@ list(VHost, Component, Default) ->
         _    -> Default
     end.
 
+list_policies() ->
+    list_policies('_').
+
+list_policies(VHost) ->
+    Match = #runtime_parameters{key = {VHost, <<"policy">>, '_'}, _ = '_'},
+    [p(P) || P <- mnesia:dirty_match_object(?TABLE, Match)].
+
 list_formatted(VHost) ->
-    [pset(value, format(pget(value, P)), P)
-     || P <- list(VHost), pget(component, P) /= <<"policy">>].
+    [pset(value, format(pget(value, P)), P) || P <- list(VHost)].
 
 list_formatted_policies(VHost) ->
     [proplists:delete(component, pset(value, format(pget(value, P)), P))
-     || P <- list(VHost), pget(component, P) == <<"policy">>].
+     || P <- list_policies(VHost)].
 
 lookup(VHost, Component, Key) ->
     case lookup0(VHost, Component, Key, rabbit_misc:const(not_found)) of

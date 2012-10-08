@@ -68,10 +68,8 @@ validate_policy([{Tag1, Arg1}, {Tag2, Arg2}])
   when is_list(Arg1), is_list(Arg2) ->
     case [Tag1, Tag2] -- [<<"testpos">>, <<"testeven">>] of
         [] ->
-            case {lists:all(fun (N) ->
-                                   is_integer(N) andalso
-                                   N > 0
-                            end, Arg1 ++ Arg2),
+            case {lists:all(fun (N) -> is_integer(N) andalso N > 0 end,
+                            Arg1 ++ Arg2),
                   length(Arg1) rem 2, length(Arg2) rem 2} of
                 {true, 0, 0} -> ok;
                 _            -> {error, "meh", []}

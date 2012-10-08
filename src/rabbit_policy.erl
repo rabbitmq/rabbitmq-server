@@ -83,7 +83,7 @@ notify_clear(VHost, <<"policy">>, _Name) ->
 
 list(VHost) ->
     [[{<<"name">>, pget(key, P)} | pget(value, P)]
-     || P <- rabbit_runtime_parameters:list(VHost, <<"policy">>)].
+     || P <- rabbit_runtime_parameters:list_policies(VHost)].
 
 update_policies(VHost) ->
     Policies = list(VHost),
@@ -144,10 +144,7 @@ validation(_Name, []) ->
 validation(_Name, Terms) when is_list(Terms) ->
     {Tags, Modules} = lists:unzip(
                             rabbit_registry:lookup_all(policy_validator)),
-    case lists:usort(Tags -- lists:usort(Tags)) of
-        []  -> ok;
-        Dup -> rabbit_log:warning("Duplicate policy validators: ~p~n", [Dup])
-    end,
+    [] = lists:usort(Tags -- lists:usort(Tags)), %% ASSERTION
     Validators = lists:zipwith(fun (M, T) ->  {M, a2b(T)} end, Modules, Tags),
     case lists:foldl(
            fun (_, {Error, _} = Acc) when Error /= ok ->
