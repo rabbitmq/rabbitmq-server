@@ -52,5 +52,5 @@ basic(ReqData) ->
           end,
     case Raw of
         not_found -> not_found;
-        _         -> [rabbit_mgmt_format:parameter(P) || P <- Raw]
+        _         -> [rabbit_mgmt_format:policy_fmt(P) || P <- Raw]
     end.

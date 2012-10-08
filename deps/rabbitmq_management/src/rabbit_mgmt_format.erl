@@ -17,7 +17,7 @@
 -module(rabbit_mgmt_format).
 
 -export([format/2, print/2, remove/1, ip/1, ipb/1, amqp_table/1, tuple/1]).
--export([parameter/1, timestamp/1, timestamp_ms/1, strip_pids/1]).
+-export([parameter/1, policy_fmt/1, timestamp/1, timestamp_ms/1, strip_pids/1]).
 -export([node_from_pid/1, protocol/1, resource/1, queue/1]).
 -export([exchange/1, user/1, internal_user/1, binding/1, url/2]).
 -export([pack_binding_props/2, unpack_binding_props/1, tokenise/1]).
@@ -105,6 +105,10 @@ utf8_safe(V) ->
     end.
 
 parameter(P) -> pset(value, rabbit_misc:term_to_json(pget(value, P)), P).
+
+policy_fmt(P) ->
+    proplists:delete(component,
+                     pset(value, rabbit_misc:term_to_json(pget(value, P)), P)).
 
 tuple(unknown)                    -> unknown;
 tuple(Tuple) when is_tuple(Tuple) -> [tuple(E) || E <- tuple_to_list(Tuple)];

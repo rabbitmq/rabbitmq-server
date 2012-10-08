@@ -935,6 +935,43 @@ parameters_test() ->
     rabbit_runtime_parameters_test:unregister(),
     ok.
 
+policy_test() ->
+    rabbit_runtime_parameters_test:register_policy_validator(),
+    http_put(
+      "/policies/%2f/policy_pos",
+      [{value, [{<<"pattern">>, <<".*">>},
+                {<<"priority">>, 10},
+                {<<"policy">>, {struct,[{<<"testpos">>, [1, 2, 3]}]}}]}],
+      ?NO_CONTENT),
+    http_put(
+      "/policies/%2f/policy_even",
+      [{value, [{<<"pattern">>, <<".*">>},
+                {<<"priority">>, 10},
+                {<<"policy">>, {struct,[{<<"testeven">>, [1, 2, 3, 4]}]}}]}],
+      ?NO_CONTENT),
+    PolicyPos = [{vhost,<<"/">>},
+                 {key,<<"policy_pos">>},
+                 {value,[{pattern,<<".*">>},
+                         {priority,10},
+                         {policy,[{testpos,[1,2,3]}]}]}],
+    PolicyEven = [{vhost,<<"/">>},
+                 {key,<<"policy_even">>},
+                 {value,[{pattern,<<".*">>},
+                         {priority,10},
+                         {policy,[{testeven,[1,2,3,4]}]}]}],
+    assert_item(PolicyPos,  http_get("/policies/%2f/policy_pos",  ?OK)),
+    assert_item(PolicyEven, http_get("/policies/%2f/policy_even", ?OK)),
+    List = [PolicyPos, PolicyEven],
+    assert_list(List, http_get("/policies",     ?OK)),
+    assert_list(List, http_get("/policies/%2f", ?OK)),
+
+    http_delete("/policies/%2f/policy_pos", ?NO_CONTENT),
+    http_delete("/policies/%2f/policy_even", ?NO_CONTENT),
+    0 = length(http_get("/policies")),
+    0 = length(http_get("/policies/%2f")),
+    rabbit_runtime_parameters_test:unregister_policy_validator(),
+    ok.
+
 %%---------------------------------------------------------------------------
 
 msg(Key, Headers, Body) ->

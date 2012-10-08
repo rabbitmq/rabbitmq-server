@@ -539,6 +539,32 @@ or:
         <td></td>
         <td></td>
         <td></td>
+        <td class="path">/api/policies</td>
+        <td>A list of all policies.</td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/policies/<i>vhost</i></td>
+        <td>A list of all policies for a given virtual host.</td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td>X</td>
+        <td>X</td>
+        <td></td>
+        <td class="path">/api/policies/<i>vhost</i>/<i>key</i></td>
+        <td>An individual policy. To PUT a policy, you will need a body looking something like this:
+<pre>{"vhost": "/","key":"federation-policy","value":{"federation-upstream-set":"all"}}</pre>
+</td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
         <td class="path">/api/aliveness-test/<i>vhost</i></td>
         <td>
           Declares a test queue, then publishes and consumes a
