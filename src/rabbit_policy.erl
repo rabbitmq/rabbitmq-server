@@ -146,6 +146,16 @@ validation(_Name, Terms) when is_list(Terms) ->
                             rabbit_registry:lookup_all(policy_validator)),
     [] = lists:usort(Tags -- lists:usort(Tags)), %% ASSERTION
     Validators = lists:zipwith(fun (M, T) ->  {M, a2b(T)} end, Modules, Tags),
+
+    {TermKeys, _} = lists:unzip(Terms),
+    case TermKeys -- lists:usort(TermKeys) of
+        []   -> validation0(Validators, Terms);
+        Dup  -> {error, "~p duplicate keys not allowed", [Dup]}
+    end;
+validation(_Name, Term) ->
+    {error, "parse error while reading policy: ~p", [Term]}.
+
+validation0(Validators, Terms) ->
     case lists:foldl(
            fun (_, {Error, _} = Acc) when Error /= ok ->
                    Acc;
@@ -163,8 +173,6 @@ validation(_Name, Terms) when is_list(Terms) ->
              {error, "~p are not recognised policy settings", Unvalidated};
          {Error, _} ->
              Error
-    end;
-validation(_Name, Term) ->
-    {error, "parse error while reading policy: ~p", [Term]}.
+    end.
 
 a2b(A) -> list_to_binary(atom_to_list(A)).

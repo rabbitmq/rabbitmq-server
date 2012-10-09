@@ -340,27 +340,32 @@ validate_policy(TagList) ->
         [<<"all">>] ->
             ok;
         [<<"nodes">>] ->
-            validate_params(fun erlang:is_binary/1, lists:append(Params),
-                            "~p has invalid node names when ha-mode=nodes");
+            validate_params(lists:append(Params),
+                            fun erlang:is_binary/1,
+                            "~p has invalid node names when ha-mode=nodes",
+                            fun (N) -> N > 0 end,
+                            "at least one node expected when ha-mode=nodes");
         [<<"exactly">>] ->
-            case Params of
-                [_] -> validate_params(
-                         fun (N) -> is_integer(N) andalso N >= 0 end,
-                         Params, "~p must be a positive integer");
-                X   -> {error, "ha-params must be supplied with one number "
-                               "when ha-mode=exactly. found ~p arguments",
-                               [length(X)]}
-            end;
+            validate_params(Params,
+                            fun (N) -> is_integer(N) andalso N >= 0 end,
+                            "~p must be a positive integer",
+                            fun (N) -> N == 1 end,
+                            "ha-params must be supplied with one number "
+                            "when ha-mode=exactly");
         [_, _|_] ->
             {error, "ha-mode may appear at most once", []};
         [Other] ->
             {error, "~p is not a valid ha-mode value", [Other]}
     end.
 
-validate_params(FilterFun, Params, Msg) when is_list(Params) ->
-    case lists:filter(fun (P) -> not FilterFun(P) end, Params) of
-        [] -> ok;
-        X  -> {error, Msg, [X]}
+validate_params(Params, FilterPred, FilterMsg, SizePred, SizeMsg)
+  when is_list(Params) ->
+    case SizePred(length(Params)) of
+        true -> case lists:filter(fun (P) -> not FilterPred(P) end, Params) of
+                    [] -> ok;
+                    X  -> {error, FilterMsg, [X]}
+                end;
+        false -> {error, SizeMsg, []}
     end;
-validate_params(_, Params, _) ->
+validate_params(Params, _, _, _, _) ->
     {error, "~p was expected to be a list", [Params]}.
