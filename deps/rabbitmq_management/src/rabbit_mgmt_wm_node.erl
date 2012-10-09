@@ -49,6 +49,14 @@ node0(ReqData) ->
     case [N || N <- rabbit_mgmt_wm_nodes:all_nodes(),
                proplists:get_value(name, N) == Name] of
         []     -> not_found;
-        [Node] -> Node
+        [Node] -> augment(ReqData, Name, Node)
     end.
 
+augment(ReqData, Name, Node) ->
+    case wrq:get_qs_value("memory", ReqData) of
+        "true" -> case rpc:call(Name, rabbit_vm, memory, [], infinity) of
+                      {badrpc, _} -> [{memory, not_available} | Node];
+                      Memory      -> [{memory, Memory} | Node]
+                  end;
+        _      -> Node
+    end.
