@@ -21,7 +21,8 @@
 -export([parse_set/4, parse_set_policy/5, set/4, set_policy/3, clear/3,
          clear_policy/2, list/0, list/1, list_strict/1, list/2, list_strict/2,
          list_policies/0, list_policies/1, list_formatted/1,
-         list_formatted_policies/1, lookup/3, value/3, value/4, info_keys/0]).
+         list_formatted_policies/1, lookup/3, value/3, value/4, info_keys/0,
+         info_keys_policies/0]).
 
 %%----------------------------------------------------------------------------
 
@@ -60,7 +61,7 @@
 
 %%---------------------------------------------------------------------------
 
--import(rabbit_misc, [pget/2, pset/3]).
+-import(rabbit_misc, [pget/2, pget/3, pset/3]).
 
 -define(TABLE, rabbit_runtime_parameters).
 
@@ -89,7 +90,7 @@ parse_set_policy0(VHost, Key, Pattern, Defn, Priority) ->
             set_policy(VHost, Key, pset(<<"pattern">>, list_to_binary(Pattern),
                                         pset(<<"policy">>,
                                              rabbit_misc:json_to_term(JSON),
-                                             Priority)),
+                                             Priority)));
         error ->
             {error_string, "JSON decoding error"}
     end.
@@ -129,6 +130,7 @@ set0(VHost, Component, Key, Term) ->
     end.
 
 mnesia_update(VHost, Component, Key, Term) ->
+rabbit_log:info("setting parameter vh ~p~n comp ~p~n key ~p~n term ~p~n~n", [VHost, Component, Key, Term]),
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
               Res = case mnesia:read(?TABLE, {VHost, Component, Key}, read) of
@@ -201,8 +203,17 @@ list_formatted(VHost) ->
     [pset(value, format(pget(value, P)), P) || P <- list(VHost)].
 
 list_formatted_policies(VHost) ->
-    [proplists:delete(component, pset(value, format(pget(value, P)), P))
-     || P <- list_policies(VHost)].
+    [begin
+       Key = pget(key,   P),
+       Val = pget(value, P),
+       [{key,        Key},
+        {pattern,    pget(<<"pattern">>,  Val)},
+        {definition, format(pget(<<"policy">>,   Val))}] ++
+        case pget(<<"priority">>, Val) of
+            undefined -> [];
+            Priority  -> [{priority, Priority}]
+        end
+     end || P <- list_policies(VHost)].
 
 lookup(VHost, Component, Key) ->
     case lookup0(VHost, Component, Key, rabbit_misc:const(not_found)) of
@@ -251,6 +262,7 @@ p(#runtime_parameters{key = {VHost, Component, Key}, value = Value}) ->
      {value,     Value}].
 
 info_keys() -> [component, key, value].
+info_keys_policies() -> [key, pattern, definition, priority].
 
 %%---------------------------------------------------------------------------
 

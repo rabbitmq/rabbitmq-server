@@ -467,7 +467,7 @@ action(set_policy, Node, [Key, Pattern, Defn], Opts, Inform) ->
 
 action(set_policy, Node, [Key, Pattern, Defn, Priority], Opts, Inform) ->
     VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
-    Inform("Setting policy ~p to ~p", [Key, Defn]),
+    Inform("Setting policy ~p to ~p for pattern ~p", [Key, Defn, Pattern]),
     rpc_call(Node, rabbit_runtime_parameters, parse_set_policy,
              [VHostArg, list_to_binary(Key), Pattern, Defn, Priority]);
 
@@ -482,7 +482,7 @@ action(list_policies, Node, [], Opts, Inform) ->
     Inform("Listing policies", []),
     display_info_list(
       rpc_call(Node, rabbit_runtime_parameters, list_formatted_policies, [VHostArg]),
-      rabbit_runtime_parameters:info_keys() -- [component]);
+      rabbit_runtime_parameters:info_keys_policies());
 
 action(report, Node, _Args, _Opts, Inform) ->
     Inform("Reporting server status on ~p~n~n", [erlang:universaltime()]),

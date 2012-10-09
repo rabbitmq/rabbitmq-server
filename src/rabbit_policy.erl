@@ -140,7 +140,7 @@ policy_validation() ->
      {<<"policy">>,   fun validation/2,                         mandatory}].
 
 validation(_Name, []) ->
-    ok;
+    {error, "no policy provided", []};
 validation(_Name, Terms) when is_list(Terms) ->
     {Tags, Modules} = lists:unzip(
                             rabbit_registry:lookup_all(policy_validator)),
