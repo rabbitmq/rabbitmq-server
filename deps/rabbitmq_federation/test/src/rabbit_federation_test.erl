@@ -143,7 +143,8 @@ user_id_test() ->
               expect(Ch, Q, ExpectUser(<<"hare-user">>)),
 
               delete_exchange(Ch, <<"hare.downstream">>),
-              delete_exchange(Ch2, <<"upstream">>)
+              delete_exchange(Ch2, <<"upstream">>),
+              stop_other_node(?HARE)
       end, []).
 
 %% In order to test that unbinds get sent we deliberately set up a
@@ -372,7 +373,7 @@ federate_unfederate_test() ->
               assert_connections(Xs, []),
 
               %% Federate them - links appear
-              set_pol("dyn", policy("^dyn.", "all")),
+              set_pol("dyn", "^dyn.", policy("all")),
               assert_connections(Xs, [<<"localhost">>, <<"local5673">>]),
 
               %% Unfederate them - links disappear
@@ -410,6 +411,7 @@ start_other_node({Name, Port}, Config, PluginsFile) ->
                      " OTHER_CONFIG=" ++ Config ++
                      " OTHER_PLUGINS=" ++ PluginsFile ++
                      " start-other-node ; echo $?"),
+io:format("startup: ~p~n", [Res]),
     LastLine = hd(lists:reverse(string:tokens(Res, "\n"))),
     ?assertEqual("0", LastLine),
     {ok, Conn} = amqp_connection:start(#amqp_params_network{port = Port}),
@@ -427,8 +429,8 @@ set_param(Component, Key, Value) ->
 clear_param(Component, Key) ->
     rabbitmqctl(fmt("clear_parameter ~s ~s", [Component, Key])).
 
-set_pol(Key, Value) ->
-    rabbitmqctl(fmt("set_policy ~s '~s'", [Key, Value])).
+set_pol(Key, Pattern, Defn) ->
+    rabbitmqctl(fmt("set_policy ~s \"~s\" '~s'", [Key, Pattern, Defn])).
 
 clear_pol(Key) ->
     rabbitmqctl(fmt("clear_policy ~s ", [Key])).
@@ -441,10 +443,8 @@ rabbitmqctl(Args) ->
        plugin_dir() ++ "/../rabbitmq-server/scripts/rabbitmqctl " ++ Args),
     timer:sleep(100).
 
-policy(Pattern, UpstreamSet) ->
-    rabbit_misc:format("{\"pattern\": \"~s\","
-                       " \"policy\":  {\"federation-upstream-set\": \"~s\"}}",
-                       [Pattern, UpstreamSet]).
+policy(UpstreamSet) ->
+    rabbit_misc:format("{\"federation-upstream-set\": \"~s\"}", [UpstreamSet]).
 
 plugin_dir() ->
     {ok, [[File]]} = init:get_argument(config),
