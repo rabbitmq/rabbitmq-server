@@ -54,9 +54,10 @@ node0(ReqData) ->
 
 augment(ReqData, Name, Node) ->
     case wrq:get_qs_value("memory", ReqData) of
-        "true" -> case rpc:call(Name, rabbit_vm, memory, [], infinity) of
-                      {badrpc, _} -> [{memory, not_available} | Node];
-                      Memory      -> [{memory, Memory} | Node]
-                  end;
+        "true" -> Mem = case rpc:call(Name, rabbit_vm, memory, [], infinity) of
+                            {badrpc, _} -> not_available;
+                            Memory      -> Memory
+                        end,
+                  [{memory, Mem} | Node];
         _      -> Node
     end.
