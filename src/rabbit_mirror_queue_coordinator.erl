@@ -398,8 +398,6 @@ members_changed([_CPid], _Births, []) ->
 members_changed([CPid], _Births, Deaths) ->
     ok = gen_server2:cast(CPid, {gm_deaths, Deaths}).
 
-handle_msg([_CPid], _From, master_changed) ->
-    ok;
 handle_msg([CPid], _From, request_depth = Msg) ->
     ok = gen_server2:cast(CPid, Msg);
 handle_msg([CPid], _From, {ensure_monitoring, _Pids} = Msg) ->
