@@ -132,6 +132,7 @@ function update_manual(div, query) {
     var data = JSON.parse(sync_get(path));
 
     replace_content(div, format(template, data));
+    postprocess_partial();
 }
 
 function render(reqs, template, highlight) {
