@@ -553,6 +553,7 @@ unicode_test() ->
     ok.
 
 definitions_test() ->
+    rabbit_runtime_parameters_test:register_policy_validator(),
     XArgs = [{type, <<"direct">>}],
     QArgs = [],
     http_put("/queues/%2f/my-queue", QArgs, ?NO_CONTENT),
@@ -576,12 +577,11 @@ definitions_test() ->
         [{users,       []},
          {vhosts,      []},
          {permissions, []},
-         {parameters,  [[{value,    [{<<"pattern">>, <<".*">>},
+         {policies,    [[{value,    [{<<"pattern">>, <<".*">>},
                                      {<<"priority">>, 1},
-                                     {<<"policy">>, [{<<"a">>, <<"b">>}]}
+                                     {<<"policy">>, [{testpos, [1, 2, 3]}]}
                                     ]},
                          {vhost,    <<"/">>},
-                         {component,<<"policy">>},
                          {key,      <<"test">>}]]},
          {queues,      [[{name,        <<"another-queue">>},
                          {vhost,       <<"/">>},
@@ -607,7 +607,8 @@ definitions_test() ->
     http_post("/definitions", ExtraConfig, ?CREATED),
     http_post("/definitions", BrokenConfig, ?BAD_REQUEST),
     http_delete("/queues/%2f/another-queue", ?NO_CONTENT),
-    http_delete("/parameters/policy/%2f/test", ?NO_CONTENT),
+    http_delete("/policies/%2f/test", ?NO_CONTENT),
+    rabbit_runtime_parameters_test:unregister_policy_validator(),
     ok.
 
 definitions_remove_things_test() ->
@@ -939,26 +940,26 @@ policy_test() ->
     rabbit_runtime_parameters_test:register_policy_validator(),
     http_put(
       "/policies/%2f/policy_pos",
-      [{value, [{<<"pattern">>, <<".*">>},
+      [{value, [{<<"pattern">>,  <<".*">>},
                 {<<"priority">>, 10},
-                {<<"policy">>, {struct,[{<<"testpos">>, [1, 2, 3]}]}}]}],
+                {<<"policy">>,   [{testpos, [1, 2, 3]}]}]}],
       ?NO_CONTENT),
     http_put(
       "/policies/%2f/policy_even",
-      [{value, [{<<"pattern">>, <<".*">>},
+      [{value, [{<<"pattern">>,  <<".*">>},
                 {<<"priority">>, 10},
-                {<<"policy">>, {struct,[{<<"testeven">>, [1, 2, 3, 4]}]}}]}],
+                {<<"policy">>,   [{testeven, [1, 2, 3, 4]}]}]}],
       ?NO_CONTENT),
-    PolicyPos = [{vhost,<<"/">>},
-                 {key,<<"policy_pos">>},
-                 {value,[{pattern,<<".*">>},
-                         {priority,10},
-                         {policy,[{testpos,[1,2,3]}]}]}],
-    PolicyEven = [{vhost,<<"/">>},
-                 {key,<<"policy_even">>},
-                 {value,[{pattern,<<".*">>},
-                         {priority,10},
-                         {policy,[{testeven,[1,2,3,4]}]}]}],
+    PolicyPos = [{vhost, <<"/">>},
+                 {key,   <<"policy_pos">>},
+                 {value, [{pattern,  <<".*">>},
+                          {priority, 10},
+                          {policy,   [{testpos, [1,2,3]}]}]}],
+    PolicyEven = [{vhost, <<"/">>},
+                  {key,   <<"policy_even">>},
+                  {value, [{pattern,  <<".*">>},
+                           {priority, 10},
+                           {policy,   [{testeven, [1,2,3,4]}]}]}],
     assert_item(PolicyPos,  http_get("/policies/%2f/policy_pos",  ?OK)),
     assert_item(PolicyEven, http_get("/policies/%2f/policy_even", ?OK)),
     List = [PolicyPos, PolicyEven],

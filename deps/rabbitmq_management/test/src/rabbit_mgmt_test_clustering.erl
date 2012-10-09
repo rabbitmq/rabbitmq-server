@@ -68,7 +68,7 @@ ha() ->
                        {policy,  [{'ha-mode', <<"all">>}]
                        }]
               }],
-    http_put("/parameters/policy/%2f/HA", Policy, ?NO_CONTENT),
+    http_put("/policies/%2f/HA", Policy, ?NO_CONTENT),
     QArgs = [{node, <<"hare">>}],
     http_put("/queues/%2f/ha-queue", QArgs, ?NO_CONTENT),
     Q = wait_for("/queues/%2f/ha-queue"),
