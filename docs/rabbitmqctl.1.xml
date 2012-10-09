@@ -905,7 +905,7 @@
       </para>
       <variablelist>
         <varlistentry>
-          <term><cmdsynopsis><command>set_policy</command> <arg choice="opt">-p <replaceable>vhostpath</replaceable></arg> <arg choice="req"><replaceable>key</replaceable></arg> <arg choice="req"><replaceable>value</replaceable></arg></cmdsynopsis></term>
+          <term><cmdsynopsis><command>set_policy</command> <arg choice="opt">-p <replaceable>vhostpath</replaceable></arg> <arg choice="req"><replaceable>key</replaceable></arg> <arg choice="req"><replaceable>pattern</replaceable></arg>  <arg choice="req"><replaceable>definition</replaceable></arg> <arg choice="opt"><replaceable>priority</replaceable></arg> </cmdsynopsis></term>
           <listitem>
             <para>
               Sets a policy.
@@ -918,17 +918,28 @@
                 </para></listitem>
               </varlistentry>
               <varlistentry>
-                <term>value</term>
+                <term>pattern</term>
+                <listitem><para>
+                    The regular expression, which when matches on a given resources causes the policy to apply.
+                </para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>definition</term>
                 <listitem><para>
                     The definition of the policy, as a
                     JSON string. In most shells you are very likely to
                     need to quote this.
                 </para></listitem>
               </varlistentry>
+              <varlistentry>
+                <term>priority</term>
+                <listitem><para>
+                    The priority of the policy as an integer, defaulting to 0. Higher numbers indicate greater precedence.
+                </para></listitem>
+              </varlistentry>
             </variablelist>
             <para role="example-prefix">For example:</para>
-            <screen role="example">rabbitmqctl set_policy federate-me '{"pattern":"^amq.",\
-                                     "policy":{"federation-upstream-set":"all"}}'</screen>
+            <screen role="example">rabbitmqctl set_policy federate-me "^amq." '{"federation-upstream-set":"all"}'</screen>
             <para role="example">
               This command sets the policy <command>federate-me</command> in the default virtual host so that built-in exchanges are federated.
             </para>

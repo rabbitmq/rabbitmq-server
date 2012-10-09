@@ -18,7 +18,7 @@
 
 -include("rabbit.hrl").
 
--export([parse_set/4, parse_set_policy/3, set/4, set_policy/3, clear/3,
+-export([parse_set/4, parse_set_policy/5, set/4, set_policy/3, clear/3,
          clear_policy/2, list/0, list/1, list_strict/1, list/2, list_strict/2,
          list_policies/0, list_policies/1, list_formatted/1,
          list_formatted_policies/1, lookup/3, value/3, value/4, info_keys/0]).
@@ -31,8 +31,8 @@
 
 -spec(parse_set/4 :: (rabbit_types:vhost(), binary(), binary(), string())
                      -> ok_or_error_string()).
--spec(parse_set_policy/3 :: (rabbit_types:vhost(), binary(), string())
-                            -> ok_or_error_string()).
+-spec(parse_set_policy/5 :: (rabbit_types:vhost(), binary(), string(), string(),
+                            string()) -> ok_or_error_string()).
 -spec(set/4 :: (rabbit_types:vhost(), binary(), binary(), term())
                -> ok_or_error_string()).
 -spec(set_policy/3 :: (rabbit_types:vhost(), binary(), term())
@@ -74,11 +74,23 @@ parse_set(VHost, Component, Key, String) ->
         error      -> {error_string, "JSON decoding error"}
     end.
 
-parse_set_policy(VHost, Key, String) ->
-    case rabbit_misc:json_decode(String) of
+parse_set_policy(VHost, Key, Pat, Defn, default) ->
+    parse_set_policy0(VHost, Key, Pat, Defn, []);
+parse_set_policy(VHost, Key, Pat, Defn, Priority) ->
+    try list_to_integer(Priority) of
+        Num -> parse_set_policy0(VHost, Key, Pat, Defn, [{<<"priority">>, Num}])
+    catch
+        _:_ -> {error, "~p  priority must be a number", [Priority]}
+    end.
+
+parse_set_policy0(VHost, Key, Pattern, Defn, Priority) ->
+    case rabbit_misc:json_decode(Defn) of
         {ok, JSON} ->
-            set_policy(VHost, Key, rabbit_misc:json_to_term(JSON));
-        error      ->
+            set_policy(VHost, Key, pset(<<"pattern">>, list_to_binary(Pattern),
+                                        pset(<<"policy">>,
+                                             rabbit_misc:json_to_term(JSON),
+                                             Priority)),
+        error ->
             {error_string, "JSON decoding error"}
     end.
 
