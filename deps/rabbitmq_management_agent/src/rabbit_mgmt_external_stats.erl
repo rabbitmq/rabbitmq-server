@@ -26,8 +26,8 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
--define(REFRESH_RATE, 5000).
--define(KEYS, [name, os_pid, memory, memory_age, fd_used, fd_total,
+-define(REFRESH_RATIO, 5000).
+-define(KEYS, [name, os_pid, fd_used, fd_total,
                sockets_used, sockets_total, mem_used, mem_limit, mem_alarm,
                disk_free_limit, disk_free, disk_free_alarm,
                proc_used, proc_total, statistics_level,
@@ -36,7 +36,7 @@
 
 %%--------------------------------------------------------------------
 
--record(state, {fd_total, memory_stats, memory_last_updated}).
+-record(state, {fd_total}).
 
 %%--------------------------------------------------------------------
 
@@ -142,13 +142,9 @@ get_disk_free() -> ?SAFE_CALL(rabbit_disk_monitor:get_disk_free(),
 
 infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
 
-i(fd_total,   #state{fd_total = FdTotal})       -> FdTotal;
-i(memory,     #state{memory_stats = Stats})     -> Stats;
-i(memory_age, #state{memory_last_updated = LU}) -> timer:now_diff(
-                                                     now(), LU) / 1000;
-
 i(name,            _State) -> node();
 i(fd_used,         _State) -> get_used_fd();
+i(fd_total, #state{fd_total = FdTotal}) -> FdTotal;
 i(sockets_used,    _State) ->
     proplists:get_value(sockets_used, file_handle_cache:info([sockets_used]));
 i(sockets_total,   _State) ->
@@ -243,7 +239,7 @@ format_mochiweb_option(_K, V) ->
 %%--------------------------------------------------------------------
 
 init([]) ->
-    State = update_memory_stats(#state{fd_total = file_handle_cache:ulimit()}),
+    State = #state{fd_total = file_handle_cache:ulimit()},
     {ok, emit_update(State)}.
 
 handle_call(_Req, _From, State) ->
@@ -254,9 +250,6 @@ handle_cast(_C, State) ->
 
 handle_info(emit_update, State) ->
     {noreply, emit_update(State)};
-
-handle_info(update_memory_stats, State) ->
-    {noreply, update_memory_stats(State)};
 
 handle_info(_I, State) ->
     {noreply, State}.
@@ -269,14 +262,5 @@ code_change(_, State, _) -> {ok, State}.
 
 emit_update(State) ->
     rabbit_event:notify(node_stats, infos(?KEYS, State)),
-    erlang:send_after(?REFRESH_RATE, self(), emit_update),
+    erlang:send_after(?REFRESH_RATIO, self(), emit_update),
     State.
-
-update_memory_stats(State) ->
-    {Stats, Interval} =
-        rabbit_misc:interval_operation(
-          fun rabbit_vm:memory/0, 0.01, ?REFRESH_RATE),
-    State1 = State#state{memory_stats        = Stats,
-                         memory_last_updated = now()},
-    erlang:send_after(Interval, self(), update_memory_stats),
-    State1.
