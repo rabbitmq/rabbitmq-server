@@ -442,6 +442,11 @@ function fmt_resource_bar(used_label, limit_label, ratio, colour, help) {
     return res;
 }
 
+function fmt_resource_bar_count(used, total, thresholds) {
+    return fmt_resource_bar(used, total + ' available', used / total,
+                            fmt_color(used / total, thresholds));
+}
+
 function fmt_shortened_uri(uri0) {
     var uri = fmt_escape_html(uri0);
     if (uri.indexOf('?') == -1) {
