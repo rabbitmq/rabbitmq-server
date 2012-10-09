@@ -27,8 +27,8 @@
 <% } %>
      <td><%= link_policy(policy.vhost, policy.key) %></td>
      <td><%= fmt_string(policy.value['pattern']) %></td>
-     <td><%= fmt_string(policy.value['priority']) %></td>
      <td><%= fmt_table_short(policy.value['policy']) %></td>
+     <td><%= fmt_string(policy.value['priority']) %></td>
    </tr>
 <% } %>
  </tbody>
@@ -68,13 +68,13 @@
           <td><input type="text" name="pattern"/><span class="mand">*</span></td>
         </tr>
         <tr>
-          <th><label>Priority:</label></th>
-          <td><input type="text" name="priority"/></td>
-        </tr>
-        <tr>
           <th><label>Policy:</label></th>
           <td><span class="multifield mand" id="policy"></span></td>
           <td><span class="mand">*</span></td>
+        </tr>
+        <tr>
+          <th><label>Priority:</label></th>
+          <td><input type="text" name="priority"/></td>
         </tr>
       </table>
       <input type="submit" value="Add policy"/>
