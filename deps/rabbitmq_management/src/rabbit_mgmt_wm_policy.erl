@@ -56,12 +56,24 @@ accept_content(ReqData, Context) ->
             rabbit_mgmt_util:not_found(vhost_not_found, ReqData, Context);
         VHost ->
             rabbit_mgmt_util:with_decode(
-              [value], ReqData, Context,
-              fun([Value], _) ->
-                      case rabbit_runtime_parameters:set_policy(
-                             VHost,
-                             key(ReqData),
-                             rabbit_misc:json_to_term(Value)) of
+              [pattern, definition], ReqData, Context,
+              fun([Pattern, Definition], Body) ->
+                      case
+                          case proplists:get_value(priority, Body) of
+                              undefined ->
+                                  rabbit_runtime_parameters:set_policy(
+                                    VHost,
+                                    key(ReqData),
+                                    Pattern,
+                                    rabbit_misc:json_to_term(Definition));
+                              Priority ->
+                                  rabbit_runtime_parameters:set_policy(
+                                    VHost,
+                                    key(ReqData),
+                                    Pattern,
+                                    rabbit_misc:json_to_term(Definition),
+                                    Priority)
+                          end of
                           ok ->
                               {true, ReqData, Context};
                           {error_string, Reason} ->

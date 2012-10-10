@@ -11,13 +11,13 @@
 <% } %>
     <th>Name</th>
     <th>Regexp</th>
-    <th>Priority</th>
     <th>Policy</th>
+    <th>Priority</th>
   </tr>
  </thead>
  <tbody>
 <%
- var sorted_policies = policies.sort(function(a,b) {return b.value['priority'] || 0 - a.value['priority'] || 0} );
+ var sorted_policies = policies.sort(function(a,b) {return b.priority || 0 - a.priority || 0} );
  for (var i = 0; i < sorted_policies.length; i++) {
     var policy = sorted_policies[i];
 %>
@@ -26,9 +26,9 @@
      <td><%= fmt_string(policy.vhost) %></td>
 <% } %>
      <td><%= link_policy(policy.vhost, policy.key) %></td>
-     <td><%= fmt_string(policy.value['pattern']) %></td>
-     <td><%= fmt_table_short(policy.value['policy']) %></td>
-     <td><%= fmt_string(policy.value['priority']) %></td>
+     <td><%= fmt_string(policy.pattern) %></td>
+     <td><%= fmt_table_short(policy.definition) %></td>
+     <td><%= fmt_string(policy.priority) %></td>
    </tr>
 <% } %>
  </tbody>
@@ -69,7 +69,7 @@
         </tr>
         <tr>
           <th><label>Policy:</label></th>
-          <td><span class="multifield mand" id="policy"></span></td>
+          <td><span class="multifield mand" id="definition"></span></td>
           <td><span class="mand">*</span></td>
         </tr>
         <tr>

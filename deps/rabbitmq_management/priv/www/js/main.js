@@ -815,12 +815,6 @@ function put_policy(sammy, mandatory_keys, num_keys, bool_keys) {
             sammy.params[i] = sammy.params[i] == 'true';
         }
     }
-    var params = {"vhost":     sammy.params.vhost,
-                  "key":       sammy.params.key,
-                  "value":     params_magic(sammy.params)};
-    delete params.value.vhost;
-    delete params.value.key;
-    sammy.params = params;
     if (sync_put(sammy, '/policies/:vhost/:key')) update();
 }
 
