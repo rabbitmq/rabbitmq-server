@@ -80,7 +80,7 @@ remove_from_queue(QueueName, DeadGMPids) ->
                                      end, [QPid | SPids]),
                       {QPid1, SPids1} = promote_slave(Alive),
 
-                      case {{QPid, SPids}, {QPid1, SPids1}} of
+                      case {{QPid, SPids, GMPids}, {QPid1, SPids1, GMPids1}} of
                           {Same, Same} ->
                               {ok, QPid1, []};
                           _ when QPid =:= QPid1 orelse node(QPid1) =:= node() ->
