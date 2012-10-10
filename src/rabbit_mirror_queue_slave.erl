@@ -180,25 +180,20 @@ handle_call({gm_deaths, Deaths}, From,
         {error, not_found} ->
             gen_server2:reply(From, ok),
             {stop, normal, State};
-        {ok, Pid, DeadPids, ExtraNodes} ->
+        {ok, Pid, DeadPids} ->
             rabbit_mirror_queue_misc:report_deaths(self(), false, QueueName,
                                                    DeadPids),
             if node(Pid) =:= node(MPid) ->
                     %% master hasn't changed
                     gen_server2:reply(From, ok),
-                    rabbit_mirror_queue_misc:add_mirrors(QueueName, ExtraNodes),
                     noreply(State);
                node(Pid) =:= node() ->
                     %% we've become master
                     QueueState = promote_me(From, State),
-                    rabbit_mirror_queue_misc:add_mirrors(QueueName, ExtraNodes),
                     {become, rabbit_amqqueue_process, QueueState, hibernate};
                true ->
                     %% master has changed to not us.
                     gen_server2:reply(From, ok),
-                    %% assertion, we don't need to add_mirrors/2 in this
-                    %% branch, see last clause in remove_from_queue/2
-                    [] = ExtraNodes,
                     erlang:monitor(process, Pid),
                     noreply(State #state { master_pid = Pid })
             end
