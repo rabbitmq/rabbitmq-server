@@ -105,7 +105,7 @@ init_with_existing_bq(Q, BQ, BQS) ->
     ok = rabbit_misc:execute_mnesia_transaction(
            fun () ->
                    ok = rabbit_amqqueue:store_queue(Q1)
-           end),   
+           end),
     #state { gm                  = GM,
              coordinator         = CPid,
              backing_queue       = BQ,
