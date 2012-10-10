@@ -141,7 +141,7 @@ init(#amqqueue { name = QueueName } = Q) ->
         duplicate_live_master ->
             {stop, {duplicate_live_master, Node}};
         existing ->
-            exit(GM, normal),
+            gm:leave(GM),
             ignore
     end.
 
