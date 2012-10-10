@@ -18,11 +18,13 @@
 
 -include("rabbit.hrl").
 
--export([parse_set/4, parse_set_policy/5, set/4, set_policy/3, clear/3,
-         clear_policy/2, list/0, list/1, list_strict/1, list/2, list_strict/2,
-         list_policies/0, list_policies/1, list_formatted/1,
-         list_formatted_policies/1, lookup/3, value/3, value/4, info_keys/0,
-         info_keys_policies/0]).
+-export([parse_set/4, parse_set_policy/4, parse_set_policy/5, set_policy/4,
+         set_policy/5,
+         clear/3, clear_policy/2,
+         list/0, list/1, list_strict/1, list/2, list_strict/2, list_policies/0,
+         list_policies/1, list_formatted/1, list_formatted_policies/1,
+         list_policies_raw/1,
+         lookup/3, value/3, value/4, info_keys/0, info_keys_policies/0]).
 
 %%----------------------------------------------------------------------------
 
@@ -32,11 +34,13 @@
 
 -spec(parse_set/4 :: (rabbit_types:vhost(), binary(), binary(), string())
                      -> ok_or_error_string()).
+-spec(parse_set_policy/4 :: (rabbit_types:vhost(), binary(), string(),
+                            string()) -> ok_or_error_string()).
 -spec(parse_set_policy/5 :: (rabbit_types:vhost(), binary(), string(), string(),
                             string()) -> ok_or_error_string()).
--spec(set/4 :: (rabbit_types:vhost(), binary(), binary(), term())
-               -> ok_or_error_string()).
--spec(set_policy/3 :: (rabbit_types:vhost(), binary(), term())
+-spec(set_policy/4 :: (rabbit_types:vhost(), binary(), term(), term())
+                     -> ok_or_error_string()).
+-spec(set_policy/5 :: (rabbit_types:vhost(), binary(), term(), term(), term())
                      -> ok_or_error_string()).
 -spec(clear/3 :: (rabbit_types:vhost(), binary(), binary())
                  -> ok_or_error_string()).
@@ -67,6 +71,8 @@
 
 %%---------------------------------------------------------------------------
 
+% used by rabbit_control_main
+
 parse_set(_, <<"policy">>, _, _) ->
     {error_string, "policies may not be set using this method"};
 parse_set(VHost, Component, Key, String) ->
@@ -74,43 +80,49 @@ parse_set(VHost, Component, Key, String) ->
         {ok, JSON} -> set(VHost, Component, Key, rabbit_misc:json_to_term(JSON));
         error      -> {error_string, "JSON decoding error"}
     end.
-
-parse_set_policy(VHost, Key, Pat, Defn, default) ->
-    parse_set_policy0(VHost, Key, Pat, Defn, []);
-parse_set_policy(VHost, Key, Pat, Defn, Priority) ->
-    try list_to_integer(Priority) of
-        Num -> parse_set_policy0(VHost, Key, Pat, Defn, [{<<"priority">>, Num}])
-    catch
-        _:_ -> {error, "~p  priority must be a number", [Priority]}
-    end.
-
-parse_set_policy0(VHost, Key, Pattern, Defn, Priority) ->
-    case rabbit_misc:json_decode(Defn) of
-        {ok, JSON} ->
-            set_policy(VHost, Key, pset(<<"pattern">>, list_to_binary(Pattern),
-                                        pset(<<"policy">>,
-                                             rabbit_misc:json_to_term(JSON),
-                                             Priority)));
-        error ->
-            {error_string, "JSON decoding error"}
-    end.
-
-set(_, <<"policy">>, _, _) ->
-    {error_string, "policies may not be set using this method"};
-set(VHost, Component, Key, Term) ->
+set(VHost, Component, Key, Term) when Component /= <<"policy">> ->
     case set0(VHost, Component, Key, Term) of
         ok          -> ok;
         {errors, L} -> format_error(L)
     end.
 
-set_policy(VHost, Key, Term) ->
+parse_set_policy(VHost, Key, Pat, Defn) ->
+    parse_set_policy0(VHost, Key, Pat, Defn, []).
+parse_set_policy(VHost, Key, Pat, Defn, Priority) ->
+    try list_to_integer(Priority) of
+        Num -> parse_set_policy0(VHost, Key, Pat, Defn, [{<<"priority">>, Num}])
+    catch
+        _:_ -> {error, "~p priority must be a number", [Priority]}
+    end.
+
+parse_set_policy0(VHost, Key, Pattern, Defn, Priority) ->
+    case rabbit_misc:json_decode(Defn) of
+        {ok, JSON} ->
+            set_policy0(VHost, Key, pset(<<"pattern">>, list_to_binary(Pattern),
+                                         pset(<<"policy">>,
+                                              rabbit_misc:json_to_term(JSON),
+                                              Priority)));
+        error ->
+            {error_string, "JSON decoding error"}
+    end.
+
+% used by management plugin
+
+set_policy(VHost, Key, Pattern, Defn, Priority) ->
+    set_policy0(VHost, Key, pset(<<"pattern">>, Pattern,
+                                 pset(<<"policy">>, Defn,
+                                      [{<<"priority">>, Priority}]))).
+set_policy(VHost, Key, Pattern, Defn) ->
+    set_policy0(VHost, Key, pset(<<"pattern">>, Pattern,
+                                 [{<<"policy">>, Defn}])).
+
+% common interface used by both parameters and policies
+
+set_policy0(VHost, Key, Term) ->
     case set0(VHost, <<"policy">>, Key, Term) of
         ok          -> ok;
         {errors, L} -> format_error(L)
     end.
-
-format_error(L) ->
-    {error_string, rabbit_misc:format_many([{"Validation failed~n", []} | L])}.
 
 set0(VHost, Component, Key, Term) ->
     case lookup_component(Component) of
@@ -130,7 +142,6 @@ set0(VHost, Component, Key, Term) ->
     end.
 
 mnesia_update(VHost, Component, Key, Term) ->
-rabbit_log:info("setting parameter vh ~p~n comp ~p~n key ~p~n term ~p~n~n", [VHost, Component, Key, Term]),
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
               Res = case mnesia:read(?TABLE, {VHost, Component, Key}, read) of
@@ -140,6 +151,8 @@ rabbit_log:info("setting parameter vh ~p~n comp ~p~n key ~p~n term ~p~n~n", [VHo
               ok = mnesia:write(?TABLE, c(VHost, Component, Key, Term), write),
               Res
       end).
+
+%%---------------------------------------------------------------------------
 
 clear(_, <<"policy">> , _) ->
     {error_string, "policies may not be cleared using this method"};
@@ -173,6 +186,8 @@ mnesia_clear(VHost, Component, Key) ->
                    ok = mnesia:delete(?TABLE, {VHost, Component, Key}, write)
            end).
 
+%%---------------------------------------------------------------------------
+
 list() ->
     [p(P) || #runtime_parameters{ key = {_VHost, Comp, _Key}} = P <-
              rabbit_misc:dirty_read_all(?TABLE), Comp /= <<"policy">>].
@@ -196,24 +211,42 @@ list_policies() ->
     list_policies('_').
 
 list_policies(VHost) ->
+     list_as_proplist(list_policies0(VHost)).
+
+list_policies0(VHost) ->
     Match = #runtime_parameters{key = {VHost, <<"policy">>, '_'}, _ = '_'},
     [p(P) || P <- mnesia:dirty_match_object(?TABLE, Match)].
+
+% used by rabbit_control_main
 
 list_formatted(VHost) ->
     [pset(value, format(pget(value, P)), P) || P <- list(VHost)].
 
 list_formatted_policies(VHost) ->
+    [pset(definition, format(pget(definition, Props)), Props) ||
+     Props <- list_as_proplist(list_policies0(VHost))].
+
+list_as_proplist(Source) ->
     [begin
        Key = pget(key,   P),
        Val = pget(value, P),
-       [{key,        Key},
-        {pattern,    pget(<<"pattern">>,  Val)},
-        {definition, format(pget(<<"policy">>,   Val))}] ++
+       [{vhost,      pget(vhost, P)},
+        {key,        Key},
+        {pattern,    pget(<<"pattern">>, Val)},
+        {definition, pget(<<"policy">>,   Val)}] ++
         case pget(<<"priority">>, Val) of
             undefined -> [];
             Priority  -> [{priority, Priority}]
         end
-     end || P <- list_policies(VHost)].
+     end || P <- Source].
+
+% used by rabbit_policy
+
+list_policies_raw(VHost) ->
+    Match = #runtime_parameters{key = {VHost, <<"policy">>, '_'}, _ = '_'},
+    [p(P) || P <- mnesia:dirty_match_object(?TABLE, Match)].
+
+%%---------------------------------------------------------------------------
 
 lookup(VHost, Component, Key) ->
     case lookup0(VHost, Component, Key, rabbit_misc:const(not_found)) of
@@ -261,8 +294,8 @@ p(#runtime_parameters{key = {VHost, Component, Key}, value = Value}) ->
      {key,       Key},
      {value,     Value}].
 
-info_keys() -> [component, key, value].
-info_keys_policies() -> [key, pattern, definition, priority].
+info_keys()          -> [component, key, value].
+info_keys_policies() -> [vhost, key, pattern, definition, priority].
 
 %%---------------------------------------------------------------------------
 
@@ -279,6 +312,9 @@ lookup_component(Component) ->
                                [{"component ~s not found", [Component]}]};
         {ok, Module}       -> {ok, Module}
     end.
+
+format_error(L) ->
+    {error_string, rabbit_misc:format_many([{"Validation failed~n", []} | L])}.
 
 format(Term) ->
     {ok, JSON} = rabbit_misc:json_encode(rabbit_misc:term_to_json(Term)),

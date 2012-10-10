@@ -83,7 +83,7 @@ notify_clear(VHost, <<"policy">>, _Name) ->
 
 list(VHost) ->
     [[{<<"name">>, pget(key, P)} | pget(value, P)]
-     || P <- rabbit_runtime_parameters:list_policies(VHost)].
+     || P <- rabbit_runtime_parameters:list_policies_raw(VHost)].
 
 update_policies(VHost) ->
     Policies = list(VHost),

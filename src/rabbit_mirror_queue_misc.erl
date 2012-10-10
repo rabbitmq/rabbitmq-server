@@ -347,7 +347,7 @@ validate_policy(TagList) ->
                             "at least one node expected when ha-mode=nodes");
         [<<"exactly">>] ->
             validate_params(Params,
-                            fun (N) -> is_integer(N) andalso N >= 0 end,
+                            fun (N) -> is_integer(N) andalso N > 0 end,
                             "~p must be a positive integer",
                             fun (N) -> N == 1 end,
                             "ha-params must be supplied with one number "
