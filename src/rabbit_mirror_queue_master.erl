@@ -154,16 +154,18 @@ stop_all_slaves(Reason, #state{gm = GM}) ->
     MRefs = [erlang:monitor(process, S) || S <- Slaves],
     ok = gm:broadcast(GM, {delete_and_terminate, Reason}),
     [receive {'DOWN', MRef, process, _Pid, _Info} -> ok end || MRef <- MRefs],
+    %% Normally when we remove a slave another slave or master will
+    %% notice and update Mnesia. But we just removed them all, and
+    %% have stopped listening ourselves. So manually clean up.
     QName = proplists:get_value(group_name, Info),
-    ok = gm:forget_group(QName),
-    ok = rabbit_misc:execute_mnesia_transaction(
-           fun () ->
-                   [Q] = mnesia:read({rabbit_queue, QName}),
-                   rabbit_mirror_queue_misc:store_updated_slaves(
-                     Q#amqqueue{gm_pids    = [],
-                                slave_pids = []}),
-                   ok.
-           end).
+    rabbit_misc:execute_mnesia_transaction(
+      fun () ->
+              [Q] = mnesia:read({rabbit_queue, QName}),
+              rabbit_mirror_queue_misc:store_updated_slaves(
+                Q #amqqueue { gm_pids    = [],
+                              slave_pids = [] })
+      end),
+    ok = gm:forget_group(QName).
 
 purge(State = #state { gm                  = GM,
                        backing_queue       = BQ,

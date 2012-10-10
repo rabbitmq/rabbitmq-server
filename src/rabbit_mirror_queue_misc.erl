@@ -31,11 +31,12 @@
 
 -spec(remove_from_queue/2 ::
         (rabbit_amqqueue:name(), [pid()])
-        -> {'ok', pid(), [pid()], [node()]} | {'error', 'not_found'}).
+        -> {'ok', pid(), [pid()]} | {'error', 'not_found'}).
 -spec(on_node_up/0 :: () -> 'ok').
 -spec(add_mirrors/2 :: (rabbit_amqqueue:name(), [node()]) -> 'ok').
 -spec(add_mirror/2 ::
-        (rabbit_amqqueue:name(), node()) -> rabbit_types:ok_or_error(any())).
+        (rabbit_amqqueue:name(), node()) ->
+                           {'ok', atom()} | rabbit_types:error(any())).
 -spec(store_updated_slaves/1 :: (rabbit_types:amqqueue()) ->
                                      rabbit_types:amqqueue()).
 -spec(suggested_queue_nodes/1 :: (rabbit_types:amqqueue()) ->
@@ -58,8 +59,6 @@
 %% Returns {ok, NewMPid, DeadPids}
 
 remove_from_queue(QueueName, DeadGMPids) ->
-    ClusterNodes = rabbit_mnesia:cluster_nodes(running) --
-        [node(DeadGMPid) || DeadGMPid <- DeadGMPids],
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
               %% Someone else could have deleted the queue before we
@@ -83,43 +82,46 @@ remove_from_queue(QueueName, DeadGMPids) ->
 
                       case {{QPid, SPids}, {QPid1, SPids1}} of
                           {Same, Same} ->
-                              {ok, QPid1, [], []};
+                              {ok, QPid1, []};
                           _ when QPid =:= QPid1 orelse node(QPid1) =:= node() ->
                               %% Either master hasn't changed, so
                               %% we're ok to update mnesia; or we have
                               %% become the master.
-                              Q1 = store_updated_slaves(
-                                     Q #amqqueue { pid        = QPid1,
-                                                   slave_pids = SPids1,
-                                                   gm_pids    = GMPids1 }),
-                              %% Sometimes a slave dying means we need
-                              %% to start more on other nodes -
-                              %% "exactly" mode can cause this to
-                              %% happen.
-                              {_, OldNodes} = actual_queue_nodes(Q1),
-                              {_, NewNodes} = suggested_queue_nodes(
-                                                Q1, ClusterNodes),
-                              {ok, QPid1, [QPid | SPids] -- Alive,
-                               NewNodes -- OldNodes};
+                              store_updated_slaves(
+                                Q #amqqueue { pid        = QPid1,
+                                              slave_pids = SPids1,
+                                              gm_pids    = GMPids1 }),
+                              {ok, QPid1, [QPid | SPids] -- Alive};
                           _ ->
                               %% Master has changed, and we're not it,
                               %% so leave alone to allow the promoted
                               %% slave to find it and make its
                               %% promotion atomic.
-                              {ok, QPid1, [], []}
+                              {ok, QPid1, []}
                       end
               end
       end).
 
 on_node_up() ->
-    ClusterNodes = rabbit_mnesia:cluster_nodes(running),
     QNames =
         rabbit_misc:execute_mnesia_transaction(
           fun () ->
                   mnesia:foldl(
-                    fun (Q = #amqqueue{name = QName}, QNames0) ->
+                    fun (Q = #amqqueue{name       = QName,
+                                       pid        = Pid,
+                                       slave_pids = SPids}, QNames0) ->
+                            %% We don't want to pass in the whole
+                            %% cluster - we don't want a situation
+                            %% where starting one node causes us to
+                            %% decide to start a mirror on another
+                            PossibleNodes0 = [node(P) || P <- [Pid | SPids]],
+                            PossibleNodes =
+                                case lists:member(node(), PossibleNodes0) of
+                                    true  -> PossibleNodes0;
+                                    false -> [node() | PossibleNodes0]
+                                end,
                             {_MNode, SNodes} = suggested_queue_nodes(
-                                                 Q, ClusterNodes),
+                                                 Q, PossibleNodes),
                             case lists:member(node(), SNodes) of
                                 true  -> [QName | QNames0];
                                 false -> QNames0
@@ -245,14 +247,14 @@ suggested_queue_nodes(Q) ->
 %% This variant exists so we can pull a call to
 %% rabbit_mnesia:cluster_nodes(running) out of a loop or
 %% transaction or both.
-suggested_queue_nodes(Q, ClusterNodes) ->
+suggested_queue_nodes(Q, PossibleNodes) ->
     {MNode0, SNodes} = actual_queue_nodes(Q),
     MNode = case MNode0 of
                 none -> node();
                 _    -> MNode0
             end,
     suggested_queue_nodes(policy(<<"ha-mode">>, Q), policy(<<"ha-params">>, Q),
-                          {MNode, SNodes}, ClusterNodes).
+                          {MNode, SNodes}, PossibleNodes).
 
 policy(Policy, Q) ->
     case rabbit_policy:get(Policy, Q) of
@@ -260,11 +262,11 @@ policy(Policy, Q) ->
         _       -> none
     end.
 
-suggested_queue_nodes(<<"all">>, _Params, {MNode, _SNodes}, All) ->
-    {MNode, All -- [MNode]};
-suggested_queue_nodes(<<"nodes">>, Nodes0, {MNode, _SNodes}, All) ->
+suggested_queue_nodes(<<"all">>, _Params, {MNode, _SNodes}, Possible) ->
+    {MNode, Possible -- [MNode]};
+suggested_queue_nodes(<<"nodes">>, Nodes0, {MNode, _SNodes}, Possible) ->
     Nodes = [list_to_atom(binary_to_list(Node)) || Node <- Nodes0],
-    Unavailable = Nodes -- All,
+    Unavailable = Nodes -- Possible,
     Available = Nodes -- Unavailable,
     case Available of
         [] -> %% We have never heard of anything? Not much we can do but
@@ -275,10 +277,10 @@ suggested_queue_nodes(<<"nodes">>, Nodes0, {MNode, _SNodes}, All) ->
                   false -> promote_slave(Available)
               end
     end;
-suggested_queue_nodes(<<"exactly">>, Count, {MNode, SNodes}, All) ->
+suggested_queue_nodes(<<"exactly">>, Count, {MNode, SNodes}, Possible) ->
     SCount = Count - 1,
     {MNode, case SCount > length(SNodes) of
-                true  -> Cand = (All -- [MNode]) -- SNodes,
+                true  -> Cand = (Possible -- [MNode]) -- SNodes,
                          SNodes ++ lists:sublist(Cand, SCount - length(SNodes));
                 false -> lists:sublist(SNodes, SCount)
             end};
@@ -320,13 +322,6 @@ update_mirrors0(OldQ = #amqqueue{name = QName},
     All = fun ({A,B}) -> [A|B] end,
     OldNodes = All(actual_queue_nodes(OldQ)),
     NewNodes = All(suggested_queue_nodes(NewQ)),
-    %% When a mirror dies, remove_from_queue/2 might have to add new
-    %% slaves (in "exactly" mode). It will check mnesia to see which
-    %% slaves there currently are. If drop_mirror/2 is invoked first
-    %% then when we end up in remove_from_queue/2 it will not see the
-    %% slaves that add_mirror/2 will add, and also want to add them
-    %% (even though we are not responding to the death of a
-    %% mirror). Breakage ensues.
     add_mirrors(QName, NewNodes -- OldNodes),
     drop_mirrors(QName, OldNodes -- NewNodes),
     ok.

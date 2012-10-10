@@ -344,10 +344,9 @@ handle_cast({gm_deaths, Deaths},
             State = #state { q  = #amqqueue { name = QueueName, pid = MPid } })
   when node(MPid) =:= node() ->
     case rabbit_mirror_queue_misc:remove_from_queue(QueueName, Deaths) of
-        {ok, MPid, DeadPids, ExtraNodes} ->
+        {ok, MPid, DeadPids} ->
             rabbit_mirror_queue_misc:report_deaths(MPid, true, QueueName,
                                                    DeadPids),
-            rabbit_mirror_queue_misc:add_mirrors(QueueName, ExtraNodes),
             noreply(State);
         {error, not_found} ->
             {stop, normal, State}
