@@ -101,6 +101,11 @@ init_with_existing_bq(Q, BQ, BQS) ->
     {ok, CPid} = rabbit_mirror_queue_coordinator:start_link(
                    Q, undefined, sender_death_fun(), depth_fun()),
     GM = rabbit_mirror_queue_coordinator:get_gm(CPid),
+    Q1 = Q#amqqueue{gm_pids = [{GM, self()}]},
+    ok = rabbit_misc:execute_mnesia_transaction(
+           fun () ->
+                   ok = rabbit_amqqueue:store_queue(Q1)
+           end),   
     #state { gm                  = GM,
              coordinator         = CPid,
              backing_queue       = BQ,
@@ -115,6 +120,7 @@ stop_mirroring(State = #state { coordinator         = CPid,
                                 backing_queue       = BQ,
                                 backing_queue_state = BQS }) ->
     unlink(CPid),
+    %% TODO remove GM from mnesia
     stop_all_slaves(shutdown, State),
     {BQ, BQS}.
 
