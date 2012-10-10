@@ -35,7 +35,8 @@
 -spec(on_node_up/0 :: () -> 'ok').
 -spec(add_mirrors/2 :: (rabbit_amqqueue:name(), [node()]) -> 'ok').
 -spec(add_mirror/2 ::
-        (rabbit_amqqueue:name(), node()) -> rabbit_types:ok_or_error(any())).
+        (rabbit_amqqueue:name(), node()) ->
+                           {'ok', atom()} | rabbit_types:error(any())).
 -spec(store_updated_slaves/1 :: (rabbit_types:amqqueue()) ->
                                      rabbit_types:amqqueue()).
 -spec(suggested_queue_nodes/1 :: (rabbit_types:amqqueue()) ->
