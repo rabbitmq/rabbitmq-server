@@ -170,7 +170,7 @@ div.bindings-wrapper p { margin: 10px; text-align: center; }
 div.bindings-wrapper span.exchange { border: 1px solid #bbb; padding: 10px; border-radius: 10px; -moz-border-radius: 10px; }
 div.bindings-wrapper span.queue { border: 1px solid #666; padding: 10px; }
 div.bindings-wrapper td span.exchange, div.bindings-wrapper td span.queue { background: white; display: block; }
-div.bindings-wrapper span.exchange a, div.bindings-wrapper span.queue a { display: inline; font-weight: normal !important; }
+div.bindings-wrapper span.exchange a, div.bindings-wrapper span.queue a { font-weight: normal !important; }
 div.bindings-wrapper p.arrow { font-size: 200%; }
 
 #footer { overflow: auto; width: 100%; }
