@@ -184,7 +184,7 @@ terminate(Reason, State = #state{downstream_channel    = DCh,
                                  downstream_connection = DConn,
                                  connection            = Conn}) ->
     ensure_closed(DConn, DCh),
-    enforce_closed(Conn),
+    ensure_connection_closed(Conn),
     log_terminate(Reason, State),
     ok.
 
@@ -383,7 +383,7 @@ go(S0 = {not_started, {Upstream, DownXName =
                             %% terminate/2 will not get this, as we
                             %% have not put them in our state yet
                             ensure_closed(DConn, DCh),
-                            ensure_closed(Conn, Ch),
+                            ensure_connection_closed(Conn),
                             connection_error(remote, E, S0)
                     end;
                 E ->
@@ -548,7 +548,7 @@ disposable_channel_call(Conn, Method, ErrFun) ->
     catch exit:{{shutdown, {server_initiated_close, Code, Text}}, _} ->
             ErrFun(Code, Text)
     after
-        ensure_closed(Ch)
+        ensure_channel_closed(Ch)
     end.
 
 disposable_connection_call(Params, Method, ErrFun) ->
@@ -560,20 +560,19 @@ disposable_connection_call(Params, Method, ErrFun) ->
                                     {server_initiated_close, Code, Txt}}}, _} ->
                     ErrFun(Code, Txt)
             after
-                ensure_closed(Conn, Ch)
+                ensure_connection_closed(Conn)
             end;
         E ->
             E
     end.
 
 ensure_closed(Conn, Ch) ->
-    ensure_closed(Ch),
-    catch amqp_connection:close(Conn).
+    ensure_channel_closed(Ch),
+    ensure_connection_closed(Conn).
 
-ensure_closed(Ch) ->
-    catch amqp_channel:close(Ch).
+ensure_channel_closed(Ch) -> catch amqp_channel:close(Ch).
 
-enforce_closed(Conn) ->
+ensure_connection_closed(Conn) ->
     catch amqp_connection:close(Conn, ?MAX_CONNECTION_CLOSE_TIMEOUT).
 
 ack(Tag, Multiple, #state{channel = Ch}) ->
