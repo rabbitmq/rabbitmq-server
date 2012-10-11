@@ -26,18 +26,21 @@
 <% } else { %>
 <% if (mode == 'queue' || mode == 'exchange_destination') { %>
              <td>
-               <%= link_exchange(binding.vhost, binding.source) %>
-               <sub>Exchange</sub>
+               <span class="exchange">
+                 <%= link_exchange(binding.vhost, binding.source) %>
+               </span>
              </td>
 <% } else if (binding.destination_type == 'exchange') { %>
              <td>
-               <%= link_exchange(binding.vhost, binding.destination) %>
-               <sub>Exchange</sub>
+               <span class="exchange" title="Exchange">
+                 <%= link_exchange(binding.vhost, binding.destination) %>
+               </span>
              </td>
 <% } else { %>
              <td>
-               <%= link_queue(binding.vhost, binding.destination) %>
-               <sub>Queue</sub>
+               <span class="queue" title="Queue">
+                 <%= link_queue(binding.vhost, binding.destination) %>
+               </span>
              </td>
 <% } %>
              <td><%= fmt_string(binding.routing_key) %></td>
