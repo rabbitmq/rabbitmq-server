@@ -899,9 +899,8 @@
       <para>
         Policies are used to control and modify the behaviour of queues
         and exchanges on a cluster-wide basis. Policies apply within a
-        given vhost, and consist of a key and a value. The key must be a
-        string and the value must be a JSON string. Policies can be set,
-        cleared and listed.
+        given vhost, and consist of a key, pattern, definition and an
+        optional priority. Policies can be set, cleared and listed.
       </para>
       <variablelist>
         <varlistentry>

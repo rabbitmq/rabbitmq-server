@@ -1494,7 +1494,6 @@ test_declare_on_dead_queue(SecondaryNode) ->
 %%---------------------------------------------------------------------
 
 control_action(Command, Args) ->
-rabbit_log:info("control args ~p~n", [Args]),
     control_action(Command, node(), Args, default_options()).
 
 control_action(Command, Args, NewOpts) ->
