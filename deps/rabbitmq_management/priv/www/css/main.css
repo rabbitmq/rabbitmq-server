@@ -1,5 +1,6 @@
 body { font: 12px Verdana,sans-serif; color: #484848; padding: 8px 35px; }
 #logo { margin-bottom: 20px; }
+#logo img { border: none; }
 #login-version { float: right; color: #444; }
 #login-version p { padding: 0 0 0.2em 0; margin: 0; text-align: right; }
 #login-version b { color: black; font-weight: normal; }
