@@ -543,16 +543,10 @@ attempt_delivery(#delivery{sender = SenderPid, message = Message}, Props,
                       {{Message, Props#message_properties.delivered, AckTag},
                        true, State1#q{backing_queue_state = BQS3}}
               end, false, State#q{backing_queue_state = BQS1});
-        {Duplicate, BQS1} ->
-            %% if the message has previously been seen by the BQ then
-            %% it must have been seen under the same circumstances as
-            %% now: i.e. if it is now a deliver_immediately then it
-            %% must have been before.
-            {case Duplicate of
-                 published -> true;
-                 discarded -> false
-             end,
-             State#q{backing_queue_state = BQS1}}
+        {published, BQS1} ->
+            {true,  State#q{backing_queue_state = BQS1}};
+        {discarded, BQS1} ->
+            {false, State#q{backing_queue_state = BQS1}}
     end.
 
 deliver_or_enqueue(Delivery = #delivery{message    = Message,
