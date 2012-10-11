@@ -55,7 +55,8 @@ to_json(ReqData, {Mode, Context}) ->
     Bs = [rabbit_mgmt_format:binding(B) || B <- list_bindings(Mode, ReqData)],
     rabbit_mgmt_util:reply_list(
       rabbit_mgmt_util:filter_vhost(Bs, ReqData, Context),
-      ["vhost", "exchange", "queue", "routing_key", "properties_key"],
+      ["vhost", "source", "type", "destination",
+       "routing_key", "properties_key"],
       ReqData, {Mode, Context}).
 
 create_path(ReqData, Context) ->
