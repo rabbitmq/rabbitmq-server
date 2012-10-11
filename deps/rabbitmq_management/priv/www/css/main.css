@@ -164,9 +164,11 @@ acronym.warning { background: #daa; }
 
 acronym.type { background: none; color: inherit; padding: 0; border-bottom: 1px dotted #ddd; cursor: default; }
 
-table.bindings { margin-bottom: 1em; }
-td.binding-endpoint span.object { border: 1px solid #bbb; padding: 10px; border-radius: 10px; -moz-border-radius: 10px; }
-td.binding-endpoint span.arrow { font-size: 200%; }
+div.bindings-wrapper { display: inline-block; }
+div.bindings-wrapper table { margin: auto; }
+div.bindings-wrapper p { margin: 10px; text-align: center; }
+div.bindings-wrapper p span.object { border: 1px solid #bbb; padding: 10px; border-radius: 10px; -moz-border-radius: 10px; }
+div.bindings-wrapper p.arrow { font-size: 200%; }
 
 #footer { overflow: auto; width: 100%; }
 #footer-nav { padding-top: 5px; }

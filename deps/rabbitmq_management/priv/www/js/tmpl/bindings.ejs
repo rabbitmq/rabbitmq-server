@@ -1,6 +1,6 @@
 <%= maybe_truncate(bindings) %>
 <% if (bindings.length > 0) { %>
-    <table class="list bindings">
+    <table class="list updatable">
       <thead>
         <tr>
 <% if (mode == 'exchange_source') { %>
@@ -19,6 +19,11 @@
                var binding = bindings[i];
         %>
            <tr<%= alt_rows(i)%>>
+<% if (binding.source == '') { %>
+             <td colspan="4">
+               (Default exchange binding)
+             </td>
+<% } else { %>
 <% if (mode == 'queue' || mode == 'exchange_destination') { %>
              <td>
                <%= link_exchange(binding.vhost, binding.source) %>
@@ -38,7 +43,6 @@
              <td><%= fmt_string(binding.routing_key) %></td>
              <td><%= fmt_table_short(binding.arguments) %></td>
              <td class="c">
-<% if (binding.source != '') { %>
                <form action="#/bindings" method="delete" class="confirm">
                  <input type="hidden" name="vhost" value="<%= fmt_string(binding.vhost) %>"/>
                  <input type="hidden" name="source" value="<%= fmt_exchange_url(binding.source) %>"/>
@@ -47,12 +51,13 @@
                  <input type="hidden" name="properties_key" value="<%= fmt_string(binding.properties_key) %>"/>
                  <input type="submit" value="Unbind"/>
                </form>
-<% } %>
              </td>
+           <% } %>
            </tr>
            <% } %>
       </tbody>
     </table>
+
 <% } else { %>
   <p>... no bindings ...</p>
 <% } %>

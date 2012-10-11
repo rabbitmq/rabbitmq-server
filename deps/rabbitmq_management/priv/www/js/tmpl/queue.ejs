@@ -119,21 +119,13 @@
 <div class="section-hidden">
   <h2>Bindings</h2>
   <div class="hider">
-    <h3>Incoming to <b><%= fmt_string(queue.name) %></b></h3>
-    <table class="bindings updatable">
-      <tr>
-        <td>
-          <%= format('bindings', {'mode': 'queue', 'bindings': bindings}) %>
-        </td>
-        <td class="binding-endpoint">
-          <span class="arrow">&rarr;</span>
-          <span class="object"><%= queue.name %></span>
-        </td>
-      </tr>
-    </table>
+    <div class="bindings-wrapper">
+      <%= format('bindings', {'mode': 'queue', 'bindings': bindings}) %>
+      <p class="arrow">&dArr;</p>
+      <p><span class="object"><%= queue.name %></span></p>
 
-<%= format('add-binding', {'mode': 'queue', 'parent': queue}) %>
-
+      <%= format('add-binding', {'mode': 'queue', 'parent': queue}) %>
+    </div>
   </div>
 </div>
 
