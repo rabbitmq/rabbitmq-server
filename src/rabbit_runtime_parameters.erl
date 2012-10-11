@@ -18,7 +18,6 @@
 
 -include("rabbit.hrl").
 
-
 -export([parse_set_param/4, set_param/4,
          parse_set_policy/4, parse_set_policy/5, set_policy/4, set_policy/5,
          clear_param/3, clear_policy/2,
@@ -82,8 +81,6 @@
 
 %%---------------------------------------------------------------------------
 
-% used by rabbit_control_main
-
 parse_set_param(_, <<"policy">>, _, _) ->
     {error_string, "policies may not be set using this method"};
 parse_set_param(VHost, Component, Key, String) ->
@@ -93,8 +90,6 @@ parse_set_param(VHost, Component, Key, String) ->
         error      -> {error_string, "JSON decoding error"}
     end.
 
-% used by management plugin tests and rabbit_mgmt_wm_parameter
-
 set_param(_, <<"policy">>, _, _) ->
     {error_string, "policies may not be set using this method"};
 set_param(VHost, Component, Key, Term) ->
@@ -102,9 +97,6 @@ set_param(VHost, Component, Key, Term) ->
         ok          -> ok;
         {errors, L} -> format_error(L)
     end.
-
-
-% used by rabbit_control_main
 
 parse_set_policy(VHost, Key, Pat, Defn) ->
     parse_set_policy0(VHost, Key, Pat, Defn, []).
@@ -126,8 +118,6 @@ parse_set_policy0(VHost, Key, Pattern, Defn, Priority) ->
             {error_string, "JSON decoding error"}
     end.
 
-% used by management plugin
-
 set_policy(VHost, Key, Pattern, Defn) ->
     set_policy0(VHost, Key, policy_values(Pattern, Defn)).
 set_policy(VHost, Key, Pattern, Defn, Priority) ->
@@ -136,8 +126,6 @@ set_policy(VHost, Key, Pattern, Defn, Priority) ->
 
 policy_values(Pattern, Defn) ->
     [{<<"pattern">>, Pattern}, {<<"policy">>, Defn}].
-
-% common, used by both parameters and policies
 
 set_policy0(VHost, Key, Term) ->
     case set0(VHost, <<"policy">>, Key, Term) of
@@ -209,8 +197,6 @@ mnesia_clear(VHost, Component, Key) ->
 
 %%---------------------------------------------------------------------------
 
-% used by broker internally (rabbit_vhost)
-
 list_param() ->
     [p(P) || #runtime_parameters{ key = {_VHost, Comp, _Key}} = P <-
              rabbit_misc:dirty_read_all(?TABLE), Comp /= <<"policy">>].
@@ -230,15 +216,11 @@ list_param(VHost, Component, Default) ->
         _    -> Default
     end.
 
-% used by management plugin REST interface
-
 list_policies() ->
     list_policies('_').
 
 list_policies(VHost) ->
     list_policies0(VHost, fun ident/1).
-
-% used by rabbit_control_main
 
 list_formatted_param(VHost) ->
     [pset(value, format(pget(value, P)), P) || P <- list_param(VHost)].
@@ -254,15 +236,11 @@ order_policies(PropList) ->
     lists:sort(fun (A, B) -> pget(priority, A, 0) < pget(priority, B, 0) end,
                PropList).
 
-% used by rabbit_policy
-
 list_policies_raw(VHost) ->
     Match = #runtime_parameters{key = {VHost, <<"policy">>, '_'}, _ = '_'},
     [p(P) || P <- mnesia:dirty_match_object(?TABLE, Match)].
 
 %%---------------------------------------------------------------------------
-
-% used by management plugin (rabbit_mgmt_wm_policy and _parameter)
 
 lookup_param(VHost, Component, Key) ->
     case lookup0(VHost, Component, Key, rabbit_misc:const(not_found)) of
@@ -360,4 +338,3 @@ flatten_errors(L) ->
         [] -> ok;
         E  -> {errors, E}
     end.
-

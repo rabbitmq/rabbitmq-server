@@ -334,7 +334,7 @@ update_mirrors0(OldQ = #amqqueue{name = QName},
 %%----------------------------------------------------------------------------
 
 validate_policy(TagList) ->
-    Mode   = proplists:get_all_values(<<"ha-mode">>, TagList),
+    Mode   = proplists:get_all_values(<<"ha-mode">>,   TagList),
     Params = proplists:get_all_values(<<"ha-params">>, TagList),
     case Mode of
         [<<"all">>] ->
