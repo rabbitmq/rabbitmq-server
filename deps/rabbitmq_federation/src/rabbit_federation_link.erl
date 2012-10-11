@@ -279,51 +279,62 @@ open(Params) ->
         E -> E
     end.
 
-add_binding(B = #binding{key = Key, args = Args},
-            State = #state{channel = Ch, internal_exchange = IntXNameBin,
-                           upstream = #upstream{exchange = X}}) ->
-    case check_add_binding(B, State) of
-        {true,  State1} -> State1;
-        {false, State1} -> amqp_channel:call(
-                             Ch, #'exchange.bind'{
-                               destination = IntXNameBin,
-                               source      = name(X),
-                               routing_key = Key,
-                               arguments   = Args}),
-                           State1
+add_binding(B = #binding{key = Key, destination = Dest, args = Args},
+            State = #state{bindings = Bs, channel = Ch,
+                           internal_exchange = IntXNameBin,
+                           upstream = U = #upstream{exchange = X,
+                                                    max_hops = MaxHops}}) ->
+    io:format("add Args: ~p~n", [Args]),
+    K = key(B),
+    Cmd = #'exchange.bind'{destination = IntXNameBin,
+                           source      = name(X),
+                           routing_key = Key,
+                           arguments   = update_binding(Args, U)},
+    io:format("Cmd: ~p~n", [Cmd]),
+    case rabbit_misc:table_lookup(Args, ?BINDING_HEADER) of
+        undefined  -> Set = case dict:find(K, Bs) of
+                                {ok, Dests} -> sets:add_element(Dest, Dests);
+                                error       -> amqp_channel:call(Ch, Cmd),
+                                               sets:from_list([Dest])
+                            end,
+                      State#state{bindings = dict:store(K, Set, Bs)};
+        {array, A} -> case length(A) < MaxHops of
+                          true  -> amqp_channel:call(Ch, Cmd);
+                          false -> ok
+                      end,
+                      State
     end.
 
-check_add_binding(B = #binding{destination = Dest},
-                  State = #state{bindings = Bs}) ->
-    K = key(B),
-    {Res, Set} = case dict:find(K, Bs) of
-                     {ok, Dests} -> {true,  sets:add_element(Dest, Dests)};
-                     error       -> {false, sets:from_list([Dest])}
-                 end,
-    {Res, State#state{bindings = dict:store(K, Set, Bs)}}.
+update_binding(Args, Upstream) ->
+    {table, Info} = rabbit_federation_upstream:to_table(Upstream),
+    rabbit_basic:append_table_header(?BINDING_HEADER, Info, Args).
 
-remove_binding(B = #binding{key = Key, args = Args},
-               State = #state{channel = Ch,
+%% TODO in fact this looks a lot like add_binding...
+remove_binding(B = #binding{key = Key, destination = Dest, args = Args},
+               State = #state{bindings = Bs, channel = Ch,
                               internal_exchange = IntXNameBin,
-                              upstream = #upstream{exchange = X}}) ->
-    case check_remove_binding(B, State) of
-        {true,  State1} -> State1;
-        {false, State1} -> amqp_channel:call(
-                             Ch, #'exchange.unbind'{
-                               destination = IntXNameBin,
-                               source      = name(X),
-                               routing_key = Key,
-                               arguments   = Args}),
-                           State1
-    end.
-
-check_remove_binding(B = #binding{destination = Dest},
-                     State = #state{bindings = Bs}) ->
+                              upstream = U = #upstream{exchange = X,
+                                                       max_hops = MaxHops}}) ->
+    io:format("remove Args: ~p~n", [Args]),
     K = key(B),
-    Dests = sets:del_element(Dest, dict:fetch(K, Bs)),
-    case sets:size(Dests) of
-        0 -> {false, State#state{bindings = dict:erase(K, Bs)}};
-        _ -> {true,  State#state{bindings = dict:store(K, Dests, Bs)}}
+    Cmd = #'exchange.unbind'{destination = IntXNameBin,
+                             source      = name(X),
+                             routing_key = Key,
+                             arguments   = update_binding(Args, U)},
+    io:format("Cmd: ~p~n", [Cmd]),
+    case rabbit_misc:table_lookup(Args, ?BINDING_HEADER) of
+        undefined  -> Dests = sets:del_element(Dest, dict:fetch(K, Bs)),
+                      Bs1 = case sets:size(Dests) of
+                                0 -> amqp_channel:call(Ch, Cmd),
+                                     dict:erase(K, Bs);
+                                _ -> dict:store(K, Dests, Bs)
+                            end,
+                      State#state{bindings = Bs1};
+        {array, A} -> case length(A) < MaxHops of
+                          true  -> amqp_channel:call(Ch, Cmd);
+                          false -> ok
+                      end,
+                      State
     end.
 
 key(#binding{key = Key, args = Args}) -> {Key, Args}.
