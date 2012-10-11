@@ -143,7 +143,7 @@ user_id_test() ->
               expect(Ch, Q, ExpectUser(<<"hare-user">>)),
 
               delete_exchange(Ch, <<"hare.downstream">>),
-              delete_exchange(Ch2, <<"upstream">>),
+              delete_exchange(Ch2, <<"upstream">>)
       end, []).
 
 %% In order to test that unbinds get sent we deliberately set up a
