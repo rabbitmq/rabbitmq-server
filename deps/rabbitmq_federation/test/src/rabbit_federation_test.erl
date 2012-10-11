@@ -144,7 +144,6 @@ user_id_test() ->
 
               delete_exchange(Ch, <<"hare.downstream">>),
               delete_exchange(Ch2, <<"upstream">>),
-              stop_other_node(?HARE)
       end, []).
 
 %% In order to test that unbinds get sent we deliberately set up a
@@ -411,7 +410,6 @@ start_other_node({Name, Port}, Config, PluginsFile) ->
                      " OTHER_CONFIG=" ++ Config ++
                      " OTHER_PLUGINS=" ++ PluginsFile ++
                      " start-other-node ; echo $?"),
-io:format("startup: ~p~n", [Res]),
     LastLine = hd(lists:reverse(string:tokens(Res, "\n"))),
     ?assertEqual("0", LastLine),
     {ok, Conn} = amqp_connection:start(#amqp_params_network{port = Port}),
