@@ -27,7 +27,7 @@
 -include("rabbit.hrl").
 
 -rabbit_boot_step({?MODULE,
-                   [{description, "HA policy validator hook"},
+                   [{description, "HA policy validation capability"},
                     {mfa, {rabbit_registry, register,
                            [policy_validator, <<"ha-mode">>, ?MODULE]}},
                     {mfa, {rabbit_registry, register,

@@ -53,13 +53,13 @@ unregister_policy_validator() ->
     rabbit_registry:unregister(policy_validator, <<"testpos">>).
 
 validate_policy([{<<"testeven">>, Terms}]) when is_list(Terms) ->
-    case length(Terms) rem 2 =:= 0 of
+    case check_even(Terms) of
         true  -> ok;
         false -> {error, "meh", []}
     end;
 
 validate_policy([{<<"testpos">>, Terms}]) when is_list(Terms) ->
-    case lists:all(fun (N) -> is_integer(N) andalso N > 0 end, Terms) of
+    case check_pos(Terms) of
         true  -> ok;
         false -> {error, "meh", []}
     end;
@@ -67,15 +67,17 @@ validate_policy([{<<"testpos">>, Terms}]) when is_list(Terms) ->
 validate_policy([{Tag1, Arg1}, {Tag2, Arg2}])
   when is_list(Arg1), is_list(Arg2) ->
     case [Tag1, Tag2] -- [<<"testpos">>, <<"testeven">>] of
-        [] ->
-            case {lists:all(fun (N) -> is_integer(N) andalso N > 0 end,
-                            Arg1 ++ Arg2),
-                  length(Arg1) rem 2, length(Arg2) rem 2} of
-                {true, 0, 0} -> ok;
-                _            -> {error, "meh", []}
-            end;
-        _ -> {error, "meh", []}
+        [] -> case check_pos (Arg1) andalso check_pos (Arg2) andalso
+                   check_even(Arg1) andalso check_even(Arg2) of
+                  true -> ok;
+                  _    -> {error, "meh", []}
+              end;
+        _  -> {error, "meh", []}
    end;
 
 validate_policy(_) ->
     {error, "meh", []}.
+
+check_even(Terms) -> length(Terms) rem 2 =:= 0.
+check_pos(Terms)  -> lists:all(fun (N) -> is_integer(N) andalso
+                                          N > 0 end, Terms).

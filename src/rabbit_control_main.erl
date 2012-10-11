@@ -445,26 +445,31 @@ action(set_parameter, Node, [Component, Key, Value], Opts, Inform) ->
     VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
     Inform("Setting runtime parameter ~p for component ~p to ~p",
            [Key, Component, Value]),
-    rpc_call(Node, rabbit_runtime_parameters, parse_set,
+    rpc_call(Node, rabbit_runtime_parameters, parse_set_param,
              [VHostArg, list_to_binary(Component), list_to_binary(Key), Value]);
 
 action(clear_parameter, Node, [Component, Key], Opts, Inform) ->
     VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
     Inform("Clearing runtime parameter ~p for component ~p", [Key, Component]),
-    rpc_call(Node, rabbit_runtime_parameters, clear, [VHostArg,
-                                                      list_to_binary(Component),
-                                                      list_to_binary(Key)]);
+    rpc_call(Node, rabbit_runtime_parameters, clear_param,
+             [VHostArg, list_to_binary(Component), list_to_binary(Key)]);
 
 action(list_parameters, Node, [], Opts, Inform) ->
     VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
     Inform("Listing runtime parameters", []),
     display_info_list(
-      rpc_call(Node, rabbit_runtime_parameters, list_formatted, [VHostArg]),
+      rpc_call(Node, rabbit_runtime_parameters, list_formatted_param,
+               [VHostArg]),
       rabbit_runtime_parameters:info_keys());
 
-action(set_policy, Node, [Key, Pattern, Defn | Priority], Opts, Inform) ->
+action(set_policy, Node, [Key, Pattern, Defn | Priority], Opts, Inform)
+  when Priority == [] orelse length(Priority) == 1 ->
+    Msg = "Setting policy ~p for pattern ~p to ~p",
+    InformMsg = case Priority of []  -> Msg;
+                                 [_] -> Msg ++ " with priority ~p"
+                end,
     VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
-    Inform("Setting policy ~p for pattern ~p to ~p", [Key, Pattern, Defn]),
+    Inform(InformMsg, [Key, Pattern, Defn] ++ Priority),
     rpc_call(Node, rabbit_runtime_parameters, parse_set_policy,
              [VHostArg, list_to_binary(Key), Pattern, Defn] ++ Priority);
 
@@ -478,8 +483,9 @@ action(list_policies, Node, [], Opts, Inform) ->
     VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
     Inform("Listing policies", []),
     display_info_list(
-      rpc_call(Node, rabbit_runtime_parameters, list_formatted_policies, [VHostArg]),
-      rabbit_runtime_parameters:info_keys_policies());
+      rpc_call(Node, rabbit_runtime_parameters, list_formatted_policies,
+               [VHostArg]),
+      rabbit_runtime_parameters:info_keys_policy());
 
 action(report, Node, _Args, _Opts, Inform) ->
     Inform("Reporting server status on ~p~n~n", [erlang:universaltime()]),

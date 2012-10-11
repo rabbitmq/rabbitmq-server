@@ -1040,8 +1040,7 @@ test_policy_validation() ->
                          end, "", TagValList),
                 control_action(
                   set_policy,
-                  ["name", rabbit_misc:format("{\"pattern\":\".*\", \"policy\":"
-                                            "{~s}}", [string:join(Frag, ",")])])
+                  ["name", ".*", "{" ++ string:join(Frag, ",") ++ "}"])
         end,
 
     ok                 = SetPol([{"testeven", []}]),
@@ -1056,7 +1055,8 @@ test_policy_validation() ->
     {error_string, _}  = SetPol([{"testpos",  [2, 16, 32]}, {"testeven", [12, 24]}]),
     {error_string, _}  = SetPol([{"testpos",  [2, 16]},     {"testeven", [12, -2]}]),
     {error_string, _}  = SetPol([{"not_registered", []}]),
-    rabbit_runtime_parameters_test:unregister_policy_validator().
+    rabbit_runtime_parameters_test:unregister_policy_validator(),
+    passed.
 
 test_server_status() ->
     %% create a few things so there is some useful information to list

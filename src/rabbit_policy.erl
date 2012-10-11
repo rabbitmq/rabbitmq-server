@@ -170,7 +170,7 @@ validation0(Validators, Terms) ->
          {ok, []} ->
              ok;
          {ok, Unvalidated} ->
-             {error, "~p are not recognised policy settings", Unvalidated};
+             {error, "~p are not recognised policy settings", [Unvalidated]};
          {Error, _} ->
              Error
     end.
