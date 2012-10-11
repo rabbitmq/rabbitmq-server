@@ -23,8 +23,7 @@
 
 -export([start_link/5, connect/1, open_channel/3, hard_error_in_channel/3,
          channel_internal_error/3, server_misbehaved/2, channels_terminated/1,
-         close/2, close/3, server_close/2, fast_close/2,
-         info/2, info_keys/0, info_keys/1]).
+         close/2, close/3, server_close/2, info/2, info_keys/0, info_keys/1]).
 -export([behaviour_info/1]).
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2]).
@@ -86,9 +85,6 @@ close(Pid, Close) ->
 
 close(Pid, Close, Timeout) ->
     gen_server:call(Pid, {command, {close, Close, Timeout}}, infinity).
-
-fast_close(Pid, Close) ->
-    gen_server:call(Pid, {command, {fast_close, Close}}, infinity).
 
 server_close(Pid, Close) ->
     gen_server:cast(Pid, {server_close, Close}).
@@ -256,8 +252,6 @@ handle_command({open_channel, ProposedNumber, Consumer}, _From,
     {reply, amqp_channels_manager:open_channel(ChMgr, ProposedNumber, Consumer,
                                                Mod:open_channel_args(MState)),
      State};
-handle_command({fast_close, #'connection.close'{} = Close}, From, State) ->
-    app_initiated_fast_close(Close, From, State);
 handle_command({close, #'connection.close'{} = Close, Timeout},
               From, State) ->
     app_initiated_close(Close, From, Timeout, State);
@@ -295,11 +289,6 @@ app_initiated_close(Close, From, State) ->
                                       close = Close,
                                       from = From}, State).
 
-app_initiated_fast_close(Close, From, State) ->
-    set_closing_state(immediate, #closing{reason = app_initiated_close,
-                                          close = Close,
-                                          from = From}, State).
-
 internal_error(State) ->
     Close = #'connection.close'{reply_text = <<>>,
                                 reply_code = ?INTERNAL_ERROR,
@@ -329,16 +318,10 @@ set_closing_state(ChannelCloseType, NewClosing,
             true  -> NewClosing;
             false -> CurClosing
         end,
-    Reason = closing_to_reason(ResClosing),
-    {ClosingReason, ActualCloseType} = case ChannelCloseType of
-                                           immediate ->
-                                               {{immediate, Reason}, abrupt};
-                                           _ ->
-                                               {Reason, ChannelCloseType}
-                                       end,
-    amqp_channels_manager:signal_connection_closing(ChMgr, ActualCloseType,
+    ClosingReason = closing_to_reason(ResClosing),
+    amqp_channels_manager:signal_connection_closing(ChMgr, ChannelCloseType,
                                                     ClosingReason),
-    callback(closing, [ActualCloseType, ClosingReason],
+    callback(closing, [ChannelCloseType, ClosingReason],
              State#state{closing = ResClosing}).
 
 closing_priority(false)                                     -> 99;

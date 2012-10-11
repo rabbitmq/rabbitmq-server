@@ -81,16 +81,6 @@ handle_message({Ref, {error, Reason}},
                {_,          _} -> {socket_error, Reason}
            end, State}.
 
-closing(abrupt, {immediate, {Reason, Code, Text}}, State) ->
-    Close = #'connection.close'{reply_text = Text,
-                                reply_code = Code,
-                                class_id   = 0,
-                                method_id  = 0},
-    ?LOG_INFO("Connection (~p) initiating fast_close: ~p~n",
-              [self(), Reason]),
-    do2(Close, State),
-    rabbit_net:fast_close(State#state.sock),
-    {stop, Reason, State};
 closing(_ChannelCloseType, Reason, State) ->
     {ok, State#state{closing_reason = Reason}}.
 

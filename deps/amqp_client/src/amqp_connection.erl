@@ -70,7 +70,7 @@
 -include("amqp_client_internal.hrl").
 
 -export([open_channel/1, open_channel/2, open_channel/3]).
--export([start/1, close/1, close/2, close/3, fast_close/1, fast_close/3]).
+-export([start/1, close/1, close/2, close/3]).
 -export([error_atom/1]).
 -export([info/2, info_keys/1, info_keys/0]).
 
@@ -255,16 +255,6 @@ close(ConnectionPid, Code, Text, Timeout) ->
         infinity -> amqp_gen_connection:close(ConnectionPid, Close);
         _Value   -> amqp_gen_connection:close(ConnectionPid, Close, Timeout)
     end.
-
-fast_close(ConnectionPid) ->
-    fast_close(ConnectionPid, 200, <<"Goodbye">>).
-
-fast_close(ConnectionPid, Code, Text) ->
-    Close = #'connection.close'{reply_text = Text,
-                                reply_code = Code,
-                                class_id   = 0,
-                                method_id  = 0},
-    amqp_gen_connection:fast_close(ConnectionPid, Close).
 
 %%---------------------------------------------------------------------------
 %% Other functions
