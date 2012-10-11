@@ -47,8 +47,7 @@ resource_exists(ReqData, Context) ->
      end, ReqData, Context}.
 
 to_json(ReqData, Context) ->
-    rabbit_mgmt_util:reply(rabbit_mgmt_format:parameter(policy(ReqData)),
-                           ReqData, Context).
+    rabbit_mgmt_util:reply(policy(ReqData), ReqData, Context).
 
 accept_content(ReqData, Context) ->
     case rabbit_mgmt_util:vhost(ReqData) of
@@ -94,7 +93,7 @@ is_authorized(ReqData, Context) ->
 %%--------------------------------------------------------------------
 
 policy(ReqData) ->
-    rabbit_runtime_parameters:lookup(
-      rabbit_mgmt_util:vhost(ReqData), <<"policy">>, key(ReqData)).
+    rabbit_runtime_parameters:lookup_policy(
+      rabbit_mgmt_util:vhost(ReqData), key(ReqData)).
 
 key(ReqData)       -> rabbit_mgmt_util:id(key, ReqData).

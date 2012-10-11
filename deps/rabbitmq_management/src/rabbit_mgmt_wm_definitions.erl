@@ -158,7 +158,7 @@ export_name(_Name)                -> true.
 
 rw_state() ->
     [{parameters,  [vhost, component, key, value]},
-     {policies,    [vhost, key, value]},
+     {policies,    [vhost, key, pattern, definition, priority]},
      {users,       [name, password_hash, tags]},
      {vhosts,      [name]},
      {permissions, [user, vhost, configure, write, read]},
@@ -208,8 +208,22 @@ add_parameter(Param) ->
 add_policy(Param) ->
     VHost = pget(vhost, Param),
     Key = pget(key, Param),
-    case rabbit_runtime_parameters:set_policy(
-           VHost, Key, rabbit_misc:json_to_term(pget(value, Param))) of
+    case
+        case pget(priority, Param) of
+            undefined ->
+                 rabbit_runtime_parameters:set_policy(
+                   pget(vhost, Param),
+                   pget(key, Param),
+                   pget(pattern, Param),
+                   rabbit_misc:json_to_term(pget(definition, Param)));
+             Priority ->
+                 rabbit_runtime_parameters:set_policy(
+                   pget(vhost, Param),
+                   pget(key, Param),
+                   pget(pattern, Param),
+                   rabbit_misc:json_to_term(pget(definition, Param)),
+                   Priority)
+        end of
         ok                -> ok;
         {error_string, E} -> S = rabbit_misc:format(" (~s/~s)", [VHost, Key]),
                              exit(list_to_binary(E ++ S))

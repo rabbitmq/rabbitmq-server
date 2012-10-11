@@ -64,10 +64,8 @@ ha_test_() ->
     {timeout, 60, fun ha/0}.
 
 ha() ->
-    Policy = [{value, [{pattern, <<".*">>},
-                       {policy,  [{'ha-mode', <<"all">>}]
-                       }]
-              }],
+    Policy = [{pattern,    <<".*">>},
+              {definition, [{'ha-mode', <<"all">>}]}],
     http_put("/policies/%2f/HA", Policy, ?NO_CONTENT),
     QArgs = [{node, <<"hare">>}],
     http_put("/queues/%2f/ha-queue", QArgs, ?NO_CONTENT),
