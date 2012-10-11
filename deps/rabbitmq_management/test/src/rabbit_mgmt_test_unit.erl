@@ -34,15 +34,12 @@ pack_binding_test() ->
                    <<"foo_bar/bash">>, []),
     assert_binding(<<"foo%5Fbar%5Fbash">>,
                    <<"foo_bar_bash">>, []),
-    assert_binding(<<"foo_arg1_foo%5Fbar%2Fbash">>,
-                   <<"foo">>, [{<<"arg1">>, longstr, <<"foo_bar/bash">>}]),
-    assert_binding(<<"foo_arg1_bar_arg2_bash">>,
-                   <<"foo">>, [{<<"arg1">>, longstr, <<"bar">>},
-                               {<<"arg2">>, longstr, <<"bash">>}]),
-    assert_binding(<<"_arg1_bar">>,
-                   <<"">>, [{<<"arg1">>, longstr, <<"bar">>}]),
+    assert_binding(<<"foo_%7B%22key%22%3A%22value%22%7D">>,
+                   <<"foo">>, [{<<"key">>, longstr, <<"value">>}]),
+    assert_binding(<<"_%7B%22key%22%3A%22value%22%7D">>,
+                   <<"">>, [{<<"key">>, longstr, <<"value">>}]),
 
-    {bad_request, {no_value, "routing"}} =
+    {bad_request, {not_json, <<"routing">>}} =
         rabbit_mgmt_format:unpack_binding_props(<<"bad_routing">>),
     ok.
 

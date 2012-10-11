@@ -168,44 +168,37 @@ listener(#listener{node = Node, protocol = Protocol,
 
 pack_binding_props(<<"">>, []) ->
     <<"_">>;
+pack_binding_props(Key, []) ->
+    list_to_binary(quote_binding(Key));
 pack_binding_props(Key, Args) ->
-    Dict = dict:from_list([{K, V} || {K, _, V} <- Args]),
-    ArgsKeys = lists:sort(dict:fetch_keys(Dict)),
-    PackedArgs =
-        string:join(
-          [quote_binding(K) ++ "_" ++
-               quote_binding(dict:fetch(K, Dict)) || K <- ArgsKeys],
-          "_"),
-    list_to_binary(quote_binding(Key) ++
-                       case PackedArgs of
-                           "" -> "";
-                           _  -> "_" ++ PackedArgs
-                       end).
+    {ok, JSON} = rabbit_misc:json_encode(amqp_table(Args)),
+    ArgsEnc = quote_binding(un_io(JSON)),
+    list_to_binary(quote_binding(Key) ++ "_" ++ ArgsEnc).
+
+un_io(IOL) ->
+    binary_to_list(iolist_to_binary(IOL)).
 
 quote_binding(Name) ->
-    binary_to_list(
-      iolist_to_binary(
-        re:replace(mochiweb_util:quote_plus(Name), "_", "%5F", [global]))).
+    re:replace(mochiweb_util:quote_plus(Name), "_", "%5F", [global]).
 
 unpack_binding_props(B) when is_binary(B) ->
     unpack_binding_props(binary_to_list(B));
 unpack_binding_props(Str) ->
-    unpack_binding_props0(tokenise(Str)).
+    case tokenise(Str) of
+        ["_"]             -> {<<>>, []};
+        [Key]             -> {unquote_binding(Key), []};
+        ["_", ArgsEnc]    -> unpack_binding_props0(<<>>, ArgsEnc);
+        [Key, ArgsEnc]    -> unpack_binding_props0(
+                               unquote_binding(Key), ArgsEnc);
+        _                 -> {bad_request, {too_many_tokens, Str}}
+    end.
 
-unpack_binding_props0([Key | Args]) ->
-    try
-        {unquote_binding(Key), to_amqp_table(unpack_binding_args(Args))}
-    catch E -> E
-    end;
-unpack_binding_props0([]) ->
-    {bad_request, empty_properties}.
-
-unpack_binding_args([]) ->
-    [];
-unpack_binding_args([K]) ->
-    throw({bad_request, {no_value, K}});
-unpack_binding_args([K, V | Rest]) ->
-    [{unquote_binding(K), unquote_binding(V)} | unpack_binding_args(Rest)].
+unpack_binding_props0(Key, ArgsEnc) ->
+    Args = unquote_binding(ArgsEnc),
+    case rabbit_misc:json_decode(Args) of
+        {ok, JSON} -> {Key, to_amqp_table(JSON)};
+        error      -> {bad_request, {not_json, Args}}
+    end.
 
 unquote_binding(Name) ->
     list_to_binary(mochiweb_util:unquote(Name)).

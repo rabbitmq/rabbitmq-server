@@ -334,17 +334,20 @@ bindings_post_test() ->
     Headers1 = http_post("/bindings/%2f/e/myexchange/q/myqueue", [], ?CREATED),
     "../../../../%2F/e/myexchange/q/myqueue/_" = pget("location", Headers1),
     Headers2 = http_post("/bindings/%2f/e/myexchange/q/myqueue", BArgs, ?CREATED),
-    "../../../../%2F/e/myexchange/q/myqueue/routing_foo_bar" =
+    PropertiesKey = "routing_%7B%22foo%22%3A%22bar%22%7D",
+    PropertiesKeyEnc = "routing_%257B%2522foo%2522%253A%2522bar%2522%257D",
+    PropertiesKeyBin = list_to_binary(PropertiesKey),
+    "../../../../%2F/e/myexchange/q/myqueue/" ++ PropertiesKeyEnc =
         pget("location", Headers2),
+    URI = "/bindings/%2F/e/myexchange/q/myqueue/" ++ PropertiesKeyEnc,
     [{source,<<"myexchange">>},
      {vhost,<<"/">>},
      {destination,<<"myqueue">>},
      {destination_type,<<"queue">>},
      {routing_key,<<"routing">>},
      {arguments,[{foo,<<"bar">>}]},
-     {properties_key,<<"routing_foo_bar">>}] =
-        http_get("/bindings/%2F/e/myexchange/q/myqueue/routing_foo_bar", ?OK),
-    http_delete("/bindings/%2F/e/myexchange/q/myqueue/routing_foo_bar", ?NO_CONTENT),
+     {properties_key,PropertiesKeyBin}] = http_get(URI, ?OK),
+    http_delete(URI, ?NO_CONTENT),
     http_delete("/exchanges/%2f/myexchange", ?NO_CONTENT),
     http_delete("/queues/%2f/myqueue", ?NO_CONTENT),
     ok.
@@ -665,10 +668,10 @@ arguments_test() ->
         pget(arguments, http_get("/exchanges/%2f/myexchange", ?OK)),
     [{'x-expires', 1800000}] =
         pget(arguments, http_get("/queues/%2f/myqueue", ?OK)),
-    [{foo, <<"bar">>}, {'x-match', <<"all">>}] =
+    [{'x-match', <<"all">>}, {foo, <<"bar">>}] =
         pget(arguments,
              http_get("/bindings/%2f/e/myexchange/q/myqueue/" ++
-                          "_foo_bar_x-match_all", ?OK)),
+                          "_%257B%2522x-match%2522%253A%2522all%2522%252C%2522foo%2522%253A%2522bar%2522%257D", ?OK)),
     http_delete("/exchanges/%2f/myexchange", ?NO_CONTENT),
     http_delete("/queues/%2f/myqueue", ?NO_CONTENT),
     ok.
