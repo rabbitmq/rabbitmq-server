@@ -103,24 +103,13 @@
      </td>
 <% } else { %>
      <td>
-<%= fmt_resource_bar(node.fd_used,
-                     node.fd_total + ' available',
-                     node.fd_used / node.fd_total,
-                     fmt_color(node.fd_used / node.fd_total, FD_THRESHOLDS)) %>
+<%= fmt_resource_bar_count(node.fd_used, node.fd_total, FD_THRESHOLDS) %>
      </td>
      <td>
-<%= fmt_resource_bar(node.sockets_used,
-                     node.sockets_total + ' available',
-                     node.sockets_used / node.sockets_total,
-                     fmt_color(node.sockets_used / node.sockets_total,
-                               FD_THRESHOLDS)) %>
+<%= fmt_resource_bar_count(node.sockets_used, node.sockets_total, FD_THRESHOLDS) %>
      </td>
      <td>
-<%= fmt_resource_bar(node.proc_used,
-                     node.proc_total + ' available',
-                     node.proc_used / node.proc_total,
-                     fmt_color(node.proc_used / node.proc_total,
-                               PROCESS_THRESHOLDS)) %>
+<%= fmt_resource_bar_count(node.proc_used, node.proc_total, PROCESS_THRESHOLDS) %>
      </td>
      <td>
 <% if (node.mem_limit != 'memory_monitoring_disabled') { %>
