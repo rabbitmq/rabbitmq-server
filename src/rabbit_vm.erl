@@ -100,8 +100,11 @@ child_memory(Pid, supervisor) when is_pid (Pid) -> sup_memory(Pid);
 child_memory(_, _)                              -> 0.
 
 mnesia_memory() ->
-    lists:sum([bytes(mnesia:table_info(Tab, memory)) ||
-                  Tab <- mnesia:system_info(tables)]).
+    case mnesia:system_info(is_running) of
+        yes -> lists:sum([bytes(mnesia:table_info(Tab, memory)) ||
+                             Tab <- mnesia:system_info(tables)]);
+        no  -> 0
+    end.
 
 ets_memory(Name) ->
     lists:sum([bytes(ets:info(T, memory)) || T <- ets:all(),
