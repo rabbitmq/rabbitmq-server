@@ -27,6 +27,11 @@ function fmt_bytes(bytes) {
     return (power == 0 ? num.toFixed(0) : num.toFixed(1)) + powers[power];
 }
 
+function fmt_memory(memory, key) {
+    return '<div class="memory-key memory_' + key + '"></div>' +
+        fmt_bytes(memory[key]);
+}
+
 function fmt_boolean(b) {
     if (b == undefined) return UNKNOWN_REPR;
 
@@ -46,6 +51,10 @@ function fmt_date(d) {
 function fmt_time(t, suffix) {
     if (t == undefined || t == 0) return '';
     return t + suffix;
+}
+
+function fmt_millis(millis) {
+    return Math.round(millis / 1000) + "s";
 }
 
 function fmt_parameters(obj) {
@@ -396,12 +405,46 @@ function fmt_connection_state(conn) {
     }
 
     if (explanation) {
-        return '<div class="' + colour + '"><acronym title="' + explanation +
-            '">' + text + '</acronym></div>';
+        return '<div class="status-' + colour + '"><acronym title="' +
+            explanation + '">' + text + '</acronym></div>';
     }
     else {
-        return '<div class="' + colour + '">' + text + '</div>';
+        return '<div class="status-' + colour + '">' + text + '</div>';
     }
+}
+
+function fmt_resource_bar(used_label, limit_label, ratio, colour, help) {
+    var width = 120;
+
+    var res = '';
+    var other_colour = colour;
+    if (ratio > 1) {
+        ratio = 1 / ratio;
+        inverted = true;
+        colour += '-dark';
+    }
+    else {
+        other_colour += '-dark';
+    }
+    var offset = Math.round(width * (1 - ratio));
+
+    res += '<div class="status-bar" style="width: ' + width + 'px;">';
+    res += '<div class="status-bar-main ' + colour + '" style="background-image: url(img/bg-' + other_colour + '.png); background-position: -' + offset + 'px 0px; background-repeat: no-repeat;">';
+    res += used_label;
+    if (help != null) {
+        res += ' <span class="help" id="' + help + '"></span>';
+    }
+    res += '</div>'; // status-bar-main
+    if (limit_label != null) {
+        res += '<sub>' + limit_label + '</sub>';
+    }
+    res += '</div>'; // status-bar
+    return res;
+}
+
+function fmt_resource_bar_count(used, total, thresholds) {
+    return fmt_resource_bar(used, total + ' available', used / total,
+                            fmt_color(used / total, thresholds));
 }
 
 function fmt_shortened_uri(uri0) {

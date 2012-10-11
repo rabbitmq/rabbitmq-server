@@ -30,6 +30,7 @@ div.box, div.section, div.section-hidden { overflow: auto; width: 100%; }
 
 .left { float: left; }
 .right { float: right; }
+.clear { clear: both; }
 
 .help { color: #888; cursor: pointer; }
 .help:hover { color: #444; }
@@ -43,7 +44,6 @@ table.list { border-width: 1px; border-bottom: 1px solid #ccc; margin-bottom: 1e
 table.list th, table.list td { border-left: 1px solid #ccc; border-right: 1px solid #ccc; }
 table.list th { text-align: center; border-top: 1px solid #ccc; border-bottom: 1px solid #ccc; }
 table.list td a { display: block; width: 100%; }
-table.list td.status a { display: inline; }
 table.list th a.sort { display: block; width: 100%; cursor: pointer; }
 table.list th a.sort .arrow { color: #888; }
 table.list td p { margin: 0; padding: 1px 0 0 0; }
@@ -54,6 +54,25 @@ table.list tr.total td { border: none; border-top: 1px solid #bbb; }
 table.list tr.total th { border: none; border-top: 1px solid #bbb; text-align: right; vertical-align: middle; }
 
 div.section table.list, div.section-hidden table.list { margin-bottom: 0; }
+
+div.memory-bar { margin: 10px 0 5px 0; border-radius: 5px; border: 1px solid #ddd; float: left; }
+div.memory-section { float: left; height: 30px; }
+div.memory-key { float: left; width: 10px; height: 10px; margin: 3px 5px 0 0;}
+div.memory-info { float: left; padding: 10px 10px 0 0; }
+button.memory-button { margin-top: 10px; }
+
+div.memory_connection_procs { background: #955300; }
+div.memory_queue_procs      { background: #da7900; }
+div.memory_plugins          { background: #ffc884; }
+div.memory_other_proc       { background: #fff4e7; }
+div.memory_mnesia           { background: #005395; }
+div.memory_msg_index        { background: #0079da; }
+div.memory_mgmt_db          { background: #84c8ff; }
+div.memory_other_ets        { background: #e7f4ff; }
+div.memory_binary           { background: #666; }
+div.memory_code             { background: #999; }
+div.memory_atom             { background: #bbb; }
+div.memory_other_system     { background: #ddd; }
 
 sub { display: block; font-size: 0.8em; color: #888; }
 small { font-size: 0.8em; color: #888; }
@@ -74,12 +93,16 @@ table.mini td { border: none; padding: 0 2px 2px 2px; }
 tr.alt1>td { background: #eee; }
 tr.alt2>td { background: #fff; }
 
-td.status { text-align: center; }
-td.status div { padding: 5px; text-align: center; border-radius: 5px; -moz-border-radius: 5px; }
-td.status div.red { background: #F62817; color:white; }
-td.status div.red * { color:white; }
-td.status div.yellow { background: yellow; }
-td.status div.green { background: lightgreen; }
+div.status-bar, div.status-red, div.status-yellow, div.status-green { text-align: center; }
+div.status-bar-main, div.status-red, div.status-yellow, div.status-green { border-radius: 5px; -moz-border-radius: 5px; padding: 5px; }
+div.status-bar sub { white-space: nowrap; }
+
+div.status-bar .red, div.status-red { background: #ff7a7a; color: white; }
+div.status-bar .yellow, div.status-yellow { background: #ffff7b; }
+div.status-bar .green, div.status-green { background: #98f898; }
+div.status-bar .red-dark { background: #e24545; color: white; }
+/* yellow-dark and green-dark can never happen */
+div.status-bar .red *, div.status-bar .red-dark *, div.status-red * { color: white; }
 
 td.l { text-align: left !important; }
 td.c { text-align: center !important; }
@@ -160,7 +183,7 @@ acronym { background: #add; color: #222; padding: 2px 4px; border-radius: 2px; -
 
 acronym.warning { background: #daa; }
 
-.status acronym, small acronym { background: none; color: inherit; padding: 0; border-bottom: 1px dotted; cursor: default; }
+.status-red acronym, .status-yellow acronym, .status-green acronym, small acronym { background: none; color: inherit; padding: 0; border-bottom: 1px dotted; cursor: default; }
 
 acronym.type { background: none; color: inherit; padding: 0; border-bottom: 1px dotted #ddd; cursor: default; }
 

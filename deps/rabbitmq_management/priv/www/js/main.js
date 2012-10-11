@@ -122,6 +122,19 @@ function reset_timer() {
     }
 }
 
+function update_manual(div, query) {
+    var path;
+    var template;
+    if (query == 'memory') {
+        path = current_reqs['node'] + '?memory=true';
+        template = 'memory';
+    }
+    var data = JSON.parse(sync_get(path));
+
+    replace_content(div, format(template, data));
+    postprocess_partial();
+}
+
 function render(reqs, template, highlight) {
     current_template = template;
     current_reqs = reqs;
@@ -352,6 +365,9 @@ function postprocess() {
             window.location = path;
             setTimeout('app.run()');
             return false;
+        });
+    $('.update-manual').click(function() {
+            update_manual($(this).attr('for'), $(this).attr('query'));
         });
     $('input, select').die();
     $('.multifield input').live('blur', function() {

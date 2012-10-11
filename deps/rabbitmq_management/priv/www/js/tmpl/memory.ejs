@@ -1,0 +1,96 @@
+<%
+  var width = 800;
+  if (memory == "not_available") {
+%>
+<p class="warning">
+  Memory statistics not available.
+</p>
+<% } else { %>
+<div class="memory-bar">
+<%
+  var sections = {'connection_procs' : 'Connections',
+                  'queue_procs'      : 'Queues',
+                  'plugins'          : 'Plugins',
+                  'other_proc'       : 'Other process memory',
+                  'mnesia'           : 'Mnesia',
+                  'msg_index'        : 'Message store index',
+                  'mgmt_db'          : 'Management database',
+                  'other_ets'        : 'Other ETS tables',
+                  'binary'           : 'Binaries',
+                  'code'             : 'Code',
+                  'atom'             : 'Atoms',
+                  'other_system'     : 'Other system'};
+  for (var section in sections) {
+    var section_width = Math.round(width * memory[section] / memory.total);
+%>
+  <div class="memory-section memory_<%= section %>"
+       style="width: <%= section_width %>px;"
+       title="<%= sections[section] %> <%= fmt_bytes(memory[section]) %>">
+  </div>
+<% } %>
+</div>
+<span class="clear">&nbsp;</span>
+<div class="box">
+<table class="facts">
+  <tr>
+    <th>Connections</th>
+    <td><%= fmt_memory(memory, 'connection_procs') %></td>
+  </tr>
+  <tr>
+    <th>Queues</th>
+    <td><%= fmt_memory(memory, 'queue_procs') %></td>
+  </tr>
+  <tr>
+    <th>Plugins</th>
+    <td><%= fmt_memory(memory, 'plugins') %></td>
+  </tr>
+  <tr>
+    <th>Other process memory</th>
+    <td><%= fmt_memory(memory, 'other_proc') %></td>
+  </tr>
+</table>
+<table class="facts">
+  <tr>
+    <th>Mnesia</th>
+    <td><%= fmt_memory(memory, 'mnesia') %></td>
+  </tr>
+  <tr>
+    <th>Message store index</th>
+    <td><%= fmt_memory(memory, 'msg_index') %></td>
+  </tr>
+  <tr>
+    <th>Management database</th>
+    <td><%= fmt_memory(memory, 'mgmt_db') %></td>
+  </tr>
+  <tr>
+    <th>Other ETS tables</th>
+    <td><%= fmt_memory(memory, 'other_ets') %></td>
+  </tr>
+</table>
+<table class="facts">
+  <tr>
+    <th>Binaries</th>
+    <td><%= fmt_memory(memory, 'binary') %></td>
+  </tr>
+  <tr>
+    <th>Code</th>
+    <td><%= fmt_memory(memory, 'code') %></td>
+  </tr>
+  <tr>
+    <th>Atoms</th>
+    <td><%= fmt_memory(memory, 'atom') %></td>
+  </tr>
+  <tr>
+    <th>Other system</th>
+    <td><%= fmt_memory(memory, 'other_system') %></td>
+  </tr>
+</table>
+</div>
+
+<div class="memory-info">
+  Last updated: <b><%= fmt_date(new Date()) %></b>.<br/>
+  Total memory used at last update: <b><%= fmt_bytes(memory.total) %></b>
+  <span class="help" id="memory-use"></span>
+</div>
+
+<% } %>
