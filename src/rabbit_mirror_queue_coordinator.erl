@@ -101,19 +101,25 @@
 %% channel during a publish, only some of the mirrors may receive that
 %% publish. As a result of this problem, the messages broadcast over
 %% the gm contain published content, and thus slaves can operate
-%% successfully on messages that they only receive via the gm. The key
-%% purpose of also sending messages directly from the channels to the
-%% slaves is that without this, in the event of the death of the
-%% master, messages could be lost until a suitable slave is promoted.
+%% successfully on messages that they only receive via the gm.
 %%
-%% However, that is not the only reason. For example, if confirms are
-%% in use, then there is no guarantee that every slave will see the
-%% delivery with the same msg_seq_no. As a result, the slaves have to
-%% wait until they've seen both the publish via gm, and the publish
-%% via the channel before they have enough information to be able to
-%% perform the publish to their own bq, and subsequently issue the
-%% confirm, if necessary. Either form of publish can arrive first, and
-%% a slave can be upgraded to the master at any point during this
+%% The key purpose of also sending messages directly from the channels
+%% to the slaves is that without this, in the event of the death of
+%% the master, messages could be lost until a suitable slave is
+%% promoted. However, that is not the only reason. A slave cannot send
+%% confirms for a message until it has seen it from the
+%% channel. Otherwise, it might send a confirm to a channel for a
+%% message that it might *never* receive from that channel. This can
+%% happen because new slaves join the gm ring (and thus receive
+%% messages from the master) before inserting themselves in the
+%% queue's mnesia record (which is what channels look at for routing).
+%% As it turns out, channels will simply ignore such bogus confirms,
+%% but relying on that would introduce a dangerously tight coupling.
+%%
+%% Hence the slaves have to wait until they've seen both the publish
+%% via gm, and the publish via the channel before they issue the
+%% confirm. Either form of publish can arrive first, and a slave can
+%% be upgraded to the master at any point during this
 %% process. Confirms continue to be issued correctly, however.
 %%
 %% Because the slave is a full process, it impersonates parts of the

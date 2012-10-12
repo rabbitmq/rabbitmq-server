@@ -634,15 +634,11 @@ maybe_enqueue_message(
             SQ1 = dict:store(ChPid, {MQ1, PendingCh}, SQ),
             State1 #state { sender_queues = SQ1 };
         {ok, confirmed} ->
-            %% BQ has confirmed it but we didn't know what the
-            %% msg_seq_no was at the time. We do now!
             ok = rabbit_misc:confirm_to_sender(ChPid, [MsgSeqNo]),
             SQ1 = remove_from_pending_ch(MsgId, ChPid, SQ),
             State1 #state { msg_id_status = dict:erase(MsgId, MS),
                             sender_queues = SQ1 };
         {ok, published} ->
-            %% It was published to the BQ and we didn't know the
-            %% msg_seq_no so couldn't confirm it at the time.
             {MS1, SQ1} =
                 case needs_confirming(Delivery, State1) of
                     never       -> {dict:erase(MsgId, MS),
@@ -686,13 +682,10 @@ process_instruction(
                    msg_id_status       = MS }) ->
 
     %% We really are going to do the publish right now, even though we
-    %% may not have seen it directly from the channel. As a result, we
-    %% may know that it needs confirming without knowing its
-    %% msg_seq_no, which means that we can see the confirmation come
-    %% back from the backing queue without knowing the msg_seq_no,
-    %% which means that we're going to have to hang on to the fact
-    %% that we've seen the msg_id confirmed until we can associate it
-    %% with a msg_seq_no.
+    %% may not have seen it directly from the channel. But we cannot
+    %% issues confirms until the latter has happened. So we need to
+    %% keep track of the MsgId and its confirmation status in the
+    %% meantime.
     State1 = ensure_monitoring(ChPid, State),
     {MQ, PendingCh} = get_sender_queue(ChPid, SQ),
     {MQ1, PendingCh1, MS1} =
