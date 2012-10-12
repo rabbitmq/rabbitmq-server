@@ -249,8 +249,7 @@ handle_command({open_channel, ProposedNumber, Consumer}, _From,
     {reply, amqp_channels_manager:open_channel(ChMgr, ProposedNumber, Consumer,
                                                Mod:open_channel_args(MState)),
      State};
-handle_command({close, #'connection.close'{} = Close, Timeout},
-              From, State) ->
+handle_command({close, #'connection.close'{} = Close, Timeout}, From, State) ->
     app_initiated_close(Close, From, Timeout, State).
 
 %%---------------------------------------------------------------------------
