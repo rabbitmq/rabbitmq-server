@@ -1032,29 +1032,20 @@ test_runtime_parameters() ->
 test_policy_validation() ->
     rabbit_runtime_parameters_test:register_policy_validator(),
     SetPol =
-        fun (TagValList) ->
-                Frag = lists:foldl(
-                         fun ({Pol, Val}, Acc) ->
-                               [rabbit_misc:format("\"~s\":~p", [Pol, Val]) |
-                                Acc]
-                         end, "", TagValList),
+        fun (Tag, Val) ->
                 control_action(
                   set_policy,
-                  ["name", ".*", "{" ++ string:join(Frag, ",") ++ "}"])
+                  ["name", ".*", rabbit_misc:format("{\"~s\":~p}", [Tag, Val])])
         end,
 
-    ok                 = SetPol([{"testeven", []}]),
-    ok                 = SetPol([{"testeven", [1, 2]}]),
-    ok                 = SetPol([{"testeven", [1, 2, 3, 4]}]),
-    ok                 = SetPol([{"testpos",  [2, 3, 5, 562]}]),
+    ok                 = SetPol("testeven", []),
+    ok                 = SetPol("testeven", [1, 2]),
+    ok                 = SetPol("testeven", [1, 2, 3, 4]),
+    ok                 = SetPol("testpos",  [2, 5, 5678]),
 
-    {error_string, _}  = SetPol([{"testpos",  [-1, 0, 1]}]),
-    {error_string, _}  = SetPol([{"testeven", [ 1, 2, 3]}]),
+    {error_string, _}  = SetPol("testpos",  [-1, 0, 1]),
+    {error_string, _}  = SetPol("testeven", [ 1, 2, 3]),
 
-    ok                 = SetPol([{"testpos",  [2, 16]},     {"testeven", [12, 24]}]),
-    {error_string, _}  = SetPol([{"testpos",  [2, 16, 32]}, {"testeven", [12, 24]}]),
-    {error_string, _}  = SetPol([{"testpos",  [2, 16]},     {"testeven", [12, -2]}]),
-    {error_string, _}  = SetPol([{"not_registered", []}]),
     rabbit_runtime_parameters_test:unregister_policy_validator(),
     passed.
 
