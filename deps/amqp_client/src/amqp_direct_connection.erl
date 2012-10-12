@@ -89,7 +89,8 @@ terminate(_Reason, #state{node = Node}) ->
 i(type, _State) -> direct;
 i(pid,  _State) -> self();
 %% AMQP Params
-i(user,              #state{params = P}) -> P#amqp_params_direct.username;
+i(user, #state{params=#amqp_params_direct{username=#user{username=U}}}) -> U;
+i(user, #state{params=#amqp_params_direct{username=U}}) -> U;
 i(vhost,             #state{params = P}) -> P#amqp_params_direct.virtual_host;
 i(client_properties, #state{params = P}) ->
     P#amqp_params_direct.client_properties;
