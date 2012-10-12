@@ -39,18 +39,18 @@
     <td><%= fmt_string(link.node) %></td>
 <% } %>
 <% if (link.error) { %>
-    <td class="status">
-       <div class="red"><acronym title="<%= fmt_escape_html_one_line(link.error) %>"><%= link.status %></acronym></div>
+    <td>
+       <div class="status-red"><acronym title="<%= fmt_escape_html_one_line(link.error) %>"><%= link.status %></acronym></div>
     </td>
     <td></td>
     <td><%= link.timestamp %></td>
   </tr>
 <% } else { %>
-    <td class="status">
+    <td>
        <% if (link.status == 'starting') { %>
-         <div class="yellow"><%= link.status %></div>
+         <div class="status-yellow"><%= link.status %></div>
        <% } else { %>
-         <div class="green"><%= link.status %></div>
+         <div class="status-green"><%= link.status %></div>
       <% } %>
     </td>
     <td class="r">
