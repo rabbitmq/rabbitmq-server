@@ -206,13 +206,13 @@ list_param_strict(Component)        -> list_param('_',   Component, not_found).
 list_param(VHost, Component)        -> list_param(VHost, Component, []).
 list_param_strict(VHost, Component) -> list_param(VHost, Component, not_found).
 
-list_param(_VHost, <<"policy">>, _Default) ->
-    {error, "policies may not be listed using this method"};
 list_param(VHost, Component, Default) ->
     case component_good(Component) of
         true -> Match = #runtime_parameters{key = {VHost, Component, '_'},
                                             _ = '_'},
-                [p(P) || P <- mnesia:dirty_match_object(?TABLE, Match)];
+                [p(P) || #runtime_parameters{ key = {_VHost, Comp, _Key}} = P <-
+                         mnesia:dirty_match_object(?TABLE, Match),
+                         Comp /= <<"policy">>];
         _    -> Default
     end.
 
