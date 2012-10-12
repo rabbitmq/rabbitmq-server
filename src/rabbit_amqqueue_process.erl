@@ -559,6 +559,7 @@ deliver_or_enqueue(Delivery = #delivery{message    = Message,
         {true, State1} ->
             State1;
         %% the next one is an optimisations
+        %% TODO: optimise the Confirm =/= never case too
         {false, State1 = #q{ttl = 0, dlx = undefined,
                             backing_queue = BQ, backing_queue_state = BQS}}
           when Confirm == never ->
