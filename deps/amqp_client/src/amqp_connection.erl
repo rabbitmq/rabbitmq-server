@@ -251,10 +251,7 @@ close(ConnectionPid, Code, Text, Timeout) ->
                                 reply_code = Code,
                                 class_id   = 0,
                                 method_id  = 0},
-    case Timeout of
-        infinity -> amqp_gen_connection:close(ConnectionPid, Close);
-        _Value   -> amqp_gen_connection:close(ConnectionPid, Close, Timeout)
-    end.
+    amqp_gen_connection:close(ConnectionPid, Close, Timeout).
 
 %%---------------------------------------------------------------------------
 %% Other functions
