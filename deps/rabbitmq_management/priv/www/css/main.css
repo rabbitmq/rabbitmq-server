@@ -187,9 +187,14 @@ acronym.warning { background: #daa; }
 
 acronym.type { background: none; color: inherit; padding: 0; border-bottom: 1px dotted #ddd; cursor: default; }
 
-table.bindings { margin-bottom: 1em; }
-td.binding-endpoint span.object { border: 1px solid #bbb; padding: 10px; border-radius: 10px; -moz-border-radius: 10px; }
-td.binding-endpoint span.arrow { font-size: 200%; }
+div.bindings-wrapper { display: inline-block; }
+div.bindings-wrapper table { margin: auto; }
+div.bindings-wrapper p { margin: 10px; text-align: center; }
+div.bindings-wrapper span.exchange { border: 1px solid #bbb; padding: 10px; border-radius: 10px; -moz-border-radius: 10px; }
+div.bindings-wrapper span.queue { border: 1px solid #666; padding: 10px; }
+div.bindings-wrapper td span.exchange, div.bindings-wrapper td span.queue { background: white; display: block; }
+div.bindings-wrapper span.exchange a, div.bindings-wrapper span.queue a { font-weight: normal !important; }
+div.bindings-wrapper p.arrow { font-size: 200%; }
 
 #footer { overflow: auto; width: 100%; }
 #footer-nav { padding-top: 5px; }
