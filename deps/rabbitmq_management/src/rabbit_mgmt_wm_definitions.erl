@@ -208,22 +208,12 @@ add_parameter(Param) ->
 add_policy(Param) ->
     VHost = pget(vhost, Param),
     Key = pget(key, Param),
-    case
-        case pget(priority, Param) of
-            undefined ->
-                 rabbit_runtime_parameters:set_policy(
-                   pget(vhost, Param),
-                   pget(key, Param),
-                   pget(pattern, Param),
-                   rabbit_misc:json_to_term(pget(definition, Param)));
-             Priority ->
-                 rabbit_runtime_parameters:set_policy(
-                   pget(vhost, Param),
-                   pget(key, Param),
-                   pget(pattern, Param),
-                   rabbit_misc:json_to_term(pget(definition, Param)),
-                   Priority)
-        end of
+    case rabbit_runtime_parameters:set_policy(
+           pget(vhost, Param),
+           pget(key, Param),
+           pget(pattern, Param),
+           rabbit_misc:json_to_term(pget(definition, Param)),
+           pget(priority, Param)) of
         ok                -> ok;
         {error_string, E} -> S = rabbit_misc:format(" (~s/~s)", [VHost, Key]),
                              exit(list_to_binary(E ++ S))
