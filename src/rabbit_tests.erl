@@ -927,7 +927,7 @@ test_dynamic_mirroring() ->
 dm_list_match([],     [],      0)     -> ok;
 dm_list_match(_,      [],     _Extra) -> error;
 dm_list_match([H|T1], [H |T2], Extra) -> dm_list_match(T1, T2, Extra);
-dm_list_match(L1,     [H2|T2], Extra) -> dm_list_match(L1, T2, Extra - 1).
+dm_list_match(L1,     [_H|T2], Extra) -> dm_list_match(L1, T2, Extra - 1).
 
 test_user_management() ->
 
