@@ -24,6 +24,7 @@
 -type(ack()   :: any()).
 -type(state() :: any()).
 
+-type(msg_ids() :: [rabbit_types:msg_id()]).
 -type(fetch_result(Ack) ::
         ('empty' |
          %% Message,                  IsDelivered, AckTag, Remaining_Len
@@ -117,7 +118,7 @@
 %% first time the message id appears in the result of
 %% drain_confirmed. All subsequent appearances of that message id will
 %% be ignored.
--callback drain_confirmed(state()) -> {[rabbit_guid:guid()], state()}.
+-callback drain_confirmed(state()) -> {msg_ids(), state()}.
 
 %% Drop messages from the head of the queue while the supplied predicate returns
 %% true. Also accepts a boolean parameter that determines whether the messages
@@ -136,7 +137,7 @@
 
 %% Acktags supplied are for messages which can now be forgotten
 %% about. Must return 1 msg_id per Ack, in the same order as Acks.
--callback ack([ack()], state()) -> {[rabbit_guid:guid()], state()}.
+-callback ack([ack()], state()) -> {msg_ids(), state()}.
 
 %% Acktags supplied are for messages which should be processed. The
 %% provided callback function is called with each message.
@@ -144,7 +145,7 @@
 
 %% Reinsert messages into the queue which have already been delivered
 %% and were pending acknowledgement.
--callback requeue([ack()], state()) -> {[rabbit_guid:guid()], state()}.
+-callback requeue([ack()], state()) -> {msg_ids(), state()}.
 
 %% How long is my queue?
 -callback len(state()) -> non_neg_integer().
