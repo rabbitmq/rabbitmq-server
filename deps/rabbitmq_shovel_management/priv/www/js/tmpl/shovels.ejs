@@ -25,8 +25,8 @@
     <td><%= fmt_string(shovel.node) %></td>
 <% } %>
 <% if (shovel.state == 'terminated') { %>
-    <td class="status" colspan="3">
-       <div class="red"><%= shovel.state %></div>
+    <td colspan="3">
+       <div class="status-red"><%= shovel.state %></div>
     </td>
     <td><%= shovel.timestamp %></td>
   </tr>
@@ -36,8 +36,8 @@
     </td>
   </tr>
 <% } else { %>
-    <td class="status">
-       <div class="green"><%= shovel.state %></div>
+    <td>
+       <div class="status-green"><%= shovel.state %></div>
     </td>
     <td>
       <%= fmt_shovel_endpoint(shovel.source) %>
