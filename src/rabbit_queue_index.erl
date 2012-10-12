@@ -537,7 +537,7 @@ queue_index_walker_reader(QueueName, Gatherer) ->
     State = blank_state(QueueName),
     ok = scan_segments(
            fun (_SeqId, MsgId, _MsgProps, true, _IsDelivered, no_ack, ok) ->
-                   gatherer:in(Gatherer, {MsgId, 1});
+                   gatherer:sync_in(Gatherer, {MsgId, 1});
                (_SeqId, _MsgId, _MsgProps, _IsPersistent, _IsDelivered,
                 _IsAcked, Acc) ->
                    Acc
