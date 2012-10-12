@@ -549,9 +549,8 @@ attempt_delivery(#delivery{sender = SenderPid, message = Message}, Props,
             {false, State#q{backing_queue_state = BQS1}}
     end.
 
-deliver_or_enqueue(Delivery = #delivery{message    = Message,
-                                        sender     = SenderPid}, Delivered,
-                   State) ->
+deliver_or_enqueue(Delivery = #delivery{message = Message, sender = SenderPid},
+                   Delivered, State) ->
     Confirm = should_confirm_message(Delivery, State),
     Props = message_properties(Confirm, Delivered, State),
     case attempt_delivery(Delivery, Props,
