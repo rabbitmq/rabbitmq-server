@@ -554,19 +554,20 @@ deliver_or_enqueue(Delivery = #delivery{message    = Message,
                    State) ->
     Confirm = should_confirm_message(Delivery, State),
     Props = message_properties(Confirm, Delivered, State),
-    case attempt_delivery(Delivery, Props, State) of
+    case attempt_delivery(Delivery, Props,
+                          maybe_record_confirm_message(Confirm, State)) of
         {true, State1} ->
-            maybe_record_confirm_message(Confirm, State1);
+            State1;
         %% the next one is an optimisations
-        %% TODO: optimise the Confirm =/= never case too
-        {false, State1 = #q{ttl = 0, dlx = undefined}} when Confirm == never ->
-            discard_delivery(Delivery, State1);
-        {false, State1} ->
-            State2 = #q{backing_queue = BQ, backing_queue_state = BQS} =
-                maybe_record_confirm_message(Confirm, State1),
+        {false, State1 = #q{ttl = 0, dlx = undefined,
+                            backing_queue = BQ, backing_queue_state = BQS}}
+          when Confirm == never ->
+            BQS1 = BQ:discard(Message, SenderPid, BQS),
+            State1#q{backing_queue_state = BQS1};
+        {false, State1 = #q{backing_queue = BQ, backing_queue_state = BQS}} ->
             BQS1 = BQ:publish(Message, Props, SenderPid, BQS),
             ensure_ttl_timer(Props#message_properties.expiry,
-                             State2#q{backing_queue_state = BQS1})
+                             State1#q{backing_queue_state = BQS1})
     end.
 
 requeue_and_run(AckTags, State = #q{backing_queue       = BQ,
@@ -682,12 +683,6 @@ subtract_acks(ChPid, AckTags, State, Fun) ->
                                                         ChAckTags, AckTags)}),
             Fun(State)
     end.
-
-discard_delivery(#delivery{sender = SenderPid,
-                           message = Message},
-                 State = #q{backing_queue = BQ,
-                            backing_queue_state = BQS}) ->
-    State#q{backing_queue_state = BQ:discard(Message, SenderPid, BQS)}.
 
 message_properties(Confirm, Delivered, #q{ttl = TTL}) ->
     #message_properties{expiry           = calculate_msg_expiry(TTL),
