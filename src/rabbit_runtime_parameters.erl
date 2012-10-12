@@ -19,7 +19,7 @@
 -include("rabbit.hrl").
 
 -export([parse_set_param/4, set_param/4,
-         parse_set_policy/4, parse_set_policy/5, set_policy/4, set_policy/5,
+         parse_set_policy/4, parse_set_policy/5, set_policy/5,
          clear_param/3, clear_policy/2,
          list_param/0, list_param/1, list_param/2,
          list_param_strict/1, list_param_strict/2,
@@ -42,8 +42,6 @@
                              string()) -> ok_or_error_string()).
 -spec(parse_set_policy/5 :: (rabbit_types:vhost(), binary(), string(), string(),
                              string()) -> ok_or_error_string()).
--spec(set_policy/4 :: (rabbit_types:vhost(), binary(), term(), term())
-                       -> ok_or_error_string()).
 -spec(set_policy/5 :: (rabbit_types:vhost(), binary(), term(), term(), term())
                        -> ok_or_error_string()).
 -spec(clear_param/3 :: (rabbit_types:vhost(), binary(), binary())
@@ -118,14 +116,12 @@ parse_set_policy0(VHost, Key, Pattern, Defn, Priority) ->
             {error_string, "JSON decoding error"}
     end.
 
-set_policy(VHost, Key, Pattern, Defn) ->
-    set_policy0(VHost, Key, policy_values(Pattern, Defn)).
 set_policy(VHost, Key, Pattern, Defn, Priority) ->
-    set_policy0(VHost, Key, [{<<"priority">>, Priority} |
-                             policy_values(Pattern, Defn)]).
-
-policy_values(Pattern, Defn) ->
-    [{<<"pattern">>, Pattern}, {<<"policy">>, Defn}].
+    PolicyProps = [{<<"pattern">>, Pattern}, {<<"policy">>, Defn}],
+    set_policy0(VHost, Key, case Priority of
+                                undefined -> [];
+                                _         -> [{<<"priority">>, Priority}]
+                            end ++ PolicyProps).
 
 set_policy0(VHost, Key, Term) ->
     case set0(VHost, <<"policy">>, Key, Term) of
