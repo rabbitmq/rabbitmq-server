@@ -379,8 +379,10 @@ discard(Msg = #basic_message { id = MsgId }, ChPid,
     case dict:find(MsgId, SS) of
         error ->
             ok = gm:broadcast(GM, {discard, ChPid, Msg}),
-            State #state { backing_queue_state = BQ:discard(Msg, ChPid, BQS),
-                           seen_status         = dict:erase(MsgId, SS) };
+            ensure_monitoring(
+              ChPid, State #state {
+                       backing_queue_state = BQ:discard(Msg, ChPid, BQS),
+                       seen_status         = dict:erase(MsgId, SS) });
         {ok, discarded} ->
             State
     end.
