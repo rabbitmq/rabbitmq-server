@@ -352,8 +352,6 @@ validate_policy(TagList) ->
                             fun (N) -> N == 1 end,
                             "ha-params must be supplied with one number "
                             "when ha-mode=exactly");
-        [_, _|_] ->
-            {error, "ha-mode may appear at most once", []};
         [Other] ->
             {error, "~p is not a valid ha-mode value", [Other]}
     end.
