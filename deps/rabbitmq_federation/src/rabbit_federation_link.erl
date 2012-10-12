@@ -183,7 +183,7 @@ terminate(_Reason, {not_started, _}) ->
 terminate(Reason, State = #state{downstream_channel    = DCh,
                                  downstream_connection = DConn,
                                  connection            = Conn}) ->
-    ensure_closed(DConn, DCh),
+    ensure_connection_closed(DConn),
     ensure_connection_closed(Conn),
     log_terminate(Reason, State),
     ok.
@@ -382,12 +382,12 @@ go(S0 = {not_started, {Upstream, DownXName =
                     catch exit:E ->
                             %% terminate/2 will not get this, as we
                             %% have not put them in our state yet
-                            ensure_closed(DConn, DCh),
+                            ensure_connection_closed(DConn),
                             ensure_connection_closed(Conn),
                             connection_error(remote, E, S0)
                     end;
                 E ->
-                    ensure_closed(DConn, DCh),
+                    ensure_connection_closed(DConn),
                     connection_error(remote, E, S0)
             end;
         E ->
@@ -565,10 +565,6 @@ disposable_connection_call(Params, Method, ErrFun) ->
         E ->
             E
     end.
-
-ensure_closed(Conn, Ch) ->
-    ensure_channel_closed(Ch),
-    ensure_connection_closed(Conn).
 
 ensure_channel_closed(Ch) -> catch amqp_channel:close(Ch).
 
