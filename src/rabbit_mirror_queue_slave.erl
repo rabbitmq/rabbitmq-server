@@ -639,17 +639,15 @@ maybe_enqueue_message(
             State1 #state { msg_id_status = dict:erase(MsgId, MS),
                             sender_queues = SQ1 };
         {ok, published} ->
-            {MS1, SQ1} =
-                case needs_confirming(Delivery, State1) of
-                    never       -> {dict:erase(MsgId, MS),
-                                    remove_from_pending_ch(MsgId, ChPid, SQ)};
-                    eventually  -> MMS = {published, ChPid, MsgSeqNo},
-                                   {dict:store(MsgId, MMS, MS), SQ};
-                    immediately -> ok = rabbit_misc:confirm_to_sender(
-                                          ChPid, [MsgSeqNo]),
-                                   {dict:erase(MsgId, MS),
-                                    remove_from_pending_ch(MsgId, ChPid, SQ)}
-                end,
+            MS1 = case needs_confirming(Delivery, State1) of
+                      never       -> dict:erase(MsgId, MS);
+                      eventually  -> MMS = {published, ChPid, MsgSeqNo},
+                                     dict:store(MsgId, MMS, MS);
+                      immediately -> ok = rabbit_misc:confirm_to_sender(
+                                            ChPid, [MsgSeqNo]),
+                                     dict:erase(MsgId, MS)
+                  end,
+            SQ1 = remove_from_pending_ch(MsgId, ChPid, SQ),
             State1 #state { msg_id_status = MS1,
                             sender_queues = SQ1 };
         {ok, discarded} ->
