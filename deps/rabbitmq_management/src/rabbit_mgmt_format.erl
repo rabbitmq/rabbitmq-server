@@ -143,7 +143,7 @@ resource(_, unknown) ->
 resource(NameAs, #resource{name = Name, virtual_host = VHost}) ->
     [{NameAs, Name}, {vhost, VHost}].
 
-policy(none)   -> [];
+policy('')     -> [];
 policy(Policy) -> [{policy, Policy}].
 
 internal_user(User) ->
@@ -267,8 +267,7 @@ queue(#amqqueue{name            = Name,
        {auto_delete, AutoDelete},
        {owner_pid,   ExclusiveOwner},
        {arguments,   Arguments},
-       {pid,         Pid},
-       {policy,      rabbit_policy:name(Q)}],
+       {pid,         Pid}],
       [{fun resource/1,   [name]},
        {fun amqp_table/1, [arguments]},
        {fun policy/1,     [policy]}]).
