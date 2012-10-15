@@ -24,6 +24,7 @@
          write_cluster_status/1, read_cluster_status/0,
          update_cluster_status/0, reset_cluster_status/0]).
 -export([notify_node_up/0, notify_joined_cluster/0, notify_left_cluster/1]).
+-export([partition/0]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
@@ -31,6 +32,8 @@
 
 -define(SERVER, ?MODULE).
 -define(RABBIT_UP_RPC_TIMEOUT, 2000).
+
+-record(state, {monitors, partition}).
 
 %%----------------------------------------------------------------------------
 
@@ -49,6 +52,8 @@
 -spec(notify_node_up/0 :: () -> 'ok').
 -spec(notify_joined_cluster/0 :: () -> 'ok').
 -spec(notify_left_cluster/1 :: (node()) -> 'ok').
+
+-spec(partition/0 :: () -> consistent | {atom(), node()}).
 
 -endif.
 
@@ -168,10 +173,23 @@ notify_left_cluster(Node) ->
     ok.
 
 %%----------------------------------------------------------------------------
+%% Server calls
+%%----------------------------------------------------------------------------
+
+partition() ->
+    gen_server:call(?SERVER, partition, infinity).
+
+%%----------------------------------------------------------------------------
 %% gen_server callbacks
 %%----------------------------------------------------------------------------
 
-init([]) -> {ok, pmon:new()}.
+init([]) ->
+    {ok, _} = mnesia:subscribe(system),
+    {ok, #state{monitors  = pmon:new(),
+                partition = none}}.
+
+handle_call(partition, _From, State = #state{partition = Partition}) ->
+    {reply, {node(), Partition}, State};
 
 handle_call(_Request, _From, State) ->
     {noreply, State}.
@@ -179,9 +197,10 @@ handle_call(_Request, _From, State) ->
 %% Note: when updating the status file, we can't simply write the
 %% mnesia information since the message can (and will) overtake the
 %% mnesia propagation.
-handle_cast({node_up, Node, NodeType}, Monitors) ->
+handle_cast({node_up, Node, NodeType},
+            State = #state{monitors = Monitors}) ->
     case pmon:is_monitored({rabbit, Node}, Monitors) of
-        true  -> {noreply, Monitors};
+        true  -> {noreply, State};
         false -> rabbit_log:info("rabbit on node ~p up~n", [Node]),
                  {AllNodes, DiscNodes, RunningNodes} = read_cluster_status(),
                  write_cluster_status({add_node(Node, AllNodes),
@@ -191,7 +210,8 @@ handle_cast({node_up, Node, NodeType}, Monitors) ->
                                        end,
                                        add_node(Node, RunningNodes)}),
                  ok = handle_live_rabbit(Node),
-                 {noreply, pmon:monitor({rabbit, Node}, Monitors)}
+                 {noreply, State#state{
+                             monitors = pmon:monitor({rabbit, Node}, Monitors)}}
     end;
 handle_cast({joined_cluster, Node, NodeType}, State) ->
     {AllNodes, DiscNodes, RunningNodes} = read_cluster_status(),
@@ -210,12 +230,18 @@ handle_cast({left_cluster, Node}, State) ->
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
-handle_info({'DOWN', _MRef, process, {rabbit, Node}, _Reason}, Monitors) ->
+handle_info({'DOWN', _MRef, process, {rabbit, Node}, _Reason},
+            State = #state{monitors = Monitors}) ->
     rabbit_log:info("rabbit on node ~p down~n", [Node]),
     {AllNodes, DiscNodes, RunningNodes} = read_cluster_status(),
     write_cluster_status({AllNodes, DiscNodes, del_node(Node, RunningNodes)}),
     ok = handle_dead_rabbit(Node),
-    {noreply, pmon:erase({rabbit, Node}, Monitors)};
+    {noreply, State#state{monitors = pmon:erase({rabbit, Node}, Monitors)}};
+
+handle_info({mnesia_system_event, {inconsistent_database, Context, Node}},
+            State) ->
+    {noreply, State#state{partition = {Context, Node}}};
+
 handle_info(_Info, State) ->
     {noreply, State}.
 

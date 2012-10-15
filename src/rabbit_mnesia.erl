@@ -320,9 +320,19 @@ status() ->
     [{nodes, (IfNonEmpty(disc, cluster_nodes(disc)) ++
                   IfNonEmpty(ram, cluster_nodes(ram)))}] ++
         case mnesia:system_info(is_running) of
-            yes -> [{running_nodes, cluster_nodes(running)}];
+            yes -> RunningNodes = cluster_nodes(running),
+                   [{running_nodes, cluster_nodes(running)},
+                    {partitions,    mnesia_partitions(RunningNodes)}];
             no  -> []
         end.
+
+mnesia_partitions(Nodes) ->
+    {Replies, _BadNodes} = rpc:multicall(
+                             Nodes, rabbit_node_monitor, partition, []),
+    case [Reply || Reply = {_, R} <- Replies, R =/= none] of
+        []   -> none;
+        List -> List
+    end.
 
 is_clustered() -> AllNodes = cluster_nodes(all),
                   AllNodes =/= [] andalso AllNodes =/= [node()].
