@@ -88,18 +88,19 @@ stop() ->
     %% Same as start/1.
     exit({not_valid_for_generic_backing_queue, ?MODULE}).
 
-init(Q, Recover, AsyncCallback) ->
+init(Q = #amqqueue{name = QName}, Recover, AsyncCallback) ->
     {ok, BQ} = application:get_env(backing_queue_module),
     BQS = BQ:init(Q, Recover, AsyncCallback),
-    init_with_existing_bq(Q, BQ, BQS).
-
-init_with_existing_bq(#amqqueue { name = QName } = Q, BQ, BQS) ->
-    {ok, CPid} = rabbit_mirror_queue_coordinator:start_link(
-                   Q, undefined, sender_death_fun(), depth_fun()),
-    GM = rabbit_mirror_queue_coordinator:get_gm(CPid),
+    State = #state{gm = GM} = init_with_existing_bq(Q, BQ, BQS),
     {_MNode, SNodes} = rabbit_mirror_queue_misc:suggested_queue_nodes(Q),
     rabbit_mirror_queue_misc:add_mirrors(QName, SNodes),
     ok = gm:broadcast(GM, {depth, BQ:depth(BQS)}),
+    State.
+
+init_with_existing_bq(Q, BQ, BQS) ->
+    {ok, CPid} = rabbit_mirror_queue_coordinator:start_link(
+                   Q, undefined, sender_death_fun(), depth_fun()),
+    GM = rabbit_mirror_queue_coordinator:get_gm(CPid),
     #state { gm                  = GM,
              coordinator         = CPid,
              backing_queue       = BQ,
@@ -148,7 +149,17 @@ stop_all_slaves(Reason, #state{gm = GM}) ->
     MRefs = [erlang:monitor(process, S) || S <- Slaves],
     ok = gm:broadcast(GM, {delete_and_terminate, Reason}),
     [receive {'DOWN', MRef, process, _Pid, _Info} -> ok end || MRef <- MRefs],
-    ok = gm:forget_group(proplists:get_value(group_name, Info)).
+    %% Normally when we remove a slave another slave or master will
+    %% notice and update Mnesia. But we just removed them all, and
+    %% have stopped listening ourselves. So manually clean up.
+    QName = proplists:get_value(group_name, Info),
+    rabbit_misc:execute_mnesia_transaction(
+      fun () ->
+              [Q] = mnesia:read({rabbit_queue, QName}),
+              rabbit_mirror_queue_misc:store_updated_slaves(
+                Q #amqqueue { slave_pids = [] })
+      end),
+    ok = gm:forget_group(QName).
 
 purge(State = #state { gm                  = GM,
                        backing_queue       = BQ,
@@ -368,8 +379,10 @@ discard(Msg = #basic_message { id = MsgId }, ChPid,
     case dict:find(MsgId, SS) of
         error ->
             ok = gm:broadcast(GM, {discard, ChPid, Msg}),
-            State #state { backing_queue_state = BQ:discard(Msg, ChPid, BQS),
-                           seen_status         = dict:erase(MsgId, SS) };
+            ensure_monitoring(
+              ChPid, State #state {
+                       backing_queue_state = BQ:discard(Msg, ChPid, BQS),
+                       seen_status         = dict:erase(MsgId, SS) });
         {ok, discarded} ->
             State
     end.
