@@ -27,7 +27,7 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 -define(REFRESH_RATIO, 5000).
--define(KEYS, [name, os_pid, fd_used, fd_total,
+-define(KEYS, [name, partitions, os_pid, fd_used, fd_total,
                sockets_used, sockets_total, mem_used, mem_limit, mem_alarm,
                disk_free_limit, disk_free, disk_free_alarm,
                proc_used, proc_total, statistics_level,
@@ -143,6 +143,8 @@ get_disk_free() -> ?SAFE_CALL(rabbit_disk_monitor:get_disk_free(),
 infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
 
 i(name,            _State) -> node();
+i(partitions,      _State) -> {_Node, Parts} = rabbit_node_monitor:partitions(),
+                              Parts;
 i(fd_used,         _State) -> get_used_fd();
 i(fd_total, #state{fd_total = FdTotal}) -> FdTotal;
 i(sockets_used,    _State) ->
