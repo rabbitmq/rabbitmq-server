@@ -124,7 +124,5 @@ validate_policy([{<<"federation-upstream-set">>, Value}])
   when is_binary(Value) ->
     ok;
 validate_policy([{<<"federation-upstream-set">>, Value}]) ->
-    {error, "~p is not a valid federation upstream set name", [Value]};
-validate_policy([_, _|_] = Multiple) ->
-    {error, "~p only one federation upstream set name is allowed", [Multiple]}.
+    {error, "~p is not a valid federation upstream set name", [Value]}.
 
