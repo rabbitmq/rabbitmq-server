@@ -47,6 +47,6 @@ is_authorized(ReqData, Context) ->
 basic(ReqData) ->
     case rabbit_mgmt_util:vhost(ReqData) of
         not_found -> not_found;
-        none      -> rabbit_runtime_parameters:list_policies();
-        VHost     -> rabbit_runtime_parameters:list_policies(VHost)
+        none      -> rabbit_policy:list();
+        VHost     -> rabbit_policy:list(VHost)
     end.

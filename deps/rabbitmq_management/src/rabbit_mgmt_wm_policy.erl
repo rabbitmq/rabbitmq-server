@@ -57,7 +57,7 @@ accept_content(ReqData, Context) ->
             rabbit_mgmt_util:with_decode(
               [pattern, definition], ReqData, Context,
               fun([Pattern, Definition], Body) ->
-                      case rabbit_runtime_parameters:set_policy(
+                      case rabbit_policy:add(
                              VHost,
                              key(ReqData),
                              Pattern,
@@ -73,7 +73,7 @@ accept_content(ReqData, Context) ->
     end.
 
 delete_resource(ReqData, Context) ->
-    ok = rabbit_runtime_parameters:clear_policy(
+    ok = rabbit_policy:delete(
            rabbit_mgmt_util:vhost(ReqData), key(ReqData)),
     {true, ReqData, Context}.
 
@@ -83,7 +83,7 @@ is_authorized(ReqData, Context) ->
 %%--------------------------------------------------------------------
 
 policy(ReqData) ->
-    rabbit_runtime_parameters:lookup_policy(
+    rabbit_policy:lookup(
       rabbit_mgmt_util:vhost(ReqData), key(ReqData)).
 
 key(ReqData)       -> rabbit_mgmt_util:id(key, ReqData).

@@ -208,7 +208,7 @@ add_parameter(Param) ->
 add_policy(Param) ->
     VHost = pget(vhost, Param),
     Key = pget(key, Param),
-    case rabbit_runtime_parameters:set_policy(
+    case rabbit_policy:add(
            pget(vhost, Param),
            pget(key, Param),
            pget(pattern, Param),
