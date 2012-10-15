@@ -653,6 +653,10 @@ maybe_enqueue_message(
         {ok, discarded} ->
             %% We've already heard from GM that the msg is to be
             %% discarded. We won't see this again.
+            case needs_confirming(Delivery, State1) of
+                never -> ok;
+                _     -> ok = rabbit_misc:confirm_to_sender(ChPid, [MsgSeqNo])
+            end,
             SQ1 = remove_from_pending_ch(MsgId, ChPid, SQ),
             State1 #state { msg_id_status = dict:erase(MsgId, MS),
                             sender_queues = SQ1 }
@@ -742,8 +746,16 @@ process_instruction({discard, ChPid, Msg = #basic_message { id = MsgId }},
             {empty, _MQ} ->
                 {MQ, sets:add_element(MsgId, PendingCh),
                  dict:store(MsgId, discarded, MS)};
-            {{value, #delivery { message = #basic_message { id = MsgId } }},
-             MQ2} ->
+            {{value, Delivery = #delivery {
+                       msg_seq_no = MsgSeqNo,
+                       message    = #basic_message { id = MsgId } }}, MQ2} ->
+                 %% We received the msg from the channel first. Thus
+                 %% we need to deal with confirms here.
+                case needs_confirming(Delivery, State1) of
+                    never -> ok;
+                    _     -> ok = rabbit_misc:confirm_to_sender(
+                                    ChPid, [MsgSeqNo])
+                end,
                 %% We've already seen it from the channel, we're not
                 %% going to see this again, so don't add it to MS
                 {MQ2, PendingCh, MS};
