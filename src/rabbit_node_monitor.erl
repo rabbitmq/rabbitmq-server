@@ -24,7 +24,7 @@
          write_cluster_status/1, read_cluster_status/0,
          update_cluster_status/0, reset_cluster_status/0]).
 -export([notify_node_up/0, notify_joined_cluster/0, notify_left_cluster/1]).
--export([partition/0]).
+-export([partitions/0]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
@@ -33,7 +33,7 @@
 -define(SERVER, ?MODULE).
 -define(RABBIT_UP_RPC_TIMEOUT, 2000).
 
--record(state, {monitors, partition}).
+-record(state, {monitors, partitions}).
 
 %%----------------------------------------------------------------------------
 
@@ -53,7 +53,7 @@
 -spec(notify_joined_cluster/0 :: () -> 'ok').
 -spec(notify_left_cluster/1 :: (node()) -> 'ok').
 
--spec(partition/0 :: () -> consistent | {atom(), node()}).
+-spec(partitions/0 :: () -> {node(), [{atom(), node()}]}).
 
 -endif.
 
@@ -176,8 +176,8 @@ notify_left_cluster(Node) ->
 %% Server calls
 %%----------------------------------------------------------------------------
 
-partition() ->
-    gen_server:call(?SERVER, partition, infinity).
+partitions() ->
+    gen_server:call(?SERVER, partitions, infinity).
 
 %%----------------------------------------------------------------------------
 %% gen_server callbacks
@@ -185,11 +185,11 @@ partition() ->
 
 init([]) ->
     {ok, _} = mnesia:subscribe(system),
-    {ok, #state{monitors  = pmon:new(),
-                partition = none}}.
+    {ok, #state{monitors   = pmon:new(),
+                partitions = []}}.
 
-handle_call(partition, _From, State = #state{partition = Partition}) ->
-    {reply, {node(), Partition}, State};
+handle_call(partitions, _From, State = #state{partitions = Partitions}) ->
+    {reply, {node(), Partitions}, State};
 
 handle_call(_Request, _From, State) ->
     {noreply, State}.
@@ -238,9 +238,12 @@ handle_info({'DOWN', _MRef, process, {rabbit, Node}, _Reason},
     ok = handle_dead_rabbit(Node),
     {noreply, State#state{monitors = pmon:erase({rabbit, Node}, Monitors)}};
 
-handle_info({mnesia_system_event, {inconsistent_database, Context, Node}},
-            State) ->
-    {noreply, State#state{partition = {Context, Node}}};
+handle_info({mnesia_system_event,
+             {inconsistent_database, running_partitioned_network, Node}},
+            State = #state{partitions = Partitions}) ->
+    Partitions1 = ordsets:to_list(
+                    ordsets:add_element(Node, ordsets:from_list(Partitions))),
+    {noreply, State#state{partitions = Partitions1}};
 
 handle_info(_Info, State) ->
     {noreply, State}.

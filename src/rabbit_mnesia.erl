@@ -328,11 +328,8 @@ status() ->
 
 mnesia_partitions(Nodes) ->
     {Replies, _BadNodes} = rpc:multicall(
-                             Nodes, rabbit_node_monitor, partition, []),
-    case [Reply || Reply = {_, R} <- Replies, R =/= none] of
-        []   -> none;
-        List -> List
-    end.
+                             Nodes, rabbit_node_monitor, partitions, []),
+    [Reply || Reply = {_, R} <- Replies, R =/= []].
 
 is_clustered() -> AllNodes = cluster_nodes(all),
                   AllNodes =/= [] andalso AllNodes =/= [node()].
