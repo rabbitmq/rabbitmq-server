@@ -27,6 +27,10 @@
 -export([register/0]).
 -export([name/1, get/2, set/1]).
 -export([validate/4, validate_clear/3, notify/4, notify_clear/3]).
+-export([parse_add/5, add/5, delete/2, lookup/2, list/0, list/1,
+         list_formatted/1, info_keys/0]).
+
+-define(TABLE, rabbit_runtime_parameters).
 
 -rabbit_boot_step({?MODULE,
                    [{description, "policy parameters"},
@@ -55,13 +59,90 @@ get(Name, EntityName = #resource{virtual_host = VHost}) ->
     get0(Name, match(EntityName, list(VHost))).
 
 get0(_Name, undefined) -> {error, not_found};
-get0(Name, List)       -> case pget(<<"policy">>, List) of
+get0(Name, List)       -> case pget(definition, List) of
                               undefined -> {error, not_found};
                               Policy    -> case pget(Name, Policy) of
                                                undefined -> {error, not_found};
                                                Value    -> {ok, Value}
                                            end
                           end.
+
+%%----------------------------------------------------------------------------
+
+parse_add(VHost, Key, Pattern, Definition, undefined) ->
+    parse_add_policy0(VHost, Key, Pattern, Definition, []);
+parse_add(VHost, Key, Pattern, Definition, Priority) ->
+    try list_to_integer(Priority) of
+        Num -> parse_add_policy0(VHost, Key, Pattern, Definition,
+                                 [{<<"priority">>, Num}])
+    catch
+        error:badarg -> {error, "~p priority must be a number", [Priority]}
+    end.
+
+parse_add_policy0(VHost, Key, Pattern, Defn, Priority) ->
+    case rabbit_misc:json_decode(Defn) of
+        {ok, JSON} ->
+            add0(VHost, Key, [{<<"pattern">>, list_to_binary(Pattern)},
+                              {<<"policy">>, rabbit_misc:json_to_term(JSON)}] ++
+                             Priority);
+        error ->
+            {error_string, "JSON decoding error"}
+    end.
+
+add(VHost, Key, Pattern, Definition, Priority) ->
+    PolicyProps = [{<<"pattern">>, Pattern}, {<<"policy">>, Definition}],
+    add0(VHost, Key, case Priority of
+                         undefined -> [];
+                         _         -> [{<<"priority">>, Priority}]
+                     end ++ PolicyProps).
+
+add0(VHost, Key, Term) ->
+    rabbit_runtime_parameters:set_any(VHost, <<"policy">>, Key, Term).
+
+delete(VHost, Key) ->
+    rabbit_runtime_parameters:clear_any(VHost, <<"policy">>, Key).
+
+lookup(VHost, Key) ->
+    case mnesia:dirty_read(?TABLE, {VHost, <<"policy">>, Key}) of
+        []  -> not_found;
+        [P] -> p(P, fun ident/1)
+    end.
+
+list() ->
+    list('_').
+
+list(VHost) ->
+    list0(VHost, fun ident/1).
+
+list_formatted(VHost) ->
+    order_policies(list0(VHost, fun format/1)).
+
+list0(VHost, DefnFun) ->
+    Match = #runtime_parameters{key = {VHost, <<"policy">>, '_'}, _ = '_'},
+    [p(P, DefnFun) || P <- mnesia:dirty_match_object(?TABLE, Match)].
+
+order_policies(PropList) ->
+    lists:sort(fun (A, B) -> pget(priority, A, 0) < pget(priority, B, 0) end,
+               PropList).
+
+p(#runtime_parameters{key = {VHost, <<"policy">>, Key}, value = Value},
+  DefnFun) ->
+    [{vhost,      VHost},
+     {key,        Key},
+     {pattern,    pget(<<"pattern">>, Value)},
+     {definition, DefnFun(pget(<<"policy">>,  Value))}] ++
+    case pget(<<"priority">>, Value) of
+        undefined -> [];
+        Priority  -> [{priority, Priority}]
+    end.
+
+format(Term) ->
+    {ok, JSON} = rabbit_misc:json_encode(rabbit_misc:term_to_json(Term)),
+    list_to_binary(JSON).
+
+ident(X) -> X.
+
+info_keys() -> [vhost, key, pattern, definition, priority].
 
 %%----------------------------------------------------------------------------
 
@@ -79,10 +160,6 @@ notify_clear(VHost, <<"policy">>, _Name) ->
     update_policies(VHost).
 
 %%----------------------------------------------------------------------------
-
-list(VHost) ->
-    [[{<<"name">>, pget(key, P)} | pget(value, P)]
-     || P <- rabbit_runtime_parameters:list_policies_raw(VHost)].
 
 update_policies(VHost) ->
     Policies = list(VHost),
@@ -127,9 +204,9 @@ match(Name, Policies) ->
     end.
 
 matches(#resource{name = Name}, Policy) ->
-    match =:= re:run(Name, pget(<<"pattern">>, Policy), [{capture, none}]).
+    match =:= re:run(Name, pget(pattern, Policy), [{capture, none}]).
 
-sort_pred(A, B) -> pget(<<"priority">>, A, 0) >= pget(<<"priority">>, B, 0).
+sort_pred(A, B) -> pget(priority, A, 0) >= pget(priority, B, 0).
 
 %%----------------------------------------------------------------------------
 
