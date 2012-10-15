@@ -633,12 +633,7 @@ maybe_enqueue_message(
             MQ1 = queue:in(Delivery, MQ),
             SQ1 = dict:store(ChPid, {MQ1, PendingCh}, SQ),
             State1 #state { sender_queues = SQ1 };
-        {ok, confirmed} ->
-            ok = rabbit_misc:confirm_to_sender(ChPid, [MsgSeqNo]),
-            SQ1 = remove_from_pending_ch(MsgId, ChPid, SQ),
-            State1 #state { msg_id_status = dict:erase(MsgId, MS),
-                            sender_queues = SQ1 };
-        {ok, Status} when Status =:= published orelse Status =:= discarded ->
+        {ok, Status} ->
             MS1 = case needs_confirming(Status, Delivery, State1) of
                       never       -> dict:erase(MsgId, MS);
                       eventually  -> MMS = {Status, ChPid, MsgSeqNo},
