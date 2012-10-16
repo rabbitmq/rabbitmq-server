@@ -18,9 +18,9 @@
 
 -include("rabbit.hrl").
 
--export([parse_set/4, set/4, clear/3,
-         list/0, list/1, list_strict/1, list/2, list_strict/2, list_formatted/1,
-         lookup/3, value/3, value/4, info_keys/0]).
+-export([parse_set/4, set/4, set_any/4, clear/3, clear_any/3, list/0, list/1,
+         list_strict/1, list/2, list_strict/2, list_formatted/1, lookup/3,
+         value/3, value/4, info_keys/0]).
 
 %%----------------------------------------------------------------------------
 
@@ -32,8 +32,12 @@
                      -> ok_or_error_string()).
 -spec(set/4 :: (rabbit_types:vhost(), binary(), binary(), term())
                -> ok_or_error_string()).
+-spec(set_any/4 :: (rabbit_types:vhost(), binary(), binary(), term())
+                   -> ok_or_error_string()).
 -spec(clear/3 :: (rabbit_types:vhost(), binary(), binary())
                  -> ok_or_error_string()).
+-spec(clear_any/3 :: (rabbit_types:vhost(), binary(), binary())
+                     -> ok_or_error_string()).
 -spec(list/0 :: () -> [rabbit_types:infos()]).
 -spec(list/1 :: (rabbit_types:vhost()) -> [rabbit_types:infos()]).
 -spec(list_strict/1 :: (binary()) -> [rabbit_types:infos()] | 'not_found').
@@ -57,22 +61,29 @@
 
 %%---------------------------------------------------------------------------
 
+parse_set(_, <<"policy">>, _, _) ->
+    {error_string, "policies may not be set using this method"};
 parse_set(VHost, Component, Key, String) ->
     case rabbit_misc:json_decode(String) of
         {ok, JSON} -> set(VHost, Component, Key, rabbit_misc:json_to_term(JSON));
         error      -> {error_string, "JSON decoding error"}
     end.
 
+set(_, <<"policy">>, _, _) ->
+    {error_string, "policies may not be set using this method"};
 set(VHost, Component, Key, Term) ->
-    case set0(VHost, Component, Key, Term) of
-        ok          -> ok;
-        {errors, L} -> format_error(L)
-    end.
+    set_any(VHost, Component, Key, Term).
 
 format_error(L) ->
     {error_string, rabbit_misc:format_many([{"Validation failed~n", []} | L])}.
 
-set0(VHost, Component, Key, Term) ->
+set_any(VHost, Component, Key, Term) ->
+    case set_any0(VHost, Component, Key, Term) of
+        ok          -> ok;
+        {errors, L} -> format_error(L)
+    end.
+
+set_any0(VHost, Component, Key, Term) ->
     case lookup_component(Component) of
         {ok, Mod} ->
             case flatten_errors(Mod:validate(VHost, Component, Key, Term)) of
@@ -100,13 +111,18 @@ mnesia_update(VHost, Component, Key, Term) ->
               Res
       end).
 
+clear(_, <<"policy">> , _) ->
+    {error_string, "policies may not be cleared using this method"};
 clear(VHost, Component, Key) ->
-    case clear0(VHost, Component, Key) of
+    clear_any(VHost, Component, Key).
+
+clear_any(VHost, Component, Key) ->
+    case clear_any0(VHost, Component, Key) of
         ok          -> ok;
         {errors, L} -> format_error(L)
     end.
 
-clear0(VHost, Component, Key) ->
+clear_any0(VHost, Component, Key) ->
     case lookup_component(Component) of
         {ok, Mod} -> case flatten_errors(
                             Mod:validate_clear(VHost, Component, Key)) of
@@ -125,7 +141,8 @@ mnesia_clear(VHost, Component, Key) ->
            end).
 
 list() ->
-    [p(P) || P <- rabbit_misc:dirty_read_all(?TABLE)].
+    [p(P) || #runtime_parameters{ key = {_VHost, Comp, _Key}} = P <-
+             rabbit_misc:dirty_read_all(?TABLE), Comp /= <<"policy">>].
 
 list(VHost)                   -> list(VHost, '_', []).
 list_strict(Component)        -> list('_',   Component, not_found).
@@ -136,7 +153,10 @@ list(VHost, Component, Default) ->
     case component_good(Component) of
         true -> Match = #runtime_parameters{key = {VHost, Component, '_'},
                                             _ = '_'},
-                [p(P) || P <- mnesia:dirty_match_object(?TABLE, Match)];
+                [p(P) || #runtime_parameters{ key = {_VHost, Comp, _Key}} = P <-
+                         mnesia:dirty_match_object(?TABLE, Match),
+                         Comp =/= <<"policy">> orelse
+                             Component =:= <<"policy">>];
         _    -> Default
     end.
 

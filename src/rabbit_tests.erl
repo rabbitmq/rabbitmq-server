@@ -57,6 +57,7 @@ all_tests() ->
     passed = test_dynamic_mirroring(),
     passed = test_user_management(),
     passed = test_runtime_parameters(),
+    passed = test_policy_validation(),
     passed = test_server_status(),
     passed = test_confirms(),
     passed =
@@ -1037,6 +1038,26 @@ test_runtime_parameters() ->
     {error_string, _} =
         control_action(clear_parameter, ["test", "neverexisted"]),
     rabbit_runtime_parameters_test:unregister(),
+    passed.
+
+test_policy_validation() ->
+    rabbit_runtime_parameters_test:register_policy_validator(),
+    SetPol =
+        fun (Key, Val) ->
+                control_action(
+                  set_policy,
+                  ["name", ".*", rabbit_misc:format("{\"~s\":~p}", [Key, Val])])
+        end,
+
+    ok                 = SetPol("testeven", []),
+    ok                 = SetPol("testeven", [1, 2]),
+    ok                 = SetPol("testeven", [1, 2, 3, 4]),
+    ok                 = SetPol("testpos",  [2, 5, 5678]),
+
+    {error_string, _}  = SetPol("testpos",  [-1, 0, 1]),
+    {error_string, _}  = SetPol("testeven", [ 1, 2, 3]),
+
+    rabbit_runtime_parameters_test:unregister_policy_validator(),
     passed.
 
 test_server_status() ->
