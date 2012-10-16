@@ -170,8 +170,8 @@ start() ->
         {error, Reason} ->
             print_error("~p", [Reason]),
             rabbit_misc:quit(2);
-        {parse_error, {_Line, Mod, Err}} ->
-            print_error("~s", [lists:flatten(Mod:format_error(Err))]),
+        {error_string, Reason} ->
+            print_error("~s", [Reason]),
             rabbit_misc:quit(2);
         {badrpc, {'EXIT', Reason}} ->
             print_error("~p", [Reason]),
@@ -477,11 +477,13 @@ action(eval, Node, [Expr], _Opts, _Inform) ->
                                       Node, erl_eval, exprs, [Parsed, []]),
                                 io:format("~p~n", [Value]),
                                 ok;
-                {error, E}   -> {parse_error, E}
+                {error, E}   -> {error_string, format_parse_error(E)}
             end;
         {error, E, _} ->
-            {parse_error, E}
+            {error_string, format_parse_error(E)}
     end.
+
+format_parse_error({_Line, Mod, Err}) -> lists:flatten(Mod:format_error(Err)).
 
 %%----------------------------------------------------------------------------
 
