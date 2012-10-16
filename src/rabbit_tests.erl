@@ -1032,10 +1032,10 @@ test_runtime_parameters() ->
 test_policy_validation() ->
     rabbit_runtime_parameters_test:register_policy_validator(),
     SetPol =
-        fun (Tag, Val) ->
+        fun (Key, Val) ->
                 control_action(
                   set_policy,
-                  ["name", ".*", rabbit_misc:format("{\"~s\":~p}", [Tag, Val])])
+                  ["name", ".*", rabbit_misc:format("{\"~s\":~p}", [Key, Val])])
         end,
 
     ok                 = SetPol("testeven", []),
