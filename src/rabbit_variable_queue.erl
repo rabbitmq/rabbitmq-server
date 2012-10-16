@@ -1316,12 +1316,9 @@ must_sync_index(#vqstate { msg_indices_on_disk = MIOD,
     %% subtraction.
     not (gb_sets:is_empty(UC) orelse gb_sets:is_subset(UC, MIOD)).
 
-blind_confirm(Callback, MsgIdSet) ->
-    Callback(?MODULE,
-             fun (?MODULE, State) -> record_confirms(MsgIdSet, State) end).
-
 msgs_written_to_disk(Callback, MsgIdSet, ignored) ->
-    blind_confirm(Callback, MsgIdSet);
+    Callback(?MODULE,
+             fun (?MODULE, State) -> record_confirms(MsgIdSet, State) end);
 msgs_written_to_disk(Callback, MsgIdSet, written) ->
     Callback(?MODULE,
              fun (?MODULE, State = #vqstate { msgs_on_disk        = MOD,
