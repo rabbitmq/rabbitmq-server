@@ -333,28 +333,28 @@ update_mirrors0(OldQ = #amqqueue{name = QName},
 
 %%----------------------------------------------------------------------------
 
-validate_policy(TagList) ->
-    Mode   = proplists:get_all_values(<<"ha-mode">>,   TagList),
-    Params = proplists:get_all_values(<<"ha-params">>, TagList),
-    case Mode of
-        [<<"all">>] ->
-            ok;
-        [<<"nodes">>] ->
-            validate_params(lists:append(Params),
-                            fun erlang:is_binary/1,
-                            "~p has invalid node names when ha-mode=nodes",
-                            fun (N) -> N > 0 end,
-                            "at least one node expected when ha-mode=nodes");
-        [<<"exactly">>] ->
-            validate_params(Params,
-                            fun (N) -> is_integer(N) andalso N > 0 end,
-                            "~p must be a positive integer",
-                            fun (N) -> N == 1 end,
-                            "ha-params must be supplied with one number "
-                            "when ha-mode=exactly");
-        [Other] ->
-            {error, "~p is not a valid ha-mode value", [Other]}
-    end.
+validate_policy(KeyList) ->
+    validate_policy(
+      proplists:get_value(<<"ha-mode">>,   KeyList),
+      proplists:get_value(<<"ha-params">>, KeyList)).
+
+validate_policy(<<"all">>, _Params) ->
+    ok;
+validate_policy(<<"nodes">>, Params) ->
+    validate_params(lists:append(Params),
+                    fun erlang:is_binary/1,
+                    "~p has invalid node names when ha-mode=nodes",
+                    fun (N) -> N > 0 end,
+                    "at least one node expected when ha-mode=nodes");
+validate_policy(<<"exactly">>, Params) ->
+    validate_params(Params,
+                    fun (N) -> is_integer(N) andalso N > 0 end,
+                    "~p must be a positive integer",
+                    fun (N) -> N == 1 end,
+                    "ha-params must be supplied with one number "
+                    "when ha-mode=exactly");
+validate_policy(Mode, _Params) ->
+    {error, "~p is not a valid ha-mode value", [Mode]}.
 
 validate_params(Params, FilterPred, FilterMsg, SizePred, SizeMsg)
   when is_list(Params) ->
