@@ -58,9 +58,7 @@ accept_content(ReqData, Context) ->
               [pattern, definition], ReqData, Context,
               fun([Pattern, Definition], Body) ->
                       case rabbit_policy:set(
-                             VHost,
-                             key(ReqData),
-                             Pattern,
+                             VHost, key(ReqData), Pattern,
                              rabbit_misc:json_to_term(Definition),
                              proplists:get_value(priority, Body)) of
                           ok ->
