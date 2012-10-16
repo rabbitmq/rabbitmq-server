@@ -73,12 +73,12 @@ remove_from_queue(QueueName, DeadGMPids) ->
                                           fun ({GM, _}) ->
                                                   lists:member(GM, DeadGMPids)
                                           end, GMPids),
-                      DeadPids = [Pid || {_GM, Pid} <- Dead, Pid =/= existing],
+                      DeadPids = [Pid || {_GM, Pid} <- Dead],
                       Alive = [QPid | SPids] -- DeadPids,
                       {QPid1, SPids1} = promote_slave(Alive),
-
-                      case {{QPid, SPids, GMPids}, {QPid1, SPids1, GMPids1}} of
+                      case {{QPid, SPids}, {QPid1, SPids1}} of
                           {Same, Same} ->
+                              GMPids = GMPids1, %% ASSERTION
                               {ok, QPid1, []};
                           _ when QPid =:= QPid1 orelse node(QPid1) =:= node() ->
                               %% Either master hasn't changed, so

@@ -156,10 +156,7 @@ init_it(Self, GM, Node, QueueName) ->
                       false -> {stale, QPid}
                   end;
         [SPid] -> case rabbit_misc:is_process_alive(SPid) of
-                      true  -> Q1 = Q#amqqueue { gm_pids = [{GM, existing} |
-                                                            GMPids] },
-                               ok = rabbit_amqqueue:store_queue(Q1),
-                               existing;
+                      true  -> existing;
                       false -> Q1 = Q#amqqueue {
                                       slave_pids = SPids -- [SPid],
                                       gm_pids    = [T || T = {_, S} <- GMPids,
