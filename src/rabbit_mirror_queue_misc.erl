@@ -346,32 +346,25 @@ validate_policy(KeyList) ->
       proplists:get_value(<<"ha-mode">>,   KeyList),
       proplists:get_value(<<"ha-params">>, KeyList)).
 
-validate_policy(<<"all">>, _Params) ->
+validate_policy(<<"all">>, undefined) ->
     ok;
+validate_policy(<<"all">>, _Params) ->
+    {error, "ha-mode=\"all\" does not take parameters", []};
+
+validate_policy(<<"nodes">>, []) ->
+    {error, "ha-mode=\"nodes\" list must be non-empty", []};
+validate_policy(<<"nodes">>, Nodes) when is_list(Nodes) ->
+    case [I || I <- Nodes, not is_binary(I)] of
+        [] -> ok;
+        _  -> {error, "ha-mode=\"nodes\" takes a list of strings", []}
+    end;
 validate_policy(<<"nodes">>, Params) ->
-    validate_params(lists:append(Params),
-                    fun erlang:is_binary/1,
-                    "~p has invalid node names when ha-mode=nodes",
-                    fun (N) -> N > 0 end,
-                    "at least one node expected when ha-mode=nodes");
+    {error, "ha-mode=\"nodes\" takes a list, ~p given", [Params]};
+
+validate_policy(<<"exactly">>, N) when is_integer(N) andalso N > 0 ->
+    ok;
 validate_policy(<<"exactly">>, Params) ->
-    validate_params(Params,
-                    fun (N) -> is_integer(N) andalso N > 0 end,
-                    "~p must be a positive integer",
-                    fun (N) -> N == 1 end,
-                    "ha-params must be supplied with one number "
-                    "when ha-mode=exactly");
+    {error, "ha-mode=\"exactly\" takes an integer, ~p given", [Params]};
 validate_policy(Mode, _Params) ->
     {error, "~p is not a valid ha-mode value", [Mode]}.
 
-validate_params(Params, FilterPred, FilterMsg, SizePred, SizeMsg)
-  when is_list(Params) ->
-    case SizePred(length(Params)) of
-        true -> case lists:filter(fun (P) -> not FilterPred(P) end, Params) of
-                    [] -> ok;
-                    X  -> {error, FilterMsg, [X]}
-                end;
-        false -> {error, SizeMsg, []}
-    end;
-validate_params(Params, _, _, _, _) ->
-    {error, "~p was expected to be a list", [Params]}.
