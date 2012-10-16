@@ -97,10 +97,18 @@ init(Q = #amqqueue{name = QName}, Recover, AsyncCallback) ->
     ok = gm:broadcast(GM, {depth, BQ:depth(BQS)}),
     State.
 
-init_with_existing_bq(Q, BQ, BQS) ->
+init_with_existing_bq(Q = #amqqueue{name = QName}, BQ, BQS) ->
     {ok, CPid} = rabbit_mirror_queue_coordinator:start_link(
                    Q, undefined, sender_death_fun(), depth_fun()),
     GM = rabbit_mirror_queue_coordinator:get_gm(CPid),
+    Self = self(),
+    ok = rabbit_misc:execute_mnesia_transaction(
+           fun () ->
+                   [Q1 = #amqqueue{gm_pids = GMPids}]
+                       = mnesia:read({rabbit_queue, QName}),
+                   ok = rabbit_amqqueue:store_queue(
+                          Q1#amqqueue{gm_pids = [{GM, Self} | GMPids]})
+           end),
     #state { gm                  = GM,
              coordinator         = CPid,
              backing_queue       = BQ,
@@ -157,7 +165,7 @@ stop_all_slaves(Reason, #state{gm = GM}) ->
       fun () ->
               [Q] = mnesia:read({rabbit_queue, QName}),
               rabbit_mirror_queue_misc:store_updated_slaves(
-                Q #amqqueue { slave_pids = [] })
+                Q #amqqueue { gm_pids = [], slave_pids = [] })
       end),
     ok = gm:forget_group(QName).
 

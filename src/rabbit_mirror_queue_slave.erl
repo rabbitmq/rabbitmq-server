@@ -104,7 +104,7 @@ init(Q = #amqqueue { name = QName }) ->
     Self = self(),
     Node = node(),
     case rabbit_misc:execute_mnesia_transaction(
-           fun() -> init_it(Self, Node, QName) end) of
+           fun() -> init_it(Self, GM, Node, QName) end) of
         {new, QPid} ->
             erlang:monitor(process, QPid),
             ok = file_handle_cache:register_callback(
@@ -140,14 +140,15 @@ init(Q = #amqqueue { name = QName }) ->
         duplicate_live_master ->
             {stop, {duplicate_live_master, Node}};
         existing ->
+            gm:leave(GM),
             ignore
     end.
 
-init_it(Self, Node, QName) ->
-    [Q = #amqqueue { pid = QPid, slave_pids = SPids }] =
+init_it(Self, GM, Node, QName) ->
+    [Q = #amqqueue { pid = QPid, slave_pids = SPids, gm_pids = GMPids }] =
         mnesia:read({rabbit_queue, QName}),
     case [Pid || Pid <- [QPid | SPids], node(Pid) =:= Node] of
-        []     -> add_slave(Q, Self),
+        []     -> add_slave(Q, Self, GM),
                   {new, QPid};
         [QPid] -> case rabbit_misc:is_process_alive(QPid) of
                       true  -> duplicate_live_master;
@@ -155,17 +156,20 @@ init_it(Self, Node, QName) ->
                   end;
         [SPid] -> case rabbit_misc:is_process_alive(SPid) of
                       true  -> existing;
-                      false -> Q1 = Q#amqqueue { slave_pids = SPids -- [SPid] },
-                               add_slave(Q1, Self),
+                      false -> Q1 = Q#amqqueue {
+                                      slave_pids = SPids -- [SPid],
+                                      gm_pids    = [T || T = {_, S} <- GMPids,
+                                                         S =/= SPid] },
+                               add_slave(Q1, Self, GM),
                                {new, QPid}
                   end
     end.
 
 %% Add to the end, so they are in descending order of age, see
 %% rabbit_mirror_queue_misc:promote_slave/1
-add_slave(Q = #amqqueue { slave_pids = SPids }, New) ->
+add_slave(Q = #amqqueue { slave_pids = SPids, gm_pids = GMPids }, New, GM) ->
     rabbit_mirror_queue_misc:store_updated_slaves(
-      Q#amqqueue{slave_pids = SPids ++ [New]}).
+      Q#amqqueue{slave_pids = SPids ++ [New], gm_pids = [{GM, New} | GMPids]}).
 
 handle_call({deliver, Delivery, true}, From, State) ->
     %% Synchronous, "mandatory" deliver mode.

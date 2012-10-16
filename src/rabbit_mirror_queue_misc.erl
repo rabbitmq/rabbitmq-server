@@ -59,7 +59,6 @@
 %% Returns {ok, NewMPid, DeadPids}
 
 remove_from_queue(QueueName, DeadGMPids) ->
-    DeadNodes = [node(DeadGMPid) || DeadGMPid <- DeadGMPids],
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
               %% Someone else could have deleted the queue before we
@@ -67,12 +66,18 @@ remove_from_queue(QueueName, DeadGMPids) ->
               case mnesia:read({rabbit_queue, QueueName}) of
                   [] -> {error, not_found};
                   [Q = #amqqueue { pid        = QPid,
-                                   slave_pids = SPids }] ->
-                      Alive = [Pid || Pid <- [QPid | SPids],
-                                  not lists:member(node(Pid), DeadNodes)],
+                                   slave_pids = SPids,
+                                   gm_pids    = GMPids }] ->
+                      {Dead, GMPids1} = lists:partition(
+                                          fun ({GM, _}) ->
+                                                  lists:member(GM, DeadGMPids)
+                                          end, GMPids),
+                      DeadPids = [Pid || {_GM, Pid} <- Dead],
+                      Alive = [QPid | SPids] -- DeadPids,
                       {QPid1, SPids1} = promote_slave(Alive),
                       case {{QPid, SPids}, {QPid1, SPids1}} of
                           {Same, Same} ->
+                              GMPids = GMPids1, %% ASSERTION
                               {ok, QPid1, []};
                           _ when QPid =:= QPid1 orelse node(QPid1) =:= node() ->
                               %% Either master hasn't changed, so
@@ -80,7 +85,8 @@ remove_from_queue(QueueName, DeadGMPids) ->
                               %% become the master.
                               store_updated_slaves(
                                 Q #amqqueue { pid        = QPid1,
-                                              slave_pids = SPids1 }),
+                                              slave_pids = SPids1,
+                                              gm_pids    = GMPids1 }),
                               {ok, QPid1, [QPid | SPids] -- Alive};
                           _ ->
                               %% Master has changed, and we're not it,
