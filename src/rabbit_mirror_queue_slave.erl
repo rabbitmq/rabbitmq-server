@@ -696,25 +696,23 @@ publish_or_discard(Status, ChPid, MsgId,
     State1 #state { sender_queues = SQ1, msg_id_status = MS1 }.
 
 
-process_instruction({publish, false, ChPid, MsgProps,
+process_instruction({publish, ChPid, MsgProps,
                      Msg = #basic_message { id = MsgId }}, State) ->
     State1 = #state { backing_queue = BQ, backing_queue_state = BQS } =
         publish_or_discard(published, ChPid, MsgId, State),
     BQS1 = BQ:publish(Msg, MsgProps, ChPid, BQS),
     {ok, State1 #state { backing_queue_state = BQS1 }};
-process_instruction({publish, {true, AckRequired}, ChPid, MsgProps,
+process_instruction({publish_delivered, ChPid, MsgProps,
                      Msg = #basic_message { id = MsgId }}, State) ->
     State1 = #state { backing_queue = BQ, backing_queue_state = BQS } =
         publish_or_discard(published, ChPid, MsgId, State),
-    {AckTag, BQS1} = BQ:publish_delivered(AckRequired, Msg, MsgProps,
-                                          ChPid, BQS),
-    {ok, maybe_store_ack(AckRequired, MsgId, AckTag,
+    {AckTag, BQS1} = BQ:publish_delivered(Msg, MsgProps, ChPid, BQS),
+    {ok, maybe_store_ack(true, MsgId, AckTag,
                          State1 #state { backing_queue_state = BQS1 })};
-process_instruction({discard, ChPid, Msg = #basic_message { id = MsgId }},
-                    State) ->
+process_instruction({discard, ChPid, MsgId}, State) ->
     State1 = #state { backing_queue = BQ, backing_queue_state = BQS } =
         publish_or_discard(discarded, ChPid, MsgId, State),
-    BQS1 = BQ:discard(Msg, ChPid, BQS),
+    BQS1 = BQ:discard(MsgId, ChPid, BQS),
     {ok, State1 #state { backing_queue_state = BQS1 }};
 process_instruction({drop, Length, Dropped, AckRequired},
                     State = #state { backing_queue       = BQ,

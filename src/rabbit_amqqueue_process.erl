@@ -513,6 +513,14 @@ send_or_record_confirm(#delivery{sender     = SenderPid,
     rabbit_misc:confirm_to_sender(SenderPid, [MsgSeqNo]),
     {immediately, State}.
 
+discard(#delivery{sender = SenderPid, message = #basic_message{id = MsgId}},
+        State) ->
+    %% fake an 'eventual' confirm from BQ; noop if not needed
+    State1 = #q{backing_queue = BQ, backing_queue_state = BQS} =
+        confirm_messages([MsgId], State),
+    BQS1 = BQ:discard(MsgId, SenderPid, BQS),
+    State1#q{backing_queue_state = BQS1}.
+
 run_message_queue(State) ->
     State1 = #q{backing_queue = BQ, backing_queue_state = BQS} =
         drop_expired_messages(State),
@@ -521,17 +529,20 @@ run_message_queue(State) ->
                             BQ:is_empty(BQS), State1),
     State2.
 
-attempt_delivery(#delivery{sender = SenderPid, message = Message}, Props,
+attempt_delivery(Delivery = #delivery{sender = SenderPid, message = Message},
+                 Props = #message_properties{delivered = Delivered},
                  State = #q{backing_queue = BQ, backing_queue_state = BQS}) ->
     case BQ:is_duplicate(Message, BQS) of
         {false, BQS1} ->
             deliver_msgs_to_consumers(
-              fun (AckRequired, State1 = #q{backing_queue_state = BQS2}) ->
+              fun (true, State1 = #q{backing_queue_state = BQS2}) ->
                       {AckTag, BQS3} = BQ:publish_delivered(
-                                         AckRequired, Message, Props,
-                                         SenderPid, BQS2),
-                      {{Message, Props#message_properties.delivered, AckTag},
-                       true, State1#q{backing_queue_state = BQS3}}
+                                         Message, Props, SenderPid, BQS2),
+                      {{Message, Delivered, AckTag},
+                       true, State1#q{backing_queue_state = BQS3}};
+                  (false, State1) ->
+                      {{Message, Delivered, undefined},
+                       true, discard(Delivery, State1)}
               end, false, State#q{backing_queue_state = BQS1});
         {published, BQS1} ->
             {true,  State#q{backing_queue_state = BQS1}};
@@ -548,11 +559,7 @@ deliver_or_enqueue(Delivery = #delivery{message = Message, sender = SenderPid},
             State2;
         %% The next one is an optimisation
         {false, State2 = #q{ttl = 0, dlx = undefined}} ->
-            %% fake an 'eventual' confirm from BQ; noop if not needed
-            State3 = #q{backing_queue = BQ, backing_queue_state = BQS} =
-                confirm_messages([Message#basic_message.id], State2),
-            BQS1 = BQ:discard(Message, SenderPid, BQS),
-            State3#q{backing_queue_state = BQS1};
+            discard(Delivery, State2);
         {false, State2 = #q{backing_queue = BQ, backing_queue_state = BQS}} ->
             BQS1 = BQ:publish(Message, Props, SenderPid, BQS),
             ensure_ttl_timer(Props#message_properties.expiry,

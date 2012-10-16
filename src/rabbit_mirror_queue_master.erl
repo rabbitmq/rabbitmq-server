@@ -17,11 +17,11 @@
 -module(rabbit_mirror_queue_master).
 
 -export([init/3, terminate/2, delete_and_terminate/2,
-         purge/1, publish/4, publish_delivered/5, fetch/2, ack/2,
+         purge/1, publish/4, publish_delivered/4, discard/3, fetch/2, ack/2,
          requeue/2, len/1, is_empty/1, depth/1, drain_confirmed/1,
          dropwhile/3, set_ram_duration_target/2, ram_duration/1,
          needs_timeout/1, timeout/1, handle_pre_hibernate/1,
-         status/1, invoke/3, is_duplicate/2, discard/3, fold/3]).
+         status/1, invoke/3, is_duplicate/2, fold/3]).
 
 -export([start/1, stop/0]).
 
@@ -183,25 +183,42 @@ publish(Msg = #basic_message { id = MsgId }, MsgProps, ChPid,
                          backing_queue       = BQ,
                          backing_queue_state = BQS }) ->
     false = dict:is_key(MsgId, SS), %% ASSERTION
-    ok = gm:broadcast(GM, {publish, false, ChPid, MsgProps, Msg}),
+    ok = gm:broadcast(GM, {publish, ChPid, MsgProps, Msg}),
     BQS1 = BQ:publish(Msg, MsgProps, ChPid, BQS),
     ensure_monitoring(ChPid, State #state { backing_queue_state = BQS1 }).
 
-publish_delivered(AckRequired, Msg = #basic_message { id = MsgId }, MsgProps,
+publish_delivered(Msg = #basic_message { id = MsgId }, MsgProps,
                   ChPid, State = #state { gm                  = GM,
                                           seen_status         = SS,
                                           backing_queue       = BQ,
                                           backing_queue_state = BQS,
                                           ack_msg_id          = AM }) ->
     false = dict:is_key(MsgId, SS), %% ASSERTION
-    ok = gm:broadcast(
-           GM, {publish, {true, AckRequired}, ChPid, MsgProps, Msg}),
-    {AckTag, BQS1} =
-        BQ:publish_delivered(AckRequired, Msg, MsgProps, ChPid, BQS),
+    ok = gm:broadcast(GM, {publish_delivered, ChPid, MsgProps, Msg}),
+    {AckTag, BQS1} = BQ:publish_delivered(Msg, MsgProps, ChPid, BQS),
     AM1 = maybe_store_acktag(AckTag, MsgId, AM),
-    {AckTag,
-     ensure_monitoring(ChPid, State #state { backing_queue_state = BQS1,
-                                             ack_msg_id          = AM1 })}.
+    State1 = State #state { backing_queue_state = BQS1, ack_msg_id = AM1 },
+    {AckTag, ensure_monitoring(ChPid, State1)}.
+
+discard(MsgId, ChPid, State = #state { gm                  = GM,
+                                       backing_queue       = BQ,
+                                       backing_queue_state = BQS,
+                                       seen_status         = SS }) ->
+    %% It's a massive error if we get told to discard something that's
+    %% already been published or published-and-confirmed. To do that
+    %% would require non FIFO access. Hence we should not find
+    %% 'published' or 'confirmed' in this dict:find.
+    case dict:find(MsgId, SS) of
+        error ->
+            ok = gm:broadcast(GM, {discard, ChPid, MsgId}),
+            BQS1 = BQ:discard(MsgId, ChPid, BQS),
+            ensure_monitoring(
+              ChPid, State #state {
+                       backing_queue_state = BQS1,
+                       seen_status         = dict:erase(MsgId, SS) });
+        {ok, discarded} ->
+            State
+    end.
 
 dropwhile(Pred, AckRequired,
           State = #state{gm                  = GM,
@@ -373,26 +390,6 @@ is_duplicate(Message = #basic_message { id = MsgId },
             %% Don't erase from SS here because discard/2 is about to
             %% be called and we need to be able to detect this case
             {discarded, State}
-    end.
-
-discard(Msg = #basic_message { id = MsgId }, ChPid,
-        State = #state { gm                  = GM,
-                         backing_queue       = BQ,
-                         backing_queue_state = BQS,
-                         seen_status         = SS }) ->
-    %% It's a massive error if we get told to discard something that's
-    %% already been published or published-and-confirmed. To do that
-    %% would require non FIFO access. Hence we should not find
-    %% 'published' or 'confirmed' in this dict:find.
-    case dict:find(MsgId, SS) of
-        error ->
-            ok = gm:broadcast(GM, {discard, ChPid, Msg}),
-            ensure_monitoring(
-              ChPid, State #state {
-                       backing_queue_state = BQ:discard(Msg, ChPid, BQS),
-                       seen_status         = dict:erase(MsgId, SS) });
-        {ok, discarded} ->
-            State
     end.
 
 %% ---------------------------------------------------------------------------
