@@ -27,7 +27,7 @@
 -export([register/0]).
 -export([name/1, get/2, set/1]).
 -export([validate/4, validate_clear/3, notify/4, notify_clear/3]).
--export([parse_add/5, add/5, delete/2, lookup/2, list/0, list/1,
+-export([parse_set/5, set/5, delete/2, lookup/2, list/0, list/1,
          list_formatted/1, info_keys/0]).
 
 -define(TABLE, rabbit_runtime_parameters).
@@ -69,34 +69,34 @@ get0(Name, List)       -> case pget(definition, List) of
 
 %%----------------------------------------------------------------------------
 
-parse_add(VHost, Key, Pattern, Definition, undefined) ->
-    parse_add_policy0(VHost, Key, Pattern, Definition, []);
-parse_add(VHost, Key, Pattern, Definition, Priority) ->
+parse_set(VHost, Key, Pattern, Definition, undefined) ->
+    parse_set0(VHost, Key, Pattern, Definition, []);
+parse_set(VHost, Key, Pattern, Definition, Priority) ->
     try list_to_integer(Priority) of
-        Num -> parse_add_policy0(VHost, Key, Pattern, Definition,
+        Num -> parse_set0(VHost, Key, Pattern, Definition,
                                  [{<<"priority">>, Num}])
     catch
         error:badarg -> {error, "~p priority must be a number", [Priority]}
     end.
 
-parse_add_policy0(VHost, Key, Pattern, Defn, Priority) ->
+parse_set0(VHost, Key, Pattern, Defn, Priority) ->
     case rabbit_misc:json_decode(Defn) of
         {ok, JSON} ->
-            add0(VHost, Key, [{<<"pattern">>, list_to_binary(Pattern)},
+            set0(VHost, Key, [{<<"pattern">>, list_to_binary(Pattern)},
                               {<<"policy">>, rabbit_misc:json_to_term(JSON)}] ++
                              Priority);
         error ->
             {error_string, "JSON decoding error"}
     end.
 
-add(VHost, Key, Pattern, Definition, Priority) ->
+set(VHost, Key, Pattern, Definition, Priority) ->
     PolicyProps = [{<<"pattern">>, Pattern}, {<<"policy">>, Definition}],
-    add0(VHost, Key, case Priority of
+    set0(VHost, Key, case Priority of
                          undefined -> [];
                          _         -> [{<<"priority">>, Priority}]
                      end ++ PolicyProps).
 
-add0(VHost, Key, Term) ->
+set0(VHost, Key, Term) ->
     rabbit_runtime_parameters:set_any(VHost, <<"policy">>, Key, Term).
 
 delete(VHost, Key) ->

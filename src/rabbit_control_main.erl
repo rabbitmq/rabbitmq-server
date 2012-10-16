@@ -470,7 +470,7 @@ action(set_policy, Node, [Key, Pattern, Defn | Prio], Opts, Inform)
                          end,
     VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
     Inform(InformMsg, [Key, Pattern, Defn] ++ Prio),
-    rpc_call(Node, rabbit_policy, parse_add,
+    rpc_call(Node, rabbit_policy, parse_set,
              [VHostArg, list_to_binary(Key), Pattern, Defn, Prio1]);
 
 action(clear_policy, Node, [Key], Opts, Inform) ->
