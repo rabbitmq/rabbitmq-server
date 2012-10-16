@@ -57,7 +57,7 @@ accept_content(ReqData, Context) ->
             rabbit_mgmt_util:with_decode(
               [pattern, definition], ReqData, Context,
               fun([Pattern, Definition], Body) ->
-                      case rabbit_policy:add(
+                      case rabbit_policy:set(
                              VHost,
                              key(ReqData),
                              Pattern,
