@@ -22,7 +22,7 @@
 
 -include("rabbit.hrl").
 
--import(rabbit_misc, [pget/2, pget/3]).
+-import(rabbit_misc, [pget/2]).
 
 -export([register/0]).
 -export([name/1, get/2, set/1]).
@@ -68,11 +68,10 @@ get0(Name, List)       -> case pget(definition, List) of
 %%----------------------------------------------------------------------------
 
 parse_set(VHost, Key, Pattern, Definition, undefined) ->
-    parse_set0(VHost, Key, Pattern, Definition, []);
+    parse_set0(VHost, Key, Pattern, Definition, 0);
 parse_set(VHost, Key, Pattern, Definition, Priority) ->
     try list_to_integer(Priority) of
-        Num -> parse_set0(VHost, Key, Pattern, Definition,
-                                 [{<<"priority">>, Num}])
+        Num -> parse_set0(VHost, Key, Pattern, Definition, Num)
     catch
         error:badarg -> {error, "~p priority must be a number", [Priority]}
     end.
@@ -81,19 +80,21 @@ parse_set0(VHost, Key, Pattern, Defn, Priority) ->
     case rabbit_misc:json_decode(Defn) of
         {ok, JSON} ->
             set0(VHost, Key,
-                 [{<<"pattern">>, list_to_binary(Pattern)},
-                  {<<"definition">>, rabbit_misc:json_to_term(JSON)}] ++
-                     Priority);
+                 [{<<"pattern">>,    list_to_binary(Pattern)},
+                  {<<"definition">>, rabbit_misc:json_to_term(JSON)},
+                  {<<"priority">>,   Priority}]);
         error ->
             {error_string, "JSON decoding error"}
     end.
 
 set(VHost, Key, Pattern, Definition, Priority) ->
-    PolicyProps = [{<<"pattern">>, Pattern}, {<<"definition">>, Definition}],
-    set0(VHost, Key, case Priority of
-                         undefined -> [];
-                         _         -> [{<<"priority">>, Priority}]
-                     end ++ PolicyProps).
+    PolicyProps = [{<<"pattern">>,    Pattern},
+                   {<<"definition">>, Definition},
+                   {<<"priority">>,   case Priority of
+                                          undefined -> 0;
+                                          _         -> Priority
+                                      end}],
+    set0(VHost, Key, PolicyProps).
 
 set0(VHost, Key, Term) ->
     rabbit_runtime_parameters:set_any(VHost, <<"policy">>, Key, Term).
@@ -120,7 +121,7 @@ list0(VHost, DefnFun) ->
     [p(P, DefnFun) || P <- rabbit_runtime_parameters:list(VHost, <<"policy">>)].
 
 order_policies(PropList) ->
-    lists:sort(fun (A, B) -> pget(priority, A, 0) < pget(priority, B, 0) end,
+    lists:sort(fun (A, B) -> pget(priority, A) < pget(priority, B) end,
                PropList).
 
 p(Parameter, DefnFun) ->
@@ -128,11 +129,8 @@ p(Parameter, DefnFun) ->
     [{vhost,      pget(vhost, Parameter)},
      {key,        pget(key, Parameter)},
      {pattern,    pget(<<"pattern">>, Value)},
-     {definition, DefnFun(pget(<<"definition">>, Value))}] ++
-    case pget(<<"priority">>, Value) of
-        undefined -> [];
-        Priority  -> [{priority, Priority}]
-    end.
+     {definition, DefnFun(pget(<<"definition">>, Value))},
+     {priority,   pget(<<"priority">>, Value)}].
 
 format(Term) ->
     {ok, JSON} = rabbit_misc:json_encode(rabbit_misc:term_to_json(Term)),
@@ -204,12 +202,12 @@ match(Name, Policies) ->
 matches(#resource{name = Name}, Policy) ->
     match =:= re:run(Name, pget(pattern, Policy), [{capture, none}]).
 
-sort_pred(A, B) -> pget(priority, A, 0) >= pget(priority, B, 0).
+sort_pred(A, B) -> pget(priority, A) >= pget(priority, B).
 
 %%----------------------------------------------------------------------------
 
 policy_validation() ->
-    [{<<"priority">>,   fun rabbit_parameter_validation:number/2, optional},
+    [{<<"priority">>,   fun rabbit_parameter_validation:number/2, mandatory},
      {<<"pattern">>,    fun rabbit_parameter_validation:regex/2,  mandatory},
      {<<"definition">>, fun validation/2,                         mandatory}].
 
