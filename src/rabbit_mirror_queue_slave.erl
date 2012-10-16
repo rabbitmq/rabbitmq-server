@@ -178,12 +178,12 @@ handle_call({deliver, Delivery, true}, From, State) ->
 
 handle_call({gm_deaths, Deaths}, From,
             State = #state { q = Q = #amqqueue { name = QName, pid = MPid }}) ->
-    case rabbit_mirror_queue_misc:remove_from_queue(QName, Deaths) of
+    Self = self(),
+    case rabbit_mirror_queue_misc:remove_from_queue(QName, Self, Deaths) of
         {error, not_found} ->
             gen_server2:reply(From, ok),
             {stop, normal, State};
         {ok, Pid, DeadPids} ->
-            Self = self(),
             rabbit_mirror_queue_misc:report_deaths(Self, false, QName,
                                                    DeadPids),
             case Pid of

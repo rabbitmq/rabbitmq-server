@@ -16,7 +16,7 @@
 
 -module(rabbit_mirror_queue_misc).
 
--export([remove_from_queue/2, on_node_up/0, add_mirrors/2, add_mirror/2,
+-export([remove_from_queue/3, on_node_up/0, add_mirrors/2, add_mirror/2,
          report_deaths/4, store_updated_slaves/1, suggested_queue_nodes/1,
          is_mirrored/1, update_mirrors/2]).
 
@@ -29,8 +29,8 @@
 
 -ifdef(use_specs).
 
--spec(remove_from_queue/2 ::
-        (rabbit_amqqueue:name(), [pid()])
+-spec(remove_from_queue/3 ::
+        (rabbit_amqqueue:name(), pid(), [pid()])
         -> {'ok', pid(), [pid()]} | {'error', 'not_found'}).
 -spec(on_node_up/0 :: () -> 'ok').
 -spec(add_mirrors/2 :: (rabbit_amqqueue:name(), [node()]) -> 'ok').
@@ -57,8 +57,7 @@
 %% slave (now master) receives messages it's not ready for (for
 %% example, new consumers).
 %% Returns {ok, NewMPid, DeadPids}
-
-remove_from_queue(QueueName, DeadGMPids) ->
+remove_from_queue(QueueName, Self, DeadGMPids) ->
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
               %% Someone else could have deleted the queue before we
@@ -79,7 +78,7 @@ remove_from_queue(QueueName, DeadGMPids) ->
                           {Same, Same} ->
                               GMPids = GMPids1, %% ASSERTION
                               {ok, QPid1, []};
-                          _ when QPid =:= QPid1 orelse node(QPid1) =:= node() ->
+                          _ when QPid =:= QPid1 orelse QPid1 =:= Self ->
                               %% Either master hasn't changed, so
                               %% we're ok to update mnesia; or we have
                               %% become the master.
