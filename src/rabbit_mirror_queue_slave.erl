@@ -169,8 +169,7 @@ init_it(Self, GM, Node, QName) ->
 %% rabbit_mirror_queue_misc:promote_slave/1
 add_slave(Q = #amqqueue { slave_pids = SPids, gm_pids = GMPids }, New, GM) ->
     rabbit_mirror_queue_misc:store_updated_slaves(
-      Q#amqqueue{slave_pids = SPids ++ [New],
-                 gm_pids    = [{GM, New} | GMPids]}).
+      Q#amqqueue{slave_pids = SPids ++ [New], gm_pids = [{GM, New} | GMPids]}).
 
 handle_call({deliver, Delivery, true}, From, State) ->
     %% Synchronous, "mandatory" deliver mode.

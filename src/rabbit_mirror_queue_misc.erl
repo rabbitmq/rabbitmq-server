@@ -68,7 +68,6 @@ remove_from_queue(QueueName, DeadGMPids) ->
                   [Q = #amqqueue { pid        = QPid,
                                    slave_pids = SPids,
                                    gm_pids    = GMPids }] ->
-
                       {Dead, GMPids1} = lists:partition(
                                           fun ({GM, _}) ->
                                                   lists:member(GM, DeadGMPids)

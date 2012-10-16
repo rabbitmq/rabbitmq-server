@@ -106,8 +106,8 @@ init_with_existing_bq(Q = #amqqueue{name = QName}, BQ, BQS) ->
            fun () ->
                    [Q1 = #amqqueue{gm_pids = GMPids}]
                        = mnesia:read({rabbit_queue, QName}),
-                   Q2 = Q1#amqqueue{gm_pids = [{GM, Self} | GMPids]},
-                   ok = rabbit_amqqueue:store_queue(Q2)
+                   ok = rabbit_amqqueue:store_queue(
+                          Q1#amqqueue{gm_pids = [{GM, Self} | GMPids]})
            end),
     #state { gm                  = GM,
              coordinator         = CPid,
@@ -165,8 +165,7 @@ stop_all_slaves(Reason, #state{gm = GM}) ->
       fun () ->
               [Q] = mnesia:read({rabbit_queue, QName}),
               rabbit_mirror_queue_misc:store_updated_slaves(
-                Q #amqqueue { gm_pids    = [],
-                              slave_pids = [] })
+                Q #amqqueue { gm_pids = [], slave_pids = [] })
       end),
     ok = gm:forget_group(QName).
 
