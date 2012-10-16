@@ -179,18 +179,20 @@ handle_call({gm_deaths, Deaths}, From,
             gen_server2:reply(From, ok),
             {stop, normal, State};
         {ok, Pid, DeadPids} ->
-            rabbit_mirror_queue_misc:report_deaths(self(), false, QName,
+            Self = self(),
+            rabbit_mirror_queue_misc:report_deaths(Self, false, QName,
                                                    DeadPids),
-            if node(Pid) =:= node(MPid) ->
+            case Pid of
+                MPid ->
                     %% master hasn't changed
                     gen_server2:reply(From, ok),
                     noreply(State);
-               node(Pid) =:= node() ->
+                Self ->
                     %% we've become master
                     QueueState = promote_me(From, State),
                     {become, rabbit_amqqueue_process, QueueState, hibernate};
-               true ->
-                    %% master has changed to not us.
+                _ ->
+                    %% master has changed to not us
                     gen_server2:reply(From, ok),
                     erlang:monitor(process, Pid),
                     noreply(State #state { q = Q #amqqueue { pid = Pid } })
