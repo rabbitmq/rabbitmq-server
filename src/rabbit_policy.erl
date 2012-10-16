@@ -218,13 +218,12 @@ policy_validation() ->
 validation(_Name, []) ->
     {error, "no policy provided", []};
 validation(_Name, Terms) when is_list(Terms) ->
-    {Tags, Modules} = lists:unzip(
-                            rabbit_registry:lookup_all(policy_validator)),
-    [] = lists:usort(Tags -- lists:usort(Tags)), %% ASSERTION
-    Validators = lists:zipwith(fun (M, T) ->  {M, a2b(T)} end, Modules, Tags),
-
+    {Keys, Modules} = lists:unzip(
+                        rabbit_registry:lookup_all(policy_validator)),
+    [] = dups(Keys), %% ASSERTION
+    Validators = lists:zipwith(fun (M, K) ->  {M, a2b(K)} end, Modules, Keys),
     {TermKeys, _} = lists:unzip(Terms),
-    case TermKeys -- lists:usort(TermKeys) of
+    case dups(TermKeys) of
         []   -> validation0(Validators, Terms);
         Dup  -> {error, "~p duplicate keys not allowed", [Dup]}
     end;
@@ -233,15 +232,15 @@ validation(_Name, Term) ->
 
 validation0(Validators, Terms) ->
     case lists:foldl(
-           fun (_, {Error, _} = Acc) when Error /= ok ->
-                   Acc;
-               (Mod, {ok, TermsLeft}) ->
-                   ModTags = proplists:get_all_values(Mod, Validators),
-                   case [T || {Tag, _} = T <- TermsLeft,
-                              lists:member(Tag, ModTags)] of
+           fun (Mod, {ok, TermsLeft}) ->
+                   ModKeys = proplists:get_all_values(Mod, Validators),
+                   case [T || {Key, _} = T <- TermsLeft,
+                              lists:member(Key, ModKeys)] of
                        []    -> {ok, TermsLeft};
                        Scope -> {Mod:validate_policy(Scope), TermsLeft -- Scope}
-                   end
+                   end;
+               (_, Acc) ->
+                   Acc
            end, {ok, Terms}, proplists:get_keys(Validators)) of
          {ok, []} ->
              ok;
@@ -252,3 +251,5 @@ validation0(Validators, Terms) ->
     end.
 
 a2b(A) -> list_to_binary(atom_to_list(A)).
+
+dups(L) -> L -- lists:usort(L).
