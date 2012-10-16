@@ -174,8 +174,6 @@ handle_call({deliver, Delivery, true}, From, State) ->
 
 handle_call({gm_deaths, Deaths}, From,
             State = #state { q = Q = #amqqueue { name = QName, pid = MPid }}) ->
-    %% The GM has told us about deaths, which means we're not going to
-    %% receive any more messages from GM
     case rabbit_mirror_queue_misc:remove_from_queue(QName, Deaths) of
         {error, not_found} ->
             gen_server2:reply(From, ok),
