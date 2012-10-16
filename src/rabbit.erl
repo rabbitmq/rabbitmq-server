@@ -364,7 +364,7 @@ status() ->
           {running_applications, application:which_applications(infinity)},
           {os,                   os:type()},
           {erlang_version,       erlang:system_info(system_version)},
-          {memory,               erlang:memory()}],
+          {memory,               rabbit_vm:memory()}],
     S2 = rabbit_misc:filter_exit_map(
            fun ({Key, {M, F, A}}) -> {Key, erlang:apply(M, F, A)} end,
            [{vm_memory_high_watermark, {vm_memory_monitor,

@@ -277,15 +277,25 @@ suggested_queue_nodes(<<"nodes">>, Nodes0, {MNode, _SNodes}, Possible) ->
                   false -> promote_slave(Available)
               end
     end;
+%% When we need to add nodes, we randomise our candidate list as a
+%% crude form of load-balancing. TODO it would also be nice to
+%% randomise the list of ones to remove when we have too many - but
+%% that would fail to take account of synchronisation...
 suggested_queue_nodes(<<"exactly">>, Count, {MNode, SNodes}, Possible) ->
     SCount = Count - 1,
     {MNode, case SCount > length(SNodes) of
-                true  -> Cand = (Possible -- [MNode]) -- SNodes,
+                true  -> Cand = shuffle((Possible -- [MNode]) -- SNodes),
                          SNodes ++ lists:sublist(Cand, SCount - length(SNodes));
                 false -> lists:sublist(SNodes, SCount)
             end};
 suggested_queue_nodes(_, _, {MNode, _}, _) ->
     {MNode, []}.
+
+shuffle(L) ->
+    {A1,A2,A3} = now(),
+    random:seed(A1, A2, A3),
+    {_, L1} = lists:unzip(lists:keysort(1, [{random:uniform(), N} || N <- L])),
+    L1.
 
 actual_queue_nodes(#amqqueue{pid = MPid, slave_pids = SPids}) ->
     {case MPid of

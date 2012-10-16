@@ -86,6 +86,7 @@
 
 -define(STATISTICS_KEYS,
         [pid,
+         policy,
          exclusive_consumer_pid,
          exclusive_consumer_tag,
          messages_ready,
@@ -496,32 +497,21 @@ confirm_messages(MsgIds, State = #q{msg_id_to_channel = MTC}) ->
     rabbit_misc:gb_trees_foreach(fun rabbit_misc:confirm_to_sender/2, CMs),
     State#q{msg_id_to_channel = MTC1}.
 
-should_confirm_message(#delivery{msg_seq_no = undefined}, _State) ->
-    never;
-should_confirm_message(#delivery{sender     = SenderPid,
+send_or_record_confirm(#delivery{msg_seq_no = undefined}, State) ->
+    {never, State};
+send_or_record_confirm(#delivery{sender     = SenderPid,
                                  msg_seq_no = MsgSeqNo,
                                  message    = #basic_message {
                                    is_persistent = true,
                                    id            = MsgId}},
-                       #q{q = #amqqueue{durable = true}}) ->
-    {eventually, SenderPid, MsgSeqNo, MsgId};
-should_confirm_message(#delivery{sender     = SenderPid,
-                                 msg_seq_no = MsgSeqNo},
-                       _State) ->
-    {immediately, SenderPid, MsgSeqNo}.
-
-needs_confirming({eventually, _, _, _}) -> true;
-needs_confirming(_)                     -> false.
-
-maybe_record_confirm_message({eventually, SenderPid, MsgSeqNo, MsgId},
-                             State = #q{msg_id_to_channel = MTC}) ->
-    State#q{msg_id_to_channel =
-                gb_trees:insert(MsgId, {SenderPid, MsgSeqNo}, MTC)};
-maybe_record_confirm_message({immediately, SenderPid, MsgSeqNo}, State) ->
+                       State = #q{q                 = #amqqueue{durable = true},
+                                  msg_id_to_channel = MTC}) ->
+    MTC1 = gb_trees:insert(MsgId, {SenderPid, MsgSeqNo}, MTC),
+    {eventually, State#q{msg_id_to_channel = MTC1}};
+send_or_record_confirm(#delivery{sender     = SenderPid,
+                                 msg_seq_no = MsgSeqNo}, State) ->
     rabbit_misc:confirm_to_sender(SenderPid, [MsgSeqNo]),
-    State;
-maybe_record_confirm_message(_Confirm, State) ->
-    State.
+    {immediately, State}.
 
 run_message_queue(State) ->
     State1 = #q{backing_queue = BQ, backing_queue_state = BQS} =
@@ -543,33 +533,27 @@ attempt_delivery(#delivery{sender = SenderPid, message = Message}, Props,
                       {{Message, Props#message_properties.delivered, AckTag},
                        true, State1#q{backing_queue_state = BQS3}}
               end, false, State#q{backing_queue_state = BQS1});
-        {Duplicate, BQS1} ->
-            %% if the message has previously been seen by the BQ then
-            %% it must have been seen under the same circumstances as
-            %% now: i.e. if it is now a deliver_immediately then it
-            %% must have been before.
-            {case Duplicate of
-                 published -> true;
-                 discarded -> false
-             end,
-             State#q{backing_queue_state = BQS1}}
+        {published, BQS1} ->
+            {true,  State#q{backing_queue_state = BQS1}};
+        {discarded, BQS1} ->
+            {false, State#q{backing_queue_state = BQS1}}
     end.
 
-deliver_or_enqueue(Delivery = #delivery{message    = Message,
-                                        sender     = SenderPid}, Delivered,
-                   State) ->
-    Confirm = should_confirm_message(Delivery, State),
+deliver_or_enqueue(Delivery = #delivery{message = Message, sender = SenderPid},
+                   Delivered, State) ->
+    {Confirm, State1} = send_or_record_confirm(Delivery, State),
     Props = message_properties(Confirm, Delivered, State),
-    case attempt_delivery(Delivery, Props, State) of
-        {true, State1} ->
-            maybe_record_confirm_message(Confirm, State1);
+    case attempt_delivery(Delivery, Props, State1) of
+        {true, State2} ->
+            State2;
         %% the next one is an optimisations
         %% TODO: optimise the Confirm =/= never case too
-        {false, State1 = #q{ttl = 0, dlx = undefined}} when Confirm == never ->
-            discard_delivery(Delivery, State1);
-        {false, State1} ->
-            State2 = #q{backing_queue = BQ, backing_queue_state = BQS} =
-                maybe_record_confirm_message(Confirm, State1),
+        {false, State2 = #q{ttl = 0, dlx = undefined,
+                            backing_queue = BQ, backing_queue_state = BQS}}
+          when Confirm == never ->
+            BQS1 = BQ:discard(Message, SenderPid, BQS),
+            State2#q{backing_queue_state = BQS1};
+        {false, State2 = #q{backing_queue = BQ, backing_queue_state = BQS}} ->
             BQS1 = BQ:publish(Message, Props, SenderPid, BQS),
             ensure_ttl_timer(Props#message_properties.expiry,
                              State2#q{backing_queue_state = BQS1})
@@ -689,15 +673,9 @@ subtract_acks(ChPid, AckTags, State, Fun) ->
             Fun(State)
     end.
 
-discard_delivery(#delivery{sender = SenderPid,
-                           message = Message},
-                 State = #q{backing_queue = BQ,
-                            backing_queue_state = BQS}) ->
-    State#q{backing_queue_state = BQ:discard(Message, SenderPid, BQS)}.
-
 message_properties(Confirm, Delivered, #q{ttl = TTL}) ->
     #message_properties{expiry           = calculate_msg_expiry(TTL),
-                        needs_confirming = needs_confirming(Confirm),
+                        needs_confirming = Confirm == eventually,
                         delivered        = Delivered}.
 
 calculate_msg_expiry(undefined) -> undefined;
@@ -890,6 +868,12 @@ i(owner_pid, #q{q = #amqqueue{exclusive_owner = none}}) ->
     '';
 i(owner_pid, #q{q = #amqqueue{exclusive_owner = ExclusiveOwner}}) ->
     ExclusiveOwner;
+i(policy,    #q{q = #amqqueue{name = Name}}) ->
+    {ok, Q} = rabbit_amqqueue:lookup(Name),
+    case rabbit_policy:name(Q) of
+        none   -> '';
+        Policy -> Policy
+    end;
 i(exclusive_consumer_pid, #q{exclusive_consumer = none}) ->
     '';
 i(exclusive_consumer_pid, #q{exclusive_consumer = {ChPid, _ConsumerTag}}) ->
