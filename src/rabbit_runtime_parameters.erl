@@ -155,7 +155,8 @@ list(VHost, Component, Default) ->
                                             _ = '_'},
                 [p(P) || #runtime_parameters{ key = {_VHost, Comp, _Key}} = P <-
                          mnesia:dirty_match_object(?TABLE, Match),
-                         Comp /= <<"policy">>];
+                         Comp =/= <<"policy">> orelse
+                             Component =:= <<"policy">>];
         _    -> Default
     end.
 

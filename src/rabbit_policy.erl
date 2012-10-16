@@ -30,8 +30,6 @@
 -export([parse_set/5, set/5, delete/2, lookup/2, list/0, list/1,
          list_formatted/1, info_keys/0]).
 
--define(TABLE, rabbit_runtime_parameters).
-
 -rabbit_boot_step({?MODULE,
                    [{description, "policy parameters"},
                     {mfa, {rabbit_policy, register, []}},
@@ -82,15 +80,16 @@ parse_set(VHost, Key, Pattern, Definition, Priority) ->
 parse_set0(VHost, Key, Pattern, Defn, Priority) ->
     case rabbit_misc:json_decode(Defn) of
         {ok, JSON} ->
-            set0(VHost, Key, [{<<"pattern">>, list_to_binary(Pattern)},
-                              {<<"policy">>, rabbit_misc:json_to_term(JSON)}] ++
+            set0(VHost, Key,
+                 [{<<"pattern">>, list_to_binary(Pattern)},
+                  {<<"definition">>, rabbit_misc:json_to_term(JSON)}] ++
                      Priority);
         error ->
             {error_string, "JSON decoding error"}
     end.
 
 set(VHost, Key, Pattern, Definition, Priority) ->
-    PolicyProps = [{<<"pattern">>, Pattern}, {<<"policy">>, Definition}],
+    PolicyProps = [{<<"pattern">>, Pattern}, {<<"definition">>, Definition}],
     set0(VHost, Key, case Priority of
                          undefined -> [];
                          _         -> [{<<"priority">>, Priority}]
@@ -103,9 +102,9 @@ delete(VHost, Key) ->
     rabbit_runtime_parameters:clear_any(VHost, <<"policy">>, Key).
 
 lookup(VHost, Key) ->
-    case mnesia:dirty_read(?TABLE, {VHost, <<"policy">>, Key}) of
-        []  -> not_found;
-        [P] -> p(P, fun ident/1)
+    case rabbit_runtime_parameters:lookup(VHost, <<"policy">>, Key) of
+        not_found  -> not_found;
+        P          -> p(P, fun ident/1)
     end.
 
 list() ->
@@ -118,19 +117,18 @@ list_formatted(VHost) ->
     order_policies(list0(VHost, fun format/1)).
 
 list0(VHost, DefnFun) ->
-    Match = #runtime_parameters{key = {VHost, <<"policy">>, '_'}, _ = '_'},
-    [p(P, DefnFun) || P <- mnesia:dirty_match_object(?TABLE, Match)].
+    [p(P, DefnFun) || P <- rabbit_runtime_parameters:list(VHost, <<"policy">>)].
 
 order_policies(PropList) ->
     lists:sort(fun (A, B) -> pget(priority, A, 0) < pget(priority, B, 0) end,
                PropList).
 
-p(#runtime_parameters{key = {VHost, <<"policy">>, Key}, value = Value},
-  DefnFun) ->
-    [{vhost,      VHost},
-     {key,        Key},
+p(Parameter, DefnFun) ->
+    Value = pget(value, Parameter),
+    [{vhost,      pget(vhost, Parameter)},
+     {key,        pget(key, Parameter)},
      {pattern,    pget(<<"pattern">>, Value)},
-     {definition, DefnFun(pget(<<"policy">>,  Value))}] ++
+     {definition, DefnFun(pget(<<"definition">>, Value))}] ++
     case pget(<<"priority">>, Value) of
         undefined -> [];
         Priority  -> [{priority, Priority}]
@@ -211,9 +209,9 @@ sort_pred(A, B) -> pget(priority, A, 0) >= pget(priority, B, 0).
 %%----------------------------------------------------------------------------
 
 policy_validation() ->
-    [{<<"priority">>, fun rabbit_parameter_validation:number/2, optional},
-     {<<"pattern">>,  fun rabbit_parameter_validation:regex/2,  mandatory},
-     {<<"policy">>,   fun validation/2,                         mandatory}].
+    [{<<"priority">>,   fun rabbit_parameter_validation:number/2, optional},
+     {<<"pattern">>,    fun rabbit_parameter_validation:regex/2,  mandatory},
+     {<<"definition">>, fun validation/2,                         mandatory}].
 
 validation(_Name, []) ->
     {error, "no policy provided", []};
