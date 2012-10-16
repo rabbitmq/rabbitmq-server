@@ -153,19 +153,19 @@ dispatcher_add(function(sammy) {
                 update();
             return false;
         });
-    path('#/policies', {'policies': '/parameters/policy',
+    path('#/policies', {'policies': '/policies',
                         'vhosts':   '/vhosts'}, 'policies');
     sammy.get('#/policies/:vhost/:id', function() {
-            render({'policy': '/parameters/policy/' + esc(this.params['vhost'])
+            render({'policy': '/policies/' + esc(this.params['vhost'])
                         + '/' + esc(this.params['id'])},
                 'policy', '#/policies');
         });
     sammy.put('#/policies', function() {
-            put_parameter(this, ['key', 'pattern', 'policy'], ['priority'], []);
+            put_policy(this, ['key', 'pattern', 'policy'], ['priority'], []);
             return false;
         });
     sammy.del('#/policies', function() {
-            if (sync_delete(this, '/parameters/:component/:vhost/:key'))
+            if (sync_delete(this, '/policies/:vhost/:key'))
                 go_to('#/policies');
             return false;
         });

@@ -33,7 +33,7 @@ import socket
 LISTABLE = {'connections': False, 'channels': False, 'exchanges': True,
             'queues': True, 'bindings': True, 'users': False,
             'vhosts': False, 'permissions': False, 'nodes': False,
-            'parameters': False}
+            'parameters': False, 'policies': False}
 
 SHOWABLE = {'overview': False}
 
@@ -48,7 +48,8 @@ URIS = {
     'vhost':      '/vhosts/{name}',
     'user':       '/users/{name}',
     'permission': '/permissions/{vhost}/{user}',
-    'parameter':  '/parameters/{component}/{key}'
+    'parameter':  '/parameters/{component}/{key}',
+    'policy':     '/policies/{vhost}/{key}'
     }
 
 DECLARABLE = {
@@ -69,7 +70,10 @@ DECLARABLE = {
                    'optional':  {}},
     'parameter':  {'mandatory': ['component', 'key', 'value'],
                    'json':      ['value'],
-                   'optional':  {}}
+                   'optional':  {}},
+    'policy':     {'mandatory': ['vhost', 'key', 'pattern', 'definition'],
+                   'json':      ['definition', 'priority'],
+                   'optional':  {'priority' : 0}}
     }
 
 DELETABLE = {
@@ -80,7 +84,8 @@ DELETABLE = {
     'vhost':      {'mandatory': ['name']},
     'user':       {'mandatory': ['name']},
     'permission': {'mandatory': ['vhost', 'user']},
-    'parameter':  {'mandatory': ['component', 'key']}
+    'parameter':  {'mandatory': ['component', 'key']},
+    'policy':     {'mandatory': ['vhost', 'key']}
     }
 
 CLOSABLE = {

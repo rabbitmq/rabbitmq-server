@@ -60,6 +60,7 @@ to_json(ReqData, Context) ->
       [{rabbit_version, list_to_binary(Vsn)}] ++
       filter(
         [{parameters,  rabbit_mgmt_wm_parameters:basic(ReqData)},
+         {policies,    rabbit_mgmt_wm_policies:basic(ReqData)},
          {users,       rabbit_mgmt_wm_users:users()},
          {vhosts,      rabbit_mgmt_wm_vhosts:basic()},
          {permissions, rabbit_mgmt_wm_permissions:permissions()},
@@ -113,6 +114,7 @@ apply_defs(Body, SuccessFun, ErrorFun) ->
         {ok, _, All} ->
             try
                 for_all(parameters,  All, fun add_parameter/1),
+                for_all(policies,    All, fun add_policy/1),
                 for_all(users,       All, fun add_user/1),
                 for_all(vhosts,      All, fun add_vhost/1),
                 for_all(permissions, All, fun add_permission/1),
@@ -156,6 +158,7 @@ export_name(_Name)                -> true.
 
 rw_state() ->
     [{parameters,  [vhost, component, key, value]},
+     {policies,    [vhost, key, pattern, definition, priority]},
      {users,       [name, password_hash, tags]},
      {vhosts,      [name]},
      {permissions, [user, vhost, configure, write, read]},
@@ -199,6 +202,18 @@ add_parameter(Param) ->
         ok                -> ok;
         {error_string, E} -> S = rabbit_misc:format(" (~s/~s/~s)",
                                                     [VHost, Comp, Key]),
+                             exit(list_to_binary(E ++ S))
+    end.
+
+add_policy(Param) ->
+    VHost = pget(vhost, Param),
+    Key = pget(key, Param),
+    case rabbit_policy:set(
+           VHost, Key, pget(pattern, Param),
+           rabbit_misc:json_to_term(pget(definition, Param)),
+           pget(priority, Param)) of
+        ok                -> ok;
+        {error_string, E} -> S = rabbit_misc:format(" (~s/~s)", [VHost, Key]),
                              exit(list_to_binary(E ++ S))
     end.
 

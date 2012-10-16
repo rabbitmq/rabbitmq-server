@@ -553,6 +553,7 @@ unicode_test() ->
     ok.
 
 definitions_test() ->
+    rabbit_runtime_parameters_test:register_policy_validator(),
     XArgs = [{type, <<"direct">>}],
     QArgs = [],
     http_put("/queues/%2f/my-queue", QArgs, ?NO_CONTENT),
@@ -576,13 +577,12 @@ definitions_test() ->
         [{users,       []},
          {vhosts,      []},
          {permissions, []},
-         {parameters,  [[{value,    [{<<"pattern">>, <<".*">>},
-                                     {<<"priority">>, 1},
-                                     {<<"policy">>, [{<<"a">>, <<"b">>}]}
-                                    ]},
-                         {vhost,    <<"/">>},
-                         {component,<<"policy">>},
-                         {key,      <<"test">>}]]},
+         {policies,    [[{vhost,      <<"/">>},
+                         {key,        <<"test">>},
+                         {pattern,    <<".*">>},
+                         {definition, [{testpos, [1, 2, 3]}]},
+                         {priority,   1}
+                        ]]},
          {queues,      [[{name,        <<"another-queue">>},
                          {vhost,       <<"/">>},
                          {durable,     true},
@@ -607,7 +607,8 @@ definitions_test() ->
     http_post("/definitions", ExtraConfig, ?CREATED),
     http_post("/definitions", BrokenConfig, ?BAD_REQUEST),
     http_delete("/queues/%2f/another-queue", ?NO_CONTENT),
-    http_delete("/parameters/policy/%2f/test", ?NO_CONTENT),
+    http_delete("/policies/%2f/test", ?NO_CONTENT),
+    rabbit_runtime_parameters_test:unregister_policy_validator(),
     ok.
 
 definitions_remove_things_test() ->
@@ -933,6 +934,39 @@ parameters_test() ->
     0 = length(http_get("/parameters/test")),
     0 = length(http_get("/parameters/test/%2f")),
     rabbit_runtime_parameters_test:unregister(),
+    ok.
+
+policy_test() ->
+    rabbit_runtime_parameters_test:register_policy_validator(),
+    PolicyPos  = [{vhost,<<"/">>},
+                  {key,<<"policy_pos">>},
+                  {pattern,<<".*">>},
+                  {definition,[{testpos,[1,2,3]}]},
+                  {priority,10}],
+    PolicyEven = [{vhost,<<"/">>},
+                  {key,<<"policy_even">>},
+                  {pattern,<<".*">>},
+                  {definition,[{testeven,[1,2,3,4]}]},
+                  {priority,10}],
+    http_put(
+      "/policies/%2f/policy_pos",
+      lists:keydelete(key, 1, PolicyPos),
+      ?NO_CONTENT),
+    http_put(
+      "/policies/%2f/policy_even",
+      lists:keydelete(key, 1, PolicyEven),
+      ?NO_CONTENT),
+    assert_item(PolicyPos,  http_get("/policies/%2f/policy_pos",  ?OK)),
+    assert_item(PolicyEven, http_get("/policies/%2f/policy_even", ?OK)),
+    List = [PolicyPos, PolicyEven],
+    assert_list(List, http_get("/policies",     ?OK)),
+    assert_list(List, http_get("/policies/%2f", ?OK)),
+
+    http_delete("/policies/%2f/policy_pos", ?NO_CONTENT),
+    http_delete("/policies/%2f/policy_even", ?NO_CONTENT),
+    0 = length(http_get("/policies")),
+    0 = length(http_get("/policies/%2f")),
+    rabbit_runtime_parameters_test:unregister_policy_validator(),
     ok.
 
 %%---------------------------------------------------------------------------

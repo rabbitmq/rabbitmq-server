@@ -10,25 +10,24 @@
     <th>Virtual Host</th>
 <% } %>
     <th>Name</th>
-    <th>Regexp</th>
+    <th>Pattern</th>
+    <th>Definition</th>
     <th>Priority</th>
-    <th>Policy</th>
   </tr>
  </thead>
  <tbody>
 <%
- var sorted_policies = policies.sort(function(a,b) {return b.value['priority'] || 0 - a.value['priority'] || 0} );
- for (var i = 0; i < sorted_policies.length; i++) {
-    var policy = sorted_policies[i];
+ for (var i = 0; i < policies.length; i++) {
+    var policy = policies[i];
 %>
    <tr<%= alt_rows(i)%>>
 <% if (vhosts_interesting) { %>
      <td><%= fmt_string(policy.vhost) %></td>
 <% } %>
      <td><%= link_policy(policy.vhost, policy.key) %></td>
-     <td><%= fmt_string(policy.value['pattern']) %></td>
-     <td><%= fmt_string(policy.value['priority']) %></td>
-     <td><%= fmt_table_short(policy.value['policy']) %></td>
+     <td><%= fmt_string(policy.pattern) %></td>
+     <td><%= fmt_table_short(policy.definition) %></td>
+     <td><%= fmt_string(policy.priority) %></td>
    </tr>
 <% } %>
  </tbody>
@@ -44,7 +43,6 @@
   <div class="hider">
     <h3>
     <form action="#/policies" method="put">
-      <input type="hidden" name="component" value="policy"/>
       <table class="form">
 <% if (vhosts_interesting) { %>
         <tr>
@@ -65,17 +63,17 @@
           <td><input type="text" name="key"/><span class="mand">*</span></td>
         </tr>
         <tr>
-          <th><label>Regexp:</label></th>
+          <th><label>Pattern:</label></th>
           <td><input type="text" name="pattern"/><span class="mand">*</span></td>
+        </tr>
+        <tr>
+          <th><label>Definition:</label></th>
+          <td><span class="multifield mand" id="definition"></span></td>
+          <td><span class="mand">*</span></td>
         </tr>
         <tr>
           <th><label>Priority:</label></th>
           <td><input type="text" name="priority"/></td>
-        </tr>
-        <tr>
-          <th><label>Policy:</label></th>
-          <td><span class="multifield mand" id="policy"></span></td>
-          <td><span class="mand">*</span></td>
         </tr>
       </table>
       <input type="submit" value="Add policy"/>

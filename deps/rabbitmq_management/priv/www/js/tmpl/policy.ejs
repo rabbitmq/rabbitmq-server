@@ -9,16 +9,16 @@
         <td><%= fmt_string(policy.vhost) %></td>
       </tr>
       <tr>
-        <th>Regexp</th>
-        <td><%= fmt_string(policy.value.pattern) %></td>
+        <th>Pattern</th>
+        <td><%= fmt_string(policy.pattern) %></td>
+      </tr>
+      <tr>
+        <th>Definition</th>
+        <td><%= fmt_table_short(policy.definition) %></td>
       </tr>
       <tr>
         <th>Priority</th>
-        <td><%= fmt_string(policy.value.priority) %></td>
-      </tr>
-      <tr>
-        <th>Policy</th>
-        <td><%= fmt_table_short(policy.value.policy) %></td>
+        <td><%= fmt_string(policy.priority) %></td>
       </tr>
     </table>
   </div>
