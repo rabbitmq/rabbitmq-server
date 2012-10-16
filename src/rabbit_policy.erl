@@ -84,7 +84,7 @@ parse_set0(VHost, Key, Pattern, Defn, Priority) ->
         {ok, JSON} ->
             set0(VHost, Key, [{<<"pattern">>, list_to_binary(Pattern)},
                               {<<"policy">>, rabbit_misc:json_to_term(JSON)}] ++
-                             Priority);
+                     Priority);
         error ->
             {error_string, "JSON decoding error"}
     end.

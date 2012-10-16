@@ -97,9 +97,7 @@ internal_delete(VHostPath) ->
                                           proplists:get_value(component, Info),
                                           proplists:get_value(key, Info))
      || Info <- rabbit_runtime_parameters:list(VHostPath)],
-    [ok = rabbit_policy:delete(
-            VHostPath,
-            proplists:get_value(key, Info))
+    [ok = rabbit_policy:delete(VHostPath, proplists:get_value(key, Info))
      || Info <- rabbit_policy:list(VHostPath)],
     ok = mnesia:delete({rabbit_vhost, VHostPath}),
     ok.
