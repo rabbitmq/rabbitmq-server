@@ -74,10 +74,7 @@ remove_from_queue(QueueName, DeadGMPids) ->
                                                   lists:member(GM, DeadGMPids)
                                           end, GMPids),
                       DeadPids = [Pid || {_GM, Pid} <- Dead, Pid =/= existing],
-                      {_, Alive} = lists:partition(
-                                     fun (Pid) ->
-                                             lists:member(Pid, DeadPids)
-                                     end, [QPid | SPids]),
+                      Alive = [QPid | SPids] -- DeadPids,
                       {QPid1, SPids1} = promote_slave(Alive),
 
                       case {{QPid, SPids, GMPids}, {QPid1, SPids1, GMPids1}} of
