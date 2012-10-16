@@ -546,7 +546,7 @@ deliver_or_enqueue(Delivery = #delivery{message = Message, sender = SenderPid},
     case attempt_delivery(Delivery, Props, State1) of
         {true, State2} ->
             State2;
-        %% the next one is an optimisations
+        %% The next one is an optimisation
         %% TODO: optimise the Confirm =/= never case too
         {false, State2 = #q{ttl = 0, dlx = undefined,
                             backing_queue = BQ, backing_queue_state = BQS}}
