@@ -208,7 +208,7 @@ add_parameter(Param) ->
 add_policy(Param) ->
     VHost = pget(vhost, Param),
     Key = pget(key, Param),
-    case rabbit_policy:add(
+    case rabbit_policy:set(
            VHost, Key, pget(pattern, Param),
            rabbit_misc:json_to_term(pget(definition, Param)),
            pget(priority, Param)) of
