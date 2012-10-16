@@ -161,10 +161,8 @@ add_mirror(QName, MirrorNode) ->
                       start_child(Name, MirrorNode, Q);
                   [SPid] ->
                       case rabbit_misc:is_process_alive(SPid) of
-                          true ->
-                              {ok, already_mirrored};
-                          false ->
-                              start_child(Name, MirrorNode, Q)
+                          true  -> {ok, already_mirrored};
+                          false -> start_child(Name, MirrorNode, Q)
                       end
               end
       end).
