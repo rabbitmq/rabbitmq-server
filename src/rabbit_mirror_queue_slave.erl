@@ -385,14 +385,20 @@ run_backing_queue(Mod, Fun, State = #state { backing_queue       = BQ,
                                              backing_queue_state = BQS }) ->
     State #state { backing_queue_state = BQ:invoke(Mod, Fun, BQS) }.
 
-needs_confirming(#delivery{ msg_seq_no = undefined }, _State) ->
-    never;
-needs_confirming(#delivery { message = #basic_message {
-                               is_persistent = true } },
-                 #state { q = #amqqueue { durable = true } }) ->
-    eventually;
-needs_confirming(_Delivery, _State) ->
-    immediately.
+send_or_record_confirm(_, #delivery{ msg_seq_no = undefined }, MS, _State) ->
+    MS;
+send_or_record_confirm(published, #delivery { sender     = ChPid,
+                                              msg_seq_no = MsgSeqNo,
+                                              message    = #basic_message {
+                                                id            = MsgId,
+                                                is_persistent = true } },
+                       MS, #state { q = #amqqueue { durable = true } }) ->
+    dict:store(MsgId, {published, ChPid, MsgSeqNo} , MS);
+send_or_record_confirm(_Status, #delivery { sender     = ChPid,
+                                            msg_seq_no = MsgSeqNo },
+                       MS, _State) ->
+    ok = rabbit_misc:confirm_to_sender(ChPid, [MsgSeqNo]),
+    MS.
 
 confirm_messages(MsgIds, State = #state { msg_id_status = MS }) ->
     {CMs, MS1} =
@@ -619,9 +625,8 @@ confirm_sender_death(Pid) ->
     ok.
 
 maybe_enqueue_message(
-  Delivery = #delivery { message    = #basic_message { id = MsgId },
-                         msg_seq_no = MsgSeqNo,
-                         sender     = ChPid },
+  Delivery = #delivery { message = #basic_message { id = MsgId },
+                         sender  = ChPid },
   State = #state { sender_queues = SQ, msg_id_status = MS }) ->
     State1 = ensure_monitoring(ChPid, State),
     %% We will never see {published, ChPid, MsgSeqNo} here.
@@ -631,28 +636,11 @@ maybe_enqueue_message(
             MQ1 = queue:in(Delivery, MQ),
             SQ1 = dict:store(ChPid, {MQ1, PendingCh}, SQ),
             State1 #state { sender_queues = SQ1 };
-        {ok, confirmed} ->
-            ok = rabbit_misc:confirm_to_sender(ChPid, [MsgSeqNo]),
-            SQ1 = remove_from_pending_ch(MsgId, ChPid, SQ),
-            State1 #state { msg_id_status = dict:erase(MsgId, MS),
-                            sender_queues = SQ1 };
-        {ok, published} ->
-            MS1 = case needs_confirming(Delivery, State1) of
-                      never       -> dict:erase(MsgId, MS);
-                      eventually  -> MMS = {published, ChPid, MsgSeqNo},
-                                     dict:store(MsgId, MMS, MS);
-                      immediately -> ok = rabbit_misc:confirm_to_sender(
-                                            ChPid, [MsgSeqNo]),
-                                     dict:erase(MsgId, MS)
-                  end,
+        {ok, Status} ->
+            MS1 = send_or_record_confirm(
+                    Status, Delivery, dict:erase(MsgId, MS), State1),
             SQ1 = remove_from_pending_ch(MsgId, ChPid, SQ),
             State1 #state { msg_id_status = MS1,
-                            sender_queues = SQ1 };
-        {ok, discarded} ->
-            %% We've already heard from GM that the msg is to be
-            %% discarded. We won't see this again.
-            SQ1 = remove_from_pending_ch(MsgId, ChPid, SQ),
-            State1 #state { msg_id_status = dict:erase(MsgId, MS),
                             sender_queues = SQ1 }
     end.
 
@@ -670,39 +658,26 @@ remove_from_pending_ch(MsgId, ChPid, SQ) ->
             dict:store(ChPid, {MQ, sets:del_element(MsgId, PendingCh)}, SQ)
     end.
 
-process_instruction(
-  {publish, Deliver, ChPid, MsgProps, Msg = #basic_message { id = MsgId }},
-  State = #state { sender_queues       = SQ,
-                   backing_queue       = BQ,
-                   backing_queue_state = BQS,
-                   msg_id_status       = MS }) ->
-
-    %% We really are going to do the publish right now, even though we
-    %% may not have seen it directly from the channel. But we cannot
-    %% issues confirms until the latter has happened. So we need to
-    %% keep track of the MsgId and its confirmation status in the
-    %% meantime.
+publish_or_discard(Status, ChPid, MsgId,
+                   State = #state { sender_queues = SQ, msg_id_status = MS }) ->
+    %% We really are going to do the publish/discard right now, even
+    %% though we may not have seen it directly from the channel. But
+    %% we cannot issues confirms until the latter has happened. So we
+    %% need to keep track of the MsgId and its confirmation status in
+    %% the meantime.
     State1 = ensure_monitoring(ChPid, State),
     {MQ, PendingCh} = get_sender_queue(ChPid, SQ),
     {MQ1, PendingCh1, MS1} =
         case queue:out(MQ) of
             {empty, _MQ2} ->
                 {MQ, sets:add_element(MsgId, PendingCh),
-                 dict:store(MsgId, published, MS)};
+                 dict:store(MsgId, Status, MS)};
             {{value, Delivery = #delivery {
-                       msg_seq_no = MsgSeqNo,
-                       message    = #basic_message { id = MsgId } }}, MQ2} ->
+                       message = #basic_message { id = MsgId } }}, MQ2} ->
                 {MQ2, PendingCh,
                  %% We received the msg from the channel first. Thus
                  %% we need to deal with confirms here.
-                 case needs_confirming(Delivery, State1) of
-                     never       -> MS;
-                     eventually  -> MMS = {published, ChPid, MsgSeqNo},
-                                    dict:store(MsgId, MMS , MS);
-                     immediately -> ok = rabbit_misc:confirm_to_sender(
-                                           ChPid, [MsgSeqNo]),
-                                    MS
-                 end};
+                 send_or_record_confirm(Status, Delivery, MS, State1)};
             {{value, #delivery {}}, _MQ2} ->
                 %% The instruction was sent to us before we were
                 %% within the slave_pids within the #amqqueue{}
@@ -711,52 +686,30 @@ process_instruction(
                 %% expecting any confirms from us.
                 {MQ, PendingCh, MS}
         end,
-
     SQ1 = dict:store(ChPid, {MQ1, PendingCh1}, SQ),
-    State2 = State1 #state { sender_queues = SQ1, msg_id_status = MS1 },
+    State1 #state { sender_queues = SQ1, msg_id_status = MS1 }.
 
-    {ok,
-     case Deliver of
-         false ->
-             BQS1 = BQ:publish(Msg, MsgProps, ChPid, BQS),
-             State2 #state { backing_queue_state = BQS1 };
-         {true, AckRequired} ->
-             {AckTag, BQS1} = BQ:publish_delivered(AckRequired, Msg, MsgProps,
-                                                   ChPid, BQS),
-             maybe_store_ack(AckRequired, MsgId, AckTag,
-                             State2 #state { backing_queue_state = BQS1 })
-     end};
+
+process_instruction({publish, false, ChPid, MsgProps,
+                     Msg = #basic_message { id = MsgId }}, State) ->
+    State1 = #state { backing_queue = BQ, backing_queue_state = BQS } =
+        publish_or_discard(published, ChPid, MsgId, State),
+    BQS1 = BQ:publish(Msg, MsgProps, ChPid, BQS),
+    {ok, State1 #state { backing_queue_state = BQS1 }};
+process_instruction({publish, {true, AckRequired}, ChPid, MsgProps,
+                     Msg = #basic_message { id = MsgId }}, State) ->
+    State1 = #state { backing_queue = BQ, backing_queue_state = BQS } =
+        publish_or_discard(published, ChPid, MsgId, State),
+    {AckTag, BQS1} = BQ:publish_delivered(AckRequired, Msg, MsgProps,
+                                          ChPid, BQS),
+    {ok, maybe_store_ack(AckRequired, MsgId, AckTag,
+                         State1 #state { backing_queue_state = BQS1 })};
 process_instruction({discard, ChPid, Msg = #basic_message { id = MsgId }},
-                    State = #state { sender_queues       = SQ,
-                                     backing_queue       = BQ,
-                                     backing_queue_state = BQS,
-                                     msg_id_status       = MS }) ->
-    %% Many of the comments around the publish head above apply here
-    %% too.
-    State1 = ensure_monitoring(ChPid, State),
-    {MQ, PendingCh} = get_sender_queue(ChPid, SQ),
-    {MQ1, PendingCh1, MS1} =
-        case queue:out(MQ) of
-            {empty, _MQ} ->
-                {MQ, sets:add_element(MsgId, PendingCh),
-                 dict:store(MsgId, discarded, MS)};
-            {{value, #delivery { message = #basic_message { id = MsgId } }},
-             MQ2} ->
-                %% We've already seen it from the channel, we're not
-                %% going to see this again, so don't add it to MS
-                {MQ2, PendingCh, MS};
-            {{value, #delivery {}}, _MQ2} ->
-                %% The instruction was sent to us before we were
-                %% within the slave_pids within the #amqqueue{}
-                %% record. We'll never receive the message directly
-                %% from the channel.
-                {MQ, PendingCh, MS}
-        end,
-    SQ1 = dict:store(ChPid, {MQ1, PendingCh1}, SQ),
+                    State) ->
+    State1 = #state { backing_queue = BQ, backing_queue_state = BQS } =
+        publish_or_discard(discarded, ChPid, MsgId, State),
     BQS1 = BQ:discard(Msg, ChPid, BQS),
-    {ok, State1 #state { sender_queues       = SQ1,
-                         msg_id_status       = MS1,
-                         backing_queue_state = BQS1 }};
+    {ok, State1 #state { backing_queue_state = BQS1 }};
 process_instruction({drop, Length, Dropped, AckRequired},
                     State = #state { backing_queue       = BQ,
                                      backing_queue_state = BQS }) ->

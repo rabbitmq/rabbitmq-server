@@ -547,12 +547,12 @@ deliver_or_enqueue(Delivery = #delivery{message = Message, sender = SenderPid},
         {true, State2} ->
             State2;
         %% The next one is an optimisation
-        %% TODO: optimise the Confirm =/= never case too
-        {false, State2 = #q{ttl = 0, dlx = undefined,
-                            backing_queue = BQ, backing_queue_state = BQS}}
-          when Confirm == never ->
+        {false, State2 = #q{ttl = 0, dlx = undefined}} ->
+            %% fake an 'eventual' confirm from BQ; noop if not needed
+            State3 = #q{backing_queue = BQ, backing_queue_state = BQS} =
+                confirm_messages([Message#basic_message.id], State2),
             BQS1 = BQ:discard(Message, SenderPid, BQS),
-            State2#q{backing_queue_state = BQS1};
+            State3#q{backing_queue_state = BQS1};
         {false, State2 = #q{backing_queue = BQ, backing_queue_state = BQS}} ->
             BQS1 = BQ:publish(Message, Props, SenderPid, BQS),
             ensure_ttl_timer(Props#message_properties.expiry,
