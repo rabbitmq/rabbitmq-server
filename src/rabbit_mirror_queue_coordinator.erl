@@ -326,7 +326,10 @@ ensure_monitoring(CPid, Pids) ->
 init([#amqqueue { name = QueueName } = Q, GM, DeathFun, DepthFun]) ->
     GM1 = case GM of
               undefined ->
-                  {ok, GM2} = gm:start_link(QueueName, ?MODULE, [self()]),
+                  {ok, GM2} = gm:start_link(
+                                QueueName, ?MODULE,
+                                [self()],
+                                fun rabbit_misc:execute_mnesia_transaction/1),
                   receive {joined, GM2, _Members} ->
                           ok
                   end,
