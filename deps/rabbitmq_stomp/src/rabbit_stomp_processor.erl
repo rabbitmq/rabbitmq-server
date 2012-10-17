@@ -614,9 +614,7 @@ send_delivery(Delivery = #'basic.deliver'{consumer_tag = ConsumerTag},
         {ok, #subscription{}} ->
             send_frame(
               "MESSAGE",
-              rabbit_stomp_util:headers_post_process(
-                rabbit_stomp_util:message_headers(SessionId, Delivery,
-                                                  Properties)),
+              rabbit_stomp_util:headers(SessionId, Delivery, Properties),
               Body,
               State);
         error ->

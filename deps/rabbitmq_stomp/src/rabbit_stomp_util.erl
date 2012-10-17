@@ -20,7 +20,7 @@
          parse_message_id/1, durable_subscription_queue/2]).
 -export([longstr_field/2]).
 -export([ack_mode/1, consumer_tag_reply_to/1, consumer_tag/1, message_headers/3,
-         headers_post_process/1, message_properties/1, tag_to_id/1]).
+         headers_post_process/1, headers/3, message_properties/1, tag_to_id/1]).
 -export([negotiate_version/2]).
 -export([trim_headers/1]).
 -export([valid_dest_prefixes/0]).
@@ -125,14 +125,17 @@ message_headers(SessionId,
     adhoc_convert_headers(Headers, Standard).
 
 headers_post_process(Headers) ->
-    lists:reverse(
-      lists:foldl(fun (H = {?HEADER_REPLY_TO, ?REPLY_QUEUE_PREFIX ++ _}, Acc) ->
-                          [H | Acc];
-                      ({?HEADER_REPLY_TO, V}, Acc) ->
-                          [{?HEADER_REPLY_TO, ?REPLY_QUEUE_PREFIX ++ V} | Acc];
-                      (H = {_, _}, Acc) ->
-                          [H | Acc]
-                  end, [], Headers)).
+    [case H of
+         {?HEADER_REPLY_TO, ?REPLY_QUEUE_PREFIX ++ _} ->
+             H;
+         {?HEADER_REPLY_TO, V} ->
+             {?HEADER_REPLY_TO, ?REPLY_QUEUE_PREFIX ++ V};
+         {_, _} ->
+             H
+     end || H <- Headers].
+
+headers(SessionId, Delivery, Properties) ->
+    headers_post_process(message_headers(SessionId, Delivery, Properties)).
 
 tag_to_id(<<?INTERNAL_TAG_PREFIX, Id/binary>>) ->
     {ok, {internal, binary_to_list(Id)}};
