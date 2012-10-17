@@ -301,8 +301,10 @@ start() ->
                      %% mnesia after just restarting the app
                      ok = ensure_application_loaded(),
                      ok = ensure_working_log_handlers(),
-                     rabbit_node_monitor:prepare_cluster_status_files(),
-                     rabbit_mnesia:check_cluster_consistency(),
+                     apply_post_boot_step(
+                       fun rabbit_node_monitor:prepare_cluster_status_files/0),
+                     apply_post_boot_step(
+                       fun rabbit_mnesia:check_cluster_consistency/0),
                      ok = app_utils:start_applications(
                             app_startup_order(), fun handle_app_error/2),
                      ok = print_plugin_info(rabbit_plugins:active())
@@ -313,12 +315,14 @@ boot() ->
                      ok = ensure_application_loaded(),
                      maybe_hipe_compile(),
                      ok = ensure_working_log_handlers(),
-                     rabbit_node_monitor:prepare_cluster_status_files(),
+                     apply_post_boot_step(
+                       fun rabbit_node_monitor:prepare_cluster_status_files/0),
                      ok = rabbit_upgrade:maybe_upgrade_mnesia(),
                      %% It's important that the consistency check happens after
                      %% the upgrade, since if we are a secondary node the
                      %% primary node will have forgotten us
-                     rabbit_mnesia:check_cluster_consistency(),
+                     apply_post_boot_step(
+                       fun rabbit_mnesia:check_cluster_consistency/0),
                      Plugins = rabbit_plugins:setup(),
                      ToBeLoaded = Plugins ++ ?APPS,
                      ok = app_utils:load_applications(ToBeLoaded),
@@ -329,20 +333,22 @@ boot() ->
                      ok = print_plugin_info(Plugins)
              end).
 
+apply_post_boot_step(Step) ->
+    try
+        ok = Step()
+    catch
+         _:Reason -> boot_error(Reason, erlang:get_stacktrace())
+    end.
+
 handle_app_error(App, {bad_return, {_MFA, {'EXIT', {Reason, _}}}}) ->
-    throw({could_not_start, App, Reason});
+    boot_error({could_not_start, App, Reason}, not_available);
 
 handle_app_error(App, Reason) ->
-    throw({could_not_start, App, Reason}).
+    boot_error({could_not_start, App, Reason}, not_available).
 
 start_it(StartFun) ->
     try
         StartFun()
-    catch
-        throw:{could_not_start, _App, _Reason}=Err ->
-            boot_error(Err, not_available);
-         _:Reason ->
-            boot_error(Reason, erlang:get_stacktrace())
     after
         %% give the error loggers some time to catch up
         timer:sleep(100)
@@ -503,16 +509,13 @@ sort_boot_steps(UnsortedSteps) ->
                      not erlang:function_exported(M, F, length(A))] of
                 []               -> SortedSteps;
                 MissingFunctions -> basic_boot_error(
-                                      {missing_functions, MissingFunctions},
                                       "Boot step functions not exported: ~p~n",
                                       [MissingFunctions])
             end;
         {error, {vertex, duplicate, StepName}} ->
-            basic_boot_error({duplicate_boot_step, StepName},
-                             "Duplicate boot step name: ~w~n", [StepName]);
+            basic_boot_error("Duplicate boot step name: ~w~n", [StepName]);
         {error, {edge, Reason, From, To}} ->
             basic_boot_error(
-              {invalid_boot_step_dependency, From, To},
               "Could not add boot step dependency of ~w on ~w:~n~s",
               [To, From,
                case Reason of
@@ -526,7 +529,7 @@ sort_boot_steps(UnsortedSteps) ->
                end])
     end.
 
-boot_error(Term={error, {timeout_waiting_for_tables, _}}, _Stacktrace) ->
+boot_error({error, {timeout_waiting_for_tables, _}}, _Stacktrace) ->
     AllNodes = rabbit_mnesia:cluster_nodes(all),
     {Err, Nodes} =
         case AllNodes -- [node()] of
@@ -537,27 +540,25 @@ boot_error(Term={error, {timeout_waiting_for_tables, _}}, _Stacktrace) ->
                      "Timeout contacting cluster nodes: ~p.~n", [Ns]),
                    Ns}
         end,
-    basic_boot_error(Term,
-                     Err ++ rabbit_nodes:diagnostics(Nodes) ++ "~n~n", []);
+    basic_boot_error(Err ++ rabbit_nodes:diagnostics(Nodes) ++ "~n~n", []);
 boot_error(Reason, Stacktrace) ->
     Fmt = "Error description:~n   ~p~n~n" ++
         "Log files (may contain more information):~n   ~s~n   ~s~n~n",
     Args = [Reason, log_location(kernel), log_location(sasl)],
-    boot_error(Reason, Fmt, Args, Stacktrace).
+    boot_error(Fmt, Args, Stacktrace).
 
-boot_error(Reason, Fmt, Args, Stacktrace) ->
+boot_error(Fmt, Args, Stacktrace) ->
     case Stacktrace of
-        not_available -> basic_boot_error(Reason, Fmt, Args);
-        _             -> basic_boot_error(Reason, Fmt ++
-                                              "Stack trace:~n   ~p~n~n",
+        not_available -> basic_boot_error(Fmt, Args);
+        _             -> basic_boot_error(Fmt ++ "Stack trace:~n   ~p~n~n",
                                           Args ++ [Stacktrace])
     end.
 
-basic_boot_error(Reason, Format, Args) ->
+basic_boot_error(Format, Args) ->
     io:format("~n~nBOOT FAILED~n===========~n~n" ++ Format, Args),
     error_logger:error_msg(Format, Args),
     timer:sleep(1000),
-    exit({?MODULE, failure_during_boot, Reason}).
+    exit({?MODULE, failure_during_boot}).
 
 %%---------------------------------------------------------------------------
 %% boot step functions
