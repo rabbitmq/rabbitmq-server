@@ -309,8 +309,7 @@ binding_op(UpdateFun, Cmd, B = #binding{args = Args},
     {DoIt, State1} =
         case rabbit_misc:table_lookup(Args, ?BINDING_HEADER) of
             undefined  -> UpdateFun(B, State);
-            %% TODO: this is wrong, see logic on whiteboard
-            {array, A} -> {length(A) < MaxHops, State}
+            {array, A} -> {Cmd =/= ignore, State}
         end,
     case DoIt of
         true  -> amqp_channel:call(Ch, Cmd);
@@ -322,8 +321,10 @@ bind_cmd(Type, #binding{key = Key, args = Args},
          State = #state{internal_exchange = IntXNameBin,
                         upstream          = Upstream}) ->
     #upstream{exchange = X} = Upstream,
-    bind_cmd0(Type, name(X), IntXNameBin, Key,
-              update_binding(Args, State)).
+    case update_binding(Args, State) of
+        ignore  -> ignore;
+        NewArgs -> bind_cmd0(Type, name(X), IntXNameBin, Key, NewArgs)
+    end.
 
 bind_cmd0(bind, Source, Destination, RoutingKey, Arguments) ->
     #'exchange.bind'{source      = Source,
@@ -337,12 +338,30 @@ bind_cmd0(unbind, Source, Destination, RoutingKey, Arguments) ->
                        routing_key = RoutingKey,
                        arguments   = Arguments}.
 
-update_binding(Args, #state{downstream_exchange = X}) ->
-    Node = rabbit_federation_util:local_nodename(vhost(X)),
-    Info = [{<<"node">>,         longstr, Node},
-            {<<"virtual_host">>, longstr, vhost(X)},
-            {<<"exchange">>,     longstr, name(X)}],
-    rabbit_basic:append_table_header(?BINDING_HEADER, Info, Args).
+update_binding(Args, #state{downstream_exchange = X,
+                            upstream = Upstream}) ->
+    #upstream{max_hops = MaxHops} = Upstream,
+    %% TODO explain this!
+    Hops = case rabbit_misc:table_lookup(Args, ?BINDING_HEADER) of
+               undefined    -> MaxHops;
+               {array, All} -> [{table, Prev} | _] = All,
+                               {short, PrevHops} =
+                                   rabbit_misc:table_lookup(Prev, <<"hops">>),
+                               lists:min([PrevHops - 1, MaxHops])
+           end,
+    case Hops of
+        0 -> ignore;
+        _ -> Node = rabbit_federation_util:local_nodename(vhost(X)),
+             Suffix = rabbit_federation_db:get_active_suffix(
+                        X, Upstream, <<"A">>),
+             %% TODO condense this?
+             Info = [{<<"node">>,         longstr, Node},
+                     {<<"suffix">>,       longstr, Suffix},
+                     {<<"virtual_host">>, longstr, vhost(X)},
+                     {<<"exchange">>,     longstr, name(X)},
+                     {<<"hops">>,         short,   Hops}],
+             rabbit_basic:append_table_header(?BINDING_HEADER, Info, Args)
+    end.
 
 key(#binding{key = Key, args = Args}) -> {Key, Args}.
 
