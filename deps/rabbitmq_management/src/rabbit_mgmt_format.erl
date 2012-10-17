@@ -260,7 +260,7 @@ queue(#amqqueue{name            = Name,
                 auto_delete     = AutoDelete,
                 exclusive_owner = ExclusiveOwner,
                 arguments       = Arguments,
-                pid             = Pid} = Q) ->
+                pid             = Pid}) ->
     format(
       [{name,        Name},
        {durable,     Durable},
