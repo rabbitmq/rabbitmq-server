@@ -300,9 +300,11 @@ start() ->
                      %% We do not want to HiPE compile or upgrade
                      %% mnesia after just restarting the app
                      ok = ensure_application_loaded(),
-                     ok = rabbit_node_monitor:prepare_cluster_status_files(),
-                     ok = rabbit_mnesia:check_cluster_consistency(),
                      ok = ensure_working_log_handlers(),
+                     apply_post_boot_step(
+                       fun rabbit_node_monitor:prepare_cluster_status_files/0),
+                     apply_post_boot_step(
+                       fun rabbit_mnesia:check_cluster_consistency/0),
                      ok = app_utils:start_applications(
                             app_startup_order(), fun handle_app_error/2),
                      ok = print_plugin_info(rabbit_plugins:active())
@@ -312,13 +314,15 @@ boot() ->
     start_it(fun() ->
                      ok = ensure_application_loaded(),
                      maybe_hipe_compile(),
-                     ok = rabbit_node_monitor:prepare_cluster_status_files(),
                      ok = ensure_working_log_handlers(),
+                     apply_post_boot_step(
+                       fun rabbit_node_monitor:prepare_cluster_status_files/0),
                      ok = rabbit_upgrade:maybe_upgrade_mnesia(),
                      %% It's important that the consistency check happens after
                      %% the upgrade, since if we are a secondary node the
                      %% primary node will have forgotten us
-                     ok = rabbit_mnesia:check_cluster_consistency(),
+                     apply_post_boot_step(
+                       fun rabbit_mnesia:check_cluster_consistency/0),
                      Plugins = rabbit_plugins:setup(),
                      ToBeLoaded = Plugins ++ ?APPS,
                      ok = app_utils:load_applications(ToBeLoaded),
@@ -328,6 +332,13 @@ boot() ->
                             StartupApps, fun handle_app_error/2),
                      ok = print_plugin_info(Plugins)
              end).
+
+apply_post_boot_step(Step) ->
+    try
+        ok = Step()
+    catch
+         _:Reason -> boot_error(Reason, erlang:get_stacktrace())
+    end.
 
 handle_app_error(App, {bad_return, {_MFA, {'EXIT', {Reason, _}}}}) ->
     boot_error({could_not_start, App, Reason}, not_available);
@@ -530,11 +541,13 @@ boot_error({error, {timeout_waiting_for_tables, _}}, _Stacktrace) ->
                    Ns}
         end,
     basic_boot_error(Err ++ rabbit_nodes:diagnostics(Nodes) ++ "~n~n", []);
-
 boot_error(Reason, Stacktrace) ->
-    Fmt = "Error description:~n   ~p~n~n"
+    Fmt = "Error description:~n   ~p~n~n" ++
         "Log files (may contain more information):~n   ~s~n   ~s~n~n",
     Args = [Reason, log_location(kernel), log_location(sasl)],
+    boot_error(Fmt, Args, Stacktrace).
+
+boot_error(Fmt, Args, Stacktrace) ->
     case Stacktrace of
         not_available -> basic_boot_error(Fmt, Args);
         _             -> basic_boot_error(Fmt ++ "Stack trace:~n   ~p~n~n",
