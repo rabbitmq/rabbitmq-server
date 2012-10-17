@@ -75,8 +75,10 @@ validate_arg(Name, Type, Args) ->
 
 fail(Fmt, Args) -> rabbit_misc:protocol_error(precondition_failed, Fmt, Args).
 
+name(                 #resource{name = XName})  -> XName;
 name(#exchange{name = #resource{name = XName}}) -> XName.
 
+vhost(                 #resource{virtual_host = VHost})  -> VHost;
 vhost(#exchange{name = #resource{virtual_host = VHost}}) -> VHost;
 vhost( #amqp_params_direct{virtual_host = VHost}) -> VHost;
 vhost(#amqp_params_network{virtual_host = VHost}) -> VHost.

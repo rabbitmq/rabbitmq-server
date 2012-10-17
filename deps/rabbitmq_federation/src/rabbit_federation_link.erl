@@ -319,11 +319,11 @@ binding_op(UpdateFun, Cmd, B = #binding{args = Args},
     State1.
 
 bind_cmd(Type, #binding{key = Key, args = Args},
-            #state{internal_exchange = IntXNameBin,
-                   upstream          = Upstream}) ->
+         State = #state{internal_exchange = IntXNameBin,
+                        upstream          = Upstream}) ->
     #upstream{exchange = X} = Upstream,
     bind_cmd0(Type, name(X), IntXNameBin, Key,
-              update_binding(Args, Upstream)).
+              update_binding(Args, State)).
 
 bind_cmd0(bind, Source, Destination, RoutingKey, Arguments) ->
     #'exchange.bind'{source      = Source,
@@ -337,9 +337,11 @@ bind_cmd0(unbind, Source, Destination, RoutingKey, Arguments) ->
                        routing_key = RoutingKey,
                        arguments   = Arguments}.
 
-update_binding(Args, Upstream) ->
-    %% TODO add our name here, not the upstream
-    {table, Info} = rabbit_federation_upstream:to_table(Upstream),
+update_binding(Args, #state{downstream_exchange = X}) ->
+    Node = rabbit_federation_util:local_nodename(vhost(X)),
+    Info = [{<<"node">>,         longstr, Node},
+            {<<"virtual_host">>, longstr, vhost(X)},
+            {<<"exchange">>,     longstr, name(X)}],
     rabbit_basic:append_table_header(?BINDING_HEADER, Info, Args).
 
 key(#binding{key = Key, args = Args}) -> {Key, Args}.
