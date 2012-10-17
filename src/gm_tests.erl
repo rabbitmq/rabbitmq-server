@@ -77,8 +77,9 @@ test_member_death() ->
     with_two_members(
       fun (Pid, Pid2) ->
               {ok, Pid3} = gm:start_link(
-                             ?MODULE, ?MODULE, self(),
-                             fun rabbit_misc:execute_mnesia_transaction/1),
+                             ?MODULE, ?MODULE,
+                             fun rabbit_misc:execute_mnesia_transaction/1,
+                             self()),
               passed = receive_joined(Pid3, [Pid, Pid2, Pid3],
                                       timeout_joining_gm_group_3),
               passed = receive_birth(Pid, Pid3, timeout_waiting_for_birth_3_1),
@@ -130,12 +131,14 @@ test_broadcast_fun(Fun) ->
 with_two_members(Fun) ->
     ok = gm:create_tables(),
 
-    {ok, Pid} = gm:start_link(?MODULE, ?MODULE, self(),
-                              fun rabbit_misc:execute_mnesia_transaction/1),
+    {ok, Pid} = gm:start_link(?MODULE, ?MODULE,
+                              fun rabbit_misc:execute_mnesia_transaction/1,
+                              self()),
     passed = receive_joined(Pid, [Pid], timeout_joining_gm_group_1),
 
-    {ok, Pid2} = gm:start_link(?MODULE, ?MODULE, self(),
-                               fun rabbit_misc:execute_mnesia_transaction/1),
+    {ok, Pid2} = gm:start_link(?MODULE, ?MODULE,
+                               fun rabbit_misc:execute_mnesia_transaction/1,
+                               self()),
     passed = receive_joined(Pid2, [Pid, Pid2], timeout_joining_gm_group_2),
     passed = receive_birth(Pid, Pid2, timeout_waiting_for_birth_2),
 

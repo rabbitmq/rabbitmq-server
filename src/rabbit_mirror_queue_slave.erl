@@ -99,8 +99,9 @@ init(Q = #amqqueue { name = QName }) ->
     %% above.
     %%
     process_flag(trap_exit, true), %% amqqueue_process traps exits too.
-    {ok, GM} = gm:start_link(QName, ?MODULE, [self()],
-                             fun rabbit_misc:execute_mnesia_transaction/1),
+    {ok, GM} = gm:start_link(QName, ?MODULE,
+                             fun rabbit_misc:execute_mnesia_transaction/1,
+                             [self()]),
     receive {joined, GM} -> ok end,
     Self = self(),
     Node = node(),
