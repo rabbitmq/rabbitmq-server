@@ -523,10 +523,10 @@ info(Server) ->
     gen_server2:call(Server, info, infinity).
 
 forget_group(GroupName) ->
-    {atomic, ok} = mnesia:sync_transaction(
-                     fun () ->
-                             mnesia:delete({?GROUP_TABLE, GroupName})
-                     end),
+    ok = rabbit_misc:execute_mnesia_transaction(
+           fun () ->
+                   mnesia:delete({?GROUP_TABLE, GroupName})
+           end),
     ok.
 
 init([GroupName, Module, Args]) ->
@@ -1033,8 +1033,8 @@ read_group(GroupName) ->
     end.
 
 prune_or_create_group(Self, GroupName) ->
-    {atomic, Group} =
-        mnesia:sync_transaction(
+    Group =
+        rabbit_misc:execute_mnesia_transaction(
           fun () -> GroupNew = #gm_group { name    = GroupName,
                                            members = [Self],
                                            version = ?VERSION_START },
@@ -1053,8 +1053,8 @@ prune_or_create_group(Self, GroupName) ->
     Group.
 
 record_dead_member_in_group(Member, GroupName) ->
-    {atomic, Group} =
-        mnesia:sync_transaction(
+    Group =
+        rabbit_misc:execute_mnesia_transaction(
           fun () -> [Group1 = #gm_group { members = Members, version = Ver }] =
                         mnesia:read({?GROUP_TABLE, GroupName}),
                     case lists:splitwith(
@@ -1072,8 +1072,8 @@ record_dead_member_in_group(Member, GroupName) ->
     Group.
 
 record_new_member_in_group(GroupName, Left, NewMember, Fun) ->
-    {atomic, {Result, Group}} =
-        mnesia:sync_transaction(
+    {Result, Group} =
+        rabbit_misc:execute_mnesia_transaction(
           fun () ->
                   [#gm_group { members = Members, version = Ver } = Group1] =
                       mnesia:read({?GROUP_TABLE, GroupName}),
@@ -1090,8 +1090,8 @@ record_new_member_in_group(GroupName, Left, NewMember, Fun) ->
 
 erase_members_in_group(Members, GroupName) ->
     DeadMembers = [{dead, Id} || Id <- Members],
-    {atomic, Group} =
-        mnesia:sync_transaction(
+    Group =
+        rabbit_misc:execute_mnesia_transaction(
           fun () ->
                   [Group1 = #gm_group { members = [_|_] = Members1,
                                         version = Ver }] =
