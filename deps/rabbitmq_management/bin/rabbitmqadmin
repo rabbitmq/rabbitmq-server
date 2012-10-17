@@ -80,8 +80,9 @@ DECLARABLE = {
     'parameter':  {'mandatory': ['component', 'key', 'value'],
                    'json':      ['value'],
                    'optional':  {}},
-    'policy':     {'mandatory': ['vhost', 'key', 'pattern', 'definition'],
-                   'json':      ['definition', 'priority'], # TODO prio?
+    # Priority is 'json' to convert to int
+    'policy':     {'mandatory': ['key', 'pattern', 'definition'],
+                   'json':      ['definition', 'priority'],
                    'optional':  {'priority' : 0}}
     }
 
