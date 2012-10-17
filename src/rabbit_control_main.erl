@@ -102,7 +102,9 @@
          {"Bindings",  rabbit_binding,  info_all, info_keys},
          {"Consumers", rabbit_amqqueue, consumers_all, consumer_info_keys},
          {"Permissions", rabbit_auth_backend_internal, list_vhost_permissions,
-          vhost_perms_info_keys}]).
+          vhost_perms_info_keys},
+         {"Policies",   rabbit_policy,             list_formatted, info_keys},
+         {"Parameters", rabbit_runtime_parameters, list_formatted, info_keys}]).
 
 %%----------------------------------------------------------------------------
 
