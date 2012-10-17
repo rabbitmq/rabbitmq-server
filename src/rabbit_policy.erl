@@ -98,19 +98,17 @@ update_policies(VHost) ->
     ok.
 
 update_exchange(X = #exchange{name = XName, policy = OldPolicy}, Policies) ->
-    NewPolicy = match(XName, Policies),
-    case NewPolicy of
+    case match(XName, Policies) of
         OldPolicy -> no_change;
-        _         -> rabbit_exchange:update(
+        NewPolicy -> rabbit_exchange:update(
                        XName, fun(X1) -> X1#exchange{policy = NewPolicy} end),
                      {X, X#exchange{policy = NewPolicy}}
     end.
 
 update_queue(Q = #amqqueue{name = QName, policy = OldPolicy}, Policies) ->
-    NewPolicy = match(QName, Policies),
-    case NewPolicy of
+    case match(QName, Policies) of
         OldPolicy -> no_change;
-        _         -> rabbit_amqqueue:update(
+        NewPolicy -> rabbit_amqqueue:update(
                        QName, fun(Q1) -> Q1#amqqueue{policy = NewPolicy} end),
                      {Q, Q#amqqueue{policy = NewPolicy}}
     end.
@@ -131,12 +129,11 @@ match(Name, Policies) ->
 matches(#resource{name = Name}, Policy) ->
     match =:= re:run(Name, pget(<<"pattern">>, Policy), [{capture, none}]).
 
-sort_pred(A, B) ->
-    pget(<<"priority">>, A, 0) >= pget(<<"priority">>, B, 0).
+sort_pred(A, B) -> pget(<<"priority">>, A, 0) >= pget(<<"priority">>, B, 0).
 
 %%----------------------------------------------------------------------------
 
 policy_validation() ->
     [{<<"priority">>, fun rabbit_parameter_validation:number/2, optional},
-     {<<"pattern">>, fun rabbit_parameter_validation:regex/2, mandatory},
-     {<<"policy">>, fun rabbit_parameter_validation:list/2, mandatory}].
+     {<<"pattern">>,  fun rabbit_parameter_validation:regex/2,  mandatory},
+     {<<"policy">>,   fun rabbit_parameter_validation:list/2,   mandatory}].

@@ -14,7 +14,6 @@
 %% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
-
 -module(rabbit_mnesia).
 
 -export([init/0,
@@ -26,18 +25,14 @@
          forget_cluster_node/2,
 
          status/0,
-         is_db_empty/0,
          is_clustered/0,
          cluster_nodes/1,
          node_type/0,
          dir/0,
-         table_names/0,
          cluster_status_from_mnesia/0,
 
          init_db_unchecked/2,
-         empty_ram_only_tables/0,
          copy_db/1,
-         wait_for_tables/1,
          check_cluster_consistency/0,
          ensure_mnesia_dir/0,
 
@@ -50,10 +45,6 @@
          remove_node_if_mnesia_running/1,
          is_running_remote/0
         ]).
-
-%% create_tables/0 exported for helping embed RabbitMQ in or alongside
-%% other mnesia-using Erlang applications, such as ejabberd
--export([create_tables/0]).
 
 -include("rabbit.hrl").
 
@@ -78,21 +69,16 @@
 %% Various queries to get the status of the db
 -spec(status/0 :: () -> [{'nodes', [{node_type(), [node()]}]} |
                          {'running_nodes', [node()]}]).
--spec(is_db_empty/0 :: () -> boolean()).
 -spec(is_clustered/0 :: () -> boolean()).
 -spec(cluster_nodes/1 :: ('all' | 'disc' | 'ram' | 'running') -> [node()]).
 -spec(node_type/0 :: () -> node_type()).
 -spec(dir/0 :: () -> file:filename()).
--spec(table_names/0 :: () -> [atom()]).
 -spec(cluster_status_from_mnesia/0 :: () -> rabbit_types:ok_or_error2(
                                               cluster_status(), any())).
 
 %% Operations on the db and utils, mainly used in `rabbit_upgrade' and `rabbit'
 -spec(init_db_unchecked/2 :: ([node()], node_type()) -> 'ok').
--spec(empty_ram_only_tables/0 :: () -> 'ok').
--spec(create_tables/0 :: () -> 'ok').
 -spec(copy_db/1 :: (file:filename()) ->  rabbit_types:ok_or_error(any())).
--spec(wait_for_tables/1 :: ([atom()]) -> 'ok').
 -spec(check_cluster_consistency/0 :: () -> 'ok').
 -spec(ensure_mnesia_dir/0 :: () -> 'ok').
 
@@ -290,6 +276,9 @@ forget_cluster_node(Node, RemoveWhenOffline) ->
     end.
 
 remove_node_offline_node(Node) ->
+    %% We want the running nodes *now*, so we don't call
+    %% `cluster_nodes(running)' which will just get what's in the cluster status
+    %% file.
     case {running_nodes(cluster_nodes(all)) -- [Node], node_type()} of
         {[], disc} ->
             %% Note that while we check if the nodes was the last to
@@ -303,9 +292,13 @@ remove_node_offline_node(Node) ->
             case cluster_nodes(running) -- [node(), Node] of
                 [] -> start_mnesia(),
                       try
-                          [mnesia:force_load_table(T) || T <- table_names()],
-                          forget_cluster_node(Node, false),
-                          ensure_mnesia_running()
+                          %% What we want to do here is replace the last node to
+                          %% go down with the current node.  The way we do this
+                          %% is by force loading the table, and making sure that
+                          %% they are loaded.
+                          rabbit_table:force_load(),
+                          rabbit_table:wait_for_replicated(),
+                          forget_cluster_node(Node, false)
                       after
                           stop_mnesia()
                       end;
@@ -331,10 +324,6 @@ status() ->
             no  -> []
         end.
 
-is_db_empty() ->
-    lists:all(fun (Tab) -> mnesia:dirty_first(Tab) == '$end_of_table' end,
-              table_names()).
-
 is_clustered() -> AllNodes = cluster_nodes(all),
                   AllNodes =/= [] andalso AllNodes =/= [node()].
 
@@ -356,9 +345,7 @@ mnesia_nodes() ->
                            true  -> disc;
                            false -> ram
                        end,
-            Tables = mnesia:system_info(tables),
-            [{Table, _} | _] = table_definitions(NodeType),
-            case lists:member(Table, Tables) of
+            case rabbit_table:is_present() of
                 true  -> AllNodes = mnesia:system_info(db_nodes),
                          DiscCopies = mnesia:table_info(schema, disc_copies),
                          DiscNodes = case NodeType of
@@ -413,8 +400,6 @@ node_type() ->
 
 dir() -> mnesia:system_info(directory).
 
-table_names() -> [Tab || {Tab, _} <- table_definitions()].
-
 %%----------------------------------------------------------------------------
 %% Operations on the db
 %%----------------------------------------------------------------------------
@@ -444,18 +429,8 @@ init_db(ClusterNodes, NodeType, CheckOtherNodes) ->
             %% Subsequent node in cluster, catch up
             ensure_version_ok(
               rpc:call(AnotherNode, rabbit_version, recorded, [])),
-            ok = wait_for_replicated_tables(),
-            %% The sequence in which we delete the schema and then the
-            %% other tables is important: if we delete the schema
-            %% first when moving to RAM mnesia will loudly complain
-            %% since it doesn't make much sense to do that. But when
-            %% moving to disc, we need to move the schema first.
-            case NodeType of
-                disc -> create_local_table_copy(schema, disc_copies),
-                        create_local_table_copies(disc);
-                ram  -> create_local_table_copies(ram),
-                        create_local_table_copy(schema, ram_copies)
-            end
+            ok = rabbit_table:wait_for_replicated(),
+            ok = rabbit_table:create_local_copy(NodeType)
     end,
     ensure_schema_integrity(),
     rabbit_node_monitor:update_cluster_status(),
@@ -476,7 +451,7 @@ init_db_and_upgrade(ClusterNodes, NodeType, CheckOtherNodes) ->
     case NodeType of
         ram  -> start_mnesia(),
                 change_extra_db_nodes(ClusterNodes, false),
-                wait_for_replicated_tables();
+                rabbit_table:wait_for_replicated();
         disc -> ok
     end,
     ok.
@@ -522,69 +497,16 @@ ensure_mnesia_not_running() ->
     end.
 
 ensure_schema_integrity() ->
-    case check_schema_integrity() of
+    case rabbit_table:check_schema_integrity() of
         ok ->
             ok;
         {error, Reason} ->
             throw({error, {schema_integrity_check_failed, Reason}})
     end.
 
-check_schema_integrity() ->
-    Tables = mnesia:system_info(tables),
-    case check_tables(fun (Tab, TabDef) ->
-                              case lists:member(Tab, Tables) of
-                                  false -> {error, {table_missing, Tab}};
-                                  true  -> check_table_attributes(Tab, TabDef)
-                              end
-                      end) of
-        ok     -> ok = wait_for_tables(table_names()),
-                  check_tables(fun check_table_content/2);
-        Other  -> Other
-    end.
-
-empty_ram_only_tables() ->
-    Node = node(),
-    lists:foreach(
-      fun (TabName) ->
-              case lists:member(Node, mnesia:table_info(TabName, ram_copies)) of
-                  true  -> {atomic, ok} = mnesia:clear_table(TabName);
-                  false -> ok
-              end
-      end, table_names()),
-    ok.
-
-create_tables() -> create_tables(disc).
-
-create_tables(Type) ->
-    lists:foreach(fun ({Tab, TabDef}) ->
-                          TabDef1 = proplists:delete(match, TabDef),
-                          case mnesia:create_table(Tab, TabDef1) of
-                              {atomic, ok} -> ok;
-                              {aborted, Reason} ->
-                                  throw({error, {table_creation_failed,
-                                                 Tab, TabDef1, Reason}})
-                          end
-                  end,
-                  table_definitions(Type)),
-    ok.
-
 copy_db(Destination) ->
     ok = ensure_mnesia_not_running(),
     rabbit_file:recursive_copy(dir(), Destination).
-
-wait_for_replicated_tables() ->
-    wait_for_tables([Tab || {Tab, TabDef} <- table_definitions(),
-                            not lists:member({local_content, true}, TabDef)]).
-
-wait_for_tables(TableNames) ->
-    case mnesia:wait_for_tables(TableNames, 30000) of
-        ok ->
-            ok;
-        {timeout, BadTabs} ->
-            throw({error, {timeout_waiting_for_tables, BadTabs}});
-        {error, Reason} ->
-            throw({error, {failed_waiting_for_tables, Reason}})
-    end.
 
 %% This does not guarantee us much, but it avoids some situations that
 %% will definitely end up badly
@@ -678,158 +600,8 @@ discover_cluster(Node) ->
                 end
     end.
 
-%% The tables aren't supposed to be on disk on a ram node
-table_definitions(disc) ->
-    table_definitions();
-table_definitions(ram) ->
-    [{Tab, copy_type_to_ram(TabDef)} || {Tab, TabDef} <- table_definitions()].
-
-table_definitions() ->
-    [{rabbit_user,
-      [{record_name, internal_user},
-       {attributes, record_info(fields, internal_user)},
-       {disc_copies, [node()]},
-       {match, #internal_user{_='_'}}]},
-     {rabbit_user_permission,
-      [{record_name, user_permission},
-       {attributes, record_info(fields, user_permission)},
-       {disc_copies, [node()]},
-       {match, #user_permission{user_vhost = #user_vhost{_='_'},
-                                permission = #permission{_='_'},
-                                _='_'}}]},
-     {rabbit_vhost,
-      [{record_name, vhost},
-       {attributes, record_info(fields, vhost)},
-       {disc_copies, [node()]},
-       {match, #vhost{_='_'}}]},
-     {rabbit_listener,
-      [{record_name, listener},
-       {attributes, record_info(fields, listener)},
-       {type, bag},
-       {match, #listener{_='_'}}]},
-     {rabbit_durable_route,
-      [{record_name, route},
-       {attributes, record_info(fields, route)},
-       {disc_copies, [node()]},
-       {match, #route{binding = binding_match(), _='_'}}]},
-     {rabbit_semi_durable_route,
-      [{record_name, route},
-       {attributes, record_info(fields, route)},
-       {type, ordered_set},
-       {match, #route{binding = binding_match(), _='_'}}]},
-     {rabbit_route,
-      [{record_name, route},
-       {attributes, record_info(fields, route)},
-       {type, ordered_set},
-       {match, #route{binding = binding_match(), _='_'}}]},
-     {rabbit_reverse_route,
-      [{record_name, reverse_route},
-       {attributes, record_info(fields, reverse_route)},
-       {type, ordered_set},
-       {match, #reverse_route{reverse_binding = reverse_binding_match(),
-                              _='_'}}]},
-     {rabbit_topic_trie_node,
-      [{record_name, topic_trie_node},
-       {attributes, record_info(fields, topic_trie_node)},
-       {type, ordered_set},
-       {match, #topic_trie_node{trie_node = trie_node_match(), _='_'}}]},
-     {rabbit_topic_trie_edge,
-      [{record_name, topic_trie_edge},
-       {attributes, record_info(fields, topic_trie_edge)},
-       {type, ordered_set},
-       {match, #topic_trie_edge{trie_edge = trie_edge_match(), _='_'}}]},
-     {rabbit_topic_trie_binding,
-      [{record_name, topic_trie_binding},
-       {attributes, record_info(fields, topic_trie_binding)},
-       {type, ordered_set},
-       {match, #topic_trie_binding{trie_binding = trie_binding_match(),
-                                   _='_'}}]},
-     {rabbit_durable_exchange,
-      [{record_name, exchange},
-       {attributes, record_info(fields, exchange)},
-       {disc_copies, [node()]},
-       {match, #exchange{name = exchange_name_match(), _='_'}}]},
-     {rabbit_exchange,
-      [{record_name, exchange},
-       {attributes, record_info(fields, exchange)},
-       {match, #exchange{name = exchange_name_match(), _='_'}}]},
-     {rabbit_exchange_serial,
-      [{record_name, exchange_serial},
-       {attributes, record_info(fields, exchange_serial)},
-       {match, #exchange_serial{name = exchange_name_match(), _='_'}}]},
-     {rabbit_runtime_parameters,
-      [{record_name, runtime_parameters},
-       {attributes, record_info(fields, runtime_parameters)},
-       {disc_copies, [node()]},
-       {match, #runtime_parameters{_='_'}}]},
-     {rabbit_durable_queue,
-      [{record_name, amqqueue},
-       {attributes, record_info(fields, amqqueue)},
-       {disc_copies, [node()]},
-       {match, #amqqueue{name = queue_name_match(), _='_'}}]},
-     {rabbit_queue,
-      [{record_name, amqqueue},
-       {attributes, record_info(fields, amqqueue)},
-       {match, #amqqueue{name = queue_name_match(), _='_'}}]}]
-        ++ gm:table_definitions()
-        ++ mirrored_supervisor:table_definitions().
-
-binding_match() ->
-    #binding{source = exchange_name_match(),
-             destination = binding_destination_match(),
-             _='_'}.
-reverse_binding_match() ->
-    #reverse_binding{destination = binding_destination_match(),
-                     source = exchange_name_match(),
-                     _='_'}.
-binding_destination_match() ->
-    resource_match('_').
-trie_node_match() ->
-    #trie_node{   exchange_name = exchange_name_match(), _='_'}.
-trie_edge_match() ->
-    #trie_edge{   exchange_name = exchange_name_match(), _='_'}.
-trie_binding_match() ->
-    #trie_binding{exchange_name = exchange_name_match(), _='_'}.
-exchange_name_match() ->
-    resource_match(exchange).
-queue_name_match() ->
-    resource_match(queue).
-resource_match(Kind) ->
-    #resource{kind = Kind, _='_'}.
-
-check_table_attributes(Tab, TabDef) ->
-    {_, ExpAttrs} = proplists:lookup(attributes, TabDef),
-    case mnesia:table_info(Tab, attributes) of
-        ExpAttrs -> ok;
-        Attrs    -> {error, {table_attributes_mismatch, Tab, ExpAttrs, Attrs}}
-    end.
-
-check_table_content(Tab, TabDef) ->
-    {_, Match} = proplists:lookup(match, TabDef),
-    case mnesia:dirty_first(Tab) of
-        '$end_of_table' ->
-            ok;
-        Key ->
-            ObjList = mnesia:dirty_read(Tab, Key),
-            MatchComp = ets:match_spec_compile([{Match, [], ['$_']}]),
-            case ets:match_spec_run(ObjList, MatchComp) of
-                ObjList -> ok;
-                _       -> {error, {table_content_invalid, Tab, Match, ObjList}}
-            end
-    end.
-
-check_tables(Fun) ->
-    case [Error || {Tab, TabDef} <- table_definitions(node_type()),
-                   case Fun(Tab, TabDef) of
-                       ok             -> Error = none, false;
-                       {error, Error} -> true
-                   end] of
-        []     -> ok;
-        Errors -> {error, Errors}
-    end.
-
 schema_ok_or_move() ->
-    case check_schema_integrity() of
+    case rabbit_table:check_schema_integrity() of
         ok ->
             ok;
         {error, Reason} ->
@@ -858,7 +630,7 @@ create_schema() ->
     stop_mnesia(),
     rabbit_misc:ensure_ok(mnesia:create_schema([node()]), cannot_create_schema),
     start_mnesia(),
-    ok = create_tables(disc),
+    ok = rabbit_table:create(),
     ensure_schema_integrity(),
     ok = rabbit_version:record_desired().
 
@@ -883,47 +655,6 @@ move_db() ->
     start_mnesia(),
     ok.
 
-copy_type_to_ram(TabDef) ->
-    [{disc_copies, []}, {ram_copies, [node()]}
-     | proplists:delete(ram_copies, proplists:delete(disc_copies, TabDef))].
-
-table_has_copy_type(TabDef, DiscType) ->
-    lists:member(node(), proplists:get_value(DiscType, TabDef, [])).
-
-create_local_table_copies(Type) ->
-    lists:foreach(
-      fun ({Tab, TabDef}) ->
-              HasDiscCopies     = table_has_copy_type(TabDef, disc_copies),
-              HasDiscOnlyCopies = table_has_copy_type(TabDef, disc_only_copies),
-              LocalTab          = proplists:get_bool(local_content, TabDef),
-              StorageType =
-                  if
-                      Type =:= disc orelse LocalTab ->
-                          if
-                              HasDiscCopies     -> disc_copies;
-                              HasDiscOnlyCopies -> disc_only_copies;
-                              true              -> ram_copies
-                          end;
-                      Type =:= ram ->
-                          ram_copies
-                  end,
-              ok = create_local_table_copy(Tab, StorageType)
-      end,
-      table_definitions(Type)),
-    ok.
-
-create_local_table_copy(Tab, Type) ->
-    StorageType = mnesia:table_info(Tab, storage_type),
-    {atomic, ok} =
-        if
-            StorageType == unknown ->
-                mnesia:add_table_copy(Tab, node(), Type);
-            StorageType /= Type ->
-                mnesia:change_table_copy_type(Tab, node(), Type);
-            true -> {atomic, ok}
-        end,
-    ok.
-
 remove_node_if_mnesia_running(Node) ->
     case mnesia:system_info(is_running) of
         yes ->
@@ -942,13 +673,12 @@ remove_node_if_mnesia_running(Node) ->
     end.
 
 leave_cluster() ->
-    RunningNodes = running_nodes(nodes_excl_me(cluster_nodes(all))),
-    case not is_clustered() andalso RunningNodes =:= [] of
-        true  -> ok;
-        false -> case lists:any(fun leave_cluster/1, RunningNodes) of
-                     true  -> ok;
-                     false -> e(no_running_cluster_nodes)
-                 end
+    case nodes_excl_me(cluster_nodes(all)) of
+        []       -> ok;
+        AllNodes -> case lists:any(fun leave_cluster/1, AllNodes) of
+                        true  -> ok;
+                        false -> e(no_running_cluster_nodes)
+                    end
     end.
 
 leave_cluster(Node) ->

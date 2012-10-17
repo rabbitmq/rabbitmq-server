@@ -33,14 +33,14 @@
                  gm,
                  monitors,
                  death_fun,
-                 length_fun
+                 depth_fun
                }).
 
 -ifdef(use_specs).
 
 -spec(start_link/4 :: (rabbit_types:amqqueue(), pid() | 'undefined',
                        rabbit_mirror_queue_master:death_fun(),
-                       rabbit_mirror_queue_master:length_fun()) ->
+                       rabbit_mirror_queue_master:depth_fun()) ->
                            rabbit_types:ok_pid_or_error()).
 -spec(get_gm/1 :: (pid()) -> pid()).
 -spec(ensure_monitoring/2 :: (pid(), [pid()]) -> 'ok').
@@ -101,19 +101,25 @@
 %% channel during a publish, only some of the mirrors may receive that
 %% publish. As a result of this problem, the messages broadcast over
 %% the gm contain published content, and thus slaves can operate
-%% successfully on messages that they only receive via the gm. The key
-%% purpose of also sending messages directly from the channels to the
-%% slaves is that without this, in the event of the death of the
-%% master, messages could be lost until a suitable slave is promoted.
+%% successfully on messages that they only receive via the gm.
 %%
-%% However, that is not the only reason. For example, if confirms are
-%% in use, then there is no guarantee that every slave will see the
-%% delivery with the same msg_seq_no. As a result, the slaves have to
-%% wait until they've seen both the publish via gm, and the publish
-%% via the channel before they have enough information to be able to
-%% perform the publish to their own bq, and subsequently issue the
-%% confirm, if necessary. Either form of publish can arrive first, and
-%% a slave can be upgraded to the master at any point during this
+%% The key purpose of also sending messages directly from the channels
+%% to the slaves is that without this, in the event of the death of
+%% the master, messages could be lost until a suitable slave is
+%% promoted. However, that is not the only reason. A slave cannot send
+%% confirms for a message until it has seen it from the
+%% channel. Otherwise, it might send a confirm to a channel for a
+%% message that it might *never* receive from that channel. This can
+%% happen because new slaves join the gm ring (and thus receive
+%% messages from the master) before inserting themselves in the
+%% queue's mnesia record (which is what channels look at for routing).
+%% As it turns out, channels will simply ignore such bogus confirms,
+%% but relying on that would introduce a dangerously tight coupling.
+%%
+%% Hence the slaves have to wait until they've seen both the publish
+%% via gm, and the publish via the channel before they issue the
+%% confirm. Either form of publish can arrive first, and a slave can
+%% be upgraded to the master at any point during this
 %% process. Confirms continue to be issued correctly, however.
 %%
 %% Because the slave is a full process, it impersonates parts of the
@@ -154,8 +160,8 @@
 %% be able to work out when their head does not differ from the master
 %% (and is much simpler and cheaper than getting the master to hang on
 %% to the guid of the msg at the head of its queue). When a slave is
-%% promoted to a master, it unilaterally broadcasts its length, in
-%% order to solve the problem of length requests from new slaves being
+%% promoted to a master, it unilaterally broadcasts its depth, in
+%% order to solve the problem of depth requests from new slaves being
 %% unanswered by a dead master.
 %%
 %% Obviously, due to the async nature of communication across gm, the
@@ -297,15 +303,15 @@
 %% if they have no mirrored content at all. This is not surprising: to
 %% achieve anything more sophisticated would require the master and
 %% recovering slave to be able to check to see whether they agree on
-%% the last seen state of the queue: checking length alone is not
+%% the last seen state of the queue: checking depth alone is not
 %% sufficient in this case.
 %%
 %% For more documentation see the comments in bug 23554.
 %%
 %%----------------------------------------------------------------------------
 
-start_link(Queue, GM, DeathFun, LengthFun) ->
-    gen_server2:start_link(?MODULE, [Queue, GM, DeathFun, LengthFun], []).
+start_link(Queue, GM, DeathFun, DepthFun) ->
+    gen_server2:start_link(?MODULE, [Queue, GM, DeathFun, DepthFun], []).
 
 get_gm(CPid) ->
     gen_server2:call(CPid, get_gm, infinity).
@@ -317,7 +323,7 @@ ensure_monitoring(CPid, Pids) ->
 %% gen_server
 %% ---------------------------------------------------------------------------
 
-init([#amqqueue { name = QueueName } = Q, GM, DeathFun, LengthFun]) ->
+init([#amqqueue { name = QueueName } = Q, GM, DeathFun, DepthFun]) ->
     GM1 = case GM of
               undefined ->
                   {ok, GM2} = gm:start_link(QueueName, ?MODULE, [self()]),
@@ -333,7 +339,7 @@ init([#amqqueue { name = QueueName } = Q, GM, DeathFun, LengthFun]) ->
                   gm         = GM1,
                   monitors   = pmon:new(),
                   death_fun  = DeathFun,
-                  length_fun = LengthFun },
+                  depth_fun  = DepthFun },
      hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
@@ -343,7 +349,7 @@ handle_call(get_gm, _From, State = #state { gm = GM }) ->
 handle_cast({gm_deaths, Deaths},
             State = #state { q  = #amqqueue { name = QueueName, pid = MPid } })
   when node(MPid) =:= node() ->
-    case rabbit_mirror_queue_misc:remove_from_queue(QueueName, Deaths) of
+    case rabbit_mirror_queue_misc:remove_from_queue(QueueName, MPid, Deaths) of
         {ok, MPid, DeadPids} ->
             rabbit_mirror_queue_misc:report_deaths(MPid, true, QueueName,
                                                    DeadPids),
@@ -352,8 +358,8 @@ handle_cast({gm_deaths, Deaths},
             {stop, normal, State}
     end;
 
-handle_cast(request_length, State = #state { length_fun = LengthFun }) ->
-    ok = LengthFun(),
+handle_cast(request_depth, State = #state { depth_fun = DepthFun }) ->
+    ok = DepthFun(),
     noreply(State);
 
 handle_cast({ensure_monitoring, Pids}, State = #state { monitors = Mons }) ->
@@ -397,9 +403,7 @@ members_changed([_CPid], _Births, []) ->
 members_changed([CPid], _Births, Deaths) ->
     ok = gen_server2:cast(CPid, {gm_deaths, Deaths}).
 
-handle_msg([_CPid], _From, master_changed) ->
-    ok;
-handle_msg([CPid], _From, request_length = Msg) ->
+handle_msg([CPid], _From, request_depth = Msg) ->
     ok = gen_server2:cast(CPid, Msg);
 handle_msg([CPid], _From, {ensure_monitoring, _Pids} = Msg) ->
     ok = gen_server2:cast(CPid, Msg);

@@ -201,7 +201,7 @@ primary_upgrade(Upgrades, Nodes) ->
            mnesia,
            Upgrades,
            fun () ->
-                   force_tables(),
+                   rabbit_table:force_load(),
                    case Others of
                        [] -> ok;
                        _  -> info("mnesia upgrades: Breaking cluster~n", []),
@@ -210,9 +210,6 @@ primary_upgrade(Upgrades, Nodes) ->
                    end
            end),
     ok.
-
-force_tables() ->
-    [mnesia:force_load_table(T) || T <- rabbit_mnesia:table_names()].
 
 secondary_upgrade(AllNodes) ->
     %% must do this before we wipe out schema

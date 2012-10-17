@@ -364,7 +364,7 @@ status() ->
           {running_applications, application:which_applications(infinity)},
           {os,                   os:type()},
           {erlang_version,       erlang:system_info(system_version)},
-          {memory,               erlang:memory()}],
+          {memory,               rabbit_vm:memory()}],
     S2 = rabbit_misc:filter_exit_map(
            fun ({Key, {M, F, A}}) -> {Key, erlang:apply(M, F, A)} end,
            [{vm_memory_high_watermark, {vm_memory_monitor,
@@ -427,7 +427,7 @@ stop(_State) ->
     ok = rabbit_alarm:stop(),
     ok = case rabbit_mnesia:is_clustered() of
              true  -> rabbit_amqqueue:on_node_down(node());
-             false -> rabbit_mnesia:empty_ram_only_tables()
+             false -> rabbit_table:clear_ram_only_tables()
          end,
     ok.
 
@@ -558,7 +558,7 @@ recover() ->
     rabbit_binding:recover(rabbit_exchange:recover(), rabbit_amqqueue:start()).
 
 maybe_insert_default_data() ->
-    case rabbit_mnesia:is_db_empty() of
+    case rabbit_table:is_empty() of
         true -> insert_default_data();
         false -> ok
     end.
