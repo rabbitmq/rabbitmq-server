@@ -180,8 +180,7 @@ handle_info(Msg, State) ->
 terminate(_Reason, {not_started, _}) ->
     ok;
 
-terminate(Reason, State = #state{downstream_channel    = DCh,
-                                 downstream_connection = DConn,
+terminate(Reason, State = #state{downstream_connection = DConn,
                                  connection            = Conn}) ->
     ensure_connection_closed(DConn),
     ensure_connection_closed(Conn),
