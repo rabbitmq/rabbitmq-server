@@ -171,7 +171,7 @@ pack_binding_props(<<"">>, []) ->
 pack_binding_props(Key, []) ->
     list_to_binary(quote_binding(Key));
 pack_binding_props(Key, Args) ->
-    ArgsEnc = rabbit_mgmt_wm_binding:generate_binding_id(Args),
+    ArgsEnc = rabbit_mgmt_wm_binding:args_hash(Args),
     list_to_binary(quote_binding(Key) ++ "_" ++ quote_binding(ArgsEnc)).
 
 quote_binding(Name) ->

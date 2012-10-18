@@ -19,7 +19,7 @@
 -export([init/1, resource_exists/2, to_json/2,
          content_types_provided/2, content_types_accepted/2,
          is_authorized/2, allowed_methods/2, delete_resource/2,
-         lookup_binding_id/3, generate_binding_id/1]).
+         lookup_binding_id/3, args_hash/1]).
 
 -include("rabbit_mgmt.hrl").
 -include_lib("webmachine/include/webmachine.hrl").
@@ -72,15 +72,15 @@ lookup_binding_id(Src, Dst, Arg) ->
     lookup_binding_id0(
       Arg, rabbit_binding:list_for_source_and_destination(Src, Dst)).
 
-lookup_binding_id0(Hash, []) ->
+lookup_binding_id0(_Hash, []) ->
     {bad_request, "binding not found"};
 lookup_binding_id0(Hash, [#binding{args = Args} | Rest]) ->
-    case erlang:md5(term_to_binary(Args)) =:= Hash of
+    case args_hash(Args) =:= Hash of
         true  -> Args;
         false -> lookup_binding_id0(Hash, Rest)
     end.
 
-generate_binding_id(Args) ->
+args_hash(Args) ->
     erlang:md5(term_to_binary(Args)).
 
 binding(ReqData) ->
