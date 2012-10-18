@@ -6,6 +6,6 @@ WITH_BROKER_SETUP_SCRIPTS:=$(PACKAGE_DIR)/etc/setup-rabbit-test.sh
 
 $(PACKAGE_DIR)+pre-test::
 	rm -rf tmp /tmp/rabbitmq-*-mnesia
-	for R in hare flopsy mopsy cottontail ; do \
+	for R in hare flopsy mopsy cottontail dylan bugs jessica ; do \
 	  erl_call -sname $$R -q ; \
 	done
