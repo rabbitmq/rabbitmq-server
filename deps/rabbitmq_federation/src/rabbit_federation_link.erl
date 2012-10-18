@@ -378,8 +378,7 @@ bind_cmd0(unbind, Source, Destination, RoutingKey, Arguments) ->
 
 update_binding(Args, #state{downstream_exchange = X,
                             upstream            = Upstream}) ->
-    #upstream{max_hops = MaxHops,
-              exchange = UX} = Upstream,
+    #upstream{max_hops = MaxHops} = Upstream,
     Hops = case rabbit_misc:table_lookup(Args, ?BINDING_HEADER) of
                undefined    -> MaxHops;
                {array, All} -> [{table, Prev} | _] = All,
@@ -392,8 +391,10 @@ update_binding(Args, #state{downstream_exchange = X,
         _ -> Node = rabbit_federation_util:local_nodename(vhost(X)),
              ABSuffix = rabbit_federation_db:get_active_suffix(
                           X, Upstream, <<"A">>),
-             NameSuffix = name_suffix(vhost(UX), vhost(X), name(UX), name(X)),
-             Down = <<Node/binary, NameSuffix/binary, " ", ABSuffix/binary>>,
+             DVHost = vhost(X),
+             DName = name(X),
+             Down = <<Node/binary, ":", DVHost/binary,":", DName/binary, " ",
+                      ABSuffix/binary>>,
              Info = [{<<"downstream">>, longstr, Down},
                      {<<"hops">>,       short,   Hops}],
              rabbit_basic:append_table_header(?BINDING_HEADER, Info, Args)
@@ -593,17 +594,15 @@ ensure_internal_exchange(IntXNameBin,
 upstream_queue_name(XNameBin, VHost, #resource{name         = DownXNameBin,
                                                virtual_host = DownVHost}) ->
     Node = rabbit_federation_util:local_nodename(DownVHost),
-    DownPart = name_suffix(VHost, DownVHost, XNameBin, DownXNameBin),
+    DownPart = case DownVHost of
+                   VHost -> case DownXNameBin of
+                                XNameBin -> <<"">>;
+                                _        -> <<":", DownXNameBin/binary>>
+                            end;
+                   _     -> <<":", DownVHost/binary,
+                              ":", DownXNameBin/binary>>
+               end,
     <<"federation: ", XNameBin/binary, " -> ", Node/binary, DownPart/binary>>.
-
-name_suffix(UVHost, DVHost, UName, DName) ->
-    case DVHost of
-        UVHost -> case DName of
-                      UName -> <<"">>;
-                      _     -> <<":", DName/binary>>
-                  end;
-        _      -> <<":", DVHost/binary,":", DName/binary>>
-    end.
 
 upstream_exchange_name(XNameBin, VHost, DownXName, Suffix) ->
     Name = upstream_queue_name(XNameBin, VHost, DownXName),
