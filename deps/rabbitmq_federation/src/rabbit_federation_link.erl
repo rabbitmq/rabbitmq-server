@@ -351,7 +351,7 @@ bind_cmd0(unbind, Source, Destination, RoutingKey, Arguments) ->
 %% propagate as far.
 %%
 %% Note that we still want to have limits on how far messages can
-%% propagate, limiting our bindings is not enough, since other
+%% propagate: limiting our bindings is not enough, since other
 %% bindings from other nodes can overlap.
 %%
 %% So in short we want bindings to obey max_hops. However, they can't
@@ -365,8 +365,9 @@ bind_cmd0(unbind, Source, Destination, RoutingKey, Arguments) ->
 %% where the arrows indicate message flow. A binding created at C
 %% should flow to B, then to A, and no further. Therefore every time
 %% we traverse a link, we keep a count of the number of hops that a
-%% message could have made so far, and still propagate. When this
-%% number (<<"hops">> below) reaches 0 we propagate no further.
+%% message could have made so far to reach this point, and still be
+%% able to propagate. When this number ("hops" below) reaches 0 we
+%% propagate no further.
 %%
 %% hops(link(N)) is given by:
 %%
