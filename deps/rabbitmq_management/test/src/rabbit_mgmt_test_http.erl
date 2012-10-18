@@ -285,10 +285,9 @@ bindings_test() ->
     QArgs = [],
     http_put("/exchanges/%2f/myexchange", XArgs, ?NO_CONTENT),
     http_put("/queues/%2f/myqueue", QArgs, ?NO_CONTENT),
-    http_put("/bindings/%2f/e/myexchange/q/badqueue/routing", [], ?NOT_FOUND),
-    http_put("/bindings/%2f/e/badexchange/q/myqueue/routing", [], ?NOT_FOUND),
-    http_put("/bindings/%2f/e/myexchange/q/myqueue/bad_routing", [], ?BAD_REQUEST),
-    http_put("/bindings/%2f/e/myexchange/q/myqueue/routing", [], ?NO_CONTENT),
+    http_put("/bindings/%2f/e/myexchange/q/queue/routing", [], ?HTTP_NOT_ALLOWED),
+    BArgs = [{routing_key, <<"routing">>}, {arguments, []}],
+    http_post("/bindings/%2f/e/myexchange/q/myqueue", BArgs, ?CREATED),
     http_get("/bindings/%2f/e/myexchange/q/myqueue/routing", ?OK),
     http_get("/bindings/%2f/e/myexchange/q/myqueue/rooting", ?NOT_FOUND),
     Binding =
@@ -334,8 +333,8 @@ bindings_post_test() ->
     Headers1 = http_post("/bindings/%2f/e/myexchange/q/myqueue", [], ?CREATED),
     "../../../../%2F/e/myexchange/q/myqueue/_" = pget("location", Headers1),
     Headers2 = http_post("/bindings/%2f/e/myexchange/q/myqueue", BArgs, ?CREATED),
-    PropertiesKey = "routing_%7B%22foo%22%3A%22bar%22%7D",
-    PropertiesKeyEnc = "routing_%257B%2522foo%2522%253A%2522bar%2522%257D",
+    PropertiesKey = "routing_W%89%86%16%09%CF6%B7mFind%8CS%0C",
+    PropertiesKeyEnc = "routing_W%2589%2586%2516%2509%25CF6%25B7mFind%258CS%250C",
     PropertiesKeyBin = list_to_binary(PropertiesKey),
     "../../../../%2F/e/myexchange/q/myqueue/" ++ PropertiesKeyEnc =
         pget("location", Headers2),
@@ -368,7 +367,7 @@ bindings_e2e_test() ->
      {properties_key,<<"routing">>}] =
         http_get("/bindings/%2f/e/amq.direct/e/amq.fanout/routing", ?OK),
     http_delete("/bindings/%2f/e/amq.direct/e/amq.fanout/routing", ?NO_CONTENT),
-    http_put("/bindings/%2f/e/amq.direct/e/amq.headers/routing", [], ?NO_CONTENT),
+    http_post("/bindings/%2f/e/amq.direct/e/amq.headers", BArgs, ?CREATED),
     Binding =
         [{source,<<"amq.direct">>},
          {vhost,<<"/">>},
@@ -558,11 +557,12 @@ unicode_test() ->
 definitions_test() ->
     XArgs = [{type, <<"direct">>}],
     QArgs = [],
+    BArgs = [{routing_key, <<"routing">>}, {arguments, []}],
     http_put("/queues/%2f/my-queue", QArgs, ?NO_CONTENT),
     http_put("/exchanges/%2f/my-exchange", XArgs, ?NO_CONTENT),
-    http_put("/bindings/%2f/e/my-exchange/q/my-queue/routing", [], ?NO_CONTENT),
-    http_put("/bindings/%2f/e/amq.direct/q/my-queue/routing", [], ?NO_CONTENT),
-    http_put("/bindings/%2f/e/amq.direct/e/amq.fanout/routing", [], ?NO_CONTENT),
+    http_post("/bindings/%2f/e/my-exchange/q/my-queue", BArgs, ?CREATED),
+    http_post("/bindings/%2f/e/amq.direct/q/my-queue", BArgs, ?CREATED),
+    http_post("/bindings/%2f/e/amq.direct/e/amq.fanout", BArgs, ?CREATED),
     Definitions = http_get("/definitions", ?OK),
     http_delete("/bindings/%2f/e/my-exchange/q/my-queue/routing", ?NO_CONTENT),
     http_delete("/bindings/%2f/e/amq.direct/q/my-queue/routing", ?NO_CONTENT),
@@ -668,10 +668,10 @@ arguments_test() ->
         pget(arguments, http_get("/exchanges/%2f/myexchange", ?OK)),
     [{'x-expires', 1800000}] =
         pget(arguments, http_get("/queues/%2f/myqueue", ?OK)),
-    [{'x-match', <<"all">>}, {foo, <<"bar">>}] =
-        pget(arguments,
-             http_get("/bindings/%2f/e/myexchange/q/myqueue/" ++
-                          "_%257B%2522x-match%2522%253A%2522all%2522%252C%2522foo%2522%253A%2522bar%2522%257D", ?OK)),
+    true = lists:sort([{'x-match', <<"all">>}, {foo, <<"bar">>}]) =:=
+           lists:sort(pget(arguments,
+                           http_get("/bindings/%2f/e/myexchange/q/myqueue/" ++
+                                    "_%9Ds%A4W%0A%99%CDC%9DK%DF%C7p%15%A1z", ?OK))),
     http_delete("/exchanges/%2f/myexchange", ?NO_CONTENT),
     http_delete("/queues/%2f/myqueue", ?NO_CONTENT),
     ok.
