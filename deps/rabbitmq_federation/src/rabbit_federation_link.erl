@@ -304,12 +304,11 @@ forget_binding(B = #binding{destination = Dest},
     {DoIt, State#state{bindings = Bs1}}.
 
 binding_op(UpdateFun, Cmd, B = #binding{args = Args},
-           State = #state{channel = Ch,
-                          upstream = #upstream{max_hops = MaxHops}}) ->
+           State = #state{channel = Ch}) ->
     {DoIt, State1} =
         case rabbit_misc:table_lookup(Args, ?BINDING_HEADER) of
             undefined  -> UpdateFun(B, State);
-            {array, A} -> {Cmd =/= ignore, State}
+            {array, _} -> {Cmd =/= ignore, State}
         end,
     case DoIt of
         true  -> amqp_channel:call(Ch, Cmd);
