@@ -344,7 +344,7 @@ start_it(StartFun) ->
     end.
 
 stop() ->
-    rabbit_log:info("Stopping Rabbit~n"),
+    rabbit_log:info("Stopping RabbitMQ~n"),
     ok = app_utils:stop_applications(app_shutdown_order()).
 
 stop_and_halt() ->
@@ -412,6 +412,9 @@ rotate_logs(BinarySuffix) ->
 start(normal, []) ->
     case erts_version_check() of
         ok ->
+            {ok, Vsn} = application:get_key(rabbit, vsn),
+            error_logger:info_msg("Starting RabbitMQ ~s on Erlang ~s~n",
+                                  [Vsn, erlang:system_info(otp_release)]),
             {ok, SupPid} = rabbit_sup:start_link(),
             true = register(rabbit, self()),
             print_banner(),
