@@ -47,6 +47,8 @@
                 downstream_exchange,
                 unacked = gb_trees:empty()}).
 
+-define(MAX_CONNECTION_CLOSE_TIMEOUT, 10000).
+
 %%----------------------------------------------------------------------------
 
 %% We start off in a state where we do not connect, since we can first
@@ -180,10 +182,9 @@ terminate(_Reason, {not_started, _}) ->
 
 terminate(Reason, State = #state{downstream_channel    = DCh,
                                  downstream_connection = DConn,
-                                 connection            = Conn,
-                                 channel               = Ch}) ->
-    ensure_closed(DConn, DCh),
-    ensure_closed(Conn, Ch),
+                                 connection            = Conn}) ->
+    ensure_connection_closed(DConn),
+    ensure_connection_closed(Conn),
     log_terminate(Reason, State),
     ok.
 
@@ -454,12 +455,12 @@ go(S0 = {not_started, {Upstream, DownXName =
                     catch exit:E ->
                             %% terminate/2 will not get this, as we
                             %% have not put them in our state yet
-                            ensure_closed(DConn, DCh),
-                            ensure_closed(Conn, Ch),
+                            ensure_connection_closed(DConn),
+                            ensure_connection_closed(Conn),
                             connection_error(remote, E, S0)
                     end;
                 E ->
-                    ensure_closed(DConn, DCh),
+                    ensure_connection_closed(DConn),
                     connection_error(remote, E, S0)
             end;
         E ->
@@ -592,7 +593,7 @@ ensure_internal_exchange(IntXNameBin,
 
 upstream_queue_name(XNameBin, VHost, #resource{name         = DownXNameBin,
                                                virtual_host = DownVHost}) ->
-    Node = rabbit_federation_util:local_nodename(VHost),
+    Node = rabbit_federation_util:local_nodename(DownVHost),
     DownPart = case DownVHost of
                    VHost -> case DownXNameBin of
                                 XNameBin -> <<"">>;
@@ -619,8 +620,9 @@ disposable_channel_call(Conn, Method, ErrFun) ->
         amqp_channel:call(Ch, Method)
     catch exit:{{shutdown, {server_initiated_close, Code, Text}}, _} ->
             ErrFun(Code, Text)
-    end,
-    ensure_closed(Ch).
+    after
+        ensure_channel_closed(Ch)
+    end.
 
 disposable_connection_call(Params, Method, ErrFun) ->
     case open(Params) of
@@ -630,18 +632,17 @@ disposable_connection_call(Params, Method, ErrFun) ->
             catch exit:{{shutdown, {connection_closing,
                                     {server_initiated_close, Code, Txt}}}, _} ->
                     ErrFun(Code, Txt)
-            end,
-            ensure_closed(Conn, Ch);
+            after
+                ensure_connection_closed(Conn)
+            end;
         E ->
             E
     end.
 
-ensure_closed(Conn, Ch) ->
-    ensure_closed(Ch),
-    catch amqp_connection:close(Conn).
+ensure_channel_closed(Ch) -> catch amqp_channel:close(Ch).
 
-ensure_closed(Ch) ->
-    catch amqp_channel:close(Ch).
+ensure_connection_closed(Conn) ->
+    catch amqp_connection:close(Conn, ?MAX_CONNECTION_CLOSE_TIMEOUT).
 
 ack(Tag, Multiple, #state{channel = Ch}) ->
     amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = Tag,
