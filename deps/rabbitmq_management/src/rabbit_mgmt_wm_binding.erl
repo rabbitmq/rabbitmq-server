@@ -18,8 +18,8 @@
 
 -export([init/1, resource_exists/2, to_json/2,
          content_types_provided/2, content_types_accepted/2,
-         is_authorized/2, allowed_methods/2, accept_content/2,
-         delete_resource/2]).
+         is_authorized/2, allowed_methods/2, delete_resource/2,
+         lookup_binding_id/3, generate_binding_id/1]).
 
 -include("rabbit_mgmt.hrl").
 -include_lib("webmachine/include/webmachine.hrl").
@@ -35,7 +35,7 @@ content_types_accepted(ReqData, Context) ->
    {[{"application/json", accept_content}], ReqData, Context}.
 
 allowed_methods(ReqData, Context) ->
-    {['HEAD', 'GET', 'PUT', 'DELETE'], ReqData, Context}.
+    {['HEAD', 'GET', 'DELETE'], ReqData, Context}.
 
 resource_exists(ReqData, Context) ->
     Binding = binding(ReqData),
@@ -56,13 +56,6 @@ to_json(ReqData, Context) ->
                            ReqData, Context)
                  end).
 
-accept_content(ReqData, Context) ->
-    MethodName = case rabbit_mgmt_util:destination_type(ReqData) of
-                     exchange -> 'exchange.bind';
-                     queue    -> 'queue.bind'
-                 end,
-    sync_resource(MethodName, ReqData, Context).
-
 delete_resource(ReqData, Context) ->
     MethodName = case rabbit_mgmt_util:destination_type(ReqData) of
                      exchange -> 'exchange.unbind';
@@ -75,6 +68,21 @@ is_authorized(ReqData, Context) ->
 
 %%--------------------------------------------------------------------
 
+lookup_binding_id(Src, Dst, Arg) ->
+    lookup_binding_id0(
+      Arg, rabbit_binding:list_for_source_and_destination(Src, Dst)).
+
+lookup_binding_id0(Hash, []) ->
+    {bad_request, "binding not found"};
+lookup_binding_id0(Hash, [#binding{args = Args} | Rest]) ->
+    case erlang:md5(term_to_binary(Args)) =:= Hash of
+        true  -> Args;
+        false -> lookup_binding_id0(Hash, Rest)
+    end.
+
+generate_binding_id(Args) ->
+    erlang:md5(term_to_binary(Args)).
+
 binding(ReqData) ->
     case rabbit_mgmt_util:vhost(ReqData) of
         not_found -> not_found;
@@ -82,12 +90,13 @@ binding(ReqData) ->
                      Dest = rabbit_mgmt_util:id(destination, ReqData),
                      DestType = rabbit_mgmt_util:destination_type(ReqData),
                      Props = rabbit_mgmt_util:id(props, ReqData),
-                     case rabbit_mgmt_format:unpack_binding_props(Props) of
+                     SName = rabbit_misc:r(VHost, exchange, Source),
+                     DName = rabbit_misc:r(VHost, DestType, Dest),
+                     case rabbit_mgmt_format:unpack_binding_props(
+                            SName, DName, Props) of
                          {bad_request, Str} ->
                              {bad_request, Str};
                          {Key, Args} ->
-                             SName = rabbit_misc:r(VHost, exchange, Source),
-                             DName = rabbit_misc:r(VHost, DestType, Dest),
                              #binding{ source      = SName,
                                        destination = DName,
                                        key         = Key,
