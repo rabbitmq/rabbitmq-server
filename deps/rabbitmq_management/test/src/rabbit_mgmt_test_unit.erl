@@ -34,16 +34,6 @@ pack_binding_test() ->
                    <<"foo_bar/bash">>, []),
     assert_binding(<<"foo%5Fbar%5Fbash">>,
                    <<"foo_bar_bash">>, []),
-    assert_binding(<<"foo_arg1_foo%5Fbar%2Fbash">>,
-                   <<"foo">>, [{<<"arg1">>, longstr, <<"foo_bar/bash">>}]),
-    assert_binding(<<"foo_arg1_bar_arg2_bash">>,
-                   <<"foo">>, [{<<"arg1">>, longstr, <<"bar">>},
-                               {<<"arg2">>, longstr, <<"bash">>}]),
-    assert_binding(<<"_arg1_bar">>,
-                   <<"">>, [{<<"arg1">>, longstr, <<"bar">>}]),
-
-    {bad_request, {no_value, "routing"}} =
-        rabbit_mgmt_format:unpack_binding_props(<<"bad_routing">>),
     ok.
 
 amqp_table_test() ->
@@ -70,10 +60,4 @@ assert_binding(Packed, Routing, Args) ->
             ok;
         Act ->
             throw({pack, Routing, Args, expected, Packed, got, Act})
-    end,
-    case rabbit_mgmt_format:unpack_binding_props(Packed) of
-        {Routing, Args} ->
-            ok;
-        Act2 ->
-            throw({unpack, Packed, expected, Routing, Args, got, Act2})
     end.
