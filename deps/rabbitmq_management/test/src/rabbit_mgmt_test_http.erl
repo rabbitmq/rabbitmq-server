@@ -285,7 +285,6 @@ bindings_test() ->
     QArgs = [],
     http_put("/exchanges/%2f/myexchange", XArgs, ?NO_CONTENT),
     http_put("/queues/%2f/myqueue", QArgs, ?NO_CONTENT),
-    http_put("/bindings/%2f/e/myexchange/q/queue/routing", [], ?HTTP_NOT_ALLOWED),
     BArgs = [{routing_key, <<"routing">>}, {arguments, []}],
     http_post("/bindings/%2f/e/myexchange/q/myqueue", BArgs, ?CREATED),
     http_get("/bindings/%2f/e/myexchange/q/myqueue/routing", ?OK),
