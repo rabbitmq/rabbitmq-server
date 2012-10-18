@@ -338,10 +338,46 @@ bind_cmd0(unbind, Source, Destination, RoutingKey, Arguments) ->
                        routing_key = RoutingKey,
                        arguments   = Arguments}.
 
+%% This function adds information about the current node to the
+%% binding arguments, or returns 'ignore' if it determines the binding
+%% should propagate no further. The interesting part is the latter.
+%%
+%% We want bindings to propagate in the same way as messages
+%% w.r.t. max_hops - if we determine that a message can get from node
+%% A to B (assuming bindings are in place) then it follows that a
+%% binding at B should propogate back to A, and no further. There is
+%% no point in propagating bindings past the point where messages
+%% would propagate, and we will lose messages if bindings don't
+%% propagate as far.
+%%
+%% Note that we still want to have limits on how far messages can
+%% propagate, limiting our bindings is not enough, since other
+%% bindings from other nodes can overlap.
+%%
+%% So in short we want bindings to obey max_hops. However, they can't
+%% just obey the max_hops of the current link, since they are
+%% travelling in the opposite direction to messages! Consider the
+%% following federation:
+%%
+%%  A -----------> B -----------> C
+%%     max_hops=1     max_hops=2
+%%
+%% where the arrows indicate message flow. A binding created at C
+%% should flow to B, then to A, and no further. Therefore every time
+%% we traverse a link, we keep a count of the number of hops that a
+%% message could have made so far, and still propagate. When this
+%% number (<<"hops">> below) reaches 0 we propagate no further.
+%%
+%% hops(link(N)) is given by:
+%%
+%%   min(hops(link(N-1))-1, max_hops(link(N)))
+%%
+%% In other words, we count down to 0 from the link with the most
+%% restrictive max_hops we have yet passed through.
+
 update_binding(Args, #state{downstream_exchange = X,
                             upstream = Upstream}) ->
     #upstream{max_hops = MaxHops} = Upstream,
-    %% TODO explain this!
     Hops = case rabbit_misc:table_lookup(Args, ?BINDING_HEADER) of
                undefined    -> MaxHops;
                {array, All} -> [{table, Prev} | _] = All,
