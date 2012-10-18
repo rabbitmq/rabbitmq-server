@@ -81,7 +81,13 @@ lookup_binding_id0(Hash, [#binding{args = Args} | Rest]) ->
     end.
 
 args_hash(Args) ->
-    erlang:md5(term_to_binary(Args)).
+    B64 = binary_to_list(base64:encode(erlang:md5(term_to_binary(Args)))),
+    list_to_binary([hash_map(C) ||
+                       C <- lists:takewhile(fun (C) -> C =/= $= end, B64)]).
+
+hash_map($/) -> $-;
+hash_map($+) -> $~;
+hash_map(C)  -> C.
 
 binding(ReqData) ->
     case rabbit_mgmt_util:vhost(ReqData) of
@@ -95,6 +101,9 @@ binding(ReqData) ->
                      case rabbit_mgmt_format:unpack_binding_props(
                             SName, DName, Props) of
                          {bad_request, Str} ->
+                             {bad_request, Str};
+                         %% TODO ugh!
+                         {_Key, {bad_request, Str}} ->
                              {bad_request, Str};
                          {Key, Args} ->
                              #binding{ source      = SName,
