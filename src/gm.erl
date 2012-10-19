@@ -1015,9 +1015,8 @@ join_group(Self, GroupName, #gm_group { members = Members } = Group, TxnFun) ->
                         fun () ->
                                 join_group(
                                   Self, GroupName,
-                                  record_dead_member_in_group(Left,
-                                                              GroupName,
-                                                              TxnFun),
+                                  record_dead_member_in_group(
+                                    Left, GroupName, TxnFun),
                                   TxnFun)
                         end,
                     try
@@ -1045,20 +1044,21 @@ read_group(GroupName) ->
 
 prune_or_create_group(Self, GroupName, TxnFun) ->
     Group = TxnFun(
-              fun () -> GroupNew = #gm_group { name    = GroupName,
-                                               members = [Self],
-                                               version = ?VERSION_START },
-                        case mnesia:read({?GROUP_TABLE, GroupName}) of
-                            [] ->
-                                mnesia:write(GroupNew),
-                                GroupNew;
-                            [Group1 = #gm_group { members = Members }] ->
-                                case lists:any(fun is_member_alive/1, Members) of
-                                    true  -> Group1;
-                                    false -> mnesia:write(GroupNew),
-                                             GroupNew
-                                end
-                        end
+              fun () ->
+                      GroupNew = #gm_group { name    = GroupName,
+                                             members = [Self],
+                                             version = ?VERSION_START },
+                      case mnesia:read({?GROUP_TABLE, GroupName}) of
+                          [] ->
+                              mnesia:write(GroupNew),
+                              GroupNew;
+                          [Group1 = #gm_group { members = Members }] ->
+                              case lists:any(fun is_member_alive/1, Members) of
+                                  true  -> Group1;
+                                  false -> mnesia:write(GroupNew),
+                                           GroupNew
+                              end
+                      end
               end),
     Group.
 
