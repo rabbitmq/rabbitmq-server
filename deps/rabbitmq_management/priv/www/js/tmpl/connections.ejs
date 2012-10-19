@@ -32,7 +32,7 @@
     var connection = connections[i];
 %>
   <tr<%= alt_rows(i)%>>
-    <td><%= link_conn(connection) %></td>
+    <td><%= link_conn(connection.name) %></td>
     <td>
       <%= connection.protocol %>
       <% if (connection.ssl) { %>

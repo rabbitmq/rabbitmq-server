@@ -474,19 +474,6 @@ function fmt_client_name(properties) {
     return res;
 }
 
-function fmt_conn(conn) {
-    var res = '';
-
-    if (conn.peer_host == undefined) {
-        return conn.name;
-    }
-    else {
-        return conn.peer_host + ":" + conn.peer_port;
-    }
-
-    return fmt_escape_html(res);
-}
-
 function alt_rows(i) {
     return (i % 2 == 0) ? ' class="alt1"' : ' class="alt2"';
 }
@@ -495,8 +482,8 @@ function esc(str) {
     return encodeURIComponent(str);
 }
 
-function link_conn(conn) {
-    return _link_to(fmt_conn(conn), '#/connections/' + esc(conn.name))
+function link_conn(name) {
+    return _link_to(fmt_escape_html(name), '#/connections/' + esc(name))
 }
 
 function link_channel(name) {
