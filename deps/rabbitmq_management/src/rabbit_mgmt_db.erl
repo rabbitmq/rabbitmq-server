@@ -629,14 +629,16 @@ augment_channel_pid(Pid, #state{tables = Tables}) ->
      {number,          pget(number, Ch)},
      {connection_name, pget(name,         Conn)},
      {peer_address,    pget(peer_address, Conn)},
-     {peer_port,       pget(peer_port,    Conn)}].
+     {peer_port,       pget(peer_port,    Conn)},
+     {peer_host,       pget(peer_host,    Conn)}].
 
 augment_connection_pid(Pid, #state{tables = Tables}) ->
     Conn = lookup_element(orddict:fetch(connection_stats, Tables),
                           {Pid, create}),
     [{name,         pget(name,         Conn)},
      {peer_address, pget(peer_address, Conn)},
-     {peer_port,    pget(peer_port,    Conn)}].
+     {peer_port,    pget(peer_port,    Conn)},
+     {peer_host,    pget(peer_host,    Conn)}].
 
 augment_queue_pid(Pid, _State) ->
     %% TODO This should be in rabbit_amqqueue?
