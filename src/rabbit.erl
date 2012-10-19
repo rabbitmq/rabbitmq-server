@@ -303,6 +303,7 @@ start() ->
                      ok = ensure_working_log_handlers(),
                      rabbit_node_monitor:prepare_cluster_status_files(),
                      rabbit_mnesia:check_cluster_consistency(),
+                     exit(bang),
                      ok = app_utils:start_applications(
                             app_startup_order(), fun handle_app_error/2),
                      ok = print_plugin_info(rabbit_plugins:active())
@@ -349,7 +350,7 @@ start_it(StartFun) ->
     end.
 
 stop() ->
-    rabbit_log:info("Stopping Rabbit~n"),
+    rabbit_log:info("Stopping RabbitMQ~n"),
     ok = app_utils:stop_applications(app_shutdown_order()).
 
 stop_and_halt() ->
@@ -417,6 +418,9 @@ rotate_logs(BinarySuffix) ->
 start(normal, []) ->
     case erts_version_check() of
         ok ->
+            {ok, Vsn} = application:get_key(rabbit, vsn),
+            error_logger:info_msg("Starting RabbitMQ ~s on Erlang ~s~n",
+                                  [Vsn, erlang:system_info(otp_release)]),
             {ok, SupPid} = rabbit_sup:start_link(),
             true = register(rabbit, self()),
             print_banner(),
