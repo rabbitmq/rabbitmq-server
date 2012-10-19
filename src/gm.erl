@@ -509,8 +509,8 @@ table_definitions() ->
     {Name, Attributes} = ?TABLE,
     [{Name, [?TABLE_MATCH | Attributes]}].
 
-start_link(GroupName, Module, TxnFun, Args) ->
-    gen_server2:start_link(?MODULE, [GroupName, Module, TxnFun, Args], []).
+start_link(GroupName, Module, Args, TxnFun) ->
+    gen_server2:start_link(?MODULE, [GroupName, Module, Args, TxnFun], []).
 
 leave(Server) ->
     gen_server2:cast(Server, leave).
@@ -531,7 +531,7 @@ forget_group(GroupName) ->
                      end),
     ok.
 
-init([GroupName, Module, TxnFun, Args]) ->
+init([GroupName, Module, Args, TxnFun]) ->
     {MegaSecs, Secs, MicroSecs} = now(),
     random:seed(MegaSecs, Secs, MicroSecs),
     Self = make_member(GroupName),

@@ -44,9 +44,8 @@ terminate(Owner, _Reason) ->
 %% other
 
 wile_e_coyote(Time, WriteUnit) ->
-    {ok, Pid} = gm:start_link(?MODULE, ?MODULE,
-                              fun rabbit_misc:execute_mnesia_transaction/1,
-                              self()),
+    {ok, Pid} = gm:start_link(?MODULE, ?MODULE, self(),
+                              fun rabbit_misc:execute_mnesia_transaction/1),
     receive joined -> ok end,
     timer:sleep(1000), %% wait for all to join
     timer:send_after(Time, stop),
