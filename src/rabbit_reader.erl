@@ -198,8 +198,8 @@ start_connection(Parent, ChannelSupSupPid, Collector, StartHeartbeatFun, Deb,
     ConnStr = name(Sock),
     log(info, "accepting AMQP connection ~p (~s)~n", [self(), ConnStr]),
     ClientSock = socket_op(Sock, SockTransform),
-    erlang:send_after(?HANDSHAKE_TIMEOUT * 1000, self(),
-                      handshake_timeout),
+    erlang:send_after(?HANDSHAKE_TIMEOUT * 1000, self(), handshake_timeout),
+    {Host, PeerHost} = rabbit_net:rdns(Sock, inbound),
     State = #v1{parent              = Parent,
                 sock                = ClientSock,
                 connection          = #connection{
@@ -225,9 +225,8 @@ start_connection(Parent, ChannelSupSupPid, Collector, StartHeartbeatFun, Deb,
                 conserve_resources  = false,
                 last_blocked_by     = none,
                 last_blocked_at     = never,
-                peer_host           = unknown},
-    Self = self(),
-    spawn_link(fun() -> do_reverse_dns(ClientSock, Self) end),
+                host                = Host,
+                peer_host           = PeerHost},
     try
         ok = inet_op(fun () -> rabbit_net:tune_buffer_size(ClientSock) end),
         recvloop(Deb, switch_callback(rabbit_event:init_stats_timer(
@@ -252,18 +251,6 @@ start_connection(Parent, ChannelSupSupPid, Collector, StartHeartbeatFun, Deb,
         rabbit_event:notify(connection_closed, [{pid, self()}])
     end,
     done.
-
-do_reverse_dns(Sock, Reader) ->
-    Host = do_reverse_dns0(Sock, fun rabbit_net:sockname/1),
-    PeerHost = do_reverse_dns0(Sock, fun rabbit_net:peername/1),
-    unlink(Reader),
-    Reader ! {rdns, Host, PeerHost}.
-
-do_reverse_dns0(Sock, Fun) ->
-    case Fun(Sock) of
-        {ok, {IP, _Port}} -> rabbit_networking:tcp_host(IP);
-        _                 -> undefined
-    end.
 
 recvloop(Deb, State = #v1{pending_recv = true}) ->
     mainloop(Deb, State);
