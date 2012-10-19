@@ -350,9 +350,6 @@ handle_other({system, From, Request}, Deb, State = #v1{parent = Parent}) ->
 handle_other({bump_credit, Msg}, Deb, State) ->
     credit_flow:handle_bump_msg(Msg),
     recvloop(Deb, control_throttle(State));
-handle_other({rdns, Host, PeerHost}, Deb, State) ->
-    mainloop(Deb, State#v1{host = list_to_binary(Host),
-                           peer_host = list_to_binary(PeerHost)});
 handle_other(Other, _Deb, _State) ->
     %% internal error -> something worth dying for
     exit({unexpected_message, Other}).
