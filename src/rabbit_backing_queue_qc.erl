@@ -391,4 +391,13 @@ drop_messages(Messages) ->
             end
     end.
 
+-else.
+
+-export([prop_disabled/0]).
+
+prop_disabled() ->
+    exit({compiled_without_proper,
+          "PropEr was not present during compilation of the test module. "
+          "Hence all tests are disabled."}).
+
 -endif.
