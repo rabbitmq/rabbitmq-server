@@ -58,9 +58,9 @@
      <%= fmt_mirrors(queue) %>
    </td>
 <% } %>
-   <td>
+   <td class="c">
      <% if (queue.owner_pid_details != undefined) { %>
-     <%= link_conn(queue.owner_pid_details.name) %>
+     <%= link_conn(queue.owner_pid_details.name, "Owner") %>
      <% } %>
    </td>
    <td class="c"><%= fmt_parameters_short(queue) %></td>

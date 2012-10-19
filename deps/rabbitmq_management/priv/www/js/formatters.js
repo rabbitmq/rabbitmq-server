@@ -79,6 +79,18 @@ function fmt_parameters_short(obj) {
     return res;
 }
 
+function short_conn(name) {
+    var pat = /^(.*)->/;
+    var match = pat.exec(name);
+    return (match != null && match.length == 2) ? match[1] : name;
+}
+
+function short_chan(name) {
+    var pat = /^(.*)->.*( \(.*\))/;
+    var match = pat.exec(name);
+    return (match != null && match.length == 3) ? match[1] + match[2] : name;
+}
+
 function args_to_params(obj) {
     var res = {};
     for (var k in obj.arguments) {
@@ -482,12 +494,13 @@ function esc(str) {
     return encodeURIComponent(str);
 }
 
-function link_conn(name) {
-    return _link_to(fmt_escape_html(name), '#/connections/' + esc(name))
+function link_conn(name, desc) {
+    if (desc == undefined) desc = short_conn(name);
+    return _link_to(fmt_escape_html(desc), '#/connections/' + esc(name))
 }
 
 function link_channel(name) {
-    return _link_to(fmt_escape_html(name), '#/channels/' + esc(name))
+    return _link_to(fmt_escape_html(short_chan(name)), '#/channels/' + esc(name))
 }
 
 function link_exchange(vhost, name) {
