@@ -65,35 +65,18 @@
     cannot be deleted.
   </p>
 <% } else { %>
+<div class="bindings-wrapper">
 <% if (bindings_destination.length > 0) { %>
-      <h3>Incoming to <b><%= fmt_exchange(exchange.name) %></b></h3>
-      <table class="bindings updatable">
-        <tr>
-          <td>
-            <%= format('bindings', {'mode': 'exchange_destination', 'bindings': bindings_destination}) %>
-          </td>
-          <td class="binding-endpoint">
-            <span class="arrow">&rarr;</span>
-            <span class="object"><%= fmt_exchange(exchange.name) %></span>
-          </td>
-        </tr>
-      </table>
+  <%= format('bindings', {'mode': 'exchange_destination', 'bindings': bindings_destination}) %>
+  <p class="arrow">&dArr;</p>
 <% } %>
-    <h3>Outgoing from <b><%= fmt_exchange(exchange.name) %></b></h3>
-    <table class="bindings updatable">
-      <tr>
-        <td class="binding-endpoint">
-          <span class="object"><%= fmt_exchange(exchange.name) %></span>
-          <span class="arrow">&rarr;</span>
-        </td>
-        <td>
-          <%= format('bindings', {'mode': 'exchange_source', 'bindings': bindings_source}) %>
-        </td>
-      </tr>
-    </table>
-<%= format('add-binding', {'mode': 'exchange_source', 'parent': exchange}) %>
+  <p><span class="exchange">This exchange</span></p>
+  <p class="arrow">&dArr;</p>
+  <%= format('bindings', {'mode': 'exchange_source', 'bindings': bindings_source}) %>
+</div>
+  <%= format('add-binding', {'mode': 'exchange_source', 'parent': exchange}) %>
 <% } %>
-  </div>
+</div>
 </div>
 
 <% if (!exchange.internal) { %>

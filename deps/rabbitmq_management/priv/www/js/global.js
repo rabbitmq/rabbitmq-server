@@ -26,7 +26,6 @@ var SORT_QUERIES  = map(['/connections', '/channels', '/vhosts', '/users',
 var KNOWN_ARGS = {'alternate-exchange':        {'short': 'AE',  'type': 'string'},
                   'x-message-ttl':             {'short': 'TTL', 'type': 'int'},
                   'x-expires':                 {'short': 'Exp', 'type': 'int'},
-                  'x-ha-policy':               {'short': 'HA',  'type': 'string'},
                   'x-dead-letter-exchange':    {'short': 'DLX', 'type': 'string'},
                   'x-dead-letter-routing-key': {'short': 'DLK', 'type': 'string'}};
 

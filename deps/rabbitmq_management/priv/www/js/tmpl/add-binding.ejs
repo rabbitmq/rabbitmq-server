@@ -1,14 +1,9 @@
-    <h3>Add binding</h3>
-    <form action="#/bindings" method="post">
-      <table class="bindings">
-        <tr>
-<% if (mode != 'queue') { %>
-          <td class="binding-endpoint">
-            <span class="object"><%= parent.name %></span>
-            <span class="arrow">&rarr;</span>
-          </td>
+<% if (mode == 'queue') { %>
+    <h3 style="padding-top: 20px;">Add binding to this queue</h3>
+<% } else { %>
+    <h3 style="padding-top: 20px;">Add binding from this exchange</h3>
 <% } %>
-          <td>
+    <form action="#/bindings" method="post">
             <input type="hidden" name="vhost" value="<%= fmt_string(parent.vhost) %>"/>
 <% if (mode == 'queue') { %>
             <input type="hidden" name="destination" value="<%= fmt_string(parent.name) %>"/>
@@ -19,7 +14,7 @@
 <% if (mode == 'queue') { %>
               <tr>
                 <th>
-                  <label>Exchange:</label>
+                  <label>From exchange:</label>
                 </th>
                 <td>
                   <input type="hidden" name="destination_type" value="q"/>
@@ -31,8 +26,8 @@
               <tr>
                 <th>
                   <select name="destination_type" class="narrow">
-                    <option value="e">exchange</option>
-                    <option value="q" selected="selected">queue</option>
+                    <option value="e">To exchange</option>
+                    <option value="q" selected="selected">To queue</option>
                   </select>:
                 </th>
                 <td>
@@ -50,19 +45,5 @@
                 <td><span class="multifield" id="arguments"></span></td>
               </tr>
             </table>
-          </td>
-<% if (mode == 'queue') { %>
-          <td class="binding-endpoint">
-            <span class="arrow">&rarr;</span>
-            <span class="object"><%= fmt_string(parent.name) %></span>
-          </td>
-<% } %>
-        </tr>
-        <tr>
-          <td>
-            <input type="submit" value="Bind"/>
-          </td>
-          <td></td>
-        </tr>
-      </table>
+      <input type="submit" value="Bind"/>
     </form>
