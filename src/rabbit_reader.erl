@@ -39,11 +39,11 @@
              connection_state, queue_collector, heartbeater, stats_timer,
              channel_sup_sup_pid, start_heartbeat_fun, buf, buf_len,
              auth_mechanism, auth_state, conserve_resources,
-             last_blocked_by, last_blocked_at, peer_host}).
+             last_blocked_by, last_blocked_at, host, peer_host}).
 
 -define(STATISTICS_KEYS, [pid, recv_oct, recv_cnt, send_oct, send_cnt,
                           send_pend, state, last_blocked_by, last_blocked_age,
-                          channels, peer_host]).
+                          channels, host, peer_host]).
 
 -define(CREATION_EVENT_KEYS, [pid, name, address, port, peer_address, peer_port,
                               ssl, peer_cert_subject, peer_cert_issuer,
@@ -227,10 +227,7 @@ start_connection(Parent, ChannelSupSupPid, Collector, StartHeartbeatFun, Deb,
                 last_blocked_at     = never,
                 peer_host           = unknown},
     Self = self(),
-    spawn(fun() ->
-                  Res = rabbit_networking:tcp_host(i(peer_address, State)),
-                  Self ! {rdns, Res}
-          end),
+    spawn_link(fun() -> do_reverse_dns(ClientSock, Self) end),
     try
         ok = inet_op(fun () -> rabbit_net:tune_buffer_size(ClientSock) end),
         recvloop(Deb, switch_callback(rabbit_event:init_stats_timer(
@@ -255,6 +252,18 @@ start_connection(Parent, ChannelSupSupPid, Collector, StartHeartbeatFun, Deb,
         rabbit_event:notify(connection_closed, [{pid, self()}])
     end,
     done.
+
+do_reverse_dns(Sock, Reader) ->
+    Host = do_reverse_dns0(Sock, fun rabbit_net:sockname/1),
+    PeerHost = do_reverse_dns0(Sock, fun rabbit_net:peername/1),
+    unlink(Reader),
+    Reader ! {rdns, Host, PeerHost}.
+
+do_reverse_dns0(Sock, Fun) ->
+    case Fun(Sock) of
+        {ok, {IP, _Port}} -> rabbit_networking:tcp_host(IP);
+        _                 -> undefined
+    end.
 
 recvloop(Deb, State = #v1{pending_recv = true}) ->
     mainloop(Deb, State);
@@ -354,8 +363,9 @@ handle_other({system, From, Request}, Deb, State = #v1{parent = Parent}) ->
 handle_other({bump_credit, Msg}, Deb, State) ->
     credit_flow:handle_bump_msg(Msg),
     recvloop(Deb, control_throttle(State));
-handle_other({rdns, Host}, Deb, State) ->
-    mainloop(Deb, State#v1{peer_host = list_to_binary(Host)});
+handle_other({rdns, Host, PeerHost}, Deb, State) ->
+    mainloop(Deb, State#v1{host = list_to_binary(Host),
+                           peer_host = list_to_binary(PeerHost)});
 handle_other(Other, _Deb, _State) ->
     %% internal error -> something worth dying for
     exit({unexpected_message, Other}).
@@ -883,8 +893,10 @@ i(pid, #v1{}) ->
     self();
 i(name, #v1{sock = Sock}) ->
     list_to_binary(name(Sock));
-i(peer_host, #v1{peer_host = Host}) ->
+i(host, #v1{host = Host}) ->
     Host;
+i(peer_host, #v1{peer_host = PeerHost}) ->
+    PeerHost;
 i(address, #v1{sock = Sock}) ->
     socket_info(fun rabbit_net:sockname/1, fun ({A, _}) -> A end, Sock);
 i(port, #v1{sock = Sock}) ->

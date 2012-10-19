@@ -1203,12 +1203,20 @@
                 <listitem><para>Server port.</para></listitem>
               </varlistentry>
               <varlistentry>
+                <term>host</term>
+                <listitem><para>Server DNS host.</para></listitem>
+              </varlistentry>
+              <varlistentry>
                 <term>peer_address</term>
                 <listitem><para>Peer address.</para></listitem>
               </varlistentry>
               <varlistentry>
                 <term>peer_port</term>
                 <listitem><para>Peer port.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>peer_host</term>
+                <listitem><para>Peer DNS host.</para></listitem>
               </varlistentry>
               <varlistentry>
                 <term>ssl</term>
