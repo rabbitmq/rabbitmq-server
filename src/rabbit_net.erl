@@ -202,7 +202,7 @@ connection_string(Sock, Direction) ->
             {ok, rabbit_misc:format(
                    "~s:~p -> ~s:~p",
                    [maybe_rdns(FromAddress, Sock, From), FromPort,
-                    maybe_rdns(ToAddress, Sock, To),     ToPort])};
+                    maybe_rdns(ToAddress,   Sock, To),   ToPort])};
         {{error, _Reason} = Error, _} ->
             Error;
         {_, {error, _Reason} = Error} ->
