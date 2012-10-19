@@ -43,15 +43,14 @@
 
 -define(STATISTICS_KEYS, [pid, recv_oct, recv_cnt, send_oct, send_cnt,
                           send_pend, state, last_blocked_by, last_blocked_age,
-                          channels, host, peer_host]).
+                          channels]).
 
--define(CREATION_EVENT_KEYS, [pid, name, address, port, peer_address, peer_port,
-                              ssl, peer_cert_subject, peer_cert_issuer,
-                              peer_cert_validity, auth_mechanism,
-                              ssl_protocol, ssl_key_exchange,
-                              ssl_cipher, ssl_hash,
-                              protocol, user, vhost, timeout, frame_max,
-                              client_properties]).
+-define(CREATION_EVENT_KEYS,
+        [pid, name, address, port, peer_address, peer_port, host,
+        peer_host, ssl, peer_cert_subject, peer_cert_issuer,
+        peer_cert_validity, auth_mechanism, ssl_protocol,
+        ssl_key_exchange, ssl_cipher, ssl_hash, protocol, user, vhost,
+        timeout, frame_max, client_properties]).
 
 -define(INFO_KEYS, ?CREATION_EVENT_KEYS ++ ?STATISTICS_KEYS -- [pid]).
 
