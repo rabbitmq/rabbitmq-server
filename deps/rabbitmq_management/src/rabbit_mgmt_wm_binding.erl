@@ -97,32 +97,27 @@ unpack_binding_props(Src, Dst, Str) ->
         [Key] ->
             {unquote_binding(Key), []};
         ["~", ArgsEnc] ->
-            lift_err({<<>>,
-                      lookup_binding_id(Src, Dst, unquote_binding(ArgsEnc))});
+            lookup_binding_id(<<>>, ArgsEnc, Src, Dst);
         [Key, ArgsEnc] ->
-            lift_err({unquote_binding(Key),
-                      lookup_binding_id(Src, Dst, unquote_binding(ArgsEnc))});
+            lookup_binding_id(unquote_binding(Key), ArgsEnc, Src, Dst);
         _ ->
             {bad_request, {too_many_tokens, Str}}
     end.
 
-lookup_binding_id(Src, Dst, Arg) ->
-    lookup_binding_id0(
-      Arg, rabbit_binding:list_for_source_and_destination(Src, Dst)).
+lookup_binding_id(RoutingKey, ArgsEnc, Src, Dst) ->
+    lookup_binding_id0(RoutingKey, unquote_binding(ArgsEnc),
+                       rabbit_binding:list_for_source_and_destination(Src, Dst)).
 
-lookup_binding_id0(_Hash, []) ->
+lookup_binding_id0(_RoutingKey, _Hash, []) ->
     {bad_request, "binding not found"};
-lookup_binding_id0(Hash, [#binding{args = Args} | Rest]) ->
+lookup_binding_id0(RoutingKey, Hash, [#binding{args = Args} | Rest]) ->
     case args_hash(Args) =:= Hash of
-        true  -> Args;
-        false -> lookup_binding_id0(Hash, Rest)
+        true  -> {RoutingKey, Args};
+        false -> lookup_binding_id0(RoutingKey, Hash, Rest)
     end.
 
 args_hash(Args) ->
     list_to_binary(rabbit_misc:base64url(erlang:md5(term_to_binary(Args)))).
-
-lift_err({_, Err = {bad_request, _}}) -> Err;
-lift_err(NonErr = {_, _})             -> NonErr.
 
 unquote_binding(Name) ->
     list_to_binary(mochiweb_util:unquote(Name)).
