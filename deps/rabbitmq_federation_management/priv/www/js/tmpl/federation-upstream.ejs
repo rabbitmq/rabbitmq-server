@@ -1,4 +1,4 @@
-<h1>Federation Upstream: <b><%= fmt_string(upstream.key) %></b></h1>
+<h1>Federation Upstream: <b><%= fmt_string(upstream.name) %></b></h1>
 
 <div class="section">
   <h2>Overview</h2>
@@ -46,7 +46,7 @@
     <form action="#/fed-parameters" method="delete" class="confirm">
       <input type="hidden" name="component" value="federation-upstream"/>
       <input type="hidden" name="vhost" value="<%= fmt_string(upstream.vhost) %>"/>
-      <input type="hidden" name="key" value="<%= fmt_string(upstream.key) %>"/>
+      <input type="hidden" name="name" value="<%= fmt_string(upstream.name) %>"/>
       <input type="submit" value="Delete this upstream"/>
     </form>
   </div>
