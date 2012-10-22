@@ -345,7 +345,7 @@ bind_cmd0(unbind, Source, Destination, RoutingKey, Arguments) ->
 %% We want bindings to propagate in the same way as messages
 %% w.r.t. max_hops - if we determine that a message can get from node
 %% A to B (assuming bindings are in place) then it follows that a
-%% binding at B should propogate back to A, and no further. There is
+%% binding at B should propagate back to A, and no further. There is
 %% no point in propagating bindings past the point where messages
 %% would propagate, and we will lose messages if bindings don't
 %% propagate as far.
@@ -363,15 +363,18 @@ bind_cmd0(unbind, Source, Destination, RoutingKey, Arguments) ->
 %%     max_hops=1     max_hops=2
 %%
 %% where the arrows indicate message flow. A binding created at C
-%% should flow to B, then to A, and no further. Therefore every time
-%% we traverse a link, we keep a count of the number of hops that a
-%% message could have made so far to reach this point, and still be
+%% should propagate to B, then to A, and no further. Therefore every
+%% time we traverse a link, we keep a count of the number of hops that
+%% a message could have made so far to reach this point, and still be
 %% able to propagate. When this number ("hops" below) reaches 0 we
 %% propagate no further.
 %%
 %% hops(link(N)) is given by:
 %%
 %%   min(hops(link(N-1))-1, max_hops(link(N)))
+%%
+%% where link(N) is the link that bindings propagate over after N
+%% steps (e.g. link(1) is CB above, link(2) is BA).
 %%
 %% In other words, we count down to 0 from the link with the most
 %% restrictive max_hops we have yet passed through.
