@@ -43,7 +43,7 @@
          {trace_vhosts, []},
          {log_levels, [{connection, info}]},
          {ssl_cert_login_from, distinguished_name},
-         {reverse_dns_lookups, true},
+         {reverse_dns_lookups, false},
          {tcp_listen_options, [binary,
                                {packet,        raw},
                                {reuseaddr,     true},
