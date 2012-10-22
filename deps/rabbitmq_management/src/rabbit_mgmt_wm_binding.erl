@@ -77,7 +77,7 @@ binding(ReqData) ->
                      Props = rabbit_mgmt_util:id(props, ReqData),
                      SName = rabbit_misc:r(VHost, exchange, Source),
                      DName = rabbit_misc:r(VHost, DestType, Dest),
-                     case unpack_binding_props(SName, DName, Props) of
+                     case unpack(SName, DName, Props) of
                          {bad_request, Str} ->
                              {bad_request, Str};
                          {Key, Args} ->
@@ -88,38 +88,33 @@ binding(ReqData) ->
                      end
     end.
 
-unpack_binding_props(S, D, B) when is_binary(B) ->
-    unpack_binding_props(S, D, binary_to_list(B));
-unpack_binding_props(Src, Dst, Str) ->
+unpack(S, D, B) when is_binary(B) ->
+    unpack(S, D, binary_to_list(B));
+unpack(Src, Dst, Str) ->
     case rabbit_mgmt_format:tokenise(Str) of
-        ["~"] ->
-            {<<>>, []};
-        [Key] ->
-            {unquote_binding(Key), []};
-        ["~", ArgsEnc] ->
-            lookup_binding_id(<<>>, ArgsEnc, Src, Dst);
-        [Key, ArgsEnc] ->
-            lookup_binding_id(unquote_binding(Key), ArgsEnc, Src, Dst);
-        _ ->
-            {bad_request, {too_many_tokens, Str}}
+        ["~"]          -> {<<>>, []};
+        [Key]          -> {unquote(Key), []};
+        ["~", ArgsEnc] -> lookup(<<>>, ArgsEnc, Src, Dst);
+        [Key, ArgsEnc] -> lookup(unquote(Key), ArgsEnc, Src, Dst);
+        _              -> {bad_request, {too_many_tokens, Str}}
     end.
 
-lookup_binding_id(RoutingKey, ArgsEnc, Src, Dst) ->
-    lookup_binding_id0(RoutingKey, unquote_binding(ArgsEnc),
-                       rabbit_binding:list_for_source_and_destination(Src, Dst)).
+lookup(RoutingKey, ArgsEnc, Src, Dst) ->
+    lookup(RoutingKey, unquote(ArgsEnc),
+           rabbit_binding:list_for_source_and_destination(Src, Dst)).
 
-lookup_binding_id0(_RoutingKey, _Hash, []) ->
+lookup(_RoutingKey, _Hash, []) ->
     {bad_request, "binding not found"};
-lookup_binding_id0(RoutingKey, Hash, [#binding{args = Args} | Rest]) ->
+lookup(RoutingKey, Hash, [#binding{args = Args} | Rest]) ->
     case args_hash(Args) =:= Hash of
         true  -> {RoutingKey, Args};
-        false -> lookup_binding_id0(RoutingKey, Hash, Rest)
+        false -> lookup(RoutingKey, Hash, Rest)
     end.
 
 args_hash(Args) ->
     list_to_binary(rabbit_misc:base64url(erlang:md5(term_to_binary(Args)))).
 
-unquote_binding(Name) ->
+unquote(Name) ->
     list_to_binary(mochiweb_util:unquote(Name)).
 
 with_binding(ReqData, Context, Fun) ->
