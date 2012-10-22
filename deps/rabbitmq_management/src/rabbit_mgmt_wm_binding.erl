@@ -88,15 +88,13 @@ binding(ReqData) ->
                      end
     end.
 
-unpack(S, D, B) when is_binary(B) ->
-    unpack(S, D, binary_to_list(B));
-unpack(Src, Dst, Str) ->
-    case rabbit_mgmt_format:tokenise(Str) of
+unpack(Src, Dst, Props) ->
+    case rabbit_mgmt_format:tokenise(binary_to_list(Props)) of
         ["~"]          -> {<<>>, []};
         [Key]          -> {unquote(Key), []};
         ["~", ArgsEnc] -> lookup(<<>>, ArgsEnc, Src, Dst);
         [Key, ArgsEnc] -> lookup(unquote(Key), ArgsEnc, Src, Dst);
-        _              -> {bad_request, {too_many_tokens, Str}}
+        _              -> {bad_request, {too_many_tokens, Props}}
     end.
 
 lookup(RoutingKey, ArgsEnc, Src, Dst) ->
