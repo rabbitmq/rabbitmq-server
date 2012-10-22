@@ -20,7 +20,7 @@
 -export([parameter/1, timestamp/1, timestamp_ms/1, strip_pids/1]).
 -export([node_from_pid/1, protocol/1, resource/1, queue/1]).
 -export([exchange/1, user/1, internal_user/1, binding/1, url/2]).
--export([pack_binding_props/2, unpack_binding_props/3, tokenise/1]).
+-export([pack_binding_props/2, tokenise/1]).
 -export([to_amqp_table/1, listener/1, properties/1, basic_properties/1]).
 -export([record/2, to_basic_properties/1]).
 -export([addr/1, port/1]).
@@ -175,30 +175,7 @@ pack_binding_props(Key, Args) ->
     list_to_binary(quote_binding(Key) ++ "~" ++ quote_binding(ArgsEnc)).
 
 quote_binding(Name) ->
-    re:replace(mochiweb_util:quote_plus(Name), "_", "%5F", [global]).
-
-unpack_binding_props(S, D, B) when is_binary(B) ->
-    unpack_binding_props(S, D, binary_to_list(B));
-unpack_binding_props(Src, Dst, Str) ->
-    case tokenise(Str) of
-        ["~"] ->
-            {<<>>, []};
-        [Key] ->
-            {unquote_binding(Key), []};
-        ["~", ArgsEnc] ->
-            {<<>>,
-             rabbit_mgmt_wm_binding:lookup_binding_id(
-               Src, Dst, unquote_binding(ArgsEnc))};
-        [Key, ArgsEnc] ->
-            {unquote_binding(Key),
-             rabbit_mgmt_wm_binding:lookup_binding_id(
-               Src, Dst, unquote_binding(ArgsEnc))};
-        _ ->
-            {bad_request, {too_many_tokens, Str}}
-    end.
-
-unquote_binding(Name) ->
-    list_to_binary(mochiweb_util:unquote(Name)).
+    re:replace(mochiweb_util:quote_plus(Name), "~", "%7E", [global]).
 
 %% Unfortunately string:tokens("foo~~bar", "~"). -> ["foo","bar"], we lose
 %% the fact that there's a double ~.

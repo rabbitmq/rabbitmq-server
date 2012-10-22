@@ -19,7 +19,7 @@
 -export([init/1, resource_exists/2, to_json/2,
          content_types_provided/2, content_types_accepted/2,
          is_authorized/2, allowed_methods/2, delete_resource/2,
-         lookup_binding_id/3, args_hash/1]).
+         args_hash/1]).
 
 -include("rabbit_mgmt.hrl").
 -include_lib("webmachine/include/webmachine.hrl").
@@ -68,6 +68,44 @@ is_authorized(ReqData, Context) ->
 
 %%--------------------------------------------------------------------
 
+binding(ReqData) ->
+    case rabbit_mgmt_util:vhost(ReqData) of
+        not_found -> not_found;
+        VHost     -> Source = rabbit_mgmt_util:id(source, ReqData),
+                     Dest = rabbit_mgmt_util:id(destination, ReqData),
+                     DestType = rabbit_mgmt_util:destination_type(ReqData),
+                     Props = rabbit_mgmt_util:id(props, ReqData),
+                     SName = rabbit_misc:r(VHost, exchange, Source),
+                     DName = rabbit_misc:r(VHost, DestType, Dest),
+                     case unpack_binding_props(SName, DName, Props) of
+                         {bad_request, Str} ->
+                             {bad_request, Str};
+                         {Key, Args} ->
+                             #binding{ source      = SName,
+                                       destination = DName,
+                                       key         = Key,
+                                       args        = Args }
+                     end
+    end.
+
+unpack_binding_props(S, D, B) when is_binary(B) ->
+    unpack_binding_props(S, D, binary_to_list(B));
+unpack_binding_props(Src, Dst, Str) ->
+    case rabbit_mgmt_format:tokenise(Str) of
+        ["~"] ->
+            {<<>>, []};
+        [Key] ->
+            {unquote_binding(Key), []};
+        ["~", ArgsEnc] ->
+            lift_err({<<>>,
+                      lookup_binding_id(Src, Dst, unquote_binding(ArgsEnc))});
+        [Key, ArgsEnc] ->
+            lift_err({unquote_binding(Key),
+                      lookup_binding_id(Src, Dst, unquote_binding(ArgsEnc))});
+        _ ->
+            {bad_request, {too_many_tokens, Str}}
+    end.
+
 lookup_binding_id(Src, Dst, Arg) ->
     lookup_binding_id0(
       Arg, rabbit_binding:list_for_source_and_destination(Src, Dst)).
@@ -83,29 +121,11 @@ lookup_binding_id0(Hash, [#binding{args = Args} | Rest]) ->
 args_hash(Args) ->
     list_to_binary(rabbit_misc:base64url(erlang:md5(term_to_binary(Args)))).
 
-binding(ReqData) ->
-    case rabbit_mgmt_util:vhost(ReqData) of
-        not_found -> not_found;
-        VHost     -> Source = rabbit_mgmt_util:id(source, ReqData),
-                     Dest = rabbit_mgmt_util:id(destination, ReqData),
-                     DestType = rabbit_mgmt_util:destination_type(ReqData),
-                     Props = rabbit_mgmt_util:id(props, ReqData),
-                     SName = rabbit_misc:r(VHost, exchange, Source),
-                     DName = rabbit_misc:r(VHost, DestType, Dest),
-                     case rabbit_mgmt_format:unpack_binding_props(
-                            SName, DName, Props) of
-                         {bad_request, Str} ->
-                             {bad_request, Str};
-                         %% TODO ugh!
-                         {_Key, {bad_request, Str}} ->
-                             {bad_request, Str};
-                         {Key, Args} ->
-                             #binding{ source      = SName,
-                                       destination = DName,
-                                       key         = Key,
-                                       args        = Args }
-                     end
-    end.
+lift_err({_, Err = {bad_request, _}}) -> Err;
+lift_err(NonErr = {_, _})             -> NonErr.
+
+unquote_binding(Name) ->
+    list_to_binary(mochiweb_util:unquote(Name)).
 
 with_binding(ReqData, Context, Fun) ->
     case binding(ReqData) of

@@ -30,10 +30,10 @@ pack_binding_test() ->
                    <<"">>, []),
     assert_binding(<<"foo">>,
                    <<"foo">>, []),
-    assert_binding(<<"foo%5Fbar%2Fbash">>,
-                   <<"foo_bar/bash">>, []),
-    assert_binding(<<"foo%5Fbar%5Fbash">>,
-                   <<"foo_bar_bash">>, []),
+    assert_binding(<<"foo%7Ebar%2Fbash">>,
+                   <<"foo~bar/bash">>, []),
+    assert_binding(<<"foo%7Ebar%7Ebash">>,
+                   <<"foo~bar~bash">>, []),
     ok.
 
 amqp_table_test() ->
