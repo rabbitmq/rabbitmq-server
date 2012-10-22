@@ -167,12 +167,12 @@ listener(#listener{node = Node, protocol = Protocol,
      {port, Port}].
 
 pack_binding_props(<<"">>, []) ->
-    <<"_">>;
+    <<"~">>;
 pack_binding_props(Key, []) ->
     list_to_binary(quote_binding(Key));
 pack_binding_props(Key, Args) ->
     ArgsEnc = rabbit_mgmt_wm_binding:args_hash(Args),
-    list_to_binary(quote_binding(Key) ++ "_" ++ quote_binding(ArgsEnc)).
+    list_to_binary(quote_binding(Key) ++ "~" ++ quote_binding(ArgsEnc)).
 
 quote_binding(Name) ->
     re:replace(mochiweb_util:quote_plus(Name), "_", "%5F", [global]).
@@ -181,11 +181,11 @@ unpack_binding_props(S, D, B) when is_binary(B) ->
     unpack_binding_props(S, D, binary_to_list(B));
 unpack_binding_props(Src, Dst, Str) ->
     case tokenise(Str) of
-        ["_"] ->
+        ["~"] ->
             {<<>>, []};
         [Key] ->
             {unquote_binding(Key), []};
-        ["_", ArgsEnc] ->
+        ["~", ArgsEnc] ->
             {<<>>,
              rabbit_mgmt_wm_binding:lookup_binding_id(
                Src, Dst, unquote_binding(ArgsEnc))};
@@ -200,12 +200,12 @@ unpack_binding_props(Src, Dst, Str) ->
 unquote_binding(Name) ->
     list_to_binary(mochiweb_util:unquote(Name)).
 
-%% Unfortunately string:tokens("foo__bar", "_"). -> ["foo","bar"], we lose
-%% the fact that there's a double _.
+%% Unfortunately string:tokens("foo~~bar", "~"). -> ["foo","bar"], we lose
+%% the fact that there's a double ~.
 tokenise("") ->
     [];
 tokenise(Str) ->
-    Count = string:cspan(Str, "_"),
+    Count = string:cspan(Str, "~"),
     case length(Str) of
         Count -> [Str];
         _     -> [string:sub_string(Str, 1, Count) |

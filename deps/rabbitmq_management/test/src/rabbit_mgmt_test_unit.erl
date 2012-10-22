@@ -21,12 +21,12 @@
 tokenise_test() ->
     [] = rabbit_mgmt_format:tokenise(""),
     ["foo"] = rabbit_mgmt_format:tokenise("foo"),
-    ["foo", "bar"] = rabbit_mgmt_format:tokenise("foo_bar"),
-    ["foo", "", "bar"] = rabbit_mgmt_format:tokenise("foo__bar"),
+    ["foo", "bar"] = rabbit_mgmt_format:tokenise("foo~bar"),
+    ["foo", "", "bar"] = rabbit_mgmt_format:tokenise("foo~~bar"),
     ok.
 
 pack_binding_test() ->
-    assert_binding(<<"_">>,
+    assert_binding(<<"~">>,
                    <<"">>, []),
     assert_binding(<<"foo">>,
                    <<"foo">>, []),

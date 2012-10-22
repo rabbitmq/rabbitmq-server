@@ -330,9 +330,9 @@ bindings_post_test() ->
     http_post("/bindings/%2f/e/myexchange/q/badqueue", BArgs, ?NOT_FOUND),
     http_post("/bindings/%2f/e/badexchange/q/myqueue", BArgs, ?NOT_FOUND),
     Headers1 = http_post("/bindings/%2f/e/myexchange/q/myqueue", [], ?CREATED),
-    "../../../../%2F/e/myexchange/q/myqueue/_" = pget("location", Headers1),
+    "../../../../%2F/e/myexchange/q/myqueue/~" = pget("location", Headers1),
     Headers2 = http_post("/bindings/%2f/e/myexchange/q/myqueue", BArgs, ?CREATED),
-    PropertiesKey = "routing_V4mGFgnPNrdtRmluZIxTDA",
+    PropertiesKey = "routing~V4mGFgnPNrdtRmluZIxTDA",
     PropertiesKeyBin = list_to_binary(PropertiesKey),
     "../../../../%2F/e/myexchange/q/myqueue/" ++ PropertiesKey =
         pget("location", Headers2),
@@ -670,7 +670,7 @@ arguments_test() ->
     true = lists:sort([{'x-match', <<"all">>}, {foo, <<"bar">>}]) =:=
            lists:sort(pget(arguments,
                            http_get("/bindings/%2f/e/myexchange/q/myqueue/" ++
-                                    "_nXOkVwqZzUOdS9-HcBWheg", ?OK))),
+                                    "~nXOkVwqZzUOdS9_HcBWheg", ?OK))),
     http_delete("/exchanges/%2f/myexchange", ?NO_CONTENT),
     http_delete("/queues/%2f/myqueue", ?NO_CONTENT),
     ok.
