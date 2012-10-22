@@ -67,19 +67,19 @@ get0(Name, List)       -> case pget(definition, List) of
 
 %%----------------------------------------------------------------------------
 
-parse_set(VHost, Key, Pattern, Definition, undefined) ->
-    parse_set0(VHost, Key, Pattern, Definition, 0);
-parse_set(VHost, Key, Pattern, Definition, Priority) ->
+parse_set(VHost, Name, Pattern, Definition, undefined) ->
+    parse_set0(VHost, Name, Pattern, Definition, 0);
+parse_set(VHost, Name, Pattern, Definition, Priority) ->
     try list_to_integer(Priority) of
-        Num -> parse_set0(VHost, Key, Pattern, Definition, Num)
+        Num -> parse_set0(VHost, Name, Pattern, Definition, Num)
     catch
         error:badarg -> {error, "~p priority must be a number", [Priority]}
     end.
 
-parse_set0(VHost, Key, Pattern, Defn, Priority) ->
+parse_set0(VHost, Name, Pattern, Defn, Priority) ->
     case rabbit_misc:json_decode(Defn) of
         {ok, JSON} ->
-            set0(VHost, Key,
+            set0(VHost, Name,
                  [{<<"pattern">>,    list_to_binary(Pattern)},
                   {<<"definition">>, rabbit_misc:json_to_term(JSON)},
                   {<<"priority">>,   Priority}]);
@@ -87,23 +87,23 @@ parse_set0(VHost, Key, Pattern, Defn, Priority) ->
             {error_string, "JSON decoding error"}
     end.
 
-set(VHost, Key, Pattern, Definition, Priority) ->
+set(VHost, Name, Pattern, Definition, Priority) ->
     PolicyProps = [{<<"pattern">>,    Pattern},
                    {<<"definition">>, Definition},
                    {<<"priority">>,   case Priority of
                                           undefined -> 0;
                                           _         -> Priority
                                       end}],
-    set0(VHost, Key, PolicyProps).
+    set0(VHost, Name, PolicyProps).
 
-set0(VHost, Key, Term) ->
-    rabbit_runtime_parameters:set_any(VHost, <<"policy">>, Key, Term).
+set0(VHost, Name, Term) ->
+    rabbit_runtime_parameters:set_any(VHost, <<"policy">>, Name, Term).
 
-delete(VHost, Key) ->
-    rabbit_runtime_parameters:clear_any(VHost, <<"policy">>, Key).
+delete(VHost, Name) ->
+    rabbit_runtime_parameters:clear_any(VHost, <<"policy">>, Name).
 
-lookup(VHost, Key) ->
-    case rabbit_runtime_parameters:lookup(VHost, <<"policy">>, Key) of
+lookup(VHost, Name) ->
+    case rabbit_runtime_parameters:lookup(VHost, <<"policy">>, Name) of
         not_found  -> not_found;
         P          -> p(P, fun ident/1)
     end.
@@ -127,7 +127,7 @@ order_policies(PropList) ->
 p(Parameter, DefnFun) ->
     Value = pget(value, Parameter),
     [{vhost,      pget(vhost, Parameter)},
-     {key,        pget(key, Parameter)},
+     {name,       pget(name, Parameter)},
      {pattern,    pget(<<"pattern">>, Value)},
      {definition, DefnFun(pget(<<"definition">>, Value))},
      {priority,   pget(<<"priority">>, Value)}].
@@ -138,7 +138,7 @@ format(Term) ->
 
 ident(X) -> X.
 
-info_keys() -> [vhost, key, pattern, definition, priority].
+info_keys() -> [vhost, name, pattern, definition, priority].
 
 %%----------------------------------------------------------------------------
 
