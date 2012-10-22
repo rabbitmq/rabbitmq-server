@@ -421,17 +421,17 @@ stop_other_node({Name, _Port}) ->
                    " stop-other-node"),
     timer:sleep(1000).
 
-set_param(Component, Key, Value) ->
-    rabbitmqctl(fmt("set_parameter ~s ~s '~s'", [Component, Key, Value])).
+set_param(Component, Name, Value) ->
+    rabbitmqctl(fmt("set_parameter ~s ~s '~s'", [Component, Name, Value])).
 
-clear_param(Component, Key) ->
-    rabbitmqctl(fmt("clear_parameter ~s ~s", [Component, Key])).
+clear_param(Component, Name) ->
+    rabbitmqctl(fmt("clear_parameter ~s ~s", [Component, Name])).
 
-set_pol(Key, Pattern, Defn) ->
-    rabbitmqctl(fmt("set_policy ~s \"~s\" '~s'", [Key, Pattern, Defn])).
+set_pol(Name, Pattern, Defn) ->
+    rabbitmqctl(fmt("set_policy ~s \"~s\" '~s'", [Name, Pattern, Defn])).
 
-clear_pol(Key) ->
-    rabbitmqctl(fmt("clear_policy ~s ", [Key])).
+clear_pol(Name) ->
+    rabbitmqctl(fmt("clear_policy ~s ", [Name])).
 
 fmt(Fmt, Args) ->
     string:join(string:tokens(rabbit_misc:format(Fmt, Args), [$\n]), " ").
