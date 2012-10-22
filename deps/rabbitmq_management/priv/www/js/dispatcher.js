@@ -161,11 +161,11 @@ dispatcher_add(function(sammy) {
                 'policy', '#/policies');
         });
     sammy.put('#/policies', function() {
-            put_policy(this, ['key', 'pattern', 'policy'], ['priority'], []);
+            put_policy(this, ['name', 'pattern', 'policy'], ['priority'], []);
             return false;
         });
     sammy.del('#/policies', function() {
-            if (sync_delete(this, '/policies/:vhost/:key'))
+            if (sync_delete(this, '/policies/:vhost/:name'))
                 go_to('#/policies');
             return false;
         });

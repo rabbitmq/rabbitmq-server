@@ -1,4 +1,4 @@
-<h1>Policy: <b><%= fmt_string(policy.key) %></b></h1>
+<h1>Policy: <b><%= fmt_string(policy.name) %></b></h1>
 
 <div class="section">
   <h2>Overview</h2>
@@ -30,7 +30,7 @@
     <form action="#/policies" method="delete" class="confirm">
       <input type="hidden" name="component" value="policy"/>
       <input type="hidden" name="vhost" value="<%= fmt_string(policy.vhost) %>"/>
-      <input type="hidden" name="key" value="<%= fmt_string(policy.key) %>"/>
+      <input type="hidden" name="name" value="<%= fmt_string(policy.name) %>"/>
       <input type="submit" value="Delete this policy"/>
     </form>
   </div>

@@ -58,7 +58,7 @@ accept_content(ReqData, Context) ->
               [pattern, definition], ReqData, Context,
               fun([Pattern, Definition], Body) ->
                       case rabbit_policy:set(
-                             VHost, key(ReqData), Pattern,
+                             VHost, name(ReqData), Pattern,
                              rabbit_misc:json_to_term(Definition),
                              proplists:get_value(priority, Body)) of
                           ok ->
@@ -72,7 +72,7 @@ accept_content(ReqData, Context) ->
 
 delete_resource(ReqData, Context) ->
     ok = rabbit_policy:delete(
-           rabbit_mgmt_util:vhost(ReqData), key(ReqData)),
+           rabbit_mgmt_util:vhost(ReqData), name(ReqData)),
     {true, ReqData, Context}.
 
 is_authorized(ReqData, Context) ->
@@ -82,6 +82,6 @@ is_authorized(ReqData, Context) ->
 
 policy(ReqData) ->
     rabbit_policy:lookup(
-      rabbit_mgmt_util:vhost(ReqData), key(ReqData)).
+      rabbit_mgmt_util:vhost(ReqData), name(ReqData)).
 
-key(ReqData)       -> rabbit_mgmt_util:id(key, ReqData).
+name(ReqData) -> rabbit_mgmt_util:id(name, ReqData).

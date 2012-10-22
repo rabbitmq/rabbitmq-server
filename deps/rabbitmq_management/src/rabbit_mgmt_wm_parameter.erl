@@ -59,8 +59,8 @@ accept_content(ReqData, Context) ->
               [value], ReqData, Context,
               fun([Value], _) ->
                       case rabbit_runtime_parameters:set(
-                             VHost, component(ReqData), key(ReqData),
-                     rabbit_misc:json_to_term(Value)) of
+                             VHost, component(ReqData), name(ReqData),
+                             rabbit_misc:json_to_term(Value)) of
                           ok ->
                               {true, ReqData, Context};
                           {error_string, Reason} ->
@@ -72,7 +72,7 @@ accept_content(ReqData, Context) ->
 
 delete_resource(ReqData, Context) ->
     ok = rabbit_runtime_parameters:clear(
-           rabbit_mgmt_util:vhost(ReqData), component(ReqData), key(ReqData)),
+           rabbit_mgmt_util:vhost(ReqData), component(ReqData), name(ReqData)),
     {true, ReqData, Context}.
 
 is_authorized(ReqData, Context) ->
@@ -82,7 +82,7 @@ is_authorized(ReqData, Context) ->
 
 parameter(ReqData) ->
     rabbit_runtime_parameters:lookup(
-      rabbit_mgmt_util:vhost(ReqData), component(ReqData), key(ReqData)).
+      rabbit_mgmt_util:vhost(ReqData), component(ReqData), name(ReqData)).
 
 component(ReqData) -> rabbit_mgmt_util:id(component, ReqData).
-key(ReqData)       -> rabbit_mgmt_util:id(key, ReqData).
+name(ReqData)      -> rabbit_mgmt_util:id(name, ReqData).

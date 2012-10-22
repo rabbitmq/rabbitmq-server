@@ -24,7 +24,7 @@
 <% if (vhosts_interesting) { %>
      <td><%= fmt_string(policy.vhost) %></td>
 <% } %>
-     <td><%= link_policy(policy.vhost, policy.key) %></td>
+     <td><%= link_policy(policy.vhost, policy.name) %></td>
      <td><%= fmt_string(policy.pattern) %></td>
      <td><%= fmt_table_short(policy.definition) %></td>
      <td><%= fmt_string(policy.priority) %></td>
@@ -60,7 +60,7 @@
 <% } %>
         <tr>
           <th><label>Name:</label></th>
-          <td><input type="text" name="key"/><span class="mand">*</span></td>
+          <td><input type="text" name="name"/><span class="mand">*</span></td>
         </tr>
         <tr>
           <th><label>Pattern:</label></th>

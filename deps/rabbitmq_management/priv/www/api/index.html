@@ -532,9 +532,9 @@ or:
         <td>X</td>
         <td>X</td>
         <td></td>
-        <td class="path">/api/parameters/<i>component</i>/<i>vhost</i>/<i>key</i></td>
+        <td class="path">/api/parameters/<i>component</i>/<i>vhost</i>/<i>name</i></td>
         <td>An individual parameter. To PUT a parameter, you will need a body looking something like this:
-<pre>{"vhost": "/","component":"federation","key":"local_username","value":"guest"}</pre>
+<pre>{"vhost": "/","component":"federation","name":"local_username","value":"guest"}</pre>
 </td>
       </tr>
       <tr>
@@ -558,7 +558,7 @@ or:
         <td>X</td>
         <td>X</td>
         <td></td>
-        <td class="path">/api/policies/<i>vhost</i>/<i>key</i></td>
+        <td class="path">/api/policies/<i>vhost</i>/<i>name</i></td>
         <td>An individual policy. To PUT a policy, you will need a body looking something like this:
 <pre>{"pattern":"^amq.", "definition": {"federation-upstream-set":"all"}, "priority":0}</pre>
 </td>

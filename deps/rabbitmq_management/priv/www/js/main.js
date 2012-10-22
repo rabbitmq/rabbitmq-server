@@ -809,13 +809,13 @@ function put_parameter(sammy, mandatory_keys, num_keys, bool_keys) {
     }
     var params = {"component": sammy.params.component,
                   "vhost":     sammy.params.vhost,
-                  "key":       sammy.params.key,
+                  "name":      sammy.params.name,
                   "value":     params_magic(sammy.params)};
     delete params.value.vhost;
     delete params.value.component;
-    delete params.value.key;
+    delete params.value.name;
     sammy.params = params;
-    if (sync_put(sammy, '/parameters/:component/:vhost/:key')) update();
+    if (sync_put(sammy, '/parameters/:component/:vhost/:name')) update();
 }
 
 function put_policy(sammy, mandatory_keys, num_keys, bool_keys) {
@@ -831,7 +831,7 @@ function put_policy(sammy, mandatory_keys, num_keys, bool_keys) {
             sammy.params[i] = sammy.params[i] == 'true';
         }
     }
-    if (sync_put(sammy, '/policies/:vhost/:key')) update();
+    if (sync_put(sammy, '/policies/:vhost/:name')) update();
 }
 
 function debug(str) {
