@@ -344,9 +344,9 @@ update_mirrors0(OldQ = #amqqueue{name = QName},
 validate_policy(KeyList) ->
     validate_policy(
       proplists:get_value(<<"ha-mode">>,   KeyList),
-      proplists:get_value(<<"ha-params">>, KeyList)).
+      proplists:get_value(<<"ha-params">>, KeyList, none)).
 
-validate_policy(<<"all">>, undefined) ->
+validate_policy(<<"all">>, none) ->
     ok;
 validate_policy(<<"all">>, _Params) ->
     {error, "ha-mode=\"all\" does not take parameters", []};
@@ -355,8 +355,9 @@ validate_policy(<<"nodes">>, []) ->
     {error, "ha-mode=\"nodes\" list must be non-empty", []};
 validate_policy(<<"nodes">>, Nodes) when is_list(Nodes) ->
     case [I || I <- Nodes, not is_binary(I)] of
-        [] -> ok;
-        _  -> {error, "ha-mode=\"nodes\" takes a list of strings", []}
+        []      -> ok;
+        Invalid -> {error, "ha-mode=\"nodes\" takes a list of strings, "
+                    "~p was not a string", [Invalid]}
     end;
 validate_policy(<<"nodes">>, Params) ->
     {error, "ha-mode=\"nodes\" takes a list, ~p given", [Params]};
@@ -365,6 +366,7 @@ validate_policy(<<"exactly">>, N) when is_integer(N) andalso N > 0 ->
     ok;
 validate_policy(<<"exactly">>, Params) ->
     {error, "ha-mode=\"exactly\" takes an integer, ~p given", [Params]};
+
 validate_policy(Mode, _Params) ->
     {error, "~p is not a valid ha-mode value", [Mode]}.
 
