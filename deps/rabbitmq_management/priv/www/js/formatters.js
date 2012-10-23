@@ -232,7 +232,7 @@ function fmt_exchange_type(type) {
             return fmt_escape_html(type);
         }
     }
-    return '<div class="red"><acronym title="Exchange type not found. ' +
+    return '<div class="status-red"><acronym title="Exchange type not found. ' +
         'Publishing to this exchange will fail.">' + fmt_escape_html(type) +
         '</acronym></div>';
 }
