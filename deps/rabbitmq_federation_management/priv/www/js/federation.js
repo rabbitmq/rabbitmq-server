@@ -18,7 +18,7 @@ dispatcher_add(function(sammy) {
     sammy.put('#/fed-globals', function() {
             if (this.params.value == '') this.params.value = null;
 
-            if (sync_put(this, '/parameters/:component/:vhost/:key'))
+            if (sync_put(this, '/parameters/:component/:vhost/:name'))
                 update();
             return false;
         });
@@ -30,7 +30,7 @@ dispatcher_add(function(sammy) {
             return false;
         });
     sammy.del('#/fed-parameters', function() {
-            if (sync_delete(this, '/parameters/:component/:vhost/:key'))
+            if (sync_delete(this, '/parameters/:component/:vhost/:name'))
                 go_to('#/federation-upstreams');
             return false;
         });

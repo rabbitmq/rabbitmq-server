@@ -28,7 +28,7 @@
 <% if (vhosts_interesting) { %>
      <td><%= fmt_string(upstream.vhost) %></td>
 <% } %>
-     <td><%= link_fed_conn(upstream.vhost, upstream.key) %></td>
+     <td><%= link_fed_conn(upstream.vhost, upstream.name) %></td>
      <td><%= fmt_shortened_uri(upstream.value.uri) %></td>
      <td class="r"><%= fmt_time(upstream.value.expires, 'ms') %></td>
      <td class="r"><%= fmt_time(upstream.value['message-ttl'], 'ms') %></td>
@@ -68,7 +68,7 @@
 <% } %>
         <tr>
           <th><label>Name:</label></th>
-          <td><input type="text" name="key"/><span class="mand">*</span></td>
+          <td><input type="text" name="name"/><span class="mand">*</span></td>
         </tr>
         <tr>
           <th><label>URI:</label></th>

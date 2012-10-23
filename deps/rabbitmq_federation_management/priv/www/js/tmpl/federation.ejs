@@ -99,8 +99,8 @@
 
          for (var j in globals) {
            if (globals[j].vhost == vhost.name) {
-             if (globals[j].key == 'local-username') username = globals[j].value;
-             if (globals[j].key == 'local-nodename') nodename = globals[j].value;
+             if (globals[j].name == 'local-username') username = globals[j].value;
+             if (globals[j].name == 'local-nodename') nodename = globals[j].value;
            }
          }
 %>
@@ -112,7 +112,7 @@
             <form action="#/fed-globals" method="put">
               <input type="hidden" name="component" value="federation"/>
               <input type="hidden" name="vhost" value="<%= fmt_string(vhost.name) %>"/>
-              <input type="hidden" name="key" value="local-username"/>
+              <input type="hidden" name="name" value="local-username"/>
               <input type="text" name="value" value="<%= username %>" />
               <input type="submit" value="Update"/>
             </form>
@@ -121,7 +121,7 @@
             <form action="#/fed-globals" method="put">
               <input type="hidden" name="component" value="federation"/>
               <input type="hidden" name="vhost" value="<%= fmt_string(vhost.name) %>"/>
-              <input type="hidden" name="key" value="local-nodename"/>
+              <input type="hidden" name="name" value="local-nodename"/>
               <input type="text" name="value" value="<%= nodename %>" />
               <input type="submit" value="Update"/>
             </form>
